@@ -13,6 +13,7 @@
 #include <boost/math/distributions/hypergeometric.hpp>
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <numeric>
 #include <map>
@@ -651,6 +652,7 @@ namespace FASTag
       {
         const double npk = static_cast<double>(std::max<size_t>(1, s.spec.size()));
         double conf_sum = 0.0, conf_min = 1.0;
+        if (p.per_residue_conf) t.res_conf.reserve(static_cast<size_t>(k) + 1);
         for (int i = 0; i + 1 < k; ++i)
         {
           const double gap = (s.spec[peaks[static_cast<size_t>(i) + 1]].getMZ()
@@ -664,6 +666,12 @@ namespace FASTag
           const double c = mz_fit * int_fit;
           conf_sum += c;
           conf_min = std::min(conf_min, c);
+          if (p.per_residue_conf)
+          {
+            const auto v = static_cast<uint8_t>(std::lround(100.0 * c));
+            t.res_conf.push_back(v);
+            if (path[static_cast<size_t>(i)].gap) t.res_conf.push_back(v);  // pair shares one score
+          }
         }
         const int n_edge = k - 1;
         t.min_conf = n_edge > 0 ? static_cast<float>(conf_min) : 1.0f;
@@ -712,6 +720,14 @@ namespace FASTag
       // mass check would catch because the pair sum is unchanged.
       t.seq = spell(A, path);
       t.n_res = pathResidues(path);
+      if (p.per_residue_conf)
+      {
+        // The path was traversed C->N and seq is stored N->C (see above), so
+        // the residue confidences must flip too -- a mistake here mirrors
+        // every tag's confidences and NO mass or length check would catch it.
+        std::reverse(t.res_conf.begin(), t.res_conf.end());
+        assert(t.res_conf.size() == t.n_res);
+      }
       for (const Step& st : path) if (st.gap) { t.gapped = true; break; }
       t.low_mz = s.spec[peaks.front()].getMZ();
       return t;
@@ -802,15 +818,24 @@ namespace FASTag
     ///
     /// n_seeds counts emitted TAGS, not paths, so the E-value's multiple-testing
     /// factor stays honest when one path spells several.
-    void emit(std::vector<Tag>& out, size_t& n_seeds, Tag t, const Prepared& s,
+    /// A scored tag plus the indices (into Prepared::spec) of the peaks that
+    /// spelled it -- the exact, integer signature -diversity needs to tell a
+    /// re-read of the same ladder from genuinely different evidence.
+    struct ScoredTag
+    {
+      Tag tag;
+      std::vector<uint32_t> peaks;
+    };
+
+    void emit(std::vector<ScoredTag>& out, size_t& n_seeds, Tag t, const Prepared& s,
               const Param& p, const Tables& tab, const std::vector<uint32_t>& peaks,
               const std::vector<Step>& path, int charge)
     {
-      if (!t.gapped) { ++n_seeds; out.push_back(std::move(t)); return; }
+      if (!t.gapped) { ++n_seeds; out.push_back({std::move(t), peaks}); return; }
 
       size_t gi = 0;
       while (gi < path.size() && !path[gi].gap) ++gi;
-      if (gi + 1 >= peaks.size()) { ++n_seeds; out.push_back(std::move(t)); return; }
+      if (gi + 1 >= peaks.size()) { ++n_seeds; out.push_back({std::move(t), peaks}); return; }
 
       const double d = (s.spec[peaks[gi + 1]].getMZ() - s.spec[peaks[gi]].getMZ()) * charge;
       const double tol = tolAt(p, s.spec[peaks[gi + 1]].getMZ()) * charge;
@@ -846,11 +871,11 @@ namespace FASTag
           Tag v = scorePath(s, p, tab, peaks, alt, charge);
           v.extended = t.extended;
           ++n_seeds;
-          out.push_back(std::move(v));
+          out.push_back({std::move(v), peaks});
           ++emitted;
         }
       }
-      if (emitted == 0) { ++n_seeds; out.push_back(std::move(t)); }
+      if (emitted == 0) { ++n_seeds; out.push_back({std::move(t), peaks}); }
     }
   }
 
@@ -871,7 +896,7 @@ namespace FASTag
         static_cast<size_t>(std::max(2, p.tag_length + 1 - std::max(0, p.max_gaps)));
     if (s.spec.size() < min_peaks) return out;
 
-    std::vector<Tag> scored;
+    std::vector<ScoredTag> scored;
     size_t n_seeds = 0;
     const Alphabet& A = tables.alphabet();
 
@@ -981,21 +1006,23 @@ namespace FASTag
     // Exactly one gap is possible per tag today (the DFS sets gap_used and
     // extension does not cross gaps), so this applies once rather than per gap.
     const double gap_penalty = std::max(1.0, p.gap_penalty);
-    for (Tag& t : scored)
+    for (ScoredTag& st : scored)
     {
-      t.evalue *= static_cast<double>(std::max<size_t>(n_seeds, 1));
-      if (t.gapped) t.evalue *= gap_penalty;
+      st.tag.evalue *= static_cast<double>(std::max<size_t>(n_seeds, 1));
+      if (st.tag.gapped) st.tag.evalue *= gap_penalty;
     }
 
     // stable_sort, not sort: the comparator is not total (it ignores charge and
     // the flanks), and 99.4% of duplicate groups are identical in every emitted
     // field today -- but a future field would make the survivor choice
     // implementation-defined. Stability costs nothing at these sizes.
-    std::stable_sort(scored.begin(), scored.end(), [](const Tag& a, const Tag& b) {
+    const auto rank_cmp = [](const Tag& a, const Tag& b) {
       if (a.evalue != b.evalue) return a.evalue < b.evalue;
       if (a.seq != b.seq) return a.seq < b.seq;
       return a.low_mz < b.low_mz;
-    });
+    };
+    std::stable_sort(scored.begin(), scored.end(),
+                     [&](const ScoredTag& a, const ScoredTag& b) { return rank_cmp(a.tag, b.tag); });
 
     // Drop tags identical in every reported field, before the output cap so the
     // cap counts distinct results.
@@ -1007,8 +1034,35 @@ namespace FASTag
     // 0.6 mDa apart with different E-values) and makes the survivor unambiguous,
     // since the duplicates are indistinguishable.
     std::set<std::tuple<std::string, int, double, double>> seen;
-    for (Tag& t : scored)
+
+    // -diversity selection state. Near-duplicate = SAME CHARGE, both tags
+    // spelled by >= 4 peaks, sharing all but at most one peak -- adjacent-
+    // offset re-reads and gap respellings of one ladder, deliberately NOT
+    // b-vs-y reads, charge variants, or distal windows. The >=4 floor keeps
+    // the rule out of the degenerate short-tag regime (2-peak tags would
+    // merge on ANY shared peak). Deferral is demotion, never deletion:
+    // deferred tags backfill in rank order, and the kept set is re-sorted by
+    // the rank comparator so the header's ordered-by-E-value contract holds.
+    std::vector<ScoredTag> div_kept, div_deferred;
+    auto near_dup = [](const ScoredTag& a, const ScoredTag& b) {
+      if (a.tag.charge != b.tag.charge) return false;
+      if (a.peaks.size() < 4 || b.peaks.size() < 4) return false;
+      std::vector<uint32_t> pa(a.peaks), pb(b.peaks);
+      std::sort(pa.begin(), pa.end());
+      std::sort(pb.begin(), pb.end());
+      size_t i = 0, j = 0, shared = 0;
+      while (i < pa.size() && j < pb.size())
+      {
+        if (pa[i] == pb[j]) { ++shared; ++i; ++j; }
+        else if (pa[i] < pb[j]) ++i;
+        else ++j;
+      }
+      return shared >= std::min(pa.size(), pb.size()) - 1;
+    };
+
+    for (ScoredTag& st : scored)
     {
+      Tag& t = st.tag;
       // The gap penalty ORDERS but does not FILTER.
       //
       // It is a ranking correction, and letting it also gate membership turns a
@@ -1037,8 +1091,32 @@ namespace FASTag
       const double raw = t.gapped ? t.evalue / gap_penalty : t.evalue;
       if (p.max_evalue > 0 && raw > p.max_evalue) continue;
       if (!seen.emplace(t.seq, t.charge, t.nterm_mass, t.cterm_mass).second) continue;
-      out.push_back(std::move(t));
-      if (p.max_tag_count > 0 && static_cast<int>(out.size()) >= p.max_tag_count) break;
+      if (!p.diversity || p.max_tag_count <= 0)
+      {
+        out.push_back(std::move(t));
+        if (p.max_tag_count > 0 && static_cast<int>(out.size()) >= p.max_tag_count) break;
+        continue;
+      }
+      // Diversity path: fill kept with non-near-duplicates first, park the
+      // rest; both bounded at N so the walk still terminates early.
+      const size_t N = static_cast<size_t>(p.max_tag_count);
+      bool dup = false;
+      for (const auto& k : div_kept)
+        if (near_dup(k, st)) { dup = true; break; }
+      if (!dup && div_kept.size() < N) div_kept.push_back(std::move(st));
+      else if (div_deferred.size() < N) div_deferred.push_back(std::move(st));
+      if (div_kept.size() >= N) break;
+    }
+    if (p.diversity && p.max_tag_count > 0)
+    {
+      for (auto& d : div_deferred)
+      {
+        if (div_kept.size() >= static_cast<size_t>(p.max_tag_count)) break;
+        div_kept.push_back(std::move(d));
+      }
+      std::stable_sort(div_kept.begin(), div_kept.end(),
+                       [&](const ScoredTag& a, const ScoredTag& b) { return rank_cmp(a.tag, b.tag); });
+      for (auto& k : div_kept) out.push_back(std::move(k.tag));
     }
     return out;
   }

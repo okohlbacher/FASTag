@@ -62,6 +62,17 @@ namespace FASTag
     int    peaks_per_window = 0;
     int    max_tag_count  = 50;     ///< 0 = unlimited
     double max_evalue     = 20.0;   ///< 0 = no cutoff
+    /// Diversify which tags occupy the max_tag_count slots on chimeric
+    /// spectra: near-duplicate re-reads of an already-kept tag's peak set
+    /// (same charge, sharing all but at most one peak) are DEFERRED behind
+    /// non-duplicates, then backfilled in rank order. Orders slot occupancy,
+    /// never filters -- output size and rank 1 are unchanged; only which tags
+    /// survive the cap. Off by default (not provably recall-neutral under a
+    /// cap; see doc/BACKLOG-PLAN-2026-09.md F12).
+    bool   diversity      = false;
+    /// Emit per-residue confidences (Tag::res_conf). Off by default so the
+    /// hot path allocates nothing extra and the TSV schema is unchanged.
+    bool   per_residue_conf = false;
     /// Multiplier applied to a gapped tag's E-value for RANKING. 1.0 disables it.
     ///
     /// Gapped tags are systematically over-scored against contiguous ones: a gap
@@ -110,6 +121,12 @@ namespace FASTag
     /// weak, which the single E-value cannot.
     float  min_conf = 1.0f;
     float  mean_conf = 1.0f;
+    /// Per-RESIDUE confidence 0..100, N->C, one entry per residue (n_res of
+    /// them), only when Param::per_residue_conf. A gap edge's single pair
+    /// score is written to BOTH its residues: the mass evidence supports the
+    /// pair, not either identity or their order -- consumers of assembly-style
+    /// exports should read gap residues as sharing one observation.
+    std::vector<uint8_t> res_conf;
     bool   extended = false;
     bool   gapped = false;      ///< crossed a missing peak; two residues are a
                                 ///< mass-only inference, not two observed steps

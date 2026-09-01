@@ -23,12 +23,32 @@
 
 #include "FASTagger.h"
 #include "FastaFilter.h"
+#include "Glyco.h"
+
+#include <OpenMS/FORMAT/DATAACCESS/MSDataWritingConsumer.h>
+#include "TagFDR.h"
+#include "TagRecon.h"
 #include "Proforma.h"
 #include "SpectrumSampler.h"
 #include "TaxIndex.h"
 #include "TaxStats.h"
 
+#include <cstdio>
 #include <fstream>
+#include <filesystem>
+#include <csignal>
+#include <iostream>
+#ifdef _WIN32
+#include <io.h>
+#define fastag_dup _dup
+#define fastag_dup2 _dup2
+#define fastag_fdopen _fdopen
+#else
+#include <unistd.h>
+#define fastag_dup dup
+#define fastag_dup2 dup2
+#define fastag_fdopen fdopen
+#endif
 #include <map>
 #include <limits>
 #include <memory>
@@ -265,7 +285,7 @@ public:
 protected:
   void registerOptionsAndFlags_() override
   {
-    registerInputFile_("in", "<file>", "", "Input spectra");
+    registerInputFile_("in", "<file>", "", "Input spectra", /*required=*/false);
     // mzpeak is offered only when the OpenMS this was built against provides
     // MzPeakFile, so the accepted formats differ between builds. That is
     // deliberate -- advertising a format the binary cannot read would turn a
@@ -276,7 +296,7 @@ protected:
 #else
     setValidFormats_("in", ListUtils::create<String>("mzML"));
 #endif
-    registerOutputFile_("out", "<file>", "", "Tag list (tab-separated)");
+    registerOutputFile_("out", "<file>", "", "Tag list (tab-separated)", /*required=*/false);
     setValidFormats_("out", ListUtils::create<String>("tsv"));
 
     registerInputFile_("fasta", "<file>", "", "Report only tags occurring in these sequences", false);
@@ -357,9 +377,90 @@ protected:
     // Emitted from a single thread per update, so lines never interleave.
     registerFlag_("progress", "Emit 'FASTAG_PROGRESS done=<n> total=<n>' lines to stderr for a GUI progress bar");
 
+    // Low-latency resident mode for instrument control: read line-oriented
+    // spectrum blocks from stdin, write TSV rows + a sentinel per block to
+    // stdout, flushed. Protocol per block:
+    //   spectrum <id> <precursor_mz> <charge>     (charge <= 0 -> treated as 2)
+    //   <mz> <intensity>                          (one peak per line)
+    //   <blank line>                              (ends the block)
+    // Output: the TSV header once at startup, then per block its rows and
+    //   #end <id> <n_tags>
+    // Malformed input yields '#error <id> <msg>' and a resync to the next
+    // blank line -- the process never exits mid-stream. Diagnostics stay on
+    // stderr. Fixed costs (process start, table build) are paid once; steady
+    // state is sub-millisecond per spectrum at defaults.
+    registerFlag_("stream",
+                  "Resident single-spectrum mode: spectrum blocks on stdin, TSV "
+                  "rows + '#end' sentinels on stdout. Core tagging only "
+                  "(refuses -fasta/-species/-recon_out/-out_spectra/"
+                  "-entrapment_fasta); parameter changes need a restart");
+
+    registerFlag_("diversity",
+                  "Diversify which tags occupy the -max_tags slots on chimeric "
+                  "spectra: near-duplicate re-reads of an already-kept tag's peak "
+                  "set are demoted behind non-duplicates, then backfilled. "
+                  "Reorders slot occupancy under the cap; never drops below it");
+
     // ProForma 2.0 rendering of each tag, appended as a trailing column. Off by
     // default so the TSV schema is unchanged unless asked for. See Proforma.h.
     registerFlag_("proforma", "Append a ProForma 2.0 column ([+nterm]-SEQ-[+cterm]) for each tag");
+
+    registerFlag_("res_conf",
+                  "Append a res_conf column: per-residue confidences 0..100, "
+                  "N->C, space-separated, one per residue (a gap's two residues "
+                  "share their pair score). What assembly-style consumers "
+                  "(Stitch/ALPS via tools/tags_to_denovo.py) read as local "
+                  "confidence");
+
+    // Tag reconciliation (TagRecon stage A+B) at proteome scale: place each
+    // reported tag onto tryptic windows of a database by its flanking masses
+    // and localize/interpret the single mass gap the flanks imply. Runs on a
+    // per-run suffix-array index (ProteomeIndex, ~2 s to build on a human
+    // reference proteome) -- deliberately DECOUPLED from -fasta: filtering
+    // builds a per-length k-mer membership index whose memory grows with
+    // (residues x lengths), while reconciliation needs only the ~150 MB
+    // locate index, so a proteome-scale -recon_fasta must not force the
+    // filter's build.
+    // Entrapment-calibrated q-values for the -fasta membership filter.
+    // Adds a q_db column: the estimated FALSE-MATCH rate of accepting every
+    // tag at or below a row's E-value -- i.e. how often a tag this good hits
+    // the database by chance, calibrated by sequences the sample cannot
+    // contain. q_db is NOT the probability the tag misreads its precursor: a
+    // correct ladder read of a co-isolated chimeric peptide legitimately
+    // matches the target database and is not false under this null (which is
+    // exactly why this null works where single-spectrum decoys measured an
+    // empty one -- see doc/BACKLOG.md F4).
+    registerInputFile_("entrapment_fasta", "<file>", "",
+                       "Entrapment database (foreign species the sample cannot "
+                       "contain; phylogenetically distant, e.g. archaea for a "
+                       "mammalian sample). Requires -fasta. Appends a q_db "
+                       "column and marks entrapment-only matches efwd/erev "
+                       "in fasta_hit", false);
+    setValidFormats_("entrapment_fasta", ListUtils::create<String>("fasta"));
+
+    registerOutputFile_("recon_out", "<file>", "",
+                        "Reconcile reported tags against a protein database and write "
+                        "one row per placement (protein, peptide, position, flank "
+                        "agreement, mass gap + interpretation). Uses -recon_fasta, "
+                        "or -fasta when that is not given", false);
+    setValidFormats_("recon_out", ListUtils::create<String>("tsv"));
+    registerInputFile_("recon_fasta", "<file>", "",
+                       "Protein database for -recon_out. Default: the -fasta file", false);
+    setValidFormats_("recon_fasta", ListUtils::create<String>("fasta"));
+    registerIntOption_("recon_missed_cleavages", "<n>", 1,
+                       "Missed tryptic cleavages allowed in reconciliation windows", false);
+    setMinInt_("recon_missed_cleavages", 0);
+    registerIntOption_("recon_min_length", "<n>", 0,
+                       "Shortest tag worth reconciling; 0 derives it from database size "
+                       "(the length where chance matches fall below 5%). Overridable "
+                       "because the floor is a noise gate, not a correctness rule", false);
+    setMinInt_("recon_min_length", 0);
+    registerOutputFile_("delta_out", "<file>", "",
+                        "Aggregated mass-shift histogram over the reconciliations "
+                        "(requires -recon_out): delta, spectrum count, top "
+                        "interpretations. Region-level candidates, NOT localized "
+                        "identifications and NOT FDR-controlled", false);
+    setValidFormats_("delta_out", ListUtils::create<String>("tsv"));
 
     // Taxonomic / species detection: throw the tags at a prebuilt tag->taxon
     // index (buildtaxdb) and infer the taxa present by lowest-common-ancestor
@@ -373,6 +474,21 @@ protected:
     registerFlag_("species", "Infer which taxa are present from the tags. Uses the bundled "
                              "taxonomy unless -taxdb/-taxonomy_* are given, and writes "
                              "<out>.species.tsv unless -species_out is given");
+
+    // Glycopeptide spectrum flag: oxonium-ion detection per MS2 spectrum,
+    // written to its own TSV (see Glyco.h for why it is not a tag column).
+    registerFlag_("glyco",
+                  "Flag oxonium-bearing MS2 spectra (glycopeptide/glycan "
+                  "evidence, NOT an identification) to <out> with a .glyco.tsv "
+                  "suffix, or -glyco_out");
+    registerOutputFile_("glyco_out", "<file>", "",
+                        "Per-spectrum oxonium report. Default: <out> with a "
+                        ".glyco.tsv suffix", false);
+    setValidFormats_("glyco_out", ListUtils::create<String>("tsv"));
+    registerDoubleOption_("glyco_min_fraction", "<f>", 0.10,
+                          "Minimum summed oxonium intensity as a fraction of the "
+                          "base peak (MSFragger-Glyco's diagnostic filter)", false);
+    setMinFloat_("glyco_min_fraction", 0.0);
 
     registerInputFile_("taxdb", "<file>", "", "Tag->taxon index (built by buildtaxdb). Default: the bundled tax_k7.taxdb", false);
     registerInputFile_("taxonomy_nodes", "<file>", "", "NCBI taxonomy nodes.dmp. Default: the bundled nodes.dmp", false);
@@ -427,6 +543,70 @@ protected:
   /// Resolve OpenMS/UniMod modification names to FASTag::ModSpec via
   /// ModificationsDB. Terminal mods are skipped with a note -- they are absorbed
   /// into the reported flanking masses, not the internal residue alphabet.
+  /// One TSV row for one tag, appended to buf. THE row format -- file mode
+  /// and -stream both call this, so the two can never drift.
+  //
+  // Append field by field: a string grows on its own, so there is one code
+  // path and no fixed-buffer fallback to drift (an earlier snprintf version
+  // dropped columns on very long native IDs). Flanking masses at 4 decimals
+  // (0.1 mDa) -- %g's 6 significant digits are coarser than the tolerance the
+  // tag was found with, and these are what a downstream search constrains on.
+  static void appendTagRow(std::string& buf, const FASTag::Tag& t,
+                           const String& native_id, const char* hit,
+                           bool want_proforma, const std::string& proforma_fixed,
+                           bool want_res_conf = false)
+  {
+    char num[48];
+    auto f = [&](const char* fmt, auto v) { std::snprintf(num, sizeof num, fmt, v); buf += num; };
+    buf += native_id;          buf += '\t';
+    buf += t.seq;              buf += '\t';
+    f("%zu", t.n_res);         buf += '\t';
+    f("%d", t.charge);         buf += '\t';
+    f("%.4f", t.nterm_mass);   buf += '\t';
+    f("%.4f", t.cterm_mass);   buf += '\t';
+    f("%d", t.extended ? 1 : 0); buf += '\t';
+    f("%d", t.gapped ? 1 : 0); buf += '\t';
+    f("%g", t.evalue);         buf += '\t';
+    f("%.3f", t.min_conf);     buf += '\t';
+    f("%.3f", t.mean_conf);    buf += '\t';
+    buf += hit;
+    if (want_proforma) { buf += '\t'; buf += FASTag::toProforma(t.seq, t.nterm_mass, t.cterm_mass, proforma_fixed); }
+    if (want_res_conf)
+    {
+      buf += '\t';
+      for (size_t i = 0; i < t.res_conf.size(); ++i)
+      {
+        if (i) buf += ' ';
+        f("%d", static_cast<int>(t.res_conf[i]));
+      }
+    }
+    buf += '\n';
+  }
+
+  /// ProForma global fixed-modification prefix: each "Name (Residues)" entry
+  /// becomes `<[Name]@Residues>`. Fixed mods change residue masses but are
+  /// NOT in the tag sequence, so a bare `C` is really carbamidomethyl-C; the
+  /// prefix declares that for the whole proteoform.
+  static std::string buildProformaPrefix(const StringList& mods)
+  {
+    std::string out;
+    for (const String& m : mods)
+    {
+      const size_t lp = m.find('('), rp = m.rfind(')');
+      if (lp == String::npos || rp == String::npos || rp < lp) continue;
+      std::string name = m.substr(0, lp);
+      while (!name.empty() && name.back() == ' ') name.pop_back();
+      std::string targets;
+      for (char c : m.substr(lp + 1, rp - lp - 1))
+        if (c >= 'A' && c <= 'Z') targets += (c == 'I' ? 'L' : c);
+      if (name.empty() || targets.empty()) continue;
+      out += "<[" + name + "]@";
+      for (size_t i = 0; i < targets.size(); ++i) { if (i) out += ','; out += targets[i]; }
+      out += ">";
+    }
+    return out;
+  }
+
   void resolveMods_(const StringList& names, bool variable, std::vector<FASTag::ModSpec>& out)
   {
     auto* db = ModificationsDB::getInstance();
@@ -464,8 +644,34 @@ protected:
     }
   }
 
+  FILE* stream_data_ = nullptr;  ///< the REAL stdout in -stream mode
+
   ExitCodes main_(int, const char**) override
   {
+    if (getFlag_("stream"))
+    {
+      // stdout is the -stream DATA CHANNEL. OpenMS logs through thread-local
+      // streams that do not follow a global reconfig, and TOPPBase prints its
+      // timing line after main_ returns -- so the only airtight seal is the
+      // OS one: keep the real stdout as a private FILE*, then point fd 1 at
+      // stderr for everything else in the process.
+      const int data_fd = fastag_dup(1);
+      if (data_fd < 0 || fastag_dup2(2, 1) < 0
+          || !(stream_data_ = fastag_fdopen(data_fd, "w")))
+      {
+#ifndef _WIN32
+        if (data_fd >= 0 && !stream_data_) close(data_fd);
+#endif
+        OPENMS_LOG_ERROR << "-stream: cannot rewire stdout." << std::endl;
+        return ILLEGAL_PARAMETERS;
+      }
+#ifndef _WIN32
+      // A consumer that vanishes must surface as an error, not a SIGPIPE kill
+      // -- the flag help promises the process never dies mid-stream.
+      signal(SIGPIPE, SIG_IGN);
+#endif
+    }
+
     // Species precondition, checked BEFORE the run rather than after.
     //
     // The index is keyed on k-mers, so a tag shorter than k can never be looked
@@ -506,6 +712,30 @@ protected:
 
     const String in = getStringOption_("in");
     const String out = getStringOption_("out");
+    const bool stream_mode = getFlag_("stream");
+    if (!stream_mode && (in.empty() || out.empty()))
+    {
+      OPENMS_LOG_ERROR << "The parameters 'in' and 'out' are required (or use -stream)." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    if (stream_mode)
+    {
+      // Whole-run machinery is meaningless per-block: -out_spectra re-reads
+      // indexed input, q_db needs the full curve, -species aggregates a run,
+      // and the filter/recon paths are not per-spectrum-latency material yet.
+      for (const char* opt : {"fasta", "entrapment_fasta", "recon_out", "species_out",
+                              "taxdb", "out_spectra", "delta_out"})
+        if (!getStringOption_(opt).empty())
+        {
+          OPENMS_LOG_ERROR << "-stream cannot be combined with -" << opt << "." << std::endl;
+          return ILLEGAL_PARAMETERS;
+        }
+      if (getFlag_("species") || getFlag_("glyco"))
+      {
+        OPENMS_LOG_ERROR << "-stream cannot be combined with -species or -glyco." << std::endl;
+        return ILLEGAL_PARAMETERS;
+      }
+    }
     const String fasta = getStringOption_("fasta");
     const String out_spectra = getStringOption_("out_spectra");
 
@@ -519,6 +749,8 @@ protected:
     p.tol_ppm = getStringOption_("fragment_tolerance_unit") == "ppm";
     p.max_peak_count = static_cast<size_t>(getIntOption_("max_peaks"));
     p.max_tag_count = getIntOption_("max_tags");
+    p.diversity = getFlag_("diversity");
+    p.per_residue_conf = getFlag_("res_conf");
     p.max_evalue = getDoubleOption_("max_evalue");
     p.gap_penalty = getDoubleOption_("gap_penalty");
     resolveMods_(getStringList_("fixed_modifications"), false, p.mods);
@@ -543,7 +775,154 @@ protected:
     }
 
     FASTag::FastaFilter filt(getStringOption_("orientation") == "both");
+    FASTag::FastaFilter entrap(getStringOption_("orientation") == "both");
     const bool filtering = !fasta.empty();
+    const String entrap_fasta = getStringOption_("entrapment_fasta");
+    const bool entrap_on = !entrap_fasta.empty();
+    if (entrap_on && !filtering)
+    {
+      OPENMS_LOG_ERROR << "-entrapment_fasta calibrates the -fasta filter; "
+                          "give -fasta too." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    if (entrap_on
+        && (getFlag_("species")
+            || (!getStringOption_("taxdb").empty() && !getStringOption_("species_out").empty())))
+    {
+      OPENMS_LOG_ERROR << "-entrapment_fasta cannot be combined with -species: "
+                          "entrapment matches are known-false calibration "
+                          "material and would pollute the taxon evidence."
+                       << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+
+    const String recon_out = getStringOption_("recon_out");
+    const String delta_out = getStringOption_("delta_out");
+    const bool recon_on = !recon_out.empty();
+    if (!delta_out.empty() && !recon_on)
+    {
+      OPENMS_LOG_ERROR << "-delta_out requires -recon_out (the histogram is "
+                          "aggregated over reconciliations)." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    FASTag::ProteomeIndex pindex;
+    FASTag::TagReconciler recon(p.frag_tol, p.tol_ppm,
+                                getStringOption_("orientation") == "both");
+    if (recon_on)
+    {
+      String rfasta = getStringOption_("recon_fasta");
+      if (rfasta.empty()) rfasta = fasta;
+      if (rfasta.empty())
+      {
+        OPENMS_LOG_ERROR << "-recon_out needs a database: give -recon_fasta "
+                            "(or -fasta)." << std::endl;
+        return ILLEGAL_PARAMETERS;
+      }
+      std::vector<FASTAFile::FASTAEntry> rentries;
+      FASTAFile().load(rfasta, rentries);
+      std::vector<std::pair<char, double>> fixed_deltas;
+      for (const auto& m : p.mods)
+        if (!m.variable) fixed_deltas.emplace_back(m.residue, m.delta);
+      pindex.build(rentries, fixed_deltas, getDoubleOption_("isobaric_tolerance"));
+      int rmin = getIntOption_("recon_min_length");
+      if (rmin == 0) rmin = pindex.autoMinLen();
+      recon.attach(&pindex, getIntOption_("recon_missed_cleavages"), rmin);
+      std::vector<FASTag::ModCandidate> cands;
+      for (const auto& m : p.mods)
+        if (m.variable) cands.push_back({m.name, m.delta, std::string(1, m.residue)});
+      recon.setModCandidates(std::move(cands));
+      OPENMS_LOG_INFO << "Recon index: " << pindex.proteinCount() << " proteins, "
+                      << pindex.residueCount() << " residues, "
+                      << pindex.collapseRuleCount() << " isobaric rules; min tag length "
+                      << rmin << (getIntOption_("recon_min_length") == 0 ? " (derived)" : " (set)")
+                      << std::endl;
+    }
+
+    if (stream_mode)
+    {
+      FILE* const dataf = stream_data_;  // the real stdout, sealed at entry
+      const FASTag::Tables stables(p);
+      const bool spf = getFlag_("proforma");
+      const std::string spfx =
+          spf ? buildProformaPrefix(getStringList_("fixed_modifications")) : std::string();
+      std::fprintf(dataf, "spectrum\ttag\tlength\tcharge\tnterm_mass\tcterm_mass\textended"
+                          "\tgapped\tevalue\tmin_conf\tmean_conf\tfasta_hit%s%s\n",
+                   spf ? "\tproforma" : "", p.per_residue_conf ? "\tres_conf" : "");
+      std::fflush(dataf);
+
+      std::string line, id;
+      double prec_mz = 0;
+      int charge = 0;
+      MSSpectrum spec;
+      bool in_block = false, bad_block = false, sink_dead = false;
+      auto resync_error = [&](const std::string& msg) {
+        if (std::fprintf(dataf, "#error %s %s\n", id.empty() ? "?" : id.c_str(), msg.c_str()) < 0
+            || std::fflush(dataf) != 0)
+          sink_dead = true;
+        bad_block = true;
+      };
+      auto finish_block = [&]() {
+        if (!in_block) return;
+        if (!bad_block)
+        {
+          spec.sortByPosition();
+          std::string buf;
+          size_t n = 0;
+          if (!spec.empty())
+          {
+            const auto tags = FASTag::tagSpectrum(spec, prec_mz, charge, p, stables);
+            n = tags.size();
+            for (const auto& t : tags)
+              appendTagRow(buf, t, id, "-", spf, spfx, p.per_residue_conf);
+          }
+          if (std::fprintf(dataf, "%s#end %s %zu\n", buf.c_str(), id.c_str(), n) < 0
+              || std::fflush(dataf) != 0)
+            sink_dead = true;
+        }
+        in_block = bad_block = false;
+        spec.clear(true);
+        id.clear();
+      };
+      while (!sink_dead && std::getline(std::cin, line))
+      {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (line.empty()) { finish_block(); continue; }
+        if (line.rfind("spectrum ", 0) == 0)
+        {
+          finish_block();  // an unterminated previous block still gets its sentinel
+          char idbuf[256] = {0};
+          if (std::sscanf(line.c_str(), "spectrum %255s %lf %d", idbuf, &prec_mz, &charge) != 3
+              || prec_mz <= 0)
+          {
+            id.clear();
+            in_block = true;
+            resync_error("bad header (want: spectrum <id> <precursor_mz> <charge>)");
+            continue;
+          }
+          id = idbuf;
+          in_block = true;
+          continue;
+        }
+        if (!in_block) continue;  // stray line between blocks
+        if (bad_block) continue;  // resync: swallow until the blank line
+        double mz, inten;
+        if (std::sscanf(line.c_str(), "%lf %lf", &mz, &inten) != 2)
+        {
+          resync_error("bad peak line: " + line.substr(0, 64));
+          continue;
+        }
+        spec.emplace_back(mz, static_cast<float>(inten));
+      }
+      finish_block();  // EOF mid-block: emit what we have
+      if (sink_dead)
+      {
+        // The CONSUMER died (closed pipe), not us -- the malformed-input
+        // promise still holds; a dead reader is the one thing worth exiting for.
+        OPENMS_LOG_ERROR << "-stream: the output consumer closed the pipe; exiting." << std::endl;
+        return CANNOT_WRITE_OUTPUT_FILE;
+      }
+      return EXECUTION_OK;
+    }
     if (filtering)
     {
       std::vector<FASTAFile::FASTAEntry> entries;
@@ -577,6 +956,34 @@ protected:
                         << filt.autoMinLen() << "; about " << 100 * filt.chanceRate(filt.minLen())
                         << "% of random tags that length occur in this database by chance."
                         << std::endl;
+      }
+
+      if (entrap_on)
+      {
+        // Identical settings to the target filter -- same orientation, same
+        // collapse rules, same length range, and the TARGET's length floor
+        // (its own would differ with database size and skew the accounting).
+        std::vector<FASTAFile::FASTAEntry> eentries;
+        FASTAFile().load(entrap_fasta, eentries);
+        std::string eerr;
+        if (!entrap.load(eentries, &eerr))
+        {
+          OPENMS_LOG_ERROR << "Entrapment FASTA: " << eerr << std::endl;
+          return INPUT_FILE_EMPTY;
+        }
+        entrap.setMinLen(filt.minLen());
+        const double iso2 = getDoubleOption_("isobaric_tolerance");
+        if (iso2 > 0)
+        {
+          std::vector<std::pair<char, double>> fixed_deltas;
+          for (const auto& m : p.mods)
+            if (!m.variable) fixed_deltas.emplace_back(m.residue, m.delta);
+          entrap.deriveCollapses(iso2, fixed_deltas);
+        }
+        entrap.build(p.tag_length, max_len);
+        OPENMS_LOG_INFO << "Entrapment: " << entrap.sequenceCount() << " sequences, "
+                        << entrap.residueCount() << " residues, "
+                        << entrap.indexedKeys() << " keys" << std::endl;
       }
     }
 
@@ -769,30 +1176,44 @@ protected:
     }
     const bool want_proforma = getFlag_("proforma");
     tsv << "spectrum\ttag\tlength\tcharge\tnterm_mass\tcterm_mass\textended\tgapped\tevalue\tmin_conf\tmean_conf\tfasta_hit"
-        << (want_proforma ? "\tproforma" : "") << "\n";
+        << (want_proforma ? "\tproforma" : "") << (p.per_residue_conf ? "\tres_conf" : "") << "\n";
 
-    // ProForma global fixed-modification prefix, built once. Fixed mods change
-    // residue masses but are NOT in the tag sequence, so a bare `C` is really
-    // carbamidomethyl-C; `<[Carbamidomethyl]@C>` declares that for the whole
-    // proteoform. Parse each "Name (Residues)" entry into `<[Name]@Residues>`.
-    std::string proforma_fixed;
-    if (want_proforma)
+    std::ofstream rtsv;
+    if (recon_on)
     {
-      for (const String& m : getStringList_("fixed_modifications"))
+      rtsv.open(recon_out.c_str());
+      if (!rtsv)
       {
-        const size_t lp = m.find('('), rp = m.rfind(')');
-        if (lp == String::npos || rp == String::npos || rp < lp) continue;
-        std::string name = m.substr(0, lp);
-        while (!name.empty() && name.back() == ' ') name.pop_back();
-        std::string targets;
-        for (char c : m.substr(lp + 1, rp - lp - 1))
-          if (c >= 'A' && c <= 'Z') targets += (c == 'I' ? 'L' : c);
-        if (name.empty() || targets.empty()) continue;
-        proforma_fixed += "<[" + name + "]@";
-        for (size_t i = 0; i < targets.size(); ++i) { if (i) proforma_fixed += ','; proforma_fixed += targets[i]; }
-        proforma_fixed += ">";
+        OPENMS_LOG_ERROR << "Cannot open output file " << recon_out << " for writing." << std::endl;
+        return CANNOT_WRITE_OUTPUT_FILE;
       }
+      rtsv << "spectrum\ttag\tprotein\tpeptide\tpos\treversed\tnterm_match\tcterm_match"
+              "\tdelta_mass\tregion\tdelta_interp\n";
     }
+
+    const bool glyco_on = getFlag_("glyco");
+    String glyco_out = getStringOption_("glyco_out");
+    std::ofstream gtsv;
+    if (glyco_on)
+    {
+      if (glyco_out.empty())
+      {
+        const size_t gslash = out.find_last_of("/\\");
+        const size_t gdot = out.rfind('.');
+        const bool gext = gdot != std::string::npos && (gslash == std::string::npos || gdot > gslash);
+        glyco_out = (gext ? out.substr(0, gdot) : out) + ".glyco.tsv";
+      }
+      gtsv.open(glyco_out.c_str());
+      if (!gtsv)
+      {
+        OPENMS_LOG_ERROR << "Cannot open output file " << glyco_out << " for writing." << std::endl;
+        return CANNOT_WRITE_OUTPUT_FILE;
+      }
+      gtsv << "spectrum\tn_oxonium\toxonium_frac\tglyco\tions\n";
+    }
+
+    const std::string proforma_fixed =
+        want_proforma ? buildProformaPrefix(getStringList_("fixed_modifications")) : std::string();
 
     PeakMap kept;
     if (streaming)
@@ -802,6 +1223,7 @@ protected:
     else kept.getExperimentalSettings() = exp.getExperimentalSettings();
 
     size_t n_ms2 = 0, n_tags = 0, n_reported = 0;
+    size_t n_glyco = 0, n_glyco_scanned = 0;
     std::map<int, std::pair<size_t, size_t>> by_len;   // length -> (seen, matched)
 
     // Parallel over spectra, which is the only safe level: each spectrum is
@@ -816,6 +1238,17 @@ protected:
     const SignedSize n_spec = static_cast<SignedSize>(n_total);
     constexpr size_t BLOCK = 65536;
     std::vector<std::string> rows;
+    std::vector<std::string> rrows;  ///< block-local recon rows (recon_on only)
+    std::vector<std::string> grows;  ///< block-local glyco rows (glyco_on only)
+    // Two-pass -out_spectra for the mzML->mzML case: record kept INPUT indices
+    // during tagging, re-read and stream them through a writing consumer at
+    // the end -- O(1 spectrum) memory instead of holding every kept spectrum.
+    // mzPeak stays on the accumulate+store path: MzPeakFile has no streaming
+    // writer, and mzpeak INPUT materializes upstream anyway (documented).
+    const bool stream_out = !out_spectra.empty() && !mzpeak_in && !mzpeak_out;
+    std::vector<Size> kept_idx;
+    std::vector<char> keep_target;
+    size_t block_base = 0;
     std::vector<char> keep;
     std::vector<MSSpectrum> kept_spec;
     std::vector<std::map<int, std::pair<size_t, size_t>>> per_thread_len(
@@ -833,10 +1266,36 @@ protected:
     // readers that mostly agree are worse than one.
     //
     // Callers must not resize rows/keep/kept_spec while this runs.
-    auto tag_one = [&](const MSSpectrum& spec, size_t tid) -> std::string
+    //
+    // Returns the tag rows and (when -recon_out) the reconciliation rows for
+    // one spectrum, as strings the caller places by index -- one result type
+    // so the two files can never desynchronize their ordering discipline.
+    struct SpecResult
     {
-      std::string buf;
-      if (spec.getMSLevel() != 2 || spec.empty() || spec.getPrecursors().empty()) return buf;
+      std::string buf, rbuf;
+      /// Per reported row, in row order: (evalue, is_entrapment) -- the
+      /// material the q_db post-pass consumes without ever reparsing a
+      /// serialized %g evalue back off the TSV.
+      std::vector<std::pair<double, bool>> meta;
+      bool any_target = false;  ///< at least one non-entrapment reported tag
+    };
+    // Entrapment-calibration accumulators (entrap_on only): target E-values,
+    // and entrapment E-values with their tag length -- the key spaces are
+    // per-length, so each entrapment event is weighted by 1/r_len later.
+    std::vector<std::vector<double>> pt_target_e(per_thread_len.size());
+    std::vector<std::vector<std::pair<double, int>>> pt_entrap_e(per_thread_len.size());
+    // -delta_out accumulators: one (delta, interp) sample per spectrum -- the
+    // best-E-value tag's smallest-|delta| placement -- so 50 correlated tags
+    // cannot flood a bin. Clamped-flank placements are excluded and counted:
+    // a flank clamped to 0 (FASTagger's max(0,.)) makes its delta bogus.
+    std::vector<std::vector<std::pair<double, std::string>>> per_thread_delta(per_thread_len.size());
+    std::vector<size_t> per_thread_delta_clamped(per_thread_len.size(), 0);
+
+    auto tag_one = [&](const MSSpectrum& spec, size_t tid) -> SpecResult
+    {
+      SpecResult res;
+      std::string& buf = res.buf;
+      if (spec.getMSLevel() != 2 || spec.empty() || spec.getPrecursors().empty()) return res;
       ++per_thread_ms2[tid];
 
       const auto& prec = spec.getPrecursors().front();
@@ -847,61 +1306,148 @@ protected:
       // ~80 bytes/row covers the fixed columns and a typical native ID; the
       // append path just grows past it for the rare long one.
       buf.reserve(tags.size() * 80);
+      bool delta_done = false;  // one -delta_out sample per spectrum
 
       for (const auto& t : tags)
       {
         const char* hit = "-";
+        bool row_entrap = false;
         if (filtering)
         {
           ++per_thread_len[tid][static_cast<int>(t.n_res)].first;
           const auto h = filt.match(FASTag::baseSequence(t.seq));
-          if (h == FASTag::FastaFilter::Hit::None) continue;
-          ++per_thread_len[tid][static_cast<int>(t.n_res)].second;
-          // A reverse-only match identifies the ion series: the tag was read off
-          // the b series, so its flanking masses carry a one-water offset.
-          hit = (h == FASTag::FastaFilter::Hit::Forward) ? "fwd" : "rev";
+          if (h == FASTag::FastaFilter::Hit::None)
+          {
+            // Target-first attribution: only a tag the TARGET rejects may
+            // count as entrapment evidence (a tag hitting both is a target
+            // match -- exclusive attribution matches the exclusive key space
+            // the r_len correction is computed over).
+            if (!entrap_on) continue;
+            const auto he = entrap.match(FASTag::baseSequence(t.seq));
+            if (he == FASTag::FastaFilter::Hit::None) continue;
+            row_entrap = true;
+            hit = (he == FASTag::FastaFilter::Hit::Forward) ? "efwd" : "erev";
+            pt_entrap_e[tid].emplace_back(t.evalue, static_cast<int>(t.n_res));
+          }
+          else
+          {
+            ++per_thread_len[tid][static_cast<int>(t.n_res)].second;
+            // A reverse-only match identifies the ion series: the tag was read off
+            // the b series, so its flanking masses carry a one-water offset.
+            hit = (h == FASTag::FastaFilter::Hit::Forward) ? "fwd" : "rev";
+            if (entrap_on) pt_target_e[tid].push_back(t.evalue);
+          }
         }
+        if (!row_entrap) res.any_target = true;
+        if (entrap_on) res.meta.emplace_back(t.evalue, row_entrap);
         ++per_thread_rep[tid];
 
-        // Append the row field by field to buf. This replaces a pair of fixed
-        // 512-byte snprintf format strings whose heap-fallback branch had one
-        // COLUMN FEWER (it dropped min_conf/mean_conf), so a tag on a spectrum
-        // with a very long native ID silently emitted a malformed row. A string
-        // grows on its own, so there is one code path and no fallback to drift.
-        //
-        // Flanking masses at 4 decimals (0.1 mDa), not %g: %g's 6 significant
-        // digits are coarser than the tolerance the tag was found with, and
-        // these are exactly the values a downstream search uses as a precursor
-        // constraint. E-values keep %g, where relative precision is what matters.
-        char num[48];
-        auto f = [&](const char* fmt, auto v) { std::snprintf(num, sizeof num, fmt, v); buf += num; };
-        buf += spec.getNativeID(); buf += '\t';
-        buf += t.seq;              buf += '\t';
-        f("%zu", t.n_res);         buf += '\t';
-        f("%d", t.charge);         buf += '\t';
-        f("%.4f", t.nterm_mass);   buf += '\t';
-        f("%.4f", t.cterm_mass);   buf += '\t';
-        f("%d", t.extended ? 1 : 0); buf += '\t';
-        f("%d", t.gapped ? 1 : 0); buf += '\t';
-        f("%g", t.evalue);         buf += '\t';
-        f("%.3f", t.min_conf);     buf += '\t';
-        f("%.3f", t.mean_conf);    buf += '\t';
-        buf += hit;
-        if (want_proforma) { buf += '\t'; buf += FASTag::toProforma(t.seq, t.nterm_mass, t.cterm_mass, proforma_fixed); }
-        buf += '\n';
+        appendTagRow(buf, t, spec.getNativeID(), hit, want_proforma, proforma_fixed,
+                     p.per_residue_conf);
+
+        if (recon_on && !row_entrap)  // known-false rows must not place or bin
+        {
+          const auto places = recon.reconcile(FASTag::baseSequence(t.seq),
+                                              t.nterm_mass, t.cterm_mass);
+          for (const auto& pl : places)
+          {
+            std::string prot = pl.protein;
+            for (char& ch : prot) if (ch == '\t' || ch == '\n' || ch == '\r') ch = ' ';
+            res.rbuf += spec.getNativeID(); res.rbuf += '\t';
+            res.rbuf += t.seq;             res.rbuf += '\t';
+            res.rbuf += prot;              res.rbuf += '\t';
+            res.rbuf += pl.peptide;        res.rbuf += '\t';
+            char rnum[64];
+            std::snprintf(rnum, sizeof rnum, "%zu\t%d\t%d\t%d\t%.4f\t",
+                          pl.pos, pl.reversed ? 1 : 0, pl.nterm_match ? 1 : 0,
+                          pl.cterm_match ? 1 : 0, pl.delta_mass);
+            res.rbuf += rnum;
+            if (pl.region_hi >= pl.region_lo)
+            {
+              std::snprintf(rnum, sizeof rnum, "%d-%d", pl.region_lo, pl.region_hi);
+              res.rbuf += rnum;
+            }
+            res.rbuf += '\t';
+            res.rbuf += pl.delta_interp;
+            res.rbuf += '\n';
+          }
+          // The spectrum's -delta_out sample: this is the best-E-value tag
+          // (tags arrive sorted best first) -- take its min-|delta| placement.
+          if (!delta_out.empty() && !places.empty() && !delta_done)
+          {
+            const FASTag::Reconciliation* best = nullptr;
+            for (const auto& pl : places)
+              if (!best || std::fabs(pl.delta_mass) < std::fabs(best->delta_mass)) best = &pl;
+            // The delta lives on the mismatched side; the spectrum flank that
+            // fed it is nterm/cterm swapped for reversed placements. A 0.0
+            // there is indistinguishable from FASTagger's negative-flank clamp,
+            // so the sample is excluded either way and counted.
+            double side_flank = 0.0;
+            if (!best->nterm_match) side_flank = best->reversed ? t.cterm_mass : t.nterm_mass;
+            else if (!best->cterm_match) side_flank = best->reversed ? t.nterm_mass : t.cterm_mass;
+            const bool clamped_side =
+                std::fabs(best->delta_mass) > 1e-6 && side_flank == 0.0;
+            if (clamped_side) ++per_thread_delta_clamped[tid];
+            else per_thread_delta[tid].emplace_back(best->delta_mass, best->delta_interp);
+            delta_done = true;
+          }
+        }
       }
-      return buf;
+      return res;
     };
 
     // Record one spectrum's result at its BLOCK-LOCAL index. Serial or
     // parallel: the index is the caller's, so output order never depends on
     // scheduling.
-    auto record = [&](size_t idx, std::string&& buf, const MSSpectrum& spec)
+    // Per-row (evalue, is_entrapment) in FILE order, appended block by block
+    // in write_block -- the q_db post-pass walks the written TSV and this
+    // vector in lockstep. ~17 bytes/row; a 13 M-row HeLa run is ~220 MB,
+    // which is the honest cost of a whole-run calibration curve.
+    std::vector<std::pair<double, bool>> row_meta;
+    std::vector<std::vector<std::pair<double, bool>>> rmeta_blk;
+
+    auto record = [&](size_t idx, SpecResult&& r, const MSSpectrum& spec)
     {
-      if (buf.empty()) return;
-      rows[idx].swap(buf);
+      // Glyco covers every spectrum the tagger PROCESSED (MS2, non-empty,
+      // precursor-bearing) -- BEFORE the empty-buf gate: glyco spectra are
+      // exactly the tag-poor ones the gate would drop. The raw peak list is
+      // scanned so peak budgets can never eat the oxonium region.
+      if (glyco_on && spec.getMSLevel() == 2 && !spec.empty() && !spec.getPrecursors().empty())
+      {
+        const MSSpectrum* sp = &spec;
+        MSSpectrum sorted_copy;
+        if (!spec.isSorted())
+        {
+          sorted_copy = spec;
+          sorted_copy.sortByPosition();
+          sp = &sorted_copy;
+        }
+        const auto g = FASTag::scanOxonium(*sp, p.frag_tol, p.tol_ppm,
+                                           getDoubleOption_("glyco_min_fraction"));
+        char gnum[64];
+        std::snprintf(gnum, sizeof gnum, "\t%d\t%.3f\t%d\t", g.n_matched, g.frac,
+                      g.glyco ? 1 : 0);
+        grows[idx] = spec.getNativeID();
+        grows[idx] += gnum;
+        grows[idx] += g.ions;
+        grows[idx] += '\n';
+      }
+      if (r.buf.empty()) return;  // rbuf is only ever non-empty alongside buf
+      rows[idx].swap(r.buf);
+      if (recon_on) rrows[idx].swap(r.rbuf);
+      if (entrap_on) rmeta_blk[idx].swap(r.meta);
       keep[idx] = 1;
-      if (!out_spectra.empty()) kept_spec[idx] = spec;
+      // A spectrum whose only reported tags are entrapment matches is
+      // calibration material, not a hit -- keep it out of -out_spectra. The
+      // else-clear matters: the slot may hold a stale spectrum from an
+      // earlier block (buffers are recycled), and write_block treats
+      // non-empty as "keep".
+      if (stream_out) keep_target[idx] = r.any_target ? 1 : 0;
+      else if (!out_spectra.empty())
+      {
+        if (r.any_target) kept_spec[idx] = spec;
+        else kept_spec[idx] = MSSpectrum();
+      }
     };
 
     // Size the block buffers (capacity is recycled across blocks) and reset
@@ -912,9 +1458,13 @@ protected:
       if (rows.size() < n_used)
       {
         rows.resize(n_used);
-        if (!out_spectra.empty()) kept_spec.resize(n_used);
+        if (recon_on) rrows.resize(n_used);
+        if (glyco_on) grows.resize(n_used);
+        if (entrap_on) rmeta_blk.resize(n_used);
+        if (!out_spectra.empty() && !stream_out) kept_spec.resize(n_used);
       }
       keep.assign(n_used, 0);
+      if (stream_out) keep_target.assign(n_used, 0);
     };
 
     // -species consumes (spectrum id, tag) pairs from the REPORTED rows. They
@@ -932,8 +1482,25 @@ protected:
     {
       for (size_t i = 0; i < n_used; ++i)
       {
+        if (glyco_on && !grows[i].empty())
+        {
+          gtsv << grows[i];
+          // 4th field is the 0/1 flag; count flagged spectra for the summary.
+          size_t tp = grows[i].find('\t');
+          for (int f = 0; f < 2 && tp != std::string::npos; ++f)
+            tp = grows[i].find('\t', tp + 1);
+          if (tp != std::string::npos && grows[i].compare(tp + 1, 1, "1") == 0) ++n_glyco;
+          ++n_glyco_scanned;
+          grows[i].clear();
+        }
         if (!keep[i]) continue;
         tsv << rows[i];
+        if (recon_on && !rrows[i].empty()) { rtsv << rrows[i]; rrows[i].clear(); }
+        if (entrap_on)
+        {
+          row_meta.insert(row_meta.end(), rmeta_blk[i].begin(), rmeta_blk[i].end());
+          rmeta_blk[i].clear();
+        }
         if (want_species)
         {
           // Field 0 = spectrum id, field 1 = tag, per line.
@@ -954,7 +1521,12 @@ protected:
           }
         }
         rows[i].clear();
-        if (!out_spectra.empty()) kept.addSpectrum(std::move(kept_spec[i]));
+        if (stream_out)
+        {
+          if (keep[i] && keep_target[i]) kept_idx.push_back(static_cast<Size>(block_base + i));
+        }
+        else if (!out_spectra.empty() && !kept_spec[i].empty())
+          kept.addSpectrum(std::move(kept_spec[i]));
       }
     };
 
@@ -1094,6 +1666,7 @@ protected:
     for (SignedSize base = 0; base < n_spec; base += static_cast<SignedSize>(BLOCK))
     {
       const SignedSize lim = std::min(n_spec, base + static_cast<SignedSize>(BLOCK));
+      block_base = static_cast<size_t>(base);
       prep_block(static_cast<size_t>(lim - base));
 #pragma omp parallel
       {
@@ -1170,6 +1743,231 @@ protected:
     {
       OPENMS_LOG_ERROR << "Failed writing " << out << " (disk full?)." << std::endl;
       return CANNOT_WRITE_OUTPUT_FILE;
+    }
+
+    // ---- q_db: entrapment-calibrated false-match q-values ----------------
+    //
+    // Post-pass over the finished TSV: build the weighted target/decoy curve
+    // from the in-memory E-values (never reparsing the serialized %g values),
+    // then stream-rewrite <out> appending the q_db column. Atomic via rename.
+    if (entrap_on)
+    {
+      std::vector<double> target_e;
+      std::vector<std::pair<double, int>> entrap_e;
+      for (size_t t = 0; t < pt_target_e.size(); ++t)
+      {
+        target_e.insert(target_e.end(), pt_target_e[t].begin(), pt_target_e[t].end());
+        entrap_e.insert(entrap_e.end(), pt_entrap_e[t].begin(), pt_entrap_e[t].end());
+      }
+
+      // Per-length effective ratio r_len = exclusive entrapment keys over
+      // target keys, orientation-closed. The key spaces are per-length, so a
+      // single pooled scalar would miscalibrate a curve mixing lengths.
+      std::map<int, double> r_len;
+      double worst_r = std::numeric_limits<double>::max();
+      for (int len = filt.minLen(); len <= FASTag::MAX_FILTER_LEN; ++len)
+      {
+        const size_t tk = filt.keyCount(len);
+        const size_t ek = entrap.keyCount(len);
+        if (tk > 0 && ek == 0)
+          OPENMS_LOG_WARN << "Entrapment len " << len << ": target keys exist but "
+                             "the entrapment database has none -- events at this "
+                             "length carry no calibration evidence." << std::endl;
+        if (tk == 0 || ek == 0) continue;
+        const size_t shared = entrap.sharedKeyCount(filt, len);
+        const double r = static_cast<double>(ek - shared) / static_cast<double>(tk);
+        r_len[len] = r;
+        if (r > 0) worst_r = std::min(worst_r, r);
+        OPENMS_LOG_INFO << "Entrapment len " << len << ": " << ek << " keys, "
+                        << shared << " shared with target (closed), r=" << r << std::endl;
+      }
+
+      std::vector<std::pair<double, double>> wdecoys;
+      size_t dropped = 0;
+      for (const auto& de : entrap_e)
+      {
+        const auto it = r_len.find(de.second);
+        if (it == r_len.end() || it->second <= 0) { ++dropped; continue; }
+        wdecoys.emplace_back(de.first, 1.0 / it->second);
+      }
+      if (dropped)
+        OPENMS_LOG_WARN << dropped << " entrapment events at lengths with no "
+                           "exclusive entrapment key space were dropped from "
+                           "the curve." << std::endl;
+      if (!entrap_e.empty() && wdecoys.empty())
+      {
+        // Every event dropped: the entrapment database's (orientation-closed)
+        // key space sits entirely inside the target's. An all-zero q_db here
+        // would read as "perfect" while carrying zero evidence -- exactly the
+        // failure mode TagFDR's contract tells the caller to prevent.
+        OPENMS_LOG_ERROR << "The entrapment database shares its entire key "
+                            "space with the target at every matched length; "
+                            "q_db cannot be calibrated. Choose a more distant "
+                            "entrapment proteome." << std::endl;
+        return UNEXPECTED_RESULT;
+      }
+      if (entrap_e.size() < 200)
+        OPENMS_LOG_WARN << "Only " << entrap_e.size() << " entrapment events -- "
+                           "the q_db curve is step-noisy below ~200; consider a "
+                           "larger entrapment database." << std::endl;
+      if (!target_e.empty() && worst_r != std::numeric_limits<double>::max())
+        OPENMS_LOG_INFO << "q_db resolution floor ~" << (1.0 / worst_r) / target_e.size()
+                        << " (one event at the TIGHTEST length over "
+                        << target_e.size() << " target matches; other lengths "
+                           "resolve coarser). q_db 0 below it means 'under the "
+                           "resolution', not 'zero risk'." << std::endl;
+
+      const size_t n_curve_events = wdecoys.size();
+      const FASTag::TagFDR fdr(std::move(target_e), std::move(wdecoys));
+
+      const String tmp = out + ".qtmp";
+      std::ifstream in_tsv(out.c_str());
+      std::ofstream out_tsv(tmp.c_str());
+      std::string line;
+      size_t ri = 0;
+      bool first = true, ok = static_cast<bool>(in_tsv) && static_cast<bool>(out_tsv);
+      while (ok && std::getline(in_tsv, line))
+      {
+        if (first) { out_tsv << line << "\tq_db\n"; first = false; continue; }
+        if (ri >= row_meta.size()) { ok = false; break; }
+        out_tsv << line << '\t';
+        if (!row_meta[ri].second)  // entrapment rows get an empty q_db
+        {
+          char qn[32];
+          std::snprintf(qn, sizeof qn, "%.3g", fdr.qOf(row_meta[ri].first));
+          out_tsv << qn;
+        }
+        out_tsv << '\n';
+        ++ri;
+      }
+      ok = ok && ri == row_meta.size() && !in_tsv.bad();
+      out_tsv.flush();
+      ok = ok && static_cast<bool>(out_tsv);
+      in_tsv.close();
+      out_tsv.close();
+      std::error_code rc_ec;
+      if (ok)
+      {
+        // std::filesystem::rename replaces an existing destination on every
+        // platform; C rename() refuses to on Windows, which killed the
+        // feature there.
+        std::filesystem::rename(tmp.c_str(), out.c_str(), rc_ec);
+      }
+      if (!ok || rc_ec)
+      {
+        OPENMS_LOG_ERROR << "Failed appending q_db to " << out
+                         << " (row/meta mismatch or write failure); the TSV is "
+                            "left WITHOUT the column." << std::endl;
+        std::remove(tmp.c_str());
+        return CANNOT_WRITE_OUTPUT_FILE;
+      }
+      OPENMS_LOG_INFO << "q_db: " << row_meta.size() << " rows calibrated against "
+                      << n_curve_events << " entrapment events ("
+                      << entrap_e.size() << " observed) -> " << out << std::endl;
+      OPENMS_LOG_INFO << "q_db calibration envelope (measured 2026-09, "
+                         "doc/F4-CALIBRATION-AUDIT.md): conservative at q_db <= 0.02; "
+                         "UNDERESTIMATES the false-match rate ~1.6x at 0.05-0.1. Use "
+                         "tight thresholds, and read q_db as DB-match spuriousness, "
+                         "never as read correctness." << std::endl;
+    }
+
+    if (glyco_on)
+    {
+      gtsv.flush();
+      gtsv.close();
+      if (gtsv.fail())
+      {
+        OPENMS_LOG_ERROR << "Failed writing " << glyco_out << " (disk full?)." << std::endl;
+        return CANNOT_WRITE_OUTPUT_FILE;
+      }
+      OPENMS_LOG_INFO << "Glyco: " << n_glyco << " of " << n_glyco_scanned
+                      << " processed MS2 spectra carry oxonium evidence -> "
+                      << glyco_out << std::endl;
+    }
+
+    if (recon_on)
+    {
+      rtsv.flush();
+      rtsv.close();
+      if (rtsv.fail())
+      {
+        OPENMS_LOG_ERROR << "Failed writing " << recon_out << " (disk full?)." << std::endl;
+        return CANNOT_WRITE_OUTPUT_FILE;
+      }
+
+      // -delta_out: aggregate the per-spectrum samples into a histogram.
+      // 0.0005 Da bins, adjacent-bin local-max grouping into peaks; each row
+      // reports the peak center, its spectrum count, and the most frequent
+      // interpretations. Candidates, not identifications -- the README says so.
+      if (!delta_out.empty())
+      {
+        std::map<int64_t, std::pair<uint64_t, std::map<std::string, uint64_t>>> bins;
+        size_t clamped = 0, samples = 0;
+        for (size_t t = 0; t < per_thread_delta.size(); ++t)
+        {
+          clamped += per_thread_delta_clamped[t];
+          for (const auto& d : per_thread_delta[t])
+          {
+            ++samples;
+            auto& b = bins[static_cast<int64_t>(std::llround(d.first / 0.0005))];
+            ++b.first;
+            if (!d.second.empty()) ++b.second[d.second];
+          }
+        }
+        // Local-max grouping: a bin whose count is not exceeded by either
+        // neighbor becomes a peak and absorbs its (strictly smaller) neighbors.
+        std::ofstream dtsv(delta_out.c_str());
+        if (!dtsv)
+        {
+          OPENMS_LOG_ERROR << "Cannot open output file " << delta_out << " for writing." << std::endl;
+          return CANNOT_WRITE_OUTPUT_FILE;
+        }
+        dtsv << "delta\tspectra\ttop_interps\n";
+        std::set<int64_t> absorbed;
+        for (const auto& kv : bins)
+        {
+          if (absorbed.count(kv.first)) continue;
+          auto lo = bins.find(kv.first - 1), hi = bins.find(kv.first + 1);
+          const uint64_t nl = lo != bins.end() ? lo->second.first : 0;
+          const uint64_t nh = hi != bins.end() ? hi->second.first : 0;
+          if (kv.second.first < nl || kv.second.first < nh) continue;  // not the local max
+          uint64_t count = kv.second.first;
+          std::map<std::string, uint64_t> interps = kv.second.second;
+          for (auto* nb : {lo != bins.end() ? &*lo : nullptr, hi != bins.end() ? &*hi : nullptr})
+            if (nb && nb->second.first < kv.second.first)
+            {
+              count += nb->second.first;
+              for (const auto& ip : nb->second.second) interps[ip.first] += ip.second;
+              absorbed.insert(nb->first);
+            }
+          // top 3 interpretations by count, deterministic tie-break on name
+          std::vector<std::pair<uint64_t, std::string>> ranked;
+          for (const auto& ip : interps) ranked.emplace_back(ip.second, ip.first);
+          std::sort(ranked.begin(), ranked.end(), [](const auto& a, const auto& b) {
+            return a.first != b.first ? a.first > b.first : a.second < b.second;
+          });
+          char dnum[48];
+          std::snprintf(dnum, sizeof dnum, "%.4f\t%llu\t", kv.first * 0.0005,
+                        static_cast<unsigned long long>(count));
+          dtsv << dnum;
+          for (size_t r = 0; r < ranked.size() && r < 3; ++r)
+          {
+            if (r) dtsv << ';';
+            dtsv << ranked[r].second << ':' << ranked[r].first;
+          }
+          if (ranked.empty()) dtsv << '-';
+          dtsv << '\n';
+        }
+        dtsv.close();
+        if (dtsv.fail())
+        {
+          OPENMS_LOG_ERROR << "Failed writing " << delta_out << "." << std::endl;
+          return CANNOT_WRITE_OUTPUT_FILE;
+        }
+        OPENMS_LOG_INFO << "Delta histogram: " << samples << " spectra sampled"
+                        << (clamped ? String(", ") + clamped + " excluded (clamped flank)" : String(""))
+                        << " -> " << delta_out << std::endl;
+      }
     }
 
     // Taxonomic / species detection from the tags.
@@ -1424,7 +2222,55 @@ protected:
       }
     }
 
-    if (!out_spectra.empty())
+    if (stream_out)
+    {
+      if (kept_idx.empty())
+      {
+        OPENMS_LOG_ERROR << "No spectrum carried a reported tag; not writing " << out_spectra
+                         << std::endl;
+        return UNEXPECTED_RESULT;
+      }
+      {
+        // Scoped: the destructor writes footer + index. The count is known
+        // exactly BEFORE the first consume (the header bakes it in at that
+        // point -- why per-block streaming was rejected). Per-spectrum
+        // sourceFile/dataProcessing references are cleared so the header,
+        // built from the run-level settings alone, can never dangle; the
+        // FILTERING processing step is declared for every spectrum instead.
+        PlainMSDataWritingConsumer consumer(out_spectra);
+        consumer.setExperimentalSettings(kept.getExperimentalSettings());
+        consumer.setExpectedSize(kept_idx.size(), 0);
+        consumer.addDataProcessing(getProcessingInfo_(DataProcessing::FILTERING));
+        for (const Size i : kept_idx)
+        {
+          MSSpectrum sp = streaming ? ondisc->getSpectrum(i) : exp[i];
+          sp.setSourceFile(SourceFile());
+          sp.setDataProcessing({});
+          consumer.consumeSpectrum(sp);
+        }
+      }
+      // The consumer never checks its stream; verify the artifact instead.
+      std::ifstream chk(out_spectra.c_str(), std::ios::ate | std::ios::binary);
+      bool ok = chk.good() && chk.tellg() > 0;
+      if (ok)
+      {
+        const auto sz = chk.tellg();
+        const std::streamoff back = std::min<std::streamoff>(sz, 256);
+        chk.seekg(-back, std::ios::end);
+        std::string tail(static_cast<size_t>(back), '\0');
+        chk.read(&tail[0], back);
+        ok = tail.find("</indexedmzML>") != std::string::npos;
+      }
+      if (!ok)
+      {
+        OPENMS_LOG_ERROR << "Failed writing " << out_spectra << " (truncated or unwritable)."
+                         << std::endl;
+        return CANNOT_WRITE_OUTPUT_FILE;
+      }
+      OPENMS_LOG_INFO << "Wrote " << kept_idx.size() << " spectra to " << out_spectra
+                      << " (two-pass, O(1) memory)" << std::endl;
+    }
+    else if (!out_spectra.empty())
     {
       if (kept.empty())
       {

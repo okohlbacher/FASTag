@@ -593,6 +593,148 @@ int main()
     std::printf("14. deisotope at 0.3 Da (ion trap): no exception\n");
   }
 
+  // 15. -diversity: mechanism invariants on a chimeric spectrum. What the
+  //     flag GUARANTEES: output size, rank 1 and determinism unchanged; the
+  //     kept slots contain strictly fewer near-duplicate pairs (same charge,
+  //     sharing all but <=1 peak) whenever the undiversified head had any.
+  //     What it does NOT guarantee (measured, documented in the BACKLOG): a
+  //     co-isolated peptide buried far below the cap cannot be surfaced --
+  //     deferral reorders families near the head, it is not a per-peptide
+  //     clustering.
+  {
+    const std::string dom = "VGAHAGEYGAEALER", coi = "DFTPAVLQSSWK";
+    double pmz_d, pmz_c;
+    MSSpectrum sd = synth(dom, 0, 11, pmz_d);
+    MSSpectrum sc = synth(coi, 0, 12, pmz_c);
+    MSSpectrum chim = sd;
+    for (auto& pk : sc) chim.emplace_back(pk.getMZ(), pk.getIntensity() * 0.45);
+    chim.sortByPosition();
+
+    FASTag::Param p;
+    p.frag_tol = 0.02; p.tol_ppm = false; p.complement_tol = 0.02;
+    p.tag_length = 4; p.max_tag_count = 10;
+    const FASTag::Tables tab(p);
+
+    auto run = [&](bool div) {
+      FASTag::Param q = p;
+      q.diversity = div;
+      return FASTag::tagSpectrum(chim, pmz_d, 2, q, tab);
+    };
+    const auto off1 = run(false), off2 = run(false), on = run(true);
+
+    CHECK(off1.size() == on.size(), "diversity never changes the output size");
+    CHECK(!on.empty() && on.front().seq == off1.front().seq, "rank 1 unchanged");
+    bool same = off1.size() == off2.size();
+    for (size_t i = 0; same && i < off1.size(); ++i)
+      same = off1[i].seq == off2[i].seq && off1[i].evalue == off2[i].evalue;
+    CHECK(same, "repeated runs are identical");
+
+    // Near-duplicate pairs among the kept tags, via the sequence proxy the
+    // peak rule targets: adjacent-offset re-reads overlap by k-1 residues in
+    // sequence space (either orientation).
+    auto fold = [](std::string x) { for (char& c : x) if (c == 'I') c = 'L'; return x; };
+    auto overlap = [&](const std::string& a, const std::string& b) {
+      const std::string fa = fold(a), fb = fold(b), rb(fb.rbegin(), fb.rend());
+      for (const std::string* t : {&fb, &rb})
+        if (fa.substr(1) == t->substr(0, t->size() - 1) ||
+            fa.substr(0, fa.size() - 1) == t->substr(1))
+          return true;
+      return false;
+    };
+    auto ndpairs = [&](const std::vector<FASTag::Tag>& v) {
+      int n = 0;
+      for (size_t i = 0; i < v.size(); ++i)
+        for (size_t j = i + 1; j < v.size(); ++j)
+          if (v[i].charge == v[j].charge &&
+              overlap(FASTag::baseSequence(v[i].seq), FASTag::baseSequence(v[j].seq)))
+            ++n;
+      return n;
+    };
+    const int po = ndpairs(off1), pn = ndpairs(on);
+    CHECK(po > 0, "fixture produces near-duplicate re-reads under the cap");
+    CHECK(pn < po, "diversity strictly reduces near-duplicate pairs in the kept slots");
+    std::printf("15. -diversity: invariants hold; near-dup pairs %d -> %d\n", po, pn);
+  }
+
+  // 16. res_conf: one value per residue, N->C ORDER (the reversal trap), gap
+  //     duplication, and consistency with min/mean within quantization.
+  {
+    double pmz;
+    const std::string pep = "VGAHAGEYGAEALER";
+    const MSSpectrum s = synth(pep, 0, 21, pmz);
+    FASTag::Param p;
+    p.frag_tol = 0.02; p.tol_ppm = false; p.complement_tol = 0.02;
+    p.tag_length = 5; p.per_residue_conf = true;
+    const FASTag::Tables tab(p);
+    const auto tags = FASTag::tagSpectrum(s, pmz, 2, p, tab);
+    CHECK(!tags.empty(), "res_conf run yields tags");
+    bool sizes = true, consistent = true;
+    for (const auto& t : tags)
+    {
+      if (t.res_conf.size() != t.n_res) sizes = false;
+      int mn = 101, sum = 0;
+      // min/mean are EDGE-weighted; a gap writes its edge value twice, so
+      // recompute over edges by collapsing the duplicate.
+      for (size_t i = 0; i < t.res_conf.size(); ++i)
+      {
+        mn = std::min(mn, static_cast<int>(t.res_conf[i]));
+        sum += t.res_conf[i];
+      }
+      if (std::fabs(mn / 100.0 - t.min_conf) > 0.011) consistent = false;
+      // The mean identity is edge-weighted vs residue-weighted (a gap writes
+      // its edge twice), so only the ungapped case is directly comparable.
+      if (!t.gapped && t.n_res > 1 &&
+          std::fabs(sum / (100.0 * t.res_conf.size()) - t.mean_conf) > 0.011)
+        consistent = false;
+    }
+    CHECK(sizes, "res_conf has exactly n_res entries");
+    CHECK(consistent, "min(res_conf)/100 matches min_conf within quantization");
+
+    // ORDER, pinned by construction: four peaks at exact residue spacings
+    // S, G, A (low->high m/z), the HIGHEST-m/z peak nearly dead. Traversal is
+    // C->N, storage N->C, so the spelled tag is "AGS" and the weak edge -- A,
+    // resting on the dead peak -- must surface at INDEX 0 after the reversal.
+    // A mirrored implementation puts it at index 2; no other check catches
+    // that (the pair mass is direction-blind).
+    {
+      MSSpectrum ms;
+      ms.emplace_back(200.0, 1000.0f);
+      ms.emplace_back(200.0 + 87.03203, 900.0f);              // +S
+      ms.emplace_back(200.0 + 87.03203 + 57.02146, 800.0f);   // +G
+      ms.emplace_back(200.0 + 87.03203 + 57.02146 + 71.03711, 5.0f);  // +A, weak
+      FASTag::Param mp;
+      mp.frag_tol = 0.02; mp.tol_ppm = false; mp.complement_tol = 0.02;
+      mp.tag_length = 3; mp.per_residue_conf = true;
+      const FASTag::Tables mtab(mp);
+      const auto mtags = FASTag::tagSpectrum(ms, 600.0, 1, mp, mtab);
+      bool found = false, ordered = false;
+      for (const auto& t : mtags)
+        if (FASTag::baseSequence(t.seq) == "AGS" && t.res_conf.size() == 3)
+        {
+          found = true;
+          ordered = t.res_conf[0] < t.res_conf[2] &&
+                    t.res_conf[0] == *std::min_element(t.res_conf.begin(), t.res_conf.end());
+        }
+      CHECK(found, "the constructed AGS tag is emitted");
+      CHECK(ordered, "the weak N-terminal edge's confidence sits at index 0 (reversal correct)");
+    }
+    // gap duplication
+    FASTag::Param pg = p;
+    pg.max_gaps = 1; pg.tag_length = 4;
+    const FASTag::Tables tabg(pg);
+    const auto tg = FASTag::tagSpectrum(s, pmz, 2, pg, tabg);
+    bool gap_dup = true, saw_gap = false;
+    for (const auto& t : tg)
+    {
+      if (!t.gapped) continue;
+      saw_gap = true;
+      if (t.res_conf.size() != t.n_res) gap_dup = false;
+    }
+    CHECK(!saw_gap || gap_dup, "gapped tags still carry n_res confidences");
+    std::printf("16. res_conf: sizes, min agreement, order observable, gaps%s\n",
+                saw_gap ? "" : " (no gapped tag in fixture)");
+  }
+
   std::printf(failures ? "\n%d FAILURES\n" : "\nall checks passed\n", failures);
   return failures ? 1 : 0;
 }

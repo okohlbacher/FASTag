@@ -130,7 +130,7 @@ else()
                   "not apply.")
 endif()
 
-add_library(fastag_core STATIC src/FASTagger.cpp src/FastaFilter.cpp src/TagRecon.cpp src/TaxIndex.cpp src/TaxStats.cpp)
+add_library(fastag_core STATIC src/FASTagger.cpp src/FastaFilter.cpp src/ProteomeIndex.cpp src/TagRecon.cpp src/TaxIndex.cpp src/TaxStats.cpp)
 target_include_directories(fastag_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
@@ -148,10 +148,12 @@ install(TARGETS FASTag RUNTIME DESTINATION bin)
 
 # The taxonomy -species resolves by default, at <bin>/../share/FASTag/taxonomy.
 #
-# Only the pruned NCBI dumps (~30 KB) are installed here. The k-mer index is
-# ~1 GB and platform-independent, so it ships once as the release asset
-# FASTag-taxonomy-k7.tar.gz rather than inside every per-platform tarball -- see
-# the README beside these files. FASTag names the directory it searched when the
+# Only the pruned NCBI dumps (~30 KB) are installed here -- correct for a
+# SOURCE build, where downloading 430 MB behind cmake --install would be rude.
+# Release tarballs are different: CI embeds the full pinned index into every
+# one at tag time (see the "Embed taxonomy index" steps in the workflows), and
+# the same tarball ships standalone as FASTag-taxonomy-k7.tar.gz for source
+# builders. FASTag names the directory it searched when the
 # index is absent, so that is a clear error, never a silent empty report.
 # reference-set.tsv is the manifest; it is installed too so a user can rebuild.
 install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy/nodes.dmp"
@@ -176,11 +178,17 @@ endif()
 option(FASTAG_BUILD_TESTS "Build tests" ON)
 if(FASTAG_BUILD_TESTS)
   enable_testing()
-  foreach(t ranksum_test fastag_test fasta_filter_test tagrecon_test taxindex_test taxstats_test sampler_test proforma_test)
+  foreach(t ranksum_test fastag_test fasta_filter_test tagrecon_test tagfdr_test proteome_index_test glyco_test taxindex_test taxstats_test sampler_test proforma_test)
     add_executable(${t} test/${t}.cpp)
     target_link_libraries(${t} PRIVATE fastag_core)
     add_test(NAME ${t} COMMAND ${t})
   endforeach()
+
+  # Integration: the -stream protocol against the real binary (skips itself
+  # when the OpenMS share data is unreachable).
+  add_test(NAME stream_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/stream_test.sh $<TARGET_FILE:FASTag>)
+  set_tests_properties(stream_test PROPERTIES SKIP_RETURN_CODE 77)
 
   add_executable(tagfeatures_test test/tagfeatures_test.cpp src/tagfeatures.cpp)
   target_include_directories(tagfeatures_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

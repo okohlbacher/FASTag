@@ -55,7 +55,7 @@ int main()
   // Flanked by tryptic boundaries so the digest produces it cleanly.
   const std::string pep = "SAMPLEVGATSDGK";
   TagReconciler r = makeRecon("MSTVWYAAR" + pep + "GTANLEFDSK");
-  check(r.peptideCount() >= 1, "digestion produced peptides");
+  check(r.proteinCount() == 1, "index built over the protein");
 
   // --- Exact placement: an internal 4-mer with its true flanking masses ---
   {

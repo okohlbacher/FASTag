@@ -7,11 +7,13 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "ProteomeIndex.h"
+
 #include <OpenMS/FORMAT/FASTAFile.h>
 
 #include <cstdint>
+#include <memory>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace FASTag
@@ -65,14 +67,18 @@ namespace FASTag
     TagReconciler(double frag_tol, bool tol_ppm, bool both_orientations = true)
       : frag_tol_(frag_tol), tol_ppm_(tol_ppm), both_(both_orientations) {}
 
-    /// Digest the FASTA entries (trypsin, no cut before proline, up to
-    /// @p missed_cleavages) and index every @p k-mer of the resulting peptides.
-    /// Residue masses come from OpenMS with the given fixed modifications applied
-    /// (variable mods are not part of the database; they are what reconciliation
-    /// discovers as mass gaps). Call once; reconcile() is const/thread-safe after.
+    /// Legacy build: owns a ProteomeIndex over the entries (no isobaric
+    /// collapse, exact-length gate at @p k) -- the historical demo-scale
+    /// contract, kept for existing tests and callers. Call once; reconcile()
+    /// is const/thread-safe after.
     void build(const std::vector<OpenMS::FASTAFile::FASTAEntry>& entries, int k,
                int missed_cleavages,
                const std::vector<std::pair<char, double>>& fixed_mods);
+
+    /// Proteome-scale build: reconcile against a caller-owned ProteomeIndex
+    /// (any tag length in [min_len, MAX_FILTER_LEN], collapse rules as the
+    /// index was built with). The index must outlive this object.
+    void attach(const ProteomeIndex* idx, int missed_cleavages, int min_len);
 
     /// All placements of @p tag consistent with the flanking masses, at most one
     /// flank mismatch each. @p tag is base residues (bracket annotations already
@@ -85,21 +91,11 @@ namespace FASTag
     /// "?" are ever reported.
     void setModCandidates(std::vector<ModCandidate> mods) { mods_ = std::move(mods); }
 
-    size_t peptideCount() const { return peptides_.size(); }
-    size_t indexedKmers() const { return index_.size(); }
+    size_t proteinCount() const { return idx_ ? idx_->proteinCount() : 0; }
 
   private:
-    struct Peptide
-    {
-      std::string seq;              ///< I/L folded
-      std::string protein;          ///< source accession
-      std::vector<double> prefix;   ///< prefix[i] = residue mass of seq[0..i); size seq.len()+1
-    };
-    struct Placement { uint32_t pep; uint32_t pos; };
-
     double tolAt(double m) const { return tol_ppm_ ? m * frag_tol_ * 1e-6 : frag_tol_; }
-    std::string fold(const std::string& s) const;
-    void tryPlace(const Peptide& pep, size_t pos, const std::string& tag, bool reversed,
+    void tryPlace(const ProteomeIndex::TagOcc& occ, const ProteomeIndex::Window& w,
                   double nterm_mass, double cterm_mass, std::vector<Reconciliation>& out) const;
     /// Best explanation of @p delta over the residues in @p region: a candidate
     /// mod on a present residue, a single substitution of a present residue, or
@@ -111,10 +107,12 @@ namespace FASTag
     double frag_tol_;
     bool   tol_ppm_;
     bool   both_;
-    int    k_ = 0;
+    int    k_ = 0;        ///< legacy exact-length gate; 0 = length range mode
+    int    min_len_ = 3;  ///< length-range mode floor
+    int    mc_ = 0;       ///< missed cleavages for window enumeration
     double residue_masses_[128] = {0};  ///< by ASCII code, fixed mods folded in
     std::vector<ModCandidate> mods_;    ///< candidate variable mods for stage B
-    std::vector<Peptide> peptides_;
-    std::unordered_map<std::string, std::vector<Placement>> index_;  ///< k-mer -> placements
+    std::unique_ptr<ProteomeIndex> owned_;  ///< legacy build() owns its index
+    const ProteomeIndex* idx_ = nullptr;    ///< the index queries run against
   };
 }
