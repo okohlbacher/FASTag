@@ -917,6 +917,14 @@ protected:
       keep.assign(n_used, 0);
     };
 
+    // -species consumes (spectrum id, tag) pairs from the REPORTED rows. They
+    // were once re-parsed from the whole-run row buffer after the loop; the
+    // rows are recycled per block now, so the pairs are collected here, where
+    // each row is written. id + tag is far smaller than the full rows.
+    const bool want_species = getFlag_("species")
+        || (!getStringOption_("taxdb").empty() && !getStringOption_("species_out").empty());
+    std::map<std::string, std::vector<std::string>> by_spec;
+
     // Write one finished block's rows in index order and recycle the buffers.
     // Kept spectra still accumulate for the whole run: MzMLFile::store writes
     // one map at the end, and -out_spectra is opt-in.
@@ -926,6 +934,25 @@ protected:
       {
         if (!keep[i]) continue;
         tsv << rows[i];
+        if (want_species)
+        {
+          // Field 0 = spectrum id, field 1 = tag, per line.
+          const std::string& r = rows[i];
+          size_t start = 0;
+          while (start < r.size())
+          {
+            size_t nl = r.find('\n', start);
+            if (nl == std::string::npos) nl = r.size();
+            size_t t1 = r.find('\t', start);
+            if (t1 != std::string::npos && t1 < nl)
+            {
+              size_t t2 = r.find('\t', t1 + 1);
+              if (t2 != std::string::npos && t2 <= nl)
+                by_spec[r.substr(start, t1 - start)].push_back(r.substr(t1 + 1, t2 - t1 - 1));
+            }
+            start = nl + 1;
+          }
+        }
         rows[i].clear();
         if (!out_spectra.empty()) kept.addSpectrum(std::move(kept_spec[i]));
       }
@@ -1139,6 +1166,11 @@ protected:
       return CANNOT_WRITE_OUTPUT_FILE;
     }
     tsv.close();
+    if (tsv.fail())
+    {
+      OPENMS_LOG_ERROR << "Failed writing " << out << " (disk full?)." << std::endl;
+      return CANNOT_WRITE_OUTPUT_FILE;
+    }
 
     // Taxonomic / species detection from the tags.
     //
@@ -1156,7 +1188,6 @@ protected:
     String names = getStringOption_("taxonomy_names");
     // -species is the switch. Passing -taxdb and -species_out explicitly still
     // works without it, which is how this was driven before the flag existed.
-    const bool want_species = getFlag_("species") || (!taxdb.empty() && !species_out.empty());
 
     if (want_species)
     {
@@ -1263,30 +1294,10 @@ protected:
                         << std::endl;
       }
 
-      // Per-spectrum taxon support -> per-leaf spectrum counts.
+      // Per-spectrum taxon support -> per-leaf spectrum counts. by_spec was
+      // collected in write_block, in write order.
       std::map<uint32_t, uint64_t> hits;
       size_t n_units = 0;
-      // Group the written rows by spectrum: field 0 = spectrum id, field 1 = tag.
-      std::map<std::string, std::vector<std::string>> by_spec;
-      for (size_t i = 0; i < rows.size(); ++i)
-      {
-        if (!keep[i]) continue;
-        const std::string& r = rows[i];
-        size_t start = 0;
-        while (start < r.size())
-        {
-          size_t nl = r.find('\n', start);
-          if (nl == std::string::npos) nl = r.size();
-          size_t t1 = r.find('\t', start);
-          if (t1 != std::string::npos && t1 < nl)
-          {
-            size_t t2 = r.find('\t', t1 + 1);
-            if (t2 != std::string::npos && t2 <= nl)
-              by_spec[r.substr(start, t1 - start)].push_back(r.substr(t1 + 1, t2 - t1 - 1));
-          }
-          start = nl + 1;
-        }
-      }
       for (const auto& sp : by_spec)
       {
         std::set<uint32_t> taxa;  // taxa supported anywhere in this spectrum

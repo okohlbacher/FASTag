@@ -171,9 +171,11 @@ export default function App(): JSX.Element {
       for (const f of files) {
         if (have.has(f)) continue
         // sample.mzML and sample.mzpeak both map to sample.tags.tsv — on a
-        // collision keep the full input name so outputs stay distinct.
+        // collision keep the full input name, then number, so outputs stay
+        // distinct even when the fallback collides too.
         let out = defaultOut(f)
         if (used.has(out)) out = `${f}.tags.tsv`
+        for (let n = 2; used.has(out); n++) out = `${f}.${n}.tags.tsv`
         used.add(out)
         add.push({ input: f, out, status: 'queued' as const })
       }
@@ -237,12 +239,12 @@ export default function App(): JSX.Element {
     })
   }
 
-  async function showResults(outFile: string): Promise<void> {
+  async function showResults(outFile: string, speciesFile?: string): Promise<void> {
     setPreview(null)
     const rep0 = await window.fastag.preview(outFile, 200)
     setPreview(rep0)
     if (speciesOn) {
-      const sp = await window.fastag.species(String(values['species_out'] || '') || defaultSpeciesOut(outFile))
+      const sp = await window.fastag.species(speciesFile || String(values['species_out'] || '') || defaultSpeciesOut(outFile))
       setSpecies(sp)
       if (sp && !sp.empty) setTab('species')
     }
@@ -263,19 +265,33 @@ export default function App(): JSX.Element {
     // queue is dedup'd on input). A thrown preview/species must still release the
     // batch controls -- hence finally -- or Run stays disabled forever.
     const queue = jobs.filter((j) => j.status !== 'done')
+    // A configured -out_spectra must survive batch, but cannot be one shared
+    // file: derive a per-job path from the (unique) tags output, keeping the
+    // configured container format.
+    const cfgSpectra = String(values['out_spectra'] || '')
+    const spectraExt = (() => {
+      const dot = cfgSpectra.lastIndexOf('.')
+      const slash = Math.max(cfgSpectra.lastIndexOf('/'), cfgSpectra.lastIndexOf('\\'))
+      return dot > slash ? cfgSpectra.slice(dot) : '.mzML'
+    })()
+    const stemOf = (o: string): string =>
+      o.endsWith('.tags.tsv') ? o.slice(0, -'.tags.tsv'.length) : stripExt(o)
     batchCancel.current = false
     try {
       for (let i = 0; i < queue.length; i++) {
         if (batchCancel.current) break
         const job = queue[i]
         setJobs((js) => js.map((j) => (j.input === job.input ? { ...j, status: 'running' } : j)))
-        // Fixed output paths (species_out, out_spectra) would make every job
-        // overwrite the previous one's report — blank them so the CLI derives
-        // its per-input defaults instead.
-        const r = await runOne(job.input, job.out, { species_out: '', out_spectra: '' })
+        // Fixed output paths would make every job overwrite the previous
+        // one's report: species_out blanks so the CLI derives its per-input
+        // default; out_spectra (no CLI default) gets a per-job derived path.
+        const r = await runOne(job.input, job.out, {
+          species_out: '',
+          out_spectra: cfgSpectra ? `${stemOf(job.out)}.spectra${spectraExt}` : ''
+        })
         setJobs((js) => js.map((j) => (j.input === job.input ? { ...j, status: r.ok ? 'done' : 'failed' } : j)))
         if (batchCancel.current) break
-        if (r.ok && i === queue.length - 1) await showResults(job.out)  // preview the last
+        if (r.ok && i === queue.length - 1) await showResults(job.out, defaultSpeciesOut(job.out))  // preview the last
       }
     } finally {
       setBatchRunning(false)

@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <limits>
 
 using namespace OpenMS;
 
@@ -121,21 +122,23 @@ namespace FASTag
   {
     // Distinct k-mers are bounded by both the residue count and the alphabet
     // space; short k saturates the alphabet, long k saturates the sequence.
-    // 16 bytes/key in the sorted flat index; while one length builds, its raw
-    // pre-dedup emissions transiently double that length's share.
+    // 16 bytes/key in the sorted flat index. While ONE length builds, its raw
+    // pre-dedup emissions are transiently live too -- and raw is bounded by
+    // the residue count, not the distinct count, which matters for short k
+    // where the alphabet saturates (k=4: 19^4 distinct keys from millions of
+    // positions).
     min_k = std::max(min_k, minLen());
     max_k = std::min(max_k, MAX_FILTER_LEN);
-    double total = 0, biggest = 0;
+    const double infl = rules_.empty() ? 1.0 : 1.6;  // collapse readings
+    double total = 0;
     for (int k = min_k; k <= max_k; ++k)
     {
       double space = 1.0;
       for (int i = 0; i < k && space < 4e18; ++i) space *= 19.0;
-      double n = std::min(static_cast<double>(residues_), space);
-      n *= (rules_.empty() ? 1.0 : 1.6);   // collapse readings inflate the set
-      total += n;
-      biggest = std::max(biggest, n);
+      total += std::min(static_cast<double>(residues_), space) * infl;
     }
-    return static_cast<size_t>((total + biggest) * 16.0);
+    const double raw_one = static_cast<double>(residues_) * infl;
+    return static_cast<size_t>((total + raw_one) * 16.0);
   }
 
   size_t FastaFilter::indexedKeys() const
@@ -218,6 +221,16 @@ namespace FASTag
       std::sort(v.keys.begin(), v.keys.end());
       v.keys.erase(std::unique(v.keys.begin(), v.keys.end()), v.keys.end());
       v.keys.shrink_to_fit();
+      if (v.keys.size() > std::numeric_limits<uint32_t>::max())
+      {
+        // The bucket offsets are uint32; > 4.29e9 keys per length (68+ GB)
+        // would wrap them silently. Unreachable under the default max_bytes,
+        // but a raised cap must fail loudly, not corrupt lookups.
+        throw Exception::InvalidValue(
+            __FILE__, __LINE__, OPENMS_PRETTY_FUNCTION,
+            "FASTA index for length " + String(k) + " exceeds 2^32 keys.",
+            String(v.keys.size()));
+      }
       v.shift = std::max(0, 5 * k - 16);
       v.buck.assign(65537, 0);
       for (const auto& e : v.keys) ++v.buck[topBits(e, v.shift) + 1];
