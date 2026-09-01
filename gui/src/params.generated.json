@@ -17,6 +17,30 @@
       "toppAdvanced": false
     },
     {
+      "name": "delta_out",
+      "type": "output-file",
+      "default": "",
+      "description": "Aggregated mass-shift histogram over the reconciliations (requires -recon_out): delta, spectrum count, top interpretations. Region-level candidates, NOT localized identifications and NOT FDR-controlled",
+      "required": false,
+      "toppAdvanced": false
+    },
+    {
+      "name": "diversity",
+      "type": "bool",
+      "default": "false",
+      "description": "Diversify which tags occupy the -max_tags slots on chimeric spectra: near-duplicate re-reads of an already-kept tag's peak set are demoted behind non-duplicates, then backfilled. Reorders slot occupancy under the cap; never drops below it",
+      "required": false,
+      "toppAdvanced": false
+    },
+    {
+      "name": "entrapment_fasta",
+      "type": "input-file",
+      "default": "",
+      "description": "Entrapment database (foreign species the sample cannot contain; phylogenetically distant, e.g. archaea for a mammalian sample). Requires -fasta. Appends a q_db column and marks entrapment-only matches efwd/erev in fasta_hit",
+      "required": false,
+      "toppAdvanced": false
+    },
+    {
       "name": "extension",
       "type": "int",
       "default": "0",
@@ -93,11 +117,36 @@
       "max": 1
     },
     {
+      "name": "glyco",
+      "type": "bool",
+      "default": "false",
+      "description": "Flag oxonium-bearing MS2 spectra (glycopeptide/glycan evidence, NOT an identification) to <out> with a .glyco.tsv suffix, or -glyco_out",
+      "required": false,
+      "toppAdvanced": false
+    },
+    {
+      "name": "glyco_min_fraction",
+      "type": "double",
+      "default": "0.1",
+      "description": "Minimum summed oxonium intensity as a fraction of the base peak (MSFragger-Glyco's diagnostic filter)",
+      "required": false,
+      "toppAdvanced": false,
+      "min": 0
+    },
+    {
+      "name": "glyco_out",
+      "type": "output-file",
+      "default": "",
+      "description": "Per-spectrum oxonium report. Default: <out> with a .glyco.tsv suffix",
+      "required": false,
+      "toppAdvanced": false
+    },
+    {
       "name": "in",
       "type": "input-file",
       "default": "",
       "description": "Input spectra",
-      "required": true,
+      "required": false,
       "toppAdvanced": false
     },
     {
@@ -176,7 +225,7 @@
       "type": "output-file",
       "default": "",
       "description": "Tag list (tab-separated)",
-      "required": true,
+      "required": false,
       "toppAdvanced": false
     },
     {
@@ -213,6 +262,48 @@
       "toppAdvanced": false
     },
     {
+      "name": "recon_fasta",
+      "type": "input-file",
+      "default": "",
+      "description": "Protein database for -recon_out. Default: the -fasta file",
+      "required": false,
+      "toppAdvanced": false
+    },
+    {
+      "name": "recon_min_length",
+      "type": "int",
+      "default": "0",
+      "description": "Shortest tag worth reconciling; 0 derives it from database size (the length where chance matches fall below 5%). Overridable because the floor is a noise gate, not a correctness rule",
+      "required": false,
+      "toppAdvanced": false,
+      "min": 0
+    },
+    {
+      "name": "recon_missed_cleavages",
+      "type": "int",
+      "default": "1",
+      "description": "Missed tryptic cleavages allowed in reconciliation windows",
+      "required": false,
+      "toppAdvanced": false,
+      "min": 0
+    },
+    {
+      "name": "recon_out",
+      "type": "output-file",
+      "default": "",
+      "description": "Reconcile reported tags against a protein database and write one row per placement (protein, peptide, position, flank agreement, mass gap + interpretation). Uses -recon_fasta, or -fasta when that is not given",
+      "required": false,
+      "toppAdvanced": false
+    },
+    {
+      "name": "res_conf",
+      "type": "bool",
+      "default": "false",
+      "description": "Append a res_conf column: per-residue confidences 0..100, N->C, space-separated, one per residue (a gap's two residues share their pair score). What assembly-style consumers (Stitch/ALPS via tools/tags_to_denovo.py) read as local confidence",
+      "required": false,
+      "toppAdvanced": false
+    },
+    {
       "name": "species",
       "type": "bool",
       "default": "false",
@@ -242,6 +333,14 @@
       "type": "string",
       "default": "genus",
       "description": "Report taxa at this NCBI rank (genus, family, ...)",
+      "required": false,
+      "toppAdvanced": false
+    },
+    {
+      "name": "stream",
+      "type": "bool",
+      "default": "false",
+      "description": "Resident single-spectrum mode: spectrum blocks on stdin, TSV rows + '#end' sentinels on stdout. Core tagging only (refuses -fasta/-species/-recon_out/-out_spectra/-entrapment_fasta); parameter changes need a restart",
       "required": false,
       "toppAdvanced": false
     },

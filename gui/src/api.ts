@@ -10,7 +10,8 @@ import { openUrl } from '@tauri-apps/plugin-opener'
 import type {
   BinaryInfo,
   FastagApi,
-  Preview,
+  ResultsPage,
+  ResultsView,
   RunResult,
   RunStarted,
   Settings,
@@ -53,10 +54,15 @@ const api: FastagApi = {
     const r = await save({ defaultPath, filters: [{ name: 'Tags (TSV)', extensions: ['tsv'] }] })
     return typeof r === 'string' ? r : null
   },
+  pickResults: async () => {
+    const r = await open({ multiple: false, filters: [{ name: 'Tags (TSV)', extensions: ['tsv'] }] })
+    return typeof r === 'string' ? r : null
+  },
 
   run: (params: Record<string, unknown>) => invoke<RunStarted>('run', { params }),
   cancel: () => invoke<{ cancelled: boolean }>('cancel'),
-  preview: (path: string, maxRows?: number) => invoke<Preview>('preview', { path, maxRows }),
+  resultsQuery: (path: string, view: ResultsView, offset: number, limit: number) =>
+    invoke<ResultsPage>('results_query', { path, view, offset, limit }),
   species: (path: string) => invoke<SpeciesReport | null>('species', { path }),
   taxdbInfo: (explicit?: string) => invoke<TaxdbInfo | null>('taxdb_info', { explicit }),
 
@@ -78,12 +84,6 @@ const api: FastagApi = {
   onLog: (cb) => subscribe<string>('fastag:log', cb),
   onProgress: (cb) => subscribe<{ done: number; total: number }>('fastag:progress', cb),
   onDone: (cb) => subscribe<RunResult>('fastag:done', cb)
-}
-
-declare global {
-  interface Window {
-    fastag: FastagApi
-  }
 }
 
 window.fastag = api

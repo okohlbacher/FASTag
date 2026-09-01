@@ -57,14 +57,22 @@ export const CORE: string[] = [
 
 /// Everything else worth exposing, grouped inside the Advanced accordion.
 export const GROUPS: { title: string; params: string[] }[] = [
-  { title: 'Output', params: ['proforma'] },
+  { title: 'Output', params: ['proforma', 'res_conf', 'diversity'] },
+  {
+    title: 'Glyco detection',
+    params: ['glyco', 'glyco_out', 'glyco_min_fraction']
+  },
+  {
+    title: 'Reconciliation',
+    params: ['recon_out', 'recon_fasta', 'recon_missed_cleavages', 'recon_min_length', 'delta_out']
+  },
   { title: 'Peak selection', params: ['max_peaks', 'peaks_per_window'] },
   {
     title: 'Scoring & ranking',
     params: ['gap_penalty', 'orientation', 'isobaric_tolerance', 'min_filter_length']
   },
   { title: 'Modifications', params: ['fixed_modifications', 'variable_modifications'] },
-  { title: 'Sequence database', params: ['fasta', 'out_spectra'] },
+  { title: 'Sequence database', params: ['fasta', 'entrapment_fasta', 'out_spectra'] },
   { title: 'Subsampling', params: ['subsample_spectra', 'subsample_fraction', 'subsample_seed'] },
   // Only the taxonomy DB paths -- the enable/rank/output knobs are in CORE.
   { title: 'Taxonomy database', params: ['taxdb', 'taxonomy_nodes', 'taxonomy_names'] }
@@ -81,7 +89,8 @@ export const HIDDEN: Record<string, string> = {
   debug: 'TOPP boilerplate',
   no_progress: 'TOPP boilerplate; unrelated to -progress',
   force: 'TOPP boilerplate',
-  test: 'TOPP boilerplate'
+  test: 'TOPP boilerplate',
+  stream: 'stdin/stdout resident mode; meaningless under a GUI'
 }
 
 /// The parameters actually shown, and so the only ones a run may send. HIDDEN

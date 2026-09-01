@@ -1,5 +1,5 @@
+mod browser;
 mod fastag;
-mod preview;
 mod settings;
 mod species;
 
@@ -20,11 +20,12 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(RunManager::default())
+        .manage(browser::BrowserCache::default())
         .invoke_handler(tauri::generate_handler![
             fastag::probe,
             fastag::run,
             fastag::cancel,
-            preview::preview,
+            browser::results_query,
             species::species,
             species::taxdb_info,
             settings::load_settings,

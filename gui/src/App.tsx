@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
-import type { BinaryInfo, Preview, RunResult } from './types'
+import type { BinaryInfo, RunResult } from './types'
 import {
   CORE,
   GROUPS,
@@ -9,6 +9,7 @@ import {
   type ParamSpec
 } from './paramLayout'
 import ParamField, { type ParamValue } from './ParamField'
+import ResultsTable from './ResultsTable'
 import SpeciesPanel from './SpeciesPanel'
 import type { SpeciesReport } from './types'
 import logo from './assets/logo.svg'
@@ -60,7 +61,10 @@ export default function App(): JSX.Element {
   const [running, setRunning] = useState(false)
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [log, setLog] = useState<string[]>([])
-  const [preview, setPreview] = useState<Preview | null>(null)
+  // The tags TSV the browser pane shows. gen forces a fresh ResultsTable when
+  // the same path is re-run: the backend cache invalidates on (len, mtime),
+  // and the frontend view/scroll state must reset with it.
+  const [results, setResults] = useState<{ path: string; gen: number } | null>(null)
   const [species, setSpecies] = useState<SpeciesReport | null>(null)
   const [tab, setTab] = useState<'results' | 'species'>('results')
   const [taxdbK, setTaxdbK] = useState<number | null>(null)
@@ -78,6 +82,10 @@ export default function App(): JSX.Element {
   // id, so onDone would arrive before the resolver is registered. Park such a
   // result here; runOne claims it the moment it learns the id.
   const earlyDone = useRef(new Map<number, RunResult>())
+  // Run ids whose result has been delivered. A duplicated or late terminal
+  // event for a settled run must be dropped outright -- re-parking it in
+  // earlyDone would hand a stale result to a future run() reply.
+  const settled = useRef(new Set<number>())
   // Parsed from the CLI's own summary line, so the panel reports what the run
   // actually did rather than a number the GUI guessed.
   const [evidence, setEvidence] = useState<{ contributed: number | null; ms2: number | null }>({
@@ -128,16 +136,23 @@ export default function App(): JSX.Element {
     })
     const offProgress = window.fastag.onProgress((p) => setProgress(p))
     const offDone = window.fastag.onDone((r: RunResult) => {
+      // A terminal event that names no run, or one whose run already settled
+      // (a duplicate), correlates to nothing we await: drop it before it can
+      // touch the log or a later job's state.
+      const id = r.runId
+      if (id == null || settled.current.has(id)) return
       setProgress(null)
       setLog((l) => [...l, r.ok ? '— done —' : `— failed (${r.message ?? `exit ${r.code}`}) —`])
-      // Hand the result to the awaiter for THIS run id. A terminal event with no
-      // matching awaiter (a duplicate, or a run already settled by a failed
-      // start) is dropped rather than resolving an unrelated job.
-      const id = r.runId
-      const resolve = id != null ? pending.current.get(id) : undefined
-      if (id != null) pending.current.delete(id)
-      if (resolve) resolve(r)
-      else if (id != null) earlyDone.current.set(id, r) // beat the resolver; runOne will claim it
+      // Hand the result to the awaiter for THIS run id; an event that beats
+      // the invoke reply parks in earlyDone until runOne claims it.
+      const resolve = pending.current.get(id)
+      pending.current.delete(id)
+      if (resolve) {
+        settled.current.add(id)
+        resolve(r)
+      } else {
+        earlyDone.current.set(id, r)
+      }
       if (pending.current.size === 0) setRunning(false)
     })
     return () => {
@@ -221,7 +236,10 @@ export default function App(): JSX.Element {
             const early = earlyDone.current.get(res.runId)
             if (early) {
               // The terminal event already fired before this reply landed.
+              // Consume the parked result and mark the run settled so a
+              // duplicate of that event dies in onDone.
               earlyDone.current.delete(res.runId)
+              settled.current.add(res.runId)
               settle(early)
             } else {
               pending.current.set(res.runId, resolve)
@@ -240,9 +258,7 @@ export default function App(): JSX.Element {
   }
 
   async function showResults(outFile: string, speciesFile?: string): Promise<void> {
-    setPreview(null)
-    const rep0 = await window.fastag.preview(outFile, 200)
-    setPreview(rep0)
+    setResults((r) => ({ path: outFile, gen: (r?.gen ?? 0) + 1 }))
     if (speciesOn) {
       const sp = await window.fastag.species(speciesFile || String(values['species_out'] || '') || defaultSpeciesOut(outFile))
       setSpecies(sp)
@@ -250,11 +266,17 @@ export default function App(): JSX.Element {
     }
   }
 
+  // run()/runBatch() are onClick-driven: nothing awaits them, so a rejecting
+  // preview/species inside showResults would surface as an unhandled rejection.
+  // Log it instead; the run itself already settled.
+  const logResultsError = (err: unknown): void =>
+    setLog((l) => [...l, `results: ${err instanceof Error ? err.message : String(err)}`])
+
   async function run(): Promise<void> {
     if (!input || !out) return
     window.fastag.saveLast(values)
     const r = await runOne(input, out)
-    if (r.ok) await showResults(out)
+    if (r.ok) await showResults(out).catch(logResultsError)
   }
 
   async function runBatch(): Promise<void> {
@@ -291,7 +313,8 @@ export default function App(): JSX.Element {
         })
         setJobs((js) => js.map((j) => (j.input === job.input ? { ...j, status: r.ok ? 'done' : 'failed' } : j)))
         if (batchCancel.current) break
-        if (r.ok && i === queue.length - 1) await showResults(job.out, defaultSpeciesOut(job.out))  // preview the last
+        if (r.ok && i === queue.length - 1)
+          await showResults(job.out, defaultSpeciesOut(job.out)).catch(logResultsError) // preview the last
       }
     } finally {
       setBatchRunning(false)
@@ -301,6 +324,11 @@ export default function App(): JSX.Element {
 
   function resetDefaults(): void {
     setValues(initialValues())
+  }
+
+  async function openResults(): Promise<void> {
+    const p = await window.fastag.pickResults()
+    if (p) setResults((r) => ({ path: p, gen: (r?.gen ?? 0) + 1 }))
   }
 
   async function applyPreset(name: string): Promise<void> {
@@ -535,7 +563,6 @@ export default function App(): JSX.Element {
               onClick={() => setTab('results')}
             >
               Tags
-              {preview && <span className="count">{preview.shown}{preview.truncated ? '+' : ''}</span>}
             </button>
             <button
               role="tab"
@@ -558,42 +585,17 @@ export default function App(): JSX.Element {
                 totalMs2={evidence.ms2}
               />
             </div>
+          ) : results ? (
+            <ResultsTable key={`${results.path}#${results.gen}`} path={results.path} />
           ) : (
-          <div className="tablewrap">
-            {preview ? (
-              preview.rows.length ? (
-                <>
-                  <table>
-                    <thead>
-                      <tr>
-                        {preview.header.map((h, i) => (
-                          <th key={i}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {preview.rows.map((r, i) => (
-                        <tr key={i}>
-                          {r.map((c, j) => (
-                            <td key={j}>{c}</td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {preview.truncated && (
-                    <div className="trunc">
-                      Showing first {preview.shown} rows (preview cap — full browser lands in a later phase).
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className="empty">Run produced no tags.</div>
-              )
-            ) : (
-              <div className="empty">Results preview appears here after a run.</div>
-            )}
-          </div>
+            <div className="tablewrap">
+              <div className="empty">
+                Results appear here after a run, or{' '}
+                <button className="link" onClick={openResults}>
+                  open an existing tags TSV…
+                </button>
+              </div>
+            </div>
           )}
         </section>
       </main>

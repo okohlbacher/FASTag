@@ -25,7 +25,7 @@ gui/
   src-tauri/           Rust backend
     src/fastag.rs      resolve/probe the binary, run it, stream stderr as events, cancel
     src/settings.rs    named presets + last-used, atomic JSON in the app config dir
-    src/preview.rs     bounded TSV preview
+    src/browser.rs     indexed million-row results browser
     src/species.rs     species TSV read + FTX2 taxdb header read
     tauri.conf.json    window, bundle, icons
     resources/fastag/  the bundled FASTag binary + share/ (dev: symlinks; release: real files)
@@ -66,5 +66,5 @@ npm run params    # runs scripts/gen-params.mjs against the bundled binary
   `doc/BACKLOG.md`. In dev the resources are machine-specific symlinks and are
   gitignored.
 - Rust unit tests cover the trust boundaries (`build_args` allowlist and
-  flag-injection defence, settings sanitisation, species/taxdb parsing, preview
+  flag-injection defence, settings sanitisation, species/taxdb parsing, browser
   bounds): `cargo test` in `src-tauri/`. Frontend has typecheck + build only.

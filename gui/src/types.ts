@@ -10,11 +10,27 @@ export interface BinaryInfo {
   detail: string
 }
 
-export interface Preview {
-  header: string[]
+export interface ResultsSort {
+  column: string
+  desc: boolean
+}
+
+// A sorted/filtered view over a results TSV. Filters bind by column NAME and
+// are ignored by the backend when the file lacks that column.
+export interface ResultsView {
+  sort?: ResultsSort | null
+  spectrum?: string | null
+  minLength?: number | null
+  maxEvalue?: number | null
+  fastaHit?: 'only' | 'none' | null
+}
+
+export interface ResultsPage {
+  columns: string[]
+  totalRows: number
+  matchedRows: number
+  offset: number
   rows: string[][]
-  truncated: boolean
-  shown: number
 }
 
 export interface RunResult {
@@ -62,6 +78,14 @@ export interface Settings {
   presets: Record<string, Record<string, unknown>>
 }
 
+// Declared here (not in api.ts) so tests can install a mock bridge without
+// importing api.ts, whose module body executes Tauri plumbing.
+declare global {
+  interface Window {
+    fastag: FastagApi
+  }
+}
+
 export interface FastagApi {
   loadSettings: () => Promise<Settings>
   saveLast: (values: Record<string, unknown>) => Promise<boolean>
@@ -74,9 +98,10 @@ export interface FastagApi {
   pickInput: () => Promise<string | null>
   pickInputs: () => Promise<string[]>
   pickOutput: (defaultPath?: string) => Promise<string | null>
+  pickResults: () => Promise<string | null>
   run: (params: Record<string, unknown>) => Promise<RunStarted>
   cancel: () => Promise<{ cancelled: boolean }>
-  preview: (path: string, maxRows?: number) => Promise<Preview>
+  resultsQuery: (path: string, view: ResultsView, offset: number, limit: number) => Promise<ResultsPage>
   onLog: (cb: (line: string) => void) => () => void
   onProgress: (cb: (p: { done: number; total: number }) => void) => () => void
   onDone: (cb: (result: RunResult) => void) => () => void
