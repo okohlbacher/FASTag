@@ -100,6 +100,21 @@ int main()
                 iso.collapseRules());
   }
 
+  // 3b. fixed modifications shift the masses the rules are derived from: with
+  //     glycine made 57 Da heavier, N no longer equals G+G, so the N-for-GG
+  //     reading must disappear while unmodified derivation keeps it.
+  {
+    const std::string seq = "ARNDCQEGGHKLMFPSTWYV";
+    FASTag::FastaFilter modded(true);
+    modded.load(entries({seq}));
+    modded.setMinLen(4);
+    modded.deriveCollapses(0.04, {{'G', 57.02146}});
+    modded.build(4, 6);
+    CHECK(modded.match("QENH") == FASTag::FastaFilter::Hit::None,
+          "with +57 on G, N must no longer collapse to GG");
+    std::printf("3b. fixed-mod deltas change the derived rules (N=GG gone at G+57)\n");
+  }
+
   // 4. the derived floor scales with database size, and short tags are the
   //    reason it exists: at length 3 the filter is the identity function.
   {

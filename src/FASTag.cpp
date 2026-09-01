@@ -557,7 +557,13 @@ protected:
       const int floor_ = getIntOption_("min_filter_length");
       if (floor_ > 0) filt.setMinLen(floor_);
       const double iso = getDoubleOption_("isobaric_tolerance");
-      if (iso > 0) filt.deriveCollapses(iso);
+      if (iso > 0)
+      {
+        std::vector<std::pair<char, double>> fixed_deltas;
+        for (const auto& m : p.mods)
+          if (!m.variable) fixed_deltas.emplace_back(m.residue, m.delta);
+        filt.deriveCollapses(iso, fixed_deltas);
+      }
       filt.build(p.tag_length, max_len);
       OPENMS_LOG_INFO << "Filter index: " << filt.indexedKeys() << " keys" << std::endl;
 
@@ -756,6 +762,11 @@ protected:
 
     const FASTag::Tables tables(p);
     std::ofstream tsv(out.c_str());
+    if (!tsv)
+    {
+      OPENMS_LOG_ERROR << "Cannot open output file " << out << " for writing." << std::endl;
+      return CANNOT_WRITE_OUTPUT_FILE;
+    }
     const bool want_proforma = getFlag_("proforma");
     tsv << "spectrum\ttag\tlength\tcharge\tnterm_mass\tcterm_mass\textended\tgapped\tevalue\tmin_conf\tmean_conf\tfasta_hit"
         << (want_proforma ? "\tproforma" : "") << "\n";
@@ -797,12 +808,16 @@ protected:
     // independent, `tables` and `filt` are immutable once built, and per-spectrum
     // work is ~60 us -- far too little to amortise a fork/join inside the tagger.
     //
-    // Results are collected into a per-spectrum vector and written afterwards in
-    // input order, so the output is identical whatever -threads is set to.
+    // Results are collected per BLOCK of spectra and written in input order as
+    // each block finishes, so the output is identical whatever -threads is set
+    // to while TSV memory stays bounded by the block, not the run. 64k spectra
+    // x ~100 bytes/row is a few MB; the old whole-run buffer held every row of
+    // a 5 GB file at once.
     const SignedSize n_spec = static_cast<SignedSize>(n_total);
-    std::vector<std::string> rows(n_total);
-    std::vector<char> keep(n_total, 0);
-    std::vector<MSSpectrum> kept_spec(out_spectra.empty() ? 0 : n_total);
+    constexpr size_t BLOCK = 65536;
+    std::vector<std::string> rows;
+    std::vector<char> keep;
+    std::vector<MSSpectrum> kept_spec;
     std::vector<std::map<int, std::pair<size_t, size_t>>> per_thread_len(
         static_cast<size_t>(std::max(1, omp_get_max_threads())));
     std::vector<size_t> per_thread_ms2(per_thread_len.size(), 0),
@@ -878,8 +893,9 @@ protected:
       return buf;
     };
 
-    // Record one spectrum's result at its global index. Serial or parallel: the
-    // index is the caller's, so output order never depends on scheduling.
+    // Record one spectrum's result at its BLOCK-LOCAL index. Serial or
+    // parallel: the index is the caller's, so output order never depends on
+    // scheduling.
     auto record = [&](size_t idx, std::string&& buf, const MSSpectrum& spec)
     {
       if (buf.empty()) return;
@@ -888,17 +904,41 @@ protected:
       if (!out_spectra.empty()) kept_spec[idx] = spec;
     };
 
+    // Size the block buffers (capacity is recycled across blocks) and reset
+    // the keep flags. Callers must not resize rows/keep/kept_spec while a
+    // parallel block runs.
+    auto prep_block = [&](size_t n_used)
+    {
+      if (rows.size() < n_used)
+      {
+        rows.resize(n_used);
+        if (!out_spectra.empty()) kept_spec.resize(n_used);
+      }
+      keep.assign(n_used, 0);
+    };
+
+    // Write one finished block's rows in index order and recycle the buffers.
+    // Kept spectra still accumulate for the whole run: MzMLFile::store writes
+    // one map at the end, and -out_spectra is opt-in.
+    auto write_block = [&](size_t n_used)
+    {
+      for (size_t i = 0; i < n_used; ++i)
+      {
+        if (!keep[i]) continue;
+        tsv << rows[i];
+        rows[i].clear();
+        if (!out_spectra.empty()) kept.addSpectrum(std::move(kept_spec[i]));
+      }
+    };
+
     // Tag a buffered chunk in parallel and append its rows in order.
     //
     // Used by the mzPeak path, which is push-based: MzPeakFile hands over one
     // spectrum at a time, so there is nothing to index into and no random access
     // to parallelise over. Buffer, then run the same per-spectrum work over the
-    // buffer, appending at base+j so order follows input regardless of
-    // scheduling -- the guarantee the mzML path gets from indexing by i.
-    //
-    // The vectors grow HERE, outside the parallel region. Growing them inside
-    // would be a data race, and presizing from setExpectedSize would make
-    // correctness depend on a call the interface only recommends.
+    // buffer, recording at block-local j so order follows input regardless of
+    // scheduling -- the guarantee the mzML path gets from indexing by i -- and
+    // write the block out before the next chunk arrives.
     // Progress reporting (opt-in via -progress), shared across both input paths.
     // One atomic counter; the single thread that observes each step boundary
     // emits one line under a critical section, so lines never interleave. total
@@ -974,18 +1014,15 @@ protected:
     auto flush_chunk = [&](std::vector<MSSpectrum>& buf)
     {
       if (buf.empty()) return;
-      const size_t base = rows.size();
-      rows.resize(base + buf.size());
-      keep.resize(base + buf.size(), 0);
-      if (!out_spectra.empty()) kept_spec.resize(base + buf.size());
-
+      prep_block(buf.size());
       const SignedSize n = static_cast<SignedSize>(buf.size());
 #pragma omp parallel for schedule(dynamic, 16)
       for (SignedSize j = 0; j < n; ++j)
       {
         const size_t tid = static_cast<size_t>(omp_get_thread_num());
-        record(base + static_cast<size_t>(j), tag_one(buf[j], tid), buf[j]);
+        record(static_cast<size_t>(j), tag_one(buf[j], tid), buf[j]);
       }
+      write_block(buf.size());
       buf.clear();
     };
 
@@ -1025,25 +1062,33 @@ protected:
     }
     else
     {
-#pragma omp parallel
+    // Serial over blocks, parallel within each: a block's rows hit the disk
+    // before the next block starts.
+    for (SignedSize base = 0; base < n_spec; base += static_cast<SignedSize>(BLOCK))
     {
-      // One reader per thread: OnDiscMSExperiment keeps an open stream and is
-      // documented as not thread-safe.
-      // Copy-constructed, not assigned: OnDiscMSExperiment's operator= is private.
-      std::unique_ptr<OnDiscMSExperiment> reader;
-      if (streaming) reader = std::make_unique<OnDiscMSExperiment>(*ondisc);
+      const SignedSize lim = std::min(n_spec, base + static_cast<SignedSize>(BLOCK));
+      prep_block(static_cast<size_t>(lim - base));
+#pragma omp parallel
+      {
+        // One reader per thread: OnDiscMSExperiment keeps an open stream and is
+        // documented as not thread-safe.
+        // Copy-constructed, not assigned: OnDiscMSExperiment's operator= is private.
+        std::unique_ptr<OnDiscMSExperiment> reader;
+        if (streaming) reader = std::make_unique<OnDiscMSExperiment>(*ondisc);
 
 #pragma omp for schedule(dynamic, 64)
-      for (SignedSize i = 0; i < n_spec; ++i)
-      {
-        if (!sample_mask.empty() && !sample_mask[static_cast<size_t>(i)]) { tick(); continue; }
-        const MSSpectrum loaded = streaming ? reader->getSpectrum(static_cast<Size>(i))
-                                            : MSSpectrum();
-        const MSSpectrum& spec = streaming ? loaded : exp[static_cast<Size>(i)];
-        const size_t tid = static_cast<size_t>(omp_get_thread_num());
-        record(static_cast<size_t>(i), tag_one(spec, tid), spec);
-        tick();
+        for (SignedSize i = base; i < lim; ++i)
+        {
+          if (!sample_mask.empty() && !sample_mask[static_cast<size_t>(i)]) { tick(); continue; }
+          const MSSpectrum loaded = streaming ? reader->getSpectrum(static_cast<Size>(i))
+                                              : MSSpectrum();
+          const MSSpectrum& spec = streaming ? loaded : exp[static_cast<Size>(i)];
+          const size_t tid = static_cast<size_t>(omp_get_thread_num());
+          record(static_cast<size_t>(i - base), tag_one(spec, tid), spec);
+          tick();
+        }
       }
+      write_block(static_cast<size_t>(lim - base));
     }
     }
 
@@ -1087,11 +1132,11 @@ protected:
         by_len[kv.first].second += kv.second.second;
       }
     }
-    for (size_t i = 0; i < rows.size(); ++i)
+    tsv.flush();
+    if (!tsv)
     {
-      if (!keep[i]) continue;
-      tsv << rows[i];
-      if (!out_spectra.empty()) kept.addSpectrum(kept_spec[i]);
+      OPENMS_LOG_ERROR << "Failed writing " << out << " (disk full?)." << std::endl;
+      return CANNOT_WRITE_OUTPUT_FILE;
     }
     tsv.close();
 

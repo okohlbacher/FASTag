@@ -34,6 +34,12 @@ namespace FASTag
   {
     uint64_t hi = 0, lo = 0;
 
+    /// Ordering for the sorted query index (lexicographic on (hi, lo)).
+    bool operator<(const Kmer128& o) const noexcept
+    {
+      return hi != o.hi ? hi < o.hi : lo < o.lo;
+    }
+
     /// Shift left 5 bits and insert a residue code in the low bits.
     void push5(uint64_t code) noexcept
     {
@@ -89,7 +95,10 @@ namespace FASTag
     /// is sequence-correlated, not random. At 0.04 Da (20 ppm over two peaks at
     /// m/z 1000) the derived set is N=GG, Q=GA/AG, R=GV/VG, W=AD/GE/SV, K=GA.
     /// No residue equals a sum of three, so one level of collapse suffices.
-    void deriveCollapses(double tol);
+    /// @p fixed_deltas shifts residue masses before comparison (fixed mods:
+    /// a carbamidomethylated C is 57 Da heavier, which changes which sums are
+    /// isobaric) so the rules match the alphabet the tagger actually spells.
+    void deriveCollapses(double tol, const std::vector<std::pair<char, double>>& fixed_deltas = {});
     size_t collapseRules() const { return rules_.size(); }
 
     /// Below this length the filter is close to the identity function, so it is
@@ -111,7 +120,7 @@ namespace FASTag
     /// and any deriveCollapses(); the filter is immutable and thread-safe after.
     ///
     /// A separate full index is materialised per length, so the footprint scales
-    /// with (database residues x number of lengths) -- roughly 2.4 GB for a 3 M
+    /// with (database residues x number of lengths) -- roughly 0.9 GB for a 3 M
     /// residue database at seed 6 with extension 6, and far more for a proteome.
     /// Above @p max_bytes this THROWS rather than returning a status: every
     /// caller would otherwise have to remember to check, and a filter that
@@ -142,7 +151,7 @@ namespace FASTag
     static Kmer128 encode(const char* s, int n);
     bool contains(const std::string& t) const;
     void emitReadings(const std::string& seq, size_t i, int k, std::string& cur,
-                      std::unordered_set<Kmer128, Kmer128Hash>& out, size_t& budget) const;
+                      std::vector<Kmer128>& out, size_t& budget) const;
 
     bool both_;
     int  min_len_ = 0;
@@ -150,7 +159,17 @@ namespace FASTag
     size_t residues_ = 0;
     std::vector<std::string> seqs_;
     std::vector<Collapse> rules_;
-    std::vector<std::unordered_set<Kmer128, Kmer128Hash>> sets_;  ///< indexed by length
+    /// Per-length query index: sorted keys plus a 16-bit prefix bucket table
+    /// (offsets into keys by the top 16 bits of the encoded value). The buckets
+    /// narrow each membership test from a ~23-probe binary search over 12 M
+    /// keys to ~8 probes over ~200, for 256 KB per length.
+    struct LenIndex
+    {
+      std::vector<Kmer128> keys;
+      std::vector<uint32_t> buck;  ///< 65537 offsets; empty until built
+      int shift = 0;               ///< bits to drop so 16 bits of prefix remain
+    };
+    std::vector<LenIndex> idx_;
     std::vector<char> built_;
   };
 }

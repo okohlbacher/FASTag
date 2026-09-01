@@ -523,7 +523,13 @@ namespace FASTag
       Graph g;
       g.off.assign(n + 1, 0);
       g.roff.assign(n + 1, 0);
-      std::vector<std::vector<std::pair<uint32_t, uint8_t>>> adj(n), radj(n);
+      // Scratch reused across calls (one buildGraph per spectrum x charge inside
+      // the parallel loop): the inner vectors keep their capacity, turning ~2n
+      // allocations per call into ~zero once warm. thread_local because each OMP
+      // thread runs its own spectra.
+      static thread_local std::vector<std::vector<std::pair<uint32_t, uint8_t>>> adj, radj;
+      if (adj.size() < n) { adj.resize(n); radj.resize(n); }
+      for (size_t i = 0; i < n; ++i) { adj[i].clear(); radj[i].clear(); }
       // Every residue -- base and variable-modified -- is a candidate single
       // edge, so a variable mod simply adds more edges to try.
       for (size_t i = 0; i < n; ++i)
@@ -557,7 +563,9 @@ namespace FASTag
       {
         const auto& P = A.pairs;
         const double p_lo = P.front().mass, p_hi = P.back().mass;
-        std::vector<std::vector<std::pair<uint32_t, uint16_t>>> gadj(n);
+        static thread_local std::vector<std::vector<std::pair<uint32_t, uint16_t>>> gadj;
+        if (gadj.size() < n) gadj.resize(n);
+        for (size_t i = 0; i < n; ++i) gadj[i].clear();
         for (size_t i = 0; i < n; ++i)
           for (size_t j = i + 1; j < n; ++j)
           {
@@ -604,7 +612,8 @@ namespace FASTag
       // stays valid because Tables is keyed on PEAK count, not residue count: a
       // gapped tag spends the same number of peaks and draws the same null, it
       // just spells more residues with them.
-      std::vector<double> est(static_cast<size_t>(k));
+      static thread_local std::vector<double> est;
+      est.assign(static_cast<size_t>(k), 0.0);
       double cum = 0;
       est[0] = s.spec[peaks[0]].getMZ();
       for (int i = 0; i < k - 1; ++i)
@@ -869,8 +878,8 @@ namespace FASTag
     for (int z = 1; z <= s.n_frag_charges; ++z)
     {
       const Graph g = buildGraph(s, p, A, z);
-      std::vector<uint32_t> peaks;
-      std::vector<Step> path;
+      std::vector<uint32_t> peaks, pk;
+      std::vector<Step> path, rs;
       // edge is a relative index over this node's ordinary edges followed by its
       // gap edges, so one counter walks both arrays.
       struct Frame { uint32_t node, edge; };
@@ -897,8 +906,8 @@ namespace FASTag
         {
           if (n_res == p.tag_length)
           {
-            std::vector<uint32_t> pk = peaks;
-            std::vector<Step> rs = path;
+            pk = peaks;
+            rs = path;
             int grew = 0;
             if (p.max_extension > 0)
               grew = extendPath(s, p, A, g, pk, rs, z, true)

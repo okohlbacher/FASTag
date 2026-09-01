@@ -58,12 +58,15 @@ namespace FASTag
     return true;
   }
 
-  void FastaFilter::deriveCollapses(double tol)
+  void FastaFilter::deriveCollapses(double tol, const std::vector<std::pair<char, double>>& fixed_deltas)
   {
     rules_.clear();
     std::vector<std::pair<char, double>> R;
     for (const Residue* r : ResidueDB::getInstance()->getResidues("Natural19WithoutI"))
       R.emplace_back(r->getOneLetterCode()[0], r->getMonoWeight(Residue::Internal));
+    for (auto& e : R)
+      for (const auto& d : fixed_deltas)
+        if (d.first == e.first) e.second += d.second;
 
     for (const auto& one : R)
       for (const auto& a : R)
@@ -93,10 +96,9 @@ namespace FASTag
   /// Emit every length-k reading from position i, applying collapses. Depth is k
   /// and branching at most 2 per step, but real sequences give ~1; capped anyway.
   void FastaFilter::emitReadings(const std::string& seq, size_t i, int k, std::string& cur,
-                                 std::unordered_set<Kmer128, Kmer128Hash>& out,
-                                 size_t& budget) const
+                                 std::vector<Kmer128>& out, size_t& budget) const
   {
-    if (static_cast<int>(cur.size()) == k) { out.insert(encode(cur.data(), k)); return; }
+    if (static_cast<int>(cur.size()) == k) { out.push_back(encode(cur.data(), k)); return; }
     if (i >= seq.size() || budget == 0 || seq[i] == AMBIG) return;
 
     cur.push_back(seq[i]);
@@ -119,25 +121,39 @@ namespace FASTag
   {
     // Distinct k-mers are bounded by both the residue count and the alphabet
     // space; short k saturates the alphabet, long k saturates the sequence.
-    // 48 bytes/key is measured steady-state for unordered_set<Kmer128>.
+    // 16 bytes/key in the sorted flat index; while one length builds, its raw
+    // pre-dedup emissions transiently double that length's share.
     min_k = std::max(min_k, minLen());
     max_k = std::min(max_k, MAX_FILTER_LEN);
-    double total = 0;
+    double total = 0, biggest = 0;
     for (int k = min_k; k <= max_k; ++k)
     {
       double space = 1.0;
       for (int i = 0; i < k && space < 4e18; ++i) space *= 19.0;
-      const double n = std::min(static_cast<double>(residues_), space);
-      total += n * (rules_.empty() ? 1.0 : 1.6);   // collapse readings inflate the set
+      double n = std::min(static_cast<double>(residues_), space);
+      n *= (rules_.empty() ? 1.0 : 1.6);   // collapse readings inflate the set
+      total += n;
+      biggest = std::max(biggest, n);
     }
-    return static_cast<size_t>(total * 48.0);
+    return static_cast<size_t>((total + biggest) * 16.0);
   }
 
   size_t FastaFilter::indexedKeys() const
   {
     size_t n = 0;
-    for (const auto& s : sets_) n += s.size();
+    for (const auto& v : idx_) n += v.keys.size();
     return n;
+  }
+
+  /// Top 16 bits of a length-k key's 5k-bit value: a prefix of the (hi, lo)
+  /// ordering, so equal-prefix keys are contiguous in the sorted array.
+  static inline uint32_t topBits(const Kmer128& e, int shift)
+  {
+    uint64_t v;
+    if (shift >= 64)     v = e.hi >> (shift - 64);
+    else if (shift == 0) v = e.lo;
+    else                 v = (e.lo >> shift) | (e.hi << (64 - shift));
+    return static_cast<uint32_t>(v & 0xFFFFu);
   }
 
   void FastaFilter::build(int min_k, int max_k, size_t max_bytes)
@@ -170,12 +186,16 @@ namespace FASTag
           "'min_filter_length' explicitly to accept a higher chance-match rate.",
           String(floor_k));
     }
-    sets_.resize(static_cast<size_t>(max_k) + 1);
+    idx_.resize(static_cast<size_t>(max_k) + 1);
     built_.resize(static_cast<size_t>(max_k) + 1, 0);
 
     for (int k = min_k; k <= max_k; ++k)
     {
-      auto& s = sets_[static_cast<size_t>(k)];
+      // Emit raw (duplicates included) into a flat vector, then sort + unique:
+      // no hash set at all. 12 M hash inserts cost more than one 200 MB sort,
+      // and the flat index is 16 bytes/key against the set's 48.
+      auto& v = idx_[static_cast<size_t>(k)];
+      v.keys.clear();
       for (const auto& seq : seqs_)
       {
         if (static_cast<int>(seq.size()) < k) continue;
@@ -184,17 +204,24 @@ namespace FASTag
           if (rules_.empty())
           {
             if (std::memchr(seq.data() + i, AMBIG, static_cast<size_t>(k))) continue;
-            s.insert(encode(seq.data() + i, k));
+            v.keys.push_back(encode(seq.data() + i, k));
           }
           else
           {
             std::string cur;
             cur.reserve(static_cast<size_t>(k));
             size_t budget = 64;
-            emitReadings(seq, i, k, cur, s, budget);
+            emitReadings(seq, i, k, cur, v.keys, budget);
           }
         }
       }
+      std::sort(v.keys.begin(), v.keys.end());
+      v.keys.erase(std::unique(v.keys.begin(), v.keys.end()), v.keys.end());
+      v.keys.shrink_to_fit();
+      v.shift = std::max(0, 5 * k - 16);
+      v.buck.assign(65537, 0);
+      for (const auto& e : v.keys) ++v.buck[topBits(e, v.shift) + 1];
+      for (size_t b = 1; b < v.buck.size(); ++b) v.buck[b] += v.buck[b - 1];
       built_[static_cast<size_t>(k)] = 1;
     }
   }
@@ -203,10 +230,12 @@ namespace FASTag
   {
     const int k = static_cast<int>(t.size());
     if (k < 1 || k > MAX_FILTER_LEN) return false;
-    if (static_cast<size_t>(k) >= sets_.size() || !built_[static_cast<size_t>(k)]) return false;
+    if (static_cast<size_t>(k) >= idx_.size() || !built_[static_cast<size_t>(k)]) return false;
     const Kmer128 e = encode(t.data(), k);
     if (e == Kmer128::invalid()) return false;
-    return sets_[static_cast<size_t>(k)].count(e) > 0;
+    const auto& v = idx_[static_cast<size_t>(k)];
+    const uint32_t b = topBits(e, v.shift);
+    return std::binary_search(v.keys.begin() + v.buck[b], v.keys.begin() + v.buck[b + 1], e);
   }
 
   FastaFilter::Hit FastaFilter::match(const std::string& tag) const
