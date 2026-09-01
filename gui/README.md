@@ -65,5 +65,6 @@ npm run params    # runs scripts/gen-params.mjs against the bundled binary
   OpenMP error #15, and the ~1 GB taxonomy) is the real distribution work — see
   `doc/BACKLOG.md`. In dev the resources are machine-specific symlinks and are
   gitignored.
-- No automated tests yet (typecheck only); `buildArgs` in `src-tauri/src/fastag.rs`
-  is a trust boundary and wants a unit test.
+- Rust unit tests cover the trust boundaries (`build_args` allowlist and
+  flag-injection defence, settings sanitisation, species/taxdb parsing, preview
+  bounds): `cargo test` in `src-tauri/`. Frontend has typecheck + build only.

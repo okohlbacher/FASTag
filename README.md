@@ -180,6 +180,11 @@ materialises the whole run rather than streaming it, unlike the O(threads)
 mzML path: a 155 MB `.mzpeak` peaks around 1.7 GB. Prefer mzML for runs large
 relative to RAM; see [doc/BACKLOG-mzpeak.md](doc/BACKLOG-mzpeak.md).
 
+**0 tags on DIA input is the data, not the reader** — the public mzPeak sample
+files are DIA runs, whose wide-window chimeric MS2 yields few or no tags at
+default settings. The same spectra read as mzML give the same (empty) result;
+tags on DDA input confirm the mzPeak path end to end.
+
 ## Command-line reference
 
 | Option | Default | Meaning |

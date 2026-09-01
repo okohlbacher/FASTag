@@ -311,9 +311,9 @@ research project.
 | **F5** Mass-shift localization | days | Should interoperate with PTM-Shepherd rather than reimplement it; needs a design decision first. |
 | **F6** Multi-length tags in one run | ~1 day | `-tag_length` is single-valued today. Cheap, but changes the output contract, so it wants a deliberate schema choice. |
 | **F13** ProForma / mzTab / mzIdentML / USI output | days each | Unglamorous and force-multiplying; each format is its own spec-conformance job. |
-| **GUI packaging + million-row browser** | 1–2 weeks | The GUI is a **Tauri 2** app (`gui/`), ported from Electron. Done: param form from `-write_ini`, presets/last-used, sequential batch, progress, species tab with a `rel.` column, core-vs-advanced layout, and hardened run orchestration (exactly-once run-id-correlated terminal events with early-arrival buffering, single-run guard, window-close kills the child, single-instance). Still open: a million-row results browser (DuckDB in a Tauri sidecar/utility process), and P6 packaging — a signed, notarised bundle that carries the CLI + its dylib closure + the taxonomy, plus auto-update. |
-| **GUI test harness** | hours | The GUI has no automated tests (typecheck only); orchestration correctness rests on review + in-app runs. `build_args` in `src-tauri/src/fastag.rs` is a trust boundary (the allowlist that stops arbitrary flags reaching the CLI) and deserves a unit test — a Rust `#[test]` on the arg builder, plus a headless renderer runner (vitest) for the React side. |
-| **GUI OMP Error #15** duplicate `libomp` at spawn | hours, packaging | The spawned CLI intermittently aborts with `OMP: Error #15: ... libomp.dylib already initialized`. Diagnosed: `gui/src-tauri/resources/fastag/bin/FASTag` is a dev **symlink** to `build-rel/FASTag` (rpath into a local OpenMS build tree) — not a self-contained bundle. `FASTag` loads `/opt/homebrew/opt/libomp/lib/libomp.dylib` by absolute path while OpenMS pulls in its own libomp, so two images initialize → #15 (a load-order race; the first run of a session can win it). `KMP_DUPLICATE_LIB_OK=TRUE` masks it but can silently corrupt results, so it must NOT ship in a scientific tool. Real fix is P6: bundle a self-contained binary, collect its dylib closure once, dedupe `libomp`, and rewrite install names (`dylibbundler`/`install_name_tool` in a Tauri `beforeBundle` hook); then verify a spawned run never hits #15. Tauri's resource bundler also skips symlinked directories, so the `share/` tree (OpenMS data + the ~1 GB taxonomy) must be real files at pack time. |
+| **GUI packaging + million-row browser** | 1–2 weeks | The GUI is a **Tauri 2** app (`gui/`), ported from Electron. Done: param form from `-write_ini`, presets/last-used, sequential batch (per-job derived outputs, cancellable), progress, species tab with a `rel.` column, core-vs-advanced layout, and hardened run orchestration (exactly-once run-id-correlated terminal events with early-arrival buffering, single-run guard, window-close kills the child, single-instance). **P6 packaging landed**: `gui/scripts/bundle-macos.sh` assembles a self-contained `.app` (CLI + full dylib closure with a single `libomp`, `share/OpenMS`, taxonomy, icon) — verified running species detection standalone. Still open: a million-row results browser (DuckDB in a Tauri sidecar/utility process), signing/notarization (awaits the 7 `MACOS_*` secrets; runbook in `doc/SIGNING-macos-gui.md`), auto-update. |
+| **GUI test harness** | hours | **Rust side DONE** (v1.0 sweep): 17 unit tests cover `build_args` (key allowlist AND value-side flag-injection defence), settings sanitisation (`__proto__` stripping, atomic save, corrupt-file recovery), species/taxdb parsing, and the byte-capped preview — `cargo test` in `src-tauri/`. Still open: a headless renderer runner (vitest) for the React side. |
+| **GUI OMP Error #15** duplicate `libomp` at spawn | **FIXED via P6** | Fixed by `bundle-macos.sh`: the bundled closure carries exactly one `libomp` (asserted at pack time), install names rewritten, verified with a clean environment and no `KMP_DUPLICATE_LIB_OK`. Dev-tree binaries (rpath into the local OpenMS build) can still hit it — packaging was the fix, as diagnosed. Original diagnosis kept below.<br>The spawned CLI intermittently aborts with `OMP: Error #15: ... libomp.dylib already initialized`. Diagnosed: `gui/src-tauri/resources/fastag/bin/FASTag` is a dev **symlink** to `build-rel/FASTag` (rpath into a local OpenMS build tree) — not a self-contained bundle. `FASTag` loads `/opt/homebrew/opt/libomp/lib/libomp.dylib` by absolute path while OpenMS pulls in its own libomp, so two images initialize → #15 (a load-order race; the first run of a session can win it). `KMP_DUPLICATE_LIB_OK=TRUE` masks it but can silently corrupt results, so it must NOT ship in a scientific tool. Real fix is P6: bundle a self-contained binary, collect its dylib closure once, dedupe `libomp`, and rewrite install names (`dylibbundler`/`install_name_tool` in a Tauri `beforeBundle` hook); then verify a spawned run never hits #15. Tauri's resource bundler also skips symlinked directories, so the `share/` tree (OpenMS data + the ~1 GB taxonomy) must be real files at pack time. |
 | **`OnDiscMzPeakExperiment`** | days, upstream | Would delete FASTag's consumer entirely and unify the two read paths. Belongs in OpenMS, not here. |
 
 ### Blocked on someone else
@@ -335,6 +335,40 @@ research project.
   chimeric-aware or entrapment null — a research result, not an afternoon. The
   `TagFDR` machinery exists and is unit-tested but stays unwired, deliberately,
   so no miscalibrated FDR reaches a user.
+
+## v1.0 sweep (2026-09-01) — dependencies, deep review, fixes
+
+Full-repo pass before a 1.0: every dependency updated (React 19 / TypeScript 7 /
+Vite 8 / Tauri plugins / GitHub Actions), a 26-agent multi-lens review with
+adversarial verification, and every confirmed finding fixed the same day.
+
+### Closed
+- **Correctness (C++):** `deriveCollapses` now folds fixed-mod mass shifts into
+  its residue table (a carbamidomethylated C changes which sums are isobaric);
+  the tags TSV fails loudly with `CANNOT_WRITE_OUTPUT_FILE` on open or write
+  failure instead of silently truncating.
+- **Scalability (C++):** TSV rows are written in bounded 64k-spectra blocks on
+  every input path (memory no longer scales with run length); the FASTA filter
+  index is a sorted flat array + 16-bit prefix buckets instead of per-length
+  hash sets. Measured (E. coli filter, Astral DDA): **27% faster, 36% less
+  memory**, byte-identical output.
+- **Perf (C++):** thread-local scratch for the per-spectrum adjacency build and
+  scoring; hoisted per-seed copies out of the enumeration loop.
+- **Trust boundary (GUI backend):** `build_args` rejects value-side flag
+  injection (a value like `-force` can no longer be smuggled through an allowed
+  key; dash-leading paths are defanged with `./`); the TSV preview is
+  byte-capped so a newline-free file cannot buffer unbounded.
+- **GUI frontend:** batch runs derive per-job `species_out`/`out_spectra`
+  (jobs no longer overwrite each other's reports), Cancel stops the whole
+  queue, batch and single runs are mutually exclusive, default output paths
+  handle dotted directories, and colliding batch outputs are disambiguated.
+- **Rust test harness:** 17 unit tests across the four backend modules.
+- **Docs:** BOM brought current, README mzPeak/DIA yield note, this file.
+
+### Deliberately unchanged
+- `-out_spectra` still collects kept spectra for the whole run before writing
+  (one `MzMLFile::store` at the end); bounding it needs a streaming mzML
+  writer and the flag is opt-in.
 
 ## v0.17.0 — compact index, proper species set
 

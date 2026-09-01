@@ -1,8 +1,11 @@
 # Bill of Materials
 
-FASTag v0.4.0 · MIT · <https://github.com/okohlbacher/FASTag>
+FASTag · MIT · <https://github.com/okohlbacher/FASTag>
 
-Input and output are mzML. mzPeak is designed but not built; see doc/BACKLOG.md.
+Input is mzML or mzPeak (via the patched OpenMS reader; see
+doc/BACKLOG-mzpeak.md for its memory caveat), output is TSV plus optional mzML.
+The desktop GUI's own dependencies are tracked in `gui/package-lock.json`
+(frontend) and `gui/src-tauri/Cargo.lock` (Tauri backend), not here.
 
 ## Direct dependencies
 
@@ -43,6 +46,7 @@ not already require. There is no vendored third-party source in this repository.
 | Spectrum graph, tag enumeration, scoring, extension | The algorithm itself. `OpenMS::Tagger` enumerates tags but returns bare strings with no scoring and no flanking masses, and expands I/L during recursion, which costs 2^k tags. |
 | Isobaric collapse rules | Derived at runtime from `ResidueDB` masses at the configured tolerance. `MassDecompositionAlgorithm` decomposes a mass into compositions, but returns unordered compositions rather than the ordered residue pairs the rules need. |
 | k-mer index for the FASTA filter | Application-specific; nothing equivalent in OpenMS. |
+| Taxonomy k-mer index and species calls (`TaxIndex`, `TaxStats`, `buildtaxdb`) | Application-specific; scans tags against per-taxon k-mer sets and scores enrichment with the same Boost tails already listed. |
 
 ## Provenance
 
