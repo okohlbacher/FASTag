@@ -1,3 +1,4 @@
+import type { JSX } from 'react'
 import type { SpeciesReport, Taxon } from './types'
 
 // Genera that turn up in almost any LC-MS/MS run regardless of the sample:

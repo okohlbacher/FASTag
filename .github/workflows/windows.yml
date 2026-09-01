@@ -213,7 +213,7 @@ jobs:
 
       - name: Cache contrib build
         id: cache-contrib
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: contrib-build
           key: windows-x64-contrib-${{ env.CONTRIB_REV }}-v1
@@ -248,7 +248,7 @@ jobs:
       # package resolves the equivalent dependency invisibly, as part of the
       # binary package; building from source means supplying it explicitly.
       - name: Install Arrow, Parquet and libzip via conda
-        uses: conda-incubator/setup-miniconda@v3
+        uses: conda-incubator/setup-miniconda@v4
         with:
           auto-update-conda: true
           activate-environment: fastag-deps
@@ -301,7 +301,7 @@ jobs:
 
       - name: Cache OpenMS install
         id: cache-openms
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: openms-install
           key: windows-x64-openms-${{ env.OPENMS_BASE_SHA }}-${{ env.MZPEAK_REF }}-${{ env.CONTRIB_REV }}-v1
@@ -389,7 +389,7 @@ jobs:
     timeout-minutes: 90
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           path: fastag
 
@@ -414,13 +414,13 @@ jobs:
       # reaches its own success (and therefore only saves these) once both
       # are already in place.
       - name: Restore contrib build
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: contrib-build
           key: windows-x64-contrib-${{ env.CONTRIB_REV }}-v1
 
       - name: Restore OpenMS install
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: openms-install
           key: windows-x64-openms-${{ env.OPENMS_BASE_SHA }}-${{ env.MZPEAK_REF }}-${{ env.CONTRIB_REV }}-v1
@@ -437,7 +437,7 @@ jobs:
           archives: 'qtbase qtsvg qtimageformats'
 
       - name: Install Arrow, Parquet and libzip via conda
-        uses: conda-incubator/setup-miniconda@v3
+        uses: conda-incubator/setup-miniconda@v4
         with:
           auto-update-conda: true
           activate-environment: fastag-deps
@@ -590,7 +590,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: FASTag-windows-x64
           path: fastag/build/FASTag.exe
@@ -639,7 +639,7 @@ jobs:
       - name: Upload unsigned binary for SignPath (Windows)
         if: steps.signpath-gate.outputs.enabled == 'true'
         id: upload-unsigned
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: FASTag-windows-x64-unsigned
           path: fastag/build/FASTag.exe

@@ -1,3 +1,4 @@
+import type { JSX } from 'react'
 import type { ParamSpec } from './paramLayout'
 
 export type ParamValue = string | boolean | string[]

@@ -99,7 +99,7 @@ jobs:
     steps:
       - name: Restore patched OpenMS
         id: cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: openms-install
           key: openms-mzpeak-${{ matrix.name }}-${{ env.OPENMS_BASE_SHA }}-${{ env.MZPEAK_REF }}-v1
@@ -165,7 +165,7 @@ jobs:
 
       - name: Install OpenMS build dependencies
         if: steps.cache.outputs.cache-hit != 'true'
-        uses: mamba-org/setup-micromamba@v2
+        uses: mamba-org/setup-micromamba@v3
         with:
           environment-name: omsbuild
           create-args: >-
@@ -343,7 +343,7 @@ jobs:
           - { name: macos-x64,   runner: macos-15-intel, extra: "llvm-openmp" }
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Two dependencies OpenMSConfig.cmake needs but the openms package does not
       # pull in. Both were invisible locally, where contrib had already provided
@@ -361,7 +361,7 @@ jobs:
       # the base image differs by platform. Requesting it explicitly removes the
       # dependence on whatever the runner happens to ship.
       - name: Restore patched OpenMS
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: openms-install
           key: openms-mzpeak-${{ matrix.name }}-${{ env.OPENMS_BASE_SHA }}-${{ env.MZPEAK_REF }}-v1
@@ -376,7 +376,7 @@ jobs:
       # its own step further down. patchelf, its Linux counterpart, IS a real
       # conda-forge package.
       - name: Install toolchain and OpenMS runtime dependencies
-        uses: mamba-org/setup-micromamba@v2
+        uses: mamba-org/setup-micromamba@v3
         with:
           environment-name: fastag
           create-args: >-
@@ -541,7 +541,7 @@ jobs:
         shell: bash -el {0}
         run: ./build/FASTag --help
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: FASTag-${{ matrix.name }}
           path: build/FASTag
