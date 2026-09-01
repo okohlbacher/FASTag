@@ -19,17 +19,9 @@ namespace FASTag
 {
   namespace
   {
-    /// Upper-case, fold I to L, mark ambiguity codes. Returns 0 to skip.
-    ///
-    /// Ambiguity codes must not become matchable residues: an indexed X would
-    /// match a tag spelling X, and B/Z/J each stand for two residues.
-    inline char norm(char c)
-    {
-      if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
-      if (c < 'A' || c > 'Z') return 0;
-      if (c == 'X' || c == 'B' || c == 'Z' || c == 'J' || c == 'U' || c == 'O') return AMBIG;
-      return c == 'I' ? 'L' : c;
-    }
+    /// The historical local norm(), now the shared implementation -- see
+    /// ResidueFold.h for the exact semantics (they did not change).
+    inline char norm(char c) { return normResidue(c); }
   }
 
   Kmer128 FastaFilter::encode(const char* s, int n)
@@ -61,19 +53,9 @@ namespace FASTag
 
   void FastaFilter::deriveCollapses(double tol, const std::vector<std::pair<char, double>>& fixed_deltas)
   {
-    rules_.clear();
-    std::vector<std::pair<char, double>> R;
-    for (const Residue* r : ResidueDB::getInstance()->getResidues("Natural19WithoutI"))
-      R.emplace_back(r->getOneLetterCode()[0], r->getMonoWeight(Residue::Internal));
-    for (auto& e : R)
-      for (const auto& d : fixed_deltas)
-        if (d.first == e.first) e.second += d.second;
-
-    for (const auto& one : R)
-      for (const auto& a : R)
-        for (const auto& b : R)
-          if (std::fabs(one.second - (a.second + b.second)) <= tol)
-            rules_.push_back({a.first, b.first, one.first});
+    // Shared derivation (ResidueFold.h) so this filter and ProteomeIndex can
+    // never disagree about which residue equals which pair.
+    rules_ = deriveCollapseRules(tol, fixed_deltas);
   }
 
   int FastaFilter::autoMinLen() const
@@ -237,6 +219,51 @@ namespace FASTag
       for (size_t b = 1; b < v.buck.size(); ++b) v.buck[b] += v.buck[b - 1];
       built_[static_cast<size_t>(k)] = 1;
     }
+  }
+
+  Kmer128 FastaFilter::reverseKey(Kmer128 v, int k)
+  {
+    // encode() pushes characters front-to-back, so the LOW 5 bits hold the
+    // LAST character -- extracting low-first and re-pushing yields exactly
+    // the reversed key.
+    Kmer128 r;
+    for (int i = 0; i < k; ++i)
+    {
+      const uint64_t code = v.lo & 31u;
+      v.lo = (v.lo >> 5) | (v.hi << 59);
+      v.hi >>= 5;
+      r.push5(code);
+    }
+    return r;
+  }
+
+  bool FastaFilter::hasKey(int k, const Kmer128& e) const
+  {
+    if (k < 1 || static_cast<size_t>(k) >= idx_.size() || !built_[static_cast<size_t>(k)])
+      return false;
+    const auto& v = idx_[static_cast<size_t>(k)];
+    const uint32_t b = topBits(e, v.shift);
+    return std::binary_search(v.keys.begin() + v.buck[b], v.keys.begin() + v.buck[b + 1], e);
+  }
+
+  size_t FastaFilter::keyCount(int k) const
+  {
+    if (k < 1 || static_cast<size_t>(k) >= idx_.size()) return 0;
+    return idx_[static_cast<size_t>(k)].keys.size();
+  }
+
+  size_t FastaFilter::sharedKeyCount(const FastaFilter& other, int k) const
+  {
+    if (k < 1 || static_cast<size_t>(k) >= idx_.size() || !built_[static_cast<size_t>(k)])
+      return 0;
+    size_t n = 0;
+    for (const Kmer128& e : idx_[static_cast<size_t>(k)].keys)
+    {
+      if (other.hasKey(k, e)) { ++n; continue; }
+      // The reversal belongs to the ACCEPTING side's matching semantics.
+      if (other.both_ && other.hasKey(k, reverseKey(e, k))) ++n;
+    }
+    return n;
   }
 
   bool FastaFilter::contains(const std::string& t) const

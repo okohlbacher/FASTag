@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "ResidueFold.h"
+
 #include <OpenMS/FORMAT/FASTAFile.h>
 
 #include <cstdint>
@@ -21,8 +23,9 @@ namespace FASTag
   /// information. Over-length tags are rejected, never truncated.
   constexpr int MAX_FILTER_LEN = 25;
 
-  /// Sentinel for ambiguity codes; no tag can contain it.
-  constexpr char AMBIG = '#';
+  /// Sentinel for ambiguity codes; no tag can contain it. (The definition
+  /// lives in ResidueFold.h now, shared with ProteomeIndex.)
+  constexpr char AMBIG = RESIDUE_AMBIG;
 
   /// A 125-bit k-mer key as two 64-bit halves.
   ///
@@ -135,6 +138,17 @@ namespace FASTag
     /// Keys actually indexed, valid after build().
     size_t indexedKeys() const;
 
+    /// Distinct keys at one length (0 outside the built range).
+    size_t keyCount(int k) const;
+
+    /// Keys of THIS filter at length @p k that are also accepted by @p other
+    /// at that length, counted ORIENTATION-CLOSED when this filter matches
+    /// both orientations: a key is shared if other holds the key or its
+    /// reverse. This is the honest overlap for entrapment accounting -- two
+    /// databases spelling the same peptide in opposite directions accept
+    /// identical tag sets even though their stored key sets are disjoint.
+    size_t sharedKeyCount(const FastaFilter& other, int k) const;
+
     Hit match(const std::string& tag) const;
 
     size_t sequenceCount() const { return seqs_.size(); }
@@ -146,9 +160,10 @@ namespace FASTag
     /// Using 19 understates the chance rate and picks a floor one residue short.
     static constexpr double EFF_ALPHABET = 14.7;
 
-    struct Collapse { char a, b, one; };
 
     static Kmer128 encode(const char* s, int n);
+    static Kmer128 reverseKey(Kmer128 v, int k);
+    bool hasKey(int k, const Kmer128& e) const;
     bool contains(const std::string& t) const;
     void emitReadings(const std::string& seq, size_t i, int k, std::string& cur,
                       std::vector<Kmer128>& out, size_t& budget) const;
@@ -158,7 +173,7 @@ namespace FASTag
     bool min_len_auto_ = true;
     size_t residues_ = 0;
     std::vector<std::string> seqs_;
-    std::vector<Collapse> rules_;
+    std::vector<CollapseRule> rules_;
     /// Per-length query index: sorted keys plus a 16-bit prefix bucket table
     /// (offsets into keys by the top 16 bits of the encoded value). The buckets
     /// narrow each membership test from a ~23-probe binary search over 12 M

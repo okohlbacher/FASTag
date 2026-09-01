@@ -330,6 +330,24 @@ int main()
     std::printf("boundary: lengths 13-24 span the hi/lo split; collisions rejected\n");
   }
 
+  // 8. entrapment accounting: shared keys are counted orientation-closed.
+  {
+    FASTag::FastaFilter t(true), same(true), revd(true), other(true);
+    t.load(entries({"ACDEFGHKM"}));    t.setMinLen(3);    t.build(3, 3);
+    same.load(entries({"ACDEFGHKM"})); same.setMinLen(3); same.build(3, 3);
+    revd.load(entries({"MKHGFEDCA"})); revd.setMinLen(3); revd.build(3, 3);
+    other.load(entries({"WWWWWWWWW"})); other.setMinLen(3); other.build(3, 3);
+
+    CHECK(t.keyCount(3) == 7, "seven 3-mers in a 9-residue sequence");
+    CHECK(t.sharedKeyCount(same, 3) == t.keyCount(3), "identical DBs share everything");
+    // Reversed spelling: stored key sets are disjoint, accepted tag sets are
+    // identical -- closure must see full overlap.
+    CHECK(t.sharedKeyCount(revd, 3) == t.keyCount(3),
+          "reverse-spelled DB shares everything under orientation closure");
+    CHECK(t.sharedKeyCount(other, 3) == 0, "disjoint DBs share nothing");
+    std::printf("8. shared-key counting is orientation-closed\n");
+  }
+
   std::printf(failures ? "\n%d FAILURES\n" : "\nall checks passed\n", failures);
   return failures ? 1 : 0;
 }
