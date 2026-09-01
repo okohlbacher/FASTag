@@ -152,3 +152,65 @@ pub fn taxdb_info(app: AppHandle, explicit: Option<String>) -> Option<TaxdbInfo>
     };
     read_taxdb_info(&path)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    #[test]
+    fn num_strips_enrichment_suffix() {
+        assert_eq!(num("1.4x"), 1.4);
+        assert_eq!(num("8.3X"), 8.3);
+        assert_eq!(num("garbage"), 0.0);
+        assert_eq!(num("inf"), 0.0); // non-finite rejected
+    }
+
+    #[test]
+    fn species_report_filters_zero_hits_and_sorts_by_significance() {
+        let mut f = tempfile_path("sp.tsv");
+        std::fs::write(&f, "rank\ttaxid\tname\tobserved\texpected\tenrichment\tlog_pvalue\tqvalue\n\
+            genus\t1\tZero\t0\t1.0\t0.5x\t-1\t1\n\
+            genus\t2\tBig\t100\t10\t2.0x\t-50\t0.001\n\
+            genus\t3\tSmall\t5\t1\t5.0x\t-10\t0.01\n").unwrap();
+        let r = read_species(f.to_str().unwrap()).unwrap();
+        assert_eq!(r.taxa.len(), 2, "zero-observed row must be dropped");
+        assert_eq!(r.taxa[0].name, "Big", "most significant (lowest log_p) first");
+        std::fs::remove_file(&f).ok();
+        let _ = f; // silence unused on some toolchains
+    }
+
+    #[test]
+    fn ftx2_header_reads_k_and_kmers() {
+        let f = tempfile_path("t.taxdb");
+        let mut buf = Vec::new();
+        buf.extend_from_slice(b"FTX2");
+        buf.extend_from_slice(&2u32.to_le_bytes()); // version
+        buf.extend_from_slice(&7u32.to_le_bytes()); // k
+        buf.extend_from_slice(&50u32.to_le_bytes()); // n_taxa
+        buf.extend_from_slice(&123456u64.to_le_bytes()); // n_kmers @16
+        let mut fh = std::fs::File::create(&f).unwrap();
+        fh.write_all(&buf).unwrap();
+        drop(fh);
+        let info = read_taxdb_info(f.to_str().unwrap()).unwrap();
+        assert_eq!(info.k, 7);
+        assert_eq!(info.kmers, 123456);
+        std::fs::remove_file(&f).ok();
+    }
+
+    #[test]
+    fn truncated_or_alien_header_is_none() {
+        let f = tempfile_path("bad.taxdb");
+        std::fs::write(&f, b"FTX2\x02\x00").unwrap(); // 6 bytes only
+        assert!(read_taxdb_info(f.to_str().unwrap()).is_none());
+        std::fs::write(&f, b"NOPEnopeNOPEnopeNOPEnope").unwrap();
+        assert!(read_taxdb_info(f.to_str().unwrap()).is_none());
+        std::fs::remove_file(&f).ok();
+    }
+
+    fn tempfile_path(name: &str) -> std::path::PathBuf {
+        let mut p = std::env::temp_dir();
+        p.push(format!("fastag-test-{}-{}", std::process::id(), name));
+        p
+    }
+}

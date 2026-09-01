@@ -132,3 +132,27 @@ pub fn delete_preset(app: AppHandle, name: String) -> bool {
     }
     save(&app, &s)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reserved_keys_are_stripped() {
+        let m: Map<String, Value> = serde_json::from_str(
+            r#"{"__proto__":{"x":1},"constructor":2,"prototype":3,"tag_length":"7"}"#,
+        )
+        .unwrap();
+        let s = sanitize_map(&m);
+        assert_eq!(s.len(), 1);
+        assert!(s.contains_key("tag_length"));
+    }
+
+    #[test]
+    fn sanitize_value_recurses_one_level() {
+        let v: Value = serde_json::from_str(r#"{"__proto__":1,"ok":true}"#).unwrap();
+        let s = sanitize_value(v);
+        assert!(s.get("__proto__").is_none());
+        assert_eq!(s.get("ok"), Some(&Value::Bool(true)));
+    }
+}

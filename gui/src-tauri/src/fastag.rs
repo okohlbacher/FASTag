@@ -164,6 +164,20 @@ pub fn probe(app: AppHandle) -> BinaryInfo {
 // In the manifest but not settable on the command line, or managed by the app.
 const NOT_SETTABLE: [&str; 8] = ["version", "log", "debug", "no_progress", "force", "test", "in", "out"];
 
+// The key allowlist alone is not the whole trust boundary: a VALUE beginning
+// with '-' would be re-parsed by the CLI as a fresh option (OpenMS treats any
+// token starting '-' + non-digit as one), letting a hostile renderer smuggle
+// registered flags like -force or -no_progress through a benign key. Negative
+// numbers stay valid; genuinely dash-named paths stay usable via a ./ prefix.
+fn looks_like_flag(s: &str) -> bool {
+    let b = s.as_bytes();
+    b.first() == Some(&b'-') && !matches!(b.get(1), Some(c) if c.is_ascii_digit() || *c == b'.')
+}
+
+fn defang_path(p: &str) -> String {
+    if looks_like_flag(p) { format!("./{p}") } else { p.to_string() }
+}
+
 fn value_to_scalar(v: &Value) -> Option<String> {
     match v {
         Value::String(s) => Some(s.clone()),
@@ -191,7 +205,7 @@ fn build_args(p: &RunParams) -> Vec<String> {
     let not_settable: HashSet<&str> = NOT_SETTABLE.into_iter().collect();
 
     let mut args: Vec<String> =
-        vec!["-in".into(), p.input.clone(), "-out".into(), p.out.clone()];
+        vec!["-in".into(), defang_path(&p.input), "-out".into(), defang_path(&p.out)];
 
     for (name, value) in &p.params {
         let Some(t) = types.get(name) else { continue };
@@ -214,7 +228,7 @@ fn build_args(p: &RunParams) -> Vec<String> {
                 .iter()
                 .filter_map(value_to_scalar)
                 .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
+                .filter(|s| !s.is_empty() && !looks_like_flag(s))
                 .collect();
             if !items.is_empty() {
                 args.push(format!("-{name}"));
@@ -226,6 +240,9 @@ fn build_args(p: &RunParams) -> Vec<String> {
         let s = s.trim().to_string();
         if s.is_empty() {
             continue; // unset optional (an empty path is not "no path")
+        }
+        if looks_like_flag(&s) {
+            continue; // would be re-parsed as an option — hostile, drop it
         }
         args.push(format!("-{name}"));
         args.push(s);
@@ -355,5 +372,95 @@ pub fn cancel(state: State<'_, RunManager>) -> Value {
         serde_json::json!({ "cancelled": true })
     } else {
         serde_json::json!({ "cancelled": false })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rp(json: &str) -> RunParams {
+        serde_json::from_str(json).unwrap()
+    }
+
+    // build_args is the trust boundary: the renderer is untrusted, and only
+    // manifest-declared flags may ever reach the CLI's argv.
+    #[test]
+    fn build_args_minimal() {
+        let a = build_args(&rp(r#"{"in":"i.mzML","out":"o.tsv"}"#));
+        assert_eq!(a, vec!["-in", "i.mzML", "-out", "o.tsv", "-progress"]);
+    }
+
+    #[test]
+    fn build_args_drops_unknown_and_not_settable() {
+        let a = build_args(&rp(
+            r#"{"in":"i","out":"o","params":{"no_such_flag":"1","version":"9.9","force":true,"tag_length":"7"}}"#,
+        ));
+        assert!(a.contains(&"-tag_length".to_string()));
+        assert!(!a.iter().any(|s| s.contains("no_such_flag")));
+        assert!(!a.contains(&"-version".to_string()));
+        assert!(!a.contains(&"-force".to_string()));
+    }
+
+    #[test]
+    fn build_args_bool_is_presence_only() {
+        let a = build_args(&rp(r#"{"in":"i","out":"o","params":{"deisotope":true,"species":false}}"#));
+        assert!(a.contains(&"-deisotope".to_string()));
+        assert!(!a.contains(&"-species".to_string()));
+    }
+
+    #[test]
+    fn build_args_rejects_array_on_scalar_and_objects() {
+        let a = build_args(&rp(
+            r#"{"in":"i","out":"o","params":{"tag_length":["7","8"],"max_tags":{"a":1}}}"#,
+        ));
+        assert!(!a.contains(&"-tag_length".to_string()));
+        assert!(!a.contains(&"-max_tags".to_string()));
+    }
+
+    #[test]
+    fn build_args_string_list_expands() {
+        let a = build_args(&rp(
+            r#"{"in":"i","out":"o","params":{"fixed_modifications":["Carbamidomethyl (C)"," ",""]}}"#,
+        ));
+        let i = a.iter().position(|s| s == "-fixed_modifications").unwrap();
+        assert_eq!(a[i + 1], "Carbamidomethyl (C)");
+        assert_eq!(a.len(), i + 2 + 1); // one item kept, then -progress
+    }
+
+    #[test]
+    fn build_args_skips_empty_scalar() {
+        let a = build_args(&rp(r#"{"in":"i","out":"o","params":{"taxdb":"  "}}"#));
+        assert!(!a.contains(&"-taxdb".to_string()));
+    }
+
+    #[test]
+    fn build_args_blocks_value_side_flag_injection() {
+        // a value like "-force" must never surface as an argv option
+        let a = build_args(&rp(
+            r#"{"in":"-force","out":"o","params":{"species_rank":"-no_progress","gap_penalty":"-5","fixed_modifications":["-test"]}}"#,
+        ));
+        assert_eq!(a[1], "./-force", "dash-leading path is defanged, not dropped");
+        assert!(!a.contains(&"-no_progress".to_string()));
+        assert!(!a.contains(&"-test".to_string()));
+        let i = a.iter().position(|s| s == "-gap_penalty").expect("negative numbers still pass");
+        assert_eq!(a[i + 1], "-5");
+    }
+
+    #[test]
+    fn progress_line_parses() {
+        assert_eq!(parse_progress_line("FASTAG_PROGRESS done=42 total=100"), Some((42, 100)));
+        assert_eq!(parse_progress_line("FASTAG_PROGRESS done=7 total=0"), Some((7, 0)));
+        assert_eq!(parse_progress_line("something else"), None);
+        assert_eq!(parse_progress_line("FASTAG_PROGRESS done=x total=1"), None);
+    }
+
+    #[test]
+    fn version_parses_from_help_banner() {
+        assert_eq!(
+            parse_version("FASTag -- blah\nVersion: 3.6.0-pre-HEAD-2026-04-24 Jul 23 2026"),
+            Some("3.6.0-pre-HEAD-2026-04-24".to_string())
+        );
+        assert_eq!(parse_version("no banner here"), None);
     }
 }
