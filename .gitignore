@@ -16,3 +16,4 @@ build-rel/
 
 # ...but the species reference-set manifest is source, not a test output
 !data/taxonomy/reference-set.tsv
+__pycache__/

@@ -207,8 +207,8 @@ The Sage ground truth this entry originally waited for is still gone (see
 
 ## Research: how MS taggers are used in the literature (2021+) — candidate features
 
-Full survey with citations and adversarial verdicts in
-[RESEARCH-tagger-uses-2021plus.md](RESEARCH-tagger-uses-2021plus.md). Distilled
+Full survey with citations and adversarial verdicts was produced in-session
+and never committed (the file the old link named does not exist). Distilled
 here as a feature backlog. Two standing principles gate everything: tagging is a
 sensitive **prefilter** (recall-biased; specificity comes from later stages), and
 synthetic evidence cannot flip a shipped default.
@@ -223,20 +223,20 @@ Candidate features, with verdicts (ADOPT / MAYBE / SKIP):
 
 | # | Feature | Driving use | Verdict |
 |---|---|---|---|
-| F1 | Flank-mass reconciliation, delta = mod/mutation | open/blind PTM, variants | **PARTLY DONE** — `TagRecon.cpp` implements stage A + stage B (`interpretDelta_`, mod vs substitution vs unknown). Not yet wired to a DB-scale index (needs F2) |
-| F2 | FM-/substring index for tag→DB lookup | scale of F1 | ADOPT — reuse a succinct-index lib; enabling substrate |
+| F1 | Flank-mass reconciliation, delta = mod/mutation | open/blind PTM, variants | **DONE** — TagRecon stage A+B wired to the F2 suffix-array index and shipped as `-recon_out`/`-recon_fasta`/`-delta_out` (2026-09). 25/25 spot-verified placements on the human proteome; delta histogram shows the +1.003 isotope-error and +128.095 missed-K peaks where chemistry predicts them |
+| F2 | Substring index for tag→DB lookup | scale of F1 | **DONE** — `src/ProteomeIndex.*` (2026-09): per-run suffix array over the I/L-folded proteome + prefix-mass array + tryptic boundaries; locate by per-character interval refinement BRANCHING at isobaric-collapse points (no variant enumeration, cost bounded by what exists in the DB). Human reference proteome: 1.7 s build, 235 MB peak, 28 µs/locate incl. both orientations. No library, no persistence. F9 is enabled by the same structure (pigeonhole half-tag locate + ≤1-mismatch verify) |
 | F3 | Gap tags (mass-gap residues) | noisy/ion-starved spectra | **DONE** — `-gaps`, capped at 1; over-ranking fixed and validated on real data (`-gap_penalty`) |
 | F4 | **Calibrated tag confidence / per-residue FDR** | rescoring, taxonomy, variant QC | PARTLY DONE — E-value validated + per-residue `min_conf`/`mean_conf` shipped; true decoy q-value is research-grade (see below) |
-| F5 | Mass-shift localization (shifted-fragment method) | open PTM; the mod-localization roadmap | ADOPT for localization; interoperate with PTM-Shepherd, don't reimplement |
-| F6 | Multi-length tags as a recall/specificity knob | DB search, HLA, taxonomy | **DONE via -extension** — a seed of length L with -extension N emits the short seed (recall, extended=0) AND its extensions up to L+2N (specificity, extended=1) in one run, each scored against its OWN length null (mean E-value falls monotonically with length; verified). The `length`/`extended` columns let a consumer pick. Default is recall-y (short seed, extension 0); long tags are opt-in via -extension. |
+| F5 | Mass-shift localization (shifted-fragment method) | open PTM; the mod-localization roadmap | **FOLDED INTO F1/F2** — direct PTM-Shepherd feed is a category mismatch (its only input is FDR-filtered Philosopher psm.tsv + spectra; it builds histograms internally), and a database-free per-tag delta column is vacuous (flanks sum to the precursor by construction, FASTagger.cpp:705). The honest deliverable — per-reconciliation deltas + a `-delta_out` histogram — ships with F2's recon wiring. See doc/BACKLOG-PLAN-2026-09.md §1.2 |
+| F6 | Multi-length tags as a recall/specificity knob | DB search, HLA, taxonomy | **DONE via -extension** — each seed emits ONCE at its realised length: greedy extension grows it up to L+2N when edges continue (extended=1), and it stays the short seed only when none do (extended=0), each length scored against its OWN null. A run therefore contains a mix of lengths, but a given seed does NOT emit both its short and long forms (an earlier version of this row claimed it did — contradicted by the emit-once loop at FASTagger.cpp:905-919). The `length`/`extended` columns let a consumer pick; long tags are opt-in via -extension. |
 | F7 | Tag-agreement features for MS2Rescore/Oktoberfest | rescoring (+10-30% IDs) | **PARTLY DONE** — `tagfeatures` emits per-spectrum aggregates (1 row/spectrum, verified 2871/2871). Not yet validated as a rescoring gain against a real MS2Rescore run |
 | F8 | **Native tag→taxonomic/species detector** | metaproteomics | **DONE** — `-species` (off by default), bundled taxonomy resolved beside the binary, ranked-taxa TSV, and a GUI Species tab. Validated: Homo #1 on a human CPTAC sample with Bos/Sus/Oryctolagus as the expected reagent contaminants |
 | F9 | Single-substitution (mutation) tags | proteogenomics | MAYBE→ADOPT — nearly free once F1 exists; emit as flagged *unvalidated* variants only |
-| F10 | Low-latency single-spectrum tagging | real-time / instrument-control search | MAYBE — build the streaming path + benchmark; vendor integration out of scope |
-| F11 | Glyco spectrum flag (oxonium detector) | glycoproteomics | SKIP full glyco; MAYBE the flag only |
-| F12 | Top-N tags per spectrum for chimeric/DIA | chimeric DDA, DIA | MAYBE — top-N yes (already have `-max_tags`); full DIA deconvolution SKIP |
+| F10 | Low-latency single-spectrum tagging | real-time / instrument-control search | **DONE** — `-stream` (2026-09): resident stdin/stdout block protocol, rows byte-identical to file mode (shared formatter, 226/226 verified), stdout sealed at the fd level. Measured p99 ≤ 1.6 ms/spectrum on real Astral data across defaults/extension+gaps/0.3 Da — ~100x inside an instrument-control budget. Vendor integration stays out of scope |
+| F11 | Glyco spectrum flag (oxonium detector) | glycoproteomics | **DONE (flag only)** — `-glyco` (2026-09): 16-ion table incl. phospho-glycan diagnostics, GPQuest ≥2-ions + MSFragger 0.10-fraction literature thresholds (never locally fitted), own TSV so tag-poor spectra are covered, raw-peak matching. Specificity on non-enriched runs 0.6% (Astral, ppm). Sensitivity validation awaits a public glyco-enriched download (user approval) |
+| F12 | Top-N tag diversity for chimeric spectra | chimeric DDA, DIA | **DONE as opt-in `-diversity`** (2026-09): near-duplicate re-reads (same charge, ≥4 peaks, all-but-one shared) demoted behind non-duplicates under the cap; size/rank-1/determinism provably unchanged. Real chimera-rich data (Eclipse TMT SPS, cap 10): spectra with ≥1 DB hit ROSE 8,547→8,695. Honest limits, measured: it cannot surface a co-isolated peptide ranked far below the cap (synthetic: rank-133 coi tag stays out of a 10-cap), and the recon-based multi-protein proxy went down (71→49; confounded by exact-flank rarity at 0.3 Da). Full DIA deconvolution stays SKIP |
 | F13 | **Standard self-describing output** (ProForma / mzTab / mzIdentML / USI) | all downstreams | ADOPT — unglamorous, force-multiplying; low cost |
-| F14 | Overlap-friendly long reads for antibody assembly | mAb/repertoire de novo | MAYBE — nearly free given F4+F13 (feed Stitch/ALPS); don't build an assembler |
+| F14 | Overlap-friendly long reads for antibody assembly | mAb/repertoire de novo | **DONE** — `-res_conf` (per-residue confidences the consumers require; reversal-order unit-tested, gap residues share their pair score) + `tools/tags_to_denovo.py` (Stitch PEAKS-Old / ALPS export, Area 0-vs-1 NaN trap handled, --top-n 1 against correlated-read inflation, --check conformance validator). CDR-level end-to-end still awaits a real antibody dataset |
 | F15 | Cross-link diagnostic-ion tagging | XL-MS | SKIP — crowded specialist space |
 
 **Top 5 to prioritize** (from the report): **F4** (calibrated tag confidence —
@@ -280,6 +280,31 @@ entrapment null, or a reconcile-to-peptide-first target-decoy — tracked, not
 shipped, so no miscalibrated FDR reaches users. The `TagFDR` machinery (an
 empirical target-decoy q-curve) was written and unit-tested but is not wired in
 until a null that calibrates exists.
+
+### Shipped 2026-09: `q_db`, with a measured calibration envelope
+
+The entrapment-calibrated q-value proposed above SHIPPED as opt-in
+`-entrapment_fasta` (per-length k-mer-space ratios, orientation-closed,
+target-first attribution, the recovered TagFDR contract with weighted decoys).
+The full adversarial audit (doc/F4-CALIBRATION-AUDIT.md; human Astral data,
+archaeal + shuffled + swapped-role entrapment arms, PXD000001 ground-truth
+cross-check) measured: **conservative at q_db ≤ 0.02; underestimates the true
+false-match rate ~1.6x at 0.05–0.1; sensitive to entrapment choice; the
+composition-matched shuffled null is WORSE (2.5x optimistic), so sequence
+realism beats composition matching**. Correct-read rates by q_db bin: 100%
+(≤0.01), 93.6% (0.01–0.05), 52.9% (0.05–0.2) — q_db calibrates DB-match
+spuriousness, never read correctness, and the tool's own log says so on every
+run. Defaults untouched; the composition-aware null remains the research item.
+
+### Fixed 2026-09: a latent nondeterminism, present since at least v0.19.1
+
+`ResidueDB::getResidues` returns a `std::set<const Residue*>` — ordered by
+POINTER, which varies per process. The isobaric-collapse rules derived from it
+kept their set but permuted their ORDER across runs, and
+`FastaFilter::emitReadings`' 64-reading budget then truncated a different
+subset — one extra 6-mer in the index in ~1 of 5 runs on real data (verified
+back to v0.19.1: same two stable outcomes). One `std::sort` of the residue
+table in the shared derivation pins it; 8/8 runs now byte-identical.
 
 ## Open gaps as of v0.16.0 — triaged, with honest sizes
 

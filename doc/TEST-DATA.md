@@ -52,7 +52,10 @@ file's own metadata, not from a catalogue — see the Eclipse entry for why.
    `7673_YD12_P116861_S00_R1.raw` (2.4 GB). Human, DDA, label-free, tryptic.
    Convert with `ThermoRawFileParser -i in.raw -b out.mzML -f 2`.
 4. **Eclipse DDA-TMT** — MassIVE `MSV000096674` (no PXD accession),
-   `ec04479_qy_4cell_SanJose_A1.mzpeak`.
+   `ec04479_qy_4cell_SanJose_A1.mzpeak`. On this machine the converted mzML
+   sits at `~/Claude/bench_astral_dda.mzML` — a MISNOMER inherited from the
+   catalogue error below; the alias `~/Claude/bench_eclipse_iontrap_tmt.mzML`
+   points at it and is the name to use.
    **The mzPeak catalogue labels this "Orbitrap Astral". The file says
    `MS:1003029 name="Orbitrap Eclipse"`.** The deposit contains Astral, Eclipse
    and Ascend data and the index labels by deposit. Trusting it, and then running

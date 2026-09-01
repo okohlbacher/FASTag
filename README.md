@@ -208,6 +208,18 @@ tags on DDA input confirm the mzPeak path end to end.
 | `-min_filter_length <n>` | 0 | Ignore tags shorter than this when matching `-fasta`; 0 derives a floor from database size |
 | `-orientation <both\|forward>` | both | Also match a tag reversed (b-ion reading), or only as written |
 | `-proforma` | off | Append a ProForma 2.0 column for each tag (see Output) |
+| `-res_conf` | off | Append per-residue confidences 0..100, N→C, space-separated (see Assembly export) |
+| `-diversity` | off | Under `-max_tags`, demote near-duplicate re-reads of an already-kept tag's peak set behind non-duplicates, then backfill. Reorders which tags occupy the capped slots; never changes output size or rank 1 (see Tag diversity) |
+| `-recon_out <file>` | none | Reconcile reported tags against a protein database: one row per placement with protein, peptide, position, flank agreement, localized mass gap and its interpretation (see Reconciliation) |
+| `-recon_fasta <file>` | `-fasta` | Database for `-recon_out`; independent of the membership filter, so a proteome-scale reconciliation never forces the filter's per-length index build |
+| `-recon_missed_cleavages <n>` | 1 | Missed tryptic cleavages in reconciliation windows |
+| `-recon_min_length <n>` | 0 | Shortest tag worth reconciling; 0 derives the chance-match floor from database size |
+| `-delta_out <file>` | none | Aggregated mass-shift histogram over reconciliations (one best placement per spectrum). Region-level candidates, NOT localized identifications, NOT FDR-controlled |
+| `-entrapment_fasta <file>` | none | Entrapment database (foreign species) calibrating a `q_db` column: the estimated false-match rate of the `-fasta` filter at each E-value (see q_db) |
+| `-glyco` | off | Flag oxonium-bearing MS2 spectra to `<out>.glyco.tsv` (see Glyco flag) |
+| `-glyco_out <file>` | `<out>.glyco.tsv` | Per-spectrum oxonium report |
+| `-glyco_min_fraction <f>` | 0.10 | Summed oxonium intensity over base peak, the literature threshold |
+| `-stream` | off | Resident single-spectrum mode: spectrum blocks on stdin, TSV rows + `#end` sentinels on stdout (see Streaming) |
 | `-progress` | off | Emit `FASTAG_PROGRESS done=<n> total=<n>` on stderr for a progress bar |
 | `-species` | off | Infer taxa from the tags (see Species detection) |
 | `-taxdb / -taxonomy_nodes / -taxonomy_names <file>` | bundled | The index and NCBI dumps for `-species`; give all three or none |
@@ -251,6 +263,100 @@ modifications as a global prefix (`<[Carbamidomethyl]@C>`), and the I/L residue
 as `J` because FASTag folds I onto L and cannot tell them apart. Off by default;
 the TSV schema is unchanged unless asked for.
 
+## Reconciliation and mass shifts
+
+`-recon_out` places every reported tag onto tryptic windows of a protein
+database by its flanking masses (TagRecon stage A+B, Dasari 2010), running on a
+per-run suffix-array index over the whole proteome (~2 s and ~150 MB to build
+on the human reference proteome; isobaric collapse and I/L folding applied
+identically to the membership filter). Each row carries the protein, the
+peptide window in its original database spelling, the position, which flank
+matched, and — when exactly one flank disagrees — the localized mass gap with
+a best-effort interpretation (`mod:Name@X`, `sub:X->Y`, or `?`).
+
+`-delta_out` aggregates those gaps into a histogram, counting each spectrum
+once (its best tag's smallest-|delta| placement) so fifty correlated tags
+cannot flood a bin; placements whose mismatched-side flank was clamped to zero
+are excluded and counted. **Read the histogram as candidates**: localization is
+region-level, nothing here is FDR-controlled, and `delta_interp` names a
+hypothesis, not an identification. On a human Astral run the zero bin
+dominates, the +1.003 isotope-error peak and a +128.095 missed-K peak appear
+where chemistry predicts them. Direct PTM-Shepherd interop is deliberately
+absent — its only input is FDR-filtered Philosopher `psm.tsv`, a contract a
+tag-level tool cannot honestly fill.
+
+## q_db: entrapment-calibrated filter confidence
+
+`-entrapment_fasta` builds a second membership filter over sequences the
+sample cannot contain (use phylogenetically distant proteomes — archaea for a
+mammalian sample) and appends a `q_db` column: the estimated **false-match
+rate** of accepting every tag at or below that row's E-value against `-fasta`.
+Entrapment-only matches are marked `efwd`/`erev` with an empty `q_db` — they
+are calibration material, not discoveries — and are excluded from
+`-out_spectra`. Ratios are computed per tag length in collapsed k-mer space,
+orientation-closed.
+
+**Measured calibration envelope** (doc/F4-CALIBRATION-AUDIT.md, human Astral
+data, archaeal entrapment): conservative at `q_db <= 0.02`; **underestimates
+the true false-match rate ~1.6x at 0.05–0.1**; sensitive to entrapment choice.
+Use tight thresholds. And read the column for what it is: `q_db` says how
+often a tag this good matches the database by chance — it says NOTHING about
+whether the tag correctly reads its precursor (on PXD000001 ground truth,
+rows at `q_db <= 0.01` were correct reads 100% of the time, but rows in the
+0.05–0.2 bin only 52.9%). Cannot be combined with `-species`.
+
+## Streaming mode
+
+`-stream` turns FASTag into a resident process for instrument-control loops:
+spectrum blocks in on stdin (`spectrum <id> <precursor_mz> <charge>`, one
+`<mz> <intensity>` per line, blank line to finish), TSV rows plus a
+`#end <id> <n_tags>` sentinel out on stdout, flushed per block; malformed
+input yields `#error` and a resync, never an exit. All fixed costs are paid
+once; measured steady state on real Astral spectra is **0.3–0.6 ms mean,
+p99 <= 1.6 ms** per spectrum even with extension and gaps — two orders of
+magnitude inside an instrument-control budget. Rows are byte-identical to
+file mode (same formatter, verified). Core tagging only: `-fasta`, `-species`,
+`-recon_out`, `-out_spectra` and `-entrapment_fasta` are refused; parameter
+changes need a restart.
+
+## Glyco flag
+
+`-glyco` writes `<out>.glyco.tsv`: one row per processed MS2 spectrum with the
+count of matched oxonium ions, their summed intensity over the base peak, a
+0/1 flag (>= 2 distinct ions AND fraction >= `-glyco_min_fraction`, the
+GPQuest / MSFragger-Glyco heuristics with their literature thresholds), and
+the ion names. The flag means "a glycan fragmented here" — glycopeptide, free
+glycan, or O-GlcNAc — never an identification. It lives in its own file
+because glyco spectra are precisely the tag-poor ones a tag-TSV column would
+miss; expect more rows than "MS2 tagged". Matching runs on the raw peak list
+at the run's fragment tolerance. At 0.3 Da the TMT reporter 126.128 collides
+with the HexNAc fragment 126.055 — use ppm tolerances on labeled data.
+Measured specificity on non-enriched runs: 0.6% (Astral, ppm) flagged.
+
+## Tag diversity
+
+`-diversity` changes which tags occupy the `-max_tags` slots on chimeric
+spectra: near-duplicate re-reads of an already-kept tag's peak set (same
+charge, sharing all but at most one peak, both tags >= 4 peaks) are demoted
+behind non-duplicates and backfilled in rank order. Output size, rank 1 and
+determinism are unchanged — measured on the co-isolation-rich Eclipse TMT
+benchmark, spectra with at least one database hit **rose** from 8,547 to
+8,695 under a 10-tag cap. What it does not do: surface a co-isolated peptide
+whose tags rank far below the cap — deferral reorders families near the head;
+it is not per-peptide clustering. Off by default.
+
+## Assembly export
+
+`-res_conf` appends per-residue confidences (0–100, N→C, one per residue; a
+gap's two residues share their single pair score — the mass evidence supports
+the pair, not either identity). `tools/tags_to_denovo.py` converts a
+`-res_conf` TSV into the read formats antibody-assembly tools consume (Stitch
+PEAKS-style CSV, ALPS), thinning to the best tag per spectrum by default —
+FASTag's per-spectrum tags are correlated re-reads of one ladder, and
+exporting all of them would inflate assembly consensus ~50-fold. I and L are
+reported as L throughout; contigs will show L where I may be correct,
+including in CDRs.
+
 ## Species detection
 
 `-species` infers which taxa a run's tags come from — a native tag→taxon
@@ -272,10 +378,11 @@ looked up, and FASTag refuses the run up front rather than writing an empty
 report. Pair `-species` with `-subsample_fraction 0.1` for a fast call on a large
 run.
 
-**Get the index.** The pruned taxonomy dumps ship inside every release tarball;
-the ~1 GB k-mer index is a separate asset (platform-independent). Download
-`FASTag-taxonomy-k7.tar.gz` from the release and extract it into the FASTag
-directory:
+**Get the index.** Release tarballs from v0.20 on carry the full k-mer index
+inside (`share-FASTag-taxonomy/`), so `-species` works out of the box. For an
+index-only download (older tarballs, source builds, upgrades), every release
+also carries the platform-independent `FASTag-taxonomy-k7.tar.gz` (+`.sha256`);
+extract it into the FASTag directory:
 
 ```bash
 tar xzf FASTag-taxonomy-k7.tar.gz -C /path/to/FASTag/   # -> share-FASTag-taxonomy/
