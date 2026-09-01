@@ -996,9 +996,20 @@ jobs:
           npm run typecheck
           npm test
           npm run build
+      # Tauri's build script refuses to compile unless every path in
+      # tauri.conf.json's bundle.resources exists -- and resources/fastag is
+      # the machine-specific 1.4 GB CLI+dylib+taxonomy bundle, gitignored by
+      # gui/src-tauri/.gitignore and absent from a fresh checkout. The library
+      # tests are pure logic (arg building, settings, species/taxdb parsing,
+      # the results browser) and never read it, so an empty placeholder is
+      # exactly enough. Verified locally by reproducing the CI condition:
+      # without the directory cargo fails with "resource path
+      # `resources/fastag` doesn't exist"; with an empty one, 28/28 pass.
       - name: Backend unit tests
         working-directory: gui/src-tauri
-        run: cargo test --lib
+        run: |
+          mkdir -p resources/fastag
+          cargo test --lib
 
   # ---------------------------------------------------- release data asset
   # Copies the pinned taxonomy tarball onto the new release as a standalone
