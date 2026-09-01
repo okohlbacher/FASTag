@@ -13,11 +13,19 @@ import SpeciesPanel from './SpeciesPanel'
 import type { SpeciesReport } from './types'
 import logo from './assets/logo.svg'
 
+// Strip the final extension only when the dot sits inside the basename — a
+// dotted directory (`/runs.2026/sample`) must not lose half its path. Mirrors
+// the CLI's guard so the GUI reads exactly where the CLI writes.
+function stripExt(p: string): string {
+  const dot = p.lastIndexOf('.')
+  const slash = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'))
+  return dot > slash ? p.slice(0, dot) : p
+}
+
 // Where -species writes when -species_out is not given: <out> minus its final
-// extension, plus .species.tsv. Mirrors the CLI so the GUI reads what it wrote.
+// extension, plus .species.tsv.
 function defaultSpeciesOut(out: string): string {
-  const dot = out.lastIndexOf('.')
-  return `${dot > 0 ? out.slice(0, dot) : out}.species.tsv`
+  return `${stripExt(out)}.species.tsv`
 }
 
 interface Job {
@@ -28,9 +36,7 @@ interface Job {
 }
 
 function defaultOut(input: string): string {
-  const dot = input.lastIndexOf('.')
-  const stem = dot > 0 ? input.slice(0, dot) : input
-  return `${stem}.tags.tsv`
+  return `${stripExt(input)}.tags.tsv`
 }
 
 // Initial form state IS the tool's own defaults, straight from the manifest.
@@ -79,6 +85,8 @@ export default function App(): JSX.Element {
     ms2: null
   })
   const logRef = useRef<HTMLPreElement>(null)
+  // Cancel pressed during a batch: stop the QUEUE, not just the current job.
+  const batchCancel = useRef(false)
 
   // A parameter that exists in the CLI but nowhere in the layout would silently
   // be unreachable; surface it instead of hiding it.
@@ -158,7 +166,17 @@ export default function App(): JSX.Element {
     if (!files.length) return
     setJobs((js) => {
       const have = new Set(js.map((j) => j.input))
-      const add = files.filter((f) => !have.has(f)).map((f) => ({ input: f, out: defaultOut(f), status: 'queued' as const }))
+      const used = new Set(js.map((j) => j.out))
+      const add: Job[] = []
+      for (const f of files) {
+        if (have.has(f)) continue
+        // sample.mzML and sample.mzpeak both map to sample.tags.tsv — on a
+        // collision keep the full input name so outputs stay distinct.
+        let out = defaultOut(f)
+        if (used.has(out)) out = `${f}.tags.tsv`
+        used.add(out)
+        add.push({ input: f, out, status: 'queued' as const })
+      }
       return [...js, ...add]
     })
   }
@@ -182,7 +200,7 @@ export default function App(): JSX.Element {
   }
 
   // Run one file and resolve when it finishes. Shared by single and batch runs.
-  function runOne(inFile: string, outFile: string): Promise<RunResult> {
+  function runOne(inFile: string, outFile: string, overrides?: Record<string, ParamValue>): Promise<RunResult> {
     return new Promise<RunResult>((resolve) => {
       setLog([])
       setProgress(null)
@@ -193,7 +211,7 @@ export default function App(): JSX.Element {
         resolve(r)
       }
       window.fastag
-        .run({ in: inFile, out: outFile, params: submittedParams() })
+        .run({ in: inFile, out: outFile, params: { ...submittedParams(), ...overrides } })
         .then((res) => {
           // Register the awaiter only once the main process hands back the run
           // id; the terminal event carries the same id (see onDone).
@@ -238,23 +256,30 @@ export default function App(): JSX.Element {
   }
 
   async function runBatch(): Promise<void> {
-    if (jobs.length === 0 || batchRunning) return
+    if (jobs.length === 0 || batchRunning || running) return
     window.fastag.saveLast(values)
     setBatchRunning(true)
     // Snapshot the queue we're running and key status updates by input path (the
     // queue is dedup'd on input). A thrown preview/species must still release the
     // batch controls -- hence finally -- or Run stays disabled forever.
     const queue = jobs.filter((j) => j.status !== 'done')
+    batchCancel.current = false
     try {
       for (let i = 0; i < queue.length; i++) {
+        if (batchCancel.current) break
         const job = queue[i]
         setJobs((js) => js.map((j) => (j.input === job.input ? { ...j, status: 'running' } : j)))
-        const r = await runOne(job.input, job.out)
+        // Fixed output paths (species_out, out_spectra) would make every job
+        // overwrite the previous one's report — blank them so the CLI derives
+        // its per-input defaults instead.
+        const r = await runOne(job.input, job.out, { species_out: '', out_spectra: '' })
         setJobs((js) => js.map((j) => (j.input === job.input ? { ...j, status: r.ok ? 'done' : 'failed' } : j)))
+        if (batchCancel.current) break
         if (r.ok && i === queue.length - 1) await showResults(job.out)  // preview the last
       }
     } finally {
       setBatchRunning(false)
+      batchCancel.current = false
     }
   }
 
@@ -352,7 +377,7 @@ export default function App(): JSX.Element {
                 ))}
               </ul>
               <div className="row tight">
-                <button onClick={runBatch} disabled={batchRunning || !bin?.ok}>
+                <button onClick={runBatch} disabled={batchRunning || running || !bin?.ok}>
                   {batchRunning ? 'Running batch…' : `Run batch (${jobs.filter((j) => j.status !== 'done').length})`}
                 </button>
                 <button className="secondary slim" onClick={() => setJobs([])} disabled={batchRunning}>
@@ -441,7 +466,14 @@ export default function App(): JSX.Element {
             <button onClick={run} disabled={!canRun}>
               {running ? 'Running…' : 'Run'}
             </button>
-            <button className="secondary" onClick={() => window.fastag.cancel()} disabled={!running}>
+            <button
+              className="secondary"
+              onClick={() => {
+                if (batchRunning) batchCancel.current = true
+                window.fastag.cancel()
+              }}
+              disabled={!running}
+            >
               Cancel
             </button>
           </div>
