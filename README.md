@@ -388,6 +388,10 @@ extract it into the FASTag directory:
 tar xzf FASTag-taxonomy-k7.tar.gz -C /path/to/FASTag/   # -> share-FASTag-taxonomy/
 ```
 
+Index rebuilds ship as their own `taxonomy-k7-YYYYMMDD` **pre-release** — a
+normal release would take GitHub's "Latest" slot and 404 every
+`/releases/latest/download/` binary link above.
+
 The index is a bit-packed, memory-mapped format (`FTX2`): a 50-taxon index is
 ~1 GB on disk and **under 1 GB resident**, and loads instantly. Rebuild it from
 `data/taxonomy/reference-set.tsv` with `tools/fetch_reference_set.py` +

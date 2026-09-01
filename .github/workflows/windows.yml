@@ -71,7 +71,9 @@ env:
   OPENMS_BASE_SHA: 9cb5f12394aa5b3e9d243cebf0128e48f9805f66
   MZPEAK_REF: c37237c5a02becd0ea65db615404fdf426b384e3
   # Taxonomy index pins -- MUST stay in lockstep with ci.yml (see the comment
-  # there for the bump procedure: new data release first, then both files).
+  # there for the bump procedure: new data release first -- as a PRE-RELEASE,
+  # or it steals the "Latest" slot and 404s every README download link --
+  # then both files).
   TAXDB_TAG: taxonomy-k7-20260901
   TAXDB_SHA256: 520d93229df807e45b0e6fdf4d8d20c7aad95b73952749cb041c3e54de474a4b
   # The contrib commit the BASE ABOVE pins as a submodule, read directly out of

@@ -79,6 +79,13 @@ env:
   # assets under an existing data tag are never mutated. To ship a rebuilt
   # index: create a new taxonomy-k7-YYYYMMDD release carrying the new tarball
   # + .sha256 FIRST, then bump BOTH values here in one commit, then tag.
+  #
+  # THE DATA RELEASE MUST BE A PRE-RELEASE (`gh release create --prerelease`,
+  # or `gh release edit <tag> --prerelease` after the fact). GitHub hands the
+  # "Latest" slot to the newest NON-prerelease, and every binary link in the
+  # README is a /releases/latest/download/ URL -- publishing this data tag as
+  # a normal release silently 404s every platform download until it is
+  # demoted. That happened once, on 2026-09-01, and this is the fix.
   # windows.yml carries the same two pins and must stay in lockstep.
   TAXDB_TAG: taxonomy-k7-20260901
   TAXDB_SHA256: 520d93229df807e45b0e6fdf4d8d20c7aad95b73952749cb041c3e54de474a4b
