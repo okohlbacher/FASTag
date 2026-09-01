@@ -72,6 +72,16 @@ env:
   # tracking the branch -- a moving ref on either side of this two-repo
   # dependency would silently change what a release contains.
   MZPEAK_REF: c37237c5a02becd0ea65db615404fdf426b384e3
+  # The platform-independent ~430 MB taxonomy k-mer index, embedded into every
+  # release tarball at tag time and copied onto each release as a standalone
+  # asset. Pinned to a DATA-ONLY release tag + sha256 -- a moving ref would
+  # silently change what a release contains (the MZPEAK_REF lesson), and
+  # assets under an existing data tag are never mutated. To ship a rebuilt
+  # index: create a new taxonomy-k7-YYYYMMDD release carrying the new tarball
+  # + .sha256 FIRST, then bump BOTH values here in one commit, then tag.
+  # windows.yml carries the same two pins and must stay in lockstep.
+  TAXDB_TAG: taxonomy-k7-20260901
+  TAXDB_SHA256: 520d93229df807e45b0e6fdf4d8d20c7aad95b73952749cb041c3e54de474a4b
 
 jobs:
   # ------------------------------------------------------- patched OpenMS
@@ -633,11 +643,15 @@ jobs:
           done
 
           cp -r "$OPENMS_INSTALL/share/OpenMS" dist/FASTag/share-OpenMS
+          # The tag-time taxonomy smoke needs this fixture; assert it on EVERY
+          # build so its disappearance fails a cheap main push, not a release.
+          test -s dist/FASTag/share-OpenMS/examples/ID/Ecoli_MS2_small.mzML
 
-          # The taxonomy -species resolves by default. Only the pruned NCBI dumps
-          # (12 KB) go here; the 232 MB k-mer index is platform-independent and
-          # ships once per release as FASTag-taxonomy.tar.gz, rather than five
-          # times inside these tarballs. `share-FASTag-taxonomy` (not
+          # The taxonomy -species resolves by default. The pruned NCBI dumps
+          # (12 KB) go here for every build; on TAG builds the "Embed taxonomy
+          # index" step below replaces this dir with the full pinned index
+          # (dumps + tax_k7.taxdb), so release tarballs are -species-complete
+          # out of the box. `share-FASTag-taxonomy` (not
           # share/FASTag/taxonomy) because this layout is FLAT -- the executable
           # sits at the root, so there is no ../share to resolve; FASTag looks for
           # both spellings, see taxonomyDir_() in src/FASTag.cpp.
@@ -723,6 +737,9 @@ jobs:
             | awk '/LC_RPATH/{g=1;next} g&&/^ *path /{print "  " $2; g=0}'
 
           cp -r "$OPENMS_INSTALL/share/OpenMS" dist/FASTag/share-OpenMS
+          # The tag-time taxonomy smoke needs this fixture; assert it on EVERY
+          # build so its disappearance fails a cheap main push, not a release.
+          test -s dist/FASTag/share-OpenMS/examples/ID/Ecoli_MS2_small.mzML
 
           # Same taxonomy copy as the Linux step above. It lives in BOTH because
           # Linux and macOS have separate bundle steps; adding it to only one
@@ -908,6 +925,42 @@ jobs:
       #
       # Archives the WHOLE dist/FASTag/ folder now, not a single file: users
       # run FASTag/FASTag (the wrapper), not the FASTag.bin it execs.
+      # Embed the full taxonomy index into the tarball -- tag builds only;
+      # main pushes keep the fast dumps-only bundles nobody installs.
+      #
+      # Placed AFTER the macOS signing/notarization steps on purpose: the
+      # index is unsigned data, and embedding earlier would balloon the
+      # notarytool upload by ~450 MB. (That ordering stays theoretical until
+      # the MACOS_* secrets exist -- revisit on the first signed run.)
+      #
+      # Fails the release loudly on ANY error -- a tarball whose -species is
+      # silently broken is worse than a red build. The smoke run uses the
+      # ion-trap tolerance because the bundled example file is ion-trap MS2;
+      # it asserts the taxdb LOADS and a non-empty report is written, not any
+      # particular taxon ranking (139 spectra cannot rank stably).
+      - name: Embed taxonomy index (tag builds)
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash -el {0}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release download "$TAXDB_TAG" -p 'FASTag-taxonomy-k7.tar.gz' -D /tmp/taxdb
+          got=$(python3 -c "import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" /tmp/taxdb/FASTag-taxonomy-k7.tar.gz)
+          [ "$got" = "$TAXDB_SHA256" ] || { echo "taxonomy sha256 mismatch: $got"; exit 1; }
+          # The asset's dumps replace the repo copies: they are the ones the
+          # index was built against.
+          rm -rf dist/FASTag/share-FASTag-taxonomy
+          tar -xzf /tmp/taxdb/FASTag-taxonomy-k7.tar.gz -C dist/FASTag
+          test -s dist/FASTag/share-FASTag-taxonomy/tax_k7.taxdb
+          MZ=dist/FASTag/share-OpenMS/examples/ID/Ecoli_MS2_small.mzML
+          test -s "$MZ" || { echo "smoke fixture missing from bundle"; exit 1; }
+          dist/FASTag/FASTag -in "$MZ" -out /tmp/smoke.tsv \
+            -species -species_out /tmp/smoke.species.tsv \
+            -tag_length 7 -extension 2 \
+            -fragment_tolerance 0.3 -fragment_tolerance_unit Da
+          [ "$(wc -l < /tmp/smoke.species.tsv)" -ge 2 ] || { echo "species smoke wrote an empty report"; exit 1; }
+
       - name: Attach binary to the GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash -el {0}
@@ -920,3 +973,88 @@ jobs:
             2>/dev/null || true
           tar -C dist -czf "FASTag-${{ matrix.name }}.tar.gz" FASTag
           gh release upload "${{ github.ref_name }}" "FASTag-${{ matrix.name }}.tar.gz" --clobber
+
+  # ----------------------------------------------------------- GUI checks
+  # Independent on purpose: no `needs:` -- waiting ~70 min for OpenMS to test
+  # TypeScript would make nobody run it. webkit2gtk/rsvg are what the tauri
+  # crate links on Linux; without them cargo cannot even typecheck the backend.
+  gui:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Tauri build deps
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q libwebkit2gtk-4.1-dev librsvg2-dev libgtk-3-dev
+      - name: Frontend typecheck + tests + build
+        working-directory: gui
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
+      - name: Backend unit tests
+        working-directory: gui/src-tauri
+        run: cargo test --lib
+
+  # ---------------------------------------------------- release data asset
+  # Copies the pinned taxonomy tarball onto the new release as a standalone
+  # asset (index-only upgrades, GUI bundling, the README download). Its own
+  # job, independent of every platform leg: a platform failure must not leave
+  # a release without the asset. Creates the release if it is first to arrive
+  # (same harmless-race pattern as the attach steps).
+  taxonomy-asset:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Copy the pinned taxonomy asset onto this release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh release create "${{ github.ref_name }}" \
+            --title "${{ github.ref_name }}" \
+            --notes "Automated binary upload; release notes pending." \
+            2>/dev/null || true
+          gh release download "$TAXDB_TAG" -p 'FASTag-taxonomy-k7.tar.gz*' -D .
+          got=$(python3 -c "import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" FASTag-taxonomy-k7.tar.gz)
+          [ "$got" = "$TAXDB_SHA256" ] || { echo "taxonomy sha256 mismatch: $got"; exit 1; }
+          gh release upload "${{ github.ref_name }}" \
+            FASTag-taxonomy-k7.tar.gz FASTag-taxonomy-k7.tar.gz.sha256 --clobber
+
+  # ------------------------------------------------- release completeness
+  # No more silently partial releases: v0.19.1 went out with no linux-x64
+  # tarball and nobody noticed. Red when any asset THIS workflow owns is
+  # missing after all legs finish. The Windows zip is asserted by the mirror
+  # job at the end of windows.yml instead -- that workflow is the long pole,
+  # so by its end every asset should exist and it checks the FULL list.
+  # Non-destructive: the release stays up; the red run is the signal.
+  release-complete:
+    # !cancelled(), not always(): cancel-in-progress on a superseding push
+    # would otherwise turn the cancelled run's completeness check red for
+    # uploads the NEW run will finish.
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
+    needs: [build, taxonomy-asset]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Assert this workflow's assets are on the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          want="FASTag-linux-x64.tar.gz FASTag-linux-arm64.tar.gz \
+                FASTag-macos-x64.tar.gz FASTag-macos-arm64.tar.gz \
+                FASTag-taxonomy-k7.tar.gz FASTag-taxonomy-k7.tar.gz.sha256"
+          have=$(gh release view "${{ github.ref_name }}" --json assets --jq '.assets[].name')
+          missing=0
+          for a in $want; do
+            echo "$have" | grep -qx "$a" || { echo "MISSING: $a"; missing=1; }
+          done
+          exit $missing

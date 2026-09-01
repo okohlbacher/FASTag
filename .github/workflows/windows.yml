@@ -70,6 +70,10 @@ env:
   # file documents does not apply to this particular bump -- checked, not assumed.
   OPENMS_BASE_SHA: 9cb5f12394aa5b3e9d243cebf0128e48f9805f66
   MZPEAK_REF: c37237c5a02becd0ea65db615404fdf426b384e3
+  # Taxonomy index pins -- MUST stay in lockstep with ci.yml (see the comment
+  # there for the bump procedure: new data release first, then both files).
+  TAXDB_TAG: taxonomy-k7-20260901
+  TAXDB_SHA256: 520d93229df807e45b0e6fdf4d8d20c7aad95b73952749cb041c3e54de474a4b
   # The contrib commit the BASE ABOVE pins as a submodule, read directly out of
   # it rather than assumed: `git ls-tree bd4b895556 -- contrib` in a local
   # OpenMS checkout.
@@ -717,11 +721,13 @@ jobs:
             exit 1
           fi
           cp -r "$SHARE_DIR" dist/FASTag/share-OpenMS
+          # Same every-build fixture assertion as ci.yml (tag-time smoke input).
+          test -s dist/FASTag/share-OpenMS/examples/ID/Ecoli_MS2_small.mzML
 
-          # The taxonomy -species resolves by default. Only the pruned NCBI dumps
-          # (12 KB) go here; the 232 MB k-mer index is platform-independent and
-          # ships once per release as FASTag-taxonomy.tar.gz, rather than five
-          # times inside these tarballs. `share-FASTag-taxonomy` (not
+          # The taxonomy -species resolves by default. The pruned NCBI dumps
+          # (12 KB) go here for every build; on TAG builds the "Embed taxonomy
+          # index" step below replaces this dir with the full pinned index, so
+          # the release zip is -species-complete. `share-FASTag-taxonomy` (not
           # share/FASTag/taxonomy) because this layout is FLAT -- the executable
           # sits at the root, so there is no ../share to resolve; FASTag looks for
           # both spellings, see taxonomyDir_() in src/FASTag.cpp.
@@ -763,6 +769,33 @@ jobs:
           echo "$OUT" | grep -q "File not found" || { echo "::error::Unexpected output -- never reached the expected 'file not found' error."; exit 1; }
           echo "Portability check passed: runs standalone, no build-environment leakage."
 
+      # Tag builds only -- see ci.yml's identical step for the full rationale
+      # (pinned data release, loud failure, smoke semantics). --repo on every
+      # gh call: this workflow's checkout lives at fastag/, so the default cwd
+      # has no .git to infer the repo from.
+      - name: Embed taxonomy index (tag builds)
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release download "$TAXDB_TAG" -p 'FASTag-taxonomy-k7.tar.gz' -D /tmp/taxdb \
+            --repo "${{ github.repository }}"
+          got=$(python -c "import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" /tmp/taxdb/FASTag-taxonomy-k7.tar.gz)
+          [ "$got" = "$TAXDB_SHA256" ] || { echo "taxonomy sha256 mismatch: $got"; exit 1; }
+          rm -rf dist/FASTag/share-FASTag-taxonomy
+          tar -xzf /tmp/taxdb/FASTag-taxonomy-k7.tar.gz -C dist/FASTag
+          test -s dist/FASTag/share-FASTag-taxonomy/tax_k7.taxdb
+          MZ=dist/FASTag/share-OpenMS/examples/ID/Ecoli_MS2_small.mzML
+          test -s "$MZ" || { echo "smoke fixture missing from bundle"; exit 1; }
+          CLEAN_PATH=$(echo "$PATH" | tr ':' '\n' | grep -viE "openms-install|contrib-build|Qt|conda|miniconda" | tr '\n' ':')
+          PATH="$CLEAN_PATH" "$GITHUB_WORKSPACE/dist/FASTag/FASTag.bat" -in "$MZ" -out /tmp/smoke.tsv \
+            -species -species_out /tmp/smoke.species.tsv \
+            -tag_length 7 -extension 2 \
+            -fragment_tolerance 0.3 -fragment_tolerance_unit Da
+          [ "$(wc -l < /tmp/smoke.species.tsv)" -ge 2 ] || { echo "species smoke wrote an empty report"; exit 1; }
+
       # Same mechanism as ci.yml's identical step -- see there for why the
       # filename carries no version and why the create-or-fail-harmlessly
       # pattern is safe across two independent workflows racing to attach to
@@ -792,3 +825,26 @@ jobs:
             "Compress-Archive -Path '$WS/dist/FASTag' -DestinationPath 'FASTag-windows-x64.zip' -Force"
           gh release upload "${{ github.ref_name }}" FASTag-windows-x64.zip --clobber \
             --repo "${{ github.repository }}"
+
+  # ------------------------------------------------- release completeness
+  # Asserts the Windows zip only; ci.yml's mirror job asserts the unix
+  # tarballs and taxonomy assets. Split because GitHub has no cross-workflow
+  # `needs:` and either workflow can finish first.
+  release-complete:
+    # !cancelled() for the same reason as ci.yml's job.
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
+    needs: [windows-x64]
+    runs-on: ubuntu-24.04
+    steps:
+      # Own asset ONLY: there is no cross-workflow `needs:`, and "Windows is
+      # the long pole" is a heuristic, not a guarantee -- on warm caches the
+      # unix legs can lag and a healthy release would go red here. Each
+      # workflow asserts what it owns; together they cover the full list.
+      - name: Assert this workflow's asset is on the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          have=$(gh release view "${{ github.ref_name }}" --json assets --jq '.assets[].name')
+          echo "$have" | grep -qx "FASTag-windows-x64.zip" || { echo "MISSING: FASTag-windows-x64.zip"; exit 1; }
