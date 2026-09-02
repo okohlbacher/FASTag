@@ -361,6 +361,16 @@ research project.
   `TagFDR` machinery exists and is unit-tested but stays unwired, deliberately,
   so no miscalibrated FDR reaches a user.
 
+## Performance: the reading path is the bottleneck, not the tagger (2026-09-02)
+
+Profiled after 1.0 — see `doc/PERF-REVIEW-2026-09.md`. Two findings dominate:
+the indexedmzML offset list is parsed with a Xerces DOM (25.8 s of a 47 s run
+on the 13 GB file, single-threaded, immune to -threads; a linear scan of the
+same 33 MB takes 97 ms), and every spectrum is decoded through a per-spectrum
+DOM parse (~60% of read cost, read being ~75% of the loop). Plus `-threads`
+defaults to 1 on a 16-core machine. Ranked plan with expected gains in the
+review; the first two items are worth ~2x on large files for about a day.
+
 ## Watch item: single-row E-value wobble on ddaPASEF (unexplained)
 
 Found while benchmarking 1.0 against v0.19.1 (2026-09-02). On
