@@ -361,6 +361,28 @@ research project.
   `TagFDR` machinery exists and is unit-tested but stays unwired, deliberately,
   so no miscalibrated FDR reaches a user.
 
+## Watch item: single-row E-value wobble on ddaPASEF (unexplained)
+
+Found while benchmarking 1.0 against v0.19.1 (2026-09-02). On
+`bench_hela_ddapasef.mzML` (13 GB, 357,802 MS2, 2,411,581 tags) v0.19.1
+produced two distinct outputs across 7 runs. The diff is exactly ONE line, one
+field: an E-value of 5.40765 vs 5.40639 -- the 5th significant figure of a
+noise-level tag (E ~ 5 means ~5 such tags expected by chance). Sequence,
+charge, flanking masses and both confidences are identical; no other dataset
+showed it.
+
+1.0 did not reproduce it in 15 consecutive full runs (v0.19.1 flipped in 2 of
+7, so a shared ~29% defect would have shown with ~99.4% probability). But the
+scoring path is byte-identical between the versions, so the honest status is
+**not reproduced, mechanism unidentified** -- NOT fixed. Ruled out by
+inspection: the Monte-Carlo m/z-fidelity null is explicitly seeded per k; gap
+edges (where the pair-table order could matter) are absent from the affected
+row; per-spectrum work carries no cross-spectrum state in v0.19.1.
+
+Only matters if bit-reproducibility on ddaPASEF becomes load-bearing. The
+cheap next probe is `-threads 1` repeats on that file to test whether the
+wobble is concurrency-linked at all.
+
 ## v1.0 sweep (2026-09-01) — dependencies, deep review, fixes
 
 Full-repo pass before a 1.0: every dependency updated (React 19 / TypeScript 7 /
