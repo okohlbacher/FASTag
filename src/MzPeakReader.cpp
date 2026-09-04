@@ -29,7 +29,7 @@ namespace FASTag
     /// MS level, retention time, precursors and the native ID. Anything richer
     /// (auxiliary arrays, scan windows, vendor trailers) is deliberately left
     /// behind rather than half-translated.
-    void toOpenMS(const MzPeak::Spectrum& in, MSSpectrum& out)
+    void toOpenMS(const MzPeak::Spectrum& in, MSSpectrum& out, bool with_peaks)
     {
       // clear(true) discards the peak buffer's capacity (MSSpectrum.cpp:175
       // calls shrink_to_fit), so this reallocates once per spectrum. Measured:
@@ -38,20 +38,27 @@ namespace FASTag
       // dominates -- so the simpler, unambiguously-correct form stays.
       out.clear(true);
 
-      const std::vector<double>& mz = in.mz();
-      const std::vector<float>& intensity = in.intensity();
-      // A spectrum whose arrays disagree is corrupt, not merely odd: pairing
-      // them by index would invent peaks. Take the common prefix and say so.
-      const size_t n = std::min(mz.size(), intensity.size());
-      if (mz.size() != intensity.size())
+      // with_peaks == false leaves the peak arrays UNTOUCHED, and that is the
+      // point: mz()/intensity() are what trigger the library's lazy Parquet
+      // decode, so not calling them means the spectrum's chunk is never
+      // decoded at all. Everything below reads only the cached metadata map.
+      if (with_peaks)
       {
-        OPENMS_LOG_WARN << "mzPeak spectrum '" << in.metadata().id << "' has "
-                        << mz.size() << " m/z values against " << intensity.size()
-                        << " intensities; using the first " << n << "." << std::endl;
+        const std::vector<double>& mz = in.mz();
+        const std::vector<float>& intensity = in.intensity();
+        // A spectrum whose arrays disagree is corrupt, not merely odd: pairing
+        // them by index would invent peaks. Take the common prefix and say so.
+        const size_t n = std::min(mz.size(), intensity.size());
+        if (mz.size() != intensity.size())
+        {
+          OPENMS_LOG_WARN << "mzPeak spectrum '" << in.metadata().id << "' has "
+                          << mz.size() << " m/z values against " << intensity.size()
+                          << " intensities; using the first " << n << "." << std::endl;
+        }
+        out.reserve(n);
+        for (size_t i = 0; i < n; ++i)
+          out.push_back(Peak1D(mz[i], intensity[i]));
       }
-      out.reserve(n);
-      for (size_t i = 0; i < n; ++i)
-        out.push_back(Peak1D(mz[i], intensity[i]));
 
       const MzPeak::SpectrumMetadata& meta = in.metadata();
       out.setNativeID(meta.id);
@@ -129,7 +136,13 @@ namespace FASTag
       size_t n_ms2 = 0, n_ms2_profile = 0, n_picked = 0, n_pick_failed = 0;
       for (const MzPeak::Spectrum& s : spectra)
       {
-        toOpenMS(s, spec);
+        // Decode peaks only for what the consumer can use. FASTag tags MS2 and
+        // -out_spectra only ever writes spectra that carried a tag, so an MS1's
+        // peak arrays are read, decoded, copied and thrown away. The spectrum is
+        // still OFFERED (metadata only) so the consumer's progress counter keeps
+        // the same denominator it has on the mzML path.
+        const bool tagged_level = s.ms_level() == 2;
+        toOpenMS(s, spec, tagged_level);
         const bool profile = spec.getType() == SpectrumSettings::SpectrumType::PROFILE;
         if (spec.getMSLevel() == 2) { ++n_ms2; if (profile) ++n_ms2_profile; }
 
@@ -137,7 +150,7 @@ namespace FASTag
         // carried a tag, so picking profile MS1 is work no consumer here uses.
         // Measured on a run with 1,431 profile MS1: picking them cost ~1 s of
         // a 3.5 s run for nothing.
-        const bool worth_picking = spec.getMSLevel() >= 2;
+        const bool worth_picking = tagged_level;
         if (centroid_profile && profile && worth_picking && !spec.empty())
         {
           // pick() copies the spectrum meta (precursors included) and stamps
