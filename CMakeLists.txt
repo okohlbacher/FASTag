@@ -136,8 +136,44 @@ target_include_directories(fastag_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
 target_link_libraries(fastag_core PUBLIC OpenMS)
 
+# The external mzPeak reader (github.com/okohlbacher/mzpeak-openms).
+#
+# OpenMS's own MzPeakFile implements the pre-0.7.0 layout and reads every
+# current-format archive as ZERO spectra, silently. This library reads both
+# layouts and is cross-validated against the Rust reference implementation, so
+# when it is present it takes over mzPeak INPUT entirely. Optional: without it
+# the build falls back to OpenMS's reader (fine only for archives OpenMS
+# itself wrote). Point MZPEAK_LIB_DIR at a `meson install` prefix.
+set(MZPEAK_LIB_DIR "" CACHE PATH "Prefix of an installed mzpeak-openms library")
+# Headers come from the SOURCE tree, not from `meson install`: the library's
+# install_headers() list flattens the nested paths (mzpeak/data/array_index.h
+# lands as mzpeak/array_index.h) while the headers still include the nested
+# spelling, so an installed-only header set does not compile. Reported
+# upstream; until it is fixed, point MZPEAK_SOURCE_DIR at a checkout.
+set(MZPEAK_SOURCE_DIR "" CACHE PATH "Checkout of mzpeak-openms (for headers)")
+find_path(MZPEAK_INCLUDE_DIR mzpeak.h HINTS ${MZPEAK_SOURCE_DIR}/include)
+find_library(MZPEAK_LIBRARY NAMES mzpeak HINTS ${MZPEAK_LIB_DIR}/lib)
+find_library(MZPEAK_NUMPRESS_LIBRARY NAMES numpress HINTS ${MZPEAK_LIB_DIR}/lib)
+
 add_executable(FASTag src/FASTag.cpp)
 target_link_libraries(FASTag PRIVATE fastag_core)
+if(MZPEAK_INCLUDE_DIR AND MZPEAK_LIBRARY)
+  # C++23: the library's headers use std::expected and deducing this.
+  target_sources(FASTag PRIVATE src/MzPeakReader.cpp)
+  target_include_directories(FASTag PRIVATE ${MZPEAK_INCLUDE_DIR})
+  target_link_libraries(FASTag PRIVATE ${MZPEAK_LIBRARY})
+  if(MZPEAK_NUMPRESS_LIBRARY)
+    target_link_libraries(FASTag PRIVATE ${MZPEAK_NUMPRESS_LIBRARY})
+  endif()
+  # CXX_STANDARD is a TARGET property; per-source it is silently ignored and
+  # the file would compile at the target's C++17 (std::unreachable missing).
+  set_source_files_properties(src/MzPeakReader.cpp PROPERTIES COMPILE_OPTIONS "-std=c++23")
+  target_compile_definitions(FASTag PRIVATE FASTAG_HAVE_MZPEAK_LIB)
+  message(STATUS "FASTag: external mzPeak reader enabled (${MZPEAK_LIBRARY})")
+else()
+  message(STATUS "FASTag: external mzPeak reader NOT found -- mzPeak input falls back to "
+                 "OpenMS's reader, which cannot read current-format archives")
+endif()
 if(OpenMP_CXX_FOUND)
   target_link_libraries(FASTag PRIVATE OpenMP::OpenMP_CXX)
 endif()

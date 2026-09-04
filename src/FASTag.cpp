@@ -15,6 +15,9 @@
 #include <OpenMS/FORMAT/FileHandler.h>
 #include <OpenMS/KERNEL/MSExperiment.h>
 #include <OpenMS/KERNEL/OnDiscMSExperiment.h>
+#ifdef FASTAG_HAVE_MZPEAK_LIB
+#include "MzPeakReader.h"
+#endif
 #ifdef FASTAG_HAVE_MZPEAK
 #include <OpenMS/FORMAT/MzPeakFile.h>
 #include <OpenMS/INTERFACES/IMSDataConsumer.h>
@@ -1650,8 +1653,32 @@ protected:
       consumer.setProgressHooks(tick, [&progress_total](Size n) {
         progress_total.store(static_cast<long long>(n));
       });
+#ifdef FASTAG_HAVE_MZPEAK_LIB
+      // The external reader (see src/MzPeakReader.h for why it replaces
+      // OpenMS's): it reads both the pre-0.7.0 and the current layouts, and it
+      // streams, so the memory warning above no longer applies to this path.
+      FASTag::streamMzPeak(in, consumer);
+#else
+      // Fallback: OpenMS's own reader. It implements the PRE-0.7.0 mzPeak
+      // layout, so an archive from any current writer yields nothing at all --
+      // silently. Count what arrives and say so rather than reporting a clean
+      // run over an empty file.
       MzPeakFile().transform(in, &consumer);
+#endif
       consumer.finish();   // the final partial chunk, otherwise silently dropped
+#ifndef FASTAG_HAVE_MZPEAK_LIB
+      if (rows.empty() && n_ms2 == 0)
+      {
+        OPENMS_LOG_ERROR
+          << "Read 0 spectra from '" << in << "'. This build uses OpenMS's mzPeak "
+             "reader, which only understands the pre-0.7.0 layout; archives from "
+             "current writers (split-facet metadata, chunked signal) read as empty "
+             "through it. Rebuild with the external reader "
+             "(-DMZPEAK_SOURCE_DIR=... -DMZPEAK_LIB_DIR=...; see README) or supply mzML."
+          << std::endl;
+        return INPUT_FILE_CORRUPT;
+      }
+#endif
       // Run-level settings for -out_spectra come from the consumer here; the
       // mzML paths take them from getMetaData()/the loaded map above, neither
       // of which ran. Without this the written file has no run-level metadata

@@ -180,10 +180,29 @@ materialises the whole run rather than streaming it, unlike the O(threads)
 mzML path: a 155 MB `.mzpeak` peaks around 1.7 GB. Prefer mzML for runs large
 relative to RAM; see [doc/BACKLOG-mzpeak.md](doc/BACKLOG-mzpeak.md).
 
-**0 tags on DIA input is the data, not the reader** — the public mzPeak sample
-files are DIA runs, whose wide-window chimeric MS2 yields few or no tags at
-default settings. The same spectra read as mzML give the same (empty) result;
-tags on DDA input confirm the mzPeak path end to end.
+**Reading needs the external reader.** OpenMS's own mzPeak implementation
+predates the format's 0.7.0 revision (split-facet metadata, bare column names,
+the chunked signal layout with Numpress/delta encodings, `data_kind:
+"data_arrays"`), so archives from current writers read back as ZERO spectra
+through it. FASTag therefore reads mzPeak with
+[mzpeak-openms](https://github.com/okohlbacher/mzpeak-openms), which handles
+both the old and the current layouts and is cross-validated against the Rust
+reference implementation. Build it, then configure FASTag with
+`-DMZPEAK_SOURCE_DIR=<checkout> -DMZPEAK_LIB_DIR=<install prefix>`; without it
+the build falls back to OpenMS's reader and refuses loudly rather than
+reporting a clean run over an empty file.
+
+(An earlier note here blamed zero tags from mzPeak samples on DIA data. That
+was wrong — it was this format gap.)
+
+**Profile MS2 is centroided on read.** mzPeak archives converted from raw files
+routinely store profile MS2 with an empty centroid facet, and tagging profile
+SAMPLES rather than peaks costs real recall. Measured on one run available in
+both formats: 80,990 tags from the profile archive read as-is, 122,489 with
+on-read centroiding (`PeakPickerHiRes`), against 122,098 for the same run
+supplied as centroided mzML. Converting that mzML to mzPeak and tagging it
+reproduces the mzML result to within a single tag (122,097; 99.999% of
+spectrum/tag pairs identical, flanking masses to 4 decimals).
 
 ## Command-line reference
 
