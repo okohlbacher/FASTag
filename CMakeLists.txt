@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21 FATAL_ERROR)
-project(FASTag VERSION 1.0.0 LANGUAGES CXX)
+project(FASTag VERSION 1.0.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -225,6 +225,12 @@ if(FASTAG_BUILD_TESTS)
   add_test(NAME stream_test
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/stream_test.sh $<TARGET_FILE:FASTag>)
   set_tests_properties(stream_test PROPERTIES SKIP_RETURN_CODE 77)
+
+  # mzPeak reader vs its own mzML twin. Needs a matched pair of real files, so
+  # it SKIPs unless FASTAG_E2E_MZML and FASTAG_E2E_MZPEAK point at one.
+  add_test(NAME mzpeak_e2e
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/mzpeak_e2e.sh $<TARGET_FILE:FASTag>)
+  set_tests_properties(mzpeak_e2e PROPERTIES SKIP_RETURN_CODE 77)
 
   add_executable(tagfeatures_test test/tagfeatures_test.cpp src/tagfeatures.cpp)
   target_include_directories(tagfeatures_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

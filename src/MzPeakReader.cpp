@@ -8,6 +8,7 @@
 #include <OpenMS/CONCEPT/Exception.h>
 #include <OpenMS/CONCEPT/LogStream.h>
 #include <OpenMS/KERNEL/MSSpectrum.h>
+#include <OpenMS/METADATA/InstrumentSettings.h>
 #include <OpenMS/METADATA/Precursor.h>
 #include <OpenMS/METADATA/SpectrumSettings.h>
 #include <OpenMS/PROCESSING/CENTROIDING/PeakPickerHiRes.h>
@@ -31,11 +32,9 @@ namespace FASTag
     /// behind rather than half-translated.
     void toOpenMS(const MzPeak::Spectrum& in, MSSpectrum& out, bool with_peaks)
     {
-      // clear(true) discards the peak buffer's capacity (MSSpectrum.cpp:175
-      // calls shrink_to_fit), so this reallocates once per spectrum. Measured:
-      // reusing the capacity via clear(false) changed the run by nothing at all
-      // (1.33 s vs 1.27 s, inside run-to-run noise) because the decode
-      // dominates -- so the simpler, unambiguously-correct form stays.
+      // clear(true) shrink_to_fit's the peak buffer, so this reallocates once
+      // per spectrum. Reusing the capacity via clear(false) measured no faster
+      // (1.33 vs 1.27 s, run-to-run noise): the decode dominates.
       out.clear(true);
 
       // with_peaks == false leaves the peak arrays UNTOUCHED, and that is the
@@ -73,6 +72,15 @@ namespace FASTag
       else if (meta.representation == "MS:1000128")
         out.setType(SpectrumSettings::SpectrumType::PROFILE);
       out.setMSLevel(in.ms_level() > 0 ? static_cast<UInt>(in.ms_level()) : 1u);
+      // Polarity: mzPeak stores it as a signed scalar, OpenMS as an enum. Not
+      // cosmetic -- it is the only place a downstream writer can learn it, and
+      // -out_spectra otherwise emits spectra with no polarity at all.
+      if (meta.polarity)
+      {
+        out.getInstrumentSettings().setPolarity(*meta.polarity > 0
+                                                    ? IonSource::Polarity::POSITIVE
+                                                    : IonSource::Polarity::NEGATIVE);
+      }
       // The library hands retention time over in SECONDS (it converts from the
       // format's minutes at its own boundary), which is what OpenMS wants.
       if (meta.retention_time) out.setRT(*meta.retention_time);
@@ -115,8 +123,7 @@ namespace FASTag
     }
   }
 
-  void streamMzPeak(const std::string& path, Interfaces::IMSDataConsumer& consumer,
-                    bool centroid_profile)
+  void streamMzPeak(const std::string& path, Interfaces::IMSDataConsumer& consumer)
   {
     try
     {
@@ -141,7 +148,7 @@ namespace FASTag
       PeakPickerHiRes picker;
 
       MSSpectrum spec, picked;
-      size_t n_ms2 = 0, n_ms2_profile = 0, n_picked = 0, n_pick_failed = 0;
+      size_t n_picked = 0, n_pick_failed = 0;
       for (const MzPeak::Spectrum& s : spectra)
       {
         // Decode peaks only for what the consumer can use. FASTag tags MS2 and
@@ -151,15 +158,9 @@ namespace FASTag
         // the same denominator it has on the mzML path.
         const bool tagged_level = s.ms_level() == 2;
         toOpenMS(s, spec, tagged_level);
-        const bool profile = spec.getType() == SpectrumSettings::SpectrumType::PROFILE;
-        if (spec.getMSLevel() == 2) { ++n_ms2; if (profile) ++n_ms2_profile; }
 
-        // MS1 is never tagged, and -out_spectra only ever writes spectra that
-        // carried a tag, so picking profile MS1 is work no consumer here uses.
-        // Measured on a run with 1,431 profile MS1: picking them cost ~1 s of
-        // a 3.5 s run for nothing.
-        const bool worth_picking = tagged_level;
-        if (centroid_profile && profile && worth_picking && !spec.empty())
+        if (tagged_level && !spec.empty() &&
+            spec.getType() == SpectrumSettings::SpectrumType::PROFILE)
         {
           // pick() copies the spectrum meta (precursors included) and stamps
           // the result CENTROID, so the consumer sees a spectrum that is
@@ -184,6 +185,8 @@ namespace FASTag
         }
         consumer.consumeSpectrum(spec);
       }
+      // Once, at the end. Profile MS2 is a property of the archive the user
+      // cannot see and would otherwise only notice as an unexplained tag count.
       if (n_picked > 0)
       {
         OPENMS_LOG_INFO << "mzPeak: centroided " << n_picked << " profile spectra on read"
@@ -191,17 +194,6 @@ namespace FASTag
                               ? " (" + String(n_pick_failed) + " kept as profile: picking yielded nothing)"
                               : "")
                         << std::endl;
-      }
-      // Say so ONCE, at the end, rather than per spectrum. Profile MS2 is a
-      // property of the archive the user cannot see and would otherwise only
-      // notice as an unexplained drop in tags.
-      if (!centroid_profile && n_ms2_profile > n_ms2 / 2 && n_ms2 > 0)
-      {
-        OPENMS_LOG_WARN << n_ms2_profile << " of " << n_ms2 << " MS2 spectra in this "
-                           "mzPeak archive are PROFILE, not centroided, and it stores no "
-                           "centroid entry. Tagging profile samples finds fewer and worse "
-                           "tags than tagging centroids -- centroid the run first (e.g. "
-                           "PeakPickerHiRes) if the tag yield looks low." << std::endl;
       }
     }
     catch (const Exception::BaseException&)

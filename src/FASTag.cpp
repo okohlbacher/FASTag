@@ -1632,19 +1632,9 @@ protected:
     {
 #ifdef FASTAG_HAVE_MZPEAK
       // 1 M peaks per chunk, ~16 MB of Peak1D, independent of how many spectra
-      // that turns out to be.
-      //
-      // WARNING -- mzPeak input is NOT memory-bounded, and the cause is not
-      // here. MzPeakFile::transform() materialises the run rather than streaming
-      // it, despite the consumer interface existing to avoid exactly that.
-      // Measured: a 2.11 GB .mzpeak peaks at 23.7 GB resident, ~11x the file,
-      // against 169 MB for the same data as mzML. Varying this budget over a 16x
-      // range moved peak memory by under 10% (1027 / 945 / 986 MB on a 93 MB
-      // file), which is what shows the buffer is not the term that matters.
-      //
-      // Output is correct and byte-identical to the mzML path. Fine for files
-      // small relative to RAM; prefer mzML for large runs until the upstream
-      // reader streams. Tracked in doc/BACKLOG-mzpeak.md.
+      // that turns out to be. Not a memory knob: varying it over a 16x range
+      // moved peak RSS under 10%, which is how we know the buffer is not the
+      // term that matters on either reader.
       ChunkingConsumer consumer(flush_chunk, 1000u * 1000u,
                                 subsample_frac > 0.0 ? subsample_frac : 1.0, subsample_seed);
       // Progress for the streaming path: the count arrives from the reader via
@@ -1654,15 +1644,15 @@ protected:
         progress_total.store(static_cast<long long>(n));
       });
 #ifdef FASTAG_HAVE_MZPEAK_LIB
-      // The external reader (see src/MzPeakReader.h for why it replaces
-      // OpenMS's): it reads both the pre-0.7.0 and the current layouts, and it
-      // streams, so the memory warning above no longer applies to this path.
+      // The external reader; src/MzPeakReader.h says why it replaces OpenMS's.
       FASTag::streamMzPeak(in, consumer);
 #else
-      // Fallback: OpenMS's own reader. It implements the PRE-0.7.0 mzPeak
-      // layout, so an archive from any current writer yields nothing at all --
-      // silently. Count what arrives and say so rather than reporting a clean
-      // run over an empty file.
+      // Fallback: OpenMS's own reader, with two upstream problems. It
+      // implements the PRE-0.7.0 layout, so an archive from any current writer
+      // yields nothing at all -- caught below rather than reported as a clean
+      // run. And transform() materialises the run instead of streaming it: a
+      // 2.11 GB .mzpeak peaked at 23.7 GB resident against 169 MB for the same
+      // data as mzML. Neither applies to the reader above.
       MzPeakFile().transform(in, &consumer);
 #endif
       consumer.finish();   // the final partial chunk, otherwise silently dropped

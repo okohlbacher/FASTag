@@ -36,19 +36,22 @@ namespace FASTag
   /// precursors, native ID), so subsampling, chunking and progress reporting
   /// are unchanged.
   ///
+  /// PROFILE MS2 is centroided on the way through. mzPeak archives converted
+  /// from raw files routinely carry profile MS2 with an empty centroid entry,
+  /// and tagging profile SAMPLES rather than peaks costs real recall: measured
+  /// on one run, 80,990 tags read as-is against 122,489 centroided on read and
+  /// 122,098 for the same run supplied as centroided mzML.
+  ///
+  /// Peaks are decoded ONLY for MS2. mz()/intensity() are what trigger the
+  /// library's lazy Parquet decode, so anything else is offered to @p consumer
+  /// with metadata alone -- which is all the consumer keeps anyway, and which
+  /// leaves its progress denominator matching the mzML path.
+  ///
   /// @throws OpenMS::Exception::ParseError with the library's message when the
   ///   archive cannot be read. A silent empty result is never acceptable here:
   ///   that is the exact failure this reader replaces.
-  /// @param centroid_profile  centroid PROFILE spectra as they are read.
-  ///   mzPeak archives converted from raw files routinely carry profile MS2
-  ///   with an empty centroid entry, and tagging profile SAMPLES rather than
-  ///   peaks costs real recall (measured on one run: 80,990 tags from the
-  ///   profile mzPeak against 122,098 from the same run supplied as centroided
-  ///   mzML). Picking on read closes that gap without a separate conversion
-  ///   step. Off means the caller gets the archive's own representation.
   void streamMzPeak(const std::string& path,
-                    OpenMS::Interfaces::IMSDataConsumer& consumer,
-                    bool centroid_profile = true);
+                    OpenMS::Interfaces::IMSDataConsumer& consumer);
 }
 
 #endif  // FASTAG_HAVE_MZPEAK_LIB
