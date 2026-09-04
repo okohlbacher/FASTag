@@ -162,38 +162,63 @@ it cannot know the analyser, so the setting is yours.
 
 [mzPeak](https://github.com/OpenMS/mzpeak) is a Parquet-backed format (Parquet
 tables in a ZIP container). FASTag **reads and writes** it: `-in` accepts
-`.mzpeak`, `-out_spectra` writes it, and all four in/out combinations work.
-Tagging is unaffected by which you use — reading a run as mzpeak gives the same
-spectra as reading it as mzML, and a run written to mzpeak and tagged again
-reproduces the original tag set exactly.
+`.mzpeak` and `-out_spectra` writes it. Tagging is unaffected by which you use —
+reading a run as mzpeak gives the same spectra as reading it as mzML, and a run
+written to mzpeak and tagged again reproduces the original tag set exactly.
 
-The released binaries have it. Building it yourself needs an OpenMS with mzPeak
-support ([OpenMS-mzPeakRW](https://github.com/okohlbacher/OpenMS-mzPeakRW)) —
-stock and bioconda OpenMS do not have it, and configure reports which you got:
+**`-out_spectra <file>.mzpeak` does not currently work with mzPeak INPUT** —
+the other three combinations do. Writing hits a defect in OpenMS's
+`MzPeakFile::store()` when the spectra came from the external reader: the write
+aborts with `Parquet cannot store strings with size 2GB or more` and a bogus
+length that decodes to the ASCII of a CV accession, i.e. a dangling read rather
+than a real size. It fails loudly with exit code 8 after the tag TSV is already
+written, so nothing is silently wrong; it is deterministic, independent of
+`-threads`, and it does not affect tagging. Write mzML instead
+(`-out_spectra hits.mzML`) until it is fixed upstream.
+
+**Reading needs the external reader, and the released binaries do not have it
+yet.** OpenMS's own mzPeak implementation predates the format's 0.7.0 revision
+(split-facet metadata, bare column names, the chunked signal layout with
+Numpress/delta encodings, `data_kind: "data_arrays"`), so archives from current
+writers read back as ZERO spectra through it. FASTag therefore reads mzPeak
+with [mzpeak-openms](https://github.com/okohlbacher/mzpeak-openms), which
+handles both the old and the current layouts and is cross-validated against the
+Rust reference implementation.
+
+CI does not build that library yet, so a **downloaded** FASTag reads only
+archives OpenMS itself wrote; anything from a current writer exits
+`INPUT_FILE_CORRUPT` with instructions rather than reporting a clean run over an
+empty file. To read current archives, build from source: build `mzpeak-openms`,
+then configure FASTag with `-DMZPEAK_SOURCE_DIR=<checkout>
+-DMZPEAK_LIB_DIR=<install prefix>`. Configure says which reader you got:
 
 ```
--- FASTag: mzPeak input available (-in accepts .mzpeak)
+-- FASTag: external mzPeak reader enabled (<path>/libmzpeak.dylib)
 ```
 
-**Not memory-bounded, upstream** — `MzPeakFile::transform()` currently
-materialises the whole run rather than streaming it, unlike the O(threads)
-mzML path: a 155 MB `.mzpeak` peaks around 1.7 GB. Prefer mzML for runs large
-relative to RAM; see [doc/BACKLOG-mzpeak.md](doc/BACKLOG-mzpeak.md).
-
-**Reading needs the external reader.** OpenMS's own mzPeak implementation
-predates the format's 0.7.0 revision (split-facet metadata, bare column names,
-the chunked signal layout with Numpress/delta encodings, `data_kind:
-"data_arrays"`), so archives from current writers read back as ZERO spectra
-through it. FASTag therefore reads mzPeak with
-[mzpeak-openms](https://github.com/okohlbacher/mzpeak-openms), which handles
-both the old and the current layouts and is cross-validated against the Rust
-reference implementation. Build it, then configure FASTag with
-`-DMZPEAK_SOURCE_DIR=<checkout> -DMZPEAK_LIB_DIR=<install prefix>`; without it
-the build falls back to OpenMS's reader and refuses loudly rather than
-reporting a clean run over an empty file.
+Writing still goes through OpenMS, which needs
+[OpenMS-mzPeakRW](https://github.com/okohlbacher/OpenMS-mzPeakRW) — stock and
+bioconda OpenMS do not have `MzPeakFile`. The released binaries do have that.
 
 (An earlier note here blamed zero tags from mzPeak samples on DIA data. That
 was wrong — it was this format gap.)
+
+**Faster and lighter than mzML on the same acquisition.** Thermo LTQ Orbitrap
+Velos, 7,534 spectra / 6,103 MS2, 16 logical cores, warm cache, best of two
+after a warm-up:
+
+| threads | mzML (429 MB) | mzPeak, centroided (101 MB) |
+|---|---|---|
+| 1 | 4.42 s / 116 MB | **0.91 s** / 199 MB |
+| 8 | 1.37 s / 144 MB | **0.53 s** / 201 MB |
+| 16 | 1.19 s / 161 MB | **0.52 s** / 202 MB |
+
+2.3x faster at 16 threads and 8.5x single-threaded, from a file a quarter the
+size, for 1.25x the memory. Tag counts differ by one out of 122,098 — the
+archive stores m/z as float32, which moves a single borderline match across the
+tolerance. mzPeak does not scale with `-threads` (the read is one serial loop)
+while mzML does, so the gap narrows as cores are added; see
+[doc/BACKLOG-mzpeak.md](doc/BACKLOG-mzpeak.md).
 
 **Profile MS2 is centroided on read.** mzPeak archives converted from raw files
 routinely store profile MS2 with an empty centroid facet, and tagging profile
@@ -512,7 +537,9 @@ without filtering anything out:
   for the old speed. See [doc/BACKLOG.md](doc/BACKLOG.md).
 - **No modification support.** Residues are the unmodified 19, so labelled
   samples (TMT and similar) will not match tags spanning a modified residue.
-- **mzPeak is not memory-bounded on read** (see above), an upstream property of `MzPeakFile::transform()` rather than of FASTag.
+- **The released binaries cannot read current-format mzPeak** (see above): CI does not build the external reader, so a downloaded FASTag handles only archives OpenMS itself wrote. Build from source for the rest.
+- **`-out_spectra` to mzPeak fails when the input is also mzPeak** (see above), an upstream `MzPeakFile::store()` defect. Loud, deterministic, and confined to that one combination.
+- **mzPeak reading does not scale with `-threads`** — the external library's read is a single serial pull loop. It is still faster than mzML at every thread count tested here, but adding cores does not help it.
 
 ## Licence and provenance
 
