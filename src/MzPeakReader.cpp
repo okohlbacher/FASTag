@@ -31,6 +31,11 @@ namespace FASTag
     /// behind rather than half-translated.
     void toOpenMS(const MzPeak::Spectrum& in, MSSpectrum& out)
     {
+      // clear(true) discards the peak buffer's capacity (MSSpectrum.cpp:175
+      // calls shrink_to_fit), so this reallocates once per spectrum. Measured:
+      // reusing the capacity via clear(false) changed the run by nothing at all
+      // (1.33 s vs 1.27 s, inside run-to-run noise) because the decode
+      // dominates -- so the simpler, unambiguously-correct form stays.
       out.clear(true);
 
       const std::vector<double>& mz = in.mz();
@@ -128,7 +133,12 @@ namespace FASTag
         const bool profile = spec.getType() == SpectrumSettings::SpectrumType::PROFILE;
         if (spec.getMSLevel() == 2) { ++n_ms2; if (profile) ++n_ms2_profile; }
 
-        if (centroid_profile && profile && !spec.empty())
+        // MS1 is never tagged, and -out_spectra only ever writes spectra that
+        // carried a tag, so picking profile MS1 is work no consumer here uses.
+        // Measured on a run with 1,431 profile MS1: picking them cost ~1 s of
+        // a 3.5 s run for nothing.
+        const bool worth_picking = spec.getMSLevel() >= 2;
+        if (centroid_profile && profile && worth_picking && !spec.empty())
         {
           // pick() copies the spectrum meta (precursors included) and stamps
           // the result CENTROID, so the consumer sees a spectrum that is
