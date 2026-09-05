@@ -17,3 +17,6 @@ build-rel/
 # ...but the species reference-set manifest is source, not a test output
 !data/taxonomy/reference-set.tsv
 __pycache__/
+
+# Test fixtures are the one place data files belong in the repo.
+!test/fixtures/*.mzML

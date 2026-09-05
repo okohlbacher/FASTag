@@ -68,7 +68,7 @@ env:
   # change what a release contains -- and the SHA is its cache key. The commit
   # must carry MetadataDetail and the writer's precursor support; older ones do
   # not compile against src/MzPeakReader.cpp.
-  MZPEAK_LIB_REF: 20b57f7f69f3191c3890919a25e1391bcb17f00c
+  MZPEAK_LIB_REF: 13f5cbf5eee1fb537e8838737082dd119029f015
 
 jobs:
   build:

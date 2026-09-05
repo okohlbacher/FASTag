@@ -191,7 +191,7 @@ with a message saying so, rather than reporting a clean run over an empty file.
 To use mzPeak, build from source: build `mzpeak-openms`, then configure FASTag
 with `-DMZPEAK_SOURCE_DIR=<checkout> -DMZPEAK_LIB_DIR=<install prefix>`. This
 build is verified against `mzpeak-openms` branch `feat/writer-precursors`
-(`20b57f7`, on top of trunk `c211fed`); older commits lack the writer's
+(`13f5cbf`, on top of trunk `c211fed`); older commits lack the writer's
 precursor support and `MetadataDetail`, and will not compile. That commit also
 lowers the library's Arrow floor to 21, which is what bioconda's OpenMS pins. Configure says
 what you got:
