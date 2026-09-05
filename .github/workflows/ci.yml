@@ -68,7 +68,7 @@ env:
   # change what a release contains -- and the SHA is its cache key. The commit
   # must carry MetadataDetail and the writer's precursor support; older ones do
   # not compile against src/MzPeakReader.cpp.
-  MZPEAK_LIB_REF: d3161dcf05e9ac86d64df159fcf14b4dc0e21515
+  MZPEAK_LIB_REF: 20b57f7f69f3191c3890919a25e1391bcb17f00c
 
 jobs:
   build:
@@ -232,7 +232,11 @@ jobs:
         run: |
           set -euo pipefail
           export PKG_CONFIG_PATH="$CONDA_PREFIX/lib/pkgconfig" BOOST_ROOT="$CONDA_PREFIX"
-          meson setup mzpeak-src/build mzpeak-src --prefix="$PWD/mzpeak-install" --buildtype=release
+          # --libdir=lib: meson's default on Debian-family Linux is the multiarch
+          # lib/x86_64-linux-gnu, which FASTag's find_library() does not search.
+          # -Dtools=false: the library's two CLI tools use <print>, which Apple's
+          # clang 15-17 libc++ on these runners lacks; nothing here runs them.
+          meson setup mzpeak-src/build mzpeak-src --prefix="$PWD/mzpeak-install" --libdir=lib --buildtype=release -Dtools=false
           meson compile -C mzpeak-src/build
           meson test -C mzpeak-src/build --print-errorlogs
           meson install -C mzpeak-src/build
