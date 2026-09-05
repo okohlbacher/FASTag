@@ -128,7 +128,7 @@ after a discarded warm-up. Five-run spread is +-0.02 s and +-1 MB.
 | 16 | 1.19 s / 161 MB | **0.52 s** / 202 MB | 1.95 s / 356 MB |
 
 **The centroided archive reads 2.3x faster than its mzML twin at 16 threads and
-8.5x faster single-threaded, from a file a quarter the size**, at 1.25x the
+4.9x faster single-threaded, from a file a quarter the size**, at 1.25x the
 memory. The old `MzPeakFile` path bought 2.3x wall time for 4x memory; this one
 is faster and no longer memory-hungry.
 

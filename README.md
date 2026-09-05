@@ -213,7 +213,7 @@ after a warm-up:
 | 8 | 1.37 s / 144 MB | **0.53 s** / 201 MB |
 | 16 | 1.19 s / 161 MB | **0.52 s** / 202 MB |
 
-2.3x faster at 16 threads and 8.5x single-threaded, from a file a quarter the
+2.3x faster at 16 threads and 4.9x single-threaded, from a file a quarter the
 size, for 1.25x the memory. Tag counts differ by one out of 122,098 — the
 archive stores m/z as float32, which moves a single borderline match across the
 tolerance. mzPeak does not scale with `-threads` (the read is one serial loop)

@@ -3,6 +3,14 @@
 A proposal for OpenMS, mirroring `OnDiscMSExperiment` for mzML. Written from
 FASTag's experience of consuming both.
 
+> **Status (2026-09-04).** Every measurement below is of OpenMS's
+> `MzPeakFile::transform()`, and still holds for it. It no longer describes
+> FASTag, which since v1.0.0 reads mzPeak through the external
+> [mzpeak-openms](https://github.com/okohlbacher/mzpeak-openms) library
+> instead — streaming, and 202 MB on the 101 MB archive that cost 945 MB here.
+> The proposal stands as an OpenMS-side argument; see
+> [BACKLOG-mzpeak.md](BACKLOG-mzpeak.md) for what FASTag actually does now.
+
 **One-line summary: mzPeak should be *easier* to stream than mzML, not harder,
 and the current interface gives that advantage away.**
 
