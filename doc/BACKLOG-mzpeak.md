@@ -175,8 +175,9 @@ because that is where it was put — see "Next".
 ### Metadata: shared, and Lean
 
 The library caches the whole descriptive metadata table before the first peak
-is read. Two changes to `mzpeak-openms` (branch
-`perf/lean-and-shared-metadata`) make that affordable:
+is read. Two changes to `mzpeak-openms` (on trunk since `c211fed`, tag
+`perf-lean-metadata-2026-09-05`; FASTag v1.0.2 is verified against exactly that
+commit) make that affordable:
 
 - **Shared per archive.** `Manager` caches the map, so a second `Spectra` over
   one `Index` costs +0.5 MB and 1 ms instead of +26.9 MB and 60 ms. Since the
@@ -268,10 +269,12 @@ runs.**
    feature is documented, tested and fast locally, and absent from the thing
    users download. Needs meson + Arrow/Parquet + libzip in the CI image on
    four platforms, Windows included.
-2. **Land the metadata branch upstream.** `perf/lean-and-shared-metadata` in
-   okohlbacher/mzpeak-openms carries the shared metadata cache and
-   `MetadataDetail::Lean`; FASTag's Lean call needs it. Until it is on the
-   default branch, `MZPEAK_REF`-style pinning has nothing to pin to.
+2. **Pin the library in CI.** DONE on the library side: the metadata branch
+   landed on okohlbacher/mzpeak-openms trunk at `c211fed` (PR #1, tag
+   `perf-lean-metadata-2026-09-05`), so there is now something to pin.
+   FASTag v1.0.2 is verified against that commit; the pin itself belongs in
+   the CI change under item 1. Upstreaming to OpenMS/mzpeak is a separate
+   decision -- the fork is level with upstream, but `Spectra`'s design differs.
 3. **Pick in the worker, not in the reader.** `PeakPickerHiRes` runs serially
    inside `streamMzPeak` while every tagging thread waits. Moving it into the
    parallel callback should take the profile archive from 1.95 s toward its

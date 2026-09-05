@@ -190,7 +190,10 @@ archives OpenMS itself wrote; anything from a current writer exits
 `INPUT_FILE_CORRUPT` with instructions rather than reporting a clean run over an
 empty file. To read current archives, build from source: build `mzpeak-openms`,
 then configure FASTag with `-DMZPEAK_SOURCE_DIR=<checkout>
--DMZPEAK_LIB_DIR=<install prefix>`. Configure says which reader you got:
+-DMZPEAK_LIB_DIR=<install prefix>`. This release is verified against
+`mzpeak-openms` trunk `c211fed` (tag `perf-lean-metadata-2026-09-05`); older
+commits lack `MetadataDetail` and will not compile. Configure says which reader
+you got:
 
 ```
 -- FASTag: external mzPeak reader enabled (<path>/libmzpeak.dylib)
