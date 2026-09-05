@@ -185,16 +185,21 @@ consequence: `--help` no longer lists formats after `-in` and `-out_spectra`,
 because that list is validated against `FileTypes` and would have to omit
 mzpeak; the descriptions carry it instead.
 
-**The released binaries do not have the library yet.** CI does not build
-`mzpeak-openms`, so a **downloaded** FASTag refuses `.mzpeak` on either side
+**The released Linux and macOS binaries carry the library.** CI builds
+`mzpeak-openms` from a pinned commit, runs its test suite against the same
+Arrow the binary links, bundles it next to the executable, and accepts a
+release artifact only after the shipped bundle has read a real archive. The
+**Windows** binary does not have it -- bioconda has no win-64 OpenMS and the
+library has never been built with MSVC -- and refuses `.mzpeak` on either side
 with a message saying so, rather than reporting a clean run over an empty file.
-To use mzPeak, build from source: build `mzpeak-openms`, then configure FASTag
+
+To build from source with mzPeak: build `mzpeak-openms`, then configure FASTag
 with `-DMZPEAK_SOURCE_DIR=<checkout> -DMZPEAK_LIB_DIR=<install prefix>`. This
-build is verified against `mzpeak-openms` branch `feat/writer-precursors`
-(`13f5cbf`, on top of trunk `c211fed`); older commits lack the writer's
-precursor support and `MetadataDetail`, and will not compile. That commit also
-lowers the library's Arrow floor to 21, which is what bioconda's OpenMS pins. Configure says
-what you got:
+release is built against `mzpeak-openms` `13f5cbf`; older commits lack the
+writer's precursor support and `MetadataDetail`, and will not compile. That
+commit also lowers the library's Arrow floor to 21, which is what bioconda's
+OpenMS pins, and builds with Apple clang 15 and GCC 13. Configure says what
+you got:
 
 ```
 -- FASTag: mzPeak read/write enabled (<path>/libmzpeak.dylib)

@@ -20,7 +20,7 @@ FASTag therefore reads and writes with
 [mzpeak-openms](https://github.com/okohlbacher/mzpeak-openms), which handles
 both layouts and is cross-validated against the Rust reference implementation.
 The library's writer gained precursor and selected-ion facets for this
-(`feat/writer-precursors`, `13f5cbf`), because a written MS2 without a
+(on trunk since `13f5cbf`, PR #2), because a written MS2 without a
 precursor cannot be tagged by the tool that wrote it. It is optional at
 configure time:
 
@@ -40,10 +40,12 @@ against the enum and throws on a name it does not know; left unrestricted, it
 skips the check and the extension is decided in FASTag). The one visible cost:
 `--help` no longer prints a format list after those two options.
 
-**The released binaries do NOT carry the library yet** — CI builds neither it
-nor the reader, so a release binary refuses `.mzpeak`. That is the top open
-item below, and with the enum gone it is also what lets CI drop the from-source
-OpenMS build.
+**The released Linux and macOS binaries carry the library** (since v1.1.0). CI
+builds it from the pinned `MZPEAK_LIB_REF`, runs its suite against bioconda's
+Arrow 21, bundles it, and makes the shipped bundle read `small.mzpeak` before
+accepting the artifact. Windows does not: no win-64 OpenMS on bioconda, and the
+library has never met MSVC. Dropping the OpenMS enum is also what let CI drop
+the from-source OpenMS build on the other four platforms.
 
 **All four in/out combinations work**, and `test/mzpeak_e2e.sh` proves the one
 that used to be broken: it writes `hits.mzpeak` from mzPeak input, tags that
@@ -251,18 +253,16 @@ runs.**
 
 ## Next
 
-1. **Ship the external reader in the release binaries.** CI builds the patched
-   OpenMS but not `mzpeak-openms`, so a released FASTag reads only archives
-   OpenMS itself wrote and refuses everything a current writer produces. The
-   feature is documented, tested and fast locally, and absent from the thing
-   users download. Needs meson + Arrow/Parquet + libzip in the CI image on
-   four platforms, Windows included.
-2. **Pin the library in CI.** DONE on the library side: the metadata branch
-   landed on okohlbacher/mzpeak-openms trunk at `c211fed` (PR #1, tag
-   `perf-lean-metadata-2026-09-05`), so there is now something to pin.
-   FASTag v1.0.2 is verified against that commit; the pin itself belongs in
-   the CI change under item 1. Upstreaming to OpenMS/mzpeak is a separate
-   decision -- the fork is level with upstream, but `Spectra`'s design differs.
+1. **mzPeak on Windows.** The only platform without it. Needs mzpeak-openms
+   built with MSVC (never attempted: C++23, meson, Arrow/Parquet/libzip from
+   conda) and the from-source OpenMS build kept, since bioconda has no win-64
+   package. Done for Linux/macOS in v1.1.0 (`MZPEAK_LIB_REF` in ci.yml).
+2. **Run-level metadata in written archives.** The library writer takes a
+   `RunMetadata` block; nothing maps OpenMS's `ExperimentalSettings` onto it,
+   so `-out_spectra x.mzpeak` carries spectra and precursors but no
+   instrument, software or source-file record. Upstreaming the library work
+   to OpenMS/mzpeak is a separate decision -- the fork is level with upstream,
+   but `Spectra`'s design differs.
 3. **Pick in the worker, not in the reader.** `PeakPickerHiRes` runs serially
    inside `streamMzPeak` while every tagging thread waits. Moving it into the
    parallel callback should take the profile archive from 1.95 s toward its
