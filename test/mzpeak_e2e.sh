@@ -53,14 +53,23 @@ fi
 "$BIN" -in "$FASTAG_E2E_MZPEAK" -out "$W/t1.tsv" -threads 1 "${A[@]}" >/dev/null 2>&1
 ck "mzPeak 1 vs 4 threads byte-identical" "$(cmp -s "$W/t1.tsv" "$W/mp.tsv" && echo same || echo differ)" "same"
 
-# -out_spectra: mzML out works from either input; mzPeak out from mzPeak input
-# is KNOWN BROKEN upstream (MzPeakFile::store, see doc/BACKLOG-mzpeak.md) and is
-# asserted as failing so it cannot start passing -- or failing differently --
-# unnoticed.
+# -out_spectra: every in/out combination. The written archive must then be
+# RE-TAGGABLE: its spectra are exactly the ones that carried a tag, so tagging
+# it again must find those same tags. That is the check that precursors
+# survived the write -- without one FASTag refuses a spectrum outright, so a
+# writer that dropped them would report a clean zero here.
 "$BIN" -in "$FASTAG_E2E_MZPEAK" -out "$W/o.tsv" -out_spectra "$W/o.mzML" -threads 4 "${A[@]}" >/dev/null 2>&1
 ck "mzpeak -> mzML spectra" "$([ -s "$W/o.mzML" ] && echo ok)" "ok"
 "$BIN" -in "$FASTAG_E2E_MZPEAK" -out "$W/o2.tsv" -out_spectra "$W/o.mzpeak" -threads 4 "${A[@]}" >/dev/null 2>&1
-ck "mzpeak -> mzpeak spectra (known-broken upstream)" "$([ ! -s "$W/o.mzpeak" ] && echo expected-fail)" "expected-fail"
+ck "mzpeak -> mzpeak spectra" "$([ -s "$W/o.mzpeak" ] && echo ok)" "ok"
+"$BIN" -in "$W/o.mzpeak" -out "$W/re.tsv" -threads 4 "${A[@]}" >/dev/null 2>&1
+cut -f1-3 "$W/o2.tsv" | sort -u > "$W/o2.keys"
+cut -f1-3 "$W/re.tsv" 2>/dev/null | sort -u > "$W/re.keys"
+n=$(wc -l < "$W/o2.keys" | tr -d ' '); s=$(comm -12 "$W/o2.keys" "$W/re.keys" | wc -l | tr -d ' ')
+ck "re-tagging the written mzpeak reproduces >=99.9% of its tags" \
+   "$(awk -v s="$s" -v n="$n" 'BEGIN{print (n > 0 && s >= 0.999*n) ? "yes" : "no ("s"/"n")"}')" "yes"
+"$BIN" -in "$FASTAG_E2E_MZML" -out "$W/o3.tsv" -out_spectra "$W/m.mzpeak" -threads 4 "${A[@]}" >/dev/null 2>&1
+ck "mzML -> mzpeak spectra" "$([ -s "$W/m.mzpeak" ] && echo ok)" "ok"
 
 [ "$fail" -eq 0 ] || exit 1
 echo "mzpeak_e2e: all checks passed"

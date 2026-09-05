@@ -17,9 +17,6 @@
 #include <OpenMS/KERNEL/OnDiscMSExperiment.h>
 #ifdef FASTAG_HAVE_MZPEAK_LIB
 #include "MzPeakReader.h"
-#endif
-#ifdef FASTAG_HAVE_MZPEAK
-#include <OpenMS/FORMAT/MzPeakFile.h>
 #include <OpenMS/INTERFACES/IMSDataConsumer.h>
 #include <functional>
 #endif
@@ -78,7 +75,7 @@ using namespace OpenMS;
 
 namespace
 {
-  // Deliberately OUTSIDE the FASTAG_HAVE_MZPEAK guard below. -species
+  // Deliberately OUTSIDE the FASTAG_HAVE_MZPEAK_LIB guard below. -species
   // works on any build, so a mzPeak-less build must still compile this; it
   // lived inside the guard briefly and broke every stock-OpenMS build while
   // CI (which always builds the patched OpenMS) stayed green.
@@ -176,15 +173,15 @@ namespace
 */
 //-------------------------------------------------------------------------
 
-#ifdef FASTAG_HAVE_MZPEAK
+#ifdef FASTAG_HAVE_MZPEAK_LIB
 namespace
 {
   /// Buffers pushed spectra into bounded chunks and hands each to a callback.
   ///
-  /// MzPeakFile is push-based -- transform() calls consumeSpectrum() once per
-  /// spectrum -- while the tagging loop wants a batch to parallelise over. This
-  /// adapter is the whole of the mzPeak support; everything downstream is the
-  /// existing mzML code path.
+  /// The mzPeak reader is push-based -- streamMzPeak() calls consumeSpectrum()
+  /// once per spectrum -- while the tagging loop wants a batch to parallelise
+  /// over. This adapter is the whole of the mzPeak support; everything
+  /// downstream is the existing mzML code path.
   ///
   /// The chunk is bounded by PEAKS, not by spectrum count. A fixed count is the
   /// obvious choice and the wrong one: spectra range from ~100 peaks to over
@@ -288,16 +285,19 @@ public:
 protected:
   void registerOptionsAndFlags_() override
   {
-    registerInputFile_("in", "<file>", "", "Input spectra", /*required=*/false);
-    // mzpeak is offered only when the OpenMS this was built against provides
-    // MzPeakFile, so the accepted formats differ between builds. That is
-    // deliberate -- advertising a format the binary cannot read would turn a
-    // clear "unsupported" into a confusing parse failure -- and the configure
-    // step prints which one you have.
-#ifdef FASTAG_HAVE_MZPEAK
-    setValidFormats_("in", ListUtils::create<String>("mzML,mzpeak"));
+    // No setValidFormats_ on the two spectrum files. TOPPBase validates that
+    // list against OpenMS's FileTypes enum at registration and throws on a
+    // name it does not know, and MZPEAK exists only on one OpenMS feature
+    // branch -- so naming mzpeak here is what forced every release to build
+    // OpenMS from source. Left unrestricted, TOPPBase skips the check and the
+    // extension is decided below, where an unsupported one is refused with
+    // its own message. The description carries what --help's format list
+    // used to.
+#ifdef FASTAG_HAVE_MZPEAK_LIB
+    registerInputFile_("in", "<file>", "", "Input spectra (mzML or mzpeak)", /*required=*/false);
 #else
-    setValidFormats_("in", ListUtils::create<String>("mzML"));
+    registerInputFile_("in", "<file>", "", "Input spectra (mzML; this build has no mzPeak reader)",
+                       /*required=*/false);
 #endif
     registerOutputFile_("out", "<file>", "", "Tag list (tab-separated)", /*required=*/false);
     setValidFormats_("out", ListUtils::create<String>("tsv"));
@@ -306,14 +306,10 @@ protected:
     setValidFormats_("fasta", ListUtils::create<String>("fasta"));
     registerOutputFile_("out_spectra", "<file>", "",
                         "Write spectra carrying a reported tag here (mzML, or "
-                        "mzpeak if this build has it). Note this path holds one "
-                        "slot per input spectrum, so unlike the default it needs "
-                        "memory proportional to the FILE, not to the thread count", false);
-#ifdef FASTAG_HAVE_MZPEAK
-    setValidFormats_("out_spectra", ListUtils::create<String>("mzML,mzpeak"));
-#else
-    setValidFormats_("out_spectra", ListUtils::create<String>("mzML"));
-#endif
+                        "mzpeak if this build has the library). Note this path "
+                        "holds one slot per input spectrum, so unlike the default "
+                        "it needs memory proportional to the FILE, not to the "
+                        "thread count", false);
 
     registerIntOption_("tag_length", "<n>", 3, "Seed tag length in residues", false);
     setMinInt_("tag_length", 1);
@@ -1019,24 +1015,45 @@ protected:
     // -out_spectra still needs getMetaData() for the run-level settings, so that
     // path keeps the full load.
     // mzPeak is read through its own push-based path, so none of the mzML
-    // reader setup below applies to it.
-    // FileTypes::MZPEAK is referenced only under the guard.
+    // reader setup below applies to it. Decided by extension, not by OpenMS's
+    // FileTypes: that enum has no MZPEAK outside one feature branch, and the
+    // format now lives entirely in the external library.
     //
-    // An OpenMS can ship MzPeakFile.h while its FileTypes enum has no MZPEAK
-    // member -- bioconda's build is exactly that -- so detecting the header is
-    // not sufficient to know the enum exists. CI caught this: the reference sat
-    // outside the #ifdef and failed to compile on every platform, which is the
-    // one thing the compile-time gate was supposed to prevent.
-#ifdef FASTAG_HAVE_MZPEAK
-    const bool mzpeak_in = FileHandler::getType(in) == FileTypes::MZPEAK;
-    // Which writer -out_spectra gets, decided from its own extension rather
-    // than the input's: every one of the four in/out combinations is allowed,
-    // so mzML->mzpeak and mzpeak->mzML both work as a side effect of tagging.
-    const bool mzpeak_out = !out_spectra.empty()
-                            && FileHandler::getType(out_spectra) == FileTypes::MZPEAK;
-#else
-    const bool mzpeak_in = false;
-    const bool mzpeak_out = false;
+    // Which writer -out_spectra gets is decided from ITS extension, not the
+    // input's, so mzML->mzpeak and mzpeak->mzML both work as a side effect of
+    // tagging.
+    const auto has_ext = [](const String& p, const char* ext) {
+      String lower(p);
+      lower.toLower();  // mutates, so on a copy
+      return lower.hasSuffix(ext);
+    };
+    const auto is_mzpeak = [&](const String& p) { return has_ext(p, ".mzpeak"); };
+    const auto is_mzml = [&](const String& p) { return has_ext(p, ".mzml"); };
+    if (!is_mzpeak(in) && !is_mzml(in))
+    {
+      OPENMS_LOG_ERROR << "Input '" << in << "' is neither .mzML nor .mzpeak." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    if (!out_spectra.empty() && !is_mzpeak(out_spectra) && !is_mzml(out_spectra))
+    {
+      OPENMS_LOG_ERROR << "-out_spectra '" << out_spectra
+                       << "' must end in .mzML or .mzpeak." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    const bool mzpeak_in = is_mzpeak(in);
+    const bool mzpeak_out = !out_spectra.empty() && is_mzpeak(out_spectra);
+#ifndef FASTAG_HAVE_MZPEAK_LIB
+    // Refuse up front, with the reason. The alternative -- OpenMS's own
+    // MzPeakFile -- implemented the pre-0.7.0 layout and read every current
+    // archive as zero spectra, so there is no fallback worth having.
+    if (mzpeak_in || mzpeak_out)
+    {
+      OPENMS_LOG_ERROR << "This build has no mzPeak support: it was configured without "
+                          "mzpeak-openms (-DMZPEAK_SOURCE_DIR=... -DMZPEAK_LIB_DIR=...; "
+                          "see README). Supply mzML, or rebuild with the library."
+                       << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
 #endif
 
     // A pointer, not a value: the fallback below must replace this with a
@@ -1246,8 +1263,9 @@ protected:
     // Two-pass -out_spectra for the mzML->mzML case: record kept INPUT indices
     // during tagging, re-read and stream them through a writing consumer at
     // the end -- O(1 spectrum) memory instead of holding every kept spectrum.
-    // mzPeak stays on the accumulate+store path: MzPeakFile has no streaming
-    // writer, and mzpeak INPUT materializes upstream anyway (documented).
+    // mzPeak stays on the accumulate+store path: the library writer takes a
+    // whole run, and the mzPeak reader is push-based so there is no index to
+    // re-read by.
     const bool stream_out = !out_spectra.empty() && !mzpeak_in && !mzpeak_out;
     std::vector<Size> kept_idx;
     std::vector<char> keep_target;
@@ -1535,7 +1553,7 @@ protected:
 
     // Tag a buffered chunk in parallel and append its rows in order.
     //
-    // Used by the mzPeak path, which is push-based: MzPeakFile hands over one
+    // Used by the mzPeak path, which is push-based: the reader hands over one
     // spectrum at a time, so there is nothing to index into and no random access
     // to parallelise over. Buffer, then run the same per-spectrum work over the
     // buffer, recording at block-local j so order follows input regardless of
@@ -1630,7 +1648,7 @@ protected:
 
     if (mzpeak_in)
     {
-#ifdef FASTAG_HAVE_MZPEAK
+#ifdef FASTAG_HAVE_MZPEAK_LIB
       // 1 M peaks per chunk, ~16 MB of Peak1D, independent of how many spectra
       // that turns out to be. Not a memory knob: varying it over a 16x range
       // moved peak RSS under 10%, which is how we know the buffer is not the
@@ -1643,32 +1661,8 @@ protected:
       consumer.setProgressHooks(tick, [&progress_total](Size n) {
         progress_total.store(static_cast<long long>(n));
       });
-#ifdef FASTAG_HAVE_MZPEAK_LIB
-      // The external reader; src/MzPeakReader.h says why it replaces OpenMS's.
       FASTag::streamMzPeak(in, consumer);
-#else
-      // Fallback: OpenMS's own reader, with two upstream problems. It
-      // implements the PRE-0.7.0 layout, so an archive from any current writer
-      // yields nothing at all -- caught below rather than reported as a clean
-      // run. And transform() materialises the run instead of streaming it: a
-      // 2.11 GB .mzpeak peaked at 23.7 GB resident against 169 MB for the same
-      // data as mzML. Neither applies to the reader above.
-      MzPeakFile().transform(in, &consumer);
-#endif
       consumer.finish();   // the final partial chunk, otherwise silently dropped
-#ifndef FASTAG_HAVE_MZPEAK_LIB
-      if (rows.empty() && n_ms2 == 0)
-      {
-        OPENMS_LOG_ERROR
-          << "Read 0 spectra from '" << in << "'. This build uses OpenMS's mzPeak "
-             "reader, which only understands the pre-0.7.0 layout; archives from "
-             "current writers (split-facet metadata, chunked signal) read as empty "
-             "through it. Rebuild with the external reader "
-             "(-DMZPEAK_SOURCE_DIR=... -DMZPEAK_LIB_DIR=...; see README) or supply mzML."
-          << std::endl;
-        return INPUT_FILE_CORRUPT;
-      }
-#endif
       // Run-level settings for -out_spectra come from the consumer here; the
       // mzML paths take them from getMetaData()/the loaded map above, neither
       // of which ran. Without this the written file has no run-level metadata
@@ -2298,10 +2292,10 @@ protected:
       addDataProcessing_(kept, getProcessingInfo_(DataProcessing::FILTERING));
       if (mzpeak_out)
       {
-#ifdef FASTAG_HAVE_MZPEAK
+#ifdef FASTAG_HAVE_MZPEAK_LIB
         // Not routed through FileHandler: its storeExperiment() has no mzPeak
         // branch, so asking it for one silently writes something else.
-        MzPeakFile().store(out_spectra, kept);
+        FASTag::writeMzPeak(out_spectra, kept);
 #endif
       }
       else

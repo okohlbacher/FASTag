@@ -538,18 +538,6 @@ jobs:
         shell: bash -el {0}
         run: cmake --build build --parallel
 
-      - name: Verify the built binary advertises mzPeak
-        shell: bash -el {0}
-        run: |
-          # Belt-and-braces beyond the configure-time gate: the binary itself must
-          # list mzpeak among -in's valid formats. Catches anything between
-          # configure and link that could drop the format.
-          if ! ./build/FASTag --help 2>&1 | grep -E "valid formats.*mzpeak"; then
-            echo "::error::built FASTag does not advertise mzpeak input."
-            ./build/FASTag --help 2>&1 | grep -i "valid formats" || true
-            exit 1
-          fi
-
       - name: Test
         shell: bash -el {0}
         run: ctest --test-dir build --output-on-failure

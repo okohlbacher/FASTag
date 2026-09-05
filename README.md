@@ -166,42 +166,43 @@ tables in a ZIP container). FASTag **reads and writes** it: `-in` accepts
 reading a run as mzpeak gives the same spectra as reading it as mzML, and a run
 written to mzpeak and tagged again reproduces the original tag set exactly.
 
-**`-out_spectra <file>.mzpeak` does not currently work with mzPeak INPUT** —
-the other three combinations do. Writing hits a defect in OpenMS's
-`MzPeakFile::store()` when the spectra came from the external reader: the write
-aborts with `Parquet cannot store strings with size 2GB or more` and a bogus
-length that decodes to the ASCII of a CV accession, i.e. a dangling read rather
-than a real size. It fails loudly with exit code 8 after the tag TSV is already
-written, so nothing is silently wrong; it is deterministic, independent of
-`-threads`, and it does not affect tagging. Write mzML instead
-(`-out_spectra hits.mzML`) until it is fixed upstream.
-
-**Reading needs the external reader, and the released binaries do not have it
-yet.** OpenMS's own mzPeak implementation predates the format's 0.7.0 revision
-(split-facet metadata, bare column names, the chunked signal layout with
-Numpress/delta encodings, `data_kind: "data_arrays"`), so archives from current
-writers read back as ZERO spectra through it. FASTag therefore reads mzPeak
+**All of it goes through one library, and none of it through OpenMS.** OpenMS's
+own mzPeak implementation predates the format's 0.7.0 revision (split-facet
+metadata, bare column names, the chunked signal layout with Numpress/delta
+encodings, `data_kind: "data_arrays"`), so archives from current writers read
+back as ZERO spectra through it, and its writer aborted on any spectrum that
+had come through a current reader. FASTag therefore reads **and writes** mzPeak
 with [mzpeak-openms](https://github.com/okohlbacher/mzpeak-openms), which
-handles both the old and the current layouts and is cross-validated against the
-Rust reference implementation.
+handles both layouts, is cross-validated against the Rust reference
+implementation, and writes the precursor and selected-ion facets a re-tag
+needs. All four in/out combinations work; `test/mzpeak_e2e.sh` tags a written
+archive again and requires it to reproduce the tags it was written from.
 
-CI does not build that library yet, so a **downloaded** FASTag reads only
-archives OpenMS itself wrote; anything from a current writer exits
-`INPUT_FILE_CORRUPT` with instructions rather than reporting a clean run over an
-empty file. To read current archives, build from source: build `mzpeak-openms`,
-then configure FASTag with `-DMZPEAK_SOURCE_DIR=<checkout>
--DMZPEAK_LIB_DIR=<install prefix>`. This release is verified against
-`mzpeak-openms` trunk `c211fed` (tag `perf-lean-metadata-2026-09-05`); older
-commits lack `MetadataDetail` and will not compile. Configure says which reader
-you got:
+Nothing in FASTag depends on the OpenMS feature branch that carries
+`MzPeakFile` any more: a stock OpenMS >= 3.5 is enough, and `.mzpeak` is
+recognised by extension rather than through OpenMS's `FileTypes`. One visible
+consequence: `--help` no longer lists formats after `-in` and `-out_spectra`,
+because that list is validated against `FileTypes` and would have to omit
+mzpeak; the descriptions carry it instead.
+
+**The released binaries do not have the library yet.** CI does not build
+`mzpeak-openms`, so a **downloaded** FASTag refuses `.mzpeak` on either side
+with a message saying so, rather than reporting a clean run over an empty file.
+To use mzPeak, build from source: build `mzpeak-openms`, then configure FASTag
+with `-DMZPEAK_SOURCE_DIR=<checkout> -DMZPEAK_LIB_DIR=<install prefix>`. This
+build is verified against `mzpeak-openms` branch `feat/writer-precursors`
+(`f752197`, on top of trunk `c211fed`); older commits lack the writer's
+precursor support and `MetadataDetail`, and will not compile. Configure says
+what you got:
 
 ```
--- FASTag: external mzPeak reader enabled (<path>/libmzpeak.dylib)
+-- FASTag: mzPeak read/write enabled (<path>/libmzpeak.dylib)
+-- FASTag: mzpeak-openms NOT found -- this build reads and writes mzML only
 ```
 
-Writing still goes through OpenMS, which needs
-[OpenMS-mzPeakRW](https://github.com/okohlbacher/OpenMS-mzPeakRW) — stock and
-bioconda OpenMS do not have `MzPeakFile`. The released binaries do have that.
+Run-level metadata (instrument, software, source file) is not yet written to
+mzPeak; the spectra, their representation, retention times, polarity, native
+ids and precursors are.
 
 (An earlier note here blamed zero tags from mzPeak samples on DIA data. That
 was wrong — it was this format gap.)

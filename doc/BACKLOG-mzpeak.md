@@ -1,73 +1,61 @@
 # mzPeak: what works, what does not, what is next
 
-Reading **and writing** `.mzpeak` work. Reading goes through an external
-library, not OpenMS, and is both faster and lighter than the mzML path on the
+Reading **and writing** `.mzpeak` work, both through the external library and
+neither through OpenMS. Reading is faster and lighter than the mzML path on the
 same acquisition.
 
 ## What shipped
 
-**Reading: `mzpeak-openms`, not OpenMS.** OpenMS's own `MzPeakFile` implements
-the pre-0.7.0 layout (packed nested metadata, point-only signal, `data_kind:
-"data arrays"`). The format moved to split-facet metadata with bare column
-names, a chunked signal layout with delta/Numpress encodings, and
-`data_kind: "data_arrays"` — so every archive from a current writer reads back
+**Everything goes through `mzpeak-openms`.** OpenMS's own `MzPeakFile`
+implements the pre-0.7.0 layout (packed nested metadata, point-only signal,
+`data_kind: "data arrays"`). The format moved to split-facet metadata with bare
+column names, a chunked signal layout with delta/Numpress encodings, and
+`data_kind: "data_arrays"` — so every archive from a current writer read back
 as ZERO spectra through OpenMS. Measured on a run that exists in both formats:
-the mzML gave 6,103 MS2 and 122,098 tags, the mzPeak twin gave 0 and 0.
+the mzML gave 6,103 MS2 and 122,098 tags, the mzPeak twin gave 0 and 0. Its
+`store()` was worse: it aborted on any spectrum that had come through a current
+reader (a dangling read taken as a string length; see the history section).
 
-FASTag therefore reads with
+FASTag therefore reads and writes with
 [mzpeak-openms](https://github.com/okohlbacher/mzpeak-openms), which handles
 both layouts and is cross-validated against the Rust reference implementation.
-It is optional at configure time:
+The library's writer gained precursor and selected-ion facets for this
+(`feat/writer-precursors`, `f752197`), because a written MS2 without a
+precursor cannot be tagged by the tool that wrote it. It is optional at
+configure time:
 
 ```
--- FASTag: external mzPeak reader enabled (<path>/libmzpeak.dylib)
--- FASTag: external mzPeak reader NOT found -- mzPeak input falls back to
-   OpenMS's reader, which cannot read current-format archives
+-- FASTag: mzPeak read/write enabled (<path>/libmzpeak.dylib)
+-- FASTag: mzpeak-openms NOT found -- this build reads and writes mzML only
 ```
 
-Without it the fallback path still builds, and a current-format archive exits
-`INPUT_FILE_CORRUPT` with the rebuild instruction rather than reporting a clean
-run over an empty file.
+Without it, `.mzpeak` on either side is refused with that message. There is no
+fallback: the only alternative read every current archive as empty.
 
-**The released binaries do NOT carry the external reader yet** — CI builds the
-patched OpenMS but not `mzpeak-openms`, so a release binary reads only archives
-OpenMS itself wrote. That is the top open item below.
+**Nothing depends on OpenMS-mzPeakRW any more.** The `MZPEAK` enum lived only
+on one OpenMS feature branch and was what forced every release to build OpenMS
+from source; `.mzpeak` is now recognised by extension, and `-in`/`-out_spectra`
+are registered without a `setValidFormats_` list (TOPPBase validates that list
+against the enum and throws on a name it does not know; left unrestricted, it
+skips the check and the extension is decided in FASTag). The one visible cost:
+`--help` no longer prints a format list after those two options.
 
-**Writing is still `MzPeakFile`**: `-out_spectra hits.mzpeak` goes through
-OpenMS, which writes the layout it understands.
+**The released binaries do NOT carry the library yet** — CI builds neither it
+nor the reader, so a release binary refuses `.mzpeak`. That is the top open
+item below, and with the enum gone it is also what lets CI drop the from-source
+OpenMS build.
 
-Three of the four in/out combinations work. The earlier blanket refusal of
-`-out_spectra` with mzPeak input is gone -- that path only ever needed the
-run-level `ExperimentalSettings` wired in from the streaming consumer, which
-the mzML paths get from `getMetaData()` or the loaded map.
+**All four in/out combinations work**, and `test/mzpeak_e2e.sh` proves the one
+that used to be broken: it writes `hits.mzpeak` from mzPeak input, tags that
+archive again, and requires >= 99.9% of the original tags back. A writer that
+dropped precursors would report a clean zero there.
 
-**BROKEN: mzPeak in -> mzPeak out.** `MzPeakFile::store()` aborts with
-`Parquet cannot store strings with size 2GB or more, got: 3616728266405065018`
-when the spectra came from the external reader. That "length" is
-`0x323133323030313a`, which is the ASCII `:1002312` -- the tail of
-`MS:1002312`, the MS-Numpress linear accession, a string the WRITER never
-mentions and the READER's array index does. So it is a dangling read into freed
-library memory being taken as a string offset, not a real size.
-
-What is known, from bisecting it:
-
-| | |
-|---|---|
-| mzML -> mzpeak, same run, same spectrum count | works |
-| mzpeak -> mzML -> mzpeak | works |
-| mzpeak -> mzpeak, `small.mzpeak` (26 spectra) | works |
-| mzpeak -> mzpeak, either Erwinia archive | **fails** |
-| `-threads` 1, 4, 8 | fails identically |
-| run-level `ExperimentalSettings` | not the cause (proved by suppressing the assignment) |
-
-So it is data-dependent, deterministic, and specific to spectra produced by the
-external reader. It fails with exit code 8 AFTER the tag TSV is written, so no
-result is silently wrong. Fixing it means debugging `MzPeakFile::store()`'s
-Arrow builders in okohlbacher/OpenMS-mzPeakRW; until then, write mzML.
+What is NOT yet written: run-level metadata (instrument, software, source
+file). The library takes it as a `RunMetadata` block and no mapping from
+OpenMS's `ExperimentalSettings` exists on this side.
 
 Writing does NOT go through `FileHandler::storeExperiment()`: it has no mzPeak
-branch, so asking it for one silently writes a different format. `MzPeakFile`
-is called directly.
+branch, so asking it for one silently writes a different format.
 
 ### How
 
@@ -301,6 +289,6 @@ runs.**
 ## Caveat
 
 mzPeak is pre-1.0: *"no stability is guaranteed at this point"*. The API surface
-used here is deliberately tiny — `open()`, `spectra()`, and per-spectrum
-accessors on the read side, one `store()` on the write side — so churn lands in
-`src/MzPeakReader.cpp` and one dispatch site.
+used here is deliberately tiny — `open()`, `spectra()` and per-spectrum
+accessors on the read side, `write_run_archive()` with `SpectrumData` on the
+write side — so churn lands in `src/MzPeakReader.cpp` and two dispatch sites.

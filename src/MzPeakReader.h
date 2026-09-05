@@ -1,5 +1,6 @@
-// Stream an mzPeak archive into an OpenMS consumer using the external
-// mzpeak-openms library (github.com/okohlbacher/mzpeak-openms).
+// mzPeak in and out for FASTag, through the external mzpeak-openms library
+// (github.com/okohlbacher/mzpeak-openms): stream an archive into an OpenMS
+// consumer, and write an MSExperiment as an archive.
 //
 // WHY THIS EXISTS: OpenMS's own MzPeakFile implements the pre-0.7.0 mzPeak
 // layout -- packed nested metadata, point-only signal, `data_kind: "data
@@ -22,6 +23,7 @@
 #ifdef FASTAG_HAVE_MZPEAK_LIB
 
 #include <OpenMS/INTERFACES/IMSDataConsumer.h>
+#include <OpenMS/KERNEL/MSExperiment.h>
 
 #include <string>
 
@@ -52,6 +54,21 @@ namespace FASTag
   ///   that is the exact failure this reader replaces.
   void streamMzPeak(const std::string& path,
                     OpenMS::Interfaces::IMSDataConsumer& consumer);
+
+  /// Write @p exp to @p path as an mzPeak archive.
+  ///
+  /// Carries what the reader above hands back and nothing it does not: peaks,
+  /// representation, MS level, retention time, polarity, native id, and every
+  /// precursor's isolation window and selected ion (m/z, charge, intensity).
+  /// Run-level metadata (instrument, software, source file) is not written
+  /// yet; the library takes it as a RunMetadata block and no mapping from
+  /// ExperimentalSettings exists on this side.
+  ///
+  /// This replaces OpenMS's MzPeakFile::store(), which aborted on any
+  /// experiment whose spectra had come through the library reader.
+  ///
+  /// @throws OpenMS::Exception::UnableToCreateFile with the library's message.
+  void writeMzPeak(const std::string& path, const OpenMS::MSExperiment& exp);
 }
 
 #endif  // FASTAG_HAVE_MZPEAK_LIB

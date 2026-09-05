@@ -9,11 +9,13 @@
 #include <OpenMS/CONCEPT/LogStream.h>
 #include <OpenMS/KERNEL/MSSpectrum.h>
 #include <OpenMS/METADATA/InstrumentSettings.h>
+#include <OpenMS/METADATA/IonSource.h>
 #include <OpenMS/METADATA/Precursor.h>
 #include <OpenMS/METADATA/SpectrumSettings.h>
 #include <OpenMS/PROCESSING/CENTROIDING/PeakPickerHiRes.h>
 
 #include <mzpeak.h>
+#include <mzpeak/writer.h>
 
 #include <exception>
 
@@ -204,6 +206,67 @@ namespace FASTag
     {
       throw Exception::ParseError(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION, path,
                                   std::string("mzPeak read failed: ") + e.what());
+    }
+  }
+
+  void writeMzPeak(const std::string& path, const MSExperiment& exp)
+  {
+    MzPeak::RunContents run;
+    run.spectra.reserve(exp.size());
+    for (const MSSpectrum& s : exp)
+    {
+      MzPeak::SpectrumData out;
+      out.mz.reserve(s.size());
+      out.intensity.reserve(s.size());
+      for (const Peak1D& p : s)
+      {
+        out.mz.push_back(p.getMZ());
+        out.intensity.push_back(p.getIntensity());
+      }
+      // UNKNOWN goes to the data-arrays table: for a spectrum that declares no
+      // representation the reader falls back to "wherever the data is", and
+      // that is the table it looks in first.
+      out.centroid = s.getType() == SpectrumSettings::SpectrumType::CENTROID;
+      out.ms_level = static_cast<uint8_t>(std::min<UInt>(s.getMSLevel(), 255u));
+      out.retention_time = s.getRT();  // seconds on both sides of this call
+      switch (s.getInstrumentSettings().getPolarity())
+      {
+        case IonSource::Polarity::POSITIVE: out.polarity = 1; break;
+        case IonSource::Polarity::NEGATIVE: out.polarity = -1; break;
+        default: break;  // unknown stays absent rather than becoming 0
+      }
+      if (!s.getNativeID().empty()) out.id = s.getNativeID();
+
+      for (const Precursor& prec : s.getPrecursors())
+      {
+        MzPeak::PrecursorData pd;
+        // OpenMS keeps one m/z per precursor and no separate isolation target,
+        // so the window is centred on it. It goes out as both: the reader
+        // takes the selected ion's m/z (double) and falls back to the target
+        // (float) only when no ion is present, so nothing is lost on the way
+        // back.
+        pd.isolation_target_mz = static_cast<float>(prec.getMZ());
+        pd.isolation_lower_offset = static_cast<float>(prec.getIsolationWindowLowerOffset());
+        pd.isolation_upper_offset = static_cast<float>(prec.getIsolationWindowUpperOffset());
+        MzPeak::SelectedIonData ion;
+        ion.mz = prec.getMZ();
+        // OpenMS says "unknown charge" with 0; the format has a null for that.
+        if (prec.getCharge() != 0) ion.charge = prec.getCharge();
+        if (prec.getIntensity() > 0) ion.intensity = static_cast<float>(prec.getIntensity());
+        pd.selected_ions.push_back(std::move(ion));
+        out.precursors.push_back(std::move(pd));
+      }
+      run.spectra.push_back(std::move(out));
+    }
+
+    try
+    {
+      MzPeak::write_run_archive(path, run);
+    }
+    catch (const std::exception& e)
+    {
+      throw Exception::UnableToCreateFile(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION, path,
+                                          std::string("mzPeak write failed: ") + e.what());
     }
   }
 }

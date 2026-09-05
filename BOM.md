@@ -2,9 +2,9 @@
 
 FASTag · MIT · <https://github.com/okohlbacher/FASTag>
 
-Input is mzML or mzPeak (read via the external mzpeak-openms library, written
-via the patched OpenMS reader; see doc/BACKLOG-mzpeak.md), output is TSV plus
-optional mzML or mzPeak.
+Input is mzML or mzPeak (read AND written via the external mzpeak-openms
+library; OpenMS's MzPeakFile is not used -- see doc/BACKLOG-mzpeak.md), output
+is TSV plus optional mzML or mzPeak.
 The desktop GUI's own dependencies are tracked in `gui/package-lock.json`
 (frontend) and `gui/src-tauri/Cargo.lock` (Tauri backend), not here.
 

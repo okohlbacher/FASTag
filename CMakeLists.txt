@@ -69,50 +69,6 @@ else()
                  "past ~16 threads. See doc/OPENMS-FAST-READER.md.")
 endif()
 
-# mzPeak input, if this OpenMS provides it.
-#
-# MzPeakFile is not in OpenMS mainline yet (github.com/OpenMS/mzpeak, and the
-# OpenMS-side handler on a feature branch), so FASTag must build either way. When
-# the header is present, -in also accepts .mzpeak; when it is not, the tool is
-# identical minus that format.
-#
-# Detected by header presence rather than version, because there is no version to
-# test against while the API is pre-1.0.
-# Requires BOTH the MzPeakFile header and a MZPEAK member in the FileTypes enum.
-#
-# Those are not the same thing. bioconda's OpenMS ships MzPeakFile.h while its
-# FileTypes enum has no MZPEAK, so detecting only the header enabled code that
-# then failed to compile on every CI platform. Detect what the code actually
-# uses.
-set(_fastag_mzpeak OFF)
-if(_openms_inc)
-  foreach(_d IN LISTS _openms_inc)
-    string(GENEX_STRIP "${_d}" _d)
-    if(_d AND EXISTS "${_d}/OpenMS/FORMAT/MzPeakFile.h"
-          AND EXISTS "${_d}/OpenMS/FORMAT/FileTypes.h")
-      file(READ "${_d}/OpenMS/FORMAT/FileTypes.h" _ft)
-      string(FIND "${_ft}" "MZPEAK" _has_enum)
-      # store() as well as the enum, because -out_spectra now writes mzPeak too.
-      # Same principle as the enum check above: detect every API the code calls,
-      # not a proxy for them.
-      file(READ "${_d}/OpenMS/FORMAT/MzPeakFile.h" _mp)
-      string(FIND "${_mp}" "void store(" _has_store)
-      if(NOT _has_enum EQUAL -1 AND NOT _has_store EQUAL -1)
-        set(_fastag_mzpeak ON)
-      endif()
-      break()
-    endif()
-  endforeach()
-endif()
-
-if(_fastag_mzpeak)
-  message(STATUS "FASTag: mzPeak input available (-in accepts .mzpeak)")
-else()
-  message(STATUS "FASTag: mzPeak input NOT available -- this OpenMS lacks "
-                 "MzPeakFile or a MZPEAK entry in FileTypes. mzML input is "
-                 "unaffected.")
-endif()
-
 # OpenMP, declared rather than inherited.
 #
 # The parallel loop is the tool's central performance claim, and it was working
@@ -136,14 +92,17 @@ target_include_directories(fastag_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
 target_link_libraries(fastag_core PUBLIC OpenMS)
 
-# The external mzPeak reader (github.com/okohlbacher/mzpeak-openms).
+# mzPeak, in and out, through the external library
+# (github.com/okohlbacher/mzpeak-openms).
 #
-# OpenMS's own MzPeakFile implements the pre-0.7.0 layout and reads every
-# current-format archive as ZERO spectra, silently. This library reads both
-# layouts and is cross-validated against the Rust reference implementation, so
-# when it is present it takes over mzPeak INPUT entirely. Optional: without it
-# the build falls back to OpenMS's reader (fine only for archives OpenMS
-# itself wrote). Point MZPEAK_LIB_DIR at a `meson install` prefix.
+# This is the WHOLE of FASTag's mzPeak support: -in reads through it and
+# -out_spectra writes through it. OpenMS's own MzPeakFile is not used -- it
+# implements the pre-0.7.0 layout and read every current archive as zero
+# spectra, and its store() aborted on spectra that had come through this
+# reader -- so nothing here depends on the OpenMS feature branch that carries
+# it, and a stock OpenMS >= 3.5 is enough. Optional: without the library the
+# tool builds and refuses .mzpeak with a message saying so. Point
+# MZPEAK_LIB_DIR at a `meson install` prefix.
 set(MZPEAK_LIB_DIR "" CACHE PATH "Prefix of an installed mzpeak-openms library")
 # Headers come from the SOURCE tree, not from `meson install`: the library's
 # install_headers() list flattens the nested paths (mzpeak/data/array_index.h
@@ -169,16 +128,12 @@ if(MZPEAK_INCLUDE_DIR AND MZPEAK_LIBRARY)
   # the file would compile at the target's C++17 (std::unreachable missing).
   set_source_files_properties(src/MzPeakReader.cpp PROPERTIES COMPILE_OPTIONS "-std=c++23")
   target_compile_definitions(FASTag PRIVATE FASTAG_HAVE_MZPEAK_LIB)
-  message(STATUS "FASTag: external mzPeak reader enabled (${MZPEAK_LIBRARY})")
+  message(STATUS "FASTag: mzPeak read/write enabled (${MZPEAK_LIBRARY})")
 else()
-  message(STATUS "FASTag: external mzPeak reader NOT found -- mzPeak input falls back to "
-                 "OpenMS's reader, which cannot read current-format archives")
+  message(STATUS "FASTag: mzpeak-openms NOT found -- this build reads and writes mzML only")
 endif()
 if(OpenMP_CXX_FOUND)
   target_link_libraries(FASTag PRIVATE OpenMP::OpenMP_CXX)
-endif()
-if(_fastag_mzpeak)
-  target_compile_definitions(FASTag PRIVATE FASTAG_HAVE_MZPEAK)
 endif()
 install(TARGETS FASTag RUNTIME DESTINATION bin)
 
