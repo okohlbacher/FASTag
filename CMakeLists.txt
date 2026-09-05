@@ -126,7 +126,16 @@ if(MZPEAK_INCLUDE_DIR AND MZPEAK_LIBRARY)
   endif()
   # CXX_STANDARD is a TARGET property; per-source it is silently ignored and
   # the file would compile at the target's C++17 (std::unreachable missing).
-  set_source_files_properties(src/MzPeakReader.cpp PROPERTIES COMPILE_OPTIONS "-std=c++23")
+  # The flag is spelled per compiler: clang accepted `c++23` only from 17,
+  # and Apple clang 15 (GitHub's macos-14 runners) knows just `c++2b`. Ask.
+  include(CheckCXXCompilerFlag)
+  check_cxx_compiler_flag("-std=c++23" _fastag_has_std_cxx23)
+  if(_fastag_has_std_cxx23)
+    set(_fastag_cxx23_flag "-std=c++23")
+  else()
+    set(_fastag_cxx23_flag "-std=c++2b")
+  endif()
+  set_source_files_properties(src/MzPeakReader.cpp PROPERTIES COMPILE_OPTIONS "${_fastag_cxx23_flag}")
   target_compile_definitions(FASTag PRIVATE FASTAG_HAVE_MZPEAK_LIB)
   message(STATUS "FASTag: mzPeak read/write enabled (${MZPEAK_LIBRARY})")
 else()
