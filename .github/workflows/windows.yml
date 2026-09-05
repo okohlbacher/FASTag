@@ -7,10 +7,16 @@ name: windows
 # then OpenMS itself. ~100 minutes on a cold cache (contrib 37 min, OpenMS
 # 63 min, both measured directly), a few minutes once both are cached.
 #
-# The other four platforms now build OpenMS from source too (ci.yml), since
-# shipping mzPeak means patching OpenMS and no packaged build carries it.
-# Windows stays in its own workflow because it ALSO needs contrib, which none
-# of the others do -- the split is no longer about conda-vs-source. Proven end to end: configure, build, ctest and
+# The other four platforms install OpenMS 3.5.0 from bioconda (ci.yml); it has
+# no win-64 package, which is why Windows still builds from source here.
+#
+# mzPeak on Windows: NOT in this binary. FASTag's mzPeak support is entirely
+# the external mzpeak-openms library (see ci.yml for how the other four build
+# and bundle it), and that library has never been built with MSVC. Until it
+# is, the Windows binary refuses .mzpeak with a message saying so. The
+# OpenMS-mzPeakRW overlay below is no longer USED by FASTag -- nothing in it
+# references MzPeakFile or FileTypes::MZPEAK any more -- and is kept only so
+# the cache key, and with it the ~100-minute cold build, stays untouched. Proven end to end: configure, build, ctest and
 # the smoke test all pass. Kept in its own workflow rather than folded into
 # build.yml's matrix because of that cost difference, not because it is in
 # doubt -- both jobs gate the same as everywhere else (no continue-on-error),
@@ -54,15 +60,11 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # The patched OpenMS that gives FASTag mzPeak read/write -- same two pins as
-  # ci.yml, and they must stay in lockstep with it: a release whose Windows
-  # binary was built from a different OpenMS than the other four is worse than
-  # one that simply lacks the feature.
-  #
-  # This replaces the old `OPENMS_TAG: release/3.5.0`. mzPeak does not exist on
-  # 3.5.0 -- OpenMS-mzPeakRW is written against a commit on
-  # feature/dia-pseudospectra -- so shipping the format means moving the base
-  # off the release tag.
+  # The OpenMS this binary is built from. The overlay these pins select no
+  # longer matters to FASTag (see the header); they stay pinned by SHA because
+  # they are the cache key, and because a moving ref would silently change
+  # what a release contains. ci.yml no longer carries them: the other four
+  # platforms are on bioconda's 3.5.0 package.
   # Bumped 2026-07-24 in lockstep with ci.yml (was bd4b895556 / e233ade948);
   # MZPEAK_REF moved to main once PR #1 merged.
   # CONTRIB_REV below deliberately did NOT change: `git ls-tree` on both bases

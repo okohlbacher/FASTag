@@ -20,7 +20,7 @@ FASTag therefore reads and writes with
 [mzpeak-openms](https://github.com/okohlbacher/mzpeak-openms), which handles
 both layouts and is cross-validated against the Rust reference implementation.
 The library's writer gained precursor and selected-ion facets for this
-(`feat/writer-precursors`, `f752197`), because a written MS2 without a
+(`feat/writer-precursors`, `d3161dc`), because a written MS2 without a
 precursor cannot be tagged by the tool that wrote it. It is optional at
 configure time:
 
