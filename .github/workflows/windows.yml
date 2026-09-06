@@ -10,14 +10,20 @@ name: windows
 # The other four platforms install OpenMS 3.5.0 from bioconda (ci.yml); it has
 # no win-64 package, which is why Windows still builds from source here.
 #
-# mzPeak on Windows: NOT in this binary. FASTag's mzPeak support is entirely
-# the external mzpeak-openms library (see ci.yml for how the other four build
-# and bundle it), and that library has never been built with MSVC. Until it
-# is, the Windows binary refuses .mzpeak with a message saying so. The
-# OpenMS-mzPeakRW overlay below is no longer USED by FASTag -- nothing in it
-# references MzPeakFile or FileTypes::MZPEAK any more -- and is kept only so
-# the cache key, and with it the ~100-minute cold build, stays untouched. Proven end to end: configure, build, ctest and
-# the smoke test all pass. Kept in its own workflow rather than folded into
+# mzPeak on Windows: in this binary since the MZPEAK_LIB_REF pin below.
+# FASTag's mzPeak support is entirely the external mzpeak-openms library (see
+# ci.yml for how the other four build and bundle it). Here it is built with
+# MSVC through meson, from the same conda env that supplies Arrow, and linked
+# STATICALLY: the library carries no dllexport annotations, so its meson.build
+# builds only libmzpeak.a on Windows and FASTag's CMakeLists links the
+# library's own dependencies (Arrow, Parquet, libzip, Boost.JSON) itself.
+# Two Boosts meet in the process: OpenMS was built against contrib's, the
+# library needs >= 1.89 from conda. Only FASTag's translation units see the
+# newer headers; OpenMS's exported target carries no Boost include directory.
+# The OpenMS-mzPeakRW overlay below is no longer USED by FASTag -- nothing in
+# it references MzPeakFile or FileTypes::MZPEAK any more -- and is kept only so
+# the cache key, and with it the ~100-minute cold build, stays untouched.
+# Proven end to end: configure, build, ctest and the smoke test all pass. Kept in its own workflow rather than folded into
 # build.yml's matrix because of that cost difference, not because it is in
 # doubt -- both jobs gate the same as everywhere else (no continue-on-error),
 # and it gets its own concurrency group so a slow run cannot repeat the wedge
@@ -72,6 +78,11 @@ env:
   # file documents does not apply to this particular bump -- checked, not assumed.
   OPENMS_BASE_SHA: 9cb5f12394aa5b3e9d243cebf0128e48f9805f66
   MZPEAK_REF: c37237c5a02becd0ea65db615404fdf426b384e3
+  # The mzpeak-openms LIBRARY (okohlbacher/mzpeak-openms), distinct from
+  # MZPEAK_REF above (the OpenMS overlay). Keep in lockstep with ci.yml; this
+  # must be a trunk commit at or after the MSVC support (static-only Windows
+  # build, UTF-8 libzip names).
+  MZPEAK_LIB_REF: 3088c24572d581f8429e8dea9b18caf24ea39815
   # Taxonomy index pins -- MUST stay in lockstep with ci.yml (see the comment
   # there for the bump procedure: new data release first -- as a PRE-RELEASE,
   # or it steals the "Latest" slot and 404s every README download link --
@@ -454,10 +465,48 @@ jobs:
 
       - name: Configure conda packages and paths
         shell: bash -el {0}
+        # libboost-devel, meson and pkg-config are for the mzpeak-openms build
+        # below; Ninja is already here from choco.
         run: |
-          conda install -c conda-forge 'libarrow>=23' libparquet libzip nlohmann_json -y
+          conda install -c conda-forge 'libarrow>=23' libparquet libzip nlohmann_json libboost-devel 'meson>=1.3' pkg-config -y
           CONDA_ENV_PREFIX=$(conda info --json | python -c "import json,sys;print(json.load(sys.stdin)['active_prefix'])" | sed 's|\\|/|g')
           echo "CONDA_LIB_PREFIX=$CONDA_ENV_PREFIX/Library" >> "$GITHUB_ENV"
+
+      # ---- mzpeak-openms, the library behind -in/-out_spectra .mzpeak -------
+      # Same shape as ci.yml: checkout at the pin (headers come from the
+      # source tree), build cached on the pin. The build runs in the login
+      # shell so conda's meson/pkg-config are on PATH; that shell also puts
+      # Git's GNU link.exe ahead of MSVC's, which meson refuses, hence the
+      # `which cl` PATH prefix (cl is not in Git's /usr/bin, so it resolves to
+      # the MSVC directory that also holds the real link.exe and lib.exe).
+      - name: Fetch mzpeak-openms
+        shell: bash
+        run: |
+          git clone -q https://github.com/okohlbacher/mzpeak-openms.git mzpeak-src
+          git -C mzpeak-src checkout -q "$MZPEAK_LIB_REF"
+
+      - name: Restore mzpeak-openms
+        id: cache-mzpeak
+        uses: actions/cache@v6
+        with:
+          path: mzpeak-install
+          key: windows-x64-mzpeak-${{ env.MZPEAK_LIB_REF }}-v1
+
+      - name: Build mzpeak-openms
+        if: steps.cache-mzpeak.outputs.cache-hit != 'true'
+        shell: bash -el {0}
+        env:
+          CC: cl
+          CXX: cl
+        run: |
+          export PATH="$(dirname "$(which cl)"):$PATH"
+          export PKG_CONFIG_PATH="$CONDA_LIB_PREFIX/lib/pkgconfig"
+          export BOOST_ROOT="$CONDA_LIB_PREFIX"
+          meson setup mzpeak-src/build mzpeak-src --prefix="$WS/mzpeak-install" --libdir=lib --buildtype=release -Dtools=false
+          meson compile -C mzpeak-src/build
+          meson test -C mzpeak-src/build --print-errorlogs
+          meson install -C mzpeak-src/build
+          ls mzpeak-install/lib
 
       - name: Locate OpenMSConfig.cmake
         shell: bash
@@ -554,7 +603,12 @@ jobs:
             -DOpenMS_DIR="$OPENMS_DIR" \
             -DCMAKE_PREFIX_PATH="$QT_FWD;$CONDA_LIB_PREFIX;$WS/contrib-build" \
             -DEigen3_DIR="$WS/fastag/cmake/eigen3-range-shim" \
-            -DEIGEN3_INCLUDE_DIR="C:/ProgramData/chocolatey/lib/eigen/share/cmake/../../include/eigen3"
+            -DEIGEN3_INCLUDE_DIR="C:/ProgramData/chocolatey/lib/eigen/share/cmake/../../include/eigen3" \
+            -DMZPEAK_SOURCE_DIR="$WS/mzpeak-src" \
+            -DMZPEAK_LIB_DIR="$WS/mzpeak-install" 2>&1 | tee configure.log
+          # Same gate as ci.yml: a build that silently fell back to mzML-only
+          # must not pass.
+          grep -q "FASTag: mzPeak read/write enabled" configure.log || { echo "::error::mzpeak-openms not picked up -- this build would be mzML-only"; exit 1; }
 
       - name: Build FASTag
         shell: bash
@@ -583,7 +637,13 @@ jobs:
 
       - name: Smoke-test the binary
         shell: bash
-        run: ./fastag/build/FASTag.exe --help
+        run: |
+          ./fastag/build/FASTag.exe --help
+          # mzPeak read, asserted exactly as on the other platforms: 34 MS2
+          # spectra in the library's own fixture.
+          OUT=$(./fastag/build/FASTag.exe -in mzpeak-src/test/files/v2/small.mzpeak -out /tmp/smoke-mzpeak.tsv \
+                  -threads 2 -fragment_tolerance 20 -fragment_tolerance_unit ppm 2>&1) || { echo "$OUT"; exit 1; }
+          echo "$OUT" | grep -q "34 MS2 spectra" || { echo "$OUT"; echo "::error::expected 34 MS2 spectra from small.mzpeak"; exit 1; }
 
       - uses: actions/upload-artifact@v7
         with:
@@ -758,7 +818,13 @@ jobs:
             exit 1
           fi
           echo "$OUT" | grep -q "File not found" || { echo "::error::Unexpected output -- never reached the expected 'file not found' error."; exit 1; }
-          echo "Portability check passed: runs standalone, no build-environment leakage."
+          # And mzPeak through the bundle: boost_json.dll, arrow.dll, parquet.dll
+          # and zip.dll must all have travelled.
+          OUT2=$(cd /tmp && PATH="$CLEAN_PATH" "$GITHUB_WORKSPACE/dist/FASTag/FASTag.bat" \
+                   -in "$GITHUB_WORKSPACE/mzpeak-src/test/files/v2/small.mzpeak" -out /tmp/portability-mzpeak.tsv \
+                   -threads 2 -fragment_tolerance 20 -fragment_tolerance_unit ppm 2>&1) || true
+          echo "$OUT2" | grep -q "34 MS2 spectra" || { echo "$OUT2"; echo "::error::Shipped bundle cannot read mzPeak -- expected 34 MS2 spectra from small.mzpeak."; exit 1; }
+          echo "Portability check passed: runs standalone, no build-environment leakage, reads mzPeak."
 
       # Tag builds only -- see ci.yml's identical step for the full rationale
       # (pinned data release, loud failure, smoke semantics). --repo on every

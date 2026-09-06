@@ -111,8 +111,11 @@ set(MZPEAK_LIB_DIR "" CACHE PATH "Prefix of an installed mzpeak-openms library")
 # upstream; until it is fixed, point MZPEAK_SOURCE_DIR at a checkout.
 set(MZPEAK_SOURCE_DIR "" CACHE PATH "Checkout of mzpeak-openms (for headers)")
 find_path(MZPEAK_INCLUDE_DIR mzpeak.h HINTS ${MZPEAK_SOURCE_DIR}/include)
-find_library(MZPEAK_LIBRARY NAMES mzpeak HINTS ${MZPEAK_LIB_DIR}/lib)
-find_library(MZPEAK_NUMPRESS_LIBRARY NAMES numpress HINTS ${MZPEAK_LIB_DIR}/lib)
+# The literal names are for MSVC, where meson emits libmzpeak.a (the library
+# is static-only on Windows: it carries no dllexport annotations) and CMake
+# would otherwise look for mzpeak.lib alone.
+find_library(MZPEAK_LIBRARY NAMES mzpeak libmzpeak.a HINTS ${MZPEAK_LIB_DIR}/lib)
+find_library(MZPEAK_NUMPRESS_LIBRARY NAMES numpress libnumpress.a HINTS ${MZPEAK_LIB_DIR}/lib)
 
 add_executable(FASTag src/FASTag.cpp)
 target_link_libraries(FASTag PRIVATE fastag_core)
@@ -124,16 +127,32 @@ if(MZPEAK_INCLUDE_DIR AND MZPEAK_LIBRARY)
   if(MZPEAK_NUMPRESS_LIBRARY)
     target_link_libraries(FASTag PRIVATE ${MZPEAK_NUMPRESS_LIBRARY})
   endif()
+  if(WIN32)
+    # A static library brings no dependency list of its own, so what the
+    # shared libmzpeak carries as DT_NEEDED elsewhere is linked here: Arrow,
+    # Parquet, libzip and Boost.JSON (compiled, not header-only). All four come
+    # from the conda env the Windows job already puts on CMAKE_PREFIX_PATH.
+    find_package(Arrow CONFIG REQUIRED)
+    find_package(Parquet CONFIG REQUIRED)
+    find_package(libzip CONFIG REQUIRED)
+    find_package(Boost CONFIG REQUIRED COMPONENTS json)
+    target_link_libraries(FASTag PRIVATE Parquet::parquet_shared Arrow::arrow_shared libzip::zip Boost::json)
+  endif()
   # CXX_STANDARD is a TARGET property; per-source it is silently ignored and
   # the file would compile at the target's C++17 (std::unreachable missing).
-  # The flag is spelled per compiler: clang accepted `c++23` only from 17,
-  # and Apple clang 15 (GitHub's macos-14 runners) knows just `c++2b`. Ask.
-  include(CheckCXXCompilerFlag)
-  check_cxx_compiler_flag("-std=c++23" _fastag_has_std_cxx23)
-  if(_fastag_has_std_cxx23)
-    set(_fastag_cxx23_flag "-std=c++23")
+  # The flag is spelled per compiler: MSVC has no c++23, only c++latest; clang
+  # accepted `c++23` only from 17, and Apple clang 15 (GitHub's macos-14
+  # runners) knows just `c++2b`. Ask.
+  if(MSVC)
+    set(_fastag_cxx23_flag "/std:c++latest")
   else()
-    set(_fastag_cxx23_flag "-std=c++2b")
+    include(CheckCXXCompilerFlag)
+    check_cxx_compiler_flag("-std=c++23" _fastag_has_std_cxx23)
+    if(_fastag_has_std_cxx23)
+      set(_fastag_cxx23_flag "-std=c++23")
+    else()
+      set(_fastag_cxx23_flag "-std=c++2b")
+    endif()
   endif()
   set_source_files_properties(src/MzPeakReader.cpp PROPERTIES COMPILE_OPTIONS "${_fastag_cxx23_flag}")
   target_compile_definitions(FASTag PRIVATE FASTAG_HAVE_MZPEAK_LIB)

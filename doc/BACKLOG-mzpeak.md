@@ -40,12 +40,18 @@ against the enum and throws on a name it does not know; left unrestricted, it
 skips the check and the extension is decided in FASTag). The one visible cost:
 `--help` no longer prints a format list after those two options.
 
-**The released Linux and macOS binaries carry the library** (since v1.1.0). CI
-builds it from the pinned `MZPEAK_LIB_REF`, runs its suite against bioconda's
-Arrow 21, bundles it, and makes the shipped bundle read `small.mzpeak` before
-accepting the artifact. Windows does not: no win-64 OpenMS on bioconda, and the
-library has never met MSVC. Dropping the OpenMS enum is also what let CI drop
-the from-source OpenMS build on the other four platforms.
+**All five released binaries carry the library** (Linux/macOS since v1.1.0,
+Windows since the commit after it). CI builds it from the pinned
+`MZPEAK_LIB_REF`, runs its suite against the Arrow the binary links (bioconda's
+21 on four platforms, conda-forge's on Windows), bundles it, and makes the
+shipped bundle read `small.mzpeak` before accepting the artifact. Windows
+builds it with MSVC through meson and links it statically: the library has no
+dllexport annotations, so its meson.build emits only `libmzpeak.a` there and
+FASTag's CMakeLists links Arrow, Parquet, libzip and Boost.JSON itself. MSVC
+needed exactly one source change -- libzip takes UTF-8 `char*` names and
+`path::c_str()` is `wchar_t*` on Windows (`Util::narrow()` in the library).
+Dropping the OpenMS enum is also what let CI drop the from-source OpenMS build
+on the other four platforms.
 
 **All four in/out combinations work**, and `test/mzpeak_e2e.sh` proves the one
 that used to be broken: it writes `hits.mzpeak` from mzPeak input, tags that
@@ -253,34 +259,30 @@ runs.**
 
 ## Next
 
-1. **mzPeak on Windows.** The only platform without it. Needs mzpeak-openms
-   built with MSVC (never attempted: C++23, meson, Arrow/Parquet/libzip from
-   conda) and the from-source OpenMS build kept, since bioconda has no win-64
-   package. Done for Linux/macOS in v1.1.0 (`MZPEAK_LIB_REF` in ci.yml).
-2. **Run-level metadata in written archives.** The library writer takes a
+1. **Run-level metadata in written archives.** The library writer takes a
    `RunMetadata` block; nothing maps OpenMS's `ExperimentalSettings` onto it,
    so `-out_spectra x.mzpeak` carries spectra and precursors but no
    instrument, software or source-file record. Upstreaming the library work
    to OpenMS/mzpeak is a separate decision -- the fork is level with upstream,
    but `Spectra`'s design differs.
-3. **Pick in the worker, not in the reader.** `PeakPickerHiRes` runs serially
+2. **Pick in the worker, not in the reader.** `PeakPickerHiRes` runs serially
    inside `streamMzPeak` while every tagging thread waits. Moving it into the
    parallel callback should take the profile archive from 1.95 s toward its
    0.70 s decode floor; the centroided path does not pick at all and is
    unaffected.
-4. **Parallelise the read itself.** Blocked upstream, and the measurements say
+3. **Parallelise the read itself.** Blocked upstream, and the measurements say
    it is not worth much yet: one shared `Index` with a contiguous block per
    thread scales 0.87 s -> 0.30 s at 8 threads but costs ~T x the memory,
    because each thread keeps its own row-group cache and Arrow transients.
    Bounding that cache by BYTES rather than by a count of two is the
    prerequisite (a group is 22-35 MB here and ~580 MB on a chunked Astral
    archive).
-5. **`OnDiscMzPeakExperiment`** -- random access over Parquet row groups,
+4. **`OnDiscMzPeakExperiment`** -- random access over Parquet row groups,
    matching `OnDiscMSExperiment`. Would let the mzPeak path use the *same*
    pull-based loop as mzML instead of a separate chunked one, deleting the
    consumer entirely. The right long-term shape, and an OpenMS contribution
    rather than a FASTag change.
-6. **Writer-side: intensity as float32.** The mzML->mzpeak converter writes
+5. **Writer-side: intensity as float32.** The mzML->mzpeak converter writes
    `intensity` as `large_list<double>`; the raw converter writes
    `large_list<float>`. Same nominal format, twice the decoded bytes -- 29.3 MB
    of a 35.1 MB row group in the centroided archive exists only because of
