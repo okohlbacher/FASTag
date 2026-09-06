@@ -7,9 +7,16 @@
 #include <OpenMS/METADATA/Precursor.h>
 
 #include <algorithm>
+#include <cerrno>
 #include <charconv>
+#include <cstring>
 #include <fstream>
+#include <locale.h>
 #include <string_view>
+
+#if defined(__APPLE__)
+#include <xlocale.h>
+#endif
 
 using namespace OpenMS;
 
@@ -71,13 +78,60 @@ namespace FASTag
       return tag_attr(xml, k, attr);
     }
 
+    // The C-locale strtod, spelled per platform rather than through macros
+    // that would leak into everything included after them.
+#if defined(_WIN32)
+    using c_locale_t = _locale_t;
+    inline c_locale_t make_c_locale() { return _create_locale(LC_NUMERIC, "C"); }
+    inline double strtod_c(const char* s, char** end, c_locale_t loc)
+    {
+      return _strtod_l(s, end, loc);
+    }
+#else
+    using c_locale_t = locale_t;
+    inline c_locale_t make_c_locale() { return newlocale(LC_NUMERIC_MASK, "C", nullptr); }
+    inline double strtod_c(const char* s, char** end, c_locale_t loc)
+    {
+      return strtod_l(s, end, loc);
+    }
+#endif
+
+    /// The "C" locale, once: mzML numbers always use '.' as the decimal
+    /// point, and a locale-sensitive strtod would read 465.2078 as 465
+    /// wherever the process locale says otherwise (de_DE and friends).
+    c_locale_t c_locale()
+    {
+      static c_locale_t loc = make_c_locale();
+      return loc;
+    }
+
+    /// Strict: the whole view must be the number, or it is treated as absent
+    /// rather than guessed at.
+    ///
+    /// Integers go through from_chars, which is exact and available
+    /// everywhere. Doubles do NOT: libc++ deletes the floating-point
+    /// overload, so Apple clang rejects it outright. strtod_l is used
+    /// instead -- correctly rounded, like from_chars, which a hand-rolled
+    /// mantissa-and-exponent parser would not be, and a 1-ULP difference in
+    /// a precursor m/z can move a tag across the tolerance.
+    bool to_number(std::string_view s, double& out)
+    {
+      if (s.empty() || s.size() >= 64) return false;
+      char buf[64];
+      std::memcpy(buf, s.data(), s.size());
+      buf[s.size()] = '\0';
+      char* endp = nullptr;
+      errno = 0;
+      const double v = strtod_c(buf, &endp, c_locale());
+      if (endp != buf + s.size() || errno == ERANGE) return false;
+      out = v;
+      return true;
+    }
+
     template <typename T>
     bool to_number(std::string_view s, T& out)
     {
       if (s.empty()) return false;
-      // from_chars does not accept a leading '+' or surrounding space, which
-      // no mzML writer emits; anything it rejects is treated as absent rather
-      // than guessed at.
       const auto r = std::from_chars(s.data(), s.data() + s.size(), out);
       return r.ec == std::errc() && r.ptr == s.data() + s.size();
     }
