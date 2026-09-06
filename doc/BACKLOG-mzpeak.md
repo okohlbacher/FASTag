@@ -276,14 +276,20 @@ push-based `ChunkingConsumer` is gone (-432 lines in `FASTag.cpp`).
 2. **Pick in the worker -- done.** `getSpectrum()` centroids a profile MS2 on
    the calling thread. Profile archive: 2.79 s -> 0.97 s at 16 threads.
 3. **Parallel read -- done.** Contiguous range per thread over a shared
-   `Index` (each reader keeps its own decoder and two-group cache). Centroided
-   archive 0.93 s -> 0.42 s; memory is the predicted ~T x: a reader costs
-   about 3x its row group's bytes (65-105 MB here), so 16 threads peak at
-   1.28 GB. The byte-bounding prerequisite became a reader-count cap: FASTag
-   reads the largest row group's size from the Parquet footers and limits
-   readers to a 4 GB decoded budget, which allows two on a ~580 MB-group
-   Astral archive. A per-reader byte-bounded cache would not help -- one
-   group per reader is the floor.
+   `Index`. In v1.1.1 each reader kept its own two-group cache and memory was
+   the predicted ~T x (16 threads: 1.28 GB on the centroided archive, 2.09 GB
+   on the profile one) -- and the measurement showed it was DUPLICATION, not
+   transients: 16 readers with two slots each held up to 32 copies of a
+   7-group file. The library's cache now lives on the `Manager`, shared by
+   every reader, keyed by file and group, byte-budgeted with LRU eviction and
+   in-flight deduplication (a second reader wanting a group being decoded
+   waits for that decode). Each `Parquet` keeps its own file handle and
+   decode lock, so different groups still decode in parallel. FASTag sizes
+   the budget to two groups per running reader and caps readers so that fits
+   4 GB (three on a ~580 MB-group Astral archive). Result, 16 threads:
+   centroided 186 MB (was 1.28 GB), profile 491 MB (was 2.09 GB), both faster.
+   `mzPeak: decoded N row groups once for T reader threads` in the log is the
+   invariant; the library test asserts it on an 8-reader run.
 4. **`OnDiscMzPeakExperiment` -- done**, in FASTag rather than OpenMS (the
    class needs the external library, which OpenMS does not carry). Unifying the
    loops also gave mzPeak input `-subsample_spectra` (an exact count) and the
@@ -306,12 +312,7 @@ Tags are byte-identical to v1.1.0 on both archives at every thread count.
 
 ## Next
 
-1. **Cheaper readers.** The ~3x-row-group cost per reader is mostly Arrow's
-   decode transients, not the two cached groups. Decoding a row group column
-   by column instead of as one record batch, or letting the library hand out
-   a reader whose cache holds one group, would let a 16-thread run stay under
-   ~600 MB on this archive. Library work.
-2. **The e2e "readers agree" check needs the centroided twin.** Against the
+1. **The e2e "readers agree" check needs the centroided twin.** Against the
    raw-converted profile archive it reports 96.3% agreement with the
    vendor-centroided mzML (on-read picking is not the vendor's picker); that
    number is unchanged from v1.1.0 and is not a regression. `test/mzpeak_e2e.sh`

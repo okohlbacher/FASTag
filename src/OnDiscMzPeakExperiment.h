@@ -45,12 +45,13 @@ namespace FASTag
   /// once, copy-construct one reader per thread, pull spectra by index.
   ///
   /// Not thread-safe, for the same reason as its mzML counterpart: each reader
-  /// owns a decoder and a two-row-group cache. Copies share the archive index
-  /// and its descriptive-metadata map (read once, ~7 MB on a typical run) and
-  /// own their decoder, so threads decode in parallel. Give every thread a
-  /// CONTIGUOUS range of indices: a row group holds thousands of spectra, and
-  /// threads striding through the same groups each decode them, T times the
-  /// work for the same result.
+  /// owns a decoder over its own file handle. Copies share the archive index,
+  /// its descriptive-metadata map (read once, ~7 MB on a typical run) and the
+  /// archive-wide cache of DECODED row groups, so a group is decoded once
+  /// however many threads read from it, while different groups decode in
+  /// parallel. Give every thread a CONTIGUOUS range of indices anyway: it
+  /// keeps the number of groups in flight -- what the memory now follows --
+  /// at about one per thread.
   ///
   /// PROFILE MS2 is centroided on the way out, on the calling thread. mzPeak
   /// archives converted from raw files routinely carry profile MS2 with an
@@ -65,7 +66,11 @@ namespace FASTag
   class OnDiscMzPeakExperiment
   {
   public:
-    explicit OnDiscMzPeakExperiment(const std::string& path);
+    /// @param cache_budget  bytes of decoded row groups the archive-wide cache
+    ///   may hold before evicting; size it to the readers you run (see
+    ///   maxRowGroupBytes()).
+    explicit OnDiscMzPeakExperiment(const std::string& path,
+                                    std::size_t cache_budget = std::size_t(4) << 30);
     /// A per-thread reader over the same archive. Safe to call concurrently.
     OnDiscMzPeakExperiment(const OnDiscMzPeakExperiment& other);
     OnDiscMzPeakExperiment& operator=(const OnDiscMzPeakExperiment&) = delete;
@@ -82,10 +87,20 @@ namespace FASTag
     /// Run-level metadata, mapped from the archive's mzpeak_index.json.
     const OpenMS::ExperimentalSettings& getMetaData() const;
 
-    /// Largest signal row group in the archive, in uncompressed bytes. A
-    /// reader holds up to two of these decoded, so this is what a caller
-    /// sizing the number of concurrent readers needs.
+    /// Largest signal row group in the archive, in uncompressed bytes. Memory
+    /// follows the groups in flight, about one per reader plus a boundary, so
+    /// this is what a caller sizing the number of concurrent readers needs.
     std::size_t maxRowGroupBytes() const;
+    /// The cache budget this reader was opened with.
+    std::size_t cacheBudget() const;
+    /// Shrink or grow the archive-wide cache budget for every reader at once.
+    /// Two groups per running reader is the sweet spot: a single reader then
+    /// keeps what a forward pass needs and no more, and sixteen readers can
+    /// never hold more than the file has.
+    void setCacheBudget(std::size_t bytes);
+    /// Row groups decoded so far across every reader of this archive: with
+    /// the shared cache that is each group once, whatever the thread count.
+    std::size_t rowGroupsDecoded() const;
 
     /// Profile MS2 centroided so far, across every copy of this reader.
     std::size_t nPicked() const;

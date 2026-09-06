@@ -224,8 +224,13 @@ namespace FASTag
   /// the row-group size, and the picking counters.
   struct Shared
   {
-    explicit Shared(const std::string& path) : index(MzPeak::open(path)) {}
+    Shared(const std::string& path, std::size_t cache_budget)
+      : index(MzPeak::open(path)), budget(cache_budget)
+    {
+      index.manager()->row_group_cache().set_budget(cache_budget);
+    }
     MzPeak::Index index;
+    std::size_t budget;
     ExperimentalSettings settings;
     std::size_t row_group_bytes = 0;
     std::atomic<std::size_t> picked{0}, pick_failed{0};
@@ -233,8 +238,8 @@ namespace FASTag
 
   struct OnDiscMzPeakExperiment::Impl
   {
-    explicit Impl(const std::string& path)
-      : shared(std::make_shared<Shared>(path)), spectra(openSpectra(shared->index))
+    Impl(const std::string& path, std::size_t cache_budget)
+      : shared(std::make_shared<Shared>(path, cache_budget)), spectra(openSpectra(shared->index))
     {
     }
     Impl(const Impl& other) : shared(other.shared), spectra(openSpectra(shared->index)) {}
@@ -243,9 +248,9 @@ namespace FASTag
     PeakPickerHiRes picker;
   };
 
-  OnDiscMzPeakExperiment::OnDiscMzPeakExperiment(const std::string& path)
+  OnDiscMzPeakExperiment::OnDiscMzPeakExperiment(const std::string& path, std::size_t cache_budget)
   try
-    : impl_(std::make_unique<Impl>(path))
+    : impl_(std::make_unique<Impl>(path, cache_budget))
   {
     impl_->shared->settings = fromRunMetadata(impl_->shared->index.metadata());
     impl_->shared->row_group_bytes = largestRowGroup(impl_->shared->index);
@@ -270,6 +275,16 @@ namespace FASTag
   Size OnDiscMzPeakExperiment::getNrSpectra() const { return static_cast<Size>(impl_->spectra.size()); }
   const ExperimentalSettings& OnDiscMzPeakExperiment::getMetaData() const { return impl_->shared->settings; }
   std::size_t OnDiscMzPeakExperiment::maxRowGroupBytes() const { return impl_->shared->row_group_bytes; }
+  std::size_t OnDiscMzPeakExperiment::cacheBudget() const { return impl_->shared->budget; }
+  void OnDiscMzPeakExperiment::setCacheBudget(std::size_t bytes)
+  {
+    impl_->shared->budget = bytes;
+    impl_->shared->index.manager()->row_group_cache().set_budget(bytes);
+  }
+  std::size_t OnDiscMzPeakExperiment::rowGroupsDecoded() const
+  {
+    return impl_->shared->index.manager()->row_group_cache().stats().decodes;
+  }
   std::size_t OnDiscMzPeakExperiment::nPicked() const { return impl_->shared->picked.load(); }
   std::size_t OnDiscMzPeakExperiment::nPickFailed() const { return impl_->shared->pick_failed.load(); }
 

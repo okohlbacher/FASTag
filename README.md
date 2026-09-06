@@ -196,7 +196,7 @@ saying so, rather than reporting a clean run over an empty file.
 
 To build from source with mzPeak: build `mzpeak-openms`, then configure FASTag
 with `-DMZPEAK_SOURCE_DIR=<checkout> -DMZPEAK_LIB_DIR=<install prefix>`. This
-release is built against `mzpeak-openms` `f419d88`; older commits lack the
+release is built against `mzpeak-openms` `756e0c4`; older commits lack the
 writer's precursor support, `MetadataDetail` and the MSVC build, and will not
 compile. `13f5cbf` also lowered the library's Arrow floor to 21, which is what bioconda's
 OpenMS pins, and builds with Apple clang 15 and GCC 13. Configure says what
@@ -219,26 +219,26 @@ was wrong — it was this format gap.)
 
 **Faster than mzML on the same acquisition, and now parallel.** Thermo LTQ
 Orbitrap Velos, 7,534 spectra / 6,103 MS2, 16 logical cores, warm cache, wall
-time and peak RSS as FASTag reports them (v1.1.1):
+time and peak RSS as FASTag reports them (v1.1.2):
 
 | threads | mzML (429 MB) | mzPeak, centroided (101 MB) | mzPeak, profile (126 MB) |
 |---|---|---|---|
-| 1 | 4.52 s / 117 MB | **0.93 s** / 223 MB | 2.79 s / 397 MB |
-| 8 | 1.33 s / 144 MB | **0.41 s** / 731 MB | 1.10 s / 1.37 GB |
-| 16 | 1.14 s / 164 MB | **0.42 s** / 1.28 GB | 0.97 s / 2.09 GB |
+| 1 | 4.52 s / 117 MB | **0.89 s** / 174 MB | 2.83 s / 458 MB |
+| 8 | 1.33 s / 144 MB | **0.36 s** / 180 MB | 1.00 s / 484 MB |
+| 16 | 1.14 s / 164 MB | **0.34 s** / 186 MB | 0.85 s / 491 MB |
 
-4.9x faster single-threaded and 2.7x at 16 threads, from a file a quarter the
+5.1x faster single-threaded and 3.4x at 16 threads, from a file a quarter the
 size. Tag counts differ by one out of 122,098 — the archive stores m/z as
 float32, which moves a single borderline match across the tolerance. The read
 is parallel since v1.1.1: every thread owns a reader over a shared archive
 index and decodes a contiguous range of spectra, the way the mzML path already
-gave each thread its own `OnDiscMSExperiment`. The price is memory: a reader
-holds two decoded row groups plus Arrow's transients, about three times the
-row group's size each, so peak RSS grows with `-threads`. FASTag caps the
-number of readers so their decoded groups stay within 4 GB, which on this
-archive (35 MB groups) never bites and on a chunked Astral archive (~580 MB
-groups) allows two. Pick `-threads` for the memory you have; 8 already
-reaches the plateau here.
+gave each thread its own `OnDiscMSExperiment`. Since v1.1.2 the decoded row
+groups live in one cache shared by every reader, so each group is decoded
+once whatever the thread count and memory no longer grows with `-threads`:
+it follows the groups in flight, at most one per thread and never more than
+the file has. The cache is sized to two groups per running reader, and the
+reader count is capped so that fits 4 GB, which only matters for archives
+with very large row groups (a chunked Astral archive has ~580 MB groups).
 
 **Profile MS2 is centroided on read**, in the thread that reads it. mzPeak
 archives converted from raw files routinely store profile MS2 with an empty
@@ -560,7 +560,7 @@ without filtering anything out:
   for the old speed. See [doc/BACKLOG.md](doc/BACKLOG.md).
 - **No modification support.** Residues are the unmodified 19, so labelled
   samples (TMT and similar) will not match tags spanning a modified residue.
-- **mzPeak memory scales with `-threads`.** Each reader thread holds two decoded row groups plus decode transients, about three times a row group's size; on this archive 16 threads reach 1.3 GB where mzML stays at 164 MB. Readers are capped at a 4 GB decoded-group budget, which only bites on archives with very large row groups (chunked Astral, ~580 MB). Use fewer threads on a small machine; 8 gives the same speed here.
+- **mzPeak reading decodes whole row groups.** The smallest unit Parquet can hand back is a row group, tens of megabytes here, so an mzPeak run holds a few decoded groups where the mzML path holds a few spectra. Each group is decoded once and shared across threads (since v1.1.2), so this does not grow with `-threads`; it does grow with the archive's row-group size, and readers are capped so two groups per thread fit 4 GB.
 
 ## Licence and provenance
 

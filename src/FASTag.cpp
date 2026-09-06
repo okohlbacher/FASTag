@@ -1532,28 +1532,36 @@ protected:
       }
     };
 
-    // Reader threads for mzPeak, bounded by memory: every per-thread reader
-    // holds up to two decoded row groups plus Arrow's decode transients --
-    // measured ~3x the row group's byte size per reader (65-105 MB on a
-    // 22-35 MB group). A chunked Astral archive has ~580 MB groups; sixteen
-    // readers of those would be ~28 GB. Tagging runs in the same region, so a
-    // capped read caps tagging too; the cap only bites on such archives.
+    // Reader threads for mzPeak, bounded by memory. Decoded row groups live
+    // in one archive-wide cache (each group decoded once, whatever the thread
+    // count), so memory follows the groups IN FLIGHT: about one per reader
+    // plus a boundary, never more than the file has. Readers are capped so
+    // that two groups per reader fit the cache budget -- the thrash-free
+    // bound; a budget smaller than the groups in flight would decode a group
+    // again every time a reader came back to it. On a 34 MB-group archive
+    // the cap never bites; on a chunked Astral one (~580 MB groups) it
+    // allows three readers.
     // ponytail: a fixed 4 GB budget; a -mzpeak_read_memory knob if a machine
     // ever needs another.
     int read_threads = std::max(1, omp_get_max_threads());
 #ifdef FASTAG_HAVE_MZPEAK_LIB
     if (mzp && mzp->maxRowGroupBytes() > 0)
     {
-      constexpr size_t kReadBudget = size_t(4) << 30;
-      const size_t per_reader = 3 * mzp->maxRowGroupBytes();
-      const int cap = static_cast<int>(std::min<size_t>(std::max<size_t>(1, kReadBudget / per_reader), 1u << 20));
+      const size_t per_reader = 2 * mzp->maxRowGroupBytes();
+      const int cap = static_cast<int>(std::min<size_t>(std::max<size_t>(1, mzp->cacheBudget() / per_reader), 1u << 20));
       if (cap < read_threads)
       {
         OPENMS_LOG_WARN << "mzPeak: row groups decode to " << (mzp->maxRowGroupBytes() >> 20)
                         << " MB each; reading with " << cap << " of " << read_threads
-                        << " threads to stay within 4 GB." << std::endl;
+                        << " threads to stay within " << (mzp->cacheBudget() >> 30) << " GB." << std::endl;
         read_threads = cap;
       }
+      // Then size the cache to those readers: two groups each. A single reader
+      // keeps what a forward pass needs and no more (a 4 GB budget let it
+      // hoard every group it had passed); sixteen readers can hold at most
+      // thirty-two, and never more than the file has.
+      mzp->setCacheBudget(std::min<size_t>(mzp->cacheBudget(),
+                                           static_cast<size_t>(read_threads) * per_reader));
     }
 #endif
 
@@ -1619,6 +1627,13 @@ protected:
                             ? " (" + String(mzp->nPickFailed()) + " kept as profile: picking yielded nothing)"
                             : "")
                       << std::endl;
+    }
+    // One decode per group is the whole point of the shared cache; say what it
+    // cost so a regression to per-thread decoding would be visible in a log.
+    if (mzp)
+    {
+      OPENMS_LOG_INFO << "mzPeak: decoded " << mzp->rowGroupsDecoded() << " row groups once for "
+                      << read_threads << " reader thread" << (read_threads == 1 ? "" : "s") << std::endl;
     }
 #endif
 
