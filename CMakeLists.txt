@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21 FATAL_ERROR)
-project(FASTag VERSION 1.1.3 LANGUAGES CXX)
+project(FASTag VERSION 1.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -117,7 +117,7 @@ find_path(MZPEAK_INCLUDE_DIR mzpeak.h HINTS ${MZPEAK_SOURCE_DIR}/include)
 find_library(MZPEAK_LIBRARY NAMES mzpeak libmzpeak.a HINTS ${MZPEAK_LIB_DIR}/lib)
 find_library(MZPEAK_NUMPRESS_LIBRARY NAMES numpress libnumpress.a HINTS ${MZPEAK_LIB_DIR}/lib)
 
-add_executable(FASTag src/FASTag.cpp)
+add_executable(FASTag src/FASTag.cpp src/IndexedMzMLReader.cpp)
 target_link_libraries(FASTag PRIVATE fastag_core)
 if(MZPEAK_INCLUDE_DIR AND MZPEAK_LIBRARY)
   # C++23: the library's headers use std::expected and deducing this.
@@ -219,6 +219,17 @@ if(FASTAG_BUILD_TESTS)
   add_test(NAME mzpeak_e2e
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/mzpeak_e2e.sh $<TARGET_FILE:FASTag>)
   set_tests_properties(mzpeak_e2e PROPERTIES SKIP_RETURN_CODE 77)
+
+  # The mzML fast path against OpenMS itself: the tag TSV carries neither RT
+  # nor precursor charge, so only a direct field-by-field comparison proves
+  # the reader's scrape right.
+  add_executable(indexed_mzml_test test/indexed_mzml_test.cpp src/IndexedMzMLReader.cpp)
+  target_link_libraries(indexed_mzml_test PRIVATE fastag_core)
+  target_include_directories(indexed_mzml_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  target_compile_definitions(indexed_mzml_test PRIVATE
+                             FASTAG_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
+  add_test(NAME indexed_mzml_test COMMAND indexed_mzml_test)
+  set_tests_properties(indexed_mzml_test PROPERTIES SKIP_RETURN_CODE 77)
 
   add_executable(tagfeatures_test test/tagfeatures_test.cpp src/tagfeatures.cpp)
   target_include_directories(tagfeatures_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

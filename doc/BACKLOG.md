@@ -362,15 +362,48 @@ research project.
   `TagFDR` machinery exists and is unit-tested but stays unwired, deliberately,
   so no miscalibrated FDR reaches a user.
 
-## Performance: the reading path is the bottleneck, not the tagger (2026-09-02)
+## Performance: the reading path was the bottleneck — largely FIXED in v1.2.0
 
-Profiled after 1.0 — see `doc/PERF-REVIEW-2026-09.md`. Two findings dominate:
-the indexedmzML offset list is parsed with a Xerces DOM (25.8 s of a 47 s run
-on the 13 GB file, single-threaded, immune to -threads; a linear scan of the
-same 33 MB takes 97 ms), and every spectrum is decoded through a per-spectrum
-DOM parse (~60% of read cost, read being ~75% of the loop). Plus `-threads`
-defaults to 1 on a 16-core machine. Ranked plan with expected gains in the
-review; the first two items are worth ~2x on large files for about a day.
+Profiled after 1.0 (`doc/PERF-REVIEW-2026-09.md`): the serial metadata parse
+dominated every mzML run, and per-spectrum DOM decoding dominated the rest.
+Re-profiled 2026-09-07 and acted on; occupancy at 16 threads was 4.6 of 16
+cores on mzML and the fixed, single-threaded prologue was 64% of a 1.8 GB run.
+
+What that prologue actually was, and what changed:
+
+1. **A whole-file metadata parse before any tagging** — 4.0 s of a 9.1 s run,
+   serial. FASTag has a fast path that skips it, but it needs an OpenMS whose
+   per-spectrum decoder reports MS level, RT and precursors, and the releases
+   moved to bioconda's OpenMS in v1.1.0, which does not. Every mzML run had
+   silently paid the pre-pass since. `src/IndexedMzMLReader.cpp` removes the
+   dependence: it reads the mzML index itself, hands each spectrum's bytes to
+   the same public `domParseSpectrum` for peaks, and scrapes the three missing
+   fields from the same XML. Nothing is parsed up front and nothing twice.
+2. **The fragment-tolerance probe read 200 spectra strided across the file.**
+   On a columnar format that decodes a whole row group to reach one spectrum,
+   that decoded the entire archive single-threaded before tagging began: 2.8 s
+   of a 5.1 s run on an 874 MB mzPeak. It now samples 8 clusters of 8
+   consecutive spectra, touching a handful of row groups.
+3. **A static contiguous split left fast threads in the join barrier** (24% of
+   all samples blocked). Now `schedule(guided)`, which keeps large early
+   chunks — so few row groups are in flight and the shared decode cache stays
+   small — and shrinks only at the tail.
+
+Measured, 16 threads, against v1.1.3 built in the same environment; tags
+byte-identical everywhere:
+
+| input | v1.1.3 | v1.2.0 | wall | peak RSS |
+|---|---|---|---|---|
+| 309 MB mzML | 1.95 s / 263 MB | 0.52 s / 65 MB | 3.8x | 4.0x |
+| 1.8 GB mzML | 9.03 s / 949 MB | 3.50 s / 339 MB | 2.6x | 2.8x |
+| 874 MB mzPeak | 5.05 s / 3580 MB | 3.01 s / 1542 MB | 1.7x | 2.3x |
+| 429 MB mzML | 1.13 s / 169 MB | 1.13 s / 167 MB | 1.0x | 1.0x |
+| 101 MB mzPeak | 0.34 s / 181 MB | 0.34 s / 182 MB | 1.0x | 1.0x |
+
+Small files are unchanged: their prologue was already short. What is left is
+the per-spectrum DOM decode itself (Xerces node construction and its
+`dynamic_cast` traffic dominate the mzML profile), which lives inside OpenMS's
+reader, and `findNearest` in the tagger at 5-6%.
 
 ## Watch item: single-row E-value wobble on ddaPASEF (unexplained)
 

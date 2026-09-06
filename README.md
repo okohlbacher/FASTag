@@ -227,13 +227,13 @@ was wrong — it was this format gap.)
 
 **Faster than mzML on the same acquisition, and now parallel.** Thermo LTQ
 Orbitrap Velos, 7,534 spectra / 6,103 MS2, 16 logical cores, warm cache, wall
-time and peak RSS as FASTag reports them (v1.1.2):
+time and peak RSS as FASTag reports them (v1.2.0):
 
 | threads | mzML (429 MB) | mzPeak, centroided (101 MB) | mzPeak, profile (126 MB) |
 |---|---|---|---|
 | 1 | 4.52 s / 117 MB | **0.98 s** / 170 MB | 2.91 s / 422 MB |
 | 8 | 1.33 s / 144 MB | **0.43 s** / 176 MB | 1.07 s / 446 MB |
-| 16 | 1.14 s / 164 MB | **0.42 s** / 182 MB | 0.96 s / 452 MB |
+| 16 | 1.13 s / 167 MB | **0.34 s** / 182 MB | 0.81 s / 471 MB |
 
 5.1x faster single-threaded and 3.4x at 16 threads, from a file a quarter the
 size. Tag counts differ by one out of 122,098 — the archive stores m/z as
@@ -259,6 +259,26 @@ waited (1.95 s on this archive); it now runs in the worker, and the profile
 archive goes from 2.79 s to 0.97 s at 16 threads. Converting that mzML to mzPeak and tagging it
 reproduces the mzML result to within a single tag (122,097; 99.999% of
 spectrum/tag pairs identical, flanking masses to 4 decimals).
+
+### Reading speed
+
+**Large mzML files read 2.6 to 3.8x faster since v1.2.0**, and in a fraction of
+the memory. FASTag used to make OpenMS parse the whole file once for spectrum
+metadata before tagging could start: on a 1.8 GB run that was 4.0 seconds of a
+9.1 second job, single-threaded, and no number of `-threads` touched it. It now
+reads the mzML index directly and takes each spectrum's metadata from the same
+XML it decodes for peaks, so there is no prologue at all. Files without an
+index, and `-out_spectra` runs (which need run-level metadata), take the old
+route unchanged.
+
+| input | before | after |
+|---|---|---|
+| 309 MB mzML | 1.95 s / 263 MB | **0.52 s** / 65 MB |
+| 1.8 GB mzML | 9.03 s / 949 MB | **3.50 s** / 339 MB |
+| 874 MB mzPeak | 5.05 s / 3.6 GB | **3.01 s** / 1.5 GB |
+
+Tags are byte-identical to previous releases on every file tested. Smaller
+files are unchanged, having had little prologue to remove.
 
 ## Command-line reference
 

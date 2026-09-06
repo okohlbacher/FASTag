@@ -16,6 +16,7 @@
 #include <OpenMS/KERNEL/MSExperiment.h>
 #include <OpenMS/KERNEL/OnDiscMSExperiment.h>
 #ifdef FASTAG_HAVE_MZPEAK_LIB
+#include "IndexedMzMLReader.h"
 #include "OnDiscMzPeakExperiment.h"
 #include <functional>
 #endif
@@ -975,12 +976,32 @@ protected:
       }
     }
 #endif
+    // The fast mzML path: our own index-driven reader, which fills the
+    // metadata OpenMS's per-spectrum decoder drops and so needs no up-front
+    // metadata parse at all (see IndexedMzMLReader.h -- that parse is 4.0 s of
+    // a 9.1 s run on a 1.8 GB file, serial and immune to -threads).
+    //
+    // Only when -out_spectra is off: writing needs run-level settings
+    // (instrument, source files), which this reader deliberately does not
+    // read, and getting them means the very pre-pass being avoided.
+    //
+    // Probed before it is trusted, exactly as the OnDiscMSExperiment path
+    // below is: a reader reporting no MS2-with-precursor in the first 64
+    // spectra is not used, so a file it cannot understand falls back instead
+    // of producing a confident nothing.
+    std::unique_ptr<FASTag::IndexedMzMLReader> fastmz;
+    if (!mzpeak_in && out_spectra.empty())
+    {
+      auto candidate = std::make_unique<FASTag::IndexedMzMLReader>(in);
+      if (candidate->ok() && candidate->reportsSpectrumMetadata()) fastmz = std::move(candidate);
+    }
+
     // A pointer, not a value: the fallback below must replace this with a
     // genuinely fresh reader, and OnDiscMSExperiment's operator= is private
     // (copy-construction only), so an in-place reassignment isn't available.
     auto ondisc = std::make_unique<OnDiscMSExperiment>();
     PeakMap exp;
-    const bool streaming = !mzpeak_in && ondisc->openFile(in, out_spectra.empty());
+    const bool streaming = !mzpeak_in && !fastmz && ondisc->openFile(in, out_spectra.empty());
     // Spectrum i, whatever the input: the mzPeak reader, the per-spectrum mzML
     // reader, or the fully loaded map. For the SERIAL callers only; the
     // tagging loop gives each thread its own reader.
@@ -988,9 +1009,10 @@ protected:
 #ifdef FASTAG_HAVE_MZPEAK_LIB
       if (mzp) return mzp->getSpectrum(i);
 #endif
+      if (fastmz) return fastmz->getSpectrum(i);
       return streaming ? ondisc->getSpectrum(i) : exp[i];
     };
-    if (!streaming && !mzpeak_in)
+    if (!streaming && !mzpeak_in && !fastmz)
     {
       OPENMS_LOG_WARN << "'" << in << "' has no usable index; reading it entirely "
                          "into memory. Run FileConverter to write an indexed mzML "
@@ -1013,7 +1035,7 @@ protected:
     // and the fallback never engaged. Confirmed against a real 617 MB Thermo
     // file built with stock bioconda OpenMS: every spectrum read back at level 1
     // through the fast path, 0 of 53,521 MS2 spectra found, no warning printed.
-    if (streaming && out_spectra.empty() && !mzpeak_in)
+    if (streaming && out_spectra.empty() && !mzpeak_in && !fastmz)
     {
       bool have_meta = false;
       const Size probe = std::min<Size>(ondisc->getNrSpectra(), 64);
@@ -1042,6 +1064,7 @@ protected:
 #ifdef FASTAG_HAVE_MZPEAK_LIB
     if (mzp) n_total = mzp->getNrSpectra();
 #endif
+    if (fastmz) n_total = fastmz->getNrSpectra();
 
     // Subsampling selection. The mask is exact for every input -- it is built
     // over the spectrum indices up front. The count over ALL input spectra,
@@ -1080,11 +1103,39 @@ protected:
     {
       double tightest = std::numeric_limits<double>::max();
       double at_mz = 0;
-      const Size want = std::min<Size>(n_total, 200);
-      const Size step = std::max<Size>(1, n_total / std::max<Size>(want, 1));
+      // 64 samples, not 200. The test is coarse (does the tightest spacing
+      // anywhere exceed 20x the tolerance?), and every sample costs a read --
+      // on a profile archive it costs a CENTROIDING too, and consecutive
+      // sampling hits far more MS2 than the old strided one did, which made
+      // 200 samples 0.16 s of a 0.67 s run.
+      const Size want = std::min<Size>(n_total, 64);
+      // Sampled in a few CLUSTERS of consecutive spectra, not strided across
+      // the whole run.
+      //
+      // Striding cost more than the tagging it precedes. A columnar reader
+      // decodes a whole row group to reach one spectrum, and 200 evenly
+      // spaced indices land in ~200 different groups, so the probe decoded
+      // the entire archive single-threaded before any tagging started: 2.8 s
+      // of a 5.1 s run on an 874 MB archive. Clusters touch a handful of
+      // groups instead, and cost nothing on mzML either (fewer, more local
+      // reads). Several clusters rather than one because a run changes over
+      // its gradient, and the probe is looking for the file's TIGHTEST peak
+      // spacing, not a typical one.
+      constexpr Size kClusters = 8;  // 8 spectra each
+      const Size per_cluster = std::max<Size>(1, want / kClusters);
+      const Size cluster_step = std::max<Size>(1, n_total / kClusters);
       Size seen = 0;
-      for (Size i = 0; i < n_total && seen < want; i += step)
+      std::vector<Size> probe_idx;
+      probe_idx.reserve(want);
+      for (Size c = 0; c < kClusters && probe_idx.size() < want; ++c)
       {
+        const Size start = std::min<Size>(c * cluster_step, n_total ? n_total - 1 : 0);
+        for (Size k = 0; k < per_cluster && start + k < n_total && probe_idx.size() < want; ++k)
+          probe_idx.push_back(start + k);
+      }
+      for (const Size i : probe_idx)
+      {
+        if (seen >= want) break;
         MSSpectrum s = read_spectrum(i);
         if (s.getMSLevel() != 2 || s.size() < 8) continue;
         ++seen;
@@ -1579,6 +1630,8 @@ protected:
         // OnDiscMSExperiment's operator= is private.
         std::unique_ptr<OnDiscMSExperiment> reader;
         if (streaming) reader = std::make_unique<OnDiscMSExperiment>(*ondisc);
+        std::unique_ptr<FASTag::IndexedMzMLReader> freader;
+        if (fastmz) freader = std::make_unique<FASTag::IndexedMzMLReader>(*fastmz);
 #ifdef FASTAG_HAVE_MZPEAK_LIB
         std::unique_ptr<FASTag::OnDiscMzPeakExperiment> mreader;
         if (mzp) mreader = std::make_unique<FASTag::OnDiscMzPeakExperiment>(*mzp);
@@ -1588,31 +1641,38 @@ protected:
         {
           if (!sample_mask.empty() && !sample_mask[static_cast<size_t>(i)]) { tick(); return; }
           MSSpectrum loaded;
+          bool loaded_here = false;
 #ifdef FASTAG_HAVE_MZPEAK_LIB
-          if (mreader) loaded = mreader->getSpectrum(static_cast<Size>(i));
+          if (mreader) { loaded = mreader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
 #endif
-          if (streaming) loaded = reader->getSpectrum(static_cast<Size>(i));
-          const MSSpectrum& spec = (mzpeak_in || streaming) ? loaded : exp[static_cast<Size>(i)];
+          if (!loaded_here && freader) { loaded = freader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
+          if (!loaded_here && streaming) { loaded = reader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
+          const MSSpectrum& spec = loaded_here ? loaded : exp[static_cast<Size>(i)];
           record(static_cast<size_t>(i - base), tag_one(spec, tid), spec);
           tick();
         };
-        if (mzpeak_in)
-        {
-          // A CONTIGUOUS range per thread, not dynamic chunks: a row group
-          // holds thousands of spectra and each reader caches the two it last
-          // decoded, so threads striding through the same groups would each
-          // decode every group -- T times the work for the same result.
-          // Measured on the library alone: 2.9x at 8 threads this way, flat
-          // with striding.
-          const SignedSize nt = omp_get_num_threads(), t = omp_get_thread_num();
-          const SignedSize span = lim - base;
-          for (SignedSize i = base + span * t / nt; i < base + span * (t + 1) / nt; ++i) work(i);
-        }
-        else
-        {
-#pragma omp for schedule(dynamic, 64)
-          for (SignedSize i = base; i < lim; ++i) work(i);
-        }
+        // One schedule for both formats: dynamic, in chunks.
+        //
+        // mzPeak used to take a CONTIGUOUS range per thread, because each
+        // reader then cached its own two row groups and threads striding
+        // through the same groups each decoded them. The cache is shared per
+        // archive now (one decode per group whatever the thread count), so
+        // that reason is gone -- and a static split is the wrong shape: it
+        // hands every thread the same COUNT of spectra, which cost different
+        // amounts, so the fast threads sat in the join barrier (measured: 24%
+        // of all samples blocked). Dynamic chunks let a thread that finishes
+        // early take more.
+        //
+        // GUIDED, not a fixed chunk: it hands out large pieces first and
+        // small ones at the end, which is exactly the shape wanted here.
+        // Large early chunks keep each thread inside one row group, so the
+        // shared decode cache holds few groups at once; the shrinking tail is
+        // what stops the fast threads waiting in the join barrier. A fixed
+        // 256-spectrum chunk balanced the tail but fragmented the start, and
+        // cost 17% on a small profile archive.
+        constexpr SignedSize kMinChunk = 64;
+#pragma omp for schedule(guided, kMinChunk)
+        for (SignedSize i = base; i < lim; ++i) work(i);
       }
       write_block(static_cast<size_t>(lim - base));
     }
