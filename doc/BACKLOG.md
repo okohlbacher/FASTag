@@ -394,6 +394,7 @@ byte-identical everywhere:
 
 | input | v1.1.3 | v1.2.0 | wall | peak RSS |
 |---|---|---|---|---|
+| 12.2 GB mzML | 36.99 s / 2076 MB | 8.33 s / 238 MB | 4.4x | 8.7x |
 | 309 MB mzML | 1.95 s / 263 MB | 0.52 s / 65 MB | 3.8x | 4.0x |
 | 1.8 GB mzML | 9.03 s / 949 MB | 3.50 s / 339 MB | 2.6x | 2.8x |
 | 874 MB mzPeak | 5.05 s / 3580 MB | 3.01 s / 1542 MB | 1.7x | 2.3x |

@@ -273,6 +273,7 @@ route unchanged.
 
 | input | before | after |
 |---|---|---|
+| 12.2 GB mzML | 36.99 s / 2.0 GB | **8.33 s** / 238 MB |
 | 309 MB mzML | 1.95 s / 263 MB | **0.52 s** / 65 MB |
 | 1.8 GB mzML | 9.03 s / 949 MB | **3.50 s** / 339 MB |
 | 874 MB mzPeak | 5.05 s / 3.6 GB | **3.01 s** / 1.5 GB |
