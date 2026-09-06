@@ -71,7 +71,7 @@ Until v1.1.0 both readers were push-based (one `consumeSpectrum()` per
 spectrum) and a `ChunkingConsumer` buffered them into batches for the tagging
 loop. Since v1.1.1 `src/OnDiscMzPeakExperiment.cpp` gives random access like
 `OnDiscMSExperiment`, and one block loop serves both formats with one shared
-`tag_one`, so the readers cannot drift (see "Done in v1.1.1" below).
+`tag_one`, so the readers cannot drift (see "Done in v1.1.1 and v1.1.2" below).
 
 Three decisions worth keeping:
 
@@ -256,7 +256,7 @@ the consumer interface existing precisely to avoid that.
 **Guidance: mzPeak is fine for files small relative to RAM. Use mzML for large
 runs.**
 
-## Done in v1.1.1: `OnDiscMzPeakExperiment`
+## Done in v1.1.1 and v1.1.2: `OnDiscMzPeakExperiment`, one decode per group
 
 The five items that used to sit here landed together, because four of them
 were one change. `src/OnDiscMzPeakExperiment.cpp` is a random-access reader
@@ -300,15 +300,19 @@ push-based `ChunkingConsumer` is gone (-432 lines in `FASTag.cpp`).
    has `point.intensity: float`. The `large_list<double>` observation was about
    an archive produced by another converter, not this writer.
 
-Measured on the Erwinia run (7,534 spectra, 16 cores), FASTag's own wall/RSS:
+Measured on the Erwinia run (7,534 spectra, 16 cores), FASTag's own wall/RSS,
+v1.1.2 (shared decoded-group cache):
 
 | threads | mzML | mzPeak centroided | mzPeak profile |
 |---|---|---|---|
-| 1 | 4.52 s / 117 MB | 0.93 s / 223 MB | 2.79 s / 397 MB |
-| 8 | 1.33 s / 144 MB | 0.41 s / 731 MB | 1.10 s / 1.37 GB |
-| 16 | 1.14 s / 164 MB | 0.42 s / 1.28 GB | 0.97 s / 2.09 GB |
+| 1 | 4.52 s / 117 MB | 0.89 s / 174 MB | 2.83 s / 458 MB |
+| 8 | 1.33 s / 144 MB | 0.36 s / 180 MB | 1.00 s / 484 MB |
+| 16 | 1.14 s / 164 MB | 0.34 s / 186 MB | 0.85 s / 491 MB |
 
-Tags are byte-identical to v1.1.0 on both archives at every thread count.
+For the record, v1.1.1 with a private two-group cache per reader: centroided
+223 / 731 / 1,275 MB and profile 397 MB / 1.37 GB / 2.09 GB at 1 / 8 / 16
+threads. Tags are byte-identical to v1.1.0 on both archives at every thread
+count in both versions.
 
 ## Next
 
