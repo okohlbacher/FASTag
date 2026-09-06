@@ -196,7 +196,7 @@ saying so, rather than reporting a clean run over an empty file.
 
 To build from source with mzPeak: build `mzpeak-openms`, then configure FASTag
 with `-DMZPEAK_SOURCE_DIR=<checkout> -DMZPEAK_LIB_DIR=<install prefix>`. This
-release is built against `mzpeak-openms` `3088c24`; older commits lack the
+release is built against `mzpeak-openms` `f419d88`; older commits lack the
 writer's precursor support, `MetadataDetail` and the MSVC build, and will not
 compile. `13f5cbf` also lowered the library's Arrow floor to 21, which is what bioconda's
 OpenMS pins, and builds with Apple clang 15 and GCC 13. Configure says what
