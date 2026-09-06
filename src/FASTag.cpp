@@ -2178,22 +2178,34 @@ protected:
       if (mzpeak_out)
       {
 #ifdef FASTAG_HAVE_MZPEAK_LIB
-        // The library writer takes a whole run, so the kept spectra are
-        // re-read into memory here: O(kept), never O(run). Per-spectrum
-        // sourceFile/dataProcessing references are cleared as for mzML below,
-        // and the FILTERING step is declared for every spectrum instead.
+        // Streamed, like the mzML branch below: each kept spectrum is re-read
+        // and handed straight to the writer, which flushes a Parquet row
+        // group when enough points have accumulated. O(1 spectrum) plus the
+        // row group, never O(kept). Per-spectrum sourceFile/dataProcessing
+        // references are cleared so the run-level metadata cannot dangle; the
+        // FILTERING step is declared once, in that metadata.
+        //
+        // Not routed through FileHandler: its storeExperiment() has no mzPeak
+        // branch, so asking it for one silently writes something else.
+        // `kept` holds no spectra any more, and addDataProcessing_ stamps
+        // SPECTRA -- so the FILTERING step is carried by a one-spectrum map
+        // whose only purpose is to hand that step to the metadata mapping,
+        // which reads it from spectrum 0.
+        PeakMap processing_carrier;
+        processing_carrier.addSpectrum(MSSpectrum());
+        addDataProcessing_(processing_carrier, getProcessingInfo_(DataProcessing::FILTERING));
+        FASTag::MzPeakSpectrumWriter writer(out_spectra, kept.getExperimentalSettings(),
+                                            &processing_carrier);
         for (const Size i : kept_idx)
         {
           MSSpectrum sp = read_spectrum(i);
           sp.setSourceFile(SourceFile());
           sp.setDataProcessing({});
-          kept.addSpectrum(std::move(sp));
+          writer.add(sp);
         }
-        addDataProcessing_(kept, getProcessingInfo_(DataProcessing::FILTERING));
-        // Not routed through FileHandler: its storeExperiment() has no mzPeak
-        // branch, so asking it for one silently writes something else.
-        FASTag::writeMzPeak(out_spectra, kept);
-        OPENMS_LOG_INFO << "Wrote " << kept.size() << " spectra to " << out_spectra << std::endl;
+        writer.finish();
+        OPENMS_LOG_INFO << "Wrote " << writer.size() << " spectra to " << out_spectra
+                        << " (streamed, O(1) memory)" << std::endl;
 #endif
       }
       else

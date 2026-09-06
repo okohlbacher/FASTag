@@ -112,6 +112,35 @@ namespace FASTag
     std::unique_ptr<Impl> impl_;
   };
 
+  /// Write spectra to an mzPeak archive as they arrive, so a run never sits
+  /// in memory: each spectrum is converted and appended, and the library
+  /// flushes a Parquet row group whenever enough points have accumulated.
+  /// Memory is one row group of points, plus a few hundred bytes of metadata
+  /// per spectrum for the tables that can only be written at the end.
+  ///
+  /// finish() seals the archive; a writer destroyed without it leaves no
+  /// archive and no working files.
+  class MzPeakSpectrumWriter
+  {
+  public:
+    /// @param settings  run-level metadata for the archive (see
+    ///   toRunMetadata()); @p exp adds its data-processing history.
+    MzPeakSpectrumWriter(const std::string& path,
+                         const OpenMS::ExperimentalSettings& settings,
+                         const OpenMS::MSExperiment* exp = nullptr);
+    ~MzPeakSpectrumWriter();
+    MzPeakSpectrumWriter(const MzPeakSpectrumWriter&) = delete;
+    MzPeakSpectrumWriter& operator=(const MzPeakSpectrumWriter&) = delete;
+
+    void add(const OpenMS::MSSpectrum& spectrum);
+    std::size_t size() const;
+    void finish();
+
+  private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+  };
+
   /// Write @p exp to @p path as an mzPeak archive.
   ///
   /// Carries what the reader above hands back: peaks, representation, MS

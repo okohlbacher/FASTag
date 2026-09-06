@@ -196,7 +196,7 @@ saying so, rather than reporting a clean run over an empty file.
 
 To build from source with mzPeak: build `mzpeak-openms`, then configure FASTag
 with `-DMZPEAK_SOURCE_DIR=<checkout> -DMZPEAK_LIB_DIR=<install prefix>`. This
-release is built against `mzpeak-openms` `756e0c4`; older commits lack the
+release is built against `mzpeak-openms` `babe7ef`; older commits lack the
 writer's precursor support, `MetadataDetail` and the MSVC build, and will not
 compile. `13f5cbf` also lowered the library's Arrow floor to 21, which is what bioconda's
 OpenMS pins, and builds with Apple clang 15 and GCC 13. Configure says what
@@ -214,6 +214,14 @@ appends its own filtering step. An archive that came in as mzPeak keeps its
 metadata block verbatim (mzML has no field for much of it) and gets the FASTag
 step appended.
 
+**`-out_spectra` to mzPeak streams** (since v1.1.3): each kept spectrum is
+re-read and handed straight to the writer, which flushes a Parquet row group
+once enough points have accumulated, so the cost is one row group plus a few
+hundred bytes of metadata per spectrum instead of the whole run. Converting a
+1.8 GB Astral mzML to mzPeak (89,951 spectra kept) went from 11.8 GB peak RSS
+to 852 MB, same wall time, byte-identical tags and an archive that reads back
+identically. The mzML writer already streamed; both paths now do.
+
 (An earlier note here blamed zero tags from mzPeak samples on DIA data. That
 was wrong — it was this format gap.)
 
@@ -223,9 +231,9 @@ time and peak RSS as FASTag reports them (v1.1.2):
 
 | threads | mzML (429 MB) | mzPeak, centroided (101 MB) | mzPeak, profile (126 MB) |
 |---|---|---|---|
-| 1 | 4.52 s / 117 MB | **0.89 s** / 174 MB | 2.83 s / 458 MB |
-| 8 | 1.33 s / 144 MB | **0.36 s** / 180 MB | 1.00 s / 484 MB |
-| 16 | 1.14 s / 164 MB | **0.34 s** / 186 MB | 0.85 s / 491 MB |
+| 1 | 4.52 s / 117 MB | **0.98 s** / 170 MB | 2.91 s / 422 MB |
+| 8 | 1.33 s / 144 MB | **0.43 s** / 176 MB | 1.07 s / 446 MB |
+| 16 | 1.14 s / 164 MB | **0.42 s** / 182 MB | 0.96 s / 452 MB |
 
 5.1x faster single-threaded and 3.4x at 16 threads, from a file a quarter the
 size. Tag counts differ by one out of 122,098 — the archive stores m/z as

@@ -603,11 +603,11 @@ namespace FASTag
   }
 
   /****************************************************************************/
-  void writeMzPeak(const std::string& path, const MSExperiment& exp)
+  namespace
   {
-    MzPeak::RunContents run;
-    run.spectra.reserve(exp.size());
-    for (const MSSpectrum& s : exp)
+    /// One OpenMS spectrum as the library's SpectrumData. Shared by the
+    /// streaming and whole-run writers, so the two cannot drift.
+    MzPeak::SpectrumData toSpectrumData(const MSSpectrum& s)
     {
       MzPeak::SpectrumData out;
       out.mz.reserve(s.size());
@@ -653,19 +653,73 @@ namespace FASTag
         pd.selected_ions.push_back(std::move(ion));
         out.precursors.push_back(std::move(pd));
       }
-      run.spectra.push_back(std::move(out));
+      return out;
     }
+  }
 
+  /****************************************************************************/
+  struct MzPeakSpectrumWriter::Impl
+  {
+    Impl(const std::string& p, const MzPeak::RunMetadata& md)
+      : path(p), writer(p)
+    {
+      if (!md.empty()) writer.set_metadata(md);
+    }
+    std::string path;
+    MzPeak::RunArchiveWriter writer;
+  };
+
+  MzPeakSpectrumWriter::MzPeakSpectrumWriter(const std::string& path,
+                                             const ExperimentalSettings& settings,
+                                             const MSExperiment* exp)
+  try
+    : impl_(std::make_unique<Impl>(path, toRunMetadata(settings, exp)))
+  {
+  }
+  catch (const std::exception& e)
+  {
+    throw Exception::UnableToCreateFile(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION, path,
+                                        std::string("mzPeak write failed: ") + e.what());
+  }
+
+  MzPeakSpectrumWriter::~MzPeakSpectrumWriter() = default;
+
+  void MzPeakSpectrumWriter::add(const MSSpectrum& s)
+  {
     try
     {
-      const MzPeak::RunMetadata md = toRunMetadata(exp.getExperimentalSettings(), &exp);
-      MzPeak::write_run_archive(path, run, md.empty() ? nullptr : &md);
+      impl_->writer.add(toSpectrumData(s));
     }
     catch (const std::exception& e)
     {
-      throw Exception::UnableToCreateFile(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION, path,
+      throw Exception::UnableToCreateFile(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION,
+                                          impl_->path,
                                           std::string("mzPeak write failed: ") + e.what());
     }
+  }
+
+  std::size_t MzPeakSpectrumWriter::size() const { return impl_->writer.size(); }
+
+  void MzPeakSpectrumWriter::finish()
+  {
+    try
+    {
+      impl_->writer.finish();
+    }
+    catch (const std::exception& e)
+    {
+      throw Exception::UnableToCreateFile(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION,
+                                          impl_->path,
+                                          std::string("mzPeak write failed: ") + e.what());
+    }
+  }
+
+  /****************************************************************************/
+  void writeMzPeak(const std::string& path, const MSExperiment& exp)
+  {
+    MzPeakSpectrumWriter writer(path, exp.getExperimentalSettings(), &exp);
+    for (const MSSpectrum& s : exp) writer.add(s);
+    writer.finish();
   }
 }
 

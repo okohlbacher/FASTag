@@ -314,6 +314,35 @@ For the record, v1.1.1 with a private two-group cache per reader: centroided
 threads. Tags are byte-identical to v1.1.0 on both archives at every thread
 count in both versions.
 
+## Done in v1.1.3: streaming writes, and a crash the shared cache exposed
+
+**`-out_spectra x.mzpeak` streams.** `MzPeak::RunArchiveWriter` (library)
+takes spectra one at a time and flushes a Parquet row group when enough
+points have accumulated; `FASTag::MzPeakSpectrumWriter` wraps it and the
+`-out_spectra` branch feeds it from the same two-pass re-read the mzML branch
+uses. Memory is one row group plus per-spectrum metadata rows, not the run:
+converting a 1.8 GB Astral mzML (89,951 spectra kept) went from 11.8 GB peak
+RSS to 852 MB at the same wall time, with byte-identical tags and an archive
+that reads back identically. The Erwinia profile archive went 758 -> 510 MB.
+The whole-run `write_run_archive()` remains for callers that have a run in
+hand; both share the spectrum->row and validation helpers.
+
+**A crash, found by the 1.8 GB test and fixed.** Reading any archive with
+many row groups on more than one thread segfaulted in Arrow's allocator
+(`EXC_BAD_ACCESS` in `_mi_arenas_page_abandon`). Cause: since v1.1.2 a
+decoded group outlives the thread that decoded it, and FASTag frees it after
+the OpenMP workers have exited; Arrow 25's bundled mimalloc and jemalloc both
+crash on that free, while `ARROW_DEFAULT_MEMORY_POOL=system` survives. The
+library now allocates decoded row groups from Arrow's system pool -- measured
+cost: none, and slightly less peak RSS. **The released v1.1.1 and v1.1.2
+binaries were never affected**: they bundle Arrow 21, which handles the free
+correctly, and both were re-tested against it. Only a source build against
+Arrow 25 could hit it.
+
+Also fixed: the streaming writer raises Parquet's 1M row-group cap so one
+flush is one row group. Without that a 1.05M-point flush became a 1,048,576
+group plus a 699-row remainder, doubling the group count.
+
 ## Next
 
 1. **The e2e "readers agree" check needs the centroided twin.** Against the

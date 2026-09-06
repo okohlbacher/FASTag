@@ -82,7 +82,7 @@ env:
   # MZPEAK_REF above (the OpenMS overlay). Keep in lockstep with ci.yml; this
   # must be a trunk commit at or after the MSVC support (static-only Windows
   # build, UTF-8 libzip names).
-  MZPEAK_LIB_REF: 756e0c4d87713cfdebf8ce60515c14dc86a33ef5
+  MZPEAK_LIB_REF: babe7ef96c06848b703753eac48b80c2a79f5337
   # Taxonomy index pins -- MUST stay in lockstep with ci.yml (see the comment
   # there for the bump procedure: new data release first -- as a PRE-RELEASE,
   # or it steals the "Latest" slot and 404s every README download link --
