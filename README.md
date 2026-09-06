@@ -207,36 +207,48 @@ you got:
 -- FASTag: mzpeak-openms NOT found -- this build reads and writes mzML only
 ```
 
-Run-level metadata (instrument, software, source file) is not yet written to
-mzPeak; the spectra, their representation, retention times, polarity, native
-ids and precursors are.
+Run-level metadata travels too: run id and start time, source files with
+their checksums, the instrument with its source/analyser/detector components
+and software, the sample, and the data-processing history, to which FASTag
+appends its own filtering step. An archive that came in as mzPeak keeps its
+metadata block verbatim (mzML has no field for much of it) and gets the FASTag
+step appended.
 
 (An earlier note here blamed zero tags from mzPeak samples on DIA data. That
 was wrong — it was this format gap.)
 
-**Faster and lighter than mzML on the same acquisition.** Thermo LTQ Orbitrap
-Velos, 7,534 spectra / 6,103 MS2, 16 logical cores, warm cache, best of two
-after a warm-up:
+**Faster than mzML on the same acquisition, and now parallel.** Thermo LTQ
+Orbitrap Velos, 7,534 spectra / 6,103 MS2, 16 logical cores, warm cache, wall
+time and peak RSS as FASTag reports them (v1.1.1):
 
-| threads | mzML (429 MB) | mzPeak, centroided (101 MB) |
-|---|---|---|
-| 1 | 4.42 s / 116 MB | **0.91 s** / 199 MB |
-| 8 | 1.37 s / 144 MB | **0.53 s** / 201 MB |
-| 16 | 1.19 s / 161 MB | **0.52 s** / 202 MB |
+| threads | mzML (429 MB) | mzPeak, centroided (101 MB) | mzPeak, profile (126 MB) |
+|---|---|---|---|
+| 1 | 4.52 s / 117 MB | **0.93 s** / 223 MB | 2.79 s / 397 MB |
+| 8 | 1.33 s / 144 MB | **0.41 s** / 731 MB | 1.10 s / 1.37 GB |
+| 16 | 1.14 s / 164 MB | **0.42 s** / 1.28 GB | 0.97 s / 2.09 GB |
 
-2.3x faster at 16 threads and 4.9x single-threaded, from a file a quarter the
-size, for 1.25x the memory. Tag counts differ by one out of 122,098 — the
-archive stores m/z as float32, which moves a single borderline match across the
-tolerance. mzPeak does not scale with `-threads` (the read is one serial loop)
-while mzML does, so the gap narrows as cores are added; see
-[doc/BACKLOG-mzpeak.md](doc/BACKLOG-mzpeak.md).
+4.9x faster single-threaded and 2.7x at 16 threads, from a file a quarter the
+size. Tag counts differ by one out of 122,098 — the archive stores m/z as
+float32, which moves a single borderline match across the tolerance. The read
+is parallel since v1.1.1: every thread owns a reader over a shared archive
+index and decodes a contiguous range of spectra, the way the mzML path already
+gave each thread its own `OnDiscMSExperiment`. The price is memory: a reader
+holds two decoded row groups plus Arrow's transients, about three times the
+row group's size each, so peak RSS grows with `-threads`. FASTag caps the
+number of readers so their decoded groups stay within 4 GB, which on this
+archive (35 MB groups) never bites and on a chunked Astral archive (~580 MB
+groups) allows two. Pick `-threads` for the memory you have; 8 already
+reaches the plateau here.
 
-**Profile MS2 is centroided on read.** mzPeak archives converted from raw files
-routinely store profile MS2 with an empty centroid facet, and tagging profile
-SAMPLES rather than peaks costs real recall. Measured on one run available in
-both formats: 80,990 tags from the profile archive read as-is, 122,489 with
-on-read centroiding (`PeakPickerHiRes`), against 122,098 for the same run
-supplied as centroided mzML. Converting that mzML to mzPeak and tagging it
+**Profile MS2 is centroided on read**, in the thread that reads it. mzPeak
+archives converted from raw files routinely store profile MS2 with an empty
+centroid facet, and tagging profile SAMPLES rather than peaks costs real
+recall. Measured on one run available in both formats: 80,990 tags from the
+profile archive read as-is, 122,489 with on-read centroiding
+(`PeakPickerHiRes`), against 122,098 for the same run supplied as centroided
+mzML. Picking used to run serially in the reader while every tagging thread
+waited (1.95 s on this archive); it now runs in the worker, and the profile
+archive goes from 2.79 s to 0.97 s at 16 threads. Converting that mzML to mzPeak and tagging it
 reproduces the mzML result to within a single tag (122,097; 99.999% of
 spectrum/tag pairs identical, flanking masses to 4 decimals).
 
@@ -548,9 +560,7 @@ without filtering anything out:
   for the old speed. See [doc/BACKLOG.md](doc/BACKLOG.md).
 - **No modification support.** Residues are the unmodified 19, so labelled
   samples (TMT and similar) will not match tags spanning a modified residue.
-- **The released binaries cannot read current-format mzPeak** (see above): CI does not build the external reader, so a downloaded FASTag handles only archives OpenMS itself wrote. Build from source for the rest.
-- **`-out_spectra` to mzPeak fails when the input is also mzPeak** (see above), an upstream `MzPeakFile::store()` defect. Loud, deterministic, and confined to that one combination.
-- **mzPeak reading does not scale with `-threads`** — the external library's read is a single serial pull loop. It is still faster than mzML at every thread count tested here, but adding cores does not help it.
+- **mzPeak memory scales with `-threads`.** Each reader thread holds two decoded row groups plus decode transients, about three times a row group's size; on this archive 16 threads reach 1.3 GB where mzML stays at 164 MB. Readers are capped at a 4 GB decoded-group budget, which only bites on archives with very large row groups (chunked Astral, ~580 MB). Use fewer threads on a small machine; 8 gives the same speed here.
 
 ## Licence and provenance
 

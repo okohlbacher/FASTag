@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21 FATAL_ERROR)
-project(FASTag VERSION 1.1.0 LANGUAGES CXX)
+project(FASTag VERSION 1.1.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -121,22 +121,27 @@ add_executable(FASTag src/FASTag.cpp)
 target_link_libraries(FASTag PRIVATE fastag_core)
 if(MZPEAK_INCLUDE_DIR AND MZPEAK_LIBRARY)
   # C++23: the library's headers use std::expected and deducing this.
-  target_sources(FASTag PRIVATE src/MzPeakReader.cpp)
+  target_sources(FASTag PRIVATE src/OnDiscMzPeakExperiment.cpp)
   target_include_directories(FASTag PRIVATE ${MZPEAK_INCLUDE_DIR})
   target_link_libraries(FASTag PRIVATE ${MZPEAK_LIBRARY})
   if(MZPEAK_NUMPRESS_LIBRARY)
     target_link_libraries(FASTag PRIVATE ${MZPEAK_NUMPRESS_LIBRARY})
   endif()
+  # Two of the library's dependencies are called directly from
+  # OnDiscMzPeakExperiment.cpp and so are linked here on every platform:
+  # Boost.JSON (compiled, not header-only) builds the run-level metadata
+  # block, and Parquet's metadata API reports row-group sizes. Both come from
+  # the same conda env that supplies the library's Arrow.
+  find_package(Boost CONFIG REQUIRED COMPONENTS json)
+  find_package(Arrow CONFIG REQUIRED)
+  find_package(Parquet CONFIG REQUIRED)
+  target_link_libraries(FASTag PRIVATE Boost::json Parquet::parquet_shared)
   if(WIN32)
-    # A static library brings no dependency list of its own, so what the
-    # shared libmzpeak carries as DT_NEEDED elsewhere is linked here: Arrow,
-    # Parquet, libzip and Boost.JSON (compiled, not header-only). All four come
-    # from the conda env the Windows job already puts on CMAKE_PREFIX_PATH.
-    find_package(Arrow CONFIG REQUIRED)
-    find_package(Parquet CONFIG REQUIRED)
+    # A static library brings no dependency list of its own, so the rest of
+    # what the shared libmzpeak carries as DT_NEEDED elsewhere is linked here
+    # too: Arrow and libzip.
     find_package(libzip CONFIG REQUIRED)
-    find_package(Boost CONFIG REQUIRED COMPONENTS json)
-    target_link_libraries(FASTag PRIVATE Parquet::parquet_shared Arrow::arrow_shared libzip::zip Boost::json)
+    target_link_libraries(FASTag PRIVATE Arrow::arrow_shared libzip::zip)
   endif()
   # CXX_STANDARD is a TARGET property; per-source it is silently ignored and
   # the file would compile at the target's C++17 (std::unreachable missing).
@@ -154,7 +159,7 @@ if(MZPEAK_INCLUDE_DIR AND MZPEAK_LIBRARY)
       set(_fastag_cxx23_flag "-std=c++2b")
     endif()
   endif()
-  set_source_files_properties(src/MzPeakReader.cpp PROPERTIES COMPILE_OPTIONS "${_fastag_cxx23_flag}")
+  set_source_files_properties(src/OnDiscMzPeakExperiment.cpp PROPERTIES COMPILE_OPTIONS "${_fastag_cxx23_flag}")
   target_compile_definitions(FASTag PRIVATE FASTAG_HAVE_MZPEAK_LIB)
   message(STATUS "FASTag: mzPeak read/write enabled (${MZPEAK_LIBRARY})")
 else()

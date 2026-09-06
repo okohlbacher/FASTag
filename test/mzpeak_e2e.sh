@@ -7,6 +7,11 @@
 #
 #   FASTAG_E2E_MZML=<run.mzML> FASTAG_E2E_MZPEAK=<same run.mzpeak> ctest
 #
+# "Same run" means the archive CONVERTED FROM that mzML (same centroids). An
+# archive converted from the raw file carries profile MS2 that FASTag centroids
+# on read with its own picker, not the vendor's, and the "readers agree" check
+# then reports ~96% -- a property of the two pickers, not of the reader.
+#
 # Exits 77 (ctest SKIP) when they are not set, so a normal build is unaffected.
 set -u
 BIN="$1"

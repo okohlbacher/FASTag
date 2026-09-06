@@ -1,6 +1,6 @@
 # Backlog
 
-## mzPeak input — SHIPPED, and now streaming
+## mzPeak input — SHIPPED, streaming since v1.0, parallel since v1.1.1
 
 Superseded. This section used to argue for deferring mzPeak ("the consumer +
 work-queue adapter, when it is built. Not now") on the grounds that the format
@@ -14,8 +14,9 @@ What actually landed:
   `MZPEAK` entry in `FileTypes` (detected at configure time; CI asserts BOTH the
   configure decision and that the built binary advertises the format, because a
   silent drop to mzML-only has happened twice).
-- The read path is a `ChunkingConsumer` over `MzPeakFile::transform()`, bounded
-  by PEAKS rather than spectra.
+- The read path was a `ChunkingConsumer` over a push reader, bounded by PEAKS
+  rather than spectra; since v1.1.1 it is `OnDiscMzPeakExperiment`, a
+  random-access reader copied per thread, and the mzML block loop serves both.
 - `transform()` itself now streams row group by row group upstream — see
   `BACKLOG-mzpeak.md`. That was the one real obstacle and it is gone: a 42,092
   MS2-spectrum `.mzpeak` produces 1,130,228 tags at **581 MB peak RSS**, against

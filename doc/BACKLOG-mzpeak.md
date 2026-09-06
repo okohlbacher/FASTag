@@ -67,12 +67,11 @@ branch, so asking it for one silently writes a different format.
 
 ### How
 
-Both readers are push-based (one `consumeSpectrum()` per spectrum); FASTag's
-loop wants a batch to parallelise over. `ChunkingConsumer` buffers into chunks
-and hands each to the same per-spectrum work the mzML path uses — one shared
-`tag_one`, so the readers cannot drift. `src/MzPeakReader.cpp` drives the
-external library into that same consumer, so swapping readers changed no
-tagging code at all.
+Until v1.1.0 both readers were push-based (one `consumeSpectrum()` per
+spectrum) and a `ChunkingConsumer` buffered them into batches for the tagging
+loop. Since v1.1.1 `src/OnDiscMzPeakExperiment.cpp` gives random access like
+`OnDiscMSExperiment`, and one block loop serves both formats with one shared
+`tag_one`, so the readers cannot drift (see "Done in v1.1.1" below).
 
 Three decisions worth keeping:
 
@@ -257,40 +256,70 @@ the consumer interface existing precisely to avoid that.
 **Guidance: mzPeak is fine for files small relative to RAM. Use mzML for large
 runs.**
 
+## Done in v1.1.1: `OnDiscMzPeakExperiment`
+
+The five items that used to sit here landed together, because four of them
+were one change. `src/OnDiscMzPeakExperiment.cpp` is a random-access reader
+shaped like `OnDiscMSExperiment`: open once, copy-construct one per thread,
+pull spectra by index. FASTag's block loop now serves both formats and the
+push-based `ChunkingConsumer` is gone (-432 lines in `FASTag.cpp`).
+
+1. **Run-level metadata in written archives -- done.** `toRunMetadata()` maps
+   run id/start time, source files (with SHA-1/MD5), instrument (model, name,
+   vendor, customisation, source/analyser/detector components, software),
+   sample and the data-processing history onto the library's `RunMetadata`;
+   `fromRunMetadata()` is the reverse. An mzPeak input's raw block rides along
+   as a meta value and is written back verbatim with FASTag's step appended,
+   so mzpeak -> mzpeak loses nothing OpenMS has no field for. Verified on the
+   Erwinia archive: `thermo_xcalibur`, `mzpeak-convert` and their processing
+   step survive, `FASTag` and `dp_1` are added.
+2. **Pick in the worker -- done.** `getSpectrum()` centroids a profile MS2 on
+   the calling thread. Profile archive: 2.79 s -> 0.97 s at 16 threads.
+3. **Parallel read -- done.** Contiguous range per thread over a shared
+   `Index` (each reader keeps its own decoder and two-group cache). Centroided
+   archive 0.93 s -> 0.42 s; memory is the predicted ~T x: a reader costs
+   about 3x its row group's bytes (65-105 MB here), so 16 threads peak at
+   1.28 GB. The byte-bounding prerequisite became a reader-count cap: FASTag
+   reads the largest row group's size from the Parquet footers and limits
+   readers to a 4 GB decoded budget, which allows two on a ~580 MB-group
+   Astral archive. A per-reader byte-bounded cache would not help -- one
+   group per reader is the floor.
+4. **`OnDiscMzPeakExperiment` -- done**, in FASTag rather than OpenMS (the
+   class needs the external library, which OpenMS does not carry). Unifying the
+   loops also gave mzPeak input `-subsample_spectra` (an exact count) and the
+   two-pass `-out_spectra` (O(kept) instead of holding spectra during tagging),
+   both of which the push reader could not do.
+5. **Intensity as float32 -- already so.** The library's `SpectrumData` and
+   its Parquet schema store intensity as float32; every FASTag-written archive
+   has `point.intensity: float`. The `large_list<double>` observation was about
+   an archive produced by another converter, not this writer.
+
+Measured on the Erwinia run (7,534 spectra, 16 cores), FASTag's own wall/RSS:
+
+| threads | mzML | mzPeak centroided | mzPeak profile |
+|---|---|---|---|
+| 1 | 4.52 s / 117 MB | 0.93 s / 223 MB | 2.79 s / 397 MB |
+| 8 | 1.33 s / 144 MB | 0.41 s / 731 MB | 1.10 s / 1.37 GB |
+| 16 | 1.14 s / 164 MB | 0.42 s / 1.28 GB | 0.97 s / 2.09 GB |
+
+Tags are byte-identical to v1.1.0 on both archives at every thread count.
+
 ## Next
 
-1. **Run-level metadata in written archives.** The library writer takes a
-   `RunMetadata` block; nothing maps OpenMS's `ExperimentalSettings` onto it,
-   so `-out_spectra x.mzpeak` carries spectra and precursors but no
-   instrument, software or source-file record. Upstreaming the library work
-   to OpenMS/mzpeak is a separate decision -- the fork is level with upstream,
-   but `Spectra`'s design differs.
-2. **Pick in the worker, not in the reader.** `PeakPickerHiRes` runs serially
-   inside `streamMzPeak` while every tagging thread waits. Moving it into the
-   parallel callback should take the profile archive from 1.95 s toward its
-   0.70 s decode floor; the centroided path does not pick at all and is
-   unaffected.
-3. **Parallelise the read itself.** Blocked upstream, and the measurements say
-   it is not worth much yet: one shared `Index` with a contiguous block per
-   thread scales 0.87 s -> 0.30 s at 8 threads but costs ~T x the memory,
-   because each thread keeps its own row-group cache and Arrow transients.
-   Bounding that cache by BYTES rather than by a count of two is the
-   prerequisite (a group is 22-35 MB here and ~580 MB on a chunked Astral
-   archive).
-4. **`OnDiscMzPeakExperiment`** -- random access over Parquet row groups,
-   matching `OnDiscMSExperiment`. Would let the mzPeak path use the *same*
-   pull-based loop as mzML instead of a separate chunked one, deleting the
-   consumer entirely. The right long-term shape, and an OpenMS contribution
-   rather than a FASTag change.
-5. **Writer-side: intensity as float32.** The mzML->mzpeak converter writes
-   `intensity` as `large_list<double>`; the raw converter writes
-   `large_list<float>`. Same nominal format, twice the decoded bytes -- 29.3 MB
-   of a 35.1 MB row group in the centroided archive exists only because of
-   that.
+1. **Cheaper readers.** The ~3x-row-group cost per reader is mostly Arrow's
+   decode transients, not the two cached groups. Decoding a row group column
+   by column instead of as one record batch, or letting the library hand out
+   a reader whose cache holds one group, would let a 16-thread run stay under
+   ~600 MB on this archive. Library work.
+2. **The e2e "readers agree" check needs the centroided twin.** Against the
+   raw-converted profile archive it reports 96.3% agreement with the
+   vendor-centroided mzML (on-read picking is not the vendor's picker); that
+   number is unchanged from v1.1.0 and is not a regression. `test/mzpeak_e2e.sh`
+   documents the matched pair it expects.
 
 ## Caveat
 
 mzPeak is pre-1.0: *"no stability is guaranteed at this point"*. The API surface
 used here is deliberately tiny — `open()`, `spectra()` and per-spectrum
 accessors on the read side, `write_run_archive()` with `SpectrumData` on the
-write side — so churn lands in `src/MzPeakReader.cpp` and two dispatch sites.
+write side — so churn lands in `src/OnDiscMzPeakExperiment.cpp` and two dispatch sites.

@@ -16,8 +16,7 @@
 #include <OpenMS/KERNEL/MSExperiment.h>
 #include <OpenMS/KERNEL/OnDiscMSExperiment.h>
 #ifdef FASTAG_HAVE_MZPEAK_LIB
-#include "MzPeakReader.h"
-#include <OpenMS/INTERFACES/IMSDataConsumer.h>
+#include "OnDiscMzPeakExperiment.h"
 #include <functional>
 #endif
 
@@ -60,7 +59,6 @@
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
-#include <random>
 #include <set>
 #include <vector>
 
@@ -68,6 +66,7 @@
 #include <omp.h>
 #else
 static inline int omp_get_max_threads() { return 1; }
+static inline int omp_get_num_threads() { return 1; }
 static inline int omp_get_thread_num() { return 0; }
 #endif
 
@@ -173,101 +172,6 @@ namespace
 */
 //-------------------------------------------------------------------------
 
-#ifdef FASTAG_HAVE_MZPEAK_LIB
-namespace
-{
-  /// Buffers pushed spectra into bounded chunks and hands each to a callback.
-  ///
-  /// The mzPeak reader is push-based -- streamMzPeak() calls consumeSpectrum()
-  /// once per spectrum -- while the tagging loop wants a batch to parallelise
-  /// over. This adapter is the whole of the mzPeak support; everything
-  /// downstream is the existing mzML code path.
-  ///
-  /// The chunk is bounded by PEAKS, not by spectrum count. A fixed count is the
-  /// obvious choice and the wrong one: spectra range from ~100 peaks to over
-  /// 130,000 across the benchmark corpus, so "2048 spectra" is somewhere between
-  /// 200 K and 270 M peaks. Bounding peaks keeps the buffer flat whatever the
-  /// data looks like, which is the property the streaming reader bought and this
-  /// must not hand back.
-  ///
-  /// MS1 and precursor-less spectra are dropped HERE rather than in the tagging
-  /// callback, so they never occupy the buffer. On a DDA file that is most of
-  /// the input.
-  class ChunkingConsumer : public Interfaces::IMSDataConsumer
-  {
-  public:
-    using Flush = std::function<void(std::vector<MSSpectrum>&)>;
-
-    /// @param keep_fraction  <1.0 subsamples: each MS2 spectrum is kept with this
-    ///   probability (seeded, so a run is reproducible). 1.0 keeps everything.
-    ///   Only a fraction is offered here -- the push interface has no index, so an
-    ///   exact count would need reservoir sampling; the mzML path handles counts.
-    ChunkingConsumer(Flush flush, size_t peak_budget, double keep_fraction = 1.0,
-                     uint32_t seed = 1)
-      : flush_(std::move(flush)), budget_(peak_budget),
-        keep_(keep_fraction), rng_(seed) {}
-
-    /// Progress hooks. @p tick is called once per spectrum OFFERED (before any
-    /// filtering), and @p on_size once with the run's spectrum count, so the two
-    /// share a denominator and a determinate percentage is possible. Optional:
-    /// without them the consumer behaves exactly as before.
-    void setProgressHooks(std::function<void()> tick, std::function<void(Size)> on_size)
-    {
-      tick_ = std::move(tick);
-      on_size_ = std::move(on_size);
-    }
-
-    void consumeSpectrum(SpectrumType& s) override
-    {
-      // Counted before the filters below: progress tracks how far through the
-      // INPUT we are, which is what setExpectedSize() counts too. Counting only
-      // kept MS2 would stall the bar short of 100% on any file with MS1 scans.
-      if (tick_) tick_();
-      if (s.getMSLevel() != 2 || s.empty() || s.getPrecursors().empty()) return;
-      // Subsample AFTER the MS2 filter so the fraction is of taggable spectra, and
-      // BEFORE buffering so dropped spectra never occupy memory. Called serially
-      // by transform(), so one RNG is safe.
-      if (keep_ < 1.0 && unit_(rng_) >= keep_) return;
-      peaks_ += s.size();
-      buf_.push_back(s);
-      if (peaks_ >= budget_) { flush_(buf_); peaks_ = 0; }
-    }
-
-    /// FASTag tags spectra; chromatograms are not input to it.
-    void consumeChromatogram(ChromatogramType&) override {}
-
-    /// Still NOT used for presizing -- that would make correctness depend on a
-    /// call the interface only recommends ("expected to be called"), and the
-    /// flush callback grows its own storage instead. It is forwarded to the
-    /// progress hook only, where being advisory is harmless: a wrong or missing
-    /// count costs an approximate percentage, never a wrong result.
-    void setExpectedSize(Size n_spectra, Size) override
-    {
-      if (on_size_) on_size_(n_spectra);
-    }
-
-    void setExperimentalSettings(const ExperimentalSettings& e) override { settings_ = e; }
-    const ExperimentalSettings& settings() const { return settings_; }
-
-    /// Must be called after transform(): the final partial chunk is otherwise
-    /// never flushed and its spectra vanish without a word.
-    void finish() { if (!buf_.empty()) { flush_(buf_); peaks_ = 0; } }
-
-  private:
-    Flush flush_;
-    std::function<void()> tick_;
-    std::function<void(Size)> on_size_;
-    size_t budget_;
-    double keep_ = 1.0;
-    std::mt19937 rng_;
-    std::uniform_real_distribution<double> unit_{0.0, 1.0};
-    size_t peaks_ = 0;
-    std::vector<MSSpectrum> buf_;
-    ExperimentalSettings settings_;
-  };
-}
-#endif
-
 class TOPPFASTag : public TOPPBase
 {
 public:
@@ -371,8 +275,7 @@ protected:
     // Machine-readable progress for a GUI/pipeline driving FASTag. Off by
     // default so the CLI stays quiet; when set, emit periodic lines to stderr:
     //   FASTAG_PROGRESS done=<n> total=<n>
-    // total is the spectrum count for indexed input, or 0 when it is not known
-    // ahead of time (the push-based mzPeak path streams and cannot count first).
+    // total is the input's spectrum count (every reader is indexed).
     // Emitted from a single thread per update, so lines never interleave.
     registerFlag_("progress", "Emit 'FASTAG_PROGRESS done=<n> total=<n>' lines to stderr for a GUI progress bar");
 
@@ -1014,10 +917,11 @@ protected:
     //
     // -out_spectra still needs getMetaData() for the run-level settings, so that
     // path keeps the full load.
-    // mzPeak is read through its own push-based path, so none of the mzML
-    // reader setup below applies to it. Decided by extension, not by OpenMS's
-    // FileTypes: that enum has no MZPEAK outside one feature branch, and the
-    // format now lives entirely in the external library.
+    // mzPeak is read through OnDiscMzPeakExperiment, the library-backed twin
+    // of OnDiscMSExperiment below, so both formats feed the same loop. Decided
+    // by extension, not by OpenMS's FileTypes: that enum has no MZPEAK outside
+    // one feature branch, and the format now lives entirely in the external
+    // library.
     //
     // Which writer -out_spectra gets is decided from ITS extension, not the
     // input's, so mzML->mzpeak and mzpeak->mzML both work as a side effect of
@@ -1056,12 +960,36 @@ protected:
     }
 #endif
 
+#ifdef FASTAG_HAVE_MZPEAK_LIB
+    std::unique_ptr<FASTag::OnDiscMzPeakExperiment> mzp;
+    if (mzpeak_in)
+    {
+      try
+      {
+        mzp = std::make_unique<FASTag::OnDiscMzPeakExperiment>(in);
+      }
+      catch (const Exception::BaseException& e)
+      {
+        OPENMS_LOG_ERROR << e.what() << std::endl;
+        return INPUT_FILE_CORRUPT;
+      }
+    }
+#endif
     // A pointer, not a value: the fallback below must replace this with a
     // genuinely fresh reader, and OnDiscMSExperiment's operator= is private
     // (copy-construction only), so an in-place reassignment isn't available.
     auto ondisc = std::make_unique<OnDiscMSExperiment>();
     PeakMap exp;
     const bool streaming = !mzpeak_in && ondisc->openFile(in, out_spectra.empty());
+    // Spectrum i, whatever the input: the mzPeak reader, the per-spectrum mzML
+    // reader, or the fully loaded map. For the SERIAL callers only; the
+    // tagging loop gives each thread its own reader.
+    auto read_spectrum = [&](Size i) -> MSSpectrum {
+#ifdef FASTAG_HAVE_MZPEAK_LIB
+      if (mzp) return mzp->getSpectrum(i);
+#endif
+      return streaming ? ondisc->getSpectrum(i) : exp[i];
+    };
     if (!streaming && !mzpeak_in)
     {
       OPENMS_LOG_WARN << "'" << in << "' has no usable index; reading it entirely "
@@ -1110,27 +1038,21 @@ protected:
         ondisc->openFile(in);
       }
     }
-    const size_t n_total = mzpeak_in ? 0 : (streaming ? ondisc->getNrSpectra() : exp.size());
+    size_t n_total = streaming ? ondisc->getNrSpectra() : exp.size();
+#ifdef FASTAG_HAVE_MZPEAK_LIB
+    if (mzp) n_total = mzp->getNrSpectra();
+#endif
 
-    // Subsampling selection. For the indexed (mzML) paths the mask is exact -- it
-    // is built over the spectrum indices up front. The count over ALL input
-    // spectra, not MS2 only: the fast reader does not know the MS level up front,
-    // and a fraction is proportional regardless. For the push-based mzPeak path,
-    // where there is no index, only a FRACTION is supported, applied as a seeded
-    // per-spectrum Bernoulli keep inside the consumer (below).
+    // Subsampling selection. The mask is exact for every input -- it is built
+    // over the spectrum indices up front. The count over ALL input spectra,
+    // not MS2 only: the fast reader does not know the MS level up front, and
+    // a fraction is proportional regardless.
     const size_t subsample_n = static_cast<size_t>(getIntOption_("subsample_spectra"));
     const double subsample_frac = getDoubleOption_("subsample_fraction");
     const uint32_t subsample_seed = static_cast<uint32_t>(getIntOption_("subsample_seed"));
     const bool subsampling = subsample_n > 0 || subsample_frac > 0.0;
-    if (mzpeak_in && subsample_n > 0)
-    {
-      OPENMS_LOG_ERROR << "-subsample_spectra (absolute count) needs an index and is "
-                          "not supported for mzPeak input; use -subsample_fraction."
-                       << std::endl;
-      return ILLEGAL_PARAMETERS;
-    }
     FASTag::SampleMask sample_mask;
-    if (subsampling && !mzpeak_in)
+    if (subsampling)
     {
       sample_mask = subsample_n > 0 ? FASTag::sampleByCount(n_total, subsample_n, subsample_seed)
                                     : FASTag::sampleByFraction(n_total, subsample_frac, subsample_seed);
@@ -1139,6 +1061,9 @@ protected:
                       << " input spectra (seed " << subsample_seed << ")" << std::endl;
     }
 
+#ifdef FASTAG_HAVE_MZPEAK_LIB
+    size_t picked_before_loop = 0;  // the probe below re-picks what it samples
+#endif
     // Warn when the fragment tolerance looks far too tight for the data.
     //
     // A high-resolution tolerance on low-resolution data is silent, and looks
@@ -1153,14 +1078,14 @@ protected:
     // the sample is still many times the tolerance, no real fragment can be
     // matched at that tolerance either.
     {
-      double tightest = mzpeak_in ? 0.0 : std::numeric_limits<double>::max();
+      double tightest = std::numeric_limits<double>::max();
       double at_mz = 0;
       const Size want = std::min<Size>(n_total, 200);
       const Size step = std::max<Size>(1, n_total / std::max<Size>(want, 1));
       Size seen = 0;
       for (Size i = 0; i < n_total && seen < want; i += step)
       {
-        MSSpectrum s = streaming ? ondisc->getSpectrum(i) : exp[i];
+        MSSpectrum s = read_spectrum(i);
         if (s.getMSLevel() != 2 || s.size() < 8) continue;
         ++seen;
         s.sortByPosition();
@@ -1236,6 +1161,11 @@ protected:
         want_proforma ? buildProformaPrefix(getStringList_("fixed_modifications")) : std::string();
 
     PeakMap kept;
+#ifdef FASTAG_HAVE_MZPEAK_LIB
+    if (mzp) picked_before_loop = mzp->nPicked();
+    if (mzp) kept.getExperimentalSettings() = mzp->getMetaData();
+    else
+#endif
     if (streaming)
     {
       if (auto meta = ondisc->getMetaData()) kept.getExperimentalSettings() = *meta;
@@ -1260,18 +1190,16 @@ protected:
     std::vector<std::string> rows;
     std::vector<std::string> rrows;  ///< block-local recon rows (recon_on only)
     std::vector<std::string> grows;  ///< block-local glyco rows (glyco_on only)
-    // Two-pass -out_spectra for the mzML->mzML case: record kept INPUT indices
-    // during tagging, re-read and stream them through a writing consumer at
-    // the end -- O(1 spectrum) memory instead of holding every kept spectrum.
-    // mzPeak stays on the accumulate+store path: the library writer takes a
-    // whole run, and the mzPeak reader is push-based so there is no index to
-    // re-read by.
-    const bool stream_out = !out_spectra.empty() && !mzpeak_in && !mzpeak_out;
+    // Two-pass -out_spectra, whatever the formats: record kept INPUT indices
+    // during tagging, re-read them at the end. An mzML output streams them
+    // through a writing consumer, O(1 spectrum); an mzPeak output re-reads
+    // them into memory, O(kept), because the library writer takes a whole run.
+    // Every reader here is indexed, so nothing is held during tagging.
+    const bool want_out = !out_spectra.empty();
     std::vector<Size> kept_idx;
     std::vector<char> keep_target;
     size_t block_base = 0;
     std::vector<char> keep;
-    std::vector<MSSpectrum> kept_spec;
     std::vector<std::map<int, std::pair<size_t, size_t>>> per_thread_len(
         static_cast<size_t>(std::max(1, omp_get_max_threads())));
     std::vector<size_t> per_thread_ms2(per_thread_len.size(), 0),
@@ -1286,7 +1214,7 @@ protected:
     // two drifting apart, which is the failure mode that matters here -- two
     // readers that mostly agree are worse than one.
     //
-    // Callers must not resize rows/keep/kept_spec while this runs.
+    // Callers must not resize rows/keep while this runs.
     //
     // Returns the tag rows and (when -recon_out) the reconciliation rows for
     // one spectrum, as strings the caller places by index -- one result type
@@ -1459,21 +1387,13 @@ protected:
       if (entrap_on) rmeta_blk[idx].swap(r.meta);
       keep[idx] = 1;
       // A spectrum whose only reported tags are entrapment matches is
-      // calibration material, not a hit -- keep it out of -out_spectra. The
-      // else-clear matters: the slot may hold a stale spectrum from an
-      // earlier block (buffers are recycled), and write_block treats
-      // non-empty as "keep".
-      if (stream_out) keep_target[idx] = r.any_target ? 1 : 0;
-      else if (!out_spectra.empty())
-      {
-        if (r.any_target) kept_spec[idx] = spec;
-        else kept_spec[idx] = MSSpectrum();
-      }
+      // calibration material, not a hit -- keep it out of -out_spectra.
+      if (want_out) keep_target[idx] = r.any_target ? 1 : 0;
     };
 
     // Size the block buffers (capacity is recycled across blocks) and reset
-    // the keep flags. Callers must not resize rows/keep/kept_spec while a
-    // parallel block runs.
+    // the keep flags. Callers must not resize rows/keep while a parallel block
+    // runs.
     auto prep_block = [&](size_t n_used)
     {
       if (rows.size() < n_used)
@@ -1482,10 +1402,9 @@ protected:
         if (recon_on) rrows.resize(n_used);
         if (glyco_on) grows.resize(n_used);
         if (entrap_on) rmeta_blk.resize(n_used);
-        if (!out_spectra.empty() && !stream_out) kept_spec.resize(n_used);
       }
       keep.assign(n_used, 0);
-      if (stream_out) keep_target.assign(n_used, 0);
+      if (want_out) keep_target.assign(n_used, 0);
     };
 
     // -species consumes (spectrum id, tag) pairs from the REPORTED rows. They
@@ -1542,34 +1461,16 @@ protected:
           }
         }
         rows[i].clear();
-        if (stream_out)
-        {
-          if (keep[i] && keep_target[i]) kept_idx.push_back(static_cast<Size>(block_base + i));
-        }
-        else if (!out_spectra.empty() && !kept_spec[i].empty())
-          kept.addSpectrum(std::move(kept_spec[i]));
+        if (want_out && keep_target[i]) kept_idx.push_back(static_cast<Size>(block_base + i));
       }
     };
 
-    // Tag a buffered chunk in parallel and append its rows in order.
-    //
-    // Used by the mzPeak path, which is push-based: the reader hands over one
-    // spectrum at a time, so there is nothing to index into and no random access
-    // to parallelise over. Buffer, then run the same per-spectrum work over the
-    // buffer, recording at block-local j so order follows input regardless of
-    // scheduling -- the guarantee the mzML path gets from indexing by i -- and
-    // write the block out before the next chunk arrives.
     // Progress reporting (opt-in via -progress), shared across both input paths.
     // One atomic counter; the single thread that observes each step boundary
-    // emits one line under a critical section, so lines never interleave. total
-    // is the spectrum count for indexed input, or 0 (unknown) for the streaming
-    // mzPeak path, which cannot be counted before it is read.
+    // emits one line under a critical section, so lines never interleave.
     const bool emit_progress = getFlag_("progress");
     std::atomic<long long> progress_done{0};
-    // Not const, and 0 until known: the mzPeak path learns its spectrum count
-    // from setExpectedSize() partway in (see the consumer's progress hooks), so
-    // that run starts indeterminate and becomes a real percentage.
-    std::atomic<long long> progress_total{mzpeak_in ? 0 : static_cast<long long>(n_spec)};
+    std::atomic<long long> progress_total{static_cast<long long>(n_spec)};
     std::atomic<int> progress_pct{-1};
     std::atomic<long long> progress_ms{0};
     const auto progress_t0 = std::chrono::steady_clock::now();
@@ -1631,47 +1532,31 @@ protected:
       }
     };
 
-    auto flush_chunk = [&](std::vector<MSSpectrum>& buf)
-    {
-      if (buf.empty()) return;
-      prep_block(buf.size());
-      const SignedSize n = static_cast<SignedSize>(buf.size());
-#pragma omp parallel for schedule(dynamic, 16)
-      for (SignedSize j = 0; j < n; ++j)
-      {
-        const size_t tid = static_cast<size_t>(omp_get_thread_num());
-        record(static_cast<size_t>(j), tag_one(buf[j], tid), buf[j]);
-      }
-      write_block(buf.size());
-      buf.clear();
-    };
-
-    if (mzpeak_in)
-    {
+    // Reader threads for mzPeak, bounded by memory: every per-thread reader
+    // holds up to two decoded row groups plus Arrow's decode transients --
+    // measured ~3x the row group's byte size per reader (65-105 MB on a
+    // 22-35 MB group). A chunked Astral archive has ~580 MB groups; sixteen
+    // readers of those would be ~28 GB. Tagging runs in the same region, so a
+    // capped read caps tagging too; the cap only bites on such archives.
+    // ponytail: a fixed 4 GB budget; a -mzpeak_read_memory knob if a machine
+    // ever needs another.
+    int read_threads = std::max(1, omp_get_max_threads());
 #ifdef FASTAG_HAVE_MZPEAK_LIB
-      // 1 M peaks per chunk, ~16 MB of Peak1D, independent of how many spectra
-      // that turns out to be. Not a memory knob: varying it over a 16x range
-      // moved peak RSS under 10%, which is how we know the buffer is not the
-      // term that matters on either reader.
-      ChunkingConsumer consumer(flush_chunk, 1000u * 1000u,
-                                subsample_frac > 0.0 ? subsample_frac : 1.0, subsample_seed);
-      // Progress for the streaming path: the count arrives from the reader via
-      // setExpectedSize(), so the run reports "n spectra" until it does and a
-      // real percentage afterwards.
-      consumer.setProgressHooks(tick, [&progress_total](Size n) {
-        progress_total.store(static_cast<long long>(n));
-      });
-      FASTag::streamMzPeak(in, consumer);
-      consumer.finish();   // the final partial chunk, otherwise silently dropped
-      // Run-level settings for -out_spectra come from the consumer here; the
-      // mzML paths take them from getMetaData()/the loaded map above, neither
-      // of which ran. Without this the written file has no run-level metadata
-      // at all.
-      if (!out_spectra.empty()) kept.getExperimentalSettings() = consumer.settings();
-#endif
-    }
-    else
+    if (mzp && mzp->maxRowGroupBytes() > 0)
     {
+      constexpr size_t kReadBudget = size_t(4) << 30;
+      const size_t per_reader = 3 * mzp->maxRowGroupBytes();
+      const int cap = static_cast<int>(std::min<size_t>(std::max<size_t>(1, kReadBudget / per_reader), 1u << 20));
+      if (cap < read_threads)
+      {
+        OPENMS_LOG_WARN << "mzPeak: row groups decode to " << (mzp->maxRowGroupBytes() >> 20)
+                        << " MB each; reading with " << cap << " of " << read_threads
+                        << " threads to stay within 4 GB." << std::endl;
+        read_threads = cap;
+      }
+    }
+#endif
+
     // Serial over blocks, parallel within each: a block's rows hit the disk
     // before the next block starts.
     for (SignedSize base = 0; base < n_spec; base += static_cast<SignedSize>(BLOCK))
@@ -1679,29 +1564,63 @@ protected:
       const SignedSize lim = std::min(n_spec, base + static_cast<SignedSize>(BLOCK));
       block_base = static_cast<size_t>(base);
       prep_block(static_cast<size_t>(lim - base));
-#pragma omp parallel
+#pragma omp parallel num_threads(read_threads)
       {
-        // One reader per thread: OnDiscMSExperiment keeps an open stream and is
-        // documented as not thread-safe.
-        // Copy-constructed, not assigned: OnDiscMSExperiment's operator= is private.
+        // One reader per thread: both readers keep open streams and are
+        // documented as not thread-safe. Copy-constructed, not assigned:
+        // OnDiscMSExperiment's operator= is private.
         std::unique_ptr<OnDiscMSExperiment> reader;
         if (streaming) reader = std::make_unique<OnDiscMSExperiment>(*ondisc);
-
-#pragma omp for schedule(dynamic, 64)
-        for (SignedSize i = base; i < lim; ++i)
+#ifdef FASTAG_HAVE_MZPEAK_LIB
+        std::unique_ptr<FASTag::OnDiscMzPeakExperiment> mreader;
+        if (mzp) mreader = std::make_unique<FASTag::OnDiscMzPeakExperiment>(*mzp);
+#endif
+        const size_t tid = static_cast<size_t>(omp_get_thread_num());
+        auto work = [&](SignedSize i)
         {
-          if (!sample_mask.empty() && !sample_mask[static_cast<size_t>(i)]) { tick(); continue; }
-          const MSSpectrum loaded = streaming ? reader->getSpectrum(static_cast<Size>(i))
-                                              : MSSpectrum();
-          const MSSpectrum& spec = streaming ? loaded : exp[static_cast<Size>(i)];
-          const size_t tid = static_cast<size_t>(omp_get_thread_num());
+          if (!sample_mask.empty() && !sample_mask[static_cast<size_t>(i)]) { tick(); return; }
+          MSSpectrum loaded;
+#ifdef FASTAG_HAVE_MZPEAK_LIB
+          if (mreader) loaded = mreader->getSpectrum(static_cast<Size>(i));
+#endif
+          if (streaming) loaded = reader->getSpectrum(static_cast<Size>(i));
+          const MSSpectrum& spec = (mzpeak_in || streaming) ? loaded : exp[static_cast<Size>(i)];
           record(static_cast<size_t>(i - base), tag_one(spec, tid), spec);
           tick();
+        };
+        if (mzpeak_in)
+        {
+          // A CONTIGUOUS range per thread, not dynamic chunks: a row group
+          // holds thousands of spectra and each reader caches the two it last
+          // decoded, so threads striding through the same groups would each
+          // decode every group -- T times the work for the same result.
+          // Measured on the library alone: 2.9x at 8 threads this way, flat
+          // with striding.
+          const SignedSize nt = omp_get_num_threads(), t = omp_get_thread_num();
+          const SignedSize span = lim - base;
+          for (SignedSize i = base + span * t / nt; i < base + span * (t + 1) / nt; ++i) work(i);
+        }
+        else
+        {
+#pragma omp for schedule(dynamic, 64)
+          for (SignedSize i = base; i < lim; ++i) work(i);
         }
       }
       write_block(static_cast<size_t>(lim - base));
     }
+#ifdef FASTAG_HAVE_MZPEAK_LIB
+    // Once, at the end. Profile MS2 is a property of the archive the user
+    // cannot see and would otherwise only notice as an unexplained tag count.
+    if (mzp && mzp->nPicked() > picked_before_loop)
+    {
+      OPENMS_LOG_INFO << "mzPeak: centroided " << (mzp->nPicked() - picked_before_loop)
+                      << " profile spectra on read"
+                      << (mzp->nPickFailed() > 0
+                            ? " (" + String(mzp->nPickFailed()) + " kept as profile: picking yielded nothing)"
+                            : "")
+                      << std::endl;
     }
+#endif
 
     // Land the bar on 100%.
     //
@@ -2233,7 +2152,7 @@ protected:
       }
     }
 
-    if (stream_out)
+    if (want_out)
     {
       if (kept_idx.empty())
       {
@@ -2241,68 +2160,69 @@ protected:
                          << std::endl;
         return UNEXPECTED_RESULT;
       }
-      {
-        // Scoped: the destructor writes footer + index. The count is known
-        // exactly BEFORE the first consume (the header bakes it in at that
-        // point -- why per-block streaming was rejected). Per-spectrum
-        // sourceFile/dataProcessing references are cleared so the header,
-        // built from the run-level settings alone, can never dangle; the
-        // FILTERING processing step is declared for every spectrum instead.
-        PlainMSDataWritingConsumer consumer(out_spectra);
-        consumer.setExperimentalSettings(kept.getExperimentalSettings());
-        consumer.setExpectedSize(kept_idx.size(), 0);
-        consumer.addDataProcessing(getProcessingInfo_(DataProcessing::FILTERING));
-        for (const Size i : kept_idx)
-        {
-          MSSpectrum sp = streaming ? ondisc->getSpectrum(i) : exp[i];
-          sp.setSourceFile(SourceFile());
-          sp.setDataProcessing({});
-          consumer.consumeSpectrum(sp);
-        }
-      }
-      // The consumer never checks its stream; verify the artifact instead.
-      std::ifstream chk(out_spectra.c_str(), std::ios::ate | std::ios::binary);
-      bool ok = chk.good() && chk.tellg() > 0;
-      if (ok)
-      {
-        const auto sz = chk.tellg();
-        const std::streamoff back = std::min<std::streamoff>(sz, 256);
-        chk.seekg(-back, std::ios::end);
-        std::string tail(static_cast<size_t>(back), '\0');
-        chk.read(&tail[0], back);
-        ok = tail.find("</indexedmzML>") != std::string::npos;
-      }
-      if (!ok)
-      {
-        OPENMS_LOG_ERROR << "Failed writing " << out_spectra << " (truncated or unwritable)."
-                         << std::endl;
-        return CANNOT_WRITE_OUTPUT_FILE;
-      }
-      OPENMS_LOG_INFO << "Wrote " << kept_idx.size() << " spectra to " << out_spectra
-                      << " (two-pass, O(1) memory)" << std::endl;
-    }
-    else if (!out_spectra.empty())
-    {
-      if (kept.empty())
-      {
-        OPENMS_LOG_ERROR << "No spectrum carried a reported tag; not writing " << out_spectra
-                         << std::endl;
-        return UNEXPECTED_RESULT;
-      }
-      addDataProcessing_(kept, getProcessingInfo_(DataProcessing::FILTERING));
       if (mzpeak_out)
       {
 #ifdef FASTAG_HAVE_MZPEAK_LIB
+        // The library writer takes a whole run, so the kept spectra are
+        // re-read into memory here: O(kept), never O(run). Per-spectrum
+        // sourceFile/dataProcessing references are cleared as for mzML below,
+        // and the FILTERING step is declared for every spectrum instead.
+        for (const Size i : kept_idx)
+        {
+          MSSpectrum sp = read_spectrum(i);
+          sp.setSourceFile(SourceFile());
+          sp.setDataProcessing({});
+          kept.addSpectrum(std::move(sp));
+        }
+        addDataProcessing_(kept, getProcessingInfo_(DataProcessing::FILTERING));
         // Not routed through FileHandler: its storeExperiment() has no mzPeak
         // branch, so asking it for one silently writes something else.
         FASTag::writeMzPeak(out_spectra, kept);
+        OPENMS_LOG_INFO << "Wrote " << kept.size() << " spectra to " << out_spectra << std::endl;
 #endif
       }
       else
       {
-        FileHandler().storeExperiment(out_spectra, kept, {FileTypes::MZML});
+        {
+          // Scoped: the destructor writes footer + index. The count is known
+          // exactly BEFORE the first consume (the header bakes it in at that
+          // point -- why per-block streaming was rejected). Per-spectrum
+          // sourceFile/dataProcessing references are cleared so the header,
+          // built from the run-level settings alone, can never dangle; the
+          // FILTERING processing step is declared for every spectrum instead.
+          PlainMSDataWritingConsumer consumer(out_spectra);
+          consumer.setExperimentalSettings(kept.getExperimentalSettings());
+          consumer.setExpectedSize(kept_idx.size(), 0);
+          consumer.addDataProcessing(getProcessingInfo_(DataProcessing::FILTERING));
+          for (const Size i : kept_idx)
+          {
+            MSSpectrum sp = read_spectrum(i);
+            sp.setSourceFile(SourceFile());
+            sp.setDataProcessing({});
+            consumer.consumeSpectrum(sp);
+          }
+        }
+        // The consumer never checks its stream; verify the artifact instead.
+        std::ifstream chk(out_spectra.c_str(), std::ios::ate | std::ios::binary);
+        bool ok = chk.good() && chk.tellg() > 0;
+        if (ok)
+        {
+          const auto sz = chk.tellg();
+          const std::streamoff back = std::min<std::streamoff>(sz, 256);
+          chk.seekg(-back, std::ios::end);
+          std::string tail(static_cast<size_t>(back), '\0');
+          chk.read(&tail[0], back);
+          ok = tail.find("</indexedmzML>") != std::string::npos;
+        }
+        if (!ok)
+        {
+          OPENMS_LOG_ERROR << "Failed writing " << out_spectra << " (truncated or unwritable)."
+                           << std::endl;
+          return CANNOT_WRITE_OUTPUT_FILE;
+        }
+        OPENMS_LOG_INFO << "Wrote " << kept_idx.size() << " spectra to " << out_spectra
+                        << " (two-pass, O(1) memory)" << std::endl;
       }
-      OPENMS_LOG_INFO << "Wrote " << kept.size() << " spectra to " << out_spectra << std::endl;
     }
     // Completion, emitted once everything the run promised has actually been
     // written: tags, species report and -out_spectra. total is the LARGER of the
