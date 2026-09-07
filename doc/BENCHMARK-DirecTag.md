@@ -351,6 +351,56 @@ containers (mzML 19,498,430, mzPeak 19,498,431). That is the f32 intensity
 storage changing a single peak-ranking tie -- a 5e-8 relative difference, worth
 recording rather than worrying about.
 
+### Why mzML beat mzPeak -- and why that was never about reading
+
+mzPeak is 6.4x smaller and columnar, so its losing to mzML above 32 threads
+needed explaining. It turns out it does not lose at reading at all.
+
+![Where mzPeak's wall time goes](img/mzpeak-startup.png)
+
+Tagging a SINGLE spectrum isolates startup, because only one row group is
+touched. mzPeak needs 3.81 s at one thread and **12.58 s at 192**; mzML needs
+0.24 s and 0.36 s. Subtract that from the full runs and the picture inverts:
+
+| | mzPeak | mzML | |
+|---|---|---|---|
+| read + tag, 1 thread | **192.6 s** | 302.0 s | mzPeak 1.57x faster |
+| read + tag, 192 threads | **2.67 s** | 4.5 s | mzPeak 1.7x faster |
+
+The deficit is entirely a serial startup tax with two parts.
+
+**A fixed 3.76 s metadata map.** `index.spectra()` materialises descriptive
+metadata for all 762,016 spectra -- about 890 MB -- before a peak is read. It
+is already shared across every per-thread reader, so this is a one-off, but it
+is the same disease `IndexedMzMLReader` exists to cure for mzML: a serial
+metadata pre-pass before any tagging starts.
+
+**And 3.83 ms per reader, serialized, once per thread PER BLOCK.** Building a
+reader re-opens five Parquet members -- a `zip_open` over the archive's central
+directory plus a footer parse each, and the peaks footer alone describes 363
+row groups -- under a process-global mutex. The parallel region used to be
+entered once per block, so this was paid BLOCKS x THREADS times: 12 x 192 =
+2,304 constructions, **8.8 s of a 15.2 s run**, and it GREW with `-threads`.
+That is why mzPeak's wall time turned back upwards above 64 threads while
+mzML's kept falling -- startup was growing faster than the work was shrinking.
+
+Hoisting the parallel region out of the block loop makes it THREADS times
+instead. Measured on a 9.3 GB archive with the block size lowered to force
+many blocks, tagging one spectrum so all cost is startup:
+
+| threads | before | after | |
+|---|---|---|---|
+| 1 | 1.44 s | 1.34 s | 1.07x |
+| 32 | 3.36 s | 1.30 s | 2.58x |
+| 128 | 10.15 s | 2.14 s | 4.74x |
+| 192 | **14.59 s** | **2.65 s** | **5.51x** |
+
+Startup was growing 10x across that sweep; now it is nearly flat. What remains
+is the one construction per thread (fix: cache the parsed `FileMetaData` per
+member, since the footer is identical for every reader) and the 3.76 s
+metadata map (fix: build it lazily, the way the mzML reader scrapes MS level,
+retention time and precursor per spectrum in parallel).
+
 ### A stale index costs 12x
 
 The original 6.90 GB input carries an `indexListOffset`, but it had been
