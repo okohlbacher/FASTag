@@ -238,6 +238,118 @@ and this comparison ignores flanking masses, so it counts two spellings of the
 same correct read as a disagreement. Where it can be checked against truth --
 PXD000001, above -- the two reach the same 98.62% ceiling.
 
+## Native hardware, 224 threads: spock
+
+Everything above ran in an emulated `linux/amd64` container on Apple Silicon,
+which the report was careful to describe as a ratio between two tools rather
+than an absolute speed. This section removes that caveat: both tools run
+**natively on x86-64**, on one machine, on one file.
+
+**Machine.** `spock`, 2x AMD EPYC 9654, 56 cores per socket, 2 threads per
+core = 224 logical CPUs, 2,267 GB RAM, node-local NVMe ZFS. Load below
+0.1/core outside the runs. FASTag v1.2.1, the published linux-x64 release
+binary; DirecTag 1.4.21142 from the same biocontainer as above, run under
+apptainer. Both read from `/scratch`, and after the first pass the 9 GB input
+is entirely in page cache for both -- this measures the tools, not the disk.
+
+**File.** `pair.mzML`, 9.07 GB, 762,016 MS2 spectra, 379,815,617 peaks,
+indexed. It was produced by FASTag's own `-out_spectra` from a 6.90 GB
+diaTracer pseudo-spectrum run, so it is real acquisition data rather than a
+synthetic file. There are no identifications for it, so as in the section
+above **accuracy is not measurable here** -- these are throughput, memory and
+tag counts.
+
+### Head to head
+
+| threads / cpus | FASTag wall | DirecTag wall | speedup | FASTag RSS | DirecTag RSS | ratio |
+|---|---|---|---|---|---|---|
+| 8 | **36.2 s** | 198.3 s | 5.5x | **279 MB** | 17,929 MB | 64x |
+| 32 | **10.8 s** | 152.1 s | 14.1x | **270 MB** | 17,946 MB | 66x |
+| 64 | **6.6 s** | 145.1 s | 22.1x | **249 MB** | 17,894 MB | 72x |
+| 128 | **5.5 s** | 145.5 s | 26.5x | **270 MB** | 17,852 MB | 66x |
+| 192 | 6.0 s | 150.1 s | 25.2x | **212 MB** | 17,825 MB | 84x |
+
+Best against best: **5.48 s against 145.1 s, 26.5x**, at 66x less memory.
+
+Tags: FASTag 19,498,430 retained; DirecTag 17,305,496 retained of 42,510,472
+generated (+12.7% for FASTag). The same +2% direction as the Astral file, and
+the same cause: DirecTag drops thin spectra before tagging.
+
+### Where DirecTag's time goes
+
+Its own log at 192 cpus splits the run: **81.0 s reading**, 0.07 s charge
+determination, **10.3 s tagging**, and the remaining ~57 s writing the 1.34 GB
+tag file. Tagging -- the part that parallelises -- is 7% of the run. Adding
+cpus past 64 buys nothing and costs plenty: CPU seconds go 631 -> 1,957 while
+wall time gets 5 s *worse*, which is spin-wait against a serial reader.
+
+FASTag scales because its read is parallel: 302.2 s at 1 thread down to 5.5 s
+at 128, a **55x speedup**, and its memory stays flat at ~250 MB because it
+streams. DirecTag's 17.9 GB is roughly twice the file, held for the whole run
+whatever the thread count.
+
+### mzML against mzPeak
+
+The same 762,016 spectra were written to both containers to isolate the file
+format. **mzPeak is 6.4x smaller: 1.42 GB against 9.07 GB.**
+
+| threads | mzML wall | mzPeak wall | mzML RSS | mzPeak RSS |
+|---|---|---|---|---|
+| 1 | 302.2 s | **196.4 s** | 238 MB | 1,375 MB |
+| 8 | 36.2 s | **31.3 s** | 279 MB | 2,498 MB |
+| 32 | **10.8 s** | 14.7 s | 270 MB | 5,506 MB |
+| 64 | **6.6 s** | 13.3 s | 249 MB | 7,472 MB |
+| 128 | **5.5 s** | 14.2 s | 270 MB | 9,846 MB |
+| 192 | **6.0 s** | 15.3 s | 212 MB | 10,440 MB |
+
+Two findings, and they point in opposite directions.
+
+**mzPeak decodes more cheaply.** At one thread it needs 211 CPU-seconds where
+mzML needs 316 -- a third less work -- and it wins outright below about 16
+threads. Columnar Parquet with f32 intensities is simply less to parse than
+base64 zlib XML.
+
+**mzPeak stops scaling at 32 threads, and its memory grows with thread count.**
+It floors at ~13 s while mzML keeps going to 5.5 s, and RSS climbs from 1.4 GB
+to 10.4 GB across the sweep. The shared row-group cache has a 1 GiB budget, but
+that budget only covers *decoded, inserted* groups; with 192 threads each
+holding an in-flight group of its own, the in-flight set dominates and is not
+bounded by anything. This is a real defect, not a tuning question: **the mzPeak
+path's memory is O(threads), and above ~32 threads it is both slower and far
+heavier than mzML.** Until it is bounded, use mzPeak for its size and its
+low-thread efficiency, and mzML when you have many cores.
+
+Tag output differs by exactly **one tag in 19,498,431** between the two
+containers (mzML 19,498,430, mzPeak 19,498,431). That is the f32 intensity
+storage changing a single peak-ranking tie -- a 5e-8 relative difference, worth
+recording rather than worrying about.
+
+### A stale index costs 12x
+
+The original 6.90 GB input carries an `indexListOffset`, but it had been
+patched in place after conversion, which shifts every recorded byte offset.
+FASTag's index validation catches this and falls back to loading the whole file
+in memory, and says so:
+
+```
+'in/big.mzML' has no usable index; reading it entirely into memory.
+```
+
+The cost of that fallback, same tool, same protocol, same machine:
+
+| | stale index (fallback) | valid index (fast path) |
+|---|---|---|
+| wall, 32 threads | 67.9 s | **10.8 s** |
+| wall, 128 threads | 70.8 s | **5.5 s** |
+| peak RSS | 8,537 MB | **270 MB** |
+| scaling 1 -> 128 threads | 3.6x, floors at 32 | **55x** |
+
+The fallback path is serial where it matters, so it floors around 67 s and no
+thread count helps -- a run at 224 threads took 124 s and burned 18,583 CPU
+seconds to do it. **If a file has been rewritten or patched after conversion,
+re-run `FileConverter` to rebuild the index.** The guard is doing its job, but
+the price of tripping it is an order of magnitude.
+
 ## Summary
 
 **Where truth is available (PXD000001, 450 MB)** the two implementations agree:
@@ -252,9 +364,24 @@ holds the whole run in memory and reads it serially. On the largest file here,
 12.24 GB of timsTOF ddaPASEF, DirecTag cannot read the data at all, while
 FASTag tags it in 64 s using 297 MB.
 
+**On native hardware the gap widens with core count.** On a 224-thread EPYC
+machine, on a 9.07 GB / 762,016-spectrum file both tools read, FASTag is 5.5x
+faster at 8 threads and **26.5x faster best-against-best** (5.5 s against
+145.1 s), at **66x less memory** (270 MB against 17.9 GB). DirecTag spends 7%
+of that run tagging and the rest reading and writing serially, so it stops
+improving at 64 cpus; FASTag scales 55x from 1 to 128 threads.
+
 So the algorithm reproduces faithfully -- same coverage ceiling, same tag
 space -- and the difference between the two is one of engineering: streaming
 versus loading, parallel versus serial reading, and a decade of format support.
+
+Two caveats this report puts on its own numbers. FASTag's mzPeak reader is
+**O(threads) in memory** and stops scaling past 32 threads, so it is the wrong
+choice on a many-core machine despite being 6.4x smaller on disk and cheaper to
+decode at low thread counts. And an mzML whose index has gone stale -- any file
+rewritten or patched after conversion -- costs 12x in wall time and 30x in
+memory, because the reader correctly refuses the bad index and falls back to
+loading the run.
 
 ## Reproducing
 
