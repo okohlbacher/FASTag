@@ -154,14 +154,6 @@ at 8, 178 MB at 16.
 Neither tool is memory-hungry on a file of this size. The paper reports its
 timings from a machine with 1 GB of RAM and does not report memory at all.
 
-## Summary
-
-On matched parameters and the same spectra, FASTag and DirecTag agree closely:
-the same ceiling of valid-tag coverage (98.62% of identified spectra), tag
-counts within 1.3%, and comparable memory. FASTag ranks a correct tag first
-more often (90.9% vs 88.7%) and is 2.15x faster at 8 threads, the difference
-coming almost entirely from a parallel rather than serial spectrum read.
-
 ## Large files
 
 The PXD000001 run above is small (450 MB). Repeated on the two largest files
@@ -245,6 +237,24 @@ candidate tags of which 50 are kept, many scoring within noise of each other,
 and this comparison ignores flanking masses, so it counts two spellings of the
 same correct read as a disagreement. Where it can be checked against truth --
 PXD000001, above -- the two reach the same 98.62% ceiling.
+
+## Summary
+
+**Where truth is available (PXD000001, 450 MB)** the two implementations agree:
+the same ceiling of valid-tag coverage, 98.62% of identified spectra, and tag
+counts within 1.3%. FASTag ranks a correct tag first more often (90.9% vs
+88.7%) and is 2.15x faster at 8 threads. On a file this size memory is a wash,
+149 MB against 153 MB.
+
+**At scale the picture changes.** On 1.74 GB, FASTag is 6.25x faster at 8
+threads and uses 8.5x less memory (450 MB against 3.74 GB), because DirecTag
+holds the whole run in memory and reads it serially. On the largest file here,
+12.24 GB of timsTOF ddaPASEF, DirecTag cannot read the data at all, while
+FASTag tags it in 64 s using 297 MB.
+
+So the algorithm reproduces faithfully -- same coverage ceiling, same tag
+space -- and the difference between the two is one of engineering: streaming
+versus loading, parallel versus serial reading, and a decade of format support.
 
 ## Reproducing
 
