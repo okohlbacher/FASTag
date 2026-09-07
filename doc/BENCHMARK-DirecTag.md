@@ -162,6 +162,90 @@ counts within 1.3%, and comparable memory. FASTag ranks a correct tag first
 more often (90.9% vs 88.7%) and is 2.15x faster at 8 threads, the difference
 coming almost entirely from a parallel rather than serial spectrum read.
 
+## Large files
+
+The PXD000001 run above is small (450 MB). Repeated on the two largest files
+available here, both tools in the same emulated `linux/amd64` container, same
+protocol. Neither file has identifications, so **accuracy is not measurable on
+them** -- these numbers are throughput, memory and tag counts only.
+
+### The largest file, 12.24 GB: DirecTag cannot read it
+
+`bench_hela_ddapasef.mzML`, timsTOF ddaPASEF, 357,802 MS2 spectra.
+
+| | result |
+|---|---|
+| DirecTag 1.4, 8 cpus | **fails after 182.5 s**, 2.06 GB peak: `[BinaryDataEncoder::decode()] Compression error?` |
+| FASTag, 8 threads | **64.1 s**, 297 MB peak, 4,712,780 tags |
+
+The file's binary arrays are ordinary 64-bit zlib, but each spectrum carries a
+third array -- `mean inverse reduced ion mobility array` -- that the 2012
+ProteoWizard inside DirecTag predates and mis-decodes. This is not a
+configuration problem: the reference implementation simply cannot read
+contemporary ion-mobility data.
+
+### The largest file both tools can read, 1.74 GB
+
+`bench_astral_lf.mzML`, Orbitrap Astral, 102,236 spectra / 100,245 MS2.
+
+DirecTag refuses this one too, on `Invalid cvParam accession`, for three CV
+terms minted after 2012: `MS:1003378` (Orbitrap Astral), `MS:1003379`
+(asymmetric track lossless time-of-flight analyzer) and `MS:1003145`
+(ThermoRawFileParser). All three are header-level descriptions of the
+instrument and converter, each appearing exactly once, and none is spectrum
+data. For the comparison they were replaced with same-length older accessions
+of the same meaning (`MS:1000483` Thermo instrument model, `MS:1000084`
+time-of-flight, `MS:1000799` custom software). The file is byte-for-byte the
+same length, so every offset in its mzML index still resolves, and **both tools
+read that identical file**. The paper did the same kind of thing, converting
+every input through LibMSR before use.
+
+| | FASTag | DirecTag | ratio |
+|---|---|---|---|
+| wall, 1 thread | **125.1 s** | 251.6 s | 2.01x |
+| wall, 8 threads | **29.1 s** | 182.0 s | **6.25x** |
+| peak RSS, 1 thread | **400 MB** | 3.74 GB | 9.6x |
+| peak RSS, 8 threads | **450 MB** | 3.74 GB | 8.5x |
+| tags retained | 2,740,209 | 2,686,937 (of 6,104,376 generated) | +2.0% |
+| spectra yielding a tag | 92,259 | 92,261 | |
+
+Two things drive the gap, and both are architectural rather than incidental.
+
+**Memory.** DirecTag reads the entire run into memory before tagging -- 100,438
+spectra and 124,155,593 peaks -- and sits at 3.74 GB regardless of thread count.
+FASTag streams spectra and holds 400-450 MB, so its footprint tracks the
+threads, not the file. On the 12.24 GB file FASTag used 297 MB.
+
+**Scaling.** DirecTag's own log splits its time: at 1 cpu, 47.6 s reading and
+163.3 s tagging; at 8 cpus, 96.7 s reading and 44.9 s tagging. Its tagging
+parallelises well (3.6x), but its read is serial and actually got *slower*
+under thread contention, so the file as a whole improves only 1.38x. FASTag
+improves 4.30x over the same range because its read is parallel too.
+
+DirecTag also trims spectra with fewer than 10 peaks before tagging (1,812
+here); FASTag does not, which accounts for part of the tag-count difference.
+
+### Do they agree?
+
+Without identifications, the honest question on these files is not "who is
+right" but "do they do the same thing". On the Astral file, comparing tag
+strings per spectrum:
+
+| | |
+|---|---|
+| spectra tagged by both | 92,259 (FASTag-only 0, DirecTag-only 2) |
+| identical top-ranked tag | 41.2% |
+| FASTag's top tag somewhere in DirecTag's 50 | 57.7% |
+| DirecTag's top tag somewhere in FASTag's 50 | 57.6% |
+| tag-string overlap (Jaccard) | 42.2% |
+
+They tag the same spectra almost exactly, and rank differently within them.
+That is expected rather than alarming: each spectrum generates around 62
+candidate tags of which 50 are kept, many scoring within noise of each other,
+and this comparison ignores flanking masses, so it counts two spellings of the
+same correct read as a disagreement. Where it can be checked against truth --
+PXD000001, above -- the two reach the same 98.62% ceiling.
+
 ## Reproducing
 
 The input is `TMT_Erwinia_1uLSike_Top10HCD_isol2_45stepped_60min_01-20141210.mzML`
