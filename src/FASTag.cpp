@@ -58,6 +58,15 @@
 
 #include <atomic>
 #include <chrono>
+
+namespace
+{
+  /// Program start, for FASTAG_TIMING. Static init runs before main, so the
+  /// pre-loop phases (opening the archive, building its metadata map, the
+  /// tolerance probe) are attributable rather than lumped into "the rest".
+  const std::chrono::steady_clock::time_point g_t_program = std::chrono::steady_clock::now();
+  double g_t_open = 0; ///< seconds spent constructing the input reader
+}
 #include <cstdlib>
 #include <cstring>
 #include <set>
@@ -976,7 +985,11 @@ protected:
     {
       try
       {
-        mzp = std::make_unique<FASTag::OnDiscMzPeakExperiment>(in);
+        {
+          const auto a = std::chrono::steady_clock::now();
+          mzp = std::make_unique<FASTag::OnDiscMzPeakExperiment>(in);
+          g_t_open = std::chrono::duration<double>(std::chrono::steady_clock::now() - a).count();
+        }
       }
       catch (const Exception::BaseException& e)
       {
@@ -1630,6 +1643,17 @@ protected:
     }
 #endif
 
+    // FASTAG_TIMING=1 breaks the run into phases on stderr. Diagnostic only:
+    // wall time that no phase claims is the thing worth chasing, and guessing
+    // at that split has been wrong twice already in this file's history.
+    // ponytail: steady_clock and four doubles, not a profiler dependency.
+    const bool timing = std::getenv("FASTAG_TIMING") != nullptr;
+    using Clock = std::chrono::steady_clock;
+    const auto t_loop_start = Clock::now();
+    double t_readers = 0, t_prep = 0, t_parallel = 0, t_write = 0;
+    auto secs = [](Clock::time_point a, Clock::time_point b)
+    { return std::chrono::duration<double>(b - a).count(); };
+
     // The READERS are built once per thread, before the loop; the parallel
     // region still opens and closes per block.
     //
@@ -1653,6 +1677,7 @@ protected:
 #ifdef FASTAG_HAVE_MZPEAK_LIB
     std::vector<std::unique_ptr<FASTag::OnDiscMzPeakExperiment>> mreaders(read_threads);
 #endif
+    const auto t_readers_a = Clock::now();
     for (int t = 0; t < read_threads; ++t)
     {
       // Copy-constructed, not assigned: OnDiscMSExperiment's operator= is
@@ -1664,6 +1689,7 @@ protected:
       if (mzp) mreaders[t] = std::make_unique<FASTag::OnDiscMzPeakExperiment>(*mzp);
 #endif
     }
+    t_readers = secs(t_readers_a, Clock::now());
 
     // Serial over blocks, parallel within each: a block's rows hit the disk
     // before the next block starts.
@@ -1671,7 +1697,10 @@ protected:
     {
       const SignedSize lim = std::min(n_spec, base + static_cast<SignedSize>(BLOCK));
       block_base = static_cast<size_t>(base);
+      const auto t_prep_a = Clock::now();
       prep_block(static_cast<size_t>(lim - base));
+      const auto t_par_a = Clock::now();
+      t_prep += secs(t_prep_a, t_par_a);
 #pragma omp parallel num_threads(read_threads)
       {
         const size_t tid = static_cast<size_t>(omp_get_thread_num());
@@ -1712,7 +1741,23 @@ protected:
 #pragma omp for schedule(guided, kMinChunk)
         for (SignedSize i = base; i < lim; ++i) work(i);
       }
+      const auto t_write_a = Clock::now();
+      t_parallel += secs(t_par_a, t_write_a);
       write_block(static_cast<size_t>(lim - base));
+      t_write += secs(t_write_a, Clock::now());
+    }
+    if (timing)
+    {
+      const double total = secs(t_loop_start, Clock::now());
+      std::cerr << "FASTAG_TIMING open=" << g_t_open
+                << " pre_loop=" << secs(g_t_program, t_loop_start)
+                << " readers=" << t_readers << " prep=" << t_prep
+                << " parallel=" << t_parallel << " write=" << t_write
+                << " loop_total=" << total
+                << " unaccounted_in_loop="
+                << (total - t_readers - t_prep - t_parallel - t_write)
+                << " since_program_start=" << secs(g_t_program, Clock::now())
+                << std::endl;
     }
 #ifdef FASTAG_HAVE_MZPEAK_LIB
     // Once, at the end. Profile MS2 is a property of the archive the user
