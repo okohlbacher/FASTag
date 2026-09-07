@@ -1756,8 +1756,24 @@ protected:
                 << " loop_total=" << total
                 << " unaccounted_in_loop="
                 << (total - t_readers - t_prep - t_parallel - t_write)
-                << " since_program_start=" << secs(g_t_program, Clock::now())
-                << std::endl;
+                << " since_program_start=" << secs(g_t_program, Clock::now());
+#ifdef FASTAG_HAVE_MZPEAK_LIB
+      if (mzp)
+      {
+        long evals = 0, batches = 0, slices = 0;
+        mzp->readCounters(evals, batches, slices);
+        std::cerr << " cache_calls=" << mzp->cacheCalls()
+                  << " plan_group_evals=" << evals
+                  << " batches_visited=" << batches
+                  << " slices_made=" << slices;
+        long pruned = 0, fscan = 0, pidx = 0, pinull = 0, nranges = 0, rrows = 0;
+        mzp->planCounters(pruned, fscan, pidx, pinull, nranges, rrows);
+        std::cerr << " plan_pruned=" << pruned << " plan_full_scan=" << fscan
+                  << " plan_page_index=" << pidx << " plan_pi_null=" << pinull
+                  << " plan_ranges=" << nranges << " plan_range_rows=" << rrows;
+      }
+#endif
+      std::cerr << std::endl;
     }
 #ifdef FASTAG_HAVE_MZPEAK_LIB
     // Once, at the end. Profile MS2 is a property of the archive the user

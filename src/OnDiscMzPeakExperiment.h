@@ -101,6 +101,18 @@ namespace FASTag
     /// Row groups decoded so far across every reader of this archive: with
     /// the shared cache that is each group once, whatever the thread count.
     std::size_t rowGroupsDecoded() const;
+    /// Calls that REACHED the archive-wide cache (decodes + hits + waits).
+    /// Diagnostic: with a per-reader memo in front of it this should be far
+    /// below one per spectrum, and if it is not, the memo is not working.
+    std::size_t cacheCalls() const;
+    /// Row groups examined while planning, record batches walked, and slices
+    /// made -- the per-spectrum read work the group cache does not remove.
+    void readCounters(long& plan_group_evals, long& batches, long& slices) const;
+    /// How the planner decided each row group, and how wide the ranges it
+    /// produced were: pruned by statistics, narrowed by the page index, or
+    /// fallen back to a whole-group scan.
+    void planCounters(long& pruned, long& full_scan, long& page_index, long& pi_null,
+                      long& ranges, long& range_rows) const;
 
     /// Profile MS2 centroided so far, across every copy of this reader.
     std::size_t nPicked() const;

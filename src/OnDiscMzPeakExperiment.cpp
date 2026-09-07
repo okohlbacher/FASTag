@@ -288,6 +288,33 @@ namespace FASTag
   {
     impl_->shared->index.manager()->row_group_cache().set_budget(bytes);
   }
+  std::size_t OnDiscMzPeakExperiment::cacheCalls() const
+  {
+    const auto s = impl_->shared->index.manager()->row_group_cache().stats();
+    return s.decodes + s.hits + s.waits;
+  }
+
+  void OnDiscMzPeakExperiment::readCounters(long& plan_group_evals, long& batches,
+                                            long& slices) const
+  {
+    const auto c = MzPeak::Util::read_counters();
+    plan_group_evals = c.plan_group_evals;
+    batches = c.batches_visited;
+    slices = c.slices_made;
+  }
+
+  void OnDiscMzPeakExperiment::planCounters(long& pruned, long& full_scan, long& page_index,
+                                            long& pi_null, long& ranges, long& range_rows) const
+  {
+    const auto c = MzPeak::Util::read_counters();
+    pruned = c.plan_pruned;
+    full_scan = c.plan_full_scan;
+    page_index = c.plan_page_index;
+    pi_null = c.plan_pi_null;
+    ranges = c.plan_ranges;
+    range_rows = c.plan_range_rows;
+  }
+
   std::size_t OnDiscMzPeakExperiment::rowGroupsDecoded() const
   {
     return impl_->shared->index.manager()->row_group_cache().stats().decodes;
