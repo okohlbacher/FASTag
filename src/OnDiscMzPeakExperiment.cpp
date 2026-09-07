@@ -152,8 +152,13 @@ namespace FASTag
         const auto kind = file.data_kind().type();
         if (kind != DataArray && kind != Peaks) continue;
         const auto fmd = manager->parquet(file)->file_metadata();
+        // DECODED, not total_byte_size: the cache's budget is denominated in
+        // decoded bytes, and a caller sizing that budget in row groups with
+        // the encoded figure is out by whatever the encoding won -- 4.4x on a
+        // signal table whose spectrum index is sorted and RLE'd.
         for (int g = 0; g < fmd->num_row_groups(); ++g)
-          best = std::max(best, static_cast<std::size_t>(fmd->RowGroup(g)->total_byte_size()));
+          best = std::max(best, MzPeak::Util::decoded_row_group_bytes(*fmd->RowGroup(g),
+                                                                     *fmd->schema()));
       }
       return best;
     }

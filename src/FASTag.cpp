@@ -1598,22 +1598,27 @@ protected:
     // sized to the ARCHIVE, tagging gets every core, and reading self-limits
     // to as many concurrent decodes as the budget allows.
     //
-    // The budget still follows the thread count, but for the RIGHT reason. It
-    // used to, because in-flight groups were unevictable and each reader
-    // pinned its own -- so memory grew whether or not it bought anything.
-    // Admission control removes that; what remains is a genuine working-set
-    // effect: N threads walk N regions of the archive at once, so N times as
-    // many groups must stay resident or a group is evicted before the next
-    // thread reaches it and is decoded twice.
+    // A FIXED number of resident row groups, NOT one that scales with -threads.
+    // The budget used to scale because in-flight groups were unevictable and
+    // each reader pinned its own, so memory grew whether or not it bought
+    // anything. Admission control removed that, and a sweep on a 363-group
+    // archive then showed the optimum is thread-INDEPENDENT -- 1 GB won at
+    // both thread counts (wall time, 9.07 GB / 762,016 spectra):
     //
-    // Eight groups per thread, floor 32, ceiling 512, and set by measurement.
-    // On a 2,375-group archive at 16 threads (128 groups, 1.1 GB): 2,445
-    // decodes, one per group plus 3%. Half that budget cost 60% extra decodes,
-    // a quarter of it cost 271%; four times it wasted 3.3 GB to save 4
-    // decodes. See doc/BENCHMARK-DirecTag.md.
+    //    64 threads:  256 MB 17.7 s | 512 MB 10.7 s | 1 GB 10.9 s | 4 GB 11.6 s
+    //   192 threads:  256 MB 14.4 s | 512 MB 12.9 s | 1 GB 12.7 s | 4 GB 13.3 s
+    //
+    // Too small thrashes -- 256 MB cost 2,653 decodes over 363 groups -- and
+    // too large just holds memory: 4 GB was slower than 1 GB at both counts.
+    // 64 groups lands on that optimum for this archive's 20 MB groups and
+    // beats v1.2.1 on wall AND memory at 192 threads (12.7 s / 8.1 GB against
+    // 13.9 s / 8.7 GB). -mzpeak_read_memory overrides it.
+    //
+    // Sized in DECODED bytes, which is what maxRowGroupBytes() now reports and
+    // what the cache charges. The two were briefly in different units, and the
+    // budget then silently meant 4.4x what it said.
     const int read_threads = std::max(1, omp_get_max_threads());
-    const size_t kResidentGroups =
-        std::clamp<size_t>(8 * static_cast<size_t>(read_threads), 32, 512);
+    constexpr size_t kResidentGroups = 64;
 #ifdef FASTAG_HAVE_MZPEAK_LIB
     if (mzp && mzp->maxRowGroupBytes() > 0)
     {
@@ -1625,96 +1630,89 @@ protected:
     }
 #endif
 
-    // ONE parallel region for the whole run, not one per block.
+    // The READERS are built once per thread, before the loop; the parallel
+    // region still opens and closes per block.
     //
-    // The readers are built at the top of a region, and building an mzPeak
-    // reader is both expensive and SERIALIZED: index.spectra() re-opens five
-    // Parquet members -- a zip_open over the archive's central directory plus
-    // a footer parse each, and the peaks footer alone describes 363 row groups
-    // -- under a process-global mutex. Measured at 3.83 ms.
+    // Building an mzPeak reader costs 3.83 ms and is SERIALIZED: index.spectra()
+    // re-opens five Parquet members -- a zip_open over the archive's central
+    // directory plus a footer parse each, and the peaks footer alone describes
+    // 363 row groups -- under a process-global mutex. Building them inside the
+    // region paid that BLOCKS x THREADS times: 12 x 192 = 2,304 constructions,
+    // 12.7 s of a 16 s run, GROWING with -threads, which is why mzPeak got
+    // slower above 64 threads while mzML kept scaling. Measured on the
+    // benchmark archive at 192 threads: 12.69 s of startup -> 4.91 s.
     //
-    // Entering the region per block paid that BLOCKS x THREADS times: 12 x 192
-    // = 2,304 constructions, 8.8 s of serial startup on a 15.2 s run, and it
-    // GREW with -threads, which is why mzPeak got slower above 64 threads
-    // while mzML kept scaling. Hoisting makes it THREADS times, once.
-    //
-    // The block structure is unchanged -- prep_block before a block, write_block
-    // after it, each on a single thread -- because `single` and `for` already
-    // carry the barriers that used to come from opening and closing the region.
-#pragma omp parallel num_threads(read_threads)
+    // Hoisting the REGION as well was tried and reverted. It removed the same
+    // constructions, but left 191 threads spinning on the barriers around the
+    // serial write_block instead of parked outside a closed region: +344 CPU
+    // seconds at 192 threads, and the spinners stole enough bandwidth from the
+    // writing thread to eat the entire startup saving (16.01 s -> 15.22 s).
+    // Threads must not be inside a region while one of them writes a block.
+    std::vector<std::unique_ptr<OnDiscMSExperiment>> readers(read_threads);
+    std::vector<std::unique_ptr<FASTag::IndexedMzMLReader>> freaders(read_threads);
+#ifdef FASTAG_HAVE_MZPEAK_LIB
+    std::vector<std::unique_ptr<FASTag::OnDiscMzPeakExperiment>> mreaders(read_threads);
+#endif
+    for (int t = 0; t < read_threads; ++t)
     {
-      // One reader per thread: both readers keep open streams and are
-      // documented as not thread-safe. Copy-constructed, not assigned:
-      // OnDiscMSExperiment's operator= is private.
-      std::unique_ptr<OnDiscMSExperiment> reader;
-      if (streaming) reader = std::make_unique<OnDiscMSExperiment>(*ondisc);
-      std::unique_ptr<FASTag::IndexedMzMLReader> freader;
-      if (fastmz) freader = std::make_unique<FASTag::IndexedMzMLReader>(*fastmz);
+      // Copy-constructed, not assigned: OnDiscMSExperiment's operator= is
+      // private. Each copy keeps its own open streams and is used by one
+      // thread only, which is what both readers document as required.
+      if (streaming) readers[t] = std::make_unique<OnDiscMSExperiment>(*ondisc);
+      if (fastmz) freaders[t] = std::make_unique<FASTag::IndexedMzMLReader>(*fastmz);
 #ifdef FASTAG_HAVE_MZPEAK_LIB
-      std::unique_ptr<FASTag::OnDiscMzPeakExperiment> mreader;
-      if (mzp) mreader = std::make_unique<FASTag::OnDiscMzPeakExperiment>(*mzp);
+      if (mzp) mreaders[t] = std::make_unique<FASTag::OnDiscMzPeakExperiment>(*mzp);
 #endif
-      const size_t tid = static_cast<size_t>(omp_get_thread_num());
+    }
 
-      // Private to each thread and identical in each: the worksharing `for`
-      // below needs bounds every thread agrees on.
-      SignedSize base = 0;
-      SignedSize lim = 0;
-
-      auto work = [&](SignedSize i)
+    // Serial over blocks, parallel within each: a block's rows hit the disk
+    // before the next block starts.
+    for (SignedSize base = 0; base < n_spec; base += static_cast<SignedSize>(BLOCK))
+    {
+      const SignedSize lim = std::min(n_spec, base + static_cast<SignedSize>(BLOCK));
+      block_base = static_cast<size_t>(base);
+      prep_block(static_cast<size_t>(lim - base));
+#pragma omp parallel num_threads(read_threads)
       {
-        if (!sample_mask.empty() && !sample_mask[static_cast<size_t>(i)]) { tick(); return; }
-        MSSpectrum loaded;
-        bool loaded_here = false;
+        const size_t tid = static_cast<size_t>(omp_get_thread_num());
+        OnDiscMSExperiment* reader = readers[tid].get();
+        FASTag::IndexedMzMLReader* freader = freaders[tid].get();
 #ifdef FASTAG_HAVE_MZPEAK_LIB
-        if (mreader) { loaded = mreader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
+        FASTag::OnDiscMzPeakExperiment* mreader = mreaders[tid].get();
 #endif
-        if (!loaded_here && freader) { loaded = freader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
-        if (!loaded_here && streaming) { loaded = reader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
-        const MSSpectrum& spec = loaded_here ? loaded : exp[static_cast<Size>(i)];
-        record(static_cast<size_t>(i - base), tag_one(spec, tid), spec);
-        tick();
-      };
-
-      // One schedule for both formats: dynamic, in chunks.
-      //
-      // mzPeak used to take a CONTIGUOUS range per thread, because each
-      // reader then cached its own two row groups and threads striding
-      // through the same groups each decoded them. The cache is shared per
-      // archive now (one decode per group whatever the thread count), so
-      // that reason is gone -- and a static split is the wrong shape: it
-      // hands every thread the same COUNT of spectra, which cost different
-      // amounts, so the fast threads sat in the join barrier (measured: 24%
-      // of all samples blocked). Dynamic chunks let a thread that finishes
-      // early take more.
-      //
-      // GUIDED, not a fixed chunk: it hands out large pieces first and
-      // small ones at the end, which is exactly the shape wanted here.
-      // Large early chunks keep each thread inside one row group, so the
-      // shared decode cache holds few groups at once; the shrinking tail is
-      // what stops the fast threads waiting in the join barrier. A fixed
-      // 256-spectrum chunk balanced the tail but fragmented the start, and
-      // cost 17% on a small profile archive.
-      constexpr SignedSize kMinChunk = 64;
-
-      for (base = 0; base < n_spec; base += static_cast<SignedSize>(BLOCK))
-      {
-        lim = std::min(n_spec, base + static_cast<SignedSize>(BLOCK));
-        // Sizing the buffers must finish before any thread writes into them;
-        // the barrier that ends `single` is what guarantees it.
-#pragma omp single
+        auto work = [&](SignedSize i)
         {
-          block_base = static_cast<size_t>(base);
-          prep_block(static_cast<size_t>(lim - base));
-        }
+          if (!sample_mask.empty() && !sample_mask[static_cast<size_t>(i)]) { tick(); return; }
+          MSSpectrum loaded;
+          bool loaded_here = false;
+#ifdef FASTAG_HAVE_MZPEAK_LIB
+          if (mreader) { loaded = mreader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
+#endif
+          if (!loaded_here && freader) { loaded = freader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
+          if (!loaded_here && reader) { loaded = reader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
+          const MSSpectrum& spec = loaded_here ? loaded : exp[static_cast<Size>(i)];
+          record(static_cast<size_t>(i - base), tag_one(spec, tid), spec);
+          tick();
+        };
+        // One schedule for both formats: dynamic, in chunks.
+        //
+        // A static split is the wrong shape: it hands every thread the same
+        // COUNT of spectra, which cost different amounts, so the fast threads
+        // sat in the join barrier (measured: 24% of all samples blocked).
+        // Dynamic chunks let a thread that finishes early take more.
+        //
+        // GUIDED, not a fixed chunk: it hands out large pieces first and
+        // small ones at the end, which is exactly the shape wanted here.
+        // Large early chunks keep each thread inside one row group, so the
+        // shared decode cache holds few groups at once; the shrinking tail is
+        // what stops the fast threads waiting in the join barrier. A fixed
+        // 256-spectrum chunk balanced the tail but fragmented the start, and
+        // cost 17% on a small profile archive.
+        constexpr SignedSize kMinChunk = 64;
 #pragma omp for schedule(guided, kMinChunk)
         for (SignedSize i = base; i < lim; ++i) work(i);
-        // The barrier ending the `for` is what makes the block complete here,
-        // so the write sees every row. Any thread may do it: write_block
-        // touches only shared state.
-#pragma omp single
-        write_block(static_cast<size_t>(lim - base));
       }
+      write_block(static_cast<size_t>(lim - base));
     }
 #ifdef FASTAG_HAVE_MZPEAK_LIB
     // Once, at the end. Profile MS2 is a property of the archive the user

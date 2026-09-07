@@ -384,22 +384,45 @@ entered once per block, so this was paid BLOCKS x THREADS times: 12 x 192 =
 That is why mzPeak's wall time turned back upwards above 64 threads while
 mzML's kept falling -- startup was growing faster than the work was shrinking.
 
-Hoisting the parallel region out of the block loop makes it THREADS times
-instead. Measured on a 9.3 GB archive with the block size lowered to force
-many blocks, tagging one spectrum so all cost is startup:
+Building the readers once per thread, before the block loop, makes it THREADS
+times. Measured on the benchmark archive at 192 threads, tagging one spectrum
+so that all cost is startup: **12.70 s -> 4.49 s, 2.83x**, and startup is now
+nearly flat in the thread count where it used to grow 3.2x.
 
-| threads | before | after | |
-|---|---|---|---|
-| 1 | 1.44 s | 1.34 s | 1.07x |
-| 32 | 3.36 s | 1.30 s | 2.58x |
-| 128 | 10.15 s | 2.14 s | 4.74x |
-| 192 | **14.59 s** | **2.65 s** | **5.51x** |
+Hoisting the whole parallel REGION was tried and reverted: it removed the same
+constructions but left 191 threads spinning on the barriers around the serial
+per-block write instead of parked outside a closed region, costing 344 CPU
+seconds at 192 threads and eating the saving.
 
-Startup was growing 10x across that sweep; now it is nearly flat. What remains
-is the one construction per thread (fix: cache the parsed `FileMetaData` per
-member, since the footer is identical for every reader) and the 3.76 s
-metadata map (fix: build it lazily, the way the mzML reader scrapes MS level,
-retention time and precursor per spectrum in parallel).
+### What that is worth end to end
+
+A separate defect turned out to matter more. The cache budget was
+`read_threads x 2 x max_row_group_bytes` **in encoded bytes**, so at LOW thread
+counts it was tiny -- 78 MB at 8 threads, about four groups of a 363-group
+archive -- and the run thrashed. A fixed budget of 64 decoded groups fixes it.
+
+Interleaved against v1.2.1, warm cache, two repetitions each, tags
+byte-identical at every point:
+
+| threads | v1.2.1 | this build | | v1.2.1 RSS | this build RSS |
+|---|---|---|---|---|---|
+| 8 | 95.6 s | **31.6 s** | **3.0x** | 2.0 GB | 4.7 GB |
+| 32 | 22.4 s | **14.2 s** | 1.6x | 4.9 GB | 5.4 GB |
+| 64 | 12.9 s | **12.5 s** | 1.03x | 4.8 GB | 6.1 GB |
+| 128 | 14.1 s | **13.3 s** | 1.06x | 7.1 GB | 7.3 GB |
+| 192 | 15.7 s | **14.3 s** | 1.09x | 8.6 GB | **8.2 GB** |
+
+The 8-thread gap is the thrash: v1.2.1 decodes **4,208 row groups** over an
+archive that has 363; this build decodes 369, one per group. The cost is
+memory at low thread counts, where the old budget was too small to be
+correct rather than frugal.
+
+Two honest caveats. The 8-thread figure disagrees with an earlier sweep on
+this same file and binary, which recorded 31.3 s; the decode counts above
+explain the slow number mechanically, but not why the earlier run was fast.
+And CPU seconds rise at high thread counts (473 -> 812 at 192) without a wall
+penalty: threads now start together and spin at the block barrier instead of
+arriving staggered from their own construction.
 
 ### A stale index costs 12x
 
