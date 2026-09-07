@@ -271,6 +271,8 @@ tag counts.
 
 Best against best: **5.48 s against 145.1 s, 26.5x**, at 66x less memory.
 
+![Wall time, memory, scaling and DirecTag's time split](img/bench-spock.png)
+
 Tags: FASTag 19,498,430 retained; DirecTag 17,305,496 retained of 42,510,472
 generated (+12.7% for FASTag). The same +2% direction as the Astral file, and
 the same cause: DirecTag drops thin spectra before tagging.
@@ -311,13 +313,38 @@ base64 zlib XML.
 
 **mzPeak stops scaling at 32 threads, and its memory grows with thread count.**
 It floors at ~13 s while mzML keeps going to 5.5 s, and RSS climbs from 1.4 GB
-to 10.4 GB across the sweep. The shared row-group cache has a 1 GiB budget, but
-that budget only covers *decoded, inserted* groups; with 192 threads each
-holding an in-flight group of its own, the in-flight set dominates and is not
-bounded by anything. This is a real defect, not a tuning question: **the mzPeak
-path's memory is O(threads), and above ~32 threads it is both slower and far
-heavier than mzML.** Until it is bounded, use mzPeak for its size and its
-low-thread efficiency, and mzML when you have many cores.
+to 10.4 GB across the sweep. That growth is not a leak and not the allocator --
+capping glibc arenas (`MALLOC_ARENA_MAX=2`) recovers only 9-22% of it and costs
+6x in wall time, so the memory is live data. It has two causes, both in
+`FASTag.cpp`'s sizing of the shared row-group cache.
+
+![Why the mzPeak path scales in memory](img/mzpeak-memory.png)
+
+**The budget counts the wrong bytes.** The cache is charged Parquet's
+`total_byte_size` for a row group. For this archive that averages 4.5 MB. But
+the group holds 1,046,324 rows of `spectrum_index INT64 + mz DOUBLE +
+intensity FLOAT`, and decoded into an Arrow `RecordBatch` that is
+8 + 8 + 4 = 20 bytes per row, or **20.0 MB -- 4.4x what the budget was told**.
+Parquet's figure is the uncompressed *encoded* size, and `spectrum_index` is
+sorted and hugely repetitive, so RLE crushes it on disk and Arrow expands it
+straight back out.
+
+**And the budget itself scales with the thread count.** The sizing is
+`min(4 GB, read_threads x 2 x max_row_group_bytes)`, so at 192 threads it
+permits 1.88 GB *as accounted* -- which is 8.3 GB in fact, and more than the
+1.63 GB the whole file accounts for, so the cache is entitled to hold every one
+of the 363 groups decoded at once. Adding the 1.4 GB the stored Parquet member
+itself occupies gives ~9.8 GB against 10.4 GB measured; the same model tracks
+every point of the sweep (panel B).
+
+A third effect sets a floor even if both were fixed: `evict_locked_` skips
+entries that are still decoding, so T concurrent readers pin T groups that
+eviction cannot touch (`// everything left is in use; overshoot`).
+
+So: **the mzPeak path's memory is O(threads) by construction, and above ~32
+threads it is both slower and far heavier than mzML.** Until that is fixed, use
+mzPeak for its size and its low-thread efficiency, and mzML when you have many
+cores.
 
 Tag output differs by exactly **one tag in 19,498,431** between the two
 containers (mzML 19,498,430, mzPeak 19,498,431). That is the f32 intensity
