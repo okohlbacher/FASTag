@@ -225,12 +225,11 @@ namespace FASTag
   struct Shared
   {
     Shared(const std::string& path, std::size_t cache_budget)
-      : index(MzPeak::open(path)), budget(cache_budget)
+      : index(MzPeak::open(path))
     {
       index.manager()->row_group_cache().set_budget(cache_budget);
     }
     MzPeak::Index index;
-    std::size_t budget;
     ExperimentalSettings settings;
     std::size_t row_group_bytes = 0;
     std::atomic<std::size_t> picked{0}, pick_failed{0};
@@ -275,10 +274,13 @@ namespace FASTag
   Size OnDiscMzPeakExperiment::getNrSpectra() const { return static_cast<Size>(impl_->spectra.size()); }
   const ExperimentalSettings& OnDiscMzPeakExperiment::getMetaData() const { return impl_->shared->settings; }
   std::size_t OnDiscMzPeakExperiment::maxRowGroupBytes() const { return impl_->shared->row_group_bytes; }
-  std::size_t OnDiscMzPeakExperiment::cacheBudget() const { return impl_->shared->budget; }
+  // The cache owns the budget; this does not keep a second copy of it.
+  std::size_t OnDiscMzPeakExperiment::cacheBudget() const
+  {
+    return impl_->shared->index.manager()->row_group_cache().budget();
+  }
   void OnDiscMzPeakExperiment::setCacheBudget(std::size_t bytes)
   {
-    impl_->shared->budget = bytes;
     impl_->shared->index.manager()->row_group_cache().set_budget(bytes);
   }
   std::size_t OnDiscMzPeakExperiment::rowGroupsDecoded() const

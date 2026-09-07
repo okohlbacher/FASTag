@@ -239,10 +239,12 @@ time and peak RSS as FASTag reports them (v1.2.0):
 size. Tag counts differ by one out of 122,098 — the archive stores m/z as
 float32, which moves a single borderline match across the tolerance. The read
 is parallel since v1.1.1: every thread owns a reader over a shared archive
-index and decodes a contiguous range of spectra, the way the mzML path already
-gave each thread its own `OnDiscMSExperiment`. Since v1.1.2 the decoded row
-groups live in one cache shared by every reader, so each group is decoded
-once whatever the thread count and memory no longer grows with `-threads`:
+index, the way the mzML path already gave each thread its own
+`OnDiscMSExperiment`. Work is handed out on a guided schedule since v1.2.0 —
+large chunks first, so a thread stays inside one row group, and small ones at
+the end, so nobody waits at the barrier. Since v1.1.2 the decoded row groups
+live in one cache shared by every reader, so each group is decoded once
+whatever the thread count and memory no longer grows with `-threads`:
 it follows the groups in flight, at most one per thread and never more than
 the file has. The cache is sized to two groups per running reader, and the
 reader count is capped so that fits 4 GB, which only matters for archives

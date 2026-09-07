@@ -1125,25 +1125,20 @@ protected:
       const Size per_cluster = std::max<Size>(1, want / kClusters);
       const Size cluster_step = std::max<Size>(1, n_total / kClusters);
       Size seen = 0;
-      std::vector<Size> probe_idx;
-      probe_idx.reserve(want);
-      for (Size c = 0; c < kClusters && probe_idx.size() < want; ++c)
+      for (Size c = 0; c < kClusters && seen < want; ++c)
       {
-        const Size start = std::min<Size>(c * cluster_step, n_total ? n_total - 1 : 0);
-        for (Size k = 0; k < per_cluster && start + k < n_total && probe_idx.size() < want; ++k)
-          probe_idx.push_back(start + k);
-      }
-      for (const Size i : probe_idx)
-      {
-        if (seen >= want) break;
-        MSSpectrum s = read_spectrum(i);
-        if (s.getMSLevel() != 2 || s.size() < 8) continue;
-        ++seen;
-        s.sortByPosition();
-        for (Size k = 1; k < s.size(); ++k)
+        const Size start = c * cluster_step;
+        for (Size k = 0; k < per_cluster && start + k < n_total && seen < want; ++k)
         {
-          const double d = s[k].getMZ() - s[k - 1].getMZ();
-          if (d > 0 && d < tightest) { tightest = d; at_mz = s[k].getMZ(); }
+          MSSpectrum s = read_spectrum(start + k);
+          if (s.getMSLevel() != 2 || s.size() < 8) continue;
+          ++seen;
+          s.sortByPosition();
+          for (Size j = 1; j < s.size(); ++j)
+          {
+            const double d = s[j].getMZ() - s[j - 1].getMZ();
+            if (d > 0 && d < tightest) { tightest = d; at_mz = s[j].getMZ(); }
+          }
         }
       }
       if (at_mz > 0)

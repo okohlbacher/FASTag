@@ -67,9 +67,9 @@ namespace FASTag
     OpenMS::MSSpectrum getSpectrum(OpenMS::Size i);
 
     /// Does this file give up MS level and precursors to the scrape? Reads
-    /// the first @p n spectra WITHOUT decoding peaks, so the caller can
-    /// decide against this reader for the price of the metadata alone.
-    bool reportsSpectrumMetadata(OpenMS::Size n = 64);
+    /// the first spectra WITHOUT decoding peaks, so the caller can decide
+    /// against this reader for the price of the metadata alone.
+    bool reportsSpectrumMetadata();
 
   private:
     OpenMS::MSSpectrum read_(OpenMS::Size i, bool want_peaks);

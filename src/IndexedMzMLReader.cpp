@@ -63,6 +63,7 @@ namespace FASTag
     constexpr std::string_view kIsoTarget = "accession=\"MS:1000827\"";
     constexpr std::string_view kIsoLower = "accession=\"MS:1000828\"";
     constexpr std::string_view kIsoUpper = "accession=\"MS:1000829\"";
+    constexpr std::string_view kArrays = "<binaryDataArrayList";
     constexpr std::string_view kValue = "value";
     constexpr std::string_view kUnit = "unitAccession";
 
@@ -293,9 +294,9 @@ namespace FASTag
   /****************************************************************************/
   MSSpectrum IndexedMzMLReader::getSpectrum(Size i) { return read_(i, /*want_peaks=*/true); }
 
-  bool IndexedMzMLReader::reportsSpectrumMetadata(Size n)
+  bool IndexedMzMLReader::reportsSpectrumMetadata()
   {
-    const Size probe = std::min<Size>(getNrSpectra(), n);
+    const Size probe = std::min<Size>(getNrSpectra(), 64);
     for (Size i = 0; i < probe; ++i)
     {
       const MSSpectrum s = read_(i, /*want_peaks=*/false);
@@ -340,19 +341,25 @@ namespace FASTag
                      static_cast<std::streamsize>(len - head_len));
       return static_cast<bool>(impl_->in);
     };
-    if (impl_->buffer.find("<binaryDataArrayList") == std::string::npos && len > head_len)
+    if (impl_->buffer.find(kArrays) == std::string::npos && len > head_len)
     {
       if (!read_rest()) return spec;
     }
 
-    // MS level first, from whatever is in the buffer now: it decides whether
-    // the body is worth reading at all.
-    constexpr std::string_view kArrays = "<binaryDataArrayList";
+    // The metadata region of whatever is in the buffer NOW: everything this
+    // reader scrapes appears before <binaryDataArrayList>, and the arrays
+    // after it are base64 that makes up almost the whole element. Taken
+    // fresh each time because read_rest() may have grown the buffer.
+    auto meta = [this]() -> std::string_view {
+      const std::string_view all(impl_->buffer);
+      const std::size_t cut = all.find(kArrays);
+      return cut == std::string_view::npos ? all : all.substr(0, cut);
+    };
+
+    // MS level first: it decides whether the body is worth reading at all.
     int ms_level = 0;
     {
-      const std::string_view head_view(impl_->buffer);
-      const std::size_t cut = head_view.find(kArrays);
-      const std::string_view h = cut == std::string_view::npos ? head_view : head_view.substr(0, cut);
+      const std::string_view h = meta();
       if (to_number(cv_value(h, kMsLevel, 0, h.size()), ms_level) && ms_level > 0)
         spec.setMSLevel(static_cast<UInt>(ms_level));
     }
@@ -382,24 +389,17 @@ namespace FASTag
     {
       // Native id still travels: a caller may report on a spectrum it does
       // not tag.
-      const std::string_view head_view(impl_->buffer);
-      const std::size_t st = head_view.find("<spectrum");
+      const std::string_view h = meta();
+      const std::size_t st = h.find("<spectrum");
       if (st != std::string_view::npos)
       {
-        const std::string_view id = tag_attr(head_view, st + 1, "id");
+        const std::string_view id = tag_attr(h, st + 1, "id");
         if (!id.empty()) spec.setNativeID(std::string(id));
       }
     }
 
-    // The rest of the metadata, from the buffer in its final state. Only the
-    // HEAD is scanned: everything here appears before <binaryDataArrayList>,
-    // and the arrays after it are base64 that makes up almost the whole
-    // element. Searching the whole element cost more, on small files, than
-    // the metadata pre-pass this reader exists to avoid.
-    const std::string_view whole(impl_->buffer);
-    const std::size_t head = whole.find(kArrays);
-    const std::string_view xml =
-        head == std::string_view::npos ? whole : whole.substr(0, head);
+    // The rest of the metadata, from the buffer in its final state.
+    const std::string_view xml = meta();
     const std::size_t n = xml.size();
 
     double rt = 0;
