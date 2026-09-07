@@ -315,6 +315,18 @@ namespace FASTag
     range_rows = c.plan_range_rows;
   }
 
+  void OnDiscMzPeakExperiment::nsCounters(long& plan, long& exec, long& rowgroup,
+                                          long& project) const
+  {
+    const auto c = MzPeak::Util::read_counters();
+    plan = c.ns_plan;
+    // ctor time is reported through the same call for brevity
+    exec = c.ns_plan_ctor;
+    exec = c.ns_exec;
+    rowgroup = c.ns_rowgroup;
+    project = c.ns_project;
+  }
+
   std::size_t OnDiscMzPeakExperiment::rowGroupsDecoded() const
   {
     return impl_->shared->index.manager()->row_group_cache().stats().decodes;

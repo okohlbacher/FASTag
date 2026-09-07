@@ -58,6 +58,9 @@
 
 #include <atomic>
 #include <chrono>
+#ifndef _WIN32
+#include <sys/resource.h>
+#endif
 
 namespace
 {
@@ -1654,6 +1657,40 @@ protected:
     auto secs = [](Clock::time_point a, Clock::time_point b)
     { return std::chrono::duration<double>(b - a).count(); };
 
+    // Make sure this process may open the files the readers are about to.
+    //
+    // An mzPeak reader opens its own handles: the signal member plus the
+    // metadata facets, about six descriptors per thread. The usual soft limit
+    // of 1024 therefore caps a run at roughly 170 threads, and past it the
+    // archive fails to open with "Too many open files" -- which surfaces as an
+    // unrelated-looking OpenMS exception rather than anything about
+    // descriptors. Measured on a 384-core host: -threads 224 and above aborted
+    // until the soft limit was raised, then ran at 2.97-3.06 s.
+    //
+    // Raising the SOFT limit toward the hard one needs no privileges; it is
+    // what the hard limit is for. ponytail: only raise, never lower, and stay
+    // quiet unless it cannot be done.
+#ifndef _WIN32
+    {
+      struct rlimit lim{};
+      if (getrlimit(RLIMIT_NOFILE, &lim) == 0)
+      {
+        const rlim_t want = static_cast<rlim_t>(omp_get_max_threads()) * 16 + 1024;
+        if (lim.rlim_cur < want && lim.rlim_cur < lim.rlim_max)
+        {
+          const rlim_t before = lim.rlim_cur;
+          lim.rlim_cur = std::min(want, lim.rlim_max);
+          if (setrlimit(RLIMIT_NOFILE, &lim) != 0)
+          {
+            OPENMS_LOG_WARN << "could not raise the open-file limit from " << before
+                            << "; a large -threads may fail to open the input."
+                            << std::endl;
+          }
+        }
+      }
+    }
+#endif
+
     // The READERS are built once per thread, before the loop; the parallel
     // region still opens and closes per block.
     //
@@ -1771,6 +1808,10 @@ protected:
         std::cerr << " plan_pruned=" << pruned << " plan_full_scan=" << fscan
                   << " plan_page_index=" << pidx << " plan_pi_null=" << pinull
                   << " plan_ranges=" << nranges << " plan_range_rows=" << rrows;
+        long nplan = 0, nexec = 0, nrg = 0, nproj = 0;
+        mzp->nsCounters(nplan, nexec, nrg, nproj);
+        std::cerr << " s_plan=" << (nplan / 1e9) << " s_plan_ctor=" << (nexec / 1e9)
+                  << " s_rowgroup=" << (nrg / 1e9) << " s_project=" << (nproj / 1e9);
       }
 #endif
       std::cerr << std::endl;

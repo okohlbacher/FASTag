@@ -113,6 +113,10 @@ namespace FASTag
     /// fallen back to a whole-group scan.
     void planCounters(long& pruned, long& full_scan, long& page_index, long& pi_null,
                       long& ranges, long& range_rows) const;
+    /// Nanoseconds summed across all reader threads for each stage of a
+    /// per-spectrum read. Thread-seconds, not wall: divide by the thread count
+    /// to compare against the phase timings.
+    void nsCounters(long& plan, long& exec, long& rowgroup, long& project) const;
 
     /// Profile MS2 centroided so far, across every copy of this reader.
     std::size_t nPicked() const;
