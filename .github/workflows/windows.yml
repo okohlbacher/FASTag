@@ -90,6 +90,17 @@ env:
   # must be a trunk commit at or after the MSVC support (static-only Windows
   # build, UTF-8 libzip names).
   MZPEAK_LIB_REF: 40df266e276ade453ee91b1a2452585fb35b5ca0
+  # SignPath project slug. UNVERIFIED: 'fastag' was a placeholder from the day
+  # the scaffolding was written, but the enrollment actually under way is for a
+  # project named "OpenMS Apps" (its HSM-generated CSR, OpenMS_Apps.csr, came
+  # out of SignPath's console on 2026-09-08). Read the real slug off the
+  # project's page in the console and put it here BEFORE tagging a release
+  # meant to be signed -- a wrong slug fails the signing request, not the
+  # build, so it surfaces ~20 minutes into a tag run rather than early.
+  #
+  # One place, not two: the CLI and the desktop installer both submit signing
+  # requests, and they must not be able to drift apart.
+  SIGNPATH_PROJECT_SLUG: 'fastag'
   # Taxonomy index pins -- MUST stay in lockstep with ci.yml (see the comment
   # there for the bump procedure: new data release first -- as a PRE-RELEASE,
   # or it steals the "Latest" slot and 404s every README download link --
@@ -713,7 +724,7 @@ jobs:
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ secrets.SIGNPATH_ORG_ID }}
-          project-slug: 'fastag'
+          project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
           signing-policy-slug: 'release-signing'
           artifact-configuration-slug: 'initial'
           github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
@@ -929,7 +940,7 @@ jobs:
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ secrets.SIGNPATH_ORG_ID }}
-          project-slug: 'fastag'
+          project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
           signing-policy-slug: 'release-signing'
           artifact-configuration-slug: 'initial'
           github-artifact-id: ${{ steps.upload-unsigned-gui.outputs.artifact-id }}

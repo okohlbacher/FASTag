@@ -67,6 +67,25 @@ Same set BALL/BALLView uses (see the `software-signing` runbook):
 Windows additionally needs the two SignPath secrets `windows.yml` already uses
 for the CLI: `SIGNPATH_API_TOKEN` and `SIGNPATH_ORG_ID`. No new ones.
 
+### SignPath enrollment state, 2026-09-08
+
+Enrollment is under way for a project named **"OpenMS Apps"** — its CSR
+(`OpenMS_Apps.csr`, RSA 4096, `CN=University of Tübingen`,
+`O=Eberhard Karls Universität Tübingen`, `OU=IBMI/ABI`) was issued by
+SignPath's console that day.
+
+**Do not take that CSR to a CA.** SignPath's Foundation program generates the
+key in their own HSM and submits the request themselves; the certificate flips
+from `CSR PENDING` to `VALID` with no action. A certificate obtained elsewhere
+would not match the HSM key, and the enrollment would have to be redone.
+
+Consequence for this repo: `windows.yml`'s `SIGNPATH_PROJECT_SLUG` is still the
+placeholder `fastag`, and the real project is not called that. **Read the slug
+off the project page and set it before tagging a release meant to be signed** —
+a wrong slug fails the signing request roughly twenty minutes into a tag run,
+not at the start. The CLI and the installer both read that one variable, so
+they cannot drift apart.
+
 `MACOS_SIGNING_IDENTITY` and `MACOS_TEAM_ID` are already determined for this
 project by the issued certificate: `Developer ID Application: Oliver Kohlbacher
 (9WF4NVY9MY)` and `9WF4NVY9MY`, valid to 22 May 2031.
