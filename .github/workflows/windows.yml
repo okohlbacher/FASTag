@@ -78,7 +78,13 @@ on:
         default: 'release-signing'
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # A manual dispatch gets its OWN group. Sharing <workflow>-refs/heads/main
+  # with ordinary pushes means cancel-in-progress lets the next push to main
+  # kill a validation run mid-flight -- which is exactly what happened to the
+  # first gui_dry_run on 2026-09-08: cancelled at 2m17s by a push that landed
+  # 13 seconds earlier. A dispatch is user-initiated and bounded, so giving it
+  # a unique group cannot reintroduce the head-of-line wedge described above.
+  group: ${{ github.workflow }}-${{ github.ref }}${{ github.event_name == 'workflow_dispatch' && format('-dispatch-{0}', github.run_id) || '' }}
   cancel-in-progress: true
 
 env:
@@ -99,17 +105,15 @@ env:
   # must be a trunk commit at or after the MSVC support (static-only Windows
   # build, UTF-8 libzip names).
   MZPEAK_LIB_REF: 40df266e276ade453ee91b1a2452585fb35b5ca0
-  # SignPath project slug. UNVERIFIED: 'fastag' was a placeholder from the day
-  # the scaffolding was written, but the enrollment actually under way is for a
-  # project named "OpenMS Apps" (its HSM-generated CSR, OpenMS_Apps.csr, came
-  # out of SignPath's console on 2026-09-08). Read the real slug off the
-  # project's page in the console and put it here BEFORE tagging a release
-  # meant to be signed -- a wrong slug fails the signing request, not the
-  # build, so it surfaces ~20 minutes into a tag run rather than early.
+  # SignPath project slug, read off the project page in SignPath's console on
+  # 2026-09-08. NOT 'fastag' -- that was the placeholder this scaffolding was
+  # written with, and the enrollment is for a project called "OpenMS Apps",
+  # which is why its HSM-generated CSR arrived as OpenMS_Apps.csr. Underscores
+  # and capitals are the slug as SignPath spells it; it is matched literally.
   #
   # One place, not two: the CLI and the desktop installer both submit signing
   # requests, and they must not be able to drift apart.
-  SIGNPATH_PROJECT_SLUG: 'fastag'
+  SIGNPATH_PROJECT_SLUG: 'OpenMS_Apps'
   # Taxonomy index pins -- MUST stay in lockstep with ci.yml (see the comment
   # there for the bump procedure: new data release first -- as a PRE-RELEASE,
   # or it steals the "Latest" slot and 404s every README download link --
