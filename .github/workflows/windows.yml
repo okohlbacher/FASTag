@@ -67,6 +67,15 @@ on:
         description: 'Build the Windows desktop app without cutting a tag'
         type: boolean
         default: false
+      # A test-signing policy usually auto-approves and issues from a
+      # non-public root, so it proves the PIPELINE -- request, artifact
+      # configuration, download, replace -- without burning a human's Approve
+      # click or producing a binary anyone could mistake for shippable. Only
+      # the HSM release certificate yields a Windows-trusted signature.
+      signing_policy:
+        description: 'SignPath signing policy slug (use test-signing to validate)'
+        type: string
+        default: 'release-signing'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -696,7 +705,7 @@ jobs:
       # -- neither does yet, so every tag build takes the "not configured"
       # branch and ships unsigned, same as today. See doc/BACKLOG-ci.md.
       - name: Determine SignPath availability (Windows)
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run
         id: signpath-gate
         shell: pwsh
         env:
@@ -725,7 +734,7 @@ jobs:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ secrets.SIGNPATH_ORG_ID }}
           project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
-          signing-policy-slug: 'release-signing'
+          signing-policy-slug: ${{ inputs.signing_policy || 'release-signing' }}
           artifact-configuration-slug: 'initial'
           github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
           wait-for-completion: true
@@ -941,7 +950,7 @@ jobs:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ secrets.SIGNPATH_ORG_ID }}
           project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
-          signing-policy-slug: 'release-signing'
+          signing-policy-slug: ${{ inputs.signing_policy || 'release-signing' }}
           artifact-configuration-slug: 'initial'
           github-artifact-id: ${{ steps.upload-unsigned-gui.outputs.artifact-id }}
           wait-for-completion: true
