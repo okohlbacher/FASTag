@@ -810,15 +810,24 @@ jobs:
           npm ci
           npm run tauri build
           ls -la src-tauri/target/release/bundle/dmg/
-          # Asserted HERE, not at upload time: a dry run skips the upload, and
-          # the staple is exactly what a dry run exists to prove. An unstapled
-          # .dmg still warns on a machine that is offline or behind a proxy --
-          # the case a user reports as "it's broken".
+          # Assert the ticket is attached, HERE rather than at upload time: a
+          # dry run skips the upload, and the staple is what the dry run
+          # exists to prove.
+          #
+          # Validate the .APP, not the .dmg. Tauri notarizes and staples the
+          # app bundle, then builds the disk image from the stapled app and
+          # only SIGNS that -- so `stapler validate` on the .dmg fails on a
+          # perfectly good build ("does not have a ticket stapled to it",
+          # exit 65), which is how it failed the v1.4.0 tag. Gatekeeper checks
+          # the app the user drags out, and that one carries the ticket.
           if [ "${{ steps.mac-signing.outputs.enabled }}" = "true" ]; then
             shopt -s nullglob
+            apps=(src-tauri/target/release/bundle/macos/*.app)
+            [ ${#apps[@]} -gt 0 ] || { echo "::error::tauri produced no .app"; exit 1; }
+            xcrun stapler validate "${apps[0]}"
             dmgs=(src-tauri/target/release/bundle/dmg/*.dmg)
             [ ${#dmgs[@]} -gt 0 ] || { echo "::error::tauri produced no .dmg"; exit 1; }
-            xcrun stapler validate "${dmgs[0]}"
+            codesign --verify --strict --verbose=2 "${dmgs[0]}"
           fi
 
       - name: Attach the signed desktop app to the release (macOS)
