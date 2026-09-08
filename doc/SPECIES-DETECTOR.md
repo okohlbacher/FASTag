@@ -116,6 +116,46 @@ reference and the question is "which of these related taxa". Leave it off for
 ion-trap data, and when low-abundance components matter. Both counts are always
 in the report, so nothing is hidden either way.
 
+## MiCId's 1/r weighting: tried, measured, NOT adopted
+
+MiCId weights a peptide by `w = 1/r`, r being how many database proteins it maps
+to, and combines them as `tau = prod_k [prod_j p_kj]^(w_k)` (Alves & Yu,
+*Bioinformatics* 2015). It is the one genuine IDF-style scheme in this
+literature, and it outperforms MARLOWE on exactly the low-abundance
+contributors that deconvolution suppresses -- so it looked like the better
+answer.
+
+It was implemented here and it is worse. Rank of the expected genus:
+
+| sample | no correction | deconvolution | 1/r (max) | 1/r (summed) |
+|---|---|---|---|---|
+| PXD000001 | 1 | 1 | 1 | 1 |
+| CPTAC Lumos | 1 | 1 | 1 | 1 |
+| PXD076528 Astral | 1 | 1 | 1 | 1 |
+| Eclipse ion-trap | **2** | 38 | **20** | **19** |
+
+Both aggregations were tried -- max per spectrum, which preserves the
+one-spectrum-one-vote invariant, and the sum MiCId actually uses. They agree.
+Neither improves the near-neighbour tail either: PXD000001 keeps
+Chlamydomonas and Oryza behind Pectobacterium, where deconvolution replaces
+them with Dickeya and Yersinia.
+
+**The reason is structural, and it is the useful part of this result.** `1/r` is
+SYMMETRIC: when Homo and Macaca share a tag, r = 2 and both get 0.5, so their
+relative order is untouched. A weight that treats two taxa identically cannot
+separate them, and separating near neighbours is the whole problem.
+Deconvolution works precisely because its matrix is ASYMMETRIC --
+`P[i][j] = shared(i,j)/|kmers(j)|` differs from `P[j][i]` whenever the two taxa
+have different proteome sizes, which is what lets one explain the other away.
+
+Two further reasons it transfers badly: FASTag already requires a taxon to carry
+EVERY k-mer of a tag, which is itself a strong specificity filter, so r has
+little dynamic range left to exploit; and MiCId weights confidently identified
+peptides of 8-25 residues against a large protein database, a completely
+different r distribution from 7-mer tags against 50 genera.
+
+Do not re-explore this without changing one of those three things.
+
 ## Two filters that are implemented but did nothing here
 
 `-species_max_kmer_share` ignores k-mers carried by more than a given fraction
