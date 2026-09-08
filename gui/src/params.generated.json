@@ -9,10 +9,10 @@
       "toppAdvanced": true
     },
     {
-      "name": "deisotope",
+      "name": "no_deisotope",
       "type": "bool",
       "default": "false",
-      "description": "Collapse isotope clusters to their monoisotopic peak and move multiply-charged fragments onto the singly-charged scale before peak selection",
+      "description": "Do not collapse isotope clusters to their monoisotopic peak, and do not move multiply-charged fragments onto the singly-charged scale, before peak selection",
       "required": false,
       "toppAdvanced": false
     },
@@ -83,7 +83,7 @@
       "description": "Fragment mass tolerance",
       "required": false,
       "toppAdvanced": false,
-      "min": 1e-9
+      "min": 1e-09
     },
     {
       "name": "fragment_tolerance_unit",
@@ -109,7 +109,7 @@
     {
       "name": "gaps",
       "type": "int",
-      "default": "0",
+      "default": "1",
       "description": "Allow a tag to cross one missing peak, spelling the two residues either side of it from their summed mass; 0 disables",
       "required": false,
       "toppAdvanced": false,

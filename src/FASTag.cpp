@@ -236,15 +236,17 @@ protected:
     // tag_length + 2*extension is computed as int and indexes the null tables.
     // Unbounded, --extension 1073741824 overflows and aborts with std::length_error.
     setMaxInt_("extension", (FASTag::MAX_FILTER_LEN - 1) / 2);
-    registerIntOption_("gaps", "<n>", 0,
+    registerIntOption_("gaps", "<n>", 1,
                        "Allow a tag to cross one missing peak, spelling the two "
                        "residues either side of it from their summed mass; "
                        "0 disables", false);
     setMinInt_("gaps", 0);
-    registerFlag_("deisotope",
-                  "Collapse isotope clusters to their monoisotopic peak and move "
-                  "multiply-charged fragments onto the singly-charged scale before "
-                  "peak selection", false);
+    // Negated, because a TOPP flag is false unless given and both of these are
+    // now on by default. `-no_deisotope` follows TOPPBase's own `-no_progress`.
+    registerFlag_("no_deisotope",
+                  "Do not collapse isotope clusters to their monoisotopic peak, and "
+                  "do not move multiply-charged fragments onto the singly-charged "
+                  "scale, before peak selection", false);
     // One gap only. Each additional gap multiplies the branching and asserts
     // another unobserved split, and a two-gap tag would be mostly inference.
     setMaxInt_("gaps", 1);
@@ -667,7 +669,7 @@ protected:
     p.tag_length = getIntOption_("tag_length");
     p.max_extension = getIntOption_("extension");
     p.max_gaps = getIntOption_("gaps");
-    p.deisotope = getFlag_("deisotope");
+    p.deisotope = !getFlag_("no_deisotope");
     p.peaks_per_window = getIntOption_("peaks_per_window");
     p.frag_tol = getDoubleOption_("fragment_tolerance");
     p.tol_ppm = getStringOption_("fragment_tolerance_unit") == "ppm";

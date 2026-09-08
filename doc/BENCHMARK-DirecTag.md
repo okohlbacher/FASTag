@@ -45,7 +45,7 @@ disabled in FASTag (DirecTag has no equivalent).
 directag -TagLength 3 -MaxTagCount 50 -MaxPeakCount 100 \
          -FragmentMzTolerance 0.02 -PrecursorMzTolerance 1.5 -cpus N  in.mzML
 
-FASTag -in in.mzML -out tags.tsv -tag_length 3 -gaps 0 -max_tags 50 \
+FASTag -in in.mzML -out tags.tsv -tag_length 3 -gaps 0 -no_deisotope -max_tags 50 \
        -max_peaks 100 -peaks_per_window 0 \
        -fragment_tolerance 0.02 -fragment_tolerance_unit Da \
        -fixed_modifications '' -threads N

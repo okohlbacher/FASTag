@@ -61,10 +61,11 @@ length, recovering longer tags a fixed seed length alone would miss.
 
 **Gaps** (`-gaps 1`). A tag can cross one missing peak — two peaks separated by
 a two-residue combined mass bridge the hole, with every amino-acid composition
-matching that sum spelled out as a candidate. Measured against Sage ground
-truth, this lifts the number of spectra gaining a correctly placed tag by
-44.7%. Because a gapped tag asserts an unobserved split, it is systematically
-over-ranked relative to its real correctness (see `-gap_penalty` below).
+matching that sum spelled out as a candidate. On by default: measured against
+Sage ground truth it lifts the number of spectra gaining a correctly placed tag
+by 45.3% (see Validation). Because a gapped tag asserts an unobserved split, it
+is systematically over-ranked relative to its real correctness, which
+`-gap_penalty` corrects; disable gaps entirely with `-gaps 0`.
 
 **Sequence filtering** (`-fasta`). Reported tags can be restricted to ones
 occurring in proteins you supply. Matching:
@@ -141,8 +142,9 @@ FASTag -in run.mzML -out tags.tsv -extension 6 -fragment_tolerance 20
 # ion-trap MS2 -- set the tolerance to match the analyser
 FASTag -in run.mzML -out tags.tsv -fragment_tolerance 0.3 -fragment_tolerance_unit Da
 
-# cleaner spectra: collapse isotopes, allow one gap
-FASTag -in run.mzML -out tags.tsv -deisotope -gaps 1
+# isotope collapsing and one gap are on by default; turn both off for
+# maximum speed, or to match a tool that has no equivalent
+FASTag -in run.mzML -out tags.tsv -no_deisotope -gaps 0
 
 # only tags occurring in a protein of interest, plus the spectra carrying them
 FASTag -in run.mzML -out tags.tsv -fasta AGXT.fasta -out_spectra hits.mzML
@@ -222,9 +224,6 @@ hundred bytes of metadata per spectrum instead of the whole run. Converting a
 to 852 MB, same wall time, byte-identical tags and an archive that reads back
 identically. The mzML writer already streamed; both paths now do.
 
-(An earlier note here blamed zero tags from mzPeak samples on DIA data. That
-was wrong — it was this format gap.)
-
 **Faster than mzML on the same acquisition, and now parallel.** Thermo LTQ
 Orbitrap Velos, 7,534 spectra / 6,103 MS2, 16 logical cores, warm cache, wall
 time and peak RSS as FASTag reports them (v1.2.0):
@@ -256,22 +255,19 @@ centroid facet, and tagging profile SAMPLES rather than peaks costs real
 recall. Measured on one run available in both formats: 80,990 tags from the
 profile archive read as-is, 122,489 with on-read centroiding
 (`PeakPickerHiRes`), against 122,098 for the same run supplied as centroided
-mzML. Picking used to run serially in the reader while every tagging thread
-waited (1.95 s on this archive); it now runs in the worker, and the profile
-archive goes from 2.79 s to 0.97 s at 16 threads. Converting that mzML to mzPeak and tagging it
-reproduces the mzML result to within a single tag (122,097; 99.999% of
-spectrum/tag pairs identical, flanking masses to 4 decimals).
+mzML. Picking runs in the worker rather than the reader, so it parallelises:
+0.97 s at 16 threads on this archive. Converting that mzML to mzPeak and
+tagging it reproduces the mzML result to within a single tag (122,097; 99.999%
+of spectrum/tag pairs identical, flanking masses to 4 decimals).
 
 ### Reading speed
 
 **Large mzML files read 2.6 to 3.8x faster since v1.2.0**, and in a fraction of
-the memory. FASTag used to make OpenMS parse the whole file once for spectrum
-metadata before tagging could start: on a 1.8 GB run that was 4.0 seconds of a
-9.1 second job, single-threaded, and no number of `-threads` touched it. It now
-reads the mzML index directly and takes each spectrum's metadata from the same
-XML it decodes for peaks, so there is no prologue at all. Files without an
-index, and `-out_spectra` runs (which need run-level metadata), take the old
-route unchanged.
+the memory. FASTag reads the mzML index directly and takes each spectrum's
+metadata from the same XML it decodes for peaks, so there is no serial
+metadata pass before tagging starts. Files without a usable index, and
+`-out_spectra` runs (which need run-level metadata), load metadata up front
+instead.
 
 | input | before | after |
 |---|---|---|
@@ -293,8 +289,8 @@ files are unchanged, having had little prologue to remove.
 | `-out_spectra <file>` | none | Write spectra carrying a reported tag here, as mzML or mzpeak (by extension). Needs memory proportional to the *file*, not the thread count, unlike every other path |
 | `-tag_length <n>` | 3 | Seed tag length in residues |
 | `-extension <n>` | 0 | Max residues appended per terminus; 0 disables extension |
-| `-gaps <n>` | 0 | Allow a tag to cross one missing peak (0 or 1) |
-| `-deisotope` | off | Collapse isotope clusters to their monoisotopic peak and move multiply-charged fragments onto the singly-charged scale before peak selection |
+| `-gaps <n>` | 1 | Allow a tag to cross one missing peak (0 or 1) |
+| `-no_deisotope` | off | Do not collapse isotope clusters to their monoisotopic peak, and do not move multiply-charged fragments onto the singly-charged scale, before peak selection |
 | `-fragment_tolerance <value>` | 20 | Fragment mass tolerance |
 | `-fragment_tolerance_unit <ppm\|Da>` | ppm | Tolerance unit |
 | `-max_peaks <n>` | 400 | Peaks retained per spectrum; 0 uses the internal ceiling of 1024, not unlimited. The ceiling for `-peaks_per_window` |
@@ -552,12 +548,18 @@ pseudo-DDA spectra:
 Against Sage ground truth (14,867 PSMs at 1% FDR), counting spectra that gain a
 correctly placed tag:
 
-| | spectra | vs baseline | correct tags |
+| | spectra reached | vs baseline | correct tags |
 |---|---|---|---|
-| default | 3,480 | — | 8,054 (7.4%) |
-| `-deisotope` | 4,142 | +19.0% | 12,683 (10.6%) |
-| `-gaps 1` | 5,055 | +45.3% | 33,236 (7.1%) |
-| both | **5,976** | **+71.7%** | 45,919 (8.9%) |
+| `-gaps 0 -no_deisotope` | 3,480 | — | 8,054 |
+| deisotoping only | 4,142 | +19.0% | 12,683 |
+| one gap only | 5,055 | +45.3% | 33,236 |
+| **both — the default since v1.4.0** | **5,976** | **+71.7%** | **45,919** |
+
+The two count columns answer different questions and move independently: a gap
+multiplies how many tags a spectrum yields, so tag totals climb far faster than
+the number of spectra reached. These figures are not reproducible here — the PSM
+table they were measured against is no longer on any machine (see
+[doc/TEST-DATA.md](doc/TEST-DATA.md)).
 
 `ctest` covers the rank-sum DP against exhaustive enumeration, end-to-end tag
 recovery from synthetic spectra, flanking-mass placement, extension, gap
@@ -584,11 +586,10 @@ without filtering anything out:
 
 ## Known limitations
 
-- **Some defaults are conservative.** `-deisotope` and `-gaps` are off. The peak
-  budget defaults to `-peaks_per_window 10 -max_peaks 400`, validated on real
-  ground truth (PXD000001) as neutral-to-positive versus the old flat 100-peak
-  cap at ~1.35x the runtime; revert with `-peaks_per_window 0 -max_peaks 100`
-  for the old speed. See [doc/BACKLOG.md](doc/BACKLOG.md).
+- **The defaults favour recall over speed.** Isotope collapsing and one gap are
+  on, and the peak budget is `-peaks_per_window 10 -max_peaks 400`. For the
+  fastest possible run, or to match a tool with no equivalent of these:
+  `-no_deisotope -gaps 0 -peaks_per_window 0 -max_peaks 100`.
 - **No modification support.** Residues are the unmodified 19, so labelled
   samples (TMT and similar) will not match tags spanning a modified residue.
 - **mzPeak reading decodes whole row groups.** The smallest unit Parquet can hand back is a row group, tens of megabytes here, so an mzPeak run holds a few decoded groups where the mzML path holds a few spectra. Each group is decoded once and shared across threads (since v1.1.2), so this does not grow with `-threads`; it does grow with the archive's row-group size, and readers are capped so two groups per thread fit 4 GB.

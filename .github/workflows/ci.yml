@@ -810,6 +810,16 @@ jobs:
           npm ci
           npm run tauri build
           ls -la src-tauri/target/release/bundle/dmg/
+          # Asserted HERE, not at upload time: a dry run skips the upload, and
+          # the staple is exactly what a dry run exists to prove. An unstapled
+          # .dmg still warns on a machine that is offline or behind a proxy --
+          # the case a user reports as "it's broken".
+          if [ "${{ steps.mac-signing.outputs.enabled }}" = "true" ]; then
+            shopt -s nullglob
+            dmgs=(src-tauri/target/release/bundle/dmg/*.dmg)
+            [ ${#dmgs[@]} -gt 0 ] || { echo "::error::tauri produced no .dmg"; exit 1; }
+            xcrun stapler validate "${dmgs[0]}"
+          fi
 
       - name: Attach the signed desktop app to the release (macOS)
         if: steps.mac-signing.outputs.enabled == 'true' && startsWith(github.ref, 'refs/tags/v')
@@ -823,10 +833,6 @@ jobs:
           dmgs=(gui/src-tauri/target/release/bundle/dmg/*.dmg)
           [ ${#dmgs[@]} -gt 0 ] || { echo "::error::tauri produced no .dmg"; exit 1; }
           DMG="${dmgs[0]}"
-          # Refuse to ship a .dmg whose notarization ticket is not attached:
-          # an unstapled one still warns on a machine that is offline or
-          # behind a proxy, which is the case a user reports as "it's broken".
-          xcrun stapler validate "$DMG"
           cp "$DMG" "FASTag-gui-${{ matrix.name }}.dmg"
           gh release create "${{ github.ref_name }}" \
             --title "${{ github.ref_name }}" \

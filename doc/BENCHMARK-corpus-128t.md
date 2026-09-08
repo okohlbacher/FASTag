@@ -21,7 +21,8 @@ Matched parameters, as in `BENCHMARK-DirecTag.md`:
 ```
 directag -TagLength 3 -MaxTagCount 50 -MaxPeakCount 100 \
          -FragmentMzTolerance 0.02 -PrecursorMzTolerance 1.5 -cpus 128
-FASTag   -tag_length 3 -max_tags 50 -max_peaks 100 -peaks_per_window 0 -gaps 0 \
+FASTag   -tag_length 3 -max_tags 50 -max_peaks 100 -peaks_per_window 0 \
+         -gaps 0 -no_deisotope \
          -fragment_tolerance 0.02 -fragment_tolerance_unit Da \
          -fixed_modifications "" -threads 128
 ```
