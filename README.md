@@ -214,12 +214,6 @@ prefix>`; configure reports what you got:
 A build without the library refuses `.mzpeak` on either side with a message
 saying so, rather than reporting a clean run over an empty file.
 
-**Known issue: very large archives can return no peaks.** Above roughly 1.5
-billion peak rows (~3 M spectra of typical density) the reader returns zero
-points for every spectrum, so FASTag writes an empty tag list with no error.
-Archives up to 575 M peak rows are unaffected. See
-[doc/BENCHMARK-corpus-128t.md](doc/BENCHMARK-corpus-128t.md).
-
 ### Reading speed
 
 **Large mzML files read 2.6 to 3.8x faster since v1.2.0**, and in a fraction of
