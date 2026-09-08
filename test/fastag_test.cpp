@@ -575,7 +575,7 @@ int main()
   // 14. deisotoping must survive an ion-trap tolerance
   //
   // OpenMS's deisotoper throws above 100 ppm or 0.1 Da, and FASTag passed the
-  // fragment tolerance straight through -- so `-deisotope` at the 0.3 Da an ion
+  // fragment tolerance straight through -- so deisotoping at the 0.3 Da an ion
   // trap needs killed the tool with an uncaught exception. The combination is
   // reachable by following doc/TEST-DATA.md, which names 0.3 Da for the Eclipse
   // benchmark file.

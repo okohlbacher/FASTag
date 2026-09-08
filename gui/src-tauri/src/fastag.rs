@@ -404,8 +404,8 @@ mod tests {
 
     #[test]
     fn build_args_bool_is_presence_only() {
-        let a = build_args(&rp(r#"{"in":"i","out":"o","params":{"deisotope":true,"species":false}}"#));
-        assert!(a.contains(&"-deisotope".to_string()));
+        let a = build_args(&rp(r#"{"in":"i","out":"o","params":{"no_deisotope":true,"species":false}}"#));
+        assert!(a.contains(&"-no_deisotope".to_string()));
         assert!(!a.contains(&"-species".to_string()));
     }
 

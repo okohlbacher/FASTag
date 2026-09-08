@@ -46,7 +46,7 @@ export const CORE: string[] = [
   'max_tags',
   'extension',
   'gaps',
-  'deisotope',
+  'no_deisotope',
   'max_evalue',
   'threads',
   'species',

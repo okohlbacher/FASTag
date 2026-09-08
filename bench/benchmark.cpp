@@ -512,7 +512,7 @@ int main(int argc, char** argv)
   // Deliberately a floor, not a threshold on accuracy: pinning a quality number
   // would make every scoring change a CI failure and train people to edit the
   // expectation. What this catches is the tool falling over or going silent on a
-  // whole acquisition class -- which is exactly what happened when `-deisotope`
+  // whole acquisition class -- which is exactly what happened when deisotoping
   // threw on the iontrap profile.
   if (sc.tagged == 0)
   {
