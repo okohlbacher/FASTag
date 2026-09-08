@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FASTag — fast parallel sequence tags from MS/MS</title>
+<meta name="description" content="FASTag infers partial sequence tags from peptide MS/MS spectra and filters runs by the sequences you supply. A parallel reimplementation of DirecTag as an OpenMS TOPP tool.">
+<link rel="icon" href="assets/favicon.png">
+<meta property="og:title" content="FASTag">
+<meta property="og:description" content="Fast, parallel sequence tags from MS/MS — and a tag-based spectrum filter. An OpenMS TOPP tool.">
+<meta property="og:image" content="https://okohlbacher.github.io/FASTag/assets/bench-corpus.png">
+<style>
+:root{
+  --bg:#ffffff; --panel:#f6f7fb; --line:#e3e6ef; --ink:#171923; --muted:#5b6072;
+  --accent:#5b5fd6; --accent-ink:#ffffff; --code-bg:#f2f3f8; --good:#137a4d;
+}
+@media (prefers-color-scheme:dark){
+  :root{ --bg:#0f1117; --panel:#171a23; --line:#262b38; --ink:#e9ebf2; --muted:#9aa1b5;
+         --accent:#8b8ff5; --accent-ink:#12141c; --code-bg:#12151d; --good:#4ec98a; }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased}
+.wrap{max-width:860px;margin:0 auto;padding:0 22px}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+code,pre{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace}
+code{background:var(--code-bg);padding:.15em .4em;border-radius:4px;font-size:.9em}
+pre{background:var(--code-bg);border:1px solid var(--line);border-radius:10px;
+  padding:16px 18px;overflow-x:auto;font-size:13.5px;line-height:1.55}
+pre code{background:none;padding:0}
+h1,h2,h3{line-height:1.25;letter-spacing:-.01em}
+h2{font-size:1.45rem;margin:52px 0 14px;padding-top:14px;border-top:1px solid var(--line)}
+h3{font-size:1.05rem;margin:28px 0 8px}
+p{margin:14px 0}
+.muted{color:var(--muted)}
+
+/* hero */
+header{padding:64px 0 8px}
+.brand{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.brand img{width:72px;height:72px;border-radius:16px;flex:none}
+.brand h1{margin:0;font-size:2.5rem}
+.tagline{font-size:1.15rem;color:var(--muted);margin:16px 0 0;max-width:46em}
+.cta{display:flex;gap:10px;flex-wrap:wrap;margin:26px 0 0}
+.btn{display:inline-block;padding:10px 18px;border-radius:9px;font-weight:600;font-size:.95rem;
+  border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+.btn:hover{text-decoration:none;border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+
+/* openms strip */
+.openms{display:flex;align-items:center;gap:20px;flex-wrap:wrap;
+  background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  padding:18px 22px;margin:34px 0 0}
+.openms .logo{background:#fff;border-radius:8px;padding:10px 14px;flex:none;line-height:0}
+.openms img{height:44px;width:auto;display:block}
+.openms p{margin:0;font-size:.95rem;color:var(--muted)}
+
+table{border-collapse:collapse;width:100%;margin:18px 0;font-size:.94rem;display:block;overflow-x:auto}
+th,td{border-bottom:1px solid var(--line);padding:9px 12px;text-align:left;white-space:nowrap}
+th{font-weight:600;color:var(--muted);font-size:.85rem;text-transform:uppercase;letter-spacing:.04em}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+strong.win{color:var(--good)}
+
+figure{margin:26px 0}
+figure img{width:100%;border:1px solid var(--line);border-radius:10px;display:block}
+figcaption{color:var(--muted);font-size:.86rem;margin-top:10px}
+
+ul{padding-left:22px}
+li{margin:7px 0}
+.note{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);
+  border-radius:8px;padding:14px 18px;margin:20px 0;font-size:.94rem}
+footer{border-top:1px solid var(--line);margin-top:60px;padding:28px 0 60px;
+  color:var(--muted);font-size:.9rem}
+footer a{color:var(--muted);text-decoration:underline}
+footer .cols{display:flex;gap:38px;flex-wrap:wrap;margin-bottom:18px}
+footer h4{margin:0 0 8px;font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:var(--ink)}
+footer ul{list-style:none;padding:0;margin:0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="brand">
+    <img src="assets/fastag-icon.png" alt="">
+    <h1>FASTag</h1>
+  </div>
+  <p class="tagline">Partial sequence tags from peptide MS/MS spectra, and a filter that keeps
+  only the spectra whose tags occur in sequences you supply.</p>
+  <div class="cta">
+    <a class="btn primary" href="#download">Download</a>
+    <a class="btn" href="https://github.com/okohlbacher/FASTag">GitHub</a>
+    <a class="btn" href="https://github.com/okohlbacher/FASTag#readme">Documentation</a>
+  </div>
+
+  <div class="openms">
+    <a class="logo" href="https://www.openms.de"><img src="assets/openms-logo.png" alt="OpenMS"></a>
+    <p>FASTag is an <a href="https://www.openms.de">OpenMS</a> TOPP tool. It reads mzML and
+    <a href="https://github.com/OpenMS/mzpeak">mzPeak</a>, writes tab-separated tags, and drops
+    into an OpenMS pipeline like any other TOPP tool.</p>
+  </div>
+</header>
+
+<h2>What it does</h2>
+
+<p>A <em>sequence tag</em> is a short peptide read inferred directly from a fragment-ion ladder —
+no database search, no precursor digest. FASTag is a <strong>fast, sensitive prefilter</strong>: it
+tells you what is worth looking at before you commit to a slow method.</p>
+
+<ul>
+  <li>Narrow a huge search space to the spectra carrying a tag from your protein(s) of interest,
+      with <code>-fasta</code>.</li>
+  <li>Get a sense of what is in a run — species, contaminants, a specific protein — without a full
+      database search.</li>
+  <li>Feed tags into a downstream tool: open-modification search, spectral clustering, de novo seeding.</li>
+</ul>
+
+<div class="note">
+It is a prefilter, not a final identification method. It is tuned for <em>recall</em>, not
+specificity: a tag matching a sequence is a reason to look closer, not an identification.
+</div>
+
+<p>The algorithm is a reimplementation of
+<a href="https://doi.org/10.1021/pr800154p">DirecTag</a> (Tabb et al., <em>J. Proteome Res.</em>
+2008, 7:3838). That paper is the citation — FASTag has no separate publication.</p>
+
+<h2>Why use it</h2>
+
+<p>Measured against DirecTag 1.4.21142 on a 13-run, 126 GB corpus at 128 threads — Q Exactive,
+Orbitrap Fusion, LTQ Velos, Orbitrap Astral, timsTOF diaPASEF and diaTracer pseudo-MS2 up to
+3.09 M spectra:</p>
+
+<table>
+<thead><tr><th></th><th>FASTag</th><th>DirecTag</th></tr></thead>
+<tbody>
+<tr><td>Total wall clock, 8 comparable files</td><td class="num"><strong class="win">92.3 s</strong></td><td class="num">1,344.6 s</td></tr>
+<tr><td>Peak memory, 9.07 GB input</td><td class="num"><strong class="win">126 MB</strong></td><td class="num">17.7 GB</td></tr>
+<tr><td>Valid tag ranked first (PXD000001)</td><td class="num"><strong class="win">90.91%</strong></td><td class="num">88.69%</td></tr>
+<tr><td>Valid tag within top 50</td><td class="num">98.62%</td><td class="num">98.62%</td></tr>
+<tr><td>Files read of 13</td><td class="num"><strong class="win">13</strong></td><td class="num">8</td></tr>
+</tbody>
+</table>
+
+<p><strong>14.6x faster</strong> across the files DirecTag can read, and <strong>38.8x</strong>
+choosing the better container per file. Memory is flat in the file size rather than proportional
+to it, so a run is bounded by threads, not by input. Both tools reach the same accuracy ceiling —
+98.62% of identified spectra get a valid tag — and FASTag gets there sooner in the ranking.</p>
+
+<figure>
+  <img src="assets/bench-corpus.png" alt="Wall clock, speedup, container size and peak memory across 13 runs">
+  <figcaption>13 runs, 126 GB, 128 threads on a 384-core EPYC. DirecTag refuses 3 of the files
+  outright and reads 0 spectra from 2 more while exiting successfully. Full method and per-file
+  numbers in
+  <a href="https://github.com/okohlbacher/FASTag/blob/main/doc/BENCHMARK-corpus-128t.md">BENCHMARK-corpus-128t.md</a>.</figcaption>
+</figure>
+
+<h2 id="download">Download</h2>
+
+<p>Binaries are self-contained — the tool, its libraries and the OpenMS data it needs. macOS builds
+are signed with a Developer ID certificate and notarized by Apple.</p>
+
+<table>
+<thead><tr><th>Platform</th><th>Command line</th><th>Desktop app</th></tr></thead>
+<tbody>
+<tr><td>macOS, Apple silicon</td>
+    <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-macos-arm64.tar.gz">FASTag-macos-arm64.tar.gz</a></td>
+    <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-macos-arm64.dmg">.dmg</a></td></tr>
+<tr><td>macOS, Intel</td>
+    <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-macos-x64.tar.gz">FASTag-macos-x64.tar.gz</a></td>
+    <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-macos-x64.dmg">.dmg</a></td></tr>
+<tr><td>Linux x86-64</td>
+    <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-x64.tar.gz">FASTag-linux-x64.tar.gz</a></td><td>—</td></tr>
+<tr><td>Linux arm64</td>
+    <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-arm64.tar.gz">FASTag-linux-arm64.tar.gz</a></td><td>—</td></tr>
+<tr><td>Windows x64</td>
+    <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-windows-x64.zip">FASTag-windows-x64.zip</a></td><td>—</td></tr>
+</tbody>
+</table>
+
+<p class="muted">Species detection additionally needs the taxonomy index,
+<a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-taxonomy-k7.tar.gz">FASTag-taxonomy-k7.tar.gz</a>,
+which is already embedded in the release tarballs above. Windows binaries are not yet
+Authenticode-signed, so SmartScreen will warn on first run. All releases:
+<a href="https://github.com/okohlbacher/FASTag/releases">github.com/okohlbacher/FASTag/releases</a>.</p>
+
+<h2>Quick start</h2>
+
+<pre><code># tags for every MS2 spectrum in a run
+FASTag -in run.mzML -out tags.tsv
+
+# high-resolution data, seed length 3 extended to at most 15 residues
+FASTag -in run.mzML -out tags.tsv -tag_length 3 -extension 6
+
+# ion-trap MS2 — set the tolerance to match the analyser
+FASTag -in run.mzML -out tags.tsv -fragment_tolerance 0.3 -fragment_tolerance_unit Da
+
+# keep only tags occurring in a protein of interest, and the spectra carrying them
+FASTag -in run.mzML -out tags.tsv -fasta AGXT.fasta -out_spectra hits.mzML
+
+# mzPeak in, mzPeak out — any combination of mzML and mzpeak works
+FASTag -in run.mzpeak -out tags.tsv -out_spectra hits.mzpeak</code></pre>
+
+<p>Isotope collapsing and one gap per tag are on by default. For the fastest possible run, or to
+match a tool with no equivalent of either, add <code>-no_deisotope -gaps 0</code>.</p>
+
+<h2>mzPeak</h2>
+
+<p>FASTag reads <em>and</em> writes <a href="https://github.com/OpenMS/mzpeak">mzPeak</a>, the
+Parquet-backed mass-spectrometry container. Tagging is unaffected by which you use: reading a run
+as mzPeak gives the same spectra as reading it as mzML, and a run written to mzPeak and tagged
+again reproduces the original tag set exactly.</p>
+
+<ul>
+  <li><strong>6.7x smaller</strong> on a 9.07 GB run — 1.35 GB as mzPeak, with identical tags.</li>
+  <li><strong>Up to 5.1x faster to read</strong> on the same acquisition, single-threaded.</li>
+  <li>Profile MS2 is centroided on read, which recovers tags a raw profile read loses.</li>
+</ul>
+
+<p>Support comes from
+<a href="https://github.com/okohlbacher/mzpeak-openms">mzpeak-openms</a>, bundled with every
+released binary.</p>
+
+<h2>Documentation</h2>
+
+<ul>
+  <li><a href="https://github.com/okohlbacher/FASTag#readme">README</a> — options, output format,
+      reconciliation, entrapment-calibrated confidence, species detection, streaming mode</li>
+  <li><a href="https://github.com/okohlbacher/FASTag/blob/main/doc/BENCHMARK-DirecTag.md">BENCHMARK-DirecTag.md</a>
+      — accuracy and throughput against the reference implementation on identified spectra</li>
+  <li><a href="https://github.com/okohlbacher/FASTag/blob/main/doc/BENCHMARK-corpus-128t.md">BENCHMARK-corpus-128t.md</a>
+      — the 13-run corpus, both mzPeak layouts, 128 threads</li>
+  <li><a href="https://github.com/okohlbacher/FASTag/blob/main/doc/TEST-DATA.md">TEST-DATA.md</a>
+      — what each benchmark file is and where it came from</li>
+  <li><a href="https://github.com/okohlbacher/FASTag/issues">Issues</a> — bugs and questions</li>
+</ul>
+
+<h2>Citation</h2>
+
+<p>For the algorithm:</p>
+<p class="muted">Tabb DL, Ma ZQ, Martin DB, Ham AJ, Chambers MC. DirecTag: accurate sequence tags
+from peptide MS/MS through statistical scoring. <em>J Proteome Res</em> 2008; 7(9): 3838–46.
+<a href="https://doi.org/10.1021/pr800154p">doi:10.1021/pr800154p</a></p>
+
+<p>For the framework:</p>
+<p class="muted">Pfeuffer J, Bielow C, Wein S, et al. OpenMS 3 enables reproducible analysis of
+large-scale mass spectrometry data. <em>Nat Methods</em> 2024.
+<a href="https://doi.org/10.1038/s41592-024-02197-7">doi:10.1038/s41592-024-02197-7</a></p>
+
+<footer>
+  <div class="cols">
+    <div>
+      <h4>FASTag</h4>
+      <ul>
+        <li><a href="https://github.com/okohlbacher/FASTag">Source</a></li>
+        <li><a href="https://github.com/okohlbacher/FASTag/releases">Releases</a></li>
+        <li><a href="https://github.com/okohlbacher/FASTag/issues">Issues</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>OpenMS</h4>
+      <ul>
+        <li><a href="https://www.openms.de">openms.de</a></li>
+        <li><a href="https://github.com/OpenMS/OpenMS">OpenMS on GitHub</a></li>
+        <li><a href="https://openms.de/documentation/">OpenMS documentation</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>mzPeak</h4>
+      <ul>
+        <li><a href="https://github.com/OpenMS/mzpeak">Format</a></li>
+        <li><a href="https://github.com/okohlbacher/mzpeak-openms">C++ library</a></li>
+      </ul>
+    </div>
+  </div>
+  <p>MIT licensed. Built at the
+  <a href="https://www.ibmi.uni-tuebingen.de">Institute for Bioinformatics and Medical Informatics</a>,
+  University of Tübingen. The OpenMS logo is a trademark of the OpenMS project.</p>
+</footer>
+
+</div>
+</body>
+</html>
