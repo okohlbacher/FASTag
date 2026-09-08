@@ -148,12 +148,65 @@ certificate is scoped to the **Team**, not to one app — if the same Apple
 Developer account already has one (for another project), it signs FASTag too;
 no need for a second certificate.
 
-**To enable Windows signing**, apply to
-[SignPath Foundation](https://signpath.org/)'s free open-source signing
-program for FASTag specifically (enrollment is per-project — a certificate
-issued for a different project's slug does not cover this one), then add 2
-repo secrets: `SIGNPATH_API_TOKEN` and `SIGNPATH_ORG_ID`. The private key
-never leaves SignPath's HSM; there is no `.pfx` file to manage or lose.
+## Windows signing — DEFERRED 2026-09-08, waiting on a certificate
+
+**Decision: macOS ships signed; Windows ships unsigned until an OV
+code-signing certificate exists.** The CI is written and inert, so nothing has
+to change in the workflow when the certificate arrives.
+
+State of the SignPath account, read off its console on 2026-09-08:
+
+| | |
+|---|---|
+| Certificate `OpenMS Apps` (slug `OpenMS_Apps`) | `CSR PENDING`, **software** key store, "not used in any project" |
+| Project | **none exists** — so `SIGNPATH_PROJECT_SLUG` in `windows.yml` is empty and the gate refuses to sign |
+| `SIGNPATH_API_TOKEN` / `SIGNPATH_ORG_ID` | not set on the repo |
+
+Three traps recorded because each one already cost something:
+
+1. **`OpenMS_Apps` is a CERTIFICATE slug, not a project slug.** It was briefly
+   committed as `SIGNPATH_PROJECT_SLUG` on the strength of the name. The
+   signing action addresses a project, an artifact configuration and a policy;
+   a certificate is bound to a policy inside the console and is never named in
+   the workflow. The gate now refuses an empty slug up front, because a wrong
+   one fails the signing *request* about twenty minutes into a tag run.
+2. **This account is NOT on the Foundation flow.** Its console offers
+   "Request a new X.509 certificate ... purchase an X.509 certificate from a
+   commercial CA" and an *Upload X.509 certificate* button, so `CSR PENDING`
+   means SignPath is waiting on **us**. The Foundation rule — never take the
+   CSR to a CA, they submit it themselves — does not apply here. Do not carry
+   that rule across accounts.
+3. **The route chosen (buy OV from a commercial CA) cannot use the existing
+   certificate.** Its key store is *Software*, and since June 2023 the
+   CA/Browser Forum Baseline Requirements demand code-signing keys live in
+   certified hardware (FIPS 140-2 L2 / CC EAL4+) for OV as well as EV. A CSR
+   from a software key store will be refused. A **second certificate with an
+   HSM key store** is needed, and its CSR is the one to take to the CA;
+   `OpenMS_Apps.csr` is bound to the software key. Keep the software
+   certificate — it is the right one for a `test-signing` policy.
+
+Remaining work, none of it in this repository except the last line:
+
+- Confirm the SignPath plan offers an HSM key store; if not, the Foundation
+  programme becomes the realistic route after all.
+- Create the HSM certificate, take **its** CSR to a CA that accepts a cloud-HSM
+  CSR (ask before ordering: DigiCert, SSL.com and GlobalSign generally do).
+  Organisation validation of Eberhard Karls Universität Tübingen is the long
+  pole — days to weeks, and it ends in a callback to the university's publicly
+  listed number.
+- Create the **project**, the artifact configuration `initial`, and policies
+  `test-signing` (software cert) and `release-signing` (HSM cert, manual
+  approval ON).
+- Add `SIGNPATH_API_TOKEN` and `SIGNPATH_ORG_ID`, and set
+  `SIGNPATH_PROJECT_SLUG` in `windows.yml` to the project's slug.
+
+Validate with `windows` → Run workflow → `gui_dry_run` + `signing_policy:
+test-signing` before any tag. A test certificate chains to a non-public root,
+so it proves the pipeline and never shippability.
+
+**To enable Windows signing**, add 2 repo secrets: `SIGNPATH_API_TOKEN` and
+`SIGNPATH_ORG_ID`. With SignPath the private key never leaves their key store;
+there is no `.pfx` to manage or lose.
 Also requires, in SignPath's own console (not a repo file), an
 artifact-configuration matching what `windows.yml` requests (slug `initial`
 by default — edit the workflow if enrollment assigns a different one):
