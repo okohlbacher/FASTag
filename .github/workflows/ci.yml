@@ -24,7 +24,18 @@ on:
     branches: [main]
     tags: ['v*']
   pull_request:
+  # gui_dry_run exists because every desktop-app step below runs ONLY on a v*
+  # tag, so their first execution would otherwise be a real release -- the one
+  # run where a mistake is expensive. Dispatch this workflow with the switch on
+  # to build (and, when the MACOS_* secrets exist, sign and notarize) the .app
+  # without cutting a tag. Nothing is uploaded to a release in that mode; the
+  # .dmg comes back as a workflow artifact instead.
   workflow_dispatch:
+    inputs:
+      gui_dry_run:
+        description: 'Build the macOS desktop app without cutting a tag'
+        type: boolean
+        default: false
 
 # cancel-in-progress is ON, after turning it off caused something worse.
 #
@@ -659,7 +670,7 @@ jobs:
       # unsigned, same as today. See doc/BACKLOG-ci.md for exactly what is
       # needed and how to get it.
       - name: Detect macOS signing readiness
-        if: (matrix.name == 'macos-arm64' || matrix.name == 'macos-x64') && startsWith(github.ref, 'refs/tags/v')
+        if: (matrix.name == 'macos-arm64' || matrix.name == 'macos-x64') && (startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run)
         id: mac-signing
         shell: bash
         env:
@@ -724,6 +735,107 @@ jobs:
           xcrun notarytool submit "${RUNNER_TEMP}/FASTag-notarize.zip" \
             --apple-id "$MACOS_APPLE_ID" --team-id "$MACOS_TEAM_ID" \
             --password "$MACOS_NOTARY_PASSWORD" --wait
+
+      # ------------------------------------------------- desktop app (macOS)
+      # The .app is a SECOND artifact needing its OWN signature: notarization
+      # rejects a bundle containing any unsigned Mach-O, and the CLI plus its
+      # whole dylib closure travel inside this one. Those are already signed
+      # by the step above, so this restages the finished dist/ tree into the
+      # layout the Rust backend expects and lets Tauri do the outer signing,
+      # notarization and stapling in one shot.
+      #
+      # Unlike the CLI, a .app and a .dmg CAN be stapled -- so the desktop app
+      # needs no online Gatekeeper lookup on first run, which the CLI does.
+      #
+      # Runs on a v* tag, or on a workflow_dispatch with gui_dry_run set: see
+      # the comment on that input for why an untested tag-only path is a trap.
+      - uses: actions/setup-node@v7
+        if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && (matrix.name == 'macos-arm64' || matrix.name == 'macos-x64'))
+        with:
+          node-version: 24
+
+      - name: Stage the signed CLI as the app's bundled resources (macOS)
+        if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && (matrix.name == 'macos-arm64' || matrix.name == 'macos-x64'))
+        shell: bash
+        run: |
+          set -e
+          # resolve_binary() in gui/src-tauri/src/fastag.rs looks for
+          # <resources>/fastag/bin/FASTag, share/OpenMS and
+          # share/FASTag/taxonomy -- match it exactly or the app falls back to
+          # whatever `FASTag` is on PATH, which on a user's machine is nothing.
+          R=gui/src-tauri/resources/fastag
+          rm -rf "$R"; mkdir -p "$R/bin" "$R/share/FASTag"
+          cp dist/FASTag/FASTag.bin "$R/bin/FASTag"
+          # lib/ goes NEXT TO the executable, not one level up. dist/ was
+          # bundled with `-p @executable_path/lib/`, so the loader looks beside
+          # the binary; a tidier bin/../lib would break every dylib reference
+          # and only show up at first launch on someone else's Mac.
+          cp -RL dist/FASTag/lib "$R/bin/lib"
+          cp -RL dist/FASTag/share-OpenMS "$R/share/OpenMS"
+          cp -RL dist/FASTag/share-FASTag-taxonomy "$R/share/FASTag/taxonomy"
+          # -L throughout: Tauri's resource bundler silently SKIPS symlinked
+          # directories, so a symlink here becomes a missing file in the .app
+          # with no error at build time.
+          test -x "$R/bin/FASTag"
+          # The same fixture the dist/ step above asserts -- proves share/
+          # arrived whole, not just that the directory exists.
+          test -s "$R/share/OpenMS/examples/ID/Ecoli_MS2_small.mzML"
+          test -s "$R/share/FASTag/taxonomy/tax_k7.taxdb" || \
+            echo "::warning::no taxonomy index in the app bundle; -species will be unavailable"
+          du -sh "$R"
+
+      - name: Build, sign and notarize the desktop app (macOS)
+        if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && (matrix.name == 'macos-arm64' || matrix.name == 'macos-x64'))
+        timeout-minutes: 120
+        working-directory: gui
+        # Tauri reads these directly; APPLE_PASSWORD is the app-specific
+        # password, never the Apple ID password. When the secrets are absent
+        # (a dry run before they are configured) every value is empty, Tauri
+        # skips signing, and the build still proves the bundle assembles.
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.MACOS_APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
+        run: |
+          set -e
+          npm ci
+          npm run tauri build
+          ls -la src-tauri/target/release/bundle/dmg/
+
+      - name: Attach the signed desktop app to the release (macOS)
+        if: steps.mac-signing.outputs.enabled == 'true' && startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          dmgs=(gui/src-tauri/target/release/bundle/dmg/*.dmg)
+          [ ${#dmgs[@]} -gt 0 ] || { echo "::error::tauri produced no .dmg"; exit 1; }
+          DMG="${dmgs[0]}"
+          # Refuse to ship a .dmg whose notarization ticket is not attached:
+          # an unstapled one still warns on a machine that is offline or
+          # behind a proxy, which is the case a user reports as "it's broken".
+          xcrun stapler validate "$DMG"
+          cp "$DMG" "FASTag-gui-${{ matrix.name }}.dmg"
+          gh release create "${{ github.ref_name }}" \
+            --title "${{ github.ref_name }}" \
+            --notes "Automated binary upload; release notes pending." \
+            2>/dev/null || true
+          gh release upload "${{ github.ref_name }}" "FASTag-gui-${{ matrix.name }}.dmg" --clobber
+
+      # A dry run has no release to attach to, so the .dmg comes back as a
+      # workflow artifact to be opened and checked by hand.
+      - uses: actions/upload-artifact@v7
+        if: inputs.gui_dry_run && (matrix.name == 'macos-arm64' || matrix.name == 'macos-x64')
+        with:
+          name: FASTag-gui-${{ matrix.name }}-dryrun
+          path: gui/src-tauri/target/release/bundle/dmg/*.dmg
+          if-no-files-found: error
 
       # BALL's own release.yml has no equivalent teardown -- its runner is
       # simply discarded after the job, which is why the keychain never

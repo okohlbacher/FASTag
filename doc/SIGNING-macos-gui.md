@@ -1,12 +1,54 @@
-# Signing + notarizing the macOS FASTag desktop app
+# Signing the FASTag desktop app — macOS and Windows
 
-The self-contained `.app` is **built and verified** (see `gui/scripts/bundle-macos.sh`):
-a single bundle carrying the CLI, its full dylib closure with **one** `libomp`
-(which fixes `OMP: Error #15`), `share/OpenMS`, the ~1.1 GB taxonomy, and the
-icon. It runs species detection standalone with no `KMP_DUPLICATE_LIB_OK`.
+**Status 2026-09-08: WIRED, not yet exercised.** `ci.yml` builds, signs,
+notarizes and staples the macOS `.app`/`.dmg`; `windows.yml` builds the app and
+signs the NSIS installer through SignPath. Both paths are **inert until the
+secrets below exist** — they are gated on the signing credentials, so a
+secret-less tag build skips them entirely rather than burning ~90 minutes to
+produce something unshippable.
 
-What's left is **Developer ID signing + notarization**, which needs Apple
-credentials that must live in CI, never on a dev machine. This is the runbook.
+Neither has ever run. Before tagging a release that is meant to be signed, do a
+**dry run**: Actions → the workflow → Run workflow → tick `gui_dry_run`. That
+builds the app off a branch, uploads it as a workflow artifact, and uploads
+nothing to any release. On macOS a dry run also signs and notarizes when the
+secrets are present; on Windows it deliberately does not, because a SignPath
+signing request blocks on a human clicking Approve.
+
+The self-contained `.app` itself is **built and verified** (see
+`gui/scripts/bundle-macos.sh`): one bundle carrying the CLI, its full dylib
+closure with **one** `libomp` (which fixes `OMP: Error #15`), `share/OpenMS`,
+the ~1.1 GB taxonomy, and the icon. It runs species detection standalone with
+no `KMP_DUPLICATE_LIB_OK`.
+
+## What the workflows actually do
+
+`ci.yml`, macOS legs, after the CLI is signed and notarized:
+
+1. Restage the finished `dist/FASTag/` tree into
+   `gui/src-tauri/resources/fastag/` as `bin/FASTag`, `bin/lib/`,
+   `share/OpenMS`, `share/FASTag/taxonomy` — the layout `resolve_binary()` in
+   `gui/src-tauri/src/fastag.rs` searches. **`lib/` sits next to the binary**,
+   not one level up, because `dist/` was bundled with
+   `-p @executable_path/lib/`; a tidier `bin/../lib` breaks every dylib
+   reference and only shows up at first launch on someone else's Mac.
+   Everything is copied with `-L`: Tauri's resource bundler silently skips
+   symlinked directories.
+2. `npm ci && npm run tauri build` with the `APPLE_*` env vars — Tauri does the
+   outer signing, notarization and stapling in one shot. The nested Mach-Os are
+   already Developer ID-signed by the CLI step, which is what notarization
+   requires.
+3. `xcrun stapler validate` the `.dmg` before upload, then attach it as
+   `FASTag-gui-<platform>.dmg`.
+
+`windows.yml`, after the CLI is SignPath-signed and `dist/` assembled: the same
+restage (but **flat** — Windows has no RPATH, so every DLL must sit beside the
+`.exe`), `npm run tauri build`, then a **second** SignPath request for the NSIS
+installer, attached as `FASTag-gui-windows-x64-setup.exe`.
+
+That second request means **a signed release needs the Approve click in
+SignPath twice**: once for the CLI, once for the installer. SignPath's
+`initial` artifact configuration already expects a zip containing `*.exe`, and
+an NSIS installer is an `.exe`, so no new configuration is needed.
 
 ## Secrets (add in GitHub → Settings → Secrets and variables → Actions)
 
@@ -22,58 +64,38 @@ Same set BALL/BALLView uses (see the `software-signing` runbook):
 | `MACOS_TEAM_ID` | Apple Developer Team ID |
 | `MACOS_NOTARY_PASSWORD` | app-specific password for notarization |
 
-## CI steps (add to `ci.yml`'s macOS leg, AFTER the CLI `dist/FASTag` is built,
-## gated so it skips when the cert secret is absent — never breaks a release)
+Windows additionally needs the two SignPath secrets `windows.yml` already uses
+for the CLI: `SIGNPATH_API_TOKEN` and `SIGNPATH_ORG_ID`. No new ones.
 
-1. **Assemble the app's resources with the same closure the CLI build produced:**
-   ```bash
-   FASTAG_BIN=build/FASTag \
-   OPENMS_LIB="$OPENMS_INSTALL/lib" DEPS_LIB="$CONDA_PREFIX/lib" \
-   OPENMS_SHARE="$OPENMS_INSTALL/share/OpenMS" \
-   TAXONOMY_DIR="$RUNNER_TEMP/taxonomy" \
-   gui/scripts/bundle-macos.sh
-   ```
-   The taxonomy k-mer index isn't in the repo; fetch it once from the release
-   (`gh release download "$TAG" -p 'FASTag-taxonomy-k7.tar.gz'`) into
-   `$RUNNER_TEMP/taxonomy`, or rebuild it with `buildtaxdb`.
+`MACOS_SIGNING_IDENTITY` and `MACOS_TEAM_ID` are already determined for this
+project by the issued certificate: `Developer ID Application: Oliver Kohlbacher
+(9WF4NVY9MY)` and `9WF4NVY9MY`, valid to 22 May 2031.
 
-2. **Import the cert into a throwaway keychain** (decode `MACOS_CERTIFICATE_BASE64`
-   → `.p12` → `security import` → set as default). Tear it down after.
-
-3. **Sign every nested Mach-O inside out** (the CLI + all `lib/*.dylib`), hardened
-   runtime + secure timestamp — notarization rejects any unsigned executable:
-   ```bash
-   find gui/src-tauri/resources/fastag \( -name '*.dylib' -o -name FASTag \) -print0 \
-     | xargs -0 -I{} codesign --force --timestamp --options runtime \
-         --sign "$MACOS_SIGNING_IDENTITY" {}
-   ```
-
-4. **Build + sign + notarize the app in one shot** — Tauri does the outer signing
-   and notarization from env vars:
-   ```bash
-   cd gui && npm ci
-   APPLE_CERTIFICATE="$MACOS_CERTIFICATE_BASE64" \
-   APPLE_CERTIFICATE_PASSWORD="$MACOS_CERTIFICATE_PASSWORD" \
-   APPLE_SIGNING_IDENTITY="$MACOS_SIGNING_IDENTITY" \
-   APPLE_ID="$MACOS_APPLE_ID" APPLE_PASSWORD="$MACOS_NOTARY_PASSWORD" \
-   APPLE_TEAM_ID="$MACOS_TEAM_ID" \
-   npm run tauri build   # emits a signed, notarized, stapled .dmg + .app
-   ```
-   `tauri.conf.json` already sets `bundle.macOS.entitlements` →
-   `entitlements.plist` (disables library validation for the bundled third-party
-   dylibs) and `minimumSystemVersion`.
-
-5. **Upload** `gui/src-tauri/target/release/bundle/dmg/FASTag_*.dmg` to the
-   release with `gh release upload`.
+**Getting the `.p12`.** The certificate alone is only the public half; the
+`.p12` needs the private key generated with the original CSR. Check with
+`security find-identity -p codesigning -v` — if it lists the Developer ID
+identity, `security export -k ~/Library/Keychains/login.keychain-db -t
+identities -f pkcs12 -o cert.p12` produces the file, and
+`base64 -i cert.p12 | pbcopy` its secret value. If it reports `0 valid
+identities`, the key is gone and the certificate must be revoked and reissued
+from a fresh CSR — there is no recovery. Add every secret through the GitHub
+web UI, never a command line, and delete the local `.p12` afterwards.
 
 ## Gotchas (these bite on the first run)
 
-- **`secrets.*` is illegal in `if:`** — map the cert secret into a step output
-  and gate on that, or the whole workflow fails with a 0-job `startup_failure`.
+- **`secrets.*` is illegal in `if:`** — it makes the whole workflow fail with a
+  0-job `startup_failure`. Both workflows map the secret into a step `env:` and
+  gate on a step OUTPUT instead; keep it that way.
 - **Notarization is iterate-to-green.** The first submissions usually fail on a
-  missed nested binary; `xcrun notarytool log <id>` names the exact file. "Sign
-  every Mach-O", step 3, is why — don't hand-list suspects.
-- **Two arches.** Build `macos-14` (arm64) and `macos-13` (x64) legs; the `.app`
-  is ~1.5 GB each because the taxonomy is inside, so notarization upload is slow.
+  missed nested binary; `xcrun notarytool log <id>` names the exact file. That
+  is why the CLI step signs *every* dylib rather than a hand-listed set.
+- **Two arches.** `macos-arm64` and `macos-x64` each produce their own `.dmg`,
+  ~1.5 GB apiece because the taxonomy is inside, so the notarization upload is
+  slow — hence the 120-minute step timeout.
+- **A brand-new bundle ID's first notarization can take 8–12 hours** (see
+  `doc/BACKLOG-ci.md`). Prime it out of band before the first signed release;
+  no job timeout here covers that.
+- **The Windows app has never been built in CI at all.** Unlike macOS, there is
+  no working local precedent for it — dry-run it before trusting a tag.
 - Ad-hoc signatures from `bundle-macos.sh` (`codesign --sign -`) are placeholders
-  the Developer ID pass in step 3/4 overwrites.
+  the Developer ID pass overwrites.
