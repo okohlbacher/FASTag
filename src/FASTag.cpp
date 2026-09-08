@@ -30,6 +30,7 @@
 #include "TagRecon.h"
 #include "Proforma.h"
 #include "SpectrumSampler.h"
+#include "TaxDeconv.h"
 #include "TaxIndex.h"
 #include "TaxStats.h"
 
@@ -424,6 +425,34 @@ protected:
     registerIntOption_("species_min_len", "<n>", 0,
                        "Ignore tags shorter than this for taxonomy; 0 uses the index k", false);
     setMinInt_("species_min_len", 0);
+    // Near-neighbour control. Both filters are identities at their defaults, so
+    // the pre-1.5 behaviour is reproducible exactly; the deconvolution below is
+    // the part that is on.
+    registerDoubleOption_("species_max_kmer_share", "<f>", 1.0,
+                          "Ignore k-mers carried by more than this fraction of the indexed taxa: "
+                          "a k-mer in most of the reference cannot tell taxa apart. 1 keeps all", false);
+    setMinFloat_("species_max_kmer_share", 0.0);
+    setMaxFloat_("species_max_kmer_share", 1.0);
+    registerDoubleOption_("species_min_margin", "<f>", 0.0,
+                          "Require a tag's best taxa to carry this fraction more of its k-mers than "
+                          "the runner-up, else the tag is too generic to be evidence. 0 keeps all", false);
+    setMinFloat_("species_min_margin", 0.0);
+    setMaxFloat_("species_min_margin", 1.0);
+    registerFlag_("species_use_gapped",
+                  "Let gapped tags contribute taxonomic evidence. Off because a gap is an "
+                  "inferred residue pair, and an exact k-mer lookup cannot tell an inferred "
+                  "residue from an observed one", false);
+    // OPT-IN, on measured evidence rather than preference. On PXD000001 the
+    // correction is decisive: the near-neighbour tail turns from Oryza/Zea/Danio
+    // into Dickeya/Yersinia/Serratia, which are Pectobacterium's actual
+    // relatives. On a human run it is a wash -- Macaca at 93% of Homo is
+    // replaced by Chlamydomonas at 92% -- and it drives spiked contaminants
+    // down (Sus 1176 -> 0.0, Bos 1199 -> 8.2) that the sample really contains.
+    // A default flip needs evidence that holds on both, and this does not.
+    registerFlag_("species_deconvolve",
+                  "Correct taxon counts for sequence shared between taxa, so a near neighbour "
+                  "cannot rank on a relative's evidence. Helps most when the true taxon's "
+                  "relatives are in the reference; can suppress genuine low-abundance taxa", false);
     registerStringOption_("species_rank", "<rank>", "genus",
                           "Report taxa at this NCBI rank (genus, family, ...)", false);
     registerDoubleOption_("max_evalue", "<value>", 20.0, "E-value cutoff; 0 disables", false);
@@ -1486,6 +1515,7 @@ protected:
     // each row is written. id + tag is far smaller than the full rows.
     const bool want_species = getFlag_("species")
         || (!getStringOption_("taxdb").empty() && !getStringOption_("species_out").empty());
+    const bool species_use_gapped = getFlag_("species_use_gapped");
     std::map<std::string, std::vector<std::string>> by_spec;
 
     // Write one finished block's rows in index order and recycle the buffers.
@@ -1528,7 +1558,25 @@ protected:
             {
               size_t t2 = r.find('\t', t1 + 1);
               if (t2 != std::string::npos && t2 <= nl)
-                by_spec[r.substr(start, t1 - start)].push_back(r.substr(t1 + 1, t2 - t1 - 1));
+              {
+                // Skip GAPPED tags unless asked for. A gap spells two residues
+                // from one summed mass -- an inference, not a read -- and an
+                // exact k-mer lookup cannot tell the difference, so a gapped tag
+                // matches taxa it never evidenced. Measured on PXD000001: with
+                // gapped tags admitted, the true genus falls from rank 1 to rank
+                // 20 and cereal genomes take the top of the table.
+                bool gapped = false;
+                if (!species_use_gapped)
+                {
+                  // The row is spectrum \t tag \t length \t charge \t nterm \t
+                  // cterm \t extended \t gapped \t ... -- field 7.
+                  size_t f = t2, col = 2;
+                  while (col < 7 && f != std::string::npos && f < nl) { f = r.find('\t', f + 1); ++col; }
+                  if (f != std::string::npos && f + 1 < nl) gapped = (r[f + 1] == '1');
+                }
+                if (!gapped)
+                  by_spec[r.substr(start, t1 - start)].push_back(r.substr(t1 + 1, t2 - t1 - 1));
+              }
             }
             start = nl + 1;
           }
@@ -2242,8 +2290,30 @@ protected:
 
       // Per-spectrum taxon support -> per-leaf spectrum counts. by_spec was
       // collected in write_block, in write order.
-      std::map<uint32_t, uint64_t> hits;
+      // Two filters on what counts as evidence, both identities at their
+      // defaults so the previous behaviour is reproducible:
+      //
+      //   share  -- a k-mer carried by most of the reference cannot discriminate
+      //             between taxa, so it is not evidence for any of them. It is
+      //             SKIPPED rather than deleted: the whole-tag rule below would
+      //             otherwise make every tag containing one unmatchable.
+      //   margin -- a tag whose best taxa carry no more of it than the field is
+      //             too generic to be evidence at all. MARLOWE reports the
+      //             absolute form of this failing on a broad database and
+      //             replaces it with a top-two comparison; this is that idea
+      //             adapted, since one proteome per genus leaves no within-genus
+      //             fraction to compare.
+      const std::vector<uint32_t> idx_taxa = idx.taxa();
+      const double max_share = getDoubleOption_("species_max_kmer_share");
+      const double min_margin = getDoubleOption_("species_min_margin");
+      const size_t share_cap = max_share >= 1.0
+          ? idx_taxa.size()
+          : static_cast<size_t>(max_share * static_cast<double>(idx_taxa.size()));
+
+      std::map<uint32_t, uint64_t> hits;       // per NODE, deduplicated per spectrum
+      std::map<uint32_t, uint64_t> leaf_hits;  // per INDEX TAXON, deduplicated per spectrum
       size_t n_units = 0;
+      uint64_t n_kmer_skipped = 0, n_tag_generic = 0;
       for (const auto& sp : by_spec)
       {
         std::set<uint32_t> taxa;  // taxa supported anywhere in this spectrum
@@ -2251,30 +2321,40 @@ protected:
         {
           const std::string seq = FASTag::baseSequence(raw);
           if (static_cast<int>(seq.size()) < min_len) continue;
-          // Intersection of the tag's k-mer taxon sets: the taxon must carry the
-          // whole tag, not just one window.
-          std::vector<uint32_t> acc;
-          bool first = true;
           const int L = static_cast<int>(seq.size());
           // One reusable buffer: lookup() fills rather than returns a reference,
           // because the mapped index holds taxon INDICES, not a vector to borrow.
           std::vector<uint32_t> t;
+          std::map<uint32_t, int> sup;  // taxon -> how many of this tag's k-mers it carries
+          int n_eval = 0;               // k-mers that were discriminative enough to use
+          bool unexplained = false;
           for (int i = 0; i + kk <= L; ++i)
           {
             idx.lookup(FASTag::TaxIndex::fold(seq.substr(static_cast<size_t>(i), static_cast<size_t>(kk))), t);
-            if (first) { acc = t; first = false; }
-            else
-            {
-              std::vector<uint32_t> tmp;
-              std::set_intersection(acc.begin(), acc.end(), t.begin(), t.end(), std::back_inserter(tmp));
-              acc.swap(tmp);
-            }
-            if (acc.empty()) break;
+            // A k-mer in NO taxon kills the tag, exactly as the old intersection
+            // did: the reference cannot explain this tag at all.
+            if (t.empty()) { unexplained = true; break; }
+            if (t.size() > share_cap) { ++n_kmer_skipped; continue; }
+            ++n_eval;
+            for (uint32_t tx : t) ++sup[tx];
           }
-          for (uint32_t tx : acc) taxa.insert(tx);
+          if (unexplained || n_eval == 0) continue;
+
+          int best = 0;
+          for (const auto& kv : sup) best = std::max(best, kv.second);
+          // The whole-tag rule survives: a taxon must carry EVERY k-mer that was
+          // actually evaluated. With share_cap at its maximum that is exactly the
+          // old set intersection, which is why the default path is unchanged.
+          if (best < n_eval) continue;
+          int runner = 0;
+          for (const auto& kv : sup) if (kv.second < best) runner = std::max(runner, kv.second);
+          const double margin = static_cast<double>(best - runner) / static_cast<double>(n_eval);
+          if (margin < min_margin) { ++n_tag_generic; continue; }
+          for (const auto& kv : sup) if (kv.second == best) taxa.insert(kv.first);
         }
         if (taxa.empty()) continue;
         ++n_units;
+        for (uint32_t tx : taxa) ++leaf_hits[tx];
         // Count each NODE at most once per spectrum. Increment every ancestor of
         // every supported taxon, deduplicated within the spectrum, so `hits` is
         // already a correct spectrum-count at every rank. Summing leaf counts up
@@ -2285,6 +2365,39 @@ protected:
           for (uint32_t a : tax.lineage(tx)) spec_nodes.insert(a);
         for (uint32_t a : spec_nodes) ++hits[a];
       }
+
+      // Subtract the evidence a taxon earns only by resembling a stronger one.
+      // Counting cannot separate near neighbours -- Macaca trails Homo by a few
+      // percent because mammalian proteomes share most 7-mers -- but the index
+      // knows exactly how much they share, so the shared part can be removed.
+      // See TaxDeconv.h for the model and its limits.
+      std::map<uint32_t, double> adjusted_leaf;
+      if (getFlag_("species_deconvolve") && !idx_taxa.empty())
+      {
+        const size_t nt = idx_taxa.size();
+        const std::vector<uint64_t> overlap = idx.pairwiseOverlap();
+        std::vector<double> obs(nt, 0.0);
+        for (size_t i = 0; i < nt; ++i)
+        {
+          auto it = leaf_hits.find(idx_taxa[i]);
+          if (it != leaf_hits.end()) obs[i] = static_cast<double>(it->second);
+        }
+        const std::vector<double> est = FASTag::deconvolve(overlap, obs, nt);
+        for (size_t i = 0; i < nt; ++i)
+          if (est[i] > 0.0) adjusted_leaf[idx_taxa[i]] = est[i];
+      }
+      else
+      {
+        for (const auto& kv : leaf_hits) adjusted_leaf[kv.first] = static_cast<double>(kv.second);
+      }
+
+      // Roll the ADJUSTED leaves up by SUMMING. Spectrum counts had to be
+      // deduplicated per node -- one spectrum supporting two species of a genus
+      // is still one spectrum -- but these are estimated independent
+      // contributions, so a genus really is the sum of its species.
+      std::map<uint32_t, double> adjusted;
+      for (const auto& kv : adjusted_leaf)
+        for (uint32_t a : tax.lineage(kv.first)) adjusted[a] += kv.second;
 
       // hits is already rolled up (spectrum-deduped per node), so build the
       // evidence directly -- rolling it again would re-introduce the double count.
@@ -2308,12 +2421,31 @@ protected:
 
       const String want_rank = getStringOption_("species_rank");
       std::ofstream so(species_out.c_str());
-      so << "rank\ttaxid\tname\tobserved\texpected\tenrichment\tlog_pvalue\tqvalue\n";
+      // `adjusted` replaces `enrichment`. Enrichment was never usable for
+      // ranking -- a small proteome gives a tiny expectation and so a huge
+      // ratio -- and the documentation already told readers to ignore it.
+      so << "rank\ttaxid\tname\tobserved\tadjusted\texpected\tlog_pvalue\tqvalue\n";
+
+      // Order by the corrected count, not by q. Significance ranks a near
+      // neighbour highly precisely because its borrowed count IS significant.
+      std::vector<const FASTag::TaxonCall*> ranked;
+      for (const auto& c : calls) if (c.rank == want_rank) ranked.push_back(&c);
+      std::stable_sort(ranked.begin(), ranked.end(),
+                       [&](const FASTag::TaxonCall* a, const FASTag::TaxonCall* b) {
+                         auto va = adjusted.find(a->taxid), vb = adjusted.find(b->taxid);
+                         const double fa = va == adjusted.end() ? 0.0 : va->second;
+                         const double fb = vb == adjusted.end() ? 0.0 : vb->second;
+                         if (fa != fb) return fa > fb;
+                         if (a->observed != b->observed) return a->observed > b->observed;
+                         return a->taxid < b->taxid;   // deterministic ties
+                       });
+
       size_t shown = 0;
-      for (const auto& c : calls)
+      for (const FASTag::TaxonCall* cp : ranked)
       {
-        if (c.rank != want_rank) continue;
-        const double enr = c.expected > 0 ? c.observed / c.expected : 999.0;
+        const FASTag::TaxonCall& c = *cp;
+        auto ait = adjusted.find(c.taxid);
+        const double adj = ait == adjusted.end() ? 0.0 : ait->second;
         // rank/name come from the taxdump, which can carry arbitrary text: a tab
         // or newline in a name would desync columns, and a very long name would
         // overrun a fixed buffer. Sanitise the free-text fields (the numerics are
@@ -2324,8 +2456,8 @@ protected:
           return o;
         };
         char num[128];
-        std::snprintf(num, sizeof num, "\t%llu\t%.1f\t%.1fx\t%g\t%g\n",
-                      static_cast<unsigned long long>(c.observed), c.expected, enr,
+        std::snprintf(num, sizeof num, "\t%llu\t%.1f\t%.1f\t%g\t%g\n",
+                      static_cast<unsigned long long>(c.observed), adj, c.expected,
                       c.log_pvalue, c.qvalue);
         so << clean(c.rank) << '\t' << c.taxid << '\t' << clean(c.name) << num;
         if (++shown >= 50) break;
@@ -2335,8 +2467,11 @@ protected:
       so.close();
       if (!species_ok)
         OPENMS_LOG_ERROR << "Failed writing species report to " << species_out << std::endl;
-      OPENMS_LOG_INFO << "Species: " << n_units << " spectra contributed taxon evidence; "
-                      << "top " << want_rank << " calls -> " << species_out << std::endl;
+      OPENMS_LOG_INFO << "Species: " << n_units << " spectra contributed taxon evidence";
+      if (n_kmer_skipped || n_tag_generic)
+        OPENMS_LOG_INFO << " (" << n_kmer_skipped << " k-mers too widely shared, "
+                        << n_tag_generic << " tags too generic)";
+      OPENMS_LOG_INFO << "; top " << want_rank << " calls -> " << species_out << std::endl;
     }
 
     OPENMS_LOG_INFO << n_ms2 << " MS2 spectra, " << n_tags << " tags";

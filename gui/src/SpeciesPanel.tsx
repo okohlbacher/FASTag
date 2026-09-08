@@ -80,7 +80,7 @@ export default function SpeciesPanel({
           <span className="rank">{top.rank}</span>
         </div>
         <div className="sub">
-          {top.observed.toLocaleString()} spectra · {top.enrichment}× enriched over background
+          {top.observed.toLocaleString()} spectra · {top.adjusted.toLocaleString()} after subtracting shared sequence
         </div>
         <div className="caveat">
           {top.rank}-level call — a reduced reference set and short tags cannot resolve species.
@@ -137,7 +137,7 @@ export default function SpeciesPanel({
                     <span className="v">{rel}%</span>
                   </td>
                   <td className="num dim">{t.observed.toLocaleString()}</td>
-                  <td className="num">{t.enrichment}×</td>
+                  <td className="num">{t.adjusted.toLocaleString()}</td>
                   <td className="num dim">{fmtQ(t.q)}</td>
                 </tr>
               )
@@ -147,8 +147,9 @@ export default function SpeciesPanel({
       </div>
 
       <p className="footnote">
-        Ranked by significance, not by enrichment — the most enriched taxon is often not the right
-        answer, because an over-represented proteome already carries a high background expectation.
+        Ranked by the <em>adjusted</em> count — spectra remaining once sequence shared with other
+        taxa has been subtracted. Ranking by significance instead would favour a near neighbour,
+        whose borrowed count is exactly what makes it significant.
         <br />
         <em>rel.</em> is spectral hits relative to the top taxon (top = 100%): a relative confidence,
         not a calibrated posterior. q is likewise a <em>ranking aid, not a calibrated FDR</em> — the

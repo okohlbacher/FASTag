@@ -17,7 +17,7 @@ pub struct Taxon {
     name: String,
     observed: f64,
     expected: f64,
-    enrichment: f64,
+    adjusted: f64,
     log_p: f64,
     q: f64,
 }
@@ -38,7 +38,7 @@ pub struct TaxdbInfo {
     kmers: u64,
 }
 
-// FASTag writes enrichment as e.g. "1.4x"; keep the number.
+// Numeric fields may carry a trailing unit; keep the number.
 fn num(s: &str) -> f64 {
     let t = s.trim().trim_end_matches(['x', 'X']);
     t.parse::<f64>().ok().filter(|v| v.is_finite()).unwrap_or(0.0)
@@ -59,7 +59,7 @@ fn read_species(path: &str) -> Option<SpeciesReport> {
         i.and_then(|i| f.get(i)).map(|s| s.to_string()).unwrap_or_default()
     };
     let (i_rank, i_taxid, i_name) = (col("rank"), col("taxid"), col("name"));
-    let (i_obs, i_exp, i_enr) = (col("observed"), col("expected"), col("enrichment"));
+    let (i_obs, i_exp, i_adj) = (col("observed"), col("expected"), col("adjusted"));
     let (i_logp, i_q) = (col("log_pvalue"), col("qvalue"));
 
     let mut taxa: Vec<Taxon> = Vec::new();
@@ -71,7 +71,7 @@ fn read_species(path: &str) -> Option<SpeciesReport> {
             name: get(&f, i_name),
             observed: num(&get(&f, i_obs)),
             expected: num(&get(&f, i_exp)),
-            enrichment: num(&get(&f, i_enr)),
+            adjusted: num(&get(&f, i_adj)),
             log_p: num(&get(&f, i_logp)),
             q: get(&f, i_q).parse().ok().filter(|v: &f64| v.is_finite()).unwrap_or(1.0),
         });
@@ -81,11 +81,13 @@ fn read_species(path: &str) -> Option<SpeciesReport> {
     // taxon, but a taxon with zero observed k-mers is noise in the report.
     taxa.retain(|t| t.observed > 0.0);
 
-    // Rank by significance (log p-value), not enrichment; ties broken by the
-    // count. See the note in species.ts.
+    // Keep the CLI's order: it ranks by the adjusted count, which is the raw
+    // count once shared sequence between taxa has been subtracted. Re-sorting by
+    // significance here would undo that -- a near neighbour's borrowed count is
+    // exactly what makes it significant.
     taxa.sort_by(|a, b| {
-        a.log_p
-            .partial_cmp(&b.log_p)
+        b.adjusted
+            .partial_cmp(&a.adjusted)
             .unwrap_or(std::cmp::Ordering::Equal)
             .then(b.observed.partial_cmp(&a.observed).unwrap_or(std::cmp::Ordering::Equal))
     });
@@ -159,7 +161,7 @@ mod tests {
     use std::io::Write;
 
     #[test]
-    fn num_strips_enrichment_suffix() {
+    fn num_strips_trailing_unit() {
         assert_eq!(num("1.4x"), 1.4);
         assert_eq!(num("8.3X"), 8.3);
         assert_eq!(num("garbage"), 0.0);
@@ -167,15 +169,21 @@ mod tests {
     }
 
     #[test]
-    fn species_report_filters_zero_hits_and_sorts_by_significance() {
+    fn species_report_filters_zero_hits_and_sorts_by_adjusted_count() {
+        // Neighbour is the near-neighbour case: a big borrowed count makes it the
+        // MOST significant row, while deconvolution leaves it with almost
+        // nothing. True is the real answer. The two orderings disagree here on
+        // purpose -- the previous fixture ranked the same either way, so it
+        // passed whichever rule was in force and tested nothing.
         let mut f = tempfile_path("sp.tsv");
-        std::fs::write(&f, "rank\ttaxid\tname\tobserved\texpected\tenrichment\tlog_pvalue\tqvalue\n\
-            genus\t1\tZero\t0\t1.0\t0.5x\t-1\t1\n\
-            genus\t2\tBig\t100\t10\t2.0x\t-50\t0.001\n\
-            genus\t3\tSmall\t5\t1\t5.0x\t-10\t0.01\n").unwrap();
+        std::fs::write(&f, "rank\ttaxid\tname\tobserved\tadjusted\texpected\tlog_pvalue\tqvalue\n\
+            genus\t1\tZero\t0\t0\t0.5\t-1\t1\n\
+            genus\t2\tNeighbour\t200\t1\t2.0\t-99\t0\n\
+            genus\t3\tTrue\t100\t90\t2.0\t-50\t0\n").unwrap();
         let r = read_species(f.to_str().unwrap()).unwrap();
         assert_eq!(r.taxa.len(), 2, "zero-observed row must be dropped");
-        assert_eq!(r.taxa[0].name, "Big", "most significant (lowest log_p) first");
+        assert_eq!(r.taxa[0].name, "True", "highest adjusted count first, not lowest log_p");
+        assert_eq!(r.taxa[1].name, "Neighbour", "the borrowed count ranks second despite its p");
         std::fs::remove_file(&f).ok();
         let _ = f; // silence unused on some toolchains
     }

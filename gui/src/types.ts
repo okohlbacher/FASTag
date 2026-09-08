@@ -55,7 +55,7 @@ export interface Taxon {
   name: string
   observed: number
   expected: number
-  enrichment: number
+  adjusted: number
   logP: number
   q: number
 }

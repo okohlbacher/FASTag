@@ -89,6 +89,17 @@ namespace FASTag
     /// Every taxon that appears anywhere in the index, ascending.
     std::vector<uint32_t> taxa() const;
 
+    /// Row-major n x n matrix of |kmers(i) AND kmers(j)| over taxa() order,
+    /// n = taxa().size(). The diagonal equals postings().
+    ///
+    /// This is the raw material for correcting near-neighbour inflation: two
+    /// genera that share most of their k-mers cannot be told apart by counting
+    /// tags, but the overlap says by how much, so the shared part can be
+    /// subtracted (see TaxDeconv). Computed in one pass over the postings, at a
+    /// cost of sum(|S|^2) over k-mer taxon sets S -- cheap because the reference
+    /// is deliberately small and most k-mers sit in one or two taxa.
+    std::vector<uint64_t> pairwiseOverlap() const;
+
     /// Compact binary (de)serialization. save() writes v2; load() accepts v1
     /// and v2 and returns false on any other magic or version.
     bool save(const std::string& path, std::string* err = nullptr) const;

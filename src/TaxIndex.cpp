@@ -169,6 +169,55 @@ namespace FASTag
     return out;
   }
 
+  std::vector<uint64_t> TaxIndex::pairwiseOverlap() const
+  {
+    const std::vector<uint32_t> tx = taxa();
+    const size_t n = tx.size();
+    std::vector<uint64_t> m(n * n, 0);
+    if (n == 0) return m;
+
+    // One shared accumulator over both storage paths: collect the taxon INDICES
+    // of one k-mer, then bump every ordered pair. Indices, not taxids, so the
+    // inner loop is an array write and never a map lookup.
+    std::vector<uint32_t> ids;
+    auto bump = [&]() {
+      for (size_t a = 0; a < ids.size(); ++a)
+        for (size_t b = 0; b < ids.size(); ++b)
+          ++m[static_cast<size_t>(ids[a]) * n + ids[b]];
+    };
+
+    if (!legacy_ && keys_ != nullptr)
+    {
+      for (uint64_t i = 0; i < n_kmers_; ++i)
+      {
+        ids.clear();
+        for (uint32_t p = offsets_[i]; p < offsets_[i + 1]; ++p)
+        {
+          uint32_t idx = 0;
+          for (int j = tax_bytes_ - 1; j >= 0; --j)
+            idx = (idx << 8)
+                | post_[static_cast<size_t>(p) * static_cast<size_t>(tax_bytes_) + static_cast<size_t>(j)];
+          if (idx < n_taxa_) ids.push_back(idx);
+        }
+        bump();
+      }
+      return m;
+    }
+
+    // Legacy v1 path: postings are taxids, so map each to its index once.
+    for (const auto& kv : index_)
+    {
+      ids.clear();
+      for (uint32_t t : kv.second)
+      {
+        auto it = std::lower_bound(tx.begin(), tx.end(), t);
+        if (it != tx.end() && *it == t) ids.push_back(static_cast<uint32_t>(it - tx.begin()));
+      }
+      bump();
+    }
+    return m;
+  }
+
   uint64_t TaxIndex::postings(uint32_t taxid) const
   {
     if (!legacy_ && taxa_ != nullptr)

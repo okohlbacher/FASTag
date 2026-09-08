@@ -418,8 +418,20 @@ FASTag -in run.mzML -out run.tags.tsv -species -tag_length 7
 Each tag's k-mers are looked up in a reduced reference index; the taxa carrying
 the whole tag vote, votes roll up the NCBI taxonomy, and each node is tested
 against its background breadth. Output is a ranked TSV
-(`rank taxid name observed expected enrichment log_pvalue qvalue`), one call per
-taxon at `-species_rank` (genus by default).
+(`rank taxid name observed adjusted expected log_pvalue qvalue`), one call per
+taxon at `-species_rank` (genus by default), ordered by `adjusted`.
+
+**Only ungapped tags vote.** A gap spells two residues from one summed mass, and
+an exact k-mer lookup cannot tell an inferred residue from an observed one — on
+PXD000001, admitting gapped tags drops the true genus from rank 1 to rank 20.
+`-species_use_gapped` restores the old behaviour.
+
+`-species_deconvolve` subtracts the evidence a taxon earns only by resembling a
+stronger one, which is what makes near neighbours rank. It is opt-in: it turns
+the PXD000001 tail from Oryza/Zea into Pectobacterium's real relatives
+Dickeya/Yersinia, but it also suppresses genuine low-abundance taxa, and on a
+human run it disperses the mammalian block without improving the margin. See
+[doc/SPECIES-DETECTOR.md](doc/SPECIES-DETECTOR.md) for the numbers.
 
 `-tag_length` must be **at least the index k** (7) — a shorter tag cannot be
 looked up, and FASTag refuses the run up front rather than writing an empty
