@@ -105,15 +105,18 @@ env:
   # must be a trunk commit at or after the MSVC support (static-only Windows
   # build, UTF-8 libzip names).
   MZPEAK_LIB_REF: 40df266e276ade453ee91b1a2452585fb35b5ca0
-  # SignPath project slug, read off the project page in SignPath's console on
-  # 2026-09-08. NOT 'fastag' -- that was the placeholder this scaffolding was
-  # written with, and the enrollment is for a project called "OpenMS Apps",
-  # which is why its HSM-generated CSR arrived as OpenMS_Apps.csr. Underscores
-  # and capitals are the slug as SignPath spells it; it is matched literally.
+  # SignPath PROJECT slug. Empty because no project exists yet.
+  #
+  # 'OpenMS_Apps' briefly lived here and was wrong: that is the slug of a
+  # CERTIFICATE ("OpenMS Apps", X.509, software key store, CSR PENDING), and
+  # SignPath's console reports it is "not used in any project". The signing
+  # action addresses a project, an artifact configuration and a signing
+  # policy; the certificate is bound to the policy inside the console and is
+  # never named here.
   #
   # One place, not two: the CLI and the desktop installer both submit signing
   # requests, and they must not be able to drift apart.
-  SIGNPATH_PROJECT_SLUG: 'OpenMS_Apps'
+  SIGNPATH_PROJECT_SLUG: ''
   # Taxonomy index pins -- MUST stay in lockstep with ci.yml (see the comment
   # there for the bump procedure: new data release first -- as a PRE-RELEASE,
   # or it steals the "Latest" slot and 404s every README download link --
@@ -717,6 +720,13 @@ jobs:
         run: |
           if ([string]::IsNullOrEmpty($env:SIGNPATH_API_TOKEN)) {
             Write-Host "::warning title=Unsigned Windows binary::SIGNPATH_API_TOKEN is not set -- shipping this release unsigned. SmartScreen will warn on first run. See doc/BACKLOG-ci.md for what's needed."
+            "enabled=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding ascii
+          } elseif ([string]::IsNullOrEmpty($env:SIGNPATH_PROJECT_SLUG)) {
+            # Checked HERE, not left to the signing action. A missing or wrong
+            # project slug fails the REQUEST, which happens after OpenMS,
+            # mzpeak, FASTag and the desktop app have all been built -- about
+            # twenty minutes in. Refusing up front costs seconds instead.
+            Write-Host "::warning title=Unsigned Windows binary::SIGNPATH_API_TOKEN is set but SIGNPATH_PROJECT_SLUG is empty -- no SignPath project has been created yet. Shipping unsigned. See doc/SIGNING-macos-gui.md."
             "enabled=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding ascii
           } else {
             "enabled=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding ascii
