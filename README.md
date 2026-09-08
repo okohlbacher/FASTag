@@ -164,69 +164,13 @@ it cannot know the analyser, so the setting is yours.
 
 [mzPeak](https://github.com/OpenMS/mzpeak) is a Parquet-backed format (Parquet
 tables in a ZIP container). FASTag **reads and writes** it: `-in` accepts
-`.mzpeak` and `-out_spectra` writes it. Tagging is unaffected by which you use —
-reading a run as mzpeak gives the same spectra as reading it as mzML, and a run
-written to mzpeak and tagged again reproduces the original tag set exactly.
+`.mzpeak`, `-out_spectra` writes it, and all four in/out combinations work.
+Tagging is unaffected by which you use — reading a run as mzpeak gives the same
+spectra as reading it as mzML, and a run written to mzpeak and tagged again
+reproduces the original tag set exactly.
 
-**All of it goes through one library, and none of it through OpenMS.** OpenMS's
-own mzPeak implementation predates the format's 0.7.0 revision (split-facet
-metadata, bare column names, the chunked signal layout with Numpress/delta
-encodings, `data_kind: "data_arrays"`), so archives from current writers read
-back as ZERO spectra through it, and its writer aborted on any spectrum that
-had come through a current reader. FASTag therefore reads **and writes** mzPeak
-with [mzpeak-openms](https://github.com/okohlbacher/mzpeak-openms), which
-handles both layouts, is cross-validated against the Rust reference
-implementation, and writes the precursor and selected-ion facets a re-tag
-needs. All four in/out combinations work; `test/mzpeak_e2e.sh` tags a written
-archive again and requires it to reproduce the tags it was written from.
-
-Nothing in FASTag depends on the OpenMS feature branch that carries
-`MzPeakFile` any more: a stock OpenMS >= 3.5 is enough, and `.mzpeak` is
-recognised by extension rather than through OpenMS's `FileTypes`. One visible
-consequence: `--help` no longer lists formats after `-in` and `-out_spectra`,
-because that list is validated against `FileTypes` and would have to omit
-mzpeak; the descriptions carry it instead.
-
-**All five released binaries carry the library.** CI builds `mzpeak-openms`
-from a pinned commit, runs its test suite against the same Arrow the binary
-links, bundles it next to the executable, and accepts a release artifact only
-after the shipped bundle has read a real archive. On Windows the library is
-built with MSVC and linked statically (it carries no dllexport annotations);
-Arrow, Parquet, libzip and Boost.JSON travel in the zip as DLLs. A build
-configured without the library refuses `.mzpeak` on either side with a message
-saying so, rather than reporting a clean run over an empty file.
-
-To build from source with mzPeak: build `mzpeak-openms`, then configure FASTag
-with `-DMZPEAK_SOURCE_DIR=<checkout> -DMZPEAK_LIB_DIR=<install prefix>`. This
-release is built against `mzpeak-openms` `babe7ef`; older commits lack the
-writer's precursor support, `MetadataDetail` and the MSVC build, and will not
-compile. `13f5cbf` also lowered the library's Arrow floor to 21, which is what bioconda's
-OpenMS pins, and builds with Apple clang 15 and GCC 13. Configure says what
-you got:
-
-```
--- FASTag: mzPeak read/write enabled (<path>/libmzpeak.dylib)
--- FASTag: mzpeak-openms NOT found -- this build reads and writes mzML only
-```
-
-Run-level metadata travels too: run id and start time, source files with
-their checksums, the instrument with its source/analyser/detector components
-and software, the sample, and the data-processing history, to which FASTag
-appends its own filtering step. An archive that came in as mzPeak keeps its
-metadata block verbatim (mzML has no field for much of it) and gets the FASTag
-step appended.
-
-**`-out_spectra` to mzPeak streams** (since v1.1.3): each kept spectrum is
-re-read and handed straight to the writer, which flushes a Parquet row group
-once enough points have accumulated, so the cost is one row group plus a few
-hundred bytes of metadata per spectrum instead of the whole run. Converting a
-1.8 GB Astral mzML to mzPeak (89,951 spectra kept) went from 11.8 GB peak RSS
-to 852 MB, same wall time, byte-identical tags and an archive that reads back
-identically. The mzML writer already streamed; both paths now do.
-
-**Faster than mzML on the same acquisition, and now parallel.** Thermo LTQ
-Orbitrap Velos, 7,534 spectra / 6,103 MS2, 16 logical cores, warm cache, wall
-time and peak RSS as FASTag reports them (v1.2.0):
+**Smaller and faster on the same acquisition.** Thermo LTQ Orbitrap Velos,
+7,534 spectra / 6,103 MS2, 16 logical cores, warm cache:
 
 | threads | mzML (429 MB) | mzPeak, centroided (101 MB) | mzPeak, profile (126 MB) |
 |---|---|---|---|
@@ -235,30 +179,46 @@ time and peak RSS as FASTag reports them (v1.2.0):
 | 16 | 1.13 s / 167 MB | **0.34 s** / 182 MB | 0.81 s / 471 MB |
 
 5.1x faster single-threaded and 3.4x at 16 threads, from a file a quarter the
-size. Tag counts differ by one out of 122,098 — the archive stores m/z as
-float32, which moves a single borderline match across the tolerance. The read
-is parallel since v1.1.1: every thread owns a reader over a shared archive
-index, the way the mzML path already gave each thread its own
-`OnDiscMSExperiment`. Work is handed out on a guided schedule since v1.2.0 —
-large chunks first, so a thread stays inside one row group, and small ones at
-the end, so nobody waits at the barrier. Since v1.1.2 the decoded row groups
-live in one cache shared by every reader, so each group is decoded once
-whatever the thread count and memory no longer grows with `-threads`:
-it follows the groups in flight, at most one per thread and never more than
-the file has. The cache is sized to two groups per running reader, and the
-reader count is capped so that fits 4 GB, which only matters for archives
-with very large row groups (a chunked Astral archive has ~580 MB groups).
+size. Tag counts differ by one in 122,098: the archive stores m/z as float32,
+which moves a single borderline match across the tolerance.
 
-**Profile MS2 is centroided on read**, in the thread that reads it. mzPeak
-archives converted from raw files routinely store profile MS2 with an empty
-centroid facet, and tagging profile SAMPLES rather than peaks costs real
-recall. Measured on one run available in both formats: 80,990 tags from the
-profile archive read as-is, 122,489 with on-read centroiding
-(`PeakPickerHiRes`), against 122,098 for the same run supplied as centroided
-mzML. Picking runs in the worker rather than the reader, so it parallelises:
-0.97 s at 16 threads on this archive. Converting that mzML to mzPeak and
-tagging it reproduces the mzML result to within a single tag (122,097; 99.999%
-of spectrum/tag pairs identical, flanking masses to 4 decimals).
+Reading is parallel — each thread owns a reader over a shared archive index —
+and decoded row groups live in one cache shared by every reader, so a group is
+decoded once whatever the thread count and memory tracks the groups in flight
+rather than `-threads`. Archives with very large row groups (a chunked Astral
+archive has ~580 MB groups) are the case where that ceiling is visible.
+
+**Profile MS2 is centroided on read.** Archives converted from raw files
+routinely store profile MS2 with an empty centroid facet, and tagging profile
+samples rather than peaks costs real recall: on one run available in both
+formats, 80,990 tags from the profile archive read as-is against 122,489 with
+on-read centroiding (`PeakPickerHiRes`), and 122,098 for the same run supplied
+as centroided mzML. Picking runs in the worker, so it parallelises.
+
+Run-level metadata travels with the data: run id and start time, source files
+with their checksums, the instrument and its components, the sample, and the
+processing history, to which FASTag appends its own filtering step. An archive
+that arrived as mzPeak keeps its metadata block verbatim.
+
+mzPeak support is provided by
+[mzpeak-openms](https://github.com/okohlbacher/mzpeak-openms), bundled with
+every released binary. To build from source with it, build that library and
+configure FASTag with `-DMZPEAK_SOURCE_DIR=<checkout> -DMZPEAK_LIB_DIR=<install
+prefix>`; configure reports what you got:
+
+```
+-- FASTag: mzPeak read/write enabled (<path>/libmzpeak.dylib)
+-- FASTag: mzpeak-openms NOT found -- this build reads and writes mzML only
+```
+
+A build without the library refuses `.mzpeak` on either side with a message
+saying so, rather than reporting a clean run over an empty file.
+
+**Known issue: very large archives can return no peaks.** Above roughly 1.5
+billion peak rows (~3 M spectra of typical density) the reader returns zero
+points for every spectrum, so FASTag writes an empty tag list with no error.
+Archives up to 575 M peak rows are unaffected. See
+[doc/BENCHMARK-corpus-128t.md](doc/BENCHMARK-corpus-128t.md).
 
 ### Reading speed
 
