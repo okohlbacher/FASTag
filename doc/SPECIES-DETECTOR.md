@@ -31,11 +31,22 @@ already told readers to ignore it.
 
 - **Only ungapped tags count.** A gap spells two residues from one summed mass,
   which is an inference, and an exact k-mer lookup cannot tell an inferred
-  residue from an observed one. Admitting gapped tags is not a small effect: on
-  PXD000001 it drops the true genus from **rank 1 to rank 20** and puts Oryza,
-  Zea and Chlamydomonas on top of a bacterial sample. `-species_use_gapped`
-  restores the old behaviour. This matters from v1.4.0 on, where `-gaps 1`
-  became the tagging default.
+  residue from an observed one. `-species_use_gapped` restores the old
+  behaviour. This matters from v1.4.0 on, where `-gaps 1` became the tagging
+  default -- v1.4.0 shipped with the defect and v1.4.1 repairs it.
+
+  Rank of the expected genus, four samples, admitting gapped tags against
+  excluding them:
+
+  | sample | expected | gapped admitted (v1.4.0) | excluded (v1.4.1) |
+  |---|---|---|---|
+  | PXD000001, LTQ Velos | Pectobacterium | **20** | **1** |
+  | CPTAC, Fusion Lumos | Homo | 1 | 1 |
+  | PXD076528, Astral | Homo | 1 | 1 |
+  | Eclipse, ion-trap MS2 | Homo | **6** | **2** |
+
+  Decisive on two, neutral on two, harmful on none. The two it rescues are the
+  hard cases: a bacterial sample, and low-resolution ion-trap MS2.
 - The index maps each I/L-folded k-mer to the SET of taxa whose proteins carry
   it (breadth, not abundance). A **reduced** reference — one representative
   proteome per genus/family — is deliberate: short peptide k-mers cannot resolve
@@ -80,17 +91,30 @@ de novo tags, the same input class FASTag has.
 Rice and maize are replaced by Pectobacterium's actual relatives, which is the
 correction working exactly as intended.
 
-**It is opt-in anyway, because a second control does not agree.** On a human
-CPTAC run the mammalian block (Macaca at 93% of Homo) is indeed dispersed, but
-what replaces it is no better: Chlamydomonas at 92% of Homo. The #1/#2 margin
-moves from 1.07 to 1.09 -- no real gain. And it suppresses genuine
-low-abundance taxa: the PXD000001 spike-ins fall from Sus 1176 -> 0.0 and
-Bos 1199 -> 8.2, when trypsin and BSA really are in that sample. That is the
-failure MARLOWE reports against MiCId on low-abundance secondary contributors.
+**It is opt-in, and four samples say why.** Rank of the expected genus, and
+what sits behind it:
 
-Use it when the sample's likely relatives are in the reference and the question
-is "which of these related taxa"; leave it off when low-abundance components
-matter. Both counts are always in the report, so nothing is hidden either way.
+| sample | expected | off | on |
+|---|---|---|---|
+| PXD000001 | Pectobacterium | 1, tail Oryza/Zea | 1, tail **Dickeya/Yersinia** |
+| CPTAC | Homo | 1, tail Macaca/Equus | 1, tail Chlamydomonas/Drosophila |
+| PXD076528 Astral | Homo | 1, tail Macaca/Bos | 1, tail Xenopus/Oryctolagus |
+| Eclipse ion-trap | Homo | **2** | **38** |
+
+One decisive win, two where the tail merely changes which implausible genus it
+names, and one where the answer is destroyed: on noisy ion-trap MS2 the
+correction amplifies noise and Homo falls from rank 2 to 38. A matrix inverse
+cannot distinguish shared sequence from bad tags.
+
+It also suppresses genuine low-abundance taxa: the PXD000001 spike-ins fall
+from Sus 1176 -> 0.0 and Bos 1199 -> 8.2, when trypsin and BSA really are in
+that sample -- the failure MARLOWE reports against MiCId on low-abundance
+secondary contributors.
+
+Use it on high-resolution MS2 when the sample's likely relatives are in the
+reference and the question is "which of these related taxa". Leave it off for
+ion-trap data, and when low-abundance components matter. Both counts are always
+in the report, so nothing is hidden either way.
 
 ## Two filters that are implemented but did nothing here
 
