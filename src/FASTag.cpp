@@ -2658,13 +2658,35 @@ int main(int argc, const char** argv)
   // value would silently override a threads= line in the file.
   std::vector<const char*> args(argv, argv + argc);
   bool explicit_threads = false;
+  bool help = false;
   for (int i = 1; i < argc; ++i)
+  {
     if (std::strcmp(argv[i], "-threads") == 0 || std::strcmp(argv[i], "-ini") == 0) explicit_threads = true;
+    if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "--helphelp") == 0) help = true;
+  }
   if (!explicit_threads)
   {
     args.push_back("-threads");
     args.push_back("0");
   }
   TOPPFASTag tool;
-  return tool.main(static_cast<int>(args.size()), args.data());
+  const TOPPBase::ExitCodes rc = tool.main(static_cast<int>(args.size()), args.data());
+  // The same missing hook leaves --help printing TOPPBase's own -threads line,
+  // "(0 = all available cores) (default: '1')" -- wrong for FASTag on both
+  // counts and not editable from a tool: printUsage_ is not virtual, and it
+  // wraps at the console width, so patching the captured text would be
+  // fragile. TOPPBase prints help to stderr and returns EXECUTION_OK, so the
+  // correction follows on the same stream, and only when help was really
+  // printed (a bad value next to --help dumps the usage with
+  // ILLEGAL_PARAMETERS instead). Nothing parses this: the GUI manifest comes
+  // from -write_ini, and the GUI's probe and CI look for "Version:" only.
+  if (help && rc == TOPPBase::EXECUTION_OK)
+  {
+    std::cerr << "Note: in FASTag, -threads defaults to 0 = half the logical cores (at least 1);\n"
+                 "      the -threads line above is OpenMS's and shows OpenMS's own default.\n"
+                 "      With -ini, the file's threads value applies (1 if it has none) unless\n"
+                 "      -threads is also given on the command line.\n"
+              << std::endl;
+  }
+  return rc;
 }

@@ -36,7 +36,7 @@ const CHOICES: Record<string, string[]> = {
 // TOPPBase registers -threads itself with default 1, and FASTag applies its
 // real default -- 0, half the logical cores -- to argv in main(), because
 // TOPPBase offers no hook to change a common option. The manifest is a dump of
-// --help, so it carries TOPPBase's number and text; this is the tool's.
+// -write_ini, so it carries TOPPBase's number and text; this is the tool's.
 const OVERRIDES: Record<string, Partial<ParamSpec>> = {
   threads: {
     default: '0',
