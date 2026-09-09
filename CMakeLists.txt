@@ -222,6 +222,14 @@ if(FASTAG_BUILD_TESTS)
     add_test(NAME ${t} COMMAND ${t})
   endforeach()
 
+  # Integration: tool description export against the real binary. Compares the
+  # CTD's parameter set against the tool's own -write_ini output, and guards
+  # --help and -write_ini against the ToolHandler registration leaking into
+  # them. Skips (77) without python3 or when the binary cannot start.
+  add_test(NAME write_ctd_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/write_ctd_test.sh $<TARGET_FILE:FASTag>)
+  set_tests_properties(write_ctd_test PROPERTIES SKIP_RETURN_CODE 77)
+
   # Integration: the -stream protocol against the real binary (skips itself
   # when the OpenMS share data is unreachable).
   add_test(NAME stream_test
