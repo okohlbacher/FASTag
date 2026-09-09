@@ -112,6 +112,10 @@ the right build for whatever you are reading this on. Everything is also on the
 | Linux x64 | — | [.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-x64.tar.gz) |
 | Linux arm64 | — | [.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-arm64.tar.gz) |
 
+On macOS both are also on [Homebrew](https://github.com/okohlbacher/homebrew-fastag):
+`brew install --cask okohlbacher/fastag/fastag` (desktop app) or
+`brew install --cask okohlbacher/fastag/fastag-cli` (command line, `FASTag` on your PATH).
+
 A disk image or archive holds a `FASTag/` folder — run `FASTag/FASTag`
 (Linux/macOS) or `FASTag/FASTag.bat` (Windows); everything else inside is a
 bundled dependency the wrapper needs, not something to run directly.
