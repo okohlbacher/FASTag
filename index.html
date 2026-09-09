@@ -77,6 +77,16 @@ footer a{color:var(--muted);text-decoration:underline}
 footer .cols{display:flex;gap:38px;flex-wrap:wrap;margin-bottom:18px}
 footer h4{margin:0 0 8px;font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:var(--ink)}
 footer ul{list-style:none;padding:0;margin:0}
+
+/* OS picker */
+.pick{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  padding:20px 22px;margin:22px 0 26px}
+.pick .os{font-size:.85rem;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.05em;margin:0 0 12px}
+.pick .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.pick .alt{font-size:.9rem;color:var(--muted)}
+.pick .alt a{color:var(--muted);text-decoration:underline}
+.pick .note{font-size:.86rem;color:var(--muted);margin:12px 0 0}
 </style>
 </head>
 <body>
@@ -159,23 +169,36 @@ to it, so a run is bounded by threads, not by input. Both tools reach the same a
 <h2 id="download">Download</h2>
 
 <p>Binaries are self-contained — the tool, its libraries and the OpenMS data it needs. macOS builds
-are signed with a Developer ID certificate and notarized by Apple.</p>
+are signed with a Developer ID certificate, notarized by Apple, and the disk images carry their
+notarization ticket, so they open with no network connection.</p>
+
+<div class="pick" id="pick" hidden>
+  <p class="os">Your system: <strong id="pick-os"></strong></p>
+  <div class="row">
+    <a class="btn primary" id="pick-primary" href="#">Download</a>
+    <span class="alt" id="pick-alt"></span>
+  </div>
+  <p class="note" id="pick-note"></p>
+</div>
 
 <table>
-<thead><tr><th>Platform</th><th>Command line</th><th>Desktop app</th></tr></thead>
+<thead><tr><th>Platform</th><th>Desktop app</th><th>Command line</th></tr></thead>
 <tbody>
 <tr><td>macOS, Apple silicon</td>
-    <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-macos-arm64.tar.gz">FASTag-macos-arm64.tar.gz</a></td>
-    <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-macos-arm64.dmg">.dmg</a></td></tr>
+    <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-macos-arm64.dmg">FASTag-gui-macos-arm64.dmg</a></td>
+    <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-macos-arm64.dmg">.dmg</a> ·
+        <a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-macos-arm64.tar.gz">.tar.gz</a></td></tr>
 <tr><td>macOS, Intel</td>
-    <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-macos-x64.tar.gz">FASTag-macos-x64.tar.gz</a></td>
-    <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-macos-x64.dmg">.dmg</a></td></tr>
-<tr><td>Linux x86-64</td>
-    <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-x64.tar.gz">FASTag-linux-x64.tar.gz</a></td><td>—</td></tr>
-<tr><td>Linux arm64</td>
-    <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-arm64.tar.gz">FASTag-linux-arm64.tar.gz</a></td><td>—</td></tr>
+    <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-macos-x64.dmg">FASTag-gui-macos-x64.dmg</a></td>
+    <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-macos-x64.dmg">.dmg</a> ·
+        <a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-macos-x64.tar.gz">.tar.gz</a></td></tr>
 <tr><td>Windows x64</td>
-    <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-windows-x64.zip">FASTag-windows-x64.zip</a></td><td>—</td></tr>
+    <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-windows-x64-setup.exe">FASTag-gui-windows-x64-setup.exe</a></td>
+    <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-windows-x64.zip">FASTag-windows-x64.zip</a></td></tr>
+<tr><td>Linux x86-64</td><td>—</td>
+    <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-x64.tar.gz">FASTag-linux-x64.tar.gz</a></td></tr>
+<tr><td>Linux arm64</td><td>—</td>
+    <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-arm64.tar.gz">FASTag-linux-arm64.tar.gz</a></td></tr>
 </tbody>
 </table>
 
@@ -280,5 +303,79 @@ large-scale mass spectrometry data. <em>Nat Methods</em> 2024.
 </footer>
 
 </div>
+
+<script>
+// Offer the build that matches the visitor's OS. Progressive enhancement: the
+// panel starts hidden, so with JS off the full table below is still the answer.
+(function () {
+  var BASE = 'https://github.com/okohlbacher/FASTag/releases/latest/download/';
+  var pick = document.getElementById('pick');
+  if (!pick) return;
+  var osEl = document.getElementById('pick-os');
+  var btn = document.getElementById('pick-primary');
+  var alt = document.getElementById('pick-alt');
+  var note = document.getElementById('pick-note');
+
+  var uad = navigator.userAgentData;
+  var hay = ((uad && uad.platform) || navigator.platform || '') + ' ' + (navigator.userAgent || '');
+  var link = function (f, t) { return '<a href="' + BASE + f + '">' + t + '</a>'; };
+
+  function show(os, label, file, altHtml, noteText) {
+    osEl.textContent = os;
+    btn.textContent = label;
+    btn.href = BASE + file;
+    alt.innerHTML = altHtml || '';
+    note.textContent = noteText || '';
+    pick.hidden = false;
+  }
+
+  if (/iPhone|iPad|iPod|Android/i.test(hay)) {
+    osEl.textContent = 'a mobile device';
+    btn.style.display = 'none';
+    note.textContent = 'FASTag is a desktop and command-line tool — there is no mobile build.';
+    pick.hidden = false;
+    return;
+  }
+
+  if (/Win/i.test(hay)) {
+    show('Windows', 'Download the installer', 'FASTag-gui-windows-x64-setup.exe',
+         'or the ' + link('FASTag-windows-x64.zip', 'command-line tool'),
+         'Not yet code-signed, so SmartScreen will warn on first run.');
+    return;
+  }
+
+  if (/Mac/i.test(hay)) {
+    // Architecture is only exposed by Chromium's high-entropy hints. Safari
+    // reports nothing, so an unknown arch defaults to Apple silicon -- true of
+    // every Mac sold since 2020 -- and SAYS so, rather than quietly guessing.
+    var render = function (arm, sure) {
+      var me = arm ? 'arm64' : 'x64';
+      var other = arm ? 'x64' : 'arm64';
+      show('macOS, ' + (arm ? 'Apple silicon' : 'Intel'),
+           'Download the app', 'FASTag-gui-macos-' + me + '.dmg',
+           'or the ' + link('FASTag-macos-' + me + '.dmg', 'command-line tool') + ' · ' +
+           link('FASTag-gui-macos-' + other + '.dmg', arm ? 'Intel Mac instead' : 'Apple silicon instead'),
+           'Signed, notarized and stapled — it opens with no network connection.' +
+           (sure ? '' : ' Your browser does not report the processor; if this is an Intel Mac use the other link.'));
+    };
+    if (uad && uad.getHighEntropyValues) {
+      uad.getHighEntropyValues(['architecture'])
+         .then(function (v) { render(!v || v.architecture !== 'x86', !!(v && v.architecture)); })
+         .catch(function () { render(true, false); });
+    } else {
+      render(true, false);
+    }
+    return;
+  }
+
+  if (/Linux|X11/i.test(hay)) {
+    show('Linux', 'Download for Linux', 'FASTag-linux-x64.tar.gz',
+         'on arm64? ' + link('FASTag-linux-arm64.tar.gz', 'take this one'),
+         'Command-line only — there is no Linux desktop build.');
+    return;
+  }
+  // Anything else: say nothing and let the table do the work.
+})();
+</script>
 </body>
 </html>
