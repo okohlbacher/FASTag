@@ -146,8 +146,10 @@ bundled browser. The CLI remains the source of truth; the GUI shells out to it.
 cd gui && npm install && npm run tauri dev     # or: npm run tauri build
 ```
 
-Signed, installable bundles are still on the roadmap (see `doc/BACKLOG.md`); for
-now the app is built from source. Details in [gui/README.md](gui/README.md).
+Signed, installable bundles ship with every release: notarized and stapled disk
+images for macOS (also on Homebrew, above) and an installer for Windows — see
+the install table at the top. Building from source, as above, is for developing
+the GUI itself. Details in [gui/README.md](gui/README.md).
 
 ## Usage
 
