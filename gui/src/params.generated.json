@@ -9,14 +9,6 @@
       "toppAdvanced": true
     },
     {
-      "name": "no_deisotope",
-      "type": "bool",
-      "default": "false",
-      "description": "Do not collapse isotope clusters to their monoisotopic peak, and do not move multiply-charged fragments onto the singly-charged scale, before peak selection",
-      "required": false,
-      "toppAdvanced": false
-    },
-    {
       "name": "delta_out",
       "type": "output-file",
       "default": "",
@@ -83,7 +75,7 @@
       "description": "Fragment mass tolerance",
       "required": false,
       "toppAdvanced": false,
-      "min": 1e-09
+      "min": 1e-9
     },
     {
       "name": "fragment_tolerance_unit",
@@ -145,7 +137,7 @@
       "name": "in",
       "type": "input-file",
       "default": "",
-      "description": "Input spectra",
+      "description": "Input spectra (mzML or mzpeak)",
       "required": false,
       "toppAdvanced": false
     },
@@ -201,6 +193,23 @@
       "toppAdvanced": false
     },
     {
+      "name": "mzpeak_read_memory",
+      "type": "int",
+      "default": "0",
+      "description": "Decoded mzPeak held at once, in MB; 0 = size it to the archive",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
+    },
+    {
+      "name": "no_deisotope",
+      "type": "bool",
+      "default": "false",
+      "description": "Do not collapse isotope clusters to their monoisotopic peak, and do not move multiply-charged fragments onto the singly-charged scale, before peak selection",
+      "required": false,
+      "toppAdvanced": false
+    },
+    {
       "name": "no_progress",
       "type": "bool",
       "default": "false",
@@ -232,7 +241,7 @@
       "name": "out_spectra",
       "type": "output-file",
       "default": "",
-      "description": "Write spectra carrying a reported tag here (mzML, or mzpeak if this build has it). Note this path holds one slot per input spectrum, so unlike the default it needs memory proportional to the FILE, not to the thread count",
+      "description": "Write spectra carrying a reported tag here (mzML, or mzpeak if this build has the library). Note this path holds one slot per input spectrum, so unlike the default it needs memory proportional to the FILE, not to the thread count",
       "required": false,
       "toppAdvanced": false
     },
@@ -312,6 +321,24 @@
       "toppAdvanced": false
     },
     {
+      "name": "species_deconvolve",
+      "type": "bool",
+      "default": "false",
+      "description": "Correct taxon counts for sequence shared between taxa, so a near neighbour cannot rank on a relative's evidence. Helps most when the true taxon's relatives are in the reference; can suppress genuine low-abundance taxa",
+      "required": false,
+      "toppAdvanced": false
+    },
+    {
+      "name": "species_max_kmer_share",
+      "type": "double",
+      "default": "1.0",
+      "description": "Ignore k-mers carried by more than this fraction of the indexed taxa: a k-mer in most of the reference cannot tell taxa apart. 1 keeps all",
+      "required": false,
+      "toppAdvanced": false,
+      "min": 0,
+      "max": 1
+    },
+    {
       "name": "species_min_len",
       "type": "int",
       "default": "0",
@@ -319,6 +346,16 @@
       "required": false,
       "toppAdvanced": false,
       "min": 0
+    },
+    {
+      "name": "species_min_margin",
+      "type": "double",
+      "default": "0.0",
+      "description": "Require a tag's best taxa to carry this fraction more of its k-mers than the runner-up, else the tag is too generic to be evidence. 0 keeps all",
+      "required": false,
+      "toppAdvanced": false,
+      "min": 0,
+      "max": 1
     },
     {
       "name": "species_out",
@@ -333,6 +370,14 @@
       "type": "string",
       "default": "genus",
       "description": "Report taxa at this NCBI rank (genus, family, ...)",
+      "required": false,
+      "toppAdvanced": false
+    },
+    {
+      "name": "species_use_gapped",
+      "type": "bool",
+      "default": "false",
+      "description": "Let gapped tags contribute taxonomic evidence. Off because a gap is an inferred residue pair, and an exact k-mer lookup cannot tell an inferred residue from an observed one",
       "required": false,
       "toppAdvanced": false
     },
@@ -432,7 +477,7 @@
     {
       "name": "version",
       "type": "string",
-      "default": "3.6.0-pre-HEAD-2026-04-24",
+      "default": "1.4.2",
       "description": "Version of the tool that generated this parameters file.",
       "required": false,
       "toppAdvanced": true

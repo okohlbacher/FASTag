@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import type { BinaryInfo, RunResult } from './types'
 import {
-  CORE,
-  GROUPS,
+  SECTIONS,
   PARAM_BY_NAME,
   RENDERED,
+  inertBecause,
+  isActive,
+  unknownParams,
   unplacedParams,
   type ParamSpec
 } from './paramLayout'
@@ -13,6 +15,7 @@ import ResultsTable from './ResultsTable'
 import SpeciesPanel from './SpeciesPanel'
 import type { SpeciesReport } from './types'
 import logo from './assets/logo.svg'
+import openmsLogo from './assets/openms-logo.png'
 
 // Strip the final extension only when the dot sits inside the basename — a
 // dotted directory (`/runs.2026/sample`) must not lose half its path. Mirrors
@@ -56,8 +59,9 @@ export default function App(): JSX.Element {
   const [input, setInput] = useState('')
   const [out, setOut] = useState('')
   const [values, setValues] = useState<Record<string, ParamValue>>(initialValues)
-  const [advOpen, setAdvOpen] = useState(false)
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(SECTIONS.map((s) => [s.title, s.open]))
+  )
   const [running, setRunning] = useState(false)
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [log, setLog] = useState<string[]>([])
@@ -99,6 +103,7 @@ export default function App(): JSX.Element {
   // A parameter that exists in the CLI but nowhere in the layout would silently
   // be unreachable; surface it instead of hiding it.
   const unplaced = useMemo(() => unplacedParams(), [])
+  const unknown = useMemo(() => unknownParams(), [])
 
   const speciesOn = values['species'] === true
   // k comes from the index header, not an assumption: a differently-built index
@@ -364,6 +369,7 @@ export default function App(): JSX.Element {
         key={name}
         spec={spec}
         value={values[name]}
+        inert={inertBecause(name, values)}
         onChange={(v) => setValue(name, v)}
         onPickFile={pickFor}
       />
@@ -380,6 +386,11 @@ export default function App(): JSX.Element {
             {bin.ok ? bin.detail : `binary not runnable: ${bin.detail}`}
           </span>
         )}
+        <span className="spacer" />
+        <span className="openms" title="FASTag is an OpenMS TOPP tool — openms.de">
+          built on
+          <img src={openmsLogo} alt="OpenMS" />
+        </span>
       </header>
 
       <main>
@@ -440,8 +451,6 @@ export default function App(): JSX.Element {
 
           <div className="sep" />
 
-          {CORE.map(field)}
-
           <div className="presets">
             {savingName === null ? (
               <>
@@ -469,42 +478,48 @@ export default function App(): JSX.Element {
             )}
           </div>
 
-          <div className="adv">
-            <button className="disclosure" onClick={() => setAdvOpen((o) => !o)} aria-expanded={advOpen}>
-              <span className={`chev ${advOpen ? 'open' : ''}`}>▸</span> Advanced
-              <span className="count">
-                {GROUPS.reduce((n, g) => n + g.params.length, 0)} settings
-              </span>
-            </button>
-            {advOpen && (
-              <div className="adv-body">
-                {GROUPS.map((g) => {
-                  const open = openGroups[g.title] ?? false
-                  return (
-                    <div className="group" key={g.title}>
-                      <button
-                        className="disclosure sub"
-                        onClick={() => setOpenGroups((s) => ({ ...s, [g.title]: !open }))}
-                        aria-expanded={open}
-                      >
-                        <span className={`chev ${open ? 'open' : ''}`}>▸</span> {g.title}
-                        <span className="count">{g.params.length}</span>
-                      </button>
-                      {open && <div className="group-body">{g.params.map(field)}</div>}
-                    </div>
-                  )
-                })}
-                {unplaced.length > 0 && (
-                  <p className="warn">
-                    {unplaced.length} CLI parameter(s) missing from the UI layout: {unplaced.join(', ')}
-                  </p>
-                )}
-                <button className="secondary slim" onClick={resetDefaults}>
-                  Reset all to CLI defaults
+
+          {SECTIONS.map((sec) => {
+            const open = openGroups[sec.title] ?? sec.open
+            // A section whose master switch is on is doing work; say so in the
+            // header, so a collapsed "Species detection" cannot hide the fact
+            // that the run will spend time on it.
+            const on = sec.master ? isActive(sec.master, values) : false
+            const rest = sec.params.filter((n) => n !== sec.master)
+            return (
+              <section className={`sec${open ? ' open' : ''}`} key={sec.title}>
+                <button
+                  className="disclosure"
+                  onClick={() => setOpenGroups((st) => ({ ...st, [sec.title]: !open }))}
+                  aria-expanded={open}
+                >
+                  <span className={`chev ${open ? 'open' : ''}`}>▸</span>
+                  {sec.title}
+                  {on && <span className="on-dot" title={`${sec.master} is set`} />}
+                  <span className="count">{sec.params.length}</span>
                 </button>
-              </div>
-            )}
-          </div>
+                {open && (
+                  <div className="sec-body">
+                    {sec.blurb && <p className="blurb">{sec.blurb}</p>}
+                    {sec.master && field(sec.master)}
+                    {sec.master && rest.length > 0 && <div className="sub-rule" />}
+                    {rest.map(field)}
+                  </div>
+                )}
+              </section>
+            )
+          })}
+
+          {(unplaced.length > 0 || unknown.length > 0) && (
+            <p className="warn">
+              {unplaced.length > 0 && <>{unplaced.length} CLI parameter(s) missing from the UI layout: {unplaced.join(', ')}. </>}
+              {unknown.length > 0 && <>{unknown.length} layout entr(y/ies) name no such parameter: {unknown.join(', ')}.</>}
+            </p>
+          )}
+
+          <button className="secondary slim wide" onClick={resetDefaults}>
+            Reset all to CLI defaults
+          </button>
 
           <div className="row actions">
             <button onClick={run} disabled={!canRun}>

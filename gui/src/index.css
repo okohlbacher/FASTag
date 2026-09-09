@@ -1,13 +1,47 @@
+/* Light by default, dark when the OS asks for it -- `color-scheme` also flips
+   the native scrollbars, form controls and caret, which a token swap alone
+   does not. Every colour below is a token: a hardcoded hex is invisible in one
+   theme and wrong in the other, which is how the old log pane stayed near
+   black on a white app. */
 :root {
-  --bg: #1a1c20;
-  --panel: #24272e;
-  --border: #363a42;
-  --fg: #e6e8ec;
-  --muted: #9aa0ab;
-  --accent: #4f8cff;
-  --ok: #46c977;
-  --err: #e5484d;
-  color-scheme: dark;
+  --bg: #ffffff;
+  --panel: #f3f4f7;
+  --panel-2: #e9ebef;
+  --border: #d6d9e0;
+  --fg: #1a1d23;
+  --muted: #666d7a;
+  --accent: #2563eb;
+  --accent-fg: #ffffff;
+  --ok: #15803d;
+  --err: #d92d20;
+  --flag: #b25e09;
+  --code-bg: #f7f8fa;
+  --code-fg: #333a44;
+  --logo-chip: transparent;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1c20;
+    --panel: #24272e;
+    --panel-2: var(--panel-2);
+    --border: #363a42;
+    --fg: #e6e8ec;
+    --muted: #9aa0ab;
+    --accent: #4f8cff;
+    --accent-fg: #ffffff;
+    --ok: #46c977;
+    --err: #e5484d;
+    --flag: var(--flag);
+    --code-bg: var(--code-bg);
+    --code-fg: var(--code-fg);
+    /* The OpenMS wordmark is dark ink on transparent; on a dark ground it
+       needs its own light chip rather than an invert, which would wreck the
+       spectrum bars' brand colours. */
+    --logo-chip: #ffffff;
+    color-scheme: dark;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -60,7 +94,7 @@ button {
   background: var(--accent);
   border: none;
   border-radius: 6px;
-  color: white;
+  color: var(--accent-fg);
   font: inherit;
   font-weight: 500;
   cursor: pointer;
@@ -149,7 +183,7 @@ button.disclosure:hover { color: var(--accent); }
   gap: 10px;
   padding: 8px 14px;
   border-bottom: 1px solid var(--border);
-  background: #16181d;
+  background: var(--panel-2);
 }
 .progress .bar {
   flex: 1;
@@ -184,18 +218,18 @@ button.disclosure:hover { color: var(--accent); }
   margin: 0;
   padding: 10px 14px;
   overflow: auto;
-  background: #131418;
+  background: var(--code-bg);
   border-bottom: 1px solid var(--border);
   font-family: 'SF Mono', ui-monospace, Menlo, monospace;
   font-size: 11.5px;
   white-space: pre-wrap;
   overflow-wrap: anywhere; /* break long unbroken tokens (base64) instead of overflowing */
   word-break: break-word;
-  color: #c8ccd4;
+  color: var(--code-fg);
 }
 
 /* Tabs over the result area */
-.tabs { display: flex; gap: 2px; padding: 0 10px; border-bottom: 1px solid var(--border); background: #16181d; }
+.tabs { display: flex; gap: 2px; padding: 0 10px; border-bottom: 1px solid var(--border); background: var(--panel-2); }
 .tabs button {
   background: none;
   border: none;
@@ -272,7 +306,7 @@ button.link {
   text-align: left;
 }
 button.link:hover { text-decoration: underline; }
-.flag { margin-left: 5px; color: #e0a33a; cursor: help; }
+.flag { margin-left: 5px; color: var(--flag); cursor: help; }
 .footnote { margin: 12px 0 0; font-size: 10.5px; line-height: 1.5; color: var(--muted); }
 .warn.big { margin: 16px; padding: 12px 14px; font-size: 12px; }
 .warn.big p { margin: 6px 0 0; line-height: 1.5; }
@@ -315,7 +349,7 @@ li.job .rm:hover { color: var(--err); }
   align-items: center;
   padding: 6px 10px;
   border-bottom: 1px solid var(--border);
-  background: #16181d;
+  background: var(--panel-2);
 }
 .rt-bar input, .rt-bar select {
   padding: 4px 8px;
@@ -361,3 +395,59 @@ li.job .rm:hover { color: var(--err); }
 .rt-row { display: grid; height: 28px; align-items: center; border-bottom: 1px solid var(--border); font-size: 12px; }
 .rt-cell { padding: 0 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .rt-cell.dim { color: var(--muted); }
+
+/* ---- OpenMS credit in the header ------------------------------------- */
+header .spacer { flex: 1; }
+.openms {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.openms img {
+  height: 30px;
+  width: auto;
+  display: block;
+  background: var(--logo-chip);
+  border-radius: 4px;
+  padding: var(--logo-pad, 0);
+}
+@media (prefers-color-scheme: dark) { .openms img { --logo-pad: 3px 5px; } }
+
+/* ---- Parameter sections ----------------------------------------------- */
+/* One flat level of disclosure, not core-plus-nested-advanced: every section
+   is the same kind of thing, so they look the same and open the same way. */
+.sec { border-top: 1px solid var(--border); }
+.sec:first-of-type { border-top: none; }
+.sec > .disclosure { padding: 9px 2px; }
+.sec-body { padding: 0 2px 12px 10px; border-left: 2px solid var(--border); margin-left: 6px; }
+.blurb { margin: 0 0 10px; font-size: 11px; line-height: 1.45; color: var(--muted); }
+/* Separates a section's master switch from the knobs it governs. */
+.sub-rule { height: 1px; background: var(--border); margin: 4px 0 10px; }
+.on-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-left: 6px;
+  flex: 0 0 auto;
+}
+
+/* ---- Inert (dependency unmet) fields ---------------------------------- */
+/* Shown, not hidden: an option that vanishes cannot be discovered, and a form
+   that reflows every time a checkbox moves is worse than one that greys out. */
+.field.off label { color: var(--muted); opacity: 0.7; }
+.field.off input,
+.field.off select,
+.field.off textarea,
+.field.off button { opacity: 0.5; cursor: not-allowed; }
+.help.inert {
+  /* NOT the accent colour: accent means "clickable" everywhere else in this
+     app, and a reason is not a link. Amber reads as "conditional". */
+  color: var(--flag);
+  font-style: italic;
+  max-height: none;
+}
+button.wide { width: 100%; margin-top: 10px; }
