@@ -2633,6 +2633,167 @@ protected:
   }
 };
 
+namespace
+{
+// ---------------------------------------------------------------------------
+// -write_ctd / -write_cwl / -write_json for a tool that is not part of OpenMS
+// ---------------------------------------------------------------------------
+// All three route through TOPPBase::writeToolDescription_(), whose first act is
+//     StringList type_list = ToolHandler::getTypes(tool_name_);
+// (OpenMS 3.5.0 TOPPBase.cpp:2393; develop :2399). getTypes() looks the name up
+// in ToolHandler's hard-coded registry of official TOPP tools and THROWS on a
+// miss (ToolHandler.cpp:253 / :235), so any tool built outside the OpenMS tree
+// dies with "Requested tool 'FASTag' does not exist!" and exit 8.
+//
+// `official=false` -- which the constructor above already passes -- does not
+// help: inside writeToolDescription_ that flag guards only the *category*
+// lookup, and getCategory() is the non-throwing sibling that returns "" on a
+// miss. The getTypes call a few lines earlier is unguarded. -write_ini is
+// unaffected because its branch never calls getTypes at all, which is why the
+// GUI's parameter manifest has always worked while CTD export never did.
+//
+// The one escape hatch stock OpenMS offers is ToolHandler's INTERNAL tool
+// registry: it merges tools parsed from *.ttd files found in, among other
+// places, whatever OPENMS_TTD_INTERNAL_PATH points at (ToolHandler.cpp:374 in
+// 3.5.0, :291 on develop -- present in both). Registering FASTag there makes
+// getTypes() return an empty type list and the export proceeds. Every byte of
+// the resulting descriptor is then written by OpenMS's own ParamCTDFile /
+// ParamCWLFile over OpenMS's own getDefaultParameters_(); FASTag composes no
+// XML of its own. That is deliberate -- a descriptor we generated ourselves
+// would be a second, drifting source of truth for the parameter contract.
+//
+// KNOWN LIMITATION, upstream and not fixable from here: ParamCTDFile renders
+// float bounds with std::to_string, i.e. six decimals (ParamCTDFile.cpp:244),
+// so -fragment_tolerance's minimum of 1e-9 appears in the CTD as
+// restrictions="0.000000:". The INI writer uses String() and prints
+// "1.0e-09:" (ParamXMLFile.cpp:251). The emitted bound is therefore too
+// permissive: a workflow system will accept -fragment_tolerance 0 and FASTag
+// will refuse it at run time with a clear message. No official TOPP tool trips
+// this (none registers a bound below 1e-4), so the fix belongs in
+// ParamCTDFile, not in FASTag's parameter contract.
+
+/// Which of TOPPBase's descriptor branches this command line will actually
+/// take, mirroring TOPPBase::main's own precedence (TOPPBase.cpp:253-330):
+/// write_ini wins over everything, then ctd, then the two cwl spellings, then
+/// the two json spellings. Whichever comes first returns before the rest run.
+enum class DescriptorRequest
+{
+  None,
+  Ini,
+  Ctd,
+  CwlOrJson
+};
+
+DescriptorRequest requestedDescriptor(int argc, const char** argv)
+{
+  // TOPPBase::parseCommandLine_ matches option tokens by exact string ("-" +
+  // registered name, TOPPBase.cpp:2465/2496), so "--write_ctd",
+  // "-write_ctd=DIR" and abbreviations are unknown options to it too; a literal
+  // comparison here recognises exactly what it recognises. Options supplied
+  // through -ini cannot reach these branches either -- the dispatch reads
+  // param_cmdline_, before any INI is loaded.
+  auto given = [argc, argv](const char* opt) {
+    for (int i = 1; i < argc; ++i)
+    {
+      if (std::strcmp(argv[i], opt) == 0) return true;
+    }
+    return false;
+  };
+  if (given("-write_ini")) return DescriptorRequest::Ini;
+  if (given("-write_ctd")) return DescriptorRequest::Ctd;
+  if (given("-write_nested_cwl") || given("-write_cwl") || given("-write_nested_json") || given("-write_json"))
+  {
+    return DescriptorRequest::CwlOrJson;
+  }
+  return DescriptorRequest::None;
+}
+
+/// Registers FASTag with OpenMS's ToolHandler for the lifetime of the object,
+/// by writing a one-element .ttd into a private temporary directory and
+/// pointing OPENMS_TTD_INTERNAL_PATH at it.
+///
+/// Every failure path is a silent no-op that leaves the environment untouched;
+/// the caller then gets OpenMS's stock behaviour -- the "does not exist" error
+/// and exit 8 -- which is what happens today anyway. The one thing this must
+/// never do is leave a half-written .ttd where ToolHandler can find it: a
+/// truncated file raises a FATAL Xerces error from inside getTOPPToolList(),
+/// which runs at TOPPBase.cpp:150, i.e. before TOPPBase::main's try block.
+/// Hence write to a scratch name, size-check, then rename into place.
+class ToolHandlerRegistration
+{
+public:
+  ToolHandlerRegistration()
+  {
+    // Never override a value the user set: OpenMS reads exactly one directory
+    // from this variable, so there is nothing to append our entry to. An empty
+    // value counts as unset -- on OpenMS 3.5.0 it reaches QDir(""), which means
+    // the current working directory, not "disabled".
+    const char* existing = std::getenv("OPENMS_TTD_INTERNAL_PATH");
+    if (existing != nullptr && *existing != '\0') return;
+
+    std::error_code ec;
+    const std::filesystem::path base = std::filesystem::temp_directory_path(ec);
+    if (ec) return;
+    // getUniqueName(false): date, time, pid and a counter, but no hostname --
+    // shorter, and free of whatever a machine name may contain.
+    const std::filesystem::path dir = base / ("fastag-ttd-" + std::string(File::getUniqueName(false)));
+    std::filesystem::create_directories(dir, ec);
+    if (ec || !std::filesystem::is_directory(dir, ec)) return;
+
+    static const char kTtd[] = "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>\n"
+                               "<ttd><tool status=\"internal\"><name>FASTag</name>"
+                               "<category/><type/></tool></ttd>\n";
+    constexpr std::size_t kTtdLen = sizeof(kTtd) - 1;
+    const std::filesystem::path scratch = dir / "FASTag.ttd.part";
+    const std::filesystem::path target = dir / "FASTag.ttd";
+    {
+      std::ofstream os(scratch, std::ios::binary | std::ios::trunc);
+      os.write(kTtd, static_cast<std::streamsize>(kTtdLen));
+      os.close();
+      if (!os)
+      {
+        std::filesystem::remove_all(dir, ec);
+        return;
+      }
+    }
+    std::filesystem::rename(scratch, target, ec);
+    if (ec || std::filesystem::file_size(target, ec) != kTtdLen || ec)
+    {
+      std::filesystem::remove_all(dir, ec);
+      return;
+    }
+
+    const std::string dir_str = dir.string();
+#ifdef _WIN32
+    const bool set_ok = (_putenv_s("OPENMS_TTD_INTERNAL_PATH", dir_str.c_str()) == 0);
+#else
+    const bool set_ok = (::setenv("OPENMS_TTD_INTERNAL_PATH", dir_str.c_str(), 1) == 0);
+#endif
+    if (!set_ok)
+    {
+      std::filesystem::remove_all(dir, ec);
+      return;
+    }
+    dir_ = dir;
+    active_ = true;
+  }
+
+  ~ToolHandlerRegistration()
+  {
+    if (!active_) return;
+    std::error_code ec;
+    std::filesystem::remove_all(dir_, ec); // best effort, never throws
+  }
+
+  ToolHandlerRegistration(const ToolHandlerRegistration&) = delete;
+  ToolHandlerRegistration& operator=(const ToolHandlerRegistration&) = delete;
+
+private:
+  std::filesystem::path dir_;
+  bool active_ = false;
+};
+} // namespace
+
 int main(int argc, const char** argv)
 {
   // OpenMS asks its REST server whether a newer OPENMS exists. For a tool that
@@ -2672,8 +2833,61 @@ int main(int argc, const char** argv)
     args.push_back("-threads");
     args.push_back("0");
   }
+  // Tool description export (see ToolHandlerRegistration above). Gated on the
+  // usage banner: registering FASTag with ToolHandler flips exactly one
+  // --help line, "Common UTIL options:" -> "Common TOPP options:", chosen at
+  // TOPPBase.cpp:150 before any option is parsed. Keeping the shim off
+  // whenever --help was asked for keeps that output byte-identical. (A
+  // malformed descriptor invocation -- `-write_ctd DIR -threads nope` -- still
+  // prints its usage with the TOPP heading; that error path is the one
+  // remaining cosmetic difference and it is not worth more machinery.)
+  const DescriptorRequest descriptor = requestedDescriptor(argc, argv);
+  const bool want_descriptor =
+      !help && (descriptor == DescriptorRequest::Ctd || descriptor == DescriptorRequest::CwlOrJson);
+
+#ifndef ENABLE_TDL
+  // ENABLE_TDL is a PUBLIC compile definition on OpenMS's exported CMake target
+  // (src/openms/CMakeLists.txt), so it reaches this file exactly when the
+  // OpenMS being linked can write CWL/JSON at all -- bioconda 3.5.0 has it on,
+  // a default develop build has it off. Refuse here rather than letting
+  // ParamCWLFile::store() open (and therefore TRUNCATE) the target file before
+  // throwing a std::runtime_error from a depth TOPPBase does not catch: that
+  // would replace an existing, good descriptor with an empty one.
+  if (want_descriptor && descriptor == DescriptorRequest::CwlOrJson)
+  {
+    std::cerr << "FASTag: -write_cwl and -write_json need an OpenMS built with ENABLE_TDL=ON;\n"
+                 "        the OpenMS this binary links has it off. Use -write_ctd instead."
+              << std::endl;
+    return TOPPBase::UNKNOWN_ERROR;
+  }
+#endif
+
+  std::unique_ptr<ToolHandlerRegistration> ttd;
+  if (want_descriptor) ttd = std::make_unique<ToolHandlerRegistration>();
+
   TOPPFASTag tool;
-  const TOPPBase::ExitCodes rc = tool.main(static_cast<int>(args.size()), args.data());
+  TOPPBase::ExitCodes rc;
+  if (ttd)
+  {
+    // Only descriptor runs get this net, so every other invocation keeps
+    // today's exact failure behaviour, OpenMS's terminate handler included.
+    // It is needed because a malformed or duplicated .ttd raises from
+    // getTOPPToolList(), called at TOPPBase.cpp:150 -- outside TOPPBase::main's
+    // own try block, so nothing else would catch it.
+    try
+    {
+      rc = tool.main(static_cast<int>(args.size()), args.data());
+    }
+    catch (const std::exception& e)
+    {
+      std::cerr << "FASTag: tool description export failed: " << e.what() << std::endl;
+      rc = TOPPBase::UNKNOWN_ERROR;
+    }
+  }
+  else
+  {
+    rc = tool.main(static_cast<int>(args.size()), args.data());
+  }
   // The same missing hook leaves --help printing TOPPBase's own -threads line,
   // "(0 = all available cores) (default: '1')" -- wrong for FASTag on both
   // counts and not editable from a tool: printUsage_ is not virtual, and it
