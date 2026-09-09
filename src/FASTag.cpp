@@ -6,6 +6,7 @@
 // $Authors: Oliver Kohlbacher $
 // --------------------------------------------------------------------------
 
+#include <OpenMS/CONCEPT/VersionInfo.h>
 #include <OpenMS/APPLICATIONS/TOPPBase.h>
 #include <OpenMS/CHEMISTRY/ModificationsDB.h>
 #include <OpenMS/CHEMISTRY/ResidueModification.h>
@@ -198,6 +199,15 @@ public:
                  "DirecTag: accurate sequence tags from peptide MS/MS through statistical scoring",
                  "J Proteome Res 2008; 7(9): 3838-46", "10.1021/pr800154p"}})
   {
+    // TOPPBase prints the OPENMS version when version_ is empty, which for a
+    // tool shipped inside OpenMS is right and for this one is not: --help
+    // reported "3.6.0-pre-HEAD-... Revision: bd4b895", the version and git
+    // revision of the OpenMS it was built against, with FASTag's own version
+    // appearing nowhere. FASTAG_VERSION comes from project(FASTag VERSION ...).
+#ifdef FASTAG_VERSION
+    version_ = FASTAG_VERSION;
+    verboseVersion_ = String(FASTAG_VERSION) + " (OpenMS " + VersionInfo::getVersion() + ")";
+#endif
   }
 
 protected:
@@ -2607,6 +2617,21 @@ protected:
 
 int main(int argc, const char** argv)
 {
+  // OpenMS asks its REST server whether a newer OPENMS exists. For a tool that
+  // is not OpenMS the answer is not actionable, and when the request fails --
+  // offline, behind a proxy, or sandboxed inside an .app -- Qt prints
+  // "QIODevice::read (QNetworkReplyHttpImpl): device not open" to stderr, which
+  // reads like a FASTag error and was reported as one.
+  //
+  // Set only if the user has NOT: exporting it yourself still wins, in both
+  // directions, so the check can be turned back on.
+#ifdef _WIN32
+  size_t sz = 0;
+  if (getenv_s(&sz, nullptr, 0, "OPENMS_DISABLE_UPDATE_CHECK") != 0 || sz == 0)
+    _putenv_s("OPENMS_DISABLE_UPDATE_CHECK", "ON");
+#else
+  ::setenv("OPENMS_DISABLE_UPDATE_CHECK", "ON", 0);
+#endif
   TOPPFASTag tool;
   return tool.main(argc, argv);
 }

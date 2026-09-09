@@ -742,6 +742,54 @@ jobs:
             --apple-id "$MACOS_APPLE_ID" --team-id "$MACOS_TEAM_ID" \
             --password "$MACOS_NOTARY_PASSWORD" --wait
 
+      # MOVED AHEAD OF THE DESKTOP APP, and that is the whole point: the app's
+      # resources are staged from dist/FASTag, so embedding the index after that
+      # shipped an .app carrying the 12 KB dumps-only directory and no k-mer
+      # index at all. -species then failed inside the installed app with "the
+      # taxonomy dumps are present ... but the k-mer index (tax_k7.taxdb) is
+      # not" -- reported from /Applications/FASTag.app on 2026-09-09.
+      #
+      # The original reason for placing it late still holds for the CLI: the
+      # index is unsigned data and embedding it before notarization would add
+      # ~450 MB to that upload. It does not conflict, because the CLI is
+      # notarized further up, before this point.
+      # Embed the full taxonomy index into the tarball -- tag builds only;
+      # main pushes keep the fast dumps-only bundles nobody installs.
+      #
+      # Placed AFTER the macOS signing/notarization steps on purpose: the
+      # index is unsigned data, and embedding earlier would balloon the
+      # notarytool upload by ~450 MB. (That ordering stays theoretical until
+      # the MACOS_* secrets exist -- revisit on the first signed run.)
+      #
+      # Fails the release loudly on ANY error -- a tarball whose -species is
+      # silently broken is worse than a red build. The smoke run uses the
+      # ion-trap tolerance because the bundled example file is ion-trap MS2;
+      # it asserts the taxdb LOADS and a non-empty report is written, not any
+      # particular taxon ranking (139 spectra cannot rank stably).
+      - name: Embed taxonomy index (tag builds)
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash -el {0}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release download "$TAXDB_TAG" -p 'FASTag-taxonomy-k7.tar.gz' -D /tmp/taxdb
+          got=$(python3 -c "import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" /tmp/taxdb/FASTag-taxonomy-k7.tar.gz)
+          [ "$got" = "$TAXDB_SHA256" ] || { echo "taxonomy sha256 mismatch: $got"; exit 1; }
+          # The asset's dumps replace the repo copies: they are the ones the
+          # index was built against.
+          rm -rf dist/FASTag/share-FASTag-taxonomy
+          tar -xzf /tmp/taxdb/FASTag-taxonomy-k7.tar.gz -C dist/FASTag
+          test -s dist/FASTag/share-FASTag-taxonomy/tax_k7.taxdb
+          MZ=dist/FASTag/share-OpenMS/examples/ID/Ecoli_MS2_small.mzML
+          test -s "$MZ" || { echo "smoke fixture missing from bundle"; exit 1; }
+          dist/FASTag/FASTag -in "$MZ" -out /tmp/smoke.tsv \
+            -species -species_out /tmp/smoke.species.tsv \
+            -tag_length 7 -extension 2 \
+            -fragment_tolerance 0.3 -fragment_tolerance_unit Da
+          [ "$(wc -l < /tmp/smoke.species.tsv)" -ge 2 ] || { echo "species smoke wrote an empty report"; exit 1; }
+
+
       # ------------------------------------------------- desktop app (macOS)
       # The .app is a SECOND artifact needing its OWN signature: notarization
       # rejects a bundle containing any unsigned Mach-O, and the CLI plus its
@@ -786,8 +834,30 @@ jobs:
           # The same fixture the dist/ step above asserts -- proves share/
           # arrived whole, not just that the directory exists.
           test -s "$R/share/OpenMS/examples/ID/Ecoli_MS2_small.mzML"
-          test -s "$R/share/FASTag/taxonomy/tax_k7.taxdb" || \
-            echo "::warning::no taxonomy index in the app bundle; -species will be unavailable"
+
+          # HARD failure on a tag, not a warning. v1.4.1's app shipped with the
+          # dumps but no k-mer index, so -species failed for anyone who
+          # installed it -- and a warning in a green log is exactly how that
+          # reached users. On a dry run it stays a warning, because the index is
+          # only embedded on tag builds.
+          if [ -s "$R/share/FASTag/taxonomy/tax_k7.taxdb" ]; then
+            echo "taxonomy index present: $(du -h "$R/share/FASTag/taxonomy/tax_k7.taxdb" | cut -f1)"
+          elif [ "${{ startsWith(github.ref, 'refs/tags/v') }}" = "true" ]; then
+            echo "::error::the app bundle has no tax_k7.taxdb -- -species would fail in the shipped app"
+            exit 1
+          else
+            echo "::warning::no taxonomy index (not a tag build); -species unavailable in this app"
+          fi
+
+          # Run the CLI exactly as the app will: from inside the staged bundle,
+          # with nothing from this runner's environment on PATH. A bundle that
+          # cannot execute its own binary is the other half of the same class of
+          # bug, and it is invisible to any check that only looks at file names.
+          env -i HOME="$HOME" "$R/bin/FASTag" --help > /tmp/bundle-help.txt 2>&1 \
+            || { echo "::error::the bundled CLI does not run"; cat /tmp/bundle-help.txt; exit 1; }
+          grep -q "^Version: " /tmp/bundle-help.txt \
+            || { echo "::error::the bundled CLI ran but reported no version"; exit 1; }
+          echo "bundled CLI: $(grep '^Version: ' /tmp/bundle-help.txt)"
           du -sh "$R"
 
       - name: Build, sign and notarize the desktop app (macOS)
@@ -874,42 +944,6 @@ jobs:
       #
       # Archives the WHOLE dist/FASTag/ folder now, not a single file: users
       # run FASTag/FASTag (the wrapper), not the FASTag.bin it execs.
-      # Embed the full taxonomy index into the tarball -- tag builds only;
-      # main pushes keep the fast dumps-only bundles nobody installs.
-      #
-      # Placed AFTER the macOS signing/notarization steps on purpose: the
-      # index is unsigned data, and embedding earlier would balloon the
-      # notarytool upload by ~450 MB. (That ordering stays theoretical until
-      # the MACOS_* secrets exist -- revisit on the first signed run.)
-      #
-      # Fails the release loudly on ANY error -- a tarball whose -species is
-      # silently broken is worse than a red build. The smoke run uses the
-      # ion-trap tolerance because the bundled example file is ion-trap MS2;
-      # it asserts the taxdb LOADS and a non-empty report is written, not any
-      # particular taxon ranking (139 spectra cannot rank stably).
-      - name: Embed taxonomy index (tag builds)
-        if: startsWith(github.ref, 'refs/tags/v')
-        shell: bash -el {0}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          gh release download "$TAXDB_TAG" -p 'FASTag-taxonomy-k7.tar.gz' -D /tmp/taxdb
-          got=$(python3 -c "import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" /tmp/taxdb/FASTag-taxonomy-k7.tar.gz)
-          [ "$got" = "$TAXDB_SHA256" ] || { echo "taxonomy sha256 mismatch: $got"; exit 1; }
-          # The asset's dumps replace the repo copies: they are the ones the
-          # index was built against.
-          rm -rf dist/FASTag/share-FASTag-taxonomy
-          tar -xzf /tmp/taxdb/FASTag-taxonomy-k7.tar.gz -C dist/FASTag
-          test -s dist/FASTag/share-FASTag-taxonomy/tax_k7.taxdb
-          MZ=dist/FASTag/share-OpenMS/examples/ID/Ecoli_MS2_small.mzML
-          test -s "$MZ" || { echo "smoke fixture missing from bundle"; exit 1; }
-          dist/FASTag/FASTag -in "$MZ" -out /tmp/smoke.tsv \
-            -species -species_out /tmp/smoke.species.tsv \
-            -tag_length 7 -extension 2 \
-            -fragment_tolerance 0.3 -fragment_tolerance_unit Da
-          [ "$(wc -l < /tmp/smoke.species.tsv)" -ge 2 ] || { echo "species smoke wrote an empty report"; exit 1; }
-
       # ---------------------------------------------------------------------
       # A signed, notarized, STAPLED disk image of the CLI.
       #
@@ -937,9 +971,26 @@ jobs:
         run: |
           set -euo pipefail
           DMG="FASTag-${{ matrix.name }}.dmg"
-          # UDZO = compressed read-only, the ordinary format for a download.
-          hdiutil create -volname "FASTag" -srcfolder dist/FASTag \
-                         -ov -format UDZO "$DMG"
+          STAGE="${RUNNER_TEMP}/dmgroot"
+          rm -rf "$STAGE"; mkdir -p "$STAGE"
+          cp -R dist/FASTag "$STAGE/FASTag"
+
+          # A custom volume icon needs THREE things, and missing any one leaves
+          # the generic white disk: the icon at the volume root named
+          # .VolumeIcon.icns, the volume's "has custom icon" Finder flag, and a
+          # writable image while both are set -- a UDZO image is read-only, so
+          # this builds UDRW first and converts afterwards.
+          cp gui/src-tauri/icons/icon.icns "$STAGE/.VolumeIcon.icns"
+          RW="${RUNNER_TEMP}/FASTag-rw.dmg"
+          rm -f "$RW"
+          hdiutil create -volname "FASTag" -srcfolder "$STAGE" -ov -format UDRW "$RW"
+          MNT=$(hdiutil attach -readwrite -noverify -noautoopen "$RW" | grep -o '/Volumes/.*' | head -1)
+          SetFile -a C "$MNT" || echo "::warning::SetFile unavailable; the disk image will use the generic icon"
+          hdiutil detach "$MNT" -quiet
+          rm -f "$DMG"
+          hdiutil convert "$RW" -format UDZO -o "$DMG"
+          rm -f "$RW"
+
           codesign --force --timestamp --sign "$MACOS_SIGNING_IDENTITY" "$DMG"
           xcrun notarytool submit "$DMG" \
             --apple-id "$MACOS_APPLE_ID" --team-id "$MACOS_TEAM_ID" \
@@ -966,12 +1017,20 @@ jobs:
             --title "${{ github.ref_name }}" \
             --notes "Automated binary upload; release notes pending." \
             2>/dev/null || true
-          tar -C dist -czf "FASTag-${{ matrix.name }}.tar.gz" FASTag
-          gh release upload "${{ github.ref_name }}" "FASTag-${{ matrix.name }}.tar.gz" --clobber
-          # The disk image exists only on signed macOS tag builds; uploading it
-          # is conditional so an unsigned build still ships its tarball.
+          # macOS ships the DISK IMAGE ONLY. The tarball cannot carry a
+          # notarization ticket -- Apple staples one to disk images, installers
+          # and app bundles, never a plain folder -- so shipping both meant
+          # offering a second artifact that was strictly worse and warned on a
+          # machine with no network. One artifact, one behaviour.
+          #
+          # The tarball is still built and uploaded when signing is NOT
+          # configured, because an unsigned .dmg cannot be produced at all and
+          # shipping nothing for macOS would be worse than shipping a tarball.
           if [ -f "FASTag-${{ matrix.name }}.dmg" ]; then
             gh release upload "${{ github.ref_name }}" "FASTag-${{ matrix.name }}.dmg" --clobber
+          else
+            tar -C dist -czf "FASTag-${{ matrix.name }}.tar.gz" FASTag
+            gh release upload "${{ github.ref_name }}" "FASTag-${{ matrix.name }}.tar.gz" --clobber
           fi
 
   # ----------------------------------------------------------- GUI checks

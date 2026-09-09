@@ -1,7 +1,15 @@
 # FASTag — a fast parallel mass spectrometry tagger and tag-based filter
 
+[![release](https://img.shields.io/github/v/release/okohlbacher/FASTag?label=release&color=5b5fd6)](https://github.com/okohlbacher/FASTag/releases/latest)
+[![licence](https://img.shields.io/badge/licence-MIT-5b5fd6)](LICENSE)
+[![platforms](https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-5b5fd6)](#install)
+[![project page](https://img.shields.io/badge/docs-okohlbacher.github.io%2FFASTag-5b5fd6)](https://okohlbacher.github.io/FASTag/)
+
 Partial sequence tags from peptide MS/MS spectra, and a filter that keeps only
-the spectra whose tags occur in sequences you supply. A reimplementation of the
+the spectra whose tags occur in sequences you supply.
+
+**14.6x faster than DirecTag** across a 13-run corpus, at **126 MB** peak memory
+on a 9 GB file, reaching the **same 98.6%** accuracy ceiling. A reimplementation of the
 [DirecTag](https://doi.org/10.1021/pr800154p) algorithm as an
 [OpenMS](https://www.openms.de) TOPP tool. The citation — Tabb et al.,
 *J. Proteome Res.* 2008, 7:3838 — is for that original DirecTag paper; FASTag
@@ -98,20 +106,22 @@ the right build for whatever you are reading this on. Everything is also on the
 
 | platform | desktop app | command line |
 |---|---|---|
-| macOS, Apple silicon | [.dmg](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-macos-arm64.dmg) | [.dmg](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-macos-arm64.dmg) · [.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-macos-arm64.tar.gz) |
-| macOS, Intel | [.dmg](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-macos-x64.dmg) | [.dmg](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-macos-x64.dmg) · [.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-macos-x64.tar.gz) |
+| macOS, Apple silicon | [.dmg](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-macos-arm64.dmg) | [.dmg](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-macos-arm64.dmg) |
+| macOS, Intel | [.dmg](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-macos-x64.dmg) | [.dmg](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-macos-x64.dmg) |
 | Windows x64 | [installer](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-windows-x64-setup.exe) | [.zip](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-windows-x64.zip) |
 | Linux x64 | — | [.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-x64.tar.gz) |
 | Linux arm64 | — | [.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-arm64.tar.gz) |
 
-An archive extracts to a `FASTag/` folder — run `FASTag/FASTag` (Linux/macOS) or
-`FASTag/FASTag.bat` (Windows); everything else inside is a bundled dependency the
-wrapper needs, not something to run directly. A disk image holds the same folder.
+A disk image or archive holds a `FASTag/` folder — run `FASTag/FASTag`
+(Linux/macOS) or `FASTag/FASTag.bat` (Windows); everything else inside is a
+bundled dependency the wrapper needs, not something to run directly.
 
-**macOS builds are signed with a Developer ID certificate and notarized.** Prefer
-the `.dmg`: a notarization ticket can only be stapled to a disk image, an
-installer or an app bundle, so the `.dmg` opens with no network connection while
-the `.tar.gz` needs one online Gatekeeper check on first run.
+**macOS ships as a disk image only**, signed with a Developer ID certificate,
+notarized, and **stapled** — so it opens with no network connection. A tarball
+cannot carry a notarization ticket (Apple staples one to disk images, installers
+and app bundles, never a plain folder), so shipping one alongside would only
+offer a second artifact that is strictly worse and warns on a machine that is
+offline.
 
 **Windows builds are not yet code-signed**, so SmartScreen will warn on first
 run — see [doc/BACKLOG-ci.md](doc/BACKLOG-ci.md) for the state of that.

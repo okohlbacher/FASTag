@@ -119,6 +119,8 @@ find_library(MZPEAK_NUMPRESS_LIBRARY NAMES numpress libnumpress.a HINTS ${MZPEAK
 
 add_executable(FASTag src/FASTag.cpp src/IndexedMzMLReader.cpp)
 target_link_libraries(FASTag PRIVATE fastag_core)
+# So --help reports FASTag's version instead of the OpenMS it was built against.
+target_compile_definitions(FASTag PRIVATE FASTAG_VERSION="${PROJECT_VERSION}")
 if(MZPEAK_INCLUDE_DIR AND MZPEAK_LIBRARY)
   # C++23: the library's headers use std::expected and deducing this.
   target_sources(FASTag PRIVATE src/OnDiscMzPeakExperiment.cpp)
