@@ -1,0 +1,25 @@
+# mzPeakValidator (github.com/okohlbacher/mzPeakValidator), the gate every
+# mzPeak archive FASTag writes in CI must pass (test/mzpeak_validate.sh).
+#
+# Pinned twice over. The validator to a commit, because a moving ref would
+# silently change what a green run means. Its ENGINE to exact versions too:
+# the validator's own metadata says only pyarrow>=17 and jsonschema>=3, so
+# two installs of the same validator SHA on different days could otherwise
+# validate with different Parquet readers. These are the versions the tests
+# were verified with; every compiled package here (pyarrow, numpy, rpds-py)
+# ships cp312 wheels for linux x86_64/aarch64, macOS x86_64/arm64 and
+# win_amd64, so CI installs with --only-binary=:all: and never compiles.
+#
+# To move the validator pin: bump the SHA, run ctest's mzpeak_validate and
+# the bundle validation locally, and bump this file only -- both workflows
+# and the local instructions read it. Install with
+#   python -m pip install --only-binary=:all: -r test/mzpeak-validator-requirements.txt
+mzpeak-validator @ git+https://github.com/okohlbacher/mzPeakValidator.git@78c5b383f45cc823b9c2a9f89b270db9d42ae951
+pyarrow==25.0.1
+numpy==2.5.3
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
+referencing==0.37.0
+rpds-py==2026.6.3
+attrs==26.1.0
+typing_extensions==4.16.0
