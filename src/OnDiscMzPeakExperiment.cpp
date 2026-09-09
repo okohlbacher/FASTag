@@ -33,7 +33,9 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdlib>
 #include <exception>
+#include <limits>
 #include <mutex>
 #include <optional>
 #include <vector>
@@ -42,6 +44,11 @@ using namespace OpenMS;
 
 namespace FASTag
 {
+  // The archive's raw run metadata travels with the settings under this key,
+  // so a write can start from it instead of from the lossy mapping. Declared
+  // in the header: the adapter test plants legacy metadata under it.
+  const char* const kRawMetaKey = "mzpeak_run_metadata_json";
+
   namespace
   {
     /// Convert one library spectrum into the OpenMS spectrum the rest of the
@@ -111,6 +118,9 @@ namespace FASTag
           Precursor prec;
           if (ion.selected_ion_mz) prec.setMZ(*ion.selected_ion_mz);
           if (ion.charge_state) prec.setCharge(*ion.charge_state);
+          // Written at toSpectrumData() below and, until this line, never
+          // read back: an mzpeak -> mzpeak run silently dropped it.
+          if (ion.intensity) prec.setIntensity(*ion.intensity);
           if (p.isolation_window.target_mz && !ion.selected_ion_mz)
           {
             // No selected ion m/z: the isolation target is the best available
@@ -163,6 +173,25 @@ namespace FASTag
       return best;
     }
 
+    /// Row groups across the archive's spectrum signal tables, from the same
+    /// footers. rowGroupsDecoded() is NOT this: it counts cache decodes, which
+    /// equal the group count only while nothing is evicted. A test that wants
+    /// to prove it produced a multi-group archive reads this one.
+    std::size_t countRowGroups(const MzPeak::Index& index)
+    {
+      using enum MzPeak::Schema::DataKind::Type;
+      std::size_t n = 0;
+      const auto manager = index.manager();
+      for (const auto& file : index.files())
+      {
+        if (file.entity_type().type() != MzPeak::Schema::EntityType::Spectrum) continue;
+        const auto kind = file.data_kind().type();
+        if (kind != DataArray && kind != Peaks) continue;
+        n += static_cast<std::size_t>(manager->parquet(file)->file_metadata()->num_row_groups());
+      }
+      return n;
+    }
+
     /// Opening a Spectra over the shared index from several threads at once
     /// is what the per-thread copies do; the library's own lock covers its
     /// metadata cache, this one covers the file opens around it.
@@ -181,10 +210,6 @@ namespace FASTag
       std::lock_guard<std::mutex> guard(g_open_mutex);
       return index.spectra(MzPeak::MetadataDetail::Lean);
     }
-
-    /// The archive's raw run metadata travels with the settings under this
-    /// key, so a write can start from it instead of from the lossy mapping.
-    const char* const kRawMetaKey = "mzpeak_run_metadata_json";
 
     namespace json = boost::json;
 
@@ -237,6 +262,7 @@ namespace FASTag
     MzPeak::Index index;
     ExperimentalSettings settings;
     std::size_t row_group_bytes = 0;
+    std::size_t row_groups = 0;
     std::atomic<std::size_t> picked{0}, pick_failed{0};
   };
 
@@ -258,6 +284,7 @@ namespace FASTag
   {
     impl_->shared->settings = fromRunMetadata(impl_->shared->index.metadata());
     impl_->shared->row_group_bytes = largestRowGroup(impl_->shared->index);
+    impl_->shared->row_groups = countRowGroups(impl_->shared->index);
   }
   catch (const Exception::BaseException&)
   {
@@ -279,6 +306,7 @@ namespace FASTag
   Size OnDiscMzPeakExperiment::getNrSpectra() const { return static_cast<Size>(impl_->spectra.size()); }
   const ExperimentalSettings& OnDiscMzPeakExperiment::getMetaData() const { return impl_->shared->settings; }
   std::size_t OnDiscMzPeakExperiment::maxRowGroupBytes() const { return impl_->shared->row_group_bytes; }
+  std::size_t OnDiscMzPeakExperiment::rowGroupCount() const { return impl_->shared->row_groups; }
   // The cache owns the budget; this does not keep a second copy of it.
   std::size_t OnDiscMzPeakExperiment::cacheBudget() const
   {
@@ -422,7 +450,10 @@ namespace FASTag
       {
         const std::string type = c.component_type.value_or("");
         const Int order = static_cast<Int>(c.order.value_or(0));
-        if (type == "source")
+        // "ionsource" is the schema's enum value; "source" is what every
+        // archive FASTag wrote before this was corrected, and those stay
+        // readable.
+        if (type == "ionsource" || type == "source")
         {
           IonSource s;
           s.setOrder(order);
@@ -476,6 +507,38 @@ namespace FASTag
     return es;
   }
 
+  namespace
+  {
+    /// Repair the two schema violations every archive FASTag wrote before
+    /// 2026-09 carries in its mzpeak_index.json, so that an mzpeak -> mzpeak
+    /// run starting from such an archive's raw metadata does not copy them
+    /// forward: component_type "source" (the schema enum says "ionsource")
+    /// and a run block without the required "id". Both were found by
+    /// mzPeakValidator; the mzML-origin path below never emits them now.
+    void normaliseLegacyMetadata(json::object& o)
+    {
+      if (auto* ics = o.if_contains("instrument_configuration_list"); ics && ics->is_array())
+      {
+        for (auto& ic : ics->as_array())
+        {
+          if (!ic.is_object()) continue;
+          auto* comps = ic.as_object().if_contains("components");
+          if (!comps || !comps->is_array()) continue;
+          for (auto& c : comps->as_array())
+          {
+            if (!c.is_object()) continue;
+            auto* t = c.as_object().if_contains("component_type");
+            if (t && t->is_string() && t->as_string() == "source") *t = "ionsource";
+          }
+        }
+      }
+      if (auto* run = o.if_contains("run"); run && run->is_object())
+      {
+        if (!run->as_object().contains("id")) run->as_object()["id"] = "ru_0";
+      }
+    }
+  }
+
   /****************************************************************************/
   MzPeak::RunMetadata toRunMetadata(const ExperimentalSettings& es, const MSExperiment* exp)
   {
@@ -485,6 +548,7 @@ namespace FASTag
       try
       {
         o = json::parse(std::string(es.getMetaValue(kRawMetaKey).toString())).as_object();
+        normaliseLegacyMetadata(o);
       }
       catch (const std::exception&)
       {
@@ -496,7 +560,11 @@ namespace FASTag
     if (o.empty())
     {
       json::object run;
-      if (!es.getIdentifier().empty()) run["id"] = std::string(es.getIdentifier());
+      // "id" is required by the schema. OpenMS's mzML handler never fills the
+      // identifier from <run id=...> (only from a top-level accession), so
+      // without a fallback essentially every archive would lack it; ru_0 is
+      // the id OpenMS's own mzML writer emits.
+      run["id"] = es.getIdentifier().empty() ? std::string("ru_0") : std::string(es.getIdentifier());
       if (!es.getDateTime().isNull()) run["start_time"] = isoFromOpenMS(es.getDateTime().get());
 
       if (!es.getSourceFiles().empty())
@@ -553,7 +621,7 @@ namespace FASTag
           comps.push_back(c);
         };
         for (const auto& s : inst.getIonSources())
-          comp("source", s.getOrder(), "ionization type",
+          comp("ionsource", s.getOrder(), "ionization type",
                IonSource::NamesOfIonizationMethod[static_cast<std::size_t>(s.getIonizationMethod())]);
         for (const auto& a : inst.getMassAnalyzers())
           comp("analyzer", a.getOrder(), "mass analyzer type",
@@ -704,10 +772,42 @@ namespace FASTag
   }
 
   /****************************************************************************/
+  namespace
+  {
+    /// Points per Parquet row group for archives FASTag writes. The library's
+    /// default (2^20, the reference converter's) is right for real data; the
+    /// override exists so a test can turn a small fixture into a multi-group
+    /// archive and exercise the reader's group-boundary path. Parsed
+    /// strictly -- digits only, non-zero, no overflow -- and anything else is
+    /// refused with a warning rather than silently producing a default-sized
+    /// archive that would pass a test expecting several groups.
+    std::size_t pointsPerRowGroup()
+    {
+      constexpr std::size_t kDefault = std::size_t(1) << 20;
+      const char* v = std::getenv("FASTAG_MZPEAK_POINTS_PER_ROW_GROUP");
+      if (!v || !*v) return kDefault;
+      std::size_t n = 0;
+      bool ok = true;
+      for (const char* c = v; *c && ok; ++c)
+      {
+        if (*c < '0' || *c > '9' || n > (std::numeric_limits<std::size_t>::max() - 9) / 10) ok = false;
+        else n = n * 10 + static_cast<std::size_t>(*c - '0');
+      }
+      if (!ok || n == 0)
+      {
+        OPENMS_LOG_WARN << "FASTAG_MZPEAK_POINTS_PER_ROW_GROUP='" << v
+                        << "' is not a positive integer; writing " << kDefault
+                        << " points per row group" << std::endl;
+        return kDefault;
+      }
+      return n;
+    }
+  }
+
   struct MzPeakSpectrumWriter::Impl
   {
     Impl(const std::string& p, const MzPeak::RunMetadata& md)
-      : path(p), writer(p)
+      : path(p), writer(p, pointsPerRowGroup())
     {
       if (!md.empty()) writer.set_metadata(md);
     }
