@@ -1133,8 +1133,14 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          # macOS ships DISK IMAGES, not tarballs -- a stapled ticket needs a
+          # .app/.pkg/.dmg to live on. This list lagged that change and failed
+          # v1.4.2 on assets that are deliberately no longer built, which is the
+          # gate working: it compares what shipped against what we SAID ships,
+          # so it fires on a stale expectation as loudly as on a missing file.
           want="FASTag-linux-x64.tar.gz FASTag-linux-arm64.tar.gz \
-                FASTag-macos-x64.tar.gz FASTag-macos-arm64.tar.gz \
+                FASTag-macos-x64.dmg FASTag-macos-arm64.dmg \
+                FASTag-gui-macos-x64.dmg FASTag-gui-macos-arm64.dmg \
                 FASTag-taxonomy-k7.tar.gz FASTag-taxonomy-k7.tar.gz.sha256"
           have=$(gh release view "${{ github.ref_name }}" --json assets --jq '.assets[].name')
           missing=0

@@ -921,7 +921,14 @@ jobs:
           set -euo pipefail
           # Same layout resolve_binary() expects on every platform:
           # <resources>/fastag/bin/<exe>, share/OpenMS, share/FASTag/taxonomy.
-          R=gui/src-tauri/resources/fastag
+          # This job checks out into fastag/ (actions/checkout `path:`), so every
+          # GUI path needs that prefix. Without it `mkdir -p` cheerfully built a
+          # second, EMPTY gui/ tree beside the checkout, every cp and test -s
+          # passed against it, and the failure only surfaced two steps later as
+          # `npm ci` finding no package.json. Assert the real source is there
+          # before creating anything.
+          test -f fastag/gui/package.json
+          R=fastag/gui/src-tauri/resources/fastag
           rm -rf "$R"; mkdir -p "$R/bin" "$R/share/FASTag"
           cp dist/FASTag/FASTag.core.exe "$R/bin/FASTag.exe"
           # Windows has no RPATH: every DLL must sit in the SAME directory as
@@ -937,7 +944,7 @@ jobs:
       - name: Build the desktop app (Windows)
         if: startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run
         timeout-minutes: 90
-        working-directory: gui
+        working-directory: fastag/gui
         shell: bash
         run: |
           set -euo pipefail
@@ -954,7 +961,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: FASTag-gui-windows-x64-unsigned
-          path: gui/src-tauri/target/release/bundle/nsis/*.exe
+          path: fastag/gui/src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: error
 
       - name: Sign the installer via SignPath Foundation (Windows)
@@ -996,7 +1003,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          $nsis = Get-ChildItem -Path "gui/src-tauri/target/release/bundle/nsis" -Filter "*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          $nsis = Get-ChildItem -Path "fastag/gui/src-tauri/target/release/bundle/nsis" -Filter "*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $nsis) { Write-Host "::warning::no NSIS installer was produced"; exit 0 }
           Write-Host "::warning title=Unsigned Windows installer::Shipping the installer unsigned -- SmartScreen will warn on first run. See doc/BACKLOG-ci.md."
           Copy-Item $nsis.FullName -Destination "FASTag-gui-windows-x64-setup.exe" -Force
@@ -1010,7 +1017,7 @@ jobs:
         if: inputs.gui_dry_run
         with:
           name: FASTag-gui-windows-x64-dryrun
-          path: gui/src-tauri/target/release/bundle/nsis/*.exe
+          path: fastag/gui/src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: error
 
       # Same mechanism as ci.yml's identical step -- see there for why the
