@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21 FATAL_ERROR)
-project(FASTag VERSION 1.4.2 LANGUAGES CXX)
+project(FASTag VERSION 1.4.3 LANGUAGES CXX)
 # The GUI carries that version in four more files; a bump that misses one
 # fails here rather than shipping (cmake/version-guard.cmake says why).
 include(cmake/version-guard.cmake)
