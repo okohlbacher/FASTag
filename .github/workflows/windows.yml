@@ -708,6 +708,16 @@ jobs:
       - name: Test
         shell: bash
         run: |
+          # OpenMS resolves share/OpenMS (ResidueDB, ModificationsDB, unimod)
+          # via OPENMS_DATA_PATH, then a compiled-in path, then exe-relative.
+          # A unit-test binary in the build tree is not FASTag.exe and must not
+          # depend on the install layout to find it -- and on this runner
+          # indexed_mzml_test already SKIPs for its own reason, so the lookup is
+          # unproven here while the guard below now REQUIRES a pass. Point it at
+          # the OpenMS this job built; the shipped bundle's own resolution is
+          # tested separately, with a scrubbed environment, further down.
+          SHARE=$(find "$WS/openms-install" -type d -path '*/share/OpenMS' 2>/dev/null | head -1)
+          [ -n "$SHARE" ] && export OPENMS_DATA_PATH="$SHARE" && echo "OPENMS_DATA_PATH=$SHARE"
           ctest --test-dir fastag/build --output-on-failure 2>&1 | tee ctest.log
           # The mzPeak tests SKIP themselves in a build without the library or
           # without the validator. This job has both, so a skip here would be a
