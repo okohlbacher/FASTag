@@ -373,9 +373,60 @@ jobs:
         shell: bash -el {0}
         run: cmake --build build --parallel
 
+      # mzPeakValidator, for every archive this job writes: ctest's
+      # mzpeak_validate (the round-trip archives) and the bundle check below.
+      # Installed with setup-python's OWN interpreter into its own prefix,
+      # deliberately not the conda env: bioconda's openms pins libarrow, and
+      # pulling a Python pyarrow into that solve would couple an unrelated
+      # tool to the build environment. The requirements file pins the
+      # validator to a commit AND its engine to exact versions (see the file
+      # for why and how to move the pin), and doubles as the pip cache key.
+      # --only-binary: every compiled dependency has a wheel for all five
+      # targets, and a source build here would be a silent multi-minute
+      # detour on a runner without a compiler for it.
+      - uses: actions/setup-python@v5
+        id: validator-python
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: test/mzpeak-validator-requirements.txt
+      - name: Install mzPeakValidator
+        shell: bash
+        env:
+          PY: ${{ steps.validator-python.outputs.python-path }}
+        run: |
+          set -euo pipefail
+          PY="${PY//\\//}"
+          for attempt in 1 2 3; do
+            "$PY" -m pip install -q --only-binary=:all: -r test/mzpeak-validator-requirements.txt && break
+            [ "$attempt" -lt 3 ] || { echo "::error::pip could not install mzPeakValidator after 3 attempts"; exit 1; }
+            echo "pip install failed (attempt $attempt); retrying in 15 s"; sleep 15
+          done
+          # The console script sits next to the interpreter (bin/ on Unix,
+          # Scripts/ on Windows). An absolute path goes into the environment
+          # so the conda-activating test shell cannot resolve a different one.
+          D=$(dirname "$PY")
+          if [ -x "$D/mzpeak-validate" ]; then V="$D/mzpeak-validate"
+          elif [ -x "$D/Scripts/mzpeak-validate.exe" ]; then V="$D/Scripts/mzpeak-validate.exe"
+          else echo "::error::mzpeak-validate not found next to $PY"; ls "$D" "$D/Scripts" 2>/dev/null; exit 1; fi
+          "$V" --help >/dev/null
+          echo "MZPEAK_VALIDATE=$V" >> "$GITHUB_ENV"
+          echo "validator: $V"
+
       - name: Test
         shell: bash -el {0}
-        run: ctest --test-dir build --output-on-failure
+        run: |
+          # pipefail, as in Configure: this shell has errexit but not pipefail.
+          set -o pipefail
+          ctest --test-dir build --output-on-failure 2>&1 | tee ctest.log
+          # The mzPeak tests SKIP themselves in a build without the library or
+          # without the validator. This job has both, so a skip here would be a
+          # broken harness presenting as green -- the very class of failure
+          # this coverage exists for. Require a Passed line for each.
+          for t in mzpeak_roundtrip mzpeak_validate mzpeak_adapter_test; do
+            grep -E "Test +#[0-9]+: $t " ctest.log | grep -q 'Passed' \
+              || { echo "::error::$t did not pass (skipped, not run or missing)"; grep -E "$t" ctest.log || true; exit 1; }
+          done
 
       # A real mzPeak read, on the fixture the library's own tests use. The
       # count is asserted exactly: 34 MS2 in that archive, and a reader that
@@ -644,11 +695,72 @@ jobs:
             echo "::error::Shipped bundle cannot read mzPeak -- expected 34 MS2 spectra from small.mzpeak."
             exit 1
           }
+          # ...and WRITES one, then reads its own output back, still as a bare
+          # download would (env -i: nothing of this runner's environment; a
+          # minimal PATH only so the wrapper's /bin/sh can resolve dirname
+          # and pwd). Reading exercises Parquet's reader and libzip's inflate;
+          # writing needs the Parquet writer, zip finalisation and Boost.JSON
+          # -- symbols a read-only smoke never touches -- so a bundle could
+          # read mzPeak and still fail every user who asks for -out_spectra.
+          # The tags from the archive must be byte-identical to the tags from
+          # the mzML, exactly as ctest's mzpeak_roundtrip demands of the
+          # unbundled binary. The archive is validated in the next step.
+          BW=/tmp/bundle-mzpeak; rm -rf "$BW"; mkdir -p "$BW"
+          MZ="$GITHUB_WORKSPACE/dist/FASTag/share-OpenMS/examples/ID/Ecoli_MS2_small.mzML"
+          env -i HOME="$HOME" PATH=/usr/bin:/bin "$GITHUB_WORKSPACE/dist/FASTag/FASTag" \
+            -in "$MZ" -out "$BW/ml.tsv" -out_spectra "$BW/bundle.mzpeak" -threads 2 \
+            -fragment_tolerance 20 -fragment_tolerance_unit ppm > "$BW/write.log" 2>&1 \
+            || { cat "$BW/write.log"; echo "::error::the shipped bundle cannot WRITE mzPeak"; exit 1; }
+          grep -q "Wrote [0-9]* spectra" "$BW/write.log" || { cat "$BW/write.log"; echo "::error::the bundle wrote no spectra"; exit 1; }
+          env -i HOME="$HOME" PATH=/usr/bin:/bin "$GITHUB_WORKSPACE/dist/FASTag/FASTag" \
+            -in "$BW/bundle.mzpeak" -out "$BW/mp.tsv" -threads 2 \
+            -fragment_tolerance 20 -fragment_tolerance_unit ppm > "$BW/read.log" 2>&1 \
+            || { cat "$BW/read.log"; echo "::error::the shipped bundle cannot read the archive it just wrote"; exit 1; }
+          cmp -s "$BW/ml.tsv" "$BW/mp.tsv" || { echo "::error::tags from the bundle-written archive differ from the mzML tags"; diff "$BW/ml.tsv" "$BW/mp.tsv" | head; exit 1; }
+          [ "$(grep -c . "$BW/mp.tsv")" -gt 1 ] || { echo "::error::the bundle round trip produced no tags"; exit 1; }
+          echo "bundle round trip: $(grep -o 'Wrote [0-9]* spectra' "$BW/write.log"), tags byte-identical"
+
           ls dist/FASTag/lib | grep -qi 'mzpeak' || { echo "::error::no libmzpeak in the bundle"; exit 1; }
           ls dist/FASTag/lib | grep -qi 'arrow' || { echo "::error::no Arrow library in the bundle"; exit 1; }
           ls dist/FASTag/lib | grep -qi 'parquet' || { echo "::error::no Parquet library in the bundle"; exit 1; }
 
-          echo "Portability check passed: runs standalone, no build-environment leakage, reads mzPeak."
+          echo "Portability check passed: runs standalone, no build-environment leakage, reads and writes mzPeak."
+
+      # Every mzPeak archive this job wrote, through mzPeakValidator in full
+      # mode. ctest's mzpeak_validate already covered the round-trip archives
+      # (its reports are collected here); this covers the bundle's. The
+      # library's own small.mzpeak goes first as a CONTROL: written by the
+      # reference converter, it passes the pinned validator, so a failure on
+      # it means the validator or its pin is broken, not FASTag.
+      #
+      # A hard failure on EVERY run, not only tags. The validator and its
+      # engine are pinned, so the verdict can only change when FASTag's
+      # writer changes -- and an archive other readers reject is a silent
+      # failure for every user, exactly the kind this repository's history
+      # says must fail a cheap main push rather than a release. The first
+      # run of this gate found two schema violations in every archive FASTag
+      # had ever written; see doc/PLAN-ci-mzpeak-coverage.md.
+      - name: Validate every mzPeak archive this job wrote
+        shell: bash
+        run: |
+          set -euo pipefail
+          R=validator-reports; rm -rf "$R"; mkdir -p "$R"
+          bash test/mzpeak_validate.sh "$R/control" mzpeak-src/test/files/v2/small.mzpeak \
+            || { echo "::error::the CONTROL archive (reference converter) fails the pinned validator -- the validator or its pin is broken, not FASTag"; exit 1; }
+          bash test/mzpeak_validate.sh "$R/bundle" /tmp/bundle-mzpeak/bundle.mzpeak \
+            || { echo "::error::the archive the shipped bundle wrote is not a valid mzPeak archive"; exit 1; }
+          cp -r build/mzpeak-roundtrip/validator "$R/ctest"
+          ls -R "$R" | head -40
+
+      # The reports, pass or fail: a red validator run is only useful with
+      # the findings attached, and `always()` is what makes a failed step's
+      # output reach the artifact.
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mzpeak-validator-${{ matrix.name }}
+          path: validator-reports
+          if-no-files-found: warn
 
       # ---------------------------------------------------------------------
       # macOS code signing + notarization, release builds only.
