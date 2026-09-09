@@ -87,6 +87,9 @@ namespace FASTag
     /// Run-level metadata, mapped from the archive's mzpeak_index.json.
     const OpenMS::ExperimentalSettings& getMetaData() const;
 
+    /// Row groups across the archive's spectrum signal tables, from the
+    /// Parquet footers -- the physical layout, unlike rowGroupsDecoded().
+    std::size_t rowGroupCount() const;
     /// Largest signal row group in the archive, in uncompressed bytes. Memory
     /// follows the groups in flight, about one per reader plus a boundary, so
     /// this is what a caller sizing the number of concurrent readers needs.
@@ -181,6 +184,11 @@ namespace FASTag
 
   /// The reverse mapping.
   OpenMS::ExperimentalSettings fromRunMetadata(const MzPeak::RunMetadata& md);
+
+  /// Meta-value key under which fromRunMetadata() keeps the archive's raw
+  /// mzpeak_index.json metadata block, and from which toRunMetadata() starts
+  /// when it is present. Exposed for the adapter test.
+  extern const char* const kRawMetaKey;
 }
 
 #endif  // FASTAG_HAVE_MZPEAK_LIB

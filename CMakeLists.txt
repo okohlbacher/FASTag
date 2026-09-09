@@ -126,28 +126,7 @@ target_link_libraries(FASTag PRIVATE fastag_core)
 target_compile_definitions(FASTag PRIVATE FASTAG_VERSION="${PROJECT_VERSION}")
 if(MZPEAK_INCLUDE_DIR AND MZPEAK_LIBRARY)
   # C++23: the library's headers use std::expected and deducing this.
-  target_sources(FASTag PRIVATE src/OnDiscMzPeakExperiment.cpp)
-  target_include_directories(FASTag PRIVATE ${MZPEAK_INCLUDE_DIR})
-  target_link_libraries(FASTag PRIVATE ${MZPEAK_LIBRARY})
-  if(MZPEAK_NUMPRESS_LIBRARY)
-    target_link_libraries(FASTag PRIVATE ${MZPEAK_NUMPRESS_LIBRARY})
-  endif()
-  # Two of the library's dependencies are called directly from
-  # OnDiscMzPeakExperiment.cpp and so are linked here on every platform:
-  # Boost.JSON (compiled, not header-only) builds the run-level metadata
-  # block, and Parquet's metadata API reports row-group sizes. Both come from
-  # the same conda env that supplies the library's Arrow.
-  find_package(Boost CONFIG REQUIRED COMPONENTS json)
-  find_package(Arrow CONFIG REQUIRED)
-  find_package(Parquet CONFIG REQUIRED)
-  target_link_libraries(FASTag PRIVATE Boost::json Parquet::parquet_shared)
-  if(WIN32)
-    # A static library brings no dependency list of its own, so the rest of
-    # what the shared libmzpeak carries as DT_NEEDED elsewhere is linked here
-    # too: Arrow and libzip.
-    find_package(libzip CONFIG REQUIRED)
-    target_link_libraries(FASTag PRIVATE Arrow::arrow_shared libzip::zip)
-  endif()
+  #
   # CXX_STANDARD is a TARGET property; per-source it is silently ignored and
   # the file would compile at the target's C++17 (std::unreachable missing).
   # The flag is spelled per compiler: MSVC has no c++23, only c++latest; clang
@@ -164,8 +143,38 @@ if(MZPEAK_INCLUDE_DIR AND MZPEAK_LIBRARY)
       set(_fastag_cxx23_flag "-std=c++2b")
     endif()
   endif()
+
+  # The adapter (OnDiscMzPeakExperiment + MzPeakSpectrumWriter) as its own
+  # static library rather than a source of the FASTag target, so that
+  # test/mzpeak_adapter_test.cpp can link the SAME object the tool ships and
+  # compare what it writes with what it reads, field by field. Everything the
+  # adapter needs is PUBLIC here -- the library, the flag and the definition
+  # -- and FASTag's link set is unchanged in effect.
+  add_library(fastag_mzpeak STATIC src/OnDiscMzPeakExperiment.cpp)
+  target_include_directories(fastag_mzpeak PUBLIC ${MZPEAK_INCLUDE_DIR})
+  target_link_libraries(fastag_mzpeak PUBLIC fastag_core ${MZPEAK_LIBRARY})
+  if(MZPEAK_NUMPRESS_LIBRARY)
+    target_link_libraries(fastag_mzpeak PUBLIC ${MZPEAK_NUMPRESS_LIBRARY})
+  endif()
+  # Two of the library's dependencies are called directly from
+  # OnDiscMzPeakExperiment.cpp and so are linked here on every platform:
+  # Boost.JSON (compiled, not header-only) builds the run-level metadata
+  # block, and Parquet's metadata API reports row-group sizes. Both come from
+  # the same conda env that supplies the library's Arrow.
+  find_package(Boost CONFIG REQUIRED COMPONENTS json)
+  find_package(Arrow CONFIG REQUIRED)
+  find_package(Parquet CONFIG REQUIRED)
+  target_link_libraries(fastag_mzpeak PUBLIC Boost::json Parquet::parquet_shared)
+  if(WIN32)
+    # A static library brings no dependency list of its own, so the rest of
+    # what the shared libmzpeak carries as DT_NEEDED elsewhere is linked here
+    # too: Arrow and libzip.
+    find_package(libzip CONFIG REQUIRED)
+    target_link_libraries(fastag_mzpeak PUBLIC Arrow::arrow_shared libzip::zip)
+  endif()
   set_source_files_properties(src/OnDiscMzPeakExperiment.cpp PROPERTIES COMPILE_OPTIONS "${_fastag_cxx23_flag}")
-  target_compile_definitions(FASTag PRIVATE FASTAG_HAVE_MZPEAK_LIB)
+  target_compile_definitions(fastag_mzpeak PUBLIC FASTAG_HAVE_MZPEAK_LIB)
+  target_link_libraries(FASTag PRIVATE fastag_mzpeak)
   message(STATUS "FASTag: mzPeak read/write enabled (${MZPEAK_LIBRARY})")
 else()
   message(STATUS "FASTag: mzpeak-openms NOT found -- this build reads and writes mzML only")
@@ -224,6 +233,46 @@ if(FASTAG_BUILD_TESTS)
   add_test(NAME mzpeak_e2e
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/mzpeak_e2e.sh $<TARGET_FILE:FASTag>)
   set_tests_properties(mzpeak_e2e PROPERTIES SKIP_RETURN_CODE 77)
+
+  # mzPeak in and out on the vendored fixture, no external data: the tool
+  # writes an archive from the mzML, and the tags from that archive must be
+  # BYTE-IDENTICAL to the tags from the mzML, at 1 and 4 threads, across an
+  # archive -> archive re-write and a multi-row-group write. The archives are
+  # kept under mzpeak-roundtrip/ for the validator below. SKIPs only when the
+  # build has no mzPeak support; see doc/PLAN-ci-mzpeak-coverage.md.
+  add_test(NAME mzpeak_roundtrip
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/mzpeak_roundtrip.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_BINARY_DIR}/mzpeak-roundtrip)
+  set_tests_properties(mzpeak_roundtrip PROPERTIES SKIP_RETURN_CODE 77
+                       FIXTURES_SETUP mzpeak_roundtrip_archives)
+
+  # Every archive the round trip wrote, through mzPeakValidator in full mode.
+  # A FIXTURE, not DEPENDS: DEPENDS only orders, and a failed producer would
+  # still let this run on absent or stale archives. SKIPs when the validator
+  # is not resolvable (MZPEAK_VALIDATE, or mzpeak-validate on PATH; see
+  # test/mzpeak-validator-requirements.txt) or when the round trip skipped.
+  add_test(NAME mzpeak_validate
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/mzpeak_validate.sh
+                   ${CMAKE_CURRENT_BINARY_DIR}/mzpeak-roundtrip/validator
+                   ${CMAKE_CURRENT_BINARY_DIR}/mzpeak-roundtrip)
+  set_tests_properties(mzpeak_validate PROPERTIES SKIP_RETURN_CODE 77
+                       FIXTURES_REQUIRED mzpeak_roundtrip_archives)
+
+  # The adapter itself, field by field: tag equality above cannot see a
+  # halved intensity, a dropped second precursor or a zeroed retention time,
+  # because tagging ranks intensities and reads one precursor's m/z and
+  # charge. This test writes the fixture through MzPeakSpectrumWriter, reads
+  # it back through OnDiscMzPeakExperiment and compares every field.
+  if(TARGET fastag_mzpeak)
+    add_executable(mzpeak_adapter_test test/mzpeak_adapter_test.cpp)
+    target_link_libraries(mzpeak_adapter_test PRIVATE fastag_mzpeak)
+    target_compile_definitions(mzpeak_adapter_test PRIVATE
+                               FASTAG_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
+    set_source_files_properties(test/mzpeak_adapter_test.cpp PROPERTIES COMPILE_OPTIONS "${_fastag_cxx23_flag}")
+    add_test(NAME mzpeak_adapter_test COMMAND mzpeak_adapter_test)
+    set_tests_properties(mzpeak_adapter_test PROPERTIES SKIP_RETURN_CODE 77)
+  endif()
 
   # The mzML fast path against OpenMS itself: the tag TSV carries neither RT
   # nor precursor charge, so only a direct field-by-field comparison proves
