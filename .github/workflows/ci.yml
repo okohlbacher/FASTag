@@ -1260,3 +1260,56 @@ jobs:
             echo "$have" | grep -qx "$a" || { echo "MISSING: $a"; missing=1; }
           done
           exit $missing
+
+  # ------------------------------------------------- Homebrew tap (macOS)
+  # okohlbacher/homebrew-fastag carries two casks (fastag = the desktop app,
+  # fastag-cli = the command line) that download this release's four macOS
+  # disk images. Its own workflow rewrites version + sha256, audits, installs
+  # and commits -- on a 6-hour schedule with no secrets, or right now when
+  # this job asks it to. Asking needs a fine-grained PAT (secret
+  # HOMEBREW_TAP_TOKEN: only okohlbacher/homebrew-fastag, Actions read+write)
+  # because GITHUB_TOKEN is scoped to this repository and cannot dispatch a
+  # workflow in another one.
+  #
+  # Gated on release-complete, which is what asserts the four images are on
+  # the release; a partial release is never announced. `secrets.*` cannot
+  # appear in an `if:` (0-job startup_failure), so the presence check is a
+  # step output, same pattern as the signing gate above. The dispatch never
+  # fails the tag build: the tap is a downstream convenience, and its schedule
+  # publishes the release on its own within six hours either way.
+  # Design, review and the maintainer's checklist: doc/PLAN-homebrew.md.
+  homebrew-tap:
+    if: ${{ !cancelled() && needs.release-complete.result == 'success' }}
+    needs: [release-complete]
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - name: Detect the tap token
+        id: tap-token
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "$HOMEBREW_TAP_TOKEN" ]; then
+            echo "::notice title=Homebrew tap not dispatched::HOMEBREW_TAP_TOKEN is not set; okohlbacher/homebrew-fastag picks this release up on its own schedule within 6 h. See doc/PLAN-homebrew.md."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Ask the tap to publish this release
+        if: steps.tap-token.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          GH_REPO: okohlbacher/homebrew-fastag
+          # Through env and quoted below: a tag name is any valid Git ref,
+          # not only vX.Y.Z, and the tap validates it again on its side.
+          TAG: ${{ github.ref_name }}
+        run: |
+          # GitHub disables a scheduled workflow after 60 days without a
+          # commit to its repository and then refuses to dispatch it, so
+          # re-enable first; that is a no-op on an enabled workflow.
+          if gh workflow enable update-casks.yml && gh workflow run update-casks.yml -f "tag=$TAG"; then
+            echo "dispatched update-casks.yml in okohlbacher/homebrew-fastag for $TAG"
+          else
+            echo "::warning title=Homebrew tap dispatch failed::could not dispatch update-casks.yml in okohlbacher/homebrew-fastag (expired HOMEBREW_TAP_TOKEN?). The tap's own schedule publishes $TAG within 6 h."
+          fi
