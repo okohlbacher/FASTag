@@ -910,12 +910,12 @@ jobs:
       # built in CI at all, so unlike macOS this path has no working precedent
       # behind it.
       - uses: actions/setup-node@v7
-        if: steps.signpath-gate.outputs.enabled == 'true' || inputs.gui_dry_run
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run
         with:
           node-version: 24
 
       - name: Stage the CLI as the app's bundled resources (Windows)
-        if: steps.signpath-gate.outputs.enabled == 'true' || inputs.gui_dry_run
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run
         shell: bash
         run: |
           set -euo pipefail
@@ -935,7 +935,7 @@ jobs:
           test -s "$R/share/OpenMS/examples/ID/Ecoli_MS2_small.mzML"
 
       - name: Build the desktop app (Windows)
-        if: steps.signpath-gate.outputs.enabled == 'true' || inputs.gui_dry_run
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run
         timeout-minutes: 90
         working-directory: gui
         shell: bash
@@ -980,6 +980,26 @@ jobs:
           $signed = Get-ChildItem -Path "signed-gui" -Filter "*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $signed) { Write-Host "::error::SignPath returned no signed installer"; exit 1 }
           Copy-Item $signed.FullName -Destination "FASTag-gui-windows-x64-setup.exe" -Force
+          gh release create "${{ github.ref_name }}" --title "${{ github.ref_name }}" `
+            --notes "Automated binary upload; release notes pending." 2>$null
+          gh release upload "${{ github.ref_name }}" "FASTag-gui-windows-x64-setup.exe" --clobber
+
+      # Unsigned fallback. Without this the installer would be BUILT on every tag
+      # and then thrown away whenever SignPath is not configured, which is the
+      # current state -- users would see a .zip of loose files and no installer
+      # at all. SmartScreen will warn until the certificate exists; that is the
+      # same trade the platform tarballs already make.
+      - name: Attach the UNSIGNED installer to the release (Windows)
+        if: startsWith(github.ref, 'refs/tags/v') && steps.signpath-gate.outputs.enabled != 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          $nsis = Get-ChildItem -Path "gui/src-tauri/target/release/bundle/nsis" -Filter "*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $nsis) { Write-Host "::warning::no NSIS installer was produced"; exit 0 }
+          Write-Host "::warning title=Unsigned Windows installer::Shipping the installer unsigned -- SmartScreen will warn on first run. See doc/BACKLOG-ci.md."
+          Copy-Item $nsis.FullName -Destination "FASTag-gui-windows-x64-setup.exe" -Force
           gh release create "${{ github.ref_name }}" --title "${{ github.ref_name }}" `
             --notes "Automated binary upload; release notes pending." 2>$null
           gh release upload "${{ github.ref_name }}" "FASTag-gui-windows-x64-setup.exe" --clobber

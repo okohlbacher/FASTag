@@ -858,16 +858,6 @@ jobs:
           path: gui/src-tauri/target/release/bundle/dmg/*.dmg
           if-no-files-found: error
 
-      # BALL's own release.yml has no equivalent teardown -- its runner is
-      # simply discarded after the job, which is why the keychain never
-      # outlives it either way. Added anyway, cheap and slightly more
-      # careful than the reference: if a later step were ever added after
-      # this one, it would not inherit a non-default keychain search order.
-      - name: Delete signing keychain (macOS)
-        if: always() && steps.mac-signing.outputs.enabled == 'true'
-        shell: bash
-        run: security delete-keychain "${RUNNER_TEMP}/fastag-signing.keychain-db" || true
-
       # Filenames deliberately carry no version: the README links
       # /releases/latest/download/FASTag-<platform>.tar.gz, a GitHub URL form
       # that always resolves to whatever the newest release's file of that
@@ -920,6 +910,52 @@ jobs:
             -fragment_tolerance 0.3 -fragment_tolerance_unit Da
           [ "$(wc -l < /tmp/smoke.species.tsv)" -ge 2 ] || { echo "species smoke wrote an empty report"; exit 1; }
 
+      # ---------------------------------------------------------------------
+      # A signed, notarized, STAPLED disk image of the CLI.
+      #
+      # Why a .dmg when the tarball already carries the same signed binaries:
+      # Apple staples a notarization ticket only to app bundles, installers and
+      # DISK IMAGES -- never a lone Mach-O or a plain folder. The tarball is
+      # therefore verified by an ONLINE Gatekeeper lookup on first run, which
+      # fails for a user who is offline or behind a proxy that blocks Apple.
+      # The disk image can carry its ticket, so it opens with no network at all.
+      # Both ship: the .dmg for people installing by hand, the tarball for
+      # scripts and CI, where mounting an image is a nuisance.
+      #
+      # Built AFTER the taxonomy embed so the image contains a complete,
+      # -species-capable install, and BEFORE the keychain teardown because
+      # signing the image needs the identity.
+      - name: Package the CLI as a signed, notarized disk image (macOS)
+        if: steps.mac-signing.outputs.enabled == 'true' && startsWith(github.ref, 'refs/tags/v')
+        timeout-minutes: 90
+        shell: bash
+        env:
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          MACOS_APPLE_ID: ${{ secrets.MACOS_APPLE_ID }}
+          MACOS_TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
+          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          DMG="FASTag-${{ matrix.name }}.dmg"
+          # UDZO = compressed read-only, the ordinary format for a download.
+          hdiutil create -volname "FASTag" -srcfolder dist/FASTag \
+                         -ov -format UDZO "$DMG"
+          codesign --force --timestamp --sign "$MACOS_SIGNING_IDENTITY" "$DMG"
+          xcrun notarytool submit "$DMG" \
+            --apple-id "$MACOS_APPLE_ID" --team-id "$MACOS_TEAM_ID" \
+            --password "$MACOS_NOTARY_PASSWORD" --wait
+          xcrun stapler staple "$DMG"
+          # Refuse to ship an image whose ticket is not attached -- that is the
+          # entire reason this artifact exists.
+          xcrun stapler validate "$DMG"
+
+      # Placed last on purpose: everything above that needs the identity has
+      # run. `always()` so a failure earlier still tears the keychain down.
+      - name: Delete signing keychain (macOS)
+        if: always() && steps.mac-signing.outputs.enabled == 'true'
+        shell: bash
+        run: security delete-keychain "${RUNNER_TEMP}/fastag-signing.keychain-db" || true
+
       - name: Attach binary to the GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash -el {0}
@@ -932,6 +968,11 @@ jobs:
             2>/dev/null || true
           tar -C dist -czf "FASTag-${{ matrix.name }}.tar.gz" FASTag
           gh release upload "${{ github.ref_name }}" "FASTag-${{ matrix.name }}.tar.gz" --clobber
+          # The disk image exists only on signed macOS tag builds; uploading it
+          # is conditional so an unsigned build still ships its tarball.
+          if [ -f "FASTag-${{ matrix.name }}.dmg" ]; then
+            gh release upload "${{ github.ref_name }}" "FASTag-${{ matrix.name }}.dmg" --clobber
+          fi
 
   # ----------------------------------------------------------- GUI checks
   # Independent on purpose: no `needs:` -- waiting ~70 min for OpenMS to test
