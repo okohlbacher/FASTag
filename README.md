@@ -92,24 +92,29 @@ count is never mistaken for signal:
 
 ## Install
 
-Prebuilt binaries for every supported platform, from the
+**[okohlbacher.github.io/FASTag](https://okohlbacher.github.io/FASTag/)** offers
+the right build for whatever you are reading this on. Everything is also on the
 [latest release](https://github.com/okohlbacher/FASTag/releases/latest):
 
-| platform | download |
-|---|---|
-| Linux x64 | [FASTag-linux-x64.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-x64.tar.gz) |
-| Linux arm64 | [FASTag-linux-arm64.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-arm64.tar.gz) |
-| macOS x64 | [FASTag-macos-x64.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-macos-x64.tar.gz) |
-| macOS arm64 | [FASTag-macos-arm64.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-macos-arm64.tar.gz) |
-| Windows x64 | [FASTag-windows-x64.zip](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-windows-x64.zip) |
+| platform | desktop app | command line |
+|---|---|---|
+| macOS, Apple silicon | [.dmg](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-macos-arm64.dmg) | [.dmg](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-macos-arm64.dmg) · [.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-macos-arm64.tar.gz) |
+| macOS, Intel | [.dmg](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-macos-x64.dmg) | [.dmg](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-macos-x64.dmg) · [.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-macos-x64.tar.gz) |
+| Windows x64 | [installer](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-windows-x64-setup.exe) | [.zip](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-windows-x64.zip) |
+| Linux x64 | — | [.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-x64.tar.gz) |
+| Linux arm64 | — | [.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-arm64.tar.gz) |
 
-Each archive extracts to a `FASTag/` folder — run `FASTag/FASTag` (Linux/macOS)
-or `FASTag/FASTag.bat` (Windows); everything else inside is a bundled
-dependency the wrapper needs, not something to run directly.
+An archive extracts to a `FASTag/` folder — run `FASTag/FASTag` (Linux/macOS) or
+`FASTag/FASTag.bat` (Windows); everything else inside is a bundled dependency the
+wrapper needs, not something to run directly. A disk image holds the same folder.
 
-Binaries are not yet code-signed, so macOS Gatekeeper and Windows SmartScreen
-will warn on first run; see [doc/BACKLOG-ci.md](doc/BACKLOG-ci.md) if that
-matters for your deployment.
+**macOS builds are signed with a Developer ID certificate and notarized.** Prefer
+the `.dmg`: a notarization ticket can only be stapled to a disk image, an
+installer or an app bundle, so the `.dmg` opens with no network connection while
+the `.tar.gz` needs one online Gatekeeper check on first run.
+
+**Windows builds are not yet code-signed**, so SmartScreen will warn on first
+run — see [doc/BACKLOG-ci.md](doc/BACKLOG-ci.md) for the state of that.
 
 Building from source needs OpenMS ≥ 3.5 and CMake; see
 [doc/BACKLOG-ci.md](doc/BACKLOG-ci.md) for what each platform requires.
