@@ -941,16 +941,27 @@ jobs:
           test -s "$R/bin/FASTag.exe"
           test -s "$R/share/OpenMS/examples/ID/Ecoli_MS2_small.mzML"
 
+      # pwsh, NOT bash: Git Bash prepends its /usr/bin at startup, and that
+      # directory has a link.exe -- coreutils' hard-link command -- which then
+      # shadows MSVC's linker for every cargo invocation. rustc finds `link.exe`
+      # by PATH name, so the whole Rust build died on its first build script
+      # with "/usr/bin/link: extra operand". CMake never hit this because it
+      # resolves the linker from cl.exe's own directory. msvc-dev-cmd's PATH,
+      # with the MSVC bin dir first, survives intact in pwsh.
       - name: Build the desktop app (Windows)
         if: startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run
         timeout-minutes: 90
         working-directory: fastag/gui
-        shell: bash
+        shell: pwsh
         run: |
-          set -euo pipefail
-          npm ci
-          npm run tauri build
-          ls -la src-tauri/target/release/bundle/nsis/ || true
+          $ErrorActionPreference = 'Stop'
+          # Prove the right linker wins before spending ten minutes finding out.
+          $link = (Get-Command link.exe).Source
+          if ($link -like '*\Git\usr\bin\*') { throw "coreutils link.exe shadows MSVC's: $link" }
+          Write-Host "linker: $link"
+          npm ci;              if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          npm run tauri build; if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Get-ChildItem src-tauri/target/release/bundle/nsis/ -ErrorAction SilentlyContinue
 
       # SignPath's 'initial' artifact configuration expects a ZIP containing
       # *.exe -- upload-artifact always zips, and the NSIS installer is an
