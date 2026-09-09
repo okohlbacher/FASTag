@@ -342,6 +342,32 @@ research project.
 | **GUI OMP Error #15** duplicate `libomp` at spawn | **FIXED via P6** | Fixed by `bundle-macos.sh`: the bundled closure carries exactly one `libomp` (asserted at pack time), install names rewritten, verified with a clean environment and no `KMP_DUPLICATE_LIB_OK`. Dev-tree binaries (rpath into the local OpenMS build) can still hit it — packaging was the fix, as diagnosed. Original diagnosis kept below.<br>The spawned CLI intermittently aborts with `OMP: Error #15: ... libomp.dylib already initialized`. Diagnosed: `gui/src-tauri/resources/fastag/bin/FASTag` is a dev **symlink** to `build-rel/FASTag` (rpath into a local OpenMS build tree) — not a self-contained bundle. `FASTag` loads `/opt/homebrew/opt/libomp/lib/libomp.dylib` by absolute path while OpenMS pulls in its own libomp, so two images initialize → #15 (a load-order race; the first run of a session can win it). `KMP_DUPLICATE_LIB_OK=TRUE` masks it but can silently corrupt results, so it must NOT ship in a scientific tool. Real fix is P6: bundle a self-contained binary, collect its dylib closure once, dedupe `libomp`, and rewrite install names (`dylibbundler`/`install_name_tool` in a Tauri `beforeBundle` hook); then verify a spawned run never hits #15. Tauri's resource bundler also skips symlinked directories, so the `share/` tree (OpenMS data + the ~1 GB taxonomy) must be real files at pack time. |
 | **`OnDiscMzPeakExperiment`** | days, upstream | Would delete FASTag's consumer entirely and unify the two read paths. Belongs in OpenMS, not here. |
 
+### Status pass 2026-09-09 — what the sections below still get wrong
+
+Read these corrections before the rows they amend; the rows are kept as
+history.
+
+- **Release signing (macOS)** — DONE. Signed, notarized, stapled DMGs for the
+  CLI and the app since v1.4.x. Windows: SignPath application submitted
+  2026-09-09, see `doc/BACKLOG-ci.md`.
+- **GUI vitest harness** — DONE: `gui/src/App.test.tsx`, `ResultsTable.test.tsx`,
+  `paramLayout.test.ts` (37 tests) plus 28 Rust tests.
+- **GUI million-row browser** — DONE: `gui/src-tauri/src/browser.rs` +
+  `gui/src/ResultsTable.tsx` (the windowed indexed reader from the 2026-09
+  plan). Still open in the GUI: auto-update, a Linux desktop artifact — being
+  planned (`doc/PLAN-gui-2026-09.md`).
+- **Taxonomy index in the tarballs** — DONE on every tag build (embedded before
+  packaging, asserted with hard failures); the shared release asset remains.
+- **Release completeness** — the `release-complete` gate exists in both
+  workflows and fired correctly on 2026-09-09.
+- **`OnDiscMzPeakExperiment` upstreaming** — WAIT for the upstream
+  integration; no work here until then.
+- **Science items (F4 q-value, F7 rescoring validation, F9, F11 sensitivity,
+  F14 real mAb, the open F2/F4/F14 owner calls)** — POSTPONED 2026-09-09,
+  deliberately; they stay listed below and nothing about them changed.
+- **`-threads` default** — changed in v1.4.2 to 0 = half the logical cores
+  (TOPPBase's `--help` line still says 1; fix in `fix/cosmetic-help-version`).
+
 ### Blocked on someone else
 
 - **`MZPEAK_REF` still points at a fix branch**, not `main`, because `main` of

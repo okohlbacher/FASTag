@@ -113,7 +113,14 @@ filesystem tolerates the mixed separators fine — both fixed by never piping a
 Windows path through `xargs`, and by normalizing every workspace/Qt path to
 forward slashes once, up front.
 
-## Release binaries: built, not signed
+## Release binaries: macOS signed and notarized since v1.4.x; Windows unsigned
+
+**Update 2026-09-09:** the macOS path below is LIVE — the 7 `MACOS_*` secrets
+exist, every tag build signs, notarizes and staples both the CLI disk images
+and the desktop app, and CI asserts the staple on the `.app`. The Windows path
+waits on SignPath (next section). The historical text follows.
+
+### History — built, not signed
 
 Every tag build attaches its own binary to the GitHub Release automatically
 (`gh release upload ... --clobber`, one per platform, racing harmlessly
@@ -148,7 +155,17 @@ certificate is scoped to the **Team**, not to one app — if the same Apple
 Developer account already has one (for another project), it signs FASTag too;
 no need for a second certificate.
 
-## Windows signing — DEFERRED 2026-09-08, waiting on a certificate
+## Windows signing — SignPath application submitted 2026-09-09
+
+**Update 2026-09-09:** the SignPath application has been put in. Until it is
+approved and the project + HSM certificate exist, everything below still
+applies: the CI is wired and inert, and the installer ships unsigned (first
+shipped in v1.4.2 as `FASTag-gui-windows-x64-setup.exe`; SmartScreen warns).
+When the project exists: set `SIGNPATH_PROJECT_SLUG` in `windows.yml`, add
+`SIGNPATH_API_TOKEN` and `SIGNPATH_ORG_ID` in the GitHub web UI, and validate
+with a `gui_dry_run` + `signing_policy: test-signing` dispatch before any tag.
+
+### History — DEFERRED 2026-09-08, waiting on a certificate
 
 **Decision: macOS ships signed; Windows ships unsigned until an OV
 code-signing certificate exists.** The CI is written and inert, so nothing has
@@ -236,6 +253,10 @@ fails with "file does not correspond to the specified file type" — the
   package with tools but no development files otherwise fails deep inside CMake
   with a misleading message. bioconda's `openms` **does** ship it — that question
   is settled.
-- The conda OpenMS ships `MzPeakFile.h` but its `FileTypes` enum has no `MZPEAK`,
-  so CI builds **without** mzPeak support. The mzPeak read path is therefore
-  exercised only locally, and nothing in CI covers it.
+- ~~The conda OpenMS ships `MzPeakFile.h` but its `FileTypes` enum has no
+  `MZPEAK`, so CI builds **without** mzPeak support.~~ Stale since mzPeak moved
+  to the external `mzpeak-openms` library: every CI leg builds it from the
+  pinned `MZPEAK_LIB_REF`, runs its meson tests, asserts `mzPeak read/write
+  enabled` at configure time, and makes the shipped bundle read an archive.
+  What was still missing on 2026-09-09 — mzML-vs-mzPeak tag equivalence and
+  validation of archives FASTag writes — is being added (`ci/mzpeak-coverage`).
