@@ -75,6 +75,7 @@ namespace
 #include <cstdlib>
 #include <cstring>
 #include <set>
+#include <thread>
 #include <vector>
 
 #ifdef _OPENMP
@@ -613,6 +614,23 @@ protected:
 
   ExitCodes main_(int, const char**) override
   {
+    // -threads 0 is FASTag's default (main() puts it on argv when the user
+    // gives none) and it means HALF the logical cores, where TOPPBase would
+    // take all of them. A tagger that grabs every core makes the desktop it
+    // runs on unusable for the minutes it needs, and the read path stops
+    // scaling well before the core count anyway (see the mzPeak notes
+    // below). An explicit -threads <n> is honoured unchanged.
+    if (getIntOption_("threads") == 0)
+    {
+      const unsigned cores = std::thread::hardware_concurrency();  // 0 if unknown
+      const int n = std::max(1, static_cast<int>(cores / 2));
+      TOPPBase::setMaxNumberOfThreads(n);  // omp_set_num_threads, or a no-op without OpenMP
+      // Not under -stream: this runs before stdout is rewired into the data
+      // channel, and a log line there is a corrupt spectrum block.
+      if (!getFlag_("stream"))
+        OPENMS_LOG_INFO << "-threads 0: using " << n << " of " << cores << " logical cores." << std::endl;
+    }
+
     if (getFlag_("stream"))
     {
       // stdout is the -stream DATA CHANNEL. OpenMS logs through thread-local
@@ -2632,6 +2650,21 @@ int main(int argc, const char** argv)
 #else
   ::setenv("OPENMS_DISABLE_UPDATE_CHECK", "ON", 0);
 #endif
+  // -threads defaults to 0 (half the cores; see main_). TOPPBase registers
+  // that option itself, with default 1, AFTER registerOptionsAndFlags_ and
+  // offers no hook to change it, so the default is applied here, to argv,
+  // before TOPPBase parses it. Left alone when the user passes -threads, and
+  // when they pass -ini: the command line outranks the INI, so an injected
+  // value would silently override a threads= line in the file.
+  std::vector<const char*> args(argv, argv + argc);
+  bool explicit_threads = false;
+  for (int i = 1; i < argc; ++i)
+    if (std::strcmp(argv[i], "-threads") == 0 || std::strcmp(argv[i], "-ini") == 0) explicit_threads = true;
+  if (!explicit_threads)
+  {
+    args.push_back("-threads");
+    args.push_back("0");
+  }
   TOPPFASTag tool;
-  return tool.main(argc, argv);
+  return tool.main(static_cast<int>(args.size()), args.data());
 }

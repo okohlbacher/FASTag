@@ -293,8 +293,10 @@ files are unchanged, having had little prologue to remove.
 | `-fixed_modifications` / `-variable_modifications <mods>` | Carbamidomethyl (C) fixed | Modifications by OpenMS/UniMod name, e.g. `'TMT6plex (K)'`, `'Phospho (S)'` |
 
 Plus the standard OpenMS TOPP options: `-threads <n>` (parallelism — the
-core performance lever), `-ini <file>` / `-write_ini <file>` (parameter files),
-`-log <file>`, `-no_progress`, `--help` / `--helphelp`.
+core performance lever; **defaults to 0, which means half the logical cores**,
+so a run leaves the machine usable — pass `-threads <n>` to choose), `-ini
+<file>` / `-write_ini <file>` (parameter files), `-log <file>`, `-no_progress`,
+`--help` / `--helphelp`.
 
 ### Output
 

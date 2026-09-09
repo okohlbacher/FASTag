@@ -25,6 +25,13 @@ describe('layout completeness', () => {
     expect(RENDERED.length).toBe(new Set(RENDERED).size)
   })
 
+  it("carries the tool default for threads, not TOPPBase's", () => {
+    // FASTag's main() applies -threads 0 (half the cores); --help still prints
+    // TOPPBase's 1, so the form must not trust the manifest here.
+    expect(PARAM_BY_NAME.get('threads')?.default).toBe('0')
+    expect(PARAM_BY_NAME.get('threads')?.description).toMatch(/half the logical cores/)
+  })
+
   it('lists every section master among its own params', () => {
     for (const s of SECTIONS) if (s.master) expect(s.params).toContain(s.master)
   })

@@ -33,9 +33,22 @@ const CHOICES: Record<string, string[]> = {
   orientation: ['both', 'forward', 'reverse']
 }
 
-export const PARAMS: ParamSpec[] = (manifest.params as ParamSpec[]).map((p) =>
-  CHOICES[p.name] ? { ...p, choices: CHOICES[p.name] } : p
-)
+// TOPPBase registers -threads itself with default 1, and FASTag applies its
+// real default -- 0, half the logical cores -- to argv in main(), because
+// TOPPBase offers no hook to change a common option. The manifest is a dump of
+// --help, so it carries TOPPBase's number and text; this is the tool's.
+const OVERRIDES: Record<string, Partial<ParamSpec>> = {
+  threads: {
+    default: '0',
+    description: 'Threads to use. 0 (the default) means half the logical cores.'
+  }
+}
+
+export const PARAMS: ParamSpec[] = (manifest.params as ParamSpec[]).map((p) => ({
+  ...p,
+  ...(OVERRIDES[p.name] ?? {}),
+  ...(CHOICES[p.name] ? { choices: CHOICES[p.name] } : {})
+}))
 export const PARAM_BY_NAME = new Map(PARAMS.map((p) => [p.name, p]))
 
 export interface Section {
