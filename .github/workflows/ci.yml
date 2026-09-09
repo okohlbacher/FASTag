@@ -86,6 +86,20 @@ env:
   # must carry MetadataDetail and the writer's precursor support; older ones do
   # not compile against src/OnDiscMzPeakExperiment.cpp.
   MZPEAK_LIB_REF: 40df266e276ade453ee91b1a2452585fb35b5ca0
+  # The macOS floor, CHOSEN rather than inherited from whatever SDK the runner
+  # image happens to ship. v1.4.2 went out with minos 14.0 on arm64 (macos-14)
+  # and 15.0 on x64 (macos-15-intel), while the libOpenMS.dylib bundled beside
+  # it asks for 11.3 and the app's Info.plist promises 11.0. dyld refuses to
+  # load a Mach-O on a macOS older than its minos, so every Intel user on
+  # 11-14 could install that release and have every run fail -- and the floor
+  # moved on its own each time GitHub retired a runner image.
+  #
+  # 12.0: above every bundled dependency's own floor (bioconda's libOpenMS is
+  # 11.3, conda-forge's osx-64 packages 10.13), low enough to cover the Intel
+  # machines Apple still supported. gui/src-tauri/tauri.conf.json's
+  # minimumSystemVersion carries the same value -- the Homebrew casks in
+  # okohlbacher/homebrew-fastag read the floor off that plist.
+  MACOS_MIN_VERSION: "12.0"
 
 jobs:
   build:
@@ -241,7 +255,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: mzpeak-install
-          key: mzpeak-openms-${{ matrix.name }}-${{ env.MZPEAK_LIB_REF }}-v1
+          key: mzpeak-openms-${{ matrix.name }}-${{ env.MZPEAK_LIB_REF }}-osx${{ env.MACOS_MIN_VERSION }}-v1
 
       - name: Build mzpeak-openms
         if: steps.mzpeak-cache.outputs.cache-hit != 'true'
@@ -249,6 +263,10 @@ jobs:
         run: |
           set -euo pipefail
           export PKG_CONFIG_PATH="$CONDA_PREFIX/lib/pkgconfig" BOOST_ROOT="$CONDA_PREFIX"
+          # libmzpeak and libnumpress ship next to the binary, so they need the
+          # same floor it has. Exported HERE, not at job level: this is a login
+          # shell, conda's activation has already run and sets its own.
+          [ "$RUNNER_OS" = macOS ] && export MACOSX_DEPLOYMENT_TARGET="$MACOS_MIN_VERSION"
           # --libdir=lib: meson's default on Debian-family Linux is the multiarch
           # lib/x86_64-linux-gnu, which FASTag's find_library() does not search.
           # -Dtools=false: the library's two CLI tools use <print>, which Apple's
@@ -310,7 +328,17 @@ jobs:
           # Qt: "To use a cross-compiled Qt, please set the QT_HOST_PATH cache
           # variable". The build here is native, so the same prefix IS the host
           # Qt. linux-x64 is unaffected, which is why this only appeared on ARM.
-          cmake -S . -B build -G Ninja \
+          # Same floor, same reason (MACOS_MIN_VERSION at the top of this file).
+          # Both spellings: the variable covers anything cmake shells out to,
+          # the flag is what the cache records. Neither is passed on Linux,
+          # where CMAKE_OSX_DEPLOYMENT_TARGET would only draw an
+          # unused-variable warning.
+          OSX_MIN=()
+          if [ "$RUNNER_OS" = macOS ]; then
+            export MACOSX_DEPLOYMENT_TARGET="$MACOS_MIN_VERSION"
+            OSX_MIN=(-DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOS_MIN_VERSION")
+          fi
+          cmake -S . -B build -G Ninja "${OSX_MIN[@]}" \
             -DCMAKE_BUILD_TYPE=Release \
             -DOpenMS_DIR="$OPENMS_DIR" \
             -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" \
@@ -609,6 +637,33 @@ jobs:
           chmod +x dist/FASTag/FASTag dist/FASTag/FASTag.bin
           du -sh dist/FASTag
 
+      # A floor nobody reads is a floor that moves. This reads it off the
+      # Mach-Os that are about to be shipped, because everything that sets it
+      # can fail silently: a toolchain that ignores the variable, a runner
+      # image upgrade, a cached dylib built before the floor was chosen.
+      - name: Assert the macOS deployment target (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -e
+          fail=0
+          for f in dist/FASTag/FASTag.bin dist/FASTag/lib/libmzpeak*.dylib dist/FASTag/lib/libnumpress*.dylib; do
+            [ -f "$f" ] || { echo "::error::$f is not in the bundle"; fail=1; continue; }
+            # LC_BUILD_VERSION's own minos, not the LC_VERSION_MIN_MACOSX an
+            # older linker would have emitted -- these are all built by clang
+            # on a modern SDK, which emits the former.
+            # || true: this shell has -eo pipefail, and a Mach-O with no
+            # LC_BUILD_VERSION at all is exactly the case the error below is
+            # meant to report -- not one to die on with grep's bare exit 1.
+            minos=$(otool -l "$f" | grep -A4 LC_BUILD_VERSION | awk '$1 == "minos" { print $2; exit }') || true
+            echo "$f: minos ${minos:-<none>}"
+            [ "$minos" = "$MACOS_MIN_VERSION" ] || {
+              echo "::error::$f targets ${minos:-nothing} -- expected macOS $MACOS_MIN_VERSION. dyld will refuse to load it below that."
+              fail=1
+            }
+          done
+          exit $fail
+
       # The actual regression guard: run the bundle exactly the way a user
       # who only downloaded the tarball would, and fail the build if it
       # resolves anything from this job's own build environment. Deliberately
@@ -883,6 +938,7 @@ jobs:
         # (a dry run before they are configured) every value is empty, Tauri
         # skips signing, and the build still proves the bundle assembles.
         env:
+          MACOSX_DEPLOYMENT_TARGET: ${{ env.MACOS_MIN_VERSION }}
           APPLE_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
