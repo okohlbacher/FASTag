@@ -2664,7 +2664,10 @@ int main(int argc, const char** argv)
     if (std::strcmp(argv[i], "-threads") == 0 || std::strcmp(argv[i], "-ini") == 0) explicit_threads = true;
     if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "--helphelp") == 0) help = true;
   }
-  if (!explicit_threads)
+  // ...and not for a bare `FASTag` either: with no arguments TOPPBase prints
+  // the usage, and an injected pair would turn that into "in and out are
+  // required" -- a regression the cosmetic review caught.
+  if (!explicit_threads && argc > 1)
   {
     args.push_back("-threads");
     args.push_back("0");
