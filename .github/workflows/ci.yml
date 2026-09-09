@@ -855,9 +855,23 @@ jobs:
           # bug, and it is invisible to any check that only looks at file names.
           env -i HOME="$HOME" "$R/bin/FASTag" --help > /tmp/bundle-help.txt 2>&1 \
             || { echo "::error::the bundled CLI does not run"; cat /tmp/bundle-help.txt; exit 1; }
-          grep -q "^Version: " /tmp/bundle-help.txt \
-            || { echo "::error::the bundled CLI ran but reported no version"; exit 1; }
+          # ...and that the version it reports is FASTAG'S, not OpenMS's. A
+          # TOPPBase tool inherits VersionInfo::getVersion() unless the
+          # constructor overrides version_, so v1.4.1 shipped announcing
+          # "3.6.0-pre" to every user. Checking only that SOME version line
+          # exists would have passed that build.
+          want=$(sed -n 's/^project(FASTag VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          test -n "$want" || { echo "::error::cannot read the project version"; exit 1; }
+          grep -q "^Version: $want" /tmp/bundle-help.txt || {
+            echo "::error::bundled CLI reports the wrong version (want $want, likely OpenMS's)"
+            grep '^Version: ' /tmp/bundle-help.txt; exit 1; }
           echo "bundled CLI: $(grep '^Version: ' /tmp/bundle-help.txt)"
+
+          # The update check phones home through Qt and prints QIODevice noise
+          # on stderr for anyone offline or behind a proxy. main() disables it;
+          # this is the regression test for that.
+          ! grep -q "QIODevice" /tmp/bundle-help.txt \
+            || { echo "::error::update check is live -- QIODevice noise on a plain --help"; exit 1; }
           du -sh "$R"
 
       - name: Build, sign and notarize the desktop app (macOS)
