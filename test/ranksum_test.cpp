@@ -94,6 +94,20 @@ int main()
   CHECK(FASTag::ranksumCounts(9, 4).empty(), "k>n must be empty");
   std::printf("5. degenerate (k, n) return empty rather than misbehaving\n");
 
+  // Tables builds every n at once; that must be ranksumCdf(k, n) exactly, bit
+  // for bit, or the E-values move.
+  for (int k = 1; k <= 8; ++k)
+    for (int n_max : {k - 1, k, 17, 150, 400})
+    {
+      if (n_max == 400 && k > 4) continue;  // the per-n reference is O(n^3)
+      const auto all = FASTag::ranksumCdfs(k, n_max);
+      CHECK(all.size() == static_cast<size_t>(n_max) + 1, "ranksumCdfs size k=%d n_max=%d", k, n_max);
+      for (int n = 0; n <= n_max && static_cast<size_t>(n) < all.size(); ++n)
+        CHECK(all[static_cast<size_t>(n)] == (n < k ? std::vector<float>() : FASTag::ranksumCdf(k, n)),
+              "ranksumCdfs(%d, %d)[%d] != ranksumCdf", k, n_max, n);
+    }
+  std::printf("6. ranksumCdfs(k, n_max)[n] == ranksumCdf(k, n), bit for bit\n");
+
   std::printf(failures ? "\n%d FAILURES\n" : "\nall checks passed\n", failures);
   return failures ? 1 : 0;
 }
