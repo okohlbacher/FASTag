@@ -207,7 +207,14 @@ namespace FASTag
       // those. Measured on a 7,534-spectrum run: 25.9 MB -> 18.7 MB, of which
       // the live map is 10.2 MB -> 7.1 MB; the rest is Parquet columns Lean
       // never asks for and so never decodes.
-      return index.spectra(MzPeak::MetadataDetail::Lean);
+      //
+      // Minimal, not Lean: toOpenMS() reads the id, MS level, RT, polarity,
+      // representation and one precursor with its window and ion, and that is
+      // all Minimal keeps, in a compact record per spectrum expanded when the
+      // spectrum is read. 717,924 spectra: ~0.4 GB less after the open, and no
+      // allocation per spectrum while opening. An archive with several
+      // precursors on a spectrum is read as Lean by the library instead.
+      return index.spectra(MzPeak::MetadataDetail::Minimal);
     }
 
     namespace json = boost::json;
