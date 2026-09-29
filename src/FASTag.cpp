@@ -2040,9 +2040,17 @@ protected:
       // 64/128/256/512 on kim (two interleaved rounds, parallel phase, s):
       //   64 threads 1.66/1.67/1.63/1.67 | 128 1.39/1.42/1.35/1.45
       //  192 1.44/1.37/1.37/1.43         | 256 1.45/1.51/1.44/1.58
-      constexpr int kChunk = 256;
-#pragma omp for schedule(FASTAG_MONOTONIC dynamic, kChunk) nowait
-      for (SignedSize i = 0; i < n_spec; ++i)
+      //
+      // Except for the last threads x 256 spectra, which go out 16 at a
+      // time: the job guided's shrinking chunks did. Where spectra are heavy
+      // one last chunk of 256 is a tail of its own -- a 32,210-spectrum
+      // timsTOF run at 32 threads (~3.4 ms a spectrum) lost 4% to it. The
+      // second loop keeps the hand-out monotonic: a thread only reaches it
+      // once every chunk of the first has been handed out.
+      constexpr int kChunk = 256, kTailChunk = 16;
+      const SignedSize tail_from =
+          std::max<SignedSize>(0, n_spec - static_cast<SignedSize>(read_threads) * kChunk);
+      auto one = [&](SignedSize i)
       {
         const size_t k = static_cast<size_t>(i) / BLOCK;
         if (k >= open_hint.load(std::memory_order_acquire))
@@ -2059,7 +2067,11 @@ protected:
           std::lock_guard<std::mutex> guard(ring_mutex);
           ring_cv.notify_all();
         }
-      }
+      };
+#pragma omp for schedule(FASTAG_MONOTONIC dynamic, kChunk) nowait
+      for (SignedSize i = 0; i < tail_from; ++i) one(i);
+#pragma omp for schedule(FASTAG_MONOTONIC dynamic, kTailChunk) nowait
+      for (SignedSize i = tail_from; i < n_spec; ++i) one(i);
       if (timing) t_done[tid] = Clock::now();
     }
     const auto t_write_a = Clock::now();
