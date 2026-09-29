@@ -36,6 +36,7 @@
 #include "TaxStats.h"
 
 #include <cstdio>
+#include <exception>
 #include <fstream>
 #include <filesystem>
 #include <future>
@@ -1785,10 +1786,11 @@ protected:
     // The READERS are built once per thread, before the loop; the parallel
     // region still opens and closes per block.
     //
-    // Building an mzPeak reader costs 3.83 ms and is SERIALIZED: index.spectra()
-    // re-opens five Parquet members -- a zip_open over the archive's central
-    // directory plus a footer parse each, and the peaks footer alone describes
-    // 363 row groups -- under a process-global mutex. Building them inside the
+    // Building an mzPeak reader costs 3.83 ms: index.spectra() re-opens five
+    // Parquet members -- a zip_open over the archive's central directory plus
+    // a footer parse each, and the peaks footer alone describes 363 row
+    // groups -- and then was SERIALIZED under a process-global mutex (no
+    // longer; they are now built in parallel, below). Building them inside the
     // region paid that BLOCKS x THREADS times: 12 x 192 = 2,304 constructions,
     // 12.7 s of a 16 s run, GROWING with -threads, which is why mzPeak got
     // slower above 64 threads while mzML kept scaling. Measured on the
@@ -1814,10 +1816,43 @@ protected:
       // thread only, which is what both readers document as required.
       if (streaming) readers[t] = std::make_unique<OnDiscMSExperiment>(*ondisc);
       if (fastmz) freaders[t] = std::make_unique<FASTag::IndexedMzMLReader>(*fastmz);
-#ifdef FASTAG_HAVE_MZPEAK_LIB
-      if (mzp) mreaders[t] = std::make_unique<FASTag::OnDiscMzPeakExperiment>(*mzp);
-#endif
     }
+#ifdef FASTAG_HAVE_MZPEAK_LIB
+    // mzPeak copies are built in parallel, by at most 16 threads. A copy costs
+    // ~4.5 ms on the benchmark archive (six Parquet footers, plus a pass over
+    // the shared 718k-entry metadata map inside the library): serially 0.8 s
+    // at 128 threads and 1.6 s at 256 on kim, growing with -threads.
+    //
+    // Not one thread per copy. A copy allocates a few MB, a fresh glibc arena
+    // grows a page at a time through mprotect, and mprotect takes the
+    // process-wide mmap lock: with every thread doing that at once the kernel
+    // sometimes spun instead (256 threads: 7.2 s, 1,691 s of system time).
+    // ponytail: 16 won a sweep of 8/16/32/all on kim (0.2-0.6 s at 128-256
+    // threads); a copy that allocates nothing -- footers shared inside the
+    // library -- would make the cap moot.
+    //
+    // A copy shares only the archive index and its metadata cache, which the
+    // library locks itself. An exception must not leave the region, so the
+    // first one is carried out.
+    if (mzp)
+    {
+      std::exception_ptr failed;
+#pragma omp parallel for num_threads(std::min(read_threads, 16)) schedule(dynamic, 1)
+      for (int t = 0; t < read_threads; ++t)
+      {
+        try
+        {
+          mreaders[t] = std::make_unique<FASTag::OnDiscMzPeakExperiment>(*mzp);
+        }
+        catch (...)
+        {
+#pragma omp critical(fastag_reader_open)
+          if (!failed) failed = std::current_exception();
+        }
+      }
+      if (failed) std::rethrow_exception(failed);
+    }
+#endif
     t_readers = secs(t_readers_a, Clock::now());
 
     // Serial over blocks, parallel within each, and block k is WRITTEN while
