@@ -94,12 +94,15 @@ env:
   # 11-14 could install that release and have every run fail -- and the floor
   # moved on its own each time GitHub retired a runner image.
   #
-  # 12.0: above every bundled dependency's own floor (bioconda's libOpenMS is
-  # 11.3, conda-forge's osx-64 packages 10.13), low enough to cover the Intel
-  # machines Apple still supported. gui/src-tauri/tauri.conf.json's
-  # minimumSystemVersion carries the same value -- the Homebrew casks in
-  # okohlbacher/homebrew-fastag read the floor off that plist.
-  MACOS_MIN_VERSION: "12.0"
+  # 13.3: libc++ ships the floating-point std::to_chars the TSV writer formats
+  # numbers with (instead of snprintf, whose macOS implementation serialises
+  # every thread on a global locale lock) only from 13.3 on -- below it the
+  # build fails with "'to_chars' is unavailable". Still above every bundled
+  # dependency's own floor (bioconda's libOpenMS is 11.3, conda-forge's osx-64
+  # packages 10.13). gui/src-tauri/tauri.conf.json's minimumSystemVersion
+  # carries the same value -- the Homebrew casks in okohlbacher/homebrew-fastag
+  # read the floor off that plist.
+  MACOS_MIN_VERSION: "13.3"
 
 jobs:
   build:
