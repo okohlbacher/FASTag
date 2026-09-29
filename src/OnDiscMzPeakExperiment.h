@@ -121,6 +121,15 @@ namespace FASTag
     /// to compare against the phase timings.
     void nsCounters(long& plan, long& exec, long& rowgroup, long& project) const;
 
+    /// The archive-wide decode cache's counters (FASTAG_TIMING diagnostics):
+    /// decodes, hits and waits as calls, the rest as thread-seconds.
+    struct CacheStats
+    {
+      std::size_t decodes = 0, ahead = 0, hits = 0, waits = 0, admission_waits = 0, evictions = 0;
+      double s_decode = 0, s_wait = 0, s_admit = 0;
+    };
+    CacheStats cacheStats() const;
+
     /// Profile MS2 centroided so far, across every copy of this reader.
     std::size_t nPicked() const;
     /// Profile MS2 whose picking yielded nothing (profile points kept).
