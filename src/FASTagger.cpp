@@ -1016,13 +1016,19 @@ namespace FASTag
     // the flanks), and 99.4% of duplicate groups are identical in every emitted
     // field today -- but a future field would make the survivor choice
     // implementation-defined. Stability costs nothing at these sizes.
+    //
+    // Sorted as indices, not objects: merging whole ScoredTags moves a string
+    // and vectors per step, measured at 5.6% of worker CPU at tool defaults. A
+    // stable sort's result is unique, so the order is the same one.
     const auto rank_cmp = [](const Tag& a, const Tag& b) {
       if (a.evalue != b.evalue) return a.evalue < b.evalue;
       if (a.seq != b.seq) return a.seq < b.seq;
       return a.low_mz < b.low_mz;
     };
-    std::stable_sort(scored.begin(), scored.end(),
-                     [&](const ScoredTag& a, const ScoredTag& b) { return rank_cmp(a.tag, b.tag); });
+    const auto by_rank_cmp = [&](uint32_t a, uint32_t b) { return rank_cmp(scored[a].tag, scored[b].tag); };
+    std::vector<uint32_t> by_rank(scored.size());
+    std::iota(by_rank.begin(), by_rank.end(), 0u);
+    std::stable_sort(by_rank.begin(), by_rank.end(), by_rank_cmp);
 
     // Drop tags identical in every reported field, before the output cap so the
     // cap counts distinct results.
@@ -1043,7 +1049,8 @@ namespace FASTag
     // merge on ANY shared peak). Deferral is demotion, never deletion:
     // deferred tags backfill in rank order, and the kept set is re-sorted by
     // the rank comparator so the header's ordered-by-E-value contract holds.
-    std::vector<ScoredTag> div_kept, div_deferred;
+    // Both hold indices into scored.
+    std::vector<uint32_t> div_kept, div_deferred;
     auto near_dup = [](const ScoredTag& a, const ScoredTag& b) {
       if (a.tag.charge != b.tag.charge) return false;
       if (a.peaks.size() < 4 || b.peaks.size() < 4) return false;
@@ -1060,8 +1067,9 @@ namespace FASTag
       return shared >= std::min(pa.size(), pb.size()) - 1;
     };
 
-    for (ScoredTag& st : scored)
+    for (const uint32_t i : by_rank)
     {
+      ScoredTag& st = scored[i];
       Tag& t = st.tag;
       // The gap penalty ORDERS but does not FILTER.
       //
@@ -1101,22 +1109,21 @@ namespace FASTag
       // rest; both bounded at N so the walk still terminates early.
       const size_t N = static_cast<size_t>(p.max_tag_count);
       bool dup = false;
-      for (const auto& k : div_kept)
-        if (near_dup(k, st)) { dup = true; break; }
-      if (!dup && div_kept.size() < N) div_kept.push_back(std::move(st));
-      else if (div_deferred.size() < N) div_deferred.push_back(std::move(st));
+      for (const uint32_t k : div_kept)
+        if (near_dup(scored[k], st)) { dup = true; break; }
+      if (!dup && div_kept.size() < N) div_kept.push_back(i);
+      else if (div_deferred.size() < N) div_deferred.push_back(i);
       if (div_kept.size() >= N) break;
     }
     if (p.diversity && p.max_tag_count > 0)
     {
-      for (auto& d : div_deferred)
+      for (const uint32_t d : div_deferred)
       {
         if (div_kept.size() >= static_cast<size_t>(p.max_tag_count)) break;
-        div_kept.push_back(std::move(d));
+        div_kept.push_back(d);
       }
-      std::stable_sort(div_kept.begin(), div_kept.end(),
-                       [&](const ScoredTag& a, const ScoredTag& b) { return rank_cmp(a.tag, b.tag); });
-      for (auto& k : div_kept) out.push_back(std::move(k.tag));
+      std::stable_sort(div_kept.begin(), div_kept.end(), by_rank_cmp);
+      for (const uint32_t k : div_kept) out.push_back(std::move(scored[k].tag));
     }
     return out;
   }
