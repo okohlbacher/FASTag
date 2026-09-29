@@ -542,19 +542,45 @@ namespace FASTag
       static thread_local std::vector<std::vector<std::pair<uint32_t, uint8_t>>> adj, radj;
       if (adj.size() < n) { adj.resize(n); radj.resize(n); }
       for (size_t i = 0; i < n; ++i) { adj[i].clear(); radj[i].clear(); }
+      // Residue steps at this charge, divided once per call instead of once per
+      // peak -- the same quotients, so the same targets.
+      static thread_local std::vector<double> step;
+      step.resize(A.res.size());
+      for (size_t r = 0; r < step.size(); ++r) step[r] = A.res[r].mass / charge;
+      const PeakGrid& grid = *s.grid;
+      // One walk per peak through the residue-difference table for this charge,
+      // built on a thread's first spectrum and reused. It must cover the largest
+      // tolerance any target here can ask for: tolAt() grows with m/z in ppm,
+      // and no target lies above the top peak plus the heaviest step. A table
+      // that cannot serve (see StepTable::fit) leaves the grid, one lookup per
+      // residue. Either way the answer is findNearest's, in (i, r) order.
+      static thread_local std::vector<StepTable> tables;
+      if (tables.size() <= static_cast<size_t>(charge)) tables.resize(static_cast<size_t>(charge) + 1);
+      StepTable& dt = tables[static_cast<size_t>(charge)];
+      const bool walk = n > 0 && !step.empty()
+          && dt.fit(step, tolAt(p, grid.mz.back() + *std::max_element(step.begin(), step.end())));
+      static thread_local std::vector<int> hit;
       // Every residue -- base and variable-modified -- is a candidate single
       // edge, so a variable mod simply adds more edges to try.
       for (size_t i = 0; i < n; ++i)
+      {
+        if (walk) dt.nearestAbove(grid.mz, i, [&p](double t) { return tolAt(p, t); }, hit);
         for (uint8_t r = 0; r < A.res.size(); ++r)
         {
-          const double target = s.spec[i].getMZ() + A.res[r].mass / charge;
-          const int j = s.grid->nearest(target, tolAt(p, target));
+          int j;
+          if (walk) j = hit[r];
+          else
+          {
+            const double target = s.spec[i].getMZ() + step[r];
+            j = grid.nearest(target, tolAt(p, target));
+          }
           if (j > static_cast<int>(i))
           {
             adj[i].emplace_back(static_cast<uint32_t>(j), r);
             radj[static_cast<size_t>(j)].emplace_back(static_cast<uint32_t>(i), r);
           }
         }
+      }
       uint32_t t = 0, rt = 0;
       for (size_t i = 0; i < n; ++i)
       { g.off[i] = t; t += adj[i].size(); g.roff[i] = rt; rt += radj[i].size(); }
