@@ -9,7 +9,6 @@
 #include <OpenMS/CONCEPT/Constants.h>
 #include <OpenMS/PROCESSING/DEISOTOPING/Deisotoper.h>
 
-#include <boost/math/distributions/chi_squared.hpp>
 #include <boost/math/distributions/hypergeometric.hpp>
 
 #include <algorithm>
@@ -198,13 +197,24 @@ namespace FASTag
     /// independent, so the chi-square tail is optimistic. That is inherited from
     /// DirecTag and is why the result is reported as an E-value for ranking rather
     /// than as a calibrated probability.
+    ///
+    /// The tail is closed-form: for 2k degrees of freedom, integer k, it is
+    /// exp(-t) * sum_{i<k} t^i / i! with t = x/2 -- the finite sum Boost's
+    /// gamma_q itself evaluates for integer shape once t >= k-1, in the same
+    /// operation order, but in double. Boost promotes to long double on
+    /// x86-64, where the 80-bit expl made each call ~155 ns against ~6 ns.
+    /// Not bit-identical there: up to 4.4e-16 relative, 0 of 14M values
+    /// differing when printed %g. exp(-t) underflows only for a p-value
+    /// product below ~1e-323, far under what the subscores' floors allow.
     double fisher(double p1, double p2, double p3, int k)
     {
       auto safe = [](double v) { return std::log(std::max(v, 1e-300)); };
       const double x = -2.0 * (safe(p1) + safe(p2) + (k == 3 ? safe(p3) : 0.0));
       if (x <= 0 || k <= 0) return 1.0;
-      return boost::math::cdf(boost::math::complement(
-          boost::math::chi_squared(2.0 * k), x));
+      const double t = x / 2;
+      double term = std::exp(-t), sum = term;
+      for (int i = 1; i < k; ++i) { term /= i; term *= t; sum += term; }
+      return std::min(sum, 1.0);
     }
   }
 
