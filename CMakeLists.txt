@@ -89,7 +89,7 @@ else()
                   "not apply.")
 endif()
 
-add_library(fastag_core STATIC src/FASTagger.cpp src/FastaFilter.cpp src/ProteomeIndex.cpp src/TagRecon.cpp src/TaxDeconv.cpp src/TaxIndex.cpp src/TaxStats.cpp)
+add_library(fastag_core STATIC src/FASTagger.cpp src/AveragineDeisotoper.cpp src/FastaFilter.cpp src/ProteomeIndex.cpp src/TagRecon.cpp src/TaxDeconv.cpp src/TaxIndex.cpp src/TaxStats.cpp)
 target_include_directories(fastag_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
@@ -292,6 +292,22 @@ if(FASTAG_BUILD_TESTS)
                              FASTAG_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
   add_test(NAME indexed_mzml_test COMMAND indexed_mzml_test)
   set_tests_properties(indexed_mzml_test PROPERTIES SKIP_RETURN_CODE 77)
+
+  # The ported deisotoper against OpenMS's own, peak for peak and bit for bit,
+  # on synthetic edge cases. Given an mzPeak archive as its argument it also
+  # compares every spectrum of that run (not part of ctest: needs real data).
+  add_executable(deisotoper_test test/deisotoper_test.cpp)
+  if(TARGET fastag_mzpeak)
+    target_link_libraries(deisotoper_test PRIVATE fastag_mzpeak)
+  else()
+    target_link_libraries(deisotoper_test PRIVATE fastag_core)
+  endif()
+  if(OpenMP_CXX_FOUND)
+    target_link_libraries(deisotoper_test PRIVATE OpenMP::OpenMP_CXX)
+  endif()
+  target_compile_definitions(deisotoper_test PRIVATE
+                             FASTAG_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
+  add_test(NAME deisotoper_test COMMAND deisotoper_test)
 
   add_executable(tagfeatures_test test/tagfeatures_test.cpp src/tagfeatures.cpp)
   target_include_directories(tagfeatures_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

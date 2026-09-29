@@ -16,7 +16,9 @@ The desktop GUI's own dependencies are tracked in `gui/package-lock.json`
 | [Boost.Math](https://www.boost.org) | ≥ 1.81 | BSL-1.0 | chi-squared and hypergeometric distributions | header-only |
 
 Boost arrives transitively with OpenMS; FASTag adds no dependency OpenMS does
-not already require. There is no vendored third-party source in this repository.
+not already require. The only third-party source in this repository is one
+function ported from OpenMS (BSD-3-Clause, notice kept in the file): the
+averagine deisotoper in `src/AveragineDeisotoper.cpp`.
 
 ## What OpenMS provides, so FASTag does not implement it
 
@@ -30,7 +32,6 @@ not already require. There is no vendored third-party source in this repository.
 | FASTA parsing | `FASTAFile::load` |
 | Spectra, peaks, precursors | `MSExperiment`, `MSSpectrum`, `Peak1D`, `Precursor` |
 | Streaming mzML reads, bounded memory | `OnDiscMSExperiment` (one reader per thread; the class is not thread-safe) |
-| Isotope-cluster collapse (`-deisotope`) | `Deisotoper::deisotopeWithAveragineModel` |
 | CLI, INI files, logging, citations | `TOPPBase` |
 | χ² survival function | `boost::math::chi_squared` |
 | Hypergeometric tail | `boost::math::hypergeometric_distribution` |
@@ -43,6 +44,7 @@ not already require. There is no vendored third-party source in this repository.
 | Tolerance half-width (`tolAt`) | Not `Math::getTolWindow`: that returns asymmetric absolute bounds, deliberately widened so the relation between two *measured* values is symmetric. FASTag compares a *computed* target against a measured peak — a different relation, for which the symmetric half-width is correct. |
 | Monte-Carlo RNG | Not `Math::RandomShuffler`: it is a shuffler over `boost::mt19937_64` with no variate generation, and exists only because `std::random_shuffle` was not portable. A seeded `std::mt19937` already gives the reproducibility that matters. |
 | Rank-sum null (`ranksum.h`) | Neither OpenMS nor Boost has the exact null of a sum of *distinct* ranks. Boost offers the normal approximation to Mann-Whitney, unusable here because the informative tags sit in the far tail. |
+| Isotope-cluster collapse (on by default; `-no_deisotope`) | Ported from OpenMS `Deisotoper::deisotopeWithAveragineModel` (release 3.5.0) for the one parameter set FASTag passes, and bit-identical to it (`test/deisotoper_test.cpp`). The library call was a quarter of worker CPU at benchmark settings: a binary search per isotope position, vectors allocated per candidate, and a parameter object built per call. OpenMS remains the reference. |
 | Top-N peak selection | `NLargest` uses `sortByIntensity()`, an unstable sort with no secondary key. Peaks carry integer counts, so ties at the cut are common — 23% of real spectra have one — and which peak survives would depend on the standard library's sort. Peak selection provably drives tag output, so FASTag uses a total order (intensity desc, m/z desc). |
 | Spectrum graph, tag enumeration, scoring, extension | The algorithm itself. `OpenMS::Tagger` enumerates tags but returns bare strings with no scoring and no flanking masses, and expands I/L during recursion, which costs 2^k tags. |
 | Isobaric collapse rules | Derived at runtime from `ResidueDB` masses at the configured tolerance. `MassDecompositionAlgorithm` decomposes a mass into compositions, but returns unordered compositions rather than the ordered residue pairs the rules need. |
