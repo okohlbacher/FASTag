@@ -404,7 +404,10 @@ namespace FASTag
         work.sortByPosition();
       }
 
-      std::vector<size_t> order(work.size());
+      // order, keep and kept are scratch reused across spectra (thread_local:
+      // each OMP thread prepares its own), so they keep their capacity.
+      static thread_local std::vector<size_t> order;
+      order.resize(work.size());
       std::iota(order.begin(), order.end(), 0);
       std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
         if (work[a].getIntensity() != work[b].getIntensity())
@@ -442,7 +445,8 @@ namespace FASTag
       if (p.peaks_per_window > 0)
       {
         std::map<long, int> used;
-        std::vector<size_t> keep;
+        static thread_local std::vector<size_t> keep;
+        keep.clear();
         keep.reserve(std::min(order.size(), cap));
         for (size_t i : order)
         {
@@ -459,7 +463,8 @@ namespace FASTag
 
       // Keep the rank alongside the peak, then restore m/z order: the graph and
       // findNearest both need a sorted spectrum.
-      std::vector<std::pair<Peak1D, int>> kept;
+      static thread_local std::vector<std::pair<Peak1D, int>> kept;
+      kept.clear();
       kept.reserve(order.size());
       for (size_t r = 0; r < order.size(); ++r)
         kept.emplace_back(work[order[r]], static_cast<int>(r) + 1);
@@ -766,7 +771,8 @@ namespace FASTag
     {
       const auto& R = A.res;
       int added = 0;
-      std::vector<bool> used(s.spec.size(), false);
+      static thread_local std::vector<bool> used;   // scratch, as in tagSpectrum
+      used.assign(s.spec.size(), false);
       for (uint32_t i : peaks) used[i] = true;
 
       while (added < p.max_extension)
@@ -820,7 +826,9 @@ namespace FASTag
     /// factor stays honest when one path spells several.
     /// A scored tag plus the indices (into Prepared::spec) of the peaks that
     /// spelled it -- the exact, integer signature -diversity needs to tell a
-    /// re-read of the same ladder from genuinely different evidence.
+    /// re-read of the same ladder from genuinely different evidence. Filled
+    /// only under -diversity, its one reader: a copy per tag is a heap
+    /// allocation per tag.
     struct ScoredTag
     {
       Tag tag;
@@ -831,11 +839,12 @@ namespace FASTag
               const Param& p, const Tables& tab, const std::vector<uint32_t>& peaks,
               const std::vector<Step>& path, int charge)
     {
-      if (!t.gapped) { ++n_seeds; out.push_back({std::move(t), peaks}); return; }
+      const auto sig = [&]() { return p.diversity ? peaks : std::vector<uint32_t>(); };
+      if (!t.gapped) { ++n_seeds; out.push_back({std::move(t), sig()}); return; }
 
       size_t gi = 0;
       while (gi < path.size() && !path[gi].gap) ++gi;
-      if (gi + 1 >= peaks.size()) { ++n_seeds; out.push_back({std::move(t), peaks}); return; }
+      if (gi + 1 >= peaks.size()) { ++n_seeds; out.push_back({std::move(t), sig()}); return; }
 
       const double d = (s.spec[peaks[gi + 1]].getMZ() - s.spec[peaks[gi]].getMZ()) * charge;
       const double tol = tolAt(p, s.spec[peaks[gi + 1]].getMZ()) * charge;
@@ -852,7 +861,8 @@ namespace FASTag
       // recomputing asserts no precision the data lacks; it is arithmetic
       // consistency, and it costs one rescore of a path a few peaks long.
       const auto& P = tab.alphabet().pairs;
-      std::vector<Step> alt(path);
+      static thread_local std::vector<Step> alt;   // scratch, as in tagSpectrum
+      alt = path;
       int emitted = 0;
       for (auto it = std::lower_bound(P.begin(), P.end(), d - tol,
                [](const Alphabet::Pair& x, double v) { return x.mass < v; });
@@ -871,11 +881,11 @@ namespace FASTag
           Tag v = scorePath(s, p, tab, peaks, alt, charge);
           v.extended = t.extended;
           ++n_seeds;
-          out.push_back({std::move(v), peaks});
+          out.push_back({std::move(v), sig()});
           ++emitted;
         }
       }
-      if (emitted == 0) { ++n_seeds; out.push_back({std::move(t), peaks}); }
+      if (emitted == 0) { ++n_seeds; out.push_back({std::move(t), sig()}); }
     }
   }
 
@@ -896,22 +906,28 @@ namespace FASTag
         static_cast<size_t>(std::max(2, p.tag_length + 1 - std::max(0, p.max_gaps)));
     if (s.spec.size() < min_peaks) return out;
 
-    std::vector<ScoredTag> scored;
+    // scored and the DFS state below are scratch reused across paths, charges
+    // and spectra: thread_local, since each OMP thread tags its own spectra, so
+    // clear() keeps their capacity instead of allocating per spectrum -- and,
+    // for the DFS stack, per start peak.
+    static thread_local std::vector<ScoredTag> scored;
+    scored.clear();
     size_t n_seeds = 0;
     const Alphabet& A = tables.alphabet();
 
     for (int z = 1; z <= s.n_frag_charges; ++z)
     {
       const Graph g = buildGraph(s, p, A, z);
-      std::vector<uint32_t> peaks, pk;
-      std::vector<Step> path, rs;
+      static thread_local std::vector<uint32_t> peaks, pk;
+      static thread_local std::vector<Step> path, rs;
       // edge is a relative index over this node's ordinary edges followed by its
       // gap edges, so one counter walks both arrays.
       struct Frame { uint32_t node, edge; };
+      static thread_local std::vector<Frame> st;
 
       for (uint32_t start = 0; start < s.spec.size(); ++start)
       {
-        std::vector<Frame> st;
+        st.clear();
         peaks.clear(); path.clear();
         int n_res = 0;
         bool gap_used = false;
@@ -1026,7 +1042,8 @@ namespace FASTag
       return a.low_mz < b.low_mz;
     };
     const auto by_rank_cmp = [&](uint32_t a, uint32_t b) { return rank_cmp(scored[a].tag, scored[b].tag); };
-    std::vector<uint32_t> by_rank(scored.size());
+    static thread_local std::vector<uint32_t> by_rank;
+    by_rank.resize(scored.size());
     std::iota(by_rank.begin(), by_rank.end(), 0u);
     std::stable_sort(by_rank.begin(), by_rank.end(), by_rank_cmp);
 
