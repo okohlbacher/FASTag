@@ -236,12 +236,7 @@ namespace FASTag
   {
     ranksum_.resize(static_cast<size_t>(k_max_ - k_min_ + 1));
     for (int k = k_min_; k <= k_max_; ++k)
-    {
-      auto& per_n = ranksum_[static_cast<size_t>(k - k_min_)];
-      per_n.resize(n_max_ + 1);
-      for (size_t n = static_cast<size_t>(k); n <= n_max_; ++n)
-        per_n[n] = ranksumCdf(k, static_cast<int>(n));
-    }
+      ranksum_[static_cast<size_t>(k - k_min_)] = ranksumCdfs(k, static_cast<int>(n_max_));
 
     // The m/z-fidelity null has no closed form: it is the distribution of the
     // sum of squared deviations of k uniform errors about their own mean.

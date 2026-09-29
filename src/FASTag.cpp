@@ -75,6 +75,9 @@ namespace
   /// tolerance probe) are attributable rather than lumped into "the rest".
   const std::chrono::steady_clock::time_point g_t_program = std::chrono::steady_clock::now();
   double g_t_open = 0; ///< seconds spent constructing the input reader
+  double g_t_probe = 0, g_t_tables = 0; ///< tolerance probe, null tables
+  /// When main_() finished a file run; what follows it is teardown.
+  std::chrono::steady_clock::time_point g_t_main_end;
 }
 #include <cstdlib>
 #include <cstring>
@@ -593,10 +596,14 @@ protected:
 
   void resolveMods_(const StringList& names, bool variable, std::vector<FASTag::ModSpec>& out)
   {
-    auto* db = ModificationsDB::getInstance();
+    // Fetched on the first name, not up front: building the database parses
+    // all of UniMod, 0.04 s of serial start-up that a run naming no
+    // modification (-fixed_modifications "") never uses.
+    ModificationsDB* db = nullptr;
     for (const String& nm : names)
     {
       if (nm.empty()) continue;
+      if (!db) db = ModificationsDB::getInstance();
       const ResidueModification* mod = nullptr;
       try { mod = db->getModification(nm); }
       catch (Exception::BaseException&)
@@ -1202,9 +1209,8 @@ protected:
     // while an Orbitrap or TOF routinely does. If the closest pair anywhere in
     // the sample is still many times the tolerance, no real fragment can be
     // matched at that tolerance either.
+    const auto t_probe_a = std::chrono::steady_clock::now();
     {
-      double tightest = std::numeric_limits<double>::max();
-      double at_mz = 0;
       // 64 samples, not 200. The test is coarse (does the tightest spacing
       // anywhere exceed 20x the tolerance?), and every sample costs a read --
       // on a profile archive it costs a CENTROIDING too, and consecutive
@@ -1226,15 +1232,21 @@ protected:
       constexpr Size kClusters = 8;  // 8 spectra each
       const Size per_cluster = std::max<Size>(1, want / kClusters);
       const Size cluster_step = std::max<Size>(1, n_total / kClusters);
-      Size seen = 0;
-      for (Size c = 0; c < kClusters && seen < want; ++c)
+      // The closest pair per cluster as (spacing, m/z), merged in cluster
+      // order below, so the answer is the serial one -- the FIRST closest pair
+      // -- whichever thread read which cluster. (A running cap of `want`
+      // samples used to sit on these loops; 8 clusters of want/8 can never
+      // reach it.)
+      std::vector<std::pair<double, double>> closest(kClusters, {std::numeric_limits<double>::max(), 0.0});
+      auto scan_cluster = [&](Size c, auto&& read)
       {
+        double& tightest = closest[c].first;
+        double& at_mz = closest[c].second;
         const Size start = c * cluster_step;
-        for (Size k = 0; k < per_cluster && start + k < n_total && seen < want; ++k)
+        for (Size k = 0; k < per_cluster && start + k < n_total; ++k)
         {
-          MSSpectrum s = read_spectrum(start + k);
+          MSSpectrum s = read(start + k);
           if (s.getMSLevel() != 2 || s.size() < 8) continue;
-          ++seen;
           s.sortByPosition();
           for (Size j = 1; j < s.size(); ++j)
           {
@@ -1242,7 +1254,39 @@ protected:
             if (d > 0 && d < tightest) { tightest = d; at_mz = s[j].getMZ(); }
           }
         }
+      };
+      int probe_threads = 1;
+#ifdef FASTAG_HAVE_MZPEAK_LIB
+      // On mzPeak a cluster costs a row-group decode, ~13 ms each on the
+      // benchmark archive, so the clusters are read in parallel through a
+      // reader copy each (~1 ms): 0.11 s of serial start-up before this.
+      if (mzp) probe_threads = std::min(static_cast<int>(kClusters), omp_get_max_threads());
+      if (probe_threads > 1)
+      {
+        std::exception_ptr failed;
+#pragma omp parallel for num_threads(probe_threads) schedule(static, 1)
+        for (int c = 0; c < static_cast<int>(kClusters); ++c)
+        {
+          try
+          {
+            FASTag::OnDiscMzPeakExperiment own(*mzp);
+            scan_cluster(static_cast<Size>(c), [&own](Size i) { return own.getSpectrum(i); });
+          }
+          catch (...)
+          {
+#pragma omp critical(fastag_probe)
+            if (!failed) failed = std::current_exception();
+          }
+        }
+        if (failed) std::rethrow_exception(failed);
       }
+#endif
+      if (probe_threads == 1)
+        for (Size c = 0; c < kClusters; ++c) scan_cluster(c, read_spectrum);
+      double tightest = std::numeric_limits<double>::max();
+      double at_mz = 0;
+      for (const auto& cl : closest)
+        if (cl.first < tightest) { tightest = cl.first; at_mz = cl.second; }
       if (at_mz > 0)
       {
         const double tol = p.tol_ppm ? at_mz * p.frag_tol * 1e-6 : p.frag_tol;
@@ -1260,7 +1304,10 @@ protected:
       }
     }
 
+    const auto t_tables_a = std::chrono::steady_clock::now();
+    g_t_probe = std::chrono::duration<double>(t_tables_a - t_probe_a).count();
     const FASTag::Tables tables(p);
+    g_t_tables = std::chrono::duration<double>(std::chrono::steady_clock::now() - t_tables_a).count();
     std::ofstream tsv(out.c_str());
     if (!tsv)
     {
@@ -2086,7 +2133,8 @@ protected:
     if (timing)
     {
       const double total = secs(t_loop_start, Clock::now());
-      std::cerr << "FASTAG_TIMING open=" << g_t_open
+      std::cerr << "FASTAG_TIMING open=" << g_t_open << " probe=" << g_t_probe
+                << " tables=" << g_t_tables
                 << " pre_loop=" << secs(g_t_program, t_loop_start)
                 << " readers=" << t_readers << " prep=" << t_prep
                 << " parallel=" << t_parallel << " write=" << t_write
@@ -2844,6 +2892,23 @@ protected:
       std::cerr << "FASTAG_PROGRESS done=" << tt << " total=" << tt << std::endl;
     }
 
+#if defined(FASTAG_HAVE_MZPEAK_LIB) && !defined(__SANITIZE_ADDRESS__)
+    // The mzPeak readers are left to the process exit, not destroyed.
+    //
+    // Every output is written, flushed, closed and checked by now, and a
+    // reader has nothing to flush or report: read-only archive handles, the
+    // run's metadata map and the decoded row-group cache. Destroying them
+    // freed gigabytes one allocation at a time, into the arenas of the
+    // threads that decoded them -- most of the 0.82 s between the end of
+    // tagging and the process exit at 128 threads on kim, against 0.16 s for
+    // the same run read as mzML -- and the kernel takes the memory back at
+    // exit either way.
+    // ponytail: this success path only -- every error return above still
+    // destroys them -- and not in ASan builds, whose leak check would flag it.
+    for (auto& r : mreaders) static_cast<void>(r.release());
+    static_cast<void>(mzp.release());
+#endif
+    g_t_main_end = std::chrono::steady_clock::now();
     return EXECUTION_OK;
   }
 };
@@ -3102,6 +3167,16 @@ int main(int argc, const char** argv)
   else
   {
     rc = tool.main(static_cast<int>(args.size()), args.data());
+  }
+  // What the run's own FASTAG_TIMING line cannot see: destroying main_()'s
+  // state and TOPPBase's epilogue. Wall time past since_program_start is the
+  // loader, the libraries' static initialisers, and the kernel's exit.
+  if (std::getenv("FASTAG_TIMING") && g_t_main_end.time_since_epoch().count() != 0)
+  {
+    const auto now = std::chrono::steady_clock::now();
+    std::cerr << "FASTAG_TIMING teardown=" << std::chrono::duration<double>(now - g_t_main_end).count()
+              << " since_program_start=" << std::chrono::duration<double>(now - g_t_program).count()
+              << std::endl;
   }
   // The same missing hook leaves --help printing TOPPBase's own -threads line,
   // "(0 = all available cores) (default: '1')" -- wrong for FASTag on both
