@@ -20,6 +20,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <utility>
 #include <vector>
 
@@ -41,13 +42,15 @@ namespace FASTag
     constexpr float AVERAGINE_CHECK_THRESHOLD[7] = {0.0f, 0.0f, 0.05f, 0.1f, 0.2f, 0.4f, 0.6f};
 
     /// CoarseIsotopePatternGenerator::approximateIntensities(mass, MAX_ISOPEAKS)
-    /// into a caller's array instead of a fresh vector per candidate cluster.
+    /// into a caller's array instead of a fresh vector per candidate cluster,
+    /// and NOT yet normalised: it returns the sum, and the caller divides each
+    /// entry by it when it first reads it -- the same division, so the same
+    /// double. Most candidates fail at their first isotope and read two.
     ///
     /// Not memoised: its argument is a candidate's own neutral mass, which no
     /// other candidate in the run shares except by coincidence, so an exact
     /// cache would never hit and a cache by rounded mass would not be exact.
-    /// The allocation was the cost, and that is gone.
-    void approximateIntensities(double mass, double (&result)[MAX_ISOPEAKS])
+    double approximateIntensities(double mass, double (&result)[MAX_ISOPEAKS])
     {
       const double factor = mass / 1800.0;  // lambda * mass, lambda from Bellew et al.
       double curr_intensity = 1.0;
@@ -59,7 +62,7 @@ namespace FASTag
         result[k] = curr_intensity != curr_intensity ? 0.0 : curr_intensity;
         sum += result[k];
       }
-      for (unsigned k = 0; k != MAX_ISOPEAKS; ++k) result[k] /= sum;
+      return sum;
     }
 
     /// Per-thread buffers. The tagging loop calls this once per spectrum on
@@ -69,6 +72,7 @@ namespace FASTag
       std::vector<int>      charge;     ///< per peak: its cluster's charge if monoisotopic, else 0
       std::vector<char>     clustered;  ///< per peak: in a kept cluster. OpenMS numbers the
                                         ///< clusters, but only ever tests the number against -1.
+      std::vector<double>   mz;         ///< the peaks' m/z between -inf and +inf sentinels
       std::vector<size_t>   next;       ///< per charge: lower_bound of the last first-isotope target
       std::vector<double>   offset;     ///< [q * MAX_ISOPEAKS + i]: i isotope spacings at charge q
       std::vector<uint32_t> kept_idx;   ///< input index of every survivor whose m/z is unchanged
@@ -107,7 +111,7 @@ namespace FASTag
     const size_t n_charges = static_cast<size_t>(std::max(0, max_charge));
     S.charge.assign(n, 0);
     S.clustered.assign(n, 0);
-    S.next.assign(n_charges + 1, 0);
+    S.next.assign(n_charges + 1, 1);  // index 1: the first peak, past the sentinel
     S.offset.resize((n_charges + 1) * MAX_ISOPEAKS);
     for (size_t q = 1; q <= n_charges; ++q)
       for (unsigned i = 1; i < MAX_ISOPEAKS; ++i)
@@ -118,17 +122,24 @@ namespace FASTag
     const Peak1D* const pk = spec.data();
     const double ppm_factor = fragment_tolerance / 1e6;  // Math::ppmToMass's first step
 
-    // MSSpectrum::findNearest(mz, tolerance), handed k = lower_bound(mz): the
-    // nearer of k and k - 1, a tie going to k - 1, then OpenMS's own window
-    // test (NOT |found - mz| <= tolerance, which rounds differently).
-    auto nearest = [pk, n](size_t k, double mz, double tolerance) -> int
+    // The m/z values alone, densely, between sentinels: mzs[i + 1] is peak i.
+    // The sentinels stand in for OpenMS's two border cases -- nothing is
+    // nearer than a finite peak -- so the searches below need no bounds tests.
+    S.mz.resize(n + 2);
+    S.mz[0] = -std::numeric_limits<double>::infinity();
+    for (size_t i = 0; i != n; ++i) S.mz[i + 1] = pk[i].getMZ();
+    S.mz[n + 1] = std::numeric_limits<double>::infinity();
+    const double* const mzs = S.mz.data();
+
+    // MSSpectrum::findNearest(mz, tolerance), handed k = lower_bound(mz) in
+    // sentinel indexing: the nearer of k and k - 1, a tie going to k - 1,
+    // then OpenMS's own window test (NOT |found - mz| <= tolerance, which
+    // rounds differently). Returns the peak index or -1.
+    auto nearest = [mzs](size_t k, double mz, double tolerance) -> int
     {
-      size_t j;
-      if (k == 0) j = 0;
-      else if (k == n) j = n - 1;
-      else j = std::fabs(pk[k].getMZ() - mz) < std::fabs(pk[k - 1].getMZ() - mz) ? k : k - 1;
-      const double found_mz = pk[j].getMZ();
-      return (found_mz >= mz - tolerance && found_mz <= mz + tolerance) ? static_cast<int>(j) : -1;
+      const size_t j = std::fabs(mzs[k] - mz) < std::fabs(mzs[k - 1] - mz) ? k : k - 1;
+      const double found_mz = mzs[j];
+      return ((found_mz >= mz - tolerance) & (found_mz <= mz + tolerance)) ? static_cast<int>(j) - 1 : -1;
     };
 
     for (size_t current_peak = 0; current_peak != n; ++current_peak)
@@ -156,10 +167,14 @@ namespace FASTag
         // No binary search: this target rises with current_peak (the spectrum
         // is sorted, and rounding is monotonic), so its lower_bound never moves
         // left. next[q] carries it from peak to peak, and the scan from it
-        // lands on exactly the index std::lower_bound would return.
+        // lands on exactly the index std::lower_bound would return. It rarely
+        // moves more than three, so those steps are taken without a branch.
         double expected_mz = current_mz + offset[1];
         size_t k = S.next[q];
-        while (k < n && pk[k].getMZ() < expected_mz) ++k;
+        k += mzs[k] < expected_mz;
+        k += mzs[k] < expected_mz;
+        k += mzs[k] < expected_mz;
+        while (mzs[k] < expected_mz) ++k;
         S.next[q] = k;
         int p = nearest(k, expected_mz, tolerance_dalton);
         if (p == -1) continue;
@@ -171,7 +186,8 @@ namespace FASTag
         extensions_intensities[0] = current_intensity;
 
         double distr[MAX_ISOPEAKS];
-        approximateIntensities(q * (current_mz - Constants::PROTON_MASS_U), distr);
+        const double distr_sum = approximateIntensities(q * (current_mz - Constants::PROTON_MASS_U), distr);
+        distr[0] /= distr_sum;
         double spec_total_intensity = current_intensity;
         double dist_total_intensity = distr[0];
         bool has_min_isopeaks = true;
@@ -182,7 +198,7 @@ namespace FASTag
           {
             // Targets rise with i too, so the scan resumes where the last stopped.
             expected_mz = current_mz + offset[i];
-            while (k < n && pk[k].getMZ() < expected_mz) ++k;
+            while (mzs[k] < expected_mz) ++k;
             p = nearest(k, expected_mz, tolerance_dalton);
             if (p == -1)
             {
@@ -193,6 +209,7 @@ namespace FASTag
 
           extensions_intensities[n_ext] = pk[p].getIntensity();
           spec_total_intensity += extensions_intensities[n_ext];
+          distr[n_ext] /= distr_sum;
           dist_total_intensity += distr[n_ext];
 
           // KL divergence of the normalised observed intensities from the model.
