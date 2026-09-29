@@ -29,6 +29,7 @@
 #include <OpenMS/FORMAT/DATAACCESS/MSDataWritingConsumer.h>
 #include "TagFDR.h"
 #include "TagRecon.h"
+#include "NumFormat.h"
 #include "Proforma.h"
 #include "SpectrumSampler.h"
 #include "TaxDeconv.h"
@@ -517,24 +518,27 @@ protected:
   // dropped columns on very long native IDs). Flanking masses at 4 decimals
   // (0.1 mDa) -- %g's 6 significant digits are coarser than the tolerance the
   // tag was found with, and these are what a downstream search constrains on.
+  // Numbers go through appendNum, not snprintf: the same text as "%.4f" /
+  // "%g" / "%.3f", without the locale lock every worker queues on in macOS's
+  // printf (NumFormat.h).
   static void appendTagRow(std::string& buf, const FASTag::Tag& t,
                            const String& native_id, const char* hit,
                            bool want_proforma, const std::string& proforma_fixed,
                            bool want_res_conf = false)
   {
-    char num[48];
-    auto f = [&](const char* fmt, auto v) { std::snprintf(num, sizeof num, fmt, v); buf += num; };
+    using FASTag::appendNum;
+    constexpr auto fixed = std::chars_format::fixed;
     buf += native_id;          buf += '\t';
     buf += t.seq;              buf += '\t';
-    f("%zu", t.n_res);         buf += '\t';
-    f("%d", t.charge);         buf += '\t';
-    f("%.4f", t.nterm_mass);   buf += '\t';
-    f("%.4f", t.cterm_mass);   buf += '\t';
-    f("%d", t.extended ? 1 : 0); buf += '\t';
-    f("%d", t.gapped ? 1 : 0); buf += '\t';
-    f("%g", t.evalue);         buf += '\t';
-    f("%.3f", t.min_conf);     buf += '\t';
-    f("%.3f", t.mean_conf);    buf += '\t';
+    appendNum(buf, t.n_res);   buf += '\t';
+    appendNum(buf, t.charge);  buf += '\t';
+    appendNum(buf, t.nterm_mass, fixed, 4); buf += '\t';
+    appendNum(buf, t.cterm_mass, fixed, 4); buf += '\t';
+    buf += t.extended ? '1' : '0'; buf += '\t';
+    buf += t.gapped ? '1' : '0';   buf += '\t';
+    appendNum(buf, t.evalue, std::chars_format::general, 6); buf += '\t';
+    appendNum(buf, t.min_conf, fixed, 3);  buf += '\t';
+    appendNum(buf, t.mean_conf, fixed, 3); buf += '\t';
     buf += hit;
     if (want_proforma) { buf += '\t'; buf += FASTag::toProforma(t.seq, t.nterm_mass, t.cterm_mass, proforma_fixed); }
     if (want_res_conf)
@@ -543,7 +547,7 @@ protected:
       for (size_t i = 0; i < t.res_conf.size(); ++i)
       {
         if (i) buf += ' ';
-        f("%d", static_cast<int>(t.res_conf[i]));
+        appendNum(buf, static_cast<int>(t.res_conf[i]));
       }
     }
     buf += '\n';
@@ -1436,15 +1440,16 @@ protected:
             res.rbuf += t.seq;             res.rbuf += '\t';
             res.rbuf += prot;              res.rbuf += '\t';
             res.rbuf += pl.peptide;        res.rbuf += '\t';
-            char rnum[64];
-            std::snprintf(rnum, sizeof rnum, "%zu\t%d\t%d\t%d\t%.4f\t",
-                          pl.pos, pl.reversed ? 1 : 0, pl.nterm_match ? 1 : 0,
-                          pl.cterm_match ? 1 : 0, pl.delta_mass);
-            res.rbuf += rnum;
+            FASTag::appendNum(res.rbuf, pl.pos); res.rbuf += '\t';
+            res.rbuf += pl.reversed ? '1' : '0';    res.rbuf += '\t';
+            res.rbuf += pl.nterm_match ? '1' : '0'; res.rbuf += '\t';
+            res.rbuf += pl.cterm_match ? '1' : '0'; res.rbuf += '\t';
+            FASTag::appendNum(res.rbuf, pl.delta_mass, std::chars_format::fixed, 4);
+            res.rbuf += '\t';
             if (pl.region_hi >= pl.region_lo)
             {
-              std::snprintf(rnum, sizeof rnum, "%d-%d", pl.region_lo, pl.region_hi);
-              res.rbuf += rnum;
+              FASTag::appendNum(res.rbuf, pl.region_lo); res.rbuf += '-';
+              FASTag::appendNum(res.rbuf, pl.region_hi);
             }
             res.rbuf += '\t';
             res.rbuf += pl.delta_interp;
@@ -1503,13 +1508,14 @@ protected:
         }
         const auto g = FASTag::scanOxonium(*sp, p.frag_tol, p.tol_ppm,
                                            getDoubleOption_("glyco_min_fraction"));
-        char gnum[64];
-        std::snprintf(gnum, sizeof gnum, "\t%d\t%.3f\t%d\t", g.n_matched, g.frac,
-                      g.glyco ? 1 : 0);
-        grows[idx] = spec.getNativeID();
-        grows[idx] += gnum;
-        grows[idx] += g.ions;
-        grows[idx] += '\n';
+        std::string& gr = grows[idx];
+        gr = spec.getNativeID();
+        gr += '\t';
+        FASTag::appendNum(gr, g.n_matched); gr += '\t';
+        FASTag::appendNum(gr, g.frac, std::chars_format::fixed, 3); gr += '\t';
+        gr += g.glyco ? '1' : '0';           gr += '\t';
+        gr += g.ions;
+        gr += '\n';
       }
       if (r.buf.empty()) return;  // rbuf is only ever non-empty alongside buf
       rows[idx].swap(r.buf);
