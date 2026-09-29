@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "FASTagger.h"
+#include "PeakGrid.h"
 
 #include <OpenMS/CHEMISTRY/EmpiricalFormula.h>
 #include <OpenMS/CHEMISTRY/Residue.h>
@@ -302,6 +303,10 @@ namespace FASTag
       double precursor_mass = 0;
       int n_frag_charges = 1;
       std::vector<int> n_with_compl;   ///< indexed by fragment charge
+      /// Nearest-peak index over spec, for complements and buildGraph. Points at
+      /// prepare()'s per-thread grid, so valid until the next prepare() on this
+      /// thread -- tagSpectrum holds one Prepared at a time.
+      const PeakGrid* grid = nullptr;
     };
 
     Prepared prepare(const MSSpectrum& in, double precursor_mz, int charge, const Param& p)
@@ -472,6 +477,12 @@ namespace FASTag
       for (const auto& kv : kept) { s.spec.push_back(kv.first); s.rank.push_back(kv.second); }
       const size_t n = s.spec.size();
 
+      // One index over the kept peaks answers every nearest-peak query below and
+      // in buildGraph, for all fragment charges.
+      static thread_local PeakGrid grid;
+      grid.build(s.spec);
+      s.grid = &grid;
+
       // Complements: b + y = M + 2*proton, so a fragment at m/z m has its partner
       // at M/z + 2*proton - m.
       s.has_compl.assign(n, 0);
@@ -487,7 +498,7 @@ namespace FASTag
           // j != i: a peak at the midpoint would otherwise be its own partner,
           // manufacturing complement evidence from a single ion and inflating
           // both the population and the observed count.
-          const int j = s.spec.findNearest(cmz, p.complement_tol);
+          const int j = grid.nearest(cmz, p.complement_tol);
           if (j >= 0 && static_cast<size_t>(j) != i)
             s.has_compl[i] |= static_cast<uint8_t>(1u << (z - 1));
         }
@@ -537,7 +548,7 @@ namespace FASTag
         for (uint8_t r = 0; r < A.res.size(); ++r)
         {
           const double target = s.spec[i].getMZ() + A.res[r].mass / charge;
-          const int j = s.spec.findNearest(target, tolAt(p, target));
+          const int j = s.grid->nearest(target, tolAt(p, target));
           if (j > static_cast<int>(i))
           {
             adj[i].emplace_back(static_cast<uint32_t>(j), r);
