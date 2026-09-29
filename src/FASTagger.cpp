@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 #include "FASTagger.h"
+#include "AveragineDeisotoper.h"
 
 #include <OpenMS/CHEMISTRY/EmpiricalFormula.h>
 #include <OpenMS/CHEMISTRY/Residue.h>
 #include <OpenMS/CHEMISTRY/ResidueDB.h>
 #include <OpenMS/CONCEPT/Constants.h>
-#include <OpenMS/PROCESSING/DEISOTOPING/Deisotoper.h>
 
 #include <boost/math/distributions/chi_squared.hpp>
 #include <boost/math/distributions/hypergeometric.hpp>
@@ -393,14 +393,11 @@ namespace FASTag
         // option the user explicitly asked for, which is worse.
         const double deiso_tol = p.tol_ppm ? std::min(p.frag_tol, 100.0)
                                            : std::min(p.frag_tol, 0.1);
-        Deisotoper::deisotopeWithAveragineModel(
-            work, deiso_tol, p.tol_ppm,
-            0,                                        // no peak cap here
-            1, std::max(1, p.deisotope_max_charge),
-            false,                                    // keep_only_deisotoped
-            2, 10,                                    // min/max isopeaks
-            true,                                     // make_single_charged
-            false, false, false);
+        //
+        // OpenMS's Deisotoper::deisotopeWithAveragineModel, ported and bit-identical
+        // (AveragineDeisotoper.h): charges 1..max, no peak cap, unclustered peaks
+        // kept, 2..10 isotope peaks, monoisotopic peaks moved to charge 1.
+        deisotopeAveragine(work, deiso_tol, p.tol_ppm, std::max(1, p.deisotope_max_charge));
         work.sortByPosition();
       }
 
