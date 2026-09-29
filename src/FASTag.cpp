@@ -40,7 +40,6 @@
 #include <exception>
 #include <fstream>
 #include <filesystem>
-#include <future>
 #include <csignal>
 #include <iostream>
 #ifdef _WIN32
@@ -63,6 +62,8 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
+#include <mutex>
 #ifndef _WIN32
 #include <sys/resource.h>
 #endif
@@ -83,7 +84,18 @@ namespace
 
 #ifdef _OPENMP
 #include <omp.h>
+#endif
+// `schedule(FASTAG_MONOTONIC dynamic, n)`: chunks strictly in index order,
+// which the tagging loop's block ring depends on. From OpenMP 5.0 a bare
+// `dynamic` means NONmonotonic, and libomp then lets threads steal chunks out
+// of order; before 4.5 there is no modifier to write (MSVC's /openmp is 2.0),
+// and dynamic scheduling is monotonic by definition.
+#if defined(_OPENMP) && _OPENMP >= 201511
+#define FASTAG_MONOTONIC monotonic:
 #else
+#define FASTAG_MONOTONIC
+#endif
+#ifndef _OPENMP
 static inline int omp_get_max_threads() { return 1; }
 static inline int omp_get_num_threads() { return 1; }
 static inline int omp_get_thread_num() { return 0; }
@@ -1318,13 +1330,14 @@ protected:
     //
     // Results are collected per BLOCK of spectra and written in input order as
     // each block finishes, so the output is identical whatever -threads is set
-    // to while TSV memory stays bounded by two blocks (one tagging, one
-    // writing), not the run. 64k spectra x ~100 bytes/row is a few MB; the old
-    // whole-run buffer held every row of a 5 GB file at once.
+    // to while TSV memory stays bounded by three blocks (being written, being
+    // finished, being started), not the run. 64k spectra x ~100 bytes/row is
+    // a few MB; the old whole-run buffer held every row of a 5 GB file at once.
     const SignedSize n_spec = static_cast<SignedSize>(n_total);
     constexpr size_t BLOCK = 65536;
-    // One block's results at block-local indices. There are two, so the team
-    // can tag into one while the writer thread writes the other.
+    // One block's results at block-local indices. There are kRing of them: the
+    // writer thread empties one while the team finishes one and starts the
+    // next (see the loop).
     struct Block
     {
       size_t base = 0;                 ///< input index of slot 0
@@ -1334,7 +1347,11 @@ protected:
       std::vector<std::vector<std::pair<double, bool>>> rmeta;  ///< (entrap_on only)
       std::vector<char> keep, keep_target;
     };
-    Block blocks[2];
+    // ponytail: three, not four. A fourth only helped within noise (128
+    // threads: 1.41 -> 1.36 s parallel; 256: 1.64 -> 1.67) for another block
+    // of rows held in memory.
+    constexpr size_t kRing = 3;
+    Block blocks[kRing];
     // Two-pass -out_spectra, whatever the formats: record kept INPUT indices
     // during tagging, re-read them at the end. An mzML output streams them
     // through a writing consumer, O(1 spectrum); an mzPeak output re-reads
@@ -1359,6 +1376,12 @@ protected:
       // a flank clamped to 0 (FASTagger's max(0,.)) makes its delta bogus.
       std::vector<std::pair<double, std::string>> delta;
       size_t delta_clamped = 0;
+      // FASTAG_TIMING only, thread-seconds: reading (getSpectrum), of that in
+      // reads slower than 1 ms (a row-group decode, or a wait for one),
+      // tagging (tag_one + record), waiting for a ring buffer, and idle after
+      // the last chunk.
+      double s_read = 0, s_slow = 0, s_tag = 0, s_ring = 0, s_idle = 0;
+      size_t n_slow = 0;
     };
     std::vector<PerThread> per_thread(static_cast<size_t>(std::max(1, omp_get_max_threads())));
 
@@ -1572,6 +1595,32 @@ protected:
     // the loop), so everything it appends to -- the streams, the glyco
     // counters, row_meta, by_spec, kept_idx -- is touched by one thread only
     // and read after the last write is joined.
+    //
+    // Rows go to the files in chunks of a few MB, not one stream insertion per
+    // spectrum. libstdc++'s filebuf hands any insertion of 1 KiB or more to a
+    // write(2) of its own, whatever its buffer size, and one spectrum's rows
+    // are ~1.7 KB at benchmark settings: one system call per spectrum, 0.80-
+    // 0.93 s for 717,924 spectra -- as long as the whole tagging loop at 128
+    // threads and up, which the writer then held back through the block ring.
+    // ponytail: 4 MB, emptied at the end of every block; larger only holds
+    // more memory.
+    constexpr size_t kWriteChunk = size_t(4) << 20;
+    std::string tsv_pending, rtsv_pending;
+    auto put_rows = [&](std::ofstream& os, std::string& pending, const std::string& text)
+    {
+      pending += text;
+      if (pending.size() >= kWriteChunk)
+      {
+        os.write(pending.data(), static_cast<std::streamsize>(pending.size()));
+        pending.clear();
+      }
+    };
+    auto drain = [](std::ofstream& os, std::string& pending)
+    {
+      if (pending.empty()) return;
+      os.write(pending.data(), static_cast<std::streamsize>(pending.size()));
+      pending.clear();
+    };
     auto write_block = [&](Block& b, size_t n_used)
     {
       for (size_t i = 0; i < n_used; ++i)
@@ -1588,8 +1637,8 @@ protected:
           b.grows[i].clear();
         }
         if (!b.keep[i]) continue;
-        tsv << b.rows[i];
-        if (recon_on && !b.rrows[i].empty()) { rtsv << b.rrows[i]; b.rrows[i].clear(); }
+        put_rows(tsv, tsv_pending, b.rows[i]);
+        if (recon_on && !b.rrows[i].empty()) { put_rows(rtsv, rtsv_pending, b.rrows[i]); b.rrows[i].clear(); }
         if (entrap_on)
         {
           row_meta.insert(row_meta.end(), b.rmeta[i].begin(), b.rmeta[i].end());
@@ -1635,6 +1684,8 @@ protected:
         b.rows[i].clear();
         if (want_out && b.keep_target[i]) kept_idx.push_back(static_cast<Size>(b.base + i));
       }
+      drain(tsv, tsv_pending);
+      if (recon_on) drain(rtsv, rtsv_pending);
     };
 
     // Progress reporting (opt-in via -progress), shared across both input paths.
@@ -1789,8 +1840,7 @@ protected:
     }
 #endif
 
-    // The READERS are built once per thread, before the loop; the parallel
-    // region still opens and closes per block.
+    // The READERS are built once per thread, before the loop.
     //
     // Building an mzPeak reader costs 3.83 ms: index.spectra() re-opens five
     // Parquet members -- a zip_open over the archive's central directory plus
@@ -1802,13 +1852,13 @@ protected:
     // slower above 64 threads while mzML kept scaling. Measured on the
     // benchmark archive at 192 threads: 12.69 s of startup -> 4.91 s.
     //
-    // Hoisting the REGION as well was tried and reverted. It removed the same
-    // constructions, but left 191 threads spinning on the barriers around the
-    // serial write_block instead of parked outside a closed region: +344 CPU
-    // seconds at 192 threads, and the spinners stole enough bandwidth from the
-    // writing thread to eat the entire startup saving (16.01 s -> 15.22 s).
-    // Threads must not be inside a region while one of them writes a block;
-    // the write overlaps the next block on a thread of its own instead.
+    // Hoisting the REGION as well was first tried with the writes still done
+    // by a team member between barriers, and reverted: it left 191 threads
+    // spinning on the barriers around the serial write_block, +344 CPU seconds
+    // at 192 threads, and the spinners stole enough bandwidth from the writing
+    // thread to eat the entire startup saving (16.01 s -> 15.22 s). The region
+    // is now hoisted with no barrier around a write at all: a thread of its
+    // own writes, and nobody spins while it does (see the loop).
     std::vector<std::unique_ptr<OnDiscMSExperiment>> readers(read_threads);
     std::vector<std::unique_ptr<FASTag::IndexedMzMLReader>> freaders(read_threads);
 #ifdef FASTAG_HAVE_MZPEAK_LIB
@@ -1861,86 +1911,178 @@ protected:
 #endif
     t_readers = secs(t_readers_a, Clock::now());
 
-    // Serial over blocks, parallel within each, and block k is WRITTEN while
-    // block k+1 is tagged. The write was ~1 s of serial time at every thread
-    // count, with the whole team parked behind it.
+    // ONE parallel region over the whole run. Blocks only bound the memory the
+    // results take; a writer thread empties them in input order.
     //
-    // Blocks alternate between the two buffers. The writer is a plain thread,
-    // not an OpenMP one, so no team member spins while it writes. Block k is
-    // handed over only after block k-1 is written, which keeps every file in
-    // input order and means the buffer block k+1 reuses is free again.
+    // The region used to open and close once per block, with block k written
+    // while block k+1 was tagged. Every close is a barrier, and on an mzPeak
+    // input every open is a stall as well: each thread's first read in a new
+    // block lands on a row group nobody has decoded yet. Measured on a
+    // 347-group, 717,924-spectrum archive at 128 threads: 27 of 271
+    // thread-seconds idle in the barriers and 54 in those first reads, with the
+    // loop stuck at ~2.1 s from 64 threads up. With one region the frontier
+    // just runs on into the next block, and the stragglers of one block
+    // overlap the start of the next instead of holding it back.
     //
-    // ponytail: std::async per block (a dozen thread starts per run) rather
-    // than a resident writer and a condition variable; it also carries a
-    // write_block exception back to this thread through get().
-    std::future<void> writing;  ///< the previous block's write, if any
-    for (SignedSize base = 0, k = 0; base < n_spec; base += static_cast<SignedSize>(BLOCK), ++k)
+    // A ring of kRing buffers. Chunks are handed out in index order
+    // (monotonic), so a thread reaching block k knows every earlier chunk is
+    // taken; it waits only while block k's buffer still holds block k - kRing,
+    // which the writer is then writing. That cannot deadlock: the oldest block
+    // that is still open is held only by threads that are not waiting. Three
+    // buffers: one being written, one being finished by the stragglers, one
+    // taking the frontier.
+    //
+    // The writer is a plain thread, not a team member, and both sides wait on
+    // a condition variable: nobody spins while a block is written, which is
+    // what sank the first attempt at hoisting the region (see the readers).
+    const size_t n_blocks = static_cast<size_t>((n_spec + static_cast<SignedSize>(BLOCK) - 1)
+                                                / static_cast<SignedSize>(BLOCK));
+    auto block_size = [&](size_t k)
+    { return static_cast<size_t>(std::min<SignedSize>(n_spec - static_cast<SignedSize>(k * BLOCK),
+                                                      static_cast<SignedSize>(BLOCK))); };
+    // Spectra of each block not yet recorded; the writer takes a block at 0.
+    std::unique_ptr<std::atomic<size_t>[]> pending(new std::atomic<size_t>[std::max<size_t>(n_blocks, 1)]);
+    for (size_t k = 0; k < n_blocks; ++k) pending[k].store(block_size(k), std::memory_order_relaxed);
+    std::mutex ring_mutex;
+    std::condition_variable ring_cv;
+    size_t open_upto = std::min(kRing, n_blocks);  ///< blocks below have a prepared buffer (ring_mutex)
+    std::atomic<size_t> open_hint{open_upto};      ///< its lock-free copy, for the common case
+    bool write_abort = false;                      ///< the writer failed (ring_mutex)
+    std::atomic<bool> abort_hint{false};
+    std::exception_ptr write_failed;
+
+    const auto t_prep_a = Clock::now();
+    for (size_t k = 0; k < open_upto; ++k) prep_block(blocks[k % kRing], k * BLOCK, block_size(k));
+    t_prep = secs(t_prep_a, Clock::now());
+
+    std::thread writer([&]
     {
-      const SignedSize lim = std::min(n_spec, base + static_cast<SignedSize>(BLOCK));
-      Block& blk = blocks[k & 1];
-      const auto t_prep_a = Clock::now();
-      prep_block(blk, static_cast<size_t>(base), static_cast<size_t>(lim - base));
-      const auto t_par_a = Clock::now();
-      t_prep += secs(t_prep_a, t_par_a);
-#pragma omp parallel num_threads(read_threads)
+      try
       {
-        const size_t tid = static_cast<size_t>(omp_get_thread_num());
-        OnDiscMSExperiment* reader = readers[tid].get();
-        FASTag::IndexedMzMLReader* freader = freaders[tid].get();
-#ifdef FASTAG_HAVE_MZPEAK_LIB
-        FASTag::OnDiscMzPeakExperiment* mreader = mreaders[tid].get();
-#endif
-        auto work = [&](SignedSize i)
+        for (size_t k = 0; k < n_blocks; ++k)
         {
-          if (!sample_mask.empty() && !sample_mask[static_cast<size_t>(i)]) { tick(); return; }
-          MSSpectrum loaded;
-          bool loaded_here = false;
-#ifdef FASTAG_HAVE_MZPEAK_LIB
-          if (mreader) { loaded = mreader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
-#endif
-          if (!loaded_here && freader) { loaded = freader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
-          if (!loaded_here && reader) { loaded = reader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
-          const MSSpectrum& spec = loaded_here ? loaded : exp[static_cast<Size>(i)];
-          record(blk, static_cast<size_t>(i - base), tag_one(spec, tid), spec);
-          tick();
-        };
-        // One schedule for both formats: dynamic, in chunks.
-        //
-        // A static split is the wrong shape: it hands every thread the same
-        // COUNT of spectra, which cost different amounts, so the fast threads
-        // sat in the join barrier (measured: 24% of all samples blocked).
-        // Dynamic chunks let a thread that finishes early take more.
-        //
-        // GUIDED, not a fixed chunk: it hands out large pieces first and
-        // small ones at the end, which is exactly the shape wanted here.
-        // Large early chunks keep each thread inside one row group, so the
-        // shared decode cache holds few groups at once; the shrinking tail is
-        // what stops the fast threads waiting in the join barrier. A fixed
-        // 256-spectrum chunk balanced the tail but fragmented the start, and
-        // cost 17% on a small profile archive.
-        constexpr SignedSize kMinChunk = 64;
-#pragma omp for schedule(guided, kMinChunk)
-        for (SignedSize i = base; i < lim; ++i) work(i);
+          {
+            std::unique_lock<std::mutex> lock(ring_mutex);
+            ring_cv.wait(lock, [&] { return pending[k].load(std::memory_order_acquire) == 0; });
+          }
+          const auto a = Clock::now();
+          Block& b = blocks[k % kRing];
+          write_block(b, block_size(k));
+          if (k + kRing < n_blocks) prep_block(b, (k + kRing) * BLOCK, block_size(k + kRing));
+          t_write_busy += secs(a, Clock::now());
+          {
+            std::lock_guard<std::mutex> guard(ring_mutex);
+            open_upto = std::min(n_blocks, k + kRing + 1);
+            open_hint.store(open_upto, std::memory_order_release);
+          }
+          ring_cv.notify_all();
+        }
       }
-      const auto t_write_a = Clock::now();
-      t_parallel += secs(t_par_a, t_write_a);
-      // write= is only what the loop waits for; write_busy= is the writer's own.
-      if (writing.valid()) writing.get();
-      const size_t n_used = static_cast<size_t>(lim - base);
-      writing = std::async(std::launch::async, [&, b = &blk, n_used]
+      catch (...)
       {
-        const auto a = Clock::now();
-        write_block(*b, n_used);
-        t_write_busy += secs(a, Clock::now());
-      });
-      t_write += secs(t_write_a, Clock::now());
-    }
-    if (writing.valid())
+        write_failed = std::current_exception();
+        {
+          std::lock_guard<std::mutex> guard(ring_mutex);
+          write_abort = true;
+          abort_hint.store(true);
+        }
+        ring_cv.notify_all();
+      }
+    });
+
+    // FASTAG_TIMING: each thread's exit from its last chunk.
+    std::vector<Clock::time_point> t_done(static_cast<size_t>(read_threads));
+    const auto t_par_a = Clock::now();
+#pragma omp parallel num_threads(read_threads)
     {
-      const auto a = Clock::now();
-      writing.get();
-      t_write += secs(a, Clock::now());
+      const size_t tid = static_cast<size_t>(omp_get_thread_num());
+      OnDiscMSExperiment* reader = readers[tid].get();
+      FASTag::IndexedMzMLReader* freader = freaders[tid].get();
+#ifdef FASTAG_HAVE_MZPEAK_LIB
+      FASTag::OnDiscMzPeakExperiment* mreader = mreaders[tid].get();
+#endif
+      auto work = [&](SignedSize i, Block& blk, size_t idx)
+      {
+        if (!sample_mask.empty() && !sample_mask[static_cast<size_t>(i)]) { tick(); return; }
+        const Clock::time_point ta = timing ? Clock::now() : Clock::time_point();
+        MSSpectrum loaded;
+        bool loaded_here = false;
+#ifdef FASTAG_HAVE_MZPEAK_LIB
+        if (mreader) { loaded = mreader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
+#endif
+        if (!loaded_here && freader) { loaded = freader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
+        if (!loaded_here && reader) { loaded = reader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
+        const MSSpectrum& spec = loaded_here ? loaded : exp[static_cast<Size>(i)];
+        const Clock::time_point tb = timing ? Clock::now() : ta;
+        record(blk, idx, tag_one(spec, tid), spec);
+        tick();
+        if (timing)
+        {
+          PerThread& q = per_thread[tid];
+          const double r = secs(ta, tb);
+          q.s_read += r;
+          q.s_tag += secs(tb, Clock::now());
+          if (r > 1e-3) { ++q.n_slow; q.s_slow += r; }
+        }
+      };
+      // Dynamic chunks, one schedule for both formats.
+      //
+      // A static split is the wrong shape: it hands every thread the same
+      // COUNT of spectra, which cost different amounts, so the fast threads
+      // sat in the join barrier (measured: 24% of all samples blocked).
+      // Dynamic chunks let a thread that finishes early take more.
+      //
+      // MONOTONIC, which the ring above depends on, and so not guided: guided
+      // over the whole run would hand its first, largest chunks out across
+      // every block at once.
+      //
+      // ponytail: 256, best or tied at every thread count in a sweep of
+      // 64/128/256/512 on kim (two interleaved rounds, parallel phase, s):
+      //   64 threads 1.66/1.67/1.63/1.67 | 128 1.39/1.42/1.35/1.45
+      //  192 1.44/1.37/1.37/1.43         | 256 1.45/1.51/1.44/1.58
+      //
+      // Except for the last threads x 256 spectra, which go out 16 at a
+      // time: the job guided's shrinking chunks did. Where spectra are heavy
+      // one last chunk of 256 is a tail of its own -- a 32,210-spectrum
+      // timsTOF run at 32 threads (~3.4 ms a spectrum) lost 4% to it. The
+      // second loop keeps the hand-out monotonic: a thread only reaches it
+      // once every chunk of the first has been handed out.
+      constexpr int kChunk = 256, kTailChunk = 16;
+      const SignedSize tail_from =
+          std::max<SignedSize>(0, n_spec - static_cast<SignedSize>(read_threads) * kChunk);
+      auto one = [&](SignedSize i)
+      {
+        const size_t k = static_cast<size_t>(i) / BLOCK;
+        if (k >= open_hint.load(std::memory_order_acquire))
+        {
+          const Clock::time_point tw = timing ? Clock::now() : Clock::time_point();
+          std::unique_lock<std::mutex> lock(ring_mutex);
+          ring_cv.wait(lock, [&] { return k < open_upto || write_abort; });
+          if (timing) per_thread[tid].s_ring += secs(tw, Clock::now());
+        }
+        if (!abort_hint.load(std::memory_order_relaxed))
+          work(i, blocks[k % kRing], static_cast<size_t>(i) - k * BLOCK);
+        if (pending[k].fetch_sub(1, std::memory_order_acq_rel) == 1)
+        {
+          std::lock_guard<std::mutex> guard(ring_mutex);
+          ring_cv.notify_all();
+        }
+      };
+#pragma omp for schedule(FASTAG_MONOTONIC dynamic, kChunk) nowait
+      for (SignedSize i = 0; i < tail_from; ++i) one(i);
+#pragma omp for schedule(FASTAG_MONOTONIC dynamic, kTailChunk) nowait
+      for (SignedSize i = tail_from; i < n_spec; ++i) one(i);
+      if (timing) t_done[tid] = Clock::now();
     }
+    const auto t_write_a = Clock::now();
+    t_parallel = secs(t_par_a, t_write_a);
+    if (timing)
+      for (int t = 0; t < read_threads; ++t)
+        per_thread[static_cast<size_t>(t)].s_idle += secs(t_done[static_cast<size_t>(t)], t_write_a);
+    // write= is only what the loop waits for; write_busy= is the writer's own.
+    writer.join();
+    t_write = secs(t_write_a, Clock::now());
+    if (write_failed) std::rethrow_exception(write_failed);
     if (timing)
     {
       const double total = secs(t_loop_start, Clock::now());
@@ -1971,6 +2113,27 @@ protected:
         mzp->nsCounters(nplan, nexec, nrg, nproj);
         std::cerr << " s_plan=" << (nplan / 1e9) << " s_plan_ctor=" << (nexec / 1e9)
                   << " s_rowgroup=" << (nrg / 1e9) << " s_project=" << (nproj / 1e9);
+      }
+#endif
+      std::cerr << std::endl;
+      double s_read = 0, s_slow = 0, s_tag = 0, s_ring = 0, s_idle = 0;
+      size_t n_slow = 0;
+      for (const PerThread& q : per_thread)
+      { s_read += q.s_read; s_slow += q.s_slow; s_tag += q.s_tag; s_ring += q.s_ring; s_idle += q.s_idle; n_slow += q.n_slow; }
+      // Where the team's thread-seconds went, and what the decode cache did:
+      // the split that located this loop's scaling limits (row-group decode
+      // waits, barriers, lock convoys) when the phase timings could not.
+      std::cerr << "FASTAG_THREADS threads=" << read_threads << " read=" << s_read
+                << " slow_reads=" << n_slow << " slow_read=" << s_slow << " tag=" << s_tag
+                << " ring_wait=" << s_ring << " idle=" << s_idle;
+#ifdef FASTAG_HAVE_MZPEAK_LIB
+      if (mzp)
+      {
+        const auto c = mzp->cacheStats();
+        std::cerr << " decodes=" << c.decodes << " decoded_ahead=" << c.ahead << " hits=" << c.hits
+                  << " waits=" << c.waits << " admission_waits=" << c.admission_waits
+                  << " evictions=" << c.evictions << " s_decode=" << c.s_decode
+                  << " s_wait=" << c.s_wait << " s_admit=" << c.s_admit;
       }
 #endif
       std::cerr << std::endl;

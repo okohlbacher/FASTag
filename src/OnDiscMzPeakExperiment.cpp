@@ -321,6 +321,22 @@ namespace FASTag
     return s.decodes + s.hits + s.waits;
   }
 
+  OnDiscMzPeakExperiment::CacheStats OnDiscMzPeakExperiment::cacheStats() const
+  {
+    const auto s = impl_->shared->index.manager()->row_group_cache().stats();
+    CacheStats c;
+    c.decodes = s.decodes;
+    c.ahead = s.ahead_decodes;
+    c.hits = s.hits;
+    c.waits = s.waits;
+    c.admission_waits = s.admission_waits;
+    c.evictions = s.evictions;
+    c.s_decode = static_cast<double>(s.decode_ns) / 1e9;
+    c.s_wait = static_cast<double>(s.wait_ns) / 1e9;
+    c.s_admit = static_cast<double>(s.admission_ns) / 1e9;
+    return c;
+  }
+
   void OnDiscMzPeakExperiment::readCounters(long& plan_group_evals, long& batches,
                                             long& slices) const
   {
