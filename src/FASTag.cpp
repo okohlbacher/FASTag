@@ -37,8 +37,10 @@
 #include "TaxStats.h"
 
 #include <cstdio>
+#include <exception>
 #include <fstream>
 #include <filesystem>
+#include <future>
 #include <csignal>
 #include <iostream>
 #ifdef _WIN32
@@ -1316,14 +1318,23 @@ protected:
     //
     // Results are collected per BLOCK of spectra and written in input order as
     // each block finishes, so the output is identical whatever -threads is set
-    // to while TSV memory stays bounded by the block, not the run. 64k spectra
-    // x ~100 bytes/row is a few MB; the old whole-run buffer held every row of
-    // a 5 GB file at once.
+    // to while TSV memory stays bounded by two blocks (one tagging, one
+    // writing), not the run. 64k spectra x ~100 bytes/row is a few MB; the old
+    // whole-run buffer held every row of a 5 GB file at once.
     const SignedSize n_spec = static_cast<SignedSize>(n_total);
     constexpr size_t BLOCK = 65536;
-    std::vector<std::string> rows;
-    std::vector<std::string> rrows;  ///< block-local recon rows (recon_on only)
-    std::vector<std::string> grows;  ///< block-local glyco rows (glyco_on only)
+    // One block's results at block-local indices. There are two, so the team
+    // can tag into one while the writer thread writes the other.
+    struct Block
+    {
+      size_t base = 0;                 ///< input index of slot 0
+      std::vector<std::string> rows;
+      std::vector<std::string> rrows;  ///< recon rows (recon_on only)
+      std::vector<std::string> grows;  ///< glyco rows (glyco_on only)
+      std::vector<std::vector<std::pair<double, bool>>> rmeta;  ///< (entrap_on only)
+      std::vector<char> keep, keep_target;
+    };
+    Block blocks[2];
     // Two-pass -out_spectra, whatever the formats: record kept INPUT indices
     // during tagging, re-read them at the end. An mzML output streams them
     // through a writing consumer, O(1 spectrum); an mzPeak output re-reads
@@ -1331,14 +1342,25 @@ protected:
     // Every reader here is indexed, so nothing is held during tagging.
     const bool want_out = !out_spectra.empty();
     std::vector<Size> kept_idx;
-    std::vector<char> keep_target;
-    size_t block_base = 0;
-    std::vector<char> keep;
-    std::vector<std::map<int, std::pair<size_t, size_t>>> per_thread_len(
-        static_cast<size_t>(std::max(1, omp_get_max_threads())));
-    std::vector<size_t> per_thread_ms2(per_thread_len.size(), 0),
-                        per_thread_tags(per_thread_len.size(), 0),
-                        per_thread_rep(per_thread_len.size(), 0);
+    // Per-thread accumulators, summed after the loop. One cache-line-aligned
+    // struct per thread, so neighbouring threads' counters never share a line.
+    struct alignas(64) PerThread
+    {
+      std::map<int, std::pair<size_t, size_t>> len;  ///< length -> (seen, matched)
+      size_t ms2 = 0, tags = 0, rep = 0;
+      // Entrapment-calibration accumulators (entrap_on only): target E-values,
+      // and entrapment E-values with their tag length -- the key spaces are
+      // per-length, so each entrapment event is weighted by 1/r_len later.
+      std::vector<double> target_e;
+      std::vector<std::pair<double, int>> entrap_e;
+      // -delta_out accumulators: one (delta, interp) sample per spectrum -- the
+      // best-E-value tag's smallest-|delta| placement -- so 50 correlated tags
+      // cannot flood a bin. Clamped-flank placements are excluded and counted:
+      // a flank clamped to 0 (FASTagger's max(0,.)) makes its delta bogus.
+      std::vector<std::pair<double, std::string>> delta;
+      size_t delta_clamped = 0;
+    };
+    std::vector<PerThread> per_thread(static_cast<size_t>(std::max(1, omp_get_max_threads())));
 
     // The per-spectrum work, shared by every input path.
     //
@@ -1362,28 +1384,18 @@ protected:
       std::vector<std::pair<double, bool>> meta;
       bool any_target = false;  ///< at least one non-entrapment reported tag
     };
-    // Entrapment-calibration accumulators (entrap_on only): target E-values,
-    // and entrapment E-values with their tag length -- the key spaces are
-    // per-length, so each entrapment event is weighted by 1/r_len later.
-    std::vector<std::vector<double>> pt_target_e(per_thread_len.size());
-    std::vector<std::vector<std::pair<double, int>>> pt_entrap_e(per_thread_len.size());
-    // -delta_out accumulators: one (delta, interp) sample per spectrum -- the
-    // best-E-value tag's smallest-|delta| placement -- so 50 correlated tags
-    // cannot flood a bin. Clamped-flank placements are excluded and counted:
-    // a flank clamped to 0 (FASTagger's max(0,.)) makes its delta bogus.
-    std::vector<std::vector<std::pair<double, std::string>>> per_thread_delta(per_thread_len.size());
-    std::vector<size_t> per_thread_delta_clamped(per_thread_len.size(), 0);
 
     auto tag_one = [&](const MSSpectrum& spec, size_t tid) -> SpecResult
     {
       SpecResult res;
       std::string& buf = res.buf;
       if (spec.getMSLevel() != 2 || spec.empty() || spec.getPrecursors().empty()) return res;
-      ++per_thread_ms2[tid];
+      PerThread& pt = per_thread[tid];
+      ++pt.ms2;
 
       const auto& prec = spec.getPrecursors().front();
       const auto tags = FASTag::tagSpectrum(spec, prec.getMZ(), prec.getCharge(), p, tables);
-      per_thread_tags[tid] += tags.size();
+      pt.tags += tags.size();
 
       // Reserve once so the per-field appends below do not repeatedly realloc.
       // ~80 bytes/row covers the fixed columns and a typical native ID; the
@@ -1397,7 +1409,7 @@ protected:
         bool row_entrap = false;
         if (filtering)
         {
-          ++per_thread_len[tid][static_cast<int>(t.n_res)].first;
+          ++pt.len[static_cast<int>(t.n_res)].first;
           const auto h = filt.match(FASTag::baseSequence(t.seq));
           if (h == FASTag::FastaFilter::Hit::None)
           {
@@ -1410,20 +1422,20 @@ protected:
             if (he == FASTag::FastaFilter::Hit::None) continue;
             row_entrap = true;
             hit = (he == FASTag::FastaFilter::Hit::Forward) ? "efwd" : "erev";
-            pt_entrap_e[tid].emplace_back(t.evalue, static_cast<int>(t.n_res));
+            pt.entrap_e.emplace_back(t.evalue, static_cast<int>(t.n_res));
           }
           else
           {
-            ++per_thread_len[tid][static_cast<int>(t.n_res)].second;
+            ++pt.len[static_cast<int>(t.n_res)].second;
             // A reverse-only match identifies the ion series: the tag was read off
             // the b series, so its flanking masses carry a one-water offset.
             hit = (h == FASTag::FastaFilter::Hit::Forward) ? "fwd" : "rev";
-            if (entrap_on) pt_target_e[tid].push_back(t.evalue);
+            if (entrap_on) pt.target_e.push_back(t.evalue);
           }
         }
         if (!row_entrap) res.any_target = true;
         if (entrap_on) res.meta.emplace_back(t.evalue, row_entrap);
-        ++per_thread_rep[tid];
+        ++pt.rep;
 
         appendTagRow(buf, t, spec.getNativeID(), hit, want_proforma, proforma_fixed,
                      p.per_residue_conf);
@@ -1471,8 +1483,8 @@ protected:
             else if (!best->cterm_match) side_flank = best->reversed ? t.nterm_mass : t.cterm_mass;
             const bool clamped_side =
                 std::fabs(best->delta_mass) > 1e-6 && side_flank == 0.0;
-            if (clamped_side) ++per_thread_delta_clamped[tid];
-            else per_thread_delta[tid].emplace_back(best->delta_mass, best->delta_interp);
+            if (clamped_side) ++pt.delta_clamped;
+            else pt.delta.emplace_back(best->delta_mass, best->delta_interp);
             delta_done = true;
           }
         }
@@ -1488,9 +1500,8 @@ protected:
     // vector in lockstep. ~17 bytes/row; a 13 M-row HeLa run is ~220 MB,
     // which is the honest cost of a whole-run calibration curve.
     std::vector<std::pair<double, bool>> row_meta;
-    std::vector<std::vector<std::pair<double, bool>>> rmeta_blk;
 
-    auto record = [&](size_t idx, SpecResult&& r, const MSSpectrum& spec)
+    auto record = [&](Block& b, size_t idx, SpecResult&& r, const MSSpectrum& spec)
     {
       // Glyco covers every spectrum the tagger PROCESSED (MS2, non-empty,
       // precursor-bearing) -- BEFORE the empty-buf gate: glyco spectra are
@@ -1508,7 +1519,7 @@ protected:
         }
         const auto g = FASTag::scanOxonium(*sp, p.frag_tol, p.tol_ppm,
                                            getDoubleOption_("glyco_min_fraction"));
-        std::string& gr = grows[idx];
+        std::string& gr = b.grows[idx];
         gr = spec.getNativeID();
         gr += '\t';
         FASTag::appendNum(gr, g.n_matched); gr += '\t';
@@ -1518,29 +1529,30 @@ protected:
         gr += '\n';
       }
       if (r.buf.empty()) return;  // rbuf is only ever non-empty alongside buf
-      rows[idx].swap(r.buf);
-      if (recon_on) rrows[idx].swap(r.rbuf);
-      if (entrap_on) rmeta_blk[idx].swap(r.meta);
-      keep[idx] = 1;
+      b.rows[idx].swap(r.buf);
+      if (recon_on) b.rrows[idx].swap(r.rbuf);
+      if (entrap_on) b.rmeta[idx].swap(r.meta);
+      b.keep[idx] = 1;
       // A spectrum whose only reported tags are entrapment matches is
       // calibration material, not a hit -- keep it out of -out_spectra.
-      if (want_out) keep_target[idx] = r.any_target ? 1 : 0;
+      if (want_out) b.keep_target[idx] = r.any_target ? 1 : 0;
     };
 
-    // Size the block buffers (capacity is recycled across blocks) and reset
-    // the keep flags. Callers must not resize rows/keep while a parallel block
-    // runs.
-    auto prep_block = [&](size_t n_used)
+    // Size a block's buffers (capacity is recycled across blocks) and reset
+    // its keep flags. Callers must not resize a block while it is being
+    // tagged or written.
+    auto prep_block = [&](Block& b, size_t base, size_t n_used)
     {
-      if (rows.size() < n_used)
+      b.base = base;
+      if (b.rows.size() < n_used)
       {
-        rows.resize(n_used);
-        if (recon_on) rrows.resize(n_used);
-        if (glyco_on) grows.resize(n_used);
-        if (entrap_on) rmeta_blk.resize(n_used);
+        b.rows.resize(n_used);
+        if (recon_on) b.rrows.resize(n_used);
+        if (glyco_on) b.grows.resize(n_used);
+        if (entrap_on) b.rmeta.resize(n_used);
       }
-      keep.assign(n_used, 0);
-      if (want_out) keep_target.assign(n_used, 0);
+      b.keep.assign(n_used, 0);
+      if (want_out) b.keep_target.assign(n_used, 0);
     };
 
     // -species consumes (spectrum id, tag) pairs from the REPORTED rows. They
@@ -1555,33 +1567,38 @@ protected:
     // Write one finished block's rows in index order and recycle the buffers.
     // Kept spectra still accumulate for the whole run: MzMLFile::store writes
     // one map at the end, and -out_spectra is opt-in.
-    auto write_block = [&](size_t n_used)
+    //
+    // Runs on the writer thread, one block at a time and in block order (see
+    // the loop), so everything it appends to -- the streams, the glyco
+    // counters, row_meta, by_spec, kept_idx -- is touched by one thread only
+    // and read after the last write is joined.
+    auto write_block = [&](Block& b, size_t n_used)
     {
       for (size_t i = 0; i < n_used; ++i)
       {
-        if (glyco_on && !grows[i].empty())
+        if (glyco_on && !b.grows[i].empty())
         {
-          gtsv << grows[i];
+          gtsv << b.grows[i];
           // 4th field is the 0/1 flag; count flagged spectra for the summary.
-          size_t tp = grows[i].find('\t');
+          size_t tp = b.grows[i].find('\t');
           for (int f = 0; f < 2 && tp != std::string::npos; ++f)
-            tp = grows[i].find('\t', tp + 1);
-          if (tp != std::string::npos && grows[i].compare(tp + 1, 1, "1") == 0) ++n_glyco;
+            tp = b.grows[i].find('\t', tp + 1);
+          if (tp != std::string::npos && b.grows[i].compare(tp + 1, 1, "1") == 0) ++n_glyco;
           ++n_glyco_scanned;
-          grows[i].clear();
+          b.grows[i].clear();
         }
-        if (!keep[i]) continue;
-        tsv << rows[i];
-        if (recon_on && !rrows[i].empty()) { rtsv << rrows[i]; rrows[i].clear(); }
+        if (!b.keep[i]) continue;
+        tsv << b.rows[i];
+        if (recon_on && !b.rrows[i].empty()) { rtsv << b.rrows[i]; b.rrows[i].clear(); }
         if (entrap_on)
         {
-          row_meta.insert(row_meta.end(), rmeta_blk[i].begin(), rmeta_blk[i].end());
-          rmeta_blk[i].clear();
+          row_meta.insert(row_meta.end(), b.rmeta[i].begin(), b.rmeta[i].end());
+          b.rmeta[i].clear();
         }
         if (want_species)
         {
           // Field 0 = spectrum id, field 1 = tag, per line.
-          const std::string& r = rows[i];
+          const std::string& r = b.rows[i];
           size_t start = 0;
           while (start < r.size())
           {
@@ -1615,8 +1632,8 @@ protected:
             start = nl + 1;
           }
         }
-        rows[i].clear();
-        if (want_out && keep_target[i]) kept_idx.push_back(static_cast<Size>(block_base + i));
+        b.rows[i].clear();
+        if (want_out && b.keep_target[i]) kept_idx.push_back(static_cast<Size>(b.base + i));
       }
     };
 
@@ -1656,9 +1673,6 @@ protected:
       // line is reserved for the end of main_(). Without this the last percent
       // and the completion line print the same text twice.
       bool want = (d == 1) || (pct < 100 && pct > progress_pct.load(std::memory_order_relaxed));
-      // The clock is consulted only every 64th spectrum: the time rule exists for
-      // SLOW runs, where 64 spectra is a rounding error, and this keeps the hot
-      // path free of a clock read per spectrum.
       // The clock is read on EVERY tick, not one in 64. Sampling made the
       // advertised 5 s guarantee false exactly where it matters: at one
       // spectrum per second the gap became ~63 s, and a single slow spectrum
@@ -1733,11 +1747,11 @@ protected:
     // FASTAG_TIMING=1 breaks the run into phases on stderr. Diagnostic only:
     // wall time that no phase claims is the thing worth chasing, and guessing
     // at that split has been wrong twice already in this file's history.
-    // ponytail: steady_clock and four doubles, not a profiler dependency.
+    // ponytail: steady_clock and a few doubles, not a profiler dependency.
     const bool timing = std::getenv("FASTAG_TIMING") != nullptr;
     using Clock = std::chrono::steady_clock;
     const auto t_loop_start = Clock::now();
-    double t_readers = 0, t_prep = 0, t_parallel = 0, t_write = 0;
+    double t_readers = 0, t_prep = 0, t_parallel = 0, t_write = 0, t_write_busy = 0;
     auto secs = [](Clock::time_point a, Clock::time_point b)
     { return std::chrono::duration<double>(b - a).count(); };
 
@@ -1778,10 +1792,11 @@ protected:
     // The READERS are built once per thread, before the loop; the parallel
     // region still opens and closes per block.
     //
-    // Building an mzPeak reader costs 3.83 ms and is SERIALIZED: index.spectra()
-    // re-opens five Parquet members -- a zip_open over the archive's central
-    // directory plus a footer parse each, and the peaks footer alone describes
-    // 363 row groups -- under a process-global mutex. Building them inside the
+    // Building an mzPeak reader costs 3.83 ms: index.spectra() re-opens five
+    // Parquet members -- a zip_open over the archive's central directory plus
+    // a footer parse each, and the peaks footer alone describes 363 row
+    // groups -- and then was SERIALIZED under a process-global mutex (no
+    // longer; they are now built in parallel, below). Building them inside the
     // region paid that BLOCKS x THREADS times: 12 x 192 = 2,304 constructions,
     // 12.7 s of a 16 s run, GROWING with -threads, which is why mzPeak got
     // slower above 64 threads while mzML kept scaling. Measured on the
@@ -1792,7 +1807,8 @@ protected:
     // serial write_block instead of parked outside a closed region: +344 CPU
     // seconds at 192 threads, and the spinners stole enough bandwidth from the
     // writing thread to eat the entire startup saving (16.01 s -> 15.22 s).
-    // Threads must not be inside a region while one of them writes a block.
+    // Threads must not be inside a region while one of them writes a block;
+    // the write overlaps the next block on a thread of its own instead.
     std::vector<std::unique_ptr<OnDiscMSExperiment>> readers(read_threads);
     std::vector<std::unique_ptr<FASTag::IndexedMzMLReader>> freaders(read_threads);
 #ifdef FASTAG_HAVE_MZPEAK_LIB
@@ -1806,20 +1822,64 @@ protected:
       // thread only, which is what both readers document as required.
       if (streaming) readers[t] = std::make_unique<OnDiscMSExperiment>(*ondisc);
       if (fastmz) freaders[t] = std::make_unique<FASTag::IndexedMzMLReader>(*fastmz);
-#ifdef FASTAG_HAVE_MZPEAK_LIB
-      if (mzp) mreaders[t] = std::make_unique<FASTag::OnDiscMzPeakExperiment>(*mzp);
-#endif
     }
+#ifdef FASTAG_HAVE_MZPEAK_LIB
+    // mzPeak copies are built in parallel, by at most 16 threads. A copy costs
+    // ~4.5 ms on the benchmark archive (six Parquet footers, plus a pass over
+    // the shared 718k-entry metadata map inside the library): serially 0.8 s
+    // at 128 threads and 1.6 s at 256 on kim, growing with -threads.
+    //
+    // Not one thread per copy. A copy allocates a few MB, a fresh glibc arena
+    // grows a page at a time through mprotect, and mprotect takes the
+    // process-wide mmap lock: with every thread doing that at once the kernel
+    // sometimes spun instead (256 threads: 7.2 s, 1,691 s of system time).
+    // ponytail: 16 won a sweep of 8/16/32/all on kim (0.2-0.6 s at 128-256
+    // threads); a copy that allocates nothing -- footers shared inside the
+    // library -- would make the cap moot.
+    //
+    // A copy shares only the archive index and its metadata cache, which the
+    // library locks itself. An exception must not leave the region, so the
+    // first one is carried out.
+    if (mzp)
+    {
+      std::exception_ptr failed;
+#pragma omp parallel for num_threads(std::min(read_threads, 16)) schedule(dynamic, 1)
+      for (int t = 0; t < read_threads; ++t)
+      {
+        try
+        {
+          mreaders[t] = std::make_unique<FASTag::OnDiscMzPeakExperiment>(*mzp);
+        }
+        catch (...)
+        {
+#pragma omp critical(fastag_reader_open)
+          if (!failed) failed = std::current_exception();
+        }
+      }
+      if (failed) std::rethrow_exception(failed);
+    }
+#endif
     t_readers = secs(t_readers_a, Clock::now());
 
-    // Serial over blocks, parallel within each: a block's rows hit the disk
-    // before the next block starts.
-    for (SignedSize base = 0; base < n_spec; base += static_cast<SignedSize>(BLOCK))
+    // Serial over blocks, parallel within each, and block k is WRITTEN while
+    // block k+1 is tagged. The write was ~1 s of serial time at every thread
+    // count, with the whole team parked behind it.
+    //
+    // Blocks alternate between the two buffers. The writer is a plain thread,
+    // not an OpenMP one, so no team member spins while it writes. Block k is
+    // handed over only after block k-1 is written, which keeps every file in
+    // input order and means the buffer block k+1 reuses is free again.
+    //
+    // ponytail: std::async per block (a dozen thread starts per run) rather
+    // than a resident writer and a condition variable; it also carries a
+    // write_block exception back to this thread through get().
+    std::future<void> writing;  ///< the previous block's write, if any
+    for (SignedSize base = 0, k = 0; base < n_spec; base += static_cast<SignedSize>(BLOCK), ++k)
     {
       const SignedSize lim = std::min(n_spec, base + static_cast<SignedSize>(BLOCK));
-      block_base = static_cast<size_t>(base);
+      Block& blk = blocks[k & 1];
       const auto t_prep_a = Clock::now();
-      prep_block(static_cast<size_t>(lim - base));
+      prep_block(blk, static_cast<size_t>(base), static_cast<size_t>(lim - base));
       const auto t_par_a = Clock::now();
       t_prep += secs(t_prep_a, t_par_a);
 #pragma omp parallel num_threads(read_threads)
@@ -1841,7 +1901,7 @@ protected:
           if (!loaded_here && freader) { loaded = freader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
           if (!loaded_here && reader) { loaded = reader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
           const MSSpectrum& spec = loaded_here ? loaded : exp[static_cast<Size>(i)];
-          record(static_cast<size_t>(i - base), tag_one(spec, tid), spec);
+          record(blk, static_cast<size_t>(i - base), tag_one(spec, tid), spec);
           tick();
         };
         // One schedule for both formats: dynamic, in chunks.
@@ -1864,8 +1924,22 @@ protected:
       }
       const auto t_write_a = Clock::now();
       t_parallel += secs(t_par_a, t_write_a);
-      write_block(static_cast<size_t>(lim - base));
+      // write= is only what the loop waits for; write_busy= is the writer's own.
+      if (writing.valid()) writing.get();
+      const size_t n_used = static_cast<size_t>(lim - base);
+      writing = std::async(std::launch::async, [&, b = &blk, n_used]
+      {
+        const auto a = Clock::now();
+        write_block(*b, n_used);
+        t_write_busy += secs(a, Clock::now());
+      });
       t_write += secs(t_write_a, Clock::now());
+    }
+    if (writing.valid())
+    {
+      const auto a = Clock::now();
+      writing.get();
+      t_write += secs(a, Clock::now());
     }
     if (timing)
     {
@@ -1874,6 +1948,7 @@ protected:
                 << " pre_loop=" << secs(g_t_program, t_loop_start)
                 << " readers=" << t_readers << " prep=" << t_prep
                 << " parallel=" << t_parallel << " write=" << t_write
+                << " write_busy=" << t_write_busy
                 << " loop_total=" << total
                 << " unaccounted_in_loop="
                 << (total - t_readers - t_prep - t_parallel - t_write)
@@ -1922,41 +1997,12 @@ protected:
     }
 #endif
 
-    // Land the bar on 100%.
-    //
-    // The denominator can be an upper bound the run never reaches: for mzPeak it
-    // comes from setExpectedSize(), which counts every spectrum the file's
-    // metadata describes, while the reader delivers only those with point data
-    // (42,092 of 53,521 on a real Lumos run -- the bar would stop at 79%).
-    // Emitting done==total once at the end costs one line and avoids a GUI that
-    // sits at four-fifths on a finished run.
-    // NOTE: this is deliberately NOT the completion line. It reports that the
-    // TAGGING LOOP finished; species classification and -out_spectra can still
-    // run for many seconds after it, and an earlier version emitted 100% here
-    // and then kept working -- or emitted 100% and then returned an error. The
-    // real completion line is at the end of main_().
-    if (false)
+    for (const PerThread& pt : per_thread)
     {
-      // Skipped when the loop already reported 100%, which the indexed path
-      // does via its d == total case -- otherwise every mzML run ends with the
-      // same line twice.
-      //
-      // total is the LARGER of what was announced and what was delivered, never
-      // the delivered count alone. The mzPeak reader announces every spectrum in
-      // the file but delivers only those with point data (42,092 of 53,521), and
-      // rewriting total downwards made it non-monotonic -- a consumer could not
-      // tell "the reader skipped some" from "the total was always smaller".
-      const long long dd = progress_done.load();
-      const long long tt = std::max(dd, progress_total.load());
-      std::cerr << "FASTAG_PROGRESS done=" << tt << " total=" << tt << std::endl;
-    }
-
-    for (size_t t = 0; t < per_thread_len.size(); ++t)
-    {
-      n_ms2 += per_thread_ms2[t];
-      n_tags += per_thread_tags[t];
-      n_reported += per_thread_rep[t];
-      for (const auto& kv : per_thread_len[t])
+      n_ms2 += pt.ms2;
+      n_tags += pt.tags;
+      n_reported += pt.rep;
+      for (const auto& kv : pt.len)
       {
         by_len[kv.first].first += kv.second.first;
         by_len[kv.first].second += kv.second.second;
@@ -1984,10 +2030,10 @@ protected:
     {
       std::vector<double> target_e;
       std::vector<std::pair<double, int>> entrap_e;
-      for (size_t t = 0; t < pt_target_e.size(); ++t)
+      for (const PerThread& pt : per_thread)
       {
-        target_e.insert(target_e.end(), pt_target_e[t].begin(), pt_target_e[t].end());
-        entrap_e.insert(entrap_e.end(), pt_entrap_e[t].begin(), pt_entrap_e[t].end());
+        target_e.insert(target_e.end(), pt.target_e.begin(), pt.target_e.end());
+        entrap_e.insert(entrap_e.end(), pt.entrap_e.begin(), pt.entrap_e.end());
       }
 
       // Per-length effective ratio r_len = exclusive entrapment keys over
@@ -2133,10 +2179,10 @@ protected:
       {
         std::map<int64_t, std::pair<uint64_t, std::map<std::string, uint64_t>>> bins;
         size_t clamped = 0, samples = 0;
-        for (size_t t = 0; t < per_thread_delta.size(); ++t)
+        for (const PerThread& pt : per_thread)
         {
-          clamped += per_thread_delta_clamped[t];
-          for (const auto& d : per_thread_delta[t])
+          clamped += pt.delta_clamped;
+          for (const auto& d : pt.delta)
           {
             ++samples;
             auto& b = bins[static_cast<int64_t>(std::llround(d.first / 0.0005))];
