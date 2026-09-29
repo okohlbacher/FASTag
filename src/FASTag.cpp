@@ -1822,15 +1822,20 @@ protected:
     //
     // Too small thrashes -- 256 MB cost 2,653 decodes over 363 groups -- and
     // too large just holds memory: 4 GB was slower than 1 GB at both counts.
-    // 64 groups lands on that optimum for this archive's 20 MB groups and
-    // beats v1.2.1 on wall AND memory at 192 threads (12.7 s / 8.1 GB against
+    // 64 groups landed on that optimum for this archive's 20 MB groups and
+    // beat v1.2.1 on wall AND memory at 192 threads (12.7 s / 8.1 GB against
     // 13.9 s / 8.7 GB). -mzpeak_read_memory overrides it.
+    //
+    // 36 since decode-ahead, the DecodePool and key runs (groups ~14 MB): on
+    // the 717,924-spectrum AGXT archive 512 MB (~36 groups) is as fast as the
+    // 896 MB that 64 groups meant -- 1.67 vs 1.66 s at 128 threads, 1.73 vs
+    // 1.69 s at 256 -- for 0.1-0.4 GB less RSS; 256-384 MB cost up to 0.3 s.
     //
     // Sized in DECODED bytes, which is what maxRowGroupBytes() now reports and
     // what the cache charges. The two were briefly in different units, and the
     // budget then silently meant 4.4x what it said.
     const int read_threads = std::max(1, omp_get_max_threads());
-    constexpr size_t kResidentGroups = 64;
+    constexpr size_t kResidentGroups = 36;
 #ifdef FASTAG_HAVE_MZPEAK_LIB
     if (mzp && mzp->maxRowGroupBytes() > 0)
     {
