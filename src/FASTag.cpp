@@ -1330,11 +1330,25 @@ protected:
     std::vector<char> keep_target;
     size_t block_base = 0;
     std::vector<char> keep;
-    std::vector<std::map<int, std::pair<size_t, size_t>>> per_thread_len(
-        static_cast<size_t>(std::max(1, omp_get_max_threads())));
-    std::vector<size_t> per_thread_ms2(per_thread_len.size(), 0),
-                        per_thread_tags(per_thread_len.size(), 0),
-                        per_thread_rep(per_thread_len.size(), 0);
+    // Per-thread accumulators, summed after the loop. One cache-line-aligned
+    // struct per thread, so neighbouring threads' counters never share a line.
+    struct alignas(64) PerThread
+    {
+      std::map<int, std::pair<size_t, size_t>> len;  ///< length -> (seen, matched)
+      size_t ms2 = 0, tags = 0, rep = 0;
+      // Entrapment-calibration accumulators (entrap_on only): target E-values,
+      // and entrapment E-values with their tag length -- the key spaces are
+      // per-length, so each entrapment event is weighted by 1/r_len later.
+      std::vector<double> target_e;
+      std::vector<std::pair<double, int>> entrap_e;
+      // -delta_out accumulators: one (delta, interp) sample per spectrum -- the
+      // best-E-value tag's smallest-|delta| placement -- so 50 correlated tags
+      // cannot flood a bin. Clamped-flank placements are excluded and counted:
+      // a flank clamped to 0 (FASTagger's max(0,.)) makes its delta bogus.
+      std::vector<std::pair<double, std::string>> delta;
+      size_t delta_clamped = 0;
+    };
+    std::vector<PerThread> per_thread(static_cast<size_t>(std::max(1, omp_get_max_threads())));
 
     // The per-spectrum work, shared by every input path.
     //
@@ -1358,28 +1372,18 @@ protected:
       std::vector<std::pair<double, bool>> meta;
       bool any_target = false;  ///< at least one non-entrapment reported tag
     };
-    // Entrapment-calibration accumulators (entrap_on only): target E-values,
-    // and entrapment E-values with their tag length -- the key spaces are
-    // per-length, so each entrapment event is weighted by 1/r_len later.
-    std::vector<std::vector<double>> pt_target_e(per_thread_len.size());
-    std::vector<std::vector<std::pair<double, int>>> pt_entrap_e(per_thread_len.size());
-    // -delta_out accumulators: one (delta, interp) sample per spectrum -- the
-    // best-E-value tag's smallest-|delta| placement -- so 50 correlated tags
-    // cannot flood a bin. Clamped-flank placements are excluded and counted:
-    // a flank clamped to 0 (FASTagger's max(0,.)) makes its delta bogus.
-    std::vector<std::vector<std::pair<double, std::string>>> per_thread_delta(per_thread_len.size());
-    std::vector<size_t> per_thread_delta_clamped(per_thread_len.size(), 0);
 
     auto tag_one = [&](const MSSpectrum& spec, size_t tid) -> SpecResult
     {
       SpecResult res;
       std::string& buf = res.buf;
       if (spec.getMSLevel() != 2 || spec.empty() || spec.getPrecursors().empty()) return res;
-      ++per_thread_ms2[tid];
+      PerThread& pt = per_thread[tid];
+      ++pt.ms2;
 
       const auto& prec = spec.getPrecursors().front();
       const auto tags = FASTag::tagSpectrum(spec, prec.getMZ(), prec.getCharge(), p, tables);
-      per_thread_tags[tid] += tags.size();
+      pt.tags += tags.size();
 
       // Reserve once so the per-field appends below do not repeatedly realloc.
       // ~80 bytes/row covers the fixed columns and a typical native ID; the
@@ -1393,7 +1397,7 @@ protected:
         bool row_entrap = false;
         if (filtering)
         {
-          ++per_thread_len[tid][static_cast<int>(t.n_res)].first;
+          ++pt.len[static_cast<int>(t.n_res)].first;
           const auto h = filt.match(FASTag::baseSequence(t.seq));
           if (h == FASTag::FastaFilter::Hit::None)
           {
@@ -1406,20 +1410,20 @@ protected:
             if (he == FASTag::FastaFilter::Hit::None) continue;
             row_entrap = true;
             hit = (he == FASTag::FastaFilter::Hit::Forward) ? "efwd" : "erev";
-            pt_entrap_e[tid].emplace_back(t.evalue, static_cast<int>(t.n_res));
+            pt.entrap_e.emplace_back(t.evalue, static_cast<int>(t.n_res));
           }
           else
           {
-            ++per_thread_len[tid][static_cast<int>(t.n_res)].second;
+            ++pt.len[static_cast<int>(t.n_res)].second;
             // A reverse-only match identifies the ion series: the tag was read off
             // the b series, so its flanking masses carry a one-water offset.
             hit = (h == FASTag::FastaFilter::Hit::Forward) ? "fwd" : "rev";
-            if (entrap_on) pt_target_e[tid].push_back(t.evalue);
+            if (entrap_on) pt.target_e.push_back(t.evalue);
           }
         }
         if (!row_entrap) res.any_target = true;
         if (entrap_on) res.meta.emplace_back(t.evalue, row_entrap);
-        ++per_thread_rep[tid];
+        ++pt.rep;
 
         appendTagRow(buf, t, spec.getNativeID(), hit, want_proforma, proforma_fixed,
                      p.per_residue_conf);
@@ -1466,8 +1470,8 @@ protected:
             else if (!best->cterm_match) side_flank = best->reversed ? t.nterm_mass : t.cterm_mass;
             const bool clamped_side =
                 std::fabs(best->delta_mass) > 1e-6 && side_flank == 0.0;
-            if (clamped_side) ++per_thread_delta_clamped[tid];
-            else per_thread_delta[tid].emplace_back(best->delta_mass, best->delta_interp);
+            if (clamped_side) ++pt.delta_clamped;
+            else pt.delta.emplace_back(best->delta_mass, best->delta_interp);
             delta_done = true;
           }
         }
@@ -1650,9 +1654,6 @@ protected:
       // line is reserved for the end of main_(). Without this the last percent
       // and the completion line print the same text twice.
       bool want = (d == 1) || (pct < 100 && pct > progress_pct.load(std::memory_order_relaxed));
-      // The clock is consulted only every 64th spectrum: the time rule exists for
-      // SLOW runs, where 64 spectra is a rounding error, and this keeps the hot
-      // path free of a clock read per spectrum.
       // The clock is read on EVERY tick, not one in 64. Sampling made the
       // advertised 5 s guarantee false exactly where it matters: at one
       // spectrum per second the gap became ~63 s, and a single slow spectrum
@@ -1916,41 +1917,12 @@ protected:
     }
 #endif
 
-    // Land the bar on 100%.
-    //
-    // The denominator can be an upper bound the run never reaches: for mzPeak it
-    // comes from setExpectedSize(), which counts every spectrum the file's
-    // metadata describes, while the reader delivers only those with point data
-    // (42,092 of 53,521 on a real Lumos run -- the bar would stop at 79%).
-    // Emitting done==total once at the end costs one line and avoids a GUI that
-    // sits at four-fifths on a finished run.
-    // NOTE: this is deliberately NOT the completion line. It reports that the
-    // TAGGING LOOP finished; species classification and -out_spectra can still
-    // run for many seconds after it, and an earlier version emitted 100% here
-    // and then kept working -- or emitted 100% and then returned an error. The
-    // real completion line is at the end of main_().
-    if (false)
+    for (const PerThread& pt : per_thread)
     {
-      // Skipped when the loop already reported 100%, which the indexed path
-      // does via its d == total case -- otherwise every mzML run ends with the
-      // same line twice.
-      //
-      // total is the LARGER of what was announced and what was delivered, never
-      // the delivered count alone. The mzPeak reader announces every spectrum in
-      // the file but delivers only those with point data (42,092 of 53,521), and
-      // rewriting total downwards made it non-monotonic -- a consumer could not
-      // tell "the reader skipped some" from "the total was always smaller".
-      const long long dd = progress_done.load();
-      const long long tt = std::max(dd, progress_total.load());
-      std::cerr << "FASTAG_PROGRESS done=" << tt << " total=" << tt << std::endl;
-    }
-
-    for (size_t t = 0; t < per_thread_len.size(); ++t)
-    {
-      n_ms2 += per_thread_ms2[t];
-      n_tags += per_thread_tags[t];
-      n_reported += per_thread_rep[t];
-      for (const auto& kv : per_thread_len[t])
+      n_ms2 += pt.ms2;
+      n_tags += pt.tags;
+      n_reported += pt.rep;
+      for (const auto& kv : pt.len)
       {
         by_len[kv.first].first += kv.second.first;
         by_len[kv.first].second += kv.second.second;
@@ -1978,10 +1950,10 @@ protected:
     {
       std::vector<double> target_e;
       std::vector<std::pair<double, int>> entrap_e;
-      for (size_t t = 0; t < pt_target_e.size(); ++t)
+      for (const PerThread& pt : per_thread)
       {
-        target_e.insert(target_e.end(), pt_target_e[t].begin(), pt_target_e[t].end());
-        entrap_e.insert(entrap_e.end(), pt_entrap_e[t].begin(), pt_entrap_e[t].end());
+        target_e.insert(target_e.end(), pt.target_e.begin(), pt.target_e.end());
+        entrap_e.insert(entrap_e.end(), pt.entrap_e.begin(), pt.entrap_e.end());
       }
 
       // Per-length effective ratio r_len = exclusive entrapment keys over
@@ -2127,10 +2099,10 @@ protected:
       {
         std::map<int64_t, std::pair<uint64_t, std::map<std::string, uint64_t>>> bins;
         size_t clamped = 0, samples = 0;
-        for (size_t t = 0; t < per_thread_delta.size(); ++t)
+        for (const PerThread& pt : per_thread)
         {
-          clamped += per_thread_delta_clamped[t];
-          for (const auto& d : per_thread_delta[t])
+          clamped += pt.delta_clamped;
+          for (const auto& d : pt.delta)
           {
             ++samples;
             auto& b = bins[static_cast<int64_t>(std::llround(d.first / 0.0005))];
