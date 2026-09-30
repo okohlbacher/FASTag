@@ -11,8 +11,13 @@
 #include <charconv>
 #include <cstring>
 #include <fstream>
+#include <limits>
 #include <locale.h>
 #include <string_view>
+
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 #if defined(__APPLE__)
 #include <xlocale.h>
@@ -143,6 +148,9 @@ namespace FASTag
       const std::size_t k = xml.find(what, from);
       return k == std::string_view::npos ? fallback : k;
     }
+
+    /// A tag name ends at whitespace or '>': <spectrum is not <spectrumList.
+    bool is_name_end(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '>'; }
   }
 
   /****************************************************************************/
@@ -156,115 +164,150 @@ namespace FASTag
     MzMLSpectrumDecoder decoder;
     std::string buffer;
     bool ok = false;
+    bool rebuilt = false; ///< offsets came from a scan, not the file's index
 
     explicit Impl(std::string p) : path(std::move(p)) {}
   };
+
+  namespace
+  {
+    /// The offsets the file's own index gives, plus the end of the last
+    /// spectrum; null when there is no index or it does not describe this
+    /// file's bytes. Stream @p f is open on a file of @p size bytes.
+    std::shared_ptr<const std::vector<std::uint64_t>> offsets_from_index(std::ifstream& f,
+                                                                         std::int64_t size)
+    {
+      // indexListOffset sits in the last few hundred bytes of an indexed mzML.
+      const std::int64_t tail_len = std::min<std::int64_t>(size, 4096);
+      std::string tail(static_cast<std::size_t>(tail_len), '\0');
+      f.seekg(size - tail_len);
+      f.read(tail.data(), tail_len);
+      if (!f) return nullptr;
+
+      const std::size_t tb = tail.rfind("<indexListOffset>");
+      const std::size_t te = tail.rfind("</indexListOffset>");
+      if (tb == std::string::npos || te == std::string::npos || te <= tb) return nullptr;
+      std::uint64_t index_offset = 0;
+      const std::size_t vb = tb + std::string("<indexListOffset>").size();
+      if (!to_number(std::string_view(tail).substr(vb, te - vb), index_offset)) return nullptr;
+      if (index_offset == 0 || index_offset >= static_cast<std::uint64_t>(size)) return nullptr;
+
+      // The index itself: small next to the run, so it is read whole.
+      std::string index(static_cast<std::size_t>(size - static_cast<std::int64_t>(index_offset)), '\0');
+      f.seekg(static_cast<std::streamoff>(index_offset));
+      f.read(index.data(), static_cast<std::streamsize>(index.size()));
+      if (!f) return nullptr;
+
+      const std::size_t sb = index.find("<index name=\"spectrum\"");
+      if (sb == std::string::npos) return nullptr;
+      // Bounded by whichever comes first: this index's end, or the next index.
+      // A file whose spectrum index is not closed would otherwise swallow the
+      // chromatogram offsets and report them as spectra.
+      const std::size_t se =
+          std::min(find_or(index, "</index>", sb, index.size()),
+                   find_or(index, "<index name=", sb + 1, index.size()));
+
+      auto offsets = std::make_shared<std::vector<std::uint64_t>>();
+      std::size_t k = sb;
+      while (true)
+      {
+        k = index.find("<offset", k);
+        if (k == std::string::npos || k >= se) break;
+        const std::size_t gt = index.find('>', k);
+        if (gt == std::string::npos) break;
+        const std::size_t lt = index.find('<', gt);
+        if (lt == std::string::npos) break;
+        std::uint64_t off = 0;
+        if (!to_number(std::string_view(index).substr(gt + 1, lt - gt - 1), off)) return nullptr;
+        // Ascending is what makes [offset[i], offset[i+1]) a spectrum; an index
+        // that is not ordered is not one this reader can use.
+        if (!offsets->empty() && off <= offsets->back()) return nullptr;
+        offsets->push_back(off);
+        k = lt;
+      }
+      if (offsets->empty()) return nullptr;
+      if (offsets->back() >= index_offset) return nullptr;
+
+      // The terminator: the last spectrum ends where the list does.
+      {
+        const std::int64_t probe_len =
+            std::min<std::int64_t>(static_cast<std::int64_t>(index_offset) -
+                                       static_cast<std::int64_t>(offsets->back()),
+                                   std::int64_t{1} << 22);
+        std::string probe(static_cast<std::size_t>(probe_len), '\0');
+        f.seekg(static_cast<std::streamoff>(offsets->back()));
+        f.read(probe.data(), probe_len);
+        if (!f) return nullptr;
+        const std::size_t end = probe.find("</spectrum>");
+        if (end == std::string::npos) return nullptr;
+        const std::size_t after = end + std::string("</spectrum>").size();
+
+        // The index must list EVERY spectrum, not merely valid ones: a
+        // truncated index parses cleanly and would quietly shorten the run.
+        // After the last one the list must close, with no further spectrum
+        // in between.
+        const std::size_t close = probe.find("</spectrumList>", after);
+        const std::size_t next = probe.find("<spectrum", after);
+        if (close == std::string::npos) return nullptr;      // list never closes in view
+        if (next != std::string::npos && next < close) return nullptr; // more spectra than offsets
+
+        offsets->push_back(offsets->back() + after);
+      }
+
+      // 33 evenly spaced offsets, first and last included, must point
+      // exactly at a <spectrum tag, which is what the mzML index defines an
+      // offset to be.
+      //
+      // An index that is stale -- a file edited, concatenated or truncated
+      // after it was written -- otherwise decodes garbage, and garbage here is
+      // the worst kind of failure: domParseSpectrum throws per spectrum, every
+      // spectrum comes back empty, and the run reports a clean zero. Refused
+      // here, such a file has its offsets rebuilt by a scan instead.
+      //
+      // Exactly, not "a tag somewhere in the next 64 bytes" (the earlier
+      // rule): an index shifted by a few bytes passed that, and every range
+      // read from it then started inside the previous spectrum and stopped
+      // short of its own closing tag -- empty spectra, silently. One probe
+      // passes a file whose header is intact and whose body has shifted, and
+      // three (also the earlier rule) pass a file patched only between them;
+      // 33 cost 33 reads of 16 bytes.
+      // ponytail: sampled, not exhaustive -- an edit that shifts no sampled
+      // offset still gets through; check every offset if one ever does.
+      {
+        const std::size_t last = offsets->size() - 2; // -1 is the terminator
+        std::string head(16, '\0');
+        for (std::size_t j = 0; j <= 32; ++j)
+        {
+          const std::size_t k = last * j / 32;
+          f.seekg(static_cast<std::streamoff>((*offsets)[k]));
+          f.read(head.data(), static_cast<std::streamsize>(head.size()));
+          if (!f || head.compare(0, 9, "<spectrum") != 0 || !is_name_end(head[9])) return nullptr;
+        }
+      }
+      return offsets;
+    }
+  }
 
   /****************************************************************************/
   IndexedMzMLReader::IndexedMzMLReader(const std::string& path)
     : impl_(std::make_unique<Impl>(path))
   {
-    std::ifstream f(path, std::ios::binary);
-    if (!f) return;
-    f.seekg(0, std::ios::end);
-    const std::int64_t size = f.tellg();
-    if (size <= 0) return;
-
-    // indexListOffset sits in the last few hundred bytes of an indexed mzML.
-    const std::int64_t tail_len = std::min<std::int64_t>(size, 4096);
-    std::string tail(static_cast<std::size_t>(tail_len), '\0');
-    f.seekg(size - tail_len);
-    f.read(tail.data(), tail_len);
-    if (!f) return;
-
-    const std::size_t tb = tail.rfind("<indexListOffset>");
-    const std::size_t te = tail.rfind("</indexListOffset>");
-    if (tb == std::string::npos || te == std::string::npos || te <= tb) return;
-    std::uint64_t index_offset = 0;
-    const std::size_t vb = tb + std::string("<indexListOffset>").size();
-    if (!to_number(std::string_view(tail).substr(vb, te - vb), index_offset)) return;
-    if (index_offset == 0 || index_offset >= static_cast<std::uint64_t>(size)) return;
-
-    // The index itself: small next to the run, so it is read whole.
-    std::string index(static_cast<std::size_t>(size - static_cast<std::int64_t>(index_offset)), '\0');
-    f.seekg(static_cast<std::streamoff>(index_offset));
-    f.read(index.data(), static_cast<std::streamsize>(index.size()));
-    if (!f) return;
-
-    const std::size_t sb = index.find("<index name=\"spectrum\"");
-    if (sb == std::string::npos) return;
-    // Bounded by whichever comes first: this index's end, or the next index.
-    // A file whose spectrum index is not closed would otherwise swallow the
-    // chromatogram offsets and report them as spectra.
-    const std::size_t se =
-        std::min(find_or(index, "</index>", sb, index.size()),
-                 find_or(index, "<index name=", sb + 1, index.size()));
-
-    auto offsets = std::make_shared<std::vector<std::uint64_t>>();
-    std::size_t k = sb;
-    while (true)
+    std::shared_ptr<const std::vector<std::uint64_t>> offsets;
     {
-      k = index.find("<offset", k);
-      if (k == std::string::npos || k >= se) break;
-      const std::size_t gt = index.find('>', k);
-      if (gt == std::string::npos) break;
-      const std::size_t lt = index.find('<', gt);
-      if (lt == std::string::npos) break;
-      std::uint64_t off = 0;
-      if (!to_number(std::string_view(index).substr(gt + 1, lt - gt - 1), off)) return;
-      // Ascending is what makes [offset[i], offset[i+1]) a spectrum; an index
-      // that is not ordered is not one this reader can use.
-      if (!offsets->empty() && off <= offsets->back()) return;
-      offsets->push_back(off);
-      k = lt;
-    }
-    if (offsets->empty()) return;
-    if (offsets->back() >= index_offset) return;
-
-    // The terminator: the last spectrum ends where the list does.
-    {
-      const std::int64_t probe_len =
-          std::min<std::int64_t>(static_cast<std::int64_t>(index_offset) -
-                                     static_cast<std::int64_t>(offsets->back()),
-                                 std::int64_t{1} << 22);
-      std::string probe(static_cast<std::size_t>(probe_len), '\0');
-      f.seekg(static_cast<std::streamoff>(offsets->back()));
-      f.read(probe.data(), probe_len);
+      std::ifstream f(path, std::ios::binary);
       if (!f) return;
-      const std::size_t end = probe.find("</spectrum>");
-      if (end == std::string::npos) return;
-      const std::size_t after = end + std::string("</spectrum>").size();
-
-      // The index must list EVERY spectrum, not merely valid ones: a
-      // truncated index parses cleanly and would quietly shorten the run.
-      // After the last one the list must close, with no further spectrum
-      // in between.
-      const std::size_t close = probe.find("</spectrumList>", after);
-      const std::size_t next = probe.find("<spectrum", after);
-      if (close == std::string::npos) return;      // list never closes in view
-      if (next != std::string::npos && next < close) return; // more spectra than offsets
-
-      offsets->push_back(offsets->back() + after);
+      f.seekg(0, std::ios::end);
+      const std::int64_t size = f.tellg();
+      if (size <= 0) return;
+      offsets = offsets_from_index(f, size);
     }
-
-    // Three offsets are checked to actually point at a spectrum: first,
-    // middle and last.
-    //
-    // An index that is stale -- a file edited, concatenated or truncated
-    // after it was written -- otherwise decodes garbage, and garbage here is
-    // the worst kind of failure: domParseSpectrum throws per spectrum, every
-    // spectrum comes back empty, and the run reports a clean zero. Checking
-    // one offset would pass on a file whose header is intact and whose body
-    // has shifted; checking three costs two extra reads.
+    // No index, or a stale one: find the spectra in the bytes themselves.
+    if (!offsets)
     {
-      const std::size_t last = offsets->size() - 2; // -1 is the terminator
-      for (const std::size_t k : {std::size_t{0}, last / 2, last})
-      {
-        std::string head(64, '\0');
-        f.seekg(static_cast<std::streamoff>((*offsets)[k]));
-        f.read(head.data(), static_cast<std::streamsize>(head.size()));
-        if (!f || head.find("<spectrum") == std::string::npos) return;
-      }
+      auto scanned = scanSpectrumOffsets(path);
+      if (scanned.size() < 2) return; // no spectrumList, or an empty one
+      offsets = std::make_shared<const std::vector<std::uint64_t>>(std::move(scanned));
+      impl_->rebuilt = true;
     }
 
     impl_->offsets = offsets;
@@ -272,10 +315,108 @@ namespace FASTag
     impl_->ok = impl_->in.good();
   }
 
+  std::vector<std::uint64_t> IndexedMzMLReader::scanSpectrumOffsets(const std::string& path,
+                                                                     std::size_t chunk_bytes)
+  {
+    constexpr std::string_view kOpen = "<spectrum";
+    constexpr std::string_view kListOpen = "<spectrumList";
+    constexpr std::string_view kListClose = "</spectrumList";
+    // Read past each piece's end by more than the longest needle plus the
+    // byte after it, so a tag that starts in this piece is always seen whole.
+    constexpr std::size_t kOverlap = 32;
+    constexpr std::uint64_t kNone = std::numeric_limits<std::uint64_t>::max();
+
+    std::uint64_t size = 0;
+    {
+      std::ifstream f(path, std::ios::binary | std::ios::ate);
+      if (!f) return {};
+      const std::streamoff end = f.tellg();
+      if (end <= 0) return {};
+      size = static_cast<std::uint64_t>(end);
+    }
+    chunk_bytes = std::max(chunk_bytes, kOverlap);
+    const std::uint64_t n_pieces = (size + chunk_bytes - 1) / chunk_bytes;
+
+    struct Piece
+    {
+      std::vector<std::uint64_t> spectra;
+      std::uint64_t list_open = kNone;  ///< first <spectrumList starting in this piece
+      std::uint64_t list_close = kNone; ///< first </spectrumList starting in this piece
+      bool read = true;
+    };
+    std::vector<Piece> pieces(static_cast<std::size_t>(n_pieces));
+    auto tag_at = [](std::string_view v, std::size_t k, std::string_view name) {
+      return v.compare(k, name.size(), name) == 0 && k + name.size() < v.size() &&
+             is_name_end(v[k + name.size()]);
+    };
+
+    // Up to 16 threads: the scan is bound by reading the file, not by the
+    // search, and each thread holds one piece in memory.
+    int threads = 1;
+#ifdef _OPENMP
+    threads = std::max(1, std::min(omp_get_max_threads(), 16));
+#endif
+#pragma omp parallel num_threads(threads)
+    {
+      std::ifstream in(path, std::ios::binary);
+      std::string buf;
+#pragma omp for schedule(dynamic, 1)
+      for (std::int64_t p = 0; p < static_cast<std::int64_t>(n_pieces); ++p)
+      {
+        Piece& piece = pieces[static_cast<std::size_t>(p)];
+        const std::uint64_t begin = static_cast<std::uint64_t>(p) * chunk_bytes;
+        const std::uint64_t own = std::min<std::uint64_t>(chunk_bytes, size - begin);
+        const std::uint64_t len = std::min<std::uint64_t>(own + kOverlap, size - begin);
+        buf.resize(static_cast<std::size_t>(len));
+        in.clear();
+        in.seekg(static_cast<std::streamoff>(begin));
+        in.read(buf.data(), static_cast<std::streamsize>(len));
+        if (!in)
+        {
+          piece.read = false;
+          continue;
+        }
+        const std::string_view v(buf);
+        for (std::size_t k = v.find('<'); k != std::string_view::npos && k < own; k = v.find('<', k + 1))
+        {
+          if (tag_at(v, k, kOpen)) piece.spectra.push_back(begin + k);
+          else if (piece.list_open == kNone && tag_at(v, k, kListOpen)) piece.list_open = begin + k;
+          else if (piece.list_close == kNone && tag_at(v, k, kListClose)) piece.list_close = begin + k;
+        }
+      }
+    }
+
+    std::uint64_t list_open = kNone, list_close = kNone;
+    for (const Piece& piece : pieces)
+    {
+      if (!piece.read) return {};
+      if (list_open == kNone) list_open = piece.list_open;
+      if (list_open != kNone && list_close == kNone && piece.list_close != kNone &&
+          piece.list_close > list_open)
+      {
+        list_close = piece.list_close;
+      }
+    }
+    if (list_open == kNone || list_close == kNone) return {};
+
+    std::vector<std::uint64_t> offsets;
+    for (const Piece& piece : pieces)
+    {
+      for (const std::uint64_t off : piece.spectra)
+      {
+        if (off > list_open && off < list_close) offsets.push_back(off);
+      }
+    }
+    if (offsets.empty()) return {};
+    offsets.push_back(list_close);
+    return offsets;
+  }
+
   IndexedMzMLReader::IndexedMzMLReader(const IndexedMzMLReader& other)
     : impl_(std::make_unique<Impl>(other.impl_->path))
   {
     impl_->offsets = other.impl_->offsets;
+    impl_->rebuilt = other.impl_->rebuilt;
     if (!other.impl_->ok) return;
     impl_->in.open(impl_->path, std::ios::binary);
     impl_->ok = impl_->in.good();
@@ -284,6 +425,8 @@ namespace FASTag
   IndexedMzMLReader::~IndexedMzMLReader() = default;
 
   bool IndexedMzMLReader::ok() const { return impl_->ok; }
+
+  bool IndexedMzMLReader::indexRebuilt() const { return impl_->rebuilt; }
 
   Size IndexedMzMLReader::getNrSpectra() const
   {

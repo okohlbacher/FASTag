@@ -8,7 +8,7 @@
 Partial sequence tags from peptide MS/MS spectra, and a filter that keeps only
 the spectra whose tags occur in sequences you supply.
 
-**14.6x faster than DirecTag** across a 13-run corpus, at **126 MB** peak memory
+**30x faster than DirecTag** across a 13-run corpus, at **126 MB** peak memory
 on a 9 GB file, reaching the **same 98.6%** accuracy ceiling. A reimplementation of the
 [DirecTag](https://doi.org/10.1021/pr800154p) algorithm as an
 [OpenMS](https://www.openms.de) TOPP tool. The citation — Tabb et al.,
@@ -241,8 +241,12 @@ saying so, rather than reporting a clean run over an empty file.
 **Large mzML files read 2.6 to 3.8x faster since v1.2.0**, and in a fraction of
 the memory. FASTag reads the mzML index directly and takes each spectrum's
 metadata from the same XML it decodes for peaks, so there is no serial
-metadata pass before tagging starts. Files without a usable index, and
-`-out_spectra` runs (which need run-level metadata), load metadata up front
+metadata pass before tagging starts. A file with no index, or a stale one
+(a tool edited it without rewriting the index), has its spectrum offsets
+rebuilt by a parallel scan -- 0.26 s for 6 GB -- and is then read the same
+way; before v1.5.0 it was loaded whole, serially (52.9 s and 7.2 GB instead of
+2.86 s and 0.5 GB on the file that exposed it). `-out_spectra` runs (which
+need run-level metadata) still load metadata up front
 instead.
 
 | input | before | after |

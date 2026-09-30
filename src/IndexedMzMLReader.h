@@ -23,6 +23,14 @@
 // files, software) is NOT read, so a run that needs it (-out_spectra) still
 // goes through OnDiscMSExperiment.
 //
+// NO INDEX, OR A STALE ONE: the spectrum offsets are rebuilt by scanning the
+// file for <spectrum> start tags, in parallel, and the file is then read the
+// same way. A stale index is the common case, not an exotic one: any tool
+// that patches an mzML in place (adding precursor values, say) without
+// rewriting its index leaves every offset after the first edit pointing
+// into the wrong bytes. Refusing such a file used to cost a serial full
+// load -- 52.8 s instead of 4.5 s on a 6 GB diaTracer run.
+//
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
 #pragma once
@@ -39,9 +47,11 @@ namespace FASTag
   class IndexedMzMLReader
   {
   public:
-    /// Reads the index. Never throws: check ok(), and fall back to
-    /// OnDiscMSExperiment when it is false (no index, an index that does not
-    /// point at spectra, an unreadable file).
+    /// Reads the index, or rebuilds the offsets by scanning the file when it
+    /// has no index or one that does not point at its spectra (see
+    /// indexRebuilt()). Never throws: check ok(), and fall back to
+    /// OnDiscMSExperiment when it is false (an unreadable file, or one with
+    /// no spectrumList).
     explicit IndexedMzMLReader(const std::string& path);
     /// A per-thread reader over the same file: shares the parsed index,
     /// opens its own handle and owns its own decoder. Safe to call
@@ -52,6 +62,25 @@ namespace FASTag
 
     bool ok() const;
     OpenMS::Size getNrSpectra() const;
+    /// True when the file's own index was missing or stale and the offsets
+    /// came from scanning the file instead.
+    bool indexRebuilt() const;
+
+    /// The byte offset of every <spectrum> element inside the spectrumList,
+    /// ascending, followed by the offset of </spectrumList> as the end of the
+    /// last one; empty when the file has no complete spectrumList. Found by
+    /// scanning the bytes, not by trusting an index: pieces of @p chunk_bytes
+    /// are searched in parallel (up to 16 threads, within
+    /// omp_get_max_threads()), each reading a few bytes past its end so a tag
+    /// split across two pieces is found by the piece it starts in.
+    /// @p chunk_bytes changes only how the work is split, never the result;
+    /// it is a parameter so the test can prove that.
+    ///
+    /// ponytail: a <spectrum tag inside an XML comment within the
+    /// spectrumList would be taken for a spectrum. No mzML writer emits one;
+    /// skip comments here if one ever does.
+    static std::vector<std::uint64_t> scanSpectrumOffsets(const std::string& path,
+                                                          std::size_t chunk_bytes = std::size_t{4} << 20);
 
     /// Spectrum @p i with native id, MS level, retention time (in SECONDS, as
     /// OpenMS wants) and precursors.

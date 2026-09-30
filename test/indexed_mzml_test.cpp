@@ -52,6 +52,48 @@ namespace
       return {};
     }
   }
+
+  std::string slurp(const std::string& path)
+  {
+    std::ifstream in(path, std::ios::binary);
+    return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  }
+
+  void spit(const std::string& path, const std::string& bytes)
+  {
+    std::ofstream out(path, std::ios::binary);
+    out << bytes;
+  }
+
+  /// Every spectrum @p got reads must equal what @p want reads: offsets are
+  /// only proved right by reading the whole file through them.
+  void same_spectra(FASTag::IndexedMzMLReader& got, FASTag::IndexedMzMLReader& want,
+                    const std::string& what)
+  {
+    check(got.getNrSpectra() == want.getNrSpectra(), what + ": same spectrum count");
+    const Size n = std::min(got.getNrSpectra(), want.getNrSpectra());
+    Size bad = 0;
+    for (Size i = 0; i < n; ++i)
+    {
+      const MSSpectrum a = got.getSpectrum(i);
+      const MSSpectrum b = want.getSpectrum(i);
+      bool same = a.getMSLevel() == b.getMSLevel() && a.getRT() == b.getRT() &&
+                  a.getNativeID() == b.getNativeID() && a.size() == b.size() &&
+                  a.getPrecursors().size() == b.getPrecursors().size();
+      for (Size k = 0; same && k < a.size(); ++k)
+      {
+        same = a[k].getMZ() == b[k].getMZ() && a[k].getIntensity() == b[k].getIntensity();
+      }
+      for (Size k = 0; same && k < a.getPrecursors().size(); ++k)
+      {
+        same = a.getPrecursors()[k].getMZ() == b.getPrecursors()[k].getMZ() &&
+               a.getPrecursors()[k].getCharge() == b.getPrecursors()[k].getCharge();
+      }
+      if (!same) ++bad;
+    }
+    check(n > 0 && bad == 0, what + ": every spectrum reads the same (" + std::to_string(bad) +
+                                 " of " + std::to_string(n) + " differ)");
+  }
 }
 
 int main(int argc, char** argv)
@@ -148,32 +190,74 @@ int main(int argc, char** argv)
   check(with_prec > 0, "fixture exercises precursors");
   check(with_charge > 0, "fixture exercises precursor charges");
 
-  // A file with no index is refused rather than half-read. Written here
-  // rather than assumed of the fixture, which is itself indexed.
+  check(!reader.indexRebuilt(), "a valid index is used, not rebuilt");
+
+  // The scan finds the same spectra however the file is cut into pieces:
+  // sizes around the 32-byte overlap and odd ones put tag starts on every
+  // kind of boundary.
+  {
+    const auto whole = FASTag::IndexedMzMLReader::scanSpectrumOffsets(indexed);
+    check(whole.size() == reader.getNrSpectra() + 1, "scan finds every spectrum, plus the list end");
+    for (const std::size_t chunk : {std::size_t{1}, std::size_t{31}, std::size_t{32}, std::size_t{33},
+                                    std::size_t{57}, std::size_t{1000}, std::size_t{65536}})
+    {
+      check(FASTag::IndexedMzMLReader::scanSpectrumOffsets(indexed, chunk) == whole,
+            "scan result does not depend on the piece size (" + std::to_string(chunk) + ")");
+    }
+  }
+
+  // A file with no index is read all the same: its offsets are rebuilt by
+  // scanning. Written here rather than assumed of the fixture, which is
+  // itself indexed.
   {
     const std::string plain = rewrite(fixture, tmp + "/fastag_plain_fixture.mzML", false);
     if (!plain.empty())
     {
       FASTag::IndexedMzMLReader unindexed(plain);
-      check(!unindexed.ok(), "an mzML without an index is refused");
+      check(unindexed.ok() && unindexed.indexRebuilt(), "an mzML without an index is scanned");
+      if (unindexed.ok()) same_spectra(unindexed, reader, "no index");
     }
   }
-  // A truncated index is refused too: the offsets still parse, but they no
-  // longer point at spectra.
+  // So is a file whose index is stale -- the offsets still parse, but no
+  // longer point at spectra. Two edits, as tools make them: bytes inserted
+  // before the spectrumList, which moves every offset; and bytes inserted
+  // inside the middle spectrum (whitespace, so its content is unchanged),
+  // which moves only the offsets after it, and indexListOffset.
   {
-    const std::string mangled = tmp + "/fastag_stale_index.mzML";
-    std::ifstream src(indexed, std::ios::binary);
-    std::string bytes((std::istreambuf_iterator<char>(src)), std::istreambuf_iterator<char>());
-    if (bytes.size() > 4096)
+    const std::string bytes = slurp(indexed);
+    const std::size_t list = bytes.find("<spectrumList");
+    check(list != std::string::npos, "fixture has a spectrumList");
+    std::size_t mid = list;
+    for (Size i = 0; i <= reader.getNrSpectra() / 2 && mid != std::string::npos; ++i)
     {
-      // Shift the body so every recorded offset is wrong.
-      bytes.insert(bytes.find("<spectrum"), std::string(64, ' '));
-      std::ofstream out(mangled, std::ios::binary);
-      out << bytes;
-      out.close();
-      FASTag::IndexedMzMLReader stale(mangled);
-      check(!stale.ok(), "an index that no longer points at spectra is refused");
+      mid = bytes.find("<spectrum ", mid + 1);
     }
+    const std::size_t inside = mid == std::string::npos ? mid : bytes.find("<binaryDataArrayList", mid);
+    check(inside != std::string::npos, "fixture's middle spectrum has arrays");
+    if (list != std::string::npos && inside != std::string::npos)
+    {
+      std::string shifted = bytes;
+      shifted.insert(list, std::string(64, ' '));
+      spit(tmp + "/fastag_stale_index.mzML", shifted);
+      FASTag::IndexedMzMLReader stale(tmp + "/fastag_stale_index.mzML");
+      check(stale.ok() && stale.indexRebuilt(), "an index shifted as a whole is rebuilt");
+      if (stale.ok()) same_spectra(stale, reader, "index shifted as a whole");
+
+      std::string patched = bytes;
+      patched.insert(inside, "\n          ");
+      spit(tmp + "/fastag_stale_mid.mzML", patched);
+      FASTag::IndexedMzMLReader mid_stale(tmp + "/fastag_stale_mid.mzML");
+      check(mid_stale.ok() && mid_stale.indexRebuilt(), "an index stale from the middle on is rebuilt");
+      if (mid_stale.ok()) same_spectra(mid_stale, reader, "index stale from the middle on");
+    }
+  }
+  // An XML file with no spectrumList holds nothing to scan for.
+  {
+    spit(tmp + "/fastag_no_list.mzML", "<?xml version=\"1.0\"?>\n<mzML><run id=\"r\"></run></mzML>\n");
+    check(FASTag::IndexedMzMLReader::scanSpectrumOffsets(tmp + "/fastag_no_list.mzML").empty(),
+          "no spectrumList, no offsets");
+    FASTag::IndexedMzMLReader none(tmp + "/fastag_no_list.mzML");
+    check(!none.ok(), "a file with no spectrumList is refused");
   }
   // So is a file that does not exist.
   {
