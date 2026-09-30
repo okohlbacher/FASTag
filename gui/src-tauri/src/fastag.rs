@@ -112,7 +112,7 @@ fn parse_version(text: &str) -> Option<String> {
     let idx = text.find("Version:")?;
     let rest = text[idx + "Version:".len()..].trim_start();
     let tok: String = rest.chars().take_while(|c| !c.is_whitespace() && *c != ',').collect();
-    if tok.chars().next().map_or(false, |c| c.is_ascii_digit()) {
+    if tok.chars().next().is_some_and(|c| c.is_ascii_digit()) {
         Some(tok)
     } else {
         None
@@ -353,7 +353,7 @@ pub fn run(app: AppHandle, state: State<'_, RunManager>, params: RunParams) -> R
         {
             let st = a_done.state::<RunManager>();
             let mut cur = st.current.lock().unwrap();
-            if cur.as_ref().map_or(false, |c| c.run_id == run_id) {
+            if cur.as_ref().is_some_and(|c| c.run_id == run_id) {
                 *cur = None;
             }
         }

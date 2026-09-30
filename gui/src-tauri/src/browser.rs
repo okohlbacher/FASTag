@@ -190,8 +190,8 @@ impl Resolved {
                 .as_ref()
                 .filter(|s| !s.is_empty())
                 .and_then(|s| col("spectrum").map(|i| (i, s.to_lowercase()))),
-            min_length: spec.min_length.and_then(|v| col("length").map(|i| (i, v))),
-            max_evalue: spec.max_evalue.and_then(|v| col("evalue").map(|i| (i, v))),
+            min_length: col("length").zip(spec.min_length),
+            max_evalue: col("evalue").zip(spec.max_evalue),
             fasta_hit: match spec.fasta_hit.as_deref() {
                 Some("only") => col("fasta_hit").map(|i| (i, true)),
                 Some("none") => col("fasta_hit").map(|i| (i, false)),
