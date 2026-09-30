@@ -364,24 +364,33 @@ namespace FASTag
       for (std::int64_t p = 0; p < static_cast<std::int64_t>(n_pieces); ++p)
       {
         Piece& piece = pieces[static_cast<std::size_t>(p)];
-        const std::uint64_t begin = static_cast<std::uint64_t>(p) * chunk_bytes;
-        const std::uint64_t own = std::min<std::uint64_t>(chunk_bytes, size - begin);
-        const std::uint64_t len = std::min<std::uint64_t>(own + kOverlap, size - begin);
-        buf.resize(static_cast<std::size_t>(len));
-        in.clear();
-        in.seekg(static_cast<std::streamoff>(begin));
-        in.read(buf.data(), static_cast<std::streamsize>(len));
-        if (!in)
+        // No exception may leave the parallel region (std::terminate), and
+        // this reader promises not to throw: a piece that fails is unread.
+        try
+        {
+          const std::uint64_t begin = static_cast<std::uint64_t>(p) * chunk_bytes;
+          const std::uint64_t own = std::min<std::uint64_t>(chunk_bytes, size - begin);
+          const std::uint64_t len = std::min<std::uint64_t>(own + kOverlap, size - begin);
+          buf.resize(static_cast<std::size_t>(len));
+          in.clear();
+          in.seekg(static_cast<std::streamoff>(begin));
+          in.read(buf.data(), static_cast<std::streamsize>(len));
+          if (!in)
+          {
+            piece.read = false;
+            continue;
+          }
+          const std::string_view v(buf);
+          for (std::size_t k = v.find('<'); k != std::string_view::npos && k < own; k = v.find('<', k + 1))
+          {
+            if (tag_at(v, k, kOpen)) piece.spectra.push_back(begin + k);
+            else if (piece.list_open == kNone && tag_at(v, k, kListOpen)) piece.list_open = begin + k;
+            else if (piece.list_close == kNone && tag_at(v, k, kListClose)) piece.list_close = begin + k;
+          }
+        }
+        catch (...)
         {
           piece.read = false;
-          continue;
-        }
-        const std::string_view v(buf);
-        for (std::size_t k = v.find('<'); k != std::string_view::npos && k < own; k = v.find('<', k + 1))
-        {
-          if (tag_at(v, k, kOpen)) piece.spectra.push_back(begin + k);
-          else if (piece.list_open == kNone && tag_at(v, k, kListOpen)) piece.list_open = begin + k;
-          else if (piece.list_close == kNone && tag_at(v, k, kListClose)) piece.list_close = begin + k;
         }
       }
     }
