@@ -16,10 +16,9 @@
 #include <OpenMS/FORMAT/FileHandler.h>
 #include <OpenMS/KERNEL/MSExperiment.h>
 #include <OpenMS/KERNEL/OnDiscMSExperiment.h>
-#ifdef FASTAG_HAVE_MZPEAK_LIB
 #include "IndexedMzMLReader.h"
+#ifdef FASTAG_HAVE_MZPEAK_LIB
 #include "OnDiscMzPeakExperiment.h"
-#include <functional>
 #endif
 
 #include "FASTagger.h"
