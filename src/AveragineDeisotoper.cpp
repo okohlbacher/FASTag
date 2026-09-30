@@ -46,10 +46,6 @@ namespace FASTag
     /// and NOT yet normalised: it returns the sum, and the caller divides each
     /// entry by it when it first reads it -- the same division, so the same
     /// double. Most candidates fail at their first isotope and read two.
-    ///
-    /// Not memoised: its argument is a candidate's own neutral mass, which no
-    /// other candidate in the run shares except by coincidence, so an exact
-    /// cache would never hit and a cache by rounded mass would not be exact.
     double approximateIntensities(double mass, double (&result)[MAX_ISOPEAKS])
     {
       const double factor = mass / 1800.0;  // lambda * mass, lambda from Bellew et al.
@@ -65,8 +61,8 @@ namespace FASTag
       return sum;
     }
 
-    /// Per-thread buffers. The tagging loop calls this once per spectrum on
-    /// every worker, and OpenMS allocated all of these (and more) each time.
+    /// Per-thread buffers: the tagging loop calls this once per spectrum on
+    /// every worker, so they keep their capacity.
     struct Scratch
     {
       std::vector<int>      charge;     ///< per peak: its cluster's charge if monoisotopic, else 0
@@ -78,12 +74,6 @@ namespace FASTag
       std::vector<uint32_t> kept_idx;   ///< input index of every survivor whose m/z is unchanged
       std::vector<std::pair<Peak1D, uint32_t>> moved;  ///< survivors moved to charge 1, with input index
     };
-
-    Scratch& scratch()
-    {
-      thread_local Scratch s;
-      return s;
-    }
   }
 
   void deisotopeAveragine(MSSpectrum& spec, double fragment_tolerance, bool fragment_unit_ppm,
@@ -107,7 +97,7 @@ namespace FASTag
       if (spec[i].getIntensity() >= INTENSITY_THRESHOLD) spec[n++] = spec[i];
     spec.resize(n);
 
-    Scratch& S = scratch();
+    static thread_local Scratch S;
     const size_t n_charges = static_cast<size_t>(std::max(0, max_charge));
     S.charge.assign(n, 0);
     S.clustered.assign(n, 0);
