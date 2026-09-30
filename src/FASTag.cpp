@@ -126,26 +126,27 @@ namespace
     return static_cast<int>(k);
   }
 
+  /// Directory holding the bundled taxonomy, or "" when there is none:
+  /// $FASTAG_TAXONOMY_DIR (a custom or larger reference set), else a
+  /// directory beside the executable.
+  ///
+  /// Anchored to the EXECUTABLE, not OPENMS_DATA_PATH: this is FASTag's own
+  /// data, and a user pointing OPENMS_DATA_PATH at a system OpenMS must not
+  /// silently lose the taxonomy that shipped beside the binary they run.
   String taxonomyDir_()
   {
     const char* env = std::getenv("FASTAG_TAXONOMY_DIR");
     if (env != nullptr && *env != '\0' && File::isDirectory(String(env))) return String(env);
 
-    // Two layouts, because the project ships both:
+    // Both layouts the project ships:
     //   ../share/FASTag/taxonomy   a normal `cmake --install` tree (bin/ + share/)
     //   ./share-FASTag-taxonomy    the release tarball, which is flat: the
     //                              executable sits at the root next to lib/ and
     //                              share-OpenMS/, so there is no ../share to find.
-    // Checking only the first would leave -species broken in every release while
-    // working perfectly from a local install -- the worst way to get this wrong.
-    // A directory only counts if it actually HOLDS the taxonomy. Accepting the
-    // first that merely exists meant an empty ../share/FASTag/taxonomy masked a
-    // complete share-FASTag-taxonomy beside it -- exactly the layout a release
-    // has if the index was never installed.
     // Prefer a directory that has the INDEX (a fully usable set), then one with
     // the dumps (installable -- the index is a separate download), then any that
-    // merely exists (so the error names a real path). Without the index-first
-    // pass, a dumps-only install tree masked a complete flat-release dir.
+    // merely exists (so the error names a real path). First-that-exists would
+    // let an empty or dumps-only install tree mask a complete one beside it.
     const String exe = File::getExecutablePath();
     const String cands[] = {exe + "../share/FASTag/taxonomy",
                             exe + "share-FASTag-taxonomy",
@@ -205,12 +206,9 @@ protected:
   {
     // No setValidFormats_ on the two spectrum files. TOPPBase validates that
     // list against OpenMS's FileTypes enum at registration and throws on a
-    // name it does not know, and MZPEAK exists only on one OpenMS feature
-    // branch -- so naming mzpeak here is what forced every release to build
-    // OpenMS from source. Left unrestricted, TOPPBase skips the check and the
-    // extension is decided below, where an unsupported one is refused with
-    // its own message. The description carries what --help's format list
-    // used to.
+    // name it does not know, and stock OpenMS has no MZPEAK. Left
+    // unrestricted, TOPPBase skips the check and main_ decides by extension,
+    // refusing an unsupported one with its own message.
 #ifdef FASTAG_HAVE_MZPEAK_LIB
     registerInputFile_("in", "<file>", "", "Input spectra (mzML or mzpeak)", /*required=*/false);
 #else
@@ -339,6 +337,22 @@ protected:
                   "(Stitch/ALPS via tools/tags_to_denovo.py) read as local "
                   "confidence");
 
+    // Entrapment-calibrated q-values for the -fasta membership filter.
+    // Adds a q_db column: the estimated FALSE-MATCH rate of accepting every
+    // tag at or below a row's E-value -- i.e. how often a tag this good hits
+    // the database by chance, calibrated by sequences the sample cannot
+    // contain. q_db is NOT the probability the tag misreads its precursor: a
+    // correct ladder read of a co-isolated chimeric peptide legitimately
+    // matches the target database and is not false under this null (which is
+    // why this null works where single-spectrum decoys measure an empty one).
+    registerInputFile_("entrapment_fasta", "<file>", "",
+                       "Entrapment database (foreign species the sample cannot "
+                       "contain; phylogenetically distant, e.g. archaea for a "
+                       "mammalian sample). Requires -fasta. Appends a q_db "
+                       "column and marks entrapment-only matches efwd/erev "
+                       "in fasta_hit", false);
+    setValidFormats_("entrapment_fasta", ListUtils::create<String>("fasta"));
+
     // Tag reconciliation (TagRecon stage A+B) at proteome scale: place each
     // reported tag onto tryptic windows of a database by its flanking masses
     // and localize/interpret the single mass gap the flanks imply. Runs on a
@@ -348,23 +362,6 @@ protected:
     // (residues x lengths), while reconciliation needs only the ~150 MB
     // locate index, so a proteome-scale -recon_fasta must not force the
     // filter's build.
-    // Entrapment-calibrated q-values for the -fasta membership filter.
-    // Adds a q_db column: the estimated FALSE-MATCH rate of accepting every
-    // tag at or below a row's E-value -- i.e. how often a tag this good hits
-    // the database by chance, calibrated by sequences the sample cannot
-    // contain. q_db is NOT the probability the tag misreads its precursor: a
-    // correct ladder read of a co-isolated chimeric peptide legitimately
-    // matches the target database and is not false under this null (which is
-    // exactly why this null works where single-spectrum decoys measured an
-    // empty one -- see doc/BACKLOG.md F4).
-    registerInputFile_("entrapment_fasta", "<file>", "",
-                       "Entrapment database (foreign species the sample cannot "
-                       "contain; phylogenetically distant, e.g. archaea for a "
-                       "mammalian sample). Requires -fasta. Appends a q_db "
-                       "column and marks entrapment-only matches efwd/erev "
-                       "in fasta_hit", false);
-    setValidFormats_("entrapment_fasta", ListUtils::create<String>("fasta"));
-
     registerOutputFile_("recon_out", "<file>", "",
                         "Reconcile reported tags against a protein database and write "
                         "one row per placement (protein, peptide, position, flank "
@@ -425,9 +422,7 @@ protected:
     registerIntOption_("species_min_len", "<n>", 0,
                        "Ignore tags shorter than this for taxonomy; 0 uses the index k", false);
     setMinInt_("species_min_len", 0);
-    // Near-neighbour control. Both filters are identities at their defaults, so
-    // the pre-1.5 behaviour is reproducible exactly; the deconvolution below is
-    // the part that is on.
+    // Near-neighbour control. Both filters are identities at their defaults.
     registerDoubleOption_("species_max_kmer_share", "<f>", 1.0,
                           "Ignore k-mers carried by more than this fraction of the indexed taxa: "
                           "a k-mer in most of the reference cannot tell taxa apart. 1 keeps all", false);
@@ -560,6 +555,9 @@ protected:
     return out;
   }
 
+  /// Resolve OpenMS/UniMod modification names to FASTag::ModSpec via
+  /// ModificationsDB. Terminal mods are skipped with a note -- they are absorbed
+  /// into the reported flanking masses, not the internal residue alphabet.
   void resolveMods_(const StringList& names, bool variable, std::vector<FASTag::ModSpec>& out)
   {
     // Fetched on the first name, not up front: building the database parses
@@ -695,7 +693,7 @@ protected:
     {
       // Whole-run machinery is meaningless per-block: -out_spectra re-reads
       // indexed input, q_db needs the full curve, -species aggregates a run,
-      // and the filter/recon paths are not per-spectrum-latency material yet.
+      // and the filter/recon paths are not per-spectrum-latency material.
       for (const char* opt : {"fasta", "entrapment_fasta", "recon_out", "species_out",
                               "taxdb", "out_spectra", "delta_out"})
         if (!getStringOption_(opt).empty())
@@ -946,43 +944,16 @@ protected:
       }
     }
 
-    // Stream from disk rather than loading the run into memory.
-    //
-    // loadExperiment() reads the whole file into a PeakMap first: measured at
-    // 7.1 GB peak RSS for a 5.3 GB mzML, with most of the wall time spent in that
-    // single-threaded load. OnDiscMSExperiment reads one spectrum at a time from
-    // an indexed mzML, so memory becomes O(threads) instead of O(file).
-    //
-    // It is documented as NOT thread-safe -- it holds an open stream -- so each
-    // worker gets its own copy, exactly as the class comment prescribes. Falls
-    // back to a full load when the file carries no index, since random access is
-    // then impossible.
-    // Skip the up-front metadata pass; each worker reads its own spectrum's
-    // metadata from the block it already parses.
-    //
-    // openFile() otherwise calls loadMetaData_(), a fully serial parse of every
-    // spectrum's metadata before any work starts -- ~55 s of a 60 s run on S23,
-    // and the reason wall time stopped improving past 16 threads however many
-    // cores it was given.
-    //
-    // REQUIRES a patched OpenMS. Stock MzMLSpectrumDecoder::domParseSpectrum()
-    // fills the binary data and native ID only, so with skipMetaData every
-    // spectrum has MS level 0 and no precursor and the run silently returns
-    // nothing. The patch harvests MS level, RT and precursors from the DOM that
-    // function already builds; verified identical to the canonical parser across
-    // all 632,677 spectra of S23. Guarded below rather than assumed.
-    //
-    // -out_spectra still needs getMetaData() for the run-level settings, so that
-    // path keeps the full load.
-    // mzPeak is read through OnDiscMzPeakExperiment, the library-backed twin
-    // of OnDiscMSExperiment below, so both formats feed the same loop. Decided
-    // by extension, not by OpenMS's FileTypes: that enum has no MZPEAK outside
-    // one feature branch, and the format now lives entirely in the external
-    // library.
-    //
-    // Which writer -out_spectra gets is decided from ITS extension, not the
-    // input's, so mzML->mzpeak and mzpeak->mzML both work as a side effect of
-    // tagging.
+    // Input readers. Every one reads a spectrum at a time from an indexed
+    // file, so memory is O(threads), not O(file), and each worker gets its
+    // own copy (none is thread-safe):
+    //   .mzpeak  OnDiscMzPeakExperiment, over the external library
+    //   .mzML    IndexedMzMLReader, which needs no up-front metadata parse;
+    //            else OnDiscMSExperiment (-out_spectra needs its run-level
+    //            metadata); else, with no usable index, a full load.
+    // The format is decided by extension, not by OpenMS's FileTypes, which
+    // has no MZPEAK. -out_spectra's writer follows ITS extension, so
+    // mzML->mzpeak and mzpeak->mzML both work as a side effect of tagging.
     const auto has_ext = [](const String& p, const char* ext) {
       String lower(p);
       lower.toLower();  // mutates, so on a copy
@@ -1004,9 +975,7 @@ protected:
     const bool mzpeak_in = is_mzpeak(in);
     const bool mzpeak_out = !out_spectra.empty() && is_mzpeak(out_spectra);
 #ifndef FASTAG_HAVE_MZPEAK_LIB
-    // Refuse up front, with the reason. The alternative -- OpenMS's own
-    // MzPeakFile -- implemented the pre-0.7.0 layout and read every current
-    // archive as zero spectra, so there is no fallback worth having.
+    // No fallback: OpenMS's own MzPeakFile reads only the pre-0.7.0 layout.
     if (mzpeak_in || mzpeak_out)
     {
       OPENMS_LOG_ERROR << "This build has no mzPeak support: it was configured without "
@@ -1035,9 +1004,8 @@ protected:
     }
 #endif
     // The fast mzML path: our own index-driven reader, which fills the
-    // metadata OpenMS's per-spectrum decoder drops and so needs no up-front
-    // metadata parse at all (see IndexedMzMLReader.h -- that parse is 4.0 s of
-    // a 9.1 s run on a 1.8 GB file, serial and immune to -threads).
+    // metadata OpenMS's per-spectrum decoder drops and so needs no serial
+    // up-front metadata parse (see IndexedMzMLReader.h).
     //
     // Only when -out_spectra is off: writing needs run-level settings
     // (instrument, source files), which this reader deliberately does not
@@ -1091,20 +1059,14 @@ protected:
     }
     // Refuse to run blind on an unpatched OpenMS.
     //
-    // Without the patch every spectrum comes back at MS level 1 (the
-    // default-constructed value, never overwritten) with no precursor, so the
-    // MS2 test rejects all of them and the tool reports a clean run with an
-    // empty output file. That is the worst possible failure -- indistinguishable
-    // from a file that genuinely holds no MS2 -- so probe for it and take the
-    // slow path instead of producing a confident nothing.
-    //
-    // The probe checks for level 2 WITH a precursor -- what tag_one() actually
-    // requires -- not merely "level > 0". A bare ">0" is satisfied by the very
-    // default this guard exists to catch (level 1 is > 0), so it passed on
-    // spectrum 0 of every file regardless of what the reader actually reported,
-    // and the fallback never engaged. Confirmed against a real 617 MB Thermo
-    // file built with stock bioconda OpenMS: every spectrum read back at level 1
-    // through the fast path, 0 of 53,521 MS2 spectra found, no warning printed.
+    // openFile(in, true) above skips OpenMS's serial metadata pre-pass, which
+    // is only correct when its per-spectrum decoder reports MS level and
+    // precursors, which takes a patched OpenMS. Stock OpenMS
+    // leaves every spectrum at the default MS level 1 with no precursor, so
+    // the MS2 test would reject all of them and the run would report a clean,
+    // empty result. Probe for level 2 WITH a precursor -- what tag_one()
+    // requires; "level > 0" is satisfied by that very default -- and reload
+    // with metadata instead of producing a confident nothing.
     if (streaming && out_spectra.empty() && !mzpeak_in && !fastmz)
     {
       bool have_meta = false;
@@ -1121,11 +1083,9 @@ protected:
                            "loading metadata up front instead. Expect roughly a "
                            "minute of extra single-threaded startup on a large file."
                         << std::endl;
-        // A fresh instance, not a second openFile() on this one: calling
-        // openFile() again on the SAME OnDiscMSExperiment crashed (EXC_BAD_ACCESS
-        // inside MSSpectrum's copy constructor, reached via getSpectrum()) on the
-        // same real file this whole guard exists for -- this fallback had never
-        // actually run before, since the old ">0" probe never triggered it.
+        // A fresh instance: a second openFile() on the SAME OnDiscMSExperiment
+        // crashes in getSpectrum() (EXC_BAD_ACCESS in MSSpectrum's copy
+        // constructor).
         ondisc = std::make_unique<OnDiscMSExperiment>();
         ondisc->openFile(in);
       }
@@ -1169,32 +1129,22 @@ protected:
     // matched at that tolerance either.
     const auto t_probe_a = std::chrono::steady_clock::now();
     {
-      // 64 samples, not 200. The test is coarse (does the tightest spacing
-      // anywhere exceed 20x the tolerance?), and every sample costs a read --
-      // on a profile archive it costs a CENTROIDING too, and consecutive
-      // sampling hits far more MS2 than the old strided one did, which made
-      // 200 samples 0.16 s of a 0.67 s run.
+      // 64 samples: the test is coarse (does the tightest spacing anywhere
+      // exceed 20x the tolerance?), and every sample costs a read -- on a
+      // profile archive a CENTROIDING too.
       const Size want = std::min<Size>(n_total, 64);
-      // Sampled in a few CLUSTERS of consecutive spectra, not strided across
-      // the whole run.
-      //
-      // Striding cost more than the tagging it precedes. A columnar reader
-      // decodes a whole row group to reach one spectrum, and 200 evenly
-      // spaced indices land in ~200 different groups, so the probe decoded
-      // the entire archive single-threaded before any tagging started: 2.8 s
-      // of a 5.1 s run on an 874 MB archive. Clusters touch a handful of
-      // groups instead, and cost nothing on mzML either (fewer, more local
-      // reads). Several clusters rather than one because a run changes over
-      // its gradient, and the probe is looking for the file's TIGHTEST peak
-      // spacing, not a typical one.
+      // In a few CLUSTERS of consecutive spectra, not strided across the run:
+      // a columnar reader decodes a whole row group to reach one spectrum, so
+      // strided samples would decode most of the archive, single-threaded,
+      // before tagging starts. Several clusters rather than one because a run
+      // changes over its gradient, and the probe wants the file's TIGHTEST
+      // peak spacing, not a typical one.
       constexpr Size kClusters = 8;  // 8 spectra each
       const Size per_cluster = std::max<Size>(1, want / kClusters);
       const Size cluster_step = std::max<Size>(1, n_total / kClusters);
       // The closest pair per cluster as (spacing, m/z), merged in cluster
       // order below, so the answer is the serial one -- the FIRST closest pair
-      // -- whichever thread read which cluster. (A running cap of `want`
-      // samples used to sit on these loops; 8 clusters of want/8 can never
-      // reach it.)
+      // -- whichever thread read which cluster.
       std::vector<std::pair<double, double>> closest(kClusters, {std::numeric_limits<double>::max(), 0.0});
       auto scan_cluster = [&](Size c, auto&& read)
       {
@@ -1215,9 +1165,8 @@ protected:
       };
       int probe_threads = 1;
 #ifdef FASTAG_HAVE_MZPEAK_LIB
-      // On mzPeak a cluster costs a row-group decode, ~13 ms each on the
-      // benchmark archive, so the clusters are read in parallel through a
-      // reader copy each (~1 ms): 0.11 s of serial start-up before this.
+      // On mzPeak a cluster costs a row-group decode, so the clusters are
+      // read in parallel, through a (cheap) reader copy each.
       if (mzp) probe_threads = std::min(static_cast<int>(kClusters), omp_get_max_threads());
       if (probe_threads > 1)
       {
@@ -1343,8 +1292,7 @@ protected:
     // Results are collected per BLOCK of spectra and written in input order as
     // each block finishes, so the output is identical whatever -threads is set
     // to while TSV memory stays bounded by three blocks (being written, being
-    // finished, being started), not the run. 64k spectra x ~100 bytes/row is
-    // a few MB; the old whole-run buffer held every row of a 5 GB file at once.
+    // finished, being started), not the run.
     const SignedSize n_spec = static_cast<SignedSize>(n_total);
     constexpr size_t BLOCK = 65536;
     // One block's results at block-local indices. There are kRing of them: the
@@ -1359,16 +1307,13 @@ protected:
       std::vector<std::vector<std::pair<double, bool>>> rmeta;  ///< (entrap_on only)
       std::vector<char> keep, keep_target;
     };
-    // ponytail: three, not four. A fourth only helped within noise (128
-    // threads: 1.41 -> 1.36 s parallel; 256: 1.64 -> 1.67) for another block
-    // of rows held in memory.
+    // Three: a fourth only helped within noise, for another block of rows
+    // held in memory.
     constexpr size_t kRing = 3;
     Block blocks[kRing];
     // Two-pass -out_spectra, whatever the formats: record kept INPUT indices
-    // during tagging, re-read them at the end. An mzML output streams them
-    // through a writing consumer, O(1 spectrum); an mzPeak output re-reads
-    // them into memory, O(kept), because the library writer takes a whole run.
-    // Every reader here is indexed, so nothing is held during tagging.
+    // during tagging, re-read and stream them to the writer at the end. Every
+    // reader here is indexed, so nothing is held during tagging.
     const bool want_out = !out_spectra.empty();
     std::vector<Size> kept_idx;
     // Per-thread accumulators, summed after the loop. One cache-line-aligned
@@ -1401,15 +1346,9 @@ protected:
     //
     // Takes its thread id rather than calling omp_get_thread_num() internally,
     // and returns its rows rather than writing them: the caller owns where a
-    // result lands. That is what lets a second input path reuse this without the
-    // two drifting apart, which is the failure mode that matters here -- two
-    // readers that mostly agree are worse than one.
-    //
-    // Callers must not resize rows/keep while this runs.
-    //
-    // Returns the tag rows and (when -recon_out) the reconciliation rows for
-    // one spectrum, as strings the caller places by index -- one result type
-    // so the two files can never desynchronize their ordering discipline.
+    // result lands. Returns the tag rows and (when -recon_out) the
+    // reconciliation rows for one spectrum -- one result type, so the two
+    // files can never desynchronize their ordering.
     struct SpecResult
     {
       std::string buf, rbuf;
@@ -1527,15 +1466,14 @@ protected:
       return res;
     };
 
-    // Record one spectrum's result at its BLOCK-LOCAL index. Serial or
-    // parallel: the index is the caller's, so output order never depends on
-    // scheduling.
     // Per-row (evalue, is_entrapment) in FILE order, appended block by block
     // in write_block -- the q_db post-pass walks the written TSV and this
-    // vector in lockstep. ~17 bytes/row; a 13 M-row HeLa run is ~220 MB,
-    // which is the honest cost of a whole-run calibration curve.
+    // vector in lockstep. ~17 bytes/row: the cost of a whole-run calibration
+    // curve.
     std::vector<std::pair<double, bool>> row_meta;
 
+    // Record one spectrum's result at its BLOCK-LOCAL index. The index is the
+    // caller's, so output order never depends on scheduling.
     auto record = [&](Block& b, size_t idx, SpecResult&& r, const MSSpectrum& spec)
     {
       // Glyco covers every spectrum the tagger PROCESSED (MS2, non-empty,
@@ -1749,41 +1687,18 @@ protected:
       }
     };
 
-    // EVERY thread reads and tags. The two used to be one number: readers were
-    // capped so that two row groups per reader fit the cache budget, and the
-    // budget was then re-sized to that reader count -- so memory grew with the
-    // thread count, and capping readers capped tagging with them.
+    // EVERY thread reads and tags. The mzPeak cache ADMITS decodes against its
+    // budget (a decode waits when the bytes already in flight leave no room),
+    // so peak memory follows the budget, not the thread count, and reading
+    // self-limits to as many concurrent decodes as the budget allows.
     //
-    // The cache now ADMITS decodes against its budget (a decode waits when the
-    // bytes already in flight leave no room), so peak memory follows the
-    // budget and not the thread count. That decouples the two: the budget is
-    // sized to the ARCHIVE, tagging gets every core, and reading self-limits
-    // to as many concurrent decodes as the budget allows.
-    //
-    // A FIXED number of resident row groups, NOT one that scales with -threads.
-    // The budget used to scale because in-flight groups were unevictable and
-    // each reader pinned its own, so memory grew whether or not it bought
-    // anything. Admission control removed that, and a sweep on a 363-group
-    // archive then showed the optimum is thread-INDEPENDENT -- 1 GB won at
-    // both thread counts (wall time, 9.07 GB / 762,016 spectra):
-    //
-    //    64 threads:  256 MB 17.7 s | 512 MB 10.7 s | 1 GB 10.9 s | 4 GB 11.6 s
-    //   192 threads:  256 MB 14.4 s | 512 MB 12.9 s | 1 GB 12.7 s | 4 GB 13.3 s
-    //
-    // Too small thrashes -- 256 MB cost 2,653 decodes over 363 groups -- and
-    // too large just holds memory: 4 GB was slower than 1 GB at both counts.
-    // 64 groups landed on that optimum for this archive's 20 MB groups and
-    // beat v1.2.1 on wall AND memory at 192 threads (12.7 s / 8.1 GB against
-    // 13.9 s / 8.7 GB). -mzpeak_read_memory overrides it.
-    //
-    // 36 since decode-ahead, the DecodePool and key runs (groups ~14 MB): on
-    // the 717,924-spectrum AGXT archive 512 MB (~36 groups) is as fast as the
-    // 896 MB that 64 groups meant -- 1.67 vs 1.66 s at 128 threads, 1.73 vs
-    // 1.69 s at 256 -- for 0.1-0.4 GB less RSS; 256-384 MB cost up to 0.3 s.
-    //
-    // Sized in DECODED bytes, which is what maxRowGroupBytes() now reports and
-    // what the cache charges. The two were briefly in different units, and the
-    // budget then silently meant 4.4x what it said.
+    // A FIXED number of resident row groups, not one that scales with
+    // -threads: sweeps put the optimum at the same budget for every thread
+    // count. Too small thrashes (a group evicted before the next thread
+    // reaches it is decoded again); too large only holds memory. 36 groups
+    // (~512 MB of ~14 MB groups on the benchmark archive) was as fast as 64
+    // for less RSS. -mzpeak_read_memory overrides it. Sized in DECODED bytes,
+    // which is what maxRowGroupBytes() reports and what the cache charges.
     const int read_threads = std::max(1, omp_get_max_threads());
     constexpr size_t kResidentGroups = 36;
 #ifdef FASTAG_HAVE_MZPEAK_LIB
@@ -1798,9 +1713,7 @@ protected:
 #endif
 
     // FASTAG_TIMING=1 breaks the run into phases on stderr. Diagnostic only:
-    // wall time that no phase claims is the thing worth chasing, and guessing
-    // at that split has been wrong twice already in this file's history.
-    // ponytail: steady_clock and a few doubles, not a profiler dependency.
+    // wall time that no phase claims is the thing worth chasing.
     const bool timing = std::getenv("FASTAG_TIMING") != nullptr;
     using Clock = std::chrono::steady_clock;
     const auto t_loop_start = Clock::now();
@@ -1815,12 +1728,11 @@ protected:
     // of 1024 therefore caps a run at roughly 170 threads, and past it the
     // archive fails to open with "Too many open files" -- which surfaces as an
     // unrelated-looking OpenMS exception rather than anything about
-    // descriptors. Measured on a 384-core host: -threads 224 and above aborted
-    // until the soft limit was raised, then ran at 2.97-3.06 s.
+    // descriptors.
     //
     // Raising the SOFT limit toward the hard one needs no privileges; it is
-    // what the hard limit is for. ponytail: only raise, never lower, and stay
-    // quiet unless it cannot be done.
+    // what the hard limit is for. Only raise, never lower, and stay quiet
+    // unless it cannot be done.
 #ifndef _WIN32
     {
       struct rlimit lim{};
@@ -1842,25 +1754,9 @@ protected:
     }
 #endif
 
-    // The READERS are built once per thread, before the loop.
-    //
-    // Building an mzPeak reader costs 3.83 ms: index.spectra() re-opens five
-    // Parquet members -- a zip_open over the archive's central directory plus
-    // a footer parse each, and the peaks footer alone describes 363 row
-    // groups -- and then was SERIALIZED under a process-global mutex (no
-    // longer; they are now built in parallel, below). Building them inside the
-    // region paid that BLOCKS x THREADS times: 12 x 192 = 2,304 constructions,
-    // 12.7 s of a 16 s run, GROWING with -threads, which is why mzPeak got
-    // slower above 64 threads while mzML kept scaling. Measured on the
-    // benchmark archive at 192 threads: 12.69 s of startup -> 4.91 s.
-    //
-    // Hoisting the REGION as well was first tried with the writes still done
-    // by a team member between barriers, and reverted: it left 191 threads
-    // spinning on the barriers around the serial write_block, +344 CPU seconds
-    // at 192 threads, and the spinners stole enough bandwidth from the writing
-    // thread to eat the entire startup saving (16.01 s -> 15.22 s). The region
-    // is now hoisted with no barrier around a write at all: a thread of its
-    // own writes, and nobody spins while it does (see the loop).
+    // One reader per thread, built before the loop. An mzPeak reader costs
+    // milliseconds (it re-opens several Parquet members, a zip_open plus a
+    // footer parse each), so those are built in parallel, below.
     std::vector<std::unique_ptr<OnDiscMSExperiment>> readers(read_threads);
     std::vector<std::unique_ptr<FASTag::IndexedMzMLReader>> freaders(read_threads);
 #ifdef FASTAG_HAVE_MZPEAK_LIB
@@ -1876,18 +1772,12 @@ protected:
       if (fastmz) freaders[t] = std::make_unique<FASTag::IndexedMzMLReader>(*fastmz);
     }
 #ifdef FASTAG_HAVE_MZPEAK_LIB
-    // mzPeak copies are built in parallel, by at most 16 threads. A copy costs
-    // ~4.5 ms on the benchmark archive (six Parquet footers, plus a pass over
-    // the shared 718k-entry metadata map inside the library): serially 0.8 s
-    // at 128 threads and 1.6 s at 256 on kim, growing with -threads.
-    //
-    // Not one thread per copy. A copy allocates a few MB, a fresh glibc arena
-    // grows a page at a time through mprotect, and mprotect takes the
-    // process-wide mmap lock: with every thread doing that at once the kernel
-    // sometimes spun instead (256 threads: 7.2 s, 1,691 s of system time).
-    // ponytail: 16 won a sweep of 8/16/32/all on kim (0.2-0.6 s at 128-256
-    // threads); a copy that allocates nothing -- footers shared inside the
-    // library -- would make the cap moot.
+    // mzPeak copies are built in parallel, by at most 16 threads: serially
+    // they grow with -threads (~1 s at 128). Not one thread per copy: a copy
+    // allocates a few MB, a fresh glibc arena grows a page at a time through
+    // mprotect, and mprotect takes the process-wide mmap lock, so with every
+    // thread doing that at once the kernel spins instead. 16 won a sweep of
+    // 8/16/32/all.
     //
     // A copy shares only the archive index and its metadata cache, which the
     // library locks itself. An exception must not leave the region, so the
@@ -1914,17 +1804,11 @@ protected:
     t_readers = secs(t_readers_a, Clock::now());
 
     // ONE parallel region over the whole run. Blocks only bound the memory the
-    // results take; a writer thread empties them in input order.
-    //
-    // The region used to open and close once per block, with block k written
-    // while block k+1 was tagged. Every close is a barrier, and on an mzPeak
-    // input every open is a stall as well: each thread's first read in a new
-    // block lands on a row group nobody has decoded yet. Measured on a
-    // 347-group, 717,924-spectrum archive at 128 threads: 27 of 271
-    // thread-seconds idle in the barriers and 54 in those first reads, with the
-    // loop stuck at ~2.1 s from 64 threads up. With one region the frontier
-    // just runs on into the next block, and the stragglers of one block
-    // overlap the start of the next instead of holding it back.
+    // results take; a writer thread empties them in input order. A region per
+    // block would put a barrier at every block end and, on mzPeak, a stall at
+    // every block start (each thread's first read lands on an undecoded row
+    // group); with one region the stragglers of one block overlap the start
+    // of the next instead.
     //
     // A ring of kRing buffers. Chunks are handed out in index order
     // (monotonic), so a thread reaching block k knows every earlier chunk is
@@ -1935,8 +1819,9 @@ protected:
     // taking the frontier.
     //
     // The writer is a plain thread, not a team member, and both sides wait on
-    // a condition variable: nobody spins while a block is written, which is
-    // what sank the first attempt at hoisting the region (see the readers).
+    // a condition variable: nobody spins while a block is written (spinning
+    // team members steal enough bandwidth from the writer to cost more than
+    // the single region saves).
     const size_t n_blocks = static_cast<size_t>((n_spec + static_cast<SignedSize>(BLOCK) - 1)
                                                 / static_cast<SignedSize>(BLOCK));
     auto block_size = [&](size_t k)
@@ -2031,22 +1916,17 @@ protected:
       //
       // A static split is the wrong shape: it hands every thread the same
       // COUNT of spectra, which cost different amounts, so the fast threads
-      // sat in the join barrier (measured: 24% of all samples blocked).
-      // Dynamic chunks let a thread that finishes early take more.
+      // sit in the join barrier. Dynamic chunks let a thread that finishes
+      // early take more.
       //
       // MONOTONIC, which the ring above depends on, and so not guided: guided
       // over the whole run would hand its first, largest chunks out across
-      // every block at once.
-      //
-      // ponytail: 256, best or tied at every thread count in a sweep of
-      // 64/128/256/512 on kim (two interleaved rounds, parallel phase, s):
-      //   64 threads 1.66/1.67/1.63/1.67 | 128 1.39/1.42/1.35/1.45
-      //  192 1.44/1.37/1.37/1.43         | 256 1.45/1.51/1.44/1.58
+      // every block at once. 256 was best or tied at every thread count in a
+      // sweep of 64/128/256/512.
       //
       // Except for the last threads x 256 spectra, which go out 16 at a
       // time: the job guided's shrinking chunks did. Where spectra are heavy
-      // one last chunk of 256 is a tail of its own -- a 32,210-spectrum
-      // timsTOF run at 32 threads (~3.4 ms a spectrum) lost 4% to it. The
+      // (timsTOF, ~3 ms each) one last chunk of 256 is a tail of its own. The
       // second loop keeps the hand-out monotonic: a thread only reaches it
       // once every chunk of the first has been handed out.
       constexpr int kChunk = 256, kTailChunk = 16;
@@ -2285,8 +2165,7 @@ protected:
       if (ok)
       {
         // std::filesystem::rename replaces an existing destination on every
-        // platform; C rename() refuses to on Windows, which killed the
-        // feature there.
+        // platform; C rename() refuses to on Windows.
         std::filesystem::rename(tmp.c_str(), out.c_str(), rc_ec);
       }
       if (!ok || rc_ec)
@@ -2412,14 +2291,12 @@ protected:
     // per tag, so correlated tags from one spectrum cannot manufacture evidence.
     // Roll the per-leaf counts up the taxonomy, compare each node against the
     // breadth it has in the index, and rank. The q-value is a ranking aid, not a
-    // calibrated FDR: the per-k-mer background is a proxy and the chimeric-null
-    // problem (see F4 in doc/BACKLOG.md) applies here too.
+    // calibrated FDR: the per-k-mer background is a proxy, and a correct read
+    // of a co-isolated peptide is evidence for its taxon too.
     String taxdb = getStringOption_("taxdb");
     String species_out = getStringOption_("species_out");
     String nodes = getStringOption_("taxonomy_nodes");
     String names = getStringOption_("taxonomy_names");
-    // -species is the switch. Passing -taxdb and -species_out explicitly still
-    // works without it, which is how this was driven before the flag existed.
 
     if (want_species)
     {
@@ -2427,9 +2304,7 @@ protected:
       // The index and its taxonomy are ONE coherent set. An index and dumps from
       // different sources silently drop every taxid one does not know and bias
       // the background, with no error. So it is all-bundle OR all-user: if ANY of
-      // the three was given explicitly, ALL three must be -- checking only -taxdb
-      // let `FASTAG_TAXONOMY_DIR=/x` + explicit bundled dumps mix a custom index
-      // with bundled dumps through the back door.
+      // the three was given explicitly, ALL three must be.
       const bool any_explicit = !taxdb.empty() || !nodes.empty() || !names.empty();
       if (any_explicit && (taxdb.empty() || nodes.empty() || names.empty()))
       {
@@ -2499,11 +2374,10 @@ protected:
       int min_len = getIntOption_("species_min_len");
       if (min_len < kk) min_len = kk;
 
-      // The silent-empty trap: the index is keyed on k-mers, so a tag shorter
-      // than k can never be looked up. With the default tag_length of 3 against
-      // a k=7 index that is EVERY tag -- the run then succeeds, reports "0
-      // spectra contributed taxon evidence" and writes a header-only file, which
-      // reads as "nothing found" rather than "nothing could have been found".
+      // The up-front tag-length check again, against the LOADED k: the header
+      // peek rejects legacy headers the loader still accepts, and then a run
+      // whose tags are all shorter than k would write a header-only report
+      // that reads as "nothing found" rather than "nothing could be found".
       const int reach = getIntOption_("tag_length") + 2 * getIntOption_("extension");
       if (reach < kk)
       {
@@ -2520,7 +2394,7 @@ protected:
       // Per-spectrum taxon support -> per-leaf spectrum counts. by_spec was
       // collected in write_block, in write order.
       // Two filters on what counts as evidence, both identities at their
-      // defaults so the previous behaviour is reproducible:
+      // defaults:
       //
       //   share  -- a k-mer carried by most of the reference cannot discriminate
       //             between taxa, so it is not evidence for any of them. It is
@@ -2560,8 +2434,8 @@ protected:
           for (int i = 0; i + kk <= L; ++i)
           {
             idx.lookup(FASTag::TaxIndex::fold(seq.substr(static_cast<size_t>(i), static_cast<size_t>(kk))), t);
-            // A k-mer in NO taxon kills the tag, exactly as the old intersection
-            // did: the reference cannot explain this tag at all.
+            // A k-mer in NO taxon kills the tag: the reference cannot explain
+            // this tag at all.
             if (t.empty()) { unexplained = true; break; }
             if (t.size() > share_cap) { ++n_kmer_skipped; continue; }
             ++n_eval;
@@ -2571,9 +2445,9 @@ protected:
 
           int best = 0;
           for (const auto& kv : sup) best = std::max(best, kv.second);
-          // The whole-tag rule survives: a taxon must carry EVERY k-mer that was
-          // actually evaluated. With share_cap at its maximum that is exactly the
-          // old set intersection, which is why the default path is unchanged.
+          // The whole-tag rule: a taxon must carry EVERY k-mer that was actually
+          // evaluated. With share_cap at its maximum that is plain set
+          // intersection.
           if (best < n_eval) continue;
           int runner = 0;
           for (const auto& kv : sup) if (kv.second < best) runner = std::max(runner, kv.second);
@@ -2587,8 +2461,8 @@ protected:
         // Count each NODE at most once per spectrum. Increment every ancestor of
         // every supported taxon, deduplicated within the spectrum, so `hits` is
         // already a correct spectrum-count at every rank. Summing leaf counts up
-        // the tree instead (the old rollUp path) counted one spectrum TWICE at a
-        // genus with two supported species -- observed > n_total, p = -inf, q = 0.
+        // the tree instead would count one spectrum TWICE at a genus with two
+        // supported species.
         std::set<uint32_t> spec_nodes;
         for (uint32_t tx : taxa)
           for (uint32_t a : tax.lineage(tx)) spec_nodes.insert(a);
@@ -2650,9 +2524,6 @@ protected:
 
       const String want_rank = getStringOption_("species_rank");
       std::ofstream so(species_out.c_str());
-      // `adjusted` replaces `enrichment`. Enrichment was never usable for
-      // ranking -- a small proteome gives a tiny expectation and so a huge
-      // ratio -- and the documentation already told readers to ignore it.
       so << "rank\ttaxid\tname\tobserved\tadjusted\texpected\tlog_pvalue\tqvalue\n";
 
       // Order by the corrected count, not by q. Significance ranks a near
@@ -2754,10 +2625,10 @@ protected:
         //
         // Not routed through FileHandler: its storeExperiment() has no mzPeak
         // branch, so asking it for one silently writes something else.
-        // `kept` holds no spectra any more, and addDataProcessing_ stamps
-        // SPECTRA -- so the FILTERING step is carried by a one-spectrum map
-        // whose only purpose is to hand that step to the metadata mapping,
-        // which reads it from spectrum 0.
+        // `kept` holds only the run-level settings, and addDataProcessing_
+        // stamps SPECTRA -- so the FILTERING step is carried by a one-spectrum
+        // map whose only purpose is to hand that step to the metadata
+        // mapping, which reads it from spectrum 0.
         PeakMap processing_carrier;
         processing_carrier.addSpectrum(MSSpectrum());
         addDataProcessing_(processing_carrier, getProcessingInfo_(DataProcessing::FILTERING));
@@ -2779,8 +2650,8 @@ protected:
       {
         {
           // Scoped: the destructor writes footer + index. The count is known
-          // exactly BEFORE the first consume (the header bakes it in at that
-          // point -- why per-block streaming was rejected). Per-spectrum
+          // exactly BEFORE the first consume, where the header bakes it in.
+          // Per-spectrum
           // sourceFile/dataProcessing references are cleared so the header,
           // built from the run-level settings alone, can never dangle; the
           // FILTERING processing step is declared for every spectrum instead.
@@ -2834,13 +2705,11 @@ protected:
     // Every output is written, flushed, closed and checked by now, and a
     // reader has nothing to flush or report: read-only archive handles, the
     // run's metadata map and the decoded row-group cache. Destroying them
-    // freed gigabytes one allocation at a time, into the arenas of the
-    // threads that decoded them -- most of the 0.82 s between the end of
-    // tagging and the process exit at 128 threads on kim, against 0.16 s for
-    // the same run read as mzML -- and the kernel takes the memory back at
-    // exit either way.
-    // ponytail: this success path only -- every error return above still
-    // destroys them -- and not in ASan builds, whose leak check would flag it.
+    // frees gigabytes one allocation at a time, into the arenas of the
+    // threads that decoded them -- most of the teardown time at high thread
+    // counts -- and the kernel takes the memory back at exit either way.
+    // This success path only -- every error return above still destroys
+    // them -- and not in ASan builds, whose leak check would flag it.
     for (auto& r : mreaders) static_cast<void>(r.release());
     static_cast<void>(mzp.release());
 #endif
@@ -2865,8 +2734,7 @@ namespace
 // help: inside writeToolDescription_ that flag guards only the *category*
 // lookup, and getCategory() is the non-throwing sibling that returns "" on a
 // miss. The getTypes call a few lines earlier is unguarded. -write_ini is
-// unaffected because its branch never calls getTypes at all, which is why the
-// GUI's parameter manifest has always worked while CTD export never did.
+// unaffected because its branch never calls getTypes at all.
 //
 // The one escape hatch stock OpenMS offers is ToolHandler's INTERNAL tool
 // registry: it merges tools parsed from *.ttd files found in, among other
@@ -3043,7 +2911,7 @@ int main(int argc, const char** argv)
   }
   // ...and not for a bare `FASTag` either: with no arguments TOPPBase prints
   // the usage, and an injected pair would turn that into "in and out are
-  // required" -- a regression the cosmetic review caught.
+  // required".
   if (!explicit_threads && argc > 1)
   {
     args.push_back("-threads");
