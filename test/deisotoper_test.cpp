@@ -427,7 +427,7 @@ namespace
   MSSpectrum prepared(const MSSpectrum& in, double precursor_mz, int charge)
   {
     if (charge <= 0) charge = 2;
-    const double precursor_tol = 1.5;  // Param's default
+    const double precursor_tol = 1.5;  // FASTagger.cpp PRECURSOR_TOL
     const double max_mz = precursor_mz * charge - charge * PROTON + PROTON + precursor_tol;
     std::vector<Peak1D> work;
     for (const auto& pk : in)

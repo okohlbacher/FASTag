@@ -1,23 +1,14 @@
 // OpenMS's averagine deisotoper, ported for the one way FASTag calls it.
 //
 // Deisotoper::deisotopeWithAveragineModel was the largest single cost in the
-// tagging loop at benchmark settings: 26.4% of worker CPU (12.4% at tool
-// defaults), on the unreduced peak list -- diaTracer spectra carry exactly 500
-// peaks. Most of that was not the algorithm. It was an out-of-line binary
-// search per isotope position (14.9% of CPU on its own), a vector allocated
-// per candidate cluster for the averagine intensities and another for the
-// observed ones, and a DefaultParamHandler built and queried by name on every
-// call just to drop sub-0.05 intensities.
+// tagging loop, and most of it was not the algorithm: an out-of-line binary
+// search per isotope position, two vectors allocated per candidate cluster,
+// and a DefaultParamHandler built and queried by name on every call.
 //
-// This is the same algorithm with those costs taken out, and it is
-// BIT-IDENTICAL to the OpenMS it replaces: same peaks, same order, same m/z
-// doubles and intensity floats. test/deisotoper_test.cpp proves it against
-// OpenMS on synthetic edge cases and, given an archive, on every spectrum of
-// a real run.
-//
-// Source: OpenMS release/3.5.0 (c49149d47d, 2025-12-10), the tree the conda
-// package FASTag links ("3.5.0-pre-exported-20251212") was exported from; its
-// installed headers match that tag byte for byte.
+// This is the same algorithm without those costs, and it is BIT-IDENTICAL to
+// OpenMS release/3.5.0 (c49149d47d): same peaks, same order, same m/z doubles
+// and intensity floats. test/deisotoper_test.cpp proves it against OpenMS on
+// synthetic edge cases and, given an archive, on every spectrum of a real run.
 //
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT

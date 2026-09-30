@@ -1,17 +1,11 @@
-// Empirical q-values from a target/decoy E-value pair of lists.
+// Empirical q-values from target E-values and weighted decoy (entrapment)
+// E-values: q(e) = D_w(e) / T(e), monotonized non-decreasing in e, evaluated
+// by binary search over the target thresholds. Each entrapment event carries
+// weight 1/r_len because entrapment key spaces are per-tag-length, and a
+// single scalar cannot calibrate a curve pooled across lengths.
 //
-// RECREATED to the contract of the original (written, unit-tested, then
-// deleted uncommitted; recovered from the surviving build-f4/ artifacts):
-//   TagFDR(targets, decoys, decoy_scale);  q(e) = scale * D(e) / T(e),
-// monotonized non-decreasing in e, evaluated by binary search over the target
-// thresholds. "No decoys -> q 0" is part of that contract and is preserved --
-// the finite-sample caveat is the CALLER's to surface (log the resolution
-// floor scale/T so q=0 reads as "below resolution", never "zero risk").
-//
-// The weighted-decoy constructor is the one deliberate extension: entrapment
-// key spaces are per-tag-length, so each entrapment event carries weight
-// 1/r_len instead of one global scale -- a scalar cannot calibrate a curve
-// pooled across lengths.
+// No decoys -> q 0. The finite-sample caveat is the CALLER's to surface (log
+// the resolution floor so q=0 reads as "below resolution", never "zero risk").
 //
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
@@ -26,7 +20,7 @@ namespace FASTag
   class TagFDR
   {
   public:
-    /// Weighted decoys: (evalue, weight) per decoy event.
+    /// @p weighted_decoys: (evalue, weight) per decoy event.
     TagFDR(std::vector<double> targets,
            std::vector<std::pair<double, double>> weighted_decoys)
     {
@@ -46,18 +40,7 @@ namespace FASTag
         qs_[i] = dw / static_cast<double>(i + 1);
       }
       double m = 1.0;
-      for (size_t i = es_.size(); i-- > 0;)
-      {
-        m = std::min(m, qs_[i]);
-        qs_[i] = std::min(1.0, m);
-      }
-    }
-
-    /// The recovered scalar contract: every decoy weighs `decoy_scale`.
-    TagFDR(std::vector<double> targets, const std::vector<double>& decoys,
-           double decoy_scale)
-      : TagFDR(std::move(targets), scaled_(decoys, decoy_scale))
-    {
+      for (size_t i = es_.size(); i-- > 0;) qs_[i] = m = std::min(m, qs_[i]);
     }
 
     /// q of accepting everything with evalue <= e: the q at the LAST target
@@ -76,15 +59,6 @@ namespace FASTag
     }
 
   private:
-    static std::vector<std::pair<double, double>> scaled_(
-        const std::vector<double>& decoys, double scale)
-    {
-      std::vector<std::pair<double, double>> w;
-      w.reserve(decoys.size());
-      for (double d : decoys) w.emplace_back(d, scale);
-      return w;
-    }
-
     std::vector<double> es_;  ///< sorted target evalues
     std::vector<double> qs_;  ///< monotone q at each threshold
   };

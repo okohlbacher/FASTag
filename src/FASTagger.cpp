@@ -40,39 +40,37 @@ namespace FASTag
   /// pathologically wide tolerance from turning one path into hundreds of rows.
   static constexpr int MAX_GAP_SPELLINGS = 8;
 
-  // There is deliberately no minimum-flank rule for gaps.
-  //
-  // An earlier version demanded ordinary residues on both sides, so a gap would
-  // bridge two observed runs rather than dangle off a tag's end. Its evidence
-  // was that at tag_length 4 an unconstrained gap made 92.5% of output gapped
-  // and evicted 73% of contiguous tags through the per-spectrum cap. That
-  // measured the wrong quantity -- tags evicted, not peptides recovered.
-  // Measured against SAGE ground truth at tag_length 6, counting spectra that
-  // gain a correctly placed tag:
-  //
-  //   flank 0: 3479 -> 5035  (+44.7%, 1700 rescued / 144 lost, 11.8:1)
-  //   flank 1: 3479 -> 4422  (+27.1%, 1060 / 117)
-  //   flank 2: 3479 -> 3954  (+13.7%,  527 /  52, 10.1:1)
-  //   flank 3: no gap fits at this length; identical to gaps off
-  //
-  // Monotonic, and the rescue-to-loss ratio is no worse unconstrained. Every
-  // unit of the rule cost recall, and the eviction it guarded against is the cap
-  // correctly discarding near-noise -- the contiguous tags it drops are ~0.6%
-  // accurate against 6.2% for the gapped ones replacing them.
+  /// Peaks above precursor mass + proton + this (Da) are dropped.
+  static constexpr double PRECURSOR_TOL = 1.5;
+
+  /// Highest fragment charge the deisotoper tries.
+  static constexpr int DEISOTOPE_MAX_CHARGE = 3;
+
+  /// The m/z-fidelity null is Monte Carlo: this many samples per peak count,
+  /// from a fixed seed so every run scores identically.
+  static constexpr unsigned MZ_NULL_SEED = 20080717u;
+  static constexpr int MZ_NULL_SAMPLES = 10000;
+
+  // There is deliberately no minimum-flank rule for gaps (ordinary residues
+  // required on both sides of one). Against SAGE ground truth at tag_length 6,
+  // spectra gaining a correctly placed tag fell monotonically with the flank
+  // required -- +44.7% with none, +27.1% with 1, +13.7% with 2 -- at no better
+  // rescue-to-loss ratio. The contiguous tags an unconstrained gap evicts
+  // through the per-spectrum cap are near-noise (~0.6% accurate, against 6.2%
+  // for the gapped ones replacing them).
   //
   // The constraint that matters already exists: a gap spends 2 of tag_length's
-  // residue budget, so a longer tag necessarily observes more of what it spells
-  // -- at tag_length 6 a gapped tag still rests on 4 observed residues. A short
-  // tag_length with gaps gives a high inferred fraction, and that is the
-  // caller's trade rather than something to hard-code here.
+  // residue budget, so a longer tag necessarily observes more of what it spells.
+  // A short tag_length with gaps gives a high inferred fraction; that is the
+  // caller's trade.
 
   /// The residue and pair tables the graph walks, built once per run from the
   /// active modifications. Held by Tables and passed read-only into the tagger.
   ///
-  /// With no modifications this is exactly the old alphabet -- the canonical
-  /// "Natural19WithoutI" set (I and L are isobaric, so a spectrum cannot tell
-  /// them apart and enumerating both would only double the output), mass-sorted
-  /// so the DFS emits deterministically. Fixed mods shift a residue's mass;
+  /// With no modifications this is the canonical "Natural19WithoutI" set (I
+  /// and L are isobaric, so a spectrum cannot tell them apart and enumerating
+  /// both would only double the output), mass-sorted so the DFS emits
+  /// deterministically. Fixed mods shift a residue's mass;
   /// variable mods append a modified alternative.
   struct Alphabet
   {
@@ -94,8 +92,7 @@ namespace FASTag
           if (!mod.variable && mod.residue == c) m += mod.delta;
         res.push_back({c, m, ""});
       }
-      // Mass-sorted keeps the graph edges ordered (deterministic emission) and,
-      // with no mods, reproduces the previous table bit for bit.
+      // Mass-sorted keeps the graph edges ordered (deterministic emission).
       std::sort(res.begin(), res.end(), [](const Res& a, const Res& b) { return a.mass < b.mass; });
       n_base = static_cast<uint8_t>(res.size());
 
@@ -166,22 +163,10 @@ namespace FASTag
         const Step& st = path[static_cast<size_t>(i)];
         if (!st.gap) { spellRes(out, A.res[st.res]); continue; }
         const auto& pe = A.pairs[st.pair];
-        // Neither residue in a gap is observed, so there is no traversal order
-        // to preserve: swap simply selects one of the two arrangements, and
-        // emit() produces both. Ordinary steps above are the ones whose order is
-        // real and must be reversed.
         out.push_back(A.res[st.swap ? pe.a : pe.b].base);
         out.push_back(A.res[st.swap ? pe.b : pe.a].base);
       }
       return out;
-    }
-
-    /// Residue count of a path (bracket annotations do not count).
-    inline size_t pathResidues(const std::vector<Step>& path)
-    {
-      size_t n = 0;
-      for (const Step& st : path) n += stepResidues(st);
-      return n;
     }
 
     const double WATER = EmpiricalFormula("H2O").getMonoWeight();
@@ -202,16 +187,15 @@ namespace FASTag
     /// The tail is closed-form: for 2k degrees of freedom, integer k, it is
     /// exp(-t) * sum_{i<k} t^i / i! with t = x/2 -- the finite sum Boost's
     /// gamma_q itself evaluates for integer shape once t >= k-1, in the same
-    /// operation order, but in double. Boost promotes to long double on
-    /// x86-64, where the 80-bit expl made each call ~155 ns against ~6 ns.
-    /// Not bit-identical there: up to 4.4e-16 relative, 0 of 14M values
-    /// differing when printed %g. exp(-t) underflows only for a p-value
-    /// product below ~1e-323, far under what the subscores' floors allow.
+    /// operation order, but in double rather than Boost's long double (~25x
+    /// slower on x86-64). It differs by at most 4.4e-16 relative, below the
+    /// printed precision. exp(-t) underflows only for a p-value product below
+    /// ~1e-323, far under what the subscores' floors allow.
     double fisher(double p1, double p2, double p3, int k)
     {
       auto safe = [](double v) { return std::log(std::max(v, 1e-300)); };
       const double x = -2.0 * (safe(p1) + safe(p2) + (k == 3 ? safe(p3) : 0.0));
-      if (x <= 0 || k <= 0) return 1.0;
+      if (x <= 0) return 1.0;
       const double t = x / 2;
       double term = std::exp(-t), sum = term;
       for (int i = 1; i < k; ++i) { term /= i; term *= t; sum += term; }
@@ -222,12 +206,10 @@ namespace FASTag
   // ---------------------------------------------------------------- Tables
 
   // A gap spends one fewer peak than it spells residues, so the realised peak
-  // count runs from tag_length + 1 - max_gaps upward. Without the -max_gaps term
-  // every gapped tag falls BELOW the table and scores as if it had no intensity
-  // evidence at all: intensityP() returns 1.0 outside its range and
-  // mzFidelityP() clamps to the nearest built k, so one subscore is switched off
-  // and another reads the wrong null -- silently, on ~86% of the output. Same
-  // failure class as the ppm null bug, reached from a different direction.
+  // count runs from tag_length + 1 - max_gaps upward. The tables must start
+  // there: intensityP() returns 1.0 outside its range and mzFidelityP() clamps
+  // to the nearest built k, so a gapped tag below the table would silently lose
+  // one subscore and read the wrong null for another.
   Tables::Tables(const Param& p)
     : k_min_(std::max(2, p.tag_length + 1 - std::max(0, p.max_gaps))),
       k_max_(std::max(2, p.tag_length + 1 + 2 * std::max(0, p.max_extension))),
@@ -244,21 +226,19 @@ namespace FASTag
     // its runs disagree with each other.
     //
     // Sampled in UNITS OF THE TOLERANCE, on [-1, 1], and the observed SSE is
-    // divided by tol^2 before lookup. Sampling on [-frag_tol, frag_tol] instead
-    // is wrong whenever the tolerance is in ppm: frag_tol is then 20, so the null
-    // spans +-20 Da while observed deviations are ~1e-4 Da. Every tag lands below
-    // the whole null, mzFidelityP returns its floor, and one of the three Fisher
-    // subscores becomes a constant -- contributing nothing. Working in tolerance
-    // units also makes one null valid at every m/z.
+    // divided by tol^2 before lookup, so one null is valid at every m/z and in
+    // both tolerance units. (Sampling on [-frag_tol, frag_tol] would, in ppm,
+    // span +-20 Da against observed deviations of ~1e-4 Da, pinning every tag
+    // to the null's floor.)
     mz_null_.resize(static_cast<size_t>(k_max_ - k_min_ + 1));
     for (int k = k_min_; k <= k_max_; ++k)
     {
-      std::mt19937 rng(p.seed + static_cast<unsigned>(k) * 2654435761u);
+      std::mt19937 rng(MZ_NULL_SEED + static_cast<unsigned>(k) * 2654435761u);
       std::uniform_real_distribution<double> err(-1.0, 1.0);
       auto& v = mz_null_[static_cast<size_t>(k - k_min_)];
-      v.reserve(static_cast<size_t>(p.mzfidelity_samples));
+      v.reserve(static_cast<size_t>(MZ_NULL_SAMPLES));
       std::vector<double> e(static_cast<size_t>(k));
-      for (int s = 0; s < p.mzfidelity_samples; ++s)
+      for (int s = 0; s < MZ_NULL_SAMPLES; ++s)
       {
         double mean = 0;
         for (int i = 0; i < k; ++i) { e[i] = err(rng); mean += e[i]; }
@@ -286,7 +266,6 @@ namespace FASTag
   {
     const int k = std::min(std::max(tag_peaks, k_min_), k_max_);
     const auto& v = mz_null_[static_cast<size_t>(k - k_min_)];
-    if (v.empty()) return 1.0;
     if (!std::isfinite(sse)) return 1.0;   // a non-finite SSE is not evidence
     // upper_bound, not lower_bound: the claim is P(SSE <= observed), and
     // lower_bound counts only the samples strictly below it.
@@ -328,16 +307,14 @@ namespace FASTag
 
       // Drop everything above the precursor, then keep the n most intense.
       //
-      // NOT OpenMS::NLargest, deliberately. It does sortByIntensity() -- an
-      // unstable sort with no secondary key -- and keeps the first n. Peaks
-      // carry integer detector counts, so ties at the cut are common: measured
-      // on real timsTOF data, 23% of spectra have at least one peak tied at the
-      // 100-peak boundary. Which of them survives would then depend on the
-      // standard library's sort, and peak selection provably drives tag output.
+      // NOT OpenMS::NLargest, deliberately: it sorts by intensity with an
+      // unstable sort and no secondary key. Peaks carry integer detector
+      // counts, so ties at the cut are common (23% of timsTOF spectra at 100
+      // peaks), and which one survives would depend on the standard library.
       // The total order below (intensity desc, m/z desc) makes it reproducible.
       MSSpectrum work;
       work.reserve(in.size());
-      const double max_mz = s.precursor_mass + PROTON + p.precursor_tol;
+      const double max_mz = s.precursor_mass + PROTON + PRECURSOR_TOL;
       for (const auto& pk : in)
       {
         if (!std::isfinite(pk.getMZ()) || !std::isfinite(pk.getIntensity())) continue;
@@ -347,13 +324,10 @@ namespace FASTag
 
       // Collapse peaks sharing an m/z, keeping the strongest.
       //
-      // diaTracer emits them routinely -- measured on S23, every MS2 spectrum has
-      // them, median 22 and up to 46 per spectrum, some with equal and some with
-      // differing intensity. They are indistinguishable to the graph (findNearest
-      // returns one of them) but each still consumes a slot in the peak budget and
-      // shifts every intensity rank, and they let the same tag be enumerated more
-      // than once. Collapsing is a property of the input, so it belongs here
-      // rather than in a deduplication pass over the output.
+      // diaTracer emits them routinely (a median 22 per spectrum). They are
+      // indistinguishable to the graph, but each still consumes a slot in the
+      // peak budget and shifts every intensity rank, and they let the same tag
+      // be enumerated more than once.
       if (!work.empty())
       {
         work.sortByPosition();
@@ -374,40 +348,25 @@ namespace FASTag
       // Optional: collapse isotope clusters before anything competes for the
       // peak budget.
       //
-      // diaTracer emits exactly 500 peaks per spectrum, so the cap is active on
-      // every real spectrum and every isotope peak spends a slot a monoisotopic
-      // peak could have had. make_single_charged additionally moves +2 and +3
-      // fragments onto the +1 scale, putting a whole series into one coordinate
-      // system instead of splitting it across the per-charge graphs.
-      //
-      // keep_only_deisotoped stays false deliberately: it drops every peak that
-      // failed to form a cluster, and a real fragment whose isotopes fell under
-      // the noise floor is exactly what a sensitive prefilter must keep. Peak
-      // count is left to the cap below, hence number_of_final_peaks = 0.
+      // Dense spectra hit the cap, so every isotope peak spends a slot a
+      // monoisotopic peak could have had. Moving +2 and +3 fragments onto the
+      // +1 scale also puts a whole series into one coordinate system instead of
+      // splitting it across the per-charge graphs. Unclustered peaks are kept:
+      // a real fragment whose isotopes fell under the noise floor is exactly
+      // what a sensitive prefilter must keep. Peak count is left to the cap.
       if (p.deisotope && work.size() > 2)
       {
-        // Clamp to what the deisotoper accepts.
-        //
-        // OpenMS throws IllegalArgument above 100 ppm or 0.1 Da, and FASTag
-        // passed the fragment tolerance straight through -- so deisotoping with
-        // an ion-trap tolerance CRASHED the tool with an uncaught exception. Not
-        // hypothetical: 0.3 Da is the correct setting for the Eclipse benchmark
-        // file (doc/TEST-DATA.md), so the combination is one a user reaches by
-        // following the documentation. Found by bench/benchmark.cpp's iontrap
-        // profile, which is the reason that profile exists.
-        //
-        // Clamping is the conservative direction. A tolerance tighter than the
-        // data warrants makes the deisotoper collapse FEWER clusters, leaving
-        // extra isotope peaks in the spectrum; it never merges peaks that are
-        // not isotopes. Skipping deisotoping entirely would silently ignore an
-        // option the user explicitly asked for, which is worse.
+        // Clamp to what the deisotoper accepts (it throws above 100 ppm or
+        // 0.1 Da; 0.3 Da is a normal ion-trap setting). Clamping is the
+        // conservative direction: a tighter tolerance collapses FEWER
+        // clusters and never merges peaks that are not isotopes, whereas
+        // skipping would silently ignore an option the user asked for.
         const double deiso_tol = p.tol_ppm ? std::min(p.frag_tol, 100.0)
                                            : std::min(p.frag_tol, 0.1);
-        //
         // OpenMS's Deisotoper::deisotopeWithAveragineModel, ported and bit-identical
         // (AveragineDeisotoper.h): charges 1..max, no peak cap, unclustered peaks
         // kept, 2..10 isotope peaks, monoisotopic peaks moved to charge 1.
-        deisotopeAveragine(work, deiso_tol, p.tol_ppm, std::max(1, p.deisotope_max_charge));
+        deisotopeAveragine(work, deiso_tol, p.tol_ppm, DEISOTOPE_MAX_CHARGE);
         work.sortByPosition();
       }
 
@@ -421,13 +380,8 @@ namespace FASTag
           return work[a].getIntensity() > work[b].getIntensity();
         return work[a].getMZ() > work[b].getMZ();
       });
-      // max_peak_count == 0 means "use the safety ceiling", NOT "unlimited".
-      //
-      // The rank-sum tables are built for peak counts up to n_max_, and
-      // intensityP() returns 1.0 above that -- silently disabling one of the three
-      // subscores rather than erroring. So an genuinely uncapped run would quietly
-      // lose a third of the scoring on any spectrum with more peaks than the
-      // tables cover. Both places must agree on the same ceiling.
+      // max_peak_count == 0 means "use the safety ceiling", NOT "unlimited":
+      // the rank-sum tables stop at the same ceiling (see PEAK_CEILING).
       const size_t cap = p.max_peak_count > 0 ? p.max_peak_count : PEAK_CEILING;
 
       // Windowed selection: keep the strongest peaks_per_window peaks in each
@@ -435,11 +389,7 @@ namespace FASTag
       //
       // A global top-N is a fixed budget, and the right budget is not a constant:
       // it depends on how many real fragments a spectrum has, which scales with
-      // the peptide. Measured on 500-peak diaTracer spectra, raising the cap from
-      // 100 to 500 gained 56% more spectra with a correctly placed tag -- so the
-      // default was starving dense spectra. But simply raising it would starve
-      // them differently on any data that is not this dense, and would let one
-      // intense region spend the whole budget.
+      // the peptide, and one intense region can spend all of it.
       //
       // A per-window quota scales the effective total with the m/z range the
       // spectrum actually covers, which tracks precursor mass, and it spreads
@@ -499,8 +449,7 @@ namespace FASTag
           // Two fragments of the same charge z satisfy
           //   m/z(b) + m/z(y) = (Nb + z*proton)/z + (Ny + z*proton)/z
           //                   = M/z + 2*proton,      because Nb + Ny = M.
-          // Note the proton term is NOT divided by z; a review suggested
-          // (M + 2*proton)/z, which is wrong for exactly that reason.
+          // Note the proton term is NOT divided by z.
           const double cmz = s.precursor_mass / z + 2.0 * PROTON - s.spec[i].getMZ();
           // j != i: a peak at the midpoint would otherwise be its own partner,
           // manufacturing complement evidence from a single ion and inflating
@@ -509,15 +458,10 @@ namespace FASTag
           if (j >= 0 && static_cast<size_t>(j) != i)
             s.has_compl[i] |= static_cast<uint8_t>(1u << (z - 1));
         }
-      // Counted PER CHARGE, not pooled across charges.
-      //
-      // scorePath draws its observed count from one fragment charge, so the
-      // hypergeometric's population must be that same charge. Pooling made K the
-      // size of the union while obs stayed charge-specific -- two populations in
-      // one distribution, which inflates K and leaves the tail too permissive.
-      // Only bites when n_frag_charges > 1, i.e. precursor charge >= 3: about
-      // 36% of spectra on S23, and invisible to any test built on charge-2
-      // precursors, which is why it survived.
+      // Counted PER CHARGE, not pooled across charges: scorePath draws its
+      // observed count from one fragment charge, so the hypergeometric's
+      // population must be that same charge. Pooling would inflate K and leave
+      // the tail too permissive for precursors of charge >= 3.
       s.n_with_compl.assign(static_cast<size_t>(s.n_frag_charges) + 1, 0);
       for (size_t i = 0; i < n; ++i)
         for (int z = 1; z <= s.n_frag_charges; ++z)
@@ -757,22 +701,16 @@ namespace FASTag
       t.cterm_mass = std::max(0.0, avg * charge - PROTON * charge - WATER);
       t.nterm_mass = std::max(0.0, s.precursor_mass - ((avg + cum) * charge - PROTON * charge));
 
-      // Traversal runs low->high m/z, which is C->N; store N->C. So the path is
-      // walked backwards -- and a gap step must be reversed WITHIN itself too:
-      // its residues are traversed a-then-b, which reads b-then-a in the stored
-      // direction. Getting this wrong transposes exactly two residues, which no
-      // mass check would catch because the pair sum is unchanged.
       t.seq = spell(A, path);
-      t.n_res = pathResidues(path);
+      for (const Step& st : path) { t.n_res += stepResidues(st); t.gapped = t.gapped || st.gap; }
       if (p.per_residue_conf)
       {
-        // The path was traversed C->N and seq is stored N->C (see above), so
+        // The path was traversed C->N and seq is stored N->C (see spell()), so
         // the residue confidences must flip too -- a mistake here mirrors
         // every tag's confidences and NO mass or length check would catch it.
         std::reverse(t.res_conf.begin(), t.res_conf.end());
         assert(t.res_conf.size() == t.n_res);
       }
-      for (const Step& st : path) if (st.gap) { t.gapped = true; break; }
       t.low_mz = s.spec[peaks.front()].getMZ();
       return t;
     }
@@ -786,24 +724,10 @@ namespace FASTag
     /// carries no gap. A gap here would let one tag rest on two unobserved
     /// splits at opposite ends, and the sequence it spells would be mostly
     /// inference; the seed-level gap already reaches the disjoint runs this is
-    /// meant to recover.
-    ///
-    /// MEASURED, and it does not pay. Implemented in full -- reverse gap edges, a
-    /// gap budget shared across both termini, gap tried only where no ordinary
-    /// edge continues -- and benchmarked against this version on three profiles at
-    /// extension 2 and 4. Rank-1 accuracy fell in all six cells, by 4.6 points at
-    /// extension 2 and up to 13.1 at extension 4, and TOTAL RECALL DID NOT MOVE:
-    ///
-    ///   ddapasef  ext=4   rank-1 37.9% -> 24.8%,  any 80.6% -> 80.6%
-    ///   diatracer ext=4   rank-1 35.3% -> 22.2%,  any 77.8% -> 77.2%
-    ///   astral    ext=4   rank-1 22.4% -> 15.6%,  any 60.6% -> 60.2%
-    ///
-    /// Zero recall gain is the informative part: a gapped extension reaches no
-    /// peptide the seed gap had not already reached. It only converts contiguous
-    /// tags into gapped ones, which are ~3.6x less likely to be correct, and the
-    /// damage grows with extension length as more of the tag becomes inference.
-    ///
-    /// Do not reimplement without a measurement that contradicts this one.
+    /// meant to recover. Measured with gapped extension on three profiles at
+    /// extension 2 and 4: rank-1 accuracy fell by 4.6 to 13.1 points and total
+    /// recall did not move -- it reaches no peptide the seed gap does not, and
+    /// only turns contiguous tags into gapped ones (~3.6x less often correct).
     int extendPath(const Prepared& s, const Param& p, const Alphabet& A, const Graph& g,
                    std::vector<uint32_t>& peaks, std::vector<Step>& path,
                    int charge, bool forward)
@@ -852,17 +776,6 @@ namespace FASTag
       return added;
     }
 
-    /// Push one scored path as one or more tags.
-    ///
-    /// A gap edge asserts a two-residue SUM, not a split, so every composition
-    /// within tolerance of the observed difference -- in both orders -- is an
-    /// equally supported reading, and all of them are emitted. Keeping only the
-    /// closest match would be wrong on a systematic class rather than a random
-    /// one: AD and GE both weigh 186.064 exactly, so the correct spelling would
-    /// be dropped about half the time whenever that gap occurs.
-    ///
-    /// n_seeds counts emitted TAGS, not paths, so the E-value's multiple-testing
-    /// factor stays honest when one path spells several.
     /// A scored tag plus the indices (into Prepared::spec) of the peaks that
     /// spelled it -- the exact, integer signature -diversity needs to tell a
     /// re-read of the same ladder from genuinely different evidence. Filled
@@ -874,6 +787,17 @@ namespace FASTag
       std::vector<uint32_t> peaks;
     };
 
+    /// Push one scored path as one or more tags.
+    ///
+    /// A gap edge asserts a two-residue SUM, not a split, so every composition
+    /// within tolerance of the observed difference -- in both orders -- is an
+    /// equally supported reading, and all of them are emitted. Keeping only the
+    /// closest match would be wrong on a systematic class rather than a random
+    /// one: AD and GE both weigh 186.064 exactly, so the correct spelling would
+    /// be dropped about half the time whenever that gap occurs.
+    ///
+    /// n_seeds counts emitted TAGS, not paths, so the E-value's multiple-testing
+    /// factor stays honest when one path spells several.
     void emit(std::vector<ScoredTag>& out, size_t& n_seeds, Tag t, const Prepared& s,
               const Param& p, const Tables& tab, const std::vector<uint32_t>& peaks,
               const std::vector<Step>& path, int charge)
@@ -881,9 +805,8 @@ namespace FASTag
       const auto sig = [&]() { return p.diversity ? peaks : std::vector<uint32_t>(); };
       if (!t.gapped) { ++n_seeds; out.push_back({std::move(t), sig()}); return; }
 
-      size_t gi = 0;
-      while (gi < path.size() && !path[gi].gap) ++gi;
-      if (gi + 1 >= peaks.size()) { ++n_seeds; out.push_back({std::move(t), sig()}); return; }
+      size_t gi = 0;   // the gap step; peaks has one entry more than path
+      while (!path[gi].gap) ++gi;
 
       const double d = (s.spec[peaks[gi + 1]].getMZ() - s.spec[peaks[gi]].getMZ()) * charge;
       const double tol = tolAt(p, s.spec[peaks[gi + 1]].getMZ()) * charge;
@@ -939,8 +862,7 @@ namespace FASTag
 
     const Prepared s = prepare(in, precursor_mz, charge, p);
     // A gap spends one fewer peak than it spells residues, so a gapped tag of
-    // tag_length residues needs only tag_length peaks. Demanding tag_length + 1
-    // unconditionally discarded spectra holding exactly the gapped ladder.
+    // tag_length residues needs only tag_length peaks.
     const size_t min_peaks =
         static_cast<size_t>(std::max(2, p.tag_length + 1 - std::max(0, p.max_gaps)));
     if (s.spec.size() < min_peaks) return out;
@@ -1040,26 +962,12 @@ namespace FASTag
     // E-value: expected number of tags this good by chance. Valid under arbitrary
     // dependence between tags, by linearity of expectation.
     //
-    // Gapped tags additionally pay for the larger space their gap searched. An
-    // ordinary edge tests ONE residue mass and follows every peak that matches;
-    // a gap edge tests the whole 190-entry two-residue table and keeps the best
-    // fit. So a gapped path is drawn from a hypothesis space ~|pairs|/|residues|
-    // = 10x larger per gap, and its p-value is optimistic by about that factor
-    // while the null is built for a free draw.
-    //
-    // n_seeds cannot fix this: it is one global factor applied to every tag from
-    // the spectrum, so it moves the whole list and never reorders it. The
-    // distortion is WITHIN a spectrum -- gapped tags outranking contiguous ones
-    // they should sit below -- which only a per-family term can correct.
-    //
-    // Measured (bench/benchmark.cpp, astral profile, TL=4): a gapped tag holding
-    // rank 1 read the true peptide 16.1% of the time against 58.2% for a
-    // contiguous one, and enabling gaps drove rank-1 accuracy DOWN from 24.3% to
-    // 17.7% while more than doubling total recall. The tags were being found and
-    // then buried by their own competitors.
-    //
-    // Exactly one gap is possible per tag today (the DFS sets gap_used and
-    // extension does not cross gaps), so this applies once rather than per gap.
+    // Gapped tags additionally pay for the larger space their gap searched
+    // (Param::gap_penalty). n_seeds cannot do that: it is one factor for every
+    // tag of the spectrum, so it never reorders them, and the distortion --
+    // gapped tags outranking contiguous ones they should sit below -- is within
+    // a spectrum. A tag carries at most one gap (the DFS sets gap_used and
+    // extension does not cross gaps), so the penalty applies once.
     const double gap_penalty = std::max(1.0, p.gap_penalty);
     for (ScoredTag& st : scored)
     {
@@ -1068,13 +976,9 @@ namespace FASTag
     }
 
     // stable_sort, not sort: the comparator is not total (it ignores charge and
-    // the flanks), and 99.4% of duplicate groups are identical in every emitted
-    // field today -- but a future field would make the survivor choice
-    // implementation-defined. Stability costs nothing at these sizes.
-    //
-    // Sorted as indices, not objects: merging whole ScoredTags moves a string
-    // and vectors per step, measured at 5.6% of worker CPU at tool defaults. A
-    // stable sort's result is unique, so the order is the same one.
+    // the flanks), so only stability makes the survivor among equals
+    // well-defined. Sorted as indices, not objects: merging whole ScoredTags
+    // moves a string and vectors per step, a measurable share of worker CPU.
     const auto rank_cmp = [](const Tag& a, const Tag& b) {
       if (a.evalue != b.evalue) return a.evalue < b.evalue;
       if (a.seq != b.seq) return a.seq < b.seq;
@@ -1087,14 +991,9 @@ namespace FASTag
     std::stable_sort(by_rank.begin(), by_rank.end(), by_rank_cmp);
 
     // Drop tags identical in every reported field, before the output cap so the
-    // cap counts distinct results.
-    //
-    // Extension reaches the same physical tag by different N/C splits: measured
-    // with extension 6, 28% of rows are duplicates and 99.4% of duplicate groups
-    // agree in every emitted field. Keying on the exact reported values -- rather
-    // than on rounded ones -- keeps the 0.6% that genuinely differ (flanks
-    // 0.6 mDa apart with different E-values) and makes the survivor unambiguous,
-    // since the duplicates are indistinguishable.
+    // cap counts distinct results. Extension reaches the same physical tag by
+    // different N/C splits (28% of rows at extension 6). Keying on the exact
+    // reported values, not rounded ones, keeps the few that genuinely differ.
     std::set<std::tuple<std::string, int, double, double>> seen;
 
     // -diversity selection state. Near-duplicate = SAME CHARGE, both tags
@@ -1110,9 +1009,9 @@ namespace FASTag
     auto near_dup = [](const ScoredTag& a, const ScoredTag& b) {
       if (a.tag.charge != b.tag.charge) return false;
       if (a.peaks.size() < 4 || b.peaks.size() < 4) return false;
-      std::vector<uint32_t> pa(a.peaks), pb(b.peaks);
-      std::sort(pa.begin(), pa.end());
-      std::sort(pb.begin(), pb.end());
+      // peaks ascend: every graph edge, and so every path, runs to higher m/z.
+      const std::vector<uint32_t>& pa = a.peaks;
+      const std::vector<uint32_t>& pb = b.peaks;
       size_t i = 0, j = 0, shared = 0;
       while (i < pa.size() && j < pb.size())
       {
@@ -1127,30 +1026,17 @@ namespace FASTag
     {
       ScoredTag& st = scored[i];
       Tag& t = st.tag;
-      // The gap penalty ORDERS but does not FILTER.
+      // The gap penalty ORDERS but does not FILTER. Tagging is a sensitive
+      // prefilter: the cutoff answers "is this worth reporting at all" on the
+      // uncorrected evidence, the corrected E-value "which should be tried
+      // first". (Gating on the corrected value cost 19 points of recall on the
+      // astral profile; ordering alone leaves recall unchanged.) A tag carries
+      // at most one gap, so dividing once undoes the penalty.
       //
-      // It is a ranking correction, and letting it also gate membership turns a
-      // 7-point rank-1 gain into a 20-point recall loss: at the default cutoff it
-      // took total recall from 71.3% to 51.9% on the astral profile, because
-      // gapped tags were not demoted but deleted. With the cutoff lifted, the
-      // same penalty leaves recall bit-identical (81.4%, 208.8 tags/spectrum
-      // either way) and moves rank-1 from 17.8% to 25.5% -- pure reordering,
-      // which is all it was ever meant to be.
-      //
-      // Tagging is a sensitive prefilter; specificity is added by later stages.
-      // So the cutoff answers "is this worth reporting at all" on the uncorrected
-      // evidence, while the E-value answers "which should be tried first". There
-      // is no reason one number must serve both, and here it must not.
-      //
-      // Exact, not approximate: at most one gap per tag, so dividing recovers the
-      // pre-penalty value bit for bit. `continue` rather than `break` because the
-      // list is sorted by the CORRECTED value, so uncorrected values along it are
-      // not monotone and an early exit would drop tags that belong.
-      // Early exit is still sound, just at a looser bound: the list is sorted by
-      // corrected E-value, and the largest possible discount is gap_penalty, so
-      // once the corrected value passes max_evalue * gap_penalty nothing after it
-      // can survive either. Without this the loop would scan every scored path on
-      // every spectrum -- correct, but it gives back the early exit for nothing.
+      // The list is sorted by the CORRECTED value, so raw values along it are
+      // not monotone: `continue`, not `break`, on the raw cutoff. The early exit
+      // uses the looser bound max_evalue * gap_penalty, beyond which no tag can
+      // pass either.
       if (p.max_evalue > 0 && t.evalue > p.max_evalue * gap_penalty) break;
       const double raw = t.gapped ? t.evalue / gap_penalty : t.evalue;
       if (p.max_evalue > 0 && raw > p.max_evalue) continue;

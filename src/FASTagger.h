@@ -40,21 +40,20 @@ namespace FASTag
                            ///< false: shifts the residue's mass unconditionally
   };
 
-  /// Tagging parameters. Every field is set by the TOPP tool; there are no
-  /// hidden knobs and no compatibility modes.
+  /// Tagging parameters, set by the TOPP tool (complement_tol keeps its
+  /// default there; the tests and the benchmark set it).
   struct Param
   {
     int    tag_length     = 3;      ///< seed length in residues
     int    max_extension  = 0;      ///< residues appended per terminus; 0 = off
     int    max_gaps       = 0;      ///< gap edges allowed per tag; 0 = off, 1 = max
-    /// Collapse isotope clusters to their monoisotopic peak before selecting
-    /// peaks, and move multiply-charged fragments onto the singly-charged scale.
+    /// Collapse isotope clusters (charges 1-3) to their monoisotopic peak
+    /// before selecting peaks, and move multiply-charged fragments onto the
+    /// singly-charged scale.
     bool   deisotope      = false;
-    int    deisotope_max_charge = 3;
     double frag_tol       = 20.0;   ///< fragment tolerance
     bool   tol_ppm        = true;
     double complement_tol = 0.02;   ///< always absolute; complements span the whole range
-    double precursor_tol  = 1.5;
     size_t max_peak_count = 100;   ///< hard ceiling; also bounds the null tables
     /// Peaks kept per 100 Da window; 0 selects the strongest max_peak_count
     /// overall instead. Windowed selection makes the effective budget scale with
@@ -67,8 +66,7 @@ namespace FASTag
     /// (same charge, sharing all but at most one peak) are DEFERRED behind
     /// non-duplicates, then backfilled in rank order. Orders slot occupancy,
     /// never filters -- output size and rank 1 are unchanged; only which tags
-    /// survive the cap. Off by default (not provably recall-neutral under a
-    /// cap; see doc/BACKLOG-PLAN-2026-09.md F12).
+    /// survive the cap. Off by default: not provably recall-neutral under a cap.
     bool   diversity      = false;
     /// Emit per-residue confidences (Tag::res_conf). Off by default so the
     /// hot path allocates nothing extra and the TSV schema is unchanged.
@@ -91,8 +89,6 @@ namespace FASTag
     /// Ranking only: the E-value cutoff is applied to the UNCORRECTED value, so
     /// this never removes a tag, only reorders. See tagSpectrum().
     double gap_penalty    = 100.0;
-    unsigned seed         = 20080717u;  ///< the m/z-fidelity null is Monte Carlo
-    int    mzfidelity_samples = 10000;
     /// Residue-specific modifications. Fixed mods shift a residue's mass;
     /// variable mods add a modified alternative that the graph may also use.
     /// Empty means the unmodified 19-residue alphabet. Resolved by the TOPP
