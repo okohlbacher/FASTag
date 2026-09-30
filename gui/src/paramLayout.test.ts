@@ -11,8 +11,8 @@ import {
 } from './paramLayout'
 
 describe('layout completeness', () => {
-  // The stale manifest that shipped without the four -species_* options was
-  // invisible to unplacedParams(), which can only see what the manifest has.
+  // unplacedParams() can only see what the manifest has; this is the other
+  // direction.
   it('names no parameter the tool does not have', () => {
     expect(unknownParams()).toEqual([])
   })

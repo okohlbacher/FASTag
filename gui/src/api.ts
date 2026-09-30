@@ -1,7 +1,5 @@
-// The single bridge between the React frontend and the Rust backend. It presents
-// the exact `window.fastag` shape the Electron build exposed, so App.tsx and its
-// run/batch orchestration port over unchanged: only the plumbing underneath is
-// Tauri (invoke + events) instead of Electron IPC.
+// The single bridge between the React frontend and the Rust backend: the
+// `window.fastag` API (see FastagApi in types.ts) over Tauri invoke + events.
 
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
