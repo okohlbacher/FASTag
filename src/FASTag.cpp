@@ -2385,11 +2385,10 @@ protected:
       OPENMS_LOG_INFO << "q_db: " << row_meta.size() << " rows calibrated against "
                       << n_curve_events << " entrapment events ("
                       << entrap_e.size() << " observed) -> " << out << std::endl;
-      OPENMS_LOG_INFO << "q_db calibration envelope (measured 2026-09): "
-                         "conservative at q_db <= 0.02; "
-                         "UNDERESTIMATES the false-match rate ~1.6x at 0.05-0.1. Use "
-                         "tight thresholds, and read q_db as DB-match spuriousness, "
-                         "never as read correctness." << std::endl;
+      OPENMS_LOG_INFO << "q_db calibration envelope (measured 2026-09): conservative "
+                         "at q_db <= 0.02; UNDERESTIMATES the false-match rate ~1.6x "
+                         "at 0.05-0.1. Use tight thresholds, and read q_db as DB-match "
+                         "spuriousness, never as read correctness." << std::endl;
     }
 
     if (glyco_on)

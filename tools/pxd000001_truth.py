@@ -2,8 +2,7 @@
 """PXD000001 ground-truth scorer for FASTag — rebuilt, and proven to reproduce
 the numbers of the original measurement.
 
-Recipe (matches the original 2026-07-23 measurement, recovered from the session
-transcript after the scratchpad copy was lost):
+Recipe (matches the original 2026-07-23 measurement):
 
   Dataset   PXD000001 — Erwinia carotovora, TMT6plex, LTQ Orbitrap Velos HCD;
             the canonical ProteomeXchange demo dataset. It ships a Mascot

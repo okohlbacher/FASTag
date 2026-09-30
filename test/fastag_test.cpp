@@ -597,10 +597,9 @@ int main()
   //     flag GUARANTEES: output size, rank 1 and determinism unchanged; the
   //     kept slots contain strictly fewer near-duplicate pairs (same charge,
   //     sharing all but <=1 peak) whenever the undiversified head had any.
-  //     What it does NOT guarantee (measured): a
-  //     co-isolated peptide buried far below the cap cannot be surfaced --
-  //     deferral reorders families near the head, it is not a per-peptide
-  //     clustering.
+  //     What it does NOT guarantee (measured): a co-isolated peptide buried
+  //     far below the cap cannot be surfaced -- deferral reorders families
+  //     near the head, it is not a per-peptide clustering.
   {
     const std::string dom = "VGAHAGEYGAEALER", coi = "DFTPAVLQSSWK";
     double pmz_d, pmz_c;
