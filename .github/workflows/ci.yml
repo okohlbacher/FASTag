@@ -1253,7 +1253,7 @@ jobs:
       # the results browser) and never read it, so an empty placeholder is
       # exactly enough. Verified locally by reproducing the CI condition:
       # without the directory cargo fails with "resource path
-      # `resources/fastag` doesn't exist"; with an empty one, 28/28 pass.
+      # `resources/fastag` doesn't exist"; with an empty one, 29/29 pass.
       - name: Backend unit tests
         working-directory: gui/src-tauri
         run: |

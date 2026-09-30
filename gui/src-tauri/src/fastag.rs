@@ -1,12 +1,11 @@
 // FASTag CLI integration: locate the binary, run it, stream its stderr as
-// events, and cancel by killing the child. Ported from the Electron main
-// process (gui/src/main/fastag.ts); the frontend contract is identical.
+// events, and cancel by killing the child.
 //
 // Security: the binary is spawned with an explicit argv array (never a shell
 // string), and build_args() only ever emits flags the tool declares in its
 // generated manifest — a crafted invoke cannot inject an unknown option.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
@@ -22,13 +21,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 // single source of truth the frontend also reads.
 const MANIFEST: &str = include_str!("../../src/params.generated.json");
 
-fn exe_name() -> &'static str {
-    if cfg!(windows) {
-        "FASTag.exe"
-    } else {
-        "FASTag"
-    }
-}
+const EXE: &str = if cfg!(windows) { "FASTag.exe" } else { "FASTag" };
 
 // The single in-flight run. The batch queue runs sequentially, so at most one
 // child exists at a time; a second `run` while one is live is refused.
@@ -101,7 +94,7 @@ pub fn resolve_binary(app: &AppHandle) -> Resolved {
     // populate resource_dir the way a bundle does).
     roots.push(PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/resources/fastag")));
     for root in roots {
-        let bin = root.join("bin").join(exe_name());
+        let bin = root.join("bin").join(EXE);
         if bin.exists() {
             let data = root.join("share").join("OpenMS");
             let data = if data.exists() { Some(data) } else { None };
@@ -110,7 +103,7 @@ pub fn resolve_binary(app: &AppHandle) -> Resolved {
             return Resolved { bin, data, taxonomy, source: "bundled" };
         }
     }
-    Resolved { bin: PathBuf::from(exe_name()), data: None, taxonomy: None, source: "path" }
+    Resolved { bin: PathBuf::from(EXE), data: None, taxonomy: None, source: "path" }
 }
 
 // TOPP --help prints "... Version: X.Y.Z ...". Capture the version token as
@@ -119,7 +112,7 @@ fn parse_version(text: &str) -> Option<String> {
     let idx = text.find("Version:")?;
     let rest = text[idx + "Version:".len()..].trim_start();
     let tok: String = rest.chars().take_while(|c| !c.is_whitespace() && *c != ',').collect();
-    if tok.chars().next().map_or(false, |c| c.is_ascii_digit()) {
+    if tok.chars().next().is_some_and(|c| c.is_ascii_digit()) {
         Some(tok)
     } else {
         None
@@ -213,14 +206,13 @@ fn build_args(p: &RunParams) -> Vec<String> {
             }
         }
     }
-    let not_settable: HashSet<&str> = NOT_SETTABLE.into_iter().collect();
 
     let mut args: Vec<String> =
         vec!["-in".into(), defang_path(&p.input), "-out".into(), defang_path(&p.out)];
 
     for (name, value) in &p.params {
         let Some(t) = types.get(name) else { continue };
-        if not_settable.contains(name.as_str()) {
+        if NOT_SETTABLE.contains(&name.as_str()) {
             continue;
         }
         if t == "bool" {
@@ -345,7 +337,7 @@ pub fn run(app: AppHandle, state: State<'_, RunManager>, params: RunParams) -> R
 
     // Coordinator: once both streams hit EOF the process has ended; reap it,
     // emit exactly one terminal event, and release the slot. Emitting to a
-    // closed window is a harmless no-op (unlike Electron's wc.send).
+    // closed window is a harmless no-op.
     let a_done = app.clone();
     std::thread::spawn(move || {
         let _ = t_err.join();
@@ -361,7 +353,7 @@ pub fn run(app: AppHandle, state: State<'_, RunManager>, params: RunParams) -> R
         {
             let st = a_done.state::<RunManager>();
             let mut cur = st.current.lock().unwrap();
-            if cur.as_ref().map_or(false, |c| c.run_id == run_id) {
+            if cur.as_ref().is_some_and(|c| c.run_id == run_id) {
                 *cur = None;
             }
         }

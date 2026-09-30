@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
-import type { BinaryInfo, RunResult } from './types'
+import { useEffect, useRef, useState, type JSX } from 'react'
+import type { BinaryInfo, RunResult, SpeciesReport } from './types'
 import {
   SECTIONS,
   PARAM_BY_NAME,
@@ -13,7 +13,6 @@ import {
 import ParamField, { type ParamValue } from './ParamField'
 import ResultsTable from './ResultsTable'
 import SpeciesPanel from './SpeciesPanel'
-import type { SpeciesReport } from './types'
 import logo from './assets/logo.svg'
 import openmsLogo from './assets/openms-logo.png'
 
@@ -54,6 +53,11 @@ function initialValues(): Record<string, ParamValue> {
   return v
 }
 
+// A parameter that exists in the CLI but nowhere in the layout would silently
+// be unreachable; surface it instead of hiding it.
+const UNPLACED = unplacedParams()
+const UNKNOWN = unknownParams()
+
 export default function App(): JSX.Element {
   const [bin, setBin] = useState<BinaryInfo | null>(null)
   const [input, setInput] = useState('')
@@ -77,14 +81,14 @@ export default function App(): JSX.Element {
   const [savingName, setSavingName] = useState<string | null>(null)  // non-null = the 'save as' input is open
   const [jobs, setJobs] = useState<Job[]>([])
   const [batchRunning, setBatchRunning] = useState(false)
-  // Awaiter for the run in flight, keyed by the main process's run id. Keying by
+  // Awaiter for the run in flight, keyed by the backend's run id. Keying by
   // id (not a single slot) means a duplicated or late terminal event can only
   // ever resolve the run it belongs to -- never the next job's awaiter.
   const pending = useRef(new Map<number, (r: RunResult) => void>())
-  // A terminal event can beat the invoke reply: a binary that vanishes after
-  // probing makes the child emit 'error' before `run()` resolves with the run
-  // id, so onDone would arrive before the resolver is registered. Park such a
-  // result here; runOne claims it the moment it learns the id.
+  // A terminal event can beat the invoke reply: a child that exits at once can
+  // emit fastag:done before `run()` resolves with the run id, so onDone would
+  // arrive before the resolver is registered. Park such a result here; runOne
+  // claims it the moment it learns the id.
   const earlyDone = useRef(new Map<number, RunResult>())
   // Run ids whose result has been delivered. A duplicated or late terminal
   // event for a settled run must be dropped outright -- re-parking it in
@@ -99,11 +103,6 @@ export default function App(): JSX.Element {
   const logRef = useRef<HTMLPreElement>(null)
   // Cancel pressed during a batch: stop the QUEUE, not just the current job.
   const batchCancel = useRef(false)
-
-  // A parameter that exists in the CLI but nowhere in the layout would silently
-  // be unreachable; surface it instead of hiding it.
-  const unplaced = useMemo(() => unplacedParams(), [])
-  const unknown = useMemo(() => unknownParams(), [])
 
   const speciesOn = values['species'] === true
   // k comes from the index header, not an assumption: a differently-built index
@@ -215,11 +214,8 @@ export default function App(): JSX.Element {
   // entry, but HIDDEN ones must never reach the command line: `-version` is
   // recorded in the INI yet rejected as an option, so sending the whole record
   // aborts the run with "Unknown option(s) '[-version]'".
-  function submittedParams(): Record<string, ParamValue> {
-    const s: Record<string, ParamValue> = {}
-    for (const name of RENDERED) s[name] = values[name]
-    return s
-  }
+  const submittedParams = (): Record<string, ParamValue> =>
+    Object.fromEntries(RENDERED.map((name) => [name, values[name]]))
 
   // Run one file and resolve when it finishes. Shared by single and batch runs.
   function runOne(inFile: string, outFile: string, overrides?: Record<string, ParamValue>): Promise<RunResult> {
@@ -235,7 +231,7 @@ export default function App(): JSX.Element {
       window.fastag
         .run({ in: inFile, out: outFile, params: { ...submittedParams(), ...overrides } })
         .then((res) => {
-          // Register the awaiter only once the main process hands back the run
+          // Register the awaiter only once the backend hands back the run
           // id; the terminal event carries the same id (see onDone).
           if (res.started && res.runId != null) {
             const early = earlyDone.current.get(res.runId)
@@ -296,11 +292,7 @@ export default function App(): JSX.Element {
     // file: derive a per-job path from the (unique) tags output, keeping the
     // configured container format.
     const cfgSpectra = String(values['out_spectra'] || '')
-    const spectraExt = (() => {
-      const dot = cfgSpectra.lastIndexOf('.')
-      const slash = Math.max(cfgSpectra.lastIndexOf('/'), cfgSpectra.lastIndexOf('\\'))
-      return dot > slash ? cfgSpectra.slice(dot) : '.mzML'
-    })()
+    const spectraExt = cfgSpectra.slice(stripExt(cfgSpectra).length) || '.mzML'
     const stemOf = (o: string): string =>
       o.endsWith('.tags.tsv') ? o.slice(0, -'.tags.tsv'.length) : stripExt(o)
     batchCancel.current = false
@@ -327,10 +319,6 @@ export default function App(): JSX.Element {
     }
   }
 
-  function resetDefaults(): void {
-    setValues(initialValues())
-  }
-
   async function openResults(): Promise<void> {
     const p = await window.fastag.pickResults()
     if (p) setResults((r) => ({ path: p, gen: (r?.gen ?? 0) + 1 }))
@@ -346,7 +334,7 @@ export default function App(): JSX.Element {
   async function commitPreset(): Promise<void> {
     const name = (savingName ?? '').trim()
     if (!name) { setSavingName(null); return }
-    await window.fastag.savePreset(name, values)   // window.prompt is unsupported in Electron; inline input instead
+    await window.fastag.savePreset(name, values)
     const st = await window.fastag.loadSettings()
     setPresets(Object.keys(st.presets).sort())
     setPreset(name)
@@ -478,7 +466,6 @@ export default function App(): JSX.Element {
             )}
           </div>
 
-
           {SECTIONS.map((sec) => {
             const open = openGroups[sec.title] ?? sec.open
             // A section whose master switch is on is doing work; say so in the
@@ -510,14 +497,14 @@ export default function App(): JSX.Element {
             )
           })}
 
-          {(unplaced.length > 0 || unknown.length > 0) && (
+          {(UNPLACED.length > 0 || UNKNOWN.length > 0) && (
             <p className="warn">
-              {unplaced.length > 0 && <>{unplaced.length} CLI parameter(s) missing from the UI layout: {unplaced.join(', ')}. </>}
-              {unknown.length > 0 && <>{unknown.length} layout entr(y/ies) name no such parameter: {unknown.join(', ')}.</>}
+              {UNPLACED.length > 0 && <>{UNPLACED.length} CLI parameter(s) missing from the UI layout: {UNPLACED.join(', ')}. </>}
+              {UNKNOWN.length > 0 && <>{UNKNOWN.length} layout entr(y/ies) name no such parameter: {UNKNOWN.join(', ')}.</>}
             </p>
           )}
 
-          <button className="secondary slim wide" onClick={resetDefaults}>
+          <button className="secondary slim wide" onClick={() => setValues(initialValues())}>
             Reset all to CLI defaults
           </button>
 

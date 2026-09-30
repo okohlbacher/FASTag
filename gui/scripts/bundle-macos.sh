@@ -7,15 +7,14 @@
 #     share/OpenMS/           OpenMS data (OPENMS_DATA_PATH)
 #     share/FASTag/taxonomy/  the k-mer index + NCBI dumps (FASTAG_TAXONOMY_DIR)
 #
-# Bundling libomp exactly once is what fixes `OMP: Error #15 (libomp already
-# initialized)` — verified: the bundled binary runs species detection in a clean
-# env with no KMP_DUPLICATE_LIB_OK. Tauri's resource bundler skips symlinked
-# dirs, so everything here must be real files.
+# Bundling libomp exactly once is what avoids `OMP: Error #15 (libomp already
+# initialized)` without KMP_DUPLICATE_LIB_OK. Tauri's resource bundler skips
+# symlinked dirs, so everything here must be real files.
 #
 # Inputs (env, with local-dev defaults):
 #   FASTAG_BIN     the built CLI                     [build-rel/FASTag]
 #   OPENMS_LIB     dylibbundler search path (OpenMS) [OpenMS-mzpeak-build/build/lib]
-#   DEPS_LIB       dylibbundler search path (deps)   [fastag-mm/envs/omsbuild/lib]  (CI: $CONDA_PREFIX/lib)
+#   DEPS_LIB       dylibbundler search path (deps)   [fastag-mm/envs/omsbuild/lib]
 #   OPENMS_SHARE   OpenMS data dir                   [OpenMS-mzpeak-build/share/OpenMS]
 #   TAXONOMY_DIR   share/FASTag/taxonomy             [share/FASTag/taxonomy]
 #   OUT            output resource root              [gui/src-tauri/resources/fastag]

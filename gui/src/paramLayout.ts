@@ -68,11 +68,8 @@ export interface Section {
 /// The form, in the order the run happens: what is read, what is tagged, what
 /// the tags are then compared against, and what comes out.
 ///
-/// One flat list of sections replaced a "core knobs + Advanced accordion of
-/// groups" split. The old shape put `species` next to `tag_length` and its own
-/// `taxdb` two disclosure levels away, which is the opposite of grouping by
-/// content -- and it forced a judgement ("is this advanced?") that nothing in
-/// the tool actually supports.
+/// One flat list of sections, grouped by content. There is no core-vs-advanced
+/// split: nothing in the tool supports that judgement.
 export const SECTIONS: Section[] = [
   {
     title: 'Spectra',
@@ -166,11 +163,9 @@ export const SECTIONS: Section[] = [
 
 /// Parameters that do nothing unless another parameter is set.
 ///
-/// This is the tool's real structure and the UI used to hide it completely: a
-/// user could set `gap_penalty` with `gaps` at 0, or fill in three taxonomy
-/// paths with `-species` off, and the run would silently ignore all of it. The
-/// dependency is stated in each option's own help text -- it just never reached
-/// the form.
+/// Without this a user could set `gap_penalty` with `gaps` at 0, or fill in
+/// three taxonomy paths with `-species` off, and the run would silently ignore
+/// all of it. Each dependency is the one stated in the option's own help text.
 export interface Dependency {
   /// The parameter that has to be set.
   on: string
@@ -210,11 +205,8 @@ export const DEPENDS: Record<string, Dependency[]> = {
   recon_fasta: [{ on: 'recon_out', note: 'reconciliation only runs when it has an output file' }],
   recon_missed_cleavages: [{ on: 'recon_out', note: 'reconciliation only runs when it has an output file' }],
   recon_min_length: [{ on: 'recon_out', note: 'reconciliation only runs when it has an output file' }],
-  delta_out: [{ on: 'recon_out', note: 'the histogram aggregates the reconciliations' }],
-
-  // Either subsampling knob arms the seed; `on` holds the first and the OR is
-  // in isSet, because no other dependency in the tool needs a general boolean.
-  subsample_seed: [{ on: 'subsample_spectra', note: 'nothing is being subsampled' }]
+  delta_out: [{ on: 'recon_out', note: 'the histogram aggregates the reconciliations' }]
+  // subsample_seed depends on EITHER subsampling knob; inertBecause handles it.
 }
 
 /// "Set" for dependency purposes: a checked box, a non-zero number, a non-empty
@@ -232,7 +224,8 @@ export function isActive(name: string, values: Record<string, unknown>): boolean
 /// Why @p name is inert right now, or null if it is live. Returns the FIRST
 /// unmet dependency: naming one thing to fix beats listing two.
 export function inertBecause(name: string, values: Record<string, unknown>): string | null {
-  // The seed's OR, stated once rather than generalising the whole table.
+  // Either subsampling knob arms the seed: the one OR-dependency in the tool,
+  // stated here rather than generalising the whole table.
   if (name === 'subsample_seed') {
     return isActive('subsample_spectra', values) || isActive('subsample_fraction', values)
       ? null
@@ -272,9 +265,8 @@ export function unplacedParams(): string[] {
 }
 
 /// A layout that names a parameter the tool does not have is the other half of
-/// the same bug, and it fails silently: the field simply never renders. The
-/// stale manifest that shipped without the four -species_* options was only
-/// visible from this direction.
+/// the same bug, and it fails silently: the field simply never renders (a stale
+/// manifest is only visible from this direction).
 export function unknownParams(): string[] {
   return [...RENDERED, ...Object.keys(DEPENDS), ...SECTIONS.flatMap((s) => (s.master ? [s.master] : []))].filter(
     (n) => !PARAM_BY_NAME.has(n)

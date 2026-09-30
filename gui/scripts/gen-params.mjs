@@ -1,15 +1,12 @@
 // Extract the FASTag parameter contract from the tool's own -write_ini output.
 //
-// The CLI is the source of truth for names, types, defaults and restrictions.
-// Hand-copying them into the UI is how a GUI drifts from its CLI -- the first
-// draft of this app hardcoded fragment_tolerance=0.02 with no unit, which meant
-// 0.02 ppm and produced zero tags on every file. This script makes that class of
-// mistake impossible to introduce by hand.
+// The CLI is the source of truth for names, types, defaults and restrictions;
+// hand-copying them into the UI is how a GUI drifts from its CLI (a tolerance
+// copied without its unit silently means something else).
 //
-//   node scripts/gen-params.mjs [path/to/FASTag] > src/common/params.generated.json
+//   node scripts/gen-params.mjs [path/to/FASTag] > src/params.generated.json
 //
-// The binary defaults to the one the app itself resolves (resources/fastag), so
-// running it under dev.sh picks up the right env.
+// `npm run params` runs it against the bundled src-tauri/resources/fastag binary.
 
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'

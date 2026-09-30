@@ -1,11 +1,9 @@
 // Read the ranked-taxa TSV that -species writes, and read k from the index
 // header so the UI can warn before a run that tag_length can't reach the index.
-// Ported from gui/src/main/species.ts (and fixes a latent 20-vs-24 byte read
-// that made the Electron build return null for every FTX2 index).
 
 use serde::Serialize;
 use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use tauri::AppHandle;
 
@@ -45,9 +43,6 @@ fn num(s: &str) -> f64 {
 }
 
 fn read_species(path: &str) -> Option<SpeciesReport> {
-    if path.is_empty() || !Path::new(path).exists() {
-        return None;
-    }
     let content = std::fs::read_to_string(path).ok()?;
     let lines: Vec<&str> = content.lines().filter(|l| !l.trim().is_empty()).collect();
     if lines.is_empty() {
@@ -100,9 +95,6 @@ fn read_species(path: &str) -> Option<SpeciesReport> {
 // n at offset 12; v2 (FTX2) put n_taxa at 12 and n_kmers at 16. A real index is
 // many MB, so reading 24 bytes always succeeds unless the file is truncated.
 fn read_taxdb_info(path: &str) -> Option<TaxdbInfo> {
-    if path.is_empty() || !Path::new(path).exists() {
-        return None;
-    }
     let mut f = std::fs::File::open(path).ok()?;
     let mut buf = [0u8; 24];
     f.read_exact(&mut buf).ok()?;
@@ -173,9 +165,8 @@ mod tests {
         // Neighbour is the near-neighbour case: a big borrowed count makes it the
         // MOST significant row, while deconvolution leaves it with almost
         // nothing. True is the real answer. The two orderings disagree here on
-        // purpose -- the previous fixture ranked the same either way, so it
-        // passed whichever rule was in force and tested nothing.
-        let mut f = tempfile_path("sp.tsv");
+        // purpose, so the test pins which rule is in force.
+        let f = tempfile_path("sp.tsv");
         std::fs::write(&f, "rank\ttaxid\tname\tobserved\tadjusted\texpected\tlog_pvalue\tqvalue\n\
             genus\t1\tZero\t0\t0\t0.5\t-1\t1\n\
             genus\t2\tNeighbour\t200\t1\t2.0\t-99\t0\n\
@@ -185,7 +176,6 @@ mod tests {
         assert_eq!(r.taxa[0].name, "True", "highest adjusted count first, not lowest log_p");
         assert_eq!(r.taxa[1].name, "Neighbour", "the borrowed count ranks second despite its p");
         std::fs::remove_file(&f).ok();
-        let _ = f; // silence unused on some toolchains
     }
 
     #[test]
@@ -204,6 +194,19 @@ mod tests {
         assert_eq!(info.k, 7);
         assert_eq!(info.kmers, 123456);
         std::fs::remove_file(&f).ok();
+    }
+
+    // Both readers let the open fail instead of pre-checking the path, and
+    // `species` is a #[tauri::command] the frontend can call with "". A
+    // directory is here because the picker can hand one over.
+    #[test]
+    fn empty_missing_or_directory_path_is_none() {
+        let dir = std::env::temp_dir();
+        let dir = dir.to_str().unwrap();
+        for p in ["", "/nonexistent/fastag/x", dir] {
+            assert!(read_species(p).is_none(), "read_species({p:?})");
+            assert!(read_taxdb_info(p).is_none(), "read_taxdb_info({p:?})");
+        }
     }
 
     #[test]
