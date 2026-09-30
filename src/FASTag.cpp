@@ -2015,6 +2015,7 @@ protected:
     bool write_abort = false;                      ///< the writer failed (ring_mutex)
     std::atomic<bool> abort_hint{false};
     std::exception_ptr write_failed;
+    std::exception_ptr work_failed;                ///< first reader/tagger failure (ring_mutex)
 
     const auto t_prep_a = Clock::now();
     for (size_t k = 0; k < open_upto; ++k) prep_block(blocks[k % kRing], k * BLOCK, block_size(k));
@@ -2126,7 +2127,21 @@ protected:
           if (timing) per_thread[tid].s_ring += secs(tw, Clock::now());
         }
         if (!abort_hint.load(std::memory_order_relaxed))
-          work(i, blocks[k % kRing], static_cast<size_t>(i) - k * BLOCK);
+        {
+          // An exception must not leave the parallel region: that is
+          // std::terminate, an abort instead of an error message. Keep the
+          // first, let every thread skip the rest, rethrow after the join.
+          try
+          {
+            work(i, blocks[k % kRing], static_cast<size_t>(i) - k * BLOCK);
+          }
+          catch (...)
+          {
+            std::lock_guard<std::mutex> guard(ring_mutex);
+            if (!work_failed) work_failed = std::current_exception();
+            abort_hint.store(true);
+          }
+        }
         if (pending[k].fetch_sub(1, std::memory_order_acq_rel) == 1)
         {
           std::lock_guard<std::mutex> guard(ring_mutex);
@@ -2147,6 +2162,7 @@ protected:
     // write= is only what the loop waits for; write_busy= is the writer's own.
     writer.join();
     t_write = secs(t_write_a, Clock::now());
+    if (work_failed) std::rethrow_exception(work_failed);
     if (write_failed) std::rethrow_exception(write_failed);
     if (timing)
     {
@@ -3165,26 +3181,20 @@ int main(int argc, const char** argv)
 
   TOPPFASTag tool;
   TOPPBase::ExitCodes rc;
-  if (ttd)
-  {
-    // Only descriptor runs get this net, so every other invocation keeps
-    // today's exact failure behaviour, OpenMS's terminate handler included.
-    // It is needed because a malformed or duplicated .ttd raises from
-    // getTOPPToolList(), called at TOPPBase.cpp:150 -- outside TOPPBase::main's
-    // own try block, so nothing else would catch it.
-    try
-    {
-      rc = tool.main(static_cast<int>(args.size()), args.data());
-    }
-    catch (const std::exception& e)
-    {
-      std::cerr << "FASTag: tool description export failed: " << e.what() << std::endl;
-      rc = TOPPBase::UNKNOWN_ERROR;
-    }
-  }
-  else
+  // TOPPBase::main catches OpenMS's own exceptions only. Anything else -- the
+  // mzPeak library's (a malformed or unsupported archive), a malformed .ttd
+  // raised from getTOPPToolList() before TOPPBase's try block, bad_alloc --
+  // would reach std::terminate: an abort, no exit code, the message buried
+  // in a runtime banner.
+  try
   {
     rc = tool.main(static_cast<int>(args.size()), args.data());
+  }
+  catch (const std::exception& e)
+  {
+    std::cerr << (ttd ? "FASTag: tool description export failed: " : "Error: ") << e.what()
+              << std::endl;
+    rc = TOPPBase::UNKNOWN_ERROR;
   }
   // What the run's own FASTAG_TIMING line cannot see: destroying main_()'s
   // state and TOPPBase's epilogue. Wall time past since_program_start is the
