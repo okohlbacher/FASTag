@@ -264,13 +264,11 @@ namespace FASTag
       // spectrum comes back empty, and the run reports a clean zero. Refused
       // here, such a file has its offsets rebuilt by a scan instead.
       //
-      // Exactly, not "a tag somewhere in the next 64 bytes" (the earlier
-      // rule): an index shifted by a few bytes passed that, and every range
-      // read from it then started inside the previous spectrum and stopped
-      // short of its own closing tag -- empty spectra, silently. One probe
-      // passes a file whose header is intact and whose body has shifted, and
-      // three (also the earlier rule) pass a file patched only between them;
-      // 33 cost 33 reads of 16 bytes.
+      // Exactly, not "a tag somewhere nearby": from an index shifted by a few
+      // bytes every range starts inside the previous spectrum and stops short
+      // of its own closing tag -- empty spectra, silently. Spread across the
+      // run, because an edit in the middle shifts only the offsets after it;
+      // 33 probes cost 33 reads of 16 bytes.
       // ponytail: sampled, not exhaustive -- an edit that shifts no sampled
       // offset still gets through; check every offset if one ever does.
       {
@@ -562,18 +560,14 @@ namespace FASTag
     const std::size_t ple = find_or(xml, "</precursorList>", plb, n);
 
     // Element matching is by NAME, not by "<name " with a space: a writer may
-    // emit <precursor> or <selectedIon> with no attributes at all, and both
-    // loops must still advance. An earlier version searched for the
-    // space-suffixed form with a fallback to the bare one, and on a file that
-    // used the bare form the fallback restarted from the same position every
-    // iteration -- an infinite loop that appended a precursor each time and
-    // ran a 1.8 GB file to 36 GB of memory before it was killed.
+    // emit <precursor> or <selectedIon> with no attributes at all. Both loops
+    // move forward on every iteration whatever they find -- one that does not
+    // appends a precursor per turn until memory runs out.
     auto element_at = [&](std::size_t at, std::string_view name) {
       if (at == std::string_view::npos || at + name.size() >= n) return false;
-      const char after = xml[at + name.size()];
       // <selectedIonList> must not match <selectedIon>.
-      return after == '>' || after == ' ' || after == '\t' || after == '\n' ||
-             after == '\r' || after == '/';
+      const char after = xml[at + name.size()];
+      return is_name_end(after) || after == '/';
     };
 
     std::size_t p = plb;
