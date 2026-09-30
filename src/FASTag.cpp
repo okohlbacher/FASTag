@@ -62,6 +62,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <condition_variable>
 #include <mutex>
 #ifndef _WIN32
@@ -1101,8 +1102,20 @@ protected:
     std::unique_ptr<FASTag::IndexedMzMLReader> fastmz;
     if (!mzpeak_in && out_spectra.empty())
     {
+      const auto opened = std::chrono::steady_clock::now();
       auto candidate = std::make_unique<FASTag::IndexedMzMLReader>(in);
       if (candidate->ok() && candidate->reportsSpectrumMetadata()) fastmz = std::move(candidate);
+      if (fastmz && fastmz->indexRebuilt())
+      {
+        const double secs =
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - opened).count();
+        OPENMS_LOG_WARN << "'" << in << "' has no index, or one that no longer matches the file "
+                           "(edited after it was written?); found its "
+                        << fastmz->getNrSpectra() << " spectra by scanning it instead ("
+                        << std::round(secs * 100.0) / 100.0
+                        << " s). Re-index it, e.g. with FileConverter, to skip the scan."
+                        << std::endl;
+      }
     }
 
     // A pointer, not a value: the fallback below must replace this with a

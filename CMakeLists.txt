@@ -290,6 +290,10 @@ if(FASTAG_BUILD_TESTS)
   target_include_directories(indexed_mzml_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   target_compile_definitions(indexed_mzml_test PRIVATE
                              FASTAG_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
+  # The offset scan is parallel in the tool; test it the same way.
+  if(OpenMP_CXX_FOUND)
+    target_link_libraries(indexed_mzml_test PRIVATE OpenMP::OpenMP_CXX)
+  endif()
   add_test(NAME indexed_mzml_test COMMAND indexed_mzml_test)
   set_tests_properties(indexed_mzml_test PROPERTIES SKIP_RETURN_CODE 77)
 
