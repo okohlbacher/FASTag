@@ -24,23 +24,20 @@ namespace FASTag
   {
     /// The folded alphabet, exactly 19 letters: the 20 standard residues with I
     /// folded onto L. Anything else (X/B/J/O/U/Z, digits, '*') is ambiguous and
-    /// would match spuriously, so it has no code and kills the k-mer -- the same
-    /// rejection v1's character loop performed, expressed once.
+    /// would match spuriously, so it has no code and kills the k-mer.
     constexpr char ALPHABET[] = "ACDEFGHKLMNPQRSTVWY";
     constexpr int RADIX = 19;
 
     const int8_t* codeTable()
     {
-      // Function-local static with a lambda initializer: C++11 guarantees the
-      // initialization is thread-safe and runs exactly once. The previous
-      // `static bool init` guard was a data race -- a v2 load never touches this
-      // table, so the FIRST lookups happen straight from the OpenMP loop, with
-      // multiple threads writing `t` and `init` at once.
+      // Function-local static: C++11 guarantees thread-safe one-time
+      // initialization, which matters because a v2 load never touches this
+      // table, so the FIRST lookups happen straight from the OpenMP loop.
       static const std::array<int8_t, 256> table = [] {
         std::array<int8_t, 256> t;
         t.fill(-1);
         for (int i = 0; i < RADIX; ++i) t[static_cast<uint8_t>(ALPHABET[i])] = static_cast<int8_t>(i);
-        t[static_cast<uint8_t>('I')] = t[static_cast<uint8_t>('L')];  // fold, defensively
+        t[static_cast<uint8_t>('I')] = t[static_cast<uint8_t>('L')];  // I folds onto L
         return t;
       }();
       return table.data();
@@ -100,6 +97,12 @@ namespace FASTag
 
   TaxIndex::~TaxIndex() { reset(); }
 
+  uint32_t TaxIndex::postingAt(uint32_t p) const
+  {
+    return static_cast<uint32_t>(
+        rdKey(post_ + static_cast<size_t>(p) * static_cast<size_t>(tax_bytes_), tax_bytes_));
+  }
+
   void TaxIndex::reset()
   {
     if (map_base_ != nullptr)
@@ -135,8 +138,6 @@ namespace FASTag
       const uint32_t tax = e < taxids.size() ? taxids[e] : 0;
       if (tax == 0) continue;
       const std::string seq = fold(entries[e].sequence);
-      if (static_cast<int>(seq.size()) < k) continue;
-
       for (size_t i = 0; i + static_cast<size_t>(k) <= seq.size(); ++i)
       {
         if (encode(seq.data() + i, k) == UINT64_MAX) continue;
@@ -193,10 +194,7 @@ namespace FASTag
         ids.clear();
         for (uint32_t p = offsets_[i]; p < offsets_[i + 1]; ++p)
         {
-          uint32_t idx = 0;
-          for (int j = tax_bytes_ - 1; j >= 0; --j)
-            idx = (idx << 8)
-                | post_[static_cast<size_t>(p) * static_cast<size_t>(tax_bytes_) + static_cast<size_t>(j)];
+          const uint32_t idx = postingAt(p);
           if (idx < n_taxa_) ids.push_back(idx);
         }
         bump();
@@ -204,7 +202,7 @@ namespace FASTag
       return m;
     }
 
-    // Legacy v1 path: postings are taxids, so map each to its index once.
+    // In-memory path: postings are taxids, so map each to its index once.
     for (const auto& kv : index_)
     {
       ids.clear();
@@ -262,10 +260,7 @@ namespace FASTag
       out.reserve(e - b);
       for (uint32_t p = b; p < e; ++p)
       {
-        uint32_t idx = 0;
-        for (int j = tax_bytes_ - 1; j >= 0; --j)
-          idx = (idx << 8)
-              | post_[static_cast<size_t>(p) * static_cast<size_t>(tax_bytes_) + static_cast<size_t>(j)];
+        const uint32_t idx = postingAt(p);
         if (idx < n_taxa_) out.push_back(taxa_[idx]);
       }
       return;
@@ -298,7 +293,7 @@ namespace FASTag
     const int kb = keyBytes(k_);
     // Width follows the largest INDEX stored (n_taxa-1), not the count:
     // 256 taxa still index 0..255, one byte.
-    const uint32_t max_idx = n_taxa == 0 ? 0 : n_taxa - 1;
+    const uint32_t max_idx = n_taxa - 1;
     const int tb = max_idx <= 0xFFu ? 1 : (max_idx <= 0xFFFFu ? 2 : 4);
 
     std::vector<std::pair<uint64_t, std::vector<uint32_t>>> rows;
@@ -329,14 +324,7 @@ namespace FASTag
       for (uint64_t i = 0; i < n_kmers_; ++i)
       {
         std::vector<uint32_t> idx;
-        for (uint32_t p = offsets_[i]; p < offsets_[i + 1]; ++p)
-        {
-          uint32_t v = 0;
-          for (int j = tax_bytes_ - 1; j >= 0; --j)
-            v = (v << 8)
-              | post_[static_cast<size_t>(p) * static_cast<size_t>(tax_bytes_) + static_cast<size_t>(j)];
-          idx.push_back(v);
-        }
+        for (uint32_t p = offsets_[i]; p < offsets_[i + 1]; ++p) idx.push_back(postingAt(p));
         rows.emplace_back(rdKey(keys_ + i * static_cast<size_t>(key_bytes_), key_bytes_), std::move(idx));
       }
     }
@@ -383,8 +371,7 @@ namespace FASTag
 
     std::vector<uint8_t> pbuf(static_cast<size_t>(tb));
     for (const auto& r : rows)
-      for (uint32_t i : r.second)
-      { uint32_t v = i; for (int j = 0; j < tb; ++j) { pbuf[j] = static_cast<uint8_t>(v & 0xFF); v >>= 8; } put(pbuf.data(), static_cast<size_t>(tb)); }
+      for (uint32_t i : r.second) { wrKey(pbuf.data(), tb, i); put(pbuf.data(), static_cast<size_t>(tb)); }
 
     o.flush();
     return static_cast<bool>(o);
@@ -401,7 +388,7 @@ namespace FASTag
       probe.read(magic, 4);
     }
 
-    // ---- v1: parse into the maps, so pre-v2 indexes still load --------------
+    // ---- v1: parse into the in-memory maps ----------------------------------
     if (std::memcmp(magic, "FTXI", 4) == 0)
     {
       std::ifstream i(path, std::ios::binary);

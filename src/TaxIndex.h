@@ -4,30 +4,24 @@
 // protein set to the SET of taxa whose proteins contain it. Taxon sets are
 // kept, not collapsed to a per-k-mer LCA: collapsing at index time is
 // irreversible and one misannotated protein would drag a k-mer to the root,
-// where keeping the set lets outliers be down-weighted and the
-// lowest-common-ancestor be computed at report time.
+// where keeping the set lets outliers be down-weighted at report time.
 //
 // ON-DISK FORMAT AND MEMORY
 //
-// v1 stored `unordered_map<string, vector<uint32_t>>` and rebuilt it on load.
-// That cost ~90 bytes per k-mer in RAM against 16.9 on disk -- a map node, an
-// SSO string, and a heap-allocated vector holding on average 1.2 taxids. A
-// 50-taxon index measured 2.13 GB on disk and 10.2 GB resident, which put the
-// feature out of reach on an ordinary laptop.
-//
-// v2 is a flat, packed, memory-MAPPED image:
+// The index (v2) is a flat, packed, memory-MAPPED image:
 //   * k-mers are packed base-19 (the folded alphabet has exactly 19 letters),
 //     so k=7 needs 30 bits -> 4 bytes, against 7 bytes of characters.
 //   * postings store an INDEX into the taxon table, not a taxid: 50 taxa need
-//     one byte where a uint32 was used.
+//     one byte instead of four.
 //   * nothing is parsed at load. The file is mapped and the arrays are used in
 //     place, so resident memory is file-backed and EVICTABLE under pressure
-//     rather than anonymous heap the OS cannot reclaim.
+//     rather than anonymous heap the OS cannot reclaim. (A hash map of strings
+//     costs ~90 bytes per k-mer in RAM: ~10 GB resident for 50 taxa.)
 //
-// v1 files still load (via the legacy in-memory path) so existing indexes keep
-// working; save() always writes v2.
+// v1 files (a serialized hash map) still load via the in-memory path, which
+// build() also fills; save() always writes v2.
 //
-// ACCEPTED LIMITATIONS (deliberate, after an adversarial review):
+// ACCEPTED LIMITATIONS (deliberate):
 //   * Little-endian, 64-bit hosts only. macOS/Windows/Linux on x86-64/arm64 are
 //     all LE; a big-endian reader would see byte-swapped numeric fields, and a
 //     32-bit host cannot map a >4 GB index. Both are non-targets.
@@ -119,6 +113,7 @@ namespace FASTag
 
   private:
     void reset();
+    uint32_t postingAt(uint32_t p) const;  ///< taxon index of mapped posting p
 
     int k_ = 0;
 
@@ -141,7 +136,7 @@ namespace FASTag
     int key_bytes_ = 0;
     int tax_bytes_ = 0;
 
-    // ---- v1 legacy / build scratch -----------------------------------------
+    // ---- in-memory form: build() output and v1 files -----------------------
     std::unordered_map<std::string, std::vector<uint32_t>> index_;
     std::unordered_map<uint32_t, uint64_t> postings_;
     bool legacy_ = false;
