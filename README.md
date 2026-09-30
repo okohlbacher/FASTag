@@ -190,6 +190,10 @@ four in/out combinations work, and which container you use does not change the
 tags: a run read as mzPeak gives the same spectra as the same run read as mzML,
 and a run written to mzPeak and tagged again reproduces the original tag set.
 
+An input FASTag cannot decode at all — an mzPeak archive in an encoding the
+library does not support, say — ends the run with the reader's own message on
+`Error:` and a non-zero exit code, rather than aborting.
+
 ### mzML
 
 FASTag reads the mzML index directly and takes each spectrum's metadata from the
@@ -533,7 +537,8 @@ The two count columns answer different questions and move independently: a gap
 multiplies how many tags a spectrum yields, so tag totals climb far faster than
 the number of spectra reached. Overall, 84.5% of the spectra Sage identifies at
 1% FDR carry a tag that reads the identified peptide; the original DirecTag
-paper reports > 80%. See [doc/TEST-DATA.md](doc/TEST-DATA.md) for the data and
+paper reports > 80%. See [doc/TEST-DATA.md](doc/TEST-DATA.md) for the corpus,
+and for why this particular measurement cannot be re-run here, and
 [doc/BENCHMARK-DirecTag.md](doc/BENCHMARK-DirecTag.md) for the side-by-side
 comparison with the reference implementation.
 
