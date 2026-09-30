@@ -33,9 +33,10 @@
 
 #include <algorithm>
 #include <atomic>
+#include <charconv>
 #include <cstdlib>
+#include <cstring>
 #include <exception>
-#include <limits>
 #include <optional>
 #include <vector>
 
@@ -151,13 +152,14 @@ namespace FASTag
       }
     }
 
-    /// Largest signal row group across the archive's spectrum tables, in
-    /// uncompressed bytes. Read from the Parquet footers, so it costs a few
-    /// file opens and nothing else.
-    std::size_t largestRowGroup(const MzPeak::Index& index)
+    /// Row groups across the archive's spectrum signal tables, and the
+    /// largest of them in uncompressed bytes. Read from the Parquet footers,
+    /// so it costs a few file opens and nothing else. The count is the
+    /// physical layout; rowGroupsDecoded() counts cache decodes, which equal
+    /// it only while nothing is evicted.
+    void signalRowGroups(const MzPeak::Index& index, std::size_t& count, std::size_t& largest)
     {
       using enum MzPeak::Schema::DataKind::Type;
-      std::size_t best = 0;
       const auto manager = index.manager();
       for (const auto& file : index.files())
       {
@@ -165,34 +167,15 @@ namespace FASTag
         const auto kind = file.data_kind().type();
         if (kind != DataArray && kind != Peaks) continue;
         const auto fmd = manager->parquet(file)->file_metadata();
+        count += static_cast<std::size_t>(fmd->num_row_groups());
         // DECODED, not total_byte_size: the cache's budget is denominated in
         // decoded bytes, and a caller sizing that budget in row groups with
         // the encoded figure is out by whatever the encoding won -- 4.4x on a
         // signal table whose spectrum index is sorted and RLE'd.
         for (int g = 0; g < fmd->num_row_groups(); ++g)
-          best = std::max(best, MzPeak::Util::decoded_row_group_bytes(*fmd->RowGroup(g),
-                                                                     *fmd->schema()));
+          largest = std::max(largest, MzPeak::Util::decoded_row_group_bytes(*fmd->RowGroup(g),
+                                                                           *fmd->schema()));
       }
-      return best;
-    }
-
-    /// Row groups across the archive's spectrum signal tables, from the same
-    /// footers. rowGroupsDecoded() is NOT this: it counts cache decodes, which
-    /// equal the group count only while nothing is evicted. A test that wants
-    /// to prove it produced a multi-group archive reads this one.
-    std::size_t countRowGroups(const MzPeak::Index& index)
-    {
-      using enum MzPeak::Schema::DataKind::Type;
-      std::size_t n = 0;
-      const auto manager = index.manager();
-      for (const auto& file : index.files())
-      {
-        if (file.entity_type().type() != MzPeak::Schema::EntityType::Spectrum) continue;
-        const auto kind = file.data_kind().type();
-        if (kind != DataArray && kind != Peaks) continue;
-        n += static_cast<std::size_t>(manager->parquet(file)->file_metadata()->num_row_groups());
-      }
-      return n;
     }
 
     /// Called concurrently: FASTag builds its per-thread copies in parallel.
@@ -292,8 +275,7 @@ namespace FASTag
     : impl_(std::make_unique<Impl>(path))
   {
     impl_->shared->settings = fromRunMetadata(impl_->shared->index.metadata());
-    impl_->shared->row_group_bytes = largestRowGroup(impl_->shared->index);
-    impl_->shared->row_groups = countRowGroups(impl_->shared->index);
+    signalRowGroups(impl_->shared->index, impl_->shared->row_groups, impl_->shared->row_group_bytes);
   }
   catch (const Exception::BaseException&)
   {
@@ -814,14 +796,10 @@ namespace FASTag
       constexpr std::size_t kDefault = std::size_t(1) << 20;
       const char* v = std::getenv("FASTAG_MZPEAK_POINTS_PER_ROW_GROUP");
       if (!v || !*v) return kDefault;
+      const char* end = v + std::strlen(v);
       std::size_t n = 0;
-      bool ok = true;
-      for (const char* c = v; *c && ok; ++c)
-      {
-        if (*c < '0' || *c > '9' || n > (std::numeric_limits<std::size_t>::max() - 9) / 10) ok = false;
-        else n = n * 10 + static_cast<std::size_t>(*c - '0');
-      }
-      if (!ok || n == 0)
+      const auto [ptr, ec] = std::from_chars(v, end, n);
+      if (ec != std::errc() || ptr != end || n == 0)
       {
         OPENMS_LOG_WARN << "FASTAG_MZPEAK_POINTS_PER_ROW_GROUP='" << v
                         << "' is not a positive integer; writing " << kDefault
