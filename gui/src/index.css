@@ -1,8 +1,7 @@
 /* Light by default, dark when the OS asks for it -- `color-scheme` also flips
    the native scrollbars, form controls and caret, which a token swap alone
    does not. Every colour below is a token: a hardcoded hex is invisible in one
-   theme and wrong in the other, which is how the old log pane stayed near
-   black on a white app. */
+   theme and wrong in the other. */
 :root {
   --bg: #ffffff;
   --panel: #f3f4f7;
@@ -142,8 +141,6 @@ header .logo { display: block; flex: 0 0 auto; }
 button.slim { padding: 6px 10px; font-size: 12px; }
 .row.actions { margin-top: 14px; }
 
-/* Advanced accordion */
-.adv { margin-top: 6px; border-top: 1px solid var(--border); padding-top: 10px; }
 button.disclosure {
   display: flex;
   align-items: center;
@@ -158,15 +155,10 @@ button.disclosure {
   text-align: left;
   cursor: pointer;
 }
-button.disclosure.sub { font-weight: 500; color: var(--fg); font-size: 12.5px; }
 button.disclosure:hover { color: var(--accent); }
 .chev { display: inline-block; transition: transform 0.15s ease; color: var(--muted); }
 .chev.open { transform: rotate(90deg); }
 .count { margin-left: auto; font-size: 11px; font-weight: 400; color: var(--muted); }
-
-.adv-body { padding: 4px 0 0 4px; }
-.group { border-left: 2px solid var(--border); margin: 2px 0; padding-left: 8px; }
-.group-body { padding: 4px 0 8px 2px; }
 
 .warn {
   margin: 8px 0;
@@ -322,7 +314,6 @@ th, td {
 }
 th { position: sticky; top: 0; background: var(--panel); color: var(--muted); font-weight: 600; }
 .empty { padding: 24px; color: var(--muted); }
-.trunc { padding: 8px 14px; color: var(--muted); font-size: 11px; }
 
 .presets { display: flex; gap: 6px; margin: 10px 0 4px; }
 .presets select, .presets input { flex: 1; padding: 6px 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; color: var(--fg); font: inherit; font-size: 12px; }
@@ -417,8 +408,8 @@ header .spacer { flex: 1; }
 @media (prefers-color-scheme: dark) { .openms img { --logo-pad: 3px 5px; } }
 
 /* ---- Parameter sections ----------------------------------------------- */
-/* One flat level of disclosure, not core-plus-nested-advanced: every section
-   is the same kind of thing, so they look the same and open the same way. */
+/* One flat level of disclosure: every section is the same kind of thing, so
+   they look the same and open the same way. */
 .sec { border-top: 1px solid var(--border); }
 .sec:first-of-type { border-top: none; }
 .sec > .disclosure { padding: 9px 2px; }
