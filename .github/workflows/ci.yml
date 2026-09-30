@@ -85,7 +85,7 @@ env:
   # change what a release contains -- and the SHA is its cache key. The commit
   # must carry MetadataDetail::Minimal and the writer's precursor support; older
   # ones do not compile against src/OnDiscMzPeakExperiment.cpp.
-  MZPEAK_LIB_REF: 69948bcf657ddd4abf41995564d56ab95b176191
+  MZPEAK_LIB_REF: a4345f72b6968a6066e09b136a28d792ab3e5edb
   # The macOS floor, CHOSEN rather than inherited from whatever SDK the runner
   # image happens to ship. v1.4.2 went out with minos 14.0 on arm64 (macos-14)
   # and 15.0 on x64 (macos-15-intel), while the libOpenMS.dylib bundled beside

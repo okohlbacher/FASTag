@@ -104,7 +104,7 @@ env:
   # MZPEAK_REF above (the OpenMS overlay). Keep in lockstep with ci.yml; this
   # must be a trunk commit at or after the MSVC support (static-only Windows
   # build, UTF-8 libzip names).
-  MZPEAK_LIB_REF: 69948bcf657ddd4abf41995564d56ab95b176191
+  MZPEAK_LIB_REF: a4345f72b6968a6066e09b136a28d792ab3e5edb
   # SignPath PROJECT slug. Empty because no project exists yet.
   #
   # 'OpenMS_Apps' briefly lived here and was wrong: that is the slug of a
