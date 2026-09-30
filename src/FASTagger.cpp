@@ -1009,9 +1009,9 @@ namespace FASTag
     auto near_dup = [](const ScoredTag& a, const ScoredTag& b) {
       if (a.tag.charge != b.tag.charge) return false;
       if (a.peaks.size() < 4 || b.peaks.size() < 4) return false;
-      std::vector<uint32_t> pa(a.peaks), pb(b.peaks);
-      std::sort(pa.begin(), pa.end());
-      std::sort(pb.begin(), pb.end());
+      // peaks ascend: every graph edge, and so every path, runs to higher m/z.
+      const std::vector<uint32_t>& pa = a.peaks;
+      const std::vector<uint32_t>& pb = b.peaks;
       size_t i = 0, j = 0, shared = 0;
       while (i < pa.size() && j < pb.size())
       {
