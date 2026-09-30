@@ -20,13 +20,11 @@
 
 namespace FASTag
 {
-  /// Sentinel for ambiguity codes; no tag can contain it. (Kept in sync with
-  /// FastaFilter.h's constant by the compiler: both are this one.)
+  /// Sentinel for ambiguity codes; no tag can contain it. (FastaFilter.h's
+  /// AMBIG is this constant.)
   constexpr char RESIDUE_AMBIG = '#';
 
-  /// Canonicalize one database character, EXACTLY as FastaFilter always has
-  /// (moved here verbatim so the filter's index keys cannot change):
-  /// lowercase is uppercased; non-letters return 0 (drop the character);
+  /// Canonicalize one database character: lowercase is uppercased; non-letters return 0 (drop the character);
   /// ambiguity codes X/B/Z/J/U/O become RESIDUE_AMBIG (kept, unmatchable --
   /// J too: it stands for I-or-L, but an indexed J would otherwise become a
   /// matchable letter of its own); I folds to L.
@@ -51,7 +49,7 @@ namespace FASTag
   /// heavier, which changes which sums are isobaric). At 0.04 Da the unmodified
   /// set is N=GG, Q=GA/AG, K=GA/AG(*), R=GV/VG, W=AD/DA/GE/EG/SV/VS.
   inline std::vector<CollapseRule> deriveCollapseRules(
-      double tol, const std::vector<std::pair<char, double>>& fixed_deltas = {})
+      double tol, const std::vector<std::pair<char, double>>& fixed_deltas)
   {
     std::vector<CollapseRule> rules;
     std::vector<std::pair<char, double>> R;
@@ -63,13 +61,11 @@ namespace FASTag
         if (d.first == e.first) e.second += d.second;
 
     // ResidueDB::getResidues returns a std::set<const Residue*> -- ordered by
-    // POINTER, which varies per process (allocation order/ASLR). Left as-is,
-    // the derived rules keep their set but permute their ORDER between runs,
-    // and FastaFilter::emitReadings' reading budget then truncates a
-    // DIFFERENT subset of collapse readings -- a one-in-several-runs
-    // nondeterministic index observed on real data (an extra 6-mer in
-    // ~1 of 5 runs, reproduced back to v0.19.1). Sorting the residue table
-    // pins the rule order and with it every downstream truncation.
+    // POINTER, which varies per process (allocation order/ASLR). Unsorted,
+    // the rules would permute between runs, and FastaFilter::emitReadings'
+    // reading budget would truncate a different subset of collapse readings
+    // each time. Sorting the residue table pins the rule order and with it
+    // every downstream truncation.
     std::sort(R.begin(), R.end());
     for (const auto& one : R)
       for (const auto& a : R)

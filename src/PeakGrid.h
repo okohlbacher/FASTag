@@ -4,9 +4,8 @@
 // buildGraph asks "nearest peak to m/z_i + residue/z, if within tolerance" for
 // every peak x residue x fragment charge, and prepare() asks it once more per
 // peak and charge for complements -- thousands of queries against the same
-// few hundred peaks. Profiled, the binary search behind findNearest was 20-40%
-// of worker CPU, and not from cache misses (L1D hit 99.3%): an out-of-line
-// call into libOpenMS plus ~8 dependent, unpredictable branches per query.
+// few hundred peaks, where findNearest's out-of-line binary search (~8
+// dependent, unpredictable branches per query) dominated worker CPU.
 //
 // So the spectrum is indexed once. A dense array maps each m/z bucket to the
 // first peak at or above it; a query jumps to its bucket and steps forward to
@@ -19,9 +18,8 @@
 // fixed for a whole run is the residue alphabet, so a table over peak-to-peak
 // m/z DIFFERENCES, built once per charge, lists which residues each difference
 // could be. Per peak, a walk over the peaks within the heaviest step replaces
-// one lookup per residue. Measured on an EPYC 9654 (x86), per spectrum and
-// charge: the grid is 1.5-1.8x faster than findNearest, the table 3.0-3.7x faster
-// than the grid at 0.02 Da and 20 ppm, and 1.2-2.1x at 0.5 Da.
+// one lookup per residue: 3.0-3.7x faster than the grid at 0.02 Da and 20 ppm,
+// which is itself 1.5-1.8x faster than findNearest.
 //
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
