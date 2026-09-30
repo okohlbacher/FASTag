@@ -9,10 +9,6 @@
 
 #include "ProteomeIndex.h"
 
-#include <OpenMS/FORMAT/FASTAFile.h>
-
-#include <cstdint>
-#include <memory>
 #include <string>
 #include <vector>
 
@@ -54,10 +50,10 @@ namespace FASTag
 
   /// Reconciles tags against a tryptically digested protein database.
   ///
-  /// Holds the digested peptides and, for every tag-length k-mer, the peptide
-  /// placements it occurs at, so a tag can be located and its database flanking
-  /// masses computed and compared to the spectrum's. I is folded to L, exactly
-  /// as the tagger and FastaFilter do, since a spectrum cannot distinguish them.
+  /// Locates each tag in a ProteomeIndex, enumerates the tryptic windows around
+  /// every occurrence, and compares the database flanking masses to the
+  /// spectrum's. I is folded to L, exactly as the tagger and FastaFilter do,
+  /// since a spectrum cannot distinguish them.
   class TagReconciler
   {
   public:
@@ -67,22 +63,15 @@ namespace FASTag
     TagReconciler(double frag_tol, bool tol_ppm, bool both_orientations = true)
       : frag_tol_(frag_tol), tol_ppm_(tol_ppm), both_(both_orientations) {}
 
-    /// Legacy build: owns a ProteomeIndex over the entries (no isobaric
-    /// collapse, exact-length gate at @p k) -- the historical demo-scale
-    /// contract, kept for existing tests and callers. Call once; reconcile()
-    /// is const/thread-safe after.
-    void build(const std::vector<OpenMS::FASTAFile::FASTAEntry>& entries, int k,
-               int missed_cleavages,
-               const std::vector<std::pair<char, double>>& fixed_mods);
-
-    /// Proteome-scale build: reconcile against a caller-owned ProteomeIndex
-    /// (any tag length in [min_len, MAX_FILTER_LEN], collapse rules as the
-    /// index was built with). The index must outlive this object.
+    /// Reconcile against a caller-owned ProteomeIndex (any tag length in
+    /// [min_len, MAX_FILTER_LEN], collapse rules as the index was built with).
+    /// The index must outlive this object. Call once; reconcile() is
+    /// const/thread-safe after.
     void attach(const ProteomeIndex* idx, int missed_cleavages, int min_len);
 
     /// All placements of @p tag consistent with the flanking masses, at most one
     /// flank mismatch each. @p tag is base residues (bracket annotations already
-    /// stripped), N->C, at the k used in build().
+    /// stripped), N->C.
     std::vector<Reconciliation> reconcile(const std::string& tag, double nterm_mass,
                                           double cterm_mass) const;
 
@@ -90,8 +79,6 @@ namespace FASTag
     /// before reconcile(); read-only after. Empty means only substitutions and
     /// "?" are ever reported.
     void setModCandidates(std::vector<ModCandidate> mods) { mods_ = std::move(mods); }
-
-    size_t proteinCount() const { return idx_ ? idx_->proteinCount() : 0; }
 
   private:
     double tolAt(double m) const { return tol_ppm_ ? m * frag_tol_ * 1e-6 : frag_tol_; }
@@ -107,12 +94,10 @@ namespace FASTag
     double frag_tol_;
     bool   tol_ppm_;
     bool   both_;
-    int    k_ = 0;        ///< legacy exact-length gate; 0 = length range mode
-    int    min_len_ = 3;  ///< length-range mode floor
+    int    min_len_ = 3;  ///< shortest tag reconciled
     int    mc_ = 0;       ///< missed cleavages for window enumeration
-    double residue_masses_[128] = {0};  ///< by ASCII code, fixed mods folded in
+    double residue_masses_[128] = {0};  ///< by ASCII code, unmodified
     std::vector<ModCandidate> mods_;    ///< candidate variable mods for stage B
-    std::unique_ptr<ProteomeIndex> owned_;  ///< legacy build() owns its index
     const ProteomeIndex* idx_ = nullptr;    ///< the index queries run against
   };
 }
