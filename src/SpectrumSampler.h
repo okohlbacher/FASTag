@@ -19,7 +19,7 @@
 
 namespace FASTag
 {
-  /// A 0/1 mask over [0, n_total): mask[i] != 0 iff spectrum i is selected.
+  /// A mask over [0, n_total): mask[i] is 1 iff spectrum i is selected, else 0.
   using SampleMask = std::vector<char>;
 
   /// Select @p n_want of @p n_total indices uniformly at random without

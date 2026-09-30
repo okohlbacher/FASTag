@@ -242,15 +242,15 @@ protected:
                        "residues either side of it from their summed mass; "
                        "0 disables", false);
     setMinInt_("gaps", 0);
-    // Negated, because a TOPP flag is false unless given and both of these are
-    // now on by default. `-no_deisotope` follows TOPPBase's own `-no_progress`.
+    // One gap only. Each additional gap multiplies the branching and asserts
+    // another unobserved split, and a two-gap tag would be mostly inference.
+    setMaxInt_("gaps", 1);
+    // Negated, because a TOPP flag is false unless given and deisotoping is on
+    // by default. `-no_deisotope` follows TOPPBase's own `-no_progress`.
     registerFlag_("no_deisotope",
                   "Do not collapse isotope clusters to their monoisotopic peak, and "
                   "do not move multiply-charged fragments onto the singly-charged "
                   "scale, before peak selection", false);
-    // One gap only. Each additional gap multiplies the branching and asserts
-    // another unobserved split, and a two-gap tag would be mostly inference.
-    setMaxInt_("gaps", 1);
 
     registerDoubleOption_("fragment_tolerance", "<value>", 20.0, "Fragment mass tolerance", false);
     // Without a floor a negative or zero tolerance matches nothing and the run
@@ -646,20 +646,19 @@ protected:
 #endif
     }
 
+    // -species is the switch; -taxdb with -species_out still works without it,
+    // which is how species detection was driven before the flag existed.
+    const bool want_species = getFlag_("species")
+        || (!getStringOption_("taxdb").empty() && !getStringOption_("species_out").empty());
+
     // Species precondition, checked BEFORE the run rather than after.
     //
     // The index is keyed on k-mers, so a tag shorter than k can never be looked
     // up. With the default tag_length of 3 against the bundled k=7 index that is
-    // EVERY tag: the run used to succeed, spend seconds and ~2 GB loading the
-    // index, and write a header-only report -- which reads as "nothing found"
-    // instead of "nothing could be found". A warning after the fact was not
-    // enough; refuse up front and say exactly what to change.
-    // Same activation condition as the run itself (below): the legacy
-    // -taxdb + -species_out invocation triggers species detection without the
-    // -species flag, and it must get the same up-front check, not the slow
-    // empty-report path.
-    if (getFlag_("species")
-        || (!getStringOption_("taxdb").empty() && !getStringOption_("species_out").empty()))
+    // EVERY tag, and the run would spend seconds and ~2 GB loading the index to
+    // write a header-only report -- which reads as "nothing found" instead of
+    // "nothing could be found". Refuse up front and say exactly what to change.
+    if (want_species)
     {
       String probe_taxdb = getStringOption_("taxdb");
       if (probe_taxdb.empty())
@@ -748,8 +747,14 @@ protected:
       return ILLEGAL_PARAMETERS;
     }
 
-    FASTag::FastaFilter filt(getStringOption_("orientation") == "both");
-    FASTag::FastaFilter entrap(getStringOption_("orientation") == "both");
+    const bool both_orientations = getStringOption_("orientation") == "both";
+    const double iso_tol = getDoubleOption_("isobaric_tolerance");
+    std::vector<std::pair<char, double>> fixed_deltas;
+    for (const auto& m : p.mods)
+      if (!m.variable) fixed_deltas.emplace_back(m.residue, m.delta);
+
+    FASTag::FastaFilter filt(both_orientations);
+    FASTag::FastaFilter entrap(both_orientations);
     const bool filtering = !fasta.empty();
     const String entrap_fasta = getStringOption_("entrapment_fasta");
     const bool entrap_on = !entrap_fasta.empty();
@@ -759,9 +764,7 @@ protected:
                           "give -fasta too." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
-    if (entrap_on
-        && (getFlag_("species")
-            || (!getStringOption_("taxdb").empty() && !getStringOption_("species_out").empty())))
+    if (entrap_on && want_species)
     {
       OPENMS_LOG_ERROR << "-entrapment_fasta cannot be combined with -species: "
                           "entrapment matches are known-false calibration "
@@ -780,8 +783,7 @@ protected:
       return ILLEGAL_PARAMETERS;
     }
     FASTag::ProteomeIndex pindex;
-    FASTag::TagReconciler recon(p.frag_tol, p.tol_ppm,
-                                getStringOption_("orientation") == "both");
+    FASTag::TagReconciler recon(p.frag_tol, p.tol_ppm, both_orientations);
     if (recon_on)
     {
       String rfasta = getStringOption_("recon_fasta");
@@ -794,10 +796,7 @@ protected:
       }
       std::vector<FASTAFile::FASTAEntry> rentries;
       FASTAFile().load(rfasta, rentries);
-      std::vector<std::pair<char, double>> fixed_deltas;
-      for (const auto& m : p.mods)
-        if (!m.variable) fixed_deltas.emplace_back(m.residue, m.delta);
-      pindex.build(rentries, fixed_deltas, getDoubleOption_("isobaric_tolerance"));
+      pindex.build(rentries, fixed_deltas, iso_tol);
       int rmin = getIntOption_("recon_min_length");
       if (rmin == 0) rmin = pindex.autoMinLen();
       recon.attach(&pindex, getIntOption_("recon_missed_cleavages"), rmin);
@@ -909,14 +908,7 @@ protected:
       }
       const int floor_ = getIntOption_("min_filter_length");
       if (floor_ > 0) filt.setMinLen(floor_);
-      const double iso = getDoubleOption_("isobaric_tolerance");
-      if (iso > 0)
-      {
-        std::vector<std::pair<char, double>> fixed_deltas;
-        for (const auto& m : p.mods)
-          if (!m.variable) fixed_deltas.emplace_back(m.residue, m.delta);
-        filt.deriveCollapses(iso, fixed_deltas);
-      }
+      if (iso_tol > 0) filt.deriveCollapses(iso_tol, fixed_deltas);
       filt.build(p.tag_length, max_len);
       OPENMS_LOG_INFO << "Filter index: " << filt.indexedKeys() << " keys" << std::endl;
 
@@ -946,14 +938,7 @@ protected:
           return INPUT_FILE_EMPTY;
         }
         entrap.setMinLen(filt.minLen());
-        const double iso2 = getDoubleOption_("isobaric_tolerance");
-        if (iso2 > 0)
-        {
-          std::vector<std::pair<char, double>> fixed_deltas;
-          for (const auto& m : p.mods)
-            if (!m.variable) fixed_deltas.emplace_back(m.residue, m.delta);
-          entrap.deriveCollapses(iso2, fixed_deltas);
-        }
+        if (iso_tol > 0) entrap.deriveCollapses(iso_tol, fixed_deltas);
         entrap.build(p.tag_length, max_len);
         OPENMS_LOG_INFO << "Entrapment: " << entrap.sequenceCount() << " sequences, "
                         << entrap.residueCount() << " residues, "
@@ -1164,14 +1149,11 @@ protected:
     {
       sample_mask = subsample_n > 0 ? FASTag::sampleByCount(n_total, subsample_n, subsample_seed)
                                     : FASTag::sampleByFraction(n_total, subsample_frac, subsample_seed);
-      size_t sel = 0; for (char c : sample_mask) sel += c ? 1 : 0;
-      OPENMS_LOG_INFO << "Subsampling: tagging " << sel << " of " << n_total
+      OPENMS_LOG_INFO << "Subsampling: tagging "
+                      << std::count(sample_mask.begin(), sample_mask.end(), char(1)) << " of " << n_total
                       << " input spectra (seed " << subsample_seed << ")" << std::endl;
     }
 
-#ifdef FASTAG_HAVE_MZPEAK_LIB
-    size_t picked_before_loop = 0;  // the probe below re-picks what it samples
-#endif
     // Warn when the fragment tolerance looks far too tight for the data.
     //
     // A high-resolution tolerance on low-resolution data is silent, and looks
@@ -1307,18 +1289,23 @@ protected:
               "\tdelta_mass\tregion\tdelta_interp\n";
     }
 
+    // Default report paths: <out> with its extension replaced by a suffix --
+    // only if the dot is in the FILE NAME. `-out /tmp/run.v1/tags` has its
+    // last dot in the directory, and cutting there would write elsewhere.
+    const auto beside_out = [&out](const char* suffix) -> String {
+      const size_t slash = out.find_last_of("/\\");
+      const size_t dot = out.rfind('.');
+      const bool ext = dot != std::string::npos && (slash == std::string::npos || dot > slash);
+      return (ext ? out.substr(0, dot) : out) + suffix;
+    };
+
     const bool glyco_on = getFlag_("glyco");
+    const double glyco_min_fraction = getDoubleOption_("glyco_min_fraction");
     String glyco_out = getStringOption_("glyco_out");
     std::ofstream gtsv;
     if (glyco_on)
     {
-      if (glyco_out.empty())
-      {
-        const size_t gslash = out.find_last_of("/\\");
-        const size_t gdot = out.rfind('.');
-        const bool gext = gdot != std::string::npos && (gslash == std::string::npos || gdot > gslash);
-        glyco_out = (gext ? out.substr(0, gdot) : out) + ".glyco.tsv";
-      }
+      if (glyco_out.empty()) glyco_out = beside_out(".glyco.tsv");
       gtsv.open(glyco_out.c_str());
       if (!gtsv)
       {
@@ -1333,7 +1320,9 @@ protected:
 
     PeakMap kept;
 #ifdef FASTAG_HAVE_MZPEAK_LIB
-    if (mzp) picked_before_loop = mzp->nPicked();
+    // Counted from here: the tolerance probe centroids what it samples, and
+    // the loop centroids those spectra again.
+    const size_t picked_before_loop = mzp ? mzp->nPicked() : 0;
     if (mzp) kept.getExperimentalSettings() = mzp->getMetaData();
     else
 #endif
@@ -1563,8 +1552,7 @@ protected:
           sorted_copy.sortByPosition();
           sp = &sorted_copy;
         }
-        const auto g = FASTag::scanOxonium(*sp, p.frag_tol, p.tol_ppm,
-                                           getDoubleOption_("glyco_min_fraction"));
+        const auto g = FASTag::scanOxonium(*sp, p.frag_tol, p.tol_ppm, glyco_min_fraction);
         std::string& gr = b.grows[idx];
         gr = spec.getNativeID();
         gr += '\t';
@@ -1601,18 +1589,13 @@ protected:
       if (want_out) b.keep_target.assign(n_used, 0);
     };
 
-    // -species consumes (spectrum id, tag) pairs from the REPORTED rows. They
-    // were once re-parsed from the whole-run row buffer after the loop; the
-    // rows are recycled per block now, so the pairs are collected here, where
-    // each row is written. id + tag is far smaller than the full rows.
-    const bool want_species = getFlag_("species")
-        || (!getStringOption_("taxdb").empty() && !getStringOption_("species_out").empty());
+    // -species consumes (spectrum id, tag) pairs from the REPORTED rows,
+    // collected in write_block as each row is written: id + tag is far smaller
+    // than the rows, which are recycled per block.
     const bool species_use_gapped = getFlag_("species_use_gapped");
     std::map<std::string, std::vector<std::string>> by_spec;
 
     // Write one finished block's rows in index order and recycle the buffers.
-    // Kept spectra still accumulate for the whole run: MzMLFile::store writes
-    // one map at the end, and -out_spectra is opt-in.
     //
     // Runs on the writer thread, one block at a time and in block order (see
     // the loop), so everything it appends to -- the streams, the glyco
@@ -1622,27 +1605,22 @@ protected:
     // Rows go to the files in chunks of a few MB, not one stream insertion per
     // spectrum. libstdc++'s filebuf hands any insertion of 1 KiB or more to a
     // write(2) of its own, whatever its buffer size, and one spectrum's rows
-    // are ~1.7 KB at benchmark settings: one system call per spectrum, 0.80-
-    // 0.93 s for 717,924 spectra -- as long as the whole tagging loop at 128
-    // threads and up, which the writer then held back through the block ring.
-    // ponytail: 4 MB, emptied at the end of every block; larger only holds
-    // more memory.
+    // are ~1.7 KB at benchmark settings: one system call per spectrum, enough
+    // to make the writer hold the loop back through the block ring at high
+    // thread counts. 4 MB, emptied at the end of every block; larger only
+    // holds more memory.
     constexpr size_t kWriteChunk = size_t(4) << 20;
     std::string tsv_pending, rtsv_pending;
-    auto put_rows = [&](std::ofstream& os, std::string& pending, const std::string& text)
-    {
-      pending += text;
-      if (pending.size() >= kWriteChunk)
-      {
-        os.write(pending.data(), static_cast<std::streamsize>(pending.size()));
-        pending.clear();
-      }
-    };
     auto drain = [](std::ofstream& os, std::string& pending)
     {
       if (pending.empty()) return;
       os.write(pending.data(), static_cast<std::streamsize>(pending.size()));
       pending.clear();
+    };
+    auto put_rows = [&](std::ofstream& os, std::string& pending, const std::string& text)
+    {
+      pending += text;
+      if (pending.size() >= kWriteChunk) drain(os, pending);
     };
     auto write_block = [&](Block& b, size_t n_used)
     {
@@ -1716,7 +1694,7 @@ protected:
     // emits one line under a critical section, so lines never interleave.
     const bool emit_progress = getFlag_("progress");
     std::atomic<long long> progress_done{0};
-    std::atomic<long long> progress_total{static_cast<long long>(n_spec)};
+    const long long progress_total = static_cast<long long>(n_spec);
     std::atomic<int> progress_pct{-1};
     std::atomic<long long> progress_ms{0};
     const auto progress_t0 = std::chrono::steady_clock::now();
@@ -1732,25 +1710,21 @@ protected:
     // advanced past, so a busy run legitimately jumps 5% -> 8%. That is right
     // for a progress bar and wrong to describe as per-percent.
     //
-    // Percent alone goes quiet for minutes on a slow file (one 5 GB run spends
-    // ~a minute in metadata before the first spectrum), which reads as a hung
-    // GUI; a pure time interval spams a fast run. Together the line rate is
-    // bounded by ~101 + elapsed/5s regardless of file size or speed.
+    // Percent alone goes quiet for minutes on a slow file, which reads as a
+    // hung GUI; a pure time interval spams a fast run. Together the line rate
+    // is bounded by ~101 + elapsed/5s regardless of file size or speed.
     auto tick = [&]()
     {
       if (!emit_progress) return;
       const long long d = ++progress_done;
-      const long long tot = progress_total.load(std::memory_order_relaxed);
-      const int pct = tot > 0 ? static_cast<int>((d * 100) / tot) : -1;
+      const int pct = progress_total > 0 ? static_cast<int>((d * 100) / progress_total) : -1;
       // 100% is NOT emitted here. The loop finishing is not the tool finishing --
       // species classification and -out_spectra still run -- so the completion
       // line is reserved for the end of main_(). Without this the last percent
       // and the completion line print the same text twice.
       bool want = (d == 1) || (pct < 100 && pct > progress_pct.load(std::memory_order_relaxed));
-      // The clock is read on EVERY tick, not one in 64. Sampling made the
-      // advertised 5 s guarantee false exactly where it matters: at one
-      // spectrum per second the gap became ~63 s, and a single slow spectrum
-      // produced no heartbeat at all. steady_clock::now() is tens of
+      // The clock is read on EVERY tick: sampling it would break the 5 s
+      // guarantee exactly on slow spectra, and steady_clock::now() is tens of
       // nanoseconds against microseconds-to-seconds of tagging per spectrum.
       if (!want && elapsed_ms() - progress_ms.load(std::memory_order_relaxed) >= 5000)
       {
@@ -1762,7 +1736,7 @@ protected:
         // Re-check under the lock: several threads can decide to emit at once,
         // and without this they each print a line for the same percent.
         const long long dd = progress_done.load();
-        const long long tt = progress_total.load();
+        const long long tt = progress_total;
         const int pp = tt > 0 ? static_cast<int>((dd * 100) / tt) : -1;
         const long long now = elapsed_ms();
         if (dd == 1 || (pp < 100 && pp > progress_pct.load())
@@ -2471,16 +2445,7 @@ protected:
         nodes = tdir + "/nodes.dmp";
         names = tdir + "/names.dmp";
       }
-      if (species_out.empty())
-      {
-        // Strip an extension only if the dot is in the FILE NAME. `-out
-        // /tmp/run.v1/tags` has its last dot in the directory, and blindly
-        // cutting there wrote /tmp/run.species.tsv -- a different directory.
-        const size_t slash = out.find_last_of("/\\");
-        const size_t dot = out.rfind('.');
-        const bool ext = dot != std::string::npos && (slash == std::string::npos || dot > slash);
-        species_out = (ext ? out.substr(0, dot) : out) + ".species.tsv";
-      }
+      if (species_out.empty()) species_out = beside_out(".species.tsv");
 
       // Say which file is missing and where it was looked for. "Failed to load"
       // on an empty path is useless when the whole point of the defaults is that
@@ -2671,9 +2636,9 @@ protected:
 
       // The background (index breadth) IS summed up the subtree. This over-counts
       // a k-mer shared by sibling taxa, which inflates the expectation and makes
-      // calls more CONSERVATIVE -- the safe direction, unlike the observed bug.
+      // calls more CONSERVATIVE -- the safe direction.
       std::vector<std::pair<uint32_t, uint64_t>> post_pairs;
-      for (uint32_t tx : idx.taxa()) post_pairs.emplace_back(tx, idx.postings(tx));
+      for (uint32_t tx : idx_taxa) post_pairs.emplace_back(tx, idx.postings(tx));
       const auto rolled_post = tax.rollUp(post_pairs);
       std::map<uint32_t, double> bg;
       const double nk = static_cast<double>(std::max<uint64_t>(1, idx.nKmers()));
@@ -2704,21 +2669,21 @@ protected:
                          return a->taxid < b->taxid;   // deterministic ties
                        });
 
+      // rank/name come from the taxdump, which can carry arbitrary text: a tab
+      // or newline in a name would desync columns. Sanitise the free-text
+      // fields, and stream them rather than format them into a fixed buffer
+      // (only the bounded numerics go through one).
+      auto clean = [](const std::string& in) {
+        std::string o; o.reserve(in.size());
+        for (char ch : in) o += (ch == '\t' || ch == '\n' || ch == '\r') ? ' ' : ch;
+        return o;
+      };
       size_t shown = 0;
       for (const FASTag::TaxonCall* cp : ranked)
       {
         const FASTag::TaxonCall& c = *cp;
         auto ait = adjusted.find(c.taxid);
         const double adj = ait == adjusted.end() ? 0.0 : ait->second;
-        // rank/name come from the taxdump, which can carry arbitrary text: a tab
-        // or newline in a name would desync columns, and a very long name would
-        // overrun a fixed buffer. Sanitise the free-text fields (the numerics are
-        // bounded) and append to a string so length is never a factor.
-        auto clean = [](const std::string& in) {
-          std::string o; o.reserve(in.size());
-          for (char ch : in) o += (ch == '\t' || ch == '\n' || ch == '\r') ? ' ' : ch;
-          return o;
-        };
         char num[128];
         std::snprintf(num, sizeof num, "\t%llu\t%.1f\t%.1f\t%g\t%g\n",
                       static_cast<unsigned long long>(c.observed), adj, c.expected,
@@ -2855,13 +2820,11 @@ protected:
     }
     // Completion, emitted once everything the run promised has actually been
     // written: tags, species report and -out_spectra. total is the LARGER of the
-    // announced and delivered counts, so it never shrinks (the mzPeak reader
-    // announces every spectrum in the file but delivers only those with point
-    // data, 42,092 of 53,521).
+    // announced and counted spectra, so it never shrinks.
     if (emit_progress)
     {
       const long long dd = progress_done.load();
-      const long long tt = std::max(dd, progress_total.load());
+      const long long tt = std::max(dd, progress_total);
       std::cerr << "FASTAG_PROGRESS done=" << tt << " total=" << tt << std::endl;
     }
 
