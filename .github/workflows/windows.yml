@@ -769,7 +769,8 @@ jobs:
       #
       # UNTESTED until SIGNPATH_API_TOKEN/SIGNPATH_ORG_ID exist on this repo
       # -- neither does yet, so every tag build takes the "not configured"
-      # branch and ships unsigned, same as today. See doc/BACKLOG-ci.md.
+      # branch and ships unsigned, same as today. doc/SIGNING-macos-gui.md
+      # names the secrets.
       - name: Determine SignPath availability (Windows)
         if: startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run
         id: signpath-gate
@@ -778,7 +779,7 @@ jobs:
           SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
         run: |
           if ([string]::IsNullOrEmpty($env:SIGNPATH_API_TOKEN)) {
-            Write-Host "::warning title=Unsigned Windows binary::SIGNPATH_API_TOKEN is not set -- shipping this release unsigned. SmartScreen will warn on first run. See doc/BACKLOG-ci.md for what's needed."
+            Write-Host "::warning title=Unsigned Windows binary::SIGNPATH_API_TOKEN is not set -- shipping this release unsigned. SmartScreen will warn on first run. See doc/SIGNING-macos-gui.md for what's needed."
             "enabled=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding ascii
           } elseif ([string]::IsNullOrEmpty($env:SIGNPATH_PROJECT_SLUG)) {
             # Checked HERE, not left to the signing action. A missing or wrong
@@ -852,9 +853,9 @@ jobs:
       #
       # share/OpenMS's location is found by searching rather than assumed:
       # this same install already turned out to split its CMake package
-      # across two unrelated directories on this platform (see
-      # doc/BACKLOG-ci.md), so trusting a "normal" <prefix>/share/OpenMS
-      # layout without checking would be the same mistake twice.
+      # across two unrelated directories on this platform, so trusting a
+      # "normal" <prefix>/share/OpenMS layout without checking would be the
+      # same mistake twice.
       - name: Bundle runtime dependencies for portability (Windows)
         shell: bash
         run: |
@@ -959,7 +960,7 @@ jobs:
       # failure for every user, exactly the kind this repository's history
       # says must fail a cheap main push rather than a release. The first
       # run of this gate found two schema violations in every archive FASTag
-      # had ever written; see doc/PLAN-ci-mzpeak-coverage.md.
+      # had ever written.
       - name: Validate every mzPeak archive this job wrote
         shell: bash
         run: |
@@ -1131,7 +1132,7 @@ jobs:
         run: |
           $nsis = Get-ChildItem -Path "fastag/gui/src-tauri/target/release/bundle/nsis" -Filter "*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $nsis) { Write-Host "::warning::no NSIS installer was produced"; exit 0 }
-          Write-Host "::warning title=Unsigned Windows installer::Shipping the installer unsigned -- SmartScreen will warn on first run. See doc/BACKLOG-ci.md."
+          Write-Host "::warning title=Unsigned Windows installer::Shipping the installer unsigned -- SmartScreen will warn on first run."
           Copy-Item $nsis.FullName -Destination "FASTag-gui-windows-x64-setup.exe" -Force
           gh release create "${{ github.ref_name }}" --title "${{ github.ref_name }}" `
             --notes "Automated binary upload; release notes pending." 2>$null

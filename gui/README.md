@@ -5,13 +5,10 @@ A cross-platform desktop front-end for the FASTag CLI, built with
 The CLI stays the source of truth: the GUI shells out to it, streams its
 progress, and renders the tags and species report.
 
-## Why Tauri
-
-Tauri renders in the OS's own webview, so the app is a few-MB binary instead
-of a bundled ~150 MB Chromium, and its Rust backend is a natural fit next to a
-scientific CLI. The React frontend never calls Tauri directly: it speaks to an
-abstract `window.fastag` bridge (`src/api.ts`), which is also what the tests
-substitute (`src/testing/mockBridge.ts`).
+Tauri uses the OS's own webview rather than a bundled Chromium, so the app is a
+few MB instead of ~150 MB. The React frontend speaks to an abstract
+`window.fastag` bridge (`src/api.ts`), which is the only surface the Rust
+backend has to satisfy.
 
 ## Layout
 
@@ -58,15 +55,16 @@ parameter, refresh the manifest so the form stays in lockstep:
 npm run params    # runs scripts/gen-params.mjs against the bundled binary
 ```
 
-## Notes / open work
+## Tests
 
-- **Bundling the native CLI** (its dylib closure, a single `libomp` to avoid
-  OpenMP error #15, and the ~1 GB taxonomy) is done: `scripts/bundle-macos.sh`
-  assembles a local self-contained `.app`, and CI stages
-  `src-tauri/resources/fastag` itself before `tauri build`. In dev the resources
-  are machine-specific symlinks and are gitignored. Still open: auto-update, a
-  Linux desktop artifact, Windows signing — `doc/PLAN-gui-2026-09.md`.
-- Rust unit tests cover the trust boundaries (`build_args` allowlist and
-  flag-injection defence, settings sanitisation, species/taxdb parsing, browser
-  bounds): `cargo test` in `src-tauri/`. The React side has its own vitest suite
-  over the mock bridge: `npm test`. CI runs both on every push.
+Rust unit tests cover the trust boundaries (`build_args` allowlist and
+flag-injection defence, settings sanitisation, species/taxdb parsing, browser
+bounds): `cargo test` in `src-tauri/`. The frontend has typecheck and build
+only.
+
+## Packaging
+
+Release bundles carry the CLI, its dylib closure with a single `libomp` (which
+avoids OpenMP error #15) and the ~1 GB taxonomy inside the app; see
+[../doc/SIGNING-macos-gui.md](../doc/SIGNING-macos-gui.md). In dev those
+resources are machine-specific symlinks and are gitignored.

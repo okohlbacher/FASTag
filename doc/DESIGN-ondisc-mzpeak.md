@@ -3,16 +3,14 @@
 A proposal for OpenMS, mirroring `OnDiscMSExperiment` for mzML. Written from
 FASTag's experience of consuming both.
 
-> **Status (2026-09-06): built, in FASTag.** `src/OnDiscMzPeakExperiment.cpp`
-> is this proposal realised over the external
+> **Built, and in FASTag.** `src/OnDiscMzPeakExperiment.cpp` is this proposal
+> realised over the external
 > [mzpeak-openms](https://github.com/okohlbacher/mzpeak-openms) library rather
 > than OpenMS's `MzPeakFile`: pull-based `getSpectrum(i)`, one reader per
 > thread over a shared index, a contiguous range per thread (the row-group
-> argument below), and the `ChunkingConsumer` deleted as the last section
-> predicts. Measurements below are of OpenMS's `MzPeakFile::transform()` and
-> still hold for it; FASTag's own numbers are in
-> [BACKLOG-mzpeak.md](BACKLOG-mzpeak.md). Whether OpenMS wants the same shape
-> over its own reader remains an OpenMS-side decision.
+> argument below), and no `ChunkingConsumer`. The measurements below are of
+> OpenMS's `MzPeakFile::transform()` and describe that interface. Whether
+> OpenMS wants the same shape over its own reader is an OpenMS-side decision.
 
 **One-line summary: mzPeak should be *easier* to stream than mzML, not harder,
 and the current interface gives that advantage away.**

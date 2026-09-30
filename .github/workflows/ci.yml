@@ -126,9 +126,9 @@ jobs:
     # first. A job that never reaches signing (every non-tag push, and Linux
     # always) still finishes in minutes regardless -- this only widens how
     # long something is allowed to hang, not how long anything normally takes.
-    # NOTE: this does not cover the documented one-time exception where a
-    # brand-new bundle ID's FIRST notarization submission can take 8-12 hours
-    # (see doc/BACKLOG-ci.md) -- that has to be primed manually, out of band,
+    # NOTE: this does not cover the one-time exception where a brand-new
+    # bundle ID's FIRST notarization submission can take 8-12 hours
+    # -- that has to be primed manually, out of band,
     # before the first real signed release, exactly as the reference project
     # that pattern came from does it.
     timeout-minutes: 90
@@ -802,7 +802,7 @@ jobs:
       # failure for every user, exactly the kind this repository's history
       # says must fail a cheap main push rather than a release. The first
       # run of this gate found two schema violations in every archive FASTag
-      # had ever written; see doc/PLAN-ci-mzpeak-coverage.md.
+      # had ever written.
       - name: Validate every mzPeak archive this job wrote
         shell: bash
         run: |
@@ -848,8 +848,7 @@ jobs:
       #
       # UNTESTED until MACOS_* secrets exist on this repo -- none do yet, so
       # every tag build takes the "not configured" branch and ships
-      # unsigned, same as today. See doc/BACKLOG-ci.md for exactly what is
-      # needed and how to get it.
+      # unsigned, same as today. doc/SIGNING-macos-gui.md names the secrets.
       - name: Detect macOS signing readiness
         if: (matrix.name == 'macos-arm64' || matrix.name == 'macos-x64') && (startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run)
         id: mac-signing
@@ -858,7 +857,7 @@ jobs:
           MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
         run: |
           if [ -z "$MACOS_CERTIFICATE_BASE64" ]; then
-            echo "::warning title=Unsigned macOS binary::MACOS_CERTIFICATE_BASE64 is not set -- shipping this release unsigned. Gatekeeper will warn on first run. See doc/BACKLOG-ci.md for what's needed."
+            echo "::warning title=Unsigned macOS binary::MACOS_CERTIFICATE_BASE64 is not set -- shipping this release unsigned. Gatekeeper will warn on first run. See doc/SIGNING-macos-gui.md for what's needed."
             echo "enabled=false" >> "$GITHUB_OUTPUT"
           else
             echo "enabled=true" >> "$GITHUB_OUTPUT"
@@ -1341,7 +1340,6 @@ jobs:
   # step output, same pattern as the signing gate above. The dispatch never
   # fails the tag build: the tap is a downstream convenience, and its schedule
   # publishes the release on its own within six hours either way.
-  # Design, review and the maintainer's checklist: doc/PLAN-homebrew.md.
   homebrew-tap:
     if: ${{ !cancelled() && needs.release-complete.result == 'success' }}
     needs: [release-complete]
@@ -1354,7 +1352,7 @@ jobs:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
           if [ -z "$HOMEBREW_TAP_TOKEN" ]; then
-            echo "::notice title=Homebrew tap not dispatched::HOMEBREW_TAP_TOKEN is not set; okohlbacher/homebrew-fastag picks this release up on its own schedule within 6 h. See doc/PLAN-homebrew.md."
+            echo "::notice title=Homebrew tap not dispatched::HOMEBREW_TAP_TOKEN is not set; okohlbacher/homebrew-fastag picks this release up on its own schedule within 6 h."
             echo "enabled=false" >> "$GITHUB_OUTPUT"
           else
             echo "enabled=true" >> "$GITHUB_OUTPUT"

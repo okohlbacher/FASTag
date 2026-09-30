@@ -247,7 +247,7 @@ if(FASTAG_BUILD_TESTS)
   # BYTE-IDENTICAL to the tags from the mzML, at 1 and 4 threads, across an
   # archive -> archive re-write and a multi-row-group write. The archives are
   # kept under mzpeak-roundtrip/ for the validator below. SKIPs only when the
-  # build has no mzPeak support; see doc/PLAN-ci-mzpeak-coverage.md.
+  # build has no mzPeak support.
   add_test(NAME mzpeak_roundtrip
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/mzpeak_roundtrip.sh $<TARGET_FILE:FASTag>
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML

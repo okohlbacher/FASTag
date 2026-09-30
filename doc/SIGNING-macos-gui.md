@@ -1,24 +1,22 @@
 # Signing the FASTag desktop app — macOS and Windows
 
-**Status 2026-09-08: WIRED, not yet exercised.** `ci.yml` builds, signs,
-notarizes and staples the macOS `.app`/`.dmg`; `windows.yml` builds the app and
-signs the NSIS installer through SignPath. Both paths are **inert until the
-secrets below exist** — they are gated on the signing credentials, so a
-secret-less tag build skips them entirely rather than burning ~90 minutes to
-produce something unshippable.
+`ci.yml` builds, signs, notarizes and staples the macOS `.app`/`.dmg`;
+`windows.yml` builds the app and signs the NSIS installer through SignPath.
+Both paths are gated on the signing credentials below, so a secret-less tag
+build skips them entirely rather than burning ~90 minutes to produce something
+unshippable.
 
-Neither has ever run. Before tagging a release that is meant to be signed, do a
-**dry run**: Actions → the workflow → Run workflow → tick `gui_dry_run`. That
-builds the app off a branch, uploads it as a workflow artifact, and uploads
-nothing to any release. On macOS a dry run also signs and notarizes when the
-secrets are present; on Windows it deliberately does not, because a SignPath
-signing request blocks on a human clicking Approve.
+**Before tagging a release meant to be signed, do a dry run**: Actions → the
+workflow → Run workflow → tick `gui_dry_run`. That builds the app off a branch,
+uploads it as a workflow artifact, and uploads nothing to any release. On macOS
+a dry run also signs and notarizes when the secrets are present; on Windows it
+deliberately does not, because a SignPath signing request blocks on a human
+clicking Approve.
 
-The self-contained `.app` itself is **built and verified** (see
-`gui/scripts/bundle-macos.sh`): one bundle carrying the CLI, its full dylib
-closure with **one** `libomp` (which fixes `OMP: Error #15`), `share/OpenMS`,
-the ~1.1 GB taxonomy, and the icon. It runs species detection standalone with
-no `KMP_DUPLICATE_LIB_OK`.
+The self-contained `.app` (see `gui/scripts/bundle-macos.sh`) is one bundle
+carrying the CLI, its full dylib closure with **one** `libomp` (which fixes
+`OMP: Error #15`), `share/OpenMS`, the ~1.1 GB taxonomy, and the icon. It runs
+species detection standalone with no `KMP_DUPLICATE_LIB_OK`.
 
 ## What the workflows actually do
 
@@ -67,28 +65,23 @@ Same set BALL/BALLView uses (see the `software-signing` runbook):
 Windows additionally needs the two SignPath secrets `windows.yml` already uses
 for the CLI: `SIGNPATH_API_TOKEN` and `SIGNPATH_ORG_ID`. No new ones.
 
-### SignPath enrollment state, 2026-09-08
+### SignPath
 
-Enrollment is under way for a project named **"OpenMS Apps"** — its CSR
-(`OpenMS_Apps.csr`, RSA 4096, `CN=University of Tübingen`,
-`O=Eberhard Karls Universität Tübingen`, `OU=IBMI/ABI`) was issued by
-SignPath's console that day.
+The SignPath project is **"OpenMS Apps"**. Under SignPath's Foundation program
+the key lives in their HSM and they submit the certificate request themselves,
+so **a CSR from their console must not be taken to a CA** — a certificate
+obtained elsewhere would not match the HSM key and the enrollment would have to
+be redone.
 
-**Do not take that CSR to a CA.** SignPath's Foundation program generates the
-key in their own HSM and submits the request themselves; the certificate flips
-from `CSR PENDING` to `VALID` with no action. A certificate obtained elsewhere
-would not match the HSM key, and the enrollment would have to be redone.
+**Set `windows.yml`'s `SIGNPATH_PROJECT_SLUG` to the real project slug**, read
+off the project page, before tagging a release meant to be signed; the file
+ships it empty. A wrong slug fails the signing request roughly
+twenty minutes into a tag run, not at the start. The CLI and the installer both
+read that one variable, so they cannot drift apart.
 
-Consequence for this repo: `windows.yml`'s `SIGNPATH_PROJECT_SLUG` is still the
-placeholder `fastag`, and the real project is not called that. **Read the slug
-off the project page and set it before tagging a release meant to be signed** —
-a wrong slug fails the signing request roughly twenty minutes into a tag run,
-not at the start. The CLI and the installer both read that one variable, so
-they cannot drift apart.
-
-`MACOS_SIGNING_IDENTITY` and `MACOS_TEAM_ID` are already determined for this
-project by the issued certificate: `Developer ID Application: Oliver Kohlbacher
-(9WF4NVY9MY)` and `9WF4NVY9MY`, valid to 22 May 2031.
+`MACOS_SIGNING_IDENTITY` and `MACOS_TEAM_ID` follow from the issued
+certificate: `Developer ID Application: Oliver Kohlbacher (9WF4NVY9MY)` and
+`9WF4NVY9MY`, valid to 22 May 2031.
 
 **Getting the `.p12`.** The certificate alone is only the public half; the
 `.p12` needs the private key generated with the original CSR. Check with
@@ -111,10 +104,7 @@ web UI, never a command line, and delete the local `.p12` afterwards.
 - **Two arches.** `macos-arm64` and `macos-x64` each produce their own `.dmg`,
   ~1.5 GB apiece because the taxonomy is inside, so the notarization upload is
   slow — hence the 120-minute step timeout.
-- **A brand-new bundle ID's first notarization can take 8–12 hours** (see
-  `doc/BACKLOG-ci.md`). Prime it out of band before the first signed release;
-  no job timeout here covers that.
-- **The Windows app has never been built in CI at all.** Unlike macOS, there is
-  no working local precedent for it — dry-run it before trusting a tag.
+- **A brand-new bundle ID's first notarization can take 8–12 hours.** Prime it
+  out of band before the first signed release; no job timeout here covers that.
 - Ad-hoc signatures from `bundle-macos.sh` (`codesign --sign -`) are placeholders
   the Developer ID pass overwrites.
