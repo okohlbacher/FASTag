@@ -7,12 +7,11 @@ progress, and renders the tags and species report.
 
 ## Why Tauri
 
-The GUI was originally an Electron app; it was ported to Tauri to drop the
-bundled Chromium (a few-MB binary and lower memory instead of ~150 MB), and
-because a Rust backend is a natural fit next to a scientific CLI. The React
-frontend is unchanged across the port — it speaks to an abstract
-`window.fastag` bridge (`src/api.ts`), and only the plumbing beneath it
-(Electron IPC → Tauri `invoke` + events) changed.
+Tauri renders in the OS's own webview, so the app is a few-MB binary instead
+of a bundled ~150 MB Chromium, and its Rust backend is a natural fit next to a
+scientific CLI. The React frontend never calls Tauri directly: it speaks to an
+abstract `window.fastag` bridge (`src/api.ts`), which is also what the tests
+substitute (`src/testing/mockBridge.ts`).
 
 ## Layout
 
@@ -20,7 +19,7 @@ frontend is unchanged across the port — it speaks to an abstract
 gui/
   src/                 React frontend (App, ParamField, SpeciesPanel, api bridge)
     api.ts             the window.fastag bridge over Tauri invoke/events + dialog/opener plugins
-    paramLayout.ts     which CLI params are core vs advanced (overlay on the generated manifest)
+    paramLayout.ts     section/ordering overlay on the generated manifest (one flat list)
     params.generated.json   `-write_ini` dump of the tool (the source of truth for params)
   src-tauri/           Rust backend
     src/fastag.rs      resolve/probe the binary, run it, stream stderr as events, cancel
@@ -62,9 +61,12 @@ npm run params    # runs scripts/gen-params.mjs against the bundled binary
 ## Notes / open work
 
 - **Bundling the native CLI** (its dylib closure, a single `libomp` to avoid
-  OpenMP error #15, and the ~1 GB taxonomy) is the real distribution work — see
-  `doc/BACKLOG.md`. In dev the resources are machine-specific symlinks and are
-  gitignored.
+  OpenMP error #15, and the ~1 GB taxonomy) is done: `scripts/bundle-macos.sh`
+  assembles a local self-contained `.app`, and CI stages
+  `src-tauri/resources/fastag` itself before `tauri build`. In dev the resources
+  are machine-specific symlinks and are gitignored. Still open: auto-update, a
+  Linux desktop artifact, Windows signing — `doc/PLAN-gui-2026-09.md`.
 - Rust unit tests cover the trust boundaries (`build_args` allowlist and
   flag-injection defence, settings sanitisation, species/taxdb parsing, browser
-  bounds): `cargo test` in `src-tauri/`. Frontend has typecheck + build only.
+  bounds): `cargo test` in `src-tauri/`. The React side has its own vitest suite
+  over the mock bridge: `npm test`. CI runs both on every push.
