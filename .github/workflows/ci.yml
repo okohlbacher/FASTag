@@ -588,10 +588,14 @@ jobs:
           # offset 0. Each argument is single-quoted so $HERE/$0/$@ are
           # written LITERALLY, meant for the wrapper script to expand when
           # IT runs later, not for this outer shell to expand now.
+          # OPENBLAS_NUM_THREADS: libOpenMS pulls in OpenBLAS, which starts a
+          # spinning thread per core at load (~2 s CPU on 128 threads, even for
+          # --help); FASTag never calls BLAS. A user's own setting still wins.
           printf '%s\n' \
             '#!/bin/sh' \
             'HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)' \
             'export OPENMS_DATA_PATH="$HERE/share-OpenMS"' \
+            'export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-1}"' \
             'exec "$HERE/FASTag.bin" "$@"' \
             > dist/FASTag/FASTag
           chmod +x dist/FASTag/FASTag dist/FASTag/FASTag.bin
@@ -686,6 +690,7 @@ jobs:
             '#!/bin/sh' \
             'HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)' \
             'export OPENMS_DATA_PATH="$HERE/share-OpenMS"' \
+            'export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-1}"' \
             'exec "$HERE/FASTag.bin" "$@"' \
             > dist/FASTag/FASTag
           chmod +x dist/FASTag/FASTag dist/FASTag/FASTag.bin
