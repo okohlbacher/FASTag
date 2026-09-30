@@ -5,9 +5,9 @@
 // (filter + sort) is one more scan producing a row permutation; a window is a
 // handful of exact-length reads at known offsets.
 //
-// Columns are DRIVEN BY THE HEADER, not a fixed schema: -proforma already adds
-// a column and more are coming. Filters bind by column NAME and are active
-// only when their column exists in this file.
+// Columns are DRIVEN BY THE HEADER, not a fixed schema: -proforma, for one,
+// adds a column. Filters bind by column NAME and are active only when their
+// column exists in this file.
 
 use serde::{Deserialize, Serialize};
 use std::fs::File;
@@ -18,7 +18,7 @@ use std::time::SystemTime;
 /// IPC bound: a window never exceeds this many rows.
 const MAX_WINDOW: usize = 1000;
 /// A single displayed row is capped here; a longer (garbage) line is truncated
-/// rather than ballooning memory — the equivalent of the old preview byte cap.
+/// rather than ballooning memory.
 const ROW_CAP: usize = 1 << 20;
 /// A "header" longer than this is not a tags TSV.
 const HEADER_CAP: u64 = 4 << 20;
@@ -139,9 +139,8 @@ fn build_index(path: &str) -> Result<Index, String> {
             }
         }
     }
-    // The cap must hold wherever the header's newline lands -- checking only
-    // mid-scan left a one-chunk window where an oversized header was accepted
-    // and then silently truncated, mangling the last column name.
+    // The cap must hold wherever the header's newline lands: the mid-scan check
+    // alone misses a newline inside the chunk that crosses the cap.
     if let Some(end) = header_end {
         if end > HEADER_CAP {
             return Err(format!("{path}: header exceeds {HEADER_CAP} bytes — not a tags TSV"));
@@ -575,38 +574,6 @@ mod tests {
         assert_eq!(r3.total_rows, 1);
         assert_eq!(col(&r3, 0, "tag"), "ZZ");
         std::fs::remove_file(&p).ok();
-    }
-
-    // Real-data cross-check (plan 3.2 validation gate). Run as
-    //   FASTAG_BROWSER_TSV=/path/to/real.tags.tsv cargo test --lib real_file -- --ignored --nocapture
-    // and compare the printed numbers against coreutils on the same file:
-    //   total    awk 'END{print NR-1}'
-    //   matched  awk -F'\t' 'NR>1 && $9+0==$9 && $9<=1e-3' | wc -l   (evalue col)
-    //   first    tail -n+2 | sort -t$'\t' -k<evcol>,<evcol>g | head -1
-    //   last     tail -1
-    #[test]
-    #[ignore]
-    fn real_file_crosscheck() {
-        let path = std::env::var("FASTAG_BROWSER_TSV").expect("set FASTAG_BROWSER_TSV");
-        let cache = Mutex::new(None);
-        let t0 = std::time::Instant::now();
-        let all = query(&cache, &path, &ViewSpec::default(), 0, 1).unwrap();
-        println!("cold index: {:?}", t0.elapsed());
-        println!("columns: {:?}", all.columns);
-        println!("total: {}", all.total_rows);
-
-        let t0 = std::time::Instant::now();
-        let filt = query(&cache, &path, &ViewSpec { max_evalue: Some(1e-3), ..Default::default() }, 0, 1).unwrap();
-        println!("filter maxEvalue=1e-3: matched {} ({:?})", filt.matched_rows, t0.elapsed());
-
-        let t0 = std::time::Instant::now();
-        let spec = ViewSpec { sort: Some(SortSpec { column: "evalue".into(), desc: false }), ..Default::default() };
-        let sorted = query(&cache, &path, &spec, 0, 1).unwrap();
-        println!("sort evalue asc: {:?}; first row: {:?}", t0.elapsed(), sorted.rows[0]);
-
-        let t0 = std::time::Instant::now();
-        let last = query(&cache, &path, &ViewSpec::default(), all.total_rows - 1, 1).unwrap();
-        println!("warm window: {:?}; last row: {:?}", t0.elapsed(), last.rows[0]);
     }
 
     #[test]

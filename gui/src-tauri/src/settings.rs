@@ -1,7 +1,6 @@
 // Named parameter presets + last-used state, persisted as one JSON file in the
 // app config dir. Writes are atomic (temp + rename). A corrupt file is moved
 // aside once rather than silently overwritten, so recoverable presets survive.
-// Ported from gui/src/main/settings.ts.
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -47,9 +46,6 @@ fn settings_file(app: &AppHandle) -> Option<PathBuf> {
 
 pub fn load(app: &AppHandle) -> Settings {
     let Some(path) = settings_file(app) else { return Settings::default() };
-    if !path.exists() {
-        return Settings::default();
-    }
     let raw = match std::fs::read_to_string(&path) {
         Ok(s) => s,
         Err(_) => return Settings::default(),
