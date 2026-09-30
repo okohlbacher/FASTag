@@ -5,17 +5,11 @@
 //
 // WHY THIS EXISTS: OpenMS's own MzPeakFile implements the pre-0.7.0 mzPeak
 // layout -- packed nested metadata, point-only signal, `data_kind: "data
-// arrays"`. The format moved (spec rev e7f3447, reference impl 474a7c2,
-// converter 0.7.0) to split-facet metadata with bare column names, a chunked
-// signal layout with delta/Numpress encodings, and `data_kind: "data_arrays"`.
-// Every archive written by the current converter therefore read back as ZERO
-// spectra through OpenMS -- silently, exit code 0. Measured on a run that
-// exists in both formats: the mzML gave 6,103 MS2 and 122,098 tags, the
-// mzPeak twin gave 0 and 0.
-//
-// The external library reads BOTH layouts and is validated against the Rust
-// reference implementation in both directions, so it replaces the reader
-// rather than sitting beside it.
+// arrays"`. Archives in the current layout (split-facet metadata with bare
+// column names, a chunked signal layout with delta/Numpress encodings,
+// `data_kind: "data_arrays"`) read back through it as ZERO spectra --
+// silently, exit code 0. The external library reads BOTH layouts and is
+// validated against the Rust reference implementation in both directions.
 //
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
@@ -33,10 +27,6 @@
 // No library header here: this header is included by FASTag.cpp, which is
 // compiled as C++17, and the library's headers need C++23. Everything mzPeak
 // lives behind the pimpl in the .cpp, which is the one C++23 translation unit.
-namespace MzPeak
-{
-  class RunMetadata;
-}
 
 namespace FASTag
 {
@@ -50,7 +40,7 @@ namespace FASTag
   /// archive-wide cache of DECODED row groups, so a group is decoded once
   /// however many threads read from it, while different groups decode in
   /// parallel. Give every thread a CONTIGUOUS range of indices anyway: it
-  /// keeps the number of groups in flight -- what the memory now follows --
+  /// keeps the number of groups in flight -- what the memory follows --
   /// at about one per thread.
   ///
   /// PROFILE MS2 is centroided on the way out, on the calling thread. mzPeak
@@ -66,11 +56,9 @@ namespace FASTag
   class OnDiscMzPeakExperiment
   {
   public:
-    /// @param cache_budget  bytes of decoded row groups the archive-wide cache
-    ///   may hold before evicting; size it to the readers you run (see
-    ///   maxRowGroupBytes()).
-    explicit OnDiscMzPeakExperiment(const std::string& path,
-                                    std::size_t cache_budget = std::size_t(4) << 30);
+    /// Opens with a 4 GiB archive-wide cache of decoded row groups; size it
+    /// to the readers you run with setCacheBudget().
+    explicit OnDiscMzPeakExperiment(const std::string& path);
     /// A per-thread reader over the same archive. Safe to call concurrently.
     OnDiscMzPeakExperiment(const OnDiscMzPeakExperiment& other);
     OnDiscMzPeakExperiment& operator=(const OnDiscMzPeakExperiment&) = delete;
@@ -151,8 +139,10 @@ namespace FASTag
   class MzPeakSpectrumWriter
   {
   public:
-    /// @param settings  run-level metadata for the archive (see
-    ///   toRunMetadata()); @p exp adds its data-processing history.
+    /// @param settings  run-level metadata for the archive: run id and start
+    ///   time, source files, instrument, sample -- or, for settings read from
+    ///   an archive, its raw block (kRawMetaKey). @p exp adds its first
+    ///   spectrum's data-processing history.
     MzPeakSpectrumWriter(const std::string& path,
                          const OpenMS::ExperimentalSettings& settings,
                          const OpenMS::MSExperiment* exp = nullptr);
@@ -169,34 +159,9 @@ namespace FASTag
     std::unique_ptr<Impl> impl_;
   };
 
-  /// Write @p exp to @p path as an mzPeak archive.
-  ///
-  /// Carries what the reader above hands back: peaks, representation, MS
-  /// level, retention time, polarity, native id, every precursor's isolation
-  /// window and selected ion (m/z, charge, intensity), and the run-level
-  /// metadata toRunMetadata() maps from the experiment's settings.
-  ///
-  /// This replaces OpenMS's MzPeakFile::store(), which aborted on any
-  /// experiment whose spectra had come through the library reader.
-  ///
-  /// @throws OpenMS::Exception::UnableToCreateFile with the library's message.
-  void writeMzPeak(const std::string& path, const OpenMS::MSExperiment& exp);
-
-  /// OpenMS run-level settings -> mzPeak run metadata: run id and start time,
-  /// source files, the instrument with its components and software, the
-  /// sample, and -- when @p exp is given -- its first spectrum's
-  /// data-processing history. Settings that came out of fromRunMetadata()
-  /// carry the archive's raw JSON as a meta value; that is used as the base
-  /// then, so an mzpeak -> mzpeak run loses nothing OpenMS has no field for.
-  MzPeak::RunMetadata toRunMetadata(const OpenMS::ExperimentalSettings& es,
-                                    const OpenMS::MSExperiment* exp = nullptr);
-
-  /// The reverse mapping.
-  OpenMS::ExperimentalSettings fromRunMetadata(const MzPeak::RunMetadata& md);
-
-  /// Meta-value key under which fromRunMetadata() keeps the archive's raw
-  /// mzpeak_index.json metadata block, and from which toRunMetadata() starts
-  /// when it is present. Exposed for the adapter test.
+  /// Meta-value key under which getMetaData() keeps the archive's raw
+  /// mzpeak_index.json metadata block, and from which MzPeakSpectrumWriter
+  /// starts when it is present. Exposed for the adapter test.
   extern const char* const kRawMetaKey;
 }
 

@@ -48,6 +48,10 @@ namespace FASTag
   // in the header: the adapter test plants legacy metadata under it.
   const char* const kRawMetaKey = "mzpeak_run_metadata_json";
 
+  /// mzPeak run metadata -> OpenMS run-level settings, the archive's raw JSON
+  /// riding along under kRawMetaKey. Defined with its reverse, toRunMetadata().
+  static ExperimentalSettings fromRunMetadata(const MzPeak::RunMetadata& md);
+
   namespace
   {
     /// Convert one library spectrum into the OpenMS spectrum the rest of the
@@ -260,10 +264,9 @@ namespace FASTag
   /// the row-group size, and the picking counters.
   struct Shared
   {
-    Shared(const std::string& path, std::size_t cache_budget)
-      : index(MzPeak::open(path))
+    explicit Shared(const std::string& path) : index(MzPeak::open(path))
     {
-      index.manager()->row_group_cache().set_budget(cache_budget);
+      index.manager()->row_group_cache().set_budget(std::size_t(4) << 30);
     }
     MzPeak::Index index;
     ExperimentalSettings settings;
@@ -274,8 +277,8 @@ namespace FASTag
 
   struct OnDiscMzPeakExperiment::Impl
   {
-    Impl(const std::string& path, std::size_t cache_budget)
-      : shared(std::make_shared<Shared>(path, cache_budget)), spectra(openSpectra(shared->index))
+    explicit Impl(const std::string& path)
+      : shared(std::make_shared<Shared>(path)), spectra(openSpectra(shared->index))
     {
     }
     Impl(const Impl& other) : shared(other.shared), spectra(openSpectra(shared->index)) {}
@@ -284,9 +287,9 @@ namespace FASTag
     PeakPickerHiRes picker;
   };
 
-  OnDiscMzPeakExperiment::OnDiscMzPeakExperiment(const std::string& path, std::size_t cache_budget)
+  OnDiscMzPeakExperiment::OnDiscMzPeakExperiment(const std::string& path)
   try
-    : impl_(std::make_unique<Impl>(path, cache_budget))
+    : impl_(std::make_unique<Impl>(path))
   {
     impl_->shared->settings = fromRunMetadata(impl_->shared->index.metadata());
     impl_->shared->row_group_bytes = largestRowGroup(impl_->shared->index);
@@ -370,8 +373,6 @@ namespace FASTag
   {
     const auto c = MzPeak::Util::read_counters();
     plan = c.ns_plan;
-    // ctor time is reported through the same call for brevity
-    exec = c.ns_plan_ctor;
     exec = c.ns_exec;
     rowgroup = c.ns_rowgroup;
     project = c.ns_project;
@@ -421,7 +422,7 @@ namespace FASTag
   }
 
   /****************************************************************************/
-  ExperimentalSettings fromRunMetadata(const MzPeak::RunMetadata& md)
+  static ExperimentalSettings fromRunMetadata(const MzPeak::RunMetadata& md)
   {
     ExperimentalSettings es;
     if (const auto& run = md.run())
@@ -562,7 +563,13 @@ namespace FASTag
   }
 
   /****************************************************************************/
-  MzPeak::RunMetadata toRunMetadata(const ExperimentalSettings& es, const MSExperiment* exp)
+  /// OpenMS run-level settings -> mzPeak run metadata: run id and start time,
+  /// source files, the instrument with its components and software, the
+  /// sample, and -- when @p exp is given -- its first spectrum's
+  /// data-processing history. Settings that came out of fromRunMetadata()
+  /// carry the archive's raw JSON as a meta value; that is used as the base
+  /// then, so an mzpeak -> mzpeak run loses nothing OpenMS has no field for.
+  static MzPeak::RunMetadata toRunMetadata(const ExperimentalSettings& es, const MSExperiment* exp)
   {
     json::object o;
     if (es.metaValueExists(kRawMetaKey))
@@ -741,8 +748,7 @@ namespace FASTag
   /****************************************************************************/
   namespace
   {
-    /// One OpenMS spectrum as the library's SpectrumData. Shared by the
-    /// streaming and whole-run writers, so the two cannot drift.
+    /// One OpenMS spectrum as the library's SpectrumData.
     MzPeak::SpectrumData toSpectrumData(const MSSpectrum& s)
     {
       MzPeak::SpectrumData out;
@@ -880,14 +886,6 @@ namespace FASTag
                                           impl_->path,
                                           std::string("mzPeak write failed: ") + e.what());
     }
-  }
-
-  /****************************************************************************/
-  void writeMzPeak(const std::string& path, const MSExperiment& exp)
-  {
-    MzPeakSpectrumWriter writer(path, exp.getExperimentalSettings(), &exp);
-    for (const MSSpectrum& s : exp) writer.add(s);
-    writer.finish();
   }
 }
 
