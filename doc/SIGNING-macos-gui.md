@@ -74,8 +74,8 @@ obtained elsewhere would not match the HSM key and the enrollment would have to
 be redone.
 
 **Set `windows.yml`'s `SIGNPATH_PROJECT_SLUG` to the real project slug**, read
-off the project page, before tagging a release meant to be signed; the default
-in the file is a placeholder. A wrong slug fails the signing request roughly
+off the project page, before tagging a release meant to be signed; the file
+ships it empty. A wrong slug fails the signing request roughly
 twenty minutes into a tag run, not at the start. The CLI and the installer both
 read that one variable, so they cannot drift apart.
 

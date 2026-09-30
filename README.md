@@ -121,16 +121,17 @@ On macOS both are also on [Homebrew](https://github.com/okohlbacher/homebrew-fas
 A disk image or archive holds a `FASTag/` folder — run `FASTag/FASTag`
 (Linux/macOS) or `FASTag/FASTag.bat` (Windows); everything else inside is a
 bundled dependency the wrapper needs, not something to run directly. The
-wrapper sets `OPENBLAS_NUM_THREADS=1` unless you set it yourself: OpenBLAS
-arrives with libOpenMS and otherwise starts one spinning thread per core at
-load, which FASTag never uses. The desktop app does the same for the CLI it
-launches.
+Linux/macOS wrapper sets `OPENBLAS_NUM_THREADS=1` unless you set it yourself:
+OpenBLAS arrives with libOpenMS and otherwise starts one spinning thread per
+core at load, which FASTag never uses. The desktop app does the same for the
+CLI it launches, on every platform.
 
 **macOS 13.3 or later.** macOS ships as a disk image only, signed with a
 Developer ID certificate, notarized and **stapled**, so it opens with no network
 connection — a plain tarball cannot carry a notarization ticket.
 
-**Windows builds are not code-signed**, so SmartScreen will warn on first run.
+**Windows builds are not yet code-signed** — the signing path is wired up but
+the SignPath project is not live — so SmartScreen will warn on first run.
 
 Building from source needs OpenMS ≥ 3.5, a C++17 compiler and CMake ≥ 3.21.
 
@@ -448,11 +449,11 @@ looked up, and FASTag refuses the run up front rather than writing an empty
 report. Pair `-species` with `-subsample_fraction 0.1` for a fast call on a large
 run.
 
-**Get the index.** Release archives carry the full k-mer index inside
-(`share-FASTag-taxonomy/`), so `-species` works out of the box. For an
-index-only download (source builds, upgrades), every release also carries the
-platform-independent `FASTag-taxonomy-k7.tar.gz` (+`.sha256`); extract it into
-the FASTag directory:
+**Get the index.** Release archives from v1.0 on carry the full k-mer index
+inside (`share-FASTag-taxonomy/`), so `-species` works out of the box. For an
+index-only download (older archives, source builds, upgrades), every release
+also carries the platform-independent `FASTag-taxonomy-k7.tar.gz` (+`.sha256`);
+extract it into the FASTag directory:
 
 ```bash
 tar xzf FASTag-taxonomy-k7.tar.gz -C /path/to/FASTag/   # -> share-FASTag-taxonomy/
@@ -507,8 +508,10 @@ timed end to end including reading and writing. Hardware: _TBD_.
 <!-- PERF-TABLES -->
 
 Output is identical at every thread count, and memory is O(threads) rather than
-O(file) on both reading paths — `-out_spectra` is the one exception, since it
-holds one slot per input spectrum.
+O(file) on the mzML path; mzPeak instead tracks the row groups in flight, with a
+floor set by the archive's row-group size (see [File formats](#file-formats)).
+`-out_spectra` is the other exception, since it holds one slot per input
+spectrum.
 
 **The defaults favour recall over speed.** For the fastest possible run, or to
 match a tool with no equivalent of these, turn them off:
