@@ -40,6 +40,17 @@ namespace FASTag
   /// pathologically wide tolerance from turning one path into hundreds of rows.
   static constexpr int MAX_GAP_SPELLINGS = 8;
 
+  /// Peaks above precursor mass + proton + this (Da) are dropped.
+  static constexpr double PRECURSOR_TOL = 1.5;
+
+  /// Highest fragment charge the deisotoper tries.
+  static constexpr int DEISOTOPE_MAX_CHARGE = 3;
+
+  /// The m/z-fidelity null is Monte Carlo: this many samples per peak count,
+  /// from a fixed seed so every run scores identically.
+  static constexpr unsigned MZ_NULL_SEED = 20080717u;
+  static constexpr int MZ_NULL_SAMPLES = 10000;
+
   // There is deliberately no minimum-flank rule for gaps.
   //
   // An earlier version demanded ordinary residues on both sides, so a gap would
@@ -176,14 +187,6 @@ namespace FASTag
       return out;
     }
 
-    /// Residue count of a path (bracket annotations do not count).
-    inline size_t pathResidues(const std::vector<Step>& path)
-    {
-      size_t n = 0;
-      for (const Step& st : path) n += stepResidues(st);
-      return n;
-    }
-
     const double WATER = EmpiricalFormula("H2O").getMonoWeight();
     const double PROTON = Constants::PROTON_MASS_U;
 
@@ -211,7 +214,7 @@ namespace FASTag
     {
       auto safe = [](double v) { return std::log(std::max(v, 1e-300)); };
       const double x = -2.0 * (safe(p1) + safe(p2) + (k == 3 ? safe(p3) : 0.0));
-      if (x <= 0 || k <= 0) return 1.0;
+      if (x <= 0) return 1.0;
       const double t = x / 2;
       double term = std::exp(-t), sum = term;
       for (int i = 1; i < k; ++i) { term /= i; term *= t; sum += term; }
@@ -253,12 +256,12 @@ namespace FASTag
     mz_null_.resize(static_cast<size_t>(k_max_ - k_min_ + 1));
     for (int k = k_min_; k <= k_max_; ++k)
     {
-      std::mt19937 rng(p.seed + static_cast<unsigned>(k) * 2654435761u);
+      std::mt19937 rng(MZ_NULL_SEED + static_cast<unsigned>(k) * 2654435761u);
       std::uniform_real_distribution<double> err(-1.0, 1.0);
       auto& v = mz_null_[static_cast<size_t>(k - k_min_)];
-      v.reserve(static_cast<size_t>(p.mzfidelity_samples));
+      v.reserve(static_cast<size_t>(MZ_NULL_SAMPLES));
       std::vector<double> e(static_cast<size_t>(k));
-      for (int s = 0; s < p.mzfidelity_samples; ++s)
+      for (int s = 0; s < MZ_NULL_SAMPLES; ++s)
       {
         double mean = 0;
         for (int i = 0; i < k; ++i) { e[i] = err(rng); mean += e[i]; }
@@ -286,7 +289,6 @@ namespace FASTag
   {
     const int k = std::min(std::max(tag_peaks, k_min_), k_max_);
     const auto& v = mz_null_[static_cast<size_t>(k - k_min_)];
-    if (v.empty()) return 1.0;
     if (!std::isfinite(sse)) return 1.0;   // a non-finite SSE is not evidence
     // upper_bound, not lower_bound: the claim is P(SSE <= observed), and
     // lower_bound counts only the samples strictly below it.
@@ -337,7 +339,7 @@ namespace FASTag
       // The total order below (intensity desc, m/z desc) makes it reproducible.
       MSSpectrum work;
       work.reserve(in.size());
-      const double max_mz = s.precursor_mass + PROTON + p.precursor_tol;
+      const double max_mz = s.precursor_mass + PROTON + PRECURSOR_TOL;
       for (const auto& pk : in)
       {
         if (!std::isfinite(pk.getMZ()) || !std::isfinite(pk.getIntensity())) continue;
@@ -407,7 +409,7 @@ namespace FASTag
         // OpenMS's Deisotoper::deisotopeWithAveragineModel, ported and bit-identical
         // (AveragineDeisotoper.h): charges 1..max, no peak cap, unclustered peaks
         // kept, 2..10 isotope peaks, monoisotopic peaks moved to charge 1.
-        deisotopeAveragine(work, deiso_tol, p.tol_ppm, std::max(1, p.deisotope_max_charge));
+        deisotopeAveragine(work, deiso_tol, p.tol_ppm, DEISOTOPE_MAX_CHARGE);
         work.sortByPosition();
       }
 
@@ -757,22 +759,16 @@ namespace FASTag
       t.cterm_mass = std::max(0.0, avg * charge - PROTON * charge - WATER);
       t.nterm_mass = std::max(0.0, s.precursor_mass - ((avg + cum) * charge - PROTON * charge));
 
-      // Traversal runs low->high m/z, which is C->N; store N->C. So the path is
-      // walked backwards -- and a gap step must be reversed WITHIN itself too:
-      // its residues are traversed a-then-b, which reads b-then-a in the stored
-      // direction. Getting this wrong transposes exactly two residues, which no
-      // mass check would catch because the pair sum is unchanged.
       t.seq = spell(A, path);
-      t.n_res = pathResidues(path);
+      for (const Step& st : path) { t.n_res += stepResidues(st); t.gapped = t.gapped || st.gap; }
       if (p.per_residue_conf)
       {
-        // The path was traversed C->N and seq is stored N->C (see above), so
+        // The path was traversed C->N and seq is stored N->C (see spell()), so
         // the residue confidences must flip too -- a mistake here mirrors
         // every tag's confidences and NO mass or length check would catch it.
         std::reverse(t.res_conf.begin(), t.res_conf.end());
         assert(t.res_conf.size() == t.n_res);
       }
-      for (const Step& st : path) if (st.gap) { t.gapped = true; break; }
       t.low_mz = s.spec[peaks.front()].getMZ();
       return t;
     }
@@ -881,9 +877,8 @@ namespace FASTag
       const auto sig = [&]() { return p.diversity ? peaks : std::vector<uint32_t>(); };
       if (!t.gapped) { ++n_seeds; out.push_back({std::move(t), sig()}); return; }
 
-      size_t gi = 0;
-      while (gi < path.size() && !path[gi].gap) ++gi;
-      if (gi + 1 >= peaks.size()) { ++n_seeds; out.push_back({std::move(t), sig()}); return; }
+      size_t gi = 0;   // the gap step; peaks has one entry more than path
+      while (!path[gi].gap) ++gi;
 
       const double d = (s.spec[peaks[gi + 1]].getMZ() - s.spec[peaks[gi]].getMZ()) * charge;
       const double tol = tolAt(p, s.spec[peaks[gi + 1]].getMZ()) * charge;
