@@ -182,7 +182,8 @@ set, not a proof.
   because there are only ~50 proteomes available to contradict it. The
   deconvolution inherits that: it is a correction, not a calibrated abundance.
 - **The q-value is a ranking aid, not a calibrated FDR.** The per-k-mer
-  background is a proxy, and the chimeric-null problem applies. Trust the top-ranked evidence, not the absolute q.
+  background is a proxy, and the chimeric-null problem applies. Trust the
+  top-ranked evidence, not the absolute q.
 - **Reduced reference = genus/family only.** Species calls are out of scope by
   construction, and a taxon absent from the reference cannot be called (it will
   present as its nearest represented relative).
