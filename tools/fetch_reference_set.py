@@ -18,6 +18,8 @@ whose proteomeType is "Reference proteome" (an organism can also carry
 
 Skips files that already exist, so an interrupted run resumes.
 """
+import gzip
+import json
 import os
 import sys
 import time
@@ -39,7 +41,6 @@ def get(url, tries=4):
                 raise
             time.sleep(3 * (i + 1))
             print(f"    retry {i+1}: {e}", file=sys.stderr)
-    return b""
 
 
 def reference_proteome(taxid):
@@ -47,14 +48,12 @@ def reference_proteome(taxid):
 
     Two-stage on purpose. `organism_id:` matches the taxid EXACTLY, and most
     bacterial SPECIES carry no reference proteome of their own -- the reference
-    sits on a strain (S. aureus 1280 -> USA300 367830). An exact-match-only
-    resolver silently returned nothing for 11 of 50 taxa here. Falling back to
-    the taxonomy SUBTREE finds the strain, and we then key the file by the
+    sits on a strain (S. aureus 1280 -> USA300 367830), so an exact match alone
+    misses them (11 of the 50 reference taxa). Falling back to the taxonomy
+    SUBTREE finds the strain, and we then key the file by the
     strain's taxid, which is what the sequences actually are; roll-up to genus
     is the classifier's job and is unaffected.
     """
-    import json
-
     def pick(query):
         q = urllib.parse.quote(query)
         data = get(f"{API}/proteomes/search?query={q}&format=json&size=50")
@@ -114,8 +113,7 @@ def main(argv):
         # Querying (proteome:UP...) returns every isoform and unreviewed entry --
         # 147,506 sequences for human against ~2,000 for a bacterium, which is
         # the same unevenness this set exists to remove. The FTP file is 20,652
-        # for human: differences now track real proteome size, not curation.
-        import gzip
+        # for human: differences track real proteome size, not curation.
         fasta = b""
         for k in (kdom, "Eukaryota", "Bacteria", "Archaea", "Viruses"):
             try:
