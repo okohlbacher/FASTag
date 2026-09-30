@@ -33,9 +33,10 @@
 
 #include <algorithm>
 #include <atomic>
+#include <charconv>
 #include <cstdlib>
+#include <cstring>
 #include <exception>
-#include <limits>
 #include <optional>
 #include <vector>
 
@@ -47,6 +48,10 @@ namespace FASTag
   // so a write can start from it instead of from the lossy mapping. Declared
   // in the header: the adapter test plants legacy metadata under it.
   const char* const kRawMetaKey = "mzpeak_run_metadata_json";
+
+  /// mzPeak run metadata -> OpenMS run-level settings, the archive's raw JSON
+  /// riding along under kRawMetaKey. Defined with its reverse, toRunMetadata().
+  static ExperimentalSettings fromRunMetadata(const MzPeak::RunMetadata& md);
 
   namespace
   {
@@ -83,12 +88,9 @@ namespace FASTag
 
       const MzPeak::SpectrumMetadata& meta = in.metadata();
       out.setNativeID(meta.id);
-      // Carry the representation across. It is not cosmetic: mzPeak archives
-      // converted from raw files routinely store PROFILE MS2 with an empty
-      // centroid entry, and tagging profile samples is materially worse than
-      // tagging centroids (measured: 80,990 tags against 122,098 for the same
-      // run supplied as centroided mzML). Without this the caller cannot even
-      // tell, and -out_spectra would mislabel what it wrote.
+      // Carry the representation across. It is not cosmetic: getSpectrum()
+      // centroids PROFILE MS2 on read (see the header for why), which it can
+      // only do if it can tell, and -out_spectra would mislabel what it wrote.
       if (meta.representation == "MS:1000127")
         out.setType(SpectrumSettings::SpectrumType::CENTROID);
       else if (meta.representation == "MS:1000128")
@@ -117,8 +119,6 @@ namespace FASTag
           Precursor prec;
           if (ion.selected_ion_mz) prec.setMZ(*ion.selected_ion_mz);
           if (ion.charge_state) prec.setCharge(*ion.charge_state);
-          // Written at toSpectrumData() below and, until this line, never
-          // read back: an mzpeak -> mzpeak run silently dropped it.
           if (ion.intensity) prec.setIntensity(*ion.intensity);
           if (p.isolation_window.target_mz && !ion.selected_ion_mz)
           {
@@ -147,13 +147,14 @@ namespace FASTag
       }
     }
 
-    /// Largest signal row group across the archive's spectrum tables, in
-    /// uncompressed bytes. Read from the Parquet footers, so it costs a few
-    /// file opens and nothing else.
-    std::size_t largestRowGroup(const MzPeak::Index& index)
+    /// Row groups across the archive's spectrum signal tables, and the
+    /// largest of them in uncompressed bytes. Read from the Parquet footers,
+    /// so it costs a few file opens and nothing else. The count is the
+    /// physical layout; rowGroupsDecoded() counts cache decodes, which equal
+    /// it only while nothing is evicted.
+    void signalRowGroups(const MzPeak::Index& index, std::size_t& count, std::size_t& largest)
     {
       using enum MzPeak::Schema::DataKind::Type;
-      std::size_t best = 0;
       const auto manager = index.manager();
       for (const auto& file : index.files())
       {
@@ -161,59 +162,33 @@ namespace FASTag
         const auto kind = file.data_kind().type();
         if (kind != DataArray && kind != Peaks) continue;
         const auto fmd = manager->parquet(file)->file_metadata();
+        count += static_cast<std::size_t>(fmd->num_row_groups());
         // DECODED, not total_byte_size: the cache's budget is denominated in
         // decoded bytes, and a caller sizing that budget in row groups with
         // the encoded figure is out by whatever the encoding won -- 4.4x on a
         // signal table whose spectrum index is sorted and RLE'd.
         for (int g = 0; g < fmd->num_row_groups(); ++g)
-          best = std::max(best, MzPeak::Util::decoded_row_group_bytes(*fmd->RowGroup(g),
-                                                                     *fmd->schema()));
+          largest = std::max(largest, MzPeak::Util::decoded_row_group_bytes(*fmd->RowGroup(g),
+                                                                           *fmd->schema()));
       }
-      return best;
-    }
-
-    /// Row groups across the archive's spectrum signal tables, from the same
-    /// footers. rowGroupsDecoded() is NOT this: it counts cache decodes, which
-    /// equal the group count only while nothing is evicted. A test that wants
-    /// to prove it produced a multi-group archive reads this one.
-    std::size_t countRowGroups(const MzPeak::Index& index)
-    {
-      using enum MzPeak::Schema::DataKind::Type;
-      std::size_t n = 0;
-      const auto manager = index.manager();
-      for (const auto& file : index.files())
-      {
-        if (file.entity_type().type() != MzPeak::Schema::EntityType::Spectrum) continue;
-        const auto kind = file.data_kind().type();
-        if (kind != DataArray && kind != Peaks) continue;
-        n += static_cast<std::size_t>(manager->parquet(file)->file_metadata()->num_row_groups());
-      }
-      return n;
     }
 
     /// Called concurrently: FASTag builds its per-thread copies in parallel.
-    /// No lock of our own. Every member is opened through its own archive
-    /// handle (the library's RDR-26), and the shared metadata map is built
-    /// once under the library's lock -- one Spectra per thread over a shared
-    /// Index is the use Index::spectra() documents. The mutex that used to
-    /// sit here serialized ~4.5 ms per copy, 0.3-1 s at 128 threads.
+    /// No lock of our own (one would serialize ~4.5 ms per copy, 0.3-1 s at
+    /// 128 threads). Every member is opened through its own archive handle,
+    /// and the shared metadata map is built once under the library's lock --
+    /// one Spectra per thread over a shared Index is the use Index::spectra()
+    /// documents.
     MzPeak::Spectra openSpectra(const MzPeak::Index& index)
     {
-      // Lean metadata: the library caches the WHOLE descriptive metadata table
-      // before the first peak is read, and Lean leaves out the CV-parameter
-      // lists, scan windows and auxiliary arrays -- none of which FASTag reads.
-      // It needs the id, MS level, retention time, representation and the
-      // precursor isolation windows and selected ions, and Lean keeps all of
-      // those. Measured on a 7,534-spectrum run: 25.9 MB -> 18.7 MB, of which
-      // the live map is 10.2 MB -> 7.1 MB; the rest is Parquet columns Lean
-      // never asks for and so never decodes.
-      //
-      // Minimal, not Lean: toOpenMS() reads the id, MS level, RT, polarity,
-      // representation and one precursor with its window and ion, and that is
-      // all Minimal keeps, in a compact record per spectrum expanded when the
-      // spectrum is read. 717,924 spectra: ~0.4 GB less after the open, and no
-      // allocation per spectrum while opening. An archive with several
-      // precursors on a spectrum is read as Lean by the library instead.
+      // Minimal metadata: the library caches the WHOLE descriptive metadata
+      // table before the first peak is read. toOpenMS() reads the id, MS
+      // level, RT, polarity, representation and one precursor with its window
+      // and ion, and that is all Minimal keeps, in a compact record per
+      // spectrum expanded when the spectrum is read. 717,924 spectra: ~0.4 GB
+      // less than Lean after the open, and no allocation per spectrum while
+      // opening. An archive with several precursors on a spectrum is read as
+      // Lean by the library instead.
       return index.spectra(MzPeak::MetadataDetail::Minimal);
     }
 
@@ -260,10 +235,9 @@ namespace FASTag
   /// the row-group size, and the picking counters.
   struct Shared
   {
-    Shared(const std::string& path, std::size_t cache_budget)
-      : index(MzPeak::open(path))
+    explicit Shared(const std::string& path) : index(MzPeak::open(path))
     {
-      index.manager()->row_group_cache().set_budget(cache_budget);
+      index.manager()->row_group_cache().set_budget(std::size_t(4) << 30);
     }
     MzPeak::Index index;
     ExperimentalSettings settings;
@@ -274,8 +248,8 @@ namespace FASTag
 
   struct OnDiscMzPeakExperiment::Impl
   {
-    Impl(const std::string& path, std::size_t cache_budget)
-      : shared(std::make_shared<Shared>(path, cache_budget)), spectra(openSpectra(shared->index))
+    explicit Impl(const std::string& path)
+      : shared(std::make_shared<Shared>(path)), spectra(openSpectra(shared->index))
     {
     }
     Impl(const Impl& other) : shared(other.shared), spectra(openSpectra(shared->index)) {}
@@ -284,13 +258,12 @@ namespace FASTag
     PeakPickerHiRes picker;
   };
 
-  OnDiscMzPeakExperiment::OnDiscMzPeakExperiment(const std::string& path, std::size_t cache_budget)
+  OnDiscMzPeakExperiment::OnDiscMzPeakExperiment(const std::string& path)
   try
-    : impl_(std::make_unique<Impl>(path, cache_budget))
+    : impl_(std::make_unique<Impl>(path))
   {
     impl_->shared->settings = fromRunMetadata(impl_->shared->index.metadata());
-    impl_->shared->row_group_bytes = largestRowGroup(impl_->shared->index);
-    impl_->shared->row_groups = countRowGroups(impl_->shared->index);
+    signalRowGroups(impl_->shared->index, impl_->shared->row_groups, impl_->shared->row_group_bytes);
   }
   catch (const Exception::BaseException&)
   {
@@ -370,8 +343,6 @@ namespace FASTag
   {
     const auto c = MzPeak::Util::read_counters();
     plan = c.ns_plan;
-    // ctor time is reported through the same call for brevity
-    exec = c.ns_plan_ctor;
     exec = c.ns_exec;
     rowgroup = c.ns_rowgroup;
     project = c.ns_project;
@@ -421,7 +392,7 @@ namespace FASTag
   }
 
   /****************************************************************************/
-  ExperimentalSettings fromRunMetadata(const MzPeak::RunMetadata& md)
+  static ExperimentalSettings fromRunMetadata(const MzPeak::RunMetadata& md)
   {
     ExperimentalSettings es;
     if (const auto& run = md.run())
@@ -472,9 +443,8 @@ namespace FASTag
       {
         const std::string type = c.component_type.value_or("");
         const Int order = static_cast<Int>(c.order.value_or(0));
-        // "ionsource" is the schema's enum value; "source" is what every
-        // archive FASTag wrote before this was corrected, and those stay
-        // readable.
+        // "ionsource" is the schema's enum value; "source" is the legacy
+        // spelling in older FASTag archives, which stay readable.
         if (type == "ionsource" || type == "source")
         {
           IonSource s;
@@ -531,12 +501,11 @@ namespace FASTag
 
   namespace
   {
-    /// Repair the two schema violations every archive FASTag wrote before
-    /// 2026-09 carries in its mzpeak_index.json, so that an mzpeak -> mzpeak
-    /// run starting from such an archive's raw metadata does not copy them
-    /// forward: component_type "source" (the schema enum says "ionsource")
-    /// and a run block without the required "id". Both were found by
-    /// mzPeakValidator; the mzML-origin path below never emits them now.
+    /// Repair the two schema violations older FASTag archives carry in their
+    /// mzpeak_index.json, so that an mzpeak -> mzpeak run starting from such
+    /// an archive's raw metadata does not copy them forward: component_type
+    /// "source" (the schema enum says "ionsource") and a run block without
+    /// the required "id". The mzML-origin path below never emits either.
     void normaliseLegacyMetadata(json::object& o)
     {
       if (auto* ics = o.if_contains("instrument_configuration_list"); ics && ics->is_array())
@@ -562,7 +531,13 @@ namespace FASTag
   }
 
   /****************************************************************************/
-  MzPeak::RunMetadata toRunMetadata(const ExperimentalSettings& es, const MSExperiment* exp)
+  /// OpenMS run-level settings -> mzPeak run metadata: run id and start time,
+  /// source files, the instrument with its components and software, the
+  /// sample, and -- when @p exp is given -- its first spectrum's
+  /// data-processing history. Settings that came out of fromRunMetadata()
+  /// carry the archive's raw JSON as a meta value; that is used as the base
+  /// then, so an mzpeak -> mzpeak run loses nothing OpenMS has no field for.
+  static MzPeak::RunMetadata toRunMetadata(const ExperimentalSettings& es, const MSExperiment* exp)
   {
     json::object o;
     if (es.metaValueExists(kRawMetaKey))
@@ -741,8 +716,7 @@ namespace FASTag
   /****************************************************************************/
   namespace
   {
-    /// One OpenMS spectrum as the library's SpectrumData. Shared by the
-    /// streaming and whole-run writers, so the two cannot drift.
+    /// One OpenMS spectrum as the library's SpectrumData.
     MzPeak::SpectrumData toSpectrumData(const MSSpectrum& s)
     {
       MzPeak::SpectrumData out;
@@ -808,14 +782,10 @@ namespace FASTag
       constexpr std::size_t kDefault = std::size_t(1) << 20;
       const char* v = std::getenv("FASTAG_MZPEAK_POINTS_PER_ROW_GROUP");
       if (!v || !*v) return kDefault;
+      const char* end = v + std::strlen(v);
       std::size_t n = 0;
-      bool ok = true;
-      for (const char* c = v; *c && ok; ++c)
-      {
-        if (*c < '0' || *c > '9' || n > (std::numeric_limits<std::size_t>::max() - 9) / 10) ok = false;
-        else n = n * 10 + static_cast<std::size_t>(*c - '0');
-      }
-      if (!ok || n == 0)
+      const auto [ptr, ec] = std::from_chars(v, end, n);
+      if (ec != std::errc() || ptr != end || n == 0)
       {
         OPENMS_LOG_WARN << "FASTAG_MZPEAK_POINTS_PER_ROW_GROUP='" << v
                         << "' is not a positive integer; writing " << kDefault
@@ -880,14 +850,6 @@ namespace FASTag
                                           impl_->path,
                                           std::string("mzPeak write failed: ") + e.what());
     }
-  }
-
-  /****************************************************************************/
-  void writeMzPeak(const std::string& path, const MSExperiment& exp)
-  {
-    MzPeakSpectrumWriter writer(path, exp.getExperimentalSettings(), &exp);
-    for (const MSSpectrum& s : exp) writer.add(s);
-    writer.finish();
   }
 }
 

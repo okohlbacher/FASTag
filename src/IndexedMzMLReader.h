@@ -5,13 +5,8 @@
 // binary arrays and native id only -- MS level, retention time and precursors
 // are dropped. FASTag needs all three, so OnDiscMSExperiment::openFile has to
 // be told to load metadata, and that is a SERIAL Xerces parse of the entire
-// file before any tagging starts: measured at 4.0 s of a 9.1 s run on a
-// 1.8 GB file, single-threaded and immune to -threads.
-//
-// A patched OpenMS harvests those fields from the DOM domParseSpectrum
-// already builds, which is why the pre-pass used to be skippable. The
-// released binaries link bioconda's OpenMS, which carries no such patch, so
-// since v1.1.0 every mzML run has paid the pre-pass.
+// file before any tagging starts: 4.0 s of a 9.1 s run on a 1.8 GB file,
+// single-threaded and immune to -threads.
 //
 // This reader removes it: the mzML index gives each spectrum's byte range,
 // the bytes are handed to the same public domParseSpectrum for peaks, and the
@@ -28,8 +23,8 @@
 // same way. A stale index is the common case, not an exotic one: any tool
 // that patches an mzML in place (adding precursor values, say) without
 // rewriting its index leaves every offset after the first edit pointing
-// into the wrong bytes. Refusing such a file used to cost a serial full
-// load -- 52.8 s instead of 4.5 s on a 6 GB diaTracer run.
+// into the wrong bytes. Refusing such a file would cost a serial full load
+// instead: 52.8 s against 4.5 s on a 6 GB diaTracer run.
 //
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
