@@ -88,12 +88,9 @@ namespace FASTag
 
       const MzPeak::SpectrumMetadata& meta = in.metadata();
       out.setNativeID(meta.id);
-      // Carry the representation across. It is not cosmetic: mzPeak archives
-      // converted from raw files routinely store PROFILE MS2 with an empty
-      // centroid entry, and tagging profile samples is materially worse than
-      // tagging centroids (measured: 80,990 tags against 122,098 for the same
-      // run supplied as centroided mzML). Without this the caller cannot even
-      // tell, and -out_spectra would mislabel what it wrote.
+      // Carry the representation across. It is not cosmetic: getSpectrum()
+      // centroids PROFILE MS2 on read (see the header for why), which it can
+      // only do if it can tell, and -out_spectra would mislabel what it wrote.
       if (meta.representation == "MS:1000127")
         out.setType(SpectrumSettings::SpectrumType::CENTROID);
       else if (meta.representation == "MS:1000128")
@@ -122,8 +119,6 @@ namespace FASTag
           Precursor prec;
           if (ion.selected_ion_mz) prec.setMZ(*ion.selected_ion_mz);
           if (ion.charge_state) prec.setCharge(*ion.charge_state);
-          // Written at toSpectrumData() below and, until this line, never
-          // read back: an mzpeak -> mzpeak run silently dropped it.
           if (ion.intensity) prec.setIntensity(*ion.intensity);
           if (p.isolation_window.target_mz && !ion.selected_ion_mz)
           {
@@ -179,28 +174,21 @@ namespace FASTag
     }
 
     /// Called concurrently: FASTag builds its per-thread copies in parallel.
-    /// No lock of our own. Every member is opened through its own archive
-    /// handle (the library's RDR-26), and the shared metadata map is built
-    /// once under the library's lock -- one Spectra per thread over a shared
-    /// Index is the use Index::spectra() documents. The mutex that used to
-    /// sit here serialized ~4.5 ms per copy, 0.3-1 s at 128 threads.
+    /// No lock of our own (one would serialize ~4.5 ms per copy, 0.3-1 s at
+    /// 128 threads). Every member is opened through its own archive handle,
+    /// and the shared metadata map is built once under the library's lock --
+    /// one Spectra per thread over a shared Index is the use Index::spectra()
+    /// documents.
     MzPeak::Spectra openSpectra(const MzPeak::Index& index)
     {
-      // Lean metadata: the library caches the WHOLE descriptive metadata table
-      // before the first peak is read, and Lean leaves out the CV-parameter
-      // lists, scan windows and auxiliary arrays -- none of which FASTag reads.
-      // It needs the id, MS level, retention time, representation and the
-      // precursor isolation windows and selected ions, and Lean keeps all of
-      // those. Measured on a 7,534-spectrum run: 25.9 MB -> 18.7 MB, of which
-      // the live map is 10.2 MB -> 7.1 MB; the rest is Parquet columns Lean
-      // never asks for and so never decodes.
-      //
-      // Minimal, not Lean: toOpenMS() reads the id, MS level, RT, polarity,
-      // representation and one precursor with its window and ion, and that is
-      // all Minimal keeps, in a compact record per spectrum expanded when the
-      // spectrum is read. 717,924 spectra: ~0.4 GB less after the open, and no
-      // allocation per spectrum while opening. An archive with several
-      // precursors on a spectrum is read as Lean by the library instead.
+      // Minimal metadata: the library caches the WHOLE descriptive metadata
+      // table before the first peak is read. toOpenMS() reads the id, MS
+      // level, RT, polarity, representation and one precursor with its window
+      // and ion, and that is all Minimal keeps, in a compact record per
+      // spectrum expanded when the spectrum is read. 717,924 spectra: ~0.4 GB
+      // less than Lean after the open, and no allocation per spectrum while
+      // opening. An archive with several precursors on a spectrum is read as
+      // Lean by the library instead.
       return index.spectra(MzPeak::MetadataDetail::Minimal);
     }
 
@@ -455,9 +443,8 @@ namespace FASTag
       {
         const std::string type = c.component_type.value_or("");
         const Int order = static_cast<Int>(c.order.value_or(0));
-        // "ionsource" is the schema's enum value; "source" is what every
-        // archive FASTag wrote before this was corrected, and those stay
-        // readable.
+        // "ionsource" is the schema's enum value; "source" is the legacy
+        // spelling in older FASTag archives, which stay readable.
         if (type == "ionsource" || type == "source")
         {
           IonSource s;
@@ -514,12 +501,11 @@ namespace FASTag
 
   namespace
   {
-    /// Repair the two schema violations every archive FASTag wrote before
-    /// 2026-09 carries in its mzpeak_index.json, so that an mzpeak -> mzpeak
-    /// run starting from such an archive's raw metadata does not copy them
-    /// forward: component_type "source" (the schema enum says "ionsource")
-    /// and a run block without the required "id". Both were found by
-    /// mzPeakValidator; the mzML-origin path below never emits them now.
+    /// Repair the two schema violations older FASTag archives carry in their
+    /// mzpeak_index.json, so that an mzpeak -> mzpeak run starting from such
+    /// an archive's raw metadata does not copy them forward: component_type
+    /// "source" (the schema enum says "ionsource") and a run block without
+    /// the required "id". The mzML-origin path below never emits either.
     void normaliseLegacyMetadata(json::object& o)
     {
       if (auto* ics = o.if_contains("instrument_configuration_list"); ics && ics->is_array())

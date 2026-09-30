@@ -44,7 +44,6 @@
 #include <filesystem>
 #include <set>
 #include <string>
-#include <vector>
 
 using namespace OpenMS;
 namespace fs = std::filesystem;
@@ -262,7 +261,7 @@ int main()
     {
       check(rd->rowGroupCount() == 1, "default layout: " + std::to_string(rd->rowGroupCount())
                                           + " row groups, want 1 (36,050 points < 2^20)");
-      // Run metadata, mzML origin: what the validator rejected before the fix.
+      // Run metadata, mzML origin: the schema's component spelling and run id.
       const json::object raw = rawMetadata(rd->getMetaData());
       check(!raw.empty(), "default layout: the reader kept the archive's raw run metadata");
       check(firstComponentType(raw) == "ionsource",
@@ -302,9 +301,9 @@ int main()
       check(false, std::string("junk knob: cannot open: ") + e.what());
     }
 
-    // 4. Legacy raw metadata (every archive FASTag wrote before the fix) is
-    //    normalised when written again, so an mzpeak -> mzpeak run does not
-    //    carry the two schema violations forward.
+    // 4. Legacy raw metadata ("source", no run id, as older FASTag archives
+    //    carry it) is normalised when written again, so an mzpeak -> mzpeak
+    //    run does not carry the two schema violations forward.
     {
       PeakMap one;
       one.addSpectrum(exp[0]);

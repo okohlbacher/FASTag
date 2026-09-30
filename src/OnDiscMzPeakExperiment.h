@@ -82,7 +82,7 @@ namespace FASTag
     /// follows the groups in flight, about one per reader plus a boundary, so
     /// this is what a caller sizing the number of concurrent readers needs.
     std::size_t maxRowGroupBytes() const;
-    /// The cache budget this reader was opened with.
+    /// The archive-wide cache budget currently in effect.
     std::size_t cacheBudget() const;
     /// Shrink or grow the archive-wide cache budget for every reader at once.
     /// Two groups per running reader is the sweet spot: a single reader then
