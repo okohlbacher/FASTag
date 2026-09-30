@@ -10,7 +10,6 @@
 
 #include <cstdint>
 #include <string>
-#include <unordered_set>
 #include <vector>
 
 namespace FASTag
@@ -23,16 +22,22 @@ namespace FASTag
   /// information. Over-length tags are rejected, never truncated.
   constexpr int MAX_FILTER_LEN = 25;
 
-  /// Sentinel for ambiguity codes; no tag can contain it. (The definition
-  /// lives in ResidueFold.h now, shared with ProteomeIndex.)
+  /// Sentinel for ambiguity codes; no tag can contain it.
   constexpr char AMBIG = RESIDUE_AMBIG;
 
-  /// A 125-bit k-mer key as two 64-bit halves.
-  ///
-  /// Was __uint128_t, which is a GCC/Clang extension MSVC does not provide -- so
-  /// the whole tool failed to compile there, for one type in one file. Two
-  /// uint64_t are portable, the same 16 bytes, and the only operations needed
-  /// are shift-in-from-the-right and equality.
+  /// Amino acids are far from uniform: with I/L folded, sum(f^2) = 0.068 over
+  /// the human proteome, so the effective alphabet is 1/0.068 = 14.7, not 19.
+  /// Using 19 understates the chance rate and picks a floor one residue short.
+  constexpr double EFF_ALPHABET = 14.7;
+
+  /// Smallest tag length whose expected chance-match rate against @p residues
+  /// database residues is below 5%: k = ceil(log_A(20*c*M)), with A the
+  /// effective alphabet and c=2 when both orientations match. Gives 4 for a
+  /// 392-residue protein, 8 for the human proteome.
+  int autoMinFilterLen(size_t residues, bool both_orientations);
+
+  /// A 125-bit k-mer key as two 64-bit halves (portable where __uint128_t is
+  /// not, e.g. MSVC); the only operations needed are shift-in and comparison.
   struct Kmer128
   {
     uint64_t hi = 0, lo = 0;
@@ -53,20 +58,6 @@ namespace FASTag
 
     bool operator==(const Kmer128& o) const noexcept { return hi == o.hi && lo == o.lo; }
     bool operator!=(const Kmer128& o) const noexcept { return !(*this == o); }
-  };
-
-  struct Kmer128Hash
-  {
-    size_t operator()(const Kmer128& v) const noexcept
-    {
-      auto mix = [](uint64_t x) {
-        x += 0x9e3779b97f4a7c15ull;
-        x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ull;
-        x = (x ^ (x >> 27)) * 0x94d049bb133111ebull;
-        return x ^ (x >> 31);
-      };
-      return static_cast<size_t>(mix(v.lo) ^ (mix(v.hi) * 3));
-    }
   };
 
   class FastaFilter
@@ -110,10 +101,8 @@ namespace FASTag
     int  minLen() const { return min_len_ > 0 ? min_len_ : autoMinLen(); }
     bool minLenAuto() const { return min_len_auto_; }
 
-    /// Smallest length whose expected chance-match rate is below 5%:
-    /// k = ceil(log_A(20*c*M)), with A the effective alphabet and c=2 for both
-    /// orientations. Gives 4 for a 392-residue protein, 8 for the human proteome.
-    int autoMinLen() const;
+    /// autoMinFilterLen() for this database and orientation setting.
+    int autoMinLen() const { return autoMinFilterLen(residues_, both_); }
 
     /// Expected fraction of random length-k tags that match, so an observed count
     /// is never mistaken for signal.
@@ -155,12 +144,6 @@ namespace FASTag
     size_t residueCount() const { return residues_; }
 
   private:
-    /// Amino acids are far from uniform: with I/L folded, sum(f^2) = 0.068 over
-    /// the human proteome, so the effective alphabet is 1/0.068 = 14.7, not 19.
-    /// Using 19 understates the chance rate and picks a floor one residue short.
-    static constexpr double EFF_ALPHABET = 14.7;
-
-
     static Kmer128 encode(const char* s, int n);
     static Kmer128 reverseKey(Kmer128 v, int k);
     bool hasKey(int k, const Kmer128& e) const;
