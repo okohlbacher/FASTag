@@ -783,9 +783,16 @@ jobs:
           [ "$(grep -c . "$BW/mp.tsv")" -gt 1 ] || { echo "::error::the bundle round trip produced no tags"; exit 1; }
           echo "bundle round trip: $(grep -o 'Wrote [0-9]* spectra' "$BW/write.log"), tags byte-identical"
 
-          ls dist/FASTag/lib | grep -qi 'mzpeak' || { echo "::error::no libmzpeak in the bundle"; exit 1; }
-          ls dist/FASTag/lib | grep -qi 'arrow' || { echo "::error::no Arrow library in the bundle"; exit 1; }
-          ls dist/FASTag/lib | grep -qi 'parquet' || { echo "::error::no Parquet library in the bundle"; exit 1; }
+          # Listed once into a variable, not `ls | grep -q` three times: this step
+          # runs under `shell: bash`, which is pipefail, and grep -q exits at the
+          # first match -- so ls dies of SIGPIPE and the pipeline reports failure
+          # even though the library IS there. It is a race on how much ls has
+          # written, and it failed the Arrow check once with the bundle correct.
+          BUNDLED_LIBS=$(ls dist/FASTag/lib)
+          for lib in mzpeak arrow parquet; do
+            grep -qi "$lib" <<< "$BUNDLED_LIBS" \
+              || { echo "::error::no $lib library in the bundle"; echo "$BUNDLED_LIBS"; exit 1; }
+          done
 
           echo "Portability check passed: runs standalone, no build-environment leakage, reads and writes mzPeak."
 
