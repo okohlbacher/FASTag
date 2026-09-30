@@ -3,15 +3,14 @@
 
 #include "ProteomeIndex.h"
 
-#include "FastaFilter.h"  // MAX_FILTER_LEN
+#include "FastaFilter.h"  // MAX_FILTER_LEN, autoMinFilterLen
 
 #include <OpenMS/CHEMISTRY/Residue.h>
 #include <OpenMS/CHEMISTRY/ResidueDB.h>
 
 #include <algorithm>
-#include <cmath>
 #include <cstring>
-#include <set>
+#include <limits>
 #include <tuple>
 
 using namespace OpenMS;
@@ -40,8 +39,7 @@ namespace FASTag
                             const std::vector<std::pair<char, double>>& fixed_mods,
                             double isobaric_tol)
   {
-    // Residue masses with fixed mods folded in, exactly as TagRecon has
-    // always computed database flanks.
+    // Residue masses with fixed mods folded in.
     double mass[128] = {0};
     for (const Residue* r : ResidueDB::getInstance()->getResidues("Natural19WithoutI"))
     {
@@ -224,7 +222,6 @@ namespace FASTag
     // it = first boundary >= pos; the start candidates walk left from here.
     if (it == bounds_.begin() && it->first > pos) return;  // before any segment
     auto sit = (it != bounds_.end() && it->first == pos) ? it : std::prev(it);
-    if (sit->first > pos) return;
     const uint32_t seg = sit->second;
 
     auto eit = std::lower_bound(bounds_.begin(), bounds_.end(), pos + len, cmp);
@@ -249,18 +246,10 @@ namespace FASTag
   const std::string& ProteomeIndex::proteinAt(uint32_t pos) const
   {
     static const std::string none;
-    if (starts_.empty()) return none;
     const size_t i = static_cast<size_t>(
         std::upper_bound(starts_.begin(), starts_.end(), pos) - starts_.begin());
     return i > 0 ? acc_[i - 1] : none;
   }
 
-  int ProteomeIndex::autoMinLen() const
-  {
-    constexpr double EFF_ALPHABET = 14.7;  // same model as FastaFilter
-    if (residues_ == 0) return 1;
-    const int k = static_cast<int>(std::ceil(
-        std::log(20.0 * 2.0 * static_cast<double>(residues_)) / std::log(EFF_ALPHABET)));
-    return std::max(1, std::min(k, MAX_FILTER_LEN));
-  }
+  int ProteomeIndex::autoMinLen() const { return autoMinFilterLen(residues_, true); }
 }

@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""PXD000001 ground-truth scorer for FASTag — rebuilt, and proven to reproduce
-the numbers documented in doc/BACKLOG.md.
+"""PXD000001 ground-truth scorer for FASTag: tag correctness against the
+accepted PSMs of the dataset's own Mascot search.
 
-Recipe (matches the original 2026-07-23 measurement, recovered from the session
-transcript after the scratchpad copy was lost):
+Recipe:
 
   Dataset   PXD000001 — Erwinia carotovora, TMT6plex, LTQ Orbitrap Velos HCD;
             the canonical ProteomeXchange demo dataset. It ships a Mascot
@@ -14,12 +13,10 @@ transcript after the scratchpad copy was lost):
             FDR) <= 1% selects score >= 16.85 — 2,254 accepted target PSMs
             out of 6,103 queries (3,085 queries have a target top hit).
   Tagging   FASTag -tag_length 4 -gaps 1 -max_tags 0 -fragment_tolerance 20
-            -fragment_tolerance_unit ppm, plus three flags that pin today's
-            binary to the defaults in force when the numbers were measured:
-            -peaks_per_window 0 -max_peaks 100 (peak caps were raised to
-            10/400 afterwards) and -fixed_modifications '' (the alphabet
-            gained a default Carbamidomethyl (C) afterwards; the measurement
-            used the unmodified 19-residue alphabet).
+            -fragment_tolerance_unit ppm, plus -peaks_per_window 0
+            -max_peaks 100 -fixed_modifications '', which fix the peak caps
+            and the unmodified 19-residue alphabet of the reference
+            measurement (the defaults are now 10/400 and Carbamidomethyl (C)).
   Scoring   A tag is correct iff its I/L-folded sequence occurs in the
             I/L-folded peptide and ONE flank mass agrees within 0.05 Da:
             forward (y-series read)  |prefix[i] - nterm_mass|        <= 0.05
@@ -40,15 +37,12 @@ transcript after the scratchpad copy was lost):
             recall = any row. Percentages are over accepted-PSM spectra that
             produced at least one tag (2,253 of 2,254).
 
-Reproduced (this script, current build-rel/FASTag, vs doc/BACKLOG.md):
+Results (DOCUMENTED below holds the rounded values a run is checked against):
 
   -gap_penalty | rank-1 | top-5 | total | gapped rank-1 share | ... correct
    1           | 69.02  | 90.81 | 98.05 | 34.66               | 25.35
    100 default | 86.37  | 96.09 | 98.05 |  3.20               | 27.78
    10000       | 87.08  | 96.36 | 98.05 |  1.64               | 18.92
-
-  documented:   69.0/86.4/87.1 | 90.8/96.1/96.4 | 98.05 flat | 34.7/3.2/1.6
-  | 25.4/27.8/18.9 — every cell matches to rounding.
 
 Usage:
   python3 tools/pxd000001_truth.py                 # run + assert default row
@@ -56,7 +50,7 @@ Usage:
   python3 tools/pxd000001_truth.py --tsv X.tsv     # score an existing TSV
 
 The FASTag TSV is cached in --workdir and reused; delete it (or pass
---force) to re-run the tagger. On this Mac the tagger needs
+--force) to re-run the tagger. On macOS the tagger needs
 DYLD_LIBRARY_PATH=/opt/homebrew/opt/libomp/lib so that every image resolves
 the SAME libomp (a conda-env copy otherwise loads second and aborts with
 OMP Error #15); the script sets that itself. Python 3 stdlib only.
@@ -83,14 +77,14 @@ DEFAULT_WORKDIR = ('/private/tmp/claude-501/-Users-kohlbach-Claude-OpenMS---'
                    'DirecTag/df88f9b0-cc80-48db-8780-e2bc44da5d34/scratchpad/'
                    'pxd000001')
 
-# doc/BACKLOG.md, gap-penalty table: {penalty: (rank-1 %, top-5 %, total %)}
+# Reference gap-penalty table: {penalty: (rank-1 %, top-5 %, total %)}
 DOCUMENTED = {1: (69.0, 90.8, 98.05), 10: (83.0, 95.2, 98.05),
               30: (85.1, 95.7, 98.05), 100: (86.4, 96.1, 98.05),
               300: (86.8, 96.2, 98.05), 1000: (86.9, 96.4, 98.05),
               10000: (87.1, 96.4, 98.05)}
 TOLERANCE_PP = 0.3   # percentage points allowed around the documented row
 
-# --- mass model (verbatim from the original scorer) ------------------------
+# --- mass model ------------------------------------------------------------
 
 MASS = {
     'G': 57.02146, 'A': 71.03711, 'S': 87.03203, 'P': 97.05276, 'V': 99.06841,
@@ -145,8 +139,8 @@ def parse_dat(path):
 
 
 def fdr_threshold(targets, decoys, fdr=0.01):
-    """Smallest score with target-decoy q-value <= fdr (as the original:
-    FDR = decoys >= s / targets >= s, made monotone from the top)."""
+    """Smallest score with target-decoy q-value <= fdr
+    (FDR = decoys >= s / targets >= s, made monotone from the top)."""
     tscores = sorted((s for _, s in targets.values()), reverse=True)
     dscores = sorted(s for _, s in decoys.values())
     rows = []
@@ -167,7 +161,7 @@ def fdr_threshold(targets, decoys, fdr=0.01):
 # --- FASTag ----------------------------------------------------------------
 
 def run_fastag(tsv, mzml, gap_penalty, threads, force=False):
-    """Run FASTag with the measurement-era parameters; cache the TSV."""
+    """Run FASTag with the reference parameters; cache the TSV."""
     if os.path.exists(tsv) and os.path.getsize(tsv) > 0 and not force:
         print(f'reusing cached {tsv}')
         return
@@ -177,7 +171,7 @@ def run_fastag(tsv, mzml, gap_penalty, threads, force=False):
            '-tag_length', '4', '-gaps', '1', '-gap_penalty', str(gap_penalty),
            '-max_tags', '0', '-fragment_tolerance', '20',
            '-fragment_tolerance_unit', 'ppm',
-           # pin today's binary to the defaults the numbers were measured with:
+           # the reference measurement's peak caps and alphabet:
            '-peaks_per_window', '0', '-max_peaks', '100',
            '-fixed_modifications', '',
            '-threads', str(threads)]
@@ -187,7 +181,7 @@ def run_fastag(tsv, mzml, gap_penalty, threads, force=False):
         sys.exit(f'FASTag failed ({res.returncode}):\n{res.stderr[-2000:]}')
     print(res.stderr.strip().splitlines()[-1] if res.stderr.strip() else 'done')
 
-# --- scoring (verbatim semantics of the original scorer) -------------------
+# --- scoring ---------------------------------------------------------------
 
 def prefix_masses(pep):
     """Cumulative N-terminal mass of the identified peptide, fixed mods only."""
@@ -227,7 +221,7 @@ def tag_correct(seq, nterm_mass, cterm_mass, pep_folded, pref):
 
 
 def score(tsv, gt):
-    """gt: scan -> peptide. Returns the stats dict of the original scorer."""
+    """gt: scan -> peptide. Returns the per-rank correctness counts."""
     by_scan = {}
     with open(tsv) as fh:
         for row in csv.DictReader(fh, delimiter='\t'):
@@ -309,7 +303,7 @@ def main():
           f"({100.0*st['g1_correct']/st['g1']:.2f}%)" if st['g1'] else
           'no gapped rank-1 rows')
 
-    # 4. prove reproduction of the documented row
+    # 4. compare with the documented row
     doc = DOCUMENTED.get(args.gap_penalty)
     if doc:
         dev = [pct['rank1'] - doc[0], pct['top5'] - doc[1], pct['total'] - doc[2]]

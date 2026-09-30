@@ -63,10 +63,8 @@ namespace FASTag
 
     /// Tryptic windows containing [pos, pos+len), with at most
     /// @p missed_cleavages internal cleavage sites. Windows never span a
-    /// sentinel or an ambiguity residue: both are hard cleavage barriers,
-    /// which is slightly MORE permissive than TagRecon's historical
-    /// skip-the-whole-peptide-on-unknown behavior (a window beside an X is
-    /// still usable; one containing it never forms).
+    /// sentinel or an ambiguity residue: both are hard cleavage barriers (a
+    /// window beside an X is still usable; one containing it never forms).
     void windowsAt(uint32_t pos, uint32_t len, int missed_cleavages,
                    std::vector<Window>& out) const;
 
@@ -94,9 +92,7 @@ namespace FASTag
     size_t proteinCount() const { return starts_.size(); }
     size_t collapseRuleCount() const { return rules_.size(); }
 
-    /// Smallest tag length whose expected chance-match rate against this text
-    /// is below 5% -- same model as FastaFilter::autoMinLen (effective
-    /// alphabet 14.7, factor 2 for both orientations).
+    /// autoMinFilterLen() over this text, both orientations.
     int autoMinLen() const;
 
   private:

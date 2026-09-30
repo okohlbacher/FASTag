@@ -9,7 +9,7 @@ weight in a release.
 Kept:
   nodes.dmp  every taxid on a leaf->root path (the ranks the rollup climbs)
   names.dmp  the 'scientific name' row for those taxids -- the only name class
-             TaxStats::Taxonomy::load() reads
+             Taxonomy::load() (src/TaxStats.h) reads
 
 Usage:
   prune_taxdump.py <nodes.dmp> <names.dmp> <out_dir> <taxid> [taxid ...]

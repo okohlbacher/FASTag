@@ -1,4 +1,4 @@
-// Checks the ProForma tag rendering (F13).
+// Checks the ProForma tag rendering.
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
 #include "Proforma.h"

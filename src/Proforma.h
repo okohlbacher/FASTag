@@ -1,4 +1,4 @@
-// ProForma 2.0 rendering of a sequence tag, for interoperability (F13).
+// ProForma 2.0 rendering of a sequence tag, for interoperability.
 //
 // A FASTag tag is an internal stretch of residues with a known mass to each
 // peptide terminus but UNKNOWN flanking composition. ProForma has no first-class
@@ -7,7 +7,7 @@
 // tools that speak ProForma (e.g. for USI construction or proteoform display)
 // can then consume a tag without a bespoke parser.
 //
-// Two subtleties a naive rendering gets wrong, both flagged in review:
+// Two subtleties a naive rendering gets wrong:
 //
 //  * FIXED modifications (Carbamidomethyl C by default) alter residue masses but
 //    are deliberately NOT in the tag sequence -- so a bare `C` in the tag is
@@ -46,18 +46,16 @@ namespace FASTag
   inline std::string toProforma(const std::string& residues, double nterm, double cterm,
                                 const std::string& global = "")
   {
-    auto massTag = [](double m, std::string& out) -> bool {
-      if (!std::isfinite(m) || std::fabs(m) >= 1e12) return false;  // never emit [+inf]/garbage
+    // "[+m]", or empty for a terminal (< 0.5 Da), non-finite or absurd flank.
+    auto massTag = [](double m) -> std::string {
+      if (!(std::fabs(m) > 0.5) || !std::isfinite(m) || std::fabs(m) >= 1e12) return {};
       char b[48];
-      const int n = std::snprintf(b, sizeof b, "[%+.4f]", m);      // %+ gives the leading sign
-      if (n <= 0 || static_cast<size_t>(n) >= sizeof b) return false;
-      out.assign(b, static_cast<size_t>(n));
-      return true;
+      std::snprintf(b, sizeof b, "[%+.4f]", m);  // %+ gives the leading sign
+      return b;
     };
 
     std::string out = global;
-    std::string tag;
-    if (std::fabs(nterm) > 0.5) { std::string t; if (massTag(nterm, t)) { out += t; out += '-'; } }
+    if (const std::string t = massTag(nterm); !t.empty()) { out += t; out += '-'; }
 
     // Fold L -> J inside residue text only (not inside a `[...]` mod token).
     bool in_mod = false;
@@ -68,7 +66,7 @@ namespace FASTag
       out += (!in_mod && c == 'L') ? 'J' : c;
     }
 
-    if (std::fabs(cterm) > 0.5) { std::string t; if (massTag(cterm, t)) { out += '-'; out += t; } }
+    if (const std::string t = massTag(cterm); !t.empty()) { out += '-'; out += t; }
     return out;
   }
 }

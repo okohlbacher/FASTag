@@ -37,16 +37,6 @@ namespace
     double m = 0; for (char c : s) m += resMass(c); return m;
   }
 
-  TagReconciler makeRecon(const std::string& protein_seq)
-  {
-    std::vector<FASTAFile::FASTAEntry> entries;
-    entries.emplace_back("PROT1", "test protein", protein_seq);
-    TagReconciler r(0.02, /*ppm=*/false, /*both=*/true);
-    r.build(entries, /*k=*/4, /*missed=*/0, /*fixed_mods=*/{});
-    r.setModCandidates({{"Phospho", 79.96633, "STY"}, {"Acetyl", 42.01057, "K"},
-                        {"Oxidation", 15.99491, "M"}});
-    return r;
-  }
 }
 
 int main()
@@ -54,8 +44,15 @@ int main()
   // A tryptic peptide (ends in K, no internal K/R): trypsin yields it whole.
   // Flanked by tryptic boundaries so the digest produces it cleanly.
   const std::string pep = "SAMPLEVGATSDGK";
-  TagReconciler r = makeRecon("MSTVWYAAR" + pep + "GTANLEFDSK");
-  check(r.proteinCount() == 1, "index built over the protein");
+  std::vector<FASTAFile::FASTAEntry> entries;
+  entries.emplace_back("PROT1", "test protein", "MSTVWYAAR" + pep + "GTANLEFDSK");
+  ProteomeIndex idx;
+  idx.build(entries, /*fixed_mods=*/{}, /*isobaric_tol=*/0);
+  check(idx.proteinCount() == 1, "index built over the protein");
+  TagReconciler r(0.02, /*ppm=*/false, /*both=*/true);
+  r.attach(&idx, /*missed=*/0, /*min_len=*/4);
+  r.setModCandidates({{"Phospho", 79.96633, "STY"}, {"Acetyl", 42.01057, "K"},
+                      {"Oxidation", 15.99491, "M"}});
 
   // --- Exact placement: an internal 4-mer with its true flanking masses ---
   {

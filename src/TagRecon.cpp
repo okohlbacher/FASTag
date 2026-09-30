@@ -15,46 +15,19 @@ using namespace OpenMS;
 
 namespace FASTag
 {
-  namespace
-  {
-    void loadResidueMasses(double (&mass)[128],
-                           const std::vector<std::pair<char, double>>& fixed_mods)
-    {
-      for (const Residue* r : ResidueDB::getInstance()->getResidues("Natural19WithoutI"))
-      {
-        const char c = r->getOneLetterCode()[0];
-        mass[static_cast<unsigned char>(c)] = r->getMonoWeight(Residue::Internal);
-      }
-      mass[static_cast<unsigned char>('I')] = mass[static_cast<unsigned char>('L')];
-      for (const auto& m : fixed_mods)
-        if (m.first >= 0) mass[static_cast<unsigned char>(m.first)] += m.second;
-    }
-  }
-
-  void TagReconciler::build(const std::vector<FASTAFile::FASTAEntry>& entries, int k,
-                            int missed_cleavages,
-                            const std::vector<std::pair<char, double>>& fixed_mods)
-  {
-    k_ = k;
-    mc_ = missed_cleavages;
-    loadResidueMasses(residue_masses_, fixed_mods);
-    owned_ = std::make_unique<ProteomeIndex>();
-    owned_->build(entries, fixed_mods, /*isobaric_tol=*/0);
-    idx_ = owned_.get();
-  }
-
   void TagReconciler::attach(const ProteomeIndex* idx, int missed_cleavages, int min_len)
   {
-    k_ = 0;
     mc_ = missed_cleavages;
     min_len_ = std::max(1, min_len);
-    loadResidueMasses(residue_masses_, {});
     idx_ = idx;
-    // residue_masses_ here feeds only interpretDelta_'s substitution
-    // arithmetic. A fixed mod shifts the database flank and the substituted
-    // residue identically, so sub:X->Y deltas stay on the unmodified scale;
-    // mods on the substituted residue itself are the mod candidates' job. The
-    // database flanks come from the index's own fixed-mod-adjusted prefixes.
+    // Unmodified masses: they feed only interpretDelta_'s substitution
+    // arithmetic, and a fixed mod shifts the database flank and the substituted
+    // residue identically, so sub:X->Y deltas stay on the unmodified scale
+    // (mods on the substituted residue itself are the mod candidates' job).
+    // Database flanks come from the index's fixed-mod-adjusted prefixes.
+    for (const Residue* r : ResidueDB::getInstance()->getResidues("Natural19WithoutI"))
+      residue_masses_[static_cast<unsigned char>(r->getOneLetterCode()[0])] =
+          r->getMonoWeight(Residue::Internal);
   }
 
   void TagReconciler::tryPlace(const ProteomeIndex::TagOcc& occ, const ProteomeIndex::Window& w,
@@ -103,8 +76,7 @@ namespace FASTag
       r.region_hi = static_cast<int>(L) - 1;
     }
     // Stage B: interpret the localized gap as a mod or a substitution. The
-    // region is read FOLDED, as the historical implementation did (masses are
-    // I/L-blind anyway).
+    // region is read folded (masses are I/L-blind).
     if (r.region_hi >= r.region_lo && std::fabs(r.delta_mass) > 1e-6)
     {
       const std::string region =
@@ -121,9 +93,7 @@ namespace FASTag
     //   modification -- delta ~= a candidate mod's shift, and the region carries a
     //                   residue that mod applies to;
     //   substitution -- delta ~= mass(Y) - mass(X) for some residue X IN the region
-    //                   replaced by any residue Y. residue_masses_ carries fixed
-    //                   mods, matching how the database masses were computed, so
-    //                   the substitution delta is on the same scale as `delta`.
+    //                   replaced by any residue Y (unmodified masses; see attach()).
     // The best fit (smallest mass error) wins; a modification breaks a near-tie
     // because it is the more common explanation of a given mass shift.
     const double tol = tolAt(std::fabs(delta) > 1.0 ? std::fabs(delta) : 200.0);
@@ -159,7 +129,7 @@ namespace FASTag
         const double my = residue_masses_[static_cast<unsigned char>(*y)];
         if (my <= 0) continue;
         const double err = std::fabs(delta - (my - mx));
-        if (err < best_err && !(best_is_mod && err >= best_err))  // mods win ties
+        if (err < best_err)  // strict: mods win ties
         {
           best_err = err; best_is_mod = false;
           best = std::string("sub:") + x + "->" + *y;
@@ -175,7 +145,7 @@ namespace FASTag
     std::vector<Reconciliation> out;
     if (!idx_) return out;
     const int len = static_cast<int>(tag.size());
-    if (k_ > 0 ? (len != k_) : (len < min_len_ || len > MAX_FILTER_LEN)) return out;
+    if (len < min_len_ || len > MAX_FILTER_LEN) return out;
 
     std::vector<ProteomeIndex::TagOcc> occs;
     idx_->locateTag(tag, both_, occs);  // folds, collapse-branches, dedupes

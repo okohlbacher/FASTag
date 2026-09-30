@@ -3,8 +3,6 @@
 
 #include "FastaFilter.h"
 
-#include <OpenMS/CHEMISTRY/Residue.h>
-#include <OpenMS/CHEMISTRY/ResidueDB.h>
 #include <OpenMS/CONCEPT/Exception.h>
 #include <OpenMS/DATASTRUCTURES/String.h>
 
@@ -17,13 +15,6 @@ using namespace OpenMS;
 
 namespace FASTag
 {
-  namespace
-  {
-    /// The historical local norm(), now the shared implementation -- see
-    /// ResidueFold.h for the exact semantics (they did not change).
-    inline char norm(char c) { return normResidue(c); }
-  }
-
   Kmer128 FastaFilter::encode(const char* s, int n)
   {
     Kmer128 v;
@@ -42,7 +33,7 @@ namespace FASTag
     {
       std::string cur;
       cur.reserve(e.sequence.size());
-      for (char c : e.sequence) { const char n = norm(c); if (n) cur.push_back(n); }
+      for (char c : e.sequence) { const char n = normResidue(c); if (n) cur.push_back(n); }
       if (cur.empty()) continue;
       residues_ += cur.size();
       seqs_.push_back(std::move(cur));
@@ -58,12 +49,12 @@ namespace FASTag
     rules_ = deriveCollapseRules(tol, fixed_deltas);
   }
 
-  int FastaFilter::autoMinLen() const
+  int autoMinFilterLen(size_t residues, bool both_orientations)
   {
-    const double c = both_ ? 2.0 : 1.0;
-    if (residues_ == 0) return 1;
+    const double c = both_orientations ? 2.0 : 1.0;
+    if (residues == 0) return 1;
     const int k = static_cast<int>(
-        std::ceil(std::log(20.0 * c * static_cast<double>(residues_)) / std::log(EFF_ALPHABET)));
+        std::ceil(std::log(20.0 * c * static_cast<double>(residues)) / std::log(EFF_ALPHABET)));
     return std::max(1, std::min(k, MAX_FILTER_LEN));
   }
 
@@ -269,13 +260,9 @@ namespace FASTag
   bool FastaFilter::contains(const std::string& t) const
   {
     const int k = static_cast<int>(t.size());
-    if (k < 1 || k > MAX_FILTER_LEN) return false;
-    if (static_cast<size_t>(k) >= idx_.size() || !built_[static_cast<size_t>(k)]) return false;
+    if (k > MAX_FILTER_LEN) return false;
     const Kmer128 e = encode(t.data(), k);
-    if (e == Kmer128::invalid()) return false;
-    const auto& v = idx_[static_cast<size_t>(k)];
-    const uint32_t b = topBits(e, v.shift);
-    return std::binary_search(v.keys.begin() + v.buck[b], v.keys.begin() + v.buck[b + 1], e);
+    return e != Kmer128::invalid() && hasKey(k, e);
   }
 
   FastaFilter::Hit FastaFilter::match(const std::string& tag) const

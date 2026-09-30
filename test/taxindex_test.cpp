@@ -8,7 +8,6 @@
 #include "TaxIndex.h"
 
 #include <cstdint>
-
 #include <cstdio>
 #include <fstream>
 #include <iostream>
@@ -106,13 +105,12 @@ int main()
     check(idx2.nKmers() == idx.nKmers(), "kmer count survives round-trip");
     check(idx2.taxa() == idx.taxa(), "taxa survive round-trip");
 
-    // Re-saving a MAPPED index must reproduce it exactly (the non-legacy save path).
+    // Re-saving a MAPPED index must reproduce it exactly (the mapped save path).
     std::string path2 = std::string(std::tmpnam(nullptr)) + ".ftx2";
     check(idx2.save(path2, &err), "re-save mapped: " + err);
     TaxIndex idx3;
     check(idx3.load(path2, &err), "re-load: " + err);
     idx3.lookup("AAAAAAAA", b);
-    check(a != b || true, "");
     idx.lookup("AAAAAAAA", a);
     check(a == b, "mapped re-save round-trips");
     check(idx3.nKmers() == idx.nKmers(), "mapped re-save keeps kmer count");
@@ -121,9 +119,9 @@ int main()
   }
 
   // Corruption rejection: a v2 file must fail to LOAD, not crash, when
-  // truncated or given a hostile header (the case an adversarial review found
-  // could read past the mapping). Realistic because the ~1 GB index is a
-  // downloaded asset, so a partial download is ordinary corruption.
+  // truncated or given a hostile header that could read past the mapping.
+  // Realistic because the ~1 GB index is a downloaded asset, so a partial
+  // download is ordinary corruption.
   {
     std::string good = std::string(std::tmpnam(nullptr)) + ".ftx2";
     std::string err;
