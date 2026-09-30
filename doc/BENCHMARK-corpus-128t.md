@@ -7,6 +7,10 @@ against OpenMS 3.5.0. Everything below is measured.
 
 ![corpus benchmark](img/bench-corpus-128t.png)
 
+The `diatracer agxt` bars in (a), (b) and (d) are the stale-index runs (see
+*The numbers* and the `diatracer_agxt` note below): re-indexed, FASTag/mzML
+takes 4.49 s in ~0.4 GB and DirecTag 178.47 s, a 40x speedup rather than 28x.
+
 ## What was run
 
 13 runs, 126 GB of mzML, spanning Q Exactive DDA / TMT / metaproteomics,
@@ -53,8 +57,16 @@ warmed identically before each file.
 On the **8 files DirecTag actually tagged** (63.3 GB): FASTag/mzML 92.3 s
 against DirecTag 1,344.6 s, **14.6x**; picking the better FASTag container per
 file, 34.7 s, **38.8x**. Per file the ratio spans 15x (`qex_meta`) to 158x
-(`fusion_tonsil`). With the `diatracer_agxt` mzML re-indexed (see below), the same
-build's mzML total is 43.5 s, **30.9x**.
+(`fusion_tonsil`).
+
+**Corrected 2026-09-30: both totals above are skewed by a stale index in the
+`diatracer_agxt` mzML, which cost both tools** (details below). With both
+tools on the re-indexed copy -- FASTag 4.49 s instead of 53.27 s (same build),
+DirecTag 178.47 s instead of 210.55 s (same container and command, 128 cpus,
+best of 2) -- the totals are 43.5 s against 1,312.5 s, **30.2x**, and with the
+better FASTag container per file 31.7 s, **41.4x**. These are the figures to
+quote. Since v1.5.0 FASTag no longer needs the re-indexed copy: it rebuilds a
+stale index itself.
 
 Memory and tag counts:
 
@@ -123,6 +135,16 @@ The three exceptions are the informative ones:
   `indexListOffset` points into the middle of a spectrum. Re-indexed, content
   unchanged, the same build reads it in 4.49 s at 128 threads in ~0.4 GB --
   the file, not FASTag's mzML path, produced the 53.27 s.
+  DirecTag paid for it too (measured 2026-09-30): ProteoWizard rebuilds a bad
+  index before reading, 159-161 s instead of 127 s of read time, so its
+  210.55 s is 178.47 s on the re-indexed copy.
+  Fixed in v1.5.0: the fast reader now checks that sampled offsets point
+  exactly at a `<spectrum` tag and, when they do not, finds the spectra with
+  a parallel scan (0.26 s for this file) instead of loading it whole. This
+  file then reads in 2.86 s and 0.5 GB at 128 threads, tags byte-identical to
+  the re-indexed copy. The whole AGXT dataset had the same defect: the
+  precursor patch (`patch_diatracer_precursor.py`, which adds the `selected
+  ion m/z` diaTracer omits) rewrote every spectrum but copied the old index.
 
 `chunked` and `point` are within noise of each other on time and agree on tag
 counts to within 5 rows in 1.7 M, so the layout choice is a size decision, not
