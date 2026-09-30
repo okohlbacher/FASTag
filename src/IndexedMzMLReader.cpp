@@ -151,6 +151,21 @@ namespace FASTag
 
     /// A tag name ends at whitespace or '>': <spectrum is not <spectrumList.
     bool is_name_end(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '>'; }
+
+    /// "no offset here", for the scan's per-piece bookkeeping below.  At file
+    /// scope, not inside scanSpectrumOffsets: MSVC refuses to construct a
+    /// vector of a function-local struct whose member initialisers name a
+    /// constant of the enclosing function.
+    constexpr std::uint64_t kNoOffset = std::numeric_limits<std::uint64_t>::max();
+
+    /// What one piece of the file contributes to the scan.
+    struct Piece
+    {
+      std::vector<std::uint64_t> spectra;
+      std::uint64_t list_open = kNoOffset;  ///< first <spectrumList starting in this piece
+      std::uint64_t list_close = kNoOffset; ///< first </spectrumList starting in this piece
+      bool read = true;
+    };
   }
 
   /****************************************************************************/
@@ -322,7 +337,6 @@ namespace FASTag
     // Read past each piece's end by more than the longest needle plus the
     // byte after it, so a tag that starts in this piece is always seen whole.
     constexpr std::size_t kOverlap = 32;
-    constexpr std::uint64_t kNone = std::numeric_limits<std::uint64_t>::max();
 
     std::uint64_t size = 0;
     {
@@ -335,13 +349,6 @@ namespace FASTag
     chunk_bytes = std::max(chunk_bytes, kOverlap);
     const std::uint64_t n_pieces = (size + chunk_bytes - 1) / chunk_bytes;
 
-    struct Piece
-    {
-      std::vector<std::uint64_t> spectra;
-      std::uint64_t list_open = kNone;  ///< first <spectrumList starting in this piece
-      std::uint64_t list_close = kNone; ///< first </spectrumList starting in this piece
-      bool read = true;
-    };
     std::vector<Piece> pieces(static_cast<std::size_t>(n_pieces));
     auto tag_at = [](std::string_view v, std::size_t k, std::string_view name) {
       return v.compare(k, name.size(), name) == 0 && k + name.size() < v.size() &&
@@ -382,8 +389,8 @@ namespace FASTag
           for (std::size_t k = v.find('<'); k != std::string_view::npos && k < own; k = v.find('<', k + 1))
           {
             if (tag_at(v, k, kOpen)) piece.spectra.push_back(begin + k);
-            else if (piece.list_open == kNone && tag_at(v, k, kListOpen)) piece.list_open = begin + k;
-            else if (piece.list_close == kNone && tag_at(v, k, kListClose)) piece.list_close = begin + k;
+            else if (piece.list_open == kNoOffset && tag_at(v, k, kListOpen)) piece.list_open = begin + k;
+            else if (piece.list_close == kNoOffset && tag_at(v, k, kListClose)) piece.list_close = begin + k;
           }
         }
         catch (...)
@@ -393,18 +400,18 @@ namespace FASTag
       }
     }
 
-    std::uint64_t list_open = kNone, list_close = kNone;
+    std::uint64_t list_open = kNoOffset, list_close = kNoOffset;
     for (const Piece& piece : pieces)
     {
       if (!piece.read) return {};
-      if (list_open == kNone) list_open = piece.list_open;
-      if (list_open != kNone && list_close == kNone && piece.list_close != kNone &&
+      if (list_open == kNoOffset) list_open = piece.list_open;
+      if (list_open != kNoOffset && list_close == kNoOffset && piece.list_close != kNoOffset &&
           piece.list_close > list_open)
       {
         list_close = piece.list_close;
       }
     }
-    if (list_open == kNone || list_close == kNone) return {};
+    if (list_open == kNoOffset || list_close == kNoOffset) return {};
 
     std::vector<std::uint64_t> offsets;
     for (const Piece& piece : pieces)
