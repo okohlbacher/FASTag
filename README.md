@@ -8,15 +8,11 @@
 Partial sequence tags from peptide MS/MS spectra, and a filter that keeps only
 the spectra whose tags occur in sequences you supply.
 
-**30x faster than DirecTag** across a 13-run corpus, at **126 MB** peak memory
-on a 9 GB file, reaching the **same 98.6%** accuracy ceiling. A reimplementation of the
-[DirecTag](https://doi.org/10.1021/pr800154p) algorithm as an
-[OpenMS](https://www.openms.de) TOPP tool. The citation — Tabb et al.,
+A reimplementation of the [DirecTag](https://doi.org/10.1021/pr800154p)
+algorithm as an [OpenMS](https://www.openms.de) TOPP tool, parallelised and
+with memory independent of file size. The citation — Tabb et al.,
 *J. Proteome Res.* 2008, 7:3838 — is for that original DirecTag paper; FASTag
 has no separate publication of its own.
-
-Scales across threads with memory independent of file size, and returns 5-8%
-more tags than the reference implementation.
 
 ## What it does
 
@@ -33,7 +29,7 @@ method. Typical uses:
   spectral clustering, de novo seeding).
 
 It is a prefilter, not a final identification method: it is tuned for recall,
-not specificity — a tag matching a sequence is a reason to look closer, not a
+not specificity — a tag matching a sequence is a reason to look closer, not an
 identification in itself.
 
 ## How it works
@@ -60,8 +56,8 @@ DirecTag computes the intensity term by enumerating every `C(n, k)` subset of
 peak ranks — combinatorial in tag length, and impractical past length 4 or 5.
 FASTag computes the same quantity as a restricted-partition count via dynamic
 programming, `O(k·n·s_max)` — polynomial instead of combinatorial, verified
-identical to exhaustive enumeration. This is most of why FASTag is faster, and
-what makes tag lengths above four practical at all.
+identical to exhaustive enumeration. This is what makes tag lengths above four
+practical at all.
 
 **Extension** (`-extension`). A seed is a *minimum* length: each scored seed can
 be walked further along the graph at either end and rescored at its realised
@@ -74,6 +70,12 @@ Sage ground truth it lifts the number of spectra gaining a correctly placed tag
 by 45.3% (see Validation). Because a gapped tag asserts an unobserved split, it
 is systematically over-ranked relative to its real correctness, which
 `-gap_penalty` corrects; disable gaps entirely with `-gaps 0`.
+
+**Modifications.** `-fixed_modifications` (default `Carbamidomethyl (C)`) shifts
+a residue's mass; `-variable_modifications` adds a modified alternative, written
+inline in the tag as `X[Name]`. Both take any OpenMS/UniMod name. Residue-specific
+modifications only — a terminal modification shifts the whole precursor and is
+already carried in the reported flanking masses.
 
 **Sequence filtering** (`-fasta`). Reported tags can be restricted to ones
 occurring in proteins you supply. Matching:
@@ -118,21 +120,19 @@ On macOS both are also on [Homebrew](https://github.com/okohlbacher/homebrew-fas
 
 A disk image or archive holds a `FASTag/` folder — run `FASTag/FASTag`
 (Linux/macOS) or `FASTag/FASTag.bat` (Windows); everything else inside is a
-bundled dependency the wrapper needs, not something to run directly.
+bundled dependency the wrapper needs, not something to run directly. The
+wrapper sets `OPENBLAS_NUM_THREADS=1` unless you set it yourself: OpenBLAS
+arrives with libOpenMS and otherwise starts one spinning thread per core at
+load, which FASTag never uses. The desktop app does the same for the CLI it
+launches.
 
-**macOS 13.3 or later** (since v1.5.0; earlier releases ran on 12).
-**macOS ships as a disk image only**, signed with a Developer ID certificate,
-notarized, and **stapled** — so it opens with no network connection. A tarball
-cannot carry a notarization ticket (Apple staples one to disk images, installers
-and app bundles, never a plain folder), so shipping one alongside would only
-offer a second artifact that is strictly worse and warns on a machine that is
-offline.
+**macOS 13.3 or later.** macOS ships as a disk image only, signed with a
+Developer ID certificate, notarized and **stapled**, so it opens with no network
+connection — a plain tarball cannot carry a notarization ticket.
 
-**Windows builds are not yet code-signed**, so SmartScreen will warn on first
-run — see [doc/BACKLOG-ci.md](doc/BACKLOG-ci.md) for the state of that.
+**Windows builds are not code-signed**, so SmartScreen will warn on first run.
 
-Building from source needs OpenMS ≥ 3.5 and CMake; see
-[doc/BACKLOG-ci.md](doc/BACKLOG-ci.md) for what each platform requires.
+Building from source needs OpenMS ≥ 3.5, a C++17 compiler and CMake ≥ 3.21.
 
 ## Desktop GUI
 
@@ -149,8 +149,7 @@ cd gui && npm install && npm run tauri dev     # or: npm run tauri build
 
 Signed, installable bundles ship with every release: notarized and stapled disk
 images for macOS (also on Homebrew, above) and an installer for Windows — see
-the install table at the top. Building from source, as above, is for developing
-the GUI itself. Details in [gui/README.md](gui/README.md).
+the install table at the top. Details in [gui/README.md](gui/README.md).
 
 ## Usage
 
@@ -182,40 +181,43 @@ an ion-trap file, 20 ppm returned 3,007 tags where 0.3 Da returned 824,959.
 FASTag infers resolution from peak spacing and warns when the two disagree, but
 it cannot know the analyser, so the setting is yours.
 
+## File formats
+
+`-in` accepts mzML or [mzPeak](https://github.com/OpenMS/mzpeak);
+`-out` is TSV; `-out_spectra` writes mzML or mzPeak, chosen by extension. All
+four in/out combinations work, and which container you use does not change the
+tags: a run read as mzPeak gives the same spectra as the same run read as mzML,
+and a run written to mzPeak and tagged again reproduces the original tag set.
+
+### mzML
+
+FASTag reads the mzML index directly and takes each spectrum's metadata from the
+same XML it decodes for peaks, so there is no serial metadata pass before
+tagging starts and memory tracks `-threads` rather than the file.
+
+**A file with no index, or a stale one** — a tool edited it without rewriting
+the index — has its spectrum offsets rebuilt by a parallel scan and is then read
+at full speed. FASTag warns when it did this and names the file; re-index it
+(with `FileConverter`, for instance) to skip the scan on later runs. A file the
+fast reader cannot understand at all still falls back to loading the whole run
+into memory, with its own warning. `-out_spectra` runs need run-level metadata
+and read it up front instead.
+
 ### mzPeak
 
-[mzPeak](https://github.com/OpenMS/mzpeak) is a Parquet-backed format (Parquet
-tables in a ZIP container). FASTag **reads and writes** it: `-in` accepts
-`.mzpeak`, `-out_spectra` writes it, and all four in/out combinations work.
-Tagging is unaffected by which you use — reading a run as mzpeak gives the same
-spectra as reading it as mzML, and a run written to mzpeak and tagged again
-reproduces the original tag set exactly.
-
-**Smaller and faster on the same acquisition.** Thermo LTQ Orbitrap Velos,
-7,534 spectra / 6,103 MS2, 16 logical cores, warm cache:
-
-| threads | mzML (429 MB) | mzPeak, centroided (101 MB) | mzPeak, profile (126 MB) |
-|---|---|---|---|
-| 1 | 4.52 s / 117 MB | **0.98 s** / 170 MB | 2.91 s / 422 MB |
-| 8 | 1.33 s / 144 MB | **0.43 s** / 176 MB | 1.07 s / 446 MB |
-| 16 | 1.13 s / 167 MB | **0.34 s** / 182 MB | 0.81 s / 471 MB |
-
-5.1x faster single-threaded and 3.4x at 16 threads, from a file a quarter the
-size. Tag counts differ by one in 122,098: the archive stores m/z as float32,
-which moves a single borderline match across the tolerance.
-
-Reading is parallel — each thread owns a reader over a shared archive index —
-and decoded row groups live in one cache shared by every reader, so a group is
-decoded once whatever the thread count and memory tracks the groups in flight
-rather than `-threads`. Archives with very large row groups (a chunked Astral
-archive has ~580 MB groups) are the case where that ceiling is visible.
+mzPeak is a Parquet-backed format (Parquet tables in a ZIP container). Reading
+is parallel — each thread owns a reader over a shared archive index — and
+decoded row groups live in one cache shared by every reader, so a group is
+decoded once whatever the thread count, and memory tracks the groups in flight
+rather than `-threads`. Because the smallest unit Parquet can return is a row
+group, that floor grows with the archive's row-group size (a chunked Astral
+archive has ~580 MB groups); `-mzpeak_read_memory` caps it.
 
 **Profile MS2 is centroided on read.** Archives converted from raw files
 routinely store profile MS2 with an empty centroid facet, and tagging profile
-samples rather than peaks costs real recall: on one run available in both
-formats, 80,990 tags from the profile archive read as-is against 122,489 with
-on-read centroiding (`PeakPickerHiRes`), and 122,098 for the same run supplied
-as centroided mzML. Picking runs in the worker, so it parallelises.
+samples rather than peaks costs real recall: on one run, 80,990 tags reading the
+profile data as-is against 122,489 with on-read centroiding (`PeakPickerHiRes`).
+Picking runs in the worker, so it parallelises.
 
 Run-level metadata travels with the data: run id and start time, source files
 with their checksums, the instrument and its components, the sample, and the
@@ -236,47 +238,6 @@ prefix>`; configure reports what you got:
 A build without the library refuses `.mzpeak` on either side with a message
 saying so, rather than reporting a clean run over an empty file.
 
-### Reading speed
-
-**Large mzML files read 2.6 to 3.8x faster since v1.2.0**, and in a fraction of
-the memory. FASTag reads the mzML index directly and takes each spectrum's
-metadata from the same XML it decodes for peaks, so there is no serial
-metadata pass before tagging starts. A file with no index, or a stale one
-(a tool edited it without rewriting the index), has its spectrum offsets
-rebuilt by a parallel scan -- 0.26 s for 6 GB -- and is then read the same
-way; before v1.5.0 it was loaded whole, serially (52.9 s and 7.2 GB instead of
-2.86 s and 0.5 GB on the file that exposed it). `-out_spectra` runs (which
-need run-level metadata) still load metadata up front
-instead.
-
-| input | before | after |
-|---|---|---|
-| 12.2 GB mzML | 36.99 s / 2.0 GB | **8.33 s** / 238 MB |
-| 309 MB mzML | 1.95 s / 263 MB | **0.52 s** / 65 MB |
-| 1.8 GB mzML | 9.03 s / 949 MB | **3.50 s** / 339 MB |
-| 874 MB mzPeak | 5.05 s / 3.6 GB | **3.01 s** / 1.5 GB |
-
-Tags are byte-identical to previous releases on every file tested. Smaller
-files are unchanged, having had little prologue to remove.
-
-**mzPeak reads 4.5x faster at 128 threads since v1.5.0**, in a quarter of the
-memory, and is now faster than mzML at every thread count. Decode memory is
-recycled across threads instead of stranding in per-thread allocator arenas,
-the per-point `spectrum_index` column is held as verified runs rather than
-decoded, spectrum metadata is read into a compact record, and threads decode
-row groups ahead rather than waiting on each other. AGXT S23 (diaTracer
-pseudo-MS2, 717,924 spectra, 1.35 GB mzPeak), 2x AMD EPYC 9654, benchmark
-settings, fastest of 3:
-
-| threads | v1.4.3 | v1.5.0 |
-|---|---|---|
-| 1 | 185.3 s / 3.1 GB | **80.3 s** / 1.25 GB |
-| 16 | 15.52 s / 4.8 GB | **5.72 s** / 1.3 GB |
-| 64 | 7.89 s / 6.0 GB | **2.08 s** / 1.6 GB |
-| 128 | 7.47 s / 7.2 GB | **1.65 s** / 1.8 GB |
-
-The same run from mzML takes 2.74 s at 128 threads. Tags are byte-identical.
-
 ## Command-line reference
 
 | Option | Default | Meaning |
@@ -286,7 +247,7 @@ The same run from mzML takes 2.74 s at 128 threads. Tags are byte-identical.
 | `-fasta <file>` | none | Report only tags occurring in these sequences |
 | `-out_spectra <file>` | none | Write spectra carrying a reported tag here, as mzML or mzpeak (by extension). Needs memory proportional to the *file*, not the thread count, unlike every other path |
 | `-tag_length <n>` | 3 | Seed tag length in residues |
-| `-extension <n>` | 0 | Max residues appended per terminus; 0 disables extension |
+| `-extension <n>` | 0 | Max residues appended per terminus; 0 disables extension (max 12) |
 | `-gaps <n>` | 1 | Allow a tag to cross one missing peak (0 or 1) |
 | `-no_deisotope` | off | Do not collapse isotope clusters to their monoisotopic peak, and do not move multiply-charged fragments onto the singly-charged scale, before peak selection |
 | `-fragment_tolerance <value>` | 20 | Fragment mass tolerance |
@@ -295,10 +256,12 @@ The same run from mzML takes 2.74 s at 128 threads. Tags are byte-identical.
 | `-peaks_per_window <n>` | 10 | Keep this many peaks per 100 Da window instead of the strongest `-max_peaks` overall; 0 disables |
 | `-max_tags <n>` | 50 | Tags reported per spectrum; 0 = unlimited |
 | `-max_evalue <value>` | 20 | E-value cutoff; 0 disables |
-| `-gap_penalty <value>` | 100 | Rank gapped tags as if their E-value were this many times worse. Affects order only, never which tags are reported — gapped tags are otherwise heavily over-ranked (~95% of top-1 slots while ~3.6x less likely to be correct). 1 disables |
+| `-gap_penalty <value>` | 100 | Rank gapped tags as if their E-value were this many times worse. Affects order only, never which tags are reported. 1 disables |
 | `-isobaric_tolerance <value>` | 0.04 | Isobaric residue-pair substitution tolerance when matching `-fasta`; 0 requires exact strings |
 | `-min_filter_length <n>` | 0 | Ignore tags shorter than this when matching `-fasta`; 0 derives a floor from database size |
 | `-orientation <both\|forward>` | both | Also match a tag reversed (b-ion reading), or only as written |
+| `-fixed_modifications <mods>` | `Carbamidomethyl (C)` | Shift residue masses; not annotated in the tag. OpenMS/UniMod names, e.g. `'TMT6plex (K)'` |
+| `-variable_modifications <mods>` | none | Add a modified alternative, written inline as `X[Name]`, e.g. `'Phospho (S)'` |
 | `-proforma` | off | Append a ProForma 2.0 column for each tag (see Output) |
 | `-res_conf` | off | Append per-residue confidences 0..100, N→C, space-separated (see Assembly export) |
 | `-diversity` | off | Under `-max_tags`, demote near-duplicate re-reads of an already-kept tag's peak set behind non-duplicates, then backfill. Reorders which tags occupy the capped slots; never changes output size or rank 1 (see Tag diversity) |
@@ -307,27 +270,33 @@ The same run from mzML takes 2.74 s at 128 threads. Tags are byte-identical.
 | `-recon_missed_cleavages <n>` | 1 | Missed tryptic cleavages in reconciliation windows |
 | `-recon_min_length <n>` | 0 | Shortest tag worth reconciling; 0 derives the chance-match floor from database size |
 | `-delta_out <file>` | none | Aggregated mass-shift histogram over reconciliations (one best placement per spectrum). Region-level candidates, NOT localized identifications, NOT FDR-controlled |
-| `-entrapment_fasta <file>` | none | Entrapment database (foreign species) calibrating a `q_db` column: the estimated false-match rate of the `-fasta` filter at each E-value (see q_db) |
+| `-entrapment_fasta <file>` | none | Entrapment database (foreign species) calibrating a `q_db` column: the estimated false-match rate of the `-fasta` filter at each E-value (see q_db). Requires `-fasta` |
 | `-glyco` | off | Flag oxonium-bearing MS2 spectra to `<out>.glyco.tsv` (see Glyco flag) |
 | `-glyco_out <file>` | `<out>.glyco.tsv` | Per-spectrum oxonium report |
 | `-glyco_min_fraction <f>` | 0.10 | Summed oxonium intensity over base peak, the literature threshold |
 | `-stream` | off | Resident single-spectrum mode: spectrum blocks on stdin, TSV rows + `#end` sentinels on stdout (see Streaming) |
 | `-progress` | off | Emit `FASTAG_PROGRESS done=<n> total=<n>` on stderr for a progress bar |
 | `-species` | off | Infer taxa from the tags (see Species detection) |
-| `-taxdb / -taxonomy_nodes / -taxonomy_names <file>` | bundled | The index and NCBI dumps for `-species`; give all three or none |
+| `-taxdb / -taxonomy_nodes / -taxonomy_names <file>` | bundled | The k-mer index and NCBI dumps for `-species`; give all three or none |
 | `-species_out <file>` | `<out>.species.tsv` | Ranked-taxa output |
 | `-species_rank <rank>` | genus | NCBI rank to report (genus, family, …) |
 | `-species_min_len <n>` | 0 | Ignore tags shorter than this for taxonomy; 0 uses the index k |
+| `-species_max_kmer_share <f>` | 1.0 | Ignore k-mers carried by more than this fraction of the indexed taxa; 1 keeps all |
+| `-species_min_margin <f>` | 0.0 | Require a tag's best taxa to carry this fraction more of its k-mers than the runner-up; 0 keeps all |
+| `-species_use_gapped` | off | Let gapped tags contribute taxonomic evidence (see Species detection) |
+| `-species_deconvolve` | off | Correct taxon counts for sequence shared between taxa |
 | `-subsample_spectra <n>` / `-subsample_fraction <f>` | 0 | Tag only a random subset (count or fraction); 0 = all |
-| `-fixed_modifications` / `-variable_modifications <mods>` | Carbamidomethyl (C) fixed | Modifications by OpenMS/UniMod name, e.g. `'TMT6plex (K)'`, `'Phospho (S)'` |
+| `-subsample_seed <n>` | 1 | Seed for the `-subsample_*` selection |
+| `-mzpeak_read_memory <MB>` | 0 | Decoded mzPeak held at once; 0 sizes it to the archive |
 
 Plus the standard OpenMS TOPP options: `-threads <n>` (parallelism — the
 core performance lever; **defaults to 0, which means half the logical cores**,
 so a run leaves the machine usable — pass `-threads <n>` to choose), `-ini
 <file>` / `-write_ini <file>` (parameter files), `-log <file>`, `-no_progress`,
-`--help` / `--helphelp`.
+`--help` / `--helphelp`. With `-ini`, the file's `threads` value applies (1 if it
+has none) unless `-threads` is also given on the command line.
 
-### Output
+## Output
 
 One TSV row per tag: `spectrum` (native ID), `tag` (sequence), `length`,
 `charge` (fragment charge), `nterm_mass` / `cterm_mass` (flanking masses,
@@ -344,14 +313,12 @@ intensity — so `min_conf` localises the residue most likely wrong, which the
 single E-value cannot; correct tags carry a markedly higher `min_conf` than
 incorrect ones (~0.45 vs ~0.17 median). A calibrated per-tag *q-value/FDR* is
 deliberately **not** emitted: a defensible null has to reproduce the chimeric
-false tags real spectra generate, which a single-spectrum decoy does not — see
-[doc/BACKLOG.md](doc/BACKLOG.md).
+false tags real spectra generate, which a single-spectrum decoy does not.
 
-### ProForma output
-
-`-proforma` appends a [ProForma 2.0](https://github.com/HUPO-PSI/ProForma) column
-so downstream tools can consume a tag without a bespoke parser. Each tag renders
-as `<[fixed-mods]>[+nterm]-RESIDUES-[+cterm]`: the flanks as terminal mass tags
+**ProForma.** `-proforma` appends a
+[ProForma 2.0](https://github.com/HUPO-PSI/ProForma) column so downstream tools
+can consume a tag without a bespoke parser. Each tag renders as
+`<[fixed-mods]>[+nterm]-RESIDUES-[+cterm]`: the flanks as terminal mass tags
 (ProForma has no dedicated "mass gap of unknown sequence at a terminus"), fixed
 modifications as a global prefix (`<[Carbamidomethyl]@C>`), and the I/L residue
 as `J` because FASTag folds I onto L and cannot tell them apart. Off by default;
@@ -375,9 +342,7 @@ are excluded and counted. **Read the histogram as candidates**: localization is
 region-level, nothing here is FDR-controlled, and `delta_interp` names a
 hypothesis, not an identification. On a human Astral run the zero bin
 dominates, the +1.003 isotope-error peak and a +128.095 missed-K peak appear
-where chemistry predicts them. Direct PTM-Shepherd interop is deliberately
-absent — its only input is FDR-filtered Philosopher `psm.tsv`, a contract a
-tag-level tool cannot honestly fill.
+where chemistry predicts them.
 
 ## q_db: entrapment-calibrated filter confidence
 
@@ -388,16 +353,16 @@ rate** of accepting every tag at or below that row's E-value against `-fasta`.
 Entrapment-only matches are marked `efwd`/`erev` with an empty `q_db` — they
 are calibration material, not discoveries — and are excluded from
 `-out_spectra`. Ratios are computed per tag length in collapsed k-mer space,
-orientation-closed.
+orientation-closed. Requires `-fasta`; cannot be combined with `-species`.
 
-**Measured calibration envelope** (doc/F4-CALIBRATION-AUDIT.md, human Astral
-data, archaeal entrapment): conservative at `q_db <= 0.02`; **underestimates
-the true false-match rate ~1.6x at 0.05–0.1**; sensitive to entrapment choice.
-Use tight thresholds. And read the column for what it is: `q_db` says how
-often a tag this good matches the database by chance — it says NOTHING about
-whether the tag correctly reads its precursor (on PXD000001 ground truth,
-rows at `q_db <= 0.01` were correct reads 100% of the time, but rows in the
-0.05–0.2 bin only 52.9%). Cannot be combined with `-species`.
+**Use tight thresholds.** Measured on human Astral data with archaeal
+entrapment, `q_db` is conservative at `<= 0.02` but **underestimates the true
+false-match rate ~1.6x at 0.05–0.1**, and is sensitive to the entrapment
+database chosen. Read the column for what it is: `q_db` says how often a tag
+this good matches the database by chance — it says NOTHING about whether the
+tag correctly reads its precursor (on PXD000001 ground truth, rows at
+`q_db <= 0.01` were correct reads 100% of the time, rows in the 0.05–0.2 bin
+only 52.9%).
 
 ## Streaming mode
 
@@ -407,9 +372,8 @@ spectrum blocks in on stdin (`spectrum <id> <precursor_mz> <charge>`, one
 `#end <id> <n_tags>` sentinel out on stdout, flushed per block; malformed
 input yields `#error` and a resync, never an exit. All fixed costs are paid
 once; measured steady state on real Astral spectra is **0.3–0.6 ms mean,
-p99 <= 1.6 ms** per spectrum even with extension and gaps — two orders of
-magnitude inside an instrument-control budget. Rows are byte-identical to
-file mode (same formatter, verified). Core tagging only: `-fasta`, `-species`,
+p99 <= 1.6 ms** per spectrum even with extension and gaps. Rows are
+byte-identical to file mode. Core tagging only: `-fasta`, `-species`,
 `-recon_out`, `-out_spectra` and `-entrapment_fasta` are refused; parameter
 changes need a restart.
 
@@ -433,11 +397,11 @@ Measured specificity on non-enriched runs: 0.6% (Astral, ppm) flagged.
 spectra: near-duplicate re-reads of an already-kept tag's peak set (same
 charge, sharing all but at most one peak, both tags >= 4 peaks) are demoted
 behind non-duplicates and backfilled in rank order. Output size, rank 1 and
-determinism are unchanged — measured on the co-isolation-rich Eclipse TMT
-benchmark, spectra with at least one database hit **rose** from 8,547 to
-8,695 under a 10-tag cap. What it does not do: surface a co-isolated peptide
-whose tags rank far below the cap — deferral reorders families near the head;
-it is not per-peptide clustering. Off by default.
+determinism are unchanged — measured on a co-isolation-rich Eclipse TMT run,
+spectra with at least one database hit **rose** from 8,547 to 8,695 under a
+10-tag cap. What it does not do: surface a co-isolated peptide whose tags rank
+far below the cap — deferral reorders families near the head; it is not
+per-peptide clustering. Off by default.
 
 ## Assembly export
 
@@ -470,7 +434,7 @@ taxon at `-species_rank` (genus by default), ordered by `adjusted`.
 **Only ungapped tags vote.** A gap spells two residues from one summed mass, and
 an exact k-mer lookup cannot tell an inferred residue from an observed one — on
 PXD000001, admitting gapped tags drops the true genus from rank 1 to rank 20.
-`-species_use_gapped` restores the old behaviour.
+`-species_use_gapped` admits them anyway.
 
 `-species_deconvolve` subtracts the evidence a taxon earns only by resembling a
 stronger one, which is what makes near neighbours rank. It is opt-in: it turns
@@ -484,11 +448,11 @@ looked up, and FASTag refuses the run up front rather than writing an empty
 report. Pair `-species` with `-subsample_fraction 0.1` for a fast call on a large
 run.
 
-**Get the index.** Release tarballs from v0.20 on carry the full k-mer index
-inside (`share-FASTag-taxonomy/`), so `-species` works out of the box. For an
-index-only download (older tarballs, source builds, upgrades), every release
-also carries the platform-independent `FASTag-taxonomy-k7.tar.gz` (+`.sha256`);
-extract it into the FASTag directory:
+**Get the index.** Release archives carry the full k-mer index inside
+(`share-FASTag-taxonomy/`), so `-species` works out of the box. For an
+index-only download (source builds, upgrades), every release also carries the
+platform-independent `FASTag-taxonomy-k7.tar.gz` (+`.sha256`); extract it into
+the FASTag directory:
 
 ```bash
 tar xzf FASTag-taxonomy-k7.tar.gz -C /path/to/FASTag/   # -> share-FASTag-taxonomy/
@@ -533,45 +497,42 @@ provenance and what each dataset is useful for comparing.
 
 ## Performance
 
-Scaling is near-linear to 16 cores and useful well beyond; output is identical
-at every thread count, and memory is O(threads) rather than O(file) on the
-default mzML path (`-out_spectra` is the one exception — see above). Exact
-wall-clock time and peak memory depend heavily on the machine, so they aren't
-quoted here — measure on your own hardware and data.
+The tables below report wall-clock time and peak resident memory against
+`-threads` for selected public data sets, so you can judge how a run scales on
+your own machine and estimate what a file of a given size will cost. Each point
+is the fastest of three runs at default parameters (seed length 3, one gap,
+deisotoping on, `-peaks_per_window 10 -max_peaks 400`) with a warm page cache,
+timed end to end including reading and writing. Hardware: _TBD_.
 
-Against the reference implementation, run sequentially on the same file and
-hardware, FASTag keeps scaling well past where DirecTag flattens out: DirecTag
-rebuilds its ranksum table serially on every run, while FASTag's equivalent is
-a one-off cost paid once regardless of thread count.
+<!-- PERF-TABLES -->
+
+Output is identical at every thread count, and memory is O(threads) rather than
+O(file) on both reading paths — `-out_spectra` is the one exception, since it
+holds one slot per input spectrum.
+
+**The defaults favour recall over speed.** For the fastest possible run, or to
+match a tool with no equivalent of these, turn them off:
+`-no_deisotope -gaps 0 -peaks_per_window 0 -max_peaks 100`.
 
 ## Validation
 
-Against the reference implementation, matched parameters, 717,924 timsTOF
-pseudo-DDA spectra:
-
-- **84.5%** of spectra identified by [Sage](https://doi.org/10.1021/acs.jproteome.3c00486)
-  at 1% FDR carry a tag that reads the identified peptide (DirecTag 84.2%; the
-  original paper reports > 80%)
-- tag sets agree **100%** where no peak-count cap applies, ~84% on dense real
-  spectra, where the two tools break intensity ties differently at the cut
-- tags found by both are 2-4x more likely to be confirmed than either tool's
-  unique tags
-
-Against Sage ground truth (14,867 PSMs at 1% FDR), counting spectra that gain a
-correctly placed tag:
+Against Sage ground truth (14,867 PSMs at 1% FDR on 717,924 timsTOF pseudo-DDA
+spectra), counting spectra that gain a correctly placed tag:
 
 | | spectra reached | vs baseline | correct tags |
 |---|---|---|---|
 | `-gaps 0 -no_deisotope` | 3,480 | — | 8,054 |
 | deisotoping only | 4,142 | +19.0% | 12,683 |
 | one gap only | 5,055 | +45.3% | 33,236 |
-| **both — the default since v1.4.0** | **5,976** | **+71.7%** | **45,919** |
+| **both — the default** | **5,976** | **+71.7%** | **45,919** |
 
 The two count columns answer different questions and move independently: a gap
 multiplies how many tags a spectrum yields, so tag totals climb far faster than
-the number of spectra reached. These figures are not reproducible here — the PSM
-table they were measured against is no longer on any machine (see
-[doc/TEST-DATA.md](doc/TEST-DATA.md)).
+the number of spectra reached. Overall, 84.5% of the spectra Sage identifies at
+1% FDR carry a tag that reads the identified peptide; the original DirecTag
+paper reports > 80%. See [doc/TEST-DATA.md](doc/TEST-DATA.md) for the data and
+[doc/BENCHMARK-DirecTag.md](doc/BENCHMARK-DirecTag.md) for the side-by-side
+comparison with the reference implementation.
 
 `ctest` covers the rank-sum DP against exhaustive enumeration, end-to-end tag
 recovery from synthetic spectra, flanking-mass placement, extension, gap
@@ -586,9 +547,9 @@ generates synthetic spectra with exact per-tag truth, fitted to four real
 acquisitions' peak count and ladder edge density (see
 [doc/TEST-DATA.md](doc/TEST-DATA.md)), to answer the second.
 
-It found that gapped tags took **95% of rank-1 slots while being 3.6x less
-likely to be correct** — enabling gaps made the single best tag worse even as
-it doubled total recall. `-gap_penalty` (default 100) fixes the ordering
+It shows that gapped tags take **95% of rank-1 slots while being 3.6x less
+likely to be correct** — enabling gaps makes the single best tag worse even as
+it doubles total recall. `-gap_penalty` (default 100) fixes the ordering
 without filtering anything out:
 
 | astral profile, TL=4 | rank-1 | top-5 | total recall |
@@ -598,13 +559,14 @@ without filtering anything out:
 
 ## Known limitations
 
-- **The defaults favour recall over speed.** Isotope collapsing and one gap are
-  on, and the peak budget is `-peaks_per_window 10 -max_peaks 400`. For the
-  fastest possible run, or to match a tool with no equivalent of these:
-  `-no_deisotope -gaps 0 -peaks_per_window 0 -max_peaks 100`.
-- **No modification support.** Residues are the unmodified 19, so labelled
-  samples (TMT and similar) will not match tags spanning a modified residue.
-- **mzPeak reading decodes whole row groups.** The smallest unit Parquet can hand back is a row group, tens of megabytes here, so an mzPeak run holds a few decoded groups where the mzML path holds a few spectra. Each group is decoded once and shared across threads (since v1.1.2), so this does not grow with `-threads`; it does grow with the archive's row-group size, and readers are capped so two groups per thread fit 4 GB.
+- **I and L are not distinguished.** They are isobaric; FASTag folds I onto L
+  and reports L throughout, including in `-fasta` matches and assembly exports.
+- **Terminal modifications are not annotated.** A modification at either
+  terminus shifts the whole precursor and is absorbed into the reported flanking
+  masses; only residue-specific modifications appear in the tag.
+- **A tag is not an identification.** No per-tag q-value or FDR is emitted, and
+  a `-fasta` match, a species call, a `delta_out` bin and a glyco flag are all
+  candidates to follow up, not results to report.
 
 ## Licence and provenance
 
