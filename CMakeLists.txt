@@ -95,6 +95,17 @@ target_include_directories(fastag_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
 target_link_libraries(fastag_core PUBLIC OpenMS)
 
+# The ported deisotoper reproduces OpenMS's arithmetic operand for operand, and
+# deisotoper_test holds it to that bit for bit. Fused multiply-add breaks the
+# promise where the port and OpenMS spell the same value differently: on arm64,
+# where FMA is baseline, `mz * z - (z - 1) * PROTON_MASS_U` contracts and lands
+# a unit in the last place away from OpenMS's own result. x86-64 never showed it
+# because its baseline has no FMA to contract into. Off for this file only, so
+# it evaluates what it says.
+if(NOT MSVC)
+  set_source_files_properties(src/AveragineDeisotoper.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+endif()
+
 # mzPeak, in and out, through the external library
 # (github.com/okohlbacher/mzpeak-openms).
 #
