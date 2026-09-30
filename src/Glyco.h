@@ -7,8 +7,7 @@
 // tag-row column would systematically miss.
 //
 // Detection matches the accepted literature heuristics rather than anything
-// locally tuned (shipped thresholds are literature values, per the
-// synthetic-evidence rule): flag = at least two distinct oxonium species
+// locally tuned: flag = at least two distinct oxonium species
 // matched (Toghi Eshghi et al. 2016 / GPQuest) AND their summed intensity is
 // at least `min_fraction` of the base peak (MSFragger-Glyco's
 // diagnostic_intensity_filter, default 0.10). Matching runs on the RAW peak
