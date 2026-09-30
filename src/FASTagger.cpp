@@ -2,14 +2,14 @@
 // SPDX-License-Identifier: MIT
 
 #include "FASTagger.h"
+#include "AveragineDeisotoper.h"
+#include "PeakGrid.h"
 
 #include <OpenMS/CHEMISTRY/EmpiricalFormula.h>
 #include <OpenMS/CHEMISTRY/Residue.h>
 #include <OpenMS/CHEMISTRY/ResidueDB.h>
 #include <OpenMS/CONCEPT/Constants.h>
-#include <OpenMS/PROCESSING/DEISOTOPING/Deisotoper.h>
 
-#include <boost/math/distributions/chi_squared.hpp>
 #include <boost/math/distributions/hypergeometric.hpp>
 
 #include <algorithm>
@@ -198,13 +198,24 @@ namespace FASTag
     /// independent, so the chi-square tail is optimistic. That is inherited from
     /// DirecTag and is why the result is reported as an E-value for ranking rather
     /// than as a calibrated probability.
+    ///
+    /// The tail is closed-form: for 2k degrees of freedom, integer k, it is
+    /// exp(-t) * sum_{i<k} t^i / i! with t = x/2 -- the finite sum Boost's
+    /// gamma_q itself evaluates for integer shape once t >= k-1, in the same
+    /// operation order, but in double. Boost promotes to long double on
+    /// x86-64, where the 80-bit expl made each call ~155 ns against ~6 ns.
+    /// Not bit-identical there: up to 4.4e-16 relative, 0 of 14M values
+    /// differing when printed %g. exp(-t) underflows only for a p-value
+    /// product below ~1e-323, far under what the subscores' floors allow.
     double fisher(double p1, double p2, double p3, int k)
     {
       auto safe = [](double v) { return std::log(std::max(v, 1e-300)); };
       const double x = -2.0 * (safe(p1) + safe(p2) + (k == 3 ? safe(p3) : 0.0));
       if (x <= 0 || k <= 0) return 1.0;
-      return boost::math::cdf(boost::math::complement(
-          boost::math::chi_squared(2.0 * k), x));
+      const double t = x / 2;
+      double term = std::exp(-t), sum = term;
+      for (int i = 1; i < k; ++i) { term /= i; term *= t; sum += term; }
+      return std::min(sum, 1.0);
     }
   }
 
@@ -225,12 +236,7 @@ namespace FASTag
   {
     ranksum_.resize(static_cast<size_t>(k_max_ - k_min_ + 1));
     for (int k = k_min_; k <= k_max_; ++k)
-    {
-      auto& per_n = ranksum_[static_cast<size_t>(k - k_min_)];
-      per_n.resize(n_max_ + 1);
-      for (size_t n = static_cast<size_t>(k); n <= n_max_; ++n)
-        per_n[n] = ranksumCdf(k, static_cast<int>(n));
-    }
+      ranksum_[static_cast<size_t>(k - k_min_)] = ranksumCdfs(k, static_cast<int>(n_max_));
 
     // The m/z-fidelity null has no closed form: it is the distribution of the
     // sum of squared deviations of k uniform errors about their own mean.
@@ -302,6 +308,10 @@ namespace FASTag
       double precursor_mass = 0;
       int n_frag_charges = 1;
       std::vector<int> n_with_compl;   ///< indexed by fragment charge
+      /// Nearest-peak index over spec, for complements and buildGraph. Points at
+      /// prepare()'s per-thread grid, so valid until the next prepare() on this
+      /// thread -- tagSpectrum holds one Prepared at a time.
+      const PeakGrid* grid = nullptr;
     };
 
     Prepared prepare(const MSSpectrum& in, double precursor_mz, int charge, const Param& p)
@@ -393,18 +403,18 @@ namespace FASTag
         // option the user explicitly asked for, which is worse.
         const double deiso_tol = p.tol_ppm ? std::min(p.frag_tol, 100.0)
                                            : std::min(p.frag_tol, 0.1);
-        Deisotoper::deisotopeWithAveragineModel(
-            work, deiso_tol, p.tol_ppm,
-            0,                                        // no peak cap here
-            1, std::max(1, p.deisotope_max_charge),
-            false,                                    // keep_only_deisotoped
-            2, 10,                                    // min/max isopeaks
-            true,                                     // make_single_charged
-            false, false, false);
+        //
+        // OpenMS's Deisotoper::deisotopeWithAveragineModel, ported and bit-identical
+        // (AveragineDeisotoper.h): charges 1..max, no peak cap, unclustered peaks
+        // kept, 2..10 isotope peaks, monoisotopic peaks moved to charge 1.
+        deisotopeAveragine(work, deiso_tol, p.tol_ppm, std::max(1, p.deisotope_max_charge));
         work.sortByPosition();
       }
 
-      std::vector<size_t> order(work.size());
+      // order, keep and kept are scratch reused across spectra (thread_local:
+      // each OMP thread prepares its own), so they keep their capacity.
+      static thread_local std::vector<size_t> order;
+      order.resize(work.size());
       std::iota(order.begin(), order.end(), 0);
       std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
         if (work[a].getIntensity() != work[b].getIntensity())
@@ -442,7 +452,8 @@ namespace FASTag
       if (p.peaks_per_window > 0)
       {
         std::map<long, int> used;
-        std::vector<size_t> keep;
+        static thread_local std::vector<size_t> keep;
+        keep.clear();
         keep.reserve(std::min(order.size(), cap));
         for (size_t i : order)
         {
@@ -459,7 +470,8 @@ namespace FASTag
 
       // Keep the rank alongside the peak, then restore m/z order: the graph and
       // findNearest both need a sorted spectrum.
-      std::vector<std::pair<Peak1D, int>> kept;
+      static thread_local std::vector<std::pair<Peak1D, int>> kept;
+      kept.clear();
       kept.reserve(order.size());
       for (size_t r = 0; r < order.size(); ++r)
         kept.emplace_back(work[order[r]], static_cast<int>(r) + 1);
@@ -471,6 +483,12 @@ namespace FASTag
       s.rank.reserve(kept.size());
       for (const auto& kv : kept) { s.spec.push_back(kv.first); s.rank.push_back(kv.second); }
       const size_t n = s.spec.size();
+
+      // One index over the kept peaks answers every nearest-peak query below and
+      // in buildGraph, for all fragment charges.
+      static thread_local PeakGrid grid;
+      grid.build(s.spec);
+      s.grid = &grid;
 
       // Complements: b + y = M + 2*proton, so a fragment at m/z m has its partner
       // at M/z + 2*proton - m.
@@ -487,7 +505,7 @@ namespace FASTag
           // j != i: a peak at the midpoint would otherwise be its own partner,
           // manufacturing complement evidence from a single ion and inflating
           // both the population and the observed count.
-          const int j = s.spec.findNearest(cmz, p.complement_tol);
+          const int j = grid.nearest(cmz, p.complement_tol);
           if (j >= 0 && static_cast<size_t>(j) != i)
             s.has_compl[i] |= static_cast<uint8_t>(1u << (z - 1));
         }
@@ -531,19 +549,45 @@ namespace FASTag
       static thread_local std::vector<std::vector<std::pair<uint32_t, uint8_t>>> adj, radj;
       if (adj.size() < n) { adj.resize(n); radj.resize(n); }
       for (size_t i = 0; i < n; ++i) { adj[i].clear(); radj[i].clear(); }
+      // Residue steps at this charge, divided once per call instead of once per
+      // peak -- the same quotients, so the same targets.
+      static thread_local std::vector<double> step;
+      step.resize(A.res.size());
+      for (size_t r = 0; r < step.size(); ++r) step[r] = A.res[r].mass / charge;
+      const PeakGrid& grid = *s.grid;
+      // One walk per peak through the residue-difference table for this charge,
+      // built on a thread's first spectrum and reused. It must cover the largest
+      // tolerance any target here can ask for: tolAt() grows with m/z in ppm,
+      // and no target lies above the top peak plus the heaviest step. A table
+      // that cannot serve (see StepTable::fit) leaves the grid, one lookup per
+      // residue. Either way the answer is findNearest's, in (i, r) order.
+      static thread_local std::vector<StepTable> tables;
+      if (tables.size() <= static_cast<size_t>(charge)) tables.resize(static_cast<size_t>(charge) + 1);
+      StepTable& dt = tables[static_cast<size_t>(charge)];
+      const bool walk = n > 0 && !step.empty()
+          && dt.fit(step, tolAt(p, grid.mz.back() + *std::max_element(step.begin(), step.end())));
+      static thread_local std::vector<int> hit;
       // Every residue -- base and variable-modified -- is a candidate single
       // edge, so a variable mod simply adds more edges to try.
       for (size_t i = 0; i < n; ++i)
+      {
+        if (walk) dt.nearestAbove(grid.mz, i, [&p](double t) { return tolAt(p, t); }, hit);
         for (uint8_t r = 0; r < A.res.size(); ++r)
         {
-          const double target = s.spec[i].getMZ() + A.res[r].mass / charge;
-          const int j = s.spec.findNearest(target, tolAt(p, target));
+          int j;
+          if (walk) j = hit[r];
+          else
+          {
+            const double target = s.spec[i].getMZ() + step[r];
+            j = grid.nearest(target, tolAt(p, target));
+          }
           if (j > static_cast<int>(i))
           {
             adj[i].emplace_back(static_cast<uint32_t>(j), r);
             radj[static_cast<size_t>(j)].emplace_back(static_cast<uint32_t>(i), r);
           }
         }
+      }
       uint32_t t = 0, rt = 0;
       for (size_t i = 0; i < n; ++i)
       { g.off[i] = t; t += adj[i].size(); g.roff[i] = rt; rt += radj[i].size(); }
@@ -766,7 +810,8 @@ namespace FASTag
     {
       const auto& R = A.res;
       int added = 0;
-      std::vector<bool> used(s.spec.size(), false);
+      static thread_local std::vector<bool> used;   // scratch, as in tagSpectrum
+      used.assign(s.spec.size(), false);
       for (uint32_t i : peaks) used[i] = true;
 
       while (added < p.max_extension)
@@ -820,7 +865,9 @@ namespace FASTag
     /// factor stays honest when one path spells several.
     /// A scored tag plus the indices (into Prepared::spec) of the peaks that
     /// spelled it -- the exact, integer signature -diversity needs to tell a
-    /// re-read of the same ladder from genuinely different evidence.
+    /// re-read of the same ladder from genuinely different evidence. Filled
+    /// only under -diversity, its one reader: a copy per tag is a heap
+    /// allocation per tag.
     struct ScoredTag
     {
       Tag tag;
@@ -831,11 +878,12 @@ namespace FASTag
               const Param& p, const Tables& tab, const std::vector<uint32_t>& peaks,
               const std::vector<Step>& path, int charge)
     {
-      if (!t.gapped) { ++n_seeds; out.push_back({std::move(t), peaks}); return; }
+      const auto sig = [&]() { return p.diversity ? peaks : std::vector<uint32_t>(); };
+      if (!t.gapped) { ++n_seeds; out.push_back({std::move(t), sig()}); return; }
 
       size_t gi = 0;
       while (gi < path.size() && !path[gi].gap) ++gi;
-      if (gi + 1 >= peaks.size()) { ++n_seeds; out.push_back({std::move(t), peaks}); return; }
+      if (gi + 1 >= peaks.size()) { ++n_seeds; out.push_back({std::move(t), sig()}); return; }
 
       const double d = (s.spec[peaks[gi + 1]].getMZ() - s.spec[peaks[gi]].getMZ()) * charge;
       const double tol = tolAt(p, s.spec[peaks[gi + 1]].getMZ()) * charge;
@@ -852,7 +900,8 @@ namespace FASTag
       // recomputing asserts no precision the data lacks; it is arithmetic
       // consistency, and it costs one rescore of a path a few peaks long.
       const auto& P = tab.alphabet().pairs;
-      std::vector<Step> alt(path);
+      static thread_local std::vector<Step> alt;   // scratch, as in tagSpectrum
+      alt = path;
       int emitted = 0;
       for (auto it = std::lower_bound(P.begin(), P.end(), d - tol,
                [](const Alphabet::Pair& x, double v) { return x.mass < v; });
@@ -871,11 +920,11 @@ namespace FASTag
           Tag v = scorePath(s, p, tab, peaks, alt, charge);
           v.extended = t.extended;
           ++n_seeds;
-          out.push_back({std::move(v), peaks});
+          out.push_back({std::move(v), sig()});
           ++emitted;
         }
       }
-      if (emitted == 0) { ++n_seeds; out.push_back({std::move(t), peaks}); }
+      if (emitted == 0) { ++n_seeds; out.push_back({std::move(t), sig()}); }
     }
   }
 
@@ -896,22 +945,28 @@ namespace FASTag
         static_cast<size_t>(std::max(2, p.tag_length + 1 - std::max(0, p.max_gaps)));
     if (s.spec.size() < min_peaks) return out;
 
-    std::vector<ScoredTag> scored;
+    // scored and the DFS state below are scratch reused across paths, charges
+    // and spectra: thread_local, since each OMP thread tags its own spectra, so
+    // clear() keeps their capacity instead of allocating per spectrum -- and,
+    // for the DFS stack, per start peak.
+    static thread_local std::vector<ScoredTag> scored;
+    scored.clear();
     size_t n_seeds = 0;
     const Alphabet& A = tables.alphabet();
 
     for (int z = 1; z <= s.n_frag_charges; ++z)
     {
       const Graph g = buildGraph(s, p, A, z);
-      std::vector<uint32_t> peaks, pk;
-      std::vector<Step> path, rs;
+      static thread_local std::vector<uint32_t> peaks, pk;
+      static thread_local std::vector<Step> path, rs;
       // edge is a relative index over this node's ordinary edges followed by its
       // gap edges, so one counter walks both arrays.
       struct Frame { uint32_t node, edge; };
+      static thread_local std::vector<Frame> st;
 
       for (uint32_t start = 0; start < s.spec.size(); ++start)
       {
-        std::vector<Frame> st;
+        st.clear();
         peaks.clear(); path.clear();
         int n_res = 0;
         bool gap_used = false;
@@ -1016,13 +1071,20 @@ namespace FASTag
     // the flanks), and 99.4% of duplicate groups are identical in every emitted
     // field today -- but a future field would make the survivor choice
     // implementation-defined. Stability costs nothing at these sizes.
+    //
+    // Sorted as indices, not objects: merging whole ScoredTags moves a string
+    // and vectors per step, measured at 5.6% of worker CPU at tool defaults. A
+    // stable sort's result is unique, so the order is the same one.
     const auto rank_cmp = [](const Tag& a, const Tag& b) {
       if (a.evalue != b.evalue) return a.evalue < b.evalue;
       if (a.seq != b.seq) return a.seq < b.seq;
       return a.low_mz < b.low_mz;
     };
-    std::stable_sort(scored.begin(), scored.end(),
-                     [&](const ScoredTag& a, const ScoredTag& b) { return rank_cmp(a.tag, b.tag); });
+    const auto by_rank_cmp = [&](uint32_t a, uint32_t b) { return rank_cmp(scored[a].tag, scored[b].tag); };
+    static thread_local std::vector<uint32_t> by_rank;
+    by_rank.resize(scored.size());
+    std::iota(by_rank.begin(), by_rank.end(), 0u);
+    std::stable_sort(by_rank.begin(), by_rank.end(), by_rank_cmp);
 
     // Drop tags identical in every reported field, before the output cap so the
     // cap counts distinct results.
@@ -1043,7 +1105,8 @@ namespace FASTag
     // merge on ANY shared peak). Deferral is demotion, never deletion:
     // deferred tags backfill in rank order, and the kept set is re-sorted by
     // the rank comparator so the header's ordered-by-E-value contract holds.
-    std::vector<ScoredTag> div_kept, div_deferred;
+    // Both hold indices into scored.
+    std::vector<uint32_t> div_kept, div_deferred;
     auto near_dup = [](const ScoredTag& a, const ScoredTag& b) {
       if (a.tag.charge != b.tag.charge) return false;
       if (a.peaks.size() < 4 || b.peaks.size() < 4) return false;
@@ -1060,8 +1123,9 @@ namespace FASTag
       return shared >= std::min(pa.size(), pb.size()) - 1;
     };
 
-    for (ScoredTag& st : scored)
+    for (const uint32_t i : by_rank)
     {
+      ScoredTag& st = scored[i];
       Tag& t = st.tag;
       // The gap penalty ORDERS but does not FILTER.
       //
@@ -1101,22 +1165,21 @@ namespace FASTag
       // rest; both bounded at N so the walk still terminates early.
       const size_t N = static_cast<size_t>(p.max_tag_count);
       bool dup = false;
-      for (const auto& k : div_kept)
-        if (near_dup(k, st)) { dup = true; break; }
-      if (!dup && div_kept.size() < N) div_kept.push_back(std::move(st));
-      else if (div_deferred.size() < N) div_deferred.push_back(std::move(st));
+      for (const uint32_t k : div_kept)
+        if (near_dup(scored[k], st)) { dup = true; break; }
+      if (!dup && div_kept.size() < N) div_kept.push_back(i);
+      else if (div_deferred.size() < N) div_deferred.push_back(i);
       if (div_kept.size() >= N) break;
     }
     if (p.diversity && p.max_tag_count > 0)
     {
-      for (auto& d : div_deferred)
+      for (const uint32_t d : div_deferred)
       {
         if (div_kept.size() >= static_cast<size_t>(p.max_tag_count)) break;
-        div_kept.push_back(std::move(d));
+        div_kept.push_back(d);
       }
-      std::stable_sort(div_kept.begin(), div_kept.end(),
-                       [&](const ScoredTag& a, const ScoredTag& b) { return rank_cmp(a.tag, b.tag); });
-      for (auto& k : div_kept) out.push_back(std::move(k.tag));
+      std::stable_sort(div_kept.begin(), div_kept.end(), by_rank_cmp);
+      for (const uint32_t k : div_kept) out.push_back(std::move(scored[k].tag));
     }
     return out;
   }

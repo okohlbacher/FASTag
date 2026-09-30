@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21 FATAL_ERROR)
-project(FASTag VERSION 1.4.3 LANGUAGES CXX)
+project(FASTag VERSION 1.5.0 LANGUAGES CXX)
 # The GUI carries that version in four more files; a bump that misses one
 # fails here rather than shipping (cmake/version-guard.cmake says why).
 include(cmake/version-guard.cmake)
@@ -89,7 +89,7 @@ else()
                   "not apply.")
 endif()
 
-add_library(fastag_core STATIC src/FASTagger.cpp src/FastaFilter.cpp src/ProteomeIndex.cpp src/TagRecon.cpp src/TaxDeconv.cpp src/TaxIndex.cpp src/TaxStats.cpp)
+add_library(fastag_core STATIC src/FASTagger.cpp src/AveragineDeisotoper.cpp src/FastaFilter.cpp src/ProteomeIndex.cpp src/TagRecon.cpp src/TaxDeconv.cpp src/TaxIndex.cpp src/TaxStats.cpp)
 target_include_directories(fastag_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
@@ -216,7 +216,7 @@ endif()
 option(FASTAG_BUILD_TESTS "Build tests" ON)
 if(FASTAG_BUILD_TESTS)
   enable_testing()
-  foreach(t ranksum_test fastag_test fasta_filter_test tagrecon_test tagfdr_test proteome_index_test glyco_test taxindex_test taxstats_test taxdeconv_test sampler_test proforma_test)
+  foreach(t ranksum_test fastag_test fasta_filter_test tagrecon_test tagfdr_test proteome_index_test glyco_test taxindex_test taxstats_test taxdeconv_test sampler_test proforma_test numformat_test peakgrid_test)
     add_executable(${t} test/${t}.cpp)
     target_link_libraries(${t} PRIVATE fastag_core)
     add_test(NAME ${t} COMMAND ${t})
@@ -292,6 +292,22 @@ if(FASTAG_BUILD_TESTS)
                              FASTAG_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
   add_test(NAME indexed_mzml_test COMMAND indexed_mzml_test)
   set_tests_properties(indexed_mzml_test PROPERTIES SKIP_RETURN_CODE 77)
+
+  # The ported deisotoper against OpenMS's own, peak for peak and bit for bit,
+  # on synthetic edge cases. Given an mzPeak archive as its argument it also
+  # compares every spectrum of that run (not part of ctest: needs real data).
+  add_executable(deisotoper_test test/deisotoper_test.cpp)
+  if(TARGET fastag_mzpeak)
+    target_link_libraries(deisotoper_test PRIVATE fastag_mzpeak)
+  else()
+    target_link_libraries(deisotoper_test PRIVATE fastag_core)
+  endif()
+  if(OpenMP_CXX_FOUND)
+    target_link_libraries(deisotoper_test PRIVATE OpenMP::OpenMP_CXX)
+  endif()
+  target_compile_definitions(deisotoper_test PRIVATE
+                             FASTAG_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
+  add_test(NAME deisotoper_test COMMAND deisotoper_test)
 
   add_executable(tagfeatures_test test/tagfeatures_test.cpp src/tagfeatures.cpp)
   target_include_directories(tagfeatures_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

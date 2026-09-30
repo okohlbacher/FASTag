@@ -36,7 +36,6 @@
 #include <cstdlib>
 #include <exception>
 #include <limits>
-#include <mutex>
 #include <optional>
 #include <vector>
 
@@ -192,11 +191,12 @@ namespace FASTag
       return n;
     }
 
-    /// Opening a Spectra over the shared index from several threads at once
-    /// is what the per-thread copies do; the library's own lock covers its
-    /// metadata cache, this one covers the file opens around it.
-    std::mutex g_open_mutex;
-
+    /// Called concurrently: FASTag builds its per-thread copies in parallel.
+    /// No lock of our own. Every member is opened through its own archive
+    /// handle (the library's RDR-26), and the shared metadata map is built
+    /// once under the library's lock -- one Spectra per thread over a shared
+    /// Index is the use Index::spectra() documents. The mutex that used to
+    /// sit here serialized ~4.5 ms per copy, 0.3-1 s at 128 threads.
     MzPeak::Spectra openSpectra(const MzPeak::Index& index)
     {
       // Lean metadata: the library caches the WHOLE descriptive metadata table
@@ -207,8 +207,14 @@ namespace FASTag
       // those. Measured on a 7,534-spectrum run: 25.9 MB -> 18.7 MB, of which
       // the live map is 10.2 MB -> 7.1 MB; the rest is Parquet columns Lean
       // never asks for and so never decodes.
-      std::lock_guard<std::mutex> guard(g_open_mutex);
-      return index.spectra(MzPeak::MetadataDetail::Lean);
+      //
+      // Minimal, not Lean: toOpenMS() reads the id, MS level, RT, polarity,
+      // representation and one precursor with its window and ion, and that is
+      // all Minimal keeps, in a compact record per spectrum expanded when the
+      // spectrum is read. 717,924 spectra: ~0.4 GB less after the open, and no
+      // allocation per spectrum while opening. An archive with several
+      // precursors on a spectrum is read as Lean by the library instead.
+      return index.spectra(MzPeak::MetadataDetail::Minimal);
     }
 
     namespace json = boost::json;
@@ -320,6 +326,22 @@ namespace FASTag
   {
     const auto s = impl_->shared->index.manager()->row_group_cache().stats();
     return s.decodes + s.hits + s.waits;
+  }
+
+  OnDiscMzPeakExperiment::CacheStats OnDiscMzPeakExperiment::cacheStats() const
+  {
+    const auto s = impl_->shared->index.manager()->row_group_cache().stats();
+    CacheStats c;
+    c.decodes = s.decodes;
+    c.ahead = s.ahead_decodes;
+    c.hits = s.hits;
+    c.waits = s.waits;
+    c.admission_waits = s.admission_waits;
+    c.evictions = s.evictions;
+    c.s_decode = static_cast<double>(s.decode_ns) / 1e9;
+    c.s_wait = static_cast<double>(s.wait_ns) / 1e9;
+    c.s_admit = static_cast<double>(s.admission_ns) / 1e9;
+    return c;
   }
 
   void OnDiscMzPeakExperiment::readCounters(long& plan_group_evals, long& batches,

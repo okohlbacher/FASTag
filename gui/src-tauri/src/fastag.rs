@@ -126,6 +126,16 @@ fn parse_version(text: &str) -> Option<String> {
     }
 }
 
+/// libOpenMS pulls in OpenBLAS, which starts one spinning thread per core at
+/// load time (127 on a 128-thread node, ~2 s of CPU even for --help). FASTag
+/// never calls BLAS. The CLI wrappers set the same default; a user's own
+/// OPENBLAS_NUM_THREADS still wins.
+fn quiet_blas(cmd: &mut Command) {
+    if std::env::var_os("OPENBLAS_NUM_THREADS").is_none() {
+        cmd.env("OPENBLAS_NUM_THREADS", "1");
+    }
+}
+
 #[tauri::command]
 pub fn probe(app: AppHandle) -> BinaryInfo {
     let r = resolve_binary(&app);
@@ -136,6 +146,7 @@ pub fn probe(app: AppHandle) -> BinaryInfo {
     if let Some(d) = &r.data {
         cmd.env("OPENMS_DATA_PATH", d);
     }
+    quiet_blas(&mut cmd);
     match cmd.output() {
         Ok(out) => {
             let text = format!(
@@ -298,6 +309,7 @@ pub fn run(app: AppHandle, state: State<'_, RunManager>, params: RunParams) -> R
     if let Some(d) = &r.data {
         cmd.env("OPENMS_DATA_PATH", d);
     }
+    quiet_blas(&mut cmd);
     if let Some(t) = &r.taxonomy {
         // Point -species at the bundled taxonomy explicitly (the CLI's own
         // <bin>/../share lookup fails for a copied/symlinked binary).

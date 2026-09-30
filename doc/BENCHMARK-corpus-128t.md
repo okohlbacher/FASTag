@@ -53,7 +53,8 @@ warmed identically before each file.
 On the **8 files DirecTag actually tagged** (63.3 GB): FASTag/mzML 92.3 s
 against DirecTag 1,344.6 s, **14.6x**; picking the better FASTag container per
 file, 34.7 s, **38.8x**. Per file the ratio spans 15x (`qex_meta`) to 158x
-(`fusion_tonsil`).
+(`fusion_tonsil`). With the `diatracer_agxt` mzML re-indexed (see below), the same
+build's mzML total is 43.5 s, **30.9x**.
 
 Memory and tag counts:
 
@@ -117,6 +118,11 @@ The three exceptions are the informative ones:
   A broken index costs 7x and 25x the memory; the columnar archive has no
   equivalent failure mode. Worth knowing that "indexed mzML" in the header is
   not evidence the index works.
+  Cause (found 2026-09-29): this copy had `selected ion m/z` cvParams inserted
+  after it was written (+121 MB) without the index being rewritten, so
+  `indexListOffset` points into the middle of a spectrum. Re-indexed, content
+  unchanged, the same build reads it in 4.49 s at 128 threads in ~0.4 GB --
+  the file, not FASTag's mzML path, produced the 53.27 s.
 
 `chunked` and `point` are within noise of each other on time and agree on tag
 counts to within 5 rows in 1.7 M, so the layout choice is a size decision, not
