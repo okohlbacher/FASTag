@@ -504,12 +504,46 @@ provenance and what each dataset is useful for comparing.
 
 The tables below report wall-clock time and peak resident memory against
 `-threads` for selected public data sets, so you can judge how a run scales on
-your own machine and estimate what a file of a given size will cost. Each point
-is the fastest of three runs at default parameters (seed length 3, one gap,
-deisotoping on, `-peaks_per_window 10 -max_peaks 400`) with a warm page cache,
-timed end to end including reading and writing. Hardware: _TBD_.
+your own machine and estimate what a file of a given size will cost. Every point
+is the faster of two runs at **default parameters**, with a warm page cache,
+timed end to end including reading the input and writing the tag file. Hardware:
+two AMD EPYC 9654 (192 cores / 384 hardware threads), node-local NVMe, otherwise
+idle.
 
-<!-- PERF-TABLES -->
+**Scaling.** `cptac_merged` — CPTAC breast cancer, merged fractions, 931,325 MS2
+spectra (13.3 GB mzML, 3.6 GB mzPeak), 37,599,162 tags at every thread count:
+
+| threads | 1 | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 192 | 256 | 384 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| mzML, s | 566 | 280 | 139 | 69.5 | 35.0 | 17.6 | 9.04 | 5.29 | **4.33** | 4.48 | 5.02 |
+| mzML, GB | 0.77 | 0.78 | 0.78 | 0.78 | 0.79 | 0.82 | 0.87 | 0.90 | 0.94 | 0.97 | 1.28 |
+| mzPeak, s | 406 | 204 | 103 | 52.3 | 26.6 | 13.9 | 7.35 | 4.68 | 4.11 | **3.99** | 4.07 |
+| mzPeak, GB | 1.62 | 1.63 | 1.65 | 1.68 | 1.80 | 1.95 | 2.21 | 2.75 | 3.34 | 3.83 | 4.90 |
+
+Time halves with every doubling of the thread count to 64 (94% of ideal at 16,
+82% at 64) and flattens near 4 s, where the run is bounded by reading the file
+and writing 37.6 M rows rather than by tagging.
+
+**Selected runs**, at 16 threads (a workstation) and 128 (a compute node):
+
+| data set | MS2 | mzML s / GB, 16 → 128 | mzPeak s / GB, 16 → 128 |
+|---|---|---|---|
+| `cptac_merged` CPTAC breast, merged fractions | 931,325 | 34.9 / 0.77 → 5.26 / 0.88 | 26.6 / 1.78 → 4.62 / 2.78 |
+| `astral_neat` Orbitrap Astral | 304,505 | 14.9 / 1.26 → 2.60 / 1.31 | 10.7 / 2.00 → 2.28 / 3.45 |
+| `qex_iprg` Q Exactive (iPRG2015) | 49,514 | 2.11 / 0.24 → 0.58 / 0.43 | 1.70 / 1.18 → 0.95 / 2.43 |
+| `qex_tmt8` Q Exactive TMT8 | 47,470 | 12.4 / 0.46 → 7.61 / 0.88 | 4.19 / 1.15 → 1.28 / 2.66 |
+| `velos_2012` LTQ Orbitrap Velos | 36,523 | 1.33 / 0.20 → 0.44 / 0.12 | 0.92 / 0.80 → 0.53 / 0.80 |
+| `fusion_tonsil` Orbitrap Fusion | 22,408 | 0.39 / 0.10 → 0.27 / 0.11 | 0.27 / 0.15 → 0.31 / 0.17 |
+
+The two containers return the same tags on centroided input. On the two runs
+with **profile** MS2 (`qex_iprg`, `qex_tmt8`) they do not, and the times are not
+comparable either: the mzML path tags profile samples as they are, while the
+archives were centroided when written, so FASTag reads peaks and finds more tags
+(1,358,490 against 791,925, and 2,032,961 against 1,376,019). Centroid before
+tagging profile mzML, or read the archive.
+
+A file small enough to finish in well under a second gains nothing from more
+threads — `fusion_tonsil` is already at its floor by 16.
 
 Output is identical at every thread count, and memory is O(threads) rather than
 O(file) on the mzML path; mzPeak instead tracks the row groups in flight, with a
