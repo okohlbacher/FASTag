@@ -120,6 +120,7 @@ A disk image or archive holds a `FASTag/` folder — run `FASTag/FASTag`
 (Linux/macOS) or `FASTag/FASTag.bat` (Windows); everything else inside is a
 bundled dependency the wrapper needs, not something to run directly.
 
+**macOS 13.3 or later** (since v1.5.0; earlier releases ran on 12).
 **macOS ships as a disk image only**, signed with a Developer ID certificate,
 notarized, and **stapled** — so it opens with no network connection. A tarball
 cannot carry a notarization ticket (Apple staples one to disk images, installers
@@ -253,6 +254,24 @@ instead.
 
 Tags are byte-identical to previous releases on every file tested. Smaller
 files are unchanged, having had little prologue to remove.
+
+**mzPeak reads 4.5x faster at 128 threads since v1.5.0**, in a quarter of the
+memory, and is now faster than mzML at every thread count. Decode memory is
+recycled across threads instead of stranding in per-thread allocator arenas,
+the per-point `spectrum_index` column is held as verified runs rather than
+decoded, spectrum metadata is read into a compact record, and threads decode
+row groups ahead rather than waiting on each other. AGXT S23 (diaTracer
+pseudo-MS2, 717,924 spectra, 1.35 GB mzPeak), 2x AMD EPYC 9654, benchmark
+settings, fastest of 3:
+
+| threads | v1.4.3 | v1.5.0 |
+|---|---|---|
+| 1 | 185.3 s / 3.1 GB | **80.3 s** / 1.25 GB |
+| 16 | 15.52 s / 4.8 GB | **5.72 s** / 1.3 GB |
+| 64 | 7.89 s / 6.0 GB | **2.08 s** / 1.6 GB |
+| 128 | 7.47 s / 7.2 GB | **1.65 s** / 1.8 GB |
+
+The same run from mzML takes 2.74 s at 128 threads. Tags are byte-identical.
 
 ## Command-line reference
 
