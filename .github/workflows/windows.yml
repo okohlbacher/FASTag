@@ -502,7 +502,9 @@ jobs:
         # libboost-devel, meson and pkg-config are for the mzpeak-openms build
         # below; Ninja is already here from choco.
         run: |
-          conda install -c conda-forge 'libarrow>=23' libparquet libzip nlohmann_json libboost-devel 'meson>=1.3' pkg-config -y
+          # libboost-devel is pinned: mzpeak-openms's meson.build asks for >=1.89,
+          # and an unpinned solve here settled on 1.86, which fails configure.
+          conda install -c conda-forge 'libarrow>=23' libparquet libzip nlohmann_json 'libboost-devel>=1.89' 'meson>=1.3' pkg-config -y
           CONDA_ENV_PREFIX=$(conda info --json | python -c "import json,sys;print(json.load(sys.stdin)['active_prefix'])" | sed 's|\\|/|g')
           echo "CONDA_LIB_PREFIX=$CONDA_ENV_PREFIX/Library" >> "$GITHUB_ENV"
 

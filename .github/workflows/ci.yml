@@ -214,7 +214,7 @@ jobs:
             libzip
             hdf5
             libcurl
-            libboost-devel
+            libboost-devel>=1.89
             glpk
             coin-or-cbc
             coin-or-utils
