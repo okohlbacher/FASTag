@@ -16,74 +16,57 @@
 #include <OpenMS/FORMAT/FileHandler.h>
 #include <OpenMS/KERNEL/MSExperiment.h>
 #include <OpenMS/KERNEL/OnDiscMSExperiment.h>
-#include "IndexedMzMLReader.h"
-#ifdef FASTAG_HAVE_MZPEAK_LIB
-#include "OnDiscMzPeakExperiment.h"
-#endif
+#include <OpenMS/FORMAT/DATAACCESS/MSDataWritingConsumer.h>
+#include <OpenMS/SYSTEM/File.h>
 
 #include "FASTagger.h"
 #include "FastaFilter.h"
 #include "Glyco.h"
-
-#include <OpenMS/FORMAT/DATAACCESS/MSDataWritingConsumer.h>
-#include "TagFDR.h"
-#include "TagRecon.h"
+#include "IndexedMzMLReader.h"
 #include "NumFormat.h"
 #include "Proforma.h"
 #include "SpectrumSampler.h"
+#include "TagFDR.h"
+#include "TagRecon.h"
 #include "TaxDeconv.h"
 #include "TaxIndex.h"
 #include "TaxStats.h"
+#ifdef FASTAG_HAVE_MZPEAK_LIB
+#include "OnDiscMzPeakExperiment.h"
+#endif
 
-#include <cstdio>
-#include <exception>
-#include <fstream>
-#include <filesystem>
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <cmath>
+#include <condition_variable>
 #include <csignal>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <exception>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <limits>
+#include <map>
+#include <memory>
+#include <mutex>
+#include <set>
+#include <thread>
+#include <vector>
 #ifdef _WIN32
 #include <io.h>
 #define fastag_dup _dup
 #define fastag_dup2 _dup2
 #define fastag_fdopen _fdopen
 #else
+#include <sys/resource.h>
 #include <unistd.h>
 #define fastag_dup dup
 #define fastag_dup2 dup2
 #define fastag_fdopen fdopen
 #endif
-#include <map>
-#include <limits>
-#include <memory>
-#include <algorithm>
-#include <iterator>
-#include <OpenMS/SYSTEM/File.h>
-
-#include <atomic>
-#include <chrono>
-#include <cmath>
-#include <condition_variable>
-#include <mutex>
-#ifndef _WIN32
-#include <sys/resource.h>
-#endif
-
-namespace
-{
-  /// Program start, for FASTAG_TIMING. Static init runs before main, so the
-  /// pre-loop phases (opening the archive, building its metadata map, the
-  /// tolerance probe) are attributable rather than lumped into "the rest".
-  const std::chrono::steady_clock::time_point g_t_program = std::chrono::steady_clock::now();
-  double g_t_open = 0; ///< seconds spent constructing the input reader
-  double g_t_probe = 0, g_t_tables = 0; ///< tolerance probe, null tables
-  /// When main_() finished a file run; what follows it is teardown.
-  std::chrono::steady_clock::time_point g_t_main_end;
-}
-#include <cstdlib>
-#include <cstring>
-#include <set>
-#include <thread>
-#include <vector>
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -100,7 +83,6 @@ namespace
 #endif
 #ifndef _OPENMP
 static inline int omp_get_max_threads() { return 1; }
-static inline int omp_get_num_threads() { return 1; }
 static inline int omp_get_thread_num() { return 0; }
 #endif
 
@@ -108,30 +90,23 @@ using namespace OpenMS;
 
 namespace
 {
-  // Deliberately OUTSIDE the FASTAG_HAVE_MZPEAK_LIB guard below. -species
-  // works on any build, so a mzPeak-less build must still compile this; it
-  // lived inside the guard briefly and broke every stock-OpenMS build while
-  // CI (which always builds the patched OpenMS) stayed green.
-  /// Directory holding the bundled taxonomy, or "" when there is none.
-  ///
-  /// Resolution order:
-  ///   1. $FASTAG_TAXONOMY_DIR   -- a custom or larger reference set
-  ///   2. <executable dir>/../share/FASTag/taxonomy   -- the release layout
-  ///
-  /// Deliberately anchored to the EXECUTABLE, not OPENMS_DATA_PATH: this is
-  /// FASTag's own data, and a user pointing OPENMS_DATA_PATH at a system OpenMS
-  /// installation must not silently lose the taxonomy that shipped beside the
-  /// binary they are running.
+  /// Program start, for FASTAG_TIMING. Static init runs before main, so the
+  /// pre-loop phases (opening the archive, building its metadata map, the
+  /// tolerance probe) are attributable rather than lumped into "the rest".
+  const std::chrono::steady_clock::time_point g_t_program = std::chrono::steady_clock::now();
+  double g_t_open = 0; ///< seconds spent constructing the input reader
+  double g_t_probe = 0, g_t_tables = 0; ///< tolerance probe, null tables
+  /// When main_() finished a file run; what follows it is teardown.
+  std::chrono::steady_clock::time_point g_t_main_end;
+
   /// k of a taxonomy index, read from its 16-byte header alone.
   ///
   /// Exists so the tag-length precondition can be checked BEFORE tagging.
   /// Loading the index to learn k costs seconds and ~2 GB, which is exactly the
   /// work we want to refuse to waste.
   ///
-  /// Both index versions put k at the same place: magic(4) | u32 version | u32 k.
-  /// This MUST accept the current "FTX2" and not only the legacy "FTXI" -- when
-  /// it recognised only v1, the shipped v2 index made the whole tag-length
-  /// precondition a no-op, reviving the slow empty-report path it exists to stop.
+  /// Both index versions put k at the same place: magic(4) | u32 version | u32 k,
+  /// so both the current "FTX2" and the legacy "FTXI" are accepted.
   int peekTaxdbK_(const String& path)
   {
     std::ifstream f(path.c_str(), std::ios::binary);
@@ -218,15 +193,11 @@ public:
                  "DirecTag: accurate sequence tags from peptide MS/MS through statistical scoring",
                  "J Proteome Res 2008; 7(9): 3838-46", "10.1021/pr800154p"}})
   {
-    // TOPPBase prints the OPENMS version when version_ is empty, which for a
-    // tool shipped inside OpenMS is right and for this one is not: --help
-    // reported "3.6.0-pre-HEAD-... Revision: bd4b895", the version and git
-    // revision of the OpenMS it was built against, with FASTag's own version
-    // appearing nowhere. FASTAG_VERSION comes from project(FASTag VERSION ...).
-#ifdef FASTAG_VERSION
+    // TOPPBase prints the OpenMS version when version_ is empty, which is
+    // right for a tool shipped inside OpenMS and wrong for this one.
+    // FASTAG_VERSION comes from project(FASTag VERSION ...).
     version_ = FASTAG_VERSION;
     verboseVersion_ = String(FASTAG_VERSION) + " (OpenMS " + VersionInfo::getVersion() + ")";
-#endif
   }
 
 protected:
@@ -524,24 +495,19 @@ protected:
                         "Add a modified alternative, written inline as X[Name]", false);
   }
 
-  /// Resolve OpenMS/UniMod modification names to FASTag::ModSpec via
-  /// ModificationsDB. Terminal mods are skipped with a note -- they are absorbed
-  /// into the reported flanking masses, not the internal residue alphabet.
   /// One TSV row for one tag, appended to buf. THE row format -- file mode
   /// and -stream both call this, so the two can never drift.
   //
-  // Append field by field: a string grows on its own, so there is one code
-  // path and no fixed-buffer fallback to drift (an earlier snprintf version
-  // dropped columns on very long native IDs). Flanking masses at 4 decimals
-  // (0.1 mDa) -- %g's 6 significant digits are coarser than the tolerance the
-  // tag was found with, and these are what a downstream search constrains on.
-  // Numbers go through appendNum, not snprintf: the same text as "%.4f" /
-  // "%g" / "%.3f", without the locale lock every worker queues on in macOS's
-  // printf (NumFormat.h).
+  // Appended field by field, so a very long native ID needs no fixed-buffer
+  // fallback. Flanking masses at 4 decimals (0.1 mDa) -- %g's 6 significant
+  // digits are coarser than the tolerance the tag was found with, and these
+  // are what a downstream search constrains on. Numbers go through
+  // appendNum, not snprintf: the same text as "%.4f" / "%g" / "%.3f", without
+  // the locale lock every worker queues on in macOS's printf (NumFormat.h).
   static void appendTagRow(std::string& buf, const FASTag::Tag& t,
                            const String& native_id, const char* hit,
                            bool want_proforma, const std::string& proforma_fixed,
-                           bool want_res_conf = false)
+                           bool want_res_conf)
   {
     using FASTag::appendNum;
     constexpr auto fixed = std::chars_format::fixed;
@@ -1072,11 +1038,9 @@ protected:
     {
       try
       {
-        {
-          const auto a = std::chrono::steady_clock::now();
-          mzp = std::make_unique<FASTag::OnDiscMzPeakExperiment>(in);
-          g_t_open = std::chrono::duration<double>(std::chrono::steady_clock::now() - a).count();
-        }
+        const auto a = std::chrono::steady_clock::now();
+        mzp = std::make_unique<FASTag::OnDiscMzPeakExperiment>(in);
+        g_t_open = std::chrono::duration<double>(std::chrono::steady_clock::now() - a).count();
       }
       catch (const Exception::BaseException& e)
       {
@@ -2236,13 +2200,7 @@ protected:
         by_len[kv.first].second += kv.second.second;
       }
     }
-    tsv.flush();
-    if (!tsv)
-    {
-      OPENMS_LOG_ERROR << "Failed writing " << out << " (disk full?)." << std::endl;
-      return CANNOT_WRITE_OUTPUT_FILE;
-    }
-    tsv.close();
+    tsv.close();  // flushes; a failed write anywhere leaves the stream failed
     if (tsv.fail())
     {
       OPENMS_LOG_ERROR << "Failed writing " << out << " (disk full?)." << std::endl;
@@ -2377,7 +2335,6 @@ protected:
 
     if (glyco_on)
     {
-      gtsv.flush();
       gtsv.close();
       if (gtsv.fail())
       {
@@ -2391,7 +2348,6 @@ protected:
 
     if (recon_on)
     {
-      rtsv.flush();
       rtsv.close();
       if (rtsv.fail())
       {
