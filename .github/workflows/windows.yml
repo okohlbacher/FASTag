@@ -894,9 +894,16 @@ jobs:
           # FASTag.exe and FASTag.bat existed side by side, PATHEXT's
           # default order tries .EXE before .BAT and would silently skip
           # the wrapper.
+          # OPENBLAS_NUM_THREADS: an OpenMS built against OpenBLAS starts a
+          # spinning thread per core when the library loads, which costs real
+          # CPU even for --help; FASTag never calls BLAS. Set here for the same
+          # reason as in ci.yml's wrappers, and harmless when the build carries
+          # no OpenBLAS. `if not defined` is the batch spelling of ${VAR:-1}:
+          # a value the user set wins.
           printf '%s\r\n' \
             '@echo off' \
             'set "OPENMS_DATA_PATH=%~dp0share-OpenMS"' \
+            'if not defined OPENBLAS_NUM_THREADS set "OPENBLAS_NUM_THREADS=1"' \
             '"%~dp0FASTag.core.exe" %*' \
             > dist/FASTag/FASTag.bat
           ls dist/FASTag | wc -l
