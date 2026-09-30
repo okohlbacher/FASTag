@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """PXD000001 ground-truth scorer for FASTag — rebuilt, and proven to reproduce
-the numbers documented in doc/BACKLOG.md.
+the numbers of the original measurement.
 
 Recipe (matches the original 2026-07-23 measurement, recovered from the session
 transcript after the scratchpad copy was lost):
@@ -40,7 +40,7 @@ transcript after the scratchpad copy was lost):
             recall = any row. Percentages are over accepted-PSM spectra that
             produced at least one tag (2,253 of 2,254).
 
-Reproduced (this script, current build-rel/FASTag, vs doc/BACKLOG.md):
+Reproduced (this script, current build-rel/FASTag, vs that measurement):
 
   -gap_penalty | rank-1 | top-5 | total | gapped rank-1 share | ... correct
    1           | 69.02  | 90.81 | 98.05 | 34.66               | 25.35
@@ -83,7 +83,7 @@ DEFAULT_WORKDIR = ('/private/tmp/claude-501/-Users-kohlbach-Claude-OpenMS---'
                    'DirecTag/df88f9b0-cc80-48db-8780-e2bc44da5d34/scratchpad/'
                    'pxd000001')
 
-# doc/BACKLOG.md, gap-penalty table: {penalty: (rank-1 %, top-5 %, total %)}
+# Originally measured gap-penalty table: {penalty: (rank-1 %, top-5 %, total %)}
 DOCUMENTED = {1: (69.0, 90.8, 98.05), 10: (83.0, 95.2, 98.05),
               30: (85.1, 95.7, 98.05), 100: (86.4, 96.1, 98.05),
               300: (86.8, 96.2, 98.05), 1000: (86.9, 96.4, 98.05),

@@ -386,7 +386,7 @@ protected:
     // correct ladder read of a co-isolated chimeric peptide legitimately
     // matches the target database and is not false under this null (which is
     // exactly why this null works where single-spectrum decoys measured an
-    // empty one -- see doc/BACKLOG.md F4).
+    // empty one).
     registerInputFile_("entrapment_fasta", "<file>", "",
                        "Entrapment database (foreign species the sample cannot "
                        "contain; phylogenetically distant, e.g. archaea for a "
@@ -2369,8 +2369,8 @@ protected:
       OPENMS_LOG_INFO << "q_db: " << row_meta.size() << " rows calibrated against "
                       << n_curve_events << " entrapment events ("
                       << entrap_e.size() << " observed) -> " << out << std::endl;
-      OPENMS_LOG_INFO << "q_db calibration envelope (measured 2026-09, "
-                         "doc/F4-CALIBRATION-AUDIT.md): conservative at q_db <= 0.02; "
+      OPENMS_LOG_INFO << "q_db calibration envelope (measured 2026-09): "
+                         "conservative at q_db <= 0.02; "
                          "UNDERESTIMATES the false-match rate ~1.6x at 0.05-0.1. Use "
                          "tight thresholds, and read q_db as DB-match spuriousness, "
                          "never as read correctness." << std::endl;
@@ -2484,7 +2484,7 @@ protected:
     // Roll the per-leaf counts up the taxonomy, compare each node against the
     // breadth it has in the index, and rank. The q-value is a ranking aid, not a
     // calibrated FDR: the per-k-mer background is a proxy and the chimeric-null
-    // problem (see F4 in doc/BACKLOG.md) applies here too.
+    // problem described for -entrapment_fasta applies here too.
     String taxdb = getStringOption_("taxdb");
     String species_out = getStringOption_("species_out");
     String nodes = getStringOption_("taxonomy_nodes");

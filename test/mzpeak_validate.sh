@@ -15,8 +15,7 @@
 # match the archive's declared mzPeak version to a profile and fell back to
 # its latest one, which is a warning there and would otherwise be a green
 # run that validated against the wrong specification. Warnings otherwise
-# pass (FASTag's metadata mapping still lacks several CV accessions; see
-# doc/PLAN-ci-mzpeak-coverage.md).
+# pass (FASTag's metadata mapping still lacks several CV accessions).
 #
 # The validator: `mzpeak-validate` from test/mzpeak-validator-requirements.txt
 # (pinned to a commit, engine pinned too). Resolved from MZPEAK_VALIDATE when

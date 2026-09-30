@@ -68,7 +68,7 @@ namespace FASTag
     /// non-duplicates, then backfilled in rank order. Orders slot occupancy,
     /// never filters -- output size and rank 1 are unchanged; only which tags
     /// survive the cap. Off by default (not provably recall-neutral under a
-    /// cap; see doc/BACKLOG-PLAN-2026-09.md F12).
+    /// cap).
     bool   diversity      = false;
     /// Emit per-residue confidences (Tag::res_conf). Off by default so the
     /// hot path allocates nothing extra and the TSV schema is unchanged.
