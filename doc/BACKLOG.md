@@ -352,7 +352,7 @@ history.
   CLI and the app since v1.4.x. Windows: SignPath application submitted
   2026-09-09, see `doc/BACKLOG-ci.md`.
 - **GUI vitest harness** — DONE: `gui/src/App.test.tsx`, `ResultsTable.test.tsx`,
-  `paramLayout.test.ts` (37 tests) plus 28 Rust tests.
+  `paramLayout.test.ts` (37 tests) plus 29 Rust tests.
 - **GUI million-row browser** — DONE: `gui/src-tauri/src/browser.rs` +
   `gui/src/ResultsTable.tsx` (the windowed indexed reader from the 2026-09
   plan). Still open in the GUI: auto-update, a Linux desktop artifact — being

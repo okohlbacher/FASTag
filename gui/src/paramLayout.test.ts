@@ -65,6 +65,12 @@ describe('dependencies', () => {
     expect(inertBecause('subsample_seed', off)).not.toBeNull()
     expect(inertBecause('subsample_seed', { subsample_spectra: '500' })).toBeNull()
     expect(inertBecause('subsample_seed', { subsample_fraction: '0.1' })).toBeNull()
+    // Both arming knobs are named in inertBecause, not in DEPENDS, so the
+    // rendered-master check below cannot see them. Moving either to HIDDEN
+    // would leave the seed greyed out forever with no way to switch it on,
+    // and unplacedParams() would not notice -- a hidden param is placed.
+    expect(RENDERED).toContain('subsample_spectra')
+    expect(RENDERED).toContain('subsample_fraction')
   })
 
   it('never depends on a parameter that is not itself rendered', () => {

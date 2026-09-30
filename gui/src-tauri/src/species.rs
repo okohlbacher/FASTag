@@ -196,6 +196,19 @@ mod tests {
         std::fs::remove_file(&f).ok();
     }
 
+    // Both readers let the open fail instead of pre-checking the path, and
+    // `species` is a #[tauri::command] the frontend can call with "". A
+    // directory is here because the picker can hand one over.
+    #[test]
+    fn empty_missing_or_directory_path_is_none() {
+        let dir = std::env::temp_dir();
+        let dir = dir.to_str().unwrap();
+        for p in ["", "/nonexistent/fastag/x", dir] {
+            assert!(read_species(p).is_none(), "read_species({p:?})");
+            assert!(read_taxdb_info(p).is_none(), "read_taxdb_info({p:?})");
+        }
+    }
+
     #[test]
     fn truncated_or_alien_header_is_none() {
         let f = tempfile_path("bad.taxdb");
