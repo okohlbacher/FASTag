@@ -42,7 +42,6 @@ bool parseDouble(const std::string& text, double& value)
 {
   if (text.empty()) return false;
   char* end = nullptr;
-  errno = 0;
   value = std::strtod(text.c_str(), &end);
   return end != text.c_str() && *end == '\0' && std::isfinite(value);
 }
@@ -64,17 +63,9 @@ bool parseSize(const std::string& text, std::size_t& value)
 
 bool parseFlag(const std::string& text, bool& value)
 {
-  if (text == "0")
-  {
-    value = false;
-    return true;
-  }
-  if (text == "1")
-  {
-    value = true;
-    return true;
-  }
-  return false;
+  if (text != "0" && text != "1") return false;
+  value = text == "1";
+  return true;
 }
 
 struct Columns
