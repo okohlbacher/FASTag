@@ -5,10 +5,11 @@
 // needs positions, proteins and flank masses).
 //
 // One suffix array over the concatenated, I/L-folded proteome with '#'
-// sentinels between proteins, plus a double prefix-mass array and per-segment
-// tryptic cleavage boundaries. Human reference proteome: ~46 MB SA + ~91 MB
-// prefix masses, ~2 s to build -- cheap enough to rebuild per run, so nothing
-// is persisted and there is no cache-invalidation surface.
+// sentinels between proteins, plus prefix-mass checkpoints and per-segment
+// tryptic cleavage boundaries: ~6.5 bytes per residue, 4 of them the suffix
+// array. Human reference proteome: ~75 MB, ~1.4 s to build on one thread --
+// cheap enough to rebuild per run, so nothing is persisted and there is no
+// cache-invalidation surface.
 //
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
@@ -73,17 +74,14 @@ namespace FASTag
     /// Sum of (fixed-mod-adjusted) residue masses over text [from, to).
     double massBetween(uint32_t from, uint32_t to) const
     {
-      return prefix_[to] - prefix_[from];
+      return prefixMass(to) - prefixMass(from);
     }
 
     /// Accession of the protein covering text position @p pos.
     const std::string& proteinAt(uint32_t pos) const;
 
     /// Original (unfolded, as-in-database) spelling of text [from, to).
-    std::string originalText(uint32_t from, uint32_t to) const
-    {
-      return orig_.substr(from, to - from);
-    }
+    std::string originalText(uint32_t from, uint32_t to) const;
     /// Folded spelling of text [from, to) (what matching ran on).
     std::string foldedText(uint32_t from, uint32_t to) const
     {
@@ -120,15 +118,29 @@ namespace FASTag
   private:
     struct Range { uint32_t lo, hi; };  ///< half-open SA interval
 
+    /// Prefix-mass checkpoint spacing. A lookup re-adds at most this many
+    /// residue masses, in the order the build summed them, so every prefix is
+    /// bit-identical to a full per-position array at 1/32 of its memory.
+    static constexpr size_t PREFIX_STRIDE = 32;
+    /// Residue mass of text_[0..i).
+    double prefixMass(size_t i) const
+    {
+      double m = ckpt_[i / PREFIX_STRIDE];
+      for (size_t k = i - i % PREFIX_STRIDE; k < i; ++k)
+        m += mass_[static_cast<unsigned char>(text_[k])];
+      return m;
+    }
+
     char charAt(size_t p) const { return p < text_.size() ? text_[p] : '\0'; }
     Range refine(Range r, uint32_t depth, char c) const;
     void descend(const std::string& tag, size_t i, Range r, uint32_t depth,
                  bool reversed, size_t& budget, std::vector<TagOcc>& out) const;
 
     std::string text_;              ///< folded, '#'-separated, trailing '#'
-    std::string orig_;              ///< same layout, original spelling
+    std::vector<bool> is_i_;        ///< per text position: database spelled I (text_ has L)
     std::vector<uint32_t> sa_;      ///< suffix array over text_
-    std::vector<double> prefix_;    ///< prefix_[i] = residue mass of text_[0..i)
+    double mass_[128] = {};         ///< residue mass by char; 0 for '#'
+    std::vector<double> ckpt_;      ///< ckpt_[j] = residue mass of text_[0..j*PREFIX_STRIDE)
     std::vector<uint32_t> starts_;  ///< text start of each protein (sorted)
     std::vector<std::string> acc_;  ///< accession per protein
     /// Cleavage boundaries as (text position, segment id): segment start,

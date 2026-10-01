@@ -32,26 +32,27 @@ namespace FASTag
                             const std::vector<std::pair<char, double>>& fixed_mods,
                             double isobaric_tol)
   {
-    // Residue masses with fixed mods folded in.
-    double mass[128] = {0};
-    for (const Residue* r : ResidueDB::getInstance()->getResidues("Natural19WithoutI"))
-    {
-      const char c = r->getOneLetterCode()[0];
-      mass[static_cast<unsigned char>(c)] = r->getMonoWeight(Residue::Internal);
-    }
-    for (const auto& m : fixed_mods)
-      if (m.first >= 0) mass[static_cast<unsigned char>(m.first)] += m.second;
-
     // Rebuildable: a second build() must fully replace the first.
-    text_.clear(); orig_.clear(); sa_.clear(); prefix_.clear();
+    text_.clear(); is_i_.clear(); sa_.clear(); ckpt_.clear();
     starts_.clear(); acc_.clear(); bounds_.clear(); rules_.clear();
     residues_ = 0;
 
+    // Residue masses with fixed mods folded in.
+    std::fill(std::begin(mass_), std::end(mass_), 0.0);
+    for (const Residue* r : ResidueDB::getInstance()->getResidues("Natural19WithoutI"))
+    {
+      const char c = r->getOneLetterCode()[0];
+      mass_[static_cast<unsigned char>(c)] = r->getMonoWeight(Residue::Internal);
+    }
+    for (const auto& m : fixed_mods)
+      if (m.first >= 0) mass_[static_cast<unsigned char>(m.first)] += m.second;
+
     if (isobaric_tol > 0) rules_ = deriveCollapseRules(isobaric_tol, fixed_mods);
 
-    // Concatenate: folded text for matching, original for reporting, one '#'
-    // after every protein (also a hard barrier -- locate can never match
-    // across it because '#' is never a pattern character).
+    // Concatenate: folded text for matching, one '#' after every protein (also
+    // a hard barrier -- locate can never match across it because '#' is never
+    // a pattern character). Folding changes only I (to L) in a letter's
+    // uppercase spelling, so one bit per position restores the original.
     size_t total = 1;
     for (const auto& e : entries) total += e.sequence.size() + 1;
     if (total > std::numeric_limits<uint32_t>::max())
@@ -59,7 +60,7 @@ namespace FASTag
                                     "Database exceeds the index's 4 GiB text limit.",
                                     String(total));
     text_.reserve(total);
-    orig_.reserve(total);
+    is_i_.assign(total, false);
     for (const auto& e : entries)
     {
       starts_.push_back(static_cast<uint32_t>(text_.size()));
@@ -68,22 +69,27 @@ namespace FASTag
       {
         const char n = normResidue(c);
         if (!n) continue;  // non-letters are dropped, matching FastaFilter
+        if (c == 'I' || c == 'i') is_i_[text_.size()] = true;
         text_.push_back(n);
-        orig_.push_back(n == RESIDUE_AMBIG ? RESIDUE_AMBIG
-                                           : (c >= 'a' ? static_cast<char>(c - 32) : c));
         if (n != RESIDUE_AMBIG) ++residues_;
       }
       text_.push_back(RESIDUE_AMBIG);
-      orig_.push_back(RESIDUE_AMBIG);
     }
+    is_i_.resize(text_.size());
 
-    // Prefix masses; sentinels and ambiguity residues contribute 0. Double is
-    // mandatory: float's 24-bit mantissa is ~0.25 Da at a titin-scale
-    // cumulative prefix, which would destroy ppm flank checks.
-    prefix_.resize(text_.size() + 1);
-    prefix_[0] = 0.0;
-    for (size_t i = 0; i < text_.size(); ++i)
-      prefix_[i + 1] = prefix_[i] + mass[static_cast<unsigned char>(text_[i])];
+    // Prefix-mass checkpoints; sentinels and ambiguity residues contribute 0.
+    // Double is mandatory: float's 24-bit mantissa is ~0.25 Da at a titin-scale
+    // cumulative prefix, which would destroy ppm flank checks. One running sum
+    // over the whole text, exactly what prefixMass() re-adds from.
+    const size_t n = text_.size();
+    ckpt_.resize(n / PREFIX_STRIDE + 1);
+    double run = 0.0;
+    for (size_t i = 0; i < n; ++i)
+    {
+      if (i % PREFIX_STRIDE == 0) ckpt_[i / PREFIX_STRIDE] = run;
+      run += mass_[static_cast<unsigned char>(text_[i])];
+    }
+    if (n % PREFIX_STRIDE == 0) ckpt_[n / PREFIX_STRIDE] = run;
 
     // Cleavage boundaries per '#'-free segment: segment start, every
     // after-K/R-not-before-P position, segment end. OpenMS 'Trypsin'
@@ -91,7 +97,6 @@ namespace FASTag
     // against ProteaseDigestion in the unit test.
     uint32_t seg = 0;
     size_t i = 0;
-    const size_t n = text_.size();
     while (i < n)
     {
       if (text_[i] == RESIDUE_AMBIG) { ++i; continue; }
@@ -285,6 +290,14 @@ namespace FASTag
         out.push_back({bounds_[s].first, bounds_[e].first});
       }
     }
+  }
+
+  std::string ProteomeIndex::originalText(uint32_t from, uint32_t to) const
+  {
+    std::string s = text_.substr(from, to - from);
+    for (size_t k = 0; k < s.size(); ++k)
+      if (is_i_[from + k]) s[k] = 'I';
+    return s;
   }
 
   const std::string& ProteomeIndex::proteinAt(uint32_t pos) const

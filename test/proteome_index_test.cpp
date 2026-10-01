@@ -10,6 +10,7 @@
 
 #include <OpenMS/CHEMISTRY/AASequence.h>
 #include <OpenMS/CHEMISTRY/ProteaseDigestion.h>
+#include <OpenMS/CHEMISTRY/ResidueDB.h>
 
 #include <algorithm>
 #include <cmath>
@@ -230,7 +231,7 @@ int main()
     std::cout << "7. autoMinLen = " << idx.autoMinLen() << " for 100k residues\n";
   }
 
-  // --- 8. parallel suffix array == one serial sort ---
+  // --- 8. parallel suffix array == one serial sort; compact spelling, masses ---
   {
     // Repeats longer than SORT_DEPTH (duplicate proteins, homopolymer runs)
     // exercise the tie-by-position tail; '#' both separates and sits inside.
@@ -253,6 +254,30 @@ int main()
       return ProteomeIndex::suffixLess(text.data(), text.size(), a, b);
     });
     check(ProteomeIndex::suffixArray(text) == serial, "parallel suffix array == serial sort");
+
+    ProteomeIndex idx;
+    idx.build(entries({"MkiIlLAiK"}), {}, 0);
+    check(idx.originalText(0, 9) == "MKIILLAIK", "original spelling restores I");
+    check(idx.foldedText(0, 9) == "MKLLLLALK", "folded spelling");
+
+    // Prefix masses re-added from checkpoints are the build's one running sum,
+    // bit for bit, at every position (sentinels and X weigh nothing).
+    std::string seq;
+    for (int i = 0; i < 1000; ++i) seq += "ACDEFGHIKLMNPQRSTVWYX"[rng() % 21];
+    idx.build(entries({seq, seq.substr(7, 300)}), {{'C', 57.021464}}, 0);
+    double mass[128] = {0};
+    for (const Residue* r : ResidueDB::getInstance()->getResidues("Natural19WithoutI"))
+      mass[static_cast<unsigned char>(r->getOneLetterCode()[0])] = r->getMonoWeight(Residue::Internal);
+    mass[static_cast<unsigned char>('C')] += 57.021464;
+    const std::string folded = idx.foldedText(0, 1302);
+    double run = 0.0;
+    bool exact = folded.size() == 1302;
+    for (size_t i = 0; i <= folded.size(); ++i)
+    {
+      exact = exact && idx.massBetween(0, static_cast<uint32_t>(i)) == run;
+      if (i < folded.size()) run += mass[static_cast<unsigned char>(folded[i])];
+    }
+    check(exact, "checkpointed prefix masses == running sum");
     std::cout << "8. parallel suffix array == serial over " << text.size() << " chars\n";
   }
 

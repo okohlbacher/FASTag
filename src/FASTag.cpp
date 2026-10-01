@@ -356,10 +356,10 @@ protected:
     // Tag reconciliation (TagRecon stage A+B) at proteome scale: place each
     // reported tag onto tryptic windows of a database by its flanking masses
     // and localize/interpret the single mass gap the flanks imply. Runs on a
-    // per-run suffix-array index (ProteomeIndex, ~2 s to build on a human
-    // reference proteome) -- deliberately DECOUPLED from -fasta: filtering
-    // builds a per-length k-mer membership index whose memory grows with
-    // (residues x lengths), while reconciliation needs only the ~150 MB
+    // per-run suffix-array index (ProteomeIndex, ~1.4 s to build on one thread
+    // for a human reference proteome) -- deliberately DECOUPLED from -fasta:
+    // filtering builds a per-length k-mer membership index whose memory grows
+    // with (residues x lengths), while reconciliation needs only the ~75 MB
     // locate index, so a proteome-scale -recon_fasta must not force the
     // filter's build.
     registerOutputFile_("recon_out", "<file>", "",
