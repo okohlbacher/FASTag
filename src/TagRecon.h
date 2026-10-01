@@ -42,7 +42,7 @@ namespace FASTag
     /// explains the most b/y fragment ions. loc_pos < 0 when not localized.
     int         loc_pos = -1;   ///< peptide-local index of the best site (lowest on a tie)
     size_t      loc_site = 0;   ///< 1-based position of that residue in the protein
-    int         loc_score = 0;  ///< b/y ions matched with the gap on loc_pos
+    int         loc_score = 0;  ///< b/y ion/charge matches with the gap on loc_pos
     int         loc_ties = 0;   ///< region positions sharing loc_score; 1 = unique
   };
 

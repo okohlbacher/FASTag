@@ -383,8 +383,8 @@ protected:
                   "Localize each -recon_out mass gap to one residue of its region: the "
                   "site whose shifted b/y fragments match the most peaks within "
                   "-fragment_tolerance. Appends loc_site (residue + 1-based protein "
-                  "position; the first on a tie), loc_score (ions matched) and loc_ties "
-                  "(sites sharing that score; 1 = unique)");
+                  "position; the first on a tie), loc_score (b/y ion/charge matches) and "
+                  "loc_ties (sites sharing that score; 1 = unique)");
     registerOutputFile_("delta_out", "<file>", "",
                         "Aggregated mass-shift histogram over the reconciliations "
                         "(requires -recon_out): delta, spectrum count, top "
