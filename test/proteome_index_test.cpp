@@ -10,6 +10,7 @@
 
 #include <OpenMS/CHEMISTRY/AASequence.h>
 #include <OpenMS/CHEMISTRY/ProteaseDigestion.h>
+#include <OpenMS/CHEMISTRY/ResidueDB.h>
 
 #include <algorithm>
 #include <cmath>
@@ -228,6 +229,56 @@ int main()
     check(idx.autoMinLen() >= 5 && idx.autoMinLen() <= 7,
           "autoMinLen in a plausible range for 100k residues");
     std::cout << "7. autoMinLen = " << idx.autoMinLen() << " for 100k residues\n";
+  }
+
+  // --- 8. parallel suffix array == one serial sort; compact spelling, masses ---
+  {
+    // Repeats longer than SORT_DEPTH (duplicate proteins, homopolymer runs)
+    // exercise the tie-by-position tail; '#' both separates and sits inside.
+    std::string text;
+    std::vector<std::string> prot;
+    for (int p = 0; p < 400; ++p)
+    {
+      std::string s;
+      const int len = 50 + static_cast<int>(rng() % 700);
+      for (int i = 0; i < len; ++i) s += (rng() % 50 == 0) ? '#' : "ACDEFGHKLMNPQRSTVWY"[rng() % 19];
+      prot.push_back(s);
+    }
+    for (int p = 0; p < 400; ++p) prot.push_back(prot[rng() % prot.size()]);
+    prot.push_back(std::string(300, 'A'));
+    prot.push_back(std::string(150, 'L') + "K" + std::string(150, 'L'));
+    for (const auto& s : prot) text += s + "#";
+    std::vector<uint32_t> serial(text.size());
+    for (size_t i = 0; i < serial.size(); ++i) serial[i] = static_cast<uint32_t>(i);
+    std::sort(serial.begin(), serial.end(), [&text](uint32_t a, uint32_t b) {
+      return ProteomeIndex::suffixLess(text.data(), text.size(), a, b);
+    });
+    check(ProteomeIndex::suffixArray(text) == serial, "parallel suffix array == serial sort");
+
+    ProteomeIndex idx;
+    idx.build(entries({"MkiIlLAiK"}), {}, 0);
+    check(idx.originalText(0, 9) == "MKIILLAIK", "original spelling restores I");
+    check(idx.foldedText(0, 9) == "MKLLLLALK", "folded spelling");
+
+    // Prefix masses re-added from checkpoints are the build's one running sum,
+    // bit for bit, at every position (sentinels and X weigh nothing).
+    std::string seq;
+    for (int i = 0; i < 1000; ++i) seq += "ACDEFGHIKLMNPQRSTVWYX"[rng() % 21];
+    idx.build(entries({seq, seq.substr(7, 300)}), {{'C', 57.021464}}, 0);
+    double mass[128] = {0};
+    for (const Residue* r : ResidueDB::getInstance()->getResidues("Natural19WithoutI"))
+      mass[static_cast<unsigned char>(r->getOneLetterCode()[0])] = r->getMonoWeight(Residue::Internal);
+    mass[static_cast<unsigned char>('C')] += 57.021464;
+    const std::string folded = idx.foldedText(0, 1302);
+    double run = 0.0;
+    bool exact = folded.size() == 1302;
+    for (size_t i = 0; i <= folded.size(); ++i)
+    {
+      exact = exact && idx.massBetween(0, static_cast<uint32_t>(i)) == run;
+      if (i < folded.size()) run += mass[static_cast<unsigned char>(folded[i])];
+    }
+    check(exact, "checkpointed prefix masses == running sum");
+    std::cout << "8. parallel suffix array == serial over " << text.size() << " chars\n";
   }
 
   if (failures == 0) std::cout << "proteome_index_test: all checks passed\n";

@@ -94,6 +94,10 @@ target_include_directories(fastag_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
 target_link_libraries(fastag_core PUBLIC OpenMS)
+if(OpenMP_CXX_FOUND)
+  # ProteomeIndex sorts its suffix-array buckets in parallel.
+  target_link_libraries(fastag_core PRIVATE OpenMP::OpenMP_CXX)
+endif()
 
 # The ported deisotoper reproduces OpenMS's arithmetic operand for operand, and
 # deisotoper_test holds it to that bit for bit. Fused multiply-add breaks the

@@ -333,9 +333,10 @@ the TSV schema is unchanged unless asked for.
 
 `-recon_out` places every reported tag onto tryptic windows of a protein
 database by its flanking masses (TagRecon stage A+B, Dasari 2010), running on a
-per-run suffix-array index over the whole proteome (~2 s and ~150 MB to build
-on the human reference proteome; isobaric collapse and I/L folding applied
-identically to the membership filter). Each row carries the protein, the
+per-run suffix-array index over the whole proteome (~6.5 bytes per database
+residue: ~75 MB and ~1.4 s to build on one thread for the human reference
+proteome, ~0.15 s on 64; isobaric collapse and I/L folding applied identically
+to the membership filter). Each row carries the protein, the
 peptide window in its original database spelling, the position, which flank
 matched, and — when exactly one flank disagrees — the localized mass gap with
 a best-effort interpretation (`mod:Name@X`, `sub:X->Y`, or `?`).

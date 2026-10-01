@@ -5,10 +5,11 @@
 // needs positions, proteins and flank masses).
 //
 // One suffix array over the concatenated, I/L-folded proteome with '#'
-// sentinels between proteins, plus a double prefix-mass array and per-segment
-// tryptic cleavage boundaries. Human reference proteome: ~46 MB SA + ~91 MB
-// prefix masses, ~2 s to build -- cheap enough to rebuild per run, so nothing
-// is persisted and there is no cache-invalidation surface.
+// sentinels between proteins, plus prefix-mass checkpoints and per-segment
+// tryptic cleavage boundaries: ~6.5 bytes per residue, 4 of them the suffix
+// array. Human reference proteome: ~75 MB, ~1.4 s to build on one thread --
+// cheap enough to rebuild per run, so nothing is persisted and there is no
+// cache-invalidation surface.
 //
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
@@ -18,7 +19,9 @@
 
 #include <OpenMS/FORMAT/FASTAFile.h>
 
+#include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -71,17 +74,14 @@ namespace FASTag
     /// Sum of (fixed-mod-adjusted) residue masses over text [from, to).
     double massBetween(uint32_t from, uint32_t to) const
     {
-      return prefix_[to] - prefix_[from];
+      return prefixMass(to) - prefixMass(from);
     }
 
     /// Accession of the protein covering text position @p pos.
     const std::string& proteinAt(uint32_t pos) const;
 
     /// Original (unfolded, as-in-database) spelling of text [from, to).
-    std::string originalText(uint32_t from, uint32_t to) const
-    {
-      return orig_.substr(from, to - from);
-    }
+    std::string originalText(uint32_t from, uint32_t to) const;
     /// Folded spelling of text [from, to) (what matching ran on).
     std::string foldedText(uint32_t from, uint32_t to) const
     {
@@ -95,8 +95,41 @@ namespace FASTag
     /// autoMinFilterLen() over this text, both orientations.
     int autoMinLen() const;
 
+    /// Suffix order: the first SORT_DEPTH chars, ties broken by position -- a
+    /// strict total order, so every correct sort yields the same array.
+    /// SORT_DEPTH must exceed the longest pattern locate can ask about (a
+    /// 25-residue tag collapse-respelled pair by pair is 50 database chars);
+    /// past it the order is by position, which is fine BECAUSE locate refines
+    /// character by character and never compares past the pattern.
+    static constexpr size_t SORT_DEPTH = 64;
+    static bool suffixLess(const char* t, size_t n, uint32_t a, uint32_t b)
+    {
+      const size_t la = n - a, lb = n - b;
+      const size_t l = std::min(std::min(la, lb), SORT_DEPTH);
+      const int c = std::memcmp(t + a, t + b, l);
+      if (c) return c < 0;
+      if (l == SORT_DEPTH) return a < b;
+      return la < lb;
+    }
+    /// Suffix array of @p text ('#' and 'A'..'Z' only) under suffixLess,
+    /// sorted in parallel over three-character buckets.
+    static std::vector<uint32_t> suffixArray(const std::string& text);
+
   private:
     struct Range { uint32_t lo, hi; };  ///< half-open SA interval
+
+    /// Prefix-mass checkpoint spacing. A lookup re-adds at most this many
+    /// residue masses, in the order the build summed them, so every prefix is
+    /// bit-identical to a full per-position array at 1/32 of its memory.
+    static constexpr size_t PREFIX_STRIDE = 32;
+    /// Residue mass of text_[0..i).
+    double prefixMass(size_t i) const
+    {
+      double m = ckpt_[i / PREFIX_STRIDE];
+      for (size_t k = i - i % PREFIX_STRIDE; k < i; ++k)
+        m += mass_[static_cast<unsigned char>(text_[k])];
+      return m;
+    }
 
     char charAt(size_t p) const { return p < text_.size() ? text_[p] : '\0'; }
     Range refine(Range r, uint32_t depth, char c) const;
@@ -104,9 +137,10 @@ namespace FASTag
                  bool reversed, size_t& budget, std::vector<TagOcc>& out) const;
 
     std::string text_;              ///< folded, '#'-separated, trailing '#'
-    std::string orig_;              ///< same layout, original spelling
+    std::vector<bool> is_i_;        ///< per text position: database spelled I (text_ has L)
     std::vector<uint32_t> sa_;      ///< suffix array over text_
-    std::vector<double> prefix_;    ///< prefix_[i] = residue mass of text_[0..i)
+    double mass_[128] = {};         ///< residue mass by char; 0 for '#'
+    std::vector<double> ckpt_;      ///< ckpt_[j] = residue mass of text_[0..j*PREFIX_STRIDE)
     std::vector<uint32_t> starts_;  ///< text start of each protein (sorted)
     std::vector<std::string> acc_;  ///< accession per protein
     /// Cleavage boundaries as (text position, segment id): segment start,
