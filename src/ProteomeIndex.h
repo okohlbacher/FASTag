@@ -76,6 +76,8 @@ namespace FASTag
 
     /// Accession of the protein covering text position @p pos.
     const std::string& proteinAt(uint32_t pos) const;
+    /// 0-based residue position of text position @p pos within that protein.
+    uint32_t proteinOffset(uint32_t pos) const;
 
     /// Original (unfolded, as-in-database) spelling of text [from, to).
     std::string originalText(uint32_t from, uint32_t to) const

@@ -5,8 +5,10 @@
 
 #include "FastaFilter.h"  // MAX_FILTER_LEN
 
+#include <OpenMS/CHEMISTRY/EmpiricalFormula.h>
 #include <OpenMS/CHEMISTRY/Residue.h>
 #include <OpenMS/CHEMISTRY/ResidueDB.h>
+#include <OpenMS/CONCEPT/Constants.h>
 
 #include <algorithm>
 #include <cmath>
@@ -32,6 +34,7 @@ namespace FASTag
 
   void TagReconciler::tryPlace(const ProteomeIndex::TagOcc& occ, const ProteomeIndex::Window& w,
                                double nterm_mass, double cterm_mass,
+                               const MSSpectrum* spec, int frag_charges,
                                std::vector<Reconciliation>& out) const
   {
     const double db_n = idx_->massBetween(w.start, occ.pos);
@@ -83,8 +86,61 @@ namespace FASTag
           idx_->foldedText(w.start + static_cast<uint32_t>(r.region_lo),
                            w.start + static_cast<uint32_t>(r.region_hi) + 1);
       r.delta_interp = interpretDelta_(r.delta_mass, region);
+      if (spec) localize_(r, w, *spec, frag_charges);
     }
     out.push_back(std::move(r));
+  }
+
+  void TagReconciler::localize_(Reconciliation& r, const ProteomeIndex::Window& w,
+                                const MSSpectrum& spec, int frag_charges) const
+  {
+    // Shifted-fragment scoring. With the gap on residue j of an L-residue
+    // peptide, b_i (residues [0,i)) carries it iff j < i and y_i (residues
+    // [L-i,L)) iff j >= L-i. Each ion is looked up once plain and once
+    // shifted; a site scores the ions matched in the state it puts them in.
+    // Only ions ending inside the region differ between sites (the
+    // site-determining ions); every other ion adds the same to all of them.
+    //
+    // The ladder is the index's prefix masses -- the masses the flank check
+    // used, fixed mods included -- not AASequence + TheoreticalSpectrumGenerator:
+    // an arbitrary-delta modification is registered in the process-global
+    // ModificationsDB once per distinct value, i.e. once per reconciled delta.
+    //
+    // ponytail: variable mods INSIDE the tag are not on the ladder. Ions
+    // spanning such a residue miss for every site alike -- lost evidence (more
+    // ties), never a different site; put them on the ladder if that matters.
+    static const double WATER = EmpiricalFormula("H2O").getMonoWeight();
+    const int L = static_cast<int>(w.end - w.start);
+    const double d = r.delta_mass;
+    auto hits = [&](double neutral) {
+      int n = 0;
+      for (int z = 1; z <= frag_charges; ++z)
+      {
+        const double mz = (neutral + z * Constants::PROTON_MASS_U) / z;
+        if (spec.findNearest(mz, tolAt(mz)) >= 0) ++n;
+      }
+      return n;
+    };
+    // [i] = charges matched for the ion of length i, plain (0) / shifted (1).
+    std::vector<int> b0(L, 0), b1(L, 0), y0(L, 0), y1(L, 0);
+    for (int i = 1; i < L; ++i)
+    {
+      const double b = idx_->massBetween(w.start, w.start + i);
+      const double y = idx_->massBetween(w.end - i, w.end) + WATER;
+      b0[i] = hits(b); b1[i] = hits(b + d);
+      y0[i] = hits(y); y1[i] = hits(y + d);
+    }
+    int best = -1;
+    for (int j = r.region_lo; j <= r.region_hi; ++j)
+    {
+      int score = 0;
+      for (int i = 1; i < L; ++i)
+        score += (j < i ? b1[i] : b0[i]) + (j >= L - i ? y1[i] : y0[i]);
+      if (score > best) { best = score; r.loc_pos = j; r.loc_ties = 1; }
+      else if (score == best) ++r.loc_ties;
+    }
+    r.loc_score = best;
+    r.loc_site = idx_->proteinOffset(w.start + static_cast<uint32_t>(r.loc_pos)) + 1;
   }
 
   std::string TagReconciler::interpretDelta_(double delta, const std::string& region) const
@@ -140,7 +196,9 @@ namespace FASTag
   }
 
   std::vector<Reconciliation> TagReconciler::reconcile(const std::string& tag,
-                                                       double nterm_mass, double cterm_mass) const
+                                                       double nterm_mass, double cterm_mass,
+                                                       const MSSpectrum* spec,
+                                                       int precursor_charge) const
   {
     std::vector<Reconciliation> out;
     if (!idx_) return out;
@@ -149,6 +207,7 @@ namespace FASTag
 
     std::vector<ProteomeIndex::TagOcc> occs;
     idx_->locateTag(tag, both_, occs);  // folds, collapse-branches, dedupes
+    const int frag_charges = std::max(1, (precursor_charge > 0 ? precursor_charge : 2) - 1);
 
     std::vector<ProteomeIndex::Window> windows;
     for (const auto& occ : occs)
@@ -156,7 +215,7 @@ namespace FASTag
       windows.clear();
       idx_->windowsAt(occ.pos, occ.len, mc_, windows);
       for (const auto& w : windows)
-        tryPlace(occ, w, nterm_mass, cterm_mass, out);
+        tryPlace(occ, w, nterm_mass, cterm_mass, spec, frag_charges, out);
     }
     return out;
   }

@@ -9,6 +9,8 @@
 
 #include "ProteomeIndex.h"
 
+#include <OpenMS/KERNEL/MSSpectrum.h>
+
 #include <string>
 #include <vector>
 
@@ -35,6 +37,13 @@ namespace FASTag
     /// "?" (delta explained by neither within tolerance). The delta on its own is
     /// a number; this is the interpretation a search would act on.
     std::string delta_interp;
+    /// Site localization, only when reconcile() was given the spectrum and
+    /// there is a mass gap: the region residue that, carrying delta_mass,
+    /// explains the most b/y fragment ions. loc_pos < 0 when not localized.
+    int         loc_pos = -1;   ///< peptide-local index of the best site (lowest on a tie)
+    size_t      loc_site = 0;   ///< 1-based position of that residue in the protein
+    int         loc_score = 0;  ///< b/y ions matched with the gap on loc_pos
+    int         loc_ties = 0;   ///< region positions sharing loc_score; 1 = unique
   };
 
   /// A candidate variable modification for stage-B interpretation: its
@@ -72,8 +81,15 @@ namespace FASTag
     /// All placements of @p tag consistent with the flanking masses, at most one
     /// flank mismatch each. @p tag is base residues (bracket annotations already
     /// stripped), N->C.
+    ///
+    /// With @p spec (m/z-sorted fragment peaks) every placement with a mass gap
+    /// is also site-localized against it, at fragment charges
+    /// 1..max(1, @p precursor_charge - 1) (a charge <= 0 counts as 2, as in
+    /// the tagger).
     std::vector<Reconciliation> reconcile(const std::string& tag, double nterm_mass,
-                                          double cterm_mass) const;
+                                          double cterm_mass,
+                                          const OpenMS::MSSpectrum* spec = nullptr,
+                                          int precursor_charge = 2) const;
 
     /// Candidate variable modifications for stage-B delta interpretation. Set
     /// before reconcile(); read-only after. Empty means only substitutions and
@@ -83,7 +99,12 @@ namespace FASTag
   private:
     double tolAt(double m) const { return tol_ppm_ ? m * frag_tol_ * 1e-6 : frag_tol_; }
     void tryPlace(const ProteomeIndex::TagOcc& occ, const ProteomeIndex::Window& w,
-                  double nterm_mass, double cterm_mass, std::vector<Reconciliation>& out) const;
+                  double nterm_mass, double cterm_mass, const OpenMS::MSSpectrum* spec,
+                  int frag_charges, std::vector<Reconciliation>& out) const;
+    /// Fill r.loc_*: score every residue of r's region as the gap's site by the
+    /// b/y ions of window @p w it explains in @p spec.
+    void localize_(Reconciliation& r, const ProteomeIndex::Window& w,
+                   const OpenMS::MSSpectrum& spec, int frag_charges) const;
     /// Best explanation of @p delta over the residues in @p region: a candidate
     /// mod on a present residue, a single substitution of a present residue, or
     /// "?" if neither fits within tolerance. Prefers whichever fits with the

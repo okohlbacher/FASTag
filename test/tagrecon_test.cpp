@@ -8,8 +8,11 @@
 
 #include "TagRecon.h"
 
+#include <OpenMS/CHEMISTRY/EmpiricalFormula.h>
 #include <OpenMS/CHEMISTRY/Residue.h>
 #include <OpenMS/CHEMISTRY/ResidueDB.h>
+#include <OpenMS/CONCEPT/Constants.h>
+#include <OpenMS/KERNEL/MSSpectrum.h>
 
 #include <cassert>
 #include <cmath>
@@ -148,6 +151,44 @@ int main()
       if (x.peptide == pep && x.pos == pos && x.reversed && x.nterm_match && x.cterm_match)
         ok = true;
     check(ok, "a reversed tag reconciles with swapped flanks");
+  }
+
+  // --- Site localization: shifted b/y fragments pick the modified residue ---
+  {
+    // Oxidation on the M of the N-side region "SAMP" (tag "LEVG" at pos 4); the
+    // spectrum is the singly charged b/y ladder of SAM[Oxidation]PLEVGATSDGK.
+    const size_t pos = 4, site = 2;
+    const double ox = 15.99491;
+    const double water = EmpiricalFormula("H2O").getMonoWeight();
+    const std::string tag = pep.substr(pos, 4);
+    MSSpectrum spec;
+    for (size_t i = 1; i < pep.size(); ++i)
+    {
+      const double b = sumMass(pep.substr(0, i)) + (site < i ? ox : 0.0);
+      const double y = sumMass(pep.substr(pep.size() - i)) + water +
+                       (site >= pep.size() - i ? ox : 0.0);
+      spec.push_back(Peak1D(b + Constants::PROTON_MASS_U, 100.0f));
+      spec.push_back(Peak1D(y + Constants::PROTON_MASS_U, 100.0f));
+    }
+    spec.sortByPosition();
+    const double nflank = sumMass(pep.substr(0, pos)) + ox;
+    const double cflank = sumMass(pep.substr(pos + 4));
+    auto placed = [&](const Reconciliation& x) {
+      return x.peptide == pep && x.pos == pos && !x.reversed && !x.nterm_match;
+    };
+    bool unique = false, unlocalized = false, tied = false;
+    for (const auto& x : r.reconcile(tag, nflank, cflank, &spec, 2))
+      if (placed(x))
+        unique = x.loc_pos == static_cast<int>(site) && x.loc_ties == 1 &&
+                 x.loc_site == 9 + site + 1;  // "MSTVWYAAR" precedes the peptide
+    for (const auto& x : r.reconcile(tag, nflank, cflank))
+      if (placed(x)) unlocalized = x.loc_pos < 0;
+    const MSSpectrum empty;
+    for (const auto& x : r.reconcile(tag, nflank, cflank, &empty, 2))
+      if (placed(x)) tied = x.loc_pos == 0 && x.loc_score == 0 && x.loc_ties == 4;
+    check(unique, "an N-side +15.995 gap localizes uniquely to the M by its fragments");
+    check(unlocalized, "without a spectrum nothing is localized");
+    check(tied, "with no fragment evidence every region residue ties, the first reported");
   }
 
   if (failures == 0) std::cout << "tagrecon_test: all checks passed\n";
