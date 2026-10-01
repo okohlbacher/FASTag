@@ -401,7 +401,7 @@
       "name": "stream",
       "type": "bool",
       "default": "false",
-      "description": "Resident single-spectrum mode: spectrum blocks on stdin, TSV rows + '#end' sentinels on stdout. Core tagging only (refuses -fasta/-species/-recon_out/-out_spectra/-entrapment_fasta); parameter changes need a restart",
+      "description": "Resident single-spectrum mode: spectrum blocks on stdin, TSV rows + '#end' sentinels on stdout. Core tagging only (refuses -fasta/-species/-recon_out/-out_spectra/-entrapment_fasta/-usi_collection); parameter changes need a restart",
       "required": false,
       "toppAdvanced": false
     },

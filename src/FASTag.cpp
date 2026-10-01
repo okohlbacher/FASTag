@@ -332,7 +332,7 @@ protected:
                   "Resident single-spectrum mode: spectrum blocks on stdin, TSV "
                   "rows + '#end' sentinels on stdout. Core tagging only "
                   "(refuses -fasta/-species/-recon_out/-out_spectra/"
-                  "-entrapment_fasta); parameter changes need a restart");
+                  "-entrapment_fasta/-usi_collection); parameter changes need a restart");
 
     registerFlag_("diversity",
                   "Diversify which tags occupy the -max_tags slots on chimeric "
