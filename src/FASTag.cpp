@@ -813,6 +813,17 @@ protected:
                           "placements as identifications)." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
+    // TOPPBase lets an extension OpenMS does not know (ids.mzIdentML) through.
+    if (recon_ids_on)
+    {
+      const FileTypes::Type t = FileHandler::getTypeByFileName(recon_id_out);
+      if (t != FileTypes::IDXML && t != FileTypes::MZIDENTML && t != FileTypes::MZTAB)
+      {
+        OPENMS_LOG_ERROR << "-recon_id_out '" << recon_id_out << "': the extension picks the "
+                            "format; use .idXML, .mzid or .mzTab." << std::endl;
+        return ILLEGAL_PARAMETERS;
+      }
+    }
     // -usi_collection: "mzspec:<collection>:<run>:" once; empty = no usi column.
     std::string usi_prefix;
     if (const String coll = getStringOption_("usi_collection"); !coll.empty())
