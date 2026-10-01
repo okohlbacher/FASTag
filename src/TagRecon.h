@@ -96,6 +96,12 @@ namespace FASTag
     /// "?" are ever reported.
     void setModCandidates(std::vector<ModCandidate> mods) { mods_ = std::move(mods); }
 
+    /// Fixed peptide-terminal modification masses (e.g. a TMT/iTRAQ N-term
+    /// label). The spectrum flanks carry them, the index prefixes do not, so a
+    /// gap on that side includes them; localization puts them on every ion of
+    /// that terminus and places only the rest. Set before reconcile().
+    void setFixedTermMods(double nterm, double cterm) { fixed_n_ = nterm; fixed_c_ = cterm; }
+
   private:
     double tolAt(double m) const { return tol_ppm_ ? m * frag_tol_ * 1e-6 : frag_tol_; }
     void tryPlace(const ProteomeIndex::TagOcc& occ, const ProteomeIndex::Window& w,
@@ -119,6 +125,7 @@ namespace FASTag
     int    mc_ = 0;       ///< missed cleavages for window enumeration
     double residue_masses_[128] = {0};  ///< by ASCII code, unmodified
     std::vector<ModCandidate> mods_;    ///< candidate variable mods for stage B
+    double fixed_n_ = 0, fixed_c_ = 0;  ///< fixed peptide N-/C-terminal mod masses
     const ProteomeIndex* idx_ = nullptr;    ///< the index queries run against
   };
 }

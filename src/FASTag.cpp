@@ -564,7 +564,10 @@ protected:
   /// Resolve OpenMS/UniMod modification names to FASTag::ModSpec via
   /// ModificationsDB. Terminal mods are skipped with a note -- they are absorbed
   /// into the reported flanking masses, not the internal residue alphabet.
-  void resolveMods_(const StringList& names, bool variable, std::vector<FASTag::ModSpec>& out)
+  /// Peptide-terminal ones on any residue are summed into @p term_n / @p term_c
+  /// when given (the -recon_localize fragment ladder needs them).
+  void resolveMods_(const StringList& names, bool variable, std::vector<FASTag::ModSpec>& out,
+                    double* term_n = nullptr, double* term_c = nullptr)
   {
     // Fetched on the first name, not up front: building the database parses
     // all of UniMod, 0.04 s of serial start-up that a run naming no
@@ -587,6 +590,13 @@ protected:
         OPENMS_LOG_INFO << "Modification '" << nm << "' is terminal; it is absorbed "
                            "into the reported flanking masses and not annotated "
                            "per-residue." << std::endl;
+        if (term_n && mod->getOrigin() == 'X')
+        {
+          if (mod->getTermSpecificity() == ResidueModification::N_TERM)
+            *term_n += mod->getDiffMonoMass();
+          else if (mod->getTermSpecificity() == ResidueModification::C_TERM)
+            *term_c += mod->getDiffMonoMass();
+        }
         continue;
       }
       const char origin = mod->getOrigin();
@@ -730,7 +740,8 @@ protected:
     p.per_residue_conf = getFlag_("res_conf");
     p.max_evalue = getDoubleOption_("max_evalue");
     p.gap_penalty = getDoubleOption_("gap_penalty");
-    resolveMods_(getStringList_("fixed_modifications"), false, p.mods);
+    double fixed_term_n = 0, fixed_term_c = 0;
+    resolveMods_(getStringList_("fixed_modifications"), false, p.mods, &fixed_term_n, &fixed_term_c);
     resolveMods_(getStringList_("variable_modifications"), true, p.mods);
     if (!p.mods.empty())
     {
@@ -815,6 +826,7 @@ protected:
       for (const auto& m : p.mods)
         if (m.variable) cands.push_back({m.name, m.delta, std::string(1, m.residue)});
       recon.setModCandidates(std::move(cands));
+      recon.setFixedTermMods(fixed_term_n, fixed_term_c);
       OPENMS_LOG_INFO << "Recon index: " << pindex.proteinCount() << " proteins, "
                       << pindex.residueCount() << " residues, "
                       << pindex.collapseRuleCount() << " isobaric rules; min tag length "

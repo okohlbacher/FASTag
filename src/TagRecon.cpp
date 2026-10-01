@@ -106,12 +106,28 @@ namespace FASTag
     // an arbitrary-delta modification is registered in the process-global
     // ModificationsDB once per distinct value, i.e. once per reconciled delta.
     //
+    // A fixed terminal mod (TMT/iTRAQ N-term label) is in the spectrum's flank
+    // but not in the prefixes, so a gap on its side includes it: it rides on
+    // every ion from that terminus and only the rest of the gap is the site's.
+    // On the matched side the flank check already absorbed it. A gap that is
+    // the label alone (the rest within the flank tolerance) is scored whole,
+    // which places it on the terminal residue it sits on.
+    //
     // ponytail: variable mods INSIDE the tag are not on the ladder. Ions
     // spanning such a residue miss for every site alike -- lost evidence (more
     // ties), never a different site; put them on the ladder if that matters.
+    // Residue-specific and protein-terminal fixed mods are not on it either: a
+    // gap carrying one ties its site with every residue nearer that terminus.
     static const double WATER = EmpiricalFormula("H2O").getMonoWeight();
     const int L = static_cast<int>(w.end - w.start);
-    const double d = r.delta_mass;
+    const double label = r.nterm_match ? fixed_c_ : fixed_n_;
+    const double flank = idx_->massBetween(w.start + static_cast<uint32_t>(r.region_lo),
+                                           w.start + static_cast<uint32_t>(r.region_hi) + 1);
+    const bool rest = std::fabs(r.delta_mass - label) >
+                      tolAt(std::max(flank, flank + r.delta_mass));
+    const double tn = rest && !r.nterm_match ? label : 0.0;
+    const double tc = rest && r.nterm_match ? label : 0.0;
+    const double d = r.delta_mass - tn - tc;
     auto hits = [&](double neutral) {
       int n = 0;
       for (int z = 1; z <= frag_charges; ++z)
@@ -127,8 +143,8 @@ namespace FASTag
     {
       const double b = idx_->massBetween(w.start, w.start + i);
       const double y = idx_->massBetween(w.end - i, w.end) + WATER;
-      b0[i] = hits(b); b1[i] = hits(b + d);
-      y0[i] = hits(y); y1[i] = hits(y + d);
+      b0[i] = hits(b + tn); b1[i] = hits(b + tn + d);
+      y0[i] = hits(y + tc); y1[i] = hits(y + tc + d);
     }
     int best = -1;
     for (int j = r.region_lo; j <= r.region_hi; ++j)
