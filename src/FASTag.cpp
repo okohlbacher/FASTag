@@ -2417,6 +2417,12 @@ protected:
         // OpenMS's reader refuses a file without one); idXML and mzTab may be empty.
         if (recon_ids.empty() && FileHandler::getTypeByFileName(recon_id_out) == FileTypes::MZIDENTML)
         {
+          // No file, so none from an earlier run may stand in for this one.
+          if (!File::remove(recon_id_out))
+          {
+            OPENMS_LOG_ERROR << "Cannot remove the earlier " << recon_id_out << "." << std::endl;
+            return CANNOT_WRITE_OUTPUT_FILE;
+          }
           OPENMS_LOG_WARN << "Recon identifications: no placements, and mzIdentML cannot hold an "
                              "empty result; " << recon_id_out << " not written." << std::endl;
         }
