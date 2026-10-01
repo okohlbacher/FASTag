@@ -310,8 +310,9 @@ namespace FASTag
 
   uint32_t ProteomeIndex::proteinOffset(uint32_t pos) const
   {
-    const auto it = std::upper_bound(starts_.begin(), starts_.end(), pos);
-    return it == starts_.begin() ? pos : pos - *(it - 1);
+    const size_t i = static_cast<size_t>(
+        std::upper_bound(starts_.begin(), starts_.end(), pos) - starts_.begin());
+    return i > 0 ? pos - starts_[i - 1] : pos;
   }
 
   int ProteomeIndex::autoMinLen() const { return autoMinFilterLen(residues_, true); }

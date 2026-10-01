@@ -270,12 +270,14 @@ saying so, rather than reporting a clean run over an empty file.
 | `-variable_modifications <mods>` | none | Add a modified alternative, written inline as `X[Name]`, e.g. `'Phospho (S)'` |
 | `-proforma` | off | Append a ProForma 2.0 column for each tag (see Output) |
 | `-res_conf` | off | Append per-residue confidences 0..100, N→C, space-separated (see Assembly export) |
+| `-usi_collection <id>` | none | Append a `usi` column naming each tag's spectrum as a Universal Spectrum Identifier in this collection (`PXDnnnnnn`, …, or `USI000000`; see Output) |
 | `-diversity` | off | Under `-max_tags`, demote near-duplicate re-reads of an already-kept tag's peak set behind non-duplicates, then backfill. Reorders which tags occupy the capped slots; never changes output size or rank 1 (see Tag diversity) |
 | `-recon_out <file>` | none | Reconcile reported tags against a protein database: one row per placement with protein, peptide, position, flank agreement, localized mass gap and its interpretation (see Reconciliation) |
 | `-recon_fasta <file>` | `-fasta` | Database for `-recon_out`; independent of the membership filter, so a proteome-scale reconciliation never forces the filter's per-length index build |
 | `-recon_missed_cleavages <n>` | 1 | Missed tryptic cleavages in reconciliation windows |
 | `-recon_min_length <n>` | 0 | Shortest tag worth reconciling; 0 derives the chance-match floor from database size |
 | `-recon_localize` | off | Localize each reconciliation's mass gap to one residue of its region by the b/y fragments it shifts; appends `loc_site` (residue + 1-based protein position, the first on a tie), `loc_score` (b/y ion/charge matches) and `loc_ties` (sites sharing that score; 1 = unique) to `-recon_out` |
+| `-recon_id_out <file>` | none | The `-recon_out` placements as identifications: idXML, mzid or mzTab by extension (see Reconciliation). NOT FDR-controlled |
 | `-delta_out <file>` | none | Aggregated mass-shift histogram over reconciliations (one best placement per spectrum). Region-level candidates, NOT localized identifications, NOT FDR-controlled |
 | `-entrapment_fasta <file>` | none | Entrapment database (foreign species) calibrating a `q_db` column: the estimated false-match rate of the `-fasta` filter at each E-value (see q_db). Requires `-fasta` |
 | `-glyco` | off | Flag oxonium-bearing MS2 spectra to `<out>.glyco.tsv` (see Glyco flag) |
@@ -331,6 +333,15 @@ modifications as a global prefix (`<[Carbamidomethyl]@C>`), and the I/L residue
 as `J` because FASTag folds I onto L and cannot tell them apart. Off by default;
 the TSV schema is unchanged unless asked for.
 
+**USI.** `-usi_collection <id>` appends a `usi` column,
+`mzspec:<id>:<run>:<indexType>:<indexNumber>`
+([HUPO-PSI USI 1.0](https://github.com/HUPO-PSI/usi)), with `<run>` the input
+file name without its extension. `<id>` is one of the identifiers USI permits
+(`PXDnnnnnn`, `MSVnnnnnnnnn`, `RPXDnnnnnn`, `RMSVnnnnnnnnn`, `PXLnnnnnn`), or
+`USI000000` until the dataset has one. The spectrum is named by `scan:<n>` for
+Thermo and scan-number IDs, `nativeId:<a,b,…>` for the other vendor formats,
+and otherwise `index:<n>`, its 0-based position in the input.
+
 ## Reconciliation and mass shifts
 
 `-recon_out` places every reported tag onto tryptic windows of a protein
@@ -342,6 +353,18 @@ to the membership filter). Each row carries the protein, the
 peptide window in its original database spelling, the position, which flank
 matched, and — when exactly one flank disagrees — the localized mass gap with
 a best-effort interpretation (`mod:Name@X`, `sub:X->Y`, or `?`).
+
+`-recon_id_out` writes the same placements through OpenMS's idXML, mzIdentML
+or mzTab writer (by extension), so identification tooling can read them. A
+hit is one placement: the unmodified database window (fixed residue
+modifications only; a terminal one stays in the mass gap) with every protein
+and position it occurs at (rows differing only in protein are one hit), the
+spectrum's native ID, precursor m/z and charge, and the tag's E-value as
+score (lower is better). The mass gap and the other row fields travel as
+metadata, never as a localized modification. The run names FASTag as search
+engine and is marked `FDR_controlled = false`. An mzid needs at least one
+placement; without any it is not written, and a file already at that path is
+removed.
 
 `-delta_out` aggregates those gaps into a histogram, counting each spectrum
 once (its best tag's smallest-|delta| placement) so fifty correlated tags
@@ -382,8 +405,8 @@ input yields `#error` and a resync, never an exit. All fixed costs are paid
 once; measured steady state on real Astral spectra is **0.3–0.6 ms mean,
 p99 <= 1.6 ms** per spectrum even with extension and gaps. Rows are
 byte-identical to file mode. Core tagging only: `-fasta`, `-species`,
-`-recon_out`, `-out_spectra` and `-entrapment_fasta` are refused; parameter
-changes need a restart.
+`-recon_out`, `-out_spectra`, `-entrapment_fasta` and `-usi_collection` are
+refused; parameter changes need a restart.
 
 ## Glyco flag
 

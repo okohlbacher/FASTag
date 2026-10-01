@@ -67,8 +67,8 @@ int main()
     bool exact = false;
     for (const auto& x : res)
       if (x.peptide == pep && x.pos == pos && x.nterm_match && x.cterm_match &&
-          std::fabs(x.delta_mass) < 1e-6) exact = true;
-    check(exact, "exact placement of an internal tag reconciles with delta 0");
+          std::fabs(x.delta_mass) < 1e-6 && x.start == 9) exact = true;  // after MSTVWYAAR
+    check(exact, "exact placement of an internal tag reconciles with delta 0, at its protein offset");
   }
 
   // --- Modification gap on the C-side: +79.96633 (phospho) ---

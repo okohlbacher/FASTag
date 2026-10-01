@@ -79,7 +79,9 @@ namespace FASTag
 
     /// Accession of the protein covering text position @p pos.
     const std::string& proteinAt(uint32_t pos) const;
-    /// 0-based residue position of text position @p pos within that protein.
+    /// 0-based residue position of text position @p pos in that protein.
+    /// ponytail: counts the letters the index keeps, so a non-letter inside a
+    /// database sequence (a mid-protein '*') shifts the positions after it.
     uint32_t proteinOffset(uint32_t pos) const;
 
     /// Original (unfolded, as-in-database) spelling of text [from, to).
