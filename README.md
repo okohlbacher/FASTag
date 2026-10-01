@@ -269,6 +269,7 @@ saying so, rather than reporting a clean run over an empty file.
 | `-variable_modifications <mods>` | none | Add a modified alternative, written inline as `X[Name]`, e.g. `'Phospho (S)'` |
 | `-proforma` | off | Append a ProForma 2.0 column for each tag (see Output) |
 | `-res_conf` | off | Append per-residue confidences 0..100, N→C, space-separated (see Assembly export) |
+| `-usi_collection <id>` | none | Append a `usi` column naming each tag's spectrum as a Universal Spectrum Identifier in this collection (`PXDnnnnnn`, …, or `USI000000`; see Output) |
 | `-diversity` | off | Under `-max_tags`, demote near-duplicate re-reads of an already-kept tag's peak set behind non-duplicates, then backfill. Reorders which tags occupy the capped slots; never changes output size or rank 1 (see Tag diversity) |
 | `-recon_out <file>` | none | Reconcile reported tags against a protein database: one row per placement with protein, peptide, position, flank agreement, localized mass gap and its interpretation (see Reconciliation) |
 | `-recon_fasta <file>` | `-fasta` | Database for `-recon_out`; independent of the membership filter, so a proteome-scale reconciliation never forces the filter's per-length index build |
@@ -329,6 +330,15 @@ modifications as a global prefix (`<[Carbamidomethyl]@C>`), and the I/L residue
 as `J` because FASTag folds I onto L and cannot tell them apart. Off by default;
 the TSV schema is unchanged unless asked for.
 
+**USI.** `-usi_collection <id>` appends a `usi` column,
+`mzspec:<id>:<run>:<indexType>:<indexNumber>`
+([HUPO-PSI USI 1.0](https://github.com/HUPO-PSI/usi)), with `<run>` the input
+file name without its extension. `<id>` is one of the identifiers USI permits
+(`PXDnnnnnn`, `MSVnnnnnnnnn`, `RPXDnnnnnn`, `RMSVnnnnnnnnn`, `PXLnnnnnn`), or
+`USI000000` until the dataset has one. The spectrum is named by `scan:<n>` for
+Thermo and scan-number IDs, `nativeId:<a,b,…>` for the other vendor formats,
+and otherwise `index:<n>`, its 0-based position in the input.
+
 ## Reconciliation and mass shifts
 
 `-recon_out` places every reported tag onto tryptic windows of a protein
@@ -379,8 +389,8 @@ input yields `#error` and a resync, never an exit. All fixed costs are paid
 once; measured steady state on real Astral spectra is **0.3–0.6 ms mean,
 p99 <= 1.6 ms** per spectrum even with extension and gaps. Rows are
 byte-identical to file mode. Core tagging only: `-fasta`, `-species`,
-`-recon_out`, `-out_spectra` and `-entrapment_fasta` are refused; parameter
-changes need a restart.
+`-recon_out`, `-out_spectra`, `-entrapment_fasta` and `-usi_collection` are
+refused; parameter changes need a restart.
 
 ## Glyco flag
 

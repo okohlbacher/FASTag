@@ -31,6 +31,7 @@
 #include "TaxDeconv.h"
 #include "TaxIndex.h"
 #include "TaxStats.h"
+#include "Usi.h"
 #ifdef FASTAG_HAVE_MZPEAK_LIB
 #include "OnDiscMzPeakExperiment.h"
 #endif
@@ -337,6 +338,14 @@ protected:
                   "(Stitch/ALPS via tools/tags_to_denovo.py) read as local "
                   "confidence");
 
+    registerStringOption_("usi_collection", "<id>", "",
+                          "Append a usi column: each tag's spectrum as a HUPO-PSI "
+                          "Universal Spectrum Identifier, mzspec:<id>:<run>:scan:<n> (or "
+                          "the nativeId/index form USI 1.0 prescribes), where <run> is "
+                          "the input file name without extension and <id> the "
+                          "dataset's PXD/MSV/RPXD/RMSV/PXL identifier, or USI000000 "
+                          "until it has one", false);
+
     // Entrapment-calibrated q-values for the -fasta membership filter.
     // Adds a q_db column: the estimated FALSE-MATCH rate of accepting every
     // tag at or below a row's E-value -- i.e. how often a tag this good hits
@@ -502,7 +511,7 @@ protected:
   static void appendTagRow(std::string& buf, const FASTag::Tag& t,
                            const String& native_id, const char* hit,
                            bool want_proforma, const std::string& proforma_fixed,
-                           bool want_res_conf)
+                           bool want_res_conf, const std::string& usi = std::string())
   {
     using FASTag::appendNum;
     constexpr auto fixed = std::chars_format::fixed;
@@ -528,6 +537,7 @@ protected:
         appendNum(buf, static_cast<int>(t.res_conf[i]));
       }
     }
+    if (!usi.empty()) { buf += '\t'; buf += usi; }
     buf += '\n';
   }
 
@@ -695,7 +705,7 @@ protected:
       // indexed input, q_db needs the full curve, -species aggregates a run,
       // and the filter/recon paths are not per-spectrum-latency material.
       for (const char* opt : {"fasta", "entrapment_fasta", "recon_out", "species_out",
-                              "taxdb", "out_spectra", "delta_out"})
+                              "taxdb", "out_spectra", "delta_out", "usi_collection"})
         if (!getStringOption_(opt).empty())
         {
           OPENMS_LOG_ERROR << "-stream cannot be combined with -" << opt << "." << std::endl;
@@ -779,6 +789,33 @@ protected:
       OPENMS_LOG_ERROR << "-delta_out requires -recon_out (the histogram is "
                           "aggregated over reconciliations)." << std::endl;
       return ILLEGAL_PARAMETERS;
+    }
+    // -usi_collection: "mzspec:<collection>:<run>:" once; empty = no usi column.
+    std::string usi_prefix;
+    if (const String coll = getStringOption_("usi_collection"); !coll.empty())
+    {
+      if (!FASTag::isUsiCollection(coll))
+      {
+        OPENMS_LOG_ERROR << "-usi_collection '" << coll << "' is not a USI collection "
+                            "identifier: give the dataset's PXDnnnnnn (or MSVnnnnnnnnn, "
+                            "RPXDnnnnnn, RMSVnnnnnnnnn, PXLnnnnnn), or USI000000 while it "
+                            "has none." << std::endl;
+        return ILLEGAL_PARAMETERS;
+      }
+      // The input is .mzML or .mzpeak (refused otherwise below), so the last
+      // dot starts the extension. Not File::stemName: on a type OpenMS does
+      // not know (mzpeak) it cuts at the word "unknown" anywhere in the name.
+      const String file = File::basename(in);
+      const String run = file.substr(0, file.rfind('.'));
+      // USI 1.0 3.6.1: a run starting with '[' reads as a [subFolder] prefix.
+      if (run.empty() || run[0] == '[')
+      {
+        OPENMS_LOG_ERROR << "-usi_collection: the run name '" << run << "' (the input "
+                            "file name without extension) cannot be written into a USI: "
+                            "it is empty or starts with '['. Rename the input." << std::endl;
+        return ILLEGAL_PARAMETERS;
+      }
+      usi_prefix = "mzspec:" + coll + ":" + run + ":";
     }
     FASTag::ProteomeIndex pindex;
     FASTag::TagReconciler recon(p.frag_tol, p.tol_ppm, both_orientations);
@@ -1223,7 +1260,8 @@ protected:
     }
     const bool want_proforma = getFlag_("proforma");
     tsv << "spectrum\ttag\tlength\tcharge\tnterm_mass\tcterm_mass\textended\tgapped\tevalue\tmin_conf\tmean_conf\tfasta_hit"
-        << (want_proforma ? "\tproforma" : "") << (p.per_residue_conf ? "\tres_conf" : "") << "\n";
+        << (want_proforma ? "\tproforma" : "") << (p.per_residue_conf ? "\tres_conf" : "")
+        << (usi_prefix.empty() ? "" : "\tusi") << "\n";
 
     std::ofstream rtsv;
     if (recon_on)
@@ -1359,7 +1397,9 @@ protected:
       bool any_target = false;  ///< at least one non-entrapment reported tag
     };
 
-    auto tag_one = [&](const MSSpectrum& spec, size_t tid) -> SpecResult
+    // @p index is the spectrum's position in the input, for a USI that cannot
+    // name a scan.
+    auto tag_one = [&](const MSSpectrum& spec, size_t tid, size_t index) -> SpecResult
     {
       SpecResult res;
       std::string& buf = res.buf;
@@ -1376,6 +1416,8 @@ protected:
       // append path just grows past it for the rare long one.
       buf.reserve(tags.size() * 80);
       bool delta_done = false;  // one -delta_out sample per spectrum
+      const std::string usi = usi_prefix.empty() || tags.empty()
+          ? std::string() : usi_prefix + FASTag::usiIndex(spec.getNativeID(), index);
 
       for (const auto& t : tags)
       {
@@ -1412,7 +1454,7 @@ protected:
         ++pt.rep;
 
         appendTagRow(buf, t, spec.getNativeID(), hit, want_proforma, proforma_fixed,
-                     p.per_residue_conf);
+                     p.per_residue_conf, usi);
 
         if (recon_on && !row_entrap)  // known-false rows must not place or bin
         {
@@ -1902,7 +1944,7 @@ protected:
         if (!loaded_here && reader) { loaded = reader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
         const MSSpectrum& spec = loaded_here ? loaded : exp[static_cast<Size>(i)];
         const Clock::time_point tb = timing ? Clock::now() : ta;
-        record(blk, idx, tag_one(spec, tid), spec);
+        record(blk, idx, tag_one(spec, tid, static_cast<size_t>(i)), spec);
         tick();
         if (timing)
         {
