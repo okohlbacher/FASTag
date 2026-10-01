@@ -230,6 +230,32 @@ int main()
     std::cout << "7. autoMinLen = " << idx.autoMinLen() << " for 100k residues\n";
   }
 
+  // --- 8. parallel suffix array == one serial sort ---
+  {
+    // Repeats longer than SORT_DEPTH (duplicate proteins, homopolymer runs)
+    // exercise the tie-by-position tail; '#' both separates and sits inside.
+    std::string text;
+    std::vector<std::string> prot;
+    for (int p = 0; p < 400; ++p)
+    {
+      std::string s;
+      const int len = 50 + static_cast<int>(rng() % 700);
+      for (int i = 0; i < len; ++i) s += (rng() % 50 == 0) ? '#' : "ACDEFGHKLMNPQRSTVWY"[rng() % 19];
+      prot.push_back(s);
+    }
+    for (int p = 0; p < 400; ++p) prot.push_back(prot[rng() % prot.size()]);
+    prot.push_back(std::string(300, 'A'));
+    prot.push_back(std::string(150, 'L') + "K" + std::string(150, 'L'));
+    for (const auto& s : prot) text += s + "#";
+    std::vector<uint32_t> serial(text.size());
+    for (size_t i = 0; i < serial.size(); ++i) serial[i] = static_cast<uint32_t>(i);
+    std::sort(serial.begin(), serial.end(), [&text](uint32_t a, uint32_t b) {
+      return ProteomeIndex::suffixLess(text.data(), text.size(), a, b);
+    });
+    check(ProteomeIndex::suffixArray(text) == serial, "parallel suffix array == serial sort");
+    std::cout << "8. parallel suffix array == serial over " << text.size() << " chars\n";
+  }
+
   if (failures == 0) std::cout << "proteome_index_test: all checks passed\n";
   return failures == 0 ? 0 : 1;
 }

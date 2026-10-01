@@ -18,7 +18,9 @@
 
 #include <OpenMS/FORMAT/FASTAFile.h>
 
+#include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -94,6 +96,26 @@ namespace FASTag
 
     /// autoMinFilterLen() over this text, both orientations.
     int autoMinLen() const;
+
+    /// Suffix order: the first SORT_DEPTH chars, ties broken by position -- a
+    /// strict total order, so every correct sort yields the same array.
+    /// SORT_DEPTH must exceed the longest pattern locate can ask about (a
+    /// 25-residue tag collapse-respelled pair by pair is 50 database chars);
+    /// past it the order is by position, which is fine BECAUSE locate refines
+    /// character by character and never compares past the pattern.
+    static constexpr size_t SORT_DEPTH = 64;
+    static bool suffixLess(const char* t, size_t n, uint32_t a, uint32_t b)
+    {
+      const size_t la = n - a, lb = n - b;
+      const size_t l = std::min(std::min(la, lb), SORT_DEPTH);
+      const int c = std::memcmp(t + a, t + b, l);
+      if (c) return c < 0;
+      if (l == SORT_DEPTH) return a < b;
+      return la < lb;
+    }
+    /// Suffix array of @p text ('#' and 'A'..'Z' only) under suffixLess,
+    /// sorted in parallel over three-character buckets.
+    static std::vector<uint32_t> suffixArray(const std::string& text);
 
   private:
     struct Range { uint32_t lo, hi; };  ///< half-open SA interval

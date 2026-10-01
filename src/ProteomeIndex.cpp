@@ -19,13 +19,6 @@ namespace FASTag
 {
   namespace
   {
-    // Sort depth for the suffix comparator. Must exceed the longest pattern
-    // locate can ask about: a 25-residue tag whose every residue is collapse-
-    // respelled as a pair is 50 database chars. Beyond this depth suffix order
-    // is arbitrary (tie on position), which is fine BECAUSE locate refines
-    // character-by-character and never compares past the pattern.
-    constexpr size_t SORT_DEPTH = 64;
-
     // Interval-refinement steps per locateTag call. Generous: real tags spend
     // one step per character plus one per viable collapse branch, and dead
     // branches die on their first absent character. Only a pathological rule
@@ -113,19 +106,70 @@ namespace FASTag
       ++seg;
     }
 
-    // The suffix array. Comparator capped at SORT_DEPTH; ties beyond it order
-    // by position for determinism.
-    sa_.resize(n);
-    for (size_t s = 0; s < n; ++s) sa_[s] = static_cast<uint32_t>(s);
-    const char* t = text_.data();
-    std::sort(sa_.begin(), sa_.end(), [t, n](uint32_t a, uint32_t b) {
-      const size_t la = n - a, lb = n - b;
-      const size_t l = std::min(std::min(la, lb), SORT_DEPTH);
-      const int c = std::memcmp(t + a, t + b, l);
-      if (c) return c < 0;
-      if (l == SORT_DEPTH) return a < b;
-      return la < lb;
+    sa_ = suffixArray(text_);
+  }
+
+  std::vector<uint32_t> ProteomeIndex::suffixArray(const std::string& text)
+  {
+    // Counting-sort the suffixes into buckets by their first three characters
+    // -- suffixLess's own leading key -- then sort each bucket on its own.
+    // Bucket order is suffix order, so the concatenation is the array one
+    // serial sort of the whole text produces (suffixLess is a total order),
+    // whatever the thread count. Three characters, not two: a proteome's
+    // biggest two-character bucket (LL) holds ~2.5% of all suffixes, which
+    // alone would hold the sort to ~40x. Rank keeps the order: past the text
+    // end (a shorter suffix) < '#' < 'A' .. 'Z'.
+    constexpr size_t RANKS = 28, BUCKETS = RANKS * RANKS * RANKS, CHUNKS = 64;
+    const char* t = text.data();
+    const size_t n = text.size();
+    const auto rank = [t, n](size_t p) -> size_t {
+      return p >= n ? 0 : t[p] == RESIDUE_AMBIG ? 1 : static_cast<size_t>(t[p] - 'A') + 2;
+    };
+    const auto key = [&](size_t s) { return (rank(s) * RANKS + rank(s + 1)) * RANKS + rank(s + 2); };
+    const auto chunkStart = [n](long long c) { return n * static_cast<size_t>(c) / CHUNKS; };
+    // A small text sorts faster than a thread team wakes up.
+    const bool par = n >= (size_t{1} << 16);
+
+    // Per-chunk bucket counts, then exclusive offsets bucket-major, chunk-minor,
+    // so each chunk scatters its positions into a slot range of its own.
+    std::vector<uint32_t> at(CHUNKS * BUCKETS, 0);
+#pragma omp parallel for schedule(static) if(par)
+    for (long long c = 0; c < static_cast<long long>(CHUNKS); ++c)
+      for (size_t s = chunkStart(c); s < chunkStart(c + 1); ++s) ++at[c * BUCKETS + key(s)];
+    std::vector<uint32_t> lo(BUCKETS + 1);
+    uint32_t sum = 0;
+    for (size_t b = 0; b < BUCKETS; ++b)
+    {
+      lo[b] = sum;
+      for (size_t c = 0; c < CHUNKS; ++c)
+      {
+        const uint32_t k = at[c * BUCKETS + b];
+        at[c * BUCKETS + b] = sum;
+        sum += k;
+      }
+    }
+    lo[BUCKETS] = sum;
+
+    std::vector<uint32_t> sa(n);
+#pragma omp parallel for schedule(static) if(par)
+    for (long long c = 0; c < static_cast<long long>(CHUNKS); ++c)
+      for (size_t s = chunkStart(c); s < chunkStart(c + 1); ++s)
+        sa[at[c * BUCKETS + key(s)]++] = static_cast<uint32_t>(s);
+
+    // Biggest buckets first, so the last one to start is a small one.
+    std::vector<uint32_t> order(BUCKETS);
+    for (size_t b = 0; b < BUCKETS; ++b) order[b] = static_cast<uint32_t>(b);
+    std::sort(order.begin(), order.end(), [&lo](uint32_t x, uint32_t y) {
+      return lo[x + 1] - lo[x] > lo[y + 1] - lo[y];
     });
+#pragma omp parallel for schedule(dynamic, 1) if(par)
+    for (long long i = 0; i < static_cast<long long>(BUCKETS); ++i)
+    {
+      const uint32_t b = order[i];
+      std::sort(sa.begin() + lo[b], sa.begin() + lo[b + 1],
+                [t, n](uint32_t x, uint32_t y) { return suffixLess(t, n, x, y); });
+    }
+    return sa;
   }
 
   ProteomeIndex::Range ProteomeIndex::refine(Range r, uint32_t depth, char c) const
