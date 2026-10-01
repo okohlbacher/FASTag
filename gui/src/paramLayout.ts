@@ -139,7 +139,7 @@ export const SECTIONS: Section[] = [
     blurb: 'Place tags in database peptides and report the mass left over.',
     open: false,
     master: 'recon_out',
-    params: ['recon_out', 'recon_fasta', 'recon_missed_cleavages', 'recon_min_length', 'delta_out']
+    params: ['recon_out', 'recon_fasta', 'recon_missed_cleavages', 'recon_min_length', 'delta_out', 'recon_id_out']
   },
   {
     title: 'Modifications',
@@ -151,7 +151,7 @@ export const SECTIONS: Section[] = [
     title: 'Output',
     blurb: 'Extra columns and extra files beside the tag list.',
     open: false,
-    params: ['proforma', 'res_conf', 'out_spectra']
+    params: ['proforma', 'res_conf', 'usi_collection', 'out_spectra']
   },
   {
     title: 'Performance',
@@ -205,7 +205,8 @@ export const DEPENDS: Record<string, Dependency[]> = {
   recon_fasta: [{ on: 'recon_out', note: 'reconciliation only runs when it has an output file' }],
   recon_missed_cleavages: [{ on: 'recon_out', note: 'reconciliation only runs when it has an output file' }],
   recon_min_length: [{ on: 'recon_out', note: 'reconciliation only runs when it has an output file' }],
-  delta_out: [{ on: 'recon_out', note: 'the histogram aggregates the reconciliations' }]
+  delta_out: [{ on: 'recon_out', note: 'the histogram aggregates the reconciliations' }],
+  recon_id_out: [{ on: 'recon_out', note: 'it writes the reconciliations as identifications' }]
   // subsample_seed depends on EITHER subsampling knob; inertBecause handles it.
 }
 

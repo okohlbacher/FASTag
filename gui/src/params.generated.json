@@ -279,6 +279,14 @@
       "toppAdvanced": false
     },
     {
+      "name": "recon_id_out",
+      "type": "output-file",
+      "default": "",
+      "description": "The -recon_out placements as identifications (requires -recon_out), as idXML, mzid or mzTab by extension: one hit per placement with its proteins, the database peptide carrying only the fixed residue modifications, scored by the tag's E-value (lower is better), the mass gap as metadata. NOT FDR-controlled",
+      "required": false,
+      "toppAdvanced": false
+    },
+    {
       "name": "recon_min_length",
       "type": "int",
       "default": "0",
@@ -463,6 +471,14 @@
       "type": "int",
       "default": "1",
       "description": "Sets the number of threads allowed to be used by the TOPP tool (0 = all available cores)",
+      "required": false,
+      "toppAdvanced": false
+    },
+    {
+      "name": "usi_collection",
+      "type": "string",
+      "default": "",
+      "description": "Append a usi column: each tag's spectrum as a HUPO-PSI Universal Spectrum Identifier, mzspec:<id>:<run>:scan:<n> (or the nativeId/index form USI 1.0 prescribes), where <run> is the input file name without extension and <id> the dataset's PXD/MSV/RPXD/RMSV/PXL identifier, or USI000000 until it has one",
       "required": false,
       "toppAdvanced": false
     },
