@@ -275,6 +275,7 @@ saying so, rather than reporting a clean run over an empty file.
 | `-recon_fasta <file>` | `-fasta` | Database for `-recon_out`; independent of the membership filter, so a proteome-scale reconciliation never forces the filter's per-length index build |
 | `-recon_missed_cleavages <n>` | 1 | Missed tryptic cleavages in reconciliation windows |
 | `-recon_min_length <n>` | 0 | Shortest tag worth reconciling; 0 derives the chance-match floor from database size |
+| `-recon_id_out <file>` | none | The `-recon_out` placements as identifications: idXML, mzid or mzTab by extension (see Reconciliation). NOT FDR-controlled |
 | `-delta_out <file>` | none | Aggregated mass-shift histogram over reconciliations (one best placement per spectrum). Region-level candidates, NOT localized identifications, NOT FDR-controlled |
 | `-entrapment_fasta <file>` | none | Entrapment database (foreign species) calibrating a `q_db` column: the estimated false-match rate of the `-fasta` filter at each E-value (see q_db). Requires `-fasta` |
 | `-glyco` | off | Flag oxonium-bearing MS2 spectra to `<out>.glyco.tsv` (see Glyco flag) |
@@ -349,6 +350,16 @@ identically to the membership filter). Each row carries the protein, the
 peptide window in its original database spelling, the position, which flank
 matched, and — when exactly one flank disagrees — the localized mass gap with
 a best-effort interpretation (`mod:Name@X`, `sub:X->Y`, or `?`).
+
+`-recon_id_out` writes the same placements through OpenMS's idXML, mzIdentML
+or mzTab writer (by extension), so identification tooling can read them. A
+hit is one placement: the unmodified database window (fixed modifications
+only) with every protein and position it occurs at (rows differing only in
+protein are one hit), the spectrum's native ID, precursor m/z and charge, and
+the tag's E-value as score (lower is better). The mass gap and the other row
+fields travel as metadata, never as a localized modification. The run names
+FASTag as search engine and is marked `FDR_controlled = false`. An mzid needs
+at least one placement; without any it is not written.
 
 `-delta_out` aggregates those gaps into a histogram, counting each spectrum
 once (its best tag's smallest-|delta| placement) so fifty correlated tags

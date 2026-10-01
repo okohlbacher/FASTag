@@ -9,6 +9,8 @@
 #include <OpenMS/CONCEPT/VersionInfo.h>
 #include <OpenMS/APPLICATIONS/TOPPBase.h>
 #include <OpenMS/CHEMISTRY/ModificationsDB.h>
+#include <OpenMS/CHEMISTRY/ModifiedPeptideGenerator.h>
+#include <OpenMS/CHEMISTRY/ProteaseDB.h>
 #include <OpenMS/CHEMISTRY/ResidueModification.h>
 #include <OpenMS/CONCEPT/LogStream.h>
 #include <OpenMS/DATASTRUCTURES/ListUtils.h>
@@ -25,6 +27,7 @@
 #include "IndexedMzMLReader.h"
 #include "NumFormat.h"
 #include "Proforma.h"
+#include "ReconIds.h"
 #include "SpectrumSampler.h"
 #include "TagFDR.h"
 #include "TagRecon.h"
@@ -394,6 +397,13 @@ protected:
                         "interpretations. Region-level candidates, NOT localized "
                         "identifications and NOT FDR-controlled", false);
     setValidFormats_("delta_out", ListUtils::create<String>("tsv"));
+    registerOutputFile_("recon_id_out", "<file>", "",
+                        "The -recon_out placements as identifications (requires "
+                        "-recon_out), as idXML, mzid or mzTab by extension: one hit per "
+                        "placement with its proteins, the database peptide carrying only "
+                        "the fixed modifications, scored by the tag's E-value (lower is "
+                        "better), the mass gap as metadata. NOT FDR-controlled", false);
+    setValidFormats_("recon_id_out", ListUtils::create<String>("idXML,mzid,mzTab"));
 
     // Taxonomic / species detection: throw the tags at a prebuilt tag->taxon
     // index (buildtaxdb) and infer the taxa present by lowest-common-ancestor
@@ -705,7 +715,7 @@ protected:
       // indexed input, q_db needs the full curve, -species aggregates a run,
       // and the filter/recon paths are not per-spectrum-latency material.
       for (const char* opt : {"fasta", "entrapment_fasta", "recon_out", "species_out",
-                              "taxdb", "out_spectra", "delta_out", "usi_collection"})
+                              "taxdb", "out_spectra", "delta_out", "recon_id_out", "usi_collection"})
         if (!getStringOption_(opt).empty())
         {
           OPENMS_LOG_ERROR << "-stream cannot be combined with -" << opt << "." << std::endl;
@@ -790,6 +800,14 @@ protected:
                           "aggregated over reconciliations)." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
+    const String recon_id_out = getStringOption_("recon_id_out");
+    const bool recon_ids_on = !recon_id_out.empty();
+    if (recon_ids_on && !recon_on)
+    {
+      OPENMS_LOG_ERROR << "-recon_id_out requires -recon_out (it writes the same "
+                          "placements as identifications)." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
     // -usi_collection: "mzspec:<collection>:<run>:" once; empty = no usi column.
     std::string usi_prefix;
     if (const String coll = getStringOption_("usi_collection"); !coll.empty())
@@ -817,6 +835,10 @@ protected:
       }
       usi_prefix = "mzspec:" + coll + ":" + run + ":";
     }
+    // -recon_id_out: the fixed modifications its peptides carry and the search
+    // settings its run reports, filled with the reconciliation index below.
+    ModifiedPeptideGenerator::MapToResidueType id_fixed;
+    ProteinIdentification::SearchParameters id_params;
     FASTag::ProteomeIndex pindex;
     FASTag::TagReconciler recon(p.frag_tol, p.tol_ppm, both_orientations);
     if (recon_on)
@@ -839,6 +861,24 @@ protected:
       for (const auto& m : p.mods)
         if (m.variable) cands.push_back({m.name, m.delta, std::string(1, m.residue)});
       recon.setModCandidates(std::move(cands));
+      if (recon_ids_on)
+      {
+        // Names ModificationsDB knows; an unknown one was reported and ignored.
+        const auto known = [](const StringList& names) {
+          StringList out;
+          for (const String& n : names)
+            if (!n.empty() && ModificationsDB::getInstance()->has(n)) out.push_back(n);
+          return out;
+        };
+        id_params.db = rfasta;
+        id_params.fixed_modifications = known(getStringList_("fixed_modifications"));
+        id_params.variable_modifications = known(getStringList_("variable_modifications"));
+        id_params.missed_cleavages = static_cast<UInt>(getIntOption_("recon_missed_cleavages"));
+        id_params.fragment_mass_tolerance = p.frag_tol;
+        id_params.fragment_mass_tolerance_ppm = p.tol_ppm;
+        id_params.digestion_enzyme = *ProteaseDB::getInstance()->getEnzyme("Trypsin");  // ProteomeIndex's rule
+        id_fixed = ModifiedPeptideGenerator::getModifications(id_params.fixed_modifications);
+      }
       OPENMS_LOG_INFO << "Recon index: " << pindex.proteinCount() << " proteins, "
                       << pindex.residueCount() << " residues, "
                       << pindex.collapseRuleCount() << " isobaric rules; min tag length "
@@ -1341,6 +1381,7 @@ protected:
       size_t base = 0;                 ///< input index of slot 0
       std::vector<std::string> rows;
       std::vector<std::string> rrows;  ///< recon rows (recon_on only)
+      std::vector<std::vector<PeptideIdentification>> rids;  ///< (recon_ids_on only)
       std::vector<std::string> grows;  ///< glyco rows (glyco_on only)
       std::vector<std::vector<std::pair<double, bool>>> rmeta;  ///< (entrap_on only)
       std::vector<char> keep, keep_target;
@@ -1395,6 +1436,8 @@ protected:
       /// serialized %g evalue back off the TSV.
       std::vector<std::pair<double, bool>> meta;
       bool any_target = false;  ///< at least one non-entrapment reported tag
+      /// -recon_id_out: the spectrum's identification, when it placed anything.
+      std::vector<PeptideIdentification> ids;
     };
 
     // @p index is the spectrum's position in the input, for a USI that cannot
@@ -1418,6 +1461,7 @@ protected:
       bool delta_done = false;  // one -delta_out sample per spectrum
       const std::string usi = usi_prefix.empty() || tags.empty()
           ? std::string() : usi_prefix + FASTag::usiIndex(spec.getNativeID(), index);
+      std::vector<PeptideHit> id_hits;  // -recon_id_out
 
       for (const auto& t : tags)
       {
@@ -1483,6 +1527,7 @@ protected:
             res.rbuf += pl.delta_interp;
             res.rbuf += '\n';
           }
+          if (recon_ids_on) FASTag::addReconHits(id_hits, places, t.seq, t.evalue, prec.getCharge(), id_fixed);
           // The spectrum's -delta_out sample: this is the best-E-value tag
           // (tags arrive sorted best first) -- take its min-|delta| placement.
           if (!delta_out.empty() && !places.empty() && !delta_done)
@@ -1505,6 +1550,9 @@ protected:
           }
         }
       }
+      if (!id_hits.empty())
+        res.ids.push_back(FASTag::reconSpectrum(spec.getNativeID(), spec.getRT(), prec.getMZ(),
+                                                std::move(id_hits)));
       return res;
     };
 
@@ -1513,6 +1561,9 @@ protected:
     // vector in lockstep. ~17 bytes/row: the cost of a whole-run calibration
     // curve.
     std::vector<std::pair<double, bool>> row_meta;
+    // -recon_id_out, in input order: OpenMS's writers take the whole run, so
+    // ponytail: held until the end -- memory grows with the placements written.
+    PeptideIdentificationList recon_ids;
 
     // Record one spectrum's result at its BLOCK-LOCAL index. The index is the
     // caller's, so output order never depends on scheduling.
@@ -1545,6 +1596,7 @@ protected:
       if (r.buf.empty()) return;  // rbuf is only ever non-empty alongside buf
       b.rows[idx].swap(r.buf);
       if (recon_on) b.rrows[idx].swap(r.rbuf);
+      if (recon_ids_on) b.rids[idx].swap(r.ids);
       if (entrap_on) b.rmeta[idx].swap(r.meta);
       b.keep[idx] = 1;
       // A spectrum whose only reported tags are entrapment matches is
@@ -1562,6 +1614,7 @@ protected:
       {
         b.rows.resize(n_used);
         if (recon_on) b.rrows.resize(n_used);
+        if (recon_ids_on) b.rids.resize(n_used);
         if (glyco_on) b.grows.resize(n_used);
         if (entrap_on) b.rmeta.resize(n_used);
       }
@@ -1620,6 +1673,11 @@ protected:
         if (!b.keep[i]) continue;
         put_rows(tsv, tsv_pending, b.rows[i]);
         if (recon_on && !b.rrows[i].empty()) { put_rows(rtsv, rtsv_pending, b.rrows[i]); b.rrows[i].clear(); }
+        if (recon_ids_on)
+        {
+          for (PeptideIdentification& id : b.rids[i]) recon_ids.push_back(std::move(id));
+          b.rids[i].clear();
+        }
         if (entrap_on)
         {
           row_meta.insert(row_meta.end(), b.rmeta[i].begin(), b.rmeta[i].end());
@@ -2337,6 +2395,33 @@ protected:
         OPENMS_LOG_INFO << "Delta histogram: " << samples << " spectra sampled"
                         << (clamped ? String(", ") + clamped + " excluded (clamped flank)" : String(""))
                         << " -> " << delta_out << std::endl;
+      }
+
+      if (recon_ids_on)
+      {
+        size_t n_hits = 0;
+        for (const PeptideIdentification& id : recon_ids) n_hits += id.getHits().size();
+        // The mzIdentML schema requires at least one identification (and
+        // OpenMS's reader refuses a file without one); idXML and mzTab may be empty.
+        if (recon_ids.empty() && FileHandler::getTypeByFileName(recon_id_out) == FileTypes::MZIDENTML)
+        {
+          OPENMS_LOG_WARN << "Recon identifications: no placements, and mzIdentML cannot hold an "
+                             "empty result; " << recon_id_out << " not written." << std::endl;
+        }
+        else
+        {
+          try
+          {
+            FASTag::storeReconIds(recon_id_out, in, FASTAG_VERSION, id_params, recon_ids);
+          }
+          catch (const Exception::BaseException& e)
+          {
+            OPENMS_LOG_ERROR << "Failed writing " << recon_id_out << ": " << e.what() << std::endl;
+            return CANNOT_WRITE_OUTPUT_FILE;
+          }
+          OPENMS_LOG_INFO << "Recon identifications: " << n_hits << " hits on " << recon_ids.size()
+                          << " spectra, not FDR-controlled -> " << recon_id_out << std::endl;
+        }
       }
     }
 

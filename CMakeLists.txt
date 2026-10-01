@@ -89,7 +89,7 @@ else()
                   "not apply.")
 endif()
 
-add_library(fastag_core STATIC src/FASTagger.cpp src/AveragineDeisotoper.cpp src/FastaFilter.cpp src/ProteomeIndex.cpp src/TagRecon.cpp src/TaxDeconv.cpp src/TaxIndex.cpp src/TaxStats.cpp)
+add_library(fastag_core STATIC src/FASTagger.cpp src/AveragineDeisotoper.cpp src/FastaFilter.cpp src/ProteomeIndex.cpp src/ReconIds.cpp src/TagRecon.cpp src/TaxDeconv.cpp src/TaxIndex.cpp src/TaxStats.cpp)
 target_include_directories(fastag_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)

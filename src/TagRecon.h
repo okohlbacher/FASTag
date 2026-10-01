@@ -19,6 +19,7 @@ namespace FASTag
   {
     std::string protein;    ///< accession of the protein the peptide came from
     std::string peptide;    ///< the digested peptide (I/L as in the database)
+    size_t      start = 0;  ///< 0-based position of the peptide in its protein
     size_t      pos = 0;    ///< 0-based residue index where the tag starts in peptide
     bool        reversed = false;  ///< tag matched the peptide reading C->N (b-derived)
     /// Flank mass agreement. Both true = exact placement (no mass gap).

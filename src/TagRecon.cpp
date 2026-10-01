@@ -58,6 +58,7 @@ namespace FASTag
     Reconciliation r;
     r.protein = idx_->proteinAt(occ.pos);
     r.peptide = idx_->originalText(w.start, w.end);  // original DB spelling
+    r.start = idx_->proteinOffset(w.start);
     r.pos = pos;
     r.reversed = occ.reversed;
     r.nterm_match = n_ok;
