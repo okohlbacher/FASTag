@@ -353,13 +353,14 @@ a best-effort interpretation (`mod:Name@X`, `sub:X->Y`, or `?`).
 
 `-recon_id_out` writes the same placements through OpenMS's idXML, mzIdentML
 or mzTab writer (by extension), so identification tooling can read them. A
-hit is one placement: the unmodified database window (fixed modifications
-only) with every protein and position it occurs at (rows differing only in
-protein are one hit), the spectrum's native ID, precursor m/z and charge, and
-the tag's E-value as score (lower is better). The mass gap and the other row
-fields travel as metadata, never as a localized modification. The run names
-FASTag as search engine and is marked `FDR_controlled = false`. An mzid needs
-at least one placement; without any it is not written.
+hit is one placement: the unmodified database window (fixed residue
+modifications only; a terminal one stays in the mass gap) with every protein
+and position it occurs at (rows differing only in protein are one hit), the
+spectrum's native ID, precursor m/z and charge, and the tag's E-value as
+score (lower is better). The mass gap and the other row fields travel as
+metadata, never as a localized modification. The run names FASTag as search
+engine and is marked `FDR_controlled = false`. An mzid needs at least one
+placement; without any it is not written.
 
 `-delta_out` aggregates those gaps into a histogram, counting each spectrum
 once (its best tag's smallest-|delta| placement) so fifty correlated tags

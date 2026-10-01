@@ -2,9 +2,10 @@
 // idXML / mzIdentML / mzTab writers (-recon_id_out).
 //
 // A hit is one placement of one tag: the database window with nothing on it
-// but the run's FIXED modifications (they are search settings, and the flank
-// masses were computed with them), and the proteins the window occurs in as
-// its evidences -- -recon_out rows that differ only in protein are one hit.
+// but the run's fixed RESIDUE modifications (the window masses were computed
+// with them; a terminal one is not, so its mass stays in the gap), and the
+// proteins the window occurs in as its evidences -- -recon_out rows that
+// differ only in protein are one hit.
 // The mass gap a placement leaves stays metadata, because the flanks localise
 // it to a region, never to a residue. The score is the tag's E-value, lower is
 // better, and nothing here is FDR-controlled: the run says so in a CV-free
@@ -30,8 +31,8 @@ namespace FASTag
   /// @param tag     the tag as reported (inline variable mods included)
   /// @param charge  precursor charge; <= 0 becomes 2, the charge the tagger
   ///                assumed for that spectrum and so the one its flanks hold
-  /// @param fixed   the run's fixed modifications, from
-  ///                ModifiedPeptideGenerator::getModifications
+  /// @param fixed   the run's fixed residue modifications (never a terminal
+  ///                one), from ModifiedPeptideGenerator::getModifications
   void addReconHits(std::vector<OpenMS::PeptideHit>& hits, const std::vector<Reconciliation>& places,
                     const std::string& tag, double evalue, int charge,
                     const OpenMS::ModifiedPeptideGenerator::MapToResidueType& fixed);

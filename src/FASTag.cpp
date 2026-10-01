@@ -401,7 +401,7 @@ protected:
                         "The -recon_out placements as identifications (requires "
                         "-recon_out), as idXML, mzid or mzTab by extension: one hit per "
                         "placement with its proteins, the database peptide carrying only "
-                        "the fixed modifications, scored by the tag's E-value (lower is "
+                        "the fixed residue modifications, scored by the tag's E-value (lower is "
                         "better), the mass gap as metadata. NOT FDR-controlled", false);
     setValidFormats_("recon_id_out", ListUtils::create<String>("idXML,mzid,mzTab"));
 
@@ -578,7 +578,9 @@ protected:
   /// Resolve OpenMS/UniMod modification names to FASTag::ModSpec via
   /// ModificationsDB. Terminal mods are skipped with a note -- they are absorbed
   /// into the reported flanking masses, not the internal residue alphabet.
-  void resolveMods_(const StringList& names, bool variable, std::vector<FASTag::ModSpec>& out)
+  /// @p kept receives the full ID of every modification resolved.
+  void resolveMods_(const StringList& names, bool variable, std::vector<FASTag::ModSpec>& out,
+                    StringList& kept)
   {
     // Fetched on the first name, not up front: building the database parses
     // all of UniMod, 0.04 s of serial start-up that a run naming no
@@ -616,6 +618,7 @@ protected:
       ms.name = mod->getId();
       ms.variable = variable;
       out.push_back(ms);
+      kept.push_back(mod->getFullId());
     }
   }
 
@@ -744,8 +747,10 @@ protected:
     p.per_residue_conf = getFlag_("res_conf");
     p.max_evalue = getDoubleOption_("max_evalue");
     p.gap_penalty = getDoubleOption_("gap_penalty");
-    resolveMods_(getStringList_("fixed_modifications"), false, p.mods);
-    resolveMods_(getStringList_("variable_modifications"), true, p.mods);
+    // The residue modifications in use; -recon_id_out reports exactly these.
+    StringList fixed_mods, variable_mods;
+    resolveMods_(getStringList_("fixed_modifications"), false, p.mods, fixed_mods);
+    resolveMods_(getStringList_("variable_modifications"), true, p.mods, variable_mods);
     if (!p.mods.empty())
     {
       String summary;
@@ -863,16 +868,12 @@ protected:
       recon.setModCandidates(std::move(cands));
       if (recon_ids_on)
       {
-        // Names ModificationsDB knows; an unknown one was reported and ignored.
-        const auto known = [](const StringList& names) {
-          StringList out;
-          for (const String& n : names)
-            if (!n.empty() && ModificationsDB::getInstance()->has(n)) out.push_back(n);
-          return out;
-        };
+        // The modifications the index was built with: residue ones only. A
+        // terminal one is not in the window masses, so its mass is part of the
+        // gap and must not also be on the peptide.
         id_params.db = rfasta;
-        id_params.fixed_modifications = known(getStringList_("fixed_modifications"));
-        id_params.variable_modifications = known(getStringList_("variable_modifications"));
+        id_params.fixed_modifications = fixed_mods;
+        id_params.variable_modifications = variable_mods;
         id_params.missed_cleavages = static_cast<UInt>(getIntOption_("recon_missed_cleavages"));
         id_params.fragment_mass_tolerance = p.frag_tol;
         id_params.fragment_mass_tolerance_ppm = p.tol_ppm;
