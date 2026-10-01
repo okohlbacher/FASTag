@@ -59,6 +59,8 @@
 #include <mutex>
 #include <set>
 #include <thread>
+#include <tuple>
+#include <utility>
 #include <vector>
 #ifdef _WIN32
 #include <io.h>
@@ -129,6 +131,36 @@ namespace
     if ((v1 && ver != 1) || (v2 && ver != 2)) return -1;
     if (k < 1 || k > static_cast<std::uint32_t>(FASTag::TaxIndex::MAX_K)) return -1;
     return static_cast<int>(k);
+  }
+
+  /// One spectrum's rows for a -tag_lengths run, from its per-length tag lists
+  /// (ascending length). A tag that several lengths report -- the same
+  /// sequence as written, charge, flanking masses and gapped flag -- is kept
+  /// only from the length whose best E-value for it is lowest, ties to the
+  /// shorter length, with every row that length has for it; the other lengths'
+  /// rows for it are dropped. Rows otherwise keep their order: ascending
+  /// length, each length's own order within it. Compared exactly: a reading's
+  /// masses and E-value come from one computation whatever the length, so its
+  /// copies compare equal, while two readings that merely print alike (e.g. a
+  /// gap placed one residue apart, ~1e-6 Da) stay two tags.
+  std::vector<FASTag::Tag> mergeLengths(std::vector<std::vector<FASTag::Tag>> per_length)
+  {
+    using Key = std::tuple<std::string, int, double, double, bool>;
+    const auto key = [](const FASTag::Tag& t) {
+      return Key(t.seq, t.charge, t.nterm_mass, t.cterm_mass, t.gapped);
+    };
+    std::map<Key, std::pair<double, size_t>> winner;  // best E-value, its length's index
+    for (size_t i = 0; i < per_length.size(); ++i)
+      for (const FASTag::Tag& t : per_length[i])
+      {
+        const auto [it, fresh] = winner.try_emplace(key(t), t.evalue, i);
+        if (!fresh && t.evalue < it->second.first) it->second = {t.evalue, i};
+      }
+    std::vector<FASTag::Tag> rows;
+    for (size_t i = 0; i < per_length.size(); ++i)
+      for (FASTag::Tag& t : per_length[i])
+        if (winner.at(key(t)).second == i) rows.push_back(std::move(t));
+    return rows;
   }
 
   /// Directory holding the bundled taxonomy, or "" when there is none:
@@ -241,7 +273,8 @@ protected:
                      "Seed tag lengths to run in one pass, replacing 'tag_length'. "
                      "Each length is tagged, scored and capped ('max_tags') exactly "
                      "as on its own; a spectrum's rows are those runs' rows in "
-                     "ascending length", false);
+                     "ascending length, except that a tag several lengths report "
+                     "is kept only from the length with its lowest E-value", false);
     setMinInt_("tag_lengths", 1);
     registerIntOption_("extension", "<n>", 0,
                        "Maximum residues appended per terminus; 0 disables extension", false);
@@ -821,14 +854,13 @@ protected:
       return t;
     };
     // One spectrum at every length: each length's tags as its own run reports
-    // them, concatenated in ascending length.
+    // them (so 'max_tags' caps each length), in ascending length, with a tag
+    // several lengths report kept from one of them only (mergeLengths). Every
+    // consumer -- TSV, recon, identifications, -stream -- sees these rows.
     auto tag_all = [&len_params](const MSSpectrum& s, double prec_mz, int charge,
                                  const std::vector<FASTag::Tables>& tabs) {
       if (len_params.size() == 1) return FASTag::tagSpectrum(s, prec_mz, charge, len_params[0], tabs[0]);
-      std::vector<FASTag::Tag> all;
-      for (auto& tags : FASTag::tagSpectrum(s, prec_mz, charge, len_params, tabs))
-        all.insert(all.end(), std::make_move_iterator(tags.begin()), std::make_move_iterator(tags.end()));
-      return all;
+      return mergeLengths(FASTag::tagSpectrum(s, prec_mz, charge, len_params, tabs));
     };
     if (lengths.size() > 1)
     {

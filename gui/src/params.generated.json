@@ -446,7 +446,7 @@
       "name": "tag_lengths",
       "type": "string-list",
       "default": [],
-      "description": "Seed tag lengths to run in one pass, replacing 'tag_length'. Each length is tagged, scored and capped ('max_tags') exactly as on its own; a spectrum's rows are those runs' rows in ascending length",
+      "description": "Seed tag lengths to run in one pass, replacing 'tag_length'. Each length is tagged, scored and capped ('max_tags') exactly as on its own; a spectrum's rows are those runs' rows in ascending length, except that a tag several lengths report is kept only from the length with its lowest E-value",
       "required": false,
       "toppAdvanced": false
     },

@@ -256,9 +256,9 @@ if(FASTAG_BUILD_TESTS)
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/stream_test.sh $<TARGET_FILE:FASTag>)
   set_tests_properties(stream_test PROPERTIES SKIP_RETURN_CODE 77)
 
-  # Integration: -tag_lengths equals the single-length runs concatenated per
-  # spectrum, in file mode on the vendored fixture (also with -fasta and
-  # -recon_out) and in -stream.
+  # Integration: -tag_lengths equals the single-length runs' rows per spectrum
+  # with a tag several lengths report kept from one length only, in file mode
+  # on the vendored fixture (also with -fasta and -recon_out) and in -stream.
   add_test(NAME multilength_test
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/multilength_test.sh $<TARGET_FILE:FASTag>
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
