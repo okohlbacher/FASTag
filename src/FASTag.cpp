@@ -389,6 +389,12 @@ protected:
                        "(the length where chance matches fall below 5%). Overridable "
                        "because the floor is a noise gate, not a correctness rule", false);
     setMinInt_("recon_min_length", 0);
+    registerFlag_("recon_localize",
+                  "Localize each -recon_out mass gap to one residue of its region: the "
+                  "site whose shifted b/y fragments match the most peaks within "
+                  "-fragment_tolerance. Appends loc_site (residue + 1-based protein "
+                  "position; the first on a tie), loc_score (b/y ion/charge matches) and "
+                  "loc_ties (sites sharing that score; 1 = unique)");
     registerOutputFile_("delta_out", "<file>", "",
                         "Aggregated mass-shift histogram over the reconciliations "
                         "(requires -recon_out): delta, spectrum count, top "
@@ -568,7 +574,10 @@ protected:
   /// Resolve OpenMS/UniMod modification names to FASTag::ModSpec via
   /// ModificationsDB. Terminal mods are skipped with a note -- they are absorbed
   /// into the reported flanking masses, not the internal residue alphabet.
-  void resolveMods_(const StringList& names, bool variable, std::vector<FASTag::ModSpec>& out)
+  /// Peptide-terminal ones on any residue are summed into @p term_n / @p term_c
+  /// when given (the -recon_localize fragment ladder needs them).
+  void resolveMods_(const StringList& names, bool variable, std::vector<FASTag::ModSpec>& out,
+                    double* term_n = nullptr, double* term_c = nullptr)
   {
     // Fetched on the first name, not up front: building the database parses
     // all of UniMod, 0.04 s of serial start-up that a run naming no
@@ -591,6 +600,13 @@ protected:
         OPENMS_LOG_INFO << "Modification '" << nm << "' is terminal; it is absorbed "
                            "into the reported flanking masses and not annotated "
                            "per-residue." << std::endl;
+        if (term_n && mod->getOrigin() == 'X')
+        {
+          if (mod->getTermSpecificity() == ResidueModification::N_TERM)
+            *term_n += mod->getDiffMonoMass();
+          else if (mod->getTermSpecificity() == ResidueModification::C_TERM)
+            *term_c += mod->getDiffMonoMass();
+        }
         continue;
       }
       const char origin = mod->getOrigin();
@@ -747,7 +763,8 @@ protected:
     p.per_residue_conf = getFlag_("res_conf");
     p.max_evalue = getDoubleOption_("max_evalue");
     p.gap_penalty = getDoubleOption_("gap_penalty");
-    resolveMods_(getStringList_("fixed_modifications"), false, p.mods);
+    double fixed_term_n = 0, fixed_term_c = 0;
+    resolveMods_(getStringList_("fixed_modifications"), false, p.mods, &fixed_term_n, &fixed_term_c);
     resolveMods_(getStringList_("variable_modifications"), true, p.mods);
     if (!p.mods.empty())
     {
@@ -839,6 +856,13 @@ protected:
                           "aggregated over reconciliations)." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
+    const bool recon_loc = getFlag_("recon_localize");
+    if (recon_loc && !recon_on)
+    {
+      OPENMS_LOG_ERROR << "-recon_localize requires -recon_out (it adds columns "
+                          "to the reconciliations)." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
     FASTag::ProteomeIndex pindex;
     FASTag::TagReconciler recon(p.frag_tol, p.tol_ppm, both_orientations);
     if (recon_on)
@@ -861,6 +885,7 @@ protected:
       for (const auto& m : p.mods)
         if (m.variable) cands.push_back({m.name, m.delta, std::string(1, m.residue)});
       recon.setModCandidates(std::move(cands));
+      recon.setFixedTermMods(fixed_term_n, fixed_term_c);
       OPENMS_LOG_INFO << "Recon index: " << pindex.proteinCount() << " proteins, "
                       << pindex.residueCount() << " residues, "
                       << pindex.collapseRuleCount() << " isobaric rules; min tag length "
@@ -1323,7 +1348,8 @@ protected:
         return CANNOT_WRITE_OUTPUT_FILE;
       }
       rtsv << "spectrum\ttag\tprotein\tpeptide\tpos\treversed\tnterm_match\tcterm_match"
-              "\tdelta_mass\tregion\tdelta_interp\n";
+              "\tdelta_mass\tregion\tdelta_interp"
+           << (recon_loc ? "\tloc_site\tloc_score\tloc_ties" : "") << "\n";
     }
 
     // Default report paths: <out> with its extension replaced by a suffix --
@@ -1470,6 +1496,16 @@ protected:
       double delta_e = 0.0;
       std::pair<double, std::string> delta_sample;
 
+      // -recon_localize matches against the spectrum's own peaks: every
+      // positive one, m/z sorted (the tagger's peak selection is its own).
+      MSSpectrum loc_peaks;
+      if (recon_loc && !tags.empty())
+      {
+        for (const auto& pk : spec)
+          if (pk.getIntensity() > 0 && std::isfinite(pk.getMZ())) loc_peaks.push_back(pk);
+        loc_peaks.sortByPosition();
+      }
+
       for (const auto& t : tags)
       {
         const char* hit = "-";
@@ -1510,7 +1546,9 @@ protected:
         if (recon_on && !row_entrap)  // known-false rows must not place or bin
         {
           const auto places = recon.reconcile(FASTag::baseSequence(t.seq),
-                                              t.nterm_mass, t.cterm_mass);
+                                              t.nterm_mass, t.cterm_mass,
+                                              recon_loc ? &loc_peaks : nullptr,
+                                              prec.getCharge());
           for (const auto& pl : places)
           {
             std::string prot = pl.protein;
@@ -1532,6 +1570,19 @@ protected:
             }
             res.rbuf += '\t';
             res.rbuf += pl.delta_interp;
+            if (recon_loc)
+            {
+              res.rbuf += '\t';
+              if (pl.loc_pos >= 0)
+              {
+                res.rbuf += pl.peptide[static_cast<size_t>(pl.loc_pos)];
+                FASTag::appendNum(res.rbuf, pl.loc_site);
+              }
+              res.rbuf += '\t';
+              if (pl.loc_pos >= 0) FASTag::appendNum(res.rbuf, pl.loc_score);
+              res.rbuf += '\t';
+              if (pl.loc_pos >= 0) FASTag::appendNum(res.rbuf, pl.loc_ties);
+            }
             res.rbuf += '\n';
           }
           // A candidate for the spectrum's -delta_out sample: take this

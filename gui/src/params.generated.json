@@ -279,6 +279,14 @@
       "toppAdvanced": false
     },
     {
+      "name": "recon_localize",
+      "type": "bool",
+      "default": "false",
+      "description": "Localize each -recon_out mass gap to one residue of its region: the site whose shifted b/y fragments match the most peaks within -fragment_tolerance. Appends loc_site (residue + 1-based protein position; the first on a tie), loc_score (b/y ion/charge matches) and loc_ties (sites sharing that score; 1 = unique)",
+      "required": false,
+      "toppAdvanced": false
+    },
+    {
       "name": "recon_min_length",
       "type": "int",
       "default": "0",

@@ -275,6 +275,7 @@ saying so, rather than reporting a clean run over an empty file.
 | `-recon_fasta <file>` | `-fasta` | Database for `-recon_out`; independent of the membership filter, so a proteome-scale reconciliation never forces the filter's per-length index build |
 | `-recon_missed_cleavages <n>` | 1 | Missed tryptic cleavages in reconciliation windows |
 | `-recon_min_length <n>` | 0 | Shortest tag worth reconciling; 0 derives the chance-match floor from database size |
+| `-recon_localize` | off | Localize each reconciliation's mass gap to one residue of its region by the b/y fragments it shifts; appends `loc_site` (residue + 1-based protein position, the first on a tie), `loc_score` (b/y ion/charge matches) and `loc_ties` (sites sharing that score; 1 = unique) to `-recon_out` |
 | `-delta_out <file>` | none | Aggregated mass-shift histogram over reconciliations (one best placement per spectrum). Region-level candidates, NOT localized identifications, NOT FDR-controlled |
 | `-entrapment_fasta <file>` | none | Entrapment database (foreign species) calibrating a `q_db` column: the estimated false-match rate of the `-fasta` filter at each E-value (see q_db). Requires `-fasta` |
 | `-glyco` | off | Flag oxonium-bearing MS2 spectra to `<out>.glyco.tsv` (see Glyco flag) |

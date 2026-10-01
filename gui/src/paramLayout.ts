@@ -140,7 +140,7 @@ export const SECTIONS: Section[] = [
     blurb: 'Place tags in database peptides and report the mass left over.',
     open: false,
     master: 'recon_out',
-    params: ['recon_out', 'recon_fasta', 'recon_missed_cleavages', 'recon_min_length', 'delta_out']
+    params: ['recon_out', 'recon_fasta', 'recon_missed_cleavages', 'recon_min_length', 'recon_localize', 'delta_out']
   },
   {
     title: 'Modifications',
@@ -206,6 +206,7 @@ export const DEPENDS: Record<string, Dependency[]> = {
   recon_fasta: [{ on: 'recon_out', note: 'reconciliation only runs when it has an output file' }],
   recon_missed_cleavages: [{ on: 'recon_out', note: 'reconciliation only runs when it has an output file' }],
   recon_min_length: [{ on: 'recon_out', note: 'reconciliation only runs when it has an output file' }],
+  recon_localize: [{ on: 'recon_out', note: 'reconciliation only runs when it has an output file' }],
   delta_out: [{ on: 'recon_out', note: 'the histogram aggregates the reconciliations' }]
   // subsample_seed depends on EITHER subsampling knob; inertBecause handles it.
 }

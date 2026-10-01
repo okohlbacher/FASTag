@@ -8,8 +8,11 @@
 
 #include "TagRecon.h"
 
+#include <OpenMS/CHEMISTRY/EmpiricalFormula.h>
 #include <OpenMS/CHEMISTRY/Residue.h>
 #include <OpenMS/CHEMISTRY/ResidueDB.h>
+#include <OpenMS/CONCEPT/Constants.h>
+#include <OpenMS/KERNEL/MSSpectrum.h>
 
 #include <cassert>
 #include <cmath>
@@ -148,6 +151,84 @@ int main()
       if (x.peptide == pep && x.pos == pos && x.reversed && x.nterm_match && x.cterm_match)
         ok = true;
     check(ok, "a reversed tag reconciles with swapped flanks");
+  }
+
+  // --- Site localization: shifted b/y fragments pick the modified residue ---
+  {
+    // Oxidation on the M of the N-side region "SAMP" (tag "LEVG" at pos 4); the
+    // spectrum is the singly charged b/y ladder of SAM[Oxidation]PLEVGATSDGK.
+    const size_t pos = 4, site = 2;
+    const double ox = 15.99491;
+    const double water = EmpiricalFormula("H2O").getMonoWeight();
+    const std::string tag = pep.substr(pos, 4);
+    // nlabel: a fixed N-term label every b ion carries (0 = unlabelled);
+    // mod: the mass on the M.
+    auto ladder = [&](double nlabel, double mod) {
+      MSSpectrum s;
+      for (size_t i = 1; i < pep.size(); ++i)
+      {
+        const double b = sumMass(pep.substr(0, i)) + nlabel + (site < i ? mod : 0.0);
+        const double y = sumMass(pep.substr(pep.size() - i)) + water +
+                         (site >= pep.size() - i ? mod : 0.0);
+        s.push_back(Peak1D(b + Constants::PROTON_MASS_U, 100.0f));
+        s.push_back(Peak1D(y + Constants::PROTON_MASS_U, 100.0f));
+      }
+      s.sortByPosition();
+      return s;
+    };
+    const MSSpectrum spec = ladder(0.0, ox);
+    const double nflank = sumMass(pep.substr(0, pos)) + ox;
+    const double cflank = sumMass(pep.substr(pos + 4));
+    auto placed = [&](const Reconciliation& x) {
+      return x.peptide == pep && x.pos == pos && !x.reversed && !x.nterm_match;
+    };
+    bool unique = false, unlocalized = false, tied = false;
+    for (const auto& x : r.reconcile(tag, nflank, cflank, &spec, 2))
+      if (placed(x))
+        unique = x.loc_pos == static_cast<int>(site) && x.loc_ties == 1 &&
+                 x.loc_site == 9 + site + 1;  // "MSTVWYAAR" precedes the peptide
+    for (const auto& x : r.reconcile(tag, nflank, cflank))
+      if (placed(x)) unlocalized = x.loc_pos < 0;
+    const MSSpectrum empty;
+    for (const auto& x : r.reconcile(tag, nflank, cflank, &empty, 2))
+      if (placed(x)) tied = x.loc_pos == 0 && x.loc_score == 0 && x.loc_ties == 4;
+    check(unique, "an N-side +15.995 gap localizes uniquely to the M by its fragments");
+    check(unlocalized, "without a spectrum nothing is localized");
+    check(tied, "with no fragment evidence every region residue ties, the first reported");
+
+    // A fixed N-term label (TMT6plex) is in the N-side gap but not in the
+    // prefixes: on the ladder it must ride on every b ion, or the label-only b
+    // ions before the M match no state and S, A and M tie.
+    // A gap that is the label alone lands on the first residue.
+    const double tmt = 229.162932;
+    r.setFixedTermMods(tmt, 0.0);
+    const MSSpectrum labelled = ladder(tmt, ox), label_only = ladder(tmt, 0.0);
+    bool label_unique = false, label_first = false;
+    for (const auto& x : r.reconcile(tag, nflank + tmt, cflank, &labelled, 2))
+      if (placed(x))
+        label_unique = x.loc_pos == static_cast<int>(site) && x.loc_ties == 1;
+    for (const auto& x : r.reconcile(tag, nflank - ox + tmt, cflank, &label_only, 2))
+      if (placed(x)) label_first = x.loc_pos == 0 && x.loc_ties == 1;
+    check(label_unique, "a fixed N-term label + oxidation gap localizes uniquely to the M");
+    check(label_first, "a gap of the fixed N-term label alone localizes to the first residue");
+
+    // An unlabelled peptide (incomplete labelling) has the oxidation alone in
+    // its gap; read as label + rest, the M would tie with S and A.
+    bool unlabelled_unique = false;
+    for (const auto& x : r.reconcile(tag, nflank, cflank, &spec, 2))
+      if (placed(x))
+        unlabelled_unique = x.loc_pos == static_cast<int>(site) && x.loc_ties == 1;
+    check(unlabelled_unique, "an unlabelled peptide's gap on a labelled run localizes to the M");
+
+    // "Alone" at 20 ppm of the peptide, not of the SAMP flank: 0.02 Da over the
+    // label is precursor-scale error, not a 0.02 Da shift for the b ions to place.
+    TagReconciler rp(20.0, /*ppm=*/true, /*both=*/true);
+    rp.attach(&idx, /*missed=*/0, /*min_len=*/4);
+    rp.setFixedTermMods(tmt, 0.0);
+    bool label_err_first = false;
+    for (const auto& x : rp.reconcile(tag, nflank - ox + tmt + 0.02, cflank, &label_only, 2))
+      if (placed(x)) label_err_first = x.loc_pos == 0 && x.loc_ties == 1;
+    check(label_err_first, "a label-only gap off by precursor-scale error stays on the first residue");
   }
 
   if (failures == 0) std::cout << "tagrecon_test: all checks passed\n";
