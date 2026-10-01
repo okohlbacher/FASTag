@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21 FATAL_ERROR)
-project(FASTag VERSION 1.5.0 LANGUAGES CXX)
+project(FASTag VERSION 1.6.0 LANGUAGES CXX)
 # The GUI carries that version in four more files; a bump that misses one
 # fails here rather than shipping (cmake/version-guard.cmake says why).
 include(cmake/version-guard.cmake)
@@ -264,6 +264,14 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta)
   set_tests_properties(multilength_test PROPERTIES SKIP_RETURN_CODE 77)
+
+  # Integration: -recon_id_out .mzid is written with placements, and empty
+  # (0 bytes) without them.
+  add_test(NAME recon_ids_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/recon_ids_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta)
+  set_tests_properties(recon_ids_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # mzPeak reader vs its own mzML twin. Needs a matched pair of real files, so
   # it SKIPs unless FASTAG_E2E_MZML and FASTAG_E2E_MZPEAK point at one.

@@ -2563,16 +2563,18 @@ protected:
         for (const PeptideIdentification& id : recon_ids) n_hits += id.getHits().size();
         // The mzIdentML schema requires at least one identification (and
         // OpenMS's reader refuses a file without one); idXML and mzTab may be empty.
+        // A 0-byte file still marks the output as produced, for workflow
+        // engines that require every declared output, and replaces whatever an
+        // earlier run left at that path.
         if (recon_ids.empty() && FileHandler::getTypeByFileName(recon_id_out) == FileTypes::MZIDENTML)
         {
-          // No file, so none from an earlier run may stand in for this one.
-          if (!File::remove(recon_id_out))
+          if (!std::ofstream(recon_id_out.c_str(), std::ios::trunc))
           {
-            OPENMS_LOG_ERROR << "Cannot remove the earlier " << recon_id_out << "." << std::endl;
+            OPENMS_LOG_ERROR << "Cannot write " << recon_id_out << "." << std::endl;
             return CANNOT_WRITE_OUTPUT_FILE;
           }
           OPENMS_LOG_WARN << "Recon identifications: no placements, and mzIdentML cannot hold an "
-                             "empty result; " << recon_id_out << " not written." << std::endl;
+                             "empty result; " << recon_id_out << " written empty (0 bytes)." << std::endl;
         }
         else
         {
