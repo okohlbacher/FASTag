@@ -110,8 +110,10 @@ namespace FASTag
     // but not in the prefixes, so a gap on its side includes it: it rides on
     // every ion from that terminus and only the rest of the gap is the site's.
     // On the matched side the flank check already absorbed it. A gap that is
-    // the label alone (the rest within the flank tolerance) is scored whole,
-    // which places it on the terminal residue it sits on.
+    // the label alone is scored whole, which places it on the terminal residue
+    // it sits on. "Alone" is judged at the peptide's mass, not the flank's: an
+    // N-side flank is the precursor less a y ion and carries an error on that
+    // scale, and a rest that small is no shift any ion could show.
     //
     // ponytail: variable mods INSIDE the tag are not on the ladder. Ions
     // spanning such a residue miss for every site alike -- lost evidence (more
@@ -121,10 +123,8 @@ namespace FASTag
     static const double WATER = EmpiricalFormula("H2O").getMonoWeight();
     const int L = static_cast<int>(w.end - w.start);
     const double label = r.nterm_match ? fixed_c_ : fixed_n_;
-    const double flank = idx_->massBetween(w.start + static_cast<uint32_t>(r.region_lo),
-                                           w.start + static_cast<uint32_t>(r.region_hi) + 1);
     const bool rest = std::fabs(r.delta_mass - label) >
-                      tolAt(std::max(flank, flank + r.delta_mass));
+                      tolAt(idx_->massBetween(w.start, w.end) + label);
     const double tn = rest && !r.nterm_match ? label : 0.0;
     const double tc = rest && r.nterm_match ? label : 0.0;
     const double d = r.delta_mass - tn - tc;

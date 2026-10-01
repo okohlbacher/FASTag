@@ -211,6 +211,16 @@ int main()
       if (placed(x)) label_first = x.loc_pos == 0 && x.loc_ties == 1;
     check(label_unique, "a fixed N-term label + oxidation gap localizes uniquely to the M");
     check(label_first, "a gap of the fixed N-term label alone localizes to the first residue");
+
+    // "Alone" at 20 ppm of the peptide, not of the SAMP flank: 0.02 Da over the
+    // label is precursor-scale error, not a 0.02 Da shift for the b ions to place.
+    TagReconciler rp(20.0, /*ppm=*/true, /*both=*/true);
+    rp.attach(&idx, /*missed=*/0, /*min_len=*/4);
+    rp.setFixedTermMods(tmt, 0.0);
+    bool label_err_first = false;
+    for (const auto& x : rp.reconcile(tag, nflank - ox + tmt + 0.02, cflank, &label_only, 2))
+      if (placed(x)) label_err_first = x.loc_pos == 0 && x.loc_ties == 1;
+    check(label_err_first, "a label-only gap off by precursor-scale error stays on the first residue");
   }
 
   if (failures == 0) std::cout << "tagrecon_test: all checks passed\n";
