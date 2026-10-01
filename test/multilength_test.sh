@@ -19,6 +19,14 @@ fi
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/fastag-multilength-test.XXXXXX") || exit 1
 trap 'rm -rf "$TMP"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
+# same EXPECTED ACTUAL MESSAGE: on a mismatch, show the first differing lines
+# with control characters visible (a \r shows as \r) before failing.
+same() {
+  cmp -s "$1" "$2" && return
+  echo "$(wc -l < "$1") expected vs $(wc -l < "$2") actual lines; $(cmp "$1" "$2" 2>&1 | head -1)" >&2
+  diff "$1" "$2" | head -8 | sed -n l >&2
+  fail "$3"
+}
 
 # ------------------------------------------------------------------ file mode
 ARGS=(-extension 1 -fragment_tolerance 0.3 -fragment_tolerance_unit Da -threads 2)
@@ -45,8 +53,8 @@ join_rows() {
                       for (f = 2; f < ARGC; ++f) printf "%s", rows[ARGV[f], order[i]] }' \
       "$TMP/order" "$@"
 }
-join_rows "$TMP/3.tsv" "$TMP/4.tsv" "$TMP/5.tsv" | cmp -s - "$TMP/multi.tsv" \
-  || fail "file mode: the multi-length TSV is not the per-spectrum concatenation of the single-length runs"
+join_rows "$TMP/3.tsv" "$TMP/4.tsv" "$TMP/5.tsv" > "$TMP/join.tsv"
+same "$TMP/join.tsv" "$TMP/multi.tsv" "file mode: the multi-length TSV is not the per-spectrum concatenation of the single-length runs"
 
 # ------------------------------------------------------- -fasta and -recon_out
 # The small database's derived floor (4 residues) lies inside length 3's reach
@@ -62,10 +70,10 @@ for L in 3 4 5; do
 done
 awk -F'\t' 'NR > 1 && $3 < 5 { found = 1 } END { exit !found }' "$TMP/f3.tsv" \
   || fail "-fasta -tag_length 3 reported no tag shorter than 5 residues; the check would prove nothing"
-join_rows "$TMP/f3.tsv" "$TMP/f4.tsv" "$TMP/f5.tsv" | cmp -s - "$TMP/fmulti.tsv" \
-  || fail "-fasta: the multi-length TSV is not the per-spectrum concatenation of the single-length runs"
-join_rows "$TMP/f3.recon.tsv" "$TMP/f4.recon.tsv" "$TMP/f5.recon.tsv" | cmp -s - "$TMP/fmulti.recon.tsv" \
-  || fail "-recon_out: the multi-length recon TSV is not the per-spectrum concatenation of the single-length runs"
+join_rows "$TMP/f3.tsv" "$TMP/f4.tsv" "$TMP/f5.tsv" > "$TMP/fjoin.tsv"
+same "$TMP/fjoin.tsv" "$TMP/fmulti.tsv" "-fasta: the multi-length TSV is not the per-spectrum concatenation of the single-length runs"
+join_rows "$TMP/f3.recon.tsv" "$TMP/f4.recon.tsv" "$TMP/f5.recon.tsv" > "$TMP/fjoin.recon.tsv"
+same "$TMP/fjoin.recon.tsv" "$TMP/fmulti.recon.tsv" "-recon_out: the multi-length recon TSV is not the per-spectrum concatenation of the single-length runs"
 
 # Length 3 reaches at most 3 + 2*1 = 5 residues, short of a floor of 6: its own
 # run is refused, so the multi-length run must be too, with the same exit code.
@@ -109,7 +117,6 @@ grep -q '^#end pep2 [1-9]' "$TMP/s.4" || fail "-stream -tag_length 4 tagged noth
        END { for (i = 0; i < nb; ++i) printf "%s%s#end %s %d\n", rows[1, i], rows[2, i], id[i], n[1, i] + n[2, i] }' \
       "$TMP/s.3" "$TMP/s.4"
 } > "$TMP/s.expected"
-cmp -s "$TMP/s.expected" "$TMP/s.multi" \
-  || fail "-stream: the multi-length output is not each block's single-length rows concatenated"
+same "$TMP/s.expected" "$TMP/s.multi" "-stream: the multi-length output is not each block's single-length rows concatenated"
 
 echo "multilength_test: all checks passed ($(($(wc -l < "$TMP/multi.tsv") - 1)) file rows)"
