@@ -1,17 +1,21 @@
 # Signing the FASTag desktop app — macOS and Windows
 
 `ci.yml` builds, signs, notarizes and staples the macOS `.app`/`.dmg`;
-`windows.yml` builds the app and signs the NSIS installer through SignPath.
-Both paths are gated on the signing credentials below, so a secret-less tag
-build skips them entirely rather than burning ~90 minutes to produce something
-unshippable.
+`windows.yml` builds the app and signs the CLI and the NSIS installer through
+SignPath. The macOS desktop app is gated on the signing credentials below, so a
+secret-less tag build skips it rather than burning ~90 minutes to produce
+something unshippable. Windows builds the installer on every tag and signs it
+when SignPath is configured ([below](#turning-on-windows-signing)); otherwise
+it ships unsigned, with a warning in the run log.
 
 **Before tagging a release meant to be signed, do a dry run**: Actions → the
 workflow → Run workflow → tick `gui_dry_run`. That builds the app off a branch,
 uploads it as a workflow artifact, and uploads nothing to any release. On macOS
-a dry run also signs and notarizes when the secrets are present; on Windows it
-deliberately does not, because a SignPath signing request blocks on a human
-clicking Approve.
+a dry run also signs and notarizes when the secrets are present. On Windows it
+signs with SignPath's `test-signing` policy when SignPath is configured: that
+proves the requests, the artifact configuration and the download, and the
+artifact is the test-signed installer. A test certificate is not
+Windows-trusted, so this never produces a shippable binary.
 
 The self-contained `.app` (see `gui/scripts/bundle-macos.sh`) is one bundle
 carrying the CLI, its full dylib closure with **one** `libomp` (which fixes
@@ -44,9 +48,11 @@ restage (but **flat** — Windows has no RPATH, so every DLL must sit beside the
 installer, attached as `FASTag-gui-windows-x64-setup.exe`.
 
 That second request means **a signed release needs the Approve click in
-SignPath twice**: once for the CLI, once for the installer. SignPath's
-`initial` artifact configuration already expects a zip containing `*.exe`, and
-an NSIS installer is an `.exe`, so no new configuration is needed.
+SignPath twice**: once for the CLI, about ten minutes into the `windows-x64`
+job, and once for the installer, about 25 minutes later. Each request waits 30
+minutes for its click before the run fails. Both use the artifact configuration
+`initial` (below); an NSIS installer is an `.exe`, so one configuration covers
+both.
 
 ## Secrets (add in GitHub → Settings → Secrets and variables → Actions)
 
@@ -62,22 +68,8 @@ Same set BALL/BALLView uses (see the `software-signing` runbook):
 | `MACOS_TEAM_ID` | Apple Developer Team ID |
 | `MACOS_NOTARY_PASSWORD` | app-specific password for notarization |
 
-Windows additionally needs the two SignPath secrets `windows.yml` already uses
-for the CLI: `SIGNPATH_API_TOKEN` and `SIGNPATH_ORG_ID`. No new ones.
-
-### SignPath
-
-The SignPath project is **"OpenMS Apps"**. Under SignPath's Foundation program
-the key lives in their HSM and they submit the certificate request themselves,
-so **a CSR from their console must not be taken to a CA** — a certificate
-obtained elsewhere would not match the HSM key and the enrollment would have to
-be redone.
-
-**Set `windows.yml`'s `SIGNPATH_PROJECT_SLUG` to the real project slug**, read
-off the project page, before tagging a release meant to be signed; the file
-ships it empty. A wrong slug fails the signing request roughly
-twenty minutes into a tag run, not at the start. The CLI and the installer both
-read that one variable, so they cannot drift apart.
+Windows needs `SIGNPATH_API_TOKEN` and `SIGNPATH_ORG_ID` instead; see
+[Turning on Windows signing](#turning-on-windows-signing).
 
 `MACOS_SIGNING_IDENTITY` and `MACOS_TEAM_ID` follow from the issued
 certificate: `Developer ID Application: Oliver Kohlbacher (9WF4NVY9MY)` and
@@ -92,6 +84,49 @@ identities -f pkcs12 -o cert.p12` produces the file, and
 identities`, the key is gone and the certificate must be revoked and reissued
 from a fresh CSR — there is no recovery. Add every secret through the GitHub
 web UI, never a command line, and delete the local `.p12` afterwards.
+
+## Turning on Windows signing
+
+Under SignPath's Foundation program the key lives in their HSM and they submit
+the certificate request themselves, so **a CSR from their console must not be
+taken to a CA** — a certificate obtained elsewhere would not match the HSM key
+and the enrollment would have to be redone. "OpenMS Apps" in the console is
+that certificate, not a project.
+
+Windows signing is on when all of these exist:
+
+1. **In SignPath**, a project for FASTag with
+   - the predefined **GitHub.com** trusted build system linked to it;
+   - an artifact configuration with slug `initial` that expects a zip
+     (`actions/upload-artifact` always zips):
+     ```xml
+     <artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+       <zip-file><pe-file path="*.exe"><authenticode-sign /></pe-file></zip-file>
+     </artifact-configuration>
+     ```
+   - signing policies with slugs `test-signing` (test certificate) and
+     `release-signing` (the Foundation certificate, manual approval);
+   - a user whose API token is used below, with the Submitter role on both
+     policies.
+2. **In GitHub** → Settings → Secrets and variables → Actions: the secrets
+   `SIGNPATH_ORG_ID` (the organization ID) and `SIGNPATH_API_TOKEN`. Paste the
+   token in the web form only.
+3. **In `windows.yml`**: `SIGNPATH_PROJECT_SLUG` set to the project slug, read
+   off the project page. The CLI and the installer both read that one
+   variable, so they cannot drift apart.
+
+Then dry-run before the first signed tag:
+
+```bash
+gh workflow run windows.yml -R okohlbacher/FASTag --ref main \
+  -f gui_dry_run=true -f signing_policy=test-signing
+```
+
+The run log shows `SignPath signing policy: test-signing` and an
+`Authenticode:` line for the CLI and the installer; the
+`FASTag-gui-windows-x64-dryrun` artifact is the test-signed installer. On a
+`v*` tag the policy is `release-signing`; `signing_policy` overrides it on a
+manual run.
 
 ## Gotchas (these bite on the first run)
 
