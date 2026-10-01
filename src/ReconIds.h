@@ -31,8 +31,9 @@ namespace FASTag
   /// @param tag     the tag as reported (inline variable mods included)
   /// @param charge  precursor charge; <= 0 becomes 2, the charge the tagger
   ///                assumed for that spectrum and so the one its flanks hold
-  /// @param fixed   the run's fixed residue modifications (never a terminal
-  ///                one), from ModifiedPeptideGenerator::getModifications
+  /// @param fixed   the run's fixed modifications, from
+  ///                ModifiedPeptideGenerator::getModifications; a terminal one
+  ///                is not applied (its mass is in the gap)
   void addReconHits(std::vector<OpenMS::PeptideHit>& hits, const std::vector<Reconciliation>& places,
                     const std::string& tag, double evalue, int charge,
                     const OpenMS::ModifiedPeptideGenerator::MapToResidueType& fixed);

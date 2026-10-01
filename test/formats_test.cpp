@@ -178,6 +178,16 @@ namespace
           "rows differing only in protein are one hit, one evidence per row");
     check(ids[1].getHits()[0].getPeptideEvidences().size() == 2, "shared window: both proteins as evidences");
     check(ids[1].getHits()[0].getRank() == ids[1].getHits()[1].getRank(), "tied E-values share a rank");
+    // A terminal fixed modification is not in the index's window masses, so
+    // its mass is in the gap; on the peptide too it would count twice.
+    {
+      std::vector<PeptideHit> t;
+      FASTag::addReconHits(t, {placement("sp|P00001|ONE", "SAMPLECK", 10, 1)}, "AMPL", 0.5, 2,
+                           ModifiedPeptideGenerator::getModifications({"TMT6plex (N-term)", "Carbamidomethyl (C)"}));
+      check(t.size() == 1 && t[0].getSequence().toString() == "SAMPLEC(Carbamidomethyl)K"
+                && std::fabs(double(t[0].getMetaValue("calcMZ")) - t[0].getSequence().getMZ(2)) < 1e-9,
+            "a terminal fixed modification stays in the gap, off the peptide and its calculated m/z");
+    }
 
     ProteinIdentification::SearchParameters sp;
     sp.db = "test.fasta";

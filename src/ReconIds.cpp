@@ -4,6 +4,7 @@
 #include "ReconIds.h"
 
 #include <OpenMS/CHEMISTRY/AASequence.h>
+#include <OpenMS/CHEMISTRY/ResidueModification.h>
 #include <OpenMS/DATASTRUCTURES/DateTime.h>
 #include <OpenMS/FORMAT/FileHandler.h>
 #include <OpenMS/FORMAT/MzTab.h>
@@ -56,6 +57,12 @@ namespace FASTag
                     const ModifiedPeptideGenerator::MapToResidueType& fixed)
   {
     if (charge <= 0) charge = 2;  // FASTag::tagSpectrum's assumption
+    // Residue modifications only: the index leaves a terminal one out of its
+    // window masses, so its mass is in delta_mass already and on the peptide
+    // it would count twice.
+    ModifiedPeptideGenerator::MapToResidueType residue_fixed;
+    for (const auto& m : fixed.val)
+      if (m.first->getTermSpecificity() == ResidueModification::ANYWHERE) residue_fixed.val.insert(m);
     const size_t first = hits.size();
     std::vector<const Reconciliation*> made;  // the placement each new hit came from
     for (const Reconciliation& pl : places)
@@ -77,7 +84,7 @@ namespace FASTag
       if (k == made.size())
       {
         made.push_back(&pl);
-        hits.push_back(reconHit(pl, tag, evalue, charge, fixed));
+        hits.push_back(reconHit(pl, tag, evalue, charge, residue_fixed));
       }
       hits[first + k].addPeptideEvidence(ev);
     }
