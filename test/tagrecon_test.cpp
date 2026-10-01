@@ -212,6 +212,14 @@ int main()
     check(label_unique, "a fixed N-term label + oxidation gap localizes uniquely to the M");
     check(label_first, "a gap of the fixed N-term label alone localizes to the first residue");
 
+    // An unlabelled peptide (incomplete labelling) has the oxidation alone in
+    // its gap; read as label + rest, the M would tie with S and A.
+    bool unlabelled_unique = false;
+    for (const auto& x : r.reconcile(tag, nflank, cflank, &spec, 2))
+      if (placed(x))
+        unlabelled_unique = x.loc_pos == static_cast<int>(site) && x.loc_ties == 1;
+    check(unlabelled_unique, "an unlabelled peptide's gap on a labelled run localizes to the M");
+
     // "Alone" at 20 ppm of the peptide, not of the SAMP flank: 0.02 Da over the
     // label is precursor-scale error, not a 0.02 Da shift for the b ions to place.
     TagReconciler rp(20.0, /*ppm=*/true, /*both=*/true);

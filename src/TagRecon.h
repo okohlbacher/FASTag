@@ -98,8 +98,10 @@ namespace FASTag
 
     /// Fixed peptide-terminal modification masses (e.g. a TMT/iTRAQ N-term
     /// label). The spectrum flanks carry them, the index prefixes do not, so a
-    /// gap on that side includes them; localization puts them on every ion of
-    /// that terminus and places only the rest. Set before reconcile().
+    /// labelled peptide's gap on that side includes them; localization scores
+    /// that gap with them on every ion of the terminus and only the rest
+    /// placed, and without them (an unlabelled peptide), keeping the reading
+    /// that explains more ions. Set before reconcile().
     void setFixedTermMods(double nterm, double cterm) { fixed_n_ = nterm; fixed_c_ = cterm; }
 
   private:
