@@ -252,6 +252,7 @@ saying so, rather than reporting a clean run over an empty file.
 | `-fasta <file>` | none | Report only tags occurring in these sequences |
 | `-out_spectra <file>` | none | Write spectra carrying a reported tag here, as mzML or mzpeak (by extension). Needs memory proportional to the *file*, not the thread count, unlike every other path |
 | `-tag_length <n>` | 3 | Seed tag length in residues |
+| `-tag_lengths <n> ...` | none | Several seed lengths in one pass over the input, replacing `-tag_length`, e.g. `-tag_lengths 3 4 5`. Each length is tagged, scored and capped by `-max_tags` exactly as on its own; a spectrum's rows are those runs' rows in ascending length. `-delta_out` samples the lowest-E-value placed tag across lengths. Not combined with `-entrapment_fasta` |
 | `-extension <n>` | 0 | Max residues appended per terminus; 0 disables extension (max 12) |
 | `-gaps <n>` | 1 | Allow a tag to cross one missing peak (0 or 1) |
 | `-no_deisotope` | off | Do not collapse isotope clusters to their monoisotopic peak, and do not move multiply-charged fragments onto the singly-charged scale, before peak selection |

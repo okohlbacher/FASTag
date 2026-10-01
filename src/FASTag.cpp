@@ -229,6 +229,15 @@ protected:
 
     registerIntOption_("tag_length", "<n>", 3, "Seed tag length in residues", false);
     setMinInt_("tag_length", 1);
+    // Several seed lengths over ONE read of the input. A separate list, not a
+    // widened -tag_length, so that option and every INI that sets it are
+    // unchanged.
+    registerIntList_("tag_lengths", "<n>", IntList(),
+                     "Seed tag lengths to run in one pass, replacing 'tag_length'. "
+                     "Each length is tagged, scored and capped ('max_tags') exactly "
+                     "as on its own; a spectrum's rows are those runs' rows in "
+                     "ascending length", false);
+    setMinInt_("tag_lengths", 1);
     registerIntOption_("extension", "<n>", 0,
                        "Maximum residues appended per terminus; 0 disables extension", false);
     setMinInt_("extension", 0);
@@ -649,6 +658,15 @@ protected:
     const bool want_species = getFlag_("species")
         || (!getStringOption_("taxdb").empty() && !getStringOption_("species_out").empty());
 
+    // The seed lengths this run tags at, ascending and distinct: -tag_lengths
+    // when given, else the one -tag_length.
+    const IntList tag_lengths = getIntList_("tag_lengths");
+    const std::set<int> distinct_lengths(tag_lengths.begin(), tag_lengths.end());
+    std::vector<int> lengths(distinct_lengths.begin(), distinct_lengths.end());
+    if (lengths.empty()) lengths.push_back(getIntOption_("tag_length"));
+    // The option a length advice must name.
+    const char* const length_opt = tag_lengths.empty() ? "-tag_length " : "-tag_lengths ";
+
     // Species precondition, checked BEFORE the run rather than after.
     //
     // The index is keyed on k-mers, so a tag shorter than k can never be looked
@@ -667,14 +685,14 @@ protected:
       const int kk = probe_taxdb.empty() ? -1 : peekTaxdbK_(probe_taxdb);
       if (kk > 0)
       {
-        const int reach = getIntOption_("tag_length") + 2 * getIntOption_("extension");
+        const int reach = lengths.back() + 2 * getIntOption_("extension");
         if (reach < kk)
         {
-          OPENMS_LOG_ERROR << "-species: tag_length (" << getIntOption_("tag_length")
+          OPENMS_LOG_ERROR << "-species: tag_length (" << lengths.back()
                            << ") + 2*extension (" << getIntOption_("extension") << ") = "
                            << reach << " cannot reach the index k = " << kk
                            << ", so every tag would be too short to look up and the "
-                           << "report would be empty. Set -tag_length " << kk
+                           << "report would be empty. Set " << length_opt << kk
                            << " (or raise -extension)." << std::endl;
           return ILLEGAL_PARAMETERS;
         }
@@ -711,7 +729,7 @@ protected:
     const String out_spectra = getStringOption_("out_spectra");
 
     FASTag::Param p;
-    p.tag_length = getIntOption_("tag_length");
+    p.tag_length = lengths.front();
     p.max_extension = getIntOption_("extension");
     p.max_gaps = getIntOption_("gaps");
     p.deisotope = !getFlag_("no_deisotope");
@@ -737,12 +755,39 @@ protected:
 
     // Unconditional: the realised length bounds the null tables whether or not a
     // FASTA filter is in use.
-    const int max_len = p.tag_length + 2 * p.max_extension;
+    const int max_len = lengths.back() + 2 * p.max_extension;
     if (max_len > FASTag::MAX_FILTER_LEN)
     {
       OPENMS_LOG_ERROR << "Realised tag length can reach " << max_len << ", beyond the filter's "
                        << FASTag::MAX_FILTER_LEN << "-residue encoding." << std::endl;
       return ILLEGAL_PARAMETERS;
+    }
+
+    // One Param and one set of null tables per seed length, each exactly what
+    // that length's own run would use.
+    std::vector<FASTag::Param> len_params(lengths.size(), p);
+    for (size_t i = 0; i < lengths.size(); ++i) len_params[i].tag_length = lengths[i];
+    auto build_tables = [&len_params]() {
+      std::vector<FASTag::Tables> t;
+      t.reserve(len_params.size());
+      for (const FASTag::Param& lp : len_params) t.emplace_back(lp);
+      return t;
+    };
+    // One spectrum at every length: each length's tags as its own run reports
+    // them, concatenated in ascending length.
+    auto tag_all = [&len_params](const MSSpectrum& s, double prec_mz, int charge,
+                                 const std::vector<FASTag::Tables>& tabs) {
+      if (len_params.size() == 1) return FASTag::tagSpectrum(s, prec_mz, charge, len_params[0], tabs[0]);
+      std::vector<FASTag::Tag> all;
+      for (auto& tags : FASTag::tagSpectrum(s, prec_mz, charge, len_params, tabs))
+        all.insert(all.end(), std::make_move_iterator(tags.begin()), std::make_move_iterator(tags.end()));
+      return all;
+    };
+    if (lengths.size() > 1)
+    {
+      String list;
+      for (int L : lengths) list += (list.empty() ? "" : ", ") + String(L);
+      OPENMS_LOG_INFO << "Seed tag lengths: " << list << std::endl;
     }
 
     const bool both_orientations = getStringOption_("orientation") == "both";
@@ -760,6 +805,15 @@ protected:
     {
       OPENMS_LOG_ERROR << "-entrapment_fasta calibrates the -fasta filter; "
                           "give -fasta too." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    if (entrap_on && lengths.size() > 1)
+    {
+      // q_db is one curve over the run's E-values. Pooling several seed
+      // lengths into it would give every row a q_db its own length's run
+      // does not report.
+      OPENMS_LOG_ERROR << "-entrapment_fasta calibrates q_db over one seed length; "
+                          "run each of -tag_lengths separately." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
     if (entrap_on && want_species)
@@ -812,7 +866,7 @@ protected:
     if (stream_mode)
     {
       FILE* const dataf = stream_data_;  // the real stdout, sealed at entry
-      const FASTag::Tables stables(p);
+      const std::vector<FASTag::Tables> stables = build_tables();
       const bool spf = getFlag_("proforma");
       const std::string spfx =
           spf ? buildProformaPrefix(getStringList_("fixed_modifications")) : std::string();
@@ -841,7 +895,7 @@ protected:
           size_t n = 0;
           if (!spec.empty())
           {
-            const auto tags = FASTag::tagSpectrum(spec, prec_mz, charge, p, stables);
+            const auto tags = tag_all(spec, prec_mz, charge, stables);
             n = tags.size();
             for (const auto& t : tags)
               appendTagRow(buf, t, id, "-", spf, spfx, p.per_residue_conf);
@@ -907,7 +961,20 @@ protected:
       const int floor_ = getIntOption_("min_filter_length");
       if (floor_ > 0) filt.setMinLen(floor_);
       if (iso_tol > 0) filt.deriveCollapses(iso_tol, fixed_deltas);
-      filt.build(p.tag_length, max_len);
+      // build() refuses a run whose longest tag cannot reach the filter's
+      // floor. Every other seed length has to reach it too, as it would have
+      // to on its own.
+      for (size_t i = 0; i + 1 < lengths.size(); ++i)
+        if (lengths[i] + 2 * p.max_extension < filt.minLen())
+        {
+          OPENMS_LOG_ERROR << "Seed length " << lengths[i] << " reaches at most "
+                           << lengths[i] + 2 * p.max_extension << " residues, below the "
+                           << filt.minLen() << " this database needs to beat chance, so it "
+                           << "could never report a tag. Drop it from 'tag_lengths', raise "
+                           << "'extension', or set 'min_filter_length'." << std::endl;
+          return ILLEGAL_PARAMETERS;
+        }
+      filt.build(lengths.front(), max_len);
       OPENMS_LOG_INFO << "Filter index: " << filt.indexedKeys() << " keys" << std::endl;
 
       OPENMS_LOG_INFO << "Filter: " << filt.sequenceCount() << " sequences, "
@@ -937,7 +1004,7 @@ protected:
         }
         entrap.setMinLen(filt.minLen());
         if (iso_tol > 0) entrap.deriveCollapses(iso_tol, fixed_deltas);
-        entrap.build(p.tag_length, max_len);
+        entrap.build(lengths.front(), max_len);
         OPENMS_LOG_INFO << "Entrapment: " << entrap.sequenceCount() << " sequences, "
                         << entrap.residueCount() << " residues, "
                         << entrap.indexedKeys() << " keys" << std::endl;
@@ -1213,7 +1280,7 @@ protected:
 
     const auto t_tables_a = std::chrono::steady_clock::now();
     g_t_probe = std::chrono::duration<double>(t_tables_a - t_probe_a).count();
-    const FASTag::Tables tables(p);
+    const std::vector<FASTag::Tables> tables = build_tables();
     g_t_tables = std::chrono::duration<double>(std::chrono::steady_clock::now() - t_tables_a).count();
     std::ofstream tsv(out.c_str());
     if (!tsv)
@@ -1368,14 +1435,19 @@ protected:
       ++pt.ms2;
 
       const auto& prec = spec.getPrecursors().front();
-      const auto tags = FASTag::tagSpectrum(spec, prec.getMZ(), prec.getCharge(), p, tables);
+      const auto tags = tag_all(spec, prec.getMZ(), prec.getCharge(), tables);
       pt.tags += tags.size();
 
       // Reserve once so the per-field appends below do not repeatedly realloc.
       // ~80 bytes/row covers the fixed columns and a typical native ID; the
       // append path just grows past it for the rare long one.
       buf.reserve(tags.size() * 80);
-      bool delta_done = false;  // one -delta_out sample per spectrum
+      // One -delta_out sample per spectrum: the placed tag with the lowest
+      // E-value. Each length's tags arrive sorted best first, so with one
+      // length this is simply the first placed tag.
+      bool delta_have = false, delta_clamped = false;
+      double delta_e = 0.0;
+      std::pair<double, std::string> delta_sample;
 
       for (const auto& t : tags)
       {
@@ -1441,9 +1513,9 @@ protected:
             res.rbuf += pl.delta_interp;
             res.rbuf += '\n';
           }
-          // The spectrum's -delta_out sample: this is the best-E-value tag
-          // (tags arrive sorted best first) -- take its min-|delta| placement.
-          if (!delta_out.empty() && !places.empty() && !delta_done)
+          // A candidate for the spectrum's -delta_out sample: take this
+          // tag's min-|delta| placement.
+          if (!delta_out.empty() && !places.empty() && (!delta_have || t.evalue < delta_e))
           {
             const FASTag::Reconciliation* best = nullptr;
             for (const auto& pl : places)
@@ -1455,13 +1527,17 @@ protected:
             double side_flank = 0.0;
             if (!best->nterm_match) side_flank = best->reversed ? t.cterm_mass : t.nterm_mass;
             else if (!best->cterm_match) side_flank = best->reversed ? t.nterm_mass : t.cterm_mass;
-            const bool clamped_side =
-                std::fabs(best->delta_mass) > 1e-6 && side_flank == 0.0;
-            if (clamped_side) ++pt.delta_clamped;
-            else pt.delta.emplace_back(best->delta_mass, best->delta_interp);
-            delta_done = true;
+            delta_clamped = std::fabs(best->delta_mass) > 1e-6 && side_flank == 0.0;
+            delta_sample = {best->delta_mass, best->delta_interp};
+            delta_e = t.evalue;
+            delta_have = true;
           }
         }
+      }
+      if (delta_have)
+      {
+        if (delta_clamped) ++pt.delta_clamped;
+        else pt.delta.push_back(std::move(delta_sample));
       }
       return res;
     };
@@ -2393,16 +2469,16 @@ protected:
       // peek rejects legacy headers the loader still accepts, and then a run
       // whose tags are all shorter than k would write a header-only report
       // that reads as "nothing found" rather than "nothing could be found".
-      const int reach = getIntOption_("tag_length") + 2 * getIntOption_("extension");
+      const int reach = lengths.back() + 2 * getIntOption_("extension");
       if (reach < kk)
       {
         OPENMS_LOG_WARN << "-species: no tag can reach the index k (this run was "
                         << "driven by -taxdb/-species_out rather than -species, which "
                         << "checks up front). tag_length ("
-                        << getIntOption_("tag_length") << ") + 2*extension ("
+                        << lengths.back() << ") + 2*extension ("
                         << getIntOption_("extension") << ") = " << reach << " < k = " << kk
                         << ", so every tag is too short to look up and the report WILL be empty. "
-                        << "Raise -tag_length to " << kk << " (or use -extension to reach it)."
+                        << "Raise " << length_opt << "to " << kk << " (or use -extension to reach it)."
                         << std::endl;
       }
 

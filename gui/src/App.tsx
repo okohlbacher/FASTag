@@ -108,7 +108,10 @@ export default function App(): JSX.Element {
   // k comes from the index header, not an assumption: a differently-built index
   // would make a hardcoded 7 quietly wrong. The CLI warns too, but only after a
   // run has spent seconds and ~2 GB to produce an empty table.
-  const reach = Number(values['tag_length'] || 0) + 2 * Number(values['extension'] || 0)
+  // tag_lengths, when set, replaces tag_length; its longest seed decides.
+  const seeds = (Array.isArray(values['tag_lengths']) ? values['tag_lengths'] : []).map(Number).filter((n) => n > 0)
+  const seed = seeds.length ? Math.max(...seeds) : Number(values['tag_length'] || 0)
+  const reach = seed + 2 * Number(values['extension'] || 0)
   const tooShort = speciesOn && taxdbK != null && reach < taxdbK ? { reach, k: taxdbK } : null
 
   useEffect(() => {

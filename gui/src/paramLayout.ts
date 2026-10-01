@@ -91,6 +91,7 @@ export const SECTIONS: Section[] = [
     open: true,
     params: [
       'tag_length',
+      'tag_lengths',
       'fragment_tolerance',
       'fragment_tolerance_unit',
       'gaps',
