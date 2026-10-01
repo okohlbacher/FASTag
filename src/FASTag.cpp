@@ -7,6 +7,7 @@
 // --------------------------------------------------------------------------
 
 #include <OpenMS/CONCEPT/VersionInfo.h>
+#include <OpenMS/APPLICATIONS/ParameterInformation.h>
 #include <OpenMS/APPLICATIONS/TOPPBase.h>
 #include <OpenMS/CHEMISTRY/ModificationsDB.h>
 #include <OpenMS/CHEMISTRY/ResidueModification.h>
@@ -664,6 +665,10 @@ protected:
     const std::set<int> distinct_lengths(tag_lengths.begin(), tag_lengths.end());
     std::vector<int> lengths(distinct_lengths.begin(), distinct_lengths.end());
     if (lengths.empty()) lengths.push_back(getIntOption_("tag_length"));
+    else if (getIntOption_("tag_length") != static_cast<int>(findEntry_("tag_length").default_value)
+             && !distinct_lengths.count(getIntOption_("tag_length")))
+      OPENMS_LOG_WARN << "tag_length " << getIntOption_("tag_length")
+                      << " is ignored: tag_lengths replaces it." << std::endl;
     // The option a length advice must name.
     const char* const length_opt = tag_lengths.empty() ? "-tag_length " : "-tag_lengths ";
 
@@ -963,18 +968,34 @@ protected:
       if (iso_tol > 0) filt.deriveCollapses(iso_tol, fixed_deltas);
       // build() refuses a run whose longest tag cannot reach the filter's
       // floor. Every other seed length has to reach it too, as it would have
-      // to on its own.
+      // to on its own, and is refused the way build() refuses that run, so
+      // the exit code is the same.
       for (size_t i = 0; i + 1 < lengths.size(); ++i)
         if (lengths[i] + 2 * p.max_extension < filt.minLen())
-        {
-          OPENMS_LOG_ERROR << "Seed length " << lengths[i] << " reaches at most "
-                           << lengths[i] + 2 * p.max_extension << " residues, below the "
-                           << filt.minLen() << " this database needs to beat chance, so it "
-                           << "could never report a tag. Drop it from 'tag_lengths', raise "
-                           << "'extension', or set 'min_filter_length'." << std::endl;
-          return ILLEGAL_PARAMETERS;
-        }
-      filt.build(lengths.front(), max_len);
+          throw Exception::InvalidValue(
+              __FILE__, __LINE__, OPENMS_PRETTY_FUNCTION,
+              "Seed length " + String(lengths[i]) + " reaches at most " +
+              String(lengths[i] + 2 * p.max_extension) + " residues, below the " +
+              String(filt.minLen()) + " this database needs to beat chance, so it could "
+              "never report a tag. Drop it from 'tag_lengths', raise 'extension', or set "
+              "'min_filter_length'.",
+              String(lengths[i]));
+      try
+      {
+        filt.build(lengths.front(), max_len);
+      }
+      catch (const Exception::InvalidValue&)
+      {
+        // With several lengths only the size cap gets here (the floor is
+        // checked above). One index serves them all, so it can outgrow the
+        // cap where each length's own run fits: say so before build()'s text.
+        if (lengths.size() > 1)
+          OPENMS_LOG_ERROR << "One FASTA index serves every length in tag_lengths, so it covers "
+                           << "tags of " << std::max(lengths.front(), filt.minLen()) << " to "
+                           << max_len << " residues at once; split the lengths across runs "
+                           << "to fit the limit." << std::endl;
+        throw;
+      }
       OPENMS_LOG_INFO << "Filter index: " << filt.indexedKeys() << " keys" << std::endl;
 
       OPENMS_LOG_INFO << "Filter: " << filt.sequenceCount() << " sequences, "

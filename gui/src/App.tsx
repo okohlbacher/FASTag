@@ -112,7 +112,10 @@ export default function App(): JSX.Element {
   const seeds = (Array.isArray(values['tag_lengths']) ? values['tag_lengths'] : []).map(Number).filter((n) => n > 0)
   const seed = seeds.length ? Math.max(...seeds) : Number(values['tag_length'] || 0)
   const reach = seed + 2 * Number(values['extension'] || 0)
-  const tooShort = speciesOn && taxdbK != null && reach < taxdbK ? { reach, k: taxdbK } : null
+  const tooShort =
+    speciesOn && taxdbK != null && reach < taxdbK
+      ? { reach, k: taxdbK, option: seeds.length ? 'tag lengths' : 'tag length' }
+      : null
 
   useEffect(() => {
     window.fastag.probe().then(setBin)
