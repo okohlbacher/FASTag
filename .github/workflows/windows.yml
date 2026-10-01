@@ -1145,6 +1145,9 @@ jobs:
             version: ${{ toJSON(steps.version.outputs.version) }}
           wait-for-completion: true
           wait-for-completion-timeout-in-seconds: 1800
+          # The default 300 s bounds the WHOLE download, not idle time, and the
+          # signed installer is ~365 MB: 1200 s still fits the job timeout.
+          download-signed-artifact-timeout-in-seconds: 1200
           output-artifact-directory: 'signed-gui'
 
       # On dry runs too, unlike the attach step below: the dry run exists to
