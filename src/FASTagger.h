@@ -168,6 +168,16 @@ namespace FASTag
   std::vector<Tag> tagSpectrum(const OpenMS::MSSpectrum& spec, double precursor_mz,
                                int charge, const Param& p, const Tables& tables);
 
+  /// Tag one spectrum at several seed lengths, preprocessing it and building
+  /// its graphs once. Entry i is exactly tagSpectrum(spec, precursor_mz,
+  /// charge, params[i], tables[i]).
+  ///
+  /// @param params  one per length; they may differ in tag_length only
+  /// @param tables  built from the matching params entry
+  std::vector<std::vector<Tag>> tagSpectrum(const OpenMS::MSSpectrum& spec, double precursor_mz,
+                                            int charge, const std::vector<Param>& params,
+                                            const std::vector<Tables>& tables);
+
   /// Strip inline modification annotations, leaving one base residue per
   /// position: "GS[Phospho]TK[TMT6plex]" -> "GSTK". Used for FASTA matching,
   /// which is against unmodified protein sequences.
