@@ -427,6 +427,14 @@
       "min": 1
     },
     {
+      "name": "tag_lengths",
+      "type": "string-list",
+      "default": [],
+      "description": "Seed tag lengths to run in one pass, replacing 'tag_length'. Each length is tagged, scored and capped ('max_tags') exactly as on its own; a spectrum's rows are those runs' rows in ascending length",
+      "required": false,
+      "toppAdvanced": false
+    },
+    {
       "name": "taxdb",
       "type": "input-file",
       "default": "",

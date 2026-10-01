@@ -849,24 +849,31 @@ namespace FASTag
       }
       if (emitted == 0) { ++n_seeds; out.push_back({std::move(t), sig()}); }
     }
+
+    /// Fewest peaks that can carry a tag of p.tag_length residues. A gap
+    /// spends one fewer peak than it spells residues, so a gapped tag of
+    /// tag_length residues needs only tag_length peaks.
+    size_t minPeaks(const Param& p)
+    {
+      return static_cast<size_t>(std::max(2, p.tag_length + 1 - std::max(0, p.max_gaps)));
+    }
+
+    /// One graph per fragment charge, graphs[z - 1] for charge z.
+    std::vector<Graph> buildGraphs(const Prepared& s, const Param& p, const Alphabet& A)
+    {
+      std::vector<Graph> graphs;
+      graphs.reserve(static_cast<size_t>(s.n_frag_charges));
+      for (int z = 1; z <= s.n_frag_charges; ++z) graphs.push_back(buildGraph(s, p, A, z));
+      return graphs;
+    }
   }
 
-  // ------------------------------------------------------------------ API
-
-  std::vector<Tag> tagSpectrum(const MSSpectrum& in, double precursor_mz, int charge,
-                               const Param& p, const Tables& tables)
+  /// Everything that depends on the seed length -- the walk, extension,
+  /// scoring and selection -- over a prepared spectrum and its graphs.
+  static std::vector<Tag> tagPrepared(const Prepared& s, const std::vector<Graph>& graphs,
+                                      const Param& p, const Tables& tables)
   {
     std::vector<Tag> out;
-    if (p.tag_length < 1 || in.empty() || precursor_mz <= 0) return out;
-    if (charge <= 0) charge = 2;
-
-    const Prepared s = prepare(in, precursor_mz, charge, p);
-    // A gap spends one fewer peak than it spells residues, so a gapped tag of
-    // tag_length residues needs only tag_length peaks.
-    const size_t min_peaks =
-        static_cast<size_t>(std::max(2, p.tag_length + 1 - std::max(0, p.max_gaps)));
-    if (s.spec.size() < min_peaks) return out;
-
     // scored and the DFS state below are scratch reused across paths, charges
     // and spectra: thread_local, since each OMP thread tags its own spectra, so
     // clear() keeps their capacity instead of allocating per spectrum -- and,
@@ -878,7 +885,7 @@ namespace FASTag
 
     for (int z = 1; z <= s.n_frag_charges; ++z)
     {
-      const Graph g = buildGraph(s, p, A, z);
+      const Graph& g = graphs[static_cast<size_t>(z) - 1];
       static thread_local std::vector<uint32_t> peaks, pk;
       static thread_local std::vector<Step> path, rs;
       // edge is a relative index over this node's ordinary edges followed by its
@@ -1066,6 +1073,40 @@ namespace FASTag
       }
       std::stable_sort(div_kept.begin(), div_kept.end(), by_rank_cmp);
       for (const uint32_t k : div_kept) out.push_back(std::move(scored[k].tag));
+    }
+    return out;
+  }
+
+  // ------------------------------------------------------------------ API
+
+  std::vector<Tag> tagSpectrum(const MSSpectrum& in, double precursor_mz, int charge,
+                               const Param& p, const Tables& tables)
+  {
+    if (p.tag_length < 1 || in.empty() || precursor_mz <= 0) return {};
+    if (charge <= 0) charge = 2;
+
+    const Prepared s = prepare(in, precursor_mz, charge, p);
+    if (s.spec.size() < minPeaks(p)) return {};
+    return tagPrepared(s, buildGraphs(s, p, tables.alphabet()), p, tables);
+  }
+
+  std::vector<std::vector<Tag>> tagSpectrum(const MSSpectrum& in, double precursor_mz, int charge,
+                                            const std::vector<Param>& params,
+                                            const std::vector<Tables>& tables)
+  {
+    std::vector<std::vector<Tag>> out(params.size());
+    if (params.empty() || in.empty() || precursor_mz <= 0) return out;
+    if (charge <= 0) charge = 2;
+
+    // Neither the preprocessing nor the graphs read tag_length, so one of each
+    // serves every length; built only once some length has enough peaks.
+    const Prepared s = prepare(in, precursor_mz, charge, params[0]);
+    std::vector<Graph> graphs;
+    for (size_t i = 0; i < params.size(); ++i)
+    {
+      if (params[i].tag_length < 1 || s.spec.size() < minPeaks(params[i])) continue;
+      if (graphs.empty()) graphs = buildGraphs(s, params[0], tables[0].alphabet());
+      out[i] = tagPrepared(s, graphs, params[i], tables[i]);
     }
     return out;
   }

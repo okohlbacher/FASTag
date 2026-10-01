@@ -24,7 +24,7 @@ function fmtQ(q: number): string {
 interface Props {
   report: SpeciesReport | null
   enabled: boolean
-  tooShort: { reach: number; k: number } | null
+  tooShort: { reach: number; k: number; option: string } | null
   contributed: number | null
   totalMs2: number | null
 }
@@ -50,7 +50,7 @@ export default function SpeciesPanel({
         <strong>No tag can reach the index.</strong>
         <p>
           Tags reach {tooShort.reach} residues but the index is keyed on {tooShort.k}-mers, so
-          nothing can be looked up and the report would be empty. Raise <code>tag length</code> to{' '}
+          nothing can be looked up and the report would be empty. Raise <code>{tooShort.option}</code> to{' '}
           {tooShort.k}, or use <code>extension</code> to reach it.
         </p>
       </div>
