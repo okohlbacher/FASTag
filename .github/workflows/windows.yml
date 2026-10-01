@@ -72,10 +72,13 @@ on:
       # configuration, download, replace -- without burning a human's Approve
       # click or producing a binary anyone could mistake for shippable. Only
       # the HSM release certificate yields a Windows-trusted signature.
+      # Empty selects release-signing on a v* tag and test-signing anywhere
+      # else, so a plain gui_dry_run never asks for a release signature of a
+      # branch build (the signpath-gate step resolves it).
       signing_policy:
-        description: 'SignPath signing policy slug (use test-signing to validate)'
+        description: 'SignPath signing policy slug (empty: release-signing on a v* tag, test-signing otherwise)'
         type: string
-        default: 'release-signing'
+        default: ''
 
 concurrency:
   # A manual dispatch gets its OWN group. Sharing <workflow>-refs/heads/main
@@ -434,12 +437,12 @@ jobs:
     # pull_request runs from forks.
     permissions:
       contents: write
-    # 90, not 45: SignPath's release signing policy requires a human to click
+    # 120, not 45: SignPath's release signing policy requires a human to click
     # Approve in SignPath's own UI (wait-for-completion: true blocks on it,
-    # deliberately -- an anti-supply-chain control, not a bug), which can take
-    # far longer than a normal warm-cache CI run if nobody is at the keyboard.
-    # A run that never reaches signing still finishes in minutes regardless.
-    timeout-minutes: 90
+    # deliberately -- an anti-supply-chain control, not a bug), twice per
+    # release, and each signing step waits up to 30 minutes for it. An
+    # unsigned tag build takes ~35 minutes, so both full waits still fit.
+    timeout-minutes: 120
 
     steps:
       - uses: actions/checkout@v7
@@ -740,6 +743,20 @@ jobs:
                   -threads 2 -fragment_tolerance 20 -fragment_tolerance_unit ppm 2>&1) || { echo "$OUT"; exit 1; }
           echo "$OUT" | grep -q "34 MS2 spectra" || { echo "$OUT"; echo "::error::expected 34 MS2 spectra from small.mzpeak"; exit 1; }
 
+      # SignPath signs FASTag.exe only when its ProductName and ProductVersion
+      # match the artifact configuration, so check them on every push rather
+      # than first at a release. The output is the version both signing
+      # requests pass to that configuration.
+      - name: Check the version resource
+        id: version
+        shell: pwsh
+        run: |
+          $want = (Select-String -Path fastag/CMakeLists.txt -Pattern '^project\(FASTag VERSION ([0-9.]+)').Matches[0].Groups[1].Value
+          $info = (Get-Item fastag/build/FASTag.exe).VersionInfo
+          Write-Host "FASTag.exe: ProductName '$($info.ProductName)', ProductVersion '$($info.ProductVersion)'"
+          if ($info.ProductName -cne 'FASTag' -or $info.ProductVersion -cne $want) { Write-Host "::error::FASTag.exe must carry ProductName 'FASTag' and ProductVersion '$want' (src/FASTag.rc.in)"; exit 1 }
+          "version=$want" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding ascii
+
       - uses: actions/upload-artifact@v7
         with:
           name: FASTag-windows-x64
@@ -756,42 +773,49 @@ jobs:
       # mapped into a step env: (legal) and the presence check becomes a step
       # OUTPUT every downstream step gates on -- never `secrets.*` directly.
       #
-      # project-slug is a PLACEHOLDER: SignPath Foundation enrollment is
-      # per-project, and 'fastag' is only correct if that is the slug this
-      # project is actually assigned when enrolled at signpath.org -- verify
-      # and edit if not. artifact-configuration-slug 'initial' additionally
-      # requires SignPath's own console (not a repo file) to have an
-      # artifact configuration under that name expecting a zipped .exe:
+      # project-slug is SIGNPATH_PROJECT_SLUG at the top of this file.
+      # artifact-configuration-slug 'initial' requires SignPath's own console
+      # (not a repo file) to have an artifact configuration under that name
+      # expecting a zipped .exe whose metadata it enforces, as the SignPath
+      # Foundation terms require; `version` is passed by both requests:
       #   <artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
-      #     <zip-file><pe-file path="*.exe"><authenticode-sign /></pe-file></zip-file>
+      #     <parameters><parameter name="version" required="true" /></parameters>
+      #     <zip-file>
+      #       <pe-file path="*.exe" product-name="FASTag" product-version="${version}">
+      #         <authenticode-sign />
+      #       </pe-file>
+      #     </zip-file>
       #   </artifact-configuration>
       # (actions/upload-artifact always zips, so SignPath receives a .zip
       # regardless -- an artifact-configuration expecting a bare .exe fails
       # with "file does not correspond to the specified file type".)
       #
-      # UNTESTED until SIGNPATH_API_TOKEN/SIGNPATH_ORG_ID exist on this repo
-      # -- neither does yet, so every tag build takes the "not configured"
-      # branch and ships unsigned, same as today. doc/SIGNING-macos-gui.md
-      # names the secrets.
+      # UNTESTED until SIGNPATH_API_TOKEN, SIGNPATH_ORG_ID and the project
+      # slug exist; without them every tag build takes the "not configured"
+      # branch and ships unsigned. doc/SIGNING-macos-gui.md lists the steps.
       - name: Determine SignPath availability (Windows)
         if: startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run
         id: signpath-gate
         shell: pwsh
         env:
           SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORG_ID: ${{ secrets.SIGNPATH_ORG_ID }}
+          SIGNING_POLICY: ${{ inputs.signing_policy || (startsWith(github.ref, 'refs/tags/v') && 'release-signing' || 'test-signing') }}
         run: |
-          if ([string]::IsNullOrEmpty($env:SIGNPATH_API_TOKEN)) {
-            Write-Host "::warning title=Unsigned Windows binary::SIGNPATH_API_TOKEN is not set -- shipping this release unsigned. SmartScreen will warn on first run. See doc/SIGNING-macos-gui.md for what's needed."
+          if ([string]::IsNullOrEmpty($env:SIGNPATH_API_TOKEN) -or [string]::IsNullOrEmpty($env:SIGNPATH_ORG_ID)) {
+            Write-Host "::warning title=Unsigned Windows binary::SIGNPATH_API_TOKEN or SIGNPATH_ORG_ID is not set -- shipping this release unsigned. SmartScreen will warn on first run. See doc/SIGNING-macos-gui.md for what's needed."
             "enabled=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding ascii
           } elseif ([string]::IsNullOrEmpty($env:SIGNPATH_PROJECT_SLUG)) {
             # Checked HERE, not left to the signing action. A missing or wrong
             # project slug fails the REQUEST, which happens after OpenMS,
             # mzpeak, FASTag and the desktop app have all been built -- about
             # twenty minutes in. Refusing up front costs seconds instead.
-            Write-Host "::warning title=Unsigned Windows binary::SIGNPATH_API_TOKEN is set but SIGNPATH_PROJECT_SLUG is empty -- no SignPath project has been created yet. Shipping unsigned. See doc/SIGNING-macos-gui.md."
+            Write-Host "::warning title=Unsigned Windows binary::The SignPath secrets are set but SIGNPATH_PROJECT_SLUG in windows.yml is empty. Shipping unsigned. See doc/SIGNING-macos-gui.md."
             "enabled=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding ascii
           } else {
+            Write-Host "SignPath signing policy: $env:SIGNING_POLICY"
             "enabled=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding ascii
+            "policy=$env:SIGNING_POLICY" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding ascii
           }
 
       - name: Upload unsigned binary for SignPath (Windows)
@@ -805,28 +829,35 @@ jobs:
 
       - name: Sign via SignPath Foundation (Windows)
         if: steps.signpath-gate.outputs.enabled == 'true'
-        uses: signpath/github-action-submit-signing-request@v1
+        uses: signpath/github-action-submit-signing-request@v3
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ secrets.SIGNPATH_ORG_ID }}
           project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
-          signing-policy-slug: ${{ inputs.signing_policy || 'release-signing' }}
+          signing-policy-slug: ${{ steps.signpath-gate.outputs.policy }}
           artifact-configuration-slug: 'initial'
           github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
+          parameters: |
+            version: ${{ toJSON(steps.version.outputs.version) }}
           wait-for-completion: true
+          # The action's own default is 600 s, which fails a release whose
+          # Approve click comes later than ten minutes after the request.
+          wait-for-completion-timeout-in-seconds: 1800
           output-artifact-directory: 'signed'
 
       - name: Replace unsigned binary with the signed one (Windows)
         if: steps.signpath-gate.outputs.enabled == 'true'
         shell: pwsh
         run: |
+          # An error, not a warning: carrying on would ship the unsigned CLI in
+          # the zip and inside an installer that is itself signed.
           $signed = Get-ChildItem -Path "signed" -Filter "*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-          if ($signed) {
-            Copy-Item -Path $signed.FullName -Destination "fastag/build/FASTag.exe" -Force
-            Write-Host "Signed binary in place: $($signed.Name)"
-          } else {
-            Write-Host "::warning::SignPath step ran but no signed artifact found under signed/"
-          }
+          if (-not $signed) { Write-Host "::error::SignPath returned no signed FASTag.exe under signed/"; exit 1 }
+          $sig = Get-AuthenticodeSignature $signed.FullName
+          Write-Host "Authenticode: $($sig.Status) -- $($sig.SignerCertificate.Subject)"
+          if (-not $sig.SignerCertificate -or $sig.Status -eq 'HashMismatch') { Write-Host "::error::$($signed.Name) from SignPath carries no intact signature"; exit 1 }
+          Copy-Item -Path $signed.FullName -Destination "fastag/build/FASTag.exe" -Force
+          Write-Host "Signed binary in place: $($signed.Name)"
 
       # ---------------------------------------------------------------------
       # Bundle runtime dependencies for portability -- EVERY run, not just
@@ -1102,16 +1133,34 @@ jobs:
 
       - name: Sign the installer via SignPath Foundation (Windows)
         if: steps.signpath-gate.outputs.enabled == 'true'
-        uses: signpath/github-action-submit-signing-request@v1
+        uses: signpath/github-action-submit-signing-request@v3
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ secrets.SIGNPATH_ORG_ID }}
           project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
-          signing-policy-slug: ${{ inputs.signing_policy || 'release-signing' }}
+          signing-policy-slug: ${{ steps.signpath-gate.outputs.policy }}
           artifact-configuration-slug: 'initial'
           github-artifact-id: ${{ steps.upload-unsigned-gui.outputs.artifact-id }}
+          parameters: |
+            version: ${{ toJSON(steps.version.outputs.version) }}
           wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 1800
+          # The default 300 s bounds the WHOLE download, not idle time, and the
+          # signed installer is ~365 MB: 1200 s still fits the job timeout.
+          download-signed-artifact-timeout-in-seconds: 1200
           output-artifact-directory: 'signed-gui'
+
+      # On dry runs too, unlike the attach step below: the dry run exists to
+      # prove what a tag run would ship.
+      - name: Check the signed installer (Windows)
+        if: steps.signpath-gate.outputs.enabled == 'true'
+        shell: pwsh
+        run: |
+          $signed = Get-ChildItem -Path "signed-gui" -Filter "*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $signed) { Write-Host "::error::SignPath returned no signed installer"; exit 1 }
+          $sig = Get-AuthenticodeSignature $signed.FullName
+          Write-Host "Authenticode: $($sig.Status) -- $($sig.SignerCertificate.Subject)"
+          if (-not $sig.SignerCertificate -or $sig.Status -eq 'HashMismatch') { Write-Host "::error::$($signed.Name) from SignPath carries no intact signature"; exit 1 }
 
       - name: Attach the signed installer to the release (Windows)
         if: steps.signpath-gate.outputs.enabled == 'true' && startsWith(github.ref, 'refs/tags/v')
@@ -1147,13 +1196,14 @@ jobs:
             --notes "Automated binary upload; release notes pending." 2>$null
           gh release upload "${{ github.ref_name }}" "FASTag-gui-windows-x64-setup.exe" --clobber
 
-      # A dry run has no release to attach to; the unsigned installer comes
-      # back as a workflow artifact so the bundle can be installed and checked.
+      # A dry run has no release to attach to; the installer comes back as a
+      # workflow artifact so the bundle can be installed and checked -- the
+      # SignPath-signed one when signing ran, so its signature can be too.
       - uses: actions/upload-artifact@v7
         if: inputs.gui_dry_run
         with:
           name: FASTag-gui-windows-x64-dryrun
-          path: fastag/gui/src-tauri/target/release/bundle/nsis/*.exe
+          path: ${{ steps.signpath-gate.outputs.enabled == 'true' && 'signed-gui/*.exe' || 'fastag/gui/src-tauri/target/release/bundle/nsis/*.exe' }}
           if-no-files-found: error
 
       # Same mechanism as ci.yml's identical step -- see there for why the

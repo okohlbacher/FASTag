@@ -139,6 +139,11 @@ add_executable(FASTag src/FASTag.cpp src/IndexedMzMLReader.cpp)
 target_link_libraries(FASTag PRIVATE fastag_core)
 # So --help reports FASTag's version instead of the OpenMS it was built against.
 target_compile_definitions(FASTag PRIVATE FASTAG_VERSION="${PROJECT_VERSION}")
+if(WIN32)
+  # The version resource SignPath checks before it signs (src/FASTag.rc.in).
+  configure_file(src/FASTag.rc.in FASTag.rc @ONLY)
+  target_sources(FASTag PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/FASTag.rc")
+endif()
 if(MZPEAK_INCLUDE_DIR AND MZPEAK_LIBRARY)
   # C++23: the library's headers use std::expected and deducing this.
   #
