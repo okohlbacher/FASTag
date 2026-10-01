@@ -19,12 +19,14 @@ fi
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/fastag-multilength-test.XXXXXX") || exit 1
 trap 'rm -rf "$TMP"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
-# same EXPECTED ACTUAL MESSAGE: on a mismatch, show the first differing lines
-# with control characters visible (a \r shows as \r) before failing.
+# same EXPECTED ACTUAL MESSAGE: compare line endings aside -- on Windows the
+# binary writes CRLF and awk drops the CR, so only the expectations built with
+# awk lack it. On a mismatch, show the first differing lines before failing.
 same() {
-  cmp -s "$1" "$2" && return
-  echo "$(wc -l < "$1") expected vs $(wc -l < "$2") actual lines; $(cmp "$1" "$2" 2>&1 | head -1)" >&2
-  diff "$1" "$2" | head -8 | sed -n l >&2
+  tr -d '\r' < "$1" > "$1.lf" && tr -d '\r' < "$2" > "$2.lf" || fail "cannot read $1 or $2"
+  cmp -s "$1.lf" "$2.lf" && return
+  echo "$(wc -l < "$1.lf") expected vs $(wc -l < "$2.lf") actual lines; $(cmp "$1.lf" "$2.lf" 2>&1 | head -1)" >&2
+  diff "$1.lf" "$2.lf" | head -8 | sed -n l >&2
   fail "$3"
 }
 
