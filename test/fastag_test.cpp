@@ -734,6 +734,55 @@ int main()
                 saw_gap ? "" : " (no gapped tag in fixture)");
   }
 
+  // 17. mergeLengths, on synthetic per-length lists (index 0 = shortest seed).
+  // Each tag carries its own row ID in low_mz, which is not part of the key.
+  // The rule decides real -tag_lengths output (thousands of exact E-value ties
+  // on iPRG), but real data never exercises the charge and gapped parts of the
+  // key, and the shell test cannot decide a printed tie, so it is pinned here.
+  {
+    auto tag = [](int id, const std::string& seq, double evalue, int charge = 1,
+                  bool gapped = false, double nterm = 100.0) {
+      FASTag::Tag t;
+      t.seq = seq; t.evalue = evalue; t.charge = charge; t.gapped = gapped;
+      t.nterm_mass = nterm; t.cterm_mass = 200.0; t.low_mz = id;
+      return t;
+    };
+    const std::vector<std::vector<FASTag::Tag>> per_length = {
+        {tag(1, "TIE", 0.2),             // exact tie with id 11: the shorter keeps it
+         tag(2, "LOW", 0.5),             // id 12 scores lower: this one goes
+         tag(3, "CHG", 0.3),             // id 13 differs in charge only: both stay
+         tag(4, "GAP", 0.4),             // id 14 differs in gapped only: both stay
+         tag(5, "REP", 0.6),             // repeated here, best 0.05 beats id 15's 0.1,
+         tag(6, "REP", 0.05),            //   so both 5 and 6 stay, unchanged
+         tag(7, "MASS", 0.3),            // id 17 differs by 1e-7 Da in nterm: both stay
+         tag(8, "S[Phospho]TK", 0.3),    // id 18 is "STK": annotations count, both stay
+         tag(9, "BST", 0.05)},           // ids 19, 20 have best 0.02 < 0.05: 9 goes
+        {tag(11, "TIE", 0.2),
+         tag(12, "LOW", 0.1),            // ties id 21 in the longest: kept here
+         tag(13, "CHG", 0.01, 2),
+         tag(14, "GAP", 0.01, 1, true),
+         tag(15, "REP", 0.1),
+         tag(16, "ONE", 0.9),            // one length only: stays
+         tag(17, "MASS", 0.01, 1, false, 100.0 + 1e-7),
+         tag(18, "STK", 0.01),
+         tag(19, "BST", 0.3),            // the length's best is its second row, not its first
+         tag(20, "BST", 0.02)},
+        {tag(21, "LOW", 0.1),
+         tag(22, "TIE", 0.2)}};          // a three-way tie: still the shortest
+    std::vector<double> got;
+    for (const FASTag::Tag& t : FASTag::mergeLengths(per_length)) got.push_back(t.low_mz);
+    const std::vector<double> want = {1, 3, 4, 5, 6, 7, 8, 12, 13, 14, 16, 17, 18, 19, 20};
+    std::string g;
+    for (double id : got) g += " " + std::to_string(static_cast<int>(id));
+    CHECK(got == want, "mergeLengths kept rows%s; want 1 3 4 5 6 7 8 12 13 14 16 17 18 19 20", g.c_str());
+    // One length: nothing to merge, every row in order (the tool does not call
+    // it for one length, but the rule must not drop a within-length repeat).
+    const auto one = FASTag::mergeLengths({per_length[0]});
+    CHECK(one.size() == per_length[0].size(), "one length keeps all %zu rows, got %zu",
+          per_length[0].size(), one.size());
+    std::printf("17. mergeLengths: ties to the shorter, lowest best E-value, exact key\n");
+  }
+
   std::printf(failures ? "\n%d FAILURES\n" : "\nall checks passed\n", failures);
   return failures ? 1 : 0;
 }

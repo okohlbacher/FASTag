@@ -178,6 +178,20 @@ namespace FASTag
                                             int charge, const std::vector<Param>& params,
                                             const std::vector<Tables>& tables);
 
+  /// One spectrum's rows for a multi-length run, from its per-length tag lists
+  /// (ascending length, as the overload above returns them). A tag several
+  /// lengths report -- the same seq as written, charge, flanking masses and
+  /// gapped flag -- is kept only from the length whose best (lowest) E-value
+  /// for it is lowest, ties to the shorter length, with every row that length
+  /// has for it; the other lengths' rows for it are dropped. Rows otherwise
+  /// keep their order: ascending length, each length's own order within it.
+  ///
+  /// Masses and E-values are compared exactly: a reading's values come from one
+  /// computation whatever the seed length, so its copies compare equal, while
+  /// two readings that merely print alike (e.g. a gap placed one residue
+  /// apart, ~1e-6 Da) stay two tags.
+  std::vector<Tag> mergeLengths(std::vector<std::vector<Tag>> per_length);
+
   /// Strip inline modification annotations, leaving one base residue per
   /// position: "GS[Phospho]TK[TMT6plex]" -> "GSTK". Used for FASTA matching,
   /// which is against unmodified protein sequences.

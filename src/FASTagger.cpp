@@ -20,6 +20,7 @@
 #include <set>
 #include <tuple>
 #include <random>
+#include <utility>
 
 using namespace OpenMS;
 
@@ -1109,5 +1110,25 @@ namespace FASTag
       out[i] = tagPrepared(s, graphs, params[i], tables[i]);
     }
     return out;
+  }
+
+  std::vector<Tag> mergeLengths(std::vector<std::vector<Tag>> per_length)
+  {
+    using Key = std::tuple<std::string, int, double, double, bool>;
+    const auto key = [](const Tag& t) {
+      return Key(t.seq, t.charge, t.nterm_mass, t.cterm_mass, t.gapped);
+    };
+    std::map<Key, std::pair<double, size_t>> winner;  // best E-value, its length's index
+    for (size_t i = 0; i < per_length.size(); ++i)
+      for (const Tag& t : per_length[i])
+      {
+        const auto [it, fresh] = winner.try_emplace(key(t), t.evalue, i);
+        if (!fresh && t.evalue < it->second.first) it->second = {t.evalue, i};
+      }
+    std::vector<Tag> rows;
+    for (size_t i = 0; i < per_length.size(); ++i)
+      for (Tag& t : per_length[i])
+        if (winner.at(key(t)).second == i) rows.push_back(std::move(t));
+    return rows;
   }
 }
