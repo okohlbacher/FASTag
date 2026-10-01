@@ -133,7 +133,7 @@ namespace FASTag
     const auto key = [&](size_t s) { return (rank(s) * RANKS + rank(s + 1)) * RANKS + rank(s + 2); };
     const auto chunkStart = [n](long long c) { return n * static_cast<size_t>(c) / CHUNKS; };
     // A small text sorts faster than a thread team wakes up.
-    const bool par = n >= (size_t{1} << 16);
+    [[maybe_unused]] const bool par = n >= (size_t{1} << 16);  // read only by omp if()
 
     // Per-chunk bucket counts, then exclusive offsets bucket-major, chunk-minor,
     // so each chunk scatters its positions into a slot range of its own.
