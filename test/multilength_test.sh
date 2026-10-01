@@ -3,11 +3,13 @@
 # spectrum, exactly the rows the single-length runs write, concatenated in
 # ascending length: in file mode (with extension, so the realised lengths of
 # different seeds overlap and the `length` column cannot reconstruct the
-# order) and in -stream, where each block's #end count is the sum.
+# order), with -fasta and -recon_out, and in -stream, where each block's #end
+# count is the sum. A length whose own run is refused refuses the whole run.
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 BIN="$1"
 IN="$2"
+DB="$3"  # proteins that tags from $IN place in
 
 if ! "$BIN" --help >/dev/null 2>&1; then
   echo "SKIP: binary cannot initialize (OpenMS share data unreachable?)" >&2
@@ -29,21 +31,50 @@ for L in 3 4 5; do
   [ "$(wc -l < "$TMP/$L.tsv")" -gt 1 ] || fail "-tag_length $L wrote no rows; the check would prove nothing"
 done
 
-# Spectrum IDs in input order, then each spectrum's single-length rows in
-# ascending length.
+# Spectrum IDs in input order. join_rows prints the first file's header, then
+# each spectrum's rows from every file in turn (the single-length runs, in
+# ascending length).
 grep -o '<spectrum [^>]*' "$IN" | sed 's/.*[[:space:]]id="\([^"]*\)".*/\1/' > "$TMP/order"
 [ -s "$TMP/order" ] || fail "no spectrum IDs read from $IN"
-{
-  head -1 "$TMP/3.tsv"
+join_rows() {
+  head -1 "$1"
   awk -F'\t' 'FILENAME == ARGV[1] { order[++n] = $0; next }
               FNR == 1 { next }
               { rows[FILENAME, $1] = rows[FILENAME, $1] $0 "\n" }
               END { for (i = 1; i <= n; ++i)
                       for (f = 2; f < ARGC; ++f) printf "%s", rows[ARGV[f], order[i]] }' \
-      "$TMP/order" "$TMP/3.tsv" "$TMP/4.tsv" "$TMP/5.tsv"
-} > "$TMP/expected.tsv"
-cmp -s "$TMP/expected.tsv" "$TMP/multi.tsv" \
+      "$TMP/order" "$@"
+}
+join_rows "$TMP/3.tsv" "$TMP/4.tsv" "$TMP/5.tsv" | cmp -s - "$TMP/multi.tsv" \
   || fail "file mode: the multi-length TSV is not the per-spectrum concatenation of the single-length runs"
+
+# ------------------------------------------------------- -fasta and -recon_out
+# The small database's derived floor (4 residues) lies inside length 3's reach
+# (3 + 2*1), so the one shared index must cover length 3's realised range, not
+# only the longest seed's.
+FARGS=(-fasta "$DB" "${ARGS[@]}")
+"$BIN" -in "$IN" -out "$TMP/fmulti.tsv" -recon_out "$TMP/fmulti.recon.tsv" -tag_lengths 3 4 5 \
+  "${FARGS[@]}" >"$TMP/fmulti.log" 2>&1 || fail "-fasta multi-length run exited $? ($(tail -1 "$TMP/fmulti.log"))"
+for L in 3 4 5; do
+  "$BIN" -in "$IN" -out "$TMP/f$L.tsv" -recon_out "$TMP/f$L.recon.tsv" -tag_length "$L" "${FARGS[@]}" \
+    >/dev/null 2>&1 || fail "-fasta -tag_length $L run failed"
+  [ "$(wc -l < "$TMP/f$L.recon.tsv")" -gt 1 ] || fail "-recon_out -tag_length $L placed nothing; the check would prove nothing"
+done
+awk -F'\t' 'NR > 1 && $3 < 5 { found = 1 } END { exit !found }' "$TMP/f3.tsv" \
+  || fail "-fasta -tag_length 3 reported no tag shorter than 5 residues; the check would prove nothing"
+join_rows "$TMP/f3.tsv" "$TMP/f4.tsv" "$TMP/f5.tsv" | cmp -s - "$TMP/fmulti.tsv" \
+  || fail "-fasta: the multi-length TSV is not the per-spectrum concatenation of the single-length runs"
+join_rows "$TMP/f3.recon.tsv" "$TMP/f4.recon.tsv" "$TMP/f5.recon.tsv" | cmp -s - "$TMP/fmulti.recon.tsv" \
+  || fail "-recon_out: the multi-length recon TSV is not the per-spectrum concatenation of the single-length runs"
+
+# Length 3 reaches at most 3 + 2*1 = 5 residues, short of a floor of 6: its own
+# run is refused, so the multi-length run must be too, with the same exit code.
+"$BIN" -in "$IN" -out "$TMP/r.tsv" -tag_length 3 -min_filter_length 6 "${FARGS[@]}" >/dev/null 2>&1
+rc_one=$?
+"$BIN" -in "$IN" -out "$TMP/r.tsv" -tag_lengths 3 5 -min_filter_length 6 "${FARGS[@]}" >/dev/null 2>&1
+rc_multi=$?
+[ "$rc_one" -ne 0 ] && [ "$rc_multi" -eq "$rc_one" ] \
+  || fail "a length below the filter floor: its own run exited $rc_one, the multi-length run $rc_multi"
 
 # ---------------------------------------------------------------------- stream
 # Two blocks: synthetic b/y ladders of PEPTIDEK and VGAHAGEYGAEALER.
