@@ -743,6 +743,20 @@ jobs:
                   -threads 2 -fragment_tolerance 20 -fragment_tolerance_unit ppm 2>&1) || { echo "$OUT"; exit 1; }
           echo "$OUT" | grep -q "34 MS2 spectra" || { echo "$OUT"; echo "::error::expected 34 MS2 spectra from small.mzpeak"; exit 1; }
 
+      # SignPath signs FASTag.exe only when its ProductName and ProductVersion
+      # match the artifact configuration, so check them on every push rather
+      # than first at a release. The output is the version both signing
+      # requests pass to that configuration.
+      - name: Check the version resource
+        id: version
+        shell: pwsh
+        run: |
+          $want = (Select-String -Path fastag/CMakeLists.txt -Pattern '^project\(FASTag VERSION ([0-9.]+)').Matches[0].Groups[1].Value
+          $info = (Get-Item fastag/build/FASTag.exe).VersionInfo
+          Write-Host "FASTag.exe: ProductName '$($info.ProductName)', ProductVersion '$($info.ProductVersion)'"
+          if ($info.ProductName -cne 'FASTag' -or $info.ProductVersion -cne $want) { Write-Host "::error::FASTag.exe must carry ProductName 'FASTag' and ProductVersion '$want' (src/FASTag.rc.in)"; exit 1 }
+          "version=$want" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding ascii
+
       - uses: actions/upload-artifact@v7
         with:
           name: FASTag-windows-x64
@@ -762,9 +776,15 @@ jobs:
       # project-slug is SIGNPATH_PROJECT_SLUG at the top of this file.
       # artifact-configuration-slug 'initial' requires SignPath's own console
       # (not a repo file) to have an artifact configuration under that name
-      # expecting a zipped .exe:
+      # expecting a zipped .exe whose metadata it enforces, as the SignPath
+      # Foundation terms require; `version` is passed by both requests:
       #   <artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
-      #     <zip-file><pe-file path="*.exe"><authenticode-sign /></pe-file></zip-file>
+      #     <parameters><parameter name="version" required="true" /></parameters>
+      #     <zip-file>
+      #       <pe-file path="*.exe" product-name="FASTag" product-version="${version}">
+      #         <authenticode-sign />
+      #       </pe-file>
+      #     </zip-file>
       #   </artifact-configuration>
       # (actions/upload-artifact always zips, so SignPath receives a .zip
       # regardless -- an artifact-configuration expecting a bare .exe fails
@@ -817,6 +837,8 @@ jobs:
           signing-policy-slug: ${{ steps.signpath-gate.outputs.policy }}
           artifact-configuration-slug: 'initial'
           github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
+          parameters: |
+            version: ${{ toJSON(steps.version.outputs.version) }}
           wait-for-completion: true
           # The action's own default is 600 s, which fails a release whose
           # Approve click comes later than ten minutes after the request.
@@ -1119,6 +1141,8 @@ jobs:
           signing-policy-slug: ${{ steps.signpath-gate.outputs.policy }}
           artifact-configuration-slug: 'initial'
           github-artifact-id: ${{ steps.upload-unsigned-gui.outputs.artifact-id }}
+          parameters: |
+            version: ${{ toJSON(steps.version.outputs.version) }}
           wait-for-completion: true
           wait-for-completion-timeout-in-seconds: 1800
           output-artifact-directory: 'signed-gui'

@@ -98,12 +98,21 @@ Windows signing is on when all of these exist:
 1. **In SignPath**, a project for FASTag with
    - the predefined **GitHub.com** trusted build system linked to it;
    - an artifact configuration with slug `initial` that expects a zip
-     (`actions/upload-artifact` always zips):
+     (`actions/upload-artifact` always zips) and enforces the product name and
+     version, as the Foundation terms require:
      ```xml
      <artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
-       <zip-file><pe-file path="*.exe"><authenticode-sign /></pe-file></zip-file>
+       <parameters><parameter name="version" required="true" /></parameters>
+       <zip-file>
+         <pe-file path="*.exe" product-name="FASTag" product-version="${version}">
+           <authenticode-sign />
+         </pe-file>
+       </zip-file>
      </artifact-configuration>
      ```
+     `FASTag.exe` carries both values from `src/FASTag.rc.in`, the installer
+     from `gui/src-tauri/tauri.conf.json`, and `windows.yml` passes `version`
+     from `CMakeLists.txt`;
    - signing policies with slugs `test-signing` (test certificate) and
      `release-signing` (the Foundation certificate, manual approval);
    - a user whose API token is used below, with the Submitter role on both
