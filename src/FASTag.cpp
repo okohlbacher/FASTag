@@ -596,7 +596,7 @@ protected:
   /// into the reported flanking masses, not the internal residue alphabet.
   /// Peptide-terminal ones on any residue are summed into @p term_n / @p term_c
   /// when given (the -recon_localize fragment ladder needs them).
-  /// @p kept receives the full ID of every modification resolved.
+  /// @p kept receives the full ID of every residue modification added to @p out.
   void resolveMods_(const StringList& names, bool variable, std::vector<FASTag::ModSpec>& out,
                     StringList& kept, double* term_n = nullptr, double* term_c = nullptr)
   {
