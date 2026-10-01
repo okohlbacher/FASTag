@@ -360,7 +360,8 @@ spectrum's native ID, precursor m/z and charge, and the tag's E-value as
 score (lower is better). The mass gap and the other row fields travel as
 metadata, never as a localized modification. The run names FASTag as search
 engine and is marked `FDR_controlled = false`. An mzid needs at least one
-placement; without any it is not written.
+placement; without any it is not written, and a file already at that path is
+removed.
 
 `-delta_out` aggregates those gaps into a histogram, counting each spectrum
 once (its best tag's smallest-|delta| placement) so fifty correlated tags
