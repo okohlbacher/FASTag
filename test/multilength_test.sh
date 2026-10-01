@@ -48,6 +48,11 @@ same() {
 #             distinct tags whose masses differ beyond the printed decimals
 # and, per kept or dropped row, "<file index> <spectrum> <tag> K|D" to
 # STATS.rows for the recon check.
+# Known limit: two distinct readings that print alike, each reported once by
+# a different length, look like one tag here, so the check expects one of them
+# dropped while the binary (comparing exact values) keeps both, and the
+# comparison fails (see PRINT_ALIKE). The vendored fixture has none on Linux;
+# the exact rule itself, ties included, is pinned in fastag_test (17).
 merge() {
   local order="$1" stats="$2"; shift 2
   head -1 "$1"
@@ -89,6 +94,7 @@ merge() {
     }' "$order" "$@"
 }
 count() { awk -v k="$2" '$1 == k { print $2 }' "$1"; }
+PRINT_ALIKE="(if the binary keeps rows expected dropped, they may be distinct readings that print alike; see merge())"
 
 # merge_recon ORDER STATS RECON... : the -recon_out rows a multi-length run
 # must write, from the single-length runs' recon files (ascending length, as
@@ -147,7 +153,7 @@ merge "$TMP/order" "$TMP/stats" "$TMP/3.tsv" "$TMP/4.tsv" "$TMP/5.tsv" > "$TMP/e
 decisive "$TMP/stats" "file mode"
 [ "$(count "$TMP/stats" repeated)" -gt 0 ] \
   || fail "file mode: no kept key that one length reports twice; the check would prove nothing"
-same "$TMP/expected.tsv" "$TMP/multi.tsv" "file mode: the multi-length TSV is not the single-length runs' rows with cross-length repeats dropped"
+same "$TMP/expected.tsv" "$TMP/multi.tsv" "file mode: the multi-length TSV is not the single-length runs' rows with cross-length repeats dropped $PRINT_ALIKE"
 
 # One length is exactly -tag_length.
 "$BIN" -in "$IN" -out "$TMP/one.tsv" -tag_lengths 4 "${ARGS[@]}" >/dev/null 2>&1 || fail "-tag_lengths 4 run failed"
@@ -169,7 +175,7 @@ awk -F'\t' 'NR > 1 && $3 < 5 { found = 1 } END { exit !found }' "$TMP/f3.tsv" \
   || fail "-fasta -tag_length 3 reported no tag shorter than 5 residues; the check would prove nothing"
 merge "$TMP/order" "$TMP/fstats" "$TMP/f3.tsv" "$TMP/f4.tsv" "$TMP/f5.tsv" > "$TMP/fexpected.tsv"
 decisive "$TMP/fstats" "-fasta"
-same "$TMP/fexpected.tsv" "$TMP/fmulti.tsv" "-fasta: the multi-length TSV is not the single-length runs' rows with cross-length repeats dropped"
+same "$TMP/fexpected.tsv" "$TMP/fmulti.tsv" "-fasta: the multi-length TSV is not the single-length runs' rows with cross-length repeats dropped $PRINT_ALIKE"
 merge_recon "$TMP/order" "$TMP/fstats" "$TMP/f3.recon.tsv" "$TMP/f4.recon.tsv" "$TMP/f5.recon.tsv" \
   > "$TMP/fexpected.recon.tsv"
 [ "$(count "$TMP/fstats.recon" mixed)" = 0 ] && [ "$(count "$TMP/fstats.recon" orphan)" = 0 ] \
@@ -217,7 +223,7 @@ grep -q '^#end pep2 [1-9]' "$TMP/s.4" || fail "-stream -tag_length 4 tagged noth
 awk '/^#end / { print $2 }' "$TMP/s.3" > "$TMP/s.order"
 ENDS=1 merge "$TMP/s.order" "$TMP/sstats" "$TMP/s.3" "$TMP/s.4" > "$TMP/s.expected"
 decisive "$TMP/sstats" "-stream"
-same "$TMP/s.expected" "$TMP/s.multi" "-stream: the multi-length output is not each block's single-length rows with cross-length repeats dropped, counted in #end"
+same "$TMP/s.expected" "$TMP/s.multi" "-stream: the multi-length output is not each block's single-length rows with cross-length repeats dropped, counted in #end $PRINT_ALIKE"
 
 echo "multilength_test: all checks passed ($(($(wc -l < "$TMP/multi.tsv") - 1)) file rows," \
      "$(count "$TMP/stats" dropped) dropped, $(count "$TMP/stats" repeated) repeated keys kept)"
