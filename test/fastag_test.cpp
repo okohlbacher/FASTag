@@ -416,7 +416,7 @@ int main()
 
   // 11. duplicated m/z peaks must not change the result
   //
-  // diaTracer emits peaks sharing an m/z routinely -- measured on S23, every MS2
+  // diaTracer emits peaks sharing an m/z routinely -- measured on IH3, every MS2
   // spectrum has them, median 22 and up to 46. prepare() collapses them keeping
   // the strongest, because each otherwise consumes a slot in the peak budget and
   // shifts every intensity rank.

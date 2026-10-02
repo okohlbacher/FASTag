@@ -169,7 +169,7 @@ FASTag -in run.mzML -out tags.tsv -fragment_tolerance 0.3 -fragment_tolerance_un
 FASTag -in run.mzML -out tags.tsv -no_deisotope -gaps 0
 
 # only tags occurring in a protein of interest, plus the spectra carrying them
-FASTag -in run.mzML -out tags.tsv -fasta AGXT.fasta -out_spectra hits.mzML
+FASTag -in run.mzML -out tags.tsv -fasta in-house.fasta -out_spectra hits.mzML
 
 # mzPeak in, mzPeak out -- any combination of mzML and mzpeak works
 FASTag -in run.mzpeak -out tags.tsv

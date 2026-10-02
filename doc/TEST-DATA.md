@@ -33,14 +33,14 @@ file's own metadata, not from a catalogue — see the Eclipse entry for why.
 
 | # | file | instrument | analyser | acquisition | spectra | peaks/MS2 (p25/med/p75) | tolerance |
 |---|---|---|---|---|---|---|---|
-| 1 | S23_sage.mzML | Bruker timsTOF | TOF | DIA to diaTracer pseudo-MS2 | 632,677 | 500/500/500 (clamped) | 20 ppm |
+| 1 | ih3_sage.mzML | Bruker timsTOF | TOF | DIA to diaTracer pseudo-MS2 | 632,677 | 500/500/500 (clamped) | 20 ppm |
 | 2 | HeLa ddaPASEF | Bruker timsTOF Pro | TOF | real ddaPASEF | 371,187 | 95/163/273 | 20 ppm |
 | 3 | Astral label-free | Orbitrap Astral | FTMS | real DDA | 102,236 | 956/1435/1682 | 20 ppm |
 | 4 | Eclipse DDA-TMT | Orbitrap **Eclipse** | **ion trap** | real DDA, TMT | 41,407 | 183/273/371 | **0.3 Da** |
 
 ### Provenance
 
-1. **S23** — local, diaTracer output. Note this is a *constructed* spectrum type:
+1. **IH3** — local, diaTracer output. Note this is a *constructed* spectrum type:
    diaTracer aggregates correlated signal across the DIA window and retention
    time. Its 500-peak count is a hard output cap, not a property of the ions,
    which is why it is the wrong dataset to tune a peak budget on.
@@ -78,11 +78,11 @@ file's own metadata, not from a catalogue — see the Eclipse entry for why.
 ### The Sage ground truth is GONE
 
 File 1 previously had 14,867 Sage PSMs at 1% FDR, and every recall figure in the
-README's history was measured against it. **Neither the PSM table, the S23 mzML,
+README's history was measured against it. **Neither the PSM table, the IH3 mzML,
 nor the Sage binary is on this machine any more.** Those numbers can no longer be
 reproduced or extended here, which is precisely why tier 3 below exists.
 
-Regenerating it needs: Sage 0.14.7, a human FASTA with reversed decoys, the S23
+Regenerating it needs: Sage 0.14.7, a human FASTA with reversed decoys, the IH3
 diaTracer output, and the precursor-injection fix described in
 `vault/03-Design/SAGE-Tag-Confirmation.md` (Sage refuses the file otherwise).
 
