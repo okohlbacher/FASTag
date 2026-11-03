@@ -158,7 +158,11 @@ namespace FASTag
   {
     const std::size_t i = next_++;
     // MS1 peaks are never read; holding them would only cost memory.
-    if (s.getMSLevel() != 2) s.clear(false);
+    if (s.getMSLevel() != 2)
+    {
+      s.clear(false);
+      s.shrink_to_fit();
+    }
     if (keep_copy_.count(i))
     {
       static thread_local PeakPickerHiRes picker;
