@@ -481,6 +481,9 @@ jobs:
           # sits at the root, so there is no ../share to resolve; FASTag looks for
           # both spellings, see taxonomyDir_() in src/FASTag.cpp.
           cp -r data/taxonomy dist/FASTag/share-FASTag-taxonomy
+          # The -digest_out models and -massgap_out modifications, found the
+          # same way (share-FASTag-digest in this flat layout).
+          cp -r data/digest dist/FASTag/share-FASTag-digest
           # printf, not a heredoc: a heredoc's body has to be indented to
           # satisfy YAML's block-scalar rules, but leading whitespace before
           # `#!` breaks shebang recognition -- the kernel requires it at byte
@@ -578,6 +581,9 @@ jobs:
           # Linux and macOS have separate bundle steps; adding it to only one
           # shipped two of the four tarballs without it.
           cp -r data/taxonomy dist/FASTag/share-FASTag-taxonomy
+          # The -digest_out models and -massgap_out modifications, found the
+          # same way (share-FASTag-digest in this flat layout).
+          cp -r data/digest dist/FASTag/share-FASTag-digest
           # printf, not a heredoc: a heredoc's body has to be indented to
           # satisfy YAML's block-scalar rules, but leading whitespace before
           # `#!` breaks shebang recognition -- the kernel requires it at byte
@@ -682,6 +688,13 @@ jobs:
           cmp -s "$BW/ml.tsv" "$BW/mp.tsv" || { echo "::error::tags from the bundle-written archive differ from the mzML tags"; diff "$BW/ml.tsv" "$BW/mp.tsv" | head; exit 1; }
           [ "$(grep -c . "$BW/mp.tsv")" -gt 1 ] || { echo "::error::the bundle round trip produced no tags"; exit 1; }
           echo "bundle round trip: $(grep -o 'Wrote [0-9]* spectra' "$BW/write.log"), tags byte-identical"
+          # ...and finds its shipped digest data: -digest_out without
+          # -digest_models must report the shipped background.
+          env -i HOME="$HOME" PATH=/usr/bin:/bin "$GITHUB_WORKSPACE/dist/FASTag/FASTag" \
+            -in "$MZ" -out "$BW/dg.tsv" -digest_out "$BW/digest.tsv" -threads 2 > "$BW/digest.log" 2>&1 \
+            || { cat "$BW/digest.log"; echo "::error::the shipped bundle cannot write -digest_out"; exit 1; }
+          grep -q $'^run\tbackground\tshipped_human\t' "$BW/digest.tsv" \
+            || { cat "$BW/digest.log"; echo "::error::-digest_out did not find the shipped digest data"; exit 1; }
 
           # Listed once into a variable, not `ls | grep -q` three times: this step
           # runs under `shell: bash`, which is pipefail, and grep -q exits at the
@@ -908,6 +921,7 @@ jobs:
           cp -RL dist/FASTag/lib "$R/bin/lib"
           cp -RL dist/FASTag/share-OpenMS "$R/share/OpenMS"
           cp -RL dist/FASTag/share-FASTag-taxonomy "$R/share/FASTag/taxonomy"
+          cp -RL dist/FASTag/share-FASTag-digest "$R/share/FASTag/digest"
           # -L throughout: Tauri's resource bundler silently SKIPS symlinked
           # directories, so a symlink here becomes a missing file in the .app
           # with no error at build time.

@@ -549,6 +549,9 @@ jobs:
           # fastag/data, not data: this workflow checks the repo out into fastag/
           # (`path: fastag` on actions/checkout), unlike ci.yml which uses the root.
           cp -r fastag/data/taxonomy dist/FASTag/share-FASTag-taxonomy
+          # The -digest_out models and -massgap_out modifications, found the
+          # same way (share-FASTag-digest in this flat layout).
+          cp -r fastag/data/digest dist/FASTag/share-FASTag-digest
 
           # A .bat wrapper, not a shell script: this is Windows. The real
           # exe is named FASTag.core.exe (not FASTag.exe) specifically so
@@ -615,6 +618,13 @@ jobs:
           cmp -s "$BW/ml.tsv" "$BW/mp.tsv" || { echo "::error::tags from the bundle-written archive differ from the mzML tags"; diff "$BW/ml.tsv" "$BW/mp.tsv" | head; exit 1; }
           [ "$(grep -c . "$BW/mp.tsv")" -gt 1 ] || { echo "::error::the bundle round trip produced no tags"; exit 1; }
           echo "bundle round trip: $(grep -o 'Wrote [0-9]* spectra' "$BW/write.log"), tags byte-identical"
+          # ...and finds its shipped digest data: -digest_out without
+          # -digest_models must report the shipped background.
+          PATH="$CLEAN_PATH" "$GITHUB_WORKSPACE/dist/FASTag/FASTag.bat" \
+            -in "$MZ" -out "$BW/dg.tsv" -digest_out "$BW/digest.tsv" -threads 2 > "$BW/digest.log" 2>&1 \
+            || { cat "$BW/digest.log"; echo "::error::the shipped bundle cannot write -digest_out"; exit 1; }
+          grep -q $'^run\tbackground\tshipped_human\t' "$BW/digest.tsv" \
+            || { cat "$BW/digest.log"; echo "::error::-digest_out did not find the shipped digest data"; exit 1; }
           echo "Portability check passed: runs standalone, no build-environment leakage, reads and writes mzPeak."
 
       # Every mzPeak archive this job wrote, through mzPeakValidator in full
@@ -724,6 +734,7 @@ jobs:
           cp dist/FASTag/*.dll "$R/bin/"
           cp -r dist/FASTag/share-OpenMS "$R/share/OpenMS"
           cp -r dist/FASTag/share-FASTag-taxonomy "$R/share/FASTag/taxonomy"
+          cp -r dist/FASTag/share-FASTag-digest "$R/share/FASTag/digest"
           test -s "$R/bin/FASTag.exe"
           test -s "$R/share/OpenMS/examples/ID/Ecoli_MS2_small.mzML"
 
