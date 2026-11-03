@@ -149,12 +149,14 @@ jobs:
             extra: ""
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       # The same libraries OpenMS was built against (.github/env/openms.yml),
       # the same compilers, plus what packaging needs.
       - name: Install the toolchain and dependencies
-        uses: mamba-org/setup-micromamba@v3
+        uses: mamba-org/setup-micromamba@f457c30a868e4760d3a6fcea5f25dc655b8edf39 # v3
         with:
           environment-file: .github/env/openms.yml
           create-args: ${{ matrix.compilers }} ${{ matrix.extra }}
@@ -166,7 +168,7 @@ jobs:
       # cache (actions/cache would save only from a successful job).
       - name: Restore OpenMS
         id: openms-cache
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: openms-install
           key: openms-${{ env.OPENMS_REF }}-${{ matrix.name }}-${{ matrix.toolchain }}-${{ hashFiles('.github/env/openms.yml') }}-osx${{ env.MACOS_MIN_VERSION }}-v1
@@ -225,7 +227,7 @@ jobs:
 
       - name: Save OpenMS
         if: steps.openms-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: openms-install
           key: openms-${{ env.OPENMS_REF }}-${{ matrix.name }}-${{ matrix.toolchain }}-${{ hashFiles('.github/env/openms.yml') }}-osx${{ env.MACOS_MIN_VERSION }}-v1
@@ -316,7 +318,7 @@ jobs:
       # --only-binary: every compiled dependency has a wheel for all five
       # targets, and a source build here would be a silent multi-minute
       # detour on a runner without a compiler for it.
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         id: validator-python
         with:
           python-version: '3.12'
@@ -373,7 +375,7 @@ jobs:
           echo "$OUT" | grep -E "MS2 spectra" || { echo "$OUT"; exit 1; }
           echo "$OUT" | grep -q "34 MS2 spectra" || { echo "::error::expected 34 MS2 spectra from small.mzpeak"; exit 1; }
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: FASTag-${{ matrix.name }}
           path: build/FASTag
@@ -739,7 +741,7 @@ jobs:
       # The reports, pass or fail: a red validator run is only useful with
       # the findings attached, and `always()` is what makes a failed step's
       # output reach the artifact.
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
           name: mzpeak-validator-${{ matrix.name }}
@@ -898,7 +900,7 @@ jobs:
       #
       # Runs on a v* tag, or on a workflow_dispatch with gui_dry_run set: see
       # the comment on that input for why an untested tag-only path is a trap.
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && matrix.name == 'macos-arm64')
         with:
           node-version: 24
@@ -1040,7 +1042,7 @@ jobs:
 
       # A dry run has no release to attach to, so the .dmg comes back as a
       # workflow artifact to be opened and checked by hand.
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: inputs.gui_dry_run && matrix.name == 'macos-arm64'
         with:
           name: FASTag-gui-${{ matrix.name }}-dryrun
@@ -1159,8 +1161,10 @@ jobs:
   gui:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
       - name: Tauri build deps
