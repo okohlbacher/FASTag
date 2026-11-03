@@ -101,7 +101,9 @@ PRINT_ALIKE="(if the binary keeps rows expected dropped, they may be distinct re
 # given to merge, whose STATS.rows says which tag rows were kept). A recon row
 # names its tag by sequence only, so its rows go with the fate of that
 # sequence's tag rows in the spectrum and length; a sequence with kept and
-# dropped rows there cannot be split and counts as "mixed" in STATS.recon.
+# dropped rows there cannot be split and counts as "mixed" in STATS.recon. Its
+# (spectrum, sequence) goes to STATS.mixed, and the comparison leaves those
+# rows out on both sides (unmixed below) instead of guessing.
 merge_recon() {
   local order="$1" stats="$2"; shift 2
   head -1 "$1"
@@ -116,7 +118,7 @@ merge_recon() {
           for (i = 1; i <= nr[f, order[s]]; ++i) {
             k = f SUBSEP order[s] SUBSEP tag[f, order[s], i]
             if (!(k in fate)) { ++orphan; continue }
-            if (fate[k] == "M") ++mixed
+            if (fate[k] == "M") { ++mixed; print order[s] "\t" tag[f, order[s], i] > (stats ".mixed") }
             else if (fate[k] == "K") print row[f, order[s], i]
             else ++dropped
           }
@@ -124,6 +126,12 @@ merge_recon() {
       print "mixed", mixed + 0 > stats
       print "orphan", orphan + 0 > stats
     }' "$order" "$stats.rows" "$@"
+  touch "$stats.recon.mixed"
+}
+# unmixed MIXED RECON: RECON without the rows of a (spectrum, sequence) in MIXED.
+unmixed() {
+  awk -F'\t' 'FILENAME == ARGV[1] { m[$1 SUBSEP $2] = 1; next }
+               FNR == 1 || !(($1 SUBSEP $2) in m)' "$1" "$2"
 }
 
 # The printed values must decide every key the check meets, the dedup must
@@ -178,11 +186,16 @@ decisive "$TMP/fstats" "-fasta"
 same "$TMP/fexpected.tsv" "$TMP/fmulti.tsv" "-fasta: the multi-length TSV is not the single-length runs' rows with cross-length repeats dropped $PRINT_ALIKE"
 merge_recon "$TMP/order" "$TMP/fstats" "$TMP/f3.recon.tsv" "$TMP/f4.recon.tsv" "$TMP/f5.recon.tsv" \
   > "$TMP/fexpected.recon.tsv"
-[ "$(count "$TMP/fstats.recon" mixed)" = 0 ] && [ "$(count "$TMP/fstats.recon" orphan)" = 0 ] \
-  || fail "-recon_out: $(count "$TMP/fstats.recon" mixed) recon rows of a partly dropped sequence, $(count "$TMP/fstats.recon" orphan) of no tag row; the check would guess"
+[ "$(count "$TMP/fstats.recon" orphan)" = 0 ] \
+  || fail "-recon_out: $(count "$TMP/fstats.recon" orphan) recon rows of no tag row; the check would guess"
+# Mixed sequences are left out of the comparison, so they must stay a minority.
+[ "$(count "$TMP/fstats.recon" mixed)" -le "$(unmixed "$TMP/fstats.recon.mixed" "$TMP/fexpected.recon.tsv" | wc -l)" ] \
+  || fail "-recon_out: $(count "$TMP/fstats.recon" mixed) recon rows of partly dropped sequences outnumber the decidable ones"
 [ "$(count "$TMP/fstats.recon" dropped)" -gt 0 ] \
   || fail "-recon_out: no recon row dropped; the check would prove nothing"
-same "$TMP/fexpected.recon.tsv" "$TMP/fmulti.recon.tsv" "-recon_out: the multi-length recon TSV does not place exactly the kept tag rows"
+unmixed "$TMP/fstats.recon.mixed" "$TMP/fmulti.recon.tsv" > "$TMP/fmulti.recon.unmixed.tsv"
+unmixed "$TMP/fstats.recon.mixed" "$TMP/fexpected.recon.tsv" > "$TMP/fexpected.recon.unmixed.tsv"
+same "$TMP/fexpected.recon.unmixed.tsv" "$TMP/fmulti.recon.unmixed.tsv" "-recon_out: the multi-length recon TSV does not place exactly the kept tag rows"
 
 # Length 3 reaches at most 3 + 2*2 = 7 residues, short of a floor of 8: its own
 # run is refused, so the multi-length run must be too, with the same exit code.

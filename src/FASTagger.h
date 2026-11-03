@@ -208,4 +208,30 @@ namespace FASTag
     }
     return out;
   }
+
+  /// Per base residue of @p annotated (N->C), the mass shift of its variable
+  /// modification ("X[Name]" with a variable ModSpec of that name on X), 0
+  /// otherwise. One entry per baseSequence() residue.
+  inline std::vector<double> variableModShifts(const std::string& annotated,
+                                               const std::vector<ModSpec>& mods)
+  {
+    std::vector<double> out;
+    for (size_t i = 0; i < annotated.size(); ++i)
+    {
+      const char c = annotated[i];
+      if (c == '[' || c == ']') continue;
+      double shift = 0.0;
+      if (i + 1 < annotated.size() && annotated[i + 1] == '[')
+      {
+        const size_t close = annotated.find(']', i + 2);
+        const std::string name = annotated.substr(i + 2, close == std::string::npos
+                                                             ? std::string::npos : close - i - 2);
+        for (const ModSpec& m : mods)
+          if (m.variable && m.residue == c && m.name == name) { shift = m.delta; break; }
+        i = close == std::string::npos ? annotated.size() : close;
+      }
+      out.push_back(shift);
+    }
+    return out;
+  }
 }

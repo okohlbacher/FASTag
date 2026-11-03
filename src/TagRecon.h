@@ -24,7 +24,8 @@ namespace FASTag
     size_t      start = 0;  ///< 0-based position of the peptide in its protein
     size_t      pos = 0;    ///< 0-based residue index where the tag starts in peptide
     bool        reversed = false;  ///< tag matched the peptide reading C->N (b-derived)
-    /// Flank mass agreement. Both true = exact placement (no mass gap).
+    /// Flank mass agreement, within the tolerances reconcile() documents.
+    /// Both true = exact placement (no mass gap).
     bool        nterm_match = false;
     bool        cterm_match = false;
     double      delta_mass = 0.0;  ///< spectrum flank - database flank on the mismatched side; 0 if exact
@@ -86,11 +87,19 @@ namespace FASTag
     /// With @p spec (m/z-sorted fragment peaks) every placement with a mass gap
     /// is also site-localized against it, at fragment charges
     /// 1..max(1, @p precursor_charge - 1) (a charge <= 0 counts as 2, as in
-    /// the tagger).
+    /// the tagger). @p tag_shift, if given, holds the mass shift of each tag
+    /// residue's variable modification (0 when unmodified), N->C, one entry
+    /// per residue of @p tag; localization puts those shifts on the ladder.
+    ///
+    /// Flanks follow the tagger's y-ion convention: a reversed (b-derived)
+    /// placement expects cterm_mass = N-side residues - H2O and nterm_mass =
+    /// C-side residues + H2O. The precursor-derived flank is judged at the
+    /// peptide's mass, the other at its own.
     std::vector<Reconciliation> reconcile(const std::string& tag, double nterm_mass,
                                           double cterm_mass,
                                           const OpenMS::MSSpectrum* spec = nullptr,
-                                          int precursor_charge = 2) const;
+                                          int precursor_charge = 2,
+                                          const std::vector<double>* tag_shift = nullptr) const;
 
     /// Candidate variable modifications for stage-B delta interpretation. Set
     /// before reconcile(); read-only after. Empty means only substitutions and
@@ -109,11 +118,14 @@ namespace FASTag
     double tolAt(double m) const { return tol_ppm_ ? m * frag_tol_ * 1e-6 : frag_tol_; }
     void tryPlace(const ProteomeIndex::TagOcc& occ, const ProteomeIndex::Window& w,
                   double nterm_mass, double cterm_mass, const OpenMS::MSSpectrum* spec,
-                  int frag_charges, std::vector<Reconciliation>& out) const;
+                  int frag_charges, const std::vector<double>* tag_shift,
+                  std::vector<Reconciliation>& out) const;
     /// Fill r.loc_*: score every residue of r's region as the gap's site by the
     /// b/y ions of window @p w it explains in @p spec.
     void localize_(Reconciliation& r, const ProteomeIndex::Window& w,
-                   const OpenMS::MSSpectrum& spec, int frag_charges) const;
+                   const OpenMS::MSSpectrum& spec, int frag_charges,
+                   const ProteomeIndex::TagOcc& occ,
+                   const std::vector<double>* tag_shift) const;
     /// Best explanation of @p delta over the residues in @p region: a candidate
     /// mod on a present residue, a single substitution of a present residue, or
     /// "?" if neither fits within tolerance. Prefers whichever fits with the

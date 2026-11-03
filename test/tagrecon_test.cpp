@@ -141,16 +141,48 @@ int main()
     const size_t pos = 4;
     const std::string tag = pep.substr(pos, 4);
     const std::string rev(tag.rbegin(), tag.rend());
-    // A b-derived reading stores the tag reversed; its nterm/cterm flanks are the
-    // peptide's C/N flanks respectively.
-    const double nflank_spec = sumMass(pep.substr(pos + 4));   // becomes the tag's "nterm"
-    const double cflank_spec = sumMass(pep.substr(0, pos));    // becomes the tag's "cterm"
+    // A b-derived reading stores the tag reversed, and its flanks are what
+    // FASTagger computes under the y assumption: cterm = low b ion's neutral
+    // mass - H2O = N-side residues - H2O; nterm = precursor - high b ion =
+    // C-side residues + H2O.
+    const double water = EmpiricalFormula("H2O").getMonoWeight();
+    const double nflank_spec = sumMass(pep.substr(pos + 4)) + water;  // the tag's "nterm"
+    const double cflank_spec = sumMass(pep.substr(0, pos)) - water;   // the tag's "cterm"
     auto res = r.reconcile(rev, nflank_spec, cflank_spec);
     bool ok = false;
     for (const auto& x : res)
       if (x.peptide == pep && x.pos == pos && x.reversed && x.nterm_match && x.cterm_match)
         ok = true;
-    check(ok, "a reversed tag reconciles with swapped flanks");
+    check(ok, "a reversed tag reconciles with swapped, water-offset flanks");
+    // The water-free swap (the old convention) is two waters off and rejected.
+    bool stale = false;
+    for (const auto& x : r.reconcile(rev, sumMass(pep.substr(pos + 4)), sumMass(pep.substr(0, pos))))
+      if (x.peptide == pep && x.pos == pos && x.reversed && x.nterm_match && x.cterm_match)
+        stale = true;
+    check(!stale, "water-free swapped flanks are not an exact reversed placement");
+  }
+
+  // --- ppm: the precursor-derived N flank is judged at the peptide's mass ---
+  {
+    // 20 ppm of the ~500 Da N flank is 0.010 Da; a +0.015 Da error there is
+    // ~10 ppm of the peptide, an ordinary precursor-scale error.
+    const size_t pos = 5;
+    const std::string tag = pep.substr(pos, 4);
+    TagReconciler rp(20.0, /*ppm=*/true, /*both=*/true);
+    rp.attach(&idx, /*missed=*/0, /*min_len=*/4);
+    bool exact = false;
+    for (const auto& x : rp.reconcile(tag, sumMass(pep.substr(0, pos)) + 0.015,
+                                      sumMass(pep.substr(pos + 4))))
+      if (x.peptide == pep && x.pos == pos && !x.reversed && x.nterm_match && x.cterm_match)
+        exact = true;
+    check(exact, "a precursor-scale error on the N flank still places exactly (ppm)");
+    // The C flank (one low fragment) keeps its own-mass tolerance.
+    bool c_exact = false;
+    for (const auto& x : rp.reconcile(tag, sumMass(pep.substr(0, pos)),
+                                      sumMass(pep.substr(pos + 4)) + 0.015))
+      if (x.peptide == pep && x.pos == pos && !x.reversed && x.cterm_match)
+        c_exact = true;
+    check(!c_exact, "the C flank is still judged at its own mass");
   }
 
   // --- Site localization: shifted b/y fragments pick the modified residue ---
@@ -229,6 +261,39 @@ int main()
     for (const auto& x : rp.reconcile(tag, nflank - ox + tmt + 0.02, cflank, &label_only, 2))
       if (placed(x)) label_err_first = x.loc_pos == 0 && x.loc_ties == 1;
     check(label_err_first, "a label-only gap off by precursor-scale error stays on the first residue");
+  }
+
+  // --- A variable mod inside the tag rides on the localization ladder ---
+  {
+    // GM[Ox]AM[Ox]AAK: tag "MAAK" at 3 with its M oxidized, gap = Oxidation
+    // on M1 in the N-side region "GMA". y ions only. Without the tag's mod on
+    // the ladder, the y ions between M1 and the tag matched "shifted" by
+    // coincidence (gap mass == tag mod mass) and the call moved to A2.
+    const std::string gp = "GMAMAAK";
+    std::vector<FASTAFile::FASTAEntry> e2;
+    e2.emplace_back("PROT2", "test protein", "MSTVWYAAR" + gp + "GTANLEFDSK");
+    ProteomeIndex idx2;
+    idx2.build(e2, {}, 0);
+    TagReconciler r2(0.02, /*ppm=*/false, /*both=*/false);
+    r2.attach(&idx2, 0, 4);
+    const double ox = 15.99491;
+    const double water = EmpiricalFormula("H2O").getMonoWeight();
+    MSSpectrum s;
+    for (size_t i = 1; i < gp.size(); ++i)
+    {
+      double y = sumMass(gp.substr(gp.size() - i)) + water;
+      const size_t from = gp.size() - i;
+      if (from <= 1) y += ox;  // M1, the gap
+      if (from <= 3) y += ox;  // M3, the tag's own mod
+      s.push_back(Peak1D(y + Constants::PROTON_MASS_U, 100.0f));
+    }
+    s.sortByPosition();
+    const std::vector<double> shift = {ox, 0.0, 0.0, 0.0};
+    bool right = false;
+    for (const auto& x : r2.reconcile("MAAK", sumMass("GMA") + ox, 0.0, &s, 2, &shift))
+      if (x.peptide == gp && x.pos == 3 && !x.nterm_match && x.cterm_match)
+        right = x.loc_pos == 1 && x.loc_ties == 1;
+    check(right, "a gap equal to the tag's own mod localizes to M1 with the mod on the ladder");
   }
 
   if (failures == 0) std::cout << "tagrecon_test: all checks passed\n";

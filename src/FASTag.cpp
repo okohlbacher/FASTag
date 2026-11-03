@@ -1937,15 +1937,20 @@ protected:
 
         if (recon_on && !row_entrap)  // known-false rows must not place or bin
         {
+          // The tag's own variable mods go on the localization ladder.
+          const bool tag_modded = t.seq.find('[') != std::string::npos;
+          const std::vector<double> tag_shift =
+              tag_modded ? FASTag::variableModShifts(t.seq, p.mods) : std::vector<double>();
           const auto places = recon.reconcile(FASTag::baseSequence(t.seq),
                                               t.nterm_mass, t.cterm_mass,
                                               recon_loc ? &loc_peaks : nullptr,
-                                              prec.getCharge());
+                                              prec.getCharge(),
+                                              tag_modded ? &tag_shift : nullptr);
           for (const auto& pl : places)
           {
             std::string prot = pl.protein;
             for (char& ch : prot) if (ch == '\t' || ch == '\n' || ch == '\r') ch = ' ';
-            res.rbuf += spec.getNativeID(); res.rbuf += '\t';
+            appendField(res.rbuf, spec.getNativeID()); res.rbuf += '\t';
             res.rbuf += t.seq;             res.rbuf += '\t';
             res.rbuf += prot;              res.rbuf += '\t';
             res.rbuf += pl.peptide;        res.rbuf += '\t';
