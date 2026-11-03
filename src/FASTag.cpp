@@ -106,6 +106,10 @@ namespace
   /// When main_() finished a file run; what follows it is teardown.
   std::chrono::steady_clock::time_point g_t_main_end;
 
+  /// Thrown by the tagging loop at the first MS2 with an ion mobility per
+  /// peak when -out_spectra is mzPeak, which cannot store it.
+  struct IonMobilityRefused {};
+
   /// k of a taxonomy index, read from its 16-byte header alone.
   ///
   /// Exists so the tag-length precondition can be checked BEFORE tagging.
@@ -1409,6 +1413,27 @@ protected:
     g_t_probe = std::chrono::duration<double>(t_tables_a - t_probe_a).count();
     const std::vector<FASTag::Tables> tables = build_tables();
     g_t_tables = std::chrono::duration<double>(std::chrono::steady_clock::now() - t_tables_a).count();
+    // mzPeak output cannot store an ion mobility per peak: refuse before any
+    // work. For mzML the first MS2 is checked here; an mzPeak input is read
+    // once, in the tagging loop, which stops at its first such MS2.
+    const auto refuse_im = [&]()
+    {
+      OPENMS_LOG_ERROR << "Not writing " << out_spectra << ": the input's MS2 spectra have an "
+                          "ion mobility per peak, which mzPeak output cannot store yet. Write "
+                          "-out_spectra as .mzML instead." << std::endl;
+      return INCOMPATIBLE_INPUT_DATA;
+    };
+    if (mzpeak_out && !mzpeak_in)
+    {
+      const Size n_check = streaming ? ondisc->getNrSpectra() : exp.size();
+      for (Size i = 0; i < n_check; ++i)
+      {
+        const MSSpectrum sp = read_spectrum(i);
+        if (sp.getMSLevel() != 2) continue;
+        if (sp.containsIMData()) return refuse_im();
+        break;
+      }
+    }
     std::ofstream tsv(out.c_str());
     if (!tsv)
     {
@@ -2052,6 +2077,7 @@ protected:
         if (!loaded_here && freader) { loaded = freader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
         if (!loaded_here && reader) { loaded = reader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
         const MSSpectrum& spec = loaded_here ? loaded : exp[static_cast<Size>(i)];
+        if (mzpeak_out && spec.getMSLevel() == 2 && spec.containsIMData()) throw IonMobilityRefused{};
         const Clock::time_point tb = timing ? Clock::now() : ta;
         record(blk, idx, tag_one(spec, tid, static_cast<size_t>(i)), spec);
         tick();
@@ -2133,7 +2159,22 @@ protected:
     // write= is only what the loop waits for; write_busy= is the writer's own.
     writer.join();
     t_write = secs(t_write_a, Clock::now());
-    if (work_failed) std::rethrow_exception(work_failed);
+    if (work_failed)
+    {
+      try
+      {
+        std::rethrow_exception(work_failed);
+      }
+      catch (const IonMobilityRefused&)
+      {
+        // Partial reports are no result: remove them.
+        tsv.close();
+        std::remove(out.c_str());
+        if (recon_on) { rtsv.close(); std::remove(recon_out.c_str()); }
+        if (glyco_on) { gtsv.close(); std::remove(glyco_out.c_str()); }
+        return refuse_im();
+      }
+    }
     if (write_failed) std::rethrow_exception(write_failed);
     if (mzs)
     {
