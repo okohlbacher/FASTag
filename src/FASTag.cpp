@@ -2535,6 +2535,9 @@ protected:
     // write= is only what the loop waits for; write_busy= is the writer's own.
     writer.join();
     t_write = secs(t_write_a, Clock::now());
+    // The writer's failure is the cause when both are set: it aborts the
+    // mzPeak stream, and a worker blocked in take() then fails with
+    // "mzPeak read stopped", which would otherwise be reported instead.
     if (work_failed)
     {
       try
@@ -2549,6 +2552,11 @@ protected:
         if (recon_on) { rtsv.close(); std::remove(recon_out.c_str()); }
         if (glyco_on) { gtsv.close(); std::remove(glyco_out.c_str()); }
         return refuse_im();
+      }
+      catch (...)
+      {
+        if (write_failed) std::rethrow_exception(write_failed);
+        throw;
       }
     }
     if (write_failed) std::rethrow_exception(write_failed);
