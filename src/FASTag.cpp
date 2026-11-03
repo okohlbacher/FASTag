@@ -47,6 +47,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cctype>
 #include <cmath>
 #include <condition_variable>
 #include <csignal>
@@ -1738,6 +1739,15 @@ protected:
       }
       const auto same = [](const std::string& a, const std::string& b) {
         std::error_code ea, eb;
+#ifdef _WIN32
+        // NUL (Git Bash passes /dev/null as nul) has no file status on Windows.
+        for (const std::string* x : {&a, &b})
+        {
+          std::string f = fs::path(*x).stem().string();
+          for (char& c : f) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+          if (f == "nul") return false;
+        }
+#endif
         // A device (/dev/null, /dev/stdout) or other non-regular file may be
         // named twice: writing it truncates nothing.
         for (const std::string* x : {&a, &b})
