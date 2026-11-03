@@ -970,6 +970,15 @@ jobs:
             || { echo "::error::update check is live -- QIODevice noise on a plain --help"; exit 1; }
           du -sh "$R"
 
+      # Installed in a step of its own, WITHOUT the signing secrets: npm
+      # lifecycle scripts run during `npm ci`, and none of them needs the
+      # Developer ID certificate or the notary password in its environment.
+      # --ignore-scripts: the lockfile's only install script is fsevents'.
+      - name: Install the desktop app's npm dependencies (macOS)
+        if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && matrix.name == 'macos-arm64')
+        working-directory: gui
+        run: npm ci --ignore-scripts
+
       - name: Build, sign and notarize the desktop app (macOS)
         if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && matrix.name == 'macos-arm64')
         timeout-minutes: 120
@@ -988,7 +997,6 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
         run: |
           set -e
-          npm ci
           npm run tauri build
           ls -la src-tauri/target/release/bundle/dmg/
           # Assert the ticket is attached, HERE rather than at upload time: a
