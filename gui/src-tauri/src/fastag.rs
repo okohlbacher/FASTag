@@ -119,6 +119,36 @@ fn parse_version(text: &str) -> Option<String> {
     }
 }
 
+/// The CLI is a console program and the release GUI has no console
+/// (windows_subsystem = "windows"), so Windows gave every child a console
+/// window of its own -- one flashing at launch for the probe, one open for
+/// every run, and closing it killed the run. CREATE_NO_WINDOW suppresses it;
+/// piped stdio is unaffected.
+fn no_console_window(cmd: &mut Command) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    #[cfg(not(windows))]
+    let _ = cmd;
+}
+
+/// The taxonomy directory a run's child gets: the user's own
+/// FASTAG_TAXONOMY_DIR if it names a directory (the CLI honours it first,
+/// and species.rs reports on it), else the bundled one. Overriding the
+/// user's value made the species panel describe one index while the run
+/// loaded another.
+pub fn taxonomy_dir(r: &Resolved) -> Option<PathBuf> {
+    if let Ok(env) = std::env::var("FASTAG_TAXONOMY_DIR") {
+        if !env.is_empty() && PathBuf::from(&env).is_dir() {
+            return Some(PathBuf::from(env));
+        }
+    }
+    r.taxonomy.clone()
+}
+
 /// libOpenMS pulls in OpenBLAS, which starts one spinning thread per core at
 /// load time (127 on a 128-thread node, ~2 s of CPU even for --help). FASTag
 /// never calls BLAS. The CLI wrappers set the same default; a user's own
@@ -129,13 +159,31 @@ fn quiet_blas(cmd: &mut Command) {
     }
 }
 
+// async + spawn_blocking: a sync command runs on the main thread, and
+// `FASTag --help` loads the whole library closure -- seconds on a cold cache
+// or under a first-launch Gatekeeper/antivirus scan, during which the window
+// froze.
 #[tauri::command]
-pub fn probe(app: AppHandle) -> BinaryInfo {
-    let r = resolve_binary(&app);
+pub async fn probe(app: AppHandle) -> BinaryInfo {
+    tauri::async_runtime::spawn_blocking(move || probe_blocking(&app))
+        .await
+        .unwrap_or_else(|e| BinaryInfo {
+            bin: String::new(),
+            data_path: None,
+            source: "path".into(),
+            ok: false,
+            version: None,
+            detail: format!("probe failed: {e}"),
+        })
+}
+
+fn probe_blocking(app: &AppHandle) -> BinaryInfo {
+    let r = resolve_binary(app);
     let bin_s = r.bin.display().to_string();
     let data_s = r.data.as_ref().map(|d| d.display().to_string());
     let mut cmd = Command::new(&r.bin);
     cmd.arg("--help");
+    no_console_window(&mut cmd);
     if let Some(d) = &r.data {
         cmd.env("OPENMS_DATA_PATH", d);
     }
@@ -324,9 +372,11 @@ pub fn run(app: AppHandle, state: State<'_, RunManager>, params: RunParams) -> R
         cmd.env("OPENMS_DATA_PATH", d);
     }
     quiet_blas(&mut cmd);
-    if let Some(t) = &r.taxonomy {
-        // Point -species at the bundled taxonomy explicitly (the CLI's own
-        // <bin>/../share lookup fails for a copied/symlinked binary).
+    no_console_window(&mut cmd);
+    if let Some(t) = taxonomy_dir(&r) {
+        // Point -species at the taxonomy explicitly (the CLI's own
+        // <bin>/../share lookup fails for a copied/symlinked binary) -- the
+        // user's own directory if set, the same one species.rs reports on.
         cmd.env("FASTAG_TAXONOMY_DIR", t);
     }
     let mut child = match cmd.spawn() {
