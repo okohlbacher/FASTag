@@ -27,35 +27,29 @@ verified to contain a real `<indexList>`, e.g. via
 
 ## Tier 2 — benchmark corpus (external, not in-repo)
 
-Four acquisitions. **One run per instrument**, so this is coverage of the input
-space, not a sampled benchmark. Every instrument below was read out of the
-file's own metadata, not from a catalogue — see the Eclipse entry for why.
+Three public acquisitions: two from PRIDE, and one ion-trap run from MassIVE
+that anchors the `iontrap` synthetic profile. **One run per instrument**, so this is coverage of
+the input space, not a sampled benchmark. Every instrument below was read out of
+the file's own metadata, not from a catalogue — see the Eclipse entry for why.
 
 | # | file | instrument | analyser | acquisition | spectra | peaks/MS2 (p25/med/p75) | tolerance |
 |---|---|---|---|---|---|---|---|
-| 1 | ih3_sage.mzML | Bruker timsTOF | TOF | DIA to diaTracer pseudo-MS2 | 632,677 | 500/500/500 (clamped) | 20 ppm |
-| 2 | HeLa ddaPASEF | Bruker timsTOF Pro | TOF | real ddaPASEF | 371,187 | 95/163/273 | 20 ppm |
-| 3 | Astral label-free | Orbitrap Astral | FTMS | real DDA | 102,236 | 956/1435/1682 | 20 ppm |
-| 4 | Eclipse DDA-TMT | Orbitrap **Eclipse** | **ion trap** | real DDA, TMT | 41,407 | 183/273/371 | **0.3 Da** |
+| 1 | HeLa ddaPASEF | Bruker timsTOF Pro | TOF | real ddaPASEF | 371,187 | 95/163/273 | 20 ppm |
+| 2 | Astral label-free | Orbitrap Astral | FTMS | real DDA | 102,236 | 956/1435/1682 | 20 ppm |
+| 3 | Eclipse DDA-TMT | Orbitrap **Eclipse** | **ion trap** | real DDA, TMT | 41,407 | 183/273/371 | **0.3 Da** |
 
 ### Provenance
 
-1. **IH3** — local, diaTracer output. Note this is a *constructed* spectrum type:
-   diaTracer aggregates correlated signal across the DIA window and retention
-   time. Its 500-peak count is a hard output cap, not a property of the ions,
-   which is why it is the wrong dataset to tune a peak budget on.
-2. **HeLa ddaPASEF** — PRIDE `PXD054073`,
+1. **HeLa ddaPASEF** — PRIDE `PXD054073`,
    `HeLa_T2_DDA_E_A_nLC_timspro_R02.d.7z` (3.17 GB). Confirmed by its own
    metadata: `MethodName: DDA PASEF-standard_1.1sec_cycletime.m`. Convert with
    `brfp convert -i <.d> -f 2 -o out.mzML` (writes indexed mzML directly).
-3. **Astral label-free** — PRIDE `PXD076528`,
+2. **Astral label-free** — PRIDE `PXD076528`,
    `7673_YD12_P116861_S00_R1.raw` (2.4 GB). Human, DDA, label-free, tryptic.
    Convert with `ThermoRawFileParser -i in.raw -b out.mzML -f 2`.
-4. **Eclipse DDA-TMT** — MassIVE `MSV000096674` (no PXD accession),
-   `ec04479_qy_4cell_SanJose_A1.mzpeak`. On this machine the converted mzML
-   sits at `~/Claude/bench_astral_dda.mzML` — a MISNOMER inherited from the
-   catalogue error below; the alias `~/Claude/bench_eclipse_iontrap_tmt.mzML`
-   points at it and is the name to use.
+3. **Eclipse DDA-TMT** — MassIVE `MSV000096674` (public, no PXD accession),
+   `ec04479_qy_4cell_SanJose_A1.mzpeak`. Used only to fit the `iontrap`
+   synthetic profile below; it is not a demo data set.
    **The mzPeak catalogue labels this "Orbitrap Astral". The file says
    `MS:1003029 name="Orbitrap Eclipse"`.** The deposit contains Astral, Eclipse
    and Ascend data and the index labels by deposit. Trusting it, and then running
@@ -65,26 +59,21 @@ file's own metadata, not from a catalogue — see the Eclipse entry for why.
 
 ### What each one is for
 
-- **1 vs 2** separates *DIA-derived* from *real DDA* on the same vendor. Answers
-  whether pseudo-spectra flatter the tagger. (They do not: 2 is more laddered.)
-- **2 vs 3** separates *vendor and analyser* at similar acquisition. Also the
+- **1 vs 2** separates *vendor and analyser* at similar acquisition. Also the
   only pair whose peak density genuinely varies, so the only one that can test
   whether a peak budget generalises.
-- **4** is the low-resolution cornerstone. Every other file is high-res; without
+- **3** is the low-resolution cornerstone. Every other file is high-res; without
   one ion-trap acquisition the tolerance-mismatch failure mode is invisible. It
   earned its place immediately: the `iontrap` profile derived from it exposed an
   uncaught exception in `-deisotope` at 0.3 Da.
 
-### The Sage ground truth is GONE
+### Database-search ground truth
 
-File 1 previously had 14,867 Sage PSMs at 1% FDR, and every recall figure in the
-README's history was measured against it. **Neither the PSM table, the IH3 mzML,
-nor the Sage binary is on this machine any more.** Those numbers can no longer be
-reproduced or extended here, which is precisely why tier 3 below exists.
-
-Regenerating it needs: Sage 0.14.7, a human FASTA with reversed decoys, the IH3
-diaTracer output, and the precursor-injection fix described in
-`vault/03-Design/SAGE-Tag-Confirmation.md` (Sage refuses the file otherwise).
+The ground truth in this repository is the Mascot search shipped with
+PXD000001 (`F063721.dat`, 2,254 PSMs at 1% FDR), scored by
+`tools/pxd000001_truth.py`; see [BENCHMARK-DirecTag.md](BENCHMARK-DirecTag.md).
+Ground truth from Sage identifications on further public PXD runs is being
+prepared for the benchmark supplement.
 
 ## Tier 3 — synthetic benchmark (in-repo, exact truth)
 
@@ -97,7 +86,7 @@ benchmark synthstats <profile>                # same statistics, generated
 benchmark synth  <profile> [n] [TL] [gaps] [ext] [peaks] [gap_penalty]
 ```
 
-Four profiles, one per cornerstone. Each is **fitted** so `synthstats` lands on
+Three profiles, one per cornerstone. Each is **fitted** so `synthstats` lands on
 what `stats` measures on the real file — peak count and ladder edge density, the
 one structural property tagging consumes that needs no identifications:
 
@@ -105,7 +94,6 @@ one structural property tagging consumes that needs no identifications:
 |---|---|---|
 | astral | 1337 → 1395 | 69.4% → 75.2% |
 | ddapasef | 140 → 147 | 38.5% → 35.7% |
-| diatracer | ~500 → 447 | anchored to doc, not re-measured |
 | iontrap | 267 → 215 | 79.2% → 78.8% |
 
 **What it is for**: ranking. PSM truth is per *spectrum*, so it can say a correct
@@ -127,17 +115,18 @@ FASTag -in <file> -out tags.tsv -tag_length 6 -threads N \
        -fragment_tolerance <see table> -fragment_tolerance_unit <ppm|Da>
 ```
 
-Ground-truth recall counted spectra gaining a correctly placed tag: a tag was
-correct if its sequence occurred in the Sage-identified peptide at a position
-whose prefix mass matched `nterm_mass` (y-derived), or whose reverse matched with
-`cterm_mass + H2O` (b-derived), within 0.05 Da. Kept here for whoever regenerates
-the PSMs.
+Ground-truth recall counts spectra gaining a correctly placed tag: a tag is
+correct if its sequence occurs in the identified peptide at a position whose
+prefix mass matches `nterm_mass` (y-derived), or whose reverse matches with
+`cterm_mass + H2O` (b-derived), within 0.05 Da.
 
 ### Known gaps
 
-- No test, in any tier, exercises `-out_spectra`. It is the one output path with
-  no coverage.
-- Tier 3 gates nothing in CI yet. It builds there; it is not run.
-- The `diatracer` profile is the only one fitted to a document rather than to a
-  file, because the file is gone. Treat its absolute numbers with suspicion; it
-  is still useful for A/B comparisons, which is how it has been used.
+- `-out_spectra` is covered end to end only through mzPeak: `mzpeak_roundtrip`
+  and `mzpeak_e2e` write archives with it and re-tag them. There is no unit test
+  of the writer itself.
+- Tier 3 runs in `ctest` (`bench_<profile>`, one short run per profile) as a
+  smoke test only: it fails when a profile produces no tags at all, not when
+  ranking accuracy drops.
+- There is no profile for diaTracer pseudo-spectra. One fitted to a public
+  diaTracer run (for example from PXD047793) would close the gap.

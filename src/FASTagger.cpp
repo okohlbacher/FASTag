@@ -53,12 +53,12 @@ namespace FASTag
   static constexpr int MZ_NULL_SAMPLES = 10000;
 
   // There is deliberately no minimum-flank rule for gaps (ordinary residues
-  // required on both sides of one). Against SAGE ground truth at tag_length 6,
-  // spectra gaining a correctly placed tag fell monotonically with the flank
-  // required -- +44.7% with none, +27.1% with 1, +13.7% with 2 -- at no better
-  // rescue-to-loss ratio. The contiguous tags an unconstrained gap evicts
-  // through the per-spectrum cap are near-noise (~0.6% accurate, against 6.2%
-  // for the gapped ones replacing them).
+  // required on both sides of one). In development measurements against
+  // database-search ground truth at tag_length 6, the number of spectra gaining
+  // a correctly placed tag fell monotonically with the flank required, at no
+  // better rescue-to-loss ratio, and the contiguous tags an unconstrained gap
+  // evicts through the per-spectrum cap were far less often correct than the
+  // gapped ones replacing them.
   //
   // The constraint that matters already exists: a gap spends 2 of tag_length's
   // residue budget, so a longer tag necessarily observes more of what it spells.
@@ -346,7 +346,7 @@ namespace FASTag
 
       // Collapse peaks sharing an m/z, keeping the strongest.
       //
-      // diaTracer emits them routinely (a median 22 per spectrum). They are
+      // diaTracer pseudo-spectra can carry many of them. They are
       // indistinguishable to the graph, but each still consumes a slot in the
       // peak budget and shifts every intensity rank, and they let the same tag
       // be enumerated more than once.

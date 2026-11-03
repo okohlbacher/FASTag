@@ -311,7 +311,7 @@ if(FASTAG_BUILD_TESTS)
   # exception at the 0.3 Da tolerance the iontrap profile uses. Every profile
   # other than iontrap passed that day.
   if(FASTAG_BUILD_BENCH)
-    foreach(prof astral ddapasef diatracer iontrap)
+    foreach(prof astral ddapasef iontrap)
       add_test(NAME bench_${prof}
                COMMAND benchmark synth ${prof} 150 4 1 2 100)
     endforeach()
