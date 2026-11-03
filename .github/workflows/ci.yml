@@ -89,15 +89,16 @@ env:
   # Mach-O on a macOS older than its minos -- and the floor moved on its own
   # each time GitHub retired a runner image.
   #
-  # 13.3: libc++ ships the floating-point std::to_chars the TSV writer formats
-  # numbers with (instead of snprintf, whose macOS implementation serialises
-  # every thread on a global locale lock) only from 13.3 on -- below it the
-  # build fails with "'to_chars' is unavailable". Still above every bundled
+  # 13.4: the floating-point std::to_chars the TSV writer formats numbers with
+  # (instead of snprintf, whose macOS implementation serialises every thread
+  # on a global locale lock), and that OpenMS develop's std::format uses, is
+  # available from 13.4 on in conda-forge's libc++ 19 -- below it the build
+  # fails with "'to_chars' is unavailable". Still above every bundled
   # conda-forge dependency's own floor. gui/src-tauri/tauri.conf.json's minimumSystemVersion
   # carries the same value -- the Homebrew casks in okohlbacher/homebrew-fastag
   # read the floor off that plist. OpenMS is built here with the same floor,
   # and the floor is part of its cache key.
-  MACOS_MIN_VERSION: "13.3"
+  MACOS_MIN_VERSION: "13.4"
 
 jobs:
   build:
