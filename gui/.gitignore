@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Synthetic report fixtures (the repo ignores *.tsv)
+!src/fixtures/*.tsv

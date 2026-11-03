@@ -1,0 +1,20 @@
+section	key	value	n	description
+run	version	1.8.0	-	FASTag 1.8.0 wrote this report.
+run	fragment_tolerance	20 ppm	-	Fragment tolerance is 20 ppm.
+run	tag_length	4	-	Seed tags are 4 residues long.
+run	subsample_fraction	0	-	All spectra were read.
+count	tags_filtered	2410	-	2410 tags have no gap and an E-value of at most 1.
+nlabel	TMT.count	3	2410	3 tag ends match TMT.
+nlabel	TMT.background	2	2410	2 tag ends match TMT + 0.5 Da.
+nlabel	TMT.share	0.0012	2410	3 of 2410 tags carry TMT (0.001).
+nlabel	TMTpro.count	1210	2410	1210 tag ends match TMTpro.
+nlabel	TMTpro.background	9	2410	9 tag ends match TMTpro + 0.5 Da.
+nlabel	TMTpro.share	0.5021	2410	1210 of 2410 tags carry TMTpro (0.502).
+nlabel	iTRAQ4.count	0	2410	0 tag ends match iTRAQ4.
+nlabel	iTRAQ4.background	1	2410	1 tag ends match iTRAQ4 + 0.5 Da.
+nlabel	iTRAQ4.share	0.0	2410	0 of 2410 tags carry iTRAQ4 (0.000).
+heavy	K8.share	0.004	-	K+8 is 0.004 of K and K+8.
+heavy	R10.share	0.0026	-	R+10 is 0.0026 of R and R+10.
+heavy	K.tags	1007	-	1007 tag ends match K or K+8.
+heavy	R.tags	783	-	783 tag ends match R or R+10.
+heavy	gate	yes	-	Both K and R reach 50 tag ends.

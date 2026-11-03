@@ -93,12 +93,15 @@ export interface FastagApi {
   deletePreset: (name: string) => Promise<boolean>
   taxdbInfo: (explicit?: string) => Promise<TaxdbInfo | null>
   species: (path: string) => Promise<SpeciesReport | null>
+  // Text of a digest/label/mass-gap report; null when the file does not exist.
+  report: (path: string) => Promise<string | null>
   openTaxon: (taxid: number) => Promise<boolean>
   probe: () => Promise<BinaryInfo>
   pickInput: () => Promise<string | null>
   pickInputs: () => Promise<string[]>
   pickOutput: (defaultPath?: string) => Promise<string | null>
   pickResults: () => Promise<string | null>
+  pickReport: () => Promise<string | null>
   run: (params: Record<string, unknown>) => Promise<RunStarted>
   cancel: () => Promise<{ cancelled: boolean }>
   resultsQuery: (path: string, view: ResultsView, offset: number, limit: number) => Promise<ResultsPage>

@@ -13,18 +13,18 @@
 #
 # Inputs (env, with local-dev defaults):
 #   FASTAG_BIN     the built CLI                     [build-rel/FASTag]
-#   OPENMS_LIB     dylibbundler search path (OpenMS) [OpenMS-mzpeak-build/build/lib]
+#   OPENMS_LIB     dylibbundler search path (OpenMS) [openms-build/lib]
 #   DEPS_LIB       dylibbundler search path (deps)   [fastag-mm/envs/omsbuild/lib]
-#   OPENMS_SHARE   OpenMS data dir                   [OpenMS-mzpeak-build/share/OpenMS]
+#   OPENMS_SHARE   OpenMS data dir                   [openms-src/share/OpenMS]
 #   TAXONOMY_DIR   share/FASTag/taxonomy             [share/FASTag/taxonomy]
 #   OUT            output resource root              [gui/src-tauri/resources/fastag]
 set -euo pipefail
 
 repo="$(cd "$(dirname "$0")/../.." && pwd)"
 FASTAG_BIN="${FASTAG_BIN:-$repo/build-rel/FASTag}"
-OPENMS_LIB="${OPENMS_LIB:-$repo/../OpenMS-mzpeak-build/build/lib}"
+OPENMS_LIB="${OPENMS_LIB:-$repo/../openms-build/lib}"
 DEPS_LIB="${DEPS_LIB:-$repo/../fastag-mm/envs/omsbuild/lib}"
-OPENMS_SHARE="${OPENMS_SHARE:-$repo/../OpenMS-mzpeak-build/share/OpenMS}"
+OPENMS_SHARE="${OPENMS_SHARE:-$repo/../openms-src/share/OpenMS}"
 TAXONOMY_DIR="${TAXONOMY_DIR:-$repo/share/FASTag/taxonomy}"
 OUT="${OUT:-$repo/gui/src-tauri/resources/fastag}"
 

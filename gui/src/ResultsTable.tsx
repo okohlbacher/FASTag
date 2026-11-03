@@ -166,6 +166,7 @@ export default function ResultsTable({ path }: { path: string }): JSX.Element {
         {has('spectrum') && (
           <input
             placeholder="spectrum contains… (Enter)"
+            aria-label="Filter: spectrum contains"
             value={draft.spectrum}
             onChange={(e) => setDraft((d) => ({ ...d, spectrum: e.target.value }))}
             onKeyDown={onEnter}
@@ -176,6 +177,7 @@ export default function ResultsTable({ path }: { path: string }): JSX.Element {
           <input
             className="num"
             placeholder="min length"
+            aria-label="Filter: minimum tag length"
             value={draft.minLength}
             onChange={(e) => setDraft((d) => ({ ...d, minLength: e.target.value }))}
             onKeyDown={onEnter}
@@ -186,6 +188,7 @@ export default function ResultsTable({ path }: { path: string }): JSX.Element {
           <input
             className="num"
             placeholder="max evalue"
+            aria-label="Filter: maximum E-value"
             value={draft.maxEvalue}
             onChange={(e) => setDraft((d) => ({ ...d, maxEvalue: e.target.value }))}
             onKeyDown={onEnter}
@@ -196,6 +199,7 @@ export default function ResultsTable({ path }: { path: string }): JSX.Element {
           <select
             value={fastaHit}
             title="fasta_hit filter"
+            aria-label="Filter: FASTA hit"
             onChange={(e) => setFastaHit(e.target.value as 'any' | 'only' | 'none')}
           >
             <option value="any">any hit</option>
@@ -216,7 +220,13 @@ export default function ResultsTable({ path }: { path: string }): JSX.Element {
           <div className="rt-canvas" style={{ height: HEAD_H + spacerH, minWidth: totalW }}>
             <div className="rt-head" style={{ gridTemplateColumns: grid }}>
               {columns.map((c) => (
-                <button className="rt-th" key={c} onClick={() => clickSort(c)} title="sort">
+                <button
+                  className="rt-th"
+                  key={c}
+                  onClick={() => clickSort(c)}
+                  title={`sort by ${c}`}
+                  aria-sort={sort?.column === c ? (sort.desc ? 'descending' : 'ascending') : undefined}
+                >
                   {c}
                   {sort?.column === c && <span className="dir">{sort.desc ? ' ▾' : ' ▴'}</span>}
                 </button>
@@ -225,7 +235,9 @@ export default function ResultsTable({ path }: { path: string }): JSX.Element {
             <div className="rt-rows" style={{ top: blockTop }}>
               {rowsOut}
             </div>
-            {meta && matched === 0 && <div className="empty">No rows match.</div>}
+            {meta && matched === 0 && (
+              <div className="empty">{meta.total === 0 ? 'The file has no tags.' : 'No rows match the filters.'}</div>
+            )}
           </div>
         </div>
       )}
