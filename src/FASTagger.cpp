@@ -108,6 +108,27 @@ namespace FASTag
           pairs.push_back({res[i].mass + res[j].mass, i, j});
       std::sort(pairs.begin(), pairs.end(), [](const Pair& x, const Pair& y) { return x.mass < y.mass; });
 
+      // Isobaric pairs -- AD and GE, AV and GL, SL and VT, 13 such groups over
+      // the base residues -- must keep one order wherever this runs: emit()
+      // admits pairs in this order under MAX_GAP_SPELLINGS, so the order
+      // decides which spelling a full budget drops. Their computed masses tie
+      // or differ in the last bit, and which one depends on the process:
+      // OpenMS's EmpiricalFormula sums its elements in Element* order, i.e. in
+      // heap-address order, which Windows randomises per process. A tie then
+      // falls to std::sort's unspecified order. So within each run of pairs
+      // closer than ISOBARIC_DA, order by spelling instead of by those bits.
+      // Distinct base compositions are >= 3.4 mDa apart, so the runs are exact.
+      constexpr double ISOBARIC_DA = 1e-6;
+      for (auto first = pairs.begin(); first != pairs.end();)
+      {
+        auto last = first + 1;
+        while (last != pairs.end() && last->mass - (last - 1)->mass < ISOBARIC_DA) ++last;
+        std::sort(first, last, [this](const Pair& x, const Pair& y) {
+          return std::make_pair(res[x.a].base, res[x.b].base) < std::make_pair(res[y.a].base, res[y.b].base);
+        });
+        first = last;
+      }
+
       // Variable mods: one appended entry per (mod, matching base residue),
       // carrying base_mass + delta and the mod name for inline annotation.
       // Appended after the base set so pair indices (which reference base
