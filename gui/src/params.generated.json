@@ -196,7 +196,7 @@
       "name": "mzpeak_read_memory",
       "type": "int",
       "default": "0",
-      "description": "Decoded mzPeak held at once, in MB; 0 = size it to the archive",
+      "description": "Ignored; mzPeak is read in file order without a decode cache",
       "required": false,
       "toppAdvanced": true,
       "min": 0

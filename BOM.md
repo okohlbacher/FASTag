@@ -2,9 +2,8 @@
 
 FASTag · MIT · <https://github.com/okohlbacher/FASTag>
 
-Input is mzML or mzPeak (read and written via the external mzpeak-openms
-library; OpenMS's MzPeakFile is not used), output is TSV plus optional mzML or
-mzPeak.
+Input is mzML or mzPeak (read and written through OpenMS's `MzPeakFile`),
+output is TSV plus optional mzML or mzPeak.
 The desktop GUI's own dependencies are tracked in `gui/package-lock.json`
 (frontend) and `gui/src-tauri/Cargo.lock` (Tauri backend), not here.
 
@@ -12,7 +11,7 @@ The desktop GUI's own dependencies are tracked in `gui/package-lock.json`
 
 | Component | Version | Licence | Why | Linkage |
 |---|---|---|---|---|
-| [OpenMS](https://www.openms.de) | ≥ 3.5 | BSD-3-Clause | mzML and FASTA I/O, residue chemistry, physical constants, spectrum data structures, TOPP application framework | dynamic |
+| [OpenMS](https://www.openms.de) | ≥ 3.7 (develop `70cebcd144`) | BSD-3-Clause | mzML, mzPeak and FASTA I/O, residue chemistry, physical constants, spectrum data structures, TOPP application framework (`OpenMS_CLI`) | dynamic |
 | [Boost.Math](https://www.boost.org) | ≥ 1.81 | BSL-1.0 | chi-squared and hypergeometric distributions | header-only |
 
 Boost arrives transitively with OpenMS; FASTag adds no dependency OpenMS does
@@ -29,6 +28,8 @@ averagine deisotoper in `src/AveragineDeisotoper.cpp`.
 | Water mass | `EmpiricalFormula("H2O").getMonoWeight()` |
 | Nearest peak within a tolerance | `MSSpectrum::findNearest(mz, tol)` |
 | mzML read and write | `FileHandler::loadExperiment` / `storeExperiment` |
+| mzPeak read and write | `MzPeakFile::transform` (streamed, file order) / `MzPeakFile::store` |
+| Profile MS2 centroiding on mzPeak input | `PeakPickerHiRes` |
 | FASTA parsing | `FASTAFile::load` |
 | Spectra, peaks, precursors | `MSExperiment`, `MSSpectrum`, `Peak1D`, `Precursor` |
 | Streaming mzML reads, bounded memory | `OnDiscMSExperiment` (one reader per thread; the class is not thread-safe) |
@@ -76,6 +77,6 @@ FASTag; both produce the mzML that FASTag consumes.
 
 ## Build-time only
 
-CMake ≥ 3.21, a C++17 compiler. `cmake/eigen3-range-shim/` contains two CMake
+CMake ≥ 3.24, a C++23 compiler (OpenMS 3.7 requires it). `cmake/eigen3-range-shim/` contains two CMake
 files that work around Eigen 3.4's config-version file rejecting the version
 range `OpenMSConfig.cmake` requests; they contain no Eigen code.

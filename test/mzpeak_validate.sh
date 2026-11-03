@@ -22,7 +22,7 @@
 # set -- and then it MUST work, a set-but-broken path is a failure -- else
 # from PATH, else this exits 77 (ctest SKIP). Exits 77 too when a directory
 # holds no archive at all, which is how a skipped producer (a build without
-# the library) reads from here.
+# mzPeak support) reads from here.
 set -u
 export LC_ALL=C
 R="$1"; shift

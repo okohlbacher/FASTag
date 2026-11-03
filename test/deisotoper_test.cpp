@@ -18,8 +18,9 @@
 // spectra -- at Da and ppm tolerances up to and just past the clamps FASTag
 // applies (0.1 Da, 100 ppm), plus every spectrum of the vendored fixture.
 //
-// With an mzPeak archive as argument: every MS2 spectrum of the run, read
-// through OnDiscMzPeakExperiment, both as read and as prepare() hands it to
+// With an mzPeak archive as argument: every MS2 spectrum of the run, loaded
+// with MzPeakFile (profile MS2 centroided as FASTag centroids them on read),
+// both as read and as prepare() hands it to
 // the deisotoper, at 0.02 Da, 20 ppm and the two clamps. Prints the number of
 // mismatching spectra for each (must be 0) and each implementation's time.
 //
@@ -29,14 +30,14 @@
 // SPDX-License-Identifier: MIT
 
 #include "AveragineDeisotoper.h"
-#ifdef FASTAG_HAVE_MZPEAK_LIB
-#include "OnDiscMzPeakExperiment.h"
-#endif
+#include "MzPeakStream.h"
 
 #include <OpenMS/CHEMISTRY/ISOTOPEDISTRIBUTION/CoarseIsotopePatternGenerator.h>
 #include <OpenMS/CONCEPT/Constants.h>
 #include <OpenMS/CONCEPT/Exception.h>
 #include <OpenMS/FORMAT/MzMLFile.h>
+#include <OpenMS/FORMAT/MzPeakFile.h>
+#include <OpenMS/PROCESSING/CENTROIDING/PeakPickerHiRes.h>
 #include <OpenMS/KERNEL/MSExperiment.h>
 #include <OpenMS/PROCESSING/DEISOTOPING/Deisotoper.h>
 
@@ -421,7 +422,6 @@ namespace
 #endif
   }
 
-#ifdef FASTAG_HAVE_MZPEAK_LIB
   /// The input prepare() hands the deisotoper: finite, positive, at most the
   /// precursor, equal m/z collapsed to the strongest. Mirrors FASTagger.cpp.
   MSSpectrum prepared(const MSSpectrum& in, double precursor_mz, int charge)
@@ -451,15 +451,15 @@ namespace
 
   int realData(const std::string& path, int threads)
   {
-    FASTag::OnDiscMzPeakExperiment archive(path);
-    const long n = static_cast<long>(archive.getNrSpectra());
 #ifdef _OPENMP
     if (threads <= 0) threads = std::min(32, omp_get_max_threads());
+    omp_set_num_threads(threads);
 #else
     threads = 1;
 #endif
-    std::vector<std::unique_ptr<FASTag::OnDiscMzPeakExperiment>> readers(static_cast<size_t>(threads));
-    for (auto& r : readers) r = std::make_unique<FASTag::OnDiscMzPeakExperiment>(archive);
+    PeakMap archive;
+    MzPeakFile().load(path, archive);
+    const long n = static_cast<long>(archive.size());
 
     // Input kind (as read / as prepare() builds it) x tolerance.
     const Tol real_tols[] = {{0.02, false}, {20, true}, {0.1, false}, {100, true}};
@@ -471,18 +471,15 @@ namespace
 
 #pragma omp parallel num_threads(threads) reduction(+:ms2, peaks_in, peaks_out, nonfinite)
     {
-#ifdef _OPENMP
-      FASTag::OnDiscMzPeakExperiment& reader = *readers[static_cast<size_t>(omp_get_thread_num())];
-#else
-      FASTag::OnDiscMzPeakExperiment& reader = *readers[0];
-#endif
+      PeakPickerHiRes picker;
       long my_bad[2][4] = {};
       double my_to[2][4] = {}, my_tp[2][4] = {};
       std::string my_first;
 #pragma omp for schedule(guided, 64)
       for (long i = 0; i < n; ++i)
       {
-        const MSSpectrum s = reader.getSpectrum(static_cast<Size>(i));
+        MSSpectrum s = archive[static_cast<Size>(i)];
+        FASTag::centroidProfileMs2(s, picker);
         if (s.getMSLevel() != 2 || s.empty() || s.getPrecursors().empty()) continue;
         ++ms2;
         std::vector<Peak1D> finite;
@@ -539,19 +536,18 @@ namespace
     std::printf("%s\n", total_bad == 0 && ms2 > 0 ? "real data: IDENTICAL" : "real data: MISMATCH");
     return total_bad == 0 && ms2 > 0 ? 0 : 1;
   }
-#endif
 }
 
 int main(int argc, char** argv)
 {
   if (argc > 1)
   {
-#ifdef FASTAG_HAVE_MZPEAK_LIB
+    if (!MzPeakFile::isSupported())
+    {
+      std::cerr << "this OpenMS has no mzPeak support; the real-data check needs it\n";
+      return 2;
+    }
     return realData(argv[1], argc > 2 ? std::atoi(argv[2]) : 0);
-#else
-    std::cerr << "this build has no mzPeak support; the real-data check needs it\n";
-    return 2;
-#endif
   }
 
   synthetic();

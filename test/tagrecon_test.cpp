@@ -33,7 +33,7 @@ namespace
 
   double resMass(char c)
   {
-    return ResidueDB::getInstance()->getResidue(String(c))->getMonoWeight(Residue::Internal);
+    return ResidueDB::getInstance()->getResidue(std::string(1, c))->getMonoWeight(Residue::Internal);
   }
   double sumMass(const std::string& s)
   {
