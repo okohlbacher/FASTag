@@ -1210,6 +1210,11 @@ protected:
     // sized by them.
     constexpr int kChunk = 256, kTailChunk = 16;
     const int read_threads = std::max(1, omp_get_max_threads());
+    // Decoding threads for mzPeak, capped: MzPeakFile opens a reader per
+    // decoding thread for every batch of spectra, one at a time, so more
+    // threads cost more than they decode. 4-16 were alike at 64 tagging
+    // threads (1.0-1.2 s on a 27k-spectrum run); 64 took 2.2 s.
+    const int mzpeak_decode_threads = std::min(read_threads, 8);
     std::unique_ptr<FASTag::MzPeakStream> mzs;
     if (mzpeak_in)
     {
@@ -1218,7 +1223,7 @@ protected:
         const auto a = std::chrono::steady_clock::now();
         // Room for every thread's chunk, plus a decoded batch either side.
         mzs = std::make_unique<FASTag::MzPeakStream>(
-            in, read_threads, static_cast<size_t>(read_threads) * kChunk + 4096);
+            in, mzpeak_decode_threads, static_cast<size_t>(read_threads) * kChunk + 4096);
         static_cast<void>(mzs->size());
         g_t_open = std::chrono::duration<double>(std::chrono::steady_clock::now() - a).count();
       }
@@ -2792,7 +2797,7 @@ protected:
         };
         if (mzpeak_in)
         {
-          FASTag::readMzPeakSpectra(in, read_threads, kept_idx, clean);
+          FASTag::readMzPeakSpectra(in, mzpeak_decode_threads, kept_idx, clean);
           return;
         }
         for (const Size i : kept_idx)

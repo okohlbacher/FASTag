@@ -113,14 +113,19 @@ namespace FASTag
     OpenMS::ExperimentalSettings settings_;
 
     mutable std::mutex mutex_;
-    std::condition_variable header_cv_, data_cv_, space_cv_;
+    std::condition_variable header_cv_, space_cv_;
+    /// take(i) waits on data_cv_[i % kStripes]: a spectrum wakes only the
+    /// takers of its stripe, not every waiting thread (at 64 threads, waking
+    /// all of them per spectrum spent more time in the kernel than tagging).
+    static constexpr std::size_t kStripes = 64;
+    std::condition_variable data_cv_[kStripes];
     bool have_size_ = false, started_ = false, done_ = false, aborted_ = false;
     std::exception_ptr error_;
     std::size_t expected_ = 0;
     std::size_t next_ = 0;      ///< reader thread only: index of the next spectrum
     std::size_t produced_ = 0;  ///< spectra below have been read (mutex_)
     std::size_t held_ = 0;      ///< untaken spectra in slots_ (mutex_)
-    std::size_t waiting_ = 0;   ///< take()s waiting for data (mutex_)
+    std::size_t waiting_[kStripes] = {};  ///< take()s waiting, per stripe (mutex_)
     std::unordered_map<std::size_t, OpenMS::MSSpectrum> slots_;
     std::vector<char> mask_;
     std::set<std::size_t> keep_copy_;

@@ -115,7 +115,7 @@ namespace FASTag
       done_ = true;
     }
     header_cv_.notify_all();
-    data_cv_.notify_all();
+    for (auto& cv : data_cv_) cv.notify_all();
   }
 
   void MzPeakStream::setExperimentalSettings(const ExperimentalSettings& exp)
@@ -175,9 +175,9 @@ namespace FASTag
       slots_.emplace(i, std::move(s));
       ++held_;
       produced_ = i + 1;
-      wake = waiting_ > 0;
+      wake = waiting_[i % kStripes] > 0;
     }
-    if (wake) data_cv_.notify_all();
+    if (wake) data_cv_[i % kStripes].notify_all();
   }
 
   MSSpectrum MzPeakStream::take(std::size_t i, PeakPickerHiRes& picker)
@@ -188,9 +188,10 @@ namespace FASTag
       std::unique_lock<std::mutex> lock(mutex_);
       if (produced_ <= i && !done_ && !aborted_)
       {
-        ++waiting_;
-        data_cv_.wait(lock, [this, i] { return produced_ > i || done_ || aborted_; });
-        --waiting_;
+        const std::size_t stripe = i % kStripes;
+        ++waiting_[stripe];
+        data_cv_[stripe].wait(lock, [this, i] { return produced_ > i || done_ || aborted_; });
+        --waiting_[stripe];
       }
       const auto it = slots_.find(i);
       if (it == slots_.end())
@@ -226,7 +227,7 @@ namespace FASTag
       aborted_ = true;
     }
     header_cv_.notify_all();
-    data_cv_.notify_all();
+    for (auto& cv : data_cv_) cv.notify_all();
     space_cv_.notify_all();
   }
 
