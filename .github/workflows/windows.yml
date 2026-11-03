@@ -146,7 +146,7 @@ jobs:
           WS="${GITHUB_WORKSPACE//\\//}"
           # Git's /usr/bin/link shadows MSVC's link.exe in this login shell.
           CLDIR=$(dirname "$(which cl)"); export PATH="$CLDIR:$PATH"
-          # The flags of ci.yml's openms job, with the conda prefix spelled
+          # The flags of ci.yml's OpenMS build, with the conda prefix spelled
           # out for Windows. LibXml2 is named directly: CMake's FindLibXml2
           # does not find conda-forge's Windows layout on its own.
           cmake -S openms-src -B openms-build -G Ninja \
@@ -224,7 +224,7 @@ jobs:
 
       # Same key as the prep job, which saved it before this job started.
       - name: Restore OpenMS install
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: openms-install
           key: windows-x64-openms-${{ env.OPENMS_REF }}-msvc2022-${{ hashFiles('fastag/.github/env/openms.yml') }}-v1
