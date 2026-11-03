@@ -219,6 +219,15 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta)
   set_tests_properties(cli_guards_test PROPERTIES SKIP_RETURN_CODE 77)
 
+  # Integration: every output (tags, recon, delta, digest, label, massgap,
+  # glyco, idXML) byte-identical at 1, 3 and 8 threads on the mzML path.
+  add_test(NAME threads_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/threads_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
+  set_tests_properties(threads_test PROPERTIES SKIP_RETURN_CODE 77)
+
   # The shipped digest data, for digest_test and digest_cli_test.
   target_compile_definitions(digest_test PRIVATE
                              FASTAG_DIGEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/data/digest")
