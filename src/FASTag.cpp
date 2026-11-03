@@ -612,6 +612,14 @@ protected:
   // fallback. Flanking masses at 4 decimals (0.1 mDa) -- %g's 6 significant
   // digits are coarser than the tolerance the tag was found with, and these
   // are what a downstream search constrains on. Numbers go through
+  /// Append free text as one TSV field: a tab, CR or LF (an mzML id may
+  /// carry them as &#9; / &#10;) would shift columns or split the row.
+  static void appendField(std::string& buf, const std::string& text)
+  {
+    if (text.find_first_of("\t\r\n") == std::string::npos) { buf += text; return; }
+    for (char c : text) buf += (c == '\t' || c == '\r' || c == '\n') ? ' ' : c;
+  }
+
   // appendNum, not snprintf: the same text as "%.4f" / "%g" / "%.3f", without
   // the locale lock every worker queues on in macOS's printf (NumFormat.h).
   static void appendTagRow(std::string& buf, const FASTag::Tag& t,
@@ -621,7 +629,7 @@ protected:
   {
     using FASTag::appendNum;
     constexpr auto fixed = std::chars_format::fixed;
-    buf += native_id;          buf += '\t';
+    appendField(buf, native_id); buf += '\t';
     buf += t.seq;              buf += '\t';
     appendNum(buf, t.n_res);   buf += '\t';
     appendNum(buf, t.charge);  buf += '\t';
@@ -2123,7 +2131,8 @@ protected:
         }
         const auto g = FASTag::scanOxonium(*sp, p.frag_tol, p.tol_ppm, glyco_min_fraction);
         std::string& gr = b.grows[idx];
-        gr = spec.getNativeID();
+        gr.clear();
+        appendField(gr, spec.getNativeID());
         gr += '\t';
         FASTag::appendNum(gr, g.n_matched); gr += '\t';
         FASTag::appendNum(gr, g.frac, std::chars_format::fixed, 3); gr += '\t';
