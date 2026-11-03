@@ -29,6 +29,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <random>
+#include <set>
 #include <string>
 
 using namespace OpenMS;
@@ -781,6 +782,55 @@ int main()
     CHECK(one.size() == per_length[0].size(), "one length keeps all %zu rows, got %zu",
           per_length[0].size(), one.size());
     std::printf("17. mergeLengths: ties to the shorter, lowest best E-value, exact key\n");
+  }
+
+  // 18. a full gap budget keeps the same isobaric spelling in every process
+  //
+  // A gap's window can hold more spellings than MAX_GAP_SPELLINGS (8). Pairs
+  // are admitted lightest first, so the cut can fall inside a group of
+  // isobaric compositions, and which one survived used to follow the last bit
+  // of OpenMS's residue masses (summed in Element* order, i.e. heap order,
+  // which Windows randomises per process) and std::sort's order among ties:
+  // on Windows one -tag_lengths run wrote HMPSADK where another wrote HMPSEGK.
+  // The spelling decides now. At 1 Da, the window around V+T holds AK, PC and
+  // AE (6 spellings) and room for one of SL/VT; around N+E, NQ, LE and NK,
+  // and room for one of DQ/NE. On Linux x86-64 the old order kept VT here; it
+  // kept NE in FASTag itself but DQ in this binary, whose heap differs.
+  {
+    struct Case { std::string pep, kept, dropped; };
+    const auto rev = [](std::string x) { std::reverse(x.begin(), x.end()); return x; };
+    for (const Case& c : {Case{"GAVTWGR", "SL", "VT"}, Case{"GANEWGR", "DQ", "NE"}})
+    {
+      // y1, y2, y3 and y5 only: y4 deleted, so y3 -> y5 is one gap step over
+      // exactly that pair, and y6 too, which y3 would otherwise also reach
+      // within 1 Da by a pair (DR for A+V+T).
+      const AASequence aa = AASequence::fromString(c.pep);
+      double pmz = 0;
+      synth(c.pep, 0, 1, pmz);   // for the precursor m/z only
+      MSSpectrum y;
+      for (size_t i = 1; i < aa.size(); ++i)
+        if (i != 4 && i != 6) y.emplace_back(aa.getSuffix(i).getMonoWeight(Residue::YIon, 1), 0.5 + 0.02 * i);
+      y.sortByPosition();
+      const double from = aa.getSuffix(3).getMonoWeight(Residue::YIon, 1);
+
+      FASTag::Param p;
+      p.frag_tol = 1.0; p.tol_ppm = false; p.complement_tol = 0.02;
+      p.tag_length = 2; p.max_gaps = 1; p.max_tag_count = 0; p.max_evalue = 0;
+      const FASTag::Tables tab(p);
+      std::set<std::string> at_gap;
+      for (const auto& t : FASTag::tagSpectrum(y, pmz, 2, p, tab))
+        if (t.gapped && t.charge == 1 && std::fabs(t.low_mz - from) < 1e-6) at_gap.insert(t.seq);
+      std::string got;
+      for (const auto& s : at_gap) got += " " + s;
+      CHECK(at_gap.size() == 8, "%s: %zu spellings at the gap, want the full budget of 8:%s",
+            c.pep.c_str(), at_gap.size(), got.c_str());
+      CHECK(at_gap.count(c.kept) && at_gap.count(rev(c.kept)),
+            "%s: the budget must keep %s (both orders):%s", c.pep.c_str(), c.kept.c_str(), got.c_str());
+      CHECK(!at_gap.count(c.dropped) && !at_gap.count(rev(c.dropped)),
+            "%s: the budget must drop %s, the isobaric spelling after %s:%s",
+            c.pep.c_str(), c.dropped.c_str(), c.kept.c_str(), got.c_str());
+    }
+    std::printf("18. a full gap budget cuts isobaric groups by spelling (SL over VT, DQ over NE)\n");
   }
 
   std::printf(failures ? "\n%d FAILURES\n" : "\nall checks passed\n", failures);
