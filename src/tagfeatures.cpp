@@ -9,6 +9,7 @@
 #include <cerrno>
 #include <cmath>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -275,6 +276,16 @@ int main(int argc, char** argv)
     return 2;
   }
 
+  // Opening the output truncates it: the same file twice would destroy the
+  // input before it is read.
+  {
+    std::error_code ec;
+    if (std::filesystem::equivalent(argv[1], argv[2], ec))
+    {
+      std::cerr << "tagfeatures: input and output are the same file\n";
+      return 2;
+    }
+  }
   std::ifstream input(argv[1]);
   if (!input)
   {

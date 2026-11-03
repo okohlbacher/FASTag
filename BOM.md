@@ -19,6 +19,23 @@ not already require. The only third-party source in this repository is one
 function ported from OpenMS (BSD-3-Clause, notice kept in the file): the
 averagine deisotoper in `src/AveragineDeisotoper.cpp`.
 
+## Redistributed runtime libraries (binary bundles)
+
+The source depends only on the two components above, but the release bundles
+(Linux tarballs, the macOS app and tarball, the Windows zip and installer)
+redistribute the shared libraries the binary loads: libOpenMS and its whole
+runtime closure from conda-forge -- about 185 files on Linux, among them
+Apache Arrow/Parquet and the cloud filesystem SDKs it links (AWS, Azure,
+Google Cloud), abseil, protobuf, OpenSSL, ICU, libxml2, curl, zstd, Kerberos,
+libstdc++ and libgomp. Their licences are BSD, MIT, Apache-2.0, BSL-1.0, ICU,
+zlib and GPL-3.0 with the GCC runtime library exception.
+
+Every bundle carries `LICENSE` (FASTag's MIT notice) and
+`THIRD-PARTY-NOTICES.txt`, written at bundle time by
+`tools/third_party_notices.py`: each bundled library mapped to the conda
+package that installed it, with that package's version, licence and licence
+texts. OpenMS's own licence and notices are in `share-OpenMS/`.
+
 ## Shipped data
 
 | Data | Source | Licence | Used by |

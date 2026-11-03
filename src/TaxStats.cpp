@@ -185,6 +185,23 @@ std::vector<NodeEvidence> Taxonomy::rollUp(
   return out;
 }
 
+double Taxonomy::poissonLowerComplementLogP_(uint64_t k, double lambda) {
+  // log P(X >= k) = log(1 - P(X <= k-1)), X ~ Poisson(lambda), for k <= lambda.
+  // P(X <= k-1) = term_{k-1} * sum_{i<=k-1} term_i / term_{k-1}; going down,
+  // term_{i-1} / term_i = i / lambda < 1, so nothing overflows.
+  const double km1 = static_cast<double>(k - 1);
+  const double logterm = -lambda + km1 * std::log(lambda) - std::lgamma(km1 + 1.0);
+  double rel = 1.0, sum = 1.0;
+  for (uint64_t i = k - 1; i > 0; --i) {
+    rel *= static_cast<double>(i) / lambda;
+    if (rel < 1e-17 * sum) break;
+    sum += rel;
+  }
+  const double log_lower = logterm + std::log(sum);
+  if (log_lower >= 0.0) return 0.0;
+  return std::log1p(-std::exp(log_lower));
+}
+
 double Taxonomy::binomialUpperTailLogP(uint64_t k, uint64_t n, double p) const {
   if (k == 0) return 0.0;               // P(X >= 0) == 1
   if (k > n) return kNegInf;            // impossible
@@ -229,6 +246,13 @@ double Taxonomy::binomialUpperTailLogP(uint64_t k, uint64_t n, double p) const {
       rel *= lambda / static_cast<double>(i + 1);
       if (rel < 1e-17 * sum && static_cast<double>(i + 1) > lambda) break;
       sum += rel;
+      // For k far below lambda the relative terms climb by up to
+      // term_mode / term_k before they fall, which overflows a double once it
+      // passes ~e^709 (e.g. k = 5, lambda = 900). rel and sum then stay inf and
+      // the break test (inf < inf) never fires. In that regime the upper tail
+      // is ~1: take it as the complement of the lower tail, summed downward
+      // from k-1, where the terms only shrink.
+      if (!std::isfinite(sum)) return poissonLowerComplementLogP_(k, lambda);
     }
     return logterm_k + std::log(sum);
   }

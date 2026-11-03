@@ -100,6 +100,10 @@ export interface FastagApi {
   pickInput: () => Promise<string | null>
   pickInputs: () => Promise<string[]>
   pickOutput: (defaultPath?: string) => Promise<string | null>
+  // A parameter's file: filtered by the extensions its manifest entry
+  // declares (none = no filter), so a FASTA or an idXML can be picked.
+  pickFile: (formats?: string[]) => Promise<string | null>
+  saveFile: (defaultPath?: string, formats?: string[]) => Promise<string | null>
   pickResults: () => Promise<string | null>
   pickReport: () => Promise<string | null>
   run: (params: Record<string, unknown>) => Promise<RunStarted>

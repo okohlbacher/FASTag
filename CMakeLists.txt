@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
-project(FASTag VERSION 1.8.0 LANGUAGES CXX)
+project(FASTag VERSION 1.9.0 LANGUAGES CXX)
 # The GUI carries that version in four more files; a bump that misses one
 # fails here rather than shipping (cmake/version-guard.cmake says why).
 include(cmake/version-guard.cmake)
@@ -130,6 +130,12 @@ if(WIN32)
   # The version resource SignPath checks before it signs (src/FASTag.rc.in).
   configure_file(src/FASTag.rc.in FASTag.rc @ONLY)
   target_sources(FASTag PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/FASTag.rc")
+  # UTF-8 as the process code page: the MSVC CRT otherwise hands main() an
+  # ANSI-code-page argv, so the GUI's UTF-16 paths lost every character
+  # outside cp1252 ('?') and the rest became bytes OpenMS reads as UTF-8.
+  if(MSVC)
+    target_sources(FASTag PRIVATE src/FASTag.manifest)
+  endif()
 endif()
 if(OpenMP_CXX_FOUND)
   target_link_libraries(FASTag PRIVATE OpenMP::OpenMP_CXX)
@@ -204,6 +210,23 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta)
   set_tests_properties(multilength_test PROPERTIES SKIP_RETURN_CODE 77)
+
+  # Integration: refused parameters and output-path collisions, NaN precursors
+  # in -stream, entrapment inside the target, native IDs carrying a tab.
+  add_test(NAME cli_guards_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/cli_guards_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta)
+  set_tests_properties(cli_guards_test PROPERTIES SKIP_RETURN_CODE 77)
+
+  # Integration: every output (tags, recon, delta, digest, label, massgap,
+  # glyco, idXML) byte-identical at 1, 3 and 8 threads on the mzML path.
+  add_test(NAME threads_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/threads_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
+  set_tests_properties(threads_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # The shipped digest data, for digest_test and digest_cli_test.
   target_compile_definitions(digest_test PRIVATE

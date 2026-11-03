@@ -22,6 +22,8 @@ export interface ParamSpec {
   min?: number
   max?: number
   choices?: string[]
+  /// File extensions the CLI declares for a file parameter (no dot).
+  formats?: string[]
 }
 
 // UI overlays: the manifest is a faithful dump of the tool, but a few string

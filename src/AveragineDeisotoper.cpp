@@ -34,10 +34,6 @@ namespace FASTag
     constexpr unsigned MIN_ISOPEAKS = 2;
     constexpr unsigned MAX_ISOPEAKS = 10;
 
-    /// ThresholdMower's default. OpenMS removes every peak below it before
-    /// deisotoping, so this does too.
-    constexpr double INTENSITY_THRESHOLD = 0.05;
-
     /// KL-divergence ceiling by cluster size, OpenMS's table.
     constexpr float AVERAGINE_CHECK_THRESHOLD[7] = {0.0f, 0.0f, 0.05f, 0.1f, 0.2f, 0.4f, 0.6f};
 
@@ -77,7 +73,7 @@ namespace FASTag
   }
 
   void deisotopeAveragine(MSSpectrum& spec, double fragment_tolerance, bool fragment_unit_ppm,
-                          int max_charge)
+                          int max_charge, double intensity_threshold)
   {
     if ((fragment_unit_ppm && fragment_tolerance > 100) || (!fragment_unit_ppm && fragment_tolerance > 0.1))
     {
@@ -94,7 +90,7 @@ namespace FASTag
     // ThresholdMower::filterPeakSpectrum, in place.
     size_t n = 0;
     for (size_t i = 0; i != spec.size(); ++i)
-      if (spec[i].getIntensity() >= INTENSITY_THRESHOLD) spec[n++] = spec[i];
+      if (spec[i].getIntensity() >= intensity_threshold) spec[n++] = spec[i];
     spec.resize(n);
 
     static thread_local Scratch S;

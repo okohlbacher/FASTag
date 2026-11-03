@@ -36,9 +36,11 @@ namespace FASTag
   /// the knob worth turning.
   static constexpr double PEAK_WINDOW_MZ = 100.0;
 
-  /// Cap on spellings emitted for one gap. At the tolerances this tool is used
-  /// at the real count is 1 composition x 2 orders; the cap only stops a
-  /// pathologically wide tolerance from turning one path into hundreds of rows.
+  /// Cap on spellings emitted for one gap, admitted in pair-mass order. Up to
+  /// ~0.02 Da a window holds at most 7 spellings, so the cap never binds; from
+  /// ~0.05 Da (0.3 Da ion-trap settings, high-m/z 2+ fragments) a few windows
+  /// (S+R, T+R) hold 10 and lose their heaviest compositions. It stops a wide
+  /// tolerance from turning one path into hundreds of rows.
   static constexpr int MAX_GAP_SPELLINGS = 8;
 
   /// Peaks above precursor mass + proton + this (Da) are dropped.
@@ -46,6 +48,10 @@ namespace FASTag
 
   /// Highest fragment charge the deisotoper tries.
   static constexpr int DEISOTOPE_MAX_CHARGE = 3;
+  /// The deisotoper's intensity floor (OpenMS ThresholdMower's 0.05), applied
+  /// relative to the base peak below DEISOTOPE_MOWER_REF -- see prepare().
+  static constexpr double DEISOTOPE_MOWER = 0.05;
+  static constexpr double DEISOTOPE_MOWER_REF = 1e6;
 
   /// The m/z-fidelity null is Monte Carlo: this many samples per peak count,
   /// from a fixed seed so every run scores identically.
@@ -247,9 +253,10 @@ namespace FASTag
     // Sampled, with an explicit seed -- DirecTag leaves this unseeded, so two of
     // its runs disagree with each other.
     //
-    // Sampled in UNITS OF THE TOLERANCE, on [-1, 1], and the observed SSE is
-    // divided by tol^2 before lookup, so one null is valid at every m/z and in
-    // both tolerance units. (Sampling on [-frag_tol, frag_tol] would, in ppm,
+    // Sampled in UNITS OF THE TOLERANCE, on [-1, 1], and each observed
+    // deviation is divided by the tolerance at its own peak before lookup
+    // (scorePath), so one null is valid at every m/z and in both tolerance
+    // units. (Sampling on [-frag_tol, frag_tol] would, in ppm,
     // span +-20 Da against observed deviations of ~1e-4 Da, pinning every tag
     // to the null's floor.)
     mz_null_.resize(static_cast<size_t>(k_max_ - k_min_ + 1));
@@ -388,8 +395,56 @@ namespace FASTag
         // OpenMS's Deisotoper::deisotopeWithAveragineModel, ported and bit-identical
         // (AveragineDeisotoper.h): charges 1..max, no peak cap, unclustered peaks
         // kept, 2..10 isotope peaks, monoisotopic peaks moved to charge 1.
-        deisotopeAveragine(work, deiso_tol, p.tol_ppm, DEISOTOPE_MAX_CHARGE);
+        //
+        // Its first step drops peaks below an ABSOLUTE 0.05 (ThresholdMower).
+        // Everything else here is rank-based, so that made the output depend on
+        // the intensity scale: a spectrum stored with base peak = 1 lost every
+        // peak under 5% of it, and one scaled by 1e-2 lost all (review F3). The
+        // cut is now relative below a base peak of 1e6 -- 5e-8 of it -- and
+        // stays 0.05 above, which is what instrument counts see, so those runs
+        // are unchanged.
+        double base_peak = 0;
+        for (const auto& pk : work) base_peak = std::max(base_peak, static_cast<double>(pk.getIntensity()));
+        const double mower = std::min(DEISOTOPE_MOWER, DEISOTOPE_MOWER * base_peak / DEISOTOPE_MOWER_REF);
+
+        // m/z of the peaks before deisotoping: a peak not among them afterwards
+        // was moved to the 1+ scale.
+        static thread_local std::vector<double> before;
+        before.clear();
+        for (const auto& pk : work) before.push_back(pk.getMZ());   // sorted, unique
+        deisotopeAveragine(work, deiso_tol, p.tol_ppm, DEISOTOPE_MAX_CHARGE, mower);
         work.sortByPosition();
+
+        // A fragment seen as 1+ AND 2+ (common for precursors of charge >= 3)
+        // is two peaks a few ppm apart once the 2+ copy is moved: each path
+        // then exists twice, with flanks ~1e-4 Da apart that no exact key
+        // collapses, doubling n_seeds and spending max_tags and peak-budget
+        // slots (review F4). Merge a moved peak into a neighbour within the
+        // deisotoping tolerance, keeping the stronger, as exact duplicates are
+        // collapsed above. Two unmoved peaks are never merged.
+        static thread_local std::vector<std::pair<Peak1D, bool>> merged;
+        merged.clear();
+        for (const auto& pk : work)
+        {
+          const bool moved = !std::binary_search(before.begin(), before.end(), pk.getMZ());
+          if (!merged.empty())
+          {
+            auto& last = merged.back();
+            const double tol = p.tol_ppm ? pk.getMZ() * deiso_tol * 1e-6 : deiso_tol;
+            if ((moved || last.second) && pk.getMZ() - last.first.getMZ() <= tol)
+            {
+              if (pk.getIntensity() > last.first.getIntensity()) last.first = pk;
+              last.second = last.second || moved;
+              continue;
+            }
+          }
+          merged.emplace_back(pk, moved);
+        }
+        if (merged.size() != work.size())
+        {
+          work.clear(false);
+          for (const auto& m : merged) work.push_back(m.first);
+        }
       }
 
       // order, keep and kept are scratch reused across spectra (thread_local:
@@ -576,6 +631,17 @@ namespace FASTag
         const double p_lo = P.front().mass, p_hi = P.back().mass;
         static thread_local std::vector<std::vector<std::pair<uint32_t, uint16_t>>> gadj;
         if (gadj.size() < n) gadj.resize(n);
+        // adj[] (ordinary edges, built above) is sorted by nothing in
+        // particular, so scan it: degree is a handful at real tolerances.
+        const auto twoStep = [&](uint32_t from, uint32_t to) {
+          for (const auto& e1 : adj[from])
+          {
+            if (e1.first >= to) continue;
+            for (const auto& e2 : adj[e1.first])
+              if (e2.first == to) return true;
+          }
+          return false;
+        };
         for (size_t i = 0; i < n; ++i) gadj[i].clear();
         for (size_t i = 0; i < n; ++i)
           for (size_t j = i + 1; j < n; ++j)
@@ -592,7 +658,15 @@ namespace FASTag
               const double err = std::fabs(it->mass - d);
               if (err < best_err) { best_err = err; best = static_cast<int>(it - P.begin()); }
             }
-            if (best >= 0)
+            // A gap stands for ONE MISSING peak. When an ordinary two-step
+            // path i -> m -> j exists the peak is there, and the gap edge
+            // would only re-read an observed ladder: its spellings (both
+            // orders, every isobaric composition) add hypotheses with no new
+            // evidence, count in n_seeds -- multiplying every E-value in the
+            // spectrum -- and take max_tags slots (review F2). A single
+            // ordinary step whose residue is itself a pair sum (N = GG, W = AD)
+            // keeps its gap edge: the two-residue reading is an alternative.
+            if (best >= 0 && !twoStep(static_cast<uint32_t>(i), static_cast<uint32_t>(j)))
               gadj[i].emplace_back(static_cast<uint32_t>(j), static_cast<uint16_t>(best));
           }
         g.goff.assign(n + 1, 0);
@@ -633,12 +707,31 @@ namespace FASTag
         est[static_cast<size_t>(i) + 1] = s.spec[peaks[static_cast<size_t>(i) + 1]].getMZ() - cum;
       }
       const double avg = std::accumulate(est.begin(), est.end(), 0.0) / k;
+      // Express each deviation in tolerance units, so the null is scale-free and
+      // one table serves every m/z and both tolerance modes. In ppm the
+      // tolerance is each PEAK's own: a back-projected estimate carries the
+      // absolute error of the peak it came from, and a tag spanning 150..600
+      // m/z holds peaks whose tolerances differ 4x. Dividing every deviation
+      // by the tolerance at the first peak inflated the SSE up to ~16x for
+      // low-m/z tags and pushed their p_mzfidelity toward 1 (review F1). In
+      // Da the tolerance is one constant, and the arithmetic is unchanged.
       double sse = 0;
-      for (double e : est) { const double d = e - avg; sse += d * d; }
-      // Express the deviation in tolerance units, so the null is scale-free and
-      // one table serves every m/z and both tolerance modes.
-      const double tol = tolAt(p, avg);
-      t.p_mzfidelity = tab.mzFidelityP(k, tol > 0 ? sse / (tol * tol) : sse);
+      if (p.tol_ppm)
+      {
+        for (int i = 0; i < k; ++i)
+        {
+          const double ti = tolAt(p, s.spec[peaks[static_cast<size_t>(i)]].getMZ());
+          const double d = (est[static_cast<size_t>(i)] - avg) / (ti > 0 ? ti : 1.0);
+          sse += d * d;
+        }
+        t.p_mzfidelity = tab.mzFidelityP(k, sse);
+      }
+      else
+      {
+        for (double e : est) { const double d = e - avg; sse += d * d; }
+        const double tol = tolAt(p, avg);
+        t.p_mzfidelity = tab.mzFidelityP(k, tol > 0 ? sse / (tol * tol) : sse);
+      }
 
       int ranksum = 0, n_compl = 0;
       for (int i = 0; i < k; ++i)
@@ -988,8 +1081,12 @@ namespace FASTag
       }
     }
 
-    // E-value: expected number of tags this good by chance. Valid under arbitrary
-    // dependence between tags, by linearity of expectation.
+    // E-value: the combined p-value times the number of candidates. It would be
+    // the expected number of tags this good by chance (by linearity of
+    // expectation, whatever the dependence between tags) if each p-value were
+    // calibrated; fisher() says why it is not, and on random spectra the count
+    // is off in either direction depending on tolerance and gaps. A ranking
+    // score, therefore.
     //
     // Gapped tags additionally pay for the larger space their gap searched
     // (Param::gap_penalty). n_seeds cannot do that: it is one factor for every
@@ -1104,7 +1201,10 @@ namespace FASTag
   std::vector<Tag> tagSpectrum(const MSSpectrum& in, double precursor_mz, int charge,
                                const Param& p, const Tables& tables)
   {
-    if (p.tag_length < 1 || in.empty() || precursor_mz <= 0) return {};
+    // !(x > 0): NaN must not pass. A NaN precursor turned off the precursor
+    // cut and the complements and reported nterm_mass max(0, NaN) = 0, a false
+    // N-terminal claim; +inf reported nterm_mass inf.
+    if (p.tag_length < 1 || in.empty() || !(precursor_mz > 0) || !std::isfinite(precursor_mz)) return {};
     if (charge <= 0) charge = 2;
 
     const Prepared s = prepare(in, precursor_mz, charge, p);
@@ -1117,7 +1217,7 @@ namespace FASTag
                                             const std::vector<Tables>& tables)
   {
     std::vector<std::vector<Tag>> out(params.size());
-    if (params.empty() || in.empty() || precursor_mz <= 0) return out;
+    if (params.empty() || in.empty() || !(precursor_mz > 0) || !std::isfinite(precursor_mz)) return out;
     if (charge <= 0) charge = 2;
 
     // Neither the preprocessing nor the graphs read tag_length, so one of each

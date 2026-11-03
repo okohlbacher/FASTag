@@ -22,7 +22,11 @@ fn read_report(path: &str) -> Result<Option<String>, String> {
     if meta.len() > MAX_BYTES {
         return Err(format!("{path} is {} MB, too large for a report", meta.len() >> 20));
     }
-    std::fs::read_to_string(path).map(Some).map_err(|e| format!("{path}: {e}"))
+    // Lossy: a Windows build writes the input's basename in the ANSI code
+    // page, and one non-UTF-8 byte must not hide the whole report.
+    std::fs::read(path)
+        .map(|b| Some(String::from_utf8_lossy(&b).into_owned()))
+        .map_err(|e| format!("{path}: {e}"))
 }
 
 #[tauri::command]

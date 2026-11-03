@@ -113,13 +113,12 @@ fn read_taxdb_info(path: &str) -> Option<TaxdbInfo> {
 // The same search order the CLI uses (taxonomyDir_ in FASTag.cpp), so the GUI
 // reports on the index the run will actually load.
 fn bundled_taxdb(app: &AppHandle) -> Option<String> {
-    let bin = crate::fastag::resolve_binary(app).bin;
-    let bin_dir = bin.parent()?;
+    let r = crate::fastag::resolve_binary(app);
+    let bin_dir = r.bin.parent()?;
     let mut dirs: Vec<PathBuf> = Vec::new();
-    if let Ok(env) = std::env::var("FASTAG_TAXONOMY_DIR") {
-        if !env.is_empty() {
-            dirs.push(PathBuf::from(env));
-        }
+    // The directory run() hands the child (the user's, else the bundled one).
+    if let Some(t) = crate::fastag::taxonomy_dir(&r) {
+        dirs.push(t);
     }
     dirs.push(bin_dir.join("..").join("share").join("FASTag").join("taxonomy"));
     dirs.push(bin_dir.join("share-FASTag-taxonomy"));

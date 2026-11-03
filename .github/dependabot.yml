@@ -1,0 +1,8 @@
+# Third-party actions are pinned to commit SHAs (a moved tag cannot change
+# what a release job runs); Dependabot proposes the bumps.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

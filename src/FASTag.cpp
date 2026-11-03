@@ -295,10 +295,11 @@ protected:
     setValidStrings_("fragment_tolerance_unit", ListUtils::create<std::string>("ppm,Da"));
 
     registerIntOption_("max_peaks", "<n>", 400,
-                       "Peaks retained per spectrum; 0 uses the internal ceiling "
-                       "of 1024, not unlimited -- the scoring tables are built to "
-                       "that bound. The ceiling for 'peaks_per_window'", false);
+                       "Peaks retained per spectrum, at most 1024; 0 uses that "
+                       "ceiling, not unlimited -- the scoring tables are built to "
+                       "this bound, at O(n^2) memory. The ceiling for 'peaks_per_window'", false);
     setMinInt_("max_peaks", 0);
+    setMaxInt_("max_peaks", 1024);
     registerIntOption_("peaks_per_window", "<n>", 10,
                        "Keep this many peaks per 100 Da window instead of the "
                        "strongest 'max_peaks' overall; 0 disables. Scales the "
@@ -414,8 +415,9 @@ protected:
                        "Protein database for -recon_out. Default: the -fasta file", false);
     setValidFormats_("recon_fasta", ListUtils::create<std::string>("fasta"));
     registerIntOption_("recon_missed_cleavages", "<n>", 1,
-                       "Missed tryptic cleavages allowed in reconciliation windows", false);
+                       "Missed tryptic cleavages allowed in reconciliation windows (at most 10)", false);
     setMinInt_("recon_missed_cleavages", 0);
+    setMaxInt_("recon_missed_cleavages", 10);
     registerIntOption_("recon_min_length", "<n>", 0,
                        "Shortest tag worth reconciling; 0 derives it from database size "
                        "(the length where chance matches fall below 5%). Overridable "
@@ -612,6 +614,14 @@ protected:
   // fallback. Flanking masses at 4 decimals (0.1 mDa) -- %g's 6 significant
   // digits are coarser than the tolerance the tag was found with, and these
   // are what a downstream search constrains on. Numbers go through
+  /// Append free text as one TSV field: a tab, CR or LF (an mzML id may
+  /// carry them as &#9; / &#10;) would shift columns or split the row.
+  static void appendField(std::string& buf, const std::string& text)
+  {
+    if (text.find_first_of("\t\r\n") == std::string::npos) { buf += text; return; }
+    for (char c : text) buf += (c == '\t' || c == '\r' || c == '\n') ? ' ' : c;
+  }
+
   // appendNum, not snprintf: the same text as "%.4f" / "%g" / "%.3f", without
   // the locale lock every worker queues on in macOS's printf (NumFormat.h).
   static void appendTagRow(std::string& buf, const FASTag::Tag& t,
@@ -621,7 +631,7 @@ protected:
   {
     using FASTag::appendNum;
     constexpr auto fixed = std::chars_format::fixed;
-    buf += native_id;          buf += '\t';
+    appendField(buf, native_id); buf += '\t';
     buf += t.seq;              buf += '\t';
     appendNum(buf, t.n_res);   buf += '\t';
     appendNum(buf, t.charge);  buf += '\t';
@@ -687,9 +697,12 @@ protected:
   /// Peptide-terminal ones on any residue are summed into @p term_n / @p term_c
   /// when given (the -recon_localize fragment ladder needs them).
   /// @p kept receives the full ID of every residue modification added to @p out.
-  void resolveMods_(const StringList& names, bool variable, std::vector<FASTag::ModSpec>& out,
+  /// @return false if a name is not in ModificationsDB (logged): a typo must
+  ///   not run with the wrong chemistry and exit 0.
+  bool resolveMods_(const StringList& names, bool variable, std::vector<FASTag::ModSpec>& out,
                     StringList& kept, double* term_n = nullptr, double* term_c = nullptr)
   {
+    bool all_known = true;
     // Fetched on the first name, not up front: building the database parses
     // all of UniMod, 0.04 s of serial start-up that a run naming no
     // modification (-fixed_modifications "") never uses.
@@ -702,7 +715,9 @@ protected:
       try { mod = db->getModification(nm); }
       catch (Exception::BaseException&)
       {
-        OPENMS_LOG_ERROR << "Unknown modification '" << nm << "'; ignoring." << std::endl;
+        OPENMS_LOG_ERROR << "Unknown modification '" << nm << "' (not in OpenMS's "
+                            "ModificationsDB; names look like 'Oxidation (M)')." << std::endl;
+        all_known = false;
         continue;
       }
       if (!mod) continue;
@@ -735,6 +750,7 @@ protected:
       out.push_back(ms);
       kept.push_back(mod->getFullId());
     }
+    return all_known;
   }
 
   FILE* stream_data_ = nullptr;  ///< the REAL stdout in -stream mode
@@ -879,9 +895,11 @@ protected:
     // The residue modifications in use; -recon_id_out reports exactly these.
     StringList fixed_mods, variable_mods;
     double fixed_term_n = 0, fixed_term_c = 0;
-    resolveMods_(getStringList_("fixed_modifications"), false, p.mods, fixed_mods,
-                 &fixed_term_n, &fixed_term_c);
-    resolveMods_(getStringList_("variable_modifications"), true, p.mods, variable_mods);
+    const bool fixed_known = resolveMods_(getStringList_("fixed_modifications"), false, p.mods,
+                                          fixed_mods, &fixed_term_n, &fixed_term_c);
+    const bool variable_known =
+        resolveMods_(getStringList_("variable_modifications"), true, p.mods, variable_mods);
+    if (!fixed_known || !variable_known) return ILLEGAL_PARAMETERS;
     if (!p.mods.empty())
     {
       std::string summary;
@@ -1279,7 +1297,7 @@ protected:
           finish_block();  // an unterminated previous block still gets its sentinel
           char idbuf[256] = {0};
           if (std::sscanf(line.c_str(), "spectrum %255s %lf %d", idbuf, &prec_mz, &charge) != 3
-              || prec_mz <= 0)
+              || !(prec_mz > 0) || !std::isfinite(prec_mz))
           {
             id.clear();
             in_block = true;
@@ -1683,6 +1701,77 @@ protected:
         break;
       }
     }
+    // No output may be the input or another output, by any name (a symlink or
+    // hard link included). Opening an output truncates it: -out_spectra equal
+    // to -in destroyed the raw file before it was re-read, and -species_out
+    // equal to -out replaced the finished tag table. Checked before the first
+    // output is opened, with the default report paths resolved as below.
+    {
+      namespace fs = std::filesystem;
+      const auto beside = [&out](const char* suffix) -> std::string {
+        const size_t slash = out.find_last_of("/\\");
+        const size_t dot = out.rfind('.');
+        const bool ext = dot != std::string::npos && (slash == std::string::npos || dot > slash);
+        return (ext ? out.substr(0, dot) : out) + suffix;
+      };
+      std::vector<std::pair<std::string, std::string>> outs;
+      const auto add = [&outs](const char* opt, const std::string& path) {
+        if (!path.empty()) outs.emplace_back(opt, path);
+      };
+      add("out", out);
+      add("out_spectra", out_spectra);
+      add("recon_out", recon_out);
+      add("delta_out", delta_out);
+      add("recon_id_out", recon_id_out);
+      add("digest_out", digest_out);
+      add("label_out", label_out);
+      add("massgap_out", massgap_out);
+      if (getFlag_("glyco"))
+      {
+        const std::string g = getStringOption_("glyco_out");
+        add("glyco_out", g.empty() ? beside(".glyco.tsv") : g);
+      }
+      if (want_species)
+      {
+        const std::string sp = getStringOption_("species_out");
+        add("species_out", sp.empty() ? beside(".species.tsv") : sp);
+      }
+      const auto same = [](const std::string& a, const std::string& b) {
+        std::error_code ea, eb;
+        // A device (/dev/null, /dev/stdout) or other non-regular file may be
+        // named twice: writing it truncates nothing.
+        for (const std::string* x : {&a, &b})
+        {
+          std::error_code e;
+          const auto st = fs::status(*x, e);
+          if (!e && fs::exists(st) && !fs::is_regular_file(st)) return false;
+        }
+        if (fs::exists(a, ea) && fs::exists(b, eb))
+        {
+          std::error_code e;
+          if (fs::equivalent(a, b, e)) return true;
+        }
+        const fs::path ca = fs::weakly_canonical(a, ea), cb = fs::weakly_canonical(b, eb);
+        return !ea && !eb && ca == cb;
+      };
+      for (size_t i = 0; i < outs.size(); ++i)
+      {
+        if (same(outs[i].second, in))
+        {
+          OPENMS_LOG_ERROR << "-" << outs[i].first << " (" << outs[i].second
+                           << ") is the input file; writing it would destroy the input." << std::endl;
+          return ILLEGAL_PARAMETERS;
+        }
+        for (size_t j = 0; j < i; ++j)
+          if (same(outs[i].second, outs[j].second))
+          {
+            OPENMS_LOG_ERROR << "-" << outs[i].first << " and -" << outs[j].first
+                             << " name the same file (" << outs[i].second << ")." << std::endl;
+            return ILLEGAL_PARAMETERS;
+          }
+      }
+    }
+
     std::ofstream tsv(out.c_str());
     if (!tsv)
     {
@@ -1787,6 +1876,7 @@ protected:
     {
       std::map<int, std::pair<size_t, size_t>> len;  ///< length -> (seen, matched)
       size_t ms2 = 0, tags = 0, rep = 0;
+      size_t no_charge = 0;  ///< MS2 whose precursor carries no charge (tagged as 2+)
       // Entrapment-calibration accumulators (entrap_on only): target E-values,
       // and entrapment E-values with their tag length -- the key spaces are
       // per-length, so each entrapment event is weighted by 1/r_len later.
@@ -1868,6 +1958,7 @@ protected:
       }
 
       const auto& prec = spec.getPrecursors().front();
+      if (prec.getCharge() <= 0) ++pt.no_charge;
       const auto tags = tag_all(spec, prec.getMZ(), prec.getCharge(), tables);
       pt.tags += tags.size();
 
@@ -1937,15 +2028,20 @@ protected:
 
         if (recon_on && !row_entrap)  // known-false rows must not place or bin
         {
+          // The tag's own variable mods go on the localization ladder.
+          const bool tag_modded = t.seq.find('[') != std::string::npos;
+          const std::vector<double> tag_shift =
+              tag_modded ? FASTag::variableModShifts(t.seq, p.mods) : std::vector<double>();
           const auto places = recon.reconcile(FASTag::baseSequence(t.seq),
                                               t.nterm_mass, t.cterm_mass,
                                               recon_loc ? &loc_peaks : nullptr,
-                                              prec.getCharge());
+                                              prec.getCharge(),
+                                              tag_modded ? &tag_shift : nullptr);
           for (const auto& pl : places)
           {
             std::string prot = pl.protein;
             for (char& ch : prot) if (ch == '\t' || ch == '\n' || ch == '\r') ch = ' ';
-            res.rbuf += spec.getNativeID(); res.rbuf += '\t';
+            appendField(res.rbuf, spec.getNativeID()); res.rbuf += '\t';
             res.rbuf += t.seq;             res.rbuf += '\t';
             res.rbuf += prot;              res.rbuf += '\t';
             res.rbuf += pl.peptide;        res.rbuf += '\t';
@@ -2039,7 +2135,8 @@ protected:
         }
         const auto g = FASTag::scanOxonium(*sp, p.frag_tol, p.tol_ppm, glyco_min_fraction);
         std::string& gr = b.grows[idx];
-        gr = spec.getNativeID();
+        gr.clear();
+        appendField(gr, spec.getNativeID());
         gr += '\t';
         FASTag::appendNum(gr, g.n_matched); gr += '\t';
         FASTag::appendNum(gr, g.frac, std::chars_format::fixed, 3); gr += '\t';
@@ -2442,6 +2539,9 @@ protected:
     // write= is only what the loop waits for; write_busy= is the writer's own.
     writer.join();
     t_write = secs(t_write_a, Clock::now());
+    // The writer's failure is the cause when both are set: it aborts the
+    // mzPeak stream, and a worker blocked in take() then fails with
+    // "mzPeak read stopped", which would otherwise be reported instead.
     if (work_failed)
     {
       try
@@ -2456,6 +2556,11 @@ protected:
         if (recon_on) { rtsv.close(); std::remove(recon_out.c_str()); }
         if (glyco_on) { gtsv.close(); std::remove(glyco_out.c_str()); }
         return refuse_im();
+      }
+      catch (...)
+      {
+        if (write_failed) std::rethrow_exception(write_failed);
+        throw;
       }
     }
     if (write_failed) std::rethrow_exception(write_failed);
@@ -2503,8 +2608,10 @@ protected:
                       << std::endl;
     }
 
+    size_t n_no_charge = 0;
     for (const PerThread& pt : per_thread)
     {
+      n_no_charge += pt.no_charge;
       n_ms2 += pt.ms2;
       n_tags += pt.tags;
       n_reported += pt.rep;
@@ -2570,7 +2677,13 @@ protected:
         OPENMS_LOG_WARN << dropped << " entrapment events at lengths with no "
                            "exclusive entrapment key space were dropped from "
                            "the curve." << std::endl;
-      if (!entrap_e.empty() && wdecoys.empty())
+      bool any_exclusive = false;
+      for (const auto& kv : r_len) any_exclusive = any_exclusive || kv.second > 0;
+      // Also with ZERO events: with target-first attribution an entrapment
+      // database inside the target's key space (identical to -fasta, a subset,
+      // or its reverse) can produce no event at all, and the test below then
+      // never fired -- every q_db came out 0 with no evidence.
+      if (!any_exclusive || (!entrap_e.empty() && wdecoys.empty()))
       {
         // Every event dropped: the entrapment database's (orientation-closed)
         // key space sits entirely inside the target's. An all-zero q_db here
@@ -2715,7 +2828,10 @@ protected:
           uint64_t count = kv.second.first;
           std::map<std::string, uint64_t> interps = kv.second.second;
           for (auto* nb : {lo != bins.end() ? &*lo : nullptr, hi != bins.end() ? &*hi : nullptr})
-            if (nb && nb->second.first < kv.second.first)
+            // A valley bin between two peaks goes to the first (lower-delta)
+            // one only: counted twice, the rows summed to more spectra than
+            // were sampled.
+            if (nb && nb->second.first < kv.second.first && !absorbed.count(nb->first))
             {
               count += nb->second.first;
               for (const auto& ip : nb->second.second) interps[ip.first] += ip.second;
@@ -3070,7 +3186,8 @@ protected:
       // knows exactly how much they share, so the shared part can be removed.
       // See TaxDeconv.h for the model and its limits.
       std::map<uint32_t, double> adjusted_leaf;
-      if (getFlag_("species_deconvolve") && !idx_taxa.empty())
+      const bool deconvolved = getFlag_("species_deconvolve") && !idx_taxa.empty();
+      if (deconvolved)
       {
         const size_t nt = idx_taxa.size();
         const std::vector<uint64_t> overlap = idx.pairwiseOverlap();
@@ -3084,18 +3201,28 @@ protected:
         for (size_t i = 0; i < nt; ++i)
           if (est[i] > 0.0) adjusted_leaf[idx_taxa[i]] = est[i];
       }
-      else
-      {
-        for (const auto& kv : leaf_hits) adjusted_leaf[kv.first] = static_cast<double>(kv.second);
-      }
 
       // Roll the ADJUSTED leaves up by SUMMING. Spectrum counts had to be
       // deduplicated per node -- one spectrum supporting two species of a genus
       // is still one spectrum -- but these are estimated independent
       // contributions, so a genus really is the sum of its species.
+      //
+      // Without deconvolution the leaves are raw spectrum counts, NOT
+      // independent: a spectrum tied between two sibling leaves counted twice
+      // at their parent, so a family of two genera sharing the same spectra
+      // outranked one with more distinct spectra (review X13). There the
+      // per-node deduplicated count `hits` is the adjusted value; at a leaf it
+      // equals leaf_hits.
       std::map<uint32_t, double> adjusted;
-      for (const auto& kv : adjusted_leaf)
-        for (uint32_t a : tax.lineage(kv.first)) adjusted[a] += kv.second;
+      if (deconvolved)
+      {
+        for (const auto& kv : adjusted_leaf)
+          for (uint32_t a : tax.lineage(kv.first)) adjusted[a] += kv.second;
+      }
+      else
+      {
+        for (const auto& kv : hits) adjusted[kv.first] = static_cast<double>(kv.second);
+      }
 
       // hits is already rolled up (spectrum-deduped per node), so build the
       // evidence directly -- rolling it again would re-introduce the double count.
@@ -3119,6 +3246,11 @@ protected:
 
       const std::string want_rank = getStringOption_("species_rank");
       std::ofstream so(species_out.c_str());
+      if (!so)
+      {
+        OPENMS_LOG_ERROR << "Cannot open species report " << species_out << std::endl;
+        return CANNOT_WRITE_OUTPUT_FILE;
+      }
       so << "rank\ttaxid\tname\tobserved\tadjusted\texpected\tlog_pvalue\tqvalue\n";
 
       // Order by the corrected count, not by q. Significance ranks a near
@@ -3160,8 +3292,13 @@ protected:
       so.flush();
       const bool species_ok = static_cast<bool>(so);
       so.close();
-      if (!species_ok)
+      if (!species_ok || so.fail())
+      {
+        // Every other report fails the run on a write error; this one used to
+        // log and exit 0, leaving a stale report from an earlier run in place.
         OPENMS_LOG_ERROR << "Failed writing species report to " << species_out << std::endl;
+        return CANNOT_WRITE_OUTPUT_FILE;
+      }
       OPENMS_LOG_INFO << "Species: " << n_units << " spectra contributed taxon evidence";
       if (n_kmer_skipped || n_tag_generic)
         OPENMS_LOG_INFO << " (" << n_kmer_skipped << " k-mers too widely shared, "
@@ -3172,6 +3309,11 @@ protected:
     OPENMS_LOG_INFO << n_ms2 << " MS2 spectra, " << n_tags << " tags";
     if (filtering) OPENMS_LOG_INFO << " -> " << n_reported << " after filtering";
     OPENMS_LOG_INFO << std::endl;
+    if (n_no_charge > 0)
+      OPENMS_LOG_WARN << n_no_charge << " of " << n_ms2 << " MS2 spectra carry no precursor "
+                         "charge and were tagged as 2+: their peaks above the 2+ precursor "
+                         "mass are dropped, and their nterm_mass flanks assume charge 2 (wrong "
+                         "for a 3+ or higher precursor)." << std::endl;
 
     // Report matches beside the number expected by chance, so a count is never
     // mistaken for signal: below the derived floor the filter passes almost
@@ -3204,7 +3346,14 @@ protected:
     {
       if (kept_idx.empty())
       {
+        // Remove what an earlier run left there: next to this run's TSV it
+        // would read as this run's spectra (review IO-5). The collision check
+        // up front guarantees this is not the input.
+        std::error_code ec;
+        const bool stale = std::filesystem::is_regular_file(out_spectra, ec)
+                           && std::filesystem::remove(out_spectra, ec);
         OPENMS_LOG_ERROR << "No spectrum carried a reported tag; not writing " << out_spectra
+                         << (stale ? " (removed the file an earlier run left there)" : "")
                          << std::endl;
         return UNEXPECTED_RESULT;
       }

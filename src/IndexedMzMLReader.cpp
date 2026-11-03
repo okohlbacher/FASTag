@@ -3,6 +3,7 @@
 
 #include "IndexedMzMLReader.h"
 
+#include <OpenMS/CONCEPT/Exception.h>
 #include <OpenMS/FORMAT/HANDLERS/MzMLSpectrumDecoder.h>
 #include <OpenMS/IONMOBILITY/IMTypes.h>
 #include <OpenMS/METADATA/Precursor.h>
@@ -460,13 +461,21 @@ namespace FASTag
 
   bool IndexedMzMLReader::reportsSpectrumMetadata()
   {
-    const Size probe = std::min<Size>(getNrSpectra(), 64);
+    // Up to the FIRST MS2, not a fixed 64: a DDA run can open with minutes of
+    // MS1-only scans (loading, void volume), and a 64-spectrum window then
+    // threw the fast reader away and blamed the OpenMS build (review IO-2).
+    // The head-only read is cheap; the cap bounds an MS1-only file.
+    const Size probe = std::min<Size>(getNrSpectra(), kMetadataProbe);
+    bool any_level = false;
     for (Size i = 0; i < probe; ++i)
     {
       const MSSpectrum s = read_(i, /*want_peaks=*/false);
-      if (s.getMSLevel() == 2 && !s.getPrecursors().empty()) return true;
+      if (s.getMSLevel() == 2) return !s.getPrecursors().empty();
+      any_level = any_level || s.getMSLevel() > 0;
     }
-    return false;
+    // No MS2 within the cap: the scrape read MS levels, so it works; a run
+    // with nothing to tag there costs nothing either way.
+    return any_level;
   }
 
   MSSpectrum IndexedMzMLReader::read_(Size i, bool want_peaks)
@@ -475,7 +484,17 @@ namespace FASTag
     if (!impl_->ok || i + 1 >= impl_->offsets->size()) return spec;
     const std::uint64_t begin = (*impl_->offsets)[i];
     const std::uint64_t end = (*impl_->offsets)[i + 1];
-    if (end <= begin) return spec;
+    // A spectrum the tagging loop wants but cannot read is an error, as it
+    // is on OpenMS's reader: returned empty, it was skipped as "not MS2" and
+    // the run exited 0 with its tags missing (review IO-1). The metadata
+    // probe (want_peaks false) stays lenient.
+    const auto unreadable = [&](const char* why) -> MSSpectrum {
+      if (!want_peaks) return MSSpectrum();
+      throw Exception::ParseError(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION,
+                                  "spectrum index " + std::to_string(i),
+                                  std::string(why) + " in " + impl_->path);
+    };
+    if (end <= begin) return unreadable("an empty byte range");
 
     // Two-stage read: the HEAD first, and the body only if this spectrum's
     // peaks are actually wanted.
@@ -491,7 +510,7 @@ namespace FASTag
     impl_->in.clear();
     impl_->in.seekg(static_cast<std::streamoff>(begin));
     impl_->in.read(impl_->buffer.data(), static_cast<std::streamsize>(head_len));
-    if (!impl_->in) return spec;
+    if (!impl_->in) return unreadable("a short read");
 
     // The head is only known to hold the whole metadata region once the
     // arrays have been seen; otherwise fall back to the full element rather
@@ -507,7 +526,7 @@ namespace FASTag
     };
     if (impl_->buffer.find(kArrays) == std::string::npos && len > head_len)
     {
-      if (!read_rest()) return spec;
+      if (!read_rest()) return unreadable("a short read");
     }
 
     // The metadata region of whatever is in the buffer NOW: everything this
@@ -537,16 +556,16 @@ namespace FASTag
     // This may GROW the buffer, so every view below is taken afterwards.
     if (ms_level == 2 && want_peaks)
     {
-      if (!read_rest()) return MSSpectrum();
+      if (!read_rest()) return unreadable("a short read");
       try
       {
         impl_->decoder.domParseSpectrum(impl_->buffer, spec);
         // domParseSpectrum resets the spectrum, so the level goes back on.
         spec.setMSLevel(static_cast<UInt>(ms_level));
       }
-      catch (const Exception::BaseException&)
+      catch (const Exception::BaseException& e)
       {
-        return MSSpectrum();
+        return unreadable((std::string("an undecodable MS2 spectrum (") + e.what() + ")").c_str());
       }
     }
     else
@@ -569,11 +588,13 @@ namespace FASTag
     double rt = 0;
     if (to_number(cv_value(xml, kScanTime, 0, n), rt))
     {
-      // mzML records the unit; minutes are the common one and OpenMS wants
-      // seconds. An absent unit is treated as minutes, which is what the
-      // mzML specification's own example uses and what OpenMS assumes.
+      // mzML records the unit; OpenMS wants seconds. As OpenMS's MzMLHandler
+      // reads it: minutes (UO:0000031) are converted and anything else is
+      // taken as seconds -- an absent unit included. (This read an absent
+      // unit as minutes, so RTs in -recon_id_out were 60x off against the
+      // OpenMS path -out_spectra takes; review IO-4.)
       const std::string_view unit = cv_value(xml, kScanTime, 0, n, kUnit);
-      spec.setRT(unit == "UO:0000010" ? rt : rt * 60.0);
+      spec.setRT(unit == "UO:0000031" ? rt * 60.0 : rt);
     }
 
     // The scan windows and the scan's ion mobility, as OpenMS's mzML reader

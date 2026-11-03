@@ -119,6 +119,36 @@ fn parse_version(text: &str) -> Option<String> {
     }
 }
 
+/// The CLI is a console program and the release GUI has no console
+/// (windows_subsystem = "windows"), so Windows gave every child a console
+/// window of its own -- one flashing at launch for the probe, one open for
+/// every run, and closing it killed the run. CREATE_NO_WINDOW suppresses it;
+/// piped stdio is unaffected.
+fn no_console_window(cmd: &mut Command) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    #[cfg(not(windows))]
+    let _ = cmd;
+}
+
+/// The taxonomy directory a run's child gets: the user's own
+/// FASTAG_TAXONOMY_DIR if it names a directory (the CLI honours it first,
+/// and species.rs reports on it), else the bundled one. Overriding the
+/// user's value made the species panel describe one index while the run
+/// loaded another.
+pub fn taxonomy_dir(r: &Resolved) -> Option<PathBuf> {
+    if let Ok(env) = std::env::var("FASTAG_TAXONOMY_DIR") {
+        if !env.is_empty() && PathBuf::from(&env).is_dir() {
+            return Some(PathBuf::from(env));
+        }
+    }
+    r.taxonomy.clone()
+}
+
 /// libOpenMS pulls in OpenBLAS, which starts one spinning thread per core at
 /// load time (127 on a 128-thread node, ~2 s of CPU even for --help). FASTag
 /// never calls BLAS. The CLI wrappers set the same default; a user's own
@@ -129,13 +159,31 @@ fn quiet_blas(cmd: &mut Command) {
     }
 }
 
+// async + spawn_blocking: a sync command runs on the main thread, and
+// `FASTag --help` loads the whole library closure -- seconds on a cold cache
+// or under a first-launch Gatekeeper/antivirus scan, during which the window
+// froze.
 #[tauri::command]
-pub fn probe(app: AppHandle) -> BinaryInfo {
-    let r = resolve_binary(&app);
+pub async fn probe(app: AppHandle) -> BinaryInfo {
+    tauri::async_runtime::spawn_blocking(move || probe_blocking(&app))
+        .await
+        .unwrap_or_else(|e| BinaryInfo {
+            bin: String::new(),
+            data_path: None,
+            source: "path".into(),
+            ok: false,
+            version: None,
+            detail: format!("probe failed: {e}"),
+        })
+}
+
+fn probe_blocking(app: &AppHandle) -> BinaryInfo {
+    let r = resolve_binary(app);
     let bin_s = r.bin.display().to_string();
     let data_s = r.data.as_ref().map(|d| d.display().to_string());
     let mut cmd = Command::new(&r.bin);
     cmd.arg("--help");
+    no_console_window(&mut cmd);
     if let Some(d) = &r.data {
         cmd.env("OPENMS_DATA_PATH", d);
     }
@@ -196,6 +244,9 @@ fn value_to_scalar(v: &Value) -> Option<String> {
 fn build_args(p: &RunParams) -> Vec<String> {
     let manifest: Value = serde_json::from_str(MANIFEST).unwrap_or(Value::Null);
     let mut types: HashMap<String, String> = HashMap::new();
+    // String lists whose CLI default is not empty: an explicitly cleared one
+    // must reach the CLI as "-name ''", or the default comes back.
+    let mut nonempty_default: std::collections::HashSet<String> = std::collections::HashSet::new();
     if let Some(arr) = manifest.get("params").and_then(|v| v.as_array()) {
         for it in arr {
             if let (Some(n), Some(t)) = (
@@ -203,6 +254,13 @@ fn build_args(p: &RunParams) -> Vec<String> {
                 it.get("type").and_then(|v| v.as_str()),
             ) {
                 types.insert(n.to_string(), t.to_string());
+                let has_default = it
+                    .get("default")
+                    .and_then(|d| d.as_array())
+                    .is_some_and(|d| d.iter().any(|x| x.as_str().is_some_and(|s| !s.trim().is_empty())));
+                if t == "string-list" && has_default {
+                    nonempty_default.insert(n.to_string());
+                }
             }
         }
     }
@@ -236,6 +294,14 @@ fn build_args(p: &RunParams) -> Vec<String> {
             if !items.is_empty() {
                 args.push(format!("-{name}"));
                 args.extend(items);
+            } else if nonempty_default.contains(name) && !arr.iter().any(|v| {
+                value_to_scalar(v).is_some_and(|s| looks_like_flag(s.trim()))
+            }) {
+                // Cleared on purpose (e.g. no fixed modification for an
+                // unalkylated sample): the CLI reads an empty item as none.
+                // Dropping the option brought back Carbamidomethyl (C).
+                args.push(format!("-{name}"));
+                args.push(String::new());
             }
             continue;
         }
@@ -273,16 +339,38 @@ fn parse_progress_line(line: &str) -> Option<(u64, u64)> {
 }
 
 fn read_stream<R: Read>(stream: R, app: &AppHandle, parse_progress: bool) {
-    let reader = BufReader::new(stream);
-    for line in reader.lines() {
-        let Ok(line) = line else { break };
+    for_each_line(stream, |line| {
         if parse_progress {
             if let Some((done, total)) = parse_progress_line(&line) {
                 let _ = app.emit("fastag:progress", serde_json::json!({ "done": done, "total": total }));
-                continue;
+                return;
             }
         }
         let _ = app.emit("fastag:log", line);
+    });
+}
+
+/// Every line of @p stream, decoded lossily, until EOF. lines() stops at the
+/// first line that is not UTF-8 (a cp1252 path echoed by a Windows build):
+/// the reader then dropped the pipe while the child still wrote to it, which
+/// killed it with SIGPIPE on Unix and silenced the log and progress on
+/// Windows. Only EOF or a real read error ends the loop.
+fn for_each_line<R: Read, F: FnMut(String)>(stream: R, mut f: F) {
+    let mut reader = BufReader::new(stream);
+    let mut buf: Vec<u8> = Vec::new();
+    loop {
+        buf.clear();
+        match reader.read_until(b'\n', &mut buf) {
+            Ok(0) => break,
+            Ok(_) => {
+                while matches!(buf.last(), Some(b'\n') | Some(b'\r')) {
+                    buf.pop();
+                }
+                f(String::from_utf8_lossy(&buf).into_owned());
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(_) => break,
+        }
     }
 }
 
@@ -302,9 +390,11 @@ pub fn run(app: AppHandle, state: State<'_, RunManager>, params: RunParams) -> R
         cmd.env("OPENMS_DATA_PATH", d);
     }
     quiet_blas(&mut cmd);
-    if let Some(t) = &r.taxonomy {
-        // Point -species at the bundled taxonomy explicitly (the CLI's own
-        // <bin>/../share lookup fails for a copied/symlinked binary).
+    no_console_window(&mut cmd);
+    if let Some(t) = taxonomy_dir(&r) {
+        // Point -species at the taxonomy explicitly (the CLI's own
+        // <bin>/../share lookup fails for a copied/symlinked binary) -- the
+        // user's own directory if set, the same one species.rs reports on.
         cmd.env("FASTAG_TAXONOMY_DIR", t);
     }
     let mut child = match cmd.spawn() {
@@ -449,6 +539,28 @@ mod tests {
         assert!(!a.contains(&"-test".to_string()));
         let i = a.iter().position(|s| s == "-gap_penalty").expect("negative numbers still pass");
         assert_eq!(a[i + 1], "-5");
+    }
+
+    #[test]
+    fn build_args_cleared_fixed_mods_reach_the_cli_as_empty() {
+        // Cleared in the form: [""]. The CLI default (Carbamidomethyl) must not return.
+        let a = build_args(&rp(r#"{"in":"i","out":"o","params":{"fixed_modifications":[""]}}"#));
+        let i = a.iter().position(|s| s == "-fixed_modifications").expect("option kept");
+        assert_eq!(a[i + 1], "");
+        // A list whose default is empty is still left out when empty.
+        let b = build_args(&rp(r#"{"in":"i","out":"o","params":{"variable_modifications":[""]}}"#));
+        assert!(!b.contains(&"-variable_modifications".to_string()));
+    }
+
+    #[test]
+    fn lines_survive_invalid_utf8() {
+        // A cp1252 byte between progress lines must not end the stream.
+        let data: &[u8] = b"FASTAG_PROGRESS done=1 total=3\nLabels: C:\\J\xFCrgen\\x.tsv\nFASTAG_PROGRESS done=3 total=3\n";
+        let mut got = Vec::new();
+        for_each_line(data, |l| got.push(l));
+        assert_eq!(got.len(), 3);
+        assert_eq!(got[2], "FASTAG_PROGRESS done=3 total=3");
+        assert!(got[1].contains('\u{FFFD}'));
     }
 
     #[test]

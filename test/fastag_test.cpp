@@ -27,6 +27,7 @@
 #include <OpenMS/KERNEL/MSSpectrum.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <random>
 #include <set>
@@ -831,6 +832,156 @@ int main()
             c.pep.c_str(), c.dropped.c_str(), c.kept.c_str(), got.c_str());
     }
     std::printf("18. a full gap budget cuts isobaric groups by spelling (SL over VT, DQ over NE)\n");
+  }
+
+  // 19. m/z fidelity is calibrated per peak in ppm: no m/z dependence
+  //
+  // Independent +-10 ppm errors on every peak, 20 ppm tolerance. The SSE used
+  // to be divided by the tolerance at the tag's LOWEST peak, so tags starting
+  // at low m/z (whose later peaks have several times that tolerance) read up
+  // to ~16x the true SSE and their p_mzfidelity sat near 1 (mean ~0.7 below
+  // 300 m/z against ~0.1 above 1000). Per-peak normalisation makes it flat.
+  {
+    const std::string pep = "GASPVTLNDQKEMHFRYWGASPVTLNDK";
+    const AASequence aa = AASequence::fromString(pep);
+    double pmz = 0;
+    synth(pep, 0, 1, pmz);
+    FASTag::Param p;
+    p.frag_tol = 20; p.tol_ppm = true; p.complement_tol = 0.02;
+    p.tag_length = 4; p.max_tag_count = 0; p.max_evalue = 0;
+    const FASTag::Tables tab(p);
+    std::mt19937 rng(7);
+    std::uniform_real_distribution<double> err(-10e-6, 10e-6);
+    double lo_sum = 0, hi_sum = 0;
+    int lo_n = 0, hi_n = 0;
+    for (int rep = 0; rep < 60; ++rep)
+    {
+      MSSpectrum y;
+      for (size_t i = 1; i < aa.size(); ++i)
+      {
+        const double mz = aa.getSuffix(i).getMonoWeight(Residue::YIon, 1);
+        y.emplace_back(mz * (1.0 + err(rng)), 0.5 + 0.01 * static_cast<double>(i));
+      }
+      y.sortByPosition();
+      for (const auto& t : FASTag::tagSpectrum(y, pmz, 2, p, tab))
+      {
+        if (t.charge != 1 || t.gapped || t.n_res != 4) continue;
+        if (t.low_mz < 450) { lo_sum += t.p_mzfidelity; ++lo_n; }
+        else if (t.low_mz > 1500) { hi_sum += t.p_mzfidelity; ++hi_n; }
+      }
+    }
+    CHECK(lo_n > 50 && hi_n > 50, "too few tags (%d low, %d high); the test asserts nothing", lo_n, hi_n);
+    const double lo = lo_n ? lo_sum / lo_n : 0, hi = hi_n ? hi_sum / hi_n : 1;
+    CHECK(lo < 2.0 * hi, "p_mzfidelity depends on m/z: mean %.3f below 450 m/z vs %.3f above 1500", lo, hi);
+    std::printf("19. m/z fidelity in ppm is flat: mean p %.3f (low m/z) vs %.3f (high)\n", lo, hi);
+  }
+
+  // 20. a complete ladder grows no gap edges
+  //
+  // A gap stands for one missing peak. With every y ion present, gaps=1 used
+  // to add a gapped re-reading for every pair of peaks two residues apart,
+  // all counted in n_seeds, so the contiguous tags' E-values got worse with no
+  // new evidence. The peptide avoids N, Q, R and W inside the ladder: a single
+  // step by one of those IS a two-residue sum (GG, GA, GV, AD...), and that
+  // gapped alternative reading stays, as it should.
+  {
+    const std::string pep = "SAMPLEFPETDYK";
+    const AASequence aa = AASequence::fromString(pep);
+    double pmz = 0;
+    synth(pep, 0, 1, pmz);
+    MSSpectrum y;
+    for (size_t i = 1; i < aa.size(); ++i)
+      y.emplace_back(aa.getSuffix(i).getMonoWeight(Residue::YIon, 1), 0.5 + 0.02 * static_cast<double>(i));
+    y.sortByPosition();
+    FASTag::Param off;
+    off.frag_tol = 0.02; off.tol_ppm = false; off.complement_tol = 0.02;
+    off.tag_length = 4; off.max_tag_count = 0; off.max_evalue = 0;
+    FASTag::Param on = off; on.max_gaps = 1;
+    const FASTag::Tables tf(off), tn(on);
+    const auto a = FASTag::tagSpectrum(y, pmz, 2, off, tf);
+    const auto b = FASTag::tagSpectrum(y, pmz, 2, on, tn);
+    size_t gapped = 0;
+    for (const auto& t : b) gapped += t.gapped ? 1 : 0;
+    CHECK(!a.empty(), "no tags; the test asserts nothing");
+    CHECK(gapped == 0, "%zu gapped rows on a complete ladder (no peak is missing)", gapped);
+    bool same = a.size() == b.size();
+    for (size_t i = 0; same && i < a.size(); ++i)
+      same = a[i].seq == b[i].seq && a[i].evalue == b[i].evalue;
+    CHECK(same, "gaps on changed the contiguous tags or their E-values (%zu vs %zu rows)", a.size(), b.size());
+    std::printf("20. complete ladder: %zu rows with gaps off, %zu with gaps on, %zu gapped\n",
+                a.size(), b.size(), gapped);
+  }
+
+  // 21. deisotoping does not depend on the intensity scale
+  //
+  // The ported ThresholdMower step drops peaks below an absolute 0.05. synth()
+  // writes intensities in [0.02, 1], i.e. relative ones, and lost every peak
+  // under 0.05 with deisotoping on; scaled by 2^-10 it lost all and gave no
+  // tag. Powers of two keep the float intensities exact.
+  {
+    double pmz = 0;
+    const MSSpectrum s = synth("VGAHAGEYGAEALER", 60, 11, pmz);
+    FASTag::Param p;
+    p.frag_tol = 20; p.tol_ppm = true; p.complement_tol = 0.02;
+    p.deisotope = true; p.tag_length = 3; p.max_tag_count = 0; p.max_evalue = 0;
+    const FASTag::Tables tab(p);
+    const auto ref = FASTag::tagSpectrum(s, pmz, 2, p, tab);
+    CHECK(!ref.empty(), "no tags at scale 1; the test asserts nothing");
+    for (double scale : {1024.0, 1.0 / 1024.0, 1.0 / 1048576.0})
+    {
+      MSSpectrum c = s;
+      for (auto& pk : c) pk.setIntensity(static_cast<float>(pk.getIntensity() * scale));
+      const auto got = FASTag::tagSpectrum(c, pmz, 2, p, tab);
+      bool same = got.size() == ref.size();
+      for (size_t i = 0; same && i < got.size(); ++i)
+        same = got[i].seq == ref[i].seq && got[i].evalue == ref[i].evalue
+               && got[i].nterm_mass == ref[i].nterm_mass;
+      CHECK(same, "intensities x %g changed the tags (%zu vs %zu)", scale, got.size(), ref.size());
+    }
+    std::printf("21. deisotoping is scale-invariant: %zu tags at every scale\n", ref.size());
+  }
+
+  // 22. a fragment seen as 1+ and 2+ is one peak after deisotoping
+  //
+  // For a 3+ precursor every y ion is present as 1+ and as 2+, each with its
+  // C13 isotope, at +-3 ppm. The deisotoper moves the 2+ copy onto the 1+
+  // scale a few ppm from the 1+ copy; both survived, so every tag was emitted
+  // twice with flanks ~1e-4 Da apart.
+  {
+    const std::string pep = "LGEYGFQNALLVR";
+    const AASequence aa = AASequence::fromString(pep);
+    const double P = Constants::PROTON_MASS_U, C13 = Constants::C13C12_MASSDIFF_U;
+    const double pmz3 = (aa.getMonoWeight() + 3 * P) / 3;
+    MSSpectrum s;
+    for (size_t i = 1; i < aa.size(); ++i)
+    {
+      const double M = aa.getSuffix(i).getMonoWeight(Residue::Full, 0);  // neutral y
+      const double e1 = (i % 2 ? 3e-6 : -3e-6), e2 = -e1;
+      const double r = M / 1800.0;   // the averagine M+1 ratio the deisotoper expects
+      s.emplace_back((M + P) * (1 + e1), 1.0);
+      s.emplace_back((M + P + C13) * (1 + e1), r);
+      s.emplace_back((M + 2 * P) / 2 * (1 + e2), 0.7);
+      s.emplace_back((M + 2 * P + C13) / 2 * (1 + e2), 0.7 * r);
+    }
+    s.sortByPosition();
+    FASTag::Param p;
+    p.frag_tol = 20; p.tol_ppm = true; p.complement_tol = 0.02;
+    p.deisotope = true; p.tag_length = 4; p.max_tag_count = 0; p.max_evalue = 0;
+    const FASTag::Tables tab(p);
+    const auto tags = FASTag::tagSpectrum(s, pmz3, 3, p, tab);
+    size_t dup = 0;
+    for (size_t i = 0; i < tags.size(); ++i)
+      for (size_t j = i + 1; j < tags.size(); ++j)
+        if (tags[i].seq == tags[j].seq && tags[i].charge == tags[j].charge
+            && std::fabs(tags[i].nterm_mass - tags[j].nterm_mass) < 0.01
+            && tags[i].nterm_mass != tags[j].nterm_mass)
+          ++dup;
+    size_t correct = 0;
+    for (const auto& t : tags) correct += reads(pep, t.seq) ? 1 : 0;
+    CHECK(correct > 0, "no correct tag; the test asserts nothing");
+    CHECK(dup == 0, "%zu tag pairs differ only by ~1e-4 Da flanks (1+ and moved 2+ copies)", dup);
+    std::printf("22. 1+/2+ copies merged: %zu tags, %zu correct, %zu near-duplicate pairs\n",
+                tags.size(), correct, dup);
   }
 
   std::printf(failures ? "\n%d FAILURES\n" : "\nall checks passed\n", failures);

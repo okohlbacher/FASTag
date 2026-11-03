@@ -55,6 +55,27 @@ export function perJobOutputs(values: Record<string, unknown>, tagsOut: string):
   return o
 }
 
+// A new single input must not write into the previous input's reports: the
+// configured auxiliary outputs persist across runs and sessions (lastUsed), so
+// running sample B overwrote A's digest/recon/... files. Each configured
+// output-file option keeps its directory and extension and takes the new tags
+// output's stem: /res/A.digest.tsv -> /res/B.digest.tsv. Unset ones stay unset.
+export function rebaseOutputs(values: Record<string, unknown>, tagsOut: string): Record<string, ParamValue> {
+  const base = (p: string): string => p.slice(Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\')) + 1)
+  const dirOf = (p: string): string => p.slice(0, Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\')) + 1)
+  const stemPath = tagsOut.endsWith('.tags.tsv') ? tagsOut.slice(0, -'.tags.tsv'.length) : stripExt(tagsOut)
+  const stem = base(stemPath)
+  const o: Record<string, ParamValue> = {}
+  for (const name of RENDERED) {
+    if (PARAM_BY_NAME.get(name)?.type !== 'output-file') continue
+    const cfg = String(values[name] || '')
+    if (!cfg) continue
+    const ext = cfg.slice(stripExt(cfg).length) || (name === 'out_spectra' ? '.mzML' : '.tsv')
+    o[name] = `${dirOf(cfg)}${stem}.${name.replace(/_out$/, '').replace(/^out_/, '')}${ext}`
+  }
+  return o
+}
+
 // Read and parse whichever reports exist; a report the run did not write is
 // skipped, one that cannot be read or parsed becomes a message.
 async function loadReports(paths: string[]): Promise<{ reports: Report[]; errors: string[] }> {
@@ -242,6 +263,7 @@ export default function App(): JSX.Element {
     if (p) {
       setInput(p)
       setOut(defaultOut(p))
+      setValues((v) => ({ ...v, ...rebaseOutputs(v, defaultOut(p)) }))
     }
   }
 
@@ -268,10 +290,13 @@ export default function App(): JSX.Element {
   }
 
   async function pickFor(spec: ParamSpec): Promise<void> {
+    // The parameter's own formats (FASTA, idXML/mzid/mzTab, TSV), not the
+    // spectra filter every input used to get -- a .fasta or .taxdb could not
+    // be picked -- nor 'Tags (TSV)' for every output.
     const p =
       spec.type === 'output-file'
-        ? await window.fastag.pickOutput(String(values[spec.name] || ''))
-        : await window.fastag.pickInput()
+        ? await window.fastag.saveFile(String(values[spec.name] || ''), spec.formats)
+        : await window.fastag.pickFile(spec.formats)
     if (p) setValue(spec.name, p)
   }
 

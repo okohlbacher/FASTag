@@ -68,7 +68,11 @@ for (const m of xml.matchAll(/<ITEM\s([^>]*?)\/>/g)) {
     description: a.description ?? '',
     required: a.required === 'true',
     toppAdvanced: a.advanced === 'true',
-    ...parseRestrictions(a.type, a.restrictions)
+    ...parseRestrictions(a.type, a.restrictions),
+    // "*.fasta,*.fa" -> ["fasta", "fa"]: the file dialog's filter.
+    ...(a.supported_formats
+      ? { formats: a.supported_formats.split(',').map((f) => f.trim().replace(/^\*\./, '')).filter(Boolean) }
+      : {})
   })
 }
 

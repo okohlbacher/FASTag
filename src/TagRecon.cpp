@@ -35,6 +35,7 @@ namespace FASTag
   void TagReconciler::tryPlace(const ProteomeIndex::TagOcc& occ, const ProteomeIndex::Window& w,
                                double nterm_mass, double cterm_mass,
                                const MSSpectrum* spec, int frag_charges,
+                               const std::vector<double>* tag_shift,
                                std::vector<Reconciliation>& out) const
   {
     const double db_n = idx_->massBetween(w.start, occ.pos);
@@ -42,12 +43,27 @@ namespace FASTag
 
     // Under the y-ion assumption the tag's nterm_mass is the N-side flank and
     // cterm_mass the C-side. A reversed (b-derived) placement reads the peptide
-    // C->N, so the two spectrum flanks swap relative to the peptide.
-    const double want_n = occ.reversed ? cterm_mass : nterm_mass;
-    const double want_c = occ.reversed ? nterm_mass : cterm_mass;
+    // C->N, so the two spectrum flanks swap relative to the peptide -- and
+    // carry a one-water offset: the tagger subtracts H2O from the low peak (a
+    // y ion has it, a b ion does not) and the precursor's H2O stays on the
+    // high side. So cterm_mass = N-side residues - H2O and nterm_mass =
+    // C-side residues + H2O. (The C-side clamp mirrors the tagger's at 0.)
+    static const double WATER = EmpiricalFormula("H2O").getMonoWeight();
+    const double want_n = occ.reversed ? cterm_mass + WATER : nterm_mass;
+    const double want_c = occ.reversed ? std::max(0.0, nterm_mass - WATER) : cterm_mass;
 
-    const bool n_ok = std::fabs(db_n - want_n) <= tolAt(std::max(db_n, want_n));
-    const bool c_ok = std::fabs(db_c - want_c) <= tolAt(std::max(db_c, want_c));
+    // The spectrum flank that is the precursor less the top fragment (want_n
+    // forward, want_c reversed) carries an error on the PEPTIDE's mass scale,
+    // not the flank's: the precursor's error plus that of a fragment of
+    // nearly the peptide's mass. Judge it at the peptide mass; the other
+    // flank comes from a low fragment alone and is judged at its own mass.
+    // (In Da mode both tolerances are the same constant.)
+    const double pep_tol = tolAt(idx_->massBetween(w.start, w.end) + WATER);
+    const bool n_from_prec = !occ.reversed;
+    const bool n_ok = std::fabs(db_n - want_n) <=
+                      (n_from_prec ? pep_tol : tolAt(std::max(db_n, want_n)));
+    const bool c_ok = std::fabs(db_c - want_c) <=
+                      (n_from_prec ? tolAt(std::max(db_c, want_c)) : pep_tol);
 
     // Only ONE flank may carry a mass gap: a peptide with mismatches on both
     // sides of the tag is under-constrained and, in TagRecon's own words, hurts
@@ -87,13 +103,15 @@ namespace FASTag
           idx_->foldedText(w.start + static_cast<uint32_t>(r.region_lo),
                            w.start + static_cast<uint32_t>(r.region_hi) + 1);
       r.delta_interp = interpretDelta_(r.delta_mass, region);
-      if (spec) localize_(r, w, *spec, frag_charges);
+      if (spec) localize_(r, w, *spec, frag_charges, occ, tag_shift);
     }
     out.push_back(std::move(r));
   }
 
   void TagReconciler::localize_(Reconciliation& r, const ProteomeIndex::Window& w,
-                                const MSSpectrum& spec, int frag_charges) const
+                                const MSSpectrum& spec, int frag_charges,
+                                const ProteomeIndex::TagOcc& occ,
+                                const std::vector<double>* tag_shift) const
   {
     // Shifted-fragment scoring. With the gap on residue j of an L-residue
     // peptide, b_i (residues [0,i)) carries it iff j < i and y_i (residues
@@ -119,13 +137,29 @@ namespace FASTag
     // N-side flank is the precursor less a y ion and carries an error on that
     // scale, and a rest that small is no shift any ion could show.
     //
-    // ponytail: variable mods INSIDE the tag are not on the ladder. Ions
-    // spanning such a residue miss for every site alike -- lost evidence (more
-    // ties), never a different site; put them on the ladder if that matters.
+    // Variable mods INSIDE the tag (@p tag_shift, per tag residue N->C) are
+    // put on the ladder: an ion spanning such a residue carries its shift in
+    // both states. Left off, a gap whose mass equals the tag's mod made the
+    // ions between the true site and the tag match "shifted" by coincidence
+    // and pulled the call toward the tag -- a wrong unique site on y-dominated
+    // spectra, not just lost evidence.
     // Residue-specific and protein-terminal fixed mods are not on it either: a
     // gap carrying one ties its site with every residue nearer that terminus.
     static const double WATER = EmpiricalFormula("H2O").getMonoWeight();
     const int L = static_cast<int>(w.end - w.start);
+    // shift_pre[i] = summed tag-mod shift on peptide residues [0, i).
+    std::vector<double> shift_pre(static_cast<size_t>(L) + 1, 0.0);
+    if (tag_shift && tag_shift->size() == occ.len)
+    {
+      std::vector<double> at(static_cast<size_t>(L), 0.0);
+      const size_t pos = occ.pos - w.start;
+      for (size_t t = 0; t < occ.len; ++t)
+      {
+        const size_t pi = pos + (occ.reversed ? occ.len - 1 - t : t);
+        if (pi < at.size()) at[pi] += (*tag_shift)[t];
+      }
+      for (int i = 0; i < L; ++i) shift_pre[i + 1] = shift_pre[i] + at[i];
+    }
     const double label = r.nterm_match ? fixed_c_ : fixed_n_;
     const bool alone = std::fabs(r.delta_mass - label) <=
                        tolAt(idx_->massBetween(w.start, w.end) + label);
@@ -148,8 +182,9 @@ namespace FASTag
       const double d = r.delta_mass - lab;
       for (int i = 1; i < L; ++i)
       {
-        const double b = idx_->massBetween(w.start, w.start + i);
-        const double y = idx_->massBetween(w.end - i, w.end) + WATER;
+        const double b = idx_->massBetween(w.start, w.start + i) + shift_pre[i];
+        const double y = idx_->massBetween(w.end - i, w.end) + WATER
+                         + (shift_pre[L] - shift_pre[L - i]);
         b0[i] = hits(b + tn); b1[i] = hits(b + tn + d);
         y0[i] = hits(y + tc); y1[i] = hits(y + tc + d);
       }
@@ -224,7 +259,8 @@ namespace FASTag
   std::vector<Reconciliation> TagReconciler::reconcile(const std::string& tag,
                                                        double nterm_mass, double cterm_mass,
                                                        const MSSpectrum* spec,
-                                                       int precursor_charge) const
+                                                       int precursor_charge,
+                                                       const std::vector<double>* tag_shift) const
   {
     std::vector<Reconciliation> out;
     if (!idx_) return out;
@@ -241,7 +277,7 @@ namespace FASTag
       windows.clear();
       idx_->windowsAt(occ.pos, occ.len, mc_, windows);
       for (const auto& w : windows)
-        tryPlace(occ, w, nterm_mass, cterm_mass, spec, frag_charges, out);
+        tryPlace(occ, w, nterm_mass, cterm_mass, spec, frag_charges, tag_shift, out);
     }
     return out;
   }

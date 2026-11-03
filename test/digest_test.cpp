@@ -321,6 +321,8 @@ int main()
     refused(head + "X\tA\tC\tI\t1\n", "residue I");
     refused(head + "X\tA\tC\tK\tx\n", "bad freq");
     refused("model\tclass\tend\tresidue\n", "wrong columns");
+    refused(head + "X\tA\tC\tK\t0.5\nX\tA\tC\tK\t0.9\n", "a model residue row given twice");
+    refused(head + "X\tA\tC\tK\t0\nX\tA\tC\tR\t0\n", "a model end with no mass");
     D::ModelTable t;
     std::istringstream in(head + "X\tA\tC\tK\t1\r\n");
     check(D::parseModelTable(in, t, nullptr) && !t.has_bg && !t.models[0].c_bg && t.models[0].n_bg,
