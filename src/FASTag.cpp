@@ -1691,6 +1691,77 @@ protected:
         break;
       }
     }
+    // No output may be the input or another output, by any name (a symlink or
+    // hard link included). Opening an output truncates it: -out_spectra equal
+    // to -in destroyed the raw file before it was re-read, and -species_out
+    // equal to -out replaced the finished tag table. Checked before the first
+    // output is opened, with the default report paths resolved as below.
+    {
+      namespace fs = std::filesystem;
+      const auto beside = [&out](const char* suffix) -> std::string {
+        const size_t slash = out.find_last_of("/\\");
+        const size_t dot = out.rfind('.');
+        const bool ext = dot != std::string::npos && (slash == std::string::npos || dot > slash);
+        return (ext ? out.substr(0, dot) : out) + suffix;
+      };
+      std::vector<std::pair<std::string, std::string>> outs;
+      const auto add = [&outs](const char* opt, const std::string& path) {
+        if (!path.empty()) outs.emplace_back(opt, path);
+      };
+      add("out", out);
+      add("out_spectra", out_spectra);
+      add("recon_out", recon_out);
+      add("delta_out", delta_out);
+      add("recon_id_out", recon_id_out);
+      add("digest_out", digest_out);
+      add("label_out", label_out);
+      add("massgap_out", massgap_out);
+      if (getFlag_("glyco"))
+      {
+        const std::string g = getStringOption_("glyco_out");
+        add("glyco_out", g.empty() ? beside(".glyco.tsv") : g);
+      }
+      if (want_species)
+      {
+        const std::string sp = getStringOption_("species_out");
+        add("species_out", sp.empty() ? beside(".species.tsv") : sp);
+      }
+      const auto same = [](const std::string& a, const std::string& b) {
+        std::error_code ea, eb;
+        // A device (/dev/null, /dev/stdout) or other non-regular file may be
+        // named twice: writing it truncates nothing.
+        for (const std::string* x : {&a, &b})
+        {
+          std::error_code e;
+          const auto st = fs::status(*x, e);
+          if (!e && fs::exists(st) && !fs::is_regular_file(st)) return false;
+        }
+        if (fs::exists(a, ea) && fs::exists(b, eb))
+        {
+          std::error_code e;
+          if (fs::equivalent(a, b, e)) return true;
+        }
+        const fs::path ca = fs::weakly_canonical(a, ea), cb = fs::weakly_canonical(b, eb);
+        return !ea && !eb && ca == cb;
+      };
+      for (size_t i = 0; i < outs.size(); ++i)
+      {
+        if (same(outs[i].second, in))
+        {
+          OPENMS_LOG_ERROR << "-" << outs[i].first << " (" << outs[i].second
+                           << ") is the input file; writing it would destroy the input." << std::endl;
+          return ILLEGAL_PARAMETERS;
+        }
+        for (size_t j = 0; j < i; ++j)
+          if (same(outs[i].second, outs[j].second))
+          {
+            OPENMS_LOG_ERROR << "-" << outs[i].first << " and -" << outs[j].first
+                             << " name the same file (" << outs[i].second << ")." << std::endl;
+            return ILLEGAL_PARAMETERS;
+          }
+      }
+    }
+
     std::ofstream tsv(out.c_str());
     if (!tsv)
     {
