@@ -353,9 +353,10 @@ namespace FASTag::Digest
     r.add("combo", "shifted_spectra", u(res.shifted), u(res.placed),
           u(res.shifted) + " of them have a gap more than " + num(2 * t) + " Da from zero.");
 
+    // members joined by " + ": names contain '+' (Met-loss+Acetyl) but no space
     auto names = [&](const std::vector<int>& c) {
       std::string x;
-      for (int m : c) x += (x.empty() ? "" : "+") + mods[static_cast<std::size_t>(m)].name;
+      for (int m : c) x += (x.empty() ? "" : " + ") + mods[static_cast<std::size_t>(m)].name;
       return x;
     };
     for (std::size_t i = 0; i < res.peaks.size(); ++i)

@@ -369,6 +369,22 @@ int main()
                                    0.005, 0.08, 500);
     check(few.silac == "none", "SILAC needs 500 shifted spectra");
   }
+  {
+    // report values join members with " + ", since Met-loss+Acetyl is one modification
+    const std::vector<D::GapRow> hist = {{-89.0299, 300}, {-73.0350, 200}, {15.9949, 400}, {0.0, 3000}};
+    const std::vector<std::string> keys = {"-89.0299", "-73.0350", "15.9949", "0.0000"};
+    std::map<std::string, std::string> ex;
+    for (const auto& r : D::massgapRows(hist, keys, mods, combos, {}, D::GapSettings()))
+      if (r.section == "peak") ex[r.key] = r.value;
+    bool single = false, pair = false;
+    for (const auto& [k, v] : ex)
+    {
+      single = single || v == "Met-loss+Acetyl";
+      pair = pair || v == "Oxidation + Met-loss+Acetyl";
+    }
+    check(single, "massgap row: Met-loss+Acetyl alone");
+    check(pair, "massgap row: Oxidation + Met-loss+Acetyl");
+  }
 
   if (failures) std::cerr << failures << " failure(s)\n";
   else std::cout << "digest_test: all checks passed\n";

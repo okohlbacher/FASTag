@@ -181,8 +181,8 @@ Input is the `-delta_out` histogram (0.0005 Da bins, local-max grouped), built w
 |---|---|---|
 | `hist` | key = gap (Da, 4 decimals as in `-delta_out`) | spectra |
 | `cys` | `spectra` (all rows), `zero_bin` (`|d| ≤ t`), and per 0.1.3 `DELTA_CANDIDATES` entry (`Carbamidomethyl (C)` 57.021464, `Propionamide (C)` 71.037114, `Nethylmaleimide (C)` 125.047679, `Methylthio (C)` 45.987721, `Carboxymethyl (C)` 58.005479): spectra with `|d − m| ≤ t` | integer |
-| `combo` | `placed_spectra` (rows with ≥ `-massgap_min_bin` = 2 spectra), `shifted_spectra` (those with `|d| > 2t`) | integer |
-| `peak` | `<i>.delta` (the count-weighted mean, full precision), `<i>.spectra`, `<i>.explained_by` (`A+B` or `none`), `<i>.alternatives` (`A+B;C`), `<i>.context` | |
+| `combo` | `placed_spectra` (rows with ≥ `-massgap_min_bin` = 2 spectra), `shifted_spectra` (those with `|d| > 2t`; 0 when there are none, where 0.1.3's stats show 1, its division guard) | integer |
+| `peak` | `<i>.delta` (the count-weighted mean, full precision), `<i>.spectra`, `<i>.explained_by` (`A + B` or `none`), `<i>.alternatives` (`A + B;C`), `<i>.context`. Members are joined by space-plus-space, since names contain `+` but no space (`Oxidation + Met-loss+Acetyl`) | |
 | `share` | per modification: spectra of the peaks it explains / `shifted_spectra` | decimal |
 | `top` | `1` .. `-massgap_top` (5): modifications by share | word |
 | `silac` | `call` (`SILAC (Lys8/Arg10)`, `SILAC (Lys4/Arg6)`, `SILAC triplex (Lys4/Arg6, Lys8/Arg10)` or `none`), `Lys4`, `Arg6`, `Lys8`, `Arg10` shares | word, decimal |
