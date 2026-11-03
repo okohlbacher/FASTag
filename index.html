@@ -8,7 +8,7 @@
 <link rel="icon" href="assets/favicon.png">
 <meta property="og:title" content="FASTag">
 <meta property="og:description" content="Fast, parallel sequence tags from MS/MS — and a tag-based spectrum filter. An OpenMS TOPP tool.">
-<meta property="og:image" content="https://okohlbacher.github.io/FASTag/assets/bench-corpus.png">
+<meta property="og:image" content="https://okohlbacher.github.io/FASTag/assets/fastag-icon.png">
 <style>
 :root{
   --bg:#ffffff; --panel:#f6f7fb; --line:#e3e6ef; --ink:#171923; --muted:#5b6072;
@@ -117,8 +117,8 @@ th{border-bottom:2px solid var(--line)}
   </div>
 
   <div class="stats">
-    <div><div class="n">14.6&times;</div><div class="l">faster than DirecTag, 13-run corpus</div></div>
-    <div><div class="n">126 MB</div><div class="l">peak memory on a 9 GB run</div></div>
+    <div><div class="n">48&times;</div><div class="l">faster than DirecTag on PXD047793 (3.09 M spectra)</div></div>
+    <div><div class="n">280 MB</div><div class="l">peak memory on a 23 GB run (DirecTag: 69.4 GB)</div></div>
     <div><div class="n">98.6%</div><div class="l">of identified spectra get a valid tag</div></div>
     <div><div class="n">5</div><div class="l">platforms, macOS signed &amp; notarized</div></div>
   </div>
@@ -156,33 +156,25 @@ specificity: a tag matching a sequence is a reason to look closer, not an identi
 
 <h2>Why use it</h2>
 
-<p>Measured against DirecTag 1.4.21142 on a 13-run, 126 GB corpus at 128 threads — Q Exactive,
-Orbitrap Fusion, LTQ Velos, Orbitrap Astral, timsTOF diaPASEF and diaTracer pseudo-MS2 up to
-3.09 M spectra:</p>
+<p>Measured against DirecTag 1.4.21142 at 128 threads on public ProteomeXchange runs, with a
+September 2026 FASTag build and settings matched to DirecTag (tag length 3, 50 tags, 100 peaks, no
+gaps, no deisotoping); wall clock and peak memory for the whole run, including writing the tags:</p>
 
 <table>
 <thead><tr><th></th><th>FASTag</th><th>DirecTag</th></tr></thead>
 <tbody>
-<tr><td>Total wall clock, 8 comparable files</td><td class="num"><strong class="win">92.3 s</strong></td><td class="num">1,344.6 s</td></tr>
-<tr><td>Peak memory, 9.07 GB input</td><td class="num"><strong class="win">126 MB</strong></td><td class="num">17.7 GB</td></tr>
+<tr><td>PXD047793, timsTOF diaTracer pseudo-MS2, 3.09 M spectra, 23 GB</td><td class="num"><strong class="win">15.65 s, 280 MB</strong></td><td class="num">746.61 s, 69.4 GB</td></tr>
+<tr><td>PXD028735, timsTOF diaPASEF, 151,648 spectra</td><td class="num"><strong class="win">5.79 s, 864,815 tags</strong></td><td class="num">541.5 s, 0 spectra read</td></tr>
 <tr><td>Valid tag ranked first (PXD000001)</td><td class="num"><strong class="win">90.91%</strong></td><td class="num">88.69%</td></tr>
-<tr><td>Valid tag within top 50</td><td class="num">98.62%</td><td class="num">98.62%</td></tr>
-<tr><td>Files read of 13</td><td class="num"><strong class="win">13</strong></td><td class="num">8</td></tr>
+<tr><td>Valid tag within top 50 (PXD000001)</td><td class="num">98.62%</td><td class="num">98.62%</td></tr>
 </tbody>
 </table>
 
-<p><strong>14.6x faster</strong> across the files DirecTag can read, and <strong>38.8x</strong>
-choosing the better container per file. Memory is flat in the file size rather than proportional
-to it, so a run is bounded by threads, not by input. Both tools reach the same accuracy ceiling —
-98.62% of identified spectra get a valid tag — and FASTag gets there sooner in the ranking.</p>
-
-<figure>
-  <img src="assets/bench-corpus.png" alt="Wall clock, speedup, container size and peak memory across 13 runs">
-  <figcaption>13 runs, 126 GB, 128 threads on a 384-core EPYC. DirecTag refuses 3 of the files
-  outright and reads 0 spectra from 2 more while exiting successfully. Full method and per-file
-  numbers in
-  <a href="https://github.com/okohlbacher/FASTag/blob/main/doc/BENCHMARK-corpus-128t.md">BENCHMARK-corpus-128t.md</a>.</figcaption>
-</figure>
+<p>Memory is flat in the file size rather than proportional to it, so a run is bounded by threads,
+not by input. Both tools reach the same accuracy ceiling on PXD000001 — 98.62% of the spectra
+identified by its Mascot search get a valid tag — and FASTag gets there sooner in the ranking.
+A benchmark of the current release on further public data, at several thread counts and against
+database-search identifications, is in preparation.</p>
 
 <h2 id="download">Download</h2>
 
@@ -235,7 +227,7 @@ FASTag -in run.mzML -out tags.tsv -tag_length 3 -extension 6
 FASTag -in run.mzML -out tags.tsv -fragment_tolerance 0.3 -fragment_tolerance_unit Da
 
 # keep only tags occurring in a protein of interest, and the spectra carrying them
-FASTag -in run.mzML -out tags.tsv -fasta AGXT.fasta -out_spectra hits.mzML
+FASTag -in run.mzML -out tags.tsv -fasta protein.fasta -out_spectra hits.mzML
 
 # mzPeak in, mzPeak out — any combination of mzML and mzpeak works
 FASTag -in run.mzpeak -out tags.tsv -out_spectra hits.mzpeak</code></pre>
@@ -251,8 +243,7 @@ as mzPeak gives the same spectra as reading it as mzML, and a run written to mzP
 again reproduces the original tag set exactly.</p>
 
 <ul>
-  <li><strong>6.7x smaller</strong> on a 9.07 GB run — 1.35 GB as mzPeak, with identical tags.</li>
-  <li><strong>Up to 5.1x faster to read</strong> on the same acquisition, single-threaded.</li>
+  <li>The same tags from mzML and from both mzPeak layouts (PXD003531, 27,345 MS2 spectra).</li>
   <li>Profile MS2 is centroided on read, which recovers tags a raw profile read loses.</li>
 </ul>
 
@@ -267,8 +258,6 @@ released binary.</p>
       reconciliation, entrapment-calibrated confidence, species detection, streaming mode</li>
   <li><a href="https://github.com/okohlbacher/FASTag/blob/main/doc/BENCHMARK-DirecTag.md">BENCHMARK-DirecTag.md</a>
       — accuracy and throughput against the reference implementation on identified spectra</li>
-  <li><a href="https://github.com/okohlbacher/FASTag/blob/main/doc/BENCHMARK-corpus-128t.md">BENCHMARK-corpus-128t.md</a>
-      — the 13-run corpus, both mzPeak layouts, 128 threads</li>
   <li><a href="https://github.com/okohlbacher/FASTag/blob/main/doc/TEST-DATA.md">TEST-DATA.md</a>
       — what each benchmark file is and where it came from</li>
   <li><a href="https://github.com/okohlbacher/FASTag/issues">Issues</a> — bugs and questions</li>
