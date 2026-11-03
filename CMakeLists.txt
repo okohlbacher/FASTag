@@ -96,6 +96,11 @@ target_include_directories(fastag_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
 target_link_libraries(fastag_core PUBLIC OpenMS)
+# Boost.Math (header-only) for the scoring tails. Named here rather than
+# taken through OpenMS's target, which carries no Boost include path on
+# Windows.
+find_package(Boost 1.81 CONFIG REQUIRED)
+target_link_libraries(fastag_core PRIVATE Boost::headers)
 if(OpenMP_CXX_FOUND)
   # ProteomeIndex sorts its suffix-array buckets in parallel.
   target_link_libraries(fastag_core PRIVATE OpenMP::OpenMP_CXX)
