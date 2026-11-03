@@ -912,6 +912,78 @@ int main()
                 a.size(), b.size(), gapped);
   }
 
+  // 21. deisotoping does not depend on the intensity scale
+  //
+  // The ported ThresholdMower step drops peaks below an absolute 0.05. synth()
+  // writes intensities in [0.02, 1], i.e. relative ones, and lost every peak
+  // under 0.05 with deisotoping on; scaled by 2^-10 it lost all and gave no
+  // tag. Powers of two keep the float intensities exact.
+  {
+    double pmz = 0;
+    const MSSpectrum s = synth("VGAHAGEYGAEALER", 60, 11, pmz);
+    FASTag::Param p;
+    p.frag_tol = 20; p.tol_ppm = true; p.complement_tol = 0.02;
+    p.deisotope = true; p.tag_length = 3; p.max_tag_count = 0; p.max_evalue = 0;
+    const FASTag::Tables tab(p);
+    const auto ref = FASTag::tagSpectrum(s, pmz, 2, p, tab);
+    CHECK(!ref.empty(), "no tags at scale 1; the test asserts nothing");
+    for (double scale : {1024.0, 1.0 / 1024.0, 1.0 / 1048576.0})
+    {
+      MSSpectrum c = s;
+      for (auto& pk : c) pk.setIntensity(static_cast<float>(pk.getIntensity() * scale));
+      const auto got = FASTag::tagSpectrum(c, pmz, 2, p, tab);
+      bool same = got.size() == ref.size();
+      for (size_t i = 0; same && i < got.size(); ++i)
+        same = got[i].seq == ref[i].seq && got[i].evalue == ref[i].evalue
+               && got[i].nterm_mass == ref[i].nterm_mass;
+      CHECK(same, "intensities x %g changed the tags (%zu vs %zu)", scale, got.size(), ref.size());
+    }
+    std::printf("21. deisotoping is scale-invariant: %zu tags at every scale\n", ref.size());
+  }
+
+  // 22. a fragment seen as 1+ and 2+ is one peak after deisotoping
+  //
+  // For a 3+ precursor every y ion is present as 1+ and as 2+, each with its
+  // C13 isotope, at +-3 ppm. The deisotoper moves the 2+ copy onto the 1+
+  // scale a few ppm from the 1+ copy; both survived, so every tag was emitted
+  // twice with flanks ~1e-4 Da apart.
+  {
+    const std::string pep = "LGEYGFQNALLVR";
+    const AASequence aa = AASequence::fromString(pep);
+    const double P = Constants::PROTON_MASS_U, C13 = Constants::C13C12_MASSDIFF_U;
+    const double pmz3 = (aa.getMonoWeight() + 3 * P) / 3;
+    MSSpectrum s;
+    for (size_t i = 1; i < aa.size(); ++i)
+    {
+      const double M = aa.getSuffix(i).getMonoWeight(Residue::Full, 0);  // neutral y
+      const double e1 = (i % 2 ? 3e-6 : -3e-6), e2 = -e1;
+      const double r = M / 1800.0;   // the averagine M+1 ratio the deisotoper expects
+      s.emplace_back((M + P) * (1 + e1), 1.0);
+      s.emplace_back((M + P + C13) * (1 + e1), r);
+      s.emplace_back((M + 2 * P) / 2 * (1 + e2), 0.7);
+      s.emplace_back((M + 2 * P + C13) / 2 * (1 + e2), 0.7 * r);
+    }
+    s.sortByPosition();
+    FASTag::Param p;
+    p.frag_tol = 20; p.tol_ppm = true; p.complement_tol = 0.02;
+    p.deisotope = true; p.tag_length = 4; p.max_tag_count = 0; p.max_evalue = 0;
+    const FASTag::Tables tab(p);
+    const auto tags = FASTag::tagSpectrum(s, pmz3, 3, p, tab);
+    size_t dup = 0;
+    for (size_t i = 0; i < tags.size(); ++i)
+      for (size_t j = i + 1; j < tags.size(); ++j)
+        if (tags[i].seq == tags[j].seq && tags[i].charge == tags[j].charge
+            && std::fabs(tags[i].nterm_mass - tags[j].nterm_mass) < 0.01
+            && tags[i].nterm_mass != tags[j].nterm_mass)
+          ++dup;
+    size_t correct = 0;
+    for (const auto& t : tags) correct += reads(pep, t.seq) ? 1 : 0;
+    CHECK(correct > 0, "no correct tag; the test asserts nothing");
+    CHECK(dup == 0, "%zu tag pairs differ only by ~1e-4 Da flanks (1+ and moved 2+ copies)", dup);
+    std::printf("22. 1+/2+ copies merged: %zu tags, %zu correct, %zu near-duplicate pairs\n",
+                tags.size(), correct, dup);
+  }
+
   std::printf(failures ? "\n%d FAILURES\n" : "\nall checks passed\n", failures);
   return failures ? 1 : 0;
 }

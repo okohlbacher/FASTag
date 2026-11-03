@@ -31,8 +31,14 @@ namespace FASTag
   /// candidate clusters at the precursor mass; FASTag's working copy has
   /// none, so that branch never runs there and is not ported.
   ///
+  /// @param intensity_threshold the ThresholdMower step: peaks below it are
+  ///   removed first. 0.05 is OpenMS's default (and what bit-identity with it
+  ///   means); it is an ABSOLUTE intensity, so a caller with relative
+  ///   intensities passes a scaled one.
+  ///
   /// @throws OpenMS::Exception::IllegalArgument above 100 ppm or 0.1 Da, as
   ///   OpenMS does.
   void deisotopeAveragine(OpenMS::MSSpectrum& spectrum, double fragment_tolerance,
-                          bool fragment_unit_ppm, int max_charge);
+                          bool fragment_unit_ppm, int max_charge,
+                          double intensity_threshold = 0.05);
 }

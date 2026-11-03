@@ -46,6 +46,10 @@ namespace FASTag
 
   /// Highest fragment charge the deisotoper tries.
   static constexpr int DEISOTOPE_MAX_CHARGE = 3;
+  /// The deisotoper's intensity floor (OpenMS ThresholdMower's 0.05), applied
+  /// relative to the base peak below DEISOTOPE_MOWER_REF -- see prepare().
+  static constexpr double DEISOTOPE_MOWER = 0.05;
+  static constexpr double DEISOTOPE_MOWER_REF = 1e6;
 
   /// The m/z-fidelity null is Monte Carlo: this many samples per peak count,
   /// from a fixed seed so every run scores identically.
@@ -388,8 +392,56 @@ namespace FASTag
         // OpenMS's Deisotoper::deisotopeWithAveragineModel, ported and bit-identical
         // (AveragineDeisotoper.h): charges 1..max, no peak cap, unclustered peaks
         // kept, 2..10 isotope peaks, monoisotopic peaks moved to charge 1.
-        deisotopeAveragine(work, deiso_tol, p.tol_ppm, DEISOTOPE_MAX_CHARGE);
+        //
+        // Its first step drops peaks below an ABSOLUTE 0.05 (ThresholdMower).
+        // Everything else here is rank-based, so that made the output depend on
+        // the intensity scale: a spectrum stored with base peak = 1 lost every
+        // peak under 5% of it, and one scaled by 1e-2 lost all (review F3). The
+        // cut is now relative below a base peak of 1e6 -- 5e-8 of it -- and
+        // stays 0.05 above, which is what instrument counts see, so those runs
+        // are unchanged.
+        double base_peak = 0;
+        for (const auto& pk : work) base_peak = std::max(base_peak, static_cast<double>(pk.getIntensity()));
+        const double mower = std::min(DEISOTOPE_MOWER, DEISOTOPE_MOWER * base_peak / DEISOTOPE_MOWER_REF);
+
+        // m/z of the peaks before deisotoping: a peak not among them afterwards
+        // was moved to the 1+ scale.
+        static thread_local std::vector<double> before;
+        before.clear();
+        for (const auto& pk : work) before.push_back(pk.getMZ());   // sorted, unique
+        deisotopeAveragine(work, deiso_tol, p.tol_ppm, DEISOTOPE_MAX_CHARGE, mower);
         work.sortByPosition();
+
+        // A fragment seen as 1+ AND 2+ (common for precursors of charge >= 3)
+        // is two peaks a few ppm apart once the 2+ copy is moved: each path
+        // then exists twice, with flanks ~1e-4 Da apart that no exact key
+        // collapses, doubling n_seeds and spending max_tags and peak-budget
+        // slots (review F4). Merge a moved peak into a neighbour within the
+        // deisotoping tolerance, keeping the stronger, as exact duplicates are
+        // collapsed above. Two unmoved peaks are never merged.
+        static thread_local std::vector<std::pair<Peak1D, bool>> merged;
+        merged.clear();
+        for (const auto& pk : work)
+        {
+          const bool moved = !std::binary_search(before.begin(), before.end(), pk.getMZ());
+          if (!merged.empty())
+          {
+            auto& last = merged.back();
+            const double tol = p.tol_ppm ? pk.getMZ() * deiso_tol * 1e-6 : deiso_tol;
+            if ((moved || last.second) && pk.getMZ() - last.first.getMZ() <= tol)
+            {
+              if (pk.getIntensity() > last.first.getIntensity()) last.first = pk;
+              last.second = last.second || moved;
+              continue;
+            }
+          }
+          merged.emplace_back(pk, moved);
+        }
+        if (merged.size() != work.size())
+        {
+          work.clear(false);
+          for (const auto& m : merged) work.push_back(m.first);
+        }
       }
 
       // order, keep and kept are scratch reused across spectra (thread_local:
