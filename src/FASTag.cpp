@@ -1287,7 +1287,7 @@ protected:
           finish_block();  // an unterminated previous block still gets its sentinel
           char idbuf[256] = {0};
           if (std::sscanf(line.c_str(), "spectrum %255s %lf %d", idbuf, &prec_mz, &charge) != 3
-              || prec_mz <= 0)
+              || !(prec_mz > 0) || !std::isfinite(prec_mz))
           {
             id.clear();
             in_block = true;

@@ -1104,7 +1104,10 @@ namespace FASTag
   std::vector<Tag> tagSpectrum(const MSSpectrum& in, double precursor_mz, int charge,
                                const Param& p, const Tables& tables)
   {
-    if (p.tag_length < 1 || in.empty() || precursor_mz <= 0) return {};
+    // !(x > 0): NaN must not pass. A NaN precursor turned off the precursor
+    // cut and the complements and reported nterm_mass max(0, NaN) = 0, a false
+    // N-terminal claim; +inf reported nterm_mass inf.
+    if (p.tag_length < 1 || in.empty() || !(precursor_mz > 0) || !std::isfinite(precursor_mz)) return {};
     if (charge <= 0) charge = 2;
 
     const Prepared s = prepare(in, precursor_mz, charge, p);
@@ -1117,7 +1120,7 @@ namespace FASTag
                                             const std::vector<Tables>& tables)
   {
     std::vector<std::vector<Tag>> out(params.size());
-    if (params.empty() || in.empty() || precursor_mz <= 0) return out;
+    if (params.empty() || in.empty() || !(precursor_mz > 0) || !std::isfinite(precursor_mz)) return out;
     if (charge <= 0) charge = 2;
 
     // Neither the preprocessing nor the graphs read tag_length, so one of each
