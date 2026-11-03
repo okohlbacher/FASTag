@@ -14,7 +14,8 @@
 // Nothing is parsed twice and nothing is parsed up front.
 //
 // SCOPE: peaks, native id, MS level, retention time and precursors -- what
-// tagging and -out_spectra consume. Run-level metadata (instrument, source
+// tagging and -out_spectra consume -- plus the scan windows and a scan-level
+// ion mobility (1/K0, drift time or FAIMS CV), which -digest_out reads. Run-level metadata (instrument, source
 // files, software) is NOT read, so a run that needs it (-out_spectra) still
 // goes through OnDiscMSExperiment.
 //

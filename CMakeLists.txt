@@ -204,6 +204,16 @@ if(FASTAG_BUILD_TESTS)
   target_compile_definitions(digest_test PRIVATE
                              FASTAG_DIGEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/data/digest")
 
+  # Integration: -digest_out, -label_out and -massgap_out on the vendored
+  # fixture: the existing outputs unchanged, the reports' structure, a
+  # synthetic -digest_models table, FASTAG_FULL_PRECISION and the refusals.
+  add_test(NAME digest_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/digest_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
+  set_tests_properties(digest_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+
   # Integration: -recon_id_out .mzid is written with placements, and empty
   # (0 bytes) without them.
   add_test(NAME recon_ids_test

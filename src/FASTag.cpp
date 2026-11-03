@@ -18,13 +18,16 @@
 #include <OpenMS/DATASTRUCTURES/StringUtils.h>
 #include <OpenMS/FORMAT/FASTAFile.h>
 #include <OpenMS/FORMAT/FileHandler.h>
+#include <OpenMS/FORMAT/MzMLFile.h>
 #include <OpenMS/FORMAT/MzPeakFile.h>
+#include <OpenMS/IONMOBILITY/IMTypes.h>
 #include <OpenMS/PROCESSING/CENTROIDING/PeakPickerHiRes.h>
 #include <OpenMS/KERNEL/MSExperiment.h>
 #include <OpenMS/KERNEL/OnDiscMSExperiment.h>
 #include <OpenMS/FORMAT/DATAACCESS/MSDataWritingConsumer.h>
 #include <OpenMS/SYSTEM/File.h>
 
+#include "Digest.h"
 #include "FASTagger.h"
 #include "FastaFilter.h"
 #include "Glyco.h"
@@ -109,6 +112,27 @@ namespace
   /// Thrown by the tagging loop at the first MS2 with an ion mobility per
   /// peak when -out_spectra is mzPeak, which cannot store it.
   struct IonMobilityRefused {};
+
+  /// FASTAG_FULL_PRECISION=1: the tag TSV writes nterm_mass, cterm_mass and
+  /// evalue in shortest round-trip form, so a differential test reads the
+  /// doubles -digest_out counted. Deliberately not an option.
+  const bool g_full_precision = [] {
+    const char* e = std::getenv("FASTAG_FULL_PRECISION");
+    return e != nullptr && std::strcmp(e, "1") == 0;
+  }();
+
+  /// Directory holding the shipped digest data (protease models, mass-gap
+  /// modifications): $FASTAG_DIGEST_DIR, else beside the executable in the
+  /// two layouts taxonomyDir_() knows. "" when there is none.
+  std::string digestDir_()
+  {
+    const char* env = std::getenv("FASTAG_DIGEST_DIR");
+    if (env != nullptr && *env != '\0' && File::isDirectory(std::string(env))) return std::string(env);
+    const std::string exe = File::getExecutablePath();
+    for (const std::string& c : {exe + "../share/FASTag/digest", exe + "share-FASTag-digest", exe + "digest"})
+      if (File::exists(c + "/digest_models.tsv")) return c;
+    return std::string();
+  }
 
   /// k of a taxonomy index, read from its 16-byte header alone.
   ///
@@ -445,6 +469,66 @@ protected:
                           "base peak (MSFragger-Glyco's diagnostic filter)", false);
     setMinFloat_("glyco_min_fraction", 0.0);
 
+    // Digest, label and mass-gap reports: measurements from the reported
+    // tags, long-form TSV (section, key, value, n, description). Opt-in; the
+    // other outputs are the same with or without them.
+    registerOutputFile_("digest_out", "<file>", "",
+                        "Report the terminal residues of the tags (ungapped, E-value <= 1) and "
+                        "the protease call they support, with its margin or the reason for no call", false);
+    setValidFormats_("digest_out", ListUtils::create<std::string>("tsv"));
+    registerOutputFile_("label_out", "<file>", "",
+                        "Report N-terminal isobaric label gaps (TMT, TMTpro, iTRAQ4) and the heavy "
+                        "Lys8/Arg10 shares of the tag ends", false);
+    setValidFormats_("label_out", ListUtils::create<std::string>("tsv"));
+    registerOutputFile_("massgap_out", "<file>", "",
+                        "Report the -delta_out mass-gap distribution (requires -recon_out): Cys "
+                        "alkylation counts, gap peaks explained as combinations of Unimod "
+                        "modifications, and SILAC labels among them", false);
+    setValidFormats_("massgap_out", ListUtils::create<std::string>("tsv"));
+    registerInputFile_("digest_models", "<file>", "",
+                       "Protease model table for -digest_out (columns model, class, end, residue, "
+                       "freq). Default: the shipped cleavage-rule models", false);
+    setValidFormats_("digest_models", ListUtils::create<std::string>("tsv"));
+    registerIntOption_("digest_tag_min", "<n>", 100,
+                       "Tag ends needed for a protease call; the N-terminal ends count from as many", false, true);
+    setMinInt_("digest_tag_min", 1);
+    registerDoubleOption_("digest_window", "<Da>", 0.008,
+                          "Mass window around a residue or label mass at the tag ends", false, true);
+    setMinFloat_("digest_window", 0.0);
+    registerDoubleOption_("digest_background_share", "<f>", 0.05,
+                          "Share of the background mixed into every protease model", false, true);
+    setMinFloat_("digest_background_share", 0.0);
+    setMaxFloat_("digest_background_share", 1.0);
+    registerIntOption_("digest_silac_min", "<n>", 50,
+                       "K- and R-terminal tag ends each before -label_out's heavy shares are gated in", false, true);
+    setMinInt_("digest_silac_min", 0);
+    registerDoubleOption_("massgap_window", "<Da>", 0.02,
+                          "Gap window of -massgap_out on a ppm run", false, true);
+    setMinFloat_("massgap_window", 0.0);
+    registerDoubleOption_("massgap_window_da", "<Da>", 0.5,
+                          "Gap window of -massgap_out on a run with a Da fragment tolerance", false, true);
+    setMinFloat_("massgap_window_da", 0.0);
+    registerIntOption_("massgap_min_spectra", "<n>", 20, "Spectra a gap peak needs", false, true);
+    setMinInt_("massgap_min_spectra", 0);
+    registerDoubleOption_("massgap_min_share", "<f>", 0.005,
+                          "Share of the placed spectra a gap peak needs", false, true);
+    setMinFloat_("massgap_min_share", 0.0);
+    registerIntOption_("massgap_min_bin", "<n>", 2,
+                       "Spectra a -delta_out row needs to take part in the gap peaks", false, true);
+    setMinInt_("massgap_min_bin", 1);
+    registerIntOption_("massgap_max_mods", "<n>", 3,
+                       "Modifications combined to explain a gap", false, true);
+    setMinInt_("massgap_max_mods", 1);
+    setMaxInt_("massgap_max_mods", 4);
+    registerIntOption_("massgap_top", "<n>", 5, "Modifications listed by share", false, true);
+    setMinInt_("massgap_top", 0);
+    registerDoubleOption_("massgap_silac_share", "<f>", 0.08,
+                          "Share of the shifted spectra a SILAC label needs", false, true);
+    setMinFloat_("massgap_silac_share", 0.0);
+    registerIntOption_("massgap_silac_min", "<n>", 500,
+                       "Shifted spectra a SILAC call needs", false, true);
+    setMinInt_("massgap_silac_min", 0);
+
     registerInputFile_("taxdb", "<file>", "", "Tag->taxon index (built by buildtaxdb). Default: the bundled tax_k7.taxdb", false);
     registerInputFile_("taxonomy_nodes", "<file>", "", "NCBI taxonomy nodes.dmp. Default: the bundled nodes.dmp", false);
     registerInputFile_("taxonomy_names", "<file>", "", "NCBI taxonomy names.dmp. Default: the bundled names.dmp", false);
@@ -541,11 +625,21 @@ protected:
     buf += t.seq;              buf += '\t';
     appendNum(buf, t.n_res);   buf += '\t';
     appendNum(buf, t.charge);  buf += '\t';
-    appendNum(buf, t.nterm_mass, fixed, 4); buf += '\t';
-    appendNum(buf, t.cterm_mass, fixed, 4); buf += '\t';
+    if (g_full_precision)
+    {
+      FASTag::appendShortest(buf, t.nterm_mass); buf += '\t';
+      FASTag::appendShortest(buf, t.cterm_mass); buf += '\t';
+    }
+    else
+    {
+      appendNum(buf, t.nterm_mass, fixed, 4); buf += '\t';
+      appendNum(buf, t.cterm_mass, fixed, 4); buf += '\t';
+    }
     buf += t.extended ? '1' : '0'; buf += '\t';
     buf += t.gapped ? '1' : '0';   buf += '\t';
-    appendNum(buf, t.evalue, std::chars_format::general, 6); buf += '\t';
+    if (g_full_precision) FASTag::appendShortest(buf, t.evalue);
+    else appendNum(buf, t.evalue, std::chars_format::general, 6);
+    buf += '\t';
     appendNum(buf, t.min_conf, fixed, 3);  buf += '\t';
     appendNum(buf, t.mean_conf, fixed, 3); buf += '\t';
     buf += hit;
@@ -752,7 +846,8 @@ protected:
       // indexed input, q_db needs the full curve, -species aggregates a run,
       // and the filter/recon paths are not per-spectrum-latency material.
       for (const char* opt : {"fasta", "entrapment_fasta", "recon_out", "species_out",
-                              "taxdb", "out_spectra", "delta_out", "recon_id_out", "usi_collection"})
+                              "taxdb", "out_spectra", "delta_out", "recon_id_out", "usi_collection",
+                              "digest_out", "label_out", "massgap_out"})
         if (!getStringOption_(opt).empty())
         {
           OPENMS_LOG_ERROR << "-stream cannot be combined with -" << opt << "." << std::endl;
@@ -975,6 +1070,141 @@ protected:
                       << rmin << (getIntOption_("recon_min_length") == 0 ? " (derived)" : " (set)")
                       << std::endl;
     }
+
+    // -digest_out, -label_out, -massgap_out: their tables are read here, so a
+    // bad one is refused before any tagging.
+    namespace FD = FASTag::Digest;
+    const std::string digest_out = getStringOption_("digest_out");
+    const std::string label_out = getStringOption_("label_out");
+    const std::string massgap_out = getStringOption_("massgap_out");
+    const bool digest_on = !digest_out.empty();
+    const bool count_on = digest_on || !label_out.empty();
+    const bool massgap_on = !massgap_out.empty();
+    const bool delta_on = !delta_out.empty() || massgap_on;
+    if (massgap_on && !recon_on)
+    {
+      OPENMS_LOG_ERROR << "-massgap_out requires -recon_out (the gaps are those of the "
+                          "reconciliations, as in -delta_out)." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    FD::DigestSettings dset;
+    dset.window = getDoubleOption_("digest_window");
+    dset.tag_min = getIntOption_("digest_tag_min");
+    dset.background_share = getDoubleOption_("digest_background_share");
+    dset.silac_min = getIntOption_("digest_silac_min");
+    dset.low_resolution = !p.tol_ppm;
+    FD::ModelTable dtable;
+    const std::string digest_models = getStringOption_("digest_models");
+    const std::string ddir = (digest_on || massgap_on) ? digestDir_() : std::string();
+    const auto no_digest_dir = [&](const char* what) {
+      OPENMS_LOG_ERROR << "No shipped " << what << " found (expected <bin>/../share/FASTag/digest). "
+                          "Set FASTAG_DIGEST_DIR to the directory holding digest_models.tsv and "
+                          "massgap_mods.tsv" << (digest_on ? ", or give -digest_models." : ".") << std::endl;
+      return ILLEGAL_PARAMETERS;
+    };
+    if (digest_on)
+    {
+      std::string mpath = digest_models;
+      if (mpath.empty())
+      {
+        if (ddir.empty()) return no_digest_dir("protease models");
+        mpath = ddir + "/digest_models.tsv";
+      }
+      std::string err;
+      if (!FD::loadModelTable(mpath, dtable, &err))
+      {
+        OPENMS_LOG_ERROR << "-digest_models '" << mpath << "': " << err << std::endl;
+        return INPUT_FILE_CORRUPT;
+      }
+      dset.models = digest_models.empty() ? "shipped" : digest_models;
+      // The table's own background wins; else the FASTA's composition; else
+      // the shipped human one.
+      std::string bfasta = getStringOption_("recon_fasta");
+      if (bfasta.empty()) bfasta = fasta;
+      if (!digest_models.empty() && dtable.has_bg) dset.background = "models_table";
+      else if (!bfasta.empty())
+      {
+        std::vector<FASTAFile::FASTAEntry> bentries;
+        FASTAFile().load(bfasta, bentries);
+        std::vector<std::string> seqs;
+        seqs.reserve(bentries.size());
+        for (auto& e : bentries) seqs.push_back(std::move(e.sequence));
+        dtable.bg_c = dtable.bg_n = FD::composition(seqs);
+        dtable.has_bg = true;
+        dset.background = "fasta:" + bfasta;
+      }
+      else if (!dtable.has_bg)
+      {
+        FD::ModelTable shipped;
+        if (ddir.empty()) return no_digest_dir("background");
+        if (!FD::loadModelTable(ddir + "/digest_models.tsv", shipped, &err) || !shipped.has_bg)
+        {
+          OPENMS_LOG_ERROR << "The shipped digest_models.tsv in '" << ddir << "' has no background: " << err << std::endl;
+          return INPUT_FILE_CORRUPT;
+        }
+        dtable.bg_c = shipped.bg_c;
+        dtable.bg_n = shipped.bg_n;
+        dtable.has_bg = true;
+      }
+    }
+    std::vector<FD::GapMod> gmods, gcys;
+    std::vector<FD::Combo> gcombos;
+    FD::GapSettings gset;
+    if (massgap_on)
+    {
+      if (ddir.empty()) return no_digest_dir("mass-gap modifications");
+      std::ifstream mf((ddir + "/massgap_mods.tsv").c_str());
+      std::string err;
+      if (!mf || !FD::parseGapMods(mf, gmods, &err))
+      {
+        OPENMS_LOG_ERROR << "'" << ddir << "/massgap_mods.tsv': " << (err.empty() ? "cannot read" : err) << std::endl;
+        return INPUT_FILE_CORRUPT;
+      }
+      for (const char* c : {"Carbamidomethyl (C)", "Propionamide (C)", "Nethylmaleimide (C)",
+                            "Methylthio (C)", "Carboxymethyl (C)"})
+        gcys.push_back(FD::GapMod{c, c, 1.0, 0.0});
+      const ModificationsDB* mdb = ModificationsDB::getInstance();
+      for (std::vector<FD::GapMod>* list : {&gmods, &gcys})
+        for (FD::GapMod& m : *list)
+        {
+          const ResidueModification* rm = nullptr;
+          try { rm = mdb->getModification(m.site); }
+          catch (const Exception::BaseException&) { rm = nullptr; }
+          if (rm) m.mass = rm->getDiffMonoMass();
+          else
+          {
+            OPENMS_LOG_ERROR << "-massgap_out: OpenMS does not know the modification '" << m.site << "'." << std::endl;
+            return INPUT_FILE_CORRUPT;
+          }
+        }
+      gset.window = p.tol_ppm ? getDoubleOption_("massgap_window") : getDoubleOption_("massgap_window_da");
+      gset.min_spectra = static_cast<std::uint64_t>(getIntOption_("massgap_min_spectra"));
+      gset.min_share = getDoubleOption_("massgap_min_share");
+      gset.min_bin = static_cast<std::uint64_t>(getIntOption_("massgap_min_bin"));
+      gset.max_mods = getIntOption_("massgap_max_mods");
+      gset.top = getIntOption_("massgap_top");
+      gset.silac_share = getDoubleOption_("massgap_silac_share");
+      gset.silac_min = static_cast<std::uint64_t>(getIntOption_("massgap_silac_min"));
+      gcombos = FD::combinations(gmods, gset.max_mods);
+    }
+    // The run rows every report starts with.
+    const auto run_rows = [&]() {
+      std::vector<FD::Row> r;
+      std::string lens;
+      for (int L : lengths) lens += (lens.empty() ? "" : ",") + std::to_string(L);
+      r.push_back({"run", "version", FASTAG_VERSION, "-", std::string("FASTag ") + FASTAG_VERSION + " wrote this report."});
+      r.push_back({"run", "input", File::basename(in), "-", "The spectra were read from " + File::basename(in) + "."});
+      r.push_back({"run", "fragment_tolerance", FD::num(p.frag_tol), "-",
+                   "The fragment tolerance is " + FD::num(p.frag_tol) + " " + getStringOption_("fragment_tolerance_unit") + "."});
+      r.push_back({"run", "fragment_tolerance_unit", getStringOption_("fragment_tolerance_unit"), "-",
+                   "The fragment tolerance is in " + getStringOption_("fragment_tolerance_unit") + "."});
+      r.push_back({"run", "tag_length", lens, "-", "Tags were seeded at length " + lens + "."});
+      r.push_back({"run", "subsample_fraction", FD::num(getDoubleOption_("subsample_fraction")), "-",
+                   "A fraction of " + FD::num(getDoubleOption_("subsample_fraction")) + " of the spectra was tagged (0 = all)."});
+      r.push_back({"run", "subsample_spectra", std::to_string(getIntOption_("subsample_spectra")), "-",
+                   std::to_string(getIntOption_("subsample_spectra")) + " spectra were drawn for tagging (0 = all)."});
+      return r;
+    };
 
     if (stream_mode)
     {
@@ -1549,6 +1779,11 @@ protected:
       // a flank clamped to 0 (FASTagger's max(0,.)) makes its delta bogus.
       std::vector<std::pair<double, std::string>> delta;
       size_t delta_clamped = 0;
+      // -digest_out / -label_out: tag-end counts, and the MS2 metadata the
+      // no-call rules read.
+      FASTag::Digest::TerminusCounter digest;
+      std::vector<double> first_peak, scan_low;
+      size_t ms2_meta = 0, im_vssc = 0, im_drift = 0, im_faims = 0, im_other = 0;
       // FASTAG_TIMING only, thread-seconds: reading (getSpectrum), of that in
       // reads slower than 1 ms (a wait for the mzPeak reader, for one),
       // tagging (tag_one + record), waiting for a ring buffer, and idle after
@@ -1557,6 +1792,7 @@ protected:
       size_t n_slow = 0;
     };
     std::vector<PerThread> per_thread(static_cast<size_t>(std::max(1, omp_get_max_threads())));
+    for (PerThread& q : per_thread) q.digest = FASTag::Digest::TerminusCounter(dset.window);
 
     // The per-spectrum work, shared by every input path.
     //
@@ -1586,6 +1822,31 @@ protected:
       if (spec.getMSLevel() != 2 || spec.empty() || spec.getPrecursors().empty()) return res;
       PerThread& pt = per_thread[tid];
       ++pt.ms2;
+      if (digest_on)
+      {
+        ++pt.ms2_meta;
+        double first = std::numeric_limits<double>::infinity();
+        for (const auto& pk : spec) first = std::min(first, pk.getMZ());
+        pt.first_peak.push_back(first);
+        const auto& wins = spec.getInstrumentSettings().getScanWindows();
+        if (!wins.empty())
+        {
+          double b = std::numeric_limits<double>::infinity();
+          for (const auto& w : wins) b = std::min(b, w.begin);
+          pt.scan_low.push_back(b);
+        }
+        bool has_im = false;
+        DriftTimeUnit unit = DriftTimeUnit::NONE;
+        if (spec.containsIMData()) { has_im = true; unit = spec.getIMData().second; }
+        else if (spec.getDriftTime() != IMTypes::DRIFTTIME_NOT_SET) { has_im = true; unit = spec.getDriftTimeUnit(); }
+        if (has_im)
+        {
+          if (unit == DriftTimeUnit::VSSC) ++pt.im_vssc;
+          else if (unit == DriftTimeUnit::MILLISECOND) ++pt.im_drift;
+          else if (unit == DriftTimeUnit::FAIMS_COMPENSATION_VOLTAGE) ++pt.im_faims;
+          else ++pt.im_other;
+        }
+      }
 
       const auto& prec = spec.getPrecursors().front();
       const auto tags = tag_all(spec, prec.getMZ(), prec.getCharge(), tables);
@@ -1651,6 +1912,9 @@ protected:
 
         appendTagRow(buf, t, spec.getNativeID(), hit, want_proforma, proforma_fixed,
                      p.per_residue_conf, usi);
+        // The tags fastag_termini counts: every row written, ungapped, E <= 1.
+        if (count_on && !t.gapped && t.evalue <= 1.0)
+          pt.digest.add(t.nterm_mass, t.cterm_mass, FASTag::baseSequence(t.seq));
 
         if (recon_on && !row_entrap)  // known-false rows must not place or bin
         {
@@ -1697,7 +1961,7 @@ protected:
           if (recon_ids_on) FASTag::addReconHits(id_hits, places, t.seq, t.evalue, prec.getCharge(), id_fixed);
           // A candidate for the spectrum's -delta_out sample: take this
           // tag's min-|delta| placement.
-          if (!delta_out.empty() && !places.empty() && (!delta_have || t.evalue < delta_e))
+          if (delta_on && !places.empty() && (!delta_have || t.evalue < delta_e))
           {
             const FASTag::Reconciliation* best = nullptr;
             for (const auto& pl : places)
@@ -2388,7 +2652,7 @@ protected:
       // 0.0005 Da bins, adjacent-bin local-max grouping into peaks; each row
       // reports the peak center, its spectrum count, and the most frequent
       // interpretations. Candidates, not identifications -- the README says so.
-      if (!delta_out.empty())
+      if (delta_on)
       {
         std::map<int64_t, std::pair<uint64_t, std::map<std::string, uint64_t>>> bins;
         size_t clamped = 0, samples = 0;
@@ -2405,13 +2669,22 @@ protected:
         }
         // Local-max grouping: a bin whose count is not exceeded by either
         // neighbor becomes a peak and absorbs its (strictly smaller) neighbors.
-        std::ofstream dtsv(delta_out.c_str());
-        if (!dtsv)
+        // Each row goes to -delta_out and, as -massgap_out reads the file,
+        // with its gap as printed, to the mass-gap report.
+        const bool write_delta = !delta_out.empty();
+        std::ofstream dtsv;
+        if (write_delta)
         {
-          OPENMS_LOG_ERROR << "Cannot open output file " << delta_out << " for writing." << std::endl;
-          return CANNOT_WRITE_OUTPUT_FILE;
+          dtsv.open(delta_out.c_str());
+          if (!dtsv)
+          {
+            OPENMS_LOG_ERROR << "Cannot open output file " << delta_out << " for writing." << std::endl;
+            return CANNOT_WRITE_OUTPUT_FILE;
+          }
+          dtsv << "delta\tspectra\ttop_interps\n";
         }
-        dtsv << "delta\tspectra\ttop_interps\n";
+        std::vector<FD::GapRow> gap_rows;
+        std::vector<std::string> gap_keys;
         std::set<int64_t> absorbed;
         for (const auto& kv : bins)
         {
@@ -2438,6 +2711,13 @@ protected:
           char dnum[48];
           std::snprintf(dnum, sizeof dnum, "%.4f\t%llu\t", kv.first * 0.0005,
                         static_cast<unsigned long long>(count));
+          if (massgap_on)
+          {
+            const std::string key(dnum, std::strchr(dnum, '\t'));
+            gap_rows.push_back({std::strtod(key.c_str(), nullptr), count});
+            gap_keys.push_back(key);
+          }
+          if (!write_delta) continue;
           dtsv << dnum;
           for (size_t r = 0; r < ranked.size() && r < 3; ++r)
           {
@@ -2447,15 +2727,30 @@ protected:
           if (ranked.empty()) dtsv << '-';
           dtsv << '\n';
         }
-        dtsv.close();
-        if (dtsv.fail())
+        if (write_delta)
         {
-          OPENMS_LOG_ERROR << "Failed writing " << delta_out << "." << std::endl;
-          return CANNOT_WRITE_OUTPUT_FILE;
+          dtsv.close();
+          if (dtsv.fail())
+          {
+            OPENMS_LOG_ERROR << "Failed writing " << delta_out << "." << std::endl;
+            return CANNOT_WRITE_OUTPUT_FILE;
+          }
+          OPENMS_LOG_INFO << "Delta histogram: " << samples << " spectra sampled"
+                          << (clamped ? ", " + std::to_string(clamped) + " excluded (clamped flank)" : std::string())
+                          << " -> " << delta_out << std::endl;
         }
-        OPENMS_LOG_INFO << "Delta histogram: " << samples << " spectra sampled"
-                        << (clamped ? ", " + std::to_string(clamped) + " excluded (clamped flank)" : std::string())
-                        << " -> " << delta_out << std::endl;
+        if (massgap_on)
+        {
+          std::vector<FD::Row> rows = run_rows();
+          const auto more = FD::massgapRows(gap_rows, gap_keys, gmods, gcombos, gcys, gset);
+          rows.insert(rows.end(), more.begin(), more.end());
+          if (!FD::writeReport(massgap_out, rows))
+          {
+            OPENMS_LOG_ERROR << "Failed writing " << massgap_out << "." << std::endl;
+            return CANNOT_WRITE_OUTPUT_FILE;
+          }
+          OPENMS_LOG_INFO << "Mass gaps: " << gap_rows.size() << " histogram rows -> " << massgap_out << std::endl;
+        }
       }
 
       if (recon_ids_on)
@@ -2491,6 +2786,76 @@ protected:
           OPENMS_LOG_INFO << "Recon identifications: " << n_hits << " hits on " << recon_ids.size()
                           << " spectra, not FDR-controlled -> " << recon_id_out << std::endl;
         }
+      }
+    }
+
+    // -digest_out and -label_out, from the tag ends counted in the loop.
+    if (count_on)
+    {
+      FD::TerminusCounter tc(dset.window);
+      for (const PerThread& pt : per_thread) tc.merge(pt.digest);
+      if (digest_on)
+      {
+        FD::RunMeta meta;
+        for (const PerThread& pt : per_thread)
+        {
+          meta.ms2 += pt.ms2_meta;
+          meta.im_vssc += pt.im_vssc;
+          meta.im_drift += pt.im_drift;
+          meta.im_faims += pt.im_faims;
+          meta.im_other += pt.im_other;
+          meta.first_peak.insert(meta.first_peak.end(), pt.first_peak.begin(), pt.first_peak.end());
+          meta.scan_low.insert(meta.scan_low.end(), pt.scan_low.begin(), pt.scan_low.end());
+        }
+        // Run-level metadata: the archive's settings for mzPeak; for mzML
+        // the run header alone (the fast reader skips it), parsing stops at
+        // the spectrumList.
+        ExperimentalSettings es;
+        if (mzs) es = mzs->settings();
+        else
+        {
+          try
+          {
+            PeakMap head;
+            MzMLFile mf;
+            mf.getOptions().setMetadataOnly(true);
+            mf.load(in, head);
+            es = head.getExperimentalSettings();
+          }
+          catch (const Exception::BaseException& e)
+          {
+            OPENMS_LOG_WARN << "-digest_out: could not read the run header of " << in << " (" << e.what()
+                            << "); instrument and native ID format are reported absent." << std::endl;
+          }
+        }
+        meta.instrument_name = es.getInstrument().getName();
+        meta.instrument_model = es.getInstrument().getModel();
+        for (const SourceFile& sf : es.getSourceFiles())
+          if (!sf.getNativeIDTypeAccession().empty()) { meta.native_id_type = sf.getNativeIDTypeAccession(); break; }
+        std::vector<FD::Row> rows = run_rows();
+        const auto more = FD::digestRows(tc, dtable, meta, dset);
+        rows.insert(rows.end(), more.begin(), more.end());
+        if (!FD::writeReport(digest_out, rows))
+        {
+          OPENMS_LOG_ERROR << "Failed writing " << digest_out << "." << std::endl;
+          return CANNOT_WRITE_OUTPUT_FILE;
+        }
+        std::string status;
+        for (const FD::Row& r : more)
+          if (r.section == "call" && (r.key == "model" || r.key == "reason")) status = r.key + " " + r.value;
+        OPENMS_LOG_INFO << "Digest: " << tc.tags << " filtered tags, " << status << " -> " << digest_out << std::endl;
+      }
+      if (!label_out.empty())
+      {
+        std::vector<FD::Row> rows = run_rows();
+        const auto more = FD::labelRows(tc, dset);
+        rows.insert(rows.end(), more.begin(), more.end());
+        if (!FD::writeReport(label_out, rows))
+        {
+          OPENMS_LOG_ERROR << "Failed writing " << label_out << "." << std::endl;
+          return CANNOT_WRITE_OUTPUT_FILE;
+        }
+        OPENMS_LOG_INFO << "Labels: " << tc.tags << " filtered tags -> " << label_out << std::endl;
       }
     }
 
