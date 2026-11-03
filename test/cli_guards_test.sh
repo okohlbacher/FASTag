@@ -10,6 +10,7 @@
 #     when it produced no event (every q_db came out 0)
 #   - a native ID with a tab or newline stays one TSV field
 #   - -max_peaks above the 1024 table ceiling is refused
+#   - an empty -out_spectra result removes an earlier run's file there
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 BIN="$1"
@@ -66,6 +67,12 @@ grep -q 's&#9;11472' "$TMP/tab.mzML" || fail "fixture edit did not apply"
 grep -q 's 11472' "$TMP/tab.tsv" || fail "the tab-carrying native ID wrote no row"
 BAD=$(awk -F'\t' 'NF != 12' "$TMP/tab.tsv" | head -1)
 [ -z "$BAD" ] || fail "a row with a stray field: $BAD"
+
+# -out_spectra with nothing to write removes an earlier run's file there.
+echo stale > "$TMP/stale.mzML"
+"$BIN" -in "$IN" -out "$TMP/z.tsv" -out_spectra "$TMP/stale.mzML" -max_evalue 1e-300 "${ARGS[@]}" \
+  >"$TMP/z.log" 2>&1 && fail "an empty -out_spectra result exited 0"
+[ ! -e "$TMP/stale.mzML" ] || fail "an earlier run's -out_spectra file was left in place"
 
 # -max_peaks above the table ceiling.
 "$BIN" -in "$IN" -out "$TMP/p.tsv" -max_peaks 5000 "${ARGS[@]}" >/dev/null 2>&1 \

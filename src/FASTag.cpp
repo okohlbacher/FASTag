@@ -3346,7 +3346,14 @@ protected:
     {
       if (kept_idx.empty())
       {
+        // Remove what an earlier run left there: next to this run's TSV it
+        // would read as this run's spectra (review IO-5). The collision check
+        // up front guarantees this is not the input.
+        std::error_code ec;
+        const bool stale = std::filesystem::is_regular_file(out_spectra, ec)
+                           && std::filesystem::remove(out_spectra, ec);
         OPENMS_LOG_ERROR << "No spectrum carried a reported tag; not writing " << out_spectra
+                         << (stale ? " (removed the file an earlier run left there)" : "")
                          << std::endl;
         return UNEXPECTED_RESULT;
       }
