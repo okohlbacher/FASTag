@@ -205,6 +205,14 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta)
   set_tests_properties(multilength_test PROPERTIES SKIP_RETURN_CODE 77)
 
+  # Integration: refused parameters and output-path collisions, NaN precursors
+  # in -stream, entrapment inside the target, native IDs carrying a tab.
+  add_test(NAME cli_guards_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/cli_guards_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta)
+  set_tests_properties(cli_guards_test PROPERTIES SKIP_RETURN_CODE 77)
+
   # The shipped digest data, for digest_test and digest_cli_test.
   target_compile_definitions(digest_test PRIVATE
                              FASTAG_DIGEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/data/digest")

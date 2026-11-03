@@ -295,10 +295,11 @@ protected:
     setValidStrings_("fragment_tolerance_unit", ListUtils::create<std::string>("ppm,Da"));
 
     registerIntOption_("max_peaks", "<n>", 400,
-                       "Peaks retained per spectrum; 0 uses the internal ceiling "
-                       "of 1024, not unlimited -- the scoring tables are built to "
-                       "that bound. The ceiling for 'peaks_per_window'", false);
+                       "Peaks retained per spectrum, at most 1024; 0 uses that "
+                       "ceiling, not unlimited -- the scoring tables are built to "
+                       "this bound, at O(n^2) memory. The ceiling for 'peaks_per_window'", false);
     setMinInt_("max_peaks", 0);
+    setMaxInt_("max_peaks", 1024);
     registerIntOption_("peaks_per_window", "<n>", 10,
                        "Keep this many peaks per 100 Da window instead of the "
                        "strongest 'max_peaks' overall; 0 disables. Scales the "
@@ -414,8 +415,9 @@ protected:
                        "Protein database for -recon_out. Default: the -fasta file", false);
     setValidFormats_("recon_fasta", ListUtils::create<std::string>("fasta"));
     registerIntOption_("recon_missed_cleavages", "<n>", 1,
-                       "Missed tryptic cleavages allowed in reconciliation windows", false);
+                       "Missed tryptic cleavages allowed in reconciliation windows (at most 10)", false);
     setMinInt_("recon_missed_cleavages", 0);
+    setMaxInt_("recon_missed_cleavages", 10);
     registerIntOption_("recon_min_length", "<n>", 0,
                        "Shortest tag worth reconciling; 0 derives it from database size "
                        "(the length where chance matches fall below 5%). Overridable "
