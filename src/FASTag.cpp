@@ -687,9 +687,12 @@ protected:
   /// Peptide-terminal ones on any residue are summed into @p term_n / @p term_c
   /// when given (the -recon_localize fragment ladder needs them).
   /// @p kept receives the full ID of every residue modification added to @p out.
-  void resolveMods_(const StringList& names, bool variable, std::vector<FASTag::ModSpec>& out,
+  /// @return false if a name is not in ModificationsDB (logged): a typo must
+  ///   not run with the wrong chemistry and exit 0.
+  bool resolveMods_(const StringList& names, bool variable, std::vector<FASTag::ModSpec>& out,
                     StringList& kept, double* term_n = nullptr, double* term_c = nullptr)
   {
+    bool all_known = true;
     // Fetched on the first name, not up front: building the database parses
     // all of UniMod, 0.04 s of serial start-up that a run naming no
     // modification (-fixed_modifications "") never uses.
@@ -702,7 +705,9 @@ protected:
       try { mod = db->getModification(nm); }
       catch (Exception::BaseException&)
       {
-        OPENMS_LOG_ERROR << "Unknown modification '" << nm << "'; ignoring." << std::endl;
+        OPENMS_LOG_ERROR << "Unknown modification '" << nm << "' (not in OpenMS's "
+                            "ModificationsDB; names look like 'Oxidation (M)')." << std::endl;
+        all_known = false;
         continue;
       }
       if (!mod) continue;
@@ -735,6 +740,7 @@ protected:
       out.push_back(ms);
       kept.push_back(mod->getFullId());
     }
+    return all_known;
   }
 
   FILE* stream_data_ = nullptr;  ///< the REAL stdout in -stream mode
@@ -879,9 +885,11 @@ protected:
     // The residue modifications in use; -recon_id_out reports exactly these.
     StringList fixed_mods, variable_mods;
     double fixed_term_n = 0, fixed_term_c = 0;
-    resolveMods_(getStringList_("fixed_modifications"), false, p.mods, fixed_mods,
-                 &fixed_term_n, &fixed_term_c);
-    resolveMods_(getStringList_("variable_modifications"), true, p.mods, variable_mods);
+    const bool fixed_known = resolveMods_(getStringList_("fixed_modifications"), false, p.mods,
+                                          fixed_mods, &fixed_term_n, &fixed_term_c);
+    const bool variable_known =
+        resolveMods_(getStringList_("variable_modifications"), true, p.mods, variable_mods);
+    if (!fixed_known || !variable_known) return ILLEGAL_PARAMETERS;
     if (!p.mods.empty())
     {
       std::string summary;
