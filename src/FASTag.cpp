@@ -3203,6 +3203,11 @@ protected:
 
       const std::string want_rank = getStringOption_("species_rank");
       std::ofstream so(species_out.c_str());
+      if (!so)
+      {
+        OPENMS_LOG_ERROR << "Cannot open species report " << species_out << std::endl;
+        return CANNOT_WRITE_OUTPUT_FILE;
+      }
       so << "rank\ttaxid\tname\tobserved\tadjusted\texpected\tlog_pvalue\tqvalue\n";
 
       // Order by the corrected count, not by q. Significance ranks a near
@@ -3244,8 +3249,13 @@ protected:
       so.flush();
       const bool species_ok = static_cast<bool>(so);
       so.close();
-      if (!species_ok)
+      if (!species_ok || so.fail())
+      {
+        // Every other report fails the run on a write error; this one used to
+        // log and exit 0, leaving a stale report from an earlier run in place.
         OPENMS_LOG_ERROR << "Failed writing species report to " << species_out << std::endl;
+        return CANNOT_WRITE_OUTPUT_FILE;
+      }
       OPENMS_LOG_INFO << "Species: " << n_units << " spectra contributed taxon evidence";
       if (n_kmer_skipped || n_tag_generic)
         OPENMS_LOG_INFO << " (" << n_kmer_skipped << " k-mers too widely shared, "
