@@ -125,9 +125,18 @@ namespace FASTag::Digest
   bool loadModelTable(const std::string& path, ModelTable& out, std::string* err);
   bool parseModelTable(std::istream& in, ModelTable& out, std::string* err);
 
-  /// Residue composition of @p sequences, I counted as L, other letters
-  /// skipped, normalised over the 19 residues.
+  /// Residue composition of @p sequences, Ile (I) counted as Leu (L), other
+  /// letters skipped, normalised over the 19 residues.
   Dist composition(const std::vector<std::string>& sequences);
+
+  /// Adds the residues of @p seq to @p cnt, counted as composition() does,
+  /// so a FASTA can be streamed rather than held in memory.
+  void addResidues(const std::string& seq, std::array<std::uint64_t, kNumAA>& cnt);
+
+  /// @p cnt normalised. With @p pseudocount, one count is first added to
+  /// every residue when any of them is 0, so no model scores -inf on a
+  /// residue the FASTA lacks; @p added says whether that happened.
+  Dist composition(std::array<std::uint64_t, kNumAA> cnt, bool pseudocount, bool* added = nullptr);
 
   struct ModelScore
   {
@@ -143,6 +152,12 @@ namespace FASTag::Digest
     int top = -1, runner_up = -1;    ///< indices into scores; runner_up -1 = no other class
     double margin = 0.0;             ///< log-likelihood per tag
     std::uint64_t n_c = 0, n_n = 0;
+    /// The call's or the runner-up's log-likelihood is not finite (a residue
+    /// at probability 0), so there is no valid margin.
+    bool nonfinite = false;
+    /// The runner-up scores exactly as the call: the names of every model
+    /// with the top score, in table order (empty when there is no tie).
+    std::vector<std::string> tied;
   };
 
   /// 0.1.3 protease_call over the merged counts: each model mixed as
@@ -240,6 +255,7 @@ namespace FASTag::Digest
     int silac_min = 50;
     bool low_resolution = false;               ///< fragment tolerance in Da
     std::string models = "shipped", background = "shipped_human";
+    bool background_pseudocount = false;       ///< one count added per residue of the FASTA
   };
 
   /// Python statistics.median; NaN for none.

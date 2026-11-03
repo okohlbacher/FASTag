@@ -83,7 +83,8 @@ namespace FASTag::Digest
     r.add("run", "background", s.background, "-",
           s.background == "shipped_human" ? "The background is the residue composition of the human reference proteome shipped with FASTag."
           : s.background == "models_table" ? "The background is the one in the model table."
-                                           : "The background is the residue composition of " + s.background.substr(6) + ".");
+                                           : "The background is the residue composition of " + s.background.substr(6) +
+                                                 (s.background_pseudocount ? ", with one count added to every residue because one is absent." : "."));
 
     // ---- meta
     const bool have_inst = !meta.instrument_name.empty() || !meta.instrument_model.empty();
@@ -212,12 +213,20 @@ namespace FASTag::Digest
     const std::string tims = tims_yes ? "yes" : (have_inst || !meta.native_id_type.empty()) ? "no" : "unknown";
     constexpr double kY1K = 147.1128;
     const std::string scan = meta.scan_low.empty() ? "unknown" : low > kY1K + 0.1 ? "yes" : "no";
+    // 0.1.3's own gate: the median lowest MS2 peak, which needs no metadata.
+    const std::string fpk = meta.first_peak.empty() ? "unknown" : first > kY1K + 0.1 ? "yes" : "no";
     const std::string few = (tot < static_cast<std::uint64_t>(std::max(0, s.tag_min)) || !c.scored) ? "yes" : "no";
     const std::string lowres = s.low_resolution ? "yes" : "no";
+    const std::string nonfin = c.scored && c.nonfinite ? "yes" : "no";
+    const std::string tie = c.scored && !c.tied.empty() ? "yes" : "no";
     std::string reason;
     for (const auto& [name, v] : {std::pair{"low_resolution", lowres}, std::pair{"timstof", tims},
-                                  std::pair{"ms2_scan_window", scan}, std::pair{"few_tags", few}})
+                                  std::pair{"ms2_scan_window", scan}, std::pair{"ms2_first_peak", fpk},
+                                  std::pair{"few_tags", few}, std::pair{"nonfinite_score", nonfin},
+                                  std::pair{"tie", tie}})
       if (reason.empty() && v == "yes") reason = name;
+    std::string tied_names;
+    for (const std::string& t : c.tied) tied_names += (tied_names.empty() ? "" : ", ") + t;
 
     if (reason.empty())
     {
@@ -249,10 +258,15 @@ namespace FASTag::Digest
       std::string why;
       if (reason == "low_resolution") why = "the fragment tolerance is in Da, so the residue windows do not hold";
       else if (reason == "timstof") why = "the input is from a timsTOF";
-      else if (reason == "ms2_scan_window") why = "the median MS2 scan window starts at m/z " + f(low, 2) + ", above y1 of K (147.11)";
+      else if (reason == "ms2_scan_window") why = "the median MS2 scan window starts at m/z " + f(low, 2) + ", above y1 of K plus 0.1 (147.21)";
+      else if (reason == "ms2_first_peak") why = "the median first MS2 peak is at m/z " + f(first, 2) + ", above y1 of K plus 0.1 (147.21)";
+      else if (reason == "nonfinite_score") why = "a residue seen at the tag ends has probability 0 under the call or the runner-up";
+      else if (reason == "tie") why = tied_names + " fit the tag ends equally well";
       else why = u(n_c) + " C-terminal tag ends are fewer than " + std::to_string(s.tag_min);
       r.add("call", "status", "no_call", u(c.n_c), "No protease is called: " + why + ".");
       r.add("call", "reason", reason, "-", "The first no-call rule that applies is " + reason + ".");
+      if (reason == "tie")
+        r.add("call", "tied", tied_names, std::to_string(c.tied.size()), tied_names + " have the same log-likelihood.");
     }
 
     r.add("nocall", "low_resolution", lowres, "-",
@@ -265,8 +279,18 @@ namespace FASTag::Digest
           scan == "unknown" ? "No MS2 spectrum states its scan window (metadata absent)."
                             : "The median MS2 scan window starts at m/z " + f(low, 2) + (scan == "yes" ? ", above" : ", not above") +
                                   " y1 of K plus 0.1 (147.21).");
+    r.add("nocall", "ms2_first_peak", fpk, u(meta.first_peak.size()),
+          fpk == "unknown" ? "No MS2 spectrum has a peak."
+                           : "The median first MS2 peak is at m/z " + f(first, 2) + (fpk == "yes" ? ", above" : ", not above") +
+                                 " y1 of K plus 0.1 (147.21).");
     r.add("nocall", "few_tags", few, u(n_c),
           u(tot) + " residue-key and " + u(n_c) + " C-terminal tag ends against a minimum of " + std::to_string(s.tag_min) + ".");
+    r.add("nocall", "nonfinite_score", nonfin, "-",
+          nonfin == "yes" ? "The call or the runner-up gives a residue seen at the tag ends probability 0."
+                          : "The call and the runner-up have finite log-likelihoods, or no call was scored.");
+    r.add("nocall", "tie", tie, std::to_string(c.tied.size()),
+          tie == "yes" ? tied_names + " have the same log-likelihood."
+                       : "No model of another class has the call's log-likelihood, or no call was scored.");
     return out;
   }
 
@@ -275,6 +299,9 @@ namespace FASTag::Digest
     std::vector<Row> out;
     Rows r{out};
     r.add("run", "window_da", num(s.window), "-", "A tag end counts for a label when its mass is within " + num(s.window) + " Da of it.");
+    r.add("run", "low_resolution", s.low_resolution ? "yes" : "no", "-",
+          s.low_resolution ? "The fragment tolerance is in Da, so the label windows do not hold."
+                           : "The fragment tolerance is in ppm.");
     r.add("run", "silac_min", std::to_string(s.silac_min), "-",
           "The heavy shares are gated on " + std::to_string(s.silac_min) + " K- and R-terminal tag ends each.");
     r.add("count", "tags_filtered", u(tc.tags), u(tc.tags), u(tc.tags) + " reported tags are ungapped with an E-value of at most 1.");

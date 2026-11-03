@@ -496,7 +496,7 @@ protected:
                           "Mass window around a residue or label mass at the tag ends", false, true);
     setMinFloat_("digest_window", 0.0);
     registerDoubleOption_("digest_background_share", "<f>", 0.05,
-                          "Share of the background mixed into every protease model", false, true);
+                          "Share of the background mixed into every protease model (below 1)", false, true);
     setMinFloat_("digest_background_share", 0.0);
     setMaxFloat_("digest_background_share", 1.0);
     registerIntOption_("digest_silac_min", "<n>", 50,
@@ -1091,10 +1091,18 @@ protected:
     dset.window = getDoubleOption_("digest_window");
     dset.tag_min = getIntOption_("digest_tag_min");
     dset.background_share = getDoubleOption_("digest_background_share");
+    if (dset.background_share >= 1.0)
+    {
+      OPENMS_LOG_ERROR << "-digest_background_share must be below 1: at 1 every model is the background "
+                          "and all of them tie." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
     dset.silac_min = getIntOption_("digest_silac_min");
     dset.low_resolution = !p.tol_ppm;
     FD::ModelTable dtable;
     const std::string digest_models = getStringOption_("digest_models");
+    if (!digest_on && !digest_models.empty())
+      OPENMS_LOG_WARN << "-digest_models is only read for -digest_out; it is ignored here." << std::endl;
     const std::string ddir = (digest_on || massgap_on) ? digestDir_() : std::string();
     const auto no_digest_dir = [&](const char* what) {
       OPENMS_LOG_ERROR << "No shipped " << what << " found (expected <bin>/../share/FASTag/digest). "
@@ -1124,12 +1132,13 @@ protected:
       if (!digest_models.empty() && dtable.has_bg) dset.background = "models_table";
       else if (!bfasta.empty())
       {
-        std::vector<FASTAFile::FASTAEntry> bentries;
-        FASTAFile().load(bfasta, bentries);
-        std::vector<std::string> seqs;
-        seqs.reserve(bentries.size());
-        for (auto& e : bentries) seqs.push_back(std::move(e.sequence));
-        dtable.bg_c = dtable.bg_n = FD::composition(seqs);
+        // Streamed: only the residue counts are needed, not the entries.
+        std::array<std::uint64_t, FD::kNumAA> bcnt{};
+        FASTAFile bf;
+        bf.readStart(bfasta);
+        FASTAFile::FASTAEntry be;
+        while (bf.readNext(be)) FD::addResidues(be.sequence, bcnt);
+        dtable.bg_c = dtable.bg_n = FD::composition(bcnt, true, &dset.background_pseudocount);
         dtable.has_bg = true;
         dset.background = "fasta:" + bfasta;
       }

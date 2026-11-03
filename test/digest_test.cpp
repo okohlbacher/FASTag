@@ -91,6 +91,12 @@ static std::array<std::uint64_t, D::kNumAA> counts(std::map<char, std::uint64_t>
   for (const auto& [c, v] : m) a[static_cast<std::size_t>(D::aaIndex(c))] = v;
   return a;
 }
+static std::map<char, std::uint64_t> bgc_all()
+{
+  std::map<char, std::uint64_t> m;
+  for (int i = 0; i < D::kNumAA; ++i) m[D::kAAs[static_cast<std::size_t>(i)]] = 1;
+  return m;
+}
 static std::string value(const std::vector<D::Row>& rows, const std::string& section, const std::string& key)
 {
   for (const D::Row& r : rows)
@@ -230,9 +236,20 @@ int main()
     check(reason(window, s) == "no_call ms2_scan_window", "scan window above y1(K) + 0.1");
     window.scan_low = {147.2128 - 1e-9};
     check(reason(window, s).rfind("call ", 0) == 0, "scan window just below 147.2128");
+    D::RunMeta peak = meta;
+    peak.first_peak = {150.0, 151.0, 147.0};
+    check(reason(peak, s) == "no_call ms2_first_peak", "median first MS2 peak above y1(K) + 0.1");
+    peak.first_peak = {147.2128 - 1e-9};
+    check(reason(peak, s).rfind("call ", 0) == 0, "median first MS2 peak just below 147.2128");
+    peak.scan_low.clear();
+    peak.first_peak = {160.0};
+    check(reason(peak, s) == "no_call ms2_first_peak", "first-peak rule without scan windows");
     D::DigestSettings lowres = s;
     lowres.low_resolution = true;
     check(reason(tims, lowres) == "no_call low_resolution", "low resolution comes first");
+    check(value(D::labelRows(tc, lowres), "run", "low_resolution") == "yes" &&
+              value(D::labelRows(tc, s), "run", "low_resolution") == "no",
+          "label report marks a Da run");
     D::DigestSettings strict = s;
     strict.tag_min = 151;
     check(reason(meta, strict) == "no_call few_tags", "150 tags below 151");
@@ -241,6 +258,52 @@ int main()
               value(rows, "nocall", "few_tags") == "no",
           "nocall lists every rule");
     for (const auto& r : rows) check(!(r.section == "call" && r.key == "margin"), "no margin row on a no call");
+  }
+
+  // ---- an exact tie with another class is no call, never a call with margin 0
+  {
+    // C ends shaped as the background, 50 N ends (< 100): unspecific and
+    // Asp-N both score the background at both ends.
+    std::map<char, std::uint64_t> bgc;
+    for (int i = 0; i < D::kNumAA; ++i) bgc[D::kAAs[static_cast<std::size_t>(i)]] = 4 * static_cast<std::uint64_t>(i + 1);
+    const D::Classification c = D::classify(counts(bgc), counts({{'D', 50}}), table(), 0.05, 100);
+    check(c.tied == std::vector<std::string>{"unspecific", "Asp-N"}, "tie: unspecific and Asp-N tie");
+    D::TerminusCounter none;
+    const auto rows = D::digestRows(none, table(), D::RunMeta(), D::DigestSettings());
+    check(value(rows, "nocall", "tie") == "no", "tie: not on an unscored run");
+  }
+
+  // ---- a residue at probability 0 is no call, not a margin of inf or nan
+  {
+    std::string t = "model\tclass\tend\tresidue\tfreq\n";
+    for (const char* end : {"C", "N"})
+      for (int i = 0; i < D::kNumAA; ++i)
+        t += std::string("background\t-\t") + end + "\t" + D::kAAs[static_cast<std::size_t>(i)] + "\t" +
+             (D::kAAs[static_cast<std::size_t>(i)] == 'W' ? "0" : "0.05") + "\n";
+    t += "Trypsin\tTrypsin\tC\tK\t0.5\nTrypsin\tTrypsin\tC\tR\t0.5\n"
+         "Chymotrypsin\tChymotrypsin\tC\tF\t0.25\nChymotrypsin\tChymotrypsin\tC\tY\t0.25\n"
+         "Chymotrypsin\tChymotrypsin\tC\tW\t0.25\nChymotrypsin\tChymotrypsin\tC\tL\t0.25\n";
+    D::ModelTable nw;
+    std::istringstream in(t);
+    std::string err;
+    check(D::parseModelTable(in, nw, &err), "no-W table parses: " + err);
+    const D::Classification c = D::classify(counts({{'K', 150}, {'R', 120}, {'W', 1}}), counts({}), nw, 0.05, 100);
+    check(c.nonfinite && c.scores[static_cast<std::size_t>(c.top)].name == "Chymotrypsin",
+          "no W in the background: Trypsin scores -inf, flagged");
+    D::TerminusCounter tc;
+    for (int i = 0; i < 150; ++i) tc.add(300.1, K, "PEPT");
+    for (int i = 0; i < 120; ++i) tc.add(300.1, R, "PEPT");
+    tc.add(300.1, 186.07931, "PEPT");  // W
+    const auto rows = D::digestRows(tc, nw, D::RunMeta(), D::DigestSettings());
+    check(value(rows, "call", "status") == "no_call" && value(rows, "call", "reason") == "nonfinite_score",
+          "no W in the background: no_call nonfinite_score");
+    bool added = false;
+    const D::Dist p = D::composition(counts({{'A', 3}}), true, &added);
+    check(added, "pseudocount added when a residue is absent");
+    same(p[static_cast<std::size_t>(D::aaIndex('A'))], 4.0 / 22.0, "pseudocount: A (3 + 1) of 22");
+    same(p[static_cast<std::size_t>(D::aaIndex('W'))], 1.0 / 22.0, "pseudocount: W 1 of 22");
+    D::composition(counts(bgc_all()), true, &added);
+    check(!added, "no pseudocount when every residue is present");
   }
 
   // ---- the model table: format and refusals

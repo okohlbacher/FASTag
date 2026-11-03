@@ -290,20 +290,33 @@ namespace FASTag::Digest
     return parseModelTable(in, out, err);
   }
 
-  Dist composition(const std::vector<std::string>& sequences)
+  void addResidues(const std::string& seq, std::array<std::uint64_t, kNumAA>& cnt)
   {
-    std::array<std::uint64_t, kNumAA> cnt{};
-    for (const std::string& s : sequences)
-      for (char c : s)
-      {
-        if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
-        if (const int a = aaIndex(c); a >= 0) ++cnt[static_cast<std::size_t>(a)];
-      }
+    for (char c : seq)
+    {
+      if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
+      if (const int a = aaIndex(c); a >= 0) ++cnt[static_cast<std::size_t>(a)];
+    }
+  }
+
+  Dist composition(std::array<std::uint64_t, kNumAA> cnt, bool pseudocount, bool* added)
+  {
+    const bool add = pseudocount && std::find(cnt.begin(), cnt.end(), std::uint64_t{0}) != cnt.end();
+    if (add)
+      for (auto& x : cnt) ++x;
+    if (added) *added = add;
     const std::uint64_t total = std::accumulate(cnt.begin(), cnt.end(), std::uint64_t{0});
     Dist d{};
     for (int a = 0; a < kNumAA; ++a)
       d[a] = total ? static_cast<double>(cnt[a]) / static_cast<double>(total) : 0.0;
     return d;
+  }
+
+  Dist composition(const std::vector<std::string>& sequences)
+  {
+    std::array<std::uint64_t, kNumAA> cnt{};
+    for (const std::string& s : sequences) addResidues(s, cnt);
+    return composition(cnt, false);
   }
 
   namespace
@@ -349,12 +362,22 @@ namespace FASTag::Digest
     }
     std::vector<int> rk(r.scores.size());
     std::iota(rk.begin(), rk.end(), 0);
-    std::stable_sort(rk.begin(), rk.end(), [&](int x, int y) { return -r.scores[x].loglik < -r.scores[y].loglik; });
+    // NaN ranks last, so the order stays a strict weak ordering.
+    auto key = [&](int x) {
+      const double v = r.scores[x].loglik;
+      return std::isnan(v) ? std::numeric_limits<double>::infinity() : -v;
+    };
+    std::stable_sort(rk.begin(), rk.end(), [&](int x, int y) { return key(x) < key(y); });
     r.top = rk.front();
     for (int k : rk)
       if (r.scores[k].cls != r.scores[r.top].cls) { r.runner_up = k; break; }
+    const double best = r.scores[r.top].loglik;
+    r.nonfinite = !std::isfinite(best) || (r.runner_up >= 0 && !std::isfinite(r.scores[r.runner_up].loglik));
+    if (r.runner_up >= 0 && !r.nonfinite && r.scores[r.runner_up].loglik == best)
+      for (const ModelScore& m : r.scores)
+        if (m.loglik == best) r.tied.push_back(m.name);
     if (r.runner_up >= 0)
-      r.margin = (r.scores[r.top].loglik - r.scores[r.runner_up].loglik) /
+      r.margin = (best - r.scores[r.runner_up].loglik) /
                  static_cast<double>(r.n_c + (r.uses_nterm ? r.n_n : 0));
     return r;
   }
