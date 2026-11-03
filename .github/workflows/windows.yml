@@ -31,6 +31,14 @@ on:
         description: 'Build the Windows desktop app without cutting a tag'
         type: boolean
         default: false
+      # Builds and uploads the Windows assets of an EXISTING release from the
+      # dispatched ref, e.g. after a Windows-only CI fix landed on main once the
+      # tag was cut. The dispatched ref must have the tag's source tree; only
+      # .github/ may differ.
+      release_tag:
+        description: 'Upload the Windows assets to this existing release (vX.Y.Z); empty = none'
+        type: string
+        default: ''
       # A test-signing policy usually auto-approves and issues from a
       # non-public root, so it proves the PIPELINE -- request, artifact
       # configuration, download, replace -- without burning a human's Approve
@@ -215,6 +223,18 @@ jobs:
       - uses: actions/checkout@v7
         with:
           path: fastag
+
+      - name: Check the dispatched ref has the release tag's source
+        if: inputs.release_tag != ''
+        shell: bash
+        env:
+          TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          git -C fastag fetch --depth=1 origin "refs/tags/$TAG:refs/tags/$TAG"
+          git -C fastag diff --stat "$TAG" HEAD -- . ':(exclude).github'
+          git -C fastag diff --quiet "$TAG" HEAD -- . ':(exclude).github' || {
+            echo "::error::$GITHUB_REF differs from $TAG outside .github/"; exit 1; }
 
       # $GITHUB_WORKSPACE on Windows is backslash-separated (D:\a\FASTag\FASTag).
       # Concatenating it with a forward-slash suffix (as every path below does)
@@ -436,13 +456,13 @@ jobs:
       # slug exist; without them every tag build takes the "not configured"
       # branch and ships unsigned. doc/SIGNING-macos-gui.md lists the steps.
       - name: Determine SignPath availability (Windows)
-        if: startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run
+        if: (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') || inputs.gui_dry_run
         id: signpath-gate
         shell: pwsh
         env:
           SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
           SIGNPATH_ORG_ID: ${{ secrets.SIGNPATH_ORG_ID }}
-          SIGNING_POLICY: ${{ inputs.signing_policy || (startsWith(github.ref, 'refs/tags/v') && 'release-signing' || 'test-signing') }}
+          SIGNING_POLICY: ${{ inputs.signing_policy || ((startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') && 'release-signing' || 'test-signing') }}
         run: |
           if ([string]::IsNullOrEmpty($env:SIGNPATH_API_TOKEN) -or [string]::IsNullOrEmpty($env:SIGNPATH_ORG_ID)) {
             Write-Host "::warning title=Unsigned Windows binary::SIGNPATH_API_TOKEN or SIGNPATH_ORG_ID is not set -- shipping this release unsigned. SmartScreen will warn on first run. See doc/SIGNING-macos-gui.md for what's needed."
@@ -681,7 +701,7 @@ jobs:
       # gh call: this workflow's checkout lives at fastag/, so the default cwd
       # has no .git to infer the repo from.
       - name: Embed taxonomy index (tag builds)
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '')
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -719,12 +739,12 @@ jobs:
       # built in CI at all, so unlike macOS this path has no working precedent
       # behind it.
       - uses: actions/setup-node@v7
-        if: startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run
+        if: (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') || inputs.gui_dry_run
         with:
           node-version: 24
 
       - name: Stage the CLI as the app's bundled resources (Windows)
-        if: startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run
+        if: (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') || inputs.gui_dry_run
         shell: bash
         run: |
           set -euo pipefail
@@ -759,12 +779,16 @@ jobs:
       # resolves the linker from cl.exe's own directory. msvc-dev-cmd's PATH,
       # with the MSVC bin dir first, survives intact in pwsh.
       - name: Build the desktop app (Windows)
-        if: startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run
+        if: (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') || inputs.gui_dry_run
         timeout-minutes: 90
         working-directory: fastag/gui
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          # A bash step's GITHUB_PATH entries land ahead of msvc-dev-cmd's
+          # MSVC bin dir, and Git's usr/bin (coreutils link.exe) with them.
+          # Put cl.exe's directory, which holds MSVC's link.exe, first.
+          $env:PATH = (Split-Path (Get-Command cl.exe).Source) + ';' + $env:PATH
           # Prove the right linker wins before spending ten minutes finding out.
           $link = (Get-Command link.exe).Source
           if ($link -like '*\Git\usr\bin\*') { throw "coreutils link.exe shadows MSVC's: $link" }
@@ -817,7 +841,7 @@ jobs:
           if (-not $sig.SignerCertificate -or $sig.Status -eq 'HashMismatch') { Write-Host "::error::$($signed.Name) from SignPath carries no intact signature"; exit 1 }
 
       - name: Attach the signed installer to the release (Windows)
-        if: steps.signpath-gate.outputs.enabled == 'true' && startsWith(github.ref, 'refs/tags/v')
+        if: steps.signpath-gate.outputs.enabled == 'true' && (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '')
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -826,9 +850,9 @@ jobs:
           $signed = Get-ChildItem -Path "signed-gui" -Filter "*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $signed) { Write-Host "::error::SignPath returned no signed installer"; exit 1 }
           Copy-Item $signed.FullName -Destination "FASTag-gui-windows-x64-setup.exe" -Force
-          gh release create "${{ github.ref_name }}" --title "${{ github.ref_name }}" `
+          gh release create "${{ inputs.release_tag || github.ref_name }}" --title "${{ inputs.release_tag || github.ref_name }}" `
             --notes "Automated binary upload; release notes pending." 2>$null
-          gh release upload "${{ github.ref_name }}" "FASTag-gui-windows-x64-setup.exe" --clobber
+          gh release upload "${{ inputs.release_tag || github.ref_name }}" "FASTag-gui-windows-x64-setup.exe" --clobber
 
       # Unsigned fallback. Without this the installer would be BUILT on every tag
       # and then thrown away whenever SignPath is not configured, which is the
@@ -836,7 +860,7 @@ jobs:
       # at all. SmartScreen will warn until the certificate exists; that is the
       # same trade the platform tarballs already make.
       - name: Attach the UNSIGNED installer to the release (Windows)
-        if: startsWith(github.ref, 'refs/tags/v') && steps.signpath-gate.outputs.enabled != 'true'
+        if: (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') && steps.signpath-gate.outputs.enabled != 'true'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -846,9 +870,9 @@ jobs:
           if (-not $nsis) { Write-Host "::warning::no NSIS installer was produced"; exit 0 }
           Write-Host "::warning title=Unsigned Windows installer::Shipping the installer unsigned -- SmartScreen will warn on first run."
           Copy-Item $nsis.FullName -Destination "FASTag-gui-windows-x64-setup.exe" -Force
-          gh release create "${{ github.ref_name }}" --title "${{ github.ref_name }}" `
+          gh release create "${{ inputs.release_tag || github.ref_name }}" --title "${{ inputs.release_tag || github.ref_name }}" `
             --notes "Automated binary upload; release notes pending." 2>$null
-          gh release upload "${{ github.ref_name }}" "FASTag-gui-windows-x64-setup.exe" --clobber
+          gh release upload "${{ inputs.release_tag || github.ref_name }}" "FASTag-gui-windows-x64-setup.exe" --clobber
 
       # A dry run has no release to attach to; the installer comes back as a
       # workflow artifact so the bundle can be installed and checked -- the
@@ -867,7 +891,7 @@ jobs:
       # single file: users run FASTag.bat (or bare `FASTag`), not the
       # FASTag.core.exe it calls.
       - name: Attach binary to the GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '')
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -876,9 +900,9 @@ jobs:
           # "path: fastag" above), so $GITHUB_WORKSPACE itself -- this step's
           # default cwd -- has no .git for gh to auto-detect the repo from.
           # Without --repo, both calls below fail with "not a git repository".
-          gh release create "${{ github.ref_name }}" \
+          gh release create "${{ inputs.release_tag || github.ref_name }}" \
             --repo "${{ github.repository }}" \
-            --title "${{ github.ref_name }}" \
+            --title "${{ inputs.release_tag || github.ref_name }}" \
             --notes "Automated binary upload; release notes pending." \
             2>/dev/null || true
           # Compress-Archive, not zip: unlike every other tool this workflow
@@ -887,7 +911,7 @@ jobs:
           # Windows box has PowerShell, so this has no such gap.
           powershell -NoProfile -Command \
             "Compress-Archive -Path '$WS/dist/FASTag' -DestinationPath 'FASTag-windows-x64.zip' -Force"
-          gh release upload "${{ github.ref_name }}" FASTag-windows-x64.zip --clobber \
+          gh release upload "${{ inputs.release_tag || github.ref_name }}" FASTag-windows-x64.zip --clobber \
             --repo "${{ github.repository }}"
 
   # ------------------------------------------------- release completeness
@@ -896,7 +920,7 @@ jobs:
   # `needs:` and either workflow can finish first.
   release-complete:
     # !cancelled() for the same reason as ci.yml's job.
-    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
+    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') }}
     needs: [windows-x64]
     runs-on: ubuntu-24.04
     steps:
@@ -910,5 +934,5 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          have=$(gh release view "${{ github.ref_name }}" --json assets --jq '.assets[].name')
+          have=$(gh release view "${{ inputs.release_tag || github.ref_name }}" --json assets --jq '.assets[].name')
           echo "$have" | grep -qx "FASTag-windows-x64.zip" || { echo "MISSING: FASTag-windows-x64.zip"; exit 1; }
