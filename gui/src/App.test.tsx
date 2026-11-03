@@ -371,6 +371,43 @@ describe('run/batch orchestration', () => {
     expect(sent).toHaveProperty('digest_out')
   })
 
+  it('re-bases the configured reports on a new input instead of overwriting the last one', async () => {
+    const mock = installMockBridge()
+    mock.settings.lastUsed = { digest_out: '/res/old.digest.tsv', recon_out: '/res/old.recon.tsv' }
+    await renderApp(mock)
+    await pickSingle(mock, '/d/b.mzML')
+    await click(runButton())
+    const sent = mock.runCalls[mock.runCalls.length - 1].params
+    expect(sent['digest_out']).toBe('/res/b.digest.tsv')
+  })
+
+  it('browses a parameter file with its own formats, not the spectra filter', async () => {
+    const mock = installMockBridge()
+    await renderApp(mock)
+    const browse = (name: string): Element => {
+      const field = document.getElementById(`p-${name}`)
+      const b = field?.parentElement?.querySelector('button')
+      if (!b) throw new Error(`no Browse button for ${name}`)
+      return b
+    }
+    await click(screen.getByRole('button', { name: /Sequence matching/ }))
+    await click(screen.getByRole('button', { name: /Reconciliation/ }))
+    mock.nextPickInput = '/db/human.fasta'
+    await click(browse('fasta'))
+    expect(mock.pickFileCalls[mock.pickFileCalls.length - 1]).toEqual({ kind: 'open', formats: ['fasta', 'fa', 'faa'] })
+    expect((document.getElementById('p-fasta') as HTMLInputElement).value).toBe('/db/human.fasta')
+    mock.nextPickOutput = '/r/a.recon.tsv'
+    await click(browse('recon_out'))
+    expect(mock.pickFileCalls[mock.pickFileCalls.length - 1]).toEqual({ kind: 'save', formats: ['tsv'] })
+    // With -recon_out set, -recon_id_out is live and offers its own formats.
+    mock.nextPickOutput = '/r/ids.idXML'
+    await click(browse('recon_id_out'))
+    expect(mock.pickFileCalls[mock.pickFileCalls.length - 1]).toEqual({
+      kind: 'save',
+      formats: ['idXML', 'mzid', 'mzTab']
+    })
+  })
+
   it('says a cancelled run was stopped and raises no failure', async () => {
     const mock = installMockBridge()
     const container = await renderApp(mock)
