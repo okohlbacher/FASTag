@@ -130,6 +130,12 @@ if(WIN32)
   # The version resource SignPath checks before it signs (src/FASTag.rc.in).
   configure_file(src/FASTag.rc.in FASTag.rc @ONLY)
   target_sources(FASTag PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/FASTag.rc")
+  # UTF-8 as the process code page: the MSVC CRT otherwise hands main() an
+  # ANSI-code-page argv, so the GUI's UTF-16 paths lost every character
+  # outside cp1252 ('?') and the rest became bytes OpenMS reads as UTF-8.
+  if(MSVC)
+    target_sources(FASTag PRIVATE src/FASTag.manifest)
+  endif()
 endif()
 if(OpenMP_CXX_FOUND)
   target_link_libraries(FASTag PRIVATE OpenMP::OpenMP_CXX)
