@@ -349,6 +349,28 @@ describe('run/batch orchestration', () => {
     expect(alert.textContent).toMatch(/The run failed \(exit code 1\): Error: Unable to read file/)
   })
 
+  it('falls back to the last log line when no line names an error', async () => {
+    const mock = installMockBridge()
+    await renderApp(mock)
+    await pickSingle(mock, '/d/a.mzML')
+    await click(runButton())
+    await act(async () => mock.emitLog('-massgap_out requires -recon_out (the gaps are those of the reconciliations).'))
+    await act(async () => mock.emitDone({ ok: false, code: 6, runId: 1 }))
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toMatch(/failed \(exit code 6\): -massgap_out requires -recon_out/)
+  })
+
+  it('leaves inert options out of the command line', async () => {
+    const mock = installMockBridge()
+    mock.settings.lastUsed = { massgap_out: '/r/a.massgap.tsv' }
+    await renderApp(mock)
+    await pickSingle(mock, '/d/a.mzML')
+    await click(runButton())
+    const sent = mock.runCalls[mock.runCalls.length - 1].params
+    expect(sent).not.toHaveProperty('massgap_out')
+    expect(sent).toHaveProperty('digest_out')
+  })
+
   it('says a cancelled run was stopped and raises no failure', async () => {
     const mock = installMockBridge()
     const container = await renderApp(mock)
@@ -362,7 +384,12 @@ describe('run/batch orchestration', () => {
 })
 
 describe('digest tab', () => {
-  const paths = { digest_out: '/r/a.digest.tsv', label_out: '/r/a.label.tsv', massgap_out: '/r/a.massgap.tsv' }
+  const paths = {
+    digest_out: '/r/a.digest.tsv',
+    label_out: '/r/a.label.tsv',
+    massgap_out: '/r/a.massgap.tsv',
+    recon_out: '/r/a.recon.tsv'
+  }
 
   it('is hidden until a run writes a report', async () => {
     const mock = installMockBridge()
@@ -412,7 +439,7 @@ describe('digest tab', () => {
     await click(runButton())
     await emitDone(mock, 1, true)
     await screen.findByText('No call')
-    expect(screen.getByText(/reason: the fragment tolerance is in Da · also few_tags/)).toBeDefined()
+    expect(screen.getByText(/reason: the fragment tolerance is in Da · also too few terminal tags/)).toBeDefined()
     expect(screen.getByText('Metadata absent for: timstof, ms2_scan_window.')).toBeDefined()
   })
 
@@ -425,6 +452,32 @@ describe('digest tab', () => {
     await click(runButton())
     await emitDone(mock, 1, true)
     expect((await screen.findByRole('alert')).textContent).toMatch(/Cannot read \/r\/a.digest.tsv: not a FASTag report/)
+  })
+
+  it('closes the reports of another input when one is opened', async () => {
+    const mock = installMockBridge()
+    const other = digestTsv.replace(/^run\tversion.*$/m, (l) => `${l}\nrun\tinput\tother.mzML\t-\tThe spectra were read from other.mzML.`)
+    mock.nextPickReport = '/r/b.label.tsv'
+    mock.reportFiles = { '/r/b.label.tsv': labelTsv, '/r/o.digest.tsv': other }
+    await renderApp(mock)
+    await click(screen.getByRole('button', { name: 'digest, label or mass-gap report…' }))
+    await screen.findAllByText('TMTpro')
+    mock.nextPickReport = '/r/o.digest.tsv'
+    await click(screen.getByRole('button', { name: 'Open another report…' }))
+    expect((await screen.findByRole('alert')).textContent).toMatch(/o.digest.tsv is from another input \(other.mzML\)/)
+    expect(screen.queryAllByText('TMTpro')).toHaveLength(0)
+    expect(screen.getByText('o.digest.tsv')).toBeDefined()
+  })
+
+  it('moves between the tabs with the arrow keys', async () => {
+    const mock = installMockBridge()
+    await renderApp(mock)
+    const tags = screen.getByRole('tab', { name: 'Tags' })
+    await act(async () => {
+      fireEvent.keyDown(tags, { key: 'ArrowRight' })
+    })
+    expect(screen.getByRole('tab', { name: 'Species' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('tabpanel').getAttribute('aria-labelledby')).toBe('tab-species')
   })
 
   it('opens a report from the empty results pane', async () => {

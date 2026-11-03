@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type JSX } from 'react'
+import { useEffect, useRef, useState, type JSX, type KeyboardEvent } from 'react'
 import type { BinaryInfo, RunResult, SpeciesReport } from './types'
 import {
   SECTIONS,
@@ -14,7 +14,7 @@ import ParamField, { type ParamValue } from './ParamField'
 import ResultsTable from './ResultsTable'
 import SpeciesPanel from './SpeciesPanel'
 import DigestPanel from './DigestPanel'
-import { parseReport, type Report } from './digestReport'
+import { baseName, parseReport, value, type Report } from './digestReport'
 import logo from './assets/logo.svg'
 import openmsLogo from './assets/openms-logo.png'
 
@@ -71,6 +71,9 @@ async function loadReports(paths: string[]): Promise<{ reports: Report[]; errors
   return { reports, errors }
 }
 
+type Tab = 'results' | 'species' | 'digest'
+const TAB_LABEL: Record<Tab, string> = { results: 'Tags', species: 'Species', digest: 'Digest' }
+
 interface Job {
   input: string
   out: string
@@ -119,12 +122,14 @@ export default function App(): JSX.Element {
   // and the frontend view/scroll state must reset with it.
   const [results, setResults] = useState<{ path: string; gen: number } | null>(null)
   const [species, setSpecies] = useState<SpeciesReport | null>(null)
-  const [tab, setTab] = useState<'results' | 'species' | 'digest'>('results')
+  const [tab, setTab] = useState<Tab>('results')
   const [reports, setReports] = useState<{ list: Report[]; errors: string[] }>({ list: [], errors: [] })
   // Why the last run failed, shown above the result tabs (which still hold the
   // previous run's results).
   const [failure, setFailure] = useState<string | null>(null)
   const lastError = useRef<string | null>(null)
+  // The last log line: FASTag's own refusals name no error, exception or fatal.
+  const lastLine = useRef<string | null>(null)
   const [taxdbK, setTaxdbK] = useState<number | null>(null)
   const [presets, setPresets] = useState<string[]>([])
   const [preset, setPreset] = useState('')
@@ -190,6 +195,7 @@ export default function App(): JSX.Element {
     const offLog = window.fastag.onLog((line) => {
       setLog((l) => [...l, line])
       if (/\b(error|exception|fatal)\b/i.test(line)) lastError.current = line
+      if (line.trim()) lastLine.current = line.trim()
       // "Species: N spectra contributed taxon evidence; ..."
       const sp = /^Species:\s+(\d+) spectra contributed/.exec(line)
       if (sp) setEvidence((e) => ({ ...e, contributed: Number(sp[1]) }))
@@ -273,8 +279,14 @@ export default function App(): JSX.Element {
   // entry, but HIDDEN ones must never reach the command line: `-version` is
   // recorded in the INI yet rejected as an option, so sending the whole record
   // aborts the run with "Unknown option(s) '[-version]'".
+  //
+  // Inert ones (their master is unset) with a value stay out too: the CLI
+  // ignores most of them, but refuses some (-massgap_out without -recon_out).
+  // An empty value still goes, as it asks for the CLI's default.
   const submittedParams = (): Record<string, ParamValue> =>
     Object.fromEntries(RENDERED.map((name) => [name, values[name]]))
+  const withoutInert = (p: Record<string, ParamValue>): Record<string, ParamValue> =>
+    Object.fromEntries(Object.entries(p).filter(([name, v]) => v === '' || !inertBecause(name, { ...values, ...p })))
 
   // Run one file and resolve when it finishes. Shared by single and batch runs.
   function runOne(inFile: string, outFile: string, overrides?: Record<string, ParamValue>): Promise<RunResult> {
@@ -286,6 +298,7 @@ export default function App(): JSX.Element {
       setTab((t) => (t === 'digest' ? 'results' : t))
       setFailure(null)
       lastError.current = null
+      lastLine.current = null
       cancelled.current = false
       setRunning(true)
       const settle = (r: RunResult): void => {
@@ -293,7 +306,7 @@ export default function App(): JSX.Element {
         resolve(r)
       }
       window.fastag
-        .run({ in: inFile, out: outFile, params: { ...submittedParams(), ...overrides } })
+        .run({ in: inFile, out: outFile, params: withoutInert({ ...submittedParams(), ...overrides }) })
         .then((res) => {
           // Register the awaiter only once the backend hands back the run
           // id; the terminal event carries the same id (see onDone).
@@ -334,15 +347,19 @@ export default function App(): JSX.Element {
         switched = true
       }
     }
-    const rep = await loadReports(REPORT_PARAMS.map(path).filter((p) => p !== ''))
+    // An inert report option was not sent, so its path may hold an old file.
+    const sent = REPORT_PARAMS.filter((n) => !inertBecause(n, { ...values, ...overrides }))
+    const rep = await loadReports(sent.map(path).filter((p) => p !== ''))
     setReports({ list: rep.reports, errors: rep.errors })
     if (!switched && (rep.reports.length || rep.errors.length)) setTab('digest')
   }
 
   // The message above the tabs when a run failed: the CLI's exit status and
   // its last error line, which may have scrolled out of the log.
-  const failed = (r: RunResult, what: string): void =>
-    setFailure(`${what} failed (${failText(r)})${lastError.current ? `: ${lastError.current}` : ''}`)
+  const failed = (r: RunResult, what: string): void => {
+    const why = lastError.current ?? lastLine.current
+    setFailure(`${what} failed (${failText(r)})${why ? `: ${why}` : ''}`)
+  }
 
   // run()/runBatch() are onClick-driven: nothing awaits them, so a rejecting
   // preview/species inside showResults would surface as an unhandled rejection.
@@ -390,21 +407,50 @@ export default function App(): JSX.Element {
     }
   }
 
+  // The tabs shown, in order; Digest only once there is something to show.
+  const tabs: Tab[] = [
+    'results',
+    'species',
+    ...(reports.list.length > 0 || reports.errors.length > 0 || tab === 'digest' ? (['digest'] as Tab[]) : [])
+  ]
+  // Arrow keys, Home and End move between the tabs (WAI-ARIA tabs pattern).
+  function onTabKey(e: KeyboardEvent<HTMLDivElement>): void {
+    const i = tabs.indexOf(tab)
+    const to =
+      e.key === 'ArrowRight' ? (i + 1) % tabs.length
+      : e.key === 'ArrowLeft' ? (i - 1 + tabs.length) % tabs.length
+      : e.key === 'Home' ? 0
+      : e.key === 'End' ? tabs.length - 1
+      : -1
+    if (to < 0) return
+    e.preventDefault()
+    setTab(tabs[to])
+    document.getElementById(`tab-${tabs[to]}`)?.focus()
+  }
+
   async function openResults(): Promise<void> {
     const p = await window.fastag.pickResults()
     if (p) setResults((r) => ({ path: p, gen: (r?.gen ?? 0) + 1 }))
   }
 
-  // Add one report to those shown, replacing one of the same kind.
+  // Add one report to those shown, replacing one of the same kind. A report
+  // of another input replaces all of them: one run's call next to another
+  // run's labels would read as one result.
   async function openReport(): Promise<void> {
     const p = await window.fastag.pickReport()
     if (!p) return
     const rep = await loadReports([p])
     if (rep.reports.length === 0 && rep.errors.length === 0) rep.errors.push(`${p} does not exist.`)
-    setReports((cur) => ({
-      list: [...cur.list.filter((r) => !rep.reports.some((n) => n.kind === r.kind)), ...rep.reports],
-      errors: rep.errors
-    }))
+    setReports((cur) => {
+      const input = (r: Report): string | undefined => value(r, 'run', 'input')
+      const fresh = rep.reports[0]
+      const other = fresh ? cur.list.filter((r) => input(r) !== input(fresh)) : []
+      const notes = other.length
+        ? [`${baseName(fresh.path)} is from another input (${input(fresh) ?? 'not stated'}); the reports of ${other.map((r) => input(r) ?? baseName(r.path)).filter((x, i, a) => a.indexOf(x) === i).join(', ')} were closed.`]
+        : []
+      const kept = cur.list.filter((r) => !other.includes(r) && !rep.reports.some((n) => n.kind === r.kind))
+      return { list: [...kept, ...rep.reports], errors: [...notes, ...rep.errors] }
+    })
     setTab('digest')
   }
 
@@ -657,37 +703,26 @@ export default function App(): JSX.Element {
             </div>
           )}
 
-          <div className="tabs" role="tablist">
-            <button
-              role="tab"
-              aria-selected={tab === 'results'}
-              className={tab === 'results' ? 'on' : ''}
-              onClick={() => setTab('results')}
-            >
-              Tags
-            </button>
-            <button
-              role="tab"
-              aria-selected={tab === 'species'}
-              className={tab === 'species' ? 'on' : ''}
-              onClick={() => setTab('species')}
-            >
-              Species
-              {species && !species.empty && <span className="count">{species.taxa.length}</span>}
-            </button>
-            {(reports.list.length > 0 || reports.errors.length > 0 || tab === 'digest') && (
+          <div className="tabs" role="tablist" aria-label="Results" onKeyDown={onTabKey}>
+            {tabs.map((t) => (
               <button
+                key={t}
+                id={`tab-${t}`}
                 role="tab"
-                aria-selected={tab === 'digest'}
-                className={tab === 'digest' ? 'on' : ''}
-                onClick={() => setTab('digest')}
+                aria-selected={tab === t}
+                aria-controls="tabpanel"
+                tabIndex={tab === t ? 0 : -1}
+                className={tab === t ? 'on' : ''}
+                onClick={() => setTab(t)}
               >
-                Digest
-                {reports.list.length > 0 && <span className="count">{reports.list.length}</span>}
+                {TAB_LABEL[t]}
+                {t === 'species' && species && !species.empty && <span className="count">{species.taxa.length}</span>}
+                {t === 'digest' && reports.list.length > 0 && <span className="count">{reports.list.length}</span>}
               </button>
-            )}
+            ))}
           </div>
 
+          <div className="tabpanel" id="tabpanel" role="tabpanel" aria-labelledby={`tab-${tab}`}>
           {tab === 'digest' ? (
             <div className="tablewrap">
               <DigestPanel reports={reports.list} errors={reports.errors} onOpen={openReport} />
@@ -718,6 +753,7 @@ export default function App(): JSX.Element {
               </div>
             </div>
           )}
+          </div>
         </section>
       </main>
     </div>

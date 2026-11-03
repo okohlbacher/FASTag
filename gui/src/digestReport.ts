@@ -173,6 +173,11 @@ export interface LogoColumn {
   bits: number
   /// Observations under the column; null for a model column.
   n: number | null
+  /// Information before the small-sample correction (equals bits for a model).
+  raw: number
+  /// Fewer observations than the call needs (or an N-end column the call
+  /// leaves out): drawn greyed.
+  faded: boolean
 }
 
 const uniform: Dist = Object.fromEntries(ALPHABET.map((a) => [a, 1 / ALPHABET.length]))
@@ -183,39 +188,52 @@ function normalize(d: Dist): Dist {
   return Object.fromEntries(ALPHABET.map((a) => [a, d[a] > 0 ? d[a] / s : 0]))
 }
 
-/// One logo column against background q: letter height f_a · Σ_b f_b log2(f_b/q_b).
-/// Residues with no background share are left out of the sum and the stack.
+/// Expected information of a column of @p n draws from the background itself,
+/// (s − 1) / (2 n ln 2) bits over s residues (Schneider et al. 1986): what a
+/// small sample shows with no motif at all.
+export function smallSampleBias(n: number, s = ALPHABET.length): number {
+  return n > 0 ? (s - 1) / (2 * n * Math.LN2) : 0
+}
+
+/// One logo column against background q: letter height f_a · I, where
+/// I = Σ_b f_b log2(f_b/q_b) less the small-sample bias for an observed
+/// column (n not null), clamped at 0. Residues with no background share are
+/// left out of the sum and the stack.
 export function logoColumn(label: string, weights: Dist | null, q: Dist | null, n: number | null): LogoColumn {
-  if (!weights) return { label, letters: [], bits: 0, n }
+  const blank = (raw = 0): LogoColumn => ({ label, letters: [], bits: 0, n, raw, faded: false })
+  if (!weights) return blank()
   const f = normalize(weights)
   const bg = normalize(q ?? uniform)
-  let bits = 0
-  for (const a of ALPHABET) if (f[a] > 0 && bg[a] > 0) bits += f[a] * Math.log2(f[a] / bg[a])
+  const s = ALPHABET.filter((a) => bg[a] > 0).length
+  let raw = 0
+  for (const a of ALPHABET) if (f[a] > 0 && bg[a] > 0) raw += f[a] * Math.log2(f[a] / bg[a])
+  const bits = n == null ? raw : Math.max(0, raw - smallSampleBias(n, s))
   // A model end copied from the background differs from it only by rounding.
-  if (!(bits > 1e-9)) return { label, letters: [], bits: 0, n }
+  if (!(bits > 1e-9)) return blank(raw > 1e-9 ? raw : 0)
   const letters = ALPHABET.filter((a) => f[a] > 0 && bg[a] > 0)
     .map((a) => ({ aa: a, bits: f[a] * bits }))
     .sort((x, y) => x.bits - y.bits || (x.aa < y.aa ? 1 : -1))
-  return { label, letters, bits, n }
+  return { label, letters, bits, n, raw, faded: false }
 }
 
 const sum = (d: Dist): number => Object.values(d).reduce((t, v) => t + v, 0)
 
 /// The observed logo P4..P1 | P1'..P4'. P positions use the C-end background,
-/// P' positions the N-end background.
+/// P' positions the N-end background. Columns with fewer than the report's
+/// tag_min observations are faded, and so are the P' columns when the call
+/// leaves out the N end.
 export function observedLogo(r: Report): LogoColumn[] {
   const qc = background(r, 'C')
   const qn = background(r, 'N')
-  return [
-    ...C_POSITIONS.map((p) => {
-      const c = positionCounts(r, 'C', p)
-      return logoColumn(p, sum(c) > 0 ? c : null, qc, sum(c))
-    }),
-    ...N_POSITIONS.map((p) => {
-      const c = positionCounts(r, 'N', p)
-      return logoColumn(p, sum(c) > 0 ? c : null, qn, sum(c))
-    })
-  ]
+  const tagMin = num(value(r, 'run', 'tag_min')) ?? 0
+  const nUnused = value(r, 'call', 'uses_nterm') === 'no'
+  const col = (end: 'C' | 'N', p: string, q: Dist | null): LogoColumn => {
+    const c = positionCounts(r, end, p)
+    const n = sum(c)
+    const out = logoColumn(p, n > 0 ? c : null, q, n)
+    return { ...out, faded: n < tagMin || (end === 'N' && nUnused) }
+  }
+  return [...C_POSITIONS.map((p) => col('C', p, qc)), ...N_POSITIONS.map((p) => col('N', p, qn))]
 }
 
 /// A model's logo drawn like the observed one: only P1 and P1' carry the
@@ -224,7 +242,7 @@ export function modelLogo(r: Report, model: string): LogoColumn[] | null {
   const c = modelDist(r, model, 'C')
   const n = modelDist(r, model, 'N')
   if (!c && !n) return null
-  const empty = (p: string): LogoColumn => ({ label: p, letters: [], bits: 0, n: null })
+  const empty = (p: string): LogoColumn => ({ label: p, letters: [], bits: 0, n: null, raw: 0, faded: false })
   return [
     ...C_POSITIONS.map((p) => (p === 'P1' ? logoColumn(p, c, background(r, 'C'), null) : empty(p))),
     ...N_POSITIONS.map((p) => (p === "P1'" ? logoColumn(p, n, background(r, 'N'), null) : empty(p)))
@@ -288,6 +306,20 @@ export interface GapPeak {
   explainedBy: string
   alternatives: string[]
   context: string
+}
+
+/// What the `background` run row names, in words.
+export function backgroundWords(token: string | undefined): string | null {
+  if (!token) return null
+  if (token === 'shipped_human') return 'the human reference proteome shipped with FASTag'
+  if (token === 'models_table') return 'the background in the model table'
+  if (token.startsWith('fasta:')) return `the residue composition of ${baseName(token.slice(6))}`
+  return token
+}
+
+/// The last path component, for either separator.
+export function baseName(p: string): string {
+  return p.split(/[\\/]/).pop() || p
 }
 
 export function gapPeaks(r: Report): GapPeak[] {

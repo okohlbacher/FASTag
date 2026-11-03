@@ -20,7 +20,7 @@
       "name": "digest_background_share",
       "type": "double",
       "default": "0.05",
-      "description": "Share of the background mixed into every protease model",
+      "description": "Share of the background mixed into every protease model (below 1)",
       "required": false,
       "toppAdvanced": true,
       "min": 0,
@@ -63,7 +63,7 @@
     {
       "name": "digest_window",
       "type": "double",
-      "default": "8.0e-03",
+      "default": "0.008",
       "description": "Mass window around a residue or label mass at the tag ends",
       "required": false,
       "toppAdvanced": true,
@@ -240,7 +240,7 @@
     {
       "name": "massgap_min_share",
       "type": "double",
-      "default": "5.0e-03",
+      "default": "0.005",
       "description": "Share of the placed spectra a gap peak needs",
       "required": false,
       "toppAdvanced": true,

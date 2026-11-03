@@ -78,6 +78,7 @@ parsing and logo arithmetic, Digest tab) and a typecheck: `npm test`,
 ## Packaging
 
 Release bundles carry the CLI, its dylib closure with a single `libomp` (which
-avoids OpenMP error #15) and the ~1 GB taxonomy inside the app; see
+avoids OpenMP error #15), the digest tables (`share/FASTag/digest`) and the
+~1 GB taxonomy inside the app; see
 [../doc/SIGNING-macos-gui.md](../doc/SIGNING-macos-gui.md). In dev those
 resources are machine-specific symlinks and are gitignored.

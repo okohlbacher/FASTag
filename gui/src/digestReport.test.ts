@@ -5,6 +5,8 @@ import labelTsv from './fixtures/label.tsv?raw'
 import massgapTsv from './fixtures/massgap.tsv?raw'
 import {
   ALPHABET,
+  backgroundWords,
+  baseName,
   digestCall,
   gapHistogram,
   gapPeaks,
@@ -15,6 +17,7 @@ import {
   observedLogo,
   parseReport,
   positionCounts,
+  smallSampleBias,
   topBins
 } from './digestReport'
 
@@ -72,10 +75,36 @@ describe('logo', () => {
   const uniform = Object.fromEntries(ALPHABET.map((a) => [a, 1]))
 
   it('gives two equal residues log2(19/2) bits against a uniform background', () => {
-    const c = logoColumn('P1', { K: 10, R: 10 }, uniform, 20)
+    const c = logoColumn('P1', { K: 10, R: 10 }, uniform, null)
     expect(c.bits).toBeCloseTo(Math.log2(19 / 2), 10)
     expect(c.letters.map((l) => l.aa).sort()).toEqual(['K', 'R'])
     for (const l of c.letters) expect(l.bits).toBeCloseTo(c.bits / 2, 10)
+  })
+
+  it('takes the small-sample bias off an observed column', () => {
+    const c = logoColumn('P1', { K: 10, R: 10 }, uniform, 20)
+    expect(c.raw).toBeCloseTo(Math.log2(19 / 2), 10)
+    expect(c.bits).toBeCloseTo(Math.log2(19 / 2) - 18 / (40 * Math.LN2), 10)
+    expect(smallSampleBias(20)).toBeCloseTo(18 / (40 * Math.LN2), 12)
+  })
+
+  it('draws nothing for a column of one observation', () => {
+    const c = logoColumn('P1', { K: 1 }, uniform, 1)
+    expect(c.raw).toBeCloseTo(Math.log2(19), 10)
+    expect(c.bits).toBe(0)
+    expect(c.letters).toEqual([])
+  })
+
+  it('greys columns below tag_min and the N end the call leaves out', () => {
+    const cols = observedLogo(digest)
+    expect(cols.slice(4).every((c) => c.faded)).toBe(true) // uses_nterm no
+    expect(cols.slice(0, 4).map((c) => c.faded)).toEqual(cols.slice(0, 4).map((c) => (c.n ?? 0) < 100))
+  })
+
+  it('names the background in words', () => {
+    expect(backgroundWords('shipped_human')).toMatch(/human reference proteome/)
+    expect(backgroundWords('fasta:/d/x/up.fasta')).toBe('the residue composition of up.fasta')
+    expect(baseName('C:\\d\\a.tsv')).toBe('a.tsv')
   })
 
   it('draws nothing where the column equals the background', () => {

@@ -24,9 +24,9 @@ const PLOT_H = 110
 const LEFT = 34
 const TOP = 8
 const AXIS_H = 34 // position labels and n
-// A bold sans glyph at font-size 100 is about 72 units tall and 62 wide.
+// A bold sans glyph at font-size 100 is about 72 units tall; its width is
+// set per letter with textLength, so W and M stay inside their column.
 const CAP = 72
-const ADV = 62
 
 interface Props {
   title: string
@@ -49,7 +49,7 @@ export default function SequenceLogo({ title, columns, maxBits, showN = false }:
   const ticks = top <= 4 ? Array.from({ length: Math.floor(top) + 1 }, (_, i) => i) : [0, Math.floor(top / 2), Math.floor(top)]
   const summary = columns
     .filter((c) => c.letters.length)
-    .map((c) => `${c.label} ${c.letters[c.letters.length - 1].aa} ${c.bits.toFixed(2)} bits`)
+    .map((c) => `${c.label} ${c.letters[c.letters.length - 1].aa} ${c.bits.toFixed(2)} bits${c.faded ? ' (few tag ends)' : ''}`)
     .join(', ')
 
   return (
@@ -89,7 +89,7 @@ export default function SequenceLogo({ title, columns, maxBits, showN = false }:
           let base = TOP + PLOT_H
           const x = xOf(i) + COL_W / 2
           return (
-            <g key={c.label}>
+            <g key={c.label} className={c.faded ? 'faded' : undefined}>
               {c.letters.map((l) => {
                 const h = (l.bits / top) * PLOT_H
                 const y = base
@@ -100,8 +100,10 @@ export default function SequenceLogo({ title, columns, maxBits, showN = false }:
                     key={l.aa}
                     className={`aa ${GROUP[l.aa] ?? 'hydro'}`}
                     fontSize={100}
-                    textAnchor="middle"
-                    transform={`translate(${x} ${y}) scale(${((COL_W - 4) / ADV).toFixed(4)} ${(h / CAP).toFixed(4)})`}
+                    x={-(COL_W - 4) / 2}
+                    textLength={COL_W - 4}
+                    lengthAdjust="spacingAndGlyphs"
+                    transform={`translate(${x} ${y}) scale(1 ${(h / CAP).toFixed(4)})`}
                   >
                     <title>{`${l.aa} at ${c.label}: ${l.bits.toFixed(3)} bits`}</title>
                     {l.aa}
@@ -121,5 +123,26 @@ export default function SequenceLogo({ title, columns, maxBits, showN = false }:
         })}
       </svg>
     </figure>
+  )
+}
+
+const LEGEND: [string, string][] = [
+  ['acid', 'acidic (D, E)'],
+  ['base', 'basic (K, R, H)'],
+  ['polar', 'polar (S, T, Y, C, N, Q, G)'],
+  ['hydro', 'hydrophobic (A, V, L, M, F, W, P)']
+]
+
+/// The residue colour groups, so they are not told apart by colour alone.
+export function LogoLegend(): JSX.Element {
+  return (
+    <ul className="logo-legend" aria-label="Residue colours">
+      {LEGEND.map(([cls, words]) => (
+        <li key={cls}>
+          <span className={`swatch ${cls}`} aria-hidden="true" />
+          {words}
+        </li>
+      ))}
+    </ul>
   )
 }

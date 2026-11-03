@@ -1,6 +1,8 @@
 import { useState, type JSX } from 'react'
-import SequenceLogo from './SequenceLogo'
+import SequenceLogo, { LogoLegend } from './SequenceLogo'
 import {
+  backgroundWords,
+  baseName,
   digestCall,
   fmt,
   gapHistogram,
@@ -23,8 +25,28 @@ const REASON: Record<string, string> = {
   low_resolution: 'the fragment tolerance is in Da',
   timstof: 'the run is from a timsTOF',
   ms2_scan_window: 'the MS2 scan window starts above y1 of K',
-  few_tags: 'too few terminal tags'
+  ms2_first_peak: 'the first MS2 peaks lie above y1 of K',
+  few_tags: 'too few terminal tags',
+  nonfinite_score: 'a residue has probability 0 under a model',
+  tie: 'two models of different classes fit equally well'
 }
+
+const reasonWords = (k: string): string => REASON[k] ?? k
+
+/// Section heading with the report's file name, so reports of different
+/// runs cannot be mistaken for one.
+function Heading({ id, title, report }: { id: string; title: string; report: Report }): JSX.Element {
+  return (
+    <h2 id={id}>
+      {title}
+      <span className="src mono" title={report.path}>
+        {baseName(report.path)}
+      </span>
+    </h2>
+  )
+}
+
+const ALT_SHOWN = 3
 
 const BIN_LIMIT = 40
 
@@ -90,12 +112,13 @@ function Digest({ report }: { report: Report }): JSX.Element {
     1,
     ...[observed, called ?? [], runner ?? []].flat().map((c) => c.bits)
   )
-  const bg = value(report, 'run', 'background')
+  const bg = backgroundWords(value(report, 'run', 'background'))
+  const tagMin = value(report, 'run', 'tag_min')
   const hasBg = section(report, 'background').length > 0
   const nocall = section(report, 'nocall')
   return (
     <section className="dg-block" aria-labelledby="dg-digest">
-      <h2 id="dg-digest">Digest</h2>
+      <Heading id="dg-digest" title="Digest" report={report} />
       <div className="headline">
         {call.status === 'call' ? (
           <>
@@ -120,8 +143,10 @@ function Digest({ report }: { report: Report }): JSX.Element {
               <span className="taxon">No call</span>
             </div>
             <div className="sub">
-              reason: {call.reason ? (REASON[call.reason] ?? call.reason) : 'not stated'}
-              {call.fired.length > 1 && <> · also {call.fired.filter((f) => f !== call.reason).join(', ')}</>}
+              reason: {call.reason ? reasonWords(call.reason) : 'not stated'}
+              {call.fired.length > 1 && (
+                <> · also {call.fired.filter((f) => f !== call.reason).map(reasonWords).join(', ')}</>
+              )}
             </div>
           </>
         ) : (
@@ -136,11 +161,15 @@ function Digest({ report }: { report: Report }): JSX.Element {
           <SequenceLogo title="Observed" columns={observed} maxBits={maxBits} showN />
           {called && <SequenceLogo title={`Called: ${call.model}`} columns={called} maxBits={maxBits} />}
           {runner && <SequenceLogo title={`Runner-up: ${call.runnerUp}`} columns={runner} maxBits={maxBits} />}
+          <LogoLegend />
           <p className="footnote">
             Letter height is the residue's share times the column's information in bits against the background
-            {bg ? ` (${bg})` : ''}
+            {bg ? `, ${bg}` : ''}
             {hasBg ? '' : '; the report carries no background, so a uniform one is used'}. P positions use the
-            C-terminal background, P′ positions the N-terminal one.
+            C-terminal background, P′ positions the N-terminal one. Observed columns are corrected for the
+            information a small sample shows by chance, (s − 1) / (2n ln 2) bits; columns with fewer than{' '}
+            {tagMin ?? 'the minimum of'} tag ends are greyed, as are the P′ columns when the call leaves out the N
+            end. Model logos show the model distributions before mixing with the background.
             {call.model && !called && ' The report carries no model distributions, so the model logos are not drawn.'}
           </p>
         </div>
@@ -163,12 +192,15 @@ function Label({ report }: { report: Report }): JSX.Element {
   const heavy = section(report, 'heavy')
   return (
     <section className="dg-block" aria-labelledby="dg-label">
-      <h2 id="dg-label">Labels</h2>
+      <Heading id="dg-label" title="Labels" report={report} />
+      {value(report, 'run', 'low_resolution') === 'yes' && (
+        <div className="caveat">The fragment tolerance is in Da, so the label windows do not hold.</div>
+      )}
       {labels.length > 0 && (
         <table className="taxa narrow">
           <thead>
             <tr>
-              <th>N-terminal label</th>
+              <th>label</th>
               <th className="num">tag ends</th>
               <th className="num">at +0.5 Da</th>
               <th className="num">share of tags</th>
@@ -198,7 +230,7 @@ function Label({ report }: { report: Report }): JSX.Element {
             {heavy.map((h) => (
               <tr key={h.key}>
                 <td>{h.key}</td>
-                <td className="num">{h.value}</td>
+                <td className="num">{num(h.value) != null ? fmt(num(h.value), 4) : h.value}</td>
               </tr>
             ))}
           </tbody>
@@ -225,7 +257,7 @@ function MassGap({ report }: { report: Report }): JSX.Element {
   const silac = value(report, 'silac', 'call')
   return (
     <section className="dg-block" aria-labelledby="dg-gap">
-      <h2 id="dg-gap">Mass gaps</h2>
+      <Heading id="dg-gap" title="Mass gaps" report={report} />
       {top.length > 0 && (
         <div className="sub">
           Most frequent modifications: {top.map((t) => t.value).join(', ')}
@@ -250,7 +282,10 @@ function MassGap({ report }: { report: Report }): JSX.Element {
                 <td className="num">{fmt(p.delta, 4)}</td>
                 <td className="num">{fmt(p.spectra)}</td>
                 <td className={p.explainedBy === 'none' ? 'dim' : ''}>{p.explainedBy}</td>
-                <td className="dim">{p.alternatives.join(', ')}</td>
+                <td className="dim alts" title={p.alternatives.join(', ')}>
+                  {p.alternatives.slice(0, ALT_SHOWN).join(', ')}
+                  {p.alternatives.length > ALT_SHOWN && ` +${p.alternatives.length - ALT_SHOWN} more`}
+                </td>
                 <td className="dim">{p.context}</td>
               </tr>
             ))}
