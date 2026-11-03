@@ -134,6 +134,12 @@ jobs:
           fi
           git checkout -q "$OPENMS_REF"
           test -f src/openms/include/OpenMS/FORMAT/MzPeakFile.h
+          # libOpenMS turns MSVC's unused-parameter/-variable warnings into
+          # errors, and LPWrapper.cpp includes the HiGHS headers OpenMS fetches,
+          # which have unused parameters (C4100 in Highs.h). Warnings only:
+          # they stay warnings here.
+          grep -q '"/we4100"' src/openms/CMakeLists.txt
+          sed -i -e 's#"/we4100"#"/w14100"#' -e 's#"/we4189"#"/w14189"#' src/openms/CMakeLists.txt
 
       - name: Build and install OpenMS
         if: steps.cache-openms.outputs.cache-hit != 'true'
