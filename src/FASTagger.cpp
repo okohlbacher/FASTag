@@ -36,9 +36,11 @@ namespace FASTag
   /// the knob worth turning.
   static constexpr double PEAK_WINDOW_MZ = 100.0;
 
-  /// Cap on spellings emitted for one gap. At the tolerances this tool is used
-  /// at the real count is 1 composition x 2 orders; the cap only stops a
-  /// pathologically wide tolerance from turning one path into hundreds of rows.
+  /// Cap on spellings emitted for one gap, admitted in pair-mass order. Up to
+  /// ~0.02 Da a window holds at most 7 spellings, so the cap never binds; from
+  /// ~0.05 Da (0.3 Da ion-trap settings, high-m/z 2+ fragments) a few windows
+  /// (S+R, T+R) hold 10 and lose their heaviest compositions. It stops a wide
+  /// tolerance from turning one path into hundreds of rows.
   static constexpr int MAX_GAP_SPELLINGS = 8;
 
   /// Peaks above precursor mass + proton + this (Da) are dropped.
@@ -251,9 +253,10 @@ namespace FASTag
     // Sampled, with an explicit seed -- DirecTag leaves this unseeded, so two of
     // its runs disagree with each other.
     //
-    // Sampled in UNITS OF THE TOLERANCE, on [-1, 1], and the observed SSE is
-    // divided by tol^2 before lookup, so one null is valid at every m/z and in
-    // both tolerance units. (Sampling on [-frag_tol, frag_tol] would, in ppm,
+    // Sampled in UNITS OF THE TOLERANCE, on [-1, 1], and each observed
+    // deviation is divided by the tolerance at its own peak before lookup
+    // (scorePath), so one null is valid at every m/z and in both tolerance
+    // units. (Sampling on [-frag_tol, frag_tol] would, in ppm,
     // span +-20 Da against observed deviations of ~1e-4 Da, pinning every tag
     // to the null's floor.)
     mz_null_.resize(static_cast<size_t>(k_max_ - k_min_ + 1));
@@ -1078,8 +1081,12 @@ namespace FASTag
       }
     }
 
-    // E-value: expected number of tags this good by chance. Valid under arbitrary
-    // dependence between tags, by linearity of expectation.
+    // E-value: the combined p-value times the number of candidates. It would be
+    // the expected number of tags this good by chance (by linearity of
+    // expectation, whatever the dependence between tags) if each p-value were
+    // calibrated; fisher() says why it is not, and on random spectra the count
+    // is off in either direction depending on tolerance and gaps. A ranking
+    // score, therefore.
     //
     // Gapped tags additionally pay for the larger space their gap searched
     // (Param::gap_penalty). n_seeds cannot do that: it is one factor for every

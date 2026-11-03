@@ -10,7 +10,8 @@ the spectra whose tags occur in sequences you supply.
 
 A reimplementation of the [DirecTag](https://doi.org/10.1021/pr800154p)
 algorithm as an [OpenMS](https://www.openms.de) TOPP tool, parallelised and
-with memory independent of file size. The citation — Tabb et al.,
+with memory bounded independently of file size on the default path (see
+Performance for the bound and the options that keep per-run state). The citation — Tabb et al.,
 *J. Proteome Res.* 2008, 7:3838 — is for that original DirecTag paper; FASTag
 has no separate publication of its own.
 
@@ -42,12 +43,16 @@ edges — read as a short partial sequence.
 **Seeding.** Every walk of length `-tag_length` (default 3 residues) is a
 candidate seed.
 
-**Scoring.** Each candidate is scored on three independent properties, combined
-by Fisher's method into a single chi-squared-derived E-value:
+**Scoring.** Each candidate is scored on three properties, combined by Fisher's
+method as if they were independent (they are not -- all three come from the
+same peaks, so the chi-squared tail is optimistic) into a single E-value, the
+combined p-value times the number of candidates the spectrum produced:
 
 - **Intensity** — how unlikely it is that peaks this strong would form a valid
   tag by chance, given the spectrum's overall intensity distribution.
-- **m/z fidelity** — how closely each edge matches its residue mass.
+- **m/z fidelity** — how closely the peaks fit ideal residue masses: the
+  spread of the peaks back-projected onto one position, each deviation in
+  units of the tolerance at its own peak.
 - **Complementarity** — whether a tag's flanking masses are corroborated by a
   complementary ion elsewhere in the spectrum (b/y pairs summing to the
   precursor mass).
@@ -55,17 +60,27 @@ by Fisher's method into a single chi-squared-derived E-value:
 DirecTag computes the intensity term by enumerating every `C(n, k)` subset of
 peak ranks — combinatorial in tag length, and impractical past length 4 or 5.
 FASTag computes the same quantity as a restricted-partition count via dynamic
-programming, `O(k·n·s_max)` — polynomial instead of combinatorial, verified
-identical to exhaustive enumeration. This is what makes tag lengths above four
-practical at all.
+programming, `O(k·n·s_max)` — polynomial instead of combinatorial. The
+recurrence equals the enumeration exactly; the tests check it against
+exhaustive enumeration for k ≤ 5 and n ≤ 12, and the tables are computed in
+double precision (exact counts while C(n,k) ≤ 2^53, rounded beyond) and stored
+as float. This is what makes tag lengths above four practical at all.
+
+The E-value ranks tags; it is not a calibrated expected count. On random
+spectra (150 uniform peaks) it overstates significance about 1.5x at 0.5 Da
+with gaps off and is strongly conservative at 0.02 Da, so read it as a score.
 
 **Extension** (`-extension`). A seed is a *minimum* length: each scored seed can
 be walked further along the graph at either end and rescored at its realised
 length, recovering longer tags a fixed seed length alone would miss.
 
 **Gaps** (`-gaps 1`). A tag can cross one missing peak — two peaks separated by
-a two-residue combined mass bridge the hole, with every amino-acid composition
-matching that sum spelled out as a candidate. On by default, because it lets a
+a two-residue combined mass, with no peak between them that an ordinary
+two-step path would use, bridge the hole, with up to eight spellings (both
+orders of each composition within the tolerance, in order of pair mass)
+spelled out as candidates. At high-resolution tolerances a window holds at
+most seven; at 0.3 Da a few windows (S+R, T+R) exceed the cap and lose their
+heaviest compositions. On by default, because it lets a
 tag continue past a missing fragment ion; how many more identified spectra gain a
 correctly placed tag with gaps on is being measured on public data (see
 Validation). Because a gapped tag asserts an unobserved split, it
@@ -195,9 +210,12 @@ it cannot know the analyser, so the setting is yours.
 
 `-in` accepts mzML or [mzPeak](https://github.com/OpenMS/mzpeak);
 `-out` is TSV; `-out_spectra` writes mzML or mzPeak, chosen by extension. All
-four in/out combinations work, and which container you use does not change the
-tags: a run read as mzPeak gives the same spectra as the same run read as mzML,
-and a run written to mzPeak and tagged again reproduces the original tag set.
+four in/out combinations work, and on centroided input the container does not
+change the tags: a run read as mzPeak gives the same spectra as the same run
+read as mzML, and a run written to mzPeak and tagged again reproduces the
+original tag set. This is checked byte for byte in ctest on archives FASTag
+writes itself, and outside ctest on public runs converted by mzpeak-convert
+(both layouts). Profile MS2 differs; see Performance.
 
 An input FASTag cannot decode at all — an mzPeak archive in an encoding
 OpenMS does not support, say — ends the run with the reader's own message on
@@ -207,7 +225,8 @@ OpenMS does not support, say — ends the run with the reader's own message on
 
 FASTag reads the mzML index directly and takes each spectrum's metadata from the
 same XML it decodes for peaks, so there is no serial metadata pass before
-tagging starts and memory tracks `-threads` rather than the file.
+tagging starts and memory does not grow with the file beyond a fixed buffer
+(see Performance).
 
 **A file with no index, or a stale one** — a tool edited it without rewriting
 the index — has its spectrum offsets rebuilt by a parallel scan and is then read
@@ -269,11 +288,11 @@ reporting a clean run over an empty file.
 | `-no_deisotope` | off | Do not collapse isotope clusters to their monoisotopic peak, and do not move multiply-charged fragments onto the singly-charged scale, before peak selection |
 | `-fragment_tolerance <value>` | 20 | Fragment mass tolerance |
 | `-fragment_tolerance_unit <ppm\|Da>` | ppm | Tolerance unit |
-| `-max_peaks <n>` | 400 | Peaks retained per spectrum; 0 uses the internal ceiling of 1024, not unlimited. The ceiling for `-peaks_per_window` |
+| `-max_peaks <n>` | 400 | Peaks retained per spectrum, at most 1024; 0 uses that ceiling, not unlimited. The ceiling for `-peaks_per_window` |
 | `-peaks_per_window <n>` | 10 | Keep this many peaks per 100 Da window instead of the strongest `-max_peaks` overall; 0 disables |
 | `-max_tags <n>` | 50 | Tags reported per spectrum; 0 = unlimited |
 | `-max_evalue <value>` | 20 | E-value cutoff; 0 disables |
-| `-gap_penalty <value>` | 100 | Rank gapped tags as if their E-value were this many times worse. Affects order only, never which tags are reported. 1 disables |
+| `-gap_penalty <value>` | 100 | Rank gapped tags as if their E-value were this many times worse. Never removes a tag at the `-max_evalue` cutoff (applied to the unpenalised value), but under `-max_tags` it decides which tags fill the capped slots, and the printed `evalue` of a gapped row includes it. 1 disables |
 | `-isobaric_tolerance <value>` | 0.04 | Isobaric residue-pair substitution tolerance when matching `-fasta`; 0 requires exact strings |
 | `-min_filter_length <n>` | 0 | Ignore tags shorter than this when matching `-fasta`; 0 derives a floor from database size |
 | `-orientation <both\|forward>` | both | Also match a tag reversed (b-ion reading), or only as written |
@@ -336,7 +355,9 @@ One TSV row per tag: `spectrum` (native ID), `tag` (sequence), `length`,
 `charge` (fragment charge), `nterm_mass` / `cterm_mass` (flanking masses,
 4-decimal precision), `extended` / `gapped` (flags), `evalue`, `min_conf` /
 `mean_conf` (per-residue confidence, see below), and `fasta_hit`
-(`fwd` / `rev` / `-`, present only with `-fasta`).
+(`fwd` / `rev` / `-`, present only with `-fasta`). The `evalue` of a gapped row
+is the ranking value, E × `-gap_penalty`, so it can exceed `-max_evalue`; divide
+by the penalty for the raw E-value.
 
 **Tag confidence.** The `evalue` is the primary, validated confidence — lower is
 better, and on real identifications (PXD000001) it separates correct from
@@ -530,7 +551,11 @@ Each tag's k-mers are looked up in a reduced reference index; the taxa carrying
 the whole tag vote, votes roll up the NCBI taxonomy, and each node is tested
 against its background breadth. Output is a ranked TSV
 (`rank taxid name observed adjusted expected log_pvalue qvalue`), one call per
-taxon at `-species_rank` (genus by default), ordered by `adjusted`.
+taxon at `-species_rank` (genus by default), ordered by `adjusted` and showing
+at most 50 rows. `adjusted` is the observed spectrum count, or with
+`-species_deconvolve` the deconvolved estimate; it does not use `expected`, so
+on a small or low-resolution run a large proteome that collects chance 7-mer
+hits can outrank the true genus (q stays the better guide there).
 
 **Only ungapped tags vote.** A gap spells two residues from one summed mass, and
 an exact k-mer lookup cannot tell an inferred residue from an observed one — on
@@ -623,9 +648,14 @@ mzML path tags profile samples as they are, while the archive was centroided
 when written, so FASTag reads peaks and finds more tags (2,032,961 against
 1,376,019). Centroid before tagging profile mzML, or read the archive.
 
-Output is identical at every thread count, and memory is O(threads) rather than
-O(file) on the mzML path. `-out_spectra` is the other exception, since it holds one slot per input
-spectrum.
+Output is identical at every thread count (`threads_test` checks every output
+on the fixture). Row memory on the mzML path is bounded by a ring of three
+blocks of 65,536 spectra, so it grows with the file up to ~196,000 MS2 spectra
+and stays flat beyond; it does not depend on the thread count. Some options
+keep per-run state that grows with the run: `-out_spectra` (one slot per input
+spectrum), `-species` (every reported ungapped tag per spectrum, until the
+end), `-recon_id_out` (every identification) and `-entrapment_fasta` (an
+E-value and a flag per row).
 
 **The defaults favour recall over speed.** For the fastest possible run, or to
 match a tool with no equivalent of these, turn them off:
@@ -648,14 +678,22 @@ at 98.05%. These numbers were measured with FASTag releases before 1.4; see
 comparison with the reference implementation and `tools/pxd000001_truth.py`
 for the scorer.
 
+The numbers in this section were measured before the scoring and
+preprocessing fixes of November 2026 (m/z fidelity normalised per peak, no gap
+edge across a present peak, scale-invariant deisotoping that merges 1+/2+
+copies), which change E-values and the reported sets; they are being
+re-measured with the benchmarks below.
+
 The effect of the defaults (deisotoping and one gap) on how many identified
 spectra gain a correctly placed tag is being measured for the current release
 against database-search identifications on several public PXD runs.
 
-`ctest` covers the rank-sum DP against exhaustive enumeration, end-to-end tag
-recovery from synthetic spectra, flanking-mass placement, extension, gap
-ordering with a negative control, per-row mass closure, determinism, the
-sequence filter, that `-gap_penalty` reorders without ever removing a tag, and
+`ctest` covers the rank-sum DP against exhaustive enumeration (small k and n),
+end-to-end tag recovery from synthetic spectra, flanking-mass placement,
+extension, gap ordering with a negative control, per-row mass closure,
+repeat and thread-count determinism (every output, mzML and mzPeak input), the
+sequence filter, that `-gap_penalty` never removes a tag at the E-value cutoff
+(uncapped), and
 the digest, label and mass-gap reports (`digest_test` against prose-auto
 0.1.3's functions on synthetic tables, `digest_cli_test` end to end).
 
@@ -669,8 +707,9 @@ acquisitions' peak count and ladder edge density (see
 
 It shows that gapped tags take **95% of rank-1 slots while being 3.6x less
 likely to be correct** — enabling gaps makes the single best tag worse even as
-it doubles total recall. `-gap_penalty` (default 100) fixes the ordering
-without filtering anything out:
+it doubles total recall. `-gap_penalty` (default 100) fixes the ordering; it
+filters nothing at the E-value cutoff, and under `-max_tags` it changes which
+tags fill the slots (hence the small change in total recall):
 
 | astral profile, TL=4 | rank-1 | top-5 | total recall |
 |---|---|---|---|
