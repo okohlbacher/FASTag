@@ -27,6 +27,7 @@
 #include <OpenMS/KERNEL/MSSpectrum.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <random>
 #include <set>
@@ -831,6 +832,48 @@ int main()
             c.pep.c_str(), c.dropped.c_str(), c.kept.c_str(), got.c_str());
     }
     std::printf("18. a full gap budget cuts isobaric groups by spelling (SL over VT, DQ over NE)\n");
+  }
+
+  // 19. m/z fidelity is calibrated per peak in ppm: no m/z dependence
+  //
+  // Independent +-10 ppm errors on every peak, 20 ppm tolerance. The SSE used
+  // to be divided by the tolerance at the tag's LOWEST peak, so tags starting
+  // at low m/z (whose later peaks have several times that tolerance) read up
+  // to ~16x the true SSE and their p_mzfidelity sat near 1 (mean ~0.7 below
+  // 300 m/z against ~0.1 above 1000). Per-peak normalisation makes it flat.
+  {
+    const std::string pep = "GASPVTLNDQKEMHFRYWGASPVTLNDK";
+    const AASequence aa = AASequence::fromString(pep);
+    double pmz = 0;
+    synth(pep, 0, 1, pmz);
+    FASTag::Param p;
+    p.frag_tol = 20; p.tol_ppm = true; p.complement_tol = 0.02;
+    p.tag_length = 4; p.max_tag_count = 0; p.max_evalue = 0;
+    const FASTag::Tables tab(p);
+    std::mt19937 rng(7);
+    std::uniform_real_distribution<double> err(-10e-6, 10e-6);
+    double lo_sum = 0, hi_sum = 0;
+    int lo_n = 0, hi_n = 0;
+    for (int rep = 0; rep < 60; ++rep)
+    {
+      MSSpectrum y;
+      for (size_t i = 1; i < aa.size(); ++i)
+      {
+        const double mz = aa.getSuffix(i).getMonoWeight(Residue::YIon, 1);
+        y.emplace_back(mz * (1.0 + err(rng)), 0.5 + 0.01 * static_cast<double>(i));
+      }
+      y.sortByPosition();
+      for (const auto& t : FASTag::tagSpectrum(y, pmz, 2, p, tab))
+      {
+        if (t.charge != 1 || t.gapped || t.n_res != 4) continue;
+        if (t.low_mz < 450) { lo_sum += t.p_mzfidelity; ++lo_n; }
+        else if (t.low_mz > 1500) { hi_sum += t.p_mzfidelity; ++hi_n; }
+      }
+    }
+    CHECK(lo_n > 50 && hi_n > 50, "too few tags (%d low, %d high); the test asserts nothing", lo_n, hi_n);
+    const double lo = lo_n ? lo_sum / lo_n : 0, hi = hi_n ? hi_sum / hi_n : 1;
+    CHECK(lo < 2.0 * hi, "p_mzfidelity depends on m/z: mean %.3f below 450 m/z vs %.3f above 1500", lo, hi);
+    std::printf("19. m/z fidelity in ppm is flat: mean p %.3f (low m/z) vs %.3f (high)\n", lo, hi);
   }
 
   std::printf(failures ? "\n%d FAILURES\n" : "\nall checks passed\n", failures);

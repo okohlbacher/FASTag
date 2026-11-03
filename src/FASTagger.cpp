@@ -633,12 +633,31 @@ namespace FASTag
         est[static_cast<size_t>(i) + 1] = s.spec[peaks[static_cast<size_t>(i) + 1]].getMZ() - cum;
       }
       const double avg = std::accumulate(est.begin(), est.end(), 0.0) / k;
+      // Express each deviation in tolerance units, so the null is scale-free and
+      // one table serves every m/z and both tolerance modes. In ppm the
+      // tolerance is each PEAK's own: a back-projected estimate carries the
+      // absolute error of the peak it came from, and a tag spanning 150..600
+      // m/z holds peaks whose tolerances differ 4x. Dividing every deviation
+      // by the tolerance at the first peak inflated the SSE up to ~16x for
+      // low-m/z tags and pushed their p_mzfidelity toward 1 (review F1). In
+      // Da the tolerance is one constant, and the arithmetic is unchanged.
       double sse = 0;
-      for (double e : est) { const double d = e - avg; sse += d * d; }
-      // Express the deviation in tolerance units, so the null is scale-free and
-      // one table serves every m/z and both tolerance modes.
-      const double tol = tolAt(p, avg);
-      t.p_mzfidelity = tab.mzFidelityP(k, tol > 0 ? sse / (tol * tol) : sse);
+      if (p.tol_ppm)
+      {
+        for (int i = 0; i < k; ++i)
+        {
+          const double ti = tolAt(p, s.spec[peaks[static_cast<size_t>(i)]].getMZ());
+          const double d = (est[static_cast<size_t>(i)] - avg) / (ti > 0 ? ti : 1.0);
+          sse += d * d;
+        }
+        t.p_mzfidelity = tab.mzFidelityP(k, sse);
+      }
+      else
+      {
+        for (double e : est) { const double d = e - avg; sse += d * d; }
+        const double tol = tolAt(p, avg);
+        t.p_mzfidelity = tab.mzFidelityP(k, tol > 0 ? sse / (tol * tol) : sse);
+      }
 
       int ranksum = 0, n_compl = 0;
       for (int i = 0; i < k; ++i)
