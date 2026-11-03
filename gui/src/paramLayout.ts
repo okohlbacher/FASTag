@@ -70,7 +70,7 @@ export interface Section {
 ///
 /// One flat list of sections, grouped by content. There is no core-vs-advanced
 /// split: nothing in the tool supports that judgement.
-const LAYOUT: Section[] = [
+export const SECTIONS: Section[] = [
   {
     title: 'Spectra',
     blurb: 'Which spectra are read, and which peaks survive preprocessing.',
@@ -314,36 +314,6 @@ export const HIDDEN: Record<string, string> = {
   stream: 'stdin/stdout resident mode; meaningless under a GUI'
 }
 
-/// Options of FASTag 1.8.0 placed in the layout before the manifest carries
-/// them. Each is left out of the form while the manifest lacks it and appears
-/// once `npm run params` regenerates the manifest from a binary that has it.
-export const UPCOMING = new Set<string>([
-  'digest_out',
-  'label_out',
-  'digest_models',
-  'digest_tag_min',
-  'digest_window',
-  'digest_background_share',
-  'digest_silac_min',
-  'massgap_out',
-  'massgap_window',
-  'massgap_window_da',
-  'massgap_min_spectra',
-  'massgap_min_share',
-  'massgap_min_bin',
-  'massgap_max_mods',
-  'massgap_top',
-  'massgap_silac_share',
-  'massgap_silac_min'
-])
-
-const present = (n: string): boolean => PARAM_BY_NAME.has(n) || !UPCOMING.has(n)
-
-/// The form: the layout minus upcoming options the manifest does not have yet.
-export const SECTIONS: Section[] = LAYOUT.map((s) => ({ ...s, params: s.params.filter(present) })).filter(
-  (s) => s.params.length > 0
-)
-
 /// The parameters actually shown, and so the only ones a run may send. HIDDEN
 /// entries are not merely invisible: several are not settable at all (`-version`
 /// records the tool's version in the INI and the CLI rejects it as an option),
@@ -364,7 +334,7 @@ export function unplacedParams(): string[] {
 export function unknownParams(): string[] {
   return [
     ...RENDERED,
-    ...Object.keys(DEPENDS).filter(present),
+    ...Object.keys(DEPENDS),
     ...SECTIONS.flatMap((s) => (s.master ? [s.master] : []))
   ].filter((n) => !PARAM_BY_NAME.has(n))
 }

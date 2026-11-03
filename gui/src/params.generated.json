@@ -17,6 +17,59 @@
       "toppAdvanced": false
     },
     {
+      "name": "digest_background_share",
+      "type": "double",
+      "default": "0.05",
+      "description": "Share of the background mixed into every protease model",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0,
+      "max": 1
+    },
+    {
+      "name": "digest_models",
+      "type": "input-file",
+      "default": "",
+      "description": "Protease model table for -digest_out (columns model, class, end, residue, freq). Default: the shipped cleavage-rule models",
+      "required": false,
+      "toppAdvanced": false
+    },
+    {
+      "name": "digest_out",
+      "type": "output-file",
+      "default": "",
+      "description": "Report the terminal residues of the tags (ungapped, E-value <= 1) and the protease call they support, with its margin or the reason for no call",
+      "required": false,
+      "toppAdvanced": false
+    },
+    {
+      "name": "digest_silac_min",
+      "type": "int",
+      "default": "50",
+      "description": "K- and R-terminal tag ends each before -label_out's heavy shares are gated in",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
+    },
+    {
+      "name": "digest_tag_min",
+      "type": "int",
+      "default": "100",
+      "description": "Tag ends needed for a protease call; the N-terminal ends count from as many",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 1
+    },
+    {
+      "name": "digest_window",
+      "type": "double",
+      "default": "8.0e-03",
+      "description": "Mass window around a residue or label mass at the tag ends",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
+    },
+    {
       "name": "diversity",
       "type": "bool",
       "default": "false",
@@ -150,12 +203,110 @@
       "toppAdvanced": false
     },
     {
+      "name": "label_out",
+      "type": "output-file",
+      "default": "",
+      "description": "Report N-terminal isobaric label gaps (TMT, TMTpro, iTRAQ4) and the heavy Lys8/Arg10 shares of the tag ends",
+      "required": false,
+      "toppAdvanced": false
+    },
+    {
       "name": "log",
       "type": "string",
       "default": "",
       "description": "Name of log file (created only when specified)",
       "required": false,
       "toppAdvanced": true
+    },
+    {
+      "name": "massgap_max_mods",
+      "type": "int",
+      "default": "3",
+      "description": "Modifications combined to explain a gap",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 1,
+      "max": 4
+    },
+    {
+      "name": "massgap_min_bin",
+      "type": "int",
+      "default": "2",
+      "description": "Spectra a -delta_out row needs to take part in the gap peaks",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 1
+    },
+    {
+      "name": "massgap_min_share",
+      "type": "double",
+      "default": "5.0e-03",
+      "description": "Share of the placed spectra a gap peak needs",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
+    },
+    {
+      "name": "massgap_min_spectra",
+      "type": "int",
+      "default": "20",
+      "description": "Spectra a gap peak needs",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
+    },
+    {
+      "name": "massgap_out",
+      "type": "output-file",
+      "default": "",
+      "description": "Report the -delta_out mass-gap distribution (requires -recon_out): Cys alkylation counts, gap peaks explained as combinations of Unimod modifications, and SILAC labels among them",
+      "required": false,
+      "toppAdvanced": false
+    },
+    {
+      "name": "massgap_silac_min",
+      "type": "int",
+      "default": "500",
+      "description": "Shifted spectra a SILAC call needs",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
+    },
+    {
+      "name": "massgap_silac_share",
+      "type": "double",
+      "default": "0.08",
+      "description": "Share of the shifted spectra a SILAC label needs",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
+    },
+    {
+      "name": "massgap_top",
+      "type": "int",
+      "default": "5",
+      "description": "Modifications listed by share",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
+    },
+    {
+      "name": "massgap_window",
+      "type": "double",
+      "default": "0.02",
+      "description": "Gap window of -massgap_out on a ppm run",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
+    },
+    {
+      "name": "massgap_window_da",
+      "type": "double",
+      "default": "0.5",
+      "description": "Gap window of -massgap_out on a run with a Da fragment tolerance",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
     },
     {
       "name": "max_evalue",
@@ -509,7 +660,7 @@
     {
       "name": "version",
       "type": "string",
-      "default": "1.7.0",
+      "default": "1.8.0",
       "description": "Version of the tool that generated this parameters file.",
       "required": false,
       "toppAdvanced": true
