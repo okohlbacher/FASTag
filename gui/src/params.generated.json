@@ -241,7 +241,7 @@
       "name": "out_spectra",
       "type": "output-file",
       "default": "",
-      "description": "Write spectra carrying a reported tag here (mzML, or mzpeak if this build has the library). Note this path holds one slot per input spectrum, so unlike the default it needs memory proportional to the FILE, not to the thread count",
+      "description": "Write spectra carrying a reported tag here (mzML or mzpeak). Note this path holds one slot per input spectrum, so unlike the default it needs memory proportional to the FILE, not to the thread count",
       "required": false,
       "toppAdvanced": false
     },
