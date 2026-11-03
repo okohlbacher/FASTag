@@ -142,7 +142,9 @@ jobs:
           set -euo pipefail
           # conda's Windows packages live under Library/. Forward slashes:
           # CMake treats a backslash in a quoted path as an escape.
-          LIB="${CONDA_PREFIX//\\//}/Library"
+          # Not LIB: that is MSVC's library search path, and overwriting it
+          # leaves link.exe without kernel32.lib.
+          CLIB="${CONDA_PREFIX//\\//}/Library"
           WS="${GITHUB_WORKSPACE//\\//}"
           # Git's /usr/bin/link shadows MSVC's link.exe in this login shell.
           CLDIR=$(dirname "$(which cl)"); export PATH="$CLDIR:$PATH"
@@ -153,9 +155,9 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl \
             -DCMAKE_INSTALL_PREFIX="$WS/openms-install" \
-            -DCMAKE_PREFIX_PATH="$LIB" \
-            -DLIBXML2_INCLUDE_DIR="$LIB/include/libxml2" \
-            -DLIBXML2_LIBRARY="$LIB/lib/libxml2.lib" \
+            -DCMAKE_PREFIX_PATH="$CLIB" \
+            -DLIBXML2_INCLUDE_DIR="$CLIB/include/libxml2" \
+            -DLIBXML2_LIBRARY="$CLIB/lib/libxml2.lib" \
             -DOPENMS_USE_VCPKG=OFF \
             -DOPENMS_ENABLE_MZPEAK=ON \
             -DARROW_USE_STATIC=OFF \
