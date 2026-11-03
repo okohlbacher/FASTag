@@ -229,8 +229,10 @@ Picking runs in the tagging threads, so it parallelises.
 **Limitations of the mzPeak path** (in OpenMS's `MzPeakFile`, as of the OpenMS
 commit above):
 
-- Reading is slower than in FASTag 1.6, which read archives with random access
-  from every thread through a shared decode cache. `-mzpeak_read_memory` is
+- Reading is slower than in FASTag 1.6 at higher thread counts (about 1.1x at
+  16-64 threads, up to 1.4x on chunked archives at 64; equal or faster at 1
+  thread). FASTag 1.6 read archives with random access from every thread
+  through a shared decode cache. `-mzpeak_read_memory` is
   accepted for existing command lines and has no effect.
 - `-subsample_spectra` and `-subsample_fraction` read the whole archive and
   drop the spectra not chosen; they cannot skip ahead.
@@ -307,7 +309,9 @@ core performance lever; **defaults to 0, which means half the logical cores**,
 so a run leaves the machine usable — pass `-threads <n>` to choose), `-ini
 <file>` / `-write_ini <file>` (parameter files), `-log <file>`, `-no_progress`,
 `--help` / `--helphelp`. With `-ini`, the file's `threads` value applies (1 if it
-has none) unless `-threads` is also given on the command line.
+has none) unless `-threads` is also given on the command line. `--help` shows
+OpenMS's generic text for `-threads` ("0 = all available cores"); FASTag uses
+half.
 
 ## Output
 
