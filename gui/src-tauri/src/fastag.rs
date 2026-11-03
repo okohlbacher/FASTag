@@ -244,6 +244,9 @@ fn value_to_scalar(v: &Value) -> Option<String> {
 fn build_args(p: &RunParams) -> Vec<String> {
     let manifest: Value = serde_json::from_str(MANIFEST).unwrap_or(Value::Null);
     let mut types: HashMap<String, String> = HashMap::new();
+    // String lists whose CLI default is not empty: an explicitly cleared one
+    // must reach the CLI as "-name ''", or the default comes back.
+    let mut nonempty_default: std::collections::HashSet<String> = std::collections::HashSet::new();
     if let Some(arr) = manifest.get("params").and_then(|v| v.as_array()) {
         for it in arr {
             if let (Some(n), Some(t)) = (
@@ -251,6 +254,13 @@ fn build_args(p: &RunParams) -> Vec<String> {
                 it.get("type").and_then(|v| v.as_str()),
             ) {
                 types.insert(n.to_string(), t.to_string());
+                let has_default = it
+                    .get("default")
+                    .and_then(|d| d.as_array())
+                    .is_some_and(|d| d.iter().any(|x| x.as_str().is_some_and(|s| !s.trim().is_empty())));
+                if t == "string-list" && has_default {
+                    nonempty_default.insert(n.to_string());
+                }
             }
         }
     }
@@ -284,6 +294,14 @@ fn build_args(p: &RunParams) -> Vec<String> {
             if !items.is_empty() {
                 args.push(format!("-{name}"));
                 args.extend(items);
+            } else if nonempty_default.contains(name) && !arr.iter().any(|v| {
+                value_to_scalar(v).is_some_and(|s| looks_like_flag(s.trim()))
+            }) {
+                // Cleared on purpose (e.g. no fixed modification for an
+                // unalkylated sample): the CLI reads an empty item as none.
+                // Dropping the option brought back Carbamidomethyl (C).
+                args.push(format!("-{name}"));
+                args.push(String::new());
             }
             continue;
         }
@@ -521,6 +539,28 @@ mod tests {
         assert!(!a.contains(&"-test".to_string()));
         let i = a.iter().position(|s| s == "-gap_penalty").expect("negative numbers still pass");
         assert_eq!(a[i + 1], "-5");
+    }
+
+    #[test]
+    fn build_args_cleared_fixed_mods_reach_the_cli_as_empty() {
+        // Cleared in the form: [""]. The CLI default (Carbamidomethyl) must not return.
+        let a = build_args(&rp(r#"{"in":"i","out":"o","params":{"fixed_modifications":[""]}}"#));
+        let i = a.iter().position(|s| s == "-fixed_modifications").expect("option kept");
+        assert_eq!(a[i + 1], "");
+        // A list whose default is empty is still left out when empty.
+        let b = build_args(&rp(r#"{"in":"i","out":"o","params":{"variable_modifications":[""]}}"#));
+        assert!(!b.contains(&"-variable_modifications".to_string()));
+    }
+
+    #[test]
+    fn lines_survive_invalid_utf8() {
+        // A cp1252 byte between progress lines must not end the stream.
+        let data: &[u8] = b"FASTAG_PROGRESS done=1 total=3\nLabels: C:\\J\xFCrgen\\x.tsv\nFASTAG_PROGRESS done=3 total=3\n";
+        let mut got = Vec::new();
+        for_each_line(data, |l| got.push(l));
+        assert_eq!(got.len(), 3);
+        assert_eq!(got[2], "FASTAG_PROGRESS done=3 total=3");
+        assert!(got[1].contains('\u{FFFD}'));
     }
 
     #[test]
