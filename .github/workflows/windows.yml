@@ -587,6 +587,11 @@ jobs:
           # The -digest_out models and -massgap_out modifications, found the
           # same way (share-FASTag-digest in this flat layout).
           cp -r fastag/data/digest dist/FASTag/share-FASTag-digest
+          # FASTag's licence and the redistributed DLLs' notices (see ci.yml).
+          cp fastag/LICENSE dist/FASTag/LICENSE
+          PY=$(command -v python3 || command -v python)
+          "$PY" fastag/tools/third_party_notices.py "$CONDA_LIB_PREFIX/.." dist/FASTag/THIRD-PARTY-NOTICES.txt dist/FASTag
+          test -s dist/FASTag/THIRD-PARTY-NOTICES.txt
 
           # A .bat wrapper, not a shell script: this is Windows. The real
           # exe is named FASTag.core.exe (not FASTag.exe) specifically so
@@ -770,6 +775,7 @@ jobs:
           cp -r dist/FASTag/share-OpenMS "$R/share/OpenMS"
           cp -r dist/FASTag/share-FASTag-taxonomy "$R/share/FASTag/taxonomy"
           cp -r dist/FASTag/share-FASTag-digest "$R/share/FASTag/digest"
+          cp dist/FASTag/LICENSE dist/FASTag/THIRD-PARTY-NOTICES.txt "$R/"
           test -s "$R/bin/FASTag.exe"
           test -s "$R/share/OpenMS/examples/ID/Ecoli_MS2_small.mzML"
 

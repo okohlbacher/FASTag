@@ -487,6 +487,13 @@ jobs:
           # The -digest_out models and -massgap_out modifications, found the
           # same way (share-FASTag-digest in this flat layout).
           cp -r data/digest dist/FASTag/share-FASTag-digest
+          # FASTag's own licence and the notices of every redistributed
+          # library, which BSD/MIT/Apache-2.0 require in a binary
+          # distribution (tools/third_party_notices.py maps each bundled
+          # library to the conda package that installed it).
+          cp LICENSE dist/FASTag/LICENSE
+          python3 tools/third_party_notices.py "$CONDA_PREFIX" dist/FASTag/THIRD-PARTY-NOTICES.txt dist/FASTag/lib
+          test -s dist/FASTag/THIRD-PARTY-NOTICES.txt
           # printf, not a heredoc: a heredoc's body has to be indented to
           # satisfy YAML's block-scalar rules, but leading whitespace before
           # `#!` breaks shebang recognition -- the kernel requires it at byte
@@ -587,6 +594,13 @@ jobs:
           # The -digest_out models and -massgap_out modifications, found the
           # same way (share-FASTag-digest in this flat layout).
           cp -r data/digest dist/FASTag/share-FASTag-digest
+          # FASTag's own licence and the notices of every redistributed
+          # library, which BSD/MIT/Apache-2.0 require in a binary
+          # distribution (tools/third_party_notices.py maps each bundled
+          # library to the conda package that installed it).
+          cp LICENSE dist/FASTag/LICENSE
+          python3 tools/third_party_notices.py "$CONDA_PREFIX" dist/FASTag/THIRD-PARTY-NOTICES.txt dist/FASTag/lib
+          test -s dist/FASTag/THIRD-PARTY-NOTICES.txt
           # printf, not a heredoc: a heredoc's body has to be indented to
           # satisfy YAML's block-scalar rules, but leading whitespace before
           # `#!` breaks shebang recognition -- the kernel requires it at byte
@@ -925,6 +939,7 @@ jobs:
           cp -RL dist/FASTag/share-OpenMS "$R/share/OpenMS"
           cp -RL dist/FASTag/share-FASTag-taxonomy "$R/share/FASTag/taxonomy"
           cp -RL dist/FASTag/share-FASTag-digest "$R/share/FASTag/digest"
+          cp dist/FASTag/LICENSE dist/FASTag/THIRD-PARTY-NOTICES.txt "$R/"
           # -L throughout: Tauri's resource bundler silently SKIPS symlinked
           # directories, so a symlink here becomes a missing file in the .app
           # with no error at build time.
