@@ -1,23 +1,21 @@
 name: build
 
-# Linux x64/arm64 and macOS x64/arm64, tests included.
+# Linux x64/arm64 and macOS arm64, tests included.
 #
-# OpenMS comes from bioconda (3.5.0), installed in seconds. It went through a
-# from-source detour: mzPeak once lived in OpenMS's own MzPeakFile and its
-# FileTypes enum, which exist only on an OpenMS feature branch, so shipping
-# the format meant building that branch here (~70 minutes cold, per platform)
-# with an okohlbacher/OpenMS-mzPeakRW overlay on top. FASTag no longer uses
-# either -- mzPeak is read AND written through the external mzpeak-openms
-# library, and .mzpeak is recognised by extension -- so a stock OpenMS >= 3.5
-# is enough again and the source build is gone. Windows stays a source build
-# (windows.yml) for the unrelated reason that bioconda has no win-64 package.
+# FASTag 1.7 builds against OpenMS develop at a pinned commit (OPENMS_REF), the
+# first OpenMS with MzPeakFile and the OpenMS_CLI library. There is no package
+# of it, so the `openms` job builds that commit from source, per platform,
+# against the conda-forge libraries in .github/env/openms.yml, and caches the
+# install; the key is the commit, the platform, the toolchain and that file's
+# hash. A cold build takes about an hour; afterwards the job is a cache hit.
+# It is its own job because actions/cache saves only from a successful job: a
+# FASTag failure in the same job would throw the OpenMS build away (see
+# windows.yml, which learned that first). Windows builds the same commit in
+# windows.yml.
 #
-# The library is the one thing built from source here, from a pinned commit,
-# with its own test suite run against THIS Arrow -- bioconda's openms pins
-# libarrow 21, and a consumer linking both must use one Arrow. Its install is
-# cached on the pin. The shipped bundle is then made to READ an mzPeak archive
-# before it is accepted; every previous silent loss of this feature presented
-# as a green build, and that check is what closes the gap.
+# The shipped bundle is then made to READ and WRITE an mzPeak archive before
+# it is accepted; every previous silent loss of that feature presented as a
+# green build, and that check is what closes the gap.
 
 on:
   push:
@@ -80,33 +78,153 @@ env:
   # windows.yml carries the same two pins and must stay in lockstep.
   TAXDB_TAG: taxonomy-k7-20260901
   TAXDB_SHA256: 520d93229df807e45b0e6fdf4d8d20c7aad95b73952749cb041c3e54de474a4b
-  # okohlbacher/mzpeak-openms: the WHOLE of FASTag's mzPeak support, built here
-  # and bundled next to the binary. Pinned by SHA -- a moving ref would silently
-  # change what a release contains -- and the SHA is its cache key. The commit
-  # must carry MetadataDetail::Minimal and the writer's precursor support; older
-  # ones do not compile against src/OnDiscMzPeakExperiment.cpp.
-  MZPEAK_LIB_REF: a4345f72b6968a6066e09b136a28d792ab3e5edb
+  # The OpenMS this binary is built against: OpenMS/OpenMS develop
+  # (3.7.0-dev), after the mzPeak merge. Pinned by SHA -- a moving ref would
+  # silently change what a release contains -- and part of the cache key.
+  # windows.yml carries the same pin and must move in lockstep.
+  OPENMS_REF: 70cebcd14442cecd6bcd9794fb6786d3342cacc6
   # The macOS floor, CHOSEN rather than inherited from whatever SDK the runner
   # image happens to ship. v1.4.2 went out with minos 14.0 on arm64 (macos-14)
-  # and 15.0 on x64 (macos-15-intel), while the libOpenMS.dylib bundled beside
-  # it asks for 11.3 and the app's Info.plist promises 11.0. dyld refuses to
-  # load a Mach-O on a macOS older than its minos, so every Intel user on
-  # 11-14 could install that release and have every run fail -- and the floor
-  # moved on its own each time GitHub retired a runner image.
+  # and 15.0 on x64, while the libOpenMS.dylib bundled beside it asked for
+  # 11.3 and the app's Info.plist promised 11.0. dyld refuses to load a
+  # Mach-O on a macOS older than its minos -- and the floor moved on its own
+  # each time GitHub retired a runner image.
   #
   # 13.3: libc++ ships the floating-point std::to_chars the TSV writer formats
   # numbers with (instead of snprintf, whose macOS implementation serialises
   # every thread on a global locale lock) only from 13.3 on -- below it the
   # build fails with "'to_chars' is unavailable". Still above every bundled
-  # dependency's own floor (bioconda's libOpenMS is 11.3, conda-forge's osx-64
-  # packages 10.13). gui/src-tauri/tauri.conf.json's minimumSystemVersion
+  # conda-forge dependency's own floor. gui/src-tauri/tauri.conf.json's minimumSystemVersion
   # carries the same value -- the Homebrew casks in okohlbacher/homebrew-fastag
-  # read the floor off that plist.
+  # read the floor off that plist. OpenMS is built here with the same floor,
+  # and the floor is part of its cache key.
   MACOS_MIN_VERSION: "13.3"
 
 jobs:
+  # ------------------------------------------------------- OpenMS itself
+  #
+  # Builds and caches the OpenMS install for one platform. Touches nothing
+  # FASTag-specific beyond the dependency file, so a FASTag failure downstream
+  # can never keep this cache from being saved.
+  openms:
+    name: openms-${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    # A cold build of libOpenMS + OpenMS_CLI on a 3-4 core runner, with
+    # headroom; a cache hit takes a minute.
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # compilers: the conda-forge toolchain, pinned like the libraries.
+          # toolchain: a short name for it in the cache key. macOS asks for
+          # llvm-openmp explicitly because Apple's clang ships no OpenMP
+          # runtime. extra: packages only the FASTag build needs (patchelf
+          # rewrites RPATH for the Linux bundle).
+          - name: linux-x64
+            runner: ubuntu-24.04
+            compilers: "gxx_linux-64=14.* sysroot_linux-64=2.28.*"
+            toolchain: gcc14-glibc2.28
+            extra: patchelf
+          - name: linux-arm64
+            runner: ubuntu-24.04-arm
+            compilers: "gxx_linux-aarch64=14.* sysroot_linux-aarch64=2.28.*"
+            toolchain: gcc14-glibc2.28
+            extra: patchelf
+          # dylibbundler (the macOS equivalent of patchelf) is a Homebrew
+          # package, not a conda-forge one, and is installed by brew in its
+          # own step further down.
+          - name: macos-arm64
+            runner: macos-14
+            compilers: "clangxx_osx-arm64=19.* llvm-openmp=19.*"
+            toolchain: clang19
+            extra: ""
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Restore OpenMS
+        id: openms-cache
+        uses: actions/cache@v6
+        with:
+          path: openms-install
+          key: openms-${{ env.OPENMS_REF }}-${{ matrix.name }}-${{ matrix.toolchain }}-${{ hashFiles('.github/env/openms.yml') }}-osx${{ env.MACOS_MIN_VERSION }}-v1
+
+      - name: Install the toolchain and OpenMS's dependencies
+        if: steps.openms-cache.outputs.cache-hit != 'true'
+        uses: mamba-org/setup-micromamba@v3
+        with:
+          environment-file: .github/env/openms.yml
+          create-args: ${{ matrix.compilers }}
+          init-shell: bash
+          cache-environment: true
+
+      - name: Check out OpenMS at the pinned commit
+        if: steps.openms-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init -q openms-src
+          cd openms-src
+          git remote add origin https://github.com/OpenMS/OpenMS.git
+          # GitHub serves a reachable commit by SHA; if that is ever refused,
+          # fetch develop shallow and deepen until the commit is there.
+          if ! git fetch -q --depth 1 origin "$OPENMS_REF"; then
+            git fetch -q --depth 1 origin develop
+            for _ in 1 2 3 4 5 6 7 8; do
+              git cat-file -e "$OPENMS_REF^{commit}" 2>/dev/null && break
+              git fetch -q --deepen=500 origin develop
+            done
+          fi
+          git checkout -q "$OPENMS_REF"
+          test -f src/openms/include/OpenMS/FORMAT/MzPeakFile.h
+
+      - name: Build and install OpenMS
+        if: steps.openms-cache.outputs.cache-hit != 'true'
+        shell: bash -el {0}
+        run: |
+          set -euo pipefail
+          # The flags the cluster build of this commit used, minus the TOPP
+          # tools: FASTag links libOpenMS and OpenMS_CLI, which build without
+          # them. No GUI, pyOpenMS, docs, tests, Thermo or timsTOF readers.
+          # mzPeak ON (the vendored library); Arrow shared, from conda.
+          OSX_MIN=()
+          if [ "$RUNNER_OS" = macOS ]; then
+            export MACOSX_DEPLOYMENT_TARGET="$MACOS_MIN_VERSION"
+            OSX_MIN=(-DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOS_MIN_VERSION")
+          fi
+          cmake -S openms-src -B openms-build -G Ninja "${OSX_MIN[@]}" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/openms-install" \
+            -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" \
+            -DOPENMS_USE_VCPKG=OFF \
+            -DOPENMS_ENABLE_MZPEAK=ON \
+            -DARROW_USE_STATIC=OFF \
+            -DWITH_GUI=OFF -DPYOPENMS=OFF -DENABLE_DOCS=OFF -DHAS_XSERVER=OFF \
+            -DWITH_OPENTIMS=OFF -DWITH_THERMO_RAW=OFF \
+            -DMT_ENABLE_OPENMP=ON -DMT_REQUIRE_OPENMP=ON \
+            -DBUILD_TOPP_TOOLS=OFF \
+            -DINSTALL_OPENMS_EXAMPLES=OFF \
+            -DBUILD_TESTING=OFF
+          # One job per core: some OpenMS translation units need well over
+          # a gigabyte, and the macOS runner has 7 GB for 3 cores.
+          cmake --build openms-build --parallel "$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu)"
+          cmake --install openms-build
+
+      - name: Verify the OpenMS install
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f openms-install/lib/cmake/OpenMS/OpenMSConfig.cmake
+          test -f openms-install/lib/cmake/OpenMS/OpenMSCLITargets.cmake
+          test -f openms-install/include/OpenMS/FORMAT/MzPeakFile.h
+          test -f openms-install/include/OpenMS/APPLICATIONS/TOPPBase.h
+          test -d openms-install/share/OpenMS
+          grep -m1 -oE 'PACKAGE_VERSION "[^"]+"' openms-install/lib/cmake/OpenMS/OpenMSConfigVersion.cmake
+
+  # --------------------------------------------------------------- FASTag
   build:
     name: ${{ matrix.name }}
+    needs: openms
     runs-on: ${{ matrix.runner }}
     # write, not the default: needed only for the tag-triggered release-asset
     # upload below. Scoped to this job rather than the workflow, since nothing
@@ -115,227 +233,95 @@ jobs:
     # nothing to an untrusted PR -- it only ever matters on an actual tag push.
     permissions:
       contents: write
-    # A ceiling, not an estimate. Linux finishes in ~4 minutes; this exists so a
-    # job that hangs dies rather than holding a concurrency group. It does NOT
-    # cover a job stuck waiting for a runner -- GitHub only starts this clock once
-    # the job is picked up, which is exactly the case that wedged this repo. The
-    # protection against that is not naming labels that do not exist.
+    # A ceiling, not an estimate. Linux finishes in minutes once OpenMS is
+    # cached; this exists so a job that hangs dies rather than holding a
+    # concurrency group. It does NOT cover a job stuck waiting for a runner --
+    # GitHub only starts this clock once the job is picked up. The protection
+    # against that is not naming labels that do not exist.
     #
     # 90, not 40: the macOS notarization step below has its own 60-minute
     # timeout, which is meaningless if the JOB's overall ceiling kills the run
-    # first. A job that never reaches signing (every non-tag push, and Linux
-    # always) still finishes in minutes regardless -- this only widens how
-    # long something is allowed to hang, not how long anything normally takes.
+    # first.
     # NOTE: this does not cover the one-time exception where a brand-new
     # bundle ID's FIRST notarization submission can take 8-12 hours
     # -- that has to be primed manually, out of band,
-    # before the first real signed release, exactly as the reference project
-    # that pattern came from does it.
+    # before the first real signed release.
     timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
         include:
-          # `extra` carries per-platform conda packages on top of the shared
-          # OpenMS runtime set. macOS asks for llvm-openmp explicitly because
-          # Apple's clang ships no OpenMP runtime.
-          #
-          # It is already present TRANSITIVELY -- run 29891819334 found OpenMP 5.1
-          # on macos-arm64 without asking, because libopenblas pulls llvm-openmp
-          # in. That is luck, not a guarantee: nothing in this repo depends on
-          # OpenMS continuing to depend on openblas. Naming it makes a property
-          # the build currently holds by accident into one it holds by contract.
-          #
-          # Linux gets OpenMP from the gcc toolchain; adding llvm-openmp there
-          # risks clashing with libgomp. patchelf is the release-packaging
-          # step's tool for rewriting RPATH to a relative, portable location.
-          - { name: linux-x64,   runner: ubuntu-24.04,     extra: "patchelf" }
-          - { name: linux-arm64, runner: ubuntu-24.04-arm, extra: "patchelf" }
-          # macos-arm64 is not speculative: it PASSED in run 29857387912, in the
-          # same matrix whose macos-x64 job wedged the queue. bioconda ships
-          # osx-arm64 OpenMS 3.5.0, and QT_HOST_PATH below is what it needed.
-          #
-          # dylibbundler (the macOS equivalent of patchelf above) is NOT here:
-          # `dylibbundler =* * does not exist` -- it is a Homebrew package, not
-          # a conda-forge one. Installed via `brew install` in its own step
-          # instead, further down.
-          - { name: macos-arm64, runner: macos-14, extra: "llvm-openmp" }
-          # Intel macOS. `macos-13` is retired -- established, not suspected, and
-          # the cause of the outage described above. macos-15-intel is GitHub's
-          # replacement label; it schedules and passes. If it is ever retired in
-          # turn, DROP the target rather than leave it amber: an untested platform
-          # that looks merely "queued" is the more dangerous of the two states,
-          # which is the whole lesson of this file.
-          - { name: macos-x64,   runner: macos-15-intel, extra: "llvm-openmp" }
+          - name: linux-x64
+            runner: ubuntu-24.04
+            compilers: "gxx_linux-64=14.* sysroot_linux-64=2.28.*"
+            toolchain: gcc14-glibc2.28
+            extra: patchelf
+          - name: linux-arm64
+            runner: ubuntu-24.04-arm
+            compilers: "gxx_linux-aarch64=14.* sysroot_linux-aarch64=2.28.*"
+            toolchain: gcc14-glibc2.28
+            extra: patchelf
+          # dylibbundler (the macOS equivalent of patchelf) is a Homebrew
+          # package, not a conda-forge one, and is installed by brew in its
+          # own step further down.
+          - name: macos-arm64
+            runner: macos-14
+            compilers: "clangxx_osx-arm64=19.* llvm-openmp=19.*"
+            toolchain: clang19
+            extra: ""
 
     steps:
       - uses: actions/checkout@v7
 
-      # Two dependencies OpenMSConfig.cmake needs but the openms package does not
-      # pull in. Both were invisible locally, where contrib had already provided
-      # them, and both broke immediately on a clean machine:
-      #
-      #   libboost-headers  OpenMS/config.h is public and does
-      #                     #include <boost/current_function.hpp>, so every
-      #                     downstream translation unit needs Boost headers
-      #   qt6-main          OpenMSConfig.cmake does find_dependency(Qt6). The
-      #                     env otherwise has a Qt6Config.cmake that sets
-      #                     Qt6_FOUND=FALSE -- present but incomplete, which
-      #                     reads as a confusing "found but not found"
-      #
-      # linux-x64 passed without qt6-main and the ARM/macOS runners did not, so
-      # the base image differs by platform. Requesting it explicitly removes the
-      # dependence on whatever the runner happens to ship.
-      # OpenMS itself, its runtime (libOpenMS links Arrow, Qt, Xerces and the
-      # rest dynamically), FASTag's toolchain, and what the library build below
-      # needs on top: meson and pkg-config. libarrow is deliberately NOT pinned
-      # here -- openms pins it to 21.0.* and the library is built against
-      # whatever that resolves to, which is the point.
-      #
-      # dylibbundler is NOT here: it is a Homebrew package, not a conda-forge
-      # one (`dylibbundler =* * does not exist`), and is installed by brew in
-      # its own step further down. patchelf, its Linux counterpart, IS a real
-      # conda-forge package.
-      - name: Install OpenMS, the toolchain and the library's build dependencies
+      # The same libraries OpenMS was built against (.github/env/openms.yml),
+      # the same compilers, plus what packaging needs.
+      - name: Install the toolchain and dependencies
         uses: mamba-org/setup-micromamba@v3
         with:
-          environment-name: fastag
-          create-args: >-
-            openms=3.5.0
-            libparquet
-            libarrow-dataset
-            libarrow-acero
-            nlohmann_json
-            xerces-c
-            libsvm
-            eigen
-            zlib
-            bzip2
-            libzip
-            hdf5
-            libcurl
-            libboost-devel>=1.89
-            glpk
-            coin-or-cbc
-            coin-or-utils
-            qt6-main
-            cmake
-            ninja
-            cxx-compiler
-            meson
-            pkg-config
-            ${{ matrix.extra }}
-          condarc: |
-            channels:
-              - conda-forge
-              - bioconda
+          environment-file: .github/env/openms.yml
+          create-args: ${{ matrix.compilers }} ${{ matrix.extra }}
           init-shell: bash
           cache-environment: true
 
-      # The mzPeak reader and writer. There is no package for it anywhere, so
-      # it is built here from the pinned commit and installed into the
-      # workspace, where the bundle steps below pick its libraries up like any
-      # other prefix. Its own test suite runs as part of the build: a library
-      # that decodes wrongly against THIS Arrow would otherwise only show up
-      # as wrong tags.
-      #
-      # The source tree is fetched even on a cache hit. Headers come from it,
-      # not from the install: the library's install_headers() flattens nested
-      # paths (mzpeak/data/array_index.h lands as mzpeak/array_index.h) while
-      # the headers include the nested spelling, so an installed-only header
-      # set does not compile. The build directory sits INSIDE the source tree
-      # because the tests locate their fixtures as ../test/files relative to it.
-      - name: Fetch mzpeak-openms
-        shell: bash -el {0}
-        run: |
-          set -euo pipefail
-          git clone -q https://github.com/okohlbacher/mzpeak-openms.git mzpeak-src
-          git -C mzpeak-src checkout -q "$MZPEAK_LIB_REF"
-          test -f mzpeak-src/include/mzpeak/writer.h
-
-      - name: Restore mzpeak-openms
-        id: mzpeak-cache
-        uses: actions/cache@v6
+      # Same key as the openms job, which saved it before this job started.
+      - name: Restore OpenMS
+        uses: actions/cache/restore@v5
         with:
-          path: mzpeak-install
-          key: mzpeak-openms-${{ matrix.name }}-${{ env.MZPEAK_LIB_REF }}-osx${{ env.MACOS_MIN_VERSION }}-v1
+          path: openms-install
+          key: openms-${{ env.OPENMS_REF }}-${{ matrix.name }}-${{ matrix.toolchain }}-${{ hashFiles('.github/env/openms.yml') }}-osx${{ env.MACOS_MIN_VERSION }}-v1
+          fail-on-cache-miss: true
 
-      - name: Build mzpeak-openms
-        if: steps.mzpeak-cache.outputs.cache-hit != 'true'
+      - name: Point the build at OpenMS
         shell: bash -el {0}
         run: |
           set -euo pipefail
-          export PKG_CONFIG_PATH="$CONDA_PREFIX/lib/pkgconfig" BOOST_ROOT="$CONDA_PREFIX"
-          # libmzpeak and libnumpress ship next to the binary, so they need the
-          # same floor it has. Exported HERE, not at job level: this is a login
-          # shell, conda's activation has already run and sets its own.
-          [ "$RUNNER_OS" = macOS ] && export MACOSX_DEPLOYMENT_TARGET="$MACOS_MIN_VERSION"
-          # --libdir=lib: meson's default on Debian-family Linux is the multiarch
-          # lib/x86_64-linux-gnu, which FASTag's find_library() does not search.
-          # -Dtools=false: the library's two CLI tools use <print>, which Apple's
-          # clang 15-17 libc++ on these runners lacks; nothing here runs them.
-          meson setup mzpeak-src/build mzpeak-src --prefix="$PWD/mzpeak-install" --libdir=lib --buildtype=release -Dtools=false
-          meson compile -C mzpeak-src/build
-          meson test -C mzpeak-src/build --print-errorlogs
-          meson install -C mzpeak-src/build
-          ls mzpeak-install/lib
-
-      - name: Point the build at bioconda's OpenMS
-        shell: bash -el {0}
-        run: |
-          set -euo pipefail
-          CFG="$CONDA_PREFIX/lib/cmake/OpenMS/OpenMSConfig.cmake"
-          if [ ! -f "$CFG" ]; then
-            echo "::error::the conda env has no OpenMSConfig.cmake"
-            ls -la "$CONDA_PREFIX/lib/cmake/OpenMS" 2>/dev/null || true
-            exit 1
-          fi
-          grep -m1 -oE 'PACKAGE_VERSION "[^"]+"' "$CONDA_PREFIX/lib/cmake/OpenMS/OpenMSConfigVersion.cmake"
-          echo "OPENMS_DIR=$(dirname "$CFG")" >> "$GITHUB_ENV"
           # Every downstream step needs the library and its shared-data
-          # directory; the tests and the smoke run both load CV terms. Same
-          # variable names the bundle steps have always used, now pointing at
-          # the conda prefix.
-          echo "OPENMS_INSTALL=$CONDA_PREFIX" >> "$GITHUB_ENV"
-          echo "OPENMS_DATA_PATH=$CONDA_PREFIX/share/OpenMS" >> "$GITHUB_ENV"
+          # directory; the tests and the smoke run both load CV terms.
+          echo "OPENMS_DIR=$GITHUB_WORKSPACE/openms-install/lib/cmake/OpenMS" >> "$GITHUB_ENV"
+          echo "OPENMS_INSTALL=$GITHUB_WORKSPACE/openms-install" >> "$GITHUB_ENV"
+          echo "OPENMS_DATA_PATH=$GITHUB_WORKSPACE/openms-install/share/OpenMS" >> "$GITHUB_ENV"
+
+      # The mzPeak fixture of OpenMS's own tests at the pinned commit: 34 MS2
+      # spectra, written by the reference converter. The smoke runs read it,
+      # and the validator step uses it as its control.
+      - name: Fetch the mzPeak test archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci-data
+          curl -fsSL --retry 3 -o ci-data/small.mzpeak \
+            "https://raw.githubusercontent.com/OpenMS/OpenMS/$OPENMS_REF/src/tests/class_tests/openms/data/MzPeakFile_small.mzpeak"
+          echo "5af157f1744d13502dbc8f7103ad0d01c4ba5ecc528087756aa09ed75d4b4087  ci-data/small.mzpeak" > ci-data/small.sha256
+          if command -v sha256sum >/dev/null; then sha256sum -c ci-data/small.sha256; else shasum -a 256 -c ci-data/small.sha256; fi
 
       - name: Configure
         shell: bash -el {0}
         run: |
-          # pipefail, because the cmake line below is piped into tee.
-          #
-          # This shell is `bash -el`, which has errexit but NOT pipefail, so a
-          # pipeline reports the exit status of its LAST command -- tee, which
-          # essentially always succeeds. Without this, a failed configure would be
-          # swallowed and the job would march on to Build and fail there with a
-          # far more confusing error. GitHub's default shell sets pipefail; this
-          # one was written explicitly and does not.
+          # pipefail, because the cmake line below is piped into tee. This
+          # shell is `bash -el`, which has errexit but NOT pipefail, so a
+          # failed configure would otherwise be swallowed by tee.
           set -o pipefail
-
-          # Eigen3 needs the shim this repo already ships.
-          #
-          # OpenMSConfig.cmake does find_dependency(Eigen3 3.4.0...<6). Eigen 3.4's
-          # own config-version file enforces same-major-version and rejects any
-          # range whose maximum crosses 4, so a perfectly good Eigen 3.4.0 is
-          # refused and configuration dies before OpenMS's fallback can run. It is
-          # the first thing CI hit, on every platform.
-          #
-          # README.md documented this and cmake/eigen3-range-shim existed; the
-          # first CI attempt simply failed to use it. Passing it unconditionally
-          # is harmless where Eigen behaves, and this is exactly the sort of
-          # environment-specific breakage CI is meant to catch for new users.
-          # QT_HOST_PATH is required on the ARM runners and harmless elsewhere.
-          #
-          # conda-forge's Qt6 for aarch64 and osx-arm64 is marked as a
-          # cross-compiled Qt, so Qt6Config.cmake refuses to load without a host
-          # Qt: "To use a cross-compiled Qt, please set the QT_HOST_PATH cache
-          # variable". The build here is native, so the same prefix IS the host
-          # Qt. linux-x64 is unaffected, which is why this only appeared on ARM.
           # Same floor, same reason (MACOS_MIN_VERSION at the top of this file).
-          # Both spellings: the variable covers anything cmake shells out to,
-          # the flag is what the cache records. Neither is passed on Linux,
-          # where CMAKE_OSX_DEPLOYMENT_TARGET would only draw an
-          # unused-variable warning.
           OSX_MIN=()
           if [ "$RUNNER_OS" = macOS ]; then
             export MACOSX_DEPLOYMENT_TARGET="$MACOS_MIN_VERSION"
@@ -344,12 +330,7 @@ jobs:
           cmake -S . -B build -G Ninja "${OSX_MIN[@]}" \
             -DCMAKE_BUILD_TYPE=Release \
             -DOpenMS_DIR="$OPENMS_DIR" \
-            -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" \
-            -DQT_HOST_PATH="$CONDA_PREFIX" \
-            -DEigen3_DIR="$PWD/cmake/eigen3-range-shim" \
-            -DEIGEN3_INCLUDE_DIR="$CONDA_PREFIX/include/eigen3" \
-            -DMZPEAK_SOURCE_DIR="$PWD/mzpeak-src" \
-            -DMZPEAK_LIB_DIR="$PWD/mzpeak-install" 2>&1 | tee configure.log
+            -DCMAKE_PREFIX_PATH="$OPENMS_INSTALL;$CONDA_PREFIX" 2>&1 | tee configure.log
 
       - name: Verify OpenMP was found
         shell: bash -el {0}
@@ -359,23 +340,10 @@ jobs:
           # Missing OpenMP is not a build error. CMakeLists.txt warns and carries
           # on, the #pragmas become no-ops, the omp_* fallback stubs return 1, and
           # the result is a correct tool that ignores -threads while README.md
-          # still advertises ~10x on 16 cores. Every test passes. Apple's clang
-          # ships no OpenMP runtime, so macOS is precisely where this would have
-          # happened.
-          #
-          # Asserting on the configure line rather than on the package means this
-          # checks the property that matters -- OpenMP was actually FOUND -- and
-          # not merely that something was installed.
-          #
-          # Honest scope: with bioconda's OpenMS this is belt-and-braces, because
-          # OpenMSConfig.cmake does find_dependency(OpenMP) and find_package(OpenMS)
-          # would fail first. Verified by configuring with
-          # -DCMAKE_DISABLE_FIND_PACKAGE_OpenMP=TRUE, which errors with "OpenMS
-          # could not be found because dependency OpenMP could not be found"
-          # rather than silently building serial. FASTag supports OpenMS >= 3.5
-          # generally though, and an OpenMS built without that dependency would
-          # reach FASTag's own non-REQUIRED find_package(OpenMP) -- which warns and
-          # carries on. Cheap guard, narrower exposure than first assumed.
+          # still advertises its scaling. Every test passes. Apple's clang ships
+          # no OpenMP runtime, so macOS is precisely where this would happen.
+          # (OpenMS is built with MT_REQUIRE_OPENMP, so its config fails first
+          # in practice; this checks FASTag's own find_package too.)
           if ! grep -q "FASTag: OpenMP" configure.log; then
             echo "::error::OpenMP was not found. The binary would be serial and"
             echo "::error::the performance claims would not hold. Configure said:"
@@ -384,22 +352,6 @@ jobs:
           fi
           grep "FASTag: OpenMP" configure.log
 
-      - name: Verify mzPeak support was enabled
-        shell: bash -el {0}
-        run: |
-          # mzPeak is optional at configure time -- a build without the library
-          # is a valid mzML-only tool -- but a RELEASE without it is not what
-          # the README promises. Same shape as the OpenMP gate: assert the
-          # property that matters (configure found the library), not a proxy.
-          # A regression -- a broken install, a detection change -- fails here
-          # instead of shipping a binary that refuses .mzpeak.
-          if ! grep -q "FASTag: mzPeak read/write enabled" configure.log; then
-            echo "::error::mzPeak support was NOT enabled. The release must read .mzpeak."
-            grep -i "mzpeak" configure.log || echo "(no mzPeak line at all)"
-            exit 1
-          fi
-          grep "FASTag: mzPeak read/write enabled" configure.log
-
       - name: Build
         shell: bash -el {0}
         run: cmake --build build --parallel
@@ -407,9 +359,8 @@ jobs:
       # mzPeakValidator, for every archive this job writes: ctest's
       # mzpeak_validate (the round-trip archives) and the bundle check below.
       # Installed with setup-python's OWN interpreter into its own prefix,
-      # deliberately not the conda env: bioconda's openms pins libarrow, and
-      # pulling a Python pyarrow into that solve would couple an unrelated
-      # tool to the build environment. The requirements file pins the
+      # deliberately not the conda env: pulling a Python pyarrow into that
+      # solve would couple an unrelated tool to the build environment. The requirements file pins the
       # validator to a commit AND its engine to exact versions (see the file
       # for why and how to move the pin), and doubles as the pip cache key.
       # --only-binary: every compiled dependency has a wheel for all five
@@ -450,24 +401,24 @@ jobs:
           # pipefail, as in Configure: this shell has errexit but not pipefail.
           set -o pipefail
           ctest --test-dir build --output-on-failure 2>&1 | tee ctest.log
-          # The mzPeak tests SKIP themselves in a build without the library or
-          # without the validator. This job has both, so a skip here would be a
-          # broken harness presenting as green -- the very class of failure
-          # this coverage exists for. Require a Passed line for each.
-          for t in mzpeak_roundtrip mzpeak_validate mzpeak_adapter_test; do
+          # The mzPeak tests SKIP themselves in a build without mzPeak support
+          # or without the validator. This job has both, so a skip here would
+          # be a broken harness presenting as green -- the very class of
+          # failure this coverage exists for. Require a Passed line for each.
+          for t in mzpeak_roundtrip mzpeak_validate mzpeak_stream_test; do
             grep -E "Test +#[0-9]+: $t " ctest.log | grep -q 'Passed' \
               || { echo "::error::$t did not pass (skipped, not run or missing)"; grep -E "$t" ctest.log || true; exit 1; }
           done
 
-      # A real mzPeak read, on the fixture the library's own tests use. The
-      # count is asserted exactly: 34 MS2 in that archive, and a reader that
-      # dropped spectra or precursors would report fewer.
+      # A real mzPeak read. The count is asserted exactly: 34 MS2 in that
+      # archive, and a reader that dropped spectra or precursors would report
+      # fewer.
       - name: Smoke-test the binary on a real mzPeak archive
         shell: bash -el {0}
         run: |
           set -euo pipefail
           ./build/FASTag --help >/dev/null
-          OUT=$(./build/FASTag -in mzpeak-src/test/files/v2/small.mzpeak -out /tmp/smoke-mzpeak.tsv \
+          OUT=$(./build/FASTag -in ci-data/small.mzpeak -out /tmp/smoke-mzpeak.tsv \
                   -threads 2 -fragment_tolerance 20 -fragment_tolerance_unit ppm 2>&1)
           echo "$OUT" | grep -E "MS2 spectra" || { echo "$OUT"; exit 1; }
           echo "$OUT" | grep -q "34 MS2 spectra" || { echo "::error::expected 34 MS2 spectra from small.mzpeak"; exit 1; }
@@ -519,21 +470,20 @@ jobs:
           rm -rf dist && mkdir -p dist/FASTag/lib
           cp build/FASTag dist/FASTag/FASTag.bin
 
-          # THREE source prefixes. libOpenMS and libOpenSwathAlgo come from
-          # the OpenMS install; libmzpeak and libnumpress from the library
-          # built above; everything they in turn need (Arrow, Qt, Xerces,
-          # BLAS, ...) from the conda env. Missing any one would bundle every
-          # dependency EXCEPT a library the tool is actually built around.
+          # TWO source prefixes. libOpenMS, libOpenMS_CLI and libOpenSwathAlgo
+          # come from the OpenMS install built above; everything they in turn
+          # need (Arrow, Boost, libxml2, ...) from the conda env. Missing
+          # either would bundle every dependency EXCEPT a library the tool is
+          # actually built around.
           LIBDIR="$CONDA_PREFIX/lib"
           OMSLIB="$OPENMS_INSTALL/lib"
-          MZPLIB="$PWD/mzpeak-install/lib"
 
           # Match on ldd's RESOLVED path rather than the soname, so a library
           # is attributed to whichever prefix it actually came from instead of
           # being looked up in a prefix that may not hold it.
           ldd dist/FASTag/FASTag.bin \
             | sed -n 's/.*=> \(\/[^ ]*\).*/\1/p' \
-            | grep -E "^($LIBDIR|$OMSLIB|$MZPLIB)/" | sort -u > /tmp/needed.txt
+            | grep -E "^($LIBDIR|$OMSLIB)/" | sort -u > /tmp/needed.txt
 
           while read -r path; do
             [ -z "$path" ] && continue
@@ -566,9 +516,9 @@ jobs:
 
           cp -r "$OPENMS_INSTALL/share/OpenMS" dist/FASTag/share-OpenMS
           # The tag-time taxonomy smoke needs this fixture. It is vendored
-          # (test/fixtures) because bioconda's openms ships share/OpenMS without
-          # its examples/ tree; assert it on EVERY build so its disappearance
-          # fails a cheap main push, not a release.
+          # (test/fixtures) because OpenMS is installed without its examples/
+          # tree; assert it on EVERY build so its disappearance fails a cheap
+          # main push, not a release.
           mkdir -p dist/FASTag/share-OpenMS/examples/ID
           cp test/fixtures/Ecoli_MS2_small.mzML dist/FASTag/share-OpenMS/examples/ID/
           test -s dist/FASTag/share-OpenMS/examples/ID/Ecoli_MS2_small.mzML
@@ -618,7 +568,6 @@ jobs:
             -d dist/FASTag/lib \
             -p '@executable_path/lib/' \
             -s "$OPENMS_INSTALL/lib" \
-            -s "$PWD/mzpeak-install/lib" \
             -s "$CONDA_PREFIX/lib"
 
           # Deduplicate LC_RPATH on EVERY Mach-O in the bundle, or dyld
@@ -669,9 +618,9 @@ jobs:
 
           cp -r "$OPENMS_INSTALL/share/OpenMS" dist/FASTag/share-OpenMS
           # The tag-time taxonomy smoke needs this fixture. It is vendored
-          # (test/fixtures) because bioconda's openms ships share/OpenMS without
-          # its examples/ tree; assert it on EVERY build so its disappearance
-          # fails a cheap main push, not a release.
+          # (test/fixtures) because OpenMS is installed without its examples/
+          # tree; assert it on EVERY build so its disappearance fails a cheap
+          # main push, not a release.
           mkdir -p dist/FASTag/share-OpenMS/examples/ID
           cp test/fixtures/Ecoli_MS2_small.mzML dist/FASTag/share-OpenMS/examples/ID/
           test -s dist/FASTag/share-OpenMS/examples/ID/Ecoli_MS2_small.mzML
@@ -706,7 +655,9 @@ jobs:
         run: |
           set -e
           fail=0
-          for f in dist/FASTag/FASTag.bin dist/FASTag/lib/libmzpeak*.dylib dist/FASTag/lib/libnumpress*.dylib; do
+          # FASTag and the OpenMS libraries built in this workflow carry the
+          # chosen floor; conda-forge's own dylibs carry theirs (lower).
+          for f in dist/FASTag/FASTag.bin dist/FASTag/lib/libOpenMS.dylib dist/FASTag/lib/libOpenMS_CLI.dylib; do
             [ -f "$f" ] || { echo "::error::$f is not in the bundle"; fail=1; continue; }
             # LC_BUILD_VERSION's own minos, not the LC_VERSION_MIN_MACOSX an
             # older linker would have emitted -- these are all built by clang
@@ -744,13 +695,13 @@ jobs:
           fi
           echo "$OUT" | grep -q "File not found" || { echo "::error::Unexpected output -- never reached the expected 'file not found' error."; exit 1; }
 
-          # And that the SHIPPED artifact reads mzPeak, by reading one: the
-          # library's own fixture, 34 MS2 spectra, run exactly as a download
-          # would. Everything above only exercises mzML, and a bundle whose
-          # libmzpeak, libnumpress or Arrow failed to travel would fail HERE
-          # with a loader error rather than in a user's terminal.
+          # And that the SHIPPED artifact reads mzPeak, by reading one: OpenMS's
+          # own fixture, 34 MS2 spectra, run exactly as a download would.
+          # Everything above only exercises mzML, and a bundle whose Arrow or
+          # Parquet failed to travel would fail HERE with a loader error rather
+          # than in a user's terminal.
           OUT2=$(cd /tmp && "$GITHUB_WORKSPACE/dist/FASTag/FASTag" \
-                   -in "$GITHUB_WORKSPACE/mzpeak-src/test/files/v2/small.mzpeak" \
+                   -in "$GITHUB_WORKSPACE/ci-data/small.mzpeak" \
                    -out /tmp/mzpeak-check.tsv -threads 2 \
                    -fragment_tolerance 20 -fragment_tolerance_unit ppm 2>&1) || true
           echo "$OUT2"
@@ -762,9 +713,9 @@ jobs:
           # download would (env -i: nothing of this runner's environment; a
           # minimal PATH only so the wrapper's /bin/sh can resolve dirname
           # and pwd). Reading exercises Parquet's reader and libzip's inflate;
-          # writing needs the Parquet writer, zip finalisation and Boost.JSON
-          # -- symbols a read-only smoke never touches -- so a bundle could
-          # read mzPeak and still fail every user who asks for -out_spectra.
+          # writing needs the Parquet writer and zip finalisation -- code a
+          # read-only smoke never touches -- so a bundle could read mzPeak and
+          # still fail every user who asks for -out_spectra.
           # The tags from the archive must be byte-identical to the tags from
           # the mzML, exactly as ctest's mzpeak_roundtrip demands of the
           # unbundled binary. The archive is validated in the next step.
@@ -789,7 +740,7 @@ jobs:
           # even though the library IS there. It is a race on how much ls has
           # written, and it failed the Arrow check once with the bundle correct.
           BUNDLED_LIBS=$(ls dist/FASTag/lib)
-          for lib in mzpeak arrow parquet; do
+          for lib in OpenMS arrow parquet; do
             grep -qi "$lib" <<< "$BUNDLED_LIBS" \
               || { echo "::error::no $lib library in the bundle"; echo "$BUNDLED_LIBS"; exit 1; }
           done
@@ -798,24 +749,24 @@ jobs:
 
       # Every mzPeak archive this job wrote, through mzPeakValidator in full
       # mode. ctest's mzpeak_validate already covered the round-trip archives
-      # (its reports are collected here); this covers the bundle's. The
-      # library's own small.mzpeak goes first as a CONTROL: written by the
-      # reference converter, it passes the pinned validator, so a failure on
-      # it means the validator or its pin is broken, not FASTag.
+      # (its reports are collected here); this covers the bundle's. OpenMS's
+      # small.mzpeak goes first as a CONTROL: written by the reference
+      # converter, it passes the pinned validator, so a failure on it means
+      # the validator or its pin is broken, not FASTag.
       #
       # A hard failure on EVERY run, not only tags. The validator and its
       # engine are pinned, so the verdict can only change when FASTag's
       # writer changes -- and an archive other readers reject is a silent
       # failure for every user, exactly the kind this repository's history
-      # says must fail a cheap main push rather than a release. The first
-      # run of this gate found two schema violations in every archive FASTag
-      # had ever written.
+      # says must fail a cheap main push rather than a release. The one
+      # accepted gap (run references MzPeakFile does not write) is named in
+      # test/mzpeak_validate.sh.
       - name: Validate every mzPeak archive this job wrote
         shell: bash
         run: |
           set -euo pipefail
           R=validator-reports; rm -rf "$R"; mkdir -p "$R"
-          bash test/mzpeak_validate.sh "$R/control" mzpeak-src/test/files/v2/small.mzpeak \
+          bash test/mzpeak_validate.sh "$R/control" ci-data/small.mzpeak \
             || { echo "::error::the CONTROL archive (reference converter) fails the pinned validator -- the validator or its pin is broken, not FASTag"; exit 1; }
           bash test/mzpeak_validate.sh "$R/bundle" /tmp/bundle-mzpeak/bundle.mzpeak \
             || { echo "::error::the archive the shipped bundle wrote is not a valid mzPeak archive"; exit 1; }
@@ -857,7 +808,7 @@ jobs:
       # every tag build takes the "not configured" branch and ships
       # unsigned, same as today. doc/SIGNING-macos-gui.md names the secrets.
       - name: Detect macOS signing readiness
-        if: (matrix.name == 'macos-arm64' || matrix.name == 'macos-x64') && (startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run)
+        if: matrix.name == 'macos-arm64' && (startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run)
         id: mac-signing
         shell: bash
         env:
@@ -985,12 +936,12 @@ jobs:
       # Runs on a v* tag, or on a workflow_dispatch with gui_dry_run set: see
       # the comment on that input for why an untested tag-only path is a trap.
       - uses: actions/setup-node@v7
-        if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && (matrix.name == 'macos-arm64' || matrix.name == 'macos-x64'))
+        if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && matrix.name == 'macos-arm64')
         with:
           node-version: 24
 
       - name: Stage the signed CLI as the app's bundled resources (macOS)
-        if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && (matrix.name == 'macos-arm64' || matrix.name == 'macos-x64'))
+        if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && matrix.name == 'macos-arm64')
         shell: bash
         run: |
           set -e
@@ -1056,7 +1007,7 @@ jobs:
           du -sh "$R"
 
       - name: Build, sign and notarize the desktop app (macOS)
-        if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && (matrix.name == 'macos-arm64' || matrix.name == 'macos-x64'))
+        if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && matrix.name == 'macos-arm64')
         timeout-minutes: 120
         working-directory: gui
         # Tauri reads these directly; APPLE_PASSWORD is the app-specific
@@ -1118,7 +1069,7 @@ jobs:
       # A dry run has no release to attach to, so the .dmg comes back as a
       # workflow artifact to be opened and checked by hand.
       - uses: actions/upload-artifact@v7
-        if: inputs.gui_dry_run && (matrix.name == 'macos-arm64' || matrix.name == 'macos-x64')
+        if: inputs.gui_dry_run && matrix.name == 'macos-arm64'
         with:
           name: FASTag-gui-${{ matrix.name }}-dryrun
           path: gui/src-tauri/target/release/bundle/dmg/*.dmg
@@ -1230,7 +1181,7 @@ jobs:
           fi
 
   # ----------------------------------------------------------- GUI checks
-  # Independent on purpose: no `needs:` -- waiting ~70 min for OpenMS to test
+  # Independent on purpose: no `needs:` -- waiting for OpenMS to test
   # TypeScript would make nobody run it. webkit2gtk/rsvg are what the tauri
   # crate links on Linux; without them cargo cannot even typecheck the backend.
   gui:
@@ -1321,8 +1272,7 @@ jobs:
           # gate working: it compares what shipped against what we SAID ships,
           # so it fires on a stale expectation as loudly as on a missing file.
           want="FASTag-linux-x64.tar.gz FASTag-linux-arm64.tar.gz \
-                FASTag-macos-x64.dmg FASTag-macos-arm64.dmg \
-                FASTag-gui-macos-x64.dmg FASTag-gui-macos-arm64.dmg \
+                FASTag-macos-arm64.dmg FASTag-gui-macos-arm64.dmg \
                 FASTag-taxonomy-k7.tar.gz FASTag-taxonomy-k7.tar.gz.sha256"
           have=$(gh release view "${{ github.ref_name }}" --json assets --jq '.assets[].name')
           missing=0
@@ -1333,15 +1283,15 @@ jobs:
 
   # ------------------------------------------------- Homebrew tap (macOS)
   # okohlbacher/homebrew-fastag carries two casks (fastag = the desktop app,
-  # fastag-cli = the command line) that download this release's four macOS
-  # disk images. Its own workflow rewrites version + sha256, audits, installs
+  # fastag-cli = the command line) that download this release's two macOS
+  # disk images (Apple silicon only since 1.7.0). Its own workflow rewrites version + sha256, audits, installs
   # and commits -- on a 6-hour schedule with no secrets, or right now when
   # this job asks it to. Asking needs a fine-grained PAT (secret
   # HOMEBREW_TAP_TOKEN: only okohlbacher/homebrew-fastag, Actions read+write)
   # because GITHUB_TOKEN is scoped to this repository and cannot dispatch a
   # workflow in another one.
   #
-  # Gated on release-complete, which is what asserts the four images are on
+  # Gated on release-complete, which is what asserts the two images are on
   # the release; a partial release is never announced. `secrets.*` cannot
   # appear in an `if:` (0-job startup_failure), so the presence check is a
   # step output, same pattern as the signing gate above. The dispatch never

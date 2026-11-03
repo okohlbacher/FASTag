@@ -1,0 +1,29 @@
+# The libraries OpenMS (the pinned develop commit, built from source in CI)
+# and FASTag build against, on every platform. Compilers are per platform
+# (the `compilers` matrix entries in ci.yml; MSVC on Windows). Versions are
+# pinned: the cached OpenMS install is keyed on this file's hash, and a
+# dependency that moves under a cached build breaks the link or the loader.
+# The set is the one the cluster build of OpenMS 70cebcd144 used.
+name: fastag
+channels:
+  - conda-forge
+dependencies:
+  - cmake>=3.28
+  - ninja
+  - pkg-config
+  - libarrow=24.0.0=*cpu*
+  - libparquet=24.0.0
+  - libarrow-dataset=24.0.0
+  - libarrow-acero=24.0.0
+  - libarrow-compute=24.0.0
+  - libboost-devel=1.92.0
+  - libxml2-devel=2.15.4
+  - libcurl=8.23.0
+  - libzip=1.12.1
+  - zlib=1.3.2
+  - bzip2=1.0.8
+  - zstd=1.5.7
+  - eigen=5.0.1
+  - libsvm=337
+  - sqlite=3.54.1
+  - nlohmann_json=3.12.0
