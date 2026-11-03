@@ -373,6 +373,11 @@ jobs:
       - name: Smoke-test the binary
         shell: bash
         run: |
+          # The build-tree binary finds share/OpenMS only through the
+          # environment, as in the Test step (the bundle is checked below).
+          SHARE=$(find "$WS/openms-install" -type d -path '*/share/OpenMS' 2>/dev/null | head -1)
+          [ -n "$SHARE" ] || { echo "::error::no share/OpenMS in the OpenMS install"; exit 1; }
+          export OPENMS_DATA_PATH="$SHARE"
           ./fastag/build/FASTag.exe --help
           # mzPeak read, asserted exactly as on the other platforms: 34 MS2
           # spectra in OpenMS's own fixture.
