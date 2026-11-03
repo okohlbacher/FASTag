@@ -273,16 +273,38 @@ fn parse_progress_line(line: &str) -> Option<(u64, u64)> {
 }
 
 fn read_stream<R: Read>(stream: R, app: &AppHandle, parse_progress: bool) {
-    let reader = BufReader::new(stream);
-    for line in reader.lines() {
-        let Ok(line) = line else { break };
+    for_each_line(stream, |line| {
         if parse_progress {
             if let Some((done, total)) = parse_progress_line(&line) {
                 let _ = app.emit("fastag:progress", serde_json::json!({ "done": done, "total": total }));
-                continue;
+                return;
             }
         }
         let _ = app.emit("fastag:log", line);
+    });
+}
+
+/// Every line of @p stream, decoded lossily, until EOF. lines() stops at the
+/// first line that is not UTF-8 (a cp1252 path echoed by a Windows build):
+/// the reader then dropped the pipe while the child still wrote to it, which
+/// killed it with SIGPIPE on Unix and silenced the log and progress on
+/// Windows. Only EOF or a real read error ends the loop.
+fn for_each_line<R: Read, F: FnMut(String)>(stream: R, mut f: F) {
+    let mut reader = BufReader::new(stream);
+    let mut buf: Vec<u8> = Vec::new();
+    loop {
+        buf.clear();
+        match reader.read_until(b'\n', &mut buf) {
+            Ok(0) => break,
+            Ok(_) => {
+                while matches!(buf.last(), Some(b'\n') | Some(b'\r')) {
+                    buf.pop();
+                }
+                f(String::from_utf8_lossy(&buf).into_owned());
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(_) => break,
+        }
     }
 }
 
