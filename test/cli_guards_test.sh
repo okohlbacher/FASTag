@@ -48,8 +48,10 @@ fi
   >"$TMP/s.log" 2>&1 && fail "-recon_out equal to -out ran (exit 0)"
 grep -q "name the same file" "$TMP/s.log" || fail "no message naming the colliding outputs"
 # /dev/null twice is fine (not a regular file).
-"$BIN" -in "$IN" -out /dev/null -fasta "$DB" -recon_out /dev/null -tag_length 4 "${ARGS[@]}" >/dev/null 2>&1 \
-  || fail "-out and -recon_out both /dev/null was refused"
+# Git Bash passes /dev/null to a Windows program unchanged; its null device is NUL.
+case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) NULLDEV=NUL ;; *) NULLDEV=/dev/null ;; esac
+"$BIN" -in "$IN" -out "$NULLDEV" -fasta "$DB" -recon_out "$NULLDEV" -tag_length 4 "${ARGS[@]}" >"$TMP/n.log" 2>&1 \
+  || { cat "$TMP/n.log"; fail "-out and -recon_out both $NULLDEV was refused"; }
 
 # NaN / inf precursor in -stream.
 OUT=$(printf 'spectrum a nan 2\n300.1 10\n400.2 20\n\nspectrum b inf 2\n300.1 10\n\nspectrum c 500.25 2\n300.1 10\n400.2 20\n413.317 15\n' \
