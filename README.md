@@ -113,7 +113,7 @@ the right build for whatever you are reading this on. Everything is also on the
 | Linux x64 | — | [.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-x64.tar.gz) |
 | Linux arm64 | — | [.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-arm64.tar.gz) |
 
-Intel Macs are not built from 1.7.0 on; 1.6.1 is the last release for them.
+Intel Macs are not built from 1.8.0 on; 1.6.1 is the last release for them.
 On macOS both are also on [Homebrew](https://github.com/okohlbacher/homebrew-fastag):
 `brew install --cask okohlbacher/fastag/fastag` (desktop app) or
 `brew install --cask okohlbacher/fastag/fastag-cli` (command line, `FASTag` on your PATH).
@@ -144,7 +144,11 @@ compiled from source with the libraries listed in
 A cross-platform desktop app ([`gui/`](gui/)) wraps the CLI: pick spectra, set
 parameters from a form generated out of the tool's own `-write_ini`, watch a
 progress bar, and browse the tags and the ranked species report (with a `rel.`
-column showing each taxon's evidence relative to the top hit). It is built with
+column showing each taxon's evidence relative to the top hit). A **Digest** tab
+shows the `-digest_out`, `-label_out` and `-massgap_out` reports: the protease
+call or no-call with its reason, sequence logos P4..P1 | P1'..P4' of the
+observed tag ends and of the called and runner-up models (in bits against the
+background in use), the label counts and the mass-gap peaks. It is built with
 [Tauri 2](https://tauri.app) — a Rust backend and the OS's native webview, not a
 bundled browser. The CLI remains the source of truth; the GUI shells out to it.
 
@@ -425,7 +429,9 @@ every other output is unchanged.
   explained as the smallest combination of up to three of 38 Unimod
   modifications.
 
-The counting reproduces prose-auto 0.1.3's detectors. `FASTAG_FULL_PRECISION=1`
+`-digest_out` also writes the background in use and each model's residue
+distribution before mixing, from which the Desktop GUI draws its logos. The
+counting reproduces prose-auto 0.1.3's detectors. `FASTAG_FULL_PRECISION=1`
 in the environment writes the tag TSV's masses and E-values in full precision,
 for comparing against a reader of that file.
 
@@ -626,9 +632,9 @@ A file small enough to finish in well under a second gains nothing from more
 threads — `fusion_tonsil` is already at its floor by 16.
 
 Output is identical at every thread count, and memory is O(threads) rather than
-O(file) on the mzML path. The mzPeak figures above were measured with FASTag
-1.6's own reader; 1.7 reads mzPeak through OpenMS and is slower (see
-[mzPeak](#mzpeak)).
+O(file) on the mzML path. **These figures were measured with FASTag 1.6.1** and
+have not been re-measured for 1.8. The mzPeak columns used 1.6's own reader;
+1.8 reads mzPeak through OpenMS and is slower (see [mzPeak](#mzpeak)).
 `-out_spectra` is the other exception, since it holds one slot per input
 spectrum.
 

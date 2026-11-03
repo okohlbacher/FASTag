@@ -58,9 +58,8 @@ npm run tauri build -- --debug   # faster, unsigned, for local checking
 ## Regenerate the param manifest
 
 The UI form is generated from the tool's own `-write_ini`. After changing a CLI
-parameter, refresh the manifest so the form stays in lockstep. Options listed
-in `UPCOMING` (`src/paramLayout.ts`) are placed in the layout already and appear
-once the manifest has them:
+parameter, refresh the manifest so the form stays in lockstep, and place the
+new option in `src/paramLayout.ts` (the layout tests fail until it is placed):
 
 ```bash
 npm run params    # runs scripts/gen-params.mjs against the bundled binary

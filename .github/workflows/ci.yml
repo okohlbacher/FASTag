@@ -1248,7 +1248,7 @@ jobs:
   # ------------------------------------------------- Homebrew tap (macOS)
   # okohlbacher/homebrew-fastag carries two casks (fastag = the desktop app,
   # fastag-cli = the command line) that download this release's two macOS
-  # disk images (Apple silicon only since 1.7.0). Its own workflow rewrites version + sha256, audits, installs
+  # disk images (Apple silicon only since 1.8.0). Its own workflow rewrites version + sha256, audits, installs
   # and commits -- on a 6-hour schedule with no secrets, or right now when
   # this job asks it to. Asking needs a fine-grained PAT (secret
   # HOMEBREW_TAP_TOKEN: only okohlbacher/homebrew-fastag, Actions read+write)
