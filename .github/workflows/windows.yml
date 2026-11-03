@@ -183,7 +183,9 @@ jobs:
           set -euo pipefail
           git init -q openms-src
           cd openms-src
-          git remote add origin https://github.com/OpenMS/OpenMS.git
+          # The fork, not OpenMS/OpenMS: feature/dia-pseudospectra was deleted
+          # upstream, and the fork's branch still ends at the pinned commit.
+          git remote add origin https://github.com/okohlbacher/OpenMS.git
           # A bare `git fetch origin <sha>` is refused ("couldn't find remote
           # ref") -- GitHub only serves advertised refs. The commit is an
           # ancestor of feature/dia-pseudospectra, so fetch that tip shallow
