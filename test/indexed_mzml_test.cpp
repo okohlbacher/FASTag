@@ -294,6 +294,62 @@ int main(int argc, char** argv)
     }
   }
 
+  // In-place edits of the indexed copy (same byte length, so the index stays
+  // valid): each is a file the reader once handled wrongly.
+  {
+    const std::string base = slurp(indexed);
+    // (a) A run that opens with MS1 only: the first 70 spectra relabelled as
+    // level 1. The probe looked at 64 and gave up the fast reader.
+    {
+      std::string b = base;
+      const std::string lvl2 = "name=\"ms level\" value=\"2\"";
+      size_t at = 0;
+      for (int k = 0; k < 70; ++k)
+      {
+        at = b.find(lvl2, at);
+        if (at == std::string::npos) break;
+        b[at + lvl2.size() - 2] = '1';
+        at += lvl2.size();
+      }
+      spit(tmp + "/fastag_ms1_first.mzML", b);
+      FASTag::IndexedMzMLReader r(tmp + "/fastag_ms1_first.mzML");
+      check(r.ok() && r.reportsSpectrumMetadata(),
+            "a run opening with 70 MS1 spectra keeps the fast reader");
+    }
+    // (b) Scan start time without a unit: seconds, as OpenMS reads it.
+    {
+      std::string b = base;
+      const std::string u = "unitAccession=\"UO:0000010\" unitName=\"second\"";
+      const std::string blank = "unitAccession=\"          \" unitName=\"      \"";
+      for (size_t at = b.find(u); at != std::string::npos; at = b.find(u, at + 1)) b.replace(at, u.size(), blank);
+      spit(tmp + "/fastag_rt_nounit.mzML", b);
+      FASTag::IndexedMzMLReader r(tmp + "/fastag_rt_nounit.mzML");
+      OnDiscMSExperiment od;
+      od.openFile(tmp + "/fastag_rt_nounit.mzML", /*skipMetaData=*/false);
+      const MSSpectrum got = r.getSpectrum(0), want = od.getSpectrum(0);
+      check(want.getRT() > 0 && got.getRT() == want.getRT(),
+            "an RT without a unit reads as OpenMS reads it (" + std::to_string(got.getRT()) +
+                " vs " + std::to_string(want.getRT()) + ")");
+    }
+    // (c) An MS2 whose arrays cannot be parsed must fail, not come back empty.
+    {
+      std::string b = base;
+      const size_t sp = b.find("<spectrum ", b.find("<spectrum ") + 1);   // spectrum 1
+      const size_t bin = b.find("<binary>", sp);
+      if (bin != std::string::npos) b.replace(bin, 8, "<binarx>");
+      spit(tmp + "/fastag_bad_binary.mzML", b);
+      FASTag::IndexedMzMLReader r(tmp + "/fastag_bad_binary.mzML");
+      bool threw = false;
+      try { r.getSpectrum(1); }
+      catch (const Exception::BaseException&) { threw = true; }
+      check(bin != std::string::npos && threw, "an unparsable MS2 spectrum throws");
+      bool other = false;
+      try { other = !r.getSpectrum(0).empty(); }
+      catch (...) {}
+      check(other, "the spectrum before it still reads");
+    }
+  }
+
   // An XML file with no spectrumList holds nothing to scan for.
   {
     spit(tmp + "/fastag_no_list.mzML", "<?xml version=\"1.0\"?>\n<mzML><run id=\"r\"></run></mzML>\n");

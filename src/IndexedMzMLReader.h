@@ -87,14 +87,17 @@ namespace FASTag
     /// mzPeak reader strikes. That makes this reader unsuitable for anything
     /// that needs MS1 signal, which is why -out_spectra does not use it.
     ///
-    /// Returns an empty spectrum if the range cannot be read or the decoder
-    /// rejects it.
+    /// @throws OpenMS::Exception::ParseError if the range cannot be read or
+    ///   the decoder rejects an MS2 spectrum (OpenMS's reader fails the same
+    ///   file; a silent empty spectrum would drop its tags).
     OpenMS::MSSpectrum getSpectrum(OpenMS::Size i);
 
     /// Does this file give up MS level and precursors to the scrape? Reads
-    /// the first spectra WITHOUT decoding peaks, so the caller can decide
-    /// against this reader for the price of the metadata alone.
+    /// metadata WITHOUT decoding peaks, up to the first MS2 (at most
+    /// kMetadataProbe spectra): true if that MS2 has a precursor, or if no
+    /// MS2 comes within the cap but MS levels were read.
     bool reportsSpectrumMetadata();
+    static constexpr OpenMS::Size kMetadataProbe = 5000;
 
   private:
     OpenMS::MSSpectrum read_(OpenMS::Size i, bool want_peaks);
