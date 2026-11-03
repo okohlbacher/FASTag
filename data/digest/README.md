@@ -14,12 +14,12 @@ install) or `<bin>/share-FASTag-digest` (the flat release tarball), or wherever
 uniform over its cleaving residues at P1 (C) or P1' (N), and the background at
 the other end (`*`). The residues follow ExPASy PeptideCutter and OpenMS
 `ProteaseDB`; Glu-C cuts after E only. The `background` rows are the residue
-composition of the UniProt human reference proteome (UP000005640), I counted
-as L; written by `tools/digest_models.py`. Source: UniProt (The UniProt
+composition of the UniProt human reference proteome (UP000005640), Ile (I)
+counted as Leu (L); written by `tools/digest_models.py`. Source: UniProt (The UniProt
 Consortium, *Nucleic Acids Res.* 2025), CC BY 4.0.
 
 Without `-digest_models`, a `-recon_fasta` or `-fasta` replaces this background
-with its own composition. HLA ligand or proteasome models are not shipped; give
+with its own composition (one count added to every residue when it lacks one). HLA ligand or proteasome models are not shipped; give
 them in a `-digest_models` table.
 
 `massgap_mods.tsv` lists a Unimod name, an OpenMS modification id (whose

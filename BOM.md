@@ -19,6 +19,13 @@ not already require. The only third-party source in this repository is one
 function ported from OpenMS (BSD-3-Clause, notice kept in the file): the
 averagine deisotoper in `src/AveragineDeisotoper.cpp`.
 
+## Shipped data
+
+| Data | Source | Licence | Used by |
+|---|---|---|---|
+| Residue composition of the human reference proteome (`share/FASTag/digest/digest_models.tsv`, `background` rows) | UniProt UP000005640 (The UniProt Consortium, *Nucleic Acids Res.* 2025), written by `tools/digest_models.py` | CC BY 4.0 | `-digest_out` |
+| Mass-gap modification list and priors (`share/FASTag/digest/massgap_mods.tsv`) | prose-auto 0.1.3 `delta_combos.MODS`; masses from OpenMS's Unimod | BSD-3-Clause (prose-auto ships in the OpenMS tree); Unimod as distributed with OpenMS | `-massgap_out` |
+
 ## What OpenMS provides, so FASTag does not implement it
 
 | Facility | OpenMS API |

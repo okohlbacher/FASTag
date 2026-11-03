@@ -6,7 +6,7 @@
 The cleavage-rule models (ExPASy PeptideCutter / OpenMS ProteaseDB residues,
 uniform over the cleaving residues, the other end the background) and
 "unspecific", over the residue composition of the given proteome (I counted as
-L, other letters skipped). <source line> names the proteome, its release and
+L, other letters skipped). <source line> names the proteome, its file and
 download date for the header.
 """
 import gzip

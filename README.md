@@ -113,7 +113,7 @@ the right build for whatever you are reading this on. Everything is also on the
 | Linux x64 | — | [.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-x64.tar.gz) |
 | Linux arm64 | — | [.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-arm64.tar.gz) |
 
-Intel Macs are not built from 1.8.0 on; 1.6.1 is the last release for them.
+Intel Macs are not built from 1.8.0 on; [1.6.1](https://github.com/okohlbacher/FASTag/releases/tag/v1.6.1) is the last release for them.
 On macOS both are also on [Homebrew](https://github.com/okohlbacher/homebrew-fastag):
 `brew install --cask okohlbacher/fastag/fastag` (desktop app) or
 `brew install --cask okohlbacher/fastag/fastag-cli` (command line, `FASTag` on your PATH).
@@ -404,8 +404,10 @@ where chemistry predicts them.
 and labelled, from the tags the run reports. Each is a long-form TSV with the
 columns `section`, `key`, `value`, `n` (the tags or spectra a value rests on)
 and `description` (one sentence with the numbers). They report measurements;
-how much to trust them is for the reader to decide. Without these options
-every other output is unchanged.
+how much to trust them is for the reader to decide. The tag TSV, `-recon_out`,
+`-delta_out` and the species report are byte-identical with and without these
+options; `-out_spectra` mzML records every parameter, so it lists the new
+options and their values.
 
 - **`-digest_out`** counts the residue one mass step beyond each ungapped tag
   with an E-value ≤ 1: a `cterm_mass` equal to a residue (y tags), an
@@ -419,7 +421,12 @@ every other output is unchanged.
   reference proteome composition, or over the composition of `-recon_fasta` /
   `-fasta` when given. HLA or proteasome models need a `-digest_models` table.
   No call is made, and the reason is written, on Da tolerances, timsTOF input,
-  an MS2 scan window starting above y1 of K, or fewer than 100 tag ends.
+  a median MS2 scan window or a median first MS2 peak above y1 of K plus 0.1
+  (147.21), fewer than 100 tag ends, a residue at probability 0 under the call
+  or the runner-up, or an exact tie between models of different classes. The
+  timsTOF and scan-window rules read instrument, native-ID and scan-window
+  metadata; without it they read `unknown` and do not block the call
+  (converted pseudo-spectra carry none). The first-peak rule needs no metadata.
 - **`-label_out`** counts tag ends that are a bare TMT, TMTpro or iTRAQ4 mass,
   against the same count 0.5 Da higher, and the Lys8 and Arg10 shares of the
   C-terminal K and R.
@@ -433,7 +440,9 @@ every other output is unchanged.
 distribution before mixing, from which the Desktop GUI draws its logos. The
 counting reproduces prose-auto 0.1.3's detectors. `FASTAG_FULL_PRECISION=1`
 in the environment writes the tag TSV's masses and E-values in full precision,
-for comparing against a reader of that file.
+for comparing against a reader of that file. The shipped tables are read from
+`share/FASTag/digest` next to the binary; a binary run outside its install
+tree needs `FASTAG_DIGEST_DIR` set to that directory.
 
 ## q_db: entrapment-calibrated filter confidence
 
@@ -588,6 +597,10 @@ provenance and what each dataset is useful for comparing.
 
 ## Performance
 
+**These figures were measured with FASTag 1.6.1** and have not been
+re-measured for 1.8. The mzPeak columns used 1.6's own reader; 1.8 reads mzPeak
+through OpenMS and is slower (see [mzPeak](#mzpeak)).
+
 The tables below report wall-clock time and peak resident memory against
 `-threads` for selected public data sets, so you can judge how a run scales on
 your own machine and estimate what a file of a given size will cost. Every point
@@ -632,10 +645,7 @@ A file small enough to finish in well under a second gains nothing from more
 threads — `fusion_tonsil` is already at its floor by 16.
 
 Output is identical at every thread count, and memory is O(threads) rather than
-O(file) on the mzML path. **These figures were measured with FASTag 1.6.1** and
-have not been re-measured for 1.8. The mzPeak columns used 1.6's own reader;
-1.8 reads mzPeak through OpenMS and is slower (see [mzPeak](#mzpeak)).
-`-out_spectra` is the other exception, since it holds one slot per input
+O(file) on the mzML path. `-out_spectra` is the other exception, since it holds one slot per input
 spectrum.
 
 **The defaults favour recall over speed.** For the fastest possible run, or to
@@ -666,7 +676,9 @@ comparison with the reference implementation.
 `ctest` covers the rank-sum DP against exhaustive enumeration, end-to-end tag
 recovery from synthetic spectra, flanking-mass placement, extension, gap
 ordering with a negative control, per-row mass closure, determinism, the
-sequence filter, and that `-gap_penalty` reorders without ever removing a tag.
+sequence filter, that `-gap_penalty` reorders without ever removing a tag, and
+the digest, label and mass-gap reports (`digest_test` against prose-auto
+0.1.3's functions on synthetic tables, `digest_cli_test` end to end).
 
 ### Ranking, and the synthetic benchmark
 
@@ -700,6 +712,9 @@ without filtering anything out:
 ## Licence and provenance
 
 MIT — see [LICENSE](LICENSE). Dependencies and licences are in [BOM.md](BOM.md).
+The shipped `-digest_out` background is the residue composition of the UniProt
+human reference proteome UP000005640 (CC BY 4.0); see
+[data/digest/README.md](data/digest/README.md).
 
 The DirecTag algorithm is reimplemented from its publication. The reference
 implementation (Apache-2.0) was read to resolve semantics the paper leaves
