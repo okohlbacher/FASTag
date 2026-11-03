@@ -1,0 +1,147 @@
+section	key	value	n	description
+run	version	1.8.0	-	FASTag 1.8.0 wrote this report.
+run	fragment_tolerance	20 ppm	-	Fragment tolerance is 20 ppm.
+run	tag_length	4	-	Seed tags are 4 residues long.
+run	subsample_fraction	0	-	All spectra were read.
+run	window_da	0.02	-	Gaps are grouped within 0.02 Da.
+hist	-118.1006	5	-	5 spectra have a gap of -118.1006 Da.
+hist	-117.2194	2	-	2 spectra have a gap of -117.2194 Da.
+hist	-114.2500	6	-	6 spectra have a gap of -114.2500 Da.
+hist	-110.1600	5	-	5 spectra have a gap of -110.1600 Da.
+hist	-107.3087	5	-	5 spectra have a gap of -107.3087 Da.
+hist	-105.6803	4	-	4 spectra have a gap of -105.6803 Da.
+hist	-98.2285	5	-	5 spectra have a gap of -98.2285 Da.
+hist	-85.5973	1	-	1 spectra have a gap of -85.5973 Da.
+hist	-85.0638	4	-	4 spectra have a gap of -85.0638 Da.
+hist	-81.9089	2	-	2 spectra have a gap of -81.9089 Da.
+hist	-78.8629	2	-	2 spectra have a gap of -78.8629 Da.
+hist	-66.4085	4	-	4 spectra have a gap of -66.4085 Da.
+hist	-59.2708	3	-	3 spectra have a gap of -59.2708 Da.
+hist	-50.6005	5	-	5 spectra have a gap of -50.6005 Da.
+hist	-31.9160	1	-	1 spectra have a gap of -31.9160 Da.
+hist	-29.9857	3	-	3 spectra have a gap of -29.9857 Da.
+hist	-18.0106	72	-	72 spectra have a gap of -18.0106 Da.
+hist	-17.6353	5	-	5 spectra have a gap of -17.6353 Da.
+hist	-0.0005	388	-	388 spectra have a gap of -0.0005 Da.
+hist	0.0000	5210	-	5210 spectra have a gap of 0.0000 Da.
+hist	0.0005	410	-	410 spectra have a gap of 0.0005 Da.
+hist	0.9840	340	-	340 spectra have a gap of 0.9840 Da.
+hist	1.0034	210	-	210 spectra have a gap of 1.0034 Da.
+hist	2.0068	41	-	41 spectra have a gap of 2.0068 Da.
+hist	9.2851	2	-	2 spectra have a gap of 9.2851 Da.
+hist	14.0157	33	-	33 spectra have a gap of 14.0157 Da.
+hist	15.9949	612	-	612 spectra have a gap of 15.9949 Da.
+hist	15.9950	120	-	120 spectra have a gap of 15.9950 Da.
+hist	19.6650	6	-	6 spectra have a gap of 19.6650 Da.
+hist	28.1080	2	-	2 spectra have a gap of 28.1080 Da.
+hist	31.9898	23	-	23 spectra have a gap of 31.9898 Da.
+hist	37.0673	3	-	3 spectra have a gap of 37.0673 Da.
+hist	40.8529	4	-	4 spectra have a gap of 40.8529 Da.
+hist	42.0106	150	-	150 spectra have a gap of 42.0106 Da.
+hist	45.5053	5	-	5 spectra have a gap of 45.5053 Da.
+hist	48.8703	2	-	2 spectra have a gap of 48.8703 Da.
+hist	54.8186	5	-	5 spectra have a gap of 54.8186 Da.
+hist	57.0215	95	-	95 spectra have a gap of 57.0215 Da.
+hist	67.1529	1	-	1 spectra have a gap of 67.1529 Da.
+hist	68.8437	4	-	4 spectra have a gap of 68.8437 Da.
+hist	70.9043	3	-	3 spectra have a gap of 70.9043 Da.
+hist	79.9663	44	-	44 spectra have a gap of 79.9663 Da.
+hist	81.9341	6	-	6 spectra have a gap of 81.9341 Da.
+hist	83.4856	5	-	5 spectra have a gap of 83.4856 Da.
+hist	85.1758	3	-	3 spectra have a gap of 85.1758 Da.
+hist	88.5051	1	-	1 spectra have a gap of 88.5051 Da.
+hist	106.0810	4	-	4 spectra have a gap of 106.0810 Da.
+hist	110.7541	6	-	6 spectra have a gap of 110.7541 Da.
+hist	114.0429	61	-	61 spectra have a gap of 114.0429 Da.
+hist	122.3140	3	-	3 spectra have a gap of 122.3140 Da.
+hist	123.0280	5	-	5 spectra have a gap of 123.0280 Da.
+hist	147.3772	5	-	5 spectra have a gap of 147.3772 Da.
+hist	156.1657	2	-	2 spectra have a gap of 156.1657 Da.
+hist	164.1624	2	-	2 spectra have a gap of 164.1624 Da.
+hist	165.1643	3	-	3 spectra have a gap of 165.1643 Da.
+hist	165.9330	5	-	5 spectra have a gap of 165.9330 Da.
+hist	167.8704	6	-	6 spectra have a gap of 167.8704 Da.
+hist	172.0478	1	-	1 spectra have a gap of 172.0478 Da.
+hist	176.9034	5	-	5 spectra have a gap of 176.9034 Da.
+hist	184.9275	1	-	1 spectra have a gap of 184.9275 Da.
+hist	196.8443	5	-	5 spectra have a gap of 196.8443 Da.
+hist	235.8206	6	-	6 spectra have a gap of 235.8206 Da.
+hist	238.5182	3	-	3 spectra have a gap of 238.5182 Da.
+hist	241.6609	5	-	5 spectra have a gap of 241.6609 Da.
+hist	244.1453	6	-	6 spectra have a gap of 244.1453 Da.
+hist	251.1949	3	-	3 spectra have a gap of 251.1949 Da.
+hist	278.9063	1	-	1 spectra have a gap of 278.9063 Da.
+hist	286.9087	6	-	6 spectra have a gap of 286.9087 Da.
+hist	288.2906	1	-	1 spectra have a gap of 288.2906 Da.
+hist	302.0586	3	-	3 spectra have a gap of 302.0586 Da.
+hist	311.9823	3	-	3 spectra have a gap of 311.9823 Da.
+hist	325.1915	3	-	3 spectra have a gap of 325.1915 Da.
+hist	335.8611	4	-	4 spectra have a gap of 335.8611 Da.
+hist	371.2399	5	-	5 spectra have a gap of 371.2399 Da.
+hist	386.9403	1	-	1 spectra have a gap of 386.9403 Da.
+cys	spectra	8026	-	8026 spectra were reconciled.
+cys	zero_bin	6008	-	6008 spectra have a gap within 0.02 Da of 0.
+cys	Carbamidomethyl (C)	95	-	95 spectra have a gap within 0.02 Da of 57.021464.
+cys	Propionamide (C)	0	-	0 spectra have a gap within 0.02 Da of 71.037114.
+cys	Nethylmaleimide (C)	0	-	0 spectra have a gap within 0.02 Da of 125.047679.
+cys	Methylthio (C)	0	-	0 spectra have a gap within 0.02 Da of 45.987721.
+cys	Carboxymethyl (C)	1	-	1 spectrum has a gap within 0.02 Da of 58.005479.
+combo	placed_spectra	8017	-	8017 spectra fall in bins with at least 2 spectra.
+combo	shifted_spectra	2009	-	2009 of them have a gap beyond 0.04 Da.
+peak	1.delta	15.9949	732	Peak 1 is at 15.9949 Da.
+peak	1.spectra	732	-	Peak 1 holds 732 spectra.
+peak	1.explained_by	Oxidation	732	Peak 1 is explained by Oxidation.
+peak	1.alternatives	-	-	Alternatives: none.
+peak	1.context	Oxidation (M)	-	Peak 1: Oxidation (M).
+peak	2.delta	0.984	340	Peak 2 is at 0.984 Da.
+peak	2.spectra	340	-	Peak 2 holds 340 spectra.
+peak	2.explained_by	Deamidated	340	Peak 2 is explained by Deamidated.
+peak	2.alternatives	-	-	Alternatives: none.
+peak	2.context	Deamidated (N)	-	Peak 2: Deamidated (N).
+peak	3.delta	1.0034	210	Peak 3 is at 1.0034 Da.
+peak	3.spectra	210	-	Peak 3 holds 210 spectra.
+peak	3.explained_by	none	210	Peak 3 has no explanation of at most 2 modifications.
+peak	3.alternatives	Deamidated	-	Alternatives: Deamidated.
+peak	3.context	isotope error or deamidation	-	Peak 3: isotope error or deamidation.
+peak	4.delta	42.0106	150	Peak 4 is at 42.0106 Da.
+peak	4.spectra	150	-	Peak 4 holds 150 spectra.
+peak	4.explained_by	Acetyl	150	Peak 4 is explained by Acetyl.
+peak	4.alternatives	-	-	Alternatives: none.
+peak	4.context	Acetyl (N-term)	-	Peak 4: Acetyl (N-term).
+peak	5.delta	57.0215	95	Peak 5 is at 57.0215 Da.
+peak	5.spectra	95	-	Peak 5 holds 95 spectra.
+peak	5.explained_by	Carbamidomethyl	95	Peak 5 is explained by Carbamidomethyl.
+peak	5.alternatives	-	-	Alternatives: none.
+peak	5.context	Carbamidomethyl (C)	-	Peak 5: Carbamidomethyl (C).
+peak	6.delta	-18.0106	72	Peak 6 is at -18.0106 Da.
+peak	6.spectra	72	-	Peak 6 holds 72 spectra.
+peak	6.explained_by	Dehydrated	72	Peak 6 is explained by Dehydrated.
+peak	6.alternatives	-	-	Alternatives: none.
+peak	6.context	Dehydrated (S)	-	Peak 6: Dehydrated (S).
+peak	7.delta	114.0429	61	Peak 7 is at 114.0429 Da.
+peak	7.spectra	61	-	Peak 7 holds 61 spectra.
+peak	7.explained_by	GG	61	Peak 7 is explained by GG.
+peak	7.alternatives	-	-	Alternatives: none.
+peak	7.context	GG (K)	-	Peak 7: GG (K).
+peak	8.delta	79.9663	44	Peak 8 is at 79.9663 Da.
+peak	8.spectra	44	-	Peak 8 holds 44 spectra.
+peak	8.explained_by	Phospho	44	Peak 8 is explained by Phospho.
+peak	8.alternatives	-	-	Alternatives: none.
+peak	8.context	Phospho (S)	-	Peak 8: Phospho (S).
+share	Oxidation	0.3644	2009	Oxidation explains 732 of 2009 shifted spectra (0.364).
+share	Deamidated	0.1692	2009	Deamidated explains 340 of 2009 shifted spectra (0.169).
+share	Acetyl	0.0747	2009	Acetyl explains 150 of 2009 shifted spectra (0.075).
+share	Carbamidomethyl	0.0473	2009	Carbamidomethyl explains 95 of 2009 shifted spectra (0.047).
+share	Dehydrated	0.0358	2009	Dehydrated explains 72 of 2009 shifted spectra (0.036).
+share	GG	0.0304	2009	GG explains 61 of 2009 shifted spectra (0.030).
+share	Phospho	0.0219	2009	Phospho explains 44 of 2009 shifted spectra (0.022).
+top	1	Oxidation	-	Rank 1 by share is Oxidation.
+top	2	Deamidated	-	Rank 2 by share is Deamidated.
+top	3	Acetyl	-	Rank 3 by share is Acetyl.
+top	4	Carbamidomethyl	-	Rank 4 by share is Carbamidomethyl.
+top	5	Dehydrated	-	Rank 5 by share is Dehydrated.
+silac	call	none	2009	No SILAC pair reaches 0.08 of the shifted spectra.
+silac	Lys4	0.0	2009	Lys4 explains 0 shifted spectra.
+silac	Arg6	0.0	2009	Arg6 explains 0 shifted spectra.
+silac	Lys8	0.001	2009	Lys8 explains 0.001 of the shifted spectra.
+silac	Arg10	0.0	2009	Arg10 explains 0 shifted spectra.

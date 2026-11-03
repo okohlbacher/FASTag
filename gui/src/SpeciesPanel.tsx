@@ -39,7 +39,7 @@ export default function SpeciesPanel({
   if (!enabled) {
     return (
       <div className="empty">
-        Species detection is off. Enable <code>species</code> under Advanced → Species detection.
+        Species detection is off. Enable <code>species</code> under Species detection.
       </div>
     )
   }

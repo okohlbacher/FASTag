@@ -1,0 +1,11 @@
+section	key	value	n	description
+run	version	1.8.0	-	FASTag 1.8.0 wrote this report.
+run	fragment_tolerance	0.5 Da	-	Fragment tolerance is 0.5 Da.
+count	tags_filtered	83	-	83 tags have no gap and an E-value of at most 1.
+count	n_c	61	-	61 C-terminal tag ends match a residue.
+call	status	no_call	-	No protease was called.
+call	reason	low_resolution	-	The fragment tolerance is in Da, so terminal masses cannot be told apart.
+nocall	low_resolution	yes	-	The fragment tolerance is 0.5 Da.
+nocall	timstof	unknown	-	The instrument is not known: metadata absent.
+nocall	ms2_scan_window	unknown	-	The MS2 scan window is not known: metadata absent.
+nocall	few_tags	yes	61	61 C-terminal tag ends are fewer than the minimum of 100.

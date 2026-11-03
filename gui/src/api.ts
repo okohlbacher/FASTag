@@ -57,11 +57,17 @@ const api: FastagApi = {
     return typeof r === 'string' ? r : null
   },
 
+  pickReport: async () => {
+    const r = await open({ multiple: false, filters: [{ name: 'Reports (TSV)', extensions: ['tsv'] }] })
+    return typeof r === 'string' ? r : null
+  },
+
   run: (params: Record<string, unknown>) => invoke<RunStarted>('run', { params }),
   cancel: () => invoke<{ cancelled: boolean }>('cancel'),
   resultsQuery: (path: string, view: ResultsView, offset: number, limit: number) =>
     invoke<ResultsPage>('results_query', { path, view, offset, limit }),
   species: (path: string) => invoke<SpeciesReport | null>('species', { path }),
+  report: (path: string) => invoke<string | null>('report_text', { path }),
   taxdbInfo: (explicit?: string) => invoke<TaxdbInfo | null>('taxdb_info', { explicit }),
 
   loadSettings: () => invoke<Settings>('load_settings'),

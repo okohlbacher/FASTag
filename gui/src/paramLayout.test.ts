@@ -6,6 +6,7 @@ import {
   SECTIONS,
   inertBecause,
   isActive,
+  masters,
   unknownParams,
   unplacedParams
 } from './paramLayout'
@@ -65,24 +66,30 @@ describe('dependencies', () => {
     expect(inertBecause('subsample_seed', off)).not.toBeNull()
     expect(inertBecause('subsample_seed', { subsample_spectra: '500' })).toBeNull()
     expect(inertBecause('subsample_seed', { subsample_fraction: '0.1' })).toBeNull()
-    // Both arming knobs are named in inertBecause, not in DEPENDS, so the
-    // rendered-master check below cannot see them. Moving either to HIDDEN
-    // would leave the seed greyed out forever with no way to switch it on,
-    // and unplacedParams() would not notice -- a hidden param is placed.
-    expect(RENDERED).toContain('subsample_spectra')
-    expect(RENDERED).toContain('subsample_fraction')
+  })
+
+  it('arms the digest window from EITHER report', () => {
+    expect(inertBecause('digest_window', off)).not.toBeNull()
+    expect(inertBecause('digest_window', { digest_out: '/r/d.tsv' })).toBeNull()
+    expect(inertBecause('digest_window', { label_out: '/r/l.tsv' })).toBeNull()
+  })
+
+  it('needs both recon_out and massgap_out for the mass-gap knobs', () => {
+    expect(inertBecause('massgap_top', { massgap_out: '/r/m.tsv' })).toMatch(/reconciliation/)
+    expect(inertBecause('massgap_top', { recon_out: '/r/r.tsv' })).toMatch(/mass-gap/)
+    expect(inertBecause('massgap_top', { recon_out: '/r/r.tsv', massgap_out: '/r/m.tsv' })).toBeNull()
   })
 
   it('never depends on a parameter that is not itself rendered', () => {
     // A master hidden from the form would leave its dependents permanently
     // greyed out with no way to switch them on.
-    for (const deps of Object.values(DEPENDS))
-      for (const d of deps) expect(RENDERED).toContain(d.on)
+    for (const [name, deps] of Object.entries(DEPENDS))
+      if (RENDERED.includes(name)) for (const d of deps) for (const m of masters(d)) expect(RENDERED).toContain(m)
   })
 
   it('depends only on parameters the tool has', () => {
-    for (const deps of Object.values(DEPENDS))
-      for (const d of deps) expect(PARAM_BY_NAME.has(d.on)).toBe(true)
+    for (const [name, deps] of Object.entries(DEPENDS))
+      if (PARAM_BY_NAME.has(name)) for (const d of deps) for (const m of masters(d)) expect(PARAM_BY_NAME.has(m)).toBe(true)
   })
 
   it('reads a checkbox, a number and a path the same way', () => {

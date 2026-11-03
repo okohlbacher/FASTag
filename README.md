@@ -126,7 +126,7 @@ OpenBLAS arrives with libOpenMS and otherwise starts one spinning thread per
 core at load, which FASTag never uses. The desktop app does the same for the
 CLI it launches, on every platform.
 
-**macOS 13.3 or later.** macOS ships as a disk image only, signed with a
+**macOS 13.4 or later.** macOS ships as a disk image only, signed with a
 Developer ID certificate, notarized and **stapled**, so it opens with no network
 connection — a plain tarball cannot carry a notarization ticket.
 

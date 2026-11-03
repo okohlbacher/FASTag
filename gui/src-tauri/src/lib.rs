@@ -1,5 +1,6 @@
 mod browser;
 mod fastag;
+mod report;
 mod settings;
 mod species;
 
@@ -27,6 +28,7 @@ pub fn run() {
             fastag::cancel,
             browser::results_query,
             species::species,
+            report::report_text,
             species::taxdb_info,
             settings::load_settings,
             settings::save_last,
