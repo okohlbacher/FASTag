@@ -86,15 +86,15 @@ for a in "${archives[@]}"; do
   if [ "$rc" -eq 2 ] || ! [ -s "$R/$n.json" ]; then
     echo "  FAIL $n: validator engine failure (exit $rc)"; cat "$R/$n.txt"; fail=1; continue
   fi
+  if grep -q '"profile_resolution"' "$R/$n.json"; then
+    echo "  FAIL $n: the validator could not match the archive's declared mzPeak version and fell back to a default profile"
+    grep -A1 profile_resolution "$R/$n.txt"; fail=1; continue
+  fi
   if [ "$rc" -ne 0 ]; then
     if [ "$rc" -eq 1 ] && only_run_reference_errors "$R/$n.json"; then
       echo "  ok   $n (run references): $summary"; continue
     fi
     echo "  FAIL $n: $summary"; grep -A1 -E '^  ERROR' "$R/$n.txt"; fail=1; continue
-  fi
-  if grep -q '"profile_resolution"' "$R/$n.json"; then
-    echo "  FAIL $n: the validator could not match the archive's declared mzPeak version and fell back to a default profile"
-    grep -A1 profile_resolution "$R/$n.txt"; fail=1; continue
   fi
   if ! grep -q '"verdict": "PASS"' "$R/$n.json"; then
     echo "  FAIL $n: exit 0 but the report's verdict is not PASS"; echo "$summary"; fail=1; continue
