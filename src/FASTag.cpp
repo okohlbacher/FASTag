@@ -2654,7 +2654,13 @@ protected:
         OPENMS_LOG_WARN << dropped << " entrapment events at lengths with no "
                            "exclusive entrapment key space were dropped from "
                            "the curve." << std::endl;
-      if (!entrap_e.empty() && wdecoys.empty())
+      bool any_exclusive = false;
+      for (const auto& kv : r_len) any_exclusive = any_exclusive || kv.second > 0;
+      // Also with ZERO events: with target-first attribution an entrapment
+      // database inside the target's key space (identical to -fasta, a subset,
+      // or its reverse) can produce no event at all, and the test below then
+      // never fired -- every q_db came out 0 with no evidence.
+      if (!any_exclusive || (!entrap_e.empty() && wdecoys.empty()))
       {
         // Every event dropped: the entrapment database's (orientation-closed)
         // key space sits entirely inside the target's. An all-zero q_db here
