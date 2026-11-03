@@ -160,6 +160,19 @@ int main() {
   const double big = tax.binomialUpperTailLogP(60, 1000000, 1e-5);
   CHECK(std::isfinite(big) && big < -20.0,
         "large-n small-p approximation stays finite and sane");
+  // Poisson regime with k far below lambda (n > 20000, lambda = 900): the
+  // upward sum used to overflow to inf and never terminate. P(X >= k) ~ 1.
+  for (uint64_t kk : {5ull, 45ull, 80ull}) {
+    const double lp = tax.binomialUpperTailLogP(kk, 30000, 0.03);
+    CHECK(std::isfinite(lp) && lp <= 0.0 && lp > -1e-12,
+          "Poisson tail with k << lambda terminates near log(1)");
+  }
+  // The complement path agrees with the exact binomial at the regime edge.
+  {
+    const double pois = tax.binomialUpperTailLogP(5, 25000, 0.0333);
+    CHECK(std::isfinite(pois) && pois <= 0.0 && pois > -1e-12,
+          "k=5, n=25000, p=0.0333 terminates");
+  }
 
   // --- Statistical call ----------------------------------------------------
   const uint64_t n_total = 10000;

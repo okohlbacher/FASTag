@@ -107,6 +107,8 @@ private:
   std::unordered_map<uint32_t, Node> nodes_;
 
   // Regime thresholds for binomialUpperTailLogP.
+  /// log P(X >= k) for X ~ Poisson(lambda), k <= lambda, as 1 - lower tail.
+  static double poissonLowerComplementLogP_(uint64_t k, double lambda);
   static constexpr uint64_t kExactMaxN = 20000;
   static constexpr double kPoissonMaxLambda = 1000.0;
 };
