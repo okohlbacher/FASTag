@@ -4,10 +4,10 @@
 //   benchmark stats <file.mzML> [tol_ppm]   measure a real file
 //   benchmark synth <profile> [options]     generate, tag, score
 //
-// WHY SYNTHETIC. Quality was previously measured one way only: SAGE PSMs on one
-// diaTracer file. That gives real spectra but costs a search engine, a proteome,
-// and a 5 GB input, none of which travel with the repo -- and when those
-// artefacts went missing the measurement could not be repeated at all. It also
+// WHY SYNTHETIC. Measuring quality against database-search PSMs gives real
+// spectra but costs a search engine, a proteome and a multi-GB input, none of
+// which travel with the repo -- and when those artefacts go missing the
+// measurement cannot be repeated at all. It also
 // answers only "was a correct tag found", never "was it found FIRST", because
 // PSM-based truth is per spectrum, not per tag.
 //
@@ -24,7 +24,7 @@
 //
 // CALIBRATION. Profiles are not invented. Each is fitted so its ladder edge
 // density and peak count match a real acquisition measured by `stats` -- see
-// doc/TEST-DATA.md for the four cornerstones and PROFILES below for the fits.
+// doc/TEST-DATA.md for the three cornerstones and PROFILES below for the fits.
 // Ladder edge density (the fraction of peaks with another peak exactly one
 // residue mass away) is the right target because it is the structural property
 // tagging consumes, and it needs no identifications to measure.
@@ -220,10 +220,6 @@ namespace
       {"astral",    0.88, 0.55, 13.0, 330.0, 20.0, true,  8, 25},
       // timsTOF ddaPASEF. Real: med 140 peaks, 38.5% ladder.
       {"ddapasef",  0.62, 0.14,  2.0,  45.0, 20.0, true,  7, 22},
-      // diaTracer pseudo-MS2. Constructed spectra with a hard 500-peak cap; the
-      // real file is no longer local, so this profile is anchored to the peak
-      // count and ladder density recorded in doc/TEST-DATA.md, not re-measured.
-      {"diatracer", 0.75, 0.34, 6.0, 110.0, 20.0, true,  7, 22},
       // Orbitrap Eclipse, ion-trap MS2. Real: med 267 peaks, 79.2% ladder at
       // 0.3 Da -- but at that tolerance a large share of those edges are
       // coincidence, so this profile's ladder figure is the weakest anchor here.

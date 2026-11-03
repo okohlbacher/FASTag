@@ -25,7 +25,7 @@
 // that patches an mzML in place (adding precursor values, say) without
 // rewriting its index leaves every offset after the first edit pointing
 // into the wrong bytes. Refusing such a file would cost a serial full load
-// instead: 52.8 s against 4.5 s on a 6 GB diaTracer run.
+// instead, which is much slower on a large run than the parallel rescan.
 //
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT

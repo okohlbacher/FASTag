@@ -2,8 +2,7 @@
 
 FASTag runs correctly against stock OpenMS. It just spends most of its wall time
 waiting for the reader, and stops scaling past about 16 threads no matter how
-many cores it has. On a 5.3 GB mzML with 632,677 spectra that is the difference
-between **60 s and 9 s**.
+many cores it has. On a multi-GB mzML the reader then takes most of the run.
 
 This is optional. Skip it and everything still works — FASTag detects the
 situation at configure time and again at runtime, and takes the slow path.
@@ -11,8 +10,8 @@ situation at configure time and again at runtime, and takes the slow path.
 ## Why
 
 `OnDiscMSExperiment::openFile()` calls `loadMetaData_()`, which streams the whole
-file to collect per-spectrum metadata *before any tagging starts*: measured at
-~55 s of a 60 s run, single-threaded. That prologue is ~95% of the runtime, so
+file to collect per-spectrum metadata *before any tagging starts*,
+single-threaded. On a large file that prologue dominates the runtime, so
 adding cores does nothing.
 
 `openFile(file, skipMetaData=true)` removes it, but on stock OpenMS

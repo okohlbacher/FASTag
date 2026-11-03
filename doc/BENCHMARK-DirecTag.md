@@ -238,57 +238,12 @@ and this comparison ignores flanking masses, so it counts two spellings of the
 same correct read as a disagreement. Where it can be checked against truth --
 PXD000001, above -- the two reach the same 98.62% ceiling.
 
-## Native hardware, 224 threads: spock
+## Native hardware
 
 Everything above ran in an emulated `linux/amd64` container on Apple Silicon,
-which the report was careful to describe as a ratio between two tools rather
-than an absolute speed. This section removes that caveat: both tools run
-**natively on x86-64**, on one machine, on one file.
-
-**Machine.** `spock`, 2x AMD EPYC 9654, 56 cores per socket, 2 threads per
-core = 224 logical CPUs, 2,267 GB RAM, node-local NVMe ZFS. Load below
-0.1/core outside the runs. FASTag v1.2.1, the published linux-x64 release
-binary; DirecTag 1.4.21142 from the same biocontainer as above, run under
-apptainer. Both read from `/scratch`, and after the first pass the 9 GB input
-is entirely in page cache for both -- this measures the tools, not the disk.
-
-**File.** `pair.mzML`, 9.07 GB, 762,016 MS2 spectra, 379,815,617 peaks,
-indexed. It was produced by FASTag's own `-out_spectra` from a 6.90 GB
-diaTracer pseudo-spectrum run, so it is real acquisition data rather than a
-synthetic file. There are no identifications for it, so as in the section
-above **accuracy is not measurable here** -- these are throughput, memory and
-tag counts.
-
-### Head to head
-
-| threads / cpus | FASTag wall | DirecTag wall | speedup | FASTag RSS | DirecTag RSS | ratio |
-|---|---|---|---|---|---|---|
-| 8 | **36.2 s** | 198.3 s | 5.5x | **279 MB** | 17,929 MB | 64x |
-| 32 | **10.8 s** | 152.1 s | 14.1x | **270 MB** | 17,946 MB | 66x |
-| 64 | **6.6 s** | 145.1 s | 22.1x | **249 MB** | 17,894 MB | 72x |
-| 128 | **5.5 s** | 145.5 s | 26.5x | **270 MB** | 17,852 MB | 66x |
-| 192 | 6.0 s | 150.1 s | 25.2x | **212 MB** | 17,825 MB | 84x |
-
-Best against best: **5.48 s against 145.1 s, 26.5x**, at 66x less memory.
-
-![Wall time, memory, scaling and DirecTag's time split](img/bench-spock.png)
-
-Tags: FASTag 19,498,430 retained; DirecTag 17,305,496 retained of 42,510,472
-generated (+12.7% for FASTag). The same +2% direction as the Astral file, and
-the same cause: DirecTag drops thin spectra before tagging.
-
-### Where DirecTag's time goes
-
-Its own log at 192 cpus splits the run: **81.0 s reading**, 0.07 s charge
-determination, **10.3 s tagging**, and the remaining ~57 s writing the 1.34 GB
-tag file. Tagging -- the part that parallelises -- is 7% of the run. Adding
-cpus past 64 buys nothing and costs plenty: CPU seconds go 631 -> 1,957 while
-wall time gets 5 s *worse*, which is spin-wait against a serial reader.
-
-FASTag scales because its read is parallel: 302.2 s at 1 thread down to 5.5 s
-at 128, a **55x speedup**, and its memory stays flat at ~250 MB because it
-streams. DirecTag's 17.9 GB is roughly twice the file, held for the whole run
-whatever the thread count.
+so the speed figures are ratios between two tools, not absolute speeds. A
+native x86-64 head-to-head at equal thread counts on public PXD data is in
+preparation and will be added here.
 
 ## Summary
 
@@ -303,13 +258,6 @@ threads and uses 8.5x less memory (450 MB against 3.74 GB), because DirecTag
 holds the whole run in memory and reads it serially. On the largest file here,
 12.24 GB of timsTOF ddaPASEF, DirecTag cannot read the data at all, while
 FASTag tags it in 64 s using 297 MB.
-
-**On native hardware the gap widens with core count.** On a 224-thread EPYC
-machine, on a 9.07 GB / 762,016-spectrum file both tools read, FASTag is 5.5x
-faster at 8 threads and **26.5x faster best-against-best** (5.5 s against
-145.1 s), at **66x less memory** (270 MB against 17.9 GB). DirecTag spends 7%
-of that run tagging and the rest reading and writing serially, so it stops
-improving at 64 cpus; FASTag scales 55x from 1 to 128 threads.
 
 So the algorithm reproduces faithfully -- same coverage ceiling, same tag
 space -- and the difference between the two is one of engineering: streaming

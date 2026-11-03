@@ -65,9 +65,10 @@ length, recovering longer tags a fixed seed length alone would miss.
 
 **Gaps** (`-gaps 1`). A tag can cross one missing peak — two peaks separated by
 a two-residue combined mass bridge the hole, with every amino-acid composition
-matching that sum spelled out as a candidate. On by default: measured against
-Sage ground truth it lifts the number of spectra gaining a correctly placed tag
-by 45.3% (see Validation). Because a gapped tag asserts an unobserved split, it
+matching that sum spelled out as a candidate. On by default, because it lets a
+tag continue past a missing fragment ion; how many more identified spectra gain a
+correctly placed tag with gaps on is being measured on public data (see
+Validation). Because a gapped tag asserts an unobserved split, it
 is systematically over-ranked relative to its real correctness, which
 `-gap_penalty` corrects; disable gaps entirely with `-gaps 0`.
 
@@ -226,8 +227,8 @@ nothing uses them.
 
 **Profile MS2 is centroided on read.** Archives converted from raw files
 routinely store profile MS2 with an empty centroid facet, and tagging profile
-samples rather than peaks costs real recall: on one run, 80,990 tags reading the
-profile data as-is against 122,489 with on-read centroiding (`PeakPickerHiRes`).
+samples rather than peaks costs real recall, so FASTag centroids them on read
+(`PeakPickerHiRes`).
 Picking runs in the tagging threads, so it parallelises.
 
 **Limitations of the mzPeak path** (in OpenMS's `MzPeakFile`, as of the OpenMS
@@ -578,21 +579,21 @@ them; in the TSV they are simply present.
 
 ## Demo data
 
-FASTag was validated against public runs from
-[ProteomeXchange](https://www.proteomexchange.org)/PRIDE and MassIVE, spanning
-two vendors, three instruments, and both high- and low-resolution MS2:
+Public runs from [ProteomeXchange](https://www.proteomexchange.org)/PRIDE,
+spanning two vendors and three instruments:
 
 | dataset | instrument | accession | file | convert with |
 |---|---|---|---|---|
 | HeLa, real ddaPASEF | Bruker timsTOF Pro | [PXD054073](https://www.ebi.ac.uk/pride/archive/projects/PXD054073) | `HeLa_T2_DDA_E_A_nLC_timspro_R02.d.7z` (3.17 GB) | `brfp convert -i <.d> -f 2 -o out.mzML` |
 | Label-free DDA | Orbitrap Astral | [PXD076528](https://www.ebi.ac.uk/pride/archive/projects/PXD076528) | `7673_YD12_P116861_S00_R1.raw` (2.4 GB) | `ThermoRawFileParser -i in.raw -b out.mzML -f 2` |
-| DDA-TMT | Orbitrap Eclipse (ion trap MS2) | [MSV000096674](https://massive.ucsd.edu/ProteoSAFe/dataset.jsp?accession=MSV000096674) (MassIVE, no PXD) | `ec04479_qy_4cell_SanJose_A1.mzpeak` | already mzpeak |
+| *Erwinia carotovora*, TMT6 | LTQ Orbitrap Velos (HCD) | [PXD000001](https://www.ebi.ac.uk/pride/archive/projects/PXD000001) | `TMT_Erwinia_1uLSike_Top10HCD_isol2_45stepped_60min_01-20141210.mzML` (450 MB), with its Mascot search `F063721.dat` | already mzML |
 
-The Eclipse file's own metadata says `Orbitrap Eclipse` even though the deposit
-is catalogued as Astral — read the instrument out of the file itself before
-picking a tolerance. Run it with `-fragment_tolerance 0.3
--fragment_tolerance_unit Da`; the other two are high-resolution and want the
-20 ppm default. See [doc/TEST-DATA.md](doc/TEST-DATA.md) for the full
+All three are high-resolution MS2 and want the 20 ppm default. Run PXD000001
+with `-fixed_modifications "Methylthio (C)" "TMT6plex (K)" "TMT6plex (N-term)"`.
+For ion-trap MS2 set `-fragment_tolerance 0.3 -fragment_tolerance_unit Da`, and
+read the instrument out of the file itself before picking a tolerance: a
+repository catalogue can label a deposit by its main instrument while single
+files come from another. See [doc/TEST-DATA.md](doc/TEST-DATA.md) for the
 provenance and what each dataset is useful for comparing.
 
 ## Performance
@@ -601,48 +602,26 @@ provenance and what each dataset is useful for comparing.
 re-measured for 1.8. The mzPeak columns used 1.6's own reader; 1.8 reads mzPeak
 through OpenMS and is slower (see [mzPeak](#mzpeak)).
 
-The tables below report wall-clock time and peak resident memory against
-`-threads` for selected public data sets, so you can judge how a run scales on
-your own machine and estimate what a file of a given size will cost. Every point
-is the faster of two runs at **default parameters**, with a warm page cache,
-timed end to end including reading the input and writing the tag file. Hardware:
-two AMD EPYC 9654 (192 cores / 384 hardware threads), node-local NVMe, otherwise
-idle.
+The table below reports wall-clock time and peak resident memory against
+`-threads` for a public data set, so you can judge how a run scales on your own
+machine. Every point is the faster of two runs at **default parameters**, with a
+warm page cache, timed end to end including reading the input and writing the
+tag file. Hardware: two AMD EPYC 9654 (192 cores / 384 hardware threads),
+node-local NVMe, otherwise idle.
 
-**Scaling.** `cptac_merged` — CPTAC breast cancer, merged fractions, 931,325 MS2
-spectra (13.3 GB mzML, 3.6 GB mzPeak), 37,599,162 tags at every thread count:
-
-| threads | 1 | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 192 | 256 | 384 |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| mzML, s | 566 | 280 | 139 | 69.5 | 35.0 | 17.6 | 9.04 | 5.29 | **4.33** | 4.48 | 5.02 |
-| mzML, GB | 0.77 | 0.78 | 0.78 | 0.78 | 0.79 | 0.82 | 0.87 | 0.90 | 0.94 | 0.97 | 1.28 |
-| mzPeak, s | 406 | 204 | 103 | 52.3 | 26.6 | 13.9 | 7.35 | 4.68 | 4.11 | **3.99** | 4.07 |
-| mzPeak, GB | 1.62 | 1.63 | 1.65 | 1.68 | 1.80 | 1.95 | 2.21 | 2.75 | 3.34 | 3.83 | 4.90 |
-
-Time halves with every doubling of the thread count to 64 (94% of ideal at 16,
-82% at 64) and flattens near 4 s, where the run is bounded by reading the file
-and writing 37.6 M rows rather than by tagging.
-
-**Selected runs**, at 16 threads (a workstation) and 128 (a compute node):
-
-| data set | MS2 | mzML s / GB, 16 → 128 | mzPeak s / GB, 16 → 128 |
+| data set | MS2 | mzML s / GB, 16 → 128 threads | mzPeak s / GB, 16 → 128 threads |
 |---|---|---|---|
-| `cptac_merged` CPTAC breast, merged fractions | 931,325 | 34.9 / 0.77 → 5.26 / 0.88 | 26.6 / 1.78 → 4.62 / 2.78 |
-| `astral_neat` Orbitrap Astral | 304,505 | 14.9 / 1.26 → 2.60 / 1.31 | 10.7 / 2.00 → 2.28 / 3.45 |
-| `qex_iprg` Q Exactive (iPRG2015) | 49,514 | 2.11 / 0.24 → 0.58 / 0.43 | 1.70 / 1.18 → 0.95 / 2.43 |
-| `qex_tmt8` Q Exactive TMT8 | 47,470 | 12.4 / 0.46 → 7.61 / 0.88 | 4.19 / 1.15 → 1.28 / 2.66 |
-| `velos_2012` LTQ Orbitrap Velos | 36,523 | 1.33 / 0.20 → 0.44 / 0.12 | 0.92 / 0.80 → 0.53 / 0.80 |
-| `fusion_tonsil` Orbitrap Fusion | 22,408 | 0.39 / 0.10 → 0.27 / 0.11 | 0.27 / 0.15 → 0.31 / 0.17 |
+| [PXD000865](https://www.ebi.ac.uk/pride/archive/projects/PXD000865) Q Exactive TMT8 | 47,470 | 12.4 / 0.46 → 7.61 / 0.88 | 4.19 / 1.15 → 1.28 / 2.66 |
 
-The two containers return the same tags on centroided input. On the two runs
-with **profile** MS2 (`qex_iprg`, `qex_tmt8`) they do not, and the times are not
-comparable either: the mzML path tags profile samples as they are, while the
-archives were centroided when written, so FASTag reads peaks and finds more tags
-(1,358,490 against 791,925, and 2,032,961 against 1,376,019). Centroid before
-tagging profile mzML, or read the archive.
+A thread ladder for the current release on larger public runs (PXD047793,
+PXD054073, PXD028735, PXD076528, PXD003531), with mzML and both mzPeak layouts,
+is in preparation and will replace this section.
 
-A file small enough to finish in well under a second gains nothing from more
-threads — `fusion_tonsil` is already at its floor by 16.
+The two containers return the same tags on centroided input. On **profile**
+MS2, as in this run, they do not, and the times are not comparable either: the
+mzML path tags profile samples as they are, while the archive was centroided
+when written, so FASTag reads peaks and finds more tags (2,032,961 against
+1,376,019). Centroid before tagging profile mzML, or read the archive.
 
 Output is identical at every thread count, and memory is O(threads) rather than
 O(file) on the mzML path. `-out_spectra` is the other exception, since it holds one slot per input
@@ -654,24 +633,24 @@ match a tool with no equivalent of these, turn them off:
 
 ## Validation
 
-Against Sage ground truth (14,867 PSMs at 1% FDR on 717,924 timsTOF pseudo-DDA
-spectra), counting spectra that gain a correctly placed tag:
-
-| | spectra reached | vs baseline | correct tags |
-|---|---|---|---|
-| `-gaps 0 -no_deisotope` | 3,480 | — | 8,054 |
-| deisotoping only | 4,142 | +19.0% | 12,683 |
-| one gap only | 5,055 | +45.3% | 33,236 |
-| **both — the default** | **5,976** | **+71.7%** | **45,919** |
-
-The two count columns answer different questions and move independently: a gap
-multiplies how many tags a spectrum yields, so tag totals climb far faster than
-the number of spectra reached. Overall, 84.5% of the spectra Sage identifies at
-1% FDR carry a tag that reads the identified peptide; the original DirecTag
-paper reports > 80%. See [doc/TEST-DATA.md](doc/TEST-DATA.md) for the corpus,
-and for why this particular measurement cannot be re-run here, and
+Against the Mascot identifications shipped with
+[PXD000001](https://www.ebi.ac.uk/pride/archive/projects/PXD000001) (2,254 PSMs
+at 1% FDR, LTQ Orbitrap Velos HCD, TMT6), at DirecTag's published settings
+(tag length 3, 100 peaks, 50 tags, no gaps, no deisotoping), 98.62% of the
+identified spectra carry a valid tag among the 50 kept, the same ceiling as
+DirecTag 1.4.21142, and a valid tag ranks first on 90.91% of them (DirecTag:
+88.69%). A tag is valid when its sequence occurs in the identified peptide and
+one flanking mass agrees within 0.05 Da. On the same run with `-gaps 1` at tag
+length 4, raising `-gap_penalty` from 1 to 100 raises rank-1 accuracy from
+69.0% to 86.4%, while the share of identified spectra with any valid tag stays
+at 98.05%. These numbers were measured with FASTag releases before 1.4; see
 [doc/BENCHMARK-DirecTag.md](doc/BENCHMARK-DirecTag.md) for the side-by-side
-comparison with the reference implementation.
+comparison with the reference implementation and `tools/pxd000001_truth.py`
+for the scorer.
+
+The effect of the defaults (deisotoping and one gap) on how many identified
+spectra gain a correctly placed tag is being measured for the current release
+against database-search identifications on several public PXD runs.
 
 `ctest` covers the rank-sum DP against exhaustive enumeration, end-to-end tag
 recovery from synthetic spectra, flanking-mass placement, extension, gap
@@ -684,7 +663,7 @@ the digest, label and mass-gap reports (`digest_test` against prose-auto
 
 Whether a correct tag exists is not the same question as whether it ranks
 first, and PSM ground truth only answers the first one. `bench/benchmark.cpp`
-generates synthetic spectra with exact per-tag truth, fitted to four real
+generates synthetic spectra with exact per-tag truth, fitted to three real
 acquisitions' peak count and ladder edge density (see
 [doc/TEST-DATA.md](doc/TEST-DATA.md)), to answer the second.
 
