@@ -2805,7 +2805,10 @@ protected:
           uint64_t count = kv.second.first;
           std::map<std::string, uint64_t> interps = kv.second.second;
           for (auto* nb : {lo != bins.end() ? &*lo : nullptr, hi != bins.end() ? &*hi : nullptr})
-            if (nb && nb->second.first < kv.second.first)
+            // A valley bin between two peaks goes to the first (lower-delta)
+            // one only: counted twice, the rows summed to more spectra than
+            // were sampled.
+            if (nb && nb->second.first < kv.second.first && !absorbed.count(nb->first))
             {
               count += nb->second.first;
               for (const auto& ip : nb->second.second) interps[ip.first] += ip.second;
