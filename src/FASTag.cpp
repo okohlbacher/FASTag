@@ -1101,8 +1101,18 @@ protected:
     dset.low_resolution = !p.tol_ppm;
     FD::ModelTable dtable;
     const std::string digest_models = getStringOption_("digest_models");
-    if (!digest_on && !digest_models.empty())
-      OPENMS_LOG_WARN << "-digest_models is only read for -digest_out; it is ignored here." << std::endl;
+    // Report options set without the report that reads them: ignored, so say so.
+    {
+      std::vector<std::string> unused;
+      if (!digest_on && !digest_models.empty()) unused.push_back("-digest_models");
+      if (!digest_on && dset.tag_min != 100) unused.push_back("-digest_tag_min");
+      if (!digest_on && dset.background_share != 0.05) unused.push_back("-digest_background_share");
+      if (!count_on && dset.window != 0.008) unused.push_back("-digest_window");
+      if (!count_on && dset.silac_min != 50) unused.push_back("-digest_silac_min");
+      for (const std::string& o : unused)
+        OPENMS_LOG_WARN << o << " is only read for -digest_out" << (o == "-digest_window" || o == "-digest_silac_min" ? " or -label_out" : "")
+                        << "; it is ignored here." << std::endl;
+    }
     const std::string ddir = (digest_on || massgap_on) ? digestDir_() : std::string();
     const auto no_digest_dir = [&](const char* what) {
       OPENMS_LOG_ERROR << "No shipped " << what << " found (expected <bin>/../share/FASTag/digest). "

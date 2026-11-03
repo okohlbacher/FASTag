@@ -232,6 +232,9 @@ Input is the `-delta_out` histogram (0.0005 Da bins, local-max grouped), built w
 | `-massgap_max_mods`, `-massgap_top` | 3, 5 | advanced |
 | `-massgap_silac_share`, `-massgap_silac_min` | 0.08, 500 | advanced |
 
+`-digest_models`, `-digest_tag_min` and `-digest_background_share` without `-digest_out`, and
+`-digest_window` or `-digest_silac_min` without `-digest_out` or `-label_out`, are ignored with a warning.
+
 **`FASTAG_FULL_PRECISION=1`** (environment, not in `--help`): the tag TSV writes `nterm_mass`,
 `cterm_mass` and `evalue` in shortest round-trip form instead of 4 decimals and 6 significant digits,
 so a reader of the TSV sees the doubles the reports use. For differential tests only.
