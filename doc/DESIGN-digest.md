@@ -37,7 +37,8 @@ section	key	value	n	description
 
 Example description: "1842 of 2010 C-terminal tag ends are K or R (0.92); Trypsin fits best, 0.61
 log-likelihood per tag ahead of Lys-C." Every file starts with `run` rows: `version`,
-`fragment_tolerance` (value and unit), `tag_length`, `subsample_fraction` and the options of that report.
+`input`, `fragment_tolerance`, `fragment_tolerance_unit`, `tag_length`, `subsample_fraction`,
+`subsample_spectra` and the options of that report.
 
 ## Counting rules (`-digest_out`, `-label_out`)
 
@@ -69,7 +70,8 @@ The classifier uses P1 and P1' only.
 `p'(a) = (1 − s)·p(a) + s·bg(a)` over the 19 residues, `s = -digest_background_share` (0.05,
 `NONSPECIFIC_SHARE`), with the background of the same end. The score is the multinomial
 log-likelihood `Σ k_a·ln(p'(a)/Σp')` of the C-terminal counts plus, only when `n_n ≥ -digest_tag_min`
-(100, `TAG_MIN`), that of the N-terminal counts. Sums run in table residue order, as in 0.1.3. The call
+(100, `TAG_MIN`), that of the N-terminal counts. Sums run in the residue order `GASPVTCLNDQKEMHFRYW`, as in 0.1.3, and add
+as Python's `sum()` does (Neumaier-compensated, CPython ≥ 3.12). The call
 is the top model; the runner-up is the best model of **another class**; the margin is the score
 difference divided by `n_c` (plus `n_n` when the N end is used). Ties go to the model listed first.
 
@@ -78,7 +80,7 @@ difference divided by `n_c` (plus `n_n` when the N end is used). Ties go to the 
 | Section | Keys | Value |
 |---|---|---|
 | `run` | as above, plus `window_da`, `tag_min`, `background_share`, `models` (`shipped` or path), `background` (`shipped_human`, `fasta:<path>` or `models_table`) | |
-| `meta` | `instrument`, `ion_mobility` (`yes`/`no`/`absent`), `ms2_scan_window_low` (median lower limit, m/z), `ms2_first_peak_mz` (median m/z of the first peak of each MS2, the input of 0.1.3's gate) | word or m/z |
+| `meta` | `instrument`, `instrument_model`, `native_id_format` (accession), `ion_mobility` (`yes`/`no`/`absent`), `ion_mobility_unit` (`1/K0`, `ms`, `FAIMS CV`, `other` or `-`), `ms2_scan_window_low` (median lower limit, m/z), `ms2_first_peak_mz` (median m/z of the first peak of each MS2, the input of 0.1.3's gate) | word or m/z |
 | `count` | `tags_filtered`, `tot`, `n_c`, `n_n` | integer |
 | `residue` | `C.K`, `C.K+TMT`, `C.K+TMTpro`, `C.K+iTRAQ4`, `C.K+8`, `C.R`, `C.R+10`, same with `N.` | integer |
 | `pos` | `C.P4.<aa>` .. `C.P1.<aa>`, `N.P1'.<aa>` .. `N.P4'.<aa>` (19 residues each) | integer |
@@ -179,7 +181,7 @@ Input is the `-delta_out` histogram (0.0005 Da bins, local-max grouped), built w
 | `hist` | key = gap (Da, 4 decimals as in `-delta_out`) | spectra |
 | `cys` | `spectra` (all rows), `zero_bin` (`|d| ≤ t`), and per 0.1.3 `DELTA_CANDIDATES` entry (`Carbamidomethyl (C)` 57.021464, `Propionamide (C)` 71.037114, `Nethylmaleimide (C)` 125.047679, `Methylthio (C)` 45.987721, `Carboxymethyl (C)` 58.005479): spectra with `|d − m| ≤ t` | integer |
 | `combo` | `placed_spectra` (rows with ≥ `-massgap_min_bin` = 2 spectra), `shifted_spectra` (those with `|d| > 2t`) | integer |
-| `peak` | `<i>.delta`, `<i>.spectra`, `<i>.explained_by` (`A+B` or `none`), `<i>.alternatives` (`A+B;C`), `<i>.context` | |
+| `peak` | `<i>.delta` (the count-weighted mean, full precision), `<i>.spectra`, `<i>.explained_by` (`A+B` or `none`), `<i>.alternatives` (`A+B;C`), `<i>.context` | |
 | `share` | per modification: spectra of the peaks it explains / `shifted_spectra` | decimal |
 | `top` | `1` .. `-massgap_top` (5): modifications by share | word |
 | `silac` | `call` (`SILAC (Lys8/Arg10)`, `SILAC (Lys4/Arg6)`, `SILAC triplex (Lys4/Arg6, Lys8/Arg10)` or `none`), `Lys4`, `Arg6`, `Lys8`, `Arg10` shares | word, decimal |

@@ -285,6 +285,18 @@ reporting a clean run over an empty file.
 | `-recon_localize` | off | Localize each reconciliation's mass gap to one residue of its region by the b/y fragments it shifts; appends `loc_site` (residue + 1-based protein position, the first on a tie), `loc_score` (b/y ion/charge matches) and `loc_ties` (sites sharing that score; 1 = unique) to `-recon_out` |
 | `-recon_id_out <file>` | none | The `-recon_out` placements as identifications: idXML, mzid or mzTab by extension (see Reconciliation). NOT FDR-controlled |
 | `-delta_out <file>` | none | Aggregated mass-shift histogram over reconciliations (one best placement per spectrum). Region-level candidates, NOT localized identifications, NOT FDR-controlled |
+| `-digest_out <file>` | none | Terminal residues of the tags (ungapped, E-value ≤ 1) at P4..P1 and P1'..P4', and the protease call they support with its margin, or `no_call` with the reason (see Digest, label and mass-gap reports) |
+| `-label_out <file>` | none | N-terminal TMT, TMTpro and iTRAQ4 gaps at the tag ends and the heavy Lys8/Arg10 shares |
+| `-massgap_out <file>` | none | The `-delta_out` gap distribution with Cys alkylation counts, gap peaks explained as combinations of up to 3 Unimod modifications, and SILAC labels among them. Requires `-recon_out` |
+| `-digest_models <file>` | shipped | Protease model table for `-digest_out` (columns `model`, `class`, `end`, `residue`, `freq`); its `background` rows win over a FASTA |
+| `-digest_tag_min <n>` | 100 | Advanced: tag ends a call needs; the N-terminal ends count from as many |
+| `-digest_window <Da>` | 0.008 | Advanced: window around a residue or label mass at the tag ends |
+| `-digest_background_share <f>` | 0.05 | Advanced: share of the background mixed into every model |
+| `-digest_silac_min <n>` | 50 | Advanced: K- and R-terminal tag ends each for `-label_out`'s heavy-share gate |
+| `-massgap_window <Da>` / `-massgap_window_da <Da>` | 0.02 / 0.5 | Advanced: gap window on ppm runs / on Da runs |
+| `-massgap_min_spectra <n>` / `-massgap_min_share <f>` / `-massgap_min_bin <n>` | 20 / 0.005 / 2 | Advanced: spectra and share a gap peak needs; spectra a histogram row needs to take part |
+| `-massgap_max_mods <n>` / `-massgap_top <n>` | 3 / 5 | Advanced: modifications per explanation; modifications listed by share |
+| `-massgap_silac_share <f>` / `-massgap_silac_min <n>` | 0.08 / 500 | Advanced: share a SILAC label needs; shifted spectra a SILAC call needs |
 | `-entrapment_fasta <file>` | none | Entrapment database (foreign species) calibrating a `q_db` column: the estimated false-match rate of the `-fasta` filter at each E-value (see q_db). Requires `-fasta` |
 | `-glyco` | off | Flag oxonium-bearing MS2 spectra to `<out>.glyco.tsv` (see Glyco flag) |
 | `-glyco_out <file>` | `<out>.glyco.tsv` | Per-spectrum oxonium report |
@@ -381,6 +393,41 @@ region-level, nothing here is FDR-controlled, and `delta_interp` names a
 hypothesis, not an identification. On a human Astral run the zero bin
 dominates, the +1.003 isotope-error peak and a +128.095 missed-K peak appear
 where chemistry predicts them.
+
+## Digest, label and mass-gap reports
+
+`-digest_out`, `-label_out` and `-massgap_out` describe how a run was digested
+and labelled, from the tags the run reports. Each is a long-form TSV with the
+columns `section`, `key`, `value`, `n` (the tags or spectra a value rests on)
+and `description` (one sentence with the numbers). They report measurements;
+how much to trust them is for the reader to decide. Without these options
+every other output is unchanged.
+
+- **`-digest_out`** counts the residue one mass step beyond each ungapped tag
+  with an E-value ≤ 1: a `cterm_mass` equal to a residue (y tags), an
+  `nterm_mass` equal to a residue plus water (reversed b tags), and an
+  `nterm_mass` equal to a residue (the N-terminal P1'), within 0.008 Da. Labelled
+  K (TMT, TMTpro, iTRAQ4, Lys8) counts as K. Each protease model, mixed with 5 %
+  background, is scored by the multinomial log-likelihood of these counts; the
+  call is the best model and the margin its lead per tag over the best model of
+  another class. The shipped models are cleavage rules (Trypsin, Lys-C, Arg-C,
+  Glu-C, Chymotrypsin, Asp-N, Lys-N) and `unspecific`, over the human
+  reference proteome composition, or over the composition of `-recon_fasta` /
+  `-fasta` when given. HLA or proteasome models need a `-digest_models` table.
+  No call is made, and the reason is written, on Da tolerances, timsTOF input,
+  an MS2 scan window starting above y1 of K, or fewer than 100 tag ends.
+- **`-label_out`** counts tag ends that are a bare TMT, TMTpro or iTRAQ4 mass,
+  against the same count 0.5 Da higher, and the Lys8 and Arg10 shares of the
+  C-terminal K and R.
+- **`-massgap_out`** reads the `-delta_out` histogram (built even when
+  `-delta_out` is not written; run it without fixed modifications to see the
+  Cys alkylation): spectra near each Cys alkylation mass, and gap peaks
+  explained as the smallest combination of up to three of 38 Unimod
+  modifications.
+
+The counting reproduces prose-auto 0.1.3's detectors. `FASTAG_FULL_PRECISION=1`
+in the environment writes the tag TSV's masses and E-values in full precision,
+for comparing against a reader of that file.
 
 ## q_db: entrapment-calibrated filter confidence
 
