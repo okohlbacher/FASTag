@@ -85,7 +85,8 @@ difference divided by `n_c` (plus `n_n` when the N end is used). Ties go to the 
 | `residue` | `C.K`, `C.K+TMT`, `C.K+TMTpro`, `C.K+iTRAQ4`, `C.K+8`, `C.R`, `C.R+10`, same with `N.` | integer |
 | `pos` | `C.P4.<aa>` .. `C.P1.<aa>`, `N.P1'.<aa>` .. `N.P4'.<aa>` (19 residues each) | integer |
 | `share` | `kr`, `anchors_LVFYM`, `nterm_D` | decimal |
-| `model` | `<model>.loglik`, `<model>.class` (written when `n_c ≥ tag_min`) | decimal, word |
+| `model` | `<model>.loglik`, `<model>.class`, and `<model>.C.<aa>`, `<model>.N.<aa>` (the model's distribution, normalised, before mixing; an end that is the background has the background's values), all written when `n_c ≥ tag_min` | decimal, word |
+| `background` | `C.<aa>`, `N.<aa>` (19 residues each): the background in use, normalised | decimal |
 | `call` | `status` (`call`/`no_call`); on a call `model`, `class`, `runner_up`, `runner_up_class`, `margin` (log-likelihood per tag), `uses_nterm`; on no call `reason` | |
 | `nocall` | `low_resolution`, `timstof`, `ms2_scan_window`, `few_tags`: whether each rule fired (`yes`/`no`/`unknown`) | word |
 

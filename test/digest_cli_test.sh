@@ -86,6 +86,11 @@ run "${COMMON[@]}" -out "$TMP/m.tsv" -digest_models "$TMP/models.tsv" -digest_ou
 [ "$(val "$TMP/digest2.tsv" run background)" = models_table ] || fail "the table's background did not win over -fasta"
 [ "$(val "$TMP/digest2.tsv" model KR.class)" = KR ] || fail "model KR not scored"
 [ -n "$(val "$TMP/digest2.tsv" model flat.loglik)" ] || fail "model flat not scored"
+# the distributions behind the scores: the table's background, KR normalised, flat's C end the background
+[ "$(val "$TMP/digest2.tsv" background C.K)" = "$(val "$TMP/digest2.tsv" background N.W)" ] || fail "uniform background not reported"
+[ "$(val "$TMP/digest2.tsv" model KR.C.K) $(val "$TMP/digest2.tsv" model KR.C.G)" = "0.5 0" ] || fail "KR's C end is not K, R at 0.5"
+[ "$(val "$TMP/digest2.tsv" model flat.C.A)" = "$(val "$TMP/digest2.tsv" background C.A)" ] || fail "flat's C end is not the background"
+[ "$(tr -d '\r' < "$TMP/digest2.tsv" | awk -F'\t' '$1 == "background"' | wc -l | tr -d ' ')" = 38 ] || fail "background rows are not 2 x 19"
 printf 'model\tclass\tend\tresidue\tfreq\nKR\tKR\tC\tK\t1\n' > "$TMP/nobg.tsv"
 run "${COMMON[@]}" -out "$TMP/m.tsv" -digest_models "$TMP/nobg.tsv" -digest_out "$TMP/digest3.tsv" -fasta "$DB"
 [ "$(val "$TMP/digest3.tsv" run background)" = "fasta:$DB" ] || fail "a table without background does not take the FASTA's"

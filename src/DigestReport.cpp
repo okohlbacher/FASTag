@@ -185,6 +185,26 @@ namespace FASTag::Digest
       r.add("model", m.name + ".class", m.cls, "-", m.name + " belongs to the class " + m.cls + ".");
     }
 
+    // ---- the distributions the models are scored with, normalised, before mixing
+    auto dist = [&](const std::string& section, const std::string& prefix, const Dist& d,
+                    const std::string& who) {
+      double z = 0.0;
+      for (double x : d) z += x;
+      for (int a = 0; a < kNumAA; ++a)
+      {
+        const double v = z > 0.0 ? d[a] / z : 0.0;
+        r.add(section, prefix + kAAs[a], num(v), "-", who + " gives " + kAAs[a] + " a share of " + f(v, 4) + ".");
+      }
+    };
+    dist("background", "C.", table.bg_c, "The C-terminal background");
+    dist("background", "N.", table.bg_n, "The N-terminal background");
+    if (c.scored)
+      for (const Model& m : table.models)
+      {
+        dist("model", m.name + ".C.", m.c_bg ? table.bg_c : m.c, m.name + " at the C end");
+        dist("model", m.name + ".N.", m.n_bg ? table.bg_n : m.n, m.name + " at the N end");
+      }
+
     // no-call rules, in order
     const std::string inst = lower(meta.instrument_name + " " + meta.instrument_model);
     const bool tims_yes = inst.find("timstof") != std::string::npos || meta.native_id_type == "MS:1002818" ||
@@ -273,17 +293,16 @@ namespace FASTag::Digest
     }
     const std::uint64_t tot = tc.tot();
     const int K = keyIndex("K"), K8 = keyIndex("K+8"), R = keyIndex("R"), R10 = keyIndex("R+10");
-    auto heavy = [&](int light, int hv) -> std::string {
-      if (!tot) return "-";
+    auto heavy = [&](int light, int hv) -> double {
       const double sl = static_cast<double>(tc.res(light)) / static_cast<double>(tot);
       const double sh = static_cast<double>(tc.res(hv)) / static_cast<double>(tot);
-      return num(sh / std::max(sh + sl, 1e-9));
+      return sh / std::max(sh + sl, 1e-9);
     };
-    const std::string hk = heavy(K, K8), hr = heavy(R, R10);
-    r.add("heavy", "K8.share", hk, u(tc.res(K) + tc.res(K8)),
-          hk == "-" ? "No C-terminal tag end matches a residue." : "Lys8 is a share of " + hk.substr(0, 6) + " of the C-terminal K and Lys8 ends.");
-    r.add("heavy", "R10.share", hr, u(tc.res(R) + tc.res(R10)),
-          hr == "-" ? "No C-terminal tag end matches a residue." : "Arg10 is a share of " + hr.substr(0, 6) + " of the C-terminal R and Arg10 ends.");
+    const double hk = tot ? heavy(K, K8) : 0.0, hr = tot ? heavy(R, R10) : 0.0;
+    r.add("heavy", "K8.share", tot ? num(hk) : "-", u(tc.res(K) + tc.res(K8)),
+          !tot ? "No C-terminal tag end matches a residue." : "Lys8 is a share of " + g(hk, 3) + " of the C-terminal K and Lys8 ends.");
+    r.add("heavy", "R10.share", tot ? num(hr) : "-", u(tc.res(R) + tc.res(R10)),
+          !tot ? "No C-terminal tag end matches a residue." : "Arg10 is a share of " + g(hr, 3) + " of the C-terminal R and Arg10 ends.");
     const std::uint64_t nk = tc.res(K) + tc.res(K8), nr = tc.res(R) + tc.res(R10);
     r.add("heavy", "K.tags", u(nk), "-", u(nk) + " C-terminal tag ends are K or Lys8.");
     r.add("heavy", "R.tags", u(nr), "-", u(nr) + " C-terminal tag ends are R or Arg10.");
@@ -355,7 +374,8 @@ namespace FASTag::Digest
             alt.empty() ? "No other combination fits peak " + std::to_string(i + 1) + "."
                         : std::to_string(p.alternatives.size()) + " other combinations fit peak " + std::to_string(i + 1) + ".");
       r.add("peak", k + "context", p.context.empty() ? "-" : p.context, "-",
-            p.context.empty() ? "The explanation of peak " + std::to_string(i + 1) + " is the first by size and prior."
+            p.explained_by.empty() ? "Peak " + std::to_string(i + 1) + " has no explanation."
+            : p.context.empty()    ? "The explanation of peak " + std::to_string(i + 1) + " is the first by size and prior."
                               : "The explanation of peak " + std::to_string(i + 1) + " was chosen because its " + p.context + ".");
     }
 
