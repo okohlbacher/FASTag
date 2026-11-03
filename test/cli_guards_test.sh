@@ -37,8 +37,11 @@ ln -s "$TMP/run.mzML" "$TMP/link.mzML"
 sum_before=$(cksum < "$TMP/run.mzML")
 "$BIN" -in "$TMP/run.mzML" -out "$TMP/o.tsv" -out_spectra "$TMP/run.mzML" "${ARGS[@]}" \
   >"$TMP/o.log" 2>&1 && fail "-out_spectra equal to -in ran (exit 0)"
-"$BIN" -in "$TMP/link.mzML" -out "$TMP/o.tsv" -out_spectra "$TMP/run.mzML" "${ARGS[@]}" \
-  >"$TMP/o2.log" 2>&1 && fail "-out_spectra aliasing -in through a symlink ran (exit 0)"
+# Git Bash on Windows makes ln -s a copy, which is no alias: test only a real symlink.
+if [ -L "$TMP/link.mzML" ]; then
+  "$BIN" -in "$TMP/link.mzML" -out "$TMP/o.tsv" -out_spectra "$TMP/run.mzML" "${ARGS[@]}" \
+    >"$TMP/o2.log" 2>&1 && fail "-out_spectra aliasing -in through a symlink ran (exit 0)"
+fi
 [ "$(cksum < "$TMP/run.mzML")" = "$sum_before" ] || fail "the input file was modified"
 # Two outputs, one file.
 "$BIN" -in "$IN" -out "$TMP/same.tsv" -fasta "$DB" -recon_out "$TMP/same.tsv" -tag_length 4 "${ARGS[@]}" \
