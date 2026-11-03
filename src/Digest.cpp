@@ -225,6 +225,8 @@ namespace FASTag::Digest
     std::array<bool, kNumAA> bgc_seen{}, bgn_seen{};
     // per model and end: rows given, '*' given
     std::map<std::string, std::array<int, 4>> state;  // c_rows, c_star, n_rows, n_star
+    // per model: residue rows seen at the C (first) and N (second) end
+    std::map<std::string, std::pair<std::array<bool, kNumAA>, std::array<bool, kNumAA>>> res_seen;
     auto model_of = [&](const std::string& name, const std::string& cls) -> Model* {
       for (Model& m : out.models)
         if (m.name == name) return m.cls == cls ? &m : nullptr;
@@ -269,6 +271,11 @@ namespace FASTag::Digest
           auto& s = state[name];
           if (s[cend ? 1 : 3]) return fail(err, at + "'*' and residue rows for one end of '" + name + "'");
           s[cend ? 0 : 2] = 1;
+          auto& rs = res_seen[name];
+          auto& seen = cend ? rs.first : rs.second;
+          // As for the background: a repeated row silently replaced the first.
+          if (seen[a]) return fail(err, at + "'" + name + "' " + end + " " + res + " given twice");
+          seen[a] = true;
           (cend ? m->c : m->n)[a] = v;
           (cend ? m->c_bg : m->n_bg) = false;
           return true;
@@ -280,6 +287,17 @@ namespace FASTag::Digest
           return fail(err, std::string("the background has no row for ") + kAAs[a] + " at the " +
                                (bgc_seen[a] ? "N" : "C") + " end; it needs all 19 residues at both ends");
     if (out.models.empty()) return fail(err, "no model");
+    // An end with no mass makes loglik log(0/0) = NaN once mixed with an
+    // all-zero background or a background share of 0, and the report then
+    // blamed "a residue ... has probability 0".
+    const auto massless = [](const Dist& d) {
+      return std::accumulate(d.begin(), d.end(), 0.0) <= 0.0;
+    };
+    if (out.has_bg && (massless(out.bg_c) || massless(out.bg_n)))
+      return fail(err, "the background has an end whose frequencies are all 0");
+    for (const Model& m : out.models)
+      if ((!m.c_bg && massless(m.c)) || (!m.n_bg && massless(m.n)))
+        return fail(err, "model '" + m.name + "' has an end whose frequencies are all 0");
     return true;
   }
 
