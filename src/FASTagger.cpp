@@ -576,6 +576,17 @@ namespace FASTag
         const double p_lo = P.front().mass, p_hi = P.back().mass;
         static thread_local std::vector<std::vector<std::pair<uint32_t, uint16_t>>> gadj;
         if (gadj.size() < n) gadj.resize(n);
+        // adj[] (ordinary edges, built above) is sorted by nothing in
+        // particular, so scan it: degree is a handful at real tolerances.
+        const auto twoStep = [&](uint32_t from, uint32_t to) {
+          for (const auto& e1 : adj[from])
+          {
+            if (e1.first >= to) continue;
+            for (const auto& e2 : adj[e1.first])
+              if (e2.first == to) return true;
+          }
+          return false;
+        };
         for (size_t i = 0; i < n; ++i) gadj[i].clear();
         for (size_t i = 0; i < n; ++i)
           for (size_t j = i + 1; j < n; ++j)
@@ -592,7 +603,15 @@ namespace FASTag
               const double err = std::fabs(it->mass - d);
               if (err < best_err) { best_err = err; best = static_cast<int>(it - P.begin()); }
             }
-            if (best >= 0)
+            // A gap stands for ONE MISSING peak. When an ordinary two-step
+            // path i -> m -> j exists the peak is there, and the gap edge
+            // would only re-read an observed ladder: its spellings (both
+            // orders, every isobaric composition) add hypotheses with no new
+            // evidence, count in n_seeds -- multiplying every E-value in the
+            // spectrum -- and take max_tags slots (review F2). A single
+            // ordinary step whose residue is itself a pair sum (N = GG, W = AD)
+            // keeps its gap edge: the two-residue reading is an alternative.
+            if (best >= 0 && !twoStep(static_cast<uint32_t>(i), static_cast<uint32_t>(j)))
               gadj[i].emplace_back(static_cast<uint32_t>(j), static_cast<uint16_t>(best));
           }
         g.goff.assign(n + 1, 0);

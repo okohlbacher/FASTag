@@ -876,6 +876,42 @@ int main()
     std::printf("19. m/z fidelity in ppm is flat: mean p %.3f (low m/z) vs %.3f (high)\n", lo, hi);
   }
 
+  // 20. a complete ladder grows no gap edges
+  //
+  // A gap stands for one missing peak. With every y ion present, gaps=1 used
+  // to add a gapped re-reading for every pair of peaks two residues apart,
+  // all counted in n_seeds, so the contiguous tags' E-values got worse with no
+  // new evidence. The peptide avoids N, Q, R and W inside the ladder: a single
+  // step by one of those IS a two-residue sum (GG, GA, GV, AD...), and that
+  // gapped alternative reading stays, as it should.
+  {
+    const std::string pep = "SAMPLEFPETDYK";
+    const AASequence aa = AASequence::fromString(pep);
+    double pmz = 0;
+    synth(pep, 0, 1, pmz);
+    MSSpectrum y;
+    for (size_t i = 1; i < aa.size(); ++i)
+      y.emplace_back(aa.getSuffix(i).getMonoWeight(Residue::YIon, 1), 0.5 + 0.02 * static_cast<double>(i));
+    y.sortByPosition();
+    FASTag::Param off;
+    off.frag_tol = 0.02; off.tol_ppm = false; off.complement_tol = 0.02;
+    off.tag_length = 4; off.max_tag_count = 0; off.max_evalue = 0;
+    FASTag::Param on = off; on.max_gaps = 1;
+    const FASTag::Tables tf(off), tn(on);
+    const auto a = FASTag::tagSpectrum(y, pmz, 2, off, tf);
+    const auto b = FASTag::tagSpectrum(y, pmz, 2, on, tn);
+    size_t gapped = 0;
+    for (const auto& t : b) gapped += t.gapped ? 1 : 0;
+    CHECK(!a.empty(), "no tags; the test asserts nothing");
+    CHECK(gapped == 0, "%zu gapped rows on a complete ladder (no peak is missing)", gapped);
+    bool same = a.size() == b.size();
+    for (size_t i = 0; same && i < a.size(); ++i)
+      same = a[i].seq == b[i].seq && a[i].evalue == b[i].evalue;
+    CHECK(same, "gaps on changed the contiguous tags or their E-values (%zu vs %zu rows)", a.size(), b.size());
+    std::printf("20. complete ladder: %zu rows with gaps off, %zu with gaps on, %zu gapped\n",
+                a.size(), b.size(), gapped);
+  }
+
   std::printf(failures ? "\n%d FAILURES\n" : "\nall checks passed\n", failures);
   return failures ? 1 : 0;
 }
