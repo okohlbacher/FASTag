@@ -1874,6 +1874,7 @@ protected:
     {
       std::map<int, std::pair<size_t, size_t>> len;  ///< length -> (seen, matched)
       size_t ms2 = 0, tags = 0, rep = 0;
+      size_t no_charge = 0;  ///< MS2 whose precursor carries no charge (tagged as 2+)
       // Entrapment-calibration accumulators (entrap_on only): target E-values,
       // and entrapment E-values with their tag length -- the key spaces are
       // per-length, so each entrapment event is weighted by 1/r_len later.
@@ -1955,6 +1956,7 @@ protected:
       }
 
       const auto& prec = spec.getPrecursors().front();
+      if (prec.getCharge() <= 0) ++pt.no_charge;
       const auto tags = tag_all(spec, prec.getMZ(), prec.getCharge(), tables);
       pt.tags += tags.size();
 
@@ -2604,8 +2606,10 @@ protected:
                       << std::endl;
     }
 
+    size_t n_no_charge = 0;
     for (const PerThread& pt : per_thread)
     {
+      n_no_charge += pt.no_charge;
       n_ms2 += pt.ms2;
       n_tags += pt.tags;
       n_reported += pt.rep;
@@ -3292,6 +3296,11 @@ protected:
     OPENMS_LOG_INFO << n_ms2 << " MS2 spectra, " << n_tags << " tags";
     if (filtering) OPENMS_LOG_INFO << " -> " << n_reported << " after filtering";
     OPENMS_LOG_INFO << std::endl;
+    if (n_no_charge > 0)
+      OPENMS_LOG_WARN << n_no_charge << " of " << n_ms2 << " MS2 spectra carry no precursor "
+                         "charge and were tagged as 2+: their peaks above the 2+ precursor "
+                         "mass are dropped, and their nterm_mass flanks assume charge 2 (wrong "
+                         "for a 3+ or higher precursor)." << std::endl;
 
     // Report matches beside the number expected by chance, so a count is never
     // mistaken for signal: below the derived floor the filter passes almost
