@@ -91,7 +91,7 @@ else()
                   "not apply.")
 endif()
 
-add_library(fastag_core STATIC src/FASTagger.cpp src/AveragineDeisotoper.cpp src/FastaFilter.cpp src/ProteomeIndex.cpp src/ReconIds.cpp src/TagRecon.cpp src/TaxDeconv.cpp src/TaxIndex.cpp src/TaxStats.cpp)
+add_library(fastag_core STATIC src/FASTagger.cpp src/AveragineDeisotoper.cpp src/Digest.cpp src/DigestReport.cpp src/FastaFilter.cpp src/ProteomeIndex.cpp src/ReconIds.cpp src/TagRecon.cpp src/TaxDeconv.cpp src/TaxIndex.cpp src/TaxStats.cpp)
 target_include_directories(fastag_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
@@ -110,6 +110,9 @@ endif()
 # it evaluates what it says.
 if(NOT MSVC)
   set_source_files_properties(src/AveragineDeisotoper.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+  # The digest reports reproduce prose-auto 0.1.3's Python arithmetic, where
+  # (1 - s) * p + s * bg is two products and a sum: no contraction either.
+  set_source_files_properties(src/Digest.cpp src/DigestReport.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
 endif()
 
 # mzPeak in and out goes through OpenMS's MzPeakFile; an OpenMS built without
@@ -146,6 +149,14 @@ install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy/nodes.dmp"
 
 add_executable(buildtaxdb src/buildtaxdb.cpp)
 target_link_libraries(buildtaxdb PRIVATE fastag_core)
+# The -digest_out protease models (cleavage rules over the human reference
+# proteome composition) and the -massgap_out modification list, found at
+# <bin>/../share/FASTag/digest (flat release layout: share-FASTag-digest).
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/data/digest/digest_models.tsv"
+              "${CMAKE_CURRENT_SOURCE_DIR}/data/digest/massgap_mods.tsv"
+              "${CMAKE_CURRENT_SOURCE_DIR}/data/digest/README.md"
+        DESTINATION share/FASTag/digest)
+
 install(TARGETS buildtaxdb RUNTIME DESTINATION bin)
 
 add_executable(tagfeatures src/tagfeatures.cpp)
@@ -160,7 +171,7 @@ endif()
 option(FASTAG_BUILD_TESTS "Build tests" ON)
 if(FASTAG_BUILD_TESTS)
   enable_testing()
-  foreach(t ranksum_test fastag_test fasta_filter_test tagrecon_test tagfdr_test proteome_index_test glyco_test taxindex_test taxstats_test taxdeconv_test sampler_test proforma_test numformat_test peakgrid_test formats_test)
+  foreach(t ranksum_test fastag_test fasta_filter_test tagrecon_test tagfdr_test proteome_index_test glyco_test taxindex_test taxstats_test taxdeconv_test sampler_test proforma_test numformat_test peakgrid_test formats_test digest_test)
     add_executable(${t} test/${t}.cpp)
     target_link_libraries(${t} PRIVATE fastag_core)
     add_test(NAME ${t} COMMAND ${t})
@@ -188,6 +199,10 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta)
   set_tests_properties(multilength_test PROPERTIES SKIP_RETURN_CODE 77)
+
+  # The shipped digest data, for digest_test and digest_cli_test.
+  target_compile_definitions(digest_test PRIVATE
+                             FASTAG_DIGEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/data/digest")
 
   # Integration: -recon_id_out .mzid is written with placements, and empty
   # (0 bytes) without them.

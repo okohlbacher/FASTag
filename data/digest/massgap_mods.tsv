@@ -1,0 +1,42 @@
+# Modifications for the -massgap_out combination search: Unimod names, an OpenMS ModificationsDB
+# site id (the mass is that modification's monoisotopic delta) and a prior (1.0 = seen in most runs,
+# 0.5 = study-specific), as in prose-auto 0.1.3 delta_combos.MODS. The order is the search order.
+name	site	prior
+Oxidation	Oxidation (M)	1.0
+Dioxidation	Dioxidation (M)	0.5
+Deamidated	Deamidated (N)	1.0
+Gln->pyro-Glu	Gln->pyro-Glu (N-term Q)	1.0
+Glu->pyro-Glu	Glu->pyro-Glu (N-term E)	1.0
+Carbamidomethyl	Carbamidomethyl (C)	1.0
+Cation:Na	Cation:Na (D)	0.7
+Cation:K	Cation:K (D)	0.5
+Carbamyl	Carbamyl (N-term)	0.7
+Formyl	Formyl (N-term)	0.5
+Acetyl	Acetyl (K)	1.0
+Methyl	Methyl (K)	0.7
+Dimethyl	Dimethyl (K)	0.7
+Trimethyl	Trimethyl (K)	0.5
+Propionyl	Propionyl (K)	0.5
+Butyryl	Butyryl (K)	0.3
+Crotonyl	Crotonyl (K)	0.3
+Succinyl	Succinyl (K)	0.3
+Malonyl	Malonyl (K)	0.3
+GG	GG (K)	0.5
+Phospho	Phospho (S)	0.7
+Sulfo	Sulfo (Y)	0.2
+Nitro	Nitro (Y)	0.3
+HexNAc	HexNAc (S)	0.5
+Hex	Hex (K)	0.3
+Cysteinyl	Cysteinyl (C)	0.3
+Methylthio	Methylthio (C)	0.5
+Propionamide	Propionamide (C)	0.5
+Nethylmaleimide	Nethylmaleimide (C)	0.5
+TMT6plex	TMT6plex (K)	0.5
+TMTpro	TMTpro (K)	0.5
+iTRAQ4plex	iTRAQ4plex (K)	0.5
+Label:13C(6)15N(2)	Label:13C(6)15N(2) (K)	0.5
+Label:13C(6)15N(4)	Label:13C(6)15N(4) (R)	0.5
+Label:2H(4)	Label:2H(4) (K)	0.5
+Label:13C(6)	Label:13C(6) (R)	0.5
+Met-loss	Met-loss (Protein N-term M)	0.7
+Met-loss+Acetyl	Met-loss+Acetyl (Protein N-term M)	0.7
