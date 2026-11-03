@@ -109,11 +109,11 @@ the right build for whatever you are reading this on. Everything is also on the
 | platform | desktop app | command line |
 |---|---|---|
 | macOS, Apple silicon | [.dmg](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-macos-arm64.dmg) | [.dmg](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-macos-arm64.dmg) |
-| macOS, Intel | [.dmg](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-macos-x64.dmg) | [.dmg](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-macos-x64.dmg) |
 | Windows x64 | [installer](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-windows-x64-setup.exe) | [.zip](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-windows-x64.zip) |
 | Linux x64 | — | [.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-x64.tar.gz) |
 | Linux arm64 | — | [.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-arm64.tar.gz) |
 
+Intel Macs are not built from 1.7.0 on; 1.6.1 is the last release for them.
 On macOS both are also on [Homebrew](https://github.com/okohlbacher/homebrew-fastag):
 `brew install --cask okohlbacher/fastag/fastag` (desktop app) or
 `brew install --cask okohlbacher/fastag/fastag-cli` (command line, `FASTag` on your PATH).
@@ -133,7 +133,11 @@ connection — a plain tarball cannot carry a notarization ticket.
 **Windows builds are not yet code-signed** — the signing path is wired up but
 the SignPath project is not live — so SmartScreen will warn on first run.
 
-Building from source needs OpenMS ≥ 3.5, a C++17 compiler and CMake ≥ 3.21.
+Building from source needs OpenMS 3.7 (develop), a C++23 compiler and CMake ≥
+3.24. Releases are built against OpenMS develop at commit
+[`70cebcd144`](https://github.com/OpenMS/OpenMS/commit/70cebcd14442cecd6bcd9794fb6786d3342cacc6),
+compiled from source with the libraries listed in
+[`.github/env/openms.yml`](.github/env/openms.yml).
 
 ## Desktop GUI
 
@@ -190,8 +194,8 @@ four in/out combinations work, and which container you use does not change the
 tags: a run read as mzPeak gives the same spectra as the same run read as mzML,
 and a run written to mzPeak and tagged again reproduces the original tag set.
 
-An input FASTag cannot decode at all — an mzPeak archive in an encoding the
-library does not support, say — ends the run with the reader's own message on
+An input FASTag cannot decode at all — an mzPeak archive in an encoding
+OpenMS does not support, say — ends the run with the reader's own message on
 `Error:` and a non-zero exit code, rather than aborting.
 
 ### mzML
@@ -210,38 +214,38 @@ and read it up front instead.
 
 ### mzPeak
 
-mzPeak is a Parquet-backed format (Parquet tables in a ZIP container). Reading
-is parallel — each thread owns a reader over a shared archive index — and
-decoded row groups live in one cache shared by every reader, so a group is
-decoded once whatever the thread count, and memory tracks the groups in flight
-rather than `-threads`. Because the smallest unit Parquet can return is a row
-group, that floor grows with the archive's row-group size (a chunked Astral
-archive has ~580 MB groups); `-mzpeak_read_memory` caps it.
+mzPeak is a Parquet-backed format (Parquet tables in a ZIP container). FASTag
+reads and writes it through OpenMS's `MzPeakFile`. The archive is read once,
+front to back, by OpenMS's decoding threads, while FASTag's tagging threads take
+the spectra from it as they arrive; MS1 peaks are dropped on read, since
+nothing uses them.
 
 **Profile MS2 is centroided on read.** Archives converted from raw files
 routinely store profile MS2 with an empty centroid facet, and tagging profile
 samples rather than peaks costs real recall: on one run, 80,990 tags reading the
 profile data as-is against 122,489 with on-read centroiding (`PeakPickerHiRes`).
-Picking runs in the worker, so it parallelises.
+Picking runs in the tagging threads, so it parallelises.
 
-Run-level metadata travels with the data: run id and start time, source files
-with their checksums, the instrument and its components, the sample, and the
-processing history, to which FASTag appends its own filtering step. An archive
-that arrived as mzPeak keeps its metadata block verbatim.
+**Limitations of the mzPeak path** (in OpenMS's `MzPeakFile`, as of the OpenMS
+commit above):
 
-mzPeak support is provided by
-[mzpeak-openms](https://github.com/okohlbacher/mzpeak-openms), bundled with
-every released binary. To build from source with it, build that library and
-configure FASTag with `-DMZPEAK_SOURCE_DIR=<checkout> -DMZPEAK_LIB_DIR=<install
-prefix>`; configure reports what you got:
+- Reading is slower than in FASTag 1.6, which read archives with random access
+  from every thread through a shared decode cache. `-mzpeak_read_memory` is
+  accepted for existing command lines and has no effect.
+- `-subsample_spectra` and `-subsample_fraction` read the whole archive and
+  drop the spectra not chosen; they cannot skip ahead.
+- `-out_spectra` with an mzPeak input reads the archive a second time.
+- `-out_spectra` to `.mzpeak` holds the spectra it writes in memory, and the
+  archive carries peaks, MS level, retention time, polarity, native IDs,
+  precursors and source files, but no activation, chromatograms, instrument
+  configuration, data-processing history or run references (mzPeakValidator
+  reports the missing run references as errors).
+- `-out_spectra` to `.mzpeak` refuses spectra with an ion mobility per peak
+  (timsTOF frames), with an error; write `.mzML` instead.
 
-```
--- FASTag: mzPeak read/write enabled (<path>/libmzpeak.dylib)
--- FASTag: mzpeak-openms NOT found -- this build reads and writes mzML only
-```
-
-A build without the library refuses `.mzpeak` on either side with a message
-saying so, rather than reporting a clean run over an empty file.
+A FASTag built against an OpenMS without mzPeak support (`OPENMS_ENABLE_MZPEAK`
+off) refuses `.mzpeak` on either side with a message saying so, rather than
+reporting a clean run over an empty file.
 
 ## Command-line reference
 
@@ -296,7 +300,7 @@ saying so, rather than reporting a clean run over an empty file.
 | `-species_deconvolve` | off | Correct taxon counts for sequence shared between taxa |
 | `-subsample_spectra <n>` / `-subsample_fraction <f>` | 0 | Tag only a random subset (count or fraction); 0 = all |
 | `-subsample_seed <n>` | 1 | Seed for the `-subsample_*` selection |
-| `-mzpeak_read_memory <MB>` | 0 | Decoded mzPeak held at once; 0 sizes it to the archive |
+| `-mzpeak_read_memory <MB>` | 0 | No effect; accepted for existing command lines |
 
 Plus the standard OpenMS TOPP options: `-threads <n>` (parallelism — the
 core performance lever; **defaults to 0, which means half the logical cores**,
@@ -571,8 +575,9 @@ A file small enough to finish in well under a second gains nothing from more
 threads — `fusion_tonsil` is already at its floor by 16.
 
 Output is identical at every thread count, and memory is O(threads) rather than
-O(file) on the mzML path; mzPeak instead tracks the row groups in flight, with a
-floor set by the archive's row-group size (see [File formats](#file-formats)).
+O(file) on the mzML path. The mzPeak figures above were measured with FASTag
+1.6's own reader; 1.7 reads mzPeak through OpenMS and is slower (see
+[mzPeak](#mzpeak)).
 `-out_spectra` is the other exception, since it holds one slot per input
 spectrum.
 

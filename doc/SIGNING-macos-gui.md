@@ -145,7 +145,7 @@ manual run.
 - **Notarization is iterate-to-green.** The first submissions usually fail on a
   missed nested binary; `xcrun notarytool log <id>` names the exact file. That
   is why the CLI step signs *every* dylib rather than a hand-listed set.
-- **Two arches.** `macos-arm64` and `macos-x64` each produce their own `.dmg`,
+- **One arch.** `macos-arm64` produces the `.dmg`s (Intel macOS is not built),
   ~1.5 GB apiece because the taxonomy is inside, so the notarization upload is
   slow — hence the 120-minute step timeout.
 - **A brand-new bundle ID's first notarization can take 8–12 hours.** Prime it
