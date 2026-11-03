@@ -3186,7 +3186,8 @@ protected:
       // knows exactly how much they share, so the shared part can be removed.
       // See TaxDeconv.h for the model and its limits.
       std::map<uint32_t, double> adjusted_leaf;
-      if (getFlag_("species_deconvolve") && !idx_taxa.empty())
+      const bool deconvolved = getFlag_("species_deconvolve") && !idx_taxa.empty();
+      if (deconvolved)
       {
         const size_t nt = idx_taxa.size();
         const std::vector<uint64_t> overlap = idx.pairwiseOverlap();
@@ -3200,18 +3201,28 @@ protected:
         for (size_t i = 0; i < nt; ++i)
           if (est[i] > 0.0) adjusted_leaf[idx_taxa[i]] = est[i];
       }
-      else
-      {
-        for (const auto& kv : leaf_hits) adjusted_leaf[kv.first] = static_cast<double>(kv.second);
-      }
 
       // Roll the ADJUSTED leaves up by SUMMING. Spectrum counts had to be
       // deduplicated per node -- one spectrum supporting two species of a genus
       // is still one spectrum -- but these are estimated independent
       // contributions, so a genus really is the sum of its species.
+      //
+      // Without deconvolution the leaves are raw spectrum counts, NOT
+      // independent: a spectrum tied between two sibling leaves counted twice
+      // at their parent, so a family of two genera sharing the same spectra
+      // outranked one with more distinct spectra (review X13). There the
+      // per-node deduplicated count `hits` is the adjusted value; at a leaf it
+      // equals leaf_hits.
       std::map<uint32_t, double> adjusted;
-      for (const auto& kv : adjusted_leaf)
-        for (uint32_t a : tax.lineage(kv.first)) adjusted[a] += kv.second;
+      if (deconvolved)
+      {
+        for (const auto& kv : adjusted_leaf)
+          for (uint32_t a : tax.lineage(kv.first)) adjusted[a] += kv.second;
+      }
+      else
+      {
+        for (const auto& kv : hits) adjusted[kv.first] = static_cast<double>(kv.second);
+      }
 
       // hits is already rolled up (spectrum-deduped per node), so build the
       // evidence directly -- rolling it again would re-introduce the double count.
