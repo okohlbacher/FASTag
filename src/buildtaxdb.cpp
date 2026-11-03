@@ -18,6 +18,7 @@
 
 #include "TaxIndex.h"
 
+#include <charconv>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -52,9 +53,13 @@ int main(int argc, char** argv)
     const std::string path = e.path().string();
     const std::string stem = e.path().stem().string();  // "<taxid>"
     if (e.path().extension() != ".fasta") continue;
-    char* end = nullptr;
-    const unsigned long tx = std::strtoul(stem.c_str(), &end, 10);
-    if (end == stem.c_str() || tx == 0)
+    // The WHOLE stem must be a taxid that fits uint32: strtoul took
+    // "9606_backup" as 9606, accepted a sign, and wrapped 4294967297 to 1.
+    uint32_t tx = 0;
+    const char* const first = stem.data();
+    const char* const last = first + stem.size();
+    const auto [ptr, ec] = std::from_chars(first, last, tx);
+    if (ec != std::errc() || ptr != last || tx == 0)
     {
       std::cerr << "  skip (filename is not <taxid>.fasta): " << path << "\n";
       continue;
@@ -62,7 +67,7 @@ int main(int argc, char** argv)
     std::vector<FASTAFile::FASTAEntry> part;
     try { FASTAFile().load(path, part); }
     catch (const std::exception& ex) { std::cerr << "  FASTA load failed: " << path << ": " << ex.what() << "\n"; continue; }
-    for (auto& fe : part) { entries.push_back(std::move(fe)); taxids.push_back(static_cast<uint32_t>(tx)); }
+    for (auto& fe : part) { entries.push_back(std::move(fe)); taxids.push_back(tx); }
     ++files;
     std::cerr << "  taxid " << tx << ": " << part.size() << " proteins (" << stem << ")\n";
   }
