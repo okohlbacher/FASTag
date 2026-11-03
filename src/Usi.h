@@ -10,7 +10,7 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
-#include <OpenMS/DATASTRUCTURES/String.h>
+#include <OpenMS/DATASTRUCTURES/StringUtils.h>
 #include <OpenMS/METADATA/SpectrumLookup.h>
 
 #include <algorithm>
@@ -54,7 +54,7 @@ namespace FASTag
   /// format is not read. So Bruker TSF's frame=N, the layout diaTracer also
   /// writes for its pseudo-spectra (declaring Thermo), is left to index:<i>,
   /// which is right for both.
-  inline std::string usiIndex(const OpenMS::String& native_id, size_t position)
+  inline std::string usiIndex(const std::string& native_id, size_t position)
   {
     // The integer-only layouts among the PSI-MS nativeID formats (the children
     // of MS:1000767), keys in the order the format defines them.
@@ -72,10 +72,10 @@ namespace FASTag
         {"frame", "scan"}};                              // MS:1002818 Bruker TDF
 
     const std::string by_position = "index:" + std::to_string(position);
-    std::vector<OpenMS::String> fields;
-    native_id.split(' ', fields);
+    std::vector<std::string> fields;
+    OpenMS::StringUtils::split(native_id, ' ', fields);
     Keys keys, values;
-    for (const OpenMS::String& f : fields)
+    for (const std::string& f : fields)
     {
       const size_t eq = f.find('=');
       if (eq == std::string::npos || eq == 0 || eq + 1 == f.size()

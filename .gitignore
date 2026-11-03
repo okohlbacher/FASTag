@@ -20,3 +20,4 @@ __pycache__/
 
 # Test fixtures are the one place data files belong in the repo.
 !test/fixtures/*.mzML
+!data/digest/*.tsv

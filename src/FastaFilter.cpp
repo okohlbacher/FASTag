@@ -4,7 +4,7 @@
 #include "FastaFilter.h"
 
 #include <OpenMS/CONCEPT/Exception.h>
-#include <OpenMS/DATASTRUCTURES/String.h>
+#include <string>
 
 #include <algorithm>
 #include <cmath>
@@ -139,10 +139,10 @@ namespace FASTag
     {
       throw Exception::InvalidValue(
           __FILE__, __LINE__, OPENMS_PRETTY_FUNCTION,
-          "FASTA index would need about " + String(projected / (1024 * 1024)) +
-          " MB, above the " + String(max_bytes / (1024 * 1024)) + " MB limit. "
+          "FASTA index would need about " + std::to_string(projected / (1024 * 1024)) +
+          " MB, above the " + std::to_string(max_bytes / (1024 * 1024)) + " MB limit. "
           "Reduce 'extension', raise 'min_filter_length', or use a smaller database.",
-          String(projected));
+          std::to_string(projected));
     }
     const int floor_k = minLen();
     min_k = std::max(min_k, floor_k);
@@ -156,11 +156,11 @@ namespace FASTag
       throw Exception::InvalidValue(
           __FILE__, __LINE__, OPENMS_PRETTY_FUNCTION,
           "No reportable tag can reach the minimum filter length. This database of " +
-          String(residues_) + " residues needs tags of at least " + String(floor_k) +
+          std::to_string(residues_) + " residues needs tags of at least " + std::to_string(floor_k) +
           " residues to beat chance, but the longest tag this run can produce is " +
-          String(max_k) + ". Raise 'tag_length' or 'extension', or set "
+          std::to_string(max_k) + ". Raise 'tag_length' or 'extension', or set "
           "'min_filter_length' explicitly to accept a higher chance-match rate.",
-          String(floor_k));
+          std::to_string(floor_k));
     }
     idx_.resize(static_cast<size_t>(max_k) + 1);
     built_.resize(static_cast<size_t>(max_k) + 1, 0);
@@ -201,8 +201,8 @@ namespace FASTag
         // but a raised cap must fail loudly, not corrupt lookups.
         throw Exception::InvalidValue(
             __FILE__, __LINE__, OPENMS_PRETTY_FUNCTION,
-            "FASTA index for length " + String(k) + " exceeds 2^32 keys.",
-            String(v.keys.size()));
+            "FASTA index for length " + std::to_string(k) + " exceeds 2^32 keys.",
+            std::to_string(v.keys.size()));
       }
       v.shift = std::max(0, 5 * k - 16);
       v.buck.assign(65537, 0);

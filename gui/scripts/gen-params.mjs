@@ -63,7 +63,8 @@ for (const m of xml.matchAll(/<ITEM\s([^>]*?)\/>/g)) {
   params.push({
     name: a.name,
     type: a.type,
-    default: a.value ?? '',
+    // Numbers in plain decimals: the INI writes 0.008 as 8.0e-03.
+    default: (a.type === 'double' || a.type === 'int') && /e/i.test(a.value ?? '') ? String(Number(a.value)) : (a.value ?? ''),
     description: a.description ?? '',
     required: a.required === 'true',
     toppAdvanced: a.advanced === 'true',

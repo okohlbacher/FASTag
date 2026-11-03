@@ -26,7 +26,12 @@ export default function ParamField({ spec, value, onChange, onPickFile, inert }:
   )
   // The reason replaces the description rather than joining it: a disabled
   // field's one useful piece of information is what would switch it on.
-  const help = <p className={off ? 'help inert' : 'help'}>{inert ?? spec.description}</p>
+  const helpId = `h-${spec.name}`
+  const help = (
+    <p id={helpId} className={off ? 'help inert' : 'help'}>
+      {inert ?? spec.description}
+    </p>
+  )
   const cls = `field${off ? ' off' : ''}`
 
   if (spec.type === 'bool') {
@@ -34,6 +39,7 @@ export default function ParamField({ spec, value, onChange, onPickFile, inert }:
       <div className={`${cls} check`}>
         <input
           id={`p-${spec.name}`}
+          aria-describedby={helpId}
           type="checkbox"
           disabled={off}
           checked={value === true}
@@ -52,6 +58,7 @@ export default function ParamField({ spec, value, onChange, onPickFile, inert }:
         {label}
         <textarea
           id={`p-${spec.name}`}
+          aria-describedby={helpId}
           rows={Math.max(2, items.length + 1)}
           disabled={off}
           value={items.join('\n')}
@@ -70,6 +77,7 @@ export default function ParamField({ spec, value, onChange, onPickFile, inert }:
         <div className="row tight">
           <input
             id={`p-${spec.name}`}
+            aria-describedby={helpId}
             type="text"
             disabled={off}
             value={String(value ?? '')}
@@ -91,6 +99,7 @@ export default function ParamField({ spec, value, onChange, onPickFile, inert }:
         {label}
         <select
           id={`p-${spec.name}`}
+          aria-describedby={helpId}
           disabled={off}
           value={String(value ?? '')}
           onChange={(e) => onChange(e.target.value)}
@@ -112,6 +121,7 @@ export default function ParamField({ spec, value, onChange, onPickFile, inert }:
       {label}
       <input
         id={`p-${spec.name}`}
+        aria-describedby={helpId}
         type={numeric ? 'number' : 'text'}
         step={spec.type === 'double' ? 'any' : 1}
         min={spec.min}

@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+# -digest_out, -label_out and -massgap_out against the real binary on the
+# vendored fixture: the existing outputs are byte-identical with and without
+# them, every report row has five fields, the counts agree with a recount of
+# the tag TSV, a synthetic -digest_models table is used as given, the
+# -massgap_out histogram is the -delta_out one, FASTAG_FULL_PRECISION only
+# widens the masses, and the refusals hold.
+# Exits 77 (ctest SKIP) when the binary cannot start.
+set -u
+BIN="$1"
+IN="$2"
+DB="$3"
+DATA="$4"   # data/digest
+
+if ! "$BIN" --help >/dev/null 2>&1; then
+  echo "SKIP: binary cannot initialize (OpenMS share data unreachable?)" >&2
+  exit 77
+fi
+export FASTAG_DIGEST_DIR="$DATA"
+unset FASTAG_FULL_PRECISION
+
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/fastag-digest-test.XXXXXX") || exit 1
+trap 'rm -rf "$TMP"' EXIT
+fail() { echo "FAIL: $*" >&2; exit 1; }
+# same EXPECTED ACTUAL MESSAGE, line endings aside (Windows writes CRLF)
+same() {
+  tr -d '\r' < "$1" > "$1.lf" && tr -d '\r' < "$2" > "$2.lf" || fail "cannot read $1 or $2"
+  cmp -s "$1.lf" "$2.lf" && return
+  diff "$1.lf" "$2.lf" | head -8 | sed -n l >&2
+  fail "$3"
+}
+run() { "$BIN" -threads 2 "$@" > "$TMP/log" 2>&1 || { cat "$TMP/log" >&2; fail "FASTag $*"; }; }
+# val FILE SECTION KEY
+val() { tr -d '\r' < "$1" | awk -F'\t' -v s="$2" -v k="$3" '$1 == s && $2 == k { print $3; exit }'; }
+
+# The fixture's MS2 is ion trap: at 20 ppm almost no tag passes E <= 1.
+COMMON=(-in "$IN" -tag_length 4 -fragment_tolerance 0.5 -fragment_tolerance_unit Da)
+
+# ---- existing outputs unchanged, report structure
+run "${COMMON[@]}" -out "$TMP/base.tsv"
+run "${COMMON[@]}" -out "$TMP/d.tsv" -digest_out "$TMP/digest.tsv" -label_out "$TMP/label.tsv"
+same "$TMP/base.tsv" "$TMP/d.tsv" "-digest_out/-label_out changed the tag TSV"
+for f in digest label; do
+  head -1 "$TMP/$f.tsv" | tr -d '\r' | grep -qx $'section\tkey\tvalue\tn\tdescription' || fail "$f header"
+  tr -d '\r' < "$TMP/$f.tsv" | awk -F'\t' 'NF != 5 || $5 == "" { bad = 1 } END { exit bad }' \
+    || fail "$f: a row without five fields or a description"
+done
+for s in run meta count residue pos share nocall call; do
+  tr -d '\r' < "$TMP/digest.tsv" | cut -f1 | grep -qx "$s" || fail "digest: no $s section"
+done
+merged=0
+for k in K K+TMT K+TMTpro K+iTRAQ4 K+8; do merged=$((merged + $(val "$TMP/digest.tsv" residue "C.$k"))); done
+[ "$(val "$TMP/digest.tsv" pos C.P1.K)" = "$merged" ] || fail "C.P1.K is not the merged K"
+# A Da run is written, as no_call.
+[ "$(val "$TMP/digest.tsv" call status) $(val "$TMP/digest.tsv" call reason)" = "no_call low_resolution" ] \
+  || fail "a Da run is not no_call low_resolution"
+[ "$(val "$TMP/digest.tsv" count tags_filtered)" -gt 100 ] || fail "fewer than 100 filtered tags on the fixture"
+[ "$(val "$TMP/digest.tsv" run background)" = shipped_human ] || fail "default background is not the shipped one"
+
+# ---- counts against a recount of the full-precision tag TSV
+FASTAG_FULL_PRECISION=1 run "${COMMON[@]}" -out "$TMP/full.tsv"
+[ "$(wc -l < "$TMP/full.tsv")" = "$(wc -l < "$TMP/base.tsv")" ] || fail "FASTAG_FULL_PRECISION changed the row count"
+# full-precision masses round to the default 4 decimals
+tr -d '\r' < "$TMP/full.tsv" | awk -F'\t' 'NR > 1 { printf "%.4f\t%.4f\n", $5, $6 }' > "$TMP/full46"
+tr -d '\r' < "$TMP/base.tsv" | awk -F'\t' 'NR > 1 { print $5 "\t" $6 }' > "$TMP/base46"
+same "$TMP/base46" "$TMP/full46" "full-precision masses do not round to the default ones"
+tr -d '\r' < "$TMP/full.tsv" | cut -f1-4,7,8,10- > "$TMP/full.rest"
+tr -d '\r' < "$TMP/base.tsv" | cut -f1-4,7,8,10- > "$TMP/base.rest"
+same "$TMP/base.rest" "$TMP/full.rest" "FASTAG_FULL_PRECISION changed a column other than the masses and evalue"
+recount=$(tr -d '\r' < "$TMP/full.tsv" | awk -F'\t' -v w=0.008 '
+  NR > 1 && $8 == "0" && $9 + 0 <= 1 {
+    n++; m = 156.10111; mh = m + 18.010565
+    if ($6 >= m - w && $6 <= m + w) r++
+    if ($5 >= mh - w && $5 <= mh + w) r++
+  } END { print n + 0, r + 0 }')
+[ "$recount" = "$(val "$TMP/digest.tsv" count tags_filtered) $(val "$TMP/digest.tsv" residue C.R)" ] \
+  || fail "recount (tags, C-terminal R) $recount differs from the report"
+
+# ---- a synthetic model table is read as given, its background wins over a FASTA
+{
+  printf '# synthetic\nmodel\tclass\tend\tresidue\tfreq\n'
+  for e in C N; do for a in G A S P V T C L N D Q K E M H F R Y W; do printf 'background\t-\t%s\t%s\t1\n' $e $a; done; done
+  printf 'KR\tKR\tC\tK\t1\nKR\tKR\tC\tR\t1\nflat\tnone\tC\t*\t-\n'
+} > "$TMP/models.tsv"
+run "${COMMON[@]}" -out "$TMP/m.tsv" -digest_models "$TMP/models.tsv" -digest_out "$TMP/digest2.tsv" -fasta "$DB" -digest_tag_min 1
+[ "$(val "$TMP/digest2.tsv" run background)" = models_table ] || fail "the table's background did not win over -fasta"
+[ "$(val "$TMP/digest2.tsv" model KR.class)" = KR ] || fail "model KR not scored"
+[ -n "$(val "$TMP/digest2.tsv" model flat.loglik)" ] || fail "model flat not scored"
+# the distributions behind the scores: the table's background, KR normalised, flat's C end the background
+[ "$(val "$TMP/digest2.tsv" background C.K)" = "$(val "$TMP/digest2.tsv" background N.W)" ] || fail "uniform background not reported"
+[ "$(val "$TMP/digest2.tsv" model KR.C.K) $(val "$TMP/digest2.tsv" model KR.C.G)" = "0.5 0" ] || fail "KR's C end is not K, R at 0.5"
+[ "$(val "$TMP/digest2.tsv" model flat.C.A)" = "$(val "$TMP/digest2.tsv" background C.A)" ] || fail "flat's C end is not the background"
+[ "$(tr -d '\r' < "$TMP/digest2.tsv" | awk -F'\t' '$1 == "background"' | wc -l | tr -d ' ')" = 38 ] || fail "background rows are not 2 x 19"
+printf 'model\tclass\tend\tresidue\tfreq\nKR\tKR\tC\tK\t1\n' > "$TMP/nobg.tsv"
+run "${COMMON[@]}" -out "$TMP/m.tsv" -digest_models "$TMP/nobg.tsv" -digest_out "$TMP/digest3.tsv" -fasta "$DB"
+[ "$(val "$TMP/digest3.tsv" run background)" = "fasta:$DB" ] || fail "a table without background does not take the FASTA's"
+printf 'model\tclass\tend\tresidue\tfreq\nKR\tKR\tC\tI\t1\n' > "$TMP/bad.tsv"
+"$BIN" "${COMMON[@]}" -out "$TMP/m.tsv" -digest_models "$TMP/bad.tsv" -digest_out "$TMP/x.tsv" > "$TMP/log" 2>&1 \
+  && fail "a malformed -digest_models was accepted"
+
+# ---- mass gaps: the -delta_out histogram, other outputs unchanged
+R=(-recon_fasta "$DB" -recon_out "$TMP/recon.tsv" -fixed_modifications)
+run "${COMMON[@]}" -out "$TMP/g0.tsv" "${R[@]}" -delta_out "$TMP/delta0.tsv"
+cp "$TMP/recon.tsv" "$TMP/recon0.tsv"
+run "${COMMON[@]}" -out "$TMP/g1.tsv" "${R[@]}" -delta_out "$TMP/delta1.tsv" -massgap_out "$TMP/gap1.tsv"
+same "$TMP/g0.tsv" "$TMP/g1.tsv" "-massgap_out changed the tag TSV"
+same "$TMP/recon0.tsv" "$TMP/recon.tsv" "-massgap_out changed -recon_out"
+same "$TMP/delta0.tsv" "$TMP/delta1.tsv" "-massgap_out changed -delta_out"
+run "${COMMON[@]}" -out "$TMP/g2.tsv" "${R[@]}" -massgap_out "$TMP/gap2.tsv"
+tr -d '\r' < "$TMP/delta0.tsv" | awk -F'\t' 'NR > 1 { print $1 "\t" $2 }' > "$TMP/hist.want"
+for g in gap1 gap2; do
+  tr -d '\r' < "$TMP/$g.tsv" | awk -F'\t' '$1 == "hist" { print $2 "\t" $3 }' > "$TMP/$g.hist"
+  same "$TMP/hist.want" "$TMP/$g.hist" "$g: the hist rows are not the -delta_out rows"
+  tr -d '\r' < "$TMP/$g.tsv" | awk -F'\t' 'NF != 5 || $5 == "" { bad = 1 } END { exit bad }' || fail "$g: a malformed row"
+done
+[ "$(val "$TMP/gap2.tsv" cys spectra)" = "$(awk -F'\t' 'NR > 1 { s += $2 } END { print s + 0 }' "$TMP/delta0.tsv")" ] \
+  || fail "cys spectra is not the histogram total"
+
+# ---- refusals
+"$BIN" "${COMMON[@]}" -out "$TMP/x.tsv" -massgap_out "$TMP/x2.tsv" > "$TMP/log" 2>&1 \
+  && fail "-massgap_out without -recon_out was accepted"
+printf '' | "$BIN" -stream -digest_out "$TMP/x3.tsv" > "$TMP/log" 2>&1 && fail "-stream with -digest_out was accepted"
+# Beside the build-tree binary there is no share/FASTag/digest either.
+FASTAG_DIGEST_DIR="$TMP/none" "$BIN" "${COMMON[@]}" -out "$TMP/x.tsv" -digest_out "$TMP/x4.tsv" > "$TMP/log" 2>&1 \
+  && fail "no shipped models and no -digest_models, but no error"
+
+# ---- digest options without their report: warned about, not refused
+"$BIN" "${COMMON[@]}" -out "$TMP/w.tsv" -digest_tag_min 50 -digest_window 0.01 > "$TMP/log" 2>&1 \
+  || fail "-digest_tag_min without -digest_out was refused"
+grep -q -- "-digest_tag_min is only read for -digest_out" "$TMP/log" || fail "no warning for -digest_tag_min"
+grep -q -- "-digest_window is only read for -digest_out or -label_out" "$TMP/log" || fail "no warning for -digest_window"
+"$BIN" "${COMMON[@]}" -out "$TMP/w.tsv" -label_out "$TMP/w2.tsv" -digest_window 0.01 > "$TMP/log" 2>&1
+grep -q -- "-digest_window is only read" "$TMP/log" && fail "-digest_window warned although -label_out reads it"
+
+echo "digest_cli_test: all checks passed"

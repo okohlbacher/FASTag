@@ -21,7 +21,7 @@ static std::vector<FASTAFile::FASTAEntry> entries(const std::vector<std::string>
 {
   std::vector<FASTAFile::FASTAEntry> v;
   for (size_t i = 0; i < seqs.size(); ++i)
-    v.emplace_back(String("p") + String(i), "", seqs[i]);
+    v.emplace_back("p" + std::to_string(i), "", seqs[i]);
   return v;
 }
 

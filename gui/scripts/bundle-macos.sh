@@ -6,6 +6,7 @@
 #     lib/*.dylib             its full dylib closure, with exactly ONE libomp
 #     share/OpenMS/           OpenMS data (OPENMS_DATA_PATH)
 #     share/FASTag/taxonomy/  the k-mer index + NCBI dumps (FASTAG_TAXONOMY_DIR)
+#     share/FASTag/digest/    the -digest_out models, -massgap_out modifications
 #
 # Bundling libomp exactly once is what avoids `OMP: Error #15 (libomp already
 # initialized)` without KMP_DUPLICATE_LIB_OK. Tauri's resource bundler skips
@@ -13,19 +14,21 @@
 #
 # Inputs (env, with local-dev defaults):
 #   FASTAG_BIN     the built CLI                     [build-rel/FASTag]
-#   OPENMS_LIB     dylibbundler search path (OpenMS) [OpenMS-mzpeak-build/build/lib]
+#   OPENMS_LIB     dylibbundler search path (OpenMS) [openms-build/lib]
 #   DEPS_LIB       dylibbundler search path (deps)   [fastag-mm/envs/omsbuild/lib]
-#   OPENMS_SHARE   OpenMS data dir                   [OpenMS-mzpeak-build/share/OpenMS]
+#   OPENMS_SHARE   OpenMS data dir                   [openms-src/share/OpenMS]
 #   TAXONOMY_DIR   share/FASTag/taxonomy             [share/FASTag/taxonomy]
+#   DIGEST_DIR     share/FASTag/digest               [data/digest]
 #   OUT            output resource root              [gui/src-tauri/resources/fastag]
 set -euo pipefail
 
 repo="$(cd "$(dirname "$0")/../.." && pwd)"
 FASTAG_BIN="${FASTAG_BIN:-$repo/build-rel/FASTag}"
-OPENMS_LIB="${OPENMS_LIB:-$repo/../OpenMS-mzpeak-build/build/lib}"
+OPENMS_LIB="${OPENMS_LIB:-$repo/../openms-build/lib}"
 DEPS_LIB="${DEPS_LIB:-$repo/../fastag-mm/envs/omsbuild/lib}"
-OPENMS_SHARE="${OPENMS_SHARE:-$repo/../OpenMS-mzpeak-build/share/OpenMS}"
+OPENMS_SHARE="${OPENMS_SHARE:-$repo/../openms-src/share/OpenMS}"
 TAXONOMY_DIR="${TAXONOMY_DIR:-$repo/share/FASTag/taxonomy}"
+DIGEST_DIR="${DIGEST_DIR:-$repo/data/digest}"
 OUT="${OUT:-$repo/gui/src-tauri/resources/fastag}"
 
 command -v dylibbundler >/dev/null || { echo "need dylibbundler (brew install dylibbundler)"; exit 1; }
@@ -62,9 +65,10 @@ echo ">> dedup LC_RPATH on $(ls "$OUT"/lib/*.dylib | wc -l | tr -d ' ') libs + t
 dedup_rpath "$OUT/bin/FASTag"
 for so in "$OUT"/lib/*.dylib; do [ -L "$so" ] && continue; dedup_rpath "$so"; done
 
-echo ">> copying OpenMS data + taxonomy"
+echo ">> copying OpenMS data, taxonomy and digest data"
 cp -R "$OPENMS_SHARE" "$OUT/share/OpenMS"
 cp -R "$TAXONOMY_DIR" "$OUT/share/FASTag/taxonomy"
+cp -R "$DIGEST_DIR" "$OUT/share/FASTag/digest"
 
 libomp=$(ls "$OUT"/lib | grep -c '^libomp\.dylib$' || true)
 echo ">> done: $(du -sh "$OUT" | cut -f1) at $OUT (libomp copies: $libomp — must be 1)"

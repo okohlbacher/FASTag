@@ -8,6 +8,8 @@
 #include "ReconIds.h"
 #include "Usi.h"
 
+#include <OpenMS/DATASTRUCTURES/StringUtils.h>
+#include <OpenMS/SYSTEM/SystemSettings.h>
 #include <OpenMS/CHEMISTRY/ProteaseDB.h>
 #include <OpenMS/FORMAT/IdXMLFile.h>
 #include <OpenMS/FORMAT/MzIdentMLFile.h>
@@ -129,7 +131,7 @@ namespace
     return n;
   }
 
-  std::string slurp(const String& path)
+  std::string slurp(const std::string& path)
   {
     std::ifstream in(path.c_str());
     return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
@@ -197,33 +199,34 @@ namespace
     sp.fragment_mass_tolerance_ppm = true;
     sp.digestion_enzyme = *ProteaseDB::getInstance()->getEnzyme("Trypsin");
 
-    const String base = File::getTempDirectory() + "/fastag_formats_" + File::getUniqueName(false);
+    const std::string base = SystemSettings::getTempDirectory() + "/fastag_formats_" + File::getUniqueName(false);
 
     // idXML
     {
-      const String path = base + ".idXML";
+      const std::string path = base + ".idXML";
       FASTag::storeReconIds(path, "run.mzML", "1.5.0", sp, ids);
       std::vector<ProteinIdentification> prots;
       PeptideIdentificationList peps;
       IdXMLFile().load(path, prots, peps);
       check(hitCount(peps) == n_hits && expand(peps) == rows, "idXML: the hits and their proteins");
       check(prots.size() == 1 && prots[0].getSearchEngine() == "FASTag", "idXML: search engine");
-      check(prots.size() == 1 && String(prots[0].getSearchParameters().getMetaValue("FDR_controlled")) == "false",
+      check(prots.size() == 1 && StringUtils::toStr(prots[0].getSearchParameters().getMetaValue("FDR_controlled")) == "false",
             "idXML: marked not FDR-controlled");
       check(!peps.empty() && !peps[0].isHigherScoreBetter(), "idXML: lower E-value is better");
       check(!peps.empty() && peps[0].getSpectrumReference() == "controllerType=0 controllerNumber=1 scan=11",
             "idXML: spectrum reference is the native ID");
       check(!peps.empty() && std::fabs(double(peps[0].getHits()[0].getMetaValue("delta_mass")) - 15.9949) < 1e-9
-                && String(peps[0].getHits()[0].getMetaValue("delta_interp")) == "mod:Oxidation@M",
+                && StringUtils::toStr(peps[0].getHits()[0].getMetaValue("delta_interp")) == "mod:Oxidation@M",
             "idXML: the gap travels as metadata");
       std::remove(path.c_str());
     }
     // mzIdentML: schema-valid, and it reads back with every evidence in place
     {
-      const String path = base + ".mzid";
+      const std::string path = base + ".mzid";
       FASTag::storeReconIds(path, "run.mzML", "1.5.0", sp, ids);
       MzIdentMLFile f;
-      check(f.isValid(path, std::cerr), "mzid: valid against mzIdentML1.1.0.xsd");
+      std::string version;
+      check(f.isValid(path, std::cerr, version), "mzid: valid against its mzIdentML schema (" + version + ")");
       std::vector<ProteinIdentification> prots;
       PeptideIdentificationList peps;
       f.load(path, prots, peps);
@@ -236,16 +239,16 @@ namespace
     }
     // mzTab: one PSM row per hit, its proteins comma-separated
     {
-      const String path = base + ".mzTab";
+      const std::string path = base + ".mzTab";
       FASTag::storeReconIds(path, "run.mzML", "1.5.0", sp, ids);
       MzTab mztab;
       MzTabFile().load(path, mztab);
       std::vector<std::string> got;
       for (const MzTabPSMSectionRow& r : mztab.getPSMSectionRows())
       {
-        std::vector<String> accs;
-        r.accession.get().split(',', accs);
-        for (const String& a : accs)
+        std::vector<std::string> accs;
+        StringUtils::split(r.accession.get(), ',', accs);
+        for (const std::string& a : accs)
           got.push_back(r.spectra_ref.getSpecRef() + " " + r.sequence.get() + " " + a);
       }
       std::sort(got.begin(), got.end());

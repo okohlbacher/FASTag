@@ -12,6 +12,7 @@
 #include "IndexedMzMLReader.h"
 
 #include <OpenMS/FORMAT/MzMLFile.h>
+#include <OpenMS/IONMOBILITY/IMDataArrayUtils.h>
 #include <OpenMS/KERNEL/MSExperiment.h>
 #include <OpenMS/KERNEL/OnDiscMSExperiment.h>
 
@@ -250,6 +251,49 @@ int main(int argc, char** argv)
       if (mid_stale.ok()) same_spectra(mid_stale, reader, "index stale from the middle on");
     }
   }
+  // Per-peak ion mobility: -digest_out's timsTOF rule reads containsIMData(),
+  // so the fast reader must see the array as OpenMS's own reader does, in
+  // its place after another extra float array.
+  {
+    PeakMap exp;
+    MzMLFile().load(indexed, exp);
+    PeakMap im_exp;
+    static_cast<ExperimentalSettings&>(im_exp) = exp.getExperimentalSettings();
+    for (const MSSpectrum& s : exp)
+      if (s.getMSLevel() == 2 && !s.empty())
+      {
+        MSSpectrum t = s;
+        t.getFloatDataArrays().clear();
+        auto& extra = t.getFloatDataArrays().emplace_back();
+        extra.setName("FASTag test array");
+        extra.assign(t.size(), 1.0f);
+        auto& fda = t.getFloatDataArrays().emplace_back();
+        IMDataArrayUtils::setIMUnit(fda, DriftTimeUnit::VSSC);
+        fda.assign(t.size(), 0.9f);
+        im_exp.addSpectrum(t);
+        break;
+      }
+    check(im_exp.size() == 1, "fixture has an MS2 spectrum with peaks");
+    if (im_exp.size() == 1)
+    {
+      const std::string path = tmp + "/fastag_im_arrays.mzML";
+      MzMLFile mz;
+      mz.getOptions().setWriteIndex(true);
+      mz.store(path, im_exp);
+      FASTag::IndexedMzMLReader r(path);
+      check(r.ok(), "reader accepts the ion mobility file");
+      const MSSpectrum got = r.getSpectrum(0);
+      OnDiscMSExperiment od;
+      od.openFile(path, false);
+      const MSSpectrum want = od.getSpectrum(0);
+      check(want.containsIMData(), "OpenMS sees the ion mobility array");
+      check(got.containsIMData() && got.getIMData().second == DriftTimeUnit::VSSC,
+            "fast reader sees the ion mobility array as 1/K0");
+      check(got.getFloatDataArrays().size() == 2 && got.getIMData().first == 1,
+            "the ion mobility array keeps its place after the extra one");
+    }
+  }
+
   // An XML file with no spectrumList holds nothing to scan for.
   {
     spit(tmp + "/fastag_no_list.mzML", "<?xml version=\"1.0\"?>\n<mzML><run id=\"r\"></run></mzML>\n");

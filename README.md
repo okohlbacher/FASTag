@@ -109,11 +109,11 @@ the right build for whatever you are reading this on. Everything is also on the
 | platform | desktop app | command line |
 |---|---|---|
 | macOS, Apple silicon | [.dmg](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-macos-arm64.dmg) | [.dmg](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-macos-arm64.dmg) |
-| macOS, Intel | [.dmg](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-macos-x64.dmg) | [.dmg](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-macos-x64.dmg) |
 | Windows x64 | [installer](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-windows-x64-setup.exe) | [.zip](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-windows-x64.zip) |
 | Linux x64 | — | [.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-x64.tar.gz) |
 | Linux arm64 | — | [.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-arm64.tar.gz) |
 
+Intel Macs are not built from 1.8.0 on; [1.6.1](https://github.com/okohlbacher/FASTag/releases/tag/v1.6.1) is the last release for them.
 On macOS both are also on [Homebrew](https://github.com/okohlbacher/homebrew-fastag):
 `brew install --cask okohlbacher/fastag/fastag` (desktop app) or
 `brew install --cask okohlbacher/fastag/fastag-cli` (command line, `FASTag` on your PATH).
@@ -126,21 +126,29 @@ OpenBLAS arrives with libOpenMS and otherwise starts one spinning thread per
 core at load, which FASTag never uses. The desktop app does the same for the
 CLI it launches, on every platform.
 
-**macOS 13.3 or later.** macOS ships as a disk image only, signed with a
+**macOS 13.4 or later.** macOS ships as a disk image only, signed with a
 Developer ID certificate, notarized and **stapled**, so it opens with no network
 connection — a plain tarball cannot carry a notarization ticket.
 
 **Windows builds are not yet code-signed** — the signing path is wired up but
 the SignPath project is not live — so SmartScreen will warn on first run.
 
-Building from source needs OpenMS ≥ 3.5, a C++17 compiler and CMake ≥ 3.21.
+Building from source needs OpenMS 3.7 (develop), a C++23 compiler and CMake ≥
+3.24. Releases are built against OpenMS develop at commit
+[`70cebcd144`](https://github.com/OpenMS/OpenMS/commit/70cebcd14442cecd6bcd9794fb6786d3342cacc6),
+compiled from source with the libraries listed in
+[`.github/env/openms.yml`](.github/env/openms.yml).
 
 ## Desktop GUI
 
 A cross-platform desktop app ([`gui/`](gui/)) wraps the CLI: pick spectra, set
 parameters from a form generated out of the tool's own `-write_ini`, watch a
 progress bar, and browse the tags and the ranked species report (with a `rel.`
-column showing each taxon's evidence relative to the top hit). It is built with
+column showing each taxon's evidence relative to the top hit). A **Digest** tab
+shows the `-digest_out`, `-label_out` and `-massgap_out` reports: the protease
+call or no-call with its reason, sequence logos P4..P1 | P1'..P4' of the
+observed tag ends and of the called and runner-up models (in bits against the
+background in use), the label counts and the mass-gap peaks. It is built with
 [Tauri 2](https://tauri.app) — a Rust backend and the OS's native webview, not a
 bundled browser. The CLI remains the source of truth; the GUI shells out to it.
 
@@ -190,8 +198,8 @@ four in/out combinations work, and which container you use does not change the
 tags: a run read as mzPeak gives the same spectra as the same run read as mzML,
 and a run written to mzPeak and tagged again reproduces the original tag set.
 
-An input FASTag cannot decode at all — an mzPeak archive in an encoding the
-library does not support, say — ends the run with the reader's own message on
+An input FASTag cannot decode at all — an mzPeak archive in an encoding
+OpenMS does not support, say — ends the run with the reader's own message on
 `Error:` and a non-zero exit code, rather than aborting.
 
 ### mzML
@@ -210,38 +218,40 @@ and read it up front instead.
 
 ### mzPeak
 
-mzPeak is a Parquet-backed format (Parquet tables in a ZIP container). Reading
-is parallel — each thread owns a reader over a shared archive index — and
-decoded row groups live in one cache shared by every reader, so a group is
-decoded once whatever the thread count, and memory tracks the groups in flight
-rather than `-threads`. Because the smallest unit Parquet can return is a row
-group, that floor grows with the archive's row-group size (a chunked Astral
-archive has ~580 MB groups); `-mzpeak_read_memory` caps it.
+mzPeak is a Parquet-backed format (Parquet tables in a ZIP container). FASTag
+reads and writes it through OpenMS's `MzPeakFile`. The archive is read once,
+front to back, by OpenMS's decoding threads, while FASTag's tagging threads take
+the spectra from it as they arrive; MS1 peaks are dropped on read, since
+nothing uses them.
 
 **Profile MS2 is centroided on read.** Archives converted from raw files
 routinely store profile MS2 with an empty centroid facet, and tagging profile
 samples rather than peaks costs real recall: on one run, 80,990 tags reading the
 profile data as-is against 122,489 with on-read centroiding (`PeakPickerHiRes`).
-Picking runs in the worker, so it parallelises.
+Picking runs in the tagging threads, so it parallelises.
 
-Run-level metadata travels with the data: run id and start time, source files
-with their checksums, the instrument and its components, the sample, and the
-processing history, to which FASTag appends its own filtering step. An archive
-that arrived as mzPeak keeps its metadata block verbatim.
+**Limitations of the mzPeak path** (in OpenMS's `MzPeakFile`, as of the OpenMS
+commit above):
 
-mzPeak support is provided by
-[mzpeak-openms](https://github.com/okohlbacher/mzpeak-openms), bundled with
-every released binary. To build from source with it, build that library and
-configure FASTag with `-DMZPEAK_SOURCE_DIR=<checkout> -DMZPEAK_LIB_DIR=<install
-prefix>`; configure reports what you got:
+- Reading is slower than in FASTag 1.6 at higher thread counts (about 1.1x at
+  16-64 threads, up to 1.4x on chunked archives at 64; equal or faster at 1
+  thread). FASTag 1.6 read archives with random access from every thread
+  through a shared decode cache. `-mzpeak_read_memory` is
+  accepted for existing command lines and has no effect.
+- `-subsample_spectra` and `-subsample_fraction` read the whole archive and
+  drop the spectra not chosen; they cannot skip ahead.
+- `-out_spectra` with an mzPeak input reads the archive a second time.
+- `-out_spectra` to `.mzpeak` holds the spectra it writes in memory, and the
+  archive carries peaks, MS level, retention time, polarity, native IDs,
+  precursors and source files, but no activation, chromatograms, instrument
+  configuration, data-processing history or run references (mzPeakValidator
+  reports the missing run references as errors).
+- `-out_spectra` to `.mzpeak` refuses spectra with an ion mobility per peak
+  (timsTOF frames), with an error; write `.mzML` instead.
 
-```
--- FASTag: mzPeak read/write enabled (<path>/libmzpeak.dylib)
--- FASTag: mzpeak-openms NOT found -- this build reads and writes mzML only
-```
-
-A build without the library refuses `.mzpeak` on either side with a message
-saying so, rather than reporting a clean run over an empty file.
+A FASTag built against an OpenMS without mzPeak support (`OPENMS_ENABLE_MZPEAK`
+off) refuses `.mzpeak` on either side with a message saying so, rather than
+reporting a clean run over an empty file.
 
 ## Command-line reference
 
@@ -279,6 +289,18 @@ saying so, rather than reporting a clean run over an empty file.
 | `-recon_localize` | off | Localize each reconciliation's mass gap to one residue of its region by the b/y fragments it shifts; appends `loc_site` (residue + 1-based protein position, the first on a tie), `loc_score` (b/y ion/charge matches) and `loc_ties` (sites sharing that score; 1 = unique) to `-recon_out` |
 | `-recon_id_out <file>` | none | The `-recon_out` placements as identifications: idXML, mzid or mzTab by extension (see Reconciliation). NOT FDR-controlled |
 | `-delta_out <file>` | none | Aggregated mass-shift histogram over reconciliations (one best placement per spectrum). Region-level candidates, NOT localized identifications, NOT FDR-controlled |
+| `-digest_out <file>` | none | Terminal residues of the tags (ungapped, E-value ≤ 1) at P4..P1 and P1'..P4', and the protease call they support with its margin, or `no_call` with the reason (see Digest, label and mass-gap reports) |
+| `-label_out <file>` | none | N-terminal TMT, TMTpro and iTRAQ4 gaps at the tag ends and the heavy Lys8/Arg10 shares |
+| `-massgap_out <file>` | none | The `-delta_out` gap distribution with Cys alkylation counts, gap peaks explained as combinations of up to 3 Unimod modifications, and SILAC labels among them. Requires `-recon_out` |
+| `-digest_models <file>` | shipped | Protease model table for `-digest_out` (columns `model`, `class`, `end`, `residue`, `freq`); its `background` rows win over a FASTA |
+| `-digest_tag_min <n>` | 100 | Advanced: tag ends a call needs; the N-terminal ends count from as many |
+| `-digest_window <Da>` | 0.008 | Advanced: window around a residue or label mass at the tag ends |
+| `-digest_background_share <f>` | 0.05 | Advanced: share of the background mixed into every model |
+| `-digest_silac_min <n>` | 50 | Advanced: K- and R-terminal tag ends each for `-label_out`'s heavy-share gate |
+| `-massgap_window <Da>` / `-massgap_window_da <Da>` | 0.02 / 0.5 | Advanced: gap window on ppm runs / on Da runs |
+| `-massgap_min_spectra <n>` / `-massgap_min_share <f>` / `-massgap_min_bin <n>` | 20 / 0.005 / 2 | Advanced: spectra and share a gap peak needs; spectra a histogram row needs to take part |
+| `-massgap_max_mods <n>` / `-massgap_top <n>` | 3 / 5 | Advanced: modifications per explanation; modifications listed by share |
+| `-massgap_silac_share <f>` / `-massgap_silac_min <n>` | 0.08 / 500 | Advanced: share a SILAC label needs; shifted spectra a SILAC call needs |
 | `-entrapment_fasta <file>` | none | Entrapment database (foreign species) calibrating a `q_db` column: the estimated false-match rate of the `-fasta` filter at each E-value (see q_db). Requires `-fasta` |
 | `-glyco` | off | Flag oxonium-bearing MS2 spectra to `<out>.glyco.tsv` (see Glyco flag) |
 | `-glyco_out <file>` | `<out>.glyco.tsv` | Per-spectrum oxonium report |
@@ -296,14 +318,16 @@ saying so, rather than reporting a clean run over an empty file.
 | `-species_deconvolve` | off | Correct taxon counts for sequence shared between taxa |
 | `-subsample_spectra <n>` / `-subsample_fraction <f>` | 0 | Tag only a random subset (count or fraction); 0 = all |
 | `-subsample_seed <n>` | 1 | Seed for the `-subsample_*` selection |
-| `-mzpeak_read_memory <MB>` | 0 | Decoded mzPeak held at once; 0 sizes it to the archive |
+| `-mzpeak_read_memory <MB>` | 0 | No effect; accepted for existing command lines |
 
 Plus the standard OpenMS TOPP options: `-threads <n>` (parallelism — the
 core performance lever; **defaults to 0, which means half the logical cores**,
 so a run leaves the machine usable — pass `-threads <n>` to choose), `-ini
 <file>` / `-write_ini <file>` (parameter files), `-log <file>`, `-no_progress`,
 `--help` / `--helphelp`. With `-ini`, the file's `threads` value applies (1 if it
-has none) unless `-threads` is also given on the command line.
+has none) unless `-threads` is also given on the command line. `--help` shows
+OpenMS's generic text for `-threads` ("0 = all available cores"); FASTag uses
+half.
 
 ## Output
 
@@ -373,6 +397,52 @@ region-level, nothing here is FDR-controlled, and `delta_interp` names a
 hypothesis, not an identification. On a human Astral run the zero bin
 dominates, the +1.003 isotope-error peak and a +128.095 missed-K peak appear
 where chemistry predicts them.
+
+## Digest, label and mass-gap reports
+
+`-digest_out`, `-label_out` and `-massgap_out` describe how a run was digested
+and labelled, from the tags the run reports. Each is a long-form TSV with the
+columns `section`, `key`, `value`, `n` (the tags or spectra a value rests on)
+and `description` (one sentence with the numbers). They report measurements;
+how much to trust them is for the reader to decide. The tag TSV, `-recon_out`,
+`-delta_out` and the species report are byte-identical with and without these
+options; `-out_spectra` mzML records every parameter, so it lists the new
+options and their values.
+
+- **`-digest_out`** counts the residue one mass step beyond each ungapped tag
+  with an E-value ≤ 1: a `cterm_mass` equal to a residue (y tags), an
+  `nterm_mass` equal to a residue plus water (reversed b tags), and an
+  `nterm_mass` equal to a residue (the N-terminal P1'), within 0.008 Da. Labelled
+  K (TMT, TMTpro, iTRAQ4, Lys8) counts as K. Each protease model, mixed with 5 %
+  background, is scored by the multinomial log-likelihood of these counts; the
+  call is the best model and the margin its lead per tag over the best model of
+  another class. The shipped models are cleavage rules (Trypsin, Lys-C, Arg-C,
+  Glu-C, Chymotrypsin, Asp-N, Lys-N) and `unspecific`, over the human
+  reference proteome composition, or over the composition of `-recon_fasta` /
+  `-fasta` when given. HLA or proteasome models need a `-digest_models` table.
+  No call is made, and the reason is written, on Da tolerances, timsTOF input,
+  a median MS2 scan window or a median first MS2 peak above y1 of K plus 0.1
+  (147.21), fewer than 100 tag ends, a residue at probability 0 under the call
+  or the runner-up, or an exact tie between models of different classes. The
+  timsTOF and scan-window rules read instrument, native-ID and scan-window
+  metadata; without it they read `unknown` and do not block the call
+  (converted pseudo-spectra carry none). The first-peak rule needs no metadata.
+- **`-label_out`** counts tag ends that are a bare TMT, TMTpro or iTRAQ4 mass,
+  against the same count 0.5 Da higher, and the Lys8 and Arg10 shares of the
+  C-terminal K and R.
+- **`-massgap_out`** reads the `-delta_out` histogram (built even when
+  `-delta_out` is not written; run it without fixed modifications to see the
+  Cys alkylation): spectra near each Cys alkylation mass, and gap peaks
+  explained as the smallest combination of up to three of 38 Unimod
+  modifications.
+
+`-digest_out` also writes the background in use and each model's residue
+distribution before mixing, from which the Desktop GUI draws its logos. The
+counting reproduces prose-auto 0.1.3's detectors. `FASTAG_FULL_PRECISION=1`
+in the environment writes the tag TSV's masses and E-values in full precision,
+for comparing against a reader of that file. The shipped tables are read from
+`share/FASTag/digest` next to the binary; a binary run outside its install
+tree needs `FASTAG_DIGEST_DIR` set to that directory.
 
 ## q_db: entrapment-calibrated filter confidence
 
@@ -527,6 +597,10 @@ provenance and what each dataset is useful for comparing.
 
 ## Performance
 
+**These figures were measured with FASTag 1.6.1** and have not been
+re-measured for 1.8. The mzPeak columns used 1.6's own reader; 1.8 reads mzPeak
+through OpenMS and is slower (see [mzPeak](#mzpeak)).
+
 The tables below report wall-clock time and peak resident memory against
 `-threads` for selected public data sets, so you can judge how a run scales on
 your own machine and estimate what a file of a given size will cost. Every point
@@ -571,9 +645,7 @@ A file small enough to finish in well under a second gains nothing from more
 threads — `fusion_tonsil` is already at its floor by 16.
 
 Output is identical at every thread count, and memory is O(threads) rather than
-O(file) on the mzML path; mzPeak instead tracks the row groups in flight, with a
-floor set by the archive's row-group size (see [File formats](#file-formats)).
-`-out_spectra` is the other exception, since it holds one slot per input
+O(file) on the mzML path. `-out_spectra` is the other exception, since it holds one slot per input
 spectrum.
 
 **The defaults favour recall over speed.** For the fastest possible run, or to
@@ -604,7 +676,9 @@ comparison with the reference implementation.
 `ctest` covers the rank-sum DP against exhaustive enumeration, end-to-end tag
 recovery from synthetic spectra, flanking-mass placement, extension, gap
 ordering with a negative control, per-row mass closure, determinism, the
-sequence filter, and that `-gap_penalty` reorders without ever removing a tag.
+sequence filter, that `-gap_penalty` reorders without ever removing a tag, and
+the digest, label and mass-gap reports (`digest_test` against prose-auto
+0.1.3's functions on synthetic tables, `digest_cli_test` end to end).
 
 ### Ranking, and the synthetic benchmark
 
@@ -638,6 +712,9 @@ without filtering anything out:
 ## Licence and provenance
 
 MIT — see [LICENSE](LICENSE). Dependencies and licences are in [BOM.md](BOM.md).
+The shipped `-digest_out` background is the residue composition of the UniProt
+human reference proteome UP000005640 (CC BY 4.0); see
+[data/digest/README.md](data/digest/README.md).
 
 The DirecTag algorithm is reimplemented from its publication. The reference
 implementation (Apache-2.0) was read to resolve semantics the paper leaves

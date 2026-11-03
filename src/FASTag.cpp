@@ -15,13 +15,19 @@
 #include <OpenMS/CHEMISTRY/ResidueModification.h>
 #include <OpenMS/CONCEPT/LogStream.h>
 #include <OpenMS/DATASTRUCTURES/ListUtils.h>
+#include <OpenMS/DATASTRUCTURES/StringUtils.h>
 #include <OpenMS/FORMAT/FASTAFile.h>
 #include <OpenMS/FORMAT/FileHandler.h>
+#include <OpenMS/FORMAT/MzMLFile.h>
+#include <OpenMS/FORMAT/MzPeakFile.h>
+#include <OpenMS/IONMOBILITY/IMTypes.h>
+#include <OpenMS/PROCESSING/CENTROIDING/PeakPickerHiRes.h>
 #include <OpenMS/KERNEL/MSExperiment.h>
 #include <OpenMS/KERNEL/OnDiscMSExperiment.h>
 #include <OpenMS/FORMAT/DATAACCESS/MSDataWritingConsumer.h>
 #include <OpenMS/SYSTEM/File.h>
 
+#include "Digest.h"
 #include "FASTagger.h"
 #include "FastaFilter.h"
 #include "Glyco.h"
@@ -36,9 +42,7 @@
 #include "TaxIndex.h"
 #include "TaxStats.h"
 #include "Usi.h"
-#ifdef FASTAG_HAVE_MZPEAK_LIB
-#include "OnDiscMzPeakExperiment.h"
-#endif
+#include "MzPeakStream.h"
 
 #include <algorithm>
 #include <atomic>
@@ -51,6 +55,7 @@
 #include <cstring>
 #include <exception>
 #include <filesystem>
+#include <functional>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -104,6 +109,31 @@ namespace
   /// When main_() finished a file run; what follows it is teardown.
   std::chrono::steady_clock::time_point g_t_main_end;
 
+  /// Thrown by the tagging loop at the first MS2 with an ion mobility per
+  /// peak when -out_spectra is mzPeak, which cannot store it.
+  struct IonMobilityRefused {};
+
+  /// FASTAG_FULL_PRECISION=1: the tag TSV writes nterm_mass, cterm_mass and
+  /// evalue in shortest round-trip form, so a differential test reads the
+  /// doubles -digest_out counted. Deliberately not an option.
+  const bool g_full_precision = [] {
+    const char* e = std::getenv("FASTAG_FULL_PRECISION");
+    return e != nullptr && std::strcmp(e, "1") == 0;
+  }();
+
+  /// Directory holding the shipped digest data (protease models, mass-gap
+  /// modifications): $FASTAG_DIGEST_DIR, else beside the executable in the
+  /// two layouts taxonomyDir_() knows. "" when there is none.
+  std::string digestDir_()
+  {
+    const char* env = std::getenv("FASTAG_DIGEST_DIR");
+    if (env != nullptr && *env != '\0' && File::isDirectory(std::string(env))) return std::string(env);
+    const std::string exe = File::getExecutablePath();
+    for (const std::string& c : {exe + "../share/FASTag/digest", exe + "share-FASTag-digest", exe + "digest"})
+      if (File::exists(c + "/digest_models.tsv")) return c;
+    return std::string();
+  }
+
   /// k of a taxonomy index, read from its 16-byte header alone.
   ///
   /// Exists so the tag-length precondition can be checked BEFORE tagging.
@@ -112,7 +142,7 @@ namespace
   ///
   /// Both index versions put k at the same place: magic(4) | u32 version | u32 k,
   /// so both the current "FTX2" and the legacy "FTXI" are accepted.
-  int peekTaxdbK_(const String& path)
+  int peekTaxdbK_(const std::string& path)
   {
     std::ifstream f(path.c_str(), std::ios::binary);
     if (!f) return -1;
@@ -138,10 +168,10 @@ namespace
   /// Anchored to the EXECUTABLE, not OPENMS_DATA_PATH: this is FASTag's own
   /// data, and a user pointing OPENMS_DATA_PATH at a system OpenMS must not
   /// silently lose the taxonomy that shipped beside the binary they run.
-  String taxonomyDir_()
+  std::string taxonomyDir_()
   {
     const char* env = std::getenv("FASTAG_TAXONOMY_DIR");
-    if (env != nullptr && *env != '\0' && File::isDirectory(String(env))) return String(env);
+    if (env != nullptr && *env != '\0' && File::isDirectory(std::string(env))) return std::string(env);
 
     // Both layouts the project ships:
     //   ../share/FASTag/taxonomy   a normal `cmake --install` tree (bin/ + share/)
@@ -152,12 +182,12 @@ namespace
     // the dumps (installable -- the index is a separate download), then any that
     // merely exists (so the error names a real path). First-that-exists would
     // let an empty or dumps-only install tree mask a complete one beside it.
-    const String exe = File::getExecutablePath();
-    const String cands[] = {exe + "../share/FASTag/taxonomy",
+    const std::string exe = File::getExecutablePath();
+    const std::string cands[] = {exe + "../share/FASTag/taxonomy",
                             exe + "share-FASTag-taxonomy",
                             exe + "taxonomy"};
-    String with_dumps, any;
-    for (const String& c : cands)
+    std::string with_dumps, any;
+    for (const std::string& c : cands)
     {
       if (!File::isDirectory(c)) continue;
       if (any.empty()) any = c;
@@ -190,47 +220,39 @@ namespace
 class TOPPFASTag : public TOPPBase
 {
 public:
-  // official = false: FASTag lives outside the OpenMS tree and so is not in
-  // ToolHandler's list. Passing true makes the TOPPBase constructor throw
-  // InvalidValue on startup.
+  // toolhandler_test = false: FASTag lives outside the OpenMS tree and so is
+  // not in ToolHandler's list. Passing true makes the TOPPBase constructor
+  // throw InvalidValue on startup.
   TOPPFASTag()
-    : TOPPBase("FASTag", "Infers partial sequence tags from MS/MS spectra.", false,
+    : TOPPBase("FASTag", "Infers partial sequence tags from MS/MS spectra.",
                {{"Tabb DL, Ma ZQ, Martin DB, Ham AJ, Chambers MC",
                  "DirecTag: accurate sequence tags from peptide MS/MS through statistical scoring",
-                 "J Proteome Res 2008; 7(9): 3838-46", "10.1021/pr800154p"}})
+                 "J Proteome Res 2008; 7(9): 3838-46", "10.1021/pr800154p"}},
+               false)
   {
     // TOPPBase prints the OpenMS version when version_ is empty, which is
     // right for a tool shipped inside OpenMS and wrong for this one.
     // FASTAG_VERSION comes from project(FASTag VERSION ...).
     version_ = FASTAG_VERSION;
-    verboseVersion_ = String(FASTAG_VERSION) + " (OpenMS " + VersionInfo::getVersion() + ")";
+    verboseVersion_ = std::string(FASTAG_VERSION) + " (OpenMS " + VersionInfo::getVersion() + ")";
   }
 
 protected:
   void registerOptionsAndFlags_() override
   {
-    // No setValidFormats_ on the two spectrum files. TOPPBase validates that
-    // list against OpenMS's FileTypes enum at registration and throws on a
-    // name it does not know, and stock OpenMS has no MZPEAK. Left
-    // unrestricted, TOPPBase skips the check and main_ decides by extension,
-    // refusing an unsupported one with its own message.
-#ifdef FASTAG_HAVE_MZPEAK_LIB
+    // No setValidFormats_ on the two spectrum files: main_ decides by type
+    // and refuses an unsupported one with its own message.
     registerInputFile_("in", "<file>", "", "Input spectra (mzML or mzpeak)", /*required=*/false);
-#else
-    registerInputFile_("in", "<file>", "", "Input spectra (mzML; this build has no mzPeak reader)",
-                       /*required=*/false);
-#endif
     registerOutputFile_("out", "<file>", "", "Tag list (tab-separated)", /*required=*/false);
-    setValidFormats_("out", ListUtils::create<String>("tsv"));
+    setValidFormats_("out", ListUtils::create<std::string>("tsv"));
 
     registerInputFile_("fasta", "<file>", "", "Report only tags occurring in these sequences", false);
-    setValidFormats_("fasta", ListUtils::create<String>("fasta"));
+    setValidFormats_("fasta", ListUtils::create<std::string>("fasta"));
     registerOutputFile_("out_spectra", "<file>", "",
-                        "Write spectra carrying a reported tag here (mzML, or "
-                        "mzpeak if this build has the library). Note this path "
-                        "holds one slot per input spectrum, so unlike the default "
-                        "it needs memory proportional to the FILE, not to the "
-                        "thread count", false);
+                        "Write spectra carrying a reported tag here (mzML or "
+                        "mzpeak). Note this path holds one slot per input "
+                        "spectrum, so unlike the default it needs memory "
+                        "proportional to the FILE, not to the thread count", false);
 
     registerIntOption_("tag_length", "<n>", 3, "Seed tag length in residues", false);
     setMinInt_("tag_length", 1);
@@ -270,7 +292,7 @@ protected:
     // reports zero tags with no indication why.
     setMinFloat_("fragment_tolerance", 1e-9);
     registerStringOption_("fragment_tolerance_unit", "<unit>", "ppm", "Tolerance unit", false);
-    setValidStrings_("fragment_tolerance_unit", ListUtils::create<String>("ppm,Da"));
+    setValidStrings_("fragment_tolerance_unit", ListUtils::create<std::string>("ppm,Da"));
 
     registerIntOption_("max_peaks", "<n>", 400,
                        "Peaks retained per spectrum; 0 uses the internal ceiling "
@@ -299,13 +321,10 @@ protected:
     setMinFloat_("subsample_fraction", 0.0);
     setMaxFloat_("subsample_fraction", 1.0);
 
-    // How much decoded mzPeak may be held at once. This is a real ceiling, not
-    // a hint: the archive cache admits a decode only when the bytes already in
-    // flight leave room, so peak memory follows this number and not -threads.
-    // Too small costs time rather than correctness -- a group evicted before
-    // the next thread reaches it is decoded again.
+    // Accepted so that existing command lines and INI files keep working; the
+    // mzPeak reader has no decode cache to size any more.
     registerIntOption_("mzpeak_read_memory", "<MB>", 0,
-                       "Decoded mzPeak held at once, in MB; 0 = size it to the archive", false, true);
+                       "Ignored; mzPeak is read in file order without a decode cache", false, true);
     setMinInt_("mzpeak_read_memory", 0);
     registerIntOption_("subsample_seed", "<n>", 1, "Seed for -subsample_* selection", false);
     setMinInt_("subsample_seed", 0);
@@ -374,7 +393,7 @@ protected:
                        "mammalian sample). Requires -fasta. Appends a q_db "
                        "column and marks entrapment-only matches efwd/erev "
                        "in fasta_hit", false);
-    setValidFormats_("entrapment_fasta", ListUtils::create<String>("fasta"));
+    setValidFormats_("entrapment_fasta", ListUtils::create<std::string>("fasta"));
 
     // Tag reconciliation (TagRecon stage A+B) at proteome scale: place each
     // reported tag onto tryptic windows of a database by its flanking masses
@@ -390,10 +409,10 @@ protected:
                         "one row per placement (protein, peptide, position, flank "
                         "agreement, mass gap + interpretation). Uses -recon_fasta, "
                         "or -fasta when that is not given", false);
-    setValidFormats_("recon_out", ListUtils::create<String>("tsv"));
+    setValidFormats_("recon_out", ListUtils::create<std::string>("tsv"));
     registerInputFile_("recon_fasta", "<file>", "",
                        "Protein database for -recon_out. Default: the -fasta file", false);
-    setValidFormats_("recon_fasta", ListUtils::create<String>("fasta"));
+    setValidFormats_("recon_fasta", ListUtils::create<std::string>("fasta"));
     registerIntOption_("recon_missed_cleavages", "<n>", 1,
                        "Missed tryptic cleavages allowed in reconciliation windows", false);
     setMinInt_("recon_missed_cleavages", 0);
@@ -413,14 +432,14 @@ protected:
                         "(requires -recon_out): delta, spectrum count, top "
                         "interpretations. Region-level candidates, NOT localized "
                         "identifications and NOT FDR-controlled", false);
-    setValidFormats_("delta_out", ListUtils::create<String>("tsv"));
+    setValidFormats_("delta_out", ListUtils::create<std::string>("tsv"));
     registerOutputFile_("recon_id_out", "<file>", "",
                         "The -recon_out placements as identifications (requires "
                         "-recon_out), as idXML, mzid or mzTab by extension: one hit per "
                         "placement with its proteins, the database peptide carrying only "
                         "the fixed residue modifications, scored by the tag's E-value (lower is "
                         "better), the mass gap as metadata. NOT FDR-controlled", false);
-    setValidFormats_("recon_id_out", ListUtils::create<String>("idXML,mzid,mzTab"));
+    setValidFormats_("recon_id_out", ListUtils::create<std::string>("idXML,mzid,mzTab"));
 
     // Taxonomic / species detection: throw the tags at a prebuilt tag->taxon
     // index (buildtaxdb) and infer the taxa present by lowest-common-ancestor
@@ -444,17 +463,77 @@ protected:
     registerOutputFile_("glyco_out", "<file>", "",
                         "Per-spectrum oxonium report. Default: <out> with a "
                         ".glyco.tsv suffix", false);
-    setValidFormats_("glyco_out", ListUtils::create<String>("tsv"));
+    setValidFormats_("glyco_out", ListUtils::create<std::string>("tsv"));
     registerDoubleOption_("glyco_min_fraction", "<f>", 0.10,
                           "Minimum summed oxonium intensity as a fraction of the "
                           "base peak (MSFragger-Glyco's diagnostic filter)", false);
     setMinFloat_("glyco_min_fraction", 0.0);
 
+    // Digest, label and mass-gap reports: measurements from the reported
+    // tags, long-form TSV (section, key, value, n, description). Opt-in; the
+    // other outputs are the same with or without them.
+    registerOutputFile_("digest_out", "<file>", "",
+                        "Report the terminal residues of the tags (ungapped, E-value <= 1) and "
+                        "the protease call they support, with its margin or the reason for no call", false);
+    setValidFormats_("digest_out", ListUtils::create<std::string>("tsv"));
+    registerOutputFile_("label_out", "<file>", "",
+                        "Report N-terminal isobaric label gaps (TMT, TMTpro, iTRAQ4) and the heavy "
+                        "Lys8/Arg10 shares of the tag ends", false);
+    setValidFormats_("label_out", ListUtils::create<std::string>("tsv"));
+    registerOutputFile_("massgap_out", "<file>", "",
+                        "Report the -delta_out mass-gap distribution (requires -recon_out): Cys "
+                        "alkylation counts, gap peaks explained as combinations of Unimod "
+                        "modifications, and SILAC labels among them", false);
+    setValidFormats_("massgap_out", ListUtils::create<std::string>("tsv"));
+    registerInputFile_("digest_models", "<file>", "",
+                       "Protease model table for -digest_out (columns model, class, end, residue, "
+                       "freq). Default: the shipped cleavage-rule models", false);
+    setValidFormats_("digest_models", ListUtils::create<std::string>("tsv"));
+    registerIntOption_("digest_tag_min", "<n>", 100,
+                       "Tag ends needed for a protease call; the N-terminal ends count from as many", false, true);
+    setMinInt_("digest_tag_min", 1);
+    registerDoubleOption_("digest_window", "<Da>", 0.008,
+                          "Mass window around a residue or label mass at the tag ends", false, true);
+    setMinFloat_("digest_window", 0.0);
+    registerDoubleOption_("digest_background_share", "<f>", 0.05,
+                          "Share of the background mixed into every protease model (below 1)", false, true);
+    setMinFloat_("digest_background_share", 0.0);
+    setMaxFloat_("digest_background_share", 1.0);
+    registerIntOption_("digest_silac_min", "<n>", 50,
+                       "K- and R-terminal tag ends each before -label_out's heavy shares are gated in", false, true);
+    setMinInt_("digest_silac_min", 0);
+    registerDoubleOption_("massgap_window", "<Da>", 0.02,
+                          "Gap window of -massgap_out on a ppm run", false, true);
+    setMinFloat_("massgap_window", 0.0);
+    registerDoubleOption_("massgap_window_da", "<Da>", 0.5,
+                          "Gap window of -massgap_out on a run with a Da fragment tolerance", false, true);
+    setMinFloat_("massgap_window_da", 0.0);
+    registerIntOption_("massgap_min_spectra", "<n>", 20, "Spectra a gap peak needs", false, true);
+    setMinInt_("massgap_min_spectra", 0);
+    registerDoubleOption_("massgap_min_share", "<f>", 0.005,
+                          "Share of the placed spectra a gap peak needs", false, true);
+    setMinFloat_("massgap_min_share", 0.0);
+    registerIntOption_("massgap_min_bin", "<n>", 2,
+                       "Spectra a -delta_out row needs to take part in the gap peaks", false, true);
+    setMinInt_("massgap_min_bin", 1);
+    registerIntOption_("massgap_max_mods", "<n>", 3,
+                       "Modifications combined to explain a gap", false, true);
+    setMinInt_("massgap_max_mods", 1);
+    setMaxInt_("massgap_max_mods", 4);
+    registerIntOption_("massgap_top", "<n>", 5, "Modifications listed by share", false, true);
+    setMinInt_("massgap_top", 0);
+    registerDoubleOption_("massgap_silac_share", "<f>", 0.08,
+                          "Share of the shifted spectra a SILAC label needs", false, true);
+    setMinFloat_("massgap_silac_share", 0.0);
+    registerIntOption_("massgap_silac_min", "<n>", 500,
+                       "Shifted spectra a SILAC call needs", false, true);
+    setMinInt_("massgap_silac_min", 0);
+
     registerInputFile_("taxdb", "<file>", "", "Tag->taxon index (built by buildtaxdb). Default: the bundled tax_k7.taxdb", false);
     registerInputFile_("taxonomy_nodes", "<file>", "", "NCBI taxonomy nodes.dmp. Default: the bundled nodes.dmp", false);
     registerInputFile_("taxonomy_names", "<file>", "", "NCBI taxonomy names.dmp. Default: the bundled names.dmp", false);
     registerOutputFile_("species_out", "<file>", "", "Ranked taxa TSV. Default: <out> with a .species.tsv suffix", false);
-    setValidFormats_("species_out", ListUtils::create<String>("tsv"));
+    setValidFormats_("species_out", ListUtils::create<std::string>("tsv"));
     registerIntOption_("species_min_len", "<n>", 0,
                        "Ignore tags shorter than this for taxonomy; 0 uses the index k", false);
     setMinInt_("species_min_len", 0);
@@ -506,7 +585,7 @@ protected:
     registerStringOption_("orientation", "<mode>", "both",
                           "Match a tag as written, or also reversed. Tags are stored N->C under a "
                           "y-ion assumption, so b-derived tags read reversed", false);
-    setValidStrings_("orientation", ListUtils::create<String>("both,forward"));
+    setValidStrings_("orientation", ListUtils::create<std::string>("both,forward"));
 
     // Modifications, resolved through OpenMS ModificationsDB so any UniMod name
     // works, not a fixed list. Fixed mods shift a residue's mass and are not
@@ -516,11 +595,11 @@ protected:
     // shifts the whole precursor and so is already carried in the flanking
     // masses, with nothing per-residue to annotate.
     registerStringList_("fixed_modifications", "<mods>",
-                        ListUtils::create<String>("Carbamidomethyl (C)"),
+                        ListUtils::create<std::string>("Carbamidomethyl (C)"),
                         "Fixed modifications by OpenMS/UniMod name, e.g. "
                         "'Carbamidomethyl (C)' 'TMT6plex (K)'. Shift residue masses; "
                         "not annotated in the tag", false);
-    registerStringList_("variable_modifications", "<mods>", ListUtils::create<String>(""),
+    registerStringList_("variable_modifications", "<mods>", ListUtils::create<std::string>(""),
                         "Variable modifications by OpenMS/UniMod name, e.g. "
                         "'Phospho (S)' 'Phospho (T)' 'Phospho (Y)' 'Formyl (K)'. "
                         "Add a modified alternative, written inline as X[Name]", false);
@@ -536,7 +615,7 @@ protected:
   // appendNum, not snprintf: the same text as "%.4f" / "%g" / "%.3f", without
   // the locale lock every worker queues on in macOS's printf (NumFormat.h).
   static void appendTagRow(std::string& buf, const FASTag::Tag& t,
-                           const String& native_id, const char* hit,
+                           const std::string& native_id, const char* hit,
                            bool want_proforma, const std::string& proforma_fixed,
                            bool want_res_conf, const std::string& usi = std::string())
   {
@@ -546,11 +625,21 @@ protected:
     buf += t.seq;              buf += '\t';
     appendNum(buf, t.n_res);   buf += '\t';
     appendNum(buf, t.charge);  buf += '\t';
-    appendNum(buf, t.nterm_mass, fixed, 4); buf += '\t';
-    appendNum(buf, t.cterm_mass, fixed, 4); buf += '\t';
+    if (g_full_precision)
+    {
+      FASTag::appendShortest(buf, t.nterm_mass); buf += '\t';
+      FASTag::appendShortest(buf, t.cterm_mass); buf += '\t';
+    }
+    else
+    {
+      appendNum(buf, t.nterm_mass, fixed, 4); buf += '\t';
+      appendNum(buf, t.cterm_mass, fixed, 4); buf += '\t';
+    }
     buf += t.extended ? '1' : '0'; buf += '\t';
     buf += t.gapped ? '1' : '0';   buf += '\t';
-    appendNum(buf, t.evalue, std::chars_format::general, 6); buf += '\t';
+    if (g_full_precision) FASTag::appendShortest(buf, t.evalue);
+    else appendNum(buf, t.evalue, std::chars_format::general, 6);
+    buf += '\t';
     appendNum(buf, t.min_conf, fixed, 3);  buf += '\t';
     appendNum(buf, t.mean_conf, fixed, 3); buf += '\t';
     buf += hit;
@@ -575,10 +664,10 @@ protected:
   static std::string buildProformaPrefix(const StringList& mods)
   {
     std::string out;
-    for (const String& m : mods)
+    for (const std::string& m : mods)
     {
       const size_t lp = m.find('('), rp = m.rfind(')');
-      if (lp == String::npos || rp == String::npos || rp < lp) continue;
+      if (lp == std::string::npos || rp == std::string::npos || rp < lp) continue;
       std::string name = m.substr(0, lp);
       while (!name.empty() && name.back() == ' ') name.pop_back();
       std::string targets;
@@ -604,8 +693,8 @@ protected:
     // Fetched on the first name, not up front: building the database parses
     // all of UniMod, 0.04 s of serial start-up that a run naming no
     // modification (-fixed_modifications "") never uses.
-    ModificationsDB* db = nullptr;
-    for (const String& nm : names)
+    const ModificationsDB* db = nullptr;
+    for (const std::string& nm : names)
     {
       if (nm.empty()) continue;
       if (!db) db = ModificationsDB::getInstance();
@@ -656,8 +745,8 @@ protected:
     // gives none) and it means HALF the logical cores, where TOPPBase would
     // take all of them. A tagger that grabs every core makes the desktop it
     // runs on unusable for the minutes it needs, and the read path stops
-    // scaling well before the core count anyway (see the mzPeak notes
-    // below). An explicit -threads <n> is honoured unchanged.
+    // scaling well before the core count anyway. An explicit -threads <n> is
+    // honoured unchanged.
     if (getIntOption_("threads") == 0)
     {
       const unsigned cores = std::thread::hardware_concurrency();  // 0 if unknown
@@ -720,10 +809,10 @@ protected:
     // "nothing could be found". Refuse up front and say exactly what to change.
     if (want_species)
     {
-      String probe_taxdb = getStringOption_("taxdb");
+      std::string probe_taxdb = getStringOption_("taxdb");
       if (probe_taxdb.empty())
       {
-        const String d = taxonomyDir_();
+        const std::string d = taxonomyDir_();
         if (!d.empty()) probe_taxdb = d + "/tax_k7.taxdb";
       }
       const int kk = probe_taxdb.empty() ? -1 : peekTaxdbK_(probe_taxdb);
@@ -743,8 +832,8 @@ protected:
       }
     }
 
-    const String in = getStringOption_("in");
-    const String out = getStringOption_("out");
+    const std::string in = getStringOption_("in");
+    const std::string out = getStringOption_("out");
     const bool stream_mode = getFlag_("stream");
     if (!stream_mode && (in.empty() || out.empty()))
     {
@@ -757,7 +846,8 @@ protected:
       // indexed input, q_db needs the full curve, -species aggregates a run,
       // and the filter/recon paths are not per-spectrum-latency material.
       for (const char* opt : {"fasta", "entrapment_fasta", "recon_out", "species_out",
-                              "taxdb", "out_spectra", "delta_out", "recon_id_out", "usi_collection"})
+                              "taxdb", "out_spectra", "delta_out", "recon_id_out", "usi_collection",
+                              "digest_out", "label_out", "massgap_out"})
         if (!getStringOption_(opt).empty())
         {
           OPENMS_LOG_ERROR << "-stream cannot be combined with -" << opt << "." << std::endl;
@@ -769,8 +859,8 @@ protected:
         return ILLEGAL_PARAMETERS;
       }
     }
-    const String fasta = getStringOption_("fasta");
-    const String out_spectra = getStringOption_("out_spectra");
+    const std::string fasta = getStringOption_("fasta");
+    const std::string out_spectra = getStringOption_("out_spectra");
 
     FASTag::Param p;
     p.tag_length = lengths.front();
@@ -794,9 +884,9 @@ protected:
     resolveMods_(getStringList_("variable_modifications"), true, p.mods, variable_mods);
     if (!p.mods.empty())
     {
-      String summary;
+      std::string summary;
       for (const auto& m : p.mods)
-        summary += (summary.empty() ? "" : ", ") + m.name + " (" + String(m.residue) + ", "
+        summary += (summary.empty() ? "" : ", ") + m.name + " (" + std::string(1, m.residue) + ", "
                  + (m.variable ? "variable" : "fixed") + ")";
       OPENMS_LOG_INFO << "Modifications: " << summary << std::endl;
     }
@@ -832,8 +922,8 @@ protected:
     };
     if (lengths.size() > 1)
     {
-      String list;
-      for (int L : lengths) list += (list.empty() ? "" : ", ") + String(L);
+      std::string list;
+      for (int L : lengths) list += (list.empty() ? "" : ", ") + std::to_string(L);
       OPENMS_LOG_INFO << "Seed tag lengths: " << list << std::endl;
     }
 
@@ -846,7 +936,7 @@ protected:
     FASTag::FastaFilter filt(both_orientations);
     FASTag::FastaFilter entrap(both_orientations);
     const bool filtering = !fasta.empty();
-    const String entrap_fasta = getStringOption_("entrapment_fasta");
+    const std::string entrap_fasta = getStringOption_("entrapment_fasta");
     const bool entrap_on = !entrap_fasta.empty();
     if (entrap_on && !filtering)
     {
@@ -872,8 +962,8 @@ protected:
       return ILLEGAL_PARAMETERS;
     }
 
-    const String recon_out = getStringOption_("recon_out");
-    const String delta_out = getStringOption_("delta_out");
+    const std::string recon_out = getStringOption_("recon_out");
+    const std::string delta_out = getStringOption_("delta_out");
     const bool recon_on = !recon_out.empty();
     if (!delta_out.empty() && !recon_on)
     {
@@ -888,7 +978,7 @@ protected:
                           "to the reconciliations)." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
-    const String recon_id_out = getStringOption_("recon_id_out");
+    const std::string recon_id_out = getStringOption_("recon_id_out");
     const bool recon_ids_on = !recon_id_out.empty();
     if (recon_ids_on && !recon_on)
     {
@@ -909,7 +999,7 @@ protected:
     }
     // -usi_collection: "mzspec:<collection>:<run>:" once; empty = no usi column.
     std::string usi_prefix;
-    if (const String coll = getStringOption_("usi_collection"); !coll.empty())
+    if (const std::string coll = getStringOption_("usi_collection"); !coll.empty())
     {
       if (!FASTag::isUsiCollection(coll))
       {
@@ -920,10 +1010,9 @@ protected:
         return ILLEGAL_PARAMETERS;
       }
       // The input is .mzML or .mzpeak (refused otherwise below), so the last
-      // dot starts the extension. Not File::stemName: on a type OpenMS does
-      // not know (mzpeak) it cuts at the word "unknown" anywhere in the name.
-      const String file = File::basename(in);
-      const String run = file.substr(0, file.rfind('.'));
+      // dot starts the extension.
+      const std::string file = File::basename(in);
+      const std::string run = file.substr(0, file.rfind('.'));
       // USI 1.0 3.6.1: a run starting with '[' reads as a [subFolder] prefix.
       if (run.empty() || run[0] == '[')
       {
@@ -942,7 +1031,7 @@ protected:
     FASTag::TagReconciler recon(p.frag_tol, p.tol_ppm, both_orientations);
     if (recon_on)
     {
-      String rfasta = getStringOption_("recon_fasta");
+      std::string rfasta = getStringOption_("recon_fasta");
       if (rfasta.empty()) rfasta = fasta;
       if (rfasta.empty())
       {
@@ -981,6 +1070,160 @@ protected:
                       << rmin << (getIntOption_("recon_min_length") == 0 ? " (derived)" : " (set)")
                       << std::endl;
     }
+
+    // -digest_out, -label_out, -massgap_out: their tables are read here, so a
+    // bad one is refused before any tagging.
+    namespace FD = FASTag::Digest;
+    const std::string digest_out = getStringOption_("digest_out");
+    const std::string label_out = getStringOption_("label_out");
+    const std::string massgap_out = getStringOption_("massgap_out");
+    const bool digest_on = !digest_out.empty();
+    const bool count_on = digest_on || !label_out.empty();
+    const bool massgap_on = !massgap_out.empty();
+    const bool delta_on = !delta_out.empty() || massgap_on;
+    if (massgap_on && !recon_on)
+    {
+      OPENMS_LOG_ERROR << "-massgap_out requires -recon_out (the gaps are those of the "
+                          "reconciliations, as in -delta_out)." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    FD::DigestSettings dset;
+    dset.window = getDoubleOption_("digest_window");
+    dset.tag_min = getIntOption_("digest_tag_min");
+    dset.background_share = getDoubleOption_("digest_background_share");
+    if (dset.background_share >= 1.0)
+    {
+      OPENMS_LOG_ERROR << "-digest_background_share must be below 1: at 1 every model is the background "
+                          "and all of them tie." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    dset.silac_min = getIntOption_("digest_silac_min");
+    dset.low_resolution = !p.tol_ppm;
+    FD::ModelTable dtable;
+    const std::string digest_models = getStringOption_("digest_models");
+    // Report options set without the report that reads them: ignored, so say so.
+    {
+      std::vector<std::string> unused;
+      if (!digest_on && !digest_models.empty()) unused.push_back("-digest_models");
+      if (!digest_on && dset.tag_min != 100) unused.push_back("-digest_tag_min");
+      if (!digest_on && dset.background_share != 0.05) unused.push_back("-digest_background_share");
+      if (!count_on && dset.window != 0.008) unused.push_back("-digest_window");
+      if (!count_on && dset.silac_min != 50) unused.push_back("-digest_silac_min");
+      for (const std::string& o : unused)
+        OPENMS_LOG_WARN << o << " is only read for -digest_out" << (o == "-digest_window" || o == "-digest_silac_min" ? " or -label_out" : "")
+                        << "; it is ignored here." << std::endl;
+    }
+    const std::string ddir = (digest_on || massgap_on) ? digestDir_() : std::string();
+    const auto no_digest_dir = [&](const char* what) {
+      OPENMS_LOG_ERROR << "No shipped " << what << " found (expected <bin>/../share/FASTag/digest). "
+                          "Set FASTAG_DIGEST_DIR to the directory holding digest_models.tsv and "
+                          "massgap_mods.tsv" << (digest_on ? ", or give -digest_models." : ".") << std::endl;
+      return ILLEGAL_PARAMETERS;
+    };
+    if (digest_on)
+    {
+      std::string mpath = digest_models;
+      if (mpath.empty())
+      {
+        if (ddir.empty()) return no_digest_dir("protease models");
+        mpath = ddir + "/digest_models.tsv";
+      }
+      std::string err;
+      if (!FD::loadModelTable(mpath, dtable, &err))
+      {
+        OPENMS_LOG_ERROR << "-digest_models '" << mpath << "': " << err << std::endl;
+        return INPUT_FILE_CORRUPT;
+      }
+      dset.models = digest_models.empty() ? "shipped" : digest_models;
+      // The table's own background wins; else the FASTA's composition; else
+      // the shipped human one.
+      std::string bfasta = getStringOption_("recon_fasta");
+      if (bfasta.empty()) bfasta = fasta;
+      if (!digest_models.empty() && dtable.has_bg) dset.background = "models_table";
+      else if (!bfasta.empty())
+      {
+        // Streamed: only the residue counts are needed, not the entries.
+        std::array<std::uint64_t, FD::kNumAA> bcnt{};
+        FASTAFile bf;
+        bf.readStart(bfasta);
+        FASTAFile::FASTAEntry be;
+        while (bf.readNext(be)) FD::addResidues(be.sequence, bcnt);
+        dtable.bg_c = dtable.bg_n = FD::composition(bcnt, true, &dset.background_pseudocount);
+        dtable.has_bg = true;
+        dset.background = "fasta:" + bfasta;
+      }
+      else if (!dtable.has_bg)
+      {
+        FD::ModelTable shipped;
+        if (ddir.empty()) return no_digest_dir("background");
+        if (!FD::loadModelTable(ddir + "/digest_models.tsv", shipped, &err) || !shipped.has_bg)
+        {
+          OPENMS_LOG_ERROR << "The shipped digest_models.tsv in '" << ddir << "' has no background: " << err << std::endl;
+          return INPUT_FILE_CORRUPT;
+        }
+        dtable.bg_c = shipped.bg_c;
+        dtable.bg_n = shipped.bg_n;
+        dtable.has_bg = true;
+      }
+    }
+    std::vector<FD::GapMod> gmods, gcys;
+    std::vector<FD::Combo> gcombos;
+    FD::GapSettings gset;
+    if (massgap_on)
+    {
+      if (ddir.empty()) return no_digest_dir("mass-gap modifications");
+      std::ifstream mf((ddir + "/massgap_mods.tsv").c_str());
+      std::string err;
+      if (!mf || !FD::parseGapMods(mf, gmods, &err))
+      {
+        OPENMS_LOG_ERROR << "'" << ddir << "/massgap_mods.tsv': " << (err.empty() ? "cannot read" : err) << std::endl;
+        return INPUT_FILE_CORRUPT;
+      }
+      for (const char* c : {"Carbamidomethyl (C)", "Propionamide (C)", "Nethylmaleimide (C)",
+                            "Methylthio (C)", "Carboxymethyl (C)"})
+        gcys.push_back(FD::GapMod{c, c, 1.0, 0.0});
+      const ModificationsDB* mdb = ModificationsDB::getInstance();
+      for (std::vector<FD::GapMod>* list : {&gmods, &gcys})
+        for (FD::GapMod& m : *list)
+        {
+          const ResidueModification* rm = nullptr;
+          try { rm = mdb->getModification(m.site); }
+          catch (const Exception::BaseException&) { rm = nullptr; }
+          if (rm) m.mass = rm->getDiffMonoMass();
+          else
+          {
+            OPENMS_LOG_ERROR << "-massgap_out: OpenMS does not know the modification '" << m.site << "'." << std::endl;
+            return INPUT_FILE_CORRUPT;
+          }
+        }
+      gset.window = p.tol_ppm ? getDoubleOption_("massgap_window") : getDoubleOption_("massgap_window_da");
+      gset.min_spectra = static_cast<std::uint64_t>(getIntOption_("massgap_min_spectra"));
+      gset.min_share = getDoubleOption_("massgap_min_share");
+      gset.min_bin = static_cast<std::uint64_t>(getIntOption_("massgap_min_bin"));
+      gset.max_mods = getIntOption_("massgap_max_mods");
+      gset.top = getIntOption_("massgap_top");
+      gset.silac_share = getDoubleOption_("massgap_silac_share");
+      gset.silac_min = static_cast<std::uint64_t>(getIntOption_("massgap_silac_min"));
+      gcombos = FD::combinations(gmods, gset.max_mods);
+    }
+    // The run rows every report starts with.
+    const auto run_rows = [&]() {
+      std::vector<FD::Row> r;
+      std::string lens;
+      for (int L : lengths) lens += (lens.empty() ? "" : ",") + std::to_string(L);
+      r.push_back({"run", "version", FASTAG_VERSION, "-", std::string("FASTag ") + FASTAG_VERSION + " wrote this report."});
+      r.push_back({"run", "input", File::basename(in), "-", "The spectra were read from " + File::basename(in) + "."});
+      r.push_back({"run", "fragment_tolerance", FD::num(p.frag_tol), "-",
+                   "The fragment tolerance is " + FD::num(p.frag_tol) + " " + getStringOption_("fragment_tolerance_unit") + "."});
+      r.push_back({"run", "fragment_tolerance_unit", getStringOption_("fragment_tolerance_unit"), "-",
+                   "The fragment tolerance is in " + getStringOption_("fragment_tolerance_unit") + "."});
+      r.push_back({"run", "tag_length", lens, "-", "Tags were seeded at length " + lens + "."});
+      r.push_back({"run", "subsample_fraction", FD::num(getDoubleOption_("subsample_fraction")), "-",
+                   "A fraction of " + FD::num(getDoubleOption_("subsample_fraction")) + " of the spectra was tagged (0 = all)."});
+      r.push_back({"run", "subsample_spectra", std::to_string(getIntOption_("subsample_spectra")), "-",
+                   std::to_string(getIntOption_("subsample_spectra")) + " spectra were drawn for tagging (0 = all)."});
+      return r;
+    };
 
     if (stream_mode)
     {
@@ -1088,12 +1331,12 @@ protected:
         if (lengths[i] + 2 * p.max_extension < filt.minLen())
           throw Exception::InvalidValue(
               __FILE__, __LINE__, OPENMS_PRETTY_FUNCTION,
-              "Seed length " + String(lengths[i]) + " reaches at most " +
-              String(lengths[i] + 2 * p.max_extension) + " residues, below the " +
-              String(filt.minLen()) + " this database needs to beat chance, so it could "
+              "Seed length " + std::to_string(lengths[i]) + " reaches at most " +
+              std::to_string(lengths[i] + 2 * p.max_extension) + " residues, below the " +
+              std::to_string(filt.minLen()) + " this database needs to beat chance, so it could "
               "never report a tag. Drop it from 'tag_lengths', raise 'extension', or set "
               "'min_filter_length'.",
-              String(lengths[i]));
+              std::to_string(lengths[i]));
       try
       {
         filt.build(lengths.front(), max_len);
@@ -1146,56 +1389,95 @@ protected:
       }
     }
 
-    // Input readers. Every one reads a spectrum at a time from an indexed
-    // file, so memory is O(threads), not O(file), and each worker gets its
-    // own copy (none is thread-safe):
-    //   .mzpeak  OnDiscMzPeakExperiment, over the external library
+    // Input readers. mzML: every one reads a spectrum at a time from an
+    // indexed file, so memory is O(threads), not O(file), and each worker
+    // gets its own copy (none is thread-safe):
     //   .mzML    IndexedMzMLReader, which needs no up-front metadata parse;
     //            else OnDiscMSExperiment (-out_spectra needs its run-level
     //            metadata); else, with no usable index, a full load.
-    // The format is decided by extension, not by OpenMS's FileTypes, which
-    // has no MZPEAK. -out_spectra's writer follows ITS extension, so
-    // mzML->mzpeak and mzpeak->mzML both work as a side effect of tagging.
-    const auto has_ext = [](const String& p, const char* ext) {
-      String lower(p);
-      lower.toLower();  // mutates, so on a copy
-      return lower.hasSuffix(ext);
+    //   .mzpeak  MzPeakStream: OpenMS's MzPeakFile reads the archive once,
+    //            in file order, and the workers take the spectra from it.
+    // -out_spectra's writer follows ITS extension, so mzML->mzpeak and
+    // mzpeak->mzML both work as a side effect of tagging.
+    const auto has_ext = [](const std::string& p, const char* ext) {
+      return StringUtils::hasSuffix(StringUtils::toLowered(p), ext);
     };
-    const auto is_mzpeak = [&](const String& p) { return has_ext(p, ".mzpeak"); };
-    const auto is_mzml = [&](const String& p) { return has_ext(p, ".mzml"); };
+    const auto is_mzpeak = [](const std::string& p) {
+      return FileHandler::getTypeByFileName(p) == FileTypes::MZPEAK || MzPeakFile::isMzPeak(p);
+    };
+    const auto is_mzml = [&](const std::string& p) { return has_ext(p, ".mzml"); };
     if (!is_mzpeak(in) && !is_mzml(in))
     {
       OPENMS_LOG_ERROR << "Input '" << in << "' is neither .mzML nor .mzpeak." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
-    if (!out_spectra.empty() && !is_mzpeak(out_spectra) && !is_mzml(out_spectra))
+    const bool mzpeak_in = is_mzpeak(in);
+    const bool mzpeak_out = !out_spectra.empty()
+        && FileHandler::getTypeByFileName(out_spectra) == FileTypes::MZPEAK;
+    if (!out_spectra.empty() && !mzpeak_out && !is_mzml(out_spectra))
     {
       OPENMS_LOG_ERROR << "-out_spectra '" << out_spectra
                        << "' must end in .mzML or .mzpeak." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
-    const bool mzpeak_in = is_mzpeak(in);
-    const bool mzpeak_out = !out_spectra.empty() && is_mzpeak(out_spectra);
-#ifndef FASTAG_HAVE_MZPEAK_LIB
-    // No fallback: OpenMS's own MzPeakFile reads only the pre-0.7.0 layout.
-    if (mzpeak_in || mzpeak_out)
+    if ((mzpeak_in || mzpeak_out) && !MzPeakFile::isSupported())
     {
-      OPENMS_LOG_ERROR << "This build has no mzPeak support: it was configured without "
-                          "mzpeak-openms (-DMZPEAK_SOURCE_DIR=... -DMZPEAK_LIB_DIR=...; "
-                          "see README). Supply mzML, or rebuild with the library."
+      OPENMS_LOG_ERROR << "This build has no mzPeak support: the OpenMS it uses was built "
+                          "without it (OPENMS_ENABLE_MZPEAK). Supply mzML."
                        << std::endl;
       return ILLEGAL_PARAMETERS;
     }
+
+    // Make sure this process may open the files the readers are about to.
+    //
+    // Every decoding thread of the mzPeak reader opens its own handles to the
+    // archive's members, about six descriptors per thread, and MzPeakFile
+    // caps its threads by the soft limit. The usual soft limit of 1024
+    // therefore caps the decoding at roughly 110 threads.
+    //
+    // Raising the SOFT limit toward the hard one needs no privileges; it is
+    // what the hard limit is for. Only raise, never lower, and stay quiet
+    // unless it cannot be done.
+#ifndef _WIN32
+    {
+      struct rlimit lim{};
+      if (getrlimit(RLIMIT_NOFILE, &lim) == 0)
+      {
+        const rlim_t want = static_cast<rlim_t>(omp_get_max_threads()) * 16 + 1024;
+        if (lim.rlim_cur < want && lim.rlim_cur < lim.rlim_max)
+        {
+          const rlim_t before = lim.rlim_cur;
+          lim.rlim_cur = std::min(want, lim.rlim_max);
+          if (setrlimit(RLIMIT_NOFILE, &lim) != 0)
+          {
+            OPENMS_LOG_WARN << "could not raise the open-file limit from " << before
+                            << "; a large -threads may read the input with fewer threads."
+                            << std::endl;
+          }
+        }
+      }
+    }
 #endif
 
-#ifdef FASTAG_HAVE_MZPEAK_LIB
-    std::unique_ptr<FASTag::OnDiscMzPeakExperiment> mzp;
+    // The tagging loop's dynamic chunks, here because the mzPeak window is
+    // sized by them.
+    constexpr int kChunk = 256, kTailChunk = 16;
+    const int read_threads = std::max(1, omp_get_max_threads());
+    // Decoding threads for mzPeak, capped: MzPeakFile opens a reader per
+    // decoding thread for every batch of spectra, one at a time, so more
+    // threads cost more than they decode. 4-16 were alike at 64 tagging
+    // threads (1.0-1.2 s on a 27k-spectrum run); 64 took 2.2 s.
+    const int mzpeak_decode_threads = std::min(read_threads, 8);
+    std::unique_ptr<FASTag::MzPeakStream> mzs;
     if (mzpeak_in)
     {
       try
       {
         const auto a = std::chrono::steady_clock::now();
-        mzp = std::make_unique<FASTag::OnDiscMzPeakExperiment>(in);
+        // Room for every thread's chunk, plus a decoded batch either side.
+        mzs = std::make_unique<FASTag::MzPeakStream>(
+            in, mzpeak_decode_threads, static_cast<size_t>(read_threads) * kChunk + 4096);
+        static_cast<void>(mzs->size());
         g_t_open = std::chrono::duration<double>(std::chrono::steady_clock::now() - a).count();
       }
       catch (const Exception::BaseException& e)
@@ -1204,7 +1486,6 @@ protected:
         return INPUT_FILE_CORRUPT;
       }
     }
-#endif
     // The fast mzML path: our own index-driven reader, which fills the
     // metadata OpenMS's per-spectrum decoder drops and so needs no serial
     // up-front metadata parse (see IndexedMzMLReader.h).
@@ -1242,13 +1523,10 @@ protected:
     auto ondisc = std::make_unique<OnDiscMSExperiment>();
     PeakMap exp;
     const bool streaming = !mzpeak_in && !fastmz && ondisc->openFile(in, out_spectra.empty());
-    // Spectrum i, whatever the input: the mzPeak reader, the per-spectrum mzML
-    // reader, or the fully loaded map. For the SERIAL callers only; the
-    // tagging loop gives each thread its own reader.
+    // Spectrum i of an mzML input: the per-spectrum reader or the fully
+    // loaded map. For the SERIAL callers only; the tagging loop gives each
+    // thread its own reader. (mzPeak is read in one pass, by MzPeakStream.)
     auto read_spectrum = [&](Size i) -> MSSpectrum {
-#ifdef FASTAG_HAVE_MZPEAK_LIB
-      if (mzp) return mzp->getSpectrum(i);
-#endif
       if (fastmz) return fastmz->getSpectrum(i);
       return streaming ? ondisc->getSpectrum(i) : exp[i];
     };
@@ -1293,9 +1571,7 @@ protected:
       }
     }
     size_t n_total = streaming ? ondisc->getNrSpectra() : exp.size();
-#ifdef FASTAG_HAVE_MZPEAK_LIB
-    if (mzp) n_total = mzp->getNrSpectra();
-#endif
+    if (mzs) n_total = mzs->size();
     if (fastmz) n_total = fastmz->getNrSpectra();
 
     // Subsampling selection. The mask is exact for every input -- it is built
@@ -1329,73 +1605,37 @@ protected:
     // while an Orbitrap or TOF routinely does. If the closest pair anywhere in
     // the sample is still many times the tolerance, no real fragment can be
     // matched at that tolerance either.
-    const auto t_probe_a = std::chrono::steady_clock::now();
+    // 64 samples: the test is coarse (does the tightest spacing anywhere
+    // exceed 20x the tolerance?), and every sample costs a read -- on a
+    // profile archive a CENTROIDING too.
+    //
+    // In a few CLUSTERS of consecutive spectra across the run: a run changes
+    // over its gradient, and the probe wants the file's TIGHTEST peak
+    // spacing, not a typical one.
+    constexpr Size kClusters = 8;  // 8 spectra each
+    const Size probe_want = std::min<Size>(n_total, 64);
+    const Size per_cluster = std::max<Size>(1, probe_want / kClusters);
+    const Size cluster_step = std::max<Size>(1, n_total / kClusters);
+    std::set<Size> probe_idx;
+    for (Size c = 0; c < kClusters; ++c)
+      for (Size k = 0; k < per_cluster && c * cluster_step + k < n_total; ++k)
+        probe_idx.insert(c * cluster_step + k);
+    auto tolerance_probe = [&](auto&& read)
     {
-      // 64 samples: the test is coarse (does the tightest spacing anywhere
-      // exceed 20x the tolerance?), and every sample costs a read -- on a
-      // profile archive a CENTROIDING too.
-      const Size want = std::min<Size>(n_total, 64);
-      // In a few CLUSTERS of consecutive spectra, not strided across the run:
-      // a columnar reader decodes a whole row group to reach one spectrum, so
-      // strided samples would decode most of the archive, single-threaded,
-      // before tagging starts. Several clusters rather than one because a run
-      // changes over its gradient, and the probe wants the file's TIGHTEST
-      // peak spacing, not a typical one.
-      constexpr Size kClusters = 8;  // 8 spectra each
-      const Size per_cluster = std::max<Size>(1, want / kClusters);
-      const Size cluster_step = std::max<Size>(1, n_total / kClusters);
-      // The closest pair per cluster as (spacing, m/z), merged in cluster
-      // order below, so the answer is the serial one -- the FIRST closest pair
-      // -- whichever thread read which cluster.
-      std::vector<std::pair<double, double>> closest(kClusters, {std::numeric_limits<double>::max(), 0.0});
-      auto scan_cluster = [&](Size c, auto&& read)
-      {
-        double& tightest = closest[c].first;
-        double& at_mz = closest[c].second;
-        const Size start = c * cluster_step;
-        for (Size k = 0; k < per_cluster && start + k < n_total; ++k)
-        {
-          MSSpectrum s = read(start + k);
-          if (s.getMSLevel() != 2 || s.size() < 8) continue;
-          s.sortByPosition();
-          for (Size j = 1; j < s.size(); ++j)
-          {
-            const double d = s[j].getMZ() - s[j - 1].getMZ();
-            if (d > 0 && d < tightest) { tightest = d; at_mz = s[j].getMZ(); }
-          }
-        }
-      };
-      int probe_threads = 1;
-#ifdef FASTAG_HAVE_MZPEAK_LIB
-      // On mzPeak a cluster costs a row-group decode, so the clusters are
-      // read in parallel, through a (cheap) reader copy each.
-      if (mzp) probe_threads = std::min(static_cast<int>(kClusters), omp_get_max_threads());
-      if (probe_threads > 1)
-      {
-        std::exception_ptr failed;
-#pragma omp parallel for num_threads(probe_threads) schedule(static, 1)
-        for (int c = 0; c < static_cast<int>(kClusters); ++c)
-        {
-          try
-          {
-            FASTag::OnDiscMzPeakExperiment own(*mzp);
-            scan_cluster(static_cast<Size>(c), [&own](Size i) { return own.getSpectrum(i); });
-          }
-          catch (...)
-          {
-#pragma omp critical(fastag_probe)
-            if (!failed) failed = std::current_exception();
-          }
-        }
-        if (failed) std::rethrow_exception(failed);
-      }
-#endif
-      if (probe_threads == 1)
-        for (Size c = 0; c < kClusters; ++c) scan_cluster(c, read_spectrum);
+      // The FIRST closest pair, in cluster order.
       double tightest = std::numeric_limits<double>::max();
       double at_mz = 0;
-      for (const auto& cl : closest)
-        if (cl.first < tightest) { tightest = cl.first; at_mz = cl.second; }
+      for (const Size i : probe_idx)
+      {
+        MSSpectrum s = read(i);
+        if (s.getMSLevel() != 2 || s.size() < 8) continue;
+        s.sortByPosition();
+        for (Size j = 1; j < s.size(); ++j)
+        {
+          const double d = s[j].getMZ() - s[j - 1].getMZ();
+          if (d > 0 && d < tightest) { tightest = d; at_mz = s[j].getMZ(); }
+        }
+      }
       if (at_mz > 0)
       {
         const double tol = p.tol_ppm ? at_mz * p.frag_tol * 1e-6 : p.frag_tol;
@@ -1411,12 +1651,38 @@ protected:
                         "-fragment_tolerance_unit Da." << std::endl;
         }
       }
-    }
+    };
+    const auto t_probe_a = std::chrono::steady_clock::now();
+    // mzPeak is read once, in file order, so its probe runs on copies the
+    // reader keeps aside, after the loop.
+    if (mzs) mzs->start(sample_mask, probe_idx);
+    else tolerance_probe(read_spectrum);
 
     const auto t_tables_a = std::chrono::steady_clock::now();
     g_t_probe = std::chrono::duration<double>(t_tables_a - t_probe_a).count();
     const std::vector<FASTag::Tables> tables = build_tables();
     g_t_tables = std::chrono::duration<double>(std::chrono::steady_clock::now() - t_tables_a).count();
+    // mzPeak output cannot store an ion mobility per peak: refuse before any
+    // work. For mzML the first MS2 is checked here; an mzPeak input is read
+    // once, in the tagging loop, which stops at its first such MS2.
+    const auto refuse_im = [&]()
+    {
+      OPENMS_LOG_ERROR << "Not writing " << out_spectra << ": the input's MS2 spectra have an "
+                          "ion mobility per peak, which mzPeak output cannot store yet. Write "
+                          "-out_spectra as .mzML instead." << std::endl;
+      return INCOMPATIBLE_INPUT_DATA;
+    };
+    if (mzpeak_out && !mzpeak_in)
+    {
+      const Size n_check = streaming ? ondisc->getNrSpectra() : exp.size();
+      for (Size i = 0; i < n_check; ++i)
+      {
+        const MSSpectrum sp = read_spectrum(i);
+        if (sp.getMSLevel() != 2) continue;
+        if (sp.containsIMData()) return refuse_im();
+        break;
+      }
+    }
     std::ofstream tsv(out.c_str());
     if (!tsv)
     {
@@ -1445,7 +1711,7 @@ protected:
     // Default report paths: <out> with its extension replaced by a suffix --
     // only if the dot is in the FILE NAME. `-out /tmp/run.v1/tags` has its
     // last dot in the directory, and cutting there would write elsewhere.
-    const auto beside_out = [&out](const char* suffix) -> String {
+    const auto beside_out = [&out](const char* suffix) -> std::string {
       const size_t slash = out.find_last_of("/\\");
       const size_t dot = out.rfind('.');
       const bool ext = dot != std::string::npos && (slash == std::string::npos || dot > slash);
@@ -1454,7 +1720,7 @@ protected:
 
     const bool glyco_on = getFlag_("glyco");
     const double glyco_min_fraction = getDoubleOption_("glyco_min_fraction");
-    String glyco_out = getStringOption_("glyco_out");
+    std::string glyco_out = getStringOption_("glyco_out");
     std::ofstream gtsv;
     if (glyco_on)
     {
@@ -1472,14 +1738,8 @@ protected:
         want_proforma ? buildProformaPrefix(getStringList_("fixed_modifications")) : std::string();
 
     PeakMap kept;
-#ifdef FASTAG_HAVE_MZPEAK_LIB
-    // Counted from here: the tolerance probe centroids what it samples, and
-    // the loop centroids those spectra again.
-    const size_t picked_before_loop = mzp ? mzp->nPicked() : 0;
-    if (mzp) kept.getExperimentalSettings() = mzp->getMetaData();
-    else
-#endif
-    if (streaming)
+    if (mzs) kept.getExperimentalSettings() = mzs->settings();
+    else if (streaming)
     {
       if (auto meta = ondisc->getMetaData()) kept.getExperimentalSettings() = *meta;
     }
@@ -1538,14 +1798,20 @@ protected:
       // a flank clamped to 0 (FASTagger's max(0,.)) makes its delta bogus.
       std::vector<std::pair<double, std::string>> delta;
       size_t delta_clamped = 0;
+      // -digest_out / -label_out: tag-end counts, and the MS2 metadata the
+      // no-call rules read.
+      FASTag::Digest::TerminusCounter digest;
+      std::vector<double> first_peak, scan_low;
+      size_t ms2_meta = 0, im_vssc = 0, im_drift = 0, im_faims = 0, im_other = 0;
       // FASTAG_TIMING only, thread-seconds: reading (getSpectrum), of that in
-      // reads slower than 1 ms (a row-group decode, or a wait for one),
+      // reads slower than 1 ms (a wait for the mzPeak reader, for one),
       // tagging (tag_one + record), waiting for a ring buffer, and idle after
       // the last chunk.
       double s_read = 0, s_slow = 0, s_tag = 0, s_ring = 0, s_idle = 0;
       size_t n_slow = 0;
     };
     std::vector<PerThread> per_thread(static_cast<size_t>(std::max(1, omp_get_max_threads())));
+    for (PerThread& q : per_thread) q.digest = FASTag::Digest::TerminusCounter(dset.window);
 
     // The per-spectrum work, shared by every input path.
     //
@@ -1575,6 +1841,31 @@ protected:
       if (spec.getMSLevel() != 2 || spec.empty() || spec.getPrecursors().empty()) return res;
       PerThread& pt = per_thread[tid];
       ++pt.ms2;
+      if (digest_on)
+      {
+        ++pt.ms2_meta;
+        double first = std::numeric_limits<double>::infinity();
+        for (const auto& pk : spec) first = std::min(first, pk.getMZ());
+        pt.first_peak.push_back(first);
+        const auto& wins = spec.getInstrumentSettings().getScanWindows();
+        if (!wins.empty())
+        {
+          double b = std::numeric_limits<double>::infinity();
+          for (const auto& w : wins) b = std::min(b, w.begin);
+          pt.scan_low.push_back(b);
+        }
+        bool has_im = false;
+        DriftTimeUnit unit = DriftTimeUnit::NONE;
+        if (spec.containsIMData()) { has_im = true; unit = spec.getIMData().second; }
+        else if (spec.getDriftTime() != IMTypes::DRIFTTIME_NOT_SET) { has_im = true; unit = spec.getDriftTimeUnit(); }
+        if (has_im)
+        {
+          if (unit == DriftTimeUnit::VSSC) ++pt.im_vssc;
+          else if (unit == DriftTimeUnit::MILLISECOND) ++pt.im_drift;
+          else if (unit == DriftTimeUnit::FAIMS_COMPENSATION_VOLTAGE) ++pt.im_faims;
+          else ++pt.im_other;
+        }
+      }
 
       const auto& prec = spec.getPrecursors().front();
       const auto tags = tag_all(spec, prec.getMZ(), prec.getCharge(), tables);
@@ -1640,6 +1931,9 @@ protected:
 
         appendTagRow(buf, t, spec.getNativeID(), hit, want_proforma, proforma_fixed,
                      p.per_residue_conf, usi);
+        // The tags fastag_termini counts: every row written, ungapped, E <= 1.
+        if (count_on && !t.gapped && t.evalue <= 1.0)
+          pt.digest.add(t.nterm_mass, t.cterm_mass, FASTag::baseSequence(t.seq));
 
         if (recon_on && !row_entrap)  // known-false rows must not place or bin
         {
@@ -1686,7 +1980,7 @@ protected:
           if (recon_ids_on) FASTag::addReconHits(id_hits, places, t.seq, t.evalue, prec.getCharge(), id_fixed);
           // A candidate for the spectrum's -delta_out sample: take this
           // tag's min-|delta| placement.
-          if (!delta_out.empty() && !places.empty() && (!delta_have || t.evalue < delta_e))
+          if (delta_on && !places.empty() && (!delta_have || t.evalue < delta_e))
           {
             const FASTag::Reconciliation* best = nullptr;
             for (const auto& pl : places)
@@ -1947,31 +2241,6 @@ protected:
       }
     };
 
-    // EVERY thread reads and tags. The mzPeak cache ADMITS decodes against its
-    // budget (a decode waits when the bytes already in flight leave no room),
-    // so peak memory follows the budget, not the thread count, and reading
-    // self-limits to as many concurrent decodes as the budget allows.
-    //
-    // A FIXED number of resident row groups, not one that scales with
-    // -threads: sweeps put the optimum at the same budget for every thread
-    // count. Too small thrashes (a group evicted before the next thread
-    // reaches it is decoded again); too large only holds memory. 36 groups
-    // (~512 MB of ~14 MB groups on the benchmark archive) was as fast as 64
-    // for less RSS. -mzpeak_read_memory overrides it. Sized in DECODED bytes,
-    // which is what maxRowGroupBytes() reports and what the cache charges.
-    const int read_threads = std::max(1, omp_get_max_threads());
-    constexpr size_t kResidentGroups = 36;
-#ifdef FASTAG_HAVE_MZPEAK_LIB
-    if (mzp && mzp->maxRowGroupBytes() > 0)
-    {
-      const auto requested = static_cast<size_t>(getIntOption_("mzpeak_read_memory"));
-      mzp->setCacheBudget(requested > 0
-                              ? requested << 20
-                              : std::min<size_t>(mzp->cacheBudget(),
-                                                 kResidentGroups * mzp->maxRowGroupBytes()));
-    }
-#endif
-
     // FASTAG_TIMING=1 breaks the run into phases on stderr. Diagnostic only:
     // wall time that no phase claims is the thing worth chasing.
     const bool timing = std::getenv("FASTAG_TIMING") != nullptr;
@@ -1981,47 +2250,11 @@ protected:
     auto secs = [](Clock::time_point a, Clock::time_point b)
     { return std::chrono::duration<double>(b - a).count(); };
 
-    // Make sure this process may open the files the readers are about to.
-    //
-    // An mzPeak reader opens its own handles: the signal member plus the
-    // metadata facets, about six descriptors per thread. The usual soft limit
-    // of 1024 therefore caps a run at roughly 170 threads, and past it the
-    // archive fails to open with "Too many open files" -- which surfaces as an
-    // unrelated-looking OpenMS exception rather than anything about
-    // descriptors.
-    //
-    // Raising the SOFT limit toward the hard one needs no privileges; it is
-    // what the hard limit is for. Only raise, never lower, and stay quiet
-    // unless it cannot be done.
-#ifndef _WIN32
-    {
-      struct rlimit lim{};
-      if (getrlimit(RLIMIT_NOFILE, &lim) == 0)
-      {
-        const rlim_t want = static_cast<rlim_t>(omp_get_max_threads()) * 16 + 1024;
-        if (lim.rlim_cur < want && lim.rlim_cur < lim.rlim_max)
-        {
-          const rlim_t before = lim.rlim_cur;
-          lim.rlim_cur = std::min(want, lim.rlim_max);
-          if (setrlimit(RLIMIT_NOFILE, &lim) != 0)
-          {
-            OPENMS_LOG_WARN << "could not raise the open-file limit from " << before
-                            << "; a large -threads may fail to open the input."
-                            << std::endl;
-          }
-        }
-      }
-    }
-#endif
-
-    // One reader per thread, built before the loop. An mzPeak reader costs
-    // milliseconds (it re-opens several Parquet members, a zip_open plus a
-    // footer parse each), so those are built in parallel, below.
+    // One reader per thread, built before the loop; for mzPeak, a picker
+    // per thread (profile MS2 is centroided on the taking thread).
     std::vector<std::unique_ptr<OnDiscMSExperiment>> readers(read_threads);
     std::vector<std::unique_ptr<FASTag::IndexedMzMLReader>> freaders(read_threads);
-#ifdef FASTAG_HAVE_MZPEAK_LIB
-    std::vector<std::unique_ptr<FASTag::OnDiscMzPeakExperiment>> mreaders(read_threads);
-#endif
+    std::vector<std::unique_ptr<PeakPickerHiRes>> pickers(read_threads);
     const auto t_readers_a = Clock::now();
     for (int t = 0; t < read_threads; ++t)
     {
@@ -2030,45 +2263,14 @@ protected:
       // thread only, which is what both readers document as required.
       if (streaming) readers[t] = std::make_unique<OnDiscMSExperiment>(*ondisc);
       if (fastmz) freaders[t] = std::make_unique<FASTag::IndexedMzMLReader>(*fastmz);
+      if (mzs) pickers[t] = std::make_unique<PeakPickerHiRes>();
     }
-#ifdef FASTAG_HAVE_MZPEAK_LIB
-    // mzPeak copies are built in parallel, by at most 16 threads: serially
-    // they grow with -threads (~1 s at 128). Not one thread per copy: a copy
-    // allocates a few MB, a fresh glibc arena grows a page at a time through
-    // mprotect, and mprotect takes the process-wide mmap lock, so with every
-    // thread doing that at once the kernel spins instead. 16 won a sweep of
-    // 8/16/32/all.
-    //
-    // A copy shares only the archive index and its metadata cache, which the
-    // library locks itself. An exception must not leave the region, so the
-    // first one is carried out.
-    if (mzp)
-    {
-      std::exception_ptr failed;
-#pragma omp parallel for num_threads(std::min(read_threads, 16)) schedule(dynamic, 1)
-      for (int t = 0; t < read_threads; ++t)
-      {
-        try
-        {
-          mreaders[t] = std::make_unique<FASTag::OnDiscMzPeakExperiment>(*mzp);
-        }
-        catch (...)
-        {
-#pragma omp critical(fastag_reader_open)
-          if (!failed) failed = std::current_exception();
-        }
-      }
-      if (failed) std::rethrow_exception(failed);
-    }
-#endif
     t_readers = secs(t_readers_a, Clock::now());
 
     // ONE parallel region over the whole run. Blocks only bound the memory the
     // results take; a writer thread empties them in input order. A region per
-    // block would put a barrier at every block end and, on mzPeak, a stall at
-    // every block start (each thread's first read lands on an undecoded row
-    // group); with one region the stragglers of one block overlap the start
-    // of the next instead.
+    // block would put a barrier at every block end; with one region the
+    // stragglers of one block overlap the start of the next instead.
     //
     // A ring of kRing buffers. Chunks are handed out in index order
     // (monotonic), so a thread reaching block k knows every earlier chunk is
@@ -2135,6 +2337,7 @@ protected:
           abort_hint.store(true);
         }
         ring_cv.notify_all();
+        if (mzs) mzs->abort();
       }
     });
 
@@ -2146,21 +2349,18 @@ protected:
       const size_t tid = static_cast<size_t>(omp_get_thread_num());
       OnDiscMSExperiment* reader = readers[tid].get();
       FASTag::IndexedMzMLReader* freader = freaders[tid].get();
-#ifdef FASTAG_HAVE_MZPEAK_LIB
-      FASTag::OnDiscMzPeakExperiment* mreader = mreaders[tid].get();
-#endif
+      PeakPickerHiRes* picker = pickers[tid].get();
       auto work = [&](SignedSize i, Block& blk, size_t idx)
       {
         if (!sample_mask.empty() && !sample_mask[static_cast<size_t>(i)]) { tick(); return; }
         const Clock::time_point ta = timing ? Clock::now() : Clock::time_point();
         MSSpectrum loaded;
         bool loaded_here = false;
-#ifdef FASTAG_HAVE_MZPEAK_LIB
-        if (mreader) { loaded = mreader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
-#endif
+        if (mzs) { loaded = mzs->take(static_cast<size_t>(i), *picker); loaded_here = true; }
         if (!loaded_here && freader) { loaded = freader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
         if (!loaded_here && reader) { loaded = reader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
         const MSSpectrum& spec = loaded_here ? loaded : exp[static_cast<Size>(i)];
+        if (mzpeak_out && spec.getMSLevel() == 2 && spec.containsIMData()) throw IonMobilityRefused{};
         const Clock::time_point tb = timing ? Clock::now() : ta;
         record(blk, idx, tag_one(spec, tid, static_cast<size_t>(i)), spec);
         tick();
@@ -2190,7 +2390,6 @@ protected:
       // (timsTOF, ~3 ms each) one last chunk of 256 is a tail of its own. The
       // second loop keeps the hand-out monotonic: a thread only reaches it
       // once every chunk of the first has been handed out.
-      constexpr int kChunk = 256, kTailChunk = 16;
       const SignedSize tail_from =
           std::max<SignedSize>(0, n_spec - static_cast<SignedSize>(read_threads) * kChunk);
       auto one = [&](SignedSize i)
@@ -2214,9 +2413,13 @@ protected:
           }
           catch (...)
           {
-            std::lock_guard<std::mutex> guard(ring_mutex);
-            if (!work_failed) work_failed = std::current_exception();
-            abort_hint.store(true);
+            {
+              std::lock_guard<std::mutex> guard(ring_mutex);
+              if (!work_failed) work_failed = std::current_exception();
+              abort_hint.store(true);
+            }
+            // A thread waiting for a spectrum the reader will not reach.
+            if (mzs) mzs->abort();
           }
         }
         if (pending[k].fetch_sub(1, std::memory_order_acq_rel) == 1)
@@ -2239,8 +2442,30 @@ protected:
     // write= is only what the loop waits for; write_busy= is the writer's own.
     writer.join();
     t_write = secs(t_write_a, Clock::now());
-    if (work_failed) std::rethrow_exception(work_failed);
+    if (work_failed)
+    {
+      try
+      {
+        std::rethrow_exception(work_failed);
+      }
+      catch (const IonMobilityRefused&)
+      {
+        // Partial reports are no result: remove them.
+        tsv.close();
+        std::remove(out.c_str());
+        if (recon_on) { rtsv.close(); std::remove(recon_out.c_str()); }
+        if (glyco_on) { gtsv.close(); std::remove(glyco_out.c_str()); }
+        return refuse_im();
+      }
+    }
     if (write_failed) std::rethrow_exception(write_failed);
+    if (mzs)
+    {
+      // The reader's own error, if any (a short or corrupt archive), and then
+      // the tolerance probe over the copies it kept.
+      mzs->finish();
+      tolerance_probe([&](Size i) { return mzs->copy(i); });
+    }
     if (timing)
     {
       const double total = secs(t_loop_start, Clock::now());
@@ -2254,70 +2479,29 @@ protected:
                 << " unaccounted_in_loop="
                 << (total - t_readers - t_prep - t_parallel - t_write)
                 << " since_program_start=" << secs(g_t_program, Clock::now());
-#ifdef FASTAG_HAVE_MZPEAK_LIB
-      if (mzp)
-      {
-        long evals = 0, batches = 0, slices = 0;
-        mzp->readCounters(evals, batches, slices);
-        std::cerr << " cache_calls=" << mzp->cacheCalls()
-                  << " plan_group_evals=" << evals
-                  << " batches_visited=" << batches
-                  << " slices_made=" << slices;
-        long pruned = 0, fscan = 0, pidx = 0, pinull = 0, nranges = 0, rrows = 0;
-        mzp->planCounters(pruned, fscan, pidx, pinull, nranges, rrows);
-        std::cerr << " plan_pruned=" << pruned << " plan_full_scan=" << fscan
-                  << " plan_page_index=" << pidx << " plan_pi_null=" << pinull
-                  << " plan_ranges=" << nranges << " plan_range_rows=" << rrows;
-        long nplan = 0, nexec = 0, nrg = 0, nproj = 0;
-        mzp->nsCounters(nplan, nexec, nrg, nproj);
-        std::cerr << " s_plan=" << (nplan / 1e9) << " s_plan_ctor=" << (nexec / 1e9)
-                  << " s_rowgroup=" << (nrg / 1e9) << " s_project=" << (nproj / 1e9);
-      }
-#endif
       std::cerr << std::endl;
       double s_read = 0, s_slow = 0, s_tag = 0, s_ring = 0, s_idle = 0;
       size_t n_slow = 0;
       for (const PerThread& q : per_thread)
       { s_read += q.s_read; s_slow += q.s_slow; s_tag += q.s_tag; s_ring += q.s_ring; s_idle += q.s_idle; n_slow += q.n_slow; }
-      // Where the team's thread-seconds went, and what the decode cache did:
-      // the split that located this loop's scaling limits (row-group decode
-      // waits, barriers, lock convoys) when the phase timings could not.
+      // Where the team's thread-seconds went: the split that locates this
+      // loop's scaling limits (read waits, barriers, lock convoys) when the
+      // phase timings cannot.
       std::cerr << "FASTAG_THREADS threads=" << read_threads << " read=" << s_read
                 << " slow_reads=" << n_slow << " slow_read=" << s_slow << " tag=" << s_tag
                 << " ring_wait=" << s_ring << " idle=" << s_idle;
-#ifdef FASTAG_HAVE_MZPEAK_LIB
-      if (mzp)
-      {
-        const auto c = mzp->cacheStats();
-        std::cerr << " decodes=" << c.decodes << " decoded_ahead=" << c.ahead << " hits=" << c.hits
-                  << " waits=" << c.waits << " admission_waits=" << c.admission_waits
-                  << " evictions=" << c.evictions << " s_decode=" << c.s_decode
-                  << " s_wait=" << c.s_wait << " s_admit=" << c.s_admit;
-      }
-#endif
       std::cerr << std::endl;
     }
-#ifdef FASTAG_HAVE_MZPEAK_LIB
     // Once, at the end. Profile MS2 is a property of the archive the user
     // cannot see and would otherwise only notice as an unexplained tag count.
-    if (mzp && mzp->nPicked() > picked_before_loop)
+    if (mzs && mzs->picked() > 0)
     {
-      OPENMS_LOG_INFO << "mzPeak: centroided " << (mzp->nPicked() - picked_before_loop)
-                      << " profile spectra on read"
-                      << (mzp->nPickFailed() > 0
-                            ? " (" + String(mzp->nPickFailed()) + " kept as profile: picking yielded nothing)"
-                            : "")
+      OPENMS_LOG_INFO << "mzPeak: centroided " << mzs->picked() << " profile spectra on read"
+                      << (mzs->pickFailed() > 0
+                            ? " (" + std::to_string(mzs->pickFailed()) + " kept as profile: picking yielded nothing)"
+                            : std::string())
                       << std::endl;
     }
-    // One decode per group is the whole point of the shared cache; say what it
-    // cost so a regression to per-thread decoding would be visible in a log.
-    if (mzp)
-    {
-      OPENMS_LOG_INFO << "mzPeak: decoded " << mzp->rowGroupsDecoded() << " row groups once for "
-                      << read_threads << " reader thread" << (read_threads == 1 ? "" : "s")
-                      << ", cache budget " << (mzp->cacheBudget() >> 20) << " MB" << std::endl;
-    }
-#endif
 
     for (const PerThread& pt : per_thread)
     {
@@ -2412,7 +2596,7 @@ protected:
       const size_t n_curve_events = wdecoys.size();
       const FASTag::TagFDR fdr(std::move(target_e), std::move(wdecoys));
 
-      const String tmp = out + ".qtmp";
+      const std::string tmp = out + ".qtmp";
       std::ifstream in_tsv(out.c_str());
       std::ofstream out_tsv(tmp.c_str());
       std::string line;
@@ -2487,7 +2671,7 @@ protected:
       // 0.0005 Da bins, adjacent-bin local-max grouping into peaks; each row
       // reports the peak center, its spectrum count, and the most frequent
       // interpretations. Candidates, not identifications -- the README says so.
-      if (!delta_out.empty())
+      if (delta_on)
       {
         std::map<int64_t, std::pair<uint64_t, std::map<std::string, uint64_t>>> bins;
         size_t clamped = 0, samples = 0;
@@ -2504,13 +2688,22 @@ protected:
         }
         // Local-max grouping: a bin whose count is not exceeded by either
         // neighbor becomes a peak and absorbs its (strictly smaller) neighbors.
-        std::ofstream dtsv(delta_out.c_str());
-        if (!dtsv)
+        // Each row goes to -delta_out and, as -massgap_out reads the file,
+        // with its gap as printed, to the mass-gap report.
+        const bool write_delta = !delta_out.empty();
+        std::ofstream dtsv;
+        if (write_delta)
         {
-          OPENMS_LOG_ERROR << "Cannot open output file " << delta_out << " for writing." << std::endl;
-          return CANNOT_WRITE_OUTPUT_FILE;
+          dtsv.open(delta_out.c_str());
+          if (!dtsv)
+          {
+            OPENMS_LOG_ERROR << "Cannot open output file " << delta_out << " for writing." << std::endl;
+            return CANNOT_WRITE_OUTPUT_FILE;
+          }
+          dtsv << "delta\tspectra\ttop_interps\n";
         }
-        dtsv << "delta\tspectra\ttop_interps\n";
+        std::vector<FD::GapRow> gap_rows;
+        std::vector<std::string> gap_keys;
         std::set<int64_t> absorbed;
         for (const auto& kv : bins)
         {
@@ -2537,6 +2730,13 @@ protected:
           char dnum[48];
           std::snprintf(dnum, sizeof dnum, "%.4f\t%llu\t", kv.first * 0.0005,
                         static_cast<unsigned long long>(count));
+          if (massgap_on)
+          {
+            const std::string key(dnum, std::strchr(dnum, '\t'));
+            gap_rows.push_back({std::strtod(key.c_str(), nullptr), count});
+            gap_keys.push_back(key);
+          }
+          if (!write_delta) continue;
           dtsv << dnum;
           for (size_t r = 0; r < ranked.size() && r < 3; ++r)
           {
@@ -2546,15 +2746,30 @@ protected:
           if (ranked.empty()) dtsv << '-';
           dtsv << '\n';
         }
-        dtsv.close();
-        if (dtsv.fail())
+        if (write_delta)
         {
-          OPENMS_LOG_ERROR << "Failed writing " << delta_out << "." << std::endl;
-          return CANNOT_WRITE_OUTPUT_FILE;
+          dtsv.close();
+          if (dtsv.fail())
+          {
+            OPENMS_LOG_ERROR << "Failed writing " << delta_out << "." << std::endl;
+            return CANNOT_WRITE_OUTPUT_FILE;
+          }
+          OPENMS_LOG_INFO << "Delta histogram: " << samples << " spectra sampled"
+                          << (clamped ? ", " + std::to_string(clamped) + " excluded (clamped flank)" : std::string())
+                          << " -> " << delta_out << std::endl;
         }
-        OPENMS_LOG_INFO << "Delta histogram: " << samples << " spectra sampled"
-                        << (clamped ? String(", ") + clamped + " excluded (clamped flank)" : String(""))
-                        << " -> " << delta_out << std::endl;
+        if (massgap_on)
+        {
+          std::vector<FD::Row> rows = run_rows();
+          const auto more = FD::massgapRows(gap_rows, gap_keys, gmods, gcombos, gcys, gset);
+          rows.insert(rows.end(), more.begin(), more.end());
+          if (!FD::writeReport(massgap_out, rows))
+          {
+            OPENMS_LOG_ERROR << "Failed writing " << massgap_out << "." << std::endl;
+            return CANNOT_WRITE_OUTPUT_FILE;
+          }
+          OPENMS_LOG_INFO << "Mass gaps: " << gap_rows.size() << " histogram rows -> " << massgap_out << std::endl;
+        }
       }
 
       if (recon_ids_on)
@@ -2593,6 +2808,76 @@ protected:
       }
     }
 
+    // -digest_out and -label_out, from the tag ends counted in the loop.
+    if (count_on)
+    {
+      FD::TerminusCounter tc(dset.window);
+      for (const PerThread& pt : per_thread) tc.merge(pt.digest);
+      if (digest_on)
+      {
+        FD::RunMeta meta;
+        for (const PerThread& pt : per_thread)
+        {
+          meta.ms2 += pt.ms2_meta;
+          meta.im_vssc += pt.im_vssc;
+          meta.im_drift += pt.im_drift;
+          meta.im_faims += pt.im_faims;
+          meta.im_other += pt.im_other;
+          meta.first_peak.insert(meta.first_peak.end(), pt.first_peak.begin(), pt.first_peak.end());
+          meta.scan_low.insert(meta.scan_low.end(), pt.scan_low.begin(), pt.scan_low.end());
+        }
+        // Run-level metadata: the archive's settings for mzPeak; for mzML
+        // the run header alone (the fast reader skips it), parsing stops at
+        // the spectrumList.
+        ExperimentalSettings es;
+        if (mzs) es = mzs->settings();
+        else
+        {
+          try
+          {
+            PeakMap head;
+            MzMLFile mf;
+            mf.getOptions().setMetadataOnly(true);
+            mf.load(in, head);
+            es = head.getExperimentalSettings();
+          }
+          catch (const Exception::BaseException& e)
+          {
+            OPENMS_LOG_WARN << "-digest_out: could not read the run header of " << in << " (" << e.what()
+                            << "); instrument and native ID format are reported absent." << std::endl;
+          }
+        }
+        meta.instrument_name = es.getInstrument().getName();
+        meta.instrument_model = es.getInstrument().getModel();
+        for (const SourceFile& sf : es.getSourceFiles())
+          if (!sf.getNativeIDTypeAccession().empty()) { meta.native_id_type = sf.getNativeIDTypeAccession(); break; }
+        std::vector<FD::Row> rows = run_rows();
+        const auto more = FD::digestRows(tc, dtable, meta, dset);
+        rows.insert(rows.end(), more.begin(), more.end());
+        if (!FD::writeReport(digest_out, rows))
+        {
+          OPENMS_LOG_ERROR << "Failed writing " << digest_out << "." << std::endl;
+          return CANNOT_WRITE_OUTPUT_FILE;
+        }
+        std::string status;
+        for (const FD::Row& r : more)
+          if (r.section == "call" && (r.key == "model" || r.key == "reason")) status = r.key + " " + r.value;
+        OPENMS_LOG_INFO << "Digest: " << tc.tags << " filtered tags, " << status << " -> " << digest_out << std::endl;
+      }
+      if (!label_out.empty())
+      {
+        std::vector<FD::Row> rows = run_rows();
+        const auto more = FD::labelRows(tc, dset);
+        rows.insert(rows.end(), more.begin(), more.end());
+        if (!FD::writeReport(label_out, rows))
+        {
+          OPENMS_LOG_ERROR << "Failed writing " << label_out << "." << std::endl;
+          return CANNOT_WRITE_OUTPUT_FILE;
+        }
+        OPENMS_LOG_INFO << "Labels: " << tc.tags << " filtered tags -> " << label_out << std::endl;
+      }
+    }
+
     // Taxonomic / species detection from the tags.
     //
     // For every spectrum, the SET of taxa its tags support (a tag supports a
@@ -2603,14 +2888,14 @@ protected:
     // breadth it has in the index, and rank. The q-value is a ranking aid, not a
     // calibrated FDR: the per-k-mer background is a proxy and the chimeric-null
     // problem described for -entrapment_fasta applies here too.
-    String taxdb = getStringOption_("taxdb");
-    String species_out = getStringOption_("species_out");
-    String nodes = getStringOption_("taxonomy_nodes");
-    String names = getStringOption_("taxonomy_names");
+    std::string taxdb = getStringOption_("taxdb");
+    std::string species_out = getStringOption_("species_out");
+    std::string nodes = getStringOption_("taxonomy_nodes");
+    std::string names = getStringOption_("taxonomy_names");
 
     if (want_species)
     {
-      const String tdir = taxonomyDir_();
+      const std::string tdir = taxonomyDir_();
       // The index and its taxonomy are ONE coherent set. An index and dumps from
       // different sources silently drop every taxid one does not know and bias
       // the background, with no error. So it is all-bundle OR all-user: if ANY of
@@ -2832,7 +3117,7 @@ protected:
       const double qthr = 1.0;  // rank everything; the report shows q, caller thresholds
       auto calls = tax.call(rolled, bg_pairs, static_cast<uint64_t>(n_units), qthr);
 
-      const String want_rank = getStringOption_("species_rank");
+      const std::string want_rank = getStringOption_("species_rank");
       std::ofstream so(species_out.c_str());
       so << "rank\ttaxid\tname\tobserved\tadjusted\texpected\tlog_pvalue\tqvalue\n";
 
@@ -2923,59 +3208,70 @@ protected:
                          << std::endl;
         return UNEXPECTED_RESULT;
       }
-      if (mzpeak_out)
+      // The kept spectra, in input order, to @p sink: re-read one at a time
+      // from an mzML input, or in one more pass over an mzPeak archive.
+      // Per-spectrum sourceFile/dataProcessing references are cleared so the
+      // run-level metadata cannot dangle.
+      const auto each_kept = [&](const std::function<void(MSSpectrum&)>& sink)
       {
-#ifdef FASTAG_HAVE_MZPEAK_LIB
-        // Streamed, like the mzML branch below: each kept spectrum is re-read
-        // and handed straight to the writer, which flushes a Parquet row
-        // group when enough points have accumulated. O(1 spectrum) plus the
-        // row group, never O(kept). Per-spectrum sourceFile/dataProcessing
-        // references are cleared so the run-level metadata cannot dangle; the
-        // FILTERING step is declared once, in that metadata.
-        //
-        // Not routed through FileHandler: its storeExperiment() has no mzPeak
-        // branch, so asking it for one silently writes something else.
-        // `kept` holds only the run-level settings, and addDataProcessing_
-        // stamps SPECTRA -- so the FILTERING step is carried by a one-spectrum
-        // map whose only purpose is to hand that step to the metadata
-        // mapping, which reads it from spectrum 0.
-        PeakMap processing_carrier;
-        processing_carrier.addSpectrum(MSSpectrum());
-        addDataProcessing_(processing_carrier, getProcessingInfo_(DataProcessing::FILTERING));
-        FASTag::MzPeakSpectrumWriter writer(out_spectra, kept.getExperimentalSettings(),
-                                            &processing_carrier);
+        const auto clean = [&sink](MSSpectrum& sp)
+        {
+          sp.setSourceFile(SourceFile());
+          sp.setDataProcessing({});
+          sink(sp);
+        };
+        if (mzpeak_in)
+        {
+          FASTag::readMzPeakSpectra(in, mzpeak_decode_threads, kept_idx, clean);
+          return;
+        }
         for (const Size i : kept_idx)
         {
           MSSpectrum sp = read_spectrum(i);
-          sp.setSourceFile(SourceFile());
-          sp.setDataProcessing({});
-          writer.add(sp);
+          clean(sp);
         }
-        writer.finish();
-        OPENMS_LOG_INFO << "Wrote " << writer.size() << " spectra to " << out_spectra
-                        << " (streamed, O(1) memory)" << std::endl;
-#endif
+      };
+      if (mzpeak_out)
+      {
+        // MzPeakFile::store() writes a whole experiment, so the kept spectra
+        // are held in memory. It refuses spectra with an ion mobility per
+        // peak, which it cannot store yet.
+        PeakMap out_map;
+        out_map.getExperimentalSettings() = kept.getExperimentalSettings();
+        each_kept([&out_map](MSSpectrum& sp) { out_map.addSpectrum(std::move(sp)); });
+        size_t with_im = 0;
+        for (const MSSpectrum& sp : out_map) with_im += sp.containsIMData();
+        if (with_im > 0)
+        {
+          OPENMS_LOG_ERROR << "Not writing " << out_spectra << ": " << with_im
+                           << " of the spectra to write have an ion mobility per peak, which "
+                              "mzPeak output cannot store yet. Write -out_spectra as .mzML instead."
+                           << std::endl;
+          return INCOMPATIBLE_INPUT_DATA;
+        }
+        try
+        {
+          MzPeakFile().store(out_spectra, out_map);
+        }
+        catch (const Exception::BaseException& e)
+        {
+          OPENMS_LOG_ERROR << "Failed writing " << out_spectra << ": " << e.what() << std::endl;
+          return CANNOT_WRITE_OUTPUT_FILE;
+        }
+        OPENMS_LOG_INFO << "Wrote " << out_map.size() << " spectra to " << out_spectra << std::endl;
       }
       else
       {
         {
           // Scoped: the destructor writes footer + index. The count is known
           // exactly BEFORE the first consume, where the header bakes it in.
-          // Per-spectrum
-          // sourceFile/dataProcessing references are cleared so the header,
-          // built from the run-level settings alone, can never dangle; the
-          // FILTERING processing step is declared for every spectrum instead.
+          // The header is built from the run-level settings alone; the
+          // FILTERING processing step is declared for every spectrum.
           PlainMSDataWritingConsumer consumer(out_spectra);
           consumer.setExperimentalSettings(kept.getExperimentalSettings());
           consumer.setExpectedSize(kept_idx.size(), 0);
           consumer.addDataProcessing(getProcessingInfo_(DataProcessing::FILTERING));
-          for (const Size i : kept_idx)
-          {
-            MSSpectrum sp = read_spectrum(i);
-            sp.setSourceFile(SourceFile());
-            sp.setDataProcessing({});
-            consumer.consumeSpectrum(sp);
-          }
+          each_kept([&consumer](MSSpectrum& sp) { consumer.consumeSpectrum(sp); });
         }
         // The consumer never checks its stream; verify the artifact instead.
         std::ifstream chk(out_spectra.c_str(), std::ios::ate | std::ios::binary);
@@ -3009,20 +3305,6 @@ protected:
       std::cerr << "FASTAG_PROGRESS done=" << tt << " total=" << tt << std::endl;
     }
 
-#if defined(FASTAG_HAVE_MZPEAK_LIB) && !defined(__SANITIZE_ADDRESS__)
-    // The mzPeak readers are left to the process exit, not destroyed.
-    //
-    // Every output is written, flushed, closed and checked by now, and a
-    // reader has nothing to flush or report: read-only archive handles, the
-    // run's metadata map and the decoded row-group cache. Destroying them
-    // frees gigabytes one allocation at a time, into the arenas of the
-    // threads that decoded them -- most of the teardown time at high thread
-    // counts -- and the kernel takes the memory back at exit either way.
-    // This success path only -- every error return above still destroys
-    // them -- and not in ASan builds, whose leak check would flag it.
-    for (auto& r : mreaders) static_cast<void>(r.release());
-    static_cast<void>(mzp.release());
-#endif
     g_t_main_end = std::chrono::steady_clock::now();
     return EXECUTION_OK;
   }
@@ -3031,40 +3313,18 @@ protected:
 namespace
 {
 // ---------------------------------------------------------------------------
-// -write_ctd / -write_cwl / -write_json for a tool that is not part of OpenMS
+// -write_ctd / -write_cwl / -write_json
 // ---------------------------------------------------------------------------
-// All three route through TOPPBase::writeToolDescription_(), whose first act is
-//     StringList type_list = ToolHandler::getTypes(tool_name_);
-// (OpenMS 3.5.0 TOPPBase.cpp:2393; develop :2399). getTypes() looks the name up
-// in ToolHandler's hard-coded registry of official TOPP tools and THROWS on a
-// miss (ToolHandler.cpp:253 / :235), so any tool built outside the OpenMS tree
-// dies with "Requested tool 'FASTag' does not exist!" and exit 8.
+// TOPPBase writes the descriptors from OpenMS's own ParamCTDFile / ParamCWLFile
+// over getDefaultParameters_(); FASTag composes no XML of its own, so the
+// descriptor cannot drift from the parameter contract.
 //
-// `official=false` -- which the constructor above already passes -- does not
-// help: inside writeToolDescription_ that flag guards only the *category*
-// lookup, and getCategory() is the non-throwing sibling that returns "" on a
-// miss. The getTypes call a few lines earlier is unguarded. -write_ini is
-// unaffected because its branch never calls getTypes at all.
-//
-// The one escape hatch stock OpenMS offers is ToolHandler's INTERNAL tool
-// registry: it merges tools parsed from *.ttd files found in, among other
-// places, whatever OPENMS_TTD_INTERNAL_PATH points at (ToolHandler.cpp:374 in
-// 3.5.0, :291 on develop -- present in both). Registering FASTag there makes
-// getTypes() return an empty type list and the export proceeds. Every byte of
-// the resulting descriptor is then written by OpenMS's own ParamCTDFile /
-// ParamCWLFile over OpenMS's own getDefaultParameters_(); FASTag composes no
-// XML of its own. That is deliberate -- a descriptor we generated ourselves
-// would be a second, drifting source of truth for the parameter contract.
-//
-// KNOWN LIMITATION, upstream and not fixable from here: ParamCTDFile renders
-// float bounds with std::to_string, i.e. six decimals (ParamCTDFile.cpp:244),
-// so -fragment_tolerance's minimum of 1e-9 appears in the CTD as
-// restrictions="0.000000:". The INI writer uses String() and prints
-// "1.0e-09:" (ParamXMLFile.cpp:251). The emitted bound is therefore too
-// permissive: a workflow system will accept -fragment_tolerance 0 and FASTag
-// will refuse it at run time with a clear message. No official TOPP tool trips
-// this (none registers a bound below 1e-4), so the fix belongs in
-// ParamCTDFile, not in FASTag's parameter contract.
+// KNOWN LIMITATION, upstream: ParamCTDFile renders float bounds with
+// std::to_string, i.e. six decimals, so -fragment_tolerance's minimum of 1e-9
+// appears in the CTD as restrictions="0.000000:" while the INI writer prints
+// "1.0e-09:". The emitted bound is therefore too permissive: a workflow system
+// will accept -fragment_tolerance 0 and FASTag will refuse it at run time with
+// a clear message.
 
 /// Which of TOPPBase's descriptor branches this command line will actually
 /// take, mirroring TOPPBase::main's own precedence (TOPPBase.cpp:253-330):
@@ -3102,90 +3362,6 @@ DescriptorRequest requestedDescriptor(int argc, const char** argv)
   return DescriptorRequest::None;
 }
 
-/// Registers FASTag with OpenMS's ToolHandler for the lifetime of the object,
-/// by writing a one-element .ttd into a private temporary directory and
-/// pointing OPENMS_TTD_INTERNAL_PATH at it.
-///
-/// Every failure path is a silent no-op that leaves the environment untouched;
-/// the caller then gets OpenMS's stock behaviour -- the "does not exist" error
-/// and exit 8 -- which is what happens today anyway. The one thing this must
-/// never do is leave a half-written .ttd where ToolHandler can find it: a
-/// truncated file raises a FATAL Xerces error from inside getTOPPToolList(),
-/// which runs at TOPPBase.cpp:150, i.e. before TOPPBase::main's try block.
-/// Hence write to a scratch name, size-check, then rename into place.
-class ToolHandlerRegistration
-{
-public:
-  ToolHandlerRegistration()
-  {
-    // Never override a value the user set: OpenMS reads exactly one directory
-    // from this variable, so there is nothing to append our entry to. An empty
-    // value counts as unset -- on OpenMS 3.5.0 it reaches QDir(""), which means
-    // the current working directory, not "disabled".
-    const char* existing = std::getenv("OPENMS_TTD_INTERNAL_PATH");
-    if (existing != nullptr && *existing != '\0') return;
-
-    std::error_code ec;
-    const std::filesystem::path base = std::filesystem::temp_directory_path(ec);
-    if (ec) return;
-    // getUniqueName(false): date, time, pid and a counter, but no hostname --
-    // shorter, and free of whatever a machine name may contain.
-    const std::filesystem::path dir = base / ("fastag-ttd-" + std::string(File::getUniqueName(false)));
-    std::filesystem::create_directories(dir, ec);
-    if (ec || !std::filesystem::is_directory(dir, ec)) return;
-
-    static const char kTtd[] = "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>\n"
-                               "<ttd><tool status=\"internal\"><name>FASTag</name>"
-                               "<category/><type/></tool></ttd>\n";
-    constexpr std::size_t kTtdLen = sizeof(kTtd) - 1;
-    const std::filesystem::path scratch = dir / "FASTag.ttd.part";
-    const std::filesystem::path target = dir / "FASTag.ttd";
-    {
-      std::ofstream os(scratch, std::ios::binary | std::ios::trunc);
-      os.write(kTtd, static_cast<std::streamsize>(kTtdLen));
-      os.close();
-      if (!os)
-      {
-        std::filesystem::remove_all(dir, ec);
-        return;
-      }
-    }
-    std::filesystem::rename(scratch, target, ec);
-    if (ec || std::filesystem::file_size(target, ec) != kTtdLen || ec)
-    {
-      std::filesystem::remove_all(dir, ec);
-      return;
-    }
-
-    const std::string dir_str = dir.string();
-#ifdef _WIN32
-    const bool set_ok = (_putenv_s("OPENMS_TTD_INTERNAL_PATH", dir_str.c_str()) == 0);
-#else
-    const bool set_ok = (::setenv("OPENMS_TTD_INTERNAL_PATH", dir_str.c_str(), 1) == 0);
-#endif
-    if (!set_ok)
-    {
-      std::filesystem::remove_all(dir, ec);
-      return;
-    }
-    dir_ = dir;
-    active_ = true;
-  }
-
-  ~ToolHandlerRegistration()
-  {
-    if (!active_) return;
-    std::error_code ec;
-    std::filesystem::remove_all(dir_, ec); // best effort, never throws
-  }
-
-  ToolHandlerRegistration(const ToolHandlerRegistration&) = delete;
-  ToolHandlerRegistration& operator=(const ToolHandlerRegistration&) = delete;
-
-private:
-  std::filesystem::path dir_;
-  bool active_ = false;
-};
 } // namespace
 
 int main(int argc, const char** argv)
@@ -3227,14 +3403,6 @@ int main(int argc, const char** argv)
     args.push_back("-threads");
     args.push_back("0");
   }
-  // Tool description export (see ToolHandlerRegistration above). Gated on the
-  // usage banner: registering FASTag with ToolHandler flips exactly one
-  // --help line, "Common UTIL options:" -> "Common TOPP options:", chosen at
-  // TOPPBase.cpp:150 before any option is parsed. Keeping the shim off
-  // whenever --help was asked for keeps that output byte-identical. (A
-  // malformed descriptor invocation -- `-write_ctd DIR -threads nope` -- still
-  // prints its usage with the TOPP heading; that error path is the one
-  // remaining cosmetic difference and it is not worth more machinery.)
   const DescriptorRequest descriptor = requestedDescriptor(argc, argv);
   const bool want_descriptor =
       !help && (descriptor == DescriptorRequest::Ctd || descriptor == DescriptorRequest::CwlOrJson);
@@ -3256,23 +3424,19 @@ int main(int argc, const char** argv)
   }
 #endif
 
-  std::unique_ptr<ToolHandlerRegistration> ttd;
-  if (want_descriptor) ttd = std::make_unique<ToolHandlerRegistration>();
-
   TOPPFASTag tool;
   TOPPBase::ExitCodes rc;
-  // TOPPBase::main catches OpenMS's own exceptions only. Anything else -- the
-  // mzPeak library's (a malformed or unsupported archive), a malformed .ttd
-  // raised from getTOPPToolList() before TOPPBase's try block, bad_alloc --
-  // would reach std::terminate: an abort, no exit code, the message buried
-  // in a runtime banner.
+  // TOPPBase::main catches OpenMS's own exceptions only. Anything else -- a
+  // standard library error from a reader, bad_alloc -- would reach
+  // std::terminate: an abort, no exit code, the message buried in a runtime
+  // banner.
   try
   {
     rc = tool.main(static_cast<int>(args.size()), args.data());
   }
   catch (const std::exception& e)
   {
-    std::cerr << (ttd ? "FASTag: tool description export failed: " : "Error: ") << e.what()
+    std::cerr << (want_descriptor ? "FASTag: tool description export failed: " : "Error: ") << e.what()
               << std::endl;
     rc = TOPPBase::UNKNOWN_ERROR;
   }

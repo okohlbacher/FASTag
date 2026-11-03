@@ -4,7 +4,9 @@
 #include "IndexedMzMLReader.h"
 
 #include <OpenMS/FORMAT/HANDLERS/MzMLSpectrumDecoder.h>
+#include <OpenMS/IONMOBILITY/IMTypes.h>
 #include <OpenMS/METADATA/Precursor.h>
+#include <OpenMS/METADATA/ScanWindow.h>
 
 #include <algorithm>
 #include <cerrno>
@@ -68,6 +70,11 @@ namespace FASTag
     constexpr std::string_view kIsoTarget = "accession=\"MS:1000827\"";
     constexpr std::string_view kIsoLower = "accession=\"MS:1000828\"";
     constexpr std::string_view kIsoUpper = "accession=\"MS:1000829\"";
+    constexpr std::string_view kScanLow = "accession=\"MS:1000501\"";
+    constexpr std::string_view kScanHigh = "accession=\"MS:1000500\"";
+    constexpr std::string_view kInvK0 = "accession=\"MS:1002815\"";
+    constexpr std::string_view kDriftTime = "accession=\"MS:1002476\"";
+    constexpr std::string_view kFaimsCV = "accession=\"MS:1001581\"";
     constexpr std::string_view kArrays = "<binaryDataArrayList";
     constexpr std::string_view kValue = "value";
     constexpr std::string_view kUnit = "unitAccession";
@@ -569,9 +576,47 @@ namespace FASTag
       spec.setRT(unit == "UO:0000010" ? rt : rt * 60.0);
     }
 
+    // The scan windows and the scan's ion mobility, as OpenMS's mzML reader
+    // sets them (-digest_out reads them). Searched in the scanList only: a
+    // precursor's selected ion can carry an ion mobility of its own.
+    const std::size_t plb = xml.find("<precursorList");
+    if (const std::size_t slb = xml.find("<scanList"); slb != std::string_view::npos && slb < std::min(plb, n))
+    {
+      const std::size_t sle = find_or(xml, "</scanList>", slb, n);
+      for (std::size_t w = xml.find("<scanWindow", slb); w != std::string_view::npos && w < sle;
+           w = xml.find("<scanWindow", w + 11))
+      {
+        if (w + 11 >= n || !(is_name_end(xml[w + 11]) || xml[w + 11] == '/')) continue;  // <scanWindowList
+        const std::size_t we = find_or(xml, "</scanWindow>", w, sle);
+        ScanWindow win;
+        if (to_number(cv_value(xml, kScanLow, w, we), win.begin))
+        {
+          to_number(cv_value(xml, kScanHigh, w, we), win.end);
+          spec.getInstrumentSettings().getScanWindows().push_back(win);
+        }
+      }
+      double im = 0;
+      if (to_number(cv_value(xml, kInvK0, slb, sle), im))
+      {
+        spec.setDriftTime(im);
+        spec.setDriftTimeUnit(DriftTimeUnit::VSSC);
+      }
+      else if (to_number(cv_value(xml, kDriftTime, slb, sle), im))
+      {
+        spec.setDriftTime(im);
+        spec.setDriftTimeUnit(DriftTimeUnit::MILLISECOND);
+      }
+    }
+    // FAIMS: the compensation voltage among the spectrum's own cvParams.
+    if (double cv = 0; spec.getDriftTimeUnit() == DriftTimeUnit::NONE &&
+                       to_number(cv_value(xml, kFaimsCV, 0, std::min(plb, n)), cv))
+    {
+      spec.setDriftTime(cv);
+      spec.setDriftTimeUnit(DriftTimeUnit::FAIMS_COMPENSATION_VOLTAGE);
+    }
+
     // Precursors: one OpenMS Precursor per SELECTED ION, matching the mzPeak
     // reader, so a window with several ions keeps all of them.
-    const std::size_t plb = xml.find("<precursorList");
     if (plb == std::string_view::npos) return spec;
     const std::size_t ple = find_or(xml, "</precursorList>", plb, n);
 

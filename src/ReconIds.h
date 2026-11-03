@@ -40,7 +40,7 @@ namespace FASTag
 
   /// One spectrum's identification: its hits, ranked by E-value, ties sharing
   /// a rank.
-  OpenMS::PeptideIdentification reconSpectrum(const OpenMS::String& native_id, double rt, double precursor_mz,
+  OpenMS::PeptideIdentification reconSpectrum(const std::string& native_id, double rt, double precursor_mz,
                                               std::vector<OpenMS::PeptideHit> hits);
 
   /// Writes @p ids to @p path as idXML, mzIdentML (.mzid) or mzTab, by
@@ -48,7 +48,7 @@ namespace FASTag
   /// @p spectra, the search settings @p params (database, modifications,
   /// tolerance, enzyme), no significance threshold. For mzIdentML, every hit of
   /// a sequence is given the union of that sequence's evidences.
-  void storeReconIds(const OpenMS::String& path, const OpenMS::String& spectra, const std::string& version,
+  void storeReconIds(const std::string& path, const std::string& spectra, const std::string& version,
                      OpenMS::ProteinIdentification::SearchParameters params,
                      OpenMS::PeptideIdentificationList& ids);
 }

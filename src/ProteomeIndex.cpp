@@ -58,7 +58,7 @@ namespace FASTag
     if (total > std::numeric_limits<uint32_t>::max())
       throw Exception::InvalidValue(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION,
                                     "Database exceeds the index's 4 GiB text limit.",
-                                    String(total));
+                                    std::to_string(total));
     text_.reserve(total);
     is_i_.assign(total, false);
     for (const auto& e : entries)

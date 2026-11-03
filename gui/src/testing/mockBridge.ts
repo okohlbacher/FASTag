@@ -36,6 +36,10 @@ export interface MockBridge extends FastagApi {
   nextPickInputs: string[]
   nextPickOutput: string | null
   nextPickResults: string | null
+  nextPickReport: string | null
+  // path -> report text; a missing path reads as "not written".
+  reportFiles: Record<string, string>
+  reportCalls: string[]
   resultsColumns: string[]
   resultsRows: string[][]
   resultsError: Error | null
@@ -85,6 +89,9 @@ export function installMockBridge(): MockBridge {
     nextPickInputs: [],
     nextPickOutput: null,
     nextPickResults: null,
+    nextPickReport: null,
+    reportFiles: {},
+    reportCalls: [],
     resultsColumns: ['spectrum', 'tag', 'length', 'evalue', 'fasta_hit'],
     resultsRows: [
       ['frame=5', 'AQRQAAN', '7', '0.003', 'fwd'],
@@ -136,6 +143,11 @@ export function installMockBridge(): MockBridge {
     pickInputs: () => Promise.resolve(mock.nextPickInputs),
     pickOutput: () => Promise.resolve(mock.nextPickOutput),
     pickResults: () => Promise.resolve(mock.nextPickResults),
+    pickReport: () => Promise.resolve(mock.nextPickReport),
+    report: (path) => {
+      mock.reportCalls.push(path)
+      return Promise.resolve(mock.reportFiles[path] ?? null)
+    },
     cancel: () => {
       mock.cancelCalls++
       return Promise.resolve({ cancelled: true })

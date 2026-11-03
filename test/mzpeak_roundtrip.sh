@@ -16,11 +16,11 @@
 #
 # What this cannot see: a halved intensity, a dropped second precursor, a
 # zeroed retention time. Tagging ranks intensities and reads one precursor's
-# m/z and charge, so those leave every tag untouched. mzpeak_adapter_test
+# m/z and charge, so those leave every tag untouched. mzpeak_stream_test
 # compares the fields themselves; this script proves the TOOL end to end.
 #
 # The archives are left in <outdir> for mzpeak_validate.sh (a ctest fixture).
-# Exits 77 (ctest SKIP) when the binary was built without the library, or
+# Exits 77 (ctest SKIP) when the binary was built without mzPeak support, or
 # when OpenMS's shared data is unreachable; anything else that goes wrong is
 # a failure, not a skip.
 set -u
@@ -65,7 +65,7 @@ TAGGED=$(tail -n +2 "$OUT/a.tsv" | cut -f1 | sort -u | wc -l | tr -d ' ')
 ck "some but not all spectra carry a tag (0 < $TAGGED < 139)" \
    "$([ "$TAGGED" -gt 0 ] && [ "$TAGGED" -lt 139 ] && echo yes)" "yes"
 
-# B. Write the archive. This is where a library-less build says so.
+# B. Write the archive. This is where a build without mzPeak says so.
 run b -in "$MZ" -out "$OUT/b.tsv" -out_spectra "$OUT/rt.mzpeak" -threads 4 "${A[@]}"
 rc=$?
 if grep -q "This build has no mzPeak support" "$OUT/b.log"; then
@@ -84,15 +84,13 @@ ck "mzpeak run exits 0" "$?" "0"
 ck "mzpeak run sees exactly the tagged spectra ($TAGGED MS2)" "$(ms2 "$OUT/c.log")" "$TAGGED"
 identical "tags from mzpeak == tags from mzML (4 threads)" "$OUT/a.tsv" "$OUT/c.tsv"
 
-# D. Thread-count determinism smoke (1 vs 4; a race confined to cold decodes
-#    on a two-core runner can escape this, the library's own tests go
-#    further).
+# D. Thread-count determinism smoke (1 vs 4).
 run d -in "$OUT/rt.mzpeak" -out "$OUT/d.tsv" -threads 1 "${A[@]}"
 ck "mzpeak run at 1 thread exits 0" "$?" "0"
 identical "mzpeak 1 thread == 4 threads" "$OUT/c.tsv" "$OUT/d.tsv"
 
-# E. Archive -> archive: the raw-metadata write path, precursors from an
-#    mzPeak-sourced spectrum. Then tag THAT.
+# E. Archive -> archive: precursors from an mzPeak-sourced spectrum, read in
+#    a second pass over the input. Then tag THAT.
 run e -in "$OUT/rt.mzpeak" -out "$OUT/e.tsv" -out_spectra "$OUT/rt2.mzpeak" -threads 4 "${A[@]}"
 ck "mzpeak -> mzpeak write exits 0" "$?" "0"
 ck "second archive written" "$([ -s "$OUT/rt2.mzpeak" ] && echo yes)" "yes"
@@ -103,20 +101,27 @@ ck "re-written archive tags (exit)" "$?" "0"
 ck "re-written archive sees $TAGGED MS2" "$(ms2 "$OUT/e2.log")" "$TAGGED"
 identical "tags from re-written archive == tags from mzML" "$OUT/a.tsv" "$OUT/e2.tsv"
 
-# F. A multi-row-group archive of the same content (4096 points per group,
-#    ~9 groups for this fixture), so the reader's group-boundary planning is
-#    what runs. The "decoded N" line counts cache decodes -- equal to the
-#    group count only when nothing is evicted, which is the case here -- so
-#    N >= 2 is coarse evidence; mzpeak_adapter_test reads the footer.
-FASTAG_MZPEAK_POINTS_PER_ROW_GROUP=4096 run f -in "$MZ" -out "$OUT/f.tsv" -out_spectra "$OUT/rt_rg.mzpeak" -threads 4 "${A[@]}"
-ck "multi-row-group write exits 0" "$?" "0"
-run g -in "$OUT/rt_rg.mzpeak" -out "$OUT/g.tsv" -threads 4 "${A[@]}"
-ck "multi-row-group read exits 0" "$?" "0"
-DECODED=$(grep -oE 'decoded [0-9]+ row groups' "$OUT/g.log" | head -1 | cut -d' ' -f2)
-ck "reader decoded several row groups (got ${DECODED:-none})" \
-   "$([ -n "$DECODED" ] && [ "$DECODED" -ge 2 ] && echo yes)" "yes"
-ck "multi-row-group archive sees $TAGGED MS2" "$(ms2 "$OUT/g.log")" "$TAGGED"
-identical "tags from multi-row-group archive == tags from mzML" "$OUT/a.tsv" "$OUT/g.tsv"
+# F. Archive -> mzML, and tag that: the second pass feeding the mzML writer.
+run f -in "$OUT/rt.mzpeak" -out "$OUT/f.tsv" -out_spectra "$OUT/rt3.mzML" -threads 4 "${A[@]}"
+ck "mzpeak -> mzML write exits 0" "$?" "0"
+ck "mzML from the archive kept all $TAGGED spectra" "$(wrote "$OUT/f.log")" "$TAGGED"
+run g -in "$OUT/rt3.mzML" -out "$OUT/g.tsv" -threads 4 "${A[@]}"
+ck "mzML from the archive tags (exit)" "$?" "0"
+identical "tags from the archive's mzML == tags from mzML" "$OUT/a.tsv" "$OUT/g.tsv"
+
+# H. Subsampling on an archive: the reader drops the skipped spectra as it
+#    streams; the selection and the rows are those of every thread count,
+#    and a subset of the full run's rows.
+run h1 -in "$OUT/rt.mzpeak" -out "$OUT/h1.tsv" -threads 1 -subsample_fraction 0.5 "${A[@]}"
+ck "subsampled archive run at 1 thread exits 0" "$?" "0"
+run h4 -in "$OUT/rt.mzpeak" -out "$OUT/h4.tsv" -threads 4 -subsample_fraction 0.5 "${A[@]}"
+ck "subsampled archive run at 4 threads exits 0" "$?" "0"
+identical "subsampled archive: 1 thread == 4 threads" "$OUT/h1.tsv" "$OUT/h4.tsv"
+HROWS=$(rows "$OUT/h1.tsv")
+ck "subsampling kept some but not all rows (0 < $HROWS < $ROWS)" \
+   "$([ "$HROWS" != MISSING ] && [ "$HROWS" -gt 0 ] && [ "$HROWS" -lt "$ROWS" ] && echo yes)" "yes"
+EXTRA=$(tail -n +2 "$OUT/h1.tsv" | sort | comm -23 - <(tail -n +2 "$OUT/c.tsv" | sort) | wc -l | tr -d ' ')
+ck "subsampled rows are rows of the full run" "$EXTRA" "0"
 
 [ "$fail" -eq 0 ] || { echo "mzpeak_roundtrip: FAILED (logs in $OUT)"; exit 1; }
-echo "mzpeak_roundtrip: all checks passed (139 MS2, $TAGGED tagged, $ROWS rows, ${DECODED} row groups decoded)"
+echo "mzpeak_roundtrip: all checks passed (139 MS2, $TAGGED tagged, $ROWS rows, $HROWS subsampled)"

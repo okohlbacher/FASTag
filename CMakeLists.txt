@@ -1,10 +1,11 @@
-cmake_minimum_required(VERSION 3.21 FATAL_ERROR)
-project(FASTag VERSION 1.6.1 LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
+project(FASTag VERSION 1.8.0 LANGUAGES CXX)
 # The GUI carries that version in four more files; a bump that misses one
 # fails here rather than shipping (cmake/version-guard.cmake says why).
 include(cmake/version-guard.cmake)
 
-set(CMAKE_CXX_STANDARD 17)
+# OpenMS 3.7 requires C++23 of every target that links it.
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if(APPLE AND NOT DEFINED CURL_LIBRARY)
@@ -26,12 +27,13 @@ endif()
 
 # Version is checked after the fact, not in find_package.
 #
-# OpenMS ships a SameMinorVersion config-version file, so find_package(OpenMS 3.5)
-# rejects 3.6 outright -- a MINIMUM version cannot be expressed through
+# OpenMS ships a SameMinorVersion config-version file, so find_package(OpenMS 3.7)
+# would reject 3.8 outright -- a MINIMUM version cannot be expressed through
 # find_package at all. Ask for any OpenMS and enforce the floor ourselves.
+# 3.7 (develop) is the first with MzPeakFile and the OpenMS_CLI library.
 find_package(OpenMS REQUIRED)
-if(OpenMS_VERSION VERSION_LESS 3.5)
-  message(FATAL_ERROR "FASTag needs OpenMS >= 3.5 (found ${OpenMS_VERSION}).")
+if(OpenMS_VERSION VERSION_LESS 3.7 OR NOT TARGET OpenMS_CLI)
+  message(FATAL_ERROR "FASTag needs OpenMS >= 3.7 with OpenMS_CLI (found ${OpenMS_VERSION}).")
 endif()
 message(STATUS "FASTag: using OpenMS ${OpenMS_VERSION} (${OpenMS_DIR})")
 
@@ -89,11 +91,16 @@ else()
                   "not apply.")
 endif()
 
-add_library(fastag_core STATIC src/FASTagger.cpp src/AveragineDeisotoper.cpp src/FastaFilter.cpp src/ProteomeIndex.cpp src/ReconIds.cpp src/TagRecon.cpp src/TaxDeconv.cpp src/TaxIndex.cpp src/TaxStats.cpp)
+add_library(fastag_core STATIC src/FASTagger.cpp src/AveragineDeisotoper.cpp src/Digest.cpp src/DigestReport.cpp src/FastaFilter.cpp src/ProteomeIndex.cpp src/ReconIds.cpp src/TagRecon.cpp src/TaxDeconv.cpp src/TaxIndex.cpp src/TaxStats.cpp)
 target_include_directories(fastag_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
 target_link_libraries(fastag_core PUBLIC OpenMS)
+# Boost.Math (header-only) for the scoring tails. Named here rather than
+# taken through OpenMS's target, which carries no Boost include path on
+# Windows.
+find_package(Boost 1.81 CONFIG REQUIRED)
+target_link_libraries(fastag_core PRIVATE Boost::headers)
 if(OpenMP_CXX_FOUND)
   # ProteomeIndex sorts its suffix-array buckets in parallel.
   target_link_libraries(fastag_core PRIVATE OpenMP::OpenMP_CXX)
@@ -108,96 +115,21 @@ endif()
 # it evaluates what it says.
 if(NOT MSVC)
   set_source_files_properties(src/AveragineDeisotoper.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+  # The digest reports reproduce prose-auto 0.1.3's Python arithmetic, where
+  # (1 - s) * p + s * bg is two products and a sum: no contraction either.
+  set_source_files_properties(src/Digest.cpp src/DigestReport.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
 endif()
 
-# mzPeak, in and out, through the external library
-# (github.com/okohlbacher/mzpeak-openms).
-#
-# This is the WHOLE of FASTag's mzPeak support: -in reads through it and
-# -out_spectra writes through it. OpenMS's own MzPeakFile is not used -- it
-# implements the pre-0.7.0 layout and read every current archive as zero
-# spectra, and its store() aborted on spectra that had come through this
-# reader -- so nothing here depends on the OpenMS feature branch that carries
-# it, and a stock OpenMS >= 3.5 is enough. Optional: without the library the
-# tool builds and refuses .mzpeak with a message saying so. Point
-# MZPEAK_LIB_DIR at a `meson install` prefix.
-set(MZPEAK_LIB_DIR "" CACHE PATH "Prefix of an installed mzpeak-openms library")
-# Headers come from the SOURCE tree, not from `meson install`: the library's
-# install_headers() list flattens the nested paths (mzpeak/data/array_index.h
-# lands as mzpeak/array_index.h) while the headers still include the nested
-# spelling, so an installed-only header set does not compile. Reported
-# upstream; until it is fixed, point MZPEAK_SOURCE_DIR at a checkout.
-set(MZPEAK_SOURCE_DIR "" CACHE PATH "Checkout of mzpeak-openms (for headers)")
-find_path(MZPEAK_INCLUDE_DIR mzpeak.h HINTS ${MZPEAK_SOURCE_DIR}/include)
-# The literal names are for MSVC, where meson emits libmzpeak.a (the library
-# is static-only on Windows: it carries no dllexport annotations) and CMake
-# would otherwise look for mzpeak.lib alone.
-find_library(MZPEAK_LIBRARY NAMES mzpeak libmzpeak.a HINTS ${MZPEAK_LIB_DIR}/lib)
-find_library(MZPEAK_NUMPRESS_LIBRARY NAMES numpress libnumpress.a HINTS ${MZPEAK_LIB_DIR}/lib)
-
-add_executable(FASTag src/FASTag.cpp src/IndexedMzMLReader.cpp)
-target_link_libraries(FASTag PRIVATE fastag_core)
+# mzPeak in and out goes through OpenMS's MzPeakFile; an OpenMS built without
+# it (OPENMS_ENABLE_MZPEAK=OFF) gives a FASTag that refuses .mzpeak.
+add_executable(FASTag src/FASTag.cpp src/IndexedMzMLReader.cpp src/MzPeakStream.cpp)
+target_link_libraries(FASTag PRIVATE fastag_core OpenMS_CLI)
 # So --help reports FASTag's version instead of the OpenMS it was built against.
 target_compile_definitions(FASTag PRIVATE FASTAG_VERSION="${PROJECT_VERSION}")
 if(WIN32)
   # The version resource SignPath checks before it signs (src/FASTag.rc.in).
   configure_file(src/FASTag.rc.in FASTag.rc @ONLY)
   target_sources(FASTag PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/FASTag.rc")
-endif()
-if(MZPEAK_INCLUDE_DIR AND MZPEAK_LIBRARY)
-  # C++23: the library's headers use std::expected and deducing this.
-  #
-  # CXX_STANDARD is a TARGET property; per-source it is silently ignored and
-  # the file would compile at the target's C++17 (std::unreachable missing).
-  # The flag is spelled per compiler: MSVC has no c++23, only c++latest; clang
-  # accepted `c++23` only from 17, and Apple clang 15 (GitHub's macos-14
-  # runners) knows just `c++2b`. Ask.
-  if(MSVC)
-    set(_fastag_cxx23_flag "/std:c++latest")
-  else()
-    include(CheckCXXCompilerFlag)
-    check_cxx_compiler_flag("-std=c++23" _fastag_has_std_cxx23)
-    if(_fastag_has_std_cxx23)
-      set(_fastag_cxx23_flag "-std=c++23")
-    else()
-      set(_fastag_cxx23_flag "-std=c++2b")
-    endif()
-  endif()
-
-  # The adapter (OnDiscMzPeakExperiment + MzPeakSpectrumWriter) as its own
-  # static library rather than a source of the FASTag target, so that
-  # test/mzpeak_adapter_test.cpp can link the SAME object the tool ships and
-  # compare what it writes with what it reads, field by field. Everything the
-  # adapter needs is PUBLIC here -- the library, the flag and the definition
-  # -- and FASTag's link set is unchanged in effect.
-  add_library(fastag_mzpeak STATIC src/OnDiscMzPeakExperiment.cpp)
-  target_include_directories(fastag_mzpeak PUBLIC ${MZPEAK_INCLUDE_DIR})
-  target_link_libraries(fastag_mzpeak PUBLIC fastag_core ${MZPEAK_LIBRARY})
-  if(MZPEAK_NUMPRESS_LIBRARY)
-    target_link_libraries(fastag_mzpeak PUBLIC ${MZPEAK_NUMPRESS_LIBRARY})
-  endif()
-  # Two of the library's dependencies are called directly from
-  # OnDiscMzPeakExperiment.cpp and so are linked here on every platform:
-  # Boost.JSON (compiled, not header-only) builds the run-level metadata
-  # block, and Parquet's metadata API reports row-group sizes. Both come from
-  # the same conda env that supplies the library's Arrow.
-  find_package(Boost CONFIG REQUIRED COMPONENTS json)
-  find_package(Arrow CONFIG REQUIRED)
-  find_package(Parquet CONFIG REQUIRED)
-  target_link_libraries(fastag_mzpeak PUBLIC Boost::json Parquet::parquet_shared)
-  if(WIN32)
-    # A static library brings no dependency list of its own, so the rest of
-    # what the shared libmzpeak carries as DT_NEEDED elsewhere is linked here
-    # too: Arrow and libzip.
-    find_package(libzip CONFIG REQUIRED)
-    target_link_libraries(fastag_mzpeak PUBLIC Arrow::arrow_shared libzip::zip)
-  endif()
-  set_source_files_properties(src/OnDiscMzPeakExperiment.cpp PROPERTIES COMPILE_OPTIONS "${_fastag_cxx23_flag}")
-  target_compile_definitions(fastag_mzpeak PUBLIC FASTAG_HAVE_MZPEAK_LIB)
-  target_link_libraries(FASTag PRIVATE fastag_mzpeak)
-  message(STATUS "FASTag: mzPeak read/write enabled (${MZPEAK_LIBRARY})")
-else()
-  message(STATUS "FASTag: mzpeak-openms NOT found -- this build reads and writes mzML only")
 endif()
 if(OpenMP_CXX_FOUND)
   target_link_libraries(FASTag PRIVATE OpenMP::OpenMP_CXX)
@@ -222,6 +154,14 @@ install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy/nodes.dmp"
 
 add_executable(buildtaxdb src/buildtaxdb.cpp)
 target_link_libraries(buildtaxdb PRIVATE fastag_core)
+# The -digest_out protease models (cleavage rules over the human reference
+# proteome composition) and the -massgap_out modification list, found at
+# <bin>/../share/FASTag/digest (flat release layout: share-FASTag-digest).
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/data/digest/digest_models.tsv"
+              "${CMAKE_CURRENT_SOURCE_DIR}/data/digest/massgap_mods.tsv"
+              "${CMAKE_CURRENT_SOURCE_DIR}/data/digest/README.md"
+        DESTINATION share/FASTag/digest)
+
 install(TARGETS buildtaxdb RUNTIME DESTINATION bin)
 
 add_executable(tagfeatures src/tagfeatures.cpp)
@@ -236,7 +176,7 @@ endif()
 option(FASTAG_BUILD_TESTS "Build tests" ON)
 if(FASTAG_BUILD_TESTS)
   enable_testing()
-  foreach(t ranksum_test fastag_test fasta_filter_test tagrecon_test tagfdr_test proteome_index_test glyco_test taxindex_test taxstats_test taxdeconv_test sampler_test proforma_test numformat_test peakgrid_test formats_test)
+  foreach(t ranksum_test fastag_test fasta_filter_test tagrecon_test tagfdr_test proteome_index_test glyco_test taxindex_test taxstats_test taxdeconv_test sampler_test proforma_test numformat_test peakgrid_test formats_test digest_test)
     add_executable(${t} test/${t}.cpp)
     target_link_libraries(${t} PRIVATE fastag_core)
     add_test(NAME ${t} COMMAND ${t})
@@ -265,6 +205,20 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta)
   set_tests_properties(multilength_test PROPERTIES SKIP_RETURN_CODE 77)
 
+  # The shipped digest data, for digest_test and digest_cli_test.
+  target_compile_definitions(digest_test PRIVATE
+                             FASTAG_DIGEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/data/digest")
+
+  # Integration: -digest_out, -label_out and -massgap_out on the vendored
+  # fixture: the existing outputs unchanged, the reports' structure, a
+  # synthetic -digest_models table, FASTAG_FULL_PRECISION and the refusals.
+  add_test(NAME digest_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/digest_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
+  set_tests_properties(digest_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+
   # Integration: -recon_id_out .mzid is written with placements, and empty
   # (0 bytes) without them.
   add_test(NAME recon_ids_test
@@ -282,8 +236,8 @@ if(FASTAG_BUILD_TESTS)
   # mzPeak in and out on the vendored fixture, no external data: the tool
   # writes an archive from the mzML, and the tags from that archive must be
   # BYTE-IDENTICAL to the tags from the mzML, at 1 and 4 threads, across an
-  # archive -> archive re-write and a multi-row-group write. The archives are
-  # kept under mzpeak-roundtrip/ for the validator below. SKIPs only when the
+  # archive -> archive re-write and with subsampling. The archives are kept
+  # under mzpeak-roundtrip/ for the validator below. SKIPs only when the
   # build has no mzPeak support.
   add_test(NAME mzpeak_roundtrip
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/mzpeak_roundtrip.sh $<TARGET_FILE:FASTag>
@@ -304,20 +258,18 @@ if(FASTAG_BUILD_TESTS)
   set_tests_properties(mzpeak_validate PROPERTIES SKIP_RETURN_CODE 77
                        FIXTURES_REQUIRED mzpeak_roundtrip_archives)
 
-  # The adapter itself, field by field: tag equality above cannot see a
-  # halved intensity, a dropped second precursor or a zeroed retention time,
-  # because tagging ranks intensities and reads one precursor's m/z and
-  # charge. This test writes the fixture through MzPeakSpectrumWriter, reads
-  # it back through OnDiscMzPeakExperiment and compares every field.
-  if(TARGET fastag_mzpeak)
-    add_executable(mzpeak_adapter_test test/mzpeak_adapter_test.cpp)
-    target_link_libraries(mzpeak_adapter_test PRIVATE fastag_mzpeak)
-    target_compile_definitions(mzpeak_adapter_test PRIVATE
-                               FASTAG_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
-    set_source_files_properties(test/mzpeak_adapter_test.cpp PROPERTIES COMPILE_OPTIONS "${_fastag_cxx23_flag}")
-    add_test(NAME mzpeak_adapter_test COMMAND mzpeak_adapter_test)
-    set_tests_properties(mzpeak_adapter_test PROPERTIES SKIP_RETURN_CODE 77)
+  # The mzPeak reader, spectrum by spectrum: what MzPeakStream hands out
+  # (with a mask, from several threads, centroiding profile MS2) against
+  # MzPeakFile::load() of the same archive, written from the fixture.
+  add_executable(mzpeak_stream_test test/mzpeak_stream_test.cpp src/MzPeakStream.cpp)
+  target_link_libraries(mzpeak_stream_test PRIVATE fastag_core)
+  if(OpenMP_CXX_FOUND)
+    target_link_libraries(mzpeak_stream_test PRIVATE OpenMP::OpenMP_CXX)
   endif()
+  target_compile_definitions(mzpeak_stream_test PRIVATE
+                             FASTAG_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
+  add_test(NAME mzpeak_stream_test COMMAND mzpeak_stream_test)
+  set_tests_properties(mzpeak_stream_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # The mzML fast path against OpenMS itself: the tag TSV carries neither RT
   # nor precursor charge, so only a direct field-by-field comparison proves
@@ -337,12 +289,8 @@ if(FASTAG_BUILD_TESTS)
   # The ported deisotoper against OpenMS's own, peak for peak and bit for bit,
   # on synthetic edge cases. Given an mzPeak archive as its argument it also
   # compares every spectrum of that run (not part of ctest: needs real data).
-  add_executable(deisotoper_test test/deisotoper_test.cpp)
-  if(TARGET fastag_mzpeak)
-    target_link_libraries(deisotoper_test PRIVATE fastag_mzpeak)
-  else()
-    target_link_libraries(deisotoper_test PRIVATE fastag_core)
-  endif()
+  add_executable(deisotoper_test test/deisotoper_test.cpp src/MzPeakStream.cpp)
+  target_link_libraries(deisotoper_test PRIVATE fastag_core)
   if(OpenMP_CXX_FOUND)
     target_link_libraries(deisotoper_test PRIVATE OpenMP::OpenMP_CXX)
   endif()

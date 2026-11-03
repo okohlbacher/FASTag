@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type JSX } from 'react'
+import { useEffect, useRef, useState, type JSX, type KeyboardEvent } from 'react'
 import type { BinaryInfo, RunResult, SpeciesReport } from './types'
 import {
   SECTIONS,
@@ -13,6 +13,8 @@ import {
 import ParamField, { type ParamValue } from './ParamField'
 import ResultsTable from './ResultsTable'
 import SpeciesPanel from './SpeciesPanel'
+import DigestPanel from './DigestPanel'
+import { baseName, parseReport, value, type Report } from './digestReport'
 import logo from './assets/logo.svg'
 import openmsLogo from './assets/openms-logo.png'
 
@@ -30,6 +32,47 @@ function stripExt(p: string): string {
 function defaultSpeciesOut(out: string): string {
   return `${stripExt(out)}.species.tsv`
 }
+
+// The 1.8.0 reports the Digest tab shows.
+const REPORT_PARAMS = ['digest_out', 'label_out', 'massgap_out']
+
+// A batch must not write every job's extra outputs to one configured path, or
+// each job overwrites the last. Each configured output-file option gets a
+// per-job path from the (unique) tags output, keeping the configured
+// extension: <stem>.<option without _out>.<ext>, e.g. a.glyco.tsv, and
+// a.spectra.mzpeak for out_spectra. species_out is blanked instead, so the CLI
+// derives its own per-input default.
+export function perJobOutputs(values: Record<string, unknown>, tagsOut: string): Record<string, ParamValue> {
+  const stem = tagsOut.endsWith('.tags.tsv') ? tagsOut.slice(0, -'.tags.tsv'.length) : stripExt(tagsOut)
+  const o: Record<string, ParamValue> = { species_out: '' }
+  for (const name of RENDERED) {
+    if (name === 'species_out' || PARAM_BY_NAME.get(name)?.type !== 'output-file') continue
+    const cfg = String(values[name] || '')
+    if (!cfg) continue
+    const ext = cfg.slice(stripExt(cfg).length) || (name === 'out_spectra' ? '.mzML' : '.tsv')
+    o[name] = `${stem}.${name.replace(/_out$/, '').replace(/^out_/, '')}${ext}`
+  }
+  return o
+}
+
+// Read and parse whichever reports exist; a report the run did not write is
+// skipped, one that cannot be read or parsed becomes a message.
+async function loadReports(paths: string[]): Promise<{ reports: Report[]; errors: string[] }> {
+  const reports: Report[] = []
+  const errors: string[] = []
+  for (const p of paths) {
+    try {
+      const text = await window.fastag.report(p)
+      if (text != null) reports.push(parseReport(text, p))
+    } catch (e) {
+      errors.push(`Cannot read ${p}: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+  return { reports, errors }
+}
+
+type Tab = 'results' | 'species' | 'digest'
+const TAB_LABEL: Record<Tab, string> = { results: 'Tags', species: 'Species', digest: 'Digest' }
 
 interface Job {
   input: string
@@ -53,6 +96,11 @@ function initialValues(): Record<string, ParamValue> {
   return v
 }
 
+// A run with no exit code was killed: by Cancel, or by the OS.
+function failText(r: RunResult): string {
+  return r.message ?? (r.code == null ? 'stopped before it finished' : `exit code ${r.code}`)
+}
+
 // A parameter that exists in the CLI but nowhere in the layout would silently
 // be unreachable; surface it instead of hiding it.
 const UNPLACED = unplacedParams()
@@ -74,7 +122,14 @@ export default function App(): JSX.Element {
   // and the frontend view/scroll state must reset with it.
   const [results, setResults] = useState<{ path: string; gen: number } | null>(null)
   const [species, setSpecies] = useState<SpeciesReport | null>(null)
-  const [tab, setTab] = useState<'results' | 'species'>('results')
+  const [tab, setTab] = useState<Tab>('results')
+  const [reports, setReports] = useState<{ list: Report[]; errors: string[] }>({ list: [], errors: [] })
+  // Why the last run failed, shown above the result tabs (which still hold the
+  // previous run's results).
+  const [failure, setFailure] = useState<string | null>(null)
+  const lastError = useRef<string | null>(null)
+  // The last log line: FASTag's own refusals name no error, exception or fatal.
+  const lastLine = useRef<string | null>(null)
   const [taxdbK, setTaxdbK] = useState<number | null>(null)
   const [presets, setPresets] = useState<string[]>([])
   const [preset, setPreset] = useState('')
@@ -103,6 +158,8 @@ export default function App(): JSX.Element {
   const logRef = useRef<HTMLPreElement>(null)
   // Cancel pressed during a batch: stop the QUEUE, not just the current job.
   const batchCancel = useRef(false)
+  // Cancel pressed during the current run: its failure is the user's doing.
+  const cancelled = useRef(false)
 
   const speciesOn = values['species'] === true
   // k comes from the index header, not an assumption: a differently-built index
@@ -137,6 +194,8 @@ export default function App(): JSX.Element {
   useEffect(() => {
     const offLog = window.fastag.onLog((line) => {
       setLog((l) => [...l, line])
+      if (/\b(error|exception|fatal)\b/i.test(line)) lastError.current = line
+      if (line.trim()) lastLine.current = line.trim()
       // "Species: N spectra contributed taxon evidence; ..."
       const sp = /^Species:\s+(\d+) spectra contributed/.exec(line)
       if (sp) setEvidence((e) => ({ ...e, contributed: Number(sp[1]) }))
@@ -152,7 +211,7 @@ export default function App(): JSX.Element {
       const id = r.runId
       if (id == null || settled.current.has(id)) return
       setProgress(null)
-      setLog((l) => [...l, r.ok ? '— done —' : `— failed (${r.message ?? `exit ${r.code}`}) —`])
+      setLog((l) => [...l, r.ok ? '— done —' : `— failed (${failText(r)}) —`])
       // Hand the result to the awaiter for THIS run id; an event that beats
       // the invoke reply parks in earlyDone until runOne claims it.
       const resolve = pending.current.get(id)
@@ -220,8 +279,14 @@ export default function App(): JSX.Element {
   // entry, but HIDDEN ones must never reach the command line: `-version` is
   // recorded in the INI yet rejected as an option, so sending the whole record
   // aborts the run with "Unknown option(s) '[-version]'".
+  //
+  // Inert ones (their master is unset) with a value stay out too: the CLI
+  // ignores most of them, but refuses some (-massgap_out without -recon_out).
+  // An empty value still goes, as it asks for the CLI's default.
   const submittedParams = (): Record<string, ParamValue> =>
     Object.fromEntries(RENDERED.map((name) => [name, values[name]]))
+  const withoutInert = (p: Record<string, ParamValue>): Record<string, ParamValue> =>
+    Object.fromEntries(Object.entries(p).filter(([name, v]) => v === '' || !inertBecause(name, { ...values, ...p })))
 
   // Run one file and resolve when it finishes. Shared by single and batch runs.
   function runOne(inFile: string, outFile: string, overrides?: Record<string, ParamValue>): Promise<RunResult> {
@@ -229,13 +294,19 @@ export default function App(): JSX.Element {
       setLog([])
       setProgress(null)
       setEvidence({ contributed: null, ms2: null }) // don't carry a prior run's counts
+      setReports({ list: [], errors: [] })
+      setTab((t) => (t === 'digest' ? 'results' : t))
+      setFailure(null)
+      lastError.current = null
+      lastLine.current = null
+      cancelled.current = false
       setRunning(true)
       const settle = (r: RunResult): void => {
         if (pending.current.size === 0) setRunning(false)
         resolve(r)
       }
       window.fastag
-        .run({ in: inFile, out: outFile, params: { ...submittedParams(), ...overrides } })
+        .run({ in: inFile, out: outFile, params: withoutInert({ ...submittedParams(), ...overrides }) })
         .then((res) => {
           // Register the awaiter only once the backend hands back the run
           // id; the terminal event carries the same id (see onDone).
@@ -264,13 +335,30 @@ export default function App(): JSX.Element {
     })
   }
 
-  async function showResults(outFile: string, speciesFile?: string): Promise<void> {
+  async function showResults(outFile: string, overrides: Record<string, ParamValue> = {}): Promise<void> {
     setResults((r) => ({ path: outFile, gen: (r?.gen ?? 0) + 1 }))
+    const path = (name: string): string => String(overrides[name] ?? values[name] ?? '')
+    let switched = false
     if (speciesOn) {
-      const sp = await window.fastag.species(speciesFile || String(values['species_out'] || '') || defaultSpeciesOut(outFile))
+      const sp = await window.fastag.species(path('species_out') || defaultSpeciesOut(outFile))
       setSpecies(sp)
-      if (sp && !sp.empty) setTab('species')
+      if (sp && !sp.empty) {
+        setTab('species')
+        switched = true
+      }
     }
+    // An inert report option was not sent, so its path may hold an old file.
+    const sent = REPORT_PARAMS.filter((n) => !inertBecause(n, { ...values, ...overrides }))
+    const rep = await loadReports(sent.map(path).filter((p) => p !== ''))
+    setReports({ list: rep.reports, errors: rep.errors })
+    if (!switched && (rep.reports.length || rep.errors.length)) setTab('digest')
+  }
+
+  // The message above the tabs when a run failed: the CLI's exit status and
+  // its last error line, which may have scrolled out of the log.
+  const failed = (r: RunResult, what: string): void => {
+    const why = lastError.current ?? lastLine.current
+    setFailure(`${what} failed (${failText(r)})${why ? `: ${why}` : ''}`)
   }
 
   // run()/runBatch() are onClick-driven: nothing awaits them, so a rejecting
@@ -284,6 +372,7 @@ export default function App(): JSX.Element {
     window.fastag.saveLast(values)
     const r = await runOne(input, out)
     if (r.ok) await showResults(out).catch(logResultsError)
+    else if (!cancelled.current) failed(r, 'The run')
   }
 
   async function runBatch(): Promise<void> {
@@ -294,40 +383,75 @@ export default function App(): JSX.Element {
     // queue is dedup'd on input). A thrown preview/species must still release the
     // batch controls -- hence finally -- or Run stays disabled forever.
     const queue = jobs.filter((j) => j.status !== 'done')
-    // A configured -out_spectra must survive batch, but cannot be one shared
-    // file: derive a per-job path from the (unique) tags output, keeping the
-    // configured container format.
-    const cfgSpectra = String(values['out_spectra'] || '')
-    const spectraExt = cfgSpectra.slice(stripExt(cfgSpectra).length) || '.mzML'
-    const stemOf = (o: string): string =>
-      o.endsWith('.tags.tsv') ? o.slice(0, -'.tags.tsv'.length) : stripExt(o)
+    let nFailed = 0
     batchCancel.current = false
     try {
       for (let i = 0; i < queue.length; i++) {
         if (batchCancel.current) break
         const job = queue[i]
         setJobs((js) => js.map((j) => (j.input === job.input ? { ...j, status: 'running' } : j)))
-        // Fixed output paths would make every job overwrite the previous
-        // one's report: species_out blanks so the CLI derives its per-input
-        // default; out_spectra (no CLI default) gets a per-job derived path.
-        const r = await runOne(job.input, job.out, {
-          species_out: '',
-          out_spectra: cfgSpectra ? `${stemOf(job.out)}.spectra${spectraExt}` : ''
-        })
+        const outputs = perJobOutputs(values, job.out)
+        const r = await runOne(job.input, job.out, outputs)
         setJobs((js) => js.map((j) => (j.input === job.input ? { ...j, status: r.ok ? 'done' : 'failed' } : j)))
+        if (!r.ok) nFailed++
         if (batchCancel.current) break
         if (r.ok && i === queue.length - 1)
-          await showResults(job.out, defaultSpeciesOut(job.out)).catch(logResultsError) // preview the last
+          // preview the last
+          await showResults(job.out, { ...outputs, species_out: defaultSpeciesOut(job.out) }).catch(logResultsError)
       }
+      if (nFailed > 0 && !batchCancel.current)
+        setFailure(`${nFailed} of ${queue.length} batch jobs failed; the queue marks them with ✕.`)
     } finally {
       setBatchRunning(false)
       batchCancel.current = false
     }
   }
 
+  // The tabs shown, in order; Digest only once there is something to show.
+  const tabs: Tab[] = [
+    'results',
+    'species',
+    ...(reports.list.length > 0 || reports.errors.length > 0 || tab === 'digest' ? (['digest'] as Tab[]) : [])
+  ]
+  // Arrow keys, Home and End move between the tabs (WAI-ARIA tabs pattern).
+  function onTabKey(e: KeyboardEvent<HTMLDivElement>): void {
+    const i = tabs.indexOf(tab)
+    const to =
+      e.key === 'ArrowRight' ? (i + 1) % tabs.length
+      : e.key === 'ArrowLeft' ? (i - 1 + tabs.length) % tabs.length
+      : e.key === 'Home' ? 0
+      : e.key === 'End' ? tabs.length - 1
+      : -1
+    if (to < 0) return
+    e.preventDefault()
+    setTab(tabs[to])
+    document.getElementById(`tab-${tabs[to]}`)?.focus()
+  }
+
   async function openResults(): Promise<void> {
     const p = await window.fastag.pickResults()
     if (p) setResults((r) => ({ path: p, gen: (r?.gen ?? 0) + 1 }))
+  }
+
+  // Add one report to those shown, replacing one of the same kind. A report
+  // of another input replaces all of them: one run's call next to another
+  // run's labels would read as one result.
+  async function openReport(): Promise<void> {
+    const p = await window.fastag.pickReport()
+    if (!p) return
+    const rep = await loadReports([p])
+    if (rep.reports.length === 0 && rep.errors.length === 0) rep.errors.push(`${p} does not exist.`)
+    setReports((cur) => {
+      const input = (r: Report): string | undefined => value(r, 'run', 'input')
+      const fresh = rep.reports[0]
+      const other = fresh ? cur.list.filter((r) => input(r) !== input(fresh)) : []
+      const notes = other.length
+        ? [`${baseName(fresh.path)} is from another input (${input(fresh) ?? 'not stated'}); the reports of ${other.map((r) => input(r) ?? baseName(r.path)).filter((x, i, a) => a.indexOf(x) === i).join(', ')} were closed.`]
+        : []
+      const kept = cur.list.filter((r) => !other.includes(r) && !rep.reports.some((n) => n.kind === r.kind))
+      return { list: [...kept, ...rep.reports], errors: [...notes, ...rep.errors] }
+    })
+    setTab('digest')
   }
 
   async function applyPreset(name: string): Promise<void> {
@@ -418,7 +542,7 @@ export default function App(): JSX.Element {
                     </span>
                     <span className="jn" title={j.input}>{j.input.split('/').pop()}</span>
                     {!batchRunning && (
-                      <button className="rm" title="remove" onClick={() => setJobs((js) => js.filter((_, k) => k !== i))}>
+                      <button className="rm" title="remove" aria-label={`Remove ${j.input}`} onClick={() => setJobs((js) => js.filter((_, k) => k !== i))}>
                         ×
                       </button>
                     )}
@@ -448,7 +572,12 @@ export default function App(): JSX.Element {
           <div className="presets">
             {savingName === null ? (
               <>
-                <select value={preset} onChange={(e) => applyPreset(e.target.value)} title="Load a saved preset">
+                <select
+                  value={preset}
+                  onChange={(e) => applyPreset(e.target.value)}
+                  title="Load a saved preset"
+                  aria-label="Preset"
+                >
                   <option value="">Presets…</option>
                   {presets.map((n) => (
                     <option key={n} value={n}>{n}</option>
@@ -463,6 +592,7 @@ export default function App(): JSX.Element {
                   autoFocus
                   value={savingName}
                   placeholder="preset name"
+                  aria-label="Preset name"
                   onChange={(e) => setSavingName(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') commitPreset(); if (e.key === 'Escape') setSavingName(null) }}
                 />
@@ -521,6 +651,7 @@ export default function App(): JSX.Element {
             <button
               className="secondary"
               onClick={() => {
+                cancelled.current = true
                 if (batchRunning) batchCancel.current = true
                 window.fastag.cancel()
               }}
@@ -559,31 +690,44 @@ export default function App(): JSX.Element {
               )}
             </div>
           )}
-          <pre className="log" ref={logRef}>
+          <pre className="log" ref={logRef} aria-label="Run log">
             {log.length ? log.join('\n') : 'Log output appears here.'}
           </pre>
 
-          <div className="tabs" role="tablist">
-            <button
-              role="tab"
-              aria-selected={tab === 'results'}
-              className={tab === 'results' ? 'on' : ''}
-              onClick={() => setTab('results')}
-            >
-              Tags
-            </button>
-            <button
-              role="tab"
-              aria-selected={tab === 'species'}
-              className={tab === 'species' ? 'on' : ''}
-              onClick={() => setTab('species')}
-            >
-              Species
-              {species && !species.empty && <span className="count">{species.taxa.length}</span>}
-            </button>
+          {failure && (
+            <div className="failure" role="alert">
+              <span>{failure}</span>
+              <button className="link" onClick={() => setFailure(null)} aria-label="Dismiss">
+                ×
+              </button>
+            </div>
+          )}
+
+          <div className="tabs" role="tablist" aria-label="Results" onKeyDown={onTabKey}>
+            {tabs.map((t) => (
+              <button
+                key={t}
+                id={`tab-${t}`}
+                role="tab"
+                aria-selected={tab === t}
+                aria-controls="tabpanel"
+                tabIndex={tab === t ? 0 : -1}
+                className={tab === t ? 'on' : ''}
+                onClick={() => setTab(t)}
+              >
+                {TAB_LABEL[t]}
+                {t === 'species' && species && !species.empty && <span className="count">{species.taxa.length}</span>}
+                {t === 'digest' && reports.list.length > 0 && <span className="count">{reports.list.length}</span>}
+              </button>
+            ))}
           </div>
 
-          {tab === 'species' ? (
+          <div className="tabpanel" id="tabpanel" role="tabpanel" aria-labelledby={`tab-${tab}`}>
+          {tab === 'digest' ? (
+            <div className="tablewrap">
+              <DigestPanel reports={reports.list} errors={reports.errors} onOpen={openReport} />
+            </div>
+          ) : tab === 'species' ? (
             <div className="tablewrap">
               <SpeciesPanel
                 report={species}
@@ -601,10 +745,15 @@ export default function App(): JSX.Element {
                 Results appear here after a run, or{' '}
                 <button className="link" onClick={openResults}>
                   open an existing tags TSV…
+                </button>{' '}
+                or a{' '}
+                <button className="link" onClick={openReport}>
+                  digest, label or mass-gap report…
                 </button>
               </div>
             </div>
           )}
+          </div>
         </section>
       </main>
     </div>

@@ -44,4 +44,11 @@ namespace FASTag
     char num[330];  // fixed DBL_MAX: a sign, 309 digits, '.', prec digits
     buf.append(num, std::to_chars(num, num + sizeof num, v, fmt, prec).ptr);
   }
+
+  /// Append @p v in shortest round-trip form (std::to_chars without a format).
+  inline void appendShortest(std::string& buf, double v)
+  {
+    char num[32];
+    buf.append(num, std::to_chars(num, num + sizeof num, v).ptr);
+  }
 }

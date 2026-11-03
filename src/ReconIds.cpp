@@ -41,8 +41,8 @@ namespace FASTag
       hit.setMetaValue("cterm_match", pl.cterm_match ? 1 : 0);
       hit.setMetaValue("delta_mass", pl.delta_mass);
       hit.setMetaValue("delta_region", pl.region_hi >= pl.region_lo
-                                           ? String(pl.region_lo) + "-" + String(pl.region_hi)
-                                           : String());
+                                           ? std::to_string(pl.region_lo) + "-" + std::to_string(pl.region_hi)
+                                           : std::string());
       hit.setMetaValue("delta_interp", pl.delta_interp);
       // OpenMS's key for the calculated m/z (the mzIdentML reader sets it, the
       // writer folds it into calculatedMassToCharge): beside the precursor m/z
@@ -90,7 +90,7 @@ namespace FASTag
     }
   }
 
-  PeptideIdentification reconSpectrum(const String& native_id, double rt, double precursor_mz,
+  PeptideIdentification reconSpectrum(const std::string& native_id, double rt, double precursor_mz,
                                       std::vector<PeptideHit> hits)
   {
     PeptideIdentification id;
@@ -109,7 +109,7 @@ namespace FASTag
     return id;
   }
 
-  void storeReconIds(const String& path, const String& spectra, const std::string& version,
+  void storeReconIds(const std::string& path, const std::string& spectra, const std::string& version,
                      ProteinIdentification::SearchParameters params, PeptideIdentificationList& ids)
   {
     ProteinIdentification run;
@@ -122,11 +122,11 @@ namespace FASTag
     run.setSearchParameters(std::move(params));
     // The mzIdentML writer makes a DBSequence per protein hit and drops any
     // evidence without one (an invalid file), so every accession gets a hit.
-    std::set<String> accessions;
+    std::set<std::string> accessions;
     for (const PeptideIdentification& id : ids)
       for (const PeptideHit& h : id.getHits())
         for (const PeptideEvidence& ev : h.getPeptideEvidences()) accessions.insert(ev.getProteinAccession());
-    for (const String& acc : accessions)
+    for (const std::string& acc : accessions)
     {
       ProteinHit ph;
       ph.setAccession(acc);
@@ -155,7 +155,7 @@ namespace FASTag
       // first hit, and points every later hit of that sequence at them. The
       // proteins a window occurs in do not depend on the tag that placed it,
       // so the hits of a sequence agree already; the union makes it certain.
-      std::map<String, std::vector<PeptideEvidence>> evidences;
+      std::map<std::string, std::vector<PeptideEvidence>> evidences;
       for (const PeptideIdentification& id : ids)
         for (const PeptideHit& h : id.getHits())
         {

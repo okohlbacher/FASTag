@@ -136,11 +136,43 @@ export const SECTIONS: Section[] = [
     params: ['glyco', 'glyco_min_fraction', 'glyco_out']
   },
   {
+    title: 'Digest and labels',
+    blurb: 'Report the terminal residues of the tags, the protease they fit and the labels they carry.',
+    open: false,
+    params: [
+      'digest_out',
+      'label_out',
+      'digest_models',
+      'digest_tag_min',
+      'digest_window',
+      'digest_background_share',
+      'digest_silac_min'
+    ]
+  },
+  {
     title: 'Reconciliation',
     blurb: 'Place tags in database peptides and report the mass left over.',
     open: false,
     master: 'recon_out',
-    params: ['recon_out', 'recon_fasta', 'recon_missed_cleavages', 'recon_min_length', 'recon_localize', 'delta_out', 'recon_id_out']
+    params: [
+      'recon_out',
+      'recon_fasta',
+      'recon_missed_cleavages',
+      'recon_min_length',
+      'recon_localize',
+      'delta_out',
+      'recon_id_out',
+      'massgap_out',
+      'massgap_window',
+      'massgap_window_da',
+      'massgap_min_spectra',
+      'massgap_min_share',
+      'massgap_min_bin',
+      'massgap_max_mods',
+      'massgap_top',
+      'massgap_silac_share',
+      'massgap_silac_min'
+    ]
   },
   {
     title: 'Modifications',
@@ -168,8 +200,8 @@ export const SECTIONS: Section[] = [
 /// three taxonomy paths with `-species` off, and the run would silently ignore
 /// all of it. Each dependency is the one stated in the option's own help text.
 export interface Dependency {
-  /// The parameter that has to be set.
-  on: string
+  /// The parameter that has to be set, or a list of which any one will do.
+  on: string | string[]
   /// Shown in place of the field's help when unmet. Phrased as the consequence,
   /// not the rule: a user wants to know what would happen, not what to obey.
   note: string
@@ -208,8 +240,36 @@ export const DEPENDS: Record<string, Dependency[]> = {
   recon_min_length: [{ on: 'recon_out', note: 'reconciliation only runs when it has an output file' }],
   recon_localize: [{ on: 'recon_out', note: 'reconciliation only runs when it has an output file' }],
   delta_out: [{ on: 'recon_out', note: 'the histogram aggregates the reconciliations' }],
-  recon_id_out: [{ on: 'recon_out', note: 'it writes the reconciliations as identifications' }]
-  // subsample_seed depends on EITHER subsampling knob; inertBecause handles it.
+  recon_id_out: [{ on: 'recon_out', note: 'it writes the reconciliations as identifications' }],
+
+  subsample_seed: [{ on: ['subsample_spectra', 'subsample_fraction'], note: 'nothing is being subsampled' }],
+
+  digest_models: [{ on: 'digest_out', note: 'only the digest report uses the models' }],
+  digest_tag_min: [{ on: 'digest_out', note: 'only the digest report uses it' }],
+  digest_background_share: [{ on: 'digest_out', note: 'only the digest report uses it' }],
+  digest_window: [{ on: ['digest_out', 'label_out'], note: 'neither the digest nor the label report is written' }],
+  digest_silac_min: [{ on: 'label_out', note: 'only the label report uses it' }],
+
+  massgap_out: [{ on: 'recon_out', note: 'the mass gaps come from the reconciliations' }],
+  ...Object.fromEntries(
+    [
+      'massgap_window',
+      'massgap_window_da',
+      'massgap_min_spectra',
+      'massgap_min_share',
+      'massgap_min_bin',
+      'massgap_max_mods',
+      'massgap_top',
+      'massgap_silac_share',
+      'massgap_silac_min'
+    ].map((n) => [
+      n,
+      [
+        { on: 'recon_out', note: 'reconciliation only runs when it has an output file' },
+        { on: 'massgap_out', note: 'only the mass-gap report uses it' }
+      ]
+    ])
+  )
 }
 
 /// "Set" for dependency purposes: a checked box, a non-zero number, a non-empty
@@ -227,15 +287,16 @@ export function isActive(name: string, values: Record<string, unknown>): boolean
 /// Why @p name is inert right now, or null if it is live. Returns the FIRST
 /// unmet dependency: naming one thing to fix beats listing two.
 export function inertBecause(name: string, values: Record<string, unknown>): string | null {
-  // Either subsampling knob arms the seed: the one OR-dependency in the tool,
-  // stated here rather than generalising the whole table.
-  if (name === 'subsample_seed') {
-    return isActive('subsample_spectra', values) || isActive('subsample_fraction', values)
-      ? null
-      : 'nothing is being subsampled'
+  for (const d of DEPENDS[name] ?? []) {
+    const any = Array.isArray(d.on) ? d.on : [d.on]
+    if (!any.some((n) => isActive(n, values))) return d.note
   }
-  for (const d of DEPENDS[name] ?? []) if (!isActive(d.on, values)) return d.note
   return null
+}
+
+/// Masters named by a dependency, flattened.
+export function masters(d: Dependency): string[] {
+  return Array.isArray(d.on) ? d.on : [d.on]
 }
 
 /// Deliberately not rendered, each for a stated reason. Listing them (rather
@@ -271,7 +332,9 @@ export function unplacedParams(): string[] {
 /// the same bug, and it fails silently: the field simply never renders (a stale
 /// manifest is only visible from this direction).
 export function unknownParams(): string[] {
-  return [...RENDERED, ...Object.keys(DEPENDS), ...SECTIONS.flatMap((s) => (s.master ? [s.master] : []))].filter(
-    (n) => !PARAM_BY_NAME.has(n)
-  )
+  return [
+    ...RENDERED,
+    ...Object.keys(DEPENDS),
+    ...SECTIONS.flatMap((s) => (s.master ? [s.master] : []))
+  ].filter((n) => !PARAM_BY_NAME.has(n))
 }

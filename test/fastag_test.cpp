@@ -298,7 +298,7 @@ int main()
     {
       double m = 0;
       for (char c : t.seq)
-        m += ResidueDB::getInstance()->getResidue(String(c))->getMonoWeight(Residue::Internal);
+        m += ResidueDB::getInstance()->getResidue(std::string(1, c))->getMonoWeight(Residue::Internal);
       const double err = std::fabs(t.nterm_mass + m + t.cterm_mass - prec_res);
       ++checked; worst = std::max(worst, err);
       if (err < 0.05) ++closed;
