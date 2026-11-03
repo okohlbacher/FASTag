@@ -14,7 +14,10 @@
       "default": "",
       "description": "Aggregated mass-shift histogram over the reconciliations (requires -recon_out): delta, spectrum count, top interpretations. Region-level candidates, NOT localized identifications and NOT FDR-controlled",
       "required": false,
-      "toppAdvanced": false
+      "toppAdvanced": false,
+      "formats": [
+        "tsv"
+      ]
     },
     {
       "name": "digest_background_share",
@@ -32,7 +35,10 @@
       "default": "",
       "description": "Protease model table for -digest_out (columns model, class, end, residue, freq). Default: the shipped cleavage-rule models",
       "required": false,
-      "toppAdvanced": false
+      "toppAdvanced": false,
+      "formats": [
+        "tsv"
+      ]
     },
     {
       "name": "digest_out",
@@ -40,7 +46,10 @@
       "default": "",
       "description": "Report the terminal residues of the tags (ungapped, E-value <= 1) and the protease call they support, with its margin or the reason for no call",
       "required": false,
-      "toppAdvanced": false
+      "toppAdvanced": false,
+      "formats": [
+        "tsv"
+      ]
     },
     {
       "name": "digest_silac_min",
@@ -83,7 +92,12 @@
       "default": "",
       "description": "Entrapment database (foreign species the sample cannot contain; phylogenetically distant, e.g. archaea for a mammalian sample). Requires -fasta. Appends a q_db column and marks entrapment-only matches efwd/erev in fasta_hit",
       "required": false,
-      "toppAdvanced": false
+      "toppAdvanced": false,
+      "formats": [
+        "fasta",
+        "fa",
+        "faa"
+      ]
     },
     {
       "name": "extension",
@@ -101,7 +115,12 @@
       "default": "",
       "description": "Report only tags occurring in these sequences",
       "required": false,
-      "toppAdvanced": false
+      "toppAdvanced": false,
+      "formats": [
+        "fasta",
+        "fa",
+        "faa"
+      ]
     },
     {
       "name": "fixed_modifications",
@@ -184,7 +203,10 @@
       "default": "",
       "description": "Per-spectrum oxonium report. Default: <out> with a .glyco.tsv suffix",
       "required": false,
-      "toppAdvanced": false
+      "toppAdvanced": false,
+      "formats": [
+        "tsv"
+      ]
     },
     {
       "name": "in",
@@ -208,7 +230,10 @@
       "default": "",
       "description": "Report N-terminal isobaric label gaps (TMT, TMTpro, iTRAQ4) and the heavy Lys8/Arg10 shares of the tag ends",
       "required": false,
-      "toppAdvanced": false
+      "toppAdvanced": false,
+      "formats": [
+        "tsv"
+      ]
     },
     {
       "name": "log",
@@ -261,7 +286,10 @@
       "default": "",
       "description": "Report the -delta_out mass-gap distribution (requires -recon_out): Cys alkylation counts, gap peaks explained as combinations of Unimod modifications, and SILAC labels among them",
       "required": false,
-      "toppAdvanced": false
+      "toppAdvanced": false,
+      "formats": [
+        "tsv"
+      ]
     },
     {
       "name": "massgap_silac_min",
@@ -321,10 +349,11 @@
       "name": "max_peaks",
       "type": "int",
       "default": "400",
-      "description": "Peaks retained per spectrum; 0 uses the internal ceiling of 1024, not unlimited -- the scoring tables are built to that bound. The ceiling for 'peaks_per_window'",
+      "description": "Peaks retained per spectrum, at most 1024; 0 uses that ceiling, not unlimited -- the scoring tables are built to this bound, at O(n^2) memory. The ceiling for 'peaks_per_window'",
       "required": false,
       "toppAdvanced": false,
-      "min": 0
+      "min": 0,
+      "max": 1024
     },
     {
       "name": "max_tags",
@@ -386,7 +415,10 @@
       "default": "",
       "description": "Tag list (tab-separated)",
       "required": false,
-      "toppAdvanced": false
+      "toppAdvanced": false,
+      "formats": [
+        "tsv"
+      ]
     },
     {
       "name": "out_spectra",
@@ -427,7 +459,12 @@
       "default": "",
       "description": "Protein database for -recon_out. Default: the -fasta file",
       "required": false,
-      "toppAdvanced": false
+      "toppAdvanced": false,
+      "formats": [
+        "fasta",
+        "fa",
+        "faa"
+      ]
     },
     {
       "name": "recon_id_out",
@@ -435,7 +472,12 @@
       "default": "",
       "description": "The -recon_out placements as identifications (requires -recon_out), as idXML, mzid or mzTab by extension: one hit per placement with its proteins, the database peptide carrying only the fixed residue modifications, scored by the tag's E-value (lower is better), the mass gap as metadata. NOT FDR-controlled",
       "required": false,
-      "toppAdvanced": false
+      "toppAdvanced": false,
+      "formats": [
+        "idXML",
+        "mzid",
+        "mzTab"
+      ]
     },
     {
       "name": "recon_localize",
@@ -458,10 +500,11 @@
       "name": "recon_missed_cleavages",
       "type": "int",
       "default": "1",
-      "description": "Missed tryptic cleavages allowed in reconciliation windows",
+      "description": "Missed tryptic cleavages allowed in reconciliation windows (at most 10)",
       "required": false,
       "toppAdvanced": false,
-      "min": 0
+      "min": 0,
+      "max": 10
     },
     {
       "name": "recon_out",
@@ -469,7 +512,10 @@
       "default": "",
       "description": "Reconcile reported tags against a protein database and write one row per placement (protein, peptide, position, flank agreement, mass gap + interpretation). Uses -recon_fasta, or -fasta when that is not given",
       "required": false,
-      "toppAdvanced": false
+      "toppAdvanced": false,
+      "formats": [
+        "tsv"
+      ]
     },
     {
       "name": "res_conf",
@@ -530,7 +576,10 @@
       "default": "",
       "description": "Ranked taxa TSV. Default: <out> with a .species.tsv suffix",
       "required": false,
-      "toppAdvanced": false
+      "toppAdvanced": false,
+      "formats": [
+        "tsv"
+      ]
     },
     {
       "name": "species_rank",

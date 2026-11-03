@@ -35,6 +35,7 @@ export interface MockBridge extends FastagApi {
   nextPickInput: string | null
   nextPickInputs: string[]
   nextPickOutput: string | null
+  pickFileCalls: { kind: 'open' | 'save'; formats?: string[] }[]
   nextPickResults: string | null
   nextPickReport: string | null
   // path -> report text; a missing path reads as "not written".
@@ -88,6 +89,7 @@ export function installMockBridge(): MockBridge {
     nextPickInput: null,
     nextPickInputs: [],
     nextPickOutput: null,
+    pickFileCalls: [],
     nextPickResults: null,
     nextPickReport: null,
     reportFiles: {},
@@ -142,6 +144,14 @@ export function installMockBridge(): MockBridge {
     pickInput: () => Promise.resolve(mock.nextPickInput),
     pickInputs: () => Promise.resolve(mock.nextPickInputs),
     pickOutput: () => Promise.resolve(mock.nextPickOutput),
+    pickFile: (formats) => {
+      mock.pickFileCalls.push({ kind: 'open', formats })
+      return Promise.resolve(mock.nextPickInput)
+    },
+    saveFile: (_defaultPath, formats) => {
+      mock.pickFileCalls.push({ kind: 'save', formats })
+      return Promise.resolve(mock.nextPickOutput)
+    },
     pickResults: () => Promise.resolve(mock.nextPickResults),
     pickReport: () => Promise.resolve(mock.nextPickReport),
     report: (path) => {

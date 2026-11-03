@@ -268,10 +268,13 @@ export default function App(): JSX.Element {
   }
 
   async function pickFor(spec: ParamSpec): Promise<void> {
+    // The parameter's own formats (FASTA, idXML/mzid/mzTab, TSV), not the
+    // spectra filter every input used to get -- a .fasta or .taxdb could not
+    // be picked -- nor 'Tags (TSV)' for every output.
     const p =
       spec.type === 'output-file'
-        ? await window.fastag.pickOutput(String(values[spec.name] || ''))
-        : await window.fastag.pickInput()
+        ? await window.fastag.saveFile(String(values[spec.name] || ''), spec.formats)
+        : await window.fastag.pickFile(spec.formats)
     if (p) setValue(spec.name, p)
   }
 

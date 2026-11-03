@@ -19,6 +19,13 @@ import type {
 
 const SPECTRA = [{ name: 'Spectra', extensions: ['mzML', 'mzml', 'mzpeak', 'mzPeak'] }]
 
+// A parameter's declared formats as a dialog filter; none means no filter
+// (a .taxdb, the taxonomy dumps), not the spectra one.
+export function fileFilters(formats?: string[]): { name: string; extensions: string[] }[] | undefined {
+  if (!formats || formats.length === 0) return undefined
+  return [{ name: formats.join(', '), extensions: formats }]
+}
+
 // listen() is async but the renderer wants a synchronous unsubscribe (it returns
 // one from a useEffect). Hand back a function that unlistens once the async
 // subscription resolves, and no-ops safely if it fires before then.
@@ -50,6 +57,14 @@ const api: FastagApi = {
   },
   pickOutput: async (defaultPath?: string) => {
     const r = await save({ defaultPath, filters: [{ name: 'Tags (TSV)', extensions: ['tsv'] }] })
+    return typeof r === 'string' ? r : null
+  },
+  pickFile: async (formats?: string[]) => {
+    const r = await open({ multiple: false, filters: fileFilters(formats) })
+    return typeof r === 'string' ? r : null
+  },
+  saveFile: async (defaultPath?: string, formats?: string[]) => {
+    const r = await save({ defaultPath, filters: fileFilters(formats) })
     return typeof r === 'string' ? r : null
   },
   pickResults: async () => {
