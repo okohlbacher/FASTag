@@ -18,6 +18,7 @@
 #include <OpenMS/DATASTRUCTURES/StringUtils.h>
 #include <OpenMS/FORMAT/FASTAFile.h>
 #include <OpenMS/FORMAT/FileHandler.h>
+#include <OpenMS/FORMAT/FileNameUtils.h>
 #include <OpenMS/FORMAT/MzMLFile.h>
 #include <OpenMS/FORMAT/MzPeakFile.h>
 #include <OpenMS/IONMOBILITY/IMTypes.h>
@@ -32,6 +33,7 @@
 #include "FastaFilter.h"
 #include "Glyco.h"
 #include "IndexedMzMLReader.h"
+#include "MgfReader.h"
 #include "NumFormat.h"
 #include "Proforma.h"
 #include "ReconIds.h"
@@ -243,7 +245,7 @@ protected:
   {
     // No setValidFormats_ on the two spectrum files: main_ decides by type
     // and refuses an unsupported one with its own message.
-    registerInputFile_("in", "<file>", "", "Input spectra (mzML or mzpeak)", /*required=*/false);
+    registerInputFile_("in", "<file>", "", "Input spectra (mzML, mzpeak or MGF)", /*required=*/false);
     registerOutputFile_("out", "<file>", "", "Tag list (tab-separated)", /*required=*/false);
     setValidFormats_("out", ListUtils::create<std::string>("tsv"));
 
@@ -1028,10 +1030,14 @@ protected:
                             "has none." << std::endl;
         return ILLEGAL_PARAMETERS;
       }
-      // The input is .mzML or .mzpeak (refused otherwise below), so the last
-      // dot starts the extension.
+      // The input is .mzML, .mzpeak or .mgf (refused otherwise below), so the
+      // last dot starts the extension. Except for MGF, whose run keeps it:
+      // USI 1.0 lets the msRun carry the extension, and an MGF index points
+      // into the peak list, not into the raw run it came from.
       const std::string file = File::basename(in);
-      const std::string run = file.substr(0, file.rfind('.'));
+      const bool mgf_run = FileHandler::getTypeByFileName(in) == FileTypes::MGF
+                           && !FileNameUtils::hasCompressionSuffix(in);
+      const std::string run = mgf_run ? file : file.substr(0, file.rfind('.'));
       // USI 1.0 3.6.1: a run starting with '[' reads as a [subFolder] prefix.
       if (run.empty() || run[0] == '[')
       {
@@ -1416,6 +1422,9 @@ protected:
     //            metadata); else, with no usable index, a full load.
     //   .mzpeak  MzPeakStream: OpenMS's MzPeakFile reads the archive once,
     //            in file order, and the workers take the spectra from it.
+    //   .mgf     MgfReader: one parallel scan finds every block, then each
+    //            worker reads blocks at random, like the mzML index.
+    // Compressed input (.gz, .bz2, .zip) is refused: none of these seek.
     // -out_spectra's writer follows ITS extension, so mzML->mzpeak and
     // mzpeak->mzML both work as a side effect of tagging.
     const auto has_ext = [](const std::string& p, const char* ext) {
@@ -1425,12 +1434,27 @@ protected:
       return FileHandler::getTypeByFileName(p) == FileTypes::MZPEAK || MzPeakFile::isMzPeak(p);
     };
     const auto is_mzml = [&](const std::string& p) { return has_ext(p, ".mzml"); };
-    if (!is_mzpeak(in) && !is_mzml(in))
+    // getTypeByFileName sees through a compression suffix (x.mgf.gz is MGF),
+    // so the suffix is checked first.
+    const auto is_mgf = [](const std::string& p) {
+      return FileHandler::getTypeByFileName(p) == FileTypes::MGF;
+    };
+    if (!is_mzpeak(in) && FileNameUtils::hasCompressionSuffix(in))
     {
-      OPENMS_LOG_ERROR << "Input '" << in << "' is neither .mzML nor .mzpeak." << std::endl;
+      const FileTypes::Type c = FileNameUtils::compressionType(in);
+      OPENMS_LOG_ERROR << "Input '" << in << "' is "
+                       << (c == FileTypes::GZ ? "gzip" : c == FileTypes::BZ2 ? "bzip2" : "zip")
+                       << "-compressed; FASTag reads uncompressed input only. Decompress it first."
+                       << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    if (!is_mzpeak(in) && !is_mzml(in) && !is_mgf(in))
+    {
+      OPENMS_LOG_ERROR << "Input '" << in << "' is neither .mzML, .mzpeak nor .mgf." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
     const bool mzpeak_in = is_mzpeak(in);
+    const bool mgf_in = !mzpeak_in && is_mgf(in);
     const bool mzpeak_out = !out_spectra.empty()
         && FileHandler::getTypeByFileName(out_spectra) == FileTypes::MZPEAK;
     if (!out_spectra.empty() && !mzpeak_out && !is_mzml(out_spectra))
@@ -1505,6 +1529,56 @@ protected:
         return INPUT_FILE_CORRUPT;
       }
     }
+    // MGF: the block scan checks the whole file's structure (its markers)
+    // here, before any output is opened, and names the lowest bad block. A
+    // block's content is parsed when it is read. Also with
+    // -out_spectra: the reader is random access and carries the run-level
+    // settings an MGF supports (its SourceFile).
+    std::unique_ptr<FASTag::MgfReader> mgf;
+    if (mgf_in)
+    {
+      try
+      {
+        const auto a = std::chrono::steady_clock::now();
+        mgf = std::make_unique<FASTag::MgfReader>(in);
+        g_t_open = std::chrono::duration<double>(std::chrono::steady_clock::now() - a).count();
+      }
+      catch (const Exception::FileEmpty&)
+      {
+        OPENMS_LOG_ERROR << "'" << in << "' contains no BEGIN IONS block; is it an MGF file?" << std::endl;
+        return INPUT_FILE_EMPTY;
+      }
+      catch (const Exception::FileNotReadable& e)
+      {
+        OPENMS_LOG_ERROR << e.what() << std::endl;
+        return INPUT_FILE_NOT_READABLE;
+      }
+      catch (const Exception::BaseException& e)
+      {
+        OPENMS_LOG_ERROR << e.what() << std::endl;
+        return INPUT_FILE_CORRUPT;
+      }
+      if (mgf->hasBom())
+        OPENMS_LOG_WARN << "'" << in << "' starts with a UTF-8 byte-order mark; skipped it." << std::endl;
+      // Text outside BEGIN IONS ... END IONS is ignored, as in OpenMS; what
+      // looks like a lost spectrum there is said, with where it starts.
+      const FASTag::MgfReader::Blocks& mb = mgf->blocks();
+      if (mb.stray_ends > 0)
+        OPENMS_LOG_WARN << "'" << in << "': " << mb.stray_ends << " END IONS line(s) outside any "
+                           "block (the first ends at byte " << mb.first_stray_end << "). Each "
+                           "ends a block whose BEGIN IONS line is missing; that spectrum is "
+                           "ignored." << std::endl;
+      if (mb.loose_regions > 0)
+        OPENMS_LOG_WARN << "'" << in << "': " << mb.loose_regions << " stretch(es) of text outside "
+                           "BEGIN IONS ... END IONS look like spectra (a peak line, PEPMASS=, "
+                           "TITLE=, RTINSECONDS= or SCANS=; the first at byte " << mb.first_loose
+                        << ") and were ignored." << std::endl;
+      if (mgf->headerBytes() > FASTag::MgfReader::kHeaderScan)
+        OPENMS_LOG_WARN << "'" << in << "': " << mgf->headerBytes() << " bytes before the first "
+                           "BEGIN IONS were ignored (only the first "
+                        << FASTag::MgfReader::kHeaderScan << " were looked at for a CHARGE= default)."
+                        << std::endl;
+    }
     // The fast mzML path: our own index-driven reader, which fills the
     // metadata OpenMS's per-spectrum decoder drops and so needs no serial
     // up-front metadata parse (see IndexedMzMLReader.h).
@@ -1518,7 +1592,7 @@ protected:
     // spectra is not used, so a file it cannot understand falls back instead
     // of producing a confident nothing.
     std::unique_ptr<FASTag::IndexedMzMLReader> fastmz;
-    if (!mzpeak_in && out_spectra.empty())
+    if (!mzpeak_in && !mgf_in && out_spectra.empty())
     {
       const auto opened = std::chrono::steady_clock::now();
       auto candidate = std::make_unique<FASTag::IndexedMzMLReader>(in);
@@ -1541,15 +1615,16 @@ protected:
     // (copy-construction only), so an in-place reassignment isn't available.
     auto ondisc = std::make_unique<OnDiscMSExperiment>();
     PeakMap exp;
-    const bool streaming = !mzpeak_in && !fastmz && ondisc->openFile(in, out_spectra.empty());
+    const bool streaming = !mzpeak_in && !mgf_in && !fastmz && ondisc->openFile(in, out_spectra.empty());
     // Spectrum i of an mzML input: the per-spectrum reader or the fully
     // loaded map. For the SERIAL callers only; the tagging loop gives each
     // thread its own reader. (mzPeak is read in one pass, by MzPeakStream.)
     auto read_spectrum = [&](Size i) -> MSSpectrum {
+      if (mgf) return mgf->getSpectrum(i);
       if (fastmz) return fastmz->getSpectrum(i);
       return streaming ? ondisc->getSpectrum(i) : exp[i];
     };
-    if (!streaming && !mzpeak_in && !fastmz)
+    if (!streaming && !mzpeak_in && !mgf_in && !fastmz)
     {
       OPENMS_LOG_WARN << "'" << in << "' has no usable index; reading it entirely "
                          "into memory. Run FileConverter to write an indexed mzML "
@@ -1592,6 +1667,7 @@ protected:
     size_t n_total = streaming ? ondisc->getNrSpectra() : exp.size();
     if (mzs) n_total = mzs->size();
     if (fastmz) n_total = fastmz->getNrSpectra();
+    if (mgf) n_total = mgf->getNrSpectra();
 
     // Subsampling selection. The mask is exact for every input -- it is built
     // over the spectrum indices up front. The count over ALL input spectra,
@@ -1691,7 +1767,8 @@ protected:
                           "-out_spectra as .mzML instead." << std::endl;
       return INCOMPATIBLE_INPUT_DATA;
     };
-    if (mzpeak_out && !mzpeak_in)
+    // MGF carries no per-peak ion mobility: nothing to check.
+    if (mzpeak_out && !mzpeak_in && !mgf_in)
     {
       const Size n_check = streaming ? ondisc->getNrSpectra() : exp.size();
       for (Size i = 0; i < n_check; ++i)
@@ -1838,6 +1915,7 @@ protected:
 
     PeakMap kept;
     if (mzs) kept.getExperimentalSettings() = mzs->settings();
+    else if (mgf) kept.getExperimentalSettings() = mgf->settings();
     else if (streaming)
     {
       if (auto meta = ondisc->getMetaData()) kept.getExperimentalSettings() = *meta;
@@ -1887,6 +1965,7 @@ protected:
       std::map<int, std::pair<size_t, size_t>> len;  ///< length -> (seen, matched)
       size_t ms2 = 0, tags = 0, rep = 0;
       size_t no_charge = 0;  ///< MS2 whose precursor carries no charge (tagged as 2+)
+      size_t multi_charge = 0;  ///< ... of them, those listing several possible charges
       // Entrapment-calibration accumulators (entrap_on only): target E-values,
       // and entrapment E-values with their tag length -- the key spaces are
       // per-length, so each entrapment event is weighted by 1/r_len later.
@@ -1903,6 +1982,7 @@ protected:
       FASTag::Digest::TerminusCounter digest;
       std::vector<double> first_peak, scan_low;
       size_t ms2_meta = 0, im_vssc = 0, im_drift = 0, im_faims = 0, im_other = 0;
+      size_t peaks = 0, peaks_whole = 0;
       // FASTAG_TIMING only, thread-seconds: reading (getSpectrum), of that in
       // reads slower than 1 ms (a wait for the mzPeak reader, for one),
       // tagging (tag_one + record), waiting for a ring buffer, and idle after
@@ -1945,7 +2025,17 @@ protected:
       {
         ++pt.ms2_meta;
         double first = std::numeric_limits<double>::infinity();
-        for (const auto& pk : spec) first = std::min(first, pk.getMZ());
+        for (const auto& pk : spec)
+        {
+          first = std::min(first, pk.getMZ());
+          // Ion counts (timsTOF) are whole numbers; Orbitrap intensities are not.
+          // Zero-intensity peaks (profile data, padding) carry no ion count and
+          // would read as whole, so only peaks above 0 count.
+          const float in = pk.getIntensity();
+          if (!std::isfinite(in) || in <= 0.0f) continue;
+          ++pt.peaks;
+          if (std::floor(in) == in) ++pt.peaks_whole;
+        }
         pt.first_peak.push_back(first);
         const auto& wins = spec.getInstrumentSettings().getScanWindows();
         if (!wins.empty())
@@ -1968,7 +2058,11 @@ protected:
       }
 
       const auto& prec = spec.getPrecursors().front();
-      if (prec.getCharge() <= 0) ++pt.no_charge;
+      if (prec.getCharge() <= 0)
+      {
+        ++pt.no_charge;
+        if (!prec.getPossibleChargeStates().empty()) ++pt.multi_charge;
+      }
       const auto tags = tag_all(spec, prec.getMZ(), prec.getCharge(), tables);
       pt.tags += tags.size();
 
@@ -1983,7 +2077,12 @@ protected:
       double delta_e = 0.0;
       std::pair<double, std::string> delta_sample;
       const std::string usi = usi_prefix.empty() || tags.empty()
-          ? std::string() : usi_prefix + FASTag::usiIndex(spec.getNativeID(), index);
+          ? std::string()
+          : usi_prefix + (mgf_in ? FASTag::usiIndexMgf(spec.metaValueExists("Scan_ID")
+                                                         ? StringUtils::toStr(spec.getMetaValue("Scan_ID"))
+                                                         : std::string(),
+                                                     spec.getNativeID(), index)
+                                 : FASTag::usiIndex(spec.getNativeID(), index));
       std::vector<PeptideHit> id_hits;  // -recon_id_out
 
       // -recon_localize matches against the spectrum's own peaks: every
@@ -2361,6 +2460,7 @@ protected:
     // per thread (profile MS2 is centroided on the taking thread).
     std::vector<std::unique_ptr<OnDiscMSExperiment>> readers(read_threads);
     std::vector<std::unique_ptr<FASTag::IndexedMzMLReader>> freaders(read_threads);
+    std::vector<std::unique_ptr<FASTag::MgfReader>> mreaders(read_threads);
     std::vector<std::unique_ptr<PeakPickerHiRes>> pickers(read_threads);
     const auto t_readers_a = Clock::now();
     for (int t = 0; t < read_threads; ++t)
@@ -2370,6 +2470,7 @@ protected:
       // thread only, which is what both readers document as required.
       if (streaming) readers[t] = std::make_unique<OnDiscMSExperiment>(*ondisc);
       if (fastmz) freaders[t] = std::make_unique<FASTag::IndexedMzMLReader>(*fastmz);
+      if (mgf) mreaders[t] = std::make_unique<FASTag::MgfReader>(*mgf);
       if (mzs) pickers[t] = std::make_unique<PeakPickerHiRes>();
     }
     t_readers = secs(t_readers_a, Clock::now());
@@ -2456,6 +2557,7 @@ protected:
       const size_t tid = static_cast<size_t>(omp_get_thread_num());
       OnDiscMSExperiment* reader = readers[tid].get();
       FASTag::IndexedMzMLReader* freader = freaders[tid].get();
+      FASTag::MgfReader* mreader = mreaders[tid].get();
       PeakPickerHiRes* picker = pickers[tid].get();
       auto work = [&](SignedSize i, Block& blk, size_t idx)
       {
@@ -2464,6 +2566,7 @@ protected:
         MSSpectrum loaded;
         bool loaded_here = false;
         if (mzs) { loaded = mzs->take(static_cast<size_t>(i), *picker); loaded_here = true; }
+        if (!loaded_here && mreader) { loaded = mreader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
         if (!loaded_here && freader) { loaded = freader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
         if (!loaded_here && reader) { loaded = reader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
         const MSSpectrum& spec = loaded_here ? loaded : exp[static_cast<Size>(i)];
@@ -2552,19 +2655,32 @@ protected:
     // The writer's failure is the cause when both are set: it aborts the
     // mzPeak stream, and a worker blocked in take() then fails with
     // "mzPeak read stopped", which would otherwise be reported instead.
+    // Partial reports are no result, whatever stopped the loop: remove the
+    // ones opened before it (the others are written after it). An MGF block's
+    // content is only parsed here, so a bad block outside the tolerance probe
+    // fails after these files exist, and the rows before it look complete.
+    // Only regular files: -out may name a device such as /dev/null.
+    const auto drop_partial = [&]
+    {
+      const auto drop = [](std::ofstream& os, const std::string& path)
+      {
+        os.close();
+        std::error_code ec;
+        if (std::filesystem::is_regular_file(path, ec)) std::filesystem::remove(path, ec);
+      };
+      drop(tsv, out);
+      if (recon_on) drop(rtsv, recon_out);
+      if (glyco_on) drop(gtsv, glyco_out);
+    };
     if (work_failed)
     {
+      drop_partial();
       try
       {
         std::rethrow_exception(work_failed);
       }
       catch (const IonMobilityRefused&)
       {
-        // Partial reports are no result: remove them.
-        tsv.close();
-        std::remove(out.c_str());
-        if (recon_on) { rtsv.close(); std::remove(recon_out.c_str()); }
-        if (glyco_on) { gtsv.close(); std::remove(glyco_out.c_str()); }
         return refuse_im();
       }
       catch (...)
@@ -2573,12 +2689,57 @@ protected:
         throw;
       }
     }
-    if (write_failed) std::rethrow_exception(write_failed);
+    if (write_failed)
+    {
+      drop_partial();
+      std::rethrow_exception(write_failed);
+    }
+    if (mgf)
+    {
+      // Counted by the workers' copies, which parse every tagged block once
+      // (the serial reads of the probe and -out_spectra are not counted).
+      size_t no_pepmass = 0, sanitised = 0, scans_sanitised = 0, rt_not_finite = 0, no_charge_key = 0;
+      for (const auto& r : mreaders)
+      {
+        if (!r) continue;
+        no_pepmass += r->counts().no_pepmass;
+        sanitised += r->counts().titles_sanitised;
+        scans_sanitised += r->counts().scans_sanitised;
+        rt_not_finite += r->counts().rt_not_finite;
+        no_charge_key += r->counts().no_charge_key;
+      }
+      if (no_pepmass > 0)
+        OPENMS_LOG_WARN << no_pepmass << " MGF blocks have no usable PEPMASS (missing, zero or not "
+                           "finite); they count as MS2 and yield no tags." << std::endl;
+      if (sanitised > 0)
+        OPENMS_LOG_WARN << sanitised << " MGF TITLEs carry control bytes or invalid UTF-8, replaced "
+                           "by '?'." << std::endl;
+      if (scans_sanitised > 0)
+        OPENMS_LOG_WARN << scans_sanitised << " MGF SCANS values carry control bytes or invalid "
+                           "UTF-8, replaced by '?'." << std::endl;
+      if (rt_not_finite > 0)
+        OPENMS_LOG_WARN << rt_not_finite << " MGF blocks have an RTINSECONDS that is not finite "
+                           "(nan or inf); their retention time is left unset." << std::endl;
+      // Only when it matters: OpenMS's own MGF writer puts CHARGE= in the
+      // header of files whose every block has its own.
+      if (mgf->headerCharge() && no_charge_key > 0)
+        OPENMS_LOG_WARN << "'" << in << "' has a file-level CHARGE= before its first block. It is "
+                           "not applied (as in OpenMS): " << no_charge_key << " block(s) without "
+                           "their own CHARGE were tagged as 2+." << std::endl;
+    }
     if (mzs)
     {
       // The reader's own error, if any (a short or corrupt archive), and then
       // the tolerance probe over the copies it kept.
-      mzs->finish();
+      try
+      {
+        mzs->finish();
+      }
+      catch (...)
+      {
+        drop_partial();
+        throw;
+      }
       tolerance_probe([&](Size i) { return mzs->copy(i); });
     }
     if (timing)
@@ -2618,10 +2779,11 @@ protected:
                       << std::endl;
     }
 
-    size_t n_no_charge = 0;
+    size_t n_no_charge = 0, n_multi_charge = 0;
     for (const PerThread& pt : per_thread)
     {
       n_no_charge += pt.no_charge;
+      n_multi_charge += pt.multi_charge;
       n_ms2 += pt.ms2;
       n_tags += pt.tags;
       n_reported += pt.rep;
@@ -2949,6 +3111,8 @@ protected:
           meta.im_drift += pt.im_drift;
           meta.im_faims += pt.im_faims;
           meta.im_other += pt.im_other;
+          meta.peaks += pt.peaks;
+          meta.peaks_whole += pt.peaks_whole;
           meta.first_peak.insert(meta.first_peak.end(), pt.first_peak.begin(), pt.first_peak.end());
           meta.scan_low.insert(meta.scan_low.end(), pt.scan_low.begin(), pt.scan_low.end());
         }
@@ -2957,6 +3121,14 @@ protected:
         // the spectrumList.
         ExperimentalSettings es;
         if (mzs) es = mzs->settings();
+        else if (mgf_in)
+        {
+          // An MGF names no instrument, scan window or native-ID format, and
+          // FASTag reads no ion mobility from it: all of it is absent. The
+          // native-ID format stays empty on purpose (MS:1000774 would make
+          // the timsTOF rule read "no", which the file cannot support).
+          meta.im_unread = true;
+        }
         else
         {
           try
@@ -3321,7 +3493,11 @@ protected:
     OPENMS_LOG_INFO << std::endl;
     if (n_no_charge > 0)
       OPENMS_LOG_WARN << n_no_charge << " of " << n_ms2 << " MS2 spectra carry no precursor "
-                         "charge and were tagged as 2+: their peaks above the 2+ precursor "
+                         "charge"
+                      << (n_multi_charge > 0 ? " (" + std::to_string(n_multi_charge)
+                                                   + " of them list several possible charges)"
+                                             : std::string())
+                      << " and were tagged as 2+: their peaks above the 2+ precursor "
                          "mass are dropped, and their nterm_mass flanks assume charge 2 (wrong "
                          "for a 3+ or higher precursor)." << std::endl;
 
@@ -3366,6 +3542,21 @@ protected:
                          << (stale ? " (removed the file an earlier run left there)" : "")
                          << std::endl;
         return UNEXPECTED_RESULT;
+      }
+      // An MGF input names itself as the source file (MgfReader::settings());
+      // give it the SHA-1 FileConverter writes for it, at the cost of one more
+      // read of the file.
+      if (mgf_in && !kept.getExperimentalSettings().getSourceFiles().empty())
+      {
+        try
+        {
+          kept.getExperimentalSettings().getSourceFiles()[0].setChecksum(FileHandler::computeFileHash(in),
+                                                                         SourceFile::ChecksumType::SHA1);
+        }
+        catch (const Exception::BaseException& e)
+        {
+          OPENMS_LOG_WARN << "-out_spectra: no SHA-1 for " << in << " (" << e.what() << ")." << std::endl;
+        }
       }
       // The kept spectra, in input order, to @p sink: re-read one at a time
       // from an mzML input, or in one more pass over an mzPeak archive.

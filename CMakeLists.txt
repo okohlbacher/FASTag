@@ -122,7 +122,7 @@ endif()
 
 # mzPeak in and out goes through OpenMS's MzPeakFile; an OpenMS built without
 # it (OPENMS_ENABLE_MZPEAK=OFF) gives a FASTag that refuses .mzpeak.
-add_executable(FASTag src/FASTag.cpp src/IndexedMzMLReader.cpp src/MzPeakStream.cpp)
+add_executable(FASTag src/FASTag.cpp src/IndexedMzMLReader.cpp src/MgfReader.cpp src/MzPeakStream.cpp)
 target_link_libraries(FASTag PRIVATE fastag_core OpenMS_CLI)
 # So --help reports FASTag's version instead of the OpenMS it was built against.
 target_compile_definitions(FASTag PRIVATE FASTAG_VERSION="${PROJECT_VERSION}")
@@ -308,6 +308,32 @@ if(FASTAG_BUILD_TESTS)
   endif()
   add_test(NAME indexed_mzml_test COMMAND indexed_mzml_test)
   set_tests_properties(indexed_mzml_test PROPERTIES SKIP_RETURN_CODE 77)
+
+  # The MGF reader against OpenMS's MascotGenericFile, block by block and bit
+  # for bit on the fixture, plus the block scan at every piece size, the field
+  # cases where FASTag differs from OpenMS on purpose, the errors, and reading
+  # from several threads.
+  add_executable(mgf_reader_test test/mgf_reader_test.cpp src/MgfReader.cpp)
+  target_link_libraries(mgf_reader_test PRIVATE fastag_core)
+  target_include_directories(mgf_reader_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  target_compile_definitions(mgf_reader_test PRIVATE
+                             FASTAG_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
+  if(OpenMP_CXX_FOUND)
+    target_link_libraries(mgf_reader_test PRIVATE OpenMP::OpenMP_CXX)
+  endif()
+  add_test(NAME mgf_reader_test COMMAND mgf_reader_test)
+
+  # Integration: MGF input against the real binary. The fixture MGF (written
+  # from the fixture mzML by tools/mzml_to_mgf.py) gives the mzML's TSVs once
+  # the spectrum id is cut, at any thread count; -out_spectra, -usi_collection,
+  # -recon_id_out, -digest_out, charge-less input, subsampling and the errors.
+  add_test(NAME mgf_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/mgf_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mgf
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
+  set_tests_properties(mgf_cli_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # The ported deisotoper against OpenMS's own, peak for peak and bit for bit,
   # on synthetic edge cases. Given an mzPeak archive as its argument it also

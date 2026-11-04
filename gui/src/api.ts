@@ -17,7 +17,7 @@ import type {
   TaxdbInfo
 } from './types'
 
-const SPECTRA = [{ name: 'Spectra', extensions: ['mzML', 'mzml', 'mzpeak', 'mzPeak'] }]
+const SPECTRA = [{ name: 'Spectra', extensions: ['mzML', 'mzml', 'mzpeak', 'mzPeak', 'mgf', 'MGF'] }]
 
 // A parameter's declared formats as a dialog filter; none means no filter
 // (a .taxdb, the taxonomy dumps), not the spectra one.
