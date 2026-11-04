@@ -18,7 +18,8 @@ import {
   parseReport,
   positionCounts,
   smallSampleBias,
-  topBins
+  topBins,
+  value
 } from './digestReport'
 
 const digest = parseReport(digestTsv, '/r/a.digest.tsv')
@@ -58,6 +59,14 @@ describe('digest', () => {
     expect(c).toMatchObject({ status: 'no_call', reason: 'low_resolution', margin: null })
     expect(c.fired).toEqual(['low_resolution', 'ms2_first_peak', 'few_tags'])
     expect(c.unknown).toEqual([])
+  })
+
+  it('reads the 1.10.0 ion_counts rule and its meta row', () => {
+    const r = parseReport(nocallTsv, 'x')
+    expect(value(r, 'nocall', 'ion_counts')).toBe('no')
+    expect(Number(value(r, 'meta', 'ms2_whole_intensity_share'))).toBeLessThan(0.5)
+    const fired = digestCall(parseReport(nocallTsv.replace(/^nocall\tion_counts\tno\t/m, 'nocall\tion_counts\tyes\t'), 'x')).fired
+    expect(fired).toEqual(['low_resolution', 'ms2_first_peak', 'ion_counts', 'few_tags'])
   })
 
   it('reads counts per position and models in report order', () => {

@@ -153,7 +153,7 @@ describe('parsers: real 1.9.0 outputs', () => {
 })
 
 // ---------------------------------------------------------------------------
-describe('parsers: GUI fixtures vs 1.9.0', () => {
+describe('parsers: GUI fixtures vs real output', () => {
   const keys = (t: string): Set<string> =>
     new Set(
       t.split('\n').slice(1).filter(Boolean).map((l) => {
@@ -161,15 +161,29 @@ describe('parsers: GUI fixtures vs 1.9.0', () => {
         return `${s}\t${k.replace(/\.[A-Y]$/, '.<aa>')}`
       })
     )
-  it.skipIf(!have('b.digest.tsv'))('FIXED (m14): fixtures are 1.9.0 output: run.input, fragment_tolerance_unit, all 7 nocall rules', () => {
-    const fx = readFileSync(`${FX}digest_nocall.tsv`, 'utf8')
+  // The fixtures are FASTag 1.10.0 output; the scratch reports (real 1.9.0)
+  // must have no row the fixtures lack, and 1.10.0 adds ion_counts and
+  // ms2_whole_intensity_share on top.
+  it('fixtures are 1.10.0 output: 8 nocall rules in report order, ion_counts and its meta row', () => {
     for (const f of ['digest.tsv', 'digest_nocall.tsv', 'label.tsv', 'massgap.tsv'])
-      expect(readFileSync(`${FX}${f}`, 'utf8')).toMatch(/^run\tversion\t1\.9\.0\t/m)
+      expect(readFileSync(`${FX}${f}`, 'utf8')).toMatch(/^run\tversion\t1\.10\.0\t/m)
+    for (const f of ['digest.tsv', 'digest_nocall.tsv']) {
+      const t: string = readFileSync(`${FX}${f}`, 'utf8')
+      const rules = t.split('\n').filter((l: string) => l.startsWith('nocall\t')).map((l: string) => l.split('\t')[1])
+      expect(rules).toEqual([
+        'low_resolution', 'timstof', 'ms2_scan_window', 'ms2_first_peak',
+        'ion_counts', 'few_tags', 'nonfinite_score', 'tie'
+      ])
+      expect(t).toMatch(/^meta\tms2_whole_intensity_share\t[0-9.e-]+\t\d+\t/m)
+    }
+  })
+  it.skipIf(!have('b.digest.tsv'))('FIXED (m14): fixtures carry every row of real output: run.input, fragment_tolerance_unit, all nocall rules', () => {
+    const fx = readFileSync(`${FX}digest_nocall.tsv`, 'utf8')
     const fk = keys(fx)
     const rk = keys(real('b.digest.tsv') as string)
     const missing = [...rk].filter((k) => !fk.has(k) && !k.startsWith('pos') && !k.startsWith('residue') && !k.startsWith('background'))
     expect(missing).toEqual([])
-    // the unit has its own row, as 1.9.0 writes it
+    // the unit has its own row, as 1.9.0 and later write it
     expect(fx).not.toMatch(/^run\tfragment_tolerance\t[^\t]* (ppm|Da)\t/m)
     expect(fx).toMatch(/^run\tfragment_tolerance_unit\tDa\t/m)
     // and the call fixture is a state the writer produces: n_n below tag_min, so uses_nterm no

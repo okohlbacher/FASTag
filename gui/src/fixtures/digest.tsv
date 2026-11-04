@@ -1,5 +1,5 @@
 section	key	value	n	description
-run	version	1.9.0	-	FASTag 1.9.0 wrote this report.
+run	version	1.10.0	-	FASTag 1.10.0 wrote this report.
 run	input	PXD063917.mzML	-	The spectra were read from PXD063917.mzML.
 run	fragment_tolerance	20	-	The fragment tolerance is 20 ppm.
 run	fragment_tolerance_unit	ppm	-	The fragment tolerance is in ppm.
@@ -18,6 +18,7 @@ meta	ion_mobility	no	4958	0 of 4958 MS2 spectra carry an ion mobility.
 meta	ion_mobility_unit	-	0	0 MS2 spectra carry 1/K0, 0 a drift time, 0 a FAIMS compensation voltage and 0 another ion mobility.
 meta	ms2_scan_window_low	145	4958	The median MS2 scan window starts at m/z 145.00 over 4958 spectra.
 meta	ms2_first_peak_mz	145.0963592529297	4958	The median first MS2 peak is at m/z 145.10 over 4958 spectra.
+meta	ms2_whole_intensity_share	0.004116785243385268	3547914	A share of 0.0041 of the 3547914 MS2 peak intensities above 0 are whole numbers.
 count	tags_filtered	26909	26909	26909 reported tags are ungapped with an E-value of at most 1.
 count	tot	3804	26909	3804 C-terminal tag ends match a residue key, labelled K and R+10 included.
 count	n_c	3614	26909	3614 C-terminal tag ends match a residue, labelled K counted as K and R+10 left out.
@@ -560,6 +561,7 @@ nocall	low_resolution	no	-	The fragment tolerance is in ppm.
 nocall	timstof	no	-	Neither the instrument, the native ID format nor the ion mobility marks the input as timsTOF data.
 nocall	ms2_scan_window	no	4958	The median MS2 scan window starts at m/z 145.00, not above y1 of K plus 0.1 (147.21).
 nocall	ms2_first_peak	no	4958	The median first MS2 peak is at m/z 145.10, not above y1 of K plus 0.1 (147.21).
+nocall	ion_counts	no	3547914	The input names its instrument or native ID format, so the timstof rule decides.
 nocall	few_tags	no	3614	3804 residue-key and 3614 C-terminal tag ends against a minimum of 100.
 nocall	nonfinite_score	no	-	The call and the runner-up have finite log-likelihoods, or no call was scored.
 nocall	tie	no	0	No model of another class has the call's log-likelihood, or no call was scored.

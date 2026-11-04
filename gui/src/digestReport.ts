@@ -1,4 +1,4 @@
-// Readers for the three long-form reports of FASTag 1.9.0 (-digest_out,
+// Readers for the three long-form reports of FASTag 1.9.0 and later (-digest_out,
 // -label_out, -massgap_out; doc/DESIGN-digest.md). Every file has the header
 // `section key value n description`; the reports differ only in their sections.
 // Everything here is pure so it can be tested without the bridge.

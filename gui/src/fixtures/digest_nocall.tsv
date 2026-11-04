@@ -1,5 +1,5 @@
 section	key	value	n	description
-run	version	1.9.0	-	FASTag 1.9.0 wrote this report.
+run	version	1.10.0	-	FASTag 1.10.0 wrote this report.
 run	input	Ecoli_MS2_small.mzML	-	The spectra were read from Ecoli_MS2_small.mzML.
 run	fragment_tolerance	0.3	-	The fragment tolerance is 0.3 Da.
 run	fragment_tolerance_unit	Da	-	The fragment tolerance is in Da.
@@ -13,11 +13,12 @@ run	models	shipped	-	The models are the cleavage rules shipped with FASTag.
 run	background	fasta:Ecoli_MS2_small.fasta	-	The background is the residue composition of Ecoli_MS2_small.fasta.
 meta	instrument	LTQ Orbitrap XL	-	The input names the instrument LTQ Orbitrap XL.
 meta	instrument_model	-	-	The input names no instrument model (metadata absent).
-meta	native_id_format	MS:1000777	-	The native ID format of the input is MS:1000777.
+meta	native_id_format	MS:1000777	-	The native ID format of the input is the generic MS:1000777, which names no instrument (metadata absent).
 meta	ion_mobility	no	139	0 of 139 MS2 spectra carry an ion mobility.
 meta	ion_mobility_unit	-	0	0 MS2 spectra carry 1/K0, 0 a drift time, 0 a FAIMS compensation voltage and 0 another ion mobility.
 meta	ms2_scan_window_low	130	139	The median MS2 scan window starts at m/z 130.00 over 139 spectra.
 meta	ms2_first_peak_mz	155.13693237304688	139	The median first MS2 peak is at m/z 155.14 over 139 spectra.
+meta	ms2_whole_intensity_share	5.547850208044383e-05	36050	A share of 0.0001 of the 36050 MS2 peak intensities above 0 are whole numbers.
 count	tags_filtered	694	694	694 reported tags are ungapped with an E-value of at most 1.
 count	tot	34	694	34 C-terminal tag ends match a residue key, labelled K and R+10 included.
 count	n_c	34	694	34 C-terminal tag ends match a residue, labelled K counted as K and R+10 left out.
@@ -235,6 +236,7 @@ nocall	low_resolution	yes	-	The fragment tolerance is in Da.
 nocall	timstof	no	-	Neither the instrument, the native ID format nor the ion mobility marks the input as timsTOF data.
 nocall	ms2_scan_window	no	139	The median MS2 scan window starts at m/z 130.00, not above y1 of K plus 0.1 (147.21).
 nocall	ms2_first_peak	yes	139	The median first MS2 peak is at m/z 155.14, above y1 of K plus 0.1 (147.21).
+nocall	ion_counts	no	36050	The input names its instrument or native ID format, so the timstof rule decides.
 nocall	few_tags	yes	34	34 residue-key and 34 C-terminal tag ends against a minimum of 100.
 nocall	nonfinite_score	no	-	The call and the runner-up have finite log-likelihoods, or no call was scored.
 nocall	tie	no	0	No model of another class has the call's log-likelihood, or no call was scored.

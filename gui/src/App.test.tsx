@@ -536,6 +536,27 @@ describe('digest tab', () => {
     expect(screen.queryByText(/Metadata absent for/)).toBeNull()
   })
 
+  it('names the ion_counts rule of 1.10.0 when it decides the no-call', async () => {
+    // The 1.10.0 no-call fixture with ion_counts as the deciding rule, the
+    // state FASTag writes for an MGF of ion-count intensities.
+    const tsv = nocallTsv
+      .replace(/^call\treason\tlow_resolution\t/m, 'call\treason\tion_counts\t')
+      .replace(/^nocall\tlow_resolution\tyes\t/m, 'nocall\tlow_resolution\tno\t')
+      .replace(/^nocall\tion_counts\tno\t/m, 'nocall\tion_counts\tyes\t')
+    expect(tsv).toMatch(/^nocall\tion_counts\tyes\t/m)
+    const mock = installMockBridge()
+    mock.settings.lastUsed = { digest_out: paths.digest_out }
+    mock.reportFiles = { [paths.digest_out]: tsv }
+    await renderApp(mock)
+    await pickSingle(mock, '/r/a.mzML')
+    await click(runButton())
+    await emitDone(mock, 1, true)
+    await screen.findByText('No call')
+    expect(screen.getByText('Reason').nextElementSibling?.textContent).toBe(
+      'no instrument is named and the intensities are ion counts, as on a timsTOF · also the first MS2 peaks lie above y1 of K, too few terminal tags'
+    )
+  })
+
   it('reports a file that is not a report instead of failing', async () => {
     const mock = installMockBridge()
     mock.settings.lastUsed = { digest_out: paths.digest_out }

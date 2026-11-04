@@ -1,5 +1,5 @@
 section	key	value	n	description
-run	version	1.9.0	-	FASTag 1.9.0 wrote this report.
+run	version	1.10.0	-	FASTag 1.10.0 wrote this report.
 run	input	PXD063917.mzML	-	The spectra were read from PXD063917.mzML.
 run	fragment_tolerance	20	-	The fragment tolerance is 20 ppm.
 run	fragment_tolerance_unit	ppm	-	The fragment tolerance is in ppm.
