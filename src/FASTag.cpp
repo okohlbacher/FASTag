@@ -35,6 +35,7 @@
 #include "NumFormat.h"
 #include "Proforma.h"
 #include "ReconIds.h"
+#include "SpeciesEvidence.h"
 #include "SpectrumSampler.h"
 #include "TagFDR.h"
 #include "TagRecon.h"
@@ -566,6 +567,15 @@ protected:
                   "Correct taxon counts for sequence shared between taxa, so a near neighbour "
                   "cannot rank on a relative's evidence. Helps most when the true taxon's "
                   "relatives are in the reference; can suppress genuine low-abundance taxa", false);
+    // BEST by default, on measured evidence (48 public runs, FASTag 1.9.0): the
+    // union over every reported tag let each wrong tag add the taxa its 7-mer
+    // hits by chance, so taxon counts tracked how many low-ranked tags were
+    // reported. See SpeciesEvidence.h.
+    registerStringOption_("species_evidence", "<mode>", "best",
+                          "Which of a spectrum's tags make it count for a taxon: 'best' = the taxa of its "
+                          "lowest-E-value tag that maps into the index (ties united); 'all' = the union "
+                          "over every reported tag (FASTag <= 1.9.0)", false);
+    setValidStrings_("species_evidence", ListUtils::create<std::string>("best,all"));
     registerStringOption_("species_rank", "<rank>", "genus",
                           "Report taxa at this NCBI rank (genus, family, ...)", false);
     registerDoubleOption_("max_evalue", "<value>", 20.0, "E-value cutoff; 0 disables", false);
@@ -2187,7 +2197,8 @@ protected:
     // collected in write_block as each row is written: id + tag is far smaller
     // than the rows, which are recycled per block.
     const bool species_use_gapped = getFlag_("species_use_gapped");
-    std::map<std::string, std::vector<std::string>> by_spec;
+    // Per spectrum: (tag, E-value) of every row that may count, in row order.
+    std::map<std::string, std::vector<std::pair<std::string, double>>> by_spec;
 
     // Write one finished block's rows in index order and recycle the buffers.
     //
@@ -2265,17 +2276,24 @@ protected:
                 // matches taxa it never evidenced. Measured on PXD000001: with
                 // gapped tags admitted, the true genus falls from rank 1 to rank
                 // 20 and cereal genomes take the top of the table.
+                // The row is spectrum \t tag \t length \t charge \t nterm \t
+                // cterm \t extended \t gapped \t evalue \t ... -- fields 7, 8.
+                size_t f = t2, col = 2;
+                while (col < 7 && f != std::string::npos && f < nl) { f = r.find('\t', f + 1); ++col; }
                 bool gapped = false;
-                if (!species_use_gapped)
+                double evalue = std::numeric_limits<double>::quiet_NaN();
+                if (f != std::string::npos && f + 1 < nl)
                 {
-                  // The row is spectrum \t tag \t length \t charge \t nterm \t
-                  // cterm \t extended \t gapped \t ... -- field 7.
-                  size_t f = t2, col = 2;
-                  while (col < 7 && f != std::string::npos && f < nl) { f = r.find('\t', f + 1); ++col; }
-                  if (f != std::string::npos && f + 1 < nl) gapped = (r[f + 1] == '1');
+                  gapped = (r[f + 1] == '1');
+                  const size_t fe = r.find('\t', f + 1);
+                  // Written by appendNum (to_chars: '.', no locale) and read
+                  // back by strtod in the process's C locale -- FASTag never
+                  // calls setlocale. Only the ORDER of E-values matters here.
+                  if (fe != std::string::npos && fe + 1 < nl) evalue = std::strtod(r.c_str() + fe + 1, nullptr);
                 }
+                if (species_use_gapped) gapped = false;
                 if (!gapped)
-                  by_spec[r.substr(start, t1 - start)].push_back(r.substr(t1 + 1, t2 - t1 - 1));
+                  by_spec[r.substr(start, t1 - start)].emplace_back(r.substr(t1 + 1, t2 - t1 - 1), evalue);
               }
             }
             start = nl + 1;
@@ -3138,12 +3156,15 @@ protected:
       std::map<uint32_t, uint64_t> leaf_hits;  // per INDEX TAXON, deduplicated per spectrum
       size_t n_units = 0;
       uint64_t n_kmer_skipped = 0, n_tag_generic = 0;
+      const FASTag::SpeciesEvidence ev_mode = getStringOption_("species_evidence") == "all"
+          ? FASTag::SpeciesEvidence::All : FASTag::SpeciesEvidence::Best;
+      std::vector<FASTag::TagSupport> support;  // this spectrum's informative tags
       for (const auto& sp : by_spec)
       {
-        std::set<uint32_t> taxa;  // taxa supported anywhere in this spectrum
-        for (const std::string& raw : sp.second)
+        support.clear();
+        for (const auto& row : sp.second)
         {
-          const std::string seq = FASTag::baseSequence(raw);
+          const std::string seq = FASTag::baseSequence(row.first);
           if (static_cast<int>(seq.size()) < min_len) continue;
           const int L = static_cast<int>(seq.size());
           // One reusable buffer: lookup() fills rather than returns a reference,
@@ -3174,8 +3195,15 @@ protected:
           for (const auto& kv : sup) if (kv.second < best) runner = std::max(runner, kv.second);
           const double margin = static_cast<double>(best - runner) / static_cast<double>(n_eval);
           if (margin < min_margin) { ++n_tag_generic; continue; }
-          for (const auto& kv : sup) if (kv.second == best) taxa.insert(kv.first);
+          FASTag::TagSupport ts;
+          ts.evalue = row.second;
+          for (const auto& kv : sup) if (kv.second == best) ts.taxa.push_back(kv.first);
+          support.push_back(std::move(ts));
         }
+        // The taxa this spectrum counts for: by default those of its best
+        // informative tag, not the union over all reported tags (see
+        // SpeciesEvidence.h).
+        const std::set<uint32_t> taxa = FASTag::spectrumTaxa(support, ev_mode);
         if (taxa.empty()) continue;
         ++n_units;
         for (uint32_t tx : taxa) ++leaf_hits[tx];
