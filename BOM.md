@@ -58,6 +58,8 @@ texts. OpenMS's own licence and notices are in `share-OpenMS/`.
 | Spectra, peaks, precursors | `MSExperiment`, `MSSpectrum`, `Peak1D`, `Precursor` |
 | Streaming mzML reads, bounded memory | `OnDiscMSExperiment` (one reader per thread; the class is not thread-safe) |
 | CLI, INI files, logging, citations | `TOPPBase` |
+| MGF numbers (peaks, PEPMASS, CHARGE, RTINSECONDS, MSLEVEL) | `StringUtilsHelper::extractDouble` / `extractInt`, the parsers behind `StringUtils::toDouble`, which `MascotGenericFile` uses |
+| MGF and compression by file name | `FileHandler::getTypeByFileName`, `FileNameUtils::hasCompressionSuffix` / `compressionType` |
 | χ² survival function | `boost::math::chi_squared` |
 | Hypergeometric tail | `boost::math::hypergeometric_distribution` |
 
@@ -73,8 +75,16 @@ texts. OpenMS's own licence and notices are in `share-OpenMS/`.
 | Top-N peak selection | `NLargest` uses `sortByIntensity()`, an unstable sort with no secondary key. Peaks carry integer counts, so ties at the cut are common — 23% of real spectra have one — and which peak survives would depend on the standard library's sort. Peak selection provably drives tag output, so FASTag uses a total order (intensity desc, m/z desc). |
 | Spectrum graph, tag enumeration, scoring, extension | The algorithm itself. `OpenMS::Tagger` enumerates tags but returns bare strings with no scoring and no flanking masses, and expands I/L during recursion, which costs 2^k tags. |
 | Isobaric collapse rules | Derived at runtime from `ResidueDB` masses at the configured tolerance. `MassDecompositionAlgorithm` decomposes a mass into compositions, but returns unordered compositions rather than the ordered residue pairs the rules need. |
+| MGF reader (`MgfReader`) | `MascotGenericFile` only loads a whole file into memory, serially; its per-block parser is protected and bound to `std::ifstream`, and it refuses the CHARGE forms msconvert (`2+ and 3+`) and its own writer (`-3-`) emit. FASTag indexes the blocks in parallel and parses each with OpenMS's number parsers, bit-identical to `MascotGenericFile` on every field both read (`test/mgf_reader_test.cpp`). |
 | k-mer index for the FASTA filter | Application-specific; nothing equivalent in OpenMS. |
 | Taxonomy k-mer index and species calls (`TaxIndex`, `TaxStats`, `buildtaxdb`) | Application-specific; scans tags against per-taxon k-mer sets and scores enrichment with the same Boost tails already listed. |
+
+## Test data
+
+`test/fixtures/Ecoli_MS2_small.mgf` is `Ecoli_MS2_small.mzML` (OpenMS example,
+BSD-3-Clause) written as MGF by `tools/mzml_to_mgf.py` with pyteomics 5.0.2
+(Apache-2.0; used to write the fixture, not shipped or linked). Provenance and
+sha256 in `test/fixtures/README.md`.
 
 ## Provenance
 

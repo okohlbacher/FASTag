@@ -17,13 +17,47 @@ two ever disagreed the tests would catch it.
 | repeated identical runs | determinism |
 | empty / 2-peak / no-precursor / charge 0 | must not crash or fabricate |
 
-**There is deliberately no committed mzML fixture.** The local file used during
+**A committed mzML fixture must carry a real index.** The local file used during
 development (`local_indexed.mzML`) carries an `indexedmzML` wrapper *without* an
 `<indexList>`, so `openFile` returns false and the run silently takes the
 full-load path. A fixture like that makes a streaming test pass while never
-exercising streaming — it happened here. Any committed mzML fixture must be
-verified to contain a real `<indexList>`, e.g. via
-`FileConverter -write_scan_index true`.
+exercising streaming — it happened here. `test/fixtures/Ecoli_MS2_small.mzML`
+contains a real `<indexList>`; any further mzML fixture must be verified the
+same way, and written with `FileConverter -write_scan_index true` if needed.
+
+### MGF
+
+`test/fixtures/Ecoli_MS2_small.mgf` is the fixture mzML's 139 MS2 written by
+`tools/mzml_to_mgf.py` (pyteomics 5.0.2; provenance and sha256 in
+`test/fixtures/README.md`). Peaks are exact and the RT is converted by its unit
+(the fixture's is in seconds), so:
+
+- `mgf_reader_test` compares every block with OpenMS's
+  `MascotGenericFile::load`, bit for bit on peaks, precursor, charge, RT, MS
+  level, native ID and TITLE, and covers the block scan at piece sizes from
+  1 KiB to 4 MiB, the fields where FASTag differs from OpenMS on purpose, the
+  errors, and reading from 8 threads. Given MGF paths as arguments it runs the
+  OpenMS comparison on them instead (not part of ctest).
+- `mgf_cli_test` runs the binary on the mzML and the MGF and requires every TSV
+  to be identical once column 1 is cut, column 1 to be `index=<k>` for the
+  k-th MS2, 1/3/8 threads to agree, `-out_spectra` to round-trip, and checks
+  USI, `-recon_id_out`, `-digest_out`, charge-less input, subsampling and the
+  error exits.
+
+Outside ctest (data node, 2026-11-04, FASTag on this branch at 32 threads):
+
+| public input | MGF from | compared | result |
+|---|---|---|---|
+| PXD003531 `20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01` (27,345 MS2) | `tools/mzml_to_mgf.py` | gate `dda_default` and `species` arguments; `-tag_lengths 3 4 -glyco` | tags, glyco and species TSVs identical (column 1 cut) |
+| PXD014764 `20190412_KEH_HF_SA_ANW_R11_100419_CNOT_R1_f008` (30,280 MS2) | `tools/mzml_to_mgf.py` | gate `fasta_recon`; all reports and `-recon_id_out` | tags, recon and glyco identical (column 1 cut), delta identical; label, massgap and digest identical except the `run input` row (the file name) and, in digest, the metadata rows (instrument, native-ID format, ion mobility; timsTOF and scan-window rules `unknown`), with the same Trypsin call and margin; the mzid RTs of all 4,815 results identical |
+| PXD040407 `Hog1p_WT_Rep3_Chymo_5uL` (11,351 MS2) | `tools/mzml_to_mgf.py` | gate `nontryptic_ext` | tags identical (column 1 cut) |
+| PXD004541 `HF1_..._TMT10_hpHRP_DMSO1_2p5ug_4uL_fr02` (40,111 MS2) | `tools/mzml_to_mgf.py` | gate `tmt_fixed` | tags identical (column 1 cut) |
+| PXD054073 `HeLa_T2_DDA_E_A_nLC_timspro_R02` | AlphaTims MGF; its FileConverter MGF→mzML is the control | default arguments | whole tags.tsv identical, column 1 included (130,611 MS2, 4,708,932 rows) |
+| PXD003531, the JPR harness MGF (written by `fastag_bench`, whose RT ×60 is right here because the source RT is in minutes) | harness | the gate's 1.9.0 `dda_default` reference | its 27,345 TITLEs are the mzML's MS2 native IDs in order; tags identical to the reference (column 1 cut) |
+
+`mgf_reader_test <files>` found no difference from `MascotGenericFile` on
+the 130,611 blocks of the PXD054073 AlphaTims MGF and the 27,345 and 6,103
+blocks of the harness's PXD003531 and PXD000001 MGFs.
 
 ## Tier 2 — benchmark corpus (external, not in-repo)
 
