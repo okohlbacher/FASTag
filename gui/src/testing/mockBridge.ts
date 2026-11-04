@@ -52,6 +52,7 @@ export interface MockBridge extends FastagApi {
   // Recorded calls.
   runCalls: RunCall[]
   resultsQueryCalls: ResultsQueryCall[]
+  exportCalls: { path: string; view: ResultsView; columns: string[]; dest: string }[]
   speciesCalls: string[]
   cancelCalls: number
   savedLast: Record<string, unknown>[]
@@ -108,6 +109,7 @@ export function installMockBridge(): MockBridge {
     rejectNextRun: null,
     runCalls: [],
     resultsQueryCalls: [],
+    exportCalls: [],
     speciesCalls: [],
     cancelCalls: 0,
     savedLast: [],
@@ -177,6 +179,10 @@ export function installMockBridge(): MockBridge {
         rows: mock.resultsRows.slice(offset, offset + limit)
       })
     },
+    exportResults: (path, view, columns, dest) => {
+      mock.exportCalls.push({ path, view, columns, dest })
+      return Promise.resolve(mock.resultsRows.length)
+    },
     run: (params) => {
       mock.runCalls.push(params as unknown as RunCall)
       if (mock.rejectNextRun) {
@@ -190,7 +196,12 @@ export function installMockBridge(): MockBridge {
         return Promise.resolve({ started: false, reason })
       }
       mock.lastRunId = ++seq
-      const started: RunStarted = { started: true, runId: mock.lastRunId }
+      // As fastag.rs does: a relative -out is resolved against the folder of
+      // an absolute input, and the resolved path comes back as `out`.
+      const { in: inFile, out } = params as unknown as RunCall
+      const resolved =
+        out && !out.startsWith('/') && inFile.startsWith('/') ? `${inFile.slice(0, inFile.lastIndexOf('/') + 1)}${out}` : out
+      const started: RunStarted = { started: true, runId: mock.lastRunId, out: resolved, command: [mock.binaryInfo.bin, '-in', inFile, '-out', resolved] }
       if (held) return new Promise<RunStarted>((resolve) => held!.push(() => resolve(started)))
       return Promise.resolve(started)
     },

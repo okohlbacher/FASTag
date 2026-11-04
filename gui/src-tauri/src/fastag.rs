@@ -7,9 +7,9 @@
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read};
-use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
@@ -34,6 +34,13 @@ pub struct RunManager {
 pub struct CurrentRun {
     pub run_id: u64,
     pub child: Arc<Mutex<Child>>,
+    // Set by cancel() so the done event can say "cancelled" rather than
+    // "failed" (on Windows a killed child exits with code 1).
+    pub cancelled: Arc<AtomicBool>,
+    // Set by the coordinator, under the child lock, once the child is reaped:
+    // its pid (and process group id) may then be reused, so kill_run() must
+    // not signal it any more.
+    pub reaped: Arc<AtomicBool>,
 }
 
 #[derive(Serialize)]
@@ -53,6 +60,13 @@ pub struct RunStarted {
     started: bool,
     run_id: Option<u64>,
     reason: Option<String>,
+    // The -out path the CLI was actually given: a relative Output is resolved
+    // against the input's folder (see build_args), and the renderer must read
+    // the results from there, not from its own cwd.
+    out: Option<String>,
+    // The command line, binary first: the failure banner offers it to copy,
+    // so a refused run can be reproduced in a terminal.
+    command: Option<Vec<String>>,
 }
 
 #[derive(Deserialize)]
@@ -76,8 +90,12 @@ pub struct Resolved {
 }
 
 // Resolve the binary in priority order: FASTAG_BIN env override, then bundled
-// beside the app (prod resource dir, or the dev resources dir baked in at
-// compile time), then the bare name on PATH.
+// beside the app (the resource dir). Debug builds also try the dev resources
+// dir baked in at compile time, then the bare name on PATH. A release build
+// does neither: the baked-in path is the CI runner's (and on Windows would sit
+// on a drive any user can create), and a PATH lookup cannot find the Windows
+// CLI (FASTag.bat) and could pick up an unrelated binary. It reports
+// "missing" instead, which the probe turns into a clear error.
 pub fn resolve_binary(app: &AppHandle) -> Resolved {
     if let Ok(env_bin) = std::env::var("FASTAG_BIN") {
         if !env_bin.is_empty() && PathBuf::from(&env_bin).exists() {
@@ -92,7 +110,10 @@ pub fn resolve_binary(app: &AppHandle) -> Resolved {
     }
     // Dev fallback: the resources dir next to this crate (tauri dev does not
     // populate resource_dir the way a bundle does).
-    roots.push(PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/resources/fastag")));
+    if cfg!(debug_assertions) {
+        roots.push(PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/resources/fastag")));
+    }
+    let expected = roots.first().map(|r| r.join("bin").join(EXE));
     for root in roots {
         let bin = root.join("bin").join(EXE);
         if bin.exists() {
@@ -103,7 +124,10 @@ pub fn resolve_binary(app: &AppHandle) -> Resolved {
             return Resolved { bin, data, taxonomy, source: "bundled" };
         }
     }
-    Resolved { bin: PathBuf::from(EXE), data: None, taxonomy: None, source: "path" }
+    if cfg!(debug_assertions) {
+        return Resolved { bin: PathBuf::from(EXE), data: None, taxonomy: None, source: "path" };
+    }
+    Resolved { bin: expected.unwrap_or_else(|| PathBuf::from(EXE)), data: None, taxonomy: None, source: "missing" }
 }
 
 // TOPP --help prints "... Version: X.Y.Z ...". Capture the version token as
@@ -181,6 +205,18 @@ fn probe_blocking(app: &AppHandle) -> BinaryInfo {
     let r = resolve_binary(app);
     let bin_s = r.bin.display().to_string();
     let data_s = r.data.as_ref().map(|d| d.display().to_string());
+    if r.source == "missing" {
+        return BinaryInfo {
+            detail: format!(
+                "the FASTag command-line tool is not in this app ({bin_s} is missing); reinstall FASTag, or set FASTAG_BIN to the FASTag binary"
+            ),
+            bin: bin_s,
+            data_path: data_s,
+            source: r.source.into(),
+            ok: false,
+            version: None,
+        };
+    }
     let mut cmd = Command::new(&r.bin);
     cmd.arg("--help");
     no_console_window(&mut cmd);
@@ -195,12 +231,8 @@ fn probe_blocking(app: &AppHandle) -> BinaryInfo {
                 String::from_utf8_lossy(&out.stdout),
                 String::from_utf8_lossy(&out.stderr)
             );
-            let version = parse_version(&text);
-            let detail = match &version {
-                Some(v) => format!("FASTag {v} ({})", r.source),
-                None => format!("runs, version unknown ({})", r.source),
-            };
-            BinaryInfo { bin: bin_s, data_path: data_s, source: r.source.into(), ok: true, version, detail }
+            let (ok, version, detail) = probe_verdict(out.status.success(), exit_message(&out.status), &text, r.source);
+            BinaryInfo { bin: bin_s, data_path: data_s, source: r.source.into(), ok, version, detail }
         }
         Err(e) => BinaryInfo {
             bin: bin_s,
@@ -213,8 +245,106 @@ fn probe_blocking(app: &AppHandle) -> BinaryInfo {
     }
 }
 
-// In the manifest but not settable on the command line, or managed by the app.
-const NOT_SETTABLE: [&str; 8] = ["version", "log", "debug", "no_progress", "force", "test", "in", "out"];
+/// A binary works if --help succeeds or at least prints its version banner.
+/// One that aborts while loading (dyld/DLL failure, exit 134) prints neither
+/// and is not ok: reporting it ok sent the user into a run that cannot start.
+fn probe_verdict(success: bool, failure: Option<String>, text: &str, source: &str) -> (bool, Option<String>, String) {
+    let version = parse_version(text);
+    if let Some(v) = &version {
+        return (true, version.clone(), format!("FASTag {v} ({source})"));
+    }
+    if success {
+        return (true, None, format!("runs, version unknown ({source})"));
+    }
+    let why = failure.unwrap_or_else(|| "failed".into());
+    let last = text.lines().map(str::trim).rfind(|l| !l.is_empty()).unwrap_or("");
+    let last: String = last.chars().take(200).collect();
+    let detail = if last.is_empty() {
+        format!("cannot run: {why} ({source})")
+    } else {
+        format!("cannot run: {why}: {last} ({source})")
+    };
+    (false, None, detail)
+}
+
+/// Why a child that did not succeed ended, in words: a Unix signal by name
+/// (a SIGSEGV or an OOM kill otherwise read "stopped before it finished"), a
+/// Windows crash status by name, or the exit code.
+fn exit_message(status: &ExitStatus) -> Option<String> {
+    if status.success() {
+        return None;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        if let Some(sig) = status.signal() {
+            return Some(signal_text(sig));
+        }
+    }
+    let code = status.code()?;
+    #[cfg(windows)]
+    if let Some(t) = ntstatus_text(code) {
+        return Some(t);
+    }
+    Some(format!("exit code {code}"))
+}
+
+#[cfg_attr(not(unix), allow(dead_code))]
+fn signal_text(sig: i32) -> String {
+    let name = match sig {
+        1 => "SIGHUP",
+        2 => "SIGINT",
+        3 => "SIGQUIT",
+        4 => "SIGILL",
+        5 => "SIGTRAP",
+        6 => "SIGABRT",
+        #[cfg(target_os = "linux")]
+        7 => "SIGBUS",
+        #[cfg(not(target_os = "linux"))]
+        10 => "SIGBUS",
+        8 => "SIGFPE",
+        9 => "SIGKILL",
+        11 => "SIGSEGV",
+        13 => "SIGPIPE",
+        14 => "SIGALRM",
+        15 => "SIGTERM",
+        _ => "",
+    };
+    let hint = match sig {
+        9 => "; the system may have run out of memory",
+        11 => "; the program crashed",
+        _ => "",
+    };
+    if name.is_empty() {
+        format!("killed by signal {sig}")
+    } else {
+        format!("killed by signal {sig} ({name}{hint})")
+    }
+}
+
+#[cfg_attr(not(windows), allow(dead_code))]
+fn ntstatus_text(code: i32) -> Option<String> {
+    let c = code as u32;
+    if c < 0xC000_0000 {
+        return None;
+    }
+    let name = match c {
+        0xC000_0005 => "access violation; the program crashed",
+        0xC000_0017 | 0xC000_009A => "out of memory",
+        0xC000_00FD => "stack overflow",
+        0xC000_0135 => "a required DLL was not found",
+        0xC000_013A => "interrupted",
+        0xC000_0409 => "aborted",
+        _ => "crashed",
+    };
+    Some(format!("exit status 0x{c:08X} ({name})"))
+}
+
+// In the manifest but not settable on the command line, or managed by the app:
+// -progress is always added by build_args, and -stream (stdin/stdout protocol)
+// cannot work from the GUI, which gives the child no stdin.
+const NOT_SETTABLE: [&str; 10] =
+    ["version", "log", "debug", "no_progress", "force", "test", "in", "out", "progress", "stream"];
 
 // The key allowlist alone is not the whole trust boundary: a VALUE beginning
 // with '-' would be re-parsed by the CLI as a fresh option (OpenMS treats any
@@ -228,6 +358,30 @@ fn looks_like_flag(s: &str) -> bool {
 
 fn defang_path(p: &str) -> String {
     if looks_like_flag(p) { format!("./{p}") } else { p.to_string() }
+}
+
+/// The folder relative paths are resolved against: the input's own folder,
+/// when the input is an absolute path. A Finder-launched app runs with cwd
+/// "/", so a bare Output name like "tags.tsv" could not be written.
+fn base_dir(input: &str) -> Option<PathBuf> {
+    let p = Path::new(input);
+    if !p.is_absolute() {
+        return None;
+    }
+    p.parent().filter(|d| !d.as_os_str().is_empty()).map(Path::to_path_buf)
+}
+
+/// A file-typed value: made absolute against @p base when relative (which
+/// also defuses a leading '-'), else defanged with "./".
+fn file_arg(p: &str, base: Option<&Path>) -> String {
+    match base {
+        Some(b) if !p.is_empty() && !Path::new(p).is_absolute() => b.join(p).display().to_string(),
+        _ => defang_path(p),
+    }
+}
+
+fn is_file_type(t: &str) -> bool {
+    t == "input-file" || t == "output-file"
 }
 
 fn value_to_scalar(v: &Value) -> Option<String> {
@@ -265,8 +419,10 @@ fn build_args(p: &RunParams) -> Vec<String> {
         }
     }
 
+    let base = base_dir(&p.input);
+    let base = base.as_deref();
     let mut args: Vec<String> =
-        vec!["-in".into(), defang_path(&p.input), "-out".into(), defang_path(&p.out)];
+        vec!["-in".into(), defang_path(&p.input), "-out".into(), file_arg(&p.out, base)];
 
     for (name, value) in &p.params {
         let Some(t) = types.get(name) else { continue };
@@ -310,6 +466,13 @@ fn build_args(p: &RunParams) -> Vec<String> {
         if s.is_empty() {
             continue; // unset optional (an empty path is not "no path")
         }
+        if is_file_type(t) {
+            // A dash-leading file name is a real file name, not an option:
+            // dropping it ran an unfiltered search for -fasta "-db.fasta".
+            args.push(format!("-{name}"));
+            args.push(file_arg(&s, base));
+            continue;
+        }
         if looks_like_flag(&s) {
             continue; // would be re-parsed as an option — hostile, drop it
         }
@@ -320,6 +483,14 @@ fn build_args(p: &RunParams) -> Vec<String> {
     // The GUI always wants machine-readable progress.
     args.push("-progress".into());
     args
+}
+
+/// build_args for a run request as the renderer sends it (JSON), for the
+/// end-to-end CLI tests (examples/build_args.rs), so they run the shipped
+/// argv code rather than a copy of it.
+pub fn build_args_json(json: &str) -> Result<Vec<String>, String> {
+    let p: RunParams = serde_json::from_str(json).map_err(|e| e.to_string())?;
+    Ok(build_args(&p))
 }
 
 const PROGRESS_PREFIX: &str = "FASTAG_PROGRESS ";
@@ -379,13 +550,27 @@ pub fn run(app: AppHandle, state: State<'_, RunManager>, params: RunParams) -> R
     {
         let cur = state.current.lock().unwrap();
         if cur.is_some() {
-            return RunStarted { started: false, run_id: None, reason: Some("a run is already in progress".into()) };
+            return RunStarted {
+                started: false,
+                run_id: None,
+                reason: Some("a run is already in progress".into()),
+                out: None,
+                command: None,
+            };
         }
     }
     let r = resolve_binary(&app);
     let args = build_args(&params);
+    let command: Vec<String> = std::iter::once(r.bin.display().to_string()).chain(args.iter().cloned()).collect();
     let mut cmd = Command::new(&r.bin);
-    cmd.args(&args).stdout(Stdio::piped()).stderr(Stdio::piped());
+    // stdin is null: the CLI never reads it, and an inherited one could block.
+    cmd.args(&args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    // Anything still relative (e.g. a path the CLI derives itself) lands next
+    // to the input, not in the app's cwd ("/" for a Finder launch).
+    if let Some(d) = base_dir(&params.input).filter(|d| d.is_dir()) {
+        cmd.current_dir(d);
+    }
+    new_process_group(&mut cmd);
     if let Some(d) = &r.data {
         cmd.env("OPENMS_DATA_PATH", d);
     }
@@ -401,14 +586,29 @@ pub fn run(app: AppHandle, state: State<'_, RunManager>, params: RunParams) -> R
         Ok(c) => c,
         // A spawn failure is known synchronously: report it as a non-start so
         // the frontend surfaces "could not start" and settles cleanly.
-        Err(e) => return RunStarted { started: false, run_id: None, reason: Some(format!("cannot start: {e}")) },
+        Err(e) => {
+            return RunStarted {
+                started: false,
+                run_id: None,
+                reason: Some(format!("cannot start: {e}")),
+                out: None,
+                command: None,
+            }
+        }
     };
 
     let run_id = state.seq.fetch_add(1, Ordering::SeqCst) + 1;
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
     let child_arc = Arc::new(Mutex::new(child));
-    *state.current.lock().unwrap() = Some(CurrentRun { run_id, child: child_arc.clone() });
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let reaped = Arc::new(AtomicBool::new(false));
+    *state.current.lock().unwrap() = Some(CurrentRun {
+        run_id,
+        child: child_arc.clone(),
+        cancelled: cancelled.clone(),
+        reaped: reaped.clone(),
+    });
 
     // One reader thread per stream (stderr carries the progress contract; stdout
     // is drained as log so a full pipe can never block the child).
@@ -434,12 +634,17 @@ pub fn run(app: AppHandle, state: State<'_, RunManager>, params: RunParams) -> R
         let _ = t_out.join();
         let status = {
             let mut c = child_arc.lock().unwrap();
-            c.wait()
+            let s = c.wait();
+            reaped.store(true, Ordering::SeqCst);
+            s
         };
-        let (ok, code) = match status {
-            Ok(s) => (s.success(), s.code()),
-            Err(_) => (false, None),
+        let (ok, code, message) = match &status {
+            Ok(s) => (s.success(), s.code(), exit_message(s)),
+            Err(e) => (false, None, Some(format!("lost track of the process: {e}"))),
         };
+        // A cancel that lost the race to a clean exit is not a cancellation.
+        let was_cancelled = !ok && cancelled.load(Ordering::SeqCst);
+        let message = if was_cancelled { Some("cancelled".to_string()) } else { message };
         {
             let st = a_done.state::<RunManager>();
             let mut cur = st.current.lock().unwrap();
@@ -449,24 +654,91 @@ pub fn run(app: AppHandle, state: State<'_, RunManager>, params: RunParams) -> R
         }
         let _ = a_done.emit(
             "fastag:done",
-            serde_json::json!({ "runId": run_id, "ok": ok, "code": code, "message": Value::Null }),
+            serde_json::json!({
+                "runId": run_id,
+                "ok": ok,
+                "code": code,
+                "message": message,
+                "cancelled": was_cancelled,
+            }),
         );
     });
 
-    RunStarted { started: true, run_id: Some(run_id), reason: None }
+    let out = args.get(3).cloned();
+    RunStarted { started: true, run_id: Some(run_id), reason: None, out, command: Some(command) }
+}
+
+/// Unix: start the child as the leader of its own process group, so a kill
+/// reaches anything it spawned (a wrapper script's real binary). Killing only
+/// the direct child left the worker running with the pipes open, and the UI
+/// stuck on "Running…".
+fn new_process_group(cmd: &mut Command) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+    #[cfg(not(unix))]
+    let _ = cmd;
+}
+
+#[cfg(unix)]
+extern "C" {
+    fn kill(pid: i32, sig: i32) -> i32;
+}
+
+/// Kill a run's child and everything it started. Returns false when there was
+/// nothing left to kill (already reaped, or already cancelled once).
+pub fn kill_run(run: &CurrentRun, cancel: bool) -> bool {
+    if cancel && run.cancelled.swap(true, Ordering::SeqCst) {
+        return false; // a second click: the first kill is already under way
+    }
+    let Ok(mut child) = run.child.lock() else { return false };
+    if run.reaped.load(Ordering::SeqCst) {
+        return false; // its pid may already belong to another process
+    }
+    let pid = child.id();
+    #[cfg(unix)]
+    if let Ok(pgid) = i32::try_from(pid) {
+        // The child leads its own group (new_process_group): signal the group.
+        // SAFETY: kill(2) with a negative pid only sends a signal.
+        unsafe {
+            kill(-pgid, 9);
+        }
+    }
+    #[cfg(windows)]
+    {
+        // A .bat wrapper runs the real exe as a grandchild that TerminateProcess
+        // on cmd.exe does not reach: end the whole tree.
+        let taskkill = std::env::var_os("SystemRoot")
+            .map(|r| PathBuf::from(r).join("System32").join("taskkill.exe"))
+            .unwrap_or_else(|| PathBuf::from("taskkill.exe"));
+        let mut tk = Command::new(taskkill);
+        tk.args(["/T", "/F", "/PID", &pid.to_string()])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        no_console_window(&mut tk);
+        let _ = tk.status();
+    }
+    let _ = child.kill(); // the coordinator reaps and emits done
+    true
+}
+
+/// Kill the in-flight run, if any (window closed, app quitting).
+pub fn kill_current(app: &AppHandle) {
+    let st = app.state::<RunManager>();
+    let cur = st.current.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(run) = cur.as_ref() {
+        kill_run(run, false);
+    }
 }
 
 #[tauri::command]
 pub fn cancel(state: State<'_, RunManager>) -> Value {
     let cur = state.current.lock().unwrap();
-    if let Some(run) = cur.as_ref() {
-        if let Ok(mut child) = run.child.lock() {
-            let _ = child.kill(); // SIGKILL; the coordinator reaps and emits done
-        }
-        serde_json::json!({ "cancelled": true })
-    } else {
-        serde_json::json!({ "cancelled": false })
-    }
+    let cancelled = cur.as_ref().is_some_and(|run| kill_run(run, true));
+    serde_json::json!({ "cancelled": cancelled })
 }
 
 #[cfg(test)]
@@ -550,6 +822,106 @@ mod tests {
         // A list whose default is empty is still left out when empty.
         let b = build_args(&rp(r#"{"in":"i","out":"o","params":{"variable_modifications":[""]}}"#));
         assert!(!b.contains(&"-variable_modifications".to_string()));
+    }
+
+    #[test]
+    fn build_args_keeps_dash_leading_file_names() {
+        // m17: -fasta "-db.fasta" vanished and the run went unfiltered.
+        let a = build_args(&rp(r#"{"in":"i","out":"o","params":{"fasta":"-db.fasta","digest_out":"-a.digest.tsv"}}"#));
+        let i = a.iter().position(|s| s == "-fasta").expect("-fasta kept");
+        assert_eq!(a[i + 1], "./-db.fasta");
+        let j = a.iter().position(|s| s == "-digest_out").expect("-digest_out kept");
+        assert_eq!(a[j + 1], "./-a.digest.tsv");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn build_args_resolves_relative_paths_against_the_input_folder() {
+        // m5: a Finder launch has cwd "/", so a bare "run.tags.tsv" failed.
+        let a = build_args(&rp(
+            r#"{"in":"/d/a.mzML","out":"run.tags.tsv","params":{"fasta":"-db.fasta","species_out":"/abs/s.tsv","species_rank":"-x"}}"#,
+        ));
+        assert_eq!(&a[..4], ["-in", "/d/a.mzML", "-out", "/d/run.tags.tsv"]);
+        let i = a.iter().position(|s| s == "-fasta").unwrap();
+        assert_eq!(a[i + 1], "/d/-db.fasta");
+        let j = a.iter().position(|s| s == "-species_out").unwrap();
+        assert_eq!(a[j + 1], "/abs/s.tsv");
+        assert!(!a.contains(&"-species_rank".to_string()), "non-file values still drop a flag");
+        // An absolute out is left alone; an empty one stays empty.
+        assert_eq!(build_args(&rp(r#"{"in":"/d/a.mzML","out":"/o/t.tsv"}"#))[3], "/o/t.tsv");
+        assert_eq!(build_args(&rp(r#"{"in":"/d/a.mzML","out":""}"#))[3], "");
+    }
+
+    #[test]
+    fn build_args_progress_and_stream_are_app_managed() {
+        // m36: the renderer could add -stream and a second -progress.
+        let a = build_args(&rp(r#"{"in":"i","out":"o","params":{"stream":true,"progress":true}}"#));
+        assert_eq!(a, vec!["-in", "i", "-out", "o", "-progress"]);
+    }
+
+    #[test]
+    fn probe_verdict_needs_success_or_a_version() {
+        // m29: a binary aborting in dyld (exit 134, no banner) was "ok".
+        let (ok, v, d) = probe_verdict(false, Some("killed by signal 6 (SIGABRT)".into()), "dyld: Library not loaded: @rpath/libOpenMS.dylib\n", "bundled");
+        assert!(!ok);
+        assert_eq!(v, None);
+        assert!(d.contains("SIGABRT") && d.contains("libOpenMS"), "{d}");
+        assert!(probe_verdict(true, None, "no banner", "env").0);
+        let (ok, v, _) = probe_verdict(false, Some("exit code 1".into()), "Version: 1.9.0 Jan", "path");
+        assert!(ok);
+        assert_eq!(v.as_deref(), Some("1.9.0"));
+    }
+
+    #[test]
+    fn crash_texts_name_the_cause() {
+        // m34: a SIGSEGV or OOM kill read "stopped before it finished".
+        assert!(signal_text(11).contains("SIGSEGV"));
+        assert!(signal_text(9).contains("out of memory"));
+        assert_eq!(signal_text(64), "killed by signal 64");
+        assert_eq!(ntstatus_text(1), None);
+        assert!(ntstatus_text(0xC000_0005_u32 as i32).unwrap().contains("0xC0000005"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn exit_message_reads_the_signal() {
+        let st = Command::new("sh").args(["-c", "kill -SEGV $$"]).status().unwrap();
+        assert!(exit_message(&st).unwrap().contains("SIGSEGV"));
+        let st = Command::new("sh").args(["-c", "exit 5"]).status().unwrap();
+        assert_eq!(exit_message(&st).as_deref(), Some("exit code 5"));
+        let st = Command::new("sh").args(["-c", "exit 0"]).status().unwrap();
+        assert_eq!(exit_message(&st), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cancel_kills_the_whole_process_group_once() {
+        // m27: through a wrapper the worker survived the kill and kept the
+        // pipes open, so the run never ended. m3: a second cancel is a no-op.
+        let mut cmd = Command::new("sh");
+        cmd.args(["-c", "sleep 30 & wait"]).stdin(Stdio::null()).stdout(Stdio::piped());
+        new_process_group(&mut cmd);
+        let mut child = cmd.spawn().unwrap();
+        let mut stdout = child.stdout.take().unwrap();
+        let run = CurrentRun {
+            run_id: 1,
+            child: Arc::new(Mutex::new(child)),
+            cancelled: Arc::new(AtomicBool::new(false)),
+            reaped: Arc::new(AtomicBool::new(false)),
+        };
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let mut sink = Vec::new();
+            let _ = stdout.read_to_end(&mut sink);
+            let _ = tx.send(());
+        });
+        assert!(kill_run(&run, true));
+        assert!(!kill_run(&run, true), "second cancel does nothing");
+        assert!(rx.recv_timeout(std::time::Duration::from_secs(5)).is_ok(), "grandchild still holds the pipe");
+        let st = run.child.lock().unwrap().wait().unwrap();
+        run.reaped.store(true, Ordering::SeqCst);
+        assert!(!st.success());
+        assert!(!kill_run(&run, false), "a reaped child is never signalled");
     }
 
     #[test]

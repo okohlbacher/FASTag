@@ -3,7 +3,7 @@
 
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import ResultsTable from './ResultsTable'
+import ResultsTable, { autoWidths, columnLabel } from './ResultsTable'
 import { installMockBridge } from './testing/mockBridge'
 
 const flush = (): Promise<void> => act(async () => {})
@@ -26,30 +26,57 @@ const clickIn = (el: Element): Promise<void> =>
 describe('ResultsTable', () => {
   it('renders header-driven columns, rows and the status line', async () => {
     const mock = await renderTable()
-    await screen.findByText('matched 3 of 3 rows')
-    for (const c of mock.resultsColumns) expect(screen.getByRole('button', { name: c })).toBeDefined()
+    await screen.findByText('Showing 3 of 3')
+    // Headers in words, not the TSV names.
+    for (const c of mock.resultsColumns) expect(screen.getByRole('button', { name: columnLabel(c) })).toBeDefined()
+    expect(screen.getAllByRole('columnheader').map((h) => h.getAttribute('aria-label'))).toEqual([
+      'Spectrum',
+      'Tag',
+      'Length',
+      'E-value',
+      'Database hit'
+    ])
     expect(screen.getByText('AQRQAAN')).toBeDefined()
     expect(screen.getByText('LNDLAAK')).toBeDefined()
     expect(mock.resultsQueryCalls[0]).toMatchObject({ path: '/d/x.tags.tsv', offset: 0 })
   })
 
-  it('header clicks cycle sort asc, desc, off', async () => {
+  it('opens sorted by E-value ascending; header clicks cycle sort desc, off, asc', async () => {
     const mock = await renderTable()
-    await screen.findByText('matched 3 of 3 rows')
-    const header = (): HTMLElement => screen.getByRole('button', { name: /^evalue/ })
-    await clickIn(header())
-    expect(lastCall(mock)?.view.sort).toEqual({ column: 'evalue', desc: false })
+    await screen.findByText('Showing 3 of 3')
+    expect(mock.resultsQueryCalls[0].view.sort).toEqual({ column: 'evalue', desc: false })
+    expect(screen.getAllByRole('columnheader').find((h) => h.getAttribute('aria-label') === 'E-value')?.getAttribute('aria-sort')).toBe(
+      'ascending'
+    )
+    const header = (): HTMLElement => screen.getByRole('button', { name: /^E-value/ })
     await clickIn(header())
     expect(lastCall(mock)?.view.sort).toEqual({ column: 'evalue', desc: true })
     await clickIn(header())
     expect(lastCall(mock)?.view.sort).toBeNull()
+    await clickIn(header())
+    expect(lastCall(mock)?.view.sort).toEqual({ column: 'evalue', desc: false })
+  })
+
+  it('fits the default tags columns in about 840 px, and words the hits as the filter does', async () => {
+    // The columns and the longest values of the review's 1280x820 fixture.
+    const cols = ['spectrum', 'tag', 'length', 'nterm_mass', 'cterm_mass', 'evalue', 'fasta_hit']
+    const w = autoWidths(cols, [['controllerType=0 controllerNumber=1 scan=11482', 'ADGWAQ', '6', '1234.5678', '1234.5678', '4.17e-08', 'efwd']])
+    expect(Object.values(w).reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(838)
+    const mock = installMockBridge()
+    mock.resultsColumns = ['spectrum', 'fasta_hit']
+    mock.resultsRows = [['a', 'fwd'], ['b', 'erev'], ['c', '-']]
+    render(<ResultsTable path="/d/y.tags.tsv" />)
+    await flush()
+    expect(screen.getByRole('cell', { name: 'fwd' }).textContent).toBe('Target')
+    expect(screen.getByRole('cell', { name: 'erev' }).textContent).toBe('Entrapment')
+    expect(screen.getByRole('cell', { name: '-' }).textContent).toBe('No hit')
   })
 
   it('filters commit on Enter, not per keystroke', async () => {
     const mock = await renderTable()
-    await screen.findByText('matched 3 of 3 rows')
+    await screen.findByText('Showing 3 of 3')
     const before = mock.resultsQueryCalls.length
-    const input = screen.getByPlaceholderText(/spectrum contains/)
+    const input = screen.getByLabelText('Spectrum contains')
     await act(async () => {
       fireEvent.change(input, { target: { value: 'frame=5' } })
     })
@@ -59,7 +86,7 @@ describe('ResultsTable', () => {
     })
     expect(lastCall(mock)?.view.spectrum).toBe('frame=5')
 
-    const evalue = screen.getByPlaceholderText('max evalue')
+    const evalue = screen.getByLabelText('Max. E-value')
     await act(async () => {
       fireEvent.change(evalue, { target: { value: '1e-3' } })
       fireEvent.blur(evalue)
@@ -73,10 +100,10 @@ describe('ResultsTable', () => {
     mock.resultsRows = [['1', '2']]
     render(<ResultsTable path="/d/x.tsv" />)
     await flush()
-    await screen.findByText('matched 1 of 1 rows')
-    expect(screen.queryByPlaceholderText(/spectrum contains/)).toBeNull()
-    expect(screen.queryByPlaceholderText('min length')).toBeNull()
-    expect(screen.queryByPlaceholderText('max evalue')).toBeNull()
+    await screen.findByText('Showing 1 of 1')
+    expect(screen.queryByLabelText('Spectrum contains')).toBeNull()
+    expect(screen.queryByLabelText('Min. length')).toBeNull()
+    expect(screen.queryByLabelText('Max. E-value')).toBeNull()
     expect(screen.queryByTitle('fasta_hit filter')).toBeNull()
   })
 
@@ -87,5 +114,38 @@ describe('ResultsTable', () => {
     await flush()
     await screen.findByText(/Cannot read results: cannot open/)
     expect(mock.resultsQueryCalls).toHaveLength(1)
+  })
+
+  it('filters fasta_hit with a segmented control, and draws a small E-value as a × 10^n', async () => {
+    const mock = installMockBridge()
+    mock.resultsColumns = ['spectrum', 'tag', 'evalue', 'fasta_hit']
+    mock.resultsRows = [['scan=1', 'PEPTIDE', '4.17011e-08', 'efwd']]
+    render(<ResultsTable path="/d/x.tags.tsv" />)
+    await flush()
+    const cell = screen.getByRole('cell', { name: '4.17011e-08' })
+    expect(cell.textContent).toBe('4.2 × 10−8')
+    expect(cell.className).toContain(' n') // numeric: right-aligned
+    const ent = screen.getByRole('button', { name: 'Entrapment' })
+    await clickIn(ent)
+    expect(ent.getAttribute('aria-pressed')).toBe('true')
+    expect(lastCall(mock).view.fastaHit).toBe('entrapment')
+    await clickIn(screen.getByRole('button', { name: 'All' }))
+    expect(lastCall(mock).view.fastaHit).toBeNull()
+  })
+
+  it('Columns… hides a column, and Export shown rows… writes the view in the shown columns', async () => {
+    const mock = await renderTable()
+    await screen.findByText('Showing 3 of 3')
+    await clickIn(screen.getByRole('button', { name: 'Columns…' }))
+    await clickIn(screen.getByRole('checkbox', { name: 'length' }))
+    expect(screen.queryByRole('button', { name: 'Length' })).toBeNull()
+    await clickIn(screen.getByRole('button', { name: 'Target' }))
+    mock.nextPickOutput = '/d/x.shown.tsv'
+    await clickIn(screen.getByRole('button', { name: 'Export shown rows…' }))
+    expect(mock.exportCalls).toEqual([
+      { path: '/d/x.tags.tsv', view: lastCall(mock).view, columns: ['spectrum', 'tag', 'evalue', 'fasta_hit'], dest: '/d/x.shown.tsv' }
+    ])
+    expect(mock.exportCalls[0].view.fastaHit).toBe('only')
+    expect(screen.getByText('Wrote 3 rows to /d/x.shown.tsv.')).toBeDefined()
   })
 })

@@ -6,9 +6,10 @@
 // a human judgement about which knobs belong together and which are inert
 // unless another one is set.
 //
-// TOPP's own advanced="true" flag is not usable for this split -- it marks only
-// TOPPBase boilerplate (log, debug, force, test, ...) and leaves every FASTag
-// parameter, including deep internals like gap_penalty, marked non-advanced.
+// TOPP's own advanced="true" flag is not used for this split: it marks the
+// TOPPBase boilerplate (log, debug, force, test, ...) and 14 FASTag options
+// (digest_*, massgap_*, mzpeak_read_memory), yet leaves deep internals like
+// gap_penalty non-advanced. The manifest keeps it as `toppAdvanced`.
 
 import manifest from './params.generated.json'
 
@@ -24,15 +25,19 @@ export interface ParamSpec {
   choices?: string[]
   /// File extensions the CLI declares for a file parameter (no dot).
   formats?: string[]
+  /// For a string-list: the type of each item as the CLI declares it ("int"
+  /// for tag_lengths). min/max then bound each item.
+  itemType?: string
 }
 
-// UI overlays: the manifest is a faithful dump of the tool, but a few string
-// params have a known small set of valid values the tool does not itself
-// declare as restrictions. Turning them into a dropdown keeps the user from
-// typing a rank the rollup can't resolve.
+// UI overlays: the manifest is a faithful dump of the tool, but species_rank
+// has a known small set of useful values the tool does not itself declare as
+// restrictions. The CLI accepts any rank and reports nothing for one the bundled
+// taxonomy lacks, so the list holds only ranks its nodes.dmp has: NCBI names the
+// top rank `domain` there, and `superkingdom` gives an empty report.
+// Options the tool does restrict (orientation) take the manifest's choices.
 const CHOICES: Record<string, string[]> = {
-  species_rank: ['species', 'genus', 'family', 'order', 'class', 'phylum', 'kingdom', 'superkingdom'],
-  orientation: ['both', 'forward', 'reverse']
+  species_rank: ['species', 'genus', 'family', 'order', 'class', 'phylum', 'kingdom', 'domain']
 }
 
 // TOPPBase registers -threads itself with default 1, and FASTag applies its
@@ -83,8 +88,7 @@ export const SECTIONS: Section[] = [
       'peaks_per_window',
       'subsample_spectra',
       'subsample_fraction',
-      'subsample_seed',
-      'mzpeak_read_memory'
+      'subsample_seed'
     ]
   },
   {
@@ -204,6 +208,9 @@ export const SECTIONS: Section[] = [
 export interface Dependency {
   /// The parameter that has to be set, or a list of which any one will do.
   on: string | string[]
+  /// Inverted: the parameter is inert while any of `on` IS set, because that
+  /// one replaces it (tag_lengths replaces tag_length).
+  replaced?: true
   /// Shown in place of the field's help when unmet. Phrased as the consequence,
   /// not the rule: a user wants to know what would happen, not what to obey.
   note: string
@@ -213,11 +220,16 @@ export const DEPENDS: Record<string, Dependency[]> = {
   // -gaps 0 means no gapped tags exist, so nothing can be penalised.
   gap_penalty: [{ on: 'gaps', note: 'only applies when tags may cross a gap' }],
 
-  // Every one of these is read only when the fasta filter runs.
+  // The CLI warns "tag_length N is ignored: tag_lengths replaces it".
+  tag_length: [{ on: 'tag_lengths', replaced: true, note: 'tag_lengths replaces it' }],
+
+  // Read only when the fasta filter runs.
   entrapment_fasta: [{ on: 'fasta', note: 'the entrapment database is scored against the same filter' }],
-  orientation: [{ on: 'fasta', note: 'only affects matching against a sequence database' }],
-  isobaric_tolerance: [{ on: 'fasta', note: 'only affects matching against a sequence database' }],
   min_filter_length: [{ on: 'fasta', note: 'only affects matching against a sequence database' }],
+  // Read by the fasta filter AND by reconciliation (FASTag.cpp: TagReconciler
+  // takes the orientation, the proteome index the isobaric tolerance).
+  orientation: [{ on: ['fasta', 'recon_out'], note: 'only affects matching against fasta and reconciliation' }],
+  isobaric_tolerance: [{ on: ['fasta', 'recon_out'], note: 'only affects matching against fasta and reconciliation' }],
 
   species_rank: [{ on: 'species', note: 'species detection is off' }],
   species_min_len: [{ on: 'species', note: 'species detection is off' }],
@@ -275,30 +287,76 @@ export const DEPENDS: Record<string, Dependency[]> = {
 }
 
 /// "Set" for dependency purposes: a checked box, a non-zero number, a non-empty
-/// path. This is the same test the tool applies -- every master here treats its
-/// default (false / 0 / "") as off.
+/// path or list. This is the same test the tool applies -- every master here
+/// treats its default (false / 0 / "") as off.
+///
+/// An empty field is not sent, so the CLI applies its own default: a cleared
+/// `gaps` runs with gaps 1. It is therefore read as the manifest default.
 export function isActive(name: string, values: Record<string, unknown>): boolean {
   const v = values[name]
   if (typeof v === 'boolean') return v
-  const s = String(v ?? '').trim()
-  if (s === '') return false
+  let s = (Array.isArray(v) ? v.filter((x) => String(x).trim() !== '').join(',') : String(v ?? '')).trim()
+  if (s === '') {
+    const d = PARAM_BY_NAME.get(name)?.default ?? ''
+    s = (Array.isArray(d) ? d.join(',') : d).trim()
+  }
+  if (s === '' || s === 'false') return false
+  if (s === 'true') return true
   const n = Number(s)
   return Number.isNaN(n) ? true : n !== 0
 }
 
-/// Why @p name is inert right now, or null if it is live. Returns the FIRST
-/// unmet dependency: naming one thing to fix beats listing two.
-export function inertBecause(name: string, values: Record<string, unknown>): string | null {
+/// The FIRST unmet dependency of @p name right now, or null if it is live:
+/// naming one thing to fix beats listing two.
+export function inertDependency(name: string, values: Record<string, unknown>): Dependency | null {
   for (const d of DEPENDS[name] ?? []) {
-    const any = Array.isArray(d.on) ? d.on : [d.on]
-    if (!any.some((n) => isActive(n, values))) return d.note
+    const set = masters(d).some((n) => isActive(n, values))
+    if (d.replaced ? set : !set) return d
   }
   return null
+}
+
+/// Why @p name is inert right now, or null if it is live.
+export function inertBecause(name: string, values: Record<string, unknown>): string | null {
+  return inertDependency(name, values)?.note ?? null
 }
 
 /// Masters named by a dependency, flattened.
 export function masters(d: Dependency): string[] {
   return Array.isArray(d.on) ? d.on : [d.on]
+}
+
+/// A value and its unit are one control: the unit parameter is drawn inside
+/// the value's field, not as a field of its own.
+export const UNIT_OF: Record<string, string> = { fragment_tolerance: 'fragment_tolerance_unit' }
+export const UNIT_PARAMS = new Set(Object.values(UNIT_OF))
+
+/// The CLI name in words, for the label beside it: tag_length -> Tag length.
+export function humanName(name: string): string {
+  const s = name.replace(/_/g, ' ')
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
+const listText = (v: unknown): string =>
+  (Array.isArray(v) ? v.map((x) => String(x).trim()).filter((x) => x !== '').join('\n') : String(v ?? '').trim())
+
+/// The manifest default as the form shows it: off for a switch, "not set" for
+/// an empty one.
+export function defaultText(spec: ParamSpec): string {
+  if (spec.type === 'bool') return spec.default === 'true' ? 'on' : 'off'
+  const d = listText(spec.default).replace(/\n/g, ', ')
+  return d === '' ? 'not set' : d
+}
+
+/// The value differs from the CLI default. An empty field is not sent, so the
+/// CLI applies its default: it is unchanged.
+export function isChanged(name: string, value: unknown): boolean {
+  const spec = PARAM_BY_NAME.get(name)
+  if (!spec) return false
+  if (spec.type === 'bool') return (value === true) !== (spec.default === 'true')
+  const v = listText(value)
+  if (v === '' && spec.type !== 'string-list') return false
+  return v !== listText(spec.default)
 }
 
 /// Deliberately not rendered, each for a stated reason. Listing them (rather
@@ -313,7 +371,8 @@ export const HIDDEN: Record<string, string> = {
   no_progress: 'TOPP boilerplate; unrelated to -progress',
   force: 'TOPP boilerplate',
   test: 'TOPP boilerplate',
-  stream: 'stdin/stdout resident mode; meaningless under a GUI'
+  stream: 'stdin/stdout resident mode; meaningless under a GUI',
+  mzpeak_read_memory: 'ignored by the CLI: mzPeak is read in file order without a decode cache'
 }
 
 /// The parameters actually shown, and so the only ones a run may send. HIDDEN
@@ -339,4 +398,157 @@ export function unknownParams(): string[] {
     ...Object.keys(DEPENDS),
     ...SECTIONS.flatMap((s) => (s.master ? [s.master] : []))
   ].filter((n) => !PARAM_BY_NAME.has(n))
+}
+
+// ---------------------------------------------------------------------------
+// Values the CLI would refuse.
+//
+// A number field is a text field: <input type=number> turns `0,02` into `002`
+// under an English WebKit locale and sends '' for a half-typed `5e`, which the
+// CLI then replaces by its default. So the text is checked here, the way the
+// CLI parses it, and a value it would refuse is flagged instead of sent.
+
+// A leading '+' is accepted, as the CLI accepts it (-max_peaks +400).
+const INT = /^[+-]?\d+$/
+const DOUBLE = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/
+// TOPP options are C++ ints.
+const INT_LIMIT = 2147483647
+
+// Options whose declared minimum is a tiny floor standing for "greater than 0"
+// (fragment_tolerance: 1e-9). 0 and negatives are reported as such rather than
+// as "must be at least 1e-9".
+const POSITIVE = new Set(['fragment_tolerance'])
+
+function badNumber(type: string, s: string, min?: number, max?: number): string | null {
+  if (type === 'int') {
+    if (!INT.test(s)) return 'a whole number is required'
+  } else if (s.includes(',') && DOUBLE.test(s.replace(',', '.'))) {
+    // Rejected rather than converted: `1,500` may mean 1500.
+    return 'use a decimal point, not a comma'
+  } else if (!DOUBLE.test(s)) {
+    return 'not a number'
+  }
+  const n = Number(s)
+  if (type === 'int' && Math.abs(n) > INT_LIMIT) return 'too large'
+  if (min !== undefined && n < min) return `must be at least ${min}`
+  if (max !== undefined && n > max) return `must be at most ${max}`
+  return null
+}
+
+/// Why the CLI would refuse @p value for @p spec, or null. An empty field is
+/// always fine: it is not sent, and the CLI applies its default.
+export function invalidBecause(spec: ParamSpec, value: unknown): string | null {
+  if (spec.type === 'string-list') {
+    if (spec.itemType !== 'int' && spec.itemType !== 'double') return null
+    const items = Array.isArray(value) ? value.map((x) => String(x).trim()) : []
+    for (const item of items) {
+      if (item === '') continue
+      // `7, 8` on one line is one argv item, which the CLI cannot convert.
+      if (/[\s,;]/.test(item)) return 'one value per line'
+      const bad = badNumber(spec.itemType, item, spec.min, spec.max)
+      if (bad) return `${item}: ${bad}`
+    }
+    return null
+  }
+  const s = typeof value === 'boolean' ? '' : String(value ?? '').trim()
+  if (s === '') return null
+  if (spec.choices?.length && !spec.choices.includes(s)) return `not one of ${spec.choices.join(', ')}`
+  if (spec.type === 'int' || spec.type === 'double') {
+    const positive = POSITIVE.has(spec.name)
+    const bad = badNumber(spec.type, s, positive ? undefined : spec.min, spec.max)
+    if (bad) return bad
+    if (positive) {
+      const n = Number(s)
+      if (!(n > 0)) return 'must be greater than 0'
+      if (spec.min !== undefined && n < spec.min) return `must be at least ${spec.min}`
+    }
+  }
+  return null
+}
+
+/// Every rendered, live parameter whose value the CLI would refuse, with the
+/// reason. An inert one is not sent, so it cannot fail the run. Run should stay
+/// disabled while this is non-empty.
+export function invalidParams(values: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const name of RENDERED) {
+    const spec = PARAM_BY_NAME.get(name)
+    if (!spec || inertBecause(name, values)) continue
+    const bad = invalidBecause(spec, values[name])
+    if (bad) out[name] = bad
+  }
+  return out
+}
+
+// ---------------------------------------------------------------------------
+// Combinations the CLI refuses up front (FASTag.cpp, before reading any
+// spectrum), each with rc 6. Every value here is valid on its own, so the
+// field checks above cannot see them.
+
+/// What a preflight check may need beyond the form: the k of the species
+/// index, read from its header (taxdb_info), null while unknown.
+export interface PreflightContext {
+  taxdbK?: number | null
+}
+
+export interface Conflict {
+  /// The parameters involved, CLI names. The first is the one to change.
+  params: string[]
+  /// Why the CLI would refuse, phrased like the CLI's own message.
+  note: string
+}
+
+const int = (v: unknown): number | null => (INT.test(String(v ?? '').trim()) ? Number(String(v).trim()) : null)
+
+/// The seed lengths the CLI tags at: the distinct tag_lengths when given,
+/// else tag_length (its default when cleared).
+function seedLengths(values: Record<string, unknown>): { lengths: number[]; option: string } {
+  const list = Array.isArray(values['tag_lengths']) ? values['tag_lengths'] : []
+  const lengths = [...new Set(list.map(int).filter((n): n is number => n !== null))].sort((a, b) => a - b)
+  if (lengths.length) return { lengths, option: 'tag_lengths' }
+  const one = int(values['tag_length']) ?? int(PARAM_BY_NAME.get('tag_length')?.default)
+  return { lengths: one === null ? [] : [one], option: 'tag_length' }
+}
+
+export const CONFLICTS: ((values: Record<string, unknown>, ctx: PreflightContext) => Conflict | null)[] = [
+  // FASTag.cpp: "-species: tag_length (3) + 2*extension (0) = 3 cannot reach the index k = 7".
+  (values, { taxdbK }) => {
+    if (!isActive('species', values) || !taxdbK || taxdbK <= 0) return null
+    const { lengths, option } = seedLengths(values)
+    if (!lengths.length) return null
+    const seed = lengths[lengths.length - 1]
+    const ext = int(values['extension']) ?? int(PARAM_BY_NAME.get('extension')?.default) ?? 0
+    const reach = seed + 2 * ext
+    if (reach >= taxdbK) return null
+    return {
+      params: [option, 'extension', 'species'],
+      note:
+        `${option} (${seed}) + 2 × extension (${ext}) = ${reach} cannot reach the species index k = ${taxdbK}, ` +
+        `so every tag would be too short to look up. Set ${option} to ${taxdbK} (or raise extension).`
+    }
+  },
+  // "-entrapment_fasta calibrates q_db over one seed length; run each of -tag_lengths separately."
+  (values) =>
+    !inertBecause('entrapment_fasta', values) && isActive('entrapment_fasta', values) && seedLengths(values).lengths.length > 1
+      ? { params: ['entrapment_fasta', 'tag_lengths'], note: 'entrapment_fasta calibrates over one seed length; run each of tag_lengths separately.' }
+      : null,
+  // "-entrapment_fasta cannot be combined with -species".
+  (values) =>
+    !inertBecause('entrapment_fasta', values) && isActive('entrapment_fasta', values) && isActive('species', values)
+      ? {
+          params: ['entrapment_fasta', 'species'],
+          note: 'entrapment_fasta cannot be combined with species: entrapment matches would pollute the taxon evidence.'
+        }
+      : null,
+  // "-recon_out needs a database: give -recon_fasta (or -fasta)."
+  (values) =>
+    isActive('recon_out', values) && !isActive('recon_fasta', values) && !isActive('fasta', values)
+      ? { params: ['recon_out', 'recon_fasta', 'fasta'], note: 'recon_out needs a database: set recon_fasta (or fasta).' }
+      : null
+]
+
+/// Every combination in @p values the CLI would refuse before starting. Run
+/// should stay disabled, with these notes beside it, while this is non-empty.
+export function conflicts(values: Record<string, unknown>, ctx: PreflightContext = {}): Conflict[] {
+  return CONFLICTS.map((c) => c(values, ctx)).filter((c): c is Conflict => c !== null)
 }

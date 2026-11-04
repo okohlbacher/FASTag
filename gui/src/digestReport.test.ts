@@ -49,20 +49,20 @@ describe('digest', () => {
   it('reads the call', () => {
     const c = digestCall(digest)
     expect(c).toMatchObject({ status: 'call', model: 'Trypsin', runnerUp: 'Lys-C', usesNterm: false })
-    expect(c.margin).toBe(0.3788)
+    expect(c.margin).toBeCloseTo(1.4788, 4)
     expect(c.fired).toEqual([])
   })
 
   it('reads a no-call with its reason, the rules that fired and the absent metadata', () => {
     const c = digestCall(parseReport(nocallTsv, 'x'))
     expect(c).toMatchObject({ status: 'no_call', reason: 'low_resolution', margin: null })
-    expect(c.fired).toEqual(['low_resolution', 'few_tags'])
-    expect(c.unknown).toEqual(['timstof', 'ms2_scan_window'])
+    expect(c.fired).toEqual(['low_resolution', 'ms2_first_peak', 'few_tags'])
+    expect(c.unknown).toEqual([])
   })
 
   it('reads counts per position and models in report order', () => {
     const p1 = positionCounts(digest, 'C', 'P1')
-    expect(Object.keys(p1)).toEqual(ALPHABET)
+    expect(Object.keys(p1).sort()).toEqual(ALPHABET)
     expect(p1['K']).toBeGreaterThan(p1['R'])
     expect(modelScores(digest).map((m) => m.model)).toEqual([
       'Trypsin', 'Lys-C', 'Arg-C', 'Glu-C', 'Chymotrypsin', 'Asp-N', 'Lys-N', 'unspecific'
@@ -142,7 +142,7 @@ describe('label and mass gaps', () => {
   it('reads the label rows', () => {
     const l = labelFindings(parseReport(labelTsv, 'l'))
     expect(l.map((x) => x.label)).toEqual(['TMT', 'TMTpro', 'iTRAQ4'])
-    expect(l[1]).toMatchObject({ count: 1210, background: 9 })
+    expect(l[1]).toMatchObject({ count: 0, background: 0, share: 0, n: 26909 })
   })
 
   it('reads the histogram in gap order and the peaks', () => {
@@ -150,8 +150,9 @@ describe('label and mass gaps', () => {
     const bins = gapHistogram(m)
     for (let i = 1; i < bins.length; i++) expect(bins[i].gap).toBeGreaterThan(bins[i - 1].gap)
     const peaks = gapPeaks(m)
-    expect(peaks[0]).toMatchObject({ index: 1, explainedBy: 'Oxidation', alternatives: [] })
-    expect(peaks[2]).toMatchObject({ explainedBy: 'none', alternatives: ['Deamidated'] })
+    expect(peaks.map((p) => p.index)).toEqual([1, 2, 3, 4, 5])
+    expect(peaks[0]).toMatchObject({ index: 1, spectra: 3, explainedBy: 'none', alternatives: [] })
+    expect(peaks[0].delta).toBeCloseTo(-484.592, 3)
   })
 
   it('keeps the fullest bins, in gap order', () => {

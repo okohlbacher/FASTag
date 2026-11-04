@@ -4,7 +4,8 @@
 export interface BinaryInfo {
   bin: string
   dataPath?: string
-  source: 'env' | 'bundled' | 'path'
+  // 'missing': a release build with no bundled CLI (no dev or PATH fallback).
+  source: 'env' | 'bundled' | 'path' | 'missing'
   ok: boolean
   version?: string
   detail: string
@@ -22,7 +23,9 @@ export interface ResultsView {
   spectrum?: string | null
   minLength?: number | null
   maxEvalue?: number | null
-  fastaHit?: 'only' | 'none' | null
+  // only: a target hit (fwd/rev); none: no target hit (entrapment-only rows
+  // included); entrapment: efwd/erev only.
+  fastaHit?: 'only' | 'none' | 'entrapment' | null
 }
 
 export interface ResultsPage {
@@ -36,7 +39,13 @@ export interface ResultsPage {
 export interface RunResult {
   ok: boolean
   code: number | null
+  // Filled by the backend on failure: 'cancelled', a signal name (SIGSEGV ...)
+  // or a Windows NTSTATUS name.
   message?: string
+  // True when the run ended because Cancel killed it. A killed child has no
+  // reliable exit status of its own (null on Unix, 1 from TerminateProcess on
+  // Windows), so the renderer must not read a cancel off `code`.
+  cancelled?: boolean
   // Set on results delivered via the fastag:done event; correlates the terminal
   // event to the run the renderer is awaiting. Absent on synthetic failures the
   // renderer builds itself (a run that never started).
@@ -47,6 +56,11 @@ export interface RunStarted {
   started: boolean
   reason?: string
   runId?: number
+  // The -out the CLI was actually given: a relative Output is resolved against
+  // the input's folder, which is also the child's working directory.
+  out?: string
+  // The command line, binary first, for the failure banner's Copy command.
+  command?: string[]
 }
 
 export interface Taxon {
@@ -109,6 +123,9 @@ export interface FastagApi {
   run: (params: Record<string, unknown>) => Promise<RunStarted>
   cancel: () => Promise<{ cancelled: boolean }>
   resultsQuery: (path: string, view: ResultsView, offset: number, limit: number) => Promise<ResultsPage>
+  // Write the rows of a view, only the named columns, to dest; resolves with
+  // the number of rows written.
+  exportResults: (path: string, view: ResultsView, columns: string[], dest: string) => Promise<number>
   onLog: (cb: (line: string) => void) => () => void
   onProgress: (cb: (p: { done: number; total: number }) => void) => () => void
   onDone: (cb: (result: RunResult) => void) => () => void

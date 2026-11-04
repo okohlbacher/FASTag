@@ -11,7 +11,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::fs::File;
-use std::io::{BufReader, Read, Seek, SeekFrom};
+use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
@@ -41,7 +41,9 @@ pub struct ViewSpec {
     pub min_length: Option<u32>,
     /// Maximum value of the `evalue` column (unparsable values never match).
     pub max_evalue: Option<f64>,
-    /// `fasta_hit` tri-state: "only" (!= "-"), "none" (== "-"), else inactive.
+    /// `fasta_hit` filter: "only" (a target hit: neither "-" nor an
+    /// entrapment-only `efwd`/`erev`), "none" (no target hit, entrapment-only
+    /// included), "entrapment" (`efwd`/`erev` only), else inactive.
     pub fasta_hit: Option<String>,
 }
 
@@ -155,7 +157,10 @@ fn build_index(path: &str) -> Result<Index, String> {
             let mut f = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
             let mut raw = vec![0u8; end as usize];
             f.read_exact(&mut raw).map_err(|e| format!("cannot read {path}: {e}"))?;
-            fields_of(&raw)
+            // A UTF-8 BOM would otherwise rename the first column
+            // ("\u{feff}spectrum") and unbind every filter on it.
+            let raw = raw.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(&raw);
+            fields_of(raw)
         }
     };
     Ok(Index { columns, offsets, data_end })
@@ -174,7 +179,26 @@ struct Resolved {
     spectrum: Option<(usize, String)>,
     min_length: Option<(usize, u32)>,
     max_evalue: Option<(usize, f64)>,
-    fasta_hit: Option<(usize, bool)>, // (col, must_have_hit)
+    fasta_hit: Option<(usize, HitFilter)>,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum HitFilter {
+    Target,
+    NoTarget,
+    Entrapment,
+}
+
+/// Entrapment-only matches (`efwd`/`erev`) are calibration material, not
+/// target hits (README, q_db section).
+fn is_entrapment(v: &str) -> bool {
+    v == "efwd" || v == "erev"
+}
+
+/// A numeric sort key only for finite values: `NAN` (a real tag) and `INF`
+/// parse as f64 but are strings here.
+fn numeric(cell: &str) -> Option<f64> {
+    cell.parse::<f64>().ok().filter(|v| v.is_finite())
 }
 
 impl Resolved {
@@ -193,8 +217,9 @@ impl Resolved {
             min_length: col("length").zip(spec.min_length),
             max_evalue: col("evalue").zip(spec.max_evalue),
             fasta_hit: match spec.fasta_hit.as_deref() {
-                Some("only") => col("fasta_hit").map(|i| (i, true)),
-                Some("none") => col("fasta_hit").map(|i| (i, false)),
+                Some("only") => col("fasta_hit").map(|i| (i, HitFilter::Target)),
+                Some("none") => col("fasta_hit").map(|i| (i, HitFilter::NoTarget)),
+                Some("entrapment") => col("fasta_hit").map(|i| (i, HitFilter::Entrapment)),
                 _ => None,
             },
         }
@@ -227,8 +252,14 @@ impl Resolved {
                 _ => return false,
             }
         }
-        if let Some((i, want_hit)) = self.fasta_hit {
-            if (get(i) != "-") != want_hit {
+        if let Some((i, want)) = self.fasta_hit {
+            let v = get(i);
+            let ok = match want {
+                HitFilter::Target => v != "-" && !is_entrapment(v),
+                HitFilter::NoTarget => v == "-" || is_entrapment(v),
+                HitFilter::Entrapment => is_entrapment(v),
+            };
+            if !ok {
                 return false;
             }
         }
@@ -270,9 +301,9 @@ fn build_view(path: &str, index: &Index, res: &Resolved) -> Result<Vec<u32>, Str
         matched.push(i as u32);
         if let Some((col, _)) = res.sort {
             let cell = fields.get(col).map(String::as_str).unwrap_or("");
-            keys.push(match cell.parse::<f64>() {
-                Ok(v) => Key::Num(v),
-                Err(_) => Key::Str(cell.as_bytes().to_vec()),
+            keys.push(match numeric(cell) {
+                Some(v) => Key::Num(v),
+                None => Key::Str(cell.as_bytes().to_vec()),
             });
         }
     }
@@ -316,6 +347,10 @@ fn query(
     limit: usize,
 ) -> Result<ResultsPage, String> {
     let meta = std::fs::metadata(path).map_err(|e| format!("cannot open {path}: {e}"))?;
+    // A FIFO or device would block the reader or never end; a directory has no rows.
+    if !meta.is_file() {
+        return Err(format!("{path} is not a file"));
+    }
     let (len, mtime) = (meta.len(), meta.modified().ok());
 
     let mut guard = cache.lock().unwrap();
@@ -365,6 +400,84 @@ pub async fn results_query(
         .map_err(|e| e.to_string())?
 }
 
+/// Write the rows of @p spec, in its order, with only @p columns (header
+/// names; unknown ones are skipped), to @p dest as a TSV. The rows go to
+/// `<dest>.part` first and replace @p dest only once complete, so a failed
+/// export never leaves a truncated file under the chosen name. Returns the
+/// number of rows written.
+fn export(
+    cache: &Mutex<Option<CacheEntry>>,
+    path: &str,
+    spec: &ViewSpec,
+    columns: &[String],
+    dest: &str,
+) -> Result<usize, String> {
+    // Writing the view over its own source would truncate what it reads.
+    let same = match (std::fs::canonicalize(path), std::fs::canonicalize(dest)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => path == dest,
+    };
+    if same {
+        return Err(format!("{dest} is the file being exported; choose another name"));
+    }
+    let first = query(cache, path, spec, 0, MAX_WINDOW)?;
+    let pick: Vec<usize> = columns
+        .iter()
+        .filter_map(|c| first.columns.iter().position(|h| h == c))
+        .collect();
+    if pick.is_empty() {
+        return Err("no column to export".into());
+    }
+    let part = format!("{dest}.part");
+    let write = || -> Result<usize, String> {
+        let file = File::create(&part).map_err(|e| format!("cannot write {dest}: {e}"))?;
+        let mut w = BufWriter::new(file);
+        let line = |w: &mut BufWriter<File>, cells: &[String]| -> Result<(), String> {
+            let row: Vec<&str> = pick.iter().map(|&i| cells.get(i).map(String::as_str).unwrap_or("")).collect();
+            writeln!(w, "{}", row.join("\t")).map_err(|e| format!("cannot write {dest}: {e}"))
+        };
+        line(&mut w, &first.columns)?;
+        let mut page = first;
+        let mut done = 0;
+        loop {
+            for r in &page.rows {
+                line(&mut w, r)?;
+            }
+            done += page.rows.len();
+            if page.rows.is_empty() || done >= page.matched_rows {
+                break;
+            }
+            page = query(cache, path, spec, done, MAX_WINDOW)?;
+        }
+        w.flush().map_err(|e| format!("cannot write {dest}: {e}"))?;
+        Ok(done)
+    };
+    match write() {
+        Ok(n) => {
+            std::fs::rename(&part, dest).map_err(|e| format!("cannot write {dest}: {e}"))?;
+            Ok(n)
+        }
+        Err(e) => {
+            std::fs::remove_file(&part).ok();
+            Err(e)
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn results_export(
+    state: tauri::State<'_, BrowserCache>,
+    path: String,
+    view: ViewSpec,
+    columns: Vec<String>,
+    dest: String,
+) -> Result<usize, String> {
+    let cache = state.0.clone();
+    tauri::async_runtime::spawn_blocking(move || export(&cache, &path, &view, &columns, &dest))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -396,6 +509,25 @@ mod tests {
     fn col(page: &ResultsPage, row: usize, name: &str) -> String {
         let i = page.columns.iter().position(|c| c == name).unwrap();
         page.rows[row][i].clone()
+    }
+
+    #[test]
+    fn export_writes_the_view_with_the_chosen_columns() {
+        let p = fixture("export.tsv");
+        let dest = format!("{p}.out.tsv");
+        let cache = Mutex::new(None);
+        let spec = ViewSpec { max_evalue: Some(0.005), ..Default::default() };
+        let cols = vec!["tag".to_string(), "evalue".to_string(), "no_such".to_string()];
+        let n = export(&cache, &p, &spec, &cols, &dest).unwrap();
+        assert_eq!(n, 2);
+        let text = std::fs::read_to_string(&dest).unwrap();
+        assert_eq!(text, "tag\tevalue\nAQRQAAN\t0.003\nLNDLAAK\t0.0001\n");
+        assert!(!std::path::Path::new(&format!("{dest}.part")).exists());
+        // Never over its own source.
+        assert!(export(&cache, &p, &spec, &cols, &p).is_err());
+        assert_eq!(std::fs::read_to_string(&p).unwrap().lines().count(), 5);
+        std::fs::remove_file(&p).ok();
+        std::fs::remove_file(&dest).ok();
     }
 
     #[test]
@@ -472,6 +604,63 @@ mod tests {
         let any = q(&p, &ViewSpec { fasta_hit: Some("any".into()), ..Default::default() }, 0, 100).unwrap();
         assert_eq!(any.matched_rows, 4);
         std::fs::remove_file(&p).ok();
+    }
+
+    #[test]
+    fn hits_only_excludes_entrapment_only_rows() {
+        // M11: efwd/erev are calibration material, not target hits.
+        let p = write_fixture(
+            "entrap.tsv",
+            &format!(
+                "{HEADER}\n\
+                 a\tAAA\t3\t1\t0\t0\t0\t0\t0.1\t0.1\t0.1\tfwd\n\
+                 b\tCCC\t3\t1\t0\t0\t0\t0\t0.1\t0.1\t0.1\tefwd\n\
+                 c\tDDD\t3\t1\t0\t0\t0\t0\t0.1\t0.1\t0.1\terev\n\
+                 d\tEEE\t3\t1\t0\t0\t0\t0\t0.1\t0.1\t0.1\trev\n\
+                 e\tFFF\t3\t1\t0\t0\t0\t0\t0.1\t0.1\t0.1\t-\n"
+            ),
+        );
+        let tags = |hit: &str| -> Vec<String> {
+            let r = q(&p, &ViewSpec { fasta_hit: Some(hit.into()), ..Default::default() }, 0, 100).unwrap();
+            (0..r.rows.len()).map(|i| col(&r, i, "tag")).collect()
+        };
+        assert_eq!(tags("only"), ["AAA", "EEE"]);
+        assert_eq!(tags("none"), ["CCC", "DDD", "FFF"]);
+        assert_eq!(tags("entrapment"), ["CCC", "DDD"]);
+        std::fs::remove_file(&p).ok();
+    }
+
+    #[test]
+    fn nan_and_inf_tags_sort_as_strings() {
+        // m6: the tags NAN and INF parse as f64 but are not numbers here.
+        let p = write_fixture("nan.tsv", "tag\nYYK\nNAN\nAAC\nINF\n");
+        let sorted = |desc: bool| -> Vec<String> {
+            let spec = ViewSpec { sort: Some(SortSpec { column: "tag".into(), desc }), ..Default::default() };
+            let r = q(&p, &spec, 0, 100).unwrap();
+            (0..r.rows.len()).map(|i| col(&r, i, "tag")).collect()
+        };
+        assert_eq!(sorted(false), ["AAC", "INF", "NAN", "YYK"]);
+        assert_eq!(sorted(true), ["YYK", "NAN", "INF", "AAC"]);
+        std::fs::remove_file(&p).ok();
+    }
+
+    #[test]
+    fn utf8_bom_does_not_rename_first_column() {
+        // m12: with a BOM the spectrum filter must still bind.
+        let p = write_fixture("bom.tsv", "\u{feff}spectrum\ttag\nscan=1\tAAA\nscan=2\tCCC\n");
+        let r = q(&p, &ViewSpec { spectrum: Some("scan=2".into()), ..Default::default() }, 0, 100).unwrap();
+        assert_eq!(r.columns, vec!["spectrum", "tag"]);
+        assert_eq!(r.matched_rows, 1);
+        assert_eq!(col(&r, 0, "tag"), "CCC");
+        std::fs::remove_file(&p).ok();
+    }
+
+    #[test]
+    fn a_directory_is_refused_not_read() {
+        // m31: only regular files; a FIFO or device would block the reader.
+        let d = std::env::temp_dir();
+        let e = q(d.to_str().unwrap(), &ViewSpec::default(), 0, 10).unwrap_err();
+        assert!(e.contains("is not a file"), "{e}");
     }
 
     #[test]
