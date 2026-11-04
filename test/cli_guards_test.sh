@@ -11,6 +11,12 @@
 #   - a native ID with a tab or newline stays one TSV field
 #   - -max_peaks above the 1024 table ceiling is refused
 #   - an empty -out_spectra result removes an earlier run's file there
+#   - -out through a symlink writes the link's target and keeps the link;
+#     -out /dev/stdout redirected to a file writes that file
+#   - an unknown -species_rank is refused before the run, old table untouched,
+#     and hides neither the one-set rule nor the -stream refusals
+#   - -out is written in place: an existing -out keeps its mode, every hard
+#     link sees the table, and a writable -out in a read-only directory works
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 BIN="$1"
@@ -84,5 +90,69 @@ echo stale > "$TMP/stale.mzML"
 # -max_peaks above the table ceiling.
 "$BIN" -in "$IN" -out "$TMP/p.tsv" -max_peaks 5000 "${ARGS[@]}" >/dev/null 2>&1 \
   && fail "-max_peaks 5000 ran (exit 0)"
+
+# -out: an existing file is overwritten; a symlink stays a link and its
+# target gets the table; /dev/stdout redirected to a file is written directly.
+"$BIN" -in "$IN" -out "$TMP/r.tsv" "${ARGS[@]}" >/dev/null 2>&1 || fail "the reference run failed"
+echo old > "$TMP/x.tsv"
+"$BIN" -in "$IN" -out "$TMP/x.tsv" "${ARGS[@]}" >/dev/null 2>&1 || fail "replacing an existing -out failed"
+cmp -s "$TMP/r.tsv" "$TMP/x.tsv" || fail "an existing -out was not replaced by the table"
+echo old > "$TMP/target.tsv"
+ln -s "$TMP/target.tsv" "$TMP/l.tsv"
+if [ -L "$TMP/l.tsv" ]; then
+  "$BIN" -in "$IN" -out "$TMP/l.tsv" "${ARGS[@]}" >/dev/null 2>&1 || fail "-out through a symlink failed"
+  [ -L "$TMP/l.tsv" ] || fail "-out replaced the symlink instead of writing its target"
+  cmp -s "$TMP/r.tsv" "$TMP/target.tsv" || fail "the symlink's target did not get the table"
+fi
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) ;;
+  *) "$BIN" -in "$IN" -out /dev/stdout "${ARGS[@]}" >"$TMP/so.tsv" 2>/dev/null \
+       || fail "-out /dev/stdout redirected to a file failed"
+     grep -q '^spectrum	tag' "$TMP/so.tsv" || fail "-out /dev/stdout wrote no table header" ;;
+esac
+
+# -species_rank no node has: refused before tagging, the old table untouched.
+printf '1\t|\t1\t|\tno rank\t|\n2\t|\t1\t|\tgenus\t|\n' > "$TMP/nodes.dmp"
+printf '1\t|\troot\t|\t\t|\tscientific name\t|\n' > "$TMP/names.dmp"
+echo notanindex > "$TMP/none.taxdb"
+echo old > "$TMP/sp.tsv"
+"$BIN" -in "$IN" -out "$TMP/sp.tsv" -species -species_rank superkingdom -taxdb "$TMP/none.taxdb" \
+  -taxonomy_nodes "$TMP/nodes.dmp" -taxonomy_names "$TMP/names.dmp" -tag_length 7 "${ARGS[@]}" \
+  >"$TMP/sp.log" 2>&1 && fail "-species_rank superkingdom ran (exit 0)"
+grep -q "no node of the taxonomy has that rank" "$TMP/sp.log" || fail "no message naming the missing rank"
+[ "$(cat "$TMP/sp.tsv")" = old ] || fail "a refused -species_rank touched the old table"
+# ... but not ahead of the one-set rule or the -stream refusal.
+"$BIN" -in "$IN" -out "$TMP/sp.tsv" -species -species_rank superkingdom -taxdb "$TMP/none.taxdb" \
+  -taxonomy_nodes "$TMP/nodes.dmp" -tag_length 7 "${ARGS[@]}" >"$TMP/sp2.log" 2>&1 \
+  && fail "-species with an incomplete taxonomy set ran (exit 0)"
+grep -q "are one set" "$TMP/sp2.log" || fail "a bad -species_rank hid the one-set error"
+"$BIN" -stream -species -species_rank superkingdom -taxdb "$TMP/none.taxdb" -taxonomy_nodes "$TMP/nodes.dmp" \
+  -taxonomy_names "$TMP/names.dmp" -tag_length 7 "${ARGS[@]}" </dev/null >"$TMP/sp3.log" 2>&1 \
+  && fail "-stream -species ran (exit 0)"
+grep -q "stream cannot be combined" "$TMP/sp3.log" || fail "a bad -species_rank hid the -stream refusal"
+
+# -out is written in place, so it keeps what the old file had (not on Windows:
+# no POSIX modes, hard links or read-only directories there in Git Bash).
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) ;;
+  *)
+    mode_of() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
+    for m in 600 664; do
+      echo old > "$TMP/m$m.tsv"; chmod $m "$TMP/m$m.tsv"
+      "$BIN" -in "$IN" -out "$TMP/m$m.tsv" "${ARGS[@]}" >/dev/null 2>&1 || fail "overwriting a $m -out failed"
+      [ "$(mode_of "$TMP/m$m.tsv")" = $m ] || fail "an overwritten -out lost mode $m (now $(mode_of "$TMP/m$m.tsv"))"
+      cmp -s "$TMP/r.tsv" "$TMP/m$m.tsv" || fail "the $m -out did not get the table"
+    done
+    echo old > "$TMP/hl1.tsv"; ln "$TMP/hl1.tsv" "$TMP/hl2.tsv"
+    "$BIN" -in "$IN" -out "$TMP/hl1.tsv" "${ARGS[@]}" >/dev/null 2>&1 || fail "a hard-linked -out failed"
+    cmp -s "$TMP/r.tsv" "$TMP/hl2.tsv" || fail "the other hard link of -out kept the old content"
+    if [ "$(id -u)" != 0 ]; then
+      mkdir "$TMP/ro"; echo old > "$TMP/ro/t.tsv"; chmod 555 "$TMP/ro"
+      "$BIN" -in "$IN" -out "$TMP/ro/t.tsv" "${ARGS[@]}" >"$TMP/ro.log" 2>&1
+      rc=$?; chmod 755 "$TMP/ro"
+      [ $rc = 0 ] || { cat "$TMP/ro.log"; fail "a writable -out in a read-only directory failed (rc $rc)"; }
+      cmp -s "$TMP/r.tsv" "$TMP/ro/t.tsv" || fail "the -out in a read-only directory did not get the table"
+    fi ;;
+esac
 
 echo "cli_guards_test: all checks passed"

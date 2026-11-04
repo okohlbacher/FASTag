@@ -290,7 +290,9 @@ protected:
 
     registerDoubleOption_("fragment_tolerance", "<value>", 20.0, "Fragment mass tolerance", false);
     // Without a floor a negative or zero tolerance matches nothing and the run
-    // reports zero tags with no indication why.
+    // reports zero tags with no indication why. The floor stays in the INI/CTD
+    // (restrictions="1.0e-09:") for KNIME/Galaxy validators; main_ also refuses
+    // NaN, which TOPPBase's range check lets through.
     setMinFloat_("fragment_tolerance", 1e-9);
     registerStringOption_("fragment_tolerance_unit", "<unit>", "ppm", "Tolerance unit", false);
     setValidStrings_("fragment_tolerance_unit", ListUtils::create<std::string>("ppm,Da"));
@@ -572,21 +574,25 @@ protected:
     setMinFloat_("max_evalue", 0.0);
     registerDoubleOption_("gap_penalty", "<value>", 100.0,
                           "Rank gapped tags as if their E-value were this many times "
-                          "worse. Affects ORDER only, never which tags are reported. "
-                          "1 disables. Gapped tags are otherwise heavily over-ranked: "
+                          "worse. Never removes a tag at the max_evalue cutoff (applied "
+                          "to the unpenalised value), but under max_tags it decides which "
+                          "tags fill the capped slots, and a gapped row's printed evalue "
+                          "includes it. 1 disables. Gapped tags are otherwise heavily over-ranked: "
                           "they take ~95% of top-1 slots while being ~3.6x less likely "
                           "to be correct", false);
     setMinFloat_("gap_penalty", 1.0);
 
     registerDoubleOption_("isobaric_tolerance", "<value>", 0.04,
-                          "When matching against 'fasta', treat a residue as interchangeable "
+                          "When matching against 'fasta' or reconciling against 'recon_fasta', "
+                          "treat a residue as interchangeable "
                           "with an isobaric residue pair within this tolerance; 0 requires "
                           "exact strings", false);
     registerIntOption_("min_filter_length", "<n>", 0,
                        "Ignore tags shorter than this when matching against 'fasta'; "
                        "0 derives a floor from the database size", false);
     registerStringOption_("orientation", "<mode>", "both",
-                          "Match a tag as written, or also reversed. Tags are stored N->C under a "
+                          "Match a tag as written, or also reversed, against 'fasta' and in "
+                          "'recon_fasta' reconciliation. Tags are stored N->C under a "
                           "y-ion assumption, so b-derived tags read reversed", false);
     setValidStrings_("orientation", ListUtils::create<std::string>("both,forward"));
 
@@ -817,6 +823,15 @@ protected:
     // The option a length advice must name.
     const char* const length_opt = tag_lengths.empty() ? "-tag_length " : "-tag_lengths ";
 
+    // setMinFloat_ refuses values below 1e-9, but every comparison with NaN is
+    // false, so TOPPBase lets -fragment_tolerance nan through.
+    if (!std::isfinite(getDoubleOption_("fragment_tolerance")))
+    {
+      OPENMS_LOG_ERROR << "-fragment_tolerance must be a finite number greater than 0 (got "
+                       << getDoubleOption_("fragment_tolerance") << ")." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+
     // Species precondition, checked BEFORE the run rather than after.
     //
     // The index is keyed on k-mers, so a tag shorter than k can never be looked
@@ -873,6 +888,42 @@ protected:
       if (getFlag_("species") || getFlag_("glyco"))
       {
         OPENMS_LOG_ERROR << "-stream cannot be combined with -species or -glyco." << std::endl;
+        return ILLEGAL_PARAMETERS;
+      }
+    }
+    // -species_rank no node carries would give an empty report that reads as
+    // "no taxon found" (NCBI calls the top rank domain, not superkingdom).
+    // Checked after the in/out and -stream refusals and after the one-set rule
+    // (the same check as after tagging, moved ahead so the probe cannot hide
+    // it), but before tagging. Only nodes.dmp is read. An explicit
+    // -taxonomy_nodes that does not exist is refused by TOPPBase when the
+    // option is read (above, in the one-set check); a missing bundled
+    // nodes.dmp skips the probe and is reported by the -species file checks.
+    if (want_species)
+    {
+      const bool any_tax = !getStringOption_("taxdb").empty() || !getStringOption_("taxonomy_nodes").empty()
+                           || !getStringOption_("taxonomy_names").empty();
+      if (any_tax && (getStringOption_("taxdb").empty() || getStringOption_("taxonomy_nodes").empty()
+                      || getStringOption_("taxonomy_names").empty()))
+      {
+        OPENMS_LOG_ERROR << "-taxdb, -taxonomy_nodes and -taxonomy_names are one set: "
+                         << "give all three, or none (to use the bundled taxonomy). "
+                         << "Mixing a custom index with another taxonomy silently "
+                         << "drops every taxon the two do not share." << std::endl;
+        return ILLEGAL_PARAMETERS;
+      }
+      std::string probe_nodes = getStringOption_("taxonomy_nodes");
+      if (!any_tax)
+      {
+        const std::string d = taxonomyDir_();
+        if (!d.empty()) probe_nodes = d + "/nodes.dmp";
+      }
+      if (!probe_nodes.empty() && File::exists(probe_nodes)
+          && !FASTag::Taxonomy::rankInDump(probe_nodes, getStringOption_("species_rank")))
+      {
+        OPENMS_LOG_ERROR << "-species_rank '" << getStringOption_("species_rank")
+                         << "': no node of the taxonomy has that rank (e.g. genus, family, "
+                            "order, class, phylum, kingdom, domain)." << std::endl;
         return ILLEGAL_PARAMETERS;
       }
     }
@@ -1348,19 +1399,18 @@ protected:
       // the exit code is the same.
       for (size_t i = 0; i + 1 < lengths.size(); ++i)
         if (lengths[i] + 2 * p.max_extension < filt.minLen())
-          throw Exception::InvalidValue(
+          throw Exception::InvalidParameter(
               __FILE__, __LINE__, OPENMS_PRETTY_FUNCTION,
               "Seed length " + std::to_string(lengths[i]) + " reaches at most " +
               std::to_string(lengths[i] + 2 * p.max_extension) + " residues, below the " +
               std::to_string(filt.minLen()) + " this database needs to beat chance, so it could "
               "never report a tag. Drop it from 'tag_lengths', raise 'extension', or set "
-              "'min_filter_length'.",
-              std::to_string(lengths[i]));
+              "'min_filter_length'.");
       try
       {
         filt.build(lengths.front(), max_len);
       }
-      catch (const Exception::InvalidValue&)
+      catch (const Exception::InvalidParameter&)
       {
         // With several lengths only the size cap gets here (the floor is
         // checked above). One index serves them all, so it can outgrow the

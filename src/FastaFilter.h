@@ -118,7 +118,7 @@ namespace FASTag
     /// caller would otherwise have to remember to check, and a filter that
     /// silently built nothing would reject 100% of tags while looking healthy.
     ///
-    /// @throws OpenMS::Exception::InvalidValue if the projection exceeds max_bytes
+    /// @throws OpenMS::Exception::InvalidParameter if the projection exceeds max_bytes
     void build(int min_k, int max_k, size_t max_bytes = size_t(4) << 30);
 
     /// Projected index footprint in bytes for the given length range.
