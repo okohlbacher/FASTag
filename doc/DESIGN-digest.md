@@ -1,4 +1,4 @@
-# Digest, label and mass-gap reports (FASTag 1.8.0)
+# Digest, label and mass-gap reports
 
 ## Purpose
 
