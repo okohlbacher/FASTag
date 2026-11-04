@@ -14,7 +14,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "tauri": "tauri",
-    "params": "node scripts/gen-params.mjs src-tauri/resources/fastag/bin/FASTag > src/params.generated.json"
+    "params": "node scripts/gen-params.mjs src-tauri/resources/fastag/bin/FASTag src/params.generated.json"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",

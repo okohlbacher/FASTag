@@ -43,6 +43,12 @@ texts. OpenMS's own licence and notices are in `share-OpenMS/`.
 | Residue composition of the human reference proteome (`share/FASTag/digest/digest_models.tsv`, `background` rows) | UniProt UP000005640 (The UniProt Consortium, *Nucleic Acids Res.* 2025), written by `tools/digest_models.py` | CC BY 4.0 | `-digest_out` |
 | Mass-gap modification list and priors (`share/FASTag/digest/massgap_mods.tsv`) | prose-auto 0.1.3 `delta_combos.MODS`; masses from OpenMS's Unimod | BSD-3-Clause (prose-auto ships in the OpenMS tree); Unimod as distributed with OpenMS | `-massgap_out` |
 
+## Bundled assets (desktop GUI)
+
+| Asset | Source | Licence | Used by |
+|---|---|---|---|
+| IBM Plex Sans and IBM Plex Mono, latin and latin-ext subsets, WOFF2 (`gui/src/assets/fonts/*.woff2`) | IBM Corp., [IBM Plex](https://github.com/IBM/plex) | SIL Open Font License 1.1; texts in `gui/src/assets/fonts/OFL-IBMPlexSans.txt` and `OFL-IBMPlexMono.txt` | the GUI's typeface, built into the frontend bundle (no font is fetched at run time) |
+
 ## What OpenMS provides, so FASTag does not implement it
 
 | Facility | OpenMS API |

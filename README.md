@@ -159,12 +159,17 @@ compiled from source with the libraries listed in
 
 A cross-platform desktop app ([`gui/`](gui/)) wraps the CLI: pick spectra, set
 parameters from a form generated out of the tool's own `-write_ini`, watch a
-progress bar, and browse the tags and the ranked species report (with a `rel.`
-column showing each taxon's evidence relative to the top hit). A **Digest** tab
+progress bar, and browse the tags and the ranked species report (with a
+"Relative to top taxon" column showing each taxon's evidence relative to the
+top hit, and an Adjusted column after `-species_deconvolve`). The **Database
+hit** filter on `fasta_hit` offers All, Target (`fwd`/`rev`), Entrapment
+(`efwd`/`erev`) or No hit; **Export shown rows…** writes the filtered rows, in
+the shown columns, to a new TSV. A failed run quotes FASTag's reason and offers
+its command line to copy. A **Digest** tab
 shows the `-digest_out`, `-label_out` and `-massgap_out` reports: the protease
 call or no-call with its reason, sequence logos P4..P1 | P1'..P4' of the
 observed tag ends and of the called and runner-up models (in bits against the
-background in use), the label counts and the mass-gap peaks. It is built with
+background in use), the label counts, a histogram of the mass gaps and the mass-gap peaks. It is built with
 [Tauri 2](https://tauri.app) — a Rust backend and the OS's native webview, not a
 bundled browser. The CLI remains the source of truth; the GUI shells out to it.
 
@@ -172,9 +177,10 @@ bundled browser. The CLI remains the source of truth; the GUI shells out to it.
 cd gui && npm install && npm run tauri dev     # or: npm run tauri build
 ```
 
-Signed, installable bundles ship with every release: notarized and stapled disk
-images for macOS (also on Homebrew, above) and an installer for Windows — see
-the install table at the top. Details in [gui/README.md](gui/README.md).
+Installable bundles ship with every release: signed, notarized and stapled disk
+images for macOS (also on Homebrew, above) and an installer for Windows, which
+is not yet code-signed (see above) — see the install table at the top. Details
+in [gui/README.md](gui/README.md).
 
 ## Usage
 
@@ -381,9 +387,9 @@ MGF→mzML direction is exact.
 | `-max_tags <n>` | 50 | Tags reported per spectrum; 0 = unlimited |
 | `-max_evalue <value>` | 20 | E-value cutoff; 0 disables |
 | `-gap_penalty <value>` | 100 | Rank gapped tags as if their E-value were this many times worse. Never removes a tag at the `-max_evalue` cutoff (applied to the unpenalised value), but under `-max_tags` it decides which tags fill the capped slots, and the printed `evalue` of a gapped row includes it. 1 disables |
-| `-isobaric_tolerance <value>` | 0.04 | Isobaric residue-pair substitution tolerance when matching `-fasta`; 0 requires exact strings |
+| `-isobaric_tolerance <value>` | 0.04 | Isobaric residue-pair substitution tolerance when matching `-fasta` and when reconciling against `-recon_fasta`; 0 requires exact strings |
 | `-min_filter_length <n>` | 0 | Ignore tags shorter than this when matching `-fasta`; 0 derives a floor from database size |
-| `-orientation <both\|forward>` | both | Also match a tag reversed (b-ion reading), or only as written |
+| `-orientation <both\|forward>` | both | Also match a tag reversed (b-ion reading), or only as written; applies to `-fasta` matching and `-recon_fasta` reconciliation |
 | `-fixed_modifications <mods>` | `Carbamidomethyl (C)` | Shift residue masses; not annotated in the tag. OpenMS/UniMod names, e.g. `'TMT6plex (K)'` |
 | `-variable_modifications <mods>` | none | Add a modified alternative, written inline as `X[Name]`, e.g. `'Phospho (S)'` |
 | `-proforma` | off | Append a ProForma 2.0 column for each tag (see Output) |
@@ -444,8 +450,10 @@ One TSV row per tag: `spectrum` (native ID; `index=<k>`, the 0-based block,
 for MGF), `tag` (sequence), `length`,
 `charge` (fragment charge), `nterm_mass` / `cterm_mass` (flanking masses,
 4-decimal precision), `extended` / `gapped` (flags), `evalue`, `min_conf` /
-`mean_conf` (per-residue confidence, see below), and `fasta_hit`
-(`fwd` / `rev` / `-`, present only with `-fasta`). The `evalue` of a gapped row
+`mean_conf` (per-residue confidence, see below), and `fasta_hit`. The
+`fasta_hit` column is always written: `-` without `-fasta`; with `-fasta`, only
+matching tags are written, as `fwd` / `rev`, plus `efwd` / `erev` for
+entrapment-only matches under `-entrapment_fasta`. The `evalue` of a gapped row
 is the ranking value, E × `-gap_penalty`, so it can exceed `-max_evalue`; divide
 by the penalty for the raw E-value.
 

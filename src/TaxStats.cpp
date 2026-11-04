@@ -143,6 +143,21 @@ bool Taxonomy::known(uint32_t taxid) const {
   return nodes_.find(taxid) != nodes_.end();
 }
 
+bool Taxonomy::rankInDump(const std::string& nodes_dmp, const std::string& rank) {
+  std::ifstream in(nodes_dmp);
+  std::string line;
+  while (std::getline(in, line)) {
+    if (line.empty()) continue;
+    // Same acceptance as load(): a line it would skip carries no rank.
+    std::vector<std::string> f = splitDmpLine(line);
+    if (f.size() < 3) continue;
+    uint32_t taxid = 0, par = 0;
+    if (!parseU32(f[0], taxid) || !parseU32(f[1], par)) continue;
+    if (!f[2].empty() && f[2] == rank) return true;
+  }
+  return false;
+}
+
 std::vector<uint32_t> Taxonomy::lineage(uint32_t taxid) const {
   std::vector<uint32_t> out;
   uint32_t cur = taxid;

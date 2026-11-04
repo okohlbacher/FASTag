@@ -5,7 +5,14 @@ mod settings;
 mod species;
 
 use fastag::RunManager;
-use tauri::{Manager, WindowEvent};
+use tauri::{Manager, RunEvent, WindowEvent};
+
+/// The argv a run request becomes (fastag.rs build_args), for the GUI's
+/// end-to-end CLI tests. Not used by the app.
+#[doc(hidden)]
+pub fn build_args_json(json: &str) -> Result<Vec<String>, String> {
+    fastag::build_args_json(json)
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -27,6 +34,7 @@ pub fn run() {
             fastag::run,
             fastag::cancel,
             browser::results_query,
+            browser::results_export,
             species::species,
             report::report_text,
             species::taxdb_info,
@@ -38,21 +46,17 @@ pub fn run() {
         .on_window_event(|window, event| {
             // Closing the window must not orphan a running CLI process.
             if let WindowEvent::Destroyed = event {
-                let app = window.app_handle().clone();
-                let child = app
-                    .state::<RunManager>()
-                    .current
-                    .lock()
-                    .unwrap()
-                    .as_ref()
-                    .map(|r| r.child.clone());
-                if let Some(child) = child {
-                    if let Ok(mut c) = child.lock() {
-                        let _ = c.kill();
-                    }
-                }
+                fastag::kill_current(window.app_handle());
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            // Cmd+Q (applicationWillTerminate) fires no window Destroyed event:
+            // without this the CLI outlived the app and died of SIGPIPE later,
+            // leaving truncated outputs.
+            if let RunEvent::Exit = event {
+                fastag::kill_current(app);
+            }
+        });
 }

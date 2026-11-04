@@ -113,6 +113,10 @@ int main() {
   CHECK(!tax.known(777), "names-only taxid 777 is not part of the tree");
   CHECK(tax.rank(110) == "genus", "rank(110) == genus");
   CHECK(tax.rank(100) == "family", "rank(100) == family");
+  CHECK(FASTag::Taxonomy::rankInDump(nodes_path.string(), "genus"), "rankInDump(genus)");
+  CHECK(!FASTag::Taxonomy::rankInDump(nodes_path.string(), "superkingdom"), "no node has rank superkingdom");
+  CHECK(!FASTag::Taxonomy::rankInDump(dir.string() + "/nonexistent_nodes.dmp", "genus"),
+        "rankInDump of a missing file is false");
   CHECK(tax.name(110) == "GenusA", "scientific name of 110 kept");
   CHECK(tax.name(999).empty(), "name of unknown is empty");
 

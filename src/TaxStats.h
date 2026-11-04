@@ -63,6 +63,13 @@ public:
   // True if the taxid appears in the loaded tree.
   bool known(uint32_t taxid) const;
 
+  // True if some line of the nodes.dmp at nodes_dmp has this rank; false also
+  // when the file cannot be opened. NCBI renamed "superkingdom" to "domain",
+  // so a rank the dump lacks would silently report nothing. Reads only
+  // nodes.dmp, stopping at the first match, so the CLI can refuse a rank before
+  // the run instead of after it.
+  static bool rankInDump(const std::string& nodes_dmp, const std::string& rank);
+
   // Path from taxid up to (and including) the root; empty if unknown.
   std::vector<uint32_t> lineage(uint32_t taxid) const;
 
