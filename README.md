@@ -336,6 +336,7 @@ reporting a clean run over an empty file.
 | `-species_min_margin <f>` | 0.0 | Require a tag's best taxa to carry this fraction more of its k-mers than the runner-up; 0 keeps all |
 | `-species_use_gapped` | off | Let gapped tags contribute taxonomic evidence (see Species detection) |
 | `-species_deconvolve` | off | Correct taxon counts for sequence shared between taxa |
+| `-species_evidence <mode>` | best | Which of a spectrum's tags make it count for a taxon: `best` = the taxa of its lowest-E-value tag that maps into the index (ties united), `all` = the union over every reported tag (the rule up to 1.9.0) |
 | `-subsample_spectra <n>` / `-subsample_fraction <f>` | 0 | Tag only a random subset (count or fraction); 0 = all |
 | `-subsample_seed <n>` | 1 | Seed for the `-subsample_*` selection |
 | `-mzpeak_read_memory <MB>` | 0 | No effect; accepted for existing command lines |
@@ -561,6 +562,16 @@ hits can outrank the true genus (q stays the better guide there).
 an exact k-mer lookup cannot tell an inferred residue from an observed one — on
 PXD000001, admitting gapped tags drops the true genus from rank 1 to rank 20.
 `-species_use_gapped` admits them anyway.
+
+**A spectrum counts for the taxa of its best tag.** A spectrum is one peptide,
+but up to `-max_tags` tags are reported for it, most of them wrong readings.
+Up to 1.9.0 a spectrum counted for every taxon that ANY of its tags supported,
+so each wrong tag added the taxa its 7-mer hit by chance, and a taxon's count
+grew with the number of tags reported per spectrum. Large and widely shared
+proteomes collected most of those chance hits, and changes that only reorder or
+admit lower-ranked tags moved the ranking. Now a spectrum counts for the taxa of
+its lowest-E-value tag that maps into the index (ties are united);
+`-species_evidence all` restores the union.
 
 `-species_deconvolve` subtracts the evidence a taxon earns only by resembling a
 stronger one, which is what makes near neighbours rank. It is opt-in: it turns
