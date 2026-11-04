@@ -26,6 +26,7 @@ const REASON: Record<string, string> = {
   timstof: 'the run is from a timsTOF',
   ms2_scan_window: 'the MS2 scan window starts above y1 of K',
   ms2_first_peak: 'the first MS2 peaks lie above y1 of K',
+  ion_counts: 'no instrument is named and the intensities are ion counts, as on a timsTOF',
   few_tags: 'too few terminal tags',
   nonfinite_score: 'a residue has probability 0 under a model',
   tie: 'two models of different classes fit equally well'

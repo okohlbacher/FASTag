@@ -82,6 +82,14 @@ namespace
           "non-integer field -> position");
     check(FASTag::usiIndex("scan=5 merged", 2) == "index:2", "field without '=' -> position");
 
+    // MGF: scan:<n> from SCANS= when it names one scan, else the block position.
+    check(FASTag::usiIndexMgf("17", "index=4", 4) == "scan:17", "MGF SCANS=17 -> scan:17");
+    check(FASTag::usiIndexMgf(" 007 ", "index=4", 4) == "scan:7", "MGF SCANS with blanks and leading zeros");
+    for (const char* scans : {"-1", "1-3", "5,6", "", "x"})
+      check(FASTag::usiIndexMgf(scans, "index=4", 4) == "index:4",
+            std::string("MGF SCANS='") + scans + "' -> index:4");
+    check(FASTag::usiIndexMgf("", "index=9", 9) == FASTag::usiIndex("index=9", 9), "MGF without SCANS -> usiIndex");
+
     for (const std::string& id : {std::string("controllerType=0 controllerNumber=1 scan=17555"),
                                   std::string("sample=1 period=1 cycle=2740 experiment=10"),
                                   std::string("index=0"), std::string("not a native id")})

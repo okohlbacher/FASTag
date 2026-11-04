@@ -245,6 +245,8 @@ namespace FASTag::Digest
     std::uint64_t im_vssc = 0, im_drift = 0, im_faims = 0, im_other = 0;  ///< MS2 with ion mobility, by unit
     std::vector<double> scan_low;                ///< lowest scan-window begin per MS2 that has one
     std::vector<double> first_peak;              ///< lowest peak m/z per MS2
+    std::uint64_t peaks = 0, peaks_whole = 0;    ///< MS2 peaks with an intensity above 0, and those of them that are whole numbers
+    bool im_unread = false;                      ///< the input format carries no ion mobility (MGF)
   };
 
   struct DigestSettings

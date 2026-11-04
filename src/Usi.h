@@ -106,4 +106,21 @@ namespace FASTag
     }
     return out;
   }
+
+  /// The same for a block of an MGF, whose msRun is the MGF itself:
+  /// scan:<n> when the block's SCANS= is one non-negative integer, otherwise
+  /// what usiIndex gives its native ID (index=k, so index:<position>).
+  /// FileConverter writes SCANS=-1 for "no scan", and a range or list (1-3,
+  /// 5,6) names no single scan.
+  inline std::string usiIndexMgf(const std::string& scans, const std::string& native_id, size_t position)
+  {
+    std::string digits = scans;
+    OpenMS::StringUtils::trim(digits);
+    if (!digits.empty() && digits.size() <= 18
+        && std::all_of(digits.begin(), digits.end(), [](unsigned char ch) { return std::isdigit(ch) != 0; }))
+    {
+      return "scan:" + std::to_string(std::stoull(digits));
+    }
+    return usiIndex(native_id, position);
+  }
 }
