@@ -243,7 +243,9 @@ so a reader of the TSV sees the doubles the reports use. For differential tests 
 
 Shown when a run wrote any of the three reports.
 
-- The call (or "no call" with the reason), runner-up, margin and the `description` sentences.
+- The call (or "no call" with the reason), runner-up, margin and the `description` sentences. With a
+  models table that has no model of another class the CLI writes `runner_up none` and margin `-`;
+  the tab then shows neither, and no runner-up logo.
 - The observed sequence logo P4..P1 | P1'..P4' in bits against the background in use
   (letter height `f_a · I`, `I = Σ_b f_b log2(f_b/q_b) − (s − 1)/(2n ln 2)` clamped at 0, the
   small-sample correction over `s` residues; `n` under each column). Columns with fewer than `tag_min`
@@ -251,7 +253,10 @@ Shown when a run wrote any of the three reports.
   logos of the called model and the runner-up (P1 and P1' only; their other positions are the
   background and stay empty).
 - The label rows and the heavy shares. Each block names its report file; opening a report of another
-  input closes the reports of the previous one.
+  run closes the reports of the previous one. Two reports come from one run when they sit in one
+  folder and their `run` rows agree (input, version, fragment tolerance and unit, tag length,
+  subsampling); `run input` holds only the input's file name, so it cannot tell two inputs of one
+  name apart on its own.
 - The mass-gap distribution as a table with the bar cells already used in the Species tab, followed by
   the peaks with their explanations.
 
