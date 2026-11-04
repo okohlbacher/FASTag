@@ -1016,7 +1016,7 @@ export default function App(): JSX.Element {
                     ) : (
                       <div className="input-card empty-input">
                         <IconFile />
-                        <span className="muted">Spectra as mzML or mzPeak</span>
+                        <span className="muted">Spectra as mzML, mzPeak or MGF</span>
                         <button className="secondary" onClick={pickInput}>
                           Choose file…
                         </button>

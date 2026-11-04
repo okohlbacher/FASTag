@@ -6,6 +6,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import App, { perJobOutputs } from './App'
+import { SPECTRA } from './api'
 import DigestPanel from './DigestPanel'
 import { parseReport } from './digestReport'
 import { installMockBridge, type MockBridge } from './testing/mockBridge'
@@ -240,6 +241,28 @@ describe('run/batch orchestration', () => {
     expect(outField().value).toBe('C:\\runs.2026\\sample.tags.tsv')
     await pickSingle(mock, '/d/x.mzML')
     expect(outField().value).toBe('/d/x.tags.tsv')
+  })
+
+  it('takes an MGF input like an mzML: offered by the dialogs, named on the empty card, run with its own outputs', async () => {
+    expect(SPECTRA[0].extensions).toEqual(expect.arrayContaining(['mzML', 'mzpeak', 'mgf', 'MGF']))
+    const mock = installMockBridge()
+    await renderApp(mock)
+    expect(screen.getByText('Spectra as mzML, mzPeak or MGF')).toBeDefined()
+    await pickSingle(mock, '/d/run.mgf')
+    expect(outField().value).toBe('/d/run.tags.tsv')
+    await click(runButton())
+    await waitFor(() => expect(mock.runCalls).toHaveLength(1))
+    expect(mock.runCalls[0].in).toBe('/d/run.mgf')
+    expect(mock.runCalls[0].out).toBe('/d/run.tags.tsv')
+    // In a batch, run.mzML and run.mgf of one sample keep distinct outputs.
+    await emitDone(mock, 1, true)
+    await addBatch(mock, ['/e/s.mzML', '/e/s.mgf'])
+    await startBatch()
+    for (let id = 2; id <= 3; id++) {
+      await waitFor(() => expect(mock.runCalls).toHaveLength(id))
+      await emitDone(mock, id, true)
+    }
+    expect(mock.runCalls.slice(1).map((c) => c.out)).toEqual(['/e/s.tags.tsv', '/e/s.mgf.tags.tsv'])
   })
 
   it('derives the single-run species path from the tags output', async () => {

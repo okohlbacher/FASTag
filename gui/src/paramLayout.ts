@@ -123,6 +123,7 @@ export const SECTIONS: Section[] = [
     params: [
       'species',
       'species_rank',
+      'species_evidence',
       'species_min_len',
       'species_use_gapped',
       'species_deconvolve',
@@ -232,6 +233,7 @@ export const DEPENDS: Record<string, Dependency[]> = {
   isobaric_tolerance: [{ on: ['fasta', 'recon_out'], note: 'only affects matching against fasta and reconciliation' }],
 
   species_rank: [{ on: 'species', note: 'species detection is off' }],
+  species_evidence: [{ on: 'species', note: 'species detection is off' }],
   species_min_len: [{ on: 'species', note: 'species detection is off' }],
   species_deconvolve: [{ on: 'species', note: 'species detection is off' }],
   species_max_kmer_share: [{ on: 'species', note: 'species detection is off' }],

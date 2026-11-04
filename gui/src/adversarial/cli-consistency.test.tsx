@@ -126,7 +126,7 @@ const argOf = (argv: string[], name: string): string | undefined => {
   return i < 0 ? undefined : argv[i + 1]
 }
 
-describe.skipIf(!ready)('GUI-built argv against FASTag 1.9.0', () => {
+describe.skipIf(!ready)('GUI-built argv against the FASTag CLI (FASTAG_BIN)', () => {
   it('a default run is accepted and sends every rendered default explicitly', async () => {
     const o = await guiRun({ name: 'defaults' })
     expect(o.rc).toBe(0)

@@ -7,7 +7,9 @@
 //                              (map/, docs/, parsers/) and the pipe-order
 //                              helper (cli/order_rs/target/debug/order_rs)
 //   FASTAG_ORDER_RS            the pipe-order helper, if not in the scratch dir
-//   FASTAG_BIN                 a FASTag CLI to run (cli-consistency)
+//   FASTAG_BIN                 a FASTag CLI to run (cli-consistency); it must be
+//                              the version of params.generated.json, since the GUI
+//                              sends options an older CLI does not know
 //
 // Repository files are found relative to this file.
 import { existsSync, readFileSync } from 'node:fs'
