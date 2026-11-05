@@ -27,6 +27,21 @@
 #include <xlocale.h>
 #endif
 
+#ifdef _WIN32
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
+#  ifndef WIN32_LEAN_AND_MEAN
+#    define WIN32_LEAN_AND_MEAN
+#  endif
+#  include <windows.h>
+#else
+#  include <fcntl.h>
+#  include <sys/mman.h>
+#  include <sys/stat.h>
+#  include <unistd.h>
+#endif
+
 using namespace OpenMS;
 
 namespace FASTag
@@ -166,6 +181,74 @@ namespace FASTag
     /// vector of a function-local struct whose member initialisers name a
     /// constant of the enclosing function.
     constexpr std::uint64_t kNoOffset = std::numeric_limits<std::uint64_t>::max();
+
+    /// A whole file mapped read-only, for the offset scan: every thread
+    /// searches its pieces in place, with no read calls and no copies.
+    /// Empty (data() null) when the file cannot be mapped; the scan then
+    /// reads it through streams instead.
+    class MappedFile
+    {
+    public:
+      explicit MappedFile(const std::string& path)
+      {
+#ifdef _WIN32
+        // CreateFileA, as std::ifstream opens a narrow path: under FASTag's
+        // UTF-8 code page manifest both take UTF-8.
+        file_ = CreateFileA(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                            FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+        if (file_ == INVALID_HANDLE_VALUE) { file_ = nullptr; return; }
+        LARGE_INTEGER sz;
+        if (GetFileSizeEx(file_, &sz) == 0 || sz.QuadPart <= 0) return;
+        map_ = CreateFileMappingA(file_, nullptr, PAGE_READONLY, 0, 0, nullptr);
+        if (map_ == nullptr) return;
+        void* base = MapViewOfFile(map_, FILE_MAP_READ, 0, 0, 0);
+        if (base == nullptr) return;
+        data_ = static_cast<const char*>(base);
+        size_ = static_cast<std::uint64_t>(sz.QuadPart);
+#else
+        const int fd = ::open(path.c_str(), O_RDONLY);
+        if (fd < 0) return;
+        struct stat st;
+        if (::fstat(fd, &st) != 0 || st.st_size <= 0)
+        {
+          ::close(fd);
+          return;
+        }
+        void* base = ::mmap(nullptr, static_cast<std::size_t>(st.st_size), PROT_READ, MAP_PRIVATE, fd, 0);
+        ::close(fd); // the mapping keeps the file
+        if (base == MAP_FAILED) return;
+        ::madvise(base, static_cast<std::size_t>(st.st_size), MADV_SEQUENTIAL);
+        data_ = static_cast<const char*>(base);
+        size_ = static_cast<std::uint64_t>(st.st_size);
+#endif
+      }
+      ~MappedFile()
+      {
+#ifdef _WIN32
+        if (data_) UnmapViewOfFile(data_);
+        if (map_) CloseHandle(map_);
+        if (file_) CloseHandle(file_);
+#else
+        if (data_) ::munmap(const_cast<char*>(data_), static_cast<std::size_t>(size_));
+#endif
+      }
+      MappedFile(const MappedFile&) = delete;
+      MappedFile& operator=(const MappedFile&) = delete;
+
+      const char* data() const { return data_; }
+      std::uint64_t size() const { return size_; }
+
+    private:
+      const char* data_ = nullptr;
+      std::uint64_t size_ = 0;
+#ifdef _WIN32
+      HANDLE file_ = nullptr;
+      HANDLE map_ = nullptr;
+#endif
+    };
+
+    /// The whole file fits in this process's address space.
+    bool size_t_fits(std::uint64_t n) { return n <= std::numeric_limits<std::size_t>::max(); }
 
     /// What one piece of the file contributes to the scan.
     struct Piece
@@ -344,7 +427,8 @@ namespace FASTag
   }
 
   std::vector<std::uint64_t> IndexedMzMLReader::scanSpectrumOffsets(const std::string& path,
-                                                                     std::size_t chunk_bytes)
+                                                                     std::size_t chunk_bytes,
+                                                                     bool map)
   {
     constexpr std::string_view kOpen = "<spectrum";
     constexpr std::string_view kListOpen = "<spectrumList";
@@ -353,7 +437,16 @@ namespace FASTag
     // byte after it, so a tag that starts in this piece is always seen whole.
     constexpr std::size_t kOverlap = 32;
 
+    // Mapped when the platform allows: the threads then search the file in
+    // place instead of each copying its pieces through its own stream.
+    const MappedFile mapped(map ? path : std::string());
+    const bool in_place = mapped.data() != nullptr && size_t_fits(mapped.size());
     std::uint64_t size = 0;
+    if (in_place)
+    {
+      size = mapped.size();
+    }
+    else
     {
       std::ifstream f(path, std::ios::binary | std::ios::ate);
       if (!f) return {};
@@ -376,41 +469,69 @@ namespace FASTag
 #ifdef _OPENMP
     threads = std::max(1, std::min(omp_get_max_threads(), 16));
 #endif
-#pragma omp parallel num_threads(threads)
+    // One piece: the offsets of its tags. @p v starts at the piece and runs
+    // at least kOverlap bytes past its end (or to the end of the file).
+    auto search = [&](Piece& piece, std::uint64_t begin, std::uint64_t own, std::string_view v) {
+      for (std::size_t k = v.find('<'); k != std::string_view::npos && k < own; k = v.find('<', k + 1))
+      {
+        if (tag_at(v, k, kOpen)) piece.spectra.push_back(begin + k);
+        else if (piece.list_open == kNoOffset && tag_at(v, k, kListOpen)) piece.list_open = begin + k;
+        else if (piece.list_close == kNoOffset && tag_at(v, k, kListClose)) piece.list_close = begin + k;
+      }
+    };
+
+    if (in_place)
     {
-      std::ifstream in(path, std::ios::binary);
-      std::string buf;
-#pragma omp for schedule(dynamic, 1)
+#pragma omp parallel for num_threads(threads) schedule(dynamic, 1)
       for (std::int64_t p = 0; p < static_cast<std::int64_t>(n_pieces); ++p)
       {
         Piece& piece = pieces[static_cast<std::size_t>(p)];
-        // No exception may leave the parallel region (std::terminate), and
-        // this reader promises not to throw: a piece that fails is unread.
         try
         {
           const std::uint64_t begin = static_cast<std::uint64_t>(p) * chunk_bytes;
           const std::uint64_t own = std::min<std::uint64_t>(chunk_bytes, size - begin);
           const std::uint64_t len = std::min<std::uint64_t>(own + kOverlap, size - begin);
-          buf.resize(static_cast<std::size_t>(len));
-          in.clear();
-          in.seekg(static_cast<std::streamoff>(begin));
-          in.read(buf.data(), static_cast<std::streamsize>(len));
-          if (!in)
-          {
-            piece.read = false;
-            continue;
-          }
-          const std::string_view v(buf);
-          for (std::size_t k = v.find('<'); k != std::string_view::npos && k < own; k = v.find('<', k + 1))
-          {
-            if (tag_at(v, k, kOpen)) piece.spectra.push_back(begin + k);
-            else if (piece.list_open == kNoOffset && tag_at(v, k, kListOpen)) piece.list_open = begin + k;
-            else if (piece.list_close == kNoOffset && tag_at(v, k, kListClose)) piece.list_close = begin + k;
-          }
+          search(piece, begin, own,
+                 std::string_view(mapped.data() + begin, static_cast<std::size_t>(len)));
         }
         catch (...)
         {
           piece.read = false;
+        }
+      }
+    }
+    else
+    {
+#pragma omp parallel num_threads(threads)
+      {
+        std::ifstream in(path, std::ios::binary);
+        std::string buf;
+#pragma omp for schedule(dynamic, 1)
+        for (std::int64_t p = 0; p < static_cast<std::int64_t>(n_pieces); ++p)
+        {
+          Piece& piece = pieces[static_cast<std::size_t>(p)];
+          // No exception may leave the parallel region (std::terminate), and
+          // this reader promises not to throw: a piece that fails is unread.
+          try
+          {
+            const std::uint64_t begin = static_cast<std::uint64_t>(p) * chunk_bytes;
+            const std::uint64_t own = std::min<std::uint64_t>(chunk_bytes, size - begin);
+            const std::uint64_t len = std::min<std::uint64_t>(own + kOverlap, size - begin);
+            buf.resize(static_cast<std::size_t>(len));
+            in.clear();
+            in.seekg(static_cast<std::streamoff>(begin));
+            in.read(buf.data(), static_cast<std::streamsize>(len));
+            if (!in)
+            {
+              piece.read = false;
+              continue;
+            }
+            search(piece, begin, own, std::string_view(buf));
+          }
+          catch (...)
+          {
+            piece.read = false;
+          }
         }
       }
     }

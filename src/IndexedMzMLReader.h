@@ -72,11 +72,16 @@ namespace FASTag
     /// @p chunk_bytes changes only how the work is split, never the result;
     /// it is a parameter so the test can prove that.
     ///
+    /// The file is memory-mapped and searched in place; where it cannot be
+    /// mapped (or @p map is false, for the test) each thread reads its pieces
+    /// through its own stream instead, with the same result.
+    ///
     /// Known limit: a <spectrum tag inside an XML comment within the
     /// spectrumList would be taken for a spectrum. No mzML writer emits one;
     /// skip comments here if one ever does.
     static std::vector<std::uint64_t> scanSpectrumOffsets(const std::string& path,
-                                                          std::size_t chunk_bytes = std::size_t{4} << 20);
+                                                          std::size_t chunk_bytes = std::size_t{4} << 20,
+                                                          bool map = true);
 
     /// Spectrum @p i with native id, MS level, retention time (in SECONDS, as
     /// OpenMS wants) and precursors.

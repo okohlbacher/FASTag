@@ -320,6 +320,8 @@ int main(int argc, char** argv)
     {
       check(FASTag::IndexedMzMLReader::scanSpectrumOffsets(indexed, chunk) == whole,
             "scan result does not depend on the piece size (" + std::to_string(chunk) + ")");
+      check(FASTag::IndexedMzMLReader::scanSpectrumOffsets(indexed, chunk, /*map=*/false) == whole,
+            "the stream scan finds the same (" + std::to_string(chunk) + ")");
     }
   }
 
