@@ -640,6 +640,7 @@ int main(int argc, char** argv)
     const std::string good = synthetic_spectrum("s=1", false);
     const std::string goodz = synthetic_spectrum("s=1", true);
     const std::string arrays = "<binaryDataArrayList count=\"2\">";
+    const std::string pad(37, 'x'); // more plain bytes than one 16-byte scanner step
     struct Case
     {
       const char* name;
@@ -660,6 +661,25 @@ int main(int argc, char** argv)
         {"invalid UTF-8 in the id", edit(good, "id=\"s=1\"", "id=\"s=\xff\x31\"")},
         {"invalid UTF-8 in the metadata", edit(good, "value=\"plain\"", "value=\"\xb5m\"")},
         {"zlib: unclosed element in the metadata", edit(goodz, "<scan>\n<cvParam", "<scan>\n<scan>\n<cvParam")},
+        // The one-pass scanner's byte classes and 16-byte steps: each defect
+        // also placed after a run of plain bytes longer than one step.
+        {"UTF-16 surrogate in UTF-8", edit(good, "value=\"plain\"", "value=\"" + pad + "\xed\xa0\x80\"")},
+        {"overlong UTF-8", edit(good, "value=\"plain\"", "value=\"" + pad + "\xe0\x80\xaf\"")},
+        {"overlong 2-byte UTF-8", edit(good, "value=\"plain\"", "value=\"\xc0\xbc\"")},
+        {"U+FFFE in UTF-8", edit(good, "value=\"plain\"", "value=\"" + pad + "\xef\xbf\xbe\"")},
+        {"code point above U+10FFFF", edit(good, "value=\"plain\"", "value=\"\xf4\x90\x80\x80\"")},
+        {"truncated UTF-8 before the quote", edit(good, "value=\"plain\"", "value=\"" + pad + "\xe2\x82\"")},
+        {"character reference to U+FFFE", edit(good, "value=\"plain\"", "value=\"&#xFFFE;\"")},
+        {"character reference to a surrogate", edit(good, "value=\"plain\"", "value=\"&#xD800;\"")},
+        {"control character in a value", edit(good, "value=\"plain\"", "value=\"" + pad + "\x01\"")},
+        {"control character in text", edit(good, "</scan>", pad + "\x1f</scan>")},
+        {"NUL in text", edit(good, "</scan>", pad + std::string(1, '\0') + "</scan>")},
+        {"'<' in a value", edit(good, "value=\"plain\"", "value=\"" + pad + "<\"")},
+        {"']]>' after plain text", edit(good, "</scan>", pad + "]]></scan>")},
+        {"duplicate attribute, other quotes", edit(good, "value=\"plain\"", "value=\"plain\" value='plain'")},
+        {"attribute without a value", edit(good, "<scan>", "<scan x>")},
+        {"unquoted attribute value", edit(good, "<scan>", "<scan x=1>")},
+        {"tag that does not end", good.substr(0, good.find("<scan>") + 5)},
     };
     int k = 0;
     for (const Case& c : malformed)
@@ -683,6 +703,10 @@ int main(int argc, char** argv)
         {"predefined entity in the metadata", edit(good, "value=\"plain\"", "value=\"A&amp;B &lt;&#181;&#xB5;\"")},
         {"UTF-8 in the metadata", edit(good, "value=\"plain\"", "value=\"\xc2\xb5m \xe2\x82\xac\"")},
         {"end tag with whitespace", edit(good, "</scanList>", "</scanList  >")},
+        {"UTF-8 after plain bytes", edit(good, "value=\"plain\"", "value=\"" + pad + "\xf4\x8f\xbf\xbf" + pad + "\xc2\xb5\"")},
+        {"'>', ']]>' and the other quote in a value", edit(good, "value=\"plain\"", "value=\"" + pad + "a>b]]>c'\"")},
+        {"character reference to U+10FFFF", edit(good, "value=\"plain\"", "value=\"&#x10FFFF;\"")},
+        {"tabs and line breaks in text", edit(good, "</scan>", pad + "\t\r\n" + pad + "</scan>")},
     };
     for (const Case& c : fine)
     {
