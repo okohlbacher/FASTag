@@ -37,8 +37,9 @@ env:
   # 16 ranges of 32 MiB = the first 512 MiB of the file, about 60k MS2 spectra.
   PART_BYTES: '33554432'
   PARTS: '16'
-  # full: allocator variants x threads, harness modes, Defender; affinity: SMT vs two cores.
-  PLAN: affinity
+  # full: allocator variants x threads, harness modes, Defender; affinity: SMT vs two cores;
+  # oversub: unpinned placement and oversubscribed runs, traced.
+  PLAN: oversub
 
 jobs:
   exp:
@@ -570,6 +571,16 @@ jobs:
             With-Etw 'mi_matched_t2_smt' { Run-FASTag 'mi' 'matched' 2 9 '_smt_etw' $smt }
             With-Etw 'harness_base_decode_t2_cores' { Run-Harness 'base' 'decode' 2 1 '@cores_etw' $cores }
             With-Etw 'harness_base_decode_t2_smt' { Run-Harness 'base' 'decode' 2 1 '@smt_etw' $smt }
+            Get-ChildItem "$O\etl" | Format-Table Name, Length | Out-Host
+          }
+          if ($env:PLAN -eq 'oversub') {
+            # Where the OS puts unpinned threads, and what reads wait on when threads outnumber CPUs.
+            foreach ($rep in 1..3) { foreach ($v in 'base', 'mi') { Run-FASTag $v 'matched' 2 $rep '_free'; Run-FASTag $v 'matched' 8 $rep '_free' } }
+            foreach ($v in 'base', 'mi') { Run-FASTag $v 'matched' 16 1 '_free' }
+            With-Etw 'base_matched_t2_free' { Run-FASTag 'base' 'matched' 2 9 '_free_etw' }
+            With-Etw 'base_matched_t4_free' { Run-FASTag 'base' 'matched' 4 9 '_free_etw' }
+            With-Etw 'base_matched_t8_free' { Run-FASTag 'base' 'matched' 8 9 '_free_etw' }
+            With-Etw 'mi_matched_t8_free' { Run-FASTag 'mi' 'matched' 8 9 '_free_etw' }
             Get-ChildItem "$O\etl" | Format-Table Name, Length | Out-Host
           }
           if ($env:PLAN -eq 'full') {
