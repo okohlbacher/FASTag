@@ -109,7 +109,12 @@ merge_recon() {
   head -1 "$1"
   awk -F'\t' -v stats="$stats.recon" '
     FILENAME == ARGV[1] { order[++n] = $0; next }
-    FILENAME == ARGV[2] { k = $1 SUBSEP $2 SUBSEP $3; fate[k] = (k in fate && fate[k] != $4) ? "M" : $4; next }
+    # Test membership before assigning: in `fate[k] = (k in fate ...)` POSIX
+    # leaves open whether the left side creates fate[k] first, and mawk does,
+    # so every sequence would read as mixed.
+    FILENAME == ARGV[2] { k = $1 SUBSEP $2 SUBSEP $3; v = $4
+                          if (k in fate && fate[k] != v) v = "M"
+                          fate[k] = v; next }
     FNR == 1 { ++nf; next }
     { i = ++nr[nf, $1]; row[nf, $1, i] = $0; tag[nf, $1, i] = $2 }
     END {
