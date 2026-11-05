@@ -1294,9 +1294,9 @@ jobs:
   #
   # FAILS LOUDLY. Up to 1.11.0 a missing token was only a ::notice and the job
   # went green, relying on the tap's 6-hourly schedule; the secret was never
-  # set, the schedule fell over too, and 1.10.0 and 1.11.0 had to be pushed to
-  # the tap by hand. Now a tag build without the token, or with one that
-  # cannot dispatch, is red. `secrets.*` cannot appear in an `if:`
+  # set, so every release waited up to 6 h for the schedule (1.10.0 and 1.11.0
+  # were dispatched by hand instead). Now a tag build without the token, or
+  # with one that cannot dispatch, is red. `secrets.*` cannot appear in an `if:`
   # (0-job startup_failure), so the presence check is a step output, same
   # pattern as the signing gate above.
   #
