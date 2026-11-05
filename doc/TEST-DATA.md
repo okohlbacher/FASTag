@@ -43,6 +43,16 @@ same way, and written with `FileConverter -write_scan_index true` if needed.
   k-th MS2, 1/3/8 threads to agree, `-out_spectra` to round-trip, and checks
   USI, `-recon_id_out`, `-digest_out`, charge-less input, subsampling and the
   error exits.
+- `mzml_to_mgf_test` runs `tools/mzml_to_mgf.py` on the fixture mzML (the
+  output must equal the vendored MGF byte for byte) and on two timsTOF-shaped
+  fixtures (`test/fixtures/README.md`): diaTracer's layout, with the precursor
+  m/z only as the isolation window target, and ddaPASEF MS2 without peaks in
+  three encodings, a precursor without m/z and an MS2 without precursor. It
+  checks what is written and counted, `--skip-empty`, the errors, and that
+  FASTag gives the same tags, MS2 count and no-charge count from each MGF as
+  from its mzML (column 1 cut), with column 1 naming the block whose TITLE is
+  the mzML row's ID. It skips without a Python that has pyteomics
+  (`FASTAG_PYTHON` names one).
 
 Outside ctest (data node, 2026-11-04, FASTag on this branch at 32 threads):
 
@@ -55,9 +65,60 @@ Outside ctest (data node, 2026-11-04, FASTag on this branch at 32 threads):
 | PXD054073 `HeLa_T2_DDA_E_A_nLC_timspro_R02` | AlphaTims MGF; its FileConverter MGF→mzML is the control | default arguments | whole tags.tsv identical, column 1 included (130,611 MS2, 4,708,932 rows) |
 | PXD003531, the JPR harness MGF (written by `fastag_bench`, whose RT ×60 is right here because the source RT is in minutes) | harness | the gate's 1.9.0 `dda_default` reference | its 27,345 TITLEs are the mzML's MS2 native IDs in order; tags identical to the reference (column 1 cut) |
 
+The converter on timsTOF input (data node, 2026-11-05, FASTag 1.10.0 at
+32-64 threads, default arguments; column 1 named the block whose TITLE is the
+mzML row's ID in every row):
+
+| public input | MS2 | result |
+|---|---|---|
+| PXD047793 `4223_TIMS2_001_4_Slot2-1_1_2869_diatracer.mzML` (diaTracer 2.2.1, precursor m/z only as isolation window target; the converter refused it before) | 2,303,274 | tags identical (column 1 cut), 73,354,262 rows |
+| PXD054073 `HeLa_T2_DDA_E_A_nLC_timspro_R02.d` written as mzML by mzpeak-convert 0.18.0 (3 MS2 without peaks, as uncompressed arrays of length 0; 5,952 precursors at m/z 0) | 357,805 | tags identical (column 1 cut), 7,309,985 rows; both runs count 357,802 MS2 and 5,952 without charge |
+
+That ddaPASEF file writes its empty MS2 with arrays of length 0, which the
+converter read before too (same MGF byte for byte); an MS2 with no binary
+arrays at all, as in `ddapasef_empty.mzML`, made it fail.
+
 `mgf_reader_test <files>` found no difference from `MascotGenericFile` on
 the 130,611 blocks of the PXD054073 AlphaTims MGF and the 27,345 and 6,103
 blocks of the harness's PXD003531 and PXD000001 MGFs.
+
+### Direct mzML peak decoder
+
+`indexed_mzml_test` reads every spectrum twice, through `MzMLDirectDecoder`
+and through OpenMS's `domParseSpectrum` alone, and requires the same result
+(peaks bit for bit, data arrays, meta values, precursors) or the same error.
+Under ctest it gets the fixture, its eight raw/zlib x 32/64-bit re-encodings
+and numpress, edits of those, synthetic spectra, and, where the fixtures are
+present, `diatracer_like.mzML` and `ddapasef_empty.mzML` (layouts OpenMS
+did not write). The synthetic spectra hold malformed XML that OpenMS refuses
+(unclosed or mismatched elements, undefined entities, a bare `&`, `]]>`,
+attributes run together or repeated, invalid UTF-8 in the id or the
+metadata, a missing `</binaryDataArrayList>`): each must be an error on the
+direct path too, as it was in 1.10.0. Well-formed variants (comments,
+predefined entities and character references, UTF-8 in the metadata) must be
+read directly. A zlib spectrum with `defaultArrayLength="2147483647"` must be
+read through OpenMS (two peaks, a length warning) with the address space
+capped 8 GB above the process's size on Linux, where sizing a buffer from the
+claim fails; and an absorbance unit written as `UO&#58;0000269` must keep
+its meta value.
+
+Run by hand on node data (Release build of perf/read-path against OpenMS
+develop 70cebcd144, 5 Nov 2026), `indexed_mzml_test` with the gate inputs as
+extra arguments; 0 spectra differ in every file:
+
+| file | writer | MS2 | direct | via OpenMS |
+|---|---|---:|---:|---:|
+| PXD003531 `20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01` | ThermoRawFileParser 2.0.0.0, zlib | 27,345 | 27,345 | 0 |
+| PXD004541 `HF1_..._TMT10_hpHRP_DMSO1_2p5ug_4uL_fr02` | ThermoRawFileParser 2.0.0.0, zlib | 40,111 | 40,111 | 0 |
+| PXD040407 `Hog1p_WT_Rep3_Chymo_5uL` | ThermoRawFileParser 2.0.0.0, zlib | 11,351 | 11,351 | 0 |
+| PXD014764 `20190412_KEH_HF_SA_ANW_R11_100419_CNOT_R1_f008` | ThermoRawFileParser 2.0.0.0, zlib | 30,280 | 30,280 | 0 |
+| PXD010783 `KristenJeff_p53_mod_AspN_03_02_07` | ThermoRawFileParser 2.0.0.0, zlib | 7,626 | 7,626 | 0 |
+| `test/fixtures/diatracer_like.mzML` | diaTracer layout (synthetic) | 60 | 60 | 0 |
+| `test/fixtures/ddapasef_empty.mzML` | msconvert ddaPASEF layout (synthetic) | 60 | 59 | 1 (`<binaryDataArrayList count="0">`) |
+
+All five gate inputs come from one writer. Real msconvert, diaTracer and
+mzpeak-convert files have not been compared spectrum by spectrum; only the
+synthetic layouts above stand in for them.
 
 ## Tier 2 — benchmark corpus (external, not in-repo)
 

@@ -13,9 +13,11 @@ The desktop GUI's own dependencies are tracked in `gui/package-lock.json`
 |---|---|---|---|---|
 | [OpenMS](https://www.openms.de) | ≥ 3.7 (develop `70cebcd144`) | BSD-3-Clause | mzML, mzPeak and FASTA I/O, residue chemistry, physical constants, spectrum data structures, TOPP application framework (`OpenMS_CLI`) | dynamic |
 | [Boost.Math](https://www.boost.org) | ≥ 1.81 | BSL-1.0 | chi-squared and hypergeometric distributions | header-only |
+| [zlib](https://zlib.net) | the one OpenMS links (1.3.2 in CI) | Zlib | inflating zlib-compressed mzML peak arrays in the direct decoder | dynamic |
+| [mimalloc](https://github.com/microsoft/mimalloc) | 2.2.4 (source tarball pinned by SHA-256 in `CMakeLists.txt`) | MIT | Windows only (`FASTAG_MIMALLOC`, on by default with MSVC): replaces the Windows process heap for the whole process through `mimalloc-redirect.dll`, because the many small per-spectrum allocations of the mzML read scale poorly on it | dynamic (`mimalloc.dll` + `mimalloc-redirect.dll` beside the executable) |
 
-Boost arrives transitively with OpenMS; FASTag adds no dependency OpenMS does
-not already require. The only third-party source in this repository is one
+Boost and zlib arrive transitively with OpenMS; apart from mimalloc on Windows,
+FASTag adds no dependency OpenMS does not already require. The only third-party source in this repository is one
 function ported from OpenMS (BSD-3-Clause, notice kept in the file): the
 averagine deisotoper in `src/AveragineDeisotoper.cpp`.
 
@@ -35,6 +37,14 @@ Every bundle carries `LICENSE` (FASTag's MIT notice) and
 `tools/third_party_notices.py`: each bundled library mapped to the conda
 package that installed it, with that package's version, licence and licence
 texts. OpenMS's own licence and notices are in `share-OpenMS/`.
+
+The Windows zip and the Windows installer's bundled CLI also carry
+`mimalloc.dll` and `mimalloc-redirect.dll` (mimalloc 2.2.4, MIT, Microsoft
+Corporation and Daan Leijen), built from source by FASTag's CMake rather than
+installed by conda; `.github/workflows/windows.yml` appends mimalloc's licence
+text to `THIRD-PARTY-NOTICES.txt`. `mimalloc-redirect.dll` is the prebuilt
+binary the mimalloc source ships. Building with `-DFASTAG_MIMALLOC=OFF` drops
+both; `MIMALLOC_DISABLE_REDIRECT=1` switches the redirection off at run time.
 
 ## Shipped data
 
@@ -64,7 +74,7 @@ texts. OpenMS's own licence and notices are in `share-OpenMS/`.
 | Profile MS2 centroiding on mzPeak input | `PeakPickerHiRes` |
 | FASTA parsing | `FASTAFile::load` |
 | Spectra, peaks, precursors | `MSExperiment`, `MSSpectrum`, `Peak1D`, `Precursor` |
-| Streaming mzML reads, bounded memory | `MzMLSpectrumDecoder::domParseSpectrum` (peaks, via FASTag's `IndexedMzMLReader`); `OnDiscMSExperiment` as the fallback and `-out_spectra` reader (one reader per thread; the class is not thread-safe) |
+| Streaming mzML reads, bounded memory | `MzMLSpectrumDecoder::domParseSpectrum` (peaks of every spectrum FASTag's direct decoder declines, via `IndexedMzMLReader`); `OnDiscMSExperiment` as the fallback and `-out_spectra` reader (one reader per thread; the class is not thread-safe) |
 | CLI, INI files, logging, citations | `TOPPBase` |
 | MGF numbers (peaks, PEPMASS, CHARGE, RTINSECONDS, MSLEVEL) | `StringUtilsHelper::extractDouble` / `extractInt`, the parsers behind `StringUtils::toDouble`, which `MascotGenericFile` uses |
 | MGF and compression by file name | `FileHandler::getTypeByFileName`, `FileNameUtils::hasCompressionSuffix` / `compressionType` |
@@ -83,7 +93,8 @@ texts. OpenMS's own licence and notices are in `share-OpenMS/`.
 | Top-N peak selection | `NLargest` uses `sortByIntensity()`, an unstable sort with no secondary key. Peaks carry integer counts, so ties at the cut are common — 23% of real spectra have one — and which peak survives would depend on the standard library's sort. Peak selection provably drives tag output, so FASTag uses a total order (intensity desc, m/z desc). |
 | Spectrum graph, tag enumeration, scoring, extension | The algorithm itself. `OpenMS::Tagger` enumerates tags but returns bare strings with no scoring and no flanking masses, and expands I/L during recursion, which costs 2^k tags. |
 | Isobaric collapse rules | Derived at runtime from `ResidueDB` masses at the configured tolerance. `MassDecompositionAlgorithm` decomposes a mass into compositions, but returns unordered compositions rather than the ordered residue pairs the rules need. |
-| mzML reader (`IndexedMzMLReader`) | `OnDiscMSExperiment`'s per-spectrum decoder drops MS level, retention time and precursors, so getting them means a serial parse of the whole file before tagging. FASTag's reader reads them from each spectrum's own XML, rebuilds a missing or stale index with a parallel scan, and still decodes the peaks with OpenMS's `domParseSpectrum`. |
+| mzML reader (`IndexedMzMLReader`) | `OnDiscMSExperiment`'s per-spectrum decoder drops MS level, retention time and precursors, so getting them means a serial parse of the whole file before tagging. FASTag's reader reads them from each spectrum's own XML, rebuilds a missing or stale index with a parallel scan, and decodes the peaks itself (`MzMLDirectDecoder`). |
+| mzML peak decoder (`MzMLDirectDecoder`) | `domParseSpectrum` builds a libxml2 document per spectrum and a new inflate state per array; that was most of the read cost. FASTag's decoder scans the `<binaryDataArrayList>` directly, with per-thread buffers, for one m/z and one intensity array (32/64-bit float, uncompressed or zlib) and hands everything else (numpress, zstd, extra arrays, unknown terms, malformed input) to `domParseSpectrum`. Spectrum by spectrum identical to it on the fixture, its re-encodings and the public gate inputs (`test/indexed_mzml_test.cpp`); `FASTAG_OPENMS_DECODER=1` turns it off. |
 | mzPeak streaming (`MzPeakStream`) | Streams an mzPeak archive in file order through `MzPeakFile::transform`, so spectra are tagged in parallel without loading the run. |
 | MGF reader (`MgfReader`) | `MascotGenericFile` only loads a whole file into memory, serially; its per-block parser is protected and bound to `std::ifstream`, and it refuses the CHARGE forms msconvert (`2+ and 3+`) and its own writer (`-3-`) emit. FASTag indexes the blocks in parallel and parses each with OpenMS's number parsers, bit-identical to `MascotGenericFile` on every field both read (`test/mgf_reader_test.cpp`). |
 | k-mer index for the FASTA filter | Application-specific; nothing equivalent in OpenMS. |
@@ -93,8 +104,11 @@ texts. OpenMS's own licence and notices are in `share-OpenMS/`.
 
 `test/fixtures/Ecoli_MS2_small.mgf` is `Ecoli_MS2_small.mzML` (OpenMS example,
 BSD-3-Clause) written as MGF by `tools/mzml_to_mgf.py` with pyteomics 5.0.2
-(Apache-2.0; used to write the fixture, not shipped or linked). Provenance and
-sha256 in `test/fixtures/README.md`.
+(Apache-2.0; used to write the fixture, not shipped or linked).
+`test/fixtures/diatracer_like.mzML` and `ddapasef_empty.mzML` carry peaks of the
+same example in timsTOF-shaped mzML written by
+`test/fixtures/make_converter_fixtures.py`, so BSD-3-Clause as well. Provenance
+and sha256 in `test/fixtures/README.md`.
 
 ## Provenance
 

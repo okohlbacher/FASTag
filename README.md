@@ -366,8 +366,23 @@ only in the input's name and, in the digest, the metadata rows), provided no
 so the two runs draw different spectra). The tolerance
 probe (the warning that no two peaks are closer than 20 times the fragment
 tolerance) is also placed over all spectra, so for an MGF and its mzML it can
-name different numbers, or appear for only one of the two. The k-th MS2 of
-the mzML is `index=<k>`, and TITLE holds its mzML ID. **OpenMS FileConverter's
+name different numbers, or appear for only one of the two. TITLE holds the
+mzML native ID of each block and is the stable key back to the mzML;
+`index=<k>` is the k-th block written, which is the k-th MS2 of the mzML only
+when no MS2 was left out (see below). The precursor m/z is the one FASTag's
+mzML reader reads: the selected ion m/z, else the isolation window target m/z
+when it is above 0, which is all diaTracer writes. An MS2 without peaks
+(ddaPASEF conversions write some) becomes a block without peak lines, which
+FASTag skips as it skips the empty spectrum in the mzML (`--skip-empty` leaves
+it out instead, for readers that refuse empty blocks; the tags stay the same).
+An MS2 without a precursor, which FASTag ignores in an mzML, is left out: no
+precursorList, or only precursors with neither a selected ion nor an isolation
+window target above 0. Both kinds of left-out MS2 shift `index=<k>` of the
+blocks after them. A negative charge state is written as `CHARGE=<z>-`, which
+FASTag reads as charge z in negative mode, while its mzML reader keeps the
+negative value and counts it as no charge, so negative-mode spectra can tag
+differently from the two inputs. The converter counts each case on
+stderr. **OpenMS FileConverter's
 mzML→MGF is lossy** (m/z to 15 and intensities to 6 significant digits, so peak
 ranks can tie or swap), and tags from its MGFs can differ slightly. Its
 MGF→mzML direction is exact.
