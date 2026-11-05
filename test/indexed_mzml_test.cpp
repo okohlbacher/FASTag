@@ -11,12 +11,14 @@
 
 #include "IndexedMzMLReader.h"
 
+#include <OpenMS/FORMAT/MSNumpressCoder.h>
 #include <OpenMS/FORMAT/MzMLFile.h>
 #include <OpenMS/IONMOBILITY/IMDataArrayUtils.h>
 #include <OpenMS/KERNEL/MSExperiment.h>
 #include <OpenMS/KERNEL/OnDiscMSExperiment.h>
 
 #include <cmath>
+#include <cstring>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -93,6 +95,121 @@ namespace
     }
     check(n > 0 && bad == 0, what + ": every spectrum reads the same (" + std::to_string(bad) +
                                  " of " + std::to_string(n) + " differ)");
+  }
+}
+
+namespace
+{
+  /// Bitwise equality of two doubles (NaN equals NaN, +0 differs from -0).
+  bool same_bits(double a, double b) { return std::memcmp(&a, &b, sizeof a) == 0; }
+  bool same_bits(float a, float b) { return std::memcmp(&a, &b, sizeof a) == 0; }
+
+  /// Everything domParseSpectrum puts into a spectrum, compared exactly.
+  bool same_decoded(const MSSpectrum& a, const MSSpectrum& b, std::string& why)
+  {
+    if (a.getNativeID() != b.getNativeID()) { why = "native id"; return false; }
+    if (a.getMSLevel() != b.getMSLevel()) { why = "ms level"; return false; }
+    if (!same_bits(a.getRT(), b.getRT())) { why = "rt"; return false; }
+    if (a.size() != b.size()) { why = "peak count"; return false; }
+    for (Size k = 0; k < a.size(); ++k)
+    {
+      if (!same_bits(a[k].getMZ(), b[k].getMZ()) || !same_bits(a[k].getIntensity(), b[k].getIntensity()))
+      {
+        why = "peak " + std::to_string(k);
+        return false;
+      }
+    }
+    if (a.getFloatDataArrays() != b.getFloatDataArrays() || a.getIntegerDataArrays() != b.getIntegerDataArrays() ||
+        a.getStringDataArrays() != b.getStringDataArrays())
+    {
+      why = "data arrays";
+      return false;
+    }
+    std::vector<std::string> ka, kb;
+    a.getKeys(ka);
+    b.getKeys(kb);
+    if (ka != kb) { why = "meta values"; return false; }
+    if (a.getPrecursors() != b.getPrecursors()) { why = "precursors"; return false; }
+    if (!(a.getInstrumentSettings() == b.getInstrumentSettings())) { why = "instrument settings"; return false; }
+    if (!same_bits(a.getDriftTime(), b.getDriftTime()) || a.getDriftTimeUnit() != b.getDriftTimeUnit())
+    {
+      why = "drift time";
+      return false;
+    }
+    return true;
+  }
+
+  /// Every spectrum of @p path read twice, with the direct decoder and with
+  /// OpenMS's alone, must be the same. @p expect_direct: whether the direct
+  /// decoder must have taken at least one spectrum (false where the file is
+  /// built to be declined, e.g. numpress). Returns the MS2 count compared.
+  Size direct_vs_openms(const std::string& path, const std::string& what, bool expect_direct)
+  {
+    FASTag::IndexedMzMLReader direct(path), openms(path);
+    check(direct.ok() && openms.ok(), what + ": reader opens the file");
+    if (!direct.ok() || !openms.ok()) return 0;
+    direct.setDirectDecoding(true);
+    openms.setDirectDecoding(false);
+    Size bad = 0, ms2 = 0;
+    std::string first;
+    for (Size i = 0; i < direct.getNrSpectra(); ++i)
+    {
+      MSSpectrum a, b;
+      bool threw_a = false, threw_b = false;
+      try { a = direct.getSpectrum(i); } catch (const Exception::BaseException&) { threw_a = true; }
+      try { b = openms.getSpectrum(i); } catch (const Exception::BaseException&) { threw_b = true; }
+      std::string why;
+      if (threw_a != threw_b) why = "one path threw";
+      else if (!threw_a) same_decoded(a, b, why);
+      if (!why.empty())
+      {
+        if (bad == 0) first = "spectrum " + std::to_string(i) + ": " + why;
+        ++bad;
+      }
+      if (!threw_b && b.getMSLevel() == 2) ++ms2;
+    }
+    check(openms.directDecoded() == 0, what + ": the OpenMS-only reader decodes nothing directly");
+    if (expect_direct)
+      check(direct.directDecoded() > 0, what + ": the direct decoder takes spectra (" +
+                                            std::to_string(direct.directDecoded()) + " direct, " +
+                                            std::to_string(direct.openmsDecoded()) + " OpenMS)");
+    else
+      check(direct.directDecoded() == 0, what + ": the direct decoder declines every spectrum");
+    check(bad == 0, what + ": direct and OpenMS decoding agree on every spectrum (" + std::to_string(bad) +
+                        " differ" + (bad ? "; first " + first : std::string()) + ")");
+    std::cout << what << ": " << direct.getNrSpectra() << " spectra, " << ms2 << " MS2, "
+              << direct.directDecoded() << " direct, " << direct.openmsDecoded() << " via OpenMS\n";
+    return ms2;
+  }
+
+  /// @p src rewritten with the given array encoding.
+  std::string rewrite_encoded(const std::string& src, const std::string& dst, bool zlib, bool mz32, bool int32,
+                              bool numpress = false)
+  {
+    try
+    {
+      PeakMap exp;
+      MzMLFile mz;
+      mz.load(src, exp);
+      mz.getOptions().setWriteIndex(true);
+      mz.getOptions().setCompression(zlib);
+      mz.getOptions().setMz32Bit(mz32);
+      mz.getOptions().setIntensity32Bit(int32);
+      if (numpress)
+      {
+        MSNumpressCoder::NumpressConfig c;
+        c.np_compression = MSNumpressCoder::LINEAR;
+        c.estimate_fixed_point = true;
+        mz.getOptions().setNumpressConfigurationMassTime(c);
+      }
+      mz.store(dst, exp);
+      return dst;
+    }
+    catch (const Exception::BaseException& e)
+    {
+      std::cerr << "could not write " << dst << ": " << e.what() << "\n";
+      return {};
+    }
   }
 }
 
@@ -349,6 +466,80 @@ int main(int argc, char** argv)
       check(other, "the spectrum before it still reads");
     }
   }
+
+  // The direct peak decoder against OpenMS's decoder, spectrum by spectrum,
+  // on every encoding OpenMS writes and on edits it must decline or survive.
+  {
+    direct_vs_openms(indexed, "direct: fixture as written", true);
+    for (const bool zlib : {false, true})
+      for (const bool mz32 : {false, true})
+        for (const bool int32 : {false, true})
+        {
+          const std::string tag = std::string(zlib ? "zlib" : "raw") + (mz32 ? "_mz32" : "_mz64") +
+                                  (int32 ? "_int32" : "_int64");
+          const std::string f = rewrite_encoded(fixture, tmp + "/fastag_enc_" + tag + ".mzML", zlib, mz32, int32);
+          check(!f.empty(), "write the " + tag + " copy");
+          if (!f.empty()) direct_vs_openms(f, "direct: " + tag, true);
+        }
+    // Numpress is OpenMS's alone: every spectrum declined, same result.
+    {
+      const std::string f = rewrite_encoded(fixture, tmp + "/fastag_enc_numpress.mzML", true, false, true, true);
+      if (!f.empty()) direct_vs_openms(f, "direct: numpress (declined)", false);
+    }
+    // Line breaks inside the base64, as some writers emit them: the index
+    // goes stale (rescanned), the decoder skips the whitespace as OpenMS
+    // strips it.
+    {
+      std::string b = slurp(indexed);
+      for (std::size_t at = b.find("<binary>"); at != std::string::npos; at = b.find("<binary>", at + 1))
+      {
+        const std::size_t e = b.find("</binary>", at);
+        if (e - at > 40) b.insert(at + 8 + 16, "\n  \t\r ");
+      }
+      spit(tmp + "/fastag_b64_breaks.mzML", b);
+      direct_vs_openms(tmp + "/fastag_b64_breaks.mzML", "direct: whitespace in base64", true);
+    }
+    // Attributes in single quotes and in another order, a cvParam written
+    // with an end tag, and a comment inside the arrays (declined).
+    {
+      std::string b = slurp(indexed);
+      const std::string from = "<cvParam cvRef=\"MS\" accession=\"MS:1000574\" name=\"zlib compression\" />";
+      const std::string from_raw = "<cvParam cvRef=\"MS\" accession=\"MS:1000576\" name=\"no compression\" />";
+      const std::string to = "<cvParam name='zlib compression' accession='MS:1000574' cvRef='MS'></cvParam>";
+      const std::string to_raw = "<cvParam name='no compression' accession='MS:1000576' cvRef='MS'></cvParam>";
+      for (std::size_t at = b.find(from); at != std::string::npos; at = b.find(from, at + 1)) b.replace(at, from.size(), to);
+      for (std::size_t at = b.find(from_raw); at != std::string::npos; at = b.find(from_raw, at + 1))
+        b.replace(at, from_raw.size(), to_raw);
+      spit(tmp + "/fastag_attr_forms.mzML", b);
+      direct_vs_openms(tmp + "/fastag_attr_forms.mzML", "direct: attribute forms", true);
+
+      std::string c = slurp(indexed);
+      for (std::size_t at = c.find("<binaryDataArray "); at != std::string::npos; at = c.find("<binaryDataArray ", at + 30))
+        c.insert(at, "<!-- x -->");
+      spit(tmp + "/fastag_comment.mzML", c);
+      direct_vs_openms(tmp + "/fastag_comment.mzML", "direct: comments in the arrays (declined)", false);
+    }
+    // Truncated and corrupted zlib streams: OpenMS's verdict either way.
+    {
+      const std::string z = tmp + "/fastag_enc_zlib_mz64_int32.mzML";
+      std::string b = slurp(z);
+      std::size_t k = 0;
+      for (std::size_t at = b.find("<binary>"); at != std::string::npos; at = b.find("<binary>", at + 1), ++k)
+      {
+        const std::size_t e = b.find("</binary>", at);
+        if (e - at < 40) continue;
+        if (k % 7 == 1) b[at + 8 + 12] = b[at + 8 + 12] == 'A' ? 'B' : 'A'; // corrupt
+        if (k % 7 == 3) b.replace(e - 8, 8, "AAAAAAAA");                      // damage the stream's end
+      }
+      spit(tmp + "/fastag_zlib_damaged.mzML", b);
+      direct_vs_openms(tmp + "/fastag_zlib_damaged.mzML", "direct: damaged zlib streams", true);
+    }
+    // The ion mobility file of above: three arrays, declined.
+    direct_vs_openms(tmp + "/fastag_im_arrays.mzML", "direct: extra arrays (declined)", false);
+  }
+  // Further mzML files from the command line (the public gate inputs, say),
+  // each compared spectrum by spectrum.
+  for (int a = 2; a < argc; ++a) direct_vs_openms(argv[a], std::string("direct: ") + argv[a], true);
 
   // An XML file with no spectrumList holds nothing to scan for.
   {

@@ -92,6 +92,17 @@ namespace FASTag
     ///   file; a silent empty spectrum would drop its tags).
     OpenMS::MSSpectrum getSpectrum(OpenMS::Size i);
 
+    /// MS2 peaks are decoded by MzMLDirectDecoder, and by OpenMS's
+    /// domParseSpectrum for every spectrum it declines. On by default;
+    /// FASTAG_OPENMS_DECODER=1 turns it off for every reader, this for one.
+    void setDirectDecoding(bool on);
+    /// MS2 spectra this reader decoded directly, and through OpenMS.
+    std::size_t directDecoded() const;
+    std::size_t openmsDecoded() const;
+    /// Declined this many times in a row from the start, a reader stops
+    /// trying the direct decoder.
+    static constexpr std::size_t kDirectProbe = 64;
+
     /// Does this file give up MS level and precursors to the scrape? Reads
     /// metadata WITHOUT decoding peaks, up to the first MS2 (at most
     /// kMetadataProbe spectra): true if that MS2 has a precursor, or if no

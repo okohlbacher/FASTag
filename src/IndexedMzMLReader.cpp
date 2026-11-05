@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "IndexedMzMLReader.h"
+#include "MzMLDirectDecoder.h"
 
 #include <OpenMS/CONCEPT/Exception.h>
 #include <OpenMS/FORMAT/HANDLERS/MzMLSpectrumDecoder.h>
@@ -185,6 +186,12 @@ namespace FASTag
     std::shared_ptr<const std::vector<std::uint64_t>> offsets;
     std::ifstream in;
     MzMLSpectrumDecoder decoder;
+    /// Peaks without a DOM (see MzMLDirectDecoder.h); OpenMS's decoder above
+    /// takes every spectrum this one declines.
+    MzMLDirectDecoder direct;
+    bool direct_on = !MzMLDirectDecoder::disabledByEnvironment();
+    std::size_t n_direct = 0;   ///< MS2 peaks decoded directly
+    std::size_t n_openms = 0;   ///< MS2 peaks decoded by OpenMS
     std::string buffer;
     bool ok = false;
     bool rebuilt = false; ///< offsets came from a scan, not the file's index
@@ -439,6 +446,7 @@ namespace FASTag
   {
     impl_->offsets = other.impl_->offsets;
     impl_->rebuilt = other.impl_->rebuilt;
+    impl_->direct_on = other.impl_->direct_on;
     if (!other.impl_->ok) return;
     impl_->in.open(impl_->path, std::ios::binary);
     impl_->ok = impl_->in.good();
@@ -449,6 +457,12 @@ namespace FASTag
   bool IndexedMzMLReader::ok() const { return impl_->ok; }
 
   bool IndexedMzMLReader::indexRebuilt() const { return impl_->rebuilt; }
+
+  void IndexedMzMLReader::setDirectDecoding(bool on) { impl_->direct_on = on; }
+
+  std::size_t IndexedMzMLReader::directDecoded() const { return impl_->n_direct; }
+
+  std::size_t IndexedMzMLReader::openmsDecoded() const { return impl_->n_openms; }
 
   Size IndexedMzMLReader::getNrSpectra() const
   {
@@ -557,15 +571,28 @@ namespace FASTag
     if (ms_level == 2 && want_peaks)
     {
       if (!read_rest()) return unreadable("a short read");
-      try
+      if (impl_->direct_on && impl_->direct.decode(impl_->buffer, spec))
       {
-        impl_->decoder.domParseSpectrum(impl_->buffer, spec);
-        // domParseSpectrum resets the spectrum, so the level goes back on.
-        spec.setMSLevel(static_cast<UInt>(ms_level));
+        ++impl_->n_direct;
       }
-      catch (const Exception::BaseException& e)
+      else
       {
-        return unreadable((std::string("an undecodable MS2 spectrum (") + e.what() + ")").c_str());
+        ++impl_->n_openms;
+        // A file the direct decoder cannot read (numpress, say) is left to
+        // OpenMS for good once its first spectra all came back declined, so
+        // such a file does not pay for a failed scan per spectrum.
+        if (impl_->direct_on && impl_->n_direct == 0 && impl_->n_openms >= kDirectProbe)
+          impl_->direct_on = false;
+        try
+        {
+          impl_->decoder.domParseSpectrum(impl_->buffer, spec);
+          // domParseSpectrum resets the spectrum, so the level goes back on.
+          spec.setMSLevel(static_cast<UInt>(ms_level));
+        }
+        catch (const Exception::BaseException& e)
+        {
+          return unreadable((std::string("an undecodable MS2 spectrum (") + e.what() + ")").c_str());
+        }
       }
     }
     else

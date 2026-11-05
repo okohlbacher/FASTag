@@ -87,8 +87,12 @@ endif()
 
 # mzPeak in and out goes through OpenMS's MzPeakFile; an OpenMS built without
 # it (OPENMS_ENABLE_MZPEAK=OFF) gives a FASTag that refuses .mzpeak.
-add_executable(FASTag src/FASTag.cpp src/IndexedMzMLReader.cpp src/MgfReader.cpp src/MzPeakStream.cpp)
-target_link_libraries(FASTag PRIVATE fastag_core OpenMS_CLI)
+# zlib for the direct mzML peak decoder (src/MzMLDirectDecoder.cpp); OpenMS
+# links the same library.
+find_package(ZLIB REQUIRED)
+
+add_executable(FASTag src/FASTag.cpp src/IndexedMzMLReader.cpp src/MzMLDirectDecoder.cpp src/MgfReader.cpp src/MzPeakStream.cpp)
+target_link_libraries(FASTag PRIVATE fastag_core OpenMS_CLI ZLIB::ZLIB)
 # So --help reports FASTag's version instead of the OpenMS it was built against.
 target_compile_definitions(FASTag PRIVATE FASTAG_VERSION="${PROJECT_VERSION}")
 if(WIN32)
@@ -259,8 +263,8 @@ if(FASTAG_BUILD_TESTS)
   # The mzML fast path against OpenMS itself: the tag TSV carries neither RT
   # nor precursor charge, so only a direct field-by-field comparison proves
   # the reader's scrape right.
-  add_executable(indexed_mzml_test test/indexed_mzml_test.cpp src/IndexedMzMLReader.cpp)
-  target_link_libraries(indexed_mzml_test PRIVATE fastag_core)
+  add_executable(indexed_mzml_test test/indexed_mzml_test.cpp src/IndexedMzMLReader.cpp src/MzMLDirectDecoder.cpp)
+  target_link_libraries(indexed_mzml_test PRIVATE fastag_core ZLIB::ZLIB)
   target_include_directories(indexed_mzml_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   target_compile_definitions(indexed_mzml_test PRIVATE
                              FASTAG_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
