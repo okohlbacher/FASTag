@@ -131,5 +131,9 @@ grep -q -- "-digest_tag_min is only read for -digest_out" "$TMP/log" || fail "no
 grep -q -- "-digest_window is only read for -digest_out or -label_out" "$TMP/log" || fail "no warning for -digest_window"
 "$BIN" "${COMMON[@]}" -out "$TMP/w.tsv" -label_out "$TMP/w2.tsv" -digest_window 0.01 > "$TMP/log" 2>&1
 grep -q -- "-digest_window is only read" "$TMP/log" && fail "-digest_window warned although -label_out reads it"
+"$BIN" "${COMMON[@]}" -out "$TMP/w.tsv" -digest_silac_min 10 -glyco_out "$TMP/w3.tsv" > "$TMP/log" 2>&1 \
+  || fail "-digest_silac_min without -label_out was refused"
+grep -q -- "-digest_silac_min is only read for -label_out" "$TMP/log" || fail "no warning for -digest_silac_min"
+grep -q -- "-glyco_out is only read for -glyco" "$TMP/log" || fail "no warning for -glyco_out"
 
 echo "digest_cli_test: all checks passed"

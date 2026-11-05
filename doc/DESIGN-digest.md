@@ -6,7 +6,7 @@ Three opt-in reports that describe how a run was digested and labelled, computed
 already reports:
 
 - `-digest_out`: the terminal residues of the tags and the protease call they support;
-- `-label_out`: N-terminal isobaric labels and heavy SILAC residues;
+- `-label_out`: isobaric label gaps at either tag end (N- and C-terminal counts pooled, each given in the description) and heavy SILAC residues;
 - `-massgap_out`: the precursor-vs-peptide mass-gap distribution, Cys alkylation counts and gap
   explanations as modification combinations.
 
@@ -39,11 +39,17 @@ section	key	value	n	description
 Example descriptions: "A share of 0.127 of the C-terminal tag ends are K or R, labelled ones
 included." and "Chymotrypsin fits 0.673 log-likelihood per tag end better than unspecific." Every file starts with `run` rows: `version`,
 `input`, `fragment_tolerance`, `fragment_tolerance_unit`, `tag_length`, `subsample_fraction`,
-`subsample_spectra` and the options of that report.
+`subsample_spectra`, then the report's own settings: for `-digest_out` `window_da`, `tag_min`,
+`background_share`, `models` and `background`; for `-label_out` `window_da`, `low_resolution` and
+`silac_min`; for `-massgap_out` `window_da` (the window in effect), `min_spectra`, `min_share`,
+`min_bin`, `max_mods` and `mods` (the number of modifications combined). `-massgap_top`,
+`-massgap_silac_share` and `-massgap_silac_min` have no run row: the first sets how many `top` rows
+there are, and the other two are named in the `silac call` description.
 
 ## Counting rules (`-digest_out`, `-label_out`)
 
-All counts are over the tags FASTag reports (after `-max_tags`, `-max_evalue` and deduplication),
+All counts are over the tag rows FASTag writes (after `-max_tags`, `-max_evalue`, deduplication
+and, with `-fasta`, the database filter, whose `efwd`/`erev` entrapment rows count too),
 filtered as in `fastag_termini`: `gapped == 0` and `evalue <= 1`. Let `c` and `n` be the sorted
 `cterm_mass` and `nterm_mass` values of these tags and `near(v, m)` the number of values within
 `m ± w`, both ends inclusive, `w = -digest_window` (0.008 Da, `TERMINUS_WINDOW_DA`). Residue masses
@@ -61,6 +67,8 @@ are 0.1.3's table `_RES` (Ile (I) counted as Leu (L), C = 160.03065 for carbamid
 | `kr` | share of `tot` on keys starting with K or R (`kr`) |
 | `anchors_LVFYM` | share of `tot` on L, V, F, Y, M |
 
+Positions use the protease notation of Schechter and Berger: the cleavage falls between P1 and P1';
+P1 is the last residue before it, P2 the one before P1, and P1' the first residue after it.
 Positions P4..P2 and P2'..P4' come from the tag sequence of each tag counted at P1 or P1': a tag counted
 through `cterm_mass` gives P2..P4 as its last three residues (right to left), one counted through
 `nterm_mass + H2O` (a reversed b-ion tag) gives them as its first three, and one counted at P1' gives
@@ -179,7 +187,9 @@ do not fire the rule. The rule comes after
 model	class	end	residue	freq
 ```
 
-- `end` is `C` (P1) or `N` (P1'); `freq` need not sum to 1 (the score normalizes).
+- `end` is `C` (P1) or `N` (P1'). Give `freq` values that sum to 1 for each end of each model and of
+  the background. They are mixed with the background as given, before the score normalizes, so a table
+  in counts or percentages changes the background share and can change the call.
 - `class` drives the runner-up rule: the runner-up is the best model of another class.
 - Rows with `model = background` are the mixing component, not a model, and must cover all 19 residues
   at both ends. A table without them is mixed with the FASTA composition when a FASTA is given, else
@@ -277,8 +287,9 @@ Input is the `-delta_out` histogram (0.0005 Da bins, local-max grouped), built w
 | `-massgap_max_mods`, `-massgap_top` | 3, 5 | advanced |
 | `-massgap_silac_share`, `-massgap_silac_min` | 0.08, 500 | advanced |
 
-`-digest_models`, `-digest_tag_min` and `-digest_background_share` without `-digest_out`, and
-`-digest_window` or `-digest_silac_min` without `-digest_out` or `-label_out`, are ignored with a warning.
+`-digest_models`, `-digest_tag_min` and `-digest_background_share` without `-digest_out`,
+`-digest_window` without `-digest_out` or `-label_out`, and `-digest_silac_min` without `-label_out`
+are ignored with a warning.
 
 **`FASTAG_FULL_PRECISION=1`** (environment, not in `--help`): the tag TSV writes `nterm_mass`,
 `cterm_mass` and `evalue` in shortest round-trip form instead of 4 decimals and 6 significant digits,
@@ -286,7 +297,7 @@ so a reader of the TSV sees the doubles the reports use. For differential tests 
 
 ## GUI: Digest tab
 
-Shown when a run wrote any of the three reports.
+Always present. With no report loaded, it offers to open a digest, label or mass-gap report.
 
 - The call (or "no call" with the reason), runner-up, margin and the `description` sentences. With a
   models table that has no model of another class the CLI writes `runner_up none` and margin `-`;
@@ -302,8 +313,12 @@ Shown when a run wrote any of the three reports.
   folder and their `run` rows agree (input, version, fragment tolerance and unit, tag length,
   subsampling); `run input` holds only the input's file name, so it cannot tell two inputs of one
   name apart on its own.
-- The mass-gap distribution as a table with the bar cells already used in the Species tab, followed by
-  the peaks with their explanations.
+- The mass gaps: a line with the most frequent modifications (the `top` rows) and the SILAC call
+  when there is one; the `combo`, `cys` and `silac` sentences; a histogram of the gaps in whole-Da
+  columns, with the column at 0 cut at the height of the fullest other column; the gap table with the
+  bar cells already used in the Species tab (the fullest bins, expandable to all); the peaks with
+  their explanations, alternatives and context; and a chip naming the Cys alkylation gap that the
+  most placed spectra show, or saying that there is none.
 
 The logo is a small React SVG component in `gui/src`; no new dependency.
 

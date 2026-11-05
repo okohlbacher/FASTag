@@ -37,43 +37,6 @@ if(OpenMS_VERSION VERSION_LESS 3.7 OR NOT TARGET OpenMS_CLI)
 endif()
 message(STATUS "FASTag: using OpenMS ${OpenMS_VERSION} (${OpenMS_DIR})")
 
-# Report at configure time which reader path this OpenMS will allow.
-#
-# Stock OpenMS parses every spectrum's metadata serially in openFile() before
-# tagging starts -- ~55 s of a 60 s run on a 5 GB file, and the reason wall time
-# stops improving past 16 threads. FASTag skips that pass when the OpenMS it
-# links can report MS level and precursor from the spectrum block itself, which
-# needs a patch to MzMLSpectrumDecoder (see doc/OPENMS-FAST-READER.md).
-#
-# FASTag detects this at RUNTIME too and falls back with a warning, so an
-# unpatched OpenMS is correct, merely slow. This check exists so that is known
-# when the build is configured rather than discovered from a log much later.
-set(_fastag_fast_reader OFF)
-get_target_property(_openms_inc OpenMS INTERFACE_INCLUDE_DIRECTORIES)
-if(_openms_inc)
-  foreach(_d IN LISTS _openms_inc)
-    string(GENEX_STRIP "${_d}" _d)
-    if(_d AND EXISTS "${_d}/OpenMS/FORMAT/HANDLERS/MzMLSpectrumDecoder.h")
-      file(READ "${_d}/OpenMS/FORMAT/HANDLERS/MzMLSpectrumDecoder.h" _hdr)
-      string(FIND "${_hdr}" "handleSpectrumMetadata_" _found)
-      if(NOT _found EQUAL -1)
-        set(_fastag_fast_reader ON)
-      endif()
-      break()
-    endif()
-  endforeach()
-endif()
-
-if(_fastag_fast_reader)
-  message(STATUS "FASTag: fast reader available -- this OpenMS reports "
-                 "per-spectrum metadata")
-else()
-  message(STATUS "FASTag: fast reader NOT available -- this OpenMS parses all "
-                 "metadata up front. Correct, but expect roughly a minute of "
-                 "extra single-threaded startup per large file, and no scaling "
-                 "past ~16 threads. See doc/OPENMS-FAST-READER.md.")
-endif()
-
 # OpenMP, declared rather than inherited.
 #
 # The parallel loop is the tool's central performance claim, and it was working
@@ -91,6 +54,21 @@ else()
                   "not apply.")
 endif()
 
+# No fused multiply-add contraction in any FASTag target, so every platform
+# evaluates what the source says and all produce the same tags. Clang contracts
+# a * b + c by default and GCC does whenever the target has FMA (arm64 always,
+# x86-64 with -march=haswell or later); MSVC x64 does not. One rounding step is
+# enough to flip a tolerance test: on PXD063151 scan=1201892,
+# `precursor_mz * charge - charge * PROTON` came out 1 ulp lower on Apple
+# silicon, a complement pair exactly 0.02 Da apart then passed the complement
+# test, and every E-value of that spectrum moved 5-9x. It also keeps the
+# deisotoper port bit-identical to OpenMS (deisotoper_test) and the digest
+# reports equal to prose-auto's Python arithmetic. Before any target, so all
+# of them get it.
+if(NOT MSVC)
+  add_compile_options(-ffp-contract=off)
+endif()
+
 add_library(fastag_core STATIC src/FASTagger.cpp src/AveragineDeisotoper.cpp src/Digest.cpp src/DigestReport.cpp src/FastaFilter.cpp src/ProteomeIndex.cpp src/ReconIds.cpp src/TagRecon.cpp src/TaxDeconv.cpp src/TaxIndex.cpp src/TaxStats.cpp)
 target_include_directories(fastag_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -106,19 +84,6 @@ if(OpenMP_CXX_FOUND)
   target_link_libraries(fastag_core PRIVATE OpenMP::OpenMP_CXX)
 endif()
 
-# The ported deisotoper reproduces OpenMS's arithmetic operand for operand, and
-# deisotoper_test holds it to that bit for bit. Fused multiply-add breaks the
-# promise where the port and OpenMS spell the same value differently: on arm64,
-# where FMA is baseline, `mz * z - (z - 1) * PROTON_MASS_U` contracts and lands
-# a unit in the last place away from OpenMS's own result. x86-64 never showed it
-# because its baseline has no FMA to contract into. Off for this file only, so
-# it evaluates what it says.
-if(NOT MSVC)
-  set_source_files_properties(src/AveragineDeisotoper.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
-  # The digest reports reproduce prose-auto 0.1.3's Python arithmetic, where
-  # (1 - s) * p + s * bg is two products and a sum: no contraction either.
-  set_source_files_properties(src/Digest.cpp src/DigestReport.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
-endif()
 
 # mzPeak in and out goes through OpenMS's MzPeakFile; an OpenMS built without
 # it (OPENMS_ENABLE_MZPEAK=OFF) gives a FASTag that refuses .mzpeak.
@@ -169,9 +134,6 @@ install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/data/digest/digest_models.tsv"
         DESTINATION share/FASTag/digest)
 
 install(TARGETS buildtaxdb RUNTIME DESTINATION bin)
-
-add_executable(tagfeatures src/tagfeatures.cpp)
-install(TARGETS tagfeatures RUNTIME DESTINATION bin)
 
 option(FASTAG_BUILD_BENCH "Build the synthetic benchmark" ON)
 if(FASTAG_BUILD_BENCH)
@@ -346,11 +308,6 @@ if(FASTAG_BUILD_TESTS)
   target_compile_definitions(deisotoper_test PRIVATE
                              FASTAG_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
   add_test(NAME deisotoper_test COMMAND deisotoper_test)
-
-  add_executable(tagfeatures_test test/tagfeatures_test.cpp src/tagfeatures.cpp)
-  target_include_directories(tagfeatures_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-  target_compile_definitions(tagfeatures_test PRIVATE TAGFEATURES_NO_MAIN)
-  add_test(NAME tagfeatures_test COMMAND tagfeatures_test)
 
   # One short run per acquisition class, gaps and deisotoping ON.
   #

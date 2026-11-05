@@ -12,6 +12,7 @@
 // gap_penalty non-advanced. The manifest keeps it as `toppAdvanced`.
 
 import manifest from './params.generated.json'
+import { DECIMAL } from './digestReport'
 
 export interface ParamSpec {
   name: string
@@ -44,10 +45,31 @@ const CHOICES: Record<string, string[]> = {
 // real default -- 0, half the logical cores -- to argv in main(), because
 // TOPPBase offers no hook to change a common option. The manifest is a dump of
 // -write_ini, so it carries TOPPBase's number and text; this is the tool's.
+//
+// The other entries replace a CLI help text that is written for developers
+// with plain words; the facts stay those of the CLI text.
 const OVERRIDES: Record<string, Partial<ParamSpec>> = {
   threads: {
     default: '0',
     description: 'Threads to use. 0 (the default) means half the logical cores.'
+  },
+  max_peaks: { description: 'Peaks kept per spectrum, at most 1024; 0 means 1024. More peaks need more memory.' },
+  diversity: {
+    description:
+      'When a spectrum has more candidate tags than max_tags allows, prefer tags that read different peaks over near-copies of a tag already kept. The number of tags kept stays the same.'
+  },
+  res_conf: {
+    description:
+      'Add a res_conf column: a confidence from 0 to 100 for each residue, N- to C-terminal. De novo assembly tools can use it.'
+  },
+  species_evidence: {
+    description:
+      "Which tags of a spectrum count as evidence for a taxon: 'best' = only its best tag that matches the reference; 'all' = every reported tag (the behaviour before 1.10)."
+  },
+  taxdb: { description: 'Species reference index. Default: the one bundled with FASTag.' },
+  orientation: {
+    description:
+      'Match tags as written, or also reversed, against fasta and recon_fasta. Tags are written N- to C-terminal, so tags read from the other ion series match only reversed.'
   }
 }
 
@@ -117,7 +139,7 @@ export const SECTIONS: Section[] = [
   },
   {
     title: 'Species detection',
-    blurb: 'Infer which taxa are present from the tags, against the bundled index.',
+    blurb: 'Infer which taxa are present from the tags, using the species index bundled with FASTag (or one you supply).',
     open: false,
     master: 'species',
     params: [
@@ -144,7 +166,7 @@ export const SECTIONS: Section[] = [
   },
   {
     title: 'Digest and labels',
-    blurb: 'Report the terminal residues of the tags, the protease they fit and the labels they carry.',
+    blurb: 'Report the terminal residues of the tags, the protease they fit and the labels they carry. Both reports are shown in the Digest tab.',
     open: false,
     params: [
       'digest_out',
@@ -158,7 +180,7 @@ export const SECTIONS: Section[] = [
   },
   {
     title: 'Reconciliation',
-    blurb: 'Place tags in database peptides and report the mass left over.',
+    blurb: 'Place tags in database peptides and report the mass left over. The mass-gap report (massgap_out) is shown in the Digest tab.',
     open: false,
     master: 'recon_out',
     params: [
@@ -195,7 +217,7 @@ export const SECTIONS: Section[] = [
   },
   {
     title: 'Performance',
-    blurb: '',
+    blurb: 'How much of the computer a run may use.',
     open: false,
     params: ['threads']
   }
@@ -225,7 +247,7 @@ export const DEPENDS: Record<string, Dependency[]> = {
   tag_length: [{ on: 'tag_lengths', replaced: true, note: 'tag_lengths replaces it' }],
 
   // Read only when the fasta filter runs.
-  entrapment_fasta: [{ on: 'fasta', note: 'the entrapment database is scored against the same filter' }],
+  entrapment_fasta: [{ on: 'fasta', note: 'the entrapment database is only searched together with fasta' }],
   min_filter_length: [{ on: 'fasta', note: 'only affects matching against a sequence database' }],
   // Read by the fasta filter AND by reconciliation (FASTag.cpp: TagReconciler
   // takes the orientation, the proteome index the isobaric tolerance).
@@ -255,8 +277,8 @@ export const DEPENDS: Record<string, Dependency[]> = {
   recon_missed_cleavages: [{ on: 'recon_out', note: 'reconciliation only runs when it has an output file' }],
   recon_min_length: [{ on: 'recon_out', note: 'reconciliation only runs when it has an output file' }],
   recon_localize: [{ on: 'recon_out', note: 'reconciliation only runs when it has an output file' }],
-  delta_out: [{ on: 'recon_out', note: 'the histogram aggregates the reconciliations' }],
-  recon_id_out: [{ on: 'recon_out', note: 'it writes the reconciliations as identifications' }],
+  delta_out: [{ on: 'recon_out', note: 'the histogram is built from the reconciliation results' }],
+  recon_id_out: [{ on: 'recon_out', note: 'it writes the reconciliation results as identifications' }],
 
   subsample_seed: [{ on: ['subsample_spectra', 'subsample_fraction'], note: 'nothing is being subsampled' }],
 
@@ -266,7 +288,7 @@ export const DEPENDS: Record<string, Dependency[]> = {
   digest_window: [{ on: ['digest_out', 'label_out'], note: 'neither the digest nor the label report is written' }],
   digest_silac_min: [{ on: 'label_out', note: 'only the label report uses it' }],
 
-  massgap_out: [{ on: 'recon_out', note: 'the mass gaps come from the reconciliations' }],
+  massgap_out: [{ on: 'recon_out', note: 'the mass gaps come from the reconciliation results' }],
   ...Object.fromEntries(
     [
       'massgap_window',
@@ -333,10 +355,37 @@ export function masters(d: Dependency): string[] {
 export const UNIT_OF: Record<string, string> = { fragment_tolerance: 'fragment_tolerance_unit' }
 export const UNIT_PARAMS = new Set(Object.values(UNIT_OF))
 
+/// Labels for options whose CLI name is an abbreviation, not words. The CLI
+/// name is shown beside the label, so the label is the option in words.
+export const LABEL: Record<string, string> = {
+  recon_out: 'Reconciliation table',
+  recon_fasta: 'Reconciliation database',
+  recon_id_out: 'Reconciliation as identifications',
+  recon_localize: 'Localize mass gaps',
+  recon_min_length: 'Reconciliation: minimum tag length',
+  recon_missed_cleavages: 'Reconciliation: missed cleavages',
+  delta_out: 'Mass-shift histogram',
+  massgap_out: 'Mass-gap report',
+  massgap_window: 'Gap window (ppm runs)',
+  massgap_window_da: 'Gap window (Da runs)',
+  massgap_silac_min: 'SILAC: minimum shifted spectra',
+  massgap_silac_share: 'SILAC: minimum share of shifted spectra',
+  species_max_kmer_share: 'Maximum taxon share of a k-mer',
+  species_min_margin: 'Minimum lead over runner-up taxon',
+  res_conf: 'Per-residue confidence column',
+  usi_collection: 'USI column (dataset ID)',
+  out_spectra: 'Spectra with tags (file)',
+  no_deisotope: 'Skip deisotoping',
+  proforma: 'ProForma column',
+  taxdb: 'Species reference index',
+  digest_silac_min: 'Heavy-label check: minimum K and R ends',
+  max_evalue: 'Maximum E-value'
+}
+
 /// The CLI name in words, for the label beside it: tag_length -> Tag length.
 export function humanName(name: string): string {
   const s = name.replace(/_/g, ' ')
-  return s.charAt(0).toUpperCase() + s.slice(1)
+  return LABEL[name] ?? s.charAt(0).toUpperCase() + s.slice(1)
 }
 
 const listText = (v: unknown): string =>
@@ -412,7 +461,6 @@ export function unknownParams(): string[] {
 
 // A leading '+' is accepted, as the CLI accepts it (-max_peaks +400).
 const INT = /^[+-]?\d+$/
-const DOUBLE = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/
 // TOPP options are C++ ints.
 const INT_LIMIT = 2147483647
 
@@ -421,13 +469,17 @@ const INT_LIMIT = 2147483647
 // as "must be at least 1e-9".
 const POSITIVE = new Set(['fragment_tolerance'])
 
+// Options whose declared maximum the CLI itself refuses (digest_background_share:
+// declared 0..1, but at 1 every protease model is the background, so all tie).
+const BELOW_MAX = new Set(['digest_background_share'])
+
 function badNumber(type: string, s: string, min?: number, max?: number): string | null {
   if (type === 'int') {
     if (!INT.test(s)) return 'a whole number is required'
-  } else if (s.includes(',') && DOUBLE.test(s.replace(',', '.'))) {
+  } else if (s.includes(',') && DECIMAL.test(s.replace(',', '.'))) {
     // Rejected rather than converted: `1,500` may mean 1500.
     return 'use a decimal point, not a comma'
-  } else if (!DOUBLE.test(s)) {
+  } else if (!DECIMAL.test(s)) {
     return 'not a number'
   }
   const n = Number(s)
@@ -459,6 +511,7 @@ export function invalidBecause(spec: ParamSpec, value: unknown): string | null {
     const positive = POSITIVE.has(spec.name)
     const bad = badNumber(spec.type, s, positive ? undefined : spec.min, spec.max)
     if (bad) return bad
+    if (BELOW_MAX.has(spec.name) && spec.max !== undefined && Number(s) >= spec.max) return `must be below ${spec.max}`
     if (positive) {
       const n = Number(s)
       if (!(n > 0)) return 'must be greater than 0'
@@ -512,16 +565,27 @@ function seedLengths(values: Record<string, unknown>): { lengths: number[]; opti
   return { lengths: one === null ? [] : [one], option: 'tag_length' }
 }
 
+/// With species detection on: how far the longest tag reaches (longest seed
+/// + 2 × extension) when that is short of the species index's k, else null.
+/// FASTag.cpp: "-species: tag_length (3) + 2*extension (0) = 3 cannot reach the index k = 7".
+export function speciesReach(
+  values: Record<string, unknown>,
+  taxdbK: number | null | undefined
+): { reach: number; k: number; option: string; seed: number; ext: number } | null {
+  if (!isActive('species', values) || !taxdbK || taxdbK <= 0) return null
+  const { lengths, option } = seedLengths(values)
+  if (!lengths.length) return null
+  const seed = lengths[lengths.length - 1]
+  const ext = int(values['extension']) ?? int(PARAM_BY_NAME.get('extension')?.default) ?? 0
+  const reach = seed + 2 * ext
+  return reach >= taxdbK ? null : { reach, k: taxdbK, option, seed, ext }
+}
+
 export const CONFLICTS: ((values: Record<string, unknown>, ctx: PreflightContext) => Conflict | null)[] = [
-  // FASTag.cpp: "-species: tag_length (3) + 2*extension (0) = 3 cannot reach the index k = 7".
   (values, { taxdbK }) => {
-    if (!isActive('species', values) || !taxdbK || taxdbK <= 0) return null
-    const { lengths, option } = seedLengths(values)
-    if (!lengths.length) return null
-    const seed = lengths[lengths.length - 1]
-    const ext = int(values['extension']) ?? int(PARAM_BY_NAME.get('extension')?.default) ?? 0
-    const reach = seed + 2 * ext
-    if (reach >= taxdbK) return null
+    const r = speciesReach(values, taxdbK)
+    if (!r) return null
+    const { reach, option, seed, ext } = r
     return {
       params: [option, 'extension', 'species'],
       note:
@@ -532,21 +596,33 @@ export const CONFLICTS: ((values: Record<string, unknown>, ctx: PreflightContext
   // "-entrapment_fasta calibrates q_db over one seed length; run each of -tag_lengths separately."
   (values) =>
     !inertBecause('entrapment_fasta', values) && isActive('entrapment_fasta', values) && seedLengths(values).lengths.length > 1
-      ? { params: ['entrapment_fasta', 'tag_lengths'], note: 'entrapment_fasta calibrates over one seed length; run each of tag_lengths separately.' }
+      ? { params: ['entrapment_fasta', 'tag_lengths'], note: 'entrapment_fasta estimates the false-match rate (q_db) for one tag length at a time; run each of tag_lengths separately.' }
       : null,
   // "-entrapment_fasta cannot be combined with -species".
   (values) =>
     !inertBecause('entrapment_fasta', values) && isActive('entrapment_fasta', values) && isActive('species', values)
       ? {
           params: ['entrapment_fasta', 'species'],
-          note: 'entrapment_fasta cannot be combined with species: entrapment matches would pollute the taxon evidence.'
+          note: 'entrapment_fasta cannot be combined with species: entrapment matches would be counted as species evidence.'
         }
       : null,
   // "-recon_out needs a database: give -recon_fasta (or -fasta)."
   (values) =>
     isActive('recon_out', values) && !isActive('recon_fasta', values) && !isActive('fasta', values)
       ? { params: ['recon_out', 'recon_fasta', 'fasta'], note: 'recon_out needs a database: set recon_fasta (or fasta).' }
-      : null
+      : null,
+  // "-taxdb, -taxonomy_nodes and -taxonomy_names are one set: give all three, or none (to use the bundled taxonomy)."
+  (values) => {
+    if (!isActive('species', values)) return null
+    const set = ['taxdb', 'taxonomy_nodes', 'taxonomy_names']
+    const missing = set.filter((n) => !isActive(n, values))
+    return missing.length === 0 || missing.length === set.length
+      ? null
+      : {
+          params: missing,
+          note: 'taxdb, taxonomy_nodes and taxonomy_names are one set: give all three, or none to use the bundled taxonomy.'
+        }
+  }
 ]
 
 /// Every combination in @p values the CLI would refuse before starting. Run

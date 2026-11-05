@@ -3,7 +3,6 @@
 
 export interface BinaryInfo {
   bin: string
-  dataPath?: string
   // 'missing': a release build with no bundled CLI (no dev or PATH fallback).
   source: 'env' | 'bundled' | 'path' | 'missing'
   ok: boolean
@@ -32,7 +31,6 @@ export interface ResultsPage {
   columns: string[]
   totalRows: number
   matchedRows: number
-  offset: number
   rows: string[][]
 }
 
@@ -68,22 +66,18 @@ export interface Taxon {
   taxid: number
   name: string
   observed: number
-  expected: number
   adjusted: number
-  logP: number
   q: number
 }
 
 export interface SpeciesReport {
   path: string
   taxa: Taxon[]
-  empty: boolean
 }
 
 export interface TaxdbInfo {
   path: string
   k: number
-  kmers: number
 }
 
 export interface Settings {

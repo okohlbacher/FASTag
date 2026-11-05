@@ -13,7 +13,6 @@ import {
   labelFindings,
   logoColumn,
   modelLogo,
-  modelScores,
   observedLogo,
   parseReport,
   positionCounts,
@@ -69,14 +68,10 @@ describe('digest', () => {
     expect(fired).toEqual(['low_resolution', 'ms2_first_peak', 'ion_counts', 'few_tags'])
   })
 
-  it('reads counts per position and models in report order', () => {
+  it('reads counts per position', () => {
     const p1 = positionCounts(digest, 'C', 'P1')
     expect(Object.keys(p1).sort()).toEqual(ALPHABET)
     expect(p1['K']).toBeGreaterThan(p1['R'])
-    expect(modelScores(digest).map((m) => m.model)).toEqual([
-      'Trypsin', 'Lys-C', 'Arg-C', 'Glu-C', 'Chymotrypsin', 'Asp-N', 'Lys-N', 'unspecific'
-    ])
-    expect(modelScores(digest)[7].cls).toBe('unspecific cleavage')
   })
 })
 

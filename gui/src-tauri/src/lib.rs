@@ -10,11 +10,8 @@ use tauri::{Manager, RunEvent, WindowEvent};
 /// The argv a run request becomes (fastag.rs build_args), for the GUI's
 /// end-to-end CLI tests. Not used by the app.
 #[doc(hidden)]
-pub fn build_args_json(json: &str) -> Result<Vec<String>, String> {
-    fastag::build_args_json(json)
-}
+pub use fastag::build_args_json;
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         // single-instance must be registered first: a second launch focuses the

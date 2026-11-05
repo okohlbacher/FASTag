@@ -5,6 +5,7 @@
 // copied without its unit silently means something else).
 //
 //   node scripts/gen-params.mjs [path/to/FASTag] [src/params.generated.json]
+//   (run from gui/; paths are relative to it)
 //
 // With an output path the file is replaced only once the manifest is complete,
 // so a missing or broken binary leaves the old one in place (a shell redirect
@@ -17,7 +18,7 @@ import { mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-const bin = process.argv[2] || process.env.FASTAG_BIN || 'resources/fastag/bin/FASTag'
+const bin = process.argv[2] || process.env.FASTAG_BIN || 'src-tauri/resources/fastag/bin/FASTag'
 const outPath = process.argv[3]
 
 const dir = mkdtempSync(join(tmpdir(), 'fastag-ini-'))

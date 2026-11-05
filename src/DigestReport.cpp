@@ -3,7 +3,8 @@
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
 //
-// Compiled with -ffp-contract=off, like Digest.cpp: the shares are 0.1.3's.
+// Compiled with -ffp-contract=off, like Digest.cpp, to match the reference's
+// floating-point results.
 
 #include "Digest.h"
 
@@ -172,7 +173,7 @@ namespace FASTag::Digest
               u(tc.npos[p][a]) + " of " + u(col) + " N-terminal tag ends have " + kAAs[a] + " at P" + std::to_string(p + 1) + "'.");
     }
 
-    // ---- shares, as 0.1.3 computes them from res / tot
+    // ---- shares, from res / tot as the reference computes them
     const auto& keys = residueKeys();
     if (tot > 0)
     {
@@ -229,7 +230,7 @@ namespace FASTag::Digest
     const std::string tims = tims_yes ? "yes" : (have_inst || have_nid) ? "no" : "unknown";
     constexpr double kY1K = 147.1128;
     const std::string scan = meta.scan_low.empty() ? "unknown" : low > kY1K + 0.1 ? "yes" : "no";
-    // 0.1.3's own gate: the median lowest MS2 peak, which needs no metadata.
+    // The reference's gate: the median lowest MS2 peak, which needs no metadata.
     const std::string fpk = meta.first_peak.empty() ? "unknown" : first > kY1K + 0.1 ? "yes" : "no";
     // Without instrument metadata (MGF, converted pseudo-spectra), intensities
     // that are mostly whole numbers are ion counts, as timsTOF data are.

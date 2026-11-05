@@ -80,7 +80,7 @@ namespace FASTag
       throw Exception::IllegalArgument(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION,
                                        "Fragment tolerance must not be greater than 100 ppm or 0.1 Da");
     }
-    // ponytail: prepare()'s working copy only; the header says why.
+    // prepare()'s working copy only; the header says why.
     assert(spec.isSorted());
     assert(spec.getPrecursors().empty());
     assert(spec.getFloatDataArrays().empty() && spec.getStringDataArrays().empty() &&

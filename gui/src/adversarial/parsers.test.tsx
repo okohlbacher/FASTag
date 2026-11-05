@@ -1,9 +1,8 @@
-// Parsers lens: real FASTag 1.9.0 outputs and fuzzed inputs through every
-// GUI parser and table. Real outputs live in the review scratch directory
-// named by FASTAG_GUI_REVIEW_SCRATCH (see ./external.ts)
-// (generated from test/fixtures/Ecoli_MS2_small.mzML and the public
-// PXD063917 run); a test that needs one is skipped when it is absent.
-// "BUG?" marked an assertion pinning a defect candidate; "FIXED" asserts the correction.
+// Real FASTag 1.9.0 outputs and fuzzed inputs through every GUI parser and
+// table. Real outputs live in the directory named by FASTAG_GUI_TEST_OUTPUTS
+// (see ./external.ts) (generated from test/fixtures/Ecoli_MS2_small.mzML and
+// the public PXD063917 run); a test that needs one is skipped when it is
+// absent. A "known limitation" test pins a behaviour that is kept on purpose.
 // @ts-ignore -- node built-in; the app's tsconfig has no node types
 import { readFileSync } from 'node:fs'
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
@@ -15,7 +14,6 @@ import {
   gapPeaks,
   labelFindings,
   modelLogo,
-  modelScores,
   num,
   observedLogo,
   parseReport,
@@ -46,9 +44,6 @@ describe('parsers: real 1.9.0 outputs', () => {
     const c = digestCall(r)
     expect(c).toMatchObject({ status: 'call', model: 'Trypsin', runnerUp: 'Lys-C', usesNterm: false })
     expect(c.margin).toBeCloseTo(1.4827579, 6)
-    expect(modelScores(r).map((m) => m.model)).toEqual([
-      'Trypsin', 'Lys-C', 'Arg-C', 'Glu-C', 'Chymotrypsin', 'Asp-N', 'Lys-N', 'unspecific'
-    ])
     const obs = observedLogo(r)
     expect(obs.map((x) => x.label)).toEqual(['P4', 'P3', 'P2', 'P1', "P1'", "P2'", "P3'", "P4'"])
     const p1 = obs[3]
@@ -73,7 +68,7 @@ describe('parsers: real 1.9.0 outputs', () => {
     const stat = (label: string): string | null | undefined =>
       [...document.querySelectorAll('.headline dt')].find((d) => d.textContent === label)?.nextElementSibling?.textContent
     expect(stat('Runner-up, other enzyme class')).toBe('Lys-C')
-    expect(stat('Margin, log-likelihood per tag')).toBe('1.4828')
+    expect(stat('Lead over runner-up (log-likelihood per tag end)')).toBe('1.4828')
     expect(stat('Tag ends used')).toMatch(/N end not used$/)
     // mass-gap: 19 peaks, 40 of 12,808 bins
     expect(document.body.textContent).toMatch(/the 40 fullest of 12,808 bins/)
@@ -115,7 +110,7 @@ describe('parsers: real 1.9.0 outputs', () => {
     expect(real('c.tags.tsv')?.trim().split('\n')).toHaveLength(1) // header-only tags file from a real run
   })
 
-  it('FIXED (m9, m10): bar scaling counts a bin as shifted beyond 2*window, as the CLI does, and marks the bars cut off at that scale', () => {
+  it('bar scaling counts a bin as shifted beyond 2*window, as the CLI does, and marks the bars cut off at that scale', () => {
     const r = parseReport(
       `${HEAD}\nrun\twindow_da\t0.02\t-\td\nhist\t0.0000\t1000\t-\td\nhist\t0.0300\t400\t-\td\nhist\t15.9949\t20\t-\td\ncombo\tshifted_spectra\t20\t420\tThe CLI: 20 of them have a gap more than 0.04 Da from zero.`,
       '/x.massgap.tsv'
@@ -141,7 +136,7 @@ describe('parsers: real 1.9.0 outputs', () => {
   })
 
   it.skipIf(!have('r.digest.tsv', 'q.label.tsv'))(
-    'BUG? "same input" is decided by run.input, which is only the basename: two runs with different parameters (tag_length 8 vs 4) are treated as one',
+    'known limitation: "same input" is decided by run.input, which is only the basename: two runs with different parameters (tag_length 8 vs 4) are treated as one',
     () => {
       const d = load('r.digest.tsv')
       const l = load('q.label.tsv')
@@ -177,7 +172,7 @@ describe('parsers: GUI fixtures vs real output', () => {
       expect(t).toMatch(/^meta\tms2_whole_intensity_share\t[0-9.e-]+\t\d+\t/m)
     }
   })
-  it.skipIf(!have('b.digest.tsv'))('FIXED (m14): fixtures carry every row of real output: run.input, fragment_tolerance_unit, all nocall rules', () => {
+  it.skipIf(!have('b.digest.tsv'))('fixtures carry every row of real output: run.input, fragment_tolerance_unit, all nocall rules', () => {
     const fx = readFileSync(`${FX}digest_nocall.tsv`, 'utf8')
     const fk = keys(fx)
     const rk = keys(real('b.digest.tsv') as string)
@@ -223,12 +218,12 @@ describe('parsers: fuzzed reports', () => {
     expect(digestCall(r).margin).toBeNull()
   })
 
-  it('FIXED (m15): num() reads decimals only, not hex / binary / octal literals', () => {
+  it('num() reads decimals only, not hex / binary / octal literals', () => {
     expect([num('0x1A'), num('0b11'), num('0o7')]).toEqual([null, null, null])
     expect([num('12'), num('-0.5'), num('1.8066e-05'), num('.5')]).toEqual([12, -0.5, 1.8066e-5, 0.5])
   })
 
-  it('FIXED (m11): fmt keeps small non-zero shares visible; the Share column shows them as a percentage', () => {
+  it('fmt keeps small non-zero shares visible; the Share column shows them as a percentage', () => {
     // 1 TMT tag end out of 55352 filtered tags (q/p runs have 55k-103k): share 1.8e-5
     expect(fmt(1 / 55352, 4)).toBe('0.0000181')
     expect(fmt(0.00004, 4)).toBe('0.00004')
@@ -251,7 +246,7 @@ describe('parsers: fuzzed reports', () => {
     expect(s.rows[0]).toMatchObject({ value: '', n: null, description: '' })
   })
 
-  it('FIXED (m15): duplicate keys: the first row wins, and the panel says so', () => {
+  it('duplicate keys: the first row wins, and the panel says so', () => {
     const r = dig('call\tstatus\tcall\t5\ta\ncall\tmodel\tTrypsin\t5\tb\ncall\tstatus\tno_call\t5\tc\ncall\treason\tfew_tags\t-\td')
     expect(digestCall(r).status).toBe('call')
     expect(r.warnings).toEqual(['x.digest.tsv has more than one call status row; the first one is used.'])
@@ -259,7 +254,7 @@ describe('parsers: fuzzed reports', () => {
     expect(screen.getByText('x.digest.tsv has more than one call status row; the first one is used.')).toBeDefined()
   })
 
-  it('FIXED (m15): duplicate hist keys keep distinct React keys in the gap table', () => {
+  it('duplicate hist keys keep distinct React keys in the gap table', () => {
     const errs = vi.spyOn(console, 'error').mockImplementation(() => {})
     const r = parseReport(`${HEAD}\nhist\t1.0000\t5\t-\td\nhist\t1.0000\t6\t-\td\nrun\twindow_da\t0.02\t-\td`, '/x.massgap.tsv')
     expect(gapHistogram(r)).toHaveLength(2)
@@ -282,7 +277,7 @@ describe('parsers: fuzzed reports', () => {
     expect(screen.getByText('Reason').nextElementSibling?.textContent).toBe('new_rule_2027')
   })
 
-  it('FIXED (m15): labelFindings: a key without a dot names no label', () => {
+  it('labelFindings: a key without a dot names no label', () => {
     const r = parseReport(`${HEAD}\nnlabel\tTMT\t3\t10\td\nnlabel\tTMTpro.count\t2\t10\td`, '/x.label.tsv')
     expect(labelFindings(r).map((l) => l.label)).toEqual(['TMTpro'])
   })
@@ -313,25 +308,27 @@ describe('parsers: fuzzed reports', () => {
 // ---------------------------------------------------------------------------
 describe('SpeciesPanel: edge values from species.rs', () => {
   const taxon = (o: Partial<{ rank: string; taxid: number; name: string; observed: number; adjusted: number; q: number }>) => ({
-    rank: 'genus', taxid: 1, name: 'A', observed: 5, adjusted: 5, expected: 1, logP: -1, q: 0.01, ...o
+    rank: 'genus', taxid: 1, name: 'A', observed: 5, adjusted: 5, q: 0.01, ...o
   })
-  it('BUG? a BOM header leaves rank "" and the caveat reads "-level call"', () => {
-    render(<SpeciesPanel report={{ path: 'x', empty: false, taxa: [taxon({ rank: '' })] }} enabled tooShort={null} contributed={null} totalMs2={null} />)
-    expect(screen.getByText(/^-level call/)).toBeDefined()
+  it('an empty rank reads "Call at an unstated rank" and draws no empty rank chip', () => {
+    const { container } = render(<SpeciesPanel report={{ path: 'x', taxa: [taxon({ rank: '' })] }} enabled tooShort={null} contributed={null} totalMs2={null} />)
+    expect(screen.getByText(/^Call at an unstated rank/)).toBeDefined()
+    expect(screen.queryByText(/^-level call/)).toBeNull()
+    expect(container.querySelector('.headline .rank')).toBeNull()
   })
-  it('BUG? q missing/NaN in the TSV is shown as 1.000 (species.rs default), not as absent', () => {
-    render(<SpeciesPanel report={{ path: 'x', empty: false, taxa: [taxon({ q: 1.0 })] }} enabled tooShort={null} contributed={null} totalMs2={null} />)
+  it('a missing q falls back to the CLI default of 1.000', () => {
+    render(<SpeciesPanel report={{ path: 'x', taxa: [taxon({ q: 1.0 })] }} enabled tooShort={null} contributed={null} totalMs2={null} />)
     expect(screen.getByText('1.000')).toBeDefined()
   })
   it('two unparsable taxids (both 0) collide as React keys', () => {
     const errs = vi.spyOn(console, 'error').mockImplementation(() => {})
-    render(<SpeciesPanel report={{ path: 'x', empty: false, taxa: [taxon({ taxid: 0, name: 'A' }), taxon({ taxid: 0, name: 'B' })] }} enabled tooShort={null} contributed={null} totalMs2={null} />)
+    render(<SpeciesPanel report={{ path: 'x', taxa: [taxon({ taxid: 0, name: 'A' }), taxon({ taxid: 0, name: 'B' })] }} enabled tooShort={null} contributed={null} totalMs2={null} />)
     const dup = errs.mock.calls.some((c) => String(c[0]).includes('same key'))
     errs.mockRestore()
     expect(dup).toBe(true)
   })
   it('fmtQ: 0 -> <1e-300, tiny -> exponential', () => {
-    render(<SpeciesPanel report={{ path: 'x', empty: false, taxa: [taxon({ q: 0 }), taxon({ taxid: 2, q: 1.59964e-29 })] }} enabled tooShort={null} contributed={null} totalMs2={null} />)
+    render(<SpeciesPanel report={{ path: 'x', taxa: [taxon({ q: 0 }), taxon({ taxid: 2, q: 1.59964e-29 })] }} enabled tooShort={null} contributed={null} totalMs2={null} />)
     expect(screen.getByText('<1e-300')).toBeDefined()
     expect(screen.getByText('1.6e-29')).toBeDefined()
   })
@@ -350,7 +347,7 @@ describe('ResultsTable: filter inputs and size', () => {
     })
   }
 
-  it('FIXED (m7): min length "-1" is marked invalid and never sent; one past u32 is clamped to its max', async () => {
+  it('min length "-1" is marked invalid and never sent; one past u32 is clamped to its max', async () => {
     const mock = installMockBridge()
     render(<ResultsTable path="/x.tags.tsv" />)
     await flush()
@@ -361,7 +358,7 @@ describe('ResultsTable: filter inputs and size', () => {
     expect(lastOf(mock.resultsQueryCalls)?.view.minLength).toBe(4294967295)
   })
 
-  it('FIXED (M10): an unparsable or overflowing filter is marked invalid and reported; a decimal comma is read', async () => {
+  it('an unparsable or overflowing filter is marked invalid and reported; a decimal comma is read', async () => {
     const mock = installMockBridge()
     render(<ResultsTable path="/x.tags.tsv" />)
     await flush()

@@ -8,6 +8,7 @@
 
 #include <OpenMS/FORMAT/FASTAFile.h>
 
+#include <compare>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -21,9 +22,6 @@ namespace FASTag
   /// packing would silently collide on exactly the long tags that carry the most
   /// information. Over-length tags are rejected, never truncated.
   constexpr int MAX_FILTER_LEN = 25;
-
-  /// Sentinel for ambiguity codes; no tag can contain it.
-  constexpr char AMBIG = RESIDUE_AMBIG;
 
   /// Amino acids are far from uniform: with I/L folded, sum(f^2) = 0.068 over
   /// the human proteome, so the effective alphabet is 1/0.068 = 14.7, not 19.
@@ -42,11 +40,9 @@ namespace FASTag
   {
     uint64_t hi = 0, lo = 0;
 
-    /// Ordering for the sorted query index (lexicographic on (hi, lo)).
-    bool operator<(const Kmer128& o) const noexcept
-    {
-      return hi != o.hi ? hi < o.hi : lo < o.lo;
-    }
+    /// Ordering for the sorted query index (lexicographic on (hi, lo), the
+    /// member order); also defaults == and !=.
+    auto operator<=>(const Kmer128&) const noexcept = default;
 
     /// Shift left 5 bits and insert a residue code in the low bits.
     void push5(uint64_t code) noexcept
@@ -55,9 +51,6 @@ namespace FASTag
       lo = (lo << 5) | (code & 0x1full);
     }
     static Kmer128 invalid() noexcept { return {~0ull, ~0ull}; }
-
-    bool operator==(const Kmer128& o) const noexcept { return hi == o.hi && lo == o.lo; }
-    bool operator!=(const Kmer128& o) const noexcept { return !(*this == o); }
   };
 
   class FastaFilter

@@ -33,7 +33,7 @@ namespace FASTag
     /// -- the residues between the tag and the mismatched terminus. Empty (lo>hi)
     /// when exact.
     int         region_lo = 0, region_hi = -1;
-    /// Stage B: what the mass gap most likely IS. Empty when exact. Otherwise one
+    /// Gap interpretation: what the mass gap most likely IS. Empty when exact. Otherwise one
     /// of "mod:Name@X" (a known modification on a residue X present in the
     /// region), "sub:X->Y" (a single residue X in the region replaced by Y), or
     /// "?" (delta explained by neither within tolerance). The delta on its own is
@@ -48,7 +48,7 @@ namespace FASTag
     int         loc_ties = 0;   ///< region positions sharing loc_score; 1 = unique
   };
 
-  /// A candidate variable modification for stage-B interpretation: its
+  /// A candidate variable modification for interpreting a mass gap: its
   /// monoisotopic mass shift and the residues it can sit on ("" = any). Supplied
   /// by the caller (the TOPP tool resolves names via OpenMS ModificationsDB), so
   /// this library needs no modification database of its own.
@@ -101,7 +101,7 @@ namespace FASTag
                                           int precursor_charge = 2,
                                           const std::vector<double>* tag_shift = nullptr) const;
 
-    /// Candidate variable modifications for stage-B delta interpretation. Set
+    /// Candidate variable modifications for interpreting a mass gap. Set
     /// before reconcile(); read-only after. Empty means only substitutions and
     /// "?" are ever reported.
     void setModCandidates(std::vector<ModCandidate> mods) { mods_ = std::move(mods); }
@@ -139,7 +139,7 @@ namespace FASTag
     int    min_len_ = 3;  ///< shortest tag reconciled
     int    mc_ = 0;       ///< missed cleavages for window enumeration
     double residue_masses_[128] = {0};  ///< by ASCII code, unmodified
-    std::vector<ModCandidate> mods_;    ///< candidate variable mods for stage B
+    std::vector<ModCandidate> mods_;    ///< candidate variable mods for gap interpretation
     double fixed_n_ = 0, fixed_c_ = 0;  ///< fixed peptide N-/C-terminal mod masses
     const ProteomeIndex* idx_ = nullptr;    ///< the index queries run against
   };

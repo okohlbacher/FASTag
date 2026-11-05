@@ -1,13 +1,14 @@
-// Read a digest, label or mass-gap report (FASTag 1.8.0 -digest_out,
-// -label_out, -massgap_out). They are small long-form TSVs; the frontend
-// parses them. A file the run did not write is not an error.
+// Read a digest, label or mass-gap report (-digest_out, -label_out,
+// -massgap_out). They are small long-form TSVs; the frontend parses them. A
+// file the run did not write is not an error. species.rs reads the -species
+// TSV through the same reader.
 
 use std::io::ErrorKind;
 
 // The mass-gap histogram is the largest of them, a few thousand rows.
 const MAX_BYTES: u64 = 32 << 20;
 
-fn read_report(path: &str) -> Result<Option<String>, String> {
+pub(crate) fn read_report(path: &str) -> Result<Option<String>, String> {
     if path.trim().is_empty() {
         return Ok(None);
     }

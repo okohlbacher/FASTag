@@ -95,8 +95,8 @@ namespace FASTag
       r.region_lo = static_cast<int>(pos + klen);
       r.region_hi = static_cast<int>(L) - 1;
     }
-    // Stage B: interpret the localized gap as a mod or a substitution. The
-    // region is read folded (masses are I/L-blind).
+    // Gap interpretation: explain the localized gap as a mod or a
+    // substitution. The region is read folded (masses are I/L-blind).
     if (r.region_hi >= r.region_lo && std::fabs(r.delta_mass) > 1e-6)
     {
       const std::string region =

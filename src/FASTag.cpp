@@ -141,8 +141,8 @@ namespace
   /// k of a taxonomy index, read from its 16-byte header alone.
   ///
   /// Exists so the tag-length precondition can be checked BEFORE tagging.
-  /// Loading the index to learn k costs seconds and ~2 GB, which is exactly the
-  /// work we want to refuse to waste.
+  /// Loading the index to learn k maps a ~1 GB file, which is exactly the work
+  /// we want to refuse to waste.
   ///
   /// Both index versions put k at the same place: magic(4) | u32 version | u32 k,
   /// so both the current "FTX2" and the legacy "FTXI" are accepted.
@@ -209,12 +209,14 @@ namespace
 
   @brief Infers partial sequence tags from MS/MS spectra.
 
-  Reimplements DirecTag (Tabb et al., J Proteome Res 2008, 7:3838) with three
-  differences: the intensity null is computed by dynamic programming instead of
-  by enumerating every C(n,k) subset of peak ranks, which is what makes tag
-  lengths above four reachable; a seed tag can be extended, so the configured
-  length is a minimum; and reported tags can be restricted to sequences supplied
-  as FASTA, with the carrying spectra written out as mzML.
+  Based on DirecTag (Tabb et al., J Proteome Res 2008, 7:3838). The main
+  algorithmic change is that the intensity null is computed by dynamic
+  programming instead of by enumerating every C(n,k) subset of peak ranks,
+  which makes tags longer than four residues practical. Seed tags can
+  optionally be extended (-extension) and can contain one mass gap (-gaps).
+  For the inputs, outputs and further analyses (FASTA filtering, spectra
+  output as mzML or mzPeak, species detection, reconciliation, digest
+  reports), see README.md.
 
   <B>The command line parameters of this tool are:</B>
   @verbinclude TOPP_FASTag.cli
@@ -264,8 +266,8 @@ protected:
     // widened -tag_length, so that option and every INI that sets it are
     // unchanged.
     registerIntList_("tag_lengths", "<n>", IntList(),
-                     "Seed tag lengths to run in one pass, replacing 'tag_length'. "
-                     "Each length is tagged, scored and capped ('max_tags') exactly "
+                     "Seed tag lengths to run in one pass, replacing -tag_length. "
+                     "Each length is tagged, scored and capped (-max_tags) exactly "
                      "as on its own; a spectrum's rows are those runs' rows in "
                      "ascending length, except that a tag several lengths report "
                      "is kept only from the length with its lowest E-value", false);
@@ -301,14 +303,14 @@ protected:
     setValidStrings_("fragment_tolerance_unit", ListUtils::create<std::string>("ppm,Da"));
 
     registerIntOption_("max_peaks", "<n>", 400,
-                       "Peaks retained per spectrum, at most 1024; 0 uses that "
-                       "ceiling, not unlimited -- the scoring tables are built to "
-                       "this bound, at O(n^2) memory. The ceiling for 'peaks_per_window'", false);
+                       "Peaks kept per spectrum, at most 1024; 0 means 1024, not "
+                       "unlimited. Higher values use more memory. Also caps "
+                       "-peaks_per_window", false);
     setMinInt_("max_peaks", 0);
     setMaxInt_("max_peaks", 1024);
     registerIntOption_("peaks_per_window", "<n>", 10,
                        "Keep this many peaks per 100 Da window instead of the "
-                       "strongest 'max_peaks' overall; 0 disables. Scales the "
+                       "strongest -max_peaks overall; 0 disables. Scales the "
                        "effective peak budget with the spectrum's m/z range, so "
                        "dense spectra are not starved and sparse ones not padded", false);
     setMinInt_("peaks_per_window", 0);
@@ -321,10 +323,12 @@ protected:
     // (-subsample_seed) so a run is reproducible. 0 / 0.0 disables. If both are
     // set, the absolute count wins.
     registerIntOption_("subsample_spectra", "<n>", 0,
-                       "Tag only this many randomly chosen input spectra; 0 = all", false);
+                       "Tag only this many randomly chosen input spectra; 0 = all. "
+                       "Takes precedence over -subsample_fraction", false);
     setMinInt_("subsample_spectra", 0);
     registerDoubleOption_("subsample_fraction", "<f>", 0.0,
-                          "Tag only this random fraction (0..1] of input spectra; 0 = all", false);
+                          "Tag only this random fraction (0..1] of input spectra; 0 = all. "
+                          "Ignored when -subsample_spectra is set", false);
     setMinFloat_("subsample_fraction", 0.0);
     setMaxFloat_("subsample_fraction", 1.0);
 
@@ -357,32 +361,30 @@ protected:
     // state is sub-millisecond per spectrum at defaults.
     registerFlag_("stream",
                   "Resident single-spectrum mode: spectrum blocks on stdin, TSV "
-                  "rows + '#end' sentinels on stdout. Core tagging only "
-                  "(refuses -fasta/-species/-recon_out/-out_spectra/"
-                  "-entrapment_fasta/-usi_collection); parameter changes need a restart");
+                  "rows + '#end' sentinels on stdout. Core tagging only (refuses "
+                  "-fasta, -entrapment_fasta, -species, -species_out, -taxdb, -glyco, "
+                  "-recon_out, -recon_id_out, -out_spectra, -delta_out, -digest_out, "
+                  "-label_out, -massgap_out, -usi_collection); parameter changes need a restart");
 
     registerFlag_("diversity",
-                  "Diversify which tags occupy the -max_tags slots on chimeric "
-                  "spectra: near-duplicate re-reads of an already-kept tag's peak "
-                  "set are demoted behind non-duplicates, then backfilled. "
-                  "Reorders slot occupancy under the cap; never drops below it");
+                  "On spectra with more tags than -max_tags, prefer tags built from "
+                  "different peaks over near-copies of a tag already kept. Changes "
+                  "which tags fill the slots, not how many");
 
     // ProForma 2.0 rendering of each tag, appended as a trailing column. Off by
     // default so the TSV schema is unchanged unless asked for. See Proforma.h.
     registerFlag_("proforma", "Append a ProForma 2.0 column ([+nterm]-SEQ-[+cterm]) for each tag");
 
     registerFlag_("res_conf",
-                  "Append a res_conf column: per-residue confidences 0..100, "
-                  "N->C, space-separated, one per residue (a gap's two residues "
-                  "share their pair score). What assembly-style consumers "
-                  "(Stitch/ALPS via tools/tags_to_denovo.py) read as local "
-                  "confidence");
+                  "Append a res_conf column: a confidence from 0 to 100 for each "
+                  "residue, N to C, space-separated (a gap's two residues share one "
+                  "score). Used for de novo assembly export (see README, Assembly export)");
 
     registerStringOption_("usi_collection", "<id>", "",
                           "Append a usi column: each tag's spectrum as a HUPO-PSI "
                           "Universal Spectrum Identifier, mzspec:<id>:<run>:scan:<n> (or "
                           "the nativeId/index form USI 1.0 prescribes), where <run> is "
-                          "the input file name without extension and <id> the "
+                          "the input file name without its extension (an MGF keeps its .mgf) and <id> the "
                           "dataset's PXD/MSV/RPXD/RMSV/PXL identifier, or USI000000 "
                           "until it has one", false);
 
@@ -402,9 +404,10 @@ protected:
                        "in fasta_hit", false);
     setValidFormats_("entrapment_fasta", ListUtils::create<std::string>("fasta"));
 
-    // Tag reconciliation (TagRecon stage A+B) at proteome scale: place each
-    // reported tag onto tryptic windows of a database by its flanking masses
-    // and localize/interpret the single mass gap the flanks imply. Runs on a
+    // Tag reconciliation (placement plus gap interpretation, after TagRecon)
+    // at proteome scale: place each reported tag onto tryptic windows of a
+    // database by its flanking masses and localize/interpret the single mass
+    // gap the flanks imply. Runs on a
     // per-run suffix-array index (ProteomeIndex, ~1.4 s to build on one thread
     // for a human reference proteome) -- deliberately DECOUPLED from -fasta:
     // filtering builds a per-length k-mer membership index whose memory grows
@@ -454,23 +457,24 @@ protected:
     // over the tag hits. A reduced reference set gives honest genus/family
     // resolution; short peptide tags cannot resolve species. Pair with
     // -subsample_* for a fast call on a large run.
-    // The switch. Off by default -- loading an index costs seconds and ~2 GB,
-    // which no plain tagging run should pay for. With it on, the three inputs
+    // The switch. Off by default -- loading the ~1 GB memory-mapped index is
+    // work no plain tagging run should pay for. With it on, the three inputs
     // below default to the taxonomy bundled beside the binary, so `-species` on
     // its own is a complete request.
     registerFlag_("species", "Infer which taxa are present from the tags. Uses the bundled "
                              "taxonomy unless -taxdb/-taxonomy_* are given, and writes "
-                             "<out>.species.tsv unless -species_out is given");
+                             "<out> with its extension replaced by .species.tsv unless "
+                             "-species_out is given");
 
     // Glycopeptide spectrum flag: oxonium-ion detection per MS2 spectrum,
     // written to its own TSV (see Glyco.h for why it is not a tag column).
     registerFlag_("glyco",
                   "Flag oxonium-bearing MS2 spectra (glycopeptide/glycan "
-                  "evidence, NOT an identification) to <out> with a .glyco.tsv "
-                  "suffix, or -glyco_out");
+                  "evidence, NOT an identification) to <out> with its extension "
+                  "replaced by .glyco.tsv (tags.tsv -> tags.glyco.tsv), or to -glyco_out");
     registerOutputFile_("glyco_out", "<file>", "",
-                        "Per-spectrum oxonium report. Default: <out> with a "
-                        ".glyco.tsv suffix", false);
+                        "Per-spectrum oxonium report. Default: <out> with its "
+                        "extension replaced by .glyco.tsv", false);
     setValidFormats_("glyco_out", ListUtils::create<std::string>("tsv"));
     registerDoubleOption_("glyco_min_fraction", "<f>", 0.10,
                           "Minimum summed oxonium intensity as a fraction of the "
@@ -540,7 +544,7 @@ protected:
     registerInputFile_("taxdb", "<file>", "", "Tag->taxon index (built by buildtaxdb). Default: the bundled tax_k7.taxdb", false);
     registerInputFile_("taxonomy_nodes", "<file>", "", "NCBI taxonomy nodes.dmp. Default: the bundled nodes.dmp", false);
     registerInputFile_("taxonomy_names", "<file>", "", "NCBI taxonomy names.dmp. Default: the bundled names.dmp", false);
-    registerOutputFile_("species_out", "<file>", "", "Ranked taxa TSV. Default: <out> with a .species.tsv suffix", false);
+    registerOutputFile_("species_out", "<file>", "", "Ranked taxa TSV. Default: <out> with its extension replaced by .species.tsv", false);
     setValidFormats_("species_out", ListUtils::create<std::string>("tsv"));
     registerIntOption_("species_min_len", "<n>", 0,
                        "Ignore tags shorter than this for taxonomy; 0 uses the index k", false);
@@ -578,7 +582,7 @@ protected:
     registerStringOption_("species_evidence", "<mode>", "best",
                           "Which of a spectrum's tags make it count for a taxon: 'best' = the taxa of its "
                           "lowest-E-value tag that maps into the index (ties united); 'all' = the union "
-                          "over every reported tag (FASTag <= 1.9.0)", false);
+                          "over every reported tag (more chance hits)", false);
     setValidStrings_("species_evidence", ListUtils::create<std::string>("best,all"));
     registerStringOption_("species_rank", "<rank>", "genus",
                           "Report taxa at this NCBI rank (genus, family, ...)", false);
@@ -586,25 +590,25 @@ protected:
     setMinFloat_("max_evalue", 0.0);
     registerDoubleOption_("gap_penalty", "<value>", 100.0,
                           "Rank gapped tags as if their E-value were this many times "
-                          "worse. Never removes a tag at the max_evalue cutoff (applied "
-                          "to the unpenalised value), but under max_tags it decides which "
+                          "worse. Never removes a tag at the -max_evalue cutoff (applied "
+                          "to the unpenalised value), but under -max_tags it decides which "
                           "tags fill the capped slots, and a gapped row's printed evalue "
-                          "includes it. 1 disables. Gapped tags are otherwise heavily over-ranked: "
-                          "they take ~95% of top-1 slots while being ~3.6x less likely "
-                          "to be correct", false);
+                          "includes it. 1 disables", false);
     setMinFloat_("gap_penalty", 1.0);
 
     registerDoubleOption_("isobaric_tolerance", "<value>", 0.04,
-                          "When matching against 'fasta' or reconciling against 'recon_fasta', "
+                          "When matching against -fasta or reconciling against -recon_fasta, "
                           "treat a residue as interchangeable "
                           "with an isobaric residue pair within this tolerance; 0 requires "
                           "exact strings", false);
+    setMinFloat_("isobaric_tolerance", 0.0);
     registerIntOption_("min_filter_length", "<n>", 0,
-                       "Ignore tags shorter than this when matching against 'fasta'; "
+                       "Ignore tags shorter than this when matching against -fasta; "
                        "0 derives a floor from the database size", false);
+    setMinInt_("min_filter_length", 0);
     registerStringOption_("orientation", "<mode>", "both",
-                          "Match a tag as written, or also reversed, against 'fasta' and in "
-                          "'recon_fasta' reconciliation. Tags are stored N->C under a "
+                          "Match a tag as written, or also reversed, against -fasta and in "
+                          "-recon_fasta reconciliation. Tags are stored N->C under a "
                           "y-ion assumption, so b-derived tags read reversed", false);
     setValidStrings_("orientation", ListUtils::create<std::string>("both,forward"));
 
@@ -626,13 +630,17 @@ protected:
                         "Add a modified alternative, written inline as X[Name]", false);
   }
 
-  /// One TSV row for one tag, appended to buf. THE row format -- file mode
-  /// and -stream both call this, so the two can never drift.
-  //
-  // Appended field by field, so a very long native ID needs no fixed-buffer
-  // fallback. Flanking masses at 4 decimals (0.1 mDa) -- %g's 6 significant
-  // digits are coarser than the tolerance the tag was found with, and these
-  // are what a downstream search constrains on. Numbers go through
+  /// Default report path: @p out with its extension replaced by @p suffix --
+  /// only if the dot is in the FILE NAME. `-out /tmp/run.v1/tags` has its
+  /// last dot in the directory, and cutting there would write elsewhere.
+  static std::string defaultReportPath(const std::string& out, const char* suffix)
+  {
+    const size_t slash = out.find_last_of("/\\");
+    const size_t dot = out.rfind('.');
+    const bool ext = dot != std::string::npos && (slash == std::string::npos || dot > slash);
+    return (ext ? out.substr(0, dot) : out) + suffix;
+  }
+
   /// Append free text as one TSV field: a tab, CR or LF (an mzML id may
   /// carry them as &#9; / &#10;) would shift columns or split the row.
   static void appendField(std::string& buf, const std::string& text)
@@ -641,8 +649,27 @@ protected:
     for (char c : text) buf += (c == '\t' || c == '\r' || c == '\n') ? ' ' : c;
   }
 
-  // appendNum, not snprintf: the same text as "%.4f" / "%g" / "%.3f", without
-  // the locale lock every worker queues on in macOS's printf (NumFormat.h).
+  /// The tag TSV header line, matching appendTagRow's columns.
+  static std::string tagHeader(bool proforma, bool res_conf, bool usi)
+  {
+    std::string h = "spectrum\ttag\tlength\tcharge\tnterm_mass\tcterm_mass\textended"
+                    "\tgapped\tevalue\tmin_conf\tmean_conf\tfasta_hit";
+    if (proforma) h += "\tproforma";
+    if (res_conf) h += "\tres_conf";
+    if (usi) h += "\tusi";
+    return h + "\n";
+  }
+
+  /// One TSV row for one tag, appended to buf. File mode and -stream both call
+  /// this, so the two formats cannot drift. readSpeciesFields() reads columns
+  /// back out of these rows and must change with them.
+  //
+  // Appended field by field, so a very long native ID needs no fixed-buffer
+  // fallback. Flanking masses at 4 decimals (0.1 mDa) -- %g's 6 significant
+  // digits are coarser than the tolerance the tag was found with, and these
+  // are what a downstream search constrains on. Numbers go through appendNum,
+  // not snprintf: the same text as "%.4f" / "%g" / "%.3f", without the locale
+  // lock every worker queues on in macOS's printf (NumFormat.h).
   static void appendTagRow(std::string& buf, const FASTag::Tag& t,
                            const std::string& native_id, const char* hit,
                            bool want_proforma, const std::string& proforma_fixed,
@@ -686,27 +713,48 @@ protected:
     buf += '\n';
   }
 
-  /// ProForma global fixed-modification prefix: each "Name (Residues)" entry
-  /// becomes `<[Name]@Residues>`. Fixed mods change residue masses but are
-  /// NOT in the tag sequence, so a bare `C` is really carbamidomethyl-C; the
-  /// prefix declares that for the whole proteoform.
-  static std::string buildProformaPrefix(const StringList& mods)
+  /// Reads back, from one appendTagRow line [start, nl) of @p r, the columns
+  /// species detection needs: 0 (spectrum id), 1 (tag), 7 (gapped) and 8
+  /// (E-value). Must change whenever appendTagRow's column order does. The
+  /// printed E-value is parsed on purpose, not the tag's double, so ties are
+  /// those of the TSV. @p gapped and @p evalue stay false and NaN when the
+  /// line lacks those columns.
+  /// @return false when the line has no tag column.
+  static bool readSpeciesFields(const std::string& r, size_t start, size_t nl, std::string& id,
+                                std::string& tag, bool& gapped, double& evalue)
+  {
+    const size_t t1 = r.find('\t', start);
+    if (t1 == std::string::npos || t1 >= nl) return false;
+    const size_t t2 = r.find('\t', t1 + 1);
+    if (t2 == std::string::npos || t2 > nl) return false;
+    id = r.substr(start, t1 - start);
+    tag = r.substr(t1 + 1, t2 - t1 - 1);
+    gapped = false;
+    evalue = std::numeric_limits<double>::quiet_NaN();
+    size_t f = t2, col = 2;
+    while (col < 7 && f != std::string::npos && f < nl) { f = r.find('\t', f + 1); ++col; }
+    if (f != std::string::npos && f + 1 < nl)
+    {
+      gapped = (r[f + 1] == '1');
+      const size_t fe = r.find('\t', f + 1);
+      // Written by appendNum (to_chars: '.', no locale) and read back by
+      // strtod in the process's C locale -- FASTag never calls setlocale.
+      if (fe != std::string::npos && fe + 1 < nl) evalue = std::strtod(r.c_str() + fe + 1, nullptr);
+    }
+    return true;
+  }
+
+  /// ProForma global fixed-modification prefix: each fixed residue
+  /// modification becomes `<[Name]@Residue>`. Fixed mods change residue
+  /// masses but are NOT in the tag sequence, so a bare `C` is really
+  /// carbamidomethyl-C; the prefix declares that for the whole proteoform.
+  /// Built from the resolved modifications, so terminal ones (absorbed into
+  /// the flanking masses, see resolveMods_) are left out.
+  static std::string buildProformaPrefix(const std::vector<FASTag::ModSpec>& mods)
   {
     std::string out;
-    for (const std::string& m : mods)
-    {
-      const size_t lp = m.find('('), rp = m.rfind(')');
-      if (lp == std::string::npos || rp == std::string::npos || rp < lp) continue;
-      std::string name = m.substr(0, lp);
-      while (!name.empty() && name.back() == ' ') name.pop_back();
-      std::string targets;
-      for (char c : m.substr(lp + 1, rp - lp - 1))
-        if (c >= 'A' && c <= 'Z') targets += (c == 'I' ? 'L' : c);
-      if (name.empty() || targets.empty()) continue;
-      out += "<[" + name + "]@";
-      for (size_t i = 0; i < targets.size(); ++i) { if (i) out += ','; out += targets[i]; }
-      out += ">";
-    }
+    for (const FASTag::ModSpec& m : mods)
+      if (!m.variable) out += "<[" + m.name + "]@" + m.residue + ">";
     return out;
   }
 
@@ -776,6 +824,19 @@ protected:
 
   ExitCodes main_(int, const char**) override
   {
+    // The phases of a run, in order; each starts at a "// ---- phase N" banner:
+    //   (1) option checks, refusals and tagging parameters
+    //   (2) report setup: digest, label and mass-gap tables, run rows
+    //   (3) -stream mode, which returns early
+    //   (4) opening the input and choosing the reader
+    //   (5) the tolerance probe and the output collision check
+    //   (6) the tagging loop: block ring, writer and per-spectrum work
+    //   (7) q_db post-pass
+    //   (8) glyco summary and reconciliation outputs
+    //   (9) digest and label reports
+    //   (10) species detection
+    //   (11) filter summary and -out_spectra writing
+
     // -threads 0 is FASTag's default (main() puts it on argv when the user
     // gives none) and it means HALF the logical cores, where TOPPBase would
     // take all of them. A tagger that grabs every core makes the desktop it
@@ -817,6 +878,8 @@ protected:
 #endif
     }
 
+    // ---- phase 1: option checks, refusals and tagging parameters ----------
+
     // -species is the switch; -taxdb with -species_out still works without it,
     // which is how species detection was driven before the flag existed.
     const bool want_species = getFlag_("species")
@@ -848,9 +911,9 @@ protected:
     //
     // The index is keyed on k-mers, so a tag shorter than k can never be looked
     // up. With the default tag_length of 3 against the bundled k=7 index that is
-    // EVERY tag, and the run would spend seconds and ~2 GB loading the index to
-    // write a header-only report -- which reads as "nothing found" instead of
-    // "nothing could be found". Refuse up front and say exactly what to change.
+    // EVERY tag, and the run would map the ~1 GB index to write a header-only
+    // report -- which reads as "nothing found" instead of "nothing could be
+    // found". Refuse up front and say exactly what to change.
     if (want_species)
     {
       std::string probe_taxdb = getStringOption_("taxdb");
@@ -859,17 +922,17 @@ protected:
         const std::string d = taxonomyDir_();
         if (!d.empty()) probe_taxdb = d + "/tax_k7.taxdb";
       }
-      const int kk = probe_taxdb.empty() ? -1 : peekTaxdbK_(probe_taxdb);
-      if (kk > 0)
+      const int index_k = probe_taxdb.empty() ? -1 : peekTaxdbK_(probe_taxdb);
+      if (index_k > 0)
       {
         const int reach = lengths.back() + 2 * getIntOption_("extension");
-        if (reach < kk)
+        if (reach < index_k)
         {
           OPENMS_LOG_ERROR << "-species: tag_length (" << lengths.back()
                            << ") + 2*extension (" << getIntOption_("extension") << ") = "
-                           << reach << " cannot reach the index k = " << kk
+                           << reach << " cannot reach the index k = " << index_k
                            << ", so every tag would be too short to look up and the "
-                           << "report would be empty. Set " << length_opt << kk
+                           << "report would be empty. Set " << length_opt << index_k
                            << " (or raise -extension)." << std::endl;
           return ILLEGAL_PARAMETERS;
         }
@@ -903,14 +966,17 @@ protected:
         return ILLEGAL_PARAMETERS;
       }
     }
-    // -species_rank no node carries would give an empty report that reads as
-    // "no taxon found" (NCBI calls the top rank domain, not superkingdom).
-    // Checked after the in/out and -stream refusals and after the one-set rule
-    // (the same check as after tagging, moved ahead so the probe cannot hide
-    // it), but before tagging. Only nodes.dmp is read. An explicit
-    // -taxonomy_nodes that does not exist is refused by TOPPBase when the
-    // option is read (above, in the one-set check); a missing bundled
-    // nodes.dmp skips the probe and is reported by the -species file checks.
+    // The index and its taxonomy are ONE coherent set. An index and dumps from
+    // different sources silently drop every taxid one does not know and bias
+    // the background, with no error. So it is all-bundle OR all-user: if ANY of
+    // the three is given explicitly, ALL three must be.
+    //
+    // A -species_rank that no node in nodes.dmp carries would give an empty
+    // report that reads as "no taxon found" (NCBI calls the top rank domain,
+    // not superkingdom), so the rank is checked here, before tagging, after the
+    // one-set rule. Only nodes.dmp is read. TOPPBase refuses an explicit
+    // -taxonomy_nodes that does not exist; if the bundled nodes.dmp is missing,
+    // the probe is skipped and the -species file checks report it.
     if (want_species)
     {
       const bool any_tax = !getStringOption_("taxdb").empty() || !getStringOption_("taxonomy_nodes").empty()
@@ -1157,6 +1223,8 @@ protected:
                       << std::endl;
     }
 
+    // ---- phase 2: report setup ---------------------------------------------
+
     // -digest_out, -label_out, -massgap_out: their tables are read here, so a
     // bad one is refused before any tagging.
     namespace FD = FASTag::Digest;
@@ -1173,33 +1241,58 @@ protected:
                           "reconciliations, as in -delta_out)." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
-    FD::DigestSettings dset;
-    dset.window = getDoubleOption_("digest_window");
-    dset.tag_min = getIntOption_("digest_tag_min");
-    dset.background_share = getDoubleOption_("digest_background_share");
-    if (dset.background_share >= 1.0)
+    FD::DigestSettings digest_settings;
+    digest_settings.window = getDoubleOption_("digest_window");
+    digest_settings.tag_min = getIntOption_("digest_tag_min");
+    digest_settings.background_share = getDoubleOption_("digest_background_share");
+    if (digest_settings.background_share >= 1.0)
     {
       OPENMS_LOG_ERROR << "-digest_background_share must be below 1: at 1 every model is the background "
                           "and all of them tie." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
-    dset.silac_min = getIntOption_("digest_silac_min");
-    dset.low_resolution = !p.tol_ppm;
-    FD::ModelTable dtable;
+    digest_settings.silac_min = getIntOption_("digest_silac_min");
+    digest_settings.low_resolution = !p.tol_ppm;
+    FD::ModelTable protease_models;
     const std::string digest_models = getStringOption_("digest_models");
     // Report options set without the report that reads them: ignored, so say so.
+    // Defaults are compared against the registered ones, never repeated here.
     {
-      std::vector<std::string> unused;
-      if (!digest_on && !digest_models.empty()) unused.push_back("-digest_models");
-      if (!digest_on && dset.tag_min != 100) unused.push_back("-digest_tag_min");
-      if (!digest_on && dset.background_share != 0.05) unused.push_back("-digest_background_share");
-      if (!count_on && dset.window != 0.008) unused.push_back("-digest_window");
-      if (!count_on && dset.silac_min != 50) unused.push_back("-digest_silac_min");
-      for (const std::string& o : unused)
-        OPENMS_LOG_WARN << o << " is only read for -digest_out" << (o == "-digest_window" || o == "-digest_silac_min" ? " or -label_out" : "")
-                        << "; it is ignored here." << std::endl;
+      const auto def = [&](const char* o) -> const ParamValue& { return findEntry_(o).default_value; };
+      const auto warn = [](const char* o, const char* reader) {
+        OPENMS_LOG_WARN << o << " is only read for " << reader << "; it is ignored here." << std::endl;
+      };
+      if (!digest_on && !digest_models.empty()) warn("-digest_models", "-digest_out");
+      if (!digest_on && digest_settings.tag_min != static_cast<int>(def("digest_tag_min")))
+        warn("-digest_tag_min", "-digest_out");
+      if (!digest_on && digest_settings.background_share != static_cast<double>(def("digest_background_share")))
+        warn("-digest_background_share", "-digest_out");
+      if (!count_on && digest_settings.window != static_cast<double>(def("digest_window")))
+        warn("-digest_window", "-digest_out or -label_out");
+      if (label_out.empty() && digest_settings.silac_min != static_cast<int>(def("digest_silac_min")))
+        warn("-digest_silac_min", "-label_out");
+      if (!getFlag_("glyco"))
+      {
+        if (!getStringOption_("glyco_out").empty()) warn("-glyco_out", "-glyco");
+        if (getDoubleOption_("glyco_min_fraction") != static_cast<double>(def("glyco_min_fraction")))
+          warn("-glyco_min_fraction", "-glyco");
+      }
+      if (!want_species)
+      {
+        // -taxdb and -species_out together switch species detection on, so
+        // either one alone does nothing.
+        const char* sw = "-species";
+        for (const char* o : {"species_out", "taxdb", "taxonomy_nodes", "taxonomy_names", "species_rank", "species_evidence"})
+          if (getStringOption_(o) != static_cast<std::string>(def(o))) warn((std::string("-") + o).c_str(), sw);
+        if (getIntOption_("species_min_len") != static_cast<int>(def("species_min_len")))
+          warn("-species_min_len", sw);
+        for (const char* o : {"species_max_kmer_share", "species_min_margin"})
+          if (getDoubleOption_(o) != static_cast<double>(def(o))) warn((std::string("-") + o).c_str(), sw);
+        for (const char* o : {"species_use_gapped", "species_deconvolve"})
+          if (getFlag_(o)) warn((std::string("-") + o).c_str(), sw);
+      }
     }
-    const std::string ddir = (digest_on || massgap_on) ? digestDir_() : std::string();
+    const std::string digest_dir = (digest_on || massgap_on) ? digestDir_() : std::string();
     const auto no_digest_dir = [&](const char* what) {
       OPENMS_LOG_ERROR << "No shipped " << what << " found (expected <bin>/../share/FASTag/digest). "
                           "Set FASTAG_DIGEST_DIR to the directory holding digest_models.tsv and "
@@ -1208,68 +1301,68 @@ protected:
     };
     if (digest_on)
     {
-      std::string mpath = digest_models;
-      if (mpath.empty())
+      std::string models_path = digest_models;
+      if (models_path.empty())
       {
-        if (ddir.empty()) return no_digest_dir("protease models");
-        mpath = ddir + "/digest_models.tsv";
+        if (digest_dir.empty()) return no_digest_dir("protease models");
+        models_path = digest_dir + "/digest_models.tsv";
       }
       std::string err;
-      if (!FD::loadModelTable(mpath, dtable, &err))
+      if (!FD::loadModelTable(models_path, protease_models, &err))
       {
-        OPENMS_LOG_ERROR << "-digest_models '" << mpath << "': " << err << std::endl;
+        OPENMS_LOG_ERROR << "-digest_models '" << models_path << "': " << err << std::endl;
         return INPUT_FILE_CORRUPT;
       }
-      dset.models = digest_models.empty() ? "shipped" : digest_models;
+      digest_settings.models = digest_models.empty() ? "shipped" : digest_models;
       // The table's own background wins; else the FASTA's composition; else
       // the shipped human one.
-      std::string bfasta = getStringOption_("recon_fasta");
-      if (bfasta.empty()) bfasta = fasta;
-      if (!digest_models.empty() && dtable.has_bg) dset.background = "models_table";
-      else if (!bfasta.empty())
+      std::string background_fasta = getStringOption_("recon_fasta");
+      if (background_fasta.empty()) background_fasta = fasta;
+      if (!digest_models.empty() && protease_models.has_bg) digest_settings.background = "models_table";
+      else if (!background_fasta.empty())
       {
         // Streamed: only the residue counts are needed, not the entries.
-        std::array<std::uint64_t, FD::kNumAA> bcnt{};
-        FASTAFile bf;
-        bf.readStart(bfasta);
-        FASTAFile::FASTAEntry be;
-        while (bf.readNext(be)) FD::addResidues(be.sequence, bcnt);
-        dtable.bg_c = dtable.bg_n = FD::composition(bcnt, true, &dset.background_pseudocount);
-        dtable.has_bg = true;
-        dset.background = "fasta:" + bfasta;
+        std::array<std::uint64_t, FD::kNumAA> background_counts{};
+        FASTAFile background_file;
+        background_file.readStart(background_fasta);
+        FASTAFile::FASTAEntry background_entry;
+        while (background_file.readNext(background_entry)) FD::addResidues(background_entry.sequence, background_counts);
+        protease_models.bg_c = protease_models.bg_n = FD::composition(background_counts, true, &digest_settings.background_pseudocount);
+        protease_models.has_bg = true;
+        digest_settings.background = "fasta:" + background_fasta;
       }
-      else if (!dtable.has_bg)
+      else if (!protease_models.has_bg)
       {
         FD::ModelTable shipped;
-        if (ddir.empty()) return no_digest_dir("background");
-        if (!FD::loadModelTable(ddir + "/digest_models.tsv", shipped, &err) || !shipped.has_bg)
+        if (digest_dir.empty()) return no_digest_dir("background");
+        if (!FD::loadModelTable(digest_dir + "/digest_models.tsv", shipped, &err) || !shipped.has_bg)
         {
-          OPENMS_LOG_ERROR << "The shipped digest_models.tsv in '" << ddir << "' has no background: " << err << std::endl;
+          OPENMS_LOG_ERROR << "The shipped digest_models.tsv in '" << digest_dir << "' has no background: " << err << std::endl;
           return INPUT_FILE_CORRUPT;
         }
-        dtable.bg_c = shipped.bg_c;
-        dtable.bg_n = shipped.bg_n;
-        dtable.has_bg = true;
+        protease_models.bg_c = shipped.bg_c;
+        protease_models.bg_n = shipped.bg_n;
+        protease_models.has_bg = true;
       }
     }
-    std::vector<FD::GapMod> gmods, gcys;
-    std::vector<FD::Combo> gcombos;
-    FD::GapSettings gset;
+    std::vector<FD::GapMod> gap_mods, cys_alkylations;
+    std::vector<FD::Combo> gap_combos;
+    FD::GapSettings gap_settings;
     if (massgap_on)
     {
-      if (ddir.empty()) return no_digest_dir("mass-gap modifications");
-      std::ifstream mf((ddir + "/massgap_mods.tsv").c_str());
+      if (digest_dir.empty()) return no_digest_dir("mass-gap modifications");
+      std::ifstream mf((digest_dir + "/massgap_mods.tsv").c_str());
       std::string err;
-      if (!mf || !FD::parseGapMods(mf, gmods, &err))
+      if (!mf || !FD::parseGapMods(mf, gap_mods, &err))
       {
-        OPENMS_LOG_ERROR << "'" << ddir << "/massgap_mods.tsv': " << (err.empty() ? "cannot read" : err) << std::endl;
+        OPENMS_LOG_ERROR << "'" << digest_dir << "/massgap_mods.tsv': " << (err.empty() ? "cannot read" : err) << std::endl;
         return INPUT_FILE_CORRUPT;
       }
       for (const char* c : {"Carbamidomethyl (C)", "Propionamide (C)", "Nethylmaleimide (C)",
                             "Methylthio (C)", "Carboxymethyl (C)"})
-        gcys.push_back(FD::GapMod{c, c, 1.0, 0.0});
+        cys_alkylations.push_back(FD::GapMod{c, c, 1.0, 0.0});
       const ModificationsDB* mdb = ModificationsDB::getInstance();
-      for (std::vector<FD::GapMod>* list : {&gmods, &gcys})
+      for (std::vector<FD::GapMod>* list : {&gap_mods, &cys_alkylations})
         for (FD::GapMod& m : *list)
         {
           const ResidueModification* rm = nullptr;
@@ -1282,15 +1375,15 @@ protected:
             return INPUT_FILE_CORRUPT;
           }
         }
-      gset.window = p.tol_ppm ? getDoubleOption_("massgap_window") : getDoubleOption_("massgap_window_da");
-      gset.min_spectra = static_cast<std::uint64_t>(getIntOption_("massgap_min_spectra"));
-      gset.min_share = getDoubleOption_("massgap_min_share");
-      gset.min_bin = static_cast<std::uint64_t>(getIntOption_("massgap_min_bin"));
-      gset.max_mods = getIntOption_("massgap_max_mods");
-      gset.top = getIntOption_("massgap_top");
-      gset.silac_share = getDoubleOption_("massgap_silac_share");
-      gset.silac_min = static_cast<std::uint64_t>(getIntOption_("massgap_silac_min"));
-      gcombos = FD::combinations(gmods, gset.max_mods);
+      gap_settings.window = p.tol_ppm ? getDoubleOption_("massgap_window") : getDoubleOption_("massgap_window_da");
+      gap_settings.min_spectra = static_cast<std::uint64_t>(getIntOption_("massgap_min_spectra"));
+      gap_settings.min_share = getDoubleOption_("massgap_min_share");
+      gap_settings.min_bin = static_cast<std::uint64_t>(getIntOption_("massgap_min_bin"));
+      gap_settings.max_mods = getIntOption_("massgap_max_mods");
+      gap_settings.top = getIntOption_("massgap_top");
+      gap_settings.silac_share = getDoubleOption_("massgap_silac_share");
+      gap_settings.silac_min = static_cast<std::uint64_t>(getIntOption_("massgap_silac_min"));
+      gap_combos = FD::combinations(gap_mods, gap_settings.max_mods);
     }
     // The run rows every report starts with.
     const auto run_rows = [&]() {
@@ -1311,16 +1404,16 @@ protected:
       return r;
     };
 
+    // ---- phase 3: -stream mode (returns early) -----------------------------
+
     if (stream_mode)
     {
       FILE* const dataf = stream_data_;  // the real stdout, sealed at entry
-      const std::vector<FASTag::Tables> stables = build_tables();
-      const bool spf = getFlag_("proforma");
-      const std::string spfx =
-          spf ? buildProformaPrefix(getStringList_("fixed_modifications")) : std::string();
-      std::fprintf(dataf, "spectrum\ttag\tlength\tcharge\tnterm_mass\tcterm_mass\textended"
-                          "\tgapped\tevalue\tmin_conf\tmean_conf\tfasta_hit%s%s\n",
-                   spf ? "\tproforma" : "", p.per_residue_conf ? "\tres_conf" : "");
+      const std::vector<FASTag::Tables> stream_tables = build_tables();
+      const bool stream_proforma = getFlag_("proforma");
+      const std::string stream_proforma_prefix =
+          stream_proforma ? buildProformaPrefix(p.mods) : std::string();
+      std::fputs(tagHeader(stream_proforma, p.per_residue_conf, false).c_str(), dataf);
       std::fflush(dataf);
 
       std::string line, id;
@@ -1343,10 +1436,10 @@ protected:
           size_t n = 0;
           if (!spec.empty())
           {
-            const auto tags = tag_all(spec, prec_mz, charge, stables);
+            const auto tags = tag_all(spec, prec_mz, charge, stream_tables);
             n = tags.size();
             for (const auto& t : tags)
-              appendTagRow(buf, t, id, "-", spf, spfx, p.per_residue_conf);
+              appendTagRow(buf, t, id, "-", stream_proforma, stream_proforma_prefix, p.per_residue_conf);
           }
           if (std::fprintf(dataf, "%s#end %s %zu\n", buf.c_str(), id.c_str(), n) < 0
               || std::fflush(dataf) != 0)
@@ -1363,8 +1456,9 @@ protected:
         if (line.rfind("spectrum ", 0) == 0)
         {
           finish_block();  // an unterminated previous block still gets its sentinel
-          char idbuf[256] = {0};
-          if (std::sscanf(line.c_str(), "spectrum %255s %lf %d", idbuf, &prec_mz, &charge) != 3
+          // Sized to the line: a token cannot be longer, so no ID is cut short.
+          std::vector<char> idbuf(line.size() + 1, 0);
+          if (std::sscanf(line.c_str(), "spectrum %s %lf %d", idbuf.data(), &prec_mz, &charge) != 3
               || !(prec_mz > 0) || !std::isfinite(prec_mz))
           {
             id.clear();
@@ -1372,7 +1466,7 @@ protected:
             resync_error("bad header (want: spectrum <id> <precursor_mz> <charge>)");
             continue;
           }
-          id = idbuf;
+          id = idbuf.data();
           in_block = true;
           continue;
         }
@@ -1406,8 +1500,8 @@ protected:
         OPENMS_LOG_ERROR << "FASTA: " << err << std::endl;
         return INPUT_FILE_EMPTY;
       }
-      const int floor_ = getIntOption_("min_filter_length");
-      if (floor_ > 0) filt.setMinLen(floor_);
+      const int min_filter_len = getIntOption_("min_filter_length");
+      if (min_filter_len > 0) filt.setMinLen(min_filter_len);
       if (iso_tol > 0) filt.deriveCollapses(iso_tol, fixed_deltas);
       // build() refuses a run whose longest tag cannot reach the filter's
       // floor. Every other seed length has to reach it too, as it would have
@@ -1473,6 +1567,8 @@ protected:
                         << entrap.indexedKeys() << " keys" << std::endl;
       }
     }
+
+    // ---- phase 4: opening the input and choosing the reader ----------------
 
     // Input readers. mzML: every one reads a spectrum at a time from an
     // indexed file, so memory is O(threads), not O(file), and each worker
@@ -1647,10 +1743,11 @@ protected:
     // (instrument, source files), which this reader deliberately does not
     // read, and getting them means the very pre-pass being avoided.
     //
-    // Probed before it is trusted, exactly as the OnDiscMSExperiment path
-    // below is: a reader reporting no MS2-with-precursor in the first 64
-    // spectra is not used, so a file it cannot understand falls back instead
-    // of producing a confident nothing.
+    // Probed before it is trusted: a reader reporting no MS2-with-precursor
+    // in the first spectra is not used, so a file it cannot understand falls
+    // back instead of producing a confident nothing. The fallback,
+    // OnDiscMSExperiment, loads all spectrum metadata up front: a serial pass
+    // that is slow on a large file, but correct.
     std::unique_ptr<FASTag::IndexedMzMLReader> fastmz;
     if (!mzpeak_in && !mgf_in && out_spectra.empty())
     {
@@ -1670,12 +1767,9 @@ protected:
       }
     }
 
-    // A pointer, not a value: the fallback below must replace this with a
-    // genuinely fresh reader, and OnDiscMSExperiment's operator= is private
-    // (copy-construction only), so an in-place reassignment isn't available.
     auto ondisc = std::make_unique<OnDiscMSExperiment>();
     PeakMap exp;
-    const bool streaming = !mzpeak_in && !mgf_in && !fastmz && ondisc->openFile(in, out_spectra.empty());
+    const bool streaming = !mzpeak_in && !mgf_in && !fastmz && ondisc->openFile(in);
     // Spectrum i of an mzML input: the per-spectrum reader or the fully
     // loaded map. For the SERIAL callers only; the tagging loop gives each
     // thread its own reader. (mzPeak is read in one pass, by MzPeakStream.)
@@ -1690,39 +1784,6 @@ protected:
                          "into memory. Run FileConverter to write an indexed mzML "
                          "if the file is large." << std::endl;
       FileHandler().loadExperiment(in, exp, {FileTypes::MZML});
-    }
-    // Refuse to run blind on an unpatched OpenMS.
-    //
-    // openFile(in, true) above skips OpenMS's serial metadata pre-pass, which
-    // is only correct when its per-spectrum decoder reports MS level and
-    // precursors, which takes a patched OpenMS. Stock OpenMS
-    // leaves every spectrum at the default MS level 1 with no precursor, so
-    // the MS2 test would reject all of them and the run would report a clean,
-    // empty result. Probe for level 2 WITH a precursor -- what tag_one()
-    // requires; "level > 0" is satisfied by that very default -- and reload
-    // with metadata instead of producing a confident nothing.
-    if (streaming && out_spectra.empty() && !mzpeak_in && !fastmz)
-    {
-      bool have_meta = false;
-      const Size probe = std::min<Size>(ondisc->getNrSpectra(), 64);
-      for (Size i = 0; i < probe && !have_meta; ++i)
-      {
-        const MSSpectrum s = ondisc->getSpectrum(i);
-        if (s.getMSLevel() == 2 && !s.getPrecursors().empty()) have_meta = true;
-      }
-      if (!have_meta && probe > 0)
-      {
-        OPENMS_LOG_WARN << "This OpenMS does not report spectrum metadata from the "
-                           "per-spectrum reader, so the fast path is unavailable; "
-                           "loading metadata up front instead. Expect roughly a "
-                           "minute of extra single-threaded startup on a large file."
-                        << std::endl;
-        // A fresh instance: a second openFile() on the SAME OnDiscMSExperiment
-        // crashes in getSpectrum() (EXC_BAD_ACCESS in MSSpectrum's copy
-        // constructor).
-        ondisc = std::make_unique<OnDiscMSExperiment>();
-        ondisc->openFile(in);
-      }
     }
     size_t n_total = streaming ? ondisc->getNrSpectra() : exp.size();
     if (mzs) n_total = mzs->size();
@@ -1746,6 +1807,8 @@ protected:
                       << std::count(sample_mask.begin(), sample_mask.end(), char(1)) << " of " << n_total
                       << " input spectra (seed " << subsample_seed << ")" << std::endl;
     }
+
+    // ---- phase 5: tolerance probe and output collision check --------------
 
     // Warn when the fragment tolerance looks far too tight for the data.
     //
@@ -1846,12 +1909,6 @@ protected:
     // output is opened, with the default report paths resolved as below.
     {
       namespace fs = std::filesystem;
-      const auto beside = [&out](const char* suffix) -> std::string {
-        const size_t slash = out.find_last_of("/\\");
-        const size_t dot = out.rfind('.');
-        const bool ext = dot != std::string::npos && (slash == std::string::npos || dot > slash);
-        return (ext ? out.substr(0, dot) : out) + suffix;
-      };
       std::vector<std::pair<std::string, std::string>> outs;
       const auto add = [&outs](const char* opt, const std::string& path) {
         if (!path.empty()) outs.emplace_back(opt, path);
@@ -1867,12 +1924,12 @@ protected:
       if (getFlag_("glyco"))
       {
         const std::string g = getStringOption_("glyco_out");
-        add("glyco_out", g.empty() ? beside(".glyco.tsv") : g);
+        add("glyco_out", g.empty() ? defaultReportPath(out, ".glyco.tsv") : g);
       }
       if (want_species)
       {
         const std::string sp = getStringOption_("species_out");
-        add("species_out", sp.empty() ? beside(".species.tsv") : sp);
+        add("species_out", sp.empty() ? defaultReportPath(out, ".species.tsv") : sp);
       }
       const auto same = [](const std::string& a, const std::string& b) {
         std::error_code ea, eb;
@@ -1926,9 +1983,7 @@ protected:
       return CANNOT_WRITE_OUTPUT_FILE;
     }
     const bool want_proforma = getFlag_("proforma");
-    tsv << "spectrum\ttag\tlength\tcharge\tnterm_mass\tcterm_mass\textended\tgapped\tevalue\tmin_conf\tmean_conf\tfasta_hit"
-        << (want_proforma ? "\tproforma" : "") << (p.per_residue_conf ? "\tres_conf" : "")
-        << (usi_prefix.empty() ? "" : "\tusi") << "\n";
+    tsv << tagHeader(want_proforma, p.per_residue_conf, !usi_prefix.empty());
 
     std::ofstream rtsv;
     if (recon_on)
@@ -1944,15 +1999,6 @@ protected:
            << (recon_loc ? "\tloc_site\tloc_score\tloc_ties" : "") << "\n";
     }
 
-    // Default report paths: <out> with its extension replaced by a suffix --
-    // only if the dot is in the FILE NAME. `-out /tmp/run.v1/tags` has its
-    // last dot in the directory, and cutting there would write elsewhere.
-    const auto beside_out = [&out](const char* suffix) -> std::string {
-      const size_t slash = out.find_last_of("/\\");
-      const size_t dot = out.rfind('.');
-      const bool ext = dot != std::string::npos && (slash == std::string::npos || dot > slash);
-      return (ext ? out.substr(0, dot) : out) + suffix;
-    };
 
     const bool glyco_on = getFlag_("glyco");
     const double glyco_min_fraction = getDoubleOption_("glyco_min_fraction");
@@ -1960,7 +2006,7 @@ protected:
     std::ofstream gtsv;
     if (glyco_on)
     {
-      if (glyco_out.empty()) glyco_out = beside_out(".glyco.tsv");
+      if (glyco_out.empty()) glyco_out = defaultReportPath(out, ".glyco.tsv");
       gtsv.open(glyco_out.c_str());
       if (!gtsv)
       {
@@ -1971,7 +2017,7 @@ protected:
     }
 
     const std::string proforma_fixed =
-        want_proforma ? buildProformaPrefix(getStringList_("fixed_modifications")) : std::string();
+        want_proforma ? buildProformaPrefix(p.mods) : std::string();
 
     PeakMap kept;
     if (mzs) kept.getExperimentalSettings() = mzs->settings();
@@ -1981,6 +2027,8 @@ protected:
       if (auto meta = ondisc->getMetaData()) kept.getExperimentalSettings() = *meta;
     }
     else kept.getExperimentalSettings() = exp.getExperimentalSettings();
+
+    // ---- phase 6: the tagging loop -----------------------------------------
 
     size_t n_ms2 = 0, n_tags = 0, n_reported = 0;
     size_t n_glyco = 0, n_glyco_scanned = 0;
@@ -2003,10 +2051,10 @@ protected:
     {
       size_t base = 0;                 ///< input index of slot 0
       std::vector<std::string> rows;
-      std::vector<std::string> rrows;  ///< recon rows (recon_on only)
-      std::vector<std::vector<PeptideIdentification>> rids;  ///< (recon_ids_on only)
-      std::vector<std::string> grows;  ///< glyco rows (glyco_on only)
-      std::vector<std::vector<std::pair<double, bool>>> rmeta;  ///< (entrap_on only)
+      std::vector<std::string> recon_rows;  ///< recon rows (recon_on only)
+      std::vector<std::vector<PeptideIdentification>> recon_id_lists;  ///< (recon_ids_on only)
+      std::vector<std::string> glyco_rows;  ///< glyco rows (glyco_on only)
+      std::vector<std::vector<std::pair<double, bool>>> row_meta;  ///< (entrap_on only)
       std::vector<char> keep, keep_target;
     };
     // Three: a fourth only helped within noise, for another block of rows
@@ -2023,7 +2071,7 @@ protected:
     struct alignas(64) PerThread
     {
       std::map<int, std::pair<size_t, size_t>> len;  ///< length -> (seen, matched)
-      size_t ms2 = 0, tags = 0, rep = 0;
+      size_t ms2 = 0, tags = 0, reported = 0;
       size_t no_charge = 0;  ///< MS2 whose precursor carries no charge (tagged as 2+)
       size_t multi_charge = 0;  ///< ... of them, those listing several possible charges
       // Entrapment-calibration accumulators (entrap_on only): target E-values,
@@ -2051,7 +2099,7 @@ protected:
       size_t n_slow = 0;
     };
     std::vector<PerThread> per_thread(static_cast<size_t>(std::max(1, omp_get_max_threads())));
-    for (PerThread& q : per_thread) q.digest = FASTag::Digest::TerminusCounter(dset.window);
+    for (PerThread& q : per_thread) q.digest = FASTag::Digest::TerminusCounter(digest_settings.window);
 
     // The per-spectrum work, shared by every input path.
     //
@@ -2187,11 +2235,12 @@ protected:
         }
         if (!row_entrap) res.any_target = true;
         if (entrap_on) res.meta.emplace_back(t.evalue, row_entrap);
-        ++pt.rep;
+        ++pt.reported;
 
         appendTagRow(buf, t, spec.getNativeID(), hit, want_proforma, proforma_fixed,
                      p.per_residue_conf, usi);
-        // The tags fastag_termini counts: every row written, ungapped, E <= 1.
+        // The tags the digest and label reports count: every written row that
+        // is ungapped with E <= 1.
         if (count_on && !t.gapped && t.evalue <= 1.0)
           pt.digest.add(t.nterm_mass, t.cterm_mass, FASTag::baseSequence(t.seq));
 
@@ -2281,7 +2330,8 @@ protected:
     // curve.
     std::vector<std::pair<double, bool>> row_meta;
     // -recon_id_out, in input order: OpenMS's writers take the whole run, so
-    // ponytail: held until the end -- memory grows with the placements written.
+    // the identifications are held until the end; memory grows with the
+    // placements written.
     PeptideIdentificationList recon_ids;
 
     // Record one spectrum's result at its BLOCK-LOCAL index. The index is the
@@ -2303,7 +2353,7 @@ protected:
           sp = &sorted_copy;
         }
         const auto g = FASTag::scanOxonium(*sp, p.frag_tol, p.tol_ppm, glyco_min_fraction);
-        std::string& gr = b.grows[idx];
+        std::string& gr = b.glyco_rows[idx];
         gr.clear();
         appendField(gr, spec.getNativeID());
         gr += '\t';
@@ -2315,9 +2365,9 @@ protected:
       }
       if (r.buf.empty()) return;  // rbuf is only ever non-empty alongside buf
       b.rows[idx].swap(r.buf);
-      if (recon_on) b.rrows[idx].swap(r.rbuf);
-      if (recon_ids_on) b.rids[idx].swap(r.ids);
-      if (entrap_on) b.rmeta[idx].swap(r.meta);
+      if (recon_on) b.recon_rows[idx].swap(r.rbuf);
+      if (recon_ids_on) b.recon_id_lists[idx].swap(r.ids);
+      if (entrap_on) b.row_meta[idx].swap(r.meta);
       b.keep[idx] = 1;
       // A spectrum whose only reported tags are entrapment matches is
       // calibration material, not a hit -- keep it out of -out_spectra.
@@ -2333,10 +2383,10 @@ protected:
       if (b.rows.size() < n_used)
       {
         b.rows.resize(n_used);
-        if (recon_on) b.rrows.resize(n_used);
-        if (recon_ids_on) b.rids.resize(n_used);
-        if (glyco_on) b.grows.resize(n_used);
-        if (entrap_on) b.rmeta.resize(n_used);
+        if (recon_on) b.recon_rows.resize(n_used);
+        if (recon_ids_on) b.recon_id_lists.resize(n_used);
+        if (glyco_on) b.glyco_rows.resize(n_used);
+        if (entrap_on) b.row_meta.resize(n_used);
       }
       b.keep.assign(n_used, 0);
       if (want_out) b.keep_target.assign(n_used, 0);
@@ -2380,70 +2430,51 @@ protected:
     {
       for (size_t i = 0; i < n_used; ++i)
       {
-        if (glyco_on && !b.grows[i].empty())
+        if (glyco_on && !b.glyco_rows[i].empty())
         {
-          gtsv << b.grows[i];
+          gtsv << b.glyco_rows[i];
           // 4th field is the 0/1 flag; count flagged spectra for the summary.
-          size_t tp = b.grows[i].find('\t');
+          size_t tp = b.glyco_rows[i].find('\t');
           for (int f = 0; f < 2 && tp != std::string::npos; ++f)
-            tp = b.grows[i].find('\t', tp + 1);
-          if (tp != std::string::npos && b.grows[i].compare(tp + 1, 1, "1") == 0) ++n_glyco;
+            tp = b.glyco_rows[i].find('\t', tp + 1);
+          if (tp != std::string::npos && b.glyco_rows[i].compare(tp + 1, 1, "1") == 0) ++n_glyco;
           ++n_glyco_scanned;
-          b.grows[i].clear();
+          b.glyco_rows[i].clear();
         }
         if (!b.keep[i]) continue;
         put_rows(tsv, tsv_pending, b.rows[i]);
-        if (recon_on && !b.rrows[i].empty()) { put_rows(rtsv, rtsv_pending, b.rrows[i]); b.rrows[i].clear(); }
+        if (recon_on && !b.recon_rows[i].empty()) { put_rows(rtsv, rtsv_pending, b.recon_rows[i]); b.recon_rows[i].clear(); }
         if (recon_ids_on)
         {
-          for (PeptideIdentification& id : b.rids[i]) recon_ids.push_back(std::move(id));
-          b.rids[i].clear();
+          for (PeptideIdentification& id : b.recon_id_lists[i]) recon_ids.push_back(std::move(id));
+          b.recon_id_lists[i].clear();
         }
         if (entrap_on)
         {
-          row_meta.insert(row_meta.end(), b.rmeta[i].begin(), b.rmeta[i].end());
-          b.rmeta[i].clear();
+          row_meta.insert(row_meta.end(), b.row_meta[i].begin(), b.row_meta[i].end());
+          b.row_meta[i].clear();
         }
         if (want_species)
         {
-          // Field 0 = spectrum id, field 1 = tag, per line.
           const std::string& r = b.rows[i];
           size_t start = 0;
+          std::string id, tag;
+          bool gapped = false;
+          double evalue = 0;
           while (start < r.size())
           {
             size_t nl = r.find('\n', start);
             if (nl == std::string::npos) nl = r.size();
-            size_t t1 = r.find('\t', start);
-            if (t1 != std::string::npos && t1 < nl)
+            if (readSpeciesFields(r, start, nl, id, tag, gapped, evalue))
             {
-              size_t t2 = r.find('\t', t1 + 1);
-              if (t2 != std::string::npos && t2 <= nl)
-              {
-                // Skip GAPPED tags unless asked for. A gap spells two residues
-                // from one summed mass -- an inference, not a read -- and an
-                // exact k-mer lookup cannot tell the difference, so a gapped tag
-                // matches taxa it never evidenced. Measured on PXD000001: with
-                // gapped tags admitted, the true genus falls from rank 1 to rank
-                // 20 and cereal genomes take the top of the table.
-                // The row is spectrum \t tag \t length \t charge \t nterm \t
-                // cterm \t extended \t gapped \t evalue \t ... -- fields 7, 8.
-                size_t f = t2, col = 2;
-                while (col < 7 && f != std::string::npos && f < nl) { f = r.find('\t', f + 1); ++col; }
-                bool gapped = false;
-                double evalue = std::numeric_limits<double>::quiet_NaN();
-                if (f != std::string::npos && f + 1 < nl)
-                {
-                  gapped = (r[f + 1] == '1');
-                  const size_t fe = r.find('\t', f + 1);
-                  // Written by appendNum (to_chars: '.', no locale) and read
-                  // back by strtod in the process's C locale -- FASTag never
-                  // calls setlocale. Only the ORDER of E-values matters here.
-                  if (fe != std::string::npos && fe + 1 < nl) evalue = std::strtod(r.c_str() + fe + 1, nullptr);
-                }
-                if (species_use_gapped) gapped = false;
-                if (!gapped)
-                  by_spec[r.substr(start, t1 - start)].emplace_back(r.substr(t1 + 1, t2 - t1 - 1), evalue);
-              }
+              // Skip GAPPED tags unless asked for. A gap spells two residues
+              // from one summed mass -- an inference, not a read -- and an
+              // exact k-mer lookup cannot tell the difference, so a gapped tag
+              // matches taxa it never evidenced. Measured on PXD000001: with
+              // gapped tags admitted, the true genus falls from rank 1 to rank
+              // 20 and cereal genomes take the top of the table.
+              if (species_use_gapped) gapped = false;
+              if (!gapped) by_spec[std::move(id)].emplace_back(std::move(tag), evalue);
             }
             start = nl + 1;
           }
@@ -2854,7 +2885,7 @@ protected:
       n_multi_charge += pt.multi_charge;
       n_ms2 += pt.ms2;
       n_tags += pt.tags;
-      n_reported += pt.rep;
+      n_reported += pt.reported;
       for (const auto& kv : pt.len)
       {
         by_len[kv.first].first += kv.second.first;
@@ -2868,7 +2899,7 @@ protected:
       return CANNOT_WRITE_OUTPUT_FILE;
     }
 
-    // ---- q_db: entrapment-calibrated false-match q-values ----------------
+    // ---- phase 7: q_db, entrapment-calibrated false-match q-values --------
     //
     // Post-pass over the finished TSV: build the weighted target/decoy curve
     // from the in-memory E-values (never reparsing the serialized %g values),
@@ -2998,6 +3029,8 @@ protected:
                          "spuriousness, never as read correctness." << std::endl;
     }
 
+    // ---- phase 8: glyco summary and reconciliation outputs ----------------
+
     if (glyco_on)
     {
       gtsv.close();
@@ -3117,7 +3150,7 @@ protected:
         if (massgap_on)
         {
           std::vector<FD::Row> rows = run_rows();
-          const auto more = FD::massgapRows(gap_rows, gap_keys, gmods, gcombos, gcys, gset);
+          const auto more = FD::massgapRows(gap_rows, gap_keys, gap_mods, gap_combos, cys_alkylations, gap_settings);
           rows.insert(rows.end(), more.begin(), more.end());
           if (!FD::writeReport(massgap_out, rows))
           {
@@ -3164,10 +3197,12 @@ protected:
       }
     }
 
+    // ---- phase 9: digest and label reports ---------------------------------
+
     // -digest_out and -label_out, from the tag ends counted in the loop.
     if (count_on)
     {
-      FD::TerminusCounter tc(dset.window);
+      FD::TerminusCounter tc(digest_settings.window);
       for (const PerThread& pt : per_thread) tc.merge(pt.digest);
       if (digest_on)
       {
@@ -3218,7 +3253,7 @@ protected:
         for (const SourceFile& sf : es.getSourceFiles())
           if (!sf.getNativeIDTypeAccession().empty()) { meta.native_id_type = sf.getNativeIDTypeAccession(); break; }
         std::vector<FD::Row> rows = run_rows();
-        const auto more = FD::digestRows(tc, dtable, meta, dset);
+        const auto more = FD::digestRows(tc, protease_models, meta, digest_settings);
         rows.insert(rows.end(), more.begin(), more.end());
         if (!FD::writeReport(digest_out, rows))
         {
@@ -3233,7 +3268,7 @@ protected:
       if (!label_out.empty())
       {
         std::vector<FD::Row> rows = run_rows();
-        const auto more = FD::labelRows(tc, dset);
+        const auto more = FD::labelRows(tc, digest_settings);
         rows.insert(rows.end(), more.begin(), more.end());
         if (!FD::writeReport(label_out, rows))
         {
@@ -3243,6 +3278,8 @@ protected:
         OPENMS_LOG_INFO << "Labels: " << tc.tags << " filtered tags -> " << label_out << std::endl;
       }
     }
+
+    // ---- phase 10: species detection ---------------------------------------
 
     // Taxonomic / species detection from the tags.
     //
@@ -3262,26 +3299,15 @@ protected:
     if (want_species)
     {
       const std::string tdir = taxonomyDir_();
-      // The index and its taxonomy are ONE coherent set. An index and dumps from
-      // different sources silently drop every taxid one does not know and bias
-      // the background, with no error. So it is all-bundle OR all-user: if ANY of
-      // the three was given explicitly, ALL three must be.
+      // The one-set rule is enforced before tagging; here explicit means all three.
       const bool any_explicit = !taxdb.empty() || !nodes.empty() || !names.empty();
-      if (any_explicit && (taxdb.empty() || nodes.empty() || names.empty()))
-      {
-        OPENMS_LOG_ERROR << "-taxdb, -taxonomy_nodes and -taxonomy_names are one set: "
-                         << "give all three, or none (to use the bundled taxonomy). "
-                         << "Mixing a custom index with another taxonomy silently "
-                         << "drops every taxon the two do not share." << std::endl;
-        return ILLEGAL_PARAMETERS;
-      }
       if (!any_explicit && !tdir.empty())
       {
         taxdb = tdir + "/tax_k7.taxdb";
         nodes = tdir + "/nodes.dmp";
         names = tdir + "/names.dmp";
       }
-      if (species_out.empty()) species_out = beside_out(".species.tsv");
+      if (species_out.empty()) species_out = defaultReportPath(out, ".species.tsv");
 
       // Say which file is missing and where it was looked for. "Failed to load"
       // on an empty path is useless when the whole point of the defaults is that
@@ -3331,24 +3357,24 @@ protected:
         OPENMS_LOG_ERROR << "Failed to load taxonomy: " << terr << std::endl;
         return INPUT_FILE_CORRUPT;
       }
-      const int kk = idx.k();
+      const int index_k = idx.k();
       int min_len = getIntOption_("species_min_len");
-      if (min_len < kk) min_len = kk;
+      if (min_len < index_k) min_len = index_k;
 
       // The up-front tag-length check again, against the LOADED k: the header
       // peek rejects legacy headers the loader still accepts, and then a run
       // whose tags are all shorter than k would write a header-only report
       // that reads as "nothing found" rather than "nothing could be found".
       const int reach = lengths.back() + 2 * getIntOption_("extension");
-      if (reach < kk)
+      if (reach < index_k)
       {
         OPENMS_LOG_WARN << "-species: no tag can reach the index k (this run was "
                         << "driven by -taxdb/-species_out rather than -species, which "
                         << "checks up front). tag_length ("
                         << lengths.back() << ") + 2*extension ("
-                        << getIntOption_("extension") << ") = " << reach << " < k = " << kk
+                        << getIntOption_("extension") << ") = " << reach << " < k = " << index_k
                         << ", so every tag is too short to look up and the report WILL be empty. "
-                        << "Raise " << length_opt << "to " << kk << " (or use -extension to reach it)."
+                        << "Raise " << length_opt << "to " << index_k << " (or use -extension to reach it)."
                         << std::endl;
       }
 
@@ -3388,38 +3414,39 @@ protected:
         {
           const std::string seq = FASTag::baseSequence(row.first);
           if (static_cast<int>(seq.size()) < min_len) continue;
-          const int L = static_cast<int>(seq.size());
-          // One reusable buffer: lookup() fills rather than returns a reference,
-          // because the mapped index holds taxon INDICES, not a vector to borrow.
-          std::vector<uint32_t> t;
-          std::map<uint32_t, int> sup;  // taxon -> how many of this tag's k-mers it carries
+          const int tag_len = static_cast<int>(seq.size());
+          // Buffer reused across this tag's k-mers: lookup() fills it rather
+          // than returning a reference, because the mapped index holds taxon
+          // INDICES, not a vector to borrow.
+          std::vector<uint32_t> kmer_taxa;
+          std::map<uint32_t, int> kmers_per_taxon;  // taxon -> how many of this tag's k-mers it carries
           int n_eval = 0;               // k-mers that were discriminative enough to use
           bool unexplained = false;
-          for (int i = 0; i + kk <= L; ++i)
+          for (int i = 0; i + index_k <= tag_len; ++i)
           {
-            idx.lookup(FASTag::TaxIndex::fold(seq.substr(static_cast<size_t>(i), static_cast<size_t>(kk))), t);
+            idx.lookup(FASTag::TaxIndex::fold(seq.substr(static_cast<size_t>(i), static_cast<size_t>(index_k))), kmer_taxa);
             // A k-mer in NO taxon kills the tag: the reference cannot explain
             // this tag at all.
-            if (t.empty()) { unexplained = true; break; }
-            if (t.size() > share_cap) { ++n_kmer_skipped; continue; }
+            if (kmer_taxa.empty()) { unexplained = true; break; }
+            if (kmer_taxa.size() > share_cap) { ++n_kmer_skipped; continue; }
             ++n_eval;
-            for (uint32_t tx : t) ++sup[tx];
+            for (uint32_t tx : kmer_taxa) ++kmers_per_taxon[tx];
           }
           if (unexplained || n_eval == 0) continue;
 
           int best = 0;
-          for (const auto& kv : sup) best = std::max(best, kv.second);
+          for (const auto& kv : kmers_per_taxon) best = std::max(best, kv.second);
           // The whole-tag rule: a taxon must carry EVERY k-mer that was actually
           // evaluated. With share_cap at its maximum that is plain set
           // intersection.
           if (best < n_eval) continue;
           int runner = 0;
-          for (const auto& kv : sup) if (kv.second < best) runner = std::max(runner, kv.second);
+          for (const auto& kv : kmers_per_taxon) if (kv.second < best) runner = std::max(runner, kv.second);
           const double margin = static_cast<double>(best - runner) / static_cast<double>(n_eval);
           if (margin < min_margin) { ++n_tag_generic; continue; }
           FASTag::TagSupport ts;
           ts.evalue = row.second;
-          for (const auto& kv : sup) if (kv.second == best) ts.taxa.push_back(kv.first);
+          for (const auto& kv : kmers_per_taxon) if (kv.second == best) ts.taxa.push_back(kv.first);
           support.push_back(std::move(ts));
         }
         // The taxa this spectrum counts for: by default those of its best
@@ -3468,9 +3495,9 @@ protected:
       // contributions, so a genus really is the sum of its species.
       //
       // Without deconvolution the leaves are raw spectrum counts, NOT
-      // independent: a spectrum tied between two sibling leaves counted twice
-      // at their parent, so a family of two genera sharing the same spectra
-      // outranked one with more distinct spectra (review X13). There the
+      // independent: a spectrum tied between two sibling leaves would count
+      // twice at their parent, and a family of two genera sharing the same
+      // spectra would outrank one with more distinct spectra. There the
       // per-node deduplicated count `hits` is the adjusted value; at a leaf it
       // equals leaf_hits.
       std::map<uint32_t, double> adjusted;
@@ -3554,8 +3581,8 @@ protected:
       so.close();
       if (!species_ok || so.fail())
       {
-        // Every other report fails the run on a write error; this one used to
-        // log and exit 0, leaving a stale report from an earlier run in place.
+        // A write error fails the run, as for every other report; exiting 0
+        // would leave a stale report from an earlier run in place.
         OPENMS_LOG_ERROR << "Failed writing species report to " << species_out << std::endl;
         return CANNOT_WRITE_OUTPUT_FILE;
       }
@@ -3578,6 +3605,8 @@ protected:
                       << " and were tagged as 2+: their peaks above the 2+ precursor "
                          "mass are dropped, and their nterm_mass flanks assume charge 2 (wrong "
                          "for a 3+ or higher precursor)." << std::endl;
+
+    // ---- phase 11: filter summary and -out_spectra writing ----------------
 
     // Report matches beside the number expected by chance, so a count is never
     // mistaken for signal: below the derived floor the filter passes almost
@@ -3611,7 +3640,7 @@ protected:
       if (kept_idx.empty())
       {
         // Remove what an earlier run left there: next to this run's TSV it
-        // would read as this run's spectra (review IO-5). The collision check
+        // would read as this run's spectra. The collision check
         // up front guarantees this is not the input.
         std::error_code ec;
         const bool stale = std::filesystem::is_regular_file(out_spectra, ec)
@@ -3755,7 +3784,7 @@ namespace
 // a clear message.
 
 /// Which of TOPPBase's descriptor branches this command line will actually
-/// take, mirroring TOPPBase::main's own precedence (TOPPBase.cpp:253-330):
+/// take, mirroring TOPPBase::main's own precedence:
 /// write_ini wins over everything, then ctd, then the two cwl spellings, then
 /// the two json spellings. Whichever comes first returns before the rest run.
 enum class DescriptorRequest
@@ -3769,7 +3798,7 @@ enum class DescriptorRequest
 DescriptorRequest requestedDescriptor(int argc, const char** argv)
 {
   // TOPPBase::parseCommandLine_ matches option tokens by exact string ("-" +
-  // registered name, TOPPBase.cpp:2465/2496), so "--write_ctd",
+  // registered name), so "--write_ctd",
   // "-write_ctd=DIR" and abbreviations are unknown options to it too; a literal
   // comparison here recognises exactly what it recognises. Options supplied
   // through -ini cannot reach these branches either -- the dispatch reads

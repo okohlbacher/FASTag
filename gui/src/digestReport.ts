@@ -1,5 +1,5 @@
-// Readers for the three long-form reports of FASTag 1.9.0 and later (-digest_out,
-// -label_out, -massgap_out; doc/DESIGN-digest.md). Every file has the header
+// Readers for FASTag's three long-form reports (-digest_out, -label_out,
+// -massgap_out; doc/DESIGN-digest.md). Every file has the header
 // `section key value n description`; the reports differ only in their sections.
 // Everything here is pure so it can be tested without the bridge.
 
@@ -75,7 +75,7 @@ export function value(r: Report, sec: string, key: string): string | undefined {
 
 /// A decimal number as the CLI writes it; hex, binary and octal literals,
 /// which Number() would accept, are not numbers here.
-const DECIMAL = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/
+export const DECIMAL = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/
 
 export function num(s: string | undefined): number | null {
   if (s == null || !DECIMAL.test(s)) return null
@@ -145,25 +145,6 @@ export function background(r: Report, end: 'C' | 'N'): Dist | null {
 /// A model's residue distribution at one end (`model` section, `<model>.C.<aa>`).
 export function modelDist(r: Report, model: string, end: 'C' | 'N'): Dist | null {
   return endDist(section(r, 'model'), `${model}.${end}.`)
-}
-
-export interface ModelScore {
-  model: string
-  cls: string
-  loglik: number
-}
-
-/// Models in report order with their log-likelihood and class.
-export function modelScores(r: Report): ModelScore[] {
-  const out: ModelScore[] = []
-  for (const x of section(r, 'model')) {
-    if (!x.key.endsWith('.loglik')) continue
-    const model = x.key.slice(0, -'.loglik'.length)
-    const ll = num(x.value)
-    if (ll == null) continue
-    out.push({ model, cls: value(r, 'model', `${model}.class`) ?? '', loglik: ll })
-  }
-  return out
 }
 
 // ---- sequence logo -------------------------------------------------------
@@ -393,6 +374,8 @@ export function signedDa(v: number | null): string {
 /// (3614 -> 3,614). A decimal's digits, a zero-padded code and a name such as
 /// PXD063917 or K8 stay as written.
 export function groupDigits(text: string): string {
-  // No lookbehind: older WebKit (macOS before 13.3) cannot parse one.
+  // The prefix group (start, a non-word non-dot character, or a non-digit
+  // followed by a dot) keeps decimal digits and names such as PXD063917
+  // unchanged; it is put back in front of the grouped number.
   return text.replace(/(^|[^\w.]|\D\.)([1-9]\d{3,})(?!\w|\.\d)/g, (_, pre: string, d: string) => `${pre}${fmt(Number(d))}`)
 }

@@ -12,17 +12,17 @@ export function IconError({ size = 12 }: { size?: number }): JSX.Element {
   )
 }
 
-export function IconCheck({ size = 12 }: { size?: number }): JSX.Element {
+export function IconCheck(): JSX.Element {
   return (
-    <svg className="icon" width={size} height={size} viewBox="0 0 12 12" aria-hidden="true">
+    <svg className="icon" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
       <path d="M2.5 6.2l2.2 2.2 4.8-4.9" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }
 
-export function IconWarning({ size = 16 }: { size?: number }): JSX.Element {
+export function IconWarning(): JSX.Element {
   return (
-    <svg className="icon" width={size} height={size} viewBox="0 0 16 16" aria-hidden="true">
+    <svg className="icon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
       <path d="M8 1.8l6.5 11.4H1.5z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
       <path d="M8 6v3.4M8 11.3v.1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
     </svg>
@@ -62,8 +62,10 @@ export function IconFlag(): JSX.Element {
   )
 }
 
+export type JobStatus = 'queued' | 'running' | 'done' | 'failed' | 'cancelled'
+
 /// The status of a batch job: done, failed, running, cancelled or not run.
-export function JobIcon({ status }: { status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled' }): JSX.Element {
+export function JobIcon({ status }: { status: JobStatus }): JSX.Element {
   return (
     <svg className="icon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
       {status === 'done' ? (

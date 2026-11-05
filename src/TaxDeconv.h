@@ -59,12 +59,11 @@ namespace FASTag
   /// Projected coordinate descent on the normal equations, which for a system
   /// this small is exact enough and, unlike an active-set method, cannot cycle.
   /// Deterministic: same inputs, same output, no RNG and no threading.
-  /// @p max_iter bounds the sweeps; convergence is declared when no coordinate
-  /// moves by more than @p tol.
-  /// @p tol is RELATIVE to the largest estimate, so it means the same thing on a
-  /// run of 100 spectra and one of 100,000.
+  /// Stops after 2000 sweeps, or earlier when no coordinate moves by more than
+  /// 1e-12 times the largest estimate. Because the tolerance is relative, it
+  /// means the same thing on a run of 100 spectra and one of 100,000.
   std::vector<double> nnls(const std::vector<double>& A, const std::vector<double>& b,
-                           std::size_t n, int max_iter = 2000, double tol = 1e-12);
+                           std::size_t n);
 
   /// observed -> deconvolved counts, both indexed like the overlap matrix.
   ///

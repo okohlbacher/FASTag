@@ -1,5 +1,6 @@
 import { useState, type JSX, type ReactNode } from 'react'
 import SequenceLogo, { LogoLegend } from './SequenceLogo'
+import { HelpButton, HelpLink } from './help/HelpLink'
 import {
   backgroundWords,
   baseName,
@@ -25,11 +26,11 @@ import {
 // The digest, label and mass-gap reports. FASTag reports measurements; this
 // pane shows them and their own sentences, and adds no judgement of its own.
 
-const REASON: Record<string, string> = {
+export const REASON: Record<string, string> = {
   low_resolution: 'the fragment tolerance is in Da',
   timstof: 'the run is from a timsTOF',
-  ms2_scan_window: 'the MS2 scan window starts above y1 of K',
-  ms2_first_peak: 'the first MS2 peaks lie above y1 of K',
+  ms2_scan_window: 'the MS2 scan range starts above m/z 147.21 (the y1 ion of a C-terminal K, plus 0.1), so a K before the cut is missed',
+  ms2_first_peak: 'the first MS2 peaks lie above m/z 147.21 (the y1 ion of a C-terminal K, plus 0.1), so a K before the cut is missed',
   ion_counts: 'no instrument is named and the intensities are ion counts, as on a timsTOF',
   few_tags: 'too few terminal tags',
   nonfinite_score: 'a residue has probability 0 under a model',
@@ -38,13 +39,21 @@ const REASON: Record<string, string> = {
 
 const reasonWords = (k: string): string => REASON[k] ?? k
 
+// The rules a report can mark `unknown`: what could not be checked, in words.
+const UNCHECKED: Record<string, string> = {
+  timstof: 'whether the run is from a timsTOF (no instrument or native ID format named)',
+  ms2_scan_window: 'the MS2 scan window (no spectrum states it)',
+  ms2_first_peak: 'the first MS2 peaks (no MS2 spectrum has a peak)',
+  ion_counts: 'whether the intensities are ion counts'
+}
+
 // The heavy-SILAC rows of the label report, in words.
 const HEAVY: Record<string, string> = {
   'K8.share': 'K8 share',
   'R10.share': 'R10 share',
   'K.tags': 'K tag ends',
   'R.tags': 'R tag ends',
-  gate: 'Gate met'
+  gate: 'Enough K and R tag ends to judge'
 }
 function heavyValue(key: string, v: string): string {
   const n = num(v)
@@ -56,11 +65,12 @@ function heavyValue(key: string, v: string): string {
 /// Section heading with the report's file name, so reports of different
 /// runs cannot be mistaken for one, followed by what the reader found wrong
 /// with the file.
-function Heading({ id, title, report }: { id: string; title: string; report: Report }): JSX.Element {
+function Heading({ id, title, report, help }: { id: string; title: string; report: Report; help: string }): JSX.Element {
   return (
     <>
       <div className="card-head">
         <h2 id={id}>{title}</h2>
+        <HelpButton to={help} what={title} />
         <code className="src" title={report.path}>
           {baseName(report.path)}
         </code>
@@ -162,7 +172,7 @@ function Digest({ report }: { report: Report }): JSX.Element {
   const nN = num(value(report, 'count', 'n_n'))
   return (
     <section className="dg-block card" aria-labelledby="dg-digest">
-      <Heading id="dg-digest" title="Protease" report={report} />
+      <Heading id="dg-digest" title="Protease" report={report} help="digest-protease" />
       <dl className="headline stats">
         {call.status === 'call' ? (
           <>
@@ -176,7 +186,7 @@ function Digest({ report }: { report: Report }): JSX.Element {
                 {call.runnerUpClass && call.runnerUpClass !== call.runnerUp ? ` (${call.runnerUpClass})` : ''}
               </Stat>
             )}
-            {call.margin != null && <Stat label="Margin, log-likelihood per tag">{fmt(call.margin, 4)}</Stat>}
+            {call.margin != null && <Stat label="Lead over runner-up (log-likelihood per tag end)">{fmt(call.margin, 4)}</Stat>}
           </>
         ) : call.status === 'no_call' ? (
           <>
@@ -200,7 +210,14 @@ function Digest({ report }: { report: Report }): JSX.Element {
           </Stat>
         )}
       </dl>
-      {call.unknown.length > 0 && <div className="caveat">Metadata absent for: {call.unknown.join(', ')}.</div>}
+      {call.status === 'no_call' && call.reason && REASON[call.reason] && (
+        <p className="sub">
+          <HelpLink to={`faq-digest-${call.reason}`}>What this no-call means, and what to do</HelpLink>
+        </p>
+      )}
+      {call.unknown.length > 0 && (
+        <div className="caveat">Could not check: {call.unknown.map((k) => UNCHECKED[k] ?? k).join('; ')}.</div>
+      )}
       <div className="logo-row">
         {observed.some((c) => c.letters.length) && (
           <div className="logos">
@@ -209,14 +226,17 @@ function Digest({ report }: { report: Report }): JSX.Element {
             {runner && <SequenceLogo title={`Runner-up: ${call.runnerUp}`} columns={runner} maxBits={maxBits} />}
             <LogoLegend />
             <p className="footnote">
-              Letter height is the residue's share times the column's information in bits against the background
-              {bg ? `, ${bg}` : ''}
-              {hasBg ? '' : '; the report carries no background, so a uniform one is used'}. P positions use the
-              C-terminal background, P′ positions the N-terminal one. Observed columns are corrected for the
-              information a small sample shows by chance, (s − 1) / (2n ln 2) bits; columns with fewer than{' '}
-              {tagMin ?? 'the minimum of'} tag ends are greyed, as are the P′ columns when the call leaves out the N
-              end. Model logos show the model distributions before mixing with the background.
-              {call.model && !called && ' The report carries no model distributions, so the model logos are not drawn.'}
+              Each column is one position around the cut: P4 to P1 are the last four residues before it, P1′ to P4′
+              the first four after it. The height of a stack shows how far that position differs from the background
+              {bg ? ` (${bg})` : ''}
+              {hasBg ? '' : ' (the report carries none, so a uniform one is used)'}. Each letter&apos;s height is its share
+              at that position, so the largest letter is the most common residue. Positions before the cut are
+              compared with the C-terminal background, positions after it with the N-terminal one. Observed columns
+              are corrected for the pattern a small sample shows by chance. Columns with fewer than{' '}
+              {tagMin ?? 'the minimum of'} tag ends are grey, and so are the P′ columns when the call does not use the
+              N end. Model logos show what each protease predicts, before mixing with the background.
+              {call.model && !called && ' The report carries no model distributions, so the model logos are not drawn.'}{' '}
+              <HelpLink to="digest-logo">About the logos</HelpLink>
             </p>
           </div>
         )}
@@ -238,11 +258,11 @@ function Label({ report }: { report: Report }): JSX.Element {
   const labels = labelFindings(report)
   const heavy = section(report, 'heavy')
   // Counts only, as the report gives them: a label with tag ends is named,
-  // to be compared with its +0.5 Da background column below.
+  // to be compared with the chance count 0.5 Da above it, in the column below.
   const seen = labels.filter((l) => (l.count ?? 0) > 0)
   return (
     <section className="dg-block card" aria-labelledby="dg-label">
-      <Heading id="dg-label" title="Labels" report={report} />
+      <Heading id="dg-label" title="Labels" report={report} help="digest-labels" />
       {labels.length > 0 && (
         <div className="chip-line">
           {seen.length === 0 ? (
@@ -253,7 +273,10 @@ function Label({ report }: { report: Report }): JSX.Element {
           ) : (
             <>
               <span className="chip warn">Tag ends at {seen.map((l) => l.label).join(', ')}</span>
-              <span className="muted">Compare each with its +0.5 Da background.</span>
+              <span className="muted">
+                Counts at 0.5 Da above each label mass show how many ends match by chance; a real label clearly
+                exceeds them.
+              </span>
             </>
           )}
         </div>
@@ -267,7 +290,7 @@ function Label({ report }: { report: Report }): JSX.Element {
             <tr>
               <th scope="col">Label</th>
               <th scope="col" className="num">Tag ends</th>
-              <th scope="col" className="num">At +0.5 Da (background)</th>
+              <th scope="col" className="num">Chance (0.5 Da above)</th>
               <th scope="col" className="num">Share of tags</th>
             </tr>
           </thead>
@@ -287,7 +310,7 @@ function Label({ report }: { report: Report }): JSX.Element {
         <table className="taxa narrow">
           <thead>
             <tr>
-              <th scope="col">Heavy SILAC</th>
+              <th scope="col">Heavy SILAC label (Lys8, Arg10)</th>
               <th scope="col" className="num">Value</th>
             </tr>
           </thead>
@@ -326,7 +349,7 @@ function MassGap({ report }: { report: Report }): JSX.Element {
   const alk = alkylation(report)
   return (
     <section className="dg-block card" aria-labelledby="dg-gap">
-      <Heading id="dg-gap" title="Precursor mass gaps" report={report} />
+      <Heading id="dg-gap" title="Precursor mass gaps" report={report} help="digest-gaps" />
       {top.length > 0 && (
         <div className="sub">
           Most frequent modifications: {top.map((t) => t.value).join(', ')}
@@ -406,12 +429,12 @@ function MassGap({ report }: { report: Report }): JSX.Element {
       {alk && (
         <div className="chip-line">
           <span className={alk.count > 0 ? 'chip ok' : 'chip'}>
-            {alk.count > 0 ? `Cys gap: ${alk.name}` : 'No Cys alkylation gap'}
+            {alk.count > 0 ? `Cysteine alkylation: ${alk.name}` : 'No cysteine alkylation gap'}
           </span>
           <span className="muted">
             {alk.count > 0
-              ? `${fmt(alk.count)} of ${fmt(alk.placed)} placed spectra`
-              : `none of the ${fmt(alk.placed)} placed spectra has an alkylation gap`}
+              ? `${fmt(alk.count)} of the ${fmt(alk.placed)} spectra placed in a database peptide`
+              : `none of the ${fmt(alk.placed)} spectra placed in a database peptide has an alkylation gap`}
           </span>
         </div>
       )}
@@ -487,7 +510,7 @@ function GapHistogram({ bins }: { bins: GapBin[] }): JSX.Element {
   return (
     <figure className="gap-hist">
       <figcaption>
-        Placed spectra by precursor − peptide mass (Da)
+        Spectra placed in a database peptide, by precursor − peptide mass (Da)
         {zero >= 0 && cols[zero].spectra > scale ? '; the 0 bin is cut and labelled' : ''}
         {outside > 0 ? `; ${fmt(outside)} beyond ${da(lo)} to ${da(lo + n * step - 1)} Da are not drawn` : ''}
       </figcaption>
@@ -532,11 +555,12 @@ export default function DigestPanel({ reports, errors, onOpen }: Props): JSX.Ele
       ))}
       {!d && !l && !m && errors.length === 0 && (
         <div className="empty">
-          The digest, label and mass-gap reports appear here after a run that writes them (<code>digest out</code>,{' '}
-          <code>label out</code>, <code>massgap out</code>), or{' '}
+          The digest, label and mass-gap reports appear here after a run that writes them (<code className="cli">digest_out</code>,{' '}
+          <code className="cli">label_out</code>, <code className="cli">massgap_out</code>), or{' '}
           <button className="link" onClick={onOpen}>
             open a report TSV…
-          </button>
+          </button>{' '}
+          <HelpLink to="faq-digest-empty">How to write them</HelpLink>
         </div>
       )}
       {d && <Digest report={d} />}

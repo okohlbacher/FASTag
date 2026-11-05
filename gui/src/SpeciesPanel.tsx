@@ -2,6 +2,7 @@ import type { JSX } from 'react'
 import type { SpeciesReport, Taxon } from './types'
 import { baseName } from './digestReport'
 import { IconFlag } from './icons'
+import { HelpLink } from './help/HelpLink'
 
 // Genera that turn up in almost any LC-MS/MS run regardless of the sample:
 // porcine trypsin, bovine serum, keratin from handling. Flagged so a user does
@@ -56,7 +57,8 @@ export default function SpeciesPanel({
   if (!enabled) {
     return (
       <div className="empty">
-        Species detection is off. Enable <code>species</code> under Species detection.
+        Species detection is off. Enable <code>species</code> under Species detection.{' '}
+        <HelpLink to="faq-species-off">How to use it</HelpLink>
       </div>
     )
   }
@@ -64,22 +66,23 @@ export default function SpeciesPanel({
   if (tooShort) {
     return (
       <div className="warn big">
-        <strong>No tag can reach the index.</strong>
+        <strong>Tags are too short for the species reference.</strong>
         <p>
-          Tags reach {tooShort.reach} residues but the index is keyed on {tooShort.k}-mers, so
-          nothing can be looked up, and FASTag refuses such a run up front. Raise <code>{tooShort.option}</code> to{' '}
-          {tooShort.k}, or use <code>extension</code> to reach it.
+          Tags are at most {tooShort.reach} residues long, but the species reference stores protein pieces of{' '}
+          {tooShort.k} residues, so no tag can be looked up and FASTag refuses the run. Raise{' '}
+          <code>{tooShort.option}</code> to {tooShort.k}, or set <code>extension</code> so the tags grow to{' '}
+          {tooShort.k}. <HelpLink to="faq-species-short">More</HelpLink>
         </p>
       </div>
     )
   }
 
   if (!report) return <div className="empty">Species results appear here after a run.</div>
-  if (report.empty) {
+  if (report.taxa.length === 0) {
     return (
       <div className="empty">
         No taxon was supported by the tags. The run completed — this is a negative result, not an
-        error.
+        error. <HelpLink to="faq-species-none">Possible causes</HelpLink>
       </div>
     )
   }
@@ -102,8 +105,14 @@ export default function SpeciesPanel({
   return (
     <div className="species">
       <p className="src">
-        From <code title={report.path}>{baseName(report.path)}</code> · rank <code>{top.rank}</code> ·{' '}
-        {deconvolved ? 'shared sequence subtracted' : 'no deconvolution'}
+        From <code title={report.path}>{baseName(report.path)}</code> ·{' '}
+        {top.rank && (
+          <>
+            rank <code>{top.rank}</code> ·{' '}
+          </>
+        )}
+        {deconvolved ? 'shared sequence subtracted' : 'no deconvolution'} ·{' '}
+        <HelpLink to="species-reading">About this tab</HelpLink>
       </p>
 
       <section className="cards" aria-label="Species call">
@@ -111,7 +120,7 @@ export default function SpeciesPanel({
           <span className="card-label">Species call</span>
           <div className="call">
             <span className="taxon">{tied.length > 1 ? 'No single call' : <TaxonName t={top} />}</span>
-            <span className="rank">{top.rank}</span>
+            {top.rank && <span className="rank">{top.rank}</span>}
           </div>
           {tied.length > 1 && (
             <div className="sub">
@@ -123,7 +132,8 @@ export default function SpeciesPanel({
             {deconvolved && <> · {top.adjusted.toLocaleString('en-US')} after subtracting shared sequence</>}
           </div>
           <div className="muted">
-            Ranked first by {counted} spectra · q {fmtQ(top.q)}
+            Ranked first by {counted} spectra ·{' '}
+            <span title={Q_TITLE}>q {fmtQ(top.q)}</span>
             {next && (
               <>
                 {' '}· next: <TaxonName t={next} /> at {relOf(next)}% of its evidence
@@ -131,7 +141,9 @@ export default function SpeciesPanel({
             )}
           </div>
           <div className="caveat">
-            {top.rank}-level call — a reduced reference set and short tags cannot resolve species.
+            {top.rank === 'species'
+              ? 'Species names are not reliable: a reduced reference set and short tags cannot separate close relatives. Read the call as a genus.'
+              : `${top.rank ? `${top.rank}-level call` : 'Call at an unstated rank'} — a reduced reference set and short tags cannot resolve species.`}
           </div>
         </div>
         {contributed != null && (
@@ -161,7 +173,9 @@ export default function SpeciesPanel({
               <th scope="col" className="rel-col">Relative to top taxon</th>
               <th scope="col" className="num">Observed</th>
               {deconvolved && <th scope="col" className="num">Adjusted</th>}
-              <th scope="col" className="num">q-value</th>
+              <th scope="col" className="num" title={Q_TITLE}>
+                q-value
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -189,7 +203,7 @@ export default function SpeciesPanel({
                     )}
                   </td>
                   <td className="dim">{t.rank}</td>
-                  <td title={`${counted} count relative to the top taxon`}>
+                  <td title={`${counted} spectra as a share of the top taxon`}>
                     <span className="relbar">
                       <span className="track">
                         <span className="minibar" style={{ width: `${rel}%` }} />
@@ -221,14 +235,18 @@ export default function SpeciesPanel({
           </>
         )}{' '}
         Ranking by significance instead would favour a near neighbour, whose borrowed count is
-        exactly what makes it significant. Relative values divide by the top taxon&apos;s {counted} spectra: a
-        relative confidence, not a calibrated posterior. q is likewise a <em>ranking aid, not a calibrated
-        FDR</em> — the per-k-mer background is a proxy and the chimeric-null problem applies. “Common
-        contaminant” marks genera common to most runs as reagents.
+        exactly what makes it significant. Relative values compare each taxon&apos;s {counted} spectra with the
+        top taxon&apos;s (100%); they are not probabilities. The q-value only helps sort the list. It is{' '}
+        <em>not an error rate</em> you can rely on, because the background it assumes is approximate and spectra
+        that mix two peptides can make a taxon look stronger than it is. “Common contaminant” marks genera that
+        turn up in most runs, from reagents such as trypsin or serum, or from handling (keratin).{' '}
+        <HelpLink to="species-limits">When to trust a call</HelpLink>
       </p>
     </div>
   )
 }
+
+const Q_TITLE = 'q-value: smaller means the evidence is less likely to be chance. Use it to rank taxa, not as an error rate.'
 
 /// Genus and species names are italic, as taxonomy writes them.
 function TaxonName({ t }: { t: Taxon }): JSX.Element {

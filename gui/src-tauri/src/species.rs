@@ -14,9 +14,7 @@ pub struct Taxon {
     taxid: i64,
     name: String,
     observed: f64,
-    expected: f64,
     adjusted: f64,
-    log_p: f64,
     q: f64,
 }
 
@@ -25,7 +23,6 @@ pub struct Taxon {
 pub struct SpeciesReport {
     path: String,
     taxa: Vec<Taxon>,
-    empty: bool,
 }
 
 #[derive(Serialize)]
@@ -33,7 +30,6 @@ pub struct SpeciesReport {
 pub struct TaxdbInfo {
     path: String,
     k: u32,
-    kmers: u64,
 }
 
 // Numeric fields may carry a trailing unit; keep the number.
@@ -42,39 +38,27 @@ fn num(s: &str) -> f64 {
     t.parse::<f64>().ok().filter(|v| v.is_finite()).unwrap_or(0.0)
 }
 
-// One row per reference taxon; a real report is well under 1 MB. The cap
-// keeps a mis-picked file from being read into memory whole.
-const MAX_SPECIES_BYTES: u64 = 64 * 1024 * 1024;
-
 // Only regular files: opening a FIFO or a device would block, or never end.
 fn is_regular(path: &str) -> bool {
     std::fs::metadata(path).map(|m| m.is_file()).unwrap_or(false)
 }
 
 fn read_species(path: &str) -> Option<SpeciesReport> {
-    if !is_regular(path) {
-        return None;
-    }
-    let mut bytes = Vec::new();
-    std::fs::File::open(path)
-        .ok()?
-        .take(MAX_SPECIES_BYTES)
-        .read_to_end(&mut bytes)
-        .ok()?;
-    // A taxon name in Latin-1 (or any stray byte) must not hide the report.
-    let content = String::from_utf8_lossy(&bytes);
+    // Lossy and size-capped like the other reports: a taxon name in Latin-1
+    // must not hide the report.
+    let content = crate::report::read_report(path).ok().flatten()?;
     let lines: Vec<&str> = content.lines().filter(|l| !l.trim().is_empty()).collect();
     if lines.is_empty() {
         return None;
     }
-    let head: Vec<&str> = lines[0].split('\t').collect();
+    // A header re-saved with a UTF-8 BOM must still bind its first column.
+    let head: Vec<&str> = lines[0].trim_start_matches('\u{FEFF}').split('\t').collect();
     let col = |n: &str| head.iter().position(|h| *h == n);
     let get = |f: &[&str], i: Option<usize>| -> String {
         i.and_then(|i| f.get(i)).map(|s| s.to_string()).unwrap_or_default()
     };
     let (i_rank, i_taxid, i_name) = (col("rank"), col("taxid"), col("name"));
-    let (i_obs, i_exp, i_adj) = (col("observed"), col("expected"), col("adjusted"));
-    let (i_logp, i_q) = (col("log_pvalue"), col("qvalue"));
+    let (i_obs, i_adj, i_q) = (col("observed"), col("adjusted"), col("qvalue"));
 
     let mut taxa: Vec<Taxon> = Vec::new();
     for line in &lines[1..] {
@@ -84,9 +68,7 @@ fn read_species(path: &str) -> Option<SpeciesReport> {
             taxid: get(&f, i_taxid).parse().unwrap_or(0),
             name: get(&f, i_name),
             observed: num(&get(&f, i_obs)),
-            expected: num(&get(&f, i_exp)),
             adjusted: num(&get(&f, i_adj)),
-            log_p: num(&get(&f, i_logp)),
             q: get(&f, i_q).parse().ok().filter(|v: &f64| v.is_finite()).unwrap_or(1.0),
         });
     }
@@ -95,41 +77,26 @@ fn read_species(path: &str) -> Option<SpeciesReport> {
     // taxon, but a taxon with zero observed k-mers is noise in the report.
     taxa.retain(|t| t.observed > 0.0);
 
-    // Keep the CLI's order: it ranks by the adjusted count, which is the raw
-    // count once shared sequence between taxa has been subtracted. Re-sorting by
-    // significance here would undo that -- a near neighbour's borrowed count is
-    // exactly what makes it significant.
-    taxa.sort_by(|a, b| {
-        b.adjusted
-            .partial_cmp(&a.adjusted)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then(b.observed.partial_cmp(&a.observed).unwrap_or(std::cmp::Ordering::Equal))
-    });
-
-    let empty = taxa.is_empty();
-    Some(SpeciesReport { path: path.to_string(), taxa, empty })
+    // Keep the CLI's order. It ranks rows by the adjusted count, which is the
+    // raw count once sequence shared between taxa has been subtracted. Do not
+    // re-sort here: re-sorting by significance would undo that, because a near
+    // neighbour's borrowed count is exactly what makes it significant.
+    Some(SpeciesReport { path: path.to_string(), taxa })
 }
 
-// Layout: "FTXI"/"FTX2" | u32 version | u32 k | ... k-mer count. v1 (FTXI) put
-// n at offset 12; v2 (FTX2) put n_taxa at 12 and n_kmers at 16. A real index is
-// many MB, so reading 24 bytes always succeeds unless the file is truncated.
+// Layout: magic "FTXI"/"FTX2" | u32 version | u32 k | ...; only k is needed.
 fn read_taxdb_info(path: &str) -> Option<TaxdbInfo> {
     if !is_regular(path) {
         return None;
     }
     let mut f = std::fs::File::open(path).ok()?;
-    let mut buf = [0u8; 24];
+    let mut buf = [0u8; 12];
     f.read_exact(&mut buf).ok()?;
-    let magic = &buf[0..4];
-    let k = u32::from_le_bytes(buf[8..12].try_into().ok()?);
-    let kmers = if magic == b"FTX2" {
-        u64::from_le_bytes(buf[16..24].try_into().ok()?)
-    } else if magic == b"FTXI" {
-        u64::from_le_bytes(buf[12..20].try_into().ok()?)
-    } else {
+    if &buf[0..4] != b"FTX2" && &buf[0..4] != b"FTXI" {
         return None;
-    };
-    Some(TaxdbInfo { path: path.to_string(), k, kmers })
+    }
+    let k = u32::from_le_bytes(buf[8..12].try_into().ok()?);
+    Some(TaxdbInfo { path: path.to_string(), k })
 }
 
 // The same search order the CLI uses (taxonomyDir_ in FASTag.cpp), so the GUI
@@ -184,11 +151,10 @@ mod tests {
     }
 
     #[test]
-    fn species_report_filters_zero_hits_and_sorts_by_adjusted_count() {
-        // Neighbour is the near-neighbour case: a big borrowed count makes it the
-        // MOST significant row, while deconvolution leaves it with almost
-        // nothing. True is the real answer. The two orderings disagree here on
-        // purpose, so the test pins which rule is in force.
+    fn species_report_filters_zero_hits_and_keeps_file_order() {
+        // The rows deliberately do not follow the CLI's ranking (Neighbour has
+        // the lower adjusted count), so any re-ranking by the GUI, by adjusted
+        // count or by significance, fails this test.
         let f = tempfile_path("sp.tsv");
         std::fs::write(&f, "rank\ttaxid\tname\tobserved\tadjusted\texpected\tlog_pvalue\tqvalue\n\
             genus\t1\tZero\t0\t0\t0.5\t-1\t1\n\
@@ -196,8 +162,9 @@ mod tests {
             genus\t3\tTrue\t100\t90\t2.0\t-50\t0\n").unwrap();
         let r = read_species(f.to_str().unwrap()).unwrap();
         assert_eq!(r.taxa.len(), 2, "zero-observed row must be dropped");
-        assert_eq!(r.taxa[0].name, "True", "highest adjusted count first, not lowest log_p");
-        assert_eq!(r.taxa[1].name, "Neighbour", "the borrowed count ranks second despite its p");
+        let msg = "rows keep the order the CLI wrote them in; the GUI does not re-rank";
+        assert_eq!(r.taxa[0].name, "Neighbour", "{msg}");
+        assert_eq!(r.taxa[1].name, "True", "{msg}");
         std::fs::remove_file(&f).ok();
     }
 
@@ -215,27 +182,34 @@ mod tests {
 
     #[test]
     fn a_directory_is_not_read() {
-        // m31: only regular files are read.
+        // Only regular files are read.
         let d = std::env::temp_dir();
         assert!(read_species(d.to_str().unwrap()).is_none());
         assert!(read_taxdb_info(d.to_str().unwrap()).is_none());
     }
 
     #[test]
-    fn ftx2_header_reads_k_and_kmers() {
+    fn ftx2_and_ftxi_headers_read_k() {
         let f = tempfile_path("t.taxdb");
-        let mut buf = Vec::new();
-        buf.extend_from_slice(b"FTX2");
-        buf.extend_from_slice(&2u32.to_le_bytes()); // version
-        buf.extend_from_slice(&7u32.to_le_bytes()); // k
-        buf.extend_from_slice(&50u32.to_le_bytes()); // n_taxa
-        buf.extend_from_slice(&123456u64.to_le_bytes()); // n_kmers @16
-        let mut fh = std::fs::File::create(&f).unwrap();
-        fh.write_all(&buf).unwrap();
-        drop(fh);
-        let info = read_taxdb_info(f.to_str().unwrap()).unwrap();
-        assert_eq!(info.k, 7);
-        assert_eq!(info.kmers, 123456);
+        for (magic, k) in [(b"FTX2", 7u32), (b"FTXI", 6u32)] {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(magic);
+            buf.extend_from_slice(&2u32.to_le_bytes()); // version
+            buf.extend_from_slice(&k.to_le_bytes());
+            let mut fh = std::fs::File::create(&f).unwrap();
+            fh.write_all(&buf).unwrap();
+            drop(fh);
+            assert_eq!(read_taxdb_info(f.to_str().unwrap()).unwrap().k, k);
+        }
+        std::fs::remove_file(&f).ok();
+    }
+
+    #[test]
+    fn bom_header_still_binds_the_rank_column() {
+        let f = tempfile_path("bom.tsv");
+        std::fs::write(&f, "\u{FEFF}rank\ttaxid\tname\tobserved\tadjusted\tqvalue\ngenus\t1\tA\t5\t5\t0.01\n").unwrap();
+        let r = read_species(f.to_str().unwrap()).unwrap();
+        assert_eq!(r.taxa[0].rank, "genus");
         std::fs::remove_file(&f).ok();
     }
 

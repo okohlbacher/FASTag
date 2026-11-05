@@ -12,16 +12,19 @@ taxa by lowest-common-ancestor evidence. Kraken-2-for-peptide-tags, over a
 buildtaxdb proteomes/ ref.taxdb 7        # k=7
 
 # 2. Detect, alongside normal tagging (subsample for speed on big runs)
-FASTag -in run.mzML -out tags.tsv -tag_length 7 \
+FASTag -in run.mzML -out tags.tsv -tag_length 7 -species \
        -taxdb ref.taxdb -taxonomy_nodes nodes.dmp -taxonomy_names names.dmp \
        -species_out taxa.tsv -species_rank genus -subsample_fraction 0.2
 ```
+
+`-species` with no `-taxdb`/`-taxonomy_*` uses the bundled taxonomy.
 
 `species_out` columns: rank, taxid, name, observed (spectra supporting the
 taxon), **adjusted** (observed once sequence shared with other taxa has been
 subtracted -- equal to observed unless `-species_deconvolve` is given), expected
 (from the taxon's index breadth), log_pvalue, qvalue. Rows are ordered by
-adjusted. Tags shorter than the index `k` are ignored (`-species_min_len`).
+adjusted. Only taxa supported by at least 5 spectra are tested and listed, and
+at most 50 rows are written. Tags shorter than the index `k` are ignored (`-species_min_len`).
 
 `adjusted` replaced `enrichment`, which was never usable for ranking: a small
 proteome gives a tiny expectation and therefore a huge ratio, and this document
@@ -52,13 +55,26 @@ already told readers to ignore it.
   proteome per genus/family — is deliberate: short peptide k-mers cannot resolve
   species, and a curated set keeps the LCA honest and the index small.
 - A tag supports a taxon only if EVERY one of its k-mers is in that taxon
-  (intersection), so a longer tag is more specific. Each taxon is counted ONCE
-  per spectrum, not per tag, so correlated tags cannot manufacture evidence.
-- Per-leaf counts and the index breadth are both rolled up the NCBI tree, and
-  each node is tested against its subtree breadth (binomial + Benjamini-Hochberg
-  in `TaxStats`). Reported per `-species_rank`.
+  (intersection), so a longer tag is more specific.
+- **Which tags count** (`-species_evidence`). With `best` (the default), a
+  spectrum counts once for the taxa of its lowest-E-value tag that maps into the
+  index, and ties are united. With `all`, it counts once for the union over every
+  reported tag, which was the only rule up to 1.9.0. A spectrum is one peptide,
+  but up to `-max_tags` tags are reported for it, and under the union each wrong
+  tag added the taxa its k-mers hit by chance. See the README section "A spectrum
+  counts for the taxa of its best tag".
+- Each spectrum counts once for every node on the lineages of its taxa, so a
+  genus with two supported species still counts that spectrum once. The index
+  breadth is summed up the NCBI tree as the background, and each node is tested
+  against its subtree breadth (binomial + Benjamini-Hochberg in `TaxStats`).
+  With `-species_deconvolve`, the adjusted leaf estimates are summed up the tree
+  for the `adjusted` column. Reported per `-species_rank`.
 
 ## Validated end-to-end
+
+All counts and ranks in this document were measured before 1.10.0 with the
+union rule, which is now `-species_evidence all`. The default `best` gives
+different counts.
 
 Two real runs, a reduced 17-taxon reference (target + Enterobacterales
 near-neighbours + background bacteria + the spike/contaminant animals):
@@ -182,8 +198,9 @@ set, not a proof.
   because there are only ~50 proteomes available to contradict it. The
   deconvolution inherits that: it is a correction, not a calibrated abundance.
 - **The q-value is a ranking aid, not a calibrated FDR.** The per-k-mer
-  background is a proxy, and the chimeric-null problem applies. Trust the
-  top-ranked evidence, not the absolute q.
+  background is a stand-in for the true chance rate, and no simple null model
+  reproduces tags from mixed (chimeric) spectra. Trust the top-ranked evidence,
+  not the absolute q.
 - **Reduced reference = genus/family only.** Species calls are out of scope by
   construction, and a taxon absent from the reference cannot be called (it will
   present as its nearest represented relative).

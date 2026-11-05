@@ -6,11 +6,11 @@
 // makes of them (confidence, evidence thresholds) is its own business; see
 // doc/DESIGN-digest.md.
 //
-// The arithmetic follows prose-auto 0.1.3 (external.fastag_termini,
-// protease_call, delta_combos) operation for operation, so a caller that
-// reads these reports gets the numbers 0.1.3 computed from the tag TSV:
-// the same window tests, the same summation order and Python's float sum()
-// (Neumaier-compensated since Python 3.12).
+// Ported operation for operation from the Python reference implementation
+// prose-auto 0.1.3, so both give the same numbers from the tag TSV: the same
+// window tests, the same summation order and Python's float sum()
+// (Neumaier-compensated since Python 3.12). doc/DESIGN-digest.md maps each
+// quantity to its name there; test/digest_test.cpp pins the outputs.
 //
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
@@ -45,8 +45,8 @@ namespace FASTag::Digest
     bool any_ = false;
   };
 
-  /// The residue keys of 0.1.3's _RES: the 19 residues, then K+TMT, K+TMTpro,
-  /// K+iTRAQ4, K+8 and R+10.
+  /// Residue keys: the 19 residues, then lysine with TMT, TMTpro, iTRAQ4 or
+  /// +8 Da (heavy), and arginine +10 Da (heavy).
   inline constexpr int kNumKeys = 24;
   struct ResidueKey
   {
@@ -56,7 +56,7 @@ namespace FASTag::Digest
   };
   const std::array<ResidueKey, kNumKeys>& residueKeys();
 
-  /// N-terminal labels of 0.1.3's _NLABEL.
+  /// The N-terminal labels counted.
   inline constexpr int kNumLabels = 3;
   struct LabelKey
   {
@@ -66,7 +66,7 @@ namespace FASTag::Digest
   const std::array<LabelKey, kNumLabels>& labelKeys();
 
   /// Counts over the filtered tags (gapped == 0, evalue <= 1), added one tag
-  /// at a time; near(v, m) of 0.1.3 is the number of v in [m - w, m + w].
+  /// at a time. "Near m" below means within [m - w, m + w], w the window.
   class TerminusCounter
   {
   public:
@@ -77,19 +77,30 @@ namespace FASTag::Digest
     void add(double nterm, double cterm, std::string_view seq);
     void merge(const TerminusCounter& o);
 
-    std::uint64_t tags = 0;                         ///< 0.1.3 len(c)
-    std::array<std::uint64_t, kNumKeys> c_near{};   ///< near(c, m)
-    std::array<std::uint64_t, kNumKeys> n_h2o{};    ///< near(n, m + H2O)
-    std::array<std::uint64_t, kNumKeys> n_near{};   ///< near(n, m)
-    std::array<std::uint64_t, kNumLabels> lab_n{}, lab_c{}, lab_bg_n{}, lab_bg_c{};
-    /// [position 0..3 = P1..P4][residue], C end; and P1'..P4', N end.
+    std::uint64_t tags = 0;                         ///< number of tags counted
+    std::array<std::uint64_t, kNumKeys> c_near{};   ///< tags whose C-terminal flank mass is near key k's mass
+    std::array<std::uint64_t, kNumKeys> n_h2o{};    ///< tags whose N-terminal flank mass is near key k's mass + H2O
+    std::array<std::uint64_t, kNumKeys> n_near{};   ///< tags whose N-terminal flank mass is near key k's mass
+    /// Per labelKeys() entry: tags whose N- or C-terminal flank mass is near
+    /// the label mass.
+    std::array<std::uint64_t, kNumLabels> lab_n{}, lab_c{};
+    /// The same counts at label mass + 0.5 Da, where no label sits: an
+    /// off-mass control, written as <L>.background by the label report.
+    std::array<std::uint64_t, kNumLabels> lab_bg_n{}, lab_bg_c{};
+    /// Counts per position and residue (kAAs order). Positions use the
+    /// protease notation of Schechter and Berger: the cleavage falls between
+    /// P1 and P1'; P1 is the last residue before it, P2 the one before P1, and
+    /// P1' the first residue after it. cpos[0..3] = P1..P4 on the C end,
+    /// npos[0..3] = P1'..P4' on the N end.
     std::array<std::array<std::uint64_t, kNumAA>, 4> cpos{}, npos{};
 
-    /// 0.1.3 res[k] = near(c, m) + near(n, m + H2O)
+    /// Tag ends that match key k: C-terminal flank near the key mass, or
+    /// N-terminal flank near the key mass + H2O.
     std::uint64_t res(int k) const { return c_near[k] + n_h2o[k]; }
-    /// 0.1.3 tot: res summed over every key
+    /// res() summed over every key
     std::uint64_t tot() const;
-    /// merged C- and N-terminal counts (0.1.3 cterm, nterm), in kAAs order
+    /// C- and N-terminal counts at P1 and P1', labelled lysines merged into K,
+    /// in kAAs order
     std::array<std::uint64_t, kNumAA> cterm() const { return cpos[0]; }
     std::array<std::uint64_t, kNumAA> nterm() const { return npos[0]; }
 
@@ -104,7 +115,7 @@ namespace FASTag::Digest
 
   struct Model
   {
-    std::string name, cls;
+    std::string name, cls;  ///< cls: the table's 'class' column ('class' is a C++ keyword)
     Dist c{}, n{};
     bool c_bg = true, n_bg = true;  ///< that end is the background
   };
@@ -151,7 +162,7 @@ namespace FASTag::Digest
     std::vector<ModelScore> scores;  ///< table order
     int top = -1, runner_up = -1;    ///< indices into scores; runner_up -1 = no other class
     double margin = 0.0;             ///< log-likelihood per tag
-    std::uint64_t n_c = 0, n_n = 0;
+    std::uint64_t n_c = 0, n_n = 0;  ///< sums of the merged C- and N-terminal (P1, P1') counts; written as count.n_c, count.n_n
     /// The call's or the runner-up's log-likelihood is not finite (a residue
     /// at probability 0), so there is no valid margin.
     bool nonfinite = false;
@@ -160,7 +171,7 @@ namespace FASTag::Digest
     std::vector<std::string> tied;
   };
 
-  /// 0.1.3 protease_call over the merged counts: each model mixed as
+  /// The protease call over the merged counts: each model mixed as
   /// (1 - share) * model + share * background, scored by the multinomial
   /// log-likelihood of the C-terminal counts plus, with >= tag_min N-terminal
   /// counts, of the N-terminal ones. The call is the top model (ties to the
@@ -189,7 +200,7 @@ namespace FASTag::Digest
   /// Every multiset of 1..@p max_mods modifications, sorted as Python sorts
   /// (mass, names): by mass, then by the names.
   std::vector<Combo> combinations(const std::vector<GapMod>& mods, int max_mods);
-  /// 0.1.3 explain: combinations within @p tol of @p delta, best first
+  /// The combinations within @p tol of @p delta, best first
   /// (fewest modifications, highest prior product, smallest mass error).
   std::vector<std::vector<int>> explain(const std::vector<Combo>& combos, const std::vector<GapMod>& mods,
                                         double delta, double tol);
@@ -211,15 +222,15 @@ namespace FASTag::Digest
 
   struct GapResult
   {
-    std::uint64_t placed = 0, shifted = 0;  ///< shifted as counted (0.1.3 divides by max(1, it))
+    std::uint64_t placed = 0, shifted = 0;  ///< shifted tags counted; a share uses max(1, shifted) as its denominator
     std::vector<GapPeak> peaks;
     std::vector<std::pair<int, double>> share;  ///< modification -> share, first-seen order
     std::string silac = "none";
     std::array<double, 4> silac_share{};        ///< Lys4, Arg6, Lys8, Arg10
   };
 
-  /// 0.1.3 delta_combos.detect and silac_from_gaps over @p hist (the rows
-  /// with >= min_bin spectra).
+  /// Gap peaks explained as modification combinations, their shares and the
+  /// SILAC call, over @p hist (the rows with >= min_bin spectra).
   GapResult detectGaps(const std::vector<GapRow>& hist, const std::vector<GapMod>& mods,
                        const std::vector<Combo>& combos, double tol, std::uint64_t min_spectra,
                        double min_share, double silac_share, std::uint64_t silac_min);

@@ -6,9 +6,11 @@
 // Reimplements the DirecTag algorithm (Tabb et al., J Proteome Res 2008, 7:3838)
 // from its publication. No code was copied from the reference implementation.
 //
-// Chemistry, spectrum handling, peak filtering and statistics come from OpenMS
-// and Boost. The only mathematics kept in-house is the rank-sum null in
-// ranksum.h, which neither provides.
+// Residue masses, modifications and the spectrum type come from OpenMS; the
+// hypergeometric tail of the complement test comes from Boost. Kept in this
+// project: the rank-sum null (ranksum.h), the Monte Carlo m/z-fidelity null,
+// the Fisher combination of the p-values, the tie-stable peak selection and
+// the averagine deisotoper ported from OpenMS (AveragineDeisotoper.h).
 #pragma once
 
 #include <OpenMS/KERNEL/MSSpectrum.h>

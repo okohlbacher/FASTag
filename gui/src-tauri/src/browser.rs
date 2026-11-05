@@ -53,7 +53,6 @@ pub struct ResultsPage {
     pub columns: Vec<String>,
     pub total_rows: usize,
     pub matched_rows: usize,
-    pub offset: usize,
     pub rows: Vec<Vec<String>>,
 }
 
@@ -149,7 +148,7 @@ fn build_index(path: &str) -> Result<Index, String> {
         }
     }
     if offsets.len() > u32::MAX as usize {
-        return Err(format!("{path}: more than 2^32 rows — beyond this browser's index"));
+        return Err(format!("{path} has more than 4,294,967,295 rows, too many for the table viewer"));
     }
     let columns = match header_end {
         None => Vec::new(),
@@ -381,7 +380,7 @@ fn query(
     };
 
     let rows = read_rows(path, &entry.index, &window)?;
-    Ok(ResultsPage { columns: entry.index.columns.clone(), total_rows, matched_rows, offset, rows })
+    Ok(ResultsPage { columns: entry.index.columns.clone(), total_rows, matched_rows, rows })
 }
 
 #[tauri::command]
@@ -632,7 +631,7 @@ mod tests {
 
     #[test]
     fn nan_and_inf_tags_sort_as_strings() {
-        // m6: the tags NAN and INF parse as f64 but are not numbers here.
+        // The tags NAN and INF parse as f64 but are not numbers here.
         let p = write_fixture("nan.tsv", "tag\nYYK\nNAN\nAAC\nINF\n");
         let sorted = |desc: bool| -> Vec<String> {
             let spec = ViewSpec { sort: Some(SortSpec { column: "tag".into(), desc }), ..Default::default() };
@@ -646,7 +645,7 @@ mod tests {
 
     #[test]
     fn utf8_bom_does_not_rename_first_column() {
-        // m12: with a BOM the spectrum filter must still bind.
+        // With a BOM the spectrum filter must still bind.
         let p = write_fixture("bom.tsv", "\u{feff}spectrum\ttag\nscan=1\tAAA\nscan=2\tCCC\n");
         let r = q(&p, &ViewSpec { spectrum: Some("scan=2".into()), ..Default::default() }, 0, 100).unwrap();
         assert_eq!(r.columns, vec!["spectrum", "tag"]);
@@ -657,7 +656,7 @@ mod tests {
 
     #[test]
     fn a_directory_is_refused_not_read() {
-        // m31: only regular files; a FIFO or device would block the reader.
+        // Only regular files; a FIFO or device would block the reader.
         let d = std::env::temp_dir();
         let e = q(d.to_str().unwrap(), &ViewSpec::default(), 0, 10).unwrap_err();
         assert!(e.contains("is not a file"), "{e}");

@@ -1,6 +1,6 @@
 // @ts-nocheck -- test-only file; uses node APIs and ES2022 helpers outside the app tsconfig
-// Accessibility / UX lens. These tests first pinned the v1.9.0 behaviour; a
-// "DEFECT" test pins a defect still open, a "FIXED" test asserts the correction.
+// Accessibility and usability: roles, names, focus, announcements and the
+// wording of the form, the tables and the reports.
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
@@ -19,7 +19,7 @@ const click = (el: Element): Promise<void> => act(async () => { fireEvent.click(
 
 async function renderApp(mock: MockBridge): Promise<HTMLElement> {
   const { container } = render(<App />)
-  await screen.findByText('CLI ready')
+  await screen.findByText('FASTag ready')
   await flush()
   return container
 }
@@ -27,7 +27,7 @@ async function renderApp(mock: MockBridge): Promise<HTMLElement> {
 afterEach(() => vi.restoreAllMocks())
 
 describe('a11y: tags browser (ResultsTable)', () => {
-  it('FIXED (M19, a11y review): a read-only table, not a grid; sort state and a plain name sit on its columnheader; the scroller is focusable and the count a status', async () => {
+  it('a read-only table, not a grid; sort state and a plain name sit on its columnheader; the scroller is focusable and the count a status', async () => {
     const mock = installMockBridge()
     mock.resultsColumns = ['spectrum', 'tag', 'evalue']
     mock.resultsRows = [['controllerType=0 controllerNumber=1 scan=11482', 'ADGWAQA', '4.17011e-08']]
@@ -55,7 +55,7 @@ describe('a11y: tags browser (ResultsTable)', () => {
     expect(status.getAttribute('role')).toBe('status')
   })
 
-  it('FIXED (M10): a decimal comma in "max evalue" is read; a non-numeric value is marked invalid', async () => {
+  it('a decimal comma in "max evalue" is read; a non-numeric value is marked invalid', async () => {
     const mock = installMockBridge()
     mock.resultsColumns = ['spectrum', 'evalue']
     mock.resultsRows = [['a', '0.5'], ['b', '0.001']]
@@ -80,7 +80,7 @@ describe('a11y: tags browser (ResultsTable)', () => {
 })
 
 describe('a11y: run feedback in App', () => {
-  it('FIXED (m42, review): the progress bar is a progressbar, and an always-exposed status announces start and end', async () => {
+  it('the progress bar is a progressbar, and an always-exposed status announces start and end', async () => {
     const mock = installMockBridge()
     const container = await renderApp(mock)
     mock.nextPickInput = '/data/a.mzML'
@@ -104,7 +104,7 @@ describe('a11y: run feedback in App', () => {
     expect(status.textContent).toBe('Finished a.mzML: 1,130,228 tags.')
   })
 
-  it('FIXED (review): the log, the batch queue and the raw report rows are focusable scrollers', async () => {
+  it('the log, the batch queue and the raw report rows are focusable scrollers', async () => {
     const mock = installMockBridge()
     const container = await renderApp(mock)
     const log = container.querySelector('pre#runlog') as HTMLElement
@@ -120,7 +120,7 @@ describe('a11y: run feedback in App', () => {
     expect(raw.getAttribute('tabindex')).toBe('0')
   })
 
-  it('FIXED (review): focus returns to a control when the focused one disappears', async () => {
+  it('focus returns to a control when the focused one disappears', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
     const until = (el: () => Element | null): Promise<void> =>
@@ -139,7 +139,7 @@ describe('a11y: run feedback in App', () => {
     await until(() => screen.getByRole('button', { name: /Add files for a batch/ }))
   })
 
-  it('FIXED (review): the elapsed time runs on between progress events, and Open tags/report are locked mid-run', async () => {
+  it('the elapsed time runs on between progress events, and Open tags/report are locked mid-run', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     try {
       const mock = installMockBridge()
@@ -159,7 +159,7 @@ describe('a11y: run feedback in App', () => {
     }
   })
 
-  it('FIXED (m43): batch job status is announced, and the failure banner names the failed file', async () => {
+  it('batch job status is announced, and the failure banner names the failed file', async () => {
     const mock = installMockBridge()
     const container = await renderApp(mock)
     mock.nextPickInputs = ['/d/a.mzML', '/d/b.mzML']
@@ -177,7 +177,7 @@ describe('a11y: run feedback in App', () => {
     expect(screen.getByRole('alert').textContent).toMatch(/^1 of 2 batch jobs faileda\.mzML \(exit code 6\)/)
   })
 
-  it('FIXED (m48): an active section\'s dot is an image with a name, so the section button announces it', async () => {
+  it('an active section\'s dot is an image with a name, so the section button announces it', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
     // Species section is collapsed by default: open it first.
@@ -186,13 +186,13 @@ describe('a11y: run feedback in App', () => {
     const sec = screen.getAllByRole('button', { expanded: true }).find((b) => /Species/.test(b.textContent ?? ''))!
     const dot = sec.querySelector('.on-dot')!
     expect(dot.getAttribute('role')).toBe('img')
-    expect(dot.getAttribute('aria-label')).toBe('species is set')
-    expect(screen.getByRole('button', { name: /Species detection.*species is set/ })).toBe(sec)
+    expect(dot.getAttribute('aria-label')).toBe('Species is on')
+    expect(screen.getByRole('button', { name: /Species detection.*Species is on/ })).toBe(sec)
   })
 })
 
 describe('a11y/UX: number formatting', () => {
-  it('FIXED (m41): under a German UI locale, counts and decimals in one column share one fixed format', () => {
+  it('under a German UI locale, counts and decimals in one column share one fixed format', () => {
     const orig = Number.prototype.toLocaleString
     vi.spyOn(Number.prototype, 'toLocaleString').mockImplementation(function (this: number) {
       return orig.call(this, 'de-DE')
@@ -201,17 +201,17 @@ describe('a11y/UX: number formatting', () => {
       .replace(/^heavy\tK\.tags\t\d+/m, 'heavy\tK.tags\t1234')
       .replace(/^heavy\tK8\.share\t[^\t]+/m, 'heavy\tK8.share\t0.004')
     render(<DigestPanel reports={[parseReport(text, '/d/a.label.tsv')]} errors={[]} onOpen={() => {}} />)
-    const table = screen.getByRole('columnheader', { name: 'Heavy SILAC' }).closest('table')!
+    const table = screen.getByRole('columnheader', { name: 'Heavy SILAC label (Lys8, Arg10)' }).closest('table')!
     const cells = within(table).getAllByRole('row').slice(1).map((r) => within(r).getAllByRole('cell').map((c) => c.textContent))
-    // The rows in words, a share as a percentage (review: raw keys and '0').
+    // The rows in words, a share as a percentage (not raw keys and '0').
     expect(cells).toContainEqual(['K8 share', '0.4%'])
     expect(cells).toContainEqual(['K tag ends', '1,234']) // a grouping comma, not a decimal-looking point
-    expect(cells).toContainEqual(['Gate met', 'Yes'])
+    expect(cells).toContainEqual(['Enough K and R tag ends to judge', 'Yes'])
   })
 })
 
 describe('a11y: sequence logo text alternative', () => {
-  it('FIXED (m44, m46): each greyed column is announced with its own reason, and drawn at a legible opacity', () => {
+  it('each greyed column is announced with its own reason, and drawn at a legible opacity', () => {
     // tag_min 100; P4 has 20 tag ends, P1' has 200 but the call leaves out the N end.
     const rep = parseReport(
       [
@@ -248,7 +248,7 @@ describe('a11y: sequence logo text alternative', () => {
 })
 
 describe('a11y: parameter form', () => {
-  it('FIXED (M9): an out-of-range number is marked invalid and says why', () => {
+  it('an out-of-range number is marked invalid and says why', () => {
     const spec = PARAM_BY_NAME.get('max_peaks')!
     expect(spec.max).toBe(1024)
     render(<ParamField spec={spec} value="2000" onChange={() => {}} />)
@@ -257,7 +257,7 @@ describe('a11y: parameter form', () => {
     expect(screen.getByText('must be at most 1024')).toBeDefined()
   })
 
-  it('FIXED (m47): labels use the CLI names, as help text and panels do', () => {
+  it('labels use the CLI names, as help text and panels do', () => {
     const spec = PARAM_BY_NAME.get('species')!
     expect(spec.description).toMatch(/-species_out/)
     render(<ParamField spec={PARAM_BY_NAME.get('species_out')!} value="" onChange={() => {}} />)
@@ -266,7 +266,7 @@ describe('a11y: parameter form', () => {
 })
 
 describe('a11y: species table', () => {
-  it('FIXED (m48): the contaminant flag is a chip in words, named after the reagent', () => {
+  it('the contaminant flag is a chip in words, named after the reagent', () => {
     const report = {
       path: '/x.species.tsv',
       empty: false,
@@ -279,7 +279,7 @@ describe('a11y: species table', () => {
     expect(flag.getAttribute('title')).toBe('Common contaminant: porcine trypsin')
   })
 
-  it('FIXED (review): a species-rank row is flagged by its genus (Bos taurus)', () => {
+  it('a species-rank row is flagged by its genus (Bos taurus)', () => {
     const report = {
       path: '/x.species.tsv',
       empty: false,
@@ -298,9 +298,9 @@ describe('a11y: species table', () => {
 })
 
 describe('UX: a known-failing species run stays one click away', () => {
-  it('FIXED (m1): species on + default tag_length 3 + k=7 index: Run is disabled and the reason sits next to it, on the Tags tab', async () => {
+  it('species on + default tag_length 3 + k=7 index: Run is disabled and the reason sits next to it, on the Tags tab', async () => {
     const mock = installMockBridge()
-    mock.taxdbInfoResult = { path: '/t/tax_k7.taxdb', k: 7, kmers: 1 }
+    mock.taxdbInfoResult = { path: '/t/tax_k7.taxdb', k: 7 }
     const container = await renderApp(mock)
     mock.nextPickInput = '/data/a.mzML'
     await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
@@ -311,6 +311,6 @@ describe('UX: a known-failing species run stays one click away', () => {
     expect(screen.getByRole('tab', { selected: true }).textContent).toBe('Tags')
     expect(container.querySelector('.controls')!.textContent).toMatch(/cannot reach the species index k = 7/)
     await click(screen.getByRole('tab', { name: /Species/ }))
-    expect(container.textContent).toMatch(/No tag can reach the index/)
+    expect(container.textContent).toMatch(/Tags are too short for the species reference/)
   })
 })

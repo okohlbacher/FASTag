@@ -2,7 +2,7 @@
 
 FASTag · MIT · <https://github.com/okohlbacher/FASTag>
 
-Input is mzML or mzPeak (read and written through OpenMS's `MzPeakFile`),
+Input is mzML, mzPeak (read and written through OpenMS's `MzPeakFile`) or MGF (read by FASTag's own `MgfReader`, see below);
 output is TSV plus optional mzML or mzPeak.
 The desktop GUI's own dependencies are tracked in `gui/package-lock.json`
 (frontend) and `gui/src-tauri/Cargo.lock` (Tauri backend), not here.
@@ -48,6 +48,8 @@ texts. OpenMS's own licence and notices are in `share-OpenMS/`.
 | Asset | Source | Licence | Used by |
 |---|---|---|---|
 | IBM Plex Sans and IBM Plex Mono, latin and latin-ext subsets, WOFF2 (`gui/src/assets/fonts/*.woff2`) | IBM Corp., [IBM Plex](https://github.com/IBM/plex) | SIL Open Font License 1.1; texts in `gui/src/assets/fonts/OFL-IBMPlexSans.txt` and `OFL-IBMPlexMono.txt` | the GUI's typeface, built into the frontend bundle (no font is fetched at run time) |
+| OpenMS logo (`gui/src/assets/openms-logo.png`) | The OpenMS project ([openms.de](https://www.openms.de)) | The OpenMS project's logo, shown only to credit OpenMS; not covered by FASTag's MIT licence | the app bar's "Built on OpenMS" credit |
+| FASTag logo (`gui/src/assets/logo.svg`) | FASTag | MIT, as the rest of FASTag | the app bar |
 
 ## What OpenMS provides, so FASTag does not implement it
 
@@ -62,7 +64,7 @@ texts. OpenMS's own licence and notices are in `share-OpenMS/`.
 | Profile MS2 centroiding on mzPeak input | `PeakPickerHiRes` |
 | FASTA parsing | `FASTAFile::load` |
 | Spectra, peaks, precursors | `MSExperiment`, `MSSpectrum`, `Peak1D`, `Precursor` |
-| Streaming mzML reads, bounded memory | `OnDiscMSExperiment` (one reader per thread; the class is not thread-safe) |
+| Streaming mzML reads, bounded memory | `MzMLSpectrumDecoder::domParseSpectrum` (peaks, via FASTag's `IndexedMzMLReader`); `OnDiscMSExperiment` as the fallback and `-out_spectra` reader (one reader per thread; the class is not thread-safe) |
 | CLI, INI files, logging, citations | `TOPPBase` |
 | MGF numbers (peaks, PEPMASS, CHARGE, RTINSECONDS, MSLEVEL) | `StringUtilsHelper::extractDouble` / `extractInt`, the parsers behind `StringUtils::toDouble`, which `MascotGenericFile` uses |
 | MGF and compression by file name | `FileHandler::getTypeByFileName`, `FileNameUtils::hasCompressionSuffix` / `compressionType` |
@@ -81,6 +83,8 @@ texts. OpenMS's own licence and notices are in `share-OpenMS/`.
 | Top-N peak selection | `NLargest` uses `sortByIntensity()`, an unstable sort with no secondary key. Peaks carry integer counts, so ties at the cut are common — 23% of real spectra have one — and which peak survives would depend on the standard library's sort. Peak selection provably drives tag output, so FASTag uses a total order (intensity desc, m/z desc). |
 | Spectrum graph, tag enumeration, scoring, extension | The algorithm itself. `OpenMS::Tagger` enumerates tags but returns bare strings with no scoring and no flanking masses, and expands I/L during recursion, which costs 2^k tags. |
 | Isobaric collapse rules | Derived at runtime from `ResidueDB` masses at the configured tolerance. `MassDecompositionAlgorithm` decomposes a mass into compositions, but returns unordered compositions rather than the ordered residue pairs the rules need. |
+| mzML reader (`IndexedMzMLReader`) | `OnDiscMSExperiment`'s per-spectrum decoder drops MS level, retention time and precursors, so getting them means a serial parse of the whole file before tagging. FASTag's reader reads them from each spectrum's own XML, rebuilds a missing or stale index with a parallel scan, and still decodes the peaks with OpenMS's `domParseSpectrum`. |
+| mzPeak streaming (`MzPeakStream`) | Streams an mzPeak archive in file order through `MzPeakFile::transform`, so spectra are tagged in parallel without loading the run. |
 | MGF reader (`MgfReader`) | `MascotGenericFile` only loads a whole file into memory, serially; its per-block parser is protected and bound to `std::ifstream`, and it refuses the CHARGE forms msconvert (`2+ and 3+`) and its own writer (`-3-`) emit. FASTag indexes the blocks in parallel and parses each with OpenMS's number parsers, bit-identical to `MascotGenericFile` on every field both read (`test/mgf_reader_test.cpp`). |
 | k-mer index for the FASTA filter | Application-specific; nothing equivalent in OpenMS. |
 | Taxonomy k-mer index and species calls (`TaxIndex`, `TaxStats`, `buildtaxdb`) | Application-specific; scans tags against per-taxon k-mer sets and scores enrichment with the same Boost tails already listed. |
@@ -106,10 +110,6 @@ the data structures are independently written, and several deliberately differ
 active subscores rather than from a sum of weights).
 
 ## Optional, not linked
-
-| Component | Licence | Why |
-|---|---|---|
-| OpenMS patch `feature/ondisc-metadata-from-block` | BSD-3-Clause | Removes a serial metadata pass that is ~55 s of a 60 s run and caps thread scaling at 16. FASTag detects its absence and falls back correctly, so this is a performance dependency, not a functional one. See doc/OPENMS-FAST-READER.md. |
 
 Benchmark data preparation used ThermoRawFileParser (Apache-2.0) and BRFP for
 vendor-format conversion. Neither is linked, called, or required to build or run

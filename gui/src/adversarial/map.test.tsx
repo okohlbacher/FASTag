@@ -1,6 +1,5 @@
-// Map lens: pins facts the MAP.md briefing states, so reviewers can rerun them.
-// They first pinned the v1.9.0 behaviour, bugs included; tests named FIXED now
-// assert the corrected behaviour.
+// Facts about the parameter manifest and the form: choices, types and
+// columns as the CLI declares them.
 import { describe, expect, it } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import manifest from '../params.generated.json'
@@ -10,22 +9,22 @@ import SpeciesPanel from '../SpeciesPanel'
 const raw = (name: string) => (manifest.params as { name: string; choices?: string[] }[]).find((p) => p.name === name)
 
 describe('map: param overlay vs CLI manifest', () => {
-  it('FIXED (M13): orientation offers exactly the manifest choices the 1.9.0 CLI accepts', () => {
+  it('orientation offers exactly the manifest choices the 1.9.0 CLI accepts', () => {
     expect(raw('orientation')?.choices).toEqual(['both', 'forward'])
     expect(PARAM_BY_NAME.get('orientation')?.choices).toEqual(['both', 'forward'])
   })
-  it('FIXED (M14): species_rank offers "domain", the bundled taxdump rank, not superkingdom', () => {
+  it('species_rank offers "domain", the bundled taxdump rank, not superkingdom', () => {
     const c = PARAM_BY_NAME.get('species_rank')?.choices ?? []
     expect(c).toContain('domain')
     expect(c).not.toContain('superkingdom')
   })
-  it('renders 67 parameters and hides 11 (m20: mzpeak_read_memory is hidden)', () => {
+  it('renders 67 parameters and hides 11 (mzpeak_read_memory among them)', () => {
     // 1.10.0 added species_evidence (rendered) to the 1.9.0 set.
     expect(RENDERED.length).toBe(67)
     expect(Object.keys(HIDDEN).length).toBe(11)
     expect(manifest.params.length).toBe(78)
   })
-  it('FIXED: tag_lengths reaches the UI as an int list with min 1', () => {
+  it('tag_lengths reaches the UI as an int list with min 1', () => {
     const p = PARAM_BY_NAME.get('tag_lengths')
     expect(p?.type).toBe('string-list')
     expect(p?.itemType).toBe('int')
@@ -43,7 +42,7 @@ describe('map: SpeciesPanel columns', () => {
       { rank: 'genus', taxid: 2, name: 'Neighbour', observed: 200, adjusted: 1, expected: 2, logP: -99, q: 0 }
     ]
   }
-  it('FIXED (M16/M17): the column is "adjusted", and rel. is relative to the top (rank-1) taxon', () => {
+  it('the column is "adjusted", and rel. is relative to the top (rank-1) taxon', () => {
     render(<SpeciesPanel report={report} enabled tooShort={null} contributed={null} totalMs2={null} />)
     const rows = screen.getAllByRole('row')
     expect(within(rows[0]).getAllByRole('columnheader').map((h) => h.textContent)).toEqual([

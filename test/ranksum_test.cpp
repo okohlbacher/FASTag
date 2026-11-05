@@ -3,6 +3,9 @@
 //   every intensity p-value is wrong and nothing downstream would notice.
 //   A one-n reference DP is proven against enumeration (1-5), and the
 //   all-n DP the tagger uses against the reference, bit for bit (6).
+//
+// Copyright (c) 2026 Oliver Kohlbacher and contributors
+// SPDX-License-Identifier: MIT
 #include <FASTag/ranksum.h>
 
 #include <algorithm>

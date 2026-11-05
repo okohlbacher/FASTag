@@ -1,7 +1,7 @@
 // Residue folding and isobaric collapse rules, shared by FastaFilter and
 // ProteomeIndex. One implementation on purpose: the tagger, the membership
 // filter and the locate index must agree byte-for-byte on what a residue IS
-// (I folds to L, ambiguity codes become AMBIG) and on which residue equals
+// (I folds to L, ambiguity codes become RESIDUE_AMBIG) and on which residue equals
 // which two-residue sum -- two copies of either rule would drift apart in
 // exactly the way that produces sequence-correlated recall loss.
 //
@@ -20,8 +20,7 @@
 
 namespace FASTag
 {
-  /// Sentinel for ambiguity codes; no tag can contain it. (FastaFilter.h's
-  /// AMBIG is this constant.)
+  /// Sentinel for ambiguity codes; no tag can contain it.
   constexpr char RESIDUE_AMBIG = '#';
 
   /// Canonicalize one database character: lowercase is uppercased; non-letters return 0 (drop the character);
