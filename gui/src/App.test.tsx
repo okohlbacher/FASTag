@@ -519,7 +519,8 @@ describe('digest tab', () => {
     expect(screen.getByText(/the 40 fullest of 2,284 bins/)).toBeDefined()
     await click(screen.getByRole('button', { name: 'Show all 2,284 bins' }))
     expect(screen.queryByText(/fullest of/)).toBeNull()
-  })
+    // Rendering all 2,284 histogram bins takes ~6 s on a GitHub runner (~2 s locally).
+  }, 20000)
 
   it('shows a no-call with its reason', async () => {
     const mock = installMockBridge()

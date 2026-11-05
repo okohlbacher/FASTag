@@ -32,6 +32,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <random>
@@ -58,8 +59,9 @@ namespace
 
   std::string tmp_path(const std::string& name)
   {
-    const char* d = std::getenv("TMPDIR");
-    return std::string(d && *d ? d : "/tmp") + "/fastag-mgf-test-" + name;
+    // temp_directory_path honours TMPDIR on POSIX and TEMP/TMP on Windows,
+    // where a literal "/tmp" does not exist.
+    return (std::filesystem::temp_directory_path() / ("fastag-mgf-test-" + name)).string();
   }
 
   void write_file(const std::string& path, const std::string& bytes)
