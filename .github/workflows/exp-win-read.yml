@@ -37,6 +37,8 @@ env:
   # 16 ranges of 32 MiB = the first 512 MiB of the file, about 60k MS2 spectra.
   PART_BYTES: '33554432'
   PARTS: '16'
+  # full: allocator variants x threads, harness modes, Defender; affinity: SMT vs two cores.
+  PLAN: affinity
 
 jobs:
   exp:
@@ -395,6 +397,22 @@ jobs:
               IOC io; GetProcessIoCounters(h, out io);
               return new object[] { m.PageFaultCount, (double)m.PeakWorkingSetSize.ToUInt64() / 1048576.0, io.ReadOperationCount, (double)io.ReadTransferCount / 1048576.0, io.OtherOperationCount };
             }
+            [StructLayout(LayoutKind.Sequential)] public struct SLPI { public UIntPtr ProcessorMask; public int Relationship; public ulong R1; public ulong R2; }
+            [DllImport("kernel32.dll", SetLastError=true)] public static extern bool GetLogicalProcessorInformation(IntPtr buf, ref uint len);
+            public static long[] CoreMasks() {
+              uint len = 0; GetLogicalProcessorInformation(IntPtr.Zero, ref len);
+              IntPtr b = Marshal.AllocHGlobal((int)len);
+              var res = new System.Collections.Generic.List<long>();
+              if (GetLogicalProcessorInformation(b, ref len)) {
+                int sz = Marshal.SizeOf(typeof(SLPI));
+                for (int o = 0; o + sz <= len; o += sz) {
+                  var s = (SLPI)Marshal.PtrToStructure(IntPtr.Add(b, o), typeof(SLPI));
+                  if (s.Relationship == 0) res.Add((long)s.ProcessorMask.ToUInt64());
+                }
+              }
+              Marshal.FreeHGlobal(b);
+              return res.ToArray();
+            }
           }
           '@
 
@@ -433,7 +451,7 @@ jobs:
           if (-not (Test-Path $xperf)) { $xperf = (Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits" -Recurse -Filter xperf.exe | Select-Object -First 1).FullName }
           Write-Host "xperf: $xperf"
 
-          function Start-Measured([string]$exe, [string[]]$argv, [hashtable]$envx, [string]$log) {
+          function Start-Measured([string]$exe, [string[]]$argv, [hashtable]$envx, [string]$log, [long]$mask = 0) {
             $psi = [System.Diagnostics.ProcessStartInfo]::new($exe)
             foreach ($a in $argv) { $psi.ArgumentList.Add($a) }
             $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
@@ -444,6 +462,7 @@ jobs:
             $sw = [Diagnostics.Stopwatch]::StartNew()
             $p = [Diagnostics.Process]::Start($psi)
             $h = $p.Handle
+            if ($mask -ne 0) { $p.ProcessorAffinity = [IntPtr]$mask }
             $so = $p.StandardOutput.ReadToEndAsync(); $se = $p.StandardError.ReadToEndAsync()
             $p.WaitForExit(); $sw.Stop()
             $text = $so.Result + $se.Result
@@ -466,14 +485,14 @@ jobs:
           $cols = 'variant', 'profile', 'threads', 'rep', 'traced', 'wall_s', 'user_s', 'kernel_s', 'page_faults', 'peak_ws_mb', 'read_ops', 'read_mb', 'other_ops',
                   'pre_loop_s', 'parallel_s', 'read_s', 'slow_reads', 'slow_read_s', 'tag_s', 'spectra', 'out_sha256', 'rc'
           ($cols -join "`t") | Set-Content $results
-          function Run-FASTag([string]$variant, [string]$prof, [int]$t, [int]$rep, [string]$traced = '') {
+          function Run-FASTag([string]$variant, [string]$prof, [int]$t, [int]$rep, [string]$traced = '', [long]$mask = 0) {
             $tag = "${variant}_${prof}_t${t}_r${rep}$traced"
             $out = "$env:RUNNER_TEMP\out_$tag.tsv"
             $argv = @('-in', $IN, '-out', $out, '-threads', "$t")
             if ($prof -eq 'matched') { $argv += $matched }
             $envx = @{}
             if ($variant -eq 'mioff') { $envx['MIMALLOC_DISABLE_REDIRECT'] = '1' }
-            $r, $text = Start-Measured $bins[$variant] $argv $envx "$O\logs\$tag.log"
+            $r, $text = Start-Measured $bins[$variant] $argv $envx "$O\logs\$tag.log" $mask
             $r['pre_loop_s'] = Num $text 'FASTAG_TIMING open=.*? pre_loop=([0-9.eE+-]+)'
             $r['parallel_s'] = Num $text 'FASTAG_TIMING open=.*? parallel=([0-9.eE+-]+)'
             $r['read_s'] = Num $text 'FASTAG_THREADS .*? read=([0-9.eE+-]+)'
@@ -501,7 +520,59 @@ jobs:
           $r, $text = Start-Measured $bins['mi'] (@('-in', $IN, '-out', "$env:RUNNER_TEMP\v.tsv", '-threads', '1') + $matched) @{ MIMALLOC_VERBOSE = '1'; MIMALLOC_SHOW_STATS = '1' } "$O\logs\mimalloc_verbose.log"
           ($text -split "`n" | Select-String -Pattern 'mimalloc|redirect' | Select-Object -First 30) | Out-Host
 
+          function Run-Harness([string]$v, [string]$mode, [int]$t, [int]$reps, [string]$aff = '', [long]$mask = 0) {
+            $tag = "harness_${v}${aff}_${mode}_t$t"
+            $r, $text = Start-Measured $hbins[$v] @($IN, $mode, "$t", "$reps") @{} "$O\harness\$tag.log" $mask
+            foreach ($m in [regex]::Matches($text, 'HARNESS mode=\S+ threads=\d+ rep=(\d+) items=(\S+) wall=(\S+) call_s=(\S+) user_s=(\S+) kernel_s=(\S+) us_per_item=(\S+)')) {
+              (@("$v$aff", $mode, $t) + @(1..7 | ForEach-Object { $m.Groups[$_].Value }) + @($r.user_s, $r.kernel_s, $r.page_faults, $r.read_ops) -join "`t") | Add-Content $hres
+            }
+            Write-Host ("{0,-28} wall {1,7:N2}  user {2,7:N2}  kern {3,6:N2}  rc {4}" -f $tag, $r.wall_s, $r.user_s, $r.kernel_s, $r.rc)
+            if ($r.rc -ne 0) { Get-Content "$O\harness\$tag.log" | Select-Object -Last 20 | Write-Host; throw "$tag failed" }
+          }
+          # Processor topology: one mask per physical core.
+          $cm = [PM]::CoreMasks()
+          ("core masks: " + (($cm | ForEach-Object { '0x{0:x}' -f $_ }) -join ' ')) | Tee-Object -Append "$O\machine.txt" | Out-Host
+          function LowBit([long]$m) { for ($i = 0; $i -lt 62; $i++) { $b = [long]1 -shl $i; if (($m -band $b) -ne 0) { return $b } }; return [long]0 }
+          $m1 = LowBit $cm[0]                               # one logical CPU
+          $smt = [long]$cm[0]                               # both logical CPUs of one core
+          $cores = (LowBit $cm[0]) -bor (LowBit $cm[1])     # one logical CPU on each of two cores
+          $all = [long]0; foreach ($m in $cm) { $all = $all -bor [long]$m }
+          Write-Host ("masks: one 0x{0:x}, smt 0x{1:x}, cores 0x{2:x}, all 0x{3:x}" -f $m1, $smt, $cores, $all)
+
           Run-FASTag 'base' 'matched' 4 0   # warm-up: file cache, symbol-free first launch
+          if ($env:PLAN -eq 'affinity') {
+            # Two threads on two cores vs on the two SMT siblings of one core, per allocator.
+            foreach ($rep in 1..3) {
+              foreach ($v in 'base', 'mi') {
+                Run-FASTag $v 'matched' 1 $rep '_one' $m1
+                Run-FASTag $v 'matched' 2 $rep '_cores' $cores
+                Run-FASTag $v 'matched' 2 $rep '_smt' $smt
+                Run-FASTag $v 'matched' 2 $rep '_free'
+                Run-FASTag $v 'matched' 4 $rep '_all' $all
+              }
+            }
+          }
+          $hres = "$O\harness\harness.tsv"
+          "variant`tmode`tthreads`trep`titems`twall`tcall_s`tuser_s`tkernel_s`tus_per_item`tproc_user_s`tproc_kernel_s`tpage_faults`tread_ops" | Set-Content $hres
+          if ($env:PLAN -eq 'affinity') {
+            foreach ($v in 'base', 'mi') {
+              Run-Harness $v 'decode' 1 3 '@one' $m1
+              Run-Harness $v 'decode' 2 3 '@cores' $cores
+              Run-Harness $v 'decode' 2 3 '@smt' $smt
+              Run-Harness $v 'decode' 4 3 '@all' $all
+            }
+            With-Etw 'base_matched_t1_one' { Run-FASTag 'base' 'matched' 1 9 '_one_etw' $m1 }
+            With-Etw 'base_matched_t2_cores' { Run-FASTag 'base' 'matched' 2 9 '_cores_etw' $cores }
+            With-Etw 'base_matched_t2_smt' { Run-FASTag 'base' 'matched' 2 9 '_smt_etw' $smt }
+            With-Etw 'base_matched_t4_all' { Run-FASTag 'base' 'matched' 4 9 '_all_etw' $all }
+            With-Etw 'mi_matched_t1_one' { Run-FASTag 'mi' 'matched' 1 9 '_one_etw' $m1 }
+            With-Etw 'mi_matched_t2_cores' { Run-FASTag 'mi' 'matched' 2 9 '_cores_etw' $cores }
+            With-Etw 'mi_matched_t2_smt' { Run-FASTag 'mi' 'matched' 2 9 '_smt_etw' $smt }
+            With-Etw 'harness_base_decode_t2_cores' { Run-Harness 'base' 'decode' 2 1 '@cores_etw' $cores }
+            With-Etw 'harness_base_decode_t2_smt' { Run-Harness 'base' 'decode' 2 1 '@smt_etw' $smt }
+            Get-ChildItem "$O\etl" | Format-Table Name, Length | Out-Host
+          }
+          if ($env:PLAN -eq 'full') {
           foreach ($rep in 1..3) {
             foreach ($v in 'base', 'seg', 'mi', 'mioff') {
               $ts = if ($v -eq 'base') { 1, 2, 4, 8 } else { 1, 4, 8 }
@@ -511,17 +582,6 @@ jobs:
           foreach ($rep in 1..2) { foreach ($v in 'base', 'seg', 'mi') { foreach ($t in 1, 4) { Run-FASTag $v 'default' $t $rep } } }
 
           # Harness: file reading, decoding and the scan apart, per allocator.
-          $hres = "$O\harness\harness.tsv"
-          "variant`tmode`tthreads`trep`titems`twall`tcall_s`tuser_s`tkernel_s`tus_per_item`tproc_user_s`tproc_kernel_s`tpage_faults`tread_ops" | Set-Content $hres
-          function Run-Harness([string]$v, [string]$mode, [int]$t, [int]$reps) {
-            $tag = "harness_${v}_${mode}_t$t"
-            $r, $text = Start-Measured $hbins[$v] @($IN, $mode, "$t", "$reps") @{} "$O\harness\$tag.log"
-            foreach ($m in [regex]::Matches($text, 'HARNESS mode=\S+ threads=\d+ rep=(\d+) items=(\S+) wall=(\S+) call_s=(\S+) user_s=(\S+) kernel_s=(\S+) us_per_item=(\S+)')) {
-              (@($v, $mode, $t) + @(1..7 | ForEach-Object { $m.Groups[$_].Value }) + @($r.user_s, $r.kernel_s, $r.page_faults, $r.read_ops) -join "`t") | Add-Content $hres
-            }
-            Write-Host ("{0,-28} wall {1,7:N2}  user {2,7:N2}  kern {3,6:N2}  rc {4}" -f $tag, $r.wall_s, $r.user_s, $r.kernel_s, $r.rc)
-            if ($r.rc -ne 0) { Get-Content "$O\harness\$tag.log" | Select-Object -Last 20 | Write-Host; throw "$tag failed" }
-          }
           foreach ($v in 'base', 'seg', 'mi') {
             foreach ($mode in 'scan', 'io', 'decode', 'both') {
               foreach ($t in 1, 2, 4, 8) { Run-Harness $v $mode $t 3 }
@@ -548,6 +608,7 @@ jobs:
             foreach ($t in 1, 4) { Run-Harness 'base_defender' 'scan' $t 3; Run-Harness 'base_defender' 'io' $t 3 }
             Set-MpPreference -DisableRealtimeMonitoring $true
           } catch { "Defender toggle failed: $_" | Tee-Object "$O\defender_on.txt" | Out-Host }
+          }
 
       - name: Reduce the traces to folded stacks (TraceProcessor)
         if: always()
@@ -691,6 +752,42 @@ jobs:
                   }
                   info.AppendLine($"thread activities: {acts}");
 
+                  // Where the threads ran, and how long two of them ran at the same time on each processor pair.
+                  var slices = new Dictionary<(int, int), decimal>();
+                  var byProc = new SortedDictionary<int, List<(decimal a, decimal b)>>();
+                  foreach (var sl in pSched.Result.CpuTimeSlices)
+                  {
+                      if (sl.Process == null || sl.Process.Id != pid) continue;
+                      var k = (sl.Thread?.Id ?? -1, sl.Processor);
+                      slices.TryGetValue(k, out var v); slices[k] = v + Ms(sl.Duration);
+                      if (!sl.StartTime.HasValue || !sl.StopTime.HasValue) continue;
+                      decimal a0 = sl.StartTime.RelativeTimestamp.TotalSeconds, b0 = sl.StopTime.RelativeTimestamp.TotalSeconds;
+                      if (!byProc.TryGetValue(sl.Processor, out var lst)) byProc[sl.Processor] = lst = new List<(decimal, decimal)>();
+                      lst.Add((a0, b0));
+                  }
+                  foreach (var l in byProc.Values) l.Sort((x, y) => x.a.CompareTo(y.a));
+                  var procs = byProc.Keys.ToList();
+                  var ov = new StringBuilder();
+                  foreach (var pa in procs) foreach (var pb in procs)
+                  {
+                      if (pb <= pa) continue;
+                      var A = byProc[pa]; var B = byProc[pb]; int i = 0, j = 0; decimal sum = 0;
+                      while (i < A.Count && j < B.Count)
+                      {
+                          decimal lo = Math.Max(A[i].a, B[j].a), hi = Math.Min(A[i].b, B[j].b);
+                          if (hi > lo) sum += hi - lo;
+                          if (A[i].b < B[j].b) i++; else j++;
+                      }
+                      ov.Append($"overlap cpu{pa}+cpu{pb}: {sum:F3} s\n");
+                  }
+                  foreach (var pa in procs) ov.Append($"busy cpu{pa}: {byProc[pa].Sum(x => x.b - x.a):F3} s\n");
+                  info.Append(ov.ToString());
+                  using (var w = new StreamWriter(outp + ".proc.tsv"))
+                  {
+                      w.WriteLine("tid\tprocessor\tms");
+                      foreach (var kv in slices.OrderBy(x => x.Key.Item1).ThenBy(x => x.Key.Item2)) w.WriteLine($"{kv.Key.Item1}\t{kv.Key.Item2}\t{kv.Value:F1}");
+                  }
+
                   using (var w = new StreamWriter(outp + ".cpu.folded"))
                       foreach (var kv in cpu.OrderByDescending(x => x.Value.ms))
                           w.WriteLine($"{kv.Key.Item1}\t{kv.Key.Item2}\t{kv.Value.ms:F3}\t{kv.Value.n}\t{kv.Key.Item3}");
@@ -715,7 +812,9 @@ jobs:
           '@ | Set-Content "$ws\etlstat\Program.cs"
           & dotnet build "$ws\etlstat\etlstat.csproj" -c Release -v q --nologo
           if ($LASTEXITCODE -ne 0) { throw "etlstat build failed" }
-          $dll = Get-ChildItem "$ws\etlstat\bin\Release" -Recurse -Filter etlstat.dll | Select-Object -First 1
+          $dll = Get-ChildItem "$ws\etlstat\bin" -Recurse -Filter etlstat.dll | Select-Object -First 1
+          if (-not $dll) { Get-ChildItem "$ws\etlstat" -Recurse | Select-Object -First 40 | Out-Host; throw "etlstat.dll not found" }
+          Write-Host "etlstat: $($dll.FullName)"
           $sym = "srv*C:\symbols*https://msdl.microsoft.com/download/symbols;$ws\fastag\build;$ws\fastag\build-mi;$ws\harness\build;$ws\harness\build-mi;$ws\mimalloc-build"
           $xperf = "${env:ProgramFiles(x86)}\Windows Kits\10\Windows Performance Toolkit\xperf.exe"
           foreach ($e in Get-ChildItem "$O\etl" -Filter *.etl) {
@@ -741,6 +840,22 @@ jobs:
           path: |
             out
             !out/etl
+          if-no-files-found: warn
+
+      - name: Upload binaries and PDBs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: exp-win-read-symbols
+          path: |
+            fastag/build/FASTag*.exe
+            fastag/build/FASTag*.pdb
+            fastag/build-mi/FASTag.exe
+            fastag/build-mi/*.pdb
+            fastag/build-mi/*.dll
+            harness/build/readharness*.exe
+            harness/build/readharness*.pdb
+          retention-days: 7
           if-no-files-found: warn
 
       - name: Upload traces
