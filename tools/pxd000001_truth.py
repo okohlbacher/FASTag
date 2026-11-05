@@ -49,11 +49,19 @@ Usage:
   python3 tools/pxd000001_truth.py --gap-penalty 1 # score another table row
   python3 tools/pxd000001_truth.py --tsv X.tsv     # score an existing TSV
 
+Inputs (an argument wins over its environment variable):
+  --dat     FASTAG_PXD000001_DAT   the dataset's Mascot search, F063721.dat
+  --mzml    FASTAG_PXD000001_MZML  TMT_Erwinia_1uLSike_Top10HCD_isol2_45stepped_60min_01-20141210.mzML
+  --fastag  FASTAG_BIN             the FASTag binary (default: FASTag on PATH)
+  --workdir FASTAG_PXD000001_WORK  cache directory (default: <tmp>/fastag-pxd000001)
+  --libomp-dir FASTAG_LIBOMP_DIR   see below (default: unset)
+
 The FASTag TSV is cached in --workdir and reused; delete it (or pass
---force) to re-run the tagger. On macOS the tagger needs
-DYLD_LIBRARY_PATH=/opt/homebrew/opt/libomp/lib so that every image resolves
-the SAME libomp (a conda-env copy otherwise loads second and aborts with
-OMP Error #15); the script sets that itself. Python 3 stdlib only.
+--force) to re-run the tagger. On macOS a tagger linked against a conda env
+may load a second libomp and abort with OMP Error #15; pass the directory
+of the one libomp to use (Homebrew: $(brew --prefix libomp)/lib) as
+--libomp-dir and the script puts it on DYLD_LIBRARY_PATH. Python 3 stdlib
+only.
 """
 
 import argparse
@@ -63,19 +71,22 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import urllib.parse
 
 # --- documented inputs and numbers -----------------------------------------
 
-DAT = '/Users/kohlbach/Claude/pxd000001/F063721.dat'
-MZML = ('/Users/kohlbach/Claude/mzpeak-example-data/data/general-ms/'
-        'thermo-ltq-orbitrap-velos/'
-        'TMT_Erwinia_1uLSike_Top10HCD_isol2_45stepped_60min_01-20141210.mzML')
-FASTAG = '/Users/kohlbach/Claude/FasTag/build-rel/FASTag'
-LIBOMP_DIR = '/opt/homebrew/opt/libomp/lib'
-DEFAULT_WORKDIR = ('/private/tmp/claude-501/-Users-kohlbach-Claude-OpenMS---'
-                   'DirecTag/df88f9b0-cc80-48db-8780-e2bc44da5d34/scratchpad/'
-                   'pxd000001')
+def _env(name, default=None):
+    v = os.environ.get(name, '').strip()
+    return v if v else default
+
+
+DAT = _env('FASTAG_PXD000001_DAT')
+MZML = _env('FASTAG_PXD000001_MZML')
+FASTAG = _env('FASTAG_BIN', 'FASTag')
+LIBOMP_DIR = _env('FASTAG_LIBOMP_DIR')
+DEFAULT_WORKDIR = _env('FASTAG_PXD000001_WORK',
+                       os.path.join(tempfile.gettempdir(), 'fastag-pxd000001'))
 
 # Reference gap-penalty table: {penalty: (rank-1 %, top-5 %, total %)}
 DOCUMENTED = {1: (69.0, 90.8, 98.05), 10: (83.0, 95.2, 98.05),
@@ -160,14 +171,15 @@ def fdr_threshold(targets, decoys, fdr=0.01):
 
 # --- FASTag ----------------------------------------------------------------
 
-def run_fastag(tsv, mzml, gap_penalty, threads, force=False):
+def run_fastag(tsv, mzml, gap_penalty, threads, fastag, libomp_dir, force=False):
     """Run FASTag with the reference parameters; cache the TSV."""
     if os.path.exists(tsv) and os.path.getsize(tsv) > 0 and not force:
         print(f'reusing cached {tsv}')
         return
     env = dict(os.environ)
-    env['DYLD_LIBRARY_PATH'] = LIBOMP_DIR  # single libomp; see module docstring
-    cmd = [FASTAG, '-in', mzml, '-out', tsv,
+    if libomp_dir:
+        env['DYLD_LIBRARY_PATH'] = libomp_dir  # single libomp; see module docstring
+    cmd = [fastag, '-in', mzml, '-out', tsv,
            '-tag_length', '4', '-gaps', '1', '-gap_penalty', str(gap_penalty),
            '-max_tags', '0', '-fragment_tolerance', '20',
            '-fragment_tolerance_unit', 'ppm',
@@ -257,8 +269,14 @@ def score(tsv, gt):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    ap.add_argument('--dat', default=DAT)
-    ap.add_argument('--mzml', default=MZML)
+    ap.add_argument('--dat', default=DAT,
+                    help='Mascot F063721.dat (env FASTAG_PXD000001_DAT)')
+    ap.add_argument('--mzml', default=MZML,
+                    help='the PXD000001 mzML (env FASTAG_PXD000001_MZML)')
+    ap.add_argument('--fastag', default=FASTAG,
+                    help='FASTag binary (env FASTAG_BIN; default FASTag on PATH)')
+    ap.add_argument('--libomp-dir', default=LIBOMP_DIR,
+                    help='put this libomp directory on DYLD_LIBRARY_PATH (env FASTAG_LIBOMP_DIR)')
     ap.add_argument('--gap-penalty', type=float, default=100.0)
     ap.add_argument('--tsv', help='score this TSV instead of running FASTag')
     ap.add_argument('--workdir', default=DEFAULT_WORKDIR)
@@ -266,6 +284,10 @@ def main():
     ap.add_argument('--force', action='store_true', help='re-run FASTag even if cached')
     ap.add_argument('--no-assert', action='store_true')
     args = ap.parse_args()
+    if not args.dat:
+        ap.error('--dat (or FASTAG_PXD000001_DAT) is required')
+    if not args.tsv and not args.mzml:
+        ap.error('--mzml (or FASTAG_PXD000001_MZML) is required unless --tsv is given')
 
     # 1. ground truth
     targets, decoys, scans, n_queries = parse_dat(args.dat)
@@ -288,7 +310,8 @@ def main():
         os.makedirs(args.workdir, exist_ok=True)
         gp = f'{args.gap_penalty:g}'
         tsv = os.path.join(args.workdir, f'pxd000001_tl4_g1_gp{gp}.tsv')
-        run_fastag(tsv, args.mzml, gp, args.threads, args.force)
+        run_fastag(tsv, args.mzml, gp, args.threads, args.fastag,
+                   args.libomp_dir, args.force)
 
     # 3. score
     st = score(tsv, gt)

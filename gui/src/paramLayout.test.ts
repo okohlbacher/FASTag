@@ -5,6 +5,7 @@ import {
   RENDERED,
   SECTIONS,
   inertBecause,
+  invalidBecause,
   isActive,
   masters,
   unknownParams,
@@ -100,5 +101,18 @@ describe('dependencies', () => {
     expect(isActive('x', { x: '' })).toBe(false)
     expect(isActive('x', { x: '/some/path' })).toBe(true)
     expect(isActive('x', {})).toBe(false)
+  })
+})
+
+describe('field validation', () => {
+  // The CLI declares fragment_tolerance >= 1e-9 (restrictions="1.0e-09:" in
+  // the CTD); 0 and negatives read as "greater than 0", not "at least 1e-9".
+  it('requires fragment_tolerance greater than 0', () => {
+    const spec = PARAM_BY_NAME.get('fragment_tolerance')!
+    expect(spec.min).toBe(1e-9)
+    expect(invalidBecause(spec, '0')).toBe('must be greater than 0')
+    expect(invalidBecause(spec, '-1')).toBe('must be greater than 0')
+    expect(invalidBecause(spec, '1e-12')).toBe('must be at least 1e-9')
+    expect(invalidBecause(spec, '0.02')).toBeNull()
   })
 })

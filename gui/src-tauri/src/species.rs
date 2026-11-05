@@ -42,8 +42,27 @@ fn num(s: &str) -> f64 {
     t.parse::<f64>().ok().filter(|v| v.is_finite()).unwrap_or(0.0)
 }
 
+// One row per reference taxon; a real report is well under 1 MB. The cap
+// keeps a mis-picked file from being read into memory whole.
+const MAX_SPECIES_BYTES: u64 = 64 * 1024 * 1024;
+
+// Only regular files: opening a FIFO or a device would block, or never end.
+fn is_regular(path: &str) -> bool {
+    std::fs::metadata(path).map(|m| m.is_file()).unwrap_or(false)
+}
+
 fn read_species(path: &str) -> Option<SpeciesReport> {
-    let content = std::fs::read_to_string(path).ok()?;
+    if !is_regular(path) {
+        return None;
+    }
+    let mut bytes = Vec::new();
+    std::fs::File::open(path)
+        .ok()?
+        .take(MAX_SPECIES_BYTES)
+        .read_to_end(&mut bytes)
+        .ok()?;
+    // A taxon name in Latin-1 (or any stray byte) must not hide the report.
+    let content = String::from_utf8_lossy(&bytes);
     let lines: Vec<&str> = content.lines().filter(|l| !l.trim().is_empty()).collect();
     if lines.is_empty() {
         return None;
@@ -95,6 +114,9 @@ fn read_species(path: &str) -> Option<SpeciesReport> {
 // n at offset 12; v2 (FTX2) put n_taxa at 12 and n_kmers at 16. A real index is
 // many MB, so reading 24 bytes always succeeds unless the file is truncated.
 fn read_taxdb_info(path: &str) -> Option<TaxdbInfo> {
+    if !is_regular(path) {
+        return None;
+    }
     let mut f = std::fs::File::open(path).ok()?;
     let mut buf = [0u8; 24];
     f.read_exact(&mut buf).ok()?;
@@ -132,9 +154,11 @@ fn bundled_taxdb(app: &AppHandle) -> Option<String> {
     None
 }
 
+// async: Tauri runs sync commands on the main thread, which would block the UI
+// while the file is read.
 #[tauri::command]
-pub fn species(path: String) -> Option<SpeciesReport> {
-    read_species(&path)
+pub async fn species(path: String) -> Option<SpeciesReport> {
+    tauri::async_runtime::spawn_blocking(move || read_species(&path)).await.ok().flatten()
 }
 
 #[tauri::command]
@@ -175,6 +199,26 @@ mod tests {
         assert_eq!(r.taxa[0].name, "True", "highest adjusted count first, not lowest log_p");
         assert_eq!(r.taxa[1].name, "Neighbour", "the borrowed count ranks second despite its p");
         std::fs::remove_file(&f).ok();
+    }
+
+    #[test]
+    fn non_utf8_name_does_not_hide_the_report() {
+        let f = tempfile_path("latin1.tsv");
+        std::fs::write(&f, b"rank\ttaxid\tname\tobserved\tadjusted\texpected\tlog_pvalue\tqvalue\n\
+            genus\t1\tCaf\xE9ella\t5\t5\t0.5\t-3\t0.01\n").unwrap();
+        let r = read_species(f.to_str().unwrap()).expect("report despite a non-UTF-8 byte");
+        assert_eq!(r.taxa.len(), 1);
+        assert_eq!(r.taxa[0].name, "Caf\u{FFFD}ella");
+        assert_eq!(r.taxa[0].observed, 5.0);
+        std::fs::remove_file(&f).ok();
+    }
+
+    #[test]
+    fn a_directory_is_not_read() {
+        // m31: only regular files are read.
+        let d = std::env::temp_dir();
+        assert!(read_species(d.to_str().unwrap()).is_none());
+        assert!(read_taxdb_info(d.to_str().unwrap()).is_none());
     }
 
     #[test]

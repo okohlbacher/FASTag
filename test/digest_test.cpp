@@ -160,7 +160,8 @@ int main()
     check(value(drows, "share", "kr") == "1", "tryptic: kr 1");
     check(value(drows, "residue", "C.K+TMT") == "150" && value(drows, "count", "n_c") == "210", "tryptic: residue rows");
     check(value(drows, "call", "status") == "call" && value(drows, "call", "model") == "Trypsin", "tryptic: call row");
-    check(value(drows, "nocall", "timstof") == "unknown" && value(drows, "nocall", "ms2_scan_window") == "unknown",
+    check(value(drows, "nocall", "timstof") == "unknown" && value(drows, "nocall", "ms2_scan_window") == "unknown" &&
+              value(drows, "nocall", "ion_counts") == "unknown",
           "metadata absent reads unknown and still calls");
   }
 
@@ -244,6 +245,41 @@ int main()
     peak.scan_low.clear();
     peak.first_peak = {160.0};
     check(reason(peak, s) == "no_call ms2_first_peak", "first-peak rule without scan windows");
+    // ion_counts: only without instrument and native-ID metadata (MGF, converted pseudo-spectra)
+    D::RunMeta bare;
+    bare.peaks = 1000;
+    bare.peaks_whole = 500;
+    check(reason(bare, s) == "no_call ion_counts", "no metadata, half the intensities whole: ion counts");
+    bare.peaks_whole = 499;
+    check(reason(bare, s).rfind("call ", 0) == 0, "no metadata, under half whole: call");
+    check(value(D::digestRows(tc, table(), bare, s), "meta", "ms2_whole_intensity_share") == D::num(0.499),
+          "whole-intensity share row");
+    D::RunMeta counted = meta;
+    counted.peaks = counted.peaks_whole = 1000;
+    check(reason(counted, s).rfind("call ", 0) == 0, "instrument named: whole intensities do not withhold");
+    check(value(D::digestRows(tc, table(), counted, s), "nocall", "ion_counts") == "no", "instrument named: ion_counts no");
+    check(value(D::digestRows(tc, table(), D::RunMeta(), s), "nocall", "ion_counts") == "unknown", "no peaks: ion_counts unknown");
+    D::RunMeta tdf_counts = tdf;
+    tdf_counts.peaks = tdf_counts.peaks_whole = 10;
+    check(reason(tdf_counts, s) == "no_call timstof", "native ID format named: the timstof rule decides");
+    D::RunMeta generic = bare;
+    generic.peaks_whole = 1000;
+    generic.native_id_type = "MS:1000777";
+    check(reason(generic, s) == "no_call ion_counts", "generic native ID format MS:1000777: ion_counts still fires");
+    check(value(D::digestRows(tc, table(), generic, s), "nocall", "timstof") == "unknown", "generic native ID format: timstof unknown");
+    for (const char* acc : {"MS:1000774", "MS:1000775", "MS:1000776", "MS:1000824"})
+    {
+      generic.native_id_type = acc;
+      check(reason(generic, s) == "no_call ion_counts", std::string("generic native ID format ") + acc + ": ion_counts still fires");
+    }
+    D::RunMeta thermo = bare;
+    thermo.peaks_whole = 1000;
+    thermo.native_id_type = "MS:1000768";
+    check(reason(thermo, s).rfind("call ", 0) == 0, "vendor native ID format MS:1000768: the timstof rule decides");
+    D::RunMeta bare_peak = bare;
+    bare_peak.peaks_whole = 1000;
+    bare_peak.first_peak = {160.0};
+    check(reason(bare_peak, s) == "no_call ms2_first_peak", "ms2_first_peak comes before ion_counts");
     D::DigestSettings lowres = s;
     lowres.low_resolution = true;
     check(reason(tims, lowres) == "no_call low_resolution", "low resolution comes first");

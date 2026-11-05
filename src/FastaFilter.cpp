@@ -137,12 +137,14 @@ namespace FASTag
     const size_t projected = projectBytes(min_k, max_k);
     if (projected > max_bytes)
     {
-      throw Exception::InvalidValue(
+      // InvalidParameter, not InvalidValue: TOPPBase reports it as a refusal
+      // (rc 6, the text as written) instead of an "Unexpected internal error
+      // (the value '...' was used but is not valid; ...)" with rc 8.
+      throw Exception::InvalidParameter(
           __FILE__, __LINE__, OPENMS_PRETTY_FUNCTION,
           "FASTA index would need about " + std::to_string(projected / (1024 * 1024)) +
           " MB, above the " + std::to_string(max_bytes / (1024 * 1024)) + " MB limit. "
-          "Reduce 'extension', raise 'min_filter_length', or use a smaller database.",
-          std::to_string(projected));
+          "Reduce 'extension', raise 'min_filter_length', or use a smaller database.");
     }
     const int floor_k = minLen();
     min_k = std::max(min_k, floor_k);
@@ -153,14 +155,13 @@ namespace FASTag
       // filter would reject every tag while reporting "0 hits" as if that were a
       // result. Refuse loudly instead: silence here is indistinguishable from a
       // genuine absence of evidence.
-      throw Exception::InvalidValue(
+      throw Exception::InvalidParameter(
           __FILE__, __LINE__, OPENMS_PRETTY_FUNCTION,
           "No reportable tag can reach the minimum filter length. This database of " +
           std::to_string(residues_) + " residues needs tags of at least " + std::to_string(floor_k) +
           " residues to beat chance, but the longest tag this run can produce is " +
           std::to_string(max_k) + ". Raise 'tag_length' or 'extension', or set "
-          "'min_filter_length' explicitly to accept a higher chance-match rate.",
-          std::to_string(floor_k));
+          "'min_filter_length' explicitly to accept a higher chance-match rate.");
     }
     idx_.resize(static_cast<size_t>(max_k) + 1);
     built_.resize(static_cast<size_t>(max_k) + 1, 0);

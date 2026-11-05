@@ -1,4 +1,4 @@
-# Digest, label and mass-gap reports (FASTag 1.8.0)
+# Digest, label and mass-gap reports
 
 ## Purpose
 
@@ -83,7 +83,7 @@ a score that is not a number ranks last; an exact tie between the call and the r
 | Section | Keys | Value |
 |---|---|---|
 | `run` | as above, plus `window_da`, `tag_min`, `background_share`, `models` (`shipped` or path), `background` (`shipped_human`, `fasta:<path>` or `models_table`; for a FASTA the sentence says whether a pseudocount was added) | |
-| `meta` | `instrument`, `instrument_model`, `native_id_format` (accession), `ion_mobility` (`yes`/`no`/`absent`), `ion_mobility_unit` (`1/K0`, `ms`, `FAIMS CV`, `other` or `-`), `ms2_scan_window_low` (median lower limit, m/z), `ms2_first_peak_mz` (median m/z of the first peak of each MS2, the input of 0.1.3's gate) | word or m/z |
+| `meta` | `instrument`, `instrument_model`, `native_id_format` (accession), `ion_mobility` (`yes`/`no`/`absent`), `ion_mobility_unit` (`1/K0`, `ms`, `FAIMS CV`, `other` or `-`), `ms2_scan_window_low` (median lower limit, m/z), `ms2_first_peak_mz` (median m/z of the first peak of each MS2, the input of 0.1.3's gate), `ms2_whole_intensity_share` (share of the MS2 peak intensities above 0 that are whole numbers; `n` = those peaks) | word, m/z or decimal |
 | `count` | `tags_filtered`, `tot`, `n_c`, `n_n` | integer |
 | `residue` | `C.K`, `C.K+TMT`, `C.K+TMTpro`, `C.K+iTRAQ4`, `C.K+8`, `C.R`, `C.R+10`, same with `N.` | integer |
 | `pos` | `C.P4.<aa>` .. `C.P1.<aa>`, `N.P1'.<aa>` .. `N.P4'.<aa>` (19 residues each) | integer |
@@ -91,7 +91,7 @@ a score that is not a number ranks last; an exact tie between the call and the r
 | `model` | `<model>.loglik`, `<model>.class`, and `<model>.C.<aa>`, `<model>.N.<aa>` (the model's distribution, normalised, before mixing; an end that is the background has the background's values), all written when `n_c ≥ tag_min` | decimal, word |
 | `background` | `C.<aa>`, `N.<aa>` (19 residues each): the background in use, normalised | decimal |
 | `call` | `status` (`call`/`no_call`); on a call `model`, `class`, `runner_up`, `runner_up_class`, `margin` (log-likelihood per tag), `uses_nterm`; on no call `reason`, and on a tie `tied` (the tied models) | |
-| `nocall` | `low_resolution`, `timstof`, `ms2_scan_window`, `ms2_first_peak`, `few_tags`, `nonfinite_score`, `tie`: whether each rule fired (`yes`/`no`/`unknown`) | word |
+| `nocall` | `low_resolution`, `timstof`, `ms2_scan_window`, `ms2_first_peak`, `ion_counts`, `few_tags`, `nonfinite_score`, `tie`: whether each rule fired (`yes`/`no`/`unknown`) | word |
 
 No call is written as `status no_call` with a `reason`, never as a call with margin 0.
 
@@ -105,6 +105,7 @@ Checked in this order; `reason` is the first that fires, and `nocall` lists all 
 | `timstof` | instrument name or model contains "timsTOF", or the native ID format is Bruker TDF (MS:1002818/MS:1002819), or MS2 ion mobility is in 1/K0 | metadata |
 | `ms2_scan_window` | median MS2 scan-window lower limit > y1(K) + 0.1 = 147.2128 m/z (`Y1_K`); not 0.1.3's gate | metadata |
 | `ms2_first_peak` | median m/z of the lowest peak of each MS2 > 147.2128 (0.1.3's gate, `external.py` `ms2_low_mz > Y1_K + 0.1`, there over a sample of 20,000 MS2) | peaks |
+| `ion_counts` | the input names no instrument, model or native ID format (`timstof` reads `unknown`) and at least half of the MS2 peak intensities above 0 are whole numbers (`kWholeShare` 0.5); zero-intensity peaks are left out; native ID formats that name no vendor count as none: MS:1000774/MS:1000775 (multiple/single peak list), MS:1000776 (scan number only), MS:1000777 (spectrum identifier, which OpenMS writes when the type is unknown) and MS:1000824 (no nativeID format); `no` whenever real metadata is present, `unknown` without peaks; not in 0.1.3 | peaks |
 | `few_tags` | `tot < tag_min` (gate in `fastag_termini`) or `n_c < tag_min` (gate in `protease_call`) | counts |
 | `nonfinite_score` | the call's or the runner-up's log-likelihood is not finite: a residue seen at the tag ends has probability 0 (0.1.3 raises `ValueError` here) | scores |
 | `tie` | the runner-up's log-likelihood equals the call's (e.g. Asp-N, Lys-N and unspecific when the N end is not used) | scores |
@@ -113,6 +114,8 @@ Metadata (OpenMS develop APIs):
 
 - **Instrument:** `ExperimentalSettings::getInstrument()` → `Instrument::getName()`, `getModel()`;
   native ID format `ExperimentalSettings::getSourceFiles()` → `SourceFile::getNativeIDTypeAccession()`.
+  MS:1000774, MS:1000775, MS:1000776, MS:1000777 and MS:1000824 are reported in `native_id_format`
+  but name no vendor, so `timstof` and `ion_counts` treat them as absent.
   mzML: the run header read with `MzMLFile` and `PeakFileOptions::setMetadataOnly(true)` (parsing stops
   at `<spectrumList>`), because FASTag's fast mzML reader skips run-level metadata. mzPeak: the
   `ExperimentalSettings` that `MzPeakFile::transform` hands to FASTag's consumer.
@@ -126,6 +129,48 @@ Metadata (OpenMS develop APIs):
 
 When a rule's metadata is missing, the rule reads `unknown`, the call is made normally, and the
 `description` says "metadata absent".
+
+**Why the metadata rules exist, and what replaces them without metadata.** prose-auto 0.1.3 makes no
+call on timsTOF (ddaPASEF, diaPASEF), where C-terminal R is nearly invisible (unusable on its 23
+DIA/timsTOF runs), and on MS2 that start above y1 of K (147.11), where the C-terminal K and R ions
+cannot be seen. `ms2_first_peak` is 0.1.3's own gate for the second case and needs no metadata;
+`ms2_scan_window` reads the same thing from the scan window. An MGF (and a converted pseudo-spectrum
+mzML) names no instrument, native ID format or scan window, so `timstof` and `ms2_scan_window` read
+`unknown` there. `ion_counts` stands in for `timstof` on such input: timsTOF intensities are ion
+counts, whole numbers, and Orbitrap intensities are not. Measured on public runs (FASTag 1.9.0
+differential set and MGFs written by `tools/mzml_to_mgf.py`):
+
+| Runs (mzML and MGF of each give the same share) | whole-number share |
+|---|---|
+| 35 Orbitrap runs (Q Exactive, Exploris, Fusion, Lumos, Eclipse, Velos, Elite, Astral) | 0.00001 – 0.008 |
+| 11 timsTOF runs (PXD017703, PXD047793 diaTracer; PXD010012, PXD054073 ddaPASEF) | 0.957 – 1 |
+
+MGF writers that cut intensities to 6 significant digits (OpenMS FileConverter) raise the share of
+Orbitrap data, because large intensities then end in zeros: rewritten with `%g`, the Orbitrap MGFs
+of the parity set (35 runs, first 2 million peaks above 0 of each) reach 0.0006 to 0.187 (median
+0.066), against 0.0000 to 0.0095 as written. The threshold 0.5 is still above that, but an
+Orbitrap run whose MS2 intensities are mostly at or above 1e5 and written with 6 significant digits,
+or an MGF whose writer rounds intensities to integers, would cross it and be withheld while its mzML
+is called. Independently written Orbitrap MGFs (jpr-bench PXD000001 0.016, PXD003531 0.0011,
+PXD076528 subset 0.0002) stay low. Every timsTOF mzML with
+metadata is withheld by `timstof` (11 runs), and every scan-window run by `ms2_scan_window` (11 runs).
+Their MGFs are withheld too: by `ms2_first_peak` on all 11 scan-window runs and on 11 of the 12
+timsTOF MGFs, and by `ion_counts` on all 12. Only one of the 12 needs `ion_counts`: PXD054073's own
+deposited AlphaTims MGF (centroided, median first peak 131.5; the MGF written from the run's
+mzpeak-convert mzML has 185.1): under the earlier rules it is called `unspecific`, on a HeLa tryptic
+digest. Every Orbitrap MGF whose mzML is called (19 runs) keeps the call. On the 1.9.0 differential set (199 runs, 43 of them converted
+pseudo-spectra without metadata, whole-number share at most 0.038) `ion_counts` fires on none, and
+every other row is unchanged. Converted timsTOF pseudo-spectra whose intensities are not whole numbers
+are not caught by it; there `ms2_first_peak` fired on every timsTOF run of the set. Other TOF
+instruments that write ion counts (SCIEX, Agilent, Waters) are withheld the same way when their
+metadata is missing; with metadata `ion_counts` reads `no` and `timstof` decides. An mzML that
+OpenMS writes from an MGF names only a native ID format without vendor (FileConverter: the generic
+MS:1000777; FASTag `-out_spectra`: the peak-list MS:1000774), which is not metadata: `timstof` reads `unknown` there and `ion_counts` decides, so
+PXD054073's AlphaTims MGF converted to mzML is withheld as the MGF is (before this, its mzML was
+called `unspecific`). timsTOF MGFs whose intensities were scaled or averaged (not whole numbers) are
+not caught; zero-intensity peaks are left out of the share, so profile-like MGFs padded with zeros
+do not fire the rule. The rule comes after
+`ms2_first_peak`, so it changes no reason that 1.9.0 already gave.
 
 ## Model table (`-digest_models`)
 
@@ -243,7 +288,9 @@ so a reader of the TSV sees the doubles the reports use. For differential tests 
 
 Shown when a run wrote any of the three reports.
 
-- The call (or "no call" with the reason), runner-up, margin and the `description` sentences.
+- The call (or "no call" with the reason), runner-up, margin and the `description` sentences. With a
+  models table that has no model of another class the CLI writes `runner_up none` and margin `-`;
+  the tab then shows neither, and no runner-up logo.
 - The observed sequence logo P4..P1 | P1'..P4' in bits against the background in use
   (letter height `f_a · I`, `I = Σ_b f_b log2(f_b/q_b) − (s − 1)/(2n ln 2)` clamped at 0, the
   small-sample correction over `s` residues; `n` under each column). Columns with fewer than `tag_min`
@@ -251,7 +298,10 @@ Shown when a run wrote any of the three reports.
   logos of the called model and the runner-up (P1 and P1' only; their other positions are the
   background and stay empty).
 - The label rows and the heavy shares. Each block names its report file; opening a report of another
-  input closes the reports of the previous one.
+  run closes the reports of the previous one. Two reports come from one run when they sit in one
+  folder and their `run` rows agree (input, version, fragment tolerance and unit, tag length,
+  subsampling); `run input` holds only the input's file name, so it cannot tell two inputs of one
+  name apart on its own.
 - The mass-gap distribution as a table with the bar cells already used in the Species tab, followed by
   the peaks with their explanations.
 
@@ -267,7 +317,8 @@ The logo is a small React SVG component in `gui/src`; no new dependency.
   enrichment shares, and the HLA class mapping.
 - Reagent-genus handling of the species report.
 - A PASEF acquisition-mode gate: converted diaPASEF pseudo-spectra carry no instrument, native-ID or
-  scan-window metadata and their 1/K0 only on the precursor, so `timstof` reads `unknown` on them.
+  scan-window metadata and their 1/K0 only on the precursor, so `timstof` reads `unknown` on them
+  (`ion_counts` fires on them when their intensities are ion counts).
 
 ## Checks
 

@@ -4,27 +4,34 @@
 // hand-copying them into the UI is how a GUI drifts from its CLI (a tolerance
 // copied without its unit silently means something else).
 //
-//   node scripts/gen-params.mjs [path/to/FASTag] > src/params.generated.json
+//   node scripts/gen-params.mjs [path/to/FASTag] [src/params.generated.json]
+//
+// With an output path the file is replaced only once the manifest is complete,
+// so a missing or broken binary leaves the old one in place (a shell redirect
+// would have emptied it before the script ran). Without one it prints to stdout.
 //
 // `npm run params` runs it against the bundled src-tauri/resources/fastag binary.
 
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 const bin = process.argv[2] || process.env.FASTAG_BIN || 'resources/fastag/bin/FASTag'
+const outPath = process.argv[3]
 
 const dir = mkdtempSync(join(tmpdir(), 'fastag-ini-'))
 const ini = join(dir, 'fastag.ini')
+let xml
 try {
   execFileSync(bin, ['-write_ini', ini], { stdio: ['ignore', 'ignore', 'pipe'] })
+  xml = readFileSync(ini, 'utf8')
 } catch (e) {
   console.error(`failed to run ${bin} -write_ini: ${e.message}`)
   process.exit(1)
+} finally {
+  rmSync(dir, { recursive: true, force: true })
 }
-const xml = readFileSync(ini, 'utf8')
-rmSync(dir, { recursive: true, force: true })
 
 const unescape = (s) =>
   s
@@ -87,9 +94,25 @@ for (const m of xml.matchAll(/<ITEMLIST\s([^>]*?)>([\s\S]*?)<\/ITEMLIST>/g)) {
     default: items,
     description: a.description ?? '',
     required: a.required === 'true',
-    toppAdvanced: a.advanced === 'true'
+    toppAdvanced: a.advanced === 'true',
+    // An int list (tag_lengths) keeps its item type and bounds, which apply
+    // to each item: the form can then refuse `0` or `7, 8` on one line.
+    ...(a.type && a.type !== 'string' ? { itemType: a.type } : {}),
+    ...parseRestrictions(a.type, a.restrictions)
   })
 }
 
+if (params.length === 0) {
+  console.error(`${bin} -write_ini produced no parameters`)
+  process.exit(1)
+}
+
 params.sort((x, y) => x.name.localeCompare(y.name))
-process.stdout.write(JSON.stringify({ params }, null, 2) + '\n')
+const json = JSON.stringify({ params }, null, 2) + '\n'
+if (outPath) {
+  const tmp = `${outPath}.tmp`
+  writeFileSync(tmp, json)
+  renameSync(tmp, outPath)
+} else {
+  process.stdout.write(json)
+}

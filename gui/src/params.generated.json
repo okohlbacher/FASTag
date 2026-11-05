@@ -165,7 +165,7 @@
       "name": "gap_penalty",
       "type": "double",
       "default": "100.0",
-      "description": "Rank gapped tags as if their E-value were this many times worse. Affects ORDER only, never which tags are reported. 1 disables. Gapped tags are otherwise heavily over-ranked: they take ~95% of top-1 slots while being ~3.6x less likely to be correct",
+      "description": "Rank gapped tags as if their E-value were this many times worse. Never removes a tag at the max_evalue cutoff (applied to the unpenalised value), but under max_tags it decides which tags fill the capped slots, and a gapped row's printed evalue includes it. 1 disables. Gapped tags are otherwise heavily over-ranked: they take ~95% of top-1 slots while being ~3.6x less likely to be correct",
       "required": false,
       "toppAdvanced": false,
       "min": 1
@@ -212,7 +212,7 @@
       "name": "in",
       "type": "input-file",
       "default": "",
-      "description": "Input spectra (mzML or mzpeak)",
+      "description": "Input spectra (mzML, mzpeak or MGF)",
       "required": false,
       "toppAdvanced": false
     },
@@ -220,7 +220,7 @@
       "name": "isobaric_tolerance",
       "type": "double",
       "default": "0.04",
-      "description": "When matching against 'fasta', treat a residue as interchangeable with an isobaric residue pair within this tolerance; 0 requires exact strings",
+      "description": "When matching against 'fasta' or reconciling against 'recon_fasta', treat a residue as interchangeable with an isobaric residue pair within this tolerance; 0 requires exact strings",
       "required": false,
       "toppAdvanced": false
     },
@@ -401,7 +401,7 @@
       "name": "orientation",
       "type": "string",
       "default": "both",
-      "description": "Match a tag as written, or also reversed. Tags are stored N->C under a y-ion assumption, so b-derived tags read reversed",
+      "description": "Match a tag as written, or also reversed, against 'fasta' and in 'recon_fasta' reconciliation. Tags are stored N->C under a y-ion assumption, so b-derived tags read reversed",
       "required": false,
       "toppAdvanced": false,
       "choices": [
@@ -542,6 +542,18 @@
       "toppAdvanced": false
     },
     {
+      "name": "species_evidence",
+      "type": "string",
+      "default": "best",
+      "description": "Which of a spectrum's tags make it count for a taxon: 'best' = the taxa of its lowest-E-value tag that maps into the index (ties united); 'all' = the union over every reported tag (FASTag <= 1.9.0)",
+      "required": false,
+      "toppAdvanced": false,
+      "choices": [
+        "best",
+        "all"
+      ]
+    },
+    {
       "name": "species_max_kmer_share",
       "type": "double",
       "default": "1.0",
@@ -648,7 +660,9 @@
       "default": [],
       "description": "Seed tag lengths to run in one pass, replacing 'tag_length'. Each length is tagged, scored and capped ('max_tags') exactly as on its own; a spectrum's rows are those runs' rows in ascending length, except that a tag several lengths report is kept only from the length with its lowest E-value",
       "required": false,
-      "toppAdvanced": false
+      "toppAdvanced": false,
+      "itemType": "int",
+      "min": 1
     },
     {
       "name": "taxdb",
@@ -709,7 +723,7 @@
     {
       "name": "version",
       "type": "string",
-      "default": "1.9.0",
+      "default": "1.10.0",
       "description": "Version of the tool that generated this parameters file.",
       "required": false,
       "toppAdvanced": true

@@ -159,12 +159,17 @@ compiled from source with the libraries listed in
 
 A cross-platform desktop app ([`gui/`](gui/)) wraps the CLI: pick spectra, set
 parameters from a form generated out of the tool's own `-write_ini`, watch a
-progress bar, and browse the tags and the ranked species report (with a `rel.`
-column showing each taxon's evidence relative to the top hit). A **Digest** tab
+progress bar, and browse the tags and the ranked species report (with a
+"Relative to top taxon" column showing each taxon's evidence relative to the
+top hit, and an Adjusted column after `-species_deconvolve`). The **Database
+hit** filter on `fasta_hit` offers All, Target (`fwd`/`rev`), Entrapment
+(`efwd`/`erev`) or No hit; **Export shown rows…** writes the filtered rows, in
+the shown columns, to a new TSV. A failed run quotes FASTag's reason and offers
+its command line to copy. A **Digest** tab
 shows the `-digest_out`, `-label_out` and `-massgap_out` reports: the protease
 call or no-call with its reason, sequence logos P4..P1 | P1'..P4' of the
 observed tag ends and of the called and runner-up models (in bits against the
-background in use), the label counts and the mass-gap peaks. It is built with
+background in use), the label counts, a histogram of the mass gaps and the mass-gap peaks. It is built with
 [Tauri 2](https://tauri.app) — a Rust backend and the OS's native webview, not a
 bundled browser. The CLI remains the source of truth; the GUI shells out to it.
 
@@ -172,9 +177,10 @@ bundled browser. The CLI remains the source of truth; the GUI shells out to it.
 cd gui && npm install && npm run tauri dev     # or: npm run tauri build
 ```
 
-Signed, installable bundles ship with every release: notarized and stapled disk
-images for macOS (also on Homebrew, above) and an installer for Windows — see
-the install table at the top. Details in [gui/README.md](gui/README.md).
+Installable bundles ship with every release: signed, notarized and stapled disk
+images for macOS (also on Homebrew, above) and an installer for Windows, which
+is not yet code-signed (see above) — see the install table at the top. Details
+in [gui/README.md](gui/README.md).
 
 ## Usage
 
@@ -208,9 +214,9 @@ it cannot know the analyser, so the setting is yours.
 
 ## File formats
 
-`-in` accepts mzML or [mzPeak](https://github.com/OpenMS/mzpeak);
+`-in` accepts mzML, [mzPeak](https://github.com/OpenMS/mzpeak) or MGF;
 `-out` is TSV; `-out_spectra` writes mzML or mzPeak, chosen by extension. All
-four in/out combinations work, and on centroided input the container does not
+six in/out combinations work, and on centroided input the container does not
 change the tags: a run read as mzPeak gives the same spectra as the same run
 read as mzML, and a run written to mzPeak and tagged again reproduces the
 original tag set. This is checked byte for byte in ctest on archives FASTag
@@ -273,11 +279,99 @@ A FASTag built against an OpenMS without mzPeak support (`OPENMS_ENABLE_MZPEAK`
 off) refuses `.mzpeak` on either side with a message saying so, rather than
 reporting a clean run over an empty file.
 
+### MGF
+
+A Mascot Generic Format peak list (`-in run.mgf`) is read like an indexed mzML:
+one parallel scan of the bytes finds where every `BEGIN IONS` … `END IONS`
+block starts and ends (16 bytes per spectrum kept; the scan itself peaks at
+about 32 bytes per block while it runs), and then each tagging thread reads
+the blocks it is given, at random, with its own file handle. The reader's
+memory does not grow with the file beyond those offsets (FASTag's own state
+can grow with the number of tags reported, for any input format), every
+thread count gives the same output, and `-out_spectra`, `-subsample_*` and
+`-progress` work as on mzML. The scan also checks the file's block structure
+(its markers) **before any output is opened**: a block without `END IONS`
+before the next `BEGIN IONS` or the end of the file (a truncated file), or a
+block larger than 256 MiB, stops the run with an error naming the lowest such
+block, its byte offset and its TITLE. Text outside the blocks is ignored, as
+OpenMS ignores it, but an `END IONS` line there (a block whose `BEGIN IONS`
+line is lost) and text that looks like a spectrum (a peak line, `PEPMASS=`,
+`TITLE=`, `RTINSECONDS=` or `SCANS=`) are counted in a warning with the byte
+offset of the first, so no spectrum is dropped silently.
+
+Each block becomes one MS2 spectrum, the way OpenMS's `MascotGenericFile`
+reads it, and its spectrum ID is **`index=<k>`**, the block's 0-based position
+(PSI-MS `MS:1000774`, multiple peak list nativeID format). The TITLE is kept as
+metadata (written to `-out_spectra`) but never used as the ID.
+
+| MGF | read as |
+|---|---|
+| `PEPMASS=mz [intensity]` | precursor m/z (and intensity). Missing or not finite: a precursor at m/z 0, counted as MS2 with no tags, and counted in a warning |
+| `CHARGE=` one value | its magnitude: `2`, `2+`, `+2` are 2; `3-`, `-3` and `-3-` are 3 with negative polarity |
+| `CHARGE=` several values (`2+ and 3+`, `2+,3+`), `0`, or none | no charge, tagged as 2+ like an mzML precursor without one; the values are kept as possible charges, and the no-charge warning counts them |
+| `RTINSECONDS=t` | retention time in seconds; a range `a-b` gives its midpoint. `nan` or `inf`: no retention time, counted in a warning |
+| `MSLEVEL=` | the MS level, a whole number ≥ 1 (default 2); MS1 blocks are skipped as in mzML |
+| `TITLE=` | metadata `TITLE`, as written (control bytes and invalid UTF-8 replaced by `?`) |
+| `SCANS=n` | metadata `Scan_ID` (sanitised like TITLE, counted); names the USI scan when it is one number |
+| `mz intensity [charge]` | a peak, in file order; the fragment charge is ignored. A line that looks like a peak but does not start with a digit (`-100 5`, `.5 5`, `nan 5`) is an error wherever it is |
+| `#`, `;`, `!`, `/` lines | comments, ignored anywhere in a block |
+| a file-level `CHARGE=` before the first block | not applied (as in OpenMS), with a warning when a block has no `CHARGE` of its own |
+
+FASTag parses the blocks itself, with the number parsers OpenMS's
+`MascotGenericFile` uses, so peaks and precursors are bit-identical to what
+OpenMS reads (checked block by block in ctest). It differs from OpenMS on
+purpose where OpenMS fails or guesses: multi-value and negative CHARGE and
+RTINSECONDS ranges (OpenMS refuses the file), `MSLEVEL=2abc` (an error, not 2),
+TITLE (never parsed for a time in minutes), comment lines after the peaks
+(ignored, not an error), a peak line not starting with a digit (OpenMS skips it
+before the first peak and fails on it after), and a leading UTF-8 byte-order
+mark (skipped).
+
+A malformed block (a peak line that is not two numbers or does not start with
+a digit, a non-numeric PEPMASS, CHARGE, RTINSECONDS or MSLEVEL, or a key after
+the peaks) stops the run with an error naming it, when the thread that reads it
+gets there. That can be after the reports are open; the partial `-out`,
+`-recon_out` and `-glyco_out` are then removed (the other reports are written
+only after the loop). With several such blocks, which one is named can depend
+on the thread timing. Blocks that `-subsample_*` skips are not parsed.
+
+**Compressed MGF is refused** (`.gz`, `.bz2`, `.zip`, by name): random access
+cannot seek in a compressed stream. Decompress it first.
+
+**An MGF carries less than an mzML.** No MS1, no instrument, no scan window, no
+activation, no ion mobility (no MGF key for it is common; AlphaTims writes
+it inside TITLE, which FASTag does not parse), no polarity (except a negative
+CHARGE), no isolation window, and no precursor intensity unless PEPMASS has a
+second value. `-digest_out` reports these as absent and judges timsTOF data
+by their whole-number intensities instead (see its section), and
+`-out_spectra` invents none of them: its isolation-window target is PEPMASS,
+with no offsets, where an mzML run writes the instrument's target. Its source
+file is the MGF, named with the MGF's SHA-1 as FileConverter writes it (one
+more read of the file). With `-recon_id_out`, OpenMS's mzIdentML writer logs
+"please prefer mzML files as primary MS runs" for an MGF; the file is written
+all the same.
+
+**Same tags as the mzML it came from.** `tools/mzml_to_mgf.py` (pyteomics)
+writes an mzML's MS2 as MGF with every peak exact: FASTag on that MGF gives
+`tags.tsv`, `-recon_out`, `-delta_out`, `-glyco` and the species report
+byte-identical to FASTag on the mzML once column 1 (the spectrum ID) is
+removed (the reports of `-digest_out`, `-label_out` and `-massgap_out` differ
+only in the input's name and, in the digest, the metadata rows), provided no
+`-subsample_*` is used (the subsample is drawn over all spectra, MS1 included,
+so the two runs draw different spectra). The tolerance
+probe (the warning that no two peaks are closer than 20 times the fragment
+tolerance) is also placed over all spectra, so for an MGF and its mzML it can
+name different numbers, or appear for only one of the two. The k-th MS2 of
+the mzML is `index=<k>`, and TITLE holds its mzML ID. **OpenMS FileConverter's
+mzML→MGF is lossy** (m/z to 15 and intensities to 6 significant digits, so peak
+ranks can tie or swap), and tags from its MGFs can differ slightly. Its
+MGF→mzML direction is exact.
+
 ## Command-line reference
 
 | Option | Default | Meaning |
 |---|---|---|
-| `-in <file>` | — | Input spectra: mzML or mzpeak |
+| `-in <file>` | — | Input spectra: mzML, mzpeak or MGF (uncompressed) |
 | `-out <file>` | — | Tag list, tab-separated |
 | `-fasta <file>` | none | Report only tags occurring in these sequences |
 | `-out_spectra <file>` | none | Write spectra carrying a reported tag here, as mzML or mzpeak (by extension). Needs memory proportional to the *file*, not the thread count, unlike every other path |
@@ -293,9 +387,9 @@ reporting a clean run over an empty file.
 | `-max_tags <n>` | 50 | Tags reported per spectrum; 0 = unlimited |
 | `-max_evalue <value>` | 20 | E-value cutoff; 0 disables |
 | `-gap_penalty <value>` | 100 | Rank gapped tags as if their E-value were this many times worse. Never removes a tag at the `-max_evalue` cutoff (applied to the unpenalised value), but under `-max_tags` it decides which tags fill the capped slots, and the printed `evalue` of a gapped row includes it. 1 disables |
-| `-isobaric_tolerance <value>` | 0.04 | Isobaric residue-pair substitution tolerance when matching `-fasta`; 0 requires exact strings |
+| `-isobaric_tolerance <value>` | 0.04 | Isobaric residue-pair substitution tolerance when matching `-fasta` and when reconciling against `-recon_fasta`; 0 requires exact strings |
 | `-min_filter_length <n>` | 0 | Ignore tags shorter than this when matching `-fasta`; 0 derives a floor from database size |
-| `-orientation <both\|forward>` | both | Also match a tag reversed (b-ion reading), or only as written |
+| `-orientation <both\|forward>` | both | Also match a tag reversed (b-ion reading), or only as written; applies to `-fasta` matching and `-recon_fasta` reconciliation |
 | `-fixed_modifications <mods>` | `Carbamidomethyl (C)` | Shift residue masses; not annotated in the tag. OpenMS/UniMod names, e.g. `'TMT6plex (K)'` |
 | `-variable_modifications <mods>` | none | Add a modified alternative, written inline as `X[Name]`, e.g. `'Phospho (S)'` |
 | `-proforma` | off | Append a ProForma 2.0 column for each tag (see Output) |
@@ -336,6 +430,7 @@ reporting a clean run over an empty file.
 | `-species_min_margin <f>` | 0.0 | Require a tag's best taxa to carry this fraction more of its k-mers than the runner-up; 0 keeps all |
 | `-species_use_gapped` | off | Let gapped tags contribute taxonomic evidence (see Species detection) |
 | `-species_deconvolve` | off | Correct taxon counts for sequence shared between taxa |
+| `-species_evidence <mode>` | best | Which of a spectrum's tags make it count for a taxon: `best` = the taxa of its lowest-E-value tag that maps into the index (ties united), `all` = the union over every reported tag (the rule up to 1.9.0) |
 | `-subsample_spectra <n>` / `-subsample_fraction <f>` | 0 | Tag only a random subset (count or fraction); 0 = all |
 | `-subsample_seed <n>` | 1 | Seed for the `-subsample_*` selection |
 | `-mzpeak_read_memory <MB>` | 0 | No effect; accepted for existing command lines |
@@ -351,11 +446,14 @@ half.
 
 ## Output
 
-One TSV row per tag: `spectrum` (native ID), `tag` (sequence), `length`,
+One TSV row per tag: `spectrum` (native ID; `index=<k>`, the 0-based block,
+for MGF), `tag` (sequence), `length`,
 `charge` (fragment charge), `nterm_mass` / `cterm_mass` (flanking masses,
 4-decimal precision), `extended` / `gapped` (flags), `evalue`, `min_conf` /
-`mean_conf` (per-residue confidence, see below), and `fasta_hit`
-(`fwd` / `rev` / `-`, present only with `-fasta`). The `evalue` of a gapped row
+`mean_conf` (per-residue confidence, see below), and `fasta_hit`. The
+`fasta_hit` column is always written: `-` without `-fasta`; with `-fasta`, only
+matching tags are written, as `fwd` / `rev`, plus `efwd` / `erev` for
+entrapment-only matches under `-entrapment_fasta`. The `evalue` of a gapped row
 is the ranking value, E × `-gap_penalty`, so it can exceed `-max_evalue`; divide
 by the penalty for the raw E-value.
 
@@ -382,11 +480,14 @@ the TSV schema is unchanged unless asked for.
 **USI.** `-usi_collection <id>` appends a `usi` column,
 `mzspec:<id>:<run>:<indexType>:<indexNumber>`
 ([HUPO-PSI USI 1.0](https://github.com/HUPO-PSI/usi)), with `<run>` the input
-file name without its extension. `<id>` is one of the identifiers USI permits
+file name without its extension, or, for MGF, **with** it (`run.mgf`: USI lets
+the msRun carry the extension, and an MGF index points into the peak list, not
+the raw run). `<id>` is one of the identifiers USI permits
 (`PXDnnnnnn`, `MSVnnnnnnnnn`, `RPXDnnnnnn`, `RMSVnnnnnnnnn`, `PXLnnnnnn`), or
 `USI000000` until the dataset has one. The spectrum is named by `scan:<n>` for
 Thermo and scan-number IDs, `nativeId:<a,b,…>` for the other vendor formats,
-and otherwise `index:<n>`, its 0-based position in the input.
+and otherwise `index:<n>`, its 0-based position in the input. An MGF block is
+`scan:<n>` when its `SCANS=` is one number, and otherwise `index:<k>`.
 
 ## Reconciliation and mass shifts
 
@@ -444,11 +545,26 @@ options and their values.
   `-fasta` when given. HLA or proteasome models need a `-digest_models` table.
   No call is made, and the reason is written, on Da tolerances, timsTOF input,
   a median MS2 scan window or a median first MS2 peak above y1 of K plus 0.1
-  (147.21), fewer than 100 tag ends, a residue at probability 0 under the call
-  or the runner-up, or an exact tie between models of different classes. The
-  timsTOF and scan-window rules read instrument, native-ID and scan-window
-  metadata; without it they read `unknown` and do not block the call
-  (converted pseudo-spectra carry none). The first-peak rule needs no metadata.
+  (147.21), ion-count intensities without instrument metadata, fewer than 100
+  tag ends, a residue at probability 0 under the call or the runner-up, or an
+  exact tie between models of different classes. The timsTOF and scan-window
+  rules read instrument, native-ID and scan-window metadata; without it they
+  read `unknown` and do not block the call (converted pseudo-spectra carry
+  none, and neither does an MGF, whose `ion_mobility` row reads `absent`). The
+  first-peak rule needs no metadata, and neither does `ion_counts`: when the
+  input names no instrument and no native-ID format, and at least half of the
+  MS2 peak intensities above 0 are whole numbers (ion counts, as timsTOF data
+  have; Orbitrap intensities are not), no call is made. Native-ID formats that
+  name no vendor (peak list MS:1000774/MS:1000775, scan number only
+  MS:1000776, the generic MS:1000777 that OpenMS writes into an mzML converted
+  from an MGF, and MS:1000824) count as no format. So an MGF gets no call where
+  its mzML gets `no_call` for timsTOF or the scan window: on public runs the
+  first-peak rule caught every narrow-scan-window run, and `ion_counts` the
+  timsTOF ddaPASEF MGF it missed (PXD054073's AlphaTims MGF), while Orbitrap
+  MGFs kept every call their mzML made. Other TOF instruments that write ion
+  counts are withheld the same way when their metadata is missing, and so is
+  an Orbitrap MGF whose writer rounds intensities to integers; a timsTOF MGF
+  with scaled or averaged intensities is not caught.
 - **`-label_out`** counts tag ends that are a bare TMT, TMTpro or iTRAQ4 mass,
   against the same count 0.5 Da higher, and the Lys8 and Arg10 shares of the
   C-terminal K and R.
@@ -562,6 +678,16 @@ an exact k-mer lookup cannot tell an inferred residue from an observed one — o
 PXD000001, admitting gapped tags drops the true genus from rank 1 to rank 20.
 `-species_use_gapped` admits them anyway.
 
+**A spectrum counts for the taxa of its best tag.** A spectrum is one peptide,
+but up to `-max_tags` tags are reported for it, most of them wrong readings.
+Up to 1.9.0 a spectrum counted for every taxon that ANY of its tags supported,
+so each wrong tag added the taxa its 7-mer hit by chance, and a taxon's count
+grew with the number of tags reported per spectrum. Large and widely shared
+proteomes collected most of those chance hits, and changes that only reorder or
+admit lower-ranked tags moved the ranking. Now a spectrum counts for the taxa of
+its lowest-E-value tag that maps into the index (ties are united);
+`-species_evidence all` restores the union.
+
 `-species_deconvolve` subtracts the evidence a taxon earns only by resembling a
 stronger one, which is what makes near neighbours rank. It is opt-in: it turns
 the PXD000001 tail from Oryza/Zea into Pectobacterium's real relatives
@@ -612,6 +738,9 @@ spanning two vendors and three instruments:
 | HeLa, real ddaPASEF | Bruker timsTOF Pro | [PXD054073](https://www.ebi.ac.uk/pride/archive/projects/PXD054073) | `HeLa_T2_DDA_E_A_nLC_timspro_R02.d.7z` (3.17 GB) | `brfp convert -i <.d> -f 2 -o out.mzML` |
 | Label-free DDA | Orbitrap Astral | [PXD076528](https://www.ebi.ac.uk/pride/archive/projects/PXD076528) | `7673_YD12_P116861_S00_R1.raw` (2.4 GB) | `ThermoRawFileParser -i in.raw -b out.mzML -f 2` |
 | *Erwinia carotovora*, TMT6 | LTQ Orbitrap Velos (HCD) | [PXD000001](https://www.ebi.ac.uk/pride/archive/projects/PXD000001) | `TMT_Erwinia_1uLSike_Top10HCD_isol2_45stepped_60min_01-20141210.mzML` (450 MB), with its Mascot search `F063721.dat` | already mzML |
+
+The PXD054073 deposit also holds an AlphaTims MGF of the same run
+(`HeLa_T2_DDA_E_A_nLC_timspro_R02.filtered.mgf`), which FASTag reads as is.
 
 All three are high-resolution MS2 and want the 20 ppm default. Run PXD000001
 with `-fixed_modifications "Methylthio (C)" "TMT6plex (K)" "TMT6plex (N-term)"`.
@@ -723,6 +852,17 @@ tags fill the slots (hence the small change in total recall):
 - **Terminal modifications are not annotated.** A modification at either
   terminus shifts the whole precursor and is absorbed into the reported flanking
   masses; only residue-specific modifications appear in the tag.
+- **MGF limits.** Compressed MGF is refused. No ion mobility, instrument,
+  scan-window or activation metadata is read, because MGF has none (or no
+  common key for it); `-digest_out` withholds its call on ion-count
+  intensities instead (`ion_counts`). Every run starts with one read of the whole file to find
+  the blocks (an MGF has no index), and tagging starts when it ends. From RAM
+  it reads about 3 GB/s per thread, up to 16 threads (27 GB: 8.6 s at 1 thread,
+  0.64 s at 16, on tmpfs); on a cold, network or ZFS file system it is bound by
+  the file system's read bandwidth (27 GB on ZFS: 82 s at 1 thread, 5.4 s at
+  16; shared node, indicative figures). `-subsample_*` draws over blocks, so it
+  picks different spectra than the mzML the MGF came from. A malformed block
+  that `-subsample_*` skips goes unnoticed.
 - **A tag is not an identification.** No per-tag q-value or FDR is emitted, and
   a `-fasta` match, a species call, a `delta_out` bin and a glyco flag are all
   candidates to follow up, not results to report.

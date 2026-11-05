@@ -17,7 +17,8 @@ import type {
   TaxdbInfo
 } from './types'
 
-const SPECTRA = [{ name: 'Spectra', extensions: ['mzML', 'mzml', 'mzpeak', 'mzPeak'] }]
+// The spectra the CLI reads as -in (its input-format check is by extension).
+export const SPECTRA = [{ name: 'Spectra', extensions: ['mzML', 'mzml', 'mzpeak', 'mzPeak', 'mgf', 'MGF'] }]
 
 // A parameter's declared formats as a dialog filter; none means no filter
 // (a .taxdb, the taxonomy dumps), not the spectra one.
@@ -81,6 +82,8 @@ const api: FastagApi = {
   cancel: () => invoke<{ cancelled: boolean }>('cancel'),
   resultsQuery: (path: string, view: ResultsView, offset: number, limit: number) =>
     invoke<ResultsPage>('results_query', { path, view, offset, limit }),
+  exportResults: (path: string, view: ResultsView, columns: string[], dest: string) =>
+    invoke<number>('results_export', { path, view, columns, dest }),
   species: (path: string) => invoke<SpeciesReport | null>('species', { path }),
   report: (path: string) => invoke<string | null>('report_text', { path }),
   taxdbInfo: (explicit?: string) => invoke<TaxdbInfo | null>('taxdb_info', { explicit }),

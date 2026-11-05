@@ -1,5 +1,5 @@
 import type { JSX } from 'react'
-import type { LogoColumn } from './digestReport'
+import { fmt, type LogoColumn } from './digestReport'
 
 // Residue colour groups (by side chain). Colours are CSS tokens so the logo
 // reads in both themes.
@@ -27,6 +27,12 @@ const AXIS_H = 34 // position labels and n
 // A bold sans glyph at font-size 100 is about 72 units tall; its width is
 // set per letter with textLength, so W and M stay inside their column.
 const CAP = 72
+// A greyed column stays legible: at 0.3 its letters fell to 1.5-2.4:1, at
+// 0.55 to 2.3:1 (polar, light). At 0.75 every residue colour keeps 3.2:1 on
+// the panel in both themes. Only the letters fade: the position label and n
+// are text and keep full colour; the label is set in italics instead, so the
+// column does not read as faded by lightness alone.
+const FADED_OPACITY = 0.75
 
 interface Props {
   title: string
@@ -49,7 +55,7 @@ export default function SequenceLogo({ title, columns, maxBits, showN = false }:
   const ticks = top <= 4 ? Array.from({ length: Math.floor(top) + 1 }, (_, i) => i) : [0, Math.floor(top / 2), Math.floor(top)]
   const summary = columns
     .filter((c) => c.letters.length)
-    .map((c) => `${c.label} ${c.letters[c.letters.length - 1].aa} ${c.bits.toFixed(2)} bits${c.faded ? ' (few tag ends)' : ''}`)
+    .map((c) => `${c.label} ${c.letters[c.letters.length - 1].aa} ${c.bits.toFixed(2)} bits${c.fadedBecause ? ` (${c.fadedBecause})` : ''}`)
     .join(', ')
 
   return (
@@ -99,6 +105,7 @@ export default function SequenceLogo({ title, columns, maxBits, showN = false }:
                   <text
                     key={l.aa}
                     className={`aa ${GROUP[l.aa] ?? 'hydro'}`}
+                    opacity={c.faded ? FADED_OPACITY : undefined}
                     fontSize={100}
                     x={-(COL_W - 4) / 2}
                     textLength={COL_W - 4}
@@ -115,7 +122,7 @@ export default function SequenceLogo({ title, columns, maxBits, showN = false }:
               </text>
               {showN && c.n != null && (
                 <text className="tick" x={x} y={TOP + PLOT_H + 27} textAnchor="middle">
-                  {c.n.toLocaleString()}
+                  {fmt(c.n)}
                 </text>
               )}
             </g>

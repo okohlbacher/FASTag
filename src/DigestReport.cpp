@@ -92,13 +92,25 @@ namespace FASTag::Digest
           meta.instrument_name.empty() ? "The input names no instrument (metadata absent)." : "The input names the instrument " + meta.instrument_name + ".");
     r.add("meta", "instrument_model", meta.instrument_model.empty() ? "-" : meta.instrument_model, "-",
           meta.instrument_model.empty() ? "The input names no instrument model (metadata absent)." : "The input names the instrument model " + meta.instrument_model + ".");
+    // The peak-list and generic native ID formats name no vendor, so they say nothing about
+    // the instrument: MS:1000774 multiple peak list (MGF; FASTag's -out_spectra from an MGF),
+    // MS:1000775 single peak list, MS:1000776 scan number only, MS:1000777 spectrum identifier
+    // (what OpenMS writes when the type is unknown, so every FileConverter mzML made from an
+    // MGF carries it), MS:1000824 no nativeID format.
+    const std::string& nid = meta.native_id_type;
+    const bool nid_generic = nid == "MS:1000774" || nid == "MS:1000775" || nid == "MS:1000776" ||
+                             nid == "MS:1000777" || nid == "MS:1000824";
+    const bool have_nid = !meta.native_id_type.empty() && !nid_generic;
     r.add("meta", "native_id_format", meta.native_id_type.empty() ? "-" : meta.native_id_type, "-",
-          meta.native_id_type.empty() ? "The input names no native ID format (metadata absent)." : "The native ID format of the input is " + meta.native_id_type + ".");
+          meta.native_id_type.empty() ? "The input names no native ID format (metadata absent)."
+          : nid_generic ? "The native ID format of the input is the generic " + meta.native_id_type + ", which names no instrument (metadata absent)."
+                        : "The native ID format of the input is " + meta.native_id_type + ".");
     const std::uint64_t im = meta.im_vssc + meta.im_drift + meta.im_faims + meta.im_other;
-    const std::string im_word = meta.ms2 == 0 ? "absent" : im ? "yes" : "no";
+    const std::string im_word = meta.ms2 == 0 || meta.im_unread ? "absent" : im ? "yes" : "no";
     r.add("meta", "ion_mobility", im_word, u(meta.ms2),
-          meta.ms2 == 0 ? "No MS2 spectrum was read (metadata absent)."
-                        : u(im) + " of " + u(meta.ms2) + " MS2 spectra carry an ion mobility.");
+          meta.im_unread ? "The input format carries no ion mobility (metadata absent)."
+          : meta.ms2 == 0 ? "No MS2 spectrum was read (metadata absent)."
+                          : u(im) + " of " + u(meta.ms2) + " MS2 spectra carry an ion mobility.");
     std::string unit = "-";
     if (meta.im_vssc) unit = "1/K0";
     else if (meta.im_drift) unit = "ms";
@@ -114,6 +126,10 @@ namespace FASTag::Digest
     r.add("meta", "ms2_first_peak_mz", meta.first_peak.empty() ? "-" : num(first), u(meta.first_peak.size()),
           meta.first_peak.empty() ? "No MS2 spectrum has a peak."
                                   : "The median first MS2 peak is at m/z " + f(first, 2) + " over " + u(meta.first_peak.size()) + " spectra.");
+    const double whole = meta.peaks ? static_cast<double>(meta.peaks_whole) / static_cast<double>(meta.peaks) : 0.0;
+    r.add("meta", "ms2_whole_intensity_share", meta.peaks ? num(whole) : "-", u(meta.peaks),
+          meta.peaks ? "A share of " + f(whole, 4) + " of the " + u(meta.peaks) + " MS2 peak intensities above 0 are whole numbers."
+                     : "No MS2 spectrum has a peak with an intensity above 0.");
 
     // ---- counts
     const auto cterm = tc.cterm(), nterm = tc.nterm();
@@ -210,11 +226,15 @@ namespace FASTag::Digest
     const std::string inst = lower(meta.instrument_name + " " + meta.instrument_model);
     const bool tims_yes = inst.find("timstof") != std::string::npos || meta.native_id_type == "MS:1002818" ||
                           meta.native_id_type == "MS:1002819" || meta.im_vssc > 0;
-    const std::string tims = tims_yes ? "yes" : (have_inst || !meta.native_id_type.empty()) ? "no" : "unknown";
+    const std::string tims = tims_yes ? "yes" : (have_inst || have_nid) ? "no" : "unknown";
     constexpr double kY1K = 147.1128;
     const std::string scan = meta.scan_low.empty() ? "unknown" : low > kY1K + 0.1 ? "yes" : "no";
     // 0.1.3's own gate: the median lowest MS2 peak, which needs no metadata.
     const std::string fpk = meta.first_peak.empty() ? "unknown" : first > kY1K + 0.1 ? "yes" : "no";
+    // Without instrument metadata (MGF, converted pseudo-spectra), intensities
+    // that are mostly whole numbers are ion counts, as timsTOF data are.
+    constexpr double kWholeShare = 0.5;
+    const std::string counts = tims != "unknown" ? "no" : meta.peaks == 0 ? "unknown" : whole >= kWholeShare ? "yes" : "no";
     const std::string few = (tot < static_cast<std::uint64_t>(std::max(0, s.tag_min)) || !c.scored) ? "yes" : "no";
     const std::string lowres = s.low_resolution ? "yes" : "no";
     const std::string nonfin = c.scored && c.nonfinite ? "yes" : "no";
@@ -222,7 +242,7 @@ namespace FASTag::Digest
     std::string reason;
     for (const auto& [name, v] : {std::pair{"low_resolution", lowres}, std::pair{"timstof", tims},
                                   std::pair{"ms2_scan_window", scan}, std::pair{"ms2_first_peak", fpk},
-                                  std::pair{"few_tags", few}, std::pair{"nonfinite_score", nonfin},
+                                  std::pair{"ion_counts", counts}, std::pair{"few_tags", few}, std::pair{"nonfinite_score", nonfin},
                                   std::pair{"tie", tie}})
       if (reason.empty() && v == "yes") reason = name;
     std::string tied_names;
@@ -260,6 +280,8 @@ namespace FASTag::Digest
       else if (reason == "timstof") why = "the input is from a timsTOF";
       else if (reason == "ms2_scan_window") why = "the median MS2 scan window starts at m/z " + f(low, 2) + ", above y1 of K plus 0.1 (147.21)";
       else if (reason == "ms2_first_peak") why = "the median first MS2 peak is at m/z " + f(first, 2) + ", above y1 of K plus 0.1 (147.21)";
+      else if (reason == "ion_counts")
+        why = "the input names no instrument, and a share of " + f(whole, 4) + " of its MS2 peak intensities above 0 are whole numbers, as in timsTOF data";
       else if (reason == "nonfinite_score") why = "a residue seen at the tag ends has probability 0 under the call or the runner-up";
       else if (reason == "tie") why = tied_names + " fit the tag ends equally well";
       else why = u(n_c) + " C-terminal tag ends are fewer than " + std::to_string(s.tag_min);
@@ -283,6 +305,11 @@ namespace FASTag::Digest
           fpk == "unknown" ? "No MS2 spectrum has a peak."
                            : "The median first MS2 peak is at m/z " + f(first, 2) + (fpk == "yes" ? ", above" : ", not above") +
                                  " y1 of K plus 0.1 (147.21).");
+    r.add("nocall", "ion_counts", counts, u(meta.peaks),
+          tims != "unknown" ? "The input names its instrument or native ID format, so the timstof rule decides."
+          : meta.peaks == 0 ? "No MS2 spectrum has a peak with an intensity above 0."
+                            : "The input names no instrument, and a share of " + f(whole, 4) + " of the MS2 peak intensities above 0 are whole numbers (" +
+                                  (counts == "yes" ? "at least " : "below ") + f(kWholeShare, 2) + ").");
     r.add("nocall", "few_tags", few, u(n_c),
           u(tot) + " residue-key and " + u(n_c) + " C-terminal tag ends against a minimum of " + std::to_string(s.tag_min) + ".");
     r.add("nocall", "nonfinite_score", nonfin, "-",

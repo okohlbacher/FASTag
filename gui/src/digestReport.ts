@@ -1,4 +1,4 @@
-// Readers for the three long-form reports of FASTag 1.8.0 (-digest_out,
+// Readers for the three long-form reports of FASTag 1.9.0 and later (-digest_out,
 // -label_out, -massgap_out; doc/DESIGN-digest.md). Every file has the header
 // `section key value n description`; the reports differ only in their sections.
 // Everything here is pure so it can be tested without the bridge.
@@ -18,6 +18,8 @@ export interface Report {
   kind: ReportKind
   path: string
   rows: ReportRow[]
+  /// What a reader should know about a malformed file, e.g. a repeated key.
+  warnings: string[]
 }
 
 const COLUMNS = ['section', 'key', 'value', 'n', 'description'] as const
@@ -37,26 +39,26 @@ export function parseReport(text: string, path: string): Report {
   const missing = COLUMNS.filter((_, i) => idx[i] < 0)
   if (missing.length) throw new Error(`not a FASTag report: no ${missing.join(', ')} column`)
   const rows: ReportRow[] = []
+  const seen = new Set<string>()
+  const repeated = new Set<string>()
   for (const line of lines.slice(1)) {
     const f = line.split('\t')
     const at = (i: number): string => (f[idx[i]] ?? '').trim()
-    const n = at(3)
-    const nv = n === '' || n === '-' ? null : Number(n)
-    rows.push({
-      section: at(0),
-      key: at(1),
-      value: at(2),
-      n: nv != null && Number.isFinite(nv) ? nv : null,
-      description: at(4)
-    })
+    const r = { section: at(0), key: at(1), value: at(2), n: num(at(3)), description: at(4) }
+    const id = `${r.section} ${r.key}`
+    if (seen.has(id)) repeated.add(id)
+    seen.add(id)
+    rows.push(r)
   }
+  // The writer never repeats a key; the first row is the one read.
+  const warnings = [...repeated].map((id) => `${baseName(path)} has more than one ${id} row; the first one is used.`)
   const sections = new Set(rows.map((r) => r.section))
   let kind: ReportKind
   if (['call', 'pos', 'residue', 'model', 'nocall'].some((x) => sections.has(x))) kind = 'digest'
   else if (sections.has('nlabel') || sections.has('heavy')) kind = 'label'
   else if (sections.has('hist') || sections.has('peak') || sections.has('cys')) kind = 'massgap'
   else throw new Error('not a digest, label or mass-gap report: none of their sections is present')
-  return { kind, path, rows }
+  return { kind, path, rows, warnings }
 }
 
 export function section(r: Report, name: string): ReportRow[] {
@@ -71,8 +73,12 @@ export function value(r: Report, sec: string, key: string): string | undefined {
   return row(r, sec, key)?.value
 }
 
+/// A decimal number as the CLI writes it; hex, binary and octal literals,
+/// which Number() would accept, are not numbers here.
+const DECIMAL = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/
+
 export function num(s: string | undefined): number | null {
-  if (s == null || s === '' || s === '-') return null
+  if (s == null || !DECIMAL.test(s)) return null
   const v = Number(s)
   return Number.isFinite(v) ? v : null
 }
@@ -83,6 +89,7 @@ export interface DigestCall {
   status: 'call' | 'no_call' | 'unknown'
   model?: string
   cls?: string
+  /// Absent when the model table has no model of another class (`none`).
   runnerUp?: string
   runnerUpClass?: string
   margin: number | null
@@ -97,12 +104,13 @@ export function digestCall(r: Report): DigestCall {
   const v = (k: string): string | undefined => value(r, 'call', k)
   const st = v('status')
   const nocall = section(r, 'nocall')
+  const runnerUp = v('runner_up') === 'none' ? undefined : v('runner_up')
   return {
     status: st === 'call' || st === 'no_call' ? st : 'unknown',
     model: v('model'),
     cls: v('class'),
-    runnerUp: v('runner_up'),
-    runnerUpClass: v('runner_up_class'),
+    runnerUp,
+    runnerUpClass: runnerUp == null || v('runner_up_class') === 'none' ? undefined : v('runner_up_class'),
     margin: num(v('margin')),
     usesNterm: v('uses_nterm') == null ? null : v('uses_nterm') === 'yes',
     reason: v('reason'),
@@ -178,6 +186,8 @@ export interface LogoColumn {
   /// Fewer observations than the call needs (or an N-end column the call
   /// leaves out): drawn greyed.
   faded: boolean
+  /// Why the column is greyed, in words; null when it is not.
+  fadedBecause: string | null
 }
 
 const uniform: Dist = Object.fromEntries(ALPHABET.map((a) => [a, 1 / ALPHABET.length]))
@@ -200,7 +210,7 @@ export function smallSampleBias(n: number, s = ALPHABET.length): number {
 /// column (n not null), clamped at 0. Residues with no background share are
 /// left out of the sum and the stack.
 export function logoColumn(label: string, weights: Dist | null, q: Dist | null, n: number | null): LogoColumn {
-  const blank = (raw = 0): LogoColumn => ({ label, letters: [], bits: 0, n, raw, faded: false })
+  const blank = (raw = 0): LogoColumn => ({ label, letters: [], bits: 0, n, raw, faded: false, fadedBecause: null })
   if (!weights) return blank()
   const f = normalize(weights)
   const bg = normalize(q ?? uniform)
@@ -213,7 +223,7 @@ export function logoColumn(label: string, weights: Dist | null, q: Dist | null, 
   const letters = ALPHABET.filter((a) => f[a] > 0 && bg[a] > 0)
     .map((a) => ({ aa: a, bits: f[a] * bits }))
     .sort((x, y) => x.bits - y.bits || (x.aa < y.aa ? 1 : -1))
-  return { label, letters, bits, n, raw, faded: false }
+  return { label, letters, bits, n, raw, faded: false, fadedBecause: null }
 }
 
 const sum = (d: Dist): number => Object.values(d).reduce((t, v) => t + v, 0)
@@ -231,7 +241,8 @@ export function observedLogo(r: Report): LogoColumn[] {
     const c = positionCounts(r, end, p)
     const n = sum(c)
     const out = logoColumn(p, n > 0 ? c : null, q, n)
-    return { ...out, faded: n < tagMin || (end === 'N' && nUnused) }
+    const because = end === 'N' && nUnused ? 'N end not used by the call' : n < tagMin ? 'few tag ends' : null
+    return { ...out, faded: because != null, fadedBecause: because }
   }
   return [...C_POSITIONS.map((p) => col('C', p, qc)), ...N_POSITIONS.map((p) => col('N', p, qn))]
 }
@@ -242,7 +253,7 @@ export function modelLogo(r: Report, model: string): LogoColumn[] | null {
   const c = modelDist(r, model, 'C')
   const n = modelDist(r, model, 'N')
   if (!c && !n) return null
-  const empty = (p: string): LogoColumn => ({ label: p, letters: [], bits: 0, n: null, raw: 0, faded: false })
+  const empty = (p: string): LogoColumn => ({ label: p, letters: [], bits: 0, n: null, raw: 0, faded: false, fadedBecause: null })
   return [
     ...C_POSITIONS.map((p) => (p === 'P1' ? logoColumn(p, c, background(r, 'C'), null) : empty(p))),
     ...N_POSITIONS.map((p) => (p === "P1'" ? logoColumn(p, n, background(r, 'N'), null) : empty(p)))
@@ -262,7 +273,9 @@ export interface LabelFinding {
 export function labelFindings(r: Report): LabelFinding[] {
   const names: string[] = []
   for (const x of section(r, 'nlabel')) {
-    const name = x.key.slice(0, x.key.lastIndexOf('.'))
+    // Keys are <label>.<field>; one without a dot names no label.
+    const dot = x.key.lastIndexOf('.')
+    const name = dot > 0 ? x.key.slice(0, dot) : ''
     if (name && !names.includes(name)) names.push(name)
   }
   return names.map((label) => ({
@@ -344,9 +357,42 @@ export function gapPeaks(r: Report): GapPeak[] {
     })
 }
 
-/// Format a decimal for display without inventing precision.
+const formats = new Map<string, Intl.NumberFormat>()
+const format = (o: Intl.NumberFormatOptions): Intl.NumberFormat => {
+  const k = JSON.stringify(o)
+  let f = formats.get(k)
+  if (!f) formats.set(k, (f = new Intl.NumberFormat('en-US', o)))
+  return f
+}
+
+/// Format a number for display without inventing precision: at most @p digits
+/// decimals, and three significant digits for a non-zero value they would
+/// round to 0. One fixed format (1,234.5) whatever the OS locale, so counts
+/// and decimals in one table read alike.
 export function fmt(v: number | null, digits = 3): string {
   if (v == null) return '–'
-  if (Number.isInteger(v)) return v.toLocaleString()
-  return Number(v.toFixed(digits)).toString()
+  if (v !== 0 && Math.abs(v) < 0.5 * 10 ** -digits) return format({ maximumSignificantDigits: 3 }).format(v)
+  return format({ maximumFractionDigits: digits }).format(v)
+}
+
+/// A share (0..1) as a percentage, up to two decimals (12.43%); a non-zero
+/// share too small for them keeps three significant digits (0.00181%), as
+/// fmt does, so it does not read as 0.
+export function pct(v: number | null): string {
+  return v == null ? '–' : `${fmt(v * 100, 2)}%`
+}
+
+/// A mass difference in Da with its sign and four decimals: +0.9840, −484.5920.
+export function signedDa(v: number | null): string {
+  if (v == null) return '–'
+  const s = format({ minimumFractionDigits: 4, maximumFractionDigits: 4 }).format(Math.abs(v))
+  return v > 0 ? `+${s}` : v < 0 && s !== '0.0000' ? `−${s}` : s
+}
+
+/// The integers of a report sentence in the one number format the cards use
+/// (3614 -> 3,614). A decimal's digits, a zero-padded code and a name such as
+/// PXD063917 or K8 stay as written.
+export function groupDigits(text: string): string {
+  // No lookbehind: older WebKit (macOS before 13.3) cannot parse one.
+  return text.replace(/(^|[^\w.]|\D\.)([1-9]\d{3,})(?!\w|\.\d)/g, (_, pre: string, d: string) => `${pre}${fmt(Number(d))}`)
 }

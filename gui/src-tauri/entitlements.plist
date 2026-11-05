@@ -2,12 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <!-- The app spawns the bundled FASTag CLI, which loads its own collected
-       dylib closure (OpenMS, arrow, libomp, ...). Under the hardened runtime
-       these are all re-signed with our Developer ID, but disabling library
-       validation is the standard safety net for an app that ships third-party
-       native libraries, and notarization accepts it. -->
-  <key>com.apple.security.cs.disable-library-validation</key>
-  <true/>
+  <!-- Deliberately empty. The GUI loads no third-party native libraries, so
+       it needs no com.apple.security.cs.disable-library-validation. The
+       bundled FASTag CLI is a separate process with its own signature: it
+       does not inherit the GUI's entitlements, and it loads its dylib closure
+       (OpenMS, arrow, libomp, ...) without them. -->
 </dict>
 </plist>

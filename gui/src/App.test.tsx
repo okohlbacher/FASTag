@@ -4,8 +4,11 @@
 // before assertions.
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import App, { perJobOutputs } from './App'
+import { SPECTRA } from './api'
+import DigestPanel from './DigestPanel'
+import { parseReport } from './digestReport'
 import { installMockBridge, type MockBridge } from './testing/mockBridge'
 import digestTsv from './fixtures/digest.tsv?raw'
 import nocallTsv from './fixtures/digest_nocall.tsv?raw'
@@ -16,7 +19,7 @@ async function renderApp(mock: MockBridge): Promise<HTMLElement> {
   const { container } = render(<App />)
   // Settle the mount effects (probe badge, settings, taxdb) before the test
   // interacts -- also keeps React 19 act warnings out of the output.
-  await screen.findByText(mock.binaryInfo.detail)
+  await screen.findByText('CLI ready')
   await act(async () => {})
   return container
 }
@@ -31,21 +34,21 @@ const click = (el: Element): Promise<void> =>
 const logText = (container: HTMLElement): string => container.querySelector('.log')?.textContent ?? ''
 const doneLines = (container: HTMLElement): number => logText(container).split('— done —').length - 1
 
-const runButton = (): HTMLElement => screen.getByRole('button', { name: /^Run(ning…)?$/ })
-const outField = (): HTMLInputElement => screen.getByLabelText('Output tags (TSV)') as HTMLInputElement
+const runButton = (): HTMLElement => screen.getByRole('button', { name: /^(Run( on .+)?|Running…)$/ })
+const outField = (): HTMLInputElement => screen.getByLabelText(/Tags TSV/) as HTMLInputElement
 
 async function pickSingle(mock: MockBridge, path: string): Promise<void> {
   mock.nextPickInput = path
-  await click(screen.getByRole('button', { name: 'Choose file…' }))
+  await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
 }
 
 async function addBatch(mock: MockBridge, files: string[]): Promise<void> {
   mock.nextPickInputs = files
-  await click(screen.getByRole('button', { name: 'Add batch…' }))
+  await click(screen.getByRole('button', { name: /^(Add files for a batch|Add)…$/ }))
 }
 
 const startBatch = async (): Promise<void> =>
-  click(screen.getByRole('button', { name: /^Run batch/ }))
+  click(screen.getByRole('button', { name: /^Run \d+ remaining file/ }))
 
 const emitDone = (mock: MockBridge, runId: number | undefined, ok: boolean): Promise<void> =>
   act(async () => mock.emitDone({ ok, code: ok ? 0 : 1, runId }))
@@ -85,7 +88,7 @@ describe('run/batch orchestration', () => {
     // flip the run state.
     await emitDone(mock, 42, true)
     expect(mock.resultsQueryCalls).toHaveLength(0)
-    expect(runButton().textContent).toBe('Run')
+    expect(runButton().textContent).toMatch(/^Run( on .+)?$/)
   })
 
   it('buffers a done event that beats the run() reply, and consumes it exactly once', async () => {
@@ -102,7 +105,7 @@ describe('run/batch orchestration', () => {
     await act(async () => mock.releaseRun())
     await waitFor(() => expect(mock.resultsQueryCalls).toHaveLength(1))
     expect(mock.resultsQueryCalls[0].path).toBe('/d/a.tags.tsv')
-    expect(runButton().textContent).toBe('Run')
+    expect(runButton().textContent).toMatch(/^Run( on .+)?$/)
 
     // The parked result was consumed and the run marked settled: a late
     // duplicate must not log a second done line.
@@ -117,7 +120,7 @@ describe('run/batch orchestration', () => {
     mock.failNextRun = 'binary vanished'
     await click(runButton())
     await waitFor(() => expect(logText(container)).toContain('could not start: binary vanished'))
-    expect(runButton().textContent).toBe('Run')
+    expect(runButton().textContent).toMatch(/^Run( on .+)?$/)
     expect(mock.resultsQueryCalls).toHaveLength(0)
   })
 
@@ -129,7 +132,7 @@ describe('run/batch orchestration', () => {
     await click(runButton())
     await waitFor(() => expect(logText(container)).toContain('could not start:'))
     expect(logText(container)).toContain('ipc down')
-    expect(runButton().textContent).toBe('Run')
+    expect(runButton().textContent).toMatch(/^Run( on .+)?$/)
   })
 
   it('cancel during a batch stops the queue', async () => {
@@ -143,7 +146,7 @@ describe('run/batch orchestration', () => {
     expect(mock.cancelCalls).toBe(1)
     await emitDone(mock, 1, false) // the killed child's terminal event
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /^Run batch/ })).toBeDefined())
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Run \d+ remaining file/ })).toBeDefined())
     expect(mock.runCalls).toHaveLength(1) // b and c never started
     expect(screen.getByText('0/3 done')).toBeDefined()
   })
@@ -159,7 +162,7 @@ describe('run/batch orchestration', () => {
     // The kill missed: the run finished ok anyway. Cancel still means
     // "don't show me results".
     await emitDone(mock, 1, true)
-    await waitFor(() => expect(screen.getByRole('button', { name: /^Run batch/ })).toBeDefined())
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Run \d+ remaining file/ })).toBeDefined())
     expect(mock.resultsQueryCalls).toHaveLength(0)
     expect(screen.getByText('1/1 done')).toBeDefined()
   })
@@ -225,7 +228,7 @@ describe('run/batch orchestration', () => {
     await renderApp(mock)
     await addBatch(mock, ['/d/a.mzML'])
     await addBatch(mock, ['/d/a.mzML', '/d/b.mzML'])
-    expect(screen.getByRole('button', { name: 'Run batch (2)' })).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Run 2 remaining files' })).toBeDefined()
     expect(document.querySelectorAll('li.job')).toHaveLength(2)
   })
 
@@ -238,6 +241,28 @@ describe('run/batch orchestration', () => {
     expect(outField().value).toBe('C:\\runs.2026\\sample.tags.tsv')
     await pickSingle(mock, '/d/x.mzML')
     expect(outField().value).toBe('/d/x.tags.tsv')
+  })
+
+  it('takes an MGF input like an mzML: offered by the dialogs, named on the empty card, run with its own outputs', async () => {
+    expect(SPECTRA[0].extensions).toEqual(expect.arrayContaining(['mzML', 'mzpeak', 'mgf', 'MGF']))
+    const mock = installMockBridge()
+    await renderApp(mock)
+    expect(screen.getByText('Spectra as mzML, mzPeak or MGF')).toBeDefined()
+    await pickSingle(mock, '/d/run.mgf')
+    expect(outField().value).toBe('/d/run.tags.tsv')
+    await click(runButton())
+    await waitFor(() => expect(mock.runCalls).toHaveLength(1))
+    expect(mock.runCalls[0].in).toBe('/d/run.mgf')
+    expect(mock.runCalls[0].out).toBe('/d/run.tags.tsv')
+    // In a batch, run.mzML and run.mgf of one sample keep distinct outputs.
+    await emitDone(mock, 1, true)
+    await addBatch(mock, ['/e/s.mzML', '/e/s.mgf'])
+    await startBatch()
+    for (let id = 2; id <= 3; id++) {
+      await waitFor(() => expect(mock.runCalls).toHaveLength(id))
+      await emitDone(mock, id, true)
+    }
+    expect(mock.runCalls.slice(1).map((c) => c.out)).toEqual(['/e/s.tags.tsv', '/e/s.mgf.tags.tsv'])
   })
 
   it('derives the single-run species path from the tags output', async () => {
@@ -260,7 +285,8 @@ describe('run/batch orchestration', () => {
     expect(runButton()).toHaveProperty('disabled', false)
     await click(runButton())
     expect(screen.getByRole('button', { name: 'Running…' })).toHaveProperty('disabled', true)
-    expect(screen.getByRole('button', { name: 'Add batch…' })).toHaveProperty('disabled', true)
+    // The form is locked mid-run: the input controls give way to a summary.
+    expect(screen.queryByRole('button', { name: /^(Add files for a batch|Add)…$/ })).toBeNull()
     await emitDone(mock, 1, true)
     await waitFor(() => expect(runButton()).toHaveProperty('disabled', false))
   })
@@ -272,7 +298,7 @@ describe('run/batch orchestration', () => {
     await screen.findByText(/binary not runnable/)
     await act(async () => {})
     mock.nextPickInput = '/d/a.mzML'
-    await click(screen.getByRole('button', { name: 'Choose file…' }))
+    await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
     expect(runButton()).toHaveProperty('disabled', true)
     void container
   })
@@ -298,7 +324,7 @@ describe('run/batch orchestration', () => {
     await startBatch()
     await waitFor(() => expect(mock.runCalls).toHaveLength(1))
     await emitDone(mock, 1, true)
-    await waitFor(() => expect(screen.getByRole('button', { name: /^Run batch/ })).toBeDefined())
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Run \d+ remaining file/ })).toBeDefined())
     expect(logText(container)).toContain('results: species boom')
     expect(screen.getByText('1/1 done')).toBeDefined()
   })
@@ -320,7 +346,7 @@ describe('run/batch orchestration', () => {
     await pickSingle(mock, '/d/a.mzML')
     await click(runButton())
     await emitDone(mock, 1, true)
-    await screen.findByText('matched 3 of 3 rows')
+    await screen.findByText('Showing 3 of 3')
     expect(screen.getByText('AQRQAAN')).toBeDefined()
     expect(mock.resultsQueryCalls[0]).toMatchObject({ path: '/d/a.tags.tsv', offset: 0 })
   })
@@ -346,7 +372,7 @@ describe('run/batch orchestration', () => {
     await act(async () => mock.emitLog('some later line'))
     await emitDone(mock, 1, false)
     const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toMatch(/The run failed \(exit code 1\): Error: Unable to read file/)
+    expect(alert.textContent).toMatch(/a\.mzML failed \(exit code 1\)FASTag's reason:Error: Unable to read file/)
   })
 
   it('falls back to the last log line when no line names an error', async () => {
@@ -357,7 +383,7 @@ describe('run/batch orchestration', () => {
     await act(async () => mock.emitLog('-massgap_out requires -recon_out (the gaps are those of the reconciliations).'))
     await act(async () => mock.emitDone({ ok: false, code: 6, runId: 1 }))
     const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toMatch(/failed \(exit code 6\): -massgap_out requires -recon_out/)
+    expect(alert.textContent).toMatch(/failed \(exit code 6\)FASTag's reason:-massgap_out requires -recon_out/)
   })
 
   it('leaves inert options out of the command line', async () => {
@@ -373,12 +399,39 @@ describe('run/batch orchestration', () => {
 
   it('re-bases the configured reports on a new input instead of overwriting the last one', async () => {
     const mock = installMockBridge()
-    mock.settings.lastUsed = { digest_out: '/res/old.digest.tsv', recon_out: '/res/old.recon.tsv' }
+    mock.settings.lastUsed = { digest_out: '/res/old.digest.tsv', recon_out: '/res/old.recon.tsv', recon_fasta: '/db/human.fasta' }
     await renderApp(mock)
     await pickSingle(mock, '/d/b.mzML')
     await click(runButton())
     const sent = mock.runCalls[mock.runCalls.length - 1].params
-    expect(sent['digest_out']).toBe('/res/b.digest.tsv')
+    // Beside the tags output, so a same-named input in another folder gets its own.
+    expect(sent['digest_out']).toBe('/d/b.digest.tsv')
+  })
+
+  it('keeps Run disabled while a value or a combination would be refused by the CLI, and says why', async () => {
+    const mock = installMockBridge()
+    mock.settings.lastUsed = { recon_out: '/res/old.recon.tsv', max_peaks: '2000' }
+    await renderApp(mock)
+    await pickSingle(mock, '/d/b.mzML')
+    expect((runButton() as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText('recon_out needs a database: set recon_fasta (or fasta).')).toBeDefined()
+    expect(screen.getByText(/1 value to fix before running: Max peaks \(must be at most 1024\)/)).toBeDefined()
+    await click(runButton())
+    expect(mock.runCalls).toHaveLength(0)
+  })
+
+  it('reads a relative Output where the backend resolved it, beside the input', async () => {
+    const mock = installMockBridge()
+    await renderApp(mock)
+    await pickSingle(mock, '/d/b.mzML')
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Tags TSV/), { target: { value: 'run.tags.tsv' } })
+    })
+    await click(runButton())
+    expect(mock.runCalls[mock.runCalls.length - 1].out).toBe('run.tags.tsv')
+    await emitDone(mock, 1, true)
+    await screen.findByText('Showing 3 of 3')
+    expect(mock.resultsQueryCalls[mock.resultsQueryCalls.length - 1].path).toBe('/d/run.tags.tsv')
   })
 
   it('browses a parameter file with its own formats, not the spectra filter', async () => {
@@ -428,30 +481,32 @@ describe('digest tab', () => {
     recon_out: '/r/a.recon.tsv'
   }
 
-  it('is hidden until a run writes a report', async () => {
+  it('is always offered, and selected only when a run writes a report', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await pickSingle(mock, '/d/a.mzML')
     await click(runButton())
     await emitDone(mock, 1, true)
-    await screen.findByText('matched 3 of 3 rows')
-    expect(screen.queryByRole('tab', { name: /Digest/ })).toBeNull()
+    await screen.findByText('Showing 3 of 3')
+    expect(screen.getByRole('tab', { name: /Digest/ }).getAttribute('aria-selected')).toBe('false')
   })
 
   it('shows the call, the logos, the labels and the gaps after a run', async () => {
     const mock = installMockBridge()
-    mock.settings.lastUsed = { ...paths }
+    // recon_out needs a database, or the CLI refuses the run (and Run is disabled).
+    mock.settings.lastUsed = { ...paths, recon_fasta: '/db/human.fasta' }
     mock.reportFiles = { [paths.digest_out]: digestTsv, [paths.label_out]: labelTsv, [paths.massgap_out]: massgapTsv }
     await renderApp(mock)
-    await pickSingle(mock, '/d/a.mzML')
+    await pickSingle(mock, '/r/a.mzML')
     await click(runButton())
     await emitDone(mock, 1, true)
     const tab = await screen.findByRole('tab', { name: /Digest/ })
     expect(tab.getAttribute('aria-selected')).toBe('true')
     expect(mock.reportCalls).toEqual([paths.digest_out, paths.label_out, paths.massgap_out])
-    expect(screen.getByText(/runner-up Lys-C/)).toBeDefined()
-    expect(screen.getByText(/margin 0.3788 log-likelihood per tag/)).toBeDefined()
-    const said = screen.getAllByText('Trypsin is 0.3788 log-likelihood per tag ahead of Lys-C.')
+    const stat = (label: string): string | null | undefined => screen.getByText(label).nextElementSibling?.textContent
+    expect(stat('Runner-up, other enzyme class')).toBe('Lys-C')
+    expect(stat('Margin, log-likelihood per tag')).toBe('1.4788')
+    const said = screen.getAllByText('Trypsin fits 1.48 log-likelihood per tag end better than Lys-C.')
     expect(said.map((e) => e.tagName)).toEqual(['LI', 'TD']) // the sentence list, and the raw rows
     const logos = screen.getAllByRole('img').filter((e) => e.tagName === 'svg')
     expect(logos.map((l) => l.getAttribute('aria-label')?.split(':')[0])).toEqual([
@@ -461,23 +516,46 @@ describe('digest tab', () => {
     ])
     expect(logos[0].getAttribute('aria-label')).toMatch(/P1 K /)
     expect(screen.getAllByText('TMTpro')).toHaveLength(1)
-    expect(screen.getByText(/Most frequent modifications: Oxidation, Deamidated/)).toBeDefined()
-    expect(screen.getByText(/the 40 fullest of \d+ bins/)).toBeDefined()
-    await click(screen.getByRole('button', { name: /^Show all \d+ bins$/ }))
+    expect(screen.getByText(/the 40 fullest of 2,284 bins/)).toBeDefined()
+    await click(screen.getByRole('button', { name: 'Show all 2,284 bins' }))
     expect(screen.queryByText(/fullest of/)).toBeNull()
-  })
+    // Rendering all 2,284 histogram bins takes ~6 s on a GitHub runner (~2 s locally).
+  }, 20000)
 
-  it('shows a no-call with its reason and the absent metadata', async () => {
+  it('shows a no-call with its reason', async () => {
     const mock = installMockBridge()
     mock.settings.lastUsed = { digest_out: paths.digest_out }
     mock.reportFiles = { [paths.digest_out]: nocallTsv }
     await renderApp(mock)
-    await pickSingle(mock, '/d/a.mzML')
+    await pickSingle(mock, '/r/a.mzML')
     await click(runButton())
     await emitDone(mock, 1, true)
     await screen.findByText('No call')
-    expect(screen.getByText(/reason: the fragment tolerance is in Da · also too few terminal tags/)).toBeDefined()
-    expect(screen.getByText('Metadata absent for: timstof, ms2_scan_window.')).toBeDefined()
+    expect(screen.getByText('Reason').nextElementSibling?.textContent).toBe(
+      'the fragment tolerance is in Da · also the first MS2 peaks lie above y1 of K, too few terminal tags'
+    )
+    expect(screen.queryByText(/Metadata absent for/)).toBeNull()
+  })
+
+  it('names the ion_counts rule of 1.10.0 when it decides the no-call', async () => {
+    // The 1.10.0 no-call fixture with ion_counts as the deciding rule, the
+    // state FASTag writes for an MGF of ion-count intensities.
+    const tsv = nocallTsv
+      .replace(/^call\treason\tlow_resolution\t/m, 'call\treason\tion_counts\t')
+      .replace(/^nocall\tlow_resolution\tyes\t/m, 'nocall\tlow_resolution\tno\t')
+      .replace(/^nocall\tion_counts\tno\t/m, 'nocall\tion_counts\tyes\t')
+    expect(tsv).toMatch(/^nocall\tion_counts\tyes\t/m)
+    const mock = installMockBridge()
+    mock.settings.lastUsed = { digest_out: paths.digest_out }
+    mock.reportFiles = { [paths.digest_out]: tsv }
+    await renderApp(mock)
+    await pickSingle(mock, '/r/a.mzML')
+    await click(runButton())
+    await emitDone(mock, 1, true)
+    await screen.findByText('No call')
+    expect(screen.getByText('Reason').nextElementSibling?.textContent).toBe(
+      'no instrument is named and the intensities are ion counts, as on a timsTOF · also the first MS2 peaks lie above y1 of K, too few terminal tags'
+    )
   })
 
   it('reports a file that is not a report instead of failing', async () => {
@@ -485,7 +563,7 @@ describe('digest tab', () => {
     mock.settings.lastUsed = { digest_out: paths.digest_out }
     mock.reportFiles = { [paths.digest_out]: 'spectrum\ttag\n' }
     await renderApp(mock)
-    await pickSingle(mock, '/d/a.mzML')
+    await pickSingle(mock, '/r/a.mzML')
     await click(runButton())
     await emitDone(mock, 1, true)
     expect((await screen.findByRole('alert')).textContent).toMatch(/Cannot read \/r\/a.digest.tsv: not a FASTag report/)
@@ -497,7 +575,7 @@ describe('digest tab', () => {
     mock.nextPickReport = '/r/b.label.tsv'
     mock.reportFiles = { '/r/b.label.tsv': labelTsv, '/r/o.digest.tsv': other }
     await renderApp(mock)
-    await click(screen.getByRole('button', { name: 'digest, label or mass-gap report…' }))
+    await click(screen.getByRole('button', { name: 'Open a digest, label or mass-gap report…' }))
     await screen.findAllByText('TMTpro')
     mock.nextPickReport = '/r/o.digest.tsv'
     await click(screen.getByRole('button', { name: 'Open another report…' }))
@@ -522,8 +600,124 @@ describe('digest tab', () => {
     mock.nextPickReport = '/r/b.label.tsv'
     mock.reportFiles = { '/r/b.label.tsv': labelTsv }
     await renderApp(mock)
-    await click(screen.getByRole('button', { name: 'digest, label or mass-gap report…' }))
+    await click(screen.getByRole('button', { name: 'Open a digest, label or mass-gap report…' }))
     await screen.findAllByText('TMTpro')
     expect(screen.getByRole('tab', { name: /Digest/ }).getAttribute('aria-selected')).toBe('true')
+  })
+})
+
+describe('redesign: setup and run bar', () => {
+  it('locks the form while a run is in flight and lists what the run writes and changes', async () => {
+    const mock = installMockBridge()
+    mock.settings.lastUsed = { tag_length: '7' }
+    const container = await renderApp(mock)
+    await pickSingle(mock, '/d/a.mzML')
+    expect(runButton().textContent).toBe('Run on a.mzML')
+    await click(runButton())
+    const controls = container.querySelector('.controls')!
+    expect(controls.textContent).toContain('locked while FASTag runs')
+    expect(controls.textContent).toContain('a.tags.tsv')
+    expect(controls.textContent).toContain('-tag_length 7')
+    expect(container.querySelector('#p-tag_length')).toBeNull() // no editable field mid-run
+    await emitDone(mock, 1, true)
+    expect(container.querySelector('#p-tag_length')).not.toBeNull()
+    expect(controls.textContent).toMatch(/Last run.*a\.mzML.*Finished/)
+  })
+
+  it('counts the changed values of a section in its header, and draws a value and its unit as one control', async () => {
+    const mock = installMockBridge()
+    const container = await renderApp(mock)
+    const tagging = screen.getByRole('button', { name: /^Tagging/ })
+    expect(tagging.textContent).toMatch(/defaults$/)
+    await act(async () => {
+      fireEvent.change(document.getElementById('p-tag_length')!, { target: { value: '5' } })
+    })
+    expect(tagging.textContent).toMatch(/1 changed/)
+    expect(document.getElementById('h-tag_length')!.textContent).toMatch(/Default 3 · changed$/)
+    const unit = document.getElementById('p-fragment_tolerance_unit')!
+    expect(unit.closest('.with-unit')?.querySelector('#p-fragment_tolerance')).not.toBeNull()
+    expect(container.querySelectorAll('label[for="p-fragment_tolerance_unit"]')).toHaveLength(0)
+    await act(async () => {
+      fireEvent.change(unit, { target: { value: 'Da' } })
+    })
+    expect(tagging.textContent).toMatch(/2 changed/)
+  })
+
+  it('an inert field keeps its description and names what it needs', async () => {
+    const mock = installMockBridge()
+    await renderApp(mock)
+    await click(screen.getByRole('button', { name: /^Sequence matching/ }))
+    const help = document.getElementById('h-isobaric_tolerance')!
+    expect(help.textContent).toMatch(/^When matching against/)
+    expect(help.textContent).toMatch(/Needs -?fasta or -?recon_out/)
+    expect((document.getElementById('p-isobaric_tolerance') as HTMLInputElement).disabled).toBe(true)
+  })
+
+  it('Reset… asks first; Keep leaves the values, Reset restores the CLI defaults', async () => {
+    const mock = installMockBridge()
+    await renderApp(mock)
+    const tl = (): HTMLInputElement => document.getElementById('p-tag_length') as HTMLInputElement
+    await act(async () => {
+      fireEvent.change(tl(), { target: { value: '6' } })
+    })
+    await click(screen.getByRole('button', { name: 'Reset…' }))
+    await click(screen.getByRole('button', { name: 'Keep' }))
+    expect(tl().value).toBe('6')
+    await click(screen.getByRole('button', { name: 'Reset…' }))
+    await click(screen.getByRole('button', { name: 'Reset' }))
+    expect(tl().value).toBe('3')
+  })
+
+  it('the failure banner opens the log and copies the command line', async () => {
+    const mock = installMockBridge()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    const container = await renderApp(mock)
+    await pickSingle(mock, '/d/my data/a.mzML')
+    await click(runButton())
+    await act(async () => mock.emitLog('Error: Unable to read file'))
+    await emitDone(mock, 1, false)
+    const alert = await screen.findByRole('alert')
+    expect(alert.querySelector('code.why')?.textContent).toBe('Error: Unable to read file')
+    expect((container.querySelector('pre.log') as HTMLElement).hidden).toBe(true)
+    await click(screen.getByRole('button', { name: 'Show full log' }))
+    expect((container.querySelector('pre.log') as HTMLElement).hidden).toBe(false)
+    await click(screen.getByRole('button', { name: 'Copy command' }))
+    expect(writeText).toHaveBeenCalledWith("/mock/FASTag -in '/d/my data/a.mzML' -out '/d/my data/a.tags.tsv'")
+    expect(screen.getByRole('button', { name: 'Copied' })).toBeDefined()
+  })
+
+  it('Retry failed runs only the failed jobs; a cancelled job does not hide an earlier failure', async () => {
+    const mock = installMockBridge()
+    const container = await renderApp(mock)
+    await addBatch(mock, ['/d/a.mzML', '/d/b.mzML', '/d/c.mzML'])
+    await startBatch()
+    await emitDone(mock, 1, false)
+    await waitFor(() => expect(mock.runCalls).toHaveLength(2))
+    await emitDone(mock, 2, true)
+    await waitFor(() => expect(mock.runCalls).toHaveLength(3))
+    await click(screen.getByRole('button', { name: 'Cancel' }))
+    await act(async () => mock.emitDone({ ok: false, code: null, cancelled: true, runId: 3 }))
+    expect(container.querySelector('li.job.cancelled')?.textContent).toContain('Cancelled by you')
+    expect((await screen.findByRole('alert')).textContent).toMatch(/^1 of 3 batch jobs failed/)
+    // The failed job is Retry failed's: only the cancelled one remains.
+    expect(screen.getByRole('button', { name: 'Run 1 remaining file' })).toBeDefined()
+    await click(screen.getByRole('button', { name: 'Retry failed' }))
+    expect(mock.runCalls.map((c) => c.in)).toEqual(['/d/a.mzML', '/d/b.mzML', '/d/c.mzML', '/d/a.mzML'])
+    await emitDone(mock, 4, true)
+    expect(container.querySelector('li.job.done')?.textContent).toContain('a.mzML')
+  })
+})
+
+describe('redesign: mass-gap histogram', () => {
+  it('cuts the 0 bin at the scale of the other bins, labels its count, and counts what lies outside the range', () => {
+    const head = 'section\tkey\tvalue\tn\tdescription'
+    const hist = [['0.0000', 1000], ['0.9840', 400], ['15.9949', 200], ['2.0000', 1], ['9000.0', 1]]
+    const r = parseReport([head, ...hist.map(([g, n]) => `hist\t${g}\t${n}\t-\td`)].join('\n'), '/r/a.massgap.tsv')
+    const { container } = render(<DigestPanel reports={[r]} errors={[]} onOpen={() => {}} />)
+    const fig = screen.getByRole('img', { name: /^Spectra by precursor minus peptide mass/ })
+    expect(fig.getAttribute('aria-label')).toMatch(/in 1 Da steps from 0 to \+16 Da: 1,000 at 0 \(bar cut\); next \+1 \(400\), \+16 \(200\)/)
+    expect(container.querySelector('.hist .bar.cut .cut-label')?.textContent).toBe('1,000')
+    expect(container.querySelector('.gap-hist figcaption')?.textContent).toMatch(/1 beyond 0 to \+16 Da are not drawn/)
   })
 })

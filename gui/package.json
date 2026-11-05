@@ -1,7 +1,7 @@
 {
   "name": "fastag-gui",
   "private": true,
-  "version": "1.9.0",
+  "version": "1.10.0",
   "description": "Cross-platform desktop GUI for the FASTag mass-spectrometry sequence tagger (Tauri)",
   "author": "Oliver Kohlbacher and contributors",
   "license": "MIT",
@@ -14,7 +14,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "tauri": "tauri",
-    "params": "node scripts/gen-params.mjs src-tauri/resources/fastag/bin/FASTag > src/params.generated.json"
+    "params": "node scripts/gen-params.mjs src-tauri/resources/fastag/bin/FASTag src/params.generated.json"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
