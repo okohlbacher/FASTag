@@ -6,13 +6,17 @@
 #      isolation window target; frame=<n> IDs; minutes): every spectrum is
 #      written, PEPMASS is the isolation window target, RT is minutes x 60
 #   c. ddaPASEF with MS2 without peaks (ddapasef_empty.mzML: zlib and raw
-#      arrays of length 0, no arrays at all), a precursor without m/z and an
-#      MS2 without precursor: written as empty blocks, without PEPMASS and
-#      left out, each counted; --skip-empty leaves the empty ones out
+#      arrays of length 0, no arrays at all), a precursor without m/z, an MS2
+#      without precursorList, and precursors FASTag's mzML reader does not
+#      count (offsets only, a target of 0; and one such before a real one):
+#      written as empty blocks, without PEPMASS, left out (3), and from the
+#      second precursor, each counted; --skip-empty leaves the empty ones out
 #   d. FASTag gives the same tags from each MGF as from its mzML once column 1
 #      is cut, the same MS2 and tag counts, and column 1 index=<k> names the
 #      block whose TITLE is the mzML row's native ID
-#   e. usage and inconsistent arrays are errors
+#   e. usage and inconsistent arrays are errors, and a failed conversion
+#      leaves no MGF behind (nor touches an existing one)
+#   f. a negative charge is written as CHARGE=<z>-, which FASTag reads
 # Exits 77 (ctest SKIP) without a Python that has pyteomics; part d is
 # skipped when the binary cannot start.
 set -u
@@ -66,19 +70,25 @@ paste <(grep -o 'name="scan start time" value="[^"]*"' "$FIX/diatracer_like.mzML
 conv "$TMP/c.log" "$FIX/ddapasef_empty.mzML" "$TMP/dda.mgf"
 conv "$TMP/c2.log" --skip-empty "$FIX/ddapasef_empty.mzML" "$TMP/dda_skip.mgf"
 ms2=$(grep -c 'name="ms level" value="2"' "$FIX/ddapasef_empty.mzML")
-[ "$(blocks "$TMP/dda.mgf")" -eq $((ms2 - 1)) ] || fail "ddaPASEF: $(blocks "$TMP/dda.mgf") blocks, expected $((ms2 - 1))"
-grep -q "^$((ms2 - 1)) MS2 spectra written" "$TMP/c.log" || fail "ddaPASEF: written count"
+[ "$(blocks "$TMP/dda.mgf")" -eq $((ms2 - 3)) ] || fail "ddaPASEF: $(blocks "$TMP/dda.mgf") blocks, expected $((ms2 - 3))"
+grep -q "^$((ms2 - 3)) MS2 spectra written" "$TMP/c.log" || fail "ddaPASEF: written count"
 grep -q "warning: 4 MS2 spectra have no peaks: written as blocks without peaks" "$TMP/c.log" || { cat "$TMP/c.log" >&2; fail "ddaPASEF: empty count"; }
-grep -q "warning: 1 MS2 spectra have no precursor: left out" "$TMP/c.log" || fail "ddaPASEF: no-precursor count"
+grep -q "warning: 3 MS2 spectra have no precursor: left out" "$TMP/c.log" || { cat "$TMP/c.log" >&2; fail "ddaPASEF: no-precursor count"; }
 grep -q "warning: 1 MS2 spectra have neither a selected ion m/z" "$TMP/c.log" || fail "ddaPASEF: no-m/z count"
 [ "$(empty_blocks "$TMP/dda.mgf")" -eq 4 ] || fail "ddaPASEF: $(empty_blocks "$TMP/dda.mgf") blocks without peaks, expected 4"
 [ "$(no_pepmass "$TMP/dda.mgf")" -eq 1 ] || fail "ddaPASEF: $(no_pepmass "$TMP/dda.mgf") blocks without PEPMASS, expected 1"
-[ "$(blocks "$TMP/dda_skip.mgf")" -eq $((ms2 - 5)) ] || fail "--skip-empty: $(blocks "$TMP/dda_skip.mgf") blocks, expected $((ms2 - 5))"
+[ "$(blocks "$TMP/dda_skip.mgf")" -eq $((ms2 - 7)) ] || fail "--skip-empty: $(blocks "$TMP/dda_skip.mgf") blocks, expected $((ms2 - 7))"
 [ "$(empty_blocks "$TMP/dda_skip.mgf")" -eq 0 ] || fail "--skip-empty: blocks without peaks remain"
 grep -q "warning: 4 MS2 spectra have no peaks: left out (--skip-empty)" "$TMP/c2.log" || fail "--skip-empty: count"
 # The skipped blocks are the empty ones and nothing else.
 cmp -s <(awk '/^BEGIN IONS/ {b=""; p=0} {b=b $0 "\n"} /^[0-9]/ {p=1} /^END IONS/ && p {printf "%s\n", b}' "$TMP/dda.mgf") "$TMP/dda_skip.mgf" \
   || fail "--skip-empty changed more than the empty blocks"
+# Every PEPMASS is a selected ion m/z, once each: none from a precursor
+# FASTag does not count (no PEPMASS=0 from a target of 0), and the MS2 whose
+# first precursor has neither ion nor target takes its second one's.
+cmp -s <(grep -o 'name="selected ion m/z" value="[^"]*"' "$FIX/ddapasef_empty.mzML" | sed 's/.*value="//; s/"$//' | awk '{printf "%.10g\n", $1}' | sort) \
+       <(sed -n 's/^PEPMASS=//p' "$TMP/dda.mgf" | awk '{printf "%.10g\n", $1}' | sort) \
+  || fail "ddaPASEF: PEPMASS values are not the selected ion m/z values"
 # Selected ion m/z wins over the (rounded) isolation window target.
 first=$(grep -m1 -o 'name="selected ion m/z" value="[^"]*"' "$FIX/ddapasef_empty.mzML" | sed 's/.*value="//; s/"$//')
 awk -v w="$first" 'BEGIN {exit !(w > 0)}' || fail "fixture: no selected ion m/z"
@@ -103,6 +113,22 @@ open(sys.argv[2], "w", encoding="utf-8").write(src)
 EOF
 "$PY" -I "$CONV" "$TMP/bad.mzML" "$TMP/bad.mgf" 2>"$TMP/e.log" && fail "mismatched array lengths accepted"
 grep -q "must pair up" "$TMP/e.log" || { cat "$TMP/e.log" >&2; fail "mismatched arrays not explained"; }
+# The failure comes after the spectra before it were converted: no MGF, and
+# no temporary file, may be left; an existing destination stays as it was.
+[ -e "$TMP/bad.mgf" ] && fail "a failed conversion left a truncated MGF"
+ls "$TMP"/*.part >/dev/null 2>&1 && fail "a failed conversion left its temporary file"
+printf 'old\n' > "$TMP/keep.mgf"
+"$PY" -I "$CONV" "$TMP/bad.mzML" "$TMP/keep.mgf" 2>/dev/null && fail "mismatched array lengths accepted"
+[ "$(cat "$TMP/keep.mgf")" = old ] || fail "a failed conversion changed the existing destination"
+
+# ---- f. a negative charge: CHARGE=<z>-, not <-z>+ (which FASTag refuses)
+"$PY" -I -c 'import sys; s = open(sys.argv[1], encoding="utf-8").read(); k = "name=\"charge state\" value=\""; open(sys.argv[2], "w", encoding="utf-8").write(s.replace(k, k + "-", 1))' \
+  "$FIX/diatracer_like.mzML" "$TMP/neg.mzML" || fail "could not write the negative-charge mzML"
+grep -q 'name="charge state" value="-[0-9]' "$TMP/neg.mzML" || fail "could not write the negative-charge mzML"
+conv "$TMP/f.log" "$TMP/neg.mzML" "$TMP/neg.mgf"
+first_charge=$(sed -n 's/^CHARGE=//p' "$TMP/neg.mgf" | head -1)
+case "$first_charge" in [0-9]*-) ;; *) fail "negative charge written as CHARGE=$first_charge" ;; esac
+[ "$(grep -c '^CHARGE=[0-9]*+$' "$TMP/neg.mgf")" -eq $((n - 1)) ] || fail "the positive charges did not stay <z>+"
 
 # ---- d. FASTag: the same tags from the MGF as from the mzML
 if ! "$BIN" --help >/dev/null 2>&1; then
@@ -132,7 +158,9 @@ for pair in "diatracer_like.mzML dt.mgf" "ddapasef_empty.mzML dda.mgf" "ddapasef
 done
 # The empty blocks are read and skipped like the empty mzML spectra: the
 # summary counts the MS2 with peaks and a precursor only, in all three runs.
-grep -q "$((ms2 - 5)) MS2 spectra," "$TMP/ddapasef_empty.mzML.tsv.log" || fail "ddaPASEF mzML: MS2 count is not $((ms2 - 5))"
+grep -q "$((ms2 - 7)) MS2 spectra," "$TMP/ddapasef_empty.mzML.tsv.log" || fail "ddaPASEF mzML: MS2 count is not $((ms2 - 7))"
+# FASTag reads the negative charge from the MGF (MgfReader refused "-2+").
+tag "$TMP/neg.mgf" "$TMP/neg.mgf.tsv"
 grep -q "1 MGF blocks have no usable PEPMASS" "$TMP/dda.mgf.tsv.log" || fail "the block without PEPMASS is not warned about"
 
 echo "mzml_to_mgf_test: all checks passed"

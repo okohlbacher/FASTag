@@ -23,6 +23,10 @@ ddapasef_empty.mzML, after msconvert-style ddaPASEF output (PXD054073-like):
     empty <binary/>, uncompressed arrays of length 0, and
     <binaryDataArrayList count="0"/>
   - one MS2 whose precursor has no m/z at all, one MS2 with no precursorList
+  - precursors FASTag's mzML reader does not count as one: one MS2 whose
+    <precursor> has only isolation window offsets and an empty <activation/>
+    (no selectedIonList), one whose only target is 0, and one whose first
+    <precursor> is such and whose second carries the selected ion
   - 64-bit m/z and 32-bit intensity, zlib; indexedmzML with an exact index
 
 Needs pyteomics and numpy (to read the source).
@@ -160,9 +164,13 @@ def ddapasef(src: list) -> bytes:
     run = "HeLa_ddaPASEF_synthetic"
     # Layout: an MS1 frame, then up to 6 MS2 of the next frame, repeated.
     # Kinds: "ms2" normal, "e_zlib"/"e_raw"/"e_none" without peaks,
-    # "no_mz" a precursor without m/z, "no_prec" no precursorList.
+    # "no_mz" a precursor without m/z, "no_prec" no precursorList,
+    # "no_ion" a precursor with window offsets only and no selectedIonList,
+    # "zero_target" one whose only m/z is a target of 0, "second_prec" a
+    # first precursor like "no_ion" and a second, normal one.
     kinds = ["ms2"] * len(src)
-    for k, kind in {3: "e_zlib", 9: "e_raw", 14: "e_none", 20: "e_zlib", 25: "no_mz", 31: "no_prec"}.items():
+    for k, kind in {3: "e_zlib", 9: "e_raw", 14: "e_none", 20: "e_zlib", 25: "no_mz", 31: "no_prec",
+                    36: "no_ion", 41: "zero_target", 46: "second_prec"}.items():
         if k < len(kinds):
             kinds[k] = kind
     head = ('<mzML xmlns="http://psi.hupo.org/ms/mzml" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '
@@ -236,12 +244,28 @@ def ddapasef(src: list) -> bytes:
                       '<cvParam cvRef="MS" accession="MS:1000828" name="isolation window lower offset" value="1.0" unitCvRef="MS" unitAccession="MS:1000040" unitName="m/z"/>\n'
                       '<cvParam cvRef="MS" accession="MS:1000829" name="isolation window upper offset" value="1.0" unitCvRef="MS" unitAccession="MS:1000040" unitName="m/z"/>\n'
                       '</isolationWindow>\n')
-        prec = ('' if kind == "no_prec" else
-                '<precursorList count="1">\n<precursor>\n' + window + '<selectedIonList count="1">\n' + ion +
-                '</selectedIonList>\n<activation>\n'
-                '<cvParam cvRef="MS" accession="MS:1000133" name="collision-induced dissociation" value=""/>\n'
-                '<cvParam cvRef="MS" accession="MS:1000045" name="collision energy" value="42.0" unitCvRef="UO" unitAccession="UO:0000266" unitName="electronvolt"/>\n'
-                '</activation>\n</precursor>\n</precursorList>\n')
+        offsets_only = ('<precursor>\n<isolationWindow>\n'
+                        '<cvParam cvRef="MS" accession="MS:1000828" name="isolation window lower offset" value="1.0" unitCvRef="MS" unitAccession="MS:1000040" unitName="m/z"/>\n'
+                        '<cvParam cvRef="MS" accession="MS:1000829" name="isolation window upper offset" value="1.0" unitCvRef="MS" unitAccession="MS:1000040" unitName="m/z"/>\n'
+                        '</isolationWindow>\n<activation/>\n</precursor>\n')
+        normal = ('<precursor>\n' + window + '<selectedIonList count="1">\n' + ion +
+                  '</selectedIonList>\n<activation>\n'
+                  '<cvParam cvRef="MS" accession="MS:1000133" name="collision-induced dissociation" value=""/>\n'
+                  '<cvParam cvRef="MS" accession="MS:1000045" name="collision energy" value="42.0" unitCvRef="UO" unitAccession="UO:0000266" unitName="electronvolt"/>\n'
+                  '</activation>\n</precursor>\n')
+        if kind == "no_prec":
+            prec = ''
+        elif kind == "no_ion":
+            prec = '<precursorList count="1">\n' + offsets_only + '</precursorList>\n'
+        elif kind == "zero_target":
+            prec = ('<precursorList count="1">\n<precursor>\n<isolationWindow>\n'
+                    '<cvParam cvRef="MS" accession="MS:1000827" name="isolation window target m/z" value="0" unitCvRef="MS" unitAccession="MS:1000040" unitName="m/z"/>\n'
+                    '</isolationWindow>\n<activation/>\n</precursor>\n</precursorList>\n')
+        elif kind == "second_prec":
+            prec = '<precursorList count="2">\n' + offsets_only + normal + '</precursorList>\n'
+        else:
+            prec = '<precursorList count="1">\n' + normal + '</precursorList>\n'
+
         empty = np.empty(0)
         if kind == "e_zlib":
             body, n = arrays(empty, empty, "<f4"), 0
