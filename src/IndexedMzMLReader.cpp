@@ -29,6 +29,20 @@
 #include <xlocale.h>
 #endif
 
+#ifdef _WIN32
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
+#  ifndef WIN32_LEAN_AND_MEAN
+#    define WIN32_LEAN_AND_MEAN
+#  endif
+#  include <windows.h>
+#else
+#  include <cerrno>
+#  include <fcntl.h>
+#  include <unistd.h>
+#endif
+
 using namespace OpenMS;
 
 namespace FASTag
@@ -175,6 +189,98 @@ namespace FASTag
       void operator()(char* p) const { ::operator delete[](p, std::align_val_t{kPage}); }
     };
 
+    /// A file read at explicit offsets: one call per read (pread, or
+    /// ReadFile with an offset), where a stream needs a seek and a read and
+    /// copies through its own buffer.
+    class PositionedFile
+    {
+    public:
+      PositionedFile() = default;
+      PositionedFile(const PositionedFile&) = delete;
+      PositionedFile& operator=(const PositionedFile&) = delete;
+      ~PositionedFile() { close(); }
+
+      bool open(const std::string& path)
+      {
+        close();
+#ifdef _WIN32
+        // Shared as std::ifstream shares; CreateFileA, as it opens a narrow path: under FASTag's
+        // UTF-8 code page manifest both take UTF-8.
+        h_ = CreateFileA(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+                         FILE_ATTRIBUTE_NORMAL | FILE_FLAG_RANDOM_ACCESS, nullptr);
+        return h_ != INVALID_HANDLE_VALUE;
+#else
+        fd_ = ::open(path.c_str(), O_RDONLY);
+        return fd_ >= 0;
+#endif
+      }
+
+      /// Exactly @p n bytes at @p offset into @p dst; false on an error or
+      /// end of file.
+      bool read(std::uint64_t offset, char* dst, std::size_t n)
+      {
+        while (n > 0)
+        {
+#ifdef _WIN32
+          OVERLAPPED ov{};
+          ov.Offset = static_cast<DWORD>(offset & 0xffffffffu);
+          ov.OffsetHigh = static_cast<DWORD>(offset >> 32);
+          const DWORD want = static_cast<DWORD>(std::min<std::size_t>(n, std::size_t{1} << 30));
+          DWORD got = 0;
+          if (!ReadFile(h_, dst, want, &got, &ov) || got == 0) return false;
+#else
+          const ssize_t got = ::pread(fd_, dst, n, static_cast<off_t>(offset));
+          if (got < 0 && errno == EINTR) continue;
+          if (got <= 0) return false;
+#endif
+          dst += got;
+          offset += static_cast<std::uint64_t>(got);
+          n -= static_cast<std::size_t>(got);
+        }
+        return true;
+      }
+
+    private:
+      void close()
+      {
+#ifdef _WIN32
+        if (h_ != INVALID_HANDLE_VALUE) CloseHandle(h_);
+        h_ = INVALID_HANDLE_VALUE;
+#else
+        if (fd_ >= 0) ::close(fd_);
+        fd_ = -1;
+#endif
+      }
+#ifdef _WIN32
+      HANDLE h_ = INVALID_HANDLE_VALUE;
+#else
+      int fd_ = -1;
+#endif
+    };
+
+    /// A page-aligned byte buffer that keeps its storage and never zero-fills.
+    struct AlignedBuffer
+    {
+      std::unique_ptr<char[], AlignedDelete> data;
+      std::size_t cap = 0;
+
+      /// At least @p n bytes, the first @p keep of them preserved. False when
+      /// the memory is not there.
+      bool reserve(std::size_t n, std::size_t keep)
+      {
+        if (n <= cap) return true;
+        std::size_t c = cap ? cap : 65536;
+        while (c < n) c *= 2;
+        std::unique_ptr<char[], AlignedDelete> p(
+            static_cast<char*>(::operator new[](c, std::align_val_t{kPage}, std::nothrow)));
+        if (!p) return false;
+        if (keep) std::memcpy(p.get(), data.get(), keep);
+        data = std::move(p);
+        cap = c;
+        return true;
+      }
+    };
+
     /// What one piece of the file contributes to the scan.
     struct Piece
     {
@@ -192,7 +298,15 @@ namespace FASTag
     /// Byte offset of each spectrum, ascending, plus a terminator: the offset
     /// one past the last spectrum, so every spectrum has an end.
     std::shared_ptr<const std::vector<std::uint64_t>> offsets;
-    std::ifstream in;
+    PositionedFile in;
+    /// The spectrum being read, at the start of `raw`: page-aligned, never
+    /// zero-filled, reused. The kernel copies into it from the page cache,
+    /// and that copy is slow into a destination that is not aligned (see the
+    /// offset scan). Placing the bytes at the same offset within a page as
+    /// in the file was measured too: 7% slower reads than the old
+    /// std::string, against 7% faster for this. `bytes` views them.
+    AlignedBuffer raw;
+    std::string_view bytes;
     MzMLSpectrumDecoder decoder;
     /// Peaks without a DOM (see MzMLDirectDecoder.h); OpenMS's decoder above
     /// takes every spectrum this one declines.
@@ -200,7 +314,7 @@ namespace FASTag
     bool direct_on = !MzMLDirectDecoder::disabledByEnvironment();
     std::size_t n_direct = 0;   ///< MS2 peaks decoded directly
     std::size_t n_openms = 0;   ///< MS2 peaks decoded by OpenMS
-    std::string buffer;
+    std::string buffer;         ///< a copy of `bytes` for domParseSpectrum
     bool ok = false;
     bool rebuilt = false; ///< offsets came from a scan, not the file's index
 
@@ -347,8 +461,7 @@ namespace FASTag
     }
 
     impl_->offsets = offsets;
-    impl_->in.open(path, std::ios::binary);
-    impl_->ok = impl_->in.good();
+    impl_->ok = impl_->in.open(path);
   }
 
   std::vector<std::uint64_t> IndexedMzMLReader::scanSpectrumOffsets(const std::string& path,
@@ -386,13 +499,18 @@ namespace FASTag
 #endif
 #pragma omp parallel num_threads(threads)
     {
-      std::ifstream in(path, std::ios::binary);
-      // Page-aligned, like the page cache the kernel copies each piece
-      // from. Into a std::string (malloc'd, 16 bytes past a page boundary)
-      // that copy ran at half the speed: a 3.2 GB scan took 1.69 s against
-      // 0.77 s on one thread and 0.141 s against 0.078 s on 16 (AMD EPYC
-      // 7763, ibminode05). Pieces start at multiples of chunk_bytes, so the
-      // source of every read is page-aligned too.
+      // One read call per piece. Through std::ifstream, MSVC's runtime
+      // splits each piece into 4 KB ReadFile calls, about 790k for a 3.2 GB
+      // file, and every one takes the file's cache-map lock: past 4 threads
+      // on Windows the scan got slower, not faster (ETW traces of the 1.9.0
+      // scan). On Linux one call per piece is what the stream did already.
+      PositionedFile in;
+      const bool opened = in.open(path);
+      // Page-aligned and never zero-filled. The kernel's copy from the page
+      // cache into a std::string (malloc'd, 16 bytes past a page boundary)
+      // ran at half the speed: a 3.2 GB scan took 1.69 s against 0.77 s on
+      // one thread and 0.141 s against 0.078 s on 16 (AMD EPYC 7763,
+      // ibminode05).
       const std::size_t cap = static_cast<std::size_t>(std::min<std::uint64_t>(chunk_bytes + kOverlap, size));
       std::unique_ptr<char[], AlignedDelete> buf(
           static_cast<char*>(::operator new[](cap, std::align_val_t{kPage}, std::nothrow)));
@@ -407,10 +525,7 @@ namespace FASTag
           const std::uint64_t begin = static_cast<std::uint64_t>(p) * chunk_bytes;
           const std::uint64_t own = std::min<std::uint64_t>(chunk_bytes, size - begin);
           const std::uint64_t len = std::min<std::uint64_t>(own + kOverlap, size - begin);
-          in.clear();
-          in.seekg(static_cast<std::streamoff>(begin));
-          if (buf) in.read(buf.get(), static_cast<std::streamsize>(len));
-          if (!buf || !in)
+          if (!opened || !buf || !in.read(begin, buf.get(), static_cast<std::size_t>(len)))
           {
             piece.read = false;
             continue;
@@ -463,8 +578,7 @@ namespace FASTag
     impl_->rebuilt = other.impl_->rebuilt;
     impl_->direct_on = other.impl_->direct_on;
     if (!other.impl_->ok) return;
-    impl_->in.open(impl_->path, std::ios::binary);
-    impl_->ok = impl_->in.good();
+    impl_->ok = impl_->in.open(impl_->path);
   }
 
   IndexedMzMLReader::~IndexedMzMLReader() = default;
@@ -535,25 +649,24 @@ namespace FASTag
     const std::uint64_t len = end - begin;
     constexpr std::uint64_t kHead = 16384;
     const std::uint64_t head_len = std::min(len, kHead);
-    impl_->buffer.assign(static_cast<std::size_t>(head_len), '\0');
-    impl_->in.clear();
-    impl_->in.seekg(static_cast<std::streamoff>(begin));
-    impl_->in.read(impl_->buffer.data(), static_cast<std::streamsize>(head_len));
-    if (!impl_->in) return unreadable("a short read");
+    if (!impl_->raw.reserve(static_cast<std::size_t>(head_len), 0)) return unreadable("no memory");
+    if (!impl_->in.read(begin, impl_->raw.data.get(), static_cast<std::size_t>(head_len)))
+      return unreadable("a short read");
+    impl_->bytes = std::string_view(impl_->raw.data.get(), static_cast<std::size_t>(head_len));
 
     // The head is only known to hold the whole metadata region once the
     // arrays have been seen; otherwise fall back to the full element rather
     // than scrape a truncated one.
     auto read_rest = [&]() {
-      if (impl_->buffer.size() >= len) return true;
-      impl_->buffer.resize(static_cast<std::size_t>(len), '\0');
-      impl_->in.clear();
-      impl_->in.seekg(static_cast<std::streamoff>(begin + head_len));
-      impl_->in.read(impl_->buffer.data() + head_len,
-                     static_cast<std::streamsize>(len - head_len));
-      return static_cast<bool>(impl_->in);
+      const std::size_t have = impl_->bytes.size();
+      if (have >= len) return true;
+      if (!impl_->raw.reserve(static_cast<std::size_t>(len), have)) return false;
+      if (!impl_->in.read(begin + have, impl_->raw.data.get() + have, static_cast<std::size_t>(len) - have))
+        return false;
+      impl_->bytes = std::string_view(impl_->raw.data.get(), static_cast<std::size_t>(len));
+      return true;
     };
-    if (impl_->buffer.find(kArrays) == std::string::npos && len > head_len)
+    if (impl_->bytes.find(kArrays) == std::string_view::npos && len > head_len)
     {
       if (!read_rest()) return unreadable("a short read");
     }
@@ -563,7 +676,7 @@ namespace FASTag
     // after it are base64 that makes up almost the whole element. Taken
     // fresh each time because read_rest() may have grown the buffer.
     auto meta = [this]() -> std::string_view {
-      const std::string_view all(impl_->buffer);
+      const std::string_view all = impl_->bytes;
       const std::size_t cut = all.find(kArrays);
       return cut == std::string_view::npos ? all : all.substr(0, cut);
     };
@@ -586,7 +699,7 @@ namespace FASTag
     if (ms_level == 2 && want_peaks)
     {
       if (!read_rest()) return unreadable("a short read");
-      if (impl_->direct_on && impl_->direct.decode(impl_->buffer, spec))
+      if (impl_->direct_on && impl_->direct.decode(impl_->bytes, spec))
       {
         ++impl_->n_direct;
       }
@@ -600,6 +713,7 @@ namespace FASTag
           impl_->direct_on = false;
         try
         {
+          impl_->buffer.assign(impl_->bytes.data(), impl_->bytes.size());
           impl_->decoder.domParseSpectrum(impl_->buffer, spec);
           // domParseSpectrum resets the spectrum, so the level goes back on.
           spec.setMSLevel(static_cast<UInt>(ms_level));

@@ -386,8 +386,10 @@ jobs:
           # The mzPeak tests SKIP themselves in a build without mzPeak support
           # or without the validator. This job has both, so a skip here would
           # be a broken harness presenting as green -- the very class of
-          # failure this coverage exists for. Require a Passed line for each.
-          for t in mzpeak_roundtrip mzpeak_validate mzpeak_stream_test; do
+          # failure this coverage exists for. Require a Passed line for each,
+          # and for indexed_mzml_test, the mzML reader's and the direct peak
+          # decoder's spectrum-by-spectrum check against OpenMS.
+          for t in mzpeak_roundtrip mzpeak_validate mzpeak_stream_test indexed_mzml_test; do
             grep -E "Test +#[0-9]+: $t " ctest.log | grep -q 'Passed' \
               || { echo "::error::$t did not pass (skipped, not run or missing)"; grep -E "$t" ctest.log || true; exit 1; }
           done

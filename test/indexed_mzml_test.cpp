@@ -19,6 +19,7 @@
 
 #include <cmath>
 #include <cstring>
+#include <filesystem>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -226,8 +227,9 @@ int main(int argc, char** argv)
     }
   }
 
-  const std::string tmp =
-      std::getenv("TMPDIR") ? std::getenv("TMPDIR") : std::string("/tmp");
+  // temp_directory_path honours TMPDIR on POSIX and TEMP/TMP on Windows,
+  // where a literal "/tmp" does not exist (the test skipped there).
+  const std::string tmp = std::filesystem::temp_directory_path().string();
   const std::string indexed = rewrite(fixture, tmp + "/fastag_indexed_fixture.mzML", true);
   if (indexed.empty())
   {
