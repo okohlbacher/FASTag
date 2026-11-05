@@ -258,6 +258,22 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta)
   set_tests_properties(multilength_test PROPERTIES SKIP_RETURN_CODE 77)
+  # The same check with mawk as `awk` (Debian/Ubuntu's default awk where gawk
+  # is not installed), whose evaluation order differs from gawk's and BSD awk's
+  # where POSIX leaves it open; the test's awk once read every recon row as
+  # mixed under mawk only.
+  find_program(FASTAG_MAWK mawk)
+  if(FASTAG_MAWK AND NOT WIN32)
+    set(_mawk_dir ${CMAKE_CURRENT_BINARY_DIR}/test-mawk-bin)
+    file(MAKE_DIRECTORY ${_mawk_dir})
+    file(CREATE_LINK ${FASTAG_MAWK} ${_mawk_dir}/awk SYMBOLIC)
+    add_test(NAME multilength_test_mawk
+             COMMAND ${CMAKE_COMMAND} -E env "PATH=${_mawk_dir}:$ENV{PATH}"
+                     bash ${CMAKE_CURRENT_SOURCE_DIR}/test/multilength_test.sh $<TARGET_FILE:FASTag>
+                     ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                     ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta)
+    set_tests_properties(multilength_test_mawk PROPERTIES SKIP_RETURN_CODE 77)
+  endif()
 
   # Integration: refused parameters and output-path collisions, NaN precursors
   # in -stream, entrapment inside the target, native IDs carrying a tab.
