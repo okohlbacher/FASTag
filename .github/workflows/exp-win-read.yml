@@ -1,0 +1,753 @@
+name: exp-win-read
+
+# Experiment, not CI: why does the mzML read path of FASTag scale poorly with
+# threads on Windows? Builds FASTag (Release codegen plus PDBs) against the
+# cached OpenMS install of windows.yml, takes a deterministic prefix of the
+# public PXD063151 Proteome_EIF5A.mzML, and measures read and tag time at
+# 1/2/4/8 threads for four allocator variants:
+#   base   FASTag.exe as released (UCRT malloc -> NT heap with LFH)
+#   seg    the same binary with <heapType>SegmentHeap</heapType> in its manifest
+#   mi     FASTag linked against mimalloc.dll with mimalloc-redirect
+#   mioff  the mi binary with MIMALLOC_DISABLE_REDIRECT=1 (control)
+# plus a harness that separates file reading, decoding and the index scan,
+# and ETW traces (xperf: CPU samples, context switches, ready-thread events,
+# VirtualAlloc, all with stacks) reduced to folded stacks by TraceProcessor.
+#
+# A workflow_dispatch workflow must exist on the default branch to be
+# dispatched; this one lives only on its experiment branch, so it also runs on
+# pushes to that branch.
+
+on:
+  push:
+    branches: [exp/win-read-contention]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: exp-win-read-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  OPENMS_REF: 70cebcd14442cecd6bcd9794fb6786d3342cacc6
+  MIMALLOC_TAG: v2.2.4
+  # PXD063151, file listed by the PRIDE archive (3238158580 bytes, unindexed).
+  MZML_URL: https://ftp.pride.ebi.ac.uk/pride/data/archive/2025/08/PXD063151/Proteome_EIF5A.mzML
+  # 16 ranges of 32 MiB = the first 512 MiB of the file, about 60k MS2 spectra.
+  PART_BYTES: '33554432'
+  PARTS: '16'
+
+jobs:
+  exp:
+    runs-on: windows-2022
+    timeout-minutes: 200
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          path: fastag
+
+      - name: Normalize workspace path to forward slashes
+        shell: bash
+        run: echo "WS=${GITHUB_WORKSPACE//\\//}" >> "$GITHUB_ENV"
+
+      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
+        with:
+          arch: amd64
+
+      - name: Restore OpenMS install
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: openms-install
+          key: windows-x64-openms-${{ env.OPENMS_REF }}-msvc2022-${{ hashFiles('fastag/.github/env/openms.yml') }}-v1
+          fail-on-cache-miss: true
+
+      - name: Install the dependencies
+        uses: mamba-org/setup-micromamba@f457c30a868e4760d3a6fcea5f25dc655b8edf39 # v3
+        with:
+          environment-file: fastag/.github/env/openms.yml
+          init-shell: bash
+          cache-environment: true
+
+      - name: Configure conda paths
+        shell: bash -el {0}
+        run: echo "CONDA_LIB_PREFIX=${CONDA_PREFIX//\\//}/Library" >> "$GITHUB_ENV"
+
+      - name: Locate OpenMSConfig.cmake
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGETS_FILE=$(find "$WS/openms-install" -name 'OpenMSTargets.cmake' | head -1)
+          OPENMS_DIR=$(dirname "$TARGETS_FILE")
+          CFG=$(find "$WS/openms-install" -name 'OpenMSConfig.cmake' | head -1)
+          CFG_DIR=$(dirname "$CFG")
+          if [ "$CFG_DIR" != "$OPENMS_DIR" ]; then
+            cp -v "$CFG" "$CFG_DIR/OpenMSConfigVersion.cmake" "$OPENMS_DIR/"
+          fi
+          echo "OPENMS_DIR=$OPENMS_DIR" >> "$GITHUB_ENV"
+
+      - name: Build mimalloc (shared, with redirect)
+        shell: bash -el {0}
+        env:
+          MSYS_NO_PATHCONV: '1'
+          MSYS2_ARG_CONV_EXCL: '*'
+        run: |
+          set -euo pipefail
+          CLDIR=$(dirname "$(which cl)"); export PATH="$CLDIR:$PATH"
+          curl -fsSL --retry 3 -o mi.tar.gz "https://github.com/microsoft/mimalloc/archive/refs/tags/$MIMALLOC_TAG.tar.gz"
+          mkdir -p mimalloc-src && tar -xzf mi.tar.gz -C mimalloc-src --strip-components=1
+          cmake -S mimalloc-src -B mimalloc-build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl \
+            -DCMAKE_C_FLAGS_RELEASE="/O2 /Ob2 /DNDEBUG /Zi" -DCMAKE_CXX_FLAGS_RELEASE="/O2 /Ob2 /DNDEBUG /Zi" \
+            -DCMAKE_SHARED_LINKER_FLAGS_RELEASE="/DEBUG:FULL /OPT:REF /OPT:ICF" \
+            -DMI_BUILD_SHARED=ON -DMI_BUILD_STATIC=OFF -DMI_BUILD_OBJECT=OFF -DMI_BUILD_TESTS=OFF \
+            -DMI_OVERRIDE=ON -DMI_WIN_REDIRECT=ON \
+            -DCMAKE_INSTALL_PREFIX="$WS/mimalloc-install"
+          cmake --build mimalloc-build
+          cmake --install mimalloc-build
+          find "$WS/mimalloc-install" "$WS/mimalloc-build" -maxdepth 2 \( -name '*.dll' -o -name '*.lib' -o -name '*.pdb' \) | sort
+          MILIB=$(find "$WS/mimalloc-install" -name 'mimalloc.dll.lib' | head -1)
+          [ -n "$MILIB" ] || { echo "::error::no mimalloc.dll.lib"; exit 1; }
+          echo "MILIB=$MILIB" >> "$GITHUB_ENV"
+
+      - name: Configure and build FASTag (base and mimalloc), Release codegen with PDBs
+        shell: bash -el {0}
+        env:
+          MSYS_NO_PATHCONV: '1'
+          MSYS2_ARG_CONV_EXCL: '*'
+        run: |
+          set -euo pipefail
+          CLDIR=$(dirname "$(which cl)"); export PATH="$CLDIR:$PATH"
+          common=(-G Ninja -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl
+            -DCMAKE_POLICY_DEFAULT_CMP0141=NEW -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=ProgramDatabase
+            "-DCMAKE_CXX_FLAGS_RELEASE=/O2 /Ob2 /DNDEBUG /Zi /FS"
+            "-DOpenMS_DIR=$OPENMS_DIR"
+            "-DCMAKE_PREFIX_PATH=$WS/openms-install;$CONDA_LIB_PREFIX"
+            "-DLIBXML2_INCLUDE_DIR=$CONDA_LIB_PREFIX/include/libxml2"
+            "-DLIBXML2_LIBRARY=$CONDA_LIB_PREFIX/lib/libxml2.lib")
+          cmake -S fastag -B fastag/build "${common[@]}" \
+            "-DCMAKE_EXE_LINKER_FLAGS_RELEASE=/DEBUG:FULL /OPT:REF /OPT:ICF" 2>&1 | tee configure.log
+          grep -q "FASTag: OpenMP" configure.log || { echo "::error::no OpenMP"; exit 1; }
+          cmake --build fastag/build --target FASTag
+          cmake -S fastag -B fastag/build-mi "${common[@]}" \
+            "-DCMAKE_EXE_LINKER_FLAGS_RELEASE=/DEBUG:FULL /OPT:REF /OPT:ICF" \
+            "-DCMAKE_EXE_LINKER_FLAGS=/INCLUDE:mi_version $MILIB" > configure-mi.log 2>&1 || { cat configure-mi.log; exit 1; }
+          cmake --build fastag/build-mi --target FASTag
+          MIBIN=$(dirname "$(find "$WS/mimalloc-install" -name 'mimalloc.dll' | head -1)")
+          cp -v "$MIBIN/mimalloc.dll" "$MIBIN/mimalloc-redirect.dll" fastag/build-mi/
+          cp -v mimalloc-build/*.pdb fastag/build-mi/ 2>/dev/null || true
+
+          # The read/decode harness, from the same OpenMS, in the same two flavours.
+          mkdir -p harness
+          cat > harness/CMakeLists.txt <<'EOF'
+          cmake_minimum_required(VERSION 3.24)
+          project(readharness CXX)
+          set(CMAKE_CXX_STANDARD 23)
+          set(CMAKE_CXX_STANDARD_REQUIRED ON)
+          find_package(OpenMS REQUIRED)
+          find_package(OpenMP REQUIRED)
+          add_executable(readharness harness.cpp)
+          target_link_libraries(readharness PRIVATE OpenMS OpenMP::OpenMP_CXX)
+          EOF
+          cat > harness/harness.cpp <<'EOF'
+          // readharness <file.mzML> <mode: io|decode|both|scan> <threads> [reps]
+          // io:     each thread reads its spectra like FASTag (own ifstream, seekg, 16 KB head, rest)
+          // decode: spectra preloaded in memory; MzMLSpectrumDecoder::domParseSpectrum per spectrum
+          // both:   io then decode: FASTag's read path without tagging
+          // scan:   FASTag-style index scan: each thread reads 4 MB pieces with its own ifstream
+          #include <OpenMS/FORMAT/HANDLERS/MzMLSpectrumDecoder.h>
+          #include <OpenMS/KERNEL/MSSpectrum.h>
+          #include <omp.h>
+          #include <algorithm>
+          #include <chrono>
+          #include <cstdio>
+          #include <cstdlib>
+          #include <cstring>
+          #include <fstream>
+          #include <string>
+          #include <vector>
+          #define NOMINMAX
+          #include <windows.h>
+          static void thread_times(double& user, double& kern)
+          {
+            FILETIME c, e, k, u;
+            GetThreadTimes(GetCurrentThread(), &c, &e, &k, &u);
+            auto f = [](FILETIME t) { return ((static_cast<unsigned long long>(t.dwHighDateTime) << 32) | t.dwLowDateTime) / 1e7; };
+            user = f(u); kern = f(k);
+          }
+          using Clock = std::chrono::steady_clock;
+          int main(int argc, char** argv)
+          {
+            if (argc < 4) { std::fprintf(stderr, "usage: readharness file mode threads [reps]\n"); return 2; }
+            const std::string path = argv[1], mode = argv[2];
+            const int threads = std::atoi(argv[3]);
+            const int reps = argc > 4 ? std::atoi(argv[4]) : 1;
+            std::string all;
+            {
+              std::ifstream in(path, std::ios::binary);
+              in.seekg(0, std::ios::end);
+              all.resize(static_cast<size_t>(in.tellg()));
+              in.seekg(0);
+              in.read(all.data(), static_cast<std::streamsize>(all.size()));
+            }
+            std::vector<std::pair<size_t, size_t>> spans;
+            for (size_t k = all.find("<spectrum "); k != std::string::npos; k = all.find("<spectrum ", k + 1))
+            {
+              size_t e = all.find("</spectrum>", k);
+              if (e == std::string::npos) break;
+              spans.emplace_back(k, e + 11 - k);
+            }
+            const size_t n = spans.size();
+            std::vector<std::string> mem;
+            if (mode == "decode")
+            {
+              mem.reserve(n);
+              for (auto& s : spans) mem.emplace_back(all.substr(s.first, s.second));
+            }
+            const size_t file_size = all.size();
+            if (mode != "decode") { std::string().swap(all); }
+            const size_t chunk = size_t(4) << 20;
+            const long long pieces = static_cast<long long>((file_size + chunk - 1) / chunk);
+            std::printf("HARNESS_INFO file_bytes=%zu spectra=%zu\n", file_size, n);
+            for (int rep = 0; rep < reps; ++rep)
+            {
+              std::vector<double> t_user(threads, 0), t_kern(threads, 0), t_call(threads, 0);
+              std::vector<long long> t_peaks(threads, 0);
+              const auto w0 = Clock::now();
+          #pragma omp parallel num_threads(threads)
+              {
+                const int me = omp_get_thread_num();
+                double u0, k0, u1, k1;
+                thread_times(u0, k0);
+                OpenMS::MzMLSpectrumDecoder decoder;
+                std::ifstream in;
+                if (mode != "decode") in.open(path, std::ios::binary);
+                std::string buf;
+                double call = 0;
+                long long peaks = 0;
+                if (mode == "scan")
+                {
+          #pragma omp for schedule(dynamic, 1)
+                  for (long long p = 0; p < pieces; ++p)
+                  {
+                    const auto c0 = Clock::now();
+                    const size_t begin = static_cast<size_t>(p) * chunk;
+                    const size_t len = std::min(chunk + 4096, file_size - begin);
+                    buf.resize(len);
+                    in.clear();
+                    in.seekg(static_cast<std::streamoff>(begin));
+                    in.read(buf.data(), static_cast<std::streamsize>(len));
+                    for (size_t k = buf.find('<'); k != std::string::npos && k < chunk; k = buf.find('<', k + 1))
+                      if (buf.compare(k, 10, "<spectrum ") == 0) ++peaks;
+                    call += std::chrono::duration<double>(Clock::now() - c0).count();
+                  }
+                }
+                else
+                {
+          #pragma omp for schedule(dynamic, 16)
+                  for (long long i = 0; i < static_cast<long long>(n); ++i)
+                  {
+                    const auto c0 = Clock::now();
+                    OpenMS::MSSpectrum spec;
+                    if (mode == "decode")
+                    {
+                      decoder.domParseSpectrum(mem[static_cast<size_t>(i)], spec);
+                    }
+                    else
+                    {
+                      const size_t begin = spans[static_cast<size_t>(i)].first, len = spans[static_cast<size_t>(i)].second;
+                      const size_t head = std::min<size_t>(len, 16384);
+                      buf.assign(head, '\0');
+                      in.clear();
+                      in.seekg(static_cast<std::streamoff>(begin));
+                      in.read(buf.data(), static_cast<std::streamsize>(head));
+                      if (len > head)
+                      {
+                        buf.resize(len, '\0');
+                        in.clear();
+                        in.seekg(static_cast<std::streamoff>(begin + head));
+                        in.read(buf.data() + head, static_cast<std::streamsize>(len - head));
+                      }
+                      if (mode == "both") decoder.domParseSpectrum(buf, spec);
+                    }
+                    peaks += static_cast<long long>(spec.size());
+                    call += std::chrono::duration<double>(Clock::now() - c0).count();
+                  }
+                }
+                thread_times(u1, k1);
+                t_user[me] = u1 - u0; t_kern[me] = k1 - k0; t_call[me] = call; t_peaks[me] = peaks;
+              }
+              const double wall = std::chrono::duration<double>(Clock::now() - w0).count();
+              double su = 0, sk = 0, sc = 0; long long sp = 0;
+              for (int t = 0; t < threads; ++t) { su += t_user[t]; sk += t_kern[t]; sc += t_call[t]; sp += t_peaks[t]; }
+              const double items = mode == "scan" ? double(pieces) : double(n);
+              std::printf("HARNESS mode=%s threads=%d rep=%d items=%.0f wall=%.4f call_s=%.4f user_s=%.4f kernel_s=%.4f us_per_item=%.3f count=%lld\n",
+                          mode.c_str(), threads, rep, items, wall, sc, su, sk, 1e6 * sc / std::max(1.0, items), sp);
+              std::fflush(stdout);
+            }
+            return 0;
+          }
+          EOF
+          cmake -S harness -B harness/build "${common[@]}" \
+            "-DCMAKE_EXE_LINKER_FLAGS_RELEASE=/DEBUG:FULL /OPT:REF /OPT:ICF"
+          cmake --build harness/build
+          cmake -S harness -B harness/build-mi "${common[@]}" \
+            "-DCMAKE_EXE_LINKER_FLAGS_RELEASE=/DEBUG:FULL /OPT:REF /OPT:ICF" \
+            "-DCMAKE_EXE_LINKER_FLAGS=/INCLUDE:mi_version $MILIB"
+          cmake --build harness/build-mi
+          cp -v "$MIBIN/mimalloc.dll" "$MIBIN/mimalloc-redirect.dll" harness/build-mi/
+          for e in fastag/build/FASTag.exe fastag/build-mi/FASTag.exe harness/build/readharness.exe harness/build-mi/readharness.exe; do
+            echo "== $e"; dumpbin /nologo /dependents "$e" | sed -n '/Image has the following dependencies/,/Summary/p'
+          done
+          ls -la fastag/build/*.pdb fastag/build-mi/*.pdb harness/build/*.pdb
+
+      - name: Make the segment-heap variants (manifest heapType)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ws = $env:GITHUB_WORKSPACE
+          foreach ($src in @("$ws\fastag\build\FASTag.exe", "$ws\harness\build\readharness.exe")) {
+            $dst = $src -replace '\.exe$', '_seg.exe'
+            Copy-Item $src $dst -Force
+            $m = "$env:RUNNER_TEMP\" + [IO.Path]::GetFileNameWithoutExtension($dst) + '.manifest'
+            & mt.exe -nologo "-inputresource:$dst;#1" "-out:$m"
+            $x = if ($LASTEXITCODE -eq 0 -and (Test-Path $m)) { Get-Content -Raw $m } else { '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1"></assembly>' }
+            $heap = '<heapType xmlns="http://schemas.microsoft.com/SMI/2020/WindowsSettings">SegmentHeap</heapType>'
+            if ($x -match '</windowsSettings>') { $x = $x -replace '</windowsSettings>', "$heap</windowsSettings>" }
+            else { $x = $x -replace '</assembly>', "<application xmlns=`"urn:schemas-microsoft-com:asm.v3`"><windowsSettings>$heap</windowsSettings></application></assembly>" }
+            Set-Content -Encoding utf8 $m $x
+            & mt.exe -nologo -manifest $m "-outputresource:$dst;#1"
+            if ($LASTEXITCODE -ne 0) { throw "mt failed for $dst" }
+            & mt.exe -nologo "-inputresource:$dst;#1" "-out:$m.check"
+            $chk = Get-Content -Raw "$m.check"
+            Write-Host "== $dst"; Write-Host $chk
+            if ($chk -notmatch 'SegmentHeap') { throw "no SegmentHeap in $dst" }
+          }
+
+      - name: Add runtime DLL directories to PATH
+        shell: bash
+        run: |
+          echo "$WS/openms-install/bin" >> "$GITHUB_PATH"
+          echo "$CONDA_LIB_PREFIX/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch a deterministic prefix of Proteome_EIF5A.mzML
+        shell: bash
+        run: |
+          set -euo pipefail
+          D="$RUNNER_TEMP/data"; mkdir -p "$D/parts"
+          curl -fsSI "$MZML_URL" | tr -d '\r' | grep -i -E '^(HTTP|content-length|last-modified)' | tee "$D/source_headers.txt"
+          start=$(date +%s)
+          pids=()
+          for i in $(seq 0 $((PARTS - 1))); do
+            s=$((i * PART_BYTES)); e=$((s + PART_BYTES - 1))
+            curl -fsS --retry 10 --retry-all-errors --connect-timeout 30 -r "$s-$e" -o "$D/parts/p$(printf %02d "$i")" "$MZML_URL" &
+            pids+=($!)
+          done
+          fail=0; for p in "${pids[@]}"; do wait "$p" || fail=1; done
+          [ "$fail" = 0 ] || { echo "::error::a range download failed"; exit 1; }
+          for f in "$D"/parts/p*; do [ "$(stat -c %s "$f")" = "$PART_BYTES" ] || { echo "::error::$f has the wrong size"; exit 1; }; done
+          cat "$D"/parts/p* > "$D/prefix.bin"; rm -rf "$D/parts"
+          echo "download: $(( $(date +%s) - start )) s"
+          cat > "$RUNNER_TEMP/cut.py" <<'EOF'
+          import hashlib, re, sys
+          src, dst = sys.argv[1], sys.argv[2]
+          data = open(src, 'rb').read()
+          end = data.rfind(b'</spectrum>')
+          assert end > 0
+          body = data[:end + len(b'</spectrum>')]
+          n = body.count(b'<spectrum ')
+          m = re.search(rb'<spectrumList count="(\d+)"', body[:200000])
+          body = body[:m.start(1)] + str(n).encode() + body[m.end(1):]
+          tail = b'\n</spectrumList>\n</run>\n</mzML>\n'
+          if b'<indexedmzML' in body[:4096]:
+              tail += b'</indexedmzML>\n'
+          out = body + tail
+          open(dst, 'wb').write(out)
+          print('prefix_sha256', hashlib.sha256(data).hexdigest())
+          print('subset_bytes', len(out), 'subset_sha256', hashlib.sha256(out).hexdigest())
+          print('spectra', n, 'ms2', body.count(b'name="ms level" value="2"'))
+          for acc, name in [(b'MS:1000576', 'no compression'), (b'MS:1000574', 'zlib'), (b'MS:1000521', '32-bit float'),
+                            (b'MS:1000523', '64-bit float'), (b'MS:1002312', 'numpress linear'), (b'MS:1002314', 'numpress slof')]:
+              print(acc.decode(), name, body.count(b'"' + acc + b'"'))
+          EOF
+          python -I "$RUNNER_TEMP/cut.py" "$D/prefix.bin" "$D/subset.mzML" | tee "$D/subset_info.txt"
+          rm -f "$D/prefix.bin"
+
+      - name: Benchmark and trace
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ws = $env:GITHUB_WORKSPACE
+          $O = "$ws\out"
+          New-Item -ItemType Directory -Force "$O\logs", "$O\etl", "$O\harness" | Out-Null
+          Copy-Item "$env:RUNNER_TEMP\data\subset_info.txt", "$env:RUNNER_TEMP\data\source_headers.txt" $O
+          Add-Type -TypeDefinition @'
+          using System; using System.Runtime.InteropServices;
+          public static class PM {
+            [StructLayout(LayoutKind.Sequential)] public struct PMC { public uint cb; public uint PageFaultCount; public UIntPtr PeakWorkingSetSize; public UIntPtr WorkingSetSize; public UIntPtr QuotaPeakPagedPoolUsage; public UIntPtr QuotaPagedPoolUsage; public UIntPtr QuotaPeakNonPagedPoolUsage; public UIntPtr QuotaNonPagedPoolUsage; public UIntPtr PagefileUsage; public UIntPtr PeakPagefileUsage; }
+            [StructLayout(LayoutKind.Sequential)] public struct IOC { public ulong ReadOperationCount, WriteOperationCount, OtherOperationCount, ReadTransferCount, WriteTransferCount, OtherTransferCount; }
+            [DllImport("psapi.dll", SetLastError=true)] public static extern bool GetProcessMemoryInfo(IntPtr h, out PMC c, uint cb);
+            [DllImport("kernel32.dll", SetLastError=true)] public static extern bool GetProcessIoCounters(IntPtr h, out IOC c);
+            public static object[] Counters(IntPtr h) {
+              PMC m; m.cb = 0; GetProcessMemoryInfo(h, out m, (uint)Marshal.SizeOf(typeof(PMC)));
+              IOC io; GetProcessIoCounters(h, out io);
+              return new object[] { m.PageFaultCount, (double)m.PeakWorkingSetSize.ToUInt64() / 1048576.0, io.ReadOperationCount, (double)io.ReadTransferCount / 1048576.0, io.OtherOperationCount };
+            }
+          }
+          '@
+
+          # Machine facts.
+          $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
+          $os = Get-CimInstance Win32_OperatingSystem
+          $mp = try { Get-MpComputerStatus | Select-Object RealTimeProtectionEnabled, AntivirusEnabled, AMServiceEnabled } catch { "Get-MpComputerStatus failed: $_" }
+          @(
+            "cpu: $($cpu.Name) cores=$($cpu.NumberOfCores) logical=$($cpu.NumberOfLogicalProcessors) max_mhz=$($cpu.MaxClockSpeed)",
+            "os: $($os.Caption) $($os.Version) build $($os.BuildNumber)",
+            "ram_gb: $([math]::Round($os.TotalVisibleMemorySize / 1MB, 1))",
+            "defender: $($mp | Out-String)".Trim(),
+            "filter drivers:", (& fltmc filters | Out-String)
+          ) | Set-Content "$O\machine.txt"
+          Get-Content "$O\machine.txt"
+
+          $share = (Get-ChildItem "$ws\openms-install" -Recurse -Directory | Where-Object { $_.FullName -match '\\share\\OpenMS$' } | Select-Object -First 1).FullName
+          $IN = "$env:RUNNER_TEMP\data\subset.mzML"
+          $bins = @{
+            base  = "$ws\fastag\build\FASTag.exe"
+            seg   = "$ws\fastag\build\FASTag_seg.exe"
+            mi    = "$ws\fastag\build-mi\FASTag.exe"
+            mioff = "$ws\fastag\build-mi\FASTag.exe"
+            base_defender = "$ws\fastag\build\FASTag.exe"
+          }
+          $hbins = @{
+            base = "$ws\harness\build\readharness.exe"
+            seg  = "$ws\harness\build\readharness_seg.exe"
+            mi   = "$ws\harness\build-mi\readharness.exe"
+            base_etw = "$ws\harness\build\readharness.exe"
+            base_defender = "$ws\harness\build\readharness.exe"
+          }
+          $matched = @('-tag_length', '3', '-gaps', '0', '-no_deisotope', '-max_tags', '50', '-max_peaks', '100', '-peaks_per_window', '0',
+                       '-fragment_tolerance', '0.02', '-fragment_tolerance_unit', 'Da', '-fixed_modifications', '')
+          $xperf = "${env:ProgramFiles(x86)}\Windows Kits\10\Windows Performance Toolkit\xperf.exe"
+          if (-not (Test-Path $xperf)) { $xperf = (Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits" -Recurse -Filter xperf.exe | Select-Object -First 1).FullName }
+          Write-Host "xperf: $xperf"
+
+          function Start-Measured([string]$exe, [string[]]$argv, [hashtable]$envx, [string]$log) {
+            $psi = [System.Diagnostics.ProcessStartInfo]::new($exe)
+            foreach ($a in $argv) { $psi.ArgumentList.Add($a) }
+            $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+            $psi.Environment['OPENMS_DATA_PATH'] = $share
+            $psi.Environment['OPENBLAS_NUM_THREADS'] = '1'
+            $psi.Environment['FASTAG_TIMING'] = '1'
+            foreach ($k in $envx.Keys) { $psi.Environment[$k] = $envx[$k] }
+            $sw = [Diagnostics.Stopwatch]::StartNew()
+            $p = [Diagnostics.Process]::Start($psi)
+            $h = $p.Handle
+            $so = $p.StandardOutput.ReadToEndAsync(); $se = $p.StandardError.ReadToEndAsync()
+            $p.WaitForExit(); $sw.Stop()
+            $text = $so.Result + $se.Result
+            $c = [PM]::Counters($h)
+            $r = [ordered]@{
+              wall_s = [math]::Round($sw.Elapsed.TotalSeconds, 3)
+              user_s = [math]::Round($p.UserProcessorTime.TotalSeconds, 3)
+              kernel_s = [math]::Round($p.PrivilegedProcessorTime.TotalSeconds, 3)
+              page_faults = $c[0]; peak_ws_mb = [math]::Round($c[1], 1)
+              read_ops = $c[2]; read_mb = [math]::Round($c[3], 1); other_ops = $c[4]
+              rc = $p.ExitCode
+            }
+            ("# $exe " + (($argv | ForEach-Object { if ($_ -eq '') { "''" } else { $_ } }) -join ' ') + "`n" + $text) | Set-Content -Encoding utf8 $log
+            $p.Dispose()
+            return @($r, $text)
+          }
+          function Num([string]$t, [string]$pat) { $m = [regex]::Match($t, $pat); if ($m.Success) { [double]$m.Groups[1].Value } else { '' } }
+
+          $results = "$O\results.tsv"
+          $cols = 'variant', 'profile', 'threads', 'rep', 'traced', 'wall_s', 'user_s', 'kernel_s', 'page_faults', 'peak_ws_mb', 'read_ops', 'read_mb', 'other_ops',
+                  'pre_loop_s', 'parallel_s', 'read_s', 'slow_reads', 'slow_read_s', 'tag_s', 'spectra', 'out_sha256', 'rc'
+          ($cols -join "`t") | Set-Content $results
+          function Run-FASTag([string]$variant, [string]$prof, [int]$t, [int]$rep, [string]$traced = '') {
+            $tag = "${variant}_${prof}_t${t}_r${rep}$traced"
+            $out = "$env:RUNNER_TEMP\out_$tag.tsv"
+            $argv = @('-in', $IN, '-out', $out, '-threads', "$t")
+            if ($prof -eq 'matched') { $argv += $matched }
+            $envx = @{}
+            if ($variant -eq 'mioff') { $envx['MIMALLOC_DISABLE_REDIRECT'] = '1' }
+            $r, $text = Start-Measured $bins[$variant] $argv $envx "$O\logs\$tag.log"
+            $r['pre_loop_s'] = Num $text 'FASTAG_TIMING open=.*? pre_loop=([0-9.eE+-]+)'
+            $r['parallel_s'] = Num $text 'FASTAG_TIMING open=.*? parallel=([0-9.eE+-]+)'
+            $r['read_s'] = Num $text 'FASTAG_THREADS .*? read=([0-9.eE+-]+)'
+            $r['slow_reads'] = Num $text 'FASTAG_THREADS .*? slow_reads=([0-9]+)'
+            $r['slow_read_s'] = Num $text 'FASTAG_THREADS .*? slow_read=([0-9.eE+-]+)'
+            $r['tag_s'] = Num $text 'FASTAG_THREADS .*? tag=([0-9.eE+-]+)'
+            $r['spectra'] = Num $text '([0-9]+) MS2 spectra'
+            $r['out_sha256'] = if (Test-Path $out) { (Get-FileHash -Algorithm SHA256 $out).Hash.Substring(0, 16) } else { '' }
+            Remove-Item $out -ErrorAction SilentlyContinue
+            $row = @($variant, $prof, $t, $rep, $traced) + @($cols[5..($cols.Count - 1)] | ForEach-Object { $r[$_] })
+            ($row -join "`t") | Add-Content $results
+            Write-Host ("{0,-28} wall {1,7:N2}  user {2,7:N2}  kern {3,6:N2}  read {4,7:N2}  tag {5,7:N2}  pre {6,5:N2}  rc {7}" -f $tag, $r.wall_s, $r.user_s, $r.kernel_s, $r.read_s, $r.tag_s, $r.pre_loop_s, $r.rc)
+            if ($r.rc -ne 0) { Get-Content "$O\logs\$tag.log" | Select-Object -Last 20 | Write-Host; throw "$tag failed" }
+          }
+          function With-Etw([string]$name, [scriptblock]$body) {
+            & $xperf -stop 2>&1 | Out-Null
+            $k = "$env:RUNNER_TEMP\kernel.etl"
+            & $xperf -on PROC_THREAD+LOADER+PROFILE+CSWITCH+DISPATCHER+HARD_FAULTS+VIRT_ALLOC `
+                     -stackwalk Profile+CSwitch+ReadyThread+VirtualAlloc -BufferSize 1024 -MinBuffers 256 -MaxBuffers 1024 -f $k
+            if ($LASTEXITCODE -ne 0) { throw "xperf -on failed ($LASTEXITCODE)" }
+            try { & $body } finally { & $xperf -d "$O\etl\$name.etl" | Out-Host }
+          }
+
+          # mimalloc redirection check.
+          $r, $text = Start-Measured $bins['mi'] (@('-in', $IN, '-out', "$env:RUNNER_TEMP\v.tsv", '-threads', '1') + $matched) @{ MIMALLOC_VERBOSE = '1'; MIMALLOC_SHOW_STATS = '1' } "$O\logs\mimalloc_verbose.log"
+          ($text -split "`n" | Select-String -Pattern 'mimalloc|redirect' | Select-Object -First 30) | Out-Host
+
+          Run-FASTag 'base' 'matched' 4 0   # warm-up: file cache, symbol-free first launch
+          foreach ($rep in 1..3) {
+            foreach ($v in 'base', 'seg', 'mi', 'mioff') {
+              $ts = if ($v -eq 'base') { 1, 2, 4, 8 } else { 1, 4, 8 }
+              foreach ($t in $ts) { Run-FASTag $v 'matched' $t $rep }
+            }
+          }
+          foreach ($rep in 1..2) { foreach ($v in 'base', 'seg', 'mi') { foreach ($t in 1, 4) { Run-FASTag $v 'default' $t $rep } } }
+
+          # Harness: file reading, decoding and the scan apart, per allocator.
+          $hres = "$O\harness\harness.tsv"
+          "variant`tmode`tthreads`trep`titems`twall`tcall_s`tuser_s`tkernel_s`tus_per_item`tproc_user_s`tproc_kernel_s`tpage_faults`tread_ops" | Set-Content $hres
+          function Run-Harness([string]$v, [string]$mode, [int]$t, [int]$reps) {
+            $tag = "harness_${v}_${mode}_t$t"
+            $r, $text = Start-Measured $hbins[$v] @($IN, $mode, "$t", "$reps") @{} "$O\harness\$tag.log"
+            foreach ($m in [regex]::Matches($text, 'HARNESS mode=\S+ threads=\d+ rep=(\d+) items=(\S+) wall=(\S+) call_s=(\S+) user_s=(\S+) kernel_s=(\S+) us_per_item=(\S+)')) {
+              (@($v, $mode, $t) + @(1..7 | ForEach-Object { $m.Groups[$_].Value }) + @($r.user_s, $r.kernel_s, $r.page_faults, $r.read_ops) -join "`t") | Add-Content $hres
+            }
+            Write-Host ("{0,-28} wall {1,7:N2}  user {2,7:N2}  kern {3,6:N2}  rc {4}" -f $tag, $r.wall_s, $r.user_s, $r.kernel_s, $r.rc)
+            if ($r.rc -ne 0) { Get-Content "$O\harness\$tag.log" | Select-Object -Last 20 | Write-Host; throw "$tag failed" }
+          }
+          foreach ($v in 'base', 'seg', 'mi') {
+            foreach ($mode in 'scan', 'io', 'decode', 'both') {
+              foreach ($t in 1, 2, 4, 8) { Run-Harness $v $mode $t 3 }
+            }
+          }
+
+          # ETW traces, after the timed runs.
+          With-Etw 'base_matched_t1' { Run-FASTag 'base' 'matched' 1 9 '_etw' }
+          With-Etw 'base_matched_t4' { Run-FASTag 'base' 'matched' 4 9 '_etw' }
+          With-Etw 'base_matched_t8' { Run-FASTag 'base' 'matched' 8 9 '_etw' }
+          With-Etw 'seg_matched_t4' { Run-FASTag 'seg' 'matched' 4 9 '_etw' }
+          With-Etw 'mi_matched_t4' { Run-FASTag 'mi' 'matched' 4 9 '_etw' }
+          With-Etw 'harness_base_decode_t1' { Run-Harness 'base_etw' 'decode' 1 1 }
+          With-Etw 'harness_base_decode_t4' { Run-Harness 'base_etw' 'decode' 4 1 }
+          With-Etw 'harness_base_scan_t4' { Run-Harness 'base_etw' 'scan' 4 3 }
+          Get-ChildItem "$O\etl" | Format-Table Name, Length | Out-Host
+
+          # Defender real-time scanning, if it can be switched on here (it is on, on flash).
+          try {
+            Set-MpPreference -DisableRealtimeMonitoring $false
+            Start-Sleep -Seconds 5
+            (Get-MpComputerStatus | Select-Object RealTimeProtectionEnabled, AntivirusEnabled | Out-String) | Tee-Object "$O\defender_on.txt" | Out-Host
+            foreach ($rep in 1..2) { foreach ($t in 1, 4) { Run-FASTag 'base_defender' 'matched' $t $rep } }
+            foreach ($t in 1, 4) { Run-Harness 'base_defender' 'scan' $t 3; Run-Harness 'base_defender' 'io' $t 3 }
+            Set-MpPreference -DisableRealtimeMonitoring $true
+          } catch { "Defender toggle failed: $_" | Tee-Object "$O\defender_on.txt" | Out-Host }
+
+      - name: Reduce the traces to folded stacks (TraceProcessor)
+        if: always()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ws = $env:GITHUB_WORKSPACE
+          $O = "$ws\out"
+          New-Item -ItemType Directory -Force "$O\analysis", "$ws\etlstat" | Out-Null
+          @'
+          <Project Sdk="Microsoft.NET.Sdk">
+            <PropertyGroup>
+              <OutputType>Exe</OutputType>
+              <TargetFramework>net8.0</TargetFramework>
+              <Nullable>disable</Nullable>
+              <PlatformTarget>x64</PlatformTarget>
+            </PropertyGroup>
+            <ItemGroup>
+              <PackageReference Include="Microsoft.Windows.EventTracing.Processing.All" Version="1.12.10" />
+            </ItemGroup>
+          </Project>
+          '@ | Set-Content "$ws\etlstat\etlstat.csproj"
+          @'
+          // etlstat <trace.etl> <outprefix> <process-substring> <symbolpath> <symcache> [image1.exe,image2.exe]
+          // For the busiest process whose image name contains <process-substring>:
+          //   .cpu.folded   tid, kernel(0/1), ms, samples, leaf-first frames joined by ';'
+          //   .wait.folded  tid, waits, wait_ms, ready_ms, readying process, switch-in stack, readying stack
+          //   .threads.tsv  per thread cpu, kernel, waits, wait and ready time
+          //   .timeline.tsv user and kernel ms per 0.1 s
+          using System;
+          using System.Collections.Generic;
+          using System.IO;
+          using System.Linq;
+          using System.Text;
+          using Microsoft.Windows.EventTracing;
+          using Microsoft.Windows.EventTracing.Cpu;
+          using Microsoft.Windows.EventTracing.Processes;
+          using Microsoft.Windows.EventTracing.Symbols;
+
+          static class P
+          {
+              static string Frame(StackFrame f)
+              {
+                  string mod = f.Image?.FileName ?? (f.Address.Value < 0 ? "[kernel]" : "[unknown]");
+                  string fn = null;
+                  try { fn = f.Symbol?.FunctionName; } catch { }
+                  if (string.IsNullOrEmpty(fn)) fn = "0x" + f.RelativeVirtualAddress.Value.ToString("x");
+                  return (mod + "!" + fn).Replace(';', ',').Replace('\t', ' ');
+              }
+
+              static string Folded(IStackSnapshot s, StackFrame top, int max)
+              {
+                  if (s == null || s.Frames == null || s.Frames.Count == 0)
+                      return top.HasValue ? "[nostack];" + Frame(top) : "[nostack]";
+                  var sb = new StringBuilder();
+                  int n = Math.Min(max, s.Frames.Count);
+                  for (int i = 0; i < n; i++) { if (i > 0) sb.Append(';'); sb.Append(Frame(s.Frames[i])); }
+                  if (s.Frames.Count > max) sb.Append(";[truncated]");
+                  return sb.ToString();
+              }
+
+              static decimal Ms(TraceDuration d) => d.HasValue ? d.Duration.TotalMilliseconds : 0m;
+              static decimal Ms(Duration? d) => d.HasValue ? d.Value.TotalMilliseconds : 0m;
+
+              static int Main(string[] a)
+              {
+                  if (a.Length < 5) { Console.Error.WriteLine("usage: etlstat etl outprefix procsubstr sympath symcache [images]"); return 2; }
+                  string etl = a[0], outp = a[1], want = a[2].ToLowerInvariant(), sympath = a[3], symcache = a[4];
+                  var settings = new TraceProcessorSettings { AllowLostEvents = true, AllowTimeInversion = true, SuppressFirstTimeSetupMessage = true };
+                  using ITraceProcessor trace = TraceProcessor.Create(etl, settings);
+                  var pSym = trace.UseSymbols();
+                  var pCpu = trace.UseCpuSamplingData();
+                  var pSched = trace.UseCpuSchedulingData();
+                  trace.Process();
+                  var info = new StringBuilder();
+                  try
+                  {
+                      var sw = System.Diagnostics.Stopwatch.StartNew();
+                      pSym.Result.LoadSymbolsAsync(new SymCachePath(symcache), new SymbolPath(sympath.Split(';', StringSplitOptions.RemoveEmptyEntries)), null, a.Length > 5 ? a[5].Split(',') : null, null).GetAwaiter().GetResult();
+                      info.AppendLine($"symbols: loaded in {sw.Elapsed.TotalSeconds:F1} s");
+                  }
+                  catch (Exception e) { info.AppendLine("symbols: FAILED " + e.GetType().Name + ": " + e.Message); }
+
+                  var samples = pCpu.Result.Samples;
+                  var perProc = new Dictionary<int, (string name, decimal ms)>();
+                  foreach (var s in samples)
+                  {
+                      var pr = s.Process; if (pr == null) continue;
+                      string nm = pr.ImageName ?? ""; if (!nm.ToLowerInvariant().Contains(want)) continue;
+                      perProc.TryGetValue(pr.Id, out var v); perProc[pr.Id] = (nm, v.ms + Ms(s.Weight));
+                  }
+                  if (perProc.Count == 0) { info.AppendLine("no matching process"); File.WriteAllText(outp + ".info.txt", info.ToString()); return 1; }
+                  int pid = perProc.OrderByDescending(kv => kv.Value.ms).First().Key;
+                  info.AppendLine($"process: {perProc[pid].name} pid {pid} sampled_ms {perProc[pid].ms:F1}");
+                  info.AppendLine($"all_samples: {samples.Count} gaps: {pCpu.Result.Gaps?.Count}");
+
+                  var cpu = new Dictionary<(int, int, string), (decimal ms, long n)>();
+                  var thr = new SortedDictionary<int, decimal[]>();
+                  var timeline = new SortedDictionary<long, decimal[]>();
+                  decimal? t0 = null;
+                  long orderChecks = 0, leafFirst = 0;
+                  foreach (var s in samples)
+                  {
+                      if (s.Process == null || s.Process.Id != pid) continue;
+                      int tid = s.Thread?.Id ?? -1;
+                      decimal w = Ms(s.Weight);
+                      bool kernel = s.InstructionPointer.Value < 0;
+                      var st = s.Stack;
+                      if (st != null && st.Frames != null && st.Frames.Count > 0 && s.TopStackFrame.HasValue)
+                      {
+                          orderChecks++; if (st.Frames[0].Address.Value == s.TopStackFrame.Address.Value) leafFirst++;
+                      }
+                      string key = Folded(st, s.TopStackFrame, 80);
+                      var k = (tid, kernel ? 1 : 0, key);
+                      cpu.TryGetValue(k, out var v); cpu[k] = (v.ms + w, v.n + 1);
+                      if (!thr.TryGetValue(tid, out var tv)) thr[tid] = tv = new decimal[5];
+                      tv[0] += w; if (kernel) tv[1] += w;
+                      decimal ts = s.Timestamp.RelativeTimestamp.TotalSeconds;
+                      t0 ??= ts;
+                      long bin = (long)Math.Floor((ts - t0.Value) * 10m);
+                      if (!timeline.TryGetValue(bin, out var bv)) timeline[bin] = bv = new decimal[2];
+                      if (kernel) bv[1] += w; else bv[0] += w;
+                  }
+                  info.AppendLine($"frame order check: {leafFirst}/{orderChecks} samples have Frames[0]==TopStackFrame (leaf first)");
+
+                  var waits = new Dictionary<(int, string, string, string), (long n, decimal wait, decimal ready)>();
+                  long acts = 0;
+                  foreach (var act in pSched.Result.ThreadActivity)
+                  {
+                      if (act.Process == null || act.Process.Id != pid) continue;
+                      acts++;
+                      int tid = act.Thread?.Id ?? -1;
+                      decimal wait = Ms(act.WaitingDuration), ready = Ms(act.ReadyDuration);
+                      string sw = Folded(act.SwitchIn?.Stack, default, 60);
+                      string rdy = act.ReadyThreadStack == null ? "" : Folded(act.ReadyThreadStack, default, 25);
+                      string rp = act.ReadyingProcess?.ImageName ?? "";
+                      var k = (tid, rp, sw, rdy);
+                      waits.TryGetValue(k, out var v); waits[k] = (v.n + 1, v.wait + wait, v.ready + ready);
+                      if (!thr.TryGetValue(tid, out var tv)) thr[tid] = tv = new decimal[5];
+                      tv[2] += 1; tv[3] += wait; tv[4] += ready;
+                  }
+                  info.AppendLine($"thread activities: {acts}");
+
+                  using (var w = new StreamWriter(outp + ".cpu.folded"))
+                      foreach (var kv in cpu.OrderByDescending(x => x.Value.ms))
+                          w.WriteLine($"{kv.Key.Item1}\t{kv.Key.Item2}\t{kv.Value.ms:F3}\t{kv.Value.n}\t{kv.Key.Item3}");
+                  using (var w = new StreamWriter(outp + ".wait.folded"))
+                      foreach (var kv in waits.OrderByDescending(x => x.Value.wait))
+                          w.WriteLine($"{kv.Key.Item1}\t{kv.Value.n}\t{kv.Value.wait:F3}\t{kv.Value.ready:F3}\t{kv.Key.Item2}\t{kv.Key.Item3}\t{kv.Key.Item4}");
+                  using (var w = new StreamWriter(outp + ".threads.tsv"))
+                  {
+                      w.WriteLine("tid\tcpu_ms\tkernel_ms\twaits\twait_ms\tready_ms");
+                      foreach (var kv in thr) w.WriteLine($"{kv.Key}\t{kv.Value[0]:F1}\t{kv.Value[1]:F1}\t{kv.Value[2]}\t{kv.Value[3]:F1}\t{kv.Value[4]:F1}");
+                  }
+                  using (var w = new StreamWriter(outp + ".timeline.tsv"))
+                  {
+                      w.WriteLine("t_s\tuser_ms\tkernel_ms");
+                      foreach (var kv in timeline) w.WriteLine($"{kv.Key / 10.0:F1}\t{kv.Value[0]:F1}\t{kv.Value[1]:F1}");
+                  }
+                  File.WriteAllText(outp + ".info.txt", info.ToString());
+                  Console.Write(info.ToString());
+                  return 0;
+              }
+          }
+          '@ | Set-Content "$ws\etlstat\Program.cs"
+          & dotnet build "$ws\etlstat\etlstat.csproj" -c Release -v q --nologo
+          if ($LASTEXITCODE -ne 0) { throw "etlstat build failed" }
+          $dll = Get-ChildItem "$ws\etlstat\bin\Release" -Recurse -Filter etlstat.dll | Select-Object -First 1
+          $sym = "srv*C:\symbols*https://msdl.microsoft.com/download/symbols;$ws\fastag\build;$ws\fastag\build-mi;$ws\harness\build;$ws\harness\build-mi;$ws\mimalloc-build"
+          $xperf = "${env:ProgramFiles(x86)}\Windows Kits\10\Windows Performance Toolkit\xperf.exe"
+          foreach ($e in Get-ChildItem "$O\etl" -Filter *.etl) {
+            $name = $e.BaseName
+            $want = if ($name -like 'harness*') { 'readharness' } else { 'fastag' }
+            Write-Host "== $name"
+            $sw = [Diagnostics.Stopwatch]::StartNew()
+            & dotnet $dll.FullName $e.FullName "$O\analysis\$name" $want $sym 'C:\symcache' 'FASTag.exe,FASTag_seg.exe,readharness.exe,readharness_seg.exe'
+            $rc = $LASTEXITCODE
+            Write-Host "etlstat rc $rc in $([math]::Round($sw.Elapsed.TotalSeconds)) s"
+            if ($rc -ne 0) {
+              $env:_NT_SYMBOL_PATH = $sym
+              & $xperf -i $e.FullName -symbols -o "$O\analysis\$name.xperf_profile.txt" -a profile -detail 2>&1 | Select-Object -Last 5 | Out-Host
+            }
+          }
+          Get-ChildItem "$O\analysis" | Format-Table Name, Length | Out-Host
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: exp-win-read-results
+          path: |
+            out
+            !out/etl
+          if-no-files-found: warn
+
+      - name: Upload traces
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: exp-win-read-etl
+          path: out/etl
+          retention-days: 7
+          if-no-files-found: warn
