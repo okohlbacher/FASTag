@@ -15,6 +15,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <limits>
+#include <new>
+#include <string>
 
 using namespace OpenMS;
 
@@ -100,13 +102,104 @@ namespace FASTag
       return true;
     }
 
-    /// The attributes of a tag, one at a time. Values are returned raw; the
-    /// caller refuses any that would need entity or whitespace normalisation.
+    /// One XML character of @p s at @p k, decoded from UTF-8; @p k moves past
+    /// it. False on invalid UTF-8 (overlong forms and surrogates included) and
+    /// on code points XML 1.0 does not allow (control characters, U+FFFE, ...):
+    /// libxml2 stops on both with a fatal error.
+    bool next_char(std::string_view s, std::size_t& k, std::uint32_t& cp)
+    {
+      const unsigned char c = static_cast<unsigned char>(s[k]);
+      std::size_t len = 0;
+      if (c < 0x80) { cp = c; len = 1; }
+      else if (c >= 0xC2 && c <= 0xDF) { cp = c & 0x1Fu; len = 2; }
+      else if (c >= 0xE0 && c <= 0xEF) { cp = c & 0x0Fu; len = 3; }
+      else if (c >= 0xF0 && c <= 0xF4) { cp = c & 0x07u; len = 4; }
+      else return false;
+      if (s.size() - k < len) return false;
+      for (std::size_t i = 1; i < len; ++i)
+      {
+        const unsigned char d = static_cast<unsigned char>(s[k + i]);
+        if ((d & 0xC0) != 0x80) return false;
+        cp = (cp << 6) | (d & 0x3Fu);
+      }
+      if ((len == 3 && cp < 0x800) || (len == 4 && (cp < 0x10000 || cp > 0x10FFFF))) return false; // overlong
+      k += len;
+      return cp == 0x9 || cp == 0xA || cp == 0xD || (cp >= 0x20 && cp <= 0xD7FF) || (cp >= 0xE000 && cp <= 0xFFFD) ||
+             cp >= 0x10000;
+    }
+
+    /// The reference at @p s[k] == '&' is one libxml2 resolves without a DTD:
+    /// one of the five predefined entities, or a character reference to an
+    /// XML character. @p k moves past its ';'.
+    bool next_reference(std::string_view s, std::size_t& k)
+    {
+      const std::size_t semi = s.find(';', k);
+      if (semi == std::string_view::npos || semi - k > 12) return false;
+      const std::string_view ref = s.substr(k + 1, semi - k - 1);
+      k = semi + 1;
+      if (ref == "lt" || ref == "gt" || ref == "amp" || ref == "quot" || ref == "apos") return true;
+      if (ref.size() < 2 || ref[0] != '#') return false;
+      const bool hex = ref[1] == 'x';
+      const std::string_view digits = ref.substr(hex ? 2 : 1);
+      std::uint32_t cp = 0;
+      const auto r = std::from_chars(digits.data(), digits.data() + digits.size(), cp, hex ? 16 : 10);
+      if (digits.empty() || r.ec != std::errc() || r.ptr != digits.data() + digits.size()) return false;
+      return cp == 0x9 || cp == 0xA || cp == 0xD || (cp >= 0x20 && cp <= 0xD7FF) || (cp >= 0xE000 && cp <= 0xFFFD) ||
+             (cp >= 0x10000 && cp <= 0x10FFFF);
+    }
+
+    /// Character data or an attribute value as libxml2 accepts it without a
+    /// fatal error: XML characters in valid UTF-8, '&' only in a reference
+    /// next_reference() accepts, no '<', and in character data no "]]>".
+    bool well_formed_text(std::string_view s, bool attribute)
+    {
+      std::size_t k = 0;
+      while (k < s.size())
+      {
+        const char c = s[k];
+        if (c == '&')
+        {
+          if (!next_reference(s, k)) return false;
+        }
+        else if (c == '<') return false;
+        else if (static_cast<unsigned char>(c) >= 0x20 && static_cast<unsigned char>(c) < 0x80)
+        {
+          if (!attribute && c == '>' && k >= 2 && s[k - 1] == ']' && s[k - 2] == ']') return false;
+          ++k;
+        }
+        else
+        {
+          std::uint32_t cp;
+          if (!next_char(s, k, cp)) return false;
+        }
+      }
+      return true;
+    }
+
+    /// An element or attribute name this decoder takes: ASCII, no namespace
+    /// prefix (both are valid XML that mzML spectra do not use; declined).
+    bool plain_name(std::string_view n)
+    {
+      if (n.empty()) return false;
+      const auto alpha = [](char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_'; };
+      if (!alpha(n[0])) return false;
+      for (const char c : n)
+        if (!alpha(c) && !(c >= '0' && c <= '9') && c != '-' && c != '.') return false;
+      return true;
+    }
+
+    /// The attributes of a tag, one at a time, checked as libxml2 checks
+    /// them: a valid name, a quoted value that is well-formed text,
+    /// whitespace before every further attribute, and no name twice; `bad`
+    /// is set on the first violation. Values are returned raw; the caller
+    /// refuses any that would need entity or whitespace normalisation.
     struct AttrReader
     {
       std::string_view s;
       std::size_t k = 0;
       bool bad = false;
+      std::array<std::string_view, 32> seen{};
+      std::size_t n_seen = 0;
 
       bool next(std::string_view& name, std::string_view& value)
       {
@@ -116,7 +209,7 @@ namespace FASTag
         while (k < s.size() && s[k] != '=' && !is_space(s[k])) ++k;
         name = s.substr(nb, k - nb);
         while (k < s.size() && is_space(s[k])) ++k;
-        if (name.empty() || k >= s.size() || s[k] != '=') { bad = true; return false; }
+        if (!plain_name(name) || k >= s.size() || s[k] != '=') { bad = true; return false; }
         ++k;
         while (k < s.size() && is_space(s[k])) ++k;
         if (k >= s.size() || (s[k] != '"' && s[k] != '\'')) { bad = true; return false; }
@@ -125,7 +218,22 @@ namespace FASTag
         if (ve == std::string_view::npos) { bad = true; return false; }
         value = s.substr(k, ve - k);
         k = ve + 1;
+        // "a='1'b='2'" is a fatal error in libxml2; so is a repeated name.
+        if (k < s.size() && !is_space(s[k])) { bad = true; return false; }
+        if (!well_formed_text(value, true)) { bad = true; return false; }
+        for (std::size_t i = 0; i < n_seen; ++i)
+          if (seen[i] == name) { bad = true; return false; }
+        if (n_seen == seen.size()) { bad = true; return false; } // more than this decoder tracks: declined
+        seen[n_seen++] = name;
         return true;
+      }
+
+      /// Every remaining attribute, checked; true when all are well-formed.
+      bool check_rest()
+      {
+        std::string_view n, v;
+        while (next(n, v)) {}
+        return !bad;
       }
     };
 
@@ -256,18 +364,25 @@ namespace FASTag
         return false;
       }
       out.size = 0;
-      out.reserve(expect + 64);
+      // The first allocation follows the input, not defaultArrayLength: that
+      // is the file's claim, and a wrong or garbage one (2^31 peaks) must not
+      // allocate gigabytes up front. The buffer doubles as needed below.
+      out.reserve(std::min(expect, n * 4 + 4096) + 64);
       zs.next_in = const_cast<Bytef*>(in);
       zs.avail_in = static_cast<uInt>(n);
       while (true)
       {
+        // An array longer than defaultArrayLength is declined anyway (OpenMS
+        // then warns about it); stop rather than inflate it to the end and
+        // keep a buffer that large for the rest of the run.
+        if (out.size > expect) return false;
         if (out.size == out.cap) out.reserve(out.cap * 2, out.size);
         const std::size_t room = std::min<std::size_t>(out.cap - out.size, std::numeric_limits<uInt>::max());
         zs.next_out = out.data.get() + out.size;
         zs.avail_out = static_cast<uInt>(room);
         const int ret = inflate(&zs, Z_NO_FLUSH);
         out.size += room - zs.avail_out;
-        if (ret == Z_STREAM_END) return true;
+        if (ret == Z_STREAM_END) return out.size <= expect;
         if (ret == Z_OK) continue;
         if (ret == Z_BUF_ERROR && zs.avail_out == 0) continue; // more room needed
         return false; // Z_BUF_ERROR with input exhausted (truncated), data or memory errors
@@ -300,6 +415,21 @@ namespace FASTag
 
   bool MzMLDirectDecoder::decode(std::string_view xml, MSSpectrum& spec)
   {
+    // A failed allocation (a huge array, a thread short of memory) declines:
+    // OpenMS's path then runs, with whatever it does for that spectrum.
+    // `spec` is only touched after the last allocation that can fail here.
+    try
+    {
+      return decode_(xml, spec);
+    }
+    catch (const std::bad_alloc&)
+    {
+      return false;
+    }
+  }
+
+  bool MzMLDirectDecoder::decode_(std::string_view xml, MSSpectrum& spec)
+  {
     // mzML stores little-endian arrays; this decoder copies them as they are.
     if constexpr (std::endian::native != std::endian::little) return false;
 
@@ -326,24 +456,79 @@ namespace FASTag
       if (r.ec != std::errc() || r.ptr != length_text.data() + length_text.size() || length < 0) return false;
     }
 
-    // The arrays. Everything before the list is metadata, read elsewhere;
-    // from the list on, every tag must be one this decoder understands.
-    std::size_t pos = xml.find("<binaryDataArrayList", root.end);
-    if (pos == std::string_view::npos) return false;
+    // The whole element, start to </spectrum>, must be well-formed as far as
+    // libxml2 (non-recovering, as domParseSpectrum runs it) checks: OpenMS
+    // throws on any fatal error before the root ends, and a spectrum it
+    // cannot read must not be read here. So every tag is matched against an
+    // element stack, every attribute and every text checked, also in the
+    // metadata this decoder does not otherwise use. The metadata may hold any
+    // elements and comments; from <binaryDataArrayList> on, every tag must
+    // be one this decoder understands and text between tags whitespace; and
+    // after </binaryDataArrayList> only </spectrum> may follow.
+    enum class Region { meta, arrays, after };
+    Region region = Region::meta;
+    std::array<std::string_view, 32> stack{};
+    std::size_t depth = 0;
+    stack[depth++] = root.name;
+    std::size_t pos = root.end;
     std::array<Array, 2> arrays;
     int n_arrays = 0;
     Array* cur = nullptr;
-    bool done = false;
-    while (!done)
+    const auto blank = [](std::string_view t) { return t.find_first_not_of(" \t\n\r") == std::string_view::npos; };
+    while (depth > 0)
     {
       const std::size_t lt = xml.find('<', pos);
-      if (lt == std::string_view::npos) return false;
+      if (lt == std::string_view::npos) return false; // the root never ends
+      const std::string_view text = xml.substr(pos, lt - pos);
+      if (region == Region::meta ? !well_formed_text(text, false) : !blank(text)) return false;
+
+      if (xml.compare(lt, 4, "<!--") == 0)
+      {
+        // A comment, in the metadata only: XML characters, no "--" inside.
+        const std::size_t ce = xml.find("--", lt + 4);
+        if (region != Region::meta || ce == std::string_view::npos || xml.compare(ce, 3, "-->") != 0) return false;
+        const std::string_view body = xml.substr(lt + 4, ce - lt - 4);
+        for (std::size_t k = 0; k < body.size();)
+        {
+          std::uint32_t cp;
+          if (!next_char(body, k, cp)) return false;
+        }
+        pos = ce + 3;
+        continue;
+      }
+
       Tag t;
-      if (!read_tag(xml, lt, t)) return false;
+      if (!read_tag(xml, lt, t) || !plain_name(t.name)) return false; // CDATA, PIs, DOCTYPE: declined
       pos = t.end;
+      if (t.closing)
+      {
+        if (stack[depth - 1] != t.name) return false; // mismatched or unclosed element
+        if (--depth == 0) break; // </spectrum>
+      }
+      else if (!t.self_closing)
+      {
+        if (depth == stack.size()) return false;
+        stack[depth++] = t.name;
+      }
+
+      if (region == Region::meta)
+      {
+        if (t.name == "binaryDataArrayList" && !t.closing)
+        {
+          if (depth != 2 || t.self_closing) return false; // a direct child of <spectrum>, with arrays
+          region = Region::arrays;
+        }
+        // OpenMS decodes a <binaryDataArray> wherever it sits.
+        else if (t.name == "binaryDataArray" || t.name == "binary" || t.name == "binaryDataArrayList") return false;
+        if (!AttrReader{t.attrs}.check_rest()) return false;
+        continue;
+      }
+      if (region == Region::after) return false; // only </spectrum>, which ends the loop
+
       if (t.name == "binaryDataArrayList")
       {
-        if (cur) return false;
+        if (!t.closing || cur) return false;
+        region = Region::after;
       }
       else if (t.name == "binaryDataArray")
       {
@@ -355,6 +540,7 @@ namespace FASTag
         else
         {
           if (cur || t.self_closing || n_arrays == 2) return false; // more than two arrays
+          if (!AttrReader{t.attrs}.check_rest()) return false;
           cur = &arrays[static_cast<std::size_t>(n_arrays++)];
         }
       }
@@ -371,7 +557,9 @@ namespace FASTag
           else if (an == "name") name = av;
           else if (an == "unitAccession") { unit = av; has_unit = true; }
         }
-        if (ar.bad || !literal(accession) || !literal(name)) return false;
+        // The unit is compared as text below; one written with a character
+        // reference (UO&#58;0000269) is the same unit to libxml2.
+        if (ar.bad || !literal(accession) || !literal(name) || (has_unit && !literal(unit))) return false;
         // A unit on anything but the m/z or intensity term becomes a meta
         // value in OpenMS; absorbance intensities do too.
         if (accession == "MS:1000514" || accession == "MS:1000515")
@@ -391,32 +579,33 @@ namespace FASTag
           const std::size_t e = xml.find('<', pos);
           Tag et;
           if (e == std::string_view::npos || !read_tag(xml, e, et) || !et.closing || et.name != "cvParam" ||
-              xml.substr(pos, e - pos).find_first_not_of(" \t\n\r") != std::string_view::npos)
+              !blank(xml.substr(pos, e - pos)))
             return false;
           pos = et.end;
+          --depth;
         }
       }
       else if (t.name == "binary")
       {
         if (!cur || t.closing || cur->has_binary) return false; // OpenMS concatenates repeats
+        if (!AttrReader{t.attrs}.check_rest()) return false;
         cur->has_binary = true;
         if (t.self_closing) continue;
+        // The base64 text: decode_base64 refuses anything outside its
+        // alphabet and whitespace, '&' and non-ASCII bytes included.
         const std::size_t e = xml.find('<', pos);
         Tag et;
         if (e == std::string_view::npos || !read_tag(xml, e, et) || !et.closing || et.name != "binary") return false;
         cur->base64 = xml.substr(pos, e - pos);
         pos = et.end;
-      }
-      else if (t.name == "spectrum")
-      {
-        if (!t.closing || cur) return false;
-        done = true;
+        --depth;
       }
       else
       {
-        return false; // userParam, referenceableParamGroupRef, anything else
+        return false; // </spectrum> before </binaryDataArrayList>, userParam, referenceableParamGroupRef, ...
       }
     }
+    if (region != Region::after) return false; // no arrays
 
     // Exactly one m/z and one intensity array, both float.
     if (n_arrays != 2) return false;
@@ -447,8 +636,10 @@ namespace FASTag
     if (mb.size / mw != n || ib.size / iw != n) return false;
 
     // The peaks, converted as OpenMS's fillDataArray does: m/z to double,
-    // intensity to float.
+    // intensity to float. The allocations come first: a bad_alloc in either
+    // leaves the peaks of `spec` as they were.
     spec.reserve(spec.size() + n);
+    spec.setNativeID(std::string(id));
     Peak1D peak;
     const unsigned char* mp = mb.data.get();
     const unsigned char* ip = ib.data.get();
@@ -477,7 +668,6 @@ namespace FASTag
       peak.setMZ(m);
       spec.push_back(peak);
     }
-    spec.setNativeID(std::string(id));
     return true;
   }
 }

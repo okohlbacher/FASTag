@@ -14,14 +14,34 @@
 // SCOPE: exactly what domParseSpectrum fills for the spectra FASTag reads:
 // the <spectrum> id and the peaks of one "m/z array" and one "intensity
 // array", 32- or 64-bit float, uncompressed or zlib. decode() returns false,
-// and leaves the spectrum untouched, for ANYTHING else -- numpress, zstd,
-// integer or string arrays, extra arrays (ion mobility, ...), unknown or
-// unit-carrying cvParams, userParams, param group refs, comments, CDATA,
-// entities, malformed base64, a broken zlib stream, or a decoded length that
-// differs from defaultArrayLength -- and the caller uses domParseSpectrum,
-// which then also prints or throws whatever OpenMS prints or throws for that
-// input. The accepted subset is the one where both paths give the same
-// spectrum bit for bit; indexed_mzml_test checks that spectrum by spectrum.
+// and leaves the spectrum's peaks untouched, for ANYTHING else -- numpress,
+// zstd, integer or string arrays, extra arrays (ion mobility, ...), unknown
+// or unit-carrying cvParams, userParams or other elements among the arrays,
+// param group refs, CDATA, entities in the values it uses, malformed base64,
+// a broken zlib stream, a decoded length that differs from
+// defaultArrayLength, or a failed allocation -- and the caller uses
+// domParseSpectrum, which then also prints or throws whatever OpenMS prints
+// or throws for that input.
+//
+// WELL-FORMEDNESS: OpenMS parses the element with libxml2 in non-recovering
+// mode and throws on any fatal error before the root ends, so the run fails.
+// To fail the same way, decode() checks the WHOLE element, the metadata it
+// does not use included, and declines (so OpenMS throws) on: start and end
+// tags that do not match, attributes without whitespace between them or
+// given twice, '<' or an unknown entity or character reference in text or
+// values, "]]>" in text, invalid UTF-8 or characters XML does not allow, and
+// a binaryDataArrayList that is not closed before </spectrum>. Valid XML it
+// does not handle (comments among the arrays, namespace prefixes, processing
+// instructions) is declined too, and OpenMS reads it as before.
+//
+// The accepted subset is the one where both paths give the same spectrum
+// bit for bit; indexed_mzml_test checks that spectrum by spectrum, malformed
+// spectra and an inflated defaultArrayLength included.
+//
+// MEMORY: defaultArrayLength is the file's claim and sizes nothing up
+// front: the first inflate buffer follows the compressed size and grows by
+// doubling, and inflating stops (declined) once the output passes the
+// claimed length.
 //
 // One instance per thread: the buffers are reused, not shared.
 //
@@ -56,6 +76,7 @@ namespace FASTag
     static bool disabledByEnvironment();
 
   private:
+    bool decode_(std::string_view xml, OpenMS::MSSpectrum& spec);
     struct Impl;
     std::unique_ptr<Impl> impl_;
   };
