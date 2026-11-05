@@ -228,22 +228,19 @@ double Taxonomy::binomialUpperTailLogP(uint64_t k, uint64_t n, double p) const {
     const double lp = std::log(p);
     const double lq = std::log1p(-p);
     const double ln_fact = std::lgamma(static_cast<double>(n) + 1.0);
+    const auto log_term = [&](uint64_t i) {
+      return ln_fact - std::lgamma(static_cast<double>(i) + 1.0) -
+             std::lgamma(static_cast<double>(n - i) + 1.0) +
+             static_cast<double>(i) * lp +
+             static_cast<double>(n - i) * lq;
+    };
     double maxlog = kNegInf;
     for (uint64_t i = k; i <= n; ++i) {
-      double t = ln_fact - std::lgamma(static_cast<double>(i) + 1.0) -
-                 std::lgamma(static_cast<double>(n - i) + 1.0) +
-                 static_cast<double>(i) * lp +
-                 static_cast<double>(n - i) * lq;
+      const double t = log_term(i);
       if (t > maxlog) maxlog = t;
     }
     double sum = 0.0;
-    for (uint64_t i = k; i <= n; ++i) {
-      double t = ln_fact - std::lgamma(static_cast<double>(i) + 1.0) -
-                 std::lgamma(static_cast<double>(n - i) + 1.0) +
-                 static_cast<double>(i) * lp +
-                 static_cast<double>(n - i) * lq;
-      sum += std::exp(t - maxlog);
-    }
+    for (uint64_t i = k; i <= n; ++i) sum += std::exp(log_term(i) - maxlog);
     return maxlog + std::log(sum);
   }
 

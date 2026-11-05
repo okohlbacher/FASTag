@@ -21,6 +21,8 @@
 #      and RTINSECONDS=nan give a well-formed, re-readable -out_spectra; a
 #      malformed first peak line is an error; -out_spectra carries the MGF's
 #      SHA-1; a header CHARGE= is warned about only when a block lacks one
+#   k. -proforma declares fixed residue modifications only: a terminal fixed
+#      modification is in the flanking masses, not in the prefix
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 BIN="$1"
@@ -292,5 +294,15 @@ cmp -s "$s/sub1.tsv" "$s/sub2.tsv" || fail "subsampling on MGF is not determinis
 [ "$(wc -l < "$s/sub1.tsv")" -gt 1 ] && [ "$(wc -l < "$s/sub1.tsv")" -lt "$(wc -l < "$TMP/a_plain_mgf/tags.tsv")" ] \
   || fail "subsampling kept no rows, or all of them"
 [ -z "$(comm -23 <(sort "$s/sub1.tsv") <(sort "$TMP/a_plain_mgf/tags.tsv"))" ] || fail "subsampled rows are not a subset of the full run"
+
+# ---- k. -proforma prefix: residue fixed mods only
+k="$TMP/k"; mkdir -p "$k"
+run "$k/log" -in "$MGF" -out "$k/tags.tsv" "${ARGS[@]}" -proforma \
+    -fixed_modifications "Carbamidomethyl (C)" "TMT6plex (N-term)"
+col=$(head -1 "$k/tags.tsv" | tr '\t' '\n' | grep -nx proforma | cut -d: -f1)
+[ -n "$col" ] || fail "-proforma: no proforma column"
+[ "$(wc -l < "$k/tags.tsv")" -gt 1 ] || fail "-proforma: no rows; the check would prove nothing"
+awk -F'\t' -v c="$col" 'NR > 1 && (index($c, "<[Carbamidomethyl]@C>") != 1 || index($c, "<[TMT6plex]")) {print; exit 1}' "$k/tags.tsv" \
+  || fail "-proforma prefix is not <[Carbamidomethyl]@C> alone (a terminal fixed mod leaked in)"
 
 echo "mgf_cli_test: all checks passed"

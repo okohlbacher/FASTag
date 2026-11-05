@@ -326,8 +326,8 @@ namespace FASTag
     {
       Prepared s;
       s.precursor_mass = precursor_mz * charge - charge * PROTON;
-      // +2 fragments are only sought from precursors of charge >= 3, as the paper
-      // specifies.
+      // +2 fragments are only sought from precursors of charge >= 3, as DirecTag
+      // (Tabb et al. 2008) specifies.
       // Capped at 8: has_compl is a uint8_t bitmask, so bit z-1 for z > 8 is
       // silently lost, and 1u << (z-1) is undefined well before that. Fragment
       // charges above 8 are not a real regime for peptide MS/MS, so bound it
@@ -397,12 +397,11 @@ namespace FASTag
         // kept, 2..10 isotope peaks, monoisotopic peaks moved to charge 1.
         //
         // Its first step drops peaks below an ABSOLUTE 0.05 (ThresholdMower).
-        // Everything else here is rank-based, so that made the output depend on
-        // the intensity scale: a spectrum stored with base peak = 1 lost every
-        // peak under 5% of it, and one scaled by 1e-2 lost all (review F3). The
-        // cut is now relative below a base peak of 1e6 -- 5e-8 of it -- and
-        // stays 0.05 above, which is what instrument counts see, so those runs
-        // are unchanged.
+        // Everything else here is rank-based, so the cut is relative to the
+        // base peak below 1e6 counts (5e-8 of it) and stays 0.05 above, where
+        // instrument counts lie. An absolute 0.05 would make the output depend
+        // on the intensity scale: a spectrum normalised to base peak 1 would
+        // lose every peak under 5% of it, and one scaled by 1e-2 all of them.
         double base_peak = 0;
         for (const auto& pk : work) base_peak = std::max(base_peak, static_cast<double>(pk.getIntensity()));
         const double mower = std::min(DEISOTOPE_MOWER, DEISOTOPE_MOWER * base_peak / DEISOTOPE_MOWER_REF);
@@ -419,7 +418,7 @@ namespace FASTag
         // is two peaks a few ppm apart once the 2+ copy is moved: each path
         // then exists twice, with flanks ~1e-4 Da apart that no exact key
         // collapses, doubling n_seeds and spending max_tags and peak-budget
-        // slots (review F4). Merge a moved peak into a neighbour within the
+        // slots. Merge a moved peak into a neighbour within the
         // deisotoping tolerance, keeping the stronger, as exact duplicates are
         // collapsed above. Two unmoved peaks are never merged.
         static thread_local std::vector<std::pair<Peak1D, bool>> merged;
@@ -584,15 +583,15 @@ namespace FASTag
       // residue. Either way the answer is findNearest's, in (i, r) order.
       static thread_local std::vector<StepTable> tables;
       if (tables.size() <= static_cast<size_t>(charge)) tables.resize(static_cast<size_t>(charge) + 1);
-      StepTable& dt = tables[static_cast<size_t>(charge)];
+      StepTable& step_table = tables[static_cast<size_t>(charge)];
       const bool walk = n > 0 && !step.empty()
-          && dt.fit(step, tolAt(p, grid.mz.back() + *std::max_element(step.begin(), step.end())));
+          && step_table.fit(step, tolAt(p, grid.mz.back() + *std::max_element(step.begin(), step.end())));
       static thread_local std::vector<int> hit;
       // Every residue -- base and variable-modified -- is a candidate single
       // edge, so a variable mod simply adds more edges to try.
       for (size_t i = 0; i < n; ++i)
       {
-        if (walk) dt.nearestAbove(grid.mz, i, [&p](double t) { return tolAt(p, t); }, hit);
+        if (walk) step_table.nearestAbove(grid.mz, i, [&p](double t) { return tolAt(p, t); }, hit);
         for (uint8_t r = 0; r < A.res.size(); ++r)
         {
           int j;
@@ -621,8 +620,9 @@ namespace FASTag
 
       // Gap edges: peak pairs separated by a two-residue sum, i.e. a series with
       // one member missing. Built by walking peak pairs and binary-searching the
-      // sorted table -- n^2/2 = 5k searches at the 100-peak cap, against the
-      // n * 190 = 19k findNearest calls the per-residue construction above would
+      // sorted table -- n^2/2 = 5k searches at the library's default 100-peak
+      // cap (Param::max_peak_count; the CLI's -max_peaks defaults to 400),
+      // against the n * 190 = 19k findNearest calls the per-residue construction above would
       // need. Peaks are m/z sorted, so the inner loop stops as soon as the
       // difference exceeds the heaviest pair.
       if (p.max_gaps > 0 && n > 1)
@@ -663,7 +663,7 @@ namespace FASTag
             // would only re-read an observed ladder: its spellings (both
             // orders, every isobaric composition) add hypotheses with no new
             // evidence, count in n_seeds -- multiplying every E-value in the
-            // spectrum -- and take max_tags slots (review F2). A single
+            // spectrum -- and take max_tags slots. A single
             // ordinary step whose residue is itself a pair sum (N = GG, W = AD)
             // keeps its gap edge: the two-residue reading is an alternative.
             if (best >= 0 && !twoStep(static_cast<uint32_t>(i), static_cast<uint32_t>(j)))
@@ -712,8 +712,8 @@ namespace FASTag
       // tolerance is each PEAK's own: a back-projected estimate carries the
       // absolute error of the peak it came from, and a tag spanning 150..600
       // m/z holds peaks whose tolerances differ 4x. Dividing every deviation
-      // by the tolerance at the first peak inflated the SSE up to ~16x for
-      // low-m/z tags and pushed their p_mzfidelity toward 1 (review F1). In
+      // by the tolerance at the first peak would inflate the SSE up to ~16x
+      // for low-m/z tags and push their p_mzfidelity toward 1. In
       // Da the tolerance is one constant, and the arithmetic is unchanged.
       double sse = 0;
       if (p.tol_ppm)
@@ -839,7 +839,8 @@ namespace FASTag
     /// carries no gap. A gap here would let one tag rest on two unobserved
     /// splits at opposite ends, and the sequence it spells would be mostly
     /// inference; the seed-level gap already reaches the disjoint runs this is
-    /// meant to recover. Measured with gapped extension on three profiles at
+    /// meant to recover. Measured with gapped extension on three synthetic
+    /// profiles of bench/benchmark.cpp at
     /// extension 2 and 4: rank-1 accuracy fell by 4.6 to 13.1 points and total
     /// recall did not move -- it reaches no peptide the seed gap does not, and
     /// only turns contiguous tags into gapped ones (~3.6x less often correct).
@@ -1001,21 +1002,21 @@ namespace FASTag
     for (int z = 1; z <= s.n_frag_charges; ++z)
     {
       const Graph& g = graphs[static_cast<size_t>(z) - 1];
-      static thread_local std::vector<uint32_t> peaks, pk;
-      static thread_local std::vector<Step> path, rs;
+      static thread_local std::vector<uint32_t> peaks, ext_peaks;
+      static thread_local std::vector<Step> path, ext_path;
       // edge is a relative index over this node's ordinary edges followed by its
       // gap edges, so one counter walks both arrays.
       struct Frame { uint32_t node, edge; };
-      static thread_local std::vector<Frame> st;
+      static thread_local std::vector<Frame> dfs_stack;
 
       for (uint32_t start = 0; start < s.spec.size(); ++start)
       {
-        st.clear();
+        dfs_stack.clear();
         peaks.clear(); path.clear();
         int n_res = 0;
         bool gap_used = false;
         peaks.push_back(start);
-        st.push_back({start, 0});
+        dfs_stack.push_back({start, 0});
         // Pop the deepest step, undoing exactly what pushing it did. At most one
         // gap is ever on the path, so clearing the flag on its pop is sufficient.
         auto pop_step = [&]() {
@@ -1026,43 +1027,43 @@ namespace FASTag
           if (sp.gap) gap_used = false;
         };
 
-        while (!st.empty())
+        while (!dfs_stack.empty())
         {
           if (n_res == p.tag_length)
           {
-            pk = peaks;
-            rs = path;
+            ext_peaks = peaks;
+            ext_path = path;
             int grew = 0;
             if (p.max_extension > 0)
-              grew = extendPath(s, p, A, g, pk, rs, z, true)
-                   + extendPath(s, p, A, g, pk, rs, z, false);
+              grew = extendPath(s, p, A, g, ext_peaks, ext_path, z, true)
+                   + extendPath(s, p, A, g, ext_peaks, ext_path, z, false);
             // Rescore at the realised length: a seed's statistic does not
             // describe an extended tag, and the per-length nulls are already built.
-            Tag t = scorePath(s, p, tables, pk, rs, z);
+            Tag t = scorePath(s, p, tables, ext_peaks, ext_path, z);
             t.extended = grew > 0;
-            emit(scored, n_seeds, std::move(t), s, p, tables, pk, rs, z);
-            pop_step(); st.pop_back();
+            emit(scored, n_seeds, std::move(t), s, p, tables, ext_peaks, ext_path, z);
+            pop_step(); dfs_stack.pop_back();
             continue;
           }
 
-          const uint32_t node = st.back().node;
-          const uint32_t nn = g.off[node + 1] - g.off[node];
-          const uint32_t ng = g.goff.empty() ? 0u : g.goff[node + 1] - g.goff[node];
-          if (st.back().edge >= nn + ng)
+          const uint32_t node = dfs_stack.back().node;
+          const uint32_t n_edges = g.off[node + 1] - g.off[node];
+          const uint32_t n_gap_edges = g.goff.empty() ? 0u : g.goff[node + 1] - g.goff[node];
+          if (dfs_stack.back().edge >= n_edges + n_gap_edges)
           {
-            st.pop_back();
+            dfs_stack.pop_back();
             pop_step();
             continue;
           }
-          const uint32_t ei = st.back().edge++;
+          const uint32_t ei = dfs_stack.back().edge++;
 
-          if (ei < nn)
+          if (ei < n_edges)
           {
             const uint32_t e = g.off[node] + ei;
             peaks.push_back(g.dst[e]);
             path.push_back(Step{0, g.res[e], false, false});
             ++n_res;
-            st.push_back({g.dst[e], 0});
+            dfs_stack.push_back({g.dst[e], 0});
           }
           else
           {
@@ -1070,12 +1071,12 @@ namespace FASTag
             // otherwise a gap taken at length-1 would overshoot to length+1 and
             // silently return tags longer than asked for.
             if (gap_used || n_res + 2 > p.tag_length) continue;
-            const uint32_t e = g.goff[node] + (ei - nn);
+            const uint32_t e = g.goff[node] + (ei - n_edges);
             peaks.push_back(g.gdst[e]);
             path.push_back(Step{g.gpair[e], 0, true, false});
             n_res += 2;
             gap_used = true;
-            st.push_back({g.gdst[e], 0});
+            dfs_stack.push_back({g.gdst[e], 0});
           }
         }
       }
@@ -1095,10 +1096,10 @@ namespace FASTag
     // a spectrum. A tag carries at most one gap (the DFS sets gap_used and
     // extension does not cross gaps), so the penalty applies once.
     const double gap_penalty = std::max(1.0, p.gap_penalty);
-    for (ScoredTag& st : scored)
+    for (ScoredTag& cand : scored)
     {
-      st.tag.evalue *= static_cast<double>(std::max<size_t>(n_seeds, 1));
-      if (st.tag.gapped) st.tag.evalue *= gap_penalty;
+      cand.tag.evalue *= static_cast<double>(std::max<size_t>(n_seeds, 1));
+      if (cand.tag.gapped) cand.tag.evalue *= gap_penalty;
     }
 
     // stable_sort, not sort: the comparator is not total (it ignores charge and
@@ -1150,13 +1151,14 @@ namespace FASTag
 
     for (const uint32_t i : by_rank)
     {
-      ScoredTag& st = scored[i];
-      Tag& t = st.tag;
+      ScoredTag& cand = scored[i];
+      Tag& t = cand.tag;
       // The gap penalty ORDERS but does not FILTER. Tagging is a sensitive
       // prefilter: the cutoff answers "is this worth reporting at all" on the
       // uncorrected evidence, the corrected E-value "which should be tried
       // first". (Gating on the corrected value cost 19 points of recall on the
-      // astral profile; ordering alone leaves recall unchanged.) A tag carries
+      // synthetic astral profile of bench/benchmark.cpp; ordering alone leaves
+      // recall unchanged.) A tag carries
       // at most one gap, so dividing once undoes the penalty.
       //
       // The list is sorted by the CORRECTED value, so raw values along it are
@@ -1178,7 +1180,7 @@ namespace FASTag
       const size_t N = static_cast<size_t>(p.max_tag_count);
       bool dup = false;
       for (const uint32_t k : div_kept)
-        if (near_dup(scored[k], st)) { dup = true; break; }
+        if (near_dup(scored[k], cand)) { dup = true; break; }
       if (!dup && div_kept.size() < N) div_kept.push_back(i);
       else if (div_deferred.size() < N) div_deferred.push_back(i);
       if (div_kept.size() >= N) break;

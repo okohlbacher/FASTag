@@ -72,7 +72,7 @@ namespace FASTag
     /// @p chunk_bytes changes only how the work is split, never the result;
     /// it is a parameter so the test can prove that.
     ///
-    /// ponytail: a <spectrum tag inside an XML comment within the
+    /// Known limit: a <spectrum tag inside an XML comment within the
     /// spectrumList would be taken for a spectrum. No mzML writer emits one;
     /// skip comments here if one ever does.
     static std::vector<std::uint64_t> scanSpectrumOffsets(const std::string& path,

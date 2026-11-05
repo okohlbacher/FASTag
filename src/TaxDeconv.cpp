@@ -31,8 +31,10 @@ namespace FASTag
   }
 
   std::vector<double> nnls(const std::vector<double>& A, const std::vector<double>& b,
-                           std::size_t n, int max_iter, double tol)
+                           std::size_t n)
   {
+    constexpr int max_iter = 2000;
+    constexpr double tol = 1e-12;
     std::vector<double> x(n, 0.0);
     if (n == 0 || A.size() < n * n || b.size() < n) return x;
 

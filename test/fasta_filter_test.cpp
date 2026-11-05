@@ -1,5 +1,8 @@
 // The filter must never report a tag that is not in the sequences, and never
 // drop one that is. Both directions are checked against a naive oracle.
+//
+// Copyright (c) 2026 Oliver Kohlbacher and contributors
+// SPDX-License-Identifier: MIT
 #include "FastaFilter.h"
 
 #include <OpenMS/FORMAT/FASTAFile.h>

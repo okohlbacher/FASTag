@@ -1,9 +1,10 @@
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
 //
-// Compiled with -ffp-contract=off (CMakeLists.txt): 0.1.3 evaluates
-// (1 - s) * p + s * bg as two products and a sum, and a fused multiply-add
-// would land a unit in the last place away from it.
+// Compiled with -ffp-contract=off (CMakeLists.txt) to match the reference's
+// floating-point results: it evaluates (1 - s) * p + s * bg as two products
+// and a sum, and a fused multiply-add would land a unit in the last place
+// away from it.
 
 #include "Digest.h"
 
@@ -51,8 +52,8 @@ namespace FASTag::Digest
 
   const std::array<ResidueKey, kNumKeys>& residueKeys()
   {
-    // 0.1.3 _AA (C carbamidomethylated) and the labelled K/R of _RES, whose
-    // masses are sums computed in double as 0.1.3 computes them.
+    // The residue masses (C carbamidomethylated) and the labelled K/R, whose
+    // masses are sums computed in double as the reference computes them.
     static const std::array<ResidueKey, kNumKeys> keys = [] {
       constexpr double K = 128.09496, R = 156.10111;
       return std::array<ResidueKey, kNumKeys>{{
@@ -339,8 +340,8 @@ namespace FASTag::Digest
 
   namespace
   {
-    /// 0.1.3 ll(cnt, p): the counts' multinomial log-likelihood under p,
-    /// normalised by p's sum.
+    /// Multinomial log-likelihood of the counts under p, normalised by p's
+    /// sum.
     double loglik(const std::array<std::uint64_t, kNumAA>& cnt, const Dist& p)
     {
       PySum z;

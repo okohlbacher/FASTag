@@ -17,6 +17,9 @@
 //     branch still collapses. It looked like a surviving mutation for two
 //     rounds. Check that the mutation changes behaviour before concluding the
 //     test is weak.
+//
+// Copyright (c) 2026 Oliver Kohlbacher and contributors
+// SPDX-License-Identifier: MIT
 #include "FASTagger.h"
 
 #include <OpenMS/CHEMISTRY/AASequence.h>

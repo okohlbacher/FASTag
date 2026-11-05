@@ -25,7 +25,7 @@ namespace FASTag
   /// isotope peaks, monoisotopic peaks moved to the singly-charged scale, no
   /// annotations and no intensity summing.
   ///
-  /// ponytail: only the parameter combination FASTag uses; OpenMS remains the
+  /// Scope: only the parameter combination FASTag uses; OpenMS remains the
   /// reference. The spectrum must also be what prepare() hands over: sorted by
   /// m/z, finite, with no data arrays and no precursor. OpenMS would cut
   /// candidate clusters at the precursor mass; FASTag's working copy has

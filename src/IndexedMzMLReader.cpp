@@ -292,7 +292,7 @@ namespace FASTag
       // of its own closing tag -- empty spectra, silently. Spread across the
       // run, because an edit in the middle shifts only the offsets after it;
       // 33 probes cost 33 reads of 16 bytes.
-      // ponytail: sampled, not exhaustive -- an edit that shifts no sampled
+      // Known limit: sampled, not exhaustive -- an edit that shifts no sampled
       // offset still gets through; check every offset if one ever does.
       {
         const std::size_t last = offsets->size() - 2; // -1 is the terminator
@@ -462,8 +462,8 @@ namespace FASTag
   bool IndexedMzMLReader::reportsSpectrumMetadata()
   {
     // Up to the FIRST MS2, not a fixed 64: a DDA run can open with minutes of
-    // MS1-only scans (loading, void volume), and a 64-spectrum window then
-    // threw the fast reader away and blamed the OpenMS build (review IO-2).
+    // MS1-only scans (loading, void volume), and a fixed 64-spectrum window
+    // would reject this reader for a file it reads correctly.
     // The head-only read is cheap; the cap bounds an MS1-only file.
     const Size probe = std::min<Size>(getNrSpectra(), kMetadataProbe);
     bool any_level = false;
@@ -485,8 +485,8 @@ namespace FASTag
     const std::uint64_t begin = (*impl_->offsets)[i];
     const std::uint64_t end = (*impl_->offsets)[i + 1];
     // A spectrum the tagging loop wants but cannot read is an error, as it
-    // is on OpenMS's reader: returned empty, it was skipped as "not MS2" and
-    // the run exited 0 with its tags missing (review IO-1). The metadata
+    // is on OpenMS's reader: returned empty, it would be skipped as "not MS2"
+    // and the run would exit 0 with its tags missing. The metadata
     // probe (want_peaks false) stays lenient.
     const auto unreadable = [&](const char* why) -> MSSpectrum {
       if (!want_peaks) return MSSpectrum();
@@ -590,9 +590,8 @@ namespace FASTag
     {
       // mzML records the unit; OpenMS wants seconds. As OpenMS's MzMLHandler
       // reads it: minutes (UO:0000031) are converted and anything else is
-      // taken as seconds -- an absent unit included. (This read an absent
-      // unit as minutes, so RTs in -recon_id_out were 60x off against the
-      // OpenMS path -out_spectra takes; review IO-4.)
+      // taken as seconds -- an absent unit included -- so RTs in -recon_id_out
+      // match the OpenMS path that -out_spectra takes.
       const std::string_view unit = cv_value(xml, kScanTime, 0, n, kUnit);
       spec.setRT(unit == "UO:0000031" ? rt * 60.0 : rt);
     }

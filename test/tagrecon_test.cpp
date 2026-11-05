@@ -1,4 +1,4 @@
-// Stage-A tag reconciliation: place a tag on a database peptide by flanking
+// Tag placement: place a tag on a database peptide by flanking
 // masses and localize a single mass gap. Dataset-independent -- the "spectrum"
 // flank masses are computed from the peptide itself, so a correct placement
 // must reconcile with delta 0, and an injected gap must localize.
@@ -88,7 +88,7 @@ int main()
         if (x.delta_interp.rfind("mod:Phospho@", 0) == 0) interpreted = true;
       }
     check(localized, "a C-side +79.966 gap localizes to the C-flank region with the right mass");
-    check(interpreted, "stage B interprets the +79.966 gap as mod:Phospho@S/T");
+    check(interpreted, "gap interpretation reads the +79.966 gap as mod:Phospho@S/T");
   }
 
   // --- Substitution gap: replace a region residue X by Y, delta = m(Y)-m(X) ---
@@ -105,7 +105,7 @@ int main()
       if (x.peptide == pep && !x.cterm_match && std::fabs(x.delta_mass - dsub) < 1e-3 &&
           x.delta_interp == "sub:A->S")
         sub = true;
-    check(sub, "stage B interprets an A->S mass gap as sub:A->S");
+    check(sub, "gap interpretation reads an A->S mass gap as sub:A->S");
   }
 
   // --- Modification gap on the N-side ---

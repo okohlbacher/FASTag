@@ -43,7 +43,7 @@ namespace FASTag
   /// no allocation per spectrum once warm.
   struct PeakGrid
   {
-    // ponytail: 1-Th buckets up to MAX_BUCKETS of them (16 KB), wider beyond.
+    // 1-Th buckets up to MAX_BUCKETS of them (16 KB), wider beyond.
     // At the <= 400 retained peaks of a fragment spectrum 1 Th holds under one
     // peak on average, so the step to lower_bound is usually zero or one peak;
     // the ceiling only bounds memory on a spectrum spanning more than 4096 Th
@@ -117,7 +117,7 @@ namespace FASTag
   /// are at least the lightest step away, which fit() requires to exceed w.
   struct StepTable
   {
-    // ponytail: 0.01-Th bins, and w capped at 1 Th. Neither affects the
+    // 0.01-Th bins, and w capped at 1 Th. Neither affects the
     // answer: a bin lists a step up to one bin beyond its window, which only
     // offers a peak that the exact test then settles. Width trades table size
     // (off is ~75 KB at charge 1) against steps offered per peak; the cap

@@ -50,7 +50,7 @@ namespace FASTag
   /// or derived spectrum whose ID extends a format's keys, and index=N, which
   /// converters number from 0 or 1 alike, so only the position is certain.
   ///
-  /// ponytail: the ID's own keys name its format; the file's declared nativeID
+  /// Known limit: the ID's own keys name its format; the file's declared nativeID
   /// format is not read. So Bruker TSF's frame=N, the layout diaTracer also
   /// writes for its pseudo-spectra (declaring Thermo), is left to index:<i>,
   /// which is right for both.

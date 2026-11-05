@@ -73,13 +73,13 @@ namespace FASTag
                                  std::vector<Kmer128>& out, size_t& budget) const
   {
     if (static_cast<int>(cur.size()) == k) { out.push_back(encode(cur.data(), k)); return; }
-    if (i >= seq.size() || budget == 0 || seq[i] == AMBIG) return;
+    if (i >= seq.size() || budget == 0 || seq[i] == RESIDUE_AMBIG) return;
 
     cur.push_back(seq[i]);
     emitReadings(seq, i + 1, k, cur, out, budget);
     cur.pop_back();
 
-    if (i + 1 < seq.size() && seq[i + 1] != AMBIG)
+    if (i + 1 < seq.size() && seq[i + 1] != RESIDUE_AMBIG)
       for (const auto& r : rules_)
         if (r.a == seq[i] && r.b == seq[i + 1])
         {
@@ -180,7 +180,7 @@ namespace FASTag
         {
           if (rules_.empty())
           {
-            if (std::memchr(seq.data() + i, AMBIG, static_cast<size_t>(k))) continue;
+            if (std::memchr(seq.data() + i, RESIDUE_AMBIG, static_cast<size_t>(k))) continue;
             v.keys.push_back(encode(seq.data() + i, k));
           }
           else

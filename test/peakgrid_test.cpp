@@ -92,7 +92,7 @@ namespace
   size_t pairs = 0, edges = 0, pair_ties = 0, nearer_fails = 0;
 
   /// Every (peak, step) of one spectrum through the table, against the edge
-  /// buildGraph used to take from findNearest: its index if above i, else -1.
+  /// MSSpectrum::findNearest gives: its index if above i, else -1.
   void checkTable(const std::vector<double>& mzs, StepTable& dt, const std::vector<double>& steps,
                   bool ppm, double frag_tol)
   {
