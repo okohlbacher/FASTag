@@ -14,9 +14,10 @@ The desktop GUI's own dependencies are tracked in `gui/package-lock.json`
 | [OpenMS](https://www.openms.de) | ≥ 3.7 (develop `70cebcd144`) | BSD-3-Clause | mzML, mzPeak and FASTA I/O, residue chemistry, physical constants, spectrum data structures, TOPP application framework (`OpenMS_CLI`) | dynamic |
 | [Boost.Math](https://www.boost.org) | ≥ 1.81 | BSL-1.0 | chi-squared and hypergeometric distributions | header-only |
 | [zlib](https://zlib.net) | the one OpenMS links (1.3.2 in CI) | Zlib | inflating zlib-compressed mzML peak arrays in the direct decoder | dynamic |
+| [mimalloc](https://github.com/microsoft/mimalloc) | 2.2.4 (source tarball pinned by SHA-256 in `CMakeLists.txt`) | MIT | Windows only (`FASTAG_MIMALLOC`, on by default with MSVC): replaces the Windows process heap for the whole process through `mimalloc-redirect.dll`, because the many small per-spectrum allocations of the mzML read scale poorly on it | dynamic (`mimalloc.dll` + `mimalloc-redirect.dll` beside the executable) |
 
-Boost and zlib arrive transitively with OpenMS; FASTag adds no dependency OpenMS does
-not already require. The only third-party source in this repository is one
+Boost and zlib arrive transitively with OpenMS; apart from mimalloc on Windows,
+FASTag adds no dependency OpenMS does not already require. The only third-party source in this repository is one
 function ported from OpenMS (BSD-3-Clause, notice kept in the file): the
 averagine deisotoper in `src/AveragineDeisotoper.cpp`.
 
@@ -36,6 +37,14 @@ Every bundle carries `LICENSE` (FASTag's MIT notice) and
 `tools/third_party_notices.py`: each bundled library mapped to the conda
 package that installed it, with that package's version, licence and licence
 texts. OpenMS's own licence and notices are in `share-OpenMS/`.
+
+The Windows zip and the Windows installer's bundled CLI also carry
+`mimalloc.dll` and `mimalloc-redirect.dll` (mimalloc 2.2.4, MIT, Microsoft
+Corporation and Daan Leijen), built from source by FASTag's CMake rather than
+installed by conda; `.github/workflows/windows.yml` appends mimalloc's licence
+text to `THIRD-PARTY-NOTICES.txt`. `mimalloc-redirect.dll` is the prebuilt
+binary the mimalloc source ships. Building with `-DFASTAG_MIMALLOC=OFF` drops
+both; `MIMALLOC_DISABLE_REDIRECT=1` switches the redirection off at run time.
 
 ## Shipped data
 

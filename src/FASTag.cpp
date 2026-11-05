@@ -47,6 +47,10 @@
 #include "Usi.h"
 #include "MzPeakStream.h"
 
+#ifdef FASTAG_MIMALLOC
+#include <mimalloc.h> // Windows: mimalloc with CRT redirection (CMakeLists.txt)
+#endif
+
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -3837,6 +3841,15 @@ int main(int argc, const char** argv)
     _putenv_s("OPENMS_DISABLE_UPDATE_CHECK", "ON");
 #else
   ::setenv("OPENMS_DISABLE_UPDATE_CHECK", "ON", 0);
+#endif
+#ifdef FASTAG_MIMALLOC
+  // Which heap this process allocates from. The redirection has to cover the
+  // DLLs (libxml2, OpenMS), so it is only real when mimalloc-redirect.dll
+  // loaded and patched the CRT; MIMALLOC_DISABLE_REDIRECT=1 switches it off.
+  // test/mimalloc_redirect_test.sh and the Windows bundle check read this.
+  if (std::getenv("FASTAG_TIMING"))
+    std::cerr << "FASTAG_ALLOC allocator=mimalloc version=" << mi_version()
+              << " redirected=" << (mi_is_redirected() ? 1 : 0) << std::endl;
 #endif
   // -threads defaults to 0 (half the cores; see main_). TOPPBase registers
   // that option itself, with default 1, AFTER registerOptionsAndFlags_ and

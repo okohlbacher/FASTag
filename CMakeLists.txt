@@ -92,6 +92,88 @@ endif()
 find_package(ZLIB REQUIRED)
 
 add_executable(FASTag src/FASTag.cpp src/IndexedMzMLReader.cpp src/MzMLDirectDecoder.cpp src/MgfReader.cpp src/MzPeakStream.cpp)
+
+# mimalloc on Windows, with redirection of the C runtime heap.
+#
+# The mzML read decodes each spectrum through OpenMS's MzMLSpectrumDecoder,
+# which builds and frees a libxml2 document tree: about 610 small heap
+# allocations per spectrum, all through UCRT malloc into the one Windows
+# process heap. That heap's cost grows when several cores allocate at once
+# (read time x1.12 from 1 to 2 cores on a GitHub runner, x2.0 from 1 to 12
+# threads on a 12-core Ryzen); with mimalloc the growth is gone (x1.01) and a
+# single thread reads 23-25% faster. The segment heap was slower. Linux and
+# macOS allocators do not show the effect, so this is MSVC only. (These
+# numbers predate the direct peak decoder of 1.11, which skips the libxml2
+# tree for the common array layouts; spectra it declines still take the
+# OpenMS path, and tagging allocates per spectrum too.)
+#
+# It has to be the REDIRECT variant: most of those allocations are made in
+# libxml2.dll and OpenMS.dll, not in FASTag.exe, so linking mimalloc's
+# malloc into the executable alone changes nothing (measured: the mimalloc
+# binary with redirection switched off behaves like the plain heap).
+# mimalloc.dll, loaded with the executable, has mimalloc-redirect.dll patch
+# ucrtbase's malloc/free for every module of the process. Requirements
+# (mimalloc's bin/readme.md): the dynamic CRT (/MD, CMake's default), the
+# import of mimalloc.dll early in the executable's import table (it is the
+# first library linked, and /INCLUDE:mi_version keeps the import), and both
+# DLLs next to the executable -- copied there after every build, shipped
+# there by .github/workflows/windows.yml. test/mimalloc_redirect_test.sh
+# asserts the redirection in the build tree, the workflow in the bundle.
+#
+# Pinned source tarball and hash; mimalloc-redirect.dll is the prebuilt
+# binary mimalloc ships in bin/ (MIT, as the rest of mimalloc). Allocation
+# order does not change any result: every output is byte-identical with and
+# without it (the ctest checks one run each way, threads_test and the rest
+# run the redirected binary). Off: -DFASTAG_MIMALLOC=OFF at configure time,
+# or MIMALLOC_DISABLE_REDIRECT=1 in the environment of a shipped binary.
+include(CMakeDependentOption)
+cmake_dependent_option(FASTAG_MIMALLOC
+  "Windows: link mimalloc and redirect the C runtime heap of all modules to it" ON "MSVC" OFF)
+if(FASTAG_MIMALLOC)
+  include(FetchContent)
+  set(MI_BUILD_SHARED ON)
+  set(MI_BUILD_STATIC OFF)
+  set(MI_BUILD_OBJECT OFF)
+  set(MI_BUILD_TESTS OFF)
+  set(MI_OVERRIDE ON)
+  set(MI_WIN_REDIRECT ON)
+  set(_fastag_mi_extra)
+  if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.28)
+    # Keeps mimalloc's headers, static targets and CMake package out of
+    # `cmake --install`; the two DLLs FASTag needs are installed below.
+    list(APPEND _fastag_mi_extra EXCLUDE_FROM_ALL)
+  endif()
+  FetchContent_Declare(mimalloc
+    URL https://github.com/microsoft/mimalloc/archive/refs/tags/v2.2.4.tar.gz
+    URL_HASH SHA256=754a98de5e2912fddbeaf24830f982b4540992f1bab4a0a8796ee118e0752bda
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    ${_fastag_mi_extra})
+  FetchContent_MakeAvailable(mimalloc)
+  if(CMAKE_CXX_COMPILER_ARCHITECTURE_ID MATCHES "ARM64")
+    set(_fastag_mi_redirect "${mimalloc_SOURCE_DIR}/bin/mimalloc-redirect-arm64.dll")
+  elseif(CMAKE_SIZEOF_VOID_P EQUAL 4)
+    set(_fastag_mi_redirect "${mimalloc_SOURCE_DIR}/bin/mimalloc-redirect32.dll")
+  else()
+    set(_fastag_mi_redirect "${mimalloc_SOURCE_DIR}/bin/mimalloc-redirect.dll")
+  endif()
+  if(NOT EXISTS "${_fastag_mi_redirect}")
+    message(FATAL_ERROR "FASTag: ${_fastag_mi_redirect} missing from the mimalloc source")
+  endif()
+  # First in the link line, so first among the imported DLLs.
+  target_link_libraries(FASTag PRIVATE mimalloc)
+  target_link_options(FASTag PRIVATE "/INCLUDE:mi_version")
+  # FASTAG_TIMING reports mi_version() and mi_is_redirected() (src/FASTag.cpp).
+  target_compile_definitions(FASTag PRIVATE FASTAG_MIMALLOC=1)
+  add_custom_command(TARGET FASTag POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "$<TARGET_FILE:mimalloc>" "${_fastag_mi_redirect}" "$<TARGET_FILE_DIR:FASTag>"
+    COMMENT "Copy mimalloc.dll and its redirect DLL next to FASTag.exe")
+  install(FILES "$<TARGET_FILE:mimalloc>" "${_fastag_mi_redirect}" DESTINATION bin)
+  # The licence text the Windows bundle's THIRD-PARTY-NOTICES.txt carries.
+  configure_file("${mimalloc_SOURCE_DIR}/LICENSE" "${CMAKE_CURRENT_BINARY_DIR}/mimalloc-LICENSE.txt" COPYONLY)
+  message(STATUS "FASTag: mimalloc 2.2.4 with CRT redirection (FASTAG_MIMALLOC=ON)")
+endif()
+
 target_link_libraries(FASTag PRIVATE fastag_core OpenMS_CLI ZLIB::ZLIB)
 # So --help reports FASTag's version instead of the OpenMS it was built against.
 target_compile_definitions(FASTag PRIVATE FASTAG_VERSION="${PROJECT_VERSION}")
@@ -193,6 +275,15 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
   set_tests_properties(threads_test PROPERTIES SKIP_RETURN_CODE 77)
+
+  # Windows with FASTAG_MIMALLOC: the redirection is active for the whole
+  # process, MIMALLOC_DISABLE_REDIRECT=1 switches it off, and the tags are
+  # the same either way.
+  if(FASTAG_MIMALLOC)
+    add_test(NAME mimalloc_redirect_test
+             COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/mimalloc_redirect_test.sh $<TARGET_FILE:FASTag>
+                     ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML)
+  endif()
 
   # The shipped digest data, for digest_test and digest_cli_test.
   target_compile_definitions(digest_test PRIVATE
