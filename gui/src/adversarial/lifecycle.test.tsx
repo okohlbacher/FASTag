@@ -1,6 +1,5 @@
-// Lifecycle lens: run lifecycle and state correctness in App.tsx, driven through
-// the mock bridge. Each test PINS the current behaviour; a name that
-// starts with "BUG:" documents a defect; "FIXED (id):" pins the corrected behaviour.
+// Run lifecycle: what the GUI shows before, during and after a run, driven
+// through the mock bridge.
 // CLI line sequences are copied from real FASTag 1.9.0 runs on the public
 // E. coli fixture (scratch/lifecycle/*_combined.txt).
 
@@ -12,7 +11,7 @@ import type { SpeciesReport } from '../types'
 
 async function renderApp(mock: MockBridge): Promise<HTMLElement> {
   const { container } = render(<App />)
-  await screen.findByText('CLI ready')
+  await screen.findByText('FASTag ready')
   await act(async () => {})
   return container
 }
@@ -36,12 +35,11 @@ const log = (mock: MockBridge, line: string): Promise<void> => act(async () => m
 
 const speciesA: SpeciesReport = {
   path: '/d/a.tags.species.tsv',
-  empty: false,
-  taxa: [{ rank: 'genus', taxid: 561, name: 'Escherichia', observed: 7, adjusted: 7, expected: 0.1, logP: -20, q: 1e-13 }]
+  taxa: [{ rank: 'genus', taxid: 561, name: 'Escherichia', observed: 7, adjusted: 7, q: 1e-13 }]
 }
 
 describe('lifecycle: failure banner', () => {
-  it('FIXED (M1): a FASTag refusal, not the trailing "FASTag took" timing line, is quoted in the banner', async () => {
+  it('a FASTag refusal, not the trailing "FASTag took" timing line, is quoted in the banner', async () => {
     // Real 1.9.0 output of `-species` with the default tag_length 3 (rc 6),
     // stdout and stderr merged in write order (c1_combined.txt).
     const mock = installMockBridge()
@@ -61,7 +59,7 @@ describe('lifecycle: failure banner', () => {
     expect(alert.textContent).not.toContain('FASTag took')
   })
 
-  it('FIXED (M1): same for -massgap_out without -recon_out (the case App.test pins without the timing line)', async () => {
+  it('same for -massgap_out without -recon_out (the case App.test pins without the timing line)', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await pickSingle(mock, '/d/a.mzML')
@@ -74,7 +72,7 @@ describe('lifecycle: failure banner', () => {
     expect(alert.textContent).not.toContain('Peak Memory Usage')
   })
 
-  it('FIXED (m2): a batch job failure keeps its reason although the next job clears the log', async () => {
+  it('a batch job failure keeps its reason although the next job clears the log', async () => {
     const mock = installMockBridge()
     const c = await renderApp(mock)
     await addBatch(mock, ['/d/a.mzML', '/d/b.mzML'])
@@ -85,13 +83,13 @@ describe('lifecycle: failure banner', () => {
     await done(mock, 2, true)
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toBe(
-      "1 of 2 batch jobs faileda.mzML (exit code 1)FASTag's reason:Error: File not found (the file /d/a.mzML could not be found)Show full logCopy command"
+      "1 of 2 batch jobs faileda.mzML (exit code 1)FASTag's reason:Error: File not found (the file /d/a.mzML could not be found)What to doShow full logCopy command"
     )
     expect(logText(c)).not.toContain('File not found') // the log is job b's
     expect(c.querySelector('li.job.failed .st')?.getAttribute('title')).toContain('File not found')
   })
 
-  it('FIXED (m3): a cancelled batch job is marked cancelled, not failed, and Cancel is sent once', async () => {
+  it('a cancelled batch job is marked cancelled, not failed, and Cancel is sent once', async () => {
     const mock = installMockBridge()
     const c = await renderApp(mock)
     await addBatch(mock, ['/d/a.mzML', '/d/b.mzML'])
@@ -111,7 +109,7 @@ describe('lifecycle: failure banner', () => {
 })
 
 describe('lifecycle: stale state across runs', () => {
-  it('FIXED (M4): a run on sample B clears sample A species calls, and the pane names its input', async () => {
+  it('a run on sample B clears sample A species calls, and the pane names its input', async () => {
     const mock = installMockBridge()
     mock.settings.lastUsed = { species: true, tag_length: '7' }
     mock.speciesResult = speciesA
@@ -133,7 +131,7 @@ describe('lifecycle: stale state across runs', () => {
     expect(document.querySelector('.path')?.getAttribute('title')).toBe('/d/b.mzML')
   })
 
-  it('FIXED (M4): a rejecting species read clears the previous species and still reads the Digest reports', async () => {
+  it('a rejecting species read clears the previous species and still reads the Digest reports', async () => {
     const mock = installMockBridge()
     mock.settings.lastUsed = { species: true, tag_length: '7', digest_out: '/r/a.digest.tsv' }
     mock.speciesResult = speciesA
@@ -150,12 +148,12 @@ describe('lifecycle: stale state across runs', () => {
     await done(mock, 2, true)
     await waitFor(() => expect(document.querySelector('.log')?.textContent).toContain('permission denied'))
     expect(mock.reportCalls.length).toBe(reportReadsAfterA + 1)
-    expect(mock.reportCalls[mock.reportCalls.length - 1]).toBe('/d/b.digest.tsv') // beside B's tags (M3)
+    expect(mock.reportCalls[mock.reportCalls.length - 1]).toBe('/d/b.digest.tsv') // beside B's tags
     await click(screen.getByRole('tab', { name: /Species/ }))
     expect(screen.queryAllByText('Escherichia')).toHaveLength(0)
   })
 
-  it('FIXED (M4): the Species tab follows the run, not the form: unticking keeps the report, re-ticking shows no stale one', async () => {
+  it('the Species tab follows the run, not the form: unticking keeps the report, re-ticking shows no stale one', async () => {
     const mock = installMockBridge()
     mock.settings.lastUsed = { species: true, tag_length: '7' }
     mock.speciesResult = speciesA
@@ -190,11 +188,11 @@ describe('lifecycle: stale state across runs', () => {
     expect(mock.speciesCalls).toEqual(['/d/a.tags.species.tsv'])
   })
 
-  it('FIXED (M4): lowering tag_length after a valid species run keeps showing its report', async () => {
+  it('lowering tag_length after a valid species run keeps showing its report', async () => {
     const mock = installMockBridge()
     mock.settings.lastUsed = { species: true, tag_length: '7' }
     mock.speciesResult = speciesA
-    mock.taxdbInfoResult = { path: '/tax/tax_k7.taxdb', k: 7, kmers: 1 }
+    mock.taxdbInfoResult = { path: '/tax/tax_k7.taxdb', k: 7 }
     await renderApp(mock)
     await pickSingle(mock, '/d/a.mzML')
     await click(runButton())
@@ -207,7 +205,7 @@ describe('lifecycle: stale state across runs', () => {
     expect(screen.queryAllByText('Escherichia').length).toBeGreaterThan(0)
   })
 
-  it('FIXED (M4): Choose file and Output are locked mid-run; the run of A finishes under input A', async () => {
+  it('Choose file and Output are locked mid-run; the run of A finishes under input A', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await pickSingle(mock, '/d/a.mzML')
@@ -226,7 +224,7 @@ describe('lifecycle: stale state across runs', () => {
     expect(document.querySelector('.tabpanel')?.textContent).toContain('from the run of /d/a.mzML')
   })
 
-  it('FIXED (M6, review): re-running the same output takes the old table down while it runs; after a cancel or failure it stays withheld as incomplete', async () => {
+  it('re-running the same output takes the old table down while it runs; after a cancel or failure it stays withheld as incomplete', async () => {
     // The CLI writes -out in place (as in 1.9.0), so a cancelled or failed
     // re-run may leave a truncated file: the table is withheld until the user
     // opens it anyway.
@@ -263,7 +261,7 @@ describe('lifecycle: stale state across runs', () => {
     expect(document.querySelector('.tabpanel')?.textContent).not.toContain('Incomplete.')
   })
 
-  it('FIXED (review): a batch job that rewrote the table on screen clears it; a failed last job names the file with no tags', async () => {
+  it('a batch job that rewrote the table on screen clears it; a failed last job names the file with no tags', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await pickSingle(mock, '/d/a.mzML')
@@ -296,7 +294,7 @@ describe('lifecycle: stale state across runs', () => {
 })
 
 describe('lifecycle: last-run summary', () => {
-  it('FIXED (review): the Last run block names the parameters the run was given, not the edited form', async () => {
+  it('the Last run block names the parameters the run was given, not the edited form', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await pickSingle(mock, '/d/a.mzML')
@@ -315,7 +313,7 @@ describe('lifecycle: last-run summary', () => {
 })
 
 describe('lifecycle: run gating races', () => {
-  it('FIXED (M5): the single Run button is disabled behind a batch queue', async () => {
+  it('the single Run button is disabled behind a batch queue', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await pickSingle(mock, '/d/hidden.mzML')
@@ -328,7 +326,7 @@ describe('lifecycle: run gating races', () => {
     expect(mock.runCalls).toHaveLength(0)
   })
 
-  it('FIXED (m4): a done event that beats the invoke reply leaves Run disabled until the run settled', async () => {
+  it('a done event that beats the invoke reply leaves Run disabled until the run settled', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await pickSingle(mock, '/d/a.mzML')
@@ -348,7 +346,7 @@ describe('lifecycle: run gating races', () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await pickSingle(mock, '/d/a.mzML')
-    mock.failNextRun = 'cannot start: No such file or directory (os error 2)'
+    mock.failNextRun = 'No such file or directory (os error 2)'
     await click(runButton())
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain('No such file or directory')
@@ -376,7 +374,7 @@ describe('lifecycle: run gating races', () => {
     expect(mock.runCalls[0]).toMatchObject({ in: p, out: `/d/dir with space/ünï cödé 'q"/s a'm"p.tags.tsv` })
   })
 
-  it('FIXED (m3): a done event the backend flags cancelled is no failure, whatever its exit code', async () => {
+  it('a done event the backend flags cancelled is no failure, whatever its exit code', async () => {
     const mock = installMockBridge()
     const c = await renderApp(mock)
     await pickSingle(mock, '/d/a.mzML')
@@ -386,7 +384,7 @@ describe('lifecycle: run gating races', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
-  it('FIXED (m37): the log keeps a bounded tail, so a chatty run does not grow it without limit', async () => {
+  it('the log keeps a bounded tail, so a chatty run does not grow it without limit', async () => {
     const mock = installMockBridge()
     const c = await renderApp(mock)
     await pickSingle(mock, '/d/a.mzML')

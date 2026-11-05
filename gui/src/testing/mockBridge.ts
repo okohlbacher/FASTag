@@ -175,7 +175,6 @@ export function installMockBridge(): MockBridge {
         columns: mock.resultsColumns,
         totalRows: mock.resultsRows.length,
         matchedRows: mock.resultsRows.length,
-        offset,
         rows: mock.resultsRows.slice(offset, offset + limit)
       })
     },

@@ -1,13 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEPENDS,
+  HIDDEN,
+  LABEL,
   PARAM_BY_NAME,
   RENDERED,
   SECTIONS,
+  conflicts,
+  humanName,
   inertBecause,
   invalidBecause,
   isActive,
   masters,
+  speciesReach,
   unknownParams,
   unplacedParams
 } from './paramLayout'
@@ -114,5 +119,43 @@ describe('field validation', () => {
     expect(invalidBecause(spec, '-1')).toBe('must be greater than 0')
     expect(invalidBecause(spec, '1e-12')).toBe('must be at least 1e-9')
     expect(invalidBecause(spec, '0.02')).toBeNull()
+  })
+})
+
+describe('field validation: an exclusive maximum', () => {
+  // The CLI declares digest_background_share 0..1 but refuses 1 (rc 6).
+  it('refuses digest_background_share 1, as the CLI does', () => {
+    const spec = PARAM_BY_NAME.get('digest_background_share')!
+    expect(invalidBecause(spec, '1')).toBe('must be below 1')
+    expect(invalidBecause(spec, '0.99')).toBeNull()
+    expect(invalidBecause(spec, '1.5')).toBe('must be at most 1')
+  })
+})
+
+describe('preflight conflicts', () => {
+  it('reads a cleared tag_length as its default 3, as the CLI does', () => {
+    const v = { species: true, tag_length: '', extension: '2' }
+    expect(speciesReach(v, 7)).toBeNull()
+    expect(conflicts(v, { taxdbK: 7 })).toEqual([])
+    expect(speciesReach({ species: true, tag_length: '3', extension: '1' }, 7)).toMatchObject({ reach: 5, k: 7, option: 'tag_length' })
+  })
+
+  it('refuses part of the taxdb/taxonomy_nodes/taxonomy_names set', () => {
+    const c = conflicts({ species: true, taxdb: '/d/x.taxdb' })
+    expect(c.map((x) => x.params)).toEqual([['taxonomy_nodes', 'taxonomy_names']])
+    expect(conflicts({ species: true, taxdb: '/a', taxonomy_nodes: '/b', taxonomy_names: '/c' })).toEqual([])
+    expect(conflicts({ species: false, taxdb: '/d/x.taxdb' })).toEqual([])
+  })
+})
+
+describe('labels', () => {
+  it('labels only rendered parameters, each with its own words', () => {
+    for (const name of Object.keys(LABEL)) {
+      expect(PARAM_BY_NAME.has(name), name).toBe(true)
+      expect(HIDDEN[name], name).toBeUndefined()
+      expect(RENDERED, name).toContain(name)
+    }
+    expect(new Set(Object.values(LABEL)).size).toBe(Object.keys(LABEL).length)
+    expect(humanName('tag_length')).toBe('Tag length')
   })
 })

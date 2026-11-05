@@ -1,7 +1,6 @@
 // @ts-nocheck -- test-only file; uses node APIs and ES2022 helpers outside the app tsconfig
-// Live lens: pins defects first observed by driving the running dev server
-// (vite + mock bridge) in a browser. Each test first pinned the v1.9.0
-// behaviour; "BUG:" names a defect still pinned, "FIXED" asserts the correction.
+// The app as a user drives it (vite + mock bridge): run inputs, presets,
+// batches and the tags filter.
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import App from '../App'
@@ -10,7 +9,7 @@ import { installMockBridge, type MockBridge } from '../testing/mockBridge'
 
 async function renderApp(mock: MockBridge): Promise<HTMLElement> {
   const { container } = render(<App />)
-  await screen.findByText('CLI ready')
+  await screen.findByText('FASTag ready')
   await act(async () => {})
   return container
 }
@@ -37,7 +36,7 @@ const done = (mock: MockBridge, ok = true, code: number | null = ok ? 0 : 1): Pr
   act(async () => mock.emitDone({ runId: mock.lastRunId, ok, code, message: null }))
 
 describe('live: run inputs', () => {
-  it('FIXED (M2): a preset\'s report paths are rebased onto the input chosen before it', async () => {
+  it('a preset\'s report paths are rebased onto the input chosen before it', async () => {
     const mock = installMockBridge()
     const c = await renderApp(mock)
     await pick(mock, '/r/A.mzML')
@@ -56,7 +55,7 @@ describe('live: run inputs', () => {
     expect(mock.runCalls.at(-1)!.params.digest_out).toBe('/r/B.digest.tsv')
   })
 
-  it('FIXED (M5): with a batch queue shown, the single Run is disabled', async () => {
+  it('with a batch queue shown, the single Run is disabled', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await pick(mock, '/r2/sampleB.mzML')
@@ -70,7 +69,7 @@ describe('live: run inputs', () => {
     expect(mock.runCalls).toHaveLength(0)
   })
 
-  it('FIXED (M9): an invalid number typed into a field is marked, and Run stays disabled', async () => {
+  it('an invalid number typed into a field is marked, and Run stays disabled', async () => {
     const mock = installMockBridge()
     const c = await renderApp(mock)
     await pick(mock, '/r/A.mzML')
@@ -84,9 +83,9 @@ describe('live: run inputs', () => {
     expect(mock.runCalls).toHaveLength(0)
   })
 
-  it('FIXED (m1): species with tag_length 3 against a k=7 index: Run is disabled and the reason sits next to the form, as the CLI refuses with rc 6', async () => {
+  it('species with tag_length 3 against a k=7 index: Run is disabled and the reason sits next to the form, as the CLI refuses with rc 6', async () => {
     const mock = installMockBridge()
-    mock.taxdbInfoResult = { path: '/t/tax_k7.taxdb', k: 7, kmers: 1 }
+    mock.taxdbInfoResult = { path: '/t/tax_k7.taxdb', k: 7 }
     const c = await renderApp(mock)
     await pick(mock, '/r/A.mzML')
     await openSection('Species detection')
@@ -94,12 +93,12 @@ describe('live: run inputs', () => {
     expect((runButton() as HTMLButtonElement).disabled).toBe(true)
     expect(c.querySelector('.controls .warn')!.textContent).toMatch(/cannot reach the species index k = 7/)
     await click(screen.getByRole('tab', { name: /Species/ }))
-    expect(c.querySelector('.tabpanel')!.textContent).toContain('FASTag refuses such a run up front')
+    expect(c.querySelector('.tabpanel')!.textContent).toContain('FASTag refuses the run')
   })
 })
 
 describe('live: failure and stale results', () => {
-  it('FIXED (M1): the failure banner quotes the ConversionError, not the --help dump after it', async () => {
+  it('the failure banner quotes the ConversionError, not the --help dump after it', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await pick(mock, '/r/A.mzML')
@@ -117,7 +116,7 @@ describe('live: failure and stale results', () => {
     expect(screen.getByRole('alert').textContent).toContain('ConversionError')
   })
 
-  it('FIXED (M4): after B fails, the Species tab no longer shows A\'s taxa and names B; a species-off run has no badge', async () => {
+  it('after B fails, the Species tab no longer shows A\'s taxa and names B; a species-off run has no badge', async () => {
     const mock = installMockBridge()
     mock.speciesResult = {
       path: '/s/A.tags.species.tsv',
@@ -144,7 +143,7 @@ describe('live: failure and stale results', () => {
     expect(screen.getByRole('tab', { name: /Species/ }).textContent).toBe('Species')
   })
 
-  it('FIXED (M7): after a run, permanent controls open another tags TSV or a report', async () => {
+  it('after a run, permanent controls open another tags TSV or a report', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
     expect(screen.getByRole('button', { name: /Open a tags TSV/ })).toBeTruthy()
@@ -160,17 +159,17 @@ describe('live: failure and stale results', () => {
     expect(screen.getByRole('tab', { name: /Digest/ })).toBeTruthy()
   })
 
-  it('BUG: duplicates within one batch pick are queued twice (React duplicate key)', async () => {
+  it('a file picked twice in one batch dialog is queued once', async () => {
     const mock = installMockBridge()
     const c = await renderApp(mock)
     mock.nextPickInputs = ['/d/a.mzML', '/d/a.mzML']
     await click(screen.getByRole('button', { name: /^(Add files for a batch|Add)…$/ }))
-    expect(c.querySelectorAll('li.job').length).toBe(2)
+    expect(c.querySelectorAll('li.job').length).toBe(1)
   })
 })
 
 describe('live: tags filter', () => {
-  it('FIXED (M10): a decimal-comma E-value filter is read as a decimal', async () => {
+  it('a decimal-comma E-value filter is read as a decimal', async () => {
     const mock = installMockBridge()
     render(<ResultsTable path="/r/A.tags.tsv" />)
     const ev = await screen.findByLabelText('Max. E-value')
@@ -184,7 +183,7 @@ describe('live: tags filter', () => {
     expect(ev.getAttribute('aria-invalid')).toBeNull()
   })
 
-  it('FIXED (m7): a negative min length is marked invalid and never reaches the backend (ViewSpec is Option<u32>)', async () => {
+  it('a negative min length is marked invalid and never reaches the backend (ViewSpec is Option<u32>)', async () => {
     const mock = installMockBridge()
     render(<ResultsTable path="/r/A.tags.tsv" />)
     const ml = await screen.findByLabelText('Min. length')

@@ -1,12 +1,12 @@
 // @ts-nocheck -- test-only helper; uses node APIs outside the app tsconfig
-// Inputs the adversarial tests take from outside the repository. None is
+// Inputs the tests in this folder take from outside the repository. None is
 // required: a test that needs one is skipped when it is not set.
 //
-//   FASTAG_GUI_REVIEW_SCRATCH  the GUI review's scratch directory: real FASTag
-//                              1.9.0 outputs on the public E. coli fixture
-//                              (map/, docs/, parsers/) and the pipe-order
-//                              helper (cli/order_rs/target/debug/order_rs)
-//   FASTAG_ORDER_RS            the pipe-order helper, if not in the scratch dir
+//   FASTAG_GUI_TEST_OUTPUTS    a directory of real FASTag 1.9.0 outputs on the
+//                              public E. coli fixture (map/, docs/, parsers/)
+//                              and the pipe-order helper
+//                              (cli/order_rs/target/debug/order_rs)
+//   FASTAG_ORDER_RS            the pipe-order helper, if not in that directory
 //   FASTAG_BIN                 a FASTag CLI to run (cli-consistency); it must be
 //                              the version of params.generated.json, since the GUI
 //                              sends options an older CLI does not know
@@ -17,13 +17,13 @@ import { join } from 'node:path'
 
 const env = (k: string): string => (process.env[k] ?? '').trim()
 
-/** The review scratch directory, or '' when FASTAG_GUI_REVIEW_SCRATCH is unset. */
-export const SCRATCH: string = env('FASTAG_GUI_REVIEW_SCRATCH')
+/** The test-outputs directory, or '' when FASTAG_GUI_TEST_OUTPUTS is unset. */
+export const SCRATCH: string = env('FASTAG_GUI_TEST_OUTPUTS')
 
-/** A path inside the scratch directory ('' when it is unset). */
+/** A path inside the test-outputs directory ('' when it is unset). */
 export const scratchPath = (rel: string): string => (SCRATCH ? join(SCRATCH, rel) : '')
 
-/** True when the scratch directory is set and holds every one of @p rel. */
+/** True when the test-outputs directory is set and holds every one of @p rel. */
 export const haveScratch = (...rel: string[]): boolean =>
   SCRATCH !== '' && rel.every((r) => existsSync(scratchPath(r)))
 

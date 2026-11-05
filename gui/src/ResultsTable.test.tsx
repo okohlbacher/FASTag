@@ -58,7 +58,7 @@ describe('ResultsTable', () => {
   })
 
   it('fits the default tags columns in about 840 px, and words the hits as the filter does', async () => {
-    // The columns and the longest values of the review's 1280x820 fixture.
+    // The columns and the longest values of a 1280x820 window.
     const cols = ['spectrum', 'tag', 'length', 'nterm_mass', 'cterm_mass', 'evalue', 'fasta_hit']
     const w = autoWidths(cols, [['controllerType=0 controllerNumber=1 scan=11482', 'ADGWAQ', '6', '1234.5678', '1234.5678', '4.17e-08', 'efwd']])
     expect(Object.values(w).reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(838)
@@ -67,9 +67,9 @@ describe('ResultsTable', () => {
     mock.resultsRows = [['a', 'fwd'], ['b', 'erev'], ['c', '-']]
     render(<ResultsTable path="/d/y.tags.tsv" />)
     await flush()
-    expect(screen.getByRole('cell', { name: 'fwd' }).textContent).toBe('Target')
+    expect(screen.getByRole('cell', { name: 'fwd' }).textContent).toBe('In database')
     expect(screen.getByRole('cell', { name: 'erev' }).textContent).toBe('Entrapment')
-    expect(screen.getByRole('cell', { name: '-' }).textContent).toBe('No hit')
+    expect(screen.getByRole('cell', { name: '-' }).textContent).toBe('No match')
   })
 
   it('filters commit on Enter, not per keystroke', async () => {
@@ -137,9 +137,9 @@ describe('ResultsTable', () => {
     const mock = await renderTable()
     await screen.findByText('Showing 3 of 3')
     await clickIn(screen.getByRole('button', { name: 'Columns…' }))
-    await clickIn(screen.getByRole('checkbox', { name: 'length' }))
+    await clickIn(screen.getByRole('checkbox', { name: 'Length' }))
     expect(screen.queryByRole('button', { name: 'Length' })).toBeNull()
-    await clickIn(screen.getByRole('button', { name: 'Target' }))
+    await clickIn(screen.getByRole('button', { name: 'In database' }))
     mock.nextPickOutput = '/d/x.shown.tsv'
     await clickIn(screen.getByRole('button', { name: 'Export shown rows…' }))
     expect(mock.exportCalls).toEqual([

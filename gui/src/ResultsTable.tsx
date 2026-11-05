@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type JSX, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import type { ResultsPage, ResultsSort, ResultsView } from './types'
-import { baseName } from './digestReport'
+import { baseName, DECIMAL } from './digestReport'
+import { HelpButton, HelpLink } from './help/HelpLink'
 
 // Hand-rolled fixed-row-height virtualization. Not react-window: above ~600k
 // rows the spacer div would exceed WebKit's ~16.7M px element-height limit and
@@ -38,7 +39,9 @@ const GLYPH_W = 16
 // scan number stays visible; dragging the edge widens it.
 const SPECTRUM_AUTO_W = 200
 
-// The tags file's own column names, in words; any other column keeps its name.
+// The tags file's column names in words, the optional ones (-proforma,
+// -res_conf, -usi_collection, -entrapment_fasta) included; any other column
+// keeps its name.
 const LABEL: Record<string, string> = {
   spectrum: 'Spectrum',
   tag: 'Tag',
@@ -51,16 +54,20 @@ const LABEL: Record<string, string> = {
   evalue: 'E-value',
   min_conf: 'Min. conf.',
   mean_conf: 'Mean conf.',
-  fasta_hit: 'Database hit'
+  fasta_hit: 'Database hit',
+  proforma: 'ProForma',
+  res_conf: 'Residue conf.',
+  usi: 'USI',
+  q_db: 'Database q-value'
 }
 export const columnLabel = (c: string): string => LABEL[c] ?? c
 
 // A fasta_hit value in the words of the Database hit filter; the raw value
 // stays the cell's name and tooltip.
 function hitWords(v: string): string {
-  if (v === '-' || v === '') return 'No hit'
+  if (v === '-' || v === '') return 'No match'
   if (v === 'efwd' || v === 'erev') return 'Entrapment'
-  if (v === 'fwd' || v === 'rev' || v === 'target') return 'Target'
+  if (v === 'fwd' || v === 'rev') return 'In database'
   return v
 }
 
@@ -119,19 +126,21 @@ function parseMaxEvalue(s: string): { value: number | null; invalid: boolean } {
   const t = s.trim().replace(',', '.')
   if (t === '') return { value: null, invalid: false }
   const v = Number(t)
-  if (!/^\+?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i.test(t) || !Number.isFinite(v)) {
+  // A negative E-value is never a valid maximum.
+  if (t.startsWith('-') || !DECIMAL.test(t) || !Number.isFinite(v)) {
     return { value: null, invalid: true }
   }
   return { value: v, invalid: false }
 }
 
 type FastaHitChoice = 'any' | 'only' | 'none' | 'entrapment'
-// The fasta_hit filter as a segmented control, in the words of the README.
+// The fasta_hit filter as a segmented control. In database: fwd/rev.
+// Entrapment: efwd/erev, only in the entrapment database. Not in database: '-' or efwd/erev (no -fasta hit).
 const HIT_CHOICES: [FastaHitChoice, string][] = [
   ['any', 'All'],
-  ['only', 'Target'],
+  ['only', 'In database'],
   ['entrapment', 'Entrapment'],
-  ['none', 'No hit']
+  ['none', 'Not in database']
 ]
 
 // A column is numeric when every value of the first page is a number (or the
@@ -408,6 +417,7 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
           {meta ? `${meta.total.toLocaleString('en-US')} ${meta.total === 1 ? 'tag' : 'tags'}` : 'Reading…'}
           {source && ` · ${source}`}
         </span>
+        <HelpButton to="results-columns" what="the tags table" />
         <span className="spacer" />
         <button
           type="button"
@@ -435,7 +445,7 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
                 disabled={!hidden.has(c) && shown.length === 1}
                 onChange={() => toggleColumn(c)}
               />
-              <code>{c}</code>
+              <span title={c}>{columnLabel(c)}</span>
             </label>
           ))}
         </fieldset>
@@ -509,7 +519,10 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
           </div>
         )}
         {has('fasta_hit') && (
-          <fieldset className="rt-f seg-field">
+          <fieldset
+            className="rt-f seg-field"
+            title="Whether the tag occurs in the sequence database (fasta) or only in the entrapment database (entrapment_fasta)"
+          >
             <legend>Database hit</legend>
             <div className="seg">
               {HIT_CHOICES.map(([v, words]) => (
@@ -575,7 +588,7 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
                       className="rt-th"
                       style={{ flex: 1, minWidth: 0 }}
                       onClick={() => clickSort(c)}
-                      title={`sort by ${c}`}
+                      title={`Sort by ${label}`}
                     >
                       {label}
                       {sort?.column === c && (
@@ -606,10 +619,18 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
               {rowsOut}
             </div>
           </div>
-          {/* The first page of a large file takes a while to index. */}
-          {!meta && <div className="empty" role="status">Indexing…</div>}
+          {/* The first page of a large file takes a while to read. */}
+          {!meta && <div className="empty" role="status">Reading…</div>}
           {meta && matched === 0 && (
-            <div className="empty">{meta.total === 0 ? 'The file has no tags.' : 'No rows match the filters.'}</div>
+            <div className="empty">
+              {meta.total === 0 ? (
+                <>
+                  The file has no tags. <HelpLink to="faq-no-tags">Possible causes</HelpLink>
+                </>
+              ) : (
+                'No rows match the filters.'
+              )}
+            </div>
           )}
         </div>
       )}

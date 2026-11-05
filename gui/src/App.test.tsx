@@ -19,7 +19,7 @@ async function renderApp(mock: MockBridge): Promise<HTMLElement> {
   const { container } = render(<App />)
   // Settle the mount effects (probe badge, settings, taxdb) before the test
   // interacts -- also keeps React 19 act warnings out of the output.
-  await screen.findByText('CLI ready')
+  await screen.findByText('FASTag ready')
   await act(async () => {})
   return container
 }
@@ -119,7 +119,7 @@ describe('run/batch orchestration', () => {
     await pickSingle(mock, '/d/a.mzML')
     mock.failNextRun = 'binary vanished'
     await click(runButton())
-    await waitFor(() => expect(logText(container)).toContain('could not start: binary vanished'))
+    await waitFor(() => expect(logText(container)).toContain('FASTag could not start: binary vanished'))
     expect(runButton().textContent).toMatch(/^Run( on .+)?$/)
     expect(mock.resultsQueryCalls).toHaveLength(0)
   })
@@ -130,7 +130,7 @@ describe('run/batch orchestration', () => {
     await pickSingle(mock, '/d/a.mzML')
     mock.rejectNextRun = new Error('ipc down')
     await click(runButton())
-    await waitFor(() => expect(logText(container)).toContain('could not start:'))
+    await waitFor(() => expect(logText(container)).toContain('FASTag could not start:'))
     expect(logText(container)).toContain('ipc down')
     expect(runButton().textContent).toMatch(/^Run( on .+)?$/)
   })
@@ -295,7 +295,7 @@ describe('run/batch orchestration', () => {
     const mock = installMockBridge()
     mock.binaryInfo = { bin: '/mock/FASTag', source: 'env', ok: false, detail: 'missing' }
     const { container } = render(<App />)
-    await screen.findByText(/binary not runnable/)
+    await screen.findByText(/FASTag cannot start/)
     await act(async () => {})
     mock.nextPickInput = '/d/a.mzML'
     await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
@@ -311,7 +311,7 @@ describe('run/batch orchestration', () => {
     await pickSingle(mock, '/d/a.mzML')
     await click(runButton())
     await emitDone(mock, 1, true)
-    await waitFor(() => expect(logText(container)).toContain('results: species boom'))
+    await waitFor(() => expect(logText(container)).toContain('Could not show the results: species boom'))
     expect(runButton()).toHaveProperty('disabled', false)
   })
 
@@ -325,7 +325,7 @@ describe('run/batch orchestration', () => {
     await waitFor(() => expect(mock.runCalls).toHaveLength(1))
     await emitDone(mock, 1, true)
     await waitFor(() => expect(screen.getByRole('button', { name: /^Run \d+ remaining file/ })).toBeDefined())
-    expect(logText(container)).toContain('results: species boom')
+    expect(logText(container)).toContain('Could not show the results: species boom')
     expect(screen.getByText('1/1 done')).toBeDefined()
   })
 
@@ -505,7 +505,7 @@ describe('digest tab', () => {
     expect(mock.reportCalls).toEqual([paths.digest_out, paths.label_out, paths.massgap_out])
     const stat = (label: string): string | null | undefined => screen.getByText(label).nextElementSibling?.textContent
     expect(stat('Runner-up, other enzyme class')).toBe('Lys-C')
-    expect(stat('Margin, log-likelihood per tag')).toBe('1.4788')
+    expect(stat('Lead over runner-up (log-likelihood per tag end)')).toBe('1.4788')
     const said = screen.getAllByText('Trypsin fits 1.48 log-likelihood per tag end better than Lys-C.')
     expect(said.map((e) => e.tagName)).toEqual(['LI', 'TD']) // the sentence list, and the raw rows
     const logos = screen.getAllByRole('img').filter((e) => e.tagName === 'svg')
@@ -532,9 +532,9 @@ describe('digest tab', () => {
     await emitDone(mock, 1, true)
     await screen.findByText('No call')
     expect(screen.getByText('Reason').nextElementSibling?.textContent).toBe(
-      'the fragment tolerance is in Da · also the first MS2 peaks lie above y1 of K, too few terminal tags'
+      'the fragment tolerance is in Da · also the first MS2 peaks lie above m/z 147.21 (the y1 ion of a C-terminal K, plus 0.1), so a K before the cut is missed, too few terminal tags'
     )
-    expect(screen.queryByText(/Metadata absent for/)).toBeNull()
+    expect(screen.queryByText(/Could not check/)).toBeNull()
   })
 
   it('names the ion_counts rule of 1.10.0 when it decides the no-call', async () => {
@@ -554,7 +554,7 @@ describe('digest tab', () => {
     await emitDone(mock, 1, true)
     await screen.findByText('No call')
     expect(screen.getByText('Reason').nextElementSibling?.textContent).toBe(
-      'no instrument is named and the intensities are ion counts, as on a timsTOF · also the first MS2 peaks lie above y1 of K, too few terminal tags'
+      'no instrument is named and the intensities are ion counts, as on a timsTOF · also the first MS2 peaks lie above m/z 147.21 (the y1 ion of a C-terminal K, plus 0.1), so a K before the cut is missed, too few terminal tags'
     )
   })
 

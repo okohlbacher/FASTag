@@ -22,6 +22,13 @@ export const SPECTRA = [{ name: 'Spectra', extensions: ['mzML', 'mzml', 'mzpeak'
 
 // A parameter's declared formats as a dialog filter; none means no filter
 // (a .taxdb, the taxonomy dumps), not the spectra one.
+const TAGS = [{ name: 'Tags (TSV)', extensions: ['tsv'] }]
+
+async function openOne(filters?: { name: string; extensions: string[] }[]): Promise<string | null> {
+  const r = await open({ multiple: false, filters })
+  return typeof r === 'string' ? r : null
+}
+
 export function fileFilters(formats?: string[]): { name: string; extensions: string[] }[] | undefined {
   if (!formats || formats.length === 0) return undefined
   return [{ name: formats.join(', '), extensions: formats }]
@@ -48,35 +55,22 @@ const api: FastagApi = {
 
   // Native dialogs live in the frontend via the dialog plugin; the backend only
   // ever receives already-chosen paths.
-  pickInput: async () => {
-    const r = await open({ multiple: false, filters: SPECTRA })
-    return typeof r === 'string' ? r : null
-  },
+  pickInput: () => openOne(SPECTRA),
   pickInputs: async () => {
     const r = await open({ multiple: true, filters: SPECTRA })
     return Array.isArray(r) ? r : []
   },
   pickOutput: async (defaultPath?: string) => {
-    const r = await save({ defaultPath, filters: [{ name: 'Tags (TSV)', extensions: ['tsv'] }] })
+    const r = await save({ defaultPath, filters: TAGS })
     return typeof r === 'string' ? r : null
   },
-  pickFile: async (formats?: string[]) => {
-    const r = await open({ multiple: false, filters: fileFilters(formats) })
-    return typeof r === 'string' ? r : null
-  },
+  pickFile: (formats?: string[]) => openOne(fileFilters(formats)),
   saveFile: async (defaultPath?: string, formats?: string[]) => {
     const r = await save({ defaultPath, filters: fileFilters(formats) })
     return typeof r === 'string' ? r : null
   },
-  pickResults: async () => {
-    const r = await open({ multiple: false, filters: [{ name: 'Tags (TSV)', extensions: ['tsv'] }] })
-    return typeof r === 'string' ? r : null
-  },
-
-  pickReport: async () => {
-    const r = await open({ multiple: false, filters: [{ name: 'Reports (TSV)', extensions: ['tsv'] }] })
-    return typeof r === 'string' ? r : null
-  },
+  pickResults: () => openOne(TAGS),
+  pickReport: () => openOne([{ name: 'Reports (TSV)', extensions: ['tsv'] }]),
 
   run: (params: Record<string, unknown>) => invoke<RunStarted>('run', { params }),
   cancel: () => invoke<{ cancelled: boolean }>('cancel'),

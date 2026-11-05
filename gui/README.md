@@ -17,14 +17,25 @@ backend has to satisfy.
 
 ```
 gui/
-  src/                 React frontend (App, ParamField, SpeciesPanel, DigestPanel, api bridge)
+  src/                 React frontend
+    App.tsx            the window: parameter form, run and batch, result tabs
+    ParamField.tsx     one form field per manifest parameter
+    ResultsTable.tsx   tags browser: virtualized table with filters, column choice and export
+    SpeciesPanel.tsx   species report
+    DigestPanel.tsx    digest, label and mass-gap reports
     digestReport.ts    reader of the digest/label/mass-gap TSVs and the sequence-logo arithmetic
     SequenceLogo.tsx   SVG sequence logo (bits against a background)
     fixtures/          synthetic report TSVs for the tests and the browser preview
     api.ts             the window.fastag bridge over Tauri invoke/events + dialog/opener plugins
     paramLayout.ts     section/ordering overlay on the generated manifest (one flat list)
     params.generated.json   `-write_ini` dump of the tool (the source of truth for params)
+    testing/           mock bridge for the tests and the browser preview (`npm run dev`)
+    adversarial/       end-to-end GUI tests (see Tests)
+    help/              the Help view (F1): pages as data (content.tsx, faq.tsx, params.ts),
+                       HelpView.tsx, the link store (link.ts) and the "?" links (HelpLink.tsx)
+  scripts/             gen-params.mjs (parameter manifest), bundle-macos.sh (macOS resource tree for release bundles)
   src-tauri/           Rust backend
+    src/lib.rs         plugin setup and Tauri command registration
     src/fastag.rs      resolve/probe the binary, run it, stream stderr and stdout lines as events, cancel
     src/settings.rs    named presets + last-used, atomic JSON in the app config dir
     src/browser.rs     indexed million-row results browser
@@ -67,7 +78,8 @@ npm run tauri build -- --debug   # faster, unsigned, for local checking
 
 The UI form is generated from the tool's own `-write_ini`. After changing a CLI
 parameter, refresh the manifest so the form stays in lockstep, and place the
-new option in `src/paramLayout.ts` (the layout tests fail until it is placed):
+new option in `src/paramLayout.ts` and give it a plain-language entry in
+`src/help/params.ts` (the layout and Help tests fail until both are done):
 
 ```bash
 npm run params    # runs scripts/gen-params.mjs against the bundled binary
@@ -89,13 +101,20 @@ tests (run/batch orchestration, layout completeness, results browser, report
 parsing and logo arithmetic, Digest tab) and a typecheck: `npm test`,
 `npm run typecheck`.
 
-The tests in `src/adversarial/` pin the GUI design-review findings. Some of
-them read inputs from outside the repository and are skipped unless these are
-set: `FASTAG_GUI_REVIEW_SCRATCH` (a directory of real CLI outputs on the E. coli
+The tests in `src/adversarial/` check GUI behaviour end to end: accessibility,
+the run lifecycle, report parsing, and agreement with the CLI and with this
+README. Some of them read inputs from outside the repository and are skipped
+unless these are set: `FASTAG_GUI_TEST_OUTPUTS` (a directory of real CLI outputs on the E. coli
 fixture), `FASTAG_BIN` (a FASTag CLI to run) and `FASTAG_ORDER_RS` (a helper
 that replays stdout/stderr in the order two reader threads receive them).
 `cli-consistency` also needs the `build_args` example, which `cargo test`
 builds. See `src/adversarial/external.ts`.
+
+The tests in `src/help/` check that every Help link lands on a section that
+exists, that every CLI parameter has a settings entry, that every digest
+no-call reason and failure class has a troubleshooting entry, and that the key
+Help sentences still match README.md, doc/DESIGN-digest.md and
+doc/SPECIES-DETECTOR.md.
 
 ## Packaging
 

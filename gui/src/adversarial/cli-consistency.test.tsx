@@ -1,5 +1,5 @@
 // @ts-nocheck -- test-only file; uses node APIs and ES2022 helpers outside the app tsconfig
-// Lens: GUI <-> CLI consistency.
+// The GUI and the CLI agree: what the form sends, what the CLI refuses.
 //
 // End to end, minus Tauri: the real App builds the run request through the
 // mock bridge, the shipped fastag.rs build_args() (through the build_args
@@ -8,11 +8,10 @@
 // the order two concurrent pipe readers receive them (as fastag.rs's two
 // reader threads do), and the failure banner the user would see is asserted.
 //
-// Assertions first pinned the v1.9.0 behaviour; "BUG" marks a defect still
-// pinned, "FIXED" asserts the correction. Where the GUI now refuses a run up
-// front, the CLI is run directly on the same option to show the refusal is its.
+// Where the GUI refuses a run up front, the CLI is run directly on the same
+// option to show the refusal is its.
 // Skipped unless FASTAG_BIN names the CLI, the pipe-order helper is found
-// (FASTAG_ORDER_RS, or cli/order_rs under FASTAG_GUI_REVIEW_SCRATCH) and the
+// (FASTAG_ORDER_RS, or cli/order_rs under FASTAG_GUI_TEST_OUTPUTS) and the
 // build_args example is built; see ./external.ts.
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
@@ -81,7 +80,7 @@ async function guiRun(opts: {
   const mock = installMockBridge()
   if (opts.lastUsed) mock.settings.lastUsed = opts.lastUsed
   render(<App />)
-  await screen.findByText('CLI ready')
+  await screen.findByText('FASTag ready')
   await act(async () => {})
   mock.nextPickInput = IN
   await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
@@ -107,7 +106,7 @@ async function guiBlocked(lastUsed: Record<string, unknown>): Promise<{ mock: Mo
   const mock = installMockBridge()
   mock.settings.lastUsed = lastUsed
   const { container } = render(<App />)
-  await screen.findByText('CLI ready')
+  await screen.findByText('FASTag ready')
   await act(async () => {})
   mock.nextPickInput = IN
   await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
@@ -170,7 +169,7 @@ describe.skipIf(!ready)('GUI-built argv against the FASTag CLI (FASTAG_BIN)', ()
     expect(o.rc).toBe(0)
   }, 30000)
 
-  it('FIXED (M9): -max_peaks 2000, which the CLI refuses, is caught in the form and never sent', async () => {
+  it('-max_peaks 2000, which the CLI refuses, is caught in the form and never sent', async () => {
     const g = await guiBlocked({ max_peaks: '2000' })
     expect(g.run.disabled).toBe(true)
     expect(g.mock.runCalls).toHaveLength(0)
@@ -180,7 +179,7 @@ describe.skipIf(!ready)('GUI-built argv against the FASTag CLI (FASTAG_BIN)', ()
     expect(d.lines.some((l) => /Invalid integer parameter value '2000' for parameter 'max_peaks'/.test(l.line))).toBe(true)
   }, 30000)
 
-  it('FIXED (M1): a FASTag refusal after start-up is quoted in the banner, not the "FASTag took" timing line', async () => {
+  it('a FASTag refusal after start-up is quoted in the banner, not the "FASTag took" timing line', async () => {
     // -species with the GUI default tag_length 3: Run is enabled, the CLI refuses.
     const o = await guiRun({ name: 'sp3', lastUsed: { species: true } })
     expect(o.rc).toBe(6)
@@ -193,7 +192,7 @@ describe.skipIf(!ready)('GUI-built argv against the FASTag CLI (FASTAG_BIN)', ()
     expect(o.banner).not.toMatch(/FASTag took/)
   }, 30000)
 
-  it('FIXED (M1): outputs aliasing each other are refused, and the banner says so', async () => {
+  it('outputs aliasing each other are refused, and the banner says so', async () => {
     // digest_out is rebased to <dir>/ecoli.digest.tsv on Choose file; the user then types that as Output.
     const o = await guiRun({ name: 'alias', lastUsed: { digest_out: `${S}/x.tsv` }, out: `${S}/ecoli.digest.tsv` })
     expect(argOf(o.argv, 'digest_out')).toBe(argOf(o.argv, 'out'))
@@ -202,7 +201,7 @@ describe.skipIf(!ready)('GUI-built argv against the FASTag CLI (FASTAG_BIN)', ()
     expect(o.banner).toMatch(/-digest_out and -out name the same file/)
   }, 30000)
 
-  it('FIXED (M1): out_spectra = the input is refused (input survives) and the banner says why', async () => {
+  it('out_spectra = the input is refused (input survives) and the banner says why', async () => {
     const before = readFileSync(IN).length
     const o = await guiRun({
       name: 'aliasin',
@@ -220,7 +219,7 @@ describe.skipIf(!ready)('GUI-built argv against the FASTag CLI (FASTAG_BIN)', ()
     expect(o.banner).toMatch(/is the input file; writing it would destroy the input/)
   }, 30000)
 
-  it('FIXED (m1): -entrapment_fasta + -species, which the CLI refuses, is refused beside Run', async () => {
+  it('-entrapment_fasta + -species, which the CLI refuses, is refused beside Run', async () => {
     const g = await guiBlocked({ species: true, tag_length: '7', fasta: FA, entrapment_fasta: FA })
     expect(g.run.disabled).toBe(true)
     expect(g.mock.runCalls).toHaveLength(0)
@@ -230,7 +229,7 @@ describe.skipIf(!ready)('GUI-built argv against the FASTag CLI (FASTAG_BIN)', ()
     expect(d.lines.some((l) => /cannot be combined with -species/.test(l.line))).toBe(true)
   }, 60000)
 
-  it('FIXED (M9): a non-integer in an int field ("7.0", "1e2") is caught in the form; the CLI would give a ConversionError', async () => {
+  it('a non-integer in an int field ("7.0", "1e2") is caught in the form; the CLI would give a ConversionError', async () => {
     expect(invalidBecause(PARAM_BY_NAME.get('tag_length')!, '7.0')).toBe('a whole number is required')
     expect(invalidParams({ max_peaks: '2000' }).max_peaks).toBe('must be at most 1024')
     const g = await guiBlocked({ tag_length: '7.0' })
@@ -241,7 +240,7 @@ describe.skipIf(!ready)('GUI-built argv against the FASTag CLI (FASTAG_BIN)', ()
     expect(d.lines.some((l) => /ConversionError\): Prefix of string '7\.0'/.test(l.line))).toBe(true)
   }, 30000)
 
-  it('FIXED (M9): tag_lengths typed comma-separated on one line is caught ("one value per line"); the CLI would refuse it', async () => {
+  it('tag_lengths typed comma-separated on one line is caught ("one value per line"); the CLI would refuse it', async () => {
     expect(invalidBecause(PARAM_BY_NAME.get('tag_lengths')!, ['7, 8'])).toBe('one value per line')
     const g = await guiBlocked({ tag_lengths: ['7, 8'] })
     expect(g.run.disabled).toBe(true)
@@ -251,7 +250,7 @@ describe.skipIf(!ready)('GUI-built argv against the FASTag CLI (FASTAG_BIN)', ()
     expect(d.lines.some((l) => /ConversionError/.test(l.line))).toBe(true)
   }, 30000)
 
-  it('FIXED (M13): orientation=reverse is not offered; a stored one is marked invalid and never sent', async () => {
+  it('orientation=reverse is not offered; a stored one is marked invalid and never sent', async () => {
     expect(PARAM_BY_NAME.get('orientation')?.choices).not.toContain('reverse')
     const g = await guiBlocked({ fasta: FA, tag_length: '5', orientation: 'reverse' })
     expect(g.run.disabled).toBe(true)
@@ -263,7 +262,7 @@ describe.skipIf(!ready)('GUI-built argv against the FASTag CLI (FASTAG_BIN)', ()
     expect(d.lines.some((l) => /Invalid string parameter value 'reverse'/.test(l.line))).toBe(true)
   }, 30000)
 
-  it('FIXED (M12): with reconciliation against -recon_fasta (no -fasta) the GUI sends orientation and isobaric_tolerance, which the CLI applies to reconciliation', async () => {
+  it('with reconciliation against -recon_fasta (no -fasta) the GUI sends orientation and isobaric_tolerance, which the CLI applies to reconciliation', async () => {
     const base = {
       tag_length: '4',
       fragment_tolerance: '0.3',
@@ -291,7 +290,7 @@ describe.skipIf(!ready)('GUI-built argv against the FASTag CLI (FASTAG_BIN)', ()
     expect(rows(guiRecon)).toEqual(rows(`${S}/rc.direct.recon.tsv`))
   }, 60000)
 
-  it('FIXED (M14): species_rank offers domain (the taxdump rank), not superkingdom, and a domain run reports taxa', async () => {
+  it('species_rank offers domain (the taxdump rank), not superkingdom, and a domain run reports taxa', async () => {
     const c = PARAM_BY_NAME.get('species_rank')?.choices ?? []
     expect(c).toContain('domain')
     expect(c).not.toContain('superkingdom')
@@ -305,7 +304,7 @@ describe.skipIf(!ready)('GUI-built argv against the FASTag CLI (FASTAG_BIN)', ()
   }, 120000)
 
   // Runs the shipped build_args (cargo test build_args_keeps_dash_leading_file_names).
-  it('FIXED (m17): a typed fasta path starting with "-" reaches the CLI, resolved against the input folder, and the run is filtered', async () => {
+  it('a typed fasta path starting with "-" reaches the CLI, resolved against the input folder, and the run is filtered', async () => {
     copyFileSync(FA, `${S}/-db.fasta`)
     const o = await guiRun({ name: 'dash', lastUsed: { fasta: '-db.fasta', tag_length: '5' } })
     expect(o.argv[o.argv.indexOf('-fasta') + 1]).toBe(`${S}/-db.fasta`)
@@ -315,19 +314,19 @@ describe.skipIf(!ready)('GUI-built argv against the FASTag CLI (FASTAG_BIN)', ()
 })
 
 describe('dependency logic vs CLI defaults (no CLI needed)', () => {
-  it('FIXED (m16): a cleared gaps field means the CLI default gaps=1, so gap_penalty/species_use_gapped stay live', async () => {
+  it('a cleared gaps field means the CLI default gaps=1, so gap_penalty/species_use_gapped stay live', async () => {
     const { inertBecause } = await import('../paramLayout')
     expect(PARAM_BY_NAME.get('gaps')?.default).toBe('1')
     expect(inertBecause('gap_penalty', { gaps: '' })).toBeNull()
     expect(inertBecause('species_use_gapped', { species: true, gaps: '' })).toBeNull()
   })
-  it('FIXED (m18): tag_length is inert when tag_lengths replaces it (the CLI ignores it)', async () => {
+  it('tag_length is inert when tag_lengths replaces it (the CLI ignores it)', async () => {
     const { inertBecause } = await import('../paramLayout')
     expect(inertBecause('tag_length', { tag_lengths: ['7', '8'] })).toBe('tag_lengths replaces it')
   })
-  it('FIXED (M15): gap_penalty help shown in the GUI says, as README:295 does, that it decides the max_tags slots', () => {
+  it('gap_penalty help shown in the GUI says, as the README does, that it decides the max_tags slots', () => {
     const d = PARAM_BY_NAME.get('gap_penalty')?.description
     expect(d).not.toMatch(/never which tags are reported/)
-    expect(d).toMatch(/under max_tags it decides which tags fill the capped slots/)
+    expect(d).toMatch(/under -?max_tags it decides which tags fill the capped slots/)
   })
 })

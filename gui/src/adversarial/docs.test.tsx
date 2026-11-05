@@ -1,12 +1,10 @@
-// Docs lens: each test pins a GUI behaviour against a sentence in README.md,
-// gui/README.md, doc/DESIGN-digest.md, doc/SPECIES-DETECTOR.md or the 1.8.0 /
-// 1.9.0 release notes, or against what the 1.9.0 CLI actually prints. A test
-// named "CONTRADICTION" asserted the v1.9.0 behaviour, which disagreed with the
-// quoted text; tests named FIXED now assert the behaviour the text describes.
+// The GUI does what the docs say: each test checks a GUI behaviour against a
+// sentence in README.md, gui/README.md, doc/DESIGN-digest.md,
+// doc/SPECIES-DETECTOR.md or the release notes, or against what the CLI prints.
 //
 // Real CLI outputs (FASTag 1.9.0 on test/fixtures/Ecoli_MS2_small.mzML) are
-// read from the reviewer scratch dir named by FASTAG_GUI_REVIEW_SCRATCH, so the
-// parsers see what the CLI writes; those tests skip when it is unset.
+// read from the directory named by FASTAG_GUI_TEST_OUTPUTS, so the parsers see
+// what the CLI writes; those tests skip when it is unset.
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import App, { rebaseOutputs } from '../App'
@@ -25,7 +23,7 @@ const cli = (f: string): string => readScratch(`map/${f}`) as string
 
 async function renderApp(mock: MockBridge): Promise<HTMLElement> {
   const { container } = render(<App />)
-  await screen.findByText('CLI ready')
+  await screen.findByText('FASTag ready')
   await act(async () => {})
   return container
 }
@@ -43,14 +41,14 @@ async function pickSingle(mock: MockBridge, path: string): Promise<void> {
 function speciesFromTsv(text: string): SpeciesReport {
   const [, ...lines] = text.trim().split('\n')
   const taxa = lines.map((l) => {
-    const [rank, taxid, name, observed, adjusted, expected, logP, q] = l.split('\t')
-    return { rank, taxid: +taxid, name, observed: +observed, adjusted: +adjusted, expected: +expected, logP: +logP, q: +q }
+    const [rank, taxid, name, observed, adjusted, , , q] = l.split('\t')
+    return { rank, taxid: +taxid, name, observed: +observed, adjusted: +adjusted, q: +q }
   })
-  return { path: '/r/run.tags.species.tsv', taxa, empty: taxa.length === 0 }
+  return { path: '/r/run.tags.species.tsv', taxa }
 }
 
 describe('docs: failure banner vs what the CLI prints (RN 1.8.0 "error messages")', () => {
-  it.skipIf(!haveScratch('docs/short.out', 'docs/short.err'))('FIXED (M1): a FASTag refusal is followed on stdout by the timing line, and the banner quotes the refusal', async () => {
+  it.skipIf(!haveScratch('docs/short.out', 'docs/short.err'))('a FASTag refusal is followed on stdout by the timing line, and the banner quotes the refusal', async () => {
     // Lines exactly as FASTag 1.9.0 prints them for `-species` with the
     // default tag_length 3 (scratch/docs/short.out + short.err, rc 6).
     const out = (readScratch('docs/short.out') ?? '').trim().split('\n')
@@ -74,22 +72,22 @@ describe('docs: failure banner vs what the CLI prints (RN 1.8.0 "error messages"
 })
 
 describe('docs: species precondition (README "FASTag refuses the run up front")', () => {
-  it('FIXED (m1): like the CLI, the GUI refuses the run up front: Run is disabled and the reason sits beside it', async () => {
+  it('like the CLI, the GUI refuses the run up front: Run is disabled and the reason sits beside it', async () => {
     const mock = installMockBridge()
     mock.settings.lastUsed = { species: true, tag_length: '3' }
-    mock.taxdbInfoResult = { path: '/b/tax_k7.taxdb', k: 7, kmers: 1 }
+    mock.taxdbInfoResult = { path: '/b/tax_k7.taxdb', k: 7 }
     const c = await renderApp(mock)
     await pickSingle(mock, '/d/a.mzML')
     expect((runButton() as HTMLButtonElement).disabled).toBe(true)
     expect(c.querySelector('.controls')!.textContent).toMatch(/cannot reach the species index k = 7/)
     await click(screen.getByRole('tab', { name: /Species/ }))
-    expect(screen.getByText(/FASTag refuses such a run up front/)).toBeDefined()
+    expect(screen.getByText(/FASTag refuses the run/)).toBeDefined()
     expect(screen.queryByText(/the report would be empty/)).toBeNull()
   })
 })
 
 describe('docs: species headline and footnote vs SPECIES-DETECTOR.md / README', () => {
-  it.skipIf(!haveScratch('map/run.tags.species.tsv'))('FIXED (M16): no "after subtracting shared sequence" on a run without -species_deconvolve, where adjusted == observed', () => {
+  it.skipIf(!haveScratch('map/run.tags.species.tsv'))('no "after subtracting shared sequence" on a run without -species_deconvolve, where adjusted == observed', () => {
     const rep = speciesFromTsv(cli('run.tags.species.tsv'))
     expect(rep.taxa.every((t) => t.adjusted === t.observed)).toBe(true) // the CLI did not deconvolve
     const { container } = render(
@@ -101,7 +99,7 @@ describe('docs: species headline and footnote vs SPECIES-DETECTOR.md / README', 
     expect(container.querySelector('.footnote')?.textContent).not.toMatch(/has been subtracted/)
     expect(container.querySelector('.footnote')?.textContent).toMatch(/Shared sequence was not subtracted/)
   })
-  it.skipIf(!haveScratch('map/run.tags.species.tsv'))('FIXED (M16): the adjusted column is headed "adjusted", as SPECIES-DETECTOR.md names it, and shown when the run deconvolved', () => {
+  it.skipIf(!haveScratch('map/run.tags.species.tsv'))('the adjusted column is headed "adjusted", as SPECIES-DETECTOR.md names it, and shown when the run deconvolved', () => {
     const rep = speciesFromTsv(cli('run.tags.species.tsv'))
     const { container, unmount } = render(<SpeciesPanel report={rep} enabled tooShort={null} contributed={null} totalMs2={null} />)
     let heads = within(within(container).getAllByRole('row')[0]).getAllByRole('columnheader').map((h) => h.textContent)
@@ -119,7 +117,7 @@ describe('docs: species headline and footnote vs SPECIES-DETECTOR.md / README', 
 })
 
 describe('docs: Digest tab vs doc/DESIGN-digest.md "GUI: Digest tab"', () => {
-  it('FIXED (m21): the mass-gap distribution is drawn first, "followed by the peaks"', () => {
+  it('the mass-gap distribution is drawn first, "followed by the peaks"', () => {
     const r = parseReport(massgapTsv, '/r/a.massgap.tsv')
     const { container } = render(<DigestPanel reports={[r]} errors={[]} onOpen={() => {}} />)
     const tables = [...container.querySelectorAll('section.dg-block > table')]
@@ -129,7 +127,7 @@ describe('docs: Digest tab vs doc/DESIGN-digest.md "GUI: Digest tab"', () => {
     expect(peaksAt).toBeGreaterThan(distAt)
   })
 
-  it('FIXED (m22): a call with no model of another class (DigestReport.cpp:248-250) shows neither runner-up nor margin', () => {
+  it('a call with no model of another class (DigestReport.cpp:248-250) shows neither runner-up nor margin', () => {
     const t = digestTsv
       .replace(/^call\trunner_up\t.*$/m, 'call\trunner_up\tnone\t-\tNo model of another class is in the table.')
       .replace(/^call\trunner_up_class\t.*$/m, 'call\trunner_up_class\tnone\t-\tNo model of another class is in the table.')
@@ -143,7 +141,7 @@ describe('docs: Digest tab vs doc/DESIGN-digest.md "GUI: Digest tab"', () => {
     expect(logos).toEqual(['Observed', 'Called'])
   })
 
-  it.skipIf(!haveScratch('map/run.digest.tsv', 'map/run.label.tsv'))('FIXED (m8): opening a report of a different file with the same basename closes the other reports (the CLI writes run.input as a basename)', async () => {
+  it.skipIf(!haveScratch('map/run.digest.tsv', 'map/run.label.tsv'))('opening a report of a different file with the same basename closes the other reports (the CLI writes run.input as a basename)', async () => {
     // Real 1.9.0 reports: run.input is "Ecoli_MS2_small.mzML", no directory.
     const dig = cli('run.digest.tsv')
     const lab = cli('run.label.tsv')
@@ -163,7 +161,7 @@ describe('docs: Digest tab vs doc/DESIGN-digest.md "GUI: Digest tab"', () => {
 })
 
 describe('docs: RN 1.9.0 "a new input no longer overwrites the previous sample\'s reports"', () => {
-  it('FIXED (M3): two inputs with the same file name in different folders get their own report paths', () => {
+  it('two inputs with the same file name in different folders get their own report paths', () => {
     const cfg = { digest_out: '/res/sample.digest.tsv', recon_out: '/res/sample.recon.tsv', species_out: '/res/sample.species.tsv' }
     const a = rebaseOutputs(cfg, '/runA/sample.tags.tsv')
     const b = rebaseOutputs(a, '/runB/sample.tags.tsv')
@@ -171,7 +169,7 @@ describe('docs: RN 1.9.0 "a new input no longer overwrites the previous sample\'
     expect(a['digest_out']).toBe('/runA/sample.digest.tsv')
     expect(b['digest_out']).toBe('/runB/sample.digest.tsv')
   })
-  it('FIXED (M3, end to end): the second run is sent its own digest_out', async () => {
+  it('the second run is sent its own digest_out', async () => {
     const mock = installMockBridge()
     mock.settings.lastUsed = { digest_out: '/res/old.digest.tsv' }
     await renderApp(mock)
@@ -188,12 +186,12 @@ describe('docs: RN 1.9.0 "a new input no longer overwrites the previous sample\'
 })
 
 describe('docs: code comments that promise the CLI will not reject a GUI value', () => {
-  it('FIXED (M13): orientation takes the manifest choices, with no overlay value the CLI rejects', () => {
+  it('orientation takes the manifest choices, with no overlay value the CLI rejects', () => {
     const raw = (manifest.params as { name: string; choices?: string[] }[]).find((p) => p.name === 'orientation')
     expect(raw?.choices).toEqual(['both', 'forward'])
     expect(PARAM_BY_NAME.get('orientation')?.choices).toEqual(['both', 'forward'])
   })
-  it('FIXED (M8/M9): max_peaks 2000 is marked invalid and never sent', async () => {
+  it('max_peaks 2000 is marked invalid and never sent', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await click(screen.getByRole('button', { name: /^Spectra/ }))
@@ -208,7 +206,7 @@ describe('docs: code comments that promise the CLI will not reject a GUI value',
     await click(runButton())
     expect(mock.runCalls).toHaveLength(0)
   })
-  it('FIXED (m20): the 14 advanced FASTag parameters are in the manifest, and the ignored mzpeak_read_memory is hidden', () => {
+  it('the 14 advanced FASTag parameters are in the manifest, and the ignored mzpeak_read_memory is hidden', () => {
     const own = ['version', 'log', 'debug', 'no_progress', 'force', 'test']
     const adv = (manifest.params as { name: string; toppAdvanced: boolean }[]).filter((p) => p.toppAdvanced && !own.includes(p.name))
     expect(adv.length).toBe(14)

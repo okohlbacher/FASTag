@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState, type JSX } from 'react'
-import { defaultText, humanName, invalidBecause, isChanged, masters, type Dependency, type ParamSpec } from './paramLayout'
+import { defaultText, humanName, invalidBecause, isChanged, masters, PARAM_BY_NAME, type Dependency, type ParamSpec } from './paramLayout'
 import { IconError } from './icons'
+import { HelpButton } from './help/HelpLink'
 
 export type ParamValue = string | boolean | string[]
 
@@ -9,11 +10,10 @@ interface Props {
   value: ParamValue
   onChange: (v: ParamValue) => void
   onPickFile?: (spec: ParamSpec) => void
-  /// Why this parameter currently does nothing, from inertBecause(). The field
-  /// is still shown -- hiding it would make the option undiscoverable and the
-  /// form jump around as switches flip -- but it is disabled and says why.
-  inert?: string | null
-  /// The unmet dependency behind `inert`, so the field can name what it needs.
+  /// The unmet dependency that makes this parameter do nothing right now (from
+  /// inertDependency()), or null if it is live. The field is still shown --
+  /// hiding it would make the option undiscoverable and the form jump around
+  /// as switches flip -- but it is disabled and names what it needs.
   needs?: Dependency | null
   /// The unit of a value, drawn as one control with it (fragment_tolerance).
   unit?: { spec: ParamSpec; value: ParamValue; onChange: (v: ParamValue) => void }
@@ -23,17 +23,20 @@ interface Props {
 // string with `choices` becomes a select. A number is a text field checked by
 // invalidBecause() against the type, min and max the CLI declares; a value the
 // CLI would refuse is marked invalid and says why (App keeps Run disabled).
-export default function ParamField({ spec, value, onChange, onPickFile, inert, needs, unit }: Props): JSX.Element {
-  const off = !!inert
+export default function ParamField({ spec, value, onChange, onPickFile, needs, unit }: Props): JSX.Element {
+  const off = !!needs
   // An inert field is not sent, so its value cannot fail the run.
   const invalid = off ? null : invalidBecause(spec, value)
   const changed = !off && (isChanged(spec.name, value) || (!!unit && isChanged(unit.spec.name, unit.value)))
   // The name in words, then the CLI name, as the help texts, the docs and the
   // CLI's messages spell it.
   const label = (
-    <label htmlFor={`p-${spec.name}`} title={spec.description}>
-      <span className="pname">{humanName(spec.name)}</span> <code className="cli">{spec.name}</code>
-    </label>
+    <span className="label-row">
+      <label htmlFor={`p-${spec.name}`} title={plainOptions(spec.description)}>
+        <span className="pname">{humanName(spec.name)}</span> <code className="cli">{spec.name}</code>
+      </label>
+      <HelpButton to={`param-${spec.name}`} what={humanName(spec.name)} />
+    </span>
   )
   const helpId = `h-${spec.name}`
   // The help is clamped to two lines; a longer text gets a toggle instead of
@@ -53,7 +56,7 @@ export default function ParamField({ spec, value, onChange, onPickFile, inert, n
     const ro = new ResizeObserver(measure)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [inert, invalid, changed, expanded])
+  }, [needs, invalid, changed, expanded])
   const deflt = `${defaultText(spec)}${unit ? ` ${defaultText(unit.spec)}` : ''}`
   // An invalid value says what is wrong with it in place of the description;
   // an inert field keeps its description and adds what would switch it on.
@@ -70,20 +73,18 @@ export default function ParamField({ spec, value, onChange, onPickFile, inert, n
         className={off ? 'help inert' : 'help'}
         style={expanded ? { maxHeight: 'none' } : undefined}
       >
-        {sentence(spec.description)}
-        {off && (
+        {sentence(plainOptions(spec.description))}
+        {needs && (
           <>
             {' '}
             <span className="needs">
-              {needs && (
-                <strong>
-                  {needs.replaced ? 'Replaced by ' : 'Needs '}
-                  {masters(needs).map((m, i) => (
-                    <Cli key={m} name={m} sep={i > 0} />
-                  ))}
-                </strong>
-              )}
-              {needs ? ` (${inert}).` : `${inert}.`}
+              <strong>
+                {needs.replaced ? 'Replaced by ' : 'Needs '}
+                {masters(needs).map((m, i) => (
+                  <Cli key={m} name={m} sep={i > 0} />
+                ))}
+              </strong>
+              {` (${needs.note}).`}
             </span>
           </>
         )}
@@ -165,7 +166,7 @@ export default function ParamField({ spec, value, onChange, onPickFile, inert, n
             type="button"
             className="secondary"
             disabled={off}
-            aria-label={`Browse for ${spec.name}`}
+            aria-label={`Browse for ${humanName(spec.name)}`}
             onClick={() => onPickFile?.(spec)}
           >
             Browse…
@@ -232,7 +233,7 @@ export default function ParamField({ spec, value, onChange, onPickFile, inert, n
           {input}
           <select
             id={`p-${unit.spec.name}`}
-            aria-label={`Unit (${unit.spec.name})`}
+            aria-label={humanName(unit.spec.name)}
             disabled={off}
             value={u}
             onChange={(e) => unit.onChange(e.target.value)}
@@ -255,6 +256,14 @@ export default function ParamField({ spec, value, onChange, onPickFile, inert, n
       {help}
     </div>
   )
+}
+
+/// Option names in the CLI help are written -name; the form shows them as
+/// name. Only real option names lose the dash, so words like N-terminal and
+/// k-mers stay as they are.
+const OPTION_REF = new RegExp(`(^|[\\s('"])-(${[...PARAM_BY_NAME.keys()].sort((a, b) => b.length - a.length).join('|')})\\b`, 'g')
+function plainOptions(text: string): string {
+  return text.replace(OPTION_REF, '$1$2')
 }
 
 /// The help as a sentence, so what follows it does not run on: "Seed tag

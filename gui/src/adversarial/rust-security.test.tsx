@@ -1,9 +1,6 @@
 // @ts-nocheck -- test-only file; uses node APIs and ES2022 helpers outside the app tsconfig
-// Rust/Tauri security & robustness lens: the frontend half of contracts whose
-// backend half lives in src-tauri (fastag.rs run/cancel/build_args). Rust-side
-// evidence (cargo tests on a scratch copy) is in rust-security/ of the GUI
-// review scratch directory (not in the repository). Names starting "BUG:" pinned a
-// defect; "FIXED" tests assert the correction.
+// The frontend half of the contracts whose backend half lives in src-tauri
+// (fastag.rs run/cancel/build_args): paths, cancels and crashes.
 
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
@@ -13,7 +10,7 @@ import manifest from '../params.generated.json'
 
 async function renderApp(mock: MockBridge): Promise<HTMLElement> {
   const { container } = render(<App />)
-  await screen.findByText('CLI ready')
+  await screen.findByText('FASTag ready')
   await act(async () => {})
   return container
 }
@@ -25,7 +22,7 @@ const logText = (c: HTMLElement): string => c.querySelector('.log')?.textContent
 const runButton = (): HTMLElement => screen.getByRole('button', { name: /^(Run( on .+)?|Running…)$/ })
 
 describe('rust-security: working directory', () => {
-  it('FIXED (m5): a bare Output name is resolved beside the input by fastag.rs, and the renderer reads the results there', async () => {
+  it('a bare Output name is resolved beside the input by fastag.rs, and the renderer reads the results there', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
     mock.nextPickInput = '/d/a.mzML'
@@ -46,7 +43,7 @@ describe('rust-security: working directory', () => {
 })
 
 describe('rust-security: cancel exit status', () => {
-  it('FIXED (m3, Windows): Child::kill = TerminateProcess(h, 1) gives code 1, yet a cancelled run logs "cancelled", not "failed (exit code 1)"', async () => {
+  it('Child::kill = TerminateProcess(h, 1) gives code 1, yet a cancelled run logs "cancelled", not "failed (exit code 1)"', async () => {
     const mock = installMockBridge()
     const c = await renderApp(mock)
     mock.nextPickInput = '/d/a.mzML'
@@ -73,7 +70,7 @@ describe('rust-security: cancel exit status', () => {
 })
 
 describe('rust-security: crash cause', () => {
-  it('FIXED (m34): a crash by signal names the signal fastag.rs read off the exit status', async () => {
+  it('a crash by signal names the signal fastag.rs read off the exit status', async () => {
     const mock = installMockBridge()
     const c = await renderApp(mock)
     mock.nextPickInput = '/d/a.mzML'
@@ -88,7 +85,7 @@ describe('rust-security: crash cause', () => {
 })
 
 describe('rust-security: build_args allowlist vs app-managed flags', () => {
-  // m36: fastag.rs NOT_SETTABLE now lists both, so the app sends exactly one
+  // fastag.rs NOT_SETTABLE now lists both, so the app sends exactly one
   // -progress (cargo test build_args_progress_and_stream_are_app_managed).
   it('stream and progress are in the manifest, so the backend must manage them', () => {
     const names = (manifest.params as { name: string }[]).map((p) => p.name)

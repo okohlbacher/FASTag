@@ -82,7 +82,7 @@
       "name": "diversity",
       "type": "bool",
       "default": "false",
-      "description": "Diversify which tags occupy the -max_tags slots on chimeric spectra: near-duplicate re-reads of an already-kept tag's peak set are demoted behind non-duplicates, then backfilled. Reorders slot occupancy under the cap; never drops below it",
+      "description": "On spectra with more tags than -max_tags, prefer tags built from different peaks over near-copies of a tag already kept. Changes which tags fill the slots, not how many",
       "required": false,
       "toppAdvanced": false
     },
@@ -165,7 +165,7 @@
       "name": "gap_penalty",
       "type": "double",
       "default": "100.0",
-      "description": "Rank gapped tags as if their E-value were this many times worse. Never removes a tag at the max_evalue cutoff (applied to the unpenalised value), but under max_tags it decides which tags fill the capped slots, and a gapped row's printed evalue includes it. 1 disables. Gapped tags are otherwise heavily over-ranked: they take ~95% of top-1 slots while being ~3.6x less likely to be correct",
+      "description": "Rank gapped tags as if their E-value were this many times worse. Never removes a tag at the -max_evalue cutoff (applied to the unpenalised value), but under -max_tags it decides which tags fill the capped slots, and a gapped row's printed evalue includes it. 1 disables",
       "required": false,
       "toppAdvanced": false,
       "min": 1
@@ -184,7 +184,7 @@
       "name": "glyco",
       "type": "bool",
       "default": "false",
-      "description": "Flag oxonium-bearing MS2 spectra (glycopeptide/glycan evidence, NOT an identification) to <out> with a .glyco.tsv suffix, or -glyco_out",
+      "description": "Flag oxonium-bearing MS2 spectra (glycopeptide/glycan evidence, NOT an identification) to <out> with its extension replaced by .glyco.tsv (tags.tsv -> tags.glyco.tsv), or to -glyco_out",
       "required": false,
       "toppAdvanced": false
     },
@@ -201,7 +201,7 @@
       "name": "glyco_out",
       "type": "output-file",
       "default": "",
-      "description": "Per-spectrum oxonium report. Default: <out> with a .glyco.tsv suffix",
+      "description": "Per-spectrum oxonium report. Default: <out> with its extension replaced by .glyco.tsv",
       "required": false,
       "toppAdvanced": false,
       "formats": [
@@ -220,9 +220,10 @@
       "name": "isobaric_tolerance",
       "type": "double",
       "default": "0.04",
-      "description": "When matching against 'fasta' or reconciling against 'recon_fasta', treat a residue as interchangeable with an isobaric residue pair within this tolerance; 0 requires exact strings",
+      "description": "When matching against -fasta or reconciling against -recon_fasta, treat a residue as interchangeable with an isobaric residue pair within this tolerance; 0 requires exact strings",
       "required": false,
-      "toppAdvanced": false
+      "toppAdvanced": false,
+      "min": 0
     },
     {
       "name": "label_out",
@@ -349,7 +350,7 @@
       "name": "max_peaks",
       "type": "int",
       "default": "400",
-      "description": "Peaks retained per spectrum, at most 1024; 0 uses that ceiling, not unlimited -- the scoring tables are built to this bound, at O(n^2) memory. The ceiling for 'peaks_per_window'",
+      "description": "Peaks kept per spectrum, at most 1024; 0 means 1024, not unlimited. Higher values use more memory. Also caps -peaks_per_window",
       "required": false,
       "toppAdvanced": false,
       "min": 0,
@@ -368,9 +369,10 @@
       "name": "min_filter_length",
       "type": "int",
       "default": "0",
-      "description": "Ignore tags shorter than this when matching against 'fasta'; 0 derives a floor from the database size",
+      "description": "Ignore tags shorter than this when matching against -fasta; 0 derives a floor from the database size",
       "required": false,
-      "toppAdvanced": false
+      "toppAdvanced": false,
+      "min": 0
     },
     {
       "name": "mzpeak_read_memory",
@@ -401,7 +403,7 @@
       "name": "orientation",
       "type": "string",
       "default": "both",
-      "description": "Match a tag as written, or also reversed, against 'fasta' and in 'recon_fasta' reconciliation. Tags are stored N->C under a y-ion assumption, so b-derived tags read reversed",
+      "description": "Match a tag as written, or also reversed, against -fasta and in -recon_fasta reconciliation. Tags are stored N->C under a y-ion assumption, so b-derived tags read reversed",
       "required": false,
       "toppAdvanced": false,
       "choices": [
@@ -432,7 +434,7 @@
       "name": "peaks_per_window",
       "type": "int",
       "default": "10",
-      "description": "Keep this many peaks per 100 Da window instead of the strongest 'max_peaks' overall; 0 disables. Scales the effective peak budget with the spectrum's m/z range, so dense spectra are not starved and sparse ones not padded",
+      "description": "Keep this many peaks per 100 Da window instead of the strongest -max_peaks overall; 0 disables. Scales the effective peak budget with the spectrum's m/z range, so dense spectra are not starved and sparse ones not padded",
       "required": false,
       "toppAdvanced": false,
       "min": 0
@@ -521,7 +523,7 @@
       "name": "res_conf",
       "type": "bool",
       "default": "false",
-      "description": "Append a res_conf column: per-residue confidences 0..100, N->C, space-separated, one per residue (a gap's two residues share their pair score). What assembly-style consumers (Stitch/ALPS via tools/tags_to_denovo.py) read as local confidence",
+      "description": "Append a res_conf column: a confidence from 0 to 100 for each residue, N to C, space-separated (a gap's two residues share one score). Used for de novo assembly export (see README, Assembly export)",
       "required": false,
       "toppAdvanced": false
     },
@@ -529,7 +531,7 @@
       "name": "species",
       "type": "bool",
       "default": "false",
-      "description": "Infer which taxa are present from the tags. Uses the bundled taxonomy unless -taxdb/-taxonomy_* are given, and writes <out>.species.tsv unless -species_out is given",
+      "description": "Infer which taxa are present from the tags. Uses the bundled taxonomy unless -taxdb/-taxonomy_* are given, and writes <out> with its extension replaced by .species.tsv unless -species_out is given",
       "required": false,
       "toppAdvanced": false
     },
@@ -545,7 +547,7 @@
       "name": "species_evidence",
       "type": "string",
       "default": "best",
-      "description": "Which of a spectrum's tags make it count for a taxon: 'best' = the taxa of its lowest-E-value tag that maps into the index (ties united); 'all' = the union over every reported tag (FASTag <= 1.9.0)",
+      "description": "Which of a spectrum's tags make it count for a taxon: 'best' = the taxa of its lowest-E-value tag that maps into the index (ties united); 'all' = the union over every reported tag (more chance hits)",
       "required": false,
       "toppAdvanced": false,
       "choices": [
@@ -586,7 +588,7 @@
       "name": "species_out",
       "type": "output-file",
       "default": "",
-      "description": "Ranked taxa TSV. Default: <out> with a .species.tsv suffix",
+      "description": "Ranked taxa TSV. Default: <out> with its extension replaced by .species.tsv",
       "required": false,
       "toppAdvanced": false,
       "formats": [
@@ -613,7 +615,7 @@
       "name": "stream",
       "type": "bool",
       "default": "false",
-      "description": "Resident single-spectrum mode: spectrum blocks on stdin, TSV rows + '#end' sentinels on stdout. Core tagging only (refuses -fasta/-species/-recon_out/-out_spectra/-entrapment_fasta/-usi_collection); parameter changes need a restart",
+      "description": "Resident single-spectrum mode: spectrum blocks on stdin, TSV rows + '#end' sentinels on stdout. Core tagging only (refuses -fasta, -entrapment_fasta, -species, -species_out, -taxdb, -glyco, -recon_out, -recon_id_out, -out_spectra, -delta_out, -digest_out, -label_out, -massgap_out, -usi_collection); parameter changes need a restart",
       "required": false,
       "toppAdvanced": false
     },
@@ -621,7 +623,7 @@
       "name": "subsample_fraction",
       "type": "double",
       "default": "0.0",
-      "description": "Tag only this random fraction (0..1] of input spectra; 0 = all",
+      "description": "Tag only this random fraction (0..1] of input spectra; 0 = all. Ignored when -subsample_spectra is set",
       "required": false,
       "toppAdvanced": false,
       "min": 0,
@@ -640,7 +642,7 @@
       "name": "subsample_spectra",
       "type": "int",
       "default": "0",
-      "description": "Tag only this many randomly chosen input spectra; 0 = all",
+      "description": "Tag only this many randomly chosen input spectra; 0 = all. Takes precedence over -subsample_fraction",
       "required": false,
       "toppAdvanced": false,
       "min": 0
@@ -658,7 +660,7 @@
       "name": "tag_lengths",
       "type": "string-list",
       "default": [],
-      "description": "Seed tag lengths to run in one pass, replacing 'tag_length'. Each length is tagged, scored and capped ('max_tags') exactly as on its own; a spectrum's rows are those runs' rows in ascending length, except that a tag several lengths report is kept only from the length with its lowest E-value",
+      "description": "Seed tag lengths to run in one pass, replacing -tag_length. Each length is tagged, scored and capped (-max_tags) exactly as on its own; a spectrum's rows are those runs' rows in ascending length, except that a tag several lengths report is kept only from the length with its lowest E-value",
       "required": false,
       "toppAdvanced": false,
       "itemType": "int",
@@ -708,7 +710,7 @@
       "name": "usi_collection",
       "type": "string",
       "default": "",
-      "description": "Append a usi column: each tag's spectrum as a HUPO-PSI Universal Spectrum Identifier, mzspec:<id>:<run>:scan:<n> (or the nativeId/index form USI 1.0 prescribes), where <run> is the input file name without extension and <id> the dataset's PXD/MSV/RPXD/RMSV/PXL identifier, or USI000000 until it has one",
+      "description": "Append a usi column: each tag's spectrum as a HUPO-PSI Universal Spectrum Identifier, mzspec:<id>:<run>:scan:<n> (or the nativeId/index form USI 1.0 prescribes), where <run> is the input file name without its extension (an MGF keeps its .mgf) and <id> the dataset's PXD/MSV/RPXD/RMSV/PXL identifier, or USI000000 until it has one",
       "required": false,
       "toppAdvanced": false
     },

@@ -13,6 +13,7 @@ import {
   invalidParams,
   isActive,
   isChanged,
+  speciesReach,
   unknownParams,
   unplacedParams,
   type ParamSpec
@@ -22,16 +23,23 @@ import ResultsTable from './ResultsTable'
 import SpeciesPanel from './SpeciesPanel'
 import DigestPanel from './DigestPanel'
 import { baseName, parseReport, value, type Report } from './digestReport'
-import { IconCheck, IconClose, IconError, IconFile, IconLock, IconWarning, JobIcon } from './icons'
+import { IconCheck, IconClose, IconError, IconFile, IconLock, IconWarning, JobIcon, type JobStatus } from './icons'
+import HelpView, { slug } from './help/HelpView'
+import { HelpButton, HelpLink } from './help/HelpLink'
+import { closeHelp, openHelp, useHelp } from './help/link'
+import { faqForMessage } from './help/faq'
 import logo from './assets/logo.svg'
 import openmsLogo from './assets/openms-logo.png'
+
+// The index of the last path separator, '/' or '\\'; -1 if there is none.
+const lastSep = (p: string): number => Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'))
 
 // Strip the final extension only when the dot sits inside the basename — a
 // dotted directory (`/runs.2026/sample`) must not lose half its path. Mirrors
 // the CLI's guard so the GUI reads exactly where the CLI writes.
 function stripExt(p: string): string {
   const dot = p.lastIndexOf('.')
-  const slash = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'))
+  const slash = lastSep(p)
   return dot > slash ? p.slice(0, dot) : p
 }
 
@@ -47,11 +55,11 @@ function defaultSpeciesOut(out: string): string {
 const isAbsolute = (p: string): boolean => /^([/\\]|[A-Za-z]:[/\\])/.test(p)
 function resolveBeside(inFile: string, p: string): string {
   if (!p || isAbsolute(p) || !isAbsolute(inFile)) return p
-  const slash = Math.max(inFile.lastIndexOf('/'), inFile.lastIndexOf('\\'))
+  const slash = lastSep(inFile)
   return `${inFile.slice(0, slash + 1)}${p}`
 }
 
-// The 1.8.0 reports the Digest tab shows.
+// The report options whose files the Digest tab reads.
 const REPORT_PARAMS = ['digest_out', 'label_out', 'massgap_out']
 
 // A batch must not write every job's extra outputs to one configured path, or
@@ -64,13 +72,14 @@ export function perJobOutputs(values: Record<string, unknown>, tagsOut: string):
   return { ...rebaseOutputs(values, tagsOut), species_out: '' }
 }
 
-// A new single input must not write into the previous input's reports: the
-// configured auxiliary outputs persist across runs, sessions (lastUsed) and
-// presets, so running sample B overwrote A's digest/recon/... files. Each
-// configured output-file option goes beside the new tags output, keeping its
-// extension: /res/A.digest.tsv -> /d/B.digest.tsv. Keeping the configured
-// folder is not enough: /runA/sample.mzML and /runB/sample.mzML would both
-// write /res/sample.digest.tsv. Unset ones stay unset.
+// Each run writes its reports beside its own tags output. The configured
+// report paths persist across runs, sessions (lastUsed) and presets, so
+// without this step sample B would overwrite sample A's digest/recon/...
+// files. Each configured output-file option is moved beside the new tags
+// output and keeps its extension: /res/A.digest.tsv -> /d/B.digest.tsv.
+// Keeping the configured folder is not enough: /runA/sample.mzML and
+// /runB/sample.mzML would both write /res/sample.digest.tsv. Unset options
+// stay unset.
 export function rebaseOutputs(values: Record<string, unknown>, tagsOut: string): Record<string, ParamValue> {
   const stem = tagsOut.endsWith('.tags.tsv') ? tagsOut.slice(0, -'.tags.tsv'.length) : stripExt(tagsOut)
   const o: Record<string, ParamValue> = {}
@@ -106,8 +115,7 @@ function appendLog(l: string[], line: string): string[] {
 // folders, or one file run with two tag lengths, would otherwise read as one).
 const RUN_KEYS = ['input', 'version', 'fragment_tolerance', 'fragment_tolerance_unit', 'tag_length', 'subsample_fraction', 'subsample_spectra']
 function sameRun(a: Report, b: Report): boolean {
-  const dirOf = (p: string): string => p.slice(0, Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\')) + 1)
-  return dirOf(a.path) === dirOf(b.path) && RUN_KEYS.every((k) => value(a, 'run', k) === value(b, 'run', k))
+  return dirName(a.path) === dirName(b.path) && RUN_KEYS.every((k) => value(a, 'run', k) === value(b, 'run', k))
 }
 
 // Read and parse whichever reports exist; a report the run did not write is
@@ -132,7 +140,7 @@ const TAB_LABEL: Record<Tab, string> = { results: 'Tags', species: 'Species', di
 interface Job {
   input: string
   out: string
-  status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled'
+  status: JobStatus
   tags?: number
   // Why the job failed: the next job clears the log.
   reason?: string
@@ -161,7 +169,7 @@ const clock = (t: number): string => new Date(t).toLocaleTimeString([], { hour: 
 
 // The folder part of a path, separator kept.
 function dirName(p: string): string {
-  return p.slice(0, Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\')) + 1)
+  return p.slice(0, lastSep(p) + 1)
 }
 
 // A command line a POSIX shell reads back as the same argv.
@@ -215,10 +223,9 @@ export default function App(): JSX.Element {
   // The tags TSV the browser pane shows. gen forces a fresh ResultsTable when
   // the same path is re-run: the backend cache invalidates on (len, mtime),
   // and the frontend view/scroll state must reset with it. input names the
-  // run that wrote it (none for an opened file). stale: a run writing this
-  // path is in flight. The CLI writes a temporary file beside <out> and
-  // renames it over <out> only once complete, so the file changes only if that run succeeds: the
-  // rows come back as they were when it fails or is cancelled.
+  // run that wrote it (none for an opened file). stale: a run that writes
+  // this path is in flight. The CLI writes <out> in place, so a run that fails
+  // or is cancelled can leave it truncated or removed (incomplete).
   const [results, setResults] = useState<{
     path: string
     gen: number
@@ -233,11 +240,7 @@ export default function App(): JSX.Element {
   // The run the Species tab describes, as it was submitted: unticking species
   // or lowering tag_length afterwards must not hide (or re-show) its report.
   // null until the first run; the tab then follows the form.
-  const [speciesRun, setSpeciesRun] = useState<{
-    input: string
-    enabled: boolean
-    tooShort: { reach: number; k: number; option: string } | null
-  } | null>(null)
+  const [speciesRun, setSpeciesRun] = useState<{ input: string; enabled: boolean } | null>(null)
   const [tab, setTab] = useState<Tab>('results')
   const [reports, setReports] = useState<{ list: Report[]; errors: string[] }>({ list: [], errors: [] })
   // Why the last run failed, shown above the result tabs.
@@ -247,9 +250,14 @@ export default function App(): JSX.Element {
   const [logOpen, setLogOpen] = useState(false)
   // The last run that finished, for the summary over the form, with the
   // parameters it was given that differ from the defaults.
-  const [lastRun, setLastRun] = useState<{ input: string; ok: boolean; at: number; ms: number; changed: string[] } | null>(
-    null
-  )
+  const [lastRun, setLastRun] = useState<{
+    input: string
+    ok: boolean
+    cancelled: boolean
+    at: number
+    ms: number
+    changed: string[]
+  } | null>(null)
   // What a screen reader hears of a run: started, finished, stopped. The log
   // is a live region too, but it is display:none while the drawer is shut.
   const [announce, setAnnounce] = useState('')
@@ -310,19 +318,31 @@ export default function App(): JSX.Element {
   // that finished ok despite the kill stays ok.
   const isCancelled = (r: RunResult): boolean => !r.ok && (r.cancelled === true || cancelled.current)
 
+  const help = useHelp()
+  // F1 (or ?, outside a text field) opens Help; Esc closes it.
+  useEffect(() => {
+    const typing = (t: EventTarget | null): boolean =>
+      t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))
+    const onKey = (e: globalThis.KeyboardEvent): void => {
+      if (e.key === 'F1' || (e.key === '?' && !typing(e.target))) {
+        e.preventDefault()
+        // Already open: stay where the reader is.
+        if (!help.open) openHelp()
+      } else if (e.key === 'Escape' && help.open && !typing(e.target)) {
+        e.preventDefault()
+        closeHelp()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [help.open])
+
   const speciesOn = values['species'] === true
   // k comes from the index header, not an assumption: a differently-built index
   // would make a hardcoded 7 quietly wrong. The CLI refuses such a run up front
   // (rc 6); conflicts() below keeps Run disabled for it, and this tells the
-  // Species tab why it is empty.
-  // tag_lengths, when set, replaces tag_length; its longest seed decides.
-  const seeds = (Array.isArray(values['tag_lengths']) ? values['tag_lengths'] : []).map(Number).filter((n) => n > 0)
-  const seed = seeds.length ? Math.max(...seeds) : Number(values['tag_length'] || 0)
-  const reach = seed + 2 * Number(values['extension'] || 0)
-  const tooShort =
-    speciesOn && taxdbK != null && reach < taxdbK
-      ? { reach, k: taxdbK, option: seeds.length ? 'tag lengths' : 'tag length' }
-      : null
+  // Species tab why it is empty. The same rule as that conflict.
+  const tooShort = speciesReach(values, taxdbK)
 
   useEffect(() => {
     window.fastag.probe().then(setBin)
@@ -354,10 +374,11 @@ export default function App(): JSX.Element {
       // "Species: N spectra contributed taxon evidence; ..."
       const sp = /^Species:\s+(\d+) spectra contributed/.exec(line)
       if (sp) setEvidence((e) => ({ ...e, contributed: Number(sp[1]) }))
-      // "42092 MS2 spectra, 1130228 tags"
-      const ms2 = /^(\d+) MS2 spectra,(?: (\d+) tags)?/.exec(line)
+      // "42092 MS2 spectra, 1130228 tags[ -> 5321 after filtering]"
+      const ms2 = /^(\d+) MS2 spectra,(?: (\d+) tags)?(?: -> (\d+) after filtering)?/.exec(line)
       if (ms2) setEvidence((e) => ({ ...e, ms2: Number(ms2[1]) }))
-      if (ms2?.[2]) lastTags.current = Number(ms2[2])
+      const t = ms2?.[3] ?? ms2?.[2]
+      if (t) lastTags.current = Number(t)
     })
     const offProgress = window.fastag.onProgress((p) => setProgress(p))
     const offDone = window.fastag.onDone((r: RunResult) => {
@@ -430,6 +451,7 @@ export default function App(): JSX.Element {
       const add: Job[] = []
       for (const f of files) {
         if (have.has(f)) continue
+        have.add(f)
         // sample.mzML and sample.mzpeak both map to sample.tags.tsv — on a
         // collision keep the full input name, then number, so outputs stay
         // distinct even when the fallback collides too.
@@ -444,9 +466,8 @@ export default function App(): JSX.Element {
   }
 
   async function pickFor(spec: ParamSpec): Promise<void> {
-    // The parameter's own formats (FASTA, idXML/mzid/mzTab, TSV), not the
-    // spectra filter every input used to get -- a .fasta or .taxdb could not
-    // be picked -- nor 'Tags (TSV)' for every output.
+    // Offer the parameter's own formats (FASTA, idXML/mzid/mzTab, TSV, taxdb),
+    // not the spectra filter used for inputs or 'Tags (TSV)' for every output.
     const p =
       spec.type === 'output-file'
         ? await window.fastag.saveFile(String(values[spec.name] || ''), spec.formats)
@@ -494,7 +515,7 @@ export default function App(): JSX.Element {
           r.ok
             ? `Finished ${name}${lastTags.current != null ? `: ${lastTags.current.toLocaleString('en-US')} tags` : ''}.`
             : isCancelled(r)
-              ? `Stopped ${name}.`
+              ? `Cancelled ${name}.`
               : `${name} failed.`
         )
         done({ ...r, out: wrote })
@@ -506,7 +527,7 @@ export default function App(): JSX.Element {
       // Nor a prior run's species: whatever this run ends as, the old taxa
       // would read as its result.
       setSpecies(null)
-      setSpeciesRun({ input: inFile, enabled: speciesOn, tooShort })
+      setSpeciesRun({ input: inFile, enabled: speciesOn })
       // The run may replace -out: until it ends, a table of that path may
       // not be what the file will hold.
       setResults((r) => (r && r.path === wrote ? { ...r, stale: true } : r))
@@ -548,13 +569,13 @@ export default function App(): JSX.Element {
               pending.current.set(res.runId, resolve)
             }
           } else {
-            setLog([`could not start: ${res.reason ?? 'unknown'}`])
+            setLog([`FASTag could not start: ${res.reason ?? 'no reason given'}`])
             settle({ ok: false, code: null, message: res.reason })
           }
         })
         .catch((err) => {
           // A rejected invoke would otherwise leave running=true forever.
-          setLog([`could not start: ${err instanceof Error ? err.message : String(err)}`])
+          setLog([`FASTag could not start: ${err instanceof Error ? err.message : String(err)}`])
           settle({ ok: false, code: null, message: String(err) })
         })
     })
@@ -570,7 +591,7 @@ export default function App(): JSX.Element {
       try {
         const sp = await window.fastag.species(path('species_out') || defaultSpeciesOut(outFile))
         setSpecies(sp)
-        if (sp && !sp.empty) {
+        if (sp && sp.taxa.length > 0) {
           setTab('species')
           switched = true
         }
@@ -587,12 +608,13 @@ export default function App(): JSX.Element {
 
   // The message above the tabs when a run failed: the CLI's exit status and
   // its last error line, which may have scrolled out of the log.
+  const failureWhy = (): string | null => lastError.current ?? lastLine.current
   const failureReason = (r: RunResult): string => {
-    const why = lastError.current ?? lastLine.current
+    const why = failureWhy()
     return `${failText(r)}${why ? `: ${why}` : ''}`
   }
   const failed = (r: RunResult, what: string): void => {
-    const why = lastError.current ?? lastLine.current
+    const why = failureWhy()
     setFailure({ title: `${what} failed (${failText(r)})`, reasons: why ? [{ text: why }] : [], command: command.current })
   }
 
@@ -600,14 +622,20 @@ export default function App(): JSX.Element {
   // preview/species inside showResults would surface as an unhandled rejection.
   // Log it instead; the run itself already settled.
   const logResultsError = (err: unknown): void =>
-    setLog((l) => [...l, `results: ${err instanceof Error ? err.message : String(err)}`])
+    setLog((l) => [...l, `Could not show the results: ${err instanceof Error ? err.message : String(err)}`])
 
   async function run(): Promise<void> {
     if (!input || !out) return
     window.fastag.saveLast(values)
-    const changed = changedList()
     const r = await runOne(input, out)
-    setLastRun({ input, ok: r.ok, at: Date.now(), ms: Date.now() - startedAt.current, changed })
+    setLastRun({
+      input,
+      ok: r.ok,
+      cancelled: isCancelled(r),
+      at: Date.now(),
+      ms: Date.now() - startedAt.current,
+      changed: changedParams
+    })
     if (r.ok) await showResults(input, r.out).catch(logResultsError)
     else if (!isCancelled(r)) failed(r, baseName(input))
   }
@@ -643,7 +671,7 @@ export default function App(): JSX.Element {
         lastRunJob = { input: job.input, ok: r.ok }
         if (r.ok) lastDone = job.input
         if (status === 'failed') {
-          const why = lastError.current ?? lastLine.current
+          const why = failureWhy()
           failures.push({ what: `${baseName(job.input)} (${failText(r)})`, text: why ?? '' })
           failedInputs.push(job.input)
           failedCommand = failedCommand ?? command.current
@@ -744,12 +772,15 @@ export default function App(): JSX.Element {
         return out ? { ...merged, ...rebaseOutputs(merged, out) } : merged
       })
   }
+  async function refreshPresets(): Promise<void> {
+    const st = await window.fastag.loadSettings()
+    setPresets(Object.keys(st.presets).sort())
+  }
   async function commitPreset(): Promise<void> {
     const name = (savingName ?? '').trim()
     if (!name) { cancelPreset(); return }
     await window.fastag.savePreset(name, values)
-    const st = await window.fastag.loadSettings()
-    setPresets(Object.keys(st.presets).sort())
+    await refreshPresets()
     setPreset(name)
     setSavingName(null)
     focusLater(() => presetRef.current)
@@ -761,8 +792,7 @@ export default function App(): JSX.Element {
   async function removePreset(): Promise<void> {
     if (!preset) return
     await window.fastag.deletePreset(preset)
-    const st = await window.fastag.loadSettings()
-    setPresets(Object.keys(st.presets).sort())
+    await refreshPresets()
     setPreset('')
     focusLater(() => presetRef.current)
   }
@@ -786,7 +816,6 @@ export default function App(): JSX.Element {
         key={name}
         spec={spec}
         value={values[name]}
-        inert={inertBecause(name, values)}
         needs={inertDependency(name, values)}
         onChange={(v) => setValue(name, v)}
         onPickFile={pickFor}
@@ -796,19 +825,22 @@ export default function App(): JSX.Element {
   }
 
   // What a run writes, by file name: the tags, then each output it is sent.
-  const writing = (): string[] => {
+  // Species and glyco reports go beside <out> when no path is given.
+  const writingFiles: string[] = (() => {
     const files = [out]
     if (speciesOn) files.push(String(values['species_out'] || '') || defaultSpeciesOut(out))
+    if (values['glyco'] === true) files.push(String(values['glyco_out'] || '') || `${stripExt(out)}.glyco.tsv`)
     for (const name of RENDERED) {
-      if (name === 'species_out' || PARAM_BY_NAME.get(name)?.type !== 'output-file') continue
+      if (name === 'species_out' || name === 'glyco_out' || PARAM_BY_NAME.get(name)?.type !== 'output-file') continue
       const v = String(values[name] || '')
       if (v && !inertBecause(name, values)) files.push(v)
     }
     return files.filter(Boolean).map(baseName)
-  }
-  // The parameters a run sends that differ from the CLI defaults.
-  const changedList = (): string[] =>
-    RENDERED.filter((n) => !inertBecause(n, values) && isChanged(n, values[n])).map((n) => cliText(n, values[n]))
+  })()
+  // The parameters a run sends that differ from the defaults.
+  const changedParams = RENDERED.filter((n) => !inertBecause(n, values) && isChanged(n, values[n])).map((n) =>
+    cliText(n, values[n])
+  )
 
   const nInvalid = Object.keys(invalid).length
   // Failed jobs are Retry failed's, not the remaining ones.
@@ -887,7 +919,7 @@ export default function App(): JSX.Element {
             {!busy && (
               <button
                 className="rm"
-                title="remove"
+                title="Remove"
                 aria-label={`Remove ${j.input}`}
                 onClick={() => {
                   setJobs((js) => js.filter((_, k) => k !== i))
@@ -907,7 +939,8 @@ export default function App(): JSX.Element {
         })}
       </ul>
       <p className="hint">
-        Each file writes its own <code>&lt;name&gt;.tags.tsv</code> and reports next to the input.
+        Each file writes its own <code>&lt;name&gt;.tags.tsv</code> and reports next to the input.{' '}
+        <HelpLink to="start-batch">About batch runs</HelpLink>
       </p>
     </section>
   )
@@ -926,21 +959,32 @@ export default function App(): JSX.Element {
             {bin.ok ? (
               <>
                 <IconCheck />
-                CLI ready
+                FASTag ready
               </>
             ) : (
-              `binary not runnable: ${bin.detail}`
+              `FASTag cannot start: ${bin.detail.replace(/^cannot (run|execute): /, '')}`
             )}
           </span>
         )}
         <span className="spacer" />
+        {help.open ? (
+          <button type="button" className="secondary small" onClick={() => closeHelp()}>
+            Back to FASTag
+          </button>
+        ) : (
+          <button type="button" className="secondary small" aria-keyshortcuts="F1" title="Help (F1)" onClick={() => openHelp()}>
+            Help
+          </button>
+        )}
         <span className="openms" title="FASTag is an OpenMS TOPP tool — openms.de">
           Built on
           <img src={openmsLogo} alt="OpenMS" />
         </span>
       </header>
 
-      <div className="layout">
+      {help.open && <HelpView />}
+      {/* Hidden, not unmounted: the form, the batch and the results stay as they were. */}
+      <div className="layout" hidden={help.open}>
         <aside className="controls" aria-label="Run setup">
           <div className="controls-body">
             {busy ? (
@@ -965,17 +1009,17 @@ export default function App(): JSX.Element {
                 {jobs.length === 0 && (
                   <section className="block">
                     <h2>Writing</h2>
-                    {writing().map((f) => (
+                    {writingFiles.map((f) => (
                       <code key={f}>{f}</code>
                     ))}
                   </section>
                 )}
                 <section className="block">
                   <h2>Changed from defaults</h2>
-                  {changedList().length ? (
-                    changedList().map((c) => <code key={c}>{c}</code>)
+                  {changedParams.length ? (
+                    changedParams.map((c) => <code key={c}>{c}</code>)
                   ) : (
-                    <span className="muted">nothing: the CLI defaults</span>
+                    <span className="muted">nothing: all parameters at their defaults</span>
                   )}
                 </section>
               </>
@@ -984,16 +1028,16 @@ export default function App(): JSX.Element {
                 {lastRun && jobs.length === 0 && (
                   <section className="block last-run" aria-labelledby="last-run-h">
                     <h2 id="last-run-h">Last run</h2>
-                    <div className={`last-run-name ${lastRun.ok ? 'ok' : 'bad'}`}>
-                      <JobIcon status={lastRun.ok ? 'done' : 'failed'} />
+                    <div className={`last-run-name ${lastRun.ok ? 'ok' : lastRun.cancelled ? 'cancelled' : 'bad'}`}>
+                      <JobIcon status={lastRun.ok ? 'done' : lastRun.cancelled ? 'cancelled' : 'failed'} />
                       <span>{baseName(lastRun.input)}</span>
                     </div>
                     <div className="muted">
-                      {lastRun.ok ? 'Finished' : 'Stopped'} {clock(lastRun.at)} · {duration(lastRun.ms)}
+                      {lastRun.ok ? 'Finished' : lastRun.cancelled ? 'Cancelled' : 'Failed'} {clock(lastRun.at)} · {duration(lastRun.ms)}
                       {lastRun.ok && evidence.ms2 != null && ` · ${evidence.ms2.toLocaleString('en-US')} MS2 spectra`}
                     </div>
                     {/* The form may be edited since: what this run was given. */}
-                    <code className="last-run-params">{lastRun.changed.length ? lastRun.changed.join(' ') : 'CLI defaults'}</code>
+                    <code className="last-run-params">{lastRun.changed.length ? lastRun.changed.join(' ') : 'all defaults'}</code>
                   </section>
                 )}
 
@@ -1001,7 +1045,10 @@ export default function App(): JSX.Element {
                   batchList
                 ) : (
                   <section className="block" aria-labelledby="input-label">
-                    <h2 id="input-label">Input</h2>
+                    <div className="block-head">
+                      <h2 id="input-label">Input</h2>
+                      <HelpButton to="files-inputs" what="input files" />
+                    </div>
                     {input ? (
                       <div className="input-card">
                         <IconFile />
@@ -1030,7 +1077,10 @@ export default function App(): JSX.Element {
 
                 {jobs.length === 0 && (
                   <section className="block" aria-labelledby="out-h">
-                    <h2 id="out-h">Output</h2>
+                    <div className="block-head">
+                      <h2 id="out-h">Output</h2>
+                      <HelpButton to="files-outputs" what="output files" />
+                    </div>
                     <label htmlFor="out" className="sublabel">
                       Tags TSV <code className="cli">out</code>
                     </label>
@@ -1038,7 +1088,7 @@ export default function App(): JSX.Element {
                       <input id="out" className="path-input" value={out} onChange={(e) => setOut(e.target.value)} placeholder="tags.tsv" />
                       <button
                         className="secondary"
-                        aria-label="Browse for out"
+                        aria-label="Browse for the tags TSV"
                         onClick={async () => {
                           const p = await window.fastag.pickOutput(out || undefined)
                           if (p) setOut(p)
@@ -1047,10 +1097,10 @@ export default function App(): JSX.Element {
                         Browse…
                       </button>
                     </div>
-                    {out && writing().length > 1 && (
+                    {out && writingFiles.length > 1 && (
                       <p className="hint">
                         Reports go to{' '}
-                        {writing()
+                        {writingFiles
                           .slice(1)
                           .map((f, i) => (
                             <span key={f}>
@@ -1121,7 +1171,7 @@ export default function App(): JSX.Element {
                           <span className={`chev ${open ? 'open' : ''}`} aria-hidden="true">▸</span>
                           <span className="sec-title">{sec.title}</span>{' '}
                           {on && (
-                            <span className="chip ok on-dot" role="img" aria-label={`${sec.master} is set`}>
+                            <span className="chip ok on-dot" role="img" aria-label={`${humanName(sec.master!)} is on`}>
                               on
                             </span>
                           )}
@@ -1130,7 +1180,12 @@ export default function App(): JSX.Element {
                         </button>
                         {open && (
                           <div className="sec-body">
-                            {sec.blurb && <p className="blurb">{sec.blurb}</p>}
+                            <p className="blurb">
+                              {sec.blurb}{' '}
+                              <HelpLink to={`param-sec-${slug(sec.title)}`}>
+                                Help on {sec.title}
+                              </HelpLink>
+                            </p>
                             {sec.master && field(sec.master)}
                             {sec.master && rest.length > 0 && <div className="sub-rule" />}
                             {rest.map(field)}
@@ -1142,8 +1197,18 @@ export default function App(): JSX.Element {
 
                   {(UNPLACED.length > 0 || UNKNOWN.length > 0) && (
                     <p className="warn">
-                      {UNPLACED.length > 0 && <>{UNPLACED.length} CLI parameter(s) missing from the UI layout: {UNPLACED.join(', ')}. </>}
-                      {UNKNOWN.length > 0 && <>{UNKNOWN.length} layout entr(y/ies) name no such parameter: {UNKNOWN.join(', ')}.</>}
+                      {UNPLACED.length > 0 && (
+                        <>
+                          {UNPLACED.length} {UNPLACED.length === 1 ? 'parameter of FASTag is' : 'parameters of FASTag are'} missing
+                          from the form: {UNPLACED.join(', ')}.{' '}
+                        </>
+                      )}
+                      {UNKNOWN.length > 0 && (
+                        <>
+                          {UNKNOWN.length} {UNKNOWN.length === 1 ? 'form entry names' : 'form entries name'} no such
+                          parameter: {UNKNOWN.join(', ')}.
+                        </>
+                      )}
                     </p>
                   )}
                 </section>
@@ -1216,7 +1281,7 @@ export default function App(): JSX.Element {
 
             {resetAsk && !busy ? (
               <div className="confirm" role="group" aria-label="Reset parameters">
-                <span>Reset every parameter to the CLI defaults?</span>
+                <span>Reset every parameter to its default?</span>
                 <button
                   className="danger"
                   onClick={() => {
@@ -1294,7 +1359,7 @@ export default function App(): JSX.Element {
                   onClick={() => setTab(t)}
                 >
                   {TAB_LABEL[t]}
-                  {t === 'species' && species && !species.empty && <span className="count">{species.taxa.length}</span>}
+                  {t === 'species' && species && species.taxa.length > 0 && <span className="count">{species.taxa.length}</span>}
                   {t === 'digest' && reports.list.length > 0 && <span className="count">{reports.list.length}</span>}
                 </button>
               ))}
@@ -1325,6 +1390,7 @@ export default function App(): JSX.Element {
                   <IconClose />
                 </button>
               </div>
+              {failure.reasons.length === 0 && <HelpLink to="faq-run-failed">What to do</HelpLink>}
               {failure.reasons.map((r, i) => (
                 <div className="failure-reason" key={i}>
                   {r.what && <div className="what">{r.what}</div>}
@@ -1334,6 +1400,7 @@ export default function App(): JSX.Element {
                       <code className="why">{r.text}</code>
                     </>
                   )}
+                  <HelpLink to={faqForMessage(r.text)}>What to do</HelpLink>
                 </div>
               ))}
               <div className="failure-actions">
@@ -1341,7 +1408,7 @@ export default function App(): JSX.Element {
                   className="secondary"
                   onClick={() => {
                     setLogOpen(true)
-                    setTimeout(() => logRef.current?.focus())
+                    focusLater(() => logRef.current)
                   }}
                 >
                   Show full log
@@ -1380,7 +1447,8 @@ export default function App(): JSX.Element {
                   enabled={speciesRun ? speciesRun.enabled : speciesOn}
                   formOn={!!speciesRun && !speciesRun.enabled && speciesOn}
                   runInput={speciesRun?.input}
-                  tooShort={speciesRun ? speciesRun.tooShort : tooShort}
+                  // A run that started passed the reach check, so it was never too short.
+                  tooShort={speciesRun ? null : tooShort}
                   contributed={evidence.contributed}
                   totalMs2={evidence.ms2}
                 />
@@ -1393,6 +1461,9 @@ export default function App(): JSX.Element {
                     {batchMiss.done
                       ? <>Select {baseName(batchMiss.done)} in the batch to see its results.</>
                       : 'No job of this batch finished.'}
+                  </p>
+                  <p>
+                    <HelpLink to="faq-no-tags">Why a run writes no tags</HelpLink>
                   </p>
                 </div>
               </div>
@@ -1419,7 +1490,8 @@ export default function App(): JSX.Element {
                         }
                       >
                         Open it anyway
-                      </button>
+                      </button>{' '}
+                      <HelpButton to="faq-incomplete" what="an incomplete tags file" />
                     </span>
                   )}
                 </div>
@@ -1437,6 +1509,9 @@ export default function App(): JSX.Element {
                   <p>
                     Run FASTag on the chosen file, or open a tags TSV or a digest, label or mass-gap report from an
                     earlier run.
+                  </p>
+                  <p>
+                    New to FASTag? <HelpLink to="start">Read Getting started</HelpLink> (F1 opens Help at any time).
                   </p>
                   <div className="row-actions">
                     <button className="secondary big" onClick={openResults}>
