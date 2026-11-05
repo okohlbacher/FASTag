@@ -297,6 +297,16 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
   set_tests_properties(mgf_cli_test PROPERTIES SKIP_RETURN_CODE 77)
 
+  # tools/mzml_to_mgf.py on the fixture mzML and on diaTracer- and
+  # ddaPASEF-shaped fixtures (empty MS2), and FASTag on what it writes: the
+  # mzML's tags. Skips (77) without a Python that has pyteomics
+  # (FASTAG_PYTHON names one).
+  add_test(NAME mzml_to_mgf_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/mzml_to_mgf_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/tools/mzml_to_mgf.py
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures)
+  set_tests_properties(mzml_to_mgf_test PROPERTIES SKIP_RETURN_CODE 77)
+
   # The ported deisotoper against OpenMS's own, peak for peak and bit for bit,
   # on synthetic edge cases. Given an mzPeak archive as its argument it also
   # compares every spectrum of that run (not part of ctest: needs real data).

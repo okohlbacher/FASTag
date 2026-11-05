@@ -27,3 +27,27 @@ converts by the cvParam's unit; the JPR harness writer it is derived from
 multiplies by 60 whatever the unit). TITLE is the mzML native ID and SCANS its
 scan number. Vendored so ctest needs no Python. Derived from an OpenMS example,
 so BSD-3-Clause as well.
+
+`diatracer_like.mzML` and `ddapasef_empty.mzML` — the input of
+`mzml_to_mgf_test` (the converter `tools/mzml_to_mgf.py` and FASTag on its
+MGF). Written by `make_converter_fixtures.py` (pyteomics 5.0.2, numpy 1.26.4)
+from `Ecoli_MS2_small.mzML`: the peaks are spectra 0-59 and 60-119 of that file,
+so BSD-3-Clause as well, and only the mzML around them is reshaped after real
+timsTOF files. Both are indexedmzML with an exact index.
+
+- `diatracer_like.mzML` (60 MS2) follows diaTracer 2.2.1 output (PXD047793):
+  native IDs `frame=<n>` under a source file that claims the Thermo nativeID
+  format, detector cvParams with `accession="UNKNOWN"`, the precursor m/z only
+  as `isolation window target m/z` (the selectedIon holds charge and intensity,
+  no m/z), an empty `<activation/>`, `spectrum title`, scan start time in
+  minutes, ion mobility on the scan, 64-bit zlib m/z and intensity.
+- `ddapasef_empty.mzML` (10 MS1, 60 MS2) follows msconvert-style ddaPASEF
+  output: native IDs `merged=<k> frame=<f> scanStart=.. scanEnd=..`, selected
+  ion m/z with charge and ion mobility, an isolation window target rounded to
+  0.1, 64-bit m/z and 32-bit intensity. Four MS2 have no peaks: two as zlib
+  arrays of length 0, one as uncompressed arrays of length 0, one with no
+  binary arrays at all (the form the converter failed on before). One MS2 has a
+  precursor without any m/z and one has no precursorList.
+
+sha256: `diatracer_like.mzML` `fbff96360f591209a7f1ac9f38899a6724c6ffaebdcbb6df3c883b421b4fce0d`,
+`ddapasef_empty.mzML` `8c82599641c77d77129800bfbc7e097f917d0168c1f09e0cb83e4a84cf7950d6`.

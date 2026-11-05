@@ -93,8 +93,11 @@ texts. OpenMS's own licence and notices are in `share-OpenMS/`.
 
 `test/fixtures/Ecoli_MS2_small.mgf` is `Ecoli_MS2_small.mzML` (OpenMS example,
 BSD-3-Clause) written as MGF by `tools/mzml_to_mgf.py` with pyteomics 5.0.2
-(Apache-2.0; used to write the fixture, not shipped or linked). Provenance and
-sha256 in `test/fixtures/README.md`.
+(Apache-2.0; used to write the fixture, not shipped or linked).
+`test/fixtures/diatracer_like.mzML` and `ddapasef_empty.mzML` carry peaks of the
+same example in timsTOF-shaped mzML written by
+`test/fixtures/make_converter_fixtures.py`, so BSD-3-Clause as well. Provenance
+and sha256 in `test/fixtures/README.md`.
 
 ## Provenance
 
