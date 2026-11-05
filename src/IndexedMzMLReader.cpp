@@ -19,6 +19,7 @@
 #include <memory>
 #include <new>
 #include <locale.h>
+#include <string>
 #include <string_view>
 
 #ifdef _OPENMP
@@ -205,9 +206,12 @@ namespace FASTag
         close();
 #ifdef _WIN32
         // Shared as std::ifstream shares; CreateFileA, as it opens a narrow path: under FASTag's
-        // UTF-8 code page manifest both take UTF-8.
+        // UTF-8 code page manifest both take UTF-8. No FILE_FLAG_RANDOM_ACCESS: the scan reads
+        // pieces in ascending order and the readers walk forward through blocks of spectra, so
+        // the cache manager's sequential read-ahead (on for the std::ifstream this replaces)
+        // helps; switching it off is unmeasured on Windows, cold or over SMB.
         h_ = CreateFileA(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
-                         FILE_ATTRIBUTE_NORMAL | FILE_FLAG_RANDOM_ACCESS, nullptr);
+                         FILE_ATTRIBUTE_NORMAL, nullptr);
         return h_ != INVALID_HANDLE_VALUE;
 #else
         fd_ = ::open(path.c_str(), O_RDONLY);
@@ -216,22 +220,45 @@ namespace FASTag
       }
 
       /// Exactly @p n bytes at @p offset into @p dst; false on an error or
-      /// end of file.
+      /// end of file, with the reason in error().
       bool read(std::uint64_t offset, char* dst, std::size_t n)
       {
+        // At most 1 GiB per call: ReadFile takes a DWORD, and Darwin's pread
+        // fails with EINVAL above INT_MAX bytes (Linux shortens the read).
+        constexpr std::size_t kMaxCall = std::size_t{1} << 30;
         while (n > 0)
         {
 #ifdef _WIN32
           OVERLAPPED ov{};
           ov.Offset = static_cast<DWORD>(offset & 0xffffffffu);
           ov.OffsetHigh = static_cast<DWORD>(offset >> 32);
-          const DWORD want = static_cast<DWORD>(std::min<std::size_t>(n, std::size_t{1} << 30));
+          const DWORD want = static_cast<DWORD>(std::min(n, kMaxCall));
           DWORD got = 0;
-          if (!ReadFile(h_, dst, want, &got, &ov) || got == 0) return false;
+          if (!ReadFile(h_, dst, want, &got, &ov))
+          {
+            const DWORD e = GetLastError();
+            error_ = e == ERROR_HANDLE_EOF ? std::string("a short read (end of file)")
+                                           : "a read error (Windows error " + std::to_string(e) + ")";
+            return false;
+          }
+          if (got == 0)
+          {
+            error_ = "a short read (end of file)";
+            return false;
+          }
 #else
-          const ssize_t got = ::pread(fd_, dst, n, static_cast<off_t>(offset));
+          const ssize_t got = ::pread(fd_, dst, std::min(n, kMaxCall), static_cast<off_t>(offset));
           if (got < 0 && errno == EINTR) continue;
-          if (got <= 0) return false;
+          if (got < 0)
+          {
+            error_ = std::string("a read error (") + std::strerror(errno) + ")";
+            return false;
+          }
+          if (got == 0)
+          {
+            error_ = "a short read (end of file)";
+            return false;
+          }
 #endif
           dst += got;
           offset += static_cast<std::uint64_t>(got);
@@ -239,6 +266,9 @@ namespace FASTag
         }
         return true;
       }
+
+      /// Why the last read() failed.
+      const std::string& error() const { return error_; }
 
     private:
       void close()
@@ -256,6 +286,7 @@ namespace FASTag
 #else
       int fd_ = -1;
 #endif
+      std::string error_;
     };
 
     /// A page-aligned byte buffer that keeps its storage and never zero-fills.
@@ -631,11 +662,11 @@ namespace FASTag
     // is on OpenMS's reader: returned empty, it would be skipped as "not MS2"
     // and the run would exit 0 with its tags missing. The metadata
     // probe (want_peaks false) stays lenient.
-    const auto unreadable = [&](const char* why) -> MSSpectrum {
+    const auto unreadable = [&](const std::string& why) -> MSSpectrum {
       if (!want_peaks) return MSSpectrum();
       throw Exception::ParseError(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION,
                                   "spectrum index " + std::to_string(i),
-                                  std::string(why) + " in " + impl_->path);
+                                  why + " in " + impl_->path);
     };
     if (end <= begin) return unreadable("an empty byte range");
 
@@ -649,26 +680,30 @@ namespace FASTag
     const std::uint64_t len = end - begin;
     constexpr std::uint64_t kHead = 16384;
     const std::uint64_t head_len = std::min(len, kHead);
-    if (!impl_->raw.reserve(static_cast<std::size_t>(head_len), 0)) return unreadable("no memory");
+    if (!impl_->raw.reserve(static_cast<std::size_t>(head_len), 0))
+      return unreadable("no memory for " + std::to_string(head_len) + " bytes");
     if (!impl_->in.read(begin, impl_->raw.data.get(), static_cast<std::size_t>(head_len)))
-      return unreadable("a short read");
+      return unreadable(impl_->in.error());
     impl_->bytes = std::string_view(impl_->raw.data.get(), static_cast<std::size_t>(head_len));
 
     // The head is only known to hold the whole metadata region once the
     // arrays have been seen; otherwise fall back to the full element rather
-    // than scrape a truncated one.
-    auto read_rest = [&]() {
+    // than scrape a truncated one. Empty on success, else why it failed: a
+    // file that is intact must not be reported as truncated when memory ran
+    // out.
+    auto read_rest = [&]() -> std::string {
       const std::size_t have = impl_->bytes.size();
-      if (have >= len) return true;
-      if (!impl_->raw.reserve(static_cast<std::size_t>(len), have)) return false;
+      if (have >= len) return {};
+      if (!impl_->raw.reserve(static_cast<std::size_t>(len), have))
+        return "no memory for a spectrum of " + std::to_string(len) + " bytes";
       if (!impl_->in.read(begin + have, impl_->raw.data.get() + have, static_cast<std::size_t>(len) - have))
-        return false;
+        return impl_->in.error();
       impl_->bytes = std::string_view(impl_->raw.data.get(), static_cast<std::size_t>(len));
-      return true;
+      return {};
     };
     if (impl_->bytes.find(kArrays) == std::string_view::npos && len > head_len)
     {
-      if (!read_rest()) return unreadable("a short read");
+      if (const std::string why = read_rest(); !why.empty()) return unreadable(why);
     }
 
     // The metadata region of whatever is in the buffer NOW: everything this
@@ -698,7 +733,7 @@ namespace FASTag
     // This may GROW the buffer, so every view below is taken afterwards.
     if (ms_level == 2 && want_peaks)
     {
-      if (!read_rest()) return unreadable("a short read");
+      if (const std::string why = read_rest(); !why.empty()) return unreadable(why);
       if (impl_->direct_on && impl_->direct.decode(impl_->bytes, spec))
       {
         ++impl_->n_direct;
@@ -720,7 +755,7 @@ namespace FASTag
         }
         catch (const Exception::BaseException& e)
         {
-          return unreadable((std::string("an undecodable MS2 spectrum (") + e.what() + ")").c_str());
+          return unreadable(std::string("an undecodable MS2 spectrum (") + e.what() + ")");
         }
       }
     }

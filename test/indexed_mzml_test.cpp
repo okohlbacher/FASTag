@@ -17,6 +17,7 @@
 #include <OpenMS/KERNEL/MSExperiment.h>
 #include <OpenMS/KERNEL/OnDiscMSExperiment.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <filesystem>
@@ -24,6 +25,14 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <vector>
+
+#include <zlib.h>
+
+#ifdef __linux__
+#  include <sys/resource.h>
+#  include <unistd.h>
+#endif
 
 using namespace OpenMS;
 
@@ -211,6 +220,90 @@ namespace
       std::cerr << "could not write " << dst << ": " << e.what() << "\n";
       return {};
     }
+  }
+}
+
+
+namespace
+{
+  std::string base64(const std::string& in)
+  {
+    static const char* a = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string o;
+    std::size_t i = 0;
+    const auto b = [&](std::size_t k) { return static_cast<unsigned>(static_cast<unsigned char>(in[k])); };
+    for (; i + 2 < in.size(); i += 3)
+    {
+      const unsigned v = b(i) << 16 | b(i + 1) << 8 | b(i + 2);
+      o += a[v >> 18]; o += a[(v >> 12) & 63]; o += a[(v >> 6) & 63]; o += a[v & 63];
+    }
+    if (in.size() - i == 1)
+    {
+      const unsigned v = b(i) << 16;
+      o += a[v >> 18]; o += a[(v >> 12) & 63]; o += "==";
+    }
+    else if (in.size() - i == 2)
+    {
+      const unsigned v = b(i) << 16 | b(i + 1) << 8;
+      o += a[v >> 18]; o += a[(v >> 12) & 63]; o += a[(v >> 6) & 63]; o += '=';
+    }
+    return o;
+  }
+
+  /// One 64-bit binaryDataArray of two values; @p extra goes into the
+  /// m/z or intensity cvParam (a unit, say).
+  std::string synthetic_array(bool zlib, bool intensity, const std::string& extra = "")
+  {
+    const double v[2] = {intensity ? 1000.5 : 100.5, intensity ? 2000.25 : 200.25};
+    std::string bytes(reinterpret_cast<const char*>(v), sizeof v);
+    if (zlib)
+    {
+      uLongf n = compressBound(static_cast<uLong>(bytes.size()));
+      std::string z(n, '\0');
+      compress2(reinterpret_cast<Bytef*>(z.data()), &n, reinterpret_cast<const Bytef*>(bytes.data()),
+                static_cast<uLong>(bytes.size()), 6);
+      bytes = z.substr(0, n);
+    }
+    return std::string("<binaryDataArray encodedLength=\"0\">\n") +
+           "<cvParam cvRef=\"MS\" accession=\"MS:1000523\" name=\"64-bit float\" value=\"\"/>\n" +
+           (zlib ? "<cvParam cvRef=\"MS\" accession=\"MS:1000574\" name=\"zlib compression\" value=\"\"/>\n"
+                 : "<cvParam cvRef=\"MS\" accession=\"MS:1000576\" name=\"no compression\" value=\"\"/>\n") +
+           (intensity ? "<cvParam cvRef=\"MS\" accession=\"MS:1000515\" name=\"intensity array\" value=\"\"" + extra + "/>\n"
+                      : "<cvParam cvRef=\"MS\" accession=\"MS:1000514\" name=\"m/z array\" value=\"\"" + extra + "/>\n") +
+           "<binary>" + base64(bytes) + "</binary>\n</binaryDataArray>\n";
+  }
+
+  /// A well-formed MS2 <spectrum> of two peaks, as a writer lays it out.
+  std::string synthetic_spectrum(const std::string& id, bool zlib)
+  {
+    return "<spectrum index=\"0\" id=\"" + id + "\" defaultArrayLength=\"2\">\n"
+           "<cvParam cvRef=\"MS\" accession=\"MS:1000511\" name=\"ms level\" value=\"2\"/>\n"
+           "<userParam name=\"note\" value=\"plain\"/>\n"
+           "<scanList count=\"1\">\n<scan>\n"
+           "<cvParam cvRef=\"MS\" accession=\"MS:1000016\" name=\"scan start time\" value=\"60\" "
+           "unitCvRef=\"UO\" unitAccession=\"UO:0000010\" unitName=\"second\"/>\n</scan>\n</scanList>\n"
+           "<binaryDataArrayList count=\"2\">\n" +
+           synthetic_array(zlib, false) + synthetic_array(zlib, true) + "</binaryDataArrayList>\n</spectrum>\n";
+  }
+
+  /// An mzML of the given spectra, without an index (the reader scans it).
+  void write_synthetic(const std::string& path, const std::vector<std::string>& spectra)
+  {
+    std::string b = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<mzML xmlns=\"http://psi.hupo.org/ms/mzml\" "
+                    "version=\"1.1.0\">\n<run id=\"r\">\n<spectrumList count=\"" + std::to_string(spectra.size()) +
+                    "\">\n";
+    for (const std::string& sp : spectra) b += sp;
+    b += "</spectrumList>\n</run>\n</mzML>\n";
+    spit(path, b);
+  }
+
+  /// @p sp with the first @p from replaced by @p to (which must be there).
+  std::string edit(std::string sp, const std::string& from, const std::string& to)
+  {
+    const std::size_t at = sp.find(from);
+    check(at != std::string::npos, "test edit finds '" + from + "'");
+    if (at != std::string::npos) sp.replace(at, from.size(), to);
+    return sp;
   }
 }
 
@@ -539,8 +632,127 @@ int main(int argc, char** argv)
     // The ion mobility file of above: three arrays, declined.
     direct_vs_openms(tmp + "/fastag_im_arrays.mzML", "direct: extra arrays (declined)", false);
   }
-  // Further mzML files from the command line (the public gate inputs, say),
-  // each compared spectrum by spectrum.
+  // Synthetic spectra, each the second of a two-spectrum file after a clean
+  // one. MALFORMED: libxml2 (non-recovering, as OpenMS runs it) stops on each
+  // before the root ends, OpenMS throws, and the run must fail as in 1.10.0:
+  // the direct decoder has to decline, wherever in the element the error is.
+  {
+    const std::string good = synthetic_spectrum("s=1", false);
+    const std::string goodz = synthetic_spectrum("s=1", true);
+    const std::string arrays = "<binaryDataArrayList count=\"2\">";
+    struct Case
+    {
+      const char* name;
+      std::string spectrum;
+    };
+    const std::vector<Case> malformed = {
+        {"unclosed element in the metadata", edit(good, "<scan>\n<cvParam", "<scan>\n<scan>\n<cvParam")},
+        {"mismatched end tag in the metadata", edit(good, "</scanList>", "</scanlist>")},
+        {"undefined entity in the metadata", edit(good, "value=\"plain\"", "value=\"&bogus;\"")},
+        {"unescaped '&' in the metadata", edit(good, "value=\"plain\"", "value=\"A&B\"")},
+        {"bad character reference in the metadata", edit(good, "value=\"plain\"", "value=\"&#1;\"")},
+        {"']]>' in metadata text", edit(good, "</scan>", "]]></scan>")},
+        {"missing </binaryDataArrayList>", edit(good, "</binaryDataArrayList>\n", "")},
+        {"no whitespace between attributes", edit(good, "id=\"s=1\" defaultArrayLength", "id=\"s=1\"defaultArrayLength")},
+        {"duplicate attribute", edit(good, "id=\"s=1\"", "id=\"a\" id=\"b\"")},
+        {"duplicate attribute among the arrays", edit(good, "encodedLength=\"0\"", "encodedLength=\"0\" encodedLength=\"1\"")},
+        {"stray '&' between arrays", edit(good, arrays, arrays + " & ")},
+        {"invalid UTF-8 in the id", edit(good, "id=\"s=1\"", "id=\"s=\xff\x31\"")},
+        {"invalid UTF-8 in the metadata", edit(good, "value=\"plain\"", "value=\"\xb5m\"")},
+        {"zlib: unclosed element in the metadata", edit(goodz, "<scan>\n<cvParam", "<scan>\n<scan>\n<cvParam")},
+    };
+    int k = 0;
+    for (const Case& c : malformed)
+    {
+      const std::string path = tmp + "/fastag_malformed_" + std::to_string(k++) + ".mzML";
+      write_synthetic(path, {synthetic_spectrum("s=0", false), c.spectrum});
+      const std::string what = std::string("direct: malformed, ") + c.name;
+      direct_vs_openms(path, what, true);
+      FASTag::IndexedMzMLReader r(path);
+      r.setDirectDecoding(true);
+      bool threw = false;
+      try { r.getSpectrum(1); }
+      catch (const Exception::BaseException&) { threw = true; }
+      check(r.ok() && threw, what + ": the spectrum is an error, as on OpenMS's path");
+      check(r.directDecoded() == 0, what + ": declined by the direct decoder");
+    }
+
+    // WELL-FORMED forms the metadata may take: read directly, same result.
+    const std::vector<Case> fine = {
+        {"comment in the metadata", edit(good, "<scanList", "<!-- a comment -->\n<scanList")},
+        {"predefined entity in the metadata", edit(good, "value=\"plain\"", "value=\"A&amp;B &lt;&#181;&#xB5;\"")},
+        {"UTF-8 in the metadata", edit(good, "value=\"plain\"", "value=\"\xc2\xb5m \xe2\x82\xac\"")},
+        {"end tag with whitespace", edit(good, "</scanList>", "</scanList  >")},
+    };
+    for (const Case& c : fine)
+    {
+      const std::string path = tmp + "/fastag_wellformed_" + std::to_string(k++) + ".mzML";
+      write_synthetic(path, {synthetic_spectrum("s=0", false), c.spectrum});
+      const std::string what = std::string("direct: well-formed, ") + c.name;
+      direct_vs_openms(path, what, true);
+      FASTag::IndexedMzMLReader r(path);
+      r.setDirectDecoding(true);
+      check(r.getSpectrum(1).size() == 2 && r.directDecoded() == 1, what + ": decoded directly");
+    }
+
+    // An inflated defaultArrayLength on zlib arrays: OpenMS warns and reads
+    // the two peaks; the direct decoder must decline without allocating for
+    // the claim (2^31 - 1 peaks: 16 GB per array, a bad_alloc where memory
+    // is limited) and leave the spectrum to OpenMS.
+    // On Linux the address space is capped at 8 GB above what the process
+    // maps now, around these cases, as a Windows commit limit or a hosted
+    // runner would cap it: an allocation sized from the claim (16 GB) then
+    // fails there too, instead of being granted as untouched virtual memory.
+#ifdef __linux__
+    rlimit saved{};
+    const bool limited = getrlimit(RLIMIT_AS, &saved) == 0 && [&] {
+      unsigned long long pages = 0;
+      std::ifstream statm("/proc/self/statm");
+      if (!(statm >> pages) || pages == 0) return false;
+      const rlim_t want = static_cast<rlim_t>(pages) * static_cast<rlim_t>(sysconf(_SC_PAGESIZE)) + (rlim_t{8} << 30);
+      rlimit cap = saved;
+      cap.rlim_cur = std::min<rlim_t>(saved.rlim_cur, want);
+      return setrlimit(RLIMIT_AS, &cap) == 0;
+    }();
+#endif
+    for (const char* len : {"2147483647", "1000"})
+    {
+      const std::string path = tmp + "/fastag_inflated_length_" + len + ".mzML";
+      write_synthetic(path, {synthetic_spectrum("s=0", true),
+                             edit(goodz, "defaultArrayLength=\"2\"", std::string("defaultArrayLength=\"") + len + "\"")});
+      const std::string what = std::string("direct: zlib, defaultArrayLength=") + len;
+      direct_vs_openms(path, what, true);
+      FASTag::IndexedMzMLReader r(path);
+      r.setDirectDecoding(true);
+      MSSpectrum got;
+      try { got = r.getSpectrum(1); }
+      catch (...) {}
+      check(got.size() == 2 && r.directDecoded() == 0, what + ": OpenMS reads the two peaks");
+    }
+#ifdef __linux__
+    if (limited) setrlimit(RLIMIT_AS, &saved);
+#endif
+
+    // An absorbance unit written with a character reference is still
+    // absorbance: OpenMS adds the meta value, so the direct decoder declines.
+    {
+      const std::string path = tmp + "/fastag_unit_charref.mzML";
+      const std::string sp = edit(good, synthetic_array(false, true),
+                                  synthetic_array(false, true, " unitCvRef=\"UO\" unitAccession=\"UO&#58;0000269\" "
+                                                               "unitName=\"absorbance unit\""));
+      write_synthetic(path, {synthetic_spectrum("s=0", false), sp});
+      direct_vs_openms(path, "direct: absorbance unit as a character reference", true);
+      FASTag::IndexedMzMLReader r(path);
+      r.setDirectDecoding(true);
+      const MSSpectrum got = r.getSpectrum(1);
+      check(got.metaValueExists("mzml intensity array"),
+            "absorbance as a character reference: the meta value is there");
+    }
+  }
+
+  // Further mzML files from the command line, each compared spectrum by
+  // spectrum: under ctest the vendored mzML that OpenMS did not write
+  // (diaTracer and ddaPASEF layouts), by hand the public gate inputs.
   for (int a = 2; a < argc; ++a) direct_vs_openms(argv[a], std::string("direct: ") + argv[a], true);
 
   // An XML file with no spectrumList holds nothing to scan for.

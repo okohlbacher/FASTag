@@ -59,6 +59,44 @@ Outside ctest (data node, 2026-11-04, FASTag on this branch at 32 threads):
 the 130,611 blocks of the PXD054073 AlphaTims MGF and the 27,345 and 6,103
 blocks of the harness's PXD003531 and PXD000001 MGFs.
 
+### Direct mzML peak decoder
+
+`indexed_mzml_test` reads every spectrum twice, through `MzMLDirectDecoder`
+and through OpenMS's `domParseSpectrum` alone, and requires the same result
+(peaks bit for bit, data arrays, meta values, precursors) or the same error.
+Under ctest it gets the fixture, its eight raw/zlib x 32/64-bit re-encodings
+and numpress, edits of those, synthetic spectra, and, where the fixtures are
+present, `diatracer_like.mzML` and `ddapasef_empty.mzML` (layouts OpenMS
+did not write). The synthetic spectra hold malformed XML that OpenMS refuses
+(unclosed or mismatched elements, undefined entities, a bare `&`, `]]>`,
+attributes run together or repeated, invalid UTF-8 in the id or the
+metadata, a missing `</binaryDataArrayList>`): each must be an error on the
+direct path too, as it was in 1.10.0. Well-formed variants (comments,
+predefined entities and character references, UTF-8 in the metadata) must be
+read directly. A zlib spectrum with `defaultArrayLength="2147483647"` must be
+read through OpenMS (two peaks, a length warning) with the address space
+capped 8 GB above the process's size on Linux, where sizing a buffer from the
+claim fails; and an absorbance unit written as `UO&#58;0000269` must keep
+its meta value.
+
+Run by hand on node data (Release build of perf/read-path against OpenMS
+develop 70cebcd144, 5 Nov 2026), `indexed_mzml_test` with the gate inputs as
+extra arguments; 0 spectra differ in every file:
+
+| file | writer | MS2 | direct | via OpenMS |
+|---|---|---:|---:|---:|
+| PXD003531 `20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01` | ThermoRawFileParser 2.0.0.0, zlib | 27,345 | 27,345 | 0 |
+| PXD004541 `HF1_..._TMT10_hpHRP_DMSO1_2p5ug_4uL_fr02` | ThermoRawFileParser 2.0.0.0, zlib | 40,111 | 40,111 | 0 |
+| PXD040407 `Hog1p_WT_Rep3_Chymo_5uL` | ThermoRawFileParser 2.0.0.0, zlib | 11,351 | 11,351 | 0 |
+| PXD014764 `20190412_KEH_HF_SA_ANW_R11_100419_CNOT_R1_f008` | ThermoRawFileParser 2.0.0.0, zlib | 30,280 | 30,280 | 0 |
+| PXD010783 `KristenJeff_p53_mod_AspN_03_02_07` | ThermoRawFileParser 2.0.0.0, zlib | 7,626 | 7,626 | 0 |
+| `test/fixtures/diatracer_like.mzML` | diaTracer layout (synthetic) | 60 | 60 | 0 |
+| `test/fixtures/ddapasef_empty.mzML` | msconvert ddaPASEF layout (synthetic) | 60 | 59 | 1 (`<binaryDataArrayList count="0">`) |
+
+All five gate inputs come from one writer. Real msconvert, diaTracer and
+mzpeak-convert files have not been compared spectrum by spectrum; only the
+synthetic layouts above stand in for them.
+
 ## Tier 2 — benchmark corpus (external, not in-repo)
 
 Three public acquisitions: two from PRIDE, and one ion-trap run from MassIVE

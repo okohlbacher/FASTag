@@ -272,7 +272,16 @@ if(FASTAG_BUILD_TESTS)
   if(OpenMP_CXX_FOUND)
     target_link_libraries(indexed_mzml_test PRIVATE OpenMP::OpenMP_CXX)
   endif()
-  add_test(NAME indexed_mzml_test COMMAND indexed_mzml_test)
+  # The fixture first, then every vendored mzML that OpenMS did not write
+  # (diaTracer and ddaPASEF layouts, where present), compared spectrum by
+  # spectrum between the direct decoder and OpenMS's.
+  set(_fastag_direct_fixtures ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML)
+  foreach(_f diatracer_like.mzML ddapasef_empty.mzML)
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/${_f})
+      list(APPEND _fastag_direct_fixtures ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/${_f})
+    endif()
+  endforeach()
+  add_test(NAME indexed_mzml_test COMMAND indexed_mzml_test ${_fastag_direct_fixtures})
   set_tests_properties(indexed_mzml_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # The MGF reader against OpenMS's MascotGenericFile, block by block and bit
