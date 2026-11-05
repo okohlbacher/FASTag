@@ -30,7 +30,9 @@ so BSD-3-Clause as well.
 
 `diatracer_like.mzML` and `ddapasef_empty.mzML` — the input of
 `mzml_to_mgf_test` (the converter `tools/mzml_to_mgf.py` and FASTag on its
-MGF). Written by `make_converter_fixtures.py` (pyteomics 5.0.2, numpy 1.26.4)
+MGF). Written by `make_converter_fixtures.py` (pyteomics 5.0.2, numpy 1.26.4;
+`ddapasef_empty.mzML` rewritten with pyteomics 5.0.1, numpy 2.4.6, which
+reproduces `diatracer_like.mzML` byte for byte)
 from `Ecoli_MS2_small.mzML`: the peaks are spectra 0-59 and 60-119 of that file,
 so BSD-3-Clause as well, and only the mzML around them is reshaped after real
 timsTOF files. Both are indexedmzML with an exact index.
@@ -47,7 +49,11 @@ timsTOF files. Both are indexedmzML with an exact index.
   0.1, 64-bit m/z and 32-bit intensity. Four MS2 have no peaks: two as zlib
   arrays of length 0, one as uncompressed arrays of length 0, one with no
   binary arrays at all (the form the converter failed on before). One MS2 has a
-  precursor without any m/z and one has no precursorList.
+  precursor without any m/z and one has no precursorList. Three have
+  precursors FASTag's mzML reader does not count as one: a `<precursor>` with
+  only isolation window offsets and an empty `<activation/>` (no
+  selectedIonList), one whose only m/z is a target of 0, and one such before a
+  second, normal `<precursor>` (FASTag takes the second).
 
 sha256: `diatracer_like.mzML` `fbff96360f591209a7f1ac9f38899a6724c6ffaebdcbb6df3c883b421b4fce0d`,
-`ddapasef_empty.mzML` `8c82599641c77d77129800bfbc7e097f917d0168c1f09e0cb83e4a84cf7950d6`.
+`ddapasef_empty.mzML` `37d838f8cef462c81755144b8dd76b6787b590a360947ae4e5a60069fc9f596d`.

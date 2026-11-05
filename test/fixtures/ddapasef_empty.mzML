@@ -2198,22 +2198,10 @@
 <precursorList count="1">
 <precursor>
 <isolationWindow>
-<cvParam cvRef="MS" accession="MS:1000827" name="isolation window target m/z" value="444.8" unitCvRef="MS" unitAccession="MS:1000040" unitName="m/z"/>
 <cvParam cvRef="MS" accession="MS:1000828" name="isolation window lower offset" value="1.0" unitCvRef="MS" unitAccession="MS:1000040" unitName="m/z"/>
 <cvParam cvRef="MS" accession="MS:1000829" name="isolation window upper offset" value="1.0" unitCvRef="MS" unitAccession="MS:1000040" unitName="m/z"/>
 </isolationWindow>
-<selectedIonList count="1">
-<selectedIon>
-<cvParam cvRef="MS" accession="MS:1000744" name="selected ion m/z" value="444.781158447266" unitCvRef="MS" unitAccession="MS:1000040" unitName="m/z"/>
-<cvParam cvRef="MS" accession="MS:1000041" name="charge state" value="2"/>
-<cvParam cvRef="MS" accession="MS:1000042" name="peak intensity" value="1517.0" unitCvRef="MS" unitAccession="MS:1000131" unitName="number of detector counts"/>
-<cvParam cvRef="MS" accession="MS:1002815" name="inverse reduced ion mobility" value="0.908" unitCvRef="MS" unitAccession="MS:1002814" unitName="volt-second per square centimeter"/>
-</selectedIon>
-</selectedIonList>
-<activation>
-<cvParam cvRef="MS" accession="MS:1000133" name="collision-induced dissociation" value=""/>
-<cvParam cvRef="MS" accession="MS:1000045" name="collision energy" value="42.0" unitCvRef="UO" unitAccession="UO:0000266" unitName="electronvolt"/>
-</activation>
+<activation/>
 </precursor>
 </precursorList>
 <binaryDataArrayList count="2">
@@ -2468,22 +2456,9 @@
 <precursorList count="1">
 <precursor>
 <isolationWindow>
-<cvParam cvRef="MS" accession="MS:1000827" name="isolation window target m/z" value="451.2" unitCvRef="MS" unitAccession="MS:1000040" unitName="m/z"/>
-<cvParam cvRef="MS" accession="MS:1000828" name="isolation window lower offset" value="1.0" unitCvRef="MS" unitAccession="MS:1000040" unitName="m/z"/>
-<cvParam cvRef="MS" accession="MS:1000829" name="isolation window upper offset" value="1.0" unitCvRef="MS" unitAccession="MS:1000040" unitName="m/z"/>
+<cvParam cvRef="MS" accession="MS:1000827" name="isolation window target m/z" value="0" unitCvRef="MS" unitAccession="MS:1000040" unitName="m/z"/>
 </isolationWindow>
-<selectedIonList count="1">
-<selectedIon>
-<cvParam cvRef="MS" accession="MS:1000744" name="selected ion m/z" value="451.247222900391" unitCvRef="MS" unitAccession="MS:1000040" unitName="m/z"/>
-<cvParam cvRef="MS" accession="MS:1000041" name="charge state" value="3"/>
-<cvParam cvRef="MS" accession="MS:1000042" name="peak intensity" value="1517.0" unitCvRef="MS" unitAccession="MS:1000131" unitName="number of detector counts"/>
-<cvParam cvRef="MS" accession="MS:1002815" name="inverse reduced ion mobility" value="0.923" unitCvRef="MS" unitAccession="MS:1002814" unitName="volt-second per square centimeter"/>
-</selectedIon>
-</selectedIonList>
-<activation>
-<cvParam cvRef="MS" accession="MS:1000133" name="collision-induced dissociation" value=""/>
-<cvParam cvRef="MS" accession="MS:1000045" name="collision energy" value="42.0" unitCvRef="UO" unitAccession="UO:0000266" unitName="electronvolt"/>
-</activation>
+<activation/>
 </precursor>
 </precursorList>
 <binaryDataArrayList count="2">
@@ -2767,7 +2742,14 @@
 </scanWindowList>
 </scan>
 </scanList>
-<precursorList count="1">
+<precursorList count="2">
+<precursor>
+<isolationWindow>
+<cvParam cvRef="MS" accession="MS:1000828" name="isolation window lower offset" value="1.0" unitCvRef="MS" unitAccession="MS:1000040" unitName="m/z"/>
+<cvParam cvRef="MS" accession="MS:1000829" name="isolation window upper offset" value="1.0" unitCvRef="MS" unitAccession="MS:1000040" unitName="m/z"/>
+</isolationWindow>
+<activation/>
+</precursor>
 <precursor>
 <isolationWindow>
 <cvParam cvRef="MS" accession="MS:1000827" name="isolation window target m/z" value="349.2" unitCvRef="MS" unitAccession="MS:1000040" unitName="m/z"/>
@@ -3618,33 +3600,33 @@
 <offset idRef="merged=41 frame=12 scanStart=285 scanEnd=310">224974</offset>
 <offset idRef="merged=42 frame=13 scanStart=1 scanEnd=927">229319</offset>
 <offset idRef="merged=43 frame=14 scanStart=100 scanEnd=125">231406</offset>
-<offset idRef="merged=44 frame=14 scanStart=137 scanEnd=162">235279</offset>
-<offset idRef="merged=45 frame=14 scanStart=174 scanEnd=199">240037</offset>
-<offset idRef="merged=46 frame=14 scanStart=211 scanEnd=236">247448</offset>
-<offset idRef="merged=47 frame=14 scanStart=248 scanEnd=273">253524</offset>
-<offset idRef="merged=48 frame=14 scanStart=285 scanEnd=310">258103</offset>
-<offset idRef="merged=49 frame=15 scanStart=1 scanEnd=927">262032</offset>
-<offset idRef="merged=50 frame=16 scanStart=100 scanEnd=125">265812</offset>
-<offset idRef="merged=51 frame=16 scanStart=137 scanEnd=162">273152</offset>
-<offset idRef="merged=52 frame=16 scanStart=174 scanEnd=199">277818</offset>
-<offset idRef="merged=53 frame=16 scanStart=211 scanEnd=236">284474</offset>
-<offset idRef="merged=54 frame=16 scanStart=248 scanEnd=273">289840</offset>
-<offset idRef="merged=55 frame=16 scanStart=285 scanEnd=310">294632</offset>
-<offset idRef="merged=56 frame=17 scanStart=1 scanEnd=927">301054</offset>
-<offset idRef="merged=57 frame=18 scanStart=100 scanEnd=125">304766</offset>
-<offset idRef="merged=58 frame=18 scanStart=137 scanEnd=162">311968</offset>
-<offset idRef="merged=59 frame=18 scanStart=174 scanEnd=199">316599</offset>
-<offset idRef="merged=60 frame=18 scanStart=211 scanEnd=236">324333</offset>
-<offset idRef="merged=61 frame=18 scanStart=248 scanEnd=273">331518</offset>
-<offset idRef="merged=62 frame=18 scanStart=285 scanEnd=310">336954</offset>
-<offset idRef="merged=63 frame=19 scanStart=1 scanEnd=927">342612</offset>
-<offset idRef="merged=64 frame=20 scanStart=100 scanEnd=125">345382</offset>
-<offset idRef="merged=65 frame=20 scanStart=137 scanEnd=162">350685</offset>
-<offset idRef="merged=66 frame=20 scanStart=174 scanEnd=199">356991</offset>
-<offset idRef="merged=67 frame=20 scanStart=211 scanEnd=236">362685</offset>
-<offset idRef="merged=68 frame=20 scanStart=248 scanEnd=273">367817</offset>
-<offset idRef="merged=69 frame=20 scanStart=285 scanEnd=310">374103</offset>
+<offset idRef="merged=44 frame=14 scanStart=137 scanEnd=162">234230</offset>
+<offset idRef="merged=45 frame=14 scanStart=174 scanEnd=199">238988</offset>
+<offset idRef="merged=46 frame=14 scanStart=211 scanEnd=236">246399</offset>
+<offset idRef="merged=47 frame=14 scanStart=248 scanEnd=273">252475</offset>
+<offset idRef="merged=48 frame=14 scanStart=285 scanEnd=310">257054</offset>
+<offset idRef="merged=49 frame=15 scanStart=1 scanEnd=927">259779</offset>
+<offset idRef="merged=50 frame=16 scanStart=100 scanEnd=125">263559</offset>
+<offset idRef="merged=51 frame=16 scanStart=137 scanEnd=162">270899</offset>
+<offset idRef="merged=52 frame=16 scanStart=174 scanEnd=199">275565</offset>
+<offset idRef="merged=53 frame=16 scanStart=211 scanEnd=236">282221</offset>
+<offset idRef="merged=54 frame=16 scanStart=248 scanEnd=273">287587</offset>
+<offset idRef="merged=55 frame=16 scanStart=285 scanEnd=310">292757</offset>
+<offset idRef="merged=56 frame=17 scanStart=1 scanEnd=927">299179</offset>
+<offset idRef="merged=57 frame=18 scanStart=100 scanEnd=125">302891</offset>
+<offset idRef="merged=58 frame=18 scanStart=137 scanEnd=162">310093</offset>
+<offset idRef="merged=59 frame=18 scanStart=174 scanEnd=199">314724</offset>
+<offset idRef="merged=60 frame=18 scanStart=211 scanEnd=236">322458</offset>
+<offset idRef="merged=61 frame=18 scanStart=248 scanEnd=273">329643</offset>
+<offset idRef="merged=62 frame=18 scanStart=285 scanEnd=310">335079</offset>
+<offset idRef="merged=63 frame=19 scanStart=1 scanEnd=927">340737</offset>
+<offset idRef="merged=64 frame=20 scanStart=100 scanEnd=125">343507</offset>
+<offset idRef="merged=65 frame=20 scanStart=137 scanEnd=162">348810</offset>
+<offset idRef="merged=66 frame=20 scanStart=174 scanEnd=199">355116</offset>
+<offset idRef="merged=67 frame=20 scanStart=211 scanEnd=236">360810</offset>
+<offset idRef="merged=68 frame=20 scanStart=248 scanEnd=273">365942</offset>
+<offset idRef="merged=69 frame=20 scanStart=285 scanEnd=310">372228</offset>
 </index>
 </indexList>
-<indexListOffset>380252</indexListOffset>
+<indexListOffset>378377</indexListOffset>
 </indexedmzML>
