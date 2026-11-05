@@ -51,6 +51,15 @@ on:
         description: 'SignPath signing policy slug (empty: release-signing on a v* tag, test-signing otherwise)'
         type: string
         default: ''
+      # Read time of the mzML path at 1, 2 and 4 threads with the mimalloc
+      # redirection on and off (MIMALLOC_DISABLE_REDIRECT=1), on a 512 MiB
+      # prefix of PXD063151 Proteome_EIF5A.mzML: the check that the allocator
+      # still does what output/jpr-paper/WIN-READ-CONTENTION.md measured.
+      # About 8 minutes, mostly the download.
+      mimalloc_timing:
+        description: 'Time the mzML read with the mimalloc redirection on and off'
+        type: boolean
+        default: false
 
 concurrency:
   # A manual dispatch gets its OWN group. Sharing <workflow>-refs/heads/main
@@ -315,6 +324,9 @@ jobs:
             -DLIBXML2_INCLUDE_DIR="$CONDA_LIB_PREFIX/include/libxml2" \
             -DLIBXML2_LIBRARY="$CONDA_LIB_PREFIX/lib/libxml2.lib" 2>&1 | tee configure.log
           grep -q "FASTag: OpenMP" configure.log || { echo "::error::OpenMP was not found -- this build would be serial"; exit 1; }
+          # FASTAG_MIMALLOC is on by default with MSVC; a configure that
+          # silently lost it would ship the slow heap (see CMakeLists.txt).
+          grep -q "FASTag: mimalloc" configure.log || { echo "::error::mimalloc is not linked (FASTAG_MIMALLOC off?)"; exit 1; }
 
       - name: Build FASTag
         shell: bash -el {0}
@@ -387,7 +399,7 @@ jobs:
           # or without the validator. This job has both, so a skip here would
           # be a broken harness presenting as green -- the very class of
           # failure this coverage exists for. Require a Passed line for each.
-          for t in mzpeak_roundtrip mzpeak_validate mzpeak_stream_test; do
+          for t in mzpeak_roundtrip mzpeak_validate mzpeak_stream_test mimalloc_redirect_test; do
             grep -E "Test +#[0-9]+: $t " ctest.log | grep -q 'Passed' \
               || { echo "::error::$t did not pass (skipped, not run or missing)"; grep -E "$t" ctest.log || true; exit 1; }
           done
@@ -406,6 +418,134 @@ jobs:
           OUT=$(./fastag/build/FASTag.exe -in ci-data/small.mzpeak -out /tmp/smoke-mzpeak.tsv \
                   -threads 2 -fragment_tolerance 20 -fragment_tolerance_unit ppm 2>&1) || { echo "$OUT"; exit 1; }
           echo "$OUT" | grep -q "34 MS2 spectra" || { echo "$OUT"; echo "::error::expected 34 MS2 spectra from small.mzpeak"; exit 1; }
+
+      # Dispatch input mimalloc_timing only: the read-path timing of
+      # output/jpr-paper/WIN-READ-CONTENTION.md (exp/win-read-contention),
+      # cut down to the build-tree binary with the redirection on ("mi") and
+      # off ("off", MIMALLOC_DISABLE_REDIRECT=1, i.e. the CRT heap): read
+      # thread-seconds at 1 thread (one logical CPU), 2 threads on two
+      # physical cores, and 4 threads unpinned, 3 repetitions each, on the
+      # first 512 MiB of PXD063151 Proteome_EIF5A.mzML (65,304 MS2 spectra,
+      # uncompressed arrays). Tags must be identical across all runs.
+      - name: Fetch a prefix of Proteome_EIF5A.mzML (mimalloc timing)
+        if: inputs.mimalloc_timing
+        shell: bash
+        env:
+          MZML_URL: https://ftp.pride.ebi.ac.uk/pride/data/archive/2025/08/PXD063151/Proteome_EIF5A.mzML
+          PART_BYTES: '33554432'
+          PARTS: '16'
+        run: |
+          set -euo pipefail
+          D="$RUNNER_TEMP/data"; mkdir -p "$D/parts"
+          start=$(date +%s); pids=()
+          for i in $(seq 0 $((PARTS - 1))); do
+            s=$((i * PART_BYTES)); e=$((s + PART_BYTES - 1))
+            curl -fsS --retry 10 --retry-all-errors --connect-timeout 30 -r "$s-$e" -o "$D/parts/p$(printf %02d "$i")" "$MZML_URL" &
+            pids+=($!)
+          done
+          fail=0; for p in "${pids[@]}"; do wait "$p" || fail=1; done
+          [ "$fail" = 0 ] || { echo "::error::a range download failed"; exit 1; }
+          for f in "$D"/parts/p*; do [ "$(stat -c %s "$f")" = "$PART_BYTES" ] || { echo "::error::$f has the wrong size"; exit 1; }; done
+          cat "$D"/parts/p* > "$D/prefix.bin"; rm -rf "$D/parts"
+          echo "download: $(( $(date +%s) - start )) s"
+          cat > "$RUNNER_TEMP/cut.py" <<'PY'
+          import hashlib, re, sys
+          data = open(sys.argv[1], 'rb').read()
+          end = data.rfind(b'</spectrum>')
+          body = data[:end + len(b'</spectrum>')]
+          n = body.count(b'<spectrum ')
+          m = re.search(rb'<spectrumList count="(\d+)"', body[:200000])
+          body = body[:m.start(1)] + str(n).encode() + body[m.end(1):]
+          out = body + b'\n</spectrumList>\n</run>\n</mzML>\n'
+          if b'<indexedmzML' in body[:4096]:
+              out += b'</indexedmzML>\n'
+          open(sys.argv[2], 'wb').write(out)
+          print('prefix_sha256', hashlib.sha256(data).hexdigest(), 'subset_sha256', hashlib.sha256(out).hexdigest(), 'spectra', n)
+          PY
+          python -I "$RUNNER_TEMP/cut.py" "$D/prefix.bin" "$D/subset.mzML"
+          rm -f "$D/prefix.bin"
+
+      - name: Time the mzML read with mimalloc on and off
+        if: inputs.mimalloc_timing
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Add-Type -TypeDefinition @'
+          using System; using System.Runtime.InteropServices;
+          public static class PM {
+            [StructLayout(LayoutKind.Sequential)] public struct SLPI { public UIntPtr ProcessorMask; public int Relationship; public ulong R1; public ulong R2; }
+            [DllImport("kernel32.dll", SetLastError=true)] public static extern bool GetLogicalProcessorInformation(IntPtr buf, ref uint len);
+            public static long[] CoreMasks() {
+              uint len = 0; GetLogicalProcessorInformation(IntPtr.Zero, ref len);
+              IntPtr b = Marshal.AllocHGlobal((int)len);
+              var res = new System.Collections.Generic.List<long>();
+              if (GetLogicalProcessorInformation(b, ref len)) {
+                int sz = Marshal.SizeOf(typeof(SLPI));
+                for (int o = 0; o + sz <= len; o += sz) {
+                  var s = (SLPI)Marshal.PtrToStructure(IntPtr.Add(b, o), typeof(SLPI));
+                  if (s.Relationship == 0) res.Add((long)s.ProcessorMask.ToUInt64());
+                }
+              }
+              Marshal.FreeHGlobal(b);
+              return res.ToArray();
+            }
+          }
+          '@
+          $ws = $env:GITHUB_WORKSPACE
+          $O = "$ws\mimalloc-timing"; New-Item -ItemType Directory -Force "$O\logs" | Out-Null
+          $exe = "$ws\fastag\build\FASTag.exe"
+          $IN = "$env:RUNNER_TEMP\data\subset.mzML"
+          $share = (Get-ChildItem "$ws\openms-install" -Recurse -Directory | Where-Object { $_.FullName -match '\\share\\OpenMS$' } | Select-Object -First 1).FullName
+          $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
+          $cores = [PM]::CoreMasks()
+          "cpu: $($cpu.Name) cores=$($cpu.NumberOfCores) logical=$($cpu.NumberOfLogicalProcessors); core masks: $(($cores | ForEach-Object { '0x{0:x}' -f $_ }) -join ' ')" | Tee-Object "$O\machine.txt"
+          function Low([long]$m) { return $m -band (-$m) }
+          $one = Low $cores[0]
+          $two = if ($cores.Count -ge 2) { (Low $cores[0]) -bor (Low $cores[1]) } else { 0 }
+          $matched = @('-tag_length', '3', '-gaps', '0', '-no_deisotope', '-max_tags', '50', '-max_peaks', '100', '-peaks_per_window', '0',
+                       '-fragment_tolerance', '0.02', '-fragment_tolerance_unit', 'Da', '-fixed_modifications', '')
+          $res = "$O\results.tsv"
+          "variant`tthreads`tmask`trep`twall_s`tuser_s`tkernel_s`tread_s`ttag_s`tspectra`tredirected`tout_sha256" | Set-Content $res
+          function Num([string]$t, [string]$pat) { $m = [regex]::Match($t, $pat); if ($m.Success) { $m.Groups[1].Value } else { '' } }
+          function Run([string]$v, [int]$t, [long]$mask, [int]$rep) {
+            $tag = "${v}_t${t}_r$rep"; $out = "$env:RUNNER_TEMP\$tag.tsv"
+            $psi = [Diagnostics.ProcessStartInfo]::new($exe)
+            foreach ($a in @('-in', $IN, '-out', $out, '-threads', "$t") + $matched) { $psi.ArgumentList.Add($a) }
+            $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+            $psi.Environment['OPENMS_DATA_PATH'] = $share; $psi.Environment['OPENBLAS_NUM_THREADS'] = '1'; $psi.Environment['FASTAG_TIMING'] = '1'
+            if ($v -eq 'off') { $psi.Environment['MIMALLOC_DISABLE_REDIRECT'] = '1' }
+            $sw = [Diagnostics.Stopwatch]::StartNew(); $p = [Diagnostics.Process]::Start($psi)
+            if ($mask -ne 0) { $p.ProcessorAffinity = [IntPtr]$mask }
+            $so = $p.StandardOutput.ReadToEndAsync(); $se = $p.StandardError.ReadToEndAsync(); $p.WaitForExit(); $sw.Stop()
+            $text = $so.Result + $se.Result; $text | Set-Content "$O\logs\$tag.log"
+            if ($p.ExitCode -ne 0) { Write-Host $text; throw "$tag exited $($p.ExitCode)" }
+            $sha = (Get-FileHash -Algorithm SHA256 $out).Hash.Substring(0, 16); Remove-Item $out
+            $row = @($v, $t, ('0x{0:x}' -f $mask), $rep, [math]::Round($sw.Elapsed.TotalSeconds, 3), [math]::Round($p.UserProcessorTime.TotalSeconds, 3),
+                     [math]::Round($p.PrivilegedProcessorTime.TotalSeconds, 3), (Num $text 'FASTAG_THREADS .*? read=([0-9.eE+-]+)'),
+                     (Num $text 'FASTAG_THREADS .*? tag=([0-9.eE+-]+)'), (Num $text '([0-9]+) MS2 spectra'), (Num $text 'FASTAG_ALLOC .*? redirected=([01])'), $sha)
+            ($row -join "`t") | Add-Content $res
+            Write-Host ($row -join "  ")
+          }
+          Run 'mi' 4 0 0   # warm-up: file cache
+          foreach ($rep in 1..3) { foreach ($v in 'mi', 'off') { Run $v 1 $one $rep; Run $v 2 $two $rep; Run $v 4 0 $rep } }
+          $rows = Import-Csv $res -Delimiter "`t" | Where-Object { $_.rep -ne '0' }
+          if (@($rows | Select-Object -ExpandProperty out_sha256 -Unique).Count -ne 1) { throw "tags differ between runs" }
+          if (@($rows | Where-Object { $_.variant -eq 'mi' -and $_.redirected -ne '1' }).Count -or @($rows | Where-Object { $_.variant -eq 'off' -and $_.redirected -ne '0' }).Count) { throw "redirection state not as requested" }
+          $sum = foreach ($g in ($rows | Group-Object variant, threads)) {
+            $r = @($g.Group | ForEach-Object { [double]$_.read_s } | Sort-Object); $tg = @($g.Group | ForEach-Object { [double]$_.tag_s } | Sort-Object)
+            $n = [double]$g.Group[0].spectra
+            [pscustomobject]@{ variant = $g.Group[0].variant; threads = [int]$g.Group[0].threads; read_us_per_spectrum = [math]::Round($r[1] / $n * 1e6, 1); tag_us_per_spectrum = [math]::Round($tg[1] / $n * 1e6, 1); wall_s = ($g.Group | ForEach-Object { [double]$_.wall_s } | Sort-Object)[1] }
+          }
+          $sum | Sort-Object variant, threads | Format-Table | Out-String | Tee-Object "$O\summary.txt"
+          "tags identical across all $($rows.Count) runs: $($rows[0].out_sha256)" | Tee-Object -Append "$O\summary.txt"
+          Remove-Item $IN
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: inputs.mimalloc_timing && always()
+        with:
+          name: mimalloc-timing-windows-x64
+          path: mimalloc-timing
+          if-no-files-found: warn
 
       # SignPath signs FASTag.exe only when its ProductName and ProductVersion
       # match the artifact configuration, so check them on every push rather
@@ -557,9 +697,16 @@ jobs:
           set -e
           rm -rf dist && mkdir -p dist/FASTag
           cp fastag/build/FASTag.exe dist/FASTag/FASTag.core.exe
+          # mimalloc and its CRT redirect DLL, beside the executable that
+          # imports them (CMakeLists.txt, FASTAG_MIMALLOC). First, so the
+          # cp -n below can never put another copy in their place.
+          cp fastag/build/mimalloc.dll fastag/build/mimalloc-redirect.dll dist/FASTag/
 
           for d in "$WS/openms-install/bin" "$CONDA_LIB_PREFIX/bin"; do
             [ -d "$d" ] && cp -n "$d"/*.dll dist/FASTag/ 2>/dev/null || true
+          done
+          for f in mimalloc.dll mimalloc-redirect.dll; do
+            cmp -s "fastag/build/$f" "dist/FASTag/$f" || { echo "::error::dist/FASTag/$f is not the one FASTag was linked with"; exit 1; }
           done
 
           SHARE_DIR=$(find "$WS/openms-install" -type d -path '*/share/OpenMS' 2>/dev/null | head -1)
@@ -592,6 +739,18 @@ jobs:
           PY=$(command -v python3 || command -v python)
           "$PY" fastag/tools/third_party_notices.py "$CONDA_LIB_PREFIX/.." dist/FASTag/THIRD-PARTY-NOTICES.txt dist/FASTag
           test -s dist/FASTag/THIRD-PARTY-NOTICES.txt
+          # mimalloc is built from source by FASTag's CMake, not a conda
+          # package, so the script above lists its DLLs as unowned; its MIT
+          # notice is appended from the pinned source tree.
+          {
+            printf '\n%s\n' "=============================================================================="
+            echo "mimalloc 2.2.4 -- MIT (mimalloc.dll, mimalloc-redirect.dll)"
+            echo "https://github.com/microsoft/mimalloc, built from the v2.2.4 source; mimalloc-redirect.dll is the binary that source ships in bin/"
+            echo "=============================================================================="
+            cat fastag/build/mimalloc-LICENSE.txt
+          } >> dist/FASTag/THIRD-PARTY-NOTICES.txt
+          grep -q "Copyright (c) 2018-2025 Microsoft Corporation, Daan Leijen" dist/FASTag/THIRD-PARTY-NOTICES.txt \
+            || { echo "::error::mimalloc's licence did not reach THIRD-PARTY-NOTICES.txt"; exit 1; }
 
           # A .bat wrapper, not a shell script: this is Windows. The real
           # exe is named FASTag.core.exe (not FASTag.exe) specifically so
@@ -665,7 +824,19 @@ jobs:
             || { cat "$BW/digest.log"; echo "::error::the shipped bundle cannot write -digest_out"; exit 1; }
           grep -q $'^run\tbackground\tshipped_human\t' "$BW/digest.tsv" \
             || { cat "$BW/digest.log"; echo "::error::-digest_out did not find the shipped digest data"; exit 1; }
-          echo "Portability check passed: runs standalone, no build-environment leakage, reads and writes mzPeak."
+          # ...and allocates from mimalloc in the shipped layout, for every
+          # module: mi_is_redirected() via FASTAG_TIMING, and mimalloc's own
+          # MIMALLOC_VERBOSE report.
+          FASTAG_TIMING=1 MIMALLOC_VERBOSE=1 PATH="$CLEAN_PATH" "$GITHUB_WORKSPACE/dist/FASTag/FASTag.bat" \
+            -in "$MZ" -out "$BW/mi.tsv" -threads 2 > "$BW/mi.log" 2>&1 \
+            || { cat "$BW/mi.log"; echo "::error::the shipped bundle failed with MIMALLOC_VERBOSE=1"; exit 1; }
+          grep -E "FASTAG_ALLOC|mimalloc: malloc" "$BW/mi.log"
+          if ! grep -q "FASTAG_ALLOC allocator=mimalloc version=[0-9]* redirected=1" "$BW/mi.log" \
+             || ! grep -q "mimalloc: malloc is redirected" "$BW/mi.log"; then
+            cat "$BW/mi.log"; echo "::error::the shipped bundle does not redirect the CRT heap to mimalloc"; exit 1
+          fi
+          cmp -s "$BW/ml.tsv" "$BW/mi.tsv" || { echo "::error::bundle tags differ between runs"; exit 1; }
+          echo "Portability check passed: runs standalone, no build-environment leakage, reads and writes mzPeak, mimalloc redirected."
 
       # Every mzPeak archive this job wrote, through mzPeakValidator in full
       # mode. ctest's mzpeak_validate already covered the round-trip archives
@@ -778,6 +949,17 @@ jobs:
           cp dist/FASTag/LICENSE dist/FASTag/THIRD-PARTY-NOTICES.txt "$R/"
           test -s "$R/bin/FASTag.exe"
           test -s "$R/share/OpenMS/examples/ID/Ecoli_MS2_small.mzML"
+          # The CLI the app runs redirects its heap to mimalloc as the zip's
+          # does: both DLLs beside it, and the redirection reported from the
+          # staged copy on a scrubbed PATH.
+          test -s "$R/bin/mimalloc.dll" && test -s "$R/bin/mimalloc-redirect.dll"
+          CLEAN_PATH=$(echo "$PATH" | tr ':' '\n' | grep -viE "openms-install|conda|micromamba" | tr '\n' ':')
+          OUT=$(FASTAG_TIMING=1 MIMALLOC_VERBOSE=1 OPENMS_DATA_PATH="$R/share/OpenMS" PATH="$CLEAN_PATH" \
+                  "$R/bin/FASTag.exe" -in "$R/share/OpenMS/examples/ID/Ecoli_MS2_small.mzML" \
+                  -out /tmp/gui-staged.tsv -threads 2 2>&1) || { echo "$OUT"; exit 1; }
+          echo "$OUT" | grep -E "FASTAG_ALLOC|mimalloc: malloc"
+          echo "$OUT" | grep -q "FASTAG_ALLOC allocator=mimalloc version=[0-9]* redirected=1" \
+            || { echo "::error::the GUI's bundled CLI does not redirect the CRT heap to mimalloc"; exit 1; }
 
       # pwsh, NOT bash: Git Bash prepends its /usr/bin at startup, and that
       # directory has a link.exe -- coreutils' hard-link command -- which then
