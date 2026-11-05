@@ -18,6 +18,11 @@
 #include <new>
 #include <string>
 
+#if defined(__SSE2__) || defined(_M_X64)
+#define FASTAG_DECODER_SSE2 1
+#include <emmintrin.h>
+#endif
+
 using namespace OpenMS;
 
 namespace FASTag
@@ -44,62 +49,66 @@ namespace FASTag
       }
     };
 
-    bool is_space(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
-
-    /// Characters that end an XML name.
-    bool is_name_end(char c) { return is_space(c) || c == '>' || c == '/'; }
-
-    /// One tag starting at a '<': its name (without a leading '/'), its
-    /// attribute text, and the position after its '>'.
-    struct Tag
+    /// Byte classes for the one-pass scanner below.
+    enum : unsigned char
     {
-      std::string_view name;
-      std::string_view attrs;
-      std::size_t end = 0;
-      bool closing = false;
-      bool self_closing = false;
+      kSpace = 1,     ///< XML whitespace: ' ', '\t', '\n', '\r'
+      kNameStart = 2, ///< first character of a name this decoder takes
+      kName = 4,      ///< further characters of such a name
+      kTextStop = 8,  ///< character data: anything but plain ASCII needs a closer look
+      kValueStop = 16 ///< attribute values: likewise, quotes included
     };
 
-    /// Reads the tag at @p lt (xml[lt] == '<'). '>' inside a quoted
-    /// attribute value does not end the tag. False on anything that is not a
-    /// plain start, end or empty-element tag (comments, CDATA, processing
-    /// instructions, a tag that does not end).
-    bool read_tag(std::string_view xml, std::size_t lt, Tag& tag)
+    constexpr std::array<unsigned char, 256> make_class_table()
     {
-      std::size_t k = lt + 1;
-      if (k >= xml.size()) return false;
-      tag.closing = xml[k] == '/';
-      if (tag.closing) ++k;
-      const std::size_t nb = k;
-      while (k < xml.size() && !is_name_end(xml[k]))
+      std::array<unsigned char, 256> t{};
+      for (unsigned c = 0; c < 256; ++c)
       {
-        const char c = xml[k];
-        if (c == '<' || c == '!' || c == '?' || c == '"' || c == '\'' || c == '=' || c == '&') return false;
-        ++k;
+        unsigned v = 0;
+        const bool space = c == ' ' || c == '\t' || c == '\n' || c == '\r';
+        const bool alpha = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_';
+        // XML characters that stand for themselves: printable ASCII and the
+        // three whitespace controls. Other controls and every byte >= 0x80
+        // go through next_char() (UTF-8 and the XML character ranges).
+        const bool plain = (c >= 0x20 && c < 0x80) || space;
+        if (space) v |= kSpace;
+        if (alpha) v |= kNameStart | kName;
+        if ((c >= '0' && c <= '9') || c == '-' || c == '.') v |= kName;
+        if (!plain || c == '&' || c == '<' || c == '>') v |= kTextStop;
+        if (!plain || c == '&' || c == '<' || c == '"' || c == '\'') v |= kValueStop;
+        t[c] = static_cast<unsigned char>(v);
       }
-      if (k == nb || k >= xml.size()) return false;
-      tag.name = xml.substr(nb, k - nb);
-      const std::size_t ab = k;
-      char quote = 0;
-      for (; k < xml.size(); ++k)
+      return t;
+    }
+    constexpr std::array<unsigned char, 256> kClass = make_class_table();
+
+    inline unsigned char cls(const char* p) { return kClass[static_cast<unsigned char>(*p)]; }
+
+    /// The first byte from @p p on whose class has @p Stop (kTextStop or
+    /// kValueStop), or @p e. With SSE2, 16 bytes per step: a signed compare
+    /// against 0x20 finds controls and bytes >= 0x80 at once, whitespace
+    /// controls are taken out again, and the few stop characters are
+    /// compared directly. The table loop does the rest, and the same.
+    template <unsigned char Stop>
+    inline const char* skip_plain(const char* p, const char* e)
+    {
+#ifdef FASTAG_DECODER_SSE2
+      const auto eq = [](__m128i v, char c) { return _mm_cmpeq_epi8(v, _mm_set1_epi8(c)); };
+      while (e - p >= 16)
       {
-        const char c = xml[k];
-        if (quote)
-        {
-          if (c == quote) quote = 0;
-          else if (c == '<') return false; // not well-formed XML
-        }
-        else if (c == '"' || c == '\'') quote = c;
-        else if (c == '<') return false;
-        else if (c == '>') break;
+        const __m128i v = _mm_loadu_si128(reinterpret_cast<const __m128i*>(p));
+        __m128i m = _mm_cmplt_epi8(v, _mm_set1_epi8(0x20));
+        m = _mm_andnot_si128(_mm_or_si128(_mm_or_si128(eq(v, '\t'), eq(v, '\n')), eq(v, '\r')), m);
+        m = _mm_or_si128(m, _mm_or_si128(eq(v, '&'), eq(v, '<')));
+        if constexpr (Stop == kTextStop) m = _mm_or_si128(m, eq(v, '>'));
+        else m = _mm_or_si128(m, _mm_or_si128(eq(v, '"'), eq(v, '\'')));
+        const unsigned bits = static_cast<unsigned>(_mm_movemask_epi8(m));
+        if (bits) return p + std::countr_zero(bits);
+        p += 16;
       }
-      if (k >= xml.size()) return false;
-      tag.self_closing = k > ab && xml[k - 1] == '/';
-      tag.attrs = xml.substr(ab, (tag.self_closing ? k - 1 : k) - ab);
-      tag.end = k + 1;
-      if (tag.closing && (tag.self_closing || tag.attrs.find_first_not_of(" \t\n\r") != std::string_view::npos))
-        return false;
-      return true;
+#endif
+      while (p < e && !(cls(p) & Stop)) ++p;
+      return p;
     }
 
     /// One XML character of @p s at @p k, decoded from UTF-8; @p k moves past
@@ -148,92 +157,168 @@ namespace FASTag
              (cp >= 0x10000 && cp <= 0x10FFFF);
     }
 
-    /// Character data or an attribute value as libxml2 accepts it without a
-    /// fatal error: XML characters in valid UTF-8, '&' only in a reference
-    /// next_reference() accepts, no '<', and in character data no "]]>".
-    bool well_formed_text(std::string_view s, bool attribute)
+    /// The reference at @p p ('&'), as next_reference(); @p p moves past it.
+    /// A reference that would run past the end of its text or value cannot
+    /// be valid: none of the accepted ones holds '<' or a quote.
+    bool skip_reference(const char*& p, const char* e)
     {
       std::size_t k = 0;
-      while (k < s.size())
+      if (!next_reference(std::string_view(p, static_cast<std::size_t>(std::min<std::ptrdiff_t>(e - p, 13))), k))
+        return false;
+      p += k;
+      return true;
+    }
+
+    /// The (non-ASCII or control) character at @p p, as next_char(); @p p
+    /// moves past it. A UTF-8 sequence cannot run into the '<' or quote that
+    /// ends its text: those are not continuation bytes.
+    bool skip_char(const char*& p, const char* e)
+    {
+      std::size_t k = 0;
+      std::uint32_t cp;
+      if (!next_char(std::string_view(p, static_cast<std::size_t>(e - p)), k, cp)) return false;
+      p += k;
+      return true;
+    }
+
+    /// Character data from @p p on, checked as libxml2 checks it: XML
+    /// characters in valid UTF-8, '&' only in a reference next_reference()
+    /// accepts, and no "]]>". The position of the '<' that ends it, or null
+    /// on a violation or when no '<' follows.
+    const char* scan_text(const char* p, const char* e)
+    {
+      const char* const b = p;
+      while (true)
       {
-        const char c = s[k];
-        if (c == '&')
+        p = skip_plain<kTextStop>(p, e);
+        if (p == e) return nullptr;
+        const char c = *p;
+        if (c == '<') return p;
+        if (c == '>')
         {
-          if (!next_reference(s, k)) return false;
+          if (p - b >= 2 && p[-1] == ']' && p[-2] == ']') return nullptr;
+          ++p;
         }
-        else if (c == '<') return false;
-        else if (static_cast<unsigned char>(c) >= 0x20 && static_cast<unsigned char>(c) < 0x80)
-        {
-          if (!attribute && c == '>' && k >= 2 && s[k - 1] == ']' && s[k - 2] == ']') return false;
-          ++k;
-        }
-        else
-        {
-          std::uint32_t cp;
-          if (!next_char(s, k, cp)) return false;
-        }
+        else if (c == '&' ? !skip_reference(p, e) : !skip_char(p, e)) return nullptr;
+      }
+    }
+
+    /// XML characters in valid UTF-8 (a comment's body).
+    bool xml_chars(std::string_view s)
+    {
+      const char* p = s.data();
+      const char* const e = p + s.size();
+      while (p < e)
+      {
+        const unsigned char c = static_cast<unsigned char>(*p);
+        if ((c >= 0x20 && c < 0x80) || c == '\t' || c == '\n' || c == '\r') ++p;
+        else if (!skip_char(p, e)) return false;
       }
       return true;
     }
 
-    /// An element or attribute name this decoder takes: ASCII, no namespace
-    /// prefix (both are valid XML that mzML spectra do not use; declined).
-    bool plain_name(std::string_view n)
+    /// One tag starting at a '<', read and checked in one pass, as libxml2
+    /// checks it: a name this decoder takes (ASCII, no namespace prefix:
+    /// valid XML that mzML spectra do not use, declined); for an end tag only
+    /// whitespace before its '>'; for a start or empty-element tag
+    /// attributes with a name of that kind, '=' and a quoted value that is
+    /// well-formed text (XML characters in valid UTF-8, no '<', '&' only in a
+    /// reference next_reference() accepts), whitespace before every further
+    /// attribute, and no name twice. Comments, CDATA, processing
+    /// instructions and a tag that does not end are refused. Values are
+    /// kept raw; the caller refuses any that would need entity or whitespace
+    /// normalisation.
+    struct Tag
     {
-      if (n.empty()) return false;
-      const auto alpha = [](char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_'; };
-      if (!alpha(n[0])) return false;
-      for (const char c : n)
-        if (!alpha(c) && !(c >= '0' && c <= '9') && c != '-' && c != '.') return false;
-      return true;
-    }
-
-    /// The attributes of a tag, one at a time, checked as libxml2 checks
-    /// them: a valid name, a quoted value that is well-formed text,
-    /// whitespace before every further attribute, and no name twice; `bad`
-    /// is set on the first violation. Values are returned raw; the caller
-    /// refuses any that would need entity or whitespace normalisation.
-    struct AttrReader
-    {
-      std::string_view s;
-      std::size_t k = 0;
-      bool bad = false;
-      std::array<std::string_view, 32> seen{};
-      std::size_t n_seen = 0;
-
-      bool next(std::string_view& name, std::string_view& value)
+      struct Attr
       {
-        while (k < s.size() && is_space(s[k])) ++k;
-        if (k >= s.size()) return false;
-        const std::size_t nb = k;
-        while (k < s.size() && s[k] != '=' && !is_space(s[k])) ++k;
-        name = s.substr(nb, k - nb);
-        while (k < s.size() && is_space(s[k])) ++k;
-        if (!plain_name(name) || k >= s.size() || s[k] != '=') { bad = true; return false; }
-        ++k;
-        while (k < s.size() && is_space(s[k])) ++k;
-        if (k >= s.size() || (s[k] != '"' && s[k] != '\'')) { bad = true; return false; }
-        const char q = s[k++];
-        const std::size_t ve = s.find(q, k);
-        if (ve == std::string_view::npos) { bad = true; return false; }
-        value = s.substr(k, ve - k);
-        k = ve + 1;
-        // "a='1'b='2'" is a fatal error in libxml2; so is a repeated name.
-        if (k < s.size() && !is_space(s[k])) { bad = true; return false; }
-        if (!well_formed_text(value, true)) { bad = true; return false; }
-        for (std::size_t i = 0; i < n_seen; ++i)
-          if (seen[i] == name) { bad = true; return false; }
-        if (n_seen == seen.size()) { bad = true; return false; } // more than this decoder tracks: declined
-        seen[n_seen++] = name;
-        return true;
-      }
+        const char* name;
+        const char* value;
+        std::uint32_t name_len;
+        std::uint32_t value_len;
+      };
+      static constexpr std::size_t kMaxAttrs = 32; ///< more are declined
 
-      /// Every remaining attribute, checked; true when all are well-formed.
-      bool check_rest()
+      std::string_view name;
+      const char* end = nullptr; ///< past its '>'
+      bool closing = false;
+      bool self_closing = false;
+      std::size_t n_attrs = 0;
+      Attr attrs[kMaxAttrs]; // filled up to n_attrs; left uninitialised on purpose
+
+      std::string_view attr_name(std::size_t i) const { return {attrs[i].name, attrs[i].name_len}; }
+      std::string_view attr_value(std::size_t i) const { return {attrs[i].value, attrs[i].value_len}; }
+
+      bool read(const char* lt, const char* e)
       {
-        std::string_view n, v;
-        while (next(n, v)) {}
-        return !bad;
+        const char* p = lt + 1;
+        n_attrs = 0;
+        if (p < e && *p == '/') { closing = true; ++p; }
+        else closing = false;
+        self_closing = false;
+        const char* const nb = p;
+        if (p == e || !(cls(p) & kNameStart)) return false;
+        ++p;
+        while (p < e && (cls(p) & kName)) ++p;
+        if (p == e) return false;
+        name = std::string_view(nb, static_cast<std::size_t>(p - nb));
+        if (closing)
+        {
+          while (p < e && (cls(p) & kSpace)) ++p;
+          if (p == e || *p != '>') return false;
+          end = p + 1;
+          return true;
+        }
+        // After the name or a value: '>', "/>" or whitespace (then perhaps
+        // another attribute); anything else is not well-formed.
+        while (true)
+        {
+          if (*p == '>') { end = p + 1; return true; }
+          if (*p == '/')
+          {
+            if (e - p < 2 || p[1] != '>') return false;
+            self_closing = true;
+            end = p + 2;
+            return true;
+          }
+          if (!(cls(p) & kSpace)) return false;
+          do ++p; while (p < e && (cls(p) & kSpace));
+          if (p == e) return false;
+          if (*p == '>' || *p == '/') continue;
+
+          // name = "value" (or 'value')
+          const char* const an = p;
+          if (!(cls(p) & kNameStart)) return false;
+          ++p;
+          while (p < e && (cls(p) & kName)) ++p;
+          const std::size_t an_len = static_cast<std::size_t>(p - an);
+          while (p < e && (cls(p) & kSpace)) ++p;
+          if (p == e || *p != '=') return false;
+          ++p;
+          while (p < e && (cls(p) & kSpace)) ++p;
+          if (p == e || (*p != '"' && *p != '\'')) return false;
+          const char q = *p++;
+          const char* const vb = p;
+          while (true)
+          {
+            p = skip_plain<kValueStop>(p, e);
+            if (p == e) return false;
+            const char c = *p;
+            if (c == q) break;
+            if (c == '"' || c == '\'') ++p; // the other quote
+            else if (c == '<') return false;
+            else if (c == '&' ? !skip_reference(p, e) : !skip_char(p, e)) return false;
+          }
+          const std::size_t vlen = static_cast<std::size_t>(p - vb);
+          if (vlen > std::numeric_limits<std::uint32_t>::max()) return false;
+          ++p; // the closing quote
+          if (p == e) return false;
+          // "a='1' a='2'" is a fatal error in libxml2.
+          for (std::size_t i = 0; i < n_attrs; ++i)
+            if (attrs[i].name_len == an_len && std::memcmp(attrs[i].name, an, an_len) == 0) return false;
+          if (n_attrs == kMaxAttrs) return false;
+          attrs[n_attrs++] = Attr{an, vb, static_cast<std::uint32_t>(an_len), static_cast<std::uint32_t>(vlen)};
+        }
       }
     };
 
@@ -434,22 +519,21 @@ namespace FASTag
     if constexpr (std::endian::native != std::endian::little) return false;
 
     // The root: <spectrum ...>, its id and defaultArrayLength.
+    const char* const xb = xml.data();
+    const char* const xe = xb + xml.size();
     Tag root;
-    if (xml.size() < 10 || xml.compare(0, 9, "<spectrum") != 0 || !read_tag(xml, 0, root) ||
-        root.closing || root.self_closing || root.name != "spectrum")
+    if (xml.size() < 10 || xml.compare(0, 9, "<spectrum") != 0 || !root.read(xb, xe) || root.closing ||
+        root.self_closing || root.name != "spectrum")
       return false;
     std::string_view id, length_text;
     bool has_length = false;
+    for (std::size_t i = 0; i < root.n_attrs; ++i)
     {
-      AttrReader ar{root.attrs};
-      std::string_view n, v;
-      while (ar.next(n, v))
-      {
-        if (n == "id") id = v;
-        else if (n == "defaultArrayLength") { length_text = v; has_length = true; }
-      }
-      if (ar.bad || !has_length || !literal(id)) return false;
+      const std::string_view n = root.attr_name(i);
+      if (n == "id") id = root.attr_value(i);
+      else if (n == "defaultArrayLength") { length_text = root.attr_value(i); has_length = true; }
     }
+    if (!has_length || !literal(id)) return false;
     std::int32_t length = 0;
     {
       const auto r = std::from_chars(length_text.data(), length_text.data() + length_text.size(), length);
@@ -465,41 +549,52 @@ namespace FASTag
     // elements and comments; from <binaryDataArrayList> on, every tag must
     // be one this decoder understands and text between tags whitespace; and
     // after </binaryDataArrayList> only </spectrum> may follow.
+    //
+    // One forward pass: scan_text() checks the character data while it looks
+    // for the next '<', and Tag::read() checks names, attributes and values
+    // while it reads them (a table lookup per plain ASCII byte; references,
+    // controls and non-ASCII bytes take the slow path). The base64 text is
+    // not scanned here: decode_base64 refuses any byte outside its alphabet.
     enum class Region { meta, arrays, after };
     Region region = Region::meta;
     std::array<std::string_view, 32> stack{};
     std::size_t depth = 0;
     stack[depth++] = root.name;
-    std::size_t pos = root.end;
+    const char* p = root.end;
     std::array<Array, 2> arrays;
     int n_arrays = 0;
     Array* cur = nullptr;
-    const auto blank = [](std::string_view t) { return t.find_first_not_of(" \t\n\r") == std::string_view::npos; };
+    const auto blank = [](const char* b, const char* e)
+    {
+      for (; b < e; ++b)
+        if (!(cls(b) & kSpace)) return false;
+      return true;
+    };
+    // The next '<' from q on (whitespace only before it), or null.
+    const auto next_lt_blank = [&](const char* q) -> const char*
+    {
+      const char* lt = static_cast<const char*>(std::memchr(q, '<', static_cast<std::size_t>(xe - q)));
+      return lt && blank(q, lt) ? lt : nullptr;
+    };
+    Tag t;
     while (depth > 0)
     {
-      const std::size_t lt = xml.find('<', pos);
-      if (lt == std::string_view::npos) return false; // the root never ends
-      const std::string_view text = xml.substr(pos, lt - pos);
-      if (region == Region::meta ? !well_formed_text(text, false) : !blank(text)) return false;
+      const char* const lt = region == Region::meta ? scan_text(p, xe) : next_lt_blank(p);
+      if (!lt) return false; // bad text, or the root never ends
 
-      if (xml.compare(lt, 4, "<!--") == 0)
+      if (xe - lt >= 4 && std::memcmp(lt, "<!--", 4) == 0)
       {
         // A comment, in the metadata only: XML characters, no "--" inside.
-        const std::size_t ce = xml.find("--", lt + 4);
+        const std::size_t at = static_cast<std::size_t>(lt - xb);
+        const std::size_t ce = xml.find("--", at + 4);
         if (region != Region::meta || ce == std::string_view::npos || xml.compare(ce, 3, "-->") != 0) return false;
-        const std::string_view body = xml.substr(lt + 4, ce - lt - 4);
-        for (std::size_t k = 0; k < body.size();)
-        {
-          std::uint32_t cp;
-          if (!next_char(body, k, cp)) return false;
-        }
-        pos = ce + 3;
+        if (!xml_chars(xml.substr(at + 4, ce - at - 4))) return false;
+        p = xb + ce + 3;
         continue;
       }
 
-      Tag t;
-      if (!read_tag(xml, lt, t) || !plain_name(t.name)) return false; // CDATA, PIs, DOCTYPE: declined
-      pos = t.end;
+      if (!t.read(lt, xe)) return false; // CDATA, PIs, DOCTYPE: declined
+      p = t.end;
       if (t.closing)
       {
         if (stack[depth - 1] != t.name) return false; // mismatched or unclosed element
@@ -520,7 +615,6 @@ namespace FASTag
         }
         // OpenMS decodes a <binaryDataArray> wherever it sits.
         else if (t.name == "binaryDataArray" || t.name == "binary" || t.name == "binaryDataArrayList") return false;
-        if (!AttrReader{t.attrs}.check_rest()) return false;
         continue;
       }
       if (region == Region::after) return false; // only </spectrum>, which ends the loop
@@ -540,7 +634,6 @@ namespace FASTag
         else
         {
           if (cur || t.self_closing || n_arrays == 2) return false; // more than two arrays
-          if (!AttrReader{t.attrs}.check_rest()) return false;
           cur = &arrays[static_cast<std::size_t>(n_arrays++)];
         }
       }
@@ -549,17 +642,16 @@ namespace FASTag
         if (!cur || t.closing) return false;
         std::string_view accession, name, unit;
         bool has_unit = false;
-        AttrReader ar{t.attrs};
-        std::string_view an, av;
-        while (ar.next(an, av))
+        for (std::size_t i = 0; i < t.n_attrs; ++i)
         {
-          if (an == "accession") accession = av;
-          else if (an == "name") name = av;
-          else if (an == "unitAccession") { unit = av; has_unit = true; }
+          const std::string_view an = t.attr_name(i);
+          if (an == "accession") accession = t.attr_value(i);
+          else if (an == "name") name = t.attr_value(i);
+          else if (an == "unitAccession") { unit = t.attr_value(i); has_unit = true; }
         }
         // The unit is compared as text below; one written with a character
         // reference (UO&#58;0000269) is the same unit to libxml2.
-        if (ar.bad || !literal(accession) || !literal(name) || (has_unit && !literal(unit))) return false;
+        if (!literal(accession) || !literal(name) || (has_unit && !literal(unit))) return false;
         // A unit on anything but the m/z or intensity term becomes a meta
         // value in OpenMS; absorbance intensities do too.
         if (accession == "MS:1000514" || accession == "MS:1000515")
@@ -576,28 +668,25 @@ namespace FASTag
         if (!t.self_closing)
         {
           // <cvParam ...></cvParam>: only whitespace may come before the end tag.
-          const std::size_t e = xml.find('<', pos);
+          const char* const e = next_lt_blank(p);
           Tag et;
-          if (e == std::string_view::npos || !read_tag(xml, e, et) || !et.closing || et.name != "cvParam" ||
-              !blank(xml.substr(pos, e - pos)))
-            return false;
-          pos = et.end;
+          if (!e || !et.read(e, xe) || !et.closing || et.name != "cvParam") return false;
+          p = et.end;
           --depth;
         }
       }
       else if (t.name == "binary")
       {
         if (!cur || t.closing || cur->has_binary) return false; // OpenMS concatenates repeats
-        if (!AttrReader{t.attrs}.check_rest()) return false;
         cur->has_binary = true;
         if (t.self_closing) continue;
         // The base64 text: decode_base64 refuses anything outside its
         // alphabet and whitespace, '&' and non-ASCII bytes included.
-        const std::size_t e = xml.find('<', pos);
+        const char* const e = static_cast<const char*>(std::memchr(p, '<', static_cast<std::size_t>(xe - p)));
         Tag et;
-        if (e == std::string_view::npos || !read_tag(xml, e, et) || !et.closing || et.name != "binary") return false;
-        cur->base64 = xml.substr(pos, e - pos);
-        pos = et.end;
+        if (!e || !et.read(e, xe) || !et.closing || et.name != "binary") return false;
+        cur->base64 = std::string_view(p, static_cast<std::size_t>(e - p));
+        p = et.end;
         --depth;
       }
       else
