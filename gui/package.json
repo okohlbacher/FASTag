@@ -9,10 +9,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest",
     "tauri": "tauri",
     "params": "node scripts/gen-params.mjs src-tauri/resources/fastag/bin/FASTag src/params.generated.json"
   },

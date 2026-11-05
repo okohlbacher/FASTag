@@ -47,7 +47,6 @@ pub struct CurrentRun {
 #[serde(rename_all = "camelCase")]
 pub struct BinaryInfo {
     bin: String,
-    data_path: Option<String>,
     source: String,
     ok: bool,
     version: Option<String>,
@@ -183,17 +182,16 @@ fn quiet_blas(cmd: &mut Command) {
     }
 }
 
-// async + spawn_blocking: a sync command runs on the main thread, and
-// `FASTag --help` loads the whole library closure -- seconds on a cold cache
-// or under a first-launch Gatekeeper/antivirus scan, during which the window
-// froze.
+// async + spawn_blocking: a sync command would run on the main thread.
+// `FASTag --help` loads the whole library closure, which can take seconds on a
+// cold cache or during a first-launch Gatekeeper/antivirus scan, and the window
+// must stay responsive meanwhile.
 #[tauri::command]
 pub async fn probe(app: AppHandle) -> BinaryInfo {
     tauri::async_runtime::spawn_blocking(move || probe_blocking(&app))
         .await
         .unwrap_or_else(|e| BinaryInfo {
             bin: String::new(),
-            data_path: None,
             source: "path".into(),
             ok: false,
             version: None,
@@ -204,14 +202,12 @@ pub async fn probe(app: AppHandle) -> BinaryInfo {
 fn probe_blocking(app: &AppHandle) -> BinaryInfo {
     let r = resolve_binary(app);
     let bin_s = r.bin.display().to_string();
-    let data_s = r.data.as_ref().map(|d| d.display().to_string());
     if r.source == "missing" {
         return BinaryInfo {
             detail: format!(
                 "the FASTag command-line tool is not in this app ({bin_s} is missing); reinstall FASTag, or set FASTAG_BIN to the FASTag binary"
             ),
             bin: bin_s,
-            data_path: data_s,
             source: r.source.into(),
             ok: false,
             version: None,
@@ -232,11 +228,10 @@ fn probe_blocking(app: &AppHandle) -> BinaryInfo {
                 String::from_utf8_lossy(&out.stderr)
             );
             let (ok, version, detail) = probe_verdict(out.status.success(), exit_message(&out.status), &text, r.source);
-            BinaryInfo { bin: bin_s, data_path: data_s, source: r.source.into(), ok, version, detail }
+            BinaryInfo { bin: bin_s, source: r.source.into(), ok, version, detail }
         }
         Err(e) => BinaryInfo {
             bin: bin_s,
-            data_path: data_s,
             source: r.source.into(),
             ok: false,
             version: None,
@@ -247,8 +242,15 @@ fn probe_blocking(app: &AppHandle) -> BinaryInfo {
 
 /// A binary works if --help succeeds or at least prints its version banner.
 /// One that aborts while loading (dyld/DLL failure, exit 134) prints neither
-/// and is not ok: reporting it ok sent the user into a run that cannot start.
+/// and is not ok, because a run with it could not start.
 fn probe_verdict(success: bool, failure: Option<String>, text: &str, source: &str) -> (bool, Option<String>, String) {
+    // Where the binary came from, in words.
+    let source = match source {
+        "bundled" => "bundled with the app",
+        "env" => "from FASTAG_BIN",
+        "path" => "found on PATH",
+        other => other,
+    };
     let version = parse_version(text);
     if let Some(v) = &version {
         return (true, version.clone(), format!("FASTag {v} ({source})"));
@@ -362,7 +364,8 @@ fn defang_path(p: &str) -> String {
 
 /// The folder relative paths are resolved against: the input's own folder,
 /// when the input is an absolute path. A Finder-launched app runs with cwd
-/// "/", so a bare Output name like "tags.tsv" could not be written.
+/// "/", so a bare Output name like "tags.tsv" would otherwise resolve to an
+/// unwritable "/tags.tsv".
 fn base_dir(input: &str) -> Option<PathBuf> {
     let p = Path::new(input);
     if !p.is_absolute() {
@@ -585,12 +588,12 @@ pub fn run(app: AppHandle, state: State<'_, RunManager>, params: RunParams) -> R
     let mut child = match cmd.spawn() {
         Ok(c) => c,
         // A spawn failure is known synchronously: report it as a non-start so
-        // the frontend surfaces "could not start" and settles cleanly.
+        // the frontend reports "FASTag could not start" and settles cleanly.
         Err(e) => {
             return RunStarted {
                 started: false,
                 run_id: None,
-                reason: Some(format!("cannot start: {e}")),
+                reason: Some(e.to_string()),
                 out: None,
                 command: None,
             }
@@ -668,10 +671,10 @@ pub fn run(app: AppHandle, state: State<'_, RunManager>, params: RunParams) -> R
     RunStarted { started: true, run_id: Some(run_id), reason: None, out, command: Some(command) }
 }
 
-/// Unix: start the child as the leader of its own process group, so a kill
-/// reaches anything it spawned (a wrapper script's real binary). Killing only
-/// the direct child left the worker running with the pipes open, and the UI
-/// stuck on "Running…".
+/// Unix: start the child as the leader of its own process group, so Cancel also
+/// kills anything it started (for example a wrapper script's real binary).
+/// Otherwise that worker would keep the pipes open and the run would never
+/// finish.
 fn new_process_group(cmd: &mut Command) {
     #[cfg(unix)]
     {
@@ -826,7 +829,7 @@ mod tests {
 
     #[test]
     fn build_args_keeps_dash_leading_file_names() {
-        // m17: -fasta "-db.fasta" vanished and the run went unfiltered.
+        // -fasta "-db.fasta" vanished and the run went unfiltered.
         let a = build_args(&rp(r#"{"in":"i","out":"o","params":{"fasta":"-db.fasta","digest_out":"-a.digest.tsv"}}"#));
         let i = a.iter().position(|s| s == "-fasta").expect("-fasta kept");
         assert_eq!(a[i + 1], "./-db.fasta");
@@ -837,7 +840,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn build_args_resolves_relative_paths_against_the_input_folder() {
-        // m5: a Finder launch has cwd "/", so a bare "run.tags.tsv" failed.
+        // A Finder launch has cwd "/", so a bare "run.tags.tsv" failed.
         let a = build_args(&rp(
             r#"{"in":"/d/a.mzML","out":"run.tags.tsv","params":{"fasta":"-db.fasta","species_out":"/abs/s.tsv","species_rank":"-x"}}"#,
         ));
@@ -854,14 +857,14 @@ mod tests {
 
     #[test]
     fn build_args_progress_and_stream_are_app_managed() {
-        // m36: the renderer could add -stream and a second -progress.
+        // The renderer could add -stream and a second -progress.
         let a = build_args(&rp(r#"{"in":"i","out":"o","params":{"stream":true,"progress":true}}"#));
         assert_eq!(a, vec!["-in", "i", "-out", "o", "-progress"]);
     }
 
     #[test]
     fn probe_verdict_needs_success_or_a_version() {
-        // m29: a binary aborting in dyld (exit 134, no banner) was "ok".
+        // A binary aborting in dyld (exit 134, no banner) was "ok".
         let (ok, v, d) = probe_verdict(false, Some("killed by signal 6 (SIGABRT)".into()), "dyld: Library not loaded: @rpath/libOpenMS.dylib\n", "bundled");
         assert!(!ok);
         assert_eq!(v, None);
@@ -874,7 +877,7 @@ mod tests {
 
     #[test]
     fn crash_texts_name_the_cause() {
-        // m34: a SIGSEGV or OOM kill read "stopped before it finished".
+        // A SIGSEGV or OOM kill read "stopped before it finished".
         assert!(signal_text(11).contains("SIGSEGV"));
         assert!(signal_text(9).contains("out of memory"));
         assert_eq!(signal_text(64), "killed by signal 64");
@@ -896,8 +899,8 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn cancel_kills_the_whole_process_group_once() {
-        // m27: through a wrapper the worker survived the kill and kept the
-        // pipes open, so the run never ended. m3: a second cancel is a no-op.
+        // Through a wrapper the worker survived the kill and kept the
+        // pipes open, so the run never ended. A second cancel is a no-op.
         let mut cmd = Command::new("sh");
         cmd.args(["-c", "sleep 30 & wait"]).stdin(Stdio::null()).stdout(Stdio::piped());
         new_process_group(&mut cmd);
