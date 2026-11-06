@@ -46,4 +46,9 @@ namespace FASTag
     for (const auto& kv : kmers_per_taxon) if (kv.second == best) taxa.push_back(kv.first);
     return true;
   }
+
+  std::string decoyTag(const std::string& seq, uint32_t)
+  {
+    return seq;  // RED stub: replaced by the implementation
+  }
 }

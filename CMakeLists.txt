@@ -79,7 +79,7 @@ set(FASTAG_CORE_SOURCES_E)
 # ---- 1.12 A: core sources ----
 set(FASTAG_CORE_SOURCES_A)
 # ---- 1.12 D: core sources ----
-set(FASTAG_CORE_SOURCES_D src/SpeciesLookup.cpp)
+set(FASTAG_CORE_SOURCES_D src/SpeciesLookup.cpp src/SpeciesCall.cpp)
 # ---- 1.12 F: core sources ----
 set(FASTAG_CORE_SOURCES_F src/OutputGuard.cpp)
 add_library(fastag_core STATIC ${FASTAG_CORE_SOURCES}
@@ -252,7 +252,7 @@ if(FASTAG_BUILD_TESTS)
   # ---- 1.12 A: unit tests ----
   set(FASTAG_UNIT_TESTS_A)
   # ---- 1.12 D: unit tests ----
-  set(FASTAG_UNIT_TESTS_D)
+  set(FASTAG_UNIT_TESTS_D species_call_test)
   # ---- 1.12 F: unit tests ----
   set(FASTAG_UNIT_TESTS_F output_guard_test)
   foreach(t ${FASTAG_UNIT_TESTS} ${FASTAG_UNIT_TESTS_E} ${FASTAG_UNIT_TESTS_A} ${FASTAG_UNIT_TESTS_D} ${FASTAG_UNIT_TESTS_F})
@@ -382,6 +382,15 @@ if(FASTAG_BUILD_TESTS)
   set_tests_properties(out_spectra_params_test PROPERTIES SKIP_RETURN_CODE 77)
   # ---- 1.12 A: CLI tests ----
   # ---- 1.12 D: CLI tests ----
+  # #1: -species_call (decoy null, calls, warnings, refusals) on a toy index
+  # built at test time; none equals the option absent (and FASTAG_BASELINE_BIN).
+  add_test(NAME species_call_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/species_call_test.sh $<TARGET_FILE:FASTag>
+                   $<TARGET_FILE:buildtaxdb>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy)
+  set_tests_properties(species_call_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # ---- 1.12 F: CLI tests ----
 
   # mzPeak reader vs its own mzML twin. Needs a matched pair of real files, so
