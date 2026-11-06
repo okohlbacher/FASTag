@@ -340,12 +340,17 @@ int main()
     const auto pw = idx.pairwiseOverlap();
     const auto id = idx.groupOverlap({0, 1, 2, 3, 4}, 5);
     check(id == pw, "groupOverlap with singleton groups = pairwiseOverlap");
-    // The summed roll-up this replaces gets the same C wrong.
+    // The summed roll-up this replaces gets C wrong when the groups differ in
+    // size: g = taxon 3 alone against h = taxa 1 and 2 gives half the truth.
+    const auto ov1 = idx.groupOverlap({0, 0, 1, -1, -1}, 2);
+    const auto C1 = conditionalMatrix(ov1, 2);
+    check(near(C1[1 * 2 + 0], static_cast<double>(inter) / kp.size()),
+          "groupOverlap: C[g][h] = P(k-mer in g | k-mer in h), 1 vs 2 members");
     uint64_t sum_gh = 0, sum_hh = 0;
     for (size_t a : {0, 1}) for (size_t b : {0, 1}) sum_hh += pw[a * 5 + b];
-    for (size_t a : {2, 3}) for (size_t b : {0, 1}) sum_gh += pw[a * 5 + b];
-    check(static_cast<double>(sum_gh) / sum_hh > C[1 * 2 + 0] + 0.25,
-          "groupOverlap: differs from summing the members' pairwise overlaps");
+    for (size_t b : {0, 1}) sum_gh += pw[2 * 5 + b];
+    check(static_cast<double>(sum_gh) / sum_hh < 0.6 * C1[1 * 2 + 0],
+          "groupOverlap: the summed pairwise roll-up underestimates it");
     TaxIndex empty;
     check(empty.groupOverlap({}, 3) == std::vector<uint64_t>(9, 0), "groupOverlap of an empty index");
   }
