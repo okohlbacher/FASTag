@@ -21,7 +21,11 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "Census.h"
+
 #include <cstddef>
+#include <string>
+#include <vector>
 
 namespace FASTag::ClusterAcc
 {
@@ -58,11 +62,17 @@ namespace FASTag::ClusterAcc
   // ---- 1.12 F ----
   struct ThreadF
   {
-    void merge(const ThreadF&) {}
+    Census::Tally census;  ///< -census counts and samples (#11)
+    void merge(const ThreadF& o) { census.merge(o.census); }
   };
   struct BlockF
   {
-    void prepare(std::size_t) {}
+    bool census = false;                   ///< -census is on; set once before the loop
+    std::vector<std::string> census_rows;  ///< one census row per slot (census only)
+    void prepare(std::size_t n_used)
+    {
+      if (census && census_rows.size() < n_used) census_rows.resize(n_used);
+    }
   };
 
   // ---- shared (P4; not edited by the clusters) ----

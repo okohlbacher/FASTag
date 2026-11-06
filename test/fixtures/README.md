@@ -57,3 +57,15 @@ timsTOF files. Both are indexedmzML with an exact index.
 
 sha256: `diatracer_like.mzML` `fbff96360f591209a7f1ac9f38899a6724c6ffaebdcbb6df3c883b421b4fce0d`,
 `ddapasef_empty.mzML` `37d838f8cef462c81755144b8dd76b6787b590a360947ae4e5a60069fc9f596d`.
+
+`census_edge.mzML` (12 spectra: 1 MS1, 11 MS2) — the input of
+`census_cli_test`, written by `make_converter_fixtures.py` (pyteomics 5.0.1,
+numpy 2.4.6, Python 3.11; the same run reproduces `diatracer_like.mzML` and
+`ddapasef_empty.mzML` byte for byte) from spectra 0-11 of
+`Ecoli_MS2_small.mzML`, so BSD-3-Clause as well. One case per census status:
+index 0 an MS1, 1 an MS2 without peaks, 2 an MS2 without precursorList, 3 an
+MS2 whose selected ion m/z is `nan`, 4 an MS2 with 2 peaks, 5 an MS2 whose
+intensities are all 0, 6 one whose intensities are all NaN, 7-11 five MS2 as
+in the source, index 9 without a charge state. 64-bit m/z, 32-bit intensity,
+indexedmzML with an exact index. sha256
+`673eff96641ceb6a56b419385f73b6065cd75df25c729032a7cb18b9e62ca0db`.

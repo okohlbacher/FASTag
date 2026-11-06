@@ -130,6 +130,22 @@ namespace FASTag
     bool   gapped = false;      ///< crossed a missing peak; two residues are a
                                 ///< mass-only inference, not two observed steps
     double low_mz = 0;          ///< lowest peak; also the output tie-break
+    double high_mz = 0;         ///< highest path peak (census tag_cover); not serialised
+    float  peak_tic = 0;        ///< summed intensity of the path peaks (census best_tic); not serialised
+  };
+
+  /// What tagSpectrum saw of one spectrum, for the census (-census). Filled
+  /// only when a pointer is passed; passing one never changes the tags.
+  struct SpectrumDiag
+  {
+    bool bad_precursor = false;  ///< precursor m/z not finite or <= 0: nothing was prepared
+    bool prepared = false;       ///< preprocessing ran; the counts below are valid
+    std::size_t n_kept = 0;      ///< peaks after the precursor cut, m/z collapse,
+                                 ///< deisotoping and the peak budget
+    std::size_t n_edges = 0;     ///< ordinary graph edges, summed over fragment
+                                 ///< charges; 0 when no graph was built
+    std::size_t n_compl = 0;     ///< kept peaks with a complement at fragment charge 1
+    bool enough_peaks = false;   ///< n_kept reaches the minimum of some seed length
   };
 
   /// Precomputed nulls, built once and shared read-only.
@@ -167,8 +183,10 @@ namespace FASTag
   /// @param precursor_mz  precursor m/z
   /// @param charge     precursor charge; <= 0 is treated as 2
   /// @return tags ordered by E-value, best first
+  /// @param diag       optional; filled with what the census reads
   std::vector<Tag> tagSpectrum(const OpenMS::MSSpectrum& spec, double precursor_mz,
-                               int charge, const Param& p, const Tables& tables);
+                               int charge, const Param& p, const Tables& tables,
+                               SpectrumDiag* diag = nullptr);
 
   /// Tag one spectrum at several seed lengths, preprocessing it and building
   /// its graphs once. Entry i is exactly tagSpectrum(spec, precursor_mz,
@@ -176,9 +194,12 @@ namespace FASTag
   ///
   /// @param params  one per length; they may differ in tag_length only
   /// @param tables  built from the matching params entry
+  /// @param diag    optional; one preprocessing serves every length, so one
+  ///                diag; enough_peaks when some length has enough
   std::vector<std::vector<Tag>> tagSpectrum(const OpenMS::MSSpectrum& spec, double precursor_mz,
                                             int charge, const std::vector<Param>& params,
-                                            const std::vector<Tables>& tables);
+                                            const std::vector<Tables>& tables,
+                                            SpectrumDiag* diag = nullptr);
 
   /// One spectrum's rows for a multi-length run, from its per-length tag lists
   /// (ascending length, as the overload above returns them). A tag several

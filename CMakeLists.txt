@@ -254,7 +254,7 @@ if(FASTAG_BUILD_TESTS)
   # ---- 1.12 D: unit tests ----
   set(FASTAG_UNIT_TESTS_D)
   # ---- 1.12 F: unit tests ----
-  set(FASTAG_UNIT_TESTS_F output_guard_test)
+  set(FASTAG_UNIT_TESTS_F output_guard_test census_test)
   foreach(t ${FASTAG_UNIT_TESTS} ${FASTAG_UNIT_TESTS_E} ${FASTAG_UNIT_TESTS_A} ${FASTAG_UNIT_TESTS_D} ${FASTAG_UNIT_TESTS_F})
     add_executable(${t} test/${t}.cpp)
     target_link_libraries(${t} PRIVATE fastag_core)
@@ -383,6 +383,16 @@ if(FASTAG_BUILD_TESTS)
   # ---- 1.12 A: CLI tests ----
   # ---- 1.12 D: CLI tests ----
   # ---- 1.12 F: CLI tests ----
+  # #11 phase A: -census on the fixture, its MGF twin, census_edge.mzML (every
+  # status, subsampling) and diatracer_like.mzML; existing outputs unchanged.
+  add_test(NAME census_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/census_cli_test.sh $<TARGET_FILE:FASTag>
+                   $<TARGET_FILE:census_test>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mgf
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures)
+  set_tests_properties(census_cli_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # mzPeak reader vs its own mzML twin. Needs a matched pair of real files, so
   # it SKIPs unless FASTAG_E2E_MZML and FASTAG_E2E_MZPEAK point at one.

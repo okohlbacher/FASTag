@@ -29,6 +29,7 @@
 #include <OpenMS/SYSTEM/File.h>
 
 #include "CliParam.h"
+#include "Census.h"
 #include "ClusterAcc.h"
 #include "Digest.h"
 #include "FASTagger.h"
@@ -254,7 +255,13 @@ class TOPPFASTag : public TOPPBase
       if (k.compare(0, prefix.size(), prefix) != 0) continue;
       const std::string name = k.substr(prefix.size());
       if (FASTag::Cli::isLegacyOutSpectraParameter(name)) continue;
-      if (getParam_().getValue(name) == findEntry_(name).default_value) p.removeMetaValue(k);
+      // A flag is compared through getFlag_: its Param value ("false") does
+      // not compare equal to the registered default (a bool DataValue), so
+      // an unset 1.12 flag would otherwise stay listed.
+      const ParameterInformation& e = findEntry_(name);
+      const bool at_default = e.type == ParameterInformation::FLAG ? !getFlag_(name)
+                                                                   : getParam_().getValue(name) == e.default_value;
+      if (at_default) p.removeMetaValue(k);
     }
     return p;
   }
@@ -674,6 +681,23 @@ protected:
     // ---- 1.12 A: options ----
     // ---- 1.12 D: options ----
     // ---- 1.12 F: options ----
+    // #11 phase A: the per-spectrum census. Opt-in; every other output is
+    // the same with or without it (src/Census.h).
+    registerFlag_("census",
+                  "Write a census: one row per MS2 spectrum read (status, peak and tag "
+                  "facts, tagged or not) to <out> with its extension replaced by "
+                  ".census.tsv, and a run summary to .census_summary.tsv. A status "
+                  "is not a quality call. Subsampling counts input spectra of all "
+                  "MS levels");
+    registerOutputFile_("census_out", "<file>", "",
+                        "Per-spectrum census table. Default: <out> with its "
+                        "extension replaced by .census.tsv", false);
+    setValidFormats_("census_out", ListUtils::create<std::string>("tsv"));
+    registerOutputFile_("census_summary_out", "<file>", "",
+                        "Census run summary (section, key, value, n, description). "
+                        "Default: <out> with its extension replaced by "
+                        ".census_summary.tsv", false);
+    setValidFormats_("census_summary_out", ListUtils::create<std::string>("tsv"));
   }
 
   /// True when option @p name holds a value other than its registered
@@ -1042,6 +1066,9 @@ protected:
           // ---- 1.12 A: -stream refusals ----
           // ---- 1.12 D: -stream refusals ----
           // ---- 1.12 F: -stream refusals ----
+          {"census", nullptr},
+          {"census_out", nullptr},
+          {"census_summary_out", nullptr},
       };
       for (const StreamRefusal& r : stream_refusals)
         if (optionNonDefault_(r.option))
@@ -1156,10 +1183,12 @@ protected:
     // them (so 'max_tags' caps each length), in ascending length, with a tag
     // several lengths report kept from one of them only (mergeLengths). Every
     // consumer -- TSV, recon, identifications, -stream -- sees these rows.
+    // @p diag (-census) is filled when given; it never changes the tags.
     auto tag_all = [&len_params](const MSSpectrum& s, double prec_mz, int charge,
-                                 const std::vector<FASTag::Tables>& tabs) {
-      if (len_params.size() == 1) return FASTag::tagSpectrum(s, prec_mz, charge, len_params[0], tabs[0]);
-      return FASTag::mergeLengths(FASTag::tagSpectrum(s, prec_mz, charge, len_params, tabs));
+                                 const std::vector<FASTag::Tables>& tabs,
+                                 FASTag::SpectrumDiag* diag = nullptr) {
+      if (len_params.size() == 1) return FASTag::tagSpectrum(s, prec_mz, charge, len_params[0], tabs[0], diag);
+      return FASTag::mergeLengths(FASTag::tagSpectrum(s, prec_mz, charge, len_params, tabs, diag));
     };
     if (lengths.size() > 1)
     {
@@ -1411,6 +1440,8 @@ protected:
           // ---- 1.12 A: ignored-option warnings ----
           // ---- 1.12 D: ignored-option warnings ----
           // ---- 1.12 F: ignored-option warnings ----
+          {"census_out", "-census", getFlag_("census")},
+          {"census_summary_out", "-census", getFlag_("census")},
       };
       for (const IgnoredOption& r : ignored)
       {
@@ -2064,6 +2095,14 @@ protected:
       // ---- 1.12 A: output paths ----
       // ---- 1.12 D: output paths ----
       // ---- 1.12 F: output paths ----
+      if (getFlag_("census"))
+      {
+        const std::string c = getStringOption_("census_out");
+        const std::string cs = getStringOption_("census_summary_out");
+        guard.output("census_out", c.empty() ? defaultReportPath(out, ".census.tsv") : c, /*via_part=*/true);
+        guard.output("census_summary_out", cs.empty() ? defaultReportPath(out, ".census_summary.tsv") : cs,
+                     /*via_part=*/true);
+      }
       const std::string collision = guard.check();
       if (!collision.empty())
       {
@@ -2112,6 +2151,25 @@ protected:
       gtsv << "spectrum\tn_oxonium\toxonium_frac\tglyco\tions\n";
     }
 
+    // -census (#11): written through .part files, renamed when the run
+    // finished; a failed run leaves neither.
+    const bool census_on = getFlag_("census");
+    std::string census_out = getStringOption_("census_out");
+    std::string census_summary_out = getStringOption_("census_summary_out");
+    if (census_out.empty()) census_out = defaultReportPath(out, ".census.tsv");
+    if (census_summary_out.empty()) census_summary_out = defaultReportPath(out, ".census_summary.tsv");
+    FASTag::PartFile census_part(census_out);
+    std::ofstream ctsv;
+    if (census_on)
+    {
+      if (!census_part.open(ctsv, std::ios::out | std::ios::binary))
+      {
+        OPENMS_LOG_ERROR << census_part.error() << std::endl;
+        return CANNOT_WRITE_OUTPUT_FILE;
+      }
+      ctsv << FASTag::Census::header();
+    }
+
     const std::string proforma_fixed =
         want_proforma ? buildProformaPrefix(p.mods) : std::string();
 
@@ -2158,6 +2216,7 @@ protected:
     // held in memory.
     constexpr size_t kRing = 3;
     Block blocks[kRing];
+    for (Block& b : blocks) b.acc.f.census = census_on;
     // Two-pass -out_spectra, whatever the formats: record kept INPUT indices
     // during tagging, re-read and stream them to the writer at the end. Every
     // reader here is indexed, so nothing is held during tagging.
@@ -2227,6 +2286,9 @@ protected:
       bool any_target = false;  ///< at least one non-entrapment reported tag
       /// -recon_id_out: the spectrum's identification, when it placed anything.
       std::vector<PeptideIdentification> ids;
+      /// -census: the spectrum's census row (an MS2 spectrum read, census_on only).
+      bool census = false;
+      FASTag::Census::Row census_row;
     };
 
     // @p index is the spectrum's position in the input, for a USI that cannot
@@ -2235,7 +2297,38 @@ protected:
     {
       SpecResult res;
       std::string& buf = res.buf;
-      if (spec.getMSLevel() != 2 || spec.empty() || spec.getPrecursors().empty()) return res;
+      // -census: the facts of every MS2 spectrum read, taken beside the
+      // tagging below and never steering it (src/Census.h).
+      FASTag::Census::Row& crow = res.census_row;
+      FASTag::Census::Facts cfacts;
+      if (census_on && spec.getMSLevel() == 2)
+      {
+        res.census = true;
+        crow.index = index;
+        crow.rt = spec.getRT();
+        cfacts.empty = spec.empty();
+        cfacts.has_precursor = crow.has_precursor = !spec.getPrecursors().empty();
+        if (crow.has_precursor)
+        {
+          const Precursor& pc = spec.getPrecursors().front();
+          cfacts.precursor_mz = crow.precursor_mz = pc.getMZ();
+          crow.charge_given = std::max(0, pc.getCharge());
+          crow.charge_used = pc.getCharge() > 0 ? pc.getCharge() : 2;
+        }
+        const FASTag::Census::Signal sig = FASTag::Census::signal(spec);
+        cfacts.n_peaks = crow.n_peaks = sig.n_peaks;
+        crow.has_gini = sig.has_gini;
+        crow.gini = sig.gini;
+      }
+      if (spec.getMSLevel() != 2 || spec.empty() || spec.getPrecursors().empty())
+      {
+        if (res.census)
+        {
+          crow.status = FASTag::Census::classify(cfacts);
+          per_thread[tid].acc.f.census.add(crow);
+        }
+        return res;
+      }
       PerThread& pt = per_thread[tid];
       ++pt.ms2;
       if (digest_on)
@@ -2280,8 +2373,11 @@ protected:
         ++pt.no_charge;
         if (!prec.getPossibleChargeStates().empty()) ++pt.multi_charge;
       }
-      const auto tags = tag_all(spec, prec.getMZ(), prec.getCharge(), tables);
+      FASTag::SpectrumDiag cdiag;
+      const auto tags = tag_all(spec, prec.getMZ(), prec.getCharge(), tables, res.census ? &cdiag : nullptr);
       pt.tags += tags.size();
+      std::vector<FASTag::Census::TagView> ctags;  // -census: the reported rows
+      size_t cplaced = 0;                          // -census: -recon_out placements
 
       // Reserve once so the per-field appends below do not repeatedly realloc.
       // ~80 bytes/row covers the fixed columns and a typical native ID; the
@@ -2345,6 +2441,18 @@ protected:
         if (!row_entrap) res.any_target = true;
         if (entrap_on) res.meta.emplace_back(t.evalue, row_entrap);
         ++pt.reported;
+        if (res.census)
+        {
+          FASTag::Census::TagView v;
+          v.evalue = t.evalue;
+          v.low_mz = t.low_mz;
+          v.high_mz = t.high_mz;
+          v.n_res = t.n_res;
+          v.min_conf = t.min_conf;
+          v.mean_conf = t.mean_conf;
+          v.peak_tic = t.peak_tic;
+          ctags.push_back(v);
+        }
 
         appendTagRow(buf, t, spec.getNativeID(), hit, want_proforma, proforma_fixed,
                      p.per_residue_conf, usi);
@@ -2364,6 +2472,7 @@ protected:
                                               recon_loc ? &loc_peaks : nullptr,
                                               prec.getCharge(),
                                               tag_modded ? &tag_shift : nullptr);
+          if (res.census && recon_on) cplaced += places.size();
           // -recon_out rows: one per placement.
           if (recon_on)
           {
@@ -2440,6 +2549,32 @@ protected:
       if (!id_hits.empty())
         res.ids.push_back(FASTag::reconSpectrum(spec.getNativeID(), spec.getRT(), prec.getMZ(),
                                                 std::move(id_hits)));
+      if (res.census)
+      {
+        cfacts.enough_peaks = cdiag.enough_peaks;
+        cfacts.n_found = tags.size();
+        cfacts.n_reported = ctags.size();
+        cfacts.n_placed = cplaced;
+        cfacts.count_placements = recon_on;
+        crow.status = FASTag::Census::classify(cfacts);
+        crow.prepared = cdiag.prepared;
+        crow.n_kept = cdiag.n_kept;
+        crow.n_edges = cdiag.n_edges;
+        crow.n_compl = cdiag.n_compl;
+        crow.n_found = tags.size();
+        crow.n_reported = ctags.size();
+        const size_t best = FASTag::Census::bestTag(ctags);
+        if (best != FASTag::Census::kNone)
+        {
+          crow.has_best = true;
+          crow.best = ctags[best];
+          std::vector<std::pair<double, double>> iv;
+          iv.reserve(ctags.size());
+          for (const auto& v : ctags) iv.emplace_back(v.low_mz, v.high_mz);
+          crow.tag_cover = FASTag::Census::tagCover(std::move(iv));
+        }
+        pt.acc.f.census.add(crow);
+      }
       return res;
     };
 
@@ -2481,6 +2616,13 @@ protected:
         gr += g.glyco ? '1' : '0';           gr += '\t';
         gr += g.ions;
         gr += '\n';
+      }
+      // -census: every MS2 spectrum read has a row, tagged or not.
+      if (r.census)
+      {
+        std::string& cr = b.acc.f.census_rows[idx];
+        cr.clear();
+        FASTag::Census::appendRow(cr, r.census_row, spec.getNativeID());
       }
       if (r.buf.empty()) return;  // rbuf is only ever non-empty alongside buf
       b.rows[idx].swap(r.buf);
@@ -2534,7 +2676,7 @@ protected:
     // thread counts. 4 MB, emptied at the end of every block; larger only
     // holds more memory.
     constexpr size_t kWriteChunk = size_t(4) << 20;
-    std::string tsv_pending, rtsv_pending;
+    std::string tsv_pending, rtsv_pending, ctsv_pending;
     auto drain = [](std::ofstream& os, std::string& pending)
     {
       if (pending.empty()) return;
@@ -2560,6 +2702,11 @@ protected:
           if (tp != std::string::npos && b.glyco_rows[i].compare(tp + 1, 1, "1") == 0) ++n_glyco;
           ++n_glyco_scanned;
           b.glyco_rows[i].clear();
+        }
+        if (census_on && !b.acc.f.census_rows[i].empty())
+        {
+          put_rows(ctsv, ctsv_pending, b.acc.f.census_rows[i]);
+          b.acc.f.census_rows[i].clear();
         }
         if (!b.keep[i]) continue;
         put_rows(tsv, tsv_pending, b.rows[i]);
@@ -2604,6 +2751,7 @@ protected:
       }
       drain(tsv, tsv_pending);
       if (recon_on) drain(rtsv, rtsv_pending);
+      if (census_on) drain(ctsv, ctsv_pending);
     };
 
     // Progress reporting (opt-in via -progress), shared across both input paths.
@@ -2890,6 +3038,11 @@ protected:
       drop(tsv, out);
       if (recon_on) drop(rtsv, recon_out);
       if (glyco_on) drop(gtsv, glyco_out);
+      if (census_on)
+      {
+        ctsv.close();
+        census_part.discard();
+      }
     };
     if (work_failed)
     {
@@ -3164,6 +3317,40 @@ protected:
       OPENMS_LOG_INFO << "Glyco: " << n_glyco << " of " << n_glyco_scanned
                       << " processed MS2 spectra carry oxonium evidence -> "
                       << glyco_out << std::endl;
+    }
+
+    // -census (#11): the table is complete; the summary starts with the run
+    // rows (format Versioned: a new 1.12 report) and adds section `census`.
+    if (census_on)
+    {
+      ctsv.close();
+      if (ctsv.fail() || !census_part.commit())
+      {
+        OPENMS_LOG_ERROR << "Failed writing " << census_out << " (disk full?)"
+                         << (census_part.error().empty() ? std::string() : ": " + census_part.error()) << std::endl;
+        return CANNOT_WRITE_OUTPUT_FILE;
+      }
+      const FASTag::Census::Tally& tally = run_acc.f.census;
+      std::vector<FD::Row> rows = FASTag::RunReport::runRows(run_meta, FASTag::RunReport::Emit::Versioned);
+      for (FD::Row& r : FASTag::Census::summaryRows(tally, static_cast<std::uint64_t>(n_total), subsampling))
+        rows.push_back(std::move(r));
+      FASTag::PartFile summary_part(census_summary_out);
+      if (!summary_part.begin() || !FD::writeReport(summary_part.writePath(), rows) || !summary_part.commit())
+      {
+        OPENMS_LOG_ERROR << "Failed writing " << census_summary_out
+                         << (summary_part.error().empty() ? std::string() : ": " + summary_part.error()) << std::endl;
+        return CANNOT_WRITE_OUTPUT_FILE;
+      }
+      const auto count = [&](FASTag::Census::Status st) { return tally.by_status[static_cast<size_t>(st)]; };
+      OPENMS_LOG_INFO << "Census: " << tally.ms2_seen << " MS2 spectra read, "
+                      << count(FASTag::Census::Status::Tagged) + count(FASTag::Census::Status::Placed)
+                      << " with a reported tag ("
+                      << count(FASTag::Census::Status::Placed) << " placed), "
+                      << count(FASTag::Census::Status::NoTags) << " no_tags -> " << census_out
+                      << ", summary -> " << census_summary_out << std::endl;
+      if (tally.n_processed() != n_ms2)
+        OPENMS_LOG_WARN << "Census: " << tally.n_processed() << " processed spectra, but " << n_ms2
+                        << " MS2 spectra were tagged; please report this." << std::endl;
     }
 
     // Report close, then placement processing, then the exports that read
