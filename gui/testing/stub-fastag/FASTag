@@ -6,6 +6,8 @@
 # stderr with FASTAG_PROGRESS lines, and writes -out and every report option
 # it is given, plus <out>.species.tsv / <out>.glyco.tsv for -species / -glyco
 # without a path, as the real CLI does. Deterministic. Controlled by:
+#   STUB_SLEEP_BEFORE=<s>  before writing any output, sleep this long
+#                   (a Cancel while the real CLI is still loading)
 #   STUB_SLEEP=<s>  after writing a partial -out, sleep this long (for Cancel)
 #   STUB_FAIL=<rc>  after writing partial outputs, exit with this code
 #   --help          print a version banner, as the probe expects
@@ -44,6 +46,9 @@ derive() {
 
 echo "Reading spectra (stub)" >&2
 echo "FASTAG_PROGRESS done=0 total=4" >&2
+if [ -n "${STUB_SLEEP_BEFORE:-}" ]; then
+  sleep "$STUB_SLEEP_BEFORE"
+fi
 [ -n "$out" ] && printf 'spectrum\ttag\tlength\tevalue\n' > "$out"
 echo "FASTAG_PROGRESS done=2 total=4" >&2
 if [ -n "${STUB_SLEEP:-}" ]; then

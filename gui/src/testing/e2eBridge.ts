@@ -14,6 +14,8 @@
 //   big         the tags table has 10,000,000 rows (served page by page)
 //   slow        a run goes on until it is cancelled (close guard, busy state)
 //   lastused    the last session ran with -tag_length 7 -species
+//   existing    run01.tags.tsv exists, and the run record says the run of
+//               the last session that wrote it was cancelled
 //
 // window.__fastagE2E gives the specs the mock and a few controls.
 
@@ -75,6 +77,24 @@ export function installE2EBridge(): void {
 
   if (fixture === 'lastused') {
     mock.settings.lastUsed = { tag_length: '7', species: true }
+  }
+  if (fixture === 'existing') {
+    mock.existingOutputs = ['/data/run01.tags.tsv']
+    mock.history = [
+      {
+        id: '1762419600000-1',
+        input: '/data/run01.mzML',
+        outputs: ['/data/run01.tags.tsv'],
+        cwd: '/data',
+        argv: ['/e2e/FASTag', '-in', '/data/run01.mzML', '-out', '/data/run01.tags.tsv'],
+        status: 'cancelled',
+        exitCode: null,
+        message: 'cancelled',
+        start: 1762419600000,
+        end: 1762419690000,
+        cleanup: { removed: [], renamed: [], failed: ['/data/run01.tags.tsv'] }
+      }
+    ]
   }
   if (fixture === 'big') {
     const N = 10_000_000

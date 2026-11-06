@@ -276,6 +276,9 @@ export default function App(): JSX.Element {
     // The backend removed it (or renamed it to .incomplete) after the run
     // stopped part-way: there is nothing left to open.
     removed?: 'removed' | 'renamed'
+    // Opened from disk, and the run record says the run that last wrote it
+    // did not finish (history.rs): withheld as incomplete.
+    recorded?: { status: 'cancelled' | 'failed'; end: number }
   } | null>(null)
   // A batch whose last job wrote no tags: the Tags tab names the job with
   // none, and a done job whose tags can be selected in the batch.
@@ -300,10 +303,18 @@ export default function App(): JSX.Element {
     cancelled: boolean
     at: number
     ms: number
-    changed: string[]
+    // Not known for a run of an earlier session (read from the run record).
+    changed?: string[]
     // Partial outputs the backend removed after a cancel or failure.
     cleaned: number
+    // Read from the run record at start: a run of an earlier session.
+    earlier?: boolean
   } | null>(null)
+  // Outputs of the run about to start that already exist: confirmed before
+  // the run, never after (GUI-DESIGN 6.4). answer(true) runs over them.
+  const [overwriteAsk, setOverwriteAsk] = useState<{ files: string[]; answer: (yes: boolean) => void } | null>(null)
+  // A Run click is checking for existing outputs: a second click waits.
+  const checking = useRef(false)
   // What a screen reader hears of a run: started, finished, stopped. The log
   // is a live region too, but it is display:none while the drawer is shut.
   const [announce, setAnnounce] = useState('')
@@ -402,6 +413,30 @@ export default function App(): JSX.Element {
         if (known.length) setLastUsed(Object.fromEntries(known))
       }
     })
+  }, [])
+
+  // The last run of an earlier session, from the run record: a cancelled or
+  // failed one still reads as such after a restart.
+  useEffect(() => {
+    window.fastag
+      .historyList(1)
+      .then((h) => {
+        const r = h[0]
+        if (!r) return
+        setLastRun(
+          (cur) =>
+            cur ?? {
+              input: r.input,
+              ok: r.status === 'ok',
+              cancelled: r.status === 'cancelled',
+              at: r.end,
+              ms: Math.max(0, r.end - r.start),
+              cleaned: r.cleanup.removed.length,
+              earlier: true
+            }
+        )
+      })
+      .catch(() => {})
   }, [])
 
   // The backend asks before a close or quit kills an active run.
@@ -566,13 +601,35 @@ export default function App(): JSX.Element {
   const withoutInert = (p: Record<string, ParamValue>): Record<string, ParamValue> =>
     Object.fromEntries(Object.entries(p).filter(([name, v]) => v === '' || !inertBecause(name, { ...values, ...p })))
 
+  // What `run` is given for one file.
+  const runParams = (inFile: string, outFile: string, overrides?: Record<string, ParamValue>): Record<string, unknown> => ({
+    in: inFile,
+    out: outFile,
+    params: withoutInert({ ...submittedParams(), ...overrides })
+  })
+
+  // The outputs of these runs that already exist. A failed check asks
+  // nothing: the backend still refuses to run over an unconfirmed file.
+  async function existingOutputs(calls: Record<string, unknown>[]): Promise<string[]> {
+    try {
+      const all = await Promise.all(calls.map((c) => window.fastag.outputsCheck(c)))
+      return [...new Set(all.flatMap((c) => c.existing))]
+    } catch {
+      return []
+    }
+  }
+  const askOverwrite = (files: string[]): Promise<boolean> =>
+    new Promise((answer) => setOverwriteAsk({ files, answer }))
+
   // Run one file and resolve when it finishes. Shared by single and batch runs.
   // Resolves with the -out the CLI was given (RunStarted.out), absolute once
-  // the backend has resolved a relative Output.
+  // the backend has resolved a relative Output. overwrite: the user confirmed
+  // overwriting its existing outputs.
   function runOne(
     inFile: string,
     outFile: string,
-    overrides?: Record<string, ParamValue>
+    overrides?: Record<string, ParamValue>,
+    overwrite = false
   ): Promise<RunResult & { out: string }> {
     let wrote = resolveBeside(inFile, outFile)
     const marked = wrote
@@ -633,7 +690,7 @@ export default function App(): JSX.Element {
         resolve(r)
       }
       window.fastag
-        .run({ in: inFile, out: outFile, params: withoutInert({ ...submittedParams(), ...overrides }) })
+        .run(overwrite ? { ...runParams(inFile, outFile, overrides), overwrite: true } : runParams(inFile, outFile, overrides))
         .then((res) => {
           // Register the awaiter only once the backend hands back the run
           // id; the terminal event carries the same id (see onDone).
@@ -708,10 +765,19 @@ export default function App(): JSX.Element {
     pushLog(`Could not show the results: ${err instanceof Error ? err.message : String(err)}`)
 
   async function run(): Promise<void> {
-    if (!input || !out) return
+    if (!input || !out || checking.current) return
+    checking.current = true
+    let existing: string[]
+    try {
+      existing = await existingOutputs([runParams(input, out)])
+    } finally {
+      checking.current = false
+    }
+    const overwrite = existing.length > 0
+    if (overwrite && !(await askOverwrite(existing))) return
     window.fastag.saveLast(values)
     setLogJob(null)
-    const r = await runOne(input, out)
+    const r = await runOne(input, out, undefined, overwrite)
     setLastRun({
       input,
       ok: r.ok,
@@ -744,12 +810,16 @@ export default function App(): JSX.Element {
     const failedInputs: string[] = []
     batchCancel.current = false
     try {
+      // One question for the whole batch, before its first job.
+      const existing = await existingOutputs(queue.map((j) => runParams(j.input, j.out, perJobOutputs(values, j.out))))
+      const overwrite = existing.length > 0
+      if (overwrite && !(await askOverwrite(existing))) return
       for (let i = 0; i < queue.length; i++) {
         if (batchCancel.current) break
         const job = queue[i]
         setJobs((js) => js.map((j) => (j.input === job.input ? { ...j, status: 'running', reason: undefined } : j)))
         const outputs = perJobOutputs(values, job.out)
-        const r = await runOne(job.input, job.out, outputs)
+        const r = await runOne(job.input, job.out, outputs, overwrite)
         const status: Job['status'] = r.ok ? 'done' : isCancelled(r) ? 'cancelled' : 'failed'
         const reason = status === 'failed' ? failureReason(r) : undefined
         const ms = Date.now() - startedAt.current
@@ -818,7 +888,11 @@ export default function App(): JSX.Element {
   async function openResults(): Promise<void> {
     const p = await window.fastag.pickResults()
     if (p) {
-      setResults((r) => ({ path: p, gen: (r?.gen ?? 0) + 1 }))
+      // A file whose run the record marks cancelled or failed (its cleanup
+      // could not remove it) is not opened as a complete table.
+      const rec = await window.fastag.historyOf(p).catch(() => null)
+      const recorded = rec && rec.status !== 'ok' ? { status: rec.status, end: rec.end } : undefined
+      setResults((r) => ({ path: p, gen: (r?.gen ?? 0) + 1, ...(recorded ? { stale: true, incomplete: true, recorded } : {}) }))
       setBatchMiss(null)
     }
   }
@@ -1100,6 +1174,55 @@ export default function App(): JSX.Element {
           </div>
         </div>
       )}
+      {overwriteAsk && (
+        // Outputs that already exist: asked before the run, never after.
+        <div className="modal-backdrop">
+          <div
+            className="modal"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="overwrite-ask-h"
+            aria-describedby="overwrite-ask-p"
+          >
+            <h2 id="overwrite-ask-h">
+              {overwriteAsk.files.length === 1 ? 'An output already exists' : `${overwriteAsk.files.length} outputs already exist`}
+            </h2>
+            <p id="overwrite-ask-p">
+              The run writes over {overwriteAsk.files.length === 1 ? 'this file' : 'these files'}. If it is cancelled or
+              fails, {overwriteAsk.files.length === 1 ? 'it is' : 'they are'} removed, not restored.
+            </p>
+            <ul className="overwrite-list">
+              {overwriteAsk.files.slice(0, 12).map((f) => (
+                <li key={f}>
+                  <code>{f}</code>
+                </li>
+              ))}
+              {overwriteAsk.files.length > 12 && <li>and {overwriteAsk.files.length - 12} more</li>}
+            </ul>
+            <div className="row actions">
+              <button
+                className="danger"
+                onClick={() => {
+                  setOverwriteAsk(null)
+                  overwriteAsk.answer(true)
+                }}
+              >
+                Overwrite and run
+              </button>
+              <button
+                className="secondary"
+                autoFocus
+                onClick={() => {
+                  setOverwriteAsk(null)
+                  overwriteAsk.answer(false)
+                }}
+              >
+                Don't run
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <header className="appbar">
         <img className="logo" src={logo} alt="" width={22} height={22} />
         <h1>FASTag</h1>
@@ -1183,12 +1306,16 @@ export default function App(): JSX.Element {
                       <span>{baseName(lastRun.input)}</span>
                     </div>
                     <div className="muted">
-                      {lastRun.ok ? 'Finished' : lastRun.cancelled ? 'Cancelled' : 'Failed'} {clock(lastRun.at)} · {duration(lastRun.ms)}
+                      {lastRun.ok ? 'Finished' : lastRun.cancelled ? 'Cancelled' : 'Failed'}{' '}
+                      {lastRun.earlier ? `in an earlier session, ${new Date(lastRun.at).toLocaleString()}` : clock(lastRun.at)} ·{' '}
+                      {duration(lastRun.ms)}
                       {lastRun.cleaned > 0 && ' · partial outputs removed'}
                       {lastRun.ok && evidence.ms2 != null && ` · ${evidence.ms2.toLocaleString('en-US')} MS2 spectra`}
                     </div>
                     {/* The form may be edited since: what this run was given. */}
-                    <code className="last-run-params">{lastRun.changed.length ? lastRun.changed.join(' ') : 'all defaults'}</code>
+                    {lastRun.changed && (
+                      <code className="last-run-params">{lastRun.changed.length ? lastRun.changed.join(' ') : 'all defaults'}</code>
+                    )}
                   </section>
                 )}
 
@@ -1652,8 +1779,18 @@ export default function App(): JSX.Element {
                     </span>
                   ) : (
                     <span>
-                      <strong>Incomplete.</strong> The run stopped while rewriting <code>{results.path}</code>, so the
-                      file may hold only part of a table or none.{' '}
+                      {results.recorded ? (
+                        <>
+                          <strong>Incomplete.</strong> The run that wrote <code>{results.path}</code> was{' '}
+                          {results.recorded.status} ({new Date(results.recorded.end).toLocaleString()}), so the file
+                          may hold only part of a table.{' '}
+                        </>
+                      ) : (
+                        <>
+                          <strong>Incomplete.</strong> The run stopped while rewriting <code>{results.path}</code>, so
+                          the file may hold only part of a table or none.{' '}
+                        </>
+                      )}
                       <button
                         type="button"
                         className="link"

@@ -63,6 +63,29 @@ export interface Cleanup {
   failed: string[]
 }
 
+// The outputs a run would write (as `run` resolves them) and those that
+// already exist: the UI confirms overwriting them before the run.
+export interface OutputsCheck {
+  outputs: string[]
+  existing: string[]
+}
+
+// One run as the backend records it (history.rs, history.jsonl in app data).
+export interface RunRecord {
+  id: string
+  input: string
+  outputs: string[]
+  cwd: string | null
+  argv: string[]
+  status: 'ok' | 'cancelled' | 'failed'
+  exitCode: number | null
+  message: string | null
+  // Unix time in ms.
+  start: number
+  end: number
+  cleanup: Cleanup
+}
+
 export interface RunStarted {
   started: boolean
   reason?: string
@@ -129,7 +152,14 @@ export interface FastagApi {
   saveFile: (defaultPath?: string, formats?: string[]) => Promise<string | null>
   pickResults: () => Promise<string | null>
   pickReport: () => Promise<string | null>
+  // The outputs a run of these params would write, and which exist already.
+  outputsCheck: (params: Record<string, unknown>) => Promise<OutputsCheck>
+  // params.overwrite: the user confirmed overwriting the existing outputs;
+  // without it the backend refuses a run whose outputs exist.
   run: (params: Record<string, unknown>) => Promise<RunStarted>
+  // The recorded runs, newest first; the newest run that wrote a path.
+  historyList: (limit?: number) => Promise<RunRecord[]>
+  historyOf: (path: string) => Promise<RunRecord | null>
   cancel: () => Promise<{ cancelled: boolean }>
   resultsQuery: (path: string, view: ResultsView, offset: number, limit: number) => Promise<ResultsPage>
   // Write the rows of a view, only the named columns, to dest; resolves with

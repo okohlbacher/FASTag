@@ -162,8 +162,8 @@ export const FAQ: FaqEntry[] = [
     symptoms: <>A box in the Tags tab: &quot;Outdated&quot; while a run goes, &quot;Removed&quot; after a run stopped part-way, or &quot;Incomplete&quot; with an Open it anyway link.</>,
     causes: [
       <>Outdated: a run is writing the tags file again, in place. Its tags appear when it finishes.</>,
-      <>Removed: the run was cancelled or failed, and the app removed every file it had written so far (the tags and each report), so none of them can later be read as a complete result. A file that cannot be removed is renamed to <code>&lt;name&gt;.incomplete</code>; the log names each one. A file from an earlier run that this run never wrote is left alone.</>,
-      <>Incomplete: the run was cancelled or failed while it wrote the tags file, and the file is still there. The file may hold only part of the table, or none, and the reports may be missing, partial, or left from an earlier run.</>
+      <>Removed: the run was cancelled or failed, and the app removed every file it had written so far (the tags and each report), so none of them can later be read as a complete result. A file that cannot be removed is renamed to <code>&lt;name&gt;.incomplete</code>; the log names each one. A file that was already there before the run is removed too: the app asked before the run whether to overwrite it, so no report of an earlier run is left next to this run&apos;s missing tags.</>,
+      <>Incomplete: the run was cancelled or failed while it wrote the tags file, and the file is still there. The file may hold only part of the table, or none. The app keeps a record of each run, so a tags file whose run did not finish also opens as Incomplete in a later session.</>
     ],
     fixes: [
       <>Run again to get a complete tags file and reports.</>,

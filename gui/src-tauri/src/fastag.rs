@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tauri::{AppHandle, Emitter, Manager, State};
 
-use crate::outputs;
+use crate::{history, outputs};
 
 // name -> declared type, straight from the tool's own -write_ini. This is the
 // allowlist build_args() validates against. Embedded at compile time from the
@@ -108,6 +108,10 @@ pub struct RunParams {
     out: String,
     #[serde(default)]
     params: Map<String, Value>,
+    // The user confirmed overwriting the outputs that already exist
+    // (outputs_check). Without it a run with an existing output is refused.
+    #[serde(default)]
+    overwrite: bool,
 }
 
 pub struct Resolved {
@@ -591,29 +595,65 @@ fn for_each_line<R: Read, F: FnMut(String)>(stream: R, mut f: F) {
     }
 }
 
-/// Start @p cmd as the run of @p input, which writes @p outputs (see
-/// outputs::resolved_outputs). Its stderr and stdout go to @p sink line by
-/// line; when it has ended, a run that did not finish has its outputs
-/// removed (outputs::cleanup), @p release frees the slot in @p mgr, and the
-/// last thing @p sink gets is RunEmit::Done. Returns the run id.
+/// The files of a run: its input, the outputs it writes (see
+/// outputs::resolved_outputs, as given to the CLI), the child's cwd that
+/// relative ones are joined to, and whether the user confirmed overwriting
+/// the outputs that already exist.
+pub struct RunFiles<'a> {
+    pub input: &'a str,
+    pub outputs: &'a [String],
+    pub cwd: Option<&'a Path>,
+    pub overwrite: bool,
+}
+
+/// How a run ended, for the done event and the run record.
+pub struct RunEnd {
+    pub run_id: u64,
+    pub ok: bool,
+    pub code: Option<i32>,
+    pub message: Option<String>,
+    pub cancelled: bool,
+    pub cleanup: outputs::Cleanup,
+    /// The last LOG_TAIL log lines (for last-failure.log).
+    pub log: Vec<String>,
+}
+
+/// The log lines a run keeps for last-failure.log.
+const LOG_TAIL: usize = 2000;
+
+/// The refusal of a run whose outputs already exist and were not confirmed.
+pub fn exists_reason(existing: &[PathBuf]) -> String {
+    let list: Vec<String> = existing.iter().map(|p| p.display().to_string()).collect();
+    format!("these outputs already exist and overwriting them was not confirmed: {}", list.join(", "))
+}
+
+/// Start @p cmd as the run of @p files. Refused when one of its outputs
+/// already exists and @p files.overwrite is false: an existing file is
+/// confirmed before the run, never after (GUI-DESIGN 6.4). Its stderr and
+/// stdout go to @p sink line by line; when it has ended, a run that did not
+/// finish has every file at its output paths removed (outputs::cleanup),
+/// @p finish gets how it ended (it records the run and frees the slot in
+/// @p mgr), and the last thing @p sink gets is RunEmit::Done. Returns the run
+/// id.
 pub fn start_run(
     mgr: &RunManager,
     mut cmd: Command,
-    input: &str,
-    outputs: &[String],
-    cwd: Option<&Path>,
+    files: RunFiles<'_>,
     sink: Sink,
-    release: Box<dyn FnOnce(u64) + Send>,
+    finish: Box<dyn FnOnce(&RunEnd) + Send>,
 ) -> Result<u64, String> {
     if mgr.current.lock().map(|c| c.is_some()).unwrap_or(true) {
         return Err("a run is already in progress".into());
     }
-    // Before the child can write anything: which outputs already exist.
-    let before = outputs::snapshot(outputs, cwd);
-    let input_path = match cwd {
-        Some(d) if Path::new(input).is_relative() => d.join(input),
-        _ => PathBuf::from(input),
+    let paths = outputs::resolve(files.outputs, files.cwd);
+    let input_path = match files.cwd {
+        Some(d) if Path::new(files.input).is_relative() => d.join(files.input),
+        _ => PathBuf::from(files.input),
     };
+    let existing = outputs::existing(&paths, &input_path);
+    if !files.overwrite && !existing.is_empty() {
+        return Err(exists_reason(&existing));
+    }
     let mut child = cmd.spawn().map_err(|e| e.to_string())?;
 
     let run_id = mgr.seq.fetch_add(1, Ordering::SeqCst) + 1;
@@ -628,6 +668,22 @@ pub fn start_run(
         cancelled: cancelled.clone(),
         reaped: reaped.clone(),
     });
+
+    // The tail of the log, for last-failure.log.
+    let tail = Arc::new(Mutex::new(std::collections::VecDeque::<String>::new()));
+    let sink: Sink = {
+        let tail = tail.clone();
+        Arc::new(move |e| {
+            if let RunEmit::Log(l) = &e {
+                let mut t = tail.lock().unwrap_or_else(|p| p.into_inner());
+                if t.len() == LOG_TAIL {
+                    t.pop_front();
+                }
+                t.push_back(l.clone());
+            }
+            sink(e)
+        })
+    };
 
     // One reader thread per stream (stderr carries the progress contract; stdout
     // is drained as log so a full pipe can never block the child).
@@ -645,9 +701,10 @@ pub fn start_run(
     });
 
     // Coordinator: once both streams hit EOF the process has ended; reap it,
-    // remove what an unfinished run wrote, release the slot and emit exactly
-    // one terminal event. The slot is released after the cleanup, so a quit
-    // that waits for an idle RunManager never cuts the cleanup short.
+    // remove what an unfinished run left, record the run, release the slot
+    // and emit exactly one terminal event. The slot is released after the
+    // cleanup, so a quit that waits for an idle RunManager never cuts the
+    // cleanup short.
     std::thread::spawn(move || {
         let _ = t_err.join();
         let _ = t_out.join();
@@ -664,18 +721,57 @@ pub fn start_run(
         // A cancel that lost the race to a clean exit is not a cancellation.
         let was_cancelled = !ok && cancelled.load(Ordering::SeqCst);
         let message = if was_cancelled { Some("cancelled".to_string()) } else { message };
-        let cleanup = if ok { outputs::Cleanup::default() } else { outputs::cleanup(&before, &input_path) };
-        release(run_id);
+        let cleanup = if ok { outputs::Cleanup::default() } else { outputs::cleanup(&paths, &input_path) };
+        let log: Vec<String> = tail.lock().map(|t| t.iter().cloned().collect()).unwrap_or_default();
+        let end = RunEnd { run_id, ok, code, message, cancelled: was_cancelled, cleanup, log };
+        finish(&end);
         sink(RunEmit::Done(serde_json::json!({
-            "runId": run_id,
-            "ok": ok,
-            "code": code,
-            "message": message,
-            "cancelled": was_cancelled,
-            "cleanup": cleanup,
+            "runId": end.run_id,
+            "ok": end.ok,
+            "code": end.code,
+            "message": end.message,
+            "cancelled": end.cancelled,
+            "cleanup": end.cleanup,
         })));
     });
     Ok(run_id)
+}
+
+/// The run record of a run that ended as @p end (history.rs).
+pub fn record_of(
+    files: &RunFiles<'_>,
+    argv: &[String],
+    start: u64,
+    end: &RunEnd,
+) -> history::RunRecord {
+    history::RunRecord {
+        id: format!("{start}-{}", end.run_id),
+        input: files.input.to_string(),
+        outputs: files.outputs.to_vec(),
+        cwd: files.cwd.map(|d| d.display().to_string()),
+        argv: argv.to_vec(),
+        status: if end.ok {
+            history::Status::Ok
+        } else if end.cancelled {
+            history::Status::Cancelled
+        } else {
+            history::Status::Failed
+        },
+        exit_code: end.code,
+        message: end.message.clone(),
+        start,
+        end: history::now_ms(),
+        cleanup: end.cleanup.clone(),
+    }
+}
+
+/// Append the record of a run to @p dir/history.jsonl and, for a run that
+/// did not finish, write its log to @p dir/last-failure.log.
+pub fn record_run(dir: &Path, rec: &history::RunRecord, log: &[String]) {
+    let _ = history::append(dir, rec);
+    if rec.status != history::Status::Ok {
+        let _ = history::write_failure_log(dir, rec, log);
+    }
 }
 
 /// Free the slot of run @p run_id (a later run may already hold it).
@@ -684,6 +780,29 @@ pub fn release_slot(mgr: &RunManager, run_id: u64) {
     if cur.as_ref().is_some_and(|c| c.run_id == run_id) {
         *cur = None;
     }
+}
+
+#[derive(Serialize)]
+pub struct OutputsCheck {
+    // Every output of the run, absolute as the CLI's cwd makes them.
+    outputs: Vec<String>,
+    // Those that already hold a file: the UI asks before overwriting them.
+    existing: Vec<String>,
+}
+
+/// The outputs a run of @p params would write, and those already on disk,
+/// resolved exactly as `run` resolves them (build_args, the input's folder).
+#[tauri::command]
+pub fn outputs_check(params: RunParams) -> OutputsCheck {
+    let args = build_args(&params);
+    let cwd = base_dir(&params.input).filter(|d| d.is_dir());
+    let paths = outputs::resolve(&outputs::resolved_outputs(&args), cwd.as_deref());
+    let input = match &cwd {
+        Some(d) if Path::new(&params.input).is_relative() => d.join(&params.input),
+        _ => PathBuf::from(&params.input),
+    };
+    let show = |v: &[PathBuf]| v.iter().map(|p| p.display().to_string()).collect();
+    OutputsCheck { existing: show(&outputs::existing(&paths, &input)), outputs: show(&paths) }
 }
 
 #[tauri::command]
@@ -724,6 +843,7 @@ pub fn run(app: AppHandle, state: State<'_, RunManager>, params: RunParams) -> R
         cmd.env("FASTAG_TAXONOMY_DIR", t);
     }
     let outputs = outputs::resolved_outputs(&args);
+    let start = history::now_ms();
     // Emitting to a closed window is a harmless no-op.
     let a = app.clone();
     let sink: Sink = Arc::new(move |e| {
@@ -735,11 +855,20 @@ pub fn run(app: AppHandle, state: State<'_, RunManager>, params: RunParams) -> R
             RunEmit::Done(v) => a.emit("fastag:done", v),
         };
     });
+    // When the run has ended: record it (history.rs), then free the slot.
     let a = app.clone();
-    let release = Box::new(move |id: u64| release_slot(&a.state::<RunManager>(), id));
+    let (rec_input, rec_outputs, rec_cwd, rec_argv) = (params.input.clone(), outputs.clone(), cwd.clone(), command.clone());
+    let finish = Box::new(move |end: &RunEnd| {
+        if let Some(d) = history::dir(&a) {
+            let files = RunFiles { input: &rec_input, outputs: &rec_outputs, cwd: rec_cwd.as_deref(), overwrite: true };
+            record_run(&d, &record_of(&files, &rec_argv, start, end), &end.log);
+        }
+        release_slot(&a.state::<RunManager>(), end.run_id);
+    });
+    let files = RunFiles { input: &params.input, outputs: &outputs, cwd: cwd.as_deref(), overwrite: params.overwrite };
     // A spawn failure is known synchronously: report it as a non-start so the
     // frontend reports "FASTag could not start" and settles cleanly.
-    match start_run(&state, cmd, &params.input, &outputs, cwd.as_deref(), sink, release) {
+    match start_run(&state, cmd, files, sink, finish) {
         Ok(run_id) => RunStarted {
             started: true,
             run_id: Some(run_id),
@@ -1049,11 +1178,13 @@ mod tests {
             events: mpsc::Receiver<String>,
             done: mpsc::Receiver<Value>,
             outputs: Vec<String>,
+            // The app-data folder the run is recorded in.
+            hist: PathBuf,
         }
 
         /// Start the stub as the GUI's `run` command does: build_args, the
-        /// resolved outputs, a process group of its own.
-        fn start(params: &str, env: &[(&str, &str)]) -> Run {
+        /// resolved outputs, a process group of its own, the run record.
+        fn start(params: &str, env: &[(&str, &str)]) -> Result<Run, String> {
             let p: RunParams = serde_json::from_str(params).unwrap();
             let args = build_args(&p);
             let mut cmd = Command::new("sh");
@@ -1063,6 +1194,7 @@ mod tests {
             }
             new_process_group(&mut cmd);
             let outputs = outputs::resolved_outputs(&args);
+            let hist = Path::new(&p.input).with_extension("appdata");
             let mgr = Arc::new(RunManager::default());
             let (etx, events) = mpsc::channel();
             let (dtx, done) = mpsc::channel();
@@ -1080,8 +1212,16 @@ mod tests {
                 }
             });
             let m = mgr.clone();
-            start_run(&mgr, cmd, &p.input, &outputs, None, sink, Box::new(move |id| release_slot(&m, id))).unwrap();
-            Run { mgr, events, done, outputs }
+            let (input, outs, h) = (p.input.clone(), outputs.clone(), hist.clone());
+            let argv: Vec<String> = std::iter::once("FASTag".to_string()).chain(args.iter().cloned()).collect();
+            let finish = Box::new(move |end: &RunEnd| {
+                let files = RunFiles { input: &input, outputs: &outs, cwd: None, overwrite: true };
+                record_run(&h, &record_of(&files, &argv, 1, end), &end.log);
+                release_slot(&m, end.run_id);
+            });
+            let files = RunFiles { input: &p.input, outputs: &outputs, cwd: None, overwrite: p.overwrite };
+            start_run(&mgr, cmd, files, sink, finish)?;
+            Ok(Run { mgr, events, done, outputs, hist })
         }
 
         fn wait_for(path: &Path) {
@@ -1094,6 +1234,26 @@ mod tests {
             panic!("{} was never written", path.display());
         }
 
+        fn wait_for_line(r: &Run, line: &str) {
+            loop {
+                let l = r.events.recv_timeout(Duration::from_secs(10)).expect("the stub never printed it");
+                if l == line {
+                    return;
+                }
+            }
+        }
+
+        fn cancel_of(mgr: &RunManager) {
+            let cur = mgr.current.lock().unwrap();
+            assert!(kill_run(cur.as_ref().unwrap(), true));
+        }
+
+        /// The newest record and the failure log of @p r.
+        fn recorded(r: &Run) -> (history::RunRecord, Option<String>) {
+            let rec = history::list(&r.hist, 1).pop().expect("the run was not recorded");
+            (rec, std::fs::read_to_string(r.hist.join(history::FAILURE_LOG)).ok())
+        }
+
         #[test]
         fn a_cancelled_run_leaves_no_output_at_any_resolved_path() {
             let d = dir("cancel");
@@ -1104,7 +1264,7 @@ mod tests {
                 r#"{{"in":"{}","out":"a.tags.tsv","params":{{"species":true,"digest_out":"a.digest.tsv"}}}}"#,
                 input.display()
             );
-            let r = start(&params, &[("STUB_SLEEP", "30")]);
+            let r = start(&params, &[("STUB_SLEEP", "30")]).unwrap();
             assert_eq!(
                 r.outputs,
                 vec![
@@ -1115,10 +1275,7 @@ mod tests {
             );
             wait_for(&out); // the partial table is on disk
             assert!(r.mgr.is_busy());
-            {
-                let cur = r.mgr.current.lock().unwrap();
-                assert!(kill_run(cur.as_ref().unwrap(), true));
-            }
+            cancel_of(&r.mgr);
             let done = r.done.recv_timeout(Duration::from_secs(10)).expect("no done event");
             assert_eq!(done["cancelled"], true);
             assert_eq!(done["ok"], false);
@@ -1131,33 +1288,104 @@ mod tests {
             assert!(!r.mgr.is_busy());
             let log: Vec<String> = r.events.try_iter().collect();
             assert!(log.iter().any(|l| l == "progress 2/4"), "{log:?}");
+            // The record marks the run cancelled, before the done event.
+            let (rec, faillog) = recorded(&r);
+            assert_eq!(rec.status, history::Status::Cancelled);
+            assert_eq!(rec.outputs, r.outputs);
+            assert_eq!(rec.cleanup.removed, vec![out.display().to_string()]);
+            assert_eq!(history::of_output(&r.hist, &out).unwrap().status, history::Status::Cancelled);
+            let faillog = faillog.expect("no last-failure.log");
+            assert!(faillog.contains("status: Cancelled") && faillog.contains("Reading spectra (stub)"), "{faillog}");
+            let _ = std::fs::remove_dir_all(&d);
+        }
+
+        // Replaces a_failed_run_removes_its_partial_reports_but_keeps_an_earlier_file,
+        // whose earlier file was not a resolved output of that run: here the
+        // earlier files sit at resolved paths.
+        #[test]
+        fn a_run_over_existing_outputs_is_refused_unless_confirmed() {
+            let d = dir("refuse");
+            let input = d.join("a.mzML");
+            std::fs::write(&input, "spectra").unwrap();
+            let out = d.join("a.tags.tsv");
+            let digest = d.join("a.digest.tsv");
+            std::fs::write(&out, "earlier table\n").unwrap();
+            std::fs::write(&digest, "earlier digest\n").unwrap();
+            let params = format!(
+                r#"{{"in":"{}","out":"a.tags.tsv","params":{{"digest_out":"a.digest.tsv","label_out":"a.label.tsv"}}}}"#,
+                input.display()
+            );
+            let err = start(&params, &[]).err().expect("ran over existing outputs without a confirmation");
+            assert_eq!(err, exists_reason(&[out.clone(), digest.clone()]));
+            // Nothing ran: the earlier files are as they were, no record.
+            assert_eq!(std::fs::read_to_string(&out).unwrap(), "earlier table\n");
+            assert_eq!(std::fs::read_to_string(&digest).unwrap(), "earlier digest\n");
+            assert!(!d.join("a.label.tsv").exists());
+            assert!(history::list(&input.with_extension("appdata"), 1).is_empty());
             let _ = std::fs::remove_dir_all(&d);
         }
 
         #[test]
-        fn a_failed_run_removes_its_partial_reports_but_keeps_an_earlier_file() {
+        fn a_failed_confirmed_rerun_leaves_no_file_at_any_resolved_path() {
             let d = dir("fail");
             let input = d.join("a.mzML");
             std::fs::write(&input, "spectra").unwrap();
-            // An earlier result the stub does not write: kept.
-            let earlier = d.join("a.massgap.tsv");
-            std::fs::write(&earlier, "earlier\n").unwrap();
+            let out = d.join("a.tags.tsv");
+            let digest = d.join("a.digest.tsv");
+            std::fs::write(&out, "earlier table\n").unwrap();
+            std::fs::write(&digest, "earlier digest\n").unwrap();
             let params = format!(
-                r#"{{"in":"{}","out":"a.tags.tsv","params":{{"glyco":true,"label_out":"a.label.tsv"}}}}"#,
+                r#"{{"in":"{}","out":"a.tags.tsv","overwrite":true,"params":{{"glyco":true,"label_out":"a.label.tsv","digest_out":"a.digest.tsv"}}}}"#,
                 input.display()
             );
-            let r = start(&params, &[("STUB_FAIL", "3")]);
+            let r = start(&params, &[("STUB_FAIL", "3")]).unwrap();
             let done = r.done.recv_timeout(Duration::from_secs(10)).expect("no done event");
             assert_eq!(done["ok"], false);
             assert_eq!(done["cancelled"], false);
             assert_eq!(done["code"], 3);
-            let removed: Vec<String> =
-                serde_json::from_value(done["cleanup"]["removed"].clone()).unwrap();
-            assert_eq!(removed.len(), 3, "{removed:?}");
+            let removed: Vec<String> = serde_json::from_value(done["cleanup"]["removed"].clone()).unwrap();
+            assert_eq!(removed.len(), 4, "{removed:?}");
+            assert_eq!(r.outputs.len(), 4);
             for p in &r.outputs {
                 assert!(!Path::new(p).exists(), "{p} survived the failure");
             }
-            assert!(earlier.exists());
+            assert!(input.exists());
+            let (rec, faillog) = recorded(&r);
+            assert_eq!(rec.status, history::Status::Failed);
+            assert_eq!(rec.exit_code, Some(3));
+            assert!(faillog.expect("no last-failure.log").contains("Error: stub told to fail"));
+            let _ = std::fs::remove_dir_all(&d);
+        }
+
+        #[test]
+        fn a_cancel_before_the_cli_writes_removes_the_confirmed_earlier_outputs() {
+            let d = dir("early");
+            let input = d.join("a.mzML");
+            std::fs::write(&input, "spectra").unwrap();
+            let out = d.join("a.tags.tsv");
+            let digest = d.join("a.digest.tsv");
+            std::fs::write(&out, "earlier table\n").unwrap();
+            std::fs::write(&digest, "earlier digest\n").unwrap();
+            let params = format!(
+                r#"{{"in":"{}","out":"a.tags.tsv","overwrite":true,"params":{{"digest_out":"a.digest.tsv"}}}}"#,
+                input.display()
+            );
+            // Cancelled while loading: the CLI has opened no output yet.
+            let r = start(&params, &[("STUB_SLEEP_BEFORE", "30")]).unwrap();
+            wait_for_line(&r, "Reading spectra (stub)");
+            assert_eq!(std::fs::read_to_string(&out).unwrap(), "earlier table\n");
+            cancel_of(&r.mgr);
+            let done = r.done.recv_timeout(Duration::from_secs(10)).expect("no done event");
+            assert_eq!(done["cancelled"], true);
+            assert_eq!(
+                done["cleanup"]["removed"],
+                serde_json::json!([out.display().to_string(), digest.display().to_string()])
+            );
+            for p in &r.outputs {
+                assert!(!Path::new(p).exists(), "{p} survived the cancel");
+            }
+            assert!(input.exists());
+            assert_eq!(recorded(&r).0.status, history::Status::Cancelled);
             let _ = std::fs::remove_dir_all(&d);
         }
 
@@ -1167,13 +1395,17 @@ mod tests {
             let input = d.join("a.mzML");
             std::fs::write(&input, "spectra").unwrap();
             let params = format!(r#"{{"in":"{}","out":"a.tags.tsv","params":{{"species":true}}}}"#, input.display());
-            let r = start(&params, &[]);
+            let r = start(&params, &[]).unwrap();
             let done = r.done.recv_timeout(Duration::from_secs(10)).expect("no done event");
             assert_eq!(done["ok"], true);
             assert_eq!(done["cleanup"], serde_json::json!({"removed": [], "renamed": [], "failed": []}));
             for p in &r.outputs {
                 assert!(Path::new(p).exists(), "{p} missing after a finished run");
             }
+            let (rec, faillog) = recorded(&r);
+            assert_eq!(rec.status, history::Status::Ok);
+            assert_eq!(rec.exit_code, Some(0));
+            assert!(faillog.is_none(), "a finished run writes no last-failure.log");
             let _ = std::fs::remove_dir_all(&d);
         }
 
@@ -1183,9 +1415,10 @@ mod tests {
             let input = d.join("a.mzML");
             std::fs::write(&input, "spectra").unwrap();
             let params = format!(r#"{{"in":"{}","out":"a.tags.tsv"}}"#, input.display());
-            let r = start(&params, &[("STUB_SLEEP", "30")]);
+            let r = start(&params, &[("STUB_SLEEP", "30")]).unwrap();
             let sink: Sink = Arc::new(|_| {});
-            let again = start_run(&r.mgr, Command::new("true"), "x", &[], None, sink, Box::new(|_| {}));
+            let files = RunFiles { input: "x", outputs: &[], cwd: None, overwrite: false };
+            let again = start_run(&r.mgr, Command::new("true"), files, sink, Box::new(|_| {}));
             assert_eq!(again.unwrap_err(), "a run is already in progress");
             kill_current_of(&r.mgr);
             let _ = r.done.recv_timeout(Duration::from_secs(10));

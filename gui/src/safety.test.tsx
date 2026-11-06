@@ -9,7 +9,7 @@ import App from './App'
 import ResultsTable, { MAX_DOM_ROWS } from './ResultsTable'
 import { installMockBridge, type MockBridge } from './testing/mockBridge'
 import { applyLastUsed, formValue } from './testing/lastUsed'
-import type { ResultsPage } from './types'
+import type { ResultsPage, RunRecord } from './types'
 
 async function renderApp(): Promise<HTMLElement> {
   const { container } = render(<App />)
@@ -207,6 +207,121 @@ describe('P0a: partial outputs after a cancel or failure', () => {
       mock.emitDone({ ok: false, code: null, cancelled: true, runId: 1, cleanup: { removed: ['/d/a.tags.tsv'], renamed: [], failed: [] } })
     )
     expect(c.querySelector('li.job.cancelled')?.textContent).toContain('Cancelled by you, partial outputs removed')
+  })
+})
+
+describe('P0a: existing outputs are confirmed before the run, never after', () => {
+  const rec = (status: 'ok' | 'cancelled' | 'failed', out: string): RunRecord => ({
+    id: '1-1',
+    input: '/d/a.mzML',
+    outputs: [out],
+    cwd: '/d',
+    argv: ['FASTag', '-in', '/d/a.mzML', '-out', out],
+    status,
+    exitCode: status === 'ok' ? 0 : null,
+    message: status === 'cancelled' ? 'cancelled' : null,
+    start: Date.UTC(2026, 10, 5, 9, 0, 0),
+    end: Date.UTC(2026, 10, 5, 9, 1, 30),
+    cleanup: { removed: status === 'ok' ? [] : ['/d/a.digest.tsv'], renamed: [], failed: [] }
+  })
+
+  it('asks before a run over an existing -out; "Don\'t run" runs nothing', async () => {
+    const mock = installMockBridge()
+    mock.existingOutputs = ['/d/a.tags.tsv']
+    await renderApp()
+    await pickSingle(mock, '/d/a.mzML')
+    await click(runButton())
+    const ask = screen.getByRole('alertdialog')
+    expect(ask.textContent).toContain('An output already exists')
+    expect(ask.textContent).toContain('/d/a.tags.tsv')
+    expect(ask.textContent).toContain('If it is cancelled or fails, it is removed, not restored.')
+    expect(mock.runCalls).toHaveLength(0)
+    await click(within(ask).getByRole('button', { name: "Don't run" }))
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(mock.runCalls).toHaveLength(0)
+    expect(mock.savedLast).toHaveLength(0)
+  })
+
+  it('"Overwrite and run" sends overwrite: true; with nothing on disk no question and no overwrite flag', async () => {
+    const mock = installMockBridge()
+    mock.existingOutputs = ['/d/a.tags.tsv']
+    await renderApp()
+    await pickSingle(mock, '/d/a.mzML')
+    await click(runButton())
+    await click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Overwrite and run' }))
+    expect(mock.runCalls).toHaveLength(1)
+    expect(mock.runCalls[0].overwrite).toBe(true)
+    // The check saw what run() is given.
+    expect(mock.outputsCheckCalls[0]).toEqual({ in: '/d/a.mzML', out: mock.runCalls[0].out, params: mock.runCalls[0].params })
+    await act(async () => mock.emitDone({ ok: true, code: 0, runId: 1 }))
+    mock.existingOutputs = []
+    await click(runButton())
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(mock.runCalls).toHaveLength(2)
+    expect('overwrite' in mock.runCalls[1]).toBe(false)
+  })
+
+  it('a batch asks once, for the existing outputs of all its jobs, before its first job', async () => {
+    const mock = installMockBridge()
+    mock.existingOutputs = ['/d/a.tags.tsv', '/d/c.tags.tsv']
+    await renderApp()
+    await addBatch(mock, ['/d/a.mzML', '/d/b.mzML', '/d/c.mzML'])
+    await click(screen.getByRole('button', { name: /^Run 3 remaining files$/ }))
+    const ask = screen.getByRole('alertdialog')
+    expect(ask.textContent).toContain('2 outputs already exist')
+    expect(ask.textContent).toContain('/d/a.tags.tsv')
+    expect(ask.textContent).toContain('/d/c.tags.tsv')
+    expect(mock.outputsCheckCalls.map((c) => c.in)).toEqual(['/d/a.mzML', '/d/b.mzML', '/d/c.mzML'])
+    expect(mock.runCalls).toHaveLength(0)
+    await click(within(ask).getByRole('button', { name: 'Overwrite and run' }))
+    expect(mock.runCalls).toHaveLength(1)
+    expect(mock.runCalls[0].overwrite).toBe(true)
+  })
+
+  it('declining a batch leaves its jobs queued and Run enabled', async () => {
+    const mock = installMockBridge()
+    mock.existingOutputs = ['/d/a.tags.tsv']
+    const c = await renderApp()
+    await addBatch(mock, ['/d/a.mzML'])
+    await click(screen.getByRole('button', { name: /^Run 1 remaining file$/ }))
+    await click(within(screen.getByRole('alertdialog')).getByRole('button', { name: "Don't run" }))
+    expect(mock.runCalls).toHaveLength(0)
+    expect(c.querySelector('li.job.queued')).not.toBeNull()
+    expect((screen.getByRole('button', { name: /^Run 1 remaining file$/ }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('after a restart, the last run reads as cancelled from the run record', async () => {
+    const mock = installMockBridge()
+    mock.history = [rec('cancelled', '/d/a.tags.tsv')]
+    const c = await renderApp()
+    const last = c.querySelector('.last-run')?.textContent ?? ''
+    expect(last).toContain('a.mzML')
+    expect(last).toMatch(/Cancelled in an earlier session, .* · 1:30 · partial outputs removed/)
+    expect(c.querySelector('.last-run-name.cancelled')).not.toBeNull()
+    // Its parameters are not known: no "all defaults" claim.
+    expect(c.querySelector('.last-run-params')).toBeNull()
+  })
+
+  it('a tags file whose recorded run was cancelled opens as incomplete, not as a table', async () => {
+    const mock = installMockBridge()
+    mock.history = [rec('cancelled', '/d/a.tags.tsv')]
+    const c = await renderApp()
+    mock.nextPickResults = '/d/a.tags.tsv'
+    await click(screen.getByRole('button', { name: 'Open a tags TSV…' }))
+    const panel = c.querySelector('.tabpanel')?.textContent ?? ''
+    expect(panel).toContain('The run that wrote /d/a.tags.tsv was cancelled')
+    expect(mock.resultsQueryCalls).toHaveLength(0)
+    await click(screen.getByRole('button', { name: 'Open it anyway' }))
+    await screen.findByText('Showing 3 of 3')
+  })
+
+  it('a tags file whose recorded run finished opens as usual', async () => {
+    const mock = installMockBridge()
+    mock.history = [rec('ok', '/d/a.tags.tsv')]
+    await renderApp()
+    mock.nextPickResults = '/d/a.tags.tsv'
+    await click(screen.getByRole('button', { name: 'Open a tags TSV…' }))
+    await screen.findByText('Showing 3 of 3')
   })
 })
 

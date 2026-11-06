@@ -1,6 +1,7 @@
 mod browser;
 mod close_guard;
 mod fastag;
+mod history;
 mod outputs;
 mod report;
 mod settings;
@@ -112,6 +113,9 @@ pub fn run() {
             fastag::probe,
             fastag::run,
             fastag::cancel,
+            fastag::outputs_check,
+            history::history_list,
+            history::history_of,
             close_guard::set_ui_busy,
             close_guard::close_answer,
             browser::results_query,

@@ -2,15 +2,15 @@
 // cleanup when the run is cancelled or fails (GUI-DESIGN 6.4, P0a).
 //
 // The argv is not changed: the CLI writes its outputs in place, exactly as a
-// cluster user's command line would. When a run does not finish, every output
-// it was going to write is deleted, or renamed to <name>.incomplete if it
-// cannot be deleted, so no truncated file is later read as a result. A file
-// that existed before the run and that the run did not touch is left alone.
+// cluster user's command line would. A file already at an output path is
+// confirmed before the run (existing, and RunParams.overwrite), never after.
+// When a run does not finish, every file at its output paths is deleted, or
+// renamed to <name>.incomplete if it cannot be deleted, so no truncated file,
+// and no report of an earlier run, is later read as this run's result.
 
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// The output-file options of FASTag (FASTag.cpp registerOutputFile_), in the
 /// order the CLI lists them in its own output-collision check.
@@ -76,42 +76,34 @@ pub fn resolved_outputs(args: &[String]) -> Vec<String> {
     paths
 }
 
-/// What an output path held before the run.
-#[derive(Debug, Clone, PartialEq)]
-pub enum Before {
-    /// Nothing at the path.
-    Absent,
-    /// A regular file of this size and modification time.
-    File(u64, Option<SystemTime>),
-    /// Something that is not a regular file (/dev/null, a folder): never touched.
-    Other,
-}
-
-fn state_of(p: &Path) -> Before {
-    match std::fs::metadata(p) {
-        Err(_) => Before::Absent,
-        Ok(m) if m.is_file() => Before::File(m.len(), m.modified().ok()),
-        Ok(_) => Before::Other,
-    }
-}
-
-/// The state of each output before the child is started.
-pub fn snapshot(paths: &[String], cwd: Option<&Path>) -> Vec<(PathBuf, Before)> {
+/// Every output path as the child sees it: a relative one joined to @p cwd.
+pub fn resolve(paths: &[String], cwd: Option<&Path>) -> Vec<PathBuf> {
     paths
         .iter()
-        .map(|p| {
-            let path = match cwd {
-                Some(d) if Path::new(p).is_relative() => d.join(p),
-                _ => PathBuf::from(p),
-            };
-            let before = state_of(&path);
-            (path, before)
+        .map(|p| match cwd {
+            Some(d) if Path::new(p).is_relative() => d.join(p),
+            _ => PathBuf::from(p),
         })
         .collect()
 }
 
-/// What the cleanup did, for the done event and the log.
-#[derive(Debug, Default, Serialize, PartialEq)]
+fn is_regular_file(p: &Path) -> bool {
+    std::fs::metadata(p).is_ok_and(|m| m.is_file())
+}
+
+fn same_file(a: &Path, b: &Path) -> bool {
+    a == b || matches!((a.canonicalize(), b.canonicalize()), (Ok(x), Ok(y)) if x == y)
+}
+
+/// The outputs that already hold a regular file before the run: the GUI asks
+/// before it overwrites them (GUI-DESIGN 6.4, "a file that already exists is
+/// confirmed before the run, never after"). @p input is never an output.
+pub fn existing(paths: &[PathBuf], input: &Path) -> Vec<PathBuf> {
+    paths.iter().filter(|p| is_regular_file(p) && !same_file(p, input)).cloned().collect()
+}
+
+/// What the cleanup did, for the done event, the log and the run record.
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Cleanup {
     /// Deleted.
     pub removed: Vec<String>,
@@ -135,29 +127,28 @@ pub fn incomplete_name(p: &Path) -> PathBuf {
     PathBuf::from(s)
 }
 
-/// Remove the outputs a run that did not finish left behind: every regular
-/// file at an output path, except one that was there before the run and is
-/// unchanged (same size and mtime). @p input is never touched.
-pub fn cleanup(snap: &[(PathBuf, Before)], input: &Path) -> Cleanup {
-    cleanup_with(snap, input, |p| std::fs::remove_file(p), |a, b| std::fs::rename(a, b))
+/// Remove what a run that did not finish leaves at its output paths: every
+/// regular file at one of @p paths. A file that was there before the run was
+/// confirmed for overwriting before it started (start_run refuses otherwise),
+/// so it is this run's output too: after a cancel or failure no file, of this
+/// run or an earlier one, is left at a resolved output path, and no report of
+/// an earlier run sits next to this run's missing table. @p input and
+/// anything that is not a regular file (/dev/null, a folder) are never
+/// touched.
+pub fn cleanup(paths: &[PathBuf], input: &Path) -> Cleanup {
+    cleanup_with(paths, input, |p| std::fs::remove_file(p), |a, b| std::fs::rename(a, b))
 }
 
 pub fn cleanup_with(
-    snap: &[(PathBuf, Before)],
+    paths: &[PathBuf],
     input: &Path,
     remove: impl Fn(&Path) -> std::io::Result<()>,
     rename: impl Fn(&Path, &Path) -> std::io::Result<()>,
 ) -> Cleanup {
     let mut c = Cleanup::default();
-    let same_as_input = |p: &Path| p == input || matches!((p.canonicalize(), input.canonicalize()), (Ok(a), Ok(b)) if a == b);
-    for (path, before) in snap {
-        if *before == Before::Other || same_as_input(path) {
+    for path in paths {
+        if !is_regular_file(path) || same_file(path, input) {
             continue;
-        }
-        let now = state_of(path);
-        let Before::File(..) = now else { continue };
-        if now == *before {
-            continue; // there before the run and not written by it
         }
         let shown = path.display().to_string();
         if remove(path).is_ok() {
@@ -210,8 +201,24 @@ mod tests {
     }
 
     #[test]
-    fn cleanup_removes_new_and_rewritten_files_but_keeps_untouched_ones() {
-        let d = tmp("keep");
+    fn existing_lists_the_files_to_confirm_but_never_the_input() {
+        let d = tmp("existing");
+        let earlier = d.join("a.tags.tsv");
+        let input = d.join("a.mzML");
+        std::fs::write(&earlier, "an earlier result\n").unwrap();
+        std::fs::write(&input, "spectra").unwrap();
+        let paths = resolve(&v(&["a.tags.tsv", "a.digest.tsv", "a.mzML"]), Some(&d));
+        assert_eq!(existing(&paths, &input), vec![earlier.clone()]);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    // Replaces cleanup_removes_new_and_rewritten_files_but_keeps_untouched_ones:
+    // a file that was there before the run was confirmed for overwriting, so
+    // it goes too, whether the run rewrote it, truncated it or never got to it
+    // (no earlier report is left next to this run's missing table).
+    #[test]
+    fn cleanup_removes_every_file_at_an_output_path_but_never_the_input() {
+        let d = tmp("all");
         let new = d.join("new.tsv");
         let rewritten = d.join("rewritten.tsv");
         let untouched = d.join("untouched.tsv");
@@ -220,16 +227,17 @@ mod tests {
         std::fs::write(&rewritten, "old complete table\n").unwrap();
         std::fs::write(&untouched, "an earlier result\n").unwrap();
         std::fs::write(&input, "spectra").unwrap();
-        let paths: Vec<String> = [&new, &rewritten, &untouched, &never, &input].iter().map(|p| p.display().to_string()).collect();
-        let snap = snapshot(&paths, None);
-        // The run: writes new, truncates rewritten.
+        let paths = vec![new.clone(), rewritten.clone(), untouched.clone(), never.clone(), input.clone()];
+        // The run: writes new, truncates rewritten, has not reached untouched.
         std::fs::write(&new, "spectrum\ttag\n").unwrap();
         std::fs::write(&rewritten, "x").unwrap();
-        let c = cleanup(&snap, &input);
-        assert_eq!(c.removed, vec![new.display().to_string(), rewritten.display().to_string()]);
+        let c = cleanup(&paths, &input);
+        assert_eq!(
+            c.removed,
+            vec![new.display().to_string(), rewritten.display().to_string(), untouched.display().to_string()]
+        );
         assert!(c.renamed.is_empty() && c.failed.is_empty());
-        assert!(!new.exists() && !rewritten.exists());
-        assert!(untouched.exists(), "an earlier file the run never wrote is kept");
+        assert!(!new.exists() && !rewritten.exists() && !untouched.exists() && !never.exists());
         assert!(input.exists(), "the input is never touched");
         let _ = std::fs::remove_dir_all(&d);
     }
@@ -238,15 +246,15 @@ mod tests {
     fn cleanup_renames_what_it_cannot_delete() {
         let d = tmp("rename");
         let out = d.join("a.tags.tsv");
-        let snap = snapshot(&[out.display().to_string()], None);
+        let paths = vec![out.clone()];
         std::fs::write(&out, "partial").unwrap();
         let denied = |_: &Path| Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied));
-        let c = cleanup_with(&snap, Path::new("/nonexistent/in.mzML"), denied, |a, b| std::fs::rename(a, b));
+        let c = cleanup_with(&paths, Path::new("/nonexistent/in.mzML"), denied, |a, b| std::fs::rename(a, b));
         assert_eq!(c.renamed, vec![format!("{}.incomplete", out.display())]);
         assert!(!out.exists() && d.join("a.tags.tsv.incomplete").exists());
         // Neither works: reported, not hidden.
         std::fs::write(&out, "partial").unwrap();
-        let c = cleanup_with(&snap, Path::new("/x"), denied, |_, _| Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied)));
+        let c = cleanup_with(&paths, Path::new("/x"), denied, |_, _| Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied)));
         assert_eq!(c.failed, vec![out.display().to_string()]);
         let _ = std::fs::remove_dir_all(&d);
     }
@@ -254,17 +262,17 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn cleanup_never_touches_a_device() {
-        let snap = snapshot(&["/dev/null".to_string()], None);
-        assert_eq!(snap[0].1, Before::Other);
-        assert!(cleanup(&snap, Path::new("/x")).is_empty());
+        let paths = resolve(&["/dev/null".to_string()], None);
+        assert!(existing(&paths, Path::new("/x")).is_empty());
+        assert!(cleanup(&paths, Path::new("/x")).is_empty());
         assert!(Path::new("/dev/null").exists());
     }
 
     #[test]
     fn relative_outputs_resolve_against_the_child_cwd() {
         let d = tmp("rel");
-        let snap = snapshot(&["r.tsv".to_string()], Some(&d));
-        assert_eq!(snap[0].0, d.join("r.tsv"));
+        let paths = resolve(&["r.tsv".to_string(), "/abs/r.tsv".to_string()], Some(&d));
+        assert_eq!(paths, vec![d.join("r.tsv"), PathBuf::from("/abs/r.tsv")]);
         let _ = std::fs::remove_dir_all(&d);
     }
 }

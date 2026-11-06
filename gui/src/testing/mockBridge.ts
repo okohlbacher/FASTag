@@ -8,6 +8,7 @@ import type {
   BinaryInfo,
   FastagApi,
   ResultsView,
+  RunRecord,
   RunResult,
   RunStarted,
   Settings,
@@ -19,6 +20,8 @@ export interface RunCall {
   in: string
   out: string
   params: Record<string, unknown>
+  // Set (true) only when the user confirmed overwriting existing outputs.
+  overwrite?: boolean
 }
 
 export interface ResultsQueryCall {
@@ -47,10 +50,15 @@ export interface MockBridge extends FastagApi {
   speciesResult: SpeciesReport | null
   speciesError: Error | null
   taxdbInfoResult: TaxdbInfo | null
+  // Output paths that "exist": outputsCheck reports those a run would write.
+  existingOutputs: string[]
+  // The run record (history.rs), newest first.
+  history: RunRecord[]
   failNextRun: string | null // one-shot: run() resolves { started: false, reason }
   rejectNextRun: Error | null // one-shot: run() rejects
   // Recorded calls.
   runCalls: RunCall[]
+  outputsCheckCalls: RunCall[]
   resultsQueryCalls: ResultsQueryCall[]
   exportCalls: { path: string; view: ResultsView; columns: string[]; dest: string }[]
   speciesCalls: string[]
@@ -111,9 +119,12 @@ export function installMockBridge(): MockBridge {
     speciesResult: null,
     speciesError: null,
     taxdbInfoResult: null,
+    existingOutputs: [],
+    history: [],
     failNextRun: null,
     rejectNextRun: null,
     runCalls: [],
+    outputsCheckCalls: [],
     resultsQueryCalls: [],
     exportCalls: [],
     speciesCalls: [],
@@ -191,6 +202,20 @@ export function installMockBridge(): MockBridge {
       mock.exportCalls.push({ path, view, columns, dest })
       return Promise.resolve(mock.resultsRows.length)
     },
+    // Which outputs a run would write: -out (resolved like run() does) and
+    // every *_out parameter with a value; those in existingOutputs exist.
+    outputsCheck: (params) => {
+      const call = params as unknown as RunCall
+      mock.outputsCheckCalls.push(call)
+      const dir = call.in.startsWith('/') ? call.in.slice(0, call.in.lastIndexOf('/') + 1) : ''
+      const abs = (p: string): string => (p.startsWith('/') || !dir ? p : `${dir}${p}`)
+      const outputs = [call.out, ...Object.entries(call.params ?? {})
+        .filter(([n, v]) => /_out$/.test(n) && typeof v === 'string' && v !== '')
+        .map(([, v]) => String(v))].filter((p) => p).map(abs)
+      return Promise.resolve({ outputs, existing: outputs.filter((p) => mock.existingOutputs.includes(p)) })
+    },
+    historyList: (limit) => Promise.resolve(mock.history.slice(0, limit ?? 50)),
+    historyOf: (path) => Promise.resolve(mock.history.find((r) => r.outputs.includes(path)) ?? null),
     run: (params) => {
       mock.runCalls.push(params as unknown as RunCall)
       if (mock.rejectNextRun) {

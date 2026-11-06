@@ -9,7 +9,9 @@ import type {
   BinaryInfo,
   FastagApi,
   ResultsPage,
+  OutputsCheck,
   ResultsView,
+  RunRecord,
   RunResult,
   RunStarted,
   Settings,
@@ -72,7 +74,10 @@ const api: FastagApi = {
   pickResults: () => openOne(TAGS),
   pickReport: () => openOne([{ name: 'Reports (TSV)', extensions: ['tsv'] }]),
 
+  outputsCheck: (params: Record<string, unknown>) => invoke<OutputsCheck>('outputs_check', { params }),
   run: (params: Record<string, unknown>) => invoke<RunStarted>('run', { params }),
+  historyList: (limit?: number) => invoke<RunRecord[]>('history_list', { limit }),
+  historyOf: (path: string) => invoke<RunRecord | null>('history_of', { path }),
   cancel: () => invoke<{ cancelled: boolean }>('cancel'),
   resultsQuery: (path: string, view: ResultsView, offset: number, limit: number) =>
     invoke<ResultsPage>('results_query', { path, view, offset, limit }),

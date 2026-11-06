@@ -51,3 +51,22 @@ test('a cancelled run says its partial outputs were removed', async ({ page }) =
   await page.getByRole('button', { name: /^Log/ }).first().click()
   await expect(page.locator('pre.log')).toContainText('Removed the partial output /data/run01.tags.tsv')
 })
+
+test('an existing output is confirmed before the run; a cancelled run of an earlier session reads as cancelled', async ({ page }) => {
+  await openApp(page, 'existing')
+  // The run record of the earlier session.
+  await expect(page.locator('.last-run')).toContainText('Cancelled in an earlier session')
+  await page.getByRole('button', { name: 'Open a tags TSV…' }).click()
+  await expect(page.locator('.tabpanel')).toContainText('The run that wrote /data/run01.tags.tsv was cancelled')
+  await page.getByRole('button', { name: 'Choose file…' }).click()
+  await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+  const dlg = page.getByRole('alertdialog')
+  await expect(dlg).toContainText('An output already exists')
+  await expect(dlg).toContainText('/data/run01.tags.tsv')
+  await expect(dlg.getByRole('button', { name: "Don't run" })).toBeFocused()
+  expect(await mockState<unknown[]>(page, 'runCalls')).toEqual([])
+  await dlg.getByRole('button', { name: 'Overwrite and run' }).click()
+  await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()
+  const calls = await mockState<{ overwrite?: boolean }[]>(page, 'runCalls')
+  expect(calls[0].overwrite).toBe(true)
+})
