@@ -1,3 +1,5 @@
+<img src="gui/src/assets/logo.svg" alt="FASTag logo" width="80" align="right">
+
 # FASTag — a fast parallel mass spectrometry tagger and tag-based filter
 
 [![release](https://img.shields.io/github/v/release/okohlbacher/FASTag?label=release&color=5b5fd6)](https://github.com/okohlbacher/FASTag/releases/latest)
