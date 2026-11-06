@@ -28,8 +28,15 @@
 #   - the set of files written;
 #   - every file, canonicalised, with cmp (the first differing lines are shown);
 #   - interface: `--help` and the -write_ctd CTD, raw bytes (versions masked when
-#     the two binaries report different versions); lines a new option adds pass
-#     as ADDED unless FASTAG_BASELINE_INTERFACE=exact, any other change fails.
+#     the two binaries report different versions). A candidate that only ADDS
+#     lines (new 1.12 options; every baseline line kept, in order, unchanged)
+#     is recorded as "ADDED (+N lines)" and passes; any removed or changed
+#     line is a DIFF.
+# Accepted, non-failing statuses (one list, shared by rec() and the filters
+# of baseline_identity_gate.sh and test/baseline_identity_test.sh):
+#   SAME, INFO* (log lines), ADDED* (interface lines added), PREFIX* (an
+#   output that keeps the baseline as a byte prefix; reserved for 1.12 items
+#   that append rows, e.g. #3a label_call).
 # The rest of the log is reported as INFO when it differs, never a failure.
 # A case whose baseline tag TSV has no rows FAILS: the comparison would prove nothing.
 #
@@ -93,7 +100,14 @@ REPORT="$WORK/report.tsv"
 [ -f "$REPORT" ] || printf 'label\tcase\tthreads\titem\tstatus\n' > "$REPORT"
 nfail=0 nsame=0
 rec() { printf '%s\t%s\t%s\t%s\t%s\n' "$LABEL" "$1" "$2" "$3" "$4" >> "$REPORT"
-        case $4 in SAME|ADDED*) nsame=$((nsame + 1)) ;; INFO*) ;; *) nfail=$((nfail + 1)); echo "  FAIL $1 t$2 $3: $4" ;; esac; }
+        case $4 in SAME) nsame=$((nsame + 1)) ;; INFO*|ADDED*|PREFIX*) ;; *) nfail=$((nfail + 1)); echo "  FAIL $1 t$2 $3: $4" ;; esac; }
+# rec for the interface files: SAME, ADDED (only "+" lines against the
+# baseline) or DIFF, for baseline file $1, candidate file $2, item $3.
+rec_iface() {
+  if cmp -s "$2" "$1"; then rec interface - "$3" SAME
+  elif ! diff "$1" "$2" | grep -q '^<'; then rec interface - "$3" "ADDED (+$(diff "$1" "$2" | grep -c '^>') lines)"
+  else rec interface - "$3" DIFF; showdiff "$1" "$2"; fi
+}
 showdiff() { diff "$1" "$2" | head -8 | cut -c1-200 | sed 's/^/      /'; }
 
 # args for case $1 into CASE_ARGS
@@ -130,23 +144,13 @@ run_interface() {
   [ $rc_c = $rc_b ] || rec interface - help.exit "DIFF (exit $rc_c vs $rc_b)"
   "$CAND" -write_ctd "$d/c" > "$d/c/ctd.log" 2>&1 || rec interface - ctd "ERROR (candidate -write_ctd exit $?)"
   "$BASE" -write_ctd "$d/b" > "$d/b/ctd.log" 2>&1 || rec interface - ctd "ERROR (baseline -write_ctd exit $?)"
-  # A 1.12 option ADDS lines to --help and the CTD; with
-  # FASTAG_BASELINE_INTERFACE=additions (the default) a difference that only
-  # adds lines passes as ADDED. Any changed or removed line fails, and
-  # FASTAG_BASELINE_INTERFACE=exact requires byte equality.
-  local mode=${FASTAG_BASELINE_INTERFACE:-additions} b c
   for f in help.txt FASTag.ctd; do
     [ -f "$d/c/$f" ] && [ -f "$d/b/$f" ] || { rec interface - "$f" MISSING; continue; }
-    if cmp -s "$d/c/$f" "$d/b/$f"; then rec interface - "$f" SAME; continue; fi
-    b="$d/b/$f" c="$d/c/$f"
-    if [ "$CV" != "$BV" ] || [ "$CO" != "$BO" ]; then
+    if cmp -s "$d/c/$f" "$d/b/$f"; then rec interface - "$f" SAME
+    elif [ "$CV" != "$BV" ] || [ "$CO" != "$BO" ]; then
       "$PY" "$CANON" "$d/c/$f" "$CV" "$CO" > "$d/c/$f.canon"; "$PY" "$CANON" "$d/b/$f" "$BV" "$BO" > "$d/b/$f.canon"
-      b="$d/b/$f.canon" c="$d/c/$f.canon"
-    fi
-    if cmp -s "$c" "$b"; then rec interface - "$f" SAME
-    elif [ "$mode" != exact ] && [ "$(diff "$b" "$c" | grep -c '^<')" = 0 ]; then
-      rec interface - "$f" "ADDED ($(diff "$b" "$c" | grep -c '^>') lines)"
-    else rec interface - "$f" DIFF; showdiff "$b" "$c"; fi
+      rec_iface "$d/b/$f.canon" "$d/c/$f.canon" "$f"
+    else rec_iface "$d/b/$f" "$d/c/$f" "$f"; fi
   done
 }
 
@@ -188,5 +192,6 @@ for c in $CASES; do
   if [ "$c" = interface ]; then run_interface; continue; fi
   for t in $THREADS; do run_case "$c" "$t"; done
 done
-echo "baseline_identity: $LABEL: $nsame equal, $nfail different (report $REPORT)"
+nacc=$(awk -F'\t' -v l="$LABEL" '$1 == l && $5 ~ /^(ADDED|PREFIX)/' "$REPORT" | wc -l | tr -d ' ')
+echo "baseline_identity: $LABEL: $nsame equal, $nacc accepted additions (ADDED/PREFIX), $nfail different (report $REPORT)"
 [ $nfail = 0 ]
