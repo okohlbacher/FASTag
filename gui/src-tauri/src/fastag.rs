@@ -37,6 +37,10 @@ pub struct RunManager {
     // The user chose "Cancel run and quit": the next exit request is let
     // through once the run has stopped and its partial outputs are gone.
     pub quitting: AtomicBool,
+    // The outputs of the runs of this session, absolute: the files
+    // reveal_output may show (reveal.rs). Earlier sessions' come from the
+    // run record.
+    pub revealable: Mutex<Vec<PathBuf>>,
 }
 
 impl RunManager {
@@ -99,6 +103,9 @@ pub struct RunStarted {
     // The command line, binary first: the failure banner offers it to copy,
     // so a refused run can be reproduced in a terminal.
     command: Option<Vec<String>>,
+    // The outputs resolved as the CLI writes them (GUI-DESIGN 6.3; -out in
+    // P0b): what Reveal and Open folder act on.
+    resolved_outputs: Option<crate::reveal::ResolvedOutputs>,
 }
 
 #[derive(Deserialize)]
@@ -814,6 +821,7 @@ pub fn run(app: AppHandle, state: State<'_, RunManager>, params: RunParams) -> R
         out: None,
         outputs: None,
         command: None,
+        resolved_outputs: None,
     };
     if state.current.lock().map(|c| c.is_some()).unwrap_or(true) {
         return refused("a run is already in progress".into());
@@ -868,15 +876,25 @@ pub fn run(app: AppHandle, state: State<'_, RunManager>, params: RunParams) -> R
     let files = RunFiles { input: &params.input, outputs: &outputs, cwd: cwd.as_deref(), overwrite: params.overwrite };
     // A spawn failure is known synchronously: report it as a non-start so the
     // frontend reports "FASTag could not start" and settles cleanly.
+    let resolved = crate::reveal::resolved(&args, cwd.as_deref());
+    let abs = outputs::resolve(&outputs, cwd.as_deref());
     match start_run(&state, cmd, files, sink, finish) {
-        Ok(run_id) => RunStarted {
-            started: true,
-            run_id: Some(run_id),
-            reason: None,
-            out: args.get(3).cloned(),
-            outputs: Some(outputs),
-            command: Some(command),
-        },
+        Ok(run_id) => {
+            if let Ok(mut r) = state.revealable.lock() {
+                r.extend(abs);
+            }
+            RunStarted {
+                started: true,
+                run_id: Some(run_id),
+                reason: None,
+                // The -out value the CLI was given (build_args), not a
+                // position in the argv.
+                out: args.iter().position(|a| a == "-out").and_then(|i| args.get(i + 1)).cloned(),
+                outputs: Some(outputs),
+                command: Some(command),
+                resolved_outputs: Some(resolved),
+            }
+        }
         Err(e) => refused(e),
     }
 }

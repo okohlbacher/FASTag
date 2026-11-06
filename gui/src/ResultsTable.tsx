@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type JSX, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
-import type { ResultsPage, ResultsSort, ResultsView } from './types'
+import type { BrowserEvent, ResultsHead, ResultsPage, ResultsSort, ResultsView } from './types'
 import { baseName, DECIMAL } from './digestReport'
 import { HelpButton, HelpLink } from './help/HelpLink'
 
@@ -196,6 +196,40 @@ interface Meta {
   matched: number
 }
 
+// One loaded page: its rows and their file-row ids (absent from old mocks).
+interface Page {
+  rows: string[][]
+  ids?: number[]
+}
+
+// D5: where the E-value order stands. null: nothing to rank, or not known.
+export type RankState = { state: 'ranking'; pct: number | null } | { state: 'ranked' } | null
+
+/// The column the backend ranks in the background (browser.rs RANK_COLUMN).
+export const RANK_COLUMN = 'evalue'
+
+/// A view the head rows of results_open can stand in for: no filter, and
+/// file order or the E-value order that is still being built.
+export function headServes(view: ResultsView): boolean {
+  return (
+    !view.spectrum &&
+    view.minLength == null &&
+    view.maxEvalue == null &&
+    view.fastaHit == null &&
+    (view.sort == null || view.sort.column === RANK_COLUMN)
+  )
+}
+
+/// The scrollTop that puts row @p pos in the middle of a viewport of @p viewH
+/// (the same mapping the virtualization reads back, capped spacer included).
+export function scrollTopFor(pos: number, matched: number, viewH: number): number {
+  const contentH = matched * ROW_H
+  if (contentH <= SPACER_CAP) return Math.max(0, pos * ROW_H - Math.floor(viewH / 2) + ROW_H)
+  const visible = Math.min(MAX_DOM_ROWS, Math.ceil(viewH / ROW_H) + OVERSCAN)
+  const maxScroll = Math.max(1, SPACER_CAP + HEAD_H - viewH)
+  return Math.round((Math.max(0, pos - Math.floor(visible / 2)) / Math.max(1, matched - visible)) * maxScroll)
+}
+
 interface Props {
   path: string
   /// Where the file came from, beside its row count: the run that wrote it.
@@ -225,7 +259,26 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
   const id = useId()
 
   const scrollerRef = useRef<HTMLDivElement>(null)
-  const pagesRef = useRef(new Map<number, string[][]>())
+  const pagesRef = useRef(new Map<number, Page>())
+  // D5: the head rows of the open (file order), shown until a page arrives.
+  const [head, setHead] = useState<ResultsHead | null>(null)
+  const [rank, setRank] = useState<RankState>(null)
+  // A loaded page is in file order (ranked: false): the ranked order is
+  // swapped in when it is ready.
+  const fileOrderShown = useRef(false)
+  // The swap waits while a filter field has focus.
+  const swapWaiting = useRef(false)
+  // The Ranked event of this open has arrived (it can beat a file-order page).
+  const rankedSeen = useRef(false)
+  // The selected row, by file row: kept across the swap.
+  const [active, setActive] = useState<number | null>(null)
+  const activeRef = useRef<number | null>(null)
+  activeRef.current = active
+  // Said once the ranked order is in (aria-live).
+  const [rankNote, setRankNote] = useState('')
+  const firstRef = useRef(0)
+  const matchedRef = useRef(0)
+  const formRef = useRef<HTMLFormElement>(null)
   const inflightRef = useRef(new Set<number>())
   // Scroll events are coalesced to one state update per animation frame: a
   // fling fires several per frame, and each re-rendered the table.
@@ -264,12 +317,58 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
     setUserW({})
     setNumeric(new Set())
     setHidden(new Set())
+    setHead(null)
+    setRank(null)
+    setActive(null)
+    setRankNote('')
+    rankedSeen.current = false
+    // D5: the first rows from the head read, at once; the index and the
+    // E-value order follow as events of this open.
+    let gen: number | null = null
+    let alive = true
+    const early: BrowserEvent[] = []
+    const onEvent = (e: BrowserEvent): void => {
+      if (!alive) return
+      if (gen === null) {
+        early.push(e)
+        return
+      }
+      if (e.generation !== gen) return
+      if (e.kind === 'rankProgress') {
+        setRank((r) => (r?.state === 'ranked' ? r : { state: 'ranking', pct: e.total ? Math.floor((100 * e.done) / e.total) : null }))
+      } else if (e.kind === 'ranked') {
+        rankedSeen.current = true
+        if (fileOrderShown.current) swapRef.current()
+        else setRank((r) => (r ? { state: 'ranked' } : r))
+      } else if (e.kind === 'failed') {
+        setRank(null)
+      }
+    }
+    window.fastag.resultsOpen(path, onEvent).then(
+      (h) => {
+        if (!alive) return
+        gen = h.generation
+        setHead(h)
+        if (h.rows.length > 0) {
+          setAutoW((w) => growWidths(w, autoWidths(h.columns, h.rows)))
+          setNumeric((n) => (n.size ? n : numericColumns(h.columns, h.rows)))
+        }
+        early.splice(0).forEach(onEvent)
+      },
+      // The page query reports the same error.
+      () => {}
+    )
+    return () => {
+      alive = false
+    }
   }, [path])
 
   useEffect(() => {
     genRef.current++
     pagesRef.current.clear()
     inflightRef.current.clear()
+    fileOrderShown.current = false
+    swapWaiting.current = false
     // A new file or view is the user's own action, not a fling: its first
     // page goes at once.
     frameUsed.current = false
@@ -303,7 +402,9 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
     return () => ro.disconnect()
   }, [])
 
-  const matched = meta?.matched ?? 0
+  const useHead = !meta && !!head && headServes(view)
+  const matched = meta?.matched ?? (useHead ? head!.rows.length : 0)
+  matchedRef.current = matched
   const contentH = matched * ROW_H
   const spacerH = Math.min(contentH, SPACER_CAP)
   const visible = Math.min(MAX_DOM_ROWS, Math.ceil(viewH / ROW_H) + OVERSCAN)
@@ -322,6 +423,7 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
   }
   first = Math.max(0, Math.min(first, Math.max(0, matched - 1)))
   const last = Math.min(matched, first + visible)
+  firstRef.current = first
 
   // Request the first missing page of the window in view, if this frame has
   // not sent one yet; otherwise try again next frame. A page that arrives
@@ -351,7 +453,21 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
       (res: ResultsPage) => {
         if (genRef.current !== gen) return
         inflightRef.current.delete(page)
-        pagesRef.current.set(page, res.rows)
+        if (res.ranked === false) {
+          // D5: file order until the E-value order is built.
+          fileOrderShown.current = true
+          if (rankedSeen.current) {
+            // Served before the order was ready, delivered after Ranked.
+            swapRef.current()
+            return
+          }
+          setRank((r) => (r?.state === 'ranking' ? r : { state: 'ranking', pct: null }))
+        } else if (fileOrderShown.current) {
+          // The order became ready between two pages: never show a mix.
+          swapRef.current()
+          return
+        }
+        pagesRef.current.set(page, { rows: res.rows, ids: res.rowIds })
         // LRU-ish eviction: drop the oldest cached page that is not needed
         // for the current window.
         const now = wantRef.current.pages
@@ -377,6 +493,44 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
     )
   }
 
+  // D5 swap: the ranked order replaces the file order. The active row (or,
+  // with none, the first row in view once scrolled) keeps its place in the
+  // new order; a filter field with focus defers the swap to its blur.
+  const swap = (): void => {
+    const focus = document.activeElement
+    if (focus && formRef.current?.contains(focus) && focus.tagName === 'INPUT') {
+      swapWaiting.current = true
+      return
+    }
+    swapWaiting.current = false
+    fileOrderShown.current = false
+    const firstId = pagesRef.current.get(Math.floor(firstRef.current / PAGE))?.ids?.[firstRef.current % PAGE]
+    const anchor = activeRef.current ?? (scrollerRef.current && scrollerRef.current.scrollTop > 0 ? firstId ?? null : null)
+    genRef.current++
+    pagesRef.current.clear()
+    inflightRef.current.clear()
+    frameUsed.current = false
+    setRank({ state: 'ranked' })
+    setRankNote('Ranked by E-value.')
+    setArrived((n) => n + 1)
+    pump()
+    if (anchor != null) {
+      const { path: p0, view: v0 } = wantRef.current
+      const gen = genRef.current
+      window.fastag.resultsPosition(p0, v0, anchor).then(
+        (pos) => {
+          if (genRef.current !== gen || pos == null || !scrollerRef.current) return
+          const el = scrollerRef.current
+          el.scrollTop = scrollTopFor(pos, matchedRef.current, el.clientHeight || 600)
+          setScrollTop(el.scrollTop)
+        },
+        () => {}
+      )
+    }
+  }
+  const swapRef = useRef(swap)
+  swapRef.current = swap
+
   useEffect(() => {
     const pages: number[] = []
     for (let p = Math.floor(first / PAGE); p * PAGE < Math.max(last, 1); p++) pages.push(p)
@@ -386,7 +540,7 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, view, first, last])
 
-  const columns = meta?.columns ?? []
+  const columns = meta?.columns ?? head?.columns ?? []
   const has = (c: string): boolean => columns.includes(c)
   // The shown columns, as indices into each row.
   const shown = columns.map((_, j) => j).filter((j) => !hidden.has(columns[j]))
@@ -452,11 +606,34 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
     }
   }
 
+  // Cmd+E and File > Export Shown Rows… (App dispatches 'fastag-action').
+  const exportRef = useRef(exportShown)
+  exportRef.current = exportShown
+  const canExport = !!meta && matched > 0
+  useEffect(() => {
+    const on = (e: Event): void => {
+      if ((e as CustomEvent<string>).detail === 'export' && canExport) void exportRef.current()
+    }
+    window.addEventListener('fastag-action', on)
+    return () => window.removeEventListener('fastag-action', on)
+  }, [canExport])
+
   const rowsOut: JSX.Element[] = []
   for (let i = first; i < last; i++) {
-    const row = pagesRef.current.get(Math.floor(i / PAGE))?.[i % PAGE]
+    const pg = pagesRef.current.get(Math.floor(i / PAGE))
+    const row = pg?.rows[i % PAGE] ?? (useHead ? head!.rows[i] : undefined)
+    const rowId = pg ? pg.ids?.[i % PAGE] : useHead ? i : undefined
+    const selected = rowId != null && rowId === active
     rowsOut.push(
-      <div className="rt-row" role="row" aria-rowindex={i + 2} key={i} style={{ gridTemplateColumns: grid }}>
+      <div
+        className={`rt-row${selected ? ' active' : ''}`}
+        role="row"
+        aria-rowindex={i + 2}
+        aria-selected={rowId != null ? selected : undefined}
+        key={i}
+        style={{ gridTemplateColumns: grid }}
+        onClick={() => rowId != null && setActive((a) => (a === rowId ? null : rowId))}
+      >
         {row ? (
           shown.map((j) => {
             const c = row[j] ?? ''
@@ -483,10 +660,25 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
           <code>{baseName(path)}</code>
         </h2>
         <span className="muted">
-          {meta ? `${meta.total.toLocaleString('en-US')} ${meta.total === 1 ? 'tag' : 'tags'}` : 'Reading…'}
+          {meta
+            ? `${meta.total.toLocaleString('en-US')} ${meta.total === 1 ? 'tag' : 'tags'}`
+            : head?.complete
+              ? `${head.rows.length.toLocaleString('en-US')} ${head.rows.length === 1 ? 'tag' : 'tags'}`
+              : head && head.rows.length > 0
+                ? `Reading… first ${head.rows.length.toLocaleString('en-US')} rows shown`
+                : 'Reading…'}
           {source && ` · ${source}`}
         </span>
         <HelpButton to="results-columns" what="the tags table" />
+        {sort?.column === RANK_COLUMN && rank?.state === 'ranking' && (
+          <span className="rt-rank" title="The table shows the file order until the E-value order is ready.">
+            <span className="spin" aria-hidden="true">⟳</span> Ranking by E-value…{rank.pct != null ? ` ${rank.pct}%` : ''} (file order shown)
+          </span>
+        )}
+        {/* Always in the page, so the swap is announced. */}
+        <span className="sr-only" role="status" aria-live="polite">
+          {rankNote}
+        </span>
         <span className="spacer" />
         <button
           type="button"
@@ -525,6 +717,11 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
         </p>
       )}
       <form
+        ref={formRef}
+        onBlur={() => {
+          // The swap waited for the filter field to lose focus.
+          if (swapWaiting.current) setTimeout(() => swapRef.current())
+        }}
         className="rt-bar"
         role="search"
         aria-label="Filter tags"
@@ -695,7 +892,7 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
             </div>
           </div>
           {/* The first page of a large file takes a while to read. */}
-          {!meta && <div className="empty" role="status">Reading…</div>}
+          {!meta && !useHead && <div className="empty" role="status">Reading…</div>}
           {meta && matched === 0 && (
             <div className="empty">
               {meta.total === 0 ? (

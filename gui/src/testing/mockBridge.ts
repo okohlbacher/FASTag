@@ -6,6 +6,7 @@
 
 import type {
   BinaryInfo,
+  BrowserEvent,
   FastagApi,
   ResultsView,
   RunRecord,
@@ -60,6 +61,12 @@ export interface MockBridge extends FastagApi {
   runCalls: RunCall[]
   outputsCheckCalls: RunCall[]
   resultsQueryCalls: ResultsQueryCall[]
+  resultsOpenCalls: string[]
+  // The last open's event callback: tests drive the D5 events with it.
+  emitBrowser(e: BrowserEvent): void
+  revealCalls: { path: string; folder: boolean }[]
+  revealError: Error | null
+  emitMenu(action: string): void
   exportCalls: { path: string; view: ResultsView; columns: string[]; dest: string }[]
   speciesCalls: string[]
   cancelCalls: number
@@ -85,6 +92,8 @@ export function installMockBridge(): MockBridge {
   const progressListeners: ((p: { done: number; total: number }) => void)[] = []
   const doneListeners: ((r: RunResult) => void)[] = []
   const closeListeners: ((what: 'close' | 'quit') => void)[] = []
+  const menuListeners: ((action: string) => void)[] = []
+  let browserCb: ((e: BrowserEvent) => void) | null = null
   const on = <T>(list: ((v: T) => void)[]) => {
     return (cb: (v: T) => void): (() => void) => {
       list.push(cb)
@@ -127,6 +136,11 @@ export function installMockBridge(): MockBridge {
     outputsCheckCalls: [],
     resultsQueryCalls: [],
     exportCalls: [],
+    resultsOpenCalls: [],
+    revealCalls: [],
+    revealError: null,
+    emitBrowser: (e) => browserCb?.(e),
+    emitMenu: (a) => menuListeners.slice().forEach((cb) => cb(a)),
     speciesCalls: [],
     cancelCalls: 0,
     savedLast: [],
@@ -198,6 +212,25 @@ export function installMockBridge(): MockBridge {
         rows: mock.resultsRows.slice(offset, offset + limit)
       })
     },
+    // The head read: the first rows in file order. Generation 1; the mock
+    // sends no events of its own (its resultsQuery is always ranked).
+    resultsOpen: (path, onEvent) => {
+      mock.resultsOpenCalls.push(path)
+      browserCb = onEvent
+      if (mock.resultsError) return Promise.reject(mock.resultsError)
+      return Promise.resolve({
+        generation: 1,
+        columns: mock.resultsColumns,
+        rows: mock.resultsRows.slice(0, 1000),
+        complete: mock.resultsRows.length <= 1000
+      })
+    },
+    resultsPosition: () => Promise.resolve(null),
+    revealOutput: (path, folder) => {
+      mock.revealCalls.push({ path, folder })
+      return mock.revealError ? Promise.reject(mock.revealError) : Promise.resolve()
+    },
+    onMenu: on(menuListeners),
     exportResults: (path, view, columns, dest) => {
       mock.exportCalls.push({ path, view, columns, dest })
       return Promise.resolve(mock.resultsRows.length)

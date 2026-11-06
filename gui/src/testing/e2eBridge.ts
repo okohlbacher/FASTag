@@ -16,11 +16,15 @@
 //   lastused    the last session ran with -tag_length 7 -species
 //   existing    run01.tags.tsv exists, and the run record says the run of
 //               the last session that wrote it was cancelled
+//   rank        D5: the E-value order of the tags is "being built" until a
+//               spec calls finishRanking(); until then a query sorted by
+//               E-value is served in file order (ranked: false), as
+//               browser.rs does
 //
 // window.__fastagE2E gives the specs the mock and a few controls.
 
 import { installMockBridge, type MockBridge } from './mockBridge'
-import type { ResultsPage, RunStarted } from '../types'
+import type { BrowserEvent, ResultsPage, ResultsView, RunStarted } from '../types'
 import ecoliTags from '../../e2e-web/fixtures/ecoli.tags.tsv?raw'
 import digestTsv from '../fixtures/digest.tsv?raw'
 import labelTsv from '../fixtures/label.tsv?raw'
@@ -35,6 +39,9 @@ export interface E2EControls {
   mock: MockBridge
   /// The backend's close guard asking (a close or quit while busy).
   requestClose(what: 'close' | 'quit'): void
+  /// rank fixture: progress of the E-value order, and its end (Ranked).
+  rankProgress(done: number, total: number): void
+  finishRanking(): void
 }
 
 declare global {
@@ -57,6 +64,23 @@ function parseTsv(text: string): { columns: string[]; rows: string[][] } {
 }
 
 const base = (p: string): string => p.slice(p.lastIndexOf('/') + 1)
+
+/// browser.rs's order: finite numbers by value, then every other cell by its
+/// bytes (UTF-16 order is byte order for this ASCII fixture), ties in file
+/// order; descending reverses each block on its own.
+export function rankOrder(cells: string[], desc: boolean): number[] {
+  const num = (c: string): number | null => {
+    const t = c.trim() === c && c !== '' ? Number(c) : NaN
+    return Number.isFinite(t) && !/^(0x|[+-]?inf|nan)/i.test(c) ? t : null
+  }
+  const ids = cells.map((_, i) => i)
+  const nums = ids.filter((i) => num(cells[i]) !== null)
+  const strs = ids.filter((i) => num(cells[i]) === null)
+  const sgn = desc ? -1 : 1
+  nums.sort((a, b) => sgn * (num(cells[a])! - num(cells[b])!) || a - b)
+  strs.sort((a, b) => (cells[a] < cells[b] ? -sgn : cells[a] > cells[b] ? sgn : a - b))
+  return [...nums, ...strs]
+}
 
 export function installE2EBridge(): void {
   const fixture = new URLSearchParams(window.location.search).get('fixture') ?? 'default'
@@ -108,6 +132,45 @@ export function installE2EBridge(): void {
       }
       return Promise.resolve({ columns: tags.columns, totalRows: N, matchedRows: N, rows })
     }
+  }
+
+  let ranked = fixture !== 'rank'
+  let rankCb: ((e: BrowserEvent) => void) | null = null
+  if (fixture === 'rank') {
+    const ev = tags.columns.indexOf('evalue')
+    const order = (desc: boolean): number[] => rankOrder(tags.rows.map((r) => r[ev] ?? ''), desc)
+    mock.resultsOpen = (path, onEvent) => {
+      mock.resultsOpenCalls.push(path)
+      rankCb = onEvent
+      setTimeout(() => onEvent({ kind: 'indexed', generation: 1, totalRows: tags.rows.length }), 10)
+      return Promise.resolve({ generation: 1, columns: tags.columns, rows: tags.rows.slice(0, 1000), complete: false })
+    }
+    const sortedIds = (view: ResultsView): { ids: number[]; ranked: boolean } => {
+      const s = view.sort
+      if (!s) return { ids: tags.rows.map((_, i) => i), ranked: true }
+      if (s.column === 'evalue' && !ranked) return { ids: tags.rows.map((_, i) => i), ranked: false }
+      if (s.column === 'evalue') return { ids: order(s.desc), ranked: true }
+      const j = tags.columns.indexOf(s.column)
+      const ids = tags.rows.map((_, i) => i)
+      ids.sort((a, b) => (tags.rows[a][j] < tags.rows[b][j] ? -1 : tags.rows[a][j] > tags.rows[b][j] ? 1 : a - b))
+      if (s.desc) ids.reverse()
+      return { ids, ranked: true }
+    }
+    mock.resultsQuery = (path, view, offset, limit): Promise<ResultsPage> => {
+      mock.resultsQueryCalls.push({ path, view, offset, limit })
+      const { ids, ranked: r } = sortedIds(view)
+      const sel = ids.slice(offset, offset + limit)
+      return Promise.resolve({
+        columns: tags.columns,
+        totalRows: tags.rows.length,
+        matchedRows: ids.length,
+        rows: sel.map((i) => tags.rows[i]),
+        rowIds: sel,
+        ranked: r,
+        pending: !r
+      })
+    }
+    mock.resultsPosition = (_path, view, row) => Promise.resolve(sortedIds(view).ids.indexOf(row))
   }
 
   // What the simulated CLI prints for a run of @p input.
@@ -176,6 +239,11 @@ export function installE2EBridge(): void {
     marker: E2E_MARKER,
     fixture,
     mock,
-    requestClose: (what) => mock.emitCloseRequested(what)
+    requestClose: (what) => mock.emitCloseRequested(what),
+    rankProgress: (done, total) => rankCb?.({ kind: 'rankProgress', generation: 1, done, total }),
+    finishRanking: () => {
+      ranked = true
+      rankCb?.({ kind: 'ranked', generation: 1, column: 'evalue' })
+    }
   }
 }
