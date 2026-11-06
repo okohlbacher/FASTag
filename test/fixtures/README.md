@@ -57,3 +57,27 @@ timsTOF files. Both are indexedmzML with an exact index.
 
 sha256: `diatracer_like.mzML` `fbff96360f591209a7f1ac9f38899a6724c6ffaebdcbb6df3c883b421b4fce0d`,
 `ddapasef_empty.mzML` `37d838f8cef462c81755144b8dd76b6787b590a360947ae4e5a60069fc9f596d`.
+
+`profile_ms2_small.mzML`, `profile_ms2_untyped.mzML`,
+`profile_ms2_paramgroup.mzML` and `profile_ms2_lowres.mzML` — the profile-MS2
+fixtures of `profile_cli_test` and `indexed_mzml_test` (FASTag 1.12 #9,
+`-pick_profile`). Written by `make_profile_fixtures.py` (Python 3.15.0, zlib
+1.2.12, standard library only) from `Ecoli_MS2_small.mzML`: each centroid of
+the source spectra becomes a sampled Gaussian with its intensity as apex, so
+BSD-3-Clause as well. Native IDs, retention times, precursors and scan windows
+are the source's; 64-bit m/z, 32-bit intensity, zlib; indexedmzML with an exact
+index and SHA-1 checksum.
+
+- `profile_ms2_small.mzML`: source spectra 0-9, resolving power 60,000 (FWHM =
+  m/z / 60000), 6 samples per FWHM, MS:1000128 in each spectrum's cvParams,
+  orbitrap analyser.
+- `profile_ms2_untyped.mzML`: spectra 0-3 as above with no MS:1000127/128.
+- `profile_ms2_paramgroup.mzML`: spectra 0-3 as above, the type only in a
+  `referenceableParamGroup` (the MS level stays an own cvParam).
+- `profile_ms2_lowres.mzML`: spectra 10-13, FWHM 0.3 Th sampled every 0.05 Th,
+  linear ion trap analyser.
+
+sha256: `profile_ms2_small.mzML` `d2b63aab24eaf2fc3d30e4576efcf379269b91e0102657c1aa1d6a5de59a8344`,
+`profile_ms2_untyped.mzML` `be6b92b3c7aacb3db1324e486170346a13714f39594f88f15488cefbbac9aceb`,
+`profile_ms2_paramgroup.mzML` `745df24ee8f5a923003c2308427ff295271d8926eefb678799382ea266de9147`,
+`profile_ms2_lowres.mzML` `30d1f9d64f016e5824493da0a0ae18cb9cb6846e50c523d533c410225e523338`.
