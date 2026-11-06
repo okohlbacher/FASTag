@@ -261,6 +261,11 @@ if(FASTAG_BUILD_TESTS)
     add_test(NAME ${t} COMMAND ${t})
   endforeach()
 
+  # 1.12 P4: the shared run report section (src/RunMeta.h) is frozen here.
+  add_executable(runmeta_test test/runmeta_test.cpp)
+  target_link_libraries(runmeta_test PRIVATE fastag_core)
+  add_test(NAME runmeta_test COMMAND runmeta_test WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+
   # Integration: tool description export against the real binary. Compares the
   # CTD's parameter set against the tool's own -write_ini output, and guards
   # --help and -write_ini against the ToolHandler registration leaking into
