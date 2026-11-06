@@ -43,7 +43,7 @@ done
 # is deterministic too.
 for t in 1 3 8; do
   "$BIN" -in "$IN" -out "$TMP/t$t/compl.tsv" -threads "$t" -fragment_tolerance 0.3 -fragment_tolerance_unit Da \
-    -complement_rule both -complement_tolerance 0.2 -complement_tolerance_unit fragment -complement_midp \
+    -complement_rule both -complement_tol_factor 0.2 -complement_tolerance_unit fragment -complement_midp \
     >"$TMP/t$t/compl.log" 2>&1 || { cat "$TMP/t$t/compl.log" >&2; fail "-complement_rule both at -threads $t failed"; }
 done
 [ "$(wc -l < "$TMP/t1/compl.tsv")" -gt 1 ] || fail "compl.tsv has no rows at -threads 1"

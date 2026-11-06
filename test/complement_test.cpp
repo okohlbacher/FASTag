@@ -12,7 +12,9 @@
 //   (c) pair sums off by 0.3 Da: the fragment mode at k = 0.5 with a 0.5 Da
 //       fragment tolerance finds the complements, 0.02 Da about none.
 //   (d) mid-p equals a reference summed from Boost's pdf; the plain tail
-//       equals P(X >= c); the support ends; mid-p reaches scorePath.
+//       equals P(X >= c); the support ends; mid-p reaches scorePath for
+//       tags with 0 or 1 complemented peaks only (DirecTag's scope), and
+//       tags with 2 or more keep the plain value.
 //   (e) the default Param reproduces the stored E-value vector that FASTag
 //       1.11.0 (78390cd) wrote for 5 synthetic spectra, under both Params.
 //   negatives: precursor charge 1 under precursor has no complements and
@@ -160,11 +162,19 @@ int main()
     p.frag_tol = 0.5;
     p.tol_ppm = false;
     FASTag::Param frag = p;
-    FASTag::Cli::setComplementTolerance(frag, 0.5, "fragment");
+    FASTag::Cli::setComplementTolerance(frag, FASTag::Cli::kComplementTolerance, 0.5, "fragment");
     FASTag::Param da = p;
-    FASTag::Cli::setComplementTolerance(da, 0.02, "Da");
+    FASTag::Cli::setComplementTolerance(da, 0.02, FASTag::Cli::kComplementTolFactor, "Da");
     CHECK(frag.complement_tol_mode == ComplementTolMode::Fragment && frag.complement_tol_factor == 0.5
-          && frag.complement_tol == base.complement_tol, "fragment unit sets the factor only");
+          && frag.complement_tol == base.complement_tol, "fragment unit: k in force, the Da value kept");
+    // The fragment unit with both values at their CLI defaults runs at the
+    // library's k (0.5), not at the Da default 0.02 read as k.
+    FASTag::Param unit_only = p;
+    FASTag::Cli::setComplementTolerance(unit_only, FASTag::Cli::kComplementTolerance,
+                                        FASTag::Cli::kComplementTolFactor, "fragment");
+    CHECK(unit_only.complement_tol_factor == FASTag::Param{}.complement_tol_factor
+          && unit_only.complement_tol_factor == 0.5, "fragment unit alone: k %g, want 0.5",
+          unit_only.complement_tol_factor);
     const FASTag::ComplementSpec cs = FASTag::ComplementSpec::fromParam(frag);
     CHECK(std::fabs(cs.tol(400.0, 900.0) - 0.5) < 1e-12, "fragment window at 0.5 Da: %g", cs.tol(400.0, 900.0));
     FASTag::Param ppm = frag;
@@ -213,9 +223,15 @@ int main()
       CHECK(FASTag::complementPValue(c.N, c.K, c.n, hi + 1, false) == 0.0, "plain above the support");
       CHECK(FASTag::complementPValue(c.N, c.K, c.n, hi + 1, true) == 0.0, "mid-p above the support");
     }
+    // Scope: counts 0 and 1 only.
+    CHECK(FASTag::complementMidpApplies(true, 0) && FASTag::complementMidpApplies(true, 1)
+          && !FASTag::complementMidpApplies(true, 2) && !FASTag::complementMidpApplies(false, 0),
+          "mid-p scope is not counts 0 and 1");
     // Mid-p reaches scorePath: tags without a complemented peak (plain p 1)
-    // get a mid-p below 1 when the spectrum has complements.
-    int plain_one_total = 0;
+    // get a mid-p below 1 when the spectrum has complements; a tag either
+    // keeps its plain value (2 or more complemented peaks) or moves below
+    // it (0 or 1), and both kinds occur.
+    int plain_one_total = 0, kept_total = 0, lowered_total = 0;
     for (const auto& [name, base] : bothParams())
     {
       const ComplementSynth::Spec s = ComplementSynth::make("VGAHAGEYGAEALER", 2, false, 1, 0.0, 40, 41);
@@ -224,17 +240,34 @@ int main()
       const FASTag::Tables tp(base), tm(mid);
       const auto plain = FASTag::tagSpectrum(s.spec, s.prec_mz, 2, base, tp);
       const auto midp = FASTag::tagSpectrum(s.spec, s.prec_mz, 2, mid, tm);
-      int plain_one = 0, mid_below = 0;
+      int plain_one = 0, mid_below = 0, kept = 0, lowered = 0, matched = 0;
       for (const auto& t : plain) plain_one += t.p_complement == 1.0;
       for (const auto& t : midp) mid_below += t.p_complement < 1.0;
-      std::printf("d. [%s] mid-p: %zu/%zu tags, %d plain at p=1, %d mid-p below 1\n", name,
-                  plain.size(), midp.size(), plain_one, mid_below);
+      for (const auto& m : midp)
+        for (const auto& t : plain)
+        {
+          if (t.seq != m.seq || t.charge != m.charge || t.low_mz != m.low_mz) continue;
+          ++matched;
+          if (m.p_complement == t.p_complement) ++kept;
+          else if (m.p_complement < t.p_complement) ++lowered;
+          else CHECK(false, "[%s] mid-p raised %s from %g to %g", name, m.seq.c_str(), t.p_complement,
+                     m.p_complement);
+          CHECK(t.p_complement < 1.0 || m.p_complement < 1.0, "[%s] mid-p left %s at p=1", name,
+                m.seq.c_str());
+          break;
+        }
+      std::printf("d. [%s] mid-p: %zu/%zu tags, %d plain at p=1, %d mid-p below 1; of %d matched, "
+                  "%d keep the plain value, %d lowered\n",
+                  name, plain.size(), midp.size(), plain_one, mid_below, matched, kept, lowered);
       CHECK(!plain.empty(), "[%s] no tags", name);
+      CHECK(matched > 0, "[%s] no tag in both runs", name);
       plain_one_total += plain_one;
-      CHECK(mid_below == static_cast<int>(midp.size()), "[%s] mid-p left %zu tags at p=1", name,
-            midp.size() - mid_below);
+      kept_total += kept;
+      lowered_total += lowered;
     }
     CHECK(plain_one_total > 0, "no tag without complement evidence; the mid-p check proves nothing");
+    CHECK(kept_total > 0, "no tag with 2 or more complemented peaks kept its plain value");
+    CHECK(lowered_total > 0, "no tag moved to mid-p");
     std::printf("d. %d hypergeometric points against Boost\n", checked);
   }
 

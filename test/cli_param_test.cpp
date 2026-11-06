@@ -51,7 +51,8 @@ int main(int argc, char** argv)
   check(p.complement_rule == lib.complement_rule && p.complement_rule == FASTag::ComplementRule::SameCharge,
         "complement_rule same_charge (1.11)");
   check(p.complement_tol_mode == FASTag::ComplementTolMode::Da, "complement tolerance in Da (1.11)");
-  check(p.complement_tol_factor == lib.complement_tol_factor, "complement factor untouched in Da mode");
+  check(p.complement_tol_factor == lib.complement_tol_factor && p.complement_tol_factor == 0.5,
+        "complement factor k 0.5, the library's (its own option, not the Da value)");
   check(!p.complement_midp, "complement mid-p off (1.11)");
   check(FASTag::Cli::complementRuleFromString("precursor") == FASTag::ComplementRule::Precursor
             && FASTag::Cli::complementRuleFromString("both") == FASTag::ComplementRule::Both

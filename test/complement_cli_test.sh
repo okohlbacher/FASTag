@@ -3,6 +3,8 @@
 #   - every option at its default equals the option absent (tags, and the
 #     -out_spectra mzML byte for byte: the shim keeps the 1.11 parameter list)
 #   - with FASTAG_BASELINE_BIN, the option absent equals FASTag 1.11.0
+#   - -complement_tolerance_unit fragment alone runs at k = 0.5, and
+#     -complement_tolerance (Da) does not reach the fragment unit
 #   - each option away from its default reaches the tags (a 3+ precursor
 #     rule, the fragment-tied window, mid-p), so the defaults are not
 #     identical by accident of a disconnected option
@@ -34,7 +36,8 @@ IN_ABS=$(cd "$(dirname "$IN")" && pwd)/$(basename "$IN")
 ( cd "$TMP/a" && "$BIN" -in "$IN_ABS" -out t.tsv -out_spectra s.mzML -threads 2 > log 2>&1 ) \
   || { cat "$TMP/a/log" >&2; fail "run at defaults failed"; }
 ( cd "$TMP/e" && "$BIN" -in "$IN_ABS" -out t.tsv -out_spectra s.mzML -threads 2 \
-    -complement_rule same_charge -complement_tolerance 0.02 -complement_tolerance_unit Da > log 2>&1 ) \
+    -complement_rule same_charge -complement_tolerance 0.02 -complement_tol_factor 0.5 \
+    -complement_tolerance_unit Da > log 2>&1 ) \
   || { cat "$TMP/e/log" >&2; fail "run with the complement defaults spelled out failed"; }
 cp "$TMP/a/t.tsv" "$TMP/absent.tsv"
 [ "$(wc -l < "$TMP/absent.tsv")" -gt 10 ] || fail "too few tags at defaults; the comparisons would prove nothing"
@@ -58,7 +61,17 @@ run prec -complement_rule precursor
 run both -complement_rule both
 run nodeiso -no_deisotope
 run nodeiso_prec -no_deisotope -complement_rule precursor
-run frag -complement_tolerance 2 -complement_tolerance_unit fragment
+run frag -complement_tol_factor 2 -complement_tolerance_unit fragment
+# The unit alone runs at k = 0.5 (its own default), not at the Da default
+# 0.02 read as k: equal to k 0.5 spelled out, different from k 0.02.
+run frag_unit -complement_tolerance_unit fragment
+run frag_k05 -complement_tolerance_unit fragment -complement_tol_factor 0.5
+run frag_k002 -complement_tolerance_unit fragment -complement_tol_factor 0.02
+cmp -s "$TMP/frag_unit.tsv" "$TMP/frag_k05.tsv" || fail "-complement_tolerance_unit fragment alone is not k 0.5"
+cmp -s "$TMP/frag_unit.tsv" "$TMP/frag_k002.tsv" && fail "-complement_tolerance_unit fragment alone equals k 0.02"
+# -complement_tolerance is the Da window only: it does not reach the fragment unit.
+run frag_da -complement_tolerance_unit fragment -complement_tolerance 0.3
+cmp -s "$TMP/frag_unit.tsv" "$TMP/frag_da.tsv" || fail "-complement_tolerance changed the fragment-unit window"
 run midp -complement_midp
 for v in prec both frag midp; do
   cmp -s "$TMP/absent.tsv" "$TMP/$v.tsv" && fail "-complement option set ($v) left the tags unchanged"

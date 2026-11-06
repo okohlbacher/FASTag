@@ -85,9 +85,10 @@ namespace FASTag
     /// follows the run's own -fragment_tolerance.
     ComplementTolMode complement_tol_mode = ComplementTolMode::Da;
     double complement_tol_factor = 0.5;  ///< k of the Fragment mode
-    /// Complement p-value as the mid-p P(X > c) + P(X = c)/2 of the
-    /// hypergeometric instead of P(X >= c), for every observed count c,
-    /// including 0 (which the plain tail scores as 1). Off reproduces 1.11.
+    /// Complement p-value as DirecTag's mid-p P(X > c) + P(X = c)/2 of the
+    /// hypergeometric for tags with c <= kComplementMidpMaxCount (0 or 1)
+    /// complemented peaks; larger counts keep the plain tail P(X >= c).
+    /// Off reproduces 1.11.
     bool   complement_midp = false;
     size_t max_peak_count = 100;   ///< hard ceiling; also bounds the null tables
     /// Peaks kept per 100 Da window; 0 selects the strongest max_peak_count
@@ -219,6 +220,18 @@ namespace FASTag
       return tol_factor * (at(mz) + at(cmz));
     }
   };
+
+  /// Scope of Param::complement_midp (PLAN-data-types E2 item 3: "DirecTag's
+  /// mid-p for 0 or 1 complemented peaks"): counts up to this use mid-p,
+  /// larger ones the plain tail. The p-value stays monotone in the count:
+  /// mid-p at 1 is P(X>1) + P(X=1)/2 >= P(X>=2), the plain value at 2.
+  inline constexpr unsigned kComplementMidpMaxCount = 1;
+
+  /// Whether a tag with @p obs complemented peaks is scored with mid-p.
+  inline bool complementMidpApplies(bool midp, unsigned obs)
+  {
+    return midp && obs <= kComplementMidpMaxCount;
+  }
 
   /// P-value of @p obs complemented peaks among @p n drawn from @p N, of
   /// which @p K are complemented (hypergeometric). Plain: P(X >= obs);

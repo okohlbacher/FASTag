@@ -689,19 +689,27 @@ protected:
                           "(either rule)", false, true);
     setValidStrings_("complement_rule", ListUtils::create<std::string>("same_charge,precursor,both"));
     registerDoubleOption_("complement_tolerance", "<value>", FASTag::Cli::kComplementTolerance,
-                          "Window for a complement partner: in Da, or with "
-                          "-complement_tolerance_unit fragment the factor k of "
-                          "k*(fragment tolerance at the peak + at the partner)", false, true);
+                          "Window for a complement partner in Da (used with "
+                          "-complement_tolerance_unit Da)", false, true);
     setMinFloat_("complement_tolerance", 1e-9);
+    // Its own option, not -complement_tolerance read as k: one value with one
+    // default would make "-complement_tolerance_unit fragment" alone run at
+    // k = 0.02. The name keeps the --helphelp column at the 1.11 width.
+    registerDoubleOption_("complement_tol_factor", "<k>", FASTag::Cli::kComplementTolFactor,
+                          "Factor k of the complement window k*(fragment tolerance at the "
+                          "peak + at the partner) (used with -complement_tolerance_unit "
+                          "fragment)", false, true);
+    setMinFloat_("complement_tol_factor", 1e-9);
     // "<u>", not "<unit>": the longest option-and-argument column of the
     // --helphelp listing must stay the 1.11 width, or every line reflows.
     registerStringOption_("complement_tolerance_unit", "<u>", FASTag::Cli::kComplementToleranceUnit,
-                          "Da: -complement_tolerance is absolute. fragment: it scales the "
-                          "run's -fragment_tolerance at both partners", false, true);
+                          "Da: the window is -complement_tolerance. fragment: "
+                          "-complement_tol_factor scales the run's -fragment_tolerance at "
+                          "both partners", false, true);
     setValidStrings_("complement_tolerance_unit", ListUtils::create<std::string>("Da,fragment"));
     registerFlag_("complement_midp",
-                  "Score complements with the hypergeometric mid-p P(X>c) + P(X=c)/2 "
-                  "instead of P(X>=c), for every observed count c including 0", true);
+                  "Score complements with DirecTag's hypergeometric mid-p P(X>c) + P(X=c)/2 "
+                  "for tags with 0 or 1 complemented peaks; 2 or more keep P(X>=c)", true);
     // ---- 1.12 A: options ----
     // ---- 1.12 D: options ----
     // ---- 1.12 F: options ----
@@ -1002,11 +1010,14 @@ protected:
     }
 
     // E2: the same NaN hole as -fragment_tolerance.
-    if (!std::isfinite(getDoubleOption_("complement_tolerance")))
+    for (const char* o : {"complement_tolerance", "complement_tol_factor"})
     {
-      OPENMS_LOG_ERROR << "-complement_tolerance must be a finite number greater than 0 (got "
-                       << getDoubleOption_("complement_tolerance") << ")." << std::endl;
-      return ILLEGAL_PARAMETERS;
+      if (!std::isfinite(getDoubleOption_(o)))
+      {
+        OPENMS_LOG_ERROR << "-" << o << " must be a finite number greater than 0 (got "
+                         << getDoubleOption_(o) << ")." << std::endl;
+        return ILLEGAL_PARAMETERS;
+      }
     }
 
     // Species precondition, checked BEFORE the run rather than after.
@@ -1156,6 +1167,7 @@ protected:
     p.gap_penalty = getDoubleOption_("gap_penalty");
     p.complement_rule = FASTag::Cli::complementRuleFromString(getStringOption_("complement_rule"));
     FASTag::Cli::setComplementTolerance(p, getDoubleOption_("complement_tolerance"),
+                                        getDoubleOption_("complement_tol_factor"),
                                         getStringOption_("complement_tolerance_unit"));
     p.complement_midp = getFlag_("complement_midp");
     // The residue modifications in use; -recon_id_out reports exactly these.

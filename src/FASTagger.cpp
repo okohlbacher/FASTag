@@ -810,12 +810,14 @@ namespace FASTag
       const size_t zi = static_cast<size_t>(charge);
       const int compl_pop = zi < s.n_with_compl.size() ? s.n_with_compl[zi] : 0;
       const bool use_compl = compl_pop > 0;
-      // Mid-p scores every count, 0 included; the plain tail leaves 0 at 1.
-      if (use_compl && (n_compl > 0 || tab.complement().midp))
+      // Mid-p (on) scores counts 0 and 1, 0 included; the plain tail leaves
+      // 0 at 1 and scores 2 or more in either mode.
+      const bool midp = complementMidpApplies(tab.complement().midp, static_cast<unsigned>(n_compl));
+      if (use_compl && (n_compl > 0 || midp))
         t.p_complement = complementPValue(static_cast<unsigned>(s.spec.size()),
                                           static_cast<unsigned>(compl_pop),
                                           static_cast<unsigned>(k),
-                                          static_cast<unsigned>(n_compl), tab.complement().midp);
+                                          static_cast<unsigned>(n_compl), midp);
 
       t.evalue = fisher(t.p_intensity, t.p_mzfidelity, t.p_complement, use_compl ? 3 : 2);
 
