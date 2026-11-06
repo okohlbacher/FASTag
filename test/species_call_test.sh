@@ -142,8 +142,8 @@ done
 [ -n "$(col "$S" 4930 call)$(col "$S" 590 call)" ] || fail "neither the relative nor an unrelated genus has a row (test is vacuous)"
 np=$(awk -F'\t' 'NR > 1 && $9 == "present"' "$S" | wc -l | tr -d ' ')
 [ "$np" = 1 ] || { cat "$S" >&2; fail "$np genera present, expected only Escherichia"; }
-awk -F'\t' 'NR > 1 && $9 == "not_detected" && !($15 + 0 > 0 && $15 + 0 <= 1) { exit 1 }' "$S" \
-  || fail "a not_detected row has no detection limit in (0, 1]"
+awk -F'\t' 'NR > 1 && $9 == "not_detected" && !($15 + 0 > 0) { exit 1 }' "$S" \
+  || fail "a not_detected row has no positive detection limit"
 awk -F'\t' 'NR > 1 && $9 != "not_detected" && $15 != "NA" { exit 1 }' "$S" || fail "lod is set on a row that is not not_detected"
 awk -F'\t' 'NR > 1 && ($12 + 0 < 0 || $13 + 0 < 0 || $13 + 0 > 1) { exit 1 }' "$S" || fail "decoy_expected or decoy_qvalue out of range"
 

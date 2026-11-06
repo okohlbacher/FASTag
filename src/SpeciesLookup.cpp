@@ -47,8 +47,34 @@ namespace FASTag
     return true;
   }
 
-  std::string decoyTag(const std::string& seq, uint32_t)
+  std::string decoyTag(const std::string& seq, uint32_t j)
   {
-    return seq;  // RED stub: replaced by the implementation
+    const std::string f = TaxIndex::fold(seq);
+    const std::size_t n = f.size();
+    if (n < 2) return std::string();
+    const std::string r(f.rbegin(), f.rend());
+    // FNV-1a 64 over the folded bytes, then the 4 bytes of j (little endian).
+    uint64_t h = 0xcbf29ce484222325ULL;
+    const auto mix = [&h](unsigned char c) { h ^= c; h *= 0x100000001b3ULL; };
+    for (char c : f) mix(static_cast<unsigned char>(c));
+    for (int b = 0; b < 4; ++b) mix(static_cast<unsigned char>((j >> (8 * b)) & 0xFFu));
+    // splitmix64 stream for the Fisher-Yates shuffle (own generator, so the
+    // permutation is the same with every standard library).
+    uint64_t state = h;
+    const auto next = [&state]() {
+      uint64_t z = (state += 0x9e3779b97f4a7c15ULL);
+      z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
+      z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
+      return z ^ (z >> 31);
+    };
+    std::string p = f;
+    for (std::size_t i = n - 1; i > 0; --i)
+      std::swap(p[i], p[static_cast<std::size_t>(next() % (i + 1))]);
+    for (std::size_t rot = 0; rot < n; ++rot)
+    {
+      if (p != f && p != r) return p;
+      std::rotate(p.begin(), p.begin() + 1, p.end());
+    }
+    return std::string();
   }
 }
