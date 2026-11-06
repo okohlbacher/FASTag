@@ -10,6 +10,11 @@
 #                   (a Cancel while the real CLI is still loading)
 #   STUB_SLEEP=<s>  after writing a partial -out, sleep this long (for Cancel)
 #   STUB_FAIL=<rc>  after writing partial outputs, exit with this code
+#   STUB_CHATTY=<n> print n "Scoring spectrum" lines on stderr while running
+# The real app passes the CLI no environment of its own, so the tauri-driver
+# specs (gui/e2e-tauri) steer the stub by the input's name instead: an -in
+# whose basename contains ".slow." is STUB_SLEEP=30, ".chatty." is
+# STUB_CHATTY=5000, ".fail." is STUB_FAIL=2. A variable that is set wins.
 #   --help          print a version banner, as the probe expects
 set -u
 
@@ -19,9 +24,10 @@ if [ "${1:-}" = "--help" ]; then
   exit 0
 fi
 
-out=""; reports=""; species=0; glyco=0; species_out=""; glyco_out=""
+input=""; out=""; reports=""; species=0; glyco=0; species_out=""; glyco_out=""
 while [ $# -gt 0 ]; do
   case "$1" in
+    -in) input="$2"; shift 2 ;;
     -out) out="$2"; shift 2 ;;
     -species) species=1; shift ;;
     -glyco) glyco=1; shift ;;
@@ -41,19 +47,36 @@ derive() {
     *) echo "$out$1" ;;
   esac
 }
+case "${input##*/}" in *.slow.*) : "${STUB_SLEEP:=30}" ;; esac
+case "${input##*/}" in *.chatty.*) : "${STUB_CHATTY:=5000}" ;; esac
+case "${input##*/}" in *.fail.*) : "${STUB_FAIL:=2}" ;; esac
+
 [ $species -eq 1 ] && [ -z "$species_out" ] && species_out=$(derive .species.tsv)
 [ $glyco -eq 1 ] && [ -z "$glyco_out" ] && glyco_out=$(derive .glyco.tsv)
 
+# Each sleeper is forked BEFORE the line or file a test waits for, then waited
+# on. A test cancels right after that point, and macOS lets a child forked
+# while a process-group SIGKILL is being delivered escape it: a `sleep` forked
+# after the line could outlive the kill, hold the pipes open and keep the run
+# from ever ending (the 1-in-8 flake of the early-cancel test).
+pre=""; mid=""
+[ -n "${STUB_SLEEP_BEFORE:-}" ] && { sleep "$STUB_SLEEP_BEFORE" & pre=$!; }
 echo "Reading spectra (stub)" >&2
 echo "FASTAG_PROGRESS done=0 total=4" >&2
-if [ -n "${STUB_SLEEP_BEFORE:-}" ]; then
-  sleep "$STUB_SLEEP_BEFORE"
+[ -n "$pre" ] && wait "$pre"
+[ -n "${STUB_SLEEP:-}" ] && { sleep "$STUB_SLEEP" & mid=$!; }
+if [ -n "${STUB_CHATTY:-}" ]; then
+  i=1
+  while [ "$i" -le "$STUB_CHATTY" ]; do
+    echo "Scoring spectrum $i of $STUB_CHATTY" >&2
+    i=$((i + 1))
+  done
 fi
-[ -n "$out" ] && printf 'spectrum\ttag\tlength\tevalue\n' > "$out"
+# The progress line goes out before the partial -out appears, so a test that
+# waits for the file knows the line is already in the pipe.
 echo "FASTAG_PROGRESS done=2 total=4" >&2
-if [ -n "${STUB_SLEEP:-}" ]; then
-  sleep "$STUB_SLEEP"
-fi
+[ -n "$out" ] && printf 'spectrum\ttag\tlength\tevalue\n' > "$out"
+[ -n "$mid" ] && wait "$mid"
 printf 'scan=1\tPEPTK\t5\t0.001\n' >> "$out"
 printf '%s\n' "$reports" | while IFS= read -r r; do
   [ -n "$r" ] && printf 'section\tkey\tvalue\tn\tdescription\n' > "$r"

@@ -138,7 +138,21 @@ tests (run/batch orchestration, layout completeness, results browser, report
 parsing and logo arithmetic, Digest tab) and a typecheck: `npm test`,
 `npm run typecheck`. The Rust tests of the run lifecycle (a cancelled or
 failed run leaves no output behind) run `testing/stub-fastag/FASTag`, not the
-CLI.
+CLI. The stub is steered by environment variables (`STUB_SLEEP`,
+`STUB_SLEEP_BEFORE`, `STUB_FAIL`, `STUB_CHATTY`) or, where the real app
+launches it and passes no environment of its own, by the input's name: an
+input named `*.slow.*` keeps running, `*.chatty.*` prints 5,000 log lines and
+`*.fail.*` fails.
+
+The tauri-driver specs in `e2e-tauri/` drive the real debug app in WebKitGTK
+on Linux (tauri-driver and WebKitWebDriver under xvfb): probe, run, table,
+cancel, and two recorded gates, the time to first rows on a generated
+1M-row file and the IPC message rate of a chatty run. Native dialogs cannot
+be driven, so a spec replaces only `window.fastag.pickInput` /
+`pickResults`. `bash e2e-tauri/run.sh stub` runs them against the stub (CI
+does on every push and PR, informational until P5); `run.sh real` against
+the CLI in the app's own resources (CI does against the installed `.deb`
+before a tag). Results go to `e2e-tauri/results/`.
 
 The Playwright specs in `e2e-web/` drive the app in Chromium and WebKit on an
 explicit e2e build, `npm run build:e2e` (`vite build --mode e2e`, into
@@ -151,10 +165,12 @@ workflow runs both.
 
 The tests in `src/adversarial/` check GUI behaviour end to end: accessibility,
 the run lifecycle, report parsing, and agreement with the CLI and with this
-README. Some of them read inputs from outside the repository and are skipped
-unless these are set: `FASTAG_GUI_TEST_OUTPUTS` (a directory of real CLI outputs on the E. coli
-fixture), `FASTAG_BIN` (a FASTag CLI to run) and `FASTAG_ORDER_RS` (a helper
-that replays stdout/stderr in the order two reader threads receive them).
+README. The real CLI outputs they parse are committed in
+`src/fixtures/real/` (public inputs only; see its README.md);
+`FASTAG_GUI_TEST_OUTPUTS` names another directory of them instead. The
+`cli-consistency` tests also need `FASTAG_BIN` (a FASTag CLI to run) and
+`FASTAG_ORDER_RS` (a helper that replays stdout/stderr in the order two
+reader threads receive them) and are skipped without them.
 `cli-consistency` also needs the `build_args` example, which `cargo test`
 builds. See `src/adversarial/external.ts`.
 
@@ -171,3 +187,15 @@ avoids OpenMP error #15), the digest tables (`share/FASTag/digest`) and the
 ~1 GB taxonomy inside the app; see
 [../doc/SIGNING-macos-gui.md](../doc/SIGNING-macos-gui.md). In dev those
 resources are machine-specific symlinks and are gitignored.
+
+On Linux (from 1.13.0) the `gui-linux` job in `.github/workflows/ci.yml`
+builds the app outside conda on ubuntu-22.04 against apt's WebKitGTK 4.1,
+with the portable linux-x64 CLI staged into `src-tauri/resources/fastag`:
+`FASTag-gui-linux-x64.deb`, `FASTag-gui-linux-x64.tar.gz` (the `.deb`'s
+`/usr` tree, relocatable) and a best-effort `FASTag-gui-linux-x64.AppImage`.
+The supported floor is glibc 2.35 and WebKitGTK 4.1 (Ubuntu 22.04, Debian 12,
+Rocky/RHEL 9). Before anything is attached to a release, the `.deb` is
+installed and run on ubuntu-22.04 and 24.04 and the AppImage launched on
+both and in a Rocky 9 container; a `gui_dry_run` dispatch runs the same
+jobs without a tag and leaves the bundles as the `FASTag-gui-linux-x64`
+artifact.
