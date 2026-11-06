@@ -1,10 +1,12 @@
 #[doc(hidden)]
 pub mod browser;
 mod close_guard;
+mod events;
 mod fastag;
 mod history;
 mod menu;
 mod outputs;
+mod progress;
 mod report;
 mod reveal;
 mod settings;

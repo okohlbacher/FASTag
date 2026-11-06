@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type JSX, type KeyboardEvent } from 'react'
-import type { BinaryInfo, Cleanup, RunResult, SpeciesReport } from './types'
+import type { BinaryInfo, Cleanup, LogLine, ResolvedOutputs, RunResult, SpeciesReport } from './types'
+import { MAX_LOG, newJobId, runJob, type Job as RunJob, type JobAction } from './runJob'
 import {
   SECTIONS,
   PARAM_BY_NAME,
@@ -53,22 +54,12 @@ function defaultSpeciesOut(out: string): string {
   return `${stripExt(out)}.species.tsv`
 }
 
-// Where the CLI writes a relative output path: fastag.rs resolves it against
-// the folder of an absolute input (the child's working directory), so the
-// renderer must read it there too, not relative to its own cwd.
 // The file manager's own name for "show this file".
 function revealLabel(): string {
   const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent
   if (/Mac/.test(ua)) return 'Reveal in Finder'
   if (/Win/.test(ua)) return 'Show in Explorer'
   return 'Show in folder'
-}
-
-const isAbsolute = (p: string): boolean => /^([/\\]|[A-Za-z]:[/\\])/.test(p)
-function resolveBeside(inFile: string, p: string): string {
-  if (!p || isAbsolute(p) || !isAbsolute(inFile)) return p
-  const slash = lastSep(inFile)
-  return `${inFile.slice(0, slash + 1)}${p}`
 }
 
 // The report options whose files the Digest tab reads.
@@ -115,12 +106,18 @@ const HELP_START = /^FASTag -- /
 // "Error:", "ConversionError", "exception", "fatal".
 const ERROR_WORD = /(error|exception)\b|\bfatal\b/i
 
-// The log keeps its last MAX_LOG lines: every line re-renders the whole log,
-// so an unbounded one makes a chatty run quadratic.
-const MAX_LOG = 5000
-function appendLog(l: string[], line: string): string[] {
-  return l.length < MAX_LOG ? [...l, line] : ['… earlier lines dropped …', ...l.slice(l.length - MAX_LOG + 2), line]
+// The log keeps its last MAX_LOG lines (runJob.ts), appended a batch at a
+// time: the backend sends one Log message per flush interval.
+export function appendLog(l: string[], lines: string[]): string[] {
+  const all = l.concat(lines)
+  return all.length <= MAX_LOG ? all : ['… earlier lines dropped …', ...all.slice(all.length - MAX_LOG + 1)]
 }
+
+// The log drawer renders only its last LOG_WINDOW lines (GUI-DESIGN P1):
+// with all 5,000 lines in the DOM, a log line with the drawer open cost
+// 12.8 ms (median; 104 ms at p95, GUI-DESIGN 7). The full log is kept, and
+// the drawer header counts it.
+export const LOG_WINDOW = 500
 
 // Two runs wrote the same report when the run rows they share agree and the
 // files sit in one folder. run.input is only a basename (sample.mzML from two
@@ -158,8 +155,9 @@ interface Job {
   reason?: string
   // How long the job ran, in ms.
   ms?: number
-  // The -out the CLI wrote, resolved by the backend (a done job's tags).
-  wrote?: string
+  // Every output of a done job, as the backend resolved them (its tags are
+  // outputs.out).
+  outputs?: ResolvedOutputs
   // This job's own log, kept when the next job starts (the live log is
   // cleared then): a failed job's banner and its [Log] button open it.
   log?: string[]
@@ -252,13 +250,15 @@ export default function App(): JSX.Element {
     Object.fromEntries(SECTIONS.map((s) => [s.title, s.open]))
   )
   const [running, setRunning] = useState(false)
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
+  const [progress, setProgress] = useState<RunJob['progress']>(null)
+  // The phase the run is in (progress.rs), for the run bar.
+  const [phase, setPhase] = useState<string | null>(null)
   const [log, setLog] = useState<string[]>([])
   // The same log, readable synchronously: a batch job keeps a copy of it when
   // it ends, before the next job clears it.
   const liveLog = useRef<string[]>([])
   const pushLog = (...lines: string[]): void => {
-    for (const line of lines) liveLog.current = appendLog(liveLog.current, line)
+    liveLog.current = appendLog(liveLog.current, lines)
     setLog(liveLog.current)
   }
   const resetLog = (lines: string[] = []): void => {
@@ -365,19 +365,10 @@ export default function App(): JSX.Element {
   const [savingName, setSavingName] = useState<string | null>(null)  // non-null = the 'save as' input is open
   const [jobs, setJobs] = useState<Job[]>([])
   const [batchRunning, setBatchRunning] = useState(false)
-  // Awaiter for the run in flight, keyed by the backend's run id. Keying by
-  // id (not a single slot) means a duplicated or late terminal event can only
-  // ever resolve the run it belongs to -- never the next job's awaiter.
-  const pending = useRef(new Map<number, (r: RunResult) => void>())
-  // A terminal event can beat the invoke reply: a child that exits at once can
-  // emit fastag:done before `run()` resolves with the run id, so onDone would
-  // arrive before the resolver is registered. Park such a result here; runOne
-  // claims it the moment it learns the id.
-  const earlyDone = useRef(new Map<number, RunResult>())
-  // Run ids whose result has been delivered. A duplicated or late terminal
-  // event for a settled run must be dropped outright -- re-parking it in
-  // earlyDone would hand a stale result to a future run() reply.
-  const settled = useRef(new Set<number>())
+  // The job in flight (runJob.ts): its events come on its own Channel, so
+  // none can reach another job, and a Done before the reply is a state of
+  // the job, not a race.
+  const currentJob = useRef<ReturnType<typeof runJob> | null>(null)
   // Parsed from the CLI's own summary line, so the panel reports what the run
   // actually did rather than a number the GUI guessed.
   const [evidence, setEvidence] = useState<{ contributed: number | null; ms2: number | null }>({
@@ -491,57 +482,25 @@ export default function App(): JSX.Element {
     window.fastag.taxdbInfo(taxdbPath || undefined).then((i) => setTaxdbK(i ? i.k : null))
   }, [taxdbPath])
 
-  useEffect(() => {
-    const offLog = window.fastag.onLog((line) => {
-      pushLog(line)
-      // The reason for the banner: neither the exit epilogue nor the help
-      // dump that follows a ConversionError can be it.
-      if (HELP_START.test(line)) inHelp.current = true
-      if (!inHelp.current && !EPILOGUE.test(line)) {
-        if (ERROR_WORD.test(line)) lastError.current = line
-        if (line.trim()) lastLine.current = line.trim()
-      }
-      // "Species: N spectra contributed taxon evidence; ..."
-      const sp = /^Species:\s+(\d+) spectra contributed/.exec(line)
-      if (sp) setEvidence((e) => ({ ...e, contributed: Number(sp[1]) }))
-      // "42092 MS2 spectra, 1130228 tags[ -> 5321 after filtering]"
-      const ms2 = /^(\d+) MS2 spectra,(?: (\d+) tags)?(?: -> (\d+) after filtering)?/.exec(line)
-      if (ms2) setEvidence((e) => ({ ...e, ms2: Number(ms2[1]) }))
-      const t = ms2?.[3] ?? ms2?.[2]
-      if (t) lastTags.current = Number(t)
-    })
-    const offProgress = window.fastag.onProgress((p) => setProgress(p))
-    const offDone = window.fastag.onDone((r: RunResult) => {
-      // A terminal event that names no run, or one whose run already settled
-      // (a duplicate), correlates to nothing we await: drop it before it can
-      // touch the log or a later job's state.
-      const id = r.runId
-      if (id == null || settled.current.has(id)) return
-      setProgress(null)
-      pushLog(
-        r.ok ? '— done —' : isCancelled(r) ? '— cancelled (stopped before it finished) —' : `— failed (${failText(r)}) —`,
-        ...cleanupLines(r.cleanup)
-      )
-      // Hand the result to the awaiter for THIS run id; an event that beats
-      // the invoke reply parks in earlyDone until runOne claims it. Only a
-      // delivered result ends the run: a parked one must not re-enable Run
-      // while runOne still awaits its invoke reply.
-      const resolve = pending.current.get(id)
-      pending.current.delete(id)
-      if (resolve) {
-        settled.current.add(id)
-        resolve(r)
-        if (pending.current.size === 0) setRunning(false)
-      } else {
-        earlyDone.current.set(id, r)
-      }
-    })
-    return () => {
-      offLog()
-      offProgress()
-      offDone()
+  // One line of the run's log: the reasons for the failure banner and the
+  // counts of the CLI's summary come from these.
+  const onLogLine = (line: string): void => {
+    // The reason for the banner: neither the exit epilogue nor the help
+    // dump that follows a ConversionError can be it.
+    if (HELP_START.test(line)) inHelp.current = true
+    if (!inHelp.current && !EPILOGUE.test(line)) {
+      if (ERROR_WORD.test(line)) lastError.current = line
+      if (line.trim()) lastLine.current = line.trim()
     }
-  }, [])
+    // "Species: N spectra contributed taxon evidence; ..."
+    const sp = /^Species:\s+(\d+) spectra contributed/.exec(line)
+    if (sp) setEvidence((e) => ({ ...e, contributed: Number(sp[1]) }))
+    // "42092 MS2 spectra, 1130228 tags[ -> 5321 after filtering]"
+    const ms2 = /^(\d+) MS2 spectra,(?: (\d+) tags)?(?: -> (\d+) after filtering)?/.exec(line)
+    if (ms2) setEvidence((e) => ({ ...e, ms2: Number(ms2[1]) }))
+    const t = ms2?.[3] ?? ms2?.[2]
+    if (t) lastTags.current = Number(t)
+  }
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
@@ -665,20 +624,22 @@ export default function App(): JSX.Element {
     new Promise((answer) => setOverwriteAsk({ files, answer }))
 
   // Run one file and resolve when it finishes. Shared by single and batch runs.
-  // Resolves with the -out the CLI was given (RunStarted.out), absolute once
-  // the backend has resolved a relative Output. overwrite: the user confirmed
+  // Resolves with how it ended and every output the backend resolved for it
+  // (none for a run that never started). overwrite: the user confirmed
   // overwriting its existing outputs.
   function runOne(
     inFile: string,
     outFile: string,
     overrides?: Record<string, ParamValue>,
     overwrite = false
-  ): Promise<RunResult & { out: string; revealOut?: string }> {
-    let wrote = resolveBeside(inFile, outFile)
-    let revealOut: string | undefined
-    const marked = wrote
-    return new Promise<RunResult & { out: string; revealOut?: string }>((done) => {
-      const resolve = (r: RunResult): void => {
+  ): Promise<RunResult & { outputs?: ResolvedOutputs }> {
+    return new Promise<RunResult & { outputs?: ResolvedOutputs }>((done) => {
+      // The table marked stale when the reply named this run's -out.
+      let marked: string | null = null
+      // The run's Done has come (so a failed reply is not "could not start").
+      let gotDone = false
+      const finish = (job: RunJob): void => {
+        const r = { ...job.result!, cancelled: job.status === 'cancelled' }
         // The CLI writes -out in place: a finished run rewrote it, so the
         // table reads it afresh; a failed or cancelled one may have left it
         // truncated or removed, so the table stays withheld as incomplete.
@@ -687,7 +648,7 @@ export default function App(): JSX.Element {
         const gone = (p: string): 'removed' | 'renamed' | undefined =>
           r.cleanup?.removed.includes(p) ? 'removed' : r.cleanup?.renamed.includes(`${p}.incomplete`) ? 'renamed' : undefined
         setResults((x) =>
-          x?.stale && (x.path === marked || x.path === wrote)
+          x?.stale && marked !== null && x.path === marked
             ? r.ok
               ? { ...x, stale: false, incomplete: false, removed: undefined, gen: x.gen + 1 }
               : { ...x, incomplete: true, removed: gone(x.path) }
@@ -702,19 +663,59 @@ export default function App(): JSX.Element {
               ? `Cancelled ${name}${cleaned ? ', partial outputs removed' : ''}.`
               : `${name} failed${cleaned ? ', partial outputs removed' : ''}.`
         )
-        done({ ...r, out: wrote, revealOut })
+        if (currentJob.current?.job().id === job.id) currentJob.current = null
+        setRunning(false)
+        done({ ...r, outputs: job.outputs })
+      }
+      const onChange = (job: RunJob, a: JobAction): void => {
+        if (a.type === 'REPLY') {
+          command.current = job.command
+          if (!a.reply.started) {
+            resetLog([`FASTag could not start: ${a.reply.reason ?? 'no reason given'}`])
+            return
+          }
+          // The run may replace -out: until it ends, a table of that path
+          // may not be what the file will hold.
+          const o = job.outputs?.out
+          if (o) {
+            marked = o
+            setResults((x) => (x && x.path === o ? { ...x, stale: true } : x))
+          }
+          return
+        }
+        if (a.type === 'REJECTED') {
+          if (!gotDone) resetLog([`FASTag could not start: ${a.error}`])
+          return
+        }
+        if (a.type !== 'EVENT') return
+        const e = a.event
+        if (e.kind === 'log') {
+          const lines = e.lines.map((l: LogLine) => l[0])
+          pushLog(...lines)
+          lines.forEach(onLogLine)
+        } else if (e.kind === 'progress') {
+          setProgress(job.progress)
+        } else if (e.kind === 'phase') {
+          setPhase(e.label)
+        } else {
+          gotDone = true
+          setProgress(null)
+          const r = job.result!
+          pushLog(
+            r.ok ? '— done —' : job.status === 'cancelled' ? '— cancelled (stopped before it finished) —' : `— failed (${failText(r)}) —`,
+            ...cleanupLines(r.cleanup)
+          )
+        }
       }
       resetLog()
       setProgress(null)
+      setPhase(null)
       setEvidence({ contributed: null, ms2: null }) // don't carry a prior run's counts
       setReports({ list: [], errors: [] })
       // Nor a prior run's species: whatever this run ends as, the old taxa
       // would read as its result.
       setSpecies(null)
       setSpeciesRun({ input: inFile, enabled: speciesOn })
-      // The run may replace -out: until it ends, a table of that path may
-      // not be what the file will hold.
-      setResults((r) => (r && r.path === wrote ? { ...r, stale: true } : r))
       setBatchMiss(null)
       lastTags.current = null
       setAnnounce(`Run started on ${baseName(inFile)}.`)
@@ -729,52 +730,32 @@ export default function App(): JSX.Element {
       cancelled.current = false
       setCancelling(false)
       setRunning(true)
-      const settle = (r: RunResult): void => {
-        if (pending.current.size === 0) setRunning(false)
-        resolve(r)
-      }
-      window.fastag
-        .run(overwrite ? { ...runParams(inFile, outFile, overrides), overwrite: true } : runParams(inFile, outFile, overrides))
-        .then((res) => {
-          // Register the awaiter only once the backend hands back the run
-          // id; the terminal event carries the same id (see onDone).
-          if (res.started && res.runId != null) {
-            if (res.out) wrote = res.out
-            revealOut = res.resolvedOutputs?.out ?? undefined
-            command.current = res.command
-            const early = earlyDone.current.get(res.runId)
-            if (early) {
-              // The terminal event already fired before this reply landed.
-              // Consume the parked result and mark the run settled so a
-              // duplicate of that event dies in onDone.
-              earlyDone.current.delete(res.runId)
-              settled.current.add(res.runId)
-              settle(early)
-            } else {
-              pending.current.set(res.runId, resolve)
-            }
-          } else {
-            resetLog([`FASTag could not start: ${res.reason ?? 'no reason given'}`])
-            settle({ ok: false, code: null, message: res.reason })
-          }
-        })
-        .catch((err) => {
-          // A rejected invoke would otherwise leave running=true forever.
-          resetLog([`FASTag could not start: ${err instanceof Error ? err.message : String(err)}`])
-          settle({ ok: false, code: null, message: String(err) })
-        })
+      const params = overwrite ? { ...runParams(inFile, outFile, overrides), overwrite: true } : runParams(inFile, outFile, overrides)
+      const job = runJob(window.fastag, params, newJobId(), onChange)
+      currentJob.current = job
+      void job.settled.then(finish)
     })
   }
 
-  async function showResults(inFile: string, outFile: string, overrides: Record<string, ParamValue> = {}): Promise<void> {
+  // The outputs of a run whose reply never came (or was refused): none.
+  const noOutputs: ResolvedOutputs = { out: null }
+
+  // The tags and reports of a run, at the paths the backend resolved for it
+  // (ResolvedOutputs): the renderer never derives an output path itself.
+  async function showResults(inFile: string, outputs: ResolvedOutputs): Promise<void> {
+    const outFile = outputs.out
+    if (!outFile) {
+      // Done without outputs: the reply that names them never came.
+      pushLog('The run finished, but the app did not learn where it wrote its outputs; open them with Open a tags TSV….')
+      return
+    }
     setResults((r) => ({ path: outFile, gen: (r?.gen ?? 0) + 1, input: inFile }))
     setBatchMiss(null)
-    const path = (name: string): string => resolveBeside(inFile, String(overrides[name] ?? values[name] ?? ''))
     let switched = false
-    if (speciesOn) {
+    if (speciesOn && outputs.species_out) {
       // An unreadable species report must not also cost the Digest reports.
       try {
-        const sp = await window.fastag.species(path('species_out') || defaultSpeciesOut(outFile))
+        const sp = await window.fastag.species(outputs.species_out)
         setSpecies(sp)
         if (sp && sp.taxa.length > 0) {
           setTab('species')
@@ -784,9 +765,10 @@ export default function App(): JSX.Element {
         logResultsError(err)
       }
     }
-    // An inert report option was not sent, so its path may hold an old file.
-    const sent = REPORT_PARAMS.filter((n) => !inertBecause(n, { ...values, ...overrides }))
-    const rep = await loadReports(sent.map(path).filter((p) => p !== ''))
+    // Only the reports the run was sent: an inert option was not, so its
+    // path is not an output and may hold an old file.
+    const sent = REPORT_PARAMS.map((n) => outputs[n as keyof ResolvedOutputs]).filter((p): p is string => !!p)
+    const rep = await loadReports(sent)
     setReports({ list: rep.reports, errors: rep.errors })
     if (!switched && (rep.reports.length || rep.errors.length)) setTab('digest')
   }
@@ -831,9 +813,9 @@ export default function App(): JSX.Element {
       ms: Date.now() - startedAt.current,
       changed: changedParams,
       cleaned: r.cleanup?.removed.length ?? 0,
-      out: r.revealOut ?? r.out
+      out: r.outputs?.out ?? undefined
     })
-    if (r.ok) await showResults(input, r.out).catch(logResultsError)
+    if (r.ok) await showResults(input, r.outputs ?? noOutputs).catch(logResultsError)
     else if (!isCancelled(r)) failed(r, baseName(input))
   }
 
@@ -875,7 +857,7 @@ export default function App(): JSX.Element {
         const cleaned = r.cleanup?.removed.length ?? 0
         setJobs((js) =>
           js.map((j) =>
-            j.input === job.input ? { ...j, status, reason, ms, wrote: r.ok ? r.out : undefined, log: jobLog, cleaned } : j
+            j.input === job.input ? { ...j, status, reason, ms, outputs: r.ok ? r.outputs : undefined, log: jobLog, cleaned } : j
           )
         )
         lastRunJob = { input: job.input, ok: r.ok }
@@ -889,7 +871,7 @@ export default function App(): JSX.Element {
         if (batchCancel.current) break
         if (r.ok && i === queue.length - 1)
           // preview the last
-          await showResults(job.input, r.out, { ...outputs, species_out: defaultSpeciesOut(r.out) }).catch(logResultsError)
+          await showResults(job.input, r.outputs ?? noOutputs).catch(logResultsError)
       }
       // The pane must not keep an older table as if it were this batch's:
       // name the job without tags, and a done one to select instead.
@@ -945,9 +927,9 @@ export default function App(): JSX.Element {
 
   // A done batch job's tags and reports, as the batch writes them.
   function showJob(j: Job): void {
-    const wrote = j.wrote ?? resolveBeside(j.input, j.out)
+    if (!j.outputs) return
     setTab('results')
-    showResults(j.input, wrote, { ...perJobOutputs(values, j.out), species_out: defaultSpeciesOut(wrote) }).catch(logResultsError)
+    showResults(j.input, j.outputs).catch(logResultsError)
   }
 
   // Add one report to those shown, replacing one of the same kind. A report
@@ -1027,6 +1009,7 @@ export default function App(): JSX.Element {
   function cancelRun(): void {
     if (!running || cancelling) return
     cancelled.current = true
+    currentJob.current?.dispatch({ type: 'CANCEL_REQUESTED' })
     if (batchRunning) batchCancel.current = true
     setCancelling(true)
     window.fastag.cancel()
@@ -1145,6 +1128,9 @@ export default function App(): JSX.Element {
   // The drawer shows the live log, or the kept log of a batch job.
   const logJobEntry = logJob ? jobs.find((j) => j.input === logJob && j.log) : undefined
   const shownLog = logJobEntry?.log ?? log
+  // The lines in the DOM: the last LOG_WINDOW.
+  const hiddenLines = Math.max(0, shownLog.length - LOG_WINDOW)
+  const windowLog = hiddenLines ? shownLog.slice(hiddenLines) : shownLog
   const lastLog = [...shownLog].reverse().find((l) => l.trim() !== '') ?? ''
 
   const jobWords = (j: Job): string =>
@@ -1195,7 +1181,7 @@ export default function App(): JSX.Element {
               <span className="js">{jobWords(j)}</span>
             </>
           )
-          const shown = j.status === 'done' && results?.input === j.input && results.path === (j.wrote ?? j.out)
+          const shown = j.status === 'done' && results?.input === j.input && results.path === (j.outputs?.out ?? j.out)
           return (
           <li key={j.input} className={`job ${j.status}${shown ? ' shown' : ''}`}>
             <span className="st" role="img" aria-label={j.status} title={j.reason ?? j.status}>
@@ -1259,6 +1245,8 @@ export default function App(): JSX.Element {
 
   const pct = progress && progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : null
   const elapsed = running && startedAt.current ? ` · ${duration(Date.now() - startedAt.current)} elapsed` : ''
+  // The time left at the run's weighted rate (progress.rs), once measured.
+  const eta = running && progress?.etaSec != null ? ` · about ${duration(progress.etaSec * 1000)} left` : ''
 
   return (
     <div className="app">
@@ -1277,6 +1265,7 @@ export default function App(): JSX.Element {
                 onClick={() => {
                   cancelled.current = true
                   batchCancel.current = true
+                  currentJob.current?.dispatch({ type: 'CANCEL_REQUESTED' })
                   setCloseAsk(null)
                   window.fastag.answerClose(true)
                 }}
@@ -1672,10 +1661,10 @@ export default function App(): JSX.Element {
             {running && (
               <div className="progress">
                 <div className="progress-text">
-                  <span className="what">Tagging spectra</span>
+                  <span className="what">{phase ?? 'Starting FASTag'}</span>
                   <span className="pct">
                     {pct != null && progress
-                      ? `${pct}% · ${progress.done.toLocaleString('en-US')} of ${progress.total.toLocaleString('en-US')} spectra${elapsed}`
+                      ? `${pct}% · ${progress.done.toLocaleString('en-US')} of ${progress.total.toLocaleString('en-US')} spectra${elapsed}${eta}`
                       : progress
                         ? `${progress.done.toLocaleString('en-US')} spectra${elapsed}`
                         : `starting…${elapsed}`}
@@ -2062,8 +2051,13 @@ export default function App(): JSX.Element {
                 run bar's status says when a run starts and ends. Focusable,
                 so the keyboard can scroll it. */}
             <pre id="runlog" className="log" ref={logRef} role="log" aria-label="Run log" tabIndex={0} hidden={!logOpen}>
-              {shownLog.length ? shownLog.join('\n') : 'Log output appears here.'}
+              {shownLog.length ? windowLog.join('\n') : 'Log output appears here.'}
             </pre>
+            {logOpen && hiddenLines > 0 && (
+              <p className="log-window">
+                Showing the last {LOG_WINDOW.toLocaleString('en-US')} of {shownLog.length.toLocaleString('en-US')} lines.
+              </p>
+            )}
           </section>
         </section>
       </div>

@@ -1,5 +1,5 @@
-// Resolved outputs and "Reveal in Finder / Explorer" (GUI-DESIGN 6.3, P0b:
-// -out only; the full table follows in P1).
+// Resolved outputs and "Reveal in Finder / Explorer" (GUI-DESIGN 6.3; the
+// full table of every output option from P1).
 //
 // The renderer never names a path to the opener plugin itself: it asks
 // `reveal_output`, and the backend reveals the file (or opens its folder)
@@ -17,28 +17,77 @@ use tauri_plugin_opener::OpenerExt;
 use crate::fastag::RunManager;
 use crate::history;
 
-/// The outputs of a run as the CLI writes them: absolute, resolved against
-/// the child's cwd exactly as `outputs::resolve` does for the cleanup.
+/// The outputs of a run as the CLI writes them (GUI-DESIGN 6.3): every
+/// output option, absolute, resolved against the child's cwd exactly as
+/// `outputs::resolve` does for the cleanup, from the very argv the CLI was
+/// given (build_args and its file_arg). The renderer never resolves a path
+/// itself: its own guess treated `\data\a.mzML` as absolute on Windows,
+/// where Rust and the CLI do not. A species or glyco report the CLI derives
+/// from -out (-species or -glyco without a path) is under species_out or
+/// glyco_out. None: the run does not write it.
 #[derive(Serialize, Clone, Debug, PartialEq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ResolvedOutputs {
-    /// -out.
     pub out: Option<String>,
+    pub species_out: Option<String>,
+    pub digest_out: Option<String>,
+    pub label_out: Option<String>,
+    pub massgap_out: Option<String>,
+    pub recon_out: Option<String>,
+    pub delta_out: Option<String>,
+    pub recon_id_out: Option<String>,
+    pub glyco_out: Option<String>,
+    pub out_spectra: Option<String>,
 }
 
-/// The value of option @p name in @p args (build_args order: `-name value`).
-fn arg_value<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
-    let flag = format!("-{name}");
-    args.iter().position(|a| *a == flag).and_then(|i| args.get(i + 1)).map(String::as_str)
+impl ResolvedOutputs {
+    fn slot(&mut self, option: &str) -> Option<&mut Option<String>> {
+        Some(match option {
+            "out" => &mut self.out,
+            "species_out" => &mut self.species_out,
+            "digest_out" => &mut self.digest_out,
+            "label_out" => &mut self.label_out,
+            "massgap_out" => &mut self.massgap_out,
+            "recon_out" => &mut self.recon_out,
+            "delta_out" => &mut self.delta_out,
+            "recon_id_out" => &mut self.recon_id_out,
+            "glyco_out" => &mut self.glyco_out,
+            "out_spectra" => &mut self.out_spectra,
+            _ => return None,
+        })
+    }
+
+    /// Every path, in the order of the fields.
+    pub fn paths(&self) -> Vec<&str> {
+        [
+            &self.out,
+            &self.species_out,
+            &self.digest_out,
+            &self.label_out,
+            &self.massgap_out,
+            &self.recon_out,
+            &self.delta_out,
+            &self.recon_id_out,
+            &self.glyco_out,
+            &self.out_spectra,
+        ]
+        .into_iter()
+        .filter_map(|p| p.as_deref())
+        .collect()
+    }
 }
 
 /// ResolvedOutputs of @p args (the argv without the binary) for a child that
 /// runs in @p cwd.
 pub fn resolved(args: &[String], cwd: Option<&Path>) -> ResolvedOutputs {
-    let out = arg_value(args, "out")
-        .filter(|v| !v.is_empty())
-        .map(|v| crate::outputs::resolve(&[v.to_string()], cwd).remove(0).display().to_string());
-    ResolvedOutputs { out }
+    let mut r = ResolvedOutputs::default();
+    for (option, path) in crate::outputs::outputs_by_option(args) {
+        let abs = crate::outputs::resolve(&[path], cwd).remove(0).display().to_string();
+        if let Some(slot) = r.slot(option) {
+            slot.get_or_insert(abs);
+        }
+    }
+    r
 }
 
 fn canonical(p: &Path) -> Option<PathBuf> {

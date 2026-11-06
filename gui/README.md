@@ -26,7 +26,8 @@ gui/
     digestReport.ts    reader of the digest/label/mass-gap TSVs and the sequence-logo arithmetic
     SequenceLogo.tsx   SVG sequence logo (bits against a background)
     fixtures/          synthetic report TSVs for the tests and the browser preview
-    api.ts             the window.fastag bridge over Tauri invoke/events + dialog/opener plugins
+    api.ts             the window.fastag bridge over Tauri invoke, one Channel per run, events + dialog/opener plugins
+    runJob.ts          one run as the renderer tracks it: id made before invoke, Channel events and the reply merged
     paramLayout.ts     section/ordering overlay on the generated manifest (one flat list)
     params.generated.json   `-write_ini` dump of the tool (the source of truth for params)
     testing/           mock bridge for the tests and the browser preview (`npm run dev`),
@@ -42,14 +43,16 @@ gui/
   e2e-web/             Playwright specs and their fixtures (see Tests)
   src-tauri/           Rust backend
     src/lib.rs         plugin setup and Tauri command registration
-    src/fastag.rs      resolve/probe the binary, run it, stream stderr and stdout lines as events, cancel
+    src/fastag.rs      resolve/probe the binary, run it (its events to the job's Channel), cancel
+    src/events.rs      RunEvent (Log/Progress/Phase/Done) and the batching: one Log{lines} per 75 ms or 500 lines
+    src/progress.rs    phase labels from the CLI's output (tests/fixtures/stderr) and the ETA from a weighted rate
     src/outputs.rs     the files a run writes (from its argv); removes them when it is cancelled or fails
     src/close_guard.rs asks before a window close or Cmd+Q kills an active run
     src/settings.rs    named presets + last-used, atomic JSON in the app config dir
     src/browser.rs     indexed million-row results browser: head read on open, index and
                        E-value order built in the background and swapped in (D5)
     src/menu.rs        File, Run and Help menus with their CmdOrCtrl shortcuts
-    src/reveal.rs      ResolvedOutputs (-out) and Reveal / Open folder, limited to run outputs
+    src/reveal.rs      ResolvedOutputs (every output, absolute) and Reveal / Open folder, limited to run outputs
     src/species.rs     species TSV read + FTX2 taxdb header read
     src/report.rs      digest/label/mass-gap report read
     examples/browser_bench.rs  the browser bench (bench/bench-<version>.json)
@@ -137,8 +140,12 @@ reading, browser bounds): `cargo test` in `src-tauri/` (it needs
 tests (run/batch orchestration, layout completeness, results browser, report
 parsing and logo arithmetic, Digest tab) and a typecheck: `npm test`,
 `npm run typecheck`. The Rust tests of the run lifecycle (a cancelled or
-failed run leaves no output behind) run `testing/stub-fastag/FASTag`, not the
-CLI.
+failed run leaves no output behind, the `run` command's events in order on a
+real Channel, the IPC message rate of a chatty phase) run
+`testing/stub-fastag/FASTag`, not the CLI; `cargo test --lib ipc_rate --
+--nocapture` prints the measured rate. `src/api.test.ts` tests the bridge itself
+against Tauri's IPC mock (`@tauri-apps/api/mocks`): a Done before the `run`
+reply, a late log after Done, a cancel during a phase without progress.
 
 The Playwright specs in `e2e-web/` drive the app in Chromium and WebKit on an
 explicit e2e build, `npm run build:e2e` (`vite build --mode e2e`, into

@@ -68,9 +68,8 @@ describe('run/batch orchestration', () => {
 
     await emitDone(mock, 1, true) // duplicate of A's event: dropped outright
     expect(doneLines(container)).toBe(0)
-    // An id nothing ever started parks in earlyDone (it cannot be told from
-    // the early-race at event time, so it logs) -- but it must never resolve
-    // B's awaiter.
+    // An id nothing ever started reaches no run's Channel: it must never
+    // resolve B's job.
     await emitDone(mock, 99, true)
     expect(screen.getByRole('button', { name: 'Running batch…' })).toBeDefined()
     expect(mock.runCalls).toHaveLength(2)
@@ -85,7 +84,7 @@ describe('run/batch orchestration', () => {
     // No run id at all: dropped before it can touch anything.
     await emitDone(mock, undefined, false)
     expect(logText(container)).toBe('Log output appears here.')
-    // An unclaimed id parks (and logs) but must not start showing results or
+    // An id no run has reaches no Channel: it must not start showing results or
     // flip the run state.
     await emitDone(mock, 42, true)
     expect(mock.resultsQueryCalls).toHaveLength(0)

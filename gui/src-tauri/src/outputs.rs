@@ -38,12 +38,14 @@ fn default_report_path(out: &str, suffix: &str) -> String {
 }
 
 /// Every file the CLI writes for @p args (as build_args produced them, the
-/// binary not included): each output-file option with a value, plus the
-/// species and glyco reports the CLI derives from -out when -species or
-/// -glyco is on without a path of their own (FASTag.cpp 1928-1937). Paths
-/// are as the child sees them; relative ones are relative to its cwd.
-pub fn resolved_outputs(args: &[String]) -> Vec<String> {
-    let mut found: Vec<(&str, String)> = Vec::new();
+/// binary not included), with the option that names it: each output-file
+/// option with a value, plus the species and glyco reports the CLI derives
+/// from -out when -species or -glyco is on without a path of their own
+/// (FASTag.cpp 1928-1937), under species_out and glyco_out. Paths are as the
+/// child sees them; relative ones are relative to its cwd. In the CLI's
+/// order, derived reports last, without empty values.
+pub fn outputs_by_option(args: &[String]) -> Vec<(&'static str, String)> {
+    let mut found: Vec<(&'static str, String)> = Vec::new();
     let mut flags: Vec<&str> = Vec::new();
     let mut i = 0;
     while i < args.len() {
@@ -51,7 +53,7 @@ pub fn resolved_outputs(args: &[String]) -> Vec<String> {
         if let Some(name) = a.strip_prefix('-') {
             if let Some(opt) = OUTPUT_OPTIONS.iter().find(|o| **o == name) {
                 if let Some(v) = args.get(i + 1) {
-                    found.push((opt, v.clone()));
+                    found.push((*opt, v.clone()));
                 }
                 i += 2;
                 continue;
@@ -62,18 +64,24 @@ pub fn resolved_outputs(args: &[String]) -> Vec<String> {
     }
     let get = |opt: &str| found.iter().find(|(o, _)| *o == opt).map(|(_, v)| v.clone()).unwrap_or_default();
     let out = get("out");
-    let mut paths: Vec<String> = found.iter().map(|(_, v)| v.clone()).collect();
     // -species writes its report also without -species_out (and -taxdb plus
     // -species_out turns it on); -glyco likewise without -glyco_out.
-    if flags.contains(&"glyco") && get("glyco_out").is_empty() && !out.is_empty() {
-        paths.push(default_report_path(&out, ".glyco.tsv"));
+    let glyco = flags.contains(&"glyco") && get("glyco_out").is_empty() && !out.is_empty();
+    let species = flags.contains(&"species") && get("species_out").is_empty() && !out.is_empty();
+    if glyco {
+        found.push(("glyco_out", default_report_path(&out, ".glyco.tsv")));
     }
-    if flags.contains(&"species") && get("species_out").is_empty() && !out.is_empty() {
-        paths.push(default_report_path(&out, ".species.tsv"));
+    if species {
+        found.push(("species_out", default_report_path(&out, ".species.tsv")));
     }
+    found.retain(|(_, v)| !v.is_empty());
+    found
+}
+
+/// Every file the CLI writes for @p args (outputs_by_option), each once.
+pub fn resolved_outputs(args: &[String]) -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
-    paths.retain(|p| !p.is_empty() && seen.insert(p.clone()));
-    paths
+    outputs_by_option(args).into_iter().map(|(_, p)| p).filter(|p| seen.insert(p.clone())).collect()
 }
 
 /// Every output path as the child sees it: a relative one joined to @p cwd.

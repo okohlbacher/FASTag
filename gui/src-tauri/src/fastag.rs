@@ -1,5 +1,5 @@
-// FASTag CLI integration: locate the binary, run it, stream its stderr as
-// events, and cancel by killing the child.
+// FASTag CLI integration: locate the binary, run it, stream its output to
+// the run's own Channel (events.rs), and cancel by killing the child.
 //
 // Security: the binary is spawned with an explicit argv array (never a shell
 // string), and build_args() only ever emits flags the tool declares in its
@@ -9,13 +9,17 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::ipc::Channel;
+use tauri::{AppHandle, Manager, State};
 
+use crate::events::{Batcher, RunEvent, RunResult, Sink, FLUSH_INTERVAL};
+use crate::reveal::ResolvedOutputs;
 use crate::{history, outputs};
 
 // name -> declared type, straight from the tool's own -write_ini. This is the
@@ -29,8 +33,8 @@ const EXE: &str = if cfg!(windows) { "FASTag.exe" } else { "FASTag" };
 // child exists at a time; a second `run` while one is live is refused.
 #[derive(Default)]
 pub struct RunManager {
-    pub current: Mutex<Option<CurrentRun>>,
-    pub seq: AtomicU64,
+    // Shared with the run's coordinator thread, which frees it.
+    pub current: Arc<Mutex<Option<CurrentRun>>>,
     // Set by the renderer while a batch is running: between two jobs no child
     // exists, but quitting would still drop the rest of the queue.
     pub ui_busy: AtomicBool,
@@ -66,7 +70,6 @@ impl RunManager {
 }
 
 pub struct CurrentRun {
-    pub run_id: u64,
     pub child: Arc<Mutex<Child>>,
     // Set by cancel() so the done event can say "cancelled" rather than
     // "failed" (on Windows a killed child exits with code 1).
@@ -89,23 +92,22 @@ pub struct BinaryInfo {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+// The reply of `run` (GUI-DESIGN 6.2). Its events go to the Channel the
+// renderer passed, never to a global event, so they cannot reach another
+// job; the renderer merges reply and events into the job it created itself,
+// and a Done that beats this reply is a defined state there.
 pub struct RunStarted {
-    started: bool,
-    run_id: Option<u64>,
-    reason: Option<String>,
-    // The -out path the CLI was actually given: a relative Output is resolved
-    // against the input's folder (see build_args), and the renderer must read
-    // the results from there, not from its own cwd.
-    out: Option<String>,
-    // Every file the run writes (outputs::resolved_outputs), as the CLI was
-    // given them: removed again if the run does not finish.
-    outputs: Option<Vec<String>>,
+    pub started: bool,
+    pub reason: Option<String>,
+    // The -out path the CLI was actually given, absolute (outputs.out).
+    pub out: Option<String>,
+    // Every output of the run, absolute, resolved from the argv the CLI was
+    // given (GUI-DESIGN 6.3): what the renderer reads, Reveal and Open folder
+    // act on, and what is removed again if the run does not finish.
+    pub outputs: Option<ResolvedOutputs>,
     // The command line, binary first: the failure banner offers it to copy,
     // so a refused run can be reproduced in a terminal.
-    command: Option<Vec<String>>,
-    // The outputs resolved as the CLI writes them (GUI-DESIGN 6.3; -out in
-    // P0b): what Reveal and Open folder act on.
-    resolved_outputs: Option<crate::reveal::ResolvedOutputs>,
+    pub command: Option<Vec<String>>,
 }
 
 #[derive(Deserialize)]
@@ -540,44 +542,6 @@ pub fn build_args_json(json: &str) -> Result<Vec<String>, String> {
     Ok(build_args(&p))
 }
 
-const PROGRESS_PREFIX: &str = "FASTAG_PROGRESS ";
-
-fn parse_progress_line(line: &str) -> Option<(u64, u64)> {
-    let rest = line.strip_prefix(PROGRESS_PREFIX)?;
-    let mut done = None;
-    let mut total = None;
-    for tok in rest.split_whitespace() {
-        if let Some(v) = tok.strip_prefix("done=") {
-            done = v.parse().ok();
-        } else if let Some(v) = tok.strip_prefix("total=") {
-            total = v.parse().ok();
-        }
-    }
-    Some((done?, total?))
-}
-
-/// What a run reports while it goes, independent of Tauri so the run
-/// lifecycle can be tested against a stub CLI.
-pub enum RunEmit {
-    Log(String),
-    Progress { done: u64, total: u64 },
-    Done(Value),
-}
-
-pub type Sink = Arc<dyn Fn(RunEmit) + Send + Sync>;
-
-fn read_stream<R: Read>(stream: R, sink: &Sink, parse_progress: bool) {
-    for_each_line(stream, |line| {
-        if parse_progress {
-            if let Some((done, total)) = parse_progress_line(&line) {
-                sink(RunEmit::Progress { done, total });
-                return;
-            }
-        }
-        sink(RunEmit::Log(line));
-    });
-}
-
 /// Every line of @p stream, decoded lossily, until EOF. lines() stops at the
 /// first line that is not UTF-8 (a cp1252 path echoed by a Windows build):
 /// the reader then dropped the pipe while the child still wrote to it, which
@@ -615,7 +579,8 @@ pub struct RunFiles<'a> {
 
 /// How a run ended, for the done event and the run record.
 pub struct RunEnd {
-    pub run_id: u64,
+    /// The child's process id (part of the record's id).
+    pub pid: u32,
     pub ok: bool,
     pub code: Option<i32>,
     pub message: Option<String>,
@@ -634,21 +599,33 @@ pub fn exists_reason(existing: &[PathBuf]) -> String {
     format!("these outputs already exist and overwriting them was not confirmed: {}", list.join(", "))
 }
 
+/// How often the coordinator looks whether the child has exited.
+const POLL: Duration = Duration::from_millis(20);
+/// How long the coordinator waits, once the child has exited, for the rest
+/// of its output. A process the CLI started can keep the pipes open after
+/// it (a grandchild that outlived a kill, or one that inherited the pipes
+/// from a parallel spawn): waiting for their end left the run without a
+/// Done event, its outputs uncleaned and the slot taken.
+const DRAIN: Duration = Duration::from_secs(2);
+/// The log line of a run whose output did not end with it.
+pub const STREAMS_OPEN: &str =
+    "Note: the output streams stayed open after FASTag ended (a process it started still holds them); later lines are not shown.";
+
 /// Start @p cmd as the run of @p files. Refused when one of its outputs
 /// already exists and @p files.overwrite is false: an existing file is
 /// confirmed before the run, never after (GUI-DESIGN 6.4). Its stderr and
-/// stdout go to @p sink line by line; when it has ended, a run that did not
-/// finish has every file at its output paths removed (outputs::cleanup),
-/// @p finish gets how it ended (it records the run and frees the slot in
-/// @p mgr), and the last thing @p sink gets is RunEmit::Done. Returns the run
-/// id.
+/// stdout go to @p sink in batches (events.rs); when it has ended, a run
+/// that did not finish has every file at its output paths removed
+/// (outputs::cleanup), @p finish gets how it ended (it records the run), the
+/// slot in @p mgr is freed, and the last thing @p sink gets is
+/// RunEvent::Done.
 pub fn start_run(
     mgr: &RunManager,
     mut cmd: Command,
     files: RunFiles<'_>,
     sink: Sink,
     finish: Box<dyn FnOnce(&RunEnd) + Send>,
-) -> Result<u64, String> {
+) -> Result<(), String> {
     if mgr.current.lock().map(|c| c.is_some()).unwrap_or(true) {
         return Err("a run is already in progress".into());
     }
@@ -663,64 +640,84 @@ pub fn start_run(
     }
     let mut child = cmd.spawn().map_err(|e| e.to_string())?;
 
-    let run_id = mgr.seq.fetch_add(1, Ordering::SeqCst) + 1;
+    let pid = child.id();
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
     let child_arc = Arc::new(Mutex::new(child));
     let cancelled = Arc::new(AtomicBool::new(false));
     let reaped = Arc::new(AtomicBool::new(false));
     *mgr.current.lock().unwrap() = Some(CurrentRun {
-        run_id,
         child: child_arc.clone(),
         cancelled: cancelled.clone(),
         reaped: reaped.clone(),
     });
 
+    let batcher = Arc::new(Batcher::start(sink, FLUSH_INTERVAL));
     // The tail of the log, for last-failure.log.
     let tail = Arc::new(Mutex::new(std::collections::VecDeque::<String>::new()));
-    let sink: Sink = {
-        let tail = tail.clone();
-        Arc::new(move |e| {
-            if let RunEmit::Log(l) = &e {
-                let mut t = tail.lock().unwrap_or_else(|p| p.into_inner());
-                if t.len() == LOG_TAIL {
-                    t.pop_front();
-                }
-                t.push_back(l.clone());
+
+    // One reader thread per stream (stderr carries the progress contract;
+    // stdout is drained as log so a full pipe can never block the child).
+    // Each says when its stream has ended.
+    let (eof_tx, eof_rx) = std::sync::mpsc::channel::<()>();
+    for (stream, is_err) in [(stderr.map(|s| Box::new(s) as Box<dyn Read + Send>), true), (stdout.map(|s| Box::new(s) as Box<dyn Read + Send>), false)] {
+        let (b, tail, eof) = (batcher.clone(), tail.clone(), eof_tx.clone());
+        std::thread::spawn(move || {
+            if let Some(s) = stream {
+                for_each_line(s, |line| {
+                    {
+                        let mut t = tail.lock().unwrap_or_else(|p| p.into_inner());
+                        if t.len() == LOG_TAIL {
+                            t.pop_front();
+                        }
+                        t.push_back(line.clone());
+                    }
+                    b.line(line, is_err);
+                });
             }
-            sink(e)
-        })
-    };
+            let _ = eof.send(());
+        });
+    }
+    drop(eof_tx);
 
-    // One reader thread per stream (stderr carries the progress contract; stdout
-    // is drained as log so a full pipe can never block the child).
-    let s_err = sink.clone();
-    let t_err = std::thread::spawn(move || {
-        if let Some(s) = stderr {
-            read_stream(s, &s_err, true);
-        }
-    });
-    let s_out = sink.clone();
-    let t_out = std::thread::spawn(move || {
-        if let Some(s) = stdout {
-            read_stream(s, &s_out, false);
-        }
-    });
-
-    // Coordinator: once both streams hit EOF the process has ended; reap it,
-    // remove what an unfinished run left, record the run, release the slot
-    // and emit exactly one terminal event. The slot is released after the
-    // cleanup, so a quit that waits for an idle RunManager never cuts the
-    // cleanup short.
+    // Coordinator: once the child has exited, take the rest of its output
+    // (at most DRAIN), remove what an unfinished run left, record the run,
+    // release the slot and send exactly one Done. The child is polled, not
+    // waited for under its lock: kill_run takes that lock, and a child that
+    // closed its pipes but kept running would otherwise block Cancel. The
+    // slot is released after the cleanup, so a quit that waits for an idle
+    // RunManager never cuts the cleanup short.
+    let current = mgr.current.clone();
     std::thread::spawn(move || {
-        let _ = t_err.join();
-        let _ = t_out.join();
-        let status = {
-            let mut c = child_arc.lock().unwrap();
-            let s = c.wait();
-            reaped.store(true, Ordering::SeqCst);
-            s
+        let status = loop {
+            {
+                let mut c = child_arc.lock().unwrap_or_else(|e| e.into_inner());
+                match c.try_wait() {
+                    Ok(Some(s)) => {
+                        reaped.store(true, Ordering::SeqCst);
+                        break Ok(s);
+                    }
+                    Ok(None) => {}
+                    Err(e) => {
+                        reaped.store(true, Ordering::SeqCst);
+                        break Err(e);
+                    }
+                }
+            }
+            std::thread::sleep(POLL);
         };
+        let until = std::time::Instant::now() + DRAIN;
+        let mut ended = 0;
+        while ended < 2 {
+            match eof_rx.recv_timeout(until.saturating_duration_since(std::time::Instant::now())) {
+                Ok(()) => ended += 1,
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    batcher.line(STREAMS_OPEN.to_string(), false);
+                    break;
+                }
+            }
+        }
         let (ok, code, message) = match &status {
             Ok(s) => (s.success(), s.code(), exit_message(s)),
             Err(e) => (false, None, Some(format!("lost track of the process: {e}"))),
@@ -730,18 +727,18 @@ pub fn start_run(
         let message = if was_cancelled { Some("cancelled".to_string()) } else { message };
         let cleanup = if ok { outputs::Cleanup::default() } else { outputs::cleanup(&paths, &input_path) };
         let log: Vec<String> = tail.lock().map(|t| t.iter().cloned().collect()).unwrap_or_default();
-        let end = RunEnd { run_id, ok, code, message, cancelled: was_cancelled, cleanup, log };
+        let end = RunEnd { pid, ok, code, message, cancelled: was_cancelled, cleanup, log };
         finish(&end);
-        sink(RunEmit::Done(serde_json::json!({
-            "runId": end.run_id,
-            "ok": end.ok,
-            "code": end.code,
-            "message": end.message,
-            "cancelled": end.cancelled,
-            "cleanup": end.cleanup,
-        })));
+        release_slot(&current, &child_arc);
+        batcher.finish(RunResult {
+            ok: end.ok,
+            code: end.code,
+            message: end.message,
+            cancelled: end.cancelled,
+            cleanup: end.cleanup,
+        });
     });
-    Ok(run_id)
+    Ok(())
 }
 
 /// The run record of a run that ended as @p end (history.rs).
@@ -752,7 +749,7 @@ pub fn record_of(
     end: &RunEnd,
 ) -> history::RunRecord {
     history::RunRecord {
-        id: format!("{start}-{}", end.run_id),
+        id: format!("{start}-{}", end.pid),
         input: files.input.to_string(),
         outputs: files.outputs.to_vec(),
         cwd: files.cwd.map(|d| d.display().to_string()),
@@ -781,10 +778,10 @@ pub fn record_run(dir: &Path, rec: &history::RunRecord, log: &[String]) {
     }
 }
 
-/// Free the slot of run @p run_id (a later run may already hold it).
-pub fn release_slot(mgr: &RunManager, run_id: u64) {
-    let mut cur = mgr.current.lock().unwrap_or_else(|e| e.into_inner());
-    if cur.as_ref().is_some_and(|c| c.run_id == run_id) {
+/// Free the slot of the run of @p child (a later run may already hold it).
+fn release_slot(current: &Mutex<Option<CurrentRun>>, child: &Arc<Mutex<Child>>) {
+    let mut cur = current.lock().unwrap_or_else(|e| e.into_inner());
+    if cur.as_ref().is_some_and(|c| Arc::ptr_eq(&c.child, child)) {
         *cur = None;
     }
 }
@@ -797,14 +794,33 @@ pub struct OutputsCheck {
     existing: Vec<String>,
 }
 
+/// What a run of @p params is, resolved once for `run` and `outputs_check`:
+/// the argv (build_args), the child's cwd (the input's folder), the outputs
+/// as given to the CLI, and every output resolved against that cwd.
+struct Plan {
+    args: Vec<String>,
+    cwd: Option<PathBuf>,
+    outputs: Vec<String>,
+    resolved: ResolvedOutputs,
+}
+
+fn plan(params: &RunParams) -> Plan {
+    let args = build_args(params);
+    // Anything still relative (e.g. a path the CLI derives itself) lands next
+    // to the input, not in the app's cwd ("/" for a Finder launch).
+    let cwd = base_dir(&params.input).filter(|d| d.is_dir());
+    let outputs = outputs::resolved_outputs(&args);
+    let resolved = crate::reveal::resolved(&args, cwd.as_deref());
+    Plan { args, cwd, outputs, resolved }
+}
+
 /// The outputs a run of @p params would write, and those already on disk,
 /// resolved exactly as `run` resolves them (build_args, the input's folder).
 #[tauri::command]
 pub fn outputs_check(params: RunParams) -> OutputsCheck {
-    let args = build_args(&params);
-    let cwd = base_dir(&params.input).filter(|d| d.is_dir());
-    let paths = outputs::resolve(&outputs::resolved_outputs(&args), cwd.as_deref());
-    let input = match &cwd {
+    let pl = plan(&params);
+    let paths = outputs::resolve(&pl.outputs, pl.cwd.as_deref());
+    let input = match &pl.cwd {
         Some(d) if Path::new(&params.input).is_relative() => d.join(&params.input),
         _ => PathBuf::from(&params.input),
     };
@@ -812,29 +828,22 @@ pub fn outputs_check(params: RunParams) -> OutputsCheck {
     OutputsCheck { existing: show(&outputs::existing(&paths, &input)), outputs: show(&paths) }
 }
 
-#[tauri::command]
-pub fn run(app: AppHandle, state: State<'_, RunManager>, params: RunParams) -> RunStarted {
-    let refused = |reason: String| RunStarted {
-        started: false,
-        run_id: None,
-        reason: Some(reason),
-        out: None,
-        outputs: None,
-        command: None,
-        resolved_outputs: None,
-    };
-    if state.current.lock().map(|c| c.is_some()).unwrap_or(true) {
+fn refused(reason: String) -> RunStarted {
+    RunStarted { started: false, reason: Some(reason), out: None, outputs: None, command: None }
+}
+
+/// Run @p params with the binary @p r, its events to @p sink: the whole of
+/// the `run` command but the AppHandle, so the cargo tests drive exactly
+/// this against the stub CLI. @p history_dir is where the run is recorded.
+pub fn launch(mgr: &RunManager, r: &Resolved, params: RunParams, sink: Sink, history_dir: Option<PathBuf>) -> RunStarted {
+    if mgr.current.lock().map(|c| c.is_some()).unwrap_or(true) {
         return refused("a run is already in progress".into());
     }
-    let r = resolve_binary(&app);
-    let args = build_args(&params);
+    let Plan { args, cwd, outputs, resolved } = plan(&params);
     let command: Vec<String> = std::iter::once(r.bin.display().to_string()).chain(args.iter().cloned()).collect();
     let mut cmd = Command::new(&r.bin);
     // stdin is null: the CLI never reads it, and an inherited one could block.
     cmd.args(&args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
-    // Anything still relative (e.g. a path the CLI derives itself) lands next
-    // to the input, not in the app's cwd ("/" for a Finder launch).
-    let cwd = base_dir(&params.input).filter(|d| d.is_dir());
     if let Some(d) = &cwd {
         cmd.current_dir(d);
     }
@@ -844,59 +853,50 @@ pub fn run(app: AppHandle, state: State<'_, RunManager>, params: RunParams) -> R
     }
     quiet_blas(&mut cmd);
     no_console_window(&mut cmd);
-    if let Some(t) = taxonomy_dir(&r) {
+    if let Some(t) = taxonomy_dir(r) {
         // Point -species at the taxonomy explicitly (the CLI's own
         // <bin>/../share lookup fails for a copied/symlinked binary) -- the
         // user's own directory if set, the same one species.rs reports on.
         cmd.env("FASTAG_TAXONOMY_DIR", t);
     }
-    let outputs = outputs::resolved_outputs(&args);
     let start = history::now_ms();
-    // Emitting to a closed window is a harmless no-op.
-    let a = app.clone();
-    let sink: Sink = Arc::new(move |e| {
-        let _ = match e {
-            RunEmit::Log(line) => a.emit("fastag:log", line),
-            RunEmit::Progress { done, total } => {
-                a.emit("fastag:progress", serde_json::json!({ "done": done, "total": total }))
-            }
-            RunEmit::Done(v) => a.emit("fastag:done", v),
-        };
-    });
-    // When the run has ended: record it (history.rs), then free the slot.
-    let a = app.clone();
+    // When the run has ended: record it (history.rs).
     let (rec_input, rec_outputs, rec_cwd, rec_argv) = (params.input.clone(), outputs.clone(), cwd.clone(), command.clone());
     let finish = Box::new(move |end: &RunEnd| {
-        if let Some(d) = history::dir(&a) {
+        if let Some(d) = history_dir {
             let files = RunFiles { input: &rec_input, outputs: &rec_outputs, cwd: rec_cwd.as_deref(), overwrite: true };
             record_run(&d, &record_of(&files, &rec_argv, start, end), &end.log);
         }
-        release_slot(&a.state::<RunManager>(), end.run_id);
     });
     let files = RunFiles { input: &params.input, outputs: &outputs, cwd: cwd.as_deref(), overwrite: params.overwrite };
+    let abs: Vec<PathBuf> = resolved.paths().into_iter().map(PathBuf::from).collect();
     // A spawn failure is known synchronously: report it as a non-start so the
     // frontend reports "FASTag could not start" and settles cleanly.
-    let resolved = crate::reveal::resolved(&args, cwd.as_deref());
-    let abs = outputs::resolve(&outputs, cwd.as_deref());
-    match start_run(&state, cmd, files, sink, finish) {
-        Ok(run_id) => {
-            if let Ok(mut r) = state.revealable.lock() {
+    match start_run(mgr, cmd, files, sink, finish) {
+        Ok(()) => {
+            if let Ok(mut r) = mgr.revealable.lock() {
                 r.extend(abs);
             }
             RunStarted {
                 started: true,
-                run_id: Some(run_id),
                 reason: None,
-                // The -out value the CLI was given (build_args), not a
-                // position in the argv.
-                out: args.iter().position(|a| a == "-out").and_then(|i| args.get(i + 1)).cloned(),
-                outputs: Some(outputs),
+                out: resolved.out.clone(),
+                outputs: Some(resolved),
                 command: Some(command),
-                resolved_outputs: Some(resolved),
             }
         }
         Err(e) => refused(e),
     }
+}
+
+/// Start a run; its events go to @p on_event, the job's own Channel.
+#[tauri::command]
+pub fn run(app: AppHandle, state: State<'_, RunManager>, params: RunParams, on_event: Channel<RunEvent>) -> RunStarted {
+    // Sending to a closed window is a harmless no-op.
+    let sink: Sink = Arc::new(move |e| {
+        let _ = on_event.send(e);
+    });
+    launch(&state, &resolve_binary(&app), params, sink, history::dir(&app))
 }
 
 /// Unix: start the child as the leader of its own process group, so Cancel also
@@ -975,6 +975,7 @@ pub fn cancel(state: State<'_, RunManager>) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::events::parse_progress_line;
 
     fn rp(json: &str) -> RunParams {
         serde_json::from_str(json).unwrap()
@@ -1135,7 +1136,6 @@ mod tests {
         let mut child = cmd.spawn().unwrap();
         let mut stdout = child.stdout.take().unwrap();
         let run = CurrentRun {
-            run_id: 1,
             child: Arc::new(Mutex::new(child)),
             cancelled: Arc::new(AtomicBool::new(false)),
             reaped: Arc::new(AtomicBool::new(false)),
@@ -1172,6 +1172,104 @@ mod tests {
         assert_eq!(parse_progress_line("FASTAG_PROGRESS done=7 total=0"), Some((7, 0)));
         assert_eq!(parse_progress_line("something else"), None);
         assert_eq!(parse_progress_line("FASTAG_PROGRESS done=x total=1"), None);
+    }
+
+    /// The value of every output option in @p args.
+    fn argv_outputs(args: &[String]) -> Vec<(String, String)> {
+        outputs::outputs_by_option(args).into_iter().map(|(o, v)| (o.to_string(), v)).collect()
+    }
+
+    // GUI-DESIGN 6.3: every output of the run, resolved from the argv the
+    // CLI is given, never guessed by the renderer.
+    #[test]
+    fn resolved_outputs_name_every_output_as_the_cli_gets_it() {
+        let d = std::env::temp_dir().join(format!("fastag-resolved-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        let input = d.join("a.mzML");
+        let params = format!(
+            r#"{{"in":"{}","out":"a.tags.tsv","params":{{"species":true,"glyco":true,"digest_out":"a.digest.tsv",
+               "label_out":"/abs/l.tsv","massgap_out":"-m.tsv","recon_out":"r/recon.tsv","delta_out":"a.delta.tsv",
+               "recon_id_out":"a.ids.tsv","out_spectra":"a.spectra.mzML"}}}}"#,
+            input.display()
+        );
+        let pl = plan(&rp(&params));
+        assert_eq!(pl.cwd.as_deref(), Some(d.as_path()));
+        let at = |n: &str| Some(d.join(n).display().to_string());
+        assert_eq!(
+            pl.resolved,
+            ResolvedOutputs {
+                out: at("a.tags.tsv"),
+                species_out: at("a.tags.species.tsv"),
+                digest_out: at("a.digest.tsv"),
+                label_out: Some("/abs/l.tsv".into()),
+                massgap_out: at("-m.tsv"),
+                recon_out: at("r/recon.tsv"),
+                delta_out: at("a.delta.tsv"),
+                recon_id_out: at("a.ids.tsv"),
+                glyco_out: at("a.tags.glyco.tsv"),
+                out_spectra: at("a.spectra.mzML"),
+            }
+        );
+        // The same files the cleanup removes.
+        let mut a: Vec<String> = pl.resolved.paths().into_iter().map(String::from).collect();
+        let mut b: Vec<String> =
+            outputs::resolve(&pl.outputs, pl.cwd.as_deref()).iter().map(|p| p.display().to_string()).collect();
+        a.sort();
+        b.sort();
+        assert_eq!(a, b);
+        // Explicit report paths win over derived ones; an unset option is None.
+        let pl = plan(&rp(&format!(
+            r#"{{"in":"{}","out":"a.tags.tsv","params":{{"species":true,"species_out":"s.tsv"}}}}"#,
+            input.display()
+        )));
+        assert_eq!(pl.resolved.species_out, at("s.tsv"));
+        assert_eq!(pl.resolved.glyco_out, None);
+        assert_eq!(pl.resolved.digest_out, None);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    // The renderer took `\data\a.mzML` for absolute; Windows (and the CLI)
+    // do not. On a Unix build a Windows path is a relative name: the
+    // outputs are then exactly the argv's values, never re-resolved.
+    #[test]
+    fn resolved_outputs_of_windows_paths_are_the_argv_values() {
+        let params = r#"{"in":"\\data\\a.mzML","out":"C:\\r.1\\x","params":{"species":true,"digest_out":"\\data\\d.tsv",
+                        "label_out":"D:\\l.tsv","out_spectra":"\\\\srv\\share\\s.mzML","glyco_out":"-g.tsv"}}"#;
+        let pl = plan(&rp(params));
+        for (option, value) in argv_outputs(&pl.args) {
+            let want = outputs::resolve(&[value], pl.cwd.as_deref()).remove(0).display().to_string();
+            let got = pl.resolved.paths();
+            assert!(got.contains(&want.as_str()), "{option}: {want} not in {got:?}");
+        }
+        #[cfg(windows)]
+        {
+            // \data\a.mzML has no drive, so it is not absolute on Windows
+            // either: nothing is resolved against it. The dotted folder
+            // keeps its name; UNC and other drives stay as they are.
+            assert_eq!(pl.cwd, None);
+            assert_eq!(pl.resolved.out.as_deref(), Some(r"C:\r.1\x"));
+            assert_eq!(pl.resolved.species_out.as_deref(), Some(r"C:\r.1\x.species.tsv"));
+            assert_eq!(pl.resolved.digest_out.as_deref(), Some(r"\data\d.tsv"));
+            assert_eq!(pl.resolved.label_out.as_deref(), Some(r"D:\l.tsv"));
+            assert_eq!(pl.resolved.out_spectra.as_deref(), Some(r"\\srv\share\s.mzML"));
+            assert_eq!(pl.resolved.glyco_out.as_deref(), Some("./-g.tsv"));
+            // An absolute input: relative outputs land in its folder, and a
+            // root-relative path joins its drive (the renderer's own guess
+            // read it from \data on whatever drive it ran on).
+            let pl = plan(&rp(r#"{"in":"C:\\d\\a.mzML","out":"a.tags.tsv","params":{"species":true,"digest_out":"\\data\\x.tsv"}}"#));
+            assert_eq!(pl.resolved.out.as_deref(), Some(r"C:\d\a.tags.tsv"));
+            assert_eq!(pl.resolved.species_out.as_deref(), Some(r"C:\d\a.tags.species.tsv"));
+            assert_eq!(pl.resolved.digest_out.as_deref(), Some(r"C:\data\x.tsv"));
+        }
+        #[cfg(unix)]
+        {
+            assert_eq!(pl.cwd, None);
+            assert_eq!(pl.resolved.out.as_deref(), Some(r"C:\r.1\x"));
+            assert_eq!(pl.resolved.species_out.as_deref(), Some(r"C:\r.1\x.species.tsv"));
+            assert_eq!(pl.resolved.digest_out.as_deref(), Some(r"\data\d.tsv"));
+            assert_eq!(pl.resolved.out_spectra.as_deref(), Some(r"\\srv\share\s.mzML"));
+            assert_eq!(pl.resolved.glyco_out.as_deref(), Some("./-g.tsv"));
+        }
     }
 
     // The run lifecycle against the stub CLI (gui/testing/stub-fastag):
@@ -1218,24 +1316,26 @@ mod tests {
             let (dtx, done) = mpsc::channel();
             let etx = Mutex::new(etx);
             let dtx = Mutex::new(dtx);
+            // Each log line, and "progress d/t", as one string.
             let sink: Sink = Arc::new(move |e| match e {
-                RunEmit::Log(l) => {
-                    let _ = etx.lock().unwrap().send(l);
+                RunEvent::Log { lines } => {
+                    for (l, _) in lines {
+                        let _ = etx.lock().unwrap().send(l);
+                    }
                 }
-                RunEmit::Progress { done, total } => {
+                RunEvent::Progress { done, total, .. } => {
                     let _ = etx.lock().unwrap().send(format!("progress {done}/{total}"));
                 }
-                RunEmit::Done(v) => {
-                    let _ = dtx.lock().unwrap().send(v);
+                RunEvent::Phase { .. } => {}
+                RunEvent::Done(r) => {
+                    let _ = dtx.lock().unwrap().send(serde_json::to_value(r).unwrap());
                 }
             });
-            let m = mgr.clone();
             let (input, outs, h) = (p.input.clone(), outputs.clone(), hist.clone());
             let argv: Vec<String> = std::iter::once("FASTag".to_string()).chain(args.iter().cloned()).collect();
             let finish = Box::new(move |end: &RunEnd| {
                 let files = RunFiles { input: &input, outputs: &outs, cwd: None, overwrite: true };
                 record_run(&h, &record_of(&files, &argv, 1, end), &end.log);
-                release_slot(&m, end.run_id);
             });
             let files = RunFiles { input: &p.input, outputs: &outputs, cwd: None, overwrite: p.overwrite };
             start_run(&mgr, cmd, files, sink, finish)?;
@@ -1440,6 +1540,170 @@ mod tests {
             assert_eq!(again.unwrap_err(), "a run is already in progress");
             kill_current_of(&r.mgr);
             let _ = r.done.recv_timeout(Duration::from_secs(10));
+            let _ = std::fs::remove_dir_all(&d);
+        }
+
+        /// What the renderer gets on a run's Channel: the JSON of each
+        /// message, with when it arrived.
+        type Wire = mpsc::Receiver<(std::time::Instant, Value)>;
+
+        fn channel() -> (Sink, Wire) {
+            let (tx, rx) = mpsc::channel();
+            let tx = Mutex::new(tx);
+            let ch: Channel<RunEvent> = Channel::new(move |body| {
+                if let tauri::ipc::InvokeResponseBody::Json(s) = body {
+                    let _ = tx.lock().unwrap().send((std::time::Instant::now(), serde_json::from_str(&s).unwrap()));
+                }
+                Ok(())
+            });
+            (Arc::new(move |e| { let _ = ch.send(e); }), rx)
+        }
+
+        /// The stub as the `run` command starts it (launch), with @p control
+        /// as <in>.stub (the stub's switches).
+        fn launch_stub(d: &Path, params: &str, control: &str) -> (Arc<RunManager>, RunStarted, Wire) {
+            let input = d.join("a.mzML");
+            std::fs::write(&input, "spectra").unwrap();
+            std::fs::write(d.join("a.mzML.stub"), control).unwrap();
+            let r = Resolved { bin: PathBuf::from(STUB), data: None, taxonomy: None, source: "env" };
+            let mgr = Arc::new(RunManager::default());
+            let (sink, wire) = channel();
+            let params = params.replace("$IN", &input.display().to_string());
+            let started = launch(&mgr, &r, serde_json::from_str(&params).unwrap(), sink, Some(d.join("appdata")));
+            (mgr, started, wire)
+        }
+
+        /// Every message up to Done (included); none may follow it.
+        fn until_done(wire: &Wire, within: Duration) -> Vec<(std::time::Instant, Value)> {
+            let until = std::time::Instant::now() + within;
+            let mut v = Vec::new();
+            loop {
+                let left = until.saturating_duration_since(std::time::Instant::now());
+                let m = wire.recv_timeout(left).expect("no Done in time");
+                let done = m.1["kind"] == "done";
+                v.push(m);
+                if done {
+                    assert!(wire.recv_timeout(Duration::from_millis(300)).is_err(), "a message after Done");
+                    return v;
+                }
+            }
+        }
+
+        fn kinds(v: &[(std::time::Instant, Value)], kind: &str) -> Vec<Value> {
+            v.iter().filter(|m| m.1["kind"] == kind).map(|m| m.1.clone()).collect()
+        }
+
+        // GUI-DESIGN 6.2: the real `run` against the stub CLI, its events on a
+        // real Channel in order: batched Log{lines}, the phases, coalesced
+        // progress, and Done last.
+        #[test]
+        fn the_run_command_sends_its_events_in_order_on_the_jobs_channel() {
+            let d = dir("channel");
+            let (mgr, started, wire) =
+                launch_stub(&d, r#"{"in":"$IN","out":"a.tags.tsv","params":{"species":true}}"#, "");
+            assert!(started.started, "{:?}", started.reason);
+            let outs = started.outputs.clone().unwrap();
+            assert_eq!(outs.out, Some(d.join("a.tags.tsv").display().to_string()));
+            assert_eq!(outs.species_out, Some(d.join("a.tags.species.tsv").display().to_string()));
+            assert_eq!(started.out, outs.out);
+            assert_eq!(started.command.as_ref().unwrap()[0], STUB);
+            let v = until_done(&wire, Duration::from_secs(10));
+            let done = &v.last().unwrap().1;
+            assert_eq!(done["ok"], true, "{done}");
+            assert_eq!(kinds(&v, "done").len(), 1);
+            // The log, in the order each stream wrote it, with its stream.
+            let lines: Vec<(String, bool)> = kinds(&v, "log")
+                .iter()
+                .flat_map(|m| serde_json::from_value::<Vec<(String, bool)>>(m["lines"].clone()).unwrap())
+                .collect();
+            let err: Vec<&str> = lines.iter().filter(|l| l.1).map(|l| l.0.as_str()).collect();
+            assert_eq!(err, ["-threads 0: using 1 of 1 logical cores.", "Reading spectra (stub)"]);
+            assert_eq!(lines.iter().filter(|l| !l.1).map(|l| l.0.as_str()).collect::<Vec<_>>(), ["4 MS2 spectra, 1 tags"]);
+            assert!(lines.len() > kinds(&v, "log").len(), "one message per line: {v:?}");
+            // Phases in run order (a flush may skip one), ending finished.
+            let phases: Vec<String> = kinds(&v, "phase").iter().map(|p| p["label"].as_str().unwrap().to_string()).collect();
+            let order = [crate::progress::READING, crate::progress::TAGGING, crate::progress::FINISHING, crate::progress::FINISHED];
+            let mut at = 0;
+            for p in &phases {
+                at += order[at..].iter().position(|o| o == p).unwrap_or_else(|| panic!("{p} out of order: {phases:?}"));
+            }
+            assert_eq!(phases.last().map(String::as_str), Some(crate::progress::FINISHED));
+            let progress = kinds(&v, "progress");
+            let last = progress.last().unwrap();
+            assert_eq!((last["done"].as_u64(), last["total"].as_u64()), (Some(4), Some(4)));
+            // Recorded and freed before Done.
+            assert!(!mgr.is_busy());
+            assert_eq!(history::list(&d.join("appdata"), 1)[0].status, history::Status::Ok);
+            let _ = std::fs::remove_dir_all(&d);
+        }
+
+        /// Run the stub with a chatty phase of @p n lines (@p control adds
+        /// its pace) and report the IPC message rate the renderer sees.
+        fn chatty(name: &str, n: usize, control: &str) -> (usize, usize, f64) {
+            let d = dir(name);
+            let (_mgr, started, wire) = launch_stub(&d, r#"{"in":"$IN","out":"a.tags.tsv"}"#, control);
+            assert!(started.started);
+            let v = until_done(&wire, Duration::from_secs(60));
+            let logs = kinds(&v, "log");
+            let lines: usize = logs.iter().map(|m| m["lines"].as_array().unwrap().len()).sum();
+            assert!(lines >= n, "{lines} lines");
+            assert!(logs.iter().all(|m| m["lines"].as_array().unwrap().len() <= crate::events::MAX_BATCH));
+            let secs = (v.last().unwrap().0 - v[0].0).as_secs_f64().max(1e-3);
+            // The stub prints n/100 + 3 progress lines: 0, 2, every 100th, the end.
+            println!(
+                "IPC rate ({name}): {lines} log lines and {} progress lines in {secs:.3} s -> {} messages \
+                 ({} log, {} progress, {} phase): {:.0} messages/s for {:.0} lines/s (one message per line: {})",
+                n / 100 + 3,
+                v.len(),
+                logs.len(),
+                kinds(&v, "progress").len(),
+                kinds(&v, "phase").len(),
+                v.len() as f64 / secs,
+                lines as f64 / secs,
+                lines + n / 100 + 3 + 1
+            );
+            let _ = std::fs::remove_dir_all(&d);
+            (lines, v.len(), secs)
+        }
+
+        // The P1 gate: the IPC message rate during a chatty phase. A burst
+        // of 20,000 lines goes out in messages of MAX_BATCH lines ...
+        #[test]
+        fn ipc_rate_a_burst_of_log_lines_goes_out_in_full_batches() {
+            let (lines, msgs, _) = chatty("burst", 20_000, "STUB_CHATTY=20000\n");
+            // Full batches, plus a few for the phases, progress and Done.
+            assert!(msgs <= lines / crate::events::MAX_BATCH + 12, "{msgs} messages for {lines} lines");
+        }
+
+        // ... and a sustained one (about 5,000 lines/s for 1-2 s) costs at
+        // most three messages (log, phase, progress) per flush interval.
+        #[test]
+        fn ipc_rate_a_sustained_chatty_phase_is_bounded_by_the_flush_interval() {
+            let (lines, msgs, secs) = chatty("sustained", 6_000, "STUB_CHATTY=6000\nSTUB_CHATTY_PAUSE=0.02\n");
+            // GUI-DESIGN 6.2 allows a flush every 50 ms at most.
+            let flushes = secs / 0.050 + 2.0;
+            let bound = 3.0 * flushes + (lines / crate::events::MAX_BATCH) as f64 + 1.0;
+            assert!((msgs as f64) <= bound, "{msgs} messages for {lines} lines in {secs:.3} s (bound {bound:.0})");
+            assert!(secs > 0.5, "the phase was a burst ({secs:.3} s), not sustained");
+        }
+
+        // The flake of a_cancel_before_the_cli_writes_removes_the_confirmed_earlier_outputs
+        // (about 1 in 8 parallel runs): the run ended, but a process holding
+        // its pipes kept the readers, and so Done, waiting. A run whose
+        // streams stay open after the CLI exited still ends, within DRAIN.
+        #[test]
+        fn a_run_whose_streams_outlive_the_cli_still_ends() {
+            let d = dir("orphan");
+            let t0 = std::time::Instant::now();
+            let (mgr, started, wire) = launch_stub(&d, r#"{"in":"$IN","out":"a.tags.tsv"}"#, "STUB_ORPHAN=12\n");
+            assert!(started.started);
+            let v = until_done(&wire, Duration::from_secs(7));
+            assert!(t0.elapsed() < Duration::from_secs(7));
+            assert_eq!(v.last().unwrap().1["ok"], true);
+            let note = kinds(&v, "log").iter().any(|m| m["lines"].as_array().unwrap().iter().any(|l| l[0] == STREAMS_OPEN));
+            assert!(note, "the log does not say why lines may be missing");
+            assert!(!mgr.is_busy());
+            assert!(d.join("a.tags.tsv").exists());
             let _ = std::fs::remove_dir_all(&d);
         }
 
