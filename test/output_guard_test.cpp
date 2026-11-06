@@ -54,8 +54,34 @@ namespace
   bool contains(const std::string& s, const std::string& what) { return s.find(what) != std::string::npos; }
 }
 
-int main()
+#ifndef _WIN32
+// The ignored-SIGTERM case runs in a fresh image of this binary (fork+exec),
+// so the PartFile once-flag is still unused when its first PartFile opens:
+// a forked child would inherit the parent's used flag and never reach the
+// SIG_IGN check in installTermHandler().
+static int ignoredSigtermMode(const std::string& target)
 {
+  PartFile pf(target);
+  std::ofstream os;
+  if (!pf.open(os)) return 3;
+  struct sigaction now;
+  if (sigaction(SIGTERM, nullptr, &now) != 0) return 6;
+  if ((now.sa_flags & SA_SIGINFO) || now.sa_handler != SIG_IGN) return 7;
+  raise(SIGTERM);
+  os << "still here\n";
+  os.close();
+  return pf.commit() ? 0 : 5;
+}
+#endif
+
+int main(int argc, char** argv)
+{
+#ifndef _WIN32
+  if (argc == 3 && std::string(argv[1]) == "--ignored-sigterm") return ignoredSigtermMode(argv[2]);
+#else
+  (void)argc;
+  (void)argv;
+#endif
   const char* tmp_env = std::getenv("TMPDIR");
   fs::path root = fs::path(tmp_env && *tmp_env ? tmp_env : fs::temp_directory_path().string())
                   / ("fastag-output-guard-" + std::to_string(
@@ -302,22 +328,22 @@ int main()
     check(!fs::exists(fin), "SIGTERM created no target");
   }
   {
-    // SIGTERM ignored by the parent stays ignored.
+    // SIGTERM ignored by the parent stays ignored. SIG_IGN survives exec; the
+    // re-executed test binary opens its first PartFile under it.
+    const std::string target = dir + "/ign.tsv";
     const pid_t pid = fork();
     if (pid == 0)
     {
       signal(SIGTERM, SIG_IGN);
-      PartFile pf(dir + "/ign.tsv");
-      std::ofstream os;
-      if (!pf.open(os)) _exit(3);
-      raise(SIGTERM);
-      os << "still here\n";
-      os.close();
-      _exit(pf.commit() ? 0 : 5);
+      char mode[] = "--ignored-sigterm";
+      char* args[] = {argv[0], mode, const_cast<char*>(target.c_str()), nullptr};
+      execv(argv[0], args);
+      _exit(127);
     }
     int status = 0;
     waitpid(pid, &status, 0);
-    check(WIFEXITED(status) && WEXITSTATUS(status) == 0, "an ignored SIGTERM stays ignored");
+    check(WIFEXITED(status) && WEXITSTATUS(status) == 0,
+          "an ignored SIGTERM stays ignored (child status " + std::to_string(status) + ")");
     check(slurp(dir + "/ign.tsv") == "still here\n", "ignored-SIGTERM content");
   }
 #endif
