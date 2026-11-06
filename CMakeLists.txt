@@ -327,7 +327,10 @@ if(FASTAG_BUILD_TESTS)
   # Baseline identity: every legacy output of this build equals the 1.11.0
   # binary's (78390cd) on the fixtures, after date/version masking. Needs
   # FASTAG_BASELINE_BIN (on node data: the 1.11.0 install); SKIPs without it.
-  # The gate job runs tools/baseline_identity_gate.sh on the PXD inputs too.
+  # buildtaxdb is compared too when FASTAG_BASELINE_BUILDTAXDB is set. With
+  # FASTAG_BASELINE_REQUIRED=1 nothing may skip. Byte-identical branches are
+  # gated by tools/gate_job.sh (gate.sh, tools/baseline_identity_gate.sh on the
+  # PXD inputs and, with GATE_JOB_BUILD, this test with the baseline required).
   add_test(NAME baseline_identity_test
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/baseline_identity_test.sh $<TARGET_FILE:FASTag>
                    $<TARGET_FILE:buildtaxdb>

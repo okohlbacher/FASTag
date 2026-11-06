@@ -2,7 +2,9 @@
 # Baseline-identity harness: every legacy output of a candidate FASTag binary
 # against the same run of a baseline binary (the 1.11.0 release, 78390cd, on
 # node data), after masking only run-specific values (dates, versions, the
-# random mzIdentML ids; see tools/baseline_canon.py).
+# random mzIdentML ids; see tools/baseline_canon.py). Not compared here: the
+# -out_spectra mzPeak export (gate.sh's member digests cover it) and buildtaxdb
+# (compared by test/baseline_identity_test.sh and tools/baseline_identity_gate.sh).
 #
 #   baseline_identity.sh [options] <candidate> <baseline> <workdir>
 #

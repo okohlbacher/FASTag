@@ -3,7 +3,9 @@
 # build (tags, recon, delta, digest, label, massgap, glyco, mzid, idXML, mzTab,
 # -proforma/-res_conf tags, the -out_spectra mzML, species, MGF input, --help
 # and the CTD) equals the baseline binary's after date/version masking
-# (tools/baseline_identity.sh, tools/baseline_canon.py).
+# (tools/baseline_identity.sh, tools/baseline_canon.py), and the .taxdb that
+# buildtaxdb writes equals the baseline buildtaxdb's. Not covered here: the
+# -out_spectra mzPeak export (gate.sh's member digests cover it).
 #
 # The baseline is the 1.11.0 release binary (78390cd), given as
 # FASTAG_BASELINE_BIN; on node data it is
@@ -49,6 +51,32 @@ awk '/^>/ { if (s != "") print s; print $0 "_rev"; s = ""; next }
 "$BUILDTAXDB" "$TMP/prot" "$TMP/fixture.taxdb" 7 > "$TMP/buildtaxdb.log" 2>&1 \
   || { cat "$TMP/buildtaxdb.log" >&2; fail "buildtaxdb"; }
 
+# buildtaxdb itself (an installed tool on fastag_core): the .taxdb bytes of this
+# build's buildtaxdb and the baseline's, at k 7 and 5. The 1.11.0 install ships
+# no buildtaxdb; give one built from 78390cd as FASTAG_BASELINE_BUILDTAXDB (on
+# node data /ceph/ibmi/abi/oliver/opt/fastag-1.11.0-tools/buildtaxdb). Missing:
+# a note, or a failure with FASTAG_BASELINE_REQUIRED=1.
+BASE_BT=${FASTAG_BASELINE_BUILDTAXDB:-$(dirname -- "$BASE")/buildtaxdb}
+nbt=0
+if [ -x "$BASE_BT" ]; then
+  for k in 7 5; do
+    c="$TMP/fixture.taxdb"
+    if [ $k != 7 ]; then
+      c="$TMP/fixture_k$k.taxdb"
+      "$BUILDTAXDB" "$TMP/prot" "$c" $k > "$TMP/buildtaxdb_k$k.log" 2>&1 \
+        || { cat "$TMP/buildtaxdb_k$k.log" >&2; fail "buildtaxdb k=$k"; }
+    fi
+    "$BASE_BT" "$TMP/prot" "$TMP/baseline_k$k.taxdb" $k > "$TMP/baseline_buildtaxdb_k$k.log" 2>&1 \
+      || { cat "$TMP/baseline_buildtaxdb_k$k.log" >&2; fail "baseline buildtaxdb k=$k ($BASE_BT)"; }
+    cmp "$c" "$TMP/baseline_k$k.taxdb" >&2 || fail "buildtaxdb k=$k: .taxdb differs from the baseline's ($BASE_BT)"
+    nbt=$((nbt + 1))
+  done
+elif [ "${FASTAG_BASELINE_REQUIRED:-0}" = 1 ]; then
+  fail "FASTAG_BASELINE_REQUIRED=1: no baseline buildtaxdb ($BASE_BT); set FASTAG_BASELINE_BUILDTAXDB"
+else
+  echo "NOTE: buildtaxdb not compared (no baseline buildtaxdb at $BASE_BT; set FASTAG_BASELINE_BUILDTAXDB)" >&2
+fi
+
 H="$SRC/tools/baseline_identity.sh"
 export FASTAG_PYTHON="$PY"
 rc=0
@@ -69,4 +97,4 @@ cat "$TMP"/*/report.tsv > "$TMP/report.tsv"
 [ $rc = 0 ] || { awk -F'\t' '$5 != "status" && $5 != "SAME" && $5 !~ /^INFO/' "$TMP/report.tsv" >&2
                  fail "outputs differ from the baseline"; }
 n=$(awk -F'\t' '$5 == "SAME"' "$TMP/report.tsv" | wc -l | tr -d ' ')
-echo "baseline_identity_test: all $n comparisons equal to $BASE"
+echo "baseline_identity_test: all $n comparisons equal to $BASE; buildtaxdb: $nbt .taxdb files equal to $BASE_BT"

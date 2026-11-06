@@ -10,8 +10,14 @@
 #              -proforma/-res_conf, -out_spectra mzML, --help, CTD)
 #   PXD003531  defaults: tags, -proforma/-res_conf, -out_spectra mzML;
 #              -extension 2 with the gate's tax_k7 index: species
+#   buildtaxdb Homo_sapiens.fasta as taxon 9606, k 7: the candidate's and the
+#              baseline's .taxdb, raw bytes
 #
 # Environment: FASTAG_BASELINE_BIN (default the 1.11.0 install on /ceph),
+# FASTAG_CANDIDATE_BUILDTAXDB (default buildtaxdb next to the candidate),
+# FASTAG_BASELINE_BUILDTAXDB (default /ceph/ibmi/abi/oliver/opt/fastag-1.11.0-tools/
+# buildtaxdb, built from 78390cd: the 1.11.0 install ships none); a missing one
+# FAILS unless BASELINE_SKIP_BUILDTAXDB=1,
 # GATE_IN (default /scratch/kohlbach/gate-in, staged by gate.sh --stage),
 # BASELINE_THREADS (default "32", as gate.sh), FASTAG_DIGEST_DIR (default the
 # candidate source tree's data/digest), FASTAG_PYTHON.
@@ -39,7 +45,27 @@ bash "$H" --label PXD014764 --in "$R2" --fasta "$GATE_IN/db/Homo_sapiens.fasta" 
 bash "$H" --label PXD003531 --in "$R1" --digest-dir "$DIGEST" --cases "plain format spectra_mzml species" \
   --taxdb "$GATE_IN/tax/tax_k7.taxdb" --nodes "$GATE_IN/tax/nodes.dmp" --names "$GATE_IN/tax/names.dmp" \
   --species-args "-extension 2" --threads "$T" "$CAND" "$BASE" "$OUT/PXD003531" || rc=1
-cat "$OUT"/PXD*/report.tsv | awk 'NR == 1 || $1 != "label"' > "$OUT/report.tsv"
+# buildtaxdb (on fastag_core like FASTag): .taxdb bytes of both builds.
+CBT=${FASTAG_CANDIDATE_BUILDTAXDB:-$(dirname -- "$CAND")/buildtaxdb}
+BBT=${FASTAG_BASELINE_BUILDTAXDB:-/ceph/ibmi/abi/oliver/opt/fastag-1.11.0-tools/buildtaxdb}
+BT="$OUT/buildtaxdb"
+rm -rf "$BT"; mkdir -p "$BT/prot"
+printf 'label\tcase\tthreads\titem\tstatus\n' > "$BT/report.tsv"
+btrec() { printf 'buildtaxdb\tk7\t-\t%s\t%s\n' "$1" "$2" >> "$BT/report.tsv"; [ "$2" = SAME ] || { rc=1; echo "  FAIL buildtaxdb $1: $2"; }; }
+if [ "${BASELINE_SKIP_BUILDTAXDB:-0}" = 1 ]; then
+  echo "baseline_identity_gate: buildtaxdb skipped (BASELINE_SKIP_BUILDTAXDB=1)"
+elif [ ! -x "$CBT" ] || [ ! -x "$BBT" ]; then
+  btrec binaries "MISSING (candidate $CBT, baseline $BBT; set FASTAG_CANDIDATE_BUILDTAXDB / FASTAG_BASELINE_BUILDTAXDB)"
+else
+  ln -s "$GATE_IN/db/Homo_sapiens.fasta" "$BT/prot/9606.fasta"
+  "$CBT" "$BT/prot" "$BT/c.taxdb" 7 > "$BT/c.log" 2>&1; c_rc=$?
+  "$BBT" "$BT/prot" "$BT/b.taxdb" 7 > "$BT/b.log" 2>&1; b_rc=$?
+  if [ $c_rc = $b_rc ] && [ $b_rc = 0 ]; then btrec exit SAME; else btrec exit "DIFF ($c_rc vs baseline $b_rc)"; fi
+  if [ ! -s "$BT/b.taxdb" ]; then btrec taxdb "EMPTY (baseline wrote no .taxdb)"
+  elif cmp -s "$BT/c.taxdb" "$BT/b.taxdb"; then btrec taxdb SAME; else btrec taxdb DIFF; fi
+  echo "baseline_identity_gate: buildtaxdb $CBT vs $BBT: $(awk -F'\t' '$5 == "SAME"' "$BT/report.tsv" | wc -l) equal"
+fi
+cat "$OUT"/PXD*/report.tsv "$BT/report.tsv" | awk 'NR == 1 || $1 != "label"' > "$OUT/report.tsv"
 if [ $rc = 0 ]; then echo "BASELINE IDENTITY PASS ($(awk -F'\t' '$5 == "SAME"' "$OUT/report.tsv" | wc -l) comparisons)"
 else echo "BASELINE IDENTITY FAIL"; awk -F'\t' 'NR > 1 && $5 != "SAME" && $5 !~ /^INFO/' "$OUT/report.tsv"; fi
 exit $rc
