@@ -9,7 +9,8 @@ import { clearMocks, mockIPC } from '@tauri-apps/api/mocks'
 import { Channel } from '@tauri-apps/api/core'
 import api from './api'
 import { isSettled, runJob, type Job, type JobAction } from './runJob'
-import type { RunEvent, RunStarted } from './types'
+import type { ResolvedOutputs, RunEvent, RunStarted } from './types'
+import runStarted from './testing/fixtures/run-started.json'
 
 interface Internals {
   runCallback: (id: number, data: unknown) => void
@@ -100,6 +101,24 @@ describe('api.run over a Channel of its own', () => {
     expect(j.command).toEqual(STARTED.command)
     expect(j.result?.ok).toBe(true)
     expect(changes.map(([, a]) => (a.type === 'EVENT' ? a.event.kind : a.type))).toEqual(['log', 'phase', 'done', 'REPLY'])
+  })
+
+  // The contract with fastag.rs: the reply of `run` exactly as the backend
+  // serialises it (cargo the_run_reply_names_every_output_by_its_option_name
+  // compares it with this fixture), through the real invoke. Every output
+  // reaches the job under the key the renderer reads.
+  it('the reply as the backend sends it: every output reaches the job under the key the renderer reads', async () => {
+    backend(async (w) => {
+      w.send(DONE)
+      return runStarted as RunStarted
+    })
+    const { run } = start()
+    const j = await run.settled
+    const o = j.outputs as ResolvedOutputs
+    expect(o).toEqual(runStarted.outputs)
+    const read: (keyof ResolvedOutputs)[] = ['out', 'species_out', 'digest_out', 'label_out', 'massgap_out', 'recon_out', 'delta_out', 'recon_id_out', 'glyco_out', 'out_spectra']
+    for (const k of read) expect(o[k], k).toMatch(/^\/d\//)
+    expect(Object.keys(o).sort()).toEqual([...read].sort())
   })
 
   it('late log after done: dropped, the job and its result unchanged', async () => {

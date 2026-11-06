@@ -15,7 +15,12 @@
 #   STUB_CHATTY_PAUSE=<s>  with STUB_CHATTY: pause s seconds after every
 #                   100 lines (a sustained rate instead of one burst)
 #   STUB_ORPHAN=<s> leave a process behind that holds stdout and stderr open
-#                   for s seconds after the stub has exited
+#                   for s seconds after the stub has exited, in the stub's
+#                   own process group
+#   STUB_ORPHAN_PID=<file>  with STUB_ORPHAN: write that process's pid here
+#   STUB_ORPHAN_DETACH=1    with STUB_ORPHAN: put that process in a process
+#                   group of its own (one that inherited the pipes from a
+#                   parallel spawn, which a group kill does not reach)
 #   --help          print a version banner, as the probe expects
 # The same variables can also be set in <in>.stub, a file next to the input
 # that the stub sources: tests that start it through the GUI's own `run`
@@ -95,6 +100,11 @@ fi
 echo "FASTAG_PROGRESS done=$total total=$total" >&2
 echo "4 MS2 spectra, 1 tags"
 if [ -n "${STUB_ORPHAN:-}" ]; then
-  sleep "$STUB_ORPHAN" &
+  if [ -n "${STUB_ORPHAN_DETACH:-}" ]; then
+    perl -e 'setpgrp(0, 0); exec @ARGV' sleep "$STUB_ORPHAN" &
+  else
+    sleep "$STUB_ORPHAN" &
+  fi
+  [ -n "${STUB_ORPHAN_PID:-}" ] && echo $! > "$STUB_ORPHAN_PID"
 fi
 exit 0

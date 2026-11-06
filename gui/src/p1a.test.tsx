@@ -6,7 +6,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import App, { LOG_WINDOW } from './App'
-import { installMockBridge, type MockBridge } from './testing/mockBridge'
+import { installMockBridge, mockOutputs, OUTPUT_KEYS, RUN_STARTED_FIXTURE, type MockBridge, type RunCall } from './testing/mockBridge'
 import type { ResolvedOutputs } from './types'
 
 const click = (el: Element): Promise<void> =>
@@ -53,6 +53,38 @@ describe('the outputs of a run come from the backend', () => {
     expect(mock.resultsQueryCalls[0].path).toBe('C:\\d\\a.tags.tsv')
     expect(mock.speciesCalls).toEqual(['C:\\d\\a.tags.species.tsv'])
     expect(mock.reportCalls).toEqual(['C:\\data\\d.tsv'])
+  })
+
+  // The contract with fastag.rs: the reply exactly as the backend sends it
+  // (fixtures/run-started.json, pinned by cargo). A rename_all on
+  // ResolvedOutputs once sent speciesOut and digestOut, so the species and
+  // Digest reports were never read, while this mock built its own keys.
+  it('reads the species and every report the backend reply names, under the keys it sends', async () => {
+    const mock = installMockBridge()
+    const fixture = RUN_STARTED_FIXTURE
+    const run = mock.run
+    mock.run = async (params, onEvent) => {
+      await run(params, onEvent)
+      return fixture
+    }
+    mock.settings.lastUsed = { species: true }
+    await renderApp()
+    await click(await screen.findByRole('button', { name: 'Apply last-used (1)' }))
+    await pickSingle(mock, '/d/a.mzML')
+    await click(runButton())
+    await act(async () => mock.emitDone({ ok: true, code: 0, runId: mock.lastRunId }))
+    await waitFor(() => expect(mock.reportCalls.length).toBe(3))
+    const o = fixture.outputs!
+    expect(mock.resultsQueryCalls[0].path).toBe(o.out)
+    expect(mock.speciesCalls).toEqual([o.species_out])
+    expect(mock.reportCalls).toEqual([o.digest_out, o.label_out, o.massgap_out])
+  })
+
+  it('the mock resolves outputs under the keys the backend sends', () => {
+    const params = Object.fromEntries(OUTPUT_KEYS.filter((k) => k !== 'out').map((k) => [k, `${k}.tsv`]))
+    const o = mockOutputs({ in: '/d/a.mzML', out: 'a.tags.tsv', params } satisfies RunCall)
+    expect(Object.keys(o).sort()).toEqual(Object.keys(RUN_STARTED_FIXTURE.outputs!).sort())
+    for (const k of OUTPUT_KEYS) expect(o[k], k).toMatch(/^\/d\//)
   })
 
   it('a run whose reply never names its outputs opens nothing', async () => {

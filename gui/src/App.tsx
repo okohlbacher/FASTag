@@ -62,8 +62,9 @@ function revealLabel(): string {
   return 'Show in folder'
 }
 
-// The report options whose files the Digest tab reads.
-const REPORT_PARAMS = ['digest_out', 'label_out', 'massgap_out']
+// The report options whose files the Digest tab reads: keys of
+// ResolvedOutputs, so a key the backend does not send fails the typecheck.
+const REPORT_PARAMS = ['digest_out', 'label_out', 'massgap_out'] as const satisfies readonly (keyof ResolvedOutputs)[]
 
 // A batch must not write every job's extra outputs to one configured path, or
 // each job overwrites the last. Each configured output-file option gets a
@@ -767,7 +768,7 @@ export default function App(): JSX.Element {
     }
     // Only the reports the run was sent: an inert option was not, so its
     // path is not an output and may hold an old file.
-    const sent = REPORT_PARAMS.map((n) => outputs[n as keyof ResolvedOutputs]).filter((p): p is string => !!p)
+    const sent = REPORT_PARAMS.map((n) => outputs[n]).filter((p): p is string => !!p)
     const rep = await loadReports(sent)
     setReports({ list: rep.reports, errors: rep.errors })
     if (!switched && (rep.reports.length || rep.errors.length)) setTab('digest')

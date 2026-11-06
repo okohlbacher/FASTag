@@ -26,6 +26,7 @@ import type {
   SpeciesReport,
   TaxdbInfo
 } from '../types'
+import runStartedFixture from './fixtures/run-started.json'
 
 export interface RunCall {
   in: string
@@ -100,6 +101,12 @@ export interface MockBridge extends FastagApi {
   releaseRun(): void
 }
 
+/// The reply of `run` exactly as fastag.rs serialises it (cargo test
+/// the_run_reply_names_every_output_by_its_option_name compares the two).
+export const RUN_STARTED_FIXTURE: RunStarted = runStartedFixture
+/// Every key of ResolvedOutputs on the wire.
+export const OUTPUT_KEYS = Object.keys(runStartedFixture.outputs) as (keyof ResolvedOutputs)[]
+
 const isAbs = (p: string): boolean => p.startsWith('/')
 const dirOf = (p: string): string => p.slice(0, p.lastIndexOf('/') + 1)
 
@@ -120,8 +127,10 @@ export function mockOutputs(call: RunCall): ResolvedOutputs {
     return `${dot > slash ? out.slice(0, dot) : out}${suffix}`
   }
   const o: ResolvedOutputs = { out }
-  for (const n of ['species_out', 'digest_out', 'label_out', 'massgap_out', 'recon_out', 'delta_out', 'recon_id_out', 'glyco_out', 'out_spectra'] as const) {
-    o[n] = str(n) ? abs(str(n)) : null
+  // The keys the backend sends (fixtures/run-started.json, which cargo pins
+  // to the JSON of `run`'s reply), never a list of this mock's own.
+  for (const n of OUTPUT_KEYS) {
+    if (n !== 'out') o[n] = str(n) ? abs(str(n)) : null
   }
   if (params['species'] === true && !o.species_out) o.species_out = derive('.species.tsv')
   if (params['glyco'] === true && !o.glyco_out) o.glyco_out = derive('.glyco.tsv')

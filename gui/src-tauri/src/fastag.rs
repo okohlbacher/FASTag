@@ -75,8 +75,9 @@ pub struct CurrentRun {
     // "failed" (on Windows a killed child exits with code 1).
     pub cancelled: Arc<AtomicBool>,
     // Set by the coordinator, under the child lock, once the child is reaped:
-    // its pid (and process group id) may then be reused, so kill_run() must
-    // not signal it any more.
+    // its pid may then be reused, so kill_run() no longer signals it, only
+    // its process group (whose id cannot be reused while the group has
+    // members), and only while the run still holds the slot.
     pub reaped: Arc<AtomicBool>,
 }
 
@@ -607,9 +608,19 @@ const POLL: Duration = Duration::from_millis(20);
 /// from a parallel spawn): waiting for their end left the run without a
 /// Done event, its outputs uncleaned and the slot taken.
 const DRAIN: Duration = Duration::from_secs(2);
-/// The log line of a run whose output did not end with it.
+/// How long the coordinator waits for the streams to end once it has killed
+/// what was left of the CLI's process group.
+const KILL_GRACE: Duration = Duration::from_millis(500);
+/// The log line of a run whose output did not end with it, not even once
+/// the CLI's process group was killed: a process outside the group (one that
+/// inherited the pipes from a parallel spawn) holds them.
 pub const STREAMS_OPEN: &str =
     "Note: the output streams stayed open after FASTag ended (a process it started still holds them); later lines are not shown.";
+/// The log line of a run whose CLI left a process behind in its group that
+/// still held the output streams: it is stopped before the cleanup, so
+/// nothing writes to the outputs after the run is reported ended.
+pub const LEFT_BEHIND_KILLED: &str =
+    "Note: a process FASTag started was still running after FASTag ended; it was stopped.";
 
 /// Start @p cmd as the run of @p files. Refused when one of its outputs
 /// already exists and @p files.overwrite is false: an existing file is
@@ -706,17 +717,28 @@ pub fn start_run(
             }
             std::thread::sleep(POLL);
         };
-        let until = std::time::Instant::now() + DRAIN;
+        // Both streams ended within @p within (or no reader is left).
         let mut ended = 0;
-        while ended < 2 {
-            match eof_rx.recv_timeout(until.saturating_duration_since(std::time::Instant::now())) {
-                Ok(()) => ended += 1,
-                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
-                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                    batcher.line(STREAMS_OPEN.to_string(), false);
-                    break;
+        let mut drain = |within: Duration| -> bool {
+            let until = std::time::Instant::now() + within;
+            while ended < 2 {
+                match eof_rx.recv_timeout(until.saturating_duration_since(std::time::Instant::now())) {
+                    Ok(()) => ended += 1,
+                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return true,
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => return false,
                 }
             }
+            true
+        };
+        if !drain(DRAIN) {
+            // A process the CLI started (a wrapper's worker, a backgrounded
+            // helper) still holds the pipes: kill the CLI's process group
+            // before the cleanup and the slot release, or it would go on
+            // writing to outputs the cleanup removes or the next run writes.
+            // The group id cannot be reused while the group has members.
+            kill_tree(pid);
+            let note = if drain(KILL_GRACE) { LEFT_BEHIND_KILLED } else { STREAMS_OPEN };
+            batcher.line(note.to_string(), false);
         }
         let (ok, code, message) = match &status {
             Ok(s) => (s.success(), s.code(), exit_message(s)),
@@ -918,24 +940,17 @@ extern "C" {
     fn kill(pid: i32, sig: i32) -> i32;
 }
 
-/// Kill a run's child and everything it started. Returns false when there was
-/// nothing left to kill (already reaped, or already cancelled once).
-pub fn kill_run(run: &CurrentRun, cancel: bool) -> bool {
-    if cancel && run.cancelled.swap(true, Ordering::SeqCst) {
-        return false; // a second click: the first kill is already under way
-    }
-    let Ok(mut child) = run.child.lock() else { return false };
-    if run.reaped.load(Ordering::SeqCst) {
-        return false; // its pid may already belong to another process
-    }
-    let pid = child.id();
+/// Kill the process group of a run's child (Unix: the child leads it, see
+/// new_process_group) or, on Windows, its process tree. True when the
+/// signal reached a process. Only while the slot of the run is held: the
+/// child's handle keeps its pid (Windows), and the group id cannot be
+/// reused while the group has members (Unix).
+fn kill_tree(pid: u32) -> bool {
     #[cfg(unix)]
-    if let Ok(pgid) = i32::try_from(pid) {
-        // The child leads its own group (new_process_group): signal the group.
+    {
+        let Ok(pgid) = i32::try_from(pid) else { return false };
         // SAFETY: kill(2) with a negative pid only sends a signal.
-        unsafe {
-            kill(-pgid, 9);
-        }
+        unsafe { kill(-pgid, 9) == 0 }
     }
     #[cfg(windows)]
     {
@@ -950,8 +965,31 @@ pub fn kill_run(run: &CurrentRun, cancel: bool) -> bool {
             .stdout(Stdio::null())
             .stderr(Stdio::null());
         no_console_window(&mut tk);
-        let _ = tk.status();
+        tk.status().is_ok_and(|s| s.success())
     }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = pid;
+        false
+    }
+}
+
+/// Kill a run's child and everything it started. Returns false when there was
+/// nothing left to kill (already cancelled once, or the CLI has ended and
+/// nothing of its group is left).
+pub fn kill_run(run: &CurrentRun, cancel: bool) -> bool {
+    if cancel && run.cancelled.swap(true, Ordering::SeqCst) {
+        return false; // a second click: the first kill is already under way
+    }
+    let Ok(mut child) = run.child.lock() else { return false };
+    let pid = child.id();
+    if run.reaped.load(Ordering::SeqCst) {
+        // The CLI has ended, but its run still holds the slot (the
+        // coordinator is draining its output or cleaning up): what it started
+        // may still run in its group. Signal the group only, never the pid.
+        return kill_tree(pid);
+    }
+    kill_tree(pid);
     let _ = child.kill(); // the coordinator reaps and emits done
     true
 }
@@ -1687,23 +1725,117 @@ mod tests {
             assert!(secs > 0.5, "the phase was a burst ({secs:.3} s), not sustained");
         }
 
+        /// Whether process @p pid still exists (a zombie counts until its
+        /// new parent reaps it, so this waits up to @p within for it to go).
+        fn alive_after(pid: i32, within: Duration) -> bool {
+            let until = std::time::Instant::now() + within;
+            loop {
+                // SAFETY: signal 0 only checks that the process exists.
+                if unsafe { kill(pid, 0) } != 0 {
+                    return false;
+                }
+                if std::time::Instant::now() >= until {
+                    return true;
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+        }
+
+        fn orphan_pid(d: &Path) -> i32 {
+            std::fs::read_to_string(d.join("orphan.pid")).unwrap().trim().parse().unwrap()
+        }
+
+        fn logged(v: &[(std::time::Instant, Value)], line: &str) -> bool {
+            kinds(v, "log").iter().any(|m| m["lines"].as_array().unwrap().iter().any(|l| l[0] == line))
+        }
+
         // The flake of a_cancel_before_the_cli_writes_removes_the_confirmed_earlier_outputs
         // (about 1 in 8 parallel runs): the run ended, but a process holding
         // its pipes kept the readers, and so Done, waiting. A run whose
-        // streams stay open after the CLI exited still ends, within DRAIN.
+        // streams stay open after the CLI exited still ends, within DRAIN, and
+        // what the CLI left behind in its process group is killed before the
+        // cleanup and the slot release: nothing writes after the run ended.
         #[test]
         fn a_run_whose_streams_outlive_the_cli_still_ends() {
             let d = dir("orphan");
             let t0 = std::time::Instant::now();
-            let (mgr, started, wire) = launch_stub(&d, r#"{"in":"$IN","out":"a.tags.tsv"}"#, "STUB_ORPHAN=12\n");
+            let control = format!("STUB_ORPHAN=12\nSTUB_ORPHAN_PID={}\n", d.join("orphan.pid").display());
+            let (mgr, started, wire) = launch_stub(&d, r#"{"in":"$IN","out":"a.tags.tsv"}"#, &control);
             assert!(started.started);
             let v = until_done(&wire, Duration::from_secs(7));
             assert!(t0.elapsed() < Duration::from_secs(7));
             assert_eq!(v.last().unwrap().1["ok"], true);
-            let note = kinds(&v, "log").iter().any(|m| m["lines"].as_array().unwrap().iter().any(|l| l[0] == STREAMS_OPEN));
-            assert!(note, "the log does not say why lines may be missing");
+            assert!(logged(&v, LEFT_BEHIND_KILLED), "the log does not say what was stopped: {v:?}");
+            assert!(!logged(&v, STREAMS_OPEN));
             assert!(!mgr.is_busy());
             assert!(d.join("a.tags.tsv").exists());
+            let pid = orphan_pid(&d);
+            assert!(!alive_after(pid, Duration::from_secs(2)), "the process the CLI left behind ({pid}) survived the run");
+            let _ = std::fs::remove_dir_all(&d);
+        }
+
+        // A holder outside the CLI's process group (one that inherited the
+        // pipes from a parallel spawn) is not the run's to kill: the run
+        // still ends, within DRAIN, and says why later lines are missing.
+        #[test]
+        fn a_run_whose_streams_are_held_outside_its_group_still_ends() {
+            let d = dir("detached");
+            let t0 = std::time::Instant::now();
+            let control =
+                format!("STUB_ORPHAN=12\nSTUB_ORPHAN_DETACH=1\nSTUB_ORPHAN_PID={}\n", d.join("orphan.pid").display());
+            let (mgr, started, wire) = launch_stub(&d, r#"{"in":"$IN","out":"a.tags.tsv"}"#, &control);
+            assert!(started.started);
+            let v = until_done(&wire, Duration::from_secs(7));
+            assert!(t0.elapsed() < Duration::from_secs(7));
+            assert_eq!(v.last().unwrap().1["ok"], true);
+            assert!(logged(&v, STREAMS_OPEN), "the log does not say why lines may be missing: {v:?}");
+            assert!(!mgr.is_busy());
+            let pid = orphan_pid(&d);
+            assert!(alive_after(pid, Duration::ZERO), "a process outside the run's group was signalled");
+            // SAFETY: the test's own detached sleep; leave nothing behind.
+            unsafe {
+                kill(pid, 9);
+            }
+            assert!(!alive_after(pid, Duration::from_secs(2)));
+            let _ = std::fs::remove_dir_all(&d);
+        }
+
+        // Cancel after the CLI has exited, while its run still drains: the
+        // group is killed at once, not only when DRAIN runs out.
+        #[test]
+        fn a_cancel_while_the_run_drains_kills_what_the_cli_left_behind() {
+            let d = dir("drain-cancel");
+            let control = format!("STUB_ORPHAN=12\nSTUB_ORPHAN_PID={}\n", d.join("orphan.pid").display());
+            let (mgr, started, wire) = launch_stub(&d, r#"{"in":"$IN","out":"a.tags.tsv"}"#, &control);
+            assert!(started.started);
+            // The pid file is written just before the stub exits.
+            let until = std::time::Instant::now() + Duration::from_secs(5);
+            while !d.join("orphan.pid").exists() || std::fs::read_to_string(d.join("orphan.pid")).unwrap().trim().is_empty() {
+                assert!(std::time::Instant::now() < until, "the stub did not start its orphan");
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            let pid = orphan_pid(&d);
+            // Wait until the coordinator has reaped the CLI.
+            let until = std::time::Instant::now() + Duration::from_secs(1);
+            loop {
+                let reaped = mgr.current.lock().unwrap().as_ref().map(|r| r.reaped.load(Ordering::SeqCst));
+                if reaped != Some(false) {
+                    break;
+                }
+                assert!(std::time::Instant::now() < until, "the CLI was not reaped");
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            let t0 = std::time::Instant::now();
+            let killed = mgr.current.lock().unwrap().as_ref().is_some_and(|run| kill_run(run, true));
+            assert!(killed, "Cancel in the drain window did nothing");
+            assert!(!alive_after(pid, Duration::from_secs(1)), "the process the CLI left behind ({pid}) survived Cancel");
+            let v = until_done(&wire, Duration::from_secs(5));
+            // Its pipes closed with it: no DRAIN timeout.
+            assert!(t0.elapsed() < DRAIN, "{:?}", t0.elapsed());
+            assert!(!logged(&v, STREAMS_OPEN) && !logged(&v, LEFT_BEHIND_KILLED));
+            // The CLI itself had finished: the run is not cancelled.
+            assert_eq!(v.last().unwrap().1["ok"], true);
+            assert!(!mgr.is_busy());
             let _ = std::fs::remove_dir_all(&d);
         }
 
@@ -1712,6 +1844,64 @@ mod tests {
                 kill_run(run, true);
             }
         }
+    }
+
+    // GUI-DESIGN 6.3: the reply of `run` as the renderer gets it. The keys of
+    // its outputs are the option names types.ts and App.tsx read; a
+    // rename_all on ResolvedOutputs once sent speciesOut and digestOut, so
+    // every report but -out went unread while the TS mocks, which built
+    // their own keys, stayed green. The same JSON is the fixture the vitest
+    // contract tests replay (api.test.ts, p1a.test.tsx).
+    #[test]
+    fn the_run_reply_names_every_output_by_its_option_name() {
+        let s = |p: &str| Some(p.to_string());
+        let started = RunStarted {
+            started: true,
+            reason: None,
+            out: s("/d/a.tags.tsv"),
+            outputs: Some(ResolvedOutputs {
+                out: s("/d/a.tags.tsv"),
+                species_out: s("/d/a.tags.species.tsv"),
+                digest_out: s("/d/a.digest.tsv"),
+                label_out: s("/d/a.label.tsv"),
+                massgap_out: s("/d/a.massgap.tsv"),
+                recon_out: s("/d/a.recon.tsv"),
+                delta_out: s("/d/a.delta.tsv"),
+                recon_id_out: s("/d/a.recon_id.tsv"),
+                glyco_out: s("/d/a.tags.glyco.tsv"),
+                out_spectra: s("/d/a.spectra.mzpeak"),
+            }),
+            command: Some(["/bin/FASTag", "-in", "/d/a.mzML", "-out", "/d/a.tags.tsv", "-progress"].map(String::from).to_vec()),
+        };
+        let json = serde_json::to_value(&started).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "started": true,
+                "reason": null,
+                "out": "/d/a.tags.tsv",
+                "outputs": {
+                    "out": "/d/a.tags.tsv",
+                    "species_out": "/d/a.tags.species.tsv",
+                    "digest_out": "/d/a.digest.tsv",
+                    "label_out": "/d/a.label.tsv",
+                    "massgap_out": "/d/a.massgap.tsv",
+                    "recon_out": "/d/a.recon.tsv",
+                    "delta_out": "/d/a.delta.tsv",
+                    "recon_id_out": "/d/a.recon_id.tsv",
+                    "glyco_out": "/d/a.tags.glyco.tsv",
+                    "out_spectra": "/d/a.spectra.mzpeak"
+                },
+                "command": ["/bin/FASTag", "-in", "/d/a.mzML", "-out", "/d/a.tags.tsv", "-progress"]
+            })
+        );
+        let fixture: Value = serde_json::from_str(include_str!("../../src/testing/fixtures/run-started.json")).unwrap();
+        assert_eq!(json, fixture, "gui/src/testing/fixtures/run-started.json is not what `run` sends");
+        // A refused run: no outputs at all.
+        assert_eq!(
+            serde_json::to_value(refused("busy".into())).unwrap(),
+            serde_json::json!({"started": false, "reason": "busy", "out": null, "outputs": null, "command": null})
+        );
     }
 
     #[test]

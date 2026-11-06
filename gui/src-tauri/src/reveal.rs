@@ -25,8 +25,13 @@ use crate::history;
 /// where Rust and the CLI do not. A species or glyco report the CLI derives
 /// from -out (-species or -glyco without a path) is under species_out or
 /// glyco_out. None: the run does not write it.
+///
+/// On the wire its keys are the option names (species_out, recon_id_out,
+/// out_spectra ...), as types.ts reads them: no rename_all. The JSON is
+/// pinned by fastag.rs the_run_reply_names_every_output_by_its_option_name
+/// against gui/src/testing/fixtures/run-started.json, which the vitest
+/// contract tests replay.
 #[derive(Serialize, Clone, Debug, PartialEq, Default)]
-#[serde(rename_all = "camelCase")]
 pub struct ResolvedOutputs {
     pub out: Option<String>,
     pub species_out: Option<String>,
