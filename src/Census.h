@@ -38,7 +38,9 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <limits>
+#include <type_traits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -102,13 +104,43 @@ namespace FASTag::Census
     return Status::Tagged;
   }
 
+  /// Sort non-negative, finite floats ascending (+0.0 and -0.0 must already
+  /// be one value: signal() stores +0.0). LSD radix sort on the bit patterns,
+  /// which order exactly as the values do for non-negative floats: the census
+  /// sorts every spectrum's intensities, and at a few hundred peaks or more
+  /// std::sort was most of the -census cost. The result equals std::sort's.
+  inline void sortNonNegative(std::vector<float>& v)
+  {
+    const std::size_t n = v.size();
+    if (n < 128)
+    {
+      std::sort(v.begin(), v.end());
+      return;
+    }
+    static thread_local std::vector<std::uint32_t> a, b;
+    a.resize(n);
+    b.resize(n);
+    std::memcpy(a.data(), v.data(), n * sizeof(float));
+    for (int shift = 0; shift < 32; shift += 8)
+    {
+      std::size_t count[257] = {};
+      for (const std::uint32_t x : a) ++count[((x >> shift) & 0xFFu) + 1];
+      if (count[((a[0] >> shift) & 0xFFu) + 1] == n) continue;  // one bucket: nothing to move
+      for (int k = 0; k < 256; ++k) count[k + 1] += count[k];
+      for (const std::uint32_t x : a) b[count[(x >> shift) & 0xFFu]++] = x;
+      a.swap(b);
+    }
+    std::memcpy(v.data(), a.data(), n * sizeof(float));
+  }
+
   /// Gini coefficient of @p v (sorted in place): 0 for equal values, 1 - 1/n
   /// for one non-zero value among n. The values must be >= 0 with a positive
-  /// sum. O(n log n).
+  /// sum.
   template <typename T>
   double gini(std::vector<T>& v)
   {
-    std::sort(v.begin(), v.end());
+    if constexpr (std::is_same_v<T, float>) sortNonNegative(v);
+    else std::sort(v.begin(), v.end());
     const double n = static_cast<double>(v.size());
     double sum = 0, weighted = 0;
     for (std::size_t i = 0; i < v.size(); ++i)
@@ -145,7 +177,7 @@ namespace FASTag::Census
       const double mz = pk.getMZ();
       const float in = static_cast<float>(pk.getIntensity());
       if (!std::isfinite(mz) || !std::isfinite(in) || in < 0) continue;
-      scratch.push_back(in);
+      scratch.push_back(in == 0 ? 0.0f : in);  // -0.0 as +0.0 (sortNonNegative)
       if (in > 0) ++s.n_peaks;
     }
     if (s.n_peaks > 0)
@@ -179,8 +211,8 @@ namespace FASTag::Census
     return best;
   }
 
-  /// Total length of the union of the intervals [lo, hi].
-  inline double tagCover(std::vector<std::pair<double, double>> iv)
+  /// Total length of the union of the intervals [lo, hi] in @p iv (sorted in place).
+  inline double unionLength(std::vector<std::pair<double, double>>& iv)
   {
     std::sort(iv.begin(), iv.end());
     double total = 0, lo = 0, hi = 0;
@@ -198,6 +230,18 @@ namespace FASTag::Census
     }
     if (open) total += hi - lo;
     return total;
+  }
+
+  /// Total length of the union of the intervals [lo, hi].
+  inline double tagCover(std::vector<std::pair<double, double>> iv) { return unionLength(iv); }
+
+  /// tag_cover of the reported rows: the union of their [low_mz, high_mz].
+  inline double tagCoverOf(const std::vector<TagView>& rows)
+  {
+    static thread_local std::vector<std::pair<double, double>> iv;
+    iv.clear();
+    for (const TagView& t : rows) iv.emplace_back(t.low_mz, t.high_mz);
+    return unionLength(iv);
   }
 
   /// One census row. Fields that were not computed for a spectrum are written

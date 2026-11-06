@@ -214,6 +214,29 @@ int main(int argc, char** argv)
     MSSpectrum z;
     z.emplace_back(100, 0.0f);
     CHECK(!C::signal(z).has_gini, "an all-zero spectrum has a Gini");
+    // The radix sort equals std::sort, ties, zeros (-0.0 stored as +0.0),
+    // denormals and the full float range included, above and below its cutoff.
+    std::mt19937 rng(3);
+    for (size_t n : {5u, 127u, 128u, 1000u, 4099u})
+    {
+      std::vector<float> v(n);
+      std::uniform_real_distribution<float> u(0.0f, 1e6f);
+      for (size_t i = 0; i < n; ++i)
+        v[i] = i % 9 == 0 ? 0.0f : i % 13 == 0 ? 1e-40f : i % 17 == 0 ? 3.0e38f : i % 5 == 0 ? 42.0f : u(rng);
+      std::vector<float> want = v;
+      std::sort(want.begin(), want.end());
+      C::sortNonNegative(v);
+      CHECK(v == want, "sortNonNegative differs from std::sort at n = %zu", n);
+      std::vector<double> d(want.begin(), want.end());
+      std::vector<float> f = want;
+      std::shuffle(f.begin(), f.end(), rng);
+      CHECK(C::gini(f) == C::gini(d), "float and double Gini differ at n = %zu", n);
+    }
+    MSSpectrum negz;
+    for (int i = 0; i < 300; ++i) negz.emplace_back(100 + i, i % 2 ? -0.0f : float(i));
+    std::vector<double> ref;
+    for (int i = 0; i < 300; ++i) ref.push_back(i % 2 ? 0.0 : double(i));
+    CHECK(C::signal(negz).gini == C::gini(ref), "-0.0 intensities break the Gini");
     std::printf("3. Gini\n");
   }
 
@@ -243,6 +266,12 @@ int main(int argc, char** argv)
     CHECK(std::fabs(C::tagCover({{100, 400}, {150, 260}, {120, 130}}) - 300) < 1e-9, "nested cover");
     CHECK(std::fabs(C::tagCover({{300, 350}, {100, 200}, {190, 210}}) - 160) < 1e-9, "unsorted cover");
     CHECK(C::tagCover({}) == 0.0, "empty cover");
+    std::vector<C::TagView> rows(3);
+    rows[0].low_mz = 300; rows[0].high_mz = 350;
+    rows[1].low_mz = 100; rows[1].high_mz = 200;
+    rows[2].low_mz = 190; rows[2].high_mz = 210;
+    CHECK(std::fabs(C::tagCoverOf(rows) - 160) < 1e-9 && std::fabs(C::tagCoverOf(rows) - 160) < 1e-9,
+          "tagCoverOf the rows (twice: the scratch list is reset)");
     std::printf("5. tag_cover\n");
   }
 

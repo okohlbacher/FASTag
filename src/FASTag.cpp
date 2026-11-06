@@ -2376,8 +2376,10 @@ protected:
       FASTag::SpectrumDiag cdiag;
       const auto tags = tag_all(spec, prec.getMZ(), prec.getCharge(), tables, res.census ? &cdiag : nullptr);
       pt.tags += tags.size();
-      std::vector<FASTag::Census::TagView> ctags;  // -census: the reported rows
-      size_t cplaced = 0;                          // -census: -recon_out placements
+      // -census: the reported rows (scratch reused per thread) and placements.
+      static thread_local std::vector<FASTag::Census::TagView> ctags;
+      ctags.clear();
+      size_t cplaced = 0;
 
       // Reserve once so the per-field appends below do not repeatedly realloc.
       // ~80 bytes/row covers the fixed columns and a typical native ID; the
@@ -2568,10 +2570,7 @@ protected:
         {
           crow.has_best = true;
           crow.best = ctags[best];
-          std::vector<std::pair<double, double>> iv;
-          iv.reserve(ctags.size());
-          for (const auto& v : ctags) iv.emplace_back(v.low_mz, v.high_mz);
-          crow.tag_cover = FASTag::Census::tagCover(std::move(iv));
+          crow.tag_cover = FASTag::Census::tagCoverOf(ctags);
         }
         pt.acc.f.census.add(crow);
       }
