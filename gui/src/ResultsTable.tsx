@@ -13,6 +13,22 @@ const PAGE = 500
 const MAX_PAGES = 40
 const SPACER_CAP = 15_000_000
 const OVERSCAN = 4
+// The most rows in the DOM at once, whatever height the scroller reports. A
+// scroller without a definite height (the old stacked layout below 720 px)
+// reported the whole 15 M px canvas, and a 10 M-row file then put every row
+// in the DOM and froze the window for over 45 s (GUI-DESIGN P0a).
+export const MAX_DOM_ROWS = 200
+
+// One callback per animation frame. jsdom without pretendToBeVisual and some
+// test setups have no requestAnimationFrame: fall back to a 16 ms timer.
+function onNextFrame(cb: () => void): () => void {
+  if (typeof window.requestAnimationFrame === 'function') {
+    const id = window.requestAnimationFrame(() => cb())
+    return () => window.cancelAnimationFrame(id)
+  }
+  const id = window.setTimeout(cb, 16)
+  return () => window.clearTimeout(id)
+}
 
 // Fallback widths until the first rows arrive; then columns are sized to
 // their content (header and first page) and can be resized by dragging the
@@ -211,6 +227,17 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
   const scrollerRef = useRef<HTMLDivElement>(null)
   const pagesRef = useRef(new Map<number, string[][]>())
   const inflightRef = useRef(new Set<number>())
+  // Scroll events are coalesced to one state update per animation frame: a
+  // fling fires several per frame, and each re-rendered the table.
+  const scrollFrame = useRef<(() => void) | null>(null)
+  // Page requests: at most one per animation frame, always for the window in
+  // view when the frame comes. Positions a fling passed through in between
+  // are never requested (stale requests are dropped, not queued).
+  const wantRef = useRef<{ path: string; view: ResultsView; pages: number[] }>({ path, view: {}, pages: [] })
+  const frameUsed = useRef(false)
+  const pumpFrame = useRef<(() => void) | null>(null)
+  // Bumped by a page arriving, to re-render with its rows.
+  const [, setArrived] = useState(0)
   // Bumped on every path/view change and on unmount: stale responses check it
   // and drop themselves instead of touching state.
   const genRef = useRef(0)
@@ -243,6 +270,11 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
     genRef.current++
     pagesRef.current.clear()
     inflightRef.current.clear()
+    // A new file or view is the user's own action, not a fling: its first
+    // page goes at once.
+    frameUsed.current = false
+    pumpFrame.current?.()
+    pumpFrame.current = null
     setError(null)
     setScrollTop(0)
     if (scrollerRef.current) scrollerRef.current.scrollTop = 0
@@ -250,6 +282,15 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
       genRef.current++
     }
   }, [path, view])
+
+  // Pending frames die with the table.
+  useEffect(
+    () => () => {
+      scrollFrame.current?.()
+      pumpFrame.current?.()
+    },
+    []
+  )
 
   useEffect(() => {
     const el = scrollerRef.current
@@ -265,7 +306,7 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
   const matched = meta?.matched ?? 0
   const contentH = matched * ROW_H
   const spacerH = Math.min(contentH, SPACER_CAP)
-  const visible = Math.ceil(viewH / ROW_H) + OVERSCAN
+  const visible = Math.min(MAX_DOM_ROWS, Math.ceil(viewH / ROW_H) + OVERSCAN)
   let first: number
   let blockTop: number
   if (contentH <= SPACER_CAP) {
@@ -282,39 +323,67 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
   first = Math.max(0, Math.min(first, Math.max(0, matched - 1)))
   const last = Math.min(matched, first + visible)
 
-  useEffect(() => {
+  // Request the first missing page of the window in view, if this frame has
+  // not sent one yet; otherwise try again next frame. A page that arrives
+  // pumps again, so a window spanning two pages fills in two frames.
+  const pump = (): void => {
+    const { path: p0, view: v0, pages } = wantRef.current
     const gen = genRef.current
-    const wanted: number[] = []
-    for (let p = Math.floor(first / PAGE); p * PAGE < Math.max(last, 1); p++) wanted.push(p)
-    for (const p of wanted) {
-      if (pagesRef.current.has(p) || inflightRef.current.has(p)) continue
-      inflightRef.current.add(p)
-      window.fastag.resultsQuery(path, view, p * PAGE, PAGE).then(
-        (page: ResultsPage) => {
-          if (genRef.current !== gen) return
-          inflightRef.current.delete(p)
-          pagesRef.current.set(p, page.rows)
-          // LRU-ish eviction: drop the oldest cached page that is not needed
-          // for the current window.
-          for (const k of pagesRef.current.keys()) {
-            if (pagesRef.current.size <= MAX_PAGES) break
-            if (!wanted.includes(k)) pagesRef.current.delete(k)
-          }
-          setMeta({ columns: page.columns, total: page.totalRows, matched: page.matchedRows })
-          // Widths only grow as pages arrive, so a later, longer value
-          // (scan=999999 after scan=0) is not cut and nothing jumps narrower.
-          if (page.rows.length > 0) {
-            setAutoW((w) => growWidths(w, autoWidths(page.columns, page.rows)))
-            setNumeric((n) => (n.size ? n : numericColumns(page.columns, page.rows)))
-          }
-        },
-        (err: unknown) => {
-          if (genRef.current !== gen) return
-          inflightRef.current.delete(p)
-          setError(err instanceof Error ? err.message : String(err))
-        }
-      )
+    const missing = pages.find((p) => !pagesRef.current.has(p) && !inflightRef.current.has(p))
+    if (missing === undefined) return
+    if (frameUsed.current) {
+      if (!pumpFrame.current) {
+        pumpFrame.current = onNextFrame(() => {
+          pumpFrame.current = null
+          frameUsed.current = false
+          pump()
+        })
+      }
+      return
     }
+    frameUsed.current = true
+    onNextFrame(() => {
+      frameUsed.current = false
+    })
+    const page = missing
+    inflightRef.current.add(page)
+    window.fastag.resultsQuery(p0, v0, page * PAGE, PAGE).then(
+      (res: ResultsPage) => {
+        if (genRef.current !== gen) return
+        inflightRef.current.delete(page)
+        pagesRef.current.set(page, res.rows)
+        // LRU-ish eviction: drop the oldest cached page that is not needed
+        // for the current window.
+        const now = wantRef.current.pages
+        for (const k of pagesRef.current.keys()) {
+          if (pagesRef.current.size <= MAX_PAGES) break
+          if (!now.includes(k)) pagesRef.current.delete(k)
+        }
+        setMeta({ columns: res.columns, total: res.totalRows, matched: res.matchedRows })
+        setArrived((n) => n + 1)
+        // Widths only grow as pages arrive, so a later, longer value
+        // (scan=999999 after scan=0) is not cut and nothing jumps narrower.
+        if (res.rows.length > 0) {
+          setAutoW((w) => growWidths(w, autoWidths(res.columns, res.rows)))
+          setNumeric((n) => (n.size ? n : numericColumns(res.columns, res.rows)))
+        }
+        pump()
+      },
+      (err: unknown) => {
+        if (genRef.current !== gen) return
+        inflightRef.current.delete(page)
+        setError(err instanceof Error ? err.message : String(err))
+      }
+    )
+  }
+
+  useEffect(() => {
+    const pages: number[] = []
+    for (let p = Math.floor(first / PAGE); p * PAGE < Math.max(last, 1); p++) pages.push(p)
+    wantRef.current = { path, view, pages }
+    pump()
+    // pump reads only refs: it needs no dependency of its own.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, view, first, last])
 
   const columns = meta?.columns ?? []
@@ -558,7 +627,13 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
           tabIndex={0}
           role="region"
           aria-label="Tags table"
-          onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+          onScroll={() => {
+            if (scrollFrame.current) return
+            scrollFrame.current = onNextFrame(() => {
+              scrollFrame.current = null
+              if (scrollerRef.current) setScrollTop(scrollerRef.current.scrollTop)
+            })
+          }}
         >
           <div
             className="rt-canvas"

@@ -10,6 +10,7 @@ import { SPECTRA } from './api'
 import DigestPanel from './DigestPanel'
 import { parseReport } from './digestReport'
 import { installMockBridge, type MockBridge } from './testing/mockBridge'
+import { applyLastUsed, formValue } from './testing/lastUsed'
 import digestTsv from './fixtures/digest.tsv?raw'
 import nocallTsv from './fixtures/digest_nocall.tsv?raw'
 import labelTsv from './fixtures/label.tsv?raw'
@@ -171,6 +172,10 @@ describe('run/batch orchestration', () => {
     const mock = installMockBridge()
     mock.settings.lastUsed = { out_spectra: '/tmp/all.mzpeak', species_out: '/tmp/shared.species.tsv' }
     await renderApp(mock)
+    await applyLastUsed(2)
+    // Guard: the shared paths are in the form, so the per-job ones below are derived from them.
+    expect(await formValue('out_spectra')).toBe('/tmp/all.mzpeak')
+    expect(await formValue('species_out')).toBe('/tmp/shared.species.tsv')
     await addBatch(mock, ['/d/a.mzML', '/d/b.mzML'])
     await startBatch()
     await waitFor(() => expect(mock.runCalls).toHaveLength(1))
@@ -192,6 +197,8 @@ describe('run/batch orchestration', () => {
     const mock = installMockBridge()
     mock.settings.lastUsed = { species: true }
     await renderApp(mock)
+    await applyLastUsed(1)
+    expect(await formValue('species')).toBe(true) // guard: species is on
     await addBatch(mock, ['/d/a.mzML', '/d/b.mzML'])
     await startBatch()
     await waitFor(() => expect(mock.runCalls).toHaveLength(1))
@@ -269,6 +276,8 @@ describe('run/batch orchestration', () => {
     const mock = installMockBridge()
     mock.settings.lastUsed = { species: true }
     await renderApp(mock)
+    await applyLastUsed(1)
+    expect(await formValue('species')).toBe(true) // guard: species is on
     await pickSingle(mock, '/runs.2026/sample.mzML')
     await click(runButton())
     await emitDone(mock, 1, true)
@@ -308,6 +317,8 @@ describe('run/batch orchestration', () => {
     mock.settings.lastUsed = { species: true }
     mock.speciesError = new Error('species boom')
     const container = await renderApp(mock)
+    await applyLastUsed(1)
+    expect(await formValue('species')).toBe(true) // guard: species is on, so the species report is read
     await pickSingle(mock, '/d/a.mzML')
     await click(runButton())
     await emitDone(mock, 1, true)
@@ -320,6 +331,8 @@ describe('run/batch orchestration', () => {
     mock.settings.lastUsed = { species: true }
     mock.speciesError = new Error('species boom')
     const container = await renderApp(mock)
+    await applyLastUsed(1)
+    expect(await formValue('species')).toBe(true) // guard: species is on, so the species report is read
     await addBatch(mock, ['/d/a.mzML'])
     await startBatch()
     await waitFor(() => expect(mock.runCalls).toHaveLength(1))
@@ -390,6 +403,9 @@ describe('run/batch orchestration', () => {
     const mock = installMockBridge()
     mock.settings.lastUsed = { massgap_out: '/r/a.massgap.tsv' }
     await renderApp(mock)
+    await applyLastUsed(1)
+    // Guard: the form holds massgap_out (inert without recon_out), so leaving it out is the GUI's choice.
+    expect(await formValue('massgap_out')).toBe('/r/a.massgap.tsv')
     await pickSingle(mock, '/d/a.mzML')
     await click(runButton())
     const sent = mock.runCalls[mock.runCalls.length - 1].params
@@ -401,6 +417,8 @@ describe('run/batch orchestration', () => {
     const mock = installMockBridge()
     mock.settings.lastUsed = { digest_out: '/res/old.digest.tsv', recon_out: '/res/old.recon.tsv', recon_fasta: '/db/human.fasta' }
     await renderApp(mock)
+    await applyLastUsed(3)
+    expect(await formValue('digest_out')).toBe('/res/old.digest.tsv') // guard: the old report path is in the form
     await pickSingle(mock, '/d/b.mzML')
     await click(runButton())
     const sent = mock.runCalls[mock.runCalls.length - 1].params
@@ -412,6 +430,9 @@ describe('run/batch orchestration', () => {
     const mock = installMockBridge()
     mock.settings.lastUsed = { recon_out: '/res/old.recon.tsv', max_peaks: '2000' }
     await renderApp(mock)
+    await applyLastUsed(2)
+    expect(await formValue('max_peaks')).toBe('2000') // guard: the refused values are in the form
+    expect(await formValue('recon_out')).toBe('/res/old.recon.tsv')
     await pickSingle(mock, '/d/b.mzML')
     expect((runButton() as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByText('recon_out needs a database: set recon_fasta (or fasta).')).toBeDefined()
@@ -497,6 +518,8 @@ describe('digest tab', () => {
     mock.settings.lastUsed = { ...paths, recon_fasta: '/db/human.fasta' }
     mock.reportFiles = { [paths.digest_out]: digestTsv, [paths.label_out]: labelTsv, [paths.massgap_out]: massgapTsv }
     await renderApp(mock)
+    await applyLastUsed(5)
+    expect(await formValue('label_out')).toBe(paths.label_out) // guard: the report paths are in the form
     await pickSingle(mock, '/r/a.mzML')
     await click(runButton())
     await emitDone(mock, 1, true)
@@ -527,6 +550,8 @@ describe('digest tab', () => {
     mock.settings.lastUsed = { digest_out: paths.digest_out }
     mock.reportFiles = { [paths.digest_out]: nocallTsv }
     await renderApp(mock)
+    await applyLastUsed(1)
+    expect(await formValue('digest_out')).toBe(paths.digest_out) // guard: the digest report is asked for
     await pickSingle(mock, '/r/a.mzML')
     await click(runButton())
     await emitDone(mock, 1, true)
@@ -549,6 +574,8 @@ describe('digest tab', () => {
     mock.settings.lastUsed = { digest_out: paths.digest_out }
     mock.reportFiles = { [paths.digest_out]: tsv }
     await renderApp(mock)
+    await applyLastUsed(1)
+    expect(await formValue('digest_out')).toBe(paths.digest_out) // guard: the digest report is asked for
     await pickSingle(mock, '/r/a.mzML')
     await click(runButton())
     await emitDone(mock, 1, true)
@@ -563,6 +590,8 @@ describe('digest tab', () => {
     mock.settings.lastUsed = { digest_out: paths.digest_out }
     mock.reportFiles = { [paths.digest_out]: 'spectrum\ttag\n' }
     await renderApp(mock)
+    await applyLastUsed(1)
+    expect(await formValue('digest_out')).toBe(paths.digest_out) // guard: the digest report is asked for
     await pickSingle(mock, '/r/a.mzML')
     await click(runButton())
     await emitDone(mock, 1, true)
@@ -611,6 +640,8 @@ describe('redesign: setup and run bar', () => {
     const mock = installMockBridge()
     mock.settings.lastUsed = { tag_length: '7' }
     const container = await renderApp(mock)
+    await applyLastUsed(1)
+    expect(await formValue('tag_length')).toBe('7') // guard: the changed value is in the form
     await pickSingle(mock, '/d/a.mzML')
     expect(runButton().textContent).toBe('Run on a.mzML')
     await click(runButton())

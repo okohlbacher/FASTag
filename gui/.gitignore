@@ -25,3 +25,10 @@ dist-ssr
 
 # Synthetic report fixtures (the repo ignores *.tsv)
 !src/fixtures/*.tsv
+
+# The Playwright e2e build and its results (e2e-web/)
+dist-e2e
+e2e-web/test-results
+e2e-web/playwright-report
+# ...but its fixtures are source
+!e2e-web/fixtures/*.tsv

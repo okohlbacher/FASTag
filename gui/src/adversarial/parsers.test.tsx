@@ -5,7 +5,7 @@
 // absent. A "known limitation" test pins a behaviour that is kept on purpose.
 // @ts-ignore -- node built-in; the app's tsconfig has no node types
 import { readFileSync } from 'node:fs'
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import {
   digestCall,
@@ -394,8 +394,9 @@ describe('ResultsTable: filter inputs and size', () => {
       sc.scrollTop = 15_000_000 + 28 - 600
       fireEvent.scroll(sc)
     })
-    await flush()
-    const cells = [...c2.querySelectorAll('.rt-row')].map((r) => r.firstElementChild?.textContent)
-    expect(lastOf(cells)).toBe('scan=999999')
+    // Scroll positions are applied once per animation frame (P0a): wait for it.
+    const cells = (): (string | null | undefined)[] =>
+      [...c2.querySelectorAll('.rt-row')].map((r) => r.firstElementChild?.textContent)
+    await waitFor(() => expect(lastOf(cells())).toBe('scan=999999'))
   })
 })

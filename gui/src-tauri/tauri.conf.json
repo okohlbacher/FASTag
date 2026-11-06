@@ -15,8 +15,8 @@
         "title": "FASTag",
         "width": 1200,
         "height": 800,
-        "minWidth": 640,
-        "minHeight": 480
+        "minWidth": 960,
+        "minHeight": 600
       }
     ],
     "security": {
@@ -58,6 +58,11 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "windows": {
+      "nsis": {
+        "compression": "lzma"
+      }
+    },
     "macOS": {
       "minimumSystemVersion": "13.4",
       "entitlements": "entitlements.plist"
