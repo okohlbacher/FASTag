@@ -46,9 +46,10 @@ gui/
     src/fastag.rs      resolve/probe the binary, run it, stream stderr and stdout lines as events, cancel
     src/outputs.rs     the files a run writes (from its argv); removes them when it is cancelled or fails
     src/lifetime.rs    process lifetime: the one spawner thread every CLI child starts from, PDEATHSIG
-                       (Linux), the per-run watchdog (Unix), the kill-on-close job (Windows)
-    src/sweep.rs       the marker of a running run; at startup, interrupted runs recorded and their
-                       leftovers (.part, .incomplete, partial outputs) offered for removal
+                       (Linux), the per-run watchdog (Unix), the per-run kill-on-close job (Windows)
+    src/sweep.rs       the marker (with a heartbeat) of a running run; at startup, interrupted runs
+                       recorded and their leftovers (.part, .incomplete, the outputs they wrote while
+                       alive) offered for removal
     src/close_guard.rs asks before a window close or Cmd+Q kills an active run
     src/settings.rs    named presets + last-used, atomic JSON in the app config dir
     src/browser.rs     indexed million-row results browser: head read on open, index and

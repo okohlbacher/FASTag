@@ -23,14 +23,6 @@ use tauri::{Emitter, Manager, RunEvent, WindowEvent};
 pub use fastag::build_args_json;
 
 pub fn run() {
-    // Windows: every process this app starts from here on, including the
-    // real exe that FASTag.bat starts, is born in a job that the system
-    // kills when the app ends (lifetime.rs). Unix uses PDEATHSIG and the
-    // per-run watchdog instead.
-    #[cfg(windows)]
-    if let Err(e) = lifetime::adopt_kill_on_close_job() {
-        eprintln!("FASTag: no kill-on-close job ({e}); a run may outlive a killed app");
-    }
     let builder = tauri::Builder::default()
         // single-instance must be registered first: a second launch focuses the
         // existing window instead of racing over the settings file and run state.

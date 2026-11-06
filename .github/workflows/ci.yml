@@ -1362,7 +1362,8 @@ jobs:
           cargo check --example browser_bench
 
   # The Windows half of the process lifetime (P1 PR b): the kill-on-close job
-  # object the app puts itself into at startup (lifetime.rs). windows.yml
+  # object each run is started in (lifetime.rs), including the kill of a
+  # stand-in GUI process with a .bat-like grandchild. windows.yml
   # builds the app only on tags, so without this job the cfg(windows) code
   # would first compile at a release. Every lib test is compiled here, but
   # only the lifetime ones run: the rest have never run on Windows, and this

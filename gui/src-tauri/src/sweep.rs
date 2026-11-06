@@ -8,19 +8,26 @@
 // the CLI starts and removes it when the run has ended; at the next start
 // recover() turns a marker that is still there into a Failed run record
 // ("interrupted"). One marker per run: a run refused because another is live
-// removes its own marker, never the live run's.
+// removes its own marker, never the live run's. While the run is live its
+// marker's mtime is refreshed every HEARTBEAT, so the marker of a killed run
+// says when that run was last alive: that is the record's end.
 // leftovers() then lists, for the recorded runs:
 // - <output>.part (a CLI that writes to .part and renames on success, Q3,
 //   killed before the rename) and <output>.incomplete (an output the
 //   cleanup could not delete and renamed);
 // - the outputs at their final paths of an interrupted run, unless a later
-//   run wrote the same path.
+//   run wrote the same path, and only those last written while that run was
+//   alive (from its start to its last heartbeat, plus one heartbeat for the
+//   writes between that and the kill). An older output the run had not yet
+//   rewritten, or one remade after the kill (the CLI in a terminal, another
+//   tool), is a complete file and never offered.
 // The renderer shows them and the user removes or keeps them. Only paths
 // that leftovers() lists are ever removed (the renderer is untrusted), and
 // a run's input never is.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tauri::AppHandle;
 
@@ -34,11 +41,19 @@ pub const KEPT_FILE: &str = "leftovers-kept.json";
 /// The message of the record of a run the app did not see end.
 pub const INTERRUPTED: &str = "interrupted: the app ended while this run was in progress";
 
+/// How often a live run refreshes the mtime of its marker.
+pub const HEARTBEAT: Duration = Duration::from_secs(2);
+/// How long after the last heartbeat of an interrupted run a write still
+/// counts as the run's: it was killed at most one HEARTBEAT later; the
+/// rest is slack for a late heartbeat and coarse file times.
+const AFTER_HEARTBEAT_MS: u64 = 2 * HEARTBEAT.as_millis() as u64;
+
 /// How many recorded runs are searched for leftovers.
 const RUNS_SEARCHED: usize = 500;
 
 /// Write a marker of @p rec, the run about to start (temp file and rename,
-/// so a killed app never leaves half of it). Returns its path.
+/// so a killed app never leaves half of it), and refresh its mtime every
+/// HEARTBEAT until it is removed. Returns its path.
 pub fn mark_running(dir: &Path, rec: &RunRecord) -> std::io::Result<PathBuf> {
     static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     std::fs::create_dir_all(dir)?;
@@ -48,7 +63,23 @@ pub fn mark_running(dir: &Path, rec: &RunRecord) -> std::io::Result<PathBuf> {
     tmp.push(".tmp");
     std::fs::write(&tmp, serde_json::to_vec(rec).map_err(std::io::Error::other)?)?;
     std::fs::rename(&tmp, &path)?;
+    let beat = path.clone();
+    let _ = std::thread::Builder::new().name("fastag-heartbeat".into()).spawn(move || loop {
+        std::thread::sleep(HEARTBEAT);
+        // Opened for writing, never created: once clear_running() has
+        // removed the marker this fails and the heartbeat stops.
+        let Ok(f) = std::fs::OpenOptions::new().write(true).open(&beat) else { return };
+        if f.set_modified(SystemTime::now()).is_err() {
+            return;
+        }
+    });
     Ok(path)
+}
+
+/// The mtime of @p p in ms since the epoch.
+fn mtime_ms(p: &Path) -> Option<u64> {
+    let t = std::fs::metadata(p).and_then(|m| m.modified()).ok()?;
+    Some(t.duration_since(UNIX_EPOCH).ok()?.as_millis() as u64)
 }
 
 /// The run of @p marker has ended and is recorded as such (or never started).
@@ -71,8 +102,8 @@ pub fn markers(dir: &Path) -> Vec<PathBuf> {
 }
 
 /// At startup: a marker left by an earlier session is a run the app did not
-/// see end. Each is recorded as Failed (INTERRUPTED), with the last change
-/// of any of its outputs as its end, and the marker goes. Returns those
+/// see end. Each is recorded as Failed (INTERRUPTED), with the marker's
+/// last heartbeat (its mtime) as its end, and the marker goes. Returns those
 /// records.
 pub fn recover(dir: &Path) -> Vec<RunRecord> {
     markers(dir).iter().filter_map(|m| recover_one(dir, m)).collect()
@@ -80,22 +111,24 @@ pub fn recover(dir: &Path) -> Vec<RunRecord> {
 
 fn recover_one(dir: &Path, marker: &Path) -> Option<RunRecord> {
     let text = std::fs::read(marker).ok()?;
+    let last_beat = mtime_ms(marker);
     let _ = std::fs::remove_file(marker);
     let mut rec: RunRecord = serde_json::from_slice(&text).ok()?;
     rec.status = Status::Failed;
     rec.exit_code = None;
     rec.message = Some(INTERRUPTED.to_string());
-    let last_write = rec
-        .output_paths()
-        .iter()
-        .filter_map(|p| std::fs::metadata(p).and_then(|m| m.modified()).ok())
-        .filter_map(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_millis() as u64)
-        .max();
-    rec.end = last_write.unwrap_or(rec.start).max(rec.start);
+    rec.end = last_beat.unwrap_or(rec.start).max(rec.start);
     history::append(dir, &rec).ok()?;
     let _ = history::write_failure_log(dir, &rec, &[]);
     Some(rec)
+}
+
+/// @p p was last written while the interrupted run @p rec was alive: not
+/// before its start (taken to the whole second, for file systems with
+/// coarse times) and not later than AFTER_HEARTBEAT_MS after its last
+/// heartbeat (rec.end).
+fn written_by_interrupted(p: &Path, rec: &RunRecord) -> bool {
+    mtime_ms(p).is_some_and(|t| t >= rec.start / 1000 * 1000 && t <= rec.end.saturating_add(AFTER_HEARTBEAT_MS))
 }
 
 fn is_regular_file(p: &Path) -> bool {
@@ -124,7 +157,7 @@ pub fn leftovers(dir: &Path) -> Vec<PathBuf> {
         let interrupted = rec.status == Status::Failed && rec.message.as_deref() == Some(INTERRUPTED);
         for p in rec.output_paths() {
             let mut cands = vec![with_suffix(&p, ".part"), outputs::incomplete_name(&p)];
-            if interrupted && !newer.contains(&p) {
+            if interrupted && !newer.contains(&p) && written_by_interrupted(&p, &rec) {
                 cands.push(p.clone());
             }
             newer.insert(p);
@@ -218,6 +251,22 @@ mod tests {
         }
     }
 
+    /// Set the mtime of @p p to @p ms since the epoch.
+    fn set_mtime(p: &Path, ms: u64) {
+        let f = std::fs::OpenOptions::new().write(true).open(p).unwrap();
+        f.set_modified(UNIX_EPOCH + Duration::from_millis(ms)).unwrap();
+    }
+
+    /// An interrupted run of @p data that started 60 s ago and was alive
+    /// until now (its last heartbeat).
+    fn interrupted(id: &str, data: &Path) -> RunRecord {
+        let mut r = rec(id, data, Status::Failed);
+        r.message = Some(INTERRUPTED.into());
+        r.start = history::now_ms() - 60_000;
+        r.end = history::now_ms();
+        r
+    }
+
     fn shown(v: &[PathBuf]) -> Vec<String> {
         v.iter().map(|p| p.display().to_string()).collect()
     }
@@ -232,13 +281,19 @@ mod tests {
         let m = mark_running(&app, &r).unwrap();
         assert_ne!(m, other, "two runs share a marker");
         clear_running(&other); // a refused run takes only its own marker
-        assert_eq!(markers(&app), vec![m]);
+        assert_eq!(markers(&app), vec![m.clone()]);
         std::fs::write(d.join("a.tags.tsv"), "spectrum\ttag\n").unwrap();
+        // The run's end is its last heartbeat, not the outputs' mtimes (a
+        // file written after the kill would move it).
+        let later = history::now_ms() + 3_600_000;
+        set_mtime(&m, 5000);
+        set_mtime(&d.join("a.tags.tsv"), later);
         let got = recover(&app).pop().expect("the marker was not recovered");
         assert_eq!(got.status, Status::Failed);
         assert_eq!(got.message.as_deref(), Some(INTERRUPTED));
         assert_eq!(got.exit_code, None);
-        assert!(got.end >= got.start);
+        // 5000, or now if a heartbeat came in between; never the output's.
+        assert!(got.end >= got.start && got.end < later, "end {} is not the last heartbeat", got.end);
         assert!(markers(&app).is_empty(), "the marker stayed");
         // Recorded: the last-run line and the open-as-incomplete check see it.
         assert_eq!(history::list(&app, 1), vec![got.clone()]);
@@ -262,9 +317,7 @@ mod tests {
         // a CLI left (Q3) next to the digest; then an interrupted run that
         // left its table at the final path.
         history::append(&app, &rec("1-1", &d, Status::Failed)).unwrap();
-        let mut i = rec("2-2", &d, Status::Failed);
-        i.message = Some(INTERRUPTED.into());
-        history::append(&app, &i).unwrap();
+        history::append(&app, &interrupted("2-2", &d)).unwrap();
         std::fs::write(d.join("a.tags.tsv.incomplete"), "x").unwrap();
         std::fs::write(d.join("a.digest.tsv.part"), "x").unwrap();
         std::fs::write(&tags, "partial").unwrap();
@@ -285,12 +338,55 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
     }
 
+    // Only what the interrupted run itself wrote is offered: an output older
+    // than its start (a confirmed earlier result it had not rewritten yet)
+    // and one newer than its last heartbeat (remade after the kill) are
+    // complete files.
+    #[test]
+    fn only_outputs_written_while_the_interrupted_run_was_alive_are_leftovers() {
+        let d = tmp("alive");
+        let app = d.join("appdata");
+        let now = history::now_ms();
+        let mut i = rec("1-1", &d, Status::Failed);
+        i.message = Some(INTERRUPTED.into());
+        i.outputs = vec!["a.tags.tsv".into(), "a.digest.tsv".into(), "a.species.tsv".into()];
+        i.start = now - 600_000;
+        i.end = now - 300_000;
+        history::append(&app, &i).unwrap();
+        let (older, newer, partial) = (d.join("a.tags.tsv"), d.join("a.digest.tsv"), d.join("a.species.tsv"));
+        for f in [&older, &newer, &partial] {
+            std::fs::write(f, "x").unwrap();
+        }
+        set_mtime(&older, now - 3_600_000);
+        set_mtime(&newer, now - 300_000 + AFTER_HEARTBEAT_MS + 1000);
+        set_mtime(&partial, now - 400_000);
+        assert_eq!(shown(&leftovers(&app)), shown(std::slice::from_ref(&partial)));
+        assert_eq!(sweep(&app, &[older.display().to_string(), newer.display().to_string()]).removed.len(), 0);
+        assert!(older.exists() && newer.exists());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    // A live run's marker is refreshed (its heartbeat) until it is removed,
+    // and never written again after that.
+    #[test]
+    fn a_live_runs_marker_beats_until_it_is_cleared() {
+        let d = tmp("beat");
+        let app = d.join("appdata");
+        let m = mark_running(&app, &rec("1-1", &d, Status::Ok)).unwrap();
+        set_mtime(&m, 5000);
+        std::thread::sleep(HEARTBEAT + Duration::from_millis(700));
+        assert!(mtime_ms(&m).unwrap() > history::now_ms() - 2 * HEARTBEAT.as_millis() as u64, "no heartbeat");
+        clear_running(&m);
+        std::thread::sleep(HEARTBEAT + Duration::from_millis(700));
+        assert!(!m.exists(), "the heartbeat brought a cleared marker back");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
     #[test]
     fn the_input_is_never_a_leftover() {
         let d = tmp("input");
         let app = d.join("appdata");
-        let mut i = rec("1-1", &d, Status::Failed);
-        i.message = Some(INTERRUPTED.into());
+        let mut i = interrupted("1-1", &d);
         i.outputs = vec!["a.mzML".into()];
         history::append(&app, &i).unwrap();
         std::fs::write(d.join("a.mzML"), "spectra").unwrap();

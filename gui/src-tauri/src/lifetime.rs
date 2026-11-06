@@ -22,11 +22,14 @@
 //   group is forking at that moment (measured: a shell forking in a loop
 //   left a live child after every one of 20 single kills); it then held the
 //   run's pipes and the run never ended (the stub_cli flake).
-// - adopt_kill_on_close_job(): Windows only. At startup the GUI puts itself
-//   into a JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE job: every process it starts
-//   later, including the real exe that FASTag.bat starts, is born in that
-//   job, and when the GUI ends the system closes the job's last handle and
-//   kills them all. No post-spawn assignment, so no race with a grandchild.
+// - spawn_cli(): every CLI child goes through here. On Windows the child is
+//   started suspended, put into a JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE job of
+//   its own and only then resumed, so everything it starts (the real exe
+//   that FASTag.bat starts) is born in that job, with no race against a
+//   grandchild. The GUI holds the only handle; when the GUI ends in any way
+//   the system closes it and kills the run's whole tree. The GUI itself is
+//   in no job of ours, so a browser or editor it opens (the opener plugin,
+//   ShellExecute) is not tied to the GUI's life.
 //
 // std, libc and windows-sys only: no Tauri, so the Linux-only parts can be
 // tested on their own.
@@ -202,49 +205,138 @@ pub fn kill_group_until_reaped(
     });
 }
 
-/// Windows: put the GUI process into a job that kills every process in it
-/// when its last handle closes, which the system does when the GUI ends.
-/// Children inherit the job at creation. The handle is kept open for the
-/// life of the process on purpose.
+/// What keeps a run's processes tied to the GUI on Windows: the run's job
+/// (None when it could not be set up). Nothing elsewhere.
 #[cfg(windows)]
-pub fn adopt_kill_on_close_job() -> io::Result<()> {
-    use windows_sys::Win32::System::Threading::GetCurrentProcess;
-    let job = kill_on_close_job()?;
-    // SAFETY: both handles are valid; the job handle is never closed.
-    if unsafe { windows_sys::Win32::System::JobObjects::AssignProcessToJobObject(job, GetCurrentProcess()) } == 0 {
-        return Err(io::Error::last_os_error());
+pub type RunJob = Option<Job>;
+#[cfg(not(windows))]
+pub type RunJob = ();
+
+/// Start the CLI child @p cmd (spawn()); on Windows inside a kill-on-close
+/// job of its own (spawn_in_job). Keep the RunJob until the child is
+/// reaped: dropping it on Windows kills whatever of the run is left.
+pub fn spawn_cli(cmd: Command) -> io::Result<(Child, RunJob)> {
+    #[cfg(windows)]
+    return spawn_in_job(cmd, CREATE_NO_WINDOW);
+    #[cfg(not(windows))]
+    spawn(cmd).map(|c| (c, ()))
+}
+
+/// The CLI is a console program and the GUI has none: without this flag
+/// Windows gives every child a console window of its own.
+#[cfg(windows)]
+pub const CREATE_NO_WINDOW: u32 = windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
+
+/// A kill-on-close job (Windows). Closing its handle, which drop() does and
+/// the system does when the GUI ends, kills every process in it.
+#[cfg(windows)]
+pub struct Job(windows_sys::Win32::Foundation::HANDLE);
+
+// SAFETY: a job handle is a kernel handle, usable from any thread.
+#[cfg(windows)]
+unsafe impl Send for Job {}
+#[cfg(windows)]
+unsafe impl Sync for Job {}
+
+#[cfg(windows)]
+impl Drop for Job {
+    fn drop(&mut self) {
+        // SAFETY: the handle is ours and closed once.
+        unsafe {
+            windows_sys::Win32::Foundation::CloseHandle(self.0);
+        }
+    }
+}
+
+/// Windows: start @p cmd with creation flags @p flags (they replace any set
+/// on @p cmd) and CREATE_SUSPENDED, put it into a new kill-on-close job and
+/// resume it. A job that cannot be set up (an old system without nested
+/// jobs) is None: the child then runs without one. A child that cannot be
+/// resumed is killed and an error.
+#[cfg(windows)]
+pub fn spawn_in_job(mut cmd: Command, flags: u32) -> io::Result<(Child, RunJob)> {
+    use std::os::windows::io::AsRawHandle;
+    use std::os::windows::process::CommandExt;
+    use windows_sys::Win32::System::JobObjects::AssignProcessToJobObject;
+    use windows_sys::Win32::System::Threading::CREATE_SUSPENDED;
+    cmd.creation_flags(flags | CREATE_SUSPENDED);
+    let mut child = spawn(cmd)?;
+    let job = kill_on_close_job().ok().filter(|j| {
+        // SAFETY: both handles are valid.
+        unsafe { AssignProcessToJobObject(j.0, child.as_raw_handle() as _) != 0 }
+    });
+    if let Err(e) = resume_threads(child.id()) {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(e);
+    }
+    Ok((child, job))
+}
+
+/// Resume every thread of process @p pid (the main thread of a process
+/// started suspended).
+#[cfg(windows)]
+fn resume_threads(pid: u32) -> io::Result<()> {
+    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Thread32First, Thread32Next, TH32CS_SNAPTHREAD, THREADENTRY32,
+    };
+    use windows_sys::Win32::System::Threading::{OpenThread, ResumeThread, THREAD_SUSPEND_RESUME};
+    // SAFETY: plain Win32 calls; every handle opened here is closed here.
+    unsafe {
+        let snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+        if snap == INVALID_HANDLE_VALUE {
+            return Err(io::Error::last_os_error());
+        }
+        let mut entry = THREADENTRY32 { dwSize: std::mem::size_of::<THREADENTRY32>() as u32, ..Default::default() };
+        let mut resumed = 0;
+        let mut more = Thread32First(snap, &mut entry) != 0;
+        while more {
+            if entry.th32OwnerProcessID == pid {
+                let t = OpenThread(THREAD_SUSPEND_RESUME, 0, entry.th32ThreadID);
+                if !t.is_null() {
+                    if ResumeThread(t) != u32::MAX {
+                        resumed += 1;
+                    }
+                    CloseHandle(t);
+                }
+            }
+            more = Thread32Next(snap, &mut entry) != 0;
+        }
+        CloseHandle(snap);
+        if resumed == 0 {
+            return Err(io::Error::other(format!("could not resume process {pid}")));
+        }
     }
     Ok(())
 }
 
-/// A new job object whose processes die when its last handle is closed.
-/// Breakaway is allowed, so a process started with CREATE_BREAKAWAY_FROM_JOB
-/// can leave it.
+/// A new job object whose processes die when its last handle is closed. Its
+/// handle is not inheritable, so no child keeps the job open.
 #[cfg(windows)]
-fn kill_on_close_job() -> io::Result<windows_sys::Win32::Foundation::HANDLE> {
+fn kill_on_close_job() -> io::Result<Job> {
     use windows_sys::Win32::System::JobObjects::{
         CreateJobObjectW, JobObjectExtendedLimitInformation, SetInformationJobObject,
-        JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_BREAKAWAY_OK, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
     };
     // SAFETY: plain Win32 calls with valid arguments; the info struct is
     // plain data, zeroed then filled.
     unsafe {
-        let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
-        if job.is_null() {
+        let handle = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+        if handle.is_null() {
             return Err(io::Error::last_os_error());
         }
+        let job = Job(handle);
         let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
-        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_BREAKAWAY_OK;
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
         let ok = SetInformationJobObject(
-            job,
+            job.0,
             JobObjectExtendedLimitInformation,
             &info as *const _ as *const std::ffi::c_void,
             std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
         );
         if ok == 0 {
-            let e = io::Error::last_os_error();
-            windows_sys::Win32::Foundation::CloseHandle(job);
-            return Err(e);
+            return Err(io::Error::last_os_error());
         }
         Ok(job)
     }
@@ -486,13 +578,54 @@ mod tests {
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
+    use std::io::{BufRead, BufReader, Read};
     use std::os::windows::io::AsRawHandle;
-    use std::process::Stdio;
+    use std::process::{ChildStdout, Stdio};
     use std::time::Duration;
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Threading::{
+        GetExitCodeProcess, OpenProcess, TerminateProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE,
+    };
 
-    // What the GUI's startup job does to its children: when the job's last
-    // handle closes (the GUI process ends), they end too. The child here is
-    // put into the job after its start; the GUI's own children are born in it.
+    /// Read @p r to EOF on a thread; true if EOF came within @p secs.
+    fn eof_within<R: Read + Send + 'static>(mut r: R, secs: u64) -> bool {
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let mut sink = Vec::new();
+            let _ = r.read_to_end(&mut sink);
+            let _ = tx.send(());
+        });
+        rx.recv_timeout(Duration::from_secs(secs)).is_ok()
+    }
+
+    /// Process @p pid is still running.
+    fn alive(pid: u32) -> bool {
+        // SAFETY: plain Win32 calls; the handle is closed here.
+        unsafe {
+            let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+            if h.is_null() {
+                return false;
+            }
+            let mut code = 0u32;
+            let ok = GetExitCodeProcess(h, &mut code);
+            CloseHandle(h);
+            ok != 0 && code == 259 // STILL_ACTIVE
+        }
+    }
+
+    fn terminate(pid: u32) {
+        // SAFETY: plain Win32 calls; the handle is closed here.
+        unsafe {
+            let h = OpenProcess(PROCESS_TERMINATE, 0, pid);
+            if !h.is_null() {
+                TerminateProcess(h, 1);
+                CloseHandle(h);
+            }
+        }
+    }
+
+    // The job of a run: when its last handle closes (the GUI process ends),
+    // its processes end too.
     #[test]
     fn a_kill_on_close_job_ends_its_processes_when_its_handle_closes() {
         let job = kill_on_close_job().unwrap();
@@ -504,15 +637,12 @@ mod tests {
             .unwrap();
         // SAFETY: valid handles.
         let assigned = unsafe {
-            windows_sys::Win32::System::JobObjects::AssignProcessToJobObject(job, child.as_raw_handle() as _)
+            windows_sys::Win32::System::JobObjects::AssignProcessToJobObject(job.0, child.as_raw_handle() as _)
         };
         assert_ne!(assigned, 0, "{}", io::Error::last_os_error());
         std::thread::sleep(Duration::from_millis(300));
         assert!(child.try_wait().unwrap().is_none(), "ended before the job closed");
-        // SAFETY: the job handle is ours and closed once.
-        unsafe {
-            windows_sys::Win32::Foundation::CloseHandle(job);
-        }
+        drop(job);
         let mut ended = false;
         for _ in 0..300 {
             if child.try_wait().unwrap().is_some() {
@@ -531,5 +661,100 @@ mod tests {
         cmd.args(["/C", "exit 3"]).stdin(Stdio::null());
         let st = spawn(cmd).unwrap().wait().unwrap();
         assert_eq!(st.code(), Some(3));
+    }
+
+    // A child started suspended in its job runs once resumed, and its exit
+    // code comes back.
+    #[test]
+    fn spawn_cli_resumes_the_child_it_started_in_a_job() {
+        let mut cmd = Command::new("cmd");
+        cmd.args(["/C", "exit 4"]).stdin(Stdio::null());
+        let (mut child, job) = spawn_cli(cmd).unwrap();
+        assert!(job.is_some(), "no job for the run");
+        assert_eq!(child.wait().unwrap().code(), Some(4));
+    }
+
+    // A stand-in GUI process: this test binary run again with
+    // FASTAG_LIFETIME_HELPER set, so the test can kill it (TerminateProcess,
+    // the Windows kill -9). It starts one "CLI" the way start_run does
+    // (spawn_cli): cmd.exe that starts a second cmd.exe that runs ping, a
+    // grandchild like the real exe FASTag.bat starts, all with the helper's
+    // own stdout (the pipe to the test), so the test sees EOF only once the
+    // whole tree is gone. It also starts a process the way the opener
+    // plugin's launches are started (a plain CreateProcess from the GUI,
+    // outside any job of a run), prints "ready <cli> <opened>" and waits to
+    // be killed.
+    const HELPER_ENV: &str = "FASTAG_LIFETIME_HELPER";
+
+    #[test]
+    #[ignore = "a helper process of the test below, not a test"]
+    fn gui_process_helper() {
+        if std::env::var(HELPER_ENV).is_err() {
+            return;
+        }
+        let mut cmd = Command::new("cmd");
+        cmd.args(["/C", "cmd /C ping -n 30 127.0.0.1"]).stdin(Stdio::null()).stderr(Stdio::null());
+        let (cli, job) = spawn_cli(cmd).unwrap();
+        assert!(job.is_some(), "no job for the run");
+        // The pipe to the test is an inherited, so inheritable, handle here:
+        // the opened program must not hold it too, as the app's would not.
+        // SAFETY: the handle is this process's stdout.
+        unsafe {
+            windows_sys::Win32::Foundation::SetHandleInformation(
+                std::io::stdout().as_raw_handle() as _,
+                windows_sys::Win32::Foundation::HANDLE_FLAG_INHERIT,
+                0,
+            );
+        }
+        let opened = Command::new("cmd")
+            .args(["/C", "ping -n 30 127.0.0.1 >NUL"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        println!("ready {} {}", cli.id(), opened.id());
+        let _keep = (cli, job, opened);
+        std::thread::sleep(Duration::from_secs(60));
+    }
+
+    #[allow(clippy::zombie_processes)]
+    fn gui_process() -> (Child, BufReader<ChildStdout>, u32, u32) {
+        let mut gui = Command::new(std::env::current_exe().unwrap())
+            .args(["lifetime::tests::gui_process_helper", "--exact", "--ignored", "--nocapture", "--test-threads=1"])
+            .env(HELPER_ENV, "job")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let mut out = BufReader::new(gui.stdout.take().unwrap());
+        let mut line = String::new();
+        loop {
+            line.clear();
+            assert!(out.read_line(&mut line).unwrap() > 0, "the helper ended before it was ready");
+            // libtest prints "test <name> ... " before it, on the same line.
+            if let Some(i) = line.find("ready ") {
+                let mut f = line[i + 6..].split_whitespace().map(|x| x.parse::<u32>().unwrap());
+                return (gui, out, f.next().unwrap(), f.next().unwrap());
+            }
+        }
+    }
+
+    // P1 acceptance on Windows: killing the GUI process ends the CLI and the
+    // process it started within 3 s; a program the GUI opened for the user
+    // (browser, editor) is not in the run's job and lives on.
+    #[test]
+    fn a_killed_gui_ends_the_cli_tree_but_not_what_it_opened() {
+        let (mut gui, out, cli, opened) = gui_process();
+        assert!(alive(cli) && alive(opened));
+        gui.kill().unwrap();
+        let _ = gui.wait();
+        let ended = eof_within(out, 3);
+        let opened_alive = alive(opened);
+        terminate(opened);
+        terminate(cli);
+        assert!(ended, "the CLI tree outlived the killed GUI by more than 3 s");
+        assert!(opened_alive, "a program the GUI opened died with it");
     }
 }

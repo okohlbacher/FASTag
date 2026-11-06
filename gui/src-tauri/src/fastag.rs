@@ -267,7 +267,8 @@ fn probe_blocking(app: &AppHandle) -> BinaryInfo {
     // Started by the spawner thread like every CLI child (lifetime.rs): this
     // blocking-pool thread may exit as soon as it is idle.
     lifetime::die_with_parent(&mut cmd);
-    match lifetime::spawn(cmd).and_then(|c| c.wait_with_output()) {
+    // On Windows in a job of its own, which is closed once it has ended.
+    match lifetime::spawn_cli(cmd).and_then(|(c, _job)| c.wait_with_output()) {
         Ok(out) => {
             let text = format!(
                 "{}\n{}",
@@ -665,10 +666,13 @@ pub fn start_run(
         return Err(exists_reason(&existing));
     }
     // Every CLI child is started by the one long-lived spawner thread and
-    // ends with the GUI: PDEATHSIG on Linux, the watchdog on every Unix, the
-    // startup job object on Windows (lifetime.rs, GUI-DESIGN 6.6).
+    // ends with the GUI: PDEATHSIG on Linux, the watchdog on every Unix, a
+    // kill-on-close job of the run's own on Windows (lifetime.rs,
+    // GUI-DESIGN 6.6).
     lifetime::die_with_parent(&mut cmd);
-    let mut child = lifetime::spawn(cmd).map_err(|e| e.to_string())?;
+    let (mut child, job) = lifetime::spawn_cli(cmd).map_err(|e| e.to_string())?;
+    #[cfg(not(windows))]
+    let () = job;
     #[cfg(unix)]
     let watchdog = lifetime::watch(child.id());
 
@@ -701,6 +705,10 @@ pub fn start_run(
         })
     };
 
+    #[cfg(windows)]
+    if job.is_none() {
+        sink(RunEmit::Log("warning: no job object for this run: if the app is killed, the run may go on".into()));
+    }
     #[cfg(unix)]
     let watchdog = match watchdog {
         Ok(w) => Some(w),
@@ -745,6 +753,9 @@ pub fn start_run(
             reaped.store(true, Ordering::SeqCst);
             s
         };
+        // Windows: closing the run's job ends anything of it still left.
+        #[cfg(windows)]
+        drop(job);
         let (ok, code, message) = match &status {
             Ok(s) => (s.success(), s.code(), exit_message(s)),
             Err(e) => (false, None, Some(format!("lost track of the process: {e}"))),
