@@ -442,12 +442,12 @@ MGF→mzML direction is exact.
 | `-shortlist_gapped` | off | Let placements with a mass gap count (a gap equal to a fixed terminal label always counts as exact) |
 | `-shortlist_parsimony <none\|subset\|greedy>` | none | Drop proteins whose spectra a higher-ranked kept one has (`subset`), or keep a greedy set cover (`greedy`) |
 | `-shortlist_top <n>` | 0 | Advanced: keep at most this many proteins, ties at the cut kept; 0 = no cap |
-| `-shortlist_decoy_affix <affixes>` | `DECOY_ decoy_ rev_ REV_ reverse_ XXX_ shuffled_ random_ _DECOY _rev` | Advanced: accession prefixes and suffixes that mark a decoy entry |
+| `-shortlist_decoy_affix <list>` | `DECOY_ decoy_ rev_ REV_ reverse_ XXX_ shuffled_ random_ _DECOY _rev` | Advanced: accession prefixes and suffixes that mark a decoy entry |
 | `-shortlist_force` | off | Advanced: write `-fasta_out` and `-search_config_out` although the tag ends call a non-tryptic protease |
 | `-search_config_out <file>` | none | Experimental: a Sage configuration (JSON) or Comet parameters for `-fasta_out`, or for the input database without it |
 | `-search_engine <sage\|comet>` | sage | Engine of `-search_config_out` |
 | `-search_config_template <file>` | none | Comet only: a `comet -p` file the managed keys are merged into; without it a fragment is written |
-| `-search_precursor_tolerance <f>` / `-search_precursor_tolerance_unit <ppm\|Da>` | 10 / ppm | Precursor tolerance written to the configuration |
+| `-search_precursor_tolerance <f>` / `-search_precursor_unit <ppm\|Da>` | 10 / ppm | Precursor tolerance written to the configuration |
 | `-search_isotope_errors <n>` | 0 | Precursor isotope errors 0..n (at most 3) |
 | `-search_decoy_prefix <s>` | `rev_` (Sage) / `DECOY_` (Comet) | Prefix of the decoys the engine generates |
 | `-entrapment_fasta <file>` | none | Entrapment database (foreign species) calibrating a `q_db` column: the estimated false-match rate of the `-fasta` filter at each E-value (see q_db). Requires `-fasta` |

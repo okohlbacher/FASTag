@@ -258,7 +258,12 @@ class TOPPFASTag : public TOPPBase
       if (k.compare(0, prefix.size(), prefix) != 0) continue;
       const std::string name = k.substr(prefix.size());
       if (FASTag::Cli::isLegacyOutSpectraParameter(name)) continue;
-      if (getParam_().getValue(name) == findEntry_(name).default_value) p.removeMetaValue(k);
+      // A flag's registered default is empty, its value "false" or "true":
+      // compare flags by state.
+      const ParameterInformation& e = findEntry_(name);
+      const bool at_default = e.type == ParameterInformation::FLAG ? !getFlag_(name)
+                                                                    : getParam_().getValue(name) == e.default_value;
+      if (at_default) p.removeMetaValue(k);
     }
     return p;
   }
@@ -711,7 +716,7 @@ protected:
     registerIntOption_("shortlist_top", "<n>", 0,
                        "Keep at most this many proteins, ties at the cut kept; 0 = no cap", false, true);
     setMinInt_("shortlist_top", 0);
-    registerStringList_("shortlist_decoy_affix", "<affixes>",
+    registerStringList_("shortlist_decoy_affix", "<list>",
                         ListUtils::create<std::string>("DECOY_,decoy_,rev_,REV_,reverse_,XXX_,shuffled_,random_,_DECOY,_rev"),
                         "Accession prefixes (ending in _) and suffixes (starting with _) that mark a decoy "
                         "entry, case-insensitive; decoys never enter the shortlist or -fasta_out", false, true);
@@ -728,9 +733,9 @@ protected:
     registerDoubleOption_("search_precursor_tolerance", "<f>", 10.0,
                           "Precursor tolerance written to -search_config_out", false);
     setMinFloat_("search_precursor_tolerance", 0.0);
-    registerStringOption_("search_precursor_tolerance_unit", "<unit>", "ppm",
+    registerStringOption_("search_precursor_unit", "<unit>", "ppm",
                           "Unit of -search_precursor_tolerance", false);
-    setValidStrings_("search_precursor_tolerance_unit", ListUtils::create<std::string>("ppm,Da"));
+    setValidStrings_("search_precursor_unit", ListUtils::create<std::string>("ppm,Da"));
     registerIntOption_("search_isotope_errors", "<n>", 0,
                        "Precursor isotope errors 0..n the engine searches; 0 = none", false);
     setMinInt_("search_isotope_errors", 0);
@@ -1600,7 +1605,7 @@ protected:
           {"search_engine", "-search_config_out", !search_config_out.empty()},
           {"search_config_template", "-search_config_out", !search_config_out.empty()},
           {"search_precursor_tolerance", "-search_config_out", !search_config_out.empty()},
-          {"search_precursor_tolerance_unit", "-search_config_out", !search_config_out.empty()},
+          {"search_precursor_unit", "-search_config_out", !search_config_out.empty()},
           {"search_isotope_errors", "-search_config_out", !search_config_out.empty()},
           {"search_decoy_prefix", "-search_config_out", !search_config_out.empty()},
           // ---- 1.12 D: ignored-option warnings ----
@@ -1753,7 +1758,7 @@ protected:
         sl_plan.fragment_tolerance = p.frag_tol;
         sl_plan.fragment_ppm = p.tol_ppm;
         sl_plan.precursor_tolerance = getDoubleOption_("search_precursor_tolerance");
-        sl_plan.precursor_ppm = getStringOption_("search_precursor_tolerance_unit") == "ppm";
+        sl_plan.precursor_ppm = getStringOption_("search_precursor_unit") == "ppm";
         sl_plan.isotope_errors = getIntOption_("search_isotope_errors");
         sl_plan.decoy_prefix = getStringOption_("search_decoy_prefix");
         sl_plan.fastag_version = FASTAG_VERSION;

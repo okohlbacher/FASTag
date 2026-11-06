@@ -33,7 +33,7 @@ trap 'rm -rf "$TMP"' EXIT
 cp "$IN" "$TMP/run.mzML"
 ARGS=(-in "$TMP/run.mzML" -recon_fasta "$DB" -tag_length 4 -extension 1 -fragment_tolerance 0.5
       -fragment_tolerance_unit Da -variable_modifications 'Oxidation (M)' -search_precursor_tolerance 3
-      -search_precursor_tolerance_unit Da -threads 2)
+      -search_precursor_unit Da -threads 2)
 KNOWN='VIMSS15329|VIMSS17021|VIMSS17368'
 
 if [ -n "${FASTAG_SAGE_BIN:-}" ]; then

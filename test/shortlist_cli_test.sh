@@ -124,7 +124,7 @@ fi
 # ---- d: every #5 option at its default equals no option
 run "$TMP/dflt" "$BIN" "${SHARED[@]}" -threads 2 -shortlist_max_evalue 0.1 -shortlist_min_spectra 2 \
   -shortlist_parsimony none -shortlist_top 0 -search_engine sage -search_precursor_tolerance 10 \
-  -search_precursor_tolerance_unit ppm -search_isotope_errors 0 -search_decoy_prefix ""
+  -search_precursor_unit ppm -search_isotope_errors 0 -search_decoy_prefix ""
 for f in t.tsv r.tsv d.tsv m.tsv; do
   cmp -s "$TMP/a/$f" "$TMP/dflt/$f" || fail "$f: #5 options at their defaults differ from none"
 done
@@ -161,7 +161,7 @@ grep -q "\"mzml_paths\": \[\"$IN\"\]" "$S" || fail "the Sage configuration does 
 if [ -n "$PY" ]; then "$PY" -c 'import json,sys; json.load(open(sys.argv[1]))' "$S" || fail "the Sage configuration is not JSON"; fi
 run "$TMP/c1" "$BIN" -out t.tsv -fasta_out red.fasta -search_config_out comet.params -search_engine comet \
   -search_config_template "$FIX/comet_template.params" -search_precursor_tolerance 0.02 \
-  -search_precursor_tolerance_unit Da -search_isotope_errors 2 -variable_modifications 'Oxidation (M)' -threads 2
+  -search_precursor_unit Da -search_isotope_errors 2 -variable_modifications 'Oxidation (M)' -threads 2
 C="$TMP/c1/comet.params"
 head -1 "$C" | grep -q '^# comet_version' || fail "the Comet version header is not first"
 grep -q '^database_name = red.fasta' "$C" || fail "Comet database_name is not -fasta_out"
