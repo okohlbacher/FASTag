@@ -27,6 +27,10 @@
 #   - exit code and the "N MS2 spectra, M tags" summary line (what gate.sh digests);
 #   - the set of files written;
 #   - every file, canonicalised, with cmp (the first differing lines are shown);
+#     one change is accepted and reported as PREFIX: -label_out (label.tsv)
+#     may end in the label_call rows FASTag 1.12 appends (#3a), when the
+#     baseline's file is a byte prefix of the candidate's and every added
+#     line is a label_call row;
 #   - interface: `--help` and the -write_ctd CTD, raw bytes (versions masked when
 #     the two binaries report different versions). A candidate that only ADDS
 #     lines (new 1.12 options; every baseline line kept, in order, unchanged)
@@ -95,13 +99,20 @@ REPORT="$WORK/report.tsv"
 [ -f "$REPORT" ] || printf 'label\tcase\tthreads\titem\tstatus\n' > "$REPORT"
 nfail=0 nsame=0
 rec() { printf '%s\t%s\t%s\t%s\t%s\n' "$LABEL" "$1" "$2" "$3" "$4" >> "$REPORT"
-        case $4 in SAME) nsame=$((nsame + 1)) ;; INFO*|ADDED*) ;; *) nfail=$((nfail + 1)); echo "  FAIL $1 t$2 $3: $4" ;; esac; }
+        case $4 in SAME) nsame=$((nsame + 1)) ;; INFO*|ADDED*|PREFIX*) ;; *) nfail=$((nfail + 1)); echo "  FAIL $1 t$2 $3: $4" ;; esac; }
 # rec for the interface files: SAME, ADDED (only "+" lines against the
 # baseline) or DIFF, for baseline file $1 and candidate file $2.
 rec_iface() {
   if cmp -s "$2" "$1"; then rec interface - "$3" SAME
   elif ! diff "$1" "$2" | grep -q '^<'; then rec interface - "$3" "ADDED (+$(diff "$1" "$2" | grep -c '^>') lines)"
   else rec interface - "$3" DIFF; showdiff "$1" "$2"; fi
+}
+# label_prefix BASE CAND: BASE is a byte prefix of CAND and every further line
+# of CAND is a label_call row (FASTag 1.12 #3a); prints the number of them.
+label_prefix() {
+  local nb; nb=$(wc -c < "$1" | tr -d ' ')
+  cmp -s -n "$nb" "$1" "$2" || return 1
+  tail -c +"$((nb + 1))" "$2" | awk -F'\t' '$1 != "label_call" { bad = 1 } END { if (bad || NR == 0) exit 1; print NR }'
 }
 showdiff() { diff "$1" "$2" | head -8 | cut -c1-200 | sed 's/^/      /'; }
 
@@ -178,6 +189,8 @@ run_case() { # case threads
     "$PY" "$CANON" "$d/c/$f" "$CV" "$CO" > "$d/c/$f.canon" || { rec "$c" "$t" "$f" "ERROR (canon failed on candidate)"; continue; }
     "$PY" "$CANON" "$d/b/$f" "$BV" "$BO" > "$d/b/$f.canon" || { rec "$c" "$t" "$f" "ERROR (canon failed on baseline)"; continue; }
     if cmp -s "$d/c/$f.canon" "$d/b/$f.canon"; then rec "$c" "$t" "$f" SAME
+    elif [ "$f" = label.tsv ] && n=$(label_prefix "$d/b/$f.canon" "$d/c/$f.canon"); then
+      rec "$c" "$t" "$f" "PREFIX (the baseline's rows, then $n label_call rows)"
     else rec "$c" "$t" "$f" DIFF; showdiff "$d/b/$f.canon" "$d/c/$f.canon"; fi
   done
 }
@@ -187,5 +200,7 @@ for c in $CASES; do
   if [ "$c" = interface ]; then run_interface; continue; fi
   for t in $THREADS; do run_case "$c" "$t"; done
 done
-echo "baseline_identity: $LABEL: $nsame equal, $nfail different (report $REPORT)"
+na=$(awk -F'\t' -v l="$LABEL" '$1 == l && $5 ~ /^ADDED/' "$REPORT" | wc -l | tr -d ' ')
+npre=$(awk -F'\t' -v l="$LABEL" '$1 == l && $5 ~ /^PREFIX/' "$REPORT" | wc -l | tr -d ' ')
+echo "baseline_identity: $LABEL: $nsame equal, $na interface added lines, $npre label_call prefix, $nfail different (report $REPORT)"
 [ $nfail = 0 ]

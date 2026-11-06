@@ -94,8 +94,9 @@ if [ -f "$MGF" ]; then
     --threads "1 8" "$BIN" "$BASE" "$TMP/mgf" || rc=1
 fi
 cat "$TMP"/*/report.tsv > "$TMP/report.tsv"
-[ $rc = 0 ] || { awk -F'\t' '$5 != "status" && $5 != "SAME" && $5 !~ /^INFO/ && $5 !~ /^ADDED/' "$TMP/report.tsv" >&2
+[ $rc = 0 ] || { awk -F'\t' '$5 != "status" && $5 != "SAME" && $5 !~ /^INFO/ && $5 !~ /^ADDED/ && $5 !~ /^PREFIX/' "$TMP/report.tsv" >&2
                  fail "outputs differ from the baseline"; }
 n=$(awk -F'\t' '$5 == "SAME"' "$TMP/report.tsv" | wc -l | tr -d ' ')
 na=$(awk -F'\t' '$5 ~ /^ADDED/' "$TMP/report.tsv" | wc -l | tr -d ' ')
-echo "baseline_identity_test: all $n comparisons equal to $BASE ($na interface files only add lines); buildtaxdb: $nbt .taxdb files equal to $BASE_BT"
+npre=$(awk -F'\t' '$5 ~ /^PREFIX/' "$TMP/report.tsv" | wc -l | tr -d ' ')
+echo "baseline_identity_test: all $n comparisons equal to $BASE ($na interface files only add lines; $npre label.tsv: the baseline's rows, then label_call); buildtaxdb: $nbt .taxdb files equal to $BASE_BT"
