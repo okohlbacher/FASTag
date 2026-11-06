@@ -28,6 +28,7 @@
 #include <OpenMS/FORMAT/DATAACCESS/MSDataWritingConsumer.h>
 #include <OpenMS/SYSTEM/File.h>
 
+#include "ClusterAcc.h"
 #include "Digest.h"
 #include "FASTagger.h"
 #include "FastaFilter.h"
@@ -37,6 +38,7 @@
 #include "NumFormat.h"
 #include "Proforma.h"
 #include "ReconIds.h"
+#include "RunMeta.h"
 #include "SpeciesEvidence.h"
 #include "SpectrumSampler.h"
 #include "TagFDR.h"
@@ -1389,24 +1391,16 @@ protected:
       gap_settings.silac_min = static_cast<std::uint64_t>(getIntOption_("massgap_silac_min"));
       gap_combos = FD::combinations(gap_mods, gap_settings.max_mods);
     }
-    // The run rows every report starts with.
-    const auto run_rows = [&]() {
-      std::vector<FD::Row> r;
-      std::string lens;
-      for (int L : lengths) lens += (lens.empty() ? "" : ",") + std::to_string(L);
-      r.push_back({"run", "version", FASTAG_VERSION, "-", std::string("FASTag ") + FASTAG_VERSION + " wrote this report."});
-      r.push_back({"run", "input", File::basename(in), "-", "The spectra were read from " + File::basename(in) + "."});
-      r.push_back({"run", "fragment_tolerance", FD::num(p.frag_tol), "-",
-                   "The fragment tolerance is " + FD::num(p.frag_tol) + " " + getStringOption_("fragment_tolerance_unit") + "."});
-      r.push_back({"run", "fragment_tolerance_unit", getStringOption_("fragment_tolerance_unit"), "-",
-                   "The fragment tolerance is in " + getStringOption_("fragment_tolerance_unit") + "."});
-      r.push_back({"run", "tag_length", lens, "-", "Tags were seeded at length " + lens + "."});
-      r.push_back({"run", "subsample_fraction", FD::num(getDoubleOption_("subsample_fraction")), "-",
-                   "A fraction of " + FD::num(getDoubleOption_("subsample_fraction")) + " of the spectra was tagged (0 = all)."});
-      r.push_back({"run", "subsample_spectra", std::to_string(getIntOption_("subsample_spectra")), "-",
-                   std::to_string(getIntOption_("subsample_spectra")) + " spectra were drawn for tagging (0 = all)."});
-      return r;
-    };
+    // The run rows every report starts with (src/RunMeta.h), filled once.
+    FASTag::RunReport::RunMeta run_meta;
+    run_meta.version = FASTAG_VERSION;
+    run_meta.input = File::basename(in);
+    run_meta.fragment_tolerance = p.frag_tol;
+    run_meta.fragment_tolerance_unit = getStringOption_("fragment_tolerance_unit");
+    run_meta.tag_lengths = lengths;
+    run_meta.subsample_fraction = getDoubleOption_("subsample_fraction");
+    run_meta.subsample_spectra = getIntOption_("subsample_spectra");
+    const auto run_rows = [&run_meta]() { return FASTag::RunReport::runRows(run_meta); };
 
     // ---- phase 3: -stream mode (returns early) -----------------------------
 
@@ -2060,6 +2054,7 @@ protected:
       std::vector<std::string> glyco_rows;  ///< glyco rows (glyco_on only)
       std::vector<std::vector<std::pair<double, bool>>> row_meta;  ///< (entrap_on only)
       std::vector<char> keep, keep_target;
+      FASTag::ClusterAcc::ClusterBlock acc;  ///< 1.12 per-cluster slots (src/ClusterAcc.h)
     };
     // Three: a fourth only helped within noise, for another block of rows
     // held in memory.
@@ -2101,6 +2096,7 @@ protected:
       // the last chunk.
       double s_read = 0, s_slow = 0, s_tag = 0, s_ring = 0, s_idle = 0;
       size_t n_slow = 0;
+      FASTag::ClusterAcc::ClusterThread acc;  ///< 1.12 per-cluster accumulators (src/ClusterAcc.h)
     };
     std::vector<PerThread> per_thread(static_cast<size_t>(std::max(1, omp_get_max_threads())));
     for (PerThread& q : per_thread) q.digest = FASTag::Digest::TerminusCounter(digest_settings.window);
@@ -2394,6 +2390,7 @@ protected:
       }
       b.keep.assign(n_used, 0);
       if (want_out) b.keep_target.assign(n_used, 0);
+      b.acc.prepare(n_used);
     };
 
     // -species consumes (spectrum id, tag) pairs from the REPORTED rows,
@@ -2883,8 +2880,10 @@ protected:
     }
 
     size_t n_no_charge = 0, n_multi_charge = 0;
+    FASTag::ClusterAcc::ClusterThread run_acc;  // the per-cluster accumulators, summed in thread order
     for (const PerThread& pt : per_thread)
     {
+      run_acc.merge(pt.acc);
       n_no_charge += pt.no_charge;
       n_multi_charge += pt.multi_charge;
       n_ms2 += pt.ms2;
