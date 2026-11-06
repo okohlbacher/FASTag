@@ -319,7 +319,8 @@ if(FASTAG_BUILD_TESTS)
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/threads_test.sh $<TARGET_FILE:FASTag>
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
-                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/profile_ms2_small.mzML)
   set_tests_properties(threads_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # Windows with FASTAG_MIMALLOC: the redirection is active for the whole

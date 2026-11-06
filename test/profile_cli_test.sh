@@ -21,8 +21,11 @@
 #      picked under auto on the fast reader and on OnDiscMSExperiment (the
 #      -out_spectra path), with equal tags; -out_spectra exports the spectra
 #      as tagged: centroid under auto, profile under legacy;
-#   6. low-resolution (ion trap) profile: every spectrum picked or counted;
-#   7. threads 1/3/8 identical under auto;
+#   6. low-resolution (ion trap) profile: an exported picked spectrum keeps
+#      >= 90% of its source's resolvable peaks within 0.1 Th; one left as
+#      profile is counted in the log (never silently thinned);
+#   7. threads 1/3/8 identical under auto (tags here; threads_test compares
+#      every output and the -out_spectra export);
 #   8. ignored and refused combinations: -pick_unknown_type without auto
 #      warns, auto on MGF warns and changes nothing, -stream refuses both
 #      options, an unknown mode is refused;
@@ -149,13 +152,59 @@ cmp -s "$TMP/sm_legacy.tsv" "$TMP/absent.tsv" || fail "legacy -out_spectra chang
 [ "$(grep -c 'MS:1000128' "$TMP/sm_legacy.mzML")" -ge 1 ] || fail "legacy -out_spectra: profile spectra not exported as profile"
 grep -q 'parameter: pick_profile' "$TMP/sm_legacy.mzML" && fail "legacy -out_spectra lists -pick_profile (the 1.11 list is frozen)"
 
-# ---- 6. low resolution: picked or counted ---------------------------------
-run low -in "$LOWRES" -pick_profile auto -fragment_tolerance 0.5 -fragment_tolerance_unit Da
+# ---- 6. low resolution: peaks kept, never silently thinned -----------------
+# Each exported centroid spectrum (-out_spectra writes the spectra as tagged)
+# keeps >= 90% of its source's resolvable peaks (both neighbours >= 1 Th
+# away, as centroid_test (e)) within 0.1 Th; a spectrum still profile in the
+# export must be one the log counts as kept. Needs python3 (stdlib) to decode
+# the arrays; without it only the count line is checked.
+run low -in "$LOWRES" -pick_profile auto -fragment_tolerance 0.5 -fragment_tolerance_unit Da -out_spectra "$TMP/low.mzML"
 line=$(grep -o 'mzML: centroided [0-9]* profile spectra on read.*' "$TMP/low.log")
 [ -n "$line" ] || { cat "$TMP/low.log" >&2; fail "low resolution: no centroiding line"; }
-picked=$(echo "$line" | sed -E 's/mzML: centroided ([0-9]+).*/\1/')
 kept=$(echo "$line" | grep -oE '\(([0-9]+) kept as profile' | grep -oE '[0-9]+' || echo 0)
-[ $((picked + kept)) -eq 4 ] || fail "low resolution: $picked picked + $kept kept is not the 4 spectra"
+PY=${FASTAG_PYTHON:-}
+if [ -z "$PY" ]; then for c in python3 python; do command -v "$c" >/dev/null 2>&1 && { PY=$c; break; }; done; fi
+if [ -n "$PY" ]; then
+  "$PY" - "$ECOLI" "$TMP/low.mzML" "$kept" > "$TMP/low.check" 2>&1 <<'PYEOF' || { cat "$TMP/low.check" >&2; fail "low resolution: picked spectra lost resolvable peaks"; }
+import base64, re, struct, sys, zlib
+def spectra(path):
+    text = open(path, encoding="latin-1").read()
+    out = {}
+    for m in re.finditer(r"<spectrum .*?</spectrum>", text, re.S):
+        s = m.group(0)
+        arr = {}
+        for a in re.finditer(r"<binaryDataArray .*?</binaryDataArray>", s, re.S):
+            b = a.group(0)
+            raw = base64.b64decode(re.search(r"<binary>(.*?)</binary>", b, re.S).group(1))
+            if "MS:1000574" in b:
+                raw = zlib.decompress(raw)
+            fmt = "d" if "MS:1000523" in b else "f"
+            arr["mz" if "MS:1000514" in b else "int"] = struct.unpack("<%d%s" % (len(raw) // struct.calcsize(fmt), fmt), raw)
+        out[re.search(r' id="([^"]*)"', s).group(1)] = ("MS:1000127" in s, arr.get("mz", ()))
+    return out
+src, exp, kept = spectra(sys.argv[1]), spectra(sys.argv[2]), int(sys.argv[3])
+checked = profile = 0
+for sid, (centroid, mz) in exp.items():
+    if not centroid:
+        profile += 1
+        continue
+    c = sorted(src[sid][1])
+    res = [x for i, x in enumerate(c) if (i == 0 or x - c[i - 1] >= 1.0) and (i + 1 == len(c) or c[i + 1] - x >= 1.0)]
+    hit = sum(1 for x in res if any(abs(x - y) <= 0.1 for y in mz))
+    f = hit / len(res) if res else 1.0
+    print("%s: %d of %d resolvable source peaks picked within 0.1 Th (%.3f)" % (sid, hit, len(res), f))
+    if f < 0.9:
+        sys.exit("FAIL %s: %.3f < 0.9" % (sid, f))
+    checked += 1
+if profile > kept:
+    sys.exit("FAIL: %d exported spectra are profile, the log counts %d kept" % (profile, kept))
+if checked == 0:
+    sys.exit("FAIL: no picked spectrum was exported (the check would prove nothing)")
+print("checked %d picked spectra; %d profile (kept %d)" % (checked, profile, kept))
+PYEOF
+else
+  echo "profile_cli_test: low-resolution peak retention not checked (no python3)"
+fi
 
 # ---- 7. threads -------------------------------------------------------------
 for t in 1 3 8; do
