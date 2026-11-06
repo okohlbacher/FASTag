@@ -1615,7 +1615,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -q
-          sudo apt-get install -y -q "$RUNNER_TEMP/gui/FASTag-gui-linux-x64.deb" xvfb dbus-x11
+          sudo apt-get install -y -q "$RUNNER_TEMP/gui/FASTag-gui-linux-x64.deb" xvfb dbus dbus-x11
           PKG=$(dpkg-deb -f "$RUNNER_TEMP/gui/FASTag-gui-linux-x64.deb" Package)
           dpkg -s "$PKG" | head -12
           APP=$(dpkg -L "$PKG" | grep '^/usr/bin/' | head -1)
@@ -1640,7 +1640,9 @@ jobs:
           echo "installed CLI ($CLI): $n tags from the E. coli fixture"
       - name: The installed app starts and stays up
         run: |
-          set -uo pipefail
+          # The default shell is bash -e: without +e the expected 124 from
+          # timeout would end the step before rc is read.
+          set +e -uo pipefail
           dbus-run-session -- xvfb-run -a timeout 20 "$APP" > "$RUNNER_TEMP/app.log" 2>&1
           rc=$?
           cat "$RUNNER_TEMP/app.log"
@@ -1710,9 +1712,11 @@ jobs:
           path: ${{ runner.temp }}/gui
       - name: The AppImage launches
         run: |
-          set -uo pipefail
+          # The default shell is bash -e: without +e the expected 124 from
+          # timeout would end the step before rc is read.
+          set +e -uo pipefail
           sudo apt-get update -q
-          sudo apt-get install -y -q ${{ matrix.fuse }} xvfb dbus-x11
+          sudo apt-get install -y -q ${{ matrix.fuse }} xvfb dbus dbus-x11
           A="$RUNNER_TEMP/gui/FASTag-gui-linux-x64.AppImage"
           chmod +x "$A"
           dbus-run-session -- xvfb-run -a timeout 30 "$A" > "$RUNNER_TEMP/app.log" 2>&1
@@ -1744,19 +1748,32 @@ jobs:
         with:
           name: FASTag-gui-linux-x64
           path: ${{ runner.temp }}/gui
-      - name: Rocky 9 ships WebKitGTK 4.1 (Q13)
+      # A finding, not a launch gate: its answer decides whether the README
+      # may name Rocky 9 for the .deb-style (system WebKitGTK) install, and
+      # it must not keep the AppImage launch below from running.
+      - name: Does Rocky 9 ship WebKitGTK 4.1? (Q13)
+        continue-on-error: true
         run: |
           set -euo pipefail
           dnf -y -q install epel-release dnf-plugins-core
           dnf config-manager --set-enabled crb
           dnf -y -q makecache
-          dnf repoquery -q --whatprovides 'libwebkit2gtk-4.1.so.0()(64bit)' \
-            --qf '%{name}-%{version}-%{release}.%{arch} from %{repoid}' | sort -u | tee /tmp/q13.txt
-          [ -s /tmp/q13.txt ] || { echo "::error::no Rocky 9 repository (BaseOS, AppStream, CRB, EPEL) provides libwebkit2gtk-4.1.so.0"; exit 1; }
-          { echo "### Q13: WebKitGTK 4.1 on Rocky 9 ($(cat /etc/rocky-release))"; sed 's/^/- /' /tmp/q13.txt; } >> "$GITHUB_STEP_SUMMARY"
+          q() { dnf repoquery -q "$@" --qf '%{name}-%{version}-%{release}.%{arch} from %{repoid}' | sort -u; }
+          {
+            echo "### Q13: WebKitGTK on $(cat /etc/rocky-release) (BaseOS, AppStream, CRB, EPEL)"
+            echo "- libwebkit2gtk-4.1.so.0: $(q --whatprovides 'libwebkit2gtk-4.1.so.0()(64bit)' | paste -sd ' ' -)"
+            echo "- pkgconfig(webkit2gtk-4.1): $(q --whatprovides 'pkgconfig(webkit2gtk-4.1)' | paste -sd ' ' -)"
+            echo "- libwebkit2gtk-4.0.so.37: $(q --whatprovides 'libwebkit2gtk-4.0.so.37()(64bit)' | paste -sd ' ' -)"
+            echo "- webkit2gtk* packages: $(q 'webkit2gtk*' | paste -sd ' ' -)"
+          } | tee /tmp/q13.md
+          cat /tmp/q13.md >> "$GITHUB_STEP_SUMMARY"
+          q --whatprovides 'libwebkit2gtk-4.1.so.0()(64bit)' | grep -q . \
+            || { echo "::warning::no Rocky 9 repository provides libwebkit2gtk-4.1.so.0: only the AppImage, which bundles WebKitGTK, can run there"; exit 1; }
       - name: The AppImage launches
         run: |
-          set -uo pipefail
+          # The default shell is bash -e: without +e the expected 124 from
+          # timeout would end the step before rc is read.
+          set +e -uo pipefail
           dnf -y -q install xorg-x11-server-Xvfb /usr/bin/dbus-run-session mesa-dri-drivers \
             mesa-libGL mesa-libEGL libX11 libxcb fontconfig procps-ng findutils
           A="$RUNNER_TEMP/gui/FASTag-gui-linux-x64.AppImage"
