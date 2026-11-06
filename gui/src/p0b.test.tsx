@@ -347,6 +347,26 @@ describe('D5: file order first, ranked order swapped in', () => {
     await waitFor(() => expect(tags()).toEqual(['LNDLAAK', 'AQRQAAN', 'QRQAANS']))
   })
 
+  it('sends no page query before the open of its file has answered', async () => {
+    const mock = rankingMock()
+    let release!: () => void
+    const gate = new Promise<void>((r) => (release = r))
+    const orig = mock.resultsOpen
+    mock.resultsOpen = (path, onEvent) => {
+      const h = orig(path, onEvent)
+      return gate.then(() => h)
+    }
+    render(<ResultsTable path="/d/x.tags.tsv" />)
+    await flush()
+    // The backend indexes only the open file: a query sent alongside the
+    // open could reach it first and be refused.
+    expect(mock.resultsOpenCalls).toEqual(['/d/x.tags.tsv'])
+    expect(mock.resultsQueryCalls).toHaveLength(0)
+    await act(async () => release())
+    await waitFor(() => expect(mock.resultsQueryCalls.length).toBeGreaterThan(0))
+    await waitFor(() => expect(tags()).toEqual(['AQRQAAN', 'QRQAANS', 'LNDLAAK']))
+  })
+
   it('a Ranked event that beats a file-order page still ends ranked', async () => {
     const mock = rankingMock()
     let release!: () => void
@@ -365,6 +385,51 @@ describe('D5: file order first, ranked order swapped in', () => {
     await act(async () => mock.emitBrowser({ kind: 'ranked', generation: 1, column: 'evalue' }))
     await act(async () => release())
     await waitFor(() => expect(tags()).toEqual(['LNDLAAK', 'AQRQAAN', 'QRQAANS']))
+  })
+
+  it('a page needed while the swap waits for a focused filter field is shown, not dropped', async () => {
+    // 2,000 rows, so scrolling needs pages beyond the first; ranked order is
+    // the file order reversed.
+    const N = 2000
+    const rows = Array.from({ length: N }, (_, i) => [`scan=${i}`, `T${i}`, '7', String(i + 1), '-'])
+    const mock = installMockBridge() as MockBridge & { rankedNow: boolean }
+    mock.resultsColumns = COLS
+    mock.resultsRows = rows
+    mock.rankedNow = false
+    mock.resultsQuery = (path, view, offset, limit): Promise<ResultsPage> => {
+      mock.resultsQueryCalls.push({ path, view, offset, limit })
+      const byRank = view.sort?.column === 'evalue' && mock.rankedNow
+      const all = Array.from({ length: N }, (_, i) => (byRank ? (view.sort!.desc ? i : N - 1 - i) : i))
+      const sel = all.slice(offset, offset + limit)
+      return Promise.resolve({
+        columns: COLS,
+        totalRows: N,
+        matchedRows: N,
+        rows: sel.map((i) => rows[i]),
+        rowIds: sel,
+        ranked: view.sort?.column !== 'evalue' || byRank,
+        pending: view.sort?.column === 'evalue' && !byRank
+      })
+    }
+    const { container } = render(<ResultsTable path="/d/x.tags.tsv" />)
+    await screen.findByText(/Ranking by E-value/)
+    const box = screen.getByLabelText('Spectrum contains')
+    box.focus()
+    mock.rankedNow = true
+    await act(async () => mock.emitBrowser({ kind: 'ranked', generation: 1, column: 'evalue' }))
+    expect(document.activeElement).toBe(box)
+    // Scroll to rows the table has no page for (page 3 of 500 rows).
+    const sc = container.querySelector('.rt-scroll') as HTMLElement
+    await act(async () => {
+      sc.scrollTop = 1600 * 28
+      fireEvent.scroll(sc)
+      await new Promise((r) => setTimeout(r, 40))
+    })
+    // The page arrives ranked: the swap happens now and its rows render.
+    await waitFor(() => expect(tags().length).toBeGreaterThan(0))
+    await waitFor(() => expect(tags().every((t) => t !== '')).toBe(true))
+    expect(screen.getByText('Ranked by E-value.')).toBeDefined()
+    expect(screen.queryByText(/Ranking by E-value/)).toBeNull()
   })
 
   it('head rows stand in only for file order or the E-value view without filters', () => {

@@ -294,6 +294,11 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
   // Bumped on every path/view change and on unmount: stale responses check it
   // and drop themselves instead of touching state.
   const genRef = useRef(0)
+  // The path whose results_open has answered. Page queries wait for it: the
+  // backend indexes only the open file for the table (a query that reached
+  // it before the open would be refused), and both IPC calls run
+  // concurrently, so sending them together does not order them.
+  const openedRef = useRef<string | null>(null)
 
   const minLength = parseMinLength(filters.minLength)
   const maxEvalue = parseMaxEvalue(filters.maxEvalue)
@@ -322,6 +327,7 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
     setActive(null)
     setRankNote('')
     rankedSeen.current = false
+    openedRef.current = null
     // D5: the first rows from the head read, at once; the index and the
     // E-value order follow as events of this open.
     let gen: number | null = null
@@ -354,9 +360,15 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
           setNumeric((n) => (n.size ? n : numericColumns(h.columns, h.rows)))
         }
         early.splice(0).forEach(onEvent)
+        openedRef.current = path
+        pump()
       },
       // The page query reports the same error.
-      () => {}
+      () => {
+        if (!alive) return
+        openedRef.current = path
+        pump()
+      }
     )
     return () => {
       alive = false
@@ -430,6 +442,7 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
   // pumps again, so a window spanning two pages fills in two frames.
   const pump = (): void => {
     const { path: p0, view: v0, pages } = wantRef.current
+    if (openedRef.current !== p0) return // pumped again when the open answers
     const gen = genRef.current
     const missing = pages.find((p) => !pagesRef.current.has(p) && !inflightRef.current.has(p))
     if (missing === undefined) return
@@ -457,14 +470,17 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
           // D5: file order until the E-value order is built.
           fileOrderShown.current = true
           if (rankedSeen.current) {
-            // Served before the order was ready, delivered after Ranked.
-            swapRef.current()
+            // Served before the order was ready, delivered after Ranked. A
+            // page the table needs now swaps at once, even with a filter
+            // field focused: deferring would drop it and leave rows blank.
+            swapRef.current(true)
             return
           }
           setRank((r) => (r?.state === 'ranking' ? r : { state: 'ranking', pct: null }))
         } else if (fileOrderShown.current) {
           // The order became ready between two pages: never show a mix.
-          swapRef.current()
+          // Swap at once (see above): the needed page is not stored.
+          swapRef.current(true)
           return
         }
         pagesRef.current.set(page, { rows: res.rows, ids: res.rowIds })
@@ -495,10 +511,12 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
 
   // D5 swap: the ranked order replaces the file order. The active row (or,
   // with none, the first row in view once scrolled) keeps its place in the
-  // new order; a filter field with focus defers the swap to its blur.
-  const swap = (): void => {
+  // new order; a filter field with focus defers a swap the Ranked event
+  // starts to its blur. A swap a page arrival starts (@p now) never waits:
+  // that page is needed for the window in view.
+  const swap = (now = false): void => {
     const focus = document.activeElement
-    if (focus && formRef.current?.contains(focus) && focus.tagName === 'INPUT') {
+    if (!now && focus && formRef.current?.contains(focus) && focus.tagName === 'INPUT') {
       swapWaiting.current = true
       return
     }

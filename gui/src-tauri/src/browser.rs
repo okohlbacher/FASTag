@@ -28,7 +28,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::time::{Instant, SystemTime};
 
@@ -206,6 +206,12 @@ pub(crate) struct Snapshot {
     rank: Mutex<RankSlot>,
     /// The last built view: (spec, matching rows in order).
     view: Mutex<Option<(ViewSpec, Arc<Vec<u32>>)>>,
+    /// View builds of this snapshot one at a time: a second query of the
+    /// spec being built waits for it and takes it from `view` instead of
+    /// scanning again (a different spec cancels the build in flight first).
+    view_one: Mutex<()>,
+    /// Views built (filter scans run) on this snapshot; the tests' witness.
+    views_built: AtomicUsize,
 }
 
 impl Snapshot {
@@ -710,26 +716,45 @@ impl Shared {
 
     /// The token that cancels an index build of @p path: the open's, when
     /// @p path is the open file (opening another file then cancels it).
-    fn index_token(&self, path: &str) -> Cancel {
+    fn index_token(&self, path: &str) -> Option<Cancel> {
         match &*self.open.lock().unwrap() {
-            Some(o) if o.path == path => o.index.clone(),
-            _ => Cancel::default(),
+            Some(o) if o.path == path => Some(o.index.clone()),
+            _ => None,
         }
     }
 
-    /// The snapshot of @p path, indexing it first when it is new or changed
-    /// (len, mtime). The map lock is never held during the scan.
+    /// The snapshot of @p path as the tests need it: built even when @p path
+    /// is not the open file.
+    #[cfg(test)]
     fn snapshot(&self, path: &str) -> Result<Arc<Snapshot>, String> {
+        self.snapshot_mode(path, Mode::Exact)
+    }
+
+    /// The snapshot of @p path, indexing it first when it is new or changed
+    /// (len, mtime). The map lock is never held during the scan. The build's
+    /// token is resolved before waiting for `build`, so a build that waited
+    /// while another file was opened stops instead of indexing a file nobody
+    /// has open with a token nothing cancels. An Interactive call for a file
+    /// that is not open does not index it at all.
+    fn snapshot_mode(&self, path: &str, mode: Mode) -> Result<Arc<Snapshot>, String> {
         let (len, mtime) = file_meta(path)?;
         if let Some(s) = self.fresh(path, len, mtime) {
             return Ok(s);
         }
+        let token = match (self.index_token(path), mode) {
+            (Some(t), _) => t,
+            (None, Mode::Interactive) => return Err(CANCELLED.into()),
+            (None, Mode::Exact) => Cancel::default(),
+        };
         let _one = self.build.lock().unwrap_or_else(|e| e.into_inner());
         // Another build may have finished while this one waited.
         if let Some(s) = self.fresh(path, len, mtime) {
             return Ok(s);
         }
-        let index = build_index(path, &self.index_token(path))?;
+        if token.is_cancelled() {
+            return Err(CANCELLED.into());
+        }
+        let index = build_index(path, &token)?;
         let snap = Arc::new(Snapshot {
             path: path.to_string(),
             len,
@@ -737,6 +762,8 @@ impl Shared {
             index,
             rank: Mutex::new(RankSlot::None),
             view: Mutex::new(None),
+            view_one: Mutex::new(()),
+            views_built: AtomicUsize::new(0),
         });
         let mut snaps = self.snaps.write().unwrap();
         snaps.retain(|s| s.path != path);
@@ -766,13 +793,28 @@ impl Shared {
             let mut slot = snap.rank.lock().unwrap();
             match &*slot {
                 RankSlot::Ready(_) => return false,
-                RankSlot::Building(_) => return true,
-                RankSlot::None => {}
+                // A cancelled build (the file was closed, then re-opened
+                // before that build reached a cancel check) ends without an
+                // event: start a new one. The old worker leaves this slot
+                // alone (its token is not the one installed here).
+                RankSlot::Building(t) if !t.is_cancelled() => return true,
+                RankSlot::Building(_) | RankSlot::None => {}
             }
             let t = Cancel::default();
             *slot = RankSlot::Building(t.clone());
             t
         };
+        // Only the open file is ranked: a late page query of a file closed
+        // since must not start a build nothing would cancel. Checked after
+        // installing the token, so an open() of another file either sees
+        // this build and cancels it, or ran before the check.
+        if self.index_token(&snap.path).is_none() {
+            let mut slot = snap.rank.lock().unwrap();
+            if matches!(&*slot, RankSlot::Building(t) if Arc::ptr_eq(&t.0, &token.0)) {
+                *slot = RankSlot::None;
+            }
+            return false;
+        }
         let (me, snap) = (self.clone(), snap.clone());
         std::thread::spawn(move || {
             let path = snap.path.clone();
@@ -817,6 +859,10 @@ impl Shared {
             t.cancel(); // the background build is redundant now
         }
         *slot = RankSlot::Ready(r.clone());
+        drop(slot);
+        // The cancelled background build ends silently: announce the order
+        // here, or a table showing file order would never swap.
+        self.emit_for(&snap.path, |generation| BrowserEvent::Ranked { generation, column: RANK_COLUMN.into() });
         Ok(r)
     }
 
@@ -855,7 +901,7 @@ pub(crate) fn query_mode(
     limit: usize,
     mode: Mode,
 ) -> Result<ResultsPage, String> {
-    let snap = shared.snapshot(path)?;
+    let snap = shared.snapshot_mode(path, mode)?;
     let index = &snap.index;
     let res = Resolved::bind(spec, &index.columns);
     let total_rows = index.offsets.len();
@@ -892,11 +938,20 @@ pub(crate) fn query_mode(
             }
         }
     } else {
-        let cached = snap.view.lock().unwrap().as_ref().filter(|(s, _)| s == spec).map(|(_, v)| v.clone());
-        let rows = match cached {
+        let cached = || snap.view.lock().unwrap().as_ref().filter(|(s, _)| s == spec).map(|(_, v)| v.clone());
+        let rows = match cached() {
             Some(v) => v,
-            None => {
+            None => 'build: {
                 let token = shared.view_token(path, spec);
+                let _one = snap.view_one.lock().unwrap_or_else(|e| e.into_inner());
+                // The same spec, built while this query waited.
+                if let Some(v) = cached() {
+                    break 'build v;
+                }
+                if token.is_cancelled() {
+                    return Err(CANCELLED.into());
+                }
+                snap.views_built.fetch_add(1, Ordering::SeqCst);
                 // With the E-value order ready, a filtered E-value view is
                 // that order restricted to the matching rows: the same
                 // sequence build_view's sort gives, without the sort.
@@ -952,7 +1007,7 @@ pub(crate) fn open(shared: &Arc<Shared>, path: &str, emit: Emit) -> Result<Resul
     }
     let (columns, rows, complete) = read_head(path, MAX_WINDOW)?;
     let (me, p) = (shared.clone(), path.to_string());
-    std::thread::spawn(move || match me.snapshot(&p) {
+    std::thread::spawn(move || match me.snapshot_mode(&p, Mode::Interactive) {
         Ok(snap) => {
             let total_rows = snap.index.offsets.len();
             me.emit_for(&p, |generation| BrowserEvent::Indexed { generation, total_rows });
@@ -1154,6 +1209,10 @@ pub mod bench {
     /// (Interactive: file order while the order is built).
     pub fn open_and_query(path: &str) -> Result<(usize, bool), String> {
         let shared = Arc::new(Shared::default());
+        // The file is the open one, as after results_open (without the
+        // open's own index thread, so the query indexes it here).
+        *shared.open.lock().unwrap() =
+            Some(OpenState { path: path.to_string(), generation: 1, emit: Arc::new(|_| {}), index: Cancel::default() });
         let spec = ViewSpec { sort: Some(SortSpec { column: RANK_COLUMN.into(), desc: false }), ..Default::default() };
         let p = query_mode(&shared, path, &spec, 0, 500, Mode::Interactive)?;
         Ok((p.rows.len(), p.ranked))
@@ -1702,7 +1761,7 @@ mod tests {
         let (ea, got_a) = collector();
         let ha = open(&shared, &a, ea).unwrap();
         wait_for(&got_a, |e| matches!(e, BrowserEvent::Indexed { .. }));
-        let index_a = shared.index_token(&a);
+        let index_a = shared.index_token(&a).unwrap();
         let (eb, got_b) = collector();
         let hb = open(&shared, &b, eb).unwrap();
         assert!(hb.generation > ha.generation);
@@ -1755,6 +1814,142 @@ mod tests {
         // Ties (1,000 distinct values) keep file order in both directions.
         assert_eq!(&r.asc[..3], &[0, 1000, 2000]);
         assert_eq!(&r.desc()[..2], &[321, 1321]);
+        std::fs::remove_file(&p).ok();
+    }
+
+    fn by_evalue() -> ViewSpec {
+        ViewSpec { sort: Some(SortSpec { column: "evalue".into(), desc: false }), ..Default::default() }
+    }
+
+    #[test]
+    fn a_build_waiting_for_the_old_file_stops_when_another_file_opens() {
+        let a = fixture("wait-a.tsv");
+        let b = fixture("wait-b.tsv");
+        let shared = Arc::new(Shared::default());
+        // Another index build holds the lock: A's open and A's first query
+        // both wait for it, as when the renderer queries A while A indexes.
+        let busy = shared.build.lock().unwrap();
+        let (ea, _got_a) = collector();
+        open(&shared, &a, ea).unwrap();
+        let (s2, a2) = (shared.clone(), a.clone());
+        let query_a = std::thread::spawn(move || query_mode(&s2, &a2, &by_evalue(), 0, 10, Mode::Interactive));
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        let (eb, got_b) = collector();
+        let hb = open(&shared, &b, eb).unwrap();
+        drop(busy);
+        assert_eq!(query_a.join().unwrap().err().as_deref(), Some(CANCELLED));
+        assert_eq!(
+            wait_for(&got_b, |e| matches!(e, BrowserEvent::Indexed { .. })),
+            BrowserEvent::Indexed { generation: hb.generation, total_rows: 4 }
+        );
+        // Nobody indexed A after it was closed (the old code rebuilt it in
+        // full with a token nothing could cancel, holding up B).
+        assert!(shared.snaps.read().unwrap().iter().all(|s| s.path != a));
+        // An Interactive query of a file that is not open never indexes it;
+        // export (Exact) still does.
+        assert_eq!(query_mode(&shared, &a, &by_evalue(), 0, 10, Mode::Interactive).err().as_deref(), Some(CANCELLED));
+        assert_eq!(query(&shared, &a, &by_evalue(), 0, 10).unwrap().row_ids, [2, 0, 1, 3]);
+        std::fs::remove_file(&a).ok();
+        std::fs::remove_file(&b).ok();
+    }
+
+    #[test]
+    fn reopening_a_file_whose_rank_build_was_cancelled_still_ends_ranked() {
+        // A -> B -> A before A's cancelled rank build reached a cancel
+        // check: its slot still says Building, but that build will end
+        // silently.
+        let p = fixture("reopen.tsv");
+        let shared = Arc::new(Shared::default());
+        let snap = shared.snapshot(&p).unwrap();
+        let old = Cancel::default();
+        old.cancel();
+        *snap.rank.lock().unwrap() = RankSlot::Building(old.clone());
+        let (emit, got) = collector();
+        let h = open(&shared, &p, emit).unwrap();
+        assert_eq!(
+            wait_for(&got, |e| matches!(e, BrowserEvent::Ranked { .. })),
+            BrowserEvent::Ranked { generation: h.generation, column: "evalue".into() }
+        );
+        assert!(snap.rank_ready().is_some());
+        let r = query_mode(&shared, &p, &by_evalue(), 0, 10, Mode::Interactive).unwrap();
+        assert!(r.ranked && !r.pending);
+        std::fs::remove_file(&p).ok();
+    }
+
+    #[test]
+    fn a_late_page_query_of_a_closed_file_starts_no_rank_build() {
+        let a = fixture("late-a.tsv");
+        let b = fixture("late-b.tsv");
+        let shared = Arc::new(Shared::default());
+        let snap_a = shared.snapshot(&a).unwrap(); // A indexed, not ranked
+        let (eb, _got_b) = collector();
+        open(&shared, &b, eb).unwrap();
+        // The renderer's last page query of A arrives after B was opened.
+        let r = query_mode(&shared, &a, &by_evalue(), 0, 10, Mode::Interactive).unwrap();
+        assert!(!r.ranked && !r.pending);
+        assert!(matches!(&*snap_a.rank.lock().unwrap(), RankSlot::None), "a rank build of the closed file started");
+        // Re-opening A ranks it.
+        let (ea, got_a) = collector();
+        let h = open(&shared, &a, ea).unwrap();
+        assert_eq!(
+            wait_for(&got_a, |e| matches!(e, BrowserEvent::Ranked { .. })),
+            BrowserEvent::Ranked { generation: h.generation, column: "evalue".into() }
+        );
+        std::fs::remove_file(&a).ok();
+        std::fs::remove_file(&b).ok();
+    }
+
+    #[test]
+    fn export_during_ranking_still_announces_ranked() {
+        let p = fixture("export-rank.tsv");
+        let shared = Arc::new(Shared::default());
+        let snap = shared.snapshot(&p).unwrap();
+        // A background build in flight; export makes it redundant and it
+        // then ends silently (cancelled).
+        let background = Cancel::default();
+        *snap.rank.lock().unwrap() = RankSlot::Building(background.clone());
+        let (emit, got) = collector();
+        let h = open(&shared, &p, emit).unwrap();
+        wait_for(&got, |e| matches!(e, BrowserEvent::Indexed { .. }));
+        let pending = query_mode(&shared, &p, &by_evalue(), 0, 10, Mode::Interactive).unwrap();
+        assert!(!pending.ranked && pending.pending);
+        assert!(got.lock().unwrap().iter().all(|e| !matches!(e, BrowserEvent::Ranked { .. })));
+        let e = query(&shared, &p, &by_evalue(), 0, 10).unwrap(); // export's query
+        assert_eq!(e.row_ids, [2, 0, 1, 3]);
+        assert!(background.is_cancelled());
+        assert_eq!(
+            wait_for(&got, |e| matches!(e, BrowserEvent::Ranked { .. })),
+            BrowserEvent::Ranked { generation: h.generation, column: "evalue".into() }
+        );
+        std::fs::remove_file(&p).ok();
+    }
+
+    #[test]
+    fn concurrent_queries_of_one_view_build_it_once() {
+        let p = fixture("dedupe.tsv");
+        let shared = Arc::new(Shared::default());
+        let snap = shared.snapshot(&p).unwrap();
+        let spec = ViewSpec { min_length: Some(7), sort: Some(SortSpec { column: "tag".into(), desc: false }), ..Default::default() };
+        // Hold the view builds so that both page queries are in flight at once.
+        let hold = snap.view_one.lock().unwrap();
+        let pages: Vec<_> = [0usize, 1]
+            .into_iter()
+            .map(|off| {
+                let (s, p, v) = (shared.clone(), p.clone(), spec.clone());
+                std::thread::spawn(move || query_mode(&s, &p, &v, off, 1, Mode::Interactive))
+            })
+            .collect();
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        drop(hold);
+        let got: Vec<_> = pages.into_iter().map(|t| t.join().unwrap().unwrap()).collect();
+        assert_eq!(snap.views_built.load(Ordering::SeqCst), 1, "the second query scanned the file again");
+        assert_eq!(got[0].matched_rows, got[1].matched_rows);
+        let all = query(&shared, &p, &spec, 0, 10).unwrap();
+        assert_eq!([got[0].row_ids[0], got[1].row_ids[0]], [all.row_ids[0], all.row_ids[1]]);
+        assert_eq!(snap.views_built.load(Ordering::SeqCst), 1);
+        // A different spec is a build of its own.
+        query(&shared, &p, &ViewSpec { min_length: Some(6), ..Default::default() }, 0, 10).unwrap();
+        assert_eq!(snap.views_built.load(Ordering::SeqCst), 2);
         std::fs::remove_file(&p).ok();
     }
 
