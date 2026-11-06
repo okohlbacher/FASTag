@@ -4,6 +4,10 @@
 #   - an unknown modification name is refused (it ran without the shift)
 #   - an output naming the input, or two outputs naming one file, is refused
 #     (-out_spectra = -in truncated the raw file before re-reading it)
+#   - an output naming another consumed input (-digest_models, -fasta,
+#     -recon_fasta) is refused, by name, symlink or hard link; input unchanged
+#   - an output naming another consumed input (-fasta, -recon_fasta) is
+#     refused, also through a symlink or a hard link, the database unchanged
 #   - a NaN / inf precursor in a -stream header is a bad header (it tagged
 #     with nterm_mass 0, a false N-terminal claim)
 #   - an entrapment database inside the target's key space is refused even
@@ -53,6 +57,35 @@ fi
 "$BIN" -in "$IN" -out "$TMP/same.tsv" -fasta "$DB" -recon_out "$TMP/same.tsv" -tag_length 4 "${ARGS[@]}" \
   >"$TMP/s.log" 2>&1 && fail "-recon_out equal to -out ran (exit 0)"
 grep -q "name the same file" "$TMP/s.log" || fail "no message naming the colliding outputs"
+# An output naming a consumed input other than -in, by the same name, through
+# a symlink and through a hard link: refused, and the input unchanged. The
+# outputs are .tsv and the databases .fasta by option format, so the same-name
+# case uses -digest_models (.tsv) and the database is reached through a .fasta
+# link to a .tsv file.
+echo "not a model table" > "$TMP/models.tsv"
+models_before=$(cksum < "$TMP/models.tsv")
+"$BIN" -in "$IN" -out "$TMP/models.tsv" -digest_models "$TMP/models.tsv" "${ARGS[@]}" \
+  >"$TMP/dm.log" 2>&1 && fail "-out equal to -digest_models ran (exit 0)"
+grep -q "is the -digest_models file" "$TMP/dm.log" || fail "no message naming -digest_models as the clobbered input"
+[ "$(cksum < "$TMP/models.tsv")" = "$models_before" ] || fail "the -digest_models file was modified"
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) ;;
+  *)
+    cp "$DB" "$TMP/db.tsv"
+    db_before=$(cksum < "$TMP/db.tsv")
+    ln -s "$TMP/db.tsv" "$TMP/dblink.fasta"
+    "$BIN" -in "$IN" -out "$TMP/f1.tsv" -fasta "$TMP/dblink.fasta" -recon_out "$TMP/db.tsv" -tag_length 4 "${ARGS[@]}" \
+      >"$TMP/f1.log" 2>&1 && fail "-recon_out aliasing -fasta through a symlink ran (exit 0)"
+    grep -q "is the -fasta file" "$TMP/f1.log" || fail "no message naming -fasta as the clobbered input"
+    "$BIN" -in "$IN" -out "$TMP/db.tsv" -recon_fasta "$TMP/dblink.fasta" -recon_out "$TMP/f2.tsv" -tag_length 4 "${ARGS[@]}" \
+      >"$TMP/f2.log" 2>&1 && fail "-out aliasing -recon_fasta through a symlink ran (exit 0)"
+    grep -q "is the -recon_fasta file" "$TMP/f2.log" || fail "no message naming -recon_fasta as the clobbered input"
+    ln "$TMP/db.tsv" "$TMP/dbhard.fasta"
+    "$BIN" -in "$IN" -out "$TMP/f3.tsv" -fasta "$TMP/dbhard.fasta" -recon_out "$TMP/f3r.tsv" -delta_out "$TMP/db.tsv" \
+      -tag_length 4 "${ARGS[@]}" >"$TMP/f3.log" 2>&1 && fail "-delta_out aliasing -fasta through a hard link ran (exit 0)"
+    grep -q "is the -fasta file" "$TMP/f3.log" || fail "no message for the hard-linked -fasta"
+    [ "$(cksum < "$TMP/db.tsv")" = "$db_before" ] || fail "the database was modified" ;;
+esac
 # /dev/null twice is fine (not a regular file).
 # Not on Windows: OpenMS's output check cannot create NUL there ("could not be created").
 case "$(uname -s)" in
