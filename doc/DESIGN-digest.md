@@ -235,6 +235,23 @@ table. Tests use synthetic tables.
 | `count` | `tags_filtered` | integer |
 | `nlabel` | `<L>.count` = `near(n, m) + near(c, m)`, `<L>.background` = the same at `m + 0.5` Da, `<L>.share` = count / `tags_filtered`, for L = `TMT` (229.162932), `TMTpro` (304.207146), `iTRAQ4` (144.102063) (`_NLABEL`) | integer, decimal |
 | `heavy` | `K8.share` = `s(K+8) / max(s(K+8) + s(K), 1e-9)`, `R10.share` likewise, with `s = res / tot` as in 0.1.3; `K.tags` = `res[K] + res[K+8]`, `R.tags` = `res[R] + res[R+10]`; `gate` = `yes` when both are ≥ `-digest_silac_min` (50, `SILAC_MIN_TAGS`) | decimal, integer, word |
+| `label_call` (1.12, appended last; the rows above are byte-identical to 1.11) | `status` (`call`, `no_call`), `label` (`TMT`, `TMTpro`, `iTRAQ4`, `SILAC`, joined with `+` when several pass, isobaric first; `label-free` when none passes; `-` on a no call), `basis` (`nterm_gap`, `heavy_share`, `nterm_gap+heavy_share`, `none`), `silac` (`none`, `weak`, `strong`), `reason` (`low_resolution`, `few_tags`; `-` on a call) | word |
+
+`label_call` is prose-auto 0.1.10's termini label rule (`prose_auto/external.py` `fastag_termini` /
+`termini_evidence`, commit e15aaf7), ported rule for rule (`FASTag::Digest::labelCall`):
+
+- no call on a Da tolerance (`low_resolution`; prose-auto runs the termini only on ppm runs) and below
+  175 C-terminal tag ends, `count.tot` of `-digest_out` (`few_tags`, prose-auto's `TAG_MIN`);
+- an isobaric label when `<L>.count` ≥ 0.01 × `tags_filtered` and ≥ 20 × max(`<L>.background`, 1);
+  the TMTpro row says that iTRAQ8plex has the same mass;
+- SILAC (Lys8/Arg10) when `K8.share` and `R10.share` are both ≥ 0.2, the K/R share (`share.kr` of
+  `-digest_out`) rounded to 3 decimals is ≥ 0.8 (`KR_TRYPTIC`; prose-auto compares the rounded value),
+  and `heavy.gate` is `yes`; `strong` when both shares are ≥ 0.3, else `weak`.
+
+It reads only the tag-end counts, never the mass-gap result, so `-massgap_out` and `-recon_out` do not
+change it. Parity: 100 % identical calls with prose-auto 0.1.10 on the 193 label-evaluable SDRF runs of
+the digest validation (fastag-bench `table_s3_digest_truth_v190.tsv`), run with prose-auto's own
+termini command.
 
 ## `-massgap_out` (requires `-recon_out`, like `-delta_out`)
 
@@ -327,9 +344,10 @@ The logo is a small React SVG component in `gui/src`; no new dependency.
 - Evidence confidence formulas (enzyme, label, alkylation, modifications).
 - The margin = 0 override when isobaric K (`residue` K+TMT, K+TMTpro, K+iTRAQ4) exceeds half the merged K
   and a Lys-C/Arg-C call has Trypsin as runner-up.
-- The label rule (≥ 1 % of the tags and ≥ 20× background), the SILAC heavy-share thresholds and the
-  `KR_TRYPTIC` (0.8) gate, the alkylation call rule, the 2 % / 10 % variable-modification and
-  enrichment shares, and the HLA class mapping.
+- The alkylation call rule, the 2 % / 10 % variable-modification and enrichment shares, and the HLA
+  class mapping. The label rule (≥ 1 % of the tags and ≥ 20× background, the SILAC heavy-share
+  thresholds and the `KR_TRYPTIC` gate) is also in FASTag since 1.12 (`label_call`, above); prose-auto
+  switches to reading it only by a later decision.
 - Reagent-genus handling of the species report.
 - A PASEF acquisition-mode gate: converted diaPASEF pseudo-spectra carry no instrument, native-ID or
   scan-window metadata and their 1/K0 only on the precursor, so `timstof` reads `unknown` on them

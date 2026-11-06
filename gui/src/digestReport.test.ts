@@ -149,6 +149,21 @@ describe('label and mass gaps', () => {
     expect(l[1]).toMatchObject({ count: 0, background: 0, share: 0, n: 26909 })
   })
 
+  it('keeps a label report with the 1.12 label_call rows a label report', () => {
+    const call = [
+      'label_call\tstatus\tcall\t25512\tA label call is made from 25512 C-terminal tag ends and 26909 filtered tags.',
+      'label_call\tlabel\tTMT\t26909\tThe run is labelled TMT.',
+      'label_call\tbasis\tnterm_gap\t-\tThe call rests on N-terminal label gaps.',
+      'label_call\tsilac\tnone\t-\tSILAC needs Lys8 and Arg10 shares of at least 0.2.',
+      'label_call\treason\t-\t-\tA label call is made.'
+    ].join('\n')
+    const r = parseReport(labelTsv.replace(/\n*$/, '\n') + call + '\n', 'l')
+    expect(r.kind).toBe('label')
+    expect(r.warnings).toEqual([])
+    expect(labelFindings(r)).toEqual(labelFindings(parseReport(labelTsv, 'l')))
+    expect(value(r, 'label_call', 'label')).toBe('TMT')
+  })
+
   it('reads the histogram in gap order and the peaks', () => {
     const m = parseReport(massgapTsv, 'm')
     const bins = gapHistogram(m)
