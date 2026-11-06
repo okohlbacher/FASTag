@@ -893,6 +893,16 @@ namespace FASTag
     // element has none: the same result for the single-valued fields read
     // below, since the schema puts references before cvParams and OpenMS
     // keeps the last value it sees.
+    //
+    // Groups are resolved for the step-0 fields ONLY (type, filter string,
+    // activation, possible charge states, the isolation-target meta value).
+    // The fields 1.11 already read and the tagger consumes -- MS level,
+    // selected-ion m/z, charge and intensity, the isolation window target
+    // and offsets -- are still read from the element's own cvParams, as in
+    // 1.11, so tags stay byte-identical. Resolving them from groups too
+    // changes tags on mzMLs that keep them in a group (1.11: an MS level only
+    // in a group is no MS2, a charge only in a group is tagged as 2+); that
+    // is a separate, declared output-changing item, not part of step 0.
     static const ParamGroups kNoGroups;
     const ParamGroups& groups = impl_->groups ? *impl_->groups : kNoGroups;
     // The cvParam with accession @p acc in a group referenced directly in
@@ -947,11 +957,6 @@ namespace FASTag
       const std::string_view h = meta();
       if (to_number(cv_value(h, kMsLevel, 0, h.size()), ms_level) && ms_level > 0)
         spec.setMSLevel(static_cast<UInt>(ms_level));
-      else if (const GroupParam* gp = group_param(h, needle_accession(kMsLevel), 0, spectrum_params_end(h));
-               gp && to_number(std::string_view(gp->value), ms_level) && ms_level > 0)
-        spec.setMSLevel(static_cast<UInt>(ms_level));
-      else
-        ms_level = 0;
     }
 
     // Peaks through OpenMS's own decoder, so the binary encodings (zlib,
@@ -1126,15 +1131,18 @@ namespace FASTag
         q += 10;
       }
 
-      double target = 0, lower = 0, upper = 0;
-      bool has_target = false;
+      // The window as 1.11 reads it (own cvParams only, see above); the
+      // target again with the group fallback for the step-0 meta value only.
+      double target = 0, lower = 0, upper = 0, meta_target = 0;
+      bool has_meta_target = false;
       const std::size_t iwb = xml.find("<isolationWindow", p);
       if (iwb != std::string_view::npos && iwb < p_end)
       {
         const std::size_t iwe = find_or(xml, "</isolationWindow>", iwb, p_end);
-        has_target = to_number(cvg(xml, kIsoTarget, iwb, iwe), target);
-        to_number(cvg(xml, kIsoLower, iwb, iwe), lower);
-        to_number(cvg(xml, kIsoUpper, iwb, iwe), upper);
+        to_number(cv_value(xml, kIsoTarget, iwb, iwe), target);
+        to_number(cv_value(xml, kIsoLower, iwb, iwe), lower);
+        to_number(cv_value(xml, kIsoUpper, iwb, iwe), upper);
+        has_meta_target = to_number(cvg(xml, kIsoTarget, iwb, iwe), meta_target);
       }
 
       // The activation (step 0): dissociation methods and activation energy,
@@ -1176,14 +1184,14 @@ namespace FASTag
         double mz = 0;
         int charge = 0;
         double intensity = 0;
-        if (to_number(cvg(xml, kSelectedMz, s, s_end), mz))
+        if (to_number(cv_value(xml, kSelectedMz, s, s_end), mz))
         {
           prec.setMZ(mz);
           // The isolation target kept as OpenMS keeps it (step 0): as the
           // meta value "isolation window target m/z" whenever the selected
           // ion moved the precursor m/z away from it -- 0 when the window
           // gave no target, as there.
-          const double window_mz = has_target ? target : 0.0;
+          const double window_mz = has_meta_target ? meta_target : 0.0;
           if (mz != window_mz)
           {
             static const UInt kTargetIdx =
@@ -1192,8 +1200,8 @@ namespace FASTag
           }
         }
         else if (target > 0) prec.setMZ(target);
-        if (to_number(cvg(xml, kChargeState, s, s_end), charge)) prec.setCharge(charge);
-        if (to_number(cvg(xml, kPeakIntensity, s, s_end), intensity))
+        if (to_number(cv_value(xml, kChargeState, s, s_end), charge)) prec.setCharge(charge);
+        if (to_number(cv_value(xml, kPeakIntensity, s, s_end), intensity))
           prec.setIntensity(static_cast<float>(intensity));
         // Possible charge states (MS:1000633, step 0), every one listed, in
         // the order OpenMS reads them: referenced groups, then own cvParams.

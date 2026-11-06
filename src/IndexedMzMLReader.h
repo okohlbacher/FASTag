@@ -21,8 +21,8 @@
 //
 // STEP 0 (1.12) adds, as OpenMS's MzMLHandler (70cebcd144) fills them:
 //  - referenceableParamGroups, read once at open from the run header and
-//    applied where they are referenced (spectrum, scan, isolation window,
-//    selected ion, activation); an element's own cvParam wins;
+//    applied, where they are referenced, to the step-0 fields below only;
+//    an element's own cvParam wins;
 //  - the spectrum type, MS:1000127 centroid / MS:1000128 profile (UNKNOWN
 //    when neither is given);
 //  - the possible charge states of a selected ion, MS:1000633;
@@ -35,9 +35,21 @@
 //    away from it (0 when the window has no target, as in OpenMS).
 // Not read: collision energy and the other activation meta values, product
 // lists. OpenMS keeps the FIRST selected ion of a precursor only; this reader
-// keeps one Precursor per selected ion, as before. No 1.11 consumer reads any
-// of the step-0 fields, so tags are unchanged; indexed_mzml_test compares
-// them against OpenMS.
+// keeps one Precursor per selected ion, as before.
+//
+// The fields 1.11 already read -- MS level, selected-ion m/z, charge and
+// intensity, the isolation window target and offsets -- are still read from
+// the element's OWN cvParams only, as in 1.11, NOT from param groups, which
+// OpenMS does resolve for them. Tags are therefore unchanged on every input.
+// Resolving those fields from groups would change tags on mzMLs that keep
+// them in a group (1.11: an MS level only in a group makes the spectrum no
+// MS2; a charge only in a group leaves it tagged as 2+); that is a separate,
+// declared output-changing item. Of the step-0 fields only the possible
+// charge states reach any output: the count in the "carry no precursor
+// charge" log warning (as on the OnDiscMSExperiment path already). The
+// spectrum type, activation, filter string and target meta value are read
+// by no 1.11 consumer. indexed_mzml_test compares the step-0 fields against
+// OpenMS and pins the 1.11 reading of the others.
 //
 // NO INDEX, OR A STALE ONE: the spectrum offsets are rebuilt by scanning the
 // file for <spectrum> start tags, in parallel, and the file is then read the
