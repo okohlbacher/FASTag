@@ -990,6 +990,34 @@ jobs:
           npm run tauri build; if ($LASTEXITCODE) { exit $LASTEXITCODE }
           Get-ChildItem src-tauri/target/release/bundle/nsis/ -ErrorAction SilentlyContinue
 
+      # bundle.windows.nsis.compression is "lzma" in tauri.conf.json, set
+      # explicitly rather than left to Tauri's default. This records what
+      # that produced: the installer size (in the job summary, so releases
+      # can be compared) and the compression method 7-Zip reads from the
+      # NSIS header. Informational: a method other than LZMA is a warning,
+      # since 7-Zip's NSIS reader is a heuristic, not a contract.
+      - name: Record the installer size and compression (Windows)
+        if: (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') || inputs.gui_dry_run
+        working-directory: fastag/gui
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $nsis = Get-ChildItem -Path src-tauri/target/release/bundle/nsis -Filter *.exe | Select-Object -First 1
+          if (-not $nsis) { throw "tauri produced no NSIS installer" }
+          $mib = [math]::Round($nsis.Length / 1MB, 1)
+          Write-Host "installer: $($nsis.Name), $($nsis.Length) bytes ($mib MiB)"
+          "### Windows installer: $mib MiB ($($nsis.Name))" | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
+          $sevenzip = (Get-Command 7z.exe -ErrorAction SilentlyContinue).Source
+          if (-not $sevenzip) { $sevenzip = 'C:\Program Files\7-Zip\7z.exe' }
+          if (Test-Path $sevenzip) {
+            $method = & $sevenzip l -slt $nsis.FullName | Select-String -Pattern '^Method = ' | Select-Object -First 1
+            Write-Host "7-Zip: $method"
+            "7-Zip reads: $method" | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
+            if ("$method" -notmatch 'LZMA') { Write-Host "::warning::7-Zip does not report LZMA for the installer ($method)" }
+          } else {
+            Write-Host "::warning::7-Zip not found; compression method not recorded"
+          }
+
       # SignPath's 'initial' artifact configuration expects a ZIP containing
       # *.exe -- upload-artifact always zips, and the NSIS installer is an
       # .exe, so the same configuration covers it without a new one.
