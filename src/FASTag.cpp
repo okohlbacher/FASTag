@@ -256,7 +256,8 @@ class TOPPFASTag : public TOPPBase
       const std::string name = k.substr(prefix.size());
       if (FASTag::Cli::isLegacyOutSpectraParameter(name)) continue;
       // A flag's registered default (false) and its Param value ("false")
-      // never compare equal; ask the flag itself.
+      // never compare equal, so a flag at its default would stay listed; ask
+      // the flag itself.
       const ParameterInformation& e = findEntry_(name);
       const bool at_default = e.type == ParameterInformation::FLAG ? !getFlag_(name)
                                                                    : getParam_().getValue(name) == e.default_value;

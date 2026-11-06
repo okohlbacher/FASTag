@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Baseline identity on the vendored fixtures: every legacy output of this
 # build (tags, recon, delta, digest, label, massgap, glyco, mzid, idXML, mzTab,
-# -proforma/-res_conf tags, the -out_spectra mzML, species, MGF input, --help
-# and the CTD) equals the baseline binary's after date/version masking
+# -proforma/-res_conf tags, the -out_spectra mzML, species, MGF input, --help,
+# --helphelp, the CTD and the INI; new options may only add whole option
+# blocks) equals the baseline binary's after date/version masking
 # (tools/baseline_identity.sh, tools/baseline_canon.py), and the .taxdb that
 # buildtaxdb writes equals the baseline buildtaxdb's. Not covered here: the
 # -out_spectra mzPeak export (gate.sh's member digests cover it).
@@ -94,7 +95,9 @@ if [ -f "$MGF" ]; then
     --threads "1 8" "$BIN" "$BASE" "$TMP/mgf" || rc=1
 fi
 cat "$TMP"/*/report.tsv > "$TMP/report.tsv"
-[ $rc = 0 ] || { awk -F'\t' '$5 != "status" && $5 != "SAME" && $5 !~ /^ADDED/ && $5 !~ /^INFO/' "$TMP/report.tsv" >&2
+[ $rc = 0 ] || { awk -F'\t' '$5 != "status" && $5 != "SAME" && $5 !~ /^(INFO|ADDED|PREFIX)/' "$TMP/report.tsv" >&2
                  fail "outputs differ from the baseline"; }
-n=$(awk -F'\t' '$5 == "SAME" || $5 ~ /^ADDED/' "$TMP/report.tsv" | wc -l | tr -d ' ')
-echo "baseline_identity_test: all $n comparisons equal to $BASE; buildtaxdb: $nbt .taxdb files equal to $BASE_BT"
+# The counting rule of tools/baseline_identity.sh (every row but INFO*).
+counts=$(awk -F'\t' '$5 != "status" && $5 !~ /^INFO/ { n++; if ($5 == "SAME") s++; else if ($5 ~ /^ADDED/) a++; else if ($5 ~ /^PREFIX/) p++ }
+                     END { printf "%d comparisons: %d SAME, %d ADDED, %d PREFIX", n, s, a, p }' "$TMP/report.tsv")
+echo "baseline_identity_test: all passed against $BASE ($counts); buildtaxdb: $nbt .taxdb files equal to $BASE_BT"
