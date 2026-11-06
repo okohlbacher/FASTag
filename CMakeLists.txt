@@ -369,6 +369,12 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy)
   set_tests_properties(baseline_identity_test PROPERTIES SKIP_RETURN_CODE 77)
+  # The harness's interface rule: new options may add whole option blocks to
+  # --help, --helphelp, the CTD and the INI; nothing existing may change.
+  add_test(NAME baseline_iface_added_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/baseline_iface_added_test.sh
+                   ${CMAKE_CURRENT_SOURCE_DIR}/tools/baseline_iface_added.py)
+  set_tests_properties(baseline_iface_added_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # 1.12 CLI tests against the real binary, one anchored block per cluster in
   # the order E, A, D, F. A cluster adds its add_test calls only inside its

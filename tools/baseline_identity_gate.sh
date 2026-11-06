@@ -7,7 +7,8 @@
 #
 #   PXD014764  -extension 3 -fasta Homo_sapiens.fasta: every case (tags, recon,
 #              delta, digest, label, massgap, glyco, mzid, idXML, mzTab,
-#              -proforma/-res_conf, -out_spectra mzML, --help, CTD)
+#              -proforma/-res_conf, -out_spectra mzML, --help, --helphelp,
+#              CTD, INI)
 #   PXD003531  defaults: tags, -proforma/-res_conf, -out_spectra mzML;
 #              -extension 2 with the gate's tax_k7 index: species
 #   buildtaxdb Homo_sapiens.fasta as taxon 9606, k 7: the candidate's and the
@@ -66,6 +67,12 @@ else
   echo "baseline_identity_gate: buildtaxdb $CBT vs $BBT: $(awk -F'\t' '$5 == "SAME"' "$BT/report.tsv" | wc -l) equal"
 fi
 cat "$OUT"/PXD*/report.tsv "$BT/report.tsv" | awk 'NR == 1 || $1 != "label"' > "$OUT/report.tsv"
-if [ $rc = 0 ]; then echo "BASELINE IDENTITY PASS ($(awk -F'\t' '$5 == "SAME"' "$OUT/report.tsv" | wc -l) comparisons)"
-else echo "BASELINE IDENTITY FAIL"; awk -F'\t' 'NR > 1 && $5 != "SAME" && $5 !~ /^INFO/' "$OUT/report.tsv"; fi
+# The counting rule of tools/baseline_identity.sh: every row but INFO* is a
+# comparison; SAME, ADDED* and PREFIX* pass. The ADDED/PREFIX rows are listed.
+counts=$(awk -F'\t' 'NR > 1 && $5 !~ /^INFO/ { n++; if ($5 == "SAME") s++; else if ($5 ~ /^ADDED/) a++; else if ($5 ~ /^PREFIX/) p++ }
+                     END { printf "%d comparisons: %d SAME, %d ADDED, %d PREFIX", n, s, a, p }' "$OUT/report.tsv")
+if [ $rc = 0 ]; then echo "BASELINE IDENTITY PASS ($counts)"
+  awk -F'\t' '$5 ~ /^(ADDED|PREFIX)/ { print "  " $1 " " $2 " " $4 ": " $5 }' "$OUT/report.tsv"
+else echo "BASELINE IDENTITY FAIL ($counts)"
+  awk -F'\t' 'NR > 1 && $5 != "SAME" && $5 !~ /^(INFO|ADDED|PREFIX)/' "$OUT/report.tsv"; fi
 exit $rc

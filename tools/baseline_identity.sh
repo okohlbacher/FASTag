@@ -27,9 +27,26 @@
 #   - exit code and the "N MS2 spectra, M tags" summary line (what gate.sh digests);
 #   - the set of files written;
 #   - every file, canonicalised, with cmp (the first differing lines are shown);
-#   - interface: `--help` and the -write_ctd CTD, raw bytes (versions masked when
-#     the two binaries report different versions).
+#   - interface: `--help`, `--helphelp`, the -write_ctd CTD and the -write_ini
+#     INI, raw bytes (versions masked when the two binaries report different
+#     versions). Options added after 1.11 may ADD whole option blocks and
+#     nothing else (tools/baseline_iface_added.py: a new option is a CTD name
+#     the baseline lacks; a line added inside an existing option's block, or a
+#     changed or removed line, is DIFF).
 # The rest of the log is reported as INFO when it differs, never a failure.
+#
+# Status vocabulary (column 5 of the report), shared by every 1.12 branch:
+#   SAME      equal after canonicalisation                     pass
+#   ADDED*    interface file = baseline + whole new options     pass
+#   PREFIX*   the baseline file is a byte prefix of the candidate's and the
+#             rest is rows a 1.12 item appends (the item adds its own check,
+#             e.g. #3a label_call rows in label.tsv)            pass
+#   INFO*     informational (log lines)                         not a comparison
+#   anything else (DIFF, MISSING, EMPTY, ERROR)                 fail
+# Counting rule: every row that is not INFO* is one comparison; the PASS lines
+# (here, tools/baseline_identity_gate.sh, test/baseline_identity_test.sh) give
+# their total and the SAME/ADDED/PREFIX split, so the total does not depend on
+# which item added an option.
 # A case whose baseline tag TSV has no rows FAILS: the comparison would prove nothing.
 #
 # Exit 0 when every comparison is equal, 1 otherwise, 2 on usage errors.
@@ -37,6 +54,7 @@
 set -u
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 CANON="$HERE/baseline_canon.py"
+IFACE="$HERE/baseline_iface_added.py"
 PY=${FASTAG_PYTHON:-}
 if [ -z "$PY" ]; then for c in python3 python; do command -v "$c" >/dev/null 2>&1 && { PY=$c; break; }; done; fi
 [ -n "$PY" ] || { echo "baseline_identity: no python3 for $CANON" >&2; exit 2; }
@@ -55,12 +73,12 @@ while [ $# -gt 0 ]; do
     --cases) CASES=$2; shift 2 ;;
     --digest-dir) DIGEST_DIR=$2; shift 2 ;;
     --label) LABEL=$2; shift 2 ;;
-    -h|--help) sed -n 2,36p "$0"; exit 0 ;;
+    -h|--help) sed -n 2,54p "$0"; exit 0 ;;
     --*) echo "baseline_identity: unknown option $1" >&2; exit 2 ;;
     *) break ;;
   esac
 done
-[ $# -eq 3 ] || { sed -n 2,36p "$0" >&2; exit 2; }
+[ $# -eq 3 ] || { sed -n 2,54p "$0" >&2; exit 2; }
 CAND=$1 BASE=$2 WORK=$3
 [ -n "$IN" ] && [ -f "$IN" ] || { echo "baseline_identity: --in file missing" >&2; exit 2; }
 for b in "$CAND" "$BASE"; do [ -x "$b" ] || { echo "baseline_identity: not executable: $b" >&2; exit 2; }; done
@@ -90,9 +108,19 @@ CO=$(openms_of "$CAND") BO=$(openms_of "$BASE")
 
 REPORT="$WORK/report.tsv"
 [ -f "$REPORT" ] || printf 'label\tcase\tthreads\titem\tstatus\n' > "$REPORT"
-nfail=0 nsame=0
+nfail=0 nsame=0 nadded=0 nprefix=0
 rec() { printf '%s\t%s\t%s\t%s\t%s\n' "$LABEL" "$1" "$2" "$3" "$4" >> "$REPORT"
-        case $4 in SAME) nsame=$((nsame + 1)) ;; INFO*) ;; *) nfail=$((nfail + 1)); echo "  FAIL $1 t$2 $3: $4" ;; esac; }
+        case $4 in SAME) nsame=$((nsame + 1)) ;; ADDED*) nadded=$((nadded + 1)) ;; PREFIX*) nprefix=$((nprefix + 1)) ;;
+                   INFO*) ;; *) nfail=$((nfail + 1)); echo "  FAIL $1 t$2 $3: $4" ;; esac; }
+# iface_rec <item> <kind help|ctd> <baseline file> <candidate file>: SAME, ADDED
+# (whole new option blocks only) or DIFF; new options are read from the CTDs.
+iface_rec() {
+  local st
+  if cmp -s "$3" "$4"; then rec interface - "$1" SAME; return; fi
+  st=$("$PY" "$IFACE" "$2" "$3" "$4" "$WORK/interface/b/FASTag.ctd" "$WORK/interface/c/FASTag.ctd") \
+    || { rec interface - "$1" "${st:-DIFF}"; showdiff "$3" "$4"; return; }
+  rec interface - "$1" "$st"
+}
 showdiff() { diff "$1" "$2" | head -8 | cut -c1-200 | sed 's/^/      /'; }
 
 # args for case $1 into CASE_ARGS
@@ -127,16 +155,21 @@ run_interface() {
   "$CAND" --help > "$d/c/help.txt" 2>&1; local rc_c=$?
   "$BASE" --help > "$d/b/help.txt" 2>&1; local rc_b=$?
   [ $rc_c = $rc_b ] || rec interface - help.exit "DIFF (exit $rc_c vs $rc_b)"
+  "$CAND" --helphelp > "$d/c/helphelp.txt" 2>&1
+  "$BASE" --helphelp > "$d/b/helphelp.txt" 2>&1
   "$CAND" -write_ctd "$d/c" > "$d/c/ctd.log" 2>&1 || rec interface - ctd "ERROR (candidate -write_ctd exit $?)"
   "$BASE" -write_ctd "$d/b" > "$d/b/ctd.log" 2>&1 || rec interface - ctd "ERROR (baseline -write_ctd exit $?)"
-  for f in help.txt FASTag.ctd; do
+  "$CAND" -write_ini "$d/c/tool.ini" > "$d/c/ini.log" 2>&1 || rec interface - ini "ERROR (candidate -write_ini exit $?)"
+  "$BASE" -write_ini "$d/b/tool.ini" > "$d/b/ini.log" 2>&1 || rec interface - ini "ERROR (baseline -write_ini exit $?)"
+  local f kind
+  for f in help.txt helphelp.txt FASTag.ctd tool.ini; do
+    kind=help; case $f in *.ctd|*.ini) kind=ctd ;; esac
     [ -f "$d/c/$f" ] && [ -f "$d/b/$f" ] || { rec interface - "$f" MISSING; continue; }
     if cmp -s "$d/c/$f" "$d/b/$f"; then rec interface - "$f" SAME
     elif [ "$CV" != "$BV" ] || [ "$CO" != "$BO" ]; then
       "$PY" "$CANON" "$d/c/$f" "$CV" "$CO" > "$d/c/$f.canon"; "$PY" "$CANON" "$d/b/$f" "$BV" "$BO" > "$d/b/$f.canon"
-      if cmp -s "$d/c/$f.canon" "$d/b/$f.canon"; then rec interface - "$f" SAME
-      else rec interface - "$f" DIFF; showdiff "$d/b/$f.canon" "$d/c/$f.canon"; fi
-    else rec interface - "$f" DIFF; showdiff "$d/b/$f" "$d/c/$f"; fi
+      iface_rec "$f" $kind "$d/b/$f.canon" "$d/c/$f.canon"
+    else iface_rec "$f" $kind "$d/b/$f" "$d/c/$f"; fi
   done
 }
 
@@ -178,5 +211,5 @@ for c in $CASES; do
   if [ "$c" = interface ]; then run_interface; continue; fi
   for t in $THREADS; do run_case "$c" "$t"; done
 done
-echo "baseline_identity: $LABEL: $nsame equal, $nfail different (report $REPORT)"
+echo "baseline_identity: $LABEL: $((nsame + nadded + nprefix)) comparisons passed ($nsame SAME, $nadded ADDED, $nprefix PREFIX), $nfail different (report $REPORT)"
 [ $nfail = 0 ]
