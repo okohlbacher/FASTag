@@ -193,7 +193,7 @@ int main(int argc, char** argv)
 
   // 3. Gini.
   {
-    std::vector<double> eq(10, 3.5);
+    std::vector<double> eq(10, 3.5);  // gini() is a template: doubles here, floats in signal()
     CHECK(std::fabs(C::gini(eq)) < 1e-12, "Gini of equal intensities is %g", C::gini(eq));
     for (size_t n : {2u, 5u, 40u})
     {

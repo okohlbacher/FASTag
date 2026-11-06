@@ -105,15 +105,16 @@ namespace FASTag::Census
   /// Gini coefficient of @p v (sorted in place): 0 for equal values, 1 - 1/n
   /// for one non-zero value among n. The values must be >= 0 with a positive
   /// sum. O(n log n).
-  inline double gini(std::vector<double>& v)
+  template <typename T>
+  double gini(std::vector<T>& v)
   {
     std::sort(v.begin(), v.end());
     const double n = static_cast<double>(v.size());
     double sum = 0, weighted = 0;
     for (std::size_t i = 0; i < v.size(); ++i)
     {
-      sum += v[i];
-      weighted += static_cast<double>(i + 1) * v[i];
+      sum += static_cast<double>(v[i]);
+      weighted += static_cast<double>(i + 1) * static_cast<double>(v[i]);
     }
     if (!(sum > 0)) return 0.0;
     return 2.0 * weighted / (n * sum) - (n + 1.0) / n;
@@ -135,12 +136,14 @@ namespace FASTag::Census
   Signal signal(const Spectrum& spec)
   {
     Signal s;
-    static thread_local std::vector<double> scratch;
+    // Intensities are floats: sorting them as floats orders them exactly as
+    // doubles would, at half the memory traffic; the sums are in double.
+    static thread_local std::vector<float> scratch;
     scratch.clear();
     for (const auto& pk : spec)
     {
       const double mz = pk.getMZ();
-      const double in = pk.getIntensity();
+      const float in = static_cast<float>(pk.getIntensity());
       if (!std::isfinite(mz) || !std::isfinite(in) || in < 0) continue;
       scratch.push_back(in);
       if (in > 0) ++s.n_peaks;
