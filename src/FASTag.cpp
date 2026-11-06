@@ -229,6 +229,46 @@ namespace
 
 class TOPPFASTag : public TOPPBase
 {
+  // -out_spectra (mzML) compatibility shim. TOPPBase::getProcessingInfo_
+  // lists EVERY registered parameter as a "parameter: <name>" userParam, so
+  // any option added after 1.11 would change the exported bytes even at its
+  // default. Options outside the frozen 1.11 set are dropped from the list
+  // while they hold their registered default; a non-default value is kept,
+  // so provenance stays truthful whenever an option actually acted.
+  DataProcessing outSpectraProcessingInfo_() const
+  {
+    static const std::set<std::string> k111 = {
+      "in", "out", "fasta", "out_spectra", "tag_length", "tag_lengths", "extension", "gaps",
+      "no_deisotope", "fragment_tolerance", "fragment_tolerance_unit", "max_peaks",
+      "peaks_per_window", "max_tags", "subsample_spectra", "subsample_fraction",
+      "mzpeak_read_memory", "subsample_seed", "progress", "stream", "diversity", "proforma",
+      "res_conf", "usi_collection", "entrapment_fasta", "recon_out", "recon_fasta",
+      "recon_missed_cleavages", "recon_min_length", "recon_localize", "delta_out",
+      "recon_id_out", "species", "glyco", "glyco_out", "glyco_min_fraction", "digest_out",
+      "label_out", "massgap_out", "digest_models", "digest_tag_min", "digest_window",
+      "digest_background_share", "digest_silac_min", "massgap_window", "massgap_window_da",
+      "massgap_min_spectra", "massgap_min_share", "massgap_min_bin", "massgap_max_mods",
+      "massgap_top", "massgap_silac_share", "massgap_silac_min", "taxdb", "taxonomy_nodes",
+      "taxonomy_names", "species_out", "species_min_len", "species_max_kmer_share",
+      "species_min_margin", "species_use_gapped", "species_deconvolve", "species_evidence",
+      "species_rank", "max_evalue", "gap_penalty", "isobaric_tolerance", "min_filter_length",
+      "orientation", "fixed_modifications", "variable_modifications", "log", "debug",
+      "threads", "no_progress", "force", "test"};
+    DataProcessing p = getProcessingInfo_(DataProcessing::FILTERING);
+    if (std::getenv("FASTAG_P0_NOSHIM") != nullptr) return p;  // P0 experiment only
+    const std::string prefix = "parameter: ";
+    std::vector<std::string> keys;
+    p.getKeys(keys);
+    for (const std::string& k : keys)
+    {
+      if (k.compare(0, prefix.size(), prefix) != 0) continue;
+      const std::string name = k.substr(prefix.size());
+      if (k111.count(name)) continue;
+      if (getParam_().getValue(name) == findEntry_(name).default_value) p.removeMetaValue(k);
+    }
+    return p;
+  }
+
 public:
   // toolhandler_test = false: FASTag lives outside the OpenMS tree and so is
   // not in ToolHandler's list. Passing true makes the TOPPBase constructor
@@ -391,6 +431,12 @@ protected:
                           "the input file name without its extension (an MGF keeps its .mgf) and <id> the "
                           "dataset's PXD/MSV/RPXD/RMSV/PXL identifier, or USI000000 "
                           "until it has one", false);
+
+    // P0 PROTOTYPE ONLY (never merged): a stand-in for a 1.12 option, placed
+    // in the middle of the list so the -out_spectra parameter list sees it.
+    registerStringOption_("p0_shim_probe", "<mode>", "legacy",
+                          "P0 prototype stand-in for a 1.12 option", false, true);
+    setValidStrings_("p0_shim_probe", {"legacy", "other"});
 
     // Entrapment-calibrated q-values for the -fasta membership filter.
     // Adds a q_db column: the estimated FALSE-MATCH rate of accepting every
@@ -3731,7 +3777,7 @@ protected:
           PlainMSDataWritingConsumer consumer(out_spectra);
           consumer.setExperimentalSettings(kept.getExperimentalSettings());
           consumer.setExpectedSize(kept_idx.size(), 0);
-          consumer.addDataProcessing(getProcessingInfo_(DataProcessing::FILTERING));
+          consumer.addDataProcessing(outSpectraProcessingInfo_());
           each_kept([&consumer](MSSpectrum& sp) { consumer.consumeSpectrum(sp); });
         }
         // The consumer never checks its stream; verify the artifact instead.
