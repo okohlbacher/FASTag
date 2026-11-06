@@ -78,11 +78,35 @@ int main()
 
   // Versioned: the legacy rows are a byte prefix, then the version row.
   const std::string versioned = written(RR::runRows(m, RR::Emit::Versioned));
-  check(RR::kFormatVersion == 1, "format version 1");
+  check(RR::kFormatVersion == 2, "format version 2");
   check(versioned.rfind(legacy, 0) == 0, "Versioned starts with the legacy bytes");
   check(versioned.substr(legacy.size()) ==
-          "run\trun_report_version\t1\t-\tThe run section follows FASTag run report format 1.\n",
-        "Versioned appends exactly the version row (format 1 has no cluster rows yet)");
+          "run\trun_report_version\t2\t-\tThe run section follows FASTag run report format 2.\n"
+          "run\tactivation_collisional\t0\t0\t0 of 0 MS2 spectra were activated by collision "
+          "(CID, HCD, trap-type CID, PQD).\n"
+          "run\tactivation_electron\t0\t0\t0 of 0 MS2 spectra were activated by electron transfer or "
+          "capture (ETD, ECD).\n"
+          "run\tactivation_hybrid\t0\t0\t0 of 0 MS2 spectra were activated by a hybrid method (EThcD, ETciD).\n"
+          "run\tactivation_unknown\t0\t0\t0 of 0 MS2 spectra carry no activation FASTag classifies.\n",
+        "Versioned appends the version row, then the E activation rows (format 2, #15 phase A)");
+  // The E activation counts (#15 phase A): value the count, n all MS2.
+  {
+    RR::RunMeta a = m;
+    a.activation_collisional = 3491;
+    a.activation_electron = 3492;
+    a.activation_hybrid = 1;
+    a.activation_unknown = 0;
+    const auto ra = RR::runRows(a, RR::Emit::Versioned);
+    check(ra.size() == 12, "Versioned format 2 has 12 rows");
+    check(ra[8].key == "activation_collisional" && ra[8].value == "3491" && ra[8].n == "6984",
+          "activation_collisional row");
+    check(ra[9].key == "activation_electron" && ra[9].value == "3492" && ra[9].n == "6984" &&
+            ra[9].description == "3492 of 6984 MS2 spectra were activated by electron transfer or capture (ETD, ECD).",
+          "activation_electron row");
+    check(ra[10].key == "activation_hybrid" && ra[10].value == "1", "activation_hybrid row");
+    check(ra[11].key == "activation_unknown" && ra[11].value == "0", "activation_unknown row");
+    check(written(RR::runRows(a)) == legacy, "activation counts never reach the Legacy rows");
+  }
 
   // ClusterAcc: composes and merges without touching anything.
   FASTag::ClusterAcc::ClusterThread a, b;

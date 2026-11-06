@@ -35,6 +35,7 @@
 #include "FastaFilter.h"
 #include "Glyco.h"
 #include "IndexedMzMLReader.h"
+#include "IonSeries.h"
 #include "MgfReader.h"
 #include "NumFormat.h"
 #include "OutputGuard.h"
@@ -2238,6 +2239,8 @@ protected:
       if (spec.getMSLevel() != 2 || spec.empty() || spec.getPrecursors().empty()) return res;
       PerThread& pt = per_thread[tid];
       ++pt.ms2;
+      // ---- 1.12 E: per-spectrum counters ----
+      pt.acc.e.activation.add(FASTag::IonSeries::activationClass(spec));  // #15 phase A
       if (digest_on)
       {
         ++pt.ms2_meta;
@@ -3014,6 +3017,16 @@ protected:
         by_len[kv.first].second += kv.second.second;
       }
     }
+    // ---- 1.12 E: run-level facts from the loop ----
+    {
+      // #15 phase A: activation counts (RunMeta Versioned rows only).
+      using FASTag::IonSeries::Activation;
+      const auto& act = run_acc.e.activation;
+      run_meta.activation_collisional = act.of(Activation::Collisional);
+      run_meta.activation_electron = act.of(Activation::Electron);
+      run_meta.activation_hybrid = act.of(Activation::Hybrid);
+      run_meta.activation_unknown = act.of(Activation::Unknown);
+    }
     tsv.close();  // flushes; a failed write anywhere leaves the stream failed
     if (tsv.fail())
     {
@@ -3715,6 +3728,11 @@ protected:
                       << " and were tagged as 2+: their peaks above the 2+ precursor "
                          "mass are dropped, and their nterm_mass flanks assume charge 2 (wrong "
                          "for a 3+ or higher precursor)." << std::endl;
+    // ---- 1.12 E: end-of-run warnings ----
+    // #15 phase A: tagging reads b/y ions; warn (stderr) when more than 1% of
+    // the MS2 spectra are electron or hybrid activated.
+    if (run_acc.e.activation.warnUnderBy())
+      OPENMS_LOG_WARN << FASTag::IonSeries::byModeWarning(run_acc.e.activation) << std::endl;
 
     // ---- phase 11: filter summary and -out_spectra writing ----------------
 

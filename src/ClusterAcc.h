@@ -21,6 +21,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "IonSeries.h"
+
 #include <cstddef>
 
 namespace FASTag::ClusterAcc
@@ -28,7 +30,10 @@ namespace FASTag::ClusterAcc
   // ---- 1.12 E ----
   struct ThreadE
   {
-    void merge(const ThreadE&) {}
+    /// #15 phase A: activation class of every tagged MS2. Counted at every
+    /// run (no option): the b/y warning needs it, and it changes no output.
+    IonSeries::ActivationCounts activation;
+    void merge(const ThreadE& o) { activation.merge(o.activation); }
   };
   struct BlockE
   {

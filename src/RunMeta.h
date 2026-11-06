@@ -32,6 +32,7 @@
 
 #include "Digest.h"
 
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -39,7 +40,8 @@ namespace FASTag::RunReport
 {
   /// Version of the run section format written by Emit::Versioned.
   /// 1 = the FASTag 1.11 `run` rows followed by `run_report_version`.
-  inline constexpr int kFormatVersion = 1;
+  /// 2 = format 1, then the E activation rows (#15 phase A).
+  inline constexpr int kFormatVersion = 2;
 
   /// Run-level facts shared by every long-form report. Filled once per run.
   struct RunMeta
@@ -54,6 +56,12 @@ namespace FASTag::RunReport
     int subsample_spectra = 0;            ///< -subsample_spectra
 
     // ---- 1.12 E ----
+    // #15 phase A: tagged MS2 spectra per activation class (src/IonSeries.h);
+    // filled after the tagging loop.
+    std::size_t activation_collisional = 0;
+    std::size_t activation_electron = 0;
+    std::size_t activation_hybrid = 0;
+    std::size_t activation_unknown = 0;
     // ---- 1.12 A ----
     // ---- 1.12 D ----
     // ---- 1.12 F ----
@@ -96,6 +104,22 @@ namespace FASTag::RunReport
     const std::string v = std::to_string(kFormatVersion);
     r.push_back({"run", "run_report_version", v, "-", "The run section follows FASTag run report format " + v + "."});
     // ---- 1.12 E ----
+    {
+      // #15 phase A: value = spectra of the class, n = all tagged MS2.
+      const std::size_t all = m.activation_collisional + m.activation_electron + m.activation_hybrid
+                            + m.activation_unknown;
+      const std::string n = std::to_string(all);
+      const auto row = [&](const char* key, std::size_t k, const std::string& how) {
+        const std::string c = std::to_string(k);
+        r.push_back({"run", key, c, n, c + " of " + n + " MS2 spectra " + how + "."});
+      };
+      row("activation_collisional", m.activation_collisional,
+          "were activated by collision (CID, HCD, trap-type CID, PQD)");
+      row("activation_electron", m.activation_electron,
+          "were activated by electron transfer or capture (ETD, ECD)");
+      row("activation_hybrid", m.activation_hybrid, "were activated by a hybrid method (EThcD, ETciD)");
+      row("activation_unknown", m.activation_unknown, "carry no activation FASTag classifies");
+    }
     // ---- 1.12 A ----
     // ---- 1.12 D ----
     // ---- 1.12 F ----
