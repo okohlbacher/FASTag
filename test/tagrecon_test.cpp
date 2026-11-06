@@ -14,6 +14,7 @@
 #include <OpenMS/CONCEPT/Constants.h>
 #include <OpenMS/KERNEL/MSSpectrum.h>
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <iostream>
@@ -294,6 +295,30 @@ int main()
       if (x.peptide == gp && x.pos == 3 && !x.nterm_match && x.cterm_match)
         right = x.loc_pos == 1 && x.loc_ties == 1;
     check(right, "a gap equal to the tag's own mod localizes to M1 with the mod on the ladder");
+  }
+
+  // --- protein_index: the placement's protein ordinal (1.12 P2) ---
+  {
+    std::vector<FASTAFile::FASTAEntry> e3;
+    e3.emplace_back("A", "", "MSTVWYAAR");
+    e3.emplace_back("B", "", "GGGR" + pep);
+    e3.emplace_back("B", "", "WWWR" + pep);  // a duplicate accession
+    ProteomeIndex idx3;
+    idx3.build(e3, {}, 0);
+    TagReconciler r3(0.02, false, false);
+    r3.attach(&idx3, 0, 4);
+    const size_t pos = 4;
+    const auto res = r3.reconcile(pep.substr(pos, 4), sumMass(pep.substr(0, pos)), sumMass(pep.substr(pos + 4)));
+    std::vector<uint32_t> ords;
+    bool consistent = true;
+    for (const auto& x : res)
+    {
+      ords.push_back(x.protein_index);
+      consistent = consistent && x.protein == idx3.accession(x.protein_index);
+    }
+    std::sort(ords.begin(), ords.end());
+    check(ords == std::vector<uint32_t>({1, 2}), "protein_index tells duplicate accessions apart");
+    check(consistent, "protein_index names the placement's protein");
   }
 
   if (failures == 0) std::cout << "tagrecon_test: all checks passed\n";

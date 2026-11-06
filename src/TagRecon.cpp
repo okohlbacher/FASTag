@@ -75,7 +75,8 @@ namespace FASTag
     const size_t klen = occ.len;
 
     Reconciliation r;
-    r.protein = idx_->proteinAt(occ.pos);
+    r.protein_index = idx_->proteinIndexAt(occ.pos);
+    r.protein = idx_->accession(r.protein_index);
     r.peptide = idx_->originalText(w.start, w.end);  // original DB spelling
     r.start = idx_->proteinOffset(w.start);
     r.pos = pos;

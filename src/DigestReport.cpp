@@ -367,9 +367,33 @@ namespace FASTag::Digest
     return out;
   }
 
+  GapResult gapResult(const std::vector<GapRow>& rows, const std::vector<GapMod>& mods,
+                      const std::vector<Combo>& combos, const GapSettings& s)
+  {
+    std::vector<GapRow> hist;
+    std::vector<std::size_t> at;  // hist[k] is rows[at[k]]
+    for (std::size_t i = 0; i < rows.size(); ++i)
+      if (rows[i].spectra >= s.min_bin)
+      {
+        hist.push_back(rows[i]);
+        at.push_back(i);
+      }
+    GapResult res = detectGaps(hist, mods, combos, s.window, s.min_spectra, s.min_share, s.silac_share, s.silac_min);
+    for (GapPeak& p : res.peaks)
+      for (std::size_t& m : p.members) m = at[m];
+    return res;
+  }
+
   std::vector<Row> massgapRows(const std::vector<GapRow>& rows, const std::vector<std::string>& keys,
                                const std::vector<GapMod>& mods, const std::vector<Combo>& combos,
                                const std::vector<GapMod>& cys, const GapSettings& s)
+  {
+    return massgapRows(rows, keys, mods, cys, s, gapResult(rows, mods, combos, s));
+  }
+
+  std::vector<Row> massgapRows(const std::vector<GapRow>& rows, const std::vector<std::string>& keys,
+                               const std::vector<GapMod>& mods, const std::vector<GapMod>& cys,
+                               const GapSettings& s, const GapResult& res)
   {
     std::vector<Row> out;
     Rows r{out};
@@ -399,10 +423,6 @@ namespace FASTag::Digest
             u(n) + " placed spectra have a gap within " + num(t) + " Da of " + f(m.mass, 4) + " Da (" + m.site + ").");
     }
 
-    std::vector<GapRow> hist;
-    for (const GapRow& h : rows)
-      if (h.spectra >= s.min_bin) hist.push_back(h);
-    const GapResult res = detectGaps(hist, mods, combos, t, s.min_spectra, s.min_share, s.silac_share, s.silac_min);
     r.add("combo", "placed_spectra", u(res.placed), "-",
           u(res.placed) + " placed spectra are in histogram rows of at least " + u(s.min_bin) + ".");
     r.add("combo", "shifted_spectra", u(res.shifted), u(res.placed),
