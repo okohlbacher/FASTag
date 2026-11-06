@@ -32,6 +32,7 @@
 
 #include "Digest.h"
 
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -39,7 +40,9 @@ namespace FASTag::RunReport
 {
   /// Version of the run section format written by Emit::Versioned.
   /// 1 = the FASTag 1.11 `run` rows followed by `run_report_version`.
-  inline constexpr int kFormatVersion = 1;
+  /// 2 = format 1, then the E picking rows (#9). Bumped once per item in the
+  /// PLAN-INTEGRATION merge order (E#7 adds fields only, E#9 = 2, E#15A = 3).
+  inline constexpr int kFormatVersion = 2;
 
   /// Run-level facts shared by every long-form report. Filled once per run.
   struct RunMeta
@@ -54,6 +57,11 @@ namespace FASTag::RunReport
     int subsample_spectra = 0;            ///< -subsample_spectra
 
     // ---- 1.12 E ----
+    // #9: -pick_profile and its outcome on every reader (mzML in the tagging
+    // loop, mzPeak in MzPeakStream); filled after the tagging loop.
+    std::string pick_profile = "legacy";  ///< -pick_profile
+    std::size_t pick_picked = 0;          ///< profile MS2 centroided
+    std::size_t pick_failed = 0;          ///< profile MS2 kept as profile (picking yielded nothing)
     // ---- 1.12 A ----
     // ---- 1.12 D ----
     // ---- 1.12 F ----
@@ -96,6 +104,17 @@ namespace FASTag::RunReport
     const std::string v = std::to_string(kFormatVersion);
     r.push_back({"run", "run_report_version", v, "-", "The run section follows FASTag run report format " + v + "."});
     // ---- 1.12 E ----
+    {
+      // #9: value = spectra, n = profile MS2 that needed picking.
+      const std::string n = std::to_string(m.pick_picked + m.pick_failed);
+      r.push_back({"run", "pick_profile", m.pick_profile, "-",
+                   "Profile MS2 was centroided under -pick_profile " + m.pick_profile + "."});
+      const std::string pk = std::to_string(m.pick_picked), fl = std::to_string(m.pick_failed);
+      r.push_back({"run", "profile_ms2_picked", pk, n,
+                   pk + " of " + n + " profile MS2 spectra were centroided before tagging."});
+      r.push_back({"run", "profile_ms2_kept", fl, n,
+                   fl + " of " + n + " profile MS2 spectra were tagged as profile (picking yielded nothing)."});
+    }
     // ---- 1.12 A ----
     // ---- 1.12 D ----
     // ---- 1.12 F ----

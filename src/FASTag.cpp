@@ -3050,14 +3050,6 @@ protected:
                       << std::endl;
     };
     if (mzs && mzs->picked() > 0) log_picked("mzPeak", mzs->picked(), mzs->pickFailed());
-    if (pick_in_loop)
-    {
-      // #9: -pick_profile auto on mzML. Said whenever anything was profile,
-      // so a run whose picking yielded nothing does not look centroided.
-      FASTag::Centroid::Counts c;
-      for (const PerThread& q : per_thread) c.merge(q.acc.e.pick);
-      if (c.picked > 0 || c.failed > 0) log_picked("mzML", c.picked, c.failed);
-    }
 
     size_t n_no_charge = 0, n_multi_charge = 0;
     FASTag::ClusterAcc::ClusterThread run_acc;  // the per-cluster accumulators, summed in thread order
@@ -3074,6 +3066,17 @@ protected:
         by_len[kv.first].first += kv.second.first;
         by_len[kv.first].second += kv.second.second;
       }
+    }
+    // ---- 1.12 E: run-level facts from the loop ----
+    {
+      // #9: picking counts (RunMeta Versioned rows; the INFO line for mzML).
+      // -pick_profile auto on mzML is said whenever anything was profile, so
+      // a run whose picking yielded nothing does not look centroided.
+      const FASTag::Centroid::Counts& c = run_acc.e.pick;
+      if (pick_in_loop && (c.picked > 0 || c.failed > 0)) log_picked("mzML", c.picked, c.failed);
+      run_meta.pick_profile = getStringOption_("pick_profile");
+      run_meta.pick_picked = c.picked + (mzs ? mzs->picked() : 0);
+      run_meta.pick_failed = c.failed + (mzs ? mzs->pickFailed() : 0);
     }
     tsv.close();  // flushes; a failed write anywhere leaves the stream failed
     if (tsv.fail())
