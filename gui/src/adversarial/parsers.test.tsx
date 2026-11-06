@@ -316,7 +316,7 @@ describe('parsers: fuzzed reports', () => {
     const big = time(20000)
     expect(big).toBeLessThan(Math.max(40 * small, 500))
     expect(big).toBeLessThan(15000)
-  })
+  }, 30000) // four renders; vitest's 5 s default timeout is too short on loaded CI runners
 })
 
 // ---------------------------------------------------------------------------
