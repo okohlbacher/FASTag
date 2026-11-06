@@ -1,0 +1,10 @@
+# fastag-bench lives inside the FASTag tree; the root .gitignore drops *.tsv and *.mzML,
+# but the harness configs and its small test fixtures are source.
+!*.tsv
+!*.tsv.gz
+!tests/data/**
+/results
+/figures
+.venv/
+.pytest_cache/
+__pycache__/

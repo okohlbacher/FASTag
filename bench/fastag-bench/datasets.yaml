@@ -1,0 +1,788 @@
+# FASTag paper benchmark datasets. PUBLIC ProteomeXchange (PXD) data only.
+# URLs, sizes and sha1 come from the PRIDE Archive API v3
+# (https://www.ebi.ac.uk/pride/ws/archive/v3/projects/<PXD>/files/all), resolved 2026-11-03.
+# sha256 is given for the derived files used in this study (mzML, mzPeak); they were computed on node data
+# (gate inputs.sha256 and a fresh sha256sum). Files without 'url' are derived: 'fastag-bench convert' builds
+# them from 'derived_from' when the conversion is automatic (trfp, mzpeak-convert); 'manual' ones need the
+# documented route. Species, enzyme and labels follow the PRIDE community-annotated SDRF where one exists.
+# The per-run collections are listed outside this file: the species benchmark (48 runs, 37 PXDs) in
+# config/species_runs.tsv and the digest/label/alkylation validation (254 runs: 244 validation + 10 added
+# non-tryptic) in results/sdrf_truth_runs.tsv. config/public_runs.tsv (scripts/public_runs_manifest.py) gives the
+# PRIDE file, https URL, size and PRIDE checksum (where PRIDE has one: 161 of 302) for every one of those runs.
+# Checksums marked 'computed 2026-11-04' were taken on our copy because the PRIDE API lists none.
+schema_version: 1
+datasets:
+- id: PXD000001_Erwinia_TMT6
+  pxd: PXD000001
+  species: Pectobacterium carotovorum (Erwinia carotovora); TMT6 spike-in
+  expected_genus: Pectobacterium
+  instrument: LTQ Orbitrap Velos
+  acquisition: DDA, HCD
+  enzyme:
+  - Trypsin
+  labels:
+  - TMT6plex
+  fixed_mods:
+    C: 45.987721
+    K: 229.162932
+    ^: 229.162932
+  variable_mods:
+    M:
+    - 15.994915
+  fastag_args:
+  - -fixed_modifications
+  - Methylthio (C)
+  - TMT6plex (K)
+  - TMT6plex (N-term)
+  experiments:
+  - ground_truth
+  - directag_accuracy
+  - gap_penalty
+  - peak_budget
+  - evalue
+  - species
+  - directag_speed
+  - tag_accuracy
+  sdrf: PXD000001_community_annotated.sdrf.tsv
+  note: 'Only DB-search ground truth used so far: Mascot F063721.dat, 2,254 PSMs at 1% FDR (fixed TMT6plex N-term/K, Methylthio C). Species genus per FASTag''s
+    taxonomy (NCBI genus Pectobacterium).'
+  files:
+  - name: TMT_Erwinia_1uLSike_Top10HCD_isol2_45stepped_60min_01.raw
+    role: raw
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2012/03/PXD000001/TMT_Erwinia_1uLSike_Top10HCD_isol2_45stepped_60min_01.raw
+    size: 220475548
+  - name: TMT_Erwinia_1uLSike_Top10HCD_isol2_45stepped_60min_01-20141210.mzML
+    role: mzml
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2012/03/PXD000001/TMT_Erwinia_1uLSike_Top10HCD_isol2_45stepped_60min_01-20141210.mzML
+    size: 450032788
+    sha256: 038dd84702b01463b1aadfae09cecc4176f319376ff85e9dba883cdc3208fa67
+    note: published on the PRIDE FTP beside the raw file but not listed by the PRIDE API; the file used in all PXD000001 results
+  - name: F063721.dat
+    role: search
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2012/03/PXD000001/F063721.dat
+    size: 21185462
+    sha1: 54fac65e53d61c56f5f46e9b4347d722a57cdc2e
+  - name: erwinia_carotovora.fasta
+    role: fasta
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2012/03/PXD000001/erwinia_carotovora.fasta
+    size: 1657668
+    sha1: 631f5821d741ac9ef0de4f067eaf033b968af8e2
+  - name: PXD000001_community_annotated.sdrf.tsv
+    role: sdrf
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2012/03/PXD000001/PXD000001_community_annotated.sdrf.tsv
+    size: 4078
+  search:
+    fasta: erwinia_carotovora.fasta
+    precursor_ppm: 25
+    fragment_da: 0.2
+    missed_cleavages: 2
+    variable_mods:
+      M:
+      - 15.994915
+      Y:
+      - 229.162932
+    max_variable_mods: 2
+    source: deposited Mascot search F063721.dat (MODS TMT6plex N-term/K, Methylthio C; IT_MODS TMT6plex Y, Oxidation M; TOL 25 ppm; ITOL 0.2 Da); the SDRF
+      gives no search settings
+  tagger:
+    fragment_tol_da: 0.02
+    directag_static_mods: C 45.987721 K 229.162932 ( 229.162932
+- id: PXD003531_QE_NO_03
+  pxd: PXD003531
+  species: Homo sapiens
+  expected_genus: Homo
+  instrument: Q Exactive
+  acquisition: DDA, HCD
+  enzyme:
+  - Lys-C
+  - Trypsin
+  labels:
+  - label free
+  fixed_mods:
+    C: 57.021464
+  variable_mods:
+    M:
+    - 15.994915
+    S:
+    - 79.966331
+    T:
+    - 79.966331
+    Y:
+    - 79.966331
+  experiments:
+  - gate
+  - scaling_regression
+  - mzml_vs_mzpeak
+  - species
+  - digest_runtime
+  - ground_truth
+  - minirun
+  - tag_accuracy
+  - comet_crosscheck
+  sdrf: PXD003531_community_annotated.sdrf.tsv
+  note: 'Phosphopeptide-enriched (SDRF: enrichment of phosphorylated protein), 27,345 MS2. Public gate input. Comparator smoke tests used the same file.'
+  files:
+  - name: 20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.raw
+    role: raw
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/04/PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.raw
+    size: 1210076885
+    sha1: 871d4cfeb716ec00e944aab6d9da2eab4d24167b
+  - name: 20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.mzML
+    role: mzml
+    derived_from: 20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.raw
+    conversion: trfp ThermoRawFileParser 2.0.0 -f 2 -L 1-2
+    sha256: 2b1da22229a9d8e8d4cde05d889c3a74dedd68bb9f00f3bdd9d78d2a8d9ace4a
+  - name: 20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.point.mzpeak
+    role: mzpeak
+    derived_from: 20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.mzML
+    conversion: mzpeak-convert 0.18.0 --layout point
+    sha256: 084b16f86a64499ddfae143b5a0857eb00b9bb8e51bed0d25a836138f7dc1fbe
+  - name: 20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.chunked.mzpeak
+    role: mzpeak
+    derived_from: 20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.mzML
+    conversion: mzpeak-convert 0.18.0 --layout chunked
+    sha256: b486e9fe736cf0d02e92e73104834c2a96ad1d6dfccd2e01447e2940e7a956ad
+  - name: PXD003531_community_annotated.sdrf.tsv
+    role: sdrf
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/04/PXD003531/PXD003531_community_annotated.sdrf.tsv
+    size: 50805
+  search:
+    fasta: ../PXD054073/UP000005640_9606.fasta
+    precursor_ppm: 7
+    fragment_da: 0.02
+    missed_cleavages: 2
+    variable_mods:
+      M:
+      - 15.994915
+      S:
+      - 79.966331
+      T:
+      - 79.966331
+      Y:
+      - 79.966331
+      N:
+      - 0.984016
+      Q:
+      - 0.984016
+      '[':
+      - 42.010565
+    max_variable_mods: 3
+    comet_fragment:
+    - 0.02
+    - 0.0
+    - 0
+    comet_variable_mods:
+    - 15.994915 M 0 3 -1 0 0 0.0
+    - 79.966331 STY 0 3 -1 0 0 97.976896
+    - 0.984016 NQ 0 3 -1 0 0 0.0
+    - 42.010565 n 0 1 0 0 0 0.0
+    source: 'SDRF PXD003531_community_annotated: Lys-C+Trypsin, Carbamidomethyl C fixed; Oxidation M, Phospho STY, Deamidation NQ, Acetyl protein N-term
+      variable; 7 ppm; 0.02 Da'
+  tagger:
+    fragment_tol_da: 0.02
+    directag_static_mods: C 57.021464
+- id: PXD004541_HF_TMT10_fr02
+  pxd: PXD004541
+  species: Homo sapiens
+  expected_genus: Homo
+  instrument: Q Exactive HF
+  acquisition: DDA, HCD
+  enzyme:
+  - Trypsin
+  labels:
+  - TMT10plex
+  fixed_mods:
+    C: 57.021464
+    K: 229.162932
+    ^: 229.162932
+  variable_mods:
+    M:
+    - 15.994915
+  fastag_args:
+  - -fixed_modifications
+  - Carbamidomethyl (C)
+  - TMT6plex (K)
+  - TMT6plex (N-term)
+  experiments:
+  - gate
+  - digest_label
+  sdrf: PXD004541_community_annotated.sdrf.tsv
+  note: Gate case tmt_fixed; the mzML has no valid index, so the case also covers the index scan. SDRF names the instrument Q Exactive; prose-auto metadata
+    says Q Exactive HF.
+  files:
+  - name: HF1_201501212_GM_RJ1511D_TMT10_hpHRP_DMSO1_2p5ug_4uL_fr02.raw
+    role: raw
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2016/12/PXD004541/HF1_201501212_GM_RJ1511D_TMT10_hpHRP_DMSO1_2p5ug_4uL_fr02.raw
+    size: 1056274885
+    sha1: b4d58408fd0e12f523b272189a9c5bd336353f9e
+  - name: HF1_201501212_GM_RJ1511D_TMT10_hpHRP_DMSO1_2p5ug_4uL_fr02.mzML
+    role: mzml
+    derived_from: HF1_201501212_GM_RJ1511D_TMT10_hpHRP_DMSO1_2p5ug_4uL_fr02.raw
+    conversion: trfp ThermoRawFileParser 2.0.0 -f 2 -L 1-2
+    sha256: c37656d3341c5ee804d989df072dff4ba7dca47c0a4ef3fbad5704f41c90ef8e
+  - name: PXD004541_community_annotated.sdrf.tsv
+    role: sdrf
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2016/12/PXD004541/PXD004541_community_annotated.sdrf.tsv
+    size: 230367
+- id: PXD040407_Chymo_Rep3
+  pxd: PXD040407
+  species: Saccharomyces cerevisiae
+  expected_genus: Saccharomyces
+  instrument: Q Exactive HF (SDRF) / Q Exactive Plus (file metadata)
+  acquisition: DDA, HCD
+  enzyme:
+  - Chymotrypsin
+  labels:
+  - label free
+  fixed_mods:
+    C: 57.021464
+  variable_mods:
+    M:
+    - 15.994915
+  experiments:
+  - gate
+  - digest_label
+  sdrf: PXD040407_community_annotated.sdrf.tsv
+  note: Gate case nontryptic_ext (-extension 2 -proforma -res_conf).
+  files:
+  - name: Hog1p_WT_Rep3_Chymo_5uL.raw
+    role: raw
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2024/01/PXD040407/Hog1p_WT_Rep3_Chymo_5uL.raw
+    size: 427484455
+    sha1: 3e9f7393feb8a79a1094873ae00e47dd59ca836c
+  - name: Hog1p_WT_Rep3_Chymo_5uL.mzML
+    role: mzml
+    derived_from: Hog1p_WT_Rep3_Chymo_5uL.raw
+    conversion: trfp ThermoRawFileParser 2.0.0 -f 2 -L 1-2
+    sha256: 7518360a576acb21c41bb3659840a17975144659007dad097005dc78e1cc1b86
+  - name: Hog1p_WT_Rep3_Chymo_5uL.dat
+    role: search
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2024/01/PXD040407/Hog1p_WT_Rep3_Chymo_5uL.dat
+    size: 29081830
+    sha1: 18e5babc3f74c7ffcc31832288d344341946124d
+  - name: PXD040407_community_annotated.sdrf.tsv
+    role: sdrf
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2024/01/PXD040407/PXD040407_community_annotated.sdrf.tsv
+    size: 8429
+- id: PXD014764_HF_SILAC_f008
+  pxd: PXD014764
+  species: Homo sapiens
+  expected_genus: Homo
+  instrument: Q Exactive HF
+  acquisition: DDA, HCD
+  enzyme:
+  - Trypsin
+  - Lys-C
+  labels:
+  - SILAC
+  fixed_mods:
+    C: 57.021464
+  variable_mods:
+    M:
+    - 15.994915
+  experiments:
+  - gate
+  - fasta_recon
+  - digest_label
+  sdrf: PXD014764_community_annotated.sdrf.tsv
+  note: Gate case fasta_recon (-extension 3 -fasta -recon_out -delta_out). SILAC medium/heavy per SDRF.
+  files:
+  - name: 20190412_KEH_HF_SA_ANW_R11_100419_CNOT_R1_f008.raw
+    role: raw
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2019/10/PXD014764/20190412_KEH_HF_SA_ANW_R11_100419_CNOT_R1_f008.raw
+    size: 832763825
+    sha1: c0c6f34a5ed2cf9ccde08ba5565563f52546c029
+  - name: 20190412_KEH_HF_SA_ANW_R11_100419_CNOT_R1_f008.mzML
+    role: mzml
+    derived_from: 20190412_KEH_HF_SA_ANW_R11_100419_CNOT_R1_f008.raw
+    conversion: trfp ThermoRawFileParser 2.0.0 -f 2 -L 1-2
+    sha256: 7c95070d94c6b9167882dead65a815cb24c01fa0256264df3c954d1d7f09f0bd
+  - name: PXD014764_community_annotated.sdrf.tsv
+    role: sdrf
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2019/10/PXD014764/PXD014764_community_annotated.sdrf.tsv
+    size: 108700
+- id: PXD010783_AspN_p53
+  pxd: PXD010783
+  species: Homo sapiens (p53)
+  expected_genus: Homo
+  instrument: LTQ Orbitrap XL
+  acquisition: DDA, CID
+  enzyme:
+  - Asp-N
+  labels:
+  - label free
+  fixed_mods:
+    C: 57.021464
+  variable_mods:
+    M:
+    - 15.994915
+  fastag_args:
+  - -fragment_tolerance
+  - '0.5'
+  - -fragment_tolerance_unit
+  - Da
+  experiments:
+  - gate
+  - out_spectra
+  - isobaric_ties
+  - out_spectra_memory
+  sdrf: PXD010783_community_annotated.sdrf.tsv
+  note: Gate cases out_spectra_mzml/out_spectra_mzpeak at 0.5 Da; isobaric tie change (344 of 155,939 rows).
+  files:
+  - name: KristenJeff_p53_mod_AspN_03_02_07.raw
+    role: raw
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2018/10/PXD010783/KristenJeff_p53_mod_AspN_03_02_07.raw
+    size: 526288963
+    sha1: 164e84d017a3831a5c6b87d717d0c91315372165
+  - name: KristenJeff_p53_mod_AspN_03_02_07.mzML
+    role: mzml
+    derived_from: KristenJeff_p53_mod_AspN_03_02_07.raw
+    conversion: trfp ThermoRawFileParser 2.0.0 -f 2 -L 1-2
+    sha256: 9e33de8f560172806d8909920421fc7792b2e4da00bebb1a6f030bcc884309b0
+  - name: PXD010783_community_annotated.sdrf.tsv
+    role: sdrf
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2018/10/PXD010783/PXD010783_community_annotated.sdrf.tsv
+    size: 1598
+- id: PXD017035_SIHUMIx_d12_12_I
+  pxd: PXD017035
+  species: 'SIHUMIx simplified human intestinal microbiota (SDRF: metagenome)'
+  instrument: Q Exactive HF
+  acquisition: DDA, HCD
+  enzyme:
+  - Trypsin
+  labels:
+  - label free
+  fixed_mods:
+    C: 57.021464
+  variable_mods:
+    M:
+    - 15.994915
+  experiments:
+  - digest_runtime
+  - digest_label
+  - species_mixture_candidate
+  sdrf: PXD017035_community_annotated.sdrf.tsv
+  note: Mock-community data; candidate for the mixed-species evaluation (composition from the dataset's publication, not yet encoded here).
+  files:
+  - name: d12_12_hTT_I.raw
+    role: raw
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2020/02/PXD017035/d12_12_hTT_I.raw
+    size: 1874636087
+    sha1: cde5de91f4618d838c471782993070996fe9e869
+  - name: d12_12_hTT_I.mzML
+    role: mzml
+    derived_from: d12_12_hTT_I.raw
+    conversion: trfp ThermoRawFileParser 2.0.0 -f 2 -L 1-2
+    sha256: 20f78fcc6a255786bb5afaaa65865a0f2891a01e22834a795060f6e914f3437b
+  - name: SIHUMIx_crap.fasta
+    role: fasta
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2020/02/PXD017035/SIHUMIx_crap.fasta
+    size: 13577191
+    sha1: 7f794ea76459c7878058c7ec682d692a21933018
+  - name: PXD017035_community_annotated.sdrf.tsv
+    role: sdrf
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2020/02/PXD017035/PXD017035_community_annotated.sdrf.tsv
+    size: 85945
+- id: PXD066944_Astral_HEK_DDA
+  pxd: PXD066944
+  species: Homo sapiens (HEK293)
+  expected_genus: Homo
+  instrument: 'Orbitrap Astral (SDRF: Orbitrap Astral Zoom)'
+  acquisition: DDA
+  enzyme:
+  - Trypsin
+  labels:
+  - label free
+  fixed_mods:
+    C: 57.021464
+  variable_mods:
+    M:
+    - 15.994915
+  experiments:
+  - digest_runtime
+  - digest_label
+  - scaling_candidate
+  sdrf: PXD066944_community_annotated.sdrf.tsv
+  files:
+  - name: TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03.raw
+    role: raw
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2026/02/PXD066944/TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03.raw
+    size: 1242032506
+  - name: TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03.mzML
+    role: mzml
+    derived_from: TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03.raw
+    conversion: trfp ThermoRawFileParser 2.0.0 -f 2 -L 1-2
+    sha256: bb58b7234572b83de114a01a20b358de36e214fa7c4562763986c82ab21ef540
+  - name: PXD066944_community_annotated.sdrf.tsv
+    role: sdrf
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2026/02/PXD066944/PXD066944_community_annotated.sdrf.tsv
+    size: 38554
+- id: PXD076528_Astral_7673
+  pxd: PXD076528
+  species: Homo sapiens
+  expected_genus: Homo
+  instrument: Orbitrap Astral
+  acquisition: DDA
+  enzyme:
+  - Trypsin
+  labels:
+  - label free
+  fixed_mods:
+    C: 57.021464
+  variable_mods:
+    M:
+    - 15.994915
+  experiments:
+  - directag_speed
+  - directag_agreement
+  - q_db_calibration
+  - species
+  - out_spectra_memory
+  - scaling_candidate
+  - ground_truth_candidate
+  - tag_accuracy
+  sdrf: PXD076528_community_annotated.sdrf.tsv
+  note: 102,236 spectra. DirecTag needs three header CV terms replaced (see repo doc/BENCHMARK-DirecTag.md).
+  files:
+  - name: 7673_YD12_P116861_S00_R1.raw
+    role: raw
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2026/07/PXD076528/7673_YD12_P116861_S00_R1.raw
+    size: 2395275113
+    sha1: 46b30d0f796957f9c5c53b4745b79b14de4eba31
+    note: sha1 computed 2026-11-04 on the Ceph copy /ceph/ibmi/abi/oliver/jpr-bench/data (the PRIDE API lists no checksum for this file)
+  - name: 7673_YD12_P116861_S00_R1.mzML
+    role: mzml
+    derived_from: 7673_YD12_P116861_S00_R1.raw
+    conversion: trfp ThermoRawFileParser 2.0.0 -f 2 -L 1-2 (re-converted 2026-11-03 for the accuracy benchmark)
+    sha256: 28b0b8ab85bc842de396a830033dc1ca7e10a3866f6e12f67412cae7c5e5a25b
+    size: 1865956168
+    note: 'Three conversions of the same raw file with the same ThermoRawFileParser 2.0.0 command differ in their bytes (header): accuracy copy
+      28b0b8ab... (1,865,956,168 bytes, this entry); thread-ladder copy db14b381af7a68df45ee3e2407850a594a41972a931ec5ec8cb8433dfff932a8 (1,865,956,170
+      bytes, results/ladder_inputs_v180.tsv); de novo copy e2bd53e3351edb3bbc410d28a5ee6146b9cc642360c3cfd630cb8c64629699a5
+      (jpr-bench/denovo/runs/PXD076528_mzML.sha256). Spectrum content was not compared byte by byte; tag counts agree where both were run.'
+  - name: 7673_YD12_P116861_S00_R1.point.mzpeak
+    role: mzpeak
+    derived_from: 7673_YD12_P116861_S00_R1.mzML
+    conversion: mzpeak-convert 0.18.0 --layout point (from the thread-ladder mzML db14b381...)
+    size: 736942057
+    sha256: ce5f3711676156b050c72917776d78c01d92bf3bd1edf9cdece0143df8bf93c7
+  - name: 7673_YD12_P116861_S00_R1.chunked.mzpeak
+    role: mzpeak
+    derived_from: 7673_YD12_P116861_S00_R1.mzML
+    conversion: mzpeak-convert 0.18.0 --layout chunked (from the thread-ladder mzML db14b381...)
+    size: 815071707
+    sha256: 62af754a74e07eabbbf2ccb112482ea9420958fb610e2aed16ecbf2611692606
+  - name: 7673_YD12_P116861_S00_R1.cvpatch.mzML
+    role: mzml
+    derived_from: 7673_YD12_P116861_S00_R1.mzML
+    conversion: 'scripts/ladder/patch_cv.py: 3 header CV accessions replaced by older same-length ones (DirecTag refuses MS:1003378); spectra and offsets unchanged'
+    size: 1865956170
+    sha256: 4803f0a247b5a6708e6ef6c7539b79a735d237138dda1f1a4701ec17e6af15f0
+  - name: 20200824_swissprot_human_ci.fasta
+    role: fasta
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2026/07/PXD076528/20200824_swissprot_human_ci.fasta
+    size: 46663
+  - name: PXD076528_community_annotated.sdrf.tsv
+    role: sdrf
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2026/07/PXD076528/PXD076528_community_annotated.sdrf.tsv
+    size: 7919
+  search:
+    fasta: ../PXD054073/UP000005640_9606.fasta
+    precursor_ppm: 10
+    fragment_ppm: 20
+    missed_cleavages: 2
+    variable_mods:
+      M:
+      - 15.994915
+      '[':
+      - 42.010565
+    max_variable_mods: 2
+    source: 'SDRF gives Trypsin and label free only; standard Orbitrap Astral settings: Carbamidomethyl C fixed, Oxidation M and Acetyl protein N-term variable,
+      10 ppm, 20 ppm'
+  tagger:
+    fragment_tol_da: 0.02
+    directag_static_mods: C 57.021464
+    directag_cv_patch: true
+- id: PXD054073_HeLa_ddaPASEF_R02
+  pxd: PXD054073
+  species: Homo sapiens (HeLa)
+  expected_genus: Homo
+  instrument: timsTOF Pro
+  acquisition: ddaPASEF
+  enzyme:
+  - Trypsin
+  labels:
+  - label free
+  fixed_mods:
+    C: 57.021464
+  variable_mods:
+    M:
+    - 15.994915
+  experiments:
+  - directag_speed
+  - scaling_candidate
+  - tag_accuracy
+  sdrf: PXD054073_community_annotated.sdrf.tsv
+  note: 'Two mzML routes. Tag accuracy: AlphaTims MGF -> OpenMS FileConverter (130,611 spectra, no ion-mobility array). Thread ladder: mzpeak-convert
+    0.18.0 --to mzml on the .d (13.33 GB, 357,802 MS2, ion-mobility array kept); DirecTag reads and tags it, then crashes (SIGSEGV) while writing.'
+  files:
+  - name: HeLa_T2_DDA_E_A_nLC_timspro_R02.d.7z
+    role: raw
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2025/02/PXD054073/HeLa_T2_DDA_E_A_nLC_timspro_R02.d.7z
+    size: 3165577465
+    sha1: 6f47a84b281df19c8a83aafcf8abe1177b079d44
+    note: sha1 computed 2026-11-04 on the Ceph copy /ceph/ibmi/abi/oliver/jpr-bench/data (the PRIDE API lists no checksum for this file)
+  - name: UP000005640_9606.fasta
+    role: fasta
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2025/02/PXD054073/UP000005640_9606.fasta
+    size: 13775093
+    sha1: 8c29de1199b7c988f24f18432ad381d2e3ca5605
+    note: human reference proteome deposited with PXD054073; search database for all human accuracy datasets
+  - name: HeLa_T2_DDA_E_A_nLC_timspro_R02.filtered.mgf
+    role: peak
+    derived_from: HeLa_T2_DDA_E_A_nLC_timspro_R02.d.7z
+    conversion: 'manual: 7z x; alphatims export mgf (AlphaTims 1.1.1, bioconda; defaults: centroiding_window 5, all peaks; 133,378 precursor
+      spectra); fastag-bench mgf-filter (drops PEPMASS=nan / CHARGE=0)'
+    size: 652054617
+    sha256: 967d3a0c152cc26fdf9aee55119127ebcb48d814e3f246177e58979b893d325b
+  - name: HeLa_T2_DDA_E_A_nLC_timspro_R02.mzML
+    role: mzml
+    derived_from: HeLa_T2_DDA_E_A_nLC_timspro_R02.filtered.mgf
+    conversion: 'manual: OpenMS 3.6.0 FileConverter (bioconda) -out_type mzML on the filtered MGF; one spectrum per ddaPASEF precursor, no ion-mobility
+      array (the older 12.2 GB mzML with ion-mobility arrays used for pre-1.8.0 speed tests came from an unrecorded route)'
+    size: 931103651
+    sha256: b3c6b29805810b08c063cebb6f8b75738608234a207bd5a88c7902985223b152
+  - name: HeLa_T2_DDA_E_A_nLC_timspro_R02.mzML
+    role: mzml
+    derived_from: HeLa_T2_DDA_E_A_nLC_timspro_R02.d.7z
+    conversion: 'manual: 7z x (p7zip 16.02); mzpeak-convert 0.18.0 --to mzml on the .d (1,362 s); keeps the ion-mobility array. Thread-ladder input
+      (same file name as the accuracy mzML above, a different file; kept apart by sha256)'
+    size: 13328750349
+    sha256: b45f0d48b1a209fb07b76214cd84adf802f4e44490240827cdad48d847805b92
+  - name: HeLa_T2_DDA_E_A_nLC_timspro_R02.point.mzpeak
+    role: mzpeak
+    derived_from: HeLa_T2_DDA_E_A_nLC_timspro_R02.mzML
+    conversion: mzpeak-convert 0.18.0 --layout point (from the thread-ladder mzML b45f0d48...)
+    size: 7608243226
+    sha256: b8111a6e4a212db27d890a575d5727566febd0d8b81caed19a391ced46d98ce9
+  - name: HeLa_T2_DDA_E_A_nLC_timspro_R02.chunked.mzpeak
+    role: mzpeak
+    derived_from: HeLa_T2_DDA_E_A_nLC_timspro_R02.mzML
+    conversion: mzpeak-convert 0.18.0 --layout chunked (from the thread-ladder mzML b45f0d48...)
+    size: 4893222845
+    sha256: 251fe285ac693bb10db04dec5630570a3068331997d0f7d57f40f4d7d8431951
+  - name: PXD054073_community_annotated.sdrf.tsv
+    role: sdrf
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2025/02/PXD054073/PXD054073_community_annotated.sdrf.tsv
+    size: 792137
+  search:
+    fasta: UP000005640_9606.fasta
+    precursor_ppm: 20
+    fragment_ppm: 20
+    missed_cleavages: 2
+    variable_mods:
+      M:
+      - 15.994915
+      '[':
+      - 42.010565
+    max_variable_mods: 2
+    source: 'SDRF: Trypsin, Carbamidomethyl C fixed, Oxidation M and Acetyl protein N-term variable; no tolerances given: 20 ppm / 20 ppm (timsTOF)'
+  tagger:
+    fragment_tol_da: 0.02
+    directag_static_mods: C 57.021464
+    directag_input: mgf
+- id: PXD001819_UPS1_yeast_LTQ_CID
+  pxd: PXD001819
+  species: Saccharomyces cerevisiae lysate with UPS1 human protein standard (25,000 amol)
+  expected_genus: Saccharomyces
+  instrument: LTQ Orbitrap Velos
+  acquisition: DDA, CID, ion-trap MS2 (low resolution)
+  enzyme:
+  - Trypsin/P
+  labels:
+  - label free
+  fixed_mods:
+    C: 57.021464
+  variable_mods:
+    M:
+    - 15.994915
+  fastag_args: []
+  search:
+    fasta: yeast_ups.fasta
+    precursor_ppm: 5
+    fragment_da: 0.8
+    missed_cleavages: 2
+    no_proline_rule: true
+    deisotope: false
+    variable_mods:
+      M:
+      - 15.994915
+      '[':
+      - 42.010565
+    max_variable_mods: 2
+    comet_fragment:
+    - 1.0005
+    - 0.4
+    - 1
+    comet_enzyme_number: 2
+    mascot_truth: false
+    mascot_note: 'Not used as ground truth: the deposited .dat names raw file OEMMA121101_50b.raw, Mascot Distiller titles (incl. summed scans) map
+      only 7,321 of its 17,689 1%-FDR PSMs to Sage PSM scans, and 803 of those disagree in sequence (PXD000001 .dat: 2,132 of 2,142 agree)'
+    comet_variable_mods:
+    - 15.994915 M 0 3 -1 0 0 0.0
+    - 42.010565 n 0 1 0 0 0 0.0
+    source: 'SDRF PXD001819_community_annotated: Trypsin/P, Carbamidomethyl C fixed, Oxidation M and Acetyl protein N-term variable, 5 ppm, 0.8 Da, CID'
+  tagger:
+    fragment_tol_da: 0.5
+    directag_static_mods: C 57.021464
+    fastag_default_args:
+    - -fragment_tolerance
+    - '0.5'
+    - -fragment_tolerance_unit
+    - Da
+  experiments:
+  - tag_accuracy
+  - comet_crosscheck
+  - ion_trap
+  sdrf: PXD001819_community_annotated.sdrf.tsv
+  note: 'Ion-trap ground-truth set (Ramus et al. 2016 UPS1/yeast benchmark): CID fragments read in the LTQ ion trap at unit resolution, so it tests tagging
+    at 0.5 Da; public, SDRF-annotated, deposited Mascot searches. Run UPS1_25000amol_R1 (highest spike). The FASTA is the yeast reference proteome UP000002311
+    plus the 50 UPS accessions named in the deposited Mascot search (UniProt REST, 2026-11-03).'
+  files:
+  - name: UPS1_25000amol_R1.raw
+    role: raw
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2015/12/PXD001819/UPS1_25000amol_R1.raw
+    size: 1688547295
+    sha1: 35daf78e1f2ad797b1ce3f660075eac8a27bd85e
+    note: sha1 computed 2026-11-04 on the Ceph copy /ceph/ibmi/abi/oliver/jpr-bench/data (the PRIDE API lists no checksum for this file)
+  - name: UPS1_25000amol_R1.mzML
+    role: mzml
+    derived_from: UPS1_25000amol_R1.raw
+    conversion: trfp ThermoRawFileParser 2.0.0 -f 2 -L 1-2
+    size: 765522531
+    sha256: 03985d6cfde59f42181d5e0a6f3a2521dcdaaef8bb8a3448f14c6d6b611c68fd
+  - name: WF3-8_UPS1_25000amol_R1.dat
+    role: search
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2015/12/PXD001819/WF3-8_UPS1_25000amol_R1.dat
+    size: 68795775
+    sha1: 8a659537c71e9dafb0ba57a53f16325998951505
+  - name: yeast_ups.fasta
+    role: fasta
+    derived_from: UniProtKB (rest.uniprot.org), proteome UP000002311 and the UPS accessions of WF3-8_UPS1_25000amol_R1.dat
+    sha256: 92a5aead63c9664be3387f050de7632549d15196657529b46250f1c98a380d45
+    conversion: 'manual: https://rest.uniprot.org/uniprotkb/stream?format=fasta&query=proteome:UP000002311 (6,067 entries) + the UPS accessions of the .dat
+      (49 entries + P10636-8), concatenated'
+  - name: PXD001819_community_annotated.sdrf.tsv
+    role: sdrf
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2015/12/PXD001819/PXD001819_community_annotated.sdrf.tsv
+    size: 34860
+- id: PXD047793_diaTracer_Slot2-6
+  pxd: PXD047793
+  species: Homo sapiens
+  expected_genus: Homo
+  instrument: timsTOF (diaPASEF)
+  acquisition: diaPASEF, diaTracer pseudo-MS2
+  enzyme:
+  - Trypsin
+  labels:
+  - label free
+  experiments:
+  - directag_speed
+  - scaling_candidate
+  note: 3,086,644 pseudo-MS2 spectra after diaTracer; no community SDRF on PRIDE.
+  files:
+  - name: 4223_TIMS2_006_2_Slot2-6_1_2877.d.zip
+    role: raw
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2024/05/PXD047793/4223_TIMS2_006_2_Slot2-6_1_2877.d.zip
+    size: 22265266717
+  - name: 4223_TIMS2_006_2_Slot2-6_1_2877_diatracer.mzML
+    role: mzml
+    derived_from: 4223_TIMS2_006_2_Slot2-6_1_2877.d.zip
+    conversion: 'manual: diaTracer 2.2.1 pseudo-MS2 extraction from the .d (version from the mzML softwareList)'
+    size: 24709377005
+    sha256: 8f199c90f09f327ed981fa354c16b4988999dcbd60d6a1915975db1088513e77
+  - name: 4223_TIMS2_006_2_Slot2-6_1_2877_diatracer.point.mzpeak
+    role: mzpeak
+    derived_from: 4223_TIMS2_006_2_Slot2-6_1_2877_diatracer.mzML
+    conversion: mzpeak-convert 0.18.0 --layout point
+    size: 5483135467
+    sha256: dad424e461d81d0dd8fef322ae61daf2bbef1afbebc5e1f81ffd7238f9c6d09d
+  - name: 4223_TIMS2_006_2_Slot2-6_1_2877_diatracer.chunked.mzpeak
+    role: mzpeak
+    derived_from: 4223_TIMS2_006_2_Slot2-6_1_2877_diatracer.mzML
+    conversion: mzpeak-convert 0.18.0 --layout chunked
+    size: 5076613113
+    sha256: 95cbc3696d7dada94f6cf3ebbc42eb8e6a6ceea365bef1abf780725c43529dae
+- id: PXD028735_diaPASEF_A_Gamma_01
+  pxd: PXD028735
+  species: Homo sapiens with Saccharomyces cerevisiae and Escherichia coli digest spikes (LFQ hybrid proteome)
+  expected_genus: Homo
+  instrument: timsTOF Pro
+  acquisition: diaPASEF (raw frames as MS2)
+  enzyme:
+  - Trypsin
+  labels:
+  - label free
+  experiments:
+  - directag_speed
+  - scaling_candidate
+  - species_mixture_candidate
+  sdrf: PXD028735_community_annotated.sdrf.tsv
+  note: The community SDRF covers only the Orbitrap runs of the project; spike composition taken from those rows (yeast 30%, E. coli 5% in condition A).
+  files:
+  - name: LFQ_timsTOFPro_diaPASEF_Condition_A_Sample_Gamma_01.d.zip
+    role: raw
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2022/02/PXD028735/LFQ_timsTOFPro_diaPASEF_Condition_A_Sample_Gamma_01.d.zip
+    size: 22044620571
+  - name: LFQ_timsTOFPro_diaPASEF_Condition_A_Sample_Gamma_01.mzML
+    role: mzml
+    derived_from: LFQ_timsTOFPro_diaPASEF_Condition_A_Sample_Gamma_01.d.zip
+    conversion: 'unknown: Bruker .d to mzML; the file is OpenMS-written, but converter, version and options of the original conversion are not recorded'
+    size: 32282532787
+    sha256: 72045ead6b47f654ccba0105f935e33773f262ede711bd0b19c4935ddd7f8ee1
+    note: declares spectrumList count="0"; DirecTag reads 0 spectra from it and from the count-patched copy
+  - name: LFQ_timsTOFPro_diaPASEF_Condition_A_Sample_Gamma_01.count.mzML
+    role: mzml
+    derived_from: LFQ_timsTOFPro_diaPASEF_Condition_A_Sample_Gamma_01.mzML
+    conversion: 'scripts/ladder/patch_count.py: spectrumList count 0 -> 156388, 5 indentation tabs removed; spectra and offsets unchanged (DirecTag input)'
+    size: 32282532787
+    sha256: 1ef4eb2425eee1f713cfa6cbeeaf3a7bc9435256d7e00aebe642d842e2b72742
+  - name: LFQ_timsTOFPro_diaPASEF_Condition_A_Sample_Gamma_01.point.mzpeak
+    role: mzpeak
+    derived_from: LFQ_timsTOFPro_diaPASEF_Condition_A_Sample_Gamma_01.count.mzML
+    conversion: mzpeak-convert 0.18.0 --layout point
+    size: 57016282543
+    sha256: 3a5d61c4e0e5a93ad2f9a4431ff06ed71d27789bfeaff70e31aa3333da08d39d
+  - name: LFQ_timsTOFPro_diaPASEF_Condition_A_Sample_Gamma_01.chunked.mzpeak
+    role: mzpeak
+    derived_from: LFQ_timsTOFPro_diaPASEF_Condition_A_Sample_Gamma_01.count.mzML
+    conversion: mzpeak-convert 0.18.0 --layout chunked
+    size: 47344409477
+    sha256: c9ff9ccd4c8e1bb7c1ab74ffd2a64df2dbc75b81cd8b6e79646e2cdc57f32344
+  - name: PXD028735_community_annotated.sdrf.tsv
+    role: sdrf
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2022/02/PXD028735/PXD028735_community_annotated.sdrf.tsv
+    size: 19046
+- id: PXD000865_Kuster_TMT8_B02
+  pxd: PXD000865
+  species: Homo sapiens
+  expected_genus: Homo
+  instrument: Q Exactive
+  acquisition: DDA, HCD
+  enzyme:
+  - Trypsin
+  labels:
+  - TMT8 (TMT10plex reagent subset)
+  experiments:
+  - directag_speed
+  note: Kuster human proteome draft; no community SDRF on PRIDE.
+  files:
+  - name: 0299_F1_R1_P77628B02_TMT8.raw
+    role: raw
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2014/05/PXD000865/0299_F1_R1_P77628B02_TMT8.raw
+    size: 2223019801
+  - name: 0299_F1_R1_P77628B02_TMT8.mzML
+    role: mzml
+    derived_from: 0299_F1_R1_P77628B02_TMT8.raw
+    conversion: 'manual: provided by the dataset group as mzML (profile); route not recorded'
+    sha256: 8ec0952126809c9516cb476f5a79287d1b26ce11dcf631a78d6342340c54441c

@@ -1,0 +1,193 @@
+--- a/src/FASTagger.h
++++ b/src/FASTagger.h
+@@ -128,6 +128,9 @@
+     bool   gapped = false;      ///< crossed a missing peak; two residues are a
+                                 ///< mass-only inference, not two observed steps
+     double low_mz = 0;          ///< lowest peak; also the output tie-break
++    // LONGTAG DIAGNOSTIC (not part of FASTag): per-tag evidence for the DirecTag comparison
++    int d_ncompl = 0, d_cpop = 0, d_npeaks = 0, d_ranksum = 0, d_worst = 0;
++    double d_pc_fastag = 1, d_cq = 1;
+   };
+ 
+   /// Precomputed nulls, built once and shared read-only.
+--- a/src/FASTagger.cpp
++++ b/src/FASTagger.cpp
+@@ -11,6 +11,7 @@
+ #include <OpenMS/CONCEPT/Constants.h>
+ 
+ #include <boost/math/distributions/hypergeometric.hpp>
++#include <cstdlib>
+ 
+ #include <algorithm>
+ #include <cassert>
+@@ -315,17 +316,71 @@
+       std::vector<uint8_t> has_compl;  ///< bit z-1 set if a complement exists at charge z
+       double precursor_mass = 0;
+       int n_frag_charges = 1;
++      int prec_charge = 2;             // LONGTAG DIAGNOSTIC
+       std::vector<int> n_with_compl;   ///< indexed by fragment charge
+       /// Nearest-peak index over spec, for complements and buildGraph. Points at
+       /// prepare()'s per-thread grid, so valid until the next prepare() on this
+       /// thread -- tagSpectrum holds one Prepared at a time.
+       const PeakGrid* grid = nullptr;
+     };
++
++    // ---- LONGTAG DIAGNOSTIC (not part of FASTag) ----------------------------------
++    // FASTAG_DIAG_CPAIR bit 1: DirecTag mid-p for 0 or 1 complemented peaks
++    //                   bit 2: DirecTag complement pair-mass consistency for >= 2
++    /// FASTAG_DIAG_COMPL_CHARGE=1: DirecTag's complement (BaseSpectrum::CalculateComplementMz): the partner of a
++    /// fragment at charge z carries the remaining c - z charges of the precursor; c = z gives no complement.
++    /// Default (0): FASTag 1.9.0, partner at the same charge z.
++    static int diagComplCharge()
++    {
++      static const int m = [] { const char* e = std::getenv("FASTAG_DIAG_COMPL_CHARGE"); return e ? std::atoi(e) : 0; }();
++      return m;
++    }
++    static double complMz(double M, int c, int z, double mz, double proton)
++    {
++      if (diagComplCharge() == 1)
++        return c > z ? (M + c * proton - mz * z) / (c - z) : -1.0;
++      return M / z + 2.0 * proton - mz;
++    }
++    static int diagCpair()
++    {
++      static const int m = [] { const char* e = std::getenv("FASTAG_DIAG_CPAIR"); return e ? std::atoi(e) : 0; }();
++      return m;
++    }
++    /// DirecTag InitCEBins(): SSE of c uniform(-tol, tol) errors about their mean, 10000 draws,
++    /// value = (number of draws <= sse, at least 1) / (draws + 1). Built per thread, fixed seed.
++    static double diagCeQ(int c, double tol, double sse)
++    {
++      static thread_local std::vector<std::vector<double>> nulls;
++      static thread_local double ntol = -1;
++      if (ntol != tol) { nulls.clear(); ntol = tol; }
++      if (nulls.size() <= static_cast<size_t>(c)) nulls.resize(static_cast<size_t>(c) + 1);
++      std::vector<double>& v = nulls[static_cast<size_t>(c)];
++      if (v.empty())
++      {
++        std::mt19937 rng(0);
++        std::uniform_real_distribution<double> U(-tol, tol);
++        std::vector<double> e(static_cast<size_t>(c));
++        for (int i = 0; i < 10000; ++i)
++        {
++          double m = 0;
++          for (auto& x : e) { x = U(rng); m += x; }
++          m /= c;
++          double q = 0;
++          for (double x : e) q += (x - m) * (x - m);
++          v.push_back(q);
++        }
++        std::sort(v.begin(), v.end());
++      }
++      const double n = static_cast<double>(std::upper_bound(v.begin(), v.end(), sse) - v.begin());
++      return std::max(1.0, n) / (static_cast<double>(v.size()) + 1.0);
++    }
++    // ------------------------------------------------------------------------------
+ 
+     Prepared prepare(const MSSpectrum& in, double precursor_mz, int charge, const Param& p)
+     {
+       Prepared s;
+       s.precursor_mass = precursor_mz * charge - charge * PROTON;
++      s.prec_charge = charge;   // LONGTAG DIAGNOSTIC
+       // +2 fragments are only sought from precursors of charge >= 3, as the paper
+       // specifies.
+       // Capped at 8: has_compl is a uint8_t bitmask, so bit z-1 for z > 8 is
+@@ -527,7 +582,7 @@
+           //   m/z(b) + m/z(y) = (Nb + z*proton)/z + (Ny + z*proton)/z
+           //                   = M/z + 2*proton,      because Nb + Ny = M.
+           // Note the proton term is NOT divided by z.
+-          const double cmz = s.precursor_mass / z + 2.0 * PROTON - s.spec[i].getMZ();
++          const double cmz = complMz(s.precursor_mass, s.prec_charge, z, s.spec[i].getMZ(), PROTON);
+           // j != i: a peak at the midpoint would otherwise be its own partner,
+           // manufacturing complement evidence from a single ion and inflating
+           // both the population and the observed count.
+@@ -733,12 +788,23 @@
+         t.p_mzfidelity = tab.mzFidelityP(k, tol > 0 ? sse / (tol * tol) : sse);
+       }
+ 
+-      int ranksum = 0, n_compl = 0;
++      int ranksum = 0, n_compl = 0, worst = 0;
++      static thread_local std::vector<double> pair_sums;
++      pair_sums.clear();
+       for (int i = 0; i < k; ++i)
+       {
+         ranksum += s.rank[peaks[static_cast<size_t>(i)]];
+-        if (s.has_compl[peaks[static_cast<size_t>(i)]] & (1u << (charge - 1))) ++n_compl;
++        worst = std::max(worst, s.rank[peaks[static_cast<size_t>(i)]]);
++        if (s.has_compl[peaks[static_cast<size_t>(i)]] & (1u << (charge - 1)))
++        {
++          ++n_compl;
++          const double mzi = s.spec[peaks[static_cast<size_t>(i)]].getMZ();
++          const double cmz = complMz(s.precursor_mass, s.prec_charge, charge, mzi, PROTON);
++          const int j = s.grid->nearest(cmz, p.complement_tol);
++          if (j >= 0) pair_sums.push_back(mzi + s.spec[static_cast<size_t>(j)].getMZ());
++        }
+       }
++      t.d_ranksum = ranksum; t.d_worst = worst; t.d_ncompl = n_compl; t.d_npeaks = static_cast<int>(s.spec.size());
+       t.p_intensity = tab.intensityP(k, static_cast<int>(s.spec.size()), ranksum);
+ 
+       // Per-edge confidence: how well each residue is actually supported.
+@@ -807,6 +873,32 @@
+         }
+       }
+ 
++      t.d_cpop = compl_pop;
++      t.d_pc_fastag = t.p_complement;
++      if (diagCpair() && use_compl)
++      {
++        const unsigned N = static_cast<unsigned>(s.spec.size());
++        const unsigned K = static_cast<unsigned>(compl_pop);
++        const unsigned n = static_cast<unsigned>(k);
++        const unsigned lo = (n + K > N) ? n + K - N : 0u;
++        const unsigned hi = std::min(K, n);
++        const unsigned c = static_cast<unsigned>(n_compl);
++        boost::math::hypergeometric_distribution<double> h(K, n, N);
++        auto pmf = [&](unsigned x) { return (x < lo || x > hi) ? 0.0 : boost::math::pdf(h, x); };
++        double gt = 0;                                  // P(X > c)
++        for (unsigned x = c + 1; x <= hi; ++x) gt += pmf(x);
++        const double eq = pmf(c);
++        double pc = t.p_complement;
++        if (c <= 1 && (diagCpair() & 1)) pc = gt + eq / 2.0;
++        if (c >= 2 && (diagCpair() & 2) && pair_sums.size() >= 2)
++        {
++          double m = 0; for (double x : pair_sums) m += x; m /= pair_sums.size();
++          double sse = 0; for (double x : pair_sums) sse += (x - m) * (x - m);
++          t.d_cq = diagCeQ(static_cast<int>(pair_sums.size()), p.complement_tol, sse);
++          pc = gt + eq * t.d_cq;
++        }
++        t.p_complement = std::min(1.0, std::max(pc, 1e-300));
++      }
+       t.evalue = fisher(t.p_intensity, t.p_mzfidelity, t.p_complement, use_compl ? 3 : 2);
+ 
+       // Flanking masses from the FITTED positions, not the raw ones: they are the
+--- a/src/FASTag.cpp
++++ b/src/FASTag.cpp
+@@ -653,7 +653,18 @@
+     buf += '\t';
+     appendNum(buf, t.min_conf, fixed, 3);  buf += '\t';
+     appendNum(buf, t.mean_conf, fixed, 3); buf += '\t';
+-    buf += hit;
++    {
++      static const bool diag = std::getenv("FASTAG_DIAG_PVALS") != nullptr;
++      if (diag)
++      {
++        char d[256];
++        std::snprintf(d, sizeof d, "pI=%.6g;pM=%.6g;pC=%.6g;pC0=%.6g;cq=%.6g;nc=%d;K=%d;N=%d;rs=%d;worst=%d",
++                      t.p_intensity, t.p_mzfidelity, t.p_complement, t.d_pc_fastag, t.d_cq, t.d_ncompl, t.d_cpop,
++                      t.d_npeaks, t.d_ranksum, t.d_worst);
++        buf += d;
++      }
++      else buf += hit;
++    }
+     if (want_proforma) { buf += '\t'; buf += FASTag::toProforma(t.seq, t.nterm_mass, t.cterm_mass, proforma_fixed); }
+     if (want_res_conf)
+     {
+@@ -893,6 +904,8 @@
+     p.per_residue_conf = getFlag_("res_conf");
+     p.max_evalue = getDoubleOption_("max_evalue");
+     p.gap_penalty = getDoubleOption_("gap_penalty");
++    // LONGTAG DIAGNOSTIC (not part of FASTag)
++    if (const char* e = std::getenv("FASTAG_DIAG_COMPLEMENT_TOL")) p.complement_tol = std::atof(e);
+     // The residue modifications in use; -recon_id_out reports exactly these.
+     StringList fixed_mods, variable_mods;
+     double fixed_term_n = 0, fixed_term_c = 0;

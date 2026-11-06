@@ -1,0 +1,2 @@
+[console_scripts]
+fastag-bench = fastag_bench.cli:main

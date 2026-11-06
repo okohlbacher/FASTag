@@ -1,0 +1,3 @@
+TMT6plex (K), TMT6, TMT6plex, -r-, K, , 229.162932
+TMT6plex (N-term), TMT6, TMT6plex, n--, *, , 229.162932
+Methylthio (C), Mth, Methylthio, -r-, C, , 45.987721

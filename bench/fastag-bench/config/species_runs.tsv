@@ -1,0 +1,52 @@
+# Species benchmark run manifest (public ProteomeXchange data only).
+# truth: NCBI genus names; '=x' gives the stated protein (w/w) fraction where the publication or file name gives one.
+# Sources: PRIDE project metadata and the dataset publications (see results/species_datasets.tsv); mixset mzMLs converted with ThermoRawFileParser 2.0.0 -f 2.
+run_id	pxd	set	series	level	mzml	truth	label	note
+PXD028735_Human_01	PXD028735	series	HYE	0.0	/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD028735/LFQ_Orbitrap_DDA_Human_01/LFQ_Orbitrap_DDA_Human_01.mzML	Homo=1	LF	pure K562 digest (Promega V6951)
+PXD028735_Yeast_01	PXD028735	series	HYE	1.0	/ceph/ibmi/abi/oliver/jpr-bench/species/mzml/PXD028735/LFQ_Orbitrap_DDA_Yeast_01.mzML	Saccharomyces=1	LF	pure yeast digest (Promega V7461)
+PXD028735_Ecoli_01	PXD028735	series	HYE	1.0	/ceph/ibmi/abi/oliver/jpr-bench/species/mzml/PXD028735/LFQ_Orbitrap_DDA_Ecoli_01.mzML	Escherichia=1	LF	pure E. coli digest (Waters MassPREP)
+PXD028735_A_Alpha_01	PXD028735	series	HYE	0.05	/ceph/ibmi/abi/oliver/jpr-bench/species/mzml/PXD028735/LFQ_Orbitrap_DDA_Condition_A_Sample_Alpha_01.mzML	Homo=0.65;Saccharomyces=0.30;Escherichia=0.05	LF	condition A, w/w
+PXD028735_QC_01	PXD028735	series	HYE	0.125	/ceph/ibmi/abi/oliver/jpr-bench/species/mzml/PXD028735/LFQ_Orbitrap_DDA_QC_01.mzML	Homo=0.65;Saccharomyces=0.225;Escherichia=0.125	LF	QC = A+B pool, w/w
+PXD028735_B_Beta_02	PXD028735	series	HYE	0.2	/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD028735/LFQ_Orbitrap_DDA_Condition_B_Sample_Beta_02/LFQ_Orbitrap_DDA_Condition_B_Sample_Beta_02.mzML	Homo=0.65;Saccharomyces=0.15;Escherichia=0.20	LF	condition B, w/w
+PXD017035_d12_12_hTT_I	PXD017035	mixture			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD017035/d12_12_hTT_I/d12_12_hTT_I.mzML	Anaerostipes;Bacteroides;Bifidobacterium;Blautia;Clostridium;Thomasclavelia;Escherichia;Lactiplantibacillus	LF	SIHUMIx 8 strains (Schaepe et al. 2019)
+PXD039576_HYE_8to1to1	PXD039576	mixture			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD039576/20220502_E4_NEO1_Mayer_MS_group_uPAC5_SNB0050_HYE_8to1to1_30min_M9_200ng_02/20220502_E4_NEO1_Mayer_MS_group_uPAC5_SNB0050_HYE_8to1to1_30min_M9_200ng_02.mzML	Homo=0.8;Saccharomyces=0.1;Escherichia=0.1	LF	HeLa:yeast:E. coli 8:1:1
+PXD016470_Ecoli1x	PXD016470	series	HE	1.0	/ceph/ibmi/abi/oliver/jpr-bench/species/mzml/PXD016470/09-04-18_EcoliSpikeInSingleShot1x.mzML	Homo;Escherichia	LF	K562 + E. coli lysate, 1x spike
+PXD016470_Ecoli2x	PXD016470	series	HE	2.0	/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD016470/09-04-18_EcoliSpikeInSingleShot2x/09-04-18_EcoliSpikeInSingleShot2x.mzML	Homo;Escherichia	LF	K562 + E. coli lysate, 2x spike
+PXD020815_HYpro16	PXD020815	mixture			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD020815/qb04194/qb04194.mzML	Homo=0.75;Saccharomyces=0.25	TMTpro	HYpro16 human:yeast 3:1, TMTpro
+PXD045500_200H_0Y	PXD045500	series	HY	0.0	/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD045500/20231003_E0_Neo0_FAIMS_uPAC_5cm_HT_Trap1500bar_200ngH_0ngY_iso1_rep0/20231003_E0_Neo0_FAIMS_uPAC_5cm_HT_Trap1500bar_200ngH_0ngY_iso1_rep0.mzML	Homo=1	LF	200 ng HeLa
+PXD045500_100H_100Y	PXD045500	series	HY	0.5	/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD045500/20231003_E0_Neo0_FAIMS_uPAC_5cm_HT_Trap1500bar_100ngH_100ngY_iso1_rep0/20231003_E0_Neo0_FAIMS_uPAC_5cm_HT_Trap1500bar_100ngH_100ngY_iso1_rep0.mzML	Homo=0.5;Saccharomyces=0.5	LF	100 ng HeLa + 100 ng yeast
+PXD000279_HeLa60_Ecoli10	PXD000279	mixture			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD000279/20070926_CL_Orbi2_XIC_Hela60_Ecoli10_Offgel_red_Frac16_03/20070926_CL_Orbi2_XIC_Hela60_Ecoli10_Offgel_red_Frac16_03.mzML	Homo=0.857;Escherichia=0.143	LF	MaxLFQ benchmark, OFFGEL fraction 16
+PXD046460_T1P99_01	PXD046460	series	TP	0.01	/ceph/ibmi/abi/oliver/jpr-bench/species/mzml/PXD046460/LOD_T1P99_01.mzML	Thauera=0.01;Pseudomonas=0.99	LF	Thauera aromatica 1% in P. putida
+PXD046460_T5P95_01	PXD046460	series	TP	0.05	/ceph/ibmi/abi/oliver/jpr-bench/species/mzml/PXD046460/LOD_T5P95_01.mzML	Thauera=0.05;Pseudomonas=0.95	LF	Thauera aromatica 5% in P. putida
+PXD046460_T10P90_01	PXD046460	series	TP	0.1	/ceph/ibmi/abi/oliver/jpr-bench/species/mzml/PXD046460/LOD_T10P90_01.mzML	Thauera=0.10;Pseudomonas=0.90	LF	Thauera aromatica 10% in P. putida
+PXD046460_PC	PXD046460	series	TP	0.0	/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD046460/PC/PC.mzML	Pseudomonas=1	LF	pure P. putida
+PXD007885_Saureus_phagosome	PXD007885	mixture			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD007885/131029_OV1_KRIS_HPI_P1_6h/131029_OV1_KRIS_HPI_P1_6h.mzML	Homo;Staphylococcus	LF	phagosomes of S. aureus-infected S9 cells
+PXD081656_br25	PXD081656	mixture			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD081656/2019_br25_tr1/2019_br25_tr1.mzML	Homo;Pseudomonas	LF	CuFi-5 + P. aeruginosa
+PXD073843_Pf_RBC	PXD073843	mixture			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD073843/DZ2172_proteome_Fr1/DZ2172_proteome_Fr1.mzML	Homo;Plasmodium	LF	P. falciparum-infected RBC
+PXD036799_mouse_yeast_TMT	PXD036799	mixture			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD036799/p001148_MDF_retry1_15plex-1/p001148_MDF_retry1_15plex-1.mzML	Mus;Saccharomyces	TMTpro	mouse plasma + yeast, TMTpro
+PXD008611_SET60	PXD008611	mixture			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD008611/20160906_QLL_HM60_F3_R1/20160906_QLL_HM60_F3_R1.mzML	Homo=0.6;Mus=0.4	LF	human AGS 60% + mouse MEF 40%
+PXD012772_VM56C	PXD012772	mixture			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD012772/20171208_SwiftJ_VM56C/20171208_SwiftJ_VM56C.mzML	Homo;Mus	LF	mouse skin + human MSC
+PXD042267_PDX	PXD042267	mixture			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD042267/180316_31_18254_control_06_180min_11_27_HCD_OT_val45_4ul_03/180316_31_18254_control_06_180min_11_27_HCD_OT_val45_4ul_03.mzML	Homo;Mus	LF	PDAC PDX
+PXD035857_PDX	PXD035857	mixture			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD035857/38716_2_MSPCL_0891_F2/38716_2_MSPCL_0891_F2.mzML	Homo;Mus	LF	breast-cancer PDX
+PXD016579_PDX_TMT	PXD016579	mixture			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD016579/Shideh-PDX-GroupD-F31/Shideh-PDX-GroupD-F31.mzML	Homo;Mus	TMT6	NSCLC PDX, TMT
+PXD000044_SILAC_xenograft	PXD000044	mixture			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD000044/SILAX1_110520_X_03/SILAX1_110520_X_03.mzML	Homo;Mus	SILAC	SILAC xenograft
+PXD035449_coculture	PXD035449	mixture			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD035449/IQ2160_20210817_Schumann_Anna_CO-CULTURE_G6_MCF7-BOCTAG_4T1-BOCTAG_Ac4GalNAlk6_10uM/IQ2160_20210817_Schumann_Anna_CO-CULTURE_G6_MCF7-BOCTAG_4T1-BOCTAG_Ac4GalNAlk6_10uM.mzML	Homo;Mus	LF	MCF7 + 4T1 co-culture, glycoprotein enrichment
+PXD000001_Erwinia_TMT6	PXD000001	single			/ceph/ibmi/abi/oliver/jpr-bench/species/mzml/PXD000001/TMT_Erwinia_1uLSike_Top10HCD_isol2_45stepped_60min_01-20141210.mzML	Pectobacterium	TMT6_MMTS	E. carotovora + spiked reagent proteins
+PXD003531_QE_NO_03	PXD003531	single			/ceph/ibmi/abi/oliver/prose-auto-20261029/valset_all/in/PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.mzML	Homo	LF_phospho	gate input
+PXD076528_Astral_7673	PXD076528	single			/ceph/ibmi/abi/oliver/jpr-bench/species/mzml/PXD076528/7673_YD12_P116861_S00_R1.mzML	Homo	LF	Orbitrap Astral
+PXD081656_br1	PXD081656	single			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD081656/2019_br1_tr1/2019_br1_tr1.mzML	Homo	LF	uninfected CuFi-5
+PXD027945_F8	PXD027945	single			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD027945/Lumos_P0605_PH_MS_PEP_R1_F8/Lumos_P0605_PH_MS_PEP_R1_F8.mzML	Homo	TMT6	TMT per FASTag -label_out (TMT tag-end share 0.0706, +0.5 Da background 0); the community SDRF says label free
+PXD033381_FLI06630	PXD033381	single			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD033381/FLI06630/FLI06630.mzML	Homo	LF	
+PXD078382_Biotin2	PXD078382	single			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD078382/Biotin-2/Biotin-2.mzML	Homo	LF	
+PXD016055_RPL3	PXD016055	single			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD016055/20170320_QE3_nLC11_MJ_RPL3-GFP_Rep1/20170320_QE3_nLC11_MJ_RPL3-GFP_Rep1.mzML	Homo	LF	
+PXD065430_fat	PXD065430	single			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD065430/MS240423-fat-yang-C/MS240423-fat-yang-C.mzML	Homo	LF	
+PXD020401_phag	PXD020401	single			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD020401/20180918_Felix_ash_phag_ko3/20180918_Felix_ash_phag_ko3.mzML	Mus	LF	
+PXD007040_CFP	PXD007040	single			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD007040/20160709_JuDo_CFP_985_2_6/20160709_JuDo_CFP_985_2_6.mzML	Mus	LF	
+PXD041711_KO	PXD041711	single			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD041711/20210127_005_S281136_1_Knock-out__KO_/20210127_005_S281136_1_Knock-out__KO_.mzML	Mus	LF	
+PXD033852_MSB43757A	PXD033852	single			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD033852/MSB43757A/MSB43757A.mzML	Mus	LF	
+PXD010700_Q22734	PXD010700	single			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD010700/Q22734_MS18-010_8/Q22734_MS18-010_8.mzML	Saccharomyces	LF	
+PXD041573_Obp3	PXD041573	single			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD041573/Obp3_TEV_6_R1/Obp3_TEV_6_R1.mzML	Saccharomyces	LF	
+PXD006679_Qex01777	PXD006679	single			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD006679/Qex01777/Qex01777.mzML	Escherichia	LF	
+PXD044300_Arabidopsis	PXD044300	single			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD044300/Exp1_E28157_1p_50uPAC13__trap9_5A-1_W3/Exp1_E28157_1p_50uPAC13__trap9_5A-1_W3.mzML	Arabidopsis	LF	
+PXD006349_rat	PXD006349	single			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD006349/SD9_AH_19K_16/SD9_AH_19K_16.mzML	Rattus	LF	
+PXD058521_fly	PXD058521	single			/ceph/ibmi/abi/oliver/prose-auto-20261029/mixset/in/PXD058521/0643/0643.mzML	Drosophila	LF	
