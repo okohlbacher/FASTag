@@ -1010,13 +1010,28 @@ jobs:
           $sevenzip = (Get-Command 7z.exe -ErrorAction SilentlyContinue).Source
           if (-not $sevenzip) { $sevenzip = 'C:\Program Files\7-Zip\7z.exe' }
           if (Test-Path $sevenzip) {
-            $method = & $sevenzip l -slt $nsis.FullName | Select-String -Pattern '^Method = ' | Select-Object -First 1
+            # Capture the whole listing first, then search it. Piping 7z into
+            # Select-Object -First 1 stops the pipeline while 7z is still
+            # writing (the listing runs to ~100k lines), and a stopped or
+            # failing native command leaves a non-zero $LASTEXITCODE that the
+            # pwsh wrapper's trailing `exit $LASTEXITCODE` turns into a red
+            # step. 7-Zip's NSIS reader is a heuristic and may exit 1 or 2 on a
+            # variant it half-understands; that is a warning here, never a
+            # failure, since this step only records.
+            $ErrorActionPreference = 'Continue'
+            $out = & $sevenzip l -slt $nsis.FullName 2>&1
+            $code = $LASTEXITCODE
+            $method = $out | Select-String -Pattern '^Method = ' | Select-Object -First 1
+            if ($code) { Write-Host "::warning::7z exited $code while listing the installer" }
             Write-Host "7-Zip: $method"
             "7-Zip reads: $method" | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
             if ("$method" -notmatch 'LZMA') { Write-Host "::warning::7-Zip does not report LZMA for the installer ($method)" }
           } else {
             Write-Host "::warning::7-Zip not found; compression method not recorded"
           }
+          # Informational only: never let a native exit code fail the job.
+          $global:LASTEXITCODE = 0
+          exit 0
 
       # SignPath's 'initial' artifact configuration expects a ZIP containing
       # *.exe -- upload-artifact always zips, and the NSIS installer is an

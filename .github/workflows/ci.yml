@@ -33,6 +33,15 @@ on:
         description: 'Build the macOS desktop app without cutting a tag'
         type: boolean
         default: false
+      # A plain dry run ships no taxonomy index (~450 MB), so its dmg is far
+      # smaller than a release dmg and the size ceiling on the ULMO step says
+      # nothing about the real payload. With this switch on as well, the
+      # macos-arm64 leg embeds the same pinned index a tag build embeds, and
+      # the dry run builds, notarizes and size-checks the real release image.
+      gui_full_payload:
+        description: 'With gui_dry_run: embed the pinned taxonomy index (release-sized dmg)'
+        type: boolean
+        default: false
 
 # cancel-in-progress is ON, after turning it off caused something worse.
 #
@@ -819,9 +828,10 @@ jobs:
       # push), so the secret is mapped into a step env: (legal) and the
       # presence check becomes a step OUTPUT that downstream steps gate on.
       #
-      # UNTESTED until MACOS_* secrets exist on this repo -- none do yet, so
-      # every tag build takes the "not configured" branch and ships
-      # unsigned, same as today. doc/SIGNING-macos-gui.md names the secrets.
+      # The MACOS_* secrets exist on this repo since 2026-11; the first run
+      # that took the signed branch was the gui_dry_run dispatch of PR #12.
+      # Without them a tag build takes the "not configured" branch and ships
+      # unsigned. doc/SIGNING-macos-gui.md names the secrets.
       - name: Detect macOS signing readiness
         if: matrix.name == 'macos-arm64' && (startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run)
         id: mac-signing
@@ -913,8 +923,12 @@ jobs:
       # ion-trap tolerance because the bundled example file is ion-trap MS2;
       # it asserts the taxdb LOADS and a non-empty report is written, not any
       # particular taxon ranking (139 spectra cannot rank stably).
+      #
+      # A gui_dry_run dispatch with gui_full_payload also runs it, on the
+      # macOS leg only, so the release-sized dmg can be built and checked
+      # before the tag (see the input's comment).
       - name: Embed taxonomy index (tag builds)
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || (inputs.gui_dry_run && inputs.gui_full_payload && matrix.name == 'macos-arm64')
         shell: bash -el {0}
         env:
           GH_TOKEN: ${{ github.token }}
@@ -987,15 +1001,16 @@ jobs:
           # HARD failure on a tag, not a warning. v1.4.1's app shipped with the
           # dumps but no k-mer index, so -species failed for anyone who
           # installed it -- and a warning in a green log is exactly how that
-          # reached users. On a dry run it stays a warning, because the index is
-          # only embedded on tag builds.
+          # reached users. A gui_full_payload dry run embeds the index too and
+          # is held to the same rule; a plain dry run stays a warning, because
+          # it embeds no index.
           if [ -s "$R/share/FASTag/taxonomy/tax_k7.taxdb" ]; then
             echo "taxonomy index present: $(du -h "$R/share/FASTag/taxonomy/tax_k7.taxdb" | cut -f1)"
-          elif [ "${{ startsWith(github.ref, 'refs/tags/v') }}" = "true" ]; then
+          elif [ "${{ startsWith(github.ref, 'refs/tags/v') || (inputs.gui_dry_run && inputs.gui_full_payload) }}" = "true" ]; then
             echo "::error::the app bundle has no tax_k7.taxdb -- -species would fail in the shipped app"
             exit 1
           else
-            echo "::warning::no taxonomy index (not a tag build); -species unavailable in this app"
+            echo "::warning::no taxonomy index (not a tag or full-payload build); -species unavailable in this app"
           fi
 
           # Run the CLI exactly as the app will: from inside the staged bundle,
@@ -1086,9 +1101,11 @@ jobs:
       # Then the image a user downloads is mounted and its CLI run from
       # there, with an empty environment: the portability check on the
       # shipped artifact, not on the staging folder. The size ceiling (310
-      # MiB) is what keeps a regression of the conversion, or of the bundle,
-      # from shipping silently; a dry run carries no taxonomy index and is
-      # far below it.
+      # MB, decimal: 310,000,000 bytes, as GUI-DESIGN.md's P0r acceptance
+      # states it) is what keeps a regression of the conversion, or of the
+      # bundle, from shipping silently. A plain dry run carries no taxonomy
+      # index and is far below it; dispatch with gui_full_payload as well to
+      # size-check the real release payload before the tag.
       - name: Recompress the desktop app's dmg as ULMO, sign, notarize, staple (macOS)
         if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && matrix.name == 'macos-arm64')
         timeout-minutes: 75
@@ -1153,10 +1170,11 @@ jobs:
           trap - EXIT
 
           size=$(stat -f %z "$DMG")
-          limit=$((310 * 1024 * 1024))
-          echo "ULMO dmg: $size bytes ($((size / 1048576)) MiB), was $before bytes; ceiling $limit"
-          echo "### Desktop dmg: $((size / 1048576)) MiB (ULMO), from $((before / 1048576)) MiB (UDZO)" >> "$GITHUB_STEP_SUMMARY"
-          [ "$size" -le "$limit" ] || { echo "::error::the desktop dmg is $((size / 1048576)) MiB, above the 310 MiB ceiling"; exit 1; }
+          limit=$((310 * 1000 * 1000))
+          mb() { awk -v b="$1" 'BEGIN { printf "%.1f", b / 1000000 }'; }
+          echo "ULMO dmg: $size bytes ($(mb "$size") MB), was $before bytes; ceiling $limit bytes (310 MB)"
+          echo "### Desktop dmg: $(mb "$size") MB (ULMO), from $(mb "$before") MB (UDZO); ceiling 310 MB" >> "$GITHUB_STEP_SUMMARY"
+          [ "$size" -le "$limit" ] || { echo "::error::the desktop dmg is $(mb "$size") MB, above the 310 MB ceiling"; exit 1; }
 
       - name: Attach the signed desktop app to the release (macOS)
         if: steps.mac-signing.outputs.enabled == 'true' && startsWith(github.ref, 'refs/tags/v')
