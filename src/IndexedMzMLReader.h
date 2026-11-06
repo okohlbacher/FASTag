@@ -19,6 +19,26 @@
 // files, software) is NOT read, so a run that needs it (-out_spectra) still
 // goes through OnDiscMSExperiment.
 //
+// STEP 0 (1.12) adds, as OpenMS's MzMLHandler (70cebcd144) fills them:
+//  - referenceableParamGroups, read once at open from the run header and
+//    applied where they are referenced (spectrum, scan, isolation window,
+//    selected ion, activation); an element's own cvParam wins;
+//  - the spectrum type, MS:1000127 centroid / MS:1000128 profile (UNKNOWN
+//    when neither is given);
+//  - the possible charge states of a selected ion, MS:1000633;
+//  - each precursor's activation: dissociation methods (MS:1002678/1002679
+//    supplemental terms as EThcD/ETciD) and activation energy MS:1000509;
+//  - the first scan's filter string, MS:1000512, as the meta value
+//    "filter string";
+//  - the isolation window target, as the precursor meta value "isolation
+//    window target m/z" whenever the selected ion moved the precursor m/z
+//    away from it (0 when the window has no target, as in OpenMS).
+// Not read: collision energy and the other activation meta values, product
+// lists. OpenMS keeps the FIRST selected ion of a precursor only; this reader
+// keeps one Precursor per selected ion, as before. No 1.11 consumer reads any
+// of the step-0 fields, so tags are unchanged; indexed_mzml_test compares
+// them against OpenMS.
+//
 // NO INDEX, OR A STALE ONE: the spectrum offsets are rebuilt by scanning the
 // file for <spectrum> start tags, in parallel, and the file is then read the
 // same way. A stale index is the common case, not an exotic one: any tool
@@ -91,6 +111,14 @@ namespace FASTag
     ///   the decoder rejects an MS2 spectrum (OpenMS's reader fails the same
     ///   file; a silent empty spectrum would drop its tags).
     OpenMS::MSSpectrum getSpectrum(OpenMS::Size i);
+
+    /// Spectrum @p i WITHOUT peaks: every metadata field getSpectrum() fills
+    /// (native id, MS level, retention time, type, scan windows, ion
+    /// mobility, filter string, precursors with their activation), read from
+    /// the head of the element. Lenient: an unreadable spectrum comes back
+    /// empty instead of throwing. For a probe over many spectra (the 1.12
+    /// acquisition check) that must not pay for decoding.
+    OpenMS::MSSpectrum getSpectrumMetadata(OpenMS::Size i);
 
     /// MS2 peaks are decoded by MzMLDirectDecoder, and by OpenMS's
     /// domParseSpectrum for every spectrum it declines. On by default;

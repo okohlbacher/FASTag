@@ -7,6 +7,8 @@
 #include <OpenMS/CONCEPT/Exception.h>
 #include <OpenMS/FORMAT/HANDLERS/MzMLSpectrumDecoder.h>
 #include <OpenMS/IONMOBILITY/IMTypes.h>
+#include <OpenMS/METADATA/MetaInfoInterface.h>
+#include <OpenMS/METADATA/MetaInfoRegistry.h>
 #include <OpenMS/METADATA/Precursor.h>
 #include <OpenMS/METADATA/ScanWindow.h>
 
@@ -19,8 +21,11 @@
 #include <memory>
 #include <new>
 #include <locale.h>
+#include <set>
 #include <string>
 #include <string_view>
+#include <unordered_map>
+#include <utility>
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -94,6 +99,12 @@ namespace FASTag
     constexpr std::string_view kInvK0 = "accession=\"MS:1002815\"";
     constexpr std::string_view kDriftTime = "accession=\"MS:1002476\"";
     constexpr std::string_view kFaimsCV = "accession=\"MS:1001581\"";
+    // Step 0 (1.12): fields OpenMS's MzMLHandler reads and this reader did not.
+    constexpr std::string_view kCentroid = "accession=\"MS:1000127\"";
+    constexpr std::string_view kProfile = "accession=\"MS:1000128\"";
+    constexpr std::string_view kPossibleCharge = "accession=\"MS:1000633\"";
+    constexpr std::string_view kFilterString = "accession=\"MS:1000512\"";
+    constexpr std::string_view kActivationEnergy = "accession=\"MS:1000509\"";
     constexpr std::string_view kArrays = "<binaryDataArrayList";
     constexpr std::string_view kValue = "value";
     constexpr std::string_view kUnit = "unitAccession";
@@ -108,6 +119,98 @@ namespace FASTag
       const std::size_t k = xml.find(needle, from);
       if (k == std::string_view::npos || k >= to) return {};
       return tag_attr(xml, k, attr);
+    }
+
+    /// The accession inside a needle such as `accession="MS:1000511"`.
+    constexpr std::string_view needle_accession(std::string_view needle)
+    {
+      return needle.substr(11, needle.size() - 12);
+    }
+
+    /// The dissociation methods of an <activation>, as OpenMS's MzMLHandler
+    /// maps them (70cebcd144): the supplemental terms MS:1002678/1002679 give
+    /// EThcD/ETciD, as there. MS:1002680 (supplemental collision energy) and
+    /// the other meta-value-only terms are not mapped.
+    struct ActivationTerm
+    {
+      std::string_view accession;
+      Precursor::ActivationMethod method;
+    };
+    constexpr ActivationTerm kActivationTerms[] = {
+        {"MS:1000133", Precursor::ActivationMethod::CID},   {"MS:1000134", Precursor::ActivationMethod::PD},
+        {"MS:1000135", Precursor::ActivationMethod::PSD},   {"MS:1000136", Precursor::ActivationMethod::SID},
+        {"MS:1000242", Precursor::ActivationMethod::BIRD},  {"MS:1000250", Precursor::ActivationMethod::ECD},
+        {"MS:1000262", Precursor::ActivationMethod::IMD},   {"MS:1000282", Precursor::ActivationMethod::SORI},
+        {"MS:1000422", Precursor::ActivationMethod::HCD},   {"MS:1002472", Precursor::ActivationMethod::TRAP},
+        {"MS:1002481", Precursor::ActivationMethod::HCID},  {"MS:1000433", Precursor::ActivationMethod::LCID},
+        {"MS:1000435", Precursor::ActivationMethod::PHD},   {"MS:1000598", Precursor::ActivationMethod::ETD},
+        {"MS:1002679", Precursor::ActivationMethod::ETciD}, {"MS:1002678", Precursor::ActivationMethod::EThcD},
+        {"MS:1003182", Precursor::ActivationMethod::ETciD}, {"MS:1002631", Precursor::ActivationMethod::EThcD},
+        {"MS:1000599", Precursor::ActivationMethod::PQD},   {"MS:1001880", Precursor::ActivationMethod::INSOURCE},
+        {"MS:1002000", Precursor::ActivationMethod::LIFT},
+    };
+
+    /// @p v with the XML entities a writer may put in an attribute value
+    /// (the five predefined ones and numeric character references) decoded,
+    /// as Xerces hands them to OpenMS. Anything malformed is kept verbatim.
+    std::string xml_unescape(std::string_view v)
+    {
+      if (v.find('&') == std::string_view::npos) return std::string(v);
+      std::string out;
+      out.reserve(v.size());
+      for (std::size_t i = 0; i < v.size(); ++i)
+      {
+        const std::size_t semi = v[i] == '&' ? v.find(';', i) : std::string_view::npos;
+        if (semi == std::string_view::npos || semi - i > 10)
+        {
+          out += v[i];
+          continue;
+        }
+        const std::string_view e = v.substr(i + 1, semi - i - 1);
+        unsigned long cp = 0;
+        bool ok = true;
+        if (e == "amp") cp = '&';
+        else if (e == "lt") cp = '<';
+        else if (e == "gt") cp = '>';
+        else if (e == "quot") cp = '"';
+        else if (e == "apos") cp = '\'';
+        else if (e.size() > 1 && e[0] == '#')
+        {
+          const bool hex = e[1] == 'x' || e[1] == 'X';
+          const std::string_view digits = e.substr(hex ? 2 : 1);
+          const auto r = std::from_chars(digits.data(), digits.data() + digits.size(), cp, hex ? 16 : 10);
+          ok = !digits.empty() && r.ec == std::errc() && r.ptr == digits.data() + digits.size() && cp > 0 &&
+               cp <= 0x10FFFF;
+        }
+        else ok = false;
+        if (!ok)
+        {
+          out += v[i];
+          continue;
+        }
+        // UTF-8, as Xerces' transcoding to the std::string OpenMS keeps.
+        if (cp < 0x80) out += static_cast<char>(cp);
+        else if (cp < 0x800)
+        {
+          out += static_cast<char>(0xC0 | (cp >> 6));
+          out += static_cast<char>(0x80 | (cp & 0x3F));
+        }
+        else if (cp < 0x10000)
+        {
+          out += static_cast<char>(0xE0 | (cp >> 12));
+          out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+          out += static_cast<char>(0x80 | (cp & 0x3F));
+        }
+        else
+        {
+          out += static_cast<char>(0xF0 | (cp >> 18));
+          out += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+          out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+          out += static_cast<char>(0x80 | (cp & 0x3F));
+        }
+        i = semi;
+      }
+      return out;
     }
 
     // The C-locale strtod, spelled per platform rather than through macros
@@ -322,6 +425,66 @@ namespace FASTag
     };
   }
 
+  namespace
+  {
+    /// One cvParam of a <referenceableParamGroup>, its attributes raw (the
+    /// value is unescaped where it is used as a string).
+    struct GroupParam
+    {
+      std::string accession, value, unit;
+    };
+    /// <referenceableParamGroup> id -> its cvParams, in file order.
+    using ParamGroups = std::unordered_map<std::string, std::vector<GroupParam>>;
+
+    /// The file's referenceableParamGroupList, read from the bytes before the
+    /// first spectrum (@p head_len of them, the run header). Empty when the
+    /// file has none or the head cannot be read; never throws.
+    std::shared_ptr<const ParamGroups> read_param_groups(const std::string& path, std::uint64_t head_len)
+    {
+      auto groups = std::make_shared<ParamGroups>();
+      try
+      {
+        // The header of a real mzML is a few KB; a file whose first spectrum
+        // starts beyond this cap keeps no groups rather than a huge read.
+        constexpr std::uint64_t kMaxHead = std::uint64_t{64} << 20;
+        if (head_len == 0 || head_len > kMaxHead) return groups;
+        std::ifstream f(path, std::ios::binary);
+        if (!f) return groups;
+        std::string head(static_cast<std::size_t>(head_len), '\0');
+        f.read(head.data(), static_cast<std::streamsize>(head_len));
+        if (!f) return groups;
+        const std::string_view h(head);
+        const std::size_t lb = h.find("<referenceableParamGroupList");
+        if (lb == std::string_view::npos) return groups;
+        const std::size_t le = find_or(h, "</referenceableParamGroupList>", lb, h.size());
+        constexpr std::string_view kGroup = "<referenceableParamGroup";
+        for (std::size_t g = h.find(kGroup, lb + 1); g != std::string_view::npos && g < le;
+             g = h.find(kGroup, g + kGroup.size()))
+        {
+          // Not <referenceableParamGroupList> or a ...Ref.
+          if (g + kGroup.size() >= h.size() || !is_name_end(h[g + kGroup.size()])) continue;
+          const std::string_view id = tag_attr(h, g + 1, "id");
+          const std::size_t ge = find_or(h, "</referenceableParamGroup>", g, le);
+          std::vector<GroupParam>& params = (*groups)[std::string(id)];
+          for (std::size_t c = h.find("<cvParam", g); c != std::string_view::npos && c < ge;
+               c = h.find("<cvParam", c + 8))
+          {
+            GroupParam gp;
+            gp.accession = std::string(tag_attr(h, c + 1, "accession"));
+            gp.value = std::string(tag_attr(h, c + 1, "value"));
+            gp.unit = std::string(tag_attr(h, c + 1, "unitAccession"));
+            if (!gp.accession.empty()) params.push_back(std::move(gp));
+          }
+        }
+      }
+      catch (...)
+      {
+        groups->clear();
+      }
+      return groups;
+    }
+  }
+
   /****************************************************************************/
   struct IndexedMzMLReader::Impl
   {
@@ -348,6 +511,9 @@ namespace FASTag
     std::string buffer;         ///< a copy of `bytes` for domParseSpectrum
     bool ok = false;
     bool rebuilt = false; ///< offsets came from a scan, not the file's index
+    /// The file's referenceableParamGroups, read once at open and shared by
+    /// every per-thread copy; never null once the reader is ok().
+    std::shared_ptr<const ParamGroups> groups;
 
     explicit Impl(std::string p) : path(std::move(p)) {}
   };
@@ -492,6 +658,7 @@ namespace FASTag
     }
 
     impl_->offsets = offsets;
+    impl_->groups = read_param_groups(path, offsets->front());
     impl_->ok = impl_->in.open(path);
   }
 
@@ -606,6 +773,7 @@ namespace FASTag
     : impl_(std::make_unique<Impl>(other.impl_->path))
   {
     impl_->offsets = other.impl_->offsets;
+    impl_->groups = other.impl_->groups;
     impl_->rebuilt = other.impl_->rebuilt;
     impl_->direct_on = other.impl_->direct_on;
     if (!other.impl_->ok) return;
@@ -632,6 +800,8 @@ namespace FASTag
 
   /****************************************************************************/
   MSSpectrum IndexedMzMLReader::getSpectrum(Size i) { return read_(i, /*want_peaks=*/true); }
+
+  MSSpectrum IndexedMzMLReader::getSpectrumMetadata(Size i) { return read_(i, /*want_peaks=*/false); }
 
   bool IndexedMzMLReader::reportsSpectrumMetadata()
   {
@@ -716,12 +886,72 @@ namespace FASTag
       return cut == std::string_view::npos ? all : all.substr(0, cut);
     };
 
+    // referenceableParamGroups (step 0, 1.12). OpenMS's MzMLHandler applies
+    // a group's cvParams as if they stood in the element holding the
+    // <referenceableParamGroupRef>, before that element's own cvParams. Here
+    // an element's OWN cvParam is looked up first and a group only when the
+    // element has none: the same result for the single-valued fields read
+    // below, since the schema puts references before cvParams and OpenMS
+    // keeps the last value it sees.
+    static const ParamGroups kNoGroups;
+    const ParamGroups& groups = impl_->groups ? *impl_->groups : kNoGroups;
+    // The cvParam with accession @p acc in a group referenced directly in
+    // [from, to) of @p xml, or null. The caller bounds the range to the
+    // element whose references count.
+    auto group_param = [&groups](std::string_view xml, std::string_view acc, std::size_t from,
+                                 std::size_t to) -> const GroupParam* {
+      if (groups.empty()) return nullptr;
+      constexpr std::string_view kRef = "<referenceableParamGroupRef";
+      for (std::size_t r = xml.find(kRef, from); r != std::string_view::npos && r < to;
+           r = xml.find(kRef, r + kRef.size()))
+      {
+        const auto it = groups.find(std::string(tag_attr(xml, r + 1, "ref")));
+        if (it == groups.end()) continue;
+        for (const GroupParam& gp : it->second)
+          if (gp.accession == acc) return &gp;
+      }
+      return nullptr;
+    };
+    // Every group cvParam with an accession in a referenced group, in order.
+    auto for_group_params = [&groups](std::string_view xml, std::size_t from, std::size_t to, auto&& fn) {
+      if (groups.empty()) return;
+      constexpr std::string_view kRef = "<referenceableParamGroupRef";
+      for (std::size_t r = xml.find(kRef, from); r != std::string_view::npos && r < to;
+           r = xml.find(kRef, r + kRef.size()))
+      {
+        const auto it = groups.find(std::string(tag_attr(xml, r + 1, "ref")));
+        if (it == groups.end()) continue;
+        for (const GroupParam& gp : it->second) fn(gp);
+      }
+    };
+    // cv_value() with the group fallback: the element's own cvParam if it
+    // has one, else the referenced group's.
+    auto cvg = [&](std::string_view xml, std::string_view needle, std::size_t from, std::size_t to,
+                   std::string_view attr = kValue) -> std::string_view {
+      const std::size_t k = xml.find(needle, from);
+      if (k != std::string_view::npos && k < to) return tag_attr(xml, k, attr);
+      const GroupParam* gp = group_param(xml, needle_accession(needle), from, to);
+      if (!gp) return {};
+      return attr == kUnit ? std::string_view(gp->unit) : std::string_view(gp->value);
+    };
+    // Where the spectrum's own cvParams and references end: at its first
+    // child list (the arrays are already cut off by meta()).
+    auto spectrum_params_end = [](std::string_view xml) {
+      return std::min({find_or(xml, "<scanList", 0, xml.size()), find_or(xml, "<precursorList", 0, xml.size()),
+                       find_or(xml, "<productList", 0, xml.size())});
+    };
+
     // MS level first: it decides whether the body is worth reading at all.
     int ms_level = 0;
     {
       const std::string_view h = meta();
       if (to_number(cv_value(h, kMsLevel, 0, h.size()), ms_level) && ms_level > 0)
         spec.setMSLevel(static_cast<UInt>(ms_level));
+      else if (const GroupParam* gp = group_param(h, needle_accession(kMsLevel), 0, spectrum_params_end(h));
+               gp && to_number(std::string_view(gp->value), ms_level) && ms_level > 0)
+        spec.setMSLevel(static_cast<UInt>(ms_level));
+      else
+        ms_level = 0;
     }
 
     // Peaks through OpenMS's own decoder, so the binary encodings (zlib,
@@ -826,6 +1056,43 @@ namespace FASTag
       spec.setDriftTimeUnit(DriftTimeUnit::FAIMS_COMPENSATION_VOLTAGE);
     }
 
+    // Spectrum representation (step 0): MS:1000127/128 among the spectrum's
+    // own cvParams, the later one winning as in OpenMS, else from a group it
+    // references. Neither leaves the type UNKNOWN, as OpenMS does.
+    {
+      const std::size_t se = spectrum_params_end(xml);
+      const std::size_t c = find_or(xml, kCentroid, 0, se), pr = find_or(xml, kProfile, 0, se);
+      if (c < se || pr < se)
+        spec.setType(pr >= se || (c < se && c > pr) ? SpectrumSettings::SpectrumType::CENTROID
+                                                     : SpectrumSettings::SpectrumType::PROFILE);
+      else if (group_param(xml, needle_accession(kCentroid), 0, se))
+        spec.setType(SpectrumSettings::SpectrumType::CENTROID);
+      else if (group_param(xml, needle_accession(kProfile), 0, se))
+        spec.setType(SpectrumSettings::SpectrumType::PROFILE);
+    }
+
+    // The filter string (step 0) of the first <scan>, as the meta value
+    // "filter string" OpenMS gives the spectrum.
+    if (const std::size_t slb = xml.find("<scanList"); slb != std::string_view::npos && slb < std::min(plb, n))
+    {
+      const std::size_t sle = find_or(xml, "</scanList>", slb, n);
+      std::size_t sc = xml.find("<scan", slb + 9);
+      while (sc != std::string_view::npos && sc < sle && !(sc + 5 < n && (is_name_end(xml[sc + 5]) || xml[sc + 5] == '/')))
+        sc = xml.find("<scan", sc + 5);
+      if (sc != std::string_view::npos && sc < sle)
+      {
+        // The scan's own params end at its window list or its end tag.
+        const std::size_t sce = std::min(find_or(xml, "<scanWindowList", sc, sle), find_or(xml, "</scan>", sc, sle));
+        const std::size_t k = find_or(xml, kFilterString, sc, sce);
+        const GroupParam* gp = k < sce ? nullptr : group_param(xml, needle_accession(kFilterString), sc, sce);
+        if (k < sce || gp)
+        {
+          static const UInt kFilterIdx = MetaInfoInterface::metaRegistry().registerName("filter string");
+          spec.setMetaValue(kFilterIdx, DataValue(xml_unescape(gp ? std::string_view(gp->value) : tag_attr(xml, k, kValue))));
+        }
+      }
+    }
+
     // Precursors: one OpenMS Precursor per SELECTED ION, matching the mzPeak
     // reader, so a window with several ions keeps all of them.
     if (plb == std::string_view::npos) return spec;
@@ -860,14 +1127,41 @@ namespace FASTag
       }
 
       double target = 0, lower = 0, upper = 0;
+      bool has_target = false;
       const std::size_t iwb = xml.find("<isolationWindow", p);
       if (iwb != std::string_view::npos && iwb < p_end)
       {
         const std::size_t iwe = find_or(xml, "</isolationWindow>", iwb, p_end);
-        to_number(cv_value(xml, kIsoTarget, iwb, iwe), target);
-        to_number(cv_value(xml, kIsoLower, iwb, iwe), lower);
-        to_number(cv_value(xml, kIsoUpper, iwb, iwe), upper);
+        has_target = to_number(cvg(xml, kIsoTarget, iwb, iwe), target);
+        to_number(cvg(xml, kIsoLower, iwb, iwe), lower);
+        to_number(cvg(xml, kIsoUpper, iwb, iwe), upper);
       }
+
+      // The activation (step 0): dissociation methods and activation energy,
+      // the same for every selected ion of this precursor.
+      std::set<Precursor::ActivationMethod> methods;
+      double activation_energy = 0;
+      bool has_activation_energy = false;
+      std::size_t acb = xml.find("<activation", p);
+      while (acb != std::string_view::npos && acb < p_end && !element_at(acb, "<activation"))
+        acb = xml.find("<activation", acb + 11);
+      if (acb != std::string_view::npos && acb < p_end)
+      {
+        const std::size_t ace = find_or(xml, "</activation>", acb, p_end);
+        auto add_method = [&methods](std::string_view acc) {
+          for (const ActivationTerm& t : kActivationTerms)
+            if (t.accession == acc) methods.insert(t.method);
+        };
+        for_group_params(xml, acb, ace, [&](const GroupParam& gp) { add_method(gp.accession); });
+        for (std::size_t c = xml.find("<cvParam", acb); c != std::string_view::npos && c < ace;
+             c = xml.find("<cvParam", c + 8))
+          add_method(tag_attr(xml, c + 1, "accession"));
+        has_activation_energy = to_number(cvg(xml, kActivationEnergy, acb, ace), activation_energy);
+      }
+      auto set_activation = [&](Precursor& prec) {
+        if (!methods.empty()) prec.setActivationMethods(methods);
+        if (has_activation_energy) prec.setActivationEnergy(activation_energy);
+      };
 
       bool any_ion = false;
       std::size_t s = p;
@@ -882,13 +1176,42 @@ namespace FASTag
         double mz = 0;
         int charge = 0;
         double intensity = 0;
-        if (to_number(cv_value(xml, kSelectedMz, s, s_end), mz)) prec.setMZ(mz);
+        if (to_number(cvg(xml, kSelectedMz, s, s_end), mz))
+        {
+          prec.setMZ(mz);
+          // The isolation target kept as OpenMS keeps it (step 0): as the
+          // meta value "isolation window target m/z" whenever the selected
+          // ion moved the precursor m/z away from it -- 0 when the window
+          // gave no target, as there.
+          const double window_mz = has_target ? target : 0.0;
+          if (mz != window_mz)
+          {
+            static const UInt kTargetIdx =
+                MetaInfoInterface::metaRegistry().registerName("isolation window target m/z");
+            prec.setMetaValue(kTargetIdx, DataValue(window_mz));
+          }
+        }
         else if (target > 0) prec.setMZ(target);
-        if (to_number(cv_value(xml, kChargeState, s, s_end), charge)) prec.setCharge(charge);
-        if (to_number(cv_value(xml, kPeakIntensity, s, s_end), intensity))
+        if (to_number(cvg(xml, kChargeState, s, s_end), charge)) prec.setCharge(charge);
+        if (to_number(cvg(xml, kPeakIntensity, s, s_end), intensity))
           prec.setIntensity(static_cast<float>(intensity));
+        // Possible charge states (MS:1000633, step 0), every one listed, in
+        // the order OpenMS reads them: referenced groups, then own cvParams.
+        {
+          const std::string_view acc = needle_accession(kPossibleCharge);
+          for_group_params(xml, s, s_end, [&](const GroupParam& gp) {
+            if (int z = 0; gp.accession == acc && to_number(std::string_view(gp.value), z))
+              prec.getPossibleChargeStates().push_back(z);
+          });
+          for (std::size_t k = xml.find(kPossibleCharge, s); k != std::string_view::npos && k < s_end;
+               k = xml.find(kPossibleCharge, k + kPossibleCharge.size()))
+          {
+            if (int z = 0; to_number(tag_attr(xml, k, kValue), z)) prec.getPossibleChargeStates().push_back(z);
+          }
+        }
         if (lower > 0) prec.setIsolationWindowLowerOffset(lower);
         if (upper > 0) prec.setIsolationWindowUpperOffset(upper);
+        set_activation(prec);
         spec.getPrecursors().push_back(std::move(prec));
         any_ion = true;
         // Always forward, whatever was or was not found.
@@ -902,6 +1225,7 @@ namespace FASTag
         prec.setMZ(target);
         if (lower > 0) prec.setIsolationWindowLowerOffset(lower);
         if (upper > 0) prec.setIsolationWindowUpperOffset(upper);
+        set_activation(prec);
         spec.getPrecursors().push_back(std::move(prec));
       }
       p = p_end > p ? p_end : p + 10;
