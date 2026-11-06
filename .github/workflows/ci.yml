@@ -1341,7 +1341,9 @@ jobs:
       # the results browser) and never read it, so an empty placeholder is
       # exactly enough. Verified locally by reproducing the CI condition:
       # without the directory cargo fails with "resource path
-      # `resources/fastag` doesn't exist"; with an empty one, 29/29 pass.
+      # `resources/fastag` doesn't exist"; with an empty one the lib tests pass
+      # (67 on macOS from P0a, 54 before). The run lifecycle tests drive
+      # gui/testing/stub-fastag, a sh script, instead of the CLI.
       - name: Backend unit tests
         working-directory: gui/src-tauri
         run: |

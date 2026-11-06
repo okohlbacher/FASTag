@@ -11,6 +11,7 @@ import App from '../App'
 import SpeciesPanel from '../SpeciesPanel'
 import { conflicts, inertBecause } from '../paramLayout'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
+import { applyAndCheck } from '../testing/lastUsed'
 import type { SpeciesReport, Taxon } from '../types'
 import { haveScratch, scratchPath } from './external'
 
@@ -67,6 +68,7 @@ async function renderWith(lastUsed: Record<string, unknown>): Promise<MockBridge
   render(<App />)
   await screen.findByText('FASTag ready')
   await act(async () => {})
+  await applyAndCheck(lastUsed) // D6: the offer, clicked; guards the form
   mock.nextPickInput = '/d/a.mzML'
   await act(async () => {
     fireEvent.click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))

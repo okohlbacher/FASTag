@@ -7,6 +7,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import App from '../App'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
+import { applyAndCheck } from '../testing/lastUsed'
 import type { SpeciesReport } from '../types'
 
 async function renderApp(mock: MockBridge): Promise<HTMLElement> {
@@ -114,6 +115,7 @@ describe('lifecycle: stale state across runs', () => {
     mock.settings.lastUsed = { species: true, tag_length: '7' }
     mock.speciesResult = speciesA
     await renderApp(mock)
+    await applyAndCheck(mock.settings.lastUsed!) // D6: the offer, clicked; guards the form
     await pickSingle(mock, '/d/a.mzML')
     await click(runButton())
     await done(mock, 1, true)
@@ -136,6 +138,7 @@ describe('lifecycle: stale state across runs', () => {
     mock.settings.lastUsed = { species: true, tag_length: '7', digest_out: '/r/a.digest.tsv' }
     mock.speciesResult = speciesA
     await renderApp(mock)
+    await applyAndCheck(mock.settings.lastUsed!) // D6: the offer, clicked; guards the form
     await pickSingle(mock, '/d/a.mzML')
     await click(runButton())
     await done(mock, 1, true)
@@ -158,6 +161,7 @@ describe('lifecycle: stale state across runs', () => {
     mock.settings.lastUsed = { species: true, tag_length: '7' }
     mock.speciesResult = speciesA
     await renderApp(mock)
+    await applyAndCheck(mock.settings.lastUsed!) // D6: the offer, clicked; guards the form
     await pickSingle(mock, '/d/a.mzML')
     await click(runButton())
     await done(mock, 1, true)
@@ -194,6 +198,7 @@ describe('lifecycle: stale state across runs', () => {
     mock.speciesResult = speciesA
     mock.taxdbInfoResult = { path: '/tax/tax_k7.taxdb', k: 7 }
     await renderApp(mock)
+    await applyAndCheck(mock.settings.lastUsed!) // D6: the offer, clicked; guards the form
     await pickSingle(mock, '/d/a.mzML')
     await click(runButton())
     await done(mock, 1, true)

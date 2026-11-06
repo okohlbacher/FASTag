@@ -21,6 +21,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import App from '../App'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
+import { applyAndCheck } from '../testing/lastUsed'
 import { PARAM_BY_NAME, invalidBecause, invalidParams } from '../paramLayout'
 import { FASTAG_BIN, ORDER_RS, REPO_FIXTURES_DIR, SRC_TAURI_DIR } from './external'
 
@@ -82,6 +83,7 @@ async function guiRun(opts: {
   render(<App />)
   await screen.findByText('FASTag ready')
   await act(async () => {})
+  if (opts.lastUsed) await applyAndCheck(opts.lastUsed) // D6: the offer, clicked; guards the form
   mock.nextPickInput = IN
   await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
   const outField = screen.getByLabelText(/Tags TSV/) as HTMLInputElement
@@ -108,6 +110,7 @@ async function guiBlocked(lastUsed: Record<string, unknown>): Promise<{ mock: Mo
   const { container } = render(<App />)
   await screen.findByText('FASTag ready')
   await act(async () => {})
+  await applyAndCheck(lastUsed) // D6: the offer, clicked; guards the form
   mock.nextPickInput = IN
   await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
   const run = screen.getByRole('button', { name: /^Run( on .+)?$/ }) as HTMLButtonElement

@@ -9,7 +9,9 @@ import type {
   BinaryInfo,
   FastagApi,
   ResultsPage,
+  OutputsCheck,
   ResultsView,
+  RunRecord,
   RunResult,
   RunStarted,
   Settings,
@@ -72,7 +74,10 @@ const api: FastagApi = {
   pickResults: () => openOne(TAGS),
   pickReport: () => openOne([{ name: 'Reports (TSV)', extensions: ['tsv'] }]),
 
+  outputsCheck: (params: Record<string, unknown>) => invoke<OutputsCheck>('outputs_check', { params }),
   run: (params: Record<string, unknown>) => invoke<RunStarted>('run', { params }),
+  historyList: (limit?: number) => invoke<RunRecord[]>('history_list', { limit }),
+  historyOf: (path: string) => invoke<RunRecord | null>('history_of', { path }),
   cancel: () => invoke<{ cancelled: boolean }>('cancel'),
   resultsQuery: (path: string, view: ResultsView, offset: number, limit: number) =>
     invoke<ResultsPage>('results_query', { path, view, offset, limit }),
@@ -99,7 +104,10 @@ const api: FastagApi = {
 
   onLog: (cb) => subscribe<string>('fastag:log', cb),
   onProgress: (cb) => subscribe<{ done: number; total: number }>('fastag:progress', cb),
-  onDone: (cb) => subscribe<RunResult>('fastag:done', cb)
+  onDone: (cb) => subscribe<RunResult>('fastag:done', cb),
+  onCloseRequested: (cb) => subscribe<'close' | 'quit'>('fastag:close-requested', cb),
+  answerClose: (quit: boolean) => invoke<void>('close_answer', { quit }),
+  setBusy: (busy: boolean) => invoke<void>('set_ui_busy', { busy })
 }
 
 window.fastag = api

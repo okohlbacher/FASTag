@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type JSX, type KeyboardEvent } from 'react'
-import type { BinaryInfo, RunResult, SpeciesReport } from './types'
+import type { BinaryInfo, Cleanup, RunResult, SpeciesReport } from './types'
 import {
   SECTIONS,
   PARAM_BY_NAME,
@@ -148,14 +148,22 @@ interface Job {
   ms?: number
   // The -out the CLI wrote, resolved by the backend (a done job's tags).
   wrote?: string
+  // This job's own log, kept when the next job starts (the live log is
+  // cleared then): a failed job's banner and its [Log] button open it.
+  log?: string[]
+  // A job that did not finish: the partial outputs the backend removed.
+  cleaned?: number
 }
 
 // A run that failed: what failed, and FASTag's own words for why (each failed
 // job of a batch has its own), plus the command line to reproduce it.
 interface Failure {
   title: string
-  reasons: { what?: string; text: string }[]
+  // input: the batch job the reason belongs to, whose log it opens.
+  reasons: { what?: string; text: string; input?: string }[]
   command?: string[]
+  // The batch job whose log "Show full log" opens; none: the live log.
+  logOf?: string
 }
 
 // m:ss, or h:mm:ss for a long run.
@@ -199,6 +207,20 @@ function initialValues(): Record<string, ParamValue> {
   return v
 }
 
+// What the backend did with the outputs of a run that did not finish, as log
+// lines.
+function cleanupLines(c: Cleanup | undefined): string[] {
+  if (!c) return []
+  return [
+    ...c.removed.map((p) => `Removed the partial output ${p}`),
+    ...c.renamed.map((p) => `Could not remove a partial output; renamed it to ${p}`),
+    ...c.failed.map((p) => `Could not remove the partial output ${p}: it may be incomplete`)
+  ]
+}
+
+// Two values of one parameter are the same setting.
+const sameValue = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b)
+
 // A run with no exit code was killed: by Cancel, or by the OS.
 function failText(r: RunResult): string {
   return r.message ?? (r.code == null ? 'stopped before it finished' : `exit code ${r.code}`)
@@ -220,6 +242,25 @@ export default function App(): JSX.Element {
   const [running, setRunning] = useState(false)
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [log, setLog] = useState<string[]>([])
+  // The same log, readable synchronously: a batch job keeps a copy of it when
+  // it ends, before the next job clears it.
+  const liveLog = useRef<string[]>([])
+  const pushLog = (...lines: string[]): void => {
+    for (const line of lines) liveLog.current = appendLog(liveLog.current, line)
+    setLog(liveLog.current)
+  }
+  const resetLog = (lines: string[] = []): void => {
+    liveLog.current = lines
+    setLog(lines)
+  }
+  // The batch job whose log the drawer shows; null: the live log.
+  const [logJob, setLogJob] = useState<string | null>(null)
+  // The parameters of the last session's run (D6): offered with "Apply
+  // last-used (n)", never applied on their own. null once applied.
+  const [lastUsed, setLastUsed] = useState<Record<string, ParamValue> | null>(null)
+  // The backend's close guard asks: the window was closed, or the app asked
+  // to quit, while a run or batch is active.
+  const [closeAsk, setCloseAsk] = useState<'close' | 'quit' | null>(null)
   // The tags TSV the browser pane shows. gen forces a fresh ResultsTable when
   // the same path is re-run: the backend cache invalidates on (len, mtime),
   // and the frontend view/scroll state must reset with it. input names the
@@ -232,6 +273,12 @@ export default function App(): JSX.Element {
     input?: string
     stale?: boolean
     incomplete?: boolean
+    // The backend removed it (or renamed it to .incomplete) after the run
+    // stopped part-way: there is nothing left to open.
+    removed?: 'removed' | 'renamed'
+    // Opened from disk, and the run record says the run that last wrote it
+    // did not finish (history.rs): withheld as incomplete.
+    recorded?: { status: 'cancelled' | 'failed'; end: number }
   } | null>(null)
   // A batch whose last job wrote no tags: the Tags tab names the job with
   // none, and a done job whose tags can be selected in the batch.
@@ -256,8 +303,18 @@ export default function App(): JSX.Element {
     cancelled: boolean
     at: number
     ms: number
-    changed: string[]
+    // Not known for a run of an earlier session (read from the run record).
+    changed?: string[]
+    // Partial outputs the backend removed after a cancel or failure.
+    cleaned: number
+    // Read from the run record at start: a run of an earlier session.
+    earlier?: boolean
   } | null>(null)
+  // Outputs of the run about to start that already exist: confirmed before
+  // the run, never after (GUI-DESIGN 6.4). answer(true) runs over them.
+  const [overwriteAsk, setOverwriteAsk] = useState<{ files: string[]; answer: (yes: boolean) => void } | null>(null)
+  // A Run click is checking for existing outputs: a second click waits.
+  const checking = useRef(false)
   // What a screen reader hears of a run: started, finished, stopped. The log
   // is a live region too, but it is display:none while the drawer is shut.
   const [announce, setAnnounce] = useState('')
@@ -348,12 +405,42 @@ export default function App(): JSX.Element {
     window.fastag.probe().then(setBin)
     window.fastag.loadSettings().then((st) => {
       setPresets(Object.keys(st.presets).sort())
-      // Restore the last session's parameters (but not in/out paths -- those are
-      // per-run). Merge over defaults so a new CLI option added since last launch
-      // still gets its default rather than undefined.
-      if (st.lastUsed) setValues((v) => ({ ...v, ...(st.lastUsed as Record<string, ParamValue>) }))
+      // The last session's parameters are an offer (D6): a fresh start runs
+      // with FASTag's defaults unless "Apply last-used" is clicked. Only
+      // parameters the form renders count; in/out paths are never stored.
+      if (st.lastUsed) {
+        const known = Object.entries(st.lastUsed).filter(([n]) => RENDERED.includes(n)) as [string, ParamValue][]
+        if (known.length) setLastUsed(Object.fromEntries(known))
+      }
     })
   }, [])
+
+  // The last run of an earlier session, from the run record: a cancelled or
+  // failed one still reads as such after a restart.
+  useEffect(() => {
+    window.fastag
+      .historyList(1)
+      .then((h) => {
+        const r = h[0]
+        if (!r) return
+        setLastRun(
+          (cur) =>
+            cur ?? {
+              input: r.input,
+              ok: r.status === 'ok',
+              cancelled: r.status === 'cancelled',
+              at: r.end,
+              ms: Math.max(0, r.end - r.start),
+              cleaned: r.cleanup.removed.length,
+              earlier: true
+            }
+        )
+      })
+      .catch(() => {})
+  }, [])
+
+  // The backend asks before a close or quit kills an active run.
+  useEffect(() => window.fastag.onCloseRequested((what) => setCloseAsk(what)), [])
 
   // Re-read whenever the user points at a different index.
   const taxdbPath = String(values['taxdb'] || '')
@@ -363,7 +450,7 @@ export default function App(): JSX.Element {
 
   useEffect(() => {
     const offLog = window.fastag.onLog((line) => {
-      setLog((l) => appendLog(l, line))
+      pushLog(line)
       // The reason for the banner: neither the exit epilogue nor the help
       // dump that follows a ConversionError can be it.
       if (HELP_START.test(line)) inHelp.current = true
@@ -388,11 +475,9 @@ export default function App(): JSX.Element {
       const id = r.runId
       if (id == null || settled.current.has(id)) return
       setProgress(null)
-      setLog((l) =>
-        appendLog(
-          l,
-          r.ok ? '— done —' : isCancelled(r) ? '— cancelled (stopped before it finished) —' : `— failed (${failText(r)}) —`
-        )
+      pushLog(
+        r.ok ? '— done —' : isCancelled(r) ? '— cancelled (stopped before it finished) —' : `— failed (${failText(r)}) —`,
+        ...cleanupLines(r.cleanup)
       )
       // Hand the result to the awaiter for THIS run id; an event that beats
       // the invoke reply parks in earlyDone until runOne claims it. Only a
@@ -425,12 +510,40 @@ export default function App(): JSX.Element {
     return () => clearInterval(t)
   }, [running])
 
+  // Between two batch jobs no CLI child exists: tell the backend's close
+  // guard that the batch is still busy.
+  useEffect(() => {
+    window.fastag.setBusy(batchRunning).catch(() => {})
+  }, [batchRunning])
+
   // Focus a control once the render that brings it has happened.
   const focusLater = (el: () => HTMLElement | null | undefined): void => {
     setTimeout(() => el()?.focus())
   }
 
   const setValue = (name: string, v: ParamValue): void => setValues((s) => ({ ...s, [name]: v }))
+
+  // The last session's values that differ from the form's (D6).
+  const lastUsedDiff = lastUsed ? Object.keys(lastUsed).filter((n) => !sameValue(lastUsed[n], values[n])) : []
+  // Apply the offer. Report paths go beside the current tags output, as a
+  // preset's do, or this run would overwrite the last session's reports.
+  function applyLastUsed(): void {
+    if (!lastUsed) return
+    const lu = lastUsed
+    setValues((v) => {
+      const merged = { ...v, ...lu }
+      return out ? { ...merged, ...rebaseOutputs(merged, out) } : merged
+    })
+    setLastUsed(null)
+    focusLater(() => presetRef.current)
+  }
+
+  // Open the log of a batch job (null: the live log) in the drawer.
+  function openLog(job: string | null | undefined): void {
+    setLogJob(job ?? null)
+    setLogOpen(true)
+    focusLater(() => logRef.current)
+  }
 
   async function pickInput(): Promise<void> {
     if (running || batchRunning) return
@@ -488,13 +601,35 @@ export default function App(): JSX.Element {
   const withoutInert = (p: Record<string, ParamValue>): Record<string, ParamValue> =>
     Object.fromEntries(Object.entries(p).filter(([name, v]) => v === '' || !inertBecause(name, { ...values, ...p })))
 
+  // What `run` is given for one file.
+  const runParams = (inFile: string, outFile: string, overrides?: Record<string, ParamValue>): Record<string, unknown> => ({
+    in: inFile,
+    out: outFile,
+    params: withoutInert({ ...submittedParams(), ...overrides })
+  })
+
+  // The outputs of these runs that already exist. A failed check asks
+  // nothing: the backend still refuses to run over an unconfirmed file.
+  async function existingOutputs(calls: Record<string, unknown>[]): Promise<string[]> {
+    try {
+      const all = await Promise.all(calls.map((c) => window.fastag.outputsCheck(c)))
+      return [...new Set(all.flatMap((c) => c.existing))]
+    } catch {
+      return []
+    }
+  }
+  const askOverwrite = (files: string[]): Promise<boolean> =>
+    new Promise((answer) => setOverwriteAsk({ files, answer }))
+
   // Run one file and resolve when it finishes. Shared by single and batch runs.
   // Resolves with the -out the CLI was given (RunStarted.out), absolute once
-  // the backend has resolved a relative Output.
+  // the backend has resolved a relative Output. overwrite: the user confirmed
+  // overwriting its existing outputs.
   function runOne(
     inFile: string,
     outFile: string,
-    overrides?: Record<string, ParamValue>
+    overrides?: Record<string, ParamValue>,
+    overwrite = false
   ): Promise<RunResult & { out: string }> {
     let wrote = resolveBeside(inFile, outFile)
     const marked = wrote
@@ -503,24 +638,29 @@ export default function App(): JSX.Element {
         // The CLI writes -out in place: a finished run rewrote it, so the
         // table reads it afresh; a failed or cancelled one may have left it
         // truncated or removed, so the table stays withheld as incomplete.
+        // The backend removed what the run wrote: the table has nothing left
+        // to open, not even "anyway".
+        const gone = (p: string): 'removed' | 'renamed' | undefined =>
+          r.cleanup?.removed.includes(p) ? 'removed' : r.cleanup?.renamed.includes(`${p}.incomplete`) ? 'renamed' : undefined
         setResults((x) =>
           x?.stale && (x.path === marked || x.path === wrote)
             ? r.ok
-              ? { ...x, stale: false, incomplete: false, gen: x.gen + 1 }
-              : { ...x, incomplete: true }
+              ? { ...x, stale: false, incomplete: false, removed: undefined, gen: x.gen + 1 }
+              : { ...x, incomplete: true, removed: gone(x.path) }
             : x
         )
         const name = baseName(inFile)
+        const cleaned = r.cleanup?.removed.length ?? 0
         setAnnounce(
           r.ok
             ? `Finished ${name}${lastTags.current != null ? `: ${lastTags.current.toLocaleString('en-US')} tags` : ''}.`
             : isCancelled(r)
-              ? `Cancelled ${name}.`
-              : `${name} failed.`
+              ? `Cancelled ${name}${cleaned ? ', partial outputs removed' : ''}.`
+              : `${name} failed${cleaned ? ', partial outputs removed' : ''}.`
         )
         done({ ...r, out: wrote })
       }
-      setLog([])
+      resetLog()
       setProgress(null)
       setEvidence({ contributed: null, ms2: null }) // don't carry a prior run's counts
       setReports({ list: [], errors: [] })
@@ -550,7 +690,7 @@ export default function App(): JSX.Element {
         resolve(r)
       }
       window.fastag
-        .run({ in: inFile, out: outFile, params: withoutInert({ ...submittedParams(), ...overrides }) })
+        .run(overwrite ? { ...runParams(inFile, outFile, overrides), overwrite: true } : runParams(inFile, outFile, overrides))
         .then((res) => {
           // Register the awaiter only once the backend hands back the run
           // id; the terminal event carries the same id (see onDone).
@@ -569,13 +709,13 @@ export default function App(): JSX.Element {
               pending.current.set(res.runId, resolve)
             }
           } else {
-            setLog([`FASTag could not start: ${res.reason ?? 'no reason given'}`])
+            resetLog([`FASTag could not start: ${res.reason ?? 'no reason given'}`])
             settle({ ok: false, code: null, message: res.reason })
           }
         })
         .catch((err) => {
           // A rejected invoke would otherwise leave running=true forever.
-          setLog([`FASTag could not start: ${err instanceof Error ? err.message : String(err)}`])
+          resetLog([`FASTag could not start: ${err instanceof Error ? err.message : String(err)}`])
           settle({ ok: false, code: null, message: String(err) })
         })
     })
@@ -622,19 +762,30 @@ export default function App(): JSX.Element {
   // preview/species inside showResults would surface as an unhandled rejection.
   // Log it instead; the run itself already settled.
   const logResultsError = (err: unknown): void =>
-    setLog((l) => [...l, `Could not show the results: ${err instanceof Error ? err.message : String(err)}`])
+    pushLog(`Could not show the results: ${err instanceof Error ? err.message : String(err)}`)
 
   async function run(): Promise<void> {
-    if (!input || !out) return
+    if (!input || !out || checking.current) return
+    checking.current = true
+    let existing: string[]
+    try {
+      existing = await existingOutputs([runParams(input, out)])
+    } finally {
+      checking.current = false
+    }
+    const overwrite = existing.length > 0
+    if (overwrite && !(await askOverwrite(existing))) return
     window.fastag.saveLast(values)
-    const r = await runOne(input, out)
+    setLogJob(null)
+    const r = await runOne(input, out, undefined, overwrite)
     setLastRun({
       input,
       ok: r.ok,
       cancelled: isCancelled(r),
       at: Date.now(),
       ms: Date.now() - startedAt.current,
-      changed: changedParams
+      changed: changedParams,
+      cleaned: r.cleanup?.removed.length ?? 0
     })
     if (r.ok) await showResults(input, r.out).catch(logResultsError)
     else if (!isCancelled(r)) failed(r, baseName(input))
@@ -643,6 +794,7 @@ export default function App(): JSX.Element {
   async function runBatch(only?: Job['status']): Promise<void> {
     if (jobs.length === 0 || batchRunning || running || blocked) return
     window.fastag.saveLast(values)
+    setLogJob(null)
     setBatchRunning(true)
     // Snapshot the queue we're running and key status updates by input path (the
     // queue is dedup'd on input). A thrown preview/species must still release the
@@ -658,21 +810,33 @@ export default function App(): JSX.Element {
     const failedInputs: string[] = []
     batchCancel.current = false
     try {
+      // One question for the whole batch, before its first job.
+      const existing = await existingOutputs(queue.map((j) => runParams(j.input, j.out, perJobOutputs(values, j.out))))
+      const overwrite = existing.length > 0
+      if (overwrite && !(await askOverwrite(existing))) return
       for (let i = 0; i < queue.length; i++) {
         if (batchCancel.current) break
         const job = queue[i]
         setJobs((js) => js.map((j) => (j.input === job.input ? { ...j, status: 'running', reason: undefined } : j)))
         const outputs = perJobOutputs(values, job.out)
-        const r = await runOne(job.input, job.out, outputs)
+        const r = await runOne(job.input, job.out, outputs, overwrite)
         const status: Job['status'] = r.ok ? 'done' : isCancelled(r) ? 'cancelled' : 'failed'
         const reason = status === 'failed' ? failureReason(r) : undefined
         const ms = Date.now() - startedAt.current
-        setJobs((js) => js.map((j) => (j.input === job.input ? { ...j, status, reason, ms, wrote: r.ok ? r.out : undefined } : j)))
+        // The live log holds this job's lines (and its done line) until the
+        // next job clears it: keep a copy with the job.
+        const jobLog = liveLog.current
+        const cleaned = r.cleanup?.removed.length ?? 0
+        setJobs((js) =>
+          js.map((j) =>
+            j.input === job.input ? { ...j, status, reason, ms, wrote: r.ok ? r.out : undefined, log: jobLog, cleaned } : j
+          )
+        )
         lastRunJob = { input: job.input, ok: r.ok }
         if (r.ok) lastDone = job.input
         if (status === 'failed') {
           const why = failureWhy()
-          failures.push({ what: `${baseName(job.input)} (${failText(r)})`, text: why ?? '' })
+          failures.push({ what: `${baseName(job.input)} (${failText(r)})`, text: why ?? '', input: job.input })
           failedInputs.push(job.input)
           failedCommand = failedCommand ?? command.current
         }
@@ -691,7 +855,12 @@ export default function App(): JSX.Element {
       }
       // A job that failed before the user cancelled the rest still failed.
       if (failures.length > 0)
-        setFailure({ title: `${failures.length} of ${queue.length} batch jobs failed`, reasons: failures, command: failedCommand })
+        setFailure({
+          title: `${failures.length} of ${queue.length} batch jobs failed`,
+          reasons: failures,
+          command: failedCommand,
+          logOf: failures[0].input
+        })
     } finally {
       setBatchRunning(false)
       batchCancel.current = false
@@ -719,7 +888,11 @@ export default function App(): JSX.Element {
   async function openResults(): Promise<void> {
     const p = await window.fastag.pickResults()
     if (p) {
-      setResults((r) => ({ path: p, gen: (r?.gen ?? 0) + 1 }))
+      // A file whose run the record marks cancelled or failed (its cleanup
+      // could not remove it) is not opened as a complete table.
+      const rec = await window.fastag.historyOf(p).catch(() => null)
+      const recorded = rec && rec.status !== 'ok' ? { status: rec.status, end: rec.end } : undefined
+      setResults((r) => ({ path: p, gen: (r?.gen ?? 0) + 1, ...(recorded ? { stale: true, incomplete: true, recorded } : {}) }))
       setBatchMiss(null)
     }
   }
@@ -846,7 +1019,10 @@ export default function App(): JSX.Element {
   // Failed jobs are Retry failed's, not the remaining ones.
   const remaining = jobs.filter((j) => j.status !== 'done' && j.status !== 'failed').length
   const failedJobs = jobs.filter((j) => j.status === 'failed').length
-  const lastLog = [...log].reverse().find((l) => l.trim() !== '') ?? ''
+  // The drawer shows the live log, or the kept log of a batch job.
+  const logJobEntry = logJob ? jobs.find((j) => j.input === logJob && j.log) : undefined
+  const shownLog = logJobEntry?.log ?? log
+  const lastLog = [...shownLog].reverse().find((l) => l.trim() !== '') ?? ''
 
   const jobWords = (j: Job): string =>
     j.status === 'done'
@@ -854,7 +1030,7 @@ export default function App(): JSX.Element {
       : j.status === 'failed'
         ? `Failed: ${j.reason ?? 'no reason given'}`
         : j.status === 'cancelled'
-          ? 'Cancelled by you'
+          ? `Cancelled by you${j.cleaned ? ', partial outputs removed' : ''}`
           : j.status === 'running'
             ? 'Running…'
             : 'Not run'
@@ -916,6 +1092,19 @@ export default function App(): JSX.Element {
             ) : (
               <span className="jbody">{body}</span>
             )}
+            {j.log && (
+              // This job's own log, also once later jobs have run.
+              <button
+                type="button"
+                className="jlog"
+                aria-label={`Log of ${baseName(j.input)}`}
+                aria-pressed={logJobEntry === j && logOpen}
+                title={`Show the log of ${j.input}`}
+                onClick={() => openLog(j.input)}
+              >
+                Log
+              </button>
+            )}
             {!busy && (
               <button
                 className="rm"
@@ -950,6 +1139,90 @@ export default function App(): JSX.Element {
 
   return (
     <div className="app">
+      {closeAsk && (
+        // The backend's close guard: closing or quitting would kill the run.
+        <div className="modal-backdrop">
+          <div className="modal" role="alertdialog" aria-modal="true" aria-labelledby="close-ask-h" aria-describedby="close-ask-p">
+            <h2 id="close-ask-h">{busy && jobs.length > 0 ? 'A batch is running' : 'FASTag is running'}</h2>
+            <p id="close-ask-p">
+              {closeAsk === 'quit' ? 'Quitting' : 'Closing the window'} stops the run
+              {batchRunning ? ' and the rest of the batch' : ''}, and removes the files it has written so far.
+            </p>
+            <div className="row actions">
+              <button
+                className="danger"
+                onClick={() => {
+                  cancelled.current = true
+                  batchCancel.current = true
+                  setCloseAsk(null)
+                  window.fastag.answerClose(true)
+                }}
+              >
+                Cancel run and quit
+              </button>
+              <button
+                className="secondary"
+                autoFocus
+                onClick={() => {
+                  setCloseAsk(null)
+                  window.fastag.answerClose(false)
+                }}
+              >
+                Keep running
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {overwriteAsk && (
+        // Outputs that already exist: asked before the run, never after.
+        <div className="modal-backdrop">
+          <div
+            className="modal"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="overwrite-ask-h"
+            aria-describedby="overwrite-ask-p"
+          >
+            <h2 id="overwrite-ask-h">
+              {overwriteAsk.files.length === 1 ? 'An output already exists' : `${overwriteAsk.files.length} outputs already exist`}
+            </h2>
+            <p id="overwrite-ask-p">
+              The run writes over {overwriteAsk.files.length === 1 ? 'this file' : 'these files'}. If it is cancelled or
+              fails, {overwriteAsk.files.length === 1 ? 'it is' : 'they are'} removed, not restored.
+            </p>
+            <ul className="overwrite-list">
+              {overwriteAsk.files.slice(0, 12).map((f) => (
+                <li key={f}>
+                  <code>{f}</code>
+                </li>
+              ))}
+              {overwriteAsk.files.length > 12 && <li>and {overwriteAsk.files.length - 12} more</li>}
+            </ul>
+            <div className="row actions">
+              <button
+                className="danger"
+                onClick={() => {
+                  setOverwriteAsk(null)
+                  overwriteAsk.answer(true)
+                }}
+              >
+                Overwrite and run
+              </button>
+              <button
+                className="secondary"
+                autoFocus
+                onClick={() => {
+                  setOverwriteAsk(null)
+                  overwriteAsk.answer(false)
+                }}
+              >
+                Don't run
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <header className="appbar">
         <img className="logo" src={logo} alt="" width={22} height={22} />
         <h1>FASTag</h1>
@@ -1033,11 +1306,16 @@ export default function App(): JSX.Element {
                       <span>{baseName(lastRun.input)}</span>
                     </div>
                     <div className="muted">
-                      {lastRun.ok ? 'Finished' : lastRun.cancelled ? 'Cancelled' : 'Failed'} {clock(lastRun.at)} · {duration(lastRun.ms)}
+                      {lastRun.ok ? 'Finished' : lastRun.cancelled ? 'Cancelled' : 'Failed'}{' '}
+                      {lastRun.earlier ? `in an earlier session, ${new Date(lastRun.at).toLocaleString()}` : clock(lastRun.at)} ·{' '}
+                      {duration(lastRun.ms)}
+                      {lastRun.cleaned > 0 && ' · partial outputs removed'}
                       {lastRun.ok && evidence.ms2 != null && ` · ${evidence.ms2.toLocaleString('en-US')} MS2 spectra`}
                     </div>
                     {/* The form may be edited since: what this run was given. */}
-                    <code className="last-run-params">{lastRun.changed.length ? lastRun.changed.join(' ') : 'all defaults'}</code>
+                    {lastRun.changed && (
+                      <code className="last-run-params">{lastRun.changed.length ? lastRun.changed.join(' ') : 'all defaults'}</code>
+                    )}
                   </section>
                 )}
 
@@ -1132,6 +1410,18 @@ export default function App(): JSX.Element {
                           ))}
                         </select>
                         <button className="secondary small" onClick={() => setSavingName(preset || '')}>Save…</button>
+                        {lastUsedDiff.length > 0 && (
+                          <button
+                            type="button"
+                            className="secondary small offer"
+                            onClick={applyLastUsed}
+                            title={`The settings of your last run: ${lastUsedDiff
+                              .map((n) => cliText(n, lastUsed![n]))
+                              .join(' ')}`}
+                          >
+                            Apply last-used ({lastUsedDiff.length})
+                          </button>
+                        )}
                         <button className="secondary small" onClick={removePreset} disabled={!preset}>Delete</button>
                       </>
                     ) : (
@@ -1401,16 +1691,18 @@ export default function App(): JSX.Element {
                     </>
                   )}
                   <HelpLink to={faqForMessage(r.text)}>What to do</HelpLink>
+                  {r.input && failure.reasons.length > 1 && (
+                    <>
+                      {' '}
+                      <button type="button" className="link" onClick={() => openLog(r.input)}>
+                        Log of {baseName(r.input)}
+                      </button>
+                    </>
+                  )}
                 </div>
               ))}
               <div className="failure-actions">
-                <button
-                  className="secondary"
-                  onClick={() => {
-                    setLogOpen(true)
-                    focusLater(() => logRef.current)
-                  }}
-                >
+                <button className="secondary" onClick={() => openLog(failure.logOf)}>
                   Show full log
                 </button>
                 {failure.command && (
@@ -1478,10 +1770,27 @@ export default function App(): JSX.Element {
                       <strong>Outdated.</strong> This run is rewriting <code>{results.path}</code>; its tags appear
                       here when it finishes.
                     </span>
+                  ) : results.removed ? (
+                    <span>
+                      <strong>Removed.</strong> The run stopped before it finished, so its partial outputs were
+                      {results.removed === 'removed' ? ' removed' : ' renamed to .incomplete'}: <code>{results.path}</code>{' '}
+                      {results.removed === 'removed' ? 'no longer exists' : 'is now named with .incomplete'}. Run again for
+                      a complete table. <HelpButton to="faq-incomplete" what="partial outputs" />
+                    </span>
                   ) : (
                     <span>
-                      <strong>Incomplete.</strong> The run stopped while rewriting <code>{results.path}</code>, so the
-                      file may hold only part of a table or none.{' '}
+                      {results.recorded ? (
+                        <>
+                          <strong>Incomplete.</strong> The run that wrote <code>{results.path}</code> was{' '}
+                          {results.recorded.status} ({new Date(results.recorded.end).toLocaleString()}), so the file
+                          may hold only part of a table.{' '}
+                        </>
+                      ) : (
+                        <>
+                          <strong>Incomplete.</strong> The run stopped while rewriting <code>{results.path}</code>, so
+                          the file may hold only part of a table or none.{' '}
+                        </>
+                      )}
                       <button
                         type="button"
                         className="link"
@@ -1514,10 +1823,11 @@ export default function App(): JSX.Element {
                     New to FASTag? <HelpLink to="start">Read Getting started</HelpLink> (F1 opens Help at any time).
                   </p>
                   <div className="row-actions">
-                    <button className="secondary big" onClick={openResults}>
+                    {/* Not while a run is writing the files they would open. */}
+                    <button className="secondary big" onClick={openResults} disabled={busy}>
                       Open a tags TSV…
                     </button>
-                    <button className="secondary big" onClick={openReport}>
+                    <button className="secondary big" onClick={openReport} disabled={busy}>
                       Open a digest, label or mass-gap report…
                     </button>
                   </div>
@@ -1529,18 +1839,23 @@ export default function App(): JSX.Element {
           <section className={`logdrawer${logOpen ? ' open' : ''}`} aria-label="Run log">
             <button className="drawer-toggle" aria-expanded={logOpen} aria-controls="runlog" onClick={() => setLogOpen((o) => !o)}>
               <span className={`chev ${logOpen ? 'open' : ''}`} aria-hidden="true">▸</span>
-              <span className="lbl">Log</span>
+              <span className="lbl">{logJobEntry ? `Log of ${baseName(logJobEntry.input)}` : 'Log'}</span>
               <code className="last">{lastLog || 'Log output appears here.'}</code>
               <span className="n">
-                {log.length} {log.length === 1 ? 'line' : 'lines'}
+                {shownLog.length} {shownLog.length === 1 ? 'line' : 'lines'}
               </span>
             </button>
+            {logJobEntry && logOpen && (
+              <button type="button" className="link live-log" onClick={() => openLog(null)}>
+                Show the current log
+              </button>
+            )}
             {/* role=log is a polite live region while the drawer is open; a
                 collapsed one is display:none and announces nothing, so the
                 run bar's status says when a run starts and ends. Focusable,
                 so the keyboard can scroll it. */}
             <pre id="runlog" className="log" ref={logRef} role="log" aria-label="Run log" tabIndex={0} hidden={!logOpen}>
-              {log.length ? log.join('\n') : 'Log output appears here.'}
+              {shownLog.length ? shownLog.join('\n') : 'Log output appears here.'}
             </pre>
           </section>
         </section>
