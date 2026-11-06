@@ -315,13 +315,27 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
   set_tests_properties(digest_cli_test PROPERTIES SKIP_RETURN_CODE 77)
 
-  # Integration: -recon_id_out .mzid is written with placements, and empty
-  # (0 bytes) without them.
+  # Integration: -recon_id_out in mzid, idXML and mzTab holds what -recon_out
+  # holds; .mzid is empty (0 bytes) without placements; with
+  # FASTAG_BASELINE_BIN all of it equals the 1.11.0 binary's.
   add_test(NAME recon_ids_test
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/recon_ids_test.sh $<TARGET_FILE:FASTag>
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta)
   set_tests_properties(recon_ids_test PROPERTIES SKIP_RETURN_CODE 77)
+
+  # Baseline identity: every legacy output of this build equals the 1.11.0
+  # binary's (78390cd) on the fixtures, after date/version masking. Needs
+  # FASTAG_BASELINE_BIN (on node data: the 1.11.0 install); SKIPs without it.
+  # The gate job runs tools/baseline_identity_gate.sh on the PXD inputs too.
+  add_test(NAME baseline_identity_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/baseline_identity_test.sh $<TARGET_FILE:FASTag>
+                   $<TARGET_FILE:buildtaxdb>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy)
+  set_tests_properties(baseline_identity_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # mzPeak reader vs its own mzML twin. Needs a matched pair of real files, so
   # it SKIPs unless FASTAG_E2E_MZML and FASTAG_E2E_MZPEAK point at one.
