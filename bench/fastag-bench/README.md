@@ -399,6 +399,41 @@ python3 scripts/stats_paired.py stats
   called runs, coverage, the majority-class baseline on the same runs, balanced accuracy, and per class the
   recall with a 95% Wilson interval and the run and PXD counts.
 
+## Unidentified and chimeric spectra (`fastag-bench unidentified`, FASTag 1.12 item #4)
+
+An evaluation, not a FASTag feature: FASTag 1.11.0 runs unchanged. Plan: FASTag `output/features-1.12/PLAN-qc.md`
+item #4; the endpoints are pre-registered in `validation-registry.tsv` rows F4-01..F4-07.
+
+- Two independent axes per spectrum (`strata.py`): identification (S0 = closed full-database Sage at 1% FDR,
+  S3-PT = a ProteomeTools pool spectrum the closed search does not identify, S5 = no label) and chimericity
+  (none, or `synthetic-mix:<ratio>`).
+- S3-PT truth (`pooltruth.py`): the pool peptides whose mass fits the precursor (10 ppm, the given charge or 2-4,
+  isotope errors 0 and 1, fixed CAM, Met oxidation). Size 0 = `no_pool_candidate` (reported, not scored),
+  size 1 = spectrum-level label, size > 1 = `pool_consistent` (reported separately). Controls: pool-restricted vs
+  full-DB Sage agreement (>= 95% or the pool is excluded), a same-size shuffled entrapment pool in the pool search
+  (labels flagged uncertain above 1.5x the nominal rate), synthesis byproducts, pool-swap chance (a pool of
+  another LC-MS batch, shared identities removed, same mass constraint), carryover from neighbouring pools.
+- Pool lists (`proteometools.py`): PRIDE holds no synthesis lists for PXD004732, so a pool's list is the union of
+  the MaxQuant-identified pool peptides over its four deposited tryptic searches.
+- Synthetic S4 chimeras (`chimera.py`): two S0 spectra of different pools, same activation and NCE, precursor
+  within the isolation half-width; unit TIC, minor scaled 1/ratio (1:1, 1:10), peaks within 0.002 Da summed at
+  the weighted centroid; precursor and charge from the dominant parent. Scored with and without `-diversity`.
+- Chance for S0: `score.shuffled_peptides`, a derangement over I/L-normalized identities (`shuffled_psms`, the
+  v1.9.0 row derangement, is unchanged for the v1.9.0 tables).
+- Statistics (`scripts/stats_unidentified.py`): cluster bootstrap (clusters = normalized peptide; pool for
+  pool_consistent; union of both parents for chimeras) and a cluster sign-flip permutation test with Holm.
+- Splits (`config/proteometools_splits.tsv`): drawn once, before any scoring: #4 dev 3 pools (seed 1), test 10
+  (seed 2), F7 train/test/final 20/10/10 (seeds 3/4/5, on LC-MS batches #4 does not use), reserved for #2, #15
+  and #16 (seeds 6/7/8). The test split is scored once.
+
+```bash
+C=config/unidentified-data.yaml   # node data paths
+for step in pool-truth sage-modes chimera-build run score collect; do
+  fastag-bench unidentified $step -c $C --split dev
+done
+fastag-bench unidentified v190-check -c $C   # closed path reproduces the v1.9.0 pair table
+```
+
 ## Runtime analysis of PXD047793 (`results/runtime_pxd047793_v190.tsv`)
 
 One diaTracer 2.2.1 pseudo-MS2 mzML of PXD047793 (3,086,644 spectra, 24.7 GB) and the PXD003531 Q Exactive
