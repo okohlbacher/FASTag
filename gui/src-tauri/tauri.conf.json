@@ -58,6 +58,11 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "windows": {
+      "nsis": {
+        "compression": "lzma"
+      }
+    },
     "macOS": {
       "minimumSystemVersion": "13.4",
       "entitlements": "entitlements.plist"
