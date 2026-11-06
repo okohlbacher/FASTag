@@ -1,0 +1,18 @@
+# Decision parameters of -species_call decoy (FASTag 1.12, item #1).
+#
+# PROVISIONAL. These values are NOT fitted yet: the pre-registered grid
+# (alpha {0.01, 0.05} x tau {0, 0.002, 0.005, 0.01} x n_min {5, 10, 20},
+# deconvolve off/on) is evaluated on the 48 DEV runs with the release
+# candidate, and the chosen values are frozen here together with the sha256
+# of the training run list before any held-out run. -species_call stays
+# opt-in (default none) until the held-out acceptance passes.
+#
+# key <TAB> value. alpha: q-value threshold; tau: minimum share of the run's
+# units; n_min: minimum observed spectra; decoys: the -species_call_decoys the
+# values were calibrated with (a different value warns).
+version	1.12.0-provisional
+training_sha256	none
+alpha	0.01
+tau	0
+n_min	10
+decoys	5
