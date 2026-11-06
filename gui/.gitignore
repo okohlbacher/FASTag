@@ -34,3 +34,5 @@ e2e-web/playwright-report
 !e2e-web/fixtures/*.tsv
 # The tauri-driver specs' recorded gates and logs (e2e-tauri/run.sh)
 e2e-tauri/results
+# The committed real CLI outputs (the repository ignores *.tsv)
+!src/fixtures/real/**/*.tsv
