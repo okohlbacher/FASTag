@@ -5,11 +5,18 @@ const ELEMENT = 'element-6066-11e4-a52f-4a6976a6e3b5'
 
 export class WebDriverError extends Error {}
 
+// Every non-ASCII character goes as a \u escape. Dry run 42314786620: a
+// script argument "Choose file\u2026" never matched the button of that exact
+// text, while the same text came back intact in a response -- the request
+// path through tauri-driver does not carry raw UTF-8 reliably. An escaped
+// body is plain ASCII and the same JSON.
+const ascii = (json) => json.replace(/[\u0080-\uffff]/g, (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'))
+
 async function call(base, method, path, body) {
   const r = await fetch(base + path, {
     method,
-    headers: { 'content-type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body)
+    headers: { 'content-type': 'application/json; charset=utf-8' },
+    body: body === undefined ? undefined : ascii(JSON.stringify(body))
   })
   const text = await r.text()
   let json
@@ -135,7 +142,9 @@ export class Session {
       }
       return null`
     const el = await this.exec(find, name)
-    return el ? el[ELEMENT] : null
+    if (!el) return null
+    // The W3C element key, or whatever single reference key the driver used.
+    return el[ELEMENT] ?? Object.values(el)[0] ?? null
   }
 
   /** Wait for the body text to match @p re; returns the match. */
