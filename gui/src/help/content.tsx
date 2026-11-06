@@ -102,8 +102,10 @@ export const START: HelpPage = {
             While a run goes, <strong>Changed from defaults</strong> lists the settings it was given that differ from
             the defaults. Afterwards, <strong>Last run</strong> shows whether it finished, was cancelled or failed, and
             the same list (&quot;all defaults&quot; when there is none), even if the form was edited since. Cancel
-            stops a run; what it leaves behind is in{' '}
-            <L to="faq-incomplete">The Tags tab says Outdated or Incomplete</L>.
+            stops a run at once, and the files it had written so far are removed, so no half-written table is
+            later read as a result. Closing the window or quitting while a run goes asks first: Cancel run and quit,
+            or Keep running. More in{' '}
+            <L to="faq-incomplete">The Tags tab says Outdated, Removed or Incomplete</L>.
           </p>
         </>
       )
@@ -157,6 +159,10 @@ export const START: HelpPage = {
               the failed ones again. Cancel stops the whole queue.
             </li>
             <li>
+              Each file keeps its own log: <strong>Log</strong> beside a file in the list shows it, and Show full log
+              in the red box of a failed batch shows the failed file&apos;s log, also after later files have run.
+            </li>
+            <li>
               When a file is done, click it in the batch list to see its tags and reports. The results of the last
               file are shown at the end.
             </li>
@@ -174,7 +180,9 @@ export const START: HelpPage = {
         <p>
           <strong>Save…</strong> beside Parameters stores every parameter under a name; the preset menu loads it
           again. The input file and the tags file are not part of a preset; report files set in a preset are moved
-          next to the current tags file when it is loaded. The app also remembers the parameters of the last run for the next start.{' '}
+          next to the current tags file when it is loaded. The app also remembers the parameters of the last run, but a new
+          start begins with FASTag&apos;s defaults: <strong>Apply last-used (n)</strong> beside Parameters offers the n
+          settings of the last run, and nothing of them is used until you click it.{' '}
           <strong>Reset…</strong> sets every parameter back to its default.
         </p>
       )

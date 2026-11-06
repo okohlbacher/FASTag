@@ -29,14 +29,20 @@ gui/
     api.ts             the window.fastag bridge over Tauri invoke/events + dialog/opener plugins
     paramLayout.ts     section/ordering overlay on the generated manifest (one flat list)
     params.generated.json   `-write_ini` dump of the tool (the source of truth for params)
-    testing/           mock bridge for the tests and the browser preview (`npm run dev`)
+    testing/           mock bridge for the tests and the browser preview (`npm run dev`),
+                       and the e2e bridge with its ?fixture= scenarios (Playwright build only)
     adversarial/       end-to-end GUI tests (see Tests)
     help/              the Help view (F1): pages as data (content.tsx, faq.tsx, params.ts),
                        HelpView.tsx, the link store (link.ts) and the "?" links (HelpLink.tsx)
-  scripts/             gen-params.mjs (parameter manifest), bundle-macos.sh (macOS resource tree for release bundles)
+  scripts/             gen-params.mjs (parameter manifest), bundle-macos.sh (macOS resource tree for release bundles),
+                       check-dist-clean.mjs (a release dist/ carries no mock or fixture code)
+  testing/stub-fastag/ a sh stand-in for the CLI, for the Rust run-lifecycle tests
+  e2e-web/             Playwright specs and their fixtures (see Tests)
   src-tauri/           Rust backend
     src/lib.rs         plugin setup and Tauri command registration
     src/fastag.rs      resolve/probe the binary, run it, stream stderr and stdout lines as events, cancel
+    src/outputs.rs     the files a run writes (from its argv); removes them when it is cancelled or fails
+    src/close_guard.rs asks before a window close or Cmd+Q kills an active run
     src/settings.rs    named presets + last-used, atomic JSON in the app config dir
     src/browser.rs     indexed million-row results browser
     src/species.rs     species TSV read + FTX2 taxdb header read
@@ -99,7 +105,18 @@ reading, browser bounds): `cargo test` in `src-tauri/` (it needs
 `src-tauri/resources/fastag` to exist, even empty). The frontend has vitest
 tests (run/batch orchestration, layout completeness, results browser, report
 parsing and logo arithmetic, Digest tab) and a typecheck: `npm test`,
-`npm run typecheck`.
+`npm run typecheck`. The Rust tests of the run lifecycle (a cancelled or
+failed run leaves no output behind) run `testing/stub-fastag/FASTag`, not the
+CLI.
+
+The Playwright specs in `e2e-web/` drive the app in Chromium and WebKit on an
+explicit e2e build, `npm run build:e2e` (`vite build --mode e2e`, into
+`dist-e2e/`), which installs `src/testing/e2eBridge.ts`; each spec picks a
+scenario with `?fixture=` (`default`, `batch-fail`, `big`, `slow`,
+`lastused`). Run them with `npm run e2e` (`npx playwright install chromium
+webkit` once). Any console error fails a spec. `npm run check:dist` checks
+that a release `dist/` carries none of the bridges' strings; the `ui`
+workflow runs both.
 
 The tests in `src/adversarial/` check GUI behaviour end to end: accessibility,
 the run lifecycle, report parsing, and agreement with the CLI and with this

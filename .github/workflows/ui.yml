@@ -1,0 +1,68 @@
+name: ui
+
+# The GUI's Playwright baseline (GUI-DESIGN section 9, P0a): the React app on
+# the e2e build (`vite build --mode e2e`, the ?fixture= bridge) in Chromium and
+# WebKit, and the check that a release build carries no mock or fixture code.
+# Independent of the CLI build: no OpenMS, no Tauri. Playwright's WebKit is
+# not WebKitGTK; the Linux webview is checked by tauri-driver from P1.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'gui/**'
+      - '.github/workflows/ui.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ui-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  playwright:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: gui
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+      - run: npm ci
+      # A release build must not contain the test bridges: they hang only off
+      # branches that are constant false outside dev and --mode e2e.
+      - name: Release dist carries no mock or fixture strings
+        run: |
+          npm run build
+          npm run check:dist
+      - name: The check catches them (the e2e build must fail it)
+        run: |
+          npm run build:e2e
+          if node scripts/check-dist-clean.mjs dist-e2e; then
+            echo "check-dist-clean passed on the e2e build: its markers are stale" >&2
+            exit 1
+          fi
+      - name: Playwright browsers
+        run: npx playwright install --with-deps chromium webkit
+      - name: Playwright (Chromium, WebKit)
+        env:
+          CI: '1'
+        run: npm run e2e
+      - name: Screenshots and report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: playwright-${{ github.run_id }}
+          path: |
+            gui/e2e-web/test-results
+            gui/e2e-web/playwright-report
+          if-no-files-found: ignore
+          retention-days: 14

@@ -1,0 +1,53 @@
+import { test, expect, openApp, mockState } from './fixtures'
+
+test('last-used is an offer: a fresh start runs with defaults until the chip is clicked', async ({ page }) => {
+  await openApp(page, 'lastused')
+  const chip = page.getByRole('button', { name: 'Apply last-used (2)' })
+  await expect(chip).toBeVisible()
+  await expect(page.locator('#p-tag_length')).toHaveValue('3')
+  await page.getByRole('button', { name: 'Choose file…' }).click()
+  await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+  await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()
+  let calls = await mockState<{ params: Record<string, unknown> }[]>(page, 'runCalls')
+  expect(calls[0].params['tag_length']).toBe('3')
+  expect(calls[0].params['species']).toBe(false)
+  await chip.click()
+  await expect(chip).toBeHidden()
+  await expect(page.locator('#p-tag_length')).toHaveValue('7')
+  await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+  await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()
+  calls = await mockState(page, 'runCalls')
+  expect(calls[1].params['tag_length']).toBe('7')
+  expect(calls[1].params['species']).toBe(true)
+})
+
+test('while a run goes the open buttons are locked; the close guard asks, and Keep running keeps it', async ({ page }) => {
+  await openApp(page, 'slow')
+  await page.getByRole('button', { name: 'Choose file…' }).click()
+  await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+  await expect(page.getByRole('button', { name: 'Running…' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Open a tags TSV…' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Open a digest, label or mass-gap report…' })).toBeDisabled()
+
+  await page.evaluate(() => (window as unknown as { __fastagE2E: { requestClose(w: string): void } }).__fastagE2E.requestClose('quit'))
+  const dlg = page.getByRole('alertdialog')
+  await expect(dlg).toContainText('Quitting stops the run')
+  await expect(dlg.getByRole('button', { name: 'Keep running' })).toBeFocused()
+  await dlg.getByRole('button', { name: 'Keep running' }).click()
+  await expect(dlg).toBeHidden()
+  await expect(page.getByRole('button', { name: 'Running…' })).toBeVisible()
+
+  await page.evaluate(() => (window as unknown as { __fastagE2E: { requestClose(w: string): void } }).__fastagE2E.requestClose('close'))
+  await dlg.getByRole('button', { name: 'Cancel run and quit' }).click()
+  expect(await mockState<boolean[]>(page, 'closeAnswers')).toEqual([false, true])
+})
+
+test('a cancelled run says its partial outputs were removed', async ({ page }) => {
+  await openApp(page, 'slow')
+  await page.getByRole('button', { name: 'Choose file…' }).click()
+  await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+  await page.getByRole('button', { name: 'Cancel' }).click()
+  await expect(page.locator('.last-run')).toContainText('partial outputs removed')
+  await page.getByRole('button', { name: /^Log/ }).first().click()
+  await expect(page.locator('pre.log')).toContainText('Removed the partial output /data/run01.tags.tsv')
+})

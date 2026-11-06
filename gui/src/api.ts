@@ -99,7 +99,10 @@ const api: FastagApi = {
 
   onLog: (cb) => subscribe<string>('fastag:log', cb),
   onProgress: (cb) => subscribe<{ done: number; total: number }>('fastag:progress', cb),
-  onDone: (cb) => subscribe<RunResult>('fastag:done', cb)
+  onDone: (cb) => subscribe<RunResult>('fastag:done', cb),
+  onCloseRequested: (cb) => subscribe<'close' | 'quit'>('fastag:close-requested', cb),
+  answerClose: (quit: boolean) => invoke<void>('close_answer', { quit }),
+  setBusy: (busy: boolean) => invoke<void>('set_ui_busy', { busy })
 }
 
 window.fastag = api

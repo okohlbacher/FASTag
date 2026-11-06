@@ -16,6 +16,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use crate::outputs;
+
 // name -> declared type, straight from the tool's own -write_ini. This is the
 // allowlist build_args() validates against. Embedded at compile time from the
 // single source of truth the frontend also reads.
@@ -29,6 +31,34 @@ const EXE: &str = if cfg!(windows) { "FASTag.exe" } else { "FASTag" };
 pub struct RunManager {
     pub current: Mutex<Option<CurrentRun>>,
     pub seq: AtomicU64,
+    // Set by the renderer while a batch is running: between two jobs no child
+    // exists, but quitting would still drop the rest of the queue.
+    pub ui_busy: AtomicBool,
+    // The user chose "Cancel run and quit": the next exit request is let
+    // through once the run has stopped and its partial outputs are gone.
+    pub quitting: AtomicBool,
+}
+
+impl RunManager {
+    /// A run is in flight (a child exists) or the renderer is in a batch.
+    pub fn is_busy(&self) -> bool {
+        self.ui_busy.load(Ordering::SeqCst) || self.current.lock().map(|c| c.is_some()).unwrap_or(true)
+    }
+
+    /// Wait until no child is left (the coordinator has cleaned up and
+    /// released the slot), at most @p timeout. True when idle.
+    pub fn wait_idle(&self, timeout: std::time::Duration) -> bool {
+        let until = std::time::Instant::now() + timeout;
+        loop {
+            if self.current.lock().map(|c| c.is_none()).unwrap_or(false) {
+                return true;
+            }
+            if std::time::Instant::now() >= until {
+                return false;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+    }
 }
 
 pub struct CurrentRun {
@@ -63,6 +93,9 @@ pub struct RunStarted {
     // against the input's folder (see build_args), and the renderer must read
     // the results from there, not from its own cwd.
     out: Option<String>,
+    // Every file the run writes (outputs::resolved_outputs), as the CLI was
+    // given them: removed again if the run does not finish.
+    outputs: Option<Vec<String>>,
     // The command line, binary first: the failure banner offers it to copy,
     // so a refused run can be reproduced in a terminal.
     command: Option<Vec<String>>,
@@ -512,15 +545,25 @@ fn parse_progress_line(line: &str) -> Option<(u64, u64)> {
     Some((done?, total?))
 }
 
-fn read_stream<R: Read>(stream: R, app: &AppHandle, parse_progress: bool) {
+/// What a run reports while it goes, independent of Tauri so the run
+/// lifecycle can be tested against a stub CLI.
+pub enum RunEmit {
+    Log(String),
+    Progress { done: u64, total: u64 },
+    Done(Value),
+}
+
+pub type Sink = Arc<dyn Fn(RunEmit) + Send + Sync>;
+
+fn read_stream<R: Read>(stream: R, sink: &Sink, parse_progress: bool) {
     for_each_line(stream, |line| {
         if parse_progress {
             if let Some((done, total)) = parse_progress_line(&line) {
-                let _ = app.emit("fastag:progress", serde_json::json!({ "done": done, "total": total }));
+                sink(RunEmit::Progress { done, total });
                 return;
             }
         }
-        let _ = app.emit("fastag:log", line);
+        sink(RunEmit::Log(line));
     });
 }
 
@@ -548,65 +591,38 @@ fn for_each_line<R: Read, F: FnMut(String)>(stream: R, mut f: F) {
     }
 }
 
-#[tauri::command]
-pub fn run(app: AppHandle, state: State<'_, RunManager>, params: RunParams) -> RunStarted {
-    {
-        let cur = state.current.lock().unwrap();
-        if cur.is_some() {
-            return RunStarted {
-                started: false,
-                run_id: None,
-                reason: Some("a run is already in progress".into()),
-                out: None,
-                command: None,
-            };
-        }
+/// Start @p cmd as the run of @p input, which writes @p outputs (see
+/// outputs::resolved_outputs). Its stderr and stdout go to @p sink line by
+/// line; when it has ended, a run that did not finish has its outputs
+/// removed (outputs::cleanup), @p release frees the slot in @p mgr, and the
+/// last thing @p sink gets is RunEmit::Done. Returns the run id.
+pub fn start_run(
+    mgr: &RunManager,
+    mut cmd: Command,
+    input: &str,
+    outputs: &[String],
+    cwd: Option<&Path>,
+    sink: Sink,
+    release: Box<dyn FnOnce(u64) + Send>,
+) -> Result<u64, String> {
+    if mgr.current.lock().map(|c| c.is_some()).unwrap_or(true) {
+        return Err("a run is already in progress".into());
     }
-    let r = resolve_binary(&app);
-    let args = build_args(&params);
-    let command: Vec<String> = std::iter::once(r.bin.display().to_string()).chain(args.iter().cloned()).collect();
-    let mut cmd = Command::new(&r.bin);
-    // stdin is null: the CLI never reads it, and an inherited one could block.
-    cmd.args(&args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
-    // Anything still relative (e.g. a path the CLI derives itself) lands next
-    // to the input, not in the app's cwd ("/" for a Finder launch).
-    if let Some(d) = base_dir(&params.input).filter(|d| d.is_dir()) {
-        cmd.current_dir(d);
-    }
-    new_process_group(&mut cmd);
-    if let Some(d) = &r.data {
-        cmd.env("OPENMS_DATA_PATH", d);
-    }
-    quiet_blas(&mut cmd);
-    no_console_window(&mut cmd);
-    if let Some(t) = taxonomy_dir(&r) {
-        // Point -species at the taxonomy explicitly (the CLI's own
-        // <bin>/../share lookup fails for a copied/symlinked binary) -- the
-        // user's own directory if set, the same one species.rs reports on.
-        cmd.env("FASTAG_TAXONOMY_DIR", t);
-    }
-    let mut child = match cmd.spawn() {
-        Ok(c) => c,
-        // A spawn failure is known synchronously: report it as a non-start so
-        // the frontend reports "FASTag could not start" and settles cleanly.
-        Err(e) => {
-            return RunStarted {
-                started: false,
-                run_id: None,
-                reason: Some(e.to_string()),
-                out: None,
-                command: None,
-            }
-        }
+    // Before the child can write anything: which outputs already exist.
+    let before = outputs::snapshot(outputs, cwd);
+    let input_path = match cwd {
+        Some(d) if Path::new(input).is_relative() => d.join(input),
+        _ => PathBuf::from(input),
     };
+    let mut child = cmd.spawn().map_err(|e| e.to_string())?;
 
-    let run_id = state.seq.fetch_add(1, Ordering::SeqCst) + 1;
+    let run_id = mgr.seq.fetch_add(1, Ordering::SeqCst) + 1;
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
     let child_arc = Arc::new(Mutex::new(child));
     let cancelled = Arc::new(AtomicBool::new(false));
     let reaped = Arc::new(AtomicBool::new(false));
-    *state.current.lock().unwrap() = Some(CurrentRun {
+    *mgr.current.lock().unwrap() = Some(CurrentRun {
         run_id,
         child: child_arc.clone(),
         cancelled: cancelled.clone(),
@@ -615,23 +631,23 @@ pub fn run(app: AppHandle, state: State<'_, RunManager>, params: RunParams) -> R
 
     // One reader thread per stream (stderr carries the progress contract; stdout
     // is drained as log so a full pipe can never block the child).
-    let a_err = app.clone();
+    let s_err = sink.clone();
     let t_err = std::thread::spawn(move || {
         if let Some(s) = stderr {
-            read_stream(s, &a_err, true);
+            read_stream(s, &s_err, true);
         }
     });
-    let a_out = app.clone();
+    let s_out = sink.clone();
     let t_out = std::thread::spawn(move || {
         if let Some(s) = stdout {
-            read_stream(s, &a_out, false);
+            read_stream(s, &s_out, false);
         }
     });
 
     // Coordinator: once both streams hit EOF the process has ended; reap it,
-    // emit exactly one terminal event, and release the slot. Emitting to a
-    // closed window is a harmless no-op.
-    let a_done = app.clone();
+    // remove what an unfinished run wrote, release the slot and emit exactly
+    // one terminal event. The slot is released after the cleanup, so a quit
+    // that waits for an idle RunManager never cuts the cleanup short.
     std::thread::spawn(move || {
         let _ = t_err.join();
         let _ = t_out.join();
@@ -648,27 +664,92 @@ pub fn run(app: AppHandle, state: State<'_, RunManager>, params: RunParams) -> R
         // A cancel that lost the race to a clean exit is not a cancellation.
         let was_cancelled = !ok && cancelled.load(Ordering::SeqCst);
         let message = if was_cancelled { Some("cancelled".to_string()) } else { message };
-        {
-            let st = a_done.state::<RunManager>();
-            let mut cur = st.current.lock().unwrap();
-            if cur.as_ref().is_some_and(|c| c.run_id == run_id) {
-                *cur = None;
-            }
-        }
-        let _ = a_done.emit(
-            "fastag:done",
-            serde_json::json!({
-                "runId": run_id,
-                "ok": ok,
-                "code": code,
-                "message": message,
-                "cancelled": was_cancelled,
-            }),
-        );
+        let cleanup = if ok { outputs::Cleanup::default() } else { outputs::cleanup(&before, &input_path) };
+        release(run_id);
+        sink(RunEmit::Done(serde_json::json!({
+            "runId": run_id,
+            "ok": ok,
+            "code": code,
+            "message": message,
+            "cancelled": was_cancelled,
+            "cleanup": cleanup,
+        })));
     });
+    Ok(run_id)
+}
 
-    let out = args.get(3).cloned();
-    RunStarted { started: true, run_id: Some(run_id), reason: None, out, command: Some(command) }
+/// Free the slot of run @p run_id (a later run may already hold it).
+pub fn release_slot(mgr: &RunManager, run_id: u64) {
+    let mut cur = mgr.current.lock().unwrap_or_else(|e| e.into_inner());
+    if cur.as_ref().is_some_and(|c| c.run_id == run_id) {
+        *cur = None;
+    }
+}
+
+#[tauri::command]
+pub fn run(app: AppHandle, state: State<'_, RunManager>, params: RunParams) -> RunStarted {
+    let refused = |reason: String| RunStarted {
+        started: false,
+        run_id: None,
+        reason: Some(reason),
+        out: None,
+        outputs: None,
+        command: None,
+    };
+    if state.current.lock().map(|c| c.is_some()).unwrap_or(true) {
+        return refused("a run is already in progress".into());
+    }
+    let r = resolve_binary(&app);
+    let args = build_args(&params);
+    let command: Vec<String> = std::iter::once(r.bin.display().to_string()).chain(args.iter().cloned()).collect();
+    let mut cmd = Command::new(&r.bin);
+    // stdin is null: the CLI never reads it, and an inherited one could block.
+    cmd.args(&args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    // Anything still relative (e.g. a path the CLI derives itself) lands next
+    // to the input, not in the app's cwd ("/" for a Finder launch).
+    let cwd = base_dir(&params.input).filter(|d| d.is_dir());
+    if let Some(d) = &cwd {
+        cmd.current_dir(d);
+    }
+    new_process_group(&mut cmd);
+    if let Some(d) = &r.data {
+        cmd.env("OPENMS_DATA_PATH", d);
+    }
+    quiet_blas(&mut cmd);
+    no_console_window(&mut cmd);
+    if let Some(t) = taxonomy_dir(&r) {
+        // Point -species at the taxonomy explicitly (the CLI's own
+        // <bin>/../share lookup fails for a copied/symlinked binary) -- the
+        // user's own directory if set, the same one species.rs reports on.
+        cmd.env("FASTAG_TAXONOMY_DIR", t);
+    }
+    let outputs = outputs::resolved_outputs(&args);
+    // Emitting to a closed window is a harmless no-op.
+    let a = app.clone();
+    let sink: Sink = Arc::new(move |e| {
+        let _ = match e {
+            RunEmit::Log(line) => a.emit("fastag:log", line),
+            RunEmit::Progress { done, total } => {
+                a.emit("fastag:progress", serde_json::json!({ "done": done, "total": total }))
+            }
+            RunEmit::Done(v) => a.emit("fastag:done", v),
+        };
+    });
+    let a = app.clone();
+    let release = Box::new(move |id: u64| release_slot(&a.state::<RunManager>(), id));
+    // A spawn failure is known synchronously: report it as a non-start so the
+    // frontend reports "FASTag could not start" and settles cleanly.
+    match start_run(&state, cmd, &params.input, &outputs, cwd.as_deref(), sink, release) {
+        Ok(run_id) => RunStarted {
+            started: true,
+            run_id: Some(run_id),
+            reason: None,
+            out: args.get(3).cloned(),
+            outputs: Some(outputs),
+            command: Some(command),
+        },
+        Err(e) => refused(e),
+    }
 }
 
 /// Unix: start the child as the leader of its own process group, so Cancel also
@@ -944,6 +1025,178 @@ mod tests {
         assert_eq!(parse_progress_line("FASTAG_PROGRESS done=7 total=0"), Some((7, 0)));
         assert_eq!(parse_progress_line("something else"), None);
         assert_eq!(parse_progress_line("FASTAG_PROGRESS done=x total=1"), None);
+    }
+
+    // The run lifecycle against the stub CLI (gui/testing/stub-fastag):
+    // what an unfinished run wrote is gone, a finished run's outputs stay.
+    #[cfg(unix)]
+    mod stub_cli {
+        use super::super::*;
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        const STUB: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../testing/stub-fastag/FASTag");
+
+        fn dir(name: &str) -> PathBuf {
+            let d = std::env::temp_dir().join(format!("fastag-run-{}-{name}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&d);
+            std::fs::create_dir_all(&d).unwrap();
+            d
+        }
+
+        struct Run {
+            mgr: Arc<RunManager>,
+            events: mpsc::Receiver<String>,
+            done: mpsc::Receiver<Value>,
+            outputs: Vec<String>,
+        }
+
+        /// Start the stub as the GUI's `run` command does: build_args, the
+        /// resolved outputs, a process group of its own.
+        fn start(params: &str, env: &[(&str, &str)]) -> Run {
+            let p: RunParams = serde_json::from_str(params).unwrap();
+            let args = build_args(&p);
+            let mut cmd = Command::new("sh");
+            cmd.arg(STUB).args(&args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+            for (k, v) in env {
+                cmd.env(k, v);
+            }
+            new_process_group(&mut cmd);
+            let outputs = outputs::resolved_outputs(&args);
+            let mgr = Arc::new(RunManager::default());
+            let (etx, events) = mpsc::channel();
+            let (dtx, done) = mpsc::channel();
+            let etx = Mutex::new(etx);
+            let dtx = Mutex::new(dtx);
+            let sink: Sink = Arc::new(move |e| match e {
+                RunEmit::Log(l) => {
+                    let _ = etx.lock().unwrap().send(l);
+                }
+                RunEmit::Progress { done, total } => {
+                    let _ = etx.lock().unwrap().send(format!("progress {done}/{total}"));
+                }
+                RunEmit::Done(v) => {
+                    let _ = dtx.lock().unwrap().send(v);
+                }
+            });
+            let m = mgr.clone();
+            start_run(&mgr, cmd, &p.input, &outputs, None, sink, Box::new(move |id| release_slot(&m, id))).unwrap();
+            Run { mgr, events, done, outputs }
+        }
+
+        fn wait_for(path: &Path) {
+            for _ in 0..500 {
+                if path.exists() {
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            panic!("{} was never written", path.display());
+        }
+
+        #[test]
+        fn a_cancelled_run_leaves_no_output_at_any_resolved_path() {
+            let d = dir("cancel");
+            let input = d.join("a.mzML");
+            std::fs::write(&input, "spectra").unwrap();
+            let out = d.join("a.tags.tsv");
+            let params = format!(
+                r#"{{"in":"{}","out":"a.tags.tsv","params":{{"species":true,"digest_out":"a.digest.tsv"}}}}"#,
+                input.display()
+            );
+            let r = start(&params, &[("STUB_SLEEP", "30")]);
+            assert_eq!(
+                r.outputs,
+                vec![
+                    out.display().to_string(),
+                    d.join("a.digest.tsv").display().to_string(),
+                    d.join("a.tags.species.tsv").display().to_string()
+                ]
+            );
+            wait_for(&out); // the partial table is on disk
+            assert!(r.mgr.is_busy());
+            {
+                let cur = r.mgr.current.lock().unwrap();
+                assert!(kill_run(cur.as_ref().unwrap(), true));
+            }
+            let done = r.done.recv_timeout(Duration::from_secs(10)).expect("no done event");
+            assert_eq!(done["cancelled"], true);
+            assert_eq!(done["ok"], false);
+            assert_eq!(done["cleanup"]["removed"], serde_json::json!([out.display().to_string()]));
+            for p in &r.outputs {
+                assert!(!Path::new(p).exists(), "{p} survived the cancel");
+            }
+            assert!(input.exists());
+            // The slot is free before the done event: a quit may go ahead.
+            assert!(!r.mgr.is_busy());
+            let log: Vec<String> = r.events.try_iter().collect();
+            assert!(log.iter().any(|l| l == "progress 2/4"), "{log:?}");
+            let _ = std::fs::remove_dir_all(&d);
+        }
+
+        #[test]
+        fn a_failed_run_removes_its_partial_reports_but_keeps_an_earlier_file() {
+            let d = dir("fail");
+            let input = d.join("a.mzML");
+            std::fs::write(&input, "spectra").unwrap();
+            // An earlier result the stub does not write: kept.
+            let earlier = d.join("a.massgap.tsv");
+            std::fs::write(&earlier, "earlier\n").unwrap();
+            let params = format!(
+                r#"{{"in":"{}","out":"a.tags.tsv","params":{{"glyco":true,"label_out":"a.label.tsv"}}}}"#,
+                input.display()
+            );
+            let r = start(&params, &[("STUB_FAIL", "3")]);
+            let done = r.done.recv_timeout(Duration::from_secs(10)).expect("no done event");
+            assert_eq!(done["ok"], false);
+            assert_eq!(done["cancelled"], false);
+            assert_eq!(done["code"], 3);
+            let removed: Vec<String> =
+                serde_json::from_value(done["cleanup"]["removed"].clone()).unwrap();
+            assert_eq!(removed.len(), 3, "{removed:?}");
+            for p in &r.outputs {
+                assert!(!Path::new(p).exists(), "{p} survived the failure");
+            }
+            assert!(earlier.exists());
+            let _ = std::fs::remove_dir_all(&d);
+        }
+
+        #[test]
+        fn a_finished_run_keeps_its_outputs() {
+            let d = dir("ok");
+            let input = d.join("a.mzML");
+            std::fs::write(&input, "spectra").unwrap();
+            let params = format!(r#"{{"in":"{}","out":"a.tags.tsv","params":{{"species":true}}}}"#, input.display());
+            let r = start(&params, &[]);
+            let done = r.done.recv_timeout(Duration::from_secs(10)).expect("no done event");
+            assert_eq!(done["ok"], true);
+            assert_eq!(done["cleanup"], serde_json::json!({"removed": [], "renamed": [], "failed": []}));
+            for p in &r.outputs {
+                assert!(Path::new(p).exists(), "{p} missing after a finished run");
+            }
+            let _ = std::fs::remove_dir_all(&d);
+        }
+
+        #[test]
+        fn a_second_run_is_refused_while_one_is_live() {
+            let d = dir("second");
+            let input = d.join("a.mzML");
+            std::fs::write(&input, "spectra").unwrap();
+            let params = format!(r#"{{"in":"{}","out":"a.tags.tsv"}}"#, input.display());
+            let r = start(&params, &[("STUB_SLEEP", "30")]);
+            let sink: Sink = Arc::new(|_| {});
+            let again = start_run(&r.mgr, Command::new("true"), "x", &[], None, sink, Box::new(|_| {}));
+            assert_eq!(again.unwrap_err(), "a run is already in progress");
+            kill_current_of(&r.mgr);
+            let _ = r.done.recv_timeout(Duration::from_secs(10));
+            let _ = std::fs::remove_dir_all(&d);
+        }
+
+        fn kill_current_of(mgr: &RunManager) {
+            if let Some(run) = mgr.current.lock().unwrap().as_ref() {
+                kill_run(run, true);
+            }
+        }
     }
 
     #[test]

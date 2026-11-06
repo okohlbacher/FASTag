@@ -14,6 +14,7 @@ import { parseReport } from '../digestReport'
 import { HIDDEN, PARAM_BY_NAME, RENDERED } from '../paramLayout'
 import manifest from '../params.generated.json'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
+import { applyAndCheck } from '../testing/lastUsed'
 import type { SpeciesReport } from '../types'
 import digestTsv from '../fixtures/digest.tsv?raw'
 import { haveScratch, readScratch } from './external'
@@ -77,6 +78,7 @@ describe('docs: species precondition (README "FASTag refuses the run up front")'
     mock.settings.lastUsed = { species: true, tag_length: '3' }
     mock.taxdbInfoResult = { path: '/b/tax_k7.taxdb', k: 7 }
     const c = await renderApp(mock)
+    await applyAndCheck(mock.settings.lastUsed!) // D6: the offer, clicked; guards the form
     await pickSingle(mock, '/d/a.mzML')
     expect((runButton() as HTMLButtonElement).disabled).toBe(true)
     expect(c.querySelector('.controls')!.textContent).toMatch(/cannot reach the species index k = 7/)
@@ -173,6 +175,7 @@ describe('docs: RN 1.9.0 "a new input no longer overwrites the previous sample\'
     const mock = installMockBridge()
     mock.settings.lastUsed = { digest_out: '/res/old.digest.tsv' }
     await renderApp(mock)
+    await applyAndCheck(mock.settings.lastUsed!) // D6: the offer, clicked; guards the form
     await pickSingle(mock, '/runA/sample.mzML')
     await click(runButton())
     await act(async () => mock.emitDone({ ok: true, code: 0, runId: 1 }))

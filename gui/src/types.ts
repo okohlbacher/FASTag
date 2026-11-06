@@ -48,6 +48,19 @@ export interface RunResult {
   // event to the run the renderer is awaiting. Absent on synthetic failures the
   // renderer builds itself (a run that never started).
   runId?: number
+  // A run that did not finish: what the backend did with the outputs it had
+  // written (fastag.rs / outputs.rs). Absent on a finished run.
+  cleanup?: Cleanup
+}
+
+// The outputs of a cancelled or failed run, after the backend's cleanup.
+export interface Cleanup {
+  // Deleted.
+  removed: string[]
+  // Could not be deleted: renamed to <name>.incomplete (the new names).
+  renamed: string[]
+  // Neither: still at its path, possibly truncated.
+  failed: string[]
 }
 
 export interface RunStarted {
@@ -57,6 +70,8 @@ export interface RunStarted {
   // The -out the CLI was actually given: a relative Output is resolved against
   // the input's folder, which is also the child's working directory.
   out?: string
+  // Every file the run writes, as the CLI was given them.
+  outputs?: string[]
   // The command line, binary first, for the failure banner's Copy command.
   command?: string[]
 }
@@ -123,4 +138,12 @@ export interface FastagApi {
   onLog: (cb: (line: string) => void) => () => void
   onProgress: (cb: (p: { done: number; total: number }) => void) => () => void
   onDone: (cb: (result: RunResult) => void) => () => void
+  // Close guard: the window was closed ('close') or the app asked to quit
+  // ('quit') while a run or batch is active; the backend prevented it and
+  // waits for answerClose.
+  onCloseRequested: (cb: (what: 'close' | 'quit') => void) => () => void
+  // true: cancel the run and quit; false: keep running.
+  answerClose: (quit: boolean) => Promise<void>
+  // A batch is running (no CLI child exists between two jobs).
+  setBusy: (busy: boolean) => Promise<void>
 }

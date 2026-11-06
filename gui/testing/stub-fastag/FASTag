@@ -1,0 +1,64 @@
+#!/bin/sh
+# A stand-in for the FASTag CLI, for app-level tests that must not need the
+# 1.4 GB OpenMS bundle (GUI-DESIGN section 9, "CLI for app-level tests").
+#
+# It takes the argv the GUI builds (fastag.rs build_args), prints FASTag-like
+# stderr with FASTAG_PROGRESS lines, and writes -out and every report option
+# it is given, plus <out>.species.tsv / <out>.glyco.tsv for -species / -glyco
+# without a path, as the real CLI does. Deterministic. Controlled by:
+#   STUB_SLEEP=<s>  after writing a partial -out, sleep this long (for Cancel)
+#   STUB_FAIL=<rc>  after writing partial outputs, exit with this code
+#   --help          print a version banner, as the probe expects
+set -u
+
+if [ "${1:-}" = "--help" ]; then
+  echo "FASTag -- stub for the GUI tests"
+  echo "Version: 0.0.0-stub"
+  exit 0
+fi
+
+out=""; reports=""; species=0; glyco=0; species_out=""; glyco_out=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -out) out="$2"; shift 2 ;;
+    -species) species=1; shift ;;
+    -glyco) glyco=1; shift ;;
+    -species_out) species_out="$2"; shift 2 ;;
+    -glyco_out) glyco_out="$2"; shift 2 ;;
+    -digest_out|-label_out|-massgap_out|-recon_out|-delta_out|-recon_id_out|-out_spectra)
+      reports="$reports
+$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+
+# <out> with the extension of its basename replaced (FASTag.cpp defaultReportPath).
+derive() {
+  case "${out##*/}" in
+    *.*) echo "${out%.*}$1" ;;
+    *) echo "$out$1" ;;
+  esac
+}
+[ $species -eq 1 ] && [ -z "$species_out" ] && species_out=$(derive .species.tsv)
+[ $glyco -eq 1 ] && [ -z "$glyco_out" ] && glyco_out=$(derive .glyco.tsv)
+
+echo "Reading spectra (stub)" >&2
+echo "FASTAG_PROGRESS done=0 total=4" >&2
+[ -n "$out" ] && printf 'spectrum\ttag\tlength\tevalue\n' > "$out"
+echo "FASTAG_PROGRESS done=2 total=4" >&2
+if [ -n "${STUB_SLEEP:-}" ]; then
+  sleep "$STUB_SLEEP"
+fi
+printf 'scan=1\tPEPTK\t5\t0.001\n' >> "$out"
+printf '%s\n' "$reports" | while IFS= read -r r; do
+  [ -n "$r" ] && printf 'section\tkey\tvalue\tn\tdescription\n' > "$r"
+done
+[ -n "$species_out" ] && printf 'rank\ttaxid\tname\n' > "$species_out"
+[ -n "$glyco_out" ] && printf 'spectrum\tglyco\n' > "$glyco_out"
+if [ -n "${STUB_FAIL:-}" ]; then
+  echo "Error: stub told to fail" >&2
+  exit "$STUB_FAIL"
+fi
+echo "FASTAG_PROGRESS done=4 total=4" >&2
+echo "4 MS2 spectra, 1 tags"
+exit 0

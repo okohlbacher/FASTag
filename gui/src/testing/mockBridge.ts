@@ -56,6 +56,9 @@ export interface MockBridge extends FastagApi {
   speciesCalls: string[]
   cancelCalls: number
   savedLast: Record<string, unknown>[]
+  // answerClose(quit) calls, and the setBusy values, in order.
+  closeAnswers: boolean[]
+  busyCalls: boolean[]
   // The id the most recent run() allocated (allocated at call time, so a test
   // can emit its terminal event before releasing the held invoke reply).
   lastRunId: number
@@ -63,6 +66,8 @@ export interface MockBridge extends FastagApi {
   emitLog(line: string): void
   emitProgress(p: { done: number; total: number }): void
   emitDone(r: RunResult): void
+  // The backend's close guard: a close or quit request while busy.
+  emitCloseRequested(what: 'close' | 'quit'): void
   holdRun(): void
   releaseRun(): void
 }
@@ -71,6 +76,7 @@ export function installMockBridge(): MockBridge {
   const logListeners: ((line: string) => void)[] = []
   const progressListeners: ((p: { done: number; total: number }) => void)[] = []
   const doneListeners: ((r: RunResult) => void)[] = []
+  const closeListeners: ((what: 'close' | 'quit') => void)[] = []
   const on = <T>(list: ((v: T) => void)[]) => {
     return (cb: (v: T) => void): (() => void) => {
       list.push(cb)
@@ -113,11 +119,14 @@ export function installMockBridge(): MockBridge {
     speciesCalls: [],
     cancelCalls: 0,
     savedLast: [],
+    closeAnswers: [],
+    busyCalls: [],
     lastRunId: 0,
 
     emitLog: (line) => logListeners.slice().forEach((cb) => cb(line)),
     emitProgress: (p) => progressListeners.slice().forEach((cb) => cb(p)),
     emitDone: (r) => doneListeners.slice().forEach((cb) => cb(r)),
+    emitCloseRequested: (what) => closeListeners.slice().forEach((cb) => cb(what)),
     holdRun: () => {
       held = held ?? []
     },
@@ -207,7 +216,16 @@ export function installMockBridge(): MockBridge {
 
     onLog: on(logListeners),
     onProgress: on(progressListeners),
-    onDone: on(doneListeners)
+    onDone: on(doneListeners),
+    onCloseRequested: on(closeListeners),
+    answerClose: (quit) => {
+      mock.closeAnswers.push(quit)
+      return Promise.resolve()
+    },
+    setBusy: (busy) => {
+      mock.busyCalls.push(busy)
+      return Promise.resolve()
+    }
   }
 
   window.fastag = mock
