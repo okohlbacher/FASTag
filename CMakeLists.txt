@@ -81,7 +81,7 @@ set(FASTAG_CORE_SOURCES_A)
 # ---- 1.12 D: core sources ----
 set(FASTAG_CORE_SOURCES_D)
 # ---- 1.12 F: core sources ----
-set(FASTAG_CORE_SOURCES_F)
+set(FASTAG_CORE_SOURCES_F src/OutputGuard.cpp)
 add_library(fastag_core STATIC ${FASTAG_CORE_SOURCES}
             ${FASTAG_CORE_SOURCES_E} ${FASTAG_CORE_SOURCES_A} ${FASTAG_CORE_SOURCES_D} ${FASTAG_CORE_SOURCES_F})
 target_include_directories(fastag_core PUBLIC
@@ -254,7 +254,7 @@ if(FASTAG_BUILD_TESTS)
   # ---- 1.12 D: unit tests ----
   set(FASTAG_UNIT_TESTS_D)
   # ---- 1.12 F: unit tests ----
-  set(FASTAG_UNIT_TESTS_F)
+  set(FASTAG_UNIT_TESTS_F output_guard_test)
   foreach(t ${FASTAG_UNIT_TESTS} ${FASTAG_UNIT_TESTS_E} ${FASTAG_UNIT_TESTS_A} ${FASTAG_UNIT_TESTS_D} ${FASTAG_UNIT_TESTS_F})
     add_executable(${t} test/${t}.cpp)
     target_link_libraries(${t} PRIVATE fastag_core)

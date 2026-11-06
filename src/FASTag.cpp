@@ -36,6 +36,7 @@
 #include "IndexedMzMLReader.h"
 #include "MgfReader.h"
 #include "NumFormat.h"
+#include "OutputGuard.h"
 #include "Proforma.h"
 #include "ReconIds.h"
 #include "RunMeta.h"
@@ -1968,88 +1969,52 @@ protected:
         break;
       }
     }
-    // No output may be the input or another output, by any name (a symlink or
-    // hard link included). Opening an output truncates it: -out_spectra equal
-    // to -in destroyed the raw file before it was re-read, and -species_out
-    // equal to -out replaced the finished tag table. Checked before the first
-    // output is opened, with the default report paths resolved as below.
+    // No output may be an input the run consumes or another output, by any
+    // name (a symlink or hard link included). Opening an output truncates
+    // it: -out_spectra equal to -in destroyed the raw file before it was
+    // re-read, and -species_out equal to -out replaced the finished tag
+    // table. Checked before the first output is opened, with the default
+    // report paths resolved as below (FASTag::PathGuard, OutputGuard.h).
     {
-      namespace fs = std::filesystem;
-      // One row per output: {option, path the run will write, empty when it
-      // writes none}. Rows are checked in table order. Each 1.12 cluster adds
-      // its outputs at its own anchor.
-      std::string glyco_path, species_path;
+      FASTag::PathGuard guard;
+      guard.input("in", in);
+      guard.input("fasta", fasta);
+      for (const char* opt : {"recon_fasta", "entrapment_fasta", "digest_models", "taxdb",
+                              "taxonomy_nodes", "taxonomy_names"})
+        guard.input(opt, getStringOption_(opt));
+      // ---- 1.12 E: guarded inputs ----
+      // ---- 1.12 A: guarded inputs ----
+      // ---- 1.12 D: guarded inputs ----
+      // ---- 1.12 F: guarded inputs ----
+      guard.output("out", out);
+      guard.output("out_spectra", out_spectra);
+      guard.output("recon_out", recon_out);
+      guard.output("delta_out", delta_out);
+      guard.output("recon_id_out", recon_id_out);
+      guard.output("digest_out", digest_out);
+      guard.output("label_out", label_out);
+      guard.output("massgap_out", massgap_out);
       if (getFlag_("glyco"))
       {
         const std::string g = getStringOption_("glyco_out");
-        glyco_path = g.empty() ? defaultReportPath(out, ".glyco.tsv") : g;
+        guard.output("glyco_out", g.empty() ? defaultReportPath(out, ".glyco.tsv") : g);
       }
       if (want_species)
       {
         const std::string sp = getStringOption_("species_out");
-        species_path = sp.empty() ? defaultReportPath(out, ".species.tsv") : sp;
+        guard.output("species_out", sp.empty() ? defaultReportPath(out, ".species.tsv") : sp);
       }
-      const std::pair<const char*, const std::string*> output_paths[] = {
-          {"out", &out},
-          {"out_spectra", &out_spectra},
-          {"recon_out", &recon_out},
-          {"delta_out", &delta_out},
-          {"recon_id_out", &recon_id_out},
-          {"digest_out", &digest_out},
-          {"label_out", &label_out},
-          {"massgap_out", &massgap_out},
-          {"glyco_out", &glyco_path},
-          {"species_out", &species_path},
-          // ---- 1.12 E: output paths ----
-          // ---- 1.12 A: output paths ----
-          // ---- 1.12 D: output paths ----
-          // ---- 1.12 F: output paths ----
-      };
-      std::vector<std::pair<std::string, std::string>> outs;
-      for (const auto& [opt, path] : output_paths)
-        if (!path->empty()) outs.emplace_back(opt, *path);
-      const auto same = [](const std::string& a, const std::string& b) {
-        std::error_code ea, eb;
-#ifdef _WIN32
-        // NUL (Git Bash passes /dev/null as nul) has no file status on Windows.
-        for (const std::string* x : {&a, &b})
-        {
-          std::string f = fs::path(*x).stem().string();
-          for (char& c : f) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-          if (f == "nul") return false;
-        }
-#endif
-        // A device (/dev/null, /dev/stdout) or other non-regular file may be
-        // named twice: writing it truncates nothing.
-        for (const std::string* x : {&a, &b})
-        {
-          std::error_code e;
-          const auto st = fs::status(*x, e);
-          if (!e && fs::exists(st) && !fs::is_regular_file(st)) return false;
-        }
-        if (fs::exists(a, ea) && fs::exists(b, eb))
-        {
-          std::error_code e;
-          if (fs::equivalent(a, b, e)) return true;
-        }
-        const fs::path ca = fs::weakly_canonical(a, ea), cb = fs::weakly_canonical(b, eb);
-        return !ea && !eb && ca == cb;
-      };
-      for (size_t i = 0; i < outs.size(); ++i)
+      // Outputs are checked in this order. Each 1.12 cluster adds its rows
+      // at its own anchor.
+      // ---- 1.12 E: output paths ----
+      // ---- 1.12 A: output paths ----
+      // ---- 1.12 D: output paths ----
+      // ---- 1.12 F: output paths ----
+      const std::string collision = guard.check();
+      if (!collision.empty())
       {
-        if (same(outs[i].second, in))
-        {
-          OPENMS_LOG_ERROR << "-" << outs[i].first << " (" << outs[i].second
-                           << ") is the input file; writing it would destroy the input." << std::endl;
-          return ILLEGAL_PARAMETERS;
-        }
-        for (size_t j = 0; j < i; ++j)
-          if (same(outs[i].second, outs[j].second))
-          {
-            OPENMS_LOG_ERROR << "-" << outs[i].first << " and -" << outs[j].first
-                             << " name the same file (" << outs[i].second << ")." << std::endl;
-            return ILLEGAL_PARAMETERS;
-          }
+        OPENMS_LOG_ERROR << collision << std::endl;
+        return ILLEGAL_PARAMETERS;
       }
     }
 
