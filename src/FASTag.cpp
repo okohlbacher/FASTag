@@ -3689,10 +3689,10 @@ protected:
       // See TaxDeconv.h for the model and its limits.
       std::map<uint32_t, double> adjusted_leaf;
       const bool deconvolved = getFlag_("species_deconvolve") && !idx_taxa.empty();
-      // The pairwise overlap, shared by the deconvolution and the homology
-      // term of -species_call; computed only when one of them runs.
+      // The pairwise overlap of the leaves, for the deconvolution only (the
+      // homology term of -species_call counts its own group-level overlap).
       std::vector<uint64_t> overlap;
-      if ((deconvolved || species_call_on) && !idx_taxa.empty()) overlap = idx.pairwiseOverlap();
+      if (deconvolved) overlap = idx.pairwiseOverlap();
       if (deconvolved)
       {
         const size_t nt = idx_taxa.size();
@@ -3772,8 +3772,11 @@ protected:
               break;
             }
         const size_t ng = group_taxid.size();
-        const std::vector<uint64_t> rolled_overlap =
-            FASTag::SpeciesCall::rollUpOverlap(overlap, idx_taxa.size(), group_of, ng);
+        // Distinct k-mers per group pair, not a sum of the members' pairwise
+        // overlaps: a k-mer shared by two members of one group counts once,
+        // so C[g][h] = P(k-mer in g | k-mer in h) also at family or order
+        // rank and for indexes with several strains per genus.
+        const std::vector<uint64_t> rolled_overlap = idx.groupOverlap(group_of, ng);
         const std::vector<double> C = FASTag::conditionalMatrix(rolled_overlap, ng);
         std::vector<double> obs(ng, 0.0);
         for (size_t g = 0; g < ng; ++g)

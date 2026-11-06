@@ -149,31 +149,6 @@ namespace FASTag::SpeciesCall
     return std::min(1.0, pi0);
   }
 
-  std::vector<uint64_t> rollUpOverlap(const std::vector<uint64_t>& overlap, std::size_t n,
-                                      const std::vector<int>& group_of, std::size_t n_groups)
-  {
-    std::vector<uint64_t> r(n_groups * n_groups, 0);
-    if (overlap.size() < n * n || group_of.size() < n) return r;
-    for (std::size_t i = 0; i < n; ++i)
-    {
-      const int a = group_of[i];
-      if (a < 0 || static_cast<std::size_t>(a) >= n_groups) continue;
-      for (std::size_t j = 0; j < n; ++j)
-      {
-        const int b = group_of[j];
-        if (b < 0 || static_cast<std::size_t>(b) >= n_groups) continue;
-        r[static_cast<std::size_t>(a) * n_groups + static_cast<std::size_t>(b)] += overlap[i * n + j];
-      }
-    }
-    return r;
-  }
-
-  std::vector<double> rollUpConditional(const std::vector<uint64_t>& overlap, std::size_t n,
-                                        const std::vector<int>& group_of, std::size_t n_groups)
-  {
-    return conditionalMatrix(rollUpOverlap(overlap, n, group_of, n_groups), n_groups);
-  }
-
   std::vector<GenusStat> callGenera(const std::vector<GenusInput>& genera,
                                     const std::vector<double>& C,
                                     const RunInput& run, const Params& params)
@@ -221,18 +196,17 @@ namespace FASTag::SpeciesCall
     qOverTested(p_rand, q_rand, pi0_rand);
 
     // Spill depends on which genera above are present, and presence on the
-    // q-values of all of them, so iterate to a fixed point: start from no
-    // genus present (the random null), recompute spill, p and q, and stop
-    // when the present set no longer changes. Bounded by n + 2 rounds; the
-    // statistics reported are those the final decision was taken on.
+    // q-values of all of them. F(S): the genera that qualify with spill from
+    // the present set S. Iterate F from the empty set until a set repeats; on
+    // a cycle take the intersection of its sets and shrink it until it is
+    // consistent (see SpeciesCall.h). No round bound decides the outcome.
     const auto qualifies = [&](std::size_t i, double q) {
       return st[i].tested && q <= params.alpha && st[i].share >= params.tau && st[i].observed >= params.n_min;
     };
-    std::vector<char> present(n, 0), next(n, 0);
     std::vector<double> spill(n, 0.0), p(n, 1.0), q;
     double pi0 = 1.0;
-    for (std::size_t round = 0; round < n + 2; ++round)
-    {
+    // Spill, p and q with spill from @p S; returns F(S).
+    const auto evaluate = [&](const std::vector<char>& S) {
       for (std::size_t pos = 0; pos < n; ++pos)
       {
         const std::size_t g = order[pos];
@@ -241,7 +215,7 @@ namespace FASTag::SpeciesCall
           for (std::size_t up = 0; up < pos; ++up)
           {
             const std::size_t h = order[up];
-            if (!present[h]) continue;
+            if (!S[h]) continue;
             double Nh = genera[h].deconvolved;
             if (!std::isfinite(Nh) || Nh < 0.0) Nh = static_cast<double>(genera[h].observed);
             const double c = C[g * n + h];
@@ -251,12 +225,46 @@ namespace FASTag::SpeciesCall
         p[g] = poissonUpperTail(st[g].observed, sp + st[g].random_expected);
       }
       qOverTested(p, q, pi0);
-      for (std::size_t i = 0; i < n; ++i) next[i] = qualifies(i, q[i]) ? 1 : 0;
-      if (next == present) break;
-      present.swap(next);
+      std::vector<char> f(n, 0);
+      for (std::size_t i = 0; i < n; ++i) f[i] = qualifies(i, q[i]) ? 1 : 0;
+      return f;
+    };
+
+    std::vector<std::vector<char>> seen{std::vector<char>(n, 0)};
+    std::vector<char> present;
+    for (;;)
+    {
+      std::vector<char> f = evaluate(seen.back());
+      auto it = std::find(seen.begin(), seen.end(), f);
+      // F is antitone (more spill never lowers a q at fixed pi0), so its
+      // even and odd iterates are monotone and a set repeats within about
+      // 2n rounds. A guard for estimated pi0, which can break that: past
+      // 4n + 8 rounds every set after the first counts as the cycle.
+      if (it == seen.end() && seen.size() > 4 * n + 8) it = seen.begin() + 1;
+      if (it == seen.end())
+      {
+        seen.push_back(std::move(f));
+        continue;
+      }
+      // seen[it .. end) is the cycle; length 1 is a fixed point.
+      present.assign(n, 1);
+      for (auto c = it; c != seen.end(); ++c)
+        for (std::size_t i = 0; i < n; ++i) present[i] = present[i] && (*c)[i];
+      break;
     }
-    // The decision below is taken on the last computed spill, p and q (at
-    // the fixed point the present set it gives is the one the spill used).
+    // Shrink to a set whose every member qualifies on spill from the set;
+    // terminates because the set only loses members. At a fixed point this
+    // is a single evaluation that changes nothing.
+    std::vector<char> qual;
+    for (;;)
+    {
+      qual = evaluate(present);
+      bool changed = false;
+      for (std::size_t i = 0; i < n; ++i)
+        if (present[i] && !qual[i]) { present[i] = 0; changed = true; }
+      if (!changed) break;
+    }
+    // spill, p and q are now those computed with spill from `present`.
 
     const std::size_t m = tested.size();
     for (std::size_t i = 0; i < n; ++i)
@@ -270,8 +278,9 @@ namespace FASTag::SpeciesCall
       s.lod = -1.0;
       if (run.low_resolution) { s.call = Call::NoCall; s.reason = "low_resolution"; continue; }
       if (run.n_units < run.min_units) { s.call = Call::NoCall; s.reason = "few_spectra"; continue; }
-      if (qualifies(i, q[i])) { s.call = Call::Present; s.reason = "pass"; continue; }
-      if (s.tested && s.qvalue_random <= params.alpha && s.qvalue > params.alpha)
+      if (present[i]) { s.call = Call::Present; s.reason = "pass"; continue; }
+      if (qual[i]) { s.call = Call::NoCall; s.reason = "unstable"; continue; }
+      if (s.tested && s.spill > 0.0 && s.qvalue_random <= params.alpha && s.qvalue > params.alpha)
       {
         s.call = Call::NoCall;
         s.reason = "near_neighbour";

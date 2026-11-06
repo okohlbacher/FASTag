@@ -300,19 +300,132 @@ int main()
     check(SC::estimatePi0({0.3}) == 1.0, "pi0 of one value is 1");
   }
 
-  // ---- 8. roll-up of the overlap matrix --------------------------------------
+  // ---- 8. group-level overlap from distinct k-mers -----------------------------
   {
-    // 4 index taxa; 0 and 1 in group 0, 2 in group 1, 3 in no group.
-    const std::vector<uint64_t> ov = {10, 4, 1, 2,
-                                      4, 20, 0, 1,
-                                      1, 0, 30, 5,
-                                      2, 1, 5, 40};
-    const auto r = SC::rollUpOverlap(ov, 4, {0, 0, 1, -1}, 2);
-    check(r == std::vector<uint64_t>({38, 1, 1, 30}), "overlap rolled up by summing rows and columns");
-    const auto C = SC::rollUpConditional(ov, 4, {0, 0, 1, -1}, 2);
-    check(C.size() == 4 && near(C[0], 1.0) && near(C[1], 1.0 / 30.0) && near(C[2], 1.0 / 38.0),
-          "conditional matrix of the rolled overlap");
-    check(C == conditionalMatrix(r, 2), "rollUpConditional = conditionalMatrix(rollUpOverlap)");
+    // Distinct 4-mers per taxon, by brute force, against TaxIndex::groupOverlap.
+    // Group h = taxa 1 and 2 with the SAME protein P (20 k-mers); group g =
+    // taxa 3 and 4 with the same protein Q that shares 10 of P's k-mers; taxon
+    // 5 (group -1) shares P too and must not count. Summing pairwise overlaps
+    // over members would give C[g][h] = 0.5 * 4 / 2 = 1.0 here (and above 1
+    // with a third member); the true P(k-mer in g | k-mer in h) is 0.5.
+    const std::string P = "ACDEFGHKLMNPQRSTVWYACD";   // 22 residues -> 19 4-mers
+    const std::string Q = P.substr(0, 13) + "YWVTSRQPNMLKH";  // first 10 4-mers of P, then its own
+    std::vector<OpenMS::FASTAFile::FASTAEntry> e;
+    e.emplace_back("p1", "", P); e.emplace_back("p2", "", P);
+    e.emplace_back("q3", "", Q); e.emplace_back("q4", "", Q);
+    e.emplace_back("x5", "", P);
+    TaxIndex idx;
+    idx.build(e, {1, 2, 3, 4, 5}, 4);
+    const auto kmers = [](const std::string& x) {
+      std::set<std::string> k;
+      for (size_t i = 0; i + 4 <= x.size(); ++i) k.insert(x.substr(i, 4));
+      return k;
+    };
+    const auto kp = kmers(P), kq = kmers(Q);
+    size_t inter = 0;
+    for (const auto& k : kq) inter += kp.count(k);
+    const std::vector<uint32_t> tx = idx.taxa();
+    check(tx == std::vector<uint32_t>({1, 2, 3, 4, 5}), "groupOverlap: index taxa");
+    // h = group 0 (taxa 1, 2), g = group 1 (taxa 3, 4).
+    const std::vector<int> group_of = {0, 0, 1, 1, -1};
+    const auto ov = idx.groupOverlap(group_of, 2);
+    check(ov.size() == 4, "groupOverlap: 2 x 2");
+    check(ov[0] == kp.size() && ov[3] == kq.size(), "groupOverlap: diagonal = distinct k-mers of the group");
+    check(ov[1] == inter && ov[2] == inter, "groupOverlap: off-diagonal = distinct shared k-mers");
+    const auto C = conditionalMatrix(ov, 2);
+    check(near(C[1 * 2 + 0], static_cast<double>(inter) / kp.size()),
+          "groupOverlap: C[g][h] = P(k-mer in g | k-mer in h) with 2 members each");
+    for (double c : C) check(c >= 0.0 && c <= 1.0, "groupOverlap: conditional entries in [0, 1]");
+    // One member per group reproduces pairwiseOverlap exactly.
+    const auto pw = idx.pairwiseOverlap();
+    const auto id = idx.groupOverlap({0, 1, 2, 3, 4}, 5);
+    check(id == pw, "groupOverlap with singleton groups = pairwiseOverlap");
+    // The summed roll-up this replaces gets the same C wrong.
+    uint64_t sum_gh = 0, sum_hh = 0;
+    for (size_t a : {0, 1}) for (size_t b : {0, 1}) sum_hh += pw[a * 5 + b];
+    for (size_t a : {2, 3}) for (size_t b : {0, 1}) sum_gh += pw[a * 5 + b];
+    check(static_cast<double>(sum_gh) / sum_hh > C[1 * 2 + 0] + 0.25,
+          "groupOverlap: differs from summing the members' pairwise overlaps");
+    TaxIndex empty;
+    check(empty.groupOverlap({}, 3) == std::vector<uint64_t>(9, 0), "groupOverlap of an empty index");
+  }
+
+  // ---- 8b. the present set is self-consistent; BH coupling cannot cycle it ----
+  {
+    // X: o = 100, d = 381 at D = 5 (random part 76.3); Y: o = 20, d = 0 with
+    // C[Y][X] = 0.2. With no genus present both qualify; with X present its
+    // spill (20) explains Y, which lifts q_X over alpha by BH; with nothing
+    // present the spill is gone again. A period-2 cycle: neither genus can be
+    // called present self-consistently, so both are no_call unstable, on
+    // statistics computed with spill from the (empty) present set. An extra
+    // untested genus must not change any call (the old round bound made the
+    // result depend on the parity of n).
+    SC::Params pr; pr.alpha = 0.01; pr.tau = 0.0; pr.n_min = 5;
+    SC::RunInput run; run.n_units = 1000; run.n_trials = 1000; run.decoys = 5; run.min_units = 200;
+    const auto mk = [&](size_t extra) {
+      std::vector<SC::GenusInput> g = {{10, 100, 381, 0.1, 100.0}, {20, 20, 0, 0.02, 20.0}};
+      for (size_t k = 0; k < extra; ++k) g.push_back({static_cast<uint32_t>(30 + k), 0, 0, 0.0, 0.0});
+      const size_t n = g.size();
+      std::vector<double> C(n * n, 0.0);
+      for (size_t i = 0; i < n; ++i) C[i * n + i] = 1.0;
+      C[1 * n + 0] = 0.2;  // C[Y][X]
+      return SC::callGenera(g, C, run, pr);
+    };
+    const auto s2 = mk(0);
+    check(near(find(s2, 10)->random_expected, 76.3), "cycle: X random part 76.3");
+    for (uint32_t t : {10u, 20u})
+    {
+      check(find(s2, t)->call == SC::Call::NoCall && find(s2, t)->reason == "unstable",
+            "cycle: genus " + std::to_string(t) + " is no_call unstable");
+      check(find(s2, t)->spill == 0.0, "cycle: no spill from a genus that is not called present");
+    }
+    for (size_t extra = 1; extra <= 3; ++extra)
+    {
+      const auto sn = mk(extra);
+      for (uint32_t t : {10u, 20u})
+      {
+        const auto *a = find(s2, t), *b = find(sn, t);
+        check(a->call == b->call && a->reason == b->reason && a->spill == b->spill &&
+                  near(a->qvalue, b->qvalue, 1e-12),
+              "parity: " + std::to_string(extra) + " extra untested genera change nothing for " + std::to_string(t));
+      }
+    }
+    // Without the cycle (X twice as strong) X is present and Y a near_neighbour.
+    {
+      std::vector<SC::GenusInput> g = {{10, 200, 381, 0.2, 200.0}, {20, 40, 0, 0.04, 40.0}};
+      const std::vector<double> C = {1.0, 0.0, 0.2, 1.0};
+      const auto s = SC::callGenera(g, C, run, pr);
+      check(find(s, 10)->call == SC::Call::Present, "no cycle: X present");
+      check(find(s, 20)->call == SC::Call::NoCall && find(s, 20)->reason == "near_neighbour" &&
+                near(find(s, 20)->spill, 0.2 * 200.0),
+            "no cycle: Y near_neighbour on X's spill");
+    }
+    // near_neighbour needs spill: Z, unrelated to X and Y, is significant on
+    // the random part alone (q_Z = p_Z, rank 3 of 3) but once X's spill
+    // explains Y, BH ranks Z second and q_Z = 1.5 p_Z > alpha. Z gets no
+    // spill, so it is not_detected, not a near_neighbour.
+    {
+      const double lamZ = SC::randomExpected(50, 5, 1000);
+      uint64_t oZ = 0;
+      for (uint64_t o = 1; o < 200 && oZ == 0; ++o)
+      {
+        const double t = SC::poissonUpperTail(o, lamZ);
+        if (t <= 0.0098 && t > 0.0068) oZ = o;
+      }
+      check(oZ > 0, "BH coupling: a Z count with p in (alpha / 1.5, alpha)");
+      std::vector<SC::GenusInput> g = {{10, 200, 381, 0.2, 200.0}, {20, 40, 0, 0.04, 40.0},
+                                       {30, oZ, 50, 0.01, static_cast<double>(oZ)}};
+      const std::vector<double> C = {1.0, 0.0, 0.0,
+                                     0.2, 1.0, 0.0,
+                                     0.0, 0.0, 1.0};
+      const auto s = SC::callGenera(g, C, run, pr);
+      const auto* z = find(s, 30);
+      check(find(s, 10)->call == SC::Call::Present, "BH coupling: X present");
+      check(z->spill == 0.0 && z->qvalue_random <= pr.alpha && z->qvalue > pr.alpha,
+            "BH coupling: Z significant on the random part only, without spill");
+      check(z->call == SC::Call::NotDetected && z->reason == "not_significant",
+            "BH coupling: Z not_detected, not near_neighbour");
+    }
   }
 
   // ---- 9. all-decoy run: nothing present -------------------------------------

@@ -17,16 +17,28 @@
 //     decoy hit.
 //   * homology part: spill_g = sum over the genera h that rank above g (more
 //     observed spectra) and are called present of C[g][h] * N_h, with C the
-//     column-conditional overlap matrix rolled up to the report rank and N_h
-//     the deconvolved count of h.
+//     column-conditional matrix of the distinct-k-mer overlap of the
+//     report-rank groups (TaxIndex::groupOverlap) and N_h the deconvolved
+//     count of h.
 //
 // p_g = P(X >= o_g), X ~ Poisson(lambda_g); q_g by Benjamini-Hochberg (or
 // Storey's pi0, opt-in) over the genera with o_g >= Taxonomy::kObservedFloor.
 // Decision, in this order: run-level no_call (low_resolution, few_spectra);
-// present (q <= alpha, share >= tau, o >= n_min); no_call near_neighbour (q
-// <= alpha on the random part alone, but not once the spill is included);
-// otherwise not_detected with a detection limit. The report never says
-// "absent".
+// present (q <= alpha, share >= tau, o >= n_min); no_call unstable (see
+// below); no_call near_neighbour (spill > 0, and q <= alpha on the random part
+// alone but not once the spill is included); otherwise not_detected with a
+// detection limit. The report never says "absent".
+//
+// The present set S must be self-consistent: S = F(S), F(S) being the genera
+// that qualify with spill from S. BH couples the genera (a genus's spill can
+// raise another's q), so F can cycle instead of converging. callGenera()
+// iterates F from the empty set until a set repeats. On a fixed point S is
+// it. On a cycle, S is the intersection of the sets of the cycle, shrunk to
+// S AND F(S) until every member qualifies on spill from S alone; the genera
+// that qualify on spill from S but are not in S are no_call "unstable". The
+// statistics reported are always those computed with spill from the final S,
+// and spill only ever comes from genera called present. The result does not
+// depend on the iteration bound, nor on untested genera.
 //
 // Pure functions, no I/O except loadParams(); deterministic.
 //
@@ -100,8 +112,9 @@ namespace FASTag::SpeciesCall
     double lod = -1.0;             ///< detection limit as a share; < 0 = not applicable
     bool tested = false;           ///< observed >= Taxonomy::kObservedFloor
     Call call = Call::NotDetected;
-    std::string reason;            ///< pass, low_resolution, few_spectra, near_neighbour,
-                                   ///< not_significant, low_share, few_genus_spectra
+    std::string reason;            ///< pass, low_resolution, few_spectra, unstable,
+                                   ///< near_neighbour, not_significant, low_share,
+                                   ///< few_genus_spectra
   };
 
   /// P(X >= o) for X ~ Poisson(lambda); 1 for o == 0.
@@ -117,18 +130,6 @@ namespace FASTag::SpeciesCall
   /// Storey's pi0 of @p p (OpenMS MultipleTesting::pi0Est), clamped to
   /// (0, 1]; 1 when there are fewer than 2 values or the estimate fails.
   double estimatePi0(const std::vector<double>& p);
-
-  /// Roll an index-taxon overlap matrix (row-major n x n, TaxIndex::
-  /// pairwiseOverlap order) up to groups: entry (a, b) of the result is the sum
-  /// of overlap(i, j) over the taxa i of group a and j of group b. @p group_of
-  /// maps each index taxon to its group, or -1 for a taxon outside every group.
-  std::vector<uint64_t> rollUpOverlap(const std::vector<uint64_t>& overlap, std::size_t n,
-                                      const std::vector<int>& group_of, std::size_t n_groups);
-
-  /// The rolled-up column-conditional matrix: conditionalMatrix() of
-  /// rollUpOverlap(); C[g][h] = P(k-mer in g | k-mer in h).
-  std::vector<double> rollUpConditional(const std::vector<uint64_t>& overlap, std::size_t n,
-                                        const std::vector<int>& group_of, std::size_t n_groups);
 
   /// The call for every genus of @p genera. @p C is the n x n conditional
   /// matrix in the order of @p genera (n = genera.size()); empty means no
