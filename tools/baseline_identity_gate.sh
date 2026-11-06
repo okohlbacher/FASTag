@@ -66,6 +66,8 @@ else
   echo "baseline_identity_gate: buildtaxdb $CBT vs $BBT: $(awk -F'\t' '$5 == "SAME"' "$BT/report.tsv" | wc -l) equal"
 fi
 cat "$OUT"/PXD*/report.tsv "$BT/report.tsv" | awk 'NR == 1 || $1 != "label"' > "$OUT/report.tsv"
-if [ $rc = 0 ]; then echo "BASELINE IDENTITY PASS ($(awk -F'\t' '$5 == "SAME"' "$OUT/report.tsv" | wc -l) comparisons)"
-else echo "BASELINE IDENTITY FAIL"; awk -F'\t' 'NR > 1 && $5 != "SAME" && $5 !~ /^INFO/ && $5 !~ /^ADDED/' "$OUT/report.tsv"; fi
+# Accepted statuses: SAME, INFO*, ADDED*, PREFIX* (see baseline_identity.sh).
+nacc=$(awk -F'\t' '$5 ~ /^(ADDED|PREFIX)/' "$OUT/report.tsv" | wc -l | tr -d ' ')
+if [ $rc = 0 ]; then echo "BASELINE IDENTITY PASS ($(awk -F'\t' '$5 == "SAME"' "$OUT/report.tsv" | wc -l | tr -d ' ') comparisons$([ "$nacc" = 0 ] || echo ", $nacc accepted additions (ADDED/PREFIX)"))"
+else echo "BASELINE IDENTITY FAIL"; awk -F'\t' 'NR > 1 && $5 != "SAME" && $5 !~ /^(INFO|ADDED|PREFIX)/' "$OUT/report.tsv"; fi
 exit $rc

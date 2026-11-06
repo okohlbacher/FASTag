@@ -32,6 +32,11 @@
 #     lines (new 1.12 options; every baseline line kept, in order, unchanged)
 #     is recorded as "ADDED (+N lines)" and passes; any removed or changed
 #     line is a DIFF.
+# Accepted, non-failing statuses (one list, shared by rec() and the filters
+# of baseline_identity_gate.sh and test/baseline_identity_test.sh):
+#   SAME, INFO* (log lines), ADDED* (interface lines added), PREFIX* (an
+#   output that keeps the baseline as a byte prefix; reserved for 1.12 items
+#   that append rows, e.g. #3a label_call).
 # The rest of the log is reported as INFO when it differs, never a failure.
 # A case whose baseline tag TSV has no rows FAILS: the comparison would prove nothing.
 #
@@ -95,9 +100,9 @@ REPORT="$WORK/report.tsv"
 [ -f "$REPORT" ] || printf 'label\tcase\tthreads\titem\tstatus\n' > "$REPORT"
 nfail=0 nsame=0
 rec() { printf '%s\t%s\t%s\t%s\t%s\n' "$LABEL" "$1" "$2" "$3" "$4" >> "$REPORT"
-        case $4 in SAME) nsame=$((nsame + 1)) ;; INFO*|ADDED*) ;; *) nfail=$((nfail + 1)); echo "  FAIL $1 t$2 $3: $4" ;; esac; }
+        case $4 in SAME) nsame=$((nsame + 1)) ;; INFO*|ADDED*|PREFIX*) ;; *) nfail=$((nfail + 1)); echo "  FAIL $1 t$2 $3: $4" ;; esac; }
 # rec for the interface files: SAME, ADDED (only "+" lines against the
-# baseline) or DIFF, for baseline file $1 and candidate file $2.
+# baseline) or DIFF, for baseline file $1, candidate file $2, item $3.
 rec_iface() {
   if cmp -s "$2" "$1"; then rec interface - "$3" SAME
   elif ! diff "$1" "$2" | grep -q '^<'; then rec interface - "$3" "ADDED (+$(diff "$1" "$2" | grep -c '^>') lines)"
@@ -187,5 +192,6 @@ for c in $CASES; do
   if [ "$c" = interface ]; then run_interface; continue; fi
   for t in $THREADS; do run_case "$c" "$t"; done
 done
-echo "baseline_identity: $LABEL: $nsame equal, $nfail different (report $REPORT)"
+nacc=$(awk -F'\t' -v l="$LABEL" '$1 == l && $5 ~ /^(ADDED|PREFIX)/' "$REPORT" | wc -l | tr -d ' ')
+echo "baseline_identity: $LABEL: $nsame equal, $nacc accepted additions (ADDED/PREFIX), $nfail different (report $REPORT)"
 [ $nfail = 0 ]

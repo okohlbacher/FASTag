@@ -256,7 +256,7 @@ class TOPPFASTag : public TOPPBase
       if (FASTag::Cli::isLegacyOutSpectraParameter(name)) continue;
       // A flag's registered default is the bool false while the Param holds
       // the string "false", so the two never compare equal: read flags
-      // through getFlag_ (first met with -complement_midp, 1.12 E2).
+      // through getFlag_ (first met with 1.12 E2's -complement_midp).
       const ParameterInformation& e = findEntry_(name);
       const bool at_default = e.type == ParameterInformation::FLAG
                                   ? !getFlag_(name)
