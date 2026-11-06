@@ -75,7 +75,7 @@ endif()
 # control).
 set(FASTAG_CORE_SOURCES src/FASTagger.cpp src/AveragineDeisotoper.cpp src/Digest.cpp src/DigestReport.cpp src/FastaFilter.cpp src/ProteomeIndex.cpp src/ReconIds.cpp src/TagRecon.cpp src/TaxDeconv.cpp src/TaxIndex.cpp src/TaxStats.cpp)
 # ---- 1.12 E: core sources ----
-set(FASTAG_CORE_SOURCES_E)
+set(FASTAG_CORE_SOURCES_E src/Centroid.cpp)
 # ---- 1.12 A: core sources ----
 set(FASTAG_CORE_SOURCES_A)
 # ---- 1.12 D: core sources ----
@@ -248,7 +248,7 @@ if(FASTAG_BUILD_TESTS)
   # their tests only to their own anchored list.
   set(FASTAG_UNIT_TESTS ranksum_test fastag_test fasta_filter_test tagrecon_test tagfdr_test proteome_index_test glyco_test taxindex_test taxstats_test taxdeconv_test species_evidence_test sampler_test proforma_test numformat_test peakgrid_test formats_test digest_test)
   # ---- 1.12 E: unit tests ----
-  set(FASTAG_UNIT_TESTS_E cli_param_test)
+  set(FASTAG_UNIT_TESTS_E cli_param_test centroid_test)
   # ---- 1.12 A: unit tests ----
   set(FASTAG_UNIT_TESTS_A)
   # ---- 1.12 D: unit tests ----
@@ -380,6 +380,12 @@ if(FASTAG_BUILD_TESTS)
                    $<TARGET_FILE:cli_param_test>
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML)
   set_tests_properties(out_spectra_params_test PROPERTIES SKIP_RETURN_CODE 77)
+  # #9: -pick_profile / -pick_unknown_type on the profile fixtures
+  # (test/fixtures/make_profile_fixtures.py), legacy against 1.11.0.
+  add_test(NAME profile_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/profile_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures)
+  set_tests_properties(profile_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # ---- 1.12 A: CLI tests ----
   # ---- 1.12 D: CLI tests ----
   # ---- 1.12 F: CLI tests ----
@@ -441,10 +447,12 @@ if(FASTAG_BUILD_TESTS)
     target_link_libraries(indexed_mzml_test PRIVATE OpenMP::OpenMP_CXX)
   endif()
   # The fixture first, then every vendored mzML that OpenMS did not write
-  # (diaTracer and ddaPASEF layouts, where present), compared spectrum by
+  # (diaTracer and ddaPASEF layouts, the #9 profile fixtures, where present),
+  # compared spectrum by
   # spectrum between the direct decoder and OpenMS's.
   set(_fastag_direct_fixtures ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML)
-  foreach(_f diatracer_like.mzML ddapasef_empty.mzML)
+  foreach(_f diatracer_like.mzML ddapasef_empty.mzML profile_ms2_small.mzML profile_ms2_untyped.mzML
+             profile_ms2_paramgroup.mzML profile_ms2_lowres.mzML)
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/${_f})
       list(APPEND _fastag_direct_fixtures ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/${_f})
     endif()

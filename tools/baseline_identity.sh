@@ -28,7 +28,9 @@
 #   - the set of files written;
 #   - every file, canonicalised, with cmp (the first differing lines are shown);
 #   - interface: `--help` and the -write_ctd CTD, raw bytes (versions masked when
-#     the two binaries report different versions).
+#     the two binaries report different versions). Options added after 1.11
+#     may ADD lines; every baseline line must still be there, in order, and
+#     unchanged (status ADDED, a pass; anything else is DIFF).
 # The rest of the log is reported as INFO when it differs, never a failure.
 # A case whose baseline tag TSV has no rows FAILS: the comparison would prove nothing.
 #
@@ -92,7 +94,13 @@ REPORT="$WORK/report.tsv"
 [ -f "$REPORT" ] || printf 'label\tcase\tthreads\titem\tstatus\n' > "$REPORT"
 nfail=0 nsame=0
 rec() { printf '%s\t%s\t%s\t%s\t%s\n' "$LABEL" "$1" "$2" "$3" "$4" >> "$REPORT"
-        case $4 in SAME) nsame=$((nsame + 1)) ;; INFO*) ;; *) nfail=$((nfail + 1)); echo "  FAIL $1 t$2 $3: $4" ;; esac; }
+        case $4 in SAME|ADDED*) nsame=$((nsame + 1)) ;; INFO*) ;; *) nfail=$((nfail + 1)); echo "  FAIL $1 t$2 $3: $4" ;; esac; }
+# interface_rec <item> <baseline file> <candidate file>: ADDED when the
+# candidate only adds lines (diff has no '<' line), else DIFF.
+interface_rec() {
+  if diff "$2" "$3" | grep -q '^<'; then rec interface - "$1" DIFF; showdiff "$2" "$3"
+  else rec interface - "$1" "ADDED (+$(diff "$2" "$3" | grep -c '^>') lines, none changed)"; fi
+}
 showdiff() { diff "$1" "$2" | head -8 | cut -c1-200 | sed 's/^/      /'; }
 
 # args for case $1 into CASE_ARGS
@@ -135,8 +143,8 @@ run_interface() {
     elif [ "$CV" != "$BV" ] || [ "$CO" != "$BO" ]; then
       "$PY" "$CANON" "$d/c/$f" "$CV" "$CO" > "$d/c/$f.canon"; "$PY" "$CANON" "$d/b/$f" "$BV" "$BO" > "$d/b/$f.canon"
       if cmp -s "$d/c/$f.canon" "$d/b/$f.canon"; then rec interface - "$f" SAME
-      else rec interface - "$f" DIFF; showdiff "$d/b/$f.canon" "$d/c/$f.canon"; fi
-    else rec interface - "$f" DIFF; showdiff "$d/b/$f" "$d/c/$f"; fi
+      else interface_rec "$f" "$d/b/$f.canon" "$d/c/$f.canon"; fi
+    else interface_rec "$f" "$d/b/$f" "$d/c/$f"; fi
   done
 }
 

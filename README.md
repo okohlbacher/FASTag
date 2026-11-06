@@ -259,7 +259,9 @@ nothing uses them.
 routinely store profile MS2 with an empty centroid facet, and tagging profile
 samples rather than peaks costs real recall, so FASTag centroids them on read
 (`PeakPickerHiRes`).
-Picking runs in the tagging threads, so it parallelises.
+Picking runs in the tagging threads, so it parallelises. `-pick_profile auto`
+does the same for profile MS2 in mzML (see Performance); `-pick_profile off`
+switches it off for mzPeak too.
 
 **Limitations of the mzPeak path** (in OpenMS's `MzPeakFile`, as of the OpenMS
 commit above):
@@ -454,6 +456,8 @@ MGF→mzML direction is exact.
 | `-subsample_spectra <n>` / `-subsample_fraction <f>` | 0 | Tag only a random subset (count or fraction; if both are given, the count wins); 0 = all |
 | `-subsample_seed <n>` | 1 | Seed for the `-subsample_*` selection |
 | `-mzpeak_read_memory <MB>` | 0 | No effect; accepted for existing command lines |
+| `-pick_profile <legacy\|auto\|off>` | legacy | Centroid profile MS2 (MS:1000128) with OpenMS `PeakPickerHiRes` before tagging: `legacy` on mzPeak input only (as 1.11), `auto` on mzML and mzPeak input (not MGF), `off` never. Centroided MS2 are never re-picked. `-out_spectra` writes the spectra as they were tagged. Not with `-stream` |
+| `-pick_unknown_type` | off | With `-pick_profile auto`: also centroid MS2 that declare no spectrum type, when OpenMS's `PeakTypeEstimator` reads their data as profile (advanced) |
 
 The `-glyco_*` options are read only with `-glyco`, and the `-taxdb`,
 `-taxonomy_*` and `-species_*` options only with `-species`; otherwise they are
@@ -864,7 +868,10 @@ The two containers return the same tags on centroided input. On **profile**
 MS2, as in this run, they do not, and the times are not comparable either: the
 mzML path tags profile samples as they are, while the archive was centroided
 when written, so FASTag reads peaks and finds more tags (2,032,961 against
-1,376,019). Centroid before tagging profile mzML, or read the archive.
+1,376,019). Centroid before tagging profile mzML, read the archive, or use
+`-pick_profile auto` (1.12), which centroids profile mzML MS2 on read with the
+same picker as the mzPeak path. Its default is still `legacy` (mzML tagged as
+sampled) until it is validated on held-out profile runs.
 
 Output is identical at every thread count (`threads_test` checks every output
 on the fixture). Row memory on the mzML path is bounded by a ring of three
