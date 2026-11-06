@@ -242,7 +242,8 @@ namespace FASTag
     : k_min_(std::max(2, p.tag_length + 1 - std::max(0, p.max_gaps))),
       k_max_(std::max(2, p.tag_length + 1 + 2 * std::max(0, p.max_extension))),
       n_max_(p.max_peak_count > 0 ? p.max_peak_count : PEAK_CEILING),
-      alpha_(std::make_shared<const Alphabet>(p.mods))
+      alpha_(std::make_shared<const Alphabet>(p.mods)),
+      compl_(ComplementSpec::fromParam(p))
   {
     ranksum_.resize(static_cast<size_t>(k_max_ - k_min_ + 1));
     for (int k = k_min_; k <= k_max_; ++k)
@@ -314,6 +315,7 @@ namespace FASTag
       std::vector<int> rank;           ///< 1 = most intense
       std::vector<uint8_t> has_compl;  ///< bit z-1 set if a complement exists at charge z
       double precursor_mass = 0;
+      int prec_charge = 2;             ///< as tagged (<= 0 already defaulted to 2)
       int n_frag_charges = 1;
       std::vector<int> n_with_compl;   ///< indexed by fragment charge
       /// Nearest-peak index over spec, for complements and buildGraph. Points at
@@ -322,10 +324,12 @@ namespace FASTag
       const PeakGrid* grid = nullptr;
     };
 
-    Prepared prepare(const MSSpectrum& in, double precursor_mz, int charge, const Param& p)
+    Prepared prepare(const MSSpectrum& in, double precursor_mz, int charge, const Param& p,
+                     const ComplementSpec& cs)
     {
       Prepared s;
       s.precursor_mass = precursor_mz * charge - charge * PROTON;
+      s.prec_charge = charge;
       // +2 fragments are only sought from precursors of charge >= 3, as DirecTag
       // (Tabb et al. 2008) specifies.
       // Capped at 8: has_compl is a uint8_t bitmask, so bit z-1 for z > 8 is
@@ -517,8 +521,13 @@ namespace FASTag
       s.grid = &grid;
 
       // Complements: b + y = M + 2*proton, so a fragment at m/z m has its partner
-      // at M/z + 2*proton - m.
+      // at M/z + 2*proton - m (same charge), or, carrying the precursor's
+      // remaining charges, at (M + c*proton - z*m)/(c - z). complementMz()
+      // has both; ComplementSpec picks the rule(s), the window and the
+      // ion-pair deltas (b/y: one delta, 0).
       s.has_compl.assign(n, 0);
+      const bool same_rule = cs.rule != ComplementRule::Precursor;
+      const bool prec_rule = cs.rule != ComplementRule::SameCharge;
       for (size_t i = 0; i < n; ++i)
         for (int z = 1; z <= s.n_frag_charges; ++z)
         {
@@ -526,13 +535,28 @@ namespace FASTag
           //   m/z(b) + m/z(y) = (Nb + z*proton)/z + (Ny + z*proton)/z
           //                   = M/z + 2*proton,      because Nb + Ny = M.
           // Note the proton term is NOT divided by z.
-          const double cmz = s.precursor_mass / z + 2.0 * PROTON - s.spec[i].getMZ();
-          // j != i: a peak at the midpoint would otherwise be its own partner,
-          // manufacturing complement evidence from a single ion and inflating
-          // both the population and the observed count.
-          const int j = grid.nearest(cmz, p.complement_tol);
-          if (j >= 0 && static_cast<size_t>(j) != i)
-            s.has_compl[i] |= static_cast<uint8_t>(1u << (z - 1));
+          const double mz = s.spec[i].getMZ();
+          bool found = false;
+          for (const double d : cs.pair_deltas)
+          {
+            // d == 0 leaves M as it is, so the default's doubles are 1.11's.
+            const double M = d == 0.0 ? s.precursor_mass : s.precursor_mass + d;
+            for (int r = 0; r < 2 && !found; ++r)
+            {
+              if (r == 0 ? !same_rule : !prec_rule) continue;
+              const double cmz = complementMz(M, s.prec_charge, z, mz,
+                                              r == 0 ? ComplementRule::SameCharge
+                                                     : ComplementRule::Precursor);
+              if (std::isnan(cmz)) continue;
+              // j != i: a peak at the midpoint would otherwise be its own partner,
+              // manufacturing complement evidence from a single ion and inflating
+              // both the population and the observed count.
+              const int j = grid.nearest(cmz, cs.tol(mz, cmz));
+              found = j >= 0 && static_cast<size_t>(j) != i;
+            }
+            if (found) break;
+          }
+          if (found) s.has_compl[i] |= static_cast<uint8_t>(1u << (z - 1));
         }
       // Counted PER CHARGE, not pooled across charges: scorePath draws its
       // observed count from one fragment charge, so the hypergeometric's
@@ -786,26 +810,12 @@ namespace FASTag
       const size_t zi = static_cast<size_t>(charge);
       const int compl_pop = zi < s.n_with_compl.size() ? s.n_with_compl[zi] : 0;
       const bool use_compl = compl_pop > 0;
-      if (use_compl && n_compl > 0)
-      {
-        const unsigned N = static_cast<unsigned>(s.spec.size());
-        const unsigned K = static_cast<unsigned>(compl_pop);
-        const unsigned n = static_cast<unsigned>(k);
-        // The support is [max(0, n+K-N), min(K, n)], not [0, n]: when most peaks
-        // are complemented, a tag CANNOT have few. Boost throws on an argument
-        // outside it, so resolve the ends analytically instead of clamping into
-        // a distribution that does not cover them.
-        const unsigned lo = (n + K > N) ? n + K - N : 0u;
-        const unsigned hi = std::min(K, n);
-        const unsigned obs = static_cast<unsigned>(n_compl);
-        if (obs <= lo)      t.p_complement = 1.0;   // cannot do worse; no evidence
-        else if (obs > hi)  t.p_complement = 0.0;   // impossible under the null
-        else
-        {
-          boost::math::hypergeometric_distribution<double> h(K, n, N);
-          t.p_complement = boost::math::cdf(boost::math::complement(h, obs - 1u));
-        }
-      }
+      // Mid-p scores every count, 0 included; the plain tail leaves 0 at 1.
+      if (use_compl && (n_compl > 0 || tab.complement().midp))
+        t.p_complement = complementPValue(static_cast<unsigned>(s.spec.size()),
+                                          static_cast<unsigned>(compl_pop),
+                                          static_cast<unsigned>(k),
+                                          static_cast<unsigned>(n_compl), tab.complement().midp);
 
       t.evalue = fisher(t.p_intensity, t.p_mzfidelity, t.p_complement, use_compl ? 3 : 2);
 
@@ -1200,6 +1210,40 @@ namespace FASTag
 
   // ------------------------------------------------------------------ API
 
+  double complementPValue(unsigned N, unsigned K, unsigned n, unsigned obs, bool midp)
+  {
+    // The support is [max(0, n+K-N), min(K, n)], not [0, n]: when most peaks
+    // are complemented, a tag CANNOT have few. Boost throws on an argument
+    // outside it, so resolve the ends analytically instead of clamping into
+    // a distribution that does not cover them.
+    const unsigned lo = (n + K > N) ? n + K - N : 0u;
+    const unsigned hi = std::min(K, n);
+    if (!midp)
+    {
+      if (obs <= lo) return 1.0;   // cannot do worse; no evidence
+      if (obs > hi)  return 0.0;   // impossible under the null
+      boost::math::hypergeometric_distribution<double> h(K, n, N);
+      return boost::math::cdf(boost::math::complement(h, obs - 1u));
+    }
+    if (obs < lo) return 1.0;
+    if (obs > hi) return 0.0;
+    boost::math::hypergeometric_distribution<double> h(K, n, N);
+    // P(X > obs) + P(X = obs)/2; at obs == hi the first term is 0.
+    const double above = obs < hi ? boost::math::cdf(boost::math::complement(h, obs)) : 0.0;
+    return above + 0.5 * boost::math::pdf(h, obs);
+  }
+
+  std::vector<int> complementPopulation(const MSSpectrum& in, double precursor_mz, int charge,
+                                        const Param& p)
+  {
+    if (in.empty() || !(precursor_mz > 0) || !std::isfinite(precursor_mz)) return {};
+    if (charge <= 0) charge = 2;
+    const Prepared s = prepare(in, precursor_mz, charge, p, ComplementSpec::fromParam(p));
+    std::vector<int> out = s.n_with_compl;
+    out[0] = static_cast<int>(s.spec.size());
+    return out;
+  }
+
   std::vector<Tag> tagSpectrum(const MSSpectrum& in, double precursor_mz, int charge,
                                const Param& p, const Tables& tables)
   {
@@ -1209,7 +1253,7 @@ namespace FASTag
     if (p.tag_length < 1 || in.empty() || !(precursor_mz > 0) || !std::isfinite(precursor_mz)) return {};
     if (charge <= 0) charge = 2;
 
-    const Prepared s = prepare(in, precursor_mz, charge, p);
+    const Prepared s = prepare(in, precursor_mz, charge, p, tables.complement());
     if (s.spec.size() < minPeaks(p)) return {};
     return tagPrepared(s, buildGraphs(s, p, tables.alphabet()), p, tables);
   }
@@ -1224,7 +1268,7 @@ namespace FASTag
 
     // Neither the preprocessing nor the graphs read tag_length, so one of each
     // serves every length; built only once some length has enough peaks.
-    const Prepared s = prepare(in, precursor_mz, charge, params[0]);
+    const Prepared s = prepare(in, precursor_mz, charge, params[0], tables[0].complement());
     std::vector<Graph> graphs;
     for (size_t i = 0; i < params.size(); ++i)
     {

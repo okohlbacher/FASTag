@@ -47,7 +47,16 @@ int main(int argc, char** argv)
   check(!p.diversity && !p.per_residue_conf, "diversity and res_conf off");
   check(p.max_evalue == 20.0, "max_evalue 20");
   check(p.gap_penalty == 100.0, "gap_penalty 100");
-  check(p.complement_tol == lib.complement_tol, "complement_tol is the library's: the CLI never sets it");
+  check(p.complement_tol == lib.complement_tol, "complement_tol 0.02 Da, the library's");
+  check(p.complement_rule == lib.complement_rule && p.complement_rule == FASTag::ComplementRule::SameCharge,
+        "complement_rule same_charge (1.11)");
+  check(p.complement_tol_mode == FASTag::ComplementTolMode::Da, "complement tolerance in Da (1.11)");
+  check(p.complement_tol_factor == lib.complement_tol_factor, "complement factor untouched in Da mode");
+  check(!p.complement_midp, "complement mid-p off (1.11)");
+  check(FASTag::Cli::complementRuleFromString("precursor") == FASTag::ComplementRule::Precursor
+            && FASTag::Cli::complementRuleFromString("both") == FASTag::ComplementRule::Both
+            && FASTag::Cli::complementRuleFromString("same_charge") == FASTag::ComplementRule::SameCharge,
+        "complement_rule strings");
   check(p.mods.size() == 1, "one default modification");
   if (p.mods.size() == 1)
   {

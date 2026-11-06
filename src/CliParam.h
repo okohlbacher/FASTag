@@ -39,10 +39,41 @@ namespace FASTag::Cli
   inline constexpr double kMaxEvalue = 20.0;
   inline constexpr double kGapPenalty = 100.0;
   inline constexpr const char* kFixedModifications = "Carbamidomethyl (C)";
+  // 1.12 E2 complement options (-complement_*): defaults are FASTag 1.11.
+  inline constexpr const char* kComplementRule = "same_charge";
+  inline constexpr double kComplementTolerance = 0.02;
+  inline constexpr const char* kComplementToleranceUnit = "Da";
+  inline constexpr bool kComplementMidp = false;  ///< -complement_midp is a flag, off
+
+  /// -complement_rule value to the library's rule; unknown values (TOPPBase
+  /// refuses them first) map to SameCharge.
+  inline ComplementRule complementRuleFromString(std::string_view s)
+  {
+    if (s == "precursor") return ComplementRule::Precursor;
+    if (s == "both") return ComplementRule::Both;
+    return ComplementRule::SameCharge;
+  }
+
+  /// Applies -complement_tolerance in its unit: Da sets the absolute window,
+  /// fragment sets the factor k of k*(fragment tol at m + at the partner).
+  inline void setComplementTolerance(Param& p, double value, std::string_view unit)
+  {
+    if (unit == "fragment")
+    {
+      p.complement_tol_mode = ComplementTolMode::Fragment;
+      p.complement_tol_factor = value;
+    }
+    else
+    {
+      p.complement_tol_mode = ComplementTolMode::Da;
+      p.complement_tol = value;
+    }
+  }
 
   /// The Param the tool runs with when no option is given.
   ///
-  /// complement_tol keeps the library default: the CLI never sets it.
+  /// The complement options (1.12 E2) are set to their registered defaults,
+  /// which equal the library's: same-charge rule, 0.02 Da, no mid-p.
   /// With @p resolve_mods the default fixed modification is resolved through
   /// ModificationsDB exactly as the tool's resolveMods_ resolves a residue
   /// modification (I folded to L); without it `mods` stays empty, which is
@@ -65,6 +96,9 @@ namespace FASTag::Cli
     p.per_residue_conf = false;
     p.max_evalue = kMaxEvalue;
     p.gap_penalty = kGapPenalty;
+    p.complement_rule = complementRuleFromString(kComplementRule);
+    setComplementTolerance(p, kComplementTolerance, kComplementToleranceUnit);
+    p.complement_midp = kComplementMidp;
     if (resolve_mods)
     {
       const OpenMS::ResidueModification* mod =

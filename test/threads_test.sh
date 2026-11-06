@@ -39,4 +39,15 @@ for t in 3 8; do
   cmp -s <(grep -v 'date=' "$TMP/t1/ids.idXML") <(grep -v 'date=' "$TMP/t$t/ids.idXML") \
     || fail "ids.idXML differs between -threads 1 and $t"
 done
+# 1.12 E2: -complement_rule both (with the fragment-tied window and mid-p)
+# is deterministic too.
+for t in 1 3 8; do
+  "$BIN" -in "$IN" -out "$TMP/t$t/compl.tsv" -threads "$t" -fragment_tolerance 0.3 -fragment_tolerance_unit Da \
+    -complement_rule both -complement_tolerance 0.2 -complement_tolerance_unit fragment -complement_midp \
+    >"$TMP/t$t/compl.log" 2>&1 || { cat "$TMP/t$t/compl.log" >&2; fail "-complement_rule both at -threads $t failed"; }
+done
+[ "$(wc -l < "$TMP/t1/compl.tsv")" -gt 1 ] || fail "compl.tsv has no rows at -threads 1"
+for t in 3 8; do
+  cmp -s "$TMP/t1/compl.tsv" "$TMP/t$t/compl.tsv" || fail "-complement_rule both differs between -threads 1 and $t"
+done
 echo "threads_test: all checks passed (${#OUTS[@]} TSVs and the idXML identical at 1, 3 and 8 threads)"

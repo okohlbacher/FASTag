@@ -254,7 +254,14 @@ class TOPPFASTag : public TOPPBase
       if (k.compare(0, prefix.size(), prefix) != 0) continue;
       const std::string name = k.substr(prefix.size());
       if (FASTag::Cli::isLegacyOutSpectraParameter(name)) continue;
-      if (getParam_().getValue(name) == findEntry_(name).default_value) p.removeMetaValue(k);
+      // A flag's registered default is the bool false while the Param holds
+      // the string "false", so the two never compare equal: read flags
+      // through getFlag_ (first met with -complement_midp, 1.12 E2).
+      const ParameterInformation& e = findEntry_(name);
+      const bool at_default = e.type == ParameterInformation::FLAG
+                                  ? !getFlag_(name)
+                                  : getParam_().getValue(name) == e.default_value;
+      if (at_default) p.removeMetaValue(k);
     }
     return p;
   }
@@ -671,6 +678,28 @@ protected:
     // -write_ini output stays as it was. Every new option also reaches the
     // -out_spectra mzML as a "parameter:" userParam.
     // ---- 1.12 E: options ----
+    // E2: complement-ion rules across fragment charges, tolerance tied to the
+    // run. Defaults are FASTag 1.11 (src/CliParam.h); validation decides any
+    // other default.
+    registerStringOption_("complement_rule", "<rule>", FASTag::Cli::kComplementRule,
+                          "Which fragment pairs count as complements in the complement "
+                          "subscore: same_charge (both at the fragment charge z, partner "
+                          "at M/z + 2p - m), precursor (the partner carries the precursor's "
+                          "remaining c - z charges, at (M + c*p - z*m)/(c - z)), or both "
+                          "(either rule)", false, true);
+    setValidStrings_("complement_rule", ListUtils::create<std::string>("same_charge,precursor,both"));
+    registerDoubleOption_("complement_tolerance", "<value>", FASTag::Cli::kComplementTolerance,
+                          "Window for a complement partner: in Da, or with "
+                          "-complement_tolerance_unit fragment the factor k of "
+                          "k*(fragment tolerance at the peak + at the partner)", false, true);
+    setMinFloat_("complement_tolerance", 1e-9);
+    registerStringOption_("complement_tolerance_unit", "<unit>", FASTag::Cli::kComplementToleranceUnit,
+                          "Da: -complement_tolerance is absolute. fragment: it scales the "
+                          "run's -fragment_tolerance at both partners", false, true);
+    setValidStrings_("complement_tolerance_unit", ListUtils::create<std::string>("Da,fragment"));
+    registerFlag_("complement_midp",
+                  "Score complements with the hypergeometric mid-p P(X>c) + P(X=c)/2 "
+                  "instead of P(X>=c), for every observed count c including 0", true);
     // ---- 1.12 A: options ----
     // ---- 1.12 D: options ----
     // ---- 1.12 F: options ----
@@ -970,6 +999,14 @@ protected:
       return ILLEGAL_PARAMETERS;
     }
 
+    // E2: the same NaN hole as -fragment_tolerance.
+    if (!std::isfinite(getDoubleOption_("complement_tolerance")))
+    {
+      OPENMS_LOG_ERROR << "-complement_tolerance must be a finite number greater than 0 (got "
+                       << getDoubleOption_("complement_tolerance") << ")." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+
     // Species precondition, checked BEFORE the run rather than after.
     //
     // The index is keyed on k-mers, so a tag shorter than k can never be looked
@@ -1115,6 +1152,10 @@ protected:
     p.per_residue_conf = getFlag_("res_conf");
     p.max_evalue = getDoubleOption_("max_evalue");
     p.gap_penalty = getDoubleOption_("gap_penalty");
+    p.complement_rule = FASTag::Cli::complementRuleFromString(getStringOption_("complement_rule"));
+    FASTag::Cli::setComplementTolerance(p, getDoubleOption_("complement_tolerance"),
+                                        getStringOption_("complement_tolerance_unit"));
+    p.complement_midp = getFlag_("complement_midp");
     // The residue modifications in use; -recon_id_out reports exactly these.
     StringList fixed_mods, variable_mods;
     double fixed_term_n = 0, fixed_term_c = 0;

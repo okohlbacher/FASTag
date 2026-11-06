@@ -248,7 +248,7 @@ if(FASTAG_BUILD_TESTS)
   # their tests only to their own anchored list.
   set(FASTAG_UNIT_TESTS ranksum_test fastag_test fasta_filter_test tagrecon_test tagfdr_test proteome_index_test glyco_test taxindex_test taxstats_test taxdeconv_test species_evidence_test sampler_test proforma_test numformat_test peakgrid_test formats_test digest_test)
   # ---- 1.12 E: unit tests ----
-  set(FASTAG_UNIT_TESTS_E cli_param_test)
+  set(FASTAG_UNIT_TESTS_E cli_param_test complement_test)
   # ---- 1.12 A: unit tests ----
   set(FASTAG_UNIT_TESTS_A)
   # ---- 1.12 D: unit tests ----
@@ -380,6 +380,12 @@ if(FASTAG_BUILD_TESTS)
                    $<TARGET_FILE:cli_param_test>
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML)
   set_tests_properties(out_spectra_params_test PROPERTIES SKIP_RETURN_CODE 77)
+  # E2: the complement options at their defaults equal 1.11 (and the
+  # baseline binary when FASTAG_BASELINE_BIN is set); away from them they act.
+  add_test(NAME complement_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/complement_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML)
+  set_tests_properties(complement_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # ---- 1.12 A: CLI tests ----
   # ---- 1.12 D: CLI tests ----
   # ---- 1.12 F: CLI tests ----
