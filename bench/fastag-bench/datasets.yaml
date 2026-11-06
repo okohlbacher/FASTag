@@ -786,3 +786,30 @@ datasets:
     derived_from: 0299_F1_R1_P77628B02_TMT8.raw
     conversion: 'manual: provided by the dataset group as mzML (profile); route not recorded'
     sha256: 8ec0952126809c9516cb476f5a79287d1b26ce11dcf631a78d6342340c54441c
+- id: PXD004732_ProteomeTools
+  pxd: PXD004732
+  species: synthetic human tryptic peptides (ProteomeTools Part I, about 1,000 peptides per pool)
+  expected_genus: Homo
+  instrument: Orbitrap Fusion Lumos
+  acquisition: DDA; per pool one 3xHCD (Orbitrap HCD at three NCE), 2xIT_2xHCD, DDA and ETD run
+  enzyme:
+  - Trypsin
+  labels:
+  - label free
+  fixed_mods:
+    C: 57.021464
+  variable_mods:
+    M:
+    - 15.994915
+  experiments:
+  - proteometools
+  sdrf: PXD004732_community_annotated.sdrf.tsv
+  note: 'FASTag 1.12 item #4 (S3-PT, synthetic S4). The pools, their 3xHCD raw files (PRIDE sha1) and the tryptic
+    MaxQuant searches that give the pool lists are recorded per split in config/proteometools_splits.tsv (drawn once
+    by fastag-bench unidentified splits); the PRIDE file list is fetched from the API v3. Closed search: the human
+    reference proteome UP000005640 (as for PXD054073); fixed carbamidomethyl C as in the deposited MaxQuant searches.'
+  files:
+  - name: PXD004732_community_annotated.sdrf.tsv
+    role: sdrf
+    url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/PXD004732_community_annotated.sdrf.tsv
+    size: 1327604

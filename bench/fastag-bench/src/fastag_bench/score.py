@@ -162,6 +162,53 @@ def shuffled_psms(psms: pd.DataFrame, seed: int = 0) -> pd.DataFrame:
     return pd.DataFrame({"key": gt["key"], "peptide": gt["peptide"].to_numpy()[src]})
 
 
+def shuffled_peptides(psms: pd.DataFrame, seed: int = 0) -> pd.DataFrame:
+    """Chance control of the #4 path: a derangement over I/L-normalized peptide identities.
+
+    Unlike shuffled_psms (a row derangement, kept unchanged for the v1.9.0 tables), no spectrum can
+    receive a peptide equal to its own normalized identity, even when several spectra share a peptide
+    or differ only by I/L or modifications. Identities are permuted by one random cycle; every spectrum
+    of identity u gets the same representative peptide string of identity pi(u) (its first occurrence
+    in key order, modifications kept so the flank rule still applies). With fewer than two identities
+    there is no derangement and the result is empty."""
+    gt = psms[["key", "peptide"]].drop_duplicates("key").reset_index(drop=True)
+    ident = [normalize_peptide(p) for p in gt["peptide"]]
+    uniq = sorted(set(ident))
+    if len(uniq) < 2:
+        return gt.iloc[:0].copy()
+    rep: dict[str, str] = {}
+    for u, p in zip(ident, gt["peptide"]):
+        rep.setdefault(u, p)
+    n = len(uniq)
+    rng = np.random.default_rng(seed)
+    order = rng.permutation(n)
+    src = np.empty(n, dtype=int)
+    src[order] = np.roll(order, -1)  # one random cycle over identities: no identity maps to itself
+    target = {uniq[i]: rep[uniq[src[i]]] for i in range(n)}
+    return pd.DataFrame({"key": gt["key"], "peptide": [target[u] for u in ident]})
+
+
+def correct_candidates(tag: str, flanks: tuple[float, float], candidates, tol: float = FLANK_TOL) -> list[str]:
+    """Candidates (peptide strings in Sage notation) for which the tag is correct under the paper rule,
+    in input order, each once."""
+    n, c = flanks
+    out, seen = [], set()
+    for p in candidates:
+        if p in seen:
+            continue
+        seen.add(p)
+        if tag_matches(tag, p) and tag_correct_flank(tag, n, c, *peptide_masses(p), tol=tol):
+            out.append(p)
+    return out
+
+
+def tag_correct_any(tag: str, flanks: tuple[float, float], candidates, tol: float = FLANK_TOL) -> bool:
+    """#4 rule for candidate sets: the paper rule (tag_correct_flank) holds for at least one candidate.
+    With a single candidate it is the paper rule itself."""
+    n, c = flanks
+    return any(tag_matches(tag, p) and tag_correct_flank(tag, n, c, *peptide_masses(p), tol=tol) for p in candidates)
+
+
 def score_tags(tags: pd.DataFrame, psms: pd.DataFrame, ks=(1, 5, 10, 50), rule: str = "flank") -> dict:
     """Tag precision and recall against ground-truth PSMs.
 

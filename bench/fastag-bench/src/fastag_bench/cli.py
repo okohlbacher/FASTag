@@ -260,7 +260,21 @@ def cmd_check(a) -> int:
     return 0
 
 
-def main(argv=None) -> int:
+def cmd_unidentified(a) -> int:
+    from . import unidentified as U
+    cfg = U.load(a.config)
+    if a.seed is not None:
+        for k in ("decoy_seed", "swap_seed", "chimera_seed"):
+            cfg["unidentified"][k] = a.seed
+    if a.ratios:
+        cfg["unidentified"]["ratios"] = [float(x) for x in a.ratios.split(",")]
+    if a.modes and a.modes != "closed,pool":
+        raise ConfigError("unidentified: only the modes closed,pool are implemented (open/chimera are backlog)")
+    U.run_step(cfg, a.step, a.split)
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="fastag-bench", description=__doc__)
     ap.add_argument("--version", action="version", version=f"fastag-bench {__version__}")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -361,6 +375,21 @@ def main(argv=None) -> int:
     p.add_argument("tsv", nargs="*")
     p.set_defaults(func=cmd_check)
 
+    from .unidentified import SPLITS, STEPS
+    p = sub.add_parser("unidentified", help="#4: tag accuracy on unidentified (S3-PT) and synthetic chimeric (S4) "
+                                            "ProteomeTools spectra")
+    p.add_argument("step", choices=STEPS)
+    p.add_argument("-c", "--config", required=True, help="e.g. config/unidentified-data.yaml")
+    p.add_argument("--split", choices=SPLITS, help="pool split (all steps except splits and v190-check)")
+    p.add_argument("--modes", default="closed,pool", help="Sage modes (closed,pool; open/chimera are backlog)")
+    p.add_argument("--ratios", help="chimera ratios major:minor, comma list (default unidentified.ratios)")
+    p.add_argument("--seed", type=int, help="override the decoy, swap and chimera seeds")
+    p.set_defaults(func=cmd_unidentified)
+    return ap
+
+
+def main(argv=None) -> int:
+    ap = build_parser()
     a = ap.parse_args(argv)
     sys.stdout.reconfigure(line_buffering=True)  # progress lines show up in redirected logs
     try:

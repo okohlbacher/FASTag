@@ -20,7 +20,8 @@ def test_shipped_datasets_yaml_is_valid_and_public():
     assert len(ds) >= 10
     assert all(d.pxd.startswith("PXD") for d in ds)
     for d in ds:
-        assert d.file("mzml") is not None, d.id
+        # ProteomeTools (#4): the per-pool run files are listed in config/proteometools_splits.tsv
+        assert d.file("mzml") is not None or "proteometools" in d.experiments, d.id
         for f in d.files:
             assert f.url or f.derived_from, (d.id, f.name)
             if f.url:

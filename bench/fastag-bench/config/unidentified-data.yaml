@@ -1,0 +1,44 @@
+# FASTag 1.12 item #4 (cluster F): tag accuracy on unidentified (S3-PT) and synthetic chimeric (S4) spectra.
+# Node data only (ibminode05 if data is overloaded); never dax, kim, spock or ibminode06. At most 32 threads
+# (data is shared). Public PXD data only (PXD004732 ProteomeTools Part I; human reference proteome UP000005640).
+#   fastag-bench unidentified splits      -c config/unidentified-data.yaml
+#   fastag-bench unidentified pool-truth  -c config/unidentified-data.yaml --split dev
+#   ... sage-modes, chimera-build, run, score, collect (--split dev); v190-check
+work_dir: /scratch/kohlbach/fastag112-f4/unid
+data_dir: /scratch/kohlbach/fastag112-f4/unid/data
+results_dir: /scratch/kohlbach/fastag112-f4/unid/results
+tools:
+  fastag: /ceph/ibmi/abi/oliver/opt/fastag-1.11.0/FASTag/FASTag     # 1.11.0 release bundle (no FASTag change in #4)
+  sage: /ceph/ibmi/abi/oliver/jpr-bench/envs/sage-0.14.7/sage-v0.14.7-x86_64-unknown-linux-gnu/sage
+  thermorawfileparser: /ceph/ibmi/abi/oliver/jpr-bench/envs/trfp/bin/ThermoRawFileParser
+env:
+  OPENBLAS_NUM_THREADS: "1"
+sage:
+  fdr: 0.01
+  threads: 32
+  args: ["--disable-telemetry-i-dont-want-to-improve-sage"]
+  version_note: "GitHub release v0.14.7, commit 99407db; the binary reports 0.14.6 because the release did not bump Cargo.toml"
+accuracy:
+  threads: 32
+unidentified:
+  dataset_id: PXD004732_ProteomeTools
+  # PRIDE API v3 file list (https://www.ebi.ac.uk/pride/ws/archive/v3/projects/PXD004732/files/all); its sha256 is
+  # recorded in the provenance of config/proteometools_splits.tsv
+  files_json: /scratch/kohlbach/fastag112-f4/unid/PXD004732.files.json
+  splits_tsv: config/proteometools_splits.tsv
+  human_fasta: /ceph/ibmi/abi/oliver/jpr-bench/data/PXD054073/UP000005640_9606.fasta
+  tol_ppm: 10.0          # = the Sage precursor tolerance
+  charges: [2, 3, 4]     # when the spectrum gives none
+  iso: [0, 1]
+  max_var: 1
+  decoy_seed: 1
+  swap_seed: 1
+  chimera_seed: 1
+  ratios: [1, 10]
+  max_pairs: 3000
+  v190:
+    fastag_work: /ceph/ibmi/abi/oliver/jpr-bench/accuracy/work-v190
+    directag_work: /ceph/ibmi/abi/oliver/jpr-bench/accuracy/work
+    data_dir: /ceph/ibmi/abi/oliver/jpr-bench/data
+    pairs: /ceph/ibmi/abi/oliver/jpr-bench/stats/accuracy_pairs_v190.tsv.gz
+    stats: /scratch/kohlbach/fastag112-f4/unid/v190/stats_accuracy_paired_v190.tsv

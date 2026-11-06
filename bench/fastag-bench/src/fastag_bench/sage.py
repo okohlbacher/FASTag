@@ -18,11 +18,30 @@ ENZYMES = {
 }
 
 
-def sage_config(ds: Dataset, fasta: str | Path, mzml: list[str | Path], scfg: dict) -> dict:
+SAGE_MODES = ("closed", "pool")
+
+
+def sage_config(ds: Dataset, fasta: str | Path, mzml: list[str | Path], scfg: dict, mode: str = "closed",
+                pool_fasta: str | Path | None = None) -> dict:
     """Sage configuration. Per-dataset 'search' keys in datasets.yaml override the config defaults:
     precursor_ppm, fragment_ppm or fragment_da (symmetric), missed_cleavages, max_variable_mods,
     variable_mods (Sage keys: residues, '^' peptide N-term, '[' protein N-term), deisotope,
-    no_proline_rule (Trypsin/P: cleave before P too)."""
+    no_proline_rule (Trypsin/P: cleave before P too).
+
+    mode 'closed' (default) is the v1.9.0 ground-truth search, byte-identical (tests/test_sage.py golden
+    JSON). mode 'pool' (#4 S3-PT) searches pool_fasta, one entry per pool peptide plus the shuffled decoy
+    pool (pooltruth.write_pool_fasta), without digestion (cleave_at '$', no missed cleavages); everything
+    else, Sage's own reversed decoys included, is the closed search. Backlog modes ('open' with
+    precursor_tol da [-500, 150]; 'chimera' with wide_window) are not implemented."""
+    if mode not in SAGE_MODES:
+        raise ValueError(f"Sage mode {mode!r}: one of {SAGE_MODES}")
+    if mode == "pool":
+        if pool_fasta is None:
+            raise ValueError("Sage mode 'pool' needs pool_fasta")
+        cfg = sage_config(ds, pool_fasta, mzml, scfg, mode="closed")
+        cfg["database"]["enzyme"] = {"missed_cleavages": 0, "min_len": int(scfg["min_len"]),
+                                     "max_len": int(scfg["max_len"]), "cleave_at": "$"}
+        return cfg
     from .score import expected_protease
 
     sr = ds.search or {}
