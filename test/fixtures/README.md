@@ -87,8 +87,11 @@ them is synthetic. All mzMLs are indexedmzML with an exact index. Read by
   mono m/z, an MS1 every 10 MS2. Passes.
 - `dia_nowin_like.mgf`: raw DIA as MGF, PEPMASS cycling through 20 window
   centres, no CHARGE. Refused.
+- `prm_noz_like.mgf`: an uncharged PRM / inclusion list as MGF, 40 random
+  targets over 400-1000 (seed 17) every cycle, 12 cycles, no CHARGE: periodic
+  and uncharged without windows, but not a window grid. Passes.
 
 sha256: `dia_like.mzML` `85708ffbfecb481fe65fc4fac8fa1f4663077df4398deb930a2bd68185a875f5`, `astral_dia_like.mzML` `f61384d896ed1e7441629aff878d709e18d851c530ae2dff5ef26a3e6901a3bc`,
 `diapasef_split_like.mzML` `32b88e6d7df7f37c6772d4558a6d742171643e1b84cfa13e3f3e5f894dab3515`, `dia_shifted_target.mzML` `4fb2541dbb6782cc5ade93bda0f4f280a6206b2a7279d4cf826a0e8af724d08a`,
 `dia_pseudo_like.mzML` `15827a97f0f39c45812593175f8dff906320c764779c0a3b4f8cabafc680c96a`, `dia_pseudo_repeat_like.mzML` `846f6d12fa6ac7be27b3d8fecbf8b804fa672caf42d7ffa315f9e3d9faa53f1b`,
-`prm_like.mzML` `f10e516500089eb86fae255c48849b8772a975bda101fe885809b4f04290194d`, `wwa_dda_like.mzML` `ab13880d8223152904ee9f5d2538b2167b1e892abbd91d515633999542209ec3`, `dia_nowin_like.mgf` `c7cb54169823a0bf6fd53973864f0c5f561b269afab8a5dd1c9172af5eb5e122`.
+`prm_like.mzML` `f10e516500089eb86fae255c48849b8772a975bda101fe885809b4f04290194d`, `wwa_dda_like.mzML` `ab13880d8223152904ee9f5d2538b2167b1e892abbd91d515633999542209ec3`, `dia_nowin_like.mgf` `c7cb54169823a0bf6fd53973864f0c5f561b269afab8a5dd1c9172af5eb5e122`, `prm_noz_like.mgf` `9d666015736332de22efbd662f297e82beae0324dd24fa8cc9298716007af012`.

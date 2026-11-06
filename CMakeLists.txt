@@ -105,7 +105,8 @@ endif()
 # links the same library.
 find_package(ZLIB REQUIRED)
 
-add_executable(FASTag src/FASTag.cpp src/IndexedMzMLReader.cpp src/MzMLDirectDecoder.cpp src/MgfReader.cpp src/MzPeakStream.cpp)
+add_executable(FASTag src/FASTag.cpp src/IndexedMzMLReader.cpp src/MzMLDirectDecoder.cpp src/MgfReader.cpp src/MzPeakStream.cpp
+               src/AcquisitionProbe.cpp)
 
 # mimalloc on Windows, with redirection of the C runtime heap.
 #
@@ -383,8 +384,8 @@ if(FASTAG_BUILD_TESTS)
   # #7: the raw-DIA classifier on the 21 synthetic cases of the plan, the
   # probe helpers, both mzML readers on the fixtures, the mzPeak probe and
   # the messages. Built with the readers it probes through.
-  add_executable(acquisition_test test/acquisition_test.cpp src/IndexedMzMLReader.cpp src/MzMLDirectDecoder.cpp
-                 src/MzPeakStream.cpp)
+  add_executable(acquisition_test test/acquisition_test.cpp src/AcquisitionProbe.cpp src/IndexedMzMLReader.cpp
+                 src/MzMLDirectDecoder.cpp src/MgfReader.cpp src/MzPeakStream.cpp)
   target_link_libraries(acquisition_test PRIVATE fastag_core ZLIB::ZLIB)
   if(OpenMP_CXX_FOUND)
     target_link_libraries(acquisition_test PRIVATE OpenMP::OpenMP_CXX)

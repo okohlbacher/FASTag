@@ -30,6 +30,11 @@
 //     periodic, tiling, mostly charged pattern only warns. No single signal
 //     (missing selected ion, a target-only precursor, a wide window) refuses
 //     on its own.
+//  5b. Without recorded isolation windows (MGF, mzML without window
+//     cvParams) periodicity and missing charges are not enough either: the
+//     distinct m/z must form a regular grid (most consecutive spacings near
+//     their median), as DIA window centres do. An uncharged PRM or
+//     inclusion list of arbitrary targets is PRM, tagged as in 1.11.
 //  6. Provenance: DIAspeXtract (spx_* userParams, its software entry) and
 //     diaTracer (its software entry) mark pseudo-DDA, which always passes.
 //     Provenance only ever passes a file.
@@ -88,6 +93,8 @@ namespace FASTag::Acquisition
     double dia_min_uncharged = 0.5;    ///< uncharged MS2 share to refuse a windowed scheme
     double nowin_min_uncharged = 0.9;  ///< the same without windows
     double nowin_max_spacing = 50.0;   ///< median spacing of the distinct m/z without windows, Th
+    double nowin_grid_tolerance = 0.2; ///< a spacing within this share of the median lies on the grid ...
+    double nowin_grid_min_share = 0.8; ///< ... and this share of the spacings must, to read as window centres
     double warn_min_width = 4.0;       ///< undetermined: warn from this median width ...
     double warn_min_uncharged = 0.9;   ///< ... and this uncharged share
     double min_provenance = 0.5;       ///< MS2 share with pseudo-DDA provenance to pass
@@ -110,6 +117,7 @@ namespace FASTag::Acquisition
     double lo = 0, hi = 0;      ///< the window range, Th
     double coverage = 0;        ///< union of the windows over [lo, hi]
     double spacing = 0;         ///< median spacing of the distinct m/z values, Th
+    double grid_share = 0;      ///< share of those spacings within nowin_grid_tolerance of the median
     double frac_uncharged = 0;  ///< of the MS2 probed
     double frac_provenance = 0;
     bool im = false;            ///< most MS2 carry an ion mobility (diaPASEF)

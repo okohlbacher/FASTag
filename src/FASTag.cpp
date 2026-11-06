@@ -29,6 +29,7 @@
 #include <OpenMS/SYSTEM/File.h>
 
 #include "Acquisition.h"
+#include "AcquisitionProbe.h"
 #include "CliParam.h"
 #include "ClusterAcc.h"
 #include "Digest.h"
@@ -1949,49 +1950,25 @@ protected:
       const std::string acq_check = getStringOption_("acquisition_check");
       if (acq_check != "off")
       {
-        Acq::ProbeLimits lim;
-        lim.max_ms2 = static_cast<size_t>(getIntOption_("acquisition_probe_spectra"));
-        lim.max_spectra = lim.max_ms2 * 10;
-        std::vector<Acq::Ms2Meta> probed;
-        try
+        // The probe itself (reader, header provenance, limits) is
+        // Acq::probeRun(), shared with probeFile() for callers without a
+        // FASTag run; only the decision is made here.
+        Acq::ProbeSource src;
+        src.mzpeak = mzpeak_in;
+        src.mzpeak_threads = mzpeak_decode_threads;
+        src.mgf = mgf.get();
+        src.fastmz = fastmz.get();
+        if (streaming) src.ondisc = ondisc.get();
+        else src.exp = &exp;
+        src.n_total = n_total;
+        const Acq::ProbeResult probe =
+            Acq::probeRun(in, src, static_cast<size_t>(getIntOption_("acquisition_probe_spectra")));
+        if (!probe.ok)
         {
-          if (mzpeak_in)
-          {
-            probed = FASTag::probeMzPeakMetadata(in, lim, mzpeak_decode_threads);
-          }
-          else
-          {
-            // DIAspeXtract and diaTracer name themselves in the mzML header.
-            const bool provenance = !mgf && Acq::mzmlHeaderProvenance(in);
-            std::function<MSSpectrum(Size)> head;
-            std::shared_ptr<PeakMap> od_meta;
-            // Lenient, as the fast reader's metadata read: a block that
-            // cannot be parsed is the tagging loop's to report (or to skip
-            // under -subsample_*), exactly as before the check.
-            if (mgf)
-              head = [&](Size i) {
-                try
-                {
-                  return mgf->getSpectrum(i);
-                }
-                catch (const Exception::BaseException&)
-                {
-                  return MSSpectrum();
-                }
-              };
-            else if (fastmz) head = [&](Size i) { return fastmz->getSpectrumMetadata(i); };
-            else if (streaming && (od_meta = ondisc->getMetaData()))
-              head = [&](Size i) { return i < od_meta->size() ? (*od_meta)[i] : MSSpectrum(); };
-            else head = [&](Size i) { return i < exp.size() ? exp[i] : MSSpectrum(); };
-            probed = Acq::collectMs2Meta(n_total, head, lim, provenance);
-          }
-        }
-        catch (const Exception::BaseException& e)
-        {
-          OPENMS_LOG_ERROR << e.what() << std::endl;
+          OPENMS_LOG_ERROR << probe.error << std::endl;
           return INPUT_FILE_CORRUPT;
         }
-        const Acq::AcqCall call = Acq::classifyAcquisition(probed);
+        const Acq::AcqCall& call = probe.call;
         run_meta.acquisition = Acq::modeName(call);
         run_meta.acquisition_why = call.why;
         // INFO on stderr only: nothing new may reach stdout or match the

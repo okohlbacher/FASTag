@@ -9,8 +9,10 @@
 #   reader, on OnDisc (-out_spectra), on MGF and on mzPeak, at 1/3/8 threads.
 # - -acquisition_check warn tags raw DIA as FASTag 1.11.0 did (stored digest),
 #   -acquisition_check off skips the probe.
-# - pseudo-DDA (DIAspeXtract- and diaTracer-shaped), ddaPASEF, PRM, wide-window
-#   DDA and the OpenMS example pass with tags byte-identical to off.
+# - pseudo-DDA (DIAspeXtract- and diaTracer-shaped), ddaPASEF, PRM (charged
+#   mzML and uncharged MGF without windows), wide-window DDA and the OpenMS
+#   example pass with tags byte-identical to off.
+# - probeFile() (acquisition_test --probe) logs FASTag's own INFO line.
 # - -stream is not checked; -acquisition_probe_spectra acts and is reported
 #   as ignored under off; a bad mode is refused.
 # Fixtures: test/fixtures/make_acquisition_fixtures.py (see fixtures/README.md).
@@ -138,6 +140,9 @@ pass prm "$FIX/prm_like.mzML" PRM/targeted
 pass wwa "$FIX/wwa_dda_like.mzML" DDA
 pass ecoli "$FIX/Ecoli_MS2_small.mzML" DDA
 pass ecoli_mgf "$FIX/Ecoli_MS2_small.mgf" DDA
+# Uncharged PRM without isolation windows (random targets, not a window grid):
+# periodic and uncharged, yet not raw DIA.
+pass prm_noz_mgf "$FIX/prm_noz_like.mgf" PRM/targeted
 grep -q WARN "$TMP/wwa_def/err.log" && fail "wwa_dda_like: charged wide windows must not warn"
 # The same through OnDisc (-out_spectra): the export is unchanged too.
 run ecoli_os_def 0 -in "$FIX/Ecoli_MS2_small.mzML" -out t.tsv -out_spectra s.mzML -threads 2
@@ -153,6 +158,24 @@ cmp -s <(mask "$TMP/ecoli_os_def/s.mzML") <(mask "$TMP/ecoli_os_off/s.mzML" | se
 grep -q 'parameter: acquisition' "$TMP/ecoli_os_def/s.mzML" && fail "-out_spectra lists the new options at defaults"
 run pseudo_os 0 -in "$FIX/dia_pseudo_like.mzML" -out t.tsv -out_spectra s.mzML -threads 2
 grep -q '^Acquisition check: pseudo-DDA ' "$TMP/pseudo_os/err.log" || fail "pseudo-DDA through OnDisc"
+
+# --- the shared probe: probeFile() gives FASTag's own INFO line ---------------
+# (-probe_input and the held-out pre-check call probeFile(); FASTag refuses on
+# probeRun() with its own readers.)
+same_info() {
+  local name=$1 in=$2 got want
+  want=$(grep -m1 '^Acquisition check: ' "$TMP/$name/err.log")
+  got=$("$ACQ" --probe "$in" 2>&1) || { fail "acquisition_test --probe $in failed: $got"; return; }
+  [ -n "$want" ] && [ "$got" = "$want" ] || fail "$name: probeFile says '$got', FASTag '$want'"
+}
+same_info dia_fast "$FIX/dia_like.mzML"
+same_info dia_ondisc "$FIX/dia_like.mzML"
+same_info pseudo_def "$FIX/dia_pseudo_like.mzML"
+same_info diatracer_def "$FIX/diatracer_like.mzML"
+same_info nowin_mgf "$FIX/dia_nowin_like.mgf"
+same_info prm_noz_mgf_def "$FIX/prm_noz_like.mgf"
+same_info ecoli_def "$FIX/Ecoli_MS2_small.mzML"
+[ -f "$TMP/dia.mzpeak" ] && [ -d "$TMP/dia_mzpeak" ] && same_info dia_mzpeak "$TMP/dia.mzpeak"
 
 # --- the options -------------------------------------------------------------
 # Five MS2 are too few to judge: undetermined, a WARN (wide and uncharged), tagged.

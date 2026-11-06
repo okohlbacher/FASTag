@@ -28,6 +28,9 @@ wwa_dda_like.mzML        wide-window DDA: 12 Th windows centred near (not on) a 
                          mono m/z, MS1 every 10 MS2
 dia_nowin_like.mgf       raw DIA as MGF: PEPMASS cycles through 20 window centres, no
                          CHARGE
+prm_noz_like.mgf         uncharged PRM / inclusion list as MGF: 40 random targets over
+                         400-1000 (seed 17), 12 cycles, no CHARGE: periodic and uncharged
+                         without windows, but not a window grid (must pass)
 
 Every mzML is an indexedmzML with an exact index. Needs pyteomics and numpy
 (to read the source); deterministic (no randomness beyond a fixed seed).
@@ -244,10 +247,25 @@ def mgf(src, out):
     (out / "dia_nowin_like.mgf").write_text("\n".join(lines))
 
 
+def mgf_prm_noz(src, out):
+    targets = np.random.default_rng(17).uniform(400, 1000, 40)
+    lines = []
+    k = 0
+    for c in range(12):
+        for t in targets:
+            _, _, mz, it = src[k % len(src)]
+            k += 1
+            lines += ["BEGIN IONS", f"TITLE=prm_noz.{k}.{k}.", f"RTINSECONDS={0.6 * k!r}",
+                      f"PEPMASS={round(float(t), 4)!r}"]
+            lines += [f"{float(m)!r} {float(i)!r}" for m, i in zip(mz, it)]
+            lines += ["END IONS", ""]
+    (out / "prm_noz_like.mgf").write_text("\n".join(lines))
+
+
 def main() -> None:
     src_path, out = sys.argv[1], Path(sys.argv[2])
     src = source_peaks(src_path)
-    for f in (dia_like, astral, diapasef_split, shifted, pseudo, prm, wwa, mgf):
+    for f in (dia_like, astral, diapasef_split, shifted, pseudo, prm, wwa, mgf, mgf_prm_noz):
         f(src, out)
 
 

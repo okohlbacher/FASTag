@@ -9,13 +9,18 @@
 //   acquisition_test --write-mzpeak <out>       write a raw-DIA-shaped mzPeak
 //                                               archive (for acquisition_cli_test);
 //                                               exit 77 without mzPeak support
+//   acquisition_test --probe <in>               print probeFile()'s INFO line
+//                                               (acquisition_cli_test compares it
+//                                               with FASTag's); exit 5 if unreadable
 //
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
 #include "Acquisition.h"
+#include "AcquisitionProbe.h"
 #include "IndexedMzMLReader.h"
 #include "MzPeakStream.h"
 
+#include <OpenMS/FORMAT/FileHandler.h>
 #include <OpenMS/FORMAT/MzPeakFile.h>
 #include <OpenMS/KERNEL/MSExperiment.h>
 #include <OpenMS/KERNEL/OnDiscMSExperiment.h>
@@ -301,6 +306,41 @@ namespace
       for (int k = 0; k < 40; ++k) w.emplace_back(400 + 15 * k, 402 + 15 * k);
       expect(scheme(w, 12), Mode::PRM, "17 inclusion list");
     }
+    // 17b. The same without isolation windows (MGF, mzML without window
+    // cvParams): 40 random targets over 400-1000, uncharged, 12 cycles. Not a
+    // window grid, so not DIA (a false refusal before the grid criterion).
+    {
+      std::mt19937 r17(17);
+      std::uniform_real_distribution<double> mz(400, 1000);
+      std::vector<double> targets;
+      for (int k = 0; k < 40; ++k) targets.push_back(mz(r17));
+      std::vector<Ms2Meta> r;
+      for (int c = 0; c < 12; ++c)
+        for (double x : targets) r.push_back(meta(x, 0, 0, 0));
+      const A::AcqCall c = A::classifyAcquisition(r);
+      check(c.periodic && !c.windows && c.mode == Mode::PRM && c.grid_share < 0.8,
+            std::string("17b inclusion list, no windows, uncharged, random targets: ") + name(c.mode) + " (" +
+                c.why + ")");
+      // The same targets on a 15 Th grid would read as window centres.
+      std::vector<Ms2Meta> g;
+      for (int cy = 0; cy < 12; ++cy)
+        for (int k = 0; k < 40; ++k) g.push_back(meta(400 + 15 * k, 0, 0, 0));
+      expect(g, Mode::DIA, "17b control: a regular 15 Th grid without windows");
+      // Variable-width windows without recorded windows: not a grid, so not
+      // refused (tagged as in 1.11) -- the cost of the criterion.
+      std::vector<Ms2Meta> v;
+      for (int cy = 0; cy < 12; ++cy)
+      {
+        double lo = 400;
+        for (int k = 0; k < 30; ++k)
+        {
+          const double wdt = 5 + 1.5 * k;
+          v.push_back(meta(lo + wdt / 2, 0, 0, 0));
+          lo += wdt;
+        }
+      }
+      expectNot(v, Mode::DIA, "17b variable windows without recorded windows");
+    }
     // 18. 300 polysiloxane repeats (3 lock masses), then DDA.
     {
       std::vector<Ms2Meta> r;
@@ -444,6 +484,50 @@ namespace
     }
   }
 
+  /// probeFile() and probeRun() (the one probe FASTag and its other callers
+  /// share): the call per fixture, the same call through every mzML reader.
+  void probes(const std::string& dir)
+  {
+    const auto f = [&dir](const char* n) { return dir + "/" + n; };
+    const std::vector<std::pair<const char*, Mode>> want = {
+        {"dia_like.mzML", Mode::DIA},          {"dia_pseudo_like.mzML", Mode::PseudoDDA},
+        {"diatracer_like.mzML", Mode::PseudoDDA}, {"dia_nowin_like.mgf", Mode::DIA},
+        {"prm_noz_like.mgf", Mode::PRM},       {"prm_like.mzML", Mode::PRM},
+        {"Ecoli_MS2_small.mzML", Mode::DDA},   {"Ecoli_MS2_small.mgf", Mode::DDA}};
+    for (const auto& [n, m] : want)
+    {
+      const A::ProbeResult r = A::probeFile(f(n));
+      check(r.ok && r.call.mode == m,
+            std::string("probeFile ") + n + ": expected " + name(m) + ", got " + name(r.call.mode) + " (" +
+                (r.ok ? r.call.why : r.error) + ")");
+    }
+    for (const char* n : {"dia_like.mzML", "dia_pseudo_like.mzML", "diatracer_like.mzML"})
+    {
+      const std::string fast_line = A::infoLine(A::probeFile(f(n)).call);
+      // OnDisc (FASTag's reader under -out_spectra) and in memory.
+      OnDiscMSExperiment od;
+      check(od.openFile(f(n)), std::string(n) + " opens in OnDisc");
+      A::ProbeSource s_od;
+      s_od.ondisc = &od;
+      s_od.n_total = od.getNrSpectra();
+      const A::ProbeResult r_od = A::probeRun(f(n), s_od);
+      PeakMap exp;
+      FileHandler().loadExperiment(f(n), exp, {FileTypes::MZML});
+      A::ProbeSource s_mem;
+      s_mem.exp = &exp;
+      s_mem.n_total = exp.size();
+      const A::ProbeResult r_mem = A::probeRun(f(n), s_mem);
+      check(r_od.ok && A::infoLine(r_od.call) == fast_line, std::string(n) + ": OnDisc probeRun = probeFile");
+      check(r_mem.ok && A::infoLine(r_mem.call) == fast_line, std::string(n) + ": in-memory probeRun = probeFile");
+    }
+    // The probe limits: n MS2, 10 n spectra.
+    const A::ProbeLimits l = A::probeLimits(7);
+    check(l.max_ms2 == 7 && l.max_spectra == 70, "probeLimits(7) = 7 MS2, 70 spectra");
+    check(A::probeFile(f("dia_like.mzML"), 5).call.n_ms2 == 5, "probeFile honours the MS2 cap");
+    // An unreadable input is an error, not a call.
+    check(!A::probeFile(f("does_not_exist.mgf")).ok, "probeFile: a missing MGF is not ok");
+  }
+
   /// The raw-DIA run as an MSExperiment: an MS1 then 20 MS2 per cycle.
   PeakMap diaExperiment()
   {
@@ -486,6 +570,8 @@ namespace
     A::ProbeLimits few;
     few.max_ms2 = 25;
     check(FASTag::probeMzPeakMetadata(path, few, 2).size() == 25, "mzPeak probe stops at the MS2 cap");
+    const A::ProbeResult pf = A::probeFile(path, 4000, 2);
+    check(pf.ok && pf.call.mode == Mode::DIA && pf.ms2.size() == 120, "mzPeak probeFile: DIA over 120 MS2");
     std::filesystem::remove_all(path);
   }
 }
@@ -498,11 +584,23 @@ int main(int argc, char** argv)
     MzPeakFile().store(argv[2], diaExperiment());
     return 0;
   }
+  if (argc == 3 && std::strcmp(argv[1], "--probe") == 0)
+  {
+    const A::ProbeResult r = A::probeFile(argv[2], 4000, 2);
+    if (!r.ok)
+    {
+      std::cerr << r.error << "\n";
+      return 5;
+    }
+    std::cout << A::infoLine(r.call) << "\n";
+    return 0;
+  }
   const std::string dir = argc > 1 ? argv[1] : FASTAG_TEST_DATA;
   synthetic();
   spectra();
   messages();
   fixtures(dir);
+  probes(dir);
   const std::filesystem::path tmp =
       std::filesystem::temp_directory_path() /
       ("acq_test_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));

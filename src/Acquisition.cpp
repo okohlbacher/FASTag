@@ -174,6 +174,11 @@ namespace FASTag::Acquisition
       std::vector<double> d;
       for (std::size_t i = 1; i < ks.size(); ++i) d.push_back((ks[i] - ks[i - 1]) / 10.0);
       c.spacing = median(d);
+      // Without recorded windows the values must form a regular grid, as DIA
+      // window centres do; an inclusion list of arbitrary targets does not.
+      std::size_t on_grid = 0;
+      for (double v : d) on_grid += std::fabs(v - c.spacing) <= t.nowin_grid_tolerance * c.spacing;
+      c.grid_share = d.empty() ? 0.0 : static_cast<double>(on_grid) / static_cast<double>(d.size());
     }
 
     const std::string stats =
@@ -211,11 +216,14 @@ namespace FASTag::Acquisition
     }
     if (c.periodic && !c.windows)
     {
-      if (c.frac_uncharged >= t.nowin_min_uncharged && c.spacing <= t.nowin_max_spacing)
+      const bool grid = c.grid_share >= t.nowin_grid_min_share;
+      if (c.frac_uncharged >= t.nowin_min_uncharged && c.spacing <= t.nowin_max_spacing && grid)
       {
         c.mode = Mode::DIA;
         c.why = "no isolation windows are recorded, but the same " + std::to_string(c.n_win) +
-                " uncharged precursor m/z (median spacing " + fmt(c.spacing) + " Th) repeat every cycle; " + stats;
+                " uncharged precursor m/z (a regular grid, median spacing " + fmt(c.spacing) + " Th, " +
+                pct(c.grid_share) + " of the spacings within " + pct(t.nowin_grid_tolerance) +
+                " of it) repeat every cycle; " + stats;
       }
       else if (c.frac_uncharged < t.dia_min_uncharged)
       {
@@ -226,7 +234,8 @@ namespace FASTag::Acquisition
       {
         c.mode = Mode::PRM;
         c.why = "the same " + std::to_string(c.n_win) + " precursor m/z repeat every cycle (no isolation windows, "
-                "median spacing " + fmt(c.spacing) + " Th); " + stats;
+                "median spacing " + fmt(c.spacing) + " Th, " + pct(c.grid_share) + " of the spacings within " +
+                pct(t.nowin_grid_tolerance) + " of it" + (grid ? "" : ": not a window grid") + "); " + stats;
       }
       return c;
     }

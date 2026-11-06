@@ -256,7 +256,9 @@ consecutive MS2 on the same window counted once, as frame-split diaPASEF writes
 them), the windows (read from the isolation window target) cover at least 80%
 of a range of at least 100 Th, and at least half of the MS2 carry no charge; or,
 without recorded windows, when at least 90% are uncharged and the repeating
-m/z values lie at most 50 Th apart. A periodic, tiling but mostly charged run
+m/z values form a regular grid at most 50 Th apart, as window centres do (at
+least 80% of the spacings between consecutive values within 20% of their
+median; an uncharged PRM or inclusion list of arbitrary targets is not one). A periodic, tiling but mostly charged run
 is tagged with a warning; a periodic scheme whose windows do not tile a range
 is PRM or an inclusion list and passes; so do DDA with wide windows and
 pseudo-DDA spectra, which DIAspeXtract (its software entry and `spx_*`
