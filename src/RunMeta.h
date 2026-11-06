@@ -54,6 +54,11 @@ namespace FASTag::RunReport
     int subsample_spectra = 0;            ///< -subsample_spectra
 
     // ---- 1.12 E ----
+    // #7: the acquisition class (Acquisition::modeName) and why; empty when
+    // -acquisition_check off. A field only: no report writes a row for it
+    // yet (Emit::Versioned rows need a format bump and new references).
+    std::string acquisition;
+    std::string acquisition_why;
     // ---- 1.12 A ----
     // ---- 1.12 D ----
     // ---- 1.12 F ----

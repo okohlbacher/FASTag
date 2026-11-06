@@ -232,6 +232,41 @@ An input FASTag cannot decode at all — an mzPeak archive in an encoding
 OpenMS does not support, say — ends the run with the reader's own message on
 `Error:` and a non-zero exit code (see Exit codes), rather than aborting.
 
+### Raw DIA input is refused
+
+FASTag tags MS2 spectra of one precursor each (DDA, PRM, and the pseudo-DDA
+spectra DIA tools derive). In raw DIA the "precursor" of an MS2 is an
+isolation window that holds several peptides, usually without a charge, so its
+tags would get wrong flanking masses and complement statistics. Since 1.12
+such input is refused: the run ends with exit code 11 before any output is
+opened (files from an earlier run stay as they were), an error that names the
+window scheme and recommends generating pseudo-DDA spectra first, for example
+`DIAspeXtract -in run.mzML -out run.pseudo.mzML` (diaTracer also works for
+Bruker .d), and one machine-readable line on stderr,
+`FASTAG_REFUSED reason=raw_dia windows=<n> median_width=<Th>`. FASTag then
+tags the pseudo-DDA file as any DDA run.
+
+The check reads the metadata of the first 4000 MS2 (`-acquisition_probe_spectra`)
+before tagging, through the reader the run uses, and logs one
+`Acquisition check:` line on stderr. Its rule follows prose-auto: raw DIA
+visits the same isolation windows in the same order every cycle. A run is
+refused when its selected-ion m/z repeat with a period equal to the number of
+distinct values (at least 5, periodicity at least 0.8 over at least 10 repeats,
+consecutive MS2 on the same window counted once, as frame-split diaPASEF writes
+them), the windows (read from the isolation window target) cover at least 80%
+of a range of at least 100 Th, and at least half of the MS2 carry no charge; or,
+without recorded windows, when at least 90% are uncharged and the repeating
+m/z values lie at most 50 Th apart. A periodic, tiling but mostly charged run
+is tagged with a warning; a periodic scheme whose windows do not tile a range
+is PRM or an inclusion list and passes; so do DDA with wide windows and
+pseudo-DDA spectra, which DIAspeXtract (its software entry and `spx_*`
+userParams) and diaTracer (its software entry) mark in the mzML. The
+thresholds are provisional until their validation on public data. A mixed file
+is judged on its first MS2; `-stream` is not checked.
+
+`-acquisition_check warn` tags raw DIA anyway (experts; the tags are those
+of FASTag 1.11, with a warning), and `-acquisition_check off` skips the check.
+
 ### mzML
 
 FASTag reads the mzML index directly and takes each spectrum's metadata from the
@@ -454,6 +489,8 @@ MGF→mzML direction is exact.
 | `-subsample_spectra <n>` / `-subsample_fraction <f>` | 0 | Tag only a random subset (count or fraction; if both are given, the count wins); 0 = all |
 | `-subsample_seed <n>` | 1 | Seed for the `-subsample_*` selection |
 | `-mzpeak_read_memory <MB>` | 0 | No effect; accepted for existing command lines |
+| `-acquisition_check <refuse\|warn\|off>` | refuse | Refuse raw DIA input with exit code 11, tag it anyway with a warning, or skip the check (see Raw DIA input is refused) |
+| `-acquisition_probe_spectra <n>` | 4000 | MS2 spectra the acquisition check reads, metadata only, reading at most ten times as many spectra in all (advanced) |
 
 The `-glyco_*` options are read only with `-glyco`, and the `-taxdb`,
 `-taxonomy_*` and `-species_*` options only with `-species`; otherwise they are
@@ -480,7 +517,7 @@ half.
 | 4 | INPUT_FILE_EMPTY | The `-fasta` or `-entrapment_fasta` file has no usable sequence, or an MGF input has no `BEGIN IONS` block |
 | 5 | CANNOT_WRITE_OUTPUT_FILE | An output cannot be written, for example because the disk is full |
 | 6 | ILLEGAL_PARAMETERS | Options conflict, a value is out of range, or the input is not mzML, mzPeak or MGF (or is a compressed mzML or MGF) |
-| 11 | INCOMPATIBLE_INPUT_DATA | `-out_spectra` is `.mzpeak` but the MS2 spectra carry ion mobility per peak; write `.mzML` instead |
+| 11 | INCOMPATIBLE_INPUT_DATA | The input is raw DIA (see Raw DIA input is refused; stderr carries a `FASTAG_REFUSED` line), or `-out_spectra` is `.mzpeak` but the MS2 spectra carry ion mobility per peak; write `.mzML` instead |
 | 13 | UNEXPECTED_RESULT | See below |
 
 The OpenMS framework returns its own codes before FASTag starts, for example 1

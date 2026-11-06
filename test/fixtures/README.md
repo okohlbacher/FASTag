@@ -57,3 +57,38 @@ timsTOF files. Both are indexedmzML with an exact index.
 
 sha256: `diatracer_like.mzML` `fbff96360f591209a7f1ac9f38899a6724c6ffaebdcbb6df3c883b421b4fce0d`,
 `ddapasef_empty.mzML` `37d838f8cef462c81755144b8dd76b6787b590a360947ae4e5a60069fc9f596d`.
+
+Acquisition-check fixtures (1.12 item #7), written by
+`make_acquisition_fixtures.py` (pyteomics 5.0.1, numpy 2.4.6, Python 3.11; it
+reuses the helpers of `make_converter_fixtures.py` and is deterministic) from
+`Ecoli_MS2_small.mzML`: the peaks are the 25 most intense of that file's
+spectra, cycled, so BSD-3-Clause as well; only the acquisition layout around
+them is synthetic. All mzMLs are indexedmzML with an exact index. Read by
+`acquisition_test` and `acquisition_cli_test`.
+
+- `dia_like.mzML`: raw Orbitrap DIA, msconvert-style (PXD006096-like): 20
+  windows of 25 Th over 400-900, selected ion at the window target, no charge,
+  6 cycles with one MS1 each. Refused.
+- `astral_dia_like.mzML`: Astral narrow-window DIA, 300 windows of 2 Th over
+  380-980, one cycle and the first 30 windows of the next. Refused.
+- `diapasef_split_like.mzML`: diaPASEF converted frame by frame, 10 windows of
+  25 Th over 400-650, 4 consecutive MS2 per window with a 1/K0 on the scan, 4
+  cycles. Refused as diaPASEF.
+- `dia_shifted_target.mzML`: raw DIA whose selected ion is 8 Th above the
+  window target in every other window, offsets -3/+13: the windows tile
+  400-720 only when read from the target. Refused.
+- `dia_pseudo_like.mzML`: DIAspeXtract 1.7.0 output (as its PXD006096
+  pseudo.mzML): its software entry, `spx:` run userParams, `spx_*` spectrum
+  userParams, a charged mono m/z inside its DIA window. Passes.
+- `dia_pseudo_repeat_like.mzML`: the same provenance on uncharged spectra whose
+  m/z repeats with the DIA cycle (raw DIA but for the provenance). Passes.
+- `prm_like.mzML`: PRM, 8 scattered charged targets of 2 Th, 15 cycles. Passes.
+- `wwa_dda_like.mzML`: wide-window DDA, 12 Th windows centred near a charged
+  mono m/z, an MS1 every 10 MS2. Passes.
+- `dia_nowin_like.mgf`: raw DIA as MGF, PEPMASS cycling through 20 window
+  centres, no CHARGE. Refused.
+
+sha256: `dia_like.mzML` `85708ffbfecb481fe65fc4fac8fa1f4663077df4398deb930a2bd68185a875f5`, `astral_dia_like.mzML` `f61384d896ed1e7441629aff878d709e18d851c530ae2dff5ef26a3e6901a3bc`,
+`diapasef_split_like.mzML` `32b88e6d7df7f37c6772d4558a6d742171643e1b84cfa13e3f3e5f894dab3515`, `dia_shifted_target.mzML` `4fb2541dbb6782cc5ade93bda0f4f280a6206b2a7279d4cf826a0e8af724d08a`,
+`dia_pseudo_like.mzML` `15827a97f0f39c45812593175f8dff906320c764779c0a3b4f8cabafc680c96a`, `dia_pseudo_repeat_like.mzML` `846f6d12fa6ac7be27b3d8fecbf8b804fa672caf42d7ffa315f9e3d9faa53f1b`,
+`prm_like.mzML` `f10e516500089eb86fae255c48849b8772a975bda101fe885809b4f04290194d`, `wwa_dda_like.mzML` `ab13880d8223152904ee9f5d2538b2167b1e892abbd91d515633999542209ec3`, `dia_nowin_like.mgf` `c7cb54169823a0bf6fd53973864f0c5f561b269afab8a5dd1c9172af5eb5e122`.

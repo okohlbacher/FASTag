@@ -28,6 +28,7 @@
 #include <OpenMS/FORMAT/DATAACCESS/MSDataWritingConsumer.h>
 #include <OpenMS/SYSTEM/File.h>
 
+#include "Acquisition.h"
 #include "CliParam.h"
 #include "ClusterAcc.h"
 #include "Digest.h"
@@ -671,6 +672,20 @@ protected:
     // -write_ini output stays as it was. Every new option also reaches the
     // -out_spectra mzML as a "parameter:" userParam.
     // ---- 1.12 E: options ----
+    // #7: raw DIA (MS2 whose "precursor" is an isolation window) is refused
+    // by default; the probe reads metadata only, before any output opens.
+    registerStringOption_("acquisition_check", "<mode>", "refuse",
+                          "Check the acquisition before tagging. Raw DIA, whose MS2 'precursors' are "
+                          "isolation windows holding several peptides, is refused with exit code 11 "
+                          "(refuse), tagged anyway with a warning as before 1.12 (warn), or not "
+                          "checked (off). Tag DIA through pseudo-DDA spectra instead: run DIAspeXtract "
+                          "(or diaTracer for .d) first; their output passes the check", false);
+    setValidStrings_("acquisition_check", ListUtils::create<std::string>("refuse,warn,off"));
+    registerIntOption_("acquisition_probe_spectra", "<n>", 4000,
+                       "MS2 spectra the acquisition check reads (metadata only) from the start of "
+                       "the run, reading at most ten times as many spectra in all; a mixed file is "
+                       "judged on these", false, /*advanced=*/true);
+    setMinInt_("acquisition_probe_spectra", 1);
     // ---- 1.12 A: options ----
     // ---- 1.12 D: options ----
     // ---- 1.12 F: options ----
@@ -1408,6 +1423,8 @@ protected:
           {"species_use_gapped", "-species", want_species},
           {"species_deconvolve", "-species", want_species},
           // ---- 1.12 E: ignored-option warnings ----
+          {"acquisition_probe_spectra", "-acquisition_check refuse or warn",
+           getStringOption_("acquisition_check") != "off"},
           // ---- 1.12 A: ignored-option warnings ----
           // ---- 1.12 D: ignored-option warnings ----
           // ---- 1.12 F: ignored-option warnings ----
@@ -1910,6 +1927,85 @@ protected:
     if (mzs) n_total = mzs->size();
     if (fastmz) n_total = fastmz->getNrSpectra();
     if (mgf) n_total = mgf->getNrSpectra();
+
+    // ---- 1.12 E: acquisition check (#7) ------------------------------------
+
+    // Raw DIA is refused HERE: after the reader is chosen and before any
+    // output is opened, so a refused run leaves every file that existed
+    // before it untouched. A metadata-only probe over the first MS2, through
+    // the reader the run uses (the export's reader under -out_spectra, so
+    // nothing new is read from the spectra it writes), then the pure
+    // classifier of src/Acquisition.h. -stream is not checked (returned
+    // above). The thresholds are provisional (validation-registry.tsv E7-*).
+    {
+      namespace Acq = FASTag::Acquisition;
+      const std::string acq_check = getStringOption_("acquisition_check");
+      if (acq_check != "off")
+      {
+        Acq::ProbeLimits lim;
+        lim.max_ms2 = static_cast<size_t>(getIntOption_("acquisition_probe_spectra"));
+        lim.max_spectra = lim.max_ms2 * 10;
+        std::vector<Acq::Ms2Meta> probed;
+        try
+        {
+          if (mzpeak_in)
+          {
+            probed = FASTag::probeMzPeakMetadata(in, lim, mzpeak_decode_threads);
+          }
+          else
+          {
+            // DIAspeXtract and diaTracer name themselves in the mzML header.
+            const bool provenance = !mgf && Acq::mzmlHeaderProvenance(in);
+            std::function<MSSpectrum(Size)> head;
+            std::shared_ptr<PeakMap> od_meta;
+            // Lenient, as the fast reader's metadata read: a block that
+            // cannot be parsed is the tagging loop's to report (or to skip
+            // under -subsample_*), exactly as before the check.
+            if (mgf)
+              head = [&](Size i) {
+                try
+                {
+                  return mgf->getSpectrum(i);
+                }
+                catch (const Exception::BaseException&)
+                {
+                  return MSSpectrum();
+                }
+              };
+            else if (fastmz) head = [&](Size i) { return fastmz->getSpectrumMetadata(i); };
+            else if (streaming && (od_meta = ondisc->getMetaData()))
+              head = [&](Size i) { return i < od_meta->size() ? (*od_meta)[i] : MSSpectrum(); };
+            else head = [&](Size i) { return i < exp.size() ? exp[i] : MSSpectrum(); };
+            probed = Acq::collectMs2Meta(n_total, head, lim, provenance);
+          }
+        }
+        catch (const Exception::BaseException& e)
+        {
+          OPENMS_LOG_ERROR << e.what() << std::endl;
+          return INPUT_FILE_CORRUPT;
+        }
+        const Acq::AcqCall call = Acq::classifyAcquisition(probed);
+        run_meta.acquisition = Acq::modeName(call);
+        run_meta.acquisition_why = call.why;
+        // INFO on stderr only: nothing new may reach stdout or match the
+        // summary line the gate digests.
+        std::cerr << Acq::infoLine(call) << std::endl;
+        if (call.mode == Acq::Mode::DIA)
+        {
+          if (acq_check == "refuse")
+          {
+            OPENMS_LOG_ERROR << Acq::refusalMessage(call, in) << std::endl;
+            std::cerr << Acq::refusalSentinel(call) << std::endl;
+            return INCOMPATIBLE_INPUT_DATA;
+          }
+          OPENMS_LOG_WARN << Acq::taggedAnywayMessage(call, in) << std::endl;
+        }
+        else if (call.warn)
+        {
+          OPENMS_LOG_WARN << Acq::warningMessage(call, in) << std::endl;
+        }
+      }
+    }
 
     // Subsampling selection. The mask is exact for every input -- it is built
     // over the spectrum indices up front. The count over ALL input spectra,
