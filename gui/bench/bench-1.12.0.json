@@ -1,0 +1,153 @@
+{
+  "bench": "browser",
+  "os": "macos",
+  "arch": "aarch64",
+  "files": [
+    {
+      "file": "ecoli_x1m65.tags.tsv",
+      "bytes": 167009896,
+      "firstcut": {
+        "rows": 1650792,
+        "head_rows": 1000,
+        "first_rows_ms": 0.8,
+        "index_ms": 63.1,
+        "rank_asc_desc_ms": 108.5,
+        "ranked_swap_ms": 172.4,
+        "interactive_first_page_ms": 56.7,
+        "interactive_first_page_rows": 500,
+        "interactive_first_page_ranked": false,
+        "peak_rss_mb": 84
+      },
+      "today": {
+        "rows": 1650792,
+        "index_ms": 57.3,
+        "sorted_view_ms": 773.5,
+        "first_rows_ms": 830.8,
+        "peak_rss_mb": 100
+      },
+      "verify": {
+        "asc_identical": true,
+        "desc_identical": true
+      },
+      "typed": {
+        "rows": 1650792,
+        "spectra": 105006,
+        "build_ms": 257.6,
+        "evalue_perm_ms": 32.6,
+        "filter_ms_median5": 4.9,
+        "filter_matched": 86078,
+        "export_bytes": 167009795,
+        "export_unsorted_s_per_gb": 0.116,
+        "export_sorted_s_per_gb": 3.037,
+        "peak_rss_mb": 113,
+        "bytes_per_row_typed": 15.1
+      }
+    },
+    {
+      "file": "ecoli_x6m6.tags.tsv",
+      "bytes": 671209310,
+      "firstcut": {
+        "rows": 6601140,
+        "head_rows": 1000,
+        "first_rows_ms": 0.5,
+        "index_ms": 226.1,
+        "rank_asc_desc_ms": 445.6,
+        "ranked_swap_ms": 672.3,
+        "interactive_first_page_ms": 228.6,
+        "interactive_first_page_rows": 500,
+        "interactive_first_page_ranked": false,
+        "peak_rss_mb": 298
+      },
+      "today": {
+        "rows": 6601140,
+        "index_ms": 227.2,
+        "sorted_view_ms": 3320.3,
+        "first_rows_ms": 3547.5,
+        "peak_rss_mb": 360
+      },
+      "verify": {
+        "asc_identical": true,
+        "desc_identical": true
+      },
+      "typed": {
+        "rows": 6601140,
+        "spectra": 419895,
+        "build_ms": 1026.3,
+        "evalue_perm_ms": 184,
+        "filter_ms_median5": 36.9,
+        "filter_matched": 129331,
+        "export_bytes": 671209209,
+        "export_unsorted_s_per_gb": 0.102,
+        "export_sorted_s_per_gb": 3.489,
+        "peak_rss_mb": 340,
+        "bytes_per_row_typed": 15.1
+      }
+    },
+    {
+      "file": "ecoli_x10m.tags.tsv",
+      "bytes": 1016754579,
+      "firstcut": {
+        "rows": 10002096,
+        "head_rows": 1000,
+        "first_rows_ms": 0.5,
+        "index_ms": 361.7,
+        "rank_asc_desc_ms": 719.4,
+        "ranked_swap_ms": 1081.7,
+        "interactive_first_page_ms": 364.5,
+        "interactive_first_page_rows": 500,
+        "interactive_first_page_ranked": false,
+        "peak_rss_mb": 443
+      },
+      "today": {
+        "rows": 10002096,
+        "index_ms": 363.3,
+        "sorted_view_ms": 5044.8,
+        "first_rows_ms": 5408.1,
+        "peak_rss_mb": 647
+      },
+      "verify": {
+        "asc_identical": true,
+        "desc_identical": true
+      },
+      "typed": {
+        "rows": 10002096,
+        "spectra": 636228,
+        "build_ms": 1740.1,
+        "evalue_perm_ms": 358.7,
+        "filter_ms_median5": 99,
+        "filter_matched": 724817,
+        "export_bytes": 1016754478,
+        "export_unsorted_s_per_gb": 0.109,
+        "export_sorted_s_per_gb": 6.307,
+        "peak_rss_mb": 513,
+        "bytes_per_row_typed": 15.1
+      },
+      "repeat_run": {
+        "firstcut": {
+          "ranked_swap_ms": 1117.9,
+          "peak_rss_mb": 440
+        },
+        "typed": {
+          "peak_rss_mb": 512,
+          "export_sorted_s_per_gb": 6.343,
+          "filter_ms_median5": 98.9,
+          "build_ms": 1658.8
+        }
+      }
+    }
+  ],
+  "version": "1.12.0 (P0b, branch gui/p0b-quick-wins)",
+  "date": "2026-11-06",
+  "machine": "Apple M4 Max",
+  "cache": "warm page cache",
+  "data": "public E. coli fixture tags (e2e-web/fixtures/ecoli.tags.tsv, 2,028 rows) replicated 814x, 3,255x and 4,932x (1,650,792 / 6,601,140 / 10,002,096 rows) with shifted scan numbers; every 997th/1999th/2999th E-value replaced by -, NAN, INF; in the 10M file every 3rd remaining E-value is also randomized (log-uniform 1e-6..1e3, seed 12), so the order is not one replicated block. Generated, measured, deleted.",
+  "targets": {
+    "first_rows_ms": "<150 (firm)",
+    "ranked_swap_ms": "<1500 at 10M (firm)",
+    "backend_peak_mb": "<700 P0b (recorded), <450 P3",
+    "filter_ms": "<100 at 10M (P3, provisional)",
+    "export": "<1 s/GB unsorted, <3 s/GB sorted (P3, provisional)"
+  },
+  "notes": "firstcut: backend times of results_open (head read) and of index + E-value order in one process; today: v1.11 index + build_view sorted by E-value (what the first page used to wait for); verify: first-cut orders identical to build_view in both directions; typed: bench-only typed-column prototype (GUI-DESIGN 6.1 item 7).",
+  "p3_baselines_at_10M": "typed prototype at 10,002,096 rows (the size GUI-DESIGN 7 names): build 1.7 s, filter median 99 ms, unsorted export 0.11-0.22 s/GB, sorted export 6.3 s/GB (over the provisional <3 s/GB), peak 513 MB (over the P3 <450 MB target). These, not the 6.6M figures, are the recorded P3 starting point."
+}

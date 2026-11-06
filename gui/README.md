@@ -32,6 +32,8 @@ gui/
     testing/           mock bridge for the tests and the browser preview (`npm run dev`),
                        and the e2e bridge with its ?fixture= scenarios (Playwright build only)
     adversarial/       end-to-end GUI tests (see Tests)
+    setup/             parameter search (Cmd+K, "/"), instrument presets and the
+                       species fixes (presets.ts), shortcuts and menu actions (shortcuts.ts)
     help/              the Help view (F1): pages as data (content.tsx, faq.tsx, params.ts),
                        HelpView.tsx, the link store (link.ts) and the "?" links (HelpLink.tsx)
   scripts/             gen-params.mjs (parameter manifest), bundle-macos.sh (macOS resource tree for release bundles),
@@ -44,9 +46,13 @@ gui/
     src/outputs.rs     the files a run writes (from its argv); removes them when it is cancelled or fails
     src/close_guard.rs asks before a window close or Cmd+Q kills an active run
     src/settings.rs    named presets + last-used, atomic JSON in the app config dir
-    src/browser.rs     indexed million-row results browser
+    src/browser.rs     indexed million-row results browser: head read on open, index and
+                       E-value order built in the background and swapped in (D5)
+    src/menu.rs        File, Run and Help menus with their CmdOrCtrl shortcuts
+    src/reveal.rs      ResolvedOutputs (-out) and Reveal / Open folder, limited to run outputs
     src/species.rs     species TSV read + FTX2 taxdb header read
     src/report.rs      digest/label/mass-gap report read
+    examples/browser_bench.rs  the browser bench (bench/bench-<version>.json)
     tauri.conf.json    window, bundle, icons
     resources/fastag/  the bundled FASTag binary + share/ (dev: symlinks; release: real files)
 ```
@@ -96,6 +102,31 @@ The bundled binary is gitignored; without it, name one:
 script replaces the manifest only once it is complete, so a missing or broken
 binary leaves the old one in place. Do not redirect its stdout into the
 manifest: the shell empties the file before the script runs.
+
+## Shortcuts
+
+Cmd on macOS, Ctrl on Windows and Linux; the same items are in the native
+File, Run and Help menus.
+
+| Keys | Action |
+|---|---|
+| Cmd+O / Cmd+Shift+O | Open spectra / open a tags TSV |
+| Cmd+Enter | Run (or run the batch) |
+| Cmd+. | Cancel the run |
+| Cmd+E | Export the shown rows |
+| Cmd+? (F1, ?) | Help |
+| Cmd+K or / | Search parameters by name, flag or help text |
+
+## Browser bench
+
+    cd gui/src-tauri
+    cargo run --release --example browser_bench -- big.tags.tsv > ../bench/bench-<version>.json
+
+Each mode runs in its own process (its peak RSS is its own): `firstcut`
+(head read, index, E-value order), `today` (v1.11's sorted view), `verify`
+(both orders identical) and `typed` (the typed-column prototype: filter time,
+peak memory, export throughput). bench/bench-1.12.0.json holds the P0b
+numbers on 1.65M and 6.6M rows.
 
 ## Tests
 

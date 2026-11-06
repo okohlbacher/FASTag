@@ -32,6 +32,35 @@ export interface ResultsPage {
   totalRows: number
   matchedRows: number
   rows: string[][]
+  // The file row of each row (browser.rs): the active row is kept by it
+  // across the D5 swap. Absent from older mocks.
+  rowIds?: number[]
+  // false: the E-value order is still being built and the rows are in file
+  // order (D5). Absent means true.
+  ranked?: boolean
+  // The E-value order is being built; a 'ranked' event follows.
+  pending?: boolean
+}
+
+// results_open: the header and first rows from a head read, before the index.
+export interface ResultsHead {
+  generation: number
+  columns: string[]
+  rows: string[][]
+  // The head read reached the end of the file: rows is every row.
+  complete: boolean
+}
+
+// Background progress of an open (browser.rs BrowserEvent).
+export type BrowserEvent =
+  | { kind: 'indexed'; generation: number; totalRows: number }
+  | { kind: 'rankProgress'; generation: number; done: number; total: number }
+  | { kind: 'ranked'; generation: number; column: string }
+  | { kind: 'failed'; generation: number; message: string }
+
+// A run's outputs as the CLI writes them (reveal.rs; -out only in P0b).
+export interface ResolvedOutputs {
+  out?: string | null
 }
 
 export interface RunResult {
@@ -97,6 +126,7 @@ export interface RunStarted {
   outputs?: string[]
   // The command line, binary first, for the failure banner's Copy command.
   command?: string[]
+  resolvedOutputs?: ResolvedOutputs
 }
 
 export interface Taxon {
@@ -162,6 +192,14 @@ export interface FastagApi {
   historyOf: (path: string) => Promise<RunRecord | null>
   cancel: () => Promise<{ cancelled: boolean }>
   resultsQuery: (path: string, view: ResultsView, offset: number, limit: number) => Promise<ResultsPage>
+  // D5: the head rows now; index and E-value order announced through onEvent.
+  resultsOpen: (path: string, onEvent: (e: BrowserEvent) => void) => Promise<ResultsHead>
+  // Where file row @p row sits in a built view (null: not built).
+  resultsPosition: (path: string, view: ResultsView, row: number) => Promise<number | null>
+  // Reveal an output of a run of this app (folder: open its folder instead).
+  revealOutput: (path: string, folder: boolean) => Promise<void>
+  // A native menu item (menu.rs): its action name.
+  onMenu: (cb: (action: string) => void) => () => void
   // Write the rows of a view, only the named columns, to dest; resolves with
   // the number of rows written.
   exportResults: (path: string, view: ResultsView, columns: string[], dest: string) => Promise<number>

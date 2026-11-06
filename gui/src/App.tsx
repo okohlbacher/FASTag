@@ -28,6 +28,10 @@ import HelpView, { slug } from './help/HelpView'
 import { HelpButton, HelpLink } from './help/HelpLink'
 import { closeHelp, openHelp, useHelp } from './help/link'
 import { faqForMessage } from './help/faq'
+import ParamSearch from './setup/ParamSearch'
+import type { ParamHit } from './setup/searchRank'
+import { applyInstrument, INSTRUMENTS, matchesInstrument, presetText, speciesFixes } from './setup/presets'
+import { actionOfKey, deduper, isMac, keyText, type Action } from './setup/shortcuts'
 import logo from './assets/logo.svg'
 import openmsLogo from './assets/openms-logo.png'
 
@@ -52,6 +56,14 @@ function defaultSpeciesOut(out: string): string {
 // Where the CLI writes a relative output path: fastag.rs resolves it against
 // the folder of an absolute input (the child's working directory), so the
 // renderer must read it there too, not relative to its own cwd.
+// The file manager's own name for "show this file".
+function revealLabel(): string {
+  const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent
+  if (/Mac/.test(ua)) return 'Reveal in Finder'
+  if (/Win/.test(ua)) return 'Show in Explorer'
+  return 'Show in folder'
+}
+
 const isAbsolute = (p: string): boolean => /^([/\\]|[A-Za-z]:[/\\])/.test(p)
 function resolveBeside(inFile: string, p: string): string {
   if (!p || isAbsolute(p) || !isAbsolute(inFile)) return p
@@ -309,6 +321,8 @@ export default function App(): JSX.Element {
     cleaned: number
     // Read from the run record at start: a run of an earlier session.
     earlier?: boolean
+    // Its -out as the CLI wrote it (ResolvedOutputs): Reveal and Open folder.
+    out?: string
   } | null>(null)
   // Outputs of the run about to start that already exist: confirmed before
   // the run, never after (GUI-DESIGN 6.4). answer(true) runs over them.
@@ -339,6 +353,13 @@ export default function App(): JSX.Element {
   // Inside the --help dump OpenMS prints after a ConversionError.
   const inHelp = useRef(false)
   const [taxdbK, setTaxdbK] = useState<number | null>(null)
+  // Parameter search (Cmd+K, "/"): the dialog is open.
+  const [searchOpen, setSearchOpen] = useState(false)
+  const searchBtnRef = useRef<HTMLButtonElement>(null)
+  // The instrument preset last chosen (read-only built-ins, presets.ts).
+  const [instrument, setInstrument] = useState('')
+  // Why Reveal did nothing.
+  const [revealErr, setRevealErr] = useState<string | null>(null)
   const [presets, setPresets] = useState<string[]>([])
   const [preset, setPreset] = useState('')
   const [savingName, setSavingName] = useState<string | null>(null)  // non-null = the 'save as' input is open
@@ -394,6 +415,27 @@ export default function App(): JSX.Element {
     return () => window.removeEventListener('keydown', onKey)
   }, [help.open])
 
+  // Cmd/Ctrl shortcuts in the webview and the native menu items (menu.rs)
+  // run one action each; a key both see acts once (deduper).
+  useEffect(() => {
+    const fresh = deduper()
+    const onKey = (e: globalThis.KeyboardEvent): void => {
+      const a = actionOfKey(e)
+      if (!a) return
+      e.preventDefault()
+      if (fresh(a, 'key')) actRef.current(a)
+    }
+    window.addEventListener('keydown', onKey)
+    const off = window.fastag.onMenu((name) => {
+      const a = name as Action
+      if (fresh(a, 'menu')) actRef.current(a)
+    })
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      off()
+    }
+  }, [])
+
   const speciesOn = values['species'] === true
   // k comes from the index header, not an assumption: a differently-built index
   // would make a hardcoded 7 quietly wrong. The CLI refuses such a run up front
@@ -432,7 +474,8 @@ export default function App(): JSX.Element {
               at: r.end,
               ms: Math.max(0, r.end - r.start),
               cleaned: r.cleanup.removed.length,
-              earlier: true
+              earlier: true,
+              out: r.outputs[0]
             }
         )
       })
@@ -630,10 +673,11 @@ export default function App(): JSX.Element {
     outFile: string,
     overrides?: Record<string, ParamValue>,
     overwrite = false
-  ): Promise<RunResult & { out: string }> {
+  ): Promise<RunResult & { out: string; revealOut?: string }> {
     let wrote = resolveBeside(inFile, outFile)
+    let revealOut: string | undefined
     const marked = wrote
-    return new Promise<RunResult & { out: string }>((done) => {
+    return new Promise<RunResult & { out: string; revealOut?: string }>((done) => {
       const resolve = (r: RunResult): void => {
         // The CLI writes -out in place: a finished run rewrote it, so the
         // table reads it afresh; a failed or cancelled one may have left it
@@ -658,7 +702,7 @@ export default function App(): JSX.Element {
               ? `Cancelled ${name}${cleaned ? ', partial outputs removed' : ''}.`
               : `${name} failed${cleaned ? ', partial outputs removed' : ''}.`
         )
-        done({ ...r, out: wrote })
+        done({ ...r, out: wrote, revealOut })
       }
       resetLog()
       setProgress(null)
@@ -696,6 +740,7 @@ export default function App(): JSX.Element {
           // id; the terminal event carries the same id (see onDone).
           if (res.started && res.runId != null) {
             if (res.out) wrote = res.out
+            revealOut = res.resolvedOutputs?.out ?? undefined
             command.current = res.command
             const early = earlyDone.current.get(res.runId)
             if (early) {
@@ -785,7 +830,8 @@ export default function App(): JSX.Element {
       at: Date.now(),
       ms: Date.now() - startedAt.current,
       changed: changedParams,
-      cleaned: r.cleanup?.removed.length ?? 0
+      cleaned: r.cleanup?.removed.length ?? 0,
+      out: r.revealOut ?? r.out
     })
     if (r.ok) await showResults(input, r.out).catch(logResultsError)
     else if (!isCancelled(r)) failed(r, baseName(input))
@@ -978,6 +1024,79 @@ export default function App(): JSX.Element {
   // Not behind a batch queue: the single input and output are hidden then.
   const canRun = bin?.ok && !!input && !!out && !running && !batchRunning && jobs.length === 0 && !blocked
   const busy = running || batchRunning
+  function cancelRun(): void {
+    if (!running || cancelling) return
+    cancelled.current = true
+    if (batchRunning) batchCancel.current = true
+    setCancelling(true)
+    window.fastag.cancel()
+  }
+
+  // Reveal the last run's -out in the file manager, or open its folder. The
+  // backend refuses any path that is not an output of a run of this app.
+  async function reveal(folder: boolean): Promise<void> {
+    if (!lastRun?.ok || !lastRun.out) return
+    setRevealErr(null)
+    try {
+      await window.fastag.revealOutput(lastRun.out, folder)
+    } catch (err) {
+      setRevealErr(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  // A parameter chosen in the search: open its section, focus its field (or,
+  // while the field is inert, the switch it waits for).
+  function chooseParam(hit: ParamHit): void {
+    setSearchOpen(false)
+    if (hit.section) setOpenGroups((g) => ({ ...g, [hit.section]: true }))
+    setTimeout(() => {
+      let el = document.getElementById(`p-${hit.name}`) as HTMLInputElement | null
+      if (el && el.disabled) {
+        const dep = inertDependency(hit.name, values)
+        const on = dep ? (Array.isArray(dep.on) ? dep.on[0] : dep.on) : null
+        const master = on ? (document.getElementById(`p-${on}`) as HTMLInputElement | null) : null
+        if (master && !master.disabled) el = master
+      }
+      el?.scrollIntoView?.({ block: 'center' })
+      el?.focus()
+    })
+  }
+
+  // Shortcuts and native menus run the same actions (setup/shortcuts.ts).
+  const act = (a: Action): void => {
+    switch (a) {
+      case 'open-spectra':
+        if (!busy && jobs.length === 0) void pickInput()
+        break
+      case 'open-results':
+        if (!busy) void openResults()
+        break
+      case 'run':
+        if (jobs.length > 0) {
+          if (!batchRunning && !running && bin?.ok && !blocked && remaining > 0) void runBatch()
+        } else if (canRun) void run()
+        break
+      case 'cancel':
+        cancelRun()
+        break
+      case 'export':
+        setTab('results')
+        window.dispatchEvent(new CustomEvent('fastag-action', { detail: 'export' }))
+        break
+      case 'reveal':
+        void reveal(false)
+        break
+      case 'help':
+        if (!help.open) openHelp()
+        break
+      case 'search-params':
+        if (!busy && !help.open) setSearchOpen(true)
+        break
+    }
+  }
+  const actRef = useRef(act)
+  actRef.current = act
+
   const field = (name: string): JSX.Element | null => {
     const spec = PARAM_BY_NAME.get(name)
     // A unit is drawn inside the field of its value.
@@ -1016,6 +1135,10 @@ export default function App(): JSX.Element {
   )
 
   const nInvalid = Object.keys(invalid).length
+  const chosenInstrument = INSTRUMENTS.find((p) => p.id === instrument)
+  // A preset stays shown only while the values are still its own.
+  const shownInstrument = chosenInstrument && matchesInstrument(values, chosenInstrument) ? chosenInstrument.id : ''
+  const fixes = speciesFixes(tooShort)
   // Failed jobs are Retry failed's, not the remaining ones.
   const remaining = jobs.filter((j) => j.status !== 'done' && j.status !== 'failed').length
   const failedJobs = jobs.filter((j) => j.status === 'failed').length
@@ -1259,6 +1382,15 @@ export default function App(): JSX.Element {
       {/* Hidden, not unmounted: the form, the batch and the results stay as they were. */}
       <div className="layout" hidden={help.open}>
         <aside className="controls" aria-label="Run setup">
+          {searchOpen && !busy && (
+            <ParamSearch
+              onChoose={chooseParam}
+              onClose={() => {
+                setSearchOpen(false)
+                focusLater(() => searchBtnRef.current)
+              }}
+            />
+          )}
           <div className="controls-body">
             {busy ? (
               <>
@@ -1315,6 +1447,22 @@ export default function App(): JSX.Element {
                     {/* The form may be edited since: what this run was given. */}
                     {lastRun.changed && (
                       <code className="last-run-params">{lastRun.changed.length ? lastRun.changed.join(' ') : 'all defaults'}</code>
+                    )}
+                    {lastRun.ok && lastRun.out && (
+                      <div className="row reveal">
+                        <button type="button" className="secondary small" onClick={() => reveal(false)} title={lastRun.out}>
+                          {revealLabel()}
+                        </button>
+                        <button type="button" className="secondary small" onClick={() => reveal(true)}>
+                          Open folder
+                        </button>
+                      </div>
+                    )}
+                    {revealErr && (
+                      <p className="warn" role="alert">
+                        <IconError />
+                        <span>{revealErr}</span>
+                      </p>
                     )}
                   </section>
                 )}
@@ -1410,6 +1558,16 @@ export default function App(): JSX.Element {
                           ))}
                         </select>
                         <button className="secondary small" onClick={() => setSavingName(preset || '')}>Save…</button>
+                        <button
+                          type="button"
+                          className="secondary small"
+                          ref={searchBtnRef}
+                          aria-keyshortcuts={isMac() ? 'Meta+K /' : 'Control+K /'}
+                          title={`Search parameters (${keyText('K')} or /)`}
+                          onClick={() => setSearchOpen(true)}
+                        >
+                          Search… <kbd>{keyText('K')}</kbd>
+                        </button>
                         {lastUsedDiff.length > 0 && (
                           <button
                             type="button"
@@ -1560,15 +1718,62 @@ export default function App(): JSX.Element {
                   </p>
                 )}
                 {refused.map((c) => (
-                  <p className="warn" key={c.params.join(',')}>
-                    <IconError />
-                    <span>{c.note}</span>
-                  </p>
+                  <div key={c.params.join(',')}>
+                    <p className="warn">
+                      <IconError />
+                      <span>{c.note}</span>
+                    </p>
+                    {/* The species reach conflict: one-click fixes. */}
+                    {c.params.includes('species') && c.params.includes('extension') && fixes.length > 0 && (
+                      <div className="row fixes">
+                        {fixes.map((f, i) => (
+                          <button
+                            key={f.label}
+                            type="button"
+                            className={i === 0 ? 'small' : 'secondary small'}
+                            onClick={() => setValues((v) => ({ ...v, ...f.values }))}
+                            title={f.note}
+                          >
+                            {f.label}
+                            {f.note ? ` (${f.note})` : ''}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
             )}
             {!busy && !blocked && jobs.length === 0 && !input && <p className="hint">Choose an input file to run.</p>}
 
+            {!busy && (
+              <div className="instrument">
+                <label htmlFor="instrument">Instrument</label>
+                <select
+                  id="instrument"
+                  className="small"
+                  value={shownInstrument}
+                  onChange={(e) => {
+                    const p = INSTRUMENTS.find((x) => x.id === e.target.value)
+                    setInstrument(e.target.value)
+                    if (p) setValues((v) => applyInstrument(v, p))
+                  }}
+                  title="Sets the fragment tolerance and its unit, nothing else"
+                >
+                  <option value="">{chosenInstrument ? 'Custom tolerance' : 'Choose a preset…'}</option>
+                  {INSTRUMENTS.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {presetText(p)}
+                    </option>
+                  ))}
+                </select>
+                {chosenInstrument && shownInstrument && !chosenInstrument.validated && (
+                  <span className="hint" role="note">
+                    {chosenInstrument.label}: not validated against the paper's benchmark.
+                  </span>
+                )}
+              </div>
+            )}
             {resetAsk && !busy ? (
               <div className="confirm" role="group" aria-label="Reset parameters">
                 <span>Reset every parameter to its default?</span>
@@ -1607,19 +1812,21 @@ export default function App(): JSX.Element {
                     )}
                   </>
                 ) : (
-                  <button className="primary" onClick={run} disabled={!canRun}>
+                  <button
+                    className="primary"
+                    onClick={run}
+                    disabled={!canRun}
+                    aria-keyshortcuts={isMac() ? 'Meta+Enter' : 'Control+Enter'}
+                    title={`Run (${keyText(isMac() ? '⏎' : 'Enter')})`}
+                  >
                     {running ? 'Running…' : input ? `Run on ${baseName(input)}` : 'Run'}
                   </button>
                 )}
                 {busy ? (
                   <button
                     className="secondary"
-                    onClick={() => {
-                      cancelled.current = true
-                      if (batchRunning) batchCancel.current = true
-                      setCancelling(true)
-                      window.fastag.cancel()
-                    }}
+                    onClick={cancelRun}
+                    aria-keyshortcuts={isMac() ? 'Meta+.' : 'Control+.'}
                     disabled={!running || cancelling}
                   >
                     Cancel

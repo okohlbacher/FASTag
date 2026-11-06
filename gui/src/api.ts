@@ -1,12 +1,14 @@
 // The single bridge between the React frontend and the Rust backend: the
 // `window.fastag` API (see FastagApi in types.ts) over Tauri invoke + events.
 
-import { invoke } from '@tauri-apps/api/core'
+import { Channel, invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { open, save } from '@tauri-apps/plugin-dialog'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import type {
   BinaryInfo,
+  BrowserEvent,
+  ResultsHead,
   FastagApi,
   ResultsPage,
   OutputsCheck,
@@ -81,6 +83,15 @@ const api: FastagApi = {
   cancel: () => invoke<{ cancelled: boolean }>('cancel'),
   resultsQuery: (path: string, view: ResultsView, offset: number, limit: number) =>
     invoke<ResultsPage>('results_query', { path, view, offset, limit }),
+  resultsOpen: (path: string, onEvent: (e: BrowserEvent) => void) => {
+    const ch = new Channel<BrowserEvent>()
+    ch.onmessage = onEvent
+    return invoke<ResultsHead>('results_open', { path, onEvent: ch })
+  },
+  resultsPosition: (path: string, view: ResultsView, row: number) =>
+    invoke<number | null>('results_position', { path, view, row }),
+  revealOutput: (path: string, folder: boolean) => invoke<void>('reveal_output', { path, folder }),
+  onMenu: (cb) => subscribe<string>('fastag:menu', cb),
   exportResults: (path: string, view: ResultsView, columns: string[], dest: string) =>
     invoke<number>('results_export', { path, view, columns, dest }),
   species: (path: string) => invoke<SpeciesReport | null>('species', { path }),

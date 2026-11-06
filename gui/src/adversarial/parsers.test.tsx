@@ -295,14 +295,28 @@ describe('parsers: fuzzed reports', () => {
     expect(observedLogo(r).slice(4).map((c) => c.faded)).toEqual([false, false, false, false])
   })
 
-  it('20k-bin mass-gap report parses and renders in reasonable time', () => {
-    const rows = Array.from({ length: 20000 }, (_, i) => `hist\t${(i * 0.37 - 3000).toFixed(4)}\t${(i % 13) + 1}\t-\td`).join('\n')
-    const t0 = performance.now()
-    const r = parseReport(`${HEAD}\nrun\twindow_da\t0.02\t-\td\n${rows}`, '/x.massgap.tsv')
-    render(<DigestPanel reports={[r]} errors={[]} onOpen={() => {}} />)
-    const ms = performance.now() - t0
-    expect(ms).toBeLessThan(5000)
-  })
+  // ponytail: a fixed 5 s wall-clock bound failed on loaded CI runners (5.37 s) while the
+  // test takes ~1 s locally. What it guards is super-linear parse/render cost, so it compares
+  // 20k bins against 2k bins (best of 2 each): linear is ~10x, quadratic ~100x. The absolute
+  // bound stays as a backstop.
+  it('20k-bin mass-gap report parses and renders in linear time', () => {
+    const time = (n: number) => {
+      const rows = Array.from({ length: n }, (_, i) => `hist\t${(i * 0.37 - 3000).toFixed(4)}\t${(i % 13) + 1}\t-\td`).join('\n')
+      let best = Infinity
+      for (let k = 0; k < 2; k++) {
+        const t0 = performance.now()
+        const r = parseReport(`${HEAD}\nrun\twindow_da\t0.02\t-\td\n${rows}`, '/x.massgap.tsv')
+        const { unmount } = render(<DigestPanel reports={[r]} errors={[]} onOpen={() => {}} />)
+        best = Math.min(best, performance.now() - t0)
+        unmount()
+      }
+      return best
+    }
+    const small = time(2000)
+    const big = time(20000)
+    expect(big).toBeLessThan(Math.max(40 * small, 500))
+    expect(big).toBeLessThan(15000)
+  }, 30000) // four renders; vitest's 5 s default timeout is too short on loaded CI runners
 })
 
 // ---------------------------------------------------------------------------

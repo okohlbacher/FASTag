@@ -963,6 +963,8 @@ dependencies = [
 name = "fastag"
 version = "1.11.0"
 dependencies = [
+ "libc",
+ "muda",
  "serde",
  "serde_json",
  "tauri",

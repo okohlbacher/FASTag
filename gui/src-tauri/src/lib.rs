@@ -1,90 +1,24 @@
-mod browser;
+#[doc(hidden)]
+pub mod browser;
 mod close_guard;
 mod fastag;
 mod history;
+mod menu;
 mod outputs;
 mod report;
+mod reveal;
 mod settings;
 mod species;
 
 use std::time::Duration;
 
 use fastag::RunManager;
-use tauri::{Manager, RunEvent, WindowEvent};
+use tauri::{Emitter, Manager, RunEvent, WindowEvent};
 
 /// The argv a run request becomes (fastag.rs build_args), for the GUI's
 /// end-to-end CLI tests. Not used by the app.
 #[doc(hidden)]
 pub use fastag::build_args_json;
-
-/// The menu id of the app's own Quit item (macOS).
-#[cfg(target_os = "macos")]
-const QUIT_ID: &str = "fastag-quit";
-
-/// Tauri's default macOS menu (tauri menu.rs Menu::default) with one change:
-/// Quit is an item of the app's own, whose handler calls AppHandle::exit. The
-/// predefined Quit sends terminate:, which reaches the app only as
-/// RunEvent::Exit and cannot be prevented, so Cmd+Q bypassed the close guard.
-#[cfg(target_os = "macos")]
-fn macos_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<tauri::menu::Menu<R>> {
-    use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu};
-    let pkg = app.package_info();
-    let about = AboutMetadata {
-        name: Some(pkg.name.clone()),
-        version: Some(pkg.version.to_string()),
-        copyright: app.config().bundle.copyright.clone(),
-        authors: app.config().bundle.publisher.clone().map(|p| vec![p]),
-        ..Default::default()
-    };
-    let quit = MenuItem::with_id(app, QUIT_ID, format!("Quit {}", pkg.name), true, Some("CmdOrCtrl+Q"))?;
-    Menu::with_items(
-        app,
-        &[
-            &Submenu::with_items(
-                app,
-                pkg.name.clone(),
-                true,
-                &[
-                    &PredefinedMenuItem::about(app, None, Some(about))?,
-                    &PredefinedMenuItem::separator(app)?,
-                    &PredefinedMenuItem::services(app, None)?,
-                    &PredefinedMenuItem::separator(app)?,
-                    &PredefinedMenuItem::hide(app, None)?,
-                    &PredefinedMenuItem::hide_others(app, None)?,
-                    &PredefinedMenuItem::separator(app)?,
-                    &quit,
-                ],
-            )?,
-            &Submenu::with_items(app, "File", true, &[&PredefinedMenuItem::close_window(app, None)?])?,
-            &Submenu::with_items(
-                app,
-                "Edit",
-                true,
-                &[
-                    &PredefinedMenuItem::undo(app, None)?,
-                    &PredefinedMenuItem::redo(app, None)?,
-                    &PredefinedMenuItem::separator(app)?,
-                    &PredefinedMenuItem::cut(app, None)?,
-                    &PredefinedMenuItem::copy(app, None)?,
-                    &PredefinedMenuItem::paste(app, None)?,
-                    &PredefinedMenuItem::select_all(app, None)?,
-                ],
-            )?,
-            &Submenu::with_items(app, "View", true, &[&PredefinedMenuItem::fullscreen(app, None)?])?,
-            &Submenu::with_items(
-                app,
-                "Window",
-                true,
-                &[
-                    &PredefinedMenuItem::minimize(app, None)?,
-                    &PredefinedMenuItem::maximize(app, None)?,
-                    &PredefinedMenuItem::separator(app)?,
-                    &PredefinedMenuItem::close_window(app, None)?,
-                ],
-            )?,
-        ],
-    )
-}
 
 pub fn run() {
     let builder = tauri::Builder::default()
@@ -98,12 +32,15 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init());
-    #[cfg(target_os = "macos")]
-    let builder = builder.menu(macos_menu).on_menu_event(|app, event| {
+    // File, Run and Help with their shortcuts on every platform (menu.rs).
+    let builder = builder.menu(menu::build).on_menu_event(|app, event| {
+        let id = event.id().as_ref();
         // AppHandle::exit raises RunEvent::ExitRequested, which the close
         // guard can prevent while a run is active.
-        if event.id().as_ref() == QUIT_ID {
+        if id == menu::QUIT_ID {
             app.exit(0);
+        } else if let Some(action) = menu::action_of(id) {
+            let _ = app.emit(menu::MENU_EVENT, action);
         }
     });
     builder
@@ -116,9 +53,12 @@ pub fn run() {
             fastag::outputs_check,
             history::history_list,
             history::history_of,
+            reveal::reveal_output,
             close_guard::set_ui_busy,
             close_guard::close_answer,
+            browser::results_open,
             browser::results_query,
+            browser::results_position,
             browser::results_export,
             species::species,
             report::report_text,
