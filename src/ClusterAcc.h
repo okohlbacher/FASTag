@@ -1,0 +1,101 @@
+// Per-cluster accumulators of the tagging loop (FASTag 1.12, P4).
+//
+// The tagging loop in FASTag.cpp keeps two kinds of state:
+//   - PerThread: counters and samples summed over threads after the loop;
+//   - Block: per-spectrum results of one block of the output ring, written
+//     in input order by write_block.
+// Each 1.12 cluster gets ONE sub-struct of each kind here and edits only its
+// own (PLAN-INTEGRATION section 2.1): E data types (#2/#6/#7/#9/#15 counters),
+// A hand-off (#5 shortlist records), D organism/chemistry (#3g alkylation
+// accumulator), F QC (#11 census rows). Block order is fixed: E, A, D, F.
+//
+// Contract, so that adding a field never touches the loop's shared code:
+//   - Thread*::merge(other) adds @p other into *this; it is called once per
+//     thread, in thread order, after the loop (ClusterThread::merge).
+//   - Block*::prepare(n_used) sizes the per-spectrum slots of a block before
+//     it is tagged; capacity may be recycled across blocks (see prep_block).
+//   - Nothing here may change existing outputs at defaults: a cluster's state
+//     is touched only when its own option is on.
+//
+// Copyright (c) 2026 Oliver Kohlbacher and contributors
+// SPDX-License-Identifier: MIT
+#pragma once
+
+#include <cstddef>
+
+namespace FASTag::ClusterAcc
+{
+  // ---- 1.12 E ----
+  struct ThreadE
+  {
+    void merge(const ThreadE&) {}
+  };
+  struct BlockE
+  {
+    void prepare(std::size_t) {}
+  };
+
+  // ---- 1.12 A ----
+  struct ThreadA
+  {
+    void merge(const ThreadA&) {}
+  };
+  struct BlockA
+  {
+    void prepare(std::size_t) {}
+  };
+
+  // ---- 1.12 D ----
+  struct ThreadD
+  {
+    void merge(const ThreadD&) {}
+  };
+  struct BlockD
+  {
+    void prepare(std::size_t) {}
+  };
+
+  // ---- 1.12 F ----
+  struct ThreadF
+  {
+    void merge(const ThreadF&) {}
+  };
+  struct BlockF
+  {
+    void prepare(std::size_t) {}
+  };
+
+  // ---- shared (P4; not edited by the clusters) ----
+
+  /// One per PerThread, summed after the loop.
+  struct ClusterThread
+  {
+    ThreadE e;
+    ThreadA a;
+    ThreadD d;
+    ThreadF f;
+    void merge(const ClusterThread& o)
+    {
+      e.merge(o.e);
+      a.merge(o.a);
+      d.merge(o.d);
+      f.merge(o.f);
+    }
+  };
+
+  /// One per Block of the output ring.
+  struct ClusterBlock
+  {
+    BlockE e;
+    BlockA a;
+    BlockD d;
+    BlockF f;
+    void prepare(std::size_t n_used)
+    {
+      e.prepare(n_used);
+      a.prepare(n_used);
+      d.prepare(n_used);
+      f.prepare(n_used);
+    }
+  };
+}
