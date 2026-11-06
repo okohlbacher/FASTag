@@ -1,3 +1,5 @@
+import pytest
+
 from fastag_bench import parsers as P
 
 DIRECTAG = """H\tTagsGenerator\tDirecTag
@@ -103,3 +105,50 @@ def test_mgf_filter(tmp_path):
     dst = tmp_path / "b.mgf"
     assert filter_mgf_precursors(src, dst) == (2, 1)
     assert "TITLE=b" not in dst.read_text() and dst.read_text().count("BEGIN IONS") == 2
+
+
+# #4: rank-2 reading (Sage with report_psms > 1). Ten data lines: scans 1-4 with rank 1 and 2 hits,
+# a decoy rank 2, a rank 2 above the FDR, and scan 5 with rank 1 only.
+SAGE_RANKS = ("psm_id\tpeptide\tfilename\tscannr\trank\tlabel\tspectrum_q\n"
+              "1\tPEPTIDEK\tf.mzML\tscan=1\t1\t1\t0.001\n"
+              "2\tPEPTLDEK\tf.mzML\tscan=1\t2\t1\t0.004\n"
+              "3\tSAMPLER\tf.mzML\tscan=2\t1\t1\t0.002\n"
+              "4\tREVDECOY\tf.mzML\tscan=2\t2\t-1\t0.002\n"
+              "5\tLATEK\tf.mzML\tscan=3\t1\t1\t0.003\n"
+              "6\tKETAL\tf.mzML\tscan=3\t2\t1\t0.5\n"
+              "7\tAAAAK\tf.mzML\tscan=4\t1\t-1\t0.001\n"
+              "8\tCCCCK\tf.mzML\tscan=4\t2\t1\t0.009\n"
+              "9\tWWWWK\tf.mzML\tscan=5\t1\t1\t0.001\n"
+              "10\tYYYYK\tf.mzML\tscan=6\t1\t1\t0.02\n")
+
+
+def test_sage_rank_default_unchanged(tmp_path):
+    p = tmp_path / "r.sage.tsv"
+    p.write_text(SAGE_RANKS)
+    base = P.read_sage_psms(p, 0.01)
+    assert list(base["key"]) == ["scan=1", "scan=2", "scan=3", "scan=5"]
+    assert list(base.columns) == ["filename", "scannr", "peptide", "spectrum_q", "key"]
+    # rank=None is the default; rank=1 selects the same rows
+    assert P.read_sage_psms(p, 0.01, rank=None).equals(base)
+    r1 = P.read_sage_psms(p, 0.01, rank=1)
+    assert list(r1["key"]) == list(base["key"]) and list(r1["peptide"]) == list(base["peptide"])
+
+
+def test_sage_rank2(tmp_path):
+    p = tmp_path / "r.sage.tsv"
+    p.write_text(SAGE_RANKS)
+    r2 = P.read_sage_psms(p, 0.01, rank=2)
+    # targets at rank 2 with q <= 1%: scans 1 and 4 (scan 2's rank 2 is a decoy, scan 3's is above the FDR)
+    assert list(r2["key"]) == ["scan=1", "scan=4"]
+    assert list(r2["peptide"]) == ["PEPTLDEK", "CCCCK"]
+    assert set(r2["rank"]) == {2}
+
+
+def test_sage_rank_needs_rank_column(tmp_path):
+    p = tmp_path / "s.tsv"
+    p.write_text(SAGE)  # no rank > 1 rows, but the column is present
+    assert P.read_sage_psms(p, 0.01, rank=2).empty
+    q = tmp_path / "norank.tsv"
+    q.write_text("peptide\tfilename\tscannr\tlabel\tspectrum_q\nPEPK\tf\tscan=1\t1\t0.001\n")
+    with pytest.raises(ValueError):
+        P.read_sage_psms(q, 0.01, rank=2)

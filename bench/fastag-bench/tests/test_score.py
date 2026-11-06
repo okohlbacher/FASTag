@@ -196,3 +196,65 @@ def test_cv_patch_keeps_length(tmp_path):
     dst = tmp_path / "b.mzML"
     assert A.patch_cv_terms(src, dst, chunk=7) == 2
     assert dst.stat().st_size == src.stat().st_size and b"MS:1000483" in dst.read_bytes()
+
+
+# ---------------------------------------------------------------- #4 additions
+
+DUP_PSMS = pd.DataFrame({"key": [f"scan={i}" for i in range(1, 9)],
+                         "peptide": ["PEPTIDEK", "PEPTLDEK", "PEPTIDEK", "SAMPLER", "SAMPLER",
+                                     "M[+15.994915]PEPK", "MPEPK", "LLLK"]})
+
+
+def test_shuffled_psms_unchanged():
+    # the v1.9.0 control is kept as it was (row derangement); these are its outputs at the bench import
+    assert list(S.shuffled_psms(DUP_PSMS, 0)["peptide"]) == [
+        "PEPTLDEK", "LLLK", "SAMPLER", "MPEPK", "SAMPLER", "PEPTIDEK", "M[+15.994915]PEPK", "PEPTIDEK"]
+    assert list(S.shuffled_psms(DUP_PSMS, 1)["peptide"]) == [
+        "PEPTLDEK", "SAMPLER", "MPEPK", "LLLK", "PEPTIDEK", "PEPTIDEK", "SAMPLER", "M[+15.994915]PEPK"]
+
+
+def test_shuffled_psms_can_leak_identity():
+    # why shuffled_peptides exists: a row derangement can hand a spectrum its own (I/L, mod-stripped) peptide
+    leaks = sum(any(S.normalize_peptide(a) == S.normalize_peptide(b)
+                    for a, b in zip(DUP_PSMS["peptide"], S.shuffled_psms(DUP_PSMS, s)["peptide"])) for s in range(20))
+    assert leaks > 0
+
+
+@pytest.mark.parametrize("seed", range(50))
+def test_shuffled_peptides_is_an_identity_derangement(seed):
+    sh = S.shuffled_peptides(DUP_PSMS, seed)
+    assert list(sh["key"]) == list(DUP_PSMS["key"])
+    own = [S.normalize_peptide(p) for p in DUP_PSMS["peptide"]]
+    got = [S.normalize_peptide(p) for p in sh["peptide"]]
+    assert all(a != b for a, b in zip(own, got))
+    # every assigned peptide is one of the input peptide strings (modifications kept for the flank rule)
+    assert set(sh["peptide"]) <= set(DUP_PSMS["peptide"])
+    # spectra sharing an identity get the same replacement identity (a permutation of identities)
+    by_id = {}
+    for a, b in zip(own, got):
+        by_id.setdefault(a, set()).add(b)
+    assert all(len(v) == 1 for v in by_id.values())
+
+
+def test_shuffled_peptides_deterministic_and_degenerate():
+    assert S.shuffled_peptides(DUP_PSMS, 7).equals(S.shuffled_peptides(DUP_PSMS, 7))
+    one = pd.DataFrame({"key": ["scan=1", "scan=2"], "peptide": ["PEPTIDEK", "PEPTLDEK"]})
+    # a single identity has no derangement: no chance pairs at all
+    assert S.shuffled_peptides(one, 0).empty
+
+
+def _flanks(peptide, tag_pos, L):
+    res, pref, total = S.peptide_masses(peptide)
+    return pref[tag_pos], total - pref[tag_pos + L]
+
+
+def test_tag_correct_any():
+    n, c = _flanks("SAMPLER", 1, 3)  # tag AMP after S
+    assert S.tag_correct_any("AMP", (n, c), ["PEPTIDEK", "SAMPLER"])
+    assert not S.tag_correct_any("AMP", (n, c), ["PEPTIDEK"])
+    assert not S.tag_correct_any("AMP", (n, c), [])
+    # the sequence is present but neither flank fits: not correct
+    assert not S.tag_correct_any("AMP", (n + 1.0, c + 1.0), ["SAMPLER"])
+    # equals the paper rule against the single candidate
+    assert S.tag_correct_any("AMP", (n, c), ["SAMPLER"]) == S.tag_correct_flank("AMP", n, c, *S.peptide_masses("SAMPLER"))
+    assert S.correct_candidates("AMP", (n, c), ["SAMPLER", "PEPTIDEK", "SAMPLER"]) == ["SAMPLER"]

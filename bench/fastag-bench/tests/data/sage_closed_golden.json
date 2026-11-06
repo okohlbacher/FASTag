@@ -1,0 +1,862 @@
+{
+ "PXD000001_Erwinia_TMT6": {
+  "chimera": false,
+  "database": {
+   "bucket_size": 32768,
+   "decoy_tag": "rev_",
+   "enzyme": {
+    "cleave_at": "KR",
+    "max_len": 50,
+    "min_len": 7,
+    "missed_cleavages": 2,
+    "restrict": "P"
+   },
+   "fasta": "/db/human.fasta",
+   "fragment_max_mz": 2000.0,
+   "fragment_min_mz": 150.0,
+   "generate_decoys": true,
+   "ion_kinds": [
+    "b",
+    "y"
+   ],
+   "max_variable_mods": 2,
+   "min_ion_index": 2,
+   "peptide_max_mass": 5000.0,
+   "peptide_min_mass": 500.0,
+   "static_mods": {
+    "C": 45.987721,
+    "K": 229.162932,
+    "^": 229.162932
+   },
+   "variable_mods": {
+    "M": [
+     15.994915
+    ],
+    "Y": [
+     229.162932
+    ]
+   }
+  },
+  "deisotope": true,
+  "fragment_tol": {
+   "da": [
+    -0.2,
+    0.2
+   ]
+  },
+  "isotope_errors": [
+   0,
+   1
+  ],
+  "max_peaks": 150,
+  "min_peaks": 15,
+  "mzml_paths": [
+   "/in/run.mzML"
+  ],
+  "precursor_tol": {
+   "ppm": [
+    -25.0,
+    25.0
+   ]
+  },
+  "predict_rt": true,
+  "report_psms": 1,
+  "wide_window": false
+ },
+ "PXD000865_Kuster_TMT8_B02": {
+  "chimera": false,
+  "database": {
+   "bucket_size": 32768,
+   "decoy_tag": "rev_",
+   "enzyme": {
+    "cleave_at": "KR",
+    "max_len": 50,
+    "min_len": 7,
+    "missed_cleavages": 2,
+    "restrict": "P"
+   },
+   "fasta": "/db/human.fasta",
+   "fragment_max_mz": 2000.0,
+   "fragment_min_mz": 150.0,
+   "generate_decoys": true,
+   "ion_kinds": [
+    "b",
+    "y"
+   ],
+   "max_variable_mods": 2,
+   "min_ion_index": 2,
+   "peptide_max_mass": 5000.0,
+   "peptide_min_mass": 500.0,
+   "static_mods": {
+    "C": 57.021464
+   },
+   "variable_mods": {
+    "M": [
+     15.994915
+    ]
+   }
+  },
+  "deisotope": true,
+  "fragment_tol": {
+   "ppm": [
+    -20.0,
+    20.0
+   ]
+  },
+  "isotope_errors": [
+   0,
+   1
+  ],
+  "max_peaks": 150,
+  "min_peaks": 15,
+  "mzml_paths": [
+   "/in/run.mzML"
+  ],
+  "precursor_tol": {
+   "ppm": [
+    -10.0,
+    10.0
+   ]
+  },
+  "predict_rt": true,
+  "report_psms": 1,
+  "wide_window": false
+ },
+ "PXD001819_UPS1_yeast_LTQ_CID": {
+  "chimera": false,
+  "database": {
+   "bucket_size": 32768,
+   "decoy_tag": "rev_",
+   "enzyme": {
+    "cleave_at": "KR",
+    "max_len": 50,
+    "min_len": 7,
+    "missed_cleavages": 2
+   },
+   "fasta": "/db/human.fasta",
+   "fragment_max_mz": 2000.0,
+   "fragment_min_mz": 150.0,
+   "generate_decoys": true,
+   "ion_kinds": [
+    "b",
+    "y"
+   ],
+   "max_variable_mods": 2,
+   "min_ion_index": 2,
+   "peptide_max_mass": 5000.0,
+   "peptide_min_mass": 500.0,
+   "static_mods": {
+    "C": 57.021464
+   },
+   "variable_mods": {
+    "M": [
+     15.994915
+    ],
+    "[": [
+     42.010565
+    ]
+   }
+  },
+  "deisotope": false,
+  "fragment_tol": {
+   "da": [
+    -0.8,
+    0.8
+   ]
+  },
+  "isotope_errors": [
+   0,
+   1
+  ],
+  "max_peaks": 150,
+  "min_peaks": 15,
+  "mzml_paths": [
+   "/in/run.mzML"
+  ],
+  "precursor_tol": {
+   "ppm": [
+    -5.0,
+    5.0
+   ]
+  },
+  "predict_rt": true,
+  "report_psms": 1,
+  "wide_window": false
+ },
+ "PXD003531_QE_NO_03": {
+  "chimera": false,
+  "database": {
+   "bucket_size": 32768,
+   "decoy_tag": "rev_",
+   "enzyme": {
+    "cleave_at": "KR",
+    "max_len": 50,
+    "min_len": 7,
+    "missed_cleavages": 2,
+    "restrict": "P"
+   },
+   "fasta": "/db/human.fasta",
+   "fragment_max_mz": 2000.0,
+   "fragment_min_mz": 150.0,
+   "generate_decoys": true,
+   "ion_kinds": [
+    "b",
+    "y"
+   ],
+   "max_variable_mods": 3,
+   "min_ion_index": 2,
+   "peptide_max_mass": 5000.0,
+   "peptide_min_mass": 500.0,
+   "static_mods": {
+    "C": 57.021464
+   },
+   "variable_mods": {
+    "M": [
+     15.994915
+    ],
+    "N": [
+     0.984016
+    ],
+    "Q": [
+     0.984016
+    ],
+    "S": [
+     79.966331
+    ],
+    "T": [
+     79.966331
+    ],
+    "Y": [
+     79.966331
+    ],
+    "[": [
+     42.010565
+    ]
+   }
+  },
+  "deisotope": true,
+  "fragment_tol": {
+   "da": [
+    -0.02,
+    0.02
+   ]
+  },
+  "isotope_errors": [
+   0,
+   1
+  ],
+  "max_peaks": 150,
+  "min_peaks": 15,
+  "mzml_paths": [
+   "/in/run.mzML"
+  ],
+  "precursor_tol": {
+   "ppm": [
+    -7.0,
+    7.0
+   ]
+  },
+  "predict_rt": true,
+  "report_psms": 1,
+  "wide_window": false
+ },
+ "PXD004541_HF_TMT10_fr02": {
+  "chimera": false,
+  "database": {
+   "bucket_size": 32768,
+   "decoy_tag": "rev_",
+   "enzyme": {
+    "cleave_at": "KR",
+    "max_len": 50,
+    "min_len": 7,
+    "missed_cleavages": 2,
+    "restrict": "P"
+   },
+   "fasta": "/db/human.fasta",
+   "fragment_max_mz": 2000.0,
+   "fragment_min_mz": 150.0,
+   "generate_decoys": true,
+   "ion_kinds": [
+    "b",
+    "y"
+   ],
+   "max_variable_mods": 2,
+   "min_ion_index": 2,
+   "peptide_max_mass": 5000.0,
+   "peptide_min_mass": 500.0,
+   "static_mods": {
+    "C": 57.021464,
+    "K": 229.162932,
+    "^": 229.162932
+   },
+   "variable_mods": {
+    "M": [
+     15.994915
+    ]
+   }
+  },
+  "deisotope": true,
+  "fragment_tol": {
+   "ppm": [
+    -20.0,
+    20.0
+   ]
+  },
+  "isotope_errors": [
+   0,
+   1
+  ],
+  "max_peaks": 150,
+  "min_peaks": 15,
+  "mzml_paths": [
+   "/in/run.mzML"
+  ],
+  "precursor_tol": {
+   "ppm": [
+    -10.0,
+    10.0
+   ]
+  },
+  "predict_rt": true,
+  "report_psms": 1,
+  "wide_window": false
+ },
+ "PXD010783_AspN_p53": {
+  "chimera": false,
+  "database": {
+   "bucket_size": 32768,
+   "decoy_tag": "rev_",
+   "enzyme": {
+    "c_terminal": false,
+    "cleave_at": "D",
+    "max_len": 50,
+    "min_len": 7,
+    "missed_cleavages": 2
+   },
+   "fasta": "/db/human.fasta",
+   "fragment_max_mz": 2000.0,
+   "fragment_min_mz": 150.0,
+   "generate_decoys": true,
+   "ion_kinds": [
+    "b",
+    "y"
+   ],
+   "max_variable_mods": 2,
+   "min_ion_index": 2,
+   "peptide_max_mass": 5000.0,
+   "peptide_min_mass": 500.0,
+   "static_mods": {
+    "C": 57.021464
+   },
+   "variable_mods": {
+    "M": [
+     15.994915
+    ]
+   }
+  },
+  "deisotope": true,
+  "fragment_tol": {
+   "ppm": [
+    -20.0,
+    20.0
+   ]
+  },
+  "isotope_errors": [
+   0,
+   1
+  ],
+  "max_peaks": 150,
+  "min_peaks": 15,
+  "mzml_paths": [
+   "/in/run.mzML"
+  ],
+  "precursor_tol": {
+   "ppm": [
+    -10.0,
+    10.0
+   ]
+  },
+  "predict_rt": true,
+  "report_psms": 1,
+  "wide_window": false
+ },
+ "PXD014764_HF_SILAC_f008": {
+  "chimera": false,
+  "database": {
+   "bucket_size": 32768,
+   "decoy_tag": "rev_",
+   "enzyme": {
+    "cleave_at": "KR",
+    "max_len": 50,
+    "min_len": 7,
+    "missed_cleavages": 2,
+    "restrict": "P"
+   },
+   "fasta": "/db/human.fasta",
+   "fragment_max_mz": 2000.0,
+   "fragment_min_mz": 150.0,
+   "generate_decoys": true,
+   "ion_kinds": [
+    "b",
+    "y"
+   ],
+   "max_variable_mods": 2,
+   "min_ion_index": 2,
+   "peptide_max_mass": 5000.0,
+   "peptide_min_mass": 500.0,
+   "static_mods": {
+    "C": 57.021464
+   },
+   "variable_mods": {
+    "M": [
+     15.994915
+    ]
+   }
+  },
+  "deisotope": true,
+  "fragment_tol": {
+   "ppm": [
+    -20.0,
+    20.0
+   ]
+  },
+  "isotope_errors": [
+   0,
+   1
+  ],
+  "max_peaks": 150,
+  "min_peaks": 15,
+  "mzml_paths": [
+   "/in/run.mzML"
+  ],
+  "precursor_tol": {
+   "ppm": [
+    -10.0,
+    10.0
+   ]
+  },
+  "predict_rt": true,
+  "report_psms": 1,
+  "wide_window": false
+ },
+ "PXD017035_SIHUMIx_d12_12_I": {
+  "chimera": false,
+  "database": {
+   "bucket_size": 32768,
+   "decoy_tag": "rev_",
+   "enzyme": {
+    "cleave_at": "KR",
+    "max_len": 50,
+    "min_len": 7,
+    "missed_cleavages": 2,
+    "restrict": "P"
+   },
+   "fasta": "/db/human.fasta",
+   "fragment_max_mz": 2000.0,
+   "fragment_min_mz": 150.0,
+   "generate_decoys": true,
+   "ion_kinds": [
+    "b",
+    "y"
+   ],
+   "max_variable_mods": 2,
+   "min_ion_index": 2,
+   "peptide_max_mass": 5000.0,
+   "peptide_min_mass": 500.0,
+   "static_mods": {
+    "C": 57.021464
+   },
+   "variable_mods": {
+    "M": [
+     15.994915
+    ]
+   }
+  },
+  "deisotope": true,
+  "fragment_tol": {
+   "ppm": [
+    -20.0,
+    20.0
+   ]
+  },
+  "isotope_errors": [
+   0,
+   1
+  ],
+  "max_peaks": 150,
+  "min_peaks": 15,
+  "mzml_paths": [
+   "/in/run.mzML"
+  ],
+  "precursor_tol": {
+   "ppm": [
+    -10.0,
+    10.0
+   ]
+  },
+  "predict_rt": true,
+  "report_psms": 1,
+  "wide_window": false
+ },
+ "PXD028735_diaPASEF_A_Gamma_01": {
+  "chimera": false,
+  "database": {
+   "bucket_size": 32768,
+   "decoy_tag": "rev_",
+   "enzyme": {
+    "cleave_at": "KR",
+    "max_len": 50,
+    "min_len": 7,
+    "missed_cleavages": 2,
+    "restrict": "P"
+   },
+   "fasta": "/db/human.fasta",
+   "fragment_max_mz": 2000.0,
+   "fragment_min_mz": 150.0,
+   "generate_decoys": true,
+   "ion_kinds": [
+    "b",
+    "y"
+   ],
+   "max_variable_mods": 2,
+   "min_ion_index": 2,
+   "peptide_max_mass": 5000.0,
+   "peptide_min_mass": 500.0,
+   "static_mods": {
+    "C": 57.021464
+   },
+   "variable_mods": {
+    "M": [
+     15.994915
+    ]
+   }
+  },
+  "deisotope": true,
+  "fragment_tol": {
+   "ppm": [
+    -20.0,
+    20.0
+   ]
+  },
+  "isotope_errors": [
+   0,
+   1
+  ],
+  "max_peaks": 150,
+  "min_peaks": 15,
+  "mzml_paths": [
+   "/in/run.mzML"
+  ],
+  "precursor_tol": {
+   "ppm": [
+    -10.0,
+    10.0
+   ]
+  },
+  "predict_rt": true,
+  "report_psms": 1,
+  "wide_window": false
+ },
+ "PXD040407_Chymo_Rep3": {
+  "chimera": false,
+  "database": {
+   "bucket_size": 32768,
+   "decoy_tag": "rev_",
+   "enzyme": {
+    "cleave_at": "FWYL",
+    "max_len": 50,
+    "min_len": 7,
+    "missed_cleavages": 2,
+    "restrict": "P"
+   },
+   "fasta": "/db/human.fasta",
+   "fragment_max_mz": 2000.0,
+   "fragment_min_mz": 150.0,
+   "generate_decoys": true,
+   "ion_kinds": [
+    "b",
+    "y"
+   ],
+   "max_variable_mods": 2,
+   "min_ion_index": 2,
+   "peptide_max_mass": 5000.0,
+   "peptide_min_mass": 500.0,
+   "static_mods": {
+    "C": 57.021464
+   },
+   "variable_mods": {
+    "M": [
+     15.994915
+    ]
+   }
+  },
+  "deisotope": true,
+  "fragment_tol": {
+   "ppm": [
+    -20.0,
+    20.0
+   ]
+  },
+  "isotope_errors": [
+   0,
+   1
+  ],
+  "max_peaks": 150,
+  "min_peaks": 15,
+  "mzml_paths": [
+   "/in/run.mzML"
+  ],
+  "precursor_tol": {
+   "ppm": [
+    -10.0,
+    10.0
+   ]
+  },
+  "predict_rt": true,
+  "report_psms": 1,
+  "wide_window": false
+ },
+ "PXD047793_diaTracer_Slot2-6": {
+  "chimera": false,
+  "database": {
+   "bucket_size": 32768,
+   "decoy_tag": "rev_",
+   "enzyme": {
+    "cleave_at": "KR",
+    "max_len": 50,
+    "min_len": 7,
+    "missed_cleavages": 2,
+    "restrict": "P"
+   },
+   "fasta": "/db/human.fasta",
+   "fragment_max_mz": 2000.0,
+   "fragment_min_mz": 150.0,
+   "generate_decoys": true,
+   "ion_kinds": [
+    "b",
+    "y"
+   ],
+   "max_variable_mods": 2,
+   "min_ion_index": 2,
+   "peptide_max_mass": 5000.0,
+   "peptide_min_mass": 500.0,
+   "static_mods": {
+    "C": 57.021464
+   },
+   "variable_mods": {
+    "M": [
+     15.994915
+    ]
+   }
+  },
+  "deisotope": true,
+  "fragment_tol": {
+   "ppm": [
+    -20.0,
+    20.0
+   ]
+  },
+  "isotope_errors": [
+   0,
+   1
+  ],
+  "max_peaks": 150,
+  "min_peaks": 15,
+  "mzml_paths": [
+   "/in/run.mzML"
+  ],
+  "precursor_tol": {
+   "ppm": [
+    -10.0,
+    10.0
+   ]
+  },
+  "predict_rt": true,
+  "report_psms": 1,
+  "wide_window": false
+ },
+ "PXD054073_HeLa_ddaPASEF_R02": {
+  "chimera": false,
+  "database": {
+   "bucket_size": 32768,
+   "decoy_tag": "rev_",
+   "enzyme": {
+    "cleave_at": "KR",
+    "max_len": 50,
+    "min_len": 7,
+    "missed_cleavages": 2,
+    "restrict": "P"
+   },
+   "fasta": "/db/human.fasta",
+   "fragment_max_mz": 2000.0,
+   "fragment_min_mz": 150.0,
+   "generate_decoys": true,
+   "ion_kinds": [
+    "b",
+    "y"
+   ],
+   "max_variable_mods": 2,
+   "min_ion_index": 2,
+   "peptide_max_mass": 5000.0,
+   "peptide_min_mass": 500.0,
+   "static_mods": {
+    "C": 57.021464
+   },
+   "variable_mods": {
+    "M": [
+     15.994915
+    ],
+    "[": [
+     42.010565
+    ]
+   }
+  },
+  "deisotope": true,
+  "fragment_tol": {
+   "ppm": [
+    -20.0,
+    20.0
+   ]
+  },
+  "isotope_errors": [
+   0,
+   1
+  ],
+  "max_peaks": 150,
+  "min_peaks": 15,
+  "mzml_paths": [
+   "/in/run.mzML"
+  ],
+  "precursor_tol": {
+   "ppm": [
+    -20.0,
+    20.0
+   ]
+  },
+  "predict_rt": true,
+  "report_psms": 1,
+  "wide_window": false
+ },
+ "PXD066944_Astral_HEK_DDA": {
+  "chimera": false,
+  "database": {
+   "bucket_size": 32768,
+   "decoy_tag": "rev_",
+   "enzyme": {
+    "cleave_at": "KR",
+    "max_len": 50,
+    "min_len": 7,
+    "missed_cleavages": 2,
+    "restrict": "P"
+   },
+   "fasta": "/db/human.fasta",
+   "fragment_max_mz": 2000.0,
+   "fragment_min_mz": 150.0,
+   "generate_decoys": true,
+   "ion_kinds": [
+    "b",
+    "y"
+   ],
+   "max_variable_mods": 2,
+   "min_ion_index": 2,
+   "peptide_max_mass": 5000.0,
+   "peptide_min_mass": 500.0,
+   "static_mods": {
+    "C": 57.021464
+   },
+   "variable_mods": {
+    "M": [
+     15.994915
+    ]
+   }
+  },
+  "deisotope": true,
+  "fragment_tol": {
+   "ppm": [
+    -20.0,
+    20.0
+   ]
+  },
+  "isotope_errors": [
+   0,
+   1
+  ],
+  "max_peaks": 150,
+  "min_peaks": 15,
+  "mzml_paths": [
+   "/in/run.mzML"
+  ],
+  "precursor_tol": {
+   "ppm": [
+    -10.0,
+    10.0
+   ]
+  },
+  "predict_rt": true,
+  "report_psms": 1,
+  "wide_window": false
+ },
+ "PXD076528_Astral_7673": {
+  "chimera": false,
+  "database": {
+   "bucket_size": 32768,
+   "decoy_tag": "rev_",
+   "enzyme": {
+    "cleave_at": "KR",
+    "max_len": 50,
+    "min_len": 7,
+    "missed_cleavages": 2,
+    "restrict": "P"
+   },
+   "fasta": "/db/human.fasta",
+   "fragment_max_mz": 2000.0,
+   "fragment_min_mz": 150.0,
+   "generate_decoys": true,
+   "ion_kinds": [
+    "b",
+    "y"
+   ],
+   "max_variable_mods": 2,
+   "min_ion_index": 2,
+   "peptide_max_mass": 5000.0,
+   "peptide_min_mass": 500.0,
+   "static_mods": {
+    "C": 57.021464
+   },
+   "variable_mods": {
+    "M": [
+     15.994915
+    ],
+    "[": [
+     42.010565
+    ]
+   }
+  },
+  "deisotope": true,
+  "fragment_tol": {
+   "ppm": [
+    -20.0,
+    20.0
+   ]
+  },
+  "isotope_errors": [
+   0,
+   1
+  ],
+  "max_peaks": 150,
+  "min_peaks": 15,
+  "mzml_paths": [
+   "/in/run.mzML"
+  ],
+  "precursor_tol": {
+   "ppm": [
+    -10.0,
+    10.0
+   ]
+  },
+  "predict_rt": true,
+  "report_psms": 1,
+  "wide_window": false
+ },
+ "_note": "sage_config(ds, '/db/human.fasta', ['/in/run.mzML'], DEFAULTS['sage']) at the v1.9.0 harness (bench import ebe0090), one entry per datasets.yaml id"
+}
