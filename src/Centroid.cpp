@@ -13,7 +13,7 @@ using namespace OpenMS;
 
 namespace FASTag
 {
-  int centroidProfileMs2(MSSpectrum& s, PeakPickerHiRes& picker, bool pick_unknown)
+  int centroidProfileMs2(MSSpectrum& s, PeakPickerHiRes& picker, bool pick_unknown, bool sort)
   {
     if (s.getMSLevel() != 2 || s.empty()) return 0;
     const SpectrumSettings::SpectrumType t = s.getType();
@@ -30,7 +30,14 @@ namespace FASTag
     MSSpectrum picked;
     try
     {
-      picker.pick(s, picked);
+      if (sort && !s.isSorted())
+      {
+        // A sorted copy: a spectrum picking leaves alone stays as it was.
+        MSSpectrum sorted = s;
+        sorted.sortByPosition();
+        picker.pick(sorted, picked);
+      }
+      else picker.pick(s, picked);
     }
     catch (const Exception::BaseException&)
     {
@@ -61,6 +68,7 @@ namespace FASTag
         case Mode::Auto:
           p.pick = input != Input::Mgf;
           p.unknown = p.pick && pick_unknown_type;
+          p.sort = p.pick;
           break;
         case Mode::Off: break;
       }
@@ -69,7 +77,7 @@ namespace FASTag
 
     int apply(MSSpectrum& s, PeakPickerHiRes& picker, const Policy& policy)
     {
-      return policy.pick ? centroidProfileMs2(s, picker, policy.unknown) : 0;
+      return policy.pick ? centroidProfileMs2(s, picker, policy.unknown, policy.sort) : 0;
     }
   }
 }

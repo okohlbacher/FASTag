@@ -870,8 +870,14 @@ mzML path tags profile samples as they are, while the archive was centroided
 when written, so FASTag reads peaks and finds more tags (2,032,961 against
 1,376,019). Centroid before tagging profile mzML, read the archive, or use
 `-pick_profile auto` (1.12), which centroids profile mzML MS2 on read with the
-same picker as the mzPeak path. Its default is still `legacy` (mzML tagged as
-sampled) until it is validated on held-out profile runs.
+same picker as the mzPeak path. Under `auto` a spectrum whose points are out
+of m/z order is picked from an m/z-sorted copy (`PeakPickerHiRes` needs
+sorted input): msconvert's Thermo profile mzML puts the zero-intensity point
+after some peaks' last sample at a slightly lower m/z, while mzpeak-convert
+stores the same non-zero points in m/z order (with zero runs shortened). With
+that, the PXD000865 profile mzML under `auto` and its mzpeak-convert 0.18.0
+archive give byte-identical tags (2,011,636). Its default is still `legacy`
+(mzML tagged as sampled) until it is validated on held-out profile runs.
 
 Output is identical at every thread count (`threads_test` checks every output
 on the fixture). Row memory on the mzML path is bounded by a ring of three

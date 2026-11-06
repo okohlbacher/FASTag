@@ -14,7 +14,9 @@
 //  (g) an UNKNOWN-typed profile spectrum is picked only with pick_unknown,
 //      (h) an UNKNOWN-typed centroid spectrum not even then;
 //  (i) the -pick_profile mode table per reader, the option parser and the
-//      counters.
+//      counters;
+//  (j) points out of m/z order are picked from a sorted copy under auto
+//      (the Thermo profile mzML case) and as stored under legacy.
 //
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
@@ -294,7 +296,8 @@ int main()
     for (const Row& r : rows)
     {
       const C::Policy p = C::policyFor(r.mode, r.input, r.flag);
-      check(p.pick == r.pick && p.unknown == r.unknown,
+      // Auto picks from m/z-sorted points; legacy as stored (1.11).
+      check(p.pick == r.pick && p.unknown == r.unknown && p.sort == (r.mode == M::Auto && r.pick),
             "(i) policy mode " + std::to_string(static_cast<int>(r.mode)) + " input " +
                 std::to_string(static_cast<int>(r.input)) + " flag " + std::to_string(r.flag));
     }
@@ -322,6 +325,43 @@ int main()
     b.add(-1);
     a.merge(b);
     check(a.picked == 3 && a.failed == 2, "(i) counters add and merge");
+  }
+
+  // (j) points out of m/z order (Thermo profile mzML, PXD000865: the zero
+  // padding point after a peak's last sample sits at a slightly lower m/z).
+  // With sort the result is the pick of the m/z-sorted points; without it
+  // the points are picked as stored (legacy, 1.11), which moves peaks.
+  {
+    const std::vector<double> c = spaced(200, 1500, 40, rng, 5.0), h = heights(40, rng);
+    MSSpectrum sorted = gaussians(c, h, 0.01, 0.01 / 6, SpectrumSettings::SpectrumType::PROFILE);
+    // Every zero that follows a sample: moved to 30% of a step below that sample.
+    MSSpectrum unsorted = sorted;
+    size_t moved = 0;
+    for (Size i = 1; i < unsorted.size(); ++i)
+      if (unsorted[i].getIntensity() == 0 && unsorted[i - 1].getIntensity() > 0)
+      {
+        unsorted[i].setMZ(unsorted[i - 1].getMZ() - 0.3 * (0.01 / 6));
+        ++moved;
+      }
+    check(moved >= 40 && !unsorted.isSorted(), "(j) the fixture is out of m/z order");
+    MSSpectrum resorted = unsorted;
+    resorted.sortByPosition();
+    MSSpectrum want = resorted, as_stored = unsorted, got = unsorted;
+    check(centroidProfileMs2(want, picker) == 1, "(j) the sorted points pick");
+    check(centroidProfileMs2(got, picker, false, true) == 1, "(j) sort: picked");
+    check(samePeaks(got, want), "(j) sort: the pick of the m/z-sorted points");
+    check(centroidProfileMs2(as_stored, picker, false, false) == 1, "(j) no sort: picked as stored");
+    check(!samePeaks(as_stored, want), "(j) no sort: unsorted points pick differently (the case is real)");
+    const MSSpectrum before = unsorted;
+    MSSpectrum c_sorted = unsorted;
+    c_sorted.setType(SpectrumSettings::SpectrumType::CENTROID);
+    check(centroidProfileMs2(c_sorted, picker, false, true) == 0 && c_sorted.size() == before.size() &&
+              !c_sorted.isSorted(),
+          "(j) sort never touches a spectrum that needs no picking");
+    MSSpectrum viaPolicy = unsorted;
+    check(C::apply(viaPolicy, picker, C::policyFor(C::Mode::Auto, C::Input::MzML, false)) == 1 &&
+              samePeaks(viaPolicy, want),
+          "(j) auto on mzML picks the sorted points");
   }
 
   if (failures)

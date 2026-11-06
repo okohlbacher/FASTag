@@ -10,6 +10,10 @@
 //           OnDiscMSExperiment or a full load, and mzPeak;
 //   off     nothing, mzPeak included (for experts).
 //
+// Under auto a spectrum whose points are out of m/z order is picked from a
+// sorted copy (centroidProfileMs2, @p sort); legacy picks mzPeak points as
+// stored, exactly as 1.11.
+//
 // A CENTROID spectrum is never re-picked. An UNKNOWN-typed spectrum (no
 // MS:1000127/128 anywhere, e.g. in a converter's output) is picked only under
 // auto with -pick_unknown_type, and only when OpenMS's PeakTypeEstimator
@@ -41,7 +45,18 @@ namespace FASTag
   /// nothing (data too sparse for peak shapes) leaves the spectrum as it was.
   /// Returns +1 when picked, -1 when picking yielded nothing (or threw), 0
   /// when the spectrum needed no picking.
-  int centroidProfileMs2(OpenMS::MSSpectrum& s, OpenMS::PeakPickerHiRes& picker, bool pick_unknown = false);
+  ///
+  /// With @p sort, a spectrum whose points are not in m/z order is picked
+  /// from a copy sorted by m/z: PeakPickerHiRes walks neighbouring points
+  /// and needs sorted input. Thermo profile mzML (PXD000865, msconvert) puts
+  /// a zero-intensity padding point after the last sample of a peak at a
+  /// slightly LOWER m/z; picked unsorted, that peak's boundary and centroid
+  /// shift (and its spline can overshoot), picked sorted it is the peak an
+  /// mzPeak archive of the same file gives (mzpeak-convert stores points in
+  /// m/z order). Without @p sort the points are picked as stored (FASTag
+  /// 1.11 on mzPeak).
+  int centroidProfileMs2(OpenMS::MSSpectrum& s, OpenMS::PeakPickerHiRes& picker, bool pick_unknown = false,
+                         bool sort = false);
 
   namespace Centroid
   {
@@ -68,6 +83,7 @@ namespace FASTag
     {
       bool pick = false;     ///< run centroidProfileMs2
       bool unknown = false;  ///< ... with pick_unknown
+      bool sort = false;     ///< ... with sort (auto; legacy picks as 1.11 did)
     };
 
     /// Parses a -pick_profile value; false (and @p mode untouched) if invalid.
