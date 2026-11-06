@@ -632,6 +632,35 @@ protected:
                         "Variable modifications by OpenMS/UniMod name, e.g. "
                         "'Phospho (S)' 'Phospho (T)' 'Phospho (Y)' 'Formyl (K)'. "
                         "Add a modified alternative, written inline as X[Name]", false);
+
+    // 1.12 options, one anchored block per cluster in the fixed order E, A, D,
+    // F (E data types and acquisition, A identification and search hand-off,
+    // D organism and run chemistry, F quality control). A cluster registers
+    // its options only inside its own block. The blocks come after every
+    // option above, so the order of the existing options, the CTD and the
+    // -write_ini output stays as it was. Every new option also reaches the
+    // -out_spectra mzML as a "parameter:" userParam.
+    // ---- 1.12 E: options ----
+    // ---- 1.12 A: options ----
+    // ---- 1.12 D: options ----
+    // ---- 1.12 F: options ----
+  }
+
+  /// True when option @p name holds a value other than its registered
+  /// default, read through the typed getter of its registered type: a flag
+  /// when given, a number when it differs, a string (or file path) when it
+  /// differs, so an empty-default path when it is set. Used by the
+  /// table-driven -stream refusals and the ignored-option warnings.
+  bool optionNonDefault_(const std::string& name) const
+  {
+    const ParameterInformation& e = findEntry_(name);
+    switch (e.type)
+    {
+      case ParameterInformation::FLAG: return getFlag_(name);
+      case ParameterInformation::INT: return getIntOption_(name) != static_cast<int>(e.default_value);
+      case ParameterInformation::DOUBLE: return getDoubleOption_(name) != static_cast<double>(e.default_value);
+      default: return getStringOption_(name) != static_cast<std::string>(e.default_value);
+    }
   }
 
   /// Default report path: @p out with its extension replaced by @p suffix --
@@ -956,19 +985,47 @@ protected:
       // Whole-run machinery is meaningless per-block: -out_spectra re-reads
       // indexed input, q_db needs the full curve, -species aggregates a run,
       // and the filter/recon paths are not per-spectrum-latency material.
-      for (const char* opt : {"fasta", "entrapment_fasta", "recon_out", "species_out",
-                              "taxdb", "out_spectra", "delta_out", "recon_id_out", "usi_collection",
-                              "digest_out", "label_out", "massgap_out"})
-        if (!getStringOption_(opt).empty())
+      // Checked in table order; the first option set away from its default is
+      // refused. A null message reads "-stream cannot be combined with
+      // -<option>." Each 1.12 cluster adds its rows at its own anchor.
+      struct StreamRefusal
+      {
+        const char* option;
+        const char* message;
+      };
+      static const StreamRefusal stream_refusals[] = {
+          {"fasta", nullptr},
+          {"entrapment_fasta", nullptr},
+          {"recon_out", nullptr},
+          {"species_out", nullptr},
+          {"taxdb", nullptr},
+          {"out_spectra", nullptr},
+          {"delta_out", nullptr},
+          {"recon_id_out", nullptr},
+          {"usi_collection", nullptr},
+          {"digest_out", nullptr},
+          {"label_out", nullptr},
+          {"massgap_out", nullptr},
+          {"species", "-stream cannot be combined with -species or -glyco."},
+          {"glyco", "-stream cannot be combined with -species or -glyco."},
+          // ---- 1.12 E: -stream refusals ----
+          // ---- 1.12 A: -stream refusals ----
+          // ---- 1.12 D: -stream refusals ----
+          // ---- 1.12 F: -stream refusals ----
+      };
+      for (const StreamRefusal& r : stream_refusals)
+        if (optionNonDefault_(r.option))
         {
-          OPENMS_LOG_ERROR << "-stream cannot be combined with -" << opt << "." << std::endl;
+          if (r.message)
+          {
+            OPENMS_LOG_ERROR << r.message << std::endl;
+          }
+          else
+          {
+            OPENMS_LOG_ERROR << "-stream cannot be combined with -" << r.option << "." << std::endl;
+          }
           return ILLEGAL_PARAMETERS;
         }
-      if (getFlag_("species") || getFlag_("glyco"))
-      {
-        OPENMS_LOG_ERROR << "-stream cannot be combined with -species or -glyco." << std::endl;
-        return ILLEGAL_PARAMETERS;
-      }
     }
     // The index and its taxonomy are ONE coherent set. An index and dumps from
     // different sources silently drop every taxid one does not know and bias
@@ -1261,39 +1318,50 @@ protected:
     const std::string digest_models = getStringOption_("digest_models");
     // Report options set without the report that reads them: ignored, so say so.
     // Defaults are compared against the registered ones, never repeated here.
+    // One row per option: {option, the report or switch that reads it,
+    // whether that reader is on}. Rows warn in table order. Each 1.12 cluster
+    // adds its rows at its own anchor.
     {
-      const auto def = [&](const char* o) -> const ParamValue& { return findEntry_(o).default_value; };
-      const auto warn = [](const char* o, const char* reader) {
-        OPENMS_LOG_WARN << o << " is only read for " << reader << "; it is ignored here." << std::endl;
+      struct IgnoredOption
+      {
+        const char* option;
+        const char* reader;
+        bool read;
       };
-      if (!digest_on && !digest_models.empty()) warn("-digest_models", "-digest_out");
-      if (!digest_on && digest_settings.tag_min != static_cast<int>(def("digest_tag_min")))
-        warn("-digest_tag_min", "-digest_out");
-      if (!digest_on && digest_settings.background_share != static_cast<double>(def("digest_background_share")))
-        warn("-digest_background_share", "-digest_out");
-      if (!count_on && digest_settings.window != static_cast<double>(def("digest_window")))
-        warn("-digest_window", "-digest_out or -label_out");
-      if (label_out.empty() && digest_settings.silac_min != static_cast<int>(def("digest_silac_min")))
-        warn("-digest_silac_min", "-label_out");
-      if (!getFlag_("glyco"))
+      const bool glyco_flag = getFlag_("glyco");
+      // -taxdb and -species_out together switch species detection on, so
+      // either one alone does nothing.
+      const IgnoredOption ignored[] = {
+          {"digest_models", "-digest_out", digest_on},
+          {"digest_tag_min", "-digest_out", digest_on},
+          {"digest_background_share", "-digest_out", digest_on},
+          {"digest_window", "-digest_out or -label_out", count_on},
+          {"digest_silac_min", "-label_out", !label_out.empty()},
+          {"glyco_out", "-glyco", glyco_flag},
+          {"glyco_min_fraction", "-glyco", glyco_flag},
+          {"species_out", "-species", want_species},
+          {"taxdb", "-species", want_species},
+          {"taxonomy_nodes", "-species", want_species},
+          {"taxonomy_names", "-species", want_species},
+          {"species_rank", "-species", want_species},
+          {"species_evidence", "-species", want_species},
+          {"species_min_len", "-species", want_species},
+          {"species_max_kmer_share", "-species", want_species},
+          {"species_min_margin", "-species", want_species},
+          {"species_use_gapped", "-species", want_species},
+          {"species_deconvolve", "-species", want_species},
+          // ---- 1.12 E: ignored-option warnings ----
+          // ---- 1.12 A: ignored-option warnings ----
+          // ---- 1.12 D: ignored-option warnings ----
+          // ---- 1.12 F: ignored-option warnings ----
+      };
+      for (const IgnoredOption& r : ignored)
       {
-        if (!getStringOption_("glyco_out").empty()) warn("-glyco_out", "-glyco");
-        if (getDoubleOption_("glyco_min_fraction") != static_cast<double>(def("glyco_min_fraction")))
-          warn("-glyco_min_fraction", "-glyco");
-      }
-      if (!want_species)
-      {
-        // -taxdb and -species_out together switch species detection on, so
-        // either one alone does nothing.
-        const char* sw = "-species";
-        for (const char* o : {"species_out", "taxdb", "taxonomy_nodes", "taxonomy_names", "species_rank", "species_evidence"})
-          if (getStringOption_(o) != static_cast<std::string>(def(o))) warn((std::string("-") + o).c_str(), sw);
-        if (getIntOption_("species_min_len") != static_cast<int>(def("species_min_len")))
-          warn("-species_min_len", sw);
-        for (const char* o : {"species_max_kmer_share", "species_min_margin"})
-          if (getDoubleOption_(o) != static_cast<double>(def(o))) warn((std::string("-") + o).c_str(), sw);
-        for (const char* o : {"species_use_gapped", "species_deconvolve"})
-          if (getFlag_(o)) warn((std::string("-") + o).c_str(), sw);
+        if (!r.read && optionNonDefault_(r.option))
+        {
+          OPENMS_LOG_WARN << "-" << r.option << " is only read for " << r.reader << "; it is ignored here."
+                          << std::endl;
+        }
       }
     }
     const std::string digest_dir = (digest_on || massgap_on) ? digestDir_() : std::string();
@@ -1913,28 +1981,39 @@ protected:
     // output is opened, with the default report paths resolved as below.
     {
       namespace fs = std::filesystem;
-      std::vector<std::pair<std::string, std::string>> outs;
-      const auto add = [&outs](const char* opt, const std::string& path) {
-        if (!path.empty()) outs.emplace_back(opt, path);
-      };
-      add("out", out);
-      add("out_spectra", out_spectra);
-      add("recon_out", recon_out);
-      add("delta_out", delta_out);
-      add("recon_id_out", recon_id_out);
-      add("digest_out", digest_out);
-      add("label_out", label_out);
-      add("massgap_out", massgap_out);
+      // One row per output: {option, path the run will write, empty when it
+      // writes none}. Rows are checked in table order. Each 1.12 cluster adds
+      // its outputs at its own anchor.
+      std::string glyco_path, species_path;
       if (getFlag_("glyco"))
       {
         const std::string g = getStringOption_("glyco_out");
-        add("glyco_out", g.empty() ? defaultReportPath(out, ".glyco.tsv") : g);
+        glyco_path = g.empty() ? defaultReportPath(out, ".glyco.tsv") : g;
       }
       if (want_species)
       {
         const std::string sp = getStringOption_("species_out");
-        add("species_out", sp.empty() ? defaultReportPath(out, ".species.tsv") : sp);
+        species_path = sp.empty() ? defaultReportPath(out, ".species.tsv") : sp;
       }
+      const std::pair<const char*, const std::string*> output_paths[] = {
+          {"out", &out},
+          {"out_spectra", &out_spectra},
+          {"recon_out", &recon_out},
+          {"delta_out", &delta_out},
+          {"recon_id_out", &recon_id_out},
+          {"digest_out", &digest_out},
+          {"label_out", &label_out},
+          {"massgap_out", &massgap_out},
+          {"glyco_out", &glyco_path},
+          {"species_out", &species_path},
+          // ---- 1.12 E: output paths ----
+          // ---- 1.12 A: output paths ----
+          // ---- 1.12 D: output paths ----
+          // ---- 1.12 F: output paths ----
+      };
+      std::vector<std::pair<std::string, std::string>> outs;
+      for (const auto& [opt, path] : output_paths)
+        if (!path->empty()) outs.emplace_back(opt, *path);
       const auto same = [](const std::string& a, const std::string& b) {
         std::error_code ea, eb;
 #ifdef _WIN32

@@ -69,7 +69,21 @@ if(NOT MSVC)
   add_compile_options(-ffp-contract=off)
 endif()
 
-add_library(fastag_core STATIC src/FASTagger.cpp src/AveragineDeisotoper.cpp src/Digest.cpp src/DigestReport.cpp src/FastaFilter.cpp src/ProteomeIndex.cpp src/ReconIds.cpp src/TagRecon.cpp src/TaxDeconv.cpp src/TaxIndex.cpp src/TaxStats.cpp)
+# fastag_core sources. 1.12 clusters add their sources only to their own
+# anchored list, in the fixed order E, A, D, F (E data types and acquisition,
+# A identification and search hand-off, D organism and run chemistry, F quality
+# control).
+set(FASTAG_CORE_SOURCES src/FASTagger.cpp src/AveragineDeisotoper.cpp src/Digest.cpp src/DigestReport.cpp src/FastaFilter.cpp src/ProteomeIndex.cpp src/ReconIds.cpp src/TagRecon.cpp src/TaxDeconv.cpp src/TaxIndex.cpp src/TaxStats.cpp)
+# ---- 1.12 E: core sources ----
+set(FASTAG_CORE_SOURCES_E)
+# ---- 1.12 A: core sources ----
+set(FASTAG_CORE_SOURCES_A)
+# ---- 1.12 D: core sources ----
+set(FASTAG_CORE_SOURCES_D)
+# ---- 1.12 F: core sources ----
+set(FASTAG_CORE_SOURCES_F)
+add_library(fastag_core STATIC ${FASTAG_CORE_SOURCES}
+            ${FASTAG_CORE_SOURCES_E} ${FASTAG_CORE_SOURCES_A} ${FASTAG_CORE_SOURCES_D} ${FASTAG_CORE_SOURCES_F})
 target_include_directories(fastag_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
@@ -230,7 +244,18 @@ endif()
 option(FASTAG_BUILD_TESTS "Build tests" ON)
 if(FASTAG_BUILD_TESTS)
   enable_testing()
-  foreach(t ranksum_test fastag_test fasta_filter_test tagrecon_test tagfdr_test proteome_index_test glyco_test taxindex_test taxstats_test taxdeconv_test species_evidence_test sampler_test proforma_test numformat_test peakgrid_test formats_test digest_test)
+  # Unit tests: test/<name>.cpp linked against fastag_core. 1.12 clusters add
+  # their tests only to their own anchored list.
+  set(FASTAG_UNIT_TESTS ranksum_test fastag_test fasta_filter_test tagrecon_test tagfdr_test proteome_index_test glyco_test taxindex_test taxstats_test taxdeconv_test species_evidence_test sampler_test proforma_test numformat_test peakgrid_test formats_test digest_test)
+  # ---- 1.12 E: unit tests ----
+  set(FASTAG_UNIT_TESTS_E)
+  # ---- 1.12 A: unit tests ----
+  set(FASTAG_UNIT_TESTS_A)
+  # ---- 1.12 D: unit tests ----
+  set(FASTAG_UNIT_TESTS_D)
+  # ---- 1.12 F: unit tests ----
+  set(FASTAG_UNIT_TESTS_F)
+  foreach(t ${FASTAG_UNIT_TESTS} ${FASTAG_UNIT_TESTS_E} ${FASTAG_UNIT_TESTS_A} ${FASTAG_UNIT_TESTS_D} ${FASTAG_UNIT_TESTS_F})
     add_executable(${t} test/${t}.cpp)
     target_link_libraries(${t} PRIVATE fastag_core)
     add_test(NAME ${t} COMMAND ${t})
@@ -322,6 +347,14 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta)
   set_tests_properties(recon_ids_test PROPERTIES SKIP_RETURN_CODE 77)
+
+  # 1.12 CLI tests against the real binary, one anchored block per cluster in
+  # the order E, A, D, F. A cluster adds its add_test calls only inside its
+  # own block.
+  # ---- 1.12 E: CLI tests ----
+  # ---- 1.12 A: CLI tests ----
+  # ---- 1.12 D: CLI tests ----
+  # ---- 1.12 F: CLI tests ----
 
   # mzPeak reader vs its own mzML twin. Needs a matched pair of real files, so
   # it SKIPs unless FASTAG_E2E_MZML and FASTAG_E2E_MZPEAK point at one.
