@@ -1,0 +1,4 @@
+summary 47470 MS2 spectra, 2011647 tags
+exit 0
+file tags.tsv 878dc335f3b85c9eac9dc71ff60f59507956b55f7f8d5316cfa2fc0d1e070f01
+info mzML: centroided 47470 profile spectra on read
