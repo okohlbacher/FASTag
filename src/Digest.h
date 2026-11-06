@@ -284,6 +284,52 @@ namespace FASTag::Digest
   /// The -label_out rows after @p run.
   std::vector<Row> labelRows(const TerminusCounter& tc, const DigestSettings& s);
 
+  /// The C-terminal K/R share of the tag ends, labelled K and R+10 included:
+  /// the -digest_out row share.kr (res() / tot() summed over the K and R keys
+  /// in residueKeys() order). Needs tot() > 0.
+  double krShare(const TerminusCounter& tc);
+
+  // ---- label_call (FASTag 1.12 #3a) ---------------------------------------
+  //
+  // The label call prose-auto 0.1.10 makes from FASTag's -digest_out and
+  // -label_out (prose_auto/external.py fastag_termini / termini_evidence,
+  // commit e15aaf7), ported rule for rule so both call the same label from
+  // the same counts. It reads the tag-end counts only, never the mass-gap
+  // result, so -massgap_out cannot change it.
+  //   - no_call low_resolution: the fragment tolerance is in Da (prose-auto
+  //     runs the termini only on ppm runs);
+  //   - no_call few_tags: fewer than kLabelTagMin C-terminal tag ends
+  //     (tot(), prose-auto's TAG_MIN);
+  //   - an isobaric label (labelKeys() order) when its count reaches
+  //     kLabelMinShare of the filtered tags AND kLabelBackgroundFold times
+  //     max(its +0.5 Da background, 1);
+  //   - SILAC (Lys8/Arg10) when the heavy K8 and R10 shares are both
+  //     >= kHeavyMin, the K/R share rounded to 3 decimals (as prose-auto
+  //     compares it) is >= kKrTryptic and the K- and R-terminal ends are each
+  //     >= DigestSettings::silac_min (50, prose-auto's SILAC_MIN_TAGS);
+  //     strong when both shares are >= kHeavyStrong;
+  //   - every label that passes is listed (isobaric first); none is
+  //     label-free.
+  inline constexpr std::uint64_t kLabelTagMin = 175;
+  inline constexpr double kLabelMinShare = 0.01, kLabelBackgroundFold = 20.0;
+  inline constexpr double kHeavyMin = 0.2, kHeavyStrong = 0.3, kKrTryptic = 0.8;
+
+  struct LabelCall
+  {
+    bool called = false;
+    std::string reason;               ///< no call: low_resolution or few_tags
+    std::vector<std::string> labels;  ///< labelKeys() names that passed, then "SILAC"
+    bool isobaric = false;            ///< an isobaric label passed
+    bool silac = false, silac_strong = false;
+    double kr_rounded = 0.0;          ///< krShare() rounded to 3 decimals; 0 when tot() is 0
+  };
+
+  /// The label call over the tag-end counts (see above).
+  LabelCall labelCall(const TerminusCounter& tc, const DigestSettings& s);
+  /// The label_call rows -label_out appends after labelRows(): status, label,
+  /// basis, silac and reason, in that order.
+  std::vector<Row> labelCallRows(const LabelCall& c, const TerminusCounter& tc, const DigestSettings& s);
+
   struct GapSettings
   {
     double window = 0.02;  ///< the window in use (ppm or Da run)

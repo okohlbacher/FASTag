@@ -12,6 +12,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <limits>
 
 namespace FASTag::Digest
@@ -174,16 +175,13 @@ namespace FASTag::Digest
     }
 
     // ---- shares, from res / tot as the reference computes them
-    const auto& keys = residueKeys();
     if (tot > 0)
     {
-      PySum kr, anch;
-      for (int k = 0; k < kNumKeys; ++k)
-        if (keys[k].name[0] == 'K' || keys[k].name[0] == 'R')
-          kr.add(static_cast<double>(tc.res(k)) / static_cast<double>(tot));
+      const double kr = krShare(tc);
+      PySum anch;
       for (const char* a : {"L", "V", "F", "Y", "M"})
         anch.add(static_cast<double>(tc.res(keyIndex(a))) / static_cast<double>(tot));
-      r.add("share", "kr", num(kr.value()), u(tot), "A share of " + f(kr.value(), 3) + " of the C-terminal tag ends are K or R, labelled ones included.");
+      r.add("share", "kr", num(kr), u(tot), "A share of " + f(kr, 3) + " of the C-terminal tag ends are K or R, labelled ones included.");
       r.add("share", "anchors_LVFYM", num(anch.value()), u(tot), "A share of " + f(anch.value(), 3) + " of the C-terminal tag ends are L, V, F, Y or M.");
     }
     else
@@ -322,6 +320,17 @@ namespace FASTag::Digest
     return out;
   }
 
+  double krShare(const TerminusCounter& tc)
+  {
+    const auto& keys = residueKeys();
+    const std::uint64_t tot = tc.tot();
+    PySum kr;
+    for (int k = 0; k < kNumKeys; ++k)
+      if (keys[k].name[0] == 'K' || keys[k].name[0] == 'R')
+        kr.add(static_cast<double>(tc.res(k)) / static_cast<double>(tot));
+    return kr.value();
+  }
+
   std::vector<Row> labelRows(const TerminusCounter& tc, const DigestSettings& s)
   {
     std::vector<Row> out;
@@ -364,6 +373,120 @@ namespace FASTag::Digest
     const std::uint64_t smin = static_cast<std::uint64_t>(std::max(0, s.silac_min));
     r.add("heavy", "gate", nk >= smin && nr >= smin ? "yes" : "no", "-",
           u(nk) + " K and " + u(nr) + " R tag ends against a minimum of " + std::to_string(s.silac_min) + " each.");
+    return out;
+  }
+
+  namespace
+  {
+    /// The heavy share of -label_out's heavy rows: heavy / (heavy + light),
+    /// both as shares of tot.
+    double heavyShare(const TerminusCounter& tc, int light, int hv)
+    {
+      const std::uint64_t tot = tc.tot();
+      const double sl = static_cast<double>(tc.res(light)) / static_cast<double>(tot);
+      const double sh = static_cast<double>(tc.res(hv)) / static_cast<double>(tot);
+      return sh / std::max(sh + sl, 1e-9);
+    }
+
+    /// @p v rounded to 3 decimals as Python's round(v, 3) rounds it: the
+    /// decimal nearest to the double's exact value (no binary double lies
+    /// exactly half-way between two 3-decimal numbers), read back.
+    double round3(double v)
+    {
+      char b[64];
+      std::snprintf(b, sizeof b, "%.3f", v);
+      return std::strtod(b, nullptr);
+    }
+  }
+
+  LabelCall labelCall(const TerminusCounter& tc, const DigestSettings& s)
+  {
+    LabelCall c;
+    const std::uint64_t tot = tc.tot();
+    if (tot > 0) c.kr_rounded = round3(krShare(tc));
+    if (s.low_resolution) { c.reason = "low_resolution"; return c; }
+    if (tot < kLabelTagMin) { c.reason = "few_tags"; return c; }
+    c.called = true;
+    const double tags = static_cast<double>(tc.tags);
+    const auto& labs = labelKeys();
+    for (std::size_t l = 0; l < labs.size(); ++l)
+    {
+      const double x = static_cast<double>(tc.lab_n[l] + tc.lab_c[l]);
+      const double bg = static_cast<double>(tc.lab_bg_n[l] + tc.lab_bg_c[l]);
+      if (x >= kLabelMinShare * tags && x >= kLabelBackgroundFold * std::max(bg, 1.0))
+      {
+        c.labels.push_back(labs[l].name);
+        c.isobaric = true;
+      }
+    }
+    const int K = keyIndex("K"), K8 = keyIndex("K+8"), R = keyIndex("R"), R10 = keyIndex("R+10");
+    const double hk = heavyShare(tc, K, K8), hr = heavyShare(tc, R, R10);
+    const std::uint64_t nk = tc.res(K) + tc.res(K8), nr = tc.res(R) + tc.res(R10);
+    const std::uint64_t smin = static_cast<std::uint64_t>(std::max(0, s.silac_min));
+    if (hk >= kHeavyMin && hr >= kHeavyMin && c.kr_rounded >= kKrTryptic && std::min(nk, nr) >= smin)
+    {
+      c.labels.push_back("SILAC");
+      c.silac = true;
+      c.silac_strong = std::min(hk, hr) >= kHeavyStrong;
+    }
+    return c;
+  }
+
+  std::vector<Row> labelCallRows(const LabelCall& c, const TerminusCounter& tc, const DigestSettings& s)
+  {
+    std::vector<Row> out;
+    Rows r{out};
+    const std::uint64_t tot = tc.tot();
+    const std::string sec = "label_call";
+    if (!c.called)
+    {
+      const std::string why =
+          c.reason == "low_resolution"
+              ? "the fragment tolerance is in Da, so the label windows do not hold"
+              : u(tot) + " C-terminal tag ends are fewer than " + std::to_string(kLabelTagMin);
+      r.add(sec, "status", "no_call", u(tot), "No label is called: " + why + ".");
+      r.add(sec, "label", "-", "-", "There is no label call.");
+      r.add(sec, "basis", "-", "-", "There is no label call.");
+      r.add(sec, "silac", "-", "-", "There is no label call.");
+      r.add(sec, "reason", c.reason, "-", "The first no-call rule that applies is " + c.reason + ".");
+      return out;
+    }
+    std::string label;
+    for (const std::string& l : c.labels) label += (label.empty() ? "" : "+") + l;
+    if (label.empty()) label = "label-free";
+    r.add(sec, "status", "call", u(tot),
+          "A label call is made from " + u(tot) + " C-terminal tag ends and " + u(tc.tags) + " filtered tags.");
+    std::string desc;
+    if (c.labels.empty())
+      desc = "No label passes: no isobaric gap reaches " + g(kLabelMinShare * 100, 3) + "% of the filtered tags and " +
+             g(kLabelBackgroundFold, 3) + "x its background, and the heavy shares do not make SILAC.";
+    else
+    {
+      desc = "The run is labelled " + label + ".";
+      for (const std::string& l : c.labels)
+        if (l == "TMTpro") desc += " TMTpro and iTRAQ8plex have the same mass; the reporter ions decide.";
+    }
+    r.add(sec, "label", label, u(tc.tags), desc);
+    std::string basis = c.isobaric ? "nterm_gap" : "";
+    if (c.silac) basis += std::string(basis.empty() ? "" : "+") + "heavy_share";
+    if (basis.empty()) basis = "none";
+    r.add(sec, "basis", basis, "-",
+          basis == "none" ? "No label rule fired."
+          : "The call rests on " +
+                std::string(c.isobaric && c.silac ? "N-terminal label gaps of at least " + g(kLabelMinShare * 100, 3) +
+                                                        "% of the filtered tags and the heavy Lys8/Arg10 shares"
+                            : c.isobaric ? "N-terminal label gaps of at least " + g(kLabelMinShare * 100, 3) +
+                                               "% of the filtered tags and " + g(kLabelBackgroundFold, 3) + "x their background"
+                                         : "the heavy Lys8/Arg10 shares") +
+                ".");
+    const std::string sil = c.silac ? (c.silac_strong ? "strong" : "weak") : "none";
+    r.add(sec, "silac", sil, "-",
+          c.silac ? "Lys8 and Arg10 are each at least " + g(c.silac_strong ? kHeavyStrong : kHeavyMin, 3) +
+                        " of their residue's C-terminal ends, the K/R share is " + f(c.kr_rounded, 3) + " and " +
+                        std::to_string(s.silac_min) + " K- and R-terminal ends each are reached."
+                  : "SILAC needs Lys8 and Arg10 shares of at least " + g(kHeavyMin, 3) + ", a K/R share of at least " +
+                        g(kKrTryptic, 3) + " and " + std::to_string(s.silac_min) + " K- and R-terminal ends each.");
+    r.add(sec, "reason", "-", "-", "A label call is made.");
     return out;
   }
 
