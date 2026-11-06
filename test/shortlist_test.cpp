@@ -325,6 +325,62 @@ int main()
           "a conflict between database and background is reported");
     check(SL::selectBackground({}, {entry("Z", "", "AK"), entry("Z", "", "AR")}, SL::defaultDecoyAffixes(), kept) == "Z",
           "a conflict within the background is reported");
+    // A background entry identical to a database entry the selection did not
+    // keep is kept through that entry (once, at its canonical ordinal).
+    {
+      const std::vector<FASTAFile::FASTAEntry> tdb = {entry("H1", "", "PEPK"), entry("H2", "", "MMMK"),
+                                                      entry("H1", "", "PEPK"), entry("H3", "", "CCCK")};
+      const std::vector<FASTAFile::FASTAEntry> tbg = {entry("H1", "", "PEPK"), entry("H2", "", "MMMK"),
+                                                      entry("H9", "", "WWWK")};
+      std::vector<std::uint32_t> twins;
+      std::size_t tdup = 0;
+      check(SL::selectBackground(tdb, tbg, SL::defaultDecoyAffixes(), kept, nullptr, &tdup, &twins).empty() &&
+                kept.size() == 1 && kept[0].identifier == "H9" && tdup == 2 &&
+                twins == std::vector<std::uint32_t>({0, 1}),
+            "background duplicates report their first database ordinal");
+      auto tp = proteins(4);
+      const auto td = SL::checkDuplicates(tdb);
+      for (std::uint32_t i = 0; i < 4; ++i)
+      {
+        tp[i].accession = tdb[i].identifier;
+        tp[i].canonical = td.canonical[i];
+      }
+      // H1 has one spectrum (below min_spectra 2), H2 none, H3 two (selected).
+      SL::Settings ts = open_settings();
+      ts.min_spectra = 2;
+      auto trows = SL::rankProteins({ev(1, 2, 0.01f), ev(2, 3, 0.01f), ev(3, 3, 0.01f)}, tp, ts);
+      std::vector<bool> tkeep(4, false);
+      for (const auto& r : trows)
+        if (r.kept) tkeep[r.ordinal] = true;
+      check(row(trows, "H1") && !row(trows, "H1")->kept && row(trows, "H1")->reason == "below_min_spectra",
+            "H1 is below min_spectra before the background");
+      check(SL::keepBackgroundTwins(twins, tp, tkeep, trows) == 2 &&
+                tkeep == std::vector<bool>({true, true, false, true}),
+            "background twins below min_spectra or without evidence are kept, at the canonical ordinal");
+      check(row(trows, "H1")->kept && row(trows, "H1")->reason == "background" && row(trows, "H1")->spectra == 1,
+            "a ranked twin's row becomes kept, reason background");
+      check(row(trows, "H2") && row(trows, "H2")->kept && row(trows, "H2")->reason == "background" &&
+                row(trows, "H2")->rank == 0 && row(trows, "H2")->spectra == 0,
+            "a twin without evidence gets a background row");
+      check(row(trows, "H3")->reason == "selected", "a selected protein stays selected");
+      check(SL::keepBackgroundTwins(twins, tp, tkeep, trows) == 0, "keeping twins twice adds nothing");
+      const fs::path troot = fs::temp_directory_path() / ("fastag-sl-twins-" + std::to_string(::getpid()));
+      fs::create_directories(troot);
+      {
+        std::ofstream f(troot / "db.fasta");
+        for (const auto& e : tdb) f << '>' << e.identifier << '\n' << e.sequence << '\n';
+      }
+      const auto wr = SL::writeReducedFasta((troot / "db.fasta").string(), tkeep, kept, (troot / "out.fasta").string());
+      std::vector<FASTAFile::FASTAEntry> back;
+      if (wr.ok) FASTAFile().load((troot / "out.fasta").string(), back);
+      std::size_t n_h1 = 0;
+      for (const auto& e : back) n_h1 += e.identifier == "H1";
+      check(wr.ok && back.size() == 4 && n_h1 == 1 && back[0].identifier == "H1" && back[1].identifier == "H2" &&
+                back[2].identifier == "H3" && back[3].identifier == "H9",
+            "-fasta_out holds a background twin exactly once, in database order, then the new background");
+      std::error_code ec;
+      fs::remove_all(troot, ec);
+    }
   }
 
   // ---- 11. shuffled evidence gives an identical result

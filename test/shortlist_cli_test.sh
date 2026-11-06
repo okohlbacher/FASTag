@@ -5,7 +5,8 @@
 #   a. prsA, metK and rplF rank 1-3 and are kept; no foreign protein reaches
 #      -shortlist_min_spectra; no decoy is kept or written to -fasta_out;
 #   b. -fasta_out holds exactly the kept proteins, verbatim but rewrapped,
-#      then the background, without its decoys and without duplicates;
+#      then the background, without its decoys and without duplicates; a
+#      background duplicate of a protein the shortlist left out is written once;
 #   c. every shared output (-out, -recon_out, -delta_out, -massgap_out,
 #      -recon_id_out as idXML and mzid) is identical with and without the new
 #      options; with FASTAG_BASELINE_BIN also identical to the 1.11.0 binary;
@@ -16,7 +17,8 @@
 #      tolerances and mods; the Comet one merges into a template;
 #   h. the protease check: an in-silico chymotryptic run refuses the FASTA and
 #      the configuration (shortlist written, non-zero exit) unless
-#      -shortlist_force; a Da run is inconclusive and proceeds.
+#      -shortlist_force; with -shortlist_out alone nothing is withheld (WARN,
+#      exit 0); a Da run is inconclusive and proceeds.
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 BIN="$1"
@@ -92,6 +94,20 @@ tail -2 "$TMP/bg/red.fasta" | head -1 | grep -q '^>BG1 host protein$' || fail "b
 grep -q 'DECOY_BG2' "$TMP/bg/red.fasta" && fail "a background decoy was written"
 [ "$(grep -c '^>VIMSS15329' "$TMP/bg/red.fasta")" = 1 ] || fail "a background duplicate of a kept protein was written twice"
 rows "$TMP/bg/sl.tsv" | grep -q $'\tBG1\t.*\tbackground$' || fail "no background row in the shortlist"
+# background: a duplicate of a database protein the shortlist did not keep
+# (a foreign one, below -shortlist_min_spectra) is still written, exactly once
+twin=$(grep '^>' "$DB" | sed 's/^>//; s/ .*//' | grep -v -E '^(VIMSS|DECOY_|rev_)' | head -1)
+[ -n "$twin" ] || fail "no foreign protein in the fixture database"
+rows "$TMP/b/sl.tsv" | awk -F'\t' -v t="$twin" '$2 == t && $11 == 1 { bad = 1 } END { exit bad }' \
+  || fail "$twin is kept without the background (the case needs a protein that is not)"
+awk -v t=">$twin" '$1 == t { p = 1; print; next } /^>/ { p = 0 } p' "$DB" > "$TMP/bgtwin.fasta"
+run "$TMP/bgt" "$BIN" -out t.tsv -shortlist_out sl.tsv -fasta_out red.fasta -shortlist_background "$TMP/bgtwin.fasta" -threads 2
+[ "$(awk -v t=">$twin" '$1 == t { n++ } END { print n + 0 }' "$TMP/bgt/red.fasta")" = 1 ] \
+  || fail "a background duplicate of a database protein below min_spectra is not in -fasta_out exactly once"
+[ "$(grep -c '^>' "$TMP/bgt/red.fasta")" = 4 ] || fail "background twin: expected 3 kept + the twin"
+rows "$TMP/bgt/sl.tsv" | awk -F'\t' -v t="$twin" '$2 == t && $11 == 1 && $12 == "background" { ok = 1 } END { exit !ok }' \
+  || fail "the background twin's shortlist row is not kept 1, reason background"
+grep -q '1 database entries kept as background' "$TMP/bgt/sl.tsv" || fail "the shortlist header does not count the twin"
 
 # ---- c: shared outputs identical with and without the new options
 run "$TMP/a" "$BIN" "${SHARED[@]}" -recon_id_out ids.idXML -threads 2
@@ -195,5 +211,15 @@ grep -q 'Chymotrypsin fits the tag ends best' "$TMP/ch.log" || { cat "$TMP/ch.lo
 [ -e "$TMP/chf.fasta" ] && [ -s "$TMP/chf.json" ] || fail "-shortlist_force did not write the hand-off outputs"
 grep -q 'shortlist_force writes the hand-off outputs anyway' "$TMP/chf.log" || fail "no WARN under -shortlist_force"
 cmp -s "$TMP/ch.tsv" "$TMP/chf.tsv" || fail "the protease check changed the tag TSV"
+# nothing withheld: a shortlist-only run gets its TSV with the call, a WARN and exit 0
+( cd "$TMP" && "$BIN" "${CH[@]}" -out cho.tsv -shortlist_out cho.sl.tsv > cho.log 2>&1 ) \
+  || { cat "$TMP/cho.log" >&2; fail "a non-tryptic shortlist-only run did not exit 0"; }
+grep -q '^# protease: non_tryptic Chymotrypsin' "$TMP/cho.sl.tsv" || fail "the shortlist-only run's TSV lacks the call"
+grep -q 'the call is in its header' "$TMP/cho.log" || fail "no protease WARN in a shortlist-only run"
+grep -q 'Not writing' "$TMP/cho.log" && fail "a shortlist-only run names outputs it was not asked for"
+# only -fasta_out asked: refused, and the ERROR names only -fasta_out
+( cd "$TMP" && "$BIN" "${CH[@]}" -out chq.tsv -shortlist_out chq.sl.tsv -fasta_out chq.fasta > chq.log 2>&1 ); rc=$?
+[ $rc != 0 ] && [ ! -e "$TMP/chq.fasta" ] || fail "a non-tryptic run with -fasta_out was not refused"
+grep -q 'Not writing -fasta_out (' "$TMP/chq.log" || { cat "$TMP/chq.log" >&2; fail "the ERROR does not name exactly -fasta_out"; }
 
 echo "shortlist_cli_test: all checks passed"

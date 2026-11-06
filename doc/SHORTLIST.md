@@ -40,7 +40,12 @@ Selection, in order: (1) `spectra >= -shortlist_min_spectra` (provisional 2);
 higher-ranked kept protein has is `subset_of:<accession>`, after DBReducer's
 grouping) or `greedy` (a greedy set cover of the spectra, after MetaNovo;
 others `not_in_cover`); (3) `-shortlist_top` with ties at the cut kept
-(`beyond_top`); (4) `-shortlist_background` is always appended (`background`).
+(`beyond_top`); (4) `-shortlist_background` is always kept (`background`):
+its entries are appended, except one identical to a database entry, which is
+kept as that database entry (written once, in database order) whether or not
+the selection kept it. Such an entry's row gets `kept 1`, reason `background`
+(a row without rank and evidence when it had none), and the header counts it
+("N database entries kept as background").
 
 ## Decoys and duplicates
 
@@ -71,7 +76,9 @@ Placement windows are tryptic, so the run's tag ends (ungapped, E <= 1, the
 - another protease ahead by at least 0.05 per tag end: ERROR; the shortlist is
   written with the call in its header, `-fasta_out` and `-search_config_out`
   are not, and the run exits `ILLEGAL_PARAMETERS`, unless `-shortlist_force`
-  (then WARN).
+  (then WARN). The ERROR names only the outputs that were asked for. A run that
+  asks for `-shortlist_out` alone withholds nothing: it gets a WARN, the call
+  in the shortlist header, and exits 0.
 
 Measured on the public gate inputs (2026-11-07, data): PXD003531, PXD014764
 and PXD004541 call Trypsin; PXD040407 (chymotrypsin) calls `unspecific`, 1.44
@@ -120,6 +127,18 @@ Comet syntax (15 variable slots, the 8-field slot format) follows CometAdapter
 and Comet's documentation and is unverified against the pinned binary; the
 test template `test/fixtures/comet_template.params` is written in CometAdapter's
 layout, not by `comet -p`.
+
+**`-search_engine comet` is unverified.** This is a recorded deviation from
+the plan (validation registry A5-01): the plan asks for a real `comet -p`
+template from Comet 2026.03.0 as the test fixture, and no pinned Comet binary
+is available on the build node yet. The key names in `search_config_test` are
+checked against lists taken from OpenMS's SageAdapter and CometAdapter
+sources, which is our own reading, not an independent reference (the adapter
+test `.ini` files list TOPP parameter names, not engine keys). Not verified
+against the binary: the `isotope_error` value for 0..3 (copied from
+`-search_isotope_errors`), the 15 `variable_mod` slots and their 8-field
+format, an empty or 0-first `mass_offsets`, and how Comet treats negative
+offsets. Check a Comet configuration by hand before relying on it.
 
 ## Known limits
 

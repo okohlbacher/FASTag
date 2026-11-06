@@ -437,7 +437,7 @@ MGF→mzML direction is exact.
 | `-massgap_silac_share <f>` / `-massgap_silac_min <n>` | 0.08 / 500 | Advanced: share a SILAC label needs; shifted spectra a SILAC call needs |
 | `-shortlist_out <file>` | none | Experimental (1.12): ranked protein shortlist from the tag placements on `-recon_fasta` (or `-fasta`), one row per protein with evidence (see Protein shortlist and search hand-off). A search-space reduction, NOT FDR-controlled |
 | `-fasta_out <file>` | none | Experimental: reduced FASTA of the kept proteins (never decoys), then `-shortlist_background` |
-| `-shortlist_background <file>` | none | Proteins always appended to `-fasta_out` (host proteome, contaminants); decoys and entries already in the database are left out |
+| `-shortlist_background <file>` | none | Proteins always written to `-fasta_out` (host proteome, contaminants), decoys left out; an entry identical to a database entry is written once, as that entry (kept even below the shortlist cut, reason `background`) |
 | `-shortlist_max_evalue <f>` / `-shortlist_min_spectra <n>` | 0.1 / 2 | Advanced, provisional: E-value a tag needs for its placements to count; spectra a protein needs to be kept |
 | `-shortlist_gapped` | off | Let placements with a mass gap count (a gap equal to a fixed terminal label always counts as exact) |
 | `-shortlist_parsimony <none\|subset\|greedy>` | none | Drop proteins whose spectra a higher-ranked kept one has (`subset`), or keep a greedy set cover (`greedy`) |
@@ -445,7 +445,7 @@ MGF→mzML direction is exact.
 | `-shortlist_decoy_affix <list>` | `DECOY_ decoy_ rev_ REV_ reverse_ XXX_ shuffled_ random_ _DECOY _rev` | Advanced: accession prefixes and suffixes that mark a decoy entry |
 | `-shortlist_force` | off | Advanced: write `-fasta_out` and `-search_config_out` although the tag ends call a non-tryptic protease |
 | `-search_config_out <file>` | none | Experimental: a Sage configuration (JSON) or Comet parameters for `-fasta_out`, or for the input database without it |
-| `-search_engine <sage\|comet>` | sage | Engine of `-search_config_out` |
+| `-search_engine <sage\|comet>` | sage | Engine of `-search_config_out`; `comet` is unverified against the Comet binary (see doc/SHORTLIST.md) |
 | `-search_config_template <file>` | none | Comet only: a `comet -p` file the managed keys are merged into; without it a fragment is written |
 | `-search_precursor_tolerance <f>` / `-search_precursor_unit <ppm\|Da>` | 10 / ppm | Precursor tolerance written to the configuration |
 | `-search_isotope_errors <n>` | 0 | Precursor isotope errors 0..n (at most 3) |
@@ -608,7 +608,8 @@ own: the configuration lets the engine generate them. Placement windows are
 tryptic, so the run's tag ends are checked first: a confidently non-tryptic
 protease call (the PXD040407 chymotrypsin run calls `unspecific`) writes the
 shortlist with the call in its header but no FASTA and no configuration, and
-exits with `ILLEGAL_PARAMETERS` unless `-shortlist_force`. Only tags at or
+exits with `ILLEGAL_PARAMETERS` unless `-shortlist_force` (a run asking for
+`-shortlist_out` alone withholds nothing: WARN, exit 0). Only tags at or
 above the placement floor place (`-recon_min_length`, derived as 8 residues on
 the human proteome), so give `-extension` (3 on the gate runs). See [doc/SHORTLIST.md](doc/SHORTLIST.md).
 

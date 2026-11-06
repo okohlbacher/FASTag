@@ -1409,6 +1409,7 @@ protected:
     // database for the protease check's background.
     std::vector<FASTag::Shortlist::ProteinInfo> sl_proteins;
     std::vector<FASTAFile::FASTAEntry> sl_background;
+    std::vector<std::uint32_t> sl_bg_twins;  // database entries the background duplicates
     std::array<std::uint64_t, FASTag::Digest::kNumAA> sl_db_residues{};
     std::size_t sl_decoys = 0;
     if (place_on)
@@ -1469,7 +1470,8 @@ protected:
           FASTAFile().load(bg_path, bg);
           std::size_t bg_decoys = 0, bg_dup = 0;
           const std::string conflict =
-              FASTag::Shortlist::selectBackground(rentries, bg, sl_affixes, sl_background, &bg_decoys, &bg_dup);
+              FASTag::Shortlist::selectBackground(rentries, bg, sl_affixes, sl_background, &bg_decoys, &bg_dup,
+                                                  &sl_bg_twins);
           if (!conflict.empty())
           {
             OPENMS_LOG_ERROR << "-shortlist_background '" << bg_path << "': the identifier '" << conflict
@@ -1479,7 +1481,8 @@ protected:
           }
           OPENMS_LOG_INFO << "Shortlist background: " << sl_background.size() << " entries from '" << bg_path << "'"
                           << (bg_decoys ? ", " + std::to_string(bg_decoys) + " decoys left out" : std::string())
-                          << (bg_dup ? ", " + std::to_string(bg_dup) + " already in the database" : std::string())
+                          << (bg_dup ? ", " + std::to_string(bg_dup) + " already in the database (kept through it)"
+                                    : std::string())
                           << std::endl;
         }
       }
@@ -3631,19 +3634,31 @@ protected:
         else if (verdict.kind == Verdict::Inconclusive)
           OPENMS_LOG_WARN << "Shortlist protease check inconclusive: " << verdict.reason
                           << "; the placement assumes trypsin." << std::endl;
-        else if (force)
-          OPENMS_LOG_WARN << "Shortlist protease check: " << verdict.reason
-                          << "; -shortlist_force writes the hand-off outputs anyway." << std::endl;
         else
-          OPENMS_LOG_ERROR << "Shortlist protease check: " << verdict.reason
-                           << "; the placement windows are tryptic, so the shortlist does not describe this run. "
-                              "Not writing -fasta_out or -search_config_out (-shortlist_force overrides)." << std::endl;
-        handoff_refused = verdict.kind == Verdict::NonTryptic && !force;
+        {
+          // Refused only when something is withheld: a run asking for the
+          // shortlist alone gets it, with the call in its header, and exits 0.
+          std::string withheld;
+          if (!fasta_out.empty()) withheld = "-fasta_out";
+          if (!search_config_out.empty()) withheld += (withheld.empty() ? "" : " or ") + std::string("-search_config_out");
+          if (force)
+            OPENMS_LOG_WARN << "Shortlist protease check: " << verdict.reason
+                            << "; -shortlist_force writes the hand-off outputs anyway." << std::endl;
+          else if (withheld.empty())
+            OPENMS_LOG_WARN << "Shortlist protease check: " << verdict.reason
+                            << "; the placement windows are tryptic, so the shortlist does not describe this run "
+                               "(the call is in its header)." << std::endl;
+          else
+            OPENMS_LOG_ERROR << "Shortlist protease check: " << verdict.reason
+                             << "; the placement windows are tryptic, so the shortlist does not describe this run. "
+                                "Not writing " << withheld << " (-shortlist_force overrides)." << std::endl;
+          handoff_refused = !force && !withheld.empty();
+        }
 
         std::vector<bool> keep(sl_proteins.size(), false);
         if (shortlist_on)
         {
-          const auto rows = FASTag::Shortlist::rankProteins(run_acc.a.sl, sl_proteins, sl_settings);
+          auto rows = FASTag::Shortlist::rankProteins(run_acc.a.sl, sl_proteins, sl_settings);
           std::size_t n_kept = 0, n_target = 0;
           for (const auto& r : rows)
           {
@@ -3654,6 +3669,12 @@ protected:
               ++n_kept;
             }
           }
+          // The background is always kept, also where it duplicates a database
+          // entry the selection left out.
+          const std::size_t n_bg_db = FASTag::Shortlist::keepBackgroundTwins(sl_bg_twins, sl_proteins, keep, rows);
+          if (n_bg_db > 0)
+            OPENMS_LOG_INFO << "Shortlist background: " << n_bg_db
+                            << " database entries not selected are kept as background." << std::endl;
           if (n_kept == 0)
             OPENMS_LOG_WARN << "Shortlist: no protein has " << sl_settings.min_spectra << " qualifying spectra"
                             << (fasta_out.empty() || handoff_refused ? "" : "; -fasta_out holds the background only")
@@ -3677,7 +3698,9 @@ protected:
                 std::string("protease: ") + kind + (verdict.model.empty() ? "" : " " + verdict.model) + " (" +
                     verdict.reason + ")",
                 "proteins: " + std::to_string(n_target) + " with evidence, " + std::to_string(n_kept) +
-                    " kept; decoy entries in the database: " + std::to_string(sl_decoys)};
+                    " kept" + (n_bg_db ? ", " + std::to_string(n_bg_db) + " database entries kept as background"
+                                       : std::string()) +
+                    "; decoy entries in the database: " + std::to_string(sl_decoys)};
             if (subsampling) header.push_back("counts are over the -subsample_* spectra only");
             if (filtering) header.push_back("-fasta filtered the tags before placement");
             std::string err;
@@ -4313,7 +4336,8 @@ protected:
     }
 
     g_t_main_end = std::chrono::steady_clock::now();
-    // #5: a confidently non-tryptic run wrote no FASTA and no configuration.
+    // #5: a confidently non-tryptic run withheld the FASTA or the
+    // configuration it was asked for (a shortlist-only run is not refused).
     if (handoff_refused) return ILLEGAL_PARAMETERS;
     return EXECUTION_OK;
   }

@@ -103,12 +103,18 @@ namespace FASTag::Shortlist
                                const std::vector<OpenMS::FASTAFile::FASTAEntry>& background,
                                const std::vector<std::string>& affixes,
                                std::vector<OpenMS::FASTAFile::FASTAEntry>& kept, std::size_t* decoys,
-                               std::size_t* duplicates)
+                               std::size_t* duplicates, std::vector<std::uint32_t>* in_database)
   {
     kept.clear();
+    if (in_database) in_database->clear();
     std::size_t n_decoys = 0, n_dup = 0;
     std::unordered_map<std::string, const std::string*> seen;  // identifier -> sequence
-    for (const auto& e : database) seen.emplace(e.identifier, &e.sequence);
+    std::unordered_map<std::string, std::uint32_t> db_first;   // identifier -> first database ordinal
+    for (std::uint32_t i = 0; i < database.size(); ++i)
+    {
+      seen.emplace(database[i].identifier, &database[i].sequence);
+      db_first.emplace(database[i].identifier, i);
+    }
     std::string conflict;
     for (const auto& e : background)
     {
@@ -123,6 +129,9 @@ namespace FASTag::Shortlist
         if (*it->second == e.sequence)
         {
           ++n_dup;
+          // A duplicate of a database entry is kept through that entry.
+          const auto db = db_first.find(e.identifier);
+          if (in_database && db != db_first.end()) in_database->push_back(db->second);
           continue;
         }
         if (conflict.empty()) conflict = e.identifier;
@@ -327,6 +336,35 @@ namespace FASTag::Shortlist
     return rows;
   }
 
+  std::size_t keepBackgroundTwins(const std::vector<std::uint32_t>& twins, const std::vector<ProteinInfo>& proteins,
+                                  std::vector<bool>& keep, std::vector<ProteinRow>& rows)
+  {
+    std::size_t added = 0;
+    for (std::uint32_t t : twins)
+    {
+      if (t >= proteins.size() || t >= keep.size()) continue;
+      const std::uint32_t c = proteins[t].canonical;
+      if (c >= keep.size() || keep[c] || proteins[c].decoy) continue;
+      keep[c] = true;
+      ++added;
+      const auto row = std::find_if(rows.begin(), rows.end(), [&](const ProteinRow& r) { return r.ordinal == c; });
+      if (row != rows.end())
+      {
+        row->kept = true;
+        row->reason = "background";
+        continue;
+      }
+      ProteinRow r;
+      r.ordinal = c;
+      r.accession = proteins[c].accession;
+      r.length = proteins[c].length;
+      r.kept = true;
+      r.reason = "background";
+      rows.push_back(std::move(r));
+    }
+    return added;
+  }
+
   bool writeShortlist(const std::string& path, const std::vector<std::string>& header,
                       const std::vector<ProteinRow>& rows,
                       const std::vector<OpenMS::FASTAFile::FASTAEntry>& background, std::string* err)
@@ -361,7 +399,9 @@ namespace FASTag::Shortlist
       buf += '\t';
       appendNum(buf, r.nsaf, std::chars_format::general, 6);
       buf += '\t';
-      appendNum(buf, static_cast<double>(r.best_evalue), std::chars_format::general, 3);
+      // A database entry kept only as a background twin has no evidence.
+      if (r.spectra == 0) buf += '-';
+      else appendNum(buf, static_cast<double>(r.best_evalue), std::chars_format::general, 3);
       buf += '\t';
       appendNum(buf, r.length);
       buf += '\t';

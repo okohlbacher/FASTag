@@ -110,13 +110,17 @@ namespace FASTag::Shortlist
 
   /// The background entries to append: decoys (by @p affixes) and entries
   /// identical to an earlier background entry or to a database entry are
-  /// dropped. Returns "" or the identifier that a background entry and the
-  /// database (or two background entries) spell with different sequences.
+  /// dropped. A background entry identical to a database entry is not lost:
+  /// its database ordinal (the first entry with that identifier) goes to
+  /// @p in_database, and keepBackgroundTwins keeps that entry. Returns "" or
+  /// the identifier that a background entry and the database (or two
+  /// background entries) spell with different sequences.
   std::string selectBackground(const std::vector<OpenMS::FASTAFile::FASTAEntry>& database,
                                const std::vector<OpenMS::FASTAFile::FASTAEntry>& background,
                                const std::vector<std::string>& affixes,
                                std::vector<OpenMS::FASTAFile::FASTAEntry>& kept,
-                               std::size_t* decoys = nullptr, std::size_t* duplicates = nullptr);
+                               std::size_t* decoys = nullptr, std::size_t* duplicates = nullptr,
+                               std::vector<std::uint32_t>* in_database = nullptr);
 
   /// One row of the shortlist.
   struct ProteinRow
@@ -145,6 +149,15 @@ namespace FASTag::Shortlist
   std::vector<ProteinRow> rankProteins(std::vector<Evidence> evidence,
                                        const std::vector<ProteinInfo>& proteins,
                                        const Settings& s);
+
+  /// The background is always kept: every database entry in @p twins (from
+  /// selectBackground's in_database) that the selection did not keep is set
+  /// in @p keep (at its canonical ordinal, never a decoy), and its row becomes
+  /// kept 1, reason `background` (a row with rank `-` and no evidence is
+  /// appended when it had none). The reduced FASTA then holds it once, in
+  /// database order. Returns the number of entries newly kept.
+  std::size_t keepBackgroundTwins(const std::vector<std::uint32_t>& twins, const std::vector<ProteinInfo>& proteins,
+                                  std::vector<bool>& keep, std::vector<ProteinRow>& rows);
 
   /// Writes the shortlist TSV: '#' header lines (@p header, each written as
   /// "# <line>"), the column header, then @p rows and one `background` row per
