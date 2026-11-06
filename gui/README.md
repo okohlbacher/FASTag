@@ -22,6 +22,7 @@ gui/
     ParamField.tsx     one form field per manifest parameter
     ResultsTable.tsx   tags browser: virtualized table with filters, column choice and export
     SpeciesPanel.tsx   species report
+    Leftovers.tsx      the startup offer to remove files an unfinished run left (sweep.rs)
     DigestPanel.tsx    digest, label and mass-gap reports
     digestReport.ts    reader of the digest/label/mass-gap TSVs and the sequence-logo arithmetic
     SequenceLogo.tsx   SVG sequence logo (bits against a background)
@@ -44,6 +45,10 @@ gui/
     src/lib.rs         plugin setup and Tauri command registration
     src/fastag.rs      resolve/probe the binary, run it, stream stderr and stdout lines as events, cancel
     src/outputs.rs     the files a run writes (from its argv); removes them when it is cancelled or fails
+    src/lifetime.rs    process lifetime: the one spawner thread every CLI child starts from, PDEATHSIG
+                       (Linux), the per-run watchdog (Unix), the kill-on-close job (Windows)
+    src/sweep.rs       the marker of a running run; at startup, interrupted runs recorded and their
+                       leftovers (.part, .incomplete, partial outputs) offered for removal
     src/close_guard.rs asks before a window close or Cmd+Q kills an active run
     src/settings.rs    named presets + last-used, atomic JSON in the app config dir
     src/browser.rs     indexed million-row results browser: head read on open, index and
@@ -138,13 +143,17 @@ tests (run/batch orchestration, layout completeness, results browser, report
 parsing and logo arithmetic, Digest tab) and a typecheck: `npm test`,
 `npm run typecheck`. The Rust tests of the run lifecycle (a cancelled or
 failed run leaves no output behind) run `testing/stub-fastag/FASTag`, not the
-CLI.
+CLI. The process-lifetime tests (`lifetime::tests`, and
+`a_killed_gui_ends_the_run_and_the_next_start_offers_what_it_left`) run the
+test binary again as a stand-in GUI process and kill it with SIGKILL; the
+PDEATHSIG ones run on Linux only (the `gui` CI job), the job-object one on
+Windows only (`gui-windows`).
 
 The Playwright specs in `e2e-web/` drive the app in Chromium and WebKit on an
 explicit e2e build, `npm run build:e2e` (`vite build --mode e2e`, into
 `dist-e2e/`), which installs `src/testing/e2eBridge.ts`; each spec picks a
 scenario with `?fixture=` (`default`, `batch-fail`, `big`, `slow`,
-`lastused`). Run them with `npm run e2e` (`npx playwright install chromium
+`lastused`, `existing`, `interrupted`, and the others in `e2eBridge.ts`). Run them with `npm run e2e` (`npx playwright install chromium
 webkit` once). Any console error fails a spec. `npm run check:dist` checks
 that a release `dist/` carries none of the bridges' strings; the `ui`
 workflow runs both.

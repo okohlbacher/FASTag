@@ -168,7 +168,10 @@ top hit, and an Adjusted column after `-species_deconvolve`). The **Database
 hit** filter on `fasta_hit` offers All, In database (`fwd`/`rev`), Entrapment
 (`efwd`/`erev`) or Not in database; **Export shown rows…** writes the filtered rows, in
 the shown columns, to a new TSV. A failed run quotes FASTag's reason and offers
-its command line to copy. A **Digest** tab
+its command line to copy. A run never outlives the app: if the app is killed,
+the CLI ends within seconds (a watchdog on macOS and Linux, plus the parent-death
+signal on Linux; a kill-on-close job on Windows), and the files such a run, or a
+cancelled or failed one, left behind are offered for removal at the next start. A **Digest** tab
 shows the `-digest_out`, `-label_out` and `-massgap_out` reports: the protease
 call or no-call with its reason, sequence logos P4..P1 | P1'..P4' of the
 observed tag ends and of the called and runner-up models (in bits against the

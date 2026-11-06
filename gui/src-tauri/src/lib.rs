@@ -3,12 +3,14 @@ pub mod browser;
 mod close_guard;
 mod fastag;
 mod history;
+mod lifetime;
 mod menu;
 mod outputs;
 mod report;
 mod reveal;
 mod settings;
 mod species;
+mod sweep;
 
 use std::time::Duration;
 
@@ -21,6 +23,14 @@ use tauri::{Emitter, Manager, RunEvent, WindowEvent};
 pub use fastag::build_args_json;
 
 pub fn run() {
+    // Windows: every process this app starts from here on, including the
+    // real exe that FASTag.bat starts, is born in a job that the system
+    // kills when the app ends (lifetime.rs). Unix uses PDEATHSIG and the
+    // per-run watchdog instead.
+    #[cfg(windows)]
+    if let Err(e) = lifetime::adopt_kill_on_close_job() {
+        eprintln!("FASTag: no kill-on-close job ({e}); a run may outlive a killed app");
+    }
     let builder = tauri::Builder::default()
         // single-instance must be registered first: a second launch focuses the
         // existing window instead of racing over the settings file and run state.
@@ -67,7 +77,19 @@ pub fn run() {
             settings::save_last,
             settings::save_preset,
             settings::delete_preset,
+            sweep::leftovers_list,
+            sweep::leftovers_sweep,
+            sweep::leftovers_keep,
         ])
+        // A run of an earlier session that the app did not see end (it was
+        // killed) is recorded as interrupted before the window asks for the
+        // last run and the leftovers (sweep.rs).
+        .setup(|app| {
+            if let Some(d) = history::dir(app.handle()) {
+                sweep::recover(&d);
+            }
+            Ok(())
+        })
         .on_window_event(|window, event| match event {
             // Closing the window while a run or batch is active asks first
             // (close_guard); when idle it closes as usual.

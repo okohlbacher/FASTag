@@ -21,6 +21,7 @@ import {
 import ParamField, { type ParamValue } from './ParamField'
 import ResultsTable from './ResultsTable'
 import SpeciesPanel from './SpeciesPanel'
+import { Leftovers } from './Leftovers'
 import DigestPanel from './DigestPanel'
 import { baseName, parseReport, value, type Report } from './digestReport'
 import { IconCheck, IconClose, IconError, IconFile, IconLock, IconWarning, JobIcon, type JobStatus } from './icons'
@@ -1430,6 +1431,7 @@ export default function App(): JSX.Element {
               </>
             ) : (
               <>
+                <Leftovers />
                 {lastRun && jobs.length === 0 && (
                   <section className="block last-run" aria-labelledby="last-run-h">
                     <h2 id="last-run-h">Last run</h2>

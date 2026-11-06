@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tauri::{AppHandle, Emitter, Manager, State};
 
-use crate::{history, outputs};
+use crate::{history, lifetime, outputs, sweep};
 
 // name -> declared type, straight from the tool's own -write_ini. This is the
 // allowlist build_args() validates against. Embedded at compile time from the
@@ -258,13 +258,16 @@ fn probe_blocking(app: &AppHandle) -> BinaryInfo {
         };
     }
     let mut cmd = Command::new(&r.bin);
-    cmd.arg("--help");
+    cmd.arg("--help").stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     no_console_window(&mut cmd);
     if let Some(d) = &r.data {
         cmd.env("OPENMS_DATA_PATH", d);
     }
     quiet_blas(&mut cmd);
-    match cmd.output() {
+    // Started by the spawner thread like every CLI child (lifetime.rs): this
+    // blocking-pool thread may exit as soon as it is idle.
+    lifetime::die_with_parent(&mut cmd);
+    match lifetime::spawn(cmd).and_then(|c| c.wait_with_output()) {
         Ok(out) => {
             let text = format!(
                 "{}\n{}",
@@ -661,7 +664,13 @@ pub fn start_run(
     if !files.overwrite && !existing.is_empty() {
         return Err(exists_reason(&existing));
     }
-    let mut child = cmd.spawn().map_err(|e| e.to_string())?;
+    // Every CLI child is started by the one long-lived spawner thread and
+    // ends with the GUI: PDEATHSIG on Linux, the watchdog on every Unix, the
+    // startup job object on Windows (lifetime.rs, GUI-DESIGN 6.6).
+    lifetime::die_with_parent(&mut cmd);
+    let mut child = lifetime::spawn(cmd).map_err(|e| e.to_string())?;
+    #[cfg(unix)]
+    let watchdog = lifetime::watch(child.id());
 
     let run_id = mgr.seq.fetch_add(1, Ordering::SeqCst) + 1;
     let stdout = child.stdout.take();
@@ -692,6 +701,15 @@ pub fn start_run(
         })
     };
 
+    #[cfg(unix)]
+    let watchdog = match watchdog {
+        Ok(w) => Some(w),
+        Err(e) => {
+            sink(RunEmit::Log(format!("warning: no watchdog for this run ({e}): if the app is killed, the run may go on")));
+            None
+        }
+    };
+
     // One reader thread per stream (stderr carries the progress contract; stdout
     // is drained as log so a full pipe can never block the child).
     let s_err = sink.clone();
@@ -715,6 +733,12 @@ pub fn start_run(
     std::thread::spawn(move || {
         let _ = t_err.join();
         let _ = t_out.join();
+        // Released before the reap: until then the group id it would kill
+        // cannot be reused.
+        #[cfg(unix)]
+        if let Some(w) = watchdog {
+            w.release();
+        }
         let status = {
             let mut c = child_arc.lock().unwrap();
             let s = c.wait();
@@ -769,6 +793,25 @@ pub fn record_of(
         start,
         end: history::now_ms(),
         cleanup: end.cleanup.clone(),
+    }
+}
+
+/// The record of a run that is about to start, for its marker
+/// (sweep::mark_running): what the next session records if this one never
+/// sees the run end.
+pub fn marker_of(files: &RunFiles<'_>, argv: &[String], start: u64) -> history::RunRecord {
+    history::RunRecord {
+        id: format!("{start}-interrupted"),
+        input: files.input.to_string(),
+        outputs: files.outputs.to_vec(),
+        cwd: files.cwd.map(|d| d.display().to_string()),
+        argv: argv.to_vec(),
+        status: history::Status::Failed,
+        exit_code: None,
+        message: Some(sweep::INTERRUPTED.to_string()),
+        start,
+        end: start,
+        cleanup: outputs::Cleanup::default(),
     }
 }
 
@@ -863,17 +906,26 @@ pub fn run(app: AppHandle, state: State<'_, RunManager>, params: RunParams) -> R
             RunEmit::Done(v) => a.emit("fastag:done", v),
         };
     });
+    let files = RunFiles { input: &params.input, outputs: &outputs, cwd: cwd.as_deref(), overwrite: params.overwrite };
+    // Before the CLI starts: if the app is killed while it runs, the next
+    // start finds this run's marker and offers what it left (sweep.rs).
+    let marker = history::dir(&app).and_then(|d| sweep::mark_running(&d, &marker_of(&files, &command, start)).ok());
     // When the run has ended: record it (history.rs), then free the slot.
     let a = app.clone();
     let (rec_input, rec_outputs, rec_cwd, rec_argv) = (params.input.clone(), outputs.clone(), cwd.clone(), command.clone());
+    let run_marker = marker.clone();
     let finish = Box::new(move |end: &RunEnd| {
+        // The marker first: a record next to a stale marker would be
+        // followed by a second, "interrupted" one at the next start.
+        if let Some(m) = &run_marker {
+            sweep::clear_running(m);
+        }
         if let Some(d) = history::dir(&a) {
             let files = RunFiles { input: &rec_input, outputs: &rec_outputs, cwd: rec_cwd.as_deref(), overwrite: true };
             record_run(&d, &record_of(&files, &rec_argv, start, end), &end.log);
         }
         release_slot(&a.state::<RunManager>(), end.run_id);
     });
-    let files = RunFiles { input: &params.input, outputs: &outputs, cwd: cwd.as_deref(), overwrite: params.overwrite };
     // A spawn failure is known synchronously: report it as a non-start so the
     // frontend reports "FASTag could not start" and settles cleanly.
     let resolved = crate::reveal::resolved(&args, cwd.as_deref());
@@ -895,7 +947,14 @@ pub fn run(app: AppHandle, state: State<'_, RunManager>, params: RunParams) -> R
                 resolved_outputs: Some(resolved),
             }
         }
-        Err(e) => refused(e),
+        Err(e) => {
+            // Its own marker only: a refusal because another run is live
+            // must not take that run's marker.
+            if let Some(m) = &marker {
+                sweep::clear_running(m);
+            }
+            refused(e)
+        }
     }
 }
 
@@ -913,11 +972,6 @@ fn new_process_group(cmd: &mut Command) {
     let _ = cmd;
 }
 
-#[cfg(unix)]
-extern "C" {
-    fn kill(pid: i32, sig: i32) -> i32;
-}
-
 /// Kill a run's child and everything it started. Returns false when there was
 /// nothing left to kill (already reaped, or already cancelled once).
 pub fn kill_run(run: &CurrentRun, cancel: bool) -> bool {
@@ -929,14 +983,11 @@ pub fn kill_run(run: &CurrentRun, cancel: bool) -> bool {
         return false; // its pid may already belong to another process
     }
     let pid = child.id();
+    // The child leads its own group (new_process_group): signal the group,
+    // and again until the child is reaped, for a process the group was
+    // forking at the first kill (lifetime.rs).
     #[cfg(unix)]
-    if let Ok(pgid) = i32::try_from(pid) {
-        // The child leads its own group (new_process_group): signal the group.
-        // SAFETY: kill(2) with a negative pid only sends a signal.
-        unsafe {
-            kill(-pgid, 9);
-        }
-    }
+    lifetime::kill_group_until_reaped(pid, run.child.clone(), run.reaped.clone());
     #[cfg(windows)]
     {
         // A .bat wrapper runs the real exe as a grandchild that TerminateProcess
@@ -1232,13 +1283,19 @@ mod tests {
             let m = mgr.clone();
             let (input, outs, h) = (p.input.clone(), outputs.clone(), hist.clone());
             let argv: Vec<String> = std::iter::once("FASTag".to_string()).chain(args.iter().cloned()).collect();
+            let files = RunFiles { input: &p.input, outputs: &outputs, cwd: None, overwrite: p.overwrite };
+            let marker = sweep::mark_running(&hist, &marker_of(&files, &argv, 1)).unwrap();
+            let run_marker = marker.clone();
             let finish = Box::new(move |end: &RunEnd| {
+                sweep::clear_running(&run_marker);
                 let files = RunFiles { input: &input, outputs: &outs, cwd: None, overwrite: true };
                 record_run(&h, &record_of(&files, &argv, 1, end), &end.log);
                 release_slot(&m, end.run_id);
             });
-            let files = RunFiles { input: &p.input, outputs: &outputs, cwd: None, overwrite: p.overwrite };
-            start_run(&mgr, cmd, files, sink, finish)?;
+            if let Err(e) = start_run(&mgr, cmd, files, sink, finish) {
+                sweep::clear_running(&marker);
+                return Err(e);
+            }
             Ok(Run { mgr, events, done, outputs, hist })
         }
 
@@ -1291,7 +1348,11 @@ mod tests {
                     d.join("a.tags.species.tsv").display().to_string()
                 ]
             );
-            wait_for(&out); // the partial table is on disk
+            // The stub writes the partial table, then prints progress 2/4:
+            // waiting for the file alone let the cancel land before that
+            // line, and the log check below failed now and then.
+            wait_for_line(&r, "progress 2/4");
+            assert!(out.exists(), "the partial table is on disk");
             assert!(r.mgr.is_busy());
             cancel_of(&r.mgr);
             let done = r.done.recv_timeout(Duration::from_secs(10)).expect("no done event");
@@ -1304,8 +1365,6 @@ mod tests {
             assert!(input.exists());
             // The slot is free before the done event: a quit may go ahead.
             assert!(!r.mgr.is_busy());
-            let log: Vec<String> = r.events.try_iter().collect();
-            assert!(log.iter().any(|l| l == "progress 2/4"), "{log:?}");
             // The record marks the run cancelled, before the done event.
             let (rec, faillog) = recorded(&r);
             assert_eq!(rec.status, history::Status::Cancelled);
@@ -1314,6 +1373,7 @@ mod tests {
             assert_eq!(history::of_output(&r.hist, &out).unwrap().status, history::Status::Cancelled);
             let faillog = faillog.expect("no last-failure.log");
             assert!(faillog.contains("status: Cancelled") && faillog.contains("Reading spectra (stub)"), "{faillog}");
+            assert!(sweep::markers(&r.hist).is_empty(), "a cancelled run left its marker");
             let _ = std::fs::remove_dir_all(&d);
         }
 
@@ -1340,6 +1400,7 @@ mod tests {
             assert_eq!(std::fs::read_to_string(&digest).unwrap(), "earlier digest\n");
             assert!(!d.join("a.label.tsv").exists());
             assert!(history::list(&input.with_extension("appdata"), 1).is_empty());
+            assert!(sweep::markers(&input.with_extension("appdata")).is_empty(), "a refused run left a marker");
             let _ = std::fs::remove_dir_all(&d);
         }
 
@@ -1424,6 +1485,7 @@ mod tests {
             assert_eq!(rec.status, history::Status::Ok);
             assert_eq!(rec.exit_code, Some(0));
             assert!(faillog.is_none(), "a finished run writes no last-failure.log");
+            assert!(sweep::markers(&r.hist).is_empty(), "a finished run left its marker");
             let _ = std::fs::remove_dir_all(&d);
         }
 
@@ -1441,6 +1503,93 @@ mod tests {
             kill_current_of(&r.mgr);
             let _ = r.done.recv_timeout(Duration::from_secs(10));
             let _ = std::fs::remove_dir_all(&d);
+        }
+
+        // A stand-in GUI process for the test below: this test binary run
+        // again with FASTAG_GUI_HELPER=<data folder>. It starts a run as the
+        // `run` command does, waits until the partial table is on disk,
+        // prints "ready <pgid of the CLI>" and waits to be killed.
+        const GUI_HELPER: &str = "FASTAG_GUI_HELPER";
+
+        #[test]
+        #[ignore = "a helper process of a_killed_gui_ends_the_run_and_the_next_start_offers_what_it_left"]
+        fn gui_process_helper() {
+            let Ok(d) = std::env::var(GUI_HELPER) else { return };
+            let input = Path::new(&d).join("a.mzML");
+            let params = format!(r#"{{"in":"{}","out":"a.tags.tsv","params":{{"digest_out":"a.digest.tsv"}}}}"#, input.display());
+            let r = start(&params, &[("STUB_SLEEP", "30")]).unwrap();
+            wait_for(&Path::new(&d).join("a.tags.tsv"));
+            let pgid = r.mgr.current.lock().unwrap().as_ref().unwrap().child.lock().unwrap().id();
+            println!("ready {pgid}");
+            std::thread::sleep(Duration::from_secs(60));
+        }
+
+        /// A process of group @p pgid is alive (a zombie is not).
+        fn group_alive(pgid: u32) -> bool {
+            let ps = Command::new("ps").args(["-A", "-o", "pgid=,stat="]).output().unwrap();
+            String::from_utf8_lossy(&ps.stdout).lines().any(|l| {
+                let mut f = l.split_whitespace();
+                f.next() == Some(&pgid.to_string()) && f.next().is_some_and(|st| !st.starts_with('Z'))
+            })
+        }
+
+        // P1 acceptance: killing the GUI process (kill -9) ends the CLI
+        // within 3 s, and the next start records the run as interrupted and
+        // offers the partial table it left for removal.
+        #[test]
+        fn a_killed_gui_ends_the_run_and_the_next_start_offers_what_it_left() {
+            use std::io::BufRead;
+            let d = dir("killed");
+            let input = d.join("a.mzML");
+            std::fs::write(&input, "spectra").unwrap();
+            let mut gui = Command::new(std::env::current_exe().unwrap())
+                .args(["fastag::tests::stub_cli::gui_process_helper", "--exact", "--ignored", "--nocapture", "--test-threads=1"])
+                .env(GUI_HELPER, &d)
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap();
+            let mut out = BufReader::new(gui.stdout.take().unwrap());
+            let mut line = String::new();
+            let pgid: u32 = loop {
+                line.clear();
+                assert!(out.read_line(&mut line).unwrap() > 0, "the helper ended before it was ready");
+                // libtest prints "test <name> ... " before it, on the same line.
+                if let Some(i) = line.find("ready ") {
+                    break line[i + 6..].trim().parse().unwrap();
+                }
+            };
+            assert!(group_alive(pgid));
+            gui.kill().unwrap();
+            let _ = gui.wait();
+            let t = std::time::Instant::now();
+            while group_alive(pgid) && t.elapsed() < Duration::from_secs(3) {
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            let alive = group_alive(pgid);
+            if alive {
+                lifetime_kill(pgid);
+            }
+            assert!(!alive, "the CLI outlived the killed GUI by more than 3 s");
+            // The next start.
+            let hist = input.with_extension("appdata");
+            let out_path = d.join("a.tags.tsv");
+            assert_eq!(sweep::markers(&hist).len(), 1, "no marker of the run");
+            let rec = sweep::recover(&hist).pop().expect("the killed run was not recovered");
+            assert_eq!(rec.status, history::Status::Failed);
+            assert_eq!(rec.message.as_deref(), Some(sweep::INTERRUPTED));
+            assert_eq!(history::of_output(&hist, &out_path).unwrap().message.as_deref(), Some(sweep::INTERRUPTED));
+            assert_eq!(sweep::leftovers(&hist), vec![out_path.clone()]);
+            let c = sweep::sweep(&hist, &[out_path.display().to_string()]);
+            assert_eq!(c.removed, vec![out_path.display().to_string()]);
+            assert!(!out_path.exists() && input.exists());
+            assert!(sweep::leftovers(&hist).is_empty());
+            let _ = std::fs::remove_dir_all(&d);
+        }
+
+        fn lifetime_kill(pgid: u32) {
+            let _ = Command::new("kill").args(["-9", "--", &format!("-{pgid}")]).status();
         }
 
         fn kill_current_of(mgr: &RunManager) {

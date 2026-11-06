@@ -1348,8 +1348,11 @@ jobs:
       # exactly enough. Verified locally by reproducing the CI condition:
       # without the directory cargo fails with "resource path
       # `resources/fastag` doesn't exist"; with an empty one the lib tests pass
-      # (91 on macOS from P0b, 73 from P0a, 54 before). The run lifecycle tests drive
-      # gui/testing/stub-fastag, a sh script, instead of the CLI.
+      # (100 on macOS from P1 PR b, 91 from P0b, 73 from P0a, 54 before). The run lifecycle tests drive
+      # gui/testing/stub-fastag, a sh script, instead of the CLI. The process
+      # lifetime tests (lifetime.rs, P1 PR b) have three Linux-only ones
+      # (PDEATHSIG, the getppid check): this job is where they run. Two
+      # ignored tests are the helper processes of the kill -9 tests.
       - name: Backend unit tests
         working-directory: gui/src-tauri
         run: |
@@ -1357,6 +1360,44 @@ jobs:
           cargo test --lib
           # The browser bench (P0b) is not run here, only kept compiling.
           cargo check --example browser_bench
+
+  # The Windows half of the process lifetime (P1 PR b): the kill-on-close job
+  # object the app puts itself into at startup (lifetime.rs). windows.yml
+  # builds the app only on tags, so without this job the cfg(windows) code
+  # would first compile at a release. Every lib test is compiled here, but
+  # only the lifetime ones run: the rest have never run on Windows, and this
+  # job is not the place to find out. pwsh, not bash: Git Bash's link.exe
+  # shadows MSVC's linker (windows.yml, "Build the desktop app").
+  gui-windows:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+      # tauri::generate_context! embeds the built frontend.
+      - name: Frontend build
+        working-directory: gui
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          npm ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Backend lifetime tests (Windows)
+        working-directory: gui/src-tauri
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force resources/fastag | Out-Null
+          cargo test --lib --no-run
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --lib lifetime
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   # ---------------------------------------------------- release data asset
   # Copies the pinned taxonomy tarball onto the new release as a standalone
