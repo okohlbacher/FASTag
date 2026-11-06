@@ -66,9 +66,6 @@ else
   echo "baseline_identity_gate: buildtaxdb $CBT vs $BBT: $(awk -F'\t' '$5 == "SAME"' "$BT/report.tsv" | wc -l) equal"
 fi
 cat "$OUT"/PXD*/report.tsv "$BT/report.tsv" | awk 'NR == 1 || $1 != "label"' > "$OUT/report.tsv"
-# A 1.12 option adds --help and CTD lines (status "ADDED (+n lines)", every
-# baseline line unchanged): an equal comparison, listed below the verdict.
-if [ $rc = 0 ]; then echo "BASELINE IDENTITY PASS ($(awk -F'\t' '$5 == "SAME" || $5 ~ /^ADDED/' "$OUT/report.tsv" | wc -l) comparisons)"
-  awk -F'\t' '$5 ~ /^ADDED/ { print "  " $1 " " $2 " " $4 ": " $5 }' "$OUT/report.tsv"
-else echo "BASELINE IDENTITY FAIL"; awk -F'\t' 'NR > 1 && $5 != "SAME" && $5 !~ /^ADDED/ && $5 !~ /^INFO/' "$OUT/report.tsv"; fi
+if [ $rc = 0 ]; then echo "BASELINE IDENTITY PASS ($(awk -F'\t' '$5 == "SAME"' "$OUT/report.tsv" | wc -l) comparisons)"
+else echo "BASELINE IDENTITY FAIL"; awk -F'\t' 'NR > 1 && $5 != "SAME" && $5 !~ /^INFO/' "$OUT/report.tsv"; fi
 exit $rc

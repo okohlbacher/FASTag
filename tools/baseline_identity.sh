@@ -28,9 +28,7 @@
 #   - the set of files written;
 #   - every file, canonicalised, with cmp (the first differing lines are shown);
 #   - interface: `--help` and the -write_ctd CTD, raw bytes (versions masked when
-#     the two binaries report different versions). A 1.12 option ADDS lines;
-#     that passes as "ADDED (+n lines)" as long as every baseline line is still
-#     there, unchanged and in order (diff shows no removed or changed line).
+#     the two binaries report different versions).
 # The rest of the log is reported as INFO when it differs, never a failure.
 # A case whose baseline tag TSV has no rows FAILS: the comparison would prove nothing.
 #
@@ -94,7 +92,7 @@ REPORT="$WORK/report.tsv"
 [ -f "$REPORT" ] || printf 'label\tcase\tthreads\titem\tstatus\n' > "$REPORT"
 nfail=0 nsame=0
 rec() { printf '%s\t%s\t%s\t%s\t%s\n' "$LABEL" "$1" "$2" "$3" "$4" >> "$REPORT"
-        case $4 in SAME|ADDED*) nsame=$((nsame + 1)) ;; INFO*) ;; *) nfail=$((nfail + 1)); echo "  FAIL $1 t$2 $3: $4" ;; esac; }
+        case $4 in SAME) nsame=$((nsame + 1)) ;; INFO*) ;; *) nfail=$((nfail + 1)); echo "  FAIL $1 t$2 $3: $4" ;; esac; }
 showdiff() { diff "$1" "$2" | head -8 | cut -c1-200 | sed 's/^/      /'; }
 
 # args for case $1 into CASE_ARGS
@@ -131,25 +129,14 @@ run_interface() {
   [ $rc_c = $rc_b ] || rec interface - help.exit "DIFF (exit $rc_c vs $rc_b)"
   "$CAND" -write_ctd "$d/c" > "$d/c/ctd.log" 2>&1 || rec interface - ctd "ERROR (candidate -write_ctd exit $?)"
   "$BASE" -write_ctd "$d/b" > "$d/b/ctd.log" 2>&1 || rec interface - ctd "ERROR (baseline -write_ctd exit $?)"
-  # SAME, "ADDED (+n lines)" when the candidate only adds lines, else DIFF.
-  iface_cmp() {
-    if cmp -s "$2" "$1"; then echo SAME; return; fi
-    local removed added
-    removed=$(diff "$1" "$2" | grep -c '^<') added=$(diff "$1" "$2" | grep -c '^>')
-    if [ "$removed" = 0 ]; then echo "ADDED (+$added lines)"; else echo DIFF; fi
-  }
-  local st
   for f in help.txt FASTag.ctd; do
     [ -f "$d/c/$f" ] && [ -f "$d/b/$f" ] || { rec interface - "$f" MISSING; continue; }
     if cmp -s "$d/c/$f" "$d/b/$f"; then rec interface - "$f" SAME
     elif [ "$CV" != "$BV" ] || [ "$CO" != "$BO" ]; then
       "$PY" "$CANON" "$d/c/$f" "$CV" "$CO" > "$d/c/$f.canon"; "$PY" "$CANON" "$d/b/$f" "$BV" "$BO" > "$d/b/$f.canon"
-      st=$(iface_cmp "$d/b/$f.canon" "$d/c/$f.canon"); rec interface - "$f" "$st"
-      [ "$st" = DIFF ] && showdiff "$d/b/$f.canon" "$d/c/$f.canon"
-    else
-      st=$(iface_cmp "$d/b/$f" "$d/c/$f"); rec interface - "$f" "$st"
-      [ "$st" = DIFF ] && showdiff "$d/b/$f" "$d/c/$f"
-    fi
+      if cmp -s "$d/c/$f.canon" "$d/b/$f.canon"; then rec interface - "$f" SAME
+      else rec interface - "$f" DIFF; showdiff "$d/b/$f.canon" "$d/c/$f.canon"; fi
+    else rec interface - "$f" DIFF; showdiff "$d/b/$f" "$d/c/$f"; fi
   done
 }
 
