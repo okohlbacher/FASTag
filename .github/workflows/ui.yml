@@ -26,6 +26,15 @@ jobs:
   playwright:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    # Playwright's own image carries Chromium, WebKit and their system
+    # libraries. `playwright install --with-deps webkit` pulls 181 apt
+    # packages (114 MB, GStreamer and libav included) from the runner's Ubuntu
+    # mirror, which crawled at tens of kB/s and took the job past 20 minutes
+    # before a single test ran (run 42193893280). The tag must match
+    # @playwright/test in package-lock.json; the first step below checks it.
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f
+      options: --ipc=host
     defaults:
       run:
         working-directory: gui
@@ -37,22 +46,35 @@ jobs:
         with:
           node-version: 24
       - run: npm ci
+        timeout-minutes: 5
+      - name: Playwright matches the container image
+        timeout-minutes: 1
+        run: |
+          v=$(node -p "require('@playwright/test/package.json').version")
+          if [ "$v" != "1.64.1" ]; then
+            echo "::error::@playwright/test is $v but the job runs mcr.microsoft.com/playwright:v1.64.1-noble; update the container image tag and digest in ui.yml" >&2
+            exit 1
+          fi
       # A release build must not contain the test bridges: they hang only off
       # branches that are constant false outside dev and --mode e2e.
       - name: Release dist carries no mock or fixture strings
+        timeout-minutes: 3
         run: |
           npm run build
           npm run check:dist
       - name: The check catches them (the e2e build must fail it)
+        timeout-minutes: 3
         run: |
           npm run build:e2e
           if node scripts/check-dist-clean.mjs dist-e2e; then
             echo "check-dist-clean passed on the e2e build: its markers are stale" >&2
             exit 1
           fi
-      - name: Playwright browsers
-        run: npx playwright install --with-deps chromium webkit
+      # No browser install: the image has them under /ms-playwright.
       - name: Playwright (Chromium, WebKit)
+        # Backstop only: globalTimeout in playwright.config.ts ends a hung run
+        # first, with a report naming the test.
+        timeout-minutes: 8
         env:
           CI: '1'
         run: npm run e2e

@@ -17,11 +17,20 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: 0,
+  // Fail fast on a hang: 26 tests take well under a minute locally, so a test
+  // that runs 30 s or a suite that runs 5 min is stuck (a request the bridge
+  // never answers, a locator that never appears), and Playwright reports which
+  // test and which step instead of the CI job being cancelled without a word.
+  timeout: 30_000,
+  globalTimeout: process.env.CI ? 5 * 60_000 : 0,
+  expect: { timeout: 5_000 },
   reporter: process.env.CI ? [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]] : 'list',
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
     viewport: { width: 1200, height: 800 },
-    trace: 'retain-on-failure'
+    trace: 'retain-on-failure',
+    actionTimeout: 10_000,
+    navigationTimeout: 15_000
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1200, height: 800 } } },
