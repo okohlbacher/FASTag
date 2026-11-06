@@ -28,6 +28,7 @@
 #include <OpenMS/FORMAT/DATAACCESS/MSDataWritingConsumer.h>
 #include <OpenMS/SYSTEM/File.h>
 
+#include "CliParam.h"
 #include "ClusterAcc.h"
 #include "Digest.h"
 #include "FASTagger.h"
@@ -232,6 +233,31 @@ namespace
 
 class TOPPFASTag : public TOPPBase
 {
+  // -out_spectra (mzML) compatibility shim (1.12 P3, decided in P0).
+  // TOPPBase::getProcessingInfo_ lists EVERY registered parameter as a
+  // "parameter: <name>" userParam of the exported mzML, so an option added
+  // after 1.11 would change the exported bytes even at its default. Options
+  // outside the frozen 1.11 list (FASTag::Cli::kLegacyOutSpectraParameters)
+  // are dropped from it while they hold their registered default; a
+  // non-default value is kept, so the provenance stays truthful whenever an
+  // option actually acted. Removing entries keeps the order of the rest:
+  // MetaInfo is ordered by registry index, which follows registration order.
+  DataProcessing outSpectraProcessingInfo_() const
+  {
+    DataProcessing p = getProcessingInfo_(DataProcessing::FILTERING);
+    const std::string prefix = "parameter: ";
+    std::vector<std::string> keys;
+    p.getKeys(keys);
+    for (const std::string& k : keys)
+    {
+      if (k.compare(0, prefix.size(), prefix) != 0) continue;
+      const std::string name = k.substr(prefix.size());
+      if (FASTag::Cli::isLegacyOutSpectraParameter(name)) continue;
+      if (getParam_().getValue(name) == findEntry_(name).default_value) p.removeMetaValue(k);
+    }
+    return p;
+  }
+
 public:
   // toolhandler_test = false: FASTag lives outside the OpenMS tree and so is
   // not in ToolHandler's list. Passing true makes the TOPPBase constructor
@@ -267,7 +293,7 @@ protected:
                         "spectrum, so unlike the default it needs memory "
                         "proportional to the FILE, not to the thread count", false);
 
-    registerIntOption_("tag_length", "<n>", 3, "Seed tag length in residues", false);
+    registerIntOption_("tag_length", "<n>", FASTag::Cli::kTagLength, "Seed tag length in residues", false);
     setMinInt_("tag_length", 1);
     // Several seed lengths over ONE read of the input. A separate list, not a
     // widened -tag_length, so that option and every INI that sets it are
@@ -279,13 +305,13 @@ protected:
                      "ascending length, except that a tag several lengths report "
                      "is kept only from the length with its lowest E-value", false);
     setMinInt_("tag_lengths", 1);
-    registerIntOption_("extension", "<n>", 0,
+    registerIntOption_("extension", "<n>", FASTag::Cli::kExtension,
                        "Maximum residues appended per terminus; 0 disables extension", false);
     setMinInt_("extension", 0);
     // tag_length + 2*extension is computed as int and indexes the null tables.
     // Unbounded, --extension 1073741824 overflows and aborts with std::length_error.
     setMaxInt_("extension", (FASTag::MAX_FILTER_LEN - 1) / 2);
-    registerIntOption_("gaps", "<n>", 1,
+    registerIntOption_("gaps", "<n>", FASTag::Cli::kGaps,
                        "Allow a tag to cross one missing peak, spelling the two "
                        "residues either side of it from their summed mass; "
                        "0 disables", false);
@@ -300,28 +326,28 @@ protected:
                   "do not move multiply-charged fragments onto the singly-charged "
                   "scale, before peak selection", false);
 
-    registerDoubleOption_("fragment_tolerance", "<value>", 20.0, "Fragment mass tolerance", false);
+    registerDoubleOption_("fragment_tolerance", "<value>", FASTag::Cli::kFragmentTolerance, "Fragment mass tolerance", false);
     // Without a floor a negative or zero tolerance matches nothing and the run
     // reports zero tags with no indication why. The floor stays in the INI/CTD
     // (restrictions="1.0e-09:") for KNIME/Galaxy validators; main_ also refuses
     // NaN, which TOPPBase's range check lets through.
     setMinFloat_("fragment_tolerance", 1e-9);
-    registerStringOption_("fragment_tolerance_unit", "<unit>", "ppm", "Tolerance unit", false);
+    registerStringOption_("fragment_tolerance_unit", "<unit>", FASTag::Cli::kFragmentToleranceUnit, "Tolerance unit", false);
     setValidStrings_("fragment_tolerance_unit", ListUtils::create<std::string>("ppm,Da"));
 
-    registerIntOption_("max_peaks", "<n>", 400,
+    registerIntOption_("max_peaks", "<n>", FASTag::Cli::kMaxPeaks,
                        "Peaks kept per spectrum, at most 1024; 0 means 1024, not "
                        "unlimited. Higher values use more memory. Also caps "
                        "-peaks_per_window", false);
     setMinInt_("max_peaks", 0);
     setMaxInt_("max_peaks", 1024);
-    registerIntOption_("peaks_per_window", "<n>", 10,
+    registerIntOption_("peaks_per_window", "<n>", FASTag::Cli::kPeaksPerWindow,
                        "Keep this many peaks per 100 Da window instead of the "
                        "strongest -max_peaks overall; 0 disables. Scales the "
                        "effective peak budget with the spectrum's m/z range, so "
                        "dense spectra are not starved and sparse ones not padded", false);
     setMinInt_("peaks_per_window", 0);
-    registerIntOption_("max_tags", "<n>", 50, "Tags reported per spectrum; 0 = unlimited", false);
+    registerIntOption_("max_tags", "<n>", FASTag::Cli::kMaxTags, "Tags reported per spectrum; 0 = unlimited", false);
     setMinInt_("max_tags", 0);
 
     // Random subsampling of input spectra. For a taxon call (or a quick preview)
@@ -593,9 +619,9 @@ protected:
     setValidStrings_("species_evidence", ListUtils::create<std::string>("best,all"));
     registerStringOption_("species_rank", "<rank>", "genus",
                           "Report taxa at this NCBI rank (genus, family, ...)", false);
-    registerDoubleOption_("max_evalue", "<value>", 20.0, "E-value cutoff; 0 disables", false);
+    registerDoubleOption_("max_evalue", "<value>", FASTag::Cli::kMaxEvalue, "E-value cutoff; 0 disables", false);
     setMinFloat_("max_evalue", 0.0);
-    registerDoubleOption_("gap_penalty", "<value>", 100.0,
+    registerDoubleOption_("gap_penalty", "<value>", FASTag::Cli::kGapPenalty,
                           "Rank gapped tags as if their E-value were this many times "
                           "worse. Never removes a tag at the -max_evalue cutoff (applied "
                           "to the unpenalised value), but under -max_tags it decides which "
@@ -627,7 +653,7 @@ protected:
     // shifts the whole precursor and so is already carried in the flanking
     // masses, with nothing per-residue to annotate.
     registerStringList_("fixed_modifications", "<mods>",
-                        ListUtils::create<std::string>("Carbamidomethyl (C)"),
+                        ListUtils::create<std::string>(FASTag::Cli::kFixedModifications),
                         "Fixed modifications by OpenMS/UniMod name, e.g. "
                         "'Carbamidomethyl (C)' 'TMT6plex (K)'. Shift residue masses; "
                         "not annotated in the tag", false);
@@ -1072,7 +1098,9 @@ protected:
     const std::string fasta = getStringOption_("fasta");
     const std::string out_spectra = getStringOption_("out_spectra");
 
-    FASTag::Param p;
+    // The CLI's defaults (src/CliParam.h), then every option over them; the
+    // modifications are resolved from the options below.
+    FASTag::Param p = FASTag::cliDefaultParam(/*resolve_mods=*/false);
     p.tag_length = lengths.front();
     p.max_extension = getIntOption_("extension");
     p.max_gaps = getIntOption_("gaps");
@@ -3836,7 +3864,7 @@ protected:
           PlainMSDataWritingConsumer consumer(out_spectra);
           consumer.setExperimentalSettings(kept.getExperimentalSettings());
           consumer.setExpectedSize(kept_idx.size(), 0);
-          consumer.addDataProcessing(getProcessingInfo_(DataProcessing::FILTERING));
+          consumer.addDataProcessing(outSpectraProcessingInfo_());
           each_kept([&consumer](MSSpectrum& sp) { consumer.consumeSpectrum(sp); });
         }
         // The consumer never checks its stream; verify the artifact instead.

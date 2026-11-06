@@ -248,7 +248,7 @@ if(FASTAG_BUILD_TESTS)
   # their tests only to their own anchored list.
   set(FASTAG_UNIT_TESTS ranksum_test fastag_test fasta_filter_test tagrecon_test tagfdr_test proteome_index_test glyco_test taxindex_test taxstats_test taxdeconv_test species_evidence_test sampler_test proforma_test numformat_test peakgrid_test formats_test digest_test)
   # ---- 1.12 E: unit tests ----
-  set(FASTAG_UNIT_TESTS_E)
+  set(FASTAG_UNIT_TESTS_E cli_param_test)
   # ---- 1.12 A: unit tests ----
   set(FASTAG_UNIT_TESTS_A)
   # ---- 1.12 D: unit tests ----
@@ -374,6 +374,12 @@ if(FASTAG_BUILD_TESTS)
   # the order E, A, D, F. A cluster adds its add_test calls only inside its
   # own block.
   # ---- 1.12 E: CLI tests ----
+  # P3: the -out_spectra compatibility shim keeps the 1.11 parameter list.
+  add_test(NAME out_spectra_params_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/out_spectra_params_test.sh $<TARGET_FILE:FASTag>
+                   $<TARGET_FILE:cli_param_test>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML)
+  set_tests_properties(out_spectra_params_test PROPERTIES SKIP_RETURN_CODE 77)
   # ---- 1.12 A: CLI tests ----
   # ---- 1.12 D: CLI tests ----
   # ---- 1.12 F: CLI tests ----

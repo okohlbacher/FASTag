@@ -24,6 +24,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -307,6 +308,327 @@ namespace
   }
 }
 
+// ---- step 0 (1.12): the metadata OpenMS's MzMLHandler fills and the fast
+// reader now fills too, compared field by field.
+namespace
+{
+  /// What the step-0 comparisons exercised, so a vacuous pass is caught.
+  struct Step0Seen
+  {
+    Size typed = 0, filter = 0, activation = 0, energy = 0, possible = 0, target_meta = 0, spectra = 0;
+    /// Known 1.11 divergence, not step 0: a <precursor> with neither a
+    /// selected ion nor an isolation target (ddaPASEF MS2 without a pick)
+    /// is a Precursor at m/z 0 in OpenMS and none in the fast reader. Such
+    /// m/z-less precursors (OpenMS's, counted here, and the fast reader's for
+    /// an ion with a charge but no m/z) are left out of the comparison.
+    Size mzless_precursor = 0;
+  };
+
+  /// The step-0 fields of @p got (fast reader) against @p want (OpenMS);
+  /// empty if equal, else the first difference. Precursor @p k of each.
+  std::string step0_precursor_diff(const Precursor& a, const Precursor& b, Step0Seen& seen)
+  {
+    if (std::fabs(a.getMZ() - b.getMZ()) > 1e-6) return "precursor m/z";
+    if (a.getCharge() != b.getCharge()) return "precursor charge";
+    if (a.getActivationMethods() != b.getActivationMethods()) return "activation methods";
+    if (!b.getActivationMethods().empty()) ++seen.activation;
+    if (a.getActivationEnergy() != b.getActivationEnergy()) return "activation energy";
+    if (b.getActivationEnergy() != 0) ++seen.energy;
+    if (a.getPossibleChargeStates() != b.getPossibleChargeStates()) return "possible charge states";
+    if (!b.getPossibleChargeStates().empty()) ++seen.possible;
+    const std::string t = "isolation window target m/z";
+    if (a.metaValueExists(t) != b.metaValueExists(t)) return "isolation target meta value present";
+    if (b.metaValueExists(t))
+    {
+      ++seen.target_meta;
+      if (std::fabs(double(a.getMetaValue(t)) - double(b.getMetaValue(t))) > 1e-9) return "isolation target meta value";
+    }
+    if (std::fabs(a.getIsolationWindowLowerOffset() - b.getIsolationWindowLowerOffset()) > 1e-6 ||
+        std::fabs(a.getIsolationWindowUpperOffset() - b.getIsolationWindowUpperOffset()) > 1e-6)
+      return "isolation window offsets";
+    return {};
+  }
+
+  std::string step0_diff(const MSSpectrum& got, const MSSpectrum& want, Step0Seen& seen)
+  {
+    if (got.getMSLevel() != want.getMSLevel()) return "ms level";
+    if (got.getNativeID() != want.getNativeID()) return "native id";
+    if (std::fabs(got.getRT() - want.getRT()) > 1e-6) return "retention time";
+    if (got.getType() != want.getType()) return "spectrum type";
+    if (want.getType() != SpectrumSettings::SpectrumType::UNKNOWN) ++seen.typed;
+    const std::string f = "filter string";
+    if (got.metaValueExists(f) != want.metaValueExists(f)) return "filter string present";
+    if (want.metaValueExists(f))
+    {
+      ++seen.filter;
+      if (got.getMetaValue(f).toString() != want.getMetaValue(f).toString())
+        return "filter string '" + got.getMetaValue(f).toString() + "' vs '" + want.getMetaValue(f).toString() + "'";
+    }
+    // OpenMS keeps a precursor's FIRST selected ion only, the fast reader one
+    // Precursor per ion: the counts agree whenever every precursor has one.
+    // m/z-less precursors are set aside on both sides (see Step0Seen).
+    std::vector<Precursor> pa, pb;
+    for (const Precursor& x : got.getPrecursors())
+      if (x.getMZ() != 0) pa.push_back(x);
+    for (const Precursor& x : want.getPrecursors())
+    {
+      if (x.getMZ() == 0) ++seen.mzless_precursor;
+      else pb.push_back(x);
+    }
+    if (pa.empty() != pb.empty()) return "precursor presence";
+    const Size np = pa.size() == pb.size() ? pa.size() : std::min<Size>(1, pa.size());
+    for (Size k = 0; k < np; ++k)
+    {
+      const std::string d = step0_precursor_diff(pa[k], pb[k], seen);
+      if (!d.empty()) return d + " (precursor " + std::to_string(k) + ")";
+    }
+    ++seen.spectra;
+    return {};
+  }
+
+  /// getSpectrumMetadata() must give exactly getSpectrum()'s metadata.
+  std::string metadata_only_diff(const MSSpectrum& meta, const MSSpectrum& full)
+  {
+    if (!meta.empty() && full.getMSLevel() == 2) return "metadata read decoded peaks";
+    if (meta.getMSLevel() != full.getMSLevel() || meta.getNativeID() != full.getNativeID() ||
+        meta.getRT() != full.getRT() || meta.getType() != full.getType())
+      return "spectrum fields";
+    std::vector<std::string> ka, kb;
+    meta.getKeys(ka);
+    full.getKeys(kb);
+    if (ka != kb) return "meta value keys";
+    if (meta.metaValueExists("filter string") && meta.getMetaValue("filter string") != full.getMetaValue("filter string"))
+      return "filter string";
+    if (meta.getPrecursors() != full.getPrecursors()) return "precursors";
+    if (!(meta.getInstrumentSettings() == full.getInstrumentSettings())) return "instrument settings";
+    return {};
+  }
+
+  /// Every spectrum of @p path through the fast reader against OpenMS's
+  /// MzMLFile, which parses with the same MzMLHandler as OnDiscMSExperiment
+  /// and needs no index (the synthetic fixtures have none).
+  Step0Seen metadata_vs_openms(const std::string& path, const std::string& what)
+  {
+    Step0Seen seen;
+    PeakMap ref;
+    try { MzMLFile().load(path, ref); }
+    catch (const Exception::BaseException& e)
+    {
+      check(false, what + ": OpenMS loads the file (" + e.what() + ")");
+      return seen;
+    }
+    FASTag::IndexedMzMLReader r(path);
+    check(r.ok(), what + ": reader opens the file");
+    check(r.getNrSpectra() == ref.size(), what + ": same spectrum count");
+    const Size n = std::min<Size>(r.getNrSpectra(), ref.size());
+    Size bad = 0, bad_meta = 0;
+    std::string first, first_meta;
+    for (Size i = 0; i < n; ++i)
+    {
+      const MSSpectrum got = r.getSpectrum(i);
+      const std::string d = step0_diff(got, ref[i], seen);
+      if (!d.empty() && bad++ == 0) first = "spectrum " + std::to_string(i) + ": " + d;
+      const std::string dm = metadata_only_diff(r.getSpectrumMetadata(i), got);
+      if (!dm.empty() && bad_meta++ == 0) first_meta = "spectrum " + std::to_string(i) + ": " + dm;
+    }
+    check(n > 0 && bad == 0, what + ": step-0 metadata equals OpenMS's (" + std::to_string(bad) + " of " +
+                                 std::to_string(n) + " differ" + (bad ? "; first " + first : std::string()) + ")");
+    check(bad_meta == 0, what + ": getSpectrumMetadata equals getSpectrum's metadata (" +
+                             std::to_string(bad_meta) + " differ" +
+                             (bad_meta ? "; first " + first_meta : std::string()) + ")");
+    std::cout << what << ": step 0 on " << n << " spectra: " << seen.typed << " typed, " << seen.filter
+              << " filter strings, " << seen.activation << " activations (" << seen.energy << " with energy), "
+              << seen.possible << " with possible charges, " << seen.target_meta << " target meta values"
+              << (seen.mzless_precursor ? ", " + std::to_string(seen.mzless_precursor) +
+                                              " m/z-less precursors (known, not compared)"
+                                        : std::string())
+              << "\n";
+    return seen;
+  }
+
+  /// A cvParam line.
+  std::string cv(const std::string& acc, const std::string& name, const std::string& value = "",
+                 const std::string& unit = "")
+  {
+    return "<cvParam cvRef=\"MS\" accession=\"" + acc + "\" name=\"" + name + "\" value=\"" + value + "\"" +
+           (unit.empty() ? std::string() : " unitAccession=\"" + unit + "\"") + "/>\n";
+  }
+  std::string ref(const std::string& id) { return "<referenceableParamGroupRef ref=\"" + id + "\"/>\n"; }
+
+  /// One synthetic <spectrum>, its parts given as XML: @p spec_params go
+  /// right after the start tag, @p scan_params into the one <scan>,
+  /// @p precursor the whole <precursorList> (or empty).
+  std::string param_spectrum(int index, const std::string& spec_params, const std::string& scan_params,
+                             const std::string& precursor)
+  {
+    return "<spectrum index=\"" + std::to_string(index) + "\" id=\"scan=" + std::to_string(index + 1) +
+           "\" defaultArrayLength=\"2\">\n" + spec_params + "<scanList count=\"1\">\n" +
+           cv("MS:1000795", "no combination") + "<scan>\n" + scan_params +
+           cv("MS:1000016", "scan start time", std::to_string(10 * (index + 1)), "UO:0000010") +
+           "</scan>\n</scanList>\n" + precursor + "<binaryDataArrayList count=\"2\">\n" +
+           synthetic_array(false, false) + synthetic_array(false, true) + "</binaryDataArrayList>\n</spectrum>\n";
+  }
+
+  /// An mzML with @p groups (referenceableParamGroup elements) in its run
+  /// header and @p sp as its spectra. The header is @p header_src's (an
+  /// OpenMS-written file), so OpenMS reads it as a normal run.
+  bool write_group_mzml(const std::string& header_src, const std::string& path, const std::string& groups,
+                        const std::vector<std::string>& sp)
+  {
+    const std::string src = slurp(header_src);
+    const std::size_t sl = src.find("<spectrumList");
+    if (sl == std::string::npos) return false;
+    std::string head = src.substr(0, sl);
+    if (const std::size_t gl = head.find("</referenceableParamGroupList>"); gl != std::string::npos)
+      head.insert(gl, groups);
+    else if (const std::size_t fd = head.find("</fileDescription>"); fd != std::string::npos)
+      head.insert(fd + 18, "\n<referenceableParamGroupList count=\"1\">\n" + groups + "</referenceableParamGroupList>\n");
+    else
+      return false;
+    // The source's own spectrumList start tag (OpenMS requires its
+    // defaultDataProcessingRef), with this file's count.
+    std::string list_tag = src.substr(sl, src.find('>', sl) + 1 - sl);
+    if (const std::size_t c = list_tag.find("count=\""); c != std::string::npos)
+      list_tag.replace(c + 7, list_tag.find('"', c + 7) - (c + 7), std::to_string(sp.size()));
+    std::string b = head + list_tag + "\n";
+    for (const std::string& x : sp) b += x;
+    b += "</spectrumList>\n</run>\n</mzML>\n";
+    if (head.find("<indexedmzML") != std::string::npos) b += "</indexedmzML>\n";
+    spit(path, b);
+    return true;
+  }
+
+  /// The step-0 fixture: an mzML whose spectra take their type, filter
+  /// string, isolation target, possible charges and activation from
+  /// referenceableParamGroups, mixed with spectra that carry their own
+  /// cvParams (one overriding a group). The fields 1.11 already read (MS
+  /// level, selected ion, isolation offsets) are given as own cvParams here,
+  /// since the fast reader does not resolve them from groups (see
+  /// write_pinned_fixture).
+  bool write_paramgroup_fixture(const std::string& header_src, const std::string& path)
+  {
+    const std::string groups =
+        "<referenceableParamGroup id=\"pg_ms2_profile\">\n" + cv("MS:1000511", "ms level", "2") +
+        cv("MS:1000580", "MSn spectrum") + cv("MS:1000128", "profile spectrum") +
+        "</referenceableParamGroup>\n"
+        "<referenceableParamGroup id=\"pg_centroid\">\n" + cv("MS:1000127", "centroid spectrum") +
+        "</referenceableParamGroup>\n"
+        "<referenceableParamGroup id=\"pg_ethcd\">\n" + cv("MS:1000598", "electron transfer dissociation") +
+        cv("MS:1002678", "supplemental beam-type collision-induced dissociation") +
+        cv("MS:1000509", "activation energy", "25", "UO:0000266") + "</referenceableParamGroup>\n"
+        "<referenceableParamGroup id=\"pg_charges\">\n" + cv("MS:1000633", "possible charge state", "2") +
+        cv("MS:1000633", "possible charge state", "3") + "</referenceableParamGroup>\n"
+        "<referenceableParamGroup id=\"pg_filter\">\n" +
+        cv("MS:1000512", "filter string", "FTMS + c NSI d Full ms2 500.50@etd25.00 [120.00-2000.00]") +
+        "</referenceableParamGroup>\n"
+        "<referenceableParamGroup id=\"pg_iso\">\n" + cv("MS:1000827", "isolation window target m/z", "500.5", "MS:1000040") +
+        "</referenceableParamGroup>\n";
+
+    const std::string iso_own = "<isolationWindow>\n" +
+                                cv("MS:1000827", "isolation window target m/z", "445.12", "MS:1000040") +
+                                cv("MS:1000828", "isolation window lower offset", "0.5", "MS:1000040") +
+                                cv("MS:1000829", "isolation window upper offset", "0.5", "MS:1000040") +
+                                "</isolationWindow>\n";
+    std::vector<std::string> sp;
+    // 0: MS1, typed from a group.
+    sp.push_back(param_spectrum(0, cv("MS:1000511", "ms level", "1") + ref("pg_centroid"), "", ""));
+    // 1: MS2 with the step-0 fields from groups: type, filter string,
+    //    isolation target (meta value), possible charges (no charge), EThcD
+    //    activation. Its MS level is in the group AND its own (equal), the
+    //    isolation offsets its own.
+    sp.push_back(param_spectrum(
+        1, ref("pg_ms2_profile") + cv("MS:1000511", "ms level", "2"), ref("pg_filter"),
+        "<precursorList count=\"1\">\n<precursor>\n<isolationWindow>\n" + ref("pg_iso") +
+            cv("MS:1000828", "isolation window lower offset", "1.25", "MS:1000040") +
+            cv("MS:1000829", "isolation window upper offset", "0.75", "MS:1000040") + "</isolationWindow>\n<selectedIonList count=\"1\">\n<selectedIon>\n" + ref("pg_charges") +
+            cv("MS:1000744", "selected ion m/z", "500.75", "MS:1000040") +
+            "</selectedIon>\n</selectedIonList>\n<activation>\n" + ref("pg_ethcd") +
+            "</activation>\n</precursor>\n</precursorList>\n"));
+    // 2: own cvParams that override a group (centroid over the group's
+    //    profile), an escaped filter string, possible charges from a group
+    //    AND its own, a selected ion equal to the target (no meta value),
+    //    CID with an activation energy.
+    sp.push_back(param_spectrum(
+        2, ref("pg_ms2_profile") + cv("MS:1000511", "ms level", "2") + cv("MS:1000127", "centroid spectrum"),
+        cv("MS:1000512", "filter string", "ITMS + c ESI d w Full ms2 445.12@cid35.00 [110.00-2000.00] &amp; &lt;x&gt; &#65;"),
+        "<precursorList count=\"1\">\n<precursor>\n" + iso_own + "<selectedIonList count=\"1\">\n<selectedIon>\n" +
+            ref("pg_charges") + cv("MS:1000744", "selected ion m/z", "445.12", "MS:1000040") +
+            cv("MS:1000041", "charge state", "2") + cv("MS:1000633", "possible charge state", "4") +
+            "</selectedIon>\n</selectedIonList>\n<activation>\n" + cv("MS:1000133", "collision-induced dissociation") +
+            cv("MS:1000509", "activation energy", "35", "UO:0000266") + "</activation>\n</precursor>\n</precursorList>\n"));
+    // 3: a precursor without a selected ion (its m/z is the target), HCD.
+    sp.push_back(param_spectrum(
+        3, cv("MS:1000511", "ms level", "2"), "",
+        "<precursorList count=\"1\">\n<precursor>\n<isolationWindow>\n" +
+            cv("MS:1000827", "isolation window target m/z", "600.25", "MS:1000040") +
+            "</isolationWindow>\n<activation>\n" + cv("MS:1000422", "beam-type collision-induced dissociation") +
+            "</activation>\n</precursor>\n</precursorList>\n"));
+    // 4: a selected ion without an isolation window (OpenMS keeps 0 as the
+    //    target), and a reference to a group that does not exist.
+    sp.push_back(param_spectrum(
+        4, cv("MS:1000511", "ms level", "2") + ref("pg_missing"), "",
+        "<precursorList count=\"1\">\n<precursor>\n<selectedIonList count=\"1\">\n<selectedIon>\n" +
+            cv("MS:1000744", "selected ion m/z", "700.5", "MS:1000040") + cv("MS:1000041", "charge state", "3") +
+            "</selectedIon>\n</selectedIonList>\n<activation>\n" + cv("MS:1002472", "trap-type collision-induced dissociation") +
+            "</activation>\n</precursor>\n</precursorList>\n"));
+    return write_group_mzml(header_src, path, groups, sp);
+  }
+
+  /// The pinned fixture: the fields 1.11 already read, each ONLY in a
+  /// referenced group, which OpenMS resolves and the fast reader (1.11 and
+  /// step 0 alike) does not. Resolving them changes tags, so it is a separate
+  /// declared item; until then these must read exactly as 1.11 reads them.
+  ///  0: MS1, own MS level;
+  ///  1: MS level only in a group (1.11: not read, so not an MS2, not tagged);
+  ///  2: charge only in a group (1.11: no charge, tagged as 2+);
+  ///  3: isolation target and offsets only in a group (1.11: no offsets);
+  ///  4: selected-ion m/z and intensity only in a group, own isolation target
+  ///     (1.11: the target as precursor m/z, no intensity).
+  bool write_pinned_fixture(const std::string& header_src, const std::string& path)
+  {
+    const std::string groups =
+        "<referenceableParamGroup id=\"pin_ms2\">\n" + cv("MS:1000511", "ms level", "2") +
+        "</referenceableParamGroup>\n"
+        "<referenceableParamGroup id=\"pin_z3\">\n" + cv("MS:1000041", "charge state", "3") +
+        "</referenceableParamGroup>\n"
+        "<referenceableParamGroup id=\"pin_iso\">\n" +
+        cv("MS:1000827", "isolation window target m/z", "612", "MS:1000040") +
+        cv("MS:1000828", "isolation window lower offset", "1", "MS:1000040") +
+        cv("MS:1000829", "isolation window upper offset", "1.5", "MS:1000040") + "</referenceableParamGroup>\n"
+        "<referenceableParamGroup id=\"pin_ion\">\n" + cv("MS:1000744", "selected ion m/z", "700.75", "MS:1000040") +
+        cv("MS:1000042", "peak intensity", "1234", "MS:1000131") + "</referenceableParamGroup>\n";
+    const std::string hcd = "<activation>\n" + cv("MS:1000422", "beam-type collision-induced dissociation") +
+                            "</activation>\n";
+    const std::string ms2 = cv("MS:1000511", "ms level", "2");
+    std::vector<std::string> sp;
+    sp.push_back(param_spectrum(0, cv("MS:1000511", "ms level", "1"), "", ""));
+    sp.push_back(param_spectrum(
+        1, ref("pin_ms2"), "",
+        "<precursorList count=\"1\">\n<precursor>\n<selectedIonList count=\"1\">\n<selectedIon>\n" +
+            cv("MS:1000744", "selected ion m/z", "445.25", "MS:1000040") + cv("MS:1000041", "charge state", "2") +
+            "</selectedIon>\n</selectedIonList>\n" + hcd + "</precursor>\n</precursorList>\n"));
+    sp.push_back(param_spectrum(
+        2, ms2, "",
+        "<precursorList count=\"1\">\n<precursor>\n<selectedIonList count=\"1\">\n<selectedIon>\n" +
+            ref("pin_z3") + cv("MS:1000744", "selected ion m/z", "512.25", "MS:1000040") +
+            "</selectedIon>\n</selectedIonList>\n" + hcd + "</precursor>\n</precursorList>\n"));
+    sp.push_back(param_spectrum(
+        3, ms2, "",
+        "<precursorList count=\"1\">\n<precursor>\n<isolationWindow>\n" + ref("pin_iso") +
+            "</isolationWindow>\n<selectedIonList count=\"1\">\n<selectedIon>\n" +
+            cv("MS:1000744", "selected ion m/z", "612.3", "MS:1000040") + cv("MS:1000041", "charge state", "2") +
+            "</selectedIon>\n</selectedIonList>\n" + hcd + "</precursor>\n</precursorList>\n"));
+    sp.push_back(param_spectrum(
+        4, ms2, "",
+        "<precursorList count=\"1\">\n<precursor>\n<isolationWindow>\n" +
+            cv("MS:1000827", "isolation window target m/z", "700.5", "MS:1000040") +
+            "</isolationWindow>\n<selectedIonList count=\"1\">\n<selectedIon>\n" + ref("pin_ion") +
+            cv("MS:1000041", "charge state", "2") + "</selectedIon>\n</selectedIonList>\n" + hcd +
+            "</precursor>\n</precursorList>\n"));
+    return write_group_mzml(header_src, path, groups, sp);
+  }
+}
+
 int main(int argc, char** argv)
 {
   const std::string fixture =
@@ -344,11 +666,20 @@ int main(int argc, char** argv)
   const Size n = std::min<Size>(reader.getNrSpectra(), ref.getNrSpectra());
   check(n > 0, "fixture has spectra");
   Size ms2 = 0, with_prec = 0, with_charge = 0;
+  Step0Seen ondisc_seen;
   for (Size i = 0; i < n; ++i)
   {
     const MSSpectrum got = reader.getSpectrum(i);
     const MSSpectrum want = ref.getSpectrum(i);
     const std::string at = " (spectrum " + std::to_string(i) + ")";
+    // Step 0 (1.12): type, filter string, activation, possible charges and
+    // the isolation target, against OnDiscMSExperiment itself.
+    {
+      const std::string d = step0_diff(got, want, ondisc_seen);
+      check(d.empty(), "step-0 metadata as OnDisc: " + d + at);
+      const std::string dm = metadata_only_diff(reader.getSpectrumMetadata(i), got);
+      check(dm.empty(), "getSpectrumMetadata as getSpectrum: " + dm + at);
+    }
 
     check(got.getMSLevel() == want.getMSLevel(), "ms level" + at);
     // Retention time to the microsecond: the reader converts from minutes.
@@ -401,6 +732,88 @@ int main(int argc, char** argv)
   check(ms2 > 0, "fixture exercises MS2 spectra");
   check(with_prec > 0, "fixture exercises precursors");
   check(with_charge > 0, "fixture exercises precursor charges");
+  check(ondisc_seen.typed > 0 && ondisc_seen.activation > 0, "fixture exercises spectrum type and activation");
+
+  // Step 0 against OpenMS on the param-group fixture and on every vendored
+  // mzML: each field must be exercised somewhere, or the test proves nothing.
+  {
+    const std::string pg = tmp + "/fastag_paramgroups.mzML";
+    check(write_paramgroup_fixture(indexed, pg), "write the param-group fixture");
+    const Step0Seen s = metadata_vs_openms(pg, "param groups");
+    check(s.spectra == 5, "param groups: all 5 spectra compared");
+    check(s.typed == 3, "param groups: type from a group, from a group overridden, and from a group on MS1");
+    check(s.filter == 2, "param groups: filter string from a group and escaped in its own cvParam");
+    check(s.activation == 4 && s.energy == 2, "param groups: activation from a group and own, energy both ways");
+    check(s.possible == 2, "param groups: possible charge states from a group and mixed");
+    check(s.target_meta == 2, "param groups: the isolation target kept as meta value (and 0 without a window)");
+    FASTag::IndexedMzMLReader r(pg);
+    check(r.ok() && r.reportsSpectrumMetadata(), "param groups: the fast reader takes the file");
+    const MSSpectrum s1 = r.getSpectrum(1);
+    check(s1.getMSLevel() == 2 && s1.size() == 2, "param groups: spectrum 1 decodes as an MS2");
+    check(s1.getPrecursors().size() == 1 && s1.getPrecursors()[0].metaValueExists("isolation window target m/z") &&
+              double(s1.getPrecursors()[0].getMetaValue("isolation window target m/z")) == 500.5,
+          "param groups: the isolation-target meta value comes from a group");
+    check(s1.getType() == SpectrumSettings::SpectrumType::PROFILE &&
+              s1.getPrecursors().size() == 1 &&
+              s1.getPrecursors()[0].getActivationMethods() ==
+                  std::set<Precursor::ActivationMethod>{Precursor::ActivationMethod::ETD,
+                                                       Precursor::ActivationMethod::EThcD} &&
+              s1.getPrecursors()[0].getPossibleChargeStates() == std::vector<Int>{2, 3},
+          "param groups: spectrum 1 reads as written");
+    const MSSpectrum s2 = r.getSpectrum(2);
+    check(s2.getMetaValue("filter string").toString() ==
+              "ITMS + c ESI d w Full ms2 445.12@cid35.00 [110.00-2000.00] & <x> A",
+          "param groups: the filter string is unescaped");
+    check(s2.getPrecursors().size() == 1 &&
+              s2.getPrecursors()[0].getPossibleChargeStates() == std::vector<Int>{2, 3, 4},
+          "param groups: group possible charges come first, then own ones");
+  }
+
+  // The fields 1.11 already read stay as 1.11 reads them when they are only
+  // in a param group (byte-identical tags; resolving them is a separate,
+  // declared output change). OpenMS must resolve each, or the fixture
+  // proves nothing.
+  {
+    const std::string pin = tmp + "/fastag_paramgroups_pinned.mzML";
+    check(write_pinned_fixture(indexed, pin), "write the pinned param-group fixture");
+    PeakMap want;
+    try { MzMLFile().load(pin, want); }
+    catch (const Exception::BaseException& e) { check(false, std::string("pinned: OpenMS loads the file (") + e.what() + ")"); }
+    FASTag::IndexedMzMLReader r(pin);
+    check(r.ok() && r.getNrSpectra() == 5 && want.size() == 5, "pinned: 5 spectra on both sides");
+    if (r.ok() && r.getNrSpectra() == 5 && want.size() == 5)
+    {
+      const MSSpectrum g1 = r.getSpectrum(1), g2 = r.getSpectrum(2), g3 = r.getSpectrum(3), g4 = r.getSpectrum(4);
+      check(want[1].getMSLevel() == 2, "pinned: OpenMS takes the MS level from a group");
+      // Not read, the spectrum keeps MSSpectrum's default level 1: not an
+      // MS2, not decoded, not tagged.
+      check(g1.getMSLevel() == 1 && g1.empty(), "pinned: an MS level only in a group is not read (1.11)");
+      check(r.getSpectrumMetadata(1).getMSLevel() == 1, "pinned: nor by getSpectrumMetadata (1.11)");
+      check(!want[2].getPrecursors().empty() && want[2].getPrecursors()[0].getCharge() == 3,
+            "pinned: OpenMS takes the charge from a group");
+      check(g2.getPrecursors().size() == 1 && g2.getPrecursors()[0].getCharge() == 0 &&
+                g2.getPrecursors()[0].getMZ() == 512.25,
+            "pinned: a charge only in a group is not read (1.11)");
+      check(!want[3].getPrecursors().empty() && want[3].getPrecursors()[0].getIsolationWindowLowerOffset() == 1.0 &&
+                want[3].getPrecursors()[0].getIsolationWindowUpperOffset() == 1.5,
+            "pinned: OpenMS takes the isolation offsets from a group");
+      check(g3.getPrecursors().size() == 1 && g3.getPrecursors()[0].getIsolationWindowLowerOffset() == 0 &&
+                g3.getPrecursors()[0].getIsolationWindowUpperOffset() == 0 && g3.getPrecursors()[0].getMZ() == 612.3,
+            "pinned: isolation offsets only in a group are not read (1.11)");
+      // The step-0 target meta value does take the group's target.
+      check(g3.getPrecursors().size() == 1 &&
+                g3.getPrecursors()[0].metaValueExists("isolation window target m/z") &&
+                double(g3.getPrecursors()[0].getMetaValue("isolation window target m/z")) == 612.0,
+            "pinned: the isolation-target meta value is resolved from a group (step 0)");
+      check(!want[4].getPrecursors().empty() && std::fabs(want[4].getPrecursors()[0].getMZ() - 700.75) < 1e-9 &&
+                want[4].getPrecursors()[0].getIntensity() == 1234.0f,
+            "pinned: OpenMS takes the selected-ion m/z and intensity from a group");
+      check(g4.getPrecursors().size() == 1 && g4.getPrecursors()[0].getMZ() == 700.5 &&
+                g4.getPrecursors()[0].getIntensity() == 0.0f && g4.getPrecursors()[0].getCharge() == 2,
+            "pinned: a selected-ion m/z and intensity only in a group are not read; the target is the m/z (1.11)");
+    }
+  }
+  for (int a = 2; a < argc; ++a) metadata_vs_openms(argv[a], std::string("step 0: ") + argv[a]);
 
   check(!reader.indexRebuilt(), "a valid index is used, not rebuilt");
 
