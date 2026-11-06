@@ -451,6 +451,11 @@ MGF→mzML direction is exact.
 | `-species_use_gapped` | off | Let gapped tags contribute taxonomic evidence (see Species detection) |
 | `-species_deconvolve` | off | Correct taxon counts for sequence shared between taxa |
 | `-species_evidence <mode>` | best | Which of a spectrum's tags make it count for a taxon: `best` = the taxa of its lowest-E-value tag that maps into the index (compared as printed in the `evalue` column; ties united), `all` = the union over every reported tag (the rule up to 1.9.0) |
+| `-species_call <mode>` | none | `decoy`: call each reported taxon present, no_call or not_detected against a decoy-tag null plus homology spill; appends 7 columns (see Species detection) |
+| `-species_call_params <file>` | `species_call.tsv` in the taxonomy dir | With `-species_call decoy`: the decision parameters (alpha, tau, n_min) |
+| `-species_call_min_units <n>` | 200 | With `-species_call decoy`: fewer spectra with taxon evidence make the run a few_spectra no_call |
+| `-species_call_decoys <n>` | 5 | With `-species_call decoy`: decoy tags per tag (1-100) |
+| `-species_pi0 <f>` | 1 | With `-species_call decoy`: pi0 of the q-values; 1 = Benjamini-Hochberg, 0 = estimate (Storey) |
 | `-subsample_spectra <n>` / `-subsample_fraction <f>` | 0 | Tag only a random subset (count or fraction; if both are given, the count wins); 0 = all |
 | `-subsample_seed <n>` | 1 | Seed for the `-subsample_*` selection |
 | `-mzpeak_read_memory <MB>` | 0 | No effect; accepted for existing command lines |
@@ -771,6 +776,15 @@ the PXD000001 tail from Oryza/Zea into Pectobacterium's real relatives
 Dickeya/Yersinia, but it also suppresses genuine low-abundance taxa, and on a
 human run it disperses the mammalian block without improving the margin. See
 [doc/SPECIES-DETECTOR.md](doc/SPECIES-DETECTOR.md) for the numbers.
+
+**Calibrated calls (opt-in).** `-species_call decoy` appends `call
+call_reason decoy_spectra decoy_expected decoy_qvalue share lod` to every row:
+`present`, `no_call` (low_resolution, few_spectra, unstable, near_neighbour) or
+`not_detected` with a detection limit, never "absent". The null is decoy tags
+looked up like the tags plus the spill a stronger related taxon is expected to
+cause; `decoy_expected` is that null's expectation (`expected` keeps its 1.10
+meaning). The shipped parameters are provisional. See
+[doc/SPECIES-DETECTOR.md](doc/SPECIES-DETECTOR.md).
 
 The longest `-tag_length` plus 2 × `-extension` must reach the index k (7).
 Otherwise no tag can be long enough to look up, and FASTag refuses the run up
