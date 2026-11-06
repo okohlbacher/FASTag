@@ -693,7 +693,9 @@ protected:
                           "-complement_tolerance_unit fragment the factor k of "
                           "k*(fragment tolerance at the peak + at the partner)", false, true);
     setMinFloat_("complement_tolerance", 1e-9);
-    registerStringOption_("complement_tolerance_unit", "<unit>", FASTag::Cli::kComplementToleranceUnit,
+    // "<u>", not "<unit>": the longest option-and-argument column of the
+    // --helphelp listing must stay the 1.11 width, or every line reflows.
+    registerStringOption_("complement_tolerance_unit", "<u>", FASTag::Cli::kComplementToleranceUnit,
                           "Da: -complement_tolerance is absolute. fragment: it scales the "
                           "run's -fragment_tolerance at both partners", false, true);
     setValidStrings_("complement_tolerance_unit", ListUtils::create<std::string>("Da,fragment"));
