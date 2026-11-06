@@ -1175,15 +1175,22 @@ protected:
 
     const std::string recon_out = getStringOption_("recon_out");
     const std::string delta_out = getStringOption_("delta_out");
+    // recon_on: -recon_out is written. place_on: tags are placed on the
+    // database (the index is built, every tag reconciled, the delta sample
+    // taken), whether or not -recon_out is written. Every reader of the
+    // placements adds its term at its anchor.
     const bool recon_on = !recon_out.empty();
-    if (!delta_out.empty() && !recon_on)
+    const bool place_on = recon_on
+        // ---- 1.12 A: placement readers ----
+        ;
+    if (!delta_out.empty() && !place_on)
     {
       OPENMS_LOG_ERROR << "-delta_out requires -recon_out (the histogram is "
                           "aggregated over reconciliations)." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
     const bool recon_loc = getFlag_("recon_localize");
-    if (recon_loc && !recon_on)
+    if (recon_loc && !place_on)
     {
       OPENMS_LOG_ERROR << "-recon_localize requires -recon_out (it adds columns "
                           "to the reconciliations)." << std::endl;
@@ -1244,18 +1251,21 @@ protected:
     ProteinIdentification::SearchParameters id_params;
     FASTag::ProteomeIndex pindex;
     FASTag::TagReconciler recon(p.frag_tol, p.tol_ppm, both_orientations);
-    if (recon_on)
+    // The database the index is built from (-recon_fasta, else -fasta), kept
+    // for readers that stream it again; empty without placement.
+    std::string recon_db;
+    if (place_on)
     {
-      std::string rfasta = getStringOption_("recon_fasta");
-      if (rfasta.empty()) rfasta = fasta;
-      if (rfasta.empty())
+      recon_db = getStringOption_("recon_fasta");
+      if (recon_db.empty()) recon_db = fasta;
+      if (recon_db.empty())
       {
         OPENMS_LOG_ERROR << "-recon_out needs a database: give -recon_fasta "
                             "(or -fasta)." << std::endl;
         return ILLEGAL_PARAMETERS;
       }
       std::vector<FASTAFile::FASTAEntry> rentries;
-      FASTAFile().load(rfasta, rentries);
+      FASTAFile().load(recon_db, rentries);
       pindex.build(rentries, fixed_deltas, iso_tol);
       int rmin = getIntOption_("recon_min_length");
       if (rmin == 0) rmin = pindex.autoMinLen();
@@ -1270,7 +1280,7 @@ protected:
         // The modifications the index was built with: residue ones only. A
         // terminal one is not in the window masses, so its mass is part of the
         // gap and must not also be on the peptide.
-        id_params.db = rfasta;
+        id_params.db = recon_db;
         id_params.fixed_modifications = fixed_mods;
         id_params.variable_modifications = variable_mods;
         id_params.missed_cleavages = static_cast<UInt>(getIntOption_("recon_missed_cleavages"));
@@ -1295,10 +1305,25 @@ protected:
     const std::string label_out = getStringOption_("label_out");
     const std::string massgap_out = getStringOption_("massgap_out");
     const bool digest_on = !digest_out.empty();
-    const bool count_on = digest_on || !label_out.empty();
+    const bool label_on = !label_out.empty();
+    // Tag-end counting in the loop (PerThread::digest) feeds every report that
+    // reads tag ends: one term per reader, each cluster at its anchor.
+    const auto needCounting = [&]() {
+      return digest_on || label_on
+          // ---- 1.12 A: tag-end counting readers ----
+          // ---- 1.12 D: tag-end counting readers ----
+          ;
+    };
+    const bool count_on = needCounting();
     const bool massgap_on = !massgap_out.empty();
-    const bool delta_on = !delta_out.empty() || massgap_on;
-    if (massgap_on && !recon_on)
+    // gap_needed: the mass-gap tables are loaded and the histogram rows are
+    // kept as gaps (GapRow), for -massgap_out and every other gap reader.
+    const bool gap_needed = massgap_on
+        // ---- 1.12 A: mass-gap readers ----
+        ;
+    // delta_on: one delta sample per spectrum is taken and binned.
+    const bool delta_on = !delta_out.empty() || gap_needed;
+    if (massgap_on && !place_on)
     {
       OPENMS_LOG_ERROR << "-massgap_out requires -recon_out (the gaps are those of the "
                           "reconciliations, as in -delta_out)." << std::endl;
@@ -1338,7 +1363,7 @@ protected:
           {"digest_tag_min", "-digest_out", digest_on},
           {"digest_background_share", "-digest_out", digest_on},
           {"digest_window", "-digest_out or -label_out", count_on},
-          {"digest_silac_min", "-label_out", !label_out.empty()},
+          {"digest_silac_min", "-label_out", label_on},
           {"glyco_out", "-glyco", glyco_flag},
           {"glyco_min_fraction", "-glyco", glyco_flag},
           {"species_out", "-species", want_species},
@@ -1366,7 +1391,7 @@ protected:
         }
       }
     }
-    const std::string digest_dir = (digest_on || massgap_on) ? digestDir_() : std::string();
+    const std::string digest_dir = (digest_on || gap_needed) ? digestDir_() : std::string();
     const auto no_digest_dir = [&](const char* what) {
       OPENMS_LOG_ERROR << "No shipped " << what << " found (expected <bin>/../share/FASTag/digest). "
                           "Set FASTAG_DIGEST_DIR to the directory holding digest_models.tsv and "
@@ -1422,7 +1447,7 @@ protected:
     std::vector<FD::GapMod> gap_mods, cys_alkylations;
     std::vector<FD::Combo> gap_combos;
     FD::GapSettings gap_settings;
-    if (massgap_on)
+    if (gap_needed)
     {
       if (digest_dir.empty()) return no_digest_dir("mass-gap modifications");
       std::ifstream mf((digest_dir + "/massgap_mods.tsv").c_str());
@@ -2144,6 +2169,17 @@ protected:
     // reader here is indexed, so nothing is held during tagging.
     const bool want_out = !out_spectra.empty();
     std::vector<Size> kept_idx;
+    // One spectrum's delta sample: its placement's gap, interpretation and
+    // site localization (-recon_localize; loc_residue 0 when not localized).
+    struct DeltaSample
+    {
+      double delta = 0.0;
+      std::string interp;
+      char loc_residue = 0;  ///< the localized residue, 0 = not localized
+      int loc_score = 0;     ///< b/y ions explained with the gap there
+      int loc_ties = 0;      ///< region positions sharing loc_score
+      int region_len = 0;    ///< residues the gap localizes to (0 when exact)
+    };
     // Per-thread accumulators, summed after the loop. One cache-line-aligned
     // struct per thread, so neighbouring threads' counters never share a line.
     struct alignas(64) PerThread
@@ -2157,11 +2193,11 @@ protected:
       // per-length, so each entrapment event is weighted by 1/r_len later.
       std::vector<double> target_e;
       std::vector<std::pair<double, int>> entrap_e;
-      // -delta_out accumulators: one (delta, interp) sample per spectrum -- the
-      // best-E-value tag's smallest-|delta| placement -- so 50 correlated tags
-      // cannot flood a bin. Clamped-flank placements are excluded and counted:
-      // a flank clamped to 0 (FASTagger's max(0,.)) makes its delta bogus.
-      std::vector<std::pair<double, std::string>> delta;
+      // -delta_out accumulators: one sample per spectrum -- the best-E-value
+      // tag's smallest-|delta| placement -- so 50 correlated tags cannot
+      // flood a bin. Clamped-flank placements are excluded and counted: a
+      // flank clamped to 0 (FASTagger's max(0,.)) makes its delta bogus.
+      std::vector<DeltaSample> delta;
       size_t delta_clamped = 0;
       // -digest_out / -label_out: tag-end counts, and the MS2 metadata the
       // no-call rules read.
@@ -2262,7 +2298,7 @@ protected:
       // length this is simply the first placed tag.
       bool delta_have = false, delta_clamped = false;
       double delta_e = 0.0;
-      std::pair<double, std::string> delta_sample;
+      DeltaSample delta_sample;
       const std::string usi = usi_prefix.empty() || tags.empty()
           ? std::string()
           : usi_prefix + (mgf_in ? FASTag::usiIndexMgf(spec.metaValueExists("Scan_ID")
@@ -2323,7 +2359,7 @@ protected:
         if (count_on && !t.gapped && t.evalue <= 1.0)
           pt.digest.add(t.nterm_mass, t.cterm_mass, FASTag::baseSequence(t.seq));
 
-        if (recon_on && !row_entrap)  // known-false rows must not place or bin
+        if (place_on && !row_entrap)  // known-false rows must not place or bin
         {
           // The tag's own variable mods go on the localization ladder.
           const bool tag_modded = t.seq.find('[') != std::string::npos;
@@ -2334,43 +2370,48 @@ protected:
                                               recon_loc ? &loc_peaks : nullptr,
                                               prec.getCharge(),
                                               tag_modded ? &tag_shift : nullptr);
-          for (const auto& pl : places)
+          // -recon_out rows: one per placement.
+          if (recon_on)
           {
-            std::string prot = pl.protein;
-            for (char& ch : prot) if (ch == '\t' || ch == '\n' || ch == '\r') ch = ' ';
-            appendField(res.rbuf, spec.getNativeID()); res.rbuf += '\t';
-            res.rbuf += t.seq;             res.rbuf += '\t';
-            res.rbuf += prot;              res.rbuf += '\t';
-            res.rbuf += pl.peptide;        res.rbuf += '\t';
-            FASTag::appendNum(res.rbuf, pl.pos); res.rbuf += '\t';
-            res.rbuf += pl.reversed ? '1' : '0';    res.rbuf += '\t';
-            res.rbuf += pl.nterm_match ? '1' : '0'; res.rbuf += '\t';
-            res.rbuf += pl.cterm_match ? '1' : '0'; res.rbuf += '\t';
-            FASTag::appendNum(res.rbuf, pl.delta_mass, std::chars_format::fixed, 4);
-            res.rbuf += '\t';
-            if (pl.region_hi >= pl.region_lo)
+            for (const auto& pl : places)
             {
-              FASTag::appendNum(res.rbuf, pl.region_lo); res.rbuf += '-';
-              FASTag::appendNum(res.rbuf, pl.region_hi);
-            }
-            res.rbuf += '\t';
-            res.rbuf += pl.delta_interp;
-            if (recon_loc)
-            {
+              std::string prot = pl.protein;
+              for (char& ch : prot) if (ch == '\t' || ch == '\n' || ch == '\r') ch = ' ';
+              appendField(res.rbuf, spec.getNativeID()); res.rbuf += '\t';
+              res.rbuf += t.seq;             res.rbuf += '\t';
+              res.rbuf += prot;              res.rbuf += '\t';
+              res.rbuf += pl.peptide;        res.rbuf += '\t';
+              FASTag::appendNum(res.rbuf, pl.pos); res.rbuf += '\t';
+              res.rbuf += pl.reversed ? '1' : '0';    res.rbuf += '\t';
+              res.rbuf += pl.nterm_match ? '1' : '0'; res.rbuf += '\t';
+              res.rbuf += pl.cterm_match ? '1' : '0'; res.rbuf += '\t';
+              FASTag::appendNum(res.rbuf, pl.delta_mass, std::chars_format::fixed, 4);
               res.rbuf += '\t';
-              if (pl.loc_pos >= 0)
+              if (pl.region_hi >= pl.region_lo)
               {
-                res.rbuf += pl.peptide[static_cast<size_t>(pl.loc_pos)];
-                FASTag::appendNum(res.rbuf, pl.loc_site);
+                FASTag::appendNum(res.rbuf, pl.region_lo); res.rbuf += '-';
+                FASTag::appendNum(res.rbuf, pl.region_hi);
               }
               res.rbuf += '\t';
-              if (pl.loc_pos >= 0) FASTag::appendNum(res.rbuf, pl.loc_score);
-              res.rbuf += '\t';
-              if (pl.loc_pos >= 0) FASTag::appendNum(res.rbuf, pl.loc_ties);
+              res.rbuf += pl.delta_interp;
+              if (recon_loc)
+              {
+                res.rbuf += '\t';
+                if (pl.loc_pos >= 0)
+                {
+                  res.rbuf += pl.peptide[static_cast<size_t>(pl.loc_pos)];
+                  FASTag::appendNum(res.rbuf, pl.loc_site);
+                }
+                res.rbuf += '\t';
+                if (pl.loc_pos >= 0) FASTag::appendNum(res.rbuf, pl.loc_score);
+                res.rbuf += '\t';
+                if (pl.loc_pos >= 0) FASTag::appendNum(res.rbuf, pl.loc_ties);
+              }
+              res.rbuf += '\n';
             }
-            res.rbuf += '\n';
           }
           if (recon_ids_on) FASTag::addReconHits(id_hits, places, t.seq, t.evalue, prec.getCharge(), id_fixed);
+          // ---- 1.12 A: per-tag placement records ----
           // A candidate for the spectrum's -delta_out sample: take this
           // tag's min-|delta| placement.
           if (delta_on && !places.empty() && (!delta_have || t.evalue < delta_e))
@@ -2386,7 +2427,12 @@ protected:
             if (!best->nterm_match) side_flank = best->reversed ? t.cterm_mass : t.nterm_mass;
             else if (!best->cterm_match) side_flank = best->reversed ? t.nterm_mass : t.cterm_mass;
             delta_clamped = std::fabs(best->delta_mass) > 1e-6 && side_flank == 0.0;
-            delta_sample = {best->delta_mass, best->delta_interp};
+            delta_sample.delta = best->delta_mass;
+            delta_sample.interp = best->delta_interp;
+            delta_sample.loc_residue = best->loc_pos >= 0 ? best->peptide[static_cast<size_t>(best->loc_pos)] : '\0';
+            delta_sample.loc_score = best->loc_score;
+            delta_sample.loc_ties = best->loc_ties;
+            delta_sample.region_len = best->region_hi >= best->region_lo ? best->region_hi - best->region_lo + 1 : 0;
             delta_e = t.evalue;
             delta_have = true;
           }
@@ -3126,6 +3172,10 @@ protected:
                       << glyco_out << std::endl;
     }
 
+    // Report close, then placement processing, then the exports that read
+    // it: -recon_out is closed under recon_on; the delta histogram, the gap
+    // result and every placement reader run under place_on, whether or not
+    // -recon_out is written.
     if (recon_on)
     {
       rtsv.close();
@@ -3134,7 +3184,16 @@ protected:
         OPENMS_LOG_ERROR << "Failed writing " << recon_out << " (disk full?)." << std::endl;
         return CANNOT_WRITE_OUTPUT_FILE;
       }
+    }
 
+    // ---- placement processing (place_on) ----
+    if (place_on)
+    {
+      // The histogram rows as gaps (gap_needed only: the gap as parsed and as
+      // printed) and the one gap result every gap reader shares.
+      std::vector<FD::GapRow> gap_rows;
+      std::vector<std::string> gap_keys;
+      FD::GapResult gap_result;
       // -delta_out: aggregate the per-spectrum samples into a histogram.
       // 0.0005 Da bins, adjacent-bin local-max grouping into peaks; each row
       // reports the peak center, its spectrum count, and the most frequent
@@ -3149,9 +3208,9 @@ protected:
           for (const auto& d : pt.delta)
           {
             ++samples;
-            auto& b = bins[static_cast<int64_t>(std::llround(d.first / 0.0005))];
+            auto& b = bins[static_cast<int64_t>(std::llround(d.delta / 0.0005))];
             ++b.first;
-            if (!d.second.empty()) ++b.second[d.second];
+            if (!d.interp.empty()) ++b.second[d.interp];
           }
         }
         // Local-max grouping: a bin whose count is not exceeded by either
@@ -3170,8 +3229,6 @@ protected:
           }
           dtsv << "delta\tspectra\ttop_interps\n";
         }
-        std::vector<FD::GapRow> gap_rows;
-        std::vector<std::string> gap_keys;
         std::set<int64_t> absorbed;
         for (const auto& kv : bins)
         {
@@ -3201,7 +3258,7 @@ protected:
           char dnum[48];
           std::snprintf(dnum, sizeof dnum, "%.4f\t%llu\t", kv.first * 0.0005,
                         static_cast<unsigned long long>(count));
-          if (massgap_on)
+          if (gap_needed)
           {
             const std::string key(dnum, std::strchr(dnum, '\t'));
             gap_rows.push_back({std::strtod(key.c_str(), nullptr), count});
@@ -3229,10 +3286,13 @@ protected:
                           << (clamped ? ", " + std::to_string(clamped) + " excluded (clamped flank)" : std::string())
                           << " -> " << delta_out << std::endl;
         }
+        // One gap result for every gap reader (FD::gapResult): -massgap_out
+        // and the 1.12 readers see the same peaks on the same rows.
+        if (gap_needed) gap_result = FD::gapResult(gap_rows, gap_mods, gap_combos, gap_settings);
         if (massgap_on)
         {
           std::vector<FD::Row> rows = run_rows();
-          const auto more = FD::massgapRows(gap_rows, gap_keys, gap_mods, gap_combos, cys_alkylations, gap_settings);
+          const auto more = FD::massgapRows(gap_rows, gap_keys, gap_mods, cys_alkylations, gap_settings, gap_result);
           rows.insert(rows.end(), more.begin(), more.end());
           if (!FD::writeReport(massgap_out, rows))
           {
@@ -3242,40 +3302,42 @@ protected:
           OPENMS_LOG_INFO << "Mass gaps: " << gap_rows.size() << " histogram rows -> " << massgap_out << std::endl;
         }
       }
+      // ---- 1.12 A: placement processing and hand-off exports ----
+    }
 
-      if (recon_ids_on)
+    // -recon_id_out: the placements as identifications.
+    if (recon_ids_on)
+    {
+      size_t n_hits = 0;
+      for (const PeptideIdentification& id : recon_ids) n_hits += id.getHits().size();
+      // The mzIdentML schema requires at least one identification (and
+      // OpenMS's reader refuses a file without one); idXML and mzTab may be empty.
+      // A 0-byte file still marks the output as produced, for workflow
+      // engines that require every declared output, and replaces whatever an
+      // earlier run left at that path.
+      if (recon_ids.empty() && FileHandler::getTypeByFileName(recon_id_out) == FileTypes::MZIDENTML)
       {
-        size_t n_hits = 0;
-        for (const PeptideIdentification& id : recon_ids) n_hits += id.getHits().size();
-        // The mzIdentML schema requires at least one identification (and
-        // OpenMS's reader refuses a file without one); idXML and mzTab may be empty.
-        // A 0-byte file still marks the output as produced, for workflow
-        // engines that require every declared output, and replaces whatever an
-        // earlier run left at that path.
-        if (recon_ids.empty() && FileHandler::getTypeByFileName(recon_id_out) == FileTypes::MZIDENTML)
+        if (!std::ofstream(recon_id_out.c_str(), std::ios::trunc))
         {
-          if (!std::ofstream(recon_id_out.c_str(), std::ios::trunc))
-          {
-            OPENMS_LOG_ERROR << "Cannot write " << recon_id_out << "." << std::endl;
-            return CANNOT_WRITE_OUTPUT_FILE;
-          }
-          OPENMS_LOG_WARN << "Recon identifications: no placements, and mzIdentML cannot hold an "
-                             "empty result; " << recon_id_out << " written empty (0 bytes)." << std::endl;
+          OPENMS_LOG_ERROR << "Cannot write " << recon_id_out << "." << std::endl;
+          return CANNOT_WRITE_OUTPUT_FILE;
         }
-        else
+        OPENMS_LOG_WARN << "Recon identifications: no placements, and mzIdentML cannot hold an "
+                           "empty result; " << recon_id_out << " written empty (0 bytes)." << std::endl;
+      }
+      else
+      {
+        try
         {
-          try
-          {
-            FASTag::storeReconIds(recon_id_out, in, FASTAG_VERSION, id_params, recon_ids);
-          }
-          catch (const Exception::BaseException& e)
-          {
-            OPENMS_LOG_ERROR << "Failed writing " << recon_id_out << ": " << e.what() << std::endl;
-            return CANNOT_WRITE_OUTPUT_FILE;
-          }
-          OPENMS_LOG_INFO << "Recon identifications: " << n_hits << " hits on " << recon_ids.size()
-                          << " spectra, not FDR-controlled -> " << recon_id_out << std::endl;
+          FASTag::storeReconIds(recon_id_out, in, FASTAG_VERSION, id_params, recon_ids);
         }
+        catch (const Exception::BaseException& e)
+        {
+          OPENMS_LOG_ERROR << "Failed writing " << recon_id_out << ": " << e.what() << std::endl;
+          return CANNOT_WRITE_OUTPUT_FILE;
+        }
+        OPENMS_LOG_INFO << "Recon identifications: " << n_hits << " hits on " << recon_ids.size()
+                        << " spectra, not FDR-controlled -> " << recon_id_out << std::endl;
       }
     }
 
@@ -3347,7 +3409,7 @@ protected:
           if (r.section == "call" && (r.key == "model" || r.key == "reason")) status = r.key + " " + r.value;
         OPENMS_LOG_INFO << "Digest: " << tc.tags << " filtered tags, " << status << " -> " << digest_out << std::endl;
       }
-      if (!label_out.empty())
+      if (label_on)
       {
         std::vector<FD::Row> rows = run_rows();
         const auto more = FD::labelRows(tc, digest_settings);

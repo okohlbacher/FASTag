@@ -20,6 +20,10 @@ namespace FASTag
   struct Reconciliation
   {
     std::string protein;    ///< accession of the protein the peptide came from
+    /// Ordinal of that protein in the database (ProteomeIndex order, the order
+    /// of the FASTA entries), for per-protein aggregation without a lookup by
+    /// accession (accessions need not be unique).
+    uint32_t    protein_index = 0;
     std::string peptide;    ///< the digested peptide (I/L as in the database)
     size_t      start = 0;  ///< 0-based position of the peptide in its protein
     size_t      pos = 0;    ///< 0-based residue index where the tag starts in peptide

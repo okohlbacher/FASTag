@@ -300,12 +300,18 @@ namespace FASTag
     return s;
   }
 
+  uint32_t ProteomeIndex::proteinIndexAt(uint32_t pos) const
+  {
+    const size_t i = static_cast<size_t>(
+        std::upper_bound(starts_.begin(), starts_.end(), pos) - starts_.begin());
+    return static_cast<uint32_t>(i > 0 ? i - 1 : starts_.size());
+  }
+
   const std::string& ProteomeIndex::proteinAt(uint32_t pos) const
   {
     static const std::string none;
-    const size_t i = static_cast<size_t>(
-        std::upper_bound(starts_.begin(), starts_.end(), pos) - starts_.begin());
-    return i > 0 ? acc_[i - 1] : none;
+    const uint32_t i = proteinIndexAt(pos);
+    return i < acc_.size() ? acc_[i] : none;
   }
 
   uint32_t ProteomeIndex::proteinOffset(uint32_t pos) const

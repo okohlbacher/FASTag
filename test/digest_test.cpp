@@ -487,6 +487,63 @@ int main()
     check(pair, "massgap row: Oxidation + Met-loss+Acetyl");
   }
 
+  {
+    // gapResult (1.12 P2): detectGaps over the rows with >= min_bin spectra,
+    // members indexing the unfiltered rows; massgapRows with it equals the
+    // self-computing overload.
+    const std::vector<D::GapRow> rows = {{56.0262, 900}, {112.0524, 400}, {98.0368, 150}, {79.9663, 1200},
+                                         {15.9949, 200}, {0.0, 3000},     {137.3, 5},     {56.0302, 40},
+                                         {79.9603, 30},  {56.0282, 1},    {15.9939, 1}};
+    std::vector<std::string> keys;
+    for (const auto& r : rows) keys.push_back(D::num(r.delta));
+    for (const std::uint64_t min_bin : {std::uint64_t{1}, std::uint64_t{2}, std::uint64_t{50}})
+    {
+      D::GapSettings gs;
+      gs.min_bin = min_bin;
+      std::vector<D::GapRow> hist;
+      for (const auto& r : rows)
+        if (r.spectra >= min_bin) hist.push_back(r);
+      const D::GapResult old = D::detectGaps(hist, mods, combos, gs.window, gs.min_spectra, gs.min_share,
+                                             gs.silac_share, gs.silac_min);
+      const D::GapResult res = D::gapResult(rows, mods, combos, gs);
+      const std::string tag = " (min_bin " + std::to_string(min_bin) + ")";
+      bool eq = old.placed == res.placed && old.shifted == res.shifted && old.peaks.size() == res.peaks.size() &&
+                old.share == res.share && old.silac == res.silac && old.silac_share == res.silac_share;
+      for (std::size_t i = 0; eq && i < old.peaks.size(); ++i)
+        eq = old.peaks[i].delta == res.peaks[i].delta && old.peaks[i].spectra == res.peaks[i].spectra &&
+             old.peaks[i].explained_by == res.peaks[i].explained_by &&
+             old.peaks[i].alternatives == res.peaks[i].alternatives && old.peaks[i].context == res.peaks[i].context;
+      check(eq, "gapResult equals detectGaps on the min_bin-filtered rows" + tag);
+      bool members_ok = true;
+      for (const auto& p : res.peaks)
+      {
+        std::uint64_t n = 0;
+        for (std::size_t k = 0; k < p.members.size(); ++k)
+        {
+          const std::size_t m = p.members[k];
+          members_ok = members_ok && m < rows.size() && rows[m].spectra >= min_bin &&
+                       std::fabs(rows[m].delta - p.delta) <= 2 * gs.window && (k == 0 || p.members[k - 1] < m);
+          if (m < rows.size()) n += rows[m].spectra;
+        }
+        members_ok = members_ok && n == p.spectra;
+      }
+      check(members_ok, "peak members index the unfiltered rows and sum to the peak" + tag);
+      const auto a = D::massgapRows(rows, keys, mods, combos, {}, gs);
+      const auto b = D::massgapRows(rows, keys, mods, {}, gs, res);
+      bool same_rows = a.size() == b.size();
+      for (std::size_t i = 0; same_rows && i < a.size(); ++i)
+        same_rows = a[i].section == b[i].section && a[i].key == b[i].key && a[i].value == b[i].value &&
+                    a[i].n == b[i].n && a[i].description == b[i].description;
+      check(same_rows, "massgapRows with a precomputed gapResult equals the old path" + tag);
+    }
+    // Two rows, each below min_bin, that would form a peak together do not.
+    D::GapSettings gs;
+    gs.min_bin = 30;
+    gs.min_spectra = 20;
+    const auto split = D::gapResult({{15.9949, 25}, {15.9959, 25}, {0.0, 3000}}, mods, combos, gs);
+    check(split.peaks.empty(), "rows below min_bin never combine into a peak");
+  }
+
   if (failures) std::cerr << failures << " failure(s)\n";
   else std::cout << "digest_test: all checks passed\n";
   return failures ? 1 : 0;

@@ -482,10 +482,19 @@ namespace FASTag::Digest
     if (!r.placed) return r;
 
     // A peak is the sum of all unclaimed rows within tol of its top row.
-    std::vector<GapRow> bins = hist;
-    std::sort(bins.begin(), bins.end(), [](const GapRow& a, const GapRow& b) {
-      return a.delta != b.delta ? a.delta < b.delta : a.spectra < b.spectra;
+    // src[k]: the index in @p hist of bins[k]. Rows equal in (delta, spectra)
+    // are interchangeable, so bins is the same sequence a sort of the rows
+    // themselves gives.
+    std::vector<std::size_t> src(hist.size());
+    std::iota(src.begin(), src.end(), std::size_t{0});
+    std::stable_sort(src.begin(), src.end(), [&hist](std::size_t a, std::size_t b) {
+      const GapRow& x = hist[a];
+      const GapRow& y = hist[b];
+      return x.delta != y.delta ? x.delta < y.delta : x.spectra < y.spectra;
     });
+    std::vector<GapRow> bins;
+    bins.reserve(hist.size());
+    for (const std::size_t k : src) bins.push_back(hist[k]);
     std::vector<double> deltas;
     for (const GapRow& b : bins) deltas.push_back(b.delta);
     std::vector<char> claimed(bins.size(), 0);
@@ -502,17 +511,21 @@ namespace FASTag::Digest
       const std::size_t hi = static_cast<std::size_t>(std::upper_bound(deltas.begin(), deltas.end(), d + tol) - deltas.begin());
       std::uint64_t n = 0;
       PySum ds;
+      std::vector<std::size_t> members;
       for (std::size_t j = lo; j < hi; ++j)
       {
         if (claimed[j]) continue;
         claimed[j] = 1;
         n += bins[j].spectra;
         ds.add(bins[j].delta * static_cast<double>(bins[j].spectra));
+        members.push_back(src[j]);
       }
       d = ds.value() / static_cast<double>(n);
       if (static_cast<double>(n) < thr || std::fabs(d) <= 2 * tol) continue;  // calibration offsets
       const auto ex = explain(combos, mods, d, tol);
-      GapPeak p{d, n, {}, {}, {}};
+      GapPeak p{d, n, {}, {}, {}, {}};
+      std::sort(members.begin(), members.end());
+      p.members = std::move(members);
       if (!ex.empty())
       {
         p.explained_by = ex.front();

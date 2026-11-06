@@ -218,6 +218,27 @@ int main()
     std::cout << "6. ambiguity barrier honored\n";
   }
 
+  // --- 6b. protein ordinals, accessions and lengths (1.12 P2 accessors) ---
+  {
+    ProteomeIndex idx;
+    // Second entry: a dropped non-letter ('*') and a kept ambiguity code (X).
+    idx.build(entries({"MAAAK", "PEP*TXDEK", "GG"}), {}, 0);
+    check(idx.proteinCount() == 3, "three proteins");
+    check(idx.accession(0) == "P0" && idx.accession(1) == "P1" && idx.accession(2) == "P2",
+          "accessions in database order");
+    check(idx.proteinLength(0) == 5 && idx.proteinLength(1) == 8 && idx.proteinLength(2) == 2,
+          "lengths count kept letters (X kept, '*' dropped)");
+    std::vector<ProteomeIndex::TagOcc> occ;
+    idx.locateTag("DEK", false, occ);
+    check(occ.size() == 1 && idx.proteinIndexAt(occ[0].pos) == 1 && idx.proteinAt(occ[0].pos) == "P1",
+          "proteinIndexAt agrees with proteinAt");
+    occ.clear();
+    idx.locateTag("GG", false, occ);
+    check(occ.size() == 1 && idx.proteinIndexAt(occ[0].pos) == 2, "last protein's ordinal");
+    check(idx.proteinIndexAt(0) == 0, "text start is protein 0");
+    std::cout << "6b. protein ordinals, accessions and lengths\n";
+  }
+
   // --- 7. derived floor sanity ---
   {
     ProteomeIndex idx;

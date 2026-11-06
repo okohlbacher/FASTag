@@ -218,6 +218,10 @@ namespace FASTag::Digest
     std::vector<int> explained_by;              ///< empty = none
     std::vector<std::vector<int>> alternatives;
     std::string context;
+    /// The histogram rows the peak claimed: indices into the rows given to
+    /// detectGaps() (gapResult(): into its unfiltered rows), ascending.
+    /// Internal, never printed.
+    std::vector<std::size_t> members;
   };
 
   struct GapResult
@@ -290,9 +294,20 @@ namespace FASTag::Digest
     std::uint64_t silac_min = 500;
   };
 
+  /// The gap result every gap reader shares: detectGaps() over the rows of
+  /// @p rows with at least @p s.min_bin spectra, with @p s's window and
+  /// thresholds. GapPeak::members index @p rows itself (unfiltered).
+  GapResult gapResult(const std::vector<GapRow>& rows, const std::vector<GapMod>& mods,
+                      const std::vector<Combo>& combos, const GapSettings& s);
+
   /// The -massgap_out rows: @p rows / @p keys are every -delta_out row (its
   /// gap as parsed and as printed), @p cys the Cys alkylation candidates.
   std::vector<Row> massgapRows(const std::vector<GapRow>& rows, const std::vector<std::string>& keys,
                                const std::vector<GapMod>& mods, const std::vector<Combo>& combos,
                                const std::vector<GapMod>& cys, const GapSettings& s);
+  /// The same, with @p res = gapResult(rows, mods, combos, s) computed by the
+  /// caller, so the report and other gap readers share one result.
+  std::vector<Row> massgapRows(const std::vector<GapRow>& rows, const std::vector<std::string>& keys,
+                               const std::vector<GapMod>& mods, const std::vector<GapMod>& cys,
+                               const GapSettings& s, const GapResult& res);
 }
