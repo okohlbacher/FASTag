@@ -5,7 +5,12 @@
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
 
+#include "SpeciesLookup.h"
 #include "TaxIndex.h"
+
+#include <algorithm>
+#include <map>
+#include <random>
 
 #include <cstdint>
 #include <cstdio>
@@ -23,6 +28,68 @@ namespace
   void check(bool ok, const std::string& what)
   {
     if (!ok) { std::cerr << "FAIL: " << what << "\n"; ++failures; }
+  }
+
+  // The 1.11 inline loop of FASTag.cpp phase 10, verbatim apart from the
+  // variable plumbing: the reference SpeciesLookup::tagSupport must equal.
+  struct OldResult { bool ok = false; std::vector<uint32_t> taxa; uint64_t skipped = 0, generic = 0; };
+  OldResult oldTagSupport(const TaxIndex& idx, const std::string& seq, int index_k,
+                          size_t share_cap, double min_margin)
+  {
+    OldResult r;
+    uint64_t n_kmer_skipped = 0, n_tag_generic = 0;
+    do
+    {
+      const int tag_len = static_cast<int>(seq.size());
+      std::vector<uint32_t> kmer_taxa;
+      std::map<uint32_t, int> kmers_per_taxon;
+      int n_eval = 0;
+      bool unexplained = false;
+      for (int i = 0; i + index_k <= tag_len; ++i)
+      {
+        idx.lookup(TaxIndex::fold(seq.substr(static_cast<size_t>(i), static_cast<size_t>(index_k))), kmer_taxa);
+        if (kmer_taxa.empty()) { unexplained = true; break; }
+        if (kmer_taxa.size() > share_cap) { ++n_kmer_skipped; continue; }
+        ++n_eval;
+        for (uint32_t tx : kmer_taxa) ++kmers_per_taxon[tx];
+      }
+      if (unexplained || n_eval == 0) continue;
+      int best = 0;
+      for (const auto& kv : kmers_per_taxon) best = std::max(best, kv.second);
+      if (best < n_eval) continue;
+      int runner = 0;
+      for (const auto& kv : kmers_per_taxon) if (kv.second < best) runner = std::max(runner, kv.second);
+      const double margin = static_cast<double>(best - runner) / static_cast<double>(n_eval);
+      if (margin < min_margin) { ++n_tag_generic; continue; }
+      r.ok = true;
+      for (const auto& kv : kmers_per_taxon) if (kv.second == best) r.taxa.push_back(kv.first);
+    } while (false);
+    r.skipped = n_kmer_skipped;
+    r.generic = n_tag_generic;
+    return r;
+  }
+
+  // One tagSupport call compared with the old loop; returns the new result.
+  OldResult newTagSupport(const TaxIndex& idx, const std::string& seq, int k,
+                          size_t share_cap, double min_margin)
+  {
+    OldResult r;
+    TagLookupCounters c;
+    r.taxa = {999u};  // must be cleared
+    r.ok = tagSupport(idx, seq, k, share_cap, min_margin, r.taxa, c);
+    r.skipped = c.kmer_skipped;
+    r.generic = c.tag_generic;
+    return r;
+  }
+
+  bool sameAsOld(const TaxIndex& idx, const std::string& seq, int k, size_t share_cap, double min_margin,
+                 OldResult* out = nullptr)
+  {
+    const OldResult o = oldTagSupport(idx, seq, k, share_cap, min_margin);
+    const OldResult n = newTagSupport(idx, seq, k, share_cap, min_margin);
+    if (out) *out = n;
+    return o.ok == n.ok && o.taxa == n.taxa && o.skipped == n.skipped && o.generic == n.generic
+        && (n.ok || n.taxa.empty());
   }
 }
 
@@ -154,6 +221,70 @@ int main()
     writeAndTryLoad(hostile, "a hostile huge-count header");
 
     std::remove(good.c_str());
+  }
+
+
+  // SpeciesLookup::tagSupport (1.12 P6) equals the 1.11 inline loop of
+  // FASTag.cpp phase 10: return, taxa and both counters.
+  {
+    // k = 4 toy index over four taxa with designed overlaps.
+    std::vector<FASTAFile::FASTAEntry> se;
+    se.emplace_back("t1", "", "ACDEFGHKLMNPQ");   // taxon 1
+    se.emplace_back("t2", "", "ACDEFGHKWYWYR");   // taxon 2 shares ACDEFGHK with 1
+    se.emplace_back("t3", "", "ACDEMNPQRSTVW");   // taxon 3 shares ACDE and MNPQ
+    se.emplace_back("t4", "", "ACDEYYYYKLMN");    // taxon 4 shares ACDE, KLMN
+    std::vector<uint32_t> st = {1, 2, 3, 4};
+    TaxIndex sidx;
+    sidx.build(se, st, /*k=*/4);
+    const int k = 4;
+    OldResult r;
+
+    // Unexplained k-mer: WWWW is in no taxon -> the tag is dropped.
+    check(sameAsOld(sidx, "ACDEWWWW", k, 4, 0.0, &r) && !r.ok, "tagSupport: unexplained k-mer kills the tag");
+    // Intersection rule: CDEFGHK is in taxa 1 and 2 only (all k-mers).
+    check(sameAsOld(sidx, "CDEFGHK", k, 4, 0.0, &r) && r.ok && r.taxa == std::vector<uint32_t>({1, 2}),
+          "tagSupport: intersection of taxa carrying every k-mer");
+    // Intersection empty: every k-mer of HKLMNPQR is known, but taxon 1 lacks NPQR -> best < n_eval.
+    check(sameAsOld(sidx, "HKLMNPQR", k, 4, 0.0, &r) && !r.ok && r.generic == 0, "tagSupport: no taxon carries every k-mer");
+    // Share-cap skip: ACDE is in all 4 taxa; at cap 3 it is skipped and the
+    // rest decides (counter incremented).
+    check(sameAsOld(sidx, "ACDEFGH", k, 3, 0.0, &r) && r.ok && r.skipped == 1 && r.taxa == std::vector<uint32_t>({1, 2}),
+          "tagSupport: share-cap skip counts and does not delete");
+    // Every k-mer skipped -> n_eval == 0 -> dropped, skips still counted.
+    check(sameAsOld(sidx, "ACDE", k, 3, 0.0, &r) && !r.ok && r.skipped == 1, "tagSupport: all k-mers skipped");
+    // Skips before a later unexplained k-mer are still counted (old behaviour).
+    check(sameAsOld(sidx, "ACDEWWWW", k, 3, 0.0, &r) && !r.ok && r.skipped == 1, "tagSupport: skip then unexplained");
+    // Margin failure: ACDEFG -> ACDE{1,2,3,4} CDEF{1,2} DEFG{1,2}: best 3,
+    // runner 1, margin 2/3 < 0.7 -> generic.
+    check(sameAsOld(sidx, "ACDEFG", k, 4, 0.7, &r) && !r.ok && r.generic == 1, "tagSupport: margin failure");
+    check(sameAsOld(sidx, "ACDEFG", k, 4, 0.6, &r) && r.ok && r.generic == 0, "tagSupport: margin pass");
+    // Margin 1.0 with an all-shared tag: runner 0, margin 1 -> passes for all four.
+    check(sameAsOld(sidx, "ACDE", k, 4, 1.0, &r) && r.ok && r.taxa.size() == 4, "tagSupport: one k-mer, every taxon");
+    // I/L folding per k-mer and too-short tags.
+    check(sameAsOld(sidx, "GHKIMNPQ", k, 4, 0.0, &r) && r.ok && r.taxa == std::vector<uint32_t>({1}), "tagSupport: I folds to L");
+    check(sameAsOld(sidx, "ACD", k, 4, 0.0, &r) && !r.ok, "tagSupport: shorter than k");
+
+    // Randomised: substrings of the toy proteins, with occasional mutations,
+    // under every share cap and several margins.
+    std::mt19937 rng(12345);
+    const std::string alpha = "ACDEFGHIKLMNPQRSTVWY";
+    int mismatches = 0, n_ok = 0;
+    for (int trial = 0; trial < 20000; ++trial)
+    {
+      const std::string& src = se[rng() % se.size()].sequence;
+      const size_t len = 3 + rng() % 9;
+      const size_t start = rng() % src.size();
+      std::string seq = src.substr(start, len);
+      if (rng() % 4 == 0 && !seq.empty()) seq[rng() % seq.size()] = alpha[rng() % alpha.size()];
+      const size_t cap = rng() % 6;
+      const double margins[] = {0.0, 0.2, 0.34, 0.5, 0.67, 1.0};
+      const double m = margins[rng() % 6];
+      OldResult nr;
+      if (!sameAsOld(sidx, seq, k, cap, m, &nr)) ++mismatches;
+      if (nr.ok) ++n_ok;
+    }
+    check(mismatches == 0, "tagSupport equals the old loop on 20000 random tags");
+    check(n_ok > 1000, "random tags exercise the informative path");
   }
 
   if (failures == 0) std::cout << "taxindex_test: all checks passed\n";

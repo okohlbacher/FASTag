@@ -79,7 +79,7 @@ set(FASTAG_CORE_SOURCES_E)
 # ---- 1.12 A: core sources ----
 set(FASTAG_CORE_SOURCES_A)
 # ---- 1.12 D: core sources ----
-set(FASTAG_CORE_SOURCES_D)
+set(FASTAG_CORE_SOURCES_D src/SpeciesLookup.cpp)
 # ---- 1.12 F: core sources ----
 set(FASTAG_CORE_SOURCES_F src/OutputGuard.cpp)
 add_library(fastag_core STATIC ${FASTAG_CORE_SOURCES}

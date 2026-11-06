@@ -42,6 +42,7 @@
 #include "ReconIds.h"
 #include "RunMeta.h"
 #include "SpeciesEvidence.h"
+#include "SpeciesLookup.h"
 #include "SpectrumSampler.h"
 #include "TagFDR.h"
 #include "TagRecon.h"
@@ -3540,7 +3541,7 @@ protected:
       std::map<uint32_t, uint64_t> hits;       // per NODE, deduplicated per spectrum
       std::map<uint32_t, uint64_t> leaf_hits;  // per INDEX TAXON, deduplicated per spectrum
       size_t n_units = 0;
-      uint64_t n_kmer_skipped = 0, n_tag_generic = 0;
+      FASTag::TagLookupCounters lookup_counters;
       const FASTag::SpeciesEvidence ev_mode = getStringOption_("species_evidence") == "all"
           ? FASTag::SpeciesEvidence::All : FASTag::SpeciesEvidence::Best;
       std::vector<FASTag::TagSupport> support;  // this spectrum's informative tags
@@ -3551,39 +3552,11 @@ protected:
         {
           const std::string seq = FASTag::baseSequence(row.first);
           if (static_cast<int>(seq.size()) < min_len) continue;
-          const int tag_len = static_cast<int>(seq.size());
-          // Buffer reused across this tag's k-mers: lookup() fills it rather
-          // than returning a reference, because the mapped index holds taxon
-          // INDICES, not a vector to borrow.
-          std::vector<uint32_t> kmer_taxa;
-          std::map<uint32_t, int> kmers_per_taxon;  // taxon -> how many of this tag's k-mers it carries
-          int n_eval = 0;               // k-mers that were discriminative enough to use
-          bool unexplained = false;
-          for (int i = 0; i + index_k <= tag_len; ++i)
-          {
-            idx.lookup(FASTag::TaxIndex::fold(seq.substr(static_cast<size_t>(i), static_cast<size_t>(index_k))), kmer_taxa);
-            // A k-mer in NO taxon kills the tag: the reference cannot explain
-            // this tag at all.
-            if (kmer_taxa.empty()) { unexplained = true; break; }
-            if (kmer_taxa.size() > share_cap) { ++n_kmer_skipped; continue; }
-            ++n_eval;
-            for (uint32_t tx : kmer_taxa) ++kmers_per_taxon[tx];
-          }
-          if (unexplained || n_eval == 0) continue;
-
-          int best = 0;
-          for (const auto& kv : kmers_per_taxon) best = std::max(best, kv.second);
-          // The whole-tag rule: a taxon must carry EVERY k-mer that was actually
-          // evaluated. With share_cap at its maximum that is plain set
-          // intersection.
-          if (best < n_eval) continue;
-          int runner = 0;
-          for (const auto& kv : kmers_per_taxon) if (kv.second < best) runner = std::max(runner, kv.second);
-          const double margin = static_cast<double>(best - runner) / static_cast<double>(n_eval);
-          if (margin < min_margin) { ++n_tag_generic; continue; }
+          // The per-tag rule (share skip, whole-tag rule, margin) lives in
+          // SpeciesLookup.h.
           FASTag::TagSupport ts;
+          if (!FASTag::tagSupport(idx, seq, index_k, share_cap, min_margin, ts.taxa, lookup_counters)) continue;
           ts.evalue = row.second;
-          for (const auto& kv : kmers_per_taxon) if (kv.second == best) ts.taxa.push_back(kv.first);
           support.push_back(std::move(ts));
         }
         // The taxa this spectrum counts for: by default those of its best
@@ -3724,9 +3697,9 @@ protected:
         return CANNOT_WRITE_OUTPUT_FILE;
       }
       OPENMS_LOG_INFO << "Species: " << n_units << " spectra contributed taxon evidence";
-      if (n_kmer_skipped || n_tag_generic)
-        OPENMS_LOG_INFO << " (" << n_kmer_skipped << " k-mers too widely shared, "
-                        << n_tag_generic << " tags too generic)";
+      if (lookup_counters.kmer_skipped || lookup_counters.tag_generic)
+        OPENMS_LOG_INFO << " (" << lookup_counters.kmer_skipped << " k-mers too widely shared, "
+                        << lookup_counters.tag_generic << " tags too generic)";
       OPENMS_LOG_INFO << "; top " << want_rank << " calls -> " << species_out << std::endl;
     }
 
