@@ -109,7 +109,7 @@ test('cancel leaves no truncated output', { timeout: 300000 }, () =>
     await chooseInput(s, input)
     await s.click(await s.button(`Run on ${basename(input)}`))
     const cancel = await until('Cancel, or the finished table', async () => {
-      const [c] = await s.findAll("//button[normalize-space(.)='Cancel']")
+      const c = await s.buttonNow('Cancel')
       if (c) return c
       return /Showing [\d,]+ of/.test(await s.bodyText()) ? 'finished' : null
     }, 240000)

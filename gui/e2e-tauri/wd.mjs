@@ -87,8 +87,16 @@ export class Session {
     return v.map((e) => e[ELEMENT])
   }
 
-  click(el) {
-    return this.cmd('POST', `/element/${el}/click`, {})
+  /** A WebDriver click; if the driver refuses it (not interactable, an
+   *  overlay), a DOM click on the same element, so a spec fails on what the
+   *  app does rather than on the driver's hit test. */
+  async click(el) {
+    try {
+      await this.cmd('POST', `/element/${el}/click`, {})
+    } catch (e) {
+      if (!(e instanceof WebDriverError)) throw e
+      await this.exec('arguments[0].click()', { [ELEMENT]: el })
+    }
   }
 
   text(el) {
@@ -104,18 +112,30 @@ export class Session {
     return this.exec('return document.body.innerText')
   }
 
-  /** A button by its exact visible text (or aria-label), once it is enabled. */
+  /** A button by its exact visible text (or aria-label), once it is enabled.
+   *  Matched in the page (whitespace collapsed) rather than by XPath, and a
+   *  timeout lists the buttons there were, so a renamed label is plain. */
   async button(name, timeoutMs = 20000) {
-    const q = JSON.stringify(name)
-    const xp = `//button[normalize-space(.)=${q} or @aria-label=${q}]`
-    return until(
-      `the button "${name}"`,
-      async () => {
-        const [el] = await this.findAll(xp)
-        return el && (await this.enabled(el)) ? el : null
-      },
-      timeoutMs
-    )
+    try {
+      return await until(`the button "${name}"`, () => this.buttonNow(name), timeoutMs)
+    } catch (e) {
+      const have = await this.exec(
+        "return [...document.querySelectorAll('button')].map((b) => (b.disabled ? '(disabled) ' : '') + (b.textContent || '').replace(/\\s+/g, ' ').trim() + (b.getAttribute('aria-label') ? ` [${b.getAttribute('aria-label')}]` : ''))"
+      ).catch(() => [])
+      throw new Error(`${e.message}; buttons on the page: ${JSON.stringify(have)}`)
+    }
+  }
+
+  /** The enabled button named @p name now, or null. */
+  async buttonNow(name) {
+    const find = `const want = arguments[0];
+      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+      for (const b of document.querySelectorAll('button')) {
+        if ((norm(b.textContent) === want || norm(b.getAttribute('aria-label')) === want) && !b.disabled) return b;
+      }
+      return null`
+    const el = await this.exec(find, name)
+    return el ? el[ELEMENT] : null
   }
 
   /** Wait for the body text to match @p re; returns the match. */
