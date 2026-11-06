@@ -33,6 +33,12 @@ on:
         description: 'Build the macOS desktop app without cutting a tag'
         type: boolean
         default: false
+      # Exercises the homebrew-tap job without a tag: checks HOMEBREW_TAP_TOKEN
+      # exists and can see the tap's workflow; dispatches nothing.
+      tap_dry_run:
+        description: 'Check the Homebrew tap token without dispatching the tap'
+        type: boolean
+        default: false
       # A plain dry run ships no taxonomy index (~450 MB), so its dmg is far
       # smaller than a release dmg and the size ceiling on the ULMO step says
       # nothing about the real payload. With this switch on as well, the
@@ -1434,21 +1440,29 @@ jobs:
   # ------------------------------------------------- Homebrew tap (macOS)
   # okohlbacher/homebrew-fastag carries two casks (fastag = the desktop app,
   # fastag-cli = the command line) that download this release's two macOS
-  # disk images (Apple silicon only since 1.8.0). Its own workflow rewrites version + sha256, audits, installs
-  # and commits -- on a 6-hour schedule with no secrets, or right now when
-  # this job asks it to. Asking needs a fine-grained PAT (secret
-  # HOMEBREW_TAP_TOKEN: only okohlbacher/homebrew-fastag, Actions read+write)
-  # because GITHUB_TOKEN is scoped to this repository and cannot dispatch a
-  # workflow in another one.
+  # disk images (Apple silicon only since 1.8.0). Its own workflow rewrites
+  # version + sha256, audits, installs and commits when this job dispatches
+  # it. Dispatching needs a fine-grained PAT (secret HOMEBREW_TAP_TOKEN:
+  # repository access ONLY okohlbacher/homebrew-fastag, permission
+  # "Actions: Read and write") because GITHUB_TOKEN is scoped to this
+  # repository and cannot dispatch a workflow in another one.
   #
-  # Gated on release-complete, which is what asserts the two images are on
-  # the release; a partial release is never announced. `secrets.*` cannot
-  # appear in an `if:` (0-job startup_failure), so the presence check is a
-  # step output, same pattern as the signing gate above. The dispatch never
-  # fails the tag build: the tap is a downstream convenience, and its schedule
-  # publishes the release on its own within six hours either way.
+  # Ordering: both casked images are built by THIS workflow, and
+  # release-complete asserts they are on the release, so gating on it is
+  # enough -- the Windows zip (windows.yml) is not part of any cask.
+  #
+  # FAILS LOUDLY. Up to 1.11.0 a missing token was only a ::notice and the job
+  # went green, relying on the tap's 6-hourly schedule; the secret was never
+  # set, so every release waited up to 6 h for the schedule (1.10.0 and 1.11.0
+  # were dispatched by hand instead). Now a tag build without the token, or
+  # with one that cannot dispatch, is red. `secrets.*` cannot appear in an `if:`
+  # (0-job startup_failure), so the presence check is a step output, same
+  # pattern as the signing gate above.
+  #
+  # tap_dry_run (workflow_dispatch) runs this job without a tag: it checks the
+  # token exists and can see the tap's workflow, and dispatches nothing.
   homebrew-tap:
-    if: ${{ !cancelled() && needs.release-complete.result == 'success' }}
+    if: ${{ !cancelled() && (needs.release-complete.result == 'success' || inputs.tap_dry_run) }}
     needs: [release-complete]
     runs-on: ubuntu-24.04
     permissions: {}
@@ -1457,16 +1471,30 @@ jobs:
         id: tap-token
         env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          TAG: ${{ github.ref_name }}
         run: |
           if [ -z "$HOMEBREW_TAP_TOKEN" ]; then
-            echo "::notice title=Homebrew tap not dispatched::HOMEBREW_TAP_TOKEN is not set; okohlbacher/homebrew-fastag picks this release up on its own schedule within 6 h."
+            echo "::error title=Homebrew tap not updated::secret HOMEBREW_TAP_TOKEN is not set in okohlbacher/FASTag. Add a fine-grained PAT (repository access: only okohlbacher/homebrew-fastag; permission Actions: Read and write), then publish this release with: gh workflow run update-casks.yml -R okohlbacher/homebrew-fastag -f tag=$TAG"
             echo "enabled=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            exit 1
           fi
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+
+      - name: Check the token can reach the tap's workflow (dry run)
+        if: steps.tap-token.outputs.enabled == 'true' && inputs.tap_dry_run
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          GH_REPO: okohlbacher/homebrew-fastag
+        run: |
+          set -euo pipefail
+          # Read-only: proves the secret is a live token with Actions access
+          # to the tap. Write access is only provable by dispatching, which a
+          # dry run must not do.
+          state=$(gh api "repos/$GH_REPO/actions/workflows/update-casks.yml" --jq .state)
+          echo "update-casks.yml in $GH_REPO is '$state'; dry run, nothing dispatched"
 
       - name: Ask the tap to publish this release
-        if: steps.tap-token.outputs.enabled == 'true'
+        if: steps.tap-token.outputs.enabled == 'true' && !inputs.tap_dry_run && startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           GH_REPO: okohlbacher/homebrew-fastag
@@ -1480,5 +1508,6 @@ jobs:
           if gh workflow enable update-casks.yml && gh workflow run update-casks.yml -f "tag=$TAG"; then
             echo "dispatched update-casks.yml in okohlbacher/homebrew-fastag for $TAG"
           else
-            echo "::warning title=Homebrew tap dispatch failed::could not dispatch update-casks.yml in okohlbacher/homebrew-fastag (expired HOMEBREW_TAP_TOKEN?). The tap's own schedule publishes $TAG within 6 h."
+            echo "::error title=Homebrew tap dispatch failed::could not dispatch update-casks.yml in okohlbacher/homebrew-fastag (expired HOMEBREW_TAP_TOKEN, or missing Actions: Read and write on the tap?). Publish by hand: gh workflow run update-casks.yml -R okohlbacher/homebrew-fastag -f tag=$TAG"
+            exit 1
           fi
