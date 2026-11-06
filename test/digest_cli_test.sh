@@ -136,14 +136,17 @@ ptot=$(val "$TMP/pdigest.tsv" count tot)
 pcall="$(val "$TMP/plabel.tsv" label_call status) $(val "$TMP/plabel.tsv" label_call reason)"
 if [ "$ptot" -lt 175 ]; then [ "$pcall" = "no_call few_tags" ] || fail "label_call: $ptot tag ends at 20 ppm gave '$pcall'"
 else [ "$pcall" = "call -" ] || fail "label_call: $ptot tag ends at 20 ppm gave '$pcall'"; fi
-# label_call reads the tag ends only: the same with and without -recon_out/-massgap_out, at 1 and 3 threads
-run "${COMMON[@]}" -out "$TMP/l0.tsv" -label_out "$TMP/label0.tsv"
+# label_call reads the tag ends only: the same with and without -recon_out/-massgap_out, at 1, 2 and 3
+# threads (all with R's empty -fixed_modifications, which changes the tags themselves)
+run "${COMMON[@]}" -out "$TMP/l0.tsv" -fixed_modifications -label_out "$TMP/label0.tsv"
 run "${COMMON[@]}" -out "$TMP/l1.tsv" "${R[@]}" -delta_out "$TMP/delta2.tsv" -label_out "$TMP/label1.tsv"
 run "${COMMON[@]}" -out "$TMP/l2.tsv" "${R[@]}" -delta_out "$TMP/delta3.tsv" -massgap_out "$TMP/gap3.tsv" -label_out "$TMP/label2.tsv"
 same "$TMP/label1.tsv" "$TMP/label2.tsv" "-massgap_out changed -label_out"
 same "$TMP/label0.tsv" "$TMP/label1.tsv" "-recon_out changed -label_out"
-"$BIN" "${COMMON[@]}" -threads 1 -out "$TMP/l3.tsv" -label_out "$TMP/label3.tsv" > "$TMP/log" 2>&1 || fail "FASTag -threads 1"
-"$BIN" "${COMMON[@]}" -threads 3 -out "$TMP/l4.tsv" -label_out "$TMP/label4.tsv" > "$TMP/log" 2>&1 || fail "FASTag -threads 3"
+"$BIN" "${COMMON[@]}" -threads 1 -out "$TMP/l3.tsv" -fixed_modifications -label_out "$TMP/label3.tsv" > "$TMP/log" 2>&1 \
+  || fail "FASTag -threads 1"
+"$BIN" "${COMMON[@]}" -threads 3 -out "$TMP/l4.tsv" -fixed_modifications -label_out "$TMP/label4.tsv" > "$TMP/log" 2>&1 \
+  || fail "FASTag -threads 3"
 same "$TMP/label3.tsv" "$TMP/label4.tsv" "-label_out differs between 1 and 3 threads"
 same "$TMP/label0.tsv" "$TMP/label3.tsv" "-label_out differs between 2 and 1 threads"
 
