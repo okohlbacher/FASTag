@@ -25,7 +25,7 @@ use crate::{history, outputs};
 // name -> declared type, straight from the tool's own -write_ini. This is the
 // allowlist build_args() validates against. Embedded at compile time from the
 // single source of truth the frontend also reads.
-const MANIFEST: &str = include_str!("../../src/params.generated.json");
+pub(crate) const MANIFEST: &str = include_str!("../../src/params.generated.json");
 
 const EXE: &str = if cfg!(windows) { "FASTag.exe" } else { "FASTag" };
 
@@ -114,10 +114,10 @@ pub struct RunStarted {
 #[derive(Deserialize)]
 pub struct RunParams {
     #[serde(rename = "in")]
-    input: String,
-    out: String,
+    pub(crate) input: String,
+    pub(crate) out: String,
     #[serde(default)]
-    params: Map<String, Value>,
+    pub(crate) params: Map<String, Value>,
     // The user confirmed overwriting the outputs that already exist
     // (outputs_check). Without it a run with an existing output is refused.
     #[serde(default)]
@@ -194,7 +194,7 @@ fn parse_version(text: &str) -> Option<String> {
 /// window of its own -- one flashing at launch for the probe, one open for
 /// every run, and closing it killed the run. CREATE_NO_WINDOW suppresses it;
 /// piped stdio is unaffected.
-fn no_console_window(cmd: &mut Command) {
+pub(crate) fn no_console_window(cmd: &mut Command) {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -223,7 +223,7 @@ pub fn taxonomy_dir(r: &Resolved) -> Option<PathBuf> {
 /// load time (127 on a 128-thread node, ~2 s of CPU even for --help). FASTag
 /// never calls BLAS. The CLI wrappers set the same default; a user's own
 /// OPENBLAS_NUM_THREADS still wins.
-fn quiet_blas(cmd: &mut Command) {
+pub(crate) fn quiet_blas(cmd: &mut Command) {
     if std::env::var_os("OPENBLAS_NUM_THREADS").is_none() {
         cmd.env("OPENBLAS_NUM_THREADS", "1");
     }
@@ -445,7 +445,7 @@ fn value_to_scalar(v: &Value) -> Option<String> {
 
 // Build the argv from typed params. Only names the tool declares are emitted,
 // arrays only for list-typed options, and each value is its own argv element.
-fn build_args(p: &RunParams) -> Vec<String> {
+pub(crate) fn build_args(p: &RunParams) -> Vec<String> {
     let manifest: Value = serde_json::from_str(MANIFEST).unwrap_or(Value::Null);
     let mut types: HashMap<String, String> = HashMap::new();
     // String lists whose CLI default is not empty: an explicitly cleared one
@@ -850,6 +850,19 @@ pub fn outputs_check(params: RunParams) -> OutputsCheck {
     OutputsCheck { existing: show(&outputs::existing(&paths, &input)), outputs: show(&paths) }
 }
 
+/// The command line of a run of @p params with the binary @p r, binary
+/// first: what `run` replies as `command` and History records.
+pub(crate) fn command_of(r: &Resolved, params: &RunParams) -> Vec<String> {
+    std::iter::once(r.bin.display().to_string()).chain(build_args(params)).collect()
+}
+
+/// The command line a run of @p params is (command_of), for the Setup
+/// footer's Copy command: the same argv `run` would start.
+#[tauri::command]
+pub fn command_line(app: AppHandle, params: RunParams) -> Vec<String> {
+    command_of(&resolve_binary(&app), &params)
+}
+
 fn refused(reason: String) -> RunStarted {
     RunStarted { started: false, reason: Some(reason), out: None, outputs: None, command: None }
 }
@@ -862,7 +875,7 @@ pub fn launch(mgr: &RunManager, r: &Resolved, params: RunParams, sink: Sink, his
         return refused("a run is already in progress".into());
     }
     let Plan { args, cwd, outputs, resolved } = plan(&params);
-    let command: Vec<String> = std::iter::once(r.bin.display().to_string()).chain(args.iter().cloned()).collect();
+    let command = command_of(r, &params);
     let mut cmd = Command::new(&r.bin);
     // stdin is null: the CLI never reads it, and an inherited one could block.
     cmd.args(&args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
@@ -1632,6 +1645,25 @@ mod tests {
 
         fn kinds(v: &[(std::time::Instant, Value)], kind: &str) -> Vec<Value> {
             v.iter().filter(|m| m.1["kind"] == kind).map(|m| m.1.clone()).collect()
+        }
+
+        // The Setup footer's Copy command (command_line) is the argv `run`
+        // starts and replies, which History records.
+        #[test]
+        fn the_copied_command_line_is_the_one_the_run_is_given() {
+            let d = dir("command");
+            let req = r#"{"in":"$IN","out":"a.tags.tsv","params":{"tag_length":"4","species":true,"digest_out":"a.digest.tsv","fixed_modifications":[]}}"#;
+            let (mgr, started, wire) = launch_stub(&d, req, "");
+            assert!(started.started, "{:?}", started.reason);
+            let r = Resolved { bin: PathBuf::from(STUB), data: None, taxonomy: None, source: "env" };
+            let p: RunParams = serde_json::from_str(&req.replace("$IN", &d.join("a.mzML").display().to_string())).unwrap();
+            let copied = command_of(&r, &p);
+            assert_eq!(started.command.as_ref(), Some(&copied));
+            assert!(copied.contains(&"-tag_length".to_string()) && copied.contains(&d.join("a.digest.tsv").display().to_string()));
+            until_done(&wire, Duration::from_secs(10));
+            assert!(mgr.wait_idle(Duration::from_secs(5)));
+            let rec = history::list(&d.join("appdata"), 1).pop().expect("recorded");
+            assert_eq!(rec.argv, copied);
         }
 
         // GUI-DESIGN 6.2: the real `run` against the stub CLI, its events on a

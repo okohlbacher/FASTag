@@ -21,7 +21,12 @@
 #   STUB_ORPHAN_DETACH=1    with STUB_ORPHAN: put that process in a process
 #                   group of its own (one that inherited the pipes from a
 #                   parallel spawn, which a group kill does not reach)
+#   STUB_INI_FAIL=<rc>  with -write_ini: fail with this code, writing nothing
 #   --help          print a version banner, as the probe expects
+#   -write_ini <f>  write an INI and exit, as TOPPBase does: with -ini <g>,
+#                   the items of <g> (the stub has no defaults to merge them
+#                   into), else an empty parameter set
+#   -ini <f>        on a run: -in and -out come from <f> unless given
 # The same variables can also be set in <in>.stub, a file next to the input
 # that the stub sources: tests that start it through the GUI's own `run`
 # (which passes no environment of its own) control it that way.
@@ -33,9 +38,11 @@ if [ "${1:-}" = "--help" ]; then
   exit 0
 fi
 
-in=""; out=""; reports=""; species=0; glyco=0; species_out=""; glyco_out=""
+in=""; out=""; reports=""; species=0; glyco=0; species_out=""; glyco_out=""; ini=""; write_ini=""
 while [ $# -gt 0 ]; do
   case "$1" in
+    -ini) ini="$2"; shift 2 ;;
+    -write_ini) write_ini="$2"; shift 2 ;;
     -in) in="$2"; shift 2 ;;
     -out) out="$2"; shift 2 ;;
     -species) species=1; shift ;;
@@ -48,6 +55,29 @@ $2"; shift 2 ;;
     *) shift ;;
   esac
 done
+
+if [ -n "$write_ini" ]; then
+  if [ -n "${STUB_INI_FAIL:-}" ]; then
+    echo "Error: stub told to fail writing the INI" >&2
+    exit "$STUB_INI_FAIL"
+  fi
+  if [ -n "$ini" ]; then
+    [ -r "$ini" ] || { echo "Error: cannot read $ini" >&2; exit 1; }
+    cp "$ini" "$write_ini"
+  else
+    printf '<?xml version="1.0" encoding="ISO-8859-1"?>\n<PARAMETERS version="1.8.0">\n  <NODE name="FASTag">\n    <NODE name="1">\n    </NODE>\n  </NODE>\n</PARAMETERS>\n' > "$write_ini"
+  fi
+  exit 0
+fi
+
+# An ITEM's value from the -ini file (entities &amp; and &quot; decoded).
+ini_value() {
+  sed -n "s/.*<ITEM name=\"$1\" value=\"\([^\"]*\)\".*/\1/p" "$ini" | head -n 1 | sed 's/&quot;/"/g; s/&lt;/</g; s/&gt;/>/g; s/&apos;/'"'"'/g; s/&amp;/\&/g'
+}
+if [ -n "$ini" ]; then
+  [ -z "$in" ] && in=$(ini_value in)
+  [ -z "$out" ] && out=$(ini_value out)
+fi
 
 # <out> with the extension of its basename replaced (FASTag.cpp defaultReportPath).
 derive() {
