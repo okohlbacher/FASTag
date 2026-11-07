@@ -279,8 +279,9 @@ mod tests {
     #[test]
     fn relative_outputs_resolve_against_the_child_cwd() {
         let d = tmp("rel");
-        let paths = resolve(&["r.tsv".to_string(), "/abs/r.tsv".to_string()], Some(&d));
-        assert_eq!(paths, vec![d.join("r.tsv"), PathBuf::from("/abs/r.tsv")]);
+        let abs = if cfg!(windows) { "C:/abs/r.tsv" } else { "/abs/r.tsv" };
+        let paths = resolve(&["r.tsv".to_string(), abs.to_string()], Some(&d));
+        assert_eq!(paths, vec![d.join("r.tsv"), PathBuf::from(abs)]);
         let _ = std::fs::remove_dir_all(&d);
     }
 }
