@@ -752,13 +752,16 @@ protected:
                           "How a precursor without a charge is tagged: assume2 (as 2+, as before "
                           "1.12), enumerate (at each listed possible charge, else at every charge "
                           "-charge_min..-charge_max) or infer (at the charge its complement pairs "
-                          "support; both of two close calls; 1+ when almost no intensity lies above "
-                          "the precursor). With several, E-values are multiplied by their number and "
-                          "the reports count the charge-evidence choice only. A header charge is "
-                          "never replaced", false);
+                          "support; both of two close calls; 1+ when 1 is a candidate and almost no "
+                          "intensity lies above the precursor; without evidence 2+, or the lowest "
+                          "candidate when 2 is none). Every charge tagged is a listed possible charge, "
+                          "else one of -charge_min..-charge_max. With several, E-values are multiplied "
+                          "by their number and the reports count the charge-evidence choice only. A "
+                          "header charge is never replaced", false);
     setValidStrings_("unknown_charge", ListUtils::create<std::string>(FASTag::Hyp::kModeValues));
     registerIntOption_("charge_min", "<n>", FASTag::Hyp::kChargeMinDefault,
-                       "Lowest charge -unknown_charge enumerate or infer tries", false);
+                       "Lowest charge -unknown_charge enumerate or infer tries (1 enables infer's "
+                       "1+ test)", false);
     setMinInt_("charge_min", 1);
     setMaxInt_("charge_min", FASTag::Hyp::kChargeLimit);
     registerIntOption_("charge_max", "<n>", FASTag::Hyp::kChargeMaxDefault,
@@ -767,7 +770,8 @@ protected:
     setMaxInt_("charge_max", FASTag::Hyp::kChargeLimit);
     registerDoubleOption_("charge_infer_margin", "<value>", FASTag::Hyp::kInferMarginDefault,
                           "Complement-pair excess by which the inferred charge must beat the "
-                          "runner-up to be tagged alone, and that it must reach at all", false, true);
+                          "runner-up to be tagged alone; closer, both are tagged (ambiguous). Any "
+                          "excess above 0 is a call", false, true);
     setMinFloat_("charge_infer_margin", 0.0);
     registerIntList_("isotope_error", "<k>", ListUtils::create<Int>("0"),
                      "Precursor isotope offsets (-1..3) to consider: the precursor mass is "

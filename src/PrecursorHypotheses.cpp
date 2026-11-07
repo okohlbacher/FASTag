@@ -21,7 +21,8 @@ namespace FASTag::Hyp
     /// The infer rule for a best excess E_c* in (0, margin): false = the plan's
     /// rule (the call is c*, ambiguous when the runner-up lies within the
     /// margin; assumed only when E_c* <= 0), true = assumed 2+ (the first
-    /// E6 build). Measured on the dev sets in E6-04 (7).
+    /// E6 build). Measured on the fixture, PXD003531 and PXD001819 (registry
+    /// E6-05): the plan's rule calls more charges right on all three.
     constexpr bool kAssumeBelowMargin = false;
 
     /// m/z of the strongest kInferTopPeaks finite, positive peaks (intensity

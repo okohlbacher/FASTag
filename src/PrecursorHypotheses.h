@@ -10,17 +10,21 @@
 //   assume2    2, as FASTag 1.11 (the default);
 //   enumerate  the precursor's possible charges (MS:1000633, MGF "2+ and 3+")
 //              when it lists any, else -charge_min .. -charge_max;
-//   infer      one listed possible charge, else the call of inferCharge():
-//              1 when less than 5% of the intensity lies above the precursor,
-//              else the charge whose 1+ complement pairs (b + y = M + 2p) are
-//              most in excess of chance; two charges when the runner-up is
-//              within -charge_infer_margin (ambiguous); 2 when no charge
-//              reaches the margin (assumed). Range evidence first rules out
-//              every charge c whose largest possible fragment m/z (M_c + p,
-//              a 1+ ion of the whole peptide) lies below one of the strongest
-//              peaks: such a peak cannot be a fragment of a c+ precursor.
-//              When that rules out 2, the lowest charge left is the call
-//              without complement evidence (inferred, not assumed).
+//   infer      one listed possible charge, else the call of inferCharge()
+//              over the candidates (the listed possible charges, else
+//              -charge_min .. -charge_max; every call is one of them):
+//              1 when 1 is a candidate and less than 5% of the intensity lies
+//              above the precursor, else the charge whose 1+ complement pairs
+//              (b + y = M + 2p) are most in excess of chance, when that
+//              excess is above 0; two charges when the runner-up is within
+//              -charge_infer_margin (ambiguous); without any excess above 0,
+//              2 when 2 is a candidate, else the lowest candidate (assumed).
+//              Range evidence first rules out every charge c whose largest
+//              possible fragment m/z (M_c + p, a 1+ ion of the whole peptide)
+//              lies below one of the strongest peaks: such a peak cannot be a
+//              fragment of a c+ precursor. When that rules out the lowest
+//              candidates, the lowest charge left is the call without
+//              complement evidence (inferred, not assumed).
 //
 // Isotope candidates (-isotope_error). Every listed k (-1 .. 3) shifts the
 // precursor's neutral mass by -k * (13C - 12C), header-charged precursors
@@ -169,7 +173,7 @@ namespace FASTag::Hyp
   /// What inferCharge() saw.
   struct ChargeCall
   {
-    int charge = 2;               ///< the call (2 when assumed)
+    int charge = 2;               ///< the call, one of the candidates (2, else the lowest, when assumed)
     ChargeSource src = ChargeSource::Assumed;  ///< Inferred, Ambiguous or Assumed
     int runner_up = 0;            ///< the second charge of an ambiguous call, else 0
     double above_share = 0;       ///< intensity share above the precursor (1+ test)
