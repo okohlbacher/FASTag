@@ -155,6 +155,8 @@ static int writeIds(int argc, char** argv)
     const std::string nid = s.getNativeID();
     std::string ref = nid;
     if (variant == "scan" || variant == "dupscan") ref = "scan=" + std::to_string(I::scanOf(nid));
+    // noref: every second identification lacks its reference; allnoref: all.
+    if ((variant == "noref" && k % 2 == 0) || variant == "allnoref") ref = "";
     const std::string st = meta || noq ? "hyperscore" : "q-value";
     const bool hb = meta || noq;
     auto h = [&](double q, TD td) {
@@ -303,6 +305,39 @@ int main(int argc, char** argv)
     I::Index none;
     const I::Loaded N = I::interpret({prot("run0", {})}, peps, 0.01, none);
     CHECK(I::runCheck(N, "/data/r.mzML") == "unnamed", "runCheck unnamed");
+
+    // Identifications without a spectrum_reference: never an Index entry;
+    // with hits the file is refused (named), without hits only counted.
+    {
+      I::Index e;
+      CHECK(!e.add("", true) && !e.add(" \t ", true) && e.counts().refs == 0, "an empty reference entered the Index");
+      CHECK(e.add(NID + "1", false) && e.counts().refs == 1, "a reference was not added");
+    }
+    PeptideIdentificationList some = peps;  // 8 identifications, 7 with hits
+    some[0].setSpectrumReference("");       // accepted hit
+    some[1].setSpectrumReference("  ");     // blank
+    I::Index si;
+    const I::Loaded SR = I::interpret({prot("run0", {"/x/run.mzML"})}, some, 0.01, si);
+    CHECK(!SR.refusal.empty() && SR.refusal.find("spectrum_reference") != std::string::npos
+              && SR.refusal.find("2 of 7") != std::string::npos,
+          "some references missing, not refused: '%s'", SR.refusal.c_str());
+    CHECK(SR.n_no_ref == 2 && SR.n_no_ref_hits == 2 && si.counts().refs == 6, "no_ref %zu/%zu refs %zu", SR.n_no_ref,
+          SR.n_no_ref_hits, si.counts().refs);
+    PeptideIdentificationList all = peps;
+    for (auto& p : all) p.setSpectrumReference("");
+    I::Index ai;
+    const I::Loaded AR = I::interpret({prot("run0", {"/x/run.mzML"})}, all, 0.01, ai);
+    CHECK(!AR.refusal.empty() && AR.refusal.find("spectrum_reference") != std::string::npos
+              && AR.refusal.find("7 of 7") != std::string::npos,
+          "all references missing, not refused: '%s'", AR.refusal.c_str());
+    CHECK(AR.n_no_ref == 8 && ai.counts().refs == 0, "all: no_ref %zu refs %zu", AR.n_no_ref, ai.counts().refs);
+    PeptideIdentificationList emptyhits = peps;
+    emptyhits[3].setSpectrumReference("");  // the identification without hits
+    I::Index ei;
+    const I::Loaded ER = I::interpret({prot("run0", {"/x/run.mzML"})}, emptyhits, 0.01, ei);
+    CHECK(ER.refusal.empty() && ER.n_no_ref == 1 && ER.n_no_ref_hits == 0 && ei.counts().refs == 7,
+          "a hitless identification without reference: '%s' %zu %zu", ER.refusal.c_str(), ER.n_no_ref,
+          ER.n_no_ref_hits);
     std::printf("3. interpret\n");
   }
 
@@ -383,23 +418,32 @@ int main(int argc, char** argv)
     I::JoinTally t;
     std::string err;
     CHECK(I::joinTable(in, out, idx, 0.01, t, err), "joinTable failed: %s", err.c_str());
+    // The layout comes from Census::header(): N census fields, then
+    // identified and triage.
+    const std::string hl = C::header().substr(0, C::header().size() - 1);
+    I::Layout lay;
+    CHECK(I::layoutOf(hl, lay), "Census::header() lacks a column the join reads");
+    const std::size_t N = lay.fields;
+    CHECK(N == table(hl)[0].size() && table(hl)[0][lay.spectrum] == "spectrum" && table(hl)[0][lay.status] == "status"
+              && table(hl)[0][lay.best_evalue] == "best_evalue",
+          "layoutOf(Census::header())");
     const auto rows = table(slurp(out));
     CHECK(rows.size() == 10, "joined rows %zu", rows.size());
-    CHECK(rows[0].size() == 22 && rows[0][20] == "identified" && rows[0][21] == "triage", "header");
+    CHECK(rows[0].size() == N + 2 && rows[0][N] == "identified" && rows[0][N + 1] == "triage", "header");
     const std::vector<std::pair<std::string, std::string>> want = {
         {"1", "0"}, {"0", "1"}, {"0", "1"}, {"0", "0"}, {"0", "0"}, {"", ""}, {"", ""}, {"1", "0"}, {"0", "0"}};
     for (std::size_t i = 0; i < want.size() && i + 1 < rows.size(); ++i)
     {
-      CHECK(rows[i + 1].size() == 22, "row %zu has %zu fields", i, rows[i + 1].size());
-      if (rows[i + 1].size() == 22)
-        CHECK(rows[i + 1][20] == want[i].first && rows[i + 1][21] == want[i].second,
-              "row %zu: identified '%s' triage '%s', want '%s' '%s'", i, rows[i + 1][20].c_str(),
-              rows[i + 1][21].c_str(), want[i].first.c_str(), want[i].second.c_str());
+      CHECK(rows[i + 1].size() == N + 2, "row %zu has %zu fields", i, rows[i + 1].size());
+      if (rows[i + 1].size() == N + 2)
+        CHECK(rows[i + 1][N] == want[i].first && rows[i + 1][N + 1] == want[i].second,
+              "row %zu: identified '%s' triage '%s', want '%s' '%s'", i, rows[i + 1][N].c_str(),
+              rows[i + 1][N + 1].c_str(), want[i].first.c_str(), want[i].second.c_str());
     }
-    // The first 20 fields are the census row unchanged.
+    // The first N fields are the census row unchanged.
     const auto before = table(slurp(in));
     for (std::size_t i = 0; i < before.size() && i < rows.size(); ++i)
-      CHECK(std::vector<std::string>(rows[i].begin(), rows[i].begin() + std::min<std::size_t>(20, rows[i].size()))
+      CHECK(std::vector<std::string>(rows[i].begin(), rows[i].begin() + std::min<std::size_t>(N, rows[i].size()))
                 == before[i],
             "row %zu: the census fields changed", i);
     CHECK(t.rows == 9 && t.triage == 2 && t.triage_eligible == 3, "tally rows %llu triage %llu eligible %llu",
@@ -417,6 +461,49 @@ int main(int argc, char** argv)
     I::JoinTally t2;
     CHECK(I::joinTable(in, out, idx2, 0.001, t2, err) && t2.triage == 1, "triage at 0.001: %llu",
           (unsigned long long)t2.triage);
+    // A census that gains columns (one before best_evalue, one at the end,
+    // as a later phase may add) is joined by name: same identified and
+    // triage, still the last two columns.
+    {
+      const std::string in2 = (dir / "c2.tsv").string(), out2 = (dir / "j2.tsv").string();
+      auto widen = [&](const std::vector<std::string>& f, const std::string& a, const std::string& b) {
+        std::string l;
+        for (std::size_t j = 0; j < f.size(); ++j)
+        {
+          if (j == lay.best_evalue) l += a + "\t";
+          l += f[j];
+          l += j + 1 < f.size() ? "\t" : "";
+        }
+        return l + "\t" + b;
+      };
+      const std::string wide_head = widen(before[0], "ion_series", "extra");
+      {
+        std::ofstream f(in2, std::ios::binary);
+        f << wide_head << '\n';
+        for (std::size_t i = 1; i < before.size(); ++i) f << widen(before[i], "0.9", "x") << '\n';
+      }
+      I::Index wi;
+      wi.add(NID + "1", true);
+      wi.add(NID + "2", false);
+      wi.add("scan=6", true);
+      wi.add("a b", true);
+      I::JoinTally wt;
+      CHECK(I::joinTableAs(wide_head, in2, out2, wi, 0.01, wt, err), "wide join failed: %s", err.c_str());
+      const auto wrows = table(slurp(out2));
+      CHECK(wrows.size() == 10 && wrows[0].size() == N + 4 && wrows[0][N + 2] == "identified"
+                && wrows[0][N + 3] == "triage",
+            "wide header");
+      for (std::size_t i = 0; i < want.size() && i + 1 < wrows.size(); ++i)
+        CHECK(wrows[i + 1].size() == N + 4 && wrows[i + 1][N + 2] == want[i].first
+                  && wrows[i + 1][N + 3] == want[i].second,
+              "wide row %zu", i);
+      CHECK(wt.triage == t.triage && wt.triage_eligible == t.triage_eligible && wt.by_ident == t.by_ident,
+            "wide tally");
+      // A header without best_evalue is an error, not a join.
+      I::Index ni;
+      I::JoinTally nt;
+      CHECK(!I::joinTableAs("index\tspectrum\tstatus", in2, out2, ni, 0.01, nt, err), "joined without best_evalue");
+    }
     // A table that is not a census table is an error, not a join.
     {
       std::ofstream f(in, std::ios::binary);
@@ -427,7 +514,7 @@ int main(int argc, char** argv)
     CHECK(!I::joinTable(in, out, idx3, 0.01, t3, err) && !err.empty(), "a foreign table was joined");
 
     // 6. The summary section.
-    const I::Loaded L{10, 9, 4, 1, 12, 12, {"run"}, ""};
+    const I::Loaded L{10, 9, 4, 1, 12, 12, 0, 0, {"run"}, ""};
     const auto sum = I::summaryRows(L, idx.counts(), t, "/x/ids.idXML", "match", 0.01, 0.01, true);
     auto find = [&](const std::vector<FASTag::Digest::Row>& v, const std::string& k) -> const FASTag::Digest::Row* {
       for (const auto& r : v) if (r.key == k) return &r;
@@ -449,6 +536,7 @@ int main(int argc, char** argv)
     CHECK(find(sum, "tagged_identified_1")->value == "2", "tagged_identified_1");
     CHECK(find(sum, "refs_unmatched") && !find(sum, "refs_unmatched")->value.empty(), "refs_unmatched");
     CHECK(find(sum, "run_check") && find(sum, "run_check")->value == "match", "run_check");
+    CHECK(find(sum, "id_no_ref") && find(sum, "id_no_ref")->value == "0", "id_no_ref");
     const auto sub = I::summaryRows(L, idx.counts(), t, "ids.idXML", "match", 0.01, 0.01, false);
     CHECK(find(sub, "refs_unmatched") && find(sub, "refs_unmatched")->value.empty(),
           "refs_unmatched written under subsampling");

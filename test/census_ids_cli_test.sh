@@ -3,7 +3,7 @@
 # The identification files are written at test time by census_ids_test
 # --write-ids from a fixed pattern over the MS2 ordinal, with the expected
 # identified value per native id (independent of the matcher under test).
-#   (a) the tag TSV, the first 20 census columns and the phase-A summary rows
+#   (a) the tag TSV, the census columns of phase A and the phase-A summary rows
 #       are identical with and without -census_ids; recon.tsv too
 #   (b) identified equals the expectation; (c) triage follows its rule as
 #       recomputed from the row; (d) the census_ids cross-tab and counts match
@@ -16,6 +16,10 @@
 #   (g) -census_ids_fdr moves the threshold; (h) under subsampling the
 #       unmatched count is not known and refuses nothing
 #   (i) the options are only read with -census / -census_ids
+#   (j) identifications without a spectrum_reference (some, all) are refused
+#       before any output, naming the cause
+# Columns are found by name in the header: identified and triage are the
+# last two, after the N columns of the census (N from the plain census).
 set -u
 BIN="$1"
 HELPER="$2"   # census_ids_test
@@ -36,7 +40,7 @@ rows() { tail -n +2 "$1" | wc -l | tr -d ' '; }
 val() { awk -F'\t' -v s="$2" -v k="$3" '$1 == s && $2 == k { print $3; f = 1 } END { if (!f) print "MISSING" }' "$1"; }
 ids() { "$HELPER" --write-ids "$IN" "$TMP/$1.$2" "$1" "$TMP/$1.want" || fail "helper failed for $1"; }
 
-for v in good meta scan dupscan noq wrongrun merged foreign fewforeign; do ids $v idXML; done
+for v in good meta scan dupscan noq wrongrun merged foreign fewforeign noref allnoref; do ids $v idXML; done
 ids mzid mzid
 [ "$(awk -F'\t' '$2 == "1"' "$TMP/good.want" | wc -l)" -gt 5 ] || fail "the fixture identifies too few spectra"
 [ "$(awk -F'\t' '$2 == ""' "$TMP/dupscan.want" | wc -l)" = 1 ] || fail "dupscan fixture"
@@ -45,32 +49,39 @@ ids mzid mzid
 mkdir -p "$TMP/plain"
 run "$TMP/plain/log" -in "$IN" -out "$TMP/plain/tags.tsv" -census "${ARGS[@]}"
 PC="$TMP/plain/tags.census.tsv"; PS="$TMP/plain/tags.census_summary.tsv"
+col() { head -1 "$1" | tr '\t' '\n' | grep -nx -- "$2" | head -1 | cut -d: -f1; }
+NC=$(head -1 "$PC" | tr '\t' '\n' | wc -l | tr -d ' ')   # census columns of phase A
+CSP=$(col "$PC" spectrum); CST=$(col "$PC" status); CBE=$(col "$PC" best_evalue)
+[ -n "$CSP" ] && [ -n "$CST" ] && [ -n "$CBE" ] && [ "$NC" -gt 3 ] || fail "plain census header"
+CID=$((NC + 1)); CTR=$((NC + 2))
 
 check_join() {  # dir want
   local d="$1" want="$2" c="$1/tags.census.tsv" s="$1/tags.census_summary.tsv"
   cmp -s "$TMP/plain/tags.tsv" "$d/tags.tsv" || fail "(a) $d: the tag TSV differs with -census_ids"
-  cmp -s <(cut -f1-20 "$PC") <(cut -f1-20 "$c") || fail "(a) $d: the census columns differ with -census_ids"
-  [ "$(head -1 "$c" | cut -f21,22)" = "$(printf 'identified\ttriage')" ] || fail "(a) $d: header"
-  awk -F'\t' 'NF != 22 { exit 1 }' "$c" || fail "(a) $d: a row has not 22 fields"
+  local n; n=$(( $(head -1 "$c" | tr '\t' '\n' | wc -l) - 2 ))
+  [ "$n" = "$NC" ] || fail "(a) $d: $n census columns before identified and triage, want $NC"
+  cmp -s "$PC" <(cut -f1-"$n" "$c") || fail "(a) $d: the census columns differ with -census_ids"
+  [ "$(col "$c" identified)" = "$CID" ] && [ "$(col "$c" triage)" = "$CTR" ] || fail "(a) $d: header"
+  awk -F'\t' -v n=$CTR 'NF != n { exit 1 }' "$c" || fail "(a) $d: a row has not $CTR fields"
   cmp -s "$PS" <(awk -F'\t' '$1 != "census_ids"' "$s") || fail "(a) $d: the phase-A summary rows differ"
   awk -F'\t' 'NF != 5 { exit 1 }' "$s" || fail "(a) $d: a summary line has not five fields"
   # (b) identified per native id
-  cmp -s <(sort "$want") <(awk -F'\t' 'BEGIN { OFS = "\t" } NR > 1 { print $2, $21 }' "$c" | sort) \
+  cmp -s <(sort "$want") <(awk -F'\t' -v sp=$CSP -v id=$CID 'BEGIN { OFS = "\t" } NR > 1 { print $sp, $id }' "$c" | sort) \
     || fail "(b) $d: identified differs from the expectation"
   # (c) triage = identified 0, tagged/placed, best_evalue <= 0.01; empty for unknown
-  awk -F'\t' -v t="${3:-0.01}" 'NR > 1 {
-      want = ($21 == "") ? "" : (($21 == "0" && ($12 == "tagged" || $12 == "placed") && $15 != "" && $15 + 0 <= t) ? "1" : "0")
-      if ($22 != want) { print "row " NR ": triage " $22 " want " want; bad = 1 } }
+  awk -F'\t' -v t="${3:-0.01}" -v id=$CID -v tr=$CTR -v st=$CST -v be=$CBE 'NR > 1 {
+      want = ($id == "") ? "" : (($id == "0" && ($st == "tagged" || $st == "placed") && $be != "" && $be + 0 <= t) ? "1" : "0")
+      if ($tr != want) { print "row " NR ": triage " $tr " want " want; bad = 1 } }
       END { exit bad }' "$c" || fail "(c) $d: triage"
   # (d) summary against the table
   local k
   for k in 1 0; do
-    [ "$(val "$s" census_ids identified_$k)" = "$(awk -F'\t' -v k=$k 'NR > 1 && $21 == k' "$c" | wc -l | tr -d ' ')" ] \
+    [ "$(val "$s" census_ids identified_$k)" = "$(awk -F'\t' -v k=$k -v id=$CID 'NR > 1 && $id == k' "$c" | wc -l | tr -d ' ')" ] \
       || fail "(d) $d: identified_$k"
   done
-  [ "$(val "$s" census_ids identified_unknown)" = "$(awk -F'\t' 'NR > 1 && $21 == ""' "$c" | wc -l | tr -d ' ')" ] \
+  [ "$(val "$s" census_ids identified_unknown)" = "$(awk -F'\t' -v id=$CID 'NR > 1 && $id == ""' "$c" | wc -l | tr -d ' ')" ] \
     || fail "(d) $d: identified_unknown"
-  [ "$(val "$s" census_ids triage_candidates)" = "$(awk -F'\t' 'NR > 1 && $22 == "1"' "$c" | wc -l | tr -d ' ')" ] \
+  [ "$(val "$s" census_ids triage_candidates)" = "$(awk -F'\t' -v tr=$CTR 'NR > 1 && $tr == "1"' "$c" | wc -l | tr -d ' ')" ] \
     || fail "(d) $d: triage_candidates"
   [ "$(val "$s" census_ids census_ids_version)" = 1 ] || fail "(d) $d: census_ids_version"
   local st sum=0
@@ -79,7 +90,7 @@ check_join() {  # dir want
       local n; n=$(val "$s" census_ids "${st}_identified_$k")
       [ "$n" != MISSING ] || fail "(d) $d: ${st}_identified_$k missing"
       local kk=$k; [ $k = unknown ] && kk=""
-      [ "$n" = "$(awk -F'\t' -v st=$st -v k="$kk" 'NR > 1 && $12 == st && $21 == k' "$c" | wc -l | tr -d ' ')" ] \
+      [ "$n" = "$(awk -F'\t' -v st=$st -v k="$kk" -v s=$CST -v id=$CID 'NR > 1 && $s == st && $id == k' "$c" | wc -l | tr -d ' ')" ] \
         || fail "(d) $d: ${st}_identified_$k = $n does not match the rows"
       sum=$((sum + n))
     done
@@ -100,8 +111,8 @@ done
 [ "$(val "$TMP/good/tags.census_summary.tsv" census_ids refs_scan)" = 0 ] || fail "(e) good: scan fallback used"
 [ "$(val "$TMP/scan/tags.census_summary.tsv" census_ids refs_scan)" -gt 0 ] || fail "(e) scan: no scan fallback"
 [ "$(val "$TMP/good/tags.census_summary.tsv" census_ids run_check)" = match ] || fail "(e) run_check"
-[ "$(awk -F'\t' 'NR > 1 && $22 == "1"' "$TMP/good/tags.census.tsv" | wc -l)" -gt 0 ] || fail "(c) no triage candidate; the rule is untested"
-[ "$(awk -F'\t' 'NR > 1 && $21 == "1" && ($12 == "tagged")' "$TMP/good/tags.census.tsv" | wc -l)" -gt 0 ] \
+[ "$(awk -F'\t' -v tr=$CTR 'NR > 1 && $tr == "1"' "$TMP/good/tags.census.tsv" | wc -l)" -gt 0 ] || fail "(c) no triage candidate; the rule is untested"
+[ "$(awk -F'\t' -v id=$CID -v s=$CST 'NR > 1 && $id == "1" && $s == "tagged"' "$TMP/good/tags.census.tsv" | wc -l)" -gt 0 ] \
   || fail "(c) no identified tagged spectrum; the triage exclusion is untested"
 
 # With -fasta -recon_out: recon.tsv unchanged, placed rows joined too.
@@ -111,8 +122,8 @@ run "$TMP/r1/log" -in "$IN" -out "$TMP/r1/tags.tsv" -fasta "$DB" -recon_out "$TM
   -census_ids "$TMP/good.idXML" "${ARGS[@]}"
 cmp -s "$TMP/r0/recon.tsv" "$TMP/r1/recon.tsv" || fail "(a) recon.tsv differs with -census_ids"
 cmp -s "$TMP/r0/tags.tsv" "$TMP/r1/tags.tsv" || fail "(a) -fasta: tags differ with -census_ids"
-cmp -s <(cut -f1-20 "$TMP/r0/tags.census.tsv") <(cut -f1-20 "$TMP/r1/tags.census.tsv") || fail "(a) -recon_out: census columns differ"
-[ "$(awk -F'\t' 'NR > 1 && $12 == "placed"' "$TMP/r1/tags.census.tsv" | wc -l)" -gt 0 ] || fail "no placed row with -recon_out"
+cmp -s "$TMP/r0/tags.census.tsv" <(cut -f1-"$NC" "$TMP/r1/tags.census.tsv") || fail "(a) -recon_out: census columns differ"
+[ "$(awk -F'\t' -v s=$CST 'NR > 1 && $s == "placed"' "$TMP/r1/tags.census.tsv" | wc -l)" -gt 0 ] || fail "no placed row with -recon_out"
 
 # ---- (f) provenance and refusals ----------------------------------------------------
 mkdir -p "$TMP/wrongrun"
@@ -129,6 +140,25 @@ for v in merged noq; do
 done
 grep -q "IDFilter" "$TMP/noq/log" || fail "(f) the refusal of an unfiltered file does not name IDFilter"
 grep -q "more than one run" "$TMP/merged/log" || fail "(f) the merged-run refusal does not say so"
+
+# ---- (j) identifications without a spectrum_reference --------------------------------
+for v in noref allnoref; do
+  mkdir -p "$TMP/$v"
+  "$BIN" -in "$IN" -out "$TMP/$v/tags.tsv" -census -census_ids "$TMP/$v.idXML" "${ARGS[@]}" >"$TMP/$v/log" 2>&1
+  rc=$?
+  [ $rc != 0 ] || fail "(j) $v ran (exit 0)"
+  [ ! -e "$TMP/$v/tags.tsv" ] || fail "(j) $v: refused only after writing outputs"
+  ls "$TMP/$v" | grep -q census && fail "(j) $v: a census file was written"
+  grep -q "carry no spectrum_reference" "$TMP/$v/log" || fail "(j) $v: the refusal does not name the missing spectrum_reference"
+  grep -q "IDFileConverter -mz_file" "$TMP/$v/log" || fail "(j) $v: the refusal does not name IDFileConverter -mz_file"
+  grep -q "another run" "$TMP/$v/log" && fail "(j) $v: blamed on another run"
+done
+# also under subsampling, where the unmatched check is skipped
+mkdir -p "$TMP/norefsub"
+"$BIN" -in "$IN" -out "$TMP/norefsub/tags.tsv" -census -census_ids "$TMP/noref.idXML" -subsample_spectra 40 \
+  -subsample_seed 3 "${ARGS[@]}" >"$TMP/norefsub/log" 2>&1 && fail "(j) noref under subsampling ran (exit 0)"
+grep -q "carry no spectrum_reference" "$TMP/norefsub/log" || fail "(j) noref under subsampling: no refusal"
+[ "$(val "$TMP/good/tags.census_summary.tsv" census_ids id_no_ref)" = 0 ] || fail "(j) id_no_ref row"
 
 mkdir -p "$TMP/foreign" "$TMP/fewforeign"
 "$BIN" -in "$IN" -out "$TMP/foreign/tags.tsv" -census -census_ids "$TMP/foreign.idXML" "${ARGS[@]}" >"$TMP/foreign/log" 2>&1 \

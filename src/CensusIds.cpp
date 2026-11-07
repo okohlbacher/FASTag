@@ -96,8 +96,6 @@ namespace FASTag::CensusIds
       return false;
     }
 
-    // Census columns (0-based) the join reads.
-    constexpr std::size_t kColSpectrum = 1, kColStatus = 11, kColBestEvalue = 14, kCensusFields = 20;
   }
 
   long long scanOf(const std::string& id)
@@ -165,11 +163,13 @@ namespace FASTag::CensusIds
 
   // ---- Index -------------------------------------------------------------------
 
-  void Index::add(const std::string& ref, bool accepted)
+  bool Index::add(const std::string& ref, bool accepted)
   {
+    if (trim(ref).empty()) return false;
     auto [it, fresh] = refs_.try_emplace(escaped(ref));
     if (fresh) it->second.scan = scanOf(it->first);
     it->second.accepted = it->second.accepted || accepted;
+    return true;
   }
 
   void Index::see(const std::string& native_id)
@@ -255,9 +255,18 @@ namespace FASTag::CensusIds
       }
       if (!hits.empty() && !any_target) ++L.n_decoy_only;
       if (accepted) ++L.n_accepted;
-      index.add(id.getSpectrumReference(), accepted);
+      if (!index.add(id.getSpectrumReference(), accepted))
+      {
+        ++L.n_no_ref;
+        if (!hits.empty()) ++L.n_no_ref_hits;
+      }
     }
-    if (L.n_hits_q == 0)
+    if (L.n_no_ref_hits > 0)
+      L.refusal = "-census_ids: " + std::to_string(L.n_no_ref_hits) + " of " + std::to_string(L.n_with_hits) +
+                  " spectrum identifications with hits carry no spectrum_reference, so FASTag cannot tell which "
+                  "spectrum they identify. Add the references from the mzML of -in, e.g. by converting the "
+                  "search engine output with IDFileConverter -mz_file.";
+    else if (L.n_hits_q == 0)
       L.refusal = "-census_ids: no hit carries a q-value (as the score, or as a 'q-value' or MS:1002354 meta "
                   "value), so FASTag cannot tell which identifications pass an FDR. Estimate and filter it "
                   "first, e.g. with FalseDiscoveryRate and IDFilter (-score:psm " +
@@ -289,12 +298,42 @@ namespace FASTag::CensusIds
 
   // ---- the join -------------------------------------------------------------------
 
+  bool layoutOf(const std::string& head, Layout& layout)
+  {
+    layout = Layout{};
+    bool sp = false, st = false, be = false;
+    std::size_t i = 0, start = 0;
+    for (;; ++i)
+    {
+      const std::size_t end = head.find('\t', start);
+      const std::string name = head.substr(start, end == std::string::npos ? std::string::npos : end - start);
+      if (name == "spectrum" && !sp) { layout.spectrum = i; sp = true; }
+      else if (name == "status" && !st) { layout.status = i; st = true; }
+      else if (name == "best_evalue" && !be) { layout.best_evalue = i; be = true; }
+      if (end == std::string::npos) break;
+      start = end + 1;
+    }
+    layout.fields = i + 1;
+    return sp && st && be;
+  }
+
   bool joinTable(const std::string& in, const std::string& out, Index& index, double triage_evalue,
                  JoinTally& tally, std::string& error)
   {
-    tally = JoinTally{};
     const std::string header = Census::header();
-    const std::string head = header.substr(0, header.size() - 1);  // without the newline
+    return joinTableAs(header.substr(0, header.size() - 1), in, out, index, triage_evalue, tally, error);
+  }
+
+  bool joinTableAs(const std::string& head, const std::string& in, const std::string& out, Index& index,
+                   double triage_evalue, JoinTally& tally, std::string& error)
+  {
+    tally = JoinTally{};
+    Layout lay;
+    if (!layoutOf(head, lay))
+    {
+      error = "the census header lacks spectrum, status or best_evalue";
+      return false;
+    }
     std::string line, id, status, best;
     {
       std::ifstream f(in, std::ios::binary);
@@ -302,9 +341,9 @@ namespace FASTag::CensusIds
       if (!std::getline(f, line) || line != head) { error = in + " is not a census table"; return false; }
       while (std::getline(f, line))
       {
-        if (fields(line) != kCensusFields || !field(line, kColSpectrum, id))
+        if (fields(line) != lay.fields || !field(line, lay.spectrum, id))
         {
-          error = in + ": a row has not " + std::to_string(kCensusFields) + " fields";
+          error = in + ": a row has not " + std::to_string(lay.fields) + " fields";
           return false;
         }
         index.see(id);
@@ -321,7 +360,7 @@ namespace FASTag::CensusIds
     while (std::getline(f, line))
     {
       std::size_t st = 0;
-      if (!field(line, kColSpectrum, id) || !field(line, kColStatus, status) || !field(line, kColBestEvalue, best)
+      if (!field(line, lay.spectrum, id) || !field(line, lay.status, status) || !field(line, lay.best_evalue, best)
           || !statusIndex(status, st))
       {
         error = in + ": a row cannot be read";
@@ -400,6 +439,8 @@ namespace FASTag::CensusIds
     r.push_back({sec, "id_spectra", u(L.n_ids), "-", u(L.n_ids) + " spectrum identifications in the file."});
     r.push_back({sec, "id_accepted", u(L.n_accepted), u(L.n_ids),
                  u(L.n_accepted) + " of them hold a target hit that passes the FDR."});
+    r.push_back({sec, "id_no_ref", u(L.n_no_ref), u(L.n_ids),
+                 u(L.n_no_ref) + " of them carry no spectrum_reference (and no hit; with hits the file is refused)."});
     r.push_back({sec, "id_decoy_only", u(L.n_decoy_only), u(L.n_ids), u(L.n_decoy_only) + " of them hold only decoy hits."});
     r.push_back({sec, "refs", refs, "-", refs + " distinct spectrum references."});
     r.push_back({sec, "refs_exact", u(c.exact), refs, u(c.exact) + " references name a spectrum read by its native id."});

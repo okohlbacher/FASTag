@@ -20,7 +20,12 @@
 // exactly first. A scan-number fallback is used only when the scan number is
 // unique among the references and among the spectra read, and the reference
 // matched no spectrum exactly. An ambiguous scan makes the spectrum unknown.
-// A spectrum no reference names is not identified (0).
+// A spectrum no reference names is not identified (0). A
+// PeptideIdentification with hits but without a spectrum_reference (empty
+// or blank; pepXML converted without -mz_file, older idXML) cannot be
+// matched: such a file is refused (INCOMPATIBLE_INPUT_DATA) before any
+// output, and the user is pointed to IDFileConverter -mz_file. An empty
+// reference never enters the Index.
 //
 // Run provenance. The primary MS run paths of the file are compared with -in
 // by name without extension: a different name is a warning, more than one
@@ -37,6 +42,11 @@
 // The join runs after the tagging loop on the finished census table (two
 // streaming passes), so the tagging loop, its outputs and the census rows of
 // phase A are untouched.
+//
+// Layout. The join finds the columns it reads (spectrum, status,
+// best_evalue) and the field count by name in Census::header(), so a census
+// column added later moves them without breaking the join. identified and
+// triage are always the last two columns.
 //
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
@@ -106,8 +116,9 @@ namespace FASTag::CensusIds
   public:
     /// One PeptideIdentification's reference (escaped as a census field) and
     /// whether it holds an accepted hit. The same reference twice is one
-    /// reference, accepted if either is.
-    void add(const std::string& ref, bool accepted);
+    /// reference, accepted if either is. An empty or blank reference is not
+    /// added (false); interpret() counts it in Loaded::n_no_ref.
+    bool add(const std::string& ref, bool accepted);
     /// Pass 1: a spectrum read (its census native id, escaped).
     void see(const std::string& native_id);
     /// Pass 2, after every see(): the identified value of a spectrum.
@@ -145,12 +156,15 @@ namespace FASTag::CensusIds
     std::size_t n_decoy_only = 0;   ///< ... whose hits are all decoys
     std::size_t n_hits = 0;         ///< hits
     std::size_t n_hits_q = 0;       ///< hits with a q-value
+    std::size_t n_no_ref = 0;       ///< PeptideIdentifications without a spectrum_reference
+    std::size_t n_no_ref_hits = 0;  ///< ... of them with at least one hit (refused when > 0)
     std::vector<std::string> runs;  ///< distinct primary MS run stems (runStem)
     std::string refusal;            ///< non-empty: the file is refused (the message)
   };
 
   /// Interprets loaded identifications into @p index (see the file comment).
-  /// Sets Loaded::refusal for a file without q-values or with several runs.
+  /// Sets Loaded::refusal for a file without q-values, with several runs or
+  /// with identifications (with hits) that carry no spectrum_reference.
   Loaded interpret(const std::vector<OpenMS::ProteinIdentification>& proteins,
                    const OpenMS::PeptideIdentificationList& peptides, double fdr, Index& index);
 
@@ -175,6 +189,22 @@ namespace FASTag::CensusIds
   /// False with @p error set on a read, format or write failure.
   bool joinTable(const std::string& in, const std::string& out, Index& index, double triage_evalue,
                  JoinTally& tally, std::string& error);
+
+  /// Where the join reads a census row: field count and the 0-based columns
+  /// spectrum, status and best_evalue, found by name in a header line.
+  struct Layout
+  {
+    std::size_t fields = 0, spectrum = 0, status = 0, best_evalue = 0;
+  };
+  /// The layout of @p header_line (tab-separated names, no newline); false
+  /// when a column the join reads is missing.
+  bool layoutOf(const std::string& header_line, Layout& layout);
+
+  /// joinTable() for a census table whose header line is @p header_line (no
+  /// newline) instead of Census::header(); joinTable() calls it with
+  /// Census::header(). Exposed so a test can join a table with more columns.
+  bool joinTableAs(const std::string& header_line, const std::string& in, const std::string& out, Index& index,
+                   double triage_evalue, JoinTally& tally, std::string& error);
 
   /// Run-provenance verdict for the summary: "match", "mismatch" or "unnamed".
   std::string runCheck(const Loaded& loaded, const std::string& in_path);

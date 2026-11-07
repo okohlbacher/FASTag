@@ -842,14 +842,17 @@ q-value (lower is better), otherwise its `q-value` or `MS:1002354` meta
 value. Decoy hits are ignored (target+decoy counts as a target), an empty hit
 list is not an identification, and a spectrum no identification names is 0.
 A file in which no hit carries a q-value is refused: filter it with
-FalseDiscoveryRate and IDFilter first. References are matched to native ids
+FalseDiscoveryRate and IDFilter first. So is a file with identifications
+(with hits) that carry no `spectrum_reference`, as pepXML converted without
+`-mz_file` and older idXML may: add the references with IDFileConverter
+`-mz_file`. References are matched to native ids
 exactly; a scan number is used only when it is unique among the references
 and the spectra read. A file naming another run warns, one naming several
 runs is refused, and when more than 1% of the references match no spectrum
 FASTag warns, above 50% it writes no census (exit code
 INCOMPATIBLE_INPUT_DATA; the other outputs are complete). Under subsampling
 that count is not known and is left empty. The summary adds section
-`census_ids`: the file name, the thresholds, `run_check`, the reference
+`census_ids`: the file name, the thresholds, `run_check`, `id_no_ref`, the reference
 counts (`refs`, `refs_exact`, `refs_scan`, `refs_ambiguous`,
 `refs_unmatched`), `identified_1/0/unknown`, the cross-tab
 `<status>_identified_<1|0|unknown>` and `triage_candidates`. Triage is an

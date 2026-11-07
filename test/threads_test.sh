@@ -97,8 +97,11 @@ if [ -s "$TMP/c1/recon.tsv" ]; then
       -census_out "$d/census.tsv" -census_summary_out "$d/census_summary.tsv" >"$d/log" 2>&1 \
       || { cat "$d/log" >&2; fail "-census_ids -threads $t run failed"; }
   done
+  # identified is found by name (a later census column moves it)
+  idc=$(head -1 "$TMP/i1/census.tsv" | tr '\t' '\n' | grep -nx identified | cut -d: -f1)
+  [ -n "$idc" ] || fail "-census_ids: no identified column"
   for v in 0 1; do
-    [ "$(awk -F'\t' -v v=$v 'NR > 1 && $21 == v' "$TMP/i1/census.tsv" | wc -l)" -gt 0 ] || fail "-census_ids: no row identified $v; the check is weak"
+    [ "$(awk -F'\t' -v v=$v -v c="$idc" 'NR > 1 && $c == v' "$TMP/i1/census.tsv" | wc -l)" -gt 0 ] || fail "-census_ids: no row identified $v; the check is weak"
   done
   for f in census census_summary; do
     for t in 3 8; do
