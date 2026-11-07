@@ -1928,6 +1928,14 @@ fn sort_group(round: &Round, g: &mut [u32], at: usize, buf: &mut Vec<(u64, u32)>
     }
 }
 
+/// What build_order holds besides the order it returns, at most: the
+/// records of a round (every row a slot), the span buffers, two bitsets and
+/// the group sort's buffer (open rounds hold no more than that).
+fn order_transient(n: usize, budget: usize) -> usize {
+    let per_row = budget.checked_div(n).map_or(0, |b| b.clamp(4, 121));
+    n * per_row + threads() * ROW_CAP + 2 * n.div_ceil(64) * 8 + SORT_BUF * 16
+}
+
 /// The order of @p index's rows by column @p column, as build_view sorts it
 /// ascending (finite numbers by value, then every other cell by its bytes,
 /// ties in file order), within about @p budget bytes of transients besides
@@ -2380,17 +2388,20 @@ impl Shared {
         if let Some(r) = snap.cached_order(column) {
             return Ok(r);
         }
-        // Room for the new order before its build (its transients come on
-        // top of what the cache holds).
+        // Room for the new order and its build's transients (GUI-DESIGN 7:
+        // the cache and a build together stay within the cache budget; the
+        // spectrum's dictionary order holds little besides its order).
         let n = snap.index.offsets.len();
-        snap.trim(n * 4 + n.div_ceil(64) * 8, None);
+        let budget = self.order_budget.load(Ordering::Relaxed);
         let spectrum = snap.index.columns.iter().position(|c| c == "spectrum");
+        let transient = if Some(column) == spectrum { 0 } else { order_transient(n, budget) };
+        snap.trim(n * 4 + n.div_ceil(64) * 8 + transient, None);
         let typed = if Some(column) == spectrum { self.typed_now(snap, &self.typed_token(snap, mode, token))? } else { None };
         let r = Arc::new(match typed {
             Some(t) => dict_order(&t),
             None => {
                 snap.scans.fetch_add(1, Ordering::Relaxed);
-                build_order(&snap.path, &snap.index, column, self.order_budget.load(Ordering::Relaxed), token, &|_, _| {})?
+                build_order(&snap.path, &snap.index, column, budget, token, &|_, _| {})?
             }
         });
         snap.orders_built.fetch_add(1, Ordering::SeqCst);
