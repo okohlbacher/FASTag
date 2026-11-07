@@ -125,6 +125,25 @@ describe('P4a: open a row in the Spectrum tab', () => {
     await click(second)
     expect(second.getAttribute('aria-selected')).toBe('true')
     expect(screen.getByTestId('ladder').textContent).toContain(tag)
+    // Announced: the list is a read-only grid (aria-selected counts there),
+    // one row selected and in the tab order, and the redrawn verdict is in a
+    // polite live region; the panel is a named region.
+    const grid = within(tags).getByRole('grid', { name: 'Tags of this spectrum' })
+    expect(grid.getAttribute('aria-readonly')).toBe('true')
+    expect(within(grid).getAllByRole('gridcell').length).toBeGreaterThan(0)
+    const selected = within(grid).getAllByRole('row', { selected: true })
+    expect(selected).toEqual([second])
+    expect(second.tabIndex).toBe(0)
+    expect(rows.filter((r) => r.tabIndex === 0)).toHaveLength(1)
+    expect(screen.getByTestId('ladder-verdict').closest('[aria-live=polite]')).not.toBeNull()
+    expect(screen.getByRole('region', { name: 'Spectrum' })).toBeTruthy()
+    // The keyboard: ArrowDown chooses the next tag and moves the focus.
+    await act(async () => {
+      fireEvent.keyDown(second, { key: 'ArrowDown' })
+    })
+    expect(rows[2].getAttribute('aria-selected')).toBe('true')
+    expect(document.activeElement).toBe(rows[2])
+    await click(second)
     const next = screen.getByRole('button', { name: 'Next tagged spectrum' })
     await waitFor(() => expect((next as HTMLButtonElement).disabled).toBe(false))
     await click(next)

@@ -273,7 +273,7 @@ export default function SpectrumPanel({ target, source, onTarget, onLocate }: Pr
   }
 
   return (
-    <div className="sp" aria-label="Spectrum">
+    <div className="sp" role="region" aria-label="Spectrum">
       {header}
       {caveats.map((c) => (
         <p className="hint sp-caveat" key={c}>
@@ -319,15 +319,19 @@ function TagsTable(p: {
   }
   return (
     <div className="sp-tags-wrap">
-      <table className="history-table sp-tags-table">
+      {/* A grid: aria-selected on a row is announced only in a grid (or a
+          treegrid or listbox); one row is in the tab order (roving). */}
+      <table className="history-table sp-tags-table" role="grid" aria-readonly="true" aria-label="Tags of this spectrum">
         <thead>
           <tr>
             {show.map((c) => (
-              <th key={c} scope="col">
+              <th key={c} scope="col" role="columnheader">
                 {c}
               </th>
             ))}
-            <th scope="col">ladder</th>
+            <th scope="col" role="columnheader">
+              ladder
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -344,11 +348,11 @@ function TagsTable(p: {
                 onKeyDown={(e) => key(e, i)}
               >
                 {show.map((c) => (
-                  <td key={c} className={c === 'tag' ? 'mono' : c === 'fasta_hit' ? undefined : 'num'}>
+                  <td key={c} role="gridcell" className={c === 'tag' ? 'mono' : c === 'fasta_hit' ? undefined : 'num'}>
                     {r[col(c)] ?? ''}
                   </td>
                 ))}
-                <td>{!l ? '–' : l.complete ? `${l.series} on ${l.matched}/${l.positions.length} peaks` : `not on the peaks (${l.matched}/${l.positions.length})`}</td>
+                <td role="gridcell">{!l ? '–' : l.complete ? `${l.series} on ${l.matched}/${l.positions.length} peaks` : `not on the peaks (${l.matched}/${l.positions.length})`}</td>
               </tr>
             )
           })}
@@ -363,7 +367,8 @@ function LadderLine({ ladder, tag }: { ladder: Ladder; tag: string }): JSX.Eleme
   const steps = ladder.residues.map((res, k) => ({ res, to: ladder.positions[k + 1] }))
   return (
     <div className="sp-ladder" data-testid="ladder">
-      <p>
+      {/* Polite: choosing another tag redraws the ladder and its verdict. */}
+      <p aria-live="polite" aria-atomic="true">
         <strong>
           {ladder.series}-ladder <span className="mono">{tag}</span>
         </strong>{' '}
