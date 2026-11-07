@@ -412,6 +412,7 @@ export function isChanged(name: string, value: unknown): boolean {
 
 /// Deliberately not rendered, each for a stated reason. Listing them (rather
 /// than defaulting to hide) is what lets the check below be exhaustive.
+const OPT_IN_1_12 = '1.12 command-line option, not in the form yet (CLI default applies)'
 export const HIDDEN: Record<string, string> = {
   in: 'dedicated input picker',
   out: 'dedicated output field',
@@ -423,7 +424,67 @@ export const HIDDEN: Record<string, string> = {
   force: 'TOPP boilerplate',
   test: 'TOPP boilerplate',
   stream: 'stdin/stdout resident mode; meaningless under a GUI',
-  mzpeak_read_memory: 'ignored by the CLI: mzPeak is read in file order without a decode cache'
+  mzpeak_read_memory: 'ignored by the CLI: mzPeak is read in file order without a decode cache',
+  // FASTag 1.12 options. Each is opt-in and leaves the output as 1.11 at its
+  // default (acquisition_check refuses raw DIA by default, the one 1.12
+  // default change). Not offered in the form until each has its GUI design;
+  // until then a GUI run uses the CLI defaults.
+  probe_input: 'metadata probe for programs; prints JSON lines and exits',
+  dump_spectrum: 'spectrum dump for programs; prints JSON lines and exits',
+  acquisition_check: OPT_IN_1_12,
+  acquisition_probe_spectra: OPT_IN_1_12,
+  alkylation_out: OPT_IN_1_12,
+  alkylation_proteome: OPT_IN_1_12,
+  alkylation_min_spectra: OPT_IN_1_12,
+  alkylation_min_share: OPT_IN_1_12,
+  alkylation_window: OPT_IN_1_12,
+  census: OPT_IN_1_12,
+  census_out: OPT_IN_1_12,
+  census_summary_out: OPT_IN_1_12,
+  census_ids: OPT_IN_1_12,
+  census_ids_fdr: OPT_IN_1_12,
+  census_triage_evalue: OPT_IN_1_12,
+  unknown_charge: OPT_IN_1_12,
+  charge_min: OPT_IN_1_12,
+  charge_max: OPT_IN_1_12,
+  charge_infer_margin: OPT_IN_1_12,
+  isotope_error: OPT_IN_1_12,
+  complement_rule: OPT_IN_1_12,
+  complement_tolerance: OPT_IN_1_12,
+  complement_tolerance_unit: OPT_IN_1_12,
+  complement_tol_factor: OPT_IN_1_12,
+  complement_midp: OPT_IN_1_12,
+  pick_profile: OPT_IN_1_12,
+  pick_unknown_type: OPT_IN_1_12,
+  ion_series: OPT_IN_1_12,
+  species_call: OPT_IN_1_12,
+  species_call_decoys: OPT_IN_1_12,
+  species_call_min_units: OPT_IN_1_12,
+  species_call_params: OPT_IN_1_12,
+  species_pi0: OPT_IN_1_12,
+  species_orientation: OPT_IN_1_12,
+  digest_models_version: OPT_IN_1_12,
+  digest_detection: OPT_IN_1_12,
+  digest_flank2: OPT_IN_1_12,
+  digest_min_confidence: OPT_IN_1_12,
+  digest_calibration: OPT_IN_1_12,
+  shortlist_out: OPT_IN_1_12,
+  fasta_out: OPT_IN_1_12,
+  shortlist_background: OPT_IN_1_12,
+  shortlist_min_spectra: OPT_IN_1_12,
+  shortlist_max_evalue: OPT_IN_1_12,
+  shortlist_top: OPT_IN_1_12,
+  shortlist_parsimony: OPT_IN_1_12,
+  shortlist_gapped: OPT_IN_1_12,
+  shortlist_decoy_affix: OPT_IN_1_12,
+  shortlist_force: OPT_IN_1_12,
+  search_config_out: OPT_IN_1_12,
+  search_engine: OPT_IN_1_12,
+  search_config_template: OPT_IN_1_12,
+  search_decoy_prefix: OPT_IN_1_12,
+  search_precursor_tolerance: OPT_IN_1_12,
+  search_precursor_unit: OPT_IN_1_12,
+  search_isotope_errors: OPT_IN_1_12
 }
 
 /// The parameters actually shown, and so the only ones a run may send. HIDDEN

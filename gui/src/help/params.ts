@@ -312,5 +312,89 @@ export const PARAM_HELP: Record<string, ParamHelp> = {
   debug: { text: 'A standard OpenMS option for more detailed log messages.' },
   no_progress: { text: 'A standard OpenMS option that hides OpenMS\'s own progress messages.' },
   force: { text: 'A standard OpenMS option that skips some of its checks.' },
-  test: { text: 'A standard OpenMS option for its internal tests.' }
+  test: { text: 'A standard OpenMS option for its internal tests.' },
+
+  // Not in the form: FASTag 1.12 command-line options. Each is opt-in; at its
+  // default the output is the same as FASTag 1.11, except acquisition_check.
+  acquisition_check: {
+    text: 'Before tagging, FASTag checks whether the file is raw DIA data, whose MS2 spectra each mix several peptides. By default such a file is refused (exit code 11); warn tags it anyway with a warning, off skips the check. The app always uses the default.',
+    tip: 'Make pseudo-DDA spectra with DIAspeXtract (or diaTracer for timsTOF .d) first; their output passes the check.'
+  },
+  acquisition_probe_spectra: { text: 'How many MS2 spectra at the start of the run the acquisition check reads (metadata only).' },
+  alkylation_out: {
+    text: 'Write a report of which reagent alkylated the cysteines, or none, from the placements of peptides with one cysteine. Not validated on held-out data.'
+  },
+  alkylation_proteome: { text: 'The database the alkylation report uses when no reconciliation database is given: a shipped proteome (human, mouse, yeast, E. coli) or a FASTA file.' },
+  alkylation_min_spectra: { text: 'How many spectra the alkylation call needs.' },
+  alkylation_min_share: { text: 'Which share of the counted spectra the alkylation call needs.' },
+  alkylation_window: { text: 'The mass window around each cysteine form for the alkylation report. 0 means 0.02 Da on a ppm run and 0.5 Da on a Da run.' },
+  census: {
+    text: 'Also write a census: one row for every MS2 spectrum read, tagged or not, and a run summary. A status in the census is not a quality call.'
+  },
+  census_out: { text: 'Where the per-spectrum census goes. By default next to the tags file, ending in .census.tsv.' },
+  census_summary_out: { text: 'Where the census run summary goes. By default next to the tags file, ending in .census_summary.tsv.' },
+  census_ids: {
+    text: 'Identifications of the same run (idXML or mzid) for the census: each spectrum is then marked identified or not. The file needs q-values.'
+  },
+  census_ids_fdr: { text: 'The q-value a target hit needs for its spectrum to count as identified in the census.' },
+  census_triage_evalue: { text: 'The E-value at or below which an unidentified spectrum with a tag is marked for a second look in the census. It is a threshold, not a quality call.' },
+  unknown_charge: {
+    text: 'How a precursor whose charge the file does not give is tagged: as 2+ (the default, as before 1.12), at each possible charge, or at the charge its fragment pairs support best. A charge given in the file is never replaced.'
+  },
+  charge_min: { text: 'The lowest charge tried for a precursor without a charge, when it is not tagged as 2+.' },
+  charge_max: { text: 'The highest charge tried for a precursor without a charge, when it is not tagged as 2+.' },
+  charge_infer_margin: { text: 'By how much the supported charge must beat the next one to be tagged alone; when the two are closer, both are tagged.' },
+  isotope_error: {
+    text: 'Also consider precursor masses lowered by one or more isotope spacings (1.00336 Da each), for precursors picked on the wrong isotope peak. Needs a fragment tolerance below 0.05 Da.'
+  },
+  complement_rule: {
+    text: 'Which fragment pairs count as complements when tags are scored: pairs at the same charge (the default), pairs that share the precursor charge, or either.'
+  },
+  complement_tolerance: { text: 'The mass window, in Da, for a complement partner.' },
+  complement_tolerance_unit: { text: 'Whether the complement window is a fixed value in Da or follows the fragment tolerance.' },
+  complement_tol_factor: { text: 'The factor on the fragment tolerance when the complement window follows it.' },
+  complement_midp: { text: 'Score tags with no or one complement pair with the mid-p variant of the complement test.' },
+  pick_profile: {
+    text: 'Centroid profile MS2 spectra before tagging. By default only mzPeak input is centroided (as in 1.11); auto also centroids mzML; off never centroids. Spectra that are already centroided are never picked again.'
+  },
+  pick_unknown_type: { text: 'With profile picking on auto, also centroid spectra that do not say whether they are profile or centroided, when their data look like profile.' },
+  ion_series: {
+    text: 'Read the spectra as b/y ions (the default), as c/z ions of ETD or ECD, or choose per spectrum from its activation (auto).'
+  },
+  species_call: {
+    text: 'Call each organism of the species report present, no call or not detected, by comparing it with decoy tags. Off by default.'
+  },
+  species_call_decoys: { text: 'How many decoy tags are made for each tag when organisms are called.' },
+  species_call_min_units: { text: 'Fewer spectra with organism evidence than this give no call for the whole run.' },
+  species_call_params: { text: 'A file with the decision settings of the organism call. By default the one in the taxonomy folder.' },
+  species_pi0: { text: 'The share of absent organisms assumed for the q-values of the organism call. 1 is the standard (Benjamini-Hochberg) correction.' },
+  species_orientation: {
+    text: 'Look up each tag in the species index as written (the default) or also reversed. When reversed readings are used, the log p-value and q-value columns are NA.'
+  },
+  digest_models_version: { text: 'Which protease models the digest report uses: the shipped ones (as in 1.11) or v2. v2 is not validated on held-out data.' },
+  digest_detection: { text: 'Apply per-instrument weights in the digest report, which also gives a call on timsTOF runs. Not validated on held-out data.' },
+  digest_flank2: { text: 'Let the digest report also use the two residues before each cut when the one-residue counts are too few. Not validated on held-out data.' },
+  digest_min_confidence: { text: 'Give no digest call when its calibrated confidence is below this value. 0 turns it off.' },
+  digest_calibration: { text: 'A file that calibrates the confidence of the digest call. By default the shipped one.' },
+  shortlist_out: {
+    text: 'Write a ranked list of the proteins the tags were placed on. It narrows a later database search; it is not an identification and has no FDR control.'
+  },
+  fasta_out: { text: 'Write a smaller FASTA with the proteins of the shortlist, for a database search. No decoys are added; let the search engine make them.' },
+  shortlist_background: { text: 'Proteins that are always added to the smaller FASTA, such as the host proteome or contaminants.' },
+  shortlist_min_spectra: { text: 'How many spectra a protein needs to stay on the shortlist.' },
+  shortlist_max_evalue: { text: 'The E-value a tag needs for its placements to count for the shortlist.' },
+  shortlist_top: { text: 'Keep at most this many proteins on the shortlist. 0 means no limit.' },
+  shortlist_parsimony: { text: 'Whether proteins whose spectra a higher-ranked protein already has are dropped from the shortlist.' },
+  shortlist_gapped: { text: 'Let placements with one mismatched flank count for the shortlist.' },
+  shortlist_decoy_affix: { text: 'The name prefixes and suffixes that mark a decoy entry; decoys never enter the shortlist.' },
+  shortlist_force: { text: 'Write the smaller FASTA and the search settings even when the protease of the run does not fit tryptic placement.' },
+  search_config_out: { text: 'Write search-engine settings (Sage or Comet) for the smaller FASTA.' },
+  search_engine: { text: 'The search engine the settings are written for: Sage or Comet.' },
+  search_config_template: { text: 'For Comet only: a parameter file the written settings are merged into.' },
+  search_decoy_prefix: { text: 'The decoy prefix the search engine uses. Empty means the engine default.' },
+  search_precursor_tolerance: { text: 'The precursor tolerance written into the search settings.' },
+  search_precursor_unit: { text: 'The unit of that precursor tolerance.' },
+  search_isotope_errors: { text: 'How many precursor isotope errors the search engine should consider.' },
+  probe_input: { text: 'Print what a spectra file contains (instrument, activation, spectrum counts, profile or centroided) and exit. It writes no output file and is for other programs.' },
+  dump_spectrum: { text: 'Print the peaks FASTag tags in one spectrum and exit. It writes no output file and is for other programs.' }
 }

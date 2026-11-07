@@ -1,6 +1,216 @@
 {
   "params": [
     {
+      "name": "acquisition_check",
+      "type": "string",
+      "default": "refuse",
+      "description": "Check the acquisition before tagging. Raw DIA, whose MS2 'precursors' are isolation windows holding several peptides, is refused with exit code 11 (refuse), tagged anyway with a warning as before 1.12 (warn), or not checked (off). Tag DIA through pseudo-DDA spectra instead: run DIAspeXtract (or diaTracer for .d) first; their output passes the check",
+      "required": false,
+      "toppAdvanced": false,
+      "choices": [
+        "refuse",
+        "warn",
+        "off"
+      ]
+    },
+    {
+      "name": "acquisition_probe_spectra",
+      "type": "int",
+      "default": "4000",
+      "description": "MS2 spectra the acquisition check reads (metadata only) from the start of the run, reading at most ten times as many spectra in all; a mixed file is judged on these",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 1
+    },
+    {
+      "name": "alkylation_min_share",
+      "type": "double",
+      "default": "0.6",
+      "description": "Share of the binned spectra the -alkylation_out call needs",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0,
+      "max": 1
+    },
+    {
+      "name": "alkylation_min_spectra",
+      "type": "int",
+      "default": "10",
+      "description": "Spectra the -alkylation_out call needs, binned and for the called class",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 1
+    },
+    {
+      "name": "alkylation_out",
+      "type": "output-file",
+      "default": "",
+      "description": "Report which reagent alkylated the cysteines (or none), from the placements of single-Cys peptides on -recon_fasta or -alkylation_proteome: Cys form counts and the call (not validated on held-out data)",
+      "required": false,
+      "toppAdvanced": false,
+      "formats": [
+        "tsv"
+      ]
+    },
+    {
+      "name": "alkylation_proteome",
+      "type": "string",
+      "default": "auto",
+      "description": "Database of -alkylation_out without -recon_fasta: auto (= human), human, mouse, yeast, ecoli (shipped proteomes) or a FASTA file (.gz allowed)",
+      "required": false,
+      "toppAdvanced": true
+    },
+    {
+      "name": "alkylation_window",
+      "type": "double",
+      "default": "0.0",
+      "description": "Window of -alkylation_out around each Cys form mass; 0 = 0.02 Da on a ppm run, 0.5 Da on a run with a Da fragment tolerance",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
+    },
+    {
+      "name": "census",
+      "type": "bool",
+      "default": "false",
+      "description": "Write a census: one row per MS2 spectrum read (status, peak and tag facts, tagged or not) to <out> with its extension replaced by .census.tsv, and a run summary to .census_summary.tsv. A status is not a quality call. Subsampling counts input spectra of all MS levels",
+      "required": false,
+      "toppAdvanced": false
+    },
+    {
+      "name": "census_ids",
+      "type": "input-file",
+      "default": "",
+      "description": "Identifications of -in (idXML or mzid) for -census: adds the columns identified (1, 0, empty = unknown) and triage, and a census_ids section to the summary. A spectrum is identified by a target hit whose q-value passes -census_ids_fdr; a file without q-values is refused (filter it with IDFilter first)",
+      "required": false,
+      "toppAdvanced": false,
+      "formats": [
+        "idXML",
+        "mzid"
+      ]
+    },
+    {
+      "name": "census_ids_fdr",
+      "type": "double",
+      "default": "0.01",
+      "description": "q-value a target hit of -census_ids needs to identify its spectrum",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0,
+      "max": 1
+    },
+    {
+      "name": "census_out",
+      "type": "output-file",
+      "default": "",
+      "description": "Per-spectrum census table. Default: <out> with its extension replaced by .census.tsv",
+      "required": false,
+      "toppAdvanced": false,
+      "formats": [
+        "tsv"
+      ]
+    },
+    {
+      "name": "census_summary_out",
+      "type": "output-file",
+      "default": "",
+      "description": "Census run summary (section, key, value, n, description). Default: <out> with its extension replaced by .census_summary.tsv",
+      "required": false,
+      "toppAdvanced": false,
+      "formats": [
+        "tsv"
+      ]
+    },
+    {
+      "name": "census_triage_evalue",
+      "type": "double",
+      "default": "0.01",
+      "description": "best_evalue at or below which an unidentified tagged or placed spectrum is a triage candidate (an E-value threshold, not a quality call)",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
+    },
+    {
+      "name": "charge_infer_margin",
+      "type": "double",
+      "default": "2.0",
+      "description": "Complement-pair excess by which the inferred charge must beat the runner-up to be tagged alone; closer, both are tagged (ambiguous). Any excess above 0 is a call",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
+    },
+    {
+      "name": "charge_max",
+      "type": "int",
+      "default": "4",
+      "description": "Highest charge -unknown_charge enumerate or infer tries",
+      "required": false,
+      "toppAdvanced": false,
+      "min": 1,
+      "max": 8
+    },
+    {
+      "name": "charge_min",
+      "type": "int",
+      "default": "2",
+      "description": "Lowest charge -unknown_charge enumerate or infer tries (1 enables infer's 1+ test)",
+      "required": false,
+      "toppAdvanced": false,
+      "min": 1,
+      "max": 8
+    },
+    {
+      "name": "complement_midp",
+      "type": "bool",
+      "default": "false",
+      "description": "Score complements with DirecTag's hypergeometric mid-p P(X>c) + P(X=c)/2 for tags with 0 or 1 complemented peaks; 2 or more keep P(X>=c)",
+      "required": false,
+      "toppAdvanced": true
+    },
+    {
+      "name": "complement_rule",
+      "type": "string",
+      "default": "same_charge",
+      "description": "Which fragment pairs count as complements in the complement subscore: same_charge (both at the fragment charge z, partner at M/z + 2p - m), precursor (the partner carries the precursor's remaining c - z charges, at (M + c*p - z*m)/(c - z)), or both (either rule)",
+      "required": false,
+      "toppAdvanced": true,
+      "choices": [
+        "same_charge",
+        "precursor",
+        "both"
+      ]
+    },
+    {
+      "name": "complement_tol_factor",
+      "type": "double",
+      "default": "0.5",
+      "description": "Factor k of the complement window k*(fragment tolerance at the peak + at the partner) (used with -complement_tolerance_unit fragment)",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 1e-9
+    },
+    {
+      "name": "complement_tolerance",
+      "type": "double",
+      "default": "0.02",
+      "description": "Window for a complement partner in Da (used with -complement_tolerance_unit Da)",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 1e-9
+    },
+    {
+      "name": "complement_tolerance_unit",
+      "type": "string",
+      "default": "Da",
+      "description": "Da: the window is -complement_tolerance. fragment: -complement_tol_factor scales the run's -fragment_tolerance at both partners",
+      "required": false,
+      "toppAdvanced": true,
+      "choices": [
+        "Da",
+        "fragment"
+      ]
+    },
+    {
       "name": "debug",
       "type": "int",
       "default": "0",
@@ -30,6 +240,51 @@
       "max": 1
     },
     {
+      "name": "digest_calibration",
+      "type": "input-file",
+      "default": "",
+      "description": "Calibration of p_correct for -digest_out (columns feature, coef). Default: the shipped digest_calibration.tsv when p_correct is written",
+      "required": false,
+      "toppAdvanced": true,
+      "formats": [
+        "tsv"
+      ]
+    },
+    {
+      "name": "digest_detection",
+      "type": "string",
+      "default": "none",
+      "description": "Per-instrument detection weights of -digest_out from the model table: 'shipped' applies them and calls timsTOF runs instead of withholding them (needs a v2 table; not validated on held-out data); 'none' = 1.11",
+      "required": false,
+      "toppAdvanced": true,
+      "choices": [
+        "none",
+        "shipped"
+      ]
+    },
+    {
+      "name": "digest_flank2",
+      "type": "string",
+      "default": "off",
+      "description": "Two-residue flank model of -digest_out: 'auto' scores the flank sums m(P2) + m(P1) when the P1 counts are too few or y1 is cut off (not validated on held-out data); 'off' = 1.11",
+      "required": false,
+      "toppAdvanced": true,
+      "choices": [
+        "off",
+        "auto"
+      ]
+    },
+    {
+      "name": "digest_min_confidence",
+      "type": "double",
+      "default": "0.0",
+      "description": "Withhold a -digest_out call whose calibrated p_correct is below this (no_call low_confidence); 0 = off. Not validated on held-out data",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0,
+      "max": 1
+    },
+    {
       "name": "digest_models",
       "type": "input-file",
       "default": "",
@@ -38,6 +293,18 @@
       "toppAdvanced": false,
       "formats": [
         "tsv"
+      ]
+    },
+    {
+      "name": "digest_models_version",
+      "type": "string",
+      "default": "shipped",
+      "description": "Shipped protease models of -digest_out: 'shipped' (1.11) or 'v2' (detection, LysargiNase and Asp-N_ambic rows, pooled specificity; not validated on held-out data)",
+      "required": false,
+      "toppAdvanced": true,
+      "choices": [
+        "shipped",
+        "v2"
       ]
     },
     {
@@ -87,6 +354,14 @@
       "toppAdvanced": false
     },
     {
+      "name": "dump_spectrum",
+      "type": "string",
+      "default": "",
+      "description": "Print the peaks FASTag tags of the spectrum of -in with this native ID (after centroiding, the precursor cut, deisotoping and the peak budget, under the options given) as JSON lines and exit; needs no -out. Prepares the given precursor at its charge (or 2+) only",
+      "required": false,
+      "toppAdvanced": true
+    },
+    {
       "name": "entrapment_fasta",
       "type": "input-file",
       "default": "",
@@ -120,6 +395,17 @@
         "fasta",
         "fa",
         "faa"
+      ]
+    },
+    {
+      "name": "fasta_out",
+      "type": "output-file",
+      "default": "",
+      "description": "Reduced FASTA: the shortlisted proteins of the database (no decoys; let the search engine generate them), then -shortlist_background",
+      "required": false,
+      "toppAdvanced": false,
+      "formats": [
+        "fasta"
       ]
     },
     {
@@ -217,6 +503,19 @@
       "toppAdvanced": false
     },
     {
+      "name": "ion_series",
+      "type": "string",
+      "default": "by",
+      "description": "Ion series the MS2 spectra are read as: by (b/y ions, as before 1.12), cz (c/z-dot ions of electron transfer or capture dissociation, ETD/ECD), or auto (c/z-dot for spectra whose activation is ETD or ECD, b/y for all others, hybrid EThcD/ETciD included). Under cz and auto the tag TSV gains an ion_series column when some spectrum can be read as c/z",
+      "required": false,
+      "toppAdvanced": false,
+      "choices": [
+        "by",
+        "cz",
+        "auto"
+      ]
+    },
+    {
       "name": "isobaric_tolerance",
       "type": "double",
       "default": "0.04",
@@ -224,6 +523,19 @@
       "required": false,
       "toppAdvanced": false,
       "min": 0
+    },
+    {
+      "name": "isotope_error",
+      "type": "string-list",
+      "default": [
+        "0"
+      ],
+      "description": "Precursor isotope offsets (-1..3) to consider: the precursor mass is lowered by k x 1.00336 Da, for every precursor; each charge is tagged at the offset its complement pairs support best. Needs a fragment tolerance below 0.05 Da",
+      "required": false,
+      "toppAdvanced": true,
+      "itemType": "int",
+      "min": -1,
+      "max": 3
     },
     {
       "name": "label_out",
@@ -440,6 +752,35 @@
       "min": 0
     },
     {
+      "name": "pick_profile",
+      "type": "string",
+      "default": "legacy",
+      "description": "Centroid profile MS2 (MS:1000128) with OpenMS PeakPickerHiRes before tagging: 'legacy' on mzPeak input only (as FASTag 1.11), 'auto' on mzML and mzPeak input (not MGF), 'off' never. Centroided MS2 are never re-picked; -out_spectra writes the spectra as they were tagged",
+      "required": false,
+      "toppAdvanced": false,
+      "choices": [
+        "legacy",
+        "auto",
+        "off"
+      ]
+    },
+    {
+      "name": "pick_unknown_type",
+      "type": "bool",
+      "default": "false",
+      "description": "With -pick_profile auto, also centroid MS2 that declare no spectrum type (neither MS:1000127 nor MS:1000128) when OpenMS's PeakTypeEstimator reads their data as profile",
+      "required": false,
+      "toppAdvanced": true
+    },
+    {
+      "name": "probe_input",
+      "type": "input-file",
+      "default": "",
+      "description": "Print the metadata of this spectra file (mzML, mzpeak or MGF) as JSON lines and exit: instrument and MS2 analyzer, activation, spectrum counts, centroid/profile, mzML index state, the acquisition check's call and, with -fasta, its protein and decoy counts. A FASTA file (.fasta, .fa, .faa, .fas) alone gives only those counts. Reads metadata only; needs no -in or -out",
+      "required": false,
+      "toppAdvanced": true
+    },
+    {
       "name": "proforma",
       "type": "bool",
       "default": "false",
@@ -528,12 +869,220 @@
       "toppAdvanced": false
     },
     {
+      "name": "search_config_out",
+      "type": "output-file",
+      "default": "",
+      "description": "Search-engine configuration for -fasta_out (or the input database): Sage JSON, or Comet parameters (merged into -search_config_template when given)",
+      "required": false,
+      "toppAdvanced": false
+    },
+    {
+      "name": "search_config_template",
+      "type": "input-file",
+      "default": "",
+      "description": "Comet only: a `comet -p` parameter file the managed keys are merged into",
+      "required": false,
+      "toppAdvanced": false
+    },
+    {
+      "name": "search_decoy_prefix",
+      "type": "string",
+      "default": "",
+      "description": "Decoy prefix the engine generates; empty = rev_ (Sage) or DECOY_ (Comet)",
+      "required": false,
+      "toppAdvanced": false
+    },
+    {
+      "name": "search_engine",
+      "type": "string",
+      "default": "sage",
+      "description": "Engine of -search_config_out",
+      "required": false,
+      "toppAdvanced": false,
+      "choices": [
+        "sage",
+        "comet"
+      ]
+    },
+    {
+      "name": "search_isotope_errors",
+      "type": "int",
+      "default": "0",
+      "description": "Precursor isotope errors 0..n the engine searches; 0 = none",
+      "required": false,
+      "toppAdvanced": false,
+      "min": 0,
+      "max": 3
+    },
+    {
+      "name": "search_precursor_tolerance",
+      "type": "double",
+      "default": "10.0",
+      "description": "Precursor tolerance written to -search_config_out",
+      "required": false,
+      "toppAdvanced": false,
+      "min": 0
+    },
+    {
+      "name": "search_precursor_unit",
+      "type": "string",
+      "default": "ppm",
+      "description": "Unit of -search_precursor_tolerance",
+      "required": false,
+      "toppAdvanced": false,
+      "choices": [
+        "ppm",
+        "Da"
+      ]
+    },
+    {
+      "name": "shortlist_background",
+      "type": "input-file",
+      "default": "",
+      "description": "Proteins always appended to -fasta_out (host proteome, contaminants); decoys and entries already in the database are left out",
+      "required": false,
+      "toppAdvanced": false,
+      "formats": [
+        "fasta",
+        "fa",
+        "faa"
+      ]
+    },
+    {
+      "name": "shortlist_decoy_affix",
+      "type": "string-list",
+      "default": [
+        "DECOY_",
+        "decoy_",
+        "rev_",
+        "REV_",
+        "reverse_",
+        "XXX_",
+        "shuffled_",
+        "random_",
+        "_DECOY",
+        "_rev"
+      ],
+      "description": "Accession prefixes (ending in _) and suffixes (starting with _) that mark a decoy entry, case-insensitive; decoys never enter the shortlist or -fasta_out",
+      "required": false,
+      "toppAdvanced": true
+    },
+    {
+      "name": "shortlist_force",
+      "type": "bool",
+      "default": "false",
+      "description": "Write -fasta_out and -search_config_out although the tag ends call a protease the tryptic placement does not fit",
+      "required": false,
+      "toppAdvanced": true
+    },
+    {
+      "name": "shortlist_gapped",
+      "type": "bool",
+      "default": "false",
+      "description": "Let placements with one mismatched flank (a mass gap) count for the shortlist; by default only exact ones count (a gap equal to a fixed terminal label is exact)",
+      "required": false,
+      "toppAdvanced": false
+    },
+    {
+      "name": "shortlist_max_evalue",
+      "type": "double",
+      "default": "0.1",
+      "description": "E-value a tag needs for its placements to count for the shortlist",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
+    },
+    {
+      "name": "shortlist_min_spectra",
+      "type": "int",
+      "default": "2",
+      "description": "Spectra a protein needs to be kept",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 1
+    },
+    {
+      "name": "shortlist_out",
+      "type": "output-file",
+      "default": "",
+      "description": "Ranked protein shortlist from the tag placements on -recon_fasta (or -fasta): spectra, peptides, shared-spectrum weight and best E-value per protein, and whether it is kept. A search-space reduction, NOT FDR-controlled",
+      "required": false,
+      "toppAdvanced": false,
+      "formats": [
+        "tsv"
+      ]
+    },
+    {
+      "name": "shortlist_parsimony",
+      "type": "string",
+      "default": "none",
+      "description": "'none' keeps every protein above -shortlist_min_spectra; 'subset' drops a protein whose spectra a higher-ranked kept one has; 'greedy' keeps a greedy set cover of the spectra",
+      "required": false,
+      "toppAdvanced": false,
+      "choices": [
+        "none",
+        "subset",
+        "greedy"
+      ]
+    },
+    {
+      "name": "shortlist_top",
+      "type": "int",
+      "default": "0",
+      "description": "Keep at most this many proteins, ties at the cut kept; 0 = no cap",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
+    },
+    {
       "name": "species",
       "type": "bool",
       "default": "false",
       "description": "Infer which taxa are present from the tags. Uses the bundled taxonomy unless -taxdb/-taxonomy_* are given, and writes <out> with its extension replaced by .species.tsv unless -species_out is given",
       "required": false,
       "toppAdvanced": false
+    },
+    {
+      "name": "species_call",
+      "type": "string",
+      "default": "none",
+      "description": "Call each taxon of the -species report present, no_call or not_detected: 'decoy' tests its count against a null of decoy tags (looked up like the tags) plus the spill expected from stronger related taxa, and appends the columns call, call_reason, decoy_spectra, decoy_expected, decoy_qvalue, share and lod. 'none' = the ranked report only",
+      "required": false,
+      "toppAdvanced": true,
+      "choices": [
+        "none",
+        "decoy"
+      ]
+    },
+    {
+      "name": "species_call_decoys",
+      "type": "int",
+      "default": "5",
+      "description": "Decoy tags per tag for -species_call decoy",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 1,
+      "max": 100
+    },
+    {
+      "name": "species_call_min_units",
+      "type": "int",
+      "default": "200",
+      "description": "Fewer spectra with taxon evidence than this make -species_call decoy a run-level no_call (few_spectra)",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
+    },
+    {
+      "name": "species_call_params",
+      "type": "input-file",
+      "default": "",
+      "description": "Decision parameters of -species_call decoy (alpha, tau, n_min). Default: species_call.tsv in the taxonomy directory",
+      "required": false,
+      "toppAdvanced": true,
+      "formats": [
+        "tsv"
+      ]
     },
     {
       "name": "species_deconvolve",
@@ -585,6 +1134,18 @@
       "max": 1
     },
     {
+      "name": "species_orientation",
+      "type": "string",
+      "default": "forward",
+      "description": "Which readings of a tag -species looks up: 'forward' = as written; 'both' = also reversed (a tag read from b ions is written reversed), using the one informative reading, or the taxa both share; a tag whose two readings share none is skipped. Independent of -orientation, which applies to -fasta and -recon_fasta only. Under 'both' the analytic log_pvalue and qvalue columns are NA (no analytic background follows); only decoy_qvalue and call from -species_call decoy are calibrated",
+      "required": false,
+      "toppAdvanced": true,
+      "choices": [
+        "forward",
+        "both"
+      ]
+    },
+    {
       "name": "species_out",
       "type": "output-file",
       "default": "",
@@ -594,6 +1155,16 @@
       "formats": [
         "tsv"
       ]
+    },
+    {
+      "name": "species_pi0",
+      "type": "double",
+      "default": "1.0",
+      "description": "Proportion of null taxa for the -species_call q-values: 1 = Benjamini-Hochberg; 0 estimates it from the run (Storey)",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0,
+      "max": 1
     },
     {
       "name": "species_rank",
@@ -705,6 +1276,19 @@
       "description": "Sets the number of threads allowed to be used by the TOPP tool (0 = all available cores)",
       "required": false,
       "toppAdvanced": false
+    },
+    {
+      "name": "unknown_charge",
+      "type": "string",
+      "default": "assume2",
+      "description": "How a precursor without a charge is tagged: assume2 (as 2+, as before 1.12), enumerate (at each listed possible charge, else at every charge -charge_min..-charge_max) or infer (at the charge its complement pairs support; both of two close calls; 1+ when 1 is a candidate and almost no intensity lies above the precursor; without evidence 2+, or the lowest candidate when 2 is none). Every charge tagged is a listed possible charge, else one of -charge_min..-charge_max. With several, E-values are multiplied by their number and the reports count the charge-evidence choice only. A header charge is never replaced",
+      "required": false,
+      "toppAdvanced": false,
+      "choices": [
+        "assume2",
+        "enumerate",
+        "infer"
+      ]
     },
     {
       "name": "usi_collection",
