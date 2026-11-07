@@ -169,3 +169,19 @@ the enzyme is Lys_C on purpose (see its header).
 sha256: `Ecoli_shortlist.fasta` `842262adfd982bcee9e0f135ba4b6214ea21282c06bf8b9d4982d32d5ae87ed4`,
 `chymo_insilico.mgf` `d5bbde1229e2862f7f308626f735455b4328689f60dc0d0b777799c7ebaa6582`,
 `comet_template.params` `75966c005779290916dfc104024f439924d91cf6010d6ea1d6ff3bd7658983c9`.
+
+## #17 mass-shift fixture (1.12)
+
+`shifts_insilico.mgf` (124 MS2), written by `make_shift_fixture.py
+Ecoli_MS2_small.fasta .` (standard-library Python 3, fixed seed 20261107)
+from the tryptic peptides (after K/R, not before P; 8-20 residues, no C) of
+`Ecoli_MS2_small.fasta`: charge 2, singly charged b2..b(n-1) and y1..y(n-1) at
+exact monoisotopic masses. Each spectrum carries one N-terminal mass shift on
+the precursor and every b ion (y ions unshifted): 0 (40 spectra), +15.994915
+Oxidation (30), +42.010565 Acetyl (20), +1.003355 13C (12), +123.4567
+unexplained (12), -77.7777 unexplained (10). With `-extension 3` and
+`-massgap_min_spectra 2` the run gives five gap peaks, one per rule
+`digest_cli_test` checks (variable, variable, skipped_isotope, offset,
+dropped_engine). Derived from the vendored FASTA only, so the same licence.
+
+sha256: `shifts_insilico.mgf` `bb609510728087057effddcf1fec8b0a52cec4907e2e954cdd287d27cee4d257`.

@@ -153,28 +153,33 @@ same "$TMP/label0.tsv" "$TMP/label3.tsv" "-label_out differs between 2 and 1 thr
 # ---- -search_shifts (1.12 #17): -delta_out/-massgap_out unchanged, the decisions in the config
 # masked: the run version row aside (the baseline binary may carry another version)
 nover() { tr -d '\r' < "$1" | awk -F'\t' '!($1 == "run" && $2 == "version")'; }
+# The ion-trap fixture places too few spectra for a gap peak: shifts_insilico.mgf
+# (make_shift_fixture.py) carries Oxidation, Acetyl, a 13C spacing, an
+# unexplained and a negative unexplained N-terminal shift on Ecoli_MS2_small.fasta.
+SC=(-in "$FIX/shifts_insilico.mgf" -extension 3)
 SH=(-search_engine comet -search_config_out "$TMP/sh.params")
 G2=(-massgap_min_spectra 2)
-run "${COMMON[@]}" -out "$TMP/s0.tsv" "${R[@]}" -delta_out "$TMP/sdelta0.tsv" -massgap_out "$TMP/sgap0.tsv" "${G2[@]}"
+run "${SC[@]}" -out "$TMP/s0.tsv" "${R[@]}" -delta_out "$TMP/sdelta0.tsv" -massgap_out "$TMP/sgap0.tsv" "${G2[@]}"
 cp "$TMP/recon.tsv" "$TMP/srecon0.tsv"
-run "${COMMON[@]}" -out "$TMP/s1.tsv" "${R[@]}" -delta_out "$TMP/sdelta1.tsv" -massgap_out "$TMP/sgap1.tsv" "${G2[@]}" \
+run "${SC[@]}" -out "$TMP/s1.tsv" "${R[@]}" -delta_out "$TMP/sdelta1.tsv" -massgap_out "$TMP/sgap1.tsv" "${G2[@]}" \
   -search_shifts both "${SH[@]}" -search_shifts_out "$TMP/shifts.tsv"
 same "$TMP/s0.tsv" "$TMP/s1.tsv" "-search_shifts changed the tag TSV"
 same "$TMP/srecon0.tsv" "$TMP/recon.tsv" "-search_shifts changed -recon_out"
 same "$TMP/sdelta0.tsv" "$TMP/sdelta1.tsv" "-search_shifts changed -delta_out"
 same "$TMP/sgap0.tsv" "$TMP/sgap1.tsv" "-search_shifts changed -massgap_out"
 # at the -massgap_* defaults too, against the runs above without it
-run "${COMMON[@]}" -out "$TMP/s2.tsv" "${R[@]}" -delta_out "$TMP/sdelta2.tsv" -massgap_out "$TMP/sgap2.tsv" \
+run "${SC[@]}" -out "$TMP/s2a.tsv" "${R[@]}" -delta_out "$TMP/sdelta2a.tsv" -massgap_out "$TMP/sgap2a.tsv"
+run "${SC[@]}" -out "$TMP/s2.tsv" "${R[@]}" -delta_out "$TMP/sdelta2.tsv" -massgap_out "$TMP/sgap2.tsv" \
   -search_shifts both "${SH[@]}"
-same "$TMP/delta0.tsv" "$TMP/sdelta2.tsv" "-search_shifts changed -delta_out at the -massgap defaults"
-same "$TMP/gap1.tsv" "$TMP/sgap2.tsv" "-search_shifts changed -massgap_out at the -massgap defaults"
+same "$TMP/sdelta2a.tsv" "$TMP/sdelta2.tsv" "-search_shifts changed -delta_out at the -massgap defaults"
+same "$TMP/sgap2a.tsv" "$TMP/sgap2.tsv" "-search_shifts changed -massgap_out at the -massgap defaults"
 # -search_shifts none equals the option absent
-run "${COMMON[@]}" -out "$TMP/s3.tsv" "${R[@]}" -delta_out "$TMP/sdelta3.tsv" -massgap_out "$TMP/sgap3.tsv" "${G2[@]}" -search_shifts none
+run "${SC[@]}" -out "$TMP/s3.tsv" "${R[@]}" -delta_out "$TMP/sdelta3.tsv" -massgap_out "$TMP/sgap3.tsv" "${G2[@]}" -search_shifts none
 same "$TMP/sdelta0.tsv" "$TMP/sdelta3.tsv" "-search_shifts none changed -delta_out"
 same "$TMP/sgap0.tsv" "$TMP/sgap3.tsv" "-search_shifts none changed -massgap_out"
 if [ -n "${FASTAG_BASELINE_BIN:-}" ]; then
   mkdir -p "$TMP/bl"
-  "$FASTAG_BASELINE_BIN" -threads 2 "${COMMON[@]}" -out "$TMP/bl/s.tsv" -recon_fasta "$DB" -recon_out "$TMP/bl/recon.tsv" \
+  "$FASTAG_BASELINE_BIN" -threads 2 "${SC[@]}" -out "$TMP/bl/s.tsv" -recon_fasta "$DB" -recon_out "$TMP/bl/recon.tsv" \
     -fixed_modifications -delta_out "$TMP/bl/delta.tsv" -massgap_out "$TMP/bl/gap.tsv" "${G2[@]}" > "$TMP/log" 2>&1 \
     || { cat "$TMP/log" >&2; fail "baseline binary"; }
   same "$TMP/bl/delta.tsv" "$TMP/sdelta1.tsv" "-delta_out with -search_shifts differs from the baseline binary"
@@ -197,6 +202,20 @@ nexp=$(awk -F'\t' 'NR > 1 && ($5 == "variable" || $5 == "offset" || $5 == "fixed
 [ "$nexp" -gt 0 ] || fail "no exported shift on the fixture (the checks below would be vacuous)"
 nvar=$(awk -F'\t' 'NR > 1 && $5 == "variable"' "$TMP/shifts.rows" | wc -l | tr -d ' ')
 [ "$nvar" -le 3 ] || fail "$nvar variable shifts exceed -shift_max_variable 3"
+# the fixture's shifts, each with its rule
+act() { awk -F'\t' -v d="$1" 'NR > 1 && $2 == d { print $5 }' "$TMP/shifts.rows"; }
+[ "$(act 15.9950)" = variable ] || fail "Oxidation is not a variable modification: $(act 15.9950)"
+[ "$(act 42.0105)" = variable ] || fail "Acetyl is not a variable modification: $(act 42.0105)"
+[ "$(act 1.0035)" = skipped_isotope ] || fail "the 13C spacing is not skipped_isotope: $(act 1.0035)"
+[ "$(act 123.4565)" = offset ] || fail "the unexplained shift is not an offset: $(act 123.4565)"
+[ "$(act -77.7775)" = dropped_engine ] || fail "the negative offset is not dropped_engine: $(act -77.7775)"
+tr -d '\r' < "$TMP/sh.params" | grep -qx 'isotope_error = 1' || fail "the 13C peak did not set isotope_error 1"
+tr -d '\r' < "$TMP/sh.params" | grep -qx 'mass_offsets = 0.0 123.4565' || fail "mass_offsets is not 0.0 123.4565"
+# Sage: no offsets, the variable ones written
+run "${SC[@]}" -out "$TMP/sg.tsv" "${R[@]}" "${G2[@]}" -search_shifts variable -search_config_out "$TMP/sg.json" \
+  -search_shifts_out "$TMP/sg.shifts.tsv"
+tr -d '\r' < "$TMP/sg.json" | grep -q '15\.99491' || fail "Sage config without the Oxidation shift"
+[ "$(awk -F'\t' '!/^#/ && $5 == "offset"' "$TMP/sg.shifts.tsv" | wc -l | tr -d ' ')" = 0 ] || fail "Sage got an offset"
 # the config's masses, 4 decimals: variable_modNN, mass_offsets and add_* values
 tr -d '\r' < "$TMP/sh.params" | awk '
   /^variable_mod[0-9][0-9] = / && $3 + 0 != 0 { printf "v %.4f\n", $3 }
@@ -214,7 +233,7 @@ if awk -F'\t' 'NR > 1 && $5 == "offset"' "$TMP/shifts.rows" | grep -q .; then
 fi
 # the same at 1, 3 and 8 threads
 for t in 1 3 8; do
-  "$BIN" -threads $t "${COMMON[@]}" -out "$TMP/st$t.tsv" "${R[@]}" -massgap_min_spectra 2 -search_shifts both \
+  "$BIN" -threads $t "${SC[@]}" -out "$TMP/st$t.tsv" "${R[@]}" -massgap_min_spectra 2 -search_shifts both \
     -search_engine comet -search_config_out "$TMP/sht$t.params" -search_shifts_out "$TMP/shiftst$t.tsv" > "$TMP/log" 2>&1 \
     || { cat "$TMP/log" >&2; fail "-search_shifts at $t threads"; }
 done
@@ -226,18 +245,18 @@ same "$TMP/shifts.tsv" "$TMP/shiftst1.tsv" "-search_shifts_out differs between 2
 # report-free: no -recon_out, -delta_out, -massgap_out or -digest_out, with and without -recon_localize
 for loc in "" -recon_localize; do
   rf="$TMP/rf$loc"; mkdir -p "$rf"
-  run "${COMMON[@]}" -out "$rf/t.tsv" -recon_fasta "$DB" -fixed_modifications -massgap_min_spectra 2 $loc \
+  run "${SC[@]}" -out "$rf/t.tsv" -recon_fasta "$DB" -fixed_modifications -massgap_min_spectra 2 $loc \
     -search_shifts both -search_engine comet -search_config_out "$rf/c.params"
   [ -s "$rf/c.params" ] || fail "report-free -search_shifts$loc: no config"
   [ "$(ls "$rf" | tr '\n' ' ')" = "c.params t.tsv " ] || fail "report-free -search_shifts$loc wrote $(ls "$rf" | tr '\n' ' ')"
   same "$TMP/sht1.params" "$rf/c.params" "report-free -search_shifts$loc: the config differs from the run with reports"
 done
 # site expansion with -recon_localize runs
-run "${COMMON[@]}" -out "$TMP/se.tsv" "${R[@]}" -recon_localize -massgap_min_spectra 2 -search_shifts both \
+run "${SC[@]}" -out "$TMP/se.tsv" "${R[@]}" -recon_localize -massgap_min_spectra 2 -search_shifts both \
   -search_engine comet -search_config_out "$TMP/se.params" -shift_expand_sites -search_shifts_out "$TMP/se.shifts.tsv"
 [ -s "$TMP/se.params" ] || fail "-shift_expand_sites: no config"
 # refusals
-nope() { local want="$1"; shift; "$BIN" "${COMMON[@]}" -out "$TMP/n.tsv" "$@" > "$TMP/log" 2>&1; local rc=$?
+nope() { local want="$1"; shift; "$BIN" "${SC[@]}" -out "$TMP/n.tsv" "$@" > "$TMP/log" 2>&1; local rc=$?
   [ "$rc" = "$want" ] || { cat "$TMP/log" >&2; fail "exit $rc (want $want): $*"; }; }
 nope 6 "${R[@]}" -search_shifts both
 grep -q -- "-search_shifts writes into the engine configuration" "$TMP/log" || fail "no -search_config_out: message"
@@ -253,7 +272,7 @@ mkdir -p "$TMP/baddig"; cp "$DATA"/* "$TMP/baddig/"
 printf 'Bogus\tBogusmod (X)\t1.0\n' >> "$TMP/baddig/massgap_mods.tsv"
 FASTAG_DIGEST_DIR="$TMP/baddig" nope 3 "${R[@]}" -search_shifts both "${SH[@]}"
 grep -q -- "-search_shifts: OpenMS does not know the modification 'Bogusmod (X)'" "$TMP/log" || fail "unknown mod id: message"
-"$BIN" "${COMMON[@]}" -out "$TMP/w.tsv" -search_shifts_out "$TMP/w.shifts.tsv" -shift_max_variable 5 > "$TMP/log" 2>&1 \
+"$BIN" "${SC[@]}" -out "$TMP/w.tsv" -search_shifts_out "$TMP/w.shifts.tsv" -shift_max_variable 5 > "$TMP/log" 2>&1 \
   || fail "-search_shifts_out without -search_shifts was refused"
 grep -q -- "-search_shifts_out is only read for -search_shifts" "$TMP/log" || fail "no warning for -search_shifts_out"
 grep -q -- "-shift_max_variable is only read for -search_shifts" "$TMP/log" || fail "no warning for -shift_max_variable"
