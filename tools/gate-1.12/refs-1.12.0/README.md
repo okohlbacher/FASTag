@@ -11,13 +11,20 @@ sha256 bc36282b..., integration/1.12 at fe4e12c, OpenMS 70cebcd144),
 
 - the 9 cases of `/ceph/ibmi/abi/oliver/fastag-gate/gate.sh`, re-referenced
   (`GATE_REFS=<dir> gate.sh --refs`): `<case>.digest`, `BINARY.txt`,
-  `cases.tsv`, `results.tsv`. Every non-info digest line equals refs-1.10.0;
+  `cases.tsv`, `results.tsv`. gate.sh was the shared script with sha256
+  `1230067c11686521147aaabc23e67fdba25b71b91a1aee7ff7c0c7119bb7f095`
+  (unchanged since 2026-11-04); its mzPeak digests use /usr/bin/python3 with
+  pyarrow 25.0.1 (the `digest python` line of `BINARY.txt`).
+  Every non-info digest line equals refs-1.10.0;
   only the info line with the -out_spectra mzML software version differs
   (1.10.0 -> 1.12.0).
 - dia_refuse, pseudo_pass and profile_mzml of `tools/gate_new_cases.sh`
   (`GATE_NEW_REFS=<dir> GATE_CASES="dia_refuse pseudo_pass profile_mzml"
   gate_new_cases.sh --refs`): `<case>.digest`, `BINARY.<case>.txt`. Each
-  equals its development reference in `../refs-dev`.
+  equals its development reference in `../refs-dev`. These digests use
+  sha256sum and sed only, no Python; the `digest python none` line of the
+  three `BINARY.<case>.txt` files was added after the run to say so, and
+  gate_new_cases.sh now writes it.
 
 charge_infer (#6) is not in this set: the approval names the three cases
 above, and the plan adds charge_infer only after its acceptance. It stays in

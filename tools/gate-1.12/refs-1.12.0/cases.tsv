@@ -1,0 +1,10 @@
+case	pxd	input	args	wall_s	maxrss_kb	load1_before
+dda_default	PXD003531	PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.mzML	-threads 32	0.91	276348	58.23
+tmt_fixed	PXD004541	PXD004541/HF1_201501212_GM_RJ1511D_TMT10_hpHRP_DMSO1_2p5ug_4uL_fr02.mzML	-fixed_modifications Carbamidomethyl\ \(C\) TMT6plex\ \(K\) TMT6plex\ \(N-term\) -threads 32	0.91	351204	58.23
+nontryptic_ext	PXD040407	PXD040407/Hog1p_WT_Rep3_Chymo_5uL.mzML	-extension 2 -proforma -res_conf -threads 32	0.39	138392	58.23
+fasta_recon	PXD014764	PXD014764/20190412_KEH_HF_SA_ANW_R11_100419_CNOT_R1_f008.mzML	-extension 3 -fasta $GATE_IN/db/Homo_sapiens.fasta -recon_out recon.tsv -delta_out delta.tsv -threads 32	9.36	975324	58.23
+species	PXD003531	PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.mzML	-extension 2 -species -taxdb $GATE_IN/tax/tax_k7.taxdb -taxonomy_nodes $GATE_IN/tax/nodes.dmp -taxonomy_names $GATE_IN/tax/names.dmp -species_out species.tsv -threads 32	2.54	1401324	56.58
+out_spectra_mzml	PXD010783	PXD010783/KristenJeff_p53_mod_AspN_03_02_07.mzML	-fragment_tolerance 0.5 -fragment_tolerance_unit Da -out_spectra spectra.mzML -threads 32	4.27	680484	56.70
+out_spectra_mzpeak	PXD010783	PXD010783/KristenJeff_p53_mod_AspN_03_02_07.mzML	-fragment_tolerance 0.5 -fragment_tolerance_unit Da -out_spectra spectra.mzpeak -threads 32	4.36	793272	56.70
+mzpeak_point	PXD003531	PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.point.mzpeak	-threads 32	1.15	722672	56.72
+mzpeak_chunked	PXD003531	PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.chunked.mzpeak	-threads 32	1.64	910676	59.06
