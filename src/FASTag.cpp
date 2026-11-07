@@ -254,7 +254,13 @@ class TOPPFASTag : public TOPPBase
       if (k.compare(0, prefix.size(), prefix) != 0) continue;
       const std::string name = k.substr(prefix.size());
       if (FASTag::Cli::isLegacyOutSpectraParameter(name)) continue;
-      if (getParam_().getValue(name) == findEntry_(name).default_value) p.removeMetaValue(k);
+      // A flag's registered default (false) and its Param value ("false")
+      // never compare equal, so a flag at its default would stay listed; ask
+      // the flag itself.
+      const ParameterInformation& e = findEntry_(name);
+      const bool at_default = e.type == ParameterInformation::FLAG ? !getFlag_(name)
+                                                                   : getParam_().getValue(name) == e.default_value;
+      if (at_default) p.removeMetaValue(k);
     }
     return p;
   }
