@@ -137,6 +137,7 @@ describe('docs: Digest tab vs doc/DESIGN-digest.md "GUI: Digest tab"', () => {
     const mock = installMockBridge()
     mock.reportFiles = { '/rep1/Ecoli_MS2_small.label.tsv': lab, '/rep2/Ecoli_MS2_small.digest.tsv': dig }
     await renderApp(mock)
+    await goTo('results') // the report picker lives in the empty results pane
     mock.nextPickReport = '/rep1/Ecoli_MS2_small.label.tsv'
     await click(screen.getByRole('button', { name: 'Open a digest, label or mass-gap report…' }))
     mock.nextPickReport = '/rep2/Ecoli_MS2_small.digest.tsv'

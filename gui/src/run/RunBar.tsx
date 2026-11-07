@@ -42,6 +42,12 @@ export interface RunBarProps {
   canRun: boolean
   // The instrument preset last chosen, and the values it is checked against.
   instrument: string
+  // The preset the inspector proposes for the input (inspector/checks.ts).
+  detectedInstrument?: string | null
+  // Run waits for the inspector: a block, or a red flag not yet answered.
+  inspectorHeld?: boolean
+  // ... because the checks are not known yet (--helphelp or the probe runs).
+  inspectorChecking?: boolean
   values: Record<string, ParamValue>
   onInstrument(id: string): void
   onRun(): void
@@ -66,6 +72,7 @@ export default function RunBar(p: RunBarProps): JSX.Element {
 
   const nInvalid = Object.keys(invalid).length
   const blocked = nInvalid > 0 || refused.length > 0
+  const held = !busy && !blocked && jobs === 0 && !!p.input && !!p.inspectorHeld
   const chosenInstrument = INSTRUMENTS.find((x) => x.id === p.instrument)
   // A preset stays shown only while the values are still its own.
   const shownInstrument = chosenInstrument && matchesInstrument(p.values, chosenInstrument) ? chosenInstrument.id : ''
@@ -159,6 +166,19 @@ export default function RunBar(p: RunBarProps): JSX.Element {
         </div>
       )}
       {!busy && !blocked && jobs === 0 && !p.input && <p className="hint">Choose an input file to run.</p>}
+      {/* No live region of its own: the checks' summary (InspectorPanel) is
+          announced; Run's aria-describedby names this line. */}
+      {held && p.inspectorChecking && (
+        <p className="hint" id="run-held">
+          Checking the input with FASTag… Run waits for the checks before the run.
+        </p>
+      )}
+      {held && !p.inspectorChecking && (
+        <p className="warn" id="run-held">
+          <IconError />
+          <span>Run waits for the checks before the run: fix them, or answer a red flag with Run anyway.</span>
+        </p>
+      )}
 
       {!busy && (
         <div className="instrument">
@@ -174,6 +194,7 @@ export default function RunBar(p: RunBarProps): JSX.Element {
             {INSTRUMENTS.map((x) => (
               <option key={x.id} value={x.id}>
                 {presetText(x)}
+                {p.detectedInstrument === x.id ? ' (detected)' : ''}
               </option>
             ))}
           </select>
@@ -230,6 +251,8 @@ export default function RunBar(p: RunBarProps): JSX.Element {
               className="primary"
               onClick={p.onRun}
               disabled={!p.canRun}
+              data-run=""
+              aria-describedby={held ? 'run-held' : undefined}
               aria-keyshortcuts={isMac() ? 'Meta+Enter' : 'Control+Enter'}
               title={`Run (${keyText(isMac() ? '⏎' : 'Enter')})`}
             >
