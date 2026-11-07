@@ -1007,7 +1007,7 @@ namespace FASTag
   /// Everything that depends on the seed length -- the walk, extension,
   /// scoring and selection -- over a prepared spectrum and its graphs.
   static std::vector<Tag> tagPrepared(const Prepared& s, const std::vector<Graph>& graphs,
-                                      const Param& p, const Tables& tables)
+                                      const Param& p, const Tables& tables, double multiplicity = 1.0)
   {
     std::vector<Tag> out;
     // scored and the DFS state below are scratch reused across paths, charges
@@ -1119,6 +1119,10 @@ namespace FASTag
     for (ScoredTag& cand : scored)
     {
       cand.tag.evalue *= static_cast<double>(std::max<size_t>(n_seeds, 1));
+      // 1.12 #6: H precursor hypotheses tagged for this spectrum (Bonferroni),
+      // before the cut and the cap below. 1 (the default) is skipped, so the
+      // 1.11 doubles are untouched.
+      if (multiplicity != 1.0) cand.tag.evalue *= multiplicity;
       if (cand.tag.gapped) cand.tag.evalue *= gap_penalty;
     }
 
@@ -1273,7 +1277,8 @@ namespace FASTag
   }
 
   std::vector<Tag> tagSpectrum(const MSSpectrum& in, double precursor_mz, int charge,
-                               const Param& p, const Tables& tables, SpectrumDiag* diag)
+                               const Param& p, const Tables& tables, SpectrumDiag* diag,
+                               double multiplicity)
   {
     if (diag) *diag = SpectrumDiag{};
     // !(x > 0): NaN must not pass. A NaN precursor turned off the precursor
@@ -1289,13 +1294,13 @@ namespace FASTag
     if (!enough) return {};
     const std::vector<Graph> graphs = buildGraphs(s, p, tables.alphabet());
     countEdges(diag, graphs);
-    return tagPrepared(s, graphs, p, tables);
+    return tagPrepared(s, graphs, p, tables, multiplicity);
   }
 
   std::vector<std::vector<Tag>> tagSpectrum(const MSSpectrum& in, double precursor_mz, int charge,
                                             const std::vector<Param>& params,
                                             const std::vector<Tables>& tables,
-                                            SpectrumDiag* diag)
+                                            SpectrumDiag* diag, double multiplicity)
   {
     if (diag) *diag = SpectrumDiag{};
     std::vector<std::vector<Tag>> out(params.size());
@@ -1317,7 +1322,7 @@ namespace FASTag
         graphs = buildGraphs(s, params[0], tables[0].alphabet());
         countEdges(diag, graphs);
       }
-      out[i] = tagPrepared(s, graphs, params[i], tables[i]);
+      out[i] = tagPrepared(s, graphs, params[i], tables[i], multiplicity);
     }
     fillDiag(diag, s, enough);
     return out;

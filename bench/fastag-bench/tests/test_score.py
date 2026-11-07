@@ -258,3 +258,18 @@ def test_tag_correct_any():
     # equals the paper rule against the single candidate
     assert S.tag_correct_any("AMP", (n, c), ["SAMPLER"]) == S.tag_correct_flank("AMP", n, c, *S.peptide_masses("SAMPLER"))
     assert S.correct_candidates("AMP", (n, c), ["SAMPLER", "PEPTIDEK", "SAMPLER"]) == ["SAMPLER"]
+
+
+def test_precursor_flank_scores_the_nterm_flank_of_forward_reads_only():
+    # #6: APEPTIDEK, tag PTI at position 3 (I=L); the residue mass before it is A+P+E
+    res, pref, total = S.peptide_masses("APEPTIDEK")
+    n = pref[3]
+    c = total - pref[6]
+    assert S.tag_correct_flank("PTL", n, c, res, pref, total)
+    assert S.tag_correct_precursor_flank("PTL", n, res, pref)
+    # a precursor flank off by one isotope (1.00336 Da) fails, even with the C-terminal flank right
+    assert S.tag_correct_flank("PTL", n + 1.00336, c, res, pref, total)
+    assert not S.tag_correct_precursor_flank("PTL", n + 1.00336, res, pref)
+    # a reversed read never scores here
+    assert not S.tag_correct_precursor_flank("LTP", n, res, pref)
+    assert not S.tag_correct_precursor_flank("", n, res, pref)

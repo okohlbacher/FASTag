@@ -44,6 +44,7 @@
 #include "MgfReader.h"
 #include "NumFormat.h"
 #include "OutputGuard.h"
+#include "PrecursorHypotheses.h"
 #include "Proforma.h"
 #include "ReconIds.h"
 #include "RunMeta.h"
@@ -744,6 +745,41 @@ protected:
     registerFlag_("complement_midp",
                   "Score complements with DirecTag's hypergeometric mid-p P(X>c) + P(X=c)/2 "
                   "for tags with 0 or 1 complemented peaks; 2 or more keep P(X>=c)", true);
+    // #6: precursor charge and isotope hypotheses (src/PrecursorHypotheses.h).
+    // Defaults are FASTag 1.11: uncharged precursors are tagged as 2+, no
+    // isotope offset; validation decides any other default.
+    registerStringOption_("unknown_charge", "<mode>", FASTag::Hyp::kModeDefault,
+                          "How a precursor without a charge is tagged: assume2 (as 2+, as before "
+                          "1.12), enumerate (at each listed possible charge, else at every charge "
+                          "-charge_min..-charge_max) or infer (at the charge its complement pairs "
+                          "support; both of two close calls; 1+ when 1 is a candidate and almost no "
+                          "intensity lies above the precursor; without evidence 2+, or the lowest "
+                          "candidate when 2 is none). Every charge tagged is a listed possible charge, "
+                          "else one of -charge_min..-charge_max. With several, E-values are multiplied "
+                          "by their number and the reports count the charge-evidence choice only. A "
+                          "header charge is never replaced", false);
+    setValidStrings_("unknown_charge", ListUtils::create<std::string>(FASTag::Hyp::kModeValues));
+    registerIntOption_("charge_min", "<n>", FASTag::Hyp::kChargeMinDefault,
+                       "Lowest charge -unknown_charge enumerate or infer tries (1 enables infer's "
+                       "1+ test)", false);
+    setMinInt_("charge_min", 1);
+    setMaxInt_("charge_min", FASTag::Hyp::kChargeLimit);
+    registerIntOption_("charge_max", "<n>", FASTag::Hyp::kChargeMaxDefault,
+                       "Highest charge -unknown_charge enumerate or infer tries", false);
+    setMinInt_("charge_max", 1);
+    setMaxInt_("charge_max", FASTag::Hyp::kChargeLimit);
+    registerDoubleOption_("charge_infer_margin", "<value>", FASTag::Hyp::kInferMarginDefault,
+                          "Complement-pair excess by which the inferred charge must beat the "
+                          "runner-up to be tagged alone; closer, both are tagged (ambiguous). Any "
+                          "excess above 0 is a call", false, true);
+    setMinFloat_("charge_infer_margin", 0.0);
+    registerIntList_("isotope_error", "<k>", ListUtils::create<Int>("0"),
+                     "Precursor isotope offsets (-1..3) to consider: the precursor mass is "
+                     "lowered by k x 1.00336 Da, for every precursor; each charge is tagged at "
+                     "the offset its complement pairs support best. Needs a fragment tolerance "
+                     "below 0.05 Da", false, true);
+    setMinInt_("isotope_error", FASTag::Hyp::kIsotopeMin);
+    setMaxInt_("isotope_error", FASTag::Hyp::kIsotopeMax);
     // ---- 1.12 A: options ----
     // #5: ranked protein shortlist, reduced FASTA and a search-engine
     // configuration from the tag placements. A search-space reduction, NOT an
@@ -867,6 +903,7 @@ protected:
       case ParameterInformation::FLAG: return getFlag_(name);
       case ParameterInformation::INT: return getIntOption_(name) != static_cast<int>(e.default_value);
       case ParameterInformation::DOUBLE: return getDoubleOption_(name) != static_cast<double>(e.default_value);
+      case ParameterInformation::INTLIST: return getIntList_(name) != e.default_value.toIntVector();
       default: return getStringOption_(name) != static_cast<std::string>(e.default_value);
     }
   }
@@ -891,13 +928,16 @@ protected:
   }
 
   /// The tag TSV header line, matching appendTagRow's columns.
-  static std::string tagHeader(bool proforma, bool res_conf, bool usi)
+  /// @p hyp (1.12 #6, non-default -unknown_charge or -isotope_error only)
+  /// adds the hypothesis columns after the other optional ones.
+  static std::string tagHeader(bool proforma, bool res_conf, bool usi, bool hyp = false)
   {
     std::string h = "spectrum\ttag\tlength\tcharge\tnterm_mass\tcterm_mass\textended"
                     "\tgapped\tevalue\tmin_conf\tmean_conf\tfasta_hit";
     if (proforma) h += "\tproforma";
     if (res_conf) h += "\tres_conf";
     if (usi) h += "\tusi";
+    if (hyp) h += "\tprec_charge\tcharge_src\tiso_offset\tselected";
     return h + "\n";
   }
 
@@ -914,7 +954,8 @@ protected:
   static void appendTagRow(std::string& buf, const FASTag::Tag& t,
                            const std::string& native_id, const char* hit,
                            bool want_proforma, const std::string& proforma_fixed,
-                           bool want_res_conf, const std::string& usi = std::string())
+                           bool want_res_conf, const std::string& usi = std::string(),
+                           const FASTag::Hyp::Hypothesis* hyp = nullptr)
   {
     using FASTag::appendNum;
     constexpr auto fixed = std::chars_format::fixed;
@@ -951,6 +992,14 @@ protected:
       }
     }
     if (!usi.empty()) { buf += '\t'; buf += usi; }
+    if (hyp)
+    {
+      // 1.12 #6: the hypothesis the row was tagged under.
+      buf += '\t'; appendNum(buf, hyp->charge);
+      buf += '\t'; buf += FASTag::Hyp::sourceName(hyp->src);
+      buf += '\t'; appendNum(buf, hyp->iso);
+      buf += '\t'; buf += hyp->selected ? '1' : '0';
+    }
     buf += '\n';
   }
 
@@ -1232,6 +1281,11 @@ protected:
           // ---- 1.12 E: -stream refusals ----
           {"pick_profile", nullptr},
           {"pick_unknown_type", nullptr},
+          {"unknown_charge", nullptr},
+          {"charge_min", nullptr},
+          {"charge_max", nullptr},
+          {"charge_infer_margin", nullptr},
+          {"isotope_error", nullptr},
           // ---- 1.12 A: -stream refusals ----
           {"shortlist_out", nullptr},
           {"fasta_out", nullptr},
@@ -1353,6 +1407,26 @@ protected:
                                         getDoubleOption_("complement_tol_factor"),
                                         getStringOption_("complement_tolerance_unit"));
     p.complement_midp = getFlag_("complement_midp");
+    // 1.12 #6: the precursor hypotheses; at the defaults (assume2, isotope 0)
+    // hyp_on is false and the tagging loop runs exactly as in 1.11.
+    FASTag::Hyp::HypParam hyp_param;
+    FASTag::Hyp::parseMode(getStringOption_("unknown_charge"), hyp_param.mode);
+    hyp_param.charge_min = getIntOption_("charge_min");
+    hyp_param.charge_max = getIntOption_("charge_max");
+    hyp_param.infer_margin = getDoubleOption_("charge_infer_margin");
+    hyp_param.isotope_errors.clear();
+    for (const Int k : getIntList_("isotope_error")) hyp_param.isotope_errors.push_back(k);
+    if (const std::string herr = FASTag::Hyp::validate(hyp_param, p.frag_tol, p.tol_ppm); !herr.empty())
+    {
+      OPENMS_LOG_ERROR << herr << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    const bool hyp_on = !hyp_param.isDefault();
+    // #6: -species reads the selected hypothesis' rows only, through a per-row
+    // flag carried beside the rows (Block::row_species).
+    const bool species_sel_on = hyp_on && want_species;
+    // The complement pairs the infer call counts: #2's rule and tolerance.
+    const FASTag::ComplementSpec hyp_cs = FASTag::ComplementSpec::fromParam(p);
     // The residue modifications in use; -recon_id_out reports exactly these.
     StringList fixed_mods, variable_mods;
     double fixed_term_n = 0, fixed_term_c = 0;
@@ -1395,11 +1469,14 @@ protected:
     // several lengths report kept from one of them only (mergeLengths). Every
     // consumer -- TSV, recon, identifications, -stream -- sees these rows.
     // @p diag (-census) is filled when given; it never changes the tags.
+    // @p multiplicity (1.12 #6) is the number of precursor hypotheses tagged
+    // for the spectrum; 1 changes nothing.
     auto tag_all = [&len_params](const MSSpectrum& s, double prec_mz, int charge,
                                  const std::vector<FASTag::Tables>& tabs,
-                                 FASTag::SpectrumDiag* diag = nullptr) {
-      if (len_params.size() == 1) return FASTag::tagSpectrum(s, prec_mz, charge, len_params[0], tabs[0], diag);
-      return FASTag::mergeLengths(FASTag::tagSpectrum(s, prec_mz, charge, len_params, tabs, diag));
+                                 FASTag::SpectrumDiag* diag = nullptr, double multiplicity = 1.0) {
+      if (len_params.size() == 1)
+        return FASTag::tagSpectrum(s, prec_mz, charge, len_params[0], tabs[0], diag, multiplicity);
+      return FASTag::mergeLengths(FASTag::tagSpectrum(s, prec_mz, charge, len_params, tabs, diag, multiplicity));
     };
     if (lengths.size() > 1)
     {
@@ -1771,6 +1848,10 @@ protected:
           {"acquisition_probe_spectra", "-acquisition_check refuse or warn",
            getStringOption_("acquisition_check") != "off"},
           {"pick_unknown_type", "-pick_profile auto", pick_mode == FASTag::Centroid::Mode::Auto},
+          {"charge_min", "-unknown_charge enumerate or infer", hyp_param.mode != FASTag::Hyp::ChargeMode::Assume2},
+          {"charge_max", "-unknown_charge enumerate or infer", hyp_param.mode != FASTag::Hyp::ChargeMode::Assume2},
+          {"charge_infer_margin", "-unknown_charge enumerate or infer",
+           hyp_param.mode != FASTag::Hyp::ChargeMode::Assume2},
           // ---- 1.12 A: ignored-option warnings ----
           {"shortlist_background", "-fasta_out", !fasta_out.empty()},
           {"shortlist_max_evalue", "-shortlist_out or -fasta_out", shortlist_on},
@@ -2631,7 +2712,7 @@ protected:
       return CANNOT_WRITE_OUTPUT_FILE;
     }
     const bool want_proforma = getFlag_("proforma");
-    tsv << tagHeader(want_proforma, p.per_residue_conf, !usi_prefix.empty());
+    tsv << tagHeader(want_proforma, p.per_residue_conf, !usi_prefix.empty(), hyp_on);
 
     std::ofstream rtsv;
     if (recon_on)
@@ -2722,6 +2803,11 @@ protected:
       std::vector<std::vector<PeptideIdentification>> recon_id_lists;  ///< (recon_ids_on only)
       std::vector<std::string> glyco_rows;  ///< glyco rows (glyco_on only)
       std::vector<std::vector<std::pair<double, bool>>> row_meta;  ///< (entrap_on only)
+      /// Per spectrum, per written tag row in row order: 1 when the row may be
+      /// species evidence (#6: its hypothesis is the selected one); hyp_on &&
+      /// want_species only. A flag beside the rows, never a column read back
+      /// off them, so adding TSV columns cannot change it.
+      std::vector<std::vector<char>> row_species;
       std::vector<char> keep, keep_target;
       FASTag::ClusterAcc::ClusterBlock acc;  ///< 1.12 per-cluster slots (src/ClusterAcc.h)
     };
@@ -2797,6 +2883,8 @@ protected:
       /// serialized %g evalue back off the TSV.
       std::vector<std::pair<double, bool>> meta;
       bool any_target = false;  ///< at least one non-entrapment reported tag
+      /// Per written tag row: may it be species evidence (Block::row_species).
+      std::vector<char> row_species;
       /// -recon_id_out: the spectrum's identification, when it placed anything.
       std::vector<PeptideIdentification> ids;
       /// -census: the spectrum's census row (an MS2 spectrum read, census_on only).
@@ -2888,8 +2976,59 @@ protected:
         ++pt.no_charge;
         if (!prec.getPossibleChargeStates().empty()) ++pt.multi_charge;
       }
+      // 1.12 #6: the precursor hypotheses (src/PrecursorHypotheses.h). At the
+      // defaults there is one, the 1.11 one (the header charge, <= 0 tagged
+      // as 2+, the given m/z, multiplicity 1), and the loop below is 1.11's.
+      // Otherwise every hypothesis is tagged with its E-values multiplied by
+      // H, the rows are merged by E-value and capped, and every consumer that
+      // aggregates over spectra reads the selected hypothesis' rows only
+      // (PLAN-INTEGRATION 2.3 contract 1): digest/label counts, delta and
+      // massgap samples, the shortlist evidence (#5), the census row (#11)
+      // and, through a per-row flag (Block::row_species), the species evidence. The
+      // TSV, -recon_out and -recon_id_out keep every row at its hypothesis'
+      // charge.
+      const std::vector<FASTag::Hyp::Hypothesis> hyps = FASTag::Hyp::precursorHypotheses(spec, prec, hyp_param, hyp_cs);
+      if (hyp_on) pt.acc.e.hyp.add(hyps);
       FASTag::SpectrumDiag cdiag;
-      const auto tags = tag_all(spec, prec.getMZ(), prec.getCharge(), tables, res.census ? &cdiag : nullptr);
+      std::vector<FASTag::Tag> tags;
+      std::vector<std::uint8_t> tag_hyp;  // per row: its hypothesis (hyp_on only)
+      size_t sel_found = 0;                // rows of the selected hypothesis
+      // The one place a hypothesis is tagged: its m/z and charge, the
+      // multiplicity H (1 = the 1.11 call), the census diagnostics only for
+      // the selected one. A per-spectrum choice of tables (E #15B's ion
+      // series) goes here, for every hypothesis alike.
+      const auto tag_at = [&](const FASTag::Hyp::Hypothesis& hy, double H, FASTag::SpectrumDiag* diag) {
+        return tag_all(spec, hy.mz, hy.charge, tables, diag, H);
+      };
+      if (hyps.size() == 1)
+      {
+        tags = tag_at(hyps[0], 1.0, res.census ? &cdiag : nullptr);
+        sel_found = tags.size();
+      }
+      else
+      {
+        const double H = static_cast<double>(hyps.size());
+        std::vector<std::vector<FASTag::Tag>> per(hyps.size());
+        for (size_t h = 0; h < hyps.size(); ++h)
+        {
+          per[h] = tag_at(hyps[h], H, res.census && hyps[h].selected ? &cdiag : nullptr);
+          if (hyps[h].selected) sel_found = per[h].size();
+        }
+        // The cap over all hypotheses: -max_tags per seed length, as one
+        // hypothesis reports at most.
+        const size_t cap = p.max_tag_count > 0 ? static_cast<size_t>(p.max_tag_count) * lengths.size() : 0;
+        auto merged = FASTag::Hyp::mergeHypotheses(std::move(per), cap);
+        tags.reserve(merged.size());
+        tag_hyp.reserve(merged.size());
+        for (auto& m : merged)
+        {
+          tags.push_back(std::move(m.first));
+          tag_hyp.push_back(m.second);
+        }
+      }
+      const auto hyp_of = [&](size_t i) -> const FASTag::Hyp::Hypothesis& {
+        return hyps[tag_hyp.empty() ? 0 : tag_hyp[i]];
+      };
       pt.tags += tags.size();
       // -census: the reported rows (scratch reused per thread) and placements.
       static thread_local std::vector<FASTag::Census::TagView> ctags;
@@ -2925,8 +3064,11 @@ protected:
         loc_peaks.sortByPosition();
       }
 
-      for (const auto& t : tags)
+      for (size_t ti = 0; ti < tags.size(); ++ti)
       {
+        const FASTag::Tag& t = tags[ti];
+        const FASTag::Hyp::Hypothesis& hy = hyp_of(ti);
+        const bool sel = hy.selected;  // always true at the defaults
         const char* hit = "-";
         bool row_entrap = false;
         if (filtering)
@@ -2958,7 +3100,7 @@ protected:
         if (!row_entrap) res.any_target = true;
         if (entrap_on) res.meta.emplace_back(t.evalue, row_entrap);
         ++pt.reported;
-        if (res.census)
+        if (res.census && sel)
         {
           FASTag::Census::TagView v;
           v.evalue = t.evalue;
@@ -2972,10 +3114,11 @@ protected:
         }
 
         appendTagRow(buf, t, spec.getNativeID(), hit, want_proforma, proforma_fixed,
-                     p.per_residue_conf, usi);
+                     p.per_residue_conf, usi, hyp_on ? &hy : nullptr);
+        if (species_sel_on) res.row_species.push_back(sel ? 1 : 0);
         // The tags the digest and label reports count: every written row that
-        // is ungapped with E <= 1.
-        if (count_on && !t.gapped && t.evalue <= 1.0)
+        // is ungapped with E <= 1 (of the selected hypothesis, #6).
+        if (count_on && sel && !t.gapped && t.evalue <= 1.0)
           pt.digest.add(t.nterm_mass, t.cterm_mass, FASTag::baseSequence(t.seq));
 
         if (place_on && !row_entrap)  // known-false rows must not place or bin
@@ -2987,9 +3130,9 @@ protected:
           const auto places = recon.reconcile(FASTag::baseSequence(t.seq),
                                               t.nterm_mass, t.cterm_mass,
                                               recon_loc ? &loc_peaks : nullptr,
-                                              prec.getCharge(),
+                                              hy.charge,
                                               tag_modded ? &tag_shift : nullptr);
-          if (res.census && recon_on) cplaced += places.size();
+          if (res.census && recon_on && sel) cplaced += places.size();
           // -recon_out rows: one per placement.
           if (recon_on)
           {
@@ -3030,9 +3173,9 @@ protected:
               res.rbuf += '\n';
             }
           }
-          if (recon_ids_on) FASTag::addReconHits(id_hits, places, t.seq, t.evalue, prec.getCharge(), id_fixed);
+          if (recon_ids_on) FASTag::addReconHits(id_hits, places, t.seq, t.evalue, hy.charge, id_fixed);
           // ---- 1.12 A: per-tag placement records ----
-          if (handoff_on)
+          if (handoff_on && sel)
           {
             // #5: the spectra the protease check counts (once each), and the
             // qualifying placements of the shortlist.
@@ -3064,7 +3207,7 @@ protected:
           }
           // A candidate for the spectrum's -delta_out sample: take this
           // tag's min-|delta| placement.
-          if (delta_on && !places.empty() && (!delta_have || t.evalue < delta_e))
+          if (delta_on && sel && !places.empty() && (!delta_have || t.evalue < delta_e))
           {
             const FASTag::Reconciliation* best = nullptr;
             for (const auto& pl : places)
@@ -3098,8 +3241,11 @@ protected:
                                                 std::move(id_hits)));
       if (res.census)
       {
+        // The selected hypothesis' facts (#6; all rows at the defaults).
+        for (const auto& h : hyps)
+          if (h.selected) crow.charge_used = h.charge > 0 ? h.charge : 2;
         cfacts.enough_peaks = cdiag.enough_peaks;
-        cfacts.n_found = tags.size();
+        cfacts.n_found = sel_found;
         cfacts.n_reported = ctags.size();
         cfacts.n_placed = cplaced;
         cfacts.count_placements = recon_on;
@@ -3108,7 +3254,7 @@ protected:
         crow.n_kept = cdiag.n_kept;
         crow.n_edges = cdiag.n_edges;
         crow.n_compl = cdiag.n_compl;
-        crow.n_found = tags.size();
+        crow.n_found = sel_found;
         crow.n_reported = ctags.size();
         const size_t best = FASTag::Census::bestTag(ctags);
         if (best != FASTag::Census::kNone)
@@ -3173,6 +3319,7 @@ protected:
       if (recon_on) b.recon_rows[idx].swap(r.rbuf);
       if (recon_ids_on) b.recon_id_lists[idx].swap(r.ids);
       if (entrap_on) b.row_meta[idx].swap(r.meta);
+      if (species_sel_on) b.row_species[idx].swap(r.row_species);
       b.keep[idx] = 1;
       // A spectrum whose only reported tags are entrapment matches is
       // calibration material, not a hit -- keep it out of -out_spectra.
@@ -3192,6 +3339,7 @@ protected:
         if (recon_ids_on) b.recon_id_lists.resize(n_used);
         if (glyco_on) b.glyco_rows.resize(n_used);
         if (entrap_on) b.row_meta.resize(n_used);
+        if (species_sel_on) b.row_species.resize(n_used);
       }
       b.keep.assign(n_used, 0);
       if (want_out) b.keep_target.assign(n_used, 0);
@@ -3268,7 +3416,7 @@ protected:
         if (want_species)
         {
           const std::string& r = b.rows[i];
-          size_t start = 0;
+          size_t start = 0, row = 0;
           std::string id, tag;
           bool gapped = false;
           double evalue = 0;
@@ -3276,6 +3424,9 @@ protected:
           {
             size_t nl = r.find('\n', start);
             if (nl == std::string::npos) nl = r.size();
+            // #6: a row of a losing precursor hypothesis is no species
+            // evidence (the per-row flag from tag_one, not a TSV column).
+            if (species_sel_on && !b.row_species[i][row++]) { start = nl + 1; continue; }
             if (readSpeciesFields(r, start, nl, id, tag, gapped, evalue))
             {
               // Skip GAPPED tags unless asked for. A gap spells two residues
@@ -3735,6 +3886,23 @@ protected:
       run_meta.activation_electron = act.of(Activation::Electron);
       run_meta.activation_hybrid = act.of(Activation::Hybrid);
       run_meta.activation_unknown = act.of(Activation::Unknown);
+      // #6: where the selected hypotheses' charges came from (RunMeta
+      // Versioned rows; zero at the defaults, where no hypothesis step runs).
+      using FASTag::Hyp::ChargeSource;
+      const FASTag::Hyp::SourceCounts& hc = run_acc.e.hyp;
+      const auto sel_of = [&](ChargeSource s) { return hc.selected[static_cast<size_t>(s)]; };
+      run_meta.unknown_charge = getStringOption_("unknown_charge");
+      run_meta.isotope_error.clear();
+      for (const int k : hyp_param.isotope_errors)
+        run_meta.isotope_error += (run_meta.isotope_error.empty() ? "" : ",") + std::to_string(k);
+      run_meta.charge_header = sel_of(ChargeSource::Header);
+      run_meta.charge_possible = sel_of(ChargeSource::Possible);
+      run_meta.charge_inferred = sel_of(ChargeSource::Inferred);
+      run_meta.charge_ambiguous = sel_of(ChargeSource::Ambiguous);
+      run_meta.charge_assumed = sel_of(ChargeSource::Assumed);
+      run_meta.charge_enumerated = sel_of(ChargeSource::Enumerated);
+      run_meta.iso_shifted = hc.iso_shifted;
+      run_meta.multi_hypothesis = hc.multi;
     }
     tsv.close();  // flushes; a failed write anywhere leaves the stream failed
     if (tsv.fail())
@@ -4759,7 +4927,24 @@ protected:
     OPENMS_LOG_INFO << n_ms2 << " MS2 spectra, " << n_tags << " tags";
     if (filtering) OPENMS_LOG_INFO << " -> " << n_reported << " after filtering";
     OPENMS_LOG_INFO << std::endl;
-    if (n_no_charge > 0)
+    if (n_no_charge > 0 && hyp_on)
+    {
+      // 1.12 #6: the uncharged precursors were tagged under -unknown_charge.
+      using FASTag::Hyp::ChargeSource;
+      const FASTag::Hyp::SourceCounts& hc = run_acc.e.hyp;
+      const auto sel_of = [&](ChargeSource s) { return hc.selected[static_cast<size_t>(s)]; };
+      OPENMS_LOG_WARN << n_no_charge << " of " << n_ms2 << " MS2 spectra carry no precursor charge"
+                      << (n_multi_charge > 0 ? " (" + std::to_string(n_multi_charge)
+                                                   + " of them list several possible charges)"
+                                             : std::string())
+                      << "; under -unknown_charge " << getStringOption_("unknown_charge") << " their reports use "
+                      << sel_of(ChargeSource::Inferred) << " inferred, " << sel_of(ChargeSource::Ambiguous)
+                      << " ambiguous (better of two), " << sel_of(ChargeSource::Possible) << " listed, "
+                      << sel_of(ChargeSource::Enumerated) << " enumerated and " << sel_of(ChargeSource::Assumed)
+                      << " assumed (2+, or the lowest candidate when 2 is none) charges; " << hc.multi << " spectra were tagged under several "
+                      << "hypotheses, with their E-values multiplied by the number tagged." << std::endl;
+    }
+    else if (n_no_charge > 0)
       OPENMS_LOG_WARN << n_no_charge << " of " << n_ms2 << " MS2 spectra carry no precursor "
                          "charge"
                       << (n_multi_charge > 0 ? " (" + std::to_string(n_multi_charge)

@@ -18,7 +18,7 @@ def _datasets():
 
 
 def test_modes_listed():
-    assert SAGE_MODES == ("closed", "pool")
+    assert SAGE_MODES == ("closed", "pool", "charge_truth")
 
 
 @pytest.mark.parametrize("ds", [d for d in _datasets() if d.id in GOLDEN], ids=lambda d: d.id)
@@ -57,3 +57,15 @@ def test_pool_mode_needs_pool_fasta_and_unknown_mode_fails():
         sage_config(ds, "/db/h.fasta", [], DEFAULTS["sage"], mode="pool")
     with pytest.raises(ValueError):
         sage_config(ds, "/db/h.fasta", [], DEFAULTS["sage"], mode="open")
+
+
+def test_charge_truth_mode_widens_charge_and_isotope_only():
+    # #6 truth: charges 1..4 and isotope errors -1..3; everything else is the closed search
+    ds = next(d for d in _datasets() if d.id == "PXD003531_QE_NO_03")
+    closed = sage_config(ds, "/db/human.fasta", ["/in/run.mzML"], DEFAULTS["sage"])
+    truth = sage_config(ds, "/db/human.fasta", ["/in/run.mzML"], DEFAULTS["sage"], mode="charge_truth")
+    assert truth["precursor_charge"] == [1, 4] and truth["isotope_errors"] == [-1, 3]
+    assert closed["isotope_errors"] == [0, 1] and "precursor_charge" not in closed
+    for k in set(closed) | set(truth):
+        if k not in ("precursor_charge", "isotope_errors"):
+            assert truth[k] == closed[k], k

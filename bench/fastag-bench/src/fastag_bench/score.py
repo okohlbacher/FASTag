@@ -123,6 +123,18 @@ def tag_correct_flank(tag: str, nterm_mass: float, cterm_mass: float, residues: 
     return False
 
 
+def tag_correct_precursor_flank(tag: str, nterm_mass: float, residues: str, pref: list[float],
+                                tol: float = FLANK_TOL) -> bool:
+    """#6: the precursor-derived flank alone. FASTag derives a forward (y-ion) read's nterm_mass
+    from the precursor mass, so a wrong precursor charge or isotope shows there first: true when
+    the tag as written (not reversed) occurs in the peptide (I=L) with nterm_mass equal to the
+    residue mass before it within tol. residues and pref come from peptide_masses()."""
+    t = normalize_tag(tag)
+    if not t or not pref:
+        return False
+    return any(abs(nterm_mass - pref[i]) <= tol for i in _find_all(residues, t))
+
+
 def _mark(tags: pd.DataFrame, psms: pd.DataFrame, rule: str = "flank") -> pd.DataFrame:
     """Join tags with ground-truth peptides; add correct_seq, correct_flank (when the tags carry
     nterm_mass/cterm_mass) and 'correct' = the column of the chosen rule."""

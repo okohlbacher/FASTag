@@ -44,7 +44,8 @@ namespace FASTag::RunReport
   /// 3 = format 2, then the E activation rows (#15 phase A). Bumped once per
   /// item in the PLAN-INTEGRATION merge order (E#7 adds fields only, E#9 = 2,
   /// E#15A = 3).
-  inline constexpr int kFormatVersion = 3;
+  /// 4 = format 3, then the E precursor-hypothesis rows (#6, wave 2).
+  inline constexpr int kFormatVersion = 4;
 
   /// Run-level facts shared by every long-form report. Filled once per run.
   struct RunMeta
@@ -75,6 +76,20 @@ namespace FASTag::RunReport
     std::size_t activation_electron = 0;
     std::size_t activation_hybrid = 0;
     std::size_t activation_unknown = 0;
+    // #6: -unknown_charge, -isotope_error and, per spectrum tagged, where its
+    // selected hypothesis' charge came from (src/PrecursorHypotheses.h);
+    // filled after the tagging loop. All zero at the defaults (no hypothesis
+    // step runs).
+    std::string unknown_charge = "assume2";  ///< -unknown_charge
+    std::string isotope_error = "0";         ///< -isotope_error, comma-joined
+    std::size_t charge_header = 0;           ///< selected: the precursor's charge
+    std::size_t charge_possible = 0;         ///< selected: a listed possible charge
+    std::size_t charge_inferred = 0;         ///< selected: an unambiguous infer call
+    std::size_t charge_ambiguous = 0;        ///< selected: the call of an ambiguous pair
+    std::size_t charge_assumed = 0;          ///< selected: 2 without evidence
+    std::size_t charge_enumerated = 0;       ///< selected: one of -charge_min..-charge_max
+    std::size_t iso_shifted = 0;             ///< selected hypothesis with an isotope offset
+    std::size_t multi_hypothesis = 0;        ///< spectra tagged under more than one hypothesis
     // ---- 1.12 A ----
     // ---- 1.12 D ----
     // ---- 1.12 F ----
@@ -144,6 +159,29 @@ namespace FASTag::RunReport
             "were activated by electron transfer or capture (ETD, ECD)");
         row("activation_hybrid", m.activation_hybrid, "were activated by a hybrid method (EThcD, ETciD)");
         row("activation_unknown", m.activation_unknown, "carry no activation FASTag classifies");
+      }
+      {
+        // #6: value = spectra, n = spectra with a selected hypothesis (0 at
+        // the defaults, where no hypothesis step runs).
+        r.push_back({"run", "unknown_charge", m.unknown_charge, "-",
+                     "Precursors without a charge were tagged under -unknown_charge " + m.unknown_charge + "."});
+        r.push_back({"run", "isotope_error", m.isotope_error, "-",
+                     "Precursor isotope offsets " + m.isotope_error + " were considered."});
+        const std::size_t all = m.charge_header + m.charge_possible + m.charge_inferred + m.charge_ambiguous
+                              + m.charge_assumed + m.charge_enumerated;
+        const std::string n = std::to_string(all);
+        const auto row = [&](const char* key, std::size_t k, const std::string& how) {
+          const std::string c = std::to_string(k);
+          r.push_back({"run", key, c, n, c + " of " + n + " MS2 spectra " + how + "."});
+        };
+        row("charge_header", m.charge_header, "were reported at their precursor's charge");
+        row("charge_possible", m.charge_possible, "were reported at a listed possible charge");
+        row("charge_inferred", m.charge_inferred, "were reported at an inferred charge");
+        row("charge_ambiguous", m.charge_ambiguous, "were reported at the better of two inferred charges");
+        row("charge_assumed", m.charge_assumed, "were reported at charge 2 without charge evidence");
+        row("charge_enumerated", m.charge_enumerated, "were reported at an enumerated charge");
+        row("isotope_shifted", m.iso_shifted, "were reported at a precursor isotope offset other than 0");
+        row("multi_hypothesis", m.multi_hypothesis, "were tagged under more than one precursor hypothesis");
       }
     }
     // ---- 1.12 A ----
