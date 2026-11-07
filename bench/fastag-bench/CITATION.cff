@@ -1,0 +1,32 @@
+cff-version: 1.2.0
+message: "If you use this benchmark harness, please cite the FASTag article and the FASTag software release it accompanies."
+title: "fastag-bench: benchmark harness and figures for FASTag 1.9.0"
+abstract: >-
+  Benchmark harness, result tables and figure scripts of the FASTag article in the Journal of Proteome
+  Research, distributed as Supporting Information. The harness version follows the FASTag release it
+  describes.
+version: 1.9.0
+date-released: 2026-11-04
+license: MIT
+type: software
+authors:
+  - family-names: Kohlbacher
+    given-names: Oliver
+keywords:
+  - proteomics
+  - mass spectrometry
+  - sequence tags
+  - de novo sequencing
+  - benchmark
+references:
+  - type: software
+    title: FASTag
+    version: 1.9.0
+    commit: 153bd23fed242e41b48817374372918fcac3f878
+    date-released: 2026-11-03
+    authors:
+      - family-names: Kohlbacher
+        given-names: Oliver
+    repository-code: "https://github.com/okohlbacher/FASTag"
+    url: "https://github.com/okohlbacher/FASTag/releases/tag/v1.9.0"
+    license: MIT

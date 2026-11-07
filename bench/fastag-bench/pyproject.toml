@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fastag-bench"
+version = "1.9.0"
+description = "Reproducible benchmark harness and figures for the FASTag paper (Journal of Proteome Research)"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Oliver Kohlbacher" }]
+requires-python = ">=3.11"
+dependencies = [
+  "pandas>=2.0",
+  "numpy>=1.24",
+  "matplotlib>=3.7",
+  "pyyaml>=6.0",
+  "requests>=2.31",
+]
+
+[project.optional-dependencies]
+mgf = ["pyteomics>=4.6"]
+si = ["openpyxl>=3.1"]
+test = ["pytest>=7.4"]
+
+[project.scripts]
+fastag-bench = "fastag_bench.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

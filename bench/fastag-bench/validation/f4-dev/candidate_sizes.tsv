@@ -1,0 +1,21 @@
+# source: fastag-bench 1.9.0 unidentified score dev (2026-11-07T02:11:16+01:00, host data)
+# FASTag 1.11.0 (OpenMS 3.7.0-pre-HEAD-2026-11-02); truth Sage closed (full human proteome) q <= 0.01; S3-PT candidates: pool peptides within 10.0 ppm, charges [2, 3, 4] when none given, isotope errors [0, 1], static {'C': 57.021464}, variable {'M': [15.994915]} (max 1); flank rule for any candidate (score.tag_correct_any)
+pool	identification	size_label	spectra
+TUM_first_pool_108	S0	s0	23344
+TUM_first_pool_108	S0	shared_identity	408
+TUM_first_pool_108	S3-PT	no_pool_candidate	6160
+TUM_first_pool_108	S3-PT	pool_consistent	8270
+TUM_first_pool_108	S3-PT	shared_identity	860
+TUM_first_pool_108	S3-PT	size1	10218
+TUM_first_pool_67	S0	s0	37978
+TUM_first_pool_67	S0	shared_identity	1245
+TUM_first_pool_67	S3-PT	no_pool_candidate	2494
+TUM_first_pool_67	S3-PT	pool_consistent	6611
+TUM_first_pool_67	S3-PT	shared_identity	689
+TUM_first_pool_67	S3-PT	size1	6435
+TUM_second_pool_87	S0	s0	13175
+TUM_second_pool_87	S0	shared_identity	69
+TUM_second_pool_87	S3-PT	no_pool_candidate	7940
+TUM_second_pool_87	S3-PT	pool_consistent	11953
+TUM_second_pool_87	S3-PT	shared_identity	628
+TUM_second_pool_87	S3-PT	size1	16494

@@ -1,0 +1,33 @@
+# Tag accuracy benchmark (paper Figure 3, open issue 2) on IBMI node ibminode05
+# (AMD EPYC 7763, 64 cores / 128 threads, idle at run time; load recorded per run).
+# Inputs: public PXD data staged from /ceph/ibmi/abi/oliver/jpr-bench/data to node-local /scratch.
+work_dir: /scratch/kohlbach/jpr-acc/work
+data_dir: /scratch/kohlbach/jpr-acc/data
+results_dir: /ceph/ibmi/abi/oliver/jpr-bench/accuracy/results
+tools:
+  fastag: /ceph/ibmi/abi/oliver/opt/fastag-1.8.0/FASTag/FASTag          # v1.8.0 release bundle
+  sage: /ceph/ibmi/abi/oliver/jpr-bench/envs/sage-0.14.7/sage-v0.14.7-x86_64-unknown-linux-gnu/sage
+  comet: /ceph/ibmi/abi/oliver/jpr-bench/envs/comet-2026.03.0/comet.linux.exe
+  directag: /ceph/ibmi/abi/oliver/jpr-bench/envs/bumbershoot/bin/directag
+env:
+  OPENBLAS_NUM_THREADS: "1"
+  OPENMS_TMPDIR: /dev/shm/kohlbach-tmp
+sage:
+  fdr: 0.01
+  threads: 32
+  args: ["--disable-telemetry-i-dont-want-to-improve-sage"]
+  # The v0.14.7 GitHub release binary (sha256 e3dc6b41...cbe8a, tag v0.14.7 = commit 99407db) prints
+  # 'sage 0.14.6': Cargo.toml was not bumped for that release. It is v0.14.7 code (incl. its mzML ion-mobility fix).
+  version_note: "GitHub release v0.14.7, commit 99407db; the binary reports 0.14.6 because the release did not bump Cargo.toml"
+comet:
+  threads: 32
+  version_note: "GitHub release v2026.03.0 comet.linux.exe, sha256 ad93b4cf...91e7ed"
+accuracy:
+  threads: 32
+  max_k: 50
+  sweep_threads: 1
+  sweep_reps: 3
+directag:
+  # DirecTag caches its intensity rank-sum table per working directory; it depends on the settings only.
+  # One shared copy keeps the TL 5-6 profiles from recomputing it (single-threaded) in every run.
+  cache_dir: /scratch/kohlbach/jpr-acc/work/directag_cache
