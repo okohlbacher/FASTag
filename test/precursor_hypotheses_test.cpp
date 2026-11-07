@@ -233,7 +233,7 @@ namespace
     // random spectrum is assumed 2, or a call whose best excess is below it.
     {
       std::mt19937 rng(4242);
-      int assumed = 0, confident = 0;
+      int assumed = 0, confident = 0, weak = 0;
       for (int k = 0; k < 20; ++k)
       {
         const MSSpectrum s = randomPeaks(rng, 150, 150.0, 1400.0);
@@ -244,9 +244,13 @@ namespace
         for (const auto& e : call.excess) best = std::max(best, e.second.first);
         if (h.size() == 1 && sel && sel->charge == 2 && sel->src == H::ChargeSource::Assumed) ++assumed;
         else if (!(best < H::kInferMarginDefault)) ++confident;
+        else if (best > 0 && sel && sel->src != H::ChargeSource::Assumed) ++weak;
       }
       CHECK(confident == 0, "%s (d): %d of 20 random spectra reach the margin", label, confident);
       CHECK(assumed >= 10, "%s (d): only %d of 20 random spectra assumed 2", label, assumed);
+      // The plan's rule, not the first build's: an excess in (0, margin) is
+      // a call (inferred or ambiguous), not assumed 2+.
+      CHECK(weak > 0, "%s (d): no random spectrum with an excess below the margin is called", label);
     }
 
     // ---- (e) possible charges under enumerate ----
