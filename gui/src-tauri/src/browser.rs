@@ -41,8 +41,9 @@ use std::collections::{HashMap, VecDeque};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, OnceLock, RwLock};
-use std::time::{Instant, SystemTime};
+use std::borrow::Cow;
+use std::sync::{Arc, Condvar, Mutex, RwLock};
+use std::time::{Duration, Instant, SystemTime};
 
 /// IPC bound: a window never exceeds this many rows.
 const MAX_WINDOW: usize = 1000;
@@ -68,6 +69,11 @@ const TYPED_CHUNK: usize = 1 << 20;
 const TYPED_MAX_ROWS: usize = 60_000_000;
 /// Orders kept per file besides the E-value one.
 const MAX_ORDERS: usize = 4;
+/// The bytes the cached views and the orders by other columns of one
+/// snapshot may hold together (the E-value order is not counted): older
+/// views go first, then older orders. The newest entry stays even when it
+/// alone is larger (a page read of it must not rebuild it).
+const CACHE_BYTES: usize = 96 << 20;
 /// Views kept per file (item 9: the last four).
 const MAX_VIEWS: usize = 4;
 /// A sorted export gathers this many bytes of rows per pass over the file.
@@ -214,15 +220,21 @@ impl Index {
 }
 
 /// A cancel token. Each build kind (index, rank, view, export) gets its own.
+/// The second field: a parent whose cancel also stops this one.
 #[derive(Default, Clone)]
-pub struct Cancel(Arc<AtomicBool>);
+pub struct Cancel(Arc<AtomicBool>, Option<Arc<AtomicBool>>);
 
 impl Cancel {
     pub fn cancel(&self) {
         self.0.store(true, Ordering::SeqCst);
     }
     pub fn is_cancelled(&self) -> bool {
-        self.0.load(Ordering::Relaxed)
+        self.0.load(Ordering::Relaxed) || self.1.as_ref().is_some_and(|p| p.load(Ordering::Relaxed))
+    }
+    /// A token of its own (cancelling it leaves @p parent alone) that
+    /// @p parent's cancel also stops.
+    fn child_of(parent: &Cancel) -> Cancel {
+        Cancel(Arc::default(), Some(parent.0.clone()))
     }
 }
 
@@ -236,43 +248,100 @@ pub(crate) struct Rank {
     /// Rows in the numeric block (asc[..num_len]).
     pub(crate) num_len: usize,
     /// Bit i set: asc[i] starts a new run of equal keys (within its block).
+    /// The first row of each block always starts a run.
     pub(crate) run_start: Vec<u64>,
-    /// Descending, derived from asc on first use.
-    desc: OnceLock<Vec<u32>>,
 }
 
 impl Rank {
-    fn starts(&self, i: usize) -> bool {
-        self.run_start[i / 64] >> (i % 64) & 1 == 1
-    }
-
-    /// Descending order in O(n): each block reversed on its own (numbers
-    /// stay above the unparsable cells), and the rows of a run of equal keys
-    /// kept in file order, as today's comparator `ord.reverse().then(row)`.
-    pub(crate) fn desc(&self) -> &[u32] {
-        self.desc.get_or_init(|| {
-            let mut out = Vec::with_capacity(self.asc.len());
-            for (lo, hi) in [(0, self.num_len), (self.num_len, self.asc.len())] {
-                let mut end = hi;
-                let mut i = hi;
-                while i > lo {
-                    i -= 1;
-                    if self.starts(i) {
-                        out.extend_from_slice(&self.asc[i..end]);
-                        end = i;
-                    }
-                }
-            }
-            out
-        })
-    }
-
-    fn order(&self, desc: bool) -> &[u32] {
-        if desc {
-            self.desc()
+    /// The descending order is never stored (it would be 4 B per row more
+    /// per order): position d of it is read from asc. Each block is reversed
+    /// on its own (numbers stay above the unparsable cells) and the rows of
+    /// a run of equal keys keep file order, as the comparator
+    /// `ord.reverse().then(row)` of v1.11.
+    fn block_of(&self, q: usize) -> (usize, usize) {
+        if q < self.num_len {
+            (0, self.num_len)
         } else {
-            &self.asc
+            (self.num_len, self.asc.len())
         }
+    }
+
+    /// The start of the run holding asc position @p q.
+    fn prev_start(&self, q: usize) -> usize {
+        let mut w = q / 64;
+        let mut x = self.run_start[w] & (u64::MAX >> (63 - q % 64));
+        loop {
+            if x != 0 {
+                return w * 64 + 63 - x.leading_zeros() as usize;
+            }
+            w -= 1;
+            x = self.run_start[w];
+        }
+    }
+
+    /// The first run start at or after @p from, or @p hi.
+    fn next_start(&self, from: usize, hi: usize) -> usize {
+        if from >= hi {
+            return hi;
+        }
+        let mut w = from / 64;
+        let mut x = self.run_start[w] & (u64::MAX << (from % 64));
+        loop {
+            if x != 0 {
+                return (w * 64 + x.trailing_zeros() as usize).min(hi);
+            }
+            w += 1;
+            if w * 64 >= hi {
+                return hi;
+            }
+            x = self.run_start[w];
+        }
+    }
+
+    /// Positions a..b of the descending order, one run at a time.
+    fn desc_window(&self, a: usize, b: usize) -> Vec<u32> {
+        let b = b.min(self.asc.len());
+        let mut out = Vec::with_capacity(b.saturating_sub(a));
+        let mut d = a;
+        while d < b {
+            let lo = if d < self.num_len { 0 } else { self.num_len };
+            let hi = if d < self.num_len { self.num_len } else { self.asc.len() };
+            // Its mirror in asc, and the run around that.
+            let q = hi - 1 - (d - lo);
+            let (s, e) = (self.prev_start(q), self.next_start(q + 1, hi));
+            let at = s + (e - 1 - q);
+            let take = (e - at).min(b - d);
+            out.extend_from_slice(&self.asc[at..at + take]);
+            d += take;
+        }
+        out
+    }
+
+    /// Where asc position @p p sits in the descending order.
+    fn desc_pos(&self, p: usize) -> usize {
+        let (lo, hi) = self.block_of(p);
+        let (s, e) = (self.prev_start(p), self.next_start(p + 1, hi));
+        lo + (hi - e) + (p - s)
+    }
+
+    /// Positions a..b of the order in direction @p desc.
+    fn window(&self, desc: bool, a: usize, b: usize) -> Cow<'_, [u32]> {
+        let (a, b) = (a.min(self.asc.len()), b.min(self.asc.len()));
+        if desc {
+            Cow::Owned(self.desc_window(a, b))
+        } else {
+            Cow::Borrowed(&self.asc[a..b])
+        }
+    }
+
+    /// The descending order, whole (the tests and the bench).
+    #[allow(dead_code)]
+    pub(crate) fn desc(&self) -> Vec<u32> {
+        self.desc_window(0, self.asc.len())
+    }
+
+    fn bytes(&self) -> usize {
+        self.asc.len() * 4 + self.run_start.len() * 8
     }
 }
 
@@ -830,35 +899,196 @@ fn per_spectrum(bits: &mut [u64], asc: &[u32], spec_id: &[u32], spectra: usize, 
     }
 }
 
-/// The rows of @p order (file order when None) whose bit is set.
-fn select(order: Option<&[u32]>, bits: &[u64]) -> Vec<u32> {
-    match order {
-        None => {
-            let mut out = Vec::new();
-            for (w, &word) in bits.iter().enumerate() {
-                let mut x = word;
-                while x != 0 {
-                    out.push((w * 64) as u32 + x.trailing_zeros());
+/// The rows of @p order (file order when None; an order and its
+/// direction) whose bit is set; parallel over spans of the order, the
+/// descending one read 64k positions at a time.
+fn select(order: Option<(&Rank, bool)>, bits: &[u64]) -> Vec<u32> {
+    let Some((rank, desc)) = order else {
+        let mut out = Vec::new();
+        for (w, &word) in bits.iter().enumerate() {
+            let mut x = word;
+            while x != 0 {
+                out.push((w * 64) as u32 + x.trailing_zeros());
+                x &= x - 1;
+            }
+        }
+        return out;
+    };
+    let n = rank.asc.len();
+    let span = |a: usize, b: usize| -> Vec<u32> {
+        let mut out = Vec::new();
+        let mut k = a;
+        while k < b {
+            let e = (k + (1 << 16)).min(b);
+            out.extend(rank.window(desc, k, e).iter().copied().filter(|&r| bit(bits, r as usize)));
+            k = e;
+        }
+        out
+    };
+    if n < 1 << 16 {
+        return span(0, n);
+    }
+    let per = n.div_ceil(threads());
+    let parts: Vec<Vec<u32>> = std::thread::scope(|sc| {
+        let hs: Vec<_> = (0..n).step_by(per).map(|a| {
+            let span = &span;
+            sc.spawn(move || span(a, (a + per).min(n)))
+        }).collect();
+        hs.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+    let mut out = Vec::with_capacity(parts.iter().map(Vec::len).sum());
+    for p in parts {
+        out.extend_from_slice(&p);
+    }
+    out
+}
+
+/// Set bits per block of the cumulative counts of a Masked view.
+const MASK_BLOCK_WORDS: usize = 64;
+
+/// A view as one bit per position of its order (file order when None):
+/// n/8 bytes however many rows match, where the row list would hold 4 B
+/// per matching row (40 MB for a full view at 10M rows). Positions are
+/// read back through the order; `cum` counts the set bits before each
+/// block of MASK_BLOCK_WORDS words, so a window or a position costs one
+/// binary search and at most one block of popcounts.
+pub(crate) struct Masked {
+    order: Option<(Arc<Rank>, bool)>,
+    bits: Vec<u64>,
+    cum: Vec<u32>,
+    len: usize,
+}
+
+impl Masked {
+    fn new(order: Option<(Arc<Rank>, bool)>, bits: Vec<u64>) -> Masked {
+        let mut cum = Vec::with_capacity(bits.len().div_ceil(MASK_BLOCK_WORDS));
+        let mut total = 0usize;
+        for b in bits.chunks(MASK_BLOCK_WORDS) {
+            cum.push(total as u32);
+            total += b.iter().map(|w| w.count_ones() as usize).sum::<usize>();
+        }
+        Masked { order, bits, cum, len: total }
+    }
+
+    /// The position (in the order) of the @p k-th set bit, k < len.
+    fn nth(&self, k: usize) -> usize {
+        let blk = self.cum.partition_point(|&c| c as usize <= k) - 1;
+        let mut left = k - self.cum[blk] as usize;
+        let mut w = blk * MASK_BLOCK_WORDS;
+        loop {
+            let c = self.bits[w].count_ones() as usize;
+            if left < c {
+                let mut x = self.bits[w];
+                for _ in 0..left {
                     x &= x - 1;
                 }
+                return w * 64 + x.trailing_zeros() as usize;
             }
-            out
-        }
-        Some(o) if o.len() < 1 << 16 => o.iter().copied().filter(|&r| bit(bits, r as usize)).collect(),
-        Some(o) => {
-            let per = o.len().div_ceil(threads());
-            let parts: Vec<Vec<u32>> = std::thread::scope(|sc| {
-                let hs: Vec<_> =
-                    o.chunks(per).map(|c| sc.spawn(move || c.iter().copied().filter(|&r| bit(bits, r as usize)).collect::<Vec<u32>>())).collect();
-                hs.into_iter().map(|h| h.join().unwrap()).collect()
-            });
-            let mut out = Vec::with_capacity(parts.iter().map(Vec::len).sum());
-            for p in parts {
-                out.extend_from_slice(&p);
-            }
-            out
+            left -= c;
+            w += 1;
         }
     }
+
+    /// Set bits before position @p p.
+    fn rank_of(&self, p: usize) -> usize {
+        let (w, blk) = (p / 64, p / 64 / MASK_BLOCK_WORDS);
+        let mut r = self.cum[blk] as usize;
+        for &x in &self.bits[blk * MASK_BLOCK_WORDS..w] {
+            r += x.count_ones() as usize;
+        }
+        r + (self.bits[w] & ((1u64 << (p % 64)) - 1)).count_ones() as usize
+    }
+
+    /// The rows of view positions a..b (b <= len).
+    fn window(&self, a: usize, b: usize) -> Vec<u32> {
+        let mut out = Vec::with_capacity(b - a);
+        if a >= b {
+            return out;
+        }
+        // The positions, then their rows one contiguous span at a time.
+        let mut pos = Vec::with_capacity(b - a);
+        let first = self.nth(a);
+        let mut w = first / 64;
+        let mut x = self.bits[w] & (u64::MAX << (first % 64));
+        while pos.len() < b - a {
+            while x == 0 {
+                w += 1;
+                x = self.bits[w];
+            }
+            pos.push(w * 64 + x.trailing_zeros() as usize);
+            x &= x - 1;
+        }
+        match &self.order {
+            None => out.extend(pos.iter().map(|&p| p as u32)),
+            Some((r, false)) => out.extend(pos.iter().map(|&p| r.asc[p])),
+            Some((r, true)) => {
+                let mut i = 0;
+                while i < pos.len() {
+                    let mut e = i + 1;
+                    while e < pos.len() && pos[e] == pos[e - 1] + 1 {
+                        e += 1;
+                    }
+                    out.extend_from_slice(&r.window(true, pos[i], pos[e - 1] + 1));
+                    i = e;
+                }
+            }
+        }
+        out
+    }
+
+    fn position(&self, row: u32) -> Option<usize> {
+        let p = match &self.order {
+            None => row as usize,
+            Some((r, desc)) => {
+                let p = r.asc.iter().position(|&i| i == row)?;
+                if *desc { r.desc_pos(p) } else { p }
+            }
+        };
+        (p < self.bits.len() * 64 && bit(&self.bits, p)).then(|| self.rank_of(p))
+    }
+
+    fn bytes(&self) -> usize {
+        self.bits.len() * 8 + self.cum.len() * 4
+    }
+}
+
+/// The view of @p bits (one per file row) over @p order: a row list when
+/// few rows match (at most one in 32), else a Masked view (the row list
+/// would be larger than the bits). Parallel over spans of the order.
+fn select_view(order: Option<(Arc<Rank>, bool)>, bits: Vec<u64>) -> ViewRows {
+    let n_bits = bits.len() * 64;
+    let count: usize = bits.iter().map(|w| w.count_ones() as usize).sum();
+    if count.saturating_mul(32) <= n_bits {
+        return ViewRows::Rows(Arc::new(select(order.as_ref().map(|(r, d)| (&**r, *d)), &bits)));
+    }
+    let Some((rank, desc)) = order else {
+        return ViewRows::Masked(Arc::new(Masked::new(None, bits)));
+    };
+    let n = rank.asc.len();
+    let mut pos = vec![0u64; n.div_ceil(64)];
+    // Whole words per thread, 64k positions per window of the order.
+    let per = n.div_ceil(threads()).div_ceil(64).max(1) * 64;
+    std::thread::scope(|sc| {
+        for (t, words) in pos.chunks_mut(per / 64).enumerate() {
+            let (rank, bits) = (&rank, &bits);
+            sc.spawn(move || {
+                let (a, b) = (t * per, ((t + 1) * per).min(n));
+                let mut k = a;
+                while k < b {
+                    let e = (k + (1 << 16)).min(b);
+                    for (j, &r) in rank.window(desc, k, e).iter().enumerate() {
+                        if bit(bits, r as usize) {
+                            let q = k + j - a;
+                            words[q / 64] |= 1 << (q % 64);
+                        }
+                    }
+                    k = e;
+                }
+            });
+        }
+    });
+    drop(bits);
+    ViewRows::Masked(Arc::new(Masked::new(Some((rank, desc)), pos)))
 }
 
 /// The spectrum order from the dictionary (item 8): the distinct cells
@@ -911,7 +1141,7 @@ fn dict_order(t: &Typed) -> Rank {
         asc[next[r]] = row as u32;
         next[r] += 1;
     }
-    Rank { asc, num_len, run_start, desc: OnceLock::new() }
+    Rank { asc, num_len, run_start }
 }
 
 // ---------------------------------------------------------------- snapshot
@@ -925,6 +1155,8 @@ pub(crate) enum ViewRows {
     Order(Arc<Rank>, bool),
     /// The matching rows, in order.
     Rows(Arc<Vec<u32>>),
+    /// The matching positions of an order, as bits.
+    Masked(Arc<Masked>),
 }
 
 impl ViewRows {
@@ -933,27 +1165,44 @@ impl ViewRows {
             ViewRows::All(n) => *n,
             ViewRows::Order(r, _) => r.asc.len(),
             ViewRows::Rows(v) => v.len(),
-        }
-    }
-    fn ids(&self) -> Option<&[u32]> {
-        match self {
-            ViewRows::All(_) => None,
-            ViewRows::Order(r, desc) => Some(r.order(*desc)),
-            ViewRows::Rows(v) => Some(v),
+            ViewRows::Masked(m) => m.len,
         }
     }
     fn window(&self, offset: usize, limit: usize) -> Vec<u32> {
         let n = self.len();
-        let (a, b) = (offset.min(n), (offset + limit).min(n));
-        match self.ids() {
-            None => (a..b).map(|i| i as u32).collect(),
-            Some(ids) => ids[a..b].to_vec(),
+        let (a, b) = (offset.min(n), offset.saturating_add(limit).min(n));
+        match self {
+            ViewRows::All(_) => (a..b).map(|i| i as u32).collect(),
+            ViewRows::Order(r, desc) => r.window(*desc, a, b).into_owned(),
+            ViewRows::Rows(v) => v[a..b].to_vec(),
+            ViewRows::Masked(m) => m.window(a, b),
         }
     }
     fn position(&self, row: u32) -> Option<usize> {
-        match self.ids() {
-            None => ((row as usize) < self.len()).then_some(row as usize),
-            Some(ids) => ids.iter().position(|&i| i == row),
+        match self {
+            ViewRows::All(_) => ((row as usize) < self.len()).then_some(row as usize),
+            ViewRows::Order(r, desc) => {
+                let p = r.asc.iter().position(|&i| i == row)?;
+                Some(if *desc { r.desc_pos(p) } else { p })
+            }
+            ViewRows::Rows(v) => v.iter().position(|&i| i == row),
+            ViewRows::Masked(m) => m.position(row),
+        }
+    }
+    /// The bytes this view holds of its own (an order view holds none).
+    fn bytes(&self) -> usize {
+        match self {
+            ViewRows::Rows(v) => v.len() * 4,
+            ViewRows::Masked(m) => m.bytes(),
+            _ => 0,
+        }
+    }
+    /// Whether this view reads order @p r (it must go when @p r goes).
+    fn reads(&self, r: &Arc<Rank>) -> bool {
+        match self {
+            ViewRows::Order(o, _) => Arc::ptr_eq(o, r),
+            ViewRows::Masked(m) => m.order.as_ref().is_some_and(|(o, _)| Arc::ptr_eq(o, r)),
+            _ => false,
         }
     }
 }
@@ -966,6 +1215,9 @@ pub(crate) struct Snapshot {
     mtime: Option<SystemTime>,
     pub(crate) index: Index,
     rank: Mutex<RankSlot>,
+    /// Signalled whenever `rank` leaves Building: callers that need the
+    /// order wait for the build in flight instead of starting another.
+    rank_cv: Condvar,
     /// The last MAX_VIEWS built views, newest first.
     views: Mutex<VecDeque<(ViewSpec, ViewRows)>>,
     /// View builds of this snapshot one at a time: a second query of the
@@ -989,6 +1241,8 @@ pub(crate) struct Snapshot {
     page_reads: AtomicUsize,
     /// Exports written as a byte-range copy.
     byte_copies: AtomicUsize,
+    /// CACHE_BYTES (smaller in the tests).
+    cache_budget: AtomicUsize,
 }
 
 impl Snapshot {
@@ -999,6 +1253,7 @@ impl Snapshot {
             mtime,
             index,
             rank: Mutex::new(RankSlot::None),
+            rank_cv: Condvar::new(),
             views: Mutex::default(),
             view_one: Mutex::new(()),
             views_built: AtomicUsize::new(0),
@@ -1010,6 +1265,7 @@ impl Snapshot {
             scans: AtomicUsize::new(0),
             page_reads: AtomicUsize::new(0),
             byte_copies: AtomicUsize::new(0),
+            cache_budget: AtomicUsize::new(CACHE_BYTES),
         }
     }
 
@@ -1029,11 +1285,52 @@ impl Snapshot {
         Some(rows)
     }
 
-    fn cache_view(&self, spec: &ViewSpec, rows: ViewRows) {
+    fn cache_view(&self, spec: &ViewSpec, rows: ViewRows, keep_order: Option<usize>) {
+        self.views.lock().unwrap().retain(|(s, _)| s != spec);
+        self.trim(rows.bytes(), keep_order);
         let mut views = self.views.lock().unwrap();
-        views.retain(|(s, _)| s != spec);
         views.push_front((spec.clone(), rows));
         views.truncate(MAX_VIEWS);
+    }
+
+    /// The bytes held by the cached views and the orders by other columns.
+    #[cfg(test)]
+    fn cache_bytes(&self) -> usize {
+        self.views.lock().unwrap().iter().map(|(_, v)| v.bytes()).sum::<usize>()
+            + self.orders.lock().unwrap().iter().map(|(_, r)| r.bytes()).sum::<usize>()
+    }
+
+    /// Make room for @p incoming bytes under CACHE_BYTES: the oldest views
+    /// first, then the oldest orders but the one by @p keep_order. An order
+    /// leaves together with the views that read it, so that it is freed.
+    fn trim(&self, incoming: usize, keep_order: Option<usize>) {
+        let budget = self.cache_budget.load(Ordering::Relaxed);
+        let mut views = self.views.lock().unwrap();
+        let mut orders = self.orders.lock().unwrap();
+        let used = |v: &VecDeque<(ViewSpec, ViewRows)>, o: &Vec<(usize, Arc<Rank>)>| {
+            v.iter().map(|(_, x)| x.bytes()).sum::<usize>() + o.iter().map(|(_, r)| r.bytes()).sum::<usize>()
+        };
+        while used(&views, &orders) + incoming > budget && views.pop_back().is_some() {}
+        while used(&views, &orders) + incoming > budget {
+            let Some(k) = orders.iter().rposition(|(c, _)| Some(*c) != keep_order) else {
+                break;
+            };
+            let (_, gone) = orders.remove(k);
+            views.retain(|(_, v)| !v.reads(&gone));
+        }
+    }
+
+    /// Keep @p rank as the newest order, within MAX_ORDERS and CACHE_BYTES
+    /// (an order leaves with the views that read it).
+    fn cache_order(&self, column: usize, rank: Arc<Rank>) {
+        self.trim(rank.bytes(), None);
+        let mut views = self.views.lock().unwrap();
+        let mut orders = self.orders.lock().unwrap();
+        orders.insert(0, (column, rank));
+        let keep = MAX_ORDERS.min(orders.len());
+        for (_, gone) in orders.split_off(keep) {
+            views.retain(|(_, v)| !v.reads(&gone));
+        }
     }
 
     fn cached_order(&self, column: usize) -> Option<Arc<Rank>> {
@@ -1049,7 +1346,12 @@ impl Snapshot {
     /// view was not rebuilt).
     #[cfg(test)]
     fn view_ptr(&self, spec: &ViewSpec) -> Option<*const u32> {
-        self.views.lock().unwrap().iter().find(|(s, _)| s == spec).and_then(|(_, v)| v.ids().map(<[u32]>::as_ptr))
+        self.views.lock().unwrap().iter().find(|(s, _)| s == spec).and_then(|(_, v)| match v {
+            ViewRows::Rows(r) => Some(r.as_ptr()),
+            ViewRows::Order(r, false) => Some(r.asc.as_ptr()),
+            ViewRows::Masked(m) => Some(m.bits.as_ptr() as *const u32),
+            _ => None,
+        })
     }
 }
 
@@ -1074,8 +1376,8 @@ pub struct Shared {
     view_build: Mutex<Option<(String, ViewSpec, Cancel)>>,
     /// Files with more rows are not typed (item 12).
     typed_max_rows: AtomicUsize,
-    /// Running exports: id -> token.
-    jobs: Mutex<HashMap<u64, Cancel>>,
+    /// Running exports: id -> (token, destination).
+    jobs: Mutex<HashMap<u64, (Cancel, String)>>,
     next_job: AtomicU64,
 }
 
@@ -1505,7 +1807,7 @@ pub(crate) fn build_rank(
         }
         asc.push(t.2);
     }
-    Ok(Rank { asc, num_len, run_start, desc: OnceLock::new() })
+    Ok(Rank { asc, num_len, run_start })
 }
 
 /// The rows @p rows of @p snap, in that order (item 10): sorted by offset,
@@ -1674,11 +1976,12 @@ impl Shared {
             };
             snap.scans.fetch_add(1, Ordering::Relaxed);
             let built = build_rank(&path, &snap.index, column, &token, &progress);
-                let mut slot = snap.rank.lock().unwrap();
+            let mut slot = snap.rank.lock().unwrap();
             match built {
                 Ok(rank) => {
                     *slot = RankSlot::Ready(Arc::new(rank));
                     drop(slot);
+                    snap.rank_cv.notify_all();
                     me.emit_for(&path, |generation| BrowserEvent::Ranked {
                         generation,
                         column: RANK_COLUMN.into(),
@@ -1691,6 +1994,7 @@ impl Shared {
                         *slot = RankSlot::None;
                     }
                     drop(slot);
+                    snap.rank_cv.notify_all();
                     if e != CANCELLED {
                         me.emit_for(&path, |generation| BrowserEvent::Failed { generation, message: e });
                     }
@@ -1700,24 +2004,60 @@ impl Shared {
         true
     }
 
-    /// The rank of @p snap, built here and now if it is not ready (export,
-    /// and a query that must not be served in file order).
-    fn rank_now(&self, snap: &Snapshot, column: usize) -> Result<Arc<Rank>, String> {
-        if let Some(r) = snap.rank_ready() {
-            return Ok(r);
-        }
-        snap.scans.fetch_add(1, Ordering::Relaxed);
-        let r = Arc::new(build_rank(&snap.path, &snap.index, column, &Cancel::default(), &|_, _| {})?);
+    /// The E-value order of @p snap, now (an export, the per-spectrum rule,
+    /// and the max-E-value cutoff outside the table). A build in flight is
+    /// waited for, never doubled: two rank builds side by side would hold
+    /// their 16 B per row transients twice. With none in flight it is built
+    /// here, and other callers wait for this one. @p token (the caller's
+    /// view or export token) stops the wait and a build made here; the
+    /// slot's own token marks the build in flight only, so an open of
+    /// another file does not stop an export's build.
+    fn rank_now(self: &Arc<Self>, snap: &Arc<Snapshot>, column: usize, token: &Cancel) -> Result<Arc<Rank>, String> {
         let mut slot = snap.rank.lock().unwrap();
-        if let RankSlot::Building(t) = &*slot {
-            t.cancel(); // the background build is redundant now
+        loop {
+            match &*slot {
+                RankSlot::Ready(r) => return Ok(r.clone()),
+                RankSlot::Building(t) if !t.is_cancelled() => {
+                    if token.is_cancelled() {
+                        return Err(CANCELLED.into());
+                    }
+                    slot = snap.rank_cv.wait_timeout(slot, Duration::from_millis(20)).unwrap().0;
+                }
+                RankSlot::Building(_) | RankSlot::None => break,
+            }
         }
-        *slot = RankSlot::Ready(r.clone());
+        if token.is_cancelled() {
+            return Err(CANCELLED.into());
+        }
+        let mark = Cancel::default();
+        *slot = RankSlot::Building(mark.clone());
         drop(slot);
-        // The cancelled background build ends silently: announce the order
-        // here, or a table showing file order would never swap.
-        self.emit_for(&snap.path, |generation| BrowserEvent::Ranked { generation, column: RANK_COLUMN.into() });
-        Ok(r)
+        let mine = Cancel::child_of(token);
+        snap.scans.fetch_add(1, Ordering::Relaxed);
+        let built = build_rank(&snap.path, &snap.index, column, &mine, &|_, _| {});
+        let mut slot = snap.rank.lock().unwrap();
+        let out = match built {
+            Ok(r) => {
+                let r = Arc::new(r);
+                *slot = RankSlot::Ready(r.clone());
+                Ok(r)
+            }
+            Err(e) => {
+                if matches!(&*slot, RankSlot::Building(t) if Arc::ptr_eq(&t.0, &mark.0)) {
+                    *slot = RankSlot::None;
+                }
+                Err(e)
+            }
+        };
+        drop(slot);
+        snap.rank_cv.notify_all();
+        if out.is_ok() {
+            // No background build announces this order: a table showing
+            // file order would never swap.
+            self.emit_for(&snap.path, |generation| BrowserEvent::Ranked { generation, column: RANK_COLUMN.into() });
+            self.typed_in_background(snap);
+        }
+        out
     }
 
     /// The token of a new view build for (@p path, @p spec): a different
@@ -1792,6 +2132,10 @@ impl Shared {
         if let Some(r) = snap.cached_order(column) {
             return Ok(r);
         }
+        // Room for the new order before its build (its transients come on
+        // top of what the cache holds).
+        let n = snap.index.offsets.len();
+        snap.trim(n * 4 + n.div_ceil(64) * 8, None);
         let spectrum = snap.index.columns.iter().position(|c| c == "spectrum");
         let typed = if Some(column) == spectrum { self.typed_now(snap, &self.typed_token(snap, mode, token))? } else { None };
         let r = Arc::new(match typed {
@@ -1802,9 +2146,7 @@ impl Shared {
             }
         });
         snap.orders_built.fetch_add(1, Ordering::SeqCst);
-        let mut orders = snap.orders.lock().unwrap();
-        orders.insert(0, (column, r.clone()));
-        orders.truncate(MAX_ORDERS);
+        snap.cache_order(column, r.clone());
         Ok(r)
     }
 
@@ -1824,7 +2166,7 @@ impl Shared {
             let desc = res.sort.map(|(_, d)| d).unwrap_or(false);
             let rank = match (snap.rank_ready(), mode) {
                 (Some(r), _) => Some(r),
-                (None, Mode::Exact) => Some(self.rank_now(snap, rank_col.unwrap())?),
+                (None, Mode::Exact) => Some(self.rank_now(snap, rank_col.unwrap(), &job.cloned().unwrap_or_default())?),
                 (None, Mode::Interactive) => None,
             };
             return Ok(match rank {
@@ -1852,7 +2194,8 @@ impl Shared {
         snap.views_built.fetch_add(1, Ordering::SeqCst);
         let (rows, ranked, pending) = self.build_rows(snap, &res, mode, &token)?;
         if ranked {
-            snap.cache_view(spec, rows.clone());
+            let keep = res.sort.map(|(c, _)| c).filter(|&c| Some(c) != rank_col);
+            snap.cache_view(spec, rows.clone(), keep);
         }
         Ok((rows, ranked, pending))
     }
@@ -1869,9 +2212,10 @@ impl Shared {
             None => None,
             Some((c, desc)) if Some(c) == rank_col => match snap.rank_ready() {
                 Some(r) => Some((r, desc)),
-                // The per-spectrum rule and the max-E-value cutoff need the
-                // E-value order anyway.
-                None if mode == Mode::Exact || res.per_spectrum.is_some() || res.max_evalue.is_some() => Some((self.rank_now(snap, c)?, desc)),
+                // The per-spectrum rule needs the E-value order: it waits for
+                // the build in flight (rank_now never starts a second one,
+                // and a newer view's token stops the wait).
+                None if mode == Mode::Exact || res.per_spectrum.is_some() => Some((self.rank_now(snap, c, token)?, desc)),
                 None => {
                     // D5 with filters: the matching rows in file order now.
                     ranked = false;
@@ -1887,18 +2231,23 @@ impl Shared {
                 None => (ViewRows::All(n), ranked, pending),
             });
         }
-        let bits = match self.typed_now(snap, &self.typed_token(snap, mode, token))? {
+        // D5 for the max-E-value cutoff: while the E-value order is being
+        // built, the table's view is one scan of the file (as v1.11), not a
+        // wait for that order (nor a second build of it).
+        let scan_ev = mode == Mode::Interactive && res.max_evalue.is_some() && res.per_spectrum.is_none() && snap.rank_ready().is_none();
+        let typed = if scan_ev { None } else { self.typed_now(snap, &self.typed_token(snap, mode, token))? };
+        let bits = match typed {
             Some(t) => {
                 let ev = match res.max_evalue {
                     Some((col, max)) => {
-                        let rank = self.rank_now(snap, col)?;
+                        let rank = self.rank_now(snap, col, token)?;
                         Some(evalue_bits(snap, &rank, col, max, &t.ev_inf)?)
                     }
                     None => None,
                 };
                 let mut bits = keep_bits(&t, res, n, ev.as_deref());
                 if let Some((_, ev, nmax)) = res.per_spectrum {
-                    let rank = self.rank_now(snap, ev)?;
+                    let rank = self.rank_now(snap, ev, token)?;
                     per_spectrum(&mut bits, &rank.asc, &t.spec_id, t.dict.len(), nmax);
                 }
                 bits
@@ -1917,9 +2266,25 @@ impl Shared {
         if token.is_cancelled() {
             return Err(CANCELLED.into());
         }
-        let rows = select(base.as_ref().map(|(r, desc)| r.order(*desc)), &bits);
-        Ok((ViewRows::Rows(Arc::new(rows)), ranked, pending))
+        Ok((select_view(base, bits), ranked, pending))
     }
+}
+
+/// The tests' stand-in for start_rank's worker, for a slot they set to
+/// Building by hand: after @p ms it builds the order, fills the slot, wakes
+/// the waiters and announces Ranked, as that worker does (its scan is not
+/// counted, so a test sees whether a caller scanned besides it).
+#[cfg(test)]
+pub(crate) fn finish_rank_after(shared: &Arc<Shared>, snap: &Arc<Snapshot>, ms: u64) -> std::thread::JoinHandle<()> {
+    let (me, snap) = (shared.clone(), snap.clone());
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(ms));
+        let col = snap.index.columns.iter().position(|c| c == RANK_COLUMN).unwrap();
+        let r = build_rank(&snap.path, &snap.index, col, &Cancel::default(), &|_, _| {}).unwrap();
+        *snap.rank.lock().unwrap() = RankSlot::Ready(Arc::new(r));
+        snap.rank_cv.notify_all();
+        me.emit_for(&snap.path, |generation| BrowserEvent::Ranked { generation, column: RANK_COLUMN.into() });
+    })
 }
 
 /// How a query treats an E-value order that is not ready yet.
@@ -2020,7 +2385,7 @@ pub(crate) fn position(shared: &Arc<Shared>, path: &str, spec: &ViewSpec, row: u
     let rank_col = snap.index.columns.iter().position(|c| c == RANK_COLUMN);
     if let (Some((c, desc)), Some(r), false) = (res.sort, rank_col, res.has_filters()) {
         if c == r {
-            return Ok(snap.rank_ready().and_then(|k| k.order(desc).iter().position(|&i| i == row)));
+            return Ok(snap.rank_ready().and_then(|k| ViewRows::Order(k, desc).position(row)));
         }
     }
     Ok(snap.cached_view(spec).and_then(|v| v.position(row)))
@@ -2218,7 +2583,11 @@ pub(crate) fn export_to(
         cells: Vec::new(),
         line: Vec::new(),
     };
-    let part = format!("{dest}.part");
+    // A name of this export's own: two exports to one name never share a
+    // temporary file (start_export refuses the second while the first
+    // runs; this keeps even a direct call from writing into another's).
+    static PART: AtomicU64 = AtomicU64::new(0);
+    let part = format!("{dest}.{}-{}.part", std::process::id(), PART.fetch_add(1, Ordering::Relaxed));
     let err = |e: std::io::Error| format!("cannot write {dest}: {e}");
     let rerr = |e: std::io::Error| format!("cannot read {path}: {e}");
     let write = |rw: &mut RowWriter| -> Result<usize, String> {
@@ -2229,8 +2598,8 @@ pub(crate) fn export_to(
         progress(0, total);
         let src = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
         let mut chunk: Vec<u8> = Vec::new();
-        match rows.ids() {
-            None => {
+        match &rows {
+            ViewRows::All(_) => {
                 let start = index.offsets.first().copied().unwrap_or(index.data_end);
                 if rw.copy && rw.typed.as_ref().is_some_and(|t| t.all_clean) {
                     // A byte-range copy.
@@ -2274,19 +2643,22 @@ pub(crate) fn export_to(
                     }
                 }
             }
-            Some(ids) => {
+            _ => {
                 let mut wbuf: Vec<u8> = Vec::new();
                 let mut dpos: Vec<u32> = Vec::new();
                 let mut pairs: Vec<u64> = Vec::new();
                 let mut k = 0;
                 while k < total {
-                    // One pass: the next view rows up to EXPORT_WINDOW bytes.
+                    // One pass: the next view rows up to EXPORT_WINDOW bytes
+                    // (ids holds view positions k.. of them).
+                    let ids = rows.window(k, EXPORT_WINDOW_ROWS);
+                    let ids = &ids[..];
                     dpos.clear();
                     dpos.push(0);
                     let mut bytes = 0;
                     let mut e = k;
                     while e < total && e - k < EXPORT_WINDOW_ROWS {
-                        let l = row_span(index, ids[e] as usize).1;
+                        let l = row_span(index, ids[e - k] as usize).1;
                         if e > k && bytes + l > EXPORT_WINDOW {
                             break;
                         }
@@ -2296,7 +2668,7 @@ pub(crate) fn export_to(
                     }
                     wbuf.resize(bytes, 0);
                     pairs.clear();
-                    pairs.extend((k..e).map(|j| (ids[j] as u64) << 32 | (j - k) as u64));
+                    pairs.extend((k..e).map(|j| (ids[j - k] as u64) << 32 | (j - k) as u64));
                     pairs.sort_unstable();
                     let mut j = 0;
                     while j < pairs.len() {
@@ -2327,7 +2699,7 @@ pub(crate) fn export_to(
                         }
                         j = q;
                     }
-                    for (slot, &row) in ids[k..e].iter().enumerate() {
+                    for (slot, &row) in ids[..e - k].iter().enumerate() {
                         let raw = &wbuf[dpos[slot] as usize..dpos[slot + 1] as usize];
                         let full = (index.end_of(row as usize) - index.offsets[row as usize]) as usize;
                         rw.write(&mut w, row as usize, raw, full).map_err(err)?;
@@ -2360,9 +2732,23 @@ fn export(shared: &Arc<Shared>, path: &str, spec: &ViewSpec, columns: &[String],
     export_to(shared, path, spec, columns, dest, ExportFormat::Tsv, &Cancel::default(), &|_, _| {})
 }
 
+/// The name @p dest stands for, for comparing two destinations: the
+/// canonical folder and the file name (the file itself may not exist yet).
+fn dest_key(dest: &str) -> String {
+    let p = std::path::Path::new(dest);
+    match (p.parent().map(|d| if d.as_os_str().is_empty() { std::path::Path::new(".") } else { d }), p.file_name()) {
+        (Some(dir), Some(name)) => match std::fs::canonicalize(dir) {
+            Ok(d) => d.join(name).to_string_lossy().into_owned(),
+            Err(_) => dest.to_string(),
+        },
+        _ => dest.to_string(),
+    }
+}
+
 /// Start an export job on a thread of its own; its events go to @p emit.
-/// Returns the job's id (larger than every earlier one). Only
-/// cancel_export stops it: page reads, other views and opens do not.
+/// Returns the job's id (larger than every earlier one), or why it did not
+/// start: an export to the same name is still running. Only cancel_export
+/// stops it: page reads, other views and opens do not.
 pub(crate) fn start_export(
     shared: &Arc<Shared>,
     path: &str,
@@ -2371,10 +2757,18 @@ pub(crate) fn start_export(
     dest: &str,
     fmt: ExportFormat,
     emit: ExportEmit,
-) -> u64 {
-    let job_id = shared.next_job.fetch_add(1, Ordering::SeqCst) + 1;
-    let token = Cancel::default();
-    shared.jobs.lock().unwrap().insert(job_id, token.clone());
+) -> Result<u64, String> {
+    let key = dest_key(dest);
+    let job_id = {
+        let mut jobs = shared.jobs.lock().unwrap();
+        if jobs.values().any(|(_, d)| *d == key) {
+            return Err(format!("an export to {dest} is still running; wait for it or cancel it first"));
+        }
+        let job_id = shared.next_job.fetch_add(1, Ordering::SeqCst) + 1;
+        jobs.insert(job_id, (Cancel::default(), key));
+        job_id
+    };
+    let token = shared.jobs.lock().unwrap()[&job_id].0.clone();
     let (me, path, spec, columns, dest) = (shared.clone(), path.to_string(), spec.clone(), columns.to_vec(), dest.to_string());
     std::thread::spawn(move || {
         // Progress at most every 100 ms, and always the first and the last.
@@ -2394,13 +2788,13 @@ pub(crate) fn start_export(
             Err(message) => ExportEvent::Failed { job_id, message },
         });
     });
-    job_id
+    Ok(job_id)
 }
 
 /// Cancel export job @p job_id; false when no such job is running.
 pub(crate) fn cancel_export(shared: &Shared, job_id: u64) -> bool {
     match shared.jobs.lock().unwrap().get(&job_id) {
-        Some(t) => {
+        Some((t, _)) => {
             t.cancel();
             true
         }
@@ -2422,7 +2816,7 @@ pub async fn results_export(
     let emit: ExportEmit = Arc::new(move |ev| {
         let _ = on_event.send(ev);
     });
-    Ok(start_export(&state.0, &path, &view, &columns, &dest, format.unwrap_or_default(), emit))
+    start_export(&state.0, &path, &view, &columns, &dest, format.unwrap_or_default(), emit)
 }
 
 #[tauri::command]
@@ -2469,7 +2863,7 @@ pub mod bench {
     pub fn rank(path: &str, ix: &Indexed) -> Result<(Vec<u32>, Vec<u32>), String> {
         let col = ix.0.columns.iter().position(|c| c == RANK_COLUMN).ok_or("no evalue column")?;
         let r = build_rank(path, &ix.0, col, &Cancel::default(), &|_, _| {})?;
-        let d = r.desc().to_vec();
+        let d = r.desc();
         Ok((r.asc, d))
     }
 
@@ -2484,6 +2878,14 @@ pub mod bench {
         let spec = ViewSpec { sort: Some(SortSpec { column: RANK_COLUMN.into(), desc: false }), ..Default::default() };
         let p = query_mode(&shared, path, &spec, 0, 500, Mode::Interactive)?;
         Ok((p.rows.len(), p.ranked))
+    }
+
+    pub fn typed_probe(path: &str, ix: &Indexed, rss: &dyn Fn(&str)) {
+        let t = build_typed(path, &ix.0, &Cancel::default()).unwrap();
+        rss("typed built");
+        eprintln!("dict {} entries, bytes {}", t.dict.len(), t.dict.iter().map(|d| d.len()).sum::<usize>());
+        drop(t);
+        rss("typed dropped");
     }
 
     /// The app's browser on one file, opened as results_open opens it.
@@ -3140,10 +3542,16 @@ mod tests {
         assert_eq!(r.row_ids, [0, 1, 2, 3]);
         assert_eq!(col(&r, 0, "tag"), "AQRQAAN");
         assert_eq!(position(&shared, &p, &spec, 0).unwrap(), None); // not built: no anchor yet
-        // Export and the tests never get file order for a sorted view.
+        // Export and the tests never get file order for a sorted view: they
+        // wait for the build in flight (here finished by its stand-in).
+        let scans = snap.scans.load(Ordering::Relaxed);
+        let worker = finish_rank_after(&shared, &snap, 50);
         let e = query_mode(&shared, &p, &spec, 0, 10, Mode::Exact).unwrap();
         assert!(e.ranked);
         assert_eq!(e.row_ids, [1, 0, 2, 3]);
+        assert_eq!(snap.scans.load(Ordering::Relaxed), scans);
+        assert!(!token.is_cancelled());
+        worker.join().unwrap();
         std::fs::remove_file(&p).ok();
     }
 
@@ -3331,8 +3739,9 @@ mod tests {
         let p = fixture("export-rank.tsv");
         let shared = Arc::new(Shared::default());
         let snap = shared.snapshot(&p).unwrap();
-        // A background build in flight; export makes it redundant and it
-        // then ends silently (cancelled).
+        // A background build in flight: the export's query waits for it
+        // (never a second build beside it, never cancelling it), and the
+        // background build announces the order.
         let background = Cancel::default();
         *snap.rank.lock().unwrap() = RankSlot::Building(background.clone());
         let (emit, got) = collector();
@@ -3341,9 +3750,13 @@ mod tests {
         let pending = query_mode(&shared, &p, &by_evalue(), 0, 10, Mode::Interactive).unwrap();
         assert!(!pending.ranked && pending.pending);
         assert!(got.lock().unwrap().iter().all(|e| !matches!(e, BrowserEvent::Ranked { .. })));
+        let scans = snap.scans.load(Ordering::Relaxed);
+        let worker = finish_rank_after(&shared, &snap, 100);
         let e = query(&shared, &p, &by_evalue(), 0, 10).unwrap(); // export's query
         assert_eq!(e.row_ids, [2, 0, 1, 3]);
-        assert!(background.is_cancelled());
+        assert!(!background.is_cancelled());
+        assert_eq!(snap.scans.load(Ordering::Relaxed), scans, "the export built a second order beside the one in flight");
+        worker.join().unwrap();
         assert_eq!(
             wait_for(&got, |e| matches!(e, BrowserEvent::Ranked { .. })),
             BrowserEvent::Ranked { generation: h.generation, column: "evalue".into() }

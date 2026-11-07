@@ -444,8 +444,14 @@ fn a_filtered_evalue_view_is_served_in_file_order_while_ranking() {
     let file_order = oracle(&p, &ViewSpec { min_length: Some(7), ..Default::default() });
     assert_eq!(r.row_ids, file_order);
     assert!(!token.is_cancelled());
-    // Exact (export) never gets file order.
+    // Exact (export) never gets file order: it waits for the build in
+    // flight (finished here by its stand-in) and builds no order itself.
+    let scans = snap.scans.load(Ordering::Relaxed);
+    let worker = finish_rank_after(&shared, &snap, 50);
     assert_eq!(view_rows(&shared, &p, &s).unwrap(), oracle(&p, &s));
+    worker.join().unwrap();
+    assert!(!token.is_cancelled());
+    assert_eq!(snap.scans.load(Ordering::Relaxed), scans, "the export built an order or typed columns again");
     std::fs::remove_file(&p).ok();
 }
 
@@ -498,7 +504,7 @@ fn an_export_job_reports_progress_and_ends_done() {
     let (emit, got) = export_collector();
     let dest = format!("{p}.out");
     let s = ViewSpec { sort: by("evalue", true), fasta_hit: Some("only".into()), ..Default::default() };
-    let id = start_export(&shared, &p, &s, &["tag".into(), "evalue".into()], &dest, ExportFormat::Tsv, emit);
+    let id = start_export(&shared, &p, &s, &["tag".into(), "evalue".into()], &dest, ExportFormat::Tsv, emit).unwrap();
     let end = wait_end(&got, id);
     assert_eq!(end, ExportEvent::Done { job_id: id, rows: 150_000, dest: dest.clone() });
     let ev = got.lock().unwrap().clone();
@@ -522,8 +528,8 @@ fn cancelling_an_export_stops_that_job_only_and_leaves_no_file() {
     let all: Vec<String> = HEADER.split('\t').map(str::to_string).collect();
     let (a, b) = (format!("{p}.a"), format!("{p}.b"));
     let s = ViewSpec { sort: by("tag", false), ..Default::default() };
-    let ja = start_export(&shared, &p, &s, &all, &a, ExportFormat::Csv, emit.clone());
-    let jb = start_export(&shared, &p, &ViewSpec::default(), &all, &b, ExportFormat::Tsv, emit);
+    let ja = start_export(&shared, &p, &s, &all, &a, ExportFormat::Csv, emit.clone()).unwrap();
+    let jb = start_export(&shared, &p, &ViewSpec::default(), &all, &b, ExportFormat::Tsv, emit).unwrap();
     // Job ids are the generation: each new job's is larger.
     assert!(jb > ja);
     assert!(cancel_export(&shared, ja));
@@ -553,7 +559,7 @@ fn page_reads_view_changes_and_opens_never_cancel_an_export() {
     open(&shared, &p, bemit.clone()).unwrap();
     let dest = format!("{p}.out");
     let s = ViewSpec { sort: by("length", false), min_length: Some(4), ..Default::default() };
-    let id = start_export(&shared, &p, &s, &["spectrum".into(), "length".into()], &dest, ExportFormat::Tsv, emit);
+    let id = start_export(&shared, &p, &s, &["spectrum".into(), "length".into()], &dest, ExportFormat::Tsv, emit).unwrap();
     // The table goes on: pages of the open view, other view specs (each
     // cancels the previous view build), and the same file opened again.
     for k in 0..30u32 {
@@ -575,13 +581,13 @@ fn a_failed_export_job_says_why_and_keeps_the_source() {
     let p = big(10);
     let shared = Arc::new(Shared::default());
     let (emit, got) = export_collector();
-    let id = start_export(&shared, &p, &ViewSpec::default(), &["tag".into()], &p, ExportFormat::Tsv, emit.clone());
+    let id = start_export(&shared, &p, &ViewSpec::default(), &["tag".into()], &p, ExportFormat::Tsv, emit.clone()).unwrap();
     match wait_end(&got, id) {
         ExportEvent::Failed { message, .. } => assert!(message.contains("choose another name"), "{message}"),
         e => panic!("{e:?}"),
     }
     assert_eq!(std::fs::read_to_string(&p).unwrap().lines().count(), 11);
-    let id = start_export(&shared, &p, &ViewSpec::default(), &["nope".into()], &format!("{p}.x"), ExportFormat::Tsv, emit);
+    let id = start_export(&shared, &p, &ViewSpec::default(), &["nope".into()], &format!("{p}.x"), ExportFormat::Tsv, emit).unwrap();
     assert!(matches!(wait_end(&got, id), ExportEvent::Failed { .. }));
     std::fs::remove_file(&p).ok();
 }
@@ -606,4 +612,381 @@ fn a_cancelled_view_build_stops() {
     // Nothing cancelled was cached: the same view builds in full afterwards.
     assert_eq!(view_rows(&shared, &p, &spec).unwrap(), oracle(&p, &spec));
     std::fs::remove_file(&p).ok();
+}
+
+// ------------------------------------------- the E-value order in flight
+
+/// A view that needs the E-value order while it is being built shares
+/// that build: an Interactive max-E-value cutoff is one scan in file order
+/// (D5), the per-spectrum rule waits for the order in flight and a newer
+/// view stops that wait; nothing builds a second order or cancels the
+/// background one.
+#[test]
+fn views_during_ranking_never_build_a_second_order() {
+    let p = big(400);
+    let shared = Arc::new(Shared::default());
+    let snap = shared.snapshot(&p).unwrap();
+    let background = Cancel::default();
+    *snap.rank.lock().unwrap() = RankSlot::Building(background.clone());
+    let (emit, _got) = {
+        let got: Arc<Mutex<Vec<BrowserEvent>>> = Arc::default();
+        let g = got.clone();
+        (Arc::new(move |e| g.lock().unwrap().push(e)) as Emit, got)
+    };
+    *shared.open.lock().unwrap() = Some(OpenState { path: p.clone(), generation: 1, emit, index: Cancel::default() });
+    // The order by length first (one scan of its own), then the cutoff on it.
+    query_mode(&shared, &p, &ViewSpec { sort: by("length", false), ..Default::default() }, 0, 10, Mode::Interactive).unwrap();
+    for sort in [None, by("length", false), by("evalue", false)] {
+        let s = ViewSpec { sort: sort.clone(), max_evalue: Some(100.0), ..Default::default() };
+        let scans = snap.scans.load(Ordering::Relaxed);
+        let r = query_mode(&shared, &p, &s, 0, 1000, Mode::Interactive).unwrap();
+        assert!(snap.scans.load(Ordering::Relaxed) <= scans + 1, "{s:?}: more than one scan");
+        assert!(!background.is_cancelled(), "{s:?} cancelled the background order");
+        assert!(snap.rank_ready().is_none(), "{s:?} built the E-value order itself");
+        if sort.as_ref().is_some_and(|x| x.column == "evalue") {
+            // In file order until the order is ready.
+            assert!(!r.ranked && r.pending);
+            assert_eq!(r.row_ids, oracle(&p, &ViewSpec { max_evalue: Some(100.0), ..Default::default() }));
+        } else {
+            assert!(r.ranked);
+            assert_eq!(r.row_ids, oracle(&p, &s));
+        }
+    }
+    // The per-spectrum rule waits for the order in flight; a newer view
+    // ends that wait at once.
+    let best = ViewSpec { per_spectrum: Some(1), ..Default::default() };
+    let scans = snap.scans.load(Ordering::Relaxed);
+    let waiting = {
+        let (s, p, b) = (shared.clone(), p.clone(), best.clone());
+        std::thread::spawn(move || query_mode(&s, &p, &b, 0, 1000, Mode::Interactive))
+    };
+    std::thread::sleep(Duration::from_millis(100));
+    assert!(!waiting.is_finished(), "the per-spectrum view did not wait for the order");
+    let t0 = Instant::now();
+    shared.view_token(&p, &ViewSpec { min_length: Some(5), ..Default::default() });
+    assert_eq!(waiting.join().unwrap().err().as_deref(), Some(CANCELLED));
+    assert!(t0.elapsed() < Duration::from_secs(1), "the wait outlived its view by {:?}", t0.elapsed());
+    assert!(!background.is_cancelled());
+    // Asked again, it is served from the background order once that is done.
+    let worker = finish_rank_after(&shared, &snap, 50);
+    let r = query_mode(&shared, &p, &best, 0, 1000, Mode::Interactive).unwrap();
+    worker.join().unwrap();
+    assert!(r.ranked && !r.pending);
+    assert_eq!(r.row_ids, oracle(&p, &best));
+    // One scan: the typed columns (no view before needed them); no order.
+    assert_eq!(snap.scans.load(Ordering::Relaxed), scans + 1, "the per-spectrum view built an order of its own");
+    assert!(snap.typed.lock().unwrap().is_some());
+    std::fs::remove_file(&p).ok();
+}
+
+/// An export that needs the E-value order while it is being built waits
+/// for it on its own token: Cancel export ends it at once.
+#[test]
+fn an_export_waiting_for_the_order_is_cancelled_promptly() {
+    let p = big(400);
+    let shared = Arc::new(Shared::default());
+    let snap = shared.snapshot(&p).unwrap();
+    let background = Cancel::default();
+    *snap.rank.lock().unwrap() = RankSlot::Building(background.clone());
+    let (emit, got) = export_collector();
+    let dest = format!("{p}.out");
+    for s in [
+        ViewSpec { sort: by("evalue", false), ..Default::default() },
+        ViewSpec { max_evalue: Some(10.0), ..Default::default() },
+        ViewSpec { per_spectrum: Some(1), ..Default::default() },
+    ] {
+        let id = start_export(&shared, &p, &s, &["tag".into()], &dest, ExportFormat::Tsv, emit.clone()).unwrap();
+        std::thread::sleep(Duration::from_millis(80));
+        assert!(got.lock().unwrap().iter().all(|e| !(e.job_id() == id && e.is_terminal())), "{s:?} did not wait");
+        let t0 = Instant::now();
+        assert!(cancel_export(&shared, id));
+        assert_eq!(wait_end(&got, id), ExportEvent::Cancelled { job_id: id });
+        assert!(t0.elapsed() < Duration::from_secs(1), "{s:?}: cancel took {:?}", t0.elapsed());
+        assert!(!background.is_cancelled());
+        assert!(!std::path::Path::new(&dest).exists());
+    }
+    assert!(leftover_parts(&dest).is_empty());
+    std::fs::remove_file(&p).ok();
+}
+
+/// The temporary files an export to @p dest left beside it.
+fn leftover_parts(dest: &str) -> Vec<String> {
+    let d = std::path::Path::new(dest);
+    let name = d.file_name().unwrap().to_string_lossy().into_owned();
+    std::fs::read_dir(d.parent().unwrap())
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|f| f.starts_with(&format!("{name}.")) && f.ends_with(".part"))
+        .collect()
+}
+
+/// A second export to the name of one still running is refused (the two
+/// would write one file); once the first is done the name is free again.
+#[test]
+fn a_second_export_to_a_running_exports_name_is_refused() {
+    let p = big(400);
+    let shared = Arc::new(Shared::default());
+    let snap = shared.snapshot(&p).unwrap();
+    // Held: the job waits for an order that is not ready.
+    *snap.rank.lock().unwrap() = RankSlot::Building(Cancel::default());
+    let (emit, got) = export_collector();
+    let dest = format!("{p}.out");
+    let s = ViewSpec { sort: by("evalue", false), ..Default::default() };
+    let first = start_export(&shared, &p, &s, &["tag".into()], &dest, ExportFormat::Tsv, emit.clone()).unwrap();
+    // The same name, also spelled through its folder's other path.
+    let again = format!("{}/./{}", std::path::Path::new(&dest).parent().unwrap().display(), std::path::Path::new(&dest).file_name().unwrap().to_string_lossy());
+    for d in [&dest, &again] {
+        let e = start_export(&shared, &p, &ViewSpec::default(), &["tag".into()], d, ExportFormat::Tsv, emit.clone()).unwrap_err();
+        assert!(e.contains("still running"), "{e}");
+    }
+    // Another name is not held up.
+    let other = format!("{p}.other");
+    let o = start_export(&shared, &p, &ViewSpec::default(), &["tag".into()], &other, ExportFormat::Tsv, emit.clone()).unwrap();
+    assert!(matches!(wait_end(&got, o), ExportEvent::Done { rows: 400, .. }));
+    let worker = finish_rank_after(&shared, &snap, 10);
+    assert!(matches!(wait_end(&got, first), ExportEvent::Done { rows: 400, .. }));
+    worker.join().unwrap();
+    let next = start_export(&shared, &p, &ViewSpec::default(), &["tag".into()], &dest, ExportFormat::Tsv, emit).unwrap();
+    assert!(matches!(wait_end(&got, next), ExportEvent::Done { rows: 400, .. }));
+    assert!(leftover_parts(&dest).is_empty());
+    for f in [&p, &dest, &other] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+// ------------------------------------------------------ memory per file
+
+/// Sorting by every column in both directions, and unrestricted filters
+/// on each, keeps the cached views and orders within the budget: no
+/// descending order is stored, older entries go first, and every view is
+/// still the reference's.
+#[test]
+fn every_sort_and_unrestricted_filter_stay_within_the_cache_budget() {
+    let n = 20_000u32;
+    let p = big(n);
+    let shared = Arc::new(Shared::default());
+    let snap = shared.snapshot(&p).unwrap();
+    let order = n as usize * 4 + (n as usize).div_ceil(64) * 8;
+    // Room for two orders, or one order and one full view.
+    snap.cache_budget.store(2 * order + 1024, Ordering::SeqCst);
+    for column in ["tag", "spectrum", "length", "fasta_hit", "evalue", "charge"] {
+        for desc in [false, true] {
+            for filters in [
+                ViewSpec::default(),
+                ViewSpec { min_length: Some(3), max_evalue: Some(1000.0), spectrum: Some("scan".into()), ..Default::default() },
+                ViewSpec { min_length: Some(6), ..Default::default() },
+            ] {
+                let s = ViewSpec { sort: by(column, desc), ..filters };
+                assert_eq!(view_rows(&shared, &p, &s).unwrap(), oracle(&p, &s), "{s:?}");
+                assert!(snap.cache_bytes() <= 2 * order + 1024, "{s:?}: {} cached bytes", snap.cache_bytes());
+            }
+        }
+    }
+    // The newest order stays: a page read of it does not rebuild it.
+    let built = snap.orders_built.load(Ordering::SeqCst);
+    view_rows(&shared, &p, &ViewSpec { sort: by("charge", true), ..Default::default() }).unwrap();
+    assert_eq!(snap.orders_built.load(Ordering::SeqCst), built);
+    std::fs::remove_file(&p).ok();
+}
+
+// ------------------------------------------- metamorphic, on the backend
+
+proptest! {
+    #![proptest_config(ProptestConfig { cases: 120, ..ProptestConfig::default() })]
+
+    /// Through the real query path: a tighter E-value cutoff or a smaller
+    /// N per spectrum keeps a subset of the rows, in the same order; and
+    /// two filters together are the first one's view less the rows the
+    /// second one drops, whichever way round (filters commute).
+    #[test]
+    fn tighter_filters_keep_subsets_and_filters_commute(t in tsv(), a in spec(), b in spec(), cut in prop::sample::select(vec![0.0, 1e-5, 0.003, 7.0, 1e308, f64::INFINITY]), n in 1u32..4) {
+        let p = temp("meta.tsv", &t.body);
+        let shared = Arc::new(Shared::default());
+        let rows = |s: &ViewSpec| view_rows(&shared, &p, s).unwrap();
+        let subseq = |small: &[u32], big: &[u32]| -> bool {
+            let mut it = big.iter();
+            small.iter().all(|x| it.any(|y| y == x))
+        };
+        // Cutoffs: `cut` and every tighter one of a's. One exception, found
+        // by this test and shared by v1.11's rule and e2eBridge's viewIds: a
+        // cell reading -inf (`-1e999`, `-inf`) passes every cutoff, but the
+        // E-value order puts it with the text cells, after every number; so
+        // with the per-spectrum rule a looser cutoff can let numbers in
+        // ahead of it and push it out. FASTag never writes such a cell.
+        let neg_inf = !oracle(&p, &ViewSpec { max_evalue: Some(f64::NEG_INFINITY), ..Default::default() }).is_empty();
+        let ranked_rule = a.per_spectrum.is_some_and(|k| k > 0);
+        let loose = ViewSpec { max_evalue: Some(cut), ..a.clone() };
+        for tight in [0.0, 1e-5, 0.003, 7.0, 1e308].into_iter().filter(|&x| x <= cut && !(neg_inf && ranked_rule)) {
+            let s = ViewSpec { max_evalue: Some(tight), ..a.clone() };
+            prop_assert!(subseq(&rows(&s), &rows(&loose)), "max E {} added rows to {}", tight, cut);
+        }
+        // Per spectrum: best N within best N+1 within every tag.
+        let few = ViewSpec { per_spectrum: Some(n), ..a.clone() };
+        let more = ViewSpec { per_spectrum: Some(n + 1), ..a.clone() };
+        let all = ViewSpec { per_spectrum: None, ..a.clone() };
+        prop_assert!(subseq(&rows(&few), &rows(&more)));
+        prop_assert!(subseq(&rows(&more), &rows(&all)));
+        // Commute: a's filters with b's (but b's per-spectrum rule, which
+        // ranks among what the other filters keep, so it is no plain filter).
+        let both = ViewSpec {
+            sort: a.sort.clone(),
+            spectrum: b.spectrum.clone().or(a.spectrum.clone()),
+            min_length: b.min_length.or(a.min_length),
+            max_evalue: b.max_evalue.or(a.max_evalue),
+            fasta_hit: b.fasta_hit.clone().or(a.fasta_hit.clone()),
+            per_spectrum: None,
+        };
+        let only_a = ViewSpec { per_spectrum: None, ..a.clone() };
+        let b_alone = ViewSpec { sort: a.sort.clone(), per_spectrum: None, ..b.clone() };
+        // Only where b's filters replace none of a's is "both" their conjunction.
+        let disjoint = (a.spectrum.is_none() || b.spectrum.is_none())
+            && (a.min_length.is_none() || b.min_length.is_none())
+            && (a.max_evalue.is_none() || b.max_evalue.is_none())
+            && (a.fasta_hit.is_none() || b.fasta_hit.is_none());
+        if disjoint {
+            let (va, vb, vboth) = (rows(&only_a), rows(&b_alone), rows(&both));
+            let in_b: std::collections::HashSet<u32> = vb.iter().copied().collect();
+            let in_a: std::collections::HashSet<u32> = va.iter().copied().collect();
+            prop_assert_eq!(&vboth, &va.iter().copied().filter(|r| in_b.contains(r)).collect::<Vec<_>>());
+            prop_assert_eq!(&vboth, &vb.iter().copied().filter(|r| in_a.contains(r)).collect::<Vec<_>>());
+        }
+        std::fs::remove_file(&p).ok();
+    }
+}
+
+// ------------------------------------------ the E. coli fixture, golden
+
+const ECOLI: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../e2e-web/fixtures/ecoli.tags.tsv");
+const ECOLI_VIEWS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../e2e-web/fixtures/ecoli.views.json");
+
+/// The best-tag export of the fixture has exactly one row per tagged
+/// spectrum, and that row has its spectrum's smallest E-value.
+#[test]
+fn the_best_tag_export_of_the_fixture_has_one_row_per_spectrum() {
+    let shared = Arc::new(Shared::default());
+    let src = std::fs::read_to_string(ECOLI).unwrap();
+    let mut lines = src.lines();
+    let head: Vec<&str> = lines.next().unwrap().split('\t').collect();
+    let (sp, ev) = (head.iter().position(|c| *c == "spectrum").unwrap(), head.iter().position(|c| *c == "evalue").unwrap());
+    let mut best: HashMap<String, f64> = HashMap::new();
+    for l in lines.filter(|l| !l.is_empty()) {
+        let c: Vec<&str> = l.split('\t').collect();
+        let e: f64 = c[ev].parse().unwrap();
+        let b = best.entry(c[sp].to_string()).or_insert(f64::INFINITY);
+        *b = b.min(e);
+    }
+    let dest = temp("best.tsv", b"");
+    let columns: Vec<String> = head.iter().map(|c| c.to_string()).collect();
+    for sort in [None, by("evalue", false), by("tag", true)] {
+        let s = ViewSpec { per_spectrum: Some(1), sort, ..Default::default() };
+        let n = export_to(&shared, ECOLI, &s, &columns, &dest, ExportFormat::Tsv, &Cancel::default(), &|_, _| {}).unwrap();
+        let out = std::fs::read_to_string(&dest).unwrap();
+        let rows: Vec<Vec<&str>> = out.lines().skip(1).map(|l| l.split('\t').collect()).collect();
+        assert_eq!(n, best.len());
+        assert_eq!(rows.len(), best.len(), "one row per tagged spectrum");
+        let spectra: std::collections::HashSet<&str> = rows.iter().map(|r| r[sp]).collect();
+        assert_eq!(spectra.len(), best.len(), "a spectrum appears twice");
+        for r in &rows {
+            assert_eq!(r[ev].parse::<f64>().unwrap(), best[r[sp]], "not the best tag of {}", r[sp]);
+        }
+    }
+    std::fs::remove_file(&dest).ok();
+}
+
+/// The views the e2e `view` fixture serves from e2eBridge.ts's viewIds
+/// are the backend's: this test holds the backend's views of the E. coli
+/// fixture for a fixed set of specs to ecoli.views.json (FASTAG_GOLDEN=write
+/// rewrites it), and e2eBridge.test.ts holds viewIds to the same file.
+#[test]
+fn the_backend_views_of_the_fixture_match_the_golden() {
+    use serde_json::{json, Value};
+    let sort = |c: &str, d: bool| json!({ "column": c, "desc": d });
+    let specs: Vec<Value> = vec![
+        json!({ "sort": sort("tag", false) }),
+        json!({ "sort": sort("tag", true) }),
+        json!({ "sort": sort("spectrum", false) }),
+        json!({ "sort": sort("spectrum", true) }),
+        json!({ "sort": sort("evalue", false) }),
+        json!({ "sort": sort("evalue", true) }),
+        json!({ "sort": sort("mean_conf", true) }),
+        json!({ "sort": sort("nterm_mass", false) }),
+        json!({ "maxEvalue": 1.0 }),
+        json!({ "maxEvalue": 0.01, "sort": sort("evalue", false) }),
+        json!({ "maxEvalue": 1e-5 }),
+        json!({ "spectrum": "scan=11" }),
+        json!({ "spectrum": "SCAN=1", "sort": sort("tag", false) }),
+        json!({ "minLength": 3 }),
+        json!({ "minLength": 4 }),
+        json!({ "fastaHit": "only" }),
+        json!({ "fastaHit": "none" }),
+        json!({ "fastaHit": "entrapment" }),
+        json!({ "perSpectrum": 1 }),
+        json!({ "perSpectrum": 2, "sort": sort("evalue", true) }),
+        json!({ "perSpectrum": 1, "maxEvalue": 1.0, "sort": sort("tag", false) }),
+        json!({ "spectrum": "scan=115", "perSpectrum": 3, "sort": sort("tag", true) }),
+        json!({ "minLength": 3, "fastaHit": "none", "spectrum": "SCAN=11", "perSpectrum": 2, "maxEvalue": 50.0 }),
+    ];
+    let shared = Arc::new(Shared::default());
+    let mut got = Vec::new();
+    for v in &specs {
+        let spec: ViewSpec = serde_json::from_value(v.clone()).unwrap();
+        got.push(json!({ "view": v, "ids": view_rows(&shared, ECOLI, &spec).unwrap() }));
+    }
+    // One spec per line: a change reads as a diff of the views it moved.
+    let text = format!("[\n{}\n]\n", got.iter().map(|g| serde_json::to_string(g).unwrap()).collect::<Vec<_>>().join(",\n"));
+    if std::env::var("FASTAG_GOLDEN").as_deref() == Ok("write") {
+        std::fs::write(ECOLI_VIEWS, &text).unwrap();
+    }
+    let want = std::fs::read_to_string(ECOLI_VIEWS).expect("ecoli.views.json: run with FASTAG_GOLDEN=write once");
+    assert!(want == text, "the backend's views of the fixture changed; check them, then rewrite ecoli.views.json with FASTAG_GOLDEN=write");
+}
+
+// ------------------------------------------------- views kept as bits
+
+/// A view that keeps most rows is held as one bit per position of its
+/// order (n/8 bytes, not 4 B per row); its pages, its export and the
+/// position of every row are the reference's, in every direction, and a
+/// narrow view stays a row list.
+#[test]
+fn broad_views_are_bits_over_their_order_and_read_back_exactly() {
+    let n = 30_000u32;
+    let p = big(n);
+    let shared = Arc::new(Shared::default());
+    let snap = shared.snapshot(&p).unwrap();
+    let all: Vec<String> = HEADER.split('\t').map(str::to_string).collect();
+    let dest = format!("{p}.out");
+    for sort in [None, by("tag", false), by("tag", true), by("evalue", false), by("evalue", true), by("spectrum", true)] {
+        for (broad, f) in [
+            (true, ViewSpec { min_length: Some(4), ..Default::default() }),
+            (true, ViewSpec { max_evalue: Some(900.0), fasta_hit: Some("none".into()), ..Default::default() }),
+            (false, ViewSpec { spectrum: Some("scan=777".into()), ..Default::default() }),
+        ] {
+            let s = ViewSpec { sort: sort.clone(), ..f };
+            let want = oracle(&p, &s);
+            assert_eq!(view_rows(&shared, &p, &s).unwrap(), want, "{s:?}");
+            let v = snap.cached_view(&s).expect("cached");
+            assert_eq!(matches!(v, ViewRows::Masked(_)), broad, "{s:?}");
+            if broad {
+                assert!(v.bytes() <= n as usize / 8 + 64, "{s:?}: {} bytes", v.bytes());
+            }
+            // Windows that start and end anywhere.
+            for (a, l) in [(0, 1), (1, 63), (63, 2), (64, 64), (4095, 4099), (want.len() - 1, 5), (want.len(), 3)] {
+                let a = a.min(want.len());
+                assert_eq!(v.window(a, l), want[a..(a + l).min(want.len())], "{s:?} {a}+{l}");
+            }
+            for row in (0..n).step_by(37) {
+                assert_eq!(position(&shared, &p, &s, row).unwrap(), want.iter().position(|&r| r == row), "{s:?} row {row}");
+            }
+            export_to(&shared, &p, &s, &all, &dest, ExportFormat::Tsv, &Cancel::default(), &|_, _| {}).unwrap();
+            let src = std::fs::read_to_string(&p).unwrap();
+            let lines: Vec<&str> = src.lines().skip(1).collect();
+            let out = std::fs::read_to_string(&dest).unwrap();
+            let got: Vec<&str> = out.lines().skip(1).collect();
+            assert_eq!(got, want.iter().map(|&r| lines[r as usize]).collect::<Vec<_>>(), "{s:?}");
+        }
+    }
+    for f in [&p, &dest] {
+        std::fs::remove_file(f).ok();
+    }
 }
