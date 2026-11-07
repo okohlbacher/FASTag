@@ -78,10 +78,10 @@ int main()
 
   // Versioned: the legacy rows are a byte prefix, then the version row.
   const std::string versioned = written(RR::runRows(m, RR::Emit::Versioned));
-  check(RR::kFormatVersion == 3, "format version 3");
+  check(RR::kFormatVersion == 4, "format version 4");
   check(versioned.rfind(legacy, 0) == 0, "Versioned starts with the legacy bytes");
   check(versioned.substr(legacy.size()) ==
-          "run\trun_report_version\t3\t-\tThe run section follows FASTag run report format 3.\n"
+          "run\trun_report_version\t4\t-\tThe run section follows FASTag run report format 4.\n"
           "run\tpick_profile\tlegacy\t-\tProfile MS2 was centroided under -pick_profile legacy.\n"
           "run\tprofile_ms2_picked\t0\t0\t0 of 0 profile MS2 spectra were centroided before tagging.\n"
           "run\tprofile_ms2_kept\t0\t0\t0 of 0 profile MS2 spectra were tagged as profile "
@@ -91,8 +91,12 @@ int main()
           "run\tactivation_electron\t0\t0\t0 of 0 MS2 spectra were activated by electron transfer or "
           "capture (ETD, ECD).\n"
           "run\tactivation_hybrid\t0\t0\t0 of 0 MS2 spectra were activated by a hybrid method (EThcD, ETciD).\n"
-          "run\tactivation_unknown\t0\t0\t0 of 0 MS2 spectra carry no activation FASTag classifies.\n",
-        "Versioned appends the version row, then the E picking rows (#9) and the E activation rows (#15 phase A), format 3");
+          "run\tactivation_unknown\t0\t0\t0 of 0 MS2 spectra carry no activation FASTag classifies.\n"
+          "run\tion_series\tby\t-\tMS2 spectra were read under -ion_series by.\n"
+          "run\tion_series_by\t0\t0\t0 of 0 MS2 spectra were tagged as b/y ions.\n"
+          "run\tion_series_cz\t0\t0\t0 of 0 MS2 spectra were tagged as c/z-dot ions.\n",
+        "Versioned appends the version row, then the E picking rows (#9), the E activation rows (#15 phase A) "
+        "and the E ion-series rows (#15 phase B), format 4");
   // The E picking rows (#9): value the count, n the profile MS2 that needed picking.
   {
     RR::RunMeta e = m;
@@ -100,7 +104,7 @@ int main()
     e.pick_picked = 47470;
     e.pick_failed = 3;
     const auto re = RR::runRows(e, RR::Emit::Versioned);
-    check(re.size() == 15, "Versioned format 3 has 15 rows");
+    check(re.size() == 18, "Versioned format 4 has 18 rows");
     check(re[8].key == "pick_profile" && re[8].value == "auto" && re[8].n == "-" &&
             re[8].description == "Profile MS2 was centroided under -pick_profile auto.",
           "pick_profile row");
@@ -119,7 +123,7 @@ int main()
     a.activation_hybrid = 1;
     a.activation_unknown = 0;
     const auto ra = RR::runRows(a, RR::Emit::Versioned);
-    check(ra.size() == 15, "Versioned format 3 has 15 rows");
+    check(ra.size() == 18, "Versioned format 4 has 18 rows");
     check(ra[11].key == "activation_collisional" && ra[11].value == "3491" && ra[11].n == "6984",
           "activation_collisional row");
     check(ra[12].key == "activation_electron" && ra[12].value == "3492" && ra[12].n == "6984" &&
@@ -128,6 +132,26 @@ int main()
     check(ra[13].key == "activation_hybrid" && ra[13].value == "1", "activation_hybrid row");
     check(ra[14].key == "activation_unknown" && ra[14].value == "0", "activation_unknown row");
     check(written(RR::runRows(a)) == legacy, "activation counts never reach the Legacy rows");
+  }
+  // The E ion-series rows (#15 phase B): value the spectra per series, n all
+  // tagged MS2.
+  {
+    RR::RunMeta s = m;
+    s.ion_series = "auto";
+    s.ion_series_ms2_by = 3492;
+    s.ion_series_ms2_cz = 3491;
+    const auto rs = RR::runRows(s, RR::Emit::Versioned);
+    check(rs.size() == 18, "Versioned format 4 has 18 rows");
+    check(rs[15].key == "ion_series" && rs[15].value == "auto" && rs[15].n == "-" &&
+            rs[15].description == "MS2 spectra were read under -ion_series auto.",
+          "ion_series row");
+    check(rs[16].key == "ion_series_by" && rs[16].value == "3492" && rs[16].n == "6983" &&
+            rs[16].description == "3492 of 6983 MS2 spectra were tagged as b/y ions.",
+          "ion_series_by row");
+    check(rs[17].key == "ion_series_cz" && rs[17].value == "3491" && rs[17].n == "6983" &&
+            rs[17].description == "3491 of 6983 MS2 spectra were tagged as c/z-dot ions.",
+          "ion_series_cz row");
+    check(written(RR::runRows(s)) == legacy, "ion-series counts never reach the Legacy rows");
   }
 
   // ClusterAcc: composes and merges without touching anything.

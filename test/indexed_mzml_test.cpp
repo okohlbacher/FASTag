@@ -10,6 +10,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "IndexedMzMLReader.h"
+#include "IonSeries.h"
 
 #include <OpenMS/FORMAT/MSNumpressCoder.h>
 #include <OpenMS/FORMAT/MzMLFile.h>
@@ -767,6 +768,82 @@ int main(int argc, char** argv)
     check(s2.getPrecursors().size() == 1 &&
               s2.getPrecursors()[0].getPossibleChargeStates() == std::vector<Int>{2, 3, 4},
           "param groups: group possible charges come first, then own ones");
+  }
+
+  // 1.12 #15: the activation class (IonSeries::activationClass, what
+  // -ion_series auto decides by) of the fast reader equals OnDisc's and
+  // OpenMS's, on etd_like (every CID term of the indexed fixture replaced by
+  // ETD, same byte length so the index stays exact) and on etd_paramgroup
+  // (ETD, EThcD and CID from groups and own, plus a filter-string-only
+  // spectrum).
+  {
+    namespace IS = FASTag::IonSeries;
+    const std::string etd_like = tmp + "/fastag_etd_like.mzML";
+    std::string b = slurp(indexed);
+    const std::string cid = "accession=\"MS:1000133\" name=\"collision-induced dissociation\"";
+    const std::string etd = "accession=\"MS:1000598\" name=\"electron transfer dissociation\"";
+    Size replaced = 0;
+    for (std::size_t at = b.find(cid); at != std::string::npos; at = b.find(cid, at + etd.size()))
+    {
+      b.replace(at, cid.size(), etd);
+      ++replaced;
+    }
+    spit(etd_like, b);
+    check(replaced > 0 && etd.size() == cid.size(), "etd_like: CID terms replaced at equal length");
+    FASTag::IndexedMzMLReader fast(etd_like);
+    OnDiscMSExperiment od;
+    check(fast.ok() && od.openFile(etd_like, false), "etd_like: both readers open it");
+    Size electron = 0, ms2n = 0, bad = 0;
+    for (Size i = 0; fast.ok() && i < std::min<Size>(fast.getNrSpectra(), od.getNrSpectra()); ++i)
+    {
+      const MSSpectrum g = fast.getSpectrumMetadata(i), w = od.getSpectrum(i);
+      if (w.getMSLevel() != 2) continue;
+      ++ms2n;
+      const IS::Activation ag = IS::activationClass(g), aw = IS::activationClass(w);
+      if (ag != aw) ++bad;
+      if (ag == IS::Activation::Electron) ++electron;
+    }
+    check(ms2n > 0 && bad == 0 && electron == ms2n,
+          "etd_like: the fast activation class equals OnDisc's, all electron (" + std::to_string(electron) + " of " +
+              std::to_string(ms2n) + ", " + std::to_string(bad) + " differ)");
+    metadata_vs_openms(etd_like, "etd_like");
+
+    const std::string groups =
+        "<referenceableParamGroup id=\"pg_etd\">\n" + cv("MS:1000598", "electron transfer dissociation") +
+        "</referenceableParamGroup>\n"
+        "<referenceableParamGroup id=\"pg_ethcd2\">\n" + cv("MS:1000598", "electron transfer dissociation") +
+        cv("MS:1002678", "supplemental beam-type collision-induced dissociation") + "</referenceableParamGroup>\n";
+    const auto prec = [&](const std::string& mz, const std::string& act) {
+      return "<precursorList count=\"1\">\n<precursor>\n<selectedIonList count=\"1\">\n<selectedIon>\n" +
+             cv("MS:1000744", "selected ion m/z", mz, "MS:1000040") + cv("MS:1000041", "charge state", "3") +
+             "</selectedIon>\n</selectedIonList>\n<activation>\n" + act + "</activation>\n</precursor>\n</precursorList>\n";
+    };
+    const std::string ms2 = cv("MS:1000511", "ms level", "2");
+    std::vector<std::string> sp;
+    sp.push_back(param_spectrum(0, cv("MS:1000511", "ms level", "1"), "", ""));
+    sp.push_back(param_spectrum(1, ms2, "", prec("500.25", ref("pg_etd"))));
+    sp.push_back(param_spectrum(2, ms2, "", prec("600.25", ref("pg_ethcd2"))));
+    sp.push_back(param_spectrum(3, ms2, cv("MS:1000512", "filter string", "ITMS + c NSI d Full ms2 700.25@etd66.67 [50.00-2000.00]"),
+                                prec("700.25", "")));
+    sp.push_back(param_spectrum(4, ms2, "", prec("800.25", cv("MS:1000133", "collision-induced dissociation"))));
+    sp.push_back(param_spectrum(5, ms2, "", prec("900.25", ref("pg_etd") + cv("MS:1000422", "beam-type collision-induced dissociation"))));
+    const std::string pgf = tmp + "/fastag_etd_paramgroup.mzML";
+    check(write_group_mzml(indexed, pgf, groups, sp), "etd_paramgroup: written");
+    PeakMap want;
+    try { MzMLFile().load(pgf, want); }
+    catch (const Exception::BaseException& e) { check(false, std::string("etd_paramgroup: OpenMS loads it (") + e.what() + ")"); }
+    FASTag::IndexedMzMLReader r(pgf);
+    const IS::Activation expect[6] = {IS::Activation::Unknown, IS::Activation::Electron, IS::Activation::Hybrid,
+                                      IS::Activation::Electron, IS::Activation::Collisional, IS::Activation::Hybrid};
+    check(r.ok() && r.getNrSpectra() == 6 && want.size() == 6, "etd_paramgroup: 6 spectra on both sides");
+    for (Size i = 0; r.ok() && i < 6 && i < want.size(); ++i)
+    {
+      const IS::Activation ag = IS::activationClass(r.getSpectrumMetadata(i)), aw = IS::activationClass(want[i]);
+      check(ag == aw && ag == expect[i], "etd_paramgroup spectrum " + std::to_string(i) + ": " +
+                                             IS::activationName(ag) + " fast, " + IS::activationName(aw) +
+                                             " OpenMS, " + IS::activationName(expect[i]) + " expected");
+    }
+    metadata_vs_openms(pgf, "etd_paramgroup");
   }
 
   // The fields 1.11 already read stay as 1.11 reads them when they are only
