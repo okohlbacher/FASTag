@@ -5,6 +5,7 @@ mod drop;
 mod events;
 mod fastag;
 mod history;
+mod ini;
 mod lifetime;
 mod menu;
 mod notify;
@@ -38,7 +39,9 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_notification::init());
+        .plugin(tauri_plugin_notification::init())
+        // The settings file (settings.rs): presets and the last-used offer.
+        .plugin(tauri_plugin_store::Builder::new().build());
     // File, Run, View and Help with their shortcuts on every platform (menu.rs).
     let builder = builder.menu(menu::build).on_menu_event(|app, event| {
         menu::on_menu_event(
@@ -58,6 +61,11 @@ pub fn run() {
         );
     });
     builder
+        .setup(|app| {
+            // Migrates a v1 settings file before the store first opens.
+            settings::init(app.handle());
+            Ok(())
+        })
         .manage(RunManager::default())
         .manage(browser::BrowserCache::default())
         .invoke_handler(tauri::generate_handler![
@@ -65,6 +73,8 @@ pub fn run() {
             fastag::run,
             fastag::cancel,
             fastag::outputs_check,
+            fastag::command_line,
+            ini::export_ini,
             history::history_list,
             history::history_of,
             history::history_delete,

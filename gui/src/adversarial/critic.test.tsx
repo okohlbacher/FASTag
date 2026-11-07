@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import App from '../App'
+import { DEFAULTS } from '../setup/tasks'
 import SpeciesPanel from '../SpeciesPanel'
 import { conflicts, inertBecause } from '../paramLayout'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
@@ -65,7 +66,8 @@ describe('critic: species headline on an exact tie', () => {
 async function renderWith(lastUsed: Record<string, unknown>): Promise<MockBridge> {
   const mock = installMockBridge()
   mock.settings = { schemaVersion: 1, lastUsed, presets: {} }
-  render(<App />)
+  // From FASTag's defaults, as before P2a PR u (the app lands on a task).
+  render(<App start={DEFAULTS} />)
   await screen.findByText('FASTag ready')
   await act(async () => {})
   await applyAndCheck(lastUsed) // D6: the offer, clicked; guards the form

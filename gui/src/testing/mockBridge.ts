@@ -48,6 +48,9 @@ export interface MockBridge extends FastagApi {
   // Programmable returns.
   binaryInfo: BinaryInfo
   settings: Settings
+  /// False: savePreset and deletePreset refuse, as the app does when the
+  /// settings file cannot be written.
+  settingsWritable: boolean
   nextPickInput: string | null
   nextPickInputs: string[]
   nextPickOutput: string | null
@@ -67,6 +70,14 @@ export interface MockBridge extends FastagApi {
   existingOutputs: string[]
   // The run record (history.rs), newest first.
   history: RunRecord[]
+  // commandLine() and exportIni() calls; exportIniError: the next exports reject.
+  commandLineCalls: RunCall[]
+  exportIniCalls: { params: RunCall; dest: string }[]
+  exportIniError: string | null
+  // The command line of a run request, binary first, as commandLine()
+  // answers it. (run()'s reply keeps its short -in/-out command, which the
+  // failure-banner tests pin; fastag.rs builds both from one function.)
+  commandOf(call: RunCall): string[]
   // Record every run that ends in `history`, as fastag.rs does (argv = the
   // run reply's command). Off by default: most tests set `history` by hand.
   recordRuns: boolean
@@ -153,6 +164,20 @@ export function mockOutputs(call: RunCall): ResolvedOutputs {
   return o
 }
 
+/// The argv of a run request as the mock spells it: -in, -out, then each
+/// parameter that has a value (switches as presence), in request order.
+function mockArgv(call: RunCall): string[] {
+  const a = ['-in', call.in, '-out', call.out]
+  for (const [n, v] of Object.entries(call.params ?? {})) {
+    if (v === true) a.push(`-${n}`)
+    else if (Array.isArray(v)) {
+      const items = v.map((x) => String(x).trim()).filter(Boolean)
+      if (items.length) a.push(`-${n}`, ...items)
+    } else if (typeof v === 'string' && v.trim() !== '') a.push(`-${n}`, v.trim())
+  }
+  return a
+}
+
 export function installMockBridge(): MockBridge {
   // Each started run's Channel, by its number.
   const channels = new Map<number, (e: RunEvent) => void>()
@@ -206,6 +231,7 @@ export function installMockBridge(): MockBridge {
   const mock: MockBridge = {
     binaryInfo: { bin: '/mock/FASTag', source: 'env', ok: true, detail: 'FASTag 9.9.9 (mock)' },
     settings: { schemaVersion: 1, lastUsed: null, presets: {} },
+    settingsWritable: true,
     nextPickInput: null,
     nextPickInputs: [],
     nextPickOutput: null,
@@ -226,6 +252,20 @@ export function installMockBridge(): MockBridge {
     taxdbInfoResult: null,
     existingOutputs: [],
     history: [],
+    commandLineCalls: [],
+    exportIniCalls: [],
+    exportIniError: null,
+    commandOf: (call) => [mock.binaryInfo.bin, ...mockArgv(call)],
+    commandLine: (params) => {
+      const call = params as unknown as RunCall
+      mock.commandLineCalls.push(call)
+      return Promise.resolve(mock.commandOf(call))
+    },
+    exportIni: (params, dest) => {
+      mock.exportIniCalls.push({ params: params as unknown as RunCall, dest })
+      if (mock.exportIniError) return Promise.reject(mock.exportIniError)
+      return Promise.resolve({ dest, items: mockArgv(params as unknown as RunCall).filter((a) => a.startsWith('-')).length })
+    },
     recordRuns: false,
     historyDeleteCalls: [],
     historyRerunCalls: [],
@@ -289,10 +329,12 @@ export function installMockBridge(): MockBridge {
       return Promise.resolve(true)
     },
     savePreset: (name, values) => {
+      if (!mock.settingsWritable) return Promise.resolve(false)
       mock.settings.presets[name] = values
       return Promise.resolve(true)
     },
     deletePreset: (name) => {
+      if (!mock.settingsWritable || !(name in mock.settings.presets)) return Promise.resolve(false)
       delete mock.settings.presets[name]
       return Promise.resolve(true)
     },

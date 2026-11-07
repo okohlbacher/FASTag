@@ -20,6 +20,8 @@ import { applyInstrument, INSTRUMENTS, speciesFixes } from './presets'
 import { defaultSpeciesOut, rebaseOutputs, stripExt } from '../app/paths'
 import { cliText, sameValue } from '../app/format'
 import { focusLater } from '../app/focus'
+import { DEFAULTS, baseOf, baseValues, originText, taskById, taskOf, type Origin, type TaskId } from './tasks'
+import { applyPreset as presetValues, diffNames, droppedPaths, normalizePreset, presetDiff } from './presetDiff'
 
 // Initial form state IS the tool's own defaults, straight from the manifest.
 export function initialValues(): Record<string, ParamValue> {
@@ -32,10 +34,31 @@ export function initialValues(): Record<string, ParamValue> {
   return v
 }
 
-export function useSession() {
+/// The value of the "Starting from" select for @p o: '' for the defaults,
+/// builtin:<task>, or a preset's own name.
+export function originKey(o: Origin): string {
+  return o.kind === 'defaults' ? '' : o.kind === 'builtin' ? `builtin:${o.id}` : o.name
+}
+
+// What a task or preset replaced, for Undo (GUI-DESIGN 5 undoSnapshot).
+interface Snapshot {
+  values: Record<string, ParamValue>
+  origin: Origin
+  originValues: Record<string, ParamValue>
+}
+
+/// @p start: where the session's values come from (D1: the app passes the
+/// task "Characterize a run"; the hook alone starts from the defaults).
+export function useSession(start: Origin = DEFAULTS) {
   const [input, setInput] = useState('')
   const [out, setOut] = useState('')
-  const [values, setValues] = useState<Record<string, ParamValue>>(initialValues)
+  // Where the form's values came from, and the values that origin gives
+  // (before reports are moved beside the input): the footer's diff is the
+  // form against these.
+  const [origin, setOrigin] = useState<Origin>(start)
+  const [originValues, setOriginValues] = useState<Record<string, ParamValue>>(() => baseValues(baseOf(start)))
+  const [values, setValues] = useState<Record<string, ParamValue>>(() => baseValues(baseOf(start)))
+  const [undoSnapshot, setUndoSnapshot] = useState<Snapshot | null>(null)
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(SECTIONS.map((s) => [s.title, s.open]))
   )
@@ -46,8 +69,10 @@ export function useSession() {
   // The instrument preset last chosen (read-only built-ins, presets.ts).
   const [instrument, setInstrument] = useState('')
   const [presets, setPresets] = useState<string[]>([])
-  const [preset, setPreset] = useState('')
   const [savingName, setSavingName] = useState<string | null>(null) // non-null = the 'save as' input is open
+  // Why the last save or delete of a preset was refused (the settings file
+  // cannot be written, the name is not allowed); null when it was not.
+  const [presetError, setPresetError] = useState<string | null>(null)
   // Where focus goes when the control that had it disappears.
   const presetRef = useRef<HTMLSelectElement>(null)
 
@@ -104,45 +129,100 @@ export function useSession() {
     if (p) setValue(spec.name, p)
   }
 
+  // The reports of @p v beside the current tags output, when there is one.
+  const beside = (v: Record<string, ParamValue>): Record<string, ParamValue> => (out ? { ...v, ...rebaseOutputs(v, out) } : v)
+
+  // A task or preset replaces the form. What it replaced can be undone,
+  // when it held changes of the user's own. A form without such changes
+  // keeps the snapshot taken before it: arrowing through the task radios
+  // replaces the form once per task, and the edits made before the first
+  // one must survive the second.
+  function replaceForm(o: Origin, ov: Record<string, ParamValue>): void {
+    if (diffNames(originValues, values).length > 0) setUndoSnapshot({ values, origin, originValues })
+    setPresetError(null)
+    setOrigin(o)
+    setOriginValues(ov)
+    setValues(beside(ov))
+  }
+  function undo(): void {
+    if (!undoSnapshot) return
+    setOrigin(undoSnapshot.origin)
+    setOriginValues(undoSnapshot.originValues)
+    setValues(beside(undoSnapshot.values))
+    setUndoSnapshot(null)
+  }
+  function chooseTask(id: TaskId): void {
+    if (!taskById(id)) return
+    replaceForm({ kind: 'builtin', id }, baseValues(`builtin:${id}`))
+  }
+  function chooseDefaults(): void {
+    replaceForm(DEFAULTS, baseValues('defaults'))
+  }
+  // Back to where the form started: the task, preset or defaults.
+  function resetToOrigin(): void {
+    setValues(beside(originValues))
+    setUndoSnapshot(null)
+  }
+
   async function applyPreset(name: string): Promise<void> {
-    setPreset(name)
-    if (!name) return
+    if (!name) return chooseDefaults()
+    if (name.startsWith('builtin:')) return chooseTask(name.slice('builtin:'.length) as TaskId)
     const st = await window.fastag.loadSettings()
-    const pv = st.presets[name]
-    // A preset stores the report paths of the sample it was saved with; put
-    // them beside the current tags output, or this run overwrites that
-    // sample's reports.
-    if (pv)
-      setValues((v) => {
-        const merged = { ...v, ...(pv as Record<string, ParamValue>) }
-        return out ? { ...merged, ...rebaseOutputs(merged, out) } : merged
-      })
+    // A v1 preset is the full record of the form's values, a v2 one a diff
+    // over its base (presetDiff.ts); either way its report paths go beside
+    // the current tags output, or this run overwrites that sample's reports.
+    const p = normalizePreset(st.presets[name])
+    if (!p) return
+    replaceForm({ kind: 'preset', name, base: p.base }, presetValues(p, ''))
   }
-  async function refreshPresets(): Promise<void> {
+  async function refreshPresets(): Promise<string[]> {
     const st = await window.fastag.loadSettings()
-    setPresets(Object.keys(st.presets).sort())
+    const names = Object.keys(st.presets).sort()
+    setPresets(names)
+    return names
   }
+  // A preset stores its diff over its base and no paths (presetDiff.ts).
+  const presetBase = baseOf(origin)
   async function commitPreset(): Promise<void> {
     const name = (savingName ?? '').trim()
-    if (!name) {
+    if (!name || name.startsWith('builtin:')) {
       cancelPreset()
       return
     }
-    await window.fastag.savePreset(name, values)
+    const diff = presetDiff(baseValues(presetBase), values)
+    setPresetError(null)
+    const saved = await window.fastag.savePreset(name, { v: 2, base: presetBase, diff })
     await refreshPresets()
-    setPreset(name)
+    if (!saved) {
+      // Nothing was stored: the form keeps its origin and the name input
+      // stays open, so the values are not taken for a saved preset.
+      setPresetError(`The preset “${name}” could not be saved: the settings file cannot be written, or the name is not allowed.`)
+      return
+    }
+    setOrigin({ kind: 'preset', name, base: presetBase })
+    setOriginValues({ ...baseValues(presetBase), ...diff })
     setSavingName(null)
     focusLater(() => presetRef.current)
   }
   function cancelPreset(): void {
     setSavingName(null)
+    setPresetError(null)
     focusLater(() => presetRef.current)
   }
   async function removePreset(): Promise<void> {
-    if (!preset) return
-    await window.fastag.deletePreset(preset)
-    await refreshPresets()
-    setPreset('')
+    if (origin.kind !== 'preset') return
+    setPresetError(null)
+    const deleted = await window.fastag.deletePreset(origin.name)
+    // A preset already gone from the file counts as deleted.
+    const left = await refreshPresets()
+    if (!deleted && left.includes(origin.name)) {
+      setPresetError(`The preset “${origin.name}” could not be deleted: the settings file cannot be written.`)
+      return
+    }
+    // The form stays; it now starts from what the preset was saved over.
+    const base = origin.base
+    setOrigin(base === 'defaults' ? DEFAULTS : { kind: 'builtin', id: base.slice('builtin:'.length) as TaskId })
+    setOriginValues(baseValues(base))
     focusLater(() => presetRef.current)
   }
 
@@ -156,9 +236,11 @@ export function useSession() {
   // Settings into form (History, GUI-DESIGN 3 S9): the input, output and
   // parameters of a recorded run replace the form's, over the defaults;
   // only parameters the form renders, with a value of a form type. Returns
-  // the Undo, which puts the form back as it was.
+  // the Undo, which puts the form back as it was. The form then starts from
+  // FASTag's defaults (the values are over them), so the footer's diff and
+  // Reset to origin read against the defaults, not the task it left.
   function takeRun(runInput: string, runOut: string, params: Record<string, unknown>): () => void {
-    const before = { input, out, values }
+    const before = { input, out, values, origin, originValues }
     const v = initialValues()
     for (const [name, x] of Object.entries(params)) {
       if (!RENDERED.includes(name)) continue
@@ -168,10 +250,14 @@ export function useSession() {
     }
     setInput(runInput)
     setOut(runOut)
+    setOrigin(DEFAULTS)
+    setOriginValues(initialValues())
     setValues(v)
     return () => {
       setInput(before.input)
       setOut(before.out)
+      setOrigin(before.origin)
+      setOriginValues(before.originValues)
       setValues(before.values)
     }
   }
@@ -210,7 +296,13 @@ export function useSession() {
     values,
     setValues,
     setValue,
-    reset: (): void => setValues(initialValues()),
+    // Reset… (RunBar): every parameter to FASTag's default.
+    reset: (): void => {
+      setOrigin(DEFAULTS)
+      setOriginValues(initialValues())
+      setValues(initialValues())
+      setUndoSnapshot(null)
+    },
     takeRun,
     applyFix: (v: Record<string, ParamValue>): void => setValues((cur) => ({ ...cur, ...v })),
     openGroups,
@@ -220,13 +312,28 @@ export function useSession() {
     applyLastUsed,
     presetRef,
     presets,
-    preset,
+    // The preset the form started from, by name ('' when none).
+    preset: origin.kind === 'preset' ? origin.name : '',
+    origin,
+    originKey: originKey(origin),
+    originText: originText(origin),
+    task: taskOf(origin)?.id ?? null,
+    chooseTask,
+    resetToOrigin,
+    undo,
+    canUndo: undoSnapshot !== null,
+    // What differs from where the form started (the footer).
+    diff: diffNames(originValues, values),
+    presetBaseText: originText(presetBase === 'defaults' ? DEFAULTS : { kind: 'builtin', id: presetBase.slice('builtin:'.length) as TaskId }),
+    // The input paths a preset saved now would leave out.
+    droppedPaths: droppedPaths(baseValues(presetBase), values),
     savingName,
     setSavingName,
     applyPreset,
     commitPreset,
     cancelPreset,
     removePreset,
+    presetError,
     instrument,
     chooseInstrument,
     taxdbK,

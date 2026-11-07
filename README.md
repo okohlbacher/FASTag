@@ -190,7 +190,11 @@ was alive: a result remade later, or an older one it had not rewritten yet, is n
 shows the `-digest_out`, `-label_out` and `-massgap_out` reports: the protease
 call or no-call with its reason, sequence logos P4..P1 | P1'..P4' of the
 observed tag ends and of the called and runner-up models (in bits against the
-background in use), the label counts, a histogram of the mass gaps and the mass-gap peaks. The
+background in use), the label counts, a histogram of the mass gaps and the mass-gap peaks. Setup starts
+from a task (by default **Characterize a run**: species, digest, label and
+glyco reports), so a file and Run are all a first run needs; the settings sit
+in four step cards, presets store only what differs from their task, and
+**Export INI…** writes the same parameters for `FASTag -ini`. The
 window has four views, switched from the top bar or with Cmd/Ctrl+1..4:
 **Setup**, **Results**, **Batch** and **History** (every recorded run, with
 its exact command line to copy, its settings to load back into Setup, and a

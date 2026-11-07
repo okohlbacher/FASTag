@@ -51,8 +51,11 @@ gui/
                        the e2e bridge with its ?fixture= scenarios (Playwright build only),
                        and the shared test helpers (render.tsx: renderApp, click, pickSingle, ...)
     adversarial/       end-to-end GUI tests (see Tests)
-    setup/             useSession.ts (the form's values, last-used offer, presets), SetupForm.tsx,
-                       parameter search (Cmd+K, "/"), instrument presets and the
+    setup/             useSession.ts (the form's values, where they started, last-used offer, presets),
+                       SetupForm.tsx (task chooser, four step cards), PlanFooter.tsx (plan,
+                       diff, Copy command line, Export INI), the built-in tasks (tasks.ts),
+                       presets as diffs and the v1 preset reader (presetDiff.ts), card and plan
+                       text (plan.ts), parameter search (Cmd+K, "/"), instrument presets and the
                        species fixes (presets.ts), shortcuts and menu actions (shortcuts.ts)
     help/              the Help side panel (F1, Cmd+?): pages as data (content.tsx, faq.tsx, params.ts),
                        HelpView.tsx with its search (search.ts, over every page, the FAQ, the
@@ -73,7 +76,9 @@ gui/
                        recorded and their leftovers (.part, .incomplete, the outputs they wrote while
                        alive) offered for removal
     src/close_guard.rs asks before a window close or Cmd+Q kills an active run
-    src/settings.rs    named presets + last-used, atomic JSON in the app config dir
+    src/settings.rs    named presets (diffs) + last-used in a tauri-plugin-store file (settings.json
+                       in the app config dir); migrates the v1 file once (kept as settings.v1.json.bak)
+    src/ini.rs         Export INI: the run's argv as a temporary INI, merged by `FASTag -ini <tmp> -write_ini <out>`
     src/browser.rs     indexed million-row results browser: head read on open, index and
                        E-value order built in the background and swapped in (D5)
     src/menu.rs        File, Run, View and Help menus with their CmdOrCtrl shortcuts, and the
@@ -153,6 +158,30 @@ top bar shows the job in flight (file, phase or percentage, ETA) and, outside
 the view with the run bar, its Cancel. When a run or batch finishes while the
 window is in the background, the system shows a notification; a toast
 offers Open results.
+
+Setup starts from a task: **Characterize a run** (the default: species with
+extension 2, the digest, label and glyco reports, a tenth of the spectra),
+**Batch QC vs SDRF**, **Export tags** (with the per-residue confidence
+column) or **Open results / inspect spectra** (no run). "Starting from" also
+offers FASTag's own defaults and your saved presets. The parameters sit in
+four step cards (Spectra, Database & taxonomy, Tagging, Reports), each with a
+one-line summary; settings that only a section's switch turns on (species,
+glyco, a FASTA, reconciliation) stay hidden until it is on. The footer above
+Run states the plan, counts what differs from the task or preset (Reset takes
+it back), copies the command line and exports an INI. Choosing a task or a
+preset replaces the form; Undo brings back what it replaced.
+
+A preset stores only what differs from the task or defaults it was saved
+over, and no paths: input files (a FASTA, a taxonomy) are left out, and a
+report is stored by its name (`digest.tsv`), written beside each input.
+**Export INI…** writes the parameters a run would use as a TOPP INI: the GUI
+writes them to a temporary INI and lets the CLI merge it into its defaults
+(`FASTag -ini <tmp> -write_ini <file>`), so `FASTag -ini <file>` runs with
+the same effective parameters (`-progress`, which the GUI adds for its
+progress bar, is left out). Presets and the last-used offer are kept with
+tauri-plugin-store in `settings.json` in the app config folder; a settings
+file of an earlier version is migrated on the first start, every preset
+kept, and the old file stays beside it as `settings.v1.json.bak`.
 
 Help is a side panel beside any view, with a search over every page, the
 troubleshooting entries, the glossary and the settings reference.
@@ -252,16 +281,33 @@ the partial output exists, and asserts the run was cancelled, the partial file
 removed and no CLI process left. `E2E_ONLY` picks specs by name. Results go to
 `e2e-tauri/results/`.
 
+Setup (P2a): `setup/setupScreen.app.test.tsx` renders the window as it starts
+(`renderColdApp`: the task "Characterize a run") and checks the two-action
+cold start, the task chooser and Undo, hidden dependent fields, the plan
+footer, Copy command line, Export INI and presets saved as diffs; the older
+App-level tests start from FASTag's defaults (`renderApp`).
+`setup/presetDiff.test.ts` checks the diffs and reads the v1 settings file
+`src-tauri/tests/fixtures/settings-v1.json`, which the cargo migration test
+(`settings::tests`) migrates into the store. The Export INI round trip
+(`ini::tests::round_trip`) exports a request, then compares the CLI's
+effective parameters under `-ini` with the run's argv over the CLI's
+defaults, and the tags and digest report of a run from the argv with those
+of a run from the INI. It runs the stub CLI always and the real CLI when one
+is found (`FASTAG_REAL_CLI`, else `FASTag` on PATH); `cargo test --lib
+round_trip -- --nocapture` prints which.
+
 The Playwright specs in `e2e-web/` drive the app in Chromium and WebKit on an
 explicit e2e build, `npm run build:e2e` (`vite build --mode e2e`, into
 `dist-e2e/`), which installs `src/testing/e2eBridge.ts`; each spec picks a
 scenario with `?fixture=` (`default`, `batch-fail`, `big`, `slow`,
-`lastused`, `existing`, `interrupted`, and the others in `e2eBridge.ts`). Run
-them with `npm run e2e` (`npx playwright install chromium webkit` once). Any
-console error fails a spec. `shell.spec.ts` drives the views, Help and its
-search, the themes and drops (through the e2e bridge's `drop` and `menu`
-controls), and saves screenshots of every view in both themes at 960×600 and
-1440×900 to `e2e-web/test-results/`. `npm run check:dist` checks
+`lastused`, `existing`, `interrupted`, and the others in `e2eBridge.ts`);
+`&start=defaults` starts the session from FASTag's defaults instead of the
+task the app lands on. `setup.spec.ts` drives the Setup screen and saves its
+screenshots. Run them with `npm run e2e` (`npx playwright install chromium
+webkit` once). Any console error fails a spec. `shell.spec.ts` drives the
+views, Help and its search, the themes and drops (through the e2e bridge's
+`drop` and `menu` controls), and saves screenshots of every view in both
+themes at 960×600 and 1440×900 to `e2e-web/test-results/`. `npm run check:dist` checks
 that a release `dist/` carries none of the bridges' strings; the `ui`
 workflow runs both.
 

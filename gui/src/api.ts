@@ -10,6 +10,7 @@ import type {
   BrowserEvent,
   Cleanup,
   DropRoute,
+  IniExport,
   ResultsHead,
   FastagApi,
   ResultsPage,
@@ -79,6 +80,8 @@ const api: FastagApi = {
   pickReport: () => openOne([{ name: 'Reports (TSV)', extensions: ['tsv'] }]),
 
   outputsCheck: (params: Record<string, unknown>) => invoke<OutputsCheck>('outputs_check', { params }),
+  commandLine: (params: Record<string, unknown>) => invoke<string[]>('command_line', { params }),
+  exportIni: (params: Record<string, unknown>, dest: string) => invoke<IniExport>('export_ini', { params, dest }),
   // Each run gets a Channel of its own (GUI-DESIGN 6.2): its events cannot
   // reach another job, and they may arrive before this reply does.
   run: (params: Record<string, unknown>, onEvent: (e: RunEvent) => void) => {

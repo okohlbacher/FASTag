@@ -36,7 +36,7 @@ test('the top bar, the keyboard and the View menu switch between the four views'
 })
 
 test('a run moves to Results with the pill; it finishes into History', async ({ page }) => {
-  await openApp(page)
+  await openApp(page, 'default', 'defaults')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
   await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()
@@ -86,7 +86,7 @@ test('Help opens beside the view; its search finds a setting and opens it', asyn
 
 test('the theme button overrides the system theme with the D9 colours, and changes no number', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'light' })
-  await openApp(page)
+  await openApp(page, 'default', 'defaults')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
   await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()
@@ -118,7 +118,7 @@ test('the theme button overrides the system theme with the D9 colours, and chang
 })
 
 test('drops go where their type belongs', async ({ page }) => {
-  await openApp(page)
+  await openApp(page, 'default', 'defaults')
   await e2e(page, 'drop', { spectra: ['/data/run01.mzML', '/data/run02.mzML'], batch: true })
   await expect(page.getByRole('heading', { name: /Batch · 2 files/ })).toBeVisible()
   expect(await shownViews(page)).toEqual(['batch'])
@@ -130,7 +130,7 @@ test('drops go where their type belongs', async ({ page }) => {
 })
 
 test('a view switch that hides the focused control moves focus into the view shown', async ({ page }) => {
-  await openApp(page)
+  await openApp(page, 'default', 'defaults')
   // Where focus is: the view it sits in, or BODY.
   const focusIn = (): Promise<string> =>
     page.evaluate(() => {
@@ -166,7 +166,7 @@ for (const [w, h] of [
     await page.setViewportSize({ width: w, height: h })
     for (const scheme of ['light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme: scheme })
-      await openApp(page)
+      await openApp(page, 'default', 'defaults')
       await page.getByRole('button', { name: 'Choose file…' }).click()
       await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
       await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()

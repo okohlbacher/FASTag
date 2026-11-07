@@ -610,6 +610,10 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     revealErr: state.revealErr,
     overwriteAsk: state.overwriteAsk,
     setOverwriteAsk,
+    // The request `run` would be given for the single input: what the Setup
+    // footer's Copy command and Export INI send, so neither can say
+    // anything a run would not do.
+    paramsFor: (): Record<string, unknown> => runParams(input, out),
     run,
     rerun,
     runBatch,
