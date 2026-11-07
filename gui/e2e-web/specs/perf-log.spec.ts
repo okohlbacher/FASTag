@@ -20,9 +20,14 @@ import { test, expect, openApp } from './fixtures'
 // its median and p95 are whole milliseconds and cannot show a time under
 // 1 ms. Each sample starts at a random phase of that 1 ms grid (after a
 // frame and a task), so the mean of the coarsened samples still estimates
-// the true mean. batch_x10 times ten 500-line batches in a row (each to its
-// commit, with no frame between) and divides by ten: per-batch times at
-// 0.1 ms resolution in WebKit too.
+// the true mean; the gate's statistics stay median and p95 (section 7).
+//
+// batch_x10 is back-to-back, no frame between: ten 500-line batches in a
+// row, each to its commit, divided by ten. No rendering update runs between
+// them (each batch's effect cleanup cancels the previous frame's scroll, and
+// there is no content-visibility pass, style or paint per frame), so it is
+// not a per-frame-batch time and is not evidence for the gate; it is
+// recorded only to compare builds.
 interface Stats {
   n: number
   median_ms: number
@@ -69,7 +74,8 @@ test('the log drawer commits a line and a 500-line batch quickly with 5,000 line
       await frame()
       return dt
     }
-    // The same without the frame after it: for batches in a row.
+    // The same without the frame after it: back-to-back, no frame between
+    // (batch_x10; not a per-frame-batch time).
     const commitNow = (lines: string[]): Promise<void> =>
       new Promise<void>((res) => {
         const mo = new MutationObserver(() => {
