@@ -167,16 +167,40 @@ first (ties: smaller |delta|):
 2. a fixed residue modification F: a peak at +F becomes the same Unimod name
    on K, H and the peptide N-term where ModificationsDB knows it (the fixed
    residue left out); a peak at -F is `fixed_mod_questionable` (WARN). Without
-   a fixed Cys modification, a Cys alkylation peak holding at least half the
-   C-containing placements is written as a FIXED modification (`fixed`, WARN).
-   Once the CLI's alkylation call (#3) lands it supersedes this rule.
+   a fixed Cys modification, a Cys alkylation peak whose C-containing samples
+   are at least half the run's C-containing samples is written as a FIXED
+   modification (`fixed`, WARN). Only C-containing samples count, so +57 on
+   K, the N-term or a Gly-isobaric truncation does not.
+   **This rule does not read `-alkylation_out` (#3g) yet**: a run with both
+   options can write a fixed Cys modification its own alkylation call
+   contradicts. `shiftsToPlan` already takes the call
+   (`ShiftSettings::alkylation_call`: a reagent becomes the fixed Cys
+   modification, `none`/`no_call` adds none, and a peak that would have been
+   `fixed` is `deferred_alkylation_call`, WARN); feeding #3g's call into it,
+   with a digest_cli_test case running `-alkylation_out` with
+   `-search_shifts`, belongs to the D3cg merge onto integration/1.12 (owner:
+   the integrator of D3cg).
 3. one modification: a variable modification under its `massgap_mods.tsv`
    id, mass from ModificationsDB (`already_searched` when the configuration
    has it; a SILAC label only when the SILAC call is not `none`, else
-   `skipped_silac`).
+   `skipped_silac`). A called SILAC channel is one unit: all its labels (Lys4
+   and Arg6, Lys8 and Arg10, or all four for triplex) are variable
+   modifications outside `-shift_max_variable`, or, when Comet's 15 slots
+   cannot hold them, none is (`dropped_cap`, WARN). A partial channel would
+   search one channel's R-peptides but not its K-peptides.
 4. a combination, no explanation, or a substitution share above 0.5: a Comet
-   mass offset at the 4-decimal centroid. Sage and negative offsets are
-   `dropped_engine`; 0 is always written first and not counted.
+   mass offset at the 4-decimal centroid minus the run's calibration bias.
+   Sage and negative offsets are `dropped_engine`; 0 is always written first
+   and not counted. A combination made only of exported SILAC labels is
+   `already_searched` (Comet's variable labels cover it, up to 3 per peptide).
+   Calibration: a centroid carries the run's precursor mass bias (PXD003531:
+   about +0.007 Da on every explained peak), a modification mass does not. The
+   bias is the spectra-weighted median of centroid - mass over the peaks one
+   modification explains; the `-search_shifts_out` header gives it, the number
+   of peaks and the residual (90th percentile of their remaining error), and
+   each offset row its centroid. When the residual (or, with no such peak,
+   the gap window) exceeds the precursor tolerance at 1000 Da, a WARN says
+   Comet can miss the shifted peptides.
 5. caps: `-shift_max_variable` (3) peaks as variable modifications,
    `-shift_max_offsets` (10) offsets, at most 15 Comet variable slots with the
    run's own: the rest `dropped_cap`. Under `variable` or `offsets` alone, what

@@ -135,11 +135,18 @@ namespace FASTag::SearchConfig
   //      left out); at -F -> fixed_mod_questionable (WARN);
   //   3. one modification -> variable (a SILAC label only when the SILAC call
   //      is not none, else skipped_silac; a Cys alkylation without a fixed Cys
-  //      modification and with >= half the C-containing placements -> fixed,
-  //      WARN); already in the plan -> already_searched;
+  //      modification whose C-containing samples are >= half the run's
+  //      C-containing samples -> fixed, WARN; with #3g's alkylation call given
+  //      (ShiftSettings::alkylation_call) that call decides instead:
+  //      deferred_alkylation_call); already in the plan -> already_searched;
+  //      a called SILAC channel is one unit: all its labels are variable,
+  //      outside max_variable, or none of them (WARN);
   //   4. a combination, no explanation, or a substitution share > 0.5 ->
-  //      Comet offset at the 4-decimal gap (Sage, or a negative offset:
-  //      dropped_engine);
+  //      Comet offset at the 4-decimal gap minus the run's calibration bias
+  //      (the spectra-weighted median of centroid - mass over the
+  //      single-modification peaks; Sage, or a negative offset:
+  //      dropped_engine); a combination of exported SILAC labels only ->
+  //      already_searched;
   //   5. caps: max_variable peaks as variable modifications, max_offsets
   //      offsets (0 is always first and not counted), 15 Comet slots with the
   //      plan's own: the rest dropped_cap;
@@ -156,6 +163,7 @@ namespace FASTag::SearchConfig
     std::uint64_t substitution = 0;  ///< ... interpreted as a substitution (sub:X->Y)
     std::uint64_t localized = 0;     ///< ... with a localized site
     std::uint64_t site_counted = 0;  ///< ... that count for site expansion (siteSampleCounts)
+    std::uint64_t with_c = 0;        ///< ... whose placed peptide holds a C
     std::map<char, std::uint64_t> sites;  ///< residue -> counted samples
     void add(const RowEvidence& o);
   };
@@ -183,6 +191,12 @@ namespace FASTag::SearchConfig
     double site_min_share = 0.2;
     std::uint64_t site_min_count = 10;
     std::uint64_t c_placements = 0;    ///< delta samples whose peptide holds a C
+    /// #3g's alkylation call when the run makes one: "" = none made (rule 3's
+    /// suggested fixed Cys alkylation applies); a reagent's Unimod name
+    /// (Carbamidomethyl, ...) becomes the fixed Cys modification; "none" or
+    /// "no_call" adds no fixed Cys modification. Either way no peak is
+    /// turned into a fixed modification.
+    std::string alkylation_call;
   };
 
   struct ShiftDecision
@@ -206,6 +220,13 @@ namespace FASTag::SearchConfig
     std::vector<std::string> warnings, info;
     int isotope_max = 0;                   ///< largest isotope multiple skipped
     std::size_t variable = 0, offsets = 0, fixed = 0;  ///< exported entries
+    /// Calibration: the spectra-weighted median of centroid - mass over the
+    /// peaks explained by one modification, subtracted from every offset;
+    /// bias_peaks such peaks (0: no correction, residual = the gap window);
+    /// residual the spectra-weighted 90th percentile of their |error - bias|,
+    /// the uncertainty an exported offset keeps.
+    double bias = 0.0, residual = 0.0;
+    std::size_t bias_peaks = 0;
   };
 
   /// Applies the rules above to @p gaps (with @p evidence aligned to its

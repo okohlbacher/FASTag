@@ -258,13 +258,32 @@ namespace
       auto q = shiftPlan();
       auto s = shiftSettings();
       s.c_placements = 100;
-      const auto o2 = SC::shiftsToPlan(fx.result({{57.0215, 60}}), {}, fx.mods, fx.combos, s, q);
+      SC::PeakEvidence c60;
+      c60.spectra = 60;
+      c60.with_c = 60;
+      const auto o2 = SC::shiftsToPlan(fx.result({{57.0215, 60}}), {c60}, fx.mods, fx.combos, s, q);
       check(actionAt(o2, 57.0215) == "fixed" && hasMod(q.fixed, "Carbamidomethyl (C)") && q.variable.empty() && !o2.warnings.empty(),
             "shifts 4: no fixed CAM and a dominant CAM peak -> fixed Carbamidomethyl (C) with a warning");
       auto q2 = shiftPlan();
-      const auto o3 = SC::shiftsToPlan(fx.result({{57.0215, 30}}), {}, fx.mods, fx.combos, s, q2);
+      SC::PeakEvidence c30;
+      c30.spectra = 30;
+      c30.with_c = 30;
+      const auto o3 = SC::shiftsToPlan(fx.result({{57.0215, 30}}), {c30}, fx.mods, fx.combos, s, q2);
       check(actionAt(o3, 57.0215) == "variable" && hasMod(q2.variable, "Carbamidomethyl (C)") && q2.fixed.empty(),
             "shifts 4: a CAM peak below half the C placements is variable");
+      // the numerator is the peak's C-containing samples, not all its spectra
+      // (K, N-term or Gly-isobaric +57 placements do not count)
+      SC::PeakEvidence c10;
+      c10.spectra = 100;
+      c10.with_c = 10;
+      auto q3 = shiftPlan();
+      const auto o4 = SC::shiftsToPlan(fx.result({{57.0215, 100}}), {c10}, fx.mods, fx.combos, s, q3);
+      check(actionAt(o4, 57.0215) == "variable" && q3.fixed.empty(),
+            "shifts 4: 100 spectra but 10 of 100 C-containing placements is not a suggested fixed CAM");
+      SC::PeakEvidence ec;
+      ec.add(c10);
+      ec.add(c30);
+      check(ec.with_c == 40 && ec.spectra == 130, "shifts 4: RowEvidence::add sums the C-containing samples");
     }
     // 5. caps with ties
     {
@@ -421,6 +440,112 @@ namespace
       auto q = shiftPlan({cam});
       const auto o2 = SC::shiftsToPlan(gr, {}, fx.mods, fx.combos, shiftSettings(), q);
       check(actionAt(o2, k8) == "variable" && hasMod(q.variable, "Label:13C(6)15N(2) (K)"), "shifts 13: called SILAC is exported");
+    }
+    // 15. calibration: the offsets lose the run's precursor bias (PXD003531:
+    // every explained peak about +0.007 Da above its mass)
+    {
+      const double b = 0.0072;
+      const double ox = mod("Oxidation (M)")->getDiffMonoMass(), ph = mod("Phospho (S)")->getDiffMonoMass();
+      const double cb = mod("Carbamyl (N-term)")->getDiffMonoMass();
+      auto p = shiftPlan({cam});
+      const auto o = SC::shiftsToPlan(
+          fx.result({{ph + b + 0.001, 510}, {ox + b, 378}, {cb + b - 0.0005, 154}, {ox + ph + b, 42}, {123.4567 + b, 50}}), {},
+          fx.mods, fx.combos, shiftSettings(), p);
+      check(actionAt(o, ox + ph + b) == "offset" && actionAt(o, 123.4567 + b) == "offset" && p.mass_offsets.size() == 2,
+            "shifts 15: the combination and the unexplained peak are offsets");
+      check(o.bias_peaks == 3 && std::abs(o.bias - b) < 1e-3, "shifts 15: the bias is the weighted median single-modification error");
+      // the configured precursor tolerance: 10 ppm at the offset's own mass
+      const double ptol = p.precursor_tolerance * 1e-6 * 100.0;
+      bool within = p.mass_offsets.size() == 2;
+      for (double v : p.mass_offsets)
+        within = within && (std::abs(v - (ox + ph)) <= ptol || std::abs(v - 123.4567) <= ptol);
+      check(within, "shifts 15: each offset lands within 10 ppm at 100 Da of its true mass");
+      check(decisionAt(o, ox + ph + b)->reason.find("calibration bias") != std::string::npos,
+            "shifts 15: the row says it was corrected");
+      bool warned = false;
+      for (const auto& w : o.warnings) warned = warned || w.find("known to +/-") != std::string::npos;
+      check(!warned && o.residual < 0.002, "shifts 15: a small residual gives no tolerance warning");
+      // no single-modification peak: uncorrected, known to the window (0.02 Da > 10 ppm at 1000 Da)
+      auto q = shiftPlan({cam});
+      const auto o2 = SC::shiftsToPlan(fx.result({{123.4567 + b, 50}}), {}, fx.mods, fx.combos, shiftSettings(), q);
+      bool warned2 = false;
+      for (const auto& w : o2.warnings) warned2 = warned2 || w.find("known to +/-") != std::string::npos;
+      check(o2.bias_peaks == 0 && o2.bias == 0.0 && q.mass_offsets.size() == 1 && std::abs(q.mass_offsets[0] - 123.4639) < 1e-9 &&
+                warned2,
+            "shifts 15: no calibration peak leaves the offset uncorrected, with a tolerance warning");
+    }
+    // 16. a called SILAC channel is one unit (PXD014764: triplex, Lys4 was dropped_cap)
+    {
+      const auto idx = [&](const char* name) {
+        for (std::size_t m = 0; m < fx.mods.size(); ++m)
+          if (fx.mods[m].name == name) return static_cast<int>(m);
+        return -1;
+      };
+      const int k4 = idx("Label:2H(4)"), r6 = idx("Label:13C(6)"), k8 = idx("Label:13C(6)15N(2)"), r10 = idx("Label:13C(6)15N(4)");
+      check(k4 >= 0 && r6 >= 0 && k8 >= 0 && r10 >= 0, "shifts 16: the four SILAC labels are in massgap_mods.tsv");
+      const auto m = [&](int i) { return fx.mods[static_cast<std::size_t>(i)].mass; };
+      const auto pk = [&](std::vector<int> ex, std::uint64_t n) {
+        double d = 0;
+        for (int i : ex) d += m(i);
+        return FD::GapPeak{d, n, ex, {}, {}, {}};
+      };
+      FD::GapResult gr;
+      gr.peaks = {pk({k8}, 114), pk({r10}, 101), pk({r6}, 118), pk({k4}, 61), pk({k8, r10}, 39), pk({k4, k4}, 27),
+                  pk({k4, r6}, 41), pk({idx("Oxidation")}, 50)};
+      gr.silac = "SILAC triplex (Lys4/Arg6, Lys8/Arg10)";
+      auto p = shiftPlan({cam});
+      const auto o = SC::shiftsToPlan(gr, {}, fx.mods, fx.combos, shiftSettings(), p);
+      check(hasMod(p.variable, "Label:2H(4) (K)") && hasMod(p.variable, "Label:13C(6) (R)") &&
+                hasMod(p.variable, "Label:13C(6)15N(2) (K)") && hasMod(p.variable, "Label:13C(6)15N(4) (R)"),
+            "shifts 16: all four triplex labels are exported");
+      check(actionAt(o, m(k4)) == "variable" && actionAt(o, m(r6)) == "variable", "shifts 16: Lys4 is not dropped_cap under -shift_max_variable 3");
+      check(actionAt(o, m(k8) + m(r10)) == "already_searched" && actionAt(o, 2 * m(k4)) == "already_searched" &&
+                actionAt(o, m(k4) + m(r6)) == "already_searched" && p.mass_offsets.empty(),
+            "shifts 16: label-only combinations take no offset slot");
+      check(actionAt(o, mod("Oxidation (M)")->getDiffMonoMass()) == "variable" && p.variable.size() == 5,
+            "shifts 16: the labels do not count against -shift_max_variable");
+      // the channel does not fit Comet's slots: none of its labels, with a warning
+      std::vector<const OpenMS::ResidueModification*> many;
+      for (const auto& g : fx.mods)
+      {
+        if (many.size() == 12) break;
+        if (g.name.rfind("Label:", 0) == 0) continue;
+        const auto* r = mod(g.site.c_str());
+        bool dup = false;
+        for (const auto* x : many) dup = dup || x == r;
+        if (!dup) many.push_back(r);
+      }
+      auto q = shiftPlan({cam}, many);
+      const auto o2 = SC::shiftsToPlan(gr, {}, fx.mods, fx.combos, shiftSettings(), q);
+      bool lab = false;
+      for (const auto* v : q.variable) lab = lab || v->getId().rfind("Label:", 0) == 0;
+      bool warned = false;
+      for (const auto& w : o2.warnings) warned = warned || w.find("no label of the channel") != std::string::npos;
+      check(many.size() == 12 && !lab && warned && actionAt(o2, m(k4)) == "dropped_cap" && actionAt(o2, m(k8)) == "dropped_cap",
+            "shifts 16: a channel that does not fit is dropped as a whole, with a warning");
+    }
+    // 17. #3g's alkylation call decides the fixed Cys modification
+    {
+      auto s = shiftSettings();
+      s.c_placements = 100;
+      SC::PeakEvidence c60;
+      c60.spectra = 60;
+      c60.with_c = 60;
+      auto p = shiftPlan();
+      s.alkylation_call = "Carbamidomethyl";
+      const auto o = SC::shiftsToPlan(fx.result({{57.0215, 60}}), {c60}, fx.mods, fx.combos, s, p);
+      check(hasMod(p.fixed, "Carbamidomethyl (C)") && p.fixed.size() == 1 && o.fixed == 1 && actionAt(o, 57.0215) == "variable" &&
+                !hasMod(p.variable, "Carbamidomethyl (C)") && hasMod(p.variable, "Carbamidomethyl (K)"),
+            "shifts 17: a reagent call is the fixed modification; the +57 peak is re-sited");
+      auto q = shiftPlan();
+      s.alkylation_call = "none";
+      const auto o2 = SC::shiftsToPlan(fx.result({{57.0215, 60}}), {c60}, fx.mods, fx.combos, s, q);
+      check(q.fixed.empty() && q.variable.empty() && actionAt(o2, 57.0215) == "deferred_alkylation_call" && !o2.warnings.empty(),
+            "shifts 17: a none call overrides the suggested fixed CAM");
+      auto r = shiftPlan({mod("Propionamide (C)")});
+      s.alkylation_call = "Carbamidomethyl";
+      SC::shiftsToPlan(FD::GapResult{}, {}, fx.mods, fx.combos, s, r);
+      check(r.fixed.size() == 1 && hasMod(r.fixed, "Propionamide (C)"), "shifts 17: a fixed Cys modification given by the user stays");
     }
     // 14. empty gap result
     {

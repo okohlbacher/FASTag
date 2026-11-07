@@ -419,6 +419,7 @@ namespace FASTag::SearchConfig
     substitution += o.substitution;
     localized += o.localized;
     site_counted += o.site_counted;
+    with_c += o.with_c;
     for (const auto& [r, n] : o.sites) sites[r] += n;
   }
 
@@ -504,6 +505,21 @@ namespace FASTag::SearchConfig
         if (x == m || x->getFullId() == m->getFullId()) return true;
       return false;
     }
+    /// The smallest value whose cumulative weight reaches @p q of the total
+    /// (pairs: value, weight > 0; not empty).
+    double weightedQuantile(std::vector<std::pair<double, double>> v, double q)
+    {
+      std::sort(v.begin(), v.end());
+      double total = 0.0;
+      for (const auto& x : v) total += x.second;
+      double acc = 0.0;
+      for (const auto& x : v)
+      {
+        acc += x.second;
+        if (acc >= q * total) return x.first;
+      }
+      return v.back().first;
+    }
   }
 
   ShiftOutcome shiftsToPlan(const FD::GapResult& gaps, const std::vector<PeakEvidence>& evidence,
@@ -511,6 +527,28 @@ namespace FASTag::SearchConfig
                             const ShiftSettings& s, SearchPlan& plan)
   {
     ShiftOutcome out;
+    // #3g's alkylation call decides the fixed Cys modification: a reagent
+    // call becomes it (when the plan has none on C), before the gaps are read
+    // against the fixed chemistry.
+    const bool alk_call = !s.alkylation_call.empty();
+    if (alk_call && s.alkylation_call != "none" && s.alkylation_call != "no_call")
+    {
+      const ResidueModification* fixed_c = nullptr;
+      for (const ResidueModification* F : plan.fixed)
+        if (F->getOrigin() == 'C' && F->getTermSpecificity() == ResidueModification::ANYWHERE) fixed_c = F;
+      const ResidueModification* rm = lookup(s.alkylation_call, "C", ResidueModification::ANYWHERE);
+      if (fixed_c && fixed_c->getId() != s.alkylation_call)
+        out.warnings.push_back("the configuration's fixed " + fixed_c->getFullId() + " differs from the alkylation call " +
+                               s.alkylation_call + "; the given fixed modification is kept");
+      if (!rm)
+        out.warnings.push_back("the alkylation call " + s.alkylation_call + " is not a Cys modification ModificationsDB knows");
+      else if (!fixed_c)
+      {
+        plan.fixed.push_back(rm);
+        ++out.fixed;
+        out.info.push_back("the alkylation call " + s.alkylation_call + " is written as the fixed " + rm->getFullId());
+      }
+    }
     if (gaps.peaks.empty())
     {
       out.info.push_back("no mass-gap peak in the run; no mass shift is exported");
@@ -534,6 +572,73 @@ namespace FASTag::SearchConfig
       for (int m : c) x += (x.empty() ? "" : " + ") + mods[static_cast<std::size_t>(m)].name;
       return x.empty() ? std::string("none") : x;
     };
+
+    // Calibration: a gap peak's centroid carries the run's precursor mass
+    // bias, a modification's mass does not. The bias is the spectra-weighted
+    // median of centroid - mass over the peaks one modification explains, and
+    // comes off every exported offset.
+    {
+      std::vector<std::pair<double, double>> err;
+      for (const FD::GapPeak& pk : gaps.peaks)
+        if (pk.explained_by.size() == 1 && pk.spectra > 0)
+          err.emplace_back(pk.delta - mods[static_cast<std::size_t>(pk.explained_by.front())].mass,
+                           static_cast<double>(pk.spectra));
+      out.bias_peaks = err.size();
+      out.residual = tol;
+      if (!err.empty())
+      {
+        out.bias = weightedQuantile(err, 0.5);
+        for (auto& e : err) e.first = std::fabs(e.first - out.bias);
+        out.residual = weightedQuantile(err, 0.9);
+      }
+    }
+    // A called SILAC channel is one unit: all its labels are variable
+    // modifications, outside -shift_max_variable, or none of them. A partial
+    // channel (the medium R-peptides searched, its K-peptides not) would bias
+    // every channel comparison downstream.
+    std::set<int> silac_set;               // mods indices of the channel's labels
+    int silac_state = 0;                   // 0 not handled, 1 exported, -1 dropped
+    std::string silac_why;
+    if (var_ok && gaps.silac != "none")
+    {
+      std::vector<std::string> want;
+      if (gaps.silac.find("Lys4/Arg6") != std::string::npos) want.insert(want.end(), {"Label:2H(4)", "Label:13C(6)"});
+      if (gaps.silac.find("Lys8/Arg10") != std::string::npos)
+        want.insert(want.end(), {"Label:13C(6)15N(2)", "Label:13C(6)15N(4)"});
+      std::vector<const ResidueModification*> add;
+      std::string missing;
+      for (const std::string& w : want)
+      {
+        const ResidueModification* rm = nullptr;
+        for (std::size_t m = 0; m < mods.size(); ++m)
+          if (mods[m].name == w)
+          {
+            silac_set.insert(static_cast<int>(m));
+            if (!rm) rm = lookupId(mods[m].site);
+          }
+        if (!rm) missing += (missing.empty() ? "" : ", ") + w;
+        else if (!listed(plan.variable, rm) && !listed(plan.fixed, rm) && !listed(add, rm)) add.push_back(rm);
+      }
+      if (!want.empty())
+      {
+        if (!missing.empty())
+          silac_why = "the modification list lacks " + missing;
+        else if (comet && plan.variable.size() + add.size() > 15)
+          silac_why = "Comet's 15 variable modification slots cannot hold the channel";
+        if (silac_why.empty())
+        {
+          silac_state = 1;
+          plan.variable.insert(plan.variable.end(), add.begin(), add.end());
+          out.variable += add.size();
+        }
+        else
+        {
+          silac_state = -1;
+          out.warnings.push_back("the " + gaps.silac + " call is not exported: " + silac_why +
+                                 "; no label of the channel is searched");
+        }
+      }
+    }
 
     out.decisions.resize(gaps.peaks.size());
     std::vector<std::size_t> order(gaps.peaks.size());
@@ -693,12 +798,47 @@ namespace FASTag::SearchConfig
           D.reason = gm.name + " without a SILAC call";
           continue;
         }
+        else if (silac_state != 0 && silac_set.count(X.front()))
+        {
+          D.mod_id = rm->getFullId();
+          D.sites = siteOf(*rm);
+          D.exported = rm->getDiffMonoMass();
+          if (silac_state > 0)
+          {
+            D.action = "variable";
+            D.reason = label_note + gm.name + ", a label of the called " + gaps.silac +
+                       " channel, exported with the whole channel outside -shift_max_variable";
+          }
+          else
+          {
+            D.action = "dropped_cap";
+            D.reason = "the " + gaps.silac + " channel is dropped as a whole: " + silac_why;
+          }
+          continue;
+        }
         else
         {
           why = label_note + gm.name;
           bool fixed_c = false;
           for (const ResidueModification* F : plan.fixed) fixed_c = fixed_c || F->getOrigin() == 'C';
-          if (var_ok && isCysAlkylation(*rm) && !fixed_c && s.c_placements > 0 && 2 * pk.spectra >= s.c_placements)
+          // Dominance: the peak's C-containing samples against the run's.
+          const bool dominant = isCysAlkylation(*rm) && !fixed_c && s.c_placements > 0 && 2 * ev.with_c >= s.c_placements;
+          if (var_ok && dominant && alk_call)
+          {
+            D.action = "deferred_alkylation_call";
+            D.mod_id = rm->getFullId();
+            D.sites = siteOf(*rm);
+            D.exported = rm->getDiffMonoMass();
+            D.reason = std::to_string(ev.with_c) + " of " + std::to_string(s.c_placements) +
+                       " C-containing placements suggest a fixed " + rm->getFullId() + "; the alkylation call (" +
+                       s.alkylation_call + ") decides the Cys modification";
+            out.warnings.push_back("mass-gap peak " + std::to_string(D.peak) + " (" + rm->getFullId() + ", " +
+                                   std::to_string(ev.with_c) + " of " + std::to_string(s.c_placements) +
+                                   " C-containing placements) suggests a fixed " + rm->getFullId() +
+                                   ", but the alkylation call is " + s.alkylation_call + "; it is not exported");
+            continue;
+          }
+          if (var_ok && dominant)
           {
             plan.fixed.push_back(rm);
             ++out.fixed;
@@ -706,10 +846,10 @@ namespace FASTag::SearchConfig
             D.mod_id = rm->getFullId();
             D.sites = siteOf(*rm);
             D.exported = rm->getDiffMonoMass();
-            D.reason = std::to_string(pk.spectra) + " of " + std::to_string(s.c_placements) +
+            D.reason = std::to_string(ev.with_c) + " of " + std::to_string(s.c_placements) +
                        " C-containing placements: the run looks alkylated";
             out.warnings.push_back("mass-gap peak " + std::to_string(D.peak) + " (" + rm->getFullId() + ", " +
-                                   std::to_string(pk.spectra) + " of " + std::to_string(s.c_placements) +
+                                   std::to_string(ev.with_c) + " of " + std::to_string(s.c_placements) +
                                    " C-containing placements) suggests a fixed " + rm->getFullId() +
                                    "; it is written to -search_config_out as a fixed modification");
             continue;
@@ -777,8 +917,17 @@ namespace FASTag::SearchConfig
         D.reason = (why.empty() ? std::string("an offset") : why) + "; -search_shifts variable exports no offsets";
         continue;
       }
-      const double value = round4(base);
+      if (silac_state > 0 && why == "combination" && X.size() >= 2 &&
+          std::all_of(X.begin(), X.end(), [&](int m) { return silac_set.count(m) > 0; }))
+      {
+        D.action = "already_searched";
+        D.reason = "a combination of the exported " + gaps.silac + " labels: the variable labels search it";
+        continue;
+      }
+      const double value = round4(base - out.bias);
       D.exported = value;
+      const std::string calib = out.bias_peaks ? "; centroid " + f4(base) + " minus the calibration bias " + f4(out.bias)
+                                               : std::string();
       if (!comet)
       {
         D.action = "dropped_engine";
@@ -807,7 +956,21 @@ namespace FASTag::SearchConfig
       ++n_off;
       ++out.offsets;
       D.action = "offset";
-      D.reason = why.empty() ? label_note + "an offset" : label_note + why;
+      D.reason = (why.empty() ? label_note + "an offset" : label_note + why) + calib;
+    }
+    if (out.offsets > 0)
+    {
+      // An offset is known to the residual (or, uncorrected, to the window);
+      // Comet's precursor window must hold that.
+      const double ptol = plan.precursor_ppm ? plan.precursor_tolerance * 1e-3 : plan.precursor_tolerance;
+      if (out.residual > ptol)
+        out.warnings.push_back("the exported mass offsets are known to +/- " + f4(out.residual) + " Da (" +
+                               (out.bias_peaks ? std::to_string(out.bias_peaks) + " single-modification peaks after the "
+                                                 "calibration bias " + f4(out.bias) + " Da"
+                                               : std::string("no single-modification peak to calibrate on: the gap window")) +
+                               "), more than the precursor tolerance of " + f4(ptol) +
+                               " Da (at 1000 Da): Comet can miss the shifted peptides; widen "
+                               "-search_precursor_tolerance");
     }
     if (out.isotope_max > plan.isotope_errors)
     {

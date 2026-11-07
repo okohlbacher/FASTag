@@ -490,7 +490,7 @@ MGF→mzML direction is exact.
 | `-search_isotope_errors <n>` | 0 | Precursor isotope errors 0..n (at most 3) |
 | `-search_decoy_prefix <s>` | `rev_` (Sage) / `DECOY_` (Comet) | Prefix of the decoys the engine generates |
 | `-search_shifts <none\|variable\|offsets\|both>` | none | Experimental (1.12): add the run's mass-gap peaks (the `-massgap_out` peaks, computed without writing it) to `-search_config_out` as variable modifications or Comet mass offsets (see Mass shifts as search configuration). Candidates for an FDR-controlling engine, NOT identifications. Needs `-search_config_out` and a database; `offsets` needs `-search_engine comet` |
-| `-search_shifts_out <file>` | none | With `-search_shifts`: one row per mass-gap peak with its explanation and the action taken (`variable`, `offset`, `fixed`, `skipped_isotope`, `expected_label`, `label_incomplete`, `fixed_mod_questionable`, `skipped_silac`, `already_searched`, `dropped_cap`, `dropped_engine`, `dropped_mode`) |
+| `-search_shifts_out <file>` | none | With `-search_shifts`: one row per mass-gap peak with its explanation and the action taken (`variable`, `offset`, `fixed`, `skipped_isotope`, `expected_label`, `label_incomplete`, `fixed_mod_questionable`, `skipped_silac`, `deferred_alkylation_call`, `already_searched`, `dropped_cap`, `dropped_engine`, `dropped_mode`) |
 | `-shift_max_variable <n>` / `-shift_max_offsets <n>` | 3 / 10 | Advanced: gap peaks exported as variable modifications / as offsets besides 0, most spectra first |
 | `-shift_expand_sites` | off | Advanced, unvalidated: add the residues `-recon_localize` places a variable shift on to that modification (needs `-recon_localize`) |
 | `-shift_site_min_share <f>` / `-shift_site_min_count <n>` / `-shift_site_min_ions <n>` | 0.2 / 10 / 2 | Advanced: share and count of a peak's localized samples a residue needs for `-shift_expand_sites`; b/y ions a sample needs to count |
@@ -684,9 +684,14 @@ again becomes a variable modification on its other sites (overalkylation);
 one modification becomes a variable modification (at most
 `-shift_max_variable`); combinations, unexplained and substitution-dominated
 peaks become Comet mass offsets (Sage has none; negative offsets are left
-out; 0 is always first). Without a fixed Cys modification, a Cys alkylation on
-at least half the C-containing placements is written as a fixed modification,
-with a WARN. `-search_shifts_out` lists every decision. These are candidates
+out; 0 is always first), corrected by the run's calibration bias (the
+spectra-weighted median error of the single-modification peaks, in the
+`-search_shifts_out` header; a WARN when the remaining uncertainty exceeds the
+precursor tolerance). A called SILAC channel is exported as a whole (all its
+labels, outside `-shift_max_variable`) or not at all, with a WARN. Without a
+fixed Cys modification, a Cys alkylation on at least half the C-containing
+placements is written as a fixed modification, with a WARN; this rule does not
+yet read `-alkylation_out`'s call. `-search_shifts_out` lists every decision. These are candidates
 for an FDR-controlling engine, not identifications: whether they improve
 identifications is not yet validated. Offsets need a narrow precursor
 tolerance, which the configuration sets explicitly. See

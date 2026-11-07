@@ -4053,7 +4053,11 @@ protected:
                 ++e.site_counted;
                 ++e.sites[d.loc_residue];
               }
-              if (d.has_c) ++shift_c_samples;
+              if (d.has_c)
+              {
+                ++shift_c_samples;
+                ++e.with_c;
+              }
             }
           }
         }
@@ -4171,6 +4175,11 @@ protected:
             FASTag::appendShortest(t, v);
             return t;
           };
+          const auto f4 = [](double v) {
+            std::string t;
+            FASTag::appendNum(t, v, std::chars_format::fixed, 4);
+            return t;
+          };
           const std::vector<std::string> header = {
               "FASTag " FASTAG_VERSION " mass shifts for -search_config_out: candidates for an FDR-controlling "
               "engine, NOT identifications.",
@@ -4182,7 +4191,14 @@ protected:
                   (shift_settings.expand_sites ? "yes" : "no"),
               "gap peaks: " + std::to_string(gap_result.peaks.size()) + "; exported: " +
                   std::to_string(shifts.variable) + " variable, " + std::to_string(shifts.offsets) + " offsets, " +
-                  std::to_string(shifts.fixed) + " fixed; isotope errors 0.." + std::to_string(sl_plan.isotope_errors)};
+                  std::to_string(shifts.fixed) + " fixed; isotope errors 0.." + std::to_string(sl_plan.isotope_errors),
+              shifts.bias_peaks
+                  ? "calibration: offsets corrected by the bias " + f4(shifts.bias) +
+                        " Da, the spectra-weighted median of centroid - mass over " + std::to_string(shifts.bias_peaks) +
+                        " single-modification peaks; residual " + f4(shifts.residual) +
+                        " Da (90 % of their spectra)"
+                  : "calibration: no single-modification peak; offsets uncorrected, known to the window " +
+                        shortest(gap_settings.window) + " Da"};
           std::string err;
           if (!FASTag::SearchConfig::writeShiftDecisions(search_shifts_out, header, shifts.decisions, &err))
           {
