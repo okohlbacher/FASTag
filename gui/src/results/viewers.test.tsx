@@ -157,6 +157,78 @@ describe('DataTable', () => {
   })
 })
 
+describe('DataTable: no re-sort and no page scroll on a move (review fixes)', () => {
+  it('a re-render of its caller or a move of the active row does not sort all rows again', async () => {
+    const key = vi.fn((i: number) => (i * 7919) % 1000)
+    const ids = Uint32Array.from({ length: 500 }, (_, i) => i)
+    // Like every caller: the columns are a new array of new objects each
+    // render, and the caller re-renders for its own reasons (the chart's
+    // hover above its table view, a sibling table that finished loading).
+    function Host(): JSX.Element {
+      const [, setHover] = useState(0)
+      const cols: Column[] = [{ id: 'k', label: 'Key', num: true, text: (i) => String(i), key }]
+      return (
+        <>
+          <button type="button" onClick={() => setHover((h) => h + 1)}>
+            hover
+          </button>
+          <DataTable label="Keys" columns={cols} ids={ids} total={500} sort={{ column: 'k', desc: false }} />
+        </>
+      )
+    }
+    render(<Host />)
+    const sorted = key.mock.calls.length
+    expect(sorted).toBe(500)
+    const grid = screen.getByRole('grid', { name: 'Keys' })
+    for (const k of ['ArrowDown', 'ArrowDown', 'PageDown', 'End', 'Home']) {
+      await act(async () => void fireEvent.keyDown(grid, { key: k }))
+      await click(screen.getByRole('button', { name: 'hover' }))
+    }
+    expect(key.mock.calls.length).toBe(sorted)
+    // A new sort does sort.
+    await click(screen.getByRole('button', { name: /^Key/ }))
+    expect(key.mock.calls.length).toBe(2 * sorted)
+  })
+
+  it('scrolls only its own box, and only when the keyboard moved the row: not on mount or a filter change', async () => {
+    const mock = installMockBridge()
+    mock.reportFiles = { [P.recon]: humanRecon, [P.delta]: humanDelta }
+    const scroll = vi.fn()
+    const proto = Element.prototype as { scrollIntoView?: unknown }
+    proto.scrollIntoView = scroll
+    // jsdom lays nothing out: a 100 px box under a 20 px header, rows of 20 px
+    // placed by their aria-rowindex.
+    const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      const box = (top: number, h: number): DOMRect => ({ top, bottom: top + h, height: h, left: 0, right: 0, width: 0, x: 0, y: top, toJSON: () => ({}) })
+      if (this.classList.contains('dt-wrap')) return box(0, 100)
+      if (this.tagName === 'THEAD') return box(0, 20)
+      const idx = Number(this.getAttribute('aria-rowindex'))
+      if (this.tagName === 'TR' && idx) return box((idx - 1) * 20 - (this.closest('.dt-wrap')?.scrollTop ?? 0), 20)
+      return box(0, 0)
+    })
+    try {
+      render(<ReconView massgap={human()} tables={{ recon: P.recon, delta: P.delta }} onOpen={vi.fn()} />)
+      await flush()
+      const grid = screen.getByRole('grid', { name: 'Placements' })
+      const wrap = grid.closest('.dt-wrap') as HTMLElement
+      expect(scroll).not.toHaveBeenCalled()
+      expect(wrap.scrollTop).toBe(0)
+      await act(async () => void fireEvent.change(screen.getByRole('searchbox', { name: 'Contains' }), { target: { value: 'HUMAN' } }))
+      await click(screen.getByRole('checkbox', { name: /One flank off/ }))
+      expect(wrap.scrollTop).toBe(0)
+      // Rows 1-4 fit under the header; row 5 needs 20 px more.
+      for (let k = 0; k < 4; k++) await act(async () => void fireEvent.keyDown(grid, { key: 'ArrowDown' }))
+      expect(wrap.scrollTop).toBe(20)
+      await act(async () => void fireEvent.keyDown(grid, { key: 'Home' }))
+      expect(wrap.scrollTop).toBe(0)
+      expect(scroll).not.toHaveBeenCalled()
+    } finally {
+      rect.mockRestore()
+      delete proto.scrollIntoView
+    }
+  })
+})
+
 describe('ReconView', () => {
   it('shows the human run: placed spectra, placements, the chart and the placement table', async () => {
     const mock = installMockBridge()

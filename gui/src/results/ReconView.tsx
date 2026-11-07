@@ -11,7 +11,7 @@ import { HelpLink } from '../help/HelpLink'
 import { IconWarning } from '../icons'
 import DataTable, { type Column } from './DataTable'
 import MassGapChart, { type GapBin } from './MassGapChart'
-import { filterRecon, type DeltaTable, type ReconFilter, type ReconIdTable, type ReconTable, type TablePaths } from './tables'
+import { filterRecon, type DeltaTable, type ReconFilter, type ReconIdTable, type ReconTable, type TableGen, type TablePaths } from './tables'
 import { useTable } from './useTable'
 import { FASTA_EXTENSION, type TileAction } from './overview'
 import './viewers.css'
@@ -25,6 +25,10 @@ export interface ReconViewProps {
   /// The -massgap_out report of the run shown, if any.
   massgap: Report | null
   tables: TablePaths
+  /// How often each table was opened (Reports.gen): a new count re-reads it.
+  gen?: TableGen
+  /// Why another run's files were closed when a table opened.
+  notice?: string
   /// "Choose a FASTA and write these reports" and the run; null: not offered.
   action?: { label: string; run(): void; disabled: boolean } | null
   onOpen(): void
@@ -57,10 +61,10 @@ const DATASET_LABEL: Record<Dataset, string> = {
 
 const signed = (v: number, d = 4): string => (Number.isNaN(v) ? '' : v > 0 ? `+${v.toFixed(d)}` : v < 0 ? `−${(-v).toFixed(d)}` : (0).toFixed(d))
 
-export default function ReconView({ massgap, tables, action, onOpen }: ReconViewProps): JSX.Element {
-  const recon = useTable(tables.recon, 'recon')
-  const delta = useTable(tables.delta, 'delta')
-  const ids = useTable(tables.reconIds, 'reconIds')
+export default function ReconView({ massgap, tables, gen = {}, notice, action, onOpen }: ReconViewProps): JSX.Element {
+  const recon = useTable(tables.recon, 'recon', gen.recon)
+  const delta = useTable(tables.delta, 'delta', gen.delta)
+  const ids = useTable(tables.reconIds, 'reconIds', gen.reconIds)
   const errors = [recon.error, delta.error, ids.error].filter((e): e is string => !!e)
   const loading = recon.loading || delta.loading || ids.loading
 
@@ -115,6 +119,11 @@ export default function ReconView({ massgap, tables, action, onOpen }: ReconView
           </code>
         ))}
       </div>
+      {notice && (
+        <p className="caveat" role="status">
+          {notice}
+        </p>
+      )}
       {errors.map((e) => (
         <p className="warn" key={e} role="alert">
           {e}

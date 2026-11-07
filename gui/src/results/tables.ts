@@ -19,6 +19,8 @@ export type TableKind = 'recon' | 'delta' | 'glyco' | 'reconIds'
 
 /// The table files of one run (or opened by the user), by kind.
 export type TablePaths = Partial<Record<TableKind, string>>
+/// A read count per table (Reports.gen): a new one re-reads the file.
+export type TableGen = Partial<Record<TableKind, number>>
 
 interface Base {
   path: string

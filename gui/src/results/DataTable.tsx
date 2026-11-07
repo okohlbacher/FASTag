@@ -26,6 +26,9 @@ const JUMP = 20
 export interface DataTableProps {
   /// The accessible name of the table.
   label: string
+  /// The columns may be rebuilt on every render, but must read the data
+  /// that @p ids indexes: the sorted order is kept until @p ids or the sort
+  /// changes (a new array of the same columns does not sort again).
   columns: Column[]
   /// The rows to show (after the filters), as row ids.
   ids: ArrayLike<number>
@@ -69,8 +72,20 @@ export default function DataTable({ label, columns, ids, total, empty, sort: ini
   const [active, setActive] = useState(0)
   const base = useId()
   const gridRef = useRef<HTMLTableElement>(null)
-  const col = columns.find((c) => c.id === sort?.column)
-  const order = useMemo(() => sortIds(ids, col, !!sort?.desc), [ids, col, sort?.desc])
+  const wrapRef = useRef<HTMLDivElement>(null)
+  // Set when the keyboard, a page button or a click moved the active row:
+  // only then is the row scrolled into the table's view.
+  const moved = useRef(false)
+  // The callers build their columns anew on each render; keyed on the
+  // column id, moving the active row does not sort all rows again.
+  const columnsNow = useRef(columns)
+  columnsNow.current = columns
+  const sortColumn = sort?.column
+  const sortDesc = !!sort?.desc
+  const order = useMemo(
+    () => sortIds(ids, columnsNow.current.find((c) => c.id === sortColumn), sortDesc),
+    [ids, sortColumn, sortDesc]
+  )
   const n = order.length
   // A new filter or sort starts at the first row.
   useEffect(() => setActive(0), [ids, sort])
@@ -79,14 +94,30 @@ export default function DataTable({ label, columns, ids, total, empty, sort: ini
   const shown = order.slice(start, start + PAGE)
   const rowId = (j: number): string => `${base}-r${j}`
 
+  // Bring the active row into view within the table's own scroll box, and
+  // only after the user moved it there: never on mount, a new filter or any
+  // other render, and never by scrolling the page around the table
+  // (scrollIntoView would scroll every ancestor too).
   useEffect(() => {
+    if (!moved.current) return
+    moved.current = false
+    const wrap = wrapRef.current
     const el = document.getElementById(rowId(at))
-    el?.scrollIntoView?.({ block: 'nearest' })
-  })
+    if (!wrap || !el) return
+    const w = wrap.getBoundingClientRect()
+    const r = el.getBoundingClientRect()
+    // The sticky header covers the top of the box.
+    const head = wrap.querySelector('thead')?.getBoundingClientRect().height ?? 0
+    if (r.top < w.top + head) wrap.scrollTop -= w.top + head - r.top
+    else if (r.bottom > w.bottom) wrap.scrollTop += r.bottom - w.bottom
+  }, [at, start])
 
   function move(to: number): void {
     if (n === 0) return
-    setActive(Math.max(0, Math.min(n - 1, to)))
+    const j = Math.max(0, Math.min(n - 1, to))
+    // A move that stays put leaves no flag for a later render to act on.
+    moved.current = j !== at
+    setActive(j)
   }
   function onKey(e: KeyboardEvent<HTMLTableElement>): void {
     const to =
@@ -126,7 +157,7 @@ export default function DataTable({ label, columns, ids, total, empty, sort: ini
       {n === 0 ? (
         <div className="dt-empty">{empty ?? 'No rows match.'}</div>
       ) : (
-        <div className="dt-wrap">
+        <div className="dt-wrap" ref={wrapRef}>
           <table
             ref={gridRef}
             className="taxa dt"
@@ -174,8 +205,9 @@ export default function DataTable({ label, columns, ids, total, empty, sort: ini
                     aria-selected={on}
                     className={on ? 'active' : undefined}
                     onClick={() => {
+                      moved.current = j !== at
                       setActive(j)
-                      gridRef.current?.focus()
+                      gridRef.current?.focus({ preventScroll: true })
                     }}
                   >
                     {columns.map((c) => (

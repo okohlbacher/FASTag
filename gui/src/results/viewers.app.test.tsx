@@ -2,10 +2,10 @@
 // recon and Glyco tabs through the App's run and open-report flows, read
 // only when their tab is shown.
 
-import { act, screen } from '@testing-library/react'
+import { act, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
-import { click, goTo, pickSingle, renderApp, runButton } from '../testing/render'
+import { click, flush, goTo, pickSingle, renderApp, runButton } from '../testing/render'
 import { applyLastUsed } from '../testing/lastUsed'
 import humanRecon from '../fixtures/cli/v112-pxd014764-delta-ext3/run.recon.tsv?raw'
 import humanDelta from '../fixtures/cli/v112-pxd014764-delta-ext3/run.delta.tsv?raw'
@@ -69,5 +69,87 @@ describe('P4c viewers in the app', () => {
     await click(screen.getByRole('tab', { name: 'Glyco' }))
     expect((await screen.findByRole('grid', { name: 'Glyco spectra' })).getAttribute('aria-rowcount')).toBe('45')
     expect(mock.reportCalls).toContain('/r/a.tags.glyco.tsv')
+  })
+  // Review fix: a table of another run must not mix with the run shown.
+  it("opening B's delta.tsv while A's massgap is shown closes A's report, with a note", async () => {
+    const mock = installMockBridge()
+    mock.reportFiles = { '/a/run.massgap.tsv': humanMassgap, '/b/run.delta.tsv': humanDelta }
+    mock.nextPickReport = '/a/run.massgap.tsv'
+    await renderApp(mock)
+    await goTo('results')
+    await click(screen.getByRole('button', { name: 'Open a digest, label or mass-gap report…' }))
+    await click(await screen.findByRole('tab', { name: 'Mass gaps & recon' }))
+    expect(await screen.findByText('run.massgap.tsv', { selector: 'code' })).toBeTruthy()
+    mock.nextPickReport = '/b/run.delta.tsv'
+    await click(screen.getByRole('button', { name: 'Open report…' }))
+    await flush()
+    expect(screen.getByRole('tab', { name: 'Mass gaps & recon' }).getAttribute('aria-selected')).toBe('true')
+    const view = document.querySelector('.recon-view') as HTMLElement
+    // Only B's file is named as a source; A's massgap (and its Placed spectra) is gone.
+    expect(within(view).getAllByText(/\.tsv$/, { selector: 'code.src' }).map((c) => c.getAttribute('title'))).toEqual(['/b/run.delta.tsv'])
+    expect(within(view).getByRole('status', { name: '' }).textContent).toBe('run.delta.tsv is from another run; /a/run.massgap.tsv was closed.')
+    // The note is where report notes are, too.
+    await click(screen.getByRole('tab', { name: 'Digest' }))
+    expect(screen.getByText(/run\.delta\.tsv is from another run; \/a\/run\.massgap\.tsv was closed\./)).toBeTruthy()
+  })
+
+  it("a table of the same run (folder and stem) joins A's report without a note", async () => {
+    const mock = installMockBridge()
+    mock.reportFiles = { '/a/run.massgap.tsv': humanMassgap, '/a/run.delta.tsv': humanDelta, '/a/other.recon.tsv': humanRecon }
+    mock.nextPickReport = '/a/run.massgap.tsv'
+    await renderApp(mock)
+    await goTo('results')
+    await click(screen.getByRole('button', { name: 'Open a digest, label or mass-gap report…' }))
+    mock.nextPickReport = '/a/run.delta.tsv'
+    await click(screen.getByRole('button', { name: 'Open report…' }))
+    await flush()
+    const srcs = (): (string | null)[] => Array.from(document.querySelectorAll('.recon-view code.src')).map((c) => c.getAttribute('title'))
+    expect(srcs()).toEqual(['/a/run.massgap.tsv', '/a/run.delta.tsv'])
+    expect(document.querySelector('.recon-view .caveat[role="status"]')).toBeNull()
+    // Another stem in the same folder is another run.
+    mock.nextPickReport = '/a/other.recon.tsv'
+    await click(screen.getByRole('button', { name: 'Open report…' }))
+    await flush()
+    expect(srcs()).toEqual(['/a/other.recon.tsv'])
+    expect(document.querySelector('.recon-view .caveat[role="status"]')?.textContent).toBe(
+      'other.recon.tsv is from another run; /a/run.massgap.tsv, /a/run.delta.tsv were closed.'
+    )
+  })
+
+  it("dropping B's recon then B's massgap while A is shown keeps B's recon table", async () => {
+    const mock = installMockBridge()
+    mock.reportFiles = {
+      '/a/run.massgap.tsv': humanMassgap,
+      '/a/run.delta.tsv': humanDelta,
+      '/b/run.recon.tsv': humanRecon,
+      '/b/run.massgap.tsv': humanMassgap
+    }
+    await renderApp(mock)
+    await act(async () => mock.emitDrop({ reports: [{ kind: 'massgap', path: '/a/run.massgap.tsv' }, { kind: 'delta', path: '/a/run.delta.tsv' }] }))
+    await flush()
+    await click(await screen.findByRole('tab', { name: 'Mass gaps & recon' }))
+    const srcs = (): (string | null)[] => Array.from(document.querySelectorAll('.recon-view code.src')).map((c) => c.getAttribute('title'))
+    expect(srcs()).toEqual(['/a/run.massgap.tsv', '/a/run.delta.tsv'])
+    await act(async () => mock.emitDrop({ reports: [{ kind: 'recon', path: '/b/run.recon.tsv' }, { kind: 'massgap', path: '/b/run.massgap.tsv' }] }))
+    await flush()
+    await click(screen.getByRole('tab', { name: 'Mass gaps & recon' }))
+    expect(srcs()).toEqual(['/b/run.massgap.tsv', '/b/run.recon.tsv'])
+    expect((await screen.findByRole('grid', { name: 'Placements' })).getAttribute('aria-rowcount')).toBe('4707')
+  })
+
+  it('opening the same recon.tsv again reads it again', async () => {
+    const mock = installMockBridge()
+    mock.reportFiles = { '/r/run.recon.tsv': humanRecon }
+    mock.nextPickReport = '/r/run.recon.tsv'
+    await renderApp(mock)
+    await goTo('results')
+    await click(screen.getByRole('button', { name: 'Open a digest, label or mass-gap report…' }))
+    expect((await screen.findByRole('grid', { name: 'Placements' })).getAttribute('aria-rowcount')).toBe('4707')
+    // The CLI wrote the file again: its header and the first ten rows.
+    mock.reportFiles = { '/r/run.recon.tsv': humanRecon.split('\n').slice(0, 11).join('\n') + '\n' }
+    mock.nextPickReport = '/r/run.recon.tsv'
+    await click(screen.getByRole('button', { name: 'Open report…' }))
+    await flush()
+    expect((await screen.findByRole('grid', { name: 'Placements' })).getAttribute('aria-rowcount')).toBe('11')
   })
 })

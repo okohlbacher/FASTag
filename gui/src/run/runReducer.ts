@@ -19,7 +19,7 @@ import { baseName, type Report } from '../digestReport'
 import { addJobs, renameJobs, type BatchJob } from './batch'
 import type { Refusal } from '../inspector/checks'
 import { createLogStore, type LogStore } from './logStore'
-import type { TablePaths } from '../results/tables'
+import type { TableGen, TablePaths } from '../results/tables'
 
 // A run that failed: what failed, and FASTag's own words for why (each failed
 // job of a batch has its own), plus the command line to reproduce it.
@@ -84,6 +84,12 @@ export interface Reports {
   // The wide tables of the run shown or opened (P4c: recon, delta, the
   // mzTab ids, glyco), read by their viewers when shown.
   tables?: TablePaths
+  // How often each table was opened or written by a run: its viewer reads
+  // the file again on each one, even at the same path.
+  gen?: TableGen
+  // Why the tables or reports of another run were closed when a table
+  // opened, shown above the viewers.
+  notice?: string
 }
 
 export type JobStatus = 'queued' | 'running' | 'ok' | 'failed' | 'cancelled'

@@ -228,3 +228,56 @@ test('a dropped recon table and glyco report open in their tabs', async ({ page 
   // No "no tab shows" note for them.
   await expect(page.getByText(/No tab shows/)).toHaveCount(0)
 })
+
+// Review fix: the tables scroll only their own box, and only when the
+// keyboard moves the active row; opening a tab or filtering leaves the page
+// where it is (the heading, the low-placed warning and the chart in view).
+test('opening Mass gaps & recon or Glyco, or filtering, does not scroll the page; the keyboard scrolls only the table', async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 760 })
+  await runOn(page, 'gate-recon')
+  const outer = page.locator('.tablewrap')
+  const top = (l: ReturnType<Page['locator']>): Promise<number> => l.evaluate((e) => e.scrollTop)
+  await page.getByRole('tab', { name: 'Mass gaps & recon' }).click()
+  const grid = page.getByRole('grid', { name: 'Placements' })
+  await expect(grid).toBeVisible()
+  // The view is taller than the window: a page scroll would be possible.
+  expect(await outer.evaluate((e) => e.scrollHeight > e.clientHeight)).toBe(true)
+  expect(await top(outer)).toBe(0)
+  // A filter change re-renders the table, and the page stays. (Set from a
+  // script: Playwright's own actions and the caret of a typed input scroll
+  // their element into view, which is not the table's doing.)
+  const setFilter = (v: string): Promise<void> =>
+    page.getByRole('combobox', { name: 'Interpretation' }).evaluate((e: HTMLSelectElement, to) => {
+      e.value = to
+      e.dispatchEvent(new Event('change', { bubbles: true }))
+    }, v)
+  await setFilter('sub:')
+  await expect(page.locator('.dt-count').first()).toHaveText(/ of 4,706 rows/)
+  expect(await top(outer)).toBe(0)
+  await setFilter('*')
+  await expect(page.locator('.dt-count').first()).toHaveText(/^4,706 rows/)
+  expect(await top(outer)).toBe(0)
+  // In the table: Page Down moves the row and its box, not the page around it.
+  await grid.focus()
+  const before = await top(outer)
+  const wrap = page.locator('.recon-tables .dt-wrap')
+  await page.keyboard.press('PageDown')
+  await page.keyboard.press('PageDown')
+  await expect(grid.locator('tr[aria-selected="true"]')).toHaveAttribute('aria-rowindex', '42')
+  expect(await top(wrap)).toBeGreaterThan(0)
+  const row = await grid.locator('tr[aria-selected="true"]').boundingBox()
+  const box = await wrap.boundingBox()
+  expect(row!.y + row!.height).toBeLessThanOrEqual(box!.y + box!.height + 1)
+  expect(await top(outer)).toBe(before)
+  await page.keyboard.press('Home')
+  expect(await top(outer)).toBe(before)
+  // The tabs share one scroll box (.tablewrap keeps its offset across a
+  // tab switch); start Glyco from the top.
+  await outer.evaluate((e) => (e.scrollTop = 0))
+  await page.getByRole('tab', { name: 'Glyco' }).click()
+  await expect(page.getByRole('grid', { name: 'Glyco spectra' })).toBeVisible()
+  expect(await top(page.locator('.tablewrap'))).toBe(0)
+  await page.getByRole('checkbox', { name: 'Flagged only' }).evaluate((e: HTMLElement) => e.click())
+  await expect(page.getByRole('grid', { name: 'Glyco spectra' })).not.toHaveAttribute('aria-rowcount', '45')
+  expect(await top(page.locator('.tablewrap'))).toBe(0)
+})

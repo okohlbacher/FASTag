@@ -161,11 +161,16 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
           </div>
         ) : tab === 'recon' ? (
           <div className="tablewrap">
-            <ReconView massgap={massgap} tables={tables} action={p.reconAction} onOpen={p.openReport} />
+            <ReconView massgap={massgap} tables={tables} gen={reports.gen} notice={reports.notice} action={p.reconAction} onOpen={p.openReport} />
           </div>
         ) : tab === 'glyco' && tables.glyco ? (
           <div className="tablewrap">
-            <GlycoTable key={tables.glyco} path={tables.glyco} />
+            {reports.notice && (
+              <p className="caveat" role="status">
+                {reports.notice}
+              </p>
+            )}
+            <GlycoTable key={`${reports.gen?.glyco ?? 0}:${tables.glyco}`} path={tables.glyco} />
           </div>
         ) : tab === 'digest' ? (
           <div className="tablewrap">
