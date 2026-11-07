@@ -583,6 +583,11 @@ button.drawer-toggle:hover:not(:disabled) { background: var(--ground); border: n
   color: var(--ink);
 }
 .log[hidden] { display: none; }
+/* The log window in chunks of LogDrawer.tsx LOG_CHUNK (50) lines. Those
+   before the last lines skip layout while off screen (content-visibility),
+   sized by 50 lines until first laid out, then by their last size. */
+.log .log-chunk { display: block; contain-intrinsic-size: auto 62em; contain-intrinsic-size: auto 50lh; }
+.log .log-chunk.far { content-visibility: auto; }
 
 /* ---- Tables (species, digest) ----------------------------------------------- */
 table { border-collapse: collapse; width: 100%; font-size: var(--text-sm); }
