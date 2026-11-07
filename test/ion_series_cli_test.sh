@@ -181,7 +181,9 @@ for f in base_src:base etd_all:etd_all ethcd_all:ethcd filter_etd:filter; do
   runb "by_$ref" "$in" 2 -ion_series by
   cmp -s "$TMP/$ref.tsv" "$TMP/by_$ref.tsv" || fail "$ref: -ion_series by differs from the option absent"
   cmp -s "$TMP/$ref.stdout" "$TMP/by_$ref.stdout" || fail "$ref: stdout differs under -ion_series by"
-  cmp -s <(grep -v 'took .* (wall)' "$TMP/$ref.err") <(grep -v 'took .* (wall)' "$TMP/by_$ref.err") \
+  # Timings vary between runs: drop the wall-time lines, mask "(<s> s)".
+  untimed() { grep -v 'took .* (wall)' "$1" | sed -E 's/\([0-9.]+ s\)/(T s)/g'; }
+  cmp -s <(untimed "$TMP/$ref.err") <(untimed "$TMP/by_$ref.err") \
     || { diff "$TMP/$ref.err" "$TMP/by_$ref.err" >&2; fail "$ref: stderr differs under -ion_series by"; }
 done
 grep -q 'Ion series' "$TMP/by_etd_all.err" && fail "by prints the phase B INFO line"
