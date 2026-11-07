@@ -41,6 +41,7 @@ from .tsv import read_tsv, write_tsv
 
 STEPS = ("splits", "pool-truth", "sage-modes", "run", "chimera-build", "score", "collect", "v190-check")
 SPLITS = ("dev", "test", "f7train", "f7test", "final")
+NOT_SCORED = ("no_pool_candidate", "shared_identity")  # reported, never scored
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -58,7 +59,11 @@ def score_spectra(tags: pd.DataFrame, truth: pd.DataFrame, ks=(1, 5, 10, 50), ev
     tr["size_label"] = [T.size_label(len({S.normalize_peptide(p) for p in c})) for c in tr["candidates"]]
     cand = dict(zip(tr["key"], tr["candidates"]))
     m = tags[tags["key"].isin(cand)]
-    ok = [S.tag_correct_any(t, (float(n), float(c)), cand[k])
+    # same rule as score.tag_correct_any, with each candidate parsed once (tag_correct_flank already
+    # requires the I/L-folded tag or its reverse to be a substring of the candidate's residues)
+    cache: dict[str, tuple] = {}
+    parsed = {k: [cache.setdefault(p, S.peptide_masses(p)) for p in c] for k, c in cand.items()}
+    ok = [any(S.tag_correct_flank(t, float(n), float(c), *pm) for pm in parsed[k])
           for t, n, c, k in zip(m["tag"], m["nterm_mass"], m["cterm_mass"], m["key"])]
     m = m.assign(_ok=ok)
     if "evalue" in m.columns:
@@ -81,11 +86,11 @@ def score_spectra(tags: pd.DataFrame, truth: pd.DataFrame, ks=(1, 5, 10, 50), ev
 def summarize(sc: pd.DataFrame, by: list[str], ks=(1, 5, 10, 50)) -> pd.DataFrame:
     """Per cell: spectra, scored (size > 0), tagged, rank-1 accuracy and top-k any-correct over tagged
     scored spectra, recall over scored spectra, per-tag precision, and per-tag precision at E <= 0.01.
-    no_pool_candidate spectra are counted but never scored."""
+    no_pool_candidate and shared_identity spectra are counted but never scored."""
     rows = []
     for key, g in sc.groupby(by, dropna=False, sort=True):
         key = key if isinstance(key, tuple) else (key,)
-        s = g[g["size_label"] != "no_pool_candidate"] if "size_label" in g else g
+        s = g[~g["size_label"].isin(NOT_SCORED)] if "size_label" in g else g
         t = s[s["tagged"] == 1]
         r = dict(zip(by, key))
         r.update({"spectra": len(g), "scored": len(s), "tagged": len(t),
@@ -152,12 +157,20 @@ def _splits_path(cfg) -> Path:
     return p if p.is_absolute() else ROOT / p
 
 
+def eligible(pools: pd.DataFrame) -> pd.Series:
+    """A split pool is scored only if it has tryptic MaxQuant searches (the pool list comes from them).
+    The 17 non-tryptic ProteomeTools pools (only 'unspecific' searches) stay in the split table, drawn as
+    they were, and are excluded here by this fixed rule (2 of the drawn pools: Thermo_SRM_Pool_92 in test,
+    TUM_second_pool_133 in f7train)."""
+    return pools["zips"].fillna("").astype(str) != ""
+
+
 def _split_pools(cfg, split: str) -> pd.DataFrame:
     df, _ = read_tsv(_splits_path(cfg))
     sel = df[df["split"] == split]
     if sel.empty:
         raise ValueError(f"no pools for split {split!r} in {_splits_path(cfg)}")
-    return sel
+    return sel[eligible(sel)]
 
 
 def _files(cfg) -> pd.DataFrame:
@@ -262,12 +275,26 @@ def step_pool_truth(cfg, split: str, log=print) -> list[Path]:
     written = _pool_truth(cfg, pools + sorted({sw[p] for p in pools}), files, log)
     sp, _ = read_tsv(_splits_path(cfg))
     have = {q: set(pool_peptides(cfg, q)) for q in sp["pool"] if _has_list(cfg, q)}
-    T.assert_disjoint(sp[sp["pool"].isin(have)], peptides=have)
+    a = sp[sp["pool"].isin(have)]
+    T.assert_disjoint(a)  # pool level; identities shared across splits are excluded from scoring instead
+    shared = T.shared_identities(a, have)
+    out = _wd(cfg) / "shared_identities.tsv"
+    written.append(write_tsv(pd.DataFrame({"identity": list(shared), "splits": [";".join(v) for v in shared.values()]}),
+                             out, [_prov(cfg, "pool-truth shared identities"),
+                                   f"identities in pools of more than one split, over the {len(have)} split pools with "
+                                   "lists; excluded from scoring (size_label shared_identity)"]))
     swl = {sw[p]: set(pool_peptides(cfg, sw[p])) for p in pools}
-    log(f"peptide-level disjointness holds over {len(have)} split pools with lists "
-        f"({', '.join(f'{k} {v}' for k, v in sp[sp['pool'].isin(have)].groupby('split').size().items())}); "
+    log(f"{len(shared)} identities shared across splits over {len(have)} split pools with lists "
+        f"({', '.join(f'{k} {v}' for k, v in a.groupby('split').size().items())}); "
         f"swap partners {', '.join(f'{p}->{sw[p]} ({len(swl[sw[p]])})' for p in pools)}")
     return written
+
+
+def _shared(cfg) -> set[str]:
+    p = _wd(cfg) / "shared_identities.tsv"
+    if not p.exists():
+        raise FileNotFoundError(f"{p}: run pool-truth first")
+    return set(read_tsv(p)[0]["identity"])
 
 
 def swap_partners(cfg) -> dict[str, str]:
@@ -281,11 +308,16 @@ def swap_partners(cfg) -> dict[str, str]:
     free = allp[~allp["pool"].isin(sp["pool"])]
     out = {}
     seed = int(cfg["unidentified"]["swap_seed"])
+    ok = set(free.loc[eligible(free), "pool"])
     for i, r in enumerate(sp.sort_values("pool").itertuples()):
         cand = sorted(free.loc[free["batch"] != r.batch, "pool"])
         if not cand:
             raise ValueError(f"{r.pool}: no unassigned pool in another batch")
-        out[r.pool] = cand[int(np.random.default_rng([seed, i]).integers(len(cand)))]
+        j = int(np.random.default_rng([seed, i]).integers(len(cand)))
+        # a drawn partner without tryptic searches (no pool list) passes to the next one in sorted order
+        while cand[j % len(cand)] not in ok:
+            j += 1
+        out[r.pool] = cand[j % len(cand)]
     return out
 
 
@@ -427,6 +459,17 @@ def _tags(path: Path, prefix: str = "") -> pd.DataFrame:
     return t
 
 
+def _mgf_tags(path: Path) -> pd.DataFrame:
+    """FASTag tags of a chimera MGF: FASTag names MGF spectra 'index=<k>' (k-th block, 0-based); block k
+    is chimera scan=<k+1> (chimera.write_chimeras writes them in key order)."""
+    t = P.read_fastag_tags(path)
+    idx = t["spectrum"].astype(str).str.extract(r"^index=(\d+)$")[0]
+    if idx.isna().any():
+        raise ValueError(f"{path}: expected index=<k> spectrum ids for an MGF run")
+    t["key"] = "scan=" + (idx.astype(int) + 1).astype(str)
+    return t
+
+
 def _norm_set(c) -> set[str]:
     return {S.normalize_peptide(p) for p in c}
 
@@ -457,6 +500,7 @@ def score_pool(cfg, r, swap_pool: str, carry_pools: list[str], log=print) -> tup
     ax = ax.merge(meta[["key", "precursor_mz", "charge", "nce"]], on="key").assign(pool=r.pool)
     s0p = dict(zip(s0["key"], s0["peptide"]))
     shp = dict(zip(*S.shuffled_peptides(s0, seed=int(u["swap_seed"]))[["key", "peptide"]].to_numpy().T)) if len(s0) else {}
+    shared = _shared(cfg)
     arms: dict[str, list] = {"truth": [], "chance": [], "byproduct": []}
     extra = []
     for m in ax.itertuples():
@@ -464,7 +508,8 @@ def score_pool(cfg, r, swap_pool: str, carry_pools: list[str], log=print) -> tup
             arms["truth"].append([s0p[m.key]])
             arms["chance"].append([shp[m.key]] if m.key in shp else [])
             arms["byproduct"].append([])
-            extra.append({"size_label": "s0", "cluster": S.normalize_peptide(s0p[m.key]),
+            ident = S.normalize_peptide(s0p[m.key])
+            extra.append({"size_label": "shared_identity" if ident in shared else "s0", "cluster": ident,
                           "n_byproduct": 0, "n_decoy": 0, "n_carryover": 0})
             continue
         ms = {"precursor_mz": m.precursor_mz, "charge": None if pd.isna(m.charge) else int(m.charge)}
@@ -474,7 +519,8 @@ def score_pool(cfg, r, swap_pool: str, carry_pools: list[str], log=print) -> tup
         arms["truth"].append(tv)
         arms["chance"].append([v for vs in cs["target"].values() for v in vs])
         arms["byproduct"].append([v for vs in c["byproduct"].values() for v in vs])
-        extra.append({"size_label": T.size_label(len(c["target"])), "cluster": _cluster(tv, r.pool),
+        lab_ = "shared_identity" if set(c["target"]) & shared else T.size_label(len(c["target"]))
+        extra.append({"size_label": lab_, "cluster": _cluster(tv, r.pool),
                       "n_byproduct": len(c["byproduct"]), "n_decoy": len(c["decoy"]), "n_carryover": len(c["carryover"])})
     lab = pd.concat([ax.reset_index(drop=True), pd.DataFrame(extra)], axis=1)
     parts = []
@@ -536,7 +582,7 @@ def step_score(cfg, split: str, log=print) -> list[Path]:
         for prof in u["chimera_profiles"]:
             f = d / "fastag" / prof / "tags.tsv"
             if f.exists():
-                _, per = CH.attribute_tags(_tags(f), chim, k=50)
+                _, per = CH.attribute_tags(_mgf_tags(f), chim, k=50)
                 per = per.merge(chim[["key", "parent1", "parent2", "pep1", "pep2"]], on="key")
                 rows.append(per.assign(ratio=float(ratio), profile=prof))
     if rows:

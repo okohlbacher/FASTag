@@ -135,7 +135,7 @@ def endpoint_rows(sp: pd.DataFrame, n_boot: int = N_BOOT, margin: float = MARGIN
                      "clusters": len(set(cl)), "value": _mean(a) - _mean(b), "ci_lo": lo, "ci_hi": hi,
                      "rank1_accuracy": _mean(a), "chance": _mean(b), "margin": margin,
                      "verdict": informative_verdict(lo, margin)})
-        s0 = g[(g.identification == "S0") & (g.arm == "truth") & (g.tagged == 1)]
+        s0 = g[(g.identification == "S0") & (g.size_label == "s0") & (g.arm == "truth") & (g.tagged == 1)]
         a0 = s0["top1"].to_numpy(float)
         # F4-03 selection bias: S0 - S3 size-1, unpaired; clusters from both sets (bootstrap per set)
         lo0, hi0 = _ci(s0["cluster"].to_numpy(), a0, n_boot)
@@ -148,7 +148,7 @@ def endpoint_rows(sp: pd.DataFrame, n_boot: int = N_BOOT, margin: float = MARGIN
                      "verdict": "reported"})
         # F4-02 precision transfer at E <= 0.01 (per-tag precision; spectra as clusters of tags)
         s3e = g[(g.identification == "S3-PT") & (g.size_label == "size1") & (g.arm == "truth") & (g.n_tags_e001 > 0)]
-        s0e = g[(g.identification == "S0") & (g.arm == "truth") & (g.n_tags_e001 > 0)]
+        s0e = g[(g.identification == "S0") & (g.size_label == "s0") & (g.arm == "truth") & (g.n_tags_e001 > 0)]
         p0 = _ratio(s0e)
         p3 = _ratio(s3e)
         lo2, hi2 = _ratio_diff_ci(s0e, s3e, n_boot)

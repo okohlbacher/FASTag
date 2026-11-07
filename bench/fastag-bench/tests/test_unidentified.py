@@ -74,3 +74,26 @@ def test_cli_subcommands_registered():
     assert (a.split, a.ratios, a.modes, a.seed) == ("dev", "1,10", "closed,pool", 3)
     with pytest.raises(SystemExit):
         ap.parse_args(["unidentified", "run", "--config", "x.yaml", "--split", "nosuch"])
+
+
+def test_mgf_tags_map_index_to_chimera_scan(tmp_path):
+    p = tmp_path / "tags.tsv"
+    p.write_text("spectrum\ttag\tnterm_mass\tcterm_mass\nindex=0\tAAA\t1\t2\nindex=0\tCCC\t1\t2\nindex=4\tDDD\t1\t2\n")
+    t = U._mgf_tags(p)
+    assert list(t["key"]) == ["scan=1", "scan=1", "scan=5"] and list(t["rank"]) == [1, 2, 1]
+    p.write_text("spectrum\ttag\tnterm_mass\tcterm_mass\nscan=3\tAAA\t1\t2\n")
+    with pytest.raises(ValueError):
+        U._mgf_tags(p)
+
+
+def test_pools_without_tryptic_search_are_not_scored():
+    pools = pd.DataFrame({"pool": ["A", "B", "C"], "zips": ["a-tryptic.zip", "", None]})
+    assert list(U.eligible(pools)) == [True, False, False]
+
+
+def test_shared_identity_spectra_are_reported_not_scored():
+    sc = U.score_spectra(TAGS, TRUTH, ks=(1, 5))
+    sc.loc[sc["key"] == "scan=1", "size_label"] = "shared_identity"
+    s = U.summarize(sc, by=["size_label"], ks=(1, 5)).set_index("size_label")
+    assert s.loc["shared_identity", "spectra"] == 1 and s.loc["shared_identity", "scored"] == 0
+    assert s.loc["size1", "spectra"] == 3 and s.loc["size1", "rank1_accuracy"] == 0.0

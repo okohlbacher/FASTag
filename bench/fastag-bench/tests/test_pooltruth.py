@@ -196,3 +196,10 @@ def test_assert_disjoint_catches_planted_overlap():
     with pytest.raises(ValueError, match="batch"):
         T.assert_disjoint(pd.DataFrame({"pool": ["P_1", "P_2"], "split": ["dev", "f7train"]}),
                           batches={"P_1": "q1", "P_2": "q1"}, batch_exclusive=[("dev", "f7train")])
+
+
+def test_shared_identities_across_splits():
+    a = pd.DataFrame({"pool": ["P_1", "P_2", "P_3"], "split": ["dev", "test", "test"]})
+    peps = {"P_1": {"AAAK", "PEPTIDEK"}, "P_2": {"PEPTLDEK", "CCCK"}, "P_3": {"CCCK", "DDDK"}}
+    # PEPTIDEK (I=L) is in dev and test; CCCK is only within test
+    assert T.shared_identities(a, peps) == {"PEPTLDEK": ["dev", "test"]}

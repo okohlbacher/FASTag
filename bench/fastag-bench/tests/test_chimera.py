@@ -141,3 +141,10 @@ def test_attribution():
     # top-k cut: with k = 1 scan=1 has only its pep1 tag
     _, s1 = C.attribute_tags(pd.DataFrame(rows), chim, k=1)
     assert not bool(s1.set_index("key").loc["scan=1", "both_topk"])
+
+
+def test_attribution_with_no_matching_tags():
+    chim = pd.DataFrame({"key": ["scan=1"], "pep1": ["SAMPLER"], "pep2": ["PEPTIDEK"]})
+    tags = pd.DataFrame({"key": ["scan=9"], "rank": [1], "tag": ["AMP"], "nterm_mass": [1.0], "cterm_mass": [1.0]})
+    per_tag, per_spec = C.attribute_tags(tags, chim)
+    assert per_tag.empty and list(per_spec["rank1_attribution"]) == ["untagged"]

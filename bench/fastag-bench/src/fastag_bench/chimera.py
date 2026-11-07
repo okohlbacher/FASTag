@@ -205,7 +205,7 @@ def attribute_tags(tags: pd.DataFrame, chim: pd.DataFrame, k: int = 50) -> tuple
 
     c1 = [ok(t, n, cm, p) for t, n, cm, p in zip(m["tag"], m["nterm_mass"], m["cterm_mass"], m["pep1"])]
     c2 = [ok(t, n, cm, p) for t, n, cm, p in zip(m["tag"], m["nterm_mass"], m["cterm_mass"], m["pep2"])]
-    m = m.assign(c1=c1, c2=c2)
+    m = m.assign(c1=np.asarray(c1, dtype=bool), c2=np.asarray(c2, dtype=bool))
     m["attribution"] = np.select([m.c1 & m.c2, m.c1, m.c2], ["both", "pep1", "pep2"], "neither")
     rows = []
     for key in c["key"]:

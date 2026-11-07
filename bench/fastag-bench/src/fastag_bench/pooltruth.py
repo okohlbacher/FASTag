@@ -302,6 +302,19 @@ def split_pools(pools: pd.DataFrame, plan: list[dict], peptides: dict[str, set] 
     return out.sort_values(["_o", "pool"]).drop(columns="_o").reset_index(drop=True)
 
 
+def shared_identities(assign: pd.DataFrame, peptides: dict[str, set]) -> dict[str, list[str]]:
+    """Normalized identities that occur in pools of more than one split: identity -> sorted splits.
+    ProteomeTools pools share a few peptides (1-5 of about 1,000 between some pools); rather than merging
+    pools (which would chain most pools into one group), these identities are excluded from scoring in
+    every split."""
+    seen: dict[str, set] = {}
+    split = dict(zip(assign["pool"], assign["split"]))
+    for q, sname in split.items():
+        for pep in peptides.get(q, ()):
+            seen.setdefault(normalize_peptide(pep), set()).add(sname)
+    return {i: sorted(v) for i, v in sorted(seen.items()) if len(v) > 1}
+
+
 def assert_disjoint(assign: pd.DataFrame, peptides: dict[str, set] | None = None,
                     batches: dict[str, str] | None = None, batch_exclusive=None) -> None:
     """Raise ValueError unless every pool is in one split only, no normalized peptide occurs in two
