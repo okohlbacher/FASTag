@@ -275,8 +275,10 @@ and combines them (`combineOrientations`, SpeciesEvidence.h):
 The tag's E-value is kept, so `-species_evidence best|all` is unchanged.
 Under `-species_call decoy` every decoy tag goes through the same rule, so the
 random-hit part of the null follows; the homology matrix stays the forward
-k-mer overlap. That is the only calibrated path: without it the `qvalue`
-column is NA and a warning says so. The run log gets one stderr line with the
+k-mer overlap. That is the only calibrated path: `decoy_qvalue` and `call`.
+The analytic `log_pvalue` and `qvalue` columns come from the forward index
+background, which the orientation rule does not follow, so under `both` they
+are NA, with or without `-species_call decoy`, and a warning says so. The run log gets one stderr line with the
 orientation counts (forward only, reverse only, shared, palindromes,
 ambiguous skips). The forward k-mer counters of the `Species:` line are those
 of a forward run. Default forward is byte-identical to 1.11. Expect up to 2x

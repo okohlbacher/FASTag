@@ -842,8 +842,9 @@ protected:
                           "also reversed (a tag read from b ions is written reversed), using the one "
                           "informative reading, or the taxa both share; a tag whose two readings share "
                           "none is skipped. Independent of -orientation, which applies to -fasta and "
-                          "-recon_fasta only. Under 'both' the qvalue column is NA unless -species_call "
-                          "decoy calibrates the calls", false, true);
+                          "-recon_fasta only. Under 'both' the analytic log_pvalue and qvalue columns are NA "
+                          "(no analytic background follows); only decoy_qvalue and call from "
+                          "-species_call decoy are calibrated", false, true);
     setValidStrings_("species_orientation", ListUtils::create<std::string>("forward,both"));
     // ---- 1.12 F: options ----
     // #11 phase A: the per-spectrum census. Opt-in; every other output is
@@ -1346,10 +1347,15 @@ protected:
                         << getIntOption_("species_call_decoys") << "." << std::endl;
     }
     // 1.12 #10: no analytic background follows from the orientation rule, so
-    // the ranking q-value is withheld; only the decoy null is calibrated.
-    if (species_both && !species_call_on)
-      OPENMS_LOG_WARN << "-species_orientation both: the qvalue column of the species report is NA; "
-                         "only -species_call decoy calibrates calls under both orientations." << std::endl;
+    // the analytic log_pvalue and qvalue (forward index background) are
+    // withheld under both, with or without -species_call decoy; only the
+    // decoy null (decoy_qvalue, call) is calibrated.
+    if (species_both)
+      OPENMS_LOG_WARN << "-species_orientation both: the analytic log_pvalue and qvalue columns of the species "
+                         "report are NA under both; "
+                      << (species_call_on ? "use decoy_qvalue and call from -species_call decoy."
+                                          : "use decoy_qvalue from -species_call decoy.")
+                      << std::endl;
     const std::string fasta = getStringOption_("fasta");
     const std::string out_spectra = getStringOption_("out_spectra");
 
@@ -4723,10 +4729,11 @@ protected:
         auto ait = adjusted.find(c.taxid);
         const double adj = ait == adjusted.end() ? 0.0 : ait->second;
         char num[128];
-        if (species_both && !species_call_on)
-          // 1.12 #10: uncalibrated under both orientations (see the warning).
-          std::snprintf(num, sizeof num, "\t%llu\t%.1f\t%.1f\t%g\tNA",
-                        static_cast<unsigned long long>(c.observed), adj, c.expected, c.log_pvalue);
+        if (species_both)
+          // 1.12 #10: uncalibrated under both orientations, also with
+          // -species_call decoy (see the warning); decoy_qvalue is calibrated.
+          std::snprintf(num, sizeof num, "\t%llu\t%.1f\t%.1f\tNA\tNA",
+                        static_cast<unsigned long long>(c.observed), adj, c.expected);
         else
           std::snprintf(num, sizeof num, "\t%llu\t%.1f\t%.1f\t%g\t%g",
                         static_cast<unsigned long long>(c.observed), adj, c.expected,
