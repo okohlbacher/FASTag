@@ -501,8 +501,9 @@ impl<T: Copy> Mapped<T> {
         Mapped { v: Vec::with_capacity(cap) }
     }
     pub(crate) fn zeroed(len: usize) -> Mapped<T> {
-        // SAFETY: only used with plain integers, for which zero bits are a value.
-        Mapped { v: (0..len).map(|_| unsafe { std::mem::zeroed() }).collect() }
+        // SAFETY: only used with plain integers, for which zero bits are a
+        // value (and vec! of a zero integer asks the heap for zeroed pages).
+        Mapped { v: vec![unsafe { std::mem::zeroed::<T>() }; len] }
     }
     pub(crate) fn push(&mut self, v: T) {
         self.v.push(v)
