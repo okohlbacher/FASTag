@@ -236,19 +236,20 @@ resources are machine-specific symlinks and are gitignored.
 On Linux (from 1.13.0) the `gui-linux` job in `.github/workflows/ci.yml`
 builds the app outside conda on ubuntu-22.04 against apt's WebKitGTK 4.1,
 with the portable linux-x64 CLI staged into `src-tauri/resources/fastag`:
-`FASTag-gui-linux-x64.deb` (Debian package `fastag-gui`; Tauri would name it
-`fas-tag`, so the job repacks it), `FASTag-gui-linux-x64.tar.gz` (the `.deb`'s
+`fastag-gui_<version>_amd64.deb` (Debian package `fastag-gui`; Tauri would
+name it `fas-tag`, so the job repacks it), `FASTag-gui-linux-x64.tar.gz` (the `.deb`'s
 `/usr` tree, relocatable) and a best-effort `FASTag-gui-linux-x64.AppImage`.
 A `gui_dry_run` dispatch with `gui_full_payload` embeds the taxonomy index as
 a tag does, so the release-sized bundles are built and smoke-tested first.
 A tag attaches them only once P1 PR b's process lifetime
 (a `libc::PR_SET_PDEATHSIG` call, #17) is in `src-tauri/src`.
-The supported floor is glibc 2.35 and WebKitGTK 4.1 (Ubuntu 22.04, Debian 12).
-Rocky/RHEL 9 is below it: glibc 2.34 and only WebKitGTK API 4.0
-(`webkit2gtk3`); the Rocky 9 smoke job records both and is informational
-until decision Q13 is revisited. Before anything is attached to a release, the `.deb` is
+The supported systems are Ubuntu 22.04+ and Debian 12+ (glibc 2.35 and
+WebKitGTK 4.1). RHEL-family systems are not supported by the desktop app
+(RHEL/Rocky 9 has glibc 2.34 and only WebKitGTK API 4.0, `webkit2gtk3`, and
+there is no older build base); their users run the CLI, and no CI job tests
+the app there. Before anything is attached to a release, the `.deb` is
 installed and run on ubuntu-22.04 and 24.04 (and the tarball unpacked into
 an arbitrary prefix, run and probed there first) and the AppImage launched on
-both (and tried in a Rocky 9 container); a `gui_dry_run` dispatch runs the same
+both; a `gui_dry_run` dispatch runs the same
 jobs without a tag and leaves the bundles as the `FASTag-gui-linux-x64`
 artifact.

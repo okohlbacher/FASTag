@@ -1538,6 +1538,7 @@ jobs:
     timeout-minutes: 120
     outputs:
       appimage: ${{ steps.appimage.outputs.built }}
+      deb: ${{ steps.assets.outputs.deb }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -1633,19 +1634,27 @@ jobs:
           df -h / | tail -1
           compgen -G 'src-tauri/target/release/bundle/appimage/*.AppImage' > /dev/null
           echo "built=true" >> "$GITHUB_OUTPUT"
-      # The Debian package is named fastag-gui (GUI-DESIGN section 8:
-      # fastag-gui_<ver>_amd64.deb), not the `fas-tag` Tauri derives from
-      # productName: tauri.conf.json has no option for it, so the .deb is
-      # repacked with only the Package field changed. The name has to be
-      # right before the first Linux release -- dpkg treats a renamed
-      # package as a different one, so a later rename breaks upgrades. The
-      # download keeps its versionless name for the /releases/latest links.
+      # The Debian package is named fastag-gui, not the `fas-tag` Tauri
+      # derives from productName: tauri.conf.json has no option for it, so
+      # the .deb is repacked with only the Package field changed. The name
+      # has to be right before the first Linux release -- dpkg treats a
+      # renamed package as a different one, so a later rename breaks
+      # upgrades. The download is fastag-gui_<version>_amd64.deb (GUI-DESIGN
+      # section 8, decision of 2026-11-07), Debian's own file name; the
+      # tarball and the AppImage keep their versionless names.
       - name: Name the assets, make the tarball, check the .deb
+        id: assets
         shell: bash
         env:
           DEB_PACKAGE: fastag-gui
         run: |
           set -euo pipefail
+          VER=$(sed -n 's/^project(FASTag VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          [ -n "$VER" ] || { echo "::error::no project(FASTag VERSION ...) in CMakeLists.txt"; exit 1; }
+          if [[ "$GITHUB_REF" == refs/tags/v* ]] && [ "${GITHUB_REF_NAME#v}" != "$VER" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match CMakeLists.txt version $VER"; exit 1
+          fi
+          DEB="${DEB_PACKAGE}_${VER}_amd64.deb"
           B=gui/src-tauri/target/release/bundle
           shopt -s nullglob
           debs=("$B"/deb/*.deb)
@@ -1654,12 +1663,17 @@ jobs:
           dpkg-deb -R "${debs[0]}" "$X"
           echo "Tauri's package name: $(sed -n 's/^Package: //p' "$X/DEBIAN/control")"
           sed -i "s/^Package: .*/Package: $DEB_PACKAGE/" "$X/DEBIAN/control"
-          dpkg-deb --root-owner-group -Zgzip --build "$X" FASTag-gui-linux-x64.deb
+          dpkg-deb --root-owner-group -Zgzip --build "$X" "$DEB"
           rm -f "${debs[0]}"
-          dpkg-deb -I FASTag-gui-linux-x64.deb
-          [ "$(dpkg-deb -f FASTag-gui-linux-x64.deb Package)" = "$DEB_PACKAGE" ] \
+          dpkg-deb -I "$DEB"
+          [ "$(dpkg-deb -f "$DEB" Package)" = "$DEB_PACKAGE" ] \
             || { echo "::error::the .deb is not named $DEB_PACKAGE"; exit 1; }
-          dep=$(dpkg-deb -f FASTag-gui-linux-x64.deb Depends)
+          [ "$(dpkg-deb -f "$DEB" Version)" = "$VER" ] \
+            || { echo "::error::the .deb's Version is $(dpkg-deb -f "$DEB" Version), not $VER"; exit 1; }
+          [ "$(dpkg-deb -f "$DEB" Architecture)" = amd64 ] \
+            || { echo "::error::the .deb is for $(dpkg-deb -f "$DEB" Architecture), not amd64"; exit 1; }
+          echo "deb=$DEB" >> "$GITHUB_OUTPUT"
+          dep=$(dpkg-deb -f "$DEB" Depends)
           for want in libwebkit2gtk-4.1-0 libgtk-3-0; do
             grep -q "$want" <<< "$dep" || { echo "::error::the .deb does not depend on $want (Depends: $dep)"; exit 1; }
           done
@@ -1678,7 +1692,7 @@ jobs:
           # GitHub refuses a release asset of 2 GiB or more.
           mb() { awk -v b="$1" 'BEGIN { printf "%.1f", b / 1000000 }'; }
           echo "### Linux desktop app (ubuntu-22.04, glibc $(ldd --version | head -1 | awk '{print $NF}'), WebKitGTK $(pkg-config --modversion webkit2gtk-4.1))" >> "$GITHUB_STEP_SUMMARY"
-          for f in FASTag-gui-linux-x64.*; do
+          for f in "$DEB" FASTag-gui-linux-x64.*; do
             size=$(stat -c %s "$f")
             echo "- $f: $(mb "$size") MB" >> "$GITHUB_STEP_SUMMARY"
             [ "$size" -lt 2147483648 ] || { echo "::error::$f is $(mb "$size") MB, at or above GitHub's 2 GiB asset limit"; exit 1; }
@@ -1690,7 +1704,9 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: FASTag-gui-linux-x64
-          path: FASTag-gui-linux-x64.*
+          path: |
+            fastag-gui_*_amd64.deb
+            FASTag-gui-linux-x64.*
           compression-level: 0
           retention-days: 14
           if-no-files-found: error
@@ -1720,6 +1736,8 @@ jobs:
         os: [ubuntu-22.04, ubuntu-24.04]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    env:
+      DEB: ${{ needs.gui-linux.outputs.deb }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -1795,8 +1813,9 @@ jobs:
       - name: Install the .deb
         run: |
           set -euo pipefail
-          sudo apt-get install -y -q "$RUNNER_TEMP/gui/FASTag-gui-linux-x64.deb" xvfb dbus dbus-x11
-          PKG=$(dpkg-deb -f "$RUNNER_TEMP/gui/FASTag-gui-linux-x64.deb" Package)
+          [ -n "$DEB" ] && [ -f "$RUNNER_TEMP/gui/$DEB" ] || { echo "::error::no .deb '$DEB' in the artifact"; ls -la "$RUNNER_TEMP/gui"; exit 1; }
+          sudo apt-get install -y -q "$RUNNER_TEMP/gui/$DEB" xvfb dbus dbus-x11
+          PKG=$(dpkg-deb -f "$RUNNER_TEMP/gui/$DEB" Package)
           dpkg -s "$PKG" | head -12
           APP=$(dpkg -L "$PKG" | grep '^/usr/bin/' | head -1)
           [ -x "$APP" ] || { echo "::error::the package installs no program in /usr/bin"; exit 1; }
@@ -1895,86 +1914,16 @@ jobs:
           fi
           echo "### AppImage on ${{ matrix.os }}: launches and stays up" >> "$GITHUB_STEP_SUMMARY"
 
-  # Rocky 9 (RHEL 9): decision Q13 puts the GUI floor at glibc 2.35 /
-  # WebKitGTK 4.1 and named Rocky 9 among the supported systems, on the
-  # condition that P1 confirms Rocky 9 ships WebKitGTK 4.1. It does not, and
-  # its glibc is 2.34: the dry runs (42314786620, 42317242897; Rocky 9.8)
-  # found only webkit2gtk3 (API 4.0, 2.52-2.54) in BaseOS, AppStream, CRB
-  # and EPEL, and the AppImage built on ubuntu-22.04 stops at "GLIBC_2.35
-  # not found". So no Linux GUI asset runs on Rocky 9 until the user
-  # revisits Q13 (an older build base, or Rocky 9 dropped from the list).
-  # The job keeps recording both answers; informational until then, and the
-  # AppImage's release attach does not wait for it. A container has no
-  # /dev/fuse, so the AppImage runs extracted (APPIMAGE_EXTRACT_AND_RUN=1).
-  gui-linux-smoke-rocky9:
-    name: gui-linux AppImage on Rocky 9
-    if: ${{ !cancelled() && needs.gui-linux.outputs.appimage == 'true' }}
-    needs: [gui-linux]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    continue-on-error: true
-    container:
-      image: rockylinux/rockylinux:9.8@sha256:8101994123cf3d0a8fee517bee7f39e555c7d92bd2d9eb3303cc988a0eeed00f
-    steps:
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
-        with:
-          name: FASTag-gui-linux-x64
-          path: ${{ runner.temp }}/gui
-      # A finding, not a launch gate: its answer decides whether the README
-      # may name Rocky 9 for the .deb-style (system WebKitGTK) install, and
-      # it must not keep the AppImage launch below from running.
-      - name: Does Rocky 9 ship WebKitGTK 4.1? (Q13)
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          dnf -y -q install epel-release dnf-plugins-core
-          dnf config-manager --set-enabled crb
-          dnf -y -q makecache
-          q() { dnf repoquery -q "$@" --qf '%{name}-%{version}-%{release}.%{arch} from %{repoid}' | sort -u; }
-          {
-            echo "### Q13: WebKitGTK on $(cat /etc/rocky-release) (BaseOS, AppStream, CRB, EPEL)"
-            echo "- libwebkit2gtk-4.1.so.0: $(q --whatprovides 'libwebkit2gtk-4.1.so.0()(64bit)' | paste -sd ' ' -)"
-            echo "- pkgconfig(webkit2gtk-4.1): $(q --whatprovides 'pkgconfig(webkit2gtk-4.1)' | paste -sd ' ' -)"
-            echo "- libwebkit2gtk-4.0.so.37: $(q --whatprovides 'libwebkit2gtk-4.0.so.37()(64bit)' | paste -sd ' ' -)"
-            echo "- webkit2gtk* packages: $(q 'webkit2gtk*' | paste -sd ' ' -)"
-          } | tee /tmp/q13.md
-          cat /tmp/q13.md >> "$GITHUB_STEP_SUMMARY"
-          q --whatprovides 'libwebkit2gtk-4.1.so.0()(64bit)' | grep -q . \
-            || { echo "::warning::no Rocky 9 repository provides libwebkit2gtk-4.1.so.0: only the AppImage, which bundles WebKitGTK, can run there"; exit 1; }
-      - name: The AppImage launches
-        run: |
-          # The default shell is bash -e: without +e the expected 124 from
-          # timeout would end the step before rc is read.
-          set +e -uo pipefail
-          echo "glibc: $(ldd --version | head -1)"
-          # The base of a Rocky 9 desktop: gtk3 (pango, fribidi, cairo, ...)
-          # and Mesa's EGL/GL, which the AppImage takes from the host. A bare
-          # container has none of it (dry run 42314786620: "libfribidi.so.0:
-          # cannot open shared object file"). WebKitGTK 4.1 itself comes from
-          # the AppImage: Rocky 9 has only webkit2gtk3 (API 4.0).
-          dnf -y -q install xorg-x11-server-Xvfb /usr/bin/dbus-run-session mesa-dri-drivers \
-            mesa-libGL mesa-libEGL gtk3 libX11 libxcb fontconfig procps-ng findutils
-          A="$RUNNER_TEMP/gui/FASTag-gui-linux-x64.AppImage"
-          chmod +x "$A"
-          Xvfb :99 -screen 0 1440x900x24 > /tmp/xvfb.log 2>&1 &
-          export DISPLAY=:99 APPIMAGE_EXTRACT_AND_RUN=1
-          sleep 2
-          # The extraction of the 1.4 GB payload counts against the clock.
-          dbus-run-session -- timeout 120 "$A" > /tmp/app.log 2>&1
-          rc=$?
-          tail -100 /tmp/app.log
-          [ "$rc" -eq 124 ] || { echo "::error::the AppImage exited with $rc on Rocky 9"; exit 1; }
-          if grep -qiE 'error while loading shared libraries|cannot open shared object|panicked|Gdk-ERROR|GLIBC_[0-9.]+. not found' /tmp/app.log; then
-            echo "::error::the AppImage logged a fatal start-up error on Rocky 9"; exit 1
-          fi
-          echo "### AppImage on Rocky 9: launches and stays up" >> "$GITHUB_STEP_SUMMARY"
-
   # Attaches the Linux desktop app to the release, mirroring the macOS and
-  # Windows attach steps (versionless names, so the README's
-  # /releases/latest/download/ links resolve), but only after the .deb smoke
-  # passed on both Ubuntu releases. The AppImage goes up only when it
-  # launched on both Ubuntu releases (Rocky 9 is informational, see above). Never on a dry run: that run's artifact
-  # FASTag-gui-linux-x64 is the thing to open and check by hand.
+  # Windows attach steps, but only after the .deb smoke passed on both
+  # Ubuntu releases. The .deb is fastag-gui_<version>_amd64.deb; the tarball
+  # and the AppImage keep versionless names, so their /releases/latest/
+  # download/ links resolve. The AppImage goes up only when it launched on
+  # both Ubuntu releases. Rocky/RHEL 9 is not supported by the desktop app
+  # (decision of 2026-11-07: glibc 2.34 and WebKitGTK API 4.0 only; the CLI
+  # covers RHEL-family systems), so no job tests it. Never on a dry run: that
+  # run's artifact FASTag-gui-linux-x64 is the thing to open and check by
+  # hand.
   #
   # Ordering with P1 PR b (GUI-DESIGN section 8: "PDEATHSIG and the watchdog
   # ship with the first Linux release"): killing the GUI must end its CLI
@@ -1985,7 +1934,7 @@ jobs:
   # and release-complete turns red on the missing .deb and tarball.
   gui-linux-release:
     if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') && needs.gui-linux-smoke-deb.result == 'success' }}
-    needs: [gui-linux, gui-linux-smoke-deb, gui-linux-smoke-appimage, gui-linux-smoke-rocky9]
+    needs: [gui-linux, gui-linux-smoke-deb, gui-linux-smoke-appimage]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -2009,14 +1958,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           APPIMAGE_OK: ${{ needs.gui-linux-smoke-appimage.result == 'success' }}
+          DEB: ${{ needs.gui-linux.outputs.deb }}
         run: |
           set -euo pipefail
           gh release create "${{ github.ref_name }}" \
             --title "${{ github.ref_name }}" \
             --notes "Automated binary upload; release notes pending." \
             2>/dev/null || true
+          [ "$DEB" = "fastag-gui_${GITHUB_REF_NAME#v}_amd64.deb" ] && [ -f "gui-linux/$DEB" ] \
+            || { echo "::error::the artifact's .deb is '$DEB', not fastag-gui_${GITHUB_REF_NAME#v}_amd64.deb"; exit 1; }
           gh release upload "${{ github.ref_name }}" \
-            gui-linux/FASTag-gui-linux-x64.deb gui-linux/FASTag-gui-linux-x64.tar.gz --clobber
+            "gui-linux/$DEB" gui-linux/FASTag-gui-linux-x64.tar.gz --clobber
           if [ "$APPIMAGE_OK" = "true" ] && [ -f gui-linux/FASTag-gui-linux-x64.AppImage ]; then
             gh release upload "${{ github.ref_name }}" gui-linux/FASTag-gui-linux-x64.AppImage --clobber
           else
@@ -2157,11 +2109,12 @@ jobs:
           # v1.4.2 on assets that are deliberately no longer built, which is the
           # gate working: it compares what shipped against what we SAID ships,
           # so it fires on a stale expectation as loudly as on a missing file.
-          # The Linux desktop app from 1.13.0 (P1): the .deb and the tarball;
-          # the AppImage is best-effort and not asserted.
+          # The Linux desktop app from 1.13.0 (P1): the .deb
+          # (fastag-gui_<version>_amd64.deb) and the tarball; the AppImage is
+          # best-effort and not asserted.
           want="FASTag-linux-x64.tar.gz FASTag-linux-arm64.tar.gz \
                 FASTag-macos-arm64.dmg FASTag-gui-macos-arm64.dmg \
-                FASTag-gui-linux-x64.deb FASTag-gui-linux-x64.tar.gz \
+                fastag-gui_${GITHUB_REF_NAME#v}_amd64.deb FASTag-gui-linux-x64.tar.gz \
                 FASTag-taxonomy-k7.tar.gz FASTag-taxonomy-k7.tar.gz.sha256 \
                 FASTag-taxonomy-k7.tar.xz FASTag-taxonomy-k7.tar.xz.sha256"
           have=$(gh release view "${{ github.ref_name }}" --json assets --jq '.assets[].name')
