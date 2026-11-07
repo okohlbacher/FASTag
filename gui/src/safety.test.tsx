@@ -7,7 +7,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import ResultsTable, { MAX_DOM_ROWS } from './ResultsTable'
 import { installMockBridge, type MockBridge } from './testing/mockBridge'
-import { addBatch, click, logText, pickSingle, renderApp, runButton } from './testing/render'
+import { addBatch, click, goTo, logText, pickSingle, renderApp, runButton } from './testing/render'
 import { applyLastUsed, formValue } from './testing/lastUsed'
 import type { ResultsPage, RunRecord } from './types'
 
@@ -283,6 +283,7 @@ describe('P0a: existing outputs are confirmed before the run, never after', () =
     mock.history = [rec('cancelled', '/d/a.tags.tsv')]
     const c = await renderApp()
     mock.nextPickResults = '/d/a.tags.tsv'
+    await goTo('results') // the empty Tags pane (P2a: its own view)
     await click(screen.getByRole('button', { name: 'Open a tags TSV…' }))
     const panel = c.querySelector('.tabpanel')?.textContent ?? ''
     expect(panel).toContain('The run that wrote /d/a.tags.tsv was cancelled')
@@ -296,6 +297,7 @@ describe('P0a: existing outputs are confirmed before the run, never after', () =
     mock.history = [rec('ok', '/d/a.tags.tsv')]
     await renderApp()
     mock.nextPickResults = '/d/a.tags.tsv'
+    await goTo('results') // the empty Tags pane (P2a: its own view)
     await click(screen.getByRole('button', { name: 'Open a tags TSV…' }))
     await screen.findByText('Showing 3 of 3')
   })
@@ -315,6 +317,7 @@ describe('P0a: close guard', () => {
     expect(screen.queryByRole('alertdialog')).toBeNull()
     expect(mock.closeAnswers).toEqual([false])
     expect(mock.cancelCalls).toBe(0) // still running
+    await goTo('setup') // the run bar (P2a: a run moves to Results)
     expect(screen.getByRole('button', { name: 'Running…' })).toBeDefined()
 
     await act(async () => mock.emitCloseRequested('close'))
@@ -346,9 +349,11 @@ describe('P0a: open buttons while busy', () => {
     const openTags = (): HTMLButtonElement => screen.getByRole('button', { name: 'Open a tags TSV…' }) as HTMLButtonElement
     const openReport = (): HTMLButtonElement =>
       screen.getByRole('button', { name: 'Open a digest, label or mass-gap report…' }) as HTMLButtonElement
+    await goTo('results') // the empty Tags pane (P2a: its own view)
     expect(openTags().disabled).toBe(false)
     await pickSingle(mock, '/d/a.mzML')
     await click(runButton())
+    await goTo('results')
     expect(openTags().disabled).toBe(true)
     expect(openReport().disabled).toBe(true)
     mock.nextPickResults = '/d/other.tags.tsv'

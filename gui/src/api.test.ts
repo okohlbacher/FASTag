@@ -86,7 +86,10 @@ describe('api.run over a Channel of its own', () => {
     expect(before.replied).toBe(false)
     expect(before.outputs).toBeUndefined()
     expect(isSettled(before)).toBe(false)
-    expect(before.log).toEqual([
+    // The job counts its log lines; the lines reach onChange with their
+    // action (from there the log store keeps them, the only copy).
+    expect(before.logLines).toBe(2)
+    expect(changes.flatMap(([, a]) => (a.type === 'EVENT' && a.event.kind === 'log' ? a.event.lines : []))).toEqual([
       ['-threads 0: using 8 of 16 logical cores.', true],
       ['139 MS2 spectra, 2028 tags', false]
     ])
@@ -133,7 +136,8 @@ describe('api.run over a Channel of its own', () => {
     const { changes, run } = start()
     const j = await run.settled
     await tick()
-    expect(j.log).toEqual([['Reading spectra', true]])
+    expect(j.logLines).toBe(1)
+    expect(changes.flatMap(([, a]) => (a.type === 'EVENT' && a.event.kind === 'log' ? a.event.lines : []))).toEqual([['Reading spectra', true]])
     expect(run.job()).toBe(j)
     expect(j.result).toMatchObject({ ok: true, code: 0 })
     expect(j.progress).toBeNull()
@@ -199,5 +203,34 @@ describe('api.run over a Channel of its own', () => {
     j = await start().run.settled
     expect(j.status).toBe('failed')
     expect(j.result?.message).toContain('no such command')
+  })
+})
+
+// P2a PR u: the Setup footer's two commands reach the backend by the names
+// lib.rs registers, with the run request as `params` (the same shape `run`
+// takes), and an Export INI failure rejects with the backend's reason.
+describe('api.ts: command_line and export_ini', () => {
+  afterEach(() => clearMocks())
+
+  it('sends the run request and the destination under the registered names', async () => {
+    const calls: [string, unknown][] = []
+    mockIPC((cmd, args) => {
+      calls.push([cmd, args])
+      if (cmd === 'command_line') return ['/bin/FASTag', '-in', '/d/a.mzML']
+      if (cmd === 'export_ini') {
+        const a = args as { dest: string }
+        if (a.dest.startsWith('/ro/')) throw 'FASTag could not write the INI (Permission denied)'
+        return { dest: a.dest, items: 3 }
+      }
+      throw new Error(`unexpected command ${cmd}`)
+    })
+    const req = { in: '/d/a.mzML', out: '/d/a.tags.tsv', params: { tag_length: '4' } }
+    expect(await api.commandLine(req)).toEqual(['/bin/FASTag', '-in', '/d/a.mzML'])
+    expect(await api.exportIni(req, '/d/a.ini')).toEqual({ dest: '/d/a.ini', items: 3 })
+    expect(calls).toEqual([
+      ['command_line', { params: req }],
+      ['export_ini', { params: req, dest: '/d/a.ini' }]
+    ])
+    await expect(api.exportIni(req, '/ro/a.ini')).rejects.toBe('FASTag could not write the INI (Permission denied)')
   })
 })

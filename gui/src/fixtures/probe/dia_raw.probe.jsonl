@@ -1,0 +1,7 @@
+{"record":"probe","format":1,"version":"1.12.0","input":"/data/PXD006096/100815_MM_ABPP_H1993_DMSO_DIA1_new.mzML","file_format":"mzML"}
+{"record":"instrument","name":"Q Exactive Plus","model":null,"ms2_analyzer":"orbitrap","ion_mobility":null}
+{"record":"spectra","ms1":2903,"ms2":52237,"ms2_probed":4000,"ms2_centroid":4000,"ms2_profile":0,"ms2_type_unknown":0}
+{"record":"activation","of":4000,"collisional":4000,"electron":0,"hybrid":0,"unknown":0}
+{"record":"index","state":"stale"}
+{"record":"acquisition","mode":"DIA","why":"the same 126 isolation windows repeat every cycle and tile the range (median width 8 Th, 451-1333 m/z, coverage 1); periodicity 1 over 3874 repeat gaps, cycle 126, 126 distinct precursor m/z, 100% uncharged, 4000 MS2 probed","warn":true,"refuse":true,"windows":126,"median_width":8}
+{"record":"end"}

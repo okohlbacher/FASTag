@@ -176,16 +176,31 @@ export const START: HelpPage = {
     },
     {
       id: 'start-presets',
-      title: 'Presets and remembered settings',
+      title: 'Tasks, presets and remembered settings',
       body: (
-        <p>
-          <strong>Save…</strong> beside Parameters stores every parameter under a name; the preset menu loads it
-          again. The input file and the tags file are not part of a preset; report files set in a preset are moved
-          next to the current tags file when it is loaded. The app also remembers the parameters of the last run, but a new
-          start begins with FASTag&apos;s defaults: <strong>Apply last-used (n)</strong> beside Parameters offers the n
-          settings of the last run, and nothing of them is used until you click it.{' '}
-          <strong>Reset…</strong> sets every parameter back to its default.
-        </p>
+        <>
+          <p>
+            Setup starts from a task: <strong>Characterize a run</strong> (species with extension 2, the digest, label
+            and glyco reports, a tenth of the spectra), <strong>Batch QC vs SDRF</strong> (the same reports, and the input
+            asks for the files of a batch first), <strong>Export tags</strong> (adds the per-residue confidence column){' '}
+            or <strong>Open results / inspect spectra</strong>. <strong>Starting from</strong> also offers FASTag&apos;s
+            own defaults and your presets. Choosing one replaces the form; <strong>Undo</strong> brings back what it
+            replaced. The footer above Run counts what differs from where the form started, and its{' '}
+            <strong>Reset</strong> takes that back.
+          </p>
+          <p>
+            <strong>Save…</strong> stores what differs from the task or defaults the form started from, under a name.
+            No paths are stored: input files such as a FASTA are left out, and a report is stored by its name and
+            written next to the current tags file. The app also remembers the parameters of the last run, but they
+            are never used on their own: <strong>Apply last-used (n)</strong> offers the n settings of the last run,
+            and nothing of them is used until you click it. <strong>Reset…</strong> beside Run sets every parameter
+            back to FASTag&apos;s default.
+          </p>
+          <p>
+            <strong>Export INI…</strong> writes the parameters a run would use as an INI file;{' '}
+            <code>FASTag -ini file.ini</code> runs the command line with the same parameters.
+          </p>
+        </>
       )
     },
     {

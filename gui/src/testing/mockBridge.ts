@@ -15,7 +15,10 @@
 import type {
   BinaryInfo,
   BrowserEvent,
+  CliOptions,
+  DropRoute,
   FastagApi,
+  ProbeRun,
   ResolvedOutputs,
   ResultsView,
   RunEvent,
@@ -47,6 +50,9 @@ export interface MockBridge extends FastagApi {
   // Programmable returns.
   binaryInfo: BinaryInfo
   settings: Settings
+  /// False: savePreset and deletePreset refuse, as the app does when the
+  /// settings file cannot be written.
+  settingsWritable: boolean
   nextPickInput: string | null
   nextPickInputs: string[]
   nextPickOutput: string | null
@@ -62,10 +68,28 @@ export interface MockBridge extends FastagApi {
   speciesResult: SpeciesReport | null
   speciesError: Error | null
   taxdbInfoResult: TaxdbInfo | null
+  // The CLI's --helphelp options. The default is a CLI without
+  // -probe_input, as every released FASTag is.
+  cliOptions: CliOptions
+  // input path -> the probe's stdout (the CLI has -probe_input only when
+  // cliOptions lists it); a path without one fails as the CLI does (exit 5).
+  probeOutputs: Record<string, string>
+  probeCalls: { input: string; fasta?: string | null }[]
+  // Held probes answer only when releaseProbes() is called.
+  holdProbes: boolean
+  releaseProbes(): void
   // Output paths that "exist": outputsCheck reports those a run would write.
   existingOutputs: string[]
   // The run record (history.rs), newest first.
   history: RunRecord[]
+  // commandLine() and exportIni() calls; exportIniError: the next exports reject.
+  commandLineCalls: RunCall[]
+  exportIniCalls: { params: RunCall; dest: string }[]
+  exportIniError: string | null
+  // The command line of a run request, binary first, as commandLine()
+  // answers it. (run()'s reply keeps its short -in/-out command, which the
+  // failure-banner tests pin; fastag.rs builds both from one function.)
+  commandOf(call: RunCall): string[]
   failNextRun: string | null // one-shot: run() resolves { started: false, reason }
   rejectNextRun: Error | null // one-shot: run() rejects
   // Recorded calls.
@@ -97,6 +121,10 @@ export interface MockBridge extends FastagApi {
   emitEvent(runId: number, e: RunEvent): void
   // The backend's close guard: a close or quit request while busy.
   emitCloseRequested(what: 'close' | 'quit'): void
+  // An OS file drop (drop.rs DropRoute), and a drag over the window.
+  emitDrop(route: Partial<DropRoute>): void
+  emitDragHover(over: boolean): void
+  notifyCalls: { title: string; body: string }[]
   holdRun(): void
   releaseRun(): void
 }
@@ -137,6 +165,20 @@ export function mockOutputs(call: RunCall): ResolvedOutputs {
   return o
 }
 
+/// The argv of a run request as the mock spells it: -in, -out, then each
+/// parameter that has a value (switches as presence), in request order.
+function mockArgv(call: RunCall): string[] {
+  const a = ['-in', call.in, '-out', call.out]
+  for (const [n, v] of Object.entries(call.params ?? {})) {
+    if (v === true) a.push(`-${n}`)
+    else if (Array.isArray(v)) {
+      const items = v.map((x) => String(x).trim()).filter(Boolean)
+      if (items.length) a.push(`-${n}`, ...items)
+    } else if (typeof v === 'string' && v.trim() !== '') a.push(`-${n}`, v.trim())
+  }
+  return a
+}
+
 export function installMockBridge(): MockBridge {
   // Each started run's Channel, by its number.
   const channels = new Map<number, (e: RunEvent) => void>()
@@ -145,6 +187,8 @@ export function installMockBridge(): MockBridge {
   }
   const closeListeners: ((what: 'close' | 'quit') => void)[] = []
   const menuListeners: ((action: string) => void)[] = []
+  const dropListeners: ((r: DropRoute) => void)[] = []
+  const hoverListeners: ((over: boolean) => void)[] = []
   let browserCb: ((e: BrowserEvent) => void) | null = null
   const on = <T>(list: ((v: T) => void)[]) => {
     return (cb: (v: T) => void): (() => void) => {
@@ -158,10 +202,12 @@ export function installMockBridge(): MockBridge {
 
   let seq = 0
   let held: (() => void)[] | null = null
+  const heldProbes: (() => void)[] = []
 
   const mock: MockBridge = {
     binaryInfo: { bin: '/mock/FASTag', source: 'env', ok: true, detail: 'FASTag 9.9.9 (mock)' },
     settings: { schemaVersion: 1, lastUsed: null, presets: {} },
+    settingsWritable: true,
     nextPickInput: null,
     nextPickInputs: [],
     nextPickOutput: null,
@@ -180,8 +226,30 @@ export function installMockBridge(): MockBridge {
     speciesResult: null,
     speciesError: null,
     taxdbInfoResult: null,
+    cliOptions: { options: ['in', 'out', 'fasta', 'fragment_tolerance', 'fragment_tolerance_unit'], ok: true, detail: '5 options' },
+    probeOutputs: {},
+    probeCalls: [],
+    holdProbes: false,
+    releaseProbes: () => {
+      const q = heldProbes.splice(0)
+      q.forEach((f) => f())
+    },
     existingOutputs: [],
     history: [],
+    commandLineCalls: [],
+    exportIniCalls: [],
+    exportIniError: null,
+    commandOf: (call) => [mock.binaryInfo.bin, ...mockArgv(call)],
+    commandLine: (params) => {
+      const call = params as unknown as RunCall
+      mock.commandLineCalls.push(call)
+      return Promise.resolve(mock.commandOf(call))
+    },
+    exportIni: (params, dest) => {
+      mock.exportIniCalls.push({ params: params as unknown as RunCall, dest })
+      if (mock.exportIniError) return Promise.reject(mock.exportIniError)
+      return Promise.resolve({ dest, items: mockArgv(params as unknown as RunCall).filter((a) => a.startsWith('-')).length })
+    },
     failNextRun: null,
     rejectNextRun: null,
     runCalls: [],
@@ -206,6 +274,22 @@ export function installMockBridge(): MockBridge {
     emitDone: ({ runId, ...r }) => send(runId, { kind: 'done', ...r }),
     emitEvent: (runId, e) => send(runId, e),
     emitCloseRequested: (what) => closeListeners.slice().forEach((cb) => cb(what)),
+    emitDrop: (r) => {
+      const route: DropRoute = {
+        spectra: [],
+        batch: false,
+        fasta: null,
+        taxdb: null,
+        results: null,
+        reports: [],
+        sdrf: null,
+        ignored: [],
+        ...r
+      }
+      dropListeners.slice().forEach((cb) => cb(route))
+    },
+    emitDragHover: (over) => hoverListeners.slice().forEach((cb) => cb(over)),
+    notifyCalls: [],
     holdRun: () => {
       held = held ?? []
     },
@@ -222,14 +306,29 @@ export function installMockBridge(): MockBridge {
       return Promise.resolve(true)
     },
     savePreset: (name, values) => {
+      if (!mock.settingsWritable) return Promise.resolve(false)
       mock.settings.presets[name] = values
       return Promise.resolve(true)
     },
     deletePreset: (name) => {
+      if (!mock.settingsWritable || !(name in mock.settings.presets)) return Promise.resolve(false)
       delete mock.settings.presets[name]
       return Promise.resolve(true)
     },
     taxdbInfo: () => Promise.resolve(mock.taxdbInfoResult),
+    cliCapabilities: () => Promise.resolve(mock.cliOptions),
+    probeInput: (input, fasta) => {
+      mock.probeCalls.push({ input, fasta })
+      const supported = mock.cliOptions.options.includes('probe_input')
+      const out = mock.probeOutputs[input]
+      const reply: ProbeRun = !supported
+        ? { supported: false, ok: false, code: null, timed_out: false, stdout: '', reason: 'this FASTag has no -probe_input' }
+        : out != null
+          ? { supported: true, ok: true, code: 0, timed_out: false, stdout: out, reason: null }
+          : { supported: true, ok: false, code: 5, timed_out: false, stdout: '', reason: `Error: cannot read ${input}` }
+      if (!mock.holdProbes) return Promise.resolve(reply)
+      return new Promise((resolve) => heldProbes.push(() => resolve(reply)))
+    },
     openTaxon: () => Promise.resolve(true),
     pickInput: () => Promise.resolve(mock.nextPickInput),
     pickInputs: () => Promise.resolve(mock.nextPickInputs),
@@ -338,6 +437,12 @@ export function installMockBridge(): MockBridge {
     },
     setBusy: (busy) => {
       mock.busyCalls.push(busy)
+      return Promise.resolve()
+    },
+    onDrop: on(dropListeners),
+    onDragHover: on(hoverListeners),
+    notify: (title, body) => {
+      mock.notifyCalls.push({ title, body })
       return Promise.resolve()
     }
   }

@@ -181,6 +181,42 @@ export const FAQ: FaqEntry[] = [
     ]
   },
 
+  {
+    id: 'faq-raw-dia',
+    group: 'Running',
+    question: 'FASTag refuses the file as raw DIA (exit code 11)',
+    symptoms: <>The run stops at once with "raw DIA, not tagged", or the checks before the run say "Raw DIA: FASTag will not tag this file".</>,
+    causes: [
+      <>The file is data-independent acquisition (DIA): its MS2 spectra repeat a cycle of isolation windows, and each one mixes the fragments of several peptides. Its "precursor" is a window, not a peptide, so the tags would get wrong flanking masses and complement statistics. From FASTag 1.12 the acquisition check (<C>acquisition_check</C>) refuses such files, before any output is written.</>
+    ],
+    fixes: [
+      <>Generate pseudo-DDA spectra first with DIAspeXtract (for Bruker .d also diaTracer), then run FASTag on the .pseudo.mzML file it writes; that file passes the check. The app shows the DIAspeXtract command to copy.</>,
+      <>Experts who want to tag the raw DIA spectra anyway can run the command line with <C>-acquisition_check warn</C>; the flanks and complements are then wrong.</>
+    ]
+  },
+  {
+    id: 'faq-no-ms2',
+    group: 'Running',
+    question: 'The checks say the file has no MS2 spectra',
+    symptoms: <>"Blocks the run: No MS2 spectra" under Checks before the run, and Run is disabled.</>,
+    causes: [<>The file holds only MS1 spectra (a survey or a converted MS1 file), or its MS2 spectra were filtered out when it was converted.</>],
+    fixes: [<>FASTag tags MS2 spectra only. Convert the run again with its MS2 spectra (for example with msconvert, without an MS level filter).</>]
+  },
+  {
+    id: 'faq-inspector',
+    group: 'Running',
+    question: 'What the checks before and after a run mean',
+    symptoms: <>A list of checks under the input on the Setup screen, or over the results after a run.</>,
+    causes: [
+      <>Before a run, FASTag reads the metadata of the file (instrument, MS2 count, centroid or profile, the index, the acquisition) and the app checks the settings against them. A FASTag without this probe (<C>probe_input</C>; no release has it yet) cannot check a file before the run: the app then says "Not checked" and guesses nothing.</>,
+      <>After a run, the app reads the instrument from the digest report and FASTag's own warnings from the log.</>
+    ],
+    fixes: [
+      <>"Blocks the run" disables Run until the file or the settings change. A red flag waits for its fix or for "Run anyway". A warning changes nothing.</>,
+      <>No warning does not mean the data or the settings are right. The checks propose an instrument preset; the choice stays yours.</>
+    ]
+  },
+
   // Few or no tags
   {
     id: 'faq-no-tags',
@@ -352,6 +388,7 @@ export const FAQ_BY_ID = new Map(FAQ.map((f) => [f.id, f]))
 /// The entry for a failure message from FASTag or the app.
 export const CLASSES: [RegExp, string][] = [
   [/cannot reach the index k/, 'faq-species-short'],
+  [/' is raw DIA[: ]|FASTAG_REFUSED reason=raw_dia/, 'faq-raw-dia'],
   [/-species: no |taxonomy directory|Failed to load (-taxdb|taxonomy)/, 'faq-species-reference'],
   [/Unknown modification/, 'faq-modification'],
   [/reach the minimum filter length/, 'faq-min-filter'],

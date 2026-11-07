@@ -630,3 +630,29 @@ export const CONFLICTS: ((values: Record<string, unknown>, ctx: PreflightContext
 export function conflicts(values: Record<string, unknown>, ctx: PreflightContext = {}): Conflict[] {
   return CONFLICTS.map((c) => c(values, ctx)).filter((c): c is Conflict => c !== null)
 }
+
+// ---------------------------------------------------------------------------
+// Hidden dependent fields (GUI-DESIGN 3 S1, P2a): a field that waits for its
+// section's switch (species, glyco, fasta, recon_out) stays hidden until the
+// switch is on, and the switch says once what it turns on, in place of one
+// "Needs species" line per field. A field that waits for anything else
+// (gap_penalty for gaps, digest_models for digest_out) is still shown,
+// disabled, with what it needs.
+
+/// The parameters of @p sec that its master switch turns on: those with a
+/// dependency on it.
+export function dependents(sec: Section): string[] {
+  if (!sec.master) return []
+  return sec.params.filter((n) => n !== sec.master && (DEPENDS[n] ?? []).some((d) => !d.replaced && masters(d).includes(sec.master!)))
+}
+
+/// @p name is hidden right now: its first unmet dependency names the master
+/// of @p sec.
+export function hiddenUntilMaster(name: string, sec: Section, values: Record<string, unknown>): boolean {
+  if (!sec.master || name === sec.master) return false
+  const d = inertDependency(name, values)
+  return !!d && !d.replaced && masters(d).includes(sec.master)
+}
+
+/// The section a parameter is in.
+export const SECTION_OF: Map<string, Section> = new Map(SECTIONS.flatMap((s) => s.params.map((n) => [n, s] as [string, Section])))
