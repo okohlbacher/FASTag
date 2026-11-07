@@ -520,6 +520,8 @@ MGF→mzML direction is exact.
 | `-acquisition_probe_spectra <n>` | 4000 | MS2 spectra the acquisition check reads, metadata only, reading at most ten times as many spectra in all (advanced) |
 | `-pick_profile <legacy\|auto\|off>` | legacy | Centroid profile MS2 (MS:1000128) with OpenMS `PeakPickerHiRes` before tagging: `legacy` on mzPeak input only (as 1.11), `auto` on mzML and mzPeak input (not MGF), `off` never. Centroided MS2 are never re-picked. `-out_spectra` writes the spectra as they were tagged. Not with `-stream` |
 | `-pick_unknown_type` | off | With `-pick_profile auto`: also centroid MS2 that declare no spectrum type, when OpenMS's `PeakTypeEstimator` reads their data as profile (advanced) |
+| `-probe_input <file>` | (none) | Print the metadata of a spectra file (or a FASTA alone) as JSON lines and exit; writes no file, needs no `-in`/`-out` (advanced; see Probe and spectrum dump) |
+| `-dump_spectrum <nativeId>` | (none) | Print the peaks FASTag tags of one spectrum of `-in` as JSON lines and exit; writes no file (advanced; see Probe and spectrum dump) |
 
 The `-glyco_*` options are read only with `-glyco`, the `-census_*` options only
 with `-census`, and the `-taxdb`,
@@ -773,6 +775,35 @@ and the options `-fasta`, `-entrapment_fasta`, `-taxdb`, `-usi_collection`,
 `-out_spectra`, `-recon_out`, `-recon_id_out`, `-delta_out`, `-species_out`,
 `-digest_out`, `-label_out` and `-massgap_out` are refused; parameter changes
 need a restart.
+
+## Probe and spectrum dump
+
+Two machine interfaces, used by the desktop GUI (1.12). Both print JSON lines
+to stdout only, write no file, exit without tagging, and are refused with
+`-stream`. Every line is an object with a `record` key; the first is the
+format record (`"format":1`), the last is `{"record":"end"}`, so a cut stream
+is detectable. Readers ignore records and fields they do not know. Both are
+listed in `--helphelp`, which is how the GUI detects them.
+
+- `-probe_input <file>` reads metadata only (mzML, mzPeak or MGF) and prints the
+  records `probe` (format, version, input, file_format), `instrument` (name,
+  model, ms2_analyzer, ion_mobility), `spectra` (MS1 and MS2 counts, the
+  centroid/profile verdict of the probed MS2 and `will_pick`, whether
+  `-pick_profile` as given would centroid them), `activation` (collisional,
+  electron, hybrid, unknown), `index` (ok, stale, absent, not_applicable) and
+  `acquisition` (the raw-DIA check's call and whether `-acquisition_check` as
+  given would refuse the run). With `-fasta` it adds a `fasta` record (proteins,
+  decoys by `-shortlist_decoy_affix`). A FASTA file (`.fasta`, `.fa`, `.faa`,
+  `.fas`) given alone prints only `probe`, `fasta` and `end`. The exit code is 0
+  whenever the file could be read, also for raw DIA.
+- `-dump_spectrum <nativeId>` prints one `spectrum` record for the spectrum of
+  `-in` with that native ID (MGF: `index=<i>`): `mz` and `int`, the peaks
+  after the reader's centroiding (`-pick_profile`), the precursor cut, the m/z
+  collapse, deisotoping and the peak budget, exactly as the tagger prepares
+  them under the options given; plus `precursor`, `charge` (as tagged; an
+  uncharged precursor is tagged as 2+), `charge_given`, `native_id`, `index`,
+  `tolerance` and `tolerance_unit`. An unknown ID exits 6 with the ID on stderr
+  and nothing on stdout.
 
 ## Glyco flag
 
