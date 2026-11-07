@@ -152,3 +152,30 @@ def test_sage_rank_needs_rank_column(tmp_path):
     q.write_text("peptide\tfilename\tscannr\tlabel\tspectrum_q\nPEPK\tf\tscan=1\t1\t0.001\n")
     with pytest.raises(ValueError):
         P.read_sage_psms(q, 0.01, rank=2)
+
+
+# #6: Sage's charge and isotope_error label the spectra (truth_fields).
+SAGE_TRUTH = ("psm_id\tpeptide\tfilename\tscannr\trank\tlabel\tspectrum_q\tcharge\tisotope_error\n"
+              "1\tPEPTIDEK\tf.mzML\tscan=1\t1\t1\t0.001\t2\t0.0\n"
+              "2\tSAMPLER\tf.mzML\tscan=2\t1\t1\t0.002\t3\t1.0\n"
+              "3\tREVDECOY\tf.mzML\tscan=3\t1\t-1\t0.002\t2\t0.0\n"
+              "4\tLATEK\tf.mzML\tscan=4\t1\t1\t0.003\t1\t-1.0\n")
+
+
+def test_sage_truth_fields(tmp_path):
+    p = tmp_path / "t.sage.tsv"
+    p.write_text(SAGE_TRUTH)
+    base = P.read_sage_psms(p, 0.01)
+    # the default reader is unchanged and drops both columns
+    assert list(base.columns) == ["filename", "scannr", "peptide", "spectrum_q", "key"]
+    t = P.read_sage_psms(p, 0.01, truth_fields=True)
+    assert list(t["key"]) == ["scan=1", "scan=2", "scan=4"]
+    assert list(t["charge"]) == [2, 3, 1] and list(t["isotope_error"]) == [0, 1, -1]
+    assert t.drop(columns=["charge", "isotope_error"]).equals(base)
+
+
+def test_sage_truth_fields_need_the_columns(tmp_path):
+    p = tmp_path / "r.sage.tsv"
+    p.write_text(SAGE_RANKS)
+    with pytest.raises(ValueError):
+        P.read_sage_psms(p, 0.01, truth_fields=True)

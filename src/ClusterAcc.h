@@ -23,6 +23,7 @@
 
 #include "Centroid.h"
 #include "IonSeries.h"
+#include "PrecursorHypotheses.h"
 #include "Census.h"
 #include "Shortlist.h"
 
@@ -42,12 +43,16 @@ namespace FASTag::ClusterAcc
     /// #15 phase A: activation class of every tagged MS2. Counted at every
     /// run (no option): the b/y warning needs it, and it changes no output.
     IonSeries::ActivationCounts activation;
+    /// #6: hypotheses tagged and selected, by charge source (non-default
+    /// -unknown_charge or -isotope_error only).
+    Hyp::SourceCounts hyp;
     /// #15 phase B: MS2 tagged per ion series (-ion_series).
     IonSeries::SeriesCounts series;
     void merge(const ThreadE& o)
     {
       pick.merge(o.pick);
       activation.merge(o.activation);
+      hyp.merge(o.hyp);
       series.merge(o.series);
     }
   };

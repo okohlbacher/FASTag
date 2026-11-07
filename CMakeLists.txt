@@ -75,7 +75,7 @@ endif()
 # control).
 set(FASTAG_CORE_SOURCES src/FASTagger.cpp src/AveragineDeisotoper.cpp src/Digest.cpp src/DigestReport.cpp src/FastaFilter.cpp src/ProteomeIndex.cpp src/ReconIds.cpp src/TagRecon.cpp src/TaxDeconv.cpp src/TaxIndex.cpp src/TaxStats.cpp)
 # ---- 1.12 E: core sources ----
-set(FASTAG_CORE_SOURCES_E src/Acquisition.cpp src/Centroid.cpp)
+set(FASTAG_CORE_SOURCES_E src/Acquisition.cpp src/Centroid.cpp src/PrecursorHypotheses.cpp)
 # ---- 1.12 A: core sources ----
 set(FASTAG_CORE_SOURCES_A src/Shortlist.cpp src/SearchConfig.cpp)
 # ---- 1.12 D: core sources ----
@@ -250,7 +250,7 @@ if(FASTAG_BUILD_TESTS)
   # their tests only to their own anchored list.
   set(FASTAG_UNIT_TESTS ranksum_test fastag_test fasta_filter_test tagrecon_test tagfdr_test proteome_index_test glyco_test taxindex_test taxstats_test taxdeconv_test species_evidence_test sampler_test proforma_test numformat_test peakgrid_test formats_test digest_test)
   # ---- 1.12 E: unit tests ----
-  set(FASTAG_UNIT_TESTS_E cli_param_test centroid_test complement_test ion_series_test)
+  set(FASTAG_UNIT_TESTS_E cli_param_test centroid_test complement_test ion_series_test precursor_hypotheses_test)
   # ---- 1.12 A: unit tests ----
   set(FASTAG_UNIT_TESTS_A shortlist_test search_config_test)
   # ---- 1.12 D: unit tests ----
@@ -436,8 +436,21 @@ if(FASTAG_BUILD_TESTS)
                    $<TARGET_FILE:buildtaxdb>
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
-                   $<TARGET_FILE:ion_series_test>)
+                   $<TARGET_FILE:ion_series_test>
+                   # census_ids_test once F11B (-census_ids) is in the tree; empty before
+                   "$<$<TARGET_EXISTS:census_ids_test>:$<TARGET_FILE:census_ids_test>>")
   set_tests_properties(ion_series_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # #6: -unknown_charge, -charge_*, -isotope_error on the fixture MGF with its
+  # charges stripped: defaults equal 1.11.0, the infer call, header charges
+  # kept, threads, losing hypotheses add no species, refusals.
+  add_test(NAME charge_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/charge_cli_test.sh $<TARGET_FILE:FASTag>
+                   $<TARGET_FILE:buildtaxdb>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mgf
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy)
+  set_tests_properties(charge_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # ---- 1.12 A: CLI tests ----
   # #5: shortlist, reduced FASTA and engine configuration on the vendored
   # fixture: ranking, no decoys, existing outputs unchanged, threads, the

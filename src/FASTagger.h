@@ -328,9 +328,13 @@ namespace FASTag
   /// @param charge     precursor charge; <= 0 is treated as 2
   /// @return tags ordered by E-value, best first
   /// @param diag       optional; filled with what the census reads
+  /// @param multiplicity  factor on every E-value with the seed count, before
+  ///                   the max_evalue cut and the max_tag_count cap: the number
+  ///                   of precursor hypotheses tagged for this spectrum (1.12
+  ///                   #6, src/PrecursorHypotheses.h). 1 changes nothing.
   std::vector<Tag> tagSpectrum(const OpenMS::MSSpectrum& spec, double precursor_mz,
                                int charge, const Param& p, const Tables& tables,
-                               SpectrumDiag* diag = nullptr);
+                               SpectrumDiag* diag = nullptr, double multiplicity = 1.0);
 
   /// Tag one spectrum at several seed lengths, preprocessing it and building
   /// its graphs once. Entry i is exactly tagSpectrum(spec, precursor_mz,
@@ -340,10 +344,11 @@ namespace FASTag
   /// @param tables  built from the matching params entry
   /// @param diag    optional; one preprocessing serves every length, so one
   ///                diag; enough_peaks when some length has enough
+  /// @param multiplicity  as for the single-length overload
   std::vector<std::vector<Tag>> tagSpectrum(const OpenMS::MSSpectrum& spec, double precursor_mz,
                                             int charge, const std::vector<Param>& params,
                                             const std::vector<Tables>& tables,
-                                            SpectrumDiag* diag = nullptr);
+                                            SpectrumDiag* diag = nullptr, double multiplicity = 1.0);
 
   /// One spectrum's rows for a multi-length run, from its per-length tag lists
   /// (ascending length, as the overload above returns them). A tag several

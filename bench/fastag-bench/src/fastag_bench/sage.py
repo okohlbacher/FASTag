@@ -18,7 +18,7 @@ ENZYMES = {
 }
 
 
-SAGE_MODES = ("closed", "pool")
+SAGE_MODES = ("closed", "pool", "charge_truth")
 
 
 def sage_config(ds: Dataset, fasta: str | Path, mzml: list[str | Path], scfg: dict, mode: str = "closed",
@@ -31,10 +31,18 @@ def sage_config(ds: Dataset, fasta: str | Path, mzml: list[str | Path], scfg: di
     mode 'closed' (default) is the v1.9.0 ground-truth search, byte-identical (tests/test_sage.py golden
     JSON). mode 'pool' (#4 S3-PT) searches pool_fasta, one entry per pool peptide plus the shuffled decoy
     pool (pooltruth.write_pool_fasta), without digestion (cleave_at '$', no missed cleavages); everything
-    else, Sage's own reversed decoys included, is the closed search. Backlog modes ('open' with
+    else, Sage's own reversed decoys included, is the closed search. mode 'charge_truth' (#6) is the
+    closed search with precursor_charge [1, 4] and isotope_errors [-1, 3]. Backlog modes ('open' with
     precursor_tol da [-500, 150]; 'chimera' with wide_window) are not implemented."""
     if mode not in SAGE_MODES:
         raise ValueError(f"Sage mode {mode!r}: one of {SAGE_MODES}")
+    if mode == "charge_truth":
+        # #6 truth: the closed search with precursor charges 1..4 and isotope errors -1..3, so
+        # each PSM's charge and isotope_error label its spectrum (read_sage_psms truth_fields).
+        cfg = sage_config(ds, fasta, mzml, scfg, mode="closed")
+        cfg["precursor_charge"] = [1, 4]
+        cfg["isotope_errors"] = [-1, 3]
+        return cfg
     if mode == "pool":
         if pool_fasta is None:
             raise ValueError("Sage mode 'pool' needs pool_fasta")

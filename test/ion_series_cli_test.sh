@@ -27,7 +27,11 @@
 #   - cz on the CID source warns about collisional spectra;
 #   - -species leaves c/z rows out and says how many;
 #   - -stream refuses -ion_series away from by;
-#   - auto through OnDisc (-out_spectra) equals the fast reader; threads 1/3/8.
+#   - auto through OnDisc (-out_spectra) equals the fast reader; threads 1/3/8;
+#   - with #6: -ion_series auto -unknown_charge infer on uncharged ETD spectra
+#     is identical at 1/3/8 threads, ion_series after #6's columns;
+#   - with F11B (argument 9, census_ids_test): -census_ids under cz and auto
+#     joins after best_ion_series (identified, triage last).
 #
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
@@ -331,5 +335,56 @@ for th in 1 3 8; do
   cmp -s "$TMP/auto_etd.census.tsv" "$TMP/auto_t$th.census.tsv" || fail "auto: census differs at $th threads"
   cmp -s "$TMP/auto_etd.lines" "$TMP/auto_t$th.lines" || fail "auto: INFO/WARN lines differ at $th threads"
 done
+
+# ---- with #6: -ion_series auto -unknown_charge infer, threads 1/3/8 ----
+# etd_all with every charge state replaced by a userParam of the same length
+# (the index stays exact): no precursor carries a charge, so infer runs.
+awk "$OUT_FN"'
+  /accession="MS:1000041"/ { i = index($0, "<cvParam"); j = index($0, "/>"); old = substr($0, i, j + 2 - i)
+                             v = old; sub(/.*value="/, "", v); sub(/".*/, "", v)
+                             nw = "<userParam name=\"zz\" value=\"" v "\""
+                             while (length(nw) < length(old) - 2) nw = nw " "
+                             $0 = substr($0, 1, i - 1) nw "/>" substr($0, j + 2) }
+  { out($0) }' "$TMP/etd_all.mzML" > "$TMP/etd_noz.mzML"
+[ "$(wc -c < "$TMP/etd_noz.mzML")" -eq "$(wc -c < "$SRC")" ] || fail "etd_noz is not byte-length equal to the source"
+[ "$(grep -c 'MS:1000041' "$TMP/etd_noz.mzML")" -eq 0 ] || fail "etd_noz still has charge states"
+for th in 1 3 8; do
+  runb "inf_t$th" "$TMP/etd_noz.mzML" "$th" -ion_series auto -unknown_charge infer -census -census_out "$TMP/inf_t$th.census.tsv"
+done
+col() { head -1 "$1" | tr '\t' '\n' | grep -nx -- "$2" | head -1 | cut -d: -f1; }
+[ "$(lastcol "$TMP/inf_t1.tsv")" = ion_series ] || fail "auto + infer: ion_series is not the last column"
+[ -n "$(col "$TMP/inf_t1.tsv" selected)" ] && [ "$(col "$TMP/inf_t1.tsv" selected)" -lt "$(col "$TMP/inf_t1.tsv" ion_series)" ] \
+  || fail "auto + infer: ion_series does not follow #6's columns"
+[ "$(valuesof "$TMP/inf_t1.tsv")" = cz ] || fail "auto + infer: rows not all cz"
+cs=$(col "$TMP/inf_t1.tsv" charge_src)
+awk -F'\t' -v c="$cs" 'NR > 1 { print $c }' "$TMP/inf_t1.tsv" | grep -qx 'inferred\|ambiguous' \
+  || fail "auto + infer: no row at an inferred charge (the construct is vacuous)"
+for th in 3 8; do
+  cmp -s "$TMP/inf_t1.tsv" "$TMP/inf_t$th.tsv" || fail "auto + infer: tags differ at $th threads"
+  cmp -s "$TMP/inf_t1.census.tsv" "$TMP/inf_t$th.census.tsv" || fail "auto + infer: census differs at $th threads"
+  cmp -s "$TMP/inf_t1.lines" "$TMP/inf_t$th.lines" || fail "auto + infer: INFO/WARN lines differ at $th threads"
+done
+echo "ion_series_cli_test: -ion_series auto -unknown_charge infer identical at 1/3/8 threads"
+
+# ---- with #11 phase B (-census_ids, F11B) once merged ----
+# -census_ids takes Census::header() as the table's layout; the run-level
+# header carries best_ion_series, so identified and triage follow it.
+IDS_HELPER="${9:-}"   # census_ids_test (F11B); empty before F11B
+if [ -n "$IDS_HELPER" ] && grep -q -- '-census_ids' <<< "$("$BIN" --helphelp 2>&1)"; then
+  "$IDS_HELPER" --write-ids "$SRC" "$TMP/good.idXML" good "$TMP/good.want" > /dev/null || fail "census_ids_test --write-ids"
+  for c in "cz:$SRC" "auto:$TMP/etd_all.mzML"; do
+    m=${c%%:*}; in=${c#*:}
+    runb "ids_$m" "$in" 2 -ion_series "$m" -census -census_out "$TMP/ids_$m.census.tsv" -census_ids "$TMP/good.idXML"
+    h=$(head -1 "$TMP/ids_$m.census.tsv" | tr '\t' '\n' | tail -3 | tr '\n' ' ')
+    [ "$h" = "best_ion_series identified triage " ] || fail "-census_ids under -ion_series $m: header ends with '$h'"
+    nf=$(head -1 "$TMP/ids_$m.census.tsv" | awk -F'\t' '{ print NF }')
+    awk -F'\t' -v n="$nf" 'NF != n { exit 1 }' "$TMP/ids_$m.census.tsv" || fail "-census_ids under -ion_series $m: a row has not $nf fields"
+    [ "$(awk -F'\t' 'NR > 1 && $(NF - 1) == "1"' "$TMP/ids_$m.census.tsv" | wc -l)" -gt 0 ] \
+      || fail "-census_ids under -ion_series $m: nothing identified"
+  done
+  echo "ion_series_cli_test: -census_ids joins the c/z census (best_ion_series, identified, triage)"
+else
+  echo "ion_series_cli_test: -census_ids not in this binary; its c/z case is skipped"
+fi
 
 echo "ion_series_cli_test: passed"

@@ -521,6 +521,10 @@ MGF→mzML direction is exact.
 | `-pick_profile <legacy\|auto\|off>` | legacy | Centroid profile MS2 (MS:1000128) with OpenMS `PeakPickerHiRes` before tagging: `legacy` on mzPeak input only (as 1.11), `auto` on mzML and mzPeak input (not MGF), `off` never. Centroided MS2 are never re-picked. `-out_spectra` writes the spectra as they were tagged. Not with `-stream` |
 | `-pick_unknown_type` | off | With `-pick_profile auto`: also centroid MS2 that declare no spectrum type, when OpenMS's `PeakTypeEstimator` reads their data as profile (advanced) |
 | `-ion_series <by\|cz\|auto>` | by | Ion series the MS2 spectra are read as: `by` (b/y ions, as 1.11), `cz` (c/z• ions of ETD/ECD, every spectrum), `auto` (c/z• for spectra whose activation is ETD or ECD, b/y for all others, hybrid EThcD/ETciD included, with a warning). Under `cz`, and under `auto` when the run has electron-activated spectra, the tag TSV gains a last `ion_series` column and the census a `best_ion_series` column (see Ion series). Not with `-stream`. Experimental: `auto` is not validated yet |
+| `-unknown_charge <assume2\|enumerate\|infer>` | assume2 | How a precursor without a charge is tagged: `assume2` as 2+ (as 1.11); `enumerate` at each listed possible charge (MS:1000633, MGF `2+ and 3+`), else at every charge `-charge_min`..`-charge_max`; `infer` at the charge its complement pairs support (1+ when `-charge_min` is 1, or 1 is listed, and almost no intensity lies above the precursor; both charges of a close call, `ambiguous`; without evidence 2+, or the lowest candidate when 2 is none, `assumed`). Every charge tagged is a listed possible charge, else one of `-charge_min`..`-charge_max`. A header charge is never replaced. A spectrum tagged under H hypotheses has every E-value multiplied by H before `-max_evalue` and `-max_tags`; its rows are merged by E-value. The reports that aggregate over spectra (digest, label, massgap, delta, species, shortlist, census) read the rows of one selected hypothesis, chosen from the charge evidence, never from the E-values. Experimental, not validated; not with `-stream` |
+| `-charge_min <n>` / `-charge_max <n>` | 2 / 4 | The charges `enumerate` and `infer` try (1-8); `-charge_min 1` enables infer's 1+ test |
+| `-charge_infer_margin <x>` | 2 | Complement-pair excess by which an inferred charge must beat the runner-up to be tagged alone; closer, both are tagged (`ambiguous`). Any excess above 0 is a call; none is `assumed` (advanced) |
+| `-isotope_error <k> ...` | 0 | Precursor isotope offsets (-1..3) to consider, for every precursor: the neutral mass is lowered by k x 1.00336 Da, and each charge is tagged at the offset its complement pairs support best. Needs a fragment tolerance below 0.05 Da (or the ppm equivalent at m/z 1000); refused otherwise (advanced) |
 
 The `-glyco_*` options are read only with `-glyco`, the `-census_*` options only
 with `-census`, and the `-taxdb`,
@@ -578,6 +582,13 @@ entrapment-only matches under `-entrapment_fasta`. The `evalue` of a gapped row
 is the ranking value, E × `-gap_penalty`, so it can exceed `-max_evalue`; divide
 by the penalty for the raw E-value.
 
+With a non-default `-unknown_charge` or `-isotope_error` (1.12), four columns
+follow the optional ones: `prec_charge` (the precursor charge the row was
+tagged at), `charge_src` (`header`, `possible`, `inferred`, `ambiguous`,
+`assumed` or `enumerated`), `iso_offset` (k) and `selected` (1 when the row's
+hypothesis feeds the aggregating reports). `-recon_out` and `-recon_id_out`
+keep every row at its hypothesis' charge.
+
 **Ion series** (`-ion_series`, 1.12). Under the default `by` the flanks follow
 the y-ion convention above: `nterm_mass` + tag residues + `cterm_mass` + H2O =
 the precursor's neutral mass, and a tag read off the b ions appears reversed
@@ -587,7 +598,9 @@ convention for forward reads (the low peak a z• ion), and a reversed read (the
 low peak a c ion) carries the offset offC - offN = (H2O - NH2) - NH3 =
 -15.0347 Da instead of +H2O: N-side residues = `cterm_mass` - 15.0347, C-side
 residues = `nterm_mass` + 15.0347. Under c/z• the complement partner of a peak
-is the one whose neutral masses sum to M + H, and peaks at the unreacted
+is the one whose neutral masses sum to M + H (under `-complement_rule
+precursor` at the c - 1 charges an electron-activated precursor of charge c
+leaves its fragments), and peaks at the unreacted
 precursor and its charge-reduced species (with their isotope and
 hydrogen-transfer forms) are dropped before tagging. `-recon_*`, `-digest_out`,
 `-label_out`, `-massgap_out`, `-delta_out` and the census take the offset from

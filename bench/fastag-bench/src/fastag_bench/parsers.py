@@ -57,13 +57,21 @@ def read_directag_tags(path: str | Path) -> pd.DataFrame:
     return _add_rank(df)
 
 
-def read_sage_psms(path: str | Path, fdr: float = 0.01, rank: int | None = None) -> pd.DataFrame:
+def read_sage_psms(path: str | Path, fdr: float = 0.01, rank: int | None = None,
+                   truth_fields: bool = False) -> pd.DataFrame:
     """Target, rank-1 PSMs at spectrum-level q <= fdr from results.sage.tsv.
 
     rank=None (default) is the v1.9.0 reader, unchanged: rank 1 where the file has a rank column, and
     columns filename, scannr, peptide, spectrum_q, key. rank=k (Sage with report_psms > 1) keeps the
-    target hits of rank k at q <= fdr instead and adds a 'rank' column; it needs the rank column."""
+    target hits of rank k at q <= fdr instead and adds a 'rank' column; it needs the rank column.
+    truth_fields=True (#6) also keeps Sage's 'charge' and 'isotope_error' (as int), which label the
+    precursor charge and isotope offset of each spectrum (sage_config mode 'charge_truth'); it needs
+    both columns."""
     df = pd.read_csv(path, sep="\t")
+    if truth_fields:
+        missing = [c for c in ("charge", "isotope_error") if c not in df.columns]
+        if missing:
+            raise ValueError(f"{path}: truth_fields needs Sage's {', '.join(missing)} column(s)")
     keep = (df["label"] == 1) & (df["spectrum_q"] <= fdr)
     if rank is None:
         if "rank" in df.columns:
@@ -74,6 +82,9 @@ def read_sage_psms(path: str | Path, fdr: float = 0.01, rank: int | None = None)
             raise ValueError(f"{path}: rank={rank} needs Sage's rank column")
         keep &= df["rank"] == int(rank)
         out = df.loc[keep, ["filename", "scannr", "peptide", "spectrum_q", "rank"]].copy()
+    if truth_fields:
+        out["charge"] = df.loc[keep, "charge"].astype(int)
+        out["isotope_error"] = df.loc[keep, "isotope_error"].round().astype(int)
     out["key"] = out["scannr"].map(spectrum_key)
     return out.drop_duplicates(["filename", "key"])
 

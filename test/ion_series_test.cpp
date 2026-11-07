@@ -34,6 +34,7 @@
 #include "Digest.h"
 #include "FASTagger.h"
 #include "IonSeries.h"
+#include "PrecursorHypotheses.h"
 #include "ProteomeIndex.h"
 #include "TagRecon.h"
 #include "complement_synth.h"
@@ -52,6 +53,7 @@
 #include <OpenMS/METADATA/Precursor.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <cmath>
 #include <iostream>
 #include <regex>
@@ -162,6 +164,37 @@ namespace
   // Tryptic peptides without C (fixed CAM), I (read as L) or P.
   const char* const kPeptides[5] = {"VGAHAGEYGAEALER", "LLEQTHGGLNAWK", "DLVEGFNTWQR", "GDFQAMVYTNSAWR",
                                     "YLGYLEQLLR"};
+
+  /// (f2) #3d's two-residue flank histogram (D3cg, TerminusCounter::
+  /// enableFlank2), when the tree has it: a reversed c-derived tag whose
+  /// nterm_mass is a residue pair sum + offC - offN lands in that pair's bin,
+  /// as a reversed b tag at pair sum + H2O does. Returns false (skip) without
+  /// #3d; the template only instantiates the calls when they exist.
+  template <class TC>
+  bool flank2CzCheck(TC tc_cz, TC tc_by, double rev_cz, int& bad)
+  {
+    if constexpr (requires { tc_cz.enableFlank2(); tc_cz.flank2Table()->find(0.0); tc_cz.dip; })
+    {
+      tc_cz.enableFlank2();
+      tc_by.enableFlank2();
+      const double er = resMass('E') + resMass('R');
+      const int bin = tc_cz.flank2Table()->find(er);
+      // cterm 1000 Da: no pair sum, so only the nterm end can count.
+      tc_cz.add(er + rev_cz, 1000.0, "AAAA", rev_cz);
+      tc_by.add(er + kWater, 1000.0, "AAAA");
+      std::uint64_t n_cz = 0, n_by = 0;
+      for (auto v : tc_cz.dip) n_cz += v;
+      for (auto v : tc_by.dip) n_by += v;
+      if (bin < 0 || n_cz != 1 || tc_cz.dip[static_cast<size_t>(bin)] != 1) ++bad;
+      if (n_by != 1 || tc_by.dip[static_cast<size_t>(bin)] != 1) ++bad;
+      return true;
+    }
+    else
+    {
+      (void)tc_cz; (void)tc_by; (void)rev_cz; (void)bad;
+      return false;
+    }
+  }
 
   /// ion_series_test --write-mzml <fasta> <out.mzML> <cz|by> [n]: a synthetic
   /// run for the CLI tests (ion_series_cli_test, threads_test). n (40)
@@ -670,6 +703,25 @@ int main(int argc, char** argv)
       check(compl3_both >= compl3, std::string(pname) + ": both is at least the precursor rule");
     }
   }
+  // ---- (b3) #6's charge evidence counts c/z-dot pairs for c/z spectra ----
+  // The infer and isotope calls count 1+ pairs at M + 2p; a spectrum read as
+  // c/z-dot counts them at M + H + 2p (the tool passes the c/z
+  // ComplementSpec), so a c/z ladder supports its true mass.
+  {
+    const auto cs_by = FASTag::ComplementSpec::fromParam(FASTag::cliDefaultParam());
+    const auto cs_cz = FASTag::ComplementSpec::fromParam(withPair(FASTag::cliDefaultParam(), IS::Series::CZ));
+    double e_cz = 0, e_by = 0;
+    for (const char* pep : kPeptides)
+    {
+      const CzSynth::Spec s = CzSynth::make(pep, 2, CzSynth::Ions::CZ, 1, 0, 400u);
+      e_cz += FASTag::Hyp::complementExcess(s.spec, s.M, cs_cz);
+      e_by += FASTag::Hyp::complementExcess(s.spec, s.M, cs_by);
+      const CzSynth::Spec b = CzSynth::make(pep, 2, CzSynth::Ions::BY, 1, 0, 400u);
+      check(FASTag::Hyp::complementExcess(b.spec, b.M, cs_by) > 3.0, std::string(pep) + ": b/y pairs at M + 2p (1.11 sum)");
+    }
+    std::cout << "b3. complement excess of 5 c/z ladders: c/z pairs " << e_cz << ", b/y pairs " << e_by << "\n";
+    check(e_cz > 20.0 && e_cz > e_by + 15.0, "b3: c/z-dot pairs carry the charge evidence of a c/z ladder");
+  }
 
   // ---- (c) the ETD precursor filter ----
   {
@@ -836,6 +888,15 @@ int main(int argc, char** argv)
     const int K = FASTag::Digest::aaIndex('K');
     check(K >= 0 && tc_cz.cterm()[static_cast<size_t>(K)] == 1, "(e) the c/z reversed read counts K at P1");
     check(K >= 0 && tc_by.cterm()[static_cast<size_t>(K)] == 0, "(e) read with H2O it does not");
+  }
+
+  // ---- (f2) #3d flank2 dip under c/z (only with D3cg merged) ----
+  {
+    int bad = 0;
+    const bool ran = flank2CzCheck(FASTag::Digest::TerminusCounter(), FASTag::Digest::TerminusCounter(),
+                                   IS::ionPair(IS::Series::CZ).reversedOffset(), bad);
+    check(bad == 0, "f2: a reversed c-derived tag enters the flank2 dip at its pair sum, with offC - offN");
+    std::cout << "f2. flank2 dip under c/z: " << (ran ? "checked" : "skipped (no #3d in this tree)") << "\n";
   }
 
   // ---- (f) terminal reports on a c/z-dot synthetic set equal the true termini ----
