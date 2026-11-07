@@ -9,9 +9,11 @@
 // - each line's own terminator (CRLF, LF or a lone CR; none on a last line);
 // - each cell as written (raw), quotes included; the reading of a cell
 //   (cellValue) unquotes a well-formed quoted cell ("" inside is one quote,
-//   and tabs and line breaks inside quotes stay in the cell). A malformed
-//   quote (text after the closing quote, no closing quote) is read as
-//   written, up to the next tab or line break;
+//   and tabs and line breaks inside quotes stay in the cell; a line break
+//   only when the row the cell closes has the header's cell count). A
+//   malformed quote (text after the closing quote, no closing quote, or a
+//   quoted line break that would leave its row a different width) is read
+//   as written, up to the next tab or line break;
 // - empty cells, blank lines, ragged rows, repeated columns (comment
 //   [modification parameters] is repeated by design) and columns this app
 //   does not know.
@@ -117,20 +119,24 @@ function quotedEnd(s: string, i: number): number {
   }
 }
 
-function parseText(s: string): SdrfLine[] {
-  const lines: SdrfLine[] = []
-  let cells: SdrfCell[] = []
-  let i = 0
-  if (s.length === 0) return lines
+const hasBreak = (raw: string): boolean => raw.includes('\n') || raw.includes('\r')
+
+/// One row starting at @p i: its cells, terminator and the index after it.
+/// A quoted cell that starts at a position in @p flat is read unquoted.
+function parseRow(s: string, i: number, flat: ReadonlySet<number>): { line: SdrfLine; next: number; crossing: number[] } {
+  const cells: SdrfCell[] = []
+  const crossing: number[] = []
   for (;;) {
     // One cell at i.
-    let end = s[i] === '"' ? quotedEnd(s, i) : -1
+    let end = s[i] === '"' && !flat.has(i) ? quotedEnd(s, i) : -1
     const quoted = end >= 0
     if (!quoted) {
       end = i
       while (!isEnd(s[end])) end++
     }
-    cells.push({ raw: s.slice(i, end), quoted })
+    const raw = s.slice(i, end)
+    if (quoted && hasBreak(raw)) crossing.push(i)
+    cells.push({ raw, quoted })
     i = end
     if (s[i] === '\t') {
       i++
@@ -140,9 +146,28 @@ function parseText(s: string): SdrfLine[] {
     let eol: Eol = ''
     if (s[i] === '\r') eol = s[i + 1] === '\n' ? '\r\n' : '\r'
     else if (s[i] === '\n') eol = '\n'
-    lines.push({ cells, eol })
-    cells = []
-    i += eol.length
+    return { line: { cells, eol }, next: i + eol.length, crossing }
+  }
+}
+
+/// The lines of @p s. A quoted cell may hold a line break only when the row
+/// it closes has the header's cell count; otherwise (a stray leading quote
+/// that would swallow the following lines) the cell is read unquoted, as
+/// written, up to the next tab or line break, the last such cell first.
+function parseText(s: string): SdrfLine[] {
+  const lines: SdrfLine[] = []
+  let i = 0
+  if (s.length === 0) return lines
+  for (;;) {
+    const width = lines.length ? lines[0].cells.length : -1
+    const flat = new Set<number>()
+    let r = parseRow(s, i, flat)
+    while (width >= 0 && r.crossing.length && r.line.cells.length !== width) {
+      flat.add(r.crossing[r.crossing.length - 1])
+      r = parseRow(s, i, flat)
+    }
+    lines.push(r.line)
+    i = r.next
     if (i >= s.length) return lines
   }
 }

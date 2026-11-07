@@ -92,6 +92,24 @@ describe('SDRF round trip (byte for byte)', () => {
     }
   })
 
+  it('a stray leading quote does not swallow the rows after it', () => {
+    const s = 'a\tb\tcomment[data file]\n"5 inch\tx\tr1.raw\nfoo\tbar"\tr2.raw\nc\td\tr3.raw\n'
+    const t = expectSame(enc(s))
+    const rows = dataRows(t)
+    expect(rows).toHaveLength(3)
+    const df = columnsNamed(t, 'comment[data file]')[0]
+    expect(rows.map((r) => cellValue(r.cells[df]))).toEqual(['r1.raw', 'r2.raw', 'r3.raw'])
+    // The stray quote is read as written, up to the next tab.
+    expect(rows[0].cells.map(cellValue)).toEqual(['"5 inch', 'x', 'r1.raw'])
+    expect(rows[1].cells.map(cellValue)).toEqual(['foo', 'bar"', 'r2.raw'])
+    // A quoted line break in a row of the header's width is still one cell.
+    const u = expectSame(enc('a\tb\tc\n"one\ntwo"\tx\ty\nd\te\tf\n'))
+    expect(dataRows(u).map((r) => r.cells.map(cellValue))).toEqual([
+      ['one\ntwo', 'x', 'y'],
+      ['d', 'e', 'f']
+    ])
+  })
+
   it('empty cells, empty rows and whitespace are kept', () => {
     const t = expectSame(enc('a\tb\tc\n\t\t\n  x \t\t\n\n'))
     const rows = dataRows(t)
