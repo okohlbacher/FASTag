@@ -2,8 +2,8 @@ import { useEffect, useId, useMemo, useRef, useState, type JSX, type KeyboardEve
 import type { BrowserEvent, ResultsHead, ResultsPage, ResultsSort, ResultsView } from './types'
 import { baseName, DECIMAL } from './digestReport'
 import { HelpButton, HelpLink } from './help/HelpLink'
-import { useExportJob, useExportJobs } from './results/exportJobs'
-import { canExportReads, DENOVO_DEFAULTS, tagsToDenovo, type DenovoFormat } from './export/denovo'
+import { READS_NAME, useExportJob, useExportJobs, type ExportJob } from './results/exportJobs'
+import { canExportReads, DENOVO_DEFAULTS, type DenovoFormat } from './export/denovo'
 
 // Hand-rolled fixed-row-height virtualization. Not react-window: above ~600k
 // rows the spacer div would exceed WebKit's ~16.7M px element-height limit and
@@ -246,8 +246,21 @@ export function spectrumHint(id: string | undefined): string {
   return parts.find((p) => /^(scan|frame|index)=/i.test(p)) ?? parts[parts.length - 1] ?? t.slice(0, 30)
 }
 
-/// The words of a read format.
-const READS_NAME: Record<DenovoFormat, string> = { stitch: 'Stitch', alps: 'ALPS' }
+/// What a job's progress counts: rows written, or (a reads job) MB read.
+function progressText(job: ExportJob): string {
+  const pct = exportPct(job.done, job.total)
+  if (job.unit === 'rows') return `${pct}% (${job.done.toLocaleString('en-US')} of ${job.total.toLocaleString('en-US')} rows)`
+  const mb = (b: number): string => (b / 1e6).toLocaleString('en-US', { maximumFractionDigits: b < 1e7 ? 1 : 0 })
+  return `${pct}% (${mb(job.done)} of ${mb(job.total)} MB read)`
+}
+
+/// What a job is said to do when it starts: a reads job names the tags it
+/// reads (the reads it writes are known only at its end).
+function jobStartText(job: ExportJob): string {
+  if (job.kind === 'table') return `Exporting to ${job.dest}…`
+  const n = job.tags ?? 0
+  return `Writing ${READS_NAME[job.kind]} reads from ${n.toLocaleString('en-US')} ${n === 1 ? 'tag' : 'tags'} to ${job.dest}…`
+}
 
 /// The scrollTop that puts row @p pos in the middle of a viewport of @p viewH
 /// (the same mapping the virtualization reads back, capped spacer included).
@@ -263,9 +276,13 @@ interface Props {
   path: string
   /// Where the file came from, beside its row count: the run that wrote it.
   source?: string
+  /// A file without res_conf (GUI-DESIGN S8): runs the form's input again
+  /// with -res_conf on. Given only when this file is the output of the run
+  /// the form would repeat; disabled while busy.
+  rerunResConf?: { run(): void; disabled: boolean } | null
 }
 
-export default function ResultsTable({ path, source }: Props): JSX.Element {
+export default function ResultsTable({ path, source, rerunResConf }: Props): JSX.Element {
   const [meta, setMeta] = useState<Meta | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Best tags first, as the CLI ranks them. A file without an evalue column
@@ -324,7 +341,6 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
   // Export as the table (TSV or CSV) or as de novo reads (export/denovo.ts).
   const [exportKind, setExportKind] = useState<'table' | DenovoFormat>('table')
   const [readsOpts, setReadsOpts] = useState({ minLength: String(DENOVO_DEFAULTS.minLength), topN: String(DENOVO_DEFAULTS.topN) })
-  const [readsJob, setReadsJob] = useState<{ running: boolean; result: { ok: boolean; text: string } | null } | null>(null)
   const firstRef = useRef(0)
   const matchedRef = useRef(0)
   const formRef = useRef<HTMLFormElement>(null)
@@ -379,7 +395,6 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
     idPending.current = false
     setRankNote('')
     setCopyNote('')
-    setReadsJob(null)
     rankedSeen.current = false
     openedRef.current = null
     // D5: the first rows from the head read, at once; the index and the
@@ -703,30 +718,14 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
   const kind = readsOk ? exportKind : 'table'
   const readsMin = /^\s*-?\d+\s*$/.test(readsOpts.minLength) ? Number(readsOpts.minLength) : null
   const readsTop = /^\s*\d+\s*$/.test(readsOpts.topN) && Number(readsOpts.topN) >= 1 ? Number(readsOpts.topN) : null
+  // A job in the backend (denovo.rs) with progress and Cancel, as the table
+  // export: the file is read there, never in the renderer.
   async function exportReads(format: DenovoFormat): Promise<void> {
-    if (readsMin == null || readsTop == null) return
+    if (readsMin == null || readsTop == null || !meta) return
     const stem = path.endsWith('.tsv') ? path.slice(0, -4) : path
     const dest = await window.fastag.saveFile(`${stem}.${format}.csv`, ['csv'])
     if (!dest) return
-    setReadsJob({ running: true, result: null })
-    try {
-      const text = await window.fastag.tagsText(path)
-      const out = tagsToDenovo(text, { format, topN: readsTop, minLength: readsMin })
-      await window.fastag.writeReads(path, dest, out.text)
-      const skipped = out.malformed > 0 ? ` ${out.malformed.toLocaleString('en-US')} malformed ${out.malformed === 1 ? 'row' : 'rows'} skipped.` : ''
-      const mods = Object.keys(out.unknownMods)
-      const stripped =
-        format === 'stitch' && mods.length > 0 ? ` Unknown modifications written as bare residues: ${mods.map((m) => m || '(empty)').join(', ')}.` : ''
-      setReadsJob({
-        running: false,
-        result: {
-          ok: true,
-          text: `Wrote ${out.reads.toLocaleString('en-US')} ${READS_NAME[format]} ${out.reads === 1 ? 'read' : 'reads'} to ${dest}.${skipped}${stripped}`
-        }
-      })
-    } catch (err) {
-      setReadsJob({ running: false, result: { ok: false, text: `Export failed: ${err instanceof Error ? err.message : String(err)}` } })
-    }
+    await exportJobs.startReads(path, dest, { format, topN: readsTop, minLength: readsMin }, meta.total)
   }
   const startExport = (): void => void (kind === 'table' ? exportShown() : exportReads(kind))
 
@@ -735,7 +734,8 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
   exportRef.current = startExport
   const canExport =
     !!meta &&
-    (kind === 'table' ? matched > 0 && !job?.running : meta.total > 0 && !readsJob?.running && readsMin != null && readsTop != null)
+    !job?.running &&
+    (kind === 'table' ? matched > 0 : meta.total > 0 && readsMin != null && readsTop != null)
   useEffect(() => {
     const on = (e: Event): void => {
       if ((e as CustomEvent<string>).detail === 'export' && canExport) void exportRef.current()
@@ -1026,6 +1026,17 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
             </option>
           </select>
         </span>
+        {meta && !readsOk && rerunResConf && (
+          <button
+            type="button"
+            className="secondary"
+            disabled={rerunResConf.disabled}
+            title="Stitch and ALPS reads need the res_conf column: runs this input again with -res_conf on"
+            onClick={rerunResConf.run}
+          >
+            Re-run with per-residue confidence
+          </button>
+        )}
         <button ref={exportBtnRef} type="button" className="secondary" disabled={!canExport} onClick={startExport}>
           {kind === 'table' ? 'Export shown rows…' : 'Export reads…'}
         </button>
@@ -1077,11 +1088,6 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
           </p>
         </div>
       )}
-      {(readsJob?.running || readsJob?.result) && (
-        <p className={readsJob.result ? (readsJob.result.ok ? 'rt-note' : 'rt-note bad') : 'rt-note'} role="status" aria-live="polite">
-          {readsJob.result ? readsJob.result.text : 'Writing reads…'}
-        </p>
-      )}
       {colsOpen && meta && (
         <fieldset className="rt-cols" id={`${id}-cols`}>
           <legend>Columns shown</legend>
@@ -1110,10 +1116,9 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={exportPct(job.done, job.total)}
-            aria-valuetext={`${exportPct(job.done, job.total)}% (${job.done.toLocaleString('en-US')} of ${job.total.toLocaleString('en-US')} rows)`}
+            aria-valuetext={progressText(job)}
           >
-            Exporting… {exportPct(job.done, job.total)}% ({job.done.toLocaleString('en-US')} of{' '}
-            {job.total.toLocaleString('en-US')} rows)
+            {job.kind === 'table' ? 'Exporting…' : `Writing ${READS_NAME[job.kind]} reads…`} {progressText(job)}
           </span>{' '}
           <button
             type="button"
@@ -1128,7 +1133,7 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
       )}
       {/* Always in the page; said twice per job: when it starts, when it ends. */}
       <p className={job?.result ? (job.result.ok ? 'rt-note' : 'rt-note bad') : 'sr-only'} role="status" aria-live="polite">
-        {job?.result ? job.result.text : job?.running ? `Exporting to ${job.dest}…` : ''}
+        {job?.result ? job.result.text : job?.running ? jobStartText(job) : ''}
       </p>
       <form
         ref={formRef}

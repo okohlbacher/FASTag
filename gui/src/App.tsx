@@ -523,6 +523,15 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
                 showFailure={jobs.length === 0}
                 overview={overview}
                 onOverviewAction={(a) => void overviewAction(a)}
+                rerunResConf={
+                  // Only for the output of the run the form would repeat.
+                  run.results?.input && run.results.input === input && jobs.length === 0 && bin?.ok
+                    ? {
+                        run: () => void overviewAction({ kind: 'enable', label: 'Re-run with per-residue confidence', values: { res_conf: true } }),
+                        disabled: busy || !!blocked
+                      }
+                    : null
+                }
                 runningState={
                   running && jobs.length === 0 ? (
                     <RunningPanel

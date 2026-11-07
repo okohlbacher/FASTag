@@ -1,7 +1,7 @@
 #[doc(hidden)]
 pub mod browser;
 mod close_guard;
-mod denovo;
+pub mod denovo;
 mod drop;
 mod events;
 mod fastag;
@@ -90,8 +90,7 @@ pub fn run() {
             species::species,
             report::report_text,
             report::summary_write,
-            denovo::tags_text,
-            denovo::denovo_write,
+            denovo::denovo_export,
             drop::folder_spectra_list,
             species::taxdb_info,
             settings::load_settings,

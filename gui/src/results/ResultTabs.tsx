@@ -59,6 +59,10 @@ export interface ResultTabsProps {
   onOverviewAction?(a: TileAction): void
   // Over the tabs while a single run goes (RunningPanel).
   runningState?: ReactNode
+  // GUI-DESIGN S8: the Tags table's "Re-run with per-residue confidence"
+  // for a file without res_conf; null when the form would not repeat the
+  // run that wrote the file shown.
+  rerunResConf?: { run(): void; disabled: boolean } | null
 }
 
 export default function ResultTabs(p: ResultTabsProps): JSX.Element {
@@ -220,6 +224,7 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
             key={`${results.path}#${results.gen}`}
             path={results.path}
             source={results.input ? `from the run of ${results.input}` : 'opened from disk'}
+            rerunResConf={p.rerunResConf}
           />
         ) : (
           <div className="tablewrap">

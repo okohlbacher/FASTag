@@ -39,6 +39,18 @@ export type ExportEvent =
   | { kind: 'done'; jobId: number; rows: number; dest: string }
   | { kind: 'failed'; jobId: number; message: string }
   | { kind: 'cancelled'; jobId: number }
+  // A reads export (denovo.rs) is complete: the reads written and what
+  // tools/tags_to_denovo.py counts. A reads job's progress is in bytes read.
+  | {
+      kind: 'readsDone'
+      jobId: number
+      reads: number
+      rowsRead: number
+      short: number
+      malformed: number
+      unknownMods: string[]
+      dest: string
+    }
 
 export interface ResultsPage {
   columns: string[]
@@ -295,11 +307,20 @@ export interface FastagApi {
   ) => Promise<number>
   // Stop an export job; false when it is not running (any more).
   cancelExport: (jobId: number) => Promise<boolean>
-  // Stitch/ALPS export (denovo.rs): the whole tags file as text, for
-  // export/denovo.ts (rejects above 256 MB, or when it is not UTF-8); and the
-  // reads it made, to a .csv through a .part file, never over @p source.
-  tagsText: (path: string) => Promise<string>
-  writeReads: (source: string, dest: string, text: string) => Promise<void>
+  // Start a Stitch/ALPS export job (denovo.rs): the reads of tags file
+  // @p path, as tools/tags_to_denovo.py --format F --top-n N --min-length L
+  // writes them, to a .csv (never over @p path) through a .part file. The
+  // backend reads the file once on a thread of its own; its progress (bytes
+  // read of the file's size) and its end come through onEvent, and
+  // cancelExport stops it as it does a table export.
+  exportReads: (
+    path: string,
+    dest: string,
+    format: 'stitch' | 'alps',
+    topN: number,
+    minLength: number,
+    onEvent: (e: ExportEvent) => void
+  ) => Promise<number>
   // Close guard: the window was closed ('close') or the app asked to quit
   // ('quit') while a run or batch is active; the backend prevented it and
   // waits for answerClose.

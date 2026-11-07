@@ -31,9 +31,10 @@
 //               export as a job; the text of each export is kept in
 //               window.__fastagE2E.exports
 //   denovo      P3 PR b: the view fixture on the real E. coli tags with the
-//               res_conf and usi columns (src/fixtures/denovo), whose text
-//               tagsText serves for the Stitch/ALPS export; the reads
-//               written are in mock.readsWrites
+//               res_conf and usi columns (src/fixtures/denovo); its
+//               Stitch/ALPS export job converts them with export/denovo.ts
+//               (as denovo.rs would) and keeps the reads in
+//               mock.readsWrites
 //   gate-batch  P2b Batch summary: Add folder… on /data lists eight spectra
 //               files, one per job of a real batch (src/fixtures/cli/batch,
 //               testing/batchFixtures.ts): each prints that job's log and

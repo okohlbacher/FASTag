@@ -44,7 +44,8 @@ gui/
     ResultsTable.tsx   tags browser: virtualized table with filters, column choice and export,
                        a keyboard active row, copy row and copy USI
     export/            denovo.ts: Stitch and ALPS reads, a byte-exact port of
-                       tools/tags_to_denovo.py (its golden files in fixtures/denovo/)
+                       tools/tags_to_denovo.py (its golden files in fixtures/denovo/),
+                       the reference the test bridges convert with
     SpeciesPanel.tsx   species report
     Leftovers.tsx      the startup offer to remove files an unfinished run left (sweep.rs)
     DigestPanel.tsx    digest, label and mass-gap reports
@@ -97,7 +98,8 @@ gui/
     src/reveal.rs      ResolvedOutputs (every output, absolute) and Reveal / Open folder, limited to run outputs
     src/species.rs     species TSV read + FTX2 taxdb header read
     src/report.rs      digest/label/mass-gap report read
-    src/denovo.rs      the Stitch/ALPS export's file side: the tags file as text, the reads to a .csv via .part
+    src/denovo.rs      the Stitch/ALPS export job: tools/tags_to_denovo.py ported (the same golden
+                       files), one pass over the file, progress and Cancel, the reads to a .csv via .part
     examples/browser_bench.rs  the browser bench (bench/bench-<version>.json)
     tauri.conf.json    window, bundle, icons
     resources/fastag/  the bundled FASTag binary + share/ (dev: symlinks; release: real files)
@@ -228,9 +230,14 @@ spectrum ID's scan, frame or index part. **Export as** writes the table (TSV,
 or CSV for a name ending in .csv: the shown rows, columns and order) or, for
 a file with the `res_conf` column (`-res_conf`), **Stitch** or **ALPS**
 reads: exactly what `tools/tags_to_denovo.py --format stitch|alps --top-n N
---min-length L` writes from the whole file (`export/denovo.ts`, checked byte
-for byte against the script's golden files), by default the best tag of each
+--min-length L` writes from the whole file, by default the best tag of each
 spectrum of at least 8 residues. The table's filters do not apply to reads.
+The reads export is a job like the table export: the backend (`denovo.rs`,
+checked byte for byte against the script's golden files) reads the file once,
+with no size limit, and shows its progress in MB read with **Cancel export**;
+a cancelled or failed export leaves no file. For a run's output without
+`res_conf`, **Re-run with per-residue confidence** runs the same input again
+with `-res_conf` on.
 
 Help is a side panel beside any view, with a search over every page, the
 troubleshooting entries, the glossary and the settings reference.
@@ -382,7 +389,8 @@ hand-written file with every edge case the script handles, each in the
 cases of `cases.json`). `node scripts/denovo-golden.mjs` (the `gui` CI job)
 runs the script on every case and fails when its output differs from the
 committed files; `--write` regenerates them. `src/export/denovo.test.ts`
-checks that `export/denovo.ts` writes them byte for byte, and
+checks that `export/denovo.ts` writes them byte for byte, the `denovo`
+cargo tests that `src/denovo.rs` does, and
 `e2e-web/specs/p3b.spec.ts` that the app exports them, with the keyboard
 row navigation and the copy actions.
 

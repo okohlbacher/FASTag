@@ -187,6 +187,17 @@ pub enum ExportEvent {
     Failed { job_id: u64, message: String },
     /// results_cancel stopped it; nothing was written under the name.
     Cancelled { job_id: u64 },
+    /// A reads export (denovo.rs) is complete under its name: the reads
+    /// written and what tools/tags_to_denovo.py would count.
+    ReadsDone {
+        job_id: u64,
+        reads: usize,
+        rows_read: usize,
+        short: usize,
+        malformed: usize,
+        unknown_mods: Vec<String>,
+        dest: String,
+    },
 }
 
 impl ExportEvent {
@@ -195,7 +206,8 @@ impl ExportEvent {
             ExportEvent::Progress { job_id, .. }
             | ExportEvent::Done { job_id, .. }
             | ExportEvent::Failed { job_id, .. }
-            | ExportEvent::Cancelled { job_id } => *job_id,
+            | ExportEvent::Cancelled { job_id }
+            | ExportEvent::ReadsDone { job_id, .. } => *job_id,
         }
     }
     pub fn is_terminal(&self) -> bool {
@@ -238,7 +250,7 @@ impl Cancel {
     }
 }
 
-const CANCELLED: &str = "cancelled";
+pub(crate) const CANCELLED: &str = "cancelled";
 
 /// The order of every row of a file by one column.
 pub(crate) struct Rank {
@@ -1398,6 +1410,12 @@ impl Default for Shared {
 
 #[derive(Default, Clone)]
 pub struct BrowserCache(Arc<Shared>);
+
+impl BrowserCache {
+    pub(crate) fn shared(&self) -> &Arc<Shared> {
+        &self.0
+    }
+}
 
 fn fields_of(raw: &[u8]) -> Vec<String> {
     trim_nl(raw).split(|b| *b == b'\t').map(|f| String::from_utf8_lossy(f).into_owned()).collect()
@@ -2745,6 +2763,27 @@ fn dest_key(dest: &str) -> String {
     }
 }
 
+/// A new export job writing @p dest: its id (larger than every earlier one)
+/// and its cancel token; refused while another job writes to that name. The
+/// table export (start_export) and the reads export (denovo.rs) share it,
+/// and results_cancel stops either.
+pub(crate) fn register_job(shared: &Shared, dest: &str) -> Result<(u64, Cancel), String> {
+    let key = dest_key(dest);
+    let mut jobs = shared.jobs.lock().unwrap();
+    if jobs.values().any(|(_, d)| *d == key) {
+        return Err(format!("an export to {dest} is still running; wait for it or cancel it first"));
+    }
+    let job_id = shared.next_job.fetch_add(1, Ordering::SeqCst) + 1;
+    let token = Cancel::default();
+    jobs.insert(job_id, (token.clone(), key));
+    Ok((job_id, token))
+}
+
+/// Job @p job_id ended: another may write to its name.
+pub(crate) fn end_job(shared: &Shared, job_id: u64) {
+    shared.jobs.lock().unwrap().remove(&job_id);
+}
+
 /// Start an export job on a thread of its own; its events go to @p emit.
 /// Returns the job's id (larger than every earlier one), or why it did not
 /// start: an export to the same name is still running. Only cancel_export
@@ -2758,17 +2797,7 @@ pub(crate) fn start_export(
     fmt: ExportFormat,
     emit: ExportEmit,
 ) -> Result<u64, String> {
-    let key = dest_key(dest);
-    let job_id = {
-        let mut jobs = shared.jobs.lock().unwrap();
-        if jobs.values().any(|(_, d)| *d == key) {
-            return Err(format!("an export to {dest} is still running; wait for it or cancel it first"));
-        }
-        let job_id = shared.next_job.fetch_add(1, Ordering::SeqCst) + 1;
-        jobs.insert(job_id, (Cancel::default(), key));
-        job_id
-    };
-    let token = shared.jobs.lock().unwrap()[&job_id].0.clone();
+    let (job_id, token) = register_job(shared, dest)?;
     let (me, path, spec, columns, dest) = (shared.clone(), path.to_string(), spec.clone(), columns.to_vec(), dest.to_string());
     std::thread::spawn(move || {
         // Progress at most every 100 ms, and always the first and the last.
@@ -2781,7 +2810,7 @@ pub(crate) fn start_export(
             }
         };
         let r = export_to(&me, &path, &spec, &columns, &dest, fmt, &token, &progress);
-        me.jobs.lock().unwrap().remove(&job_id);
+        end_job(&me, job_id);
         emit(match r {
             Ok(rows) => ExportEvent::Done { job_id, rows, dest },
             Err(_) if token.is_cancelled() => ExportEvent::Cancelled { job_id },

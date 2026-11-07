@@ -1,15 +1,17 @@
 // P3 PR b (GUI-DESIGN 3 S4, 10 P3): the Tags table's keyboard active row
 // (arrows, Home/End, PageUp/PageDown, a roving tabindex), copy row and copy
 // USI, the spectrum filter's placeholder from the file's first spectrum ID,
-// and the Stitch/ALPS export through export/denovo.ts, against the mock
-// bridge. denovo.ts itself is pinned to the script's golden files in
-// export/denovo.test.ts; the backend side is denovo.rs's cargo tests.
+// and the Stitch/ALPS export as a backend job (denovo.rs) with progress and
+// Cancel, against the mock bridge (whose job converts with export/denovo.ts).
+// denovo.ts and denovo.rs are each pinned to the script's golden files
+// (export/denovo.test.ts, denovo.rs's cargo tests).
 
 // @ts-ignore -- node built-in; the app's tsconfig has no node types
 import { readFileSync } from 'node:fs'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import ResultsTable, { spectrumHint } from './ResultsTable'
+import { goTo, pickSingle, renderApp } from './testing/render'
 import { installMockBridge, type MockBridge } from './testing/mockBridge'
 
 const flush = (): Promise<void> => act(async () => {})
@@ -272,7 +274,8 @@ describe('Stitch and ALPS export', () => {
     mock.nextPickOutput = '/d/x.stitch.csv'
     await click(screen.getByRole('button', { name: 'Export reads…' }))
     expect(mock.pickFileCalls[mock.pickFileCalls.length - 1]).toEqual({ kind: 'save', formats: ['csv'] })
-    expect(mock.tagsTextCalls).toEqual(['/d/x.tags.tsv'])
+    // A backend job: the renderer never reads the file.
+    expect(mock.readsCalls).toEqual([{ path: '/d/x.tags.tsv', dest: '/d/x.stitch.csv', format: 'stitch', topN: 1, minLength: 8 }])
     expect(mock.readsWrites).toEqual([{ source: '/d/x.tags.tsv', dest: '/d/x.stitch.csv', text: fixture('edge.stitch.csv') }])
     expect(await screen.findByText(/^Wrote 4 Stitch reads to \/d\/x\.stitch\.csv\. 7 malformed rows skipped\.$/)).toBeDefined()
     // The table export is untouched by it.
@@ -336,6 +339,76 @@ describe('Stitch and ALPS export', () => {
     expect(await screen.findByText('Export failed: cannot write /d/x.alps.csv: disk full')).toBeDefined()
   })
 
+  it('runs as a job with progress in MB read, its tag count said up front, and Cancel', async () => {
+    const mock = await renderReads()
+    mock.holdExport = true
+    await choose('alps')
+    mock.nextPickOutput = '/d/x.alps.csv'
+    await click(screen.getByRole('button', { name: 'Export reads…' }))
+    expect(screen.getByText('Writing ALPS reads from 1 tag to /d/x.alps.csv…')).toBeDefined()
+    await act(async () => mock.emitExport({ kind: 'progress', jobId: mock.lastExportId, done: 250_000_000, total: 1_000_000_000 }))
+    const bar = screen.getByRole('progressbar', { name: 'Export progress' })
+    expect(bar.getAttribute('aria-valuenow')).toBe('25')
+    expect(bar.getAttribute('aria-valuetext')).toBe('25% (250 of 1,000 MB read)')
+    expect(bar.textContent).toMatch(/^Writing ALPS reads… 25%/)
+    // One job per file: neither export starts while it runs.
+    expect(screen.getByRole('button', { name: 'Export reads…' })).toHaveProperty('disabled', true)
+    await click(screen.getByRole('button', { name: 'Cancel export' }))
+    expect(mock.exportCancelCalls).toEqual([mock.lastExportId])
+    await act(async () => mock.emitExport({ kind: 'cancelled', jobId: mock.lastExportId }))
+    expect(screen.getByText('Export cancelled; nothing was written.')).toBeDefined()
+    expect(screen.queryByRole('progressbar')).toBeNull()
+    expect(mock.readsWrites).toHaveLength(0)
+  })
+
+  it('a cancelled or superseded reads job posts no progress and no result', async () => {
+    const mock = await renderReads()
+    mock.holdExport = true
+    await choose('stitch')
+    mock.nextPickOutput = '/d/x.stitch.csv'
+    await click(screen.getByRole('button', { name: 'Export reads…' }))
+    const first = mock.lastExportId
+    const sendFirst = mock.lastExportSend
+    await click(screen.getByRole('button', { name: 'Cancel export' }))
+    await act(async () => sendFirst({ kind: 'cancelled', jobId: first }))
+    // A second job; the first one's late events change nothing.
+    mock.nextPickOutput = '/d/y.stitch.csv'
+    await click(screen.getByRole('button', { name: 'Export reads…' }))
+    expect(mock.lastExportId).toBeGreaterThan(first)
+    await act(async () => {
+      sendFirst({ kind: 'progress', jobId: first, done: 9, total: 10 })
+      sendFirst({ kind: 'readsDone', jobId: first, reads: 4, rowsRead: 25, short: 4, malformed: 7, unknownMods: [], dest: '/d/x.stitch.csv' })
+    })
+    expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('0')
+    expect(screen.getByText('Writing Stitch reads from 1 tag to /d/y.stitch.csv…')).toBeDefined()
+    await act(async () => mock.finishReads())
+    expect(screen.getByText(/^Wrote 4 Stitch reads to \/d\/y\.stitch\.csv\./)).toBeDefined()
+    expect(mock.readsWrites.map((w) => w.dest)).toEqual(['/d/y.stitch.csv'])
+  })
+
+  it('offers a re-run with -res_conf for a file without it, when the table has one to give', async () => {
+    const cols = COLUMNS.filter((c) => c !== 'res_conf')
+    const rows = ROWS.map((r) => r.filter((_, k) => k !== 7))
+    const mock = installMockBridge()
+    mock.resultsColumns = cols
+    mock.resultsRows = rows
+    const run = vi.fn()
+    const { rerender } = render(<ResultsTable path="/d/x.tags.tsv" rerunResConf={{ run, disabled: false }} />)
+    await flush()
+    await click(screen.getByRole('button', { name: 'Re-run with per-residue confidence' }))
+    expect(run).toHaveBeenCalledTimes(1)
+    rerender(<ResultsTable path="/d/x.tags.tsv" rerunResConf={{ run, disabled: true }} />)
+    expect(screen.getByRole('button', { name: 'Re-run with per-residue confidence' })).toHaveProperty('disabled', true)
+    // Not without a run to repeat, and not for a file that has res_conf.
+    rerender(<ResultsTable path="/d/x.tags.tsv" rerunResConf={null} />)
+    expect(screen.queryByRole('button', { name: 'Re-run with per-residue confidence' })).toBeNull()
+  })
+
+  it('has no re-run for a file with res_conf', async () => {
+    await renderTable()
+    expect(screen.queryByRole('button', { name: 'Re-run with per-residue confidence' })).toBeNull()
+  })
+
   it('Cmd+E exports reads when reads are chosen', async () => {
     const mock = await renderReads()
     await choose('stitch')
@@ -345,5 +418,26 @@ describe('Stitch and ALPS export', () => {
     })
     await waitFor(() => expect(mock.readsWrites).toHaveLength(1))
     expect(mock.exportCalls).toHaveLength(0)
+  })
+})
+
+describe('Re-run with per-residue confidence (S8)', () => {
+  it('runs the same input again with -res_conf on, from the Tags table of its output', async () => {
+    const mock = installMockBridge()
+    await renderApp(mock)
+    await pickSingle(mock, '/d/a.mzML')
+    await click(screen.getByRole('button', { name: /^Run on a\.mzML$/ }))
+    await waitFor(() => expect(mock.runCalls).toHaveLength(1))
+    expect((mock.runCalls[0].params as Record<string, unknown>).res_conf).not.toBe(true)
+    await act(async () => mock.emitDone({ ok: true, code: 0, runId: mock.lastRunId }))
+    await goTo('results')
+    await click(screen.getByRole('tab', { name: 'Tags' }))
+    await flush()
+    const rerun = await screen.findByRole('button', { name: 'Re-run with per-residue confidence' })
+    await click(rerun)
+    await waitFor(() => expect(mock.runCalls).toHaveLength(2))
+    expect(mock.runCalls[1].in).toBe('/d/a.mzML')
+    expect(mock.runCalls[1].params).toMatchObject({ res_conf: true })
+    await act(async () => mock.emitDone({ ok: true, code: 0, runId: mock.lastRunId }))
   })
 })
