@@ -35,6 +35,7 @@
 #include "Centroid.h"
 #include "CliParam.h"
 #include "Census.h"
+#include "CensusIds.h"
 #include "ClusterAcc.h"
 #include "Digest.h"
 #include "FASTagger.h"
@@ -966,6 +967,22 @@ protected:
                         "Default: <out> with its extension replaced by "
                         ".census_summary.tsv", false);
     setValidFormats_("census_summary_out", ListUtils::create<std::string>("tsv"));
+    // #11 phase B: the ids join (src/CensusIds.h). Without -census_ids the
+    // census is phase A's, byte for byte.
+    registerInputFile_("census_ids", "<file>", "",
+                       "Identifications of -in (idXML or mzid) for -census: adds the columns identified "
+                       "(1, 0, empty = unknown) and triage, and a census_ids section to the summary. A "
+                       "spectrum is identified by a target hit whose q-value passes -census_ids_fdr; a "
+                       "file without q-values is refused (filter it with IDFilter first)", false);
+    setValidFormats_("census_ids", ListUtils::create<std::string>("idXML,mzid"));
+    registerDoubleOption_("census_ids_fdr", "<f>", FASTag::CensusIds::kDefaultFdr,
+                          "q-value a target hit of -census_ids needs to identify its spectrum", false, true);
+    setMinFloat_("census_ids_fdr", 0.0);
+    setMaxFloat_("census_ids_fdr", 1.0);
+    registerDoubleOption_("census_triage_evalue", "<f>", FASTag::CensusIds::kDefaultTriageEvalue,
+                          "best_evalue at or below which an unidentified tagged or placed spectrum is a "
+                          "triage candidate (an E-value threshold, not a quality call)", false, true);
+    setMinFloat_("census_triage_evalue", 0.0);
   }
 
   /// True when option @p name holds a value other than its registered
@@ -1381,6 +1398,9 @@ protected:
           {"census", nullptr},
           {"census_out", nullptr},
           {"census_summary_out", nullptr},
+          {"census_ids", nullptr},
+          {"census_ids_fdr", nullptr},
+          {"census_triage_evalue", nullptr},
       };
       for (const StreamRefusal& r : stream_refusals)
         if (optionNonDefault_(r.option))
@@ -2037,6 +2057,9 @@ protected:
           // ---- 1.12 F: ignored-option warnings ----
           {"census_out", "-census", getFlag_("census")},
           {"census_summary_out", "-census", getFlag_("census")},
+          {"census_ids", "-census", getFlag_("census")},
+          {"census_ids_fdr", "-census_ids", getFlag_("census") && !getStringOption_("census_ids").empty()},
+          {"census_triage_evalue", "-census_ids", getFlag_("census") && !getStringOption_("census_ids").empty()},
       };
       for (const IgnoredOption& r : ignored)
       {
@@ -2857,6 +2880,7 @@ protected:
       guard.input("digest_calibration", getStringOption_("digest_calibration"));
       if (alk_db_source == "proteome") guard.input("alkylation_proteome", alk_db);
       // ---- 1.12 F: guarded inputs ----
+      if (getFlag_("census")) guard.input("census_ids", getStringOption_("census_ids"));
       guard.output("out", out);
       guard.output("out_spectra", out_spectra);
       guard.output("recon_out", recon_out);
@@ -2899,6 +2923,34 @@ protected:
         OPENMS_LOG_ERROR << collision << std::endl;
         return ILLEGAL_PARAMETERS;
       }
+    }
+
+    // -census_ids (#11 phase B): read and checked before any output is
+    // opened; the join itself runs on the finished census table (phase 8).
+    const std::string census_ids = getFlag_("census") ? getStringOption_("census_ids") : std::string();
+    const bool census_ids_on = !census_ids.empty();
+    const double census_ids_fdr = getDoubleOption_("census_ids_fdr");
+    const double census_triage_evalue = getDoubleOption_("census_triage_evalue");
+    FASTag::CensusIds::Index census_ids_index;
+    FASTag::CensusIds::Loaded census_ids_loaded;
+    std::string census_ids_run_check;
+    bool census_ids_refused = false;  ///< the census was withheld after the run (foreign references)
+    if (census_ids_on)
+    {
+      census_ids_loaded = FASTag::CensusIds::load(census_ids, census_ids_fdr, census_ids_index);
+      if (!census_ids_loaded.refusal.empty())
+      {
+        OPENMS_LOG_ERROR << census_ids_loaded.refusal << std::endl;
+        return INCOMPATIBLE_INPUT_DATA;
+      }
+      census_ids_run_check = FASTag::CensusIds::runCheck(census_ids_loaded, in);
+      if (census_ids_run_check == "mismatch")
+        OPENMS_LOG_WARN << "Warning: -census_ids names the run '" << census_ids_loaded.runs.front() << "', -in is '"
+                        << FASTag::CensusIds::runStem(in) << "'; the spectrum references are matched anyway."
+                        << std::endl;
+      OPENMS_LOG_INFO << "Census ids: " << census_ids_loaded.n_accepted << " of " << census_ids_loaded.n_ids
+                      << " spectrum identifications pass q <= " << census_ids_fdr << " (" << census_ids << ")"
+                      << std::endl;
     }
 
     std::ofstream tsv(out.c_str());
@@ -2956,6 +3008,12 @@ protected:
       {
         OPENMS_LOG_ERROR << census_part.error() << std::endl;
         return CANNOT_WRITE_OUTPUT_FILE;
+      }
+      if (census_ids_on && census_part.direct())
+      {
+        OPENMS_LOG_ERROR << "-census_ids needs -census_out to be a regular file (" << census_out
+                         << " is not): the ids are joined to the finished table." << std::endl;
+        return ILLEGAL_PARAMETERS;
       }
       ctsv << FASTag::Census::header();
     }
@@ -4312,9 +4370,49 @@ protected:
 
     // -census (#11): the table is complete; the summary starts with the run
     // rows (format Versioned: a new 1.12 report) and adds section `census`.
+    FASTag::CensusIds::JoinTally ids_tally;
+    FASTag::CensusIds::Index::Counts ids_counts;
     if (census_on)
     {
       ctsv.close();
+      // -census_ids: the join, from the finished table to a second .part
+      // file that replaces it before the commit.
+      if (census_ids_on && !ctsv.fail())
+      {
+        FASTag::PartFile joined(census_part.writePath());
+        std::string err;
+        if (!joined.begin()
+            || !FASTag::CensusIds::joinTable(census_part.writePath(), joined.writePath(), census_ids_index,
+                                             census_triage_evalue, ids_tally, err)
+            || !joined.commit())
+        {
+          OPENMS_LOG_ERROR << "Failed joining -census_ids to " << census_out << ": "
+                           << (err.empty() ? joined.error() : err) << std::endl;
+          census_part.discard();
+          return CANNOT_WRITE_OUTPUT_FILE;
+        }
+        ids_counts = census_ids_index.counts();
+        // Foreign references: only known when every spectrum was read.
+        const double share = ids_counts.refs ? static_cast<double>(ids_counts.unmatched) /
+                                                   static_cast<double>(ids_counts.refs)
+                                             : 0.0;
+        if (!subsampling && share > FASTag::CensusIds::kRefuseUnmatched)
+        {
+          OPENMS_LOG_ERROR << "-census_ids: " << ids_counts.unmatched << " of " << ids_counts.refs
+                           << " spectrum references match no spectrum of -in (more than "
+                           << FASTag::CensusIds::kRefuseUnmatched * 100
+                           << "%): the file belongs to another run, or names spectra by an id FASTag cannot "
+                              "match. No census was written; the other outputs are complete." << std::endl;
+          census_part.discard();
+          census_ids_refused = true;
+        }
+        else if (!subsampling && share > FASTag::CensusIds::kWarnUnmatched)
+          OPENMS_LOG_WARN << "Warning: -census_ids: " << ids_counts.unmatched << " of " << ids_counts.refs
+                          << " spectrum references match no spectrum of -in." << std::endl;
+      }
+    }
+    if (census_on && !census_ids_refused)
+    {
       if (ctsv.fail() || !census_part.commit())
       {
         OPENMS_LOG_ERROR << "Failed writing " << census_out << " (disk full?)"
@@ -4325,6 +4423,11 @@ protected:
       std::vector<FD::Row> rows = FASTag::RunReport::runRows(run_meta, FASTag::RunReport::Emit::Versioned);
       for (FD::Row& r : FASTag::Census::summaryRows(tally, static_cast<std::uint64_t>(n_total), subsampling))
         rows.push_back(std::move(r));
+      if (census_ids_on)
+        for (FD::Row& r : FASTag::CensusIds::summaryRows(census_ids_loaded, ids_counts, ids_tally, census_ids,
+                                                         census_ids_run_check, census_ids_fdr,
+                                                         census_triage_evalue, !subsampling))
+          rows.push_back(std::move(r));
       FASTag::PartFile summary_part(census_summary_out);
       if (!summary_part.begin() || !FD::writeReport(summary_part.writePath(), rows) || !summary_part.commit())
       {
@@ -4339,6 +4442,10 @@ protected:
                       << count(FASTag::Census::Status::Placed) << " placed), "
                       << count(FASTag::Census::Status::NoTags) << " no_tags -> " << census_out
                       << ", summary -> " << census_summary_out << std::endl;
+      if (census_ids_on)
+        OPENMS_LOG_INFO << "Census ids: " << ids_tally.by_ident[1] << " identified, " << ids_tally.by_ident[0]
+                        << " not, " << ids_tally.by_ident[2] << " unknown; " << ids_tally.triage
+                        << " triage candidates (best_evalue <= " << census_triage_evalue << ")" << std::endl;
       if (tally.n_processed() != n_ms2)
         OPENMS_LOG_WARN << "Census: " << tally.n_processed() << " processed spectra, but " << n_ms2
                         << " MS2 spectra were tagged; please report this." << std::endl;
@@ -5439,6 +5546,8 @@ protected:
     // #5: a confidently non-tryptic run withheld the FASTA or the
     // configuration it was asked for (a shortlist-only run is not refused).
     if (handoff_refused) return ILLEGAL_PARAMETERS;
+    // #11B: -census_ids named mostly foreign spectra; the census was withheld.
+    if (census_ids_refused) return INCOMPATIBLE_INPUT_DATA;
     return EXECUTION_OK;
   }
 };
