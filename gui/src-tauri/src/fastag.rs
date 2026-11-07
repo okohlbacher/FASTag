@@ -1711,9 +1711,13 @@ mod tests {
         // of 20,000 lines goes out in messages of MAX_BATCH lines ...
         #[test]
         fn ipc_rate_a_burst_of_log_lines_goes_out_in_full_batches() {
-            let (lines, msgs, _) = chatty("burst", 20_000, "STUB_CHATTY=20000\n");
-            // Full batches, plus a few for the phases, progress and Done.
-            assert!(msgs <= lines / crate::events::MAX_BATCH + 12, "{msgs} messages for {lines} lines");
+            let (lines, msgs, secs) = chatty("burst", 20_000, "STUB_CHATTY=20000\n");
+            // Full batches, plus a few for the phases, progress and Done. On a
+            // loaded runner the burst can span a few flush timers, and each
+            // timer may send one short batch (CI saw 53 for a bound of 52), so
+            // allow one extra message per 50 ms the burst took.
+            let bound = lines / crate::events::MAX_BATCH + 12 + (secs / 0.050) as usize;
+            assert!(msgs <= bound, "{msgs} messages for {lines} lines in {secs:.3} s (bound {bound})");
         }
 
         // ... and a sustained one (about 5,000 lines/s for 1-2 s) costs at
