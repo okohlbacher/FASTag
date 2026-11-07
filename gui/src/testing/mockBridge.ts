@@ -16,6 +16,8 @@ import type {
   BinaryInfo,
   BrowserEvent,
   DropRoute,
+  ExportEvent,
+  ExportFormat,
   FastagApi,
   ResolvedOutputs,
   ResultsView,
@@ -107,6 +109,16 @@ export interface MockBridge extends FastagApi {
   revealError: Error | null
   emitMenu(action: string): void
   exportCalls: { path: string; view: ResultsView; columns: string[]; dest: string }[]
+  // The format of each export, in exportCalls' order.
+  exportFormats: ExportFormat[]
+  // An export job: true holds its events (the test sends them with
+  // emitExport); false (the default) ends each job at once with Done.
+  holdExport: boolean
+  // The id of the newest export job, and its Channel; cancelExport calls.
+  lastExportId: number
+  lastExportSend: (e: ExportEvent) => void
+  emitExport(e: ExportEvent): void
+  exportCancelCalls: number[]
   speciesCalls: string[]
   cancelCalls: number
   savedLast: Record<string, unknown>[]
@@ -207,6 +219,7 @@ export function installMockBridge(): MockBridge {
   }
 
   let seq = 0
+  let exportSeq = 0
   let held: ((error?: Error) => void)[] | null = null
 
   const mock: MockBridge = {
@@ -263,6 +276,11 @@ export function installMockBridge(): MockBridge {
     outputsCheckCalls: [],
     resultsQueryCalls: [],
     exportCalls: [],
+    exportFormats: [],
+    holdExport: false,
+    lastExportId: 0,
+    lastExportSend: () => {},
+    exportCancelCalls: [],
     resultsOpenCalls: [],
     revealCalls: [],
     revealError: null,
@@ -389,9 +407,27 @@ export function installMockBridge(): MockBridge {
       return mock.revealError ? Promise.reject(mock.revealError) : Promise.resolve()
     },
     onMenu: on(menuListeners),
-    exportResults: (path, view, columns, dest) => {
+    // A job per export (browser.rs start_export): its id now, its events
+    // on its own Channel after the reply.
+    exportResults: (path, view, columns, dest, format, onEvent) => {
       mock.exportCalls.push({ path, view, columns, dest })
-      return Promise.resolve(mock.resultsRows.length)
+      mock.exportFormats.push(format)
+      const jobId = ++exportSeq
+      mock.lastExportId = jobId
+      mock.lastExportSend = onEvent
+      if (!mock.holdExport) {
+        const rows = mock.resultsRows.length
+        queueMicrotask(() => {
+          onEvent({ kind: 'progress', jobId, done: rows, total: rows })
+          onEvent({ kind: 'done', jobId, rows, dest })
+        })
+      }
+      return Promise.resolve(jobId)
+    },
+    emitExport: (e) => mock.lastExportSend(e),
+    cancelExport: (jobId) => {
+      mock.exportCancelCalls.push(jobId)
+      return Promise.resolve(jobId === mock.lastExportId)
     },
     // Which outputs a run would write: -out (resolved like run() does) and
     // every *_out parameter with a value; those in existingOutputs exist.

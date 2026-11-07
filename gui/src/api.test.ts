@@ -234,3 +234,46 @@ describe('api.ts: command_line and export_ini', () => {
     await expect(api.exportIni(req, '/ro/a.ini')).rejects.toBe('FASTag could not write the INI (Permission denied)')
   })
 })
+
+// P3 (GUI-DESIGN 6.1 item 11): an export is a job. results_export gets the
+// view, the columns, the destination, the format and a Channel of its own,
+// and answers with the job's id; its events come on that Channel, before
+// or after the reply; results_cancel stops the job by its id.
+describe('api.ts: export as a job', () => {
+  afterEach(() => clearMocks())
+
+  it('passes a Channel and the format, answers with the job id, and cancels by it', async () => {
+    const calls: [string, Record<string, unknown>][] = []
+    let wire: Channel<unknown> | null = null
+    mockIPC((cmd, args) => {
+      const a = args as Record<string, unknown>
+      calls.push([cmd, a])
+      if (cmd === 'results_export') {
+        wire = a.onEvent as Channel<unknown>
+        // An event before the reply.
+        internals().runCallback(wire.id, { index: 0, message: { kind: 'progress', jobId: 7, done: 0, total: 3 } })
+        return 7
+      }
+      if (cmd === 'results_cancel') return a.jobId === 7
+      throw new Error(`unexpected command ${cmd}`)
+    })
+    const got: unknown[] = []
+    const view = { sort: { column: 'evalue', desc: false }, perSpectrum: 1 }
+    const id = await api.exportResults('/d/a.tags.tsv', view, ['tag'], '/d/a.csv', 'csv', (e) => got.push(e))
+    expect(id).toBe(7)
+    internals().runCallback(wire!.id, { index: 1, message: { kind: 'done', jobId: 7, rows: 3, dest: '/d/a.csv' } })
+    await tick()
+    expect(got).toEqual([
+      { kind: 'progress', jobId: 7, done: 0, total: 3 },
+      { kind: 'done', jobId: 7, rows: 3, dest: '/d/a.csv' }
+    ])
+    expect(calls[0][0]).toBe('results_export')
+    expect(calls[0][1]).toMatchObject({ path: '/d/a.tags.tsv', view, columns: ['tag'], dest: '/d/a.csv', format: 'csv' })
+    expect(await api.cancelExport(7)).toBe(true)
+    expect(await api.cancelExport(8)).toBe(false)
+    expect(calls.slice(1)).toEqual([
+      ['results_cancel', { jobId: 7 }],
+      ['results_cancel', { jobId: 8 }]
+    ])
+  })
+})

@@ -42,3 +42,4 @@ tauri = { version = "2", features = ["test"] }
 muda = { version = "=0.19.3", default-features = false }
 # getrusage for the peak-memory figures of examples/browser_bench.rs.
 libc = "0.2"
+proptest = { version = "1", default-features = false, features = ["std"] }

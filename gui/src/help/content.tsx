@@ -440,9 +440,12 @@ export const RESULTS: HelpPage = {
       body: (
         <p>
           Above the table, &quot;Spectrum contains&quot;, &quot;Min. length&quot; and &quot;Max. E-value&quot; filter
-          the rows; Database hit picks All, In database, Entrapment or Not in database. Click a column header to sort,
-          drag its edge to resize, and use <strong>Columns…</strong> to hide columns. <strong>Export shown
-          rows…</strong> writes the rows that pass the filters, in the shown columns, to a new TSV file.{' '}
+          the rows; Database hit picks All, In database, Entrapment or Not in database; &quot;Per spectrum&quot; keeps
+          only the best tag (or the best 2, 3 or 5) of each spectrum by E-value, among the rows the other filters
+          leave. Click a column header to sort, drag its edge to resize, and use <strong>Columns…</strong> to hide
+          columns. <strong>Export shown rows…</strong> writes the rows that pass the filters, in the table&apos;s
+          order and in the shown columns, to a new file: TSV, or CSV when the name ends in .csv. A large export shows
+          its progress and can be cancelled; nothing is written under the name until it is complete.{' '}
           <strong>Open tags…</strong> shows a tags file from an earlier run.
         </p>
       )

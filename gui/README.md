@@ -249,10 +249,27 @@ File, Run, View and Help menus.
     cargo run --release --example browser_bench -- big.tags.tsv > ../bench/bench-<version>.json
 
 Each mode runs in its own process (its peak RSS is its own): `firstcut`
-(head read, index, E-value order), `today` (v1.11's sorted view), `verify`
-(both orders identical) and `typed` (the typed-column prototype: filter time,
-peak memory, export throughput). bench/bench-1.12.0.json holds the P0b
-numbers on 1.65M and 6.6M rows.
+(head read, index, E-value order), `typed` (the P0b typed-column prototype:
+filter time, peak memory, export throughput), `p3` (the P3 browser through
+the app's own open, query and export paths: filter changes, a cached page,
+the best tag per spectrum, export unsorted and sorted as TSV and filtered as
+CSV, and the peak RSS of all of it), `sort` (the first sort by tag, spectrum
+and length, and a cached one) and `cold` (first rows from a copy written
+with F_NOCACHE, so not in the page cache, opened in a fresh process; macOS).
+bench/bench-1.12.0.json holds the P0b numbers (with v1.11's `today` and
+`verify` modes, whose build_view is now the test oracle only) and
+bench/bench-1.16.0.json the P3 numbers.
+
+The tags browser (src-tauri/src/browser.rs) keeps per file the row index,
+one cached order per sort column, and typed columns (length, database hit,
+spectrum as a dictionary) read in one parallel pass after the E-value
+order: a filter change reads nothing from the file. Pages are read in
+coalesced spans. Export runs as a job with progress and cancel
+(`results_export` answers with a job id, `results_cancel` stops it), as TSV
+or, for a name ending in .csv, RFC 4180 CSV; the rows go to `<name>.part`
+and are renamed once complete. The tests compare every view with v1.11's
+build_view, kept as the oracle (`browser::reference`), on generated files
+(proptest).
 
 ## Tests
 

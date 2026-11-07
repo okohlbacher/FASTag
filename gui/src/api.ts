@@ -9,6 +9,8 @@ import type {
   BinaryInfo,
   BrowserEvent,
   Cleanup,
+  ExportEvent,
+  ExportFormat,
   DropRoute,
   IniExport,
   ResultsHead,
@@ -112,8 +114,20 @@ const api: FastagApi = {
     invoke<number | null>('results_position', { path, view, row }),
   revealOutput: (path: string, folder: boolean) => invoke<void>('reveal_output', { path, folder }),
   onMenu: (cb) => subscribe<string>('fastag:menu', cb),
-  exportResults: (path: string, view: ResultsView, columns: string[], dest: string) =>
-    invoke<number>('results_export', { path, view, columns, dest }),
+  // An export is a job (GUI-DESIGN 6.1 item 11) with a Channel of its own.
+  exportResults: (
+    path: string,
+    view: ResultsView,
+    columns: string[],
+    dest: string,
+    format: ExportFormat,
+    onEvent: (e: ExportEvent) => void
+  ) => {
+    const ch = new Channel<ExportEvent>()
+    ch.onmessage = onEvent
+    return invoke<number>('results_export', { path, view, columns, dest, format, onEvent: ch })
+  },
+  cancelExport: (jobId: number) => invoke<boolean>('results_cancel', { jobId }),
   species: (path: string) => invoke<SpeciesReport | null>('species', { path }),
   report: (path: string) => invoke<string | null>('report_text', { path }),
   taxdbInfo: (explicit?: string) => invoke<TaxdbInfo | null>('taxdb_info', { explicit }),

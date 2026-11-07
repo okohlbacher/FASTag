@@ -26,6 +26,10 @@
 //               (src/fixtures/cli, testing/cliFixtures.ts): integration/1.12
 //               on PXD003531, 1.11.0 on it (the 1.12 output absent), 1.12 on
 //               the Da run PXD010783, and 1.12 with -species_call decoy
+//   view        P3: the tags table's views as browser.rs builds them (every
+//               filter, the per-spectrum rule, a sort by any column) and
+//               export as a job; the text of each export is kept in
+//               window.__fastagE2E.exports
 //   gate-batch  P2b Batch summary: Add folder… on /data lists eight spectra
 //               files, one per job of a real batch (src/fixtures/cli/batch,
 //               testing/batchFixtures.ts): each prints that job's log and
@@ -40,7 +44,7 @@
 
 import { installMockBridge, type MockBridge } from './mockBridge'
 import { DEFAULTS, type Origin } from '../setup/tasks'
-import type { BrowserEvent, DropRoute, ResultsPage, ResultsView, RunEvent, RunStarted } from '../types'
+import type { BrowserEvent, DropRoute, ExportFormat, ResultsPage, ResultsView, RunEvent, RunStarted } from '../types'
 import ecoliTags from '../../e2e-web/fixtures/ecoli.tags.tsv?raw'
 import digestTsv from '../fixtures/digest.tsv?raw'
 import labelTsv from '../fixtures/label.tsv?raw'
@@ -72,6 +76,8 @@ export interface E2EControls {
   /// rank fixture: progress of the E-value order, and its end (Ranked).
   rankProgress(done: number, total: number): void
   finishRanking(): void
+  /// view fixture: every export written, in order.
+  exports: { dest: string; format: ExportFormat; text: string }[]
 }
 
 declare global {
@@ -114,6 +120,94 @@ export function rankOrder(cells: string[], desc: boolean): number[] {
   nums.sort((a, b) => sgn * (num(cells[a])! - num(cells[b])!) || a - b)
   strs.sort((a, b) => (cells[a] < cells[b] ? -sgn : cells[a] > cells[b] ? sgn : a - b))
   return [...nums, ...strs]
+}
+
+/// f64::from_str's grammar (Rust): what the backend reads as a number.
+const RUST_F64 = /^[+-]?(inf|infinity|nan|(\d+\.?\d*|\.\d+)(e[+-]?\d+)?)$/i
+
+function rustF64(cell: string): number | null {
+  if (!RUST_F64.test(cell)) return null
+  const s = cell.toLowerCase().replace(/^\+/, '')
+  if (/^-?inf(inity)?$/.test(s)) return s.startsWith('-') ? -Infinity : Infinity
+  if (/^-?nan$/.test(s)) return NaN
+  return Number(s)
+}
+
+/// The rows of @p view over @p columns/@p rows as browser.rs builds them:
+/// the filters (bound by column name), the per-spectrum rule (the first N
+/// of each spectrum in E-value order, after the other filters), then the
+/// sort: finite numbers by value, everything else by its text (UTF-16
+/// order is byte order for this ASCII fixture), ties in file order, each
+/// block reversed on its own when descending.
+export function viewIds(columns: string[], rows: string[][], view: ResultsView): number[] {
+  const col = (n: string): number => columns.indexOf(n)
+  const get = (r: string[], c: number): string => r[c] ?? ''
+  const [sp, len, ev, hit] = [col('spectrum'), col('length'), col('evalue'), col('fasta_hit')]
+  const needle = view.spectrum ? view.spectrum.toLowerCase() : ''
+  const entrap = (v: string): boolean => v === 'efwd' || v === 'erev'
+  const u32 = (s: string): number | null => (/^\+?\d+$/.test(s) && Number(s) <= 4294967295 ? Number(s) : null)
+  let ids = rows.map((_, i) => i).filter((i) => {
+    const r = rows[i]
+    if (needle && sp >= 0 && !get(r, sp).toLowerCase().includes(needle)) return false
+    if (view.minLength != null && len >= 0) {
+      const v = u32(get(r, len))
+      if (v == null || v < view.minLength) return false
+    }
+    if (view.maxEvalue != null && ev >= 0) {
+      const v = rustF64(get(r, ev))
+      if (v == null || !(v <= view.maxEvalue)) return false
+    }
+    if (view.fastaHit && hit >= 0) {
+      const v = get(r, hit)
+      if (view.fastaHit === 'only' && (v === '-' || entrap(v))) return false
+      if (view.fastaHit === 'none' && !(v === '-' || entrap(v))) return false
+      if (view.fastaHit === 'entrapment' && !entrap(v)) return false
+    }
+    return true
+  })
+  const key = (c: string): { num: number | null; s: string } => {
+    const v = rustF64(c)
+    return { num: v != null && Number.isFinite(v) ? v : null, s: c }
+  }
+  const cmp = (a: { num: number | null; s: string }, b: { num: number | null; s: string }): number => {
+    // f64::total_cmp: -0 sorts before 0.
+    if (a.num != null && b.num != null) return a.num - b.num || Number(Object.is(b.num, -0)) - Number(Object.is(a.num, -0))
+    if (a.num != null) return -1
+    if (b.num != null) return 1
+    return a.s < b.s ? -1 : a.s > b.s ? 1 : 0
+  }
+  if (view.perSpectrum && view.perSpectrum > 0 && sp >= 0 && ev >= 0) {
+    const byEv = ids.slice().sort((a, b) => cmp(key(get(rows[a], ev)), key(get(rows[b], ev))) || a - b)
+    const count = new Map<string, number>()
+    const keep = new Set<number>()
+    for (const i of byEv) {
+      const s = get(rows[i], sp)
+      const c = count.get(s) ?? 0
+      if (c < view.perSpectrum) {
+        count.set(s, c + 1)
+        keep.add(i)
+      }
+    }
+    ids = ids.filter((i) => keep.has(i))
+  }
+  const s = view.sort
+  const sc = s ? col(s.column) : -1
+  if (s && sc >= 0) {
+    ids.sort((a, b) => {
+      const ka = key(get(rows[a], sc))
+      const kb = key(get(rows[b], sc))
+      if ((ka.num == null) !== (kb.num == null)) return ka.num == null ? 1 : -1
+      const o = cmp(ka, kb)
+      return (s.desc ? -o : o) || a - b
+    })
+  }
+  return ids
+}
+
+/// One export line as browser.rs writes it.
+export function exportLine(cells: string[], format: ExportFormat): string {
+  if (format === 'tsv') return cells.join('\t') + '\n'
+  return cells.map((c) => (/[,"\r\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c)).join(',') + '\r\n'
 }
 
 /// Installs the bridge; returns where the session starts (?start=).
@@ -207,6 +301,43 @@ export function installE2EBridge(): Origin | undefined {
         rows.push(r)
       }
       return Promise.resolve({ columns: tags.columns, totalRows: N, matchedRows: N, rows })
+    }
+  }
+
+  const exports: { dest: string; format: ExportFormat; text: string }[] = []
+  if (fixture === 'view') {
+    const ids = (view: ResultsView): number[] => viewIds(tags.columns, tags.rows, view)
+    mock.resultsQuery = (path, view, offset, limit): Promise<ResultsPage> => {
+      mock.resultsQueryCalls.push({ path, view, offset, limit })
+      const all = ids(view)
+      const sel = all.slice(offset, offset + limit)
+      return Promise.resolve({
+        columns: tags.columns,
+        totalRows: tags.rows.length,
+        matchedRows: all.length,
+        rows: sel.map((i) => tags.rows[i]),
+        rowIds: sel,
+        ranked: true,
+        pending: false
+      })
+    }
+    mock.resultsPosition = (_path, view, row) => Promise.resolve(ids(view).indexOf(row))
+    // A job: progress, then the file, as browser.rs start_export.
+    mock.exportResults = (path, view, columns, dest, format, onEvent) => {
+      mock.exportCalls.push({ path, view, columns, dest })
+      mock.exportFormats.push(format)
+      const jobId = ++mock.lastExportId
+      const pick = columns.map((c) => tags.columns.indexOf(c)).filter((j) => j >= 0)
+      const rows = ids(view)
+      setTimeout(() => {
+        onEvent({ kind: 'progress', jobId, done: 0, total: rows.length })
+        let text = exportLine(pick.map((j) => tags.columns[j]), format)
+        for (const i of rows) text += exportLine(pick.map((j) => tags.rows[i][j] ?? ''), format)
+        exports.push({ dest, format, text })
+        onEvent({ kind: 'progress', jobId, done: rows.length, total: rows.length })
+        onEvent({ kind: 'done', jobId, rows: rows.length, dest })
+      }, 20)
+      return Promise.resolve(jobId)
     }
   }
 
@@ -334,7 +465,8 @@ export function installE2EBridge(): Origin | undefined {
     finishRanking: () => {
       ranked = true
       rankCb?.({ kind: 'ranked', generation: 1, column: 'evalue' })
-    }
+    },
+    exports
   }
   return query.get('start') === 'defaults' ? DEFAULTS : undefined
 }

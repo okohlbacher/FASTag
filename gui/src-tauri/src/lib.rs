@@ -85,6 +85,7 @@ pub fn run() {
             browser::results_query,
             browser::results_position,
             browser::results_export,
+            browser::results_cancel,
             species::species,
             report::report_text,
             report::summary_write,

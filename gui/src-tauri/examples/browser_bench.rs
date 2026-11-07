@@ -1,12 +1,16 @@
-//! Browser bench (GUI-DESIGN 7 and 10, P0b): today's sorted view, the P0b
-//! first cut (head read, index, background E-value order) and a bench-only
-//! typed-column prototype (filter time, peak memory, export throughput), the
-//! baselines for the provisional P3 targets.
+//! Browser bench (GUI-DESIGN 7 and 10): the P0b first cut (head read, index,
+//! background E-value order), the bench-only typed-column prototype of P0b
+//! (the baselines of the provisional P3 targets), and the P3 browser itself
+//! through the app's own open, query and export paths: filter changes,
+//! export throughput, backend peak memory, sorts by other columns, and
+//! first rows from a cold page cache.
 //!
 //!   cargo run --release --example browser_bench -- <tags.tsv> [more.tsv ...] > bench.json
 //!
 //! Each measurement runs in a child process of its own, so its peak RSS is
-//! its own. `--mode <today|firstcut|verify|typed> <file>` runs one of them.
+//! its own. `--mode <firstcut|typed|p3|sort|cold> <file>` runs one of them.
+//! (v1.11's build_view, which the `today` and `verify` modes of 1.12 timed,
+//! is now the test oracle only: bench-1.12.0.json keeps those numbers.)
 
 use std::collections::HashMap;
 use std::fs::File;
@@ -41,23 +45,6 @@ fn median(mut v: Vec<f64>) -> f64 {
     v[v.len() / 2]
 }
 
-/// v1.11: index, then build_view sorted by E-value (what the first page
-/// waited for).
-fn today(path: &str) -> String {
-    let t = Instant::now();
-    let ix = bench::index(path).unwrap();
-    let index_ms = ms(t);
-    let t = Instant::now();
-    let v = bench::today_sorted(path, &ix, false).unwrap();
-    let view_ms = ms(t);
-    format!(
-        r#"{{"rows":{},"index_ms":{index_ms},"sorted_view_ms":{view_ms},"first_rows_ms":{},"peak_rss_mb":{}}}"#,
-        v.len(),
-        ((index_ms + view_ms) * 10.0).round() / 10.0,
-        peak_rss_bytes() / (1 << 20)
-    )
-}
-
 /// P0b: first rows from the head read; the ranked swap after index + order.
 fn firstcut(path: &str) -> String {
     let t0 = Instant::now();
@@ -79,15 +66,6 @@ fn firstcut(path: &str) -> String {
         asc.len(),
         peak_rss_bytes() / (1 << 20)
     )
-}
-
-/// The first cut's orders equal today's, both directions.
-fn verify(path: &str) -> String {
-    let ix = bench::index(path).unwrap();
-    let (asc, desc) = bench::rank(path, &ix).unwrap();
-    let a = bench::today_sorted(path, &ix, false).unwrap() == asc;
-    let d = bench::today_sorted(path, &ix, true).unwrap() == desc;
-    format!(r#"{{"asc_identical":{a},"desc_identical":{d}}}"#)
 }
 
 /// The typed-column prototype of GUI-DESIGN 6.1 item 7: one sequential pass
@@ -299,14 +277,161 @@ fn typed(path: &str) -> String {
     )
 }
 
+use fastag_lib::browser::bench::{ExportFormat, Session, SortSpec, ViewSpec};
+
+fn by(column: &str, desc: bool) -> Option<SortSpec> {
+    Some(SortSpec { column: column.into(), desc })
+}
+
+/// P3 through the app's own paths: open (head rows), Indexed, Ranked, the
+/// typed columns; five filter changes (each a new view spec, as the table
+/// sends them, sorted by E-value: max E-value 100, min length 3, spectrum
+/// contains "scan=1<k>"), a cached page, the best tag per spectrum; then
+/// export unsorted (every column, TSV), sorted by E-value (every column,
+/// TSV) and a filtered CSV. Peak RSS of the whole sequence.
+fn p3(path: &str) -> String {
+    let t0 = Instant::now();
+    let (s, head) = Session::open(path).unwrap();
+    let first_rows_ms = ms(t0);
+    s.wait_indexed();
+    let indexed_ms = ms(t0);
+    s.wait_ranked();
+    let ranked_swap_ms = ms(t0);
+    s.wait_typed();
+    let typed_ready_ms = ms(t0);
+    let mut times = Vec::new();
+    let mut matched = Vec::new();
+    for k in 0..5 {
+        let spec = ViewSpec {
+            sort: by("evalue", false),
+            max_evalue: Some(100.0),
+            min_length: Some(3),
+            spectrum: Some(format!("scan=1{k}")),
+            ..Default::default()
+        };
+        let t = Instant::now();
+        let (m, _) = s.query(&spec, 0, 200).unwrap();
+        times.push(ms(t));
+        matched.push(m);
+    }
+    let filter_ms_median5 = median(times.clone());
+    let cached = ViewSpec { sort: by("evalue", false), max_evalue: Some(100.0), min_length: Some(3), spectrum: Some("scan=14".into()), ..Default::default() };
+    let t = Instant::now();
+    s.query(&cached, 5000, 200).unwrap();
+    let cached_page_ms = ms(t);
+    let best = ViewSpec { sort: by("evalue", false), per_spectrum: Some(1), ..Default::default() };
+    let t = Instant::now();
+    let (best_rows, _) = s.query(&best, 0, 200).unwrap();
+    let best_ms = ms(t);
+    // The header from the first line (no second index: it would count in
+    // the peak).
+    let mut first = String::new();
+    std::io::BufRead::read_line(&mut std::io::BufReader::new(File::open(path).unwrap()), &mut first).unwrap();
+    let all: Vec<String> = first.trim_end().split('\t').map(str::to_string).collect();
+    let bytes = std::fs::metadata(path).unwrap().len() - first.len() as u64;
+    let gb = bytes as f64 / 1e9;
+    let dest = std::env::temp_dir().join(format!("fastag-bench-p3-{}.tsv", std::process::id()));
+    let dest = dest.to_string_lossy().into_owned();
+    let t = Instant::now();
+    let n_unsorted = s.export(&ViewSpec::default(), &all, &dest, ExportFormat::Tsv).unwrap();
+    let unsorted = t.elapsed().as_secs_f64() / gb;
+    let t = Instant::now();
+    let n_sorted = s.export(&ViewSpec { sort: by("evalue", false), ..Default::default() }, &all, &dest, ExportFormat::Tsv).unwrap();
+    let sorted = t.elapsed().as_secs_f64() / gb;
+    let t = Instant::now();
+    let n_desc = s.export(&ViewSpec { sort: by("evalue", true), ..Default::default() }, &all, &dest, ExportFormat::Tsv).unwrap();
+    let sorted_desc = t.elapsed().as_secs_f64() / gb;
+    let t = Instant::now();
+    let n_csv = s.export(&cached, &all, &dest, ExportFormat::Csv).unwrap();
+    let csv_s = t.elapsed().as_secs_f64();
+    std::fs::remove_file(&dest).ok();
+    format!(
+        r#"{{"head_rows":{head},"first_rows_ms":{first_rows_ms},"indexed_ms":{indexed_ms},"ranked_swap_ms":{ranked_swap_ms},"typed_ready_ms":{typed_ready_ms},"filter_ms":{times:?},"filter_ms_median5":{filter_ms_median5},"filter_matched":{matched:?},"cached_page_ms":{cached_page_ms},"best_per_spectrum_ms":{best_ms},"best_per_spectrum_rows":{best_rows},"export_bytes":{bytes},"export_unsorted_rows":{n_unsorted},"export_unsorted_s_per_gb":{unsorted:.3},"export_sorted_rows":{n_sorted},"export_sorted_s_per_gb":{sorted:.3},"export_sorted_desc_rows":{n_desc},"export_sorted_desc_s_per_gb":{sorted_desc:.3},"export_filtered_csv_rows":{n_csv},"export_filtered_csv_s":{csv_s:.3},"peak_rss_mb":{}}}"#,
+        peak_rss_bytes() / (1 << 20)
+    )
+}
+
+/// Sorts by the other columns, each the first time and once more (cached),
+/// after the open's builds: not gated (GUI-DESIGN 7: provisional).
+fn sort(path: &str) -> String {
+    let (s, _) = Session::open(path).unwrap();
+    s.wait_typed();
+    let mut parts = Vec::new();
+    for c in ["tag", "spectrum", "length"] {
+        let spec = ViewSpec { sort: by(c, false), ..Default::default() };
+        let t = Instant::now();
+        s.query(&spec, 0, 200).unwrap();
+        let first = ms(t);
+        let spec = ViewSpec { sort: by(c, true), ..Default::default() };
+        let t = Instant::now();
+        s.query(&spec, 0, 200).unwrap();
+        let again = ms(t);
+        parts.push(format!(r#""{c}":{{"first_ms":{first},"desc_after_ms":{again}}}"#));
+    }
+    format!(r#"{{{},"peak_rss_mb":{}}}"#, parts.join(","), peak_rss_bytes() / (1 << 20))
+}
+
+/// First rows from a cold page cache (local SSD): the file is copied with
+/// F_NOCACHE writes, so its pages are not cached, and opened in a fresh
+/// process. `tail_read_gb_per_s` says whether the copy was really cold.
+fn cold(path: &str) -> String {
+    let copy = format!("{path}.cold-copy");
+    {
+        let mut src = File::open(path).unwrap();
+        let dst = File::create(&copy).unwrap();
+        #[cfg(target_os = "macos")]
+        unsafe {
+            use std::os::fd::AsRawFd;
+            libc::fcntl(dst.as_raw_fd(), libc::F_NOCACHE, 1);
+        }
+        let mut w = dst;
+        let mut buf = vec![0u8; 8 << 20];
+        loop {
+            let n = src.read(&mut buf).unwrap();
+            if n == 0 {
+                break;
+            }
+            w.write_all(&buf[..n]).unwrap();
+        }
+        w.sync_all().unwrap();
+    }
+    let me = std::env::current_exe().unwrap();
+    let o = Command::new(&me).args(["--mode", "coldopen", &copy]).output().unwrap();
+    std::fs::remove_file(&copy).ok();
+    assert!(o.status.success(), "coldopen: {}", String::from_utf8_lossy(&o.stderr));
+    String::from_utf8_lossy(&o.stdout).trim().to_string()
+}
+
+fn coldopen(path: &str) -> String {
+    let bytes = std::fs::metadata(path).unwrap().len();
+    // The witness: the last 256 MB read raw first (the head read takes the
+    // first 1 MB); a warm page cache reads them at about 25 GB/s here.
+    let tail = bytes.min(256 << 20);
+    let mut f = File::open(path).unwrap();
+    f.seek(SeekFrom::Start(bytes - tail)).unwrap();
+    let t = Instant::now();
+    std::io::copy(&mut f.take(tail), &mut std::io::sink()).unwrap();
+    let tail_gb_per_s = tail as f64 / 1e9 / t.elapsed().as_secs_f64();
+    let t0 = Instant::now();
+    let (s, head) = Session::open(path).unwrap();
+    let first_rows_ms = ms(t0);
+    s.wait_indexed();
+    let indexed_ms = ms(t0);
+    format!(
+        r#"{{"head_rows":{head},"first_rows_ms":{first_rows_ms},"indexed_ms":{indexed_ms},"tail_read_gb_per_s":{tail_gb_per_s:.2}}}"#
+    )
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() == 4 && args[1] == "--mode" {
         let out = match args[2].as_str() {
-            "today" => today(&args[3]),
             "firstcut" => firstcut(&args[3]),
-            "verify" => verify(&args[3]),
             "typed" => typed(&args[3]),
+            "p3" => p3(&args[3]),
+            "sort" => sort(&args[3]),
+            "cold" => cold(&args[3]),
+            "coldopen" => coldopen(&args[3]),
             m => panic!("unknown mode {m}"),
         };
         println!("{out}");
@@ -319,7 +444,7 @@ fn main() {
         // Warm page cache (GUI-DESIGN 7): read the file once first.
         std::io::copy(&mut File::open(path).unwrap(), &mut std::io::sink()).unwrap();
         let mut parts = vec![format!(r#""file":"{}","bytes":{size}"#, path.replace('\\', "/").replace('"', "\\\""))];
-        for mode in ["firstcut", "today", "verify", "typed"] {
+        for mode in ["firstcut", "typed", "p3", "sort", "cold"] {
             // Warm page cache: the first child also warms it for the others.
             let o = Command::new(&me).args(["--mode", mode, path]).output().unwrap();
             assert!(o.status.success(), "{mode}: {}", String::from_utf8_lossy(&o.stderr));

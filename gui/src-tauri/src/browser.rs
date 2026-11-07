@@ -1,9 +1,8 @@
 // Windowed browser over a FASTag tags TSV. A full run is 100k-10M+ rows; the
 // frontend virtualizes scrolling and asks for <=1000-row windows of a sorted/
 // filtered view, so the whole file never crosses IPC or lives in renderer
-// memory. On open, one sequential scan records every line-start offset; a view
-// (filter + sort) is one more scan producing a row permutation; a window is a
-// handful of exact-length reads at known offsets.
+// memory. On open, one sequential scan records every line-start offset; a
+// window is a handful of reads at known offsets.
 //
 // Columns are DRIVEN BY THE HEADER, not a fixed schema: -proforma, for one,
 // adds a column. Filters bind by column NAME and are active only when their
@@ -17,15 +16,28 @@
 // so (`ranked: false, pending: true`); the renderer swaps the ranked order in
 // when Ranked arrives.
 //
+// P3 (GUI-DESIGN 6.1 items 7-12): after the E-value order, the typed columns
+// (length u16, hit class u8, spectrum as a dictionary plus u32 ids; the
+// E-value cutoff works on the E-value order itself, see Typed) are read in
+// one parallel pass of whole-row chunks, 8 MB across the threads.
+// Every view is then a cached order (one per sort column, built once) with
+// the filters applied to it as a parallel predicate over the typed columns;
+// no filter change reads the file. A file beyond the typed budget falls back
+// to a chunk scan per filter. Pages are read in coalesced spans, and export
+// is a job with progress and cancel, as TSV or CSV.
+//
 // Concurrency: every file is one immutable `Snapshot` (index plus lazily
-// built orders) behind an `Arc`, in an `RwLock` map. A query clones the Arc
-// and releases the map at once, so a page read never waits for a build. Each
-// build kind has its own cancel token: opening another file cancels the index
-// and rank builds of the old one; a new view spec (filters, another sort)
-// cancels the previous view build. Page reads of the same spec cancel
-// nothing, so the ranked swap still happens during a scroll fling.
+// built orders and typed columns) behind an `Arc`, in an `RwLock` map. A
+// query clones the Arc and releases the map at once, so a page read never
+// waits for a build. Each build kind has its own cancel token: opening
+// another file cancels the index, rank and typed builds of the old one; a
+// new view spec (filters, another sort) cancels the previous view build;
+// an export has a token of its own that only results_cancel sets. Page reads
+// of the same spec cancel nothing, so the ranked swap still happens during a
+// scroll fling.
 
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, VecDeque};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
@@ -46,6 +58,25 @@ const HEAD_BYTES: usize = 1 << 20;
 const MAX_SNAPSHOTS: usize = 2;
 /// The column the background order is built for (D5).
 pub const RANK_COLUMN: &str = "evalue";
+/// The read size of export and of a page (GUI-DESIGN 6.1 item 7).
+const CHUNK: usize = 8 << 20;
+/// The read size of each thread of the typed pass: eight of them read in
+/// parallel, so 8 MB in all.
+const TYPED_CHUNK: usize = 1 << 20;
+/// Rows beyond this are not typed (about 15 B per row): their filters scan
+/// the file in chunks instead (item 12).
+const TYPED_MAX_ROWS: usize = 60_000_000;
+/// Orders kept per file besides the E-value one.
+const MAX_ORDERS: usize = 4;
+/// Views kept per file (item 9: the last four).
+const MAX_VIEWS: usize = 4;
+/// A sorted export gathers this many bytes of rows per pass over the file.
+const EXPORT_WINDOW: usize = 32 << 20;
+/// ... and at most this many rows.
+const EXPORT_WINDOW_ROWS: usize = 1 << 20;
+/// Rows closer than this are read in one span (the bytes in between are
+/// cheaper to read than another call).
+const GAP: u64 = 32 << 10;
 
 #[derive(Deserialize, Clone, PartialEq, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -69,6 +100,11 @@ pub struct ViewSpec {
     /// entrapment-only `efwd`/`erev`), "none" (no target hit, entrapment-only
     /// included), "entrapment" (`efwd`/`erev` only), else inactive.
     pub fasta_hit: Option<String>,
+    /// Best N tags per spectrum (1: the best tag): after the other filters,
+    /// each `spectrum` value keeps its first N rows in E-value order (the
+    /// ascending order of the table, ties in file order). 0 or absent: off;
+    /// inactive without a `spectrum` and an `evalue` column.
+    pub per_spectrum: Option<u32>,
 }
 
 #[derive(Serialize, Debug)]
@@ -119,15 +155,65 @@ pub enum BrowserEvent {
 
 pub type Emit = Arc<dyn Fn(BrowserEvent) + Send + Sync>;
 
+/// The file format of an export.
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ExportFormat {
+    /// Tab-separated, LF line ends, cells as they are.
+    #[default]
+    Tsv,
+    /// RFC 4180: comma-separated, CRLF line ends, a cell with a comma, a
+    /// quote, CR or LF in double quotes with its quotes doubled.
+    Csv,
+}
+
+/// The events of one export job, on the Channel its results_export call
+/// gave. Every event carries the job's id; ids only grow, so a renderer
+/// drops the events of a job it no longer shows.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
+pub enum ExportEvent {
+    /// Rows written so far, of the view's rows.
+    Progress { job_id: u64, done: usize, total: usize },
+    /// The file is complete under its name.
+    Done { job_id: u64, rows: usize, dest: String },
+    /// Nothing was written under the name (its .part is removed).
+    Failed { job_id: u64, message: String },
+    /// results_cancel stopped it; nothing was written under the name.
+    Cancelled { job_id: u64 },
+}
+
+impl ExportEvent {
+    pub fn job_id(&self) -> u64 {
+        match self {
+            ExportEvent::Progress { job_id, .. }
+            | ExportEvent::Done { job_id, .. }
+            | ExportEvent::Failed { job_id, .. }
+            | ExportEvent::Cancelled { job_id } => *job_id,
+        }
+    }
+    pub fn is_terminal(&self) -> bool {
+        !matches!(self, ExportEvent::Progress { .. })
+    }
+}
+
+pub type ExportEmit = Arc<dyn Fn(ExportEvent) + Send + Sync>;
+
 pub(crate) struct Index {
     pub(crate) columns: Vec<String>,
     /// Byte offset of each data-row start; row i spans offsets[i]..offsets[i+1]
     /// (data_end for the last), trailing newline included.
-    pub(crate) offsets: Vec<u64>,
+    pub(crate) offsets: Mapped<u64>,
     pub(crate) data_end: u64,
 }
 
-/// A cancel token. Each build kind (index, rank, view) gets its own.
+impl Index {
+    fn end_of(&self, i: usize) -> u64 {
+        self.offsets.get(i + 1).copied().unwrap_or(self.data_end)
+    }
+}
+
+/// A cancel token. Each build kind (index, rank, view, export) gets its own.
 #[derive(Default, Clone)]
 pub struct Cancel(Arc<AtomicBool>);
 
@@ -142,7 +228,7 @@ impl Cancel {
 
 const CANCELLED: &str = "cancelled";
 
-/// The E-value order of every row of a file.
+/// The order of every row of a file by one column.
 pub(crate) struct Rank {
     /// Ascending: the numeric block (by value, ties in file order), then the
     /// unparsable block (by bytes, ties in file order).
@@ -196,6 +282,682 @@ enum RankSlot {
     Ready(Arc<Rank>),
 }
 
+// ------------------------------------------------------------ typed columns
+
+/// `length` that a u16 cannot hold (>= 65535, or not a u32): in length_exc.
+const LEN_EXC: u16 = u16::MAX;
+/// `fasta_hit` classes: a target hit (anything else), "-", efwd/erev.
+const HIT_TARGET: u8 = 0;
+const HIT_DASH: u8 = 1;
+const HIT_ENTRAP: u8 = 2;
+
+/// The typed columns of a file (GUI-DESIGN 6.1 item 7), each read as the
+/// filters of `Resolved::matches` read its cell. A column the file lacks is
+/// empty here (its filter never binds).
+///
+/// The E-value has no column of its own here: the E-value order is built
+/// first and already sorts every finite value, so a max-E-value cutoff is a
+/// prefix of its numeric block (found by a binary search over the file's
+/// cells). Only the cells outside that block that still pass a cutoff, the
+/// ones that parse to an infinity ("-inf", "-1e999"), are kept, with their
+/// value. That saves 8 B per row (80 MB at 10M rows) against the < 450 MB
+/// backend peak (judge 2 of item 12: the smaller cut).
+pub(crate) struct Typed {
+    ev_inf: Vec<(u32, f64)>,
+    length: Box<[u16]>,
+    /// Rows whose length is LEN_EXC: the u32 value, or None (no u32).
+    length_exc: HashMap<u32, Option<u32>>,
+    hit: Box<[u8]>,
+    /// Index into `dict`.
+    spec_id: Box<[u32]>,
+    /// The distinct `spectrum` cells (as text, invalid UTF-8 read lossily).
+    dict: Vec<Box<str>>,
+    /// Bit i: row i's bytes are exactly its cells joined by tabs plus "\n"
+    /// (one field per header column, valid UTF-8, no CR, no blank line
+    /// after it, not capped), so a TSV export of all columns can copy it.
+    clean: Vec<u64>,
+    all_clean: bool,
+}
+
+fn bit(bits: &[u64], i: usize) -> bool {
+    bits[i / 64] >> (i % 64) & 1 == 1
+}
+
+fn threads() -> usize {
+    std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1).clamp(1, 8)
+}
+
+/// A growable array of plain values in an anonymous mapping of its own, for
+/// the large transients of the builds (the row offsets while they grow, the
+/// rank's 16 B per row). The allocators keep a freed block of that size
+/// resident for reuse (macOS's large cache, glibc's arenas), so it would
+/// still count when the next build allocates: the backend peak (GUI-DESIGN
+/// 7, < 450 MB at 10M rows) would be the sum of every build's transient. A
+/// mapping is returned to the system when dropped. (Windows' heap already
+/// returns large blocks at once: a Vec there.)
+pub(crate) struct Mapped<T: Copy> {
+    #[cfg(unix)]
+    ptr: *mut T,
+    #[cfg(unix)]
+    cap: usize,
+    #[cfg(unix)]
+    len: usize,
+    #[cfg(not(unix))]
+    v: Vec<T>,
+}
+
+// SAFETY: Mapped owns its mapping exclusively, like a Vec owns its buffer.
+unsafe impl<T: Copy + Send> Send for Mapped<T> {}
+unsafe impl<T: Copy + Sync> Sync for Mapped<T> {}
+
+#[cfg(unix)]
+impl<T: Copy> Mapped<T> {
+    pub(crate) fn with_capacity(cap: usize) -> Mapped<T> {
+        let mut m = Mapped { ptr: std::ptr::NonNull::dangling().as_ptr(), cap: 0, len: 0 };
+        m.grow(cap.max(1024));
+        m
+    }
+
+    fn grow(&mut self, cap: usize) {
+        let bytes = cap.checked_mul(std::mem::size_of::<T>()).expect("mapping size");
+        // SAFETY: a fresh private anonymous mapping; checked below.
+        let p = unsafe {
+            libc::mmap(std::ptr::null_mut(), bytes, libc::PROT_READ | libc::PROT_WRITE, libc::MAP_PRIVATE | libc::MAP_ANON, -1, 0)
+        };
+        assert!(p != libc::MAP_FAILED, "out of memory mapping {bytes} bytes");
+        let p = p as *mut T;
+        if self.cap > 0 {
+            // SAFETY: both regions hold at least len values and do not overlap.
+            unsafe {
+                std::ptr::copy_nonoverlapping(self.ptr, p, self.len);
+                libc::munmap(self.ptr as *mut libc::c_void, self.cap * std::mem::size_of::<T>());
+            }
+        }
+        self.ptr = p;
+        self.cap = cap;
+    }
+
+    pub(crate) fn push(&mut self, v: T) {
+        if self.len == self.cap {
+            self.grow(self.cap * 2);
+        }
+        // SAFETY: len < cap after the growth above.
+        unsafe { self.ptr.add(self.len).write(v) };
+        self.len += 1;
+    }
+}
+
+#[cfg(unix)]
+impl<T: Copy> Drop for Mapped<T> {
+    fn drop(&mut self) {
+        if self.cap > 0 {
+            // SAFETY: the mapping made by grow(), unmapped once.
+            unsafe { libc::munmap(self.ptr as *mut libc::c_void, self.cap * std::mem::size_of::<T>()) };
+        }
+    }
+}
+
+#[cfg(unix)]
+impl<T: Copy> std::ops::Deref for Mapped<T> {
+    type Target = [T];
+    fn deref(&self) -> &[T] {
+        // SAFETY: the first len values are initialised.
+        unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
+    }
+}
+
+#[cfg(unix)]
+impl<T: Copy> std::ops::DerefMut for Mapped<T> {
+    fn deref_mut(&mut self) -> &mut [T] {
+        // SAFETY: the first len values are initialised; the mapping is ours.
+        unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
+    }
+}
+
+#[cfg(not(unix))]
+impl<T: Copy> Mapped<T> {
+    pub(crate) fn with_capacity(cap: usize) -> Mapped<T> {
+        Mapped { v: Vec::with_capacity(cap) }
+    }
+    pub(crate) fn push(&mut self, v: T) {
+        self.v.push(v)
+    }
+}
+
+#[cfg(not(unix))]
+impl<T: Copy> std::ops::Deref for Mapped<T> {
+    type Target = [T];
+    fn deref(&self) -> &[T] {
+        &self.v
+    }
+}
+
+#[cfg(not(unix))]
+impl<T: Copy> std::ops::DerefMut for Mapped<T> {
+    fn deref_mut(&mut self) -> &mut [T] {
+        &mut self.v
+    }
+}
+
+/// Read exactly buf.len() bytes at @p off (pread; never mmap: a Windows map
+/// would block the CLI's rename, and truncation raises SIGBUS).
+fn read_exact_at(f: &File, buf: &mut [u8], off: u64) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::FileExt;
+        f.read_exact_at(buf, off)
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::FileExt;
+        let mut done = 0;
+        while done < buf.len() {
+            let n = f.seek_read(&mut buf[done..], off + done as u64)?;
+            if n == 0 {
+                return Err(std::io::ErrorKind::UnexpectedEof.into());
+            }
+            done += n;
+        }
+        Ok(())
+    }
+}
+
+/// @p raw without its trailing CR/LF bytes (as fields_of drops them).
+fn trim_nl(raw: &[u8]) -> &[u8] {
+    let mut s = raw;
+    while let [rest @ .., b'\n' | b'\r'] = s {
+        s = rest;
+    }
+    s
+}
+
+/// The row's bytes are exactly what a TSV export of every column writes for
+/// it: @p raw (capped at ROW_CAP from @p full bytes) is its @p ncols cells,
+/// valid UTF-8 without CR, joined by tabs, and one LF.
+fn is_clean(raw: &[u8], full: usize, ncols: usize) -> bool {
+    if full > ROW_CAP || raw.last() != Some(&b'\n') {
+        return false;
+    }
+    let line = &raw[..raw.len() - 1];
+    trim_nl(line).len() == line.len()
+        && !line.contains(&b'\r')
+        && line.iter().filter(|b| **b == b'\t').count() + 1 == ncols
+        && std::str::from_utf8(line).is_ok()
+}
+
+struct TypedCols {
+    spectrum: Option<usize>,
+    length: Option<usize>,
+    evalue: Option<usize>,
+    hit: Option<usize>,
+    ncols: usize,
+}
+
+/// One thread's share of the typed pass: rows ra..rb into the given slices.
+struct TypedPart<'a> {
+    ra: usize,
+    rb: usize,
+    length: Option<&'a mut [u16]>,
+    hit: Option<&'a mut [u8]>,
+    spec_id: Option<&'a mut [u32]>,
+    clean: &'a mut [u64],
+}
+
+/// What a part hands back: its own dictionary (local ids) and exceptions.
+struct PartOut {
+    dict: HashMap<Box<str>, u32>,
+    exc: Vec<(u32, Option<u32>)>,
+    ev_inf: Vec<(u32, f64)>,
+    all_clean: bool,
+}
+
+fn typed_part(path: &str, index: &Index, cols: &TypedCols, mut part: TypedPart, cancel: &Cancel) -> Result<PartOut, String> {
+    let f = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
+    let mut out = PartOut { dict: HashMap::new(), exc: Vec::new(), ev_inf: Vec::new(), all_clean: true };
+    let mut buf: Vec<u8> = Vec::new();
+    let mut r = part.ra;
+    while r < part.rb {
+        if cancel.is_cancelled() {
+            return Err(CANCELLED.into());
+        }
+        // Whole rows up to CHUNK bytes in one read; a longer row alone.
+        let start = index.offsets[r];
+        let mut e = r + 1;
+        if index.end_of(r) - start <= TYPED_CHUNK as u64 {
+            while e < part.rb && index.end_of(e) - start <= TYPED_CHUNK as u64 {
+                e += 1;
+            }
+        }
+        let len = if e == r + 1 { ((index.end_of(r) - start) as usize).min(ROW_CAP) } else { (index.end_of(e - 1) - start) as usize };
+        buf.resize(len, 0);
+        read_exact_at(&f, &mut buf, start).map_err(|e| format!("cannot read {path}: {e}"))?;
+        for i in r..e {
+            let a = (index.offsets[i] - start) as usize;
+            let full = (index.end_of(i) - index.offsets[i]) as usize;
+            let raw = &buf[a..a + full.min(ROW_CAP)];
+            let k = i - part.ra;
+            let line = trim_nl(raw);
+            let (mut seen_len, mut seen_spec) = (false, false);
+            let mut nf = 0;
+            for (j, cell) in line.split(|b| *b == b'\t').enumerate() {
+                nf += 1;
+                if Some(j) == cols.evalue {
+                    if let Ok(v) = String::from_utf8_lossy(cell).parse::<f64>() {
+                        if v.is_infinite() {
+                            out.ev_inf.push((i as u32, v));
+                        }
+                    }
+                }
+                if Some(j) == cols.length {
+                    if let Some(l) = part.length.as_deref_mut() {
+                        seen_len = true;
+                        match String::from_utf8_lossy(cell).parse::<u32>() {
+                            Ok(v) if v < LEN_EXC as u32 => l[k] = v as u16,
+                            v => {
+                                l[k] = LEN_EXC;
+                                out.exc.push((i as u32, v.ok()));
+                            }
+                        }
+                    }
+                }
+                if Some(j) == cols.hit {
+                    if let Some(h) = part.hit.as_deref_mut() {
+                        h[k] = match cell {
+                            b"-" => HIT_DASH,
+                            b"efwd" | b"erev" => HIT_ENTRAP,
+                            _ => HIT_TARGET,
+                        };
+                    }
+                }
+                if Some(j) == cols.spectrum {
+                    if let Some(s) = part.spec_id.as_deref_mut() {
+                        seen_spec = true;
+                        s[k] = dict_id(&mut out.dict, &String::from_utf8_lossy(cell));
+                    }
+                }
+            }
+            // A short row: the missing cells read as "".
+            if !seen_len {
+                if let Some(l) = part.length.as_deref_mut() {
+                    l[k] = LEN_EXC;
+                    out.exc.push((i as u32, None));
+                }
+            }
+            if !seen_spec {
+                if let Some(s) = part.spec_id.as_deref_mut() {
+                    s[k] = dict_id(&mut out.dict, "");
+                }
+            }
+            if nf == cols.ncols && is_clean(raw, full, cols.ncols) {
+                part.clean[k / 64] |= 1 << (k % 64);
+            } else {
+                out.all_clean = false;
+            }
+        }
+        r = e;
+    }
+    Ok(out)
+}
+
+fn dict_id(dict: &mut HashMap<Box<str>, u32>, key: &str) -> u32 {
+    if let Some(&id) = dict.get(key) {
+        return id;
+    }
+    let id = dict.len() as u32;
+    dict.insert(key.into(), id);
+    id
+}
+
+/// @p v cut into @p per-element parts, or @p count Nones when it is empty
+/// (the file has no such column).
+fn parts_of<T>(v: &mut [T], per: usize, count: usize) -> Vec<Option<&mut [T]>> {
+    if v.is_empty() {
+        (0..count).map(|_| None).collect()
+    } else {
+        v.chunks_mut(per).map(Some).collect()
+    }
+}
+
+/// The typed pass: every row of @p index once, in parallel parts of whole
+/// 8 MB chunks.
+pub(crate) fn build_typed(path: &str, index: &Index, cancel: &Cancel) -> Result<Typed, String> {
+    let n = index.offsets.len();
+    let col = |name: &str| index.columns.iter().position(|c| c == name);
+    let cols = TypedCols { spectrum: col("spectrum"), length: col("length"), evalue: col(RANK_COLUMN), hit: col("fasta_hit"), ncols: index.columns.len() };
+    let sized = |c: Option<usize>| if c.is_some() { n } else { 0 };
+    let mut length = vec![0u16; sized(cols.length)];
+    let mut hit = vec![HIT_TARGET; sized(cols.hit)];
+    let mut spec_id = vec![0u32; sized(cols.spectrum)];
+    let mut clean = vec![0u64; n.div_ceil(64)];
+    // Parts of whole bitset words.
+    let per = n.div_ceil(threads()).div_ceil(64).max(1) * 64;
+    let count = n.div_ceil(per);
+    let outs: Vec<Result<PartOut, String>> = {
+        let le = parts_of(&mut length, per, count);
+        let hi = parts_of(&mut hit, per, count);
+        let sp = parts_of(&mut spec_id, per, count);
+        let cl: Vec<&mut [u64]> = clean.chunks_mut(per / 64).collect();
+        std::thread::scope(|sc| {
+            let handles: Vec<_> = le
+                .into_iter()
+                .zip(hi)
+                .zip(sp)
+                .zip(cl)
+                .enumerate()
+                .map(|(p, (((length, hit), spec_id), clean))| {
+                    let part = TypedPart { ra: p * per, rb: ((p + 1) * per).min(n), length, hit, spec_id, clean };
+                    let cols = &cols;
+                    sc.spawn(move || typed_part(path, index, cols, part, cancel))
+                })
+                .collect();
+            handles.into_iter().map(|h| h.join().unwrap_or_else(|_| Err("typed pass panicked".into()))).collect()
+        })
+    };
+    let mut global: HashMap<Box<str>, u32> = HashMap::new();
+    let mut length_exc = HashMap::new();
+    let mut ev_inf = Vec::new();
+    let mut all_clean = true;
+    let mut remaps: Vec<Vec<u32>> = Vec::with_capacity(count);
+    for out in outs {
+        let out = out?;
+        all_clean &= out.all_clean;
+        length_exc.extend(out.exc);
+        ev_inf.extend(out.ev_inf);
+        let mut entries: Vec<(Box<str>, u32)> = out.dict.into_iter().collect();
+        entries.sort_unstable_by_key(|e| e.1);
+        let mut remap = vec![0u32; entries.len()];
+        for (key, local) in entries {
+            let next = global.len() as u32;
+            remap[local as usize] = *global.entry(key).or_insert(next);
+        }
+        remaps.push(remap);
+    }
+    if !spec_id.is_empty() {
+        for (p, ids) in spec_id.chunks_mut(per).enumerate() {
+            for id in ids {
+                *id = remaps[p][*id as usize];
+            }
+        }
+    }
+    let mut dict: Vec<Box<str>> = vec![Box::<str>::default(); global.len()];
+    for (k, id) in global {
+        dict[id as usize] = k;
+    }
+    Ok(Typed {
+        ev_inf,
+        length: length.into_boxed_slice(),
+        length_exc,
+        hit: hit.into_boxed_slice(),
+        spec_id: spec_id.into_boxed_slice(),
+        dict,
+        clean,
+        all_clean,
+    })
+}
+
+/// Which dictionary entries contain @p needle (lowercase), case-insensitive
+/// as `str::to_lowercase().contains`; matched once per distinct spectrum.
+fn spec_matches(dict: &[Box<str>], needle: &str) -> Vec<bool> {
+    let one = |s: &str| -> bool {
+        if s.is_ascii() {
+            let (h, nd) = (s.as_bytes(), needle.as_bytes());
+            nd.len() <= h.len() && h.windows(nd.len()).any(|w| w.iter().zip(nd).all(|(a, b)| a.to_ascii_lowercase() == *b))
+        } else {
+            s.to_lowercase().contains(needle)
+        }
+    };
+    if dict.len() < 1 << 14 {
+        return dict.iter().map(|s| one(s)).collect();
+    }
+    let per = dict.len().div_ceil(threads());
+    std::thread::scope(|sc| {
+        let hs: Vec<_> = dict.chunks(per).map(|c| sc.spawn(move || c.iter().map(|s| one(s)).collect::<Vec<bool>>())).collect();
+        hs.into_iter().flat_map(|h| h.join().unwrap()).collect()
+    })
+}
+
+/// The rows passing @p res's row filters (all but per-spectrum), as a bitset
+/// over the typed columns; parallel over whole words.
+/// @p ev: the rows passing the max-E-value cutoff (evalue_bits).
+fn keep_bits(t: &Typed, res: &Resolved, n: usize, ev: Option<&[u64]>) -> Vec<u64> {
+    let spec_ok = res.spectrum.as_ref().map(|(_, needle)| spec_matches(&t.dict, needle));
+    let pass = |i: usize| -> bool {
+        if let Some(ok) = &spec_ok {
+            if !ok[t.spec_id[i] as usize] {
+                return false;
+            }
+        }
+        if let Some((_, min)) = res.min_length {
+            let v = t.length[i];
+            let ok = if v != LEN_EXC { v as u32 >= min } else { matches!(t.length_exc.get(&(i as u32)), Some(Some(x)) if *x >= min) };
+            if !ok {
+                return false;
+            }
+        }
+        if let Some(ev) = ev {
+            if !bit(ev, i) {
+                return false;
+            }
+        }
+        if let Some((_, want)) = res.fasta_hit {
+            let h = t.hit[i];
+            let ok = match want {
+                HitFilter::Target => h == HIT_TARGET,
+                HitFilter::NoTarget => h != HIT_TARGET,
+                HitFilter::Entrapment => h == HIT_ENTRAP,
+            };
+            if !ok {
+                return false;
+            }
+        }
+        true
+    };
+    let mut bits = vec![0u64; n.div_ceil(64)];
+    let fill = |w0: usize, words: &mut [u64]| {
+        for (k, word) in words.iter_mut().enumerate() {
+            let base = (w0 + k) * 64;
+            let mut x = 0u64;
+            for b in 0..64.min(n - base) {
+                if pass(base + b) {
+                    x |= 1 << b;
+                }
+            }
+            *word = x;
+        }
+    };
+    if n < 1 << 16 {
+        fill(0, &mut bits);
+        return bits;
+    }
+    let per = bits.len().div_ceil(threads());
+    std::thread::scope(|sc| {
+        for (p, words) in bits.chunks_mut(per).enumerate() {
+            let fill = &fill;
+            sc.spawn(move || fill(p * per, words));
+        }
+    });
+    bits
+}
+
+/// The rows whose E-value cell passes `v <= max` as f64::from_str reads it:
+/// the numeric block of @p rank up to the first value above @p max (a
+/// binary search reading those cells), and the infinities of @p inf.
+fn evalue_bits(snap: &Snapshot, rank: &Rank, column: usize, max: f64, inf: &[(u32, f64)]) -> Result<Vec<u64>, String> {
+    let (path, index) = (&snap.path, &snap.index);
+    let f = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
+    let mut buf = Vec::new();
+    let mut value = |row: u32| -> Result<f64, String> {
+        let (s, l) = row_span(index, row as usize);
+        buf.resize(l, 0);
+        read_exact_at(&f, &mut buf, s).map_err(|e| format!("cannot read {path}: {e}"))?;
+        Ok(String::from_utf8_lossy(field_at(&buf, column)).parse::<f64>().unwrap_or(f64::NAN))
+    };
+    let (mut lo, mut hi) = (0, rank.num_len);
+    while lo < hi {
+        let mid = lo + (hi - lo) / 2;
+        if value(rank.asc[mid])? <= max {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    let mut bits = vec![0u64; index.offsets.len().div_ceil(64)];
+    for &r in &rank.asc[..lo] {
+        bits[r as usize / 64] |= 1 << (r % 64);
+    }
+    for &(r, v) in inf {
+        if v <= max {
+            bits[r as usize / 64] |= 1 << (r % 64);
+        }
+    }
+    Ok(bits)
+}
+
+/// The per-spectrum rule on @p bits: walking the E-value order, each
+/// spectrum keeps its first @p nmax set rows.
+fn per_spectrum(bits: &mut [u64], asc: &[u32], spec_id: &[u32], spectra: usize, nmax: u32) {
+    let mut count = vec![0u32; spectra];
+    for &r in asc {
+        let r = r as usize;
+        if bit(bits, r) {
+            let c = &mut count[spec_id[r] as usize];
+            if *c < nmax {
+                *c += 1;
+            } else {
+                bits[r / 64] &= !(1 << (r % 64));
+            }
+        }
+    }
+}
+
+/// The rows of @p order (file order when None) whose bit is set.
+fn select(order: Option<&[u32]>, bits: &[u64]) -> Vec<u32> {
+    match order {
+        None => {
+            let mut out = Vec::new();
+            for (w, &word) in bits.iter().enumerate() {
+                let mut x = word;
+                while x != 0 {
+                    out.push((w * 64) as u32 + x.trailing_zeros());
+                    x &= x - 1;
+                }
+            }
+            out
+        }
+        Some(o) if o.len() < 1 << 16 => o.iter().copied().filter(|&r| bit(bits, r as usize)).collect(),
+        Some(o) => {
+            let per = o.len().div_ceil(threads());
+            let parts: Vec<Vec<u32>> = std::thread::scope(|sc| {
+                let hs: Vec<_> =
+                    o.chunks(per).map(|c| sc.spawn(move || c.iter().copied().filter(|&r| bit(bits, r as usize)).collect::<Vec<u32>>())).collect();
+                hs.into_iter().map(|h| h.join().unwrap()).collect()
+            });
+            let mut out = Vec::with_capacity(parts.iter().map(Vec::len).sum());
+            for p in parts {
+                out.extend_from_slice(&p);
+            }
+            out
+        }
+    }
+}
+
+/// The spectrum order from the dictionary (item 8): the distinct cells
+/// sorted once with the view's comparator, then the rows placed by a
+/// counting sort, so ties stay in file order.
+fn dict_order(t: &Typed) -> Rank {
+    let m = t.dict.len();
+    let keys: Vec<Option<u64>> = t.dict.iter().map(|s| numeric(s).map(total_key)).collect();
+    let mut ids: Vec<u32> = (0..m as u32).collect();
+    let cmp = |a: &u32, b: &u32| match (keys[*a as usize], keys[*b as usize]) {
+        (Some(x), Some(y)) => x.cmp(&y),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => t.dict[*a as usize].as_bytes().cmp(t.dict[*b as usize].as_bytes()),
+    };
+    ids.sort_unstable_by(cmp);
+    // Equal keys ("1" and "1.0") share a rank.
+    let mut rank_of = vec![0u32; m];
+    let mut ranks = 0u32;
+    let mut num_ranks = 0u32;
+    for (k, &id) in ids.iter().enumerate() {
+        if k > 0 && cmp(&ids[k - 1], &id) != std::cmp::Ordering::Equal {
+            ranks += 1;
+        }
+        rank_of[id as usize] = ranks;
+        if keys[id as usize].is_some() {
+            num_ranks = ranks + 1;
+        }
+    }
+    let nr = if m == 0 { 0 } else { ranks as usize + 1 };
+    let mut start = vec![0usize; nr + 1];
+    for &s in t.spec_id.iter() {
+        start[rank_of[s as usize] as usize + 1] += 1;
+    }
+    for k in 0..nr {
+        start[k + 1] += start[k];
+    }
+    let n = t.spec_id.len();
+    let num_len = start[num_ranks as usize];
+    let mut run_start = vec![0u64; n.div_ceil(64)];
+    for &s in &start[..nr] {
+        if s < n {
+            run_start[s / 64] |= 1 << (s % 64);
+        }
+    }
+    let mut next = start;
+    let mut asc = vec![0u32; n];
+    for (row, &s) in t.spec_id.iter().enumerate() {
+        let r = rank_of[s as usize] as usize;
+        asc[next[r]] = row as u32;
+        next[r] += 1;
+    }
+    Rank { asc, num_len, run_start, desc: OnceLock::new() }
+}
+
+// ---------------------------------------------------------------- snapshot
+
+/// The rows of a view.
+#[derive(Clone)]
+pub(crate) enum ViewRows {
+    /// Every row in file order.
+    All(usize),
+    /// A cached order, unfiltered.
+    Order(Arc<Rank>, bool),
+    /// The matching rows, in order.
+    Rows(Arc<Vec<u32>>),
+}
+
+impl ViewRows {
+    fn len(&self) -> usize {
+        match self {
+            ViewRows::All(n) => *n,
+            ViewRows::Order(r, _) => r.asc.len(),
+            ViewRows::Rows(v) => v.len(),
+        }
+    }
+    fn ids(&self) -> Option<&[u32]> {
+        match self {
+            ViewRows::All(_) => None,
+            ViewRows::Order(r, desc) => Some(r.order(*desc)),
+            ViewRows::Rows(v) => Some(v),
+        }
+    }
+    fn window(&self, offset: usize, limit: usize) -> Vec<u32> {
+        let n = self.len();
+        let (a, b) = (offset.min(n), (offset + limit).min(n));
+        match self.ids() {
+            None => (a..b).map(|i| i as u32).collect(),
+            Some(ids) => ids[a..b].to_vec(),
+        }
+    }
+    fn position(&self, row: u32) -> Option<usize> {
+        match self.ids() {
+            None => ((row as usize) < self.len()).then_some(row as usize),
+            Some(ids) => ids.iter().position(|&i| i == row),
+        }
+    }
+}
+
 /// One file as indexed, with the orders built over it. Immutable but for
 /// its lazily filled slots; shared by Arc, never locked across a build.
 pub(crate) struct Snapshot {
@@ -204,22 +966,90 @@ pub(crate) struct Snapshot {
     mtime: Option<SystemTime>,
     pub(crate) index: Index,
     rank: Mutex<RankSlot>,
-    /// The last built view: (spec, matching rows in order).
-    view: Mutex<Option<(ViewSpec, Arc<Vec<u32>>)>>,
+    /// The last MAX_VIEWS built views, newest first.
+    views: Mutex<VecDeque<(ViewSpec, ViewRows)>>,
     /// View builds of this snapshot one at a time: a second query of the
-    /// spec being built waits for it and takes it from `view` instead of
-    /// scanning again (a different spec cancels the build in flight first).
+    /// spec being built waits for it and takes it from `views` instead of
+    /// building again (a different spec cancels the build in flight first).
     view_one: Mutex<()>,
-    /// Views built (filter scans run) on this snapshot; the tests' witness.
+    /// Views built on this snapshot; the tests' witness.
     views_built: AtomicUsize,
+    /// Orders by columns other than the E-value one: (column, order),
+    /// newest first.
+    orders: Mutex<Vec<(usize, Arc<Rank>)>>,
+    order_one: Mutex<()>,
+    orders_built: AtomicUsize,
+    typed: Mutex<Option<Arc<Typed>>>,
+    typed_one: Mutex<()>,
+    /// Full passes over the file after the index (rank, orders, typed
+    /// columns, filter scans); the tests' witness that a filter change on
+    /// the typed columns reads nothing.
+    scans: AtomicUsize,
+    /// Reads made for pages.
+    page_reads: AtomicUsize,
+    /// Exports written as a byte-range copy.
+    byte_copies: AtomicUsize,
 }
 
 impl Snapshot {
+    fn new(path: &str, len: u64, mtime: Option<SystemTime>, index: Index) -> Snapshot {
+        Snapshot {
+            path: path.to_string(),
+            len,
+            mtime,
+            index,
+            rank: Mutex::new(RankSlot::None),
+            views: Mutex::default(),
+            view_one: Mutex::new(()),
+            views_built: AtomicUsize::new(0),
+            orders: Mutex::default(),
+            order_one: Mutex::new(()),
+            orders_built: AtomicUsize::new(0),
+            typed: Mutex::new(None),
+            typed_one: Mutex::new(()),
+            scans: AtomicUsize::new(0),
+            page_reads: AtomicUsize::new(0),
+            byte_copies: AtomicUsize::new(0),
+        }
+    }
+
     fn rank_ready(&self) -> Option<Arc<Rank>> {
         match &*self.rank.lock().unwrap() {
             RankSlot::Ready(r) => Some(r.clone()),
             _ => None,
         }
+    }
+
+    fn cached_view(&self, spec: &ViewSpec) -> Option<ViewRows> {
+        let mut views = self.views.lock().unwrap();
+        let k = views.iter().position(|(s, _)| s == spec)?;
+        let hit = views.remove(k)?;
+        let rows = hit.1.clone();
+        views.push_front(hit);
+        Some(rows)
+    }
+
+    fn cache_view(&self, spec: &ViewSpec, rows: ViewRows) {
+        let mut views = self.views.lock().unwrap();
+        views.retain(|(s, _)| s != spec);
+        views.push_front((spec.clone(), rows));
+        views.truncate(MAX_VIEWS);
+    }
+
+    fn cached_order(&self, column: usize) -> Option<Arc<Rank>> {
+        let mut orders = self.orders.lock().unwrap();
+        let k = orders.iter().position(|(c, _)| *c == column)?;
+        let hit = orders.remove(k);
+        let r = hit.1.clone();
+        orders.insert(0, hit);
+        Some(r)
+    }
+
+    /// The start of the cached rows of @p spec (the tests' witness that a
+    /// view was not rebuilt).
+    #[cfg(test)]
+    fn view_ptr(&self, spec: &ViewSpec) -> Option<*const u32> {
+        self.views.lock().unwrap().iter().find(|(s, _)| s == spec).and_then(|(_, v)| v.ids().map(<[u32]>::as_ptr))
     }
 }
 
@@ -228,11 +1058,10 @@ struct OpenState {
     path: String,
     generation: u64,
     emit: Emit,
-    /// Cancels this open's index build.
+    /// Cancels this open's index, rank and typed builds.
     index: Cancel,
 }
 
-#[derive(Default)]
 pub struct Shared {
     snaps: RwLock<Vec<Arc<Snapshot>>>,
     /// Index builds one at a time: a query for a file being indexed waits for
@@ -243,29 +1072,39 @@ pub struct Shared {
     /// The view build in flight: (path, spec, token). A query with another
     /// spec cancels it; a page read of the same spec does not.
     view_build: Mutex<Option<(String, ViewSpec, Cancel)>>,
+    /// Files with more rows are not typed (item 12).
+    typed_max_rows: AtomicUsize,
+    /// Running exports: id -> token.
+    jobs: Mutex<HashMap<u64, Cancel>>,
+    next_job: AtomicU64,
+}
+
+impl Default for Shared {
+    fn default() -> Shared {
+        Shared {
+            snaps: RwLock::default(),
+            build: Mutex::new(()),
+            generation: AtomicU64::new(0),
+            open: Mutex::new(None),
+            view_build: Mutex::new(None),
+            typed_max_rows: AtomicUsize::new(TYPED_MAX_ROWS),
+            jobs: Mutex::default(),
+            next_job: AtomicU64::new(0),
+        }
+    }
 }
 
 #[derive(Default, Clone)]
 pub struct BrowserCache(Arc<Shared>);
 
 fn fields_of(raw: &[u8]) -> Vec<String> {
-    let mut s = raw;
-    while let [rest @ .., b'\n' | b'\r'] = s {
-        s = rest;
-    }
-    s.split(|b| *b == b'\t')
-        .map(|f| String::from_utf8_lossy(f).into_owned())
-        .collect()
+    trim_nl(raw).split(|b| *b == b'\t').map(|f| String::from_utf8_lossy(f).into_owned()).collect()
 }
 
 /// Field @p col of a raw row as `fields_of(raw)[col]` would give it (missing:
 /// empty), without splitting the rest of the row.
 fn field_at(raw: &[u8], col: usize) -> &[u8] {
-    let mut s = raw;
-    while let [rest @ .., b'\n' | b'\r'] = s {
-        s = rest;
-    }
-    s.split(|b| *b == b'\t').nth(col).unwrap_or(b"")
+    trim_nl(raw).split(|b| *b == b'\t').nth(col).unwrap_or(b"")
 }
 
 pub(crate) fn build_index(path: &str, cancel: &Cancel) -> Result<Index, String> {
@@ -273,7 +1112,7 @@ pub(crate) fn build_index(path: &str, cancel: &Cancel) -> Result<Index, String> 
     let mut reader = BufReader::with_capacity(1 << 20, file);
     // One pass counting newlines chunk-wise: line content is not needed here,
     // so a multi-GB file costs one buffer, not one allocation per row.
-    let mut offsets: Vec<u64> = Vec::new();
+    let mut offsets: Mapped<u64> = Mapped::with_capacity(1 << 16);
     let mut pos: u64 = 0;
     let mut line_start: u64 = 0;
     let mut header_end: Option<u64> = None;
@@ -409,6 +1248,8 @@ struct Resolved {
     min_length: Option<(usize, u32)>,
     max_evalue: Option<(usize, f64)>,
     fasta_hit: Option<(usize, HitFilter)>,
+    /// (spectrum column, evalue column, N)
+    per_spectrum: Option<(usize, usize, u32)>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -451,17 +1292,26 @@ impl Resolved {
                 Some("entrapment") => col("fasta_hit").map(|i| (i, HitFilter::Entrapment)),
                 _ => None,
             },
+            per_spectrum: match (col("spectrum"), col(RANK_COLUMN), spec.per_spectrum) {
+                (Some(s), Some(e), Some(n)) if n > 0 => Some((s, e, n)),
+                _ => None,
+            },
         }
     }
 
     fn has_filters(&self) -> bool {
-        self.spectrum.is_some() || self.min_length.is_some() || self.max_evalue.is_some() || self.fasta_hit.is_some()
+        self.spectrum.is_some()
+            || self.min_length.is_some()
+            || self.max_evalue.is_some()
+            || self.fasta_hit.is_some()
+            || self.per_spectrum.is_some()
     }
 
     fn is_trivial(&self) -> bool {
         self.sort.is_none() && !self.has_filters()
     }
 
+    /// The row filters (all but per-spectrum, which is not row-local).
     fn matches(&self, fields: &[String]) -> bool {
         let get = |i: usize| fields.get(i).map(String::as_str).unwrap_or("");
         if let Some((i, needle)) = &self.spectrum {
@@ -496,90 +1346,31 @@ impl Resolved {
     }
 }
 
-/// Sort key: numeric rows first ordered by value, then everything else
-/// byte-wise — so `-` and other non-numbers always sink to the bottom,
-/// ascending or descending.
-enum Key {
-    Num(f64),
-    Str(Vec<u8>),
-}
-
-/// Today's view (v1.11): one scan that filters, keys and sorts. It still
-/// serves every view the E-value order does not cover, and is the oracle the
-/// rank tests compare against.
-fn build_view(path: &str, index: &Index, res: &Resolved, cancel: &Cancel) -> Result<Vec<u32>, String> {
+/// The rows matching @p res's row filters, as a bitset in file order: the
+/// chunk-scan fallback for a file beyond the typed budget (item 12).
+fn filter_rows(path: &str, index: &Index, res: &Resolved, cancel: &Cancel) -> Result<Vec<u64>, String> {
     let file = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
     let mut reader = BufReader::with_capacity(1 << 20, file);
     reader
         .seek(SeekFrom::Start(index.offsets.first().copied().unwrap_or(index.data_end)))
         .map_err(|e| e.to_string())?;
-    let mut matched: Vec<u32> = Vec::new();
-    let mut keys: Vec<Key> = Vec::new();
+    let n = index.offsets.len();
+    let mut keep = vec![0u64; n.div_ceil(64)];
     let mut raw: Vec<u8> = Vec::new();
-    for i in 0..index.offsets.len() {
-        if i % 65536 == 0 && cancel.is_cancelled() {
-            return Err(CANCELLED.into());
-        }
-        // Rows are contiguous: sequential exact-length reads, no per-row seek.
-        let (start, len) = row_span(index, i);
-        let full = (index.offsets.get(i + 1).copied().unwrap_or(index.data_end) - start) as usize;
-        raw.resize(len, 0);
-        reader.read_exact(&mut raw).map_err(|e| format!("cannot read {path}: {e}"))?;
-        if full > len {
-            // skip the capped remainder of a pathological line
-            reader.seek_relative((full - len) as i64).map_err(|e| e.to_string())?;
-        }
-        let fields = fields_of(&raw);
-        if !res.matches(&fields) {
-            continue;
-        }
-        matched.push(i as u32);
-        if let Some((col, _)) = res.sort {
-            let cell = fields.get(col).map(String::as_str).unwrap_or("");
-            keys.push(match numeric(cell) {
-                Some(v) => Key::Num(v),
-                None => Key::Str(cell.as_bytes().to_vec()),
-            });
-        }
-    }
-    if let Some((_, desc)) = res.sort {
-        let mut perm: Vec<usize> = (0..matched.len()).collect();
-        perm.sort_unstable_by(|&a, &b| {
-            let ord = match (&keys[a], &keys[b]) {
-                (Key::Num(x), Key::Num(y)) => x.total_cmp(y),
-                (Key::Str(x), Key::Str(y)) => x.cmp(y),
-                (Key::Num(_), Key::Str(_)) => return std::cmp::Ordering::Less,
-                (Key::Str(_), Key::Num(_)) => return std::cmp::Ordering::Greater,
-            };
-            let ord = if desc { ord.reverse() } else { ord };
-            ord.then(a.cmp(&b)) // deterministic: file order breaks ties
-        });
-        return Ok(perm.into_iter().map(|p| matched[p]).collect());
-    }
-    Ok(matched)
-}
-
-/// The rows matching @p res's filters, in file order (no sort).
-fn filter_rows(path: &str, index: &Index, res: &Resolved, cancel: &Cancel) -> Result<Vec<bool>, String> {
-    let file = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
-    let mut reader = BufReader::with_capacity(1 << 20, file);
-    reader
-        .seek(SeekFrom::Start(index.offsets.first().copied().unwrap_or(index.data_end)))
-        .map_err(|e| e.to_string())?;
-    let mut keep = vec![false; index.offsets.len()];
-    let mut raw: Vec<u8> = Vec::new();
-    for (i, k) in keep.iter_mut().enumerate() {
+    for i in 0..n {
         if i % 65536 == 0 && cancel.is_cancelled() {
             return Err(CANCELLED.into());
         }
         let (start, len) = row_span(index, i);
-        let full = (index.offsets.get(i + 1).copied().unwrap_or(index.data_end) - start) as usize;
+        let full = (index.end_of(i) - start) as usize;
         raw.resize(len, 0);
         reader.read_exact(&mut raw).map_err(|e| format!("cannot read {path}: {e}"))?;
         if full > len {
             reader.seek_relative((full - len) as i64).map_err(|e| e.to_string())?;
         }
-        *k = res.matches(&fields_of(&raw));
+        if res.matches(&fields_of(&raw)) {
+            keep[i / 64] |= 1 << (i % 64);
+        }
     }
     Ok(keep)
 }
@@ -591,11 +1382,23 @@ fn total_key(v: f64) -> u64 {
     (b as u64) ^ (1 << 63)
 }
 
+/// The first 8 bytes of @p b, big-endian, zero-padded, and a length class:
+/// the length up to 8, 9 for a longer cell. For two cells, (prefix, class)
+/// orders as their bytes do, except two longer cells with the same first 8
+/// bytes, which compare by the rest (item 8).
+fn prefix_key(b: &[u8]) -> (u64, u32) {
+    let mut pre = [0u8; 8];
+    let k = b.len().min(8);
+    pre[..k].copy_from_slice(&b[..k]);
+    (u64::from_be_bytes(pre), if b.len() > 8 { 9 } else { b.len() as u32 })
+}
+
 /// Build the order of @p index's rows by column @p column, exactly as
 /// build_view sorts it ascending: finite numbers by value (total_cmp), then
 /// every other cell ('-', NAN, INF, anything the parser rejects) by its bytes;
-/// ties in file order. Reads only that column. @p progress gets (rows read,
-/// rows) now and then.
+/// ties in file order. Reads only that column. Text sorts by (8-byte prefix,
+/// row), equal-prefix groups of longer cells resolved from their full bytes.
+/// @p progress gets (rows read, rows) now and then.
 pub(crate) fn build_rank(
     path: &str,
     index: &Index,
@@ -605,14 +1408,17 @@ pub(crate) fn build_rank(
 ) -> Result<Rank, String> {
     let n = index.offsets.len();
     let file = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
-    let mut reader = BufReader::with_capacity(8 << 20, file);
+    let mut reader = BufReader::with_capacity(1 << 20, file);
     reader
         .seek(SeekFrom::Start(index.offsets.first().copied().unwrap_or(index.data_end)))
         .map_err(|e| e.to_string())?;
-    let mut nums: Vec<(u64, u32)> = Vec::with_capacity(n);
-    // Unparsable cells: their bytes in one arena, (start, len, row).
+    let mut nums: Mapped<(u64, u32)> = Mapped::with_capacity(n);
+    // Unparsable cells: (prefix, length class, row); the bytes after the
+    // first 8 of the longer ones in one arena, by row.
+    let mut strs: Mapped<(u64, u32, u32)> = Mapped::with_capacity(1 << 10);
+    let mut tail_rows: Vec<u32> = Vec::new();
+    let mut tail_at: Vec<(u64, u32)> = Vec::new();
     let mut arena: Vec<u8> = Vec::new();
-    let mut strs: Vec<(u32, u32, u32)> = Vec::new();
     let mut raw: Vec<u8> = Vec::new();
     let step = (n / 100).max(65536);
     let mut last = Instant::now();
@@ -627,7 +1433,7 @@ pub(crate) fn build_rank(
             }
         }
         let (start, len) = row_span(index, i);
-        let full = (index.offsets.get(i + 1).copied().unwrap_or(index.data_end) - start) as usize;
+        let full = (index.end_of(i) - start) as usize;
         raw.resize(len, 0);
         reader.read_exact(&mut raw).map_err(|e| format!("cannot read {path}: {e}"))?;
         if full > len {
@@ -640,13 +1446,15 @@ pub(crate) fn build_rank(
         match numeric(&text) {
             Some(v) => nums.push((total_key(v), i as u32)),
             None => {
-                let s = arena.len();
-                arena.extend_from_slice(text.as_bytes());
-                strs.push((s as u32, text.len() as u32, i as u32));
+                let b = text.as_bytes();
+                let (pre, class) = prefix_key(b);
+                if class == 9 {
+                    tail_rows.push(i as u32);
+                    tail_at.push((arena.len() as u64, (b.len() - 8) as u32));
+                    arena.extend_from_slice(&b[8..]);
+                }
+                strs.push((pre, class, i as u32));
             }
-        }
-        if arena.len() > u32::MAX as usize - ROW_CAP {
-            return Err(format!("{path}: too many unparsable {} cells to sort", RANK_COLUMN));
         }
     }
     if cancel.is_cancelled() {
@@ -655,8 +1463,24 @@ pub(crate) fn build_rank(
     progress(n, n);
     // (key, row) pairs: equal keys fall back to the row, i.e. file order.
     nums.sort_unstable();
-    let bytes = |&(s, l, _): &(u32, u32, u32)| &arena[s as usize..(s + l) as usize];
-    strs.sort_unstable_by(|a, b| bytes(a).cmp(bytes(b)).then(a.2.cmp(&b.2)));
+    strs.sort_unstable();
+    let tail = |row: u32| -> &[u8] {
+        let k = tail_rows.binary_search(&row).expect("a long cell has a tail");
+        let (s, l) = tail_at[k];
+        &arena[s as usize..s as usize + l as usize]
+    };
+    // Longer cells with one prefix: by the rest of their bytes, then row.
+    let mut j = 0;
+    while j < strs.len() {
+        let mut e = j + 1;
+        while e < strs.len() && strs[e].0 == strs[j].0 && strs[e].1 == strs[j].1 {
+            e += 1;
+        }
+        if strs[j].1 == 9 && e - j > 1 {
+            strs[j..e].sort_unstable_by(|a, b| tail(a.2).cmp(tail(b.2)).then(a.2.cmp(&b.2)));
+        }
+        j = e;
+    }
     if cancel.is_cancelled() {
         return Err(CANCELLED.into());
     }
@@ -672,7 +1496,11 @@ pub(crate) fn build_rank(
     let num_len = asc.len();
     drop(nums);
     for (j, t) in strs.iter().enumerate() {
-        if j == 0 || bytes(&strs[j - 1]) != bytes(t) {
+        let new = j == 0 || {
+            let p = &strs[j - 1];
+            p.0 != t.0 || p.1 != t.1 || (t.1 == 9 && tail(p.2) != tail(t.2))
+        };
+        if new {
             mark(asc.len());
         }
         asc.push(t.2);
@@ -680,17 +1508,42 @@ pub(crate) fn build_rank(
     Ok(Rank { asc, num_len, run_start, desc: OnceLock::new() })
 }
 
-fn read_rows(path: &str, index: &Index, rows: &[u32]) -> Result<Vec<Vec<String>>, String> {
-    let file = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
-    let mut reader = BufReader::new(file);
-    let mut out = Vec::with_capacity(rows.len());
-    let mut raw: Vec<u8> = Vec::new();
-    for &r in rows {
-        let (start, len) = row_span(index, r as usize);
-        reader.seek(SeekFrom::Start(start)).map_err(|e| e.to_string())?;
-        raw.resize(len, 0);
-        reader.read_exact(&mut raw).map_err(|e| format!("cannot read {path}: {e}"))?;
-        out.push(fields_of(&raw));
+/// The rows @p rows of @p snap, in that order (item 10): sorted by offset,
+/// contiguous rows merged into one read of up to CHUNK bytes, mapped back.
+fn read_rows(snap: &Snapshot, rows: &[u32]) -> Result<Vec<Vec<String>>, String> {
+    let (path, index) = (&snap.path, &snap.index);
+    let f = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
+    let mut by_offset: Vec<usize> = (0..rows.len()).collect();
+    by_offset.sort_unstable_by_key(|&k| rows[k]);
+    let mut out: Vec<Vec<String>> = vec![Vec::new(); rows.len()];
+    let mut buf: Vec<u8> = Vec::new();
+    let mut j = 0;
+    while j < by_offset.len() {
+        let r0 = rows[by_offset[j]] as usize;
+        let start = index.offsets[r0];
+        let mut end = index.end_of(r0);
+        let mut e = j + 1;
+        if end - start <= ROW_CAP as u64 {
+            while e < by_offset.len() {
+                let r = rows[by_offset[e]] as usize;
+                let (s, re) = (index.offsets[r], index.end_of(r));
+                if s != end || re - s > ROW_CAP as u64 || re - start > CHUNK as u64 {
+                    break;
+                }
+                end = re;
+                e += 1;
+            }
+        }
+        let len = ((end - start) as usize).min(if e == j + 1 { ROW_CAP } else { usize::MAX });
+        buf.resize(len, 0);
+        read_exact_at(&f, &mut buf, start).map_err(|e| format!("cannot read {path}: {e}"))?;
+        snap.page_reads.fetch_add(1, Ordering::Relaxed);
+        for &k in &by_offset[j..e] {
+            let (s, l) = row_span(index, rows[k] as usize);
+            let a = (s - start) as usize;
+            out[k] = fields_of(&buf[a..a + l]);
+        }
+        j = e;
     }
     Ok(out)
 }
@@ -712,6 +1565,12 @@ impl Shared {
             .iter()
             .find(|s| s.path == path && s.len == len && s.mtime == mtime)
             .cloned()
+    }
+
+    /// The snapshot of @p path, fresh or not (tests).
+    #[cfg(test)]
+    fn fresh_any(&self, path: &str) -> Option<Arc<Snapshot>> {
+        self.snaps.read().unwrap().iter().find(|s| s.path == path).cloned()
     }
 
     /// The token that cancels an index build of @p path: the open's, when
@@ -755,16 +1614,7 @@ impl Shared {
             return Err(CANCELLED.into());
         }
         let index = build_index(path, &token)?;
-        let snap = Arc::new(Snapshot {
-            path: path.to_string(),
-            len,
-            mtime,
-            index,
-            rank: Mutex::new(RankSlot::None),
-            view: Mutex::new(None),
-            view_one: Mutex::new(()),
-            views_built: AtomicUsize::new(0),
-        });
+        let snap = Arc::new(Snapshot::new(path, len, mtime, index));
         let mut snaps = self.snaps.write().unwrap();
         snaps.retain(|s| s.path != path);
         snaps.insert(0, snap.clone());
@@ -784,7 +1634,8 @@ impl Shared {
     }
 
     /// Start the E-value order of @p snap on a thread of its own, unless it
-    /// exists or is being built. True when it is (now) being built.
+    /// exists or is being built. True when it is (now) being built. The
+    /// typed columns follow it on the same thread.
     fn start_rank(self: &Arc<Self>, snap: &Arc<Snapshot>) -> bool {
         let Some(column) = snap.index.columns.iter().position(|c| c == RANK_COLUMN) else {
             return false;
@@ -821,8 +1672,9 @@ impl Shared {
             let progress = |done: usize, total: usize| {
                 me.emit_for(&path, |generation| BrowserEvent::RankProgress { generation, done, total })
             };
+            snap.scans.fetch_add(1, Ordering::Relaxed);
             let built = build_rank(&path, &snap.index, column, &token, &progress);
-            let mut slot = snap.rank.lock().unwrap();
+                let mut slot = snap.rank.lock().unwrap();
             match built {
                 Ok(rank) => {
                     *slot = RankSlot::Ready(Arc::new(rank));
@@ -831,6 +1683,7 @@ impl Shared {
                         generation,
                         column: RANK_COLUMN.into(),
                     });
+                    me.typed_in_background(&snap);
                 }
                 Err(e) => {
                     // A later query may start it again.
@@ -853,6 +1706,7 @@ impl Shared {
         if let Some(r) = snap.rank_ready() {
             return Ok(r);
         }
+        snap.scans.fetch_add(1, Ordering::Relaxed);
         let r = Arc::new(build_rank(&snap.path, &snap.index, column, &Cancel::default(), &|_, _| {})?);
         let mut slot = snap.rank.lock().unwrap();
         if let RankSlot::Building(t) = &*slot {
@@ -882,6 +1736,190 @@ impl Shared {
             }
         }
     }
+
+    /// The typed columns of @p snap, built now (one build at a time; a
+    /// second caller waits for it). None beyond the typed budget.
+    fn typed_now(&self, snap: &Snapshot, cancel: &Cancel) -> Result<Option<Arc<Typed>>, String> {
+        if snap.index.offsets.len() > self.typed_max_rows.load(Ordering::Relaxed) {
+            return Ok(None);
+        }
+        if let Some(t) = snap.typed.lock().unwrap().clone() {
+            return Ok(Some(t));
+        }
+        let _one = snap.typed_one.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(t) = snap.typed.lock().unwrap().clone() {
+            return Ok(Some(t));
+        }
+        if cancel.is_cancelled() {
+            return Err(CANCELLED.into());
+        }
+        snap.scans.fetch_add(1, Ordering::Relaxed);
+        let built = build_typed(&snap.path, &snap.index, cancel);
+        let t = Arc::new(built?);
+        *snap.typed.lock().unwrap() = Some(t.clone());
+        Ok(Some(t))
+    }
+
+    /// The typed columns of the open file, on a thread, with the open's
+    /// token (opening another file stops it).
+    fn typed_in_background(self: &Arc<Self>, snap: &Arc<Snapshot>) {
+        let Some(token) = self.index_token(&snap.path) else {
+            return;
+        };
+        let (me, snap) = (self.clone(), snap.clone());
+        std::thread::spawn(move || {
+            let _ = me.typed_now(&snap, &token);
+        });
+    }
+
+    /// The token typed builds of a query use: the open's for the open file,
+    /// so that a new view spec does not throw a half-built pass away.
+    fn typed_token(&self, snap: &Snapshot, mode: Mode, job: &Cancel) -> Cancel {
+        match mode {
+            Mode::Interactive => self.index_token(&snap.path).unwrap_or_default(),
+            Mode::Exact => job.clone(),
+        }
+    }
+
+    /// The order of @p snap's rows by column @p column (not the E-value
+    /// one), built once and cached (item 8): spectrum through the typed
+    /// dictionary, any other column through one read of that column.
+    fn order_for(&self, snap: &Snapshot, column: usize, mode: Mode, token: &Cancel) -> Result<Arc<Rank>, String> {
+        if let Some(r) = snap.cached_order(column) {
+            return Ok(r);
+        }
+        let _one = snap.order_one.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(r) = snap.cached_order(column) {
+            return Ok(r);
+        }
+        let spectrum = snap.index.columns.iter().position(|c| c == "spectrum");
+        let typed = if Some(column) == spectrum { self.typed_now(snap, &self.typed_token(snap, mode, token))? } else { None };
+        let r = Arc::new(match typed {
+            Some(t) => dict_order(&t),
+            None => {
+                snap.scans.fetch_add(1, Ordering::Relaxed);
+                build_rank(&snap.path, &snap.index, column, token, &|_, _| {})?
+            }
+        });
+        snap.orders_built.fetch_add(1, Ordering::SeqCst);
+        let mut orders = snap.orders.lock().unwrap();
+        orders.insert(0, (column, r.clone()));
+        orders.truncate(MAX_ORDERS);
+        Ok(r)
+    }
+
+    /// The rows of @p spec's view on @p snap, and whether they are in its
+    /// order (ranked) and the E-value order is coming (pending). @p job is
+    /// an export's token: its builds stop only on that token.
+    fn view_of(self: &Arc<Self>, snap: &Arc<Snapshot>, spec: &ViewSpec, mode: Mode, job: Option<&Cancel>) -> Result<(ViewRows, bool, bool), String> {
+        let index = &snap.index;
+        let res = Resolved::bind(spec, &index.columns);
+        let n = index.offsets.len();
+        if res.is_trivial() {
+            return Ok((ViewRows::All(n), true, false));
+        }
+        let rank_col = index.columns.iter().position(|c| c == RANK_COLUMN);
+        let by_rank = matches!((res.sort, rank_col), (Some((c, _)), Some(r)) if c == r);
+        if by_rank && !res.has_filters() {
+            let desc = res.sort.map(|(_, d)| d).unwrap_or(false);
+            let rank = match (snap.rank_ready(), mode) {
+                (Some(r), _) => Some(r),
+                (None, Mode::Exact) => Some(self.rank_now(snap, rank_col.unwrap())?),
+                (None, Mode::Interactive) => None,
+            };
+            return Ok(match rank {
+                Some(r) => (ViewRows::Order(r, desc), true, false),
+                // D5: file order now, the ranked order when it is ready.
+                None => (ViewRows::All(n), false, self.start_rank(snap)),
+            });
+        }
+        if let Some(v) = snap.cached_view(spec) {
+            return Ok((v, true, false));
+        }
+        let token = match (job, mode) {
+            (Some(t), _) => t.clone(),
+            (None, Mode::Interactive) => self.view_token(&snap.path, spec),
+            (None, Mode::Exact) => Cancel::default(),
+        };
+        let _one = snap.view_one.lock().unwrap_or_else(|e| e.into_inner());
+        // The same spec, built while this query waited.
+        if let Some(v) = snap.cached_view(spec) {
+            return Ok((v, true, false));
+        }
+        if token.is_cancelled() {
+            return Err(CANCELLED.into());
+        }
+        snap.views_built.fetch_add(1, Ordering::SeqCst);
+        let (rows, ranked, pending) = self.build_rows(snap, &res, mode, &token)?;
+        if ranked {
+            snap.cache_view(spec, rows.clone());
+        }
+        Ok((rows, ranked, pending))
+    }
+
+    /// A view that is neither trivial nor the unfiltered E-value order: the
+    /// cached order of its sort column, then the filters as a predicate
+    /// over the typed columns (item 9), applied to that order.
+    fn build_rows(self: &Arc<Self>, snap: &Arc<Snapshot>, res: &Resolved, mode: Mode, token: &Cancel) -> Result<(ViewRows, bool, bool), String> {
+        let index = &snap.index;
+        let n = index.offsets.len();
+        let rank_col = index.columns.iter().position(|c| c == RANK_COLUMN);
+        let (mut ranked, mut pending) = (true, false);
+        let base: Option<(Arc<Rank>, bool)> = match res.sort {
+            None => None,
+            Some((c, desc)) if Some(c) == rank_col => match snap.rank_ready() {
+                Some(r) => Some((r, desc)),
+                // The per-spectrum rule and the max-E-value cutoff need the
+                // E-value order anyway.
+                None if mode == Mode::Exact || res.per_spectrum.is_some() || res.max_evalue.is_some() => Some((self.rank_now(snap, c)?, desc)),
+                None => {
+                    // D5 with filters: the matching rows in file order now.
+                    ranked = false;
+                    pending = self.start_rank(snap);
+                    None
+                }
+            },
+            Some((c, desc)) => Some((self.order_for(snap, c, mode, token)?, desc)),
+        };
+        if !res.has_filters() {
+            return Ok(match base {
+                Some((r, desc)) => (ViewRows::Order(r, desc), true, false),
+                None => (ViewRows::All(n), ranked, pending),
+            });
+        }
+        let bits = match self.typed_now(snap, &self.typed_token(snap, mode, token))? {
+            Some(t) => {
+                let ev = match res.max_evalue {
+                    Some((col, max)) => {
+                        let rank = self.rank_now(snap, col)?;
+                        Some(evalue_bits(snap, &rank, col, max, &t.ev_inf)?)
+                    }
+                    None => None,
+                };
+                let mut bits = keep_bits(&t, res, n, ev.as_deref());
+                if let Some((_, ev, nmax)) = res.per_spectrum {
+                    let rank = self.rank_now(snap, ev)?;
+                    per_spectrum(&mut bits, &rank.asc, &t.spec_id, t.dict.len(), nmax);
+                }
+                bits
+            }
+            None if res.per_spectrum.is_some() => {
+                return Err(format!(
+                    "the best tags per spectrum need the typed columns, and this file has more than {} rows",
+                    self.typed_max_rows.load(Ordering::Relaxed)
+                ))
+            }
+            None => {
+                snap.scans.fetch_add(1, Ordering::Relaxed);
+                filter_rows(&snap.path, index, res, token)?
+            }
+        };
+        if token.is_cancelled() {
+            return Err(CANCELLED.into());
+        }
+        let rows = select(base.as_ref().map(|(r, desc)| r.order(*desc)), &bits);
+        Ok((ViewRows::Rows(Arc::new(rows)), ranked, pending))
+    }
 }
 
 /// How a query treats an E-value order that is not ready yet.
@@ -902,88 +1940,30 @@ pub(crate) fn query_mode(
     mode: Mode,
 ) -> Result<ResultsPage, String> {
     let snap = shared.snapshot_mode(path, mode)?;
-    let index = &snap.index;
-    let res = Resolved::bind(spec, &index.columns);
-    let total_rows = index.offsets.len();
-    let limit = limit.min(MAX_WINDOW);
-    let window = |rows: &[u32]| -> Vec<u32> {
-        let end = (offset + limit).min(rows.len());
-        rows[offset.min(rows.len())..end].to_vec()
-    };
-    let file_order = || -> Vec<u32> {
-        let end = (offset + limit).min(total_rows);
-        (offset.min(total_rows)..end).map(|i| i as u32).collect()
-    };
-    let rank_col = index.columns.iter().position(|c| c == RANK_COLUMN);
-    let by_rank = matches!((res.sort, rank_col), (Some((c, _)), Some(r)) if c == r);
-
-    let mut ranked = true;
-    let mut pending = false;
-    let (matched_rows, ids): (usize, Vec<u32>) = if res.is_trivial() {
-        (total_rows, file_order())
-    } else if by_rank && !res.has_filters() {
-        let desc = res.sort.map(|(_, d)| d).unwrap_or(false);
-        let rank = match (snap.rank_ready(), mode) {
-            (Some(r), _) => Some(r),
-            (None, Mode::Exact) => Some(shared.rank_now(&snap, rank_col.unwrap())?),
-            (None, Mode::Interactive) => None,
-        };
-        match rank {
-            Some(r) => (total_rows, window(r.order(desc))),
-            None => {
-                // D5: file order now, the ranked order when it is ready.
-                pending = shared.start_rank(&snap);
-                ranked = false;
-                (total_rows, file_order())
-            }
-        }
-    } else {
-        let cached = || snap.view.lock().unwrap().as_ref().filter(|(s, _)| s == spec).map(|(_, v)| v.clone());
-        let rows = match cached() {
-            Some(v) => v,
-            None => 'build: {
-                let token = shared.view_token(path, spec);
-                let _one = snap.view_one.lock().unwrap_or_else(|e| e.into_inner());
-                // The same spec, built while this query waited.
-                if let Some(v) = cached() {
-                    break 'build v;
-                }
-                if token.is_cancelled() {
-                    return Err(CANCELLED.into());
-                }
-                snap.views_built.fetch_add(1, Ordering::SeqCst);
-                // With the E-value order ready, a filtered E-value view is
-                // that order restricted to the matching rows: the same
-                // sequence build_view's sort gives, without the sort.
-                let built = match (by_rank, snap.rank_ready()) {
-                    (true, Some(r)) => {
-                        let keep = filter_rows(path, index, &res, &token)?;
-                        let desc = res.sort.map(|(_, d)| d).unwrap_or(false);
-                        r.order(desc).iter().copied().filter(|&i| keep[i as usize]).collect()
-                    }
-                    _ => build_view(path, index, &res, &token)?,
-                };
-                let v = Arc::new(built);
-                *snap.view.lock().unwrap() = Some((spec.clone(), v.clone()));
-                v
-            }
-        };
-        (rows.len(), window(&rows))
-    };
-
-    let rows = read_rows(path, index, &ids)?;
-    Ok(ResultsPage { columns: index.columns.clone(), total_rows, matched_rows, rows, row_ids: ids, ranked, pending })
+    let (rows, ranked, pending) = shared.view_of(&snap, spec, mode, None)?;
+    let ids = rows.window(offset, limit.min(MAX_WINDOW));
+    let page = read_rows(&snap, &ids)?;
+    Ok(ResultsPage {
+        columns: snap.index.columns.clone(),
+        total_rows: snap.index.offsets.len(),
+        matched_rows: rows.len(),
+        rows: page,
+        row_ids: ids,
+        ranked,
+        pending,
+    })
 }
 
-/// A query as export and the tests see it: always in the asked order.
+/// A query as the tests see it: always in the asked order.
+#[cfg(test)]
 fn query(shared: &Arc<Shared>, path: &str, spec: &ViewSpec, offset: usize, limit: usize) -> Result<ResultsPage, String> {
     query_mode(shared, path, spec, offset, limit, Mode::Exact)
 }
 
 /// Open @p path for the renderer: the head rows now; the index, then the
-/// E-value order, on a thread, announced through @p emit. Opening another
-/// file cancels the builds of the previous one; re-opening the same
-/// unchanged file reuses what was built.
+/// E-value order and the typed columns, on a thread, announced through
+/// @p emit. Opening another file cancels the builds of the previous one;
+/// re-opening the same unchanged file reuses what was built.
 pub(crate) fn open(shared: &Arc<Shared>, path: &str, emit: Emit) -> Result<ResultsHead, String> {
     file_meta(path)?;
     let generation = shared.generation.fetch_add(1, Ordering::SeqCst) + 1;
@@ -1011,8 +1991,13 @@ pub(crate) fn open(shared: &Arc<Shared>, path: &str, emit: Emit) -> Result<Resul
         Ok(snap) => {
             let total_rows = snap.index.offsets.len();
             me.emit_for(&p, |generation| BrowserEvent::Indexed { generation, total_rows });
-            if !me.start_rank(&snap) && snap.rank_ready().is_some() {
-                me.emit_for(&p, |generation| BrowserEvent::Ranked { generation, column: RANK_COLUMN.into() });
+            // The typed columns follow the E-value order; with no order to
+            // build they come now.
+            if !me.start_rank(&snap) {
+                if snap.rank_ready().is_some() {
+                    me.emit_for(&p, |generation| BrowserEvent::Ranked { generation, column: RANK_COLUMN.into() });
+                }
+                me.typed_in_background(&snap);
             }
         }
         Err(e) if e == CANCELLED => {}
@@ -1030,7 +2015,7 @@ pub(crate) fn position(shared: &Arc<Shared>, path: &str, spec: &ViewSpec, row: u
     };
     let res = Resolved::bind(spec, &snap.index.columns);
     if res.is_trivial() {
-        return Ok(((row as usize) < snap.index.offsets.len()).then_some(row as usize));
+        return Ok(ViewRows::All(snap.index.offsets.len()).position(row));
     }
     let rank_col = snap.index.columns.iter().position(|c| c == RANK_COLUMN);
     if let (Some((c, desc)), Some(r), false) = (res.sort, rank_col, res.has_filters()) {
@@ -1038,8 +2023,7 @@ pub(crate) fn position(shared: &Arc<Shared>, path: &str, spec: &ViewSpec, row: u
             return Ok(snap.rank_ready().and_then(|k| k.order(desc).iter().position(|&i| i == row)));
         }
     }
-    let view = snap.view.lock().unwrap().as_ref().filter(|(s, _)| s == spec).map(|(_, v)| v.clone());
-    Ok(view.and_then(|v| v.iter().position(|&i| i == row)))
+    Ok(snap.cached_view(spec).and_then(|v| v.position(row)))
 }
 
 #[tauri::command]
@@ -1086,12 +2070,121 @@ pub async fn results_position(
         .map_err(|e| e.to_string())?
 }
 
+// ------------------------------------------------------------------ export
+
+/// One cell as the export writes it: the text (invalid UTF-8 read lossily);
+/// in CSV, a cell with a comma, a quote, CR or LF in quotes, its quotes
+/// doubled.
+fn push_cell(out: &mut Vec<u8>, cell: &[u8], fmt: ExportFormat) {
+    let text = String::from_utf8_lossy(cell);
+    let b = text.as_bytes();
+    if fmt == ExportFormat::Csv && b.iter().any(|c| matches!(c, b',' | b'"' | b'\r' | b'\n')) {
+        out.push(b'"');
+        for &c in b {
+            if c == b'"' {
+                out.push(b'"');
+            }
+            out.push(c);
+        }
+        out.push(b'"');
+    } else {
+        out.extend_from_slice(b);
+    }
+}
+
+fn line_parts(fmt: ExportFormat) -> (u8, &'static [u8]) {
+    match fmt {
+        ExportFormat::Tsv => (b'\t', b"\n"),
+        ExportFormat::Csv => (b',', b"\r\n"),
+    }
+}
+
+/// The cells @p pick of a raw row (as fields_of splits it; a missing cell
+/// is empty) as one line of @p fmt.
+fn format_row(raw: &[u8], pick: &[usize], fmt: ExportFormat, cells: &mut Vec<(usize, usize)>, out: &mut Vec<u8>) {
+    let line = trim_nl(raw);
+    cells.clear();
+    let mut s = 0;
+    for (i, b) in line.iter().enumerate() {
+        if *b == b'\t' {
+            cells.push((s, i));
+            s = i + 1;
+        }
+    }
+    cells.push((s, line.len()));
+    let (sep, end) = line_parts(fmt);
+    for (k, &c) in pick.iter().enumerate() {
+        if k > 0 {
+            out.push(sep);
+        }
+        if let Some(&(a, b)) = cells.get(c) {
+            push_cell(out, &line[a..b], fmt);
+        }
+    }
+    out.extend_from_slice(end);
+}
+
+fn format_header(columns: &[String], pick: &[usize], fmt: ExportFormat, out: &mut Vec<u8>) {
+    let (sep, end) = line_parts(fmt);
+    for (k, &c) in pick.iter().enumerate() {
+        if k > 0 {
+            out.push(sep);
+        }
+        push_cell(out, columns[c].as_bytes(), fmt);
+    }
+    out.extend_from_slice(end);
+}
+
+/// How a row is written: copied when it is clean and the export is a TSV of
+/// every column in header order, else formatted.
+struct RowWriter<'a> {
+    pick: &'a [usize],
+    fmt: ExportFormat,
+    copy: bool,
+    ncols: usize,
+    typed: Option<Arc<Typed>>,
+    cells: Vec<(usize, usize)>,
+    line: Vec<u8>,
+}
+
+impl RowWriter<'_> {
+    fn write(&mut self, w: &mut impl Write, row: usize, raw: &[u8], full: usize) -> std::io::Result<()> {
+        if self.copy {
+            let clean = match &self.typed {
+                Some(t) => bit(&t.clean, row),
+                None => is_clean(raw, full, self.ncols),
+            };
+            if clean {
+                return w.write_all(raw);
+            }
+        }
+        self.line.clear();
+        format_row(raw, self.pick, self.fmt, &mut self.cells, &mut self.line);
+        w.write_all(&self.line)
+    }
+}
+
 /// Write the rows of @p spec, in its order, with only @p columns (header
-/// names; unknown ones are skipped), to @p dest as a TSV. The rows go to
-/// `<dest>.part` first and replace @p dest only once complete, so a failed
-/// export never leaves a truncated file under the chosen name. Returns the
-/// number of rows written.
-fn export(shared: &Arc<Shared>, path: &str, spec: &ViewSpec, columns: &[String], dest: &str) -> Result<usize, String> {
+/// names; unknown ones are skipped), to @p dest as @p fmt (item 11). The
+/// rows go to `<dest>.part` first and replace @p dest only once complete,
+/// so a failed or cancelled export never leaves a truncated file under the
+/// chosen name. Returns the number of rows written.
+///
+/// An unfiltered, unsorted TSV of every column of a clean file is a copy of
+/// its byte range. Any other export reads its rows in passes of up to
+/// EXPORT_WINDOW bytes of view rows: each pass sorted by offset, close rows
+/// read in one span, written in view order through a 4 MB BufWriter.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn export_to(
+    shared: &Arc<Shared>,
+    path: &str,
+    spec: &ViewSpec,
+    columns: &[String],
+    dest: &str,
+    fmt: ExportFormat,
+    cancel: &Cancel,
+    progress: &dyn Fn(usize, usize),
+) -> Result<usize, String> {
     // Writing the view over its own source would truncate what it reads.
     let same = match (std::fs::canonicalize(path), std::fs::canonicalize(dest)) {
         (Ok(a), Ok(b)) => a == b,
@@ -1100,39 +2193,156 @@ fn export(shared: &Arc<Shared>, path: &str, spec: &ViewSpec, columns: &[String],
     if same {
         return Err(format!("{dest} is the file being exported; choose another name"));
     }
-    let first = query(shared, path, spec, 0, MAX_WINDOW)?;
-    let pick: Vec<usize> = columns
-        .iter()
-        .filter_map(|c| first.columns.iter().position(|h| h == c))
-        .collect();
+    if cancel.is_cancelled() {
+        return Err(CANCELLED.into());
+    }
+    let snap = shared.snapshot_mode(path, Mode::Exact)?;
+    let index = &snap.index;
+    let pick: Vec<usize> = columns.iter().filter_map(|c| index.columns.iter().position(|h| h == c)).collect();
     if pick.is_empty() {
         return Err("no column to export".into());
     }
-    let part = format!("{dest}.part");
-    let write = || -> Result<usize, String> {
-        let file = File::create(&part).map_err(|e| format!("cannot write {dest}: {e}"))?;
-        let mut w = BufWriter::new(file);
-        let line = |w: &mut BufWriter<File>, cells: &[String]| -> Result<(), String> {
-            let row: Vec<&str> = pick.iter().map(|&i| cells.get(i).map(String::as_str).unwrap_or("")).collect();
-            writeln!(w, "{}", row.join("\t")).map_err(|e| format!("cannot write {dest}: {e}"))
-        };
-        line(&mut w, &first.columns)?;
-        let mut page = first;
-        let mut done = 0;
-        loop {
-            for r in &page.rows {
-                line(&mut w, r)?;
-            }
-            done += page.rows.len();
-            if page.rows.is_empty() || done >= page.matched_rows {
-                break;
-            }
-            page = query(shared, path, spec, done, MAX_WINDOW)?;
-        }
-        w.flush().map_err(|e| format!("cannot write {dest}: {e}"))?;
-        Ok(done)
+    let (rows, _, _) = shared.view_of(&snap, spec, Mode::Exact, Some(cancel))?;
+    if cancel.is_cancelled() {
+        return Err(CANCELLED.into());
+    }
+    let total = rows.len();
+    let ncols = index.columns.len();
+    let typed = snap.typed.lock().unwrap().clone();
+    let mut rw = RowWriter {
+        pick: &pick,
+        fmt,
+        copy: fmt == ExportFormat::Tsv && pick.iter().copied().eq(0..ncols),
+        ncols,
+        typed,
+        cells: Vec::new(),
+        line: Vec::new(),
     };
-    match write() {
+    let part = format!("{dest}.part");
+    let err = |e: std::io::Error| format!("cannot write {dest}: {e}");
+    let rerr = |e: std::io::Error| format!("cannot read {path}: {e}");
+    let write = |rw: &mut RowWriter| -> Result<usize, String> {
+        let mut w = BufWriter::with_capacity(4 << 20, File::create(&part).map_err(err)?);
+        let mut head = Vec::new();
+        format_header(&index.columns, &pick, fmt, &mut head);
+        w.write_all(&head).map_err(err)?;
+        progress(0, total);
+        let src = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
+        let mut chunk: Vec<u8> = Vec::new();
+        match rows.ids() {
+            None => {
+                let start = index.offsets.first().copied().unwrap_or(index.data_end);
+                if rw.copy && rw.typed.as_ref().is_some_and(|t| t.all_clean) {
+                    // A byte-range copy.
+                    snap.byte_copies.fetch_add(1, Ordering::Relaxed);
+                    let mut at = start;
+                    while at < index.data_end {
+                        if cancel.is_cancelled() {
+                            return Err(CANCELLED.into());
+                        }
+                        let len = ((index.data_end - at) as usize).min(CHUNK);
+                        chunk.resize(len, 0);
+                        read_exact_at(&src, &mut chunk, at).map_err(rerr)?;
+                        w.write_all(&chunk).map_err(err)?;
+                        at += len as u64;
+                        progress(index.offsets.partition_point(|&o| o < at), total);
+                    }
+                } else {
+                    // File order: whole rows in CHUNK reads.
+                    let mut r = 0;
+                    while r < total {
+                        if cancel.is_cancelled() {
+                            return Err(CANCELLED.into());
+                        }
+                        let s0 = index.offsets[r];
+                        let mut e = r + 1;
+                        if index.end_of(r) - s0 <= CHUNK as u64 {
+                            while e < total && index.end_of(e) - s0 <= CHUNK as u64 {
+                                e += 1;
+                            }
+                        }
+                        let len = if e == r + 1 { ((index.end_of(r) - s0) as usize).min(ROW_CAP) } else { (index.end_of(e - 1) - s0) as usize };
+                        chunk.resize(len, 0);
+                        read_exact_at(&src, &mut chunk, s0).map_err(rerr)?;
+                        for i in r..e {
+                            let (s, l) = row_span(index, i);
+                            let a = (s - s0) as usize;
+                            rw.write(&mut w, i, &chunk[a..a + l], (index.end_of(i) - s) as usize).map_err(err)?;
+                        }
+                        progress(e, total);
+                        r = e;
+                    }
+                }
+            }
+            Some(ids) => {
+                let mut wbuf: Vec<u8> = Vec::new();
+                let mut dpos: Vec<u32> = Vec::new();
+                let mut pairs: Vec<u64> = Vec::new();
+                let mut k = 0;
+                while k < total {
+                    // One pass: the next view rows up to EXPORT_WINDOW bytes.
+                    dpos.clear();
+                    dpos.push(0);
+                    let mut bytes = 0;
+                    let mut e = k;
+                    while e < total && e - k < EXPORT_WINDOW_ROWS {
+                        let l = row_span(index, ids[e] as usize).1;
+                        if e > k && bytes + l > EXPORT_WINDOW {
+                            break;
+                        }
+                        bytes += l;
+                        dpos.push(bytes as u32);
+                        e += 1;
+                    }
+                    wbuf.resize(bytes, 0);
+                    pairs.clear();
+                    pairs.extend((k..e).map(|j| (ids[j] as u64) << 32 | (j - k) as u64));
+                    pairs.sort_unstable();
+                    let mut j = 0;
+                    while j < pairs.len() {
+                        if cancel.is_cancelled() {
+                            return Err(CANCELLED.into());
+                        }
+                        let r0 = (pairs[j] >> 32) as usize;
+                        let s0 = index.offsets[r0];
+                        let mut end = s0 + row_span(index, r0).1 as u64;
+                        let mut q = j + 1;
+                        while q < pairs.len() {
+                            let r = (pairs[q] >> 32) as usize;
+                            let (s, l) = row_span(index, r);
+                            if s > end + GAP || s + l as u64 - s0 > CHUNK as u64 {
+                                break;
+                            }
+                            end = end.max(s + l as u64);
+                            q += 1;
+                        }
+                        chunk.resize((end - s0) as usize, 0);
+                        read_exact_at(&src, &mut chunk, s0).map_err(rerr)?;
+                        for &pq in &pairs[j..q] {
+                            let (r, slot) = ((pq >> 32) as usize, (pq & 0xffff_ffff) as usize);
+                            let (s, l) = row_span(index, r);
+                            let a = (s - s0) as usize;
+                            let d = dpos[slot] as usize;
+                            wbuf[d..d + l].copy_from_slice(&chunk[a..a + l]);
+                        }
+                        j = q;
+                    }
+                    for (slot, &row) in ids[k..e].iter().enumerate() {
+                        let raw = &wbuf[dpos[slot] as usize..dpos[slot + 1] as usize];
+                        let full = (index.end_of(row as usize) - index.offsets[row as usize]) as usize;
+                        rw.write(&mut w, row as usize, raw, full).map_err(err)?;
+                    }
+                    progress(e, total);
+                    k = e;
+                }
+            }
+        }
+        w.flush().map_err(err)?;
+        Ok(total)
+    };
+    let written = write(&mut rw);
+    drop(rw);
+    match written {
         Ok(n) => {
             std::fs::rename(&part, dest).map_err(|e| format!("cannot write {dest}: {e}"))?;
             Ok(n)
@@ -1144,27 +2354,91 @@ fn export(shared: &Arc<Shared>, path: &str, spec: &ViewSpec, columns: &[String],
     }
 }
 
+/// export_to as v1.11's synchronous TSV export (the tests).
+#[cfg(test)]
+fn export(shared: &Arc<Shared>, path: &str, spec: &ViewSpec, columns: &[String], dest: &str) -> Result<usize, String> {
+    export_to(shared, path, spec, columns, dest, ExportFormat::Tsv, &Cancel::default(), &|_, _| {})
+}
+
+/// Start an export job on a thread of its own; its events go to @p emit.
+/// Returns the job's id (larger than every earlier one). Only
+/// cancel_export stops it: page reads, other views and opens do not.
+pub(crate) fn start_export(
+    shared: &Arc<Shared>,
+    path: &str,
+    spec: &ViewSpec,
+    columns: &[String],
+    dest: &str,
+    fmt: ExportFormat,
+    emit: ExportEmit,
+) -> u64 {
+    let job_id = shared.next_job.fetch_add(1, Ordering::SeqCst) + 1;
+    let token = Cancel::default();
+    shared.jobs.lock().unwrap().insert(job_id, token.clone());
+    let (me, path, spec, columns, dest) = (shared.clone(), path.to_string(), spec.clone(), columns.to_vec(), dest.to_string());
+    std::thread::spawn(move || {
+        // Progress at most every 100 ms, and always the first and the last.
+        let last: Mutex<Option<Instant>> = Mutex::new(None);
+        let progress = |done: usize, total: usize| {
+            let mut l = last.lock().unwrap();
+            if done == 0 || done == total || l.is_none_or(|t| t.elapsed().as_millis() >= 100) {
+                *l = Some(Instant::now());
+                emit(ExportEvent::Progress { job_id, done, total });
+            }
+        };
+        let r = export_to(&me, &path, &spec, &columns, &dest, fmt, &token, &progress);
+        me.jobs.lock().unwrap().remove(&job_id);
+        emit(match r {
+            Ok(rows) => ExportEvent::Done { job_id, rows, dest },
+            Err(_) if token.is_cancelled() => ExportEvent::Cancelled { job_id },
+            Err(message) => ExportEvent::Failed { job_id, message },
+        });
+    });
+    job_id
+}
+
+/// Cancel export job @p job_id; false when no such job is running.
+pub(crate) fn cancel_export(shared: &Shared, job_id: u64) -> bool {
+    match shared.jobs.lock().unwrap().get(&job_id) {
+        Some(t) => {
+            t.cancel();
+            true
+        }
+        None => false,
+    }
+}
+
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn results_export(
     state: tauri::State<'_, BrowserCache>,
     path: String,
     view: ViewSpec,
     columns: Vec<String>,
     dest: String,
-) -> Result<usize, String> {
-    let shared = state.0.clone();
-    tauri::async_runtime::spawn_blocking(move || export(&shared, &path, &view, &columns, &dest))
-        .await
-        .map_err(|e| e.to_string())?
+    format: Option<ExportFormat>,
+    on_event: tauri::ipc::Channel<ExportEvent>,
+) -> Result<u64, String> {
+    let emit: ExportEmit = Arc::new(move |ev| {
+        let _ = on_event.send(ev);
+    });
+    Ok(start_export(&state.0, &path, &view, &columns, &dest, format.unwrap_or_default(), emit))
 }
 
-/// The pieces the browser bench (examples/browser_bench.rs) times: today's
-/// sorted view, the head read, the index and the E-value order. Not used by
-/// the app.
+#[tauri::command]
+pub fn results_cancel(state: tauri::State<'_, BrowserCache>, job_id: u64) -> bool {
+    cancel_export(&state.0, job_id)
+}
+
+/// The pieces the browser bench (examples/browser_bench.rs) times: the head
+/// read, the index, the E-value order and the app's own open, query and
+/// export paths. Not used by the app.
 #[doc(hidden)]
 #[allow(dead_code)] // used by examples/browser_bench.rs only
 pub mod bench {
     use super::*;
+
+    pub use super::{ExportFormat, SortSpec, ViewSpec};
 
     pub struct Indexed(pub(crate) Index);
 
@@ -1199,12 +2473,6 @@ pub mod bench {
         Ok((r.asc, d))
     }
 
-    /// v1.11's E-value view: build_view over the whole file.
-    pub fn today_sorted(path: &str, ix: &Indexed, desc: bool) -> Result<Vec<u32>, String> {
-        let spec = ViewSpec { sort: Some(SortSpec { column: RANK_COLUMN.into(), desc }), ..Default::default() };
-        build_view(path, &ix.0, &Resolved::bind(&spec, &ix.0.columns), &Cancel::default())
-    }
-
     /// The first page of the E-value view through the app's own query path
     /// (Interactive: file order while the order is built).
     pub fn open_and_query(path: &str) -> Result<(usize, bool), String> {
@@ -1217,7 +2485,165 @@ pub mod bench {
         let p = query_mode(&shared, path, &spec, 0, 500, Mode::Interactive)?;
         Ok((p.rows.len(), p.ranked))
     }
+
+    /// The app's browser on one file, opened as results_open opens it.
+    pub struct Session {
+        shared: Arc<Shared>,
+        path: String,
+        events: Arc<Mutex<Vec<BrowserEvent>>>,
+    }
+
+    impl Session {
+        /// results_open: the head rows (returned) now, the builds after.
+        pub fn open(path: &str) -> Result<(Session, usize), String> {
+            let shared = Arc::new(Shared::default());
+            let events: Arc<Mutex<Vec<BrowserEvent>>> = Arc::default();
+            let e = events.clone();
+            let head = open(&shared, path, Arc::new(move |ev| e.lock().unwrap().push(ev)))?;
+            Ok((Session { shared, path: path.to_string(), events }, head.rows.len()))
+        }
+
+        fn wait(&self, done: impl Fn(&Session) -> bool) {
+            while !done(self) {
+                std::thread::sleep(std::time::Duration::from_micros(200));
+            }
+        }
+
+        pub fn wait_indexed(&self) {
+            self.wait(|s| s.events.lock().unwrap().iter().any(|e| matches!(e, BrowserEvent::Indexed { .. })))
+        }
+
+        pub fn wait_ranked(&self) {
+            self.wait(|s| s.events.lock().unwrap().iter().any(|e| matches!(e, BrowserEvent::Ranked { .. })))
+        }
+
+        pub fn wait_typed(&self) {
+            self.wait(|s| s.shared.snaps.read().unwrap().iter().any(|x| x.path == s.path && x.typed.lock().unwrap().is_some()))
+        }
+
+        /// A page of @p spec as the table asks for it: (matched rows, rows).
+        pub fn query(&self, spec: &ViewSpec, offset: usize, limit: usize) -> Result<(usize, usize), String> {
+            let p = query_mode(&self.shared, &self.path, spec, offset, limit, Mode::Interactive)?;
+            Ok((p.matched_rows, p.rows.len()))
+        }
+
+        /// An export as the job runs it (without the thread).
+        pub fn export(&self, spec: &ViewSpec, columns: &[String], dest: &str, fmt: ExportFormat) -> Result<usize, String> {
+            export_to(&self.shared, &self.path, spec, columns, dest, fmt, &Cancel::default(), &|_, _| {})
+        }
+    }
 }
+
+/// v1.11's view, the oracle of every P0b and P3 view (GUI-DESIGN 6.1): one
+/// scan that filters, keys and sorts, plus the per-spectrum rule over the
+/// E-value keys.
+#[cfg(test)]
+mod reference {
+    use super::*;
+
+    /// Sort key: numeric rows first ordered by value, then everything else
+    /// byte-wise — so `-` and other non-numbers always sink to the bottom,
+    /// ascending or descending.
+    enum Key {
+        Num(f64),
+        Str(Vec<u8>),
+    }
+
+    fn key(cell: &str) -> Key {
+        match numeric(cell) {
+            Some(v) => Key::Num(v),
+            None => Key::Str(cell.as_bytes().to_vec()),
+        }
+    }
+
+    fn cmp(a: &Key, b: &Key) -> std::cmp::Ordering {
+        match (a, b) {
+            (Key::Num(x), Key::Num(y)) => x.total_cmp(y),
+            (Key::Str(x), Key::Str(y)) => x.cmp(y),
+            (Key::Num(_), Key::Str(_)) => std::cmp::Ordering::Less,
+            (Key::Str(_), Key::Num(_)) => std::cmp::Ordering::Greater,
+        }
+    }
+
+    pub(super) fn build_view(path: &str, index: &Index, res: &Resolved, cancel: &Cancel) -> Result<Vec<u32>, String> {
+        let file = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
+        let mut reader = BufReader::with_capacity(1 << 20, file);
+        reader
+            .seek(SeekFrom::Start(index.offsets.first().copied().unwrap_or(index.data_end)))
+            .map_err(|e| e.to_string())?;
+        let mut matched: Vec<u32> = Vec::new();
+        let mut keys: Vec<Key> = Vec::new();
+        // Per spectrum: the E-value key and the spectrum of each match.
+        let mut ev: Vec<Key> = Vec::new();
+        let mut spectra: Vec<String> = Vec::new();
+        let mut raw: Vec<u8> = Vec::new();
+        for i in 0..index.offsets.len() {
+            if i % 65536 == 0 && cancel.is_cancelled() {
+                return Err(CANCELLED.into());
+            }
+            // Rows are contiguous: sequential exact-length reads, no per-row seek.
+            let (start, len) = row_span(index, i);
+            let full = (index.offsets.get(i + 1).copied().unwrap_or(index.data_end) - start) as usize;
+            raw.resize(len, 0);
+            reader.read_exact(&mut raw).map_err(|e| format!("cannot read {path}: {e}"))?;
+            if full > len {
+                // skip the capped remainder of a pathological line
+                reader.seek_relative((full - len) as i64).map_err(|e| e.to_string())?;
+            }
+            let fields = fields_of(&raw);
+            if !res.matches(&fields) {
+                continue;
+            }
+            let get = |c: usize| fields.get(c).map(String::as_str).unwrap_or("");
+            matched.push(i as u32);
+            if let Some((col, _)) = res.sort {
+                keys.push(key(get(col)));
+            }
+            if let Some((sc, ec, _)) = res.per_spectrum {
+                ev.push(key(get(ec)));
+                spectra.push(get(sc).to_string());
+            }
+        }
+        if let Some((_, _, nmax)) = res.per_spectrum {
+            let mut by_ev: Vec<usize> = (0..matched.len()).collect();
+            by_ev.sort_by(|&a, &b| cmp(&ev[a], &ev[b]).then(a.cmp(&b)));
+            let mut count: HashMap<&str, u32> = HashMap::new();
+            let mut keep = vec![false; matched.len()];
+            for a in by_ev {
+                let c = count.entry(spectra[a].as_str()).or_default();
+                if *c < nmax {
+                    *c += 1;
+                    keep[a] = true;
+                }
+            }
+            let mut k = keep.iter();
+            matched.retain(|_| *k.next().unwrap());
+            if res.sort.is_some() {
+                let mut k = keep.iter();
+                keys.retain(|_| *k.next().unwrap());
+            }
+        }
+        if let Some((_, desc)) = res.sort {
+            let mut perm: Vec<usize> = (0..matched.len()).collect();
+            perm.sort_unstable_by(|&a, &b| {
+                let ord = match (&keys[a], &keys[b]) {
+                    (Key::Num(_), Key::Str(_)) => return std::cmp::Ordering::Less,
+                    (Key::Str(_), Key::Num(_)) => return std::cmp::Ordering::Greater,
+                    (x, y) => cmp(x, y),
+                };
+                let ord = if desc { ord.reverse() } else { ord };
+                ord.then(a.cmp(&b)) // deterministic: file order breaks ties
+            });
+            return Ok(perm.into_iter().map(|p| matched[p]).collect());
+        }
+        Ok(matched)
+    }
+}
+
+#[cfg(test)]
+#[path = "browser_p3_tests.rs"]
+mod p3_tests;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1430,6 +2856,7 @@ mod tests {
                 min_length: Some(9),
                 spectrum: Some("zz".into()),
                 sort: Some(SortSpec { column: "evalue".into(), desc: false }),
+                per_spectrum: Some(1),
             },
             0,
             100,
@@ -1501,9 +2928,9 @@ mod tests {
         assert_eq!(r1.rows, r2.rows);
         let tag = ViewSpec { sort: Some(SortSpec { column: "tag".into(), desc: false }), ..Default::default() };
         query(&cache, &p, &tag, 0, 100).unwrap();
-        let view_ptr = snap(&cache).view.lock().unwrap().as_ref().unwrap().1.as_ptr();
+        let view_ptr = snap(&cache).view_ptr(&tag).unwrap();
         query(&cache, &p, &tag, 0, 100).unwrap();
-        assert_eq!(view_ptr, snap(&cache).view.lock().unwrap().as_ref().unwrap().1.as_ptr());
+        assert_eq!(view_ptr, snap(&cache).view_ptr(&tag).unwrap());
 
         // Overwrite with different content: (len, mtime) invalidates.
         std::fs::write(&p, format!("{HEADER}\nz\tZZ\t9\t1\t0\t0\t0\t0\t1.0\t0.9\t0.9\tfwd\n")).unwrap();
@@ -1612,7 +3039,7 @@ mod tests {
 
     fn oracle(p: &str, spec: &ViewSpec) -> Vec<u32> {
         let index = build_index(p, &Cancel::default()).unwrap();
-        build_view(p, &index, &Resolved::bind(spec, &index.columns), &Cancel::default()).unwrap()
+        reference::build_view(p, &index, &Resolved::bind(spec, &index.columns), &Cancel::default()).unwrap()
     }
 
     #[test]
@@ -1794,7 +3221,7 @@ mod tests {
         t.cancel();
         assert_eq!(build_rank(&p, &index, 8, &t, &|_, _| {}).err().as_deref(), Some(CANCELLED));
         assert_eq!(build_index(&p, &t).err().as_deref(), Some(CANCELLED));
-        assert_eq!(build_view(&p, &index, &Resolved::bind(&ViewSpec { min_length: Some(1), ..Default::default() }, &index.columns), &t).err().as_deref(), Some(CANCELLED));
+        assert_eq!(reference::build_view(&p, &index, &Resolved::bind(&ViewSpec { min_length: Some(1), ..Default::default() }, &index.columns), &t).err().as_deref(), Some(CANCELLED));
         std::fs::remove_file(&p).ok();
     }
 

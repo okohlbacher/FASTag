@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type JSX, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
-import type { BrowserEvent, ResultsHead, ResultsPage, ResultsSort, ResultsView } from './types'
+import type { BrowserEvent, ExportEvent, ResultsHead, ResultsPage, ResultsSort, ResultsView } from './types'
 import { baseName, DECIMAL } from './digestReport'
 import { HelpButton, HelpLink } from './help/HelpLink'
 
@@ -152,6 +152,16 @@ function parseMaxEvalue(s: string): { value: number | null; invalid: boolean } {
 type FastaHitChoice = 'any' | 'only' | 'none' | 'entrapment'
 // The fasta_hit filter as a segmented control. In database: fwd/rev.
 // Entrapment: efwd/erev, only in the entrapment database. Not in database: '-' or efwd/erev (no -fasta hit).
+// The per-spectrum rule (browser.rs per_spectrum): every tag, or the best N
+// of each spectrum by E-value.
+const PER_SPECTRUM: [string, string][] = [
+  ['', 'All tags'],
+  ['1', 'Best tag'],
+  ['2', 'Best 2'],
+  ['3', 'Best 3'],
+  ['5', 'Best 5']
+]
+
 const HIT_CHOICES: [FastaHitChoice, string][] = [
   ['any', 'All'],
   ['only', 'In database'],
@@ -216,6 +226,7 @@ export function headServes(view: ResultsView): boolean {
     view.minLength == null &&
     view.maxEvalue == null &&
     view.fastaHit == null &&
+    view.perSpectrum == null &&
     (view.sort == null || view.sort.column === RANK_COLUMN)
   )
 }
@@ -247,6 +258,7 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
   const [draft, setDraft] = useState({ spectrum: '', minLength: '', maxEvalue: '' })
   const [filters, setFilters] = useState(draft)
   const [fastaHit, setFastaHit] = useState<FastaHitChoice>('any')
+  const [perSpectrum, setPerSpectrum] = useState<number | null>(null)
   const [scrollTop, setScrollTop] = useState(0)
   const [viewH, setViewH] = useState(600)
   const [autoW, setAutoW] = useState<Record<string, number> | null>(null)
@@ -256,6 +268,12 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
   const [hidden, setHidden] = useState<Set<string>>(new Set())
   const [colsOpen, setColsOpen] = useState(false)
   const [exported, setExported] = useState<{ ok: boolean; text: string } | null>(null)
+  // The export job in progress (GUI-DESIGN 6.1 item 11): its id once the
+  // backend answered, and rows written of the view's rows.
+  const [exporting, setExporting] = useState<{ jobId: number | null; done: number; total: number } | null>(null)
+  // Bumped per export: the Channel of an earlier job is not listened to.
+  const exportSeq = useRef(0)
+  const cancelWanted = useRef(false)
   const id = useId()
 
   const scrollerRef = useRef<HTMLDivElement>(null)
@@ -308,9 +326,10 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
       spectrum: filters.spectrum || null,
       minLength: minLength.value,
       maxEvalue: maxEvalue.value,
-      fastaHit: fastaHit === 'any' ? null : (fastaHit as ResultsView['fastaHit'])
+      fastaHit: fastaHit === 'any' ? null : (fastaHit as ResultsView['fastaHit']),
+      perSpectrum
     }),
-    [sort, filters.spectrum, minLength.value, maxEvalue.value, fastaHit]
+    [sort, filters.spectrum, minLength.value, maxEvalue.value, fastaHit, perSpectrum]
   )
   const ignored = [minLength.invalid && 'min. length', maxEvalue.invalid && 'max. E-value'].filter(Boolean)
   // How a decimal comma in the box is read, before it is committed.
@@ -610,24 +629,50 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
     })
 
   // Export what the table shows: this view's rows, in its order, in the shown
-  // columns. The backend writes it; the renderer holds only a window.
+  // columns, as TSV or (a name ending in .csv) CSV. The backend writes it as
+  // a job with progress and cancel; the renderer holds only a window.
   async function exportShown(): Promise<void> {
     const stem = path.endsWith('.tsv') ? path.slice(0, -4) : path
-    const dest = await window.fastag.saveFile(`${stem}.shown.tsv`, ['tsv'])
+    const dest = await window.fastag.saveFile(`${stem}.shown.tsv`, ['tsv', 'csv'])
     if (!dest) return
+    const format = dest.toLowerCase().endsWith('.csv') ? 'csv' : 'tsv'
+    const seq = ++exportSeq.current
+    cancelWanted.current = false
     setExported(null)
+    setExporting({ jobId: null, done: 0, total: matched })
+    const onEvent = (e: ExportEvent): void => {
+      if (exportSeq.current !== seq) return
+      if (e.kind === 'progress') {
+        setExporting((x) => (x ? { ...x, done: e.done, total: e.total } : x))
+        return
+      }
+      setExporting(null)
+      if (e.kind === 'done') setExported({ ok: true, text: `Wrote ${e.rows.toLocaleString('en-US')} rows to ${e.dest}.` })
+      else if (e.kind === 'cancelled') setExported({ ok: true, text: 'Export cancelled; nothing was written.' })
+      else setExported({ ok: false, text: `Export failed: ${e.message}` })
+    }
     try {
-      const n = await window.fastag.exportResults(path, view, shown.map((j) => columns[j]), dest)
-      setExported({ ok: true, text: `Wrote ${n.toLocaleString('en-US')} rows to ${dest}.` })
+      const jobId = await window.fastag.exportResults(path, view, shown.map((j) => columns[j]), dest, format, onEvent)
+      if (exportSeq.current !== seq) return
+      setExporting((x) => (x ? { ...x, jobId } : x))
+      // Cancel was pressed before the backend answered.
+      if (cancelWanted.current) void window.fastag.cancelExport(jobId)
     } catch (err) {
+      if (exportSeq.current !== seq) return
+      setExporting(null)
       setExported({ ok: false, text: `Export failed: ${err instanceof Error ? err.message : String(err)}` })
     }
+  }
+
+  const cancelExport = (): void => {
+    cancelWanted.current = true
+    if (exporting?.jobId != null) void window.fastag.cancelExport(exporting.jobId)
   }
 
   // Cmd+E and File > Export Shown Rows… (App dispatches 'fastag-action').
   const exportRef = useRef(exportShown)
   exportRef.current = exportShown
-  const canExport = !!meta && matched > 0
+  const canExport = !!meta && matched > 0 && !exporting
   useEffect(() => {
     const on = (e: Event): void => {
       if ((e as CustomEvent<string>).detail === 'export' && canExport) void exportRef.current()
@@ -708,7 +753,7 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
         >
           Columns…
         </button>
-        <button type="button" className="secondary" disabled={!meta || matched === 0} onClick={exportShown}>
+        <button type="button" className="secondary" disabled={!canExport} onClick={exportShown}>
           Export shown rows…
         </button>
       </div>
@@ -728,6 +773,15 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
             </label>
           ))}
         </fieldset>
+      )}
+      {exporting && (
+        <p className="rt-note" role="status">
+          Exporting… {exporting.total > 0 ? Math.floor((100 * exporting.done) / exporting.total) : 0}% (
+          {exporting.done.toLocaleString('en-US')} of {exporting.total.toLocaleString('en-US')} rows){' '}
+          <button type="button" className="secondary" onClick={cancelExport}>
+            Cancel export
+          </button>
+        </p>
       )}
       {exported && (
         <p className={exported.ok ? 'rt-note' : 'rt-note bad'} role="status">
@@ -800,6 +854,23 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
             <span className={maxEvalue.invalid ? 'rt-hint bad' : 'rt-hint'} id={`${id}-ev-h`}>
               {maxEvalue.invalid ? 'not a number' : commaRead != null ? `read as ${commaRead}` : ''}
             </span>
+          </div>
+        )}
+        {has('spectrum') && has(RANK_COLUMN) && (
+          <div className="rt-f">
+            <label htmlFor={`${id}-per`}>Per spectrum</label>
+            <select
+              id={`${id}-per`}
+              title="Keep the best tags of each spectrum by E-value, after the other filters"
+              value={perSpectrum == null ? '' : String(perSpectrum)}
+              onChange={(e) => setPerSpectrum(e.target.value === '' ? null : Number(e.target.value))}
+            >
+              {PER_SPECTRUM.map(([v, words]) => (
+                <option key={v} value={v}>
+                  {words}
+                </option>
+              ))}
+            </select>
           </div>
         )}
         {has('fasta_hit') && (
