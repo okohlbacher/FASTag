@@ -175,6 +175,20 @@ export interface Settings {
   presets: Record<string, Record<string, unknown>>
 }
 
+// An OS file drop, sorted by type (drop.rs DropRoute).
+export interface DropRoute {
+  spectra: string[]
+  // Two or more spectra files, or a folder: the batch queue.
+  batch: boolean
+  fasta: string | null
+  taxdb: string | null
+  // A tags table.
+  results: string | null
+  reports: { kind: string; path: string }[]
+  sdrf: string | null
+  ignored: string[]
+}
+
 // Declared here (not in api.ts) so tests can install a mock bridge without
 // importing api.ts, whose module body executes Tauri plumbing.
 declare global {
@@ -233,4 +247,10 @@ export interface FastagApi {
   answerClose: (quit: boolean) => Promise<void>
   // A batch is running (no CLI child exists between two jobs).
   setBusy: (busy: boolean) => Promise<void>
+  // Files dropped on the window, sorted by type (drop.rs).
+  onDrop: (cb: (route: DropRoute) => void) => () => void
+  // A drag with files is over the window (true) or has left it (false).
+  onDragHover: (cb: (over: boolean) => void) => () => void
+  // The system notification when a run or batch finishes.
+  notify: (title: string, body: string) => Promise<void>
 }

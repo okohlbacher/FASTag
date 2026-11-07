@@ -24,7 +24,7 @@
 // window.__fastagE2E gives the specs the mock and a few controls.
 
 import { installMockBridge, type MockBridge } from './mockBridge'
-import type { BrowserEvent, ResultsPage, ResultsView, RunEvent, RunStarted } from '../types'
+import type { BrowserEvent, DropRoute, ResultsPage, ResultsView, RunEvent, RunStarted } from '../types'
 import ecoliTags from '../../e2e-web/fixtures/ecoli.tags.tsv?raw'
 import digestTsv from '../fixtures/digest.tsv?raw'
 import labelTsv from '../fixtures/label.tsv?raw'
@@ -39,6 +39,9 @@ export interface E2EControls {
   mock: MockBridge
   /// The backend's close guard asking (a close or quit while busy).
   requestClose(what: 'close' | 'quit'): void
+  /// An OS file drop as drop.rs routes it, and a native menu click.
+  drop(route: Partial<DropRoute>): void
+  menu(action: string): void
   /// rank fixture: progress of the E-value order, and its end (Ranked).
   rankProgress(done: number, total: number): void
   finishRanking(): void
@@ -246,6 +249,8 @@ export function installE2EBridge(): void {
     fixture,
     mock,
     requestClose: (what) => mock.emitCloseRequested(what),
+    drop: (route) => mock.emitDrop(route),
+    menu: (action) => mock.emitMenu(action),
     rankProgress: (done, total) => rankCb?.({ kind: 'rankProgress', generation: 1, done, total }),
     finishRanking: () => {
       ranked = true

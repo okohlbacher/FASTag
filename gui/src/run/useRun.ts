@@ -54,7 +54,14 @@ export interface RunInputs {
 // The outputs of a run whose reply never came (or was refused): none.
 const noOutputs: ResolvedOutputs = { out: null }
 
-export function useRun(s: RunInputs, view: ViewStore) {
+// The shell's part in a run (P2a PR s): onStart is called when a single run
+// is about to start (after the overwrite question), so the app can show
+// Results, where its state and a refused start's reason are.
+export interface RunHooks {
+  onStart?(): void
+}
+
+export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   const { values, input, out, blocked, speciesOn, changedParams } = s
   const setTab = view.setTab
   const [state, dispatch] = useReducer(runReducer, undefined, createRunState)
@@ -144,7 +151,11 @@ export function useRun(s: RunInputs, view: ViewStore) {
   }
 
   async function addBatchFiles(): Promise<void> {
-    const files = await window.fastag.pickInputs()
+    addBatchPaths(await window.fastag.pickInputs())
+  }
+
+  // Files added to the queue by a pick or a drop (shell/dropRoute.ts).
+  function addBatchPaths(files: string[]): void {
     if (!files.length) return
     dispatch({ type: 'BATCH_ADD', files })
   }
@@ -324,6 +335,7 @@ export function useRun(s: RunInputs, view: ViewStore) {
     if (overwrite && !(await askOverwrite(existing))) return
     window.fastag.saveLast(values)
     view.setLogJob(null)
+    hooks.onStart?.()
     const r = await runOne(input, out, undefined, overwrite)
     dispatch({
       type: 'LAST_RUN',
@@ -410,19 +422,24 @@ export function useRun(s: RunInputs, view: ViewStore) {
     }
   }
 
-  async function openResults(): Promise<void> {
+  // Resolves true when a file was picked.
+  async function openResults(): Promise<boolean> {
     const p = await window.fastag.pickResults()
-    if (p) {
-      // A file whose run the record marks cancelled or failed (its cleanup
-      // could not remove it) is not opened as a complete table.
-      const rec = await window.fastag.historyOf(p).catch(() => null)
-      const recorded = rec && rec.status !== 'ok' ? { status: rec.status, end: rec.end } : undefined
-      dispatch({
-        type: 'RESULTS',
-        update: (r) => ({ path: p, gen: (r?.gen ?? 0) + 1, ...(recorded ? { stale: true, incomplete: true, recorded } : {}) })
-      })
-      dispatch({ type: 'BATCH_MISS', miss: null })
-    }
+    if (p) await openResultsPath(p)
+    return !!p
+  }
+
+  // A tags table, picked or dropped.
+  async function openResultsPath(p: string): Promise<void> {
+    // A file whose run the record marks cancelled or failed (its cleanup
+    // could not remove it) is not opened as a complete table.
+    const rec = await window.fastag.historyOf(p).catch(() => null)
+    const recorded = rec && rec.status !== 'ok' ? { status: rec.status, end: rec.end } : undefined
+    dispatch({
+      type: 'RESULTS',
+      update: (r) => ({ path: p, gen: (r?.gen ?? 0) + 1, ...(recorded ? { stale: true, incomplete: true, recorded } : {}) })
+    })
+    dispatch({ type: 'BATCH_MISS', miss: null })
   }
 
   // A done batch job's tags and reports, as the batch writes them.
@@ -438,6 +455,26 @@ export function useRun(s: RunInputs, view: ViewStore) {
   async function openReport(): Promise<void> {
     const p = await window.fastag.pickReport()
     if (!p) return
+    await openReportPath(p)
+  }
+
+  // Reports dropped together: each is added as a picked one would be.
+  async function openReportPaths(paths: string[]): Promise<void> {
+    for (const p of paths) await openReportPath(p)
+  }
+
+  // A species report, dropped: shown in the Species tab.
+  async function openSpeciesPath(p: string): Promise<void> {
+    try {
+      const sp = await window.fastag.species(p)
+      dispatch({ type: 'SPECIES', species: sp })
+      setTab('species')
+    } catch (err) {
+      logResultsError(err)
+    }
+  }
+
+  async function openReportPath(p: string): Promise<void> {
     const rep = await loadReports([p])
     if (rep.reports.length === 0 && rep.errors.length === 0) rep.errors.push(`${p} does not exist.`)
     dispatch({
@@ -517,6 +554,7 @@ export function useRun(s: RunInputs, view: ViewStore) {
     evidence: state.evidence,
     jobs,
     addBatchFiles,
+    addBatchPaths,
     removeJobs,
     // Failed jobs are Retry failed's, not the remaining ones.
     remaining: jobs.filter((j) => j.status !== 'done' && j.status !== 'failed').length,
@@ -541,7 +579,10 @@ export function useRun(s: RunInputs, view: ViewStore) {
     cancelForQuit,
     showJob,
     openResults,
+    openResultsPath,
     openReport,
+    openReportPaths,
+    openSpeciesPath,
     reveal
   }
 }

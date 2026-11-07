@@ -2,7 +2,11 @@ import React from 'react'
 import { createRoot } from 'react-dom/client'
 import './api' // installs window.fastag before App mounts
 import App from './App'
+import { applyTheme, loadTheme } from './app/theme'
 import './index.css'
+
+// The remembered theme before the first paint (no light flash in dark).
+applyTheme(loadTheme())
 
 async function main(): Promise<void> {
   // A dev build opened in a browser instead of the Tauri window.

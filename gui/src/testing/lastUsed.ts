@@ -6,9 +6,12 @@
 import { act, fireEvent, screen } from '@testing-library/react'
 import { expect } from 'vitest'
 import { PARAM_BY_NAME, RENDERED, SECTIONS } from '../paramLayout'
+import { showView } from './render'
 
 /// Click the offer chip. @p n is the number of settings it must offer.
 export async function applyLastUsed(n: number): Promise<void> {
+  // The chip is on the Setup view (P2a shell).
+  showView('setup')
   const chip = await screen.findByRole('button', { name: /^Apply last-used \(\d+\)$/ })
   expect(chip.textContent).toBe(`Apply last-used (${n})`)
   await act(async () => {
@@ -32,6 +35,7 @@ export async function formValue(name: string): Promise<string | boolean> {
   if (now !== undefined) return now
   const sec = SECTIONS.find((s) => s.params.includes(name))
   if (!sec) throw new Error(`${name} is in no section of the form`)
+  showView('setup')
   const toggle = (): Promise<void> =>
     act(async () => {
       const b = screen

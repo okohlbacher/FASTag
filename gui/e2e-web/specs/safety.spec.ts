@@ -1,4 +1,4 @@
-import { test, expect, openApp, mockState } from './fixtures'
+import { test, expect, goTo, openApp, mockState } from './fixtures'
 
 test('last-used is an offer: a fresh start runs with defaults until the chip is clicked', async ({ page }) => {
   await openApp(page, 'lastused')
@@ -11,6 +11,7 @@ test('last-used is an offer: a fresh start runs with defaults until the chip is 
   let calls = await mockState<{ params: Record<string, unknown> }[]>(page, 'runCalls')
   expect(calls[0].params['tag_length']).toBe('3')
   expect(calls[0].params['species']).toBe(false)
+  await goTo(page, 'Setup') // the run moved to Results; the chip is on Setup
   await chip.click()
   await expect(chip).toBeHidden()
   await expect(page.locator('#p-tag_length')).toHaveValue('7')
@@ -25,7 +26,8 @@ test('while a run goes the open buttons are locked; the close guard asks, and Ke
   await openApp(page, 'slow')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
-  await expect(page.getByRole('button', { name: 'Running…' })).toBeVisible()
+  // P2a: the run moved to Results, where the pill has its Cancel.
+  await expect(page.getByRole('group', { name: 'Run status' }).getByRole('button', { name: 'Cancel' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Open a tags TSV…' })).toBeDisabled()
   await expect(page.getByRole('button', { name: 'Open a digest, label or mass-gap report…' })).toBeDisabled()
 
@@ -35,6 +37,7 @@ test('while a run goes the open buttons are locked; the close guard asks, and Ke
   await expect(dlg.getByRole('button', { name: 'Keep running' })).toBeFocused()
   await dlg.getByRole('button', { name: 'Keep running' }).click()
   await expect(dlg).toBeHidden()
+  await goTo(page, 'Setup')
   await expect(page.getByRole('button', { name: 'Running…' })).toBeVisible()
 
   await page.evaluate(() => (window as unknown as { __fastagE2E: { requestClose(w: string): void } }).__fastagE2E.requestClose('close'))
@@ -56,8 +59,10 @@ test('an existing output is confirmed before the run; a cancelled run of an earl
   await openApp(page, 'existing')
   // The run record of the earlier session.
   await expect(page.locator('.last-run')).toContainText('Cancelled in an earlier session')
+  await goTo(page, 'Results')
   await page.getByRole('button', { name: 'Open a tags TSV…' }).click()
   await expect(page.locator('.tabpanel')).toContainText('The run that wrote /data/run01.tags.tsv was cancelled')
+  await goTo(page, 'Setup')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
   const dlg = page.getByRole('alertdialog')

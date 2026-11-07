@@ -9,7 +9,7 @@ import App from '../App'
 import { appendLog } from '../run/useRun'
 import { LOG_WINDOW } from '../run/LogDrawer'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
-import { addBatch, click, logText, pickSingle, renderApp, runButton } from '../testing/render'
+import { addBatch, click, goTo, logText, pickSingle, renderApp, runButton } from '../testing/render'
 import { applyAndCheck } from '../testing/lastUsed'
 import type { SpeciesReport } from '../types'
 
@@ -150,6 +150,7 @@ describe('lifecycle: stale state across runs', () => {
     await done(mock, 1, true)
     await waitFor(() => expect(screen.queryAllByText('Escherichia').length).toBeGreaterThan(0))
     // Unticking species after A's run keeps A's report: it is what A's run did.
+    await goTo('setup')
     await click(screen.getByRole('button', { name: /Species detection/ }))
     const speciesBox = document.getElementById('p-species') as HTMLInputElement
     await act(async () => {
@@ -157,6 +158,7 @@ describe('lifecycle: stale state across runs', () => {
     })
     expect(screen.queryByText(/Species detection is off/)).toBeNull()
     expect(screen.queryAllByText('Escherichia').length).toBeGreaterThan(0)
+    await goTo('results')
     expect(screen.getByRole('tab', { name: /Species/ }).textContent).toBe('Species1')
     // Run B with species off: A's report is cleared, and the badge with it.
     await pickSingle(mock, '/d/b.mzML')
@@ -166,6 +168,7 @@ describe('lifecycle: stale state across runs', () => {
     await act(async () => {
       fireEvent.click(document.getElementById('p-species') as HTMLInputElement)
     })
+    await goTo('results')
     await click(screen.getByRole('tab', { name: /Species/ }))
     expect(screen.queryAllByText('Escherichia')).toHaveLength(0) // no sample A call beside sample B's tags
     // B's run had it off, but the switch is on now: the tab says to run

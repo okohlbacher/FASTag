@@ -16,6 +16,9 @@ import { focusLater } from '../app/focus'
 export interface RunBarProps {
   // What a screen reader hears of a run.
   announce: string
+  // The app keeps the live region in its top bar, which is always shown
+  // (the run bar sits in one view of four).
+  announceElsewhere?: boolean
   running: boolean
   busy: boolean
   batchRunning: boolean
@@ -75,9 +78,11 @@ export default function RunBar(p: RunBarProps): JSX.Element {
   return (
     <div className="runbar">
       {/* Always in the page, so its changes are announced. */}
-      <p className="sr-only" role="status">
-        {p.announce}
-      </p>
+      {!p.announceElsewhere && (
+        <p className="sr-only" role="status">
+          {p.announce}
+        </p>
+      )}
       {running && (
         <div className="progress">
           <div className="progress-text">
