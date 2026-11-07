@@ -129,7 +129,7 @@ the right build for whatever you are reading this on. Everything is also on the
 |---|---|---|
 | macOS, Apple silicon | [.dmg](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-macos-arm64.dmg) | [.dmg](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-macos-arm64.dmg) |
 | Windows x64 | [installer](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-windows-x64-setup.exe) | [.zip](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-windows-x64.zip) |
-| Linux x64 | — | [.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-x64.tar.gz) |
+| Linux x64 | [.deb](https://github.com/okohlbacher/FASTag/releases/latest) (`fastag-gui_<version>_amd64.deb`) · [.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-linux-x64.tar.gz) (from 1.13.0) | [.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-x64.tar.gz) |
 | Linux arm64 | — | [.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-arm64.tar.gz) |
 
 Intel Macs are not built from 1.8.0 on; [1.6.1](https://github.com/okohlbacher/FASTag/releases/tag/v1.6.1) is the last release for them.
@@ -148,6 +148,19 @@ CLI it launches, on every platform.
 **macOS 13.4 or later.** macOS ships as a disk image only, signed with a
 Developer ID certificate, notarized and **stapled**, so it opens with no network
 connection — a plain tarball cannot carry a notarization ticket.
+
+**Linux desktop app: Ubuntu 22.04 or newer, Debian 12 or newer** (glibc 2.35
+and WebKitGTK 4.1). The `.deb`, `fastag-gui_<version>_amd64.deb` on the release
+page (Debian package `fastag-gui`), pulls in `libwebkit2gtk-4.1-0` and
+`libgtk-3-0` (`sudo apt install ./fastag-gui_<version>_amd64.deb`); the tarball needs them
+installed and runs as `FASTag-gui/bin/fastag`. A best-effort
+`FASTag-gui-linux-x64.AppImage` carries its own WebKitGTK 4.1, takes GTK 3,
+EGL and GL from the desktop, and needs FUSE 2 (`libfuse2`, or `libfuse2t64`
+on Ubuntu 24.04) or `APPIMAGE_EXTRACT_AND_RUN=1`. RHEL-family systems (RHEL,
+Rocky, Alma) are not supported by the desktop app: RHEL 9 has glibc 2.34 and
+only WebKitGTK API 4.0. Use the command line there; it keeps the older floor of
+glibc 2.28, so the CLI tarball also runs on RHEL/Rocky 8 and 9 and other older
+systems.
 
 **Windows builds are not yet code-signed** — the signing path is wired up but
 the SignPath project is not live — so SmartScreen will warn on first run.
@@ -197,9 +210,9 @@ cd gui && npm install && npm run tauri dev     # or: npm run tauri build
 ```
 
 Installable bundles ship with every release: signed, notarized and stapled disk
-images for macOS (also on Homebrew, above) and an installer for Windows, which
-is not yet code-signed (see above) — see the install table at the top. Details
-in [gui/README.md](gui/README.md).
+images for macOS (also on Homebrew, above), an installer for Windows, which
+is not yet code-signed (see above), and from 1.13.0 a `.deb` and a tarball for
+Linux x64 (glibc ≥ 2.35, WebKitGTK 4.1: Ubuntu 22.04, Debian 12) — see the install table at the top. Details in [gui/README.md](gui/README.md).
 
 ## Usage
 
