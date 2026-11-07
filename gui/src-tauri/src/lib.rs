@@ -85,6 +85,8 @@ pub fn run() {
             browser::results_export,
             species::species,
             report::report_text,
+            report::summary_write,
+            drop::folder_spectra_list,
             species::taxdb_info,
             settings::load_settings,
             settings::save_last,

@@ -1,0 +1,12 @@
+Modifications: Carbamidomethyl (C, fixed)
+'/scratch/kohlbach/gate-in/PXD040407/Hog1p_WT_Rep3_Chymo_5uL.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 16793 spectra by scanning it instead (0.04 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1701 repeat gaps, cycle 198, 2298 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Subsampling: tagging 1679 of 16793 input spectra (seed 1)
+Glyco: 12 of 1103 processed MS2 spectra carry oxonium evidence -> run.tags.glyco.tsv
+Census: 1103 MS2 spectra read, 916 with a reported tag (0 placed), 187 no_tags -> run.tags.census.tsv, summary -> run.tags.census_summary.tsv
+Digest: 2638 filtered tags, reason tie -> run.digest.tsv
+Labels: 2638 filtered tags -> run.label.tsv
+Species: 151 spectra contributed taxon evidence; top genus calls -> run.tags.species.tsv
+Species call (-species_call decoy): 0 present, 39 no_call, 0 not_detected among the reported genus rows (run-level no_call: few_spectra, 151 < 200); 174 trials, 5 decoys per tag; parameters /scratch/kohlbach/fastag112-integ/src/data/taxonomy/species_call.tsv (1.12.0-provisional)
+1103 MS2 spectra, 26876 tags
+FASTag took 2.38 s (wall), 3.09 s (CPU), 0.40 s (system), 2.69 s (user); Peak Memory Usage: 1052 MB.

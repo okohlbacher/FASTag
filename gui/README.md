@@ -30,9 +30,11 @@ gui/
                        theme.ts (the chosen theme), output-path and text helpers (paths.ts, format.ts)
     run/               useRun.ts (a run or batch, its log, progress and results) over one
                        reducer (runReducer.ts: jobs, RUN_START/EVENT/DONE/CANCEL_REQUESTED/
-                       BATCH_ADD/BATCH_REMOVE), each job's log in a store outside React
-                       state (logStore.ts), RunBar.tsx, LogDrawer.tsx, BatchList.tsx and
-                       the batch job naming (batch.ts)
+                       BATCH_ADD/BATCH_REMOVE/BATCH_OUT_DIR), each job's log in a store
+                       outside React state (logStore.ts), RunBar.tsx, LogDrawer.tsx,
+                       BatchList.tsx, the batch job naming (batch.ts), and the batch
+                       summary: batchSummary.ts (rows and the majority rule),
+                       useBatchSummary.ts (each done job's reports) and SummaryTable.tsx
     results/           ResultTabs.tsx (Overview, Tags, Species, Digest), FailureBanner.tsx (over
                        the tabs, or on the Batch view beside the queue), reports.ts,
                        RunningPanel.tsx (the running state), OverviewPanel.tsx over
@@ -140,7 +142,7 @@ manifest: the shell empties the file before the script runs.
 
 Four views, switched from the top bar: **Setup** (the input, the parameters
 and Run), **Results** (Overview, Tags, Species and Digest, full width), **Batch** (the
-queue, its run bar, the failure banner and each job's log) and **History**
+queue, its run bar, the failure banner, the summary table and each job's log) and **History**
 (every recorded run: input, status, duration, outputs). Run moves to
 Results; the first file of a batch moves to Batch. The progress pill in the
 top bar shows the job in flight (file, phase or percentage, ETA) and, outside
@@ -166,6 +168,20 @@ never from the version string). A tile whose report the run did not write
 offers to turn it on and run again ("Add FASTA and run again" for the
 alkylation tile). Runs from FASTag's defaults land where they did before and
 offer the Overview as a tab.
+
+The **Batch** view adds files or a whole folder (**Add folder…**: the spectra
+files directly inside it, as a dropped folder adds them) and can put every
+output into one **output folder** (for inputs on a read-only share; the
+reports follow the tags, and "Beside inputs" puts them back). Its **summary
+table** has one row per job, read from the reports that job wrote: status,
+tags, top genus, protease, label and alkylation, each cell as that run's
+Overview states it, with its caveat as a tooltip. A call that differs from
+its column's majority is marked ≠; a majority needs at least 3 jobs with a
+call and more than half of them, and a no call, "too little evidence", a
+ranking without call columns, a failed or a queued job never counts. A raw
+DIA input that FASTag 1.12 refuses (exit 11) fails with the CLI's sentence.
+**Export summary TSV…** writes the table, cell for cell, with a `yes` column
+after each call column where it differs. The SDRF comparison follows in P4.
 
 Setup starts from a task: **Characterize a run** (the default: species with
 extension 2, the digest, label and glyco reports, a tenth of the spectra),
@@ -256,6 +272,9 @@ orchestration), `results/digest.app.test.tsx` (the Digest tab),
 `results/overview.app.test.tsx` (the Overview and the running state; the
 parser and model tests `results/calls.test.ts` and `results/overview.test.ts`
 read real CLI output on the gate PXDs from `src/fixtures/cli/`),
+`run/batchSummary.app.test.tsx` (the summary table, its export, Add folder…
+and the output folder; `run/batchSummary.test.ts` checks the majority rule
+and the rows of one real batch, `src/fixtures/cli/batch/`),
 `setup/setup.app.test.tsx` (the setup form and run bar, with the checks that
 App wires Reset, the phase and the elapsed time into the run bar) and
 `shell/shell.app.test.tsx` (the views, the pill, Help and its search, menus,
@@ -285,7 +304,9 @@ The Playwright specs in `e2e-web/` drive the app in Chromium and WebKit on an
 explicit e2e build, `npm run build:e2e` (`vite build --mode e2e`, into
 `dist-e2e/`), which installs `src/testing/e2eBridge.ts`; each spec picks a
 scenario with `?fixture=` (`default`, `batch-fail`, `big`, `slow`,
-`lastused`); `&start=defaults` starts the session from FASTag's defaults
+`lastused`, the real-CLI `gate*` scenarios, and `gate-batch`, whose
+`batch-summary.spec.ts` checks the summary table and its TSV against
+oracles recomputed from the batch fixtures); `&start=defaults` starts the session from FASTag's defaults
 instead of the task the app lands on. `setup.spec.ts` drives the Setup
 screen and saves its screenshots. Run them with `npm run e2e` (`npx playwright install chromium
 webkit` once). Any console error fails a spec. `shell.spec.ts` drives the

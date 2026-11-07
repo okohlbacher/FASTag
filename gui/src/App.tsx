@@ -13,6 +13,7 @@ import { useRun } from './run/useRun'
 import RunBar from './run/RunBar'
 import LogDrawer from './run/LogDrawer'
 import BatchList from './run/BatchList'
+import SummaryTable from './run/SummaryTable'
 import ResultTabs from './results/ResultTabs'
 import FailureBanner from './results/FailureBanner'
 import { createViewStore, useView } from './app/viewStore'
@@ -56,6 +57,9 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   const [theme, setTheme] = useTheme()
   const [aboutOpen, setAboutOpen] = useState(false)
   const [toast, setToast] = useState<Toast | null>(null)
+  // What Add folder… found: a folder without spectra, or one that could not
+  // be read.
+  const [folderNote, setFolderNote] = useState<string | null>(null)
   // Bumped when a run ends: History reads the record again.
   const [historyVersion, setHistoryVersion] = useState(0)
   const emptyBatchRef = useRef<HTMLButtonElement>(null)
@@ -157,6 +161,18 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
     if (running || batchRunning) return
     const p = await window.fastag.pickInput()
     if (p) setInputPath(p)
+  }
+
+  // Add folder… (the Batch view, Batch QC's input card): the spectra files
+  // directly inside a folder join the queue, as a dropped folder's do.
+  async function addFolder(): Promise<void> {
+    setFolderNote(null)
+    try {
+      const r = await run.addBatchFolder()
+      if (r && r.files === 0) setFolderNote(`No spectra files (mzML, mzPeak, MGF) directly in ${r.dir}.`)
+    } catch (e) {
+      setFolderNote(`Cannot read the folder: ${e instanceof Error ? e.message : String(e)}`)
+    }
   }
 
   // A results file picked (menu, History, the empty states): Results.
@@ -309,6 +325,12 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   const actRef = useRef(act)
   actRef.current = act
 
+  // A done batch job's results, in Results.
+  function showBatchJob(j: (typeof jobs)[number]): void {
+    run.showJob(j)
+    if (j.outputs) setView('results')
+  }
+
   const overwriteAsk = run.overwriteAsk
   // The drawer shows the live log, or the kept log of a batch job.
   const logJobEntry = logJob ? jobs.find((j) => j.input === logJob && j.log) : undefined
@@ -432,6 +454,7 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
                 onSearch={() => setSearchOpen(true)}
                 searchBtnRef={searchBtnRef}
                 onOpenBatch={() => setView('batch')}
+                onAddFolder={() => void addFolder()}
                 addBatchRef={addBatchRef}
                 onOpenResults={openResults}
               />
@@ -505,26 +528,53 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
                     logJob={logJob}
                     logOpen={logOpen}
                     onAdd={run.addBatchFiles}
+                    onAddFolder={() => void addFolder()}
+                    outDir={run.outDir}
+                    onChooseOutDir={() => void run.chooseOutDir()}
+                    onClearOutDir={() => run.setOutDir(null)}
                     onClear={() => run.removeJobs(jobs.map((j) => j.input))}
                     onRemove={(i) => run.removeJobs([jobs[i].input])}
-                    onShow={(j) => {
-                      run.showJob(j)
-                      if (j.outputs) setView('results')
-                    }}
+                    onShow={showBatchJob}
                     onLog={openLog}
                     addBatchRef={emptyBatchRef}
                   />
+                  {folderNote && (
+                    <p className="hint note-flag" role="status">
+                      {folderNote}
+                    </p>
+                  )}
                   {runBar}
                 </div>
-                {drawer}
+                <div className="batch-side">
+                  <SummaryTable
+                    summary={run.summary}
+                    busy={busy}
+                    outDir={run.outDir}
+                    onShow={(input) => {
+                      const j = jobs.find((x) => x.input === input)
+                      if (j) showBatchJob(j)
+                    }}
+                  />
+                  {drawer}
+                </div>
               </div>
             ) : (
               <div className="empty batch-empty">
                 <h2>No batch yet</h2>
                 <p className="muted">Queue several spectra files to run them in turn with the same parameters.</p>
-                <button type="button" className="secondary" ref={emptyBatchRef} onClick={run.addBatchFiles} disabled={busy}>
-                  Add files for a batch…
-                </button>
+                <div className="actions">
+                  <button type="button" className="secondary" ref={emptyBatchRef} onClick={run.addBatchFiles} disabled={busy}>
+                    Add files for a batch…
+                  </button>
+                  <button type="button" className="secondary" onClick={() => void addFolder()} disabled={busy}>
+                    Add folder…
+                  </button>
+                </div>
+                {folderNote && (
+                  <p className="hint note-flag" role="status">
+                    {folderNote}
+                  </p>
+                )}
               </div>
             )}
           </section>

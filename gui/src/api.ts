@@ -77,6 +77,12 @@ const api: FastagApi = {
   },
   pickResults: () => openOne(TAGS),
   pickReport: () => openOne([{ name: 'Reports (TSV)', extensions: ['tsv'] }]),
+  pickFolder: async () => {
+    const r = await open({ directory: true, multiple: false })
+    return typeof r === 'string' ? r : null
+  },
+  folderSpectra: (dir: string) => invoke<string[]>('folder_spectra_list', { dir }),
+  writeSummary: (dest: string, text: string) => invoke<void>('summary_write', { dest, text }),
 
   outputsCheck: (params: Record<string, unknown>) => invoke<OutputsCheck>('outputs_check', { params }),
   commandLine: (params: Record<string, unknown>) => invoke<string[]>('command_line', { params }),

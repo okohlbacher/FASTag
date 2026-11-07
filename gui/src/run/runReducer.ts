@@ -16,7 +16,7 @@
 import type { ResolvedOutputs, RunResult, SpeciesReport } from '../types'
 import type { JobAction } from '../runJob'
 import { baseName, type Report } from '../digestReport'
-import { addJobs, type BatchJob } from './batch'
+import { addJobs, renameJobs, type BatchJob } from './batch'
 import { createLogStore, type LogStore } from './logStore'
 
 // A run that failed: what failed, and FASTag's own words for why (each failed
@@ -154,6 +154,9 @@ export interface RunState {
   activeJobId: string | null
   // The queue has jobs: the single input and output are hidden.
   batchMode: boolean
+  // The batch's output folder (P2b, for inputs on a read-only share): every
+  // job's -out is named in it. null: beside each input.
+  batchOutDir: string | null
   // A batch is being worked through (between two jobs no job runs).
   batchRunning: boolean
   // How the last batch pass ended: the jobs it ran, not the queue's
@@ -199,6 +202,7 @@ export type RunAction =
   | { type: 'CANCEL_REQUESTED' }
   | { type: 'BATCH_ADD'; files: string[] }
   | { type: 'BATCH_REMOVE'; inputs: string[] }
+  | { type: 'BATCH_OUT_DIR'; dir: string | null }
   // ended: when a pass ends, what it ran (none: it ran nothing).
   | { type: 'BATCH_RUNNING'; on: boolean; ended?: BatchEnd }
   | { type: 'RESULTS'; update: Update<Results | null> }
@@ -221,6 +225,7 @@ export const initialRunState: RunState = {
   jobs: [],
   activeJobId: null,
   batchMode: false,
+  batchOutDir: null,
   batchRunning: false,
   batchEnd: null,
   liveLog: createLogStore(),
@@ -385,7 +390,7 @@ function start(s: RunState, a: Extract<RunAction, { type: 'RUN_START' }>): RunSt
 
 function batchAdd(s: RunState, files: string[]): RunState {
   const queue = s.jobs.filter((j) => j.batch)
-  const named = addJobs(queueView(s), files)
+  const named = addJobs(queueView(s), files, s.batchOutDir)
   if (named.length === queue.length) return s
   const add: Job[] = named.slice(queue.length).map((b) => ({
     id: queuedId(b.input),
@@ -409,6 +414,15 @@ function batchRemove(s: RunState, inputs: string[]): RunState {
   return { ...s, jobs, batchMode: jobs.some((j) => j.batch) }
 }
 
+// The queue's jobs named for output folder @p dir (batch.ts renameJobs).
+function batchOutDir(s: RunState, dir: string | null): RunState {
+  if (s.batchOutDir === dir) return s
+  const named = renameJobs(queueView(s), dir)
+  let i = 0
+  const jobs = s.jobs.map((j) => (j.batch ? { ...j, out: named[i++].out } : j))
+  return { ...s, jobs, batchOutDir: dir }
+}
+
 /// The state after @p a. Returns @p s itself when @p a changes nothing, so
 /// React skips the render.
 export function runReducer(s: RunState, a: RunAction): RunState {
@@ -425,6 +439,8 @@ export function runReducer(s: RunState, a: RunAction): RunState {
       return batchAdd(s, a.files)
     case 'BATCH_REMOVE':
       return batchRemove(s, a.inputs)
+    case 'BATCH_OUT_DIR':
+      return batchOutDir(s, a.dir)
     case 'BATCH_RUNNING':
       if (a.ended) return { ...s, batchRunning: a.on, batchEnd: a.ended }
       return s.batchRunning === a.on ? s : { ...s, batchRunning: a.on }

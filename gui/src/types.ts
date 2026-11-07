@@ -229,6 +229,15 @@ export interface FastagApi {
   saveFile: (defaultPath?: string, formats?: string[]) => Promise<string | null>
   pickResults: () => Promise<string | null>
   pickReport: () => Promise<string | null>
+  // A folder (the Batch view's Add folder… and output folder).
+  pickFolder: () => Promise<string | null>
+  // The spectra files directly inside folder @p dir, sorted by name, as a
+  // dropped folder adds them (drop.rs folder_spectra_list). Rejects when
+  // @p dir is not a folder.
+  folderSpectra: (dir: string) => Promise<string[]>
+  // Write the batch summary TSV to @p dest (report.rs summary_write, via a
+  // .part file). Rejects with the reason.
+  writeSummary: (dest: string, text: string) => Promise<void>
   // The command line a run of these params is, binary first (fastag.rs
   // command_line: the argv `run` replies and History records).
   commandLine: (params: Record<string, unknown>) => Promise<string[]>

@@ -238,6 +238,28 @@ header.topbar button.on { background: var(--primary-soft); border-color: var(--p
 .batch-main .runbar { margin: auto calc(-1 * var(--space-5)) 0; position: sticky; bottom: 0; }
 .batch-main .failure { margin: 0; }
 .batchview > .logdrawer { align-self: end; margin: var(--space-4); }
+/* P2b: the summary table beside the queue, the log drawer under it. */
+.batch-side { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; min-height: 0; overflow: auto; padding: var(--space-4) var(--space-4) 0; }
+.batch-side > .logdrawer { margin: auto 0 var(--space-4); }
+.batch-table { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.summary-wrap { overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--card); }
+table.summary-table { width: max-content; min-width: 100%; }
+table.summary-table th, table.summary-table td { text-align: left; padding: 6px var(--space-3); border-bottom: 1px solid var(--row-rule); white-space: nowrap; }
+/* The file stays in view while the calls scroll sideways (a narrow window). */
+table.summary-table tbody td:first-child, table.summary-table thead th:first-child { position: sticky; left: 0; background: var(--card); z-index: 1; }
+table.summary-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+table.summary-table td.muted { color: var(--muted-foreground); }
+table.summary-table td.differs { color: var(--flag-text); font-weight: 600; }
+table.summary-table .flag-mark { color: var(--flag); }
+table.summary-table tfoot th, table.summary-table tfoot td { white-space: normal; font-size: var(--text-xs); color: var(--muted-foreground); border-bottom: 0; }
+table.summary-table td.call-cell { white-space: normal; min-width: 6.5em; max-width: 12em; }
+table.summary-table td.status { max-width: 11em; overflow: hidden; text-overflow: ellipsis; }
+table.summary-table tr.st-failed td.status { color: var(--destructive-text); }
+table.summary-table td .link { white-space: nowrap; text-align: left; }
+.outdir { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: var(--text-sm); }
+.outdir code { overflow-wrap: anywhere; }
+.hint.note-flag { color: var(--flag-text); }
+.batch-empty .actions { display: flex; gap: var(--space-2); }
 .empty.batch-empty, .history .empty { margin: auto; text-align: center; display: flex; flex-direction: column; align-items: center; gap: var(--space-3); padding: var(--space-6); }
 .batch-summary p { margin: 0; }
 
