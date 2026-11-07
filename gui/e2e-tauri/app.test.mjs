@@ -77,6 +77,18 @@ async function chooseInput(s, path) {
   await s.click(await s.button('Choose file…'))
 }
 
+/** Go to one of the shell's views (P2a) through the top bar, as a user
+ *  does: the other views stay in the DOM but hidden, and their buttons cannot
+ *  be clicked. */
+async function view(s, id) {
+  const nav = await until(`the ${id} view button`, async () => {
+    const el = await s.exec(`return document.querySelector('nav[aria-label="Views"] button[data-view="' + arguments[0] + '"]')`, id)
+    return el && (el['element-6066-11e4-a52f-4a6976a6e3b5'] ?? Object.values(el)[0])
+  })
+  await s.click(nav)
+  await until(`the ${id} view`, () => s.exec(`const v = document.querySelector('.view[data-view="' + arguments[0] + '"]'); return !!v && !v.hidden`, id), 5000)
+}
+
 const lastRun = (s) => s.exec("const e = document.querySelector('.last-run'); return e ? e.innerText : ''")
 
 test('probe: the app finds its CLI and reads its version', { timeout: 120000 }, () =>
@@ -188,6 +200,7 @@ test('table: time to first rows on a generated 1M-row file (recorded)', { timeou
   await once(w, 'finish')
   await withApp(async (s) => {
     await s.exec('const p = arguments[0]; window.fastag.pickResults = async () => p', big)
+    await view(s, 'results') // P2a: "Open a tags TSV..." is in the empty Results view
     const open = await s.button('Open a tags TSV…')
     const t0 = Date.now()
     await s.click(open)

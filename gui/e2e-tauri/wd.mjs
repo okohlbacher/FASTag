@@ -119,7 +119,9 @@ export class Session {
     return this.exec('return document.body.innerText')
   }
 
-  /** A button by its exact visible text (or aria-label), once it is enabled.
+  /** A button by its exact visible text (or aria-label), once it is enabled
+   *  and rendered: one in a hidden view (P2a shell) is not a button a user
+   *  can press, as with Playwright's role queries.
    *  Matched in the page (whitespace collapsed) rather than by XPath, and a
    *  timeout lists the buttons there were, so a renamed label is plain. */
   async button(name, timeoutMs = 20000) {
@@ -127,7 +129,7 @@ export class Session {
       return await until(`the button "${name}"`, () => this.buttonNow(name), timeoutMs)
     } catch (e) {
       const have = await this.exec(
-        "return [...document.querySelectorAll('button')].map((b) => (b.disabled ? '(disabled) ' : '') + (b.textContent || '').replace(/\\s+/g, ' ').trim() + (b.getAttribute('aria-label') ? ` [${b.getAttribute('aria-label')}]` : ''))"
+        "return [...document.querySelectorAll('button')].map((b) => (b.disabled ? '(disabled) ' : '') + (b.getClientRects().length ? '' : '(hidden) ') + (b.textContent || '').replace(/\\s+/g, ' ').trim() + (b.getAttribute('aria-label') ? ` [${b.getAttribute('aria-label')}]` : ''))"
       ).catch(() => [])
       throw new Error(`${e.message}; buttons on the page: ${JSON.stringify(have)}`)
     }
@@ -138,7 +140,7 @@ export class Session {
     const find = `const want = arguments[0];
       const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
       for (const b of document.querySelectorAll('button')) {
-        if ((norm(b.textContent) === want || norm(b.getAttribute('aria-label')) === want) && !b.disabled) return b;
+        if ((norm(b.textContent) === want || norm(b.getAttribute('aria-label')) === want) && !b.disabled && b.getClientRects().length > 0) return b;
       }
       return null`
     const el = await this.exec(find, name)
