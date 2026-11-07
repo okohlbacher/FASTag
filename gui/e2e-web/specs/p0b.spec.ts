@@ -31,7 +31,7 @@ const ctl = (page: Page, f: keyof Ctl, ...a: number[]): Promise<void> =>
 const column = (page: Page, j: number): Promise<string[]> =>
   page.$$eval(
     '.rt-rows .rt-row',
-    (rows, jj) => rows.map((r) => r.querySelectorAll('[role="cell"]')[jj as number]?.getAttribute('aria-label') ?? ''),
+    (rows, jj) => rows.map((r) => r.querySelectorAll('[role="gridcell"]')[jj as number]?.getAttribute('aria-label') ?? ''),
     j
   )
 

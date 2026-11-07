@@ -40,7 +40,7 @@ const active = (page: Page) => page.locator('.rt-rows .rt-row[aria-selected="tru
 const activeIndex = async (page: Page): Promise<number> => Number(await active(page).getAttribute('aria-rowindex')) - 2
 /// The raw cells of the active row.
 const activeCells = (page: Page): Promise<string[]> =>
-  active(page).evaluate((r) => Array.from(r.querySelectorAll('[role="cell"]')).map((c) => c.getAttribute('aria-label') ?? ''))
+  active(page).evaluate((r) => Array.from(r.querySelectorAll('[role="gridcell"]')).map((c) => c.getAttribute('aria-label') ?? ''))
 
 /// The view's rows in the order the table shows them (E-value ascending).
 function viewRows(page: Page): Promise<string[][]> {

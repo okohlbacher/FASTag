@@ -939,13 +939,13 @@ export default function ResultsTable({ path, source, rerunResConf }: Props): JSX
             const c = row[j] ?? ''
             const name = columns[j] ?? ''
             return (
-              <div className={`rt-cell${numeric.has(name) ? ' n' : ''}`} role="cell" key={j} title={c} aria-label={c}>
+              <div className={`rt-cell${numeric.has(name) ? ' n' : ''}`} role="gridcell" key={j} title={c} aria-label={c}>
                 {name === 'evalue' ? <EValue text={c} /> : name === 'fasta_hit' ? hitWords(c) : fitMiddle(c, width(name))}
               </div>
             )
           })
         ) : (
-          <div className="rt-cell dim" role="cell">
+          <div className="rt-cell dim" role="gridcell">
             …
           </div>
         )}
@@ -1253,9 +1253,12 @@ export default function ResultsTable({ path, source, rerunResConf }: Props): JSX
         // Focusable scroller: the arrows, PageUp/PageDown and Home/End move
         // the active row (GUI-DESIGN S4), ⌘C copies it and ⇧⌘C its USI. With
         // the active row in the DOM, that row is the tab stop instead
-        // (roving tabindex); its keys bubble up here. A table, not a grid:
-        // the cells are read-only, and a grid would promise arrow-key cell
-        // navigation.
+        // (roving tabindex); its keys bubble up here. A read-only grid, not a
+        // table: the rows move by arrow keys, which screen readers pass to
+        // the page only in a grid (focus mode), and ARIA has aria-selected on
+        // a row only in a grid. While the active row is not rendered (its
+        // page is on the way) the scroller holds focus and the live region
+        // below says where the active row is.
         <div
           className="rt-scroll"
           ref={scrollerRef}
@@ -1284,7 +1287,8 @@ export default function ResultsTable({ path, source, rerunResConf }: Props): JSX
         >
           <div
             className="rt-canvas"
-            role="table"
+            role="grid"
+            aria-readonly="true"
             aria-label={`Tags in ${baseName(path)}`}
             aria-rowcount={matched + 1}
             aria-colcount={shown.length}
@@ -1341,6 +1345,13 @@ export default function ResultsTable({ path, source, rerunResConf }: Props): JSX
               {rowsOut}
             </div>
           </div>
+          {/* Where the active row is while it is not rendered (focus is on
+              the scroller then, and no row's focus says it). */}
+          <span className="sr-only" role="status" aria-live="polite" data-testid="rt-pos">
+            {activePos != null && !activeShown && matched > 0
+              ? `Row ${(activePos + 1).toLocaleString('en-US')} of ${matched.toLocaleString('en-US')}, loading…`
+              : ''}
+          </span>
           {/* The first page of a large file takes a while to read. */}
           {!meta && !useHead && <div className="empty" role="status">Reading…</div>}
           {meta && matched === 0 && (

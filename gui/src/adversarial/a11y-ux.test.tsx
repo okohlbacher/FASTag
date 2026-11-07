@@ -28,9 +28,10 @@ describe('a11y: tags browser (ResultsTable)', () => {
     await click(head)
     // aria-sort is only defined on columnheader/rowheader, so it is not on the button.
     expect(head.hasAttribute('aria-sort')).toBe(false)
-    // role=table: the cells are read-only, and a grid would promise arrow-key cell navigation.
-    expect(screen.queryByRole('grid')).toBeNull()
-    expect(screen.getByRole('table')).toBeDefined()
+    // P3b: a read-only grid (arrow keys move the active row; GUI-DESIGN S4),
+    // not a table, so screen readers pass the keys on and aria-selected holds.
+    expect(screen.queryByRole('table')).toBeNull()
+    expect(screen.getByRole('grid').getAttribute('aria-readonly')).toBe('true')
     const heads = screen.getAllByRole('columnheader')
     expect(heads).toHaveLength(3)
     expect(heads[0].getAttribute('aria-sort')).toBe('ascending')

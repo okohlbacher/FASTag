@@ -141,6 +141,58 @@ describe('keyboard active row', () => {
     expect(table().tabIndex).toBe(-1)
   })
 
+  it('is a read-only grid of focusable rows, the active one aria-selected (screen readers pass the keys on)', async () => {
+    await renderTable()
+    expect(screen.queryByRole('table')).toBeNull()
+    const grid = screen.getByRole('grid', { name: 'Tags in x.tags.tsv' })
+    expect(grid.getAttribute('aria-readonly')).toBe('true')
+    expect(grid.getAttribute('aria-rowcount')).toBe(String(N + 1))
+    await key(table(), 'ArrowDown')
+    await key(activeRow()!, 'ArrowDown')
+    const rows = screen.getAllByRole('row')
+    // The header row, then the data rows: each in the grid, each with its
+    // gridcells; exactly the active one selected.
+    expect(rows[0].getAttribute('aria-rowindex')).toBe('1')
+    const data = rows.slice(1)
+    for (const r of data) {
+      expect(grid.contains(r)).toBe(true)
+      expect(r.querySelectorAll('[role="gridcell"]').length).toBeGreaterThan(0)
+    }
+    expect(data.filter((r) => r.getAttribute('aria-selected') === 'true')).toEqual([activeRow()])
+    expect(activeRow()!.getAttribute('aria-rowindex')).toBe('3')
+    expect(document.activeElement).toBe(activeRow())
+    expect(screen.queryByRole('cell')).toBeNull()
+  })
+
+  it('says where the active row is while its page is on the way, with focus on the table', async () => {
+    const BIG = 3000
+    const rows: string[][] = Array.from({ length: BIG }, (_, i) => [`scan=${i}`, `TAG${i}`, '4', '2', '0', '0', '0.1', '1 2 3 4', '-'])
+    const mock = installMockBridge()
+    mock.resultsColumns = COLUMNS
+    mock.resultsRows = rows
+    // Only the first page ever arrives.
+    mock.resultsQuery = (path, view, offset, limit) => {
+      mock.resultsQueryCalls.push({ path, view, offset, limit })
+      if (offset > 0) return new Promise(() => {})
+      const page = rows.slice(0, limit)
+      return Promise.resolve({ columns: COLUMNS, totalRows: BIG, matchedRows: BIG, rows: page, rowIds: page.map((_, i) => i), ranked: true, pending: false })
+    }
+    render(<ResultsTable path="/d/x.tags.tsv" />)
+    await flush()
+    await screen.findByText(`Showing 3,000 of 3,000`)
+    const pos = screen.getByTestId('rt-pos')
+    expect(pos.getAttribute('role')).toBe('status')
+    expect(pos.textContent).toBe('')
+    await key(table(), 'ArrowDown')
+    await key(activeRow()!, 'End')
+    await waitFor(() => expect(document.activeElement).toBe(table()))
+    expect(activeRow()).toBeNull()
+    expect(pos.textContent).toBe('Row 3,000 of 3,000, loading…')
+    await key(table(), 'Home')
+    expect(activeIndex()).toBe(0)
+    expect(pos.textContent).toBe('')
+  })
+
   it('a click makes a row active, and the arrows go on from it', async () => {
     await renderTable()
     const rows = Array.from(document.querySelectorAll('.rt-rows .rt-row'))

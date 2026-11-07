@@ -272,7 +272,7 @@ describe('D5: file order first, ranked order swapped in', () => {
   }
 
   const tags = (): string[] =>
-    Array.from(document.querySelectorAll('.rt-rows .rt-row')).map((r) => r.querySelectorAll('[role="cell"]')[1]?.textContent ?? '')
+    Array.from(document.querySelectorAll('.rt-rows .rt-row')).map((r) => r.querySelectorAll('[role="gridcell"]')[1]?.textContent ?? '')
 
   it('shows file order with a ranking note, then swaps to E-value order and announces it', async () => {
     const mock = rankingMock()
