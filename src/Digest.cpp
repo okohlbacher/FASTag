@@ -80,6 +80,16 @@ namespace FASTag::Digest
 
   void TerminusCounter::add(double nterm, double cterm, std::string_view seq)
   {
+    add_(nterm, cterm, seq, nullptr);
+  }
+
+  void TerminusCounter::add(double nterm, double cterm, std::string_view seq, double reversed_offset)
+  {
+    add_(nterm, cterm, seq, &reversed_offset);
+  }
+
+  void TerminusCounter::add_(double nterm, double cterm, std::string_view seq, const double* reversed_offset)
+  {
     ++tags;
     // P2..P4 from the residues next to the counted end: the tag's last three
     // for a y tag (cterm_mass), its first three for a reversed b tag
@@ -102,7 +112,8 @@ namespace FASTag::Digest
         ++c_near[k];
         if (a >= 0) { ++cpos[0][static_cast<std::size_t>(a)]; tail(cpos); }
       }
-      if (near_(nterm, m + kH2O))
+      // b/y (no offset given): 1.11's m + kH2O.
+      if (near_(nterm, reversed_offset ? m + *reversed_offset : m + kH2O))
       {
         ++n_h2o[k];
         if (a >= 0) { ++cpos[0][static_cast<std::size_t>(a)]; head(cpos); }

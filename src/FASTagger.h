@@ -18,6 +18,8 @@
 
 #include <FASTag/ranksum.h>
 
+#include "IonSeries.h"
+
 #include <limits>
 #include <memory>
 #include <string>
@@ -90,6 +92,12 @@ namespace FASTag
     /// complemented peaks; larger counts keep the plain tail P(X >= c).
     /// Off reproduces 1.11.
     bool   complement_midp = false;
+    /// The ion series the spectrum is read as (1.12 #15 phase B): b/y, as
+    /// FASTag 1.11, or c/z-dot for electron activation. Sets the flanking
+    /// masses' terminal offsets, the complement partner (ComplementSpec) and,
+    /// for c/z, the ETD precursor filter. The tags themselves are spelled
+    /// from residue differences, the same in every series.
+    IonSeries::IonPair ion_pair = IonSeries::ionPair(IonSeries::Series::BY);
     size_t max_peak_count = 100;   ///< hard ceiling; also bounds the null tables
     /// Peaks kept per 100 Da window; 0 selects the strongest max_peak_count
     /// overall instead. Windowed selection makes the effective budget scale with
@@ -133,9 +141,11 @@ namespace FASTag
     std::vector<ModSpec> mods;
   };
 
-  /// One tag. Flanking masses assume the low-m/z peak is a y ion, as DirecTag
-  /// does; a tag read off the b series therefore reads reversed relative to the
-  /// peptide and its flanks carry a one-water offset.
+  /// One tag. Flanking masses assume the low-m/z peak is a C-terminal ion (y,
+  /// or z-dot under Param::ion_pair c/z), as DirecTag does for y; a tag read off
+  /// the N-terminal series (b, c) therefore reads reversed relative to the
+  /// peptide and its flanks carry the offset ion_pair.reversedOffset() (one
+  /// water for b/y).
   struct Tag
   {
     std::string seq;            ///< N->C. Modified residues are written inline as
@@ -166,6 +176,9 @@ namespace FASTag
     double low_mz = 0;          ///< lowest peak; also the output tie-break
     double high_mz = 0;         ///< highest path peak (census tag_cover); not serialised
     float  peak_tic = 0;        ///< summed intensity of the path peaks (census best_tic); not serialised
+    /// The series the tag was read as (Param::ion_pair.kind); every consumer
+    /// of the flanks takes the reversed-read offset from it.
+    IonSeries::Series ion_series = IonSeries::Series::BY;
   };
 
   /// What tagSpectrum saw of one spectrum, for the census (-census). Filled
@@ -225,6 +238,9 @@ namespace FASTag
       c.frag_tol = p.frag_tol;
       c.frag_tol_ppm = p.tol_ppm;
       c.midp = p.complement_midp;
+      // b/y keeps the single delta 0 (1.11's doubles); c/z-dot pairs sum to
+      // M + H (IonSeries::IonPair::compl_delta).
+      if (p.ion_pair.kind != IonSeries::Series::BY) c.pair_deltas = {p.ion_pair.compl_delta};
       return c;
     }
 

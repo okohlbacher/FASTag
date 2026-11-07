@@ -36,6 +36,7 @@ namespace FASTag
                                double nterm_mass, double cterm_mass,
                                const MSSpectrum* spec, int frag_charges,
                                const std::vector<double>* tag_shift,
+                               const IonSeries::IonPair* series,
                                std::vector<Reconciliation>& out) const
   {
     const double db_n = idx_->massBetween(w.start, occ.pos);
@@ -49,8 +50,21 @@ namespace FASTag
     // high side. So cterm_mass = N-side residues - H2O and nterm_mass =
     // C-side residues + H2O. (The C-side clamp mirrors the tagger's at 0.)
     static const double WATER = EmpiricalFormula("H2O").getMonoWeight();
-    const double want_n = occ.reversed ? cterm_mass + WATER : nterm_mass;
-    const double want_c = occ.reversed ? std::max(0.0, nterm_mass - WATER) : cterm_mass;
+    double want_n, want_c;
+    if (!series || series->kind == IonSeries::Series::BY)
+    {
+      want_n = occ.reversed ? cterm_mass + WATER : nterm_mass;
+      want_c = occ.reversed ? std::max(0.0, nterm_mass - WATER) : cterm_mass;
+    }
+    else
+    {
+      // Another series (#15 phase B): the same swap with the series' own
+      // reversed offset (c/z-dot: offC - offN = -15.0347; the tagger's
+      // clamp at 0 mirrored as for b/y).
+      const double off = series->reversedOffset();
+      want_n = occ.reversed ? std::max(0.0, cterm_mass + off) : nterm_mass;
+      want_c = occ.reversed ? std::max(0.0, nterm_mass - off) : cterm_mass;
+    }
 
     // The spectrum flank that is the precursor less the top fragment (want_n
     // forward, want_c reversed) carries an error on the PEPTIDE's mass scale,
@@ -104,7 +118,7 @@ namespace FASTag
           idx_->foldedText(w.start + static_cast<uint32_t>(r.region_lo),
                            w.start + static_cast<uint32_t>(r.region_hi) + 1);
       r.delta_interp = interpretDelta_(r.delta_mass, region);
-      if (spec) localize_(r, w, *spec, frag_charges, occ, tag_shift);
+      if (spec) localize_(r, w, *spec, frag_charges, occ, tag_shift, series);
     }
     out.push_back(std::move(r));
   }
@@ -112,7 +126,8 @@ namespace FASTag
   void TagReconciler::localize_(Reconciliation& r, const ProteomeIndex::Window& w,
                                 const MSSpectrum& spec, int frag_charges,
                                 const ProteomeIndex::TagOcc& occ,
-                                const std::vector<double>* tag_shift) const
+                                const std::vector<double>* tag_shift,
+                                const IonSeries::IonPair* series) const
   {
     // Shifted-fragment scoring. With the gap on residue j of an L-residue
     // peptide, b_i (residues [0,i)) carries it iff j < i and y_i (residues
@@ -147,6 +162,7 @@ namespace FASTag
     // Residue-specific and protein-terminal fixed mods are not on it either: a
     // gap carrying one ties its site with every residue nearer that terminus.
     static const double WATER = EmpiricalFormula("H2O").getMonoWeight();
+    const bool by = !series || series->kind == IonSeries::Series::BY;
     const int L = static_cast<int>(w.end - w.start);
     // shift_pre[i] = summed tag-mod shift on peptide residues [0, i).
     std::vector<double> shift_pre(static_cast<size_t>(L) + 1, 0.0);
@@ -183,8 +199,11 @@ namespace FASTag
       const double d = r.delta_mass - lab;
       for (int i = 1; i < L; ++i)
       {
-        const double b = idx_->massBetween(w.start, w.start + i) + shift_pre[i];
-        const double y = idx_->massBetween(w.end - i, w.end) + WATER
+        // b/y: 1.11's expressions. Another series (#15 phase B, c/z-dot):
+        // its N-ion is prefix + offN, its C-ion suffix + offC.
+        const double b = by ? idx_->massBetween(w.start, w.start + i) + shift_pre[i]
+                            : idx_->massBetween(w.start, w.start + i) + shift_pre[i] + series->offN;
+        const double y = idx_->massBetween(w.end - i, w.end) + (by ? WATER : series->offC)
                          + (shift_pre[L] - shift_pre[L - i]);
         b0[i] = hits(b + tn); b1[i] = hits(b + tn + d);
         y0[i] = hits(y + tc); y1[i] = hits(y + tc + d);
@@ -261,7 +280,8 @@ namespace FASTag
                                                        double nterm_mass, double cterm_mass,
                                                        const MSSpectrum* spec,
                                                        int precursor_charge,
-                                                       const std::vector<double>* tag_shift) const
+                                                       const std::vector<double>* tag_shift,
+                                                       const IonSeries::IonPair* series) const
   {
     std::vector<Reconciliation> out;
     if (!idx_) return out;
@@ -278,7 +298,7 @@ namespace FASTag
       windows.clear();
       idx_->windowsAt(occ.pos, occ.len, mc_, windows);
       for (const auto& w : windows)
-        tryPlace(occ, w, nterm_mass, cterm_mass, spec, frag_charges, tag_shift, out);
+        tryPlace(occ, w, nterm_mass, cterm_mass, spec, frag_charges, tag_shift, series, out);
     }
     return out;
   }

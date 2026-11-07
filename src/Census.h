@@ -196,6 +196,7 @@ namespace FASTag::Census
     std::size_t n_res = 0;
     float min_conf = 0, mean_conf = 0;
     float peak_tic = 0;  ///< summed intensity of the tag's path peaks (BestTagTIC)
+    bool cz = false;     ///< read as c/z-dot ions (1.12 #15 phase B), else b/y
   };
 
   inline constexpr std::size_t kNone = static_cast<std::size_t>(-1);
@@ -266,12 +267,14 @@ namespace FASTag::Census
     double tag_cover = 0;
   };
 
-  /// The census TSV header line.
-  inline std::string header()
+  /// The census TSV header line. @p ion_series (a run that can read c/z,
+  /// IonSeries::seriesColumn) appends best_ion_series.
+  inline std::string header(bool ion_series = false)
   {
-    return "index\tspectrum\trt\tprecursor_mz\tcharge_given\tcharge_used\tn_peaks\tn_peaks_kept"
-           "\tn_edges\tn_compl\tint_gini\tstatus\tn_found\tn_reported\tbest_evalue\tbest_len"
-           "\tbest_min_conf\tbest_mean_conf\tbest_tic\ttag_cover\n";
+    return std::string("index\tspectrum\trt\tprecursor_mz\tcharge_given\tcharge_used\tn_peaks\tn_peaks_kept"
+                       "\tn_edges\tn_compl\tint_gini\tstatus\tn_found\tn_reported\tbest_evalue\tbest_len"
+                       "\tbest_min_conf\tbest_mean_conf\tbest_tic\ttag_cover")
+         + (ion_series ? "\tbest_ion_series\n" : "\n");
   }
 
   /// Free text as one TSV field: a tab, CR or LF becomes a space.
@@ -281,8 +284,8 @@ namespace FASTag::Census
     for (char c : text) buf += (c == '\t' || c == '\r' || c == '\n') ? ' ' : c;
   }
 
-  /// Append one census row (20 fields and a newline).
-  inline void appendRow(std::string& buf, const Row& r, const std::string& native_id)
+  /// Append one census row (20 fields, 21 with @p ion_series, and a newline).
+  inline void appendRow(std::string& buf, const Row& r, const std::string& native_id, bool ion_series = false)
   {
     constexpr auto fixed = std::chars_format::fixed;
     constexpr auto general = std::chars_format::general;
@@ -324,6 +327,11 @@ namespace FASTag::Census
       appendNum(buf, r.tag_cover, fixed, 4);
     }
     else buf += "\t\t\t\t\t";
+    if (ion_series)
+    {
+      buf += '\t';
+      if (r.has_best) buf += r.best.cz ? "cz" : "by";
+    }
     buf += '\n';
   }
 

@@ -42,10 +42,13 @@ namespace FASTag::ClusterAcc
     /// #15 phase A: activation class of every tagged MS2. Counted at every
     /// run (no option): the b/y warning needs it, and it changes no output.
     IonSeries::ActivationCounts activation;
+    /// #15 phase B: MS2 tagged per ion series (-ion_series).
+    IonSeries::SeriesCounts series;
     void merge(const ThreadE& o)
     {
       pick.merge(o.pick);
       activation.merge(o.activation);
+      series.merge(o.series);
     }
   };
   struct BlockE

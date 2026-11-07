@@ -46,6 +46,10 @@ namespace FASTag
   /// Peaks above precursor mass + proton + this (Da) are dropped.
   static constexpr double PRECURSOR_TOL = 1.5;
 
+  /// c/z only: how far above a charge-reduced precursor species (in Da,
+  /// neutral) its isotope and hydrogen-transfer forms reach.
+  static constexpr double ETD_REDUCED_ABOVE = 3.0;
+
   /// Highest fragment charge the deisotoper tries.
   static constexpr int DEISOTOPE_MAX_CHARGE = 3;
   /// The deisotoper's intensity floor (OpenMS ThresholdMower's 0.05), applied
@@ -205,6 +209,30 @@ namespace FASTag
       return p.tol_ppm ? mz * p.frag_tol * 1e-6 : p.frag_tol;
     }
 
+    /// The m/z windows the ETD precursor filter drops (c/z only): around the
+    /// unreacted precursor and each charge-reduced species of a charge-c
+    /// precursor of neutral mass M, (M + c*p)/(c - k) for k = 0 .. c-1, from
+    /// one hydrogen below to 3 Da above (isotopes and hydrogen transfer), in
+    /// neutral mass, each widened by the fragment tolerance.
+    void etdPrecursorWindows(double M, int charge, const Param& p, std::vector<std::pair<double, double>>& out)
+    {
+      out.clear();
+      const double kH = EmpiricalFormula("H").getMonoWeight();
+      for (int k = 0; k < charge; ++k)
+      {
+        const int zr = charge - k;
+        const double cr = (M + charge * PROTON) / zr;
+        out.emplace_back(cr - kH / zr - tolAt(p, cr), cr + ETD_REDUCED_ABOVE / zr + tolAt(p, cr));
+      }
+    }
+
+    inline bool inWindows(const std::vector<std::pair<double, double>>& w, double mz)
+    {
+      for (const auto& lo_hi : w)
+        if (mz >= lo_hi.first && mz <= lo_hi.second) return true;
+      return false;
+    }
+
     /// Combine independent-ish p-values by Fisher's method.
     ///
     /// The three subscores are computed from the same peaks and are therefore not
@@ -348,10 +376,16 @@ namespace FASTag
       MSSpectrum work;
       work.reserve(in.size());
       const double max_mz = s.precursor_mass + PROTON + PRECURSOR_TOL;
+      // c/z (electron activation, #15 phase B): the unreacted precursor and
+      // its charge-reduced species carry no sequence; they are dropped below.
+      const bool etd_filter = p.ion_pair.kind == IonSeries::Series::CZ;
+      static thread_local std::vector<std::pair<double, double>> etd_windows;
+      if (etd_filter) etdPrecursorWindows(s.precursor_mass, charge, p, etd_windows);
       for (const auto& pk : in)
       {
         if (!std::isfinite(pk.getMZ()) || !std::isfinite(pk.getIntensity())) continue;
         if (pk.getIntensity() <= 0 || pk.getMZ() > max_mz) continue;
+        if (etd_filter && inWindows(etd_windows, pk.getMZ())) continue;
         work.push_back(pk);
       }
 
@@ -825,8 +859,22 @@ namespace FASTag
       // only consumer of the fit, and they are what a downstream search matches on.
       // The low peak is assumed to be a y ion, so a b-derived tag reads reversed
       // and its flanks carry a one-water offset.
-      t.cterm_mass = std::max(0.0, avg * charge - PROTON * charge - WATER);
-      t.nterm_mass = std::max(0.0, s.precursor_mass - ((avg + cum) * charge - PROTON * charge));
+      if (p.ion_pair.kind == IonSeries::Series::BY)
+      {
+        t.cterm_mass = std::max(0.0, avg * charge - PROTON * charge - WATER);
+        t.nterm_mass = std::max(0.0, s.precursor_mass - ((avg + cum) * charge - PROTON * charge));
+      }
+      else
+      {
+        // Another series (#15 phase B, c/z-dot): the low peak is the
+        // C-terminal ion, residues + offC, and the residue-sum convention of
+        // b/y holds for forward reads: nterm + tag + cterm + H2O = M. A
+        // reversed read (the N-terminal series) carries reversedOffset().
+        const double offC = p.ion_pair.offC;
+        t.cterm_mass = std::max(0.0, avg * charge - PROTON * charge - offC);
+        t.nterm_mass = std::max(0.0, s.precursor_mass - ((avg + cum) * charge - PROTON * charge) - (WATER - offC));
+      }
+      t.ion_series = p.ion_pair.kind;
 
       t.seq = spell(A, path);
       for (const Step& st : path) { t.n_res += stepResidues(st); t.gapped = t.gapped || st.gap; }

@@ -7,6 +7,7 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "IonSeries.h"
 #include "ProteomeIndex.h"
 
 #include <OpenMS/KERNEL/MSSpectrum.h>
@@ -99,11 +100,18 @@ namespace FASTag
     /// placement expects cterm_mass = N-side residues - H2O and nterm_mass =
     /// C-side residues + H2O. The precursor-derived flank is judged at the
     /// peptide's mass, the other at its own.
+    ///
+    /// @p series: the ion pair the tag was read as (Tag::ion_series, 1.12
+    /// #15). nullptr or b/y is the above, FASTag 1.11's code. Another pair
+    /// (c/z-dot) takes the reversed offset from it -- cterm_mass = N-side -
+    /// reversedOffset(), nterm_mass = C-side + reversedOffset() -- and
+    /// localizes on its own ladders (c = prefix + offN, z-dot = suffix + offC).
     std::vector<Reconciliation> reconcile(const std::string& tag, double nterm_mass,
                                           double cterm_mass,
                                           const OpenMS::MSSpectrum* spec = nullptr,
                                           int precursor_charge = 2,
-                                          const std::vector<double>* tag_shift = nullptr) const;
+                                          const std::vector<double>* tag_shift = nullptr,
+                                          const IonSeries::IonPair* series = nullptr) const;
 
     /// Candidate variable modifications for interpreting a mass gap. Set
     /// before reconcile(); read-only after. Empty means only substitutions and
@@ -123,13 +131,14 @@ namespace FASTag
     void tryPlace(const ProteomeIndex::TagOcc& occ, const ProteomeIndex::Window& w,
                   double nterm_mass, double cterm_mass, const OpenMS::MSSpectrum* spec,
                   int frag_charges, const std::vector<double>* tag_shift,
-                  std::vector<Reconciliation>& out) const;
+                  const IonSeries::IonPair* series, std::vector<Reconciliation>& out) const;
     /// Fill r.loc_*: score every residue of r's region as the gap's site by the
-    /// b/y ions of window @p w it explains in @p spec.
+    /// b/y ions (or @p series' ions) of window @p w it explains in @p spec.
     void localize_(Reconciliation& r, const ProteomeIndex::Window& w,
                    const OpenMS::MSSpectrum& spec, int frag_charges,
                    const ProteomeIndex::TagOcc& occ,
-                   const std::vector<double>* tag_shift) const;
+                   const std::vector<double>* tag_shift,
+                   const IonSeries::IonPair* series) const;
     /// Best explanation of @p delta over the residues in @p region: a candidate
     /// mod on a present residue, a single substitution of a present residue, or
     /// "?" if neither fits within tolerance. Prefers whichever fits with the
