@@ -292,9 +292,9 @@ only_files() { # only_files <dir> <expected listing, space separated>
 grep -qE '^ +-probe_input <file>' "$TMP/helphelp.txt" || fail "(a) --helphelp does not list -probe_input <file>"
 grep -qE '^ +-dump_spectrum <nativeId>' "$TMP/helphelp.txt" || fail "(a) --helphelp does not list -dump_spectrum <nativeId>"
 ARGS=(-fragment_tolerance 0.3 -fragment_tolerance_unit Da -threads 2)
-run_in "$TMP/a0" "$TMP/a0.out" "$TMP/a0.err" -in "$IN" -out tags.tsv "${ARGS[@]}"
+run_in "$TMP/a0" "$TMP/a0.out" "$TMP/a0.err" -in "$IN" -out tags.tsv ${ARGS[@]+"${ARGS[@]}"}
 [ $RC = 0 ] || { cat "$TMP/a0.err" >&2; fail "(a) the plain run failed"; }
-run_in "$TMP/a1" "$TMP/a1.out" "$TMP/a1.err" -in "$IN" -out tags.tsv "${ARGS[@]}" -probe_input "" -dump_spectrum ""
+run_in "$TMP/a1" "$TMP/a1.out" "$TMP/a1.err" -in "$IN" -out tags.tsv ${ARGS[@]+"${ARGS[@]}"} -probe_input "" -dump_spectrum ""
 [ $RC = 0 ] || { cat "$TMP/a1.err" >&2; fail "(a) the run with both flags at '' failed"; }
 cmp -s "$TMP/a0/tags.tsv" "$TMP/a1/tags.tsv" || fail "(a) -probe_input '' -dump_spectrum '' changes the tag TSV"
 # stdout but for TOPPBase's timing line ("FASTag took ... (wall), ...").
@@ -411,13 +411,13 @@ census_run() { # census_run <name> <file> [args]: a real run with -census, in $T
 }
 # Every 7th MS2 of the Ecoli fixture (20 spectra), at the CLI default
 # (20 ppm, deisotoping) and at 0.3 Da.
-mapfile -t EIDS < <(ids "$IN" | awk 'NR % 7 == 1')
+EIDS=(); while IFS= read -r _id; do EIDS+=("$_id"); done < <(ids "$IN" | awk 'NR % 7 == 1')  # no mapfile: bash 3.2 (macOS)
 [ ${#EIDS[@]} -ge 15 ] || fail "(d) found only ${#EIDS[@]} spectrum IDs in the fixture"
 for cfg in default da; do
   A=(); [ $cfg = da ] && A=(-fragment_tolerance 0.3 -fragment_tolerance_unit Da)
-  census_run $cfg "$IN" -threads 2 "${A[@]}"
+  census_run $cfg "$IN" -threads 2 ${A[@]+"${A[@]}"}
   mkdir -p "$TMP/d_$cfg"
-  for k in "${!EIDS[@]}"; do dump "$IN" "${EIDS[$k]}" "$TMP/d_$cfg/$k.jsonl" "${A[@]}"; done
+  for k in "${!EIDS[@]}"; do dump "$IN" "${EIDS[$k]}" "$TMP/d_$cfg/$k.jsonl" ${A[@]+"${A[@]}"}; done
   m=$(J census "$TMP/d_$cfg" "$TMP/c_$cfg/tags.census.tsv") || fail "(d) $cfg: dumps differ from the tagger's census rows"
   [ "$m" = ${#EIDS[@]} ] || fail "(d) $cfg: $m of ${#EIDS[@]} dumps matched"
   t=$(J ladders "$TMP/d_$cfg" "$TMP/c_$cfg/tags.tsv") || fail "(d) $cfg: a tag ladder is not on the dumped peaks"
@@ -440,7 +440,7 @@ cmp -s "$TMP/dout.jsonl" "$TMP/d_default/0.jsonl" || fail "(d) -out changes the 
 
 # Profile MS2: under -pick_profile auto the dump has the picked peaks the
 # tagger tags; under legacy the profile points as read.
-mapfile -t PIDS < <(ids "$FIX/profile_ms2_small.mzML")
+PIDS=(); while IFS= read -r _id; do PIDS+=("$_id"); done < <(ids "$FIX/profile_ms2_small.mzML")
 census_run pauto "$FIX/profile_ms2_small.mzML" -pick_profile auto -threads 2
 census_run pleg "$FIX/profile_ms2_small.mzML" -threads 2
 mkdir -p "$TMP/d_pauto" "$TMP/d_pleg"

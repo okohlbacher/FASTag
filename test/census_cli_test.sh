@@ -48,8 +48,8 @@ summary() { awk -F'\t' -v k="$2" '$1 == "census" && $2 == k { print $3; f = 1 } 
 
 # ---- (a) identity, default paths, no file without -census --------------------
 mkdir -p "$TMP/off" "$TMP/on"
-run "$TMP/off/log" -in "$IN" -out "$TMP/off/tags.tsv" "${ARGS[@]}"
-run "$TMP/on/log" -in "$IN" -out "$TMP/on/tags.tsv" -census "${ARGS[@]}"
+run "$TMP/off/log" -in "$IN" -out "$TMP/off/tags.tsv" ${ARGS[@]+"${ARGS[@]}"}
+run "$TMP/on/log" -in "$IN" -out "$TMP/on/tags.tsv" -census ${ARGS[@]+"${ARGS[@]}"}
 cmp -s "$TMP/off/tags.tsv" "$TMP/on/tags.tsv" || fail "(a) the tag TSV differs with -census"
 [ "$(ls "$TMP/off")" = "log
 tags.tsv" ] || fail "(a) a run without -census wrote $(ls "$TMP/off" | tr '\n' ' ')"
@@ -62,7 +62,7 @@ for mode in fasta recon_fasta; do
   for w in off on; do
     extra=(); [ $w = on ] && extra=(-census -census_out "$d/$w/census.tsv" -census_summary_out "$d/$w/summary.tsv")
     run "$d/$w/log" -in "$IN" -out "$d/$w/tags.tsv" -"$mode" "$DB" -recon_out "$d/$w/recon.tsv" -tag_length 4 \
-      "${ARGS[@]}" "${extra[@]}"
+      ${ARGS[@]+"${ARGS[@]}"} ${extra[@]+"${extra[@]}"}
   done
   cmp -s "$d/off/tags.tsv" "$d/on/tags.tsv" || fail "(a) -$mode: the tag TSV differs with -census"
   cmp -s "$d/off/recon.tsv" "$d/on/recon.tsv" || fail "(a) -$mode: recon.tsv differs with -census"
@@ -124,14 +124,14 @@ col "$C" 12 | grep -qx placed && fail "(d) placed without -recon_out"
 
 # ---- (g) the MGF twin -----------------------------------------------------------
 mkdir -p "$TMP/mgf"
-run "$TMP/mgf/log" -in "$MGF" -out "$TMP/mgf/tags.tsv" -census "${ARGS[@]}"
+run "$TMP/mgf/log" -in "$MGF" -out "$TMP/mgf/tags.tsv" -census ${ARGS[@]+"${ARGS[@]}"}
 cmp -s <(cut -f3- "$C") <(cut -f3- "$TMP/mgf/tags.census.tsv") || fail "(g) the MGF census differs from the mzML's"
 [ "$(rows "$TMP/mgf/tags.census.tsv")" = 139 ] || fail "(g) the MGF census has $(rows "$TMP/mgf/tags.census.tsv") rows"
 
 # ---- census_edge: every status where it belongs --------------------------------
 E="$FIX/census_edge.mzML"
 mkdir -p "$TMP/edge"
-run "$TMP/edge/log" -in "$E" -out "$TMP/edge/tags.tsv" -census "${ARGS[@]}"
+run "$TMP/edge/log" -in "$E" -out "$TMP/edge/tags.tsv" -census ${ARGS[@]+"${ARGS[@]}"}
 EC="$TMP/edge/tags.census.tsv"
 check_run "$EC" "$TMP/edge/tags.census_summary.tsv" "$TMP/edge/tags.tsv" "$TMP/edge/log" "$E" 0
 got=$(awk -F'\t' 'NR > 1 { print $1 ":" $12 }' "$EC" | tr '\n' ' ')
@@ -149,7 +149,7 @@ done
 # ---- (h) subsampling ------------------------------------------------------------
 for seed in 1 7; do
   d="$TMP/sub$seed"; mkdir -p "$d"
-  run "$d/log" -in "$E" -out "$d/tags.tsv" -census -subsample_spectra 6 -subsample_seed $seed "${ARGS[@]}"
+  run "$d/log" -in "$E" -out "$d/tags.tsv" -census -subsample_spectra 6 -subsample_seed $seed ${ARGS[@]+"${ARGS[@]}"}
   grep -q "Subsampling: tagging 6 of 12 input spectra" "$d/log" || fail "(h) seed $seed: no subsampling line"
   "$HELPER" --sampled-ms2 "$E" 6 $seed > "$d/want" || fail "(h) the census_test helper failed"
   [ -s "$d/want" ] || fail "(h) seed $seed selects no MS2; pick another seed"
@@ -161,7 +161,7 @@ cmp -s "$TMP/sub1/want" "$TMP/sub7/want" && fail "(h) both seeds select the same
 
 # ---- (i) diatracer_like ---------------------------------------------------------
 mkdir -p "$TMP/dia"
-run "$TMP/dia/log" -in "$FIX/diatracer_like.mzML" -out "$TMP/dia/tags.tsv" -census "${ARGS[@]}"
+run "$TMP/dia/log" -in "$FIX/diatracer_like.mzML" -out "$TMP/dia/tags.tsv" -census ${ARGS[@]+"${ARGS[@]}"}
 check_run "$TMP/dia/tags.census.tsv" "$TMP/dia/tags.census_summary.tsv" "$TMP/dia/tags.tsv" "$TMP/dia/log" \
   "$FIX/diatracer_like.mzML" 0
 [ "$(col "$TMP/dia/tags.census.tsv" 12 | grep -cx tagged)" -gt 0 ] || fail "(i) diatracer_like gave no tagged spectrum"
@@ -169,9 +169,9 @@ check_run "$TMP/dia/tags.census.tsv" "$TMP/dia/tags.census_summary.tsv" "$TMP/di
 # ---- -out_spectra provenance: the unset flag is not listed (the 1.11 list of
 # the compatibility shim), the set flag is, with its value ----------------------
 mkdir -p "$TMP/os"
-run "$TMP/os/log0" -in "$IN" -out "$TMP/os/t0.tsv" -out_spectra "$TMP/os/s0.mzML" "${ARGS[@]}"
+run "$TMP/os/log0" -in "$IN" -out "$TMP/os/t0.tsv" -out_spectra "$TMP/os/s0.mzML" ${ARGS[@]+"${ARGS[@]}"}
 grep -q 'name="parameter: census' "$TMP/os/s0.mzML" && fail "-out_spectra lists a census option at its default"
-run "$TMP/os/log1" -in "$IN" -out "$TMP/os/t1.tsv" -out_spectra "$TMP/os/s1.mzML" -census "${ARGS[@]}"
+run "$TMP/os/log1" -in "$IN" -out "$TMP/os/t1.tsv" -out_spectra "$TMP/os/s1.mzML" -census ${ARGS[@]+"${ARGS[@]}"}
 grep -q 'name="parameter: census" type="xsd:string" value="true"' "$TMP/os/s1.mzML" \
   || fail "-out_spectra does not list -census when it is set"
 grep -q 'name="parameter: census_out"' "$TMP/os/s1.mzML" && fail "-out_spectra lists the unset -census_out"
@@ -179,7 +179,7 @@ cmp -s "$TMP/os/t0.tsv" "$TMP/os/t1.tsv" || fail "-census changed the tags of an
 
 # ---- -census_out / -census_summary_out are only read with -census ----------------
 mkdir -p "$TMP/orph"
-run "$TMP/orph/log" -in "$IN" -out "$TMP/orph/tags.tsv" -census_out "$TMP/orph/c.tsv" "${ARGS[@]}"
+run "$TMP/orph/log" -in "$IN" -out "$TMP/orph/tags.tsv" -census_out "$TMP/orph/c.tsv" ${ARGS[@]+"${ARGS[@]}"}
 grep -q -- "-census_out is only read for -census" "$TMP/orph/log" || fail "no warning for -census_out without -census"
 [ ! -e "$TMP/orph/c.tsv" ] || fail "-census_out without -census wrote a file"
 cmp -s "$TMP/off/tags.tsv" "$TMP/orph/tags.tsv" || fail "-census_out without -census changed the tags"

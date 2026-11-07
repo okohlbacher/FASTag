@@ -43,11 +43,11 @@ ids() { "$HELPER" --write-ids "$IN" "$TMP/$1.$2" "$1" "$TMP/$1.want" || fail "he
 for v in good meta scan dupscan noq wrongrun merged foreign fewforeign noref allnoref; do ids $v idXML; done
 ids mzid mzid
 [ "$(awk -F'\t' '$2 == "1"' "$TMP/good.want" | wc -l)" -gt 5 ] || fail "the fixture identifies too few spectra"
-[ "$(awk -F'\t' '$2 == ""' "$TMP/dupscan.want" | wc -l)" = 1 ] || fail "dupscan fixture"
+[ "$(awk -F'\t' '$2 == ""' "$TMP/dupscan.want" | wc -l | tr -d ' ')" = 1 ] || fail "dupscan fixture"
 
 # ---- plain census, the reference of (a) ------------------------------------------
 mkdir -p "$TMP/plain"
-run "$TMP/plain/log" -in "$IN" -out "$TMP/plain/tags.tsv" -census "${ARGS[@]}"
+run "$TMP/plain/log" -in "$IN" -out "$TMP/plain/tags.tsv" -census ${ARGS[@]+"${ARGS[@]}"}
 PC="$TMP/plain/tags.census.tsv"; PS="$TMP/plain/tags.census_summary.tsv"
 col() { head -1 "$1" | tr '\t' '\n' | grep -nx -- "$2" | head -1 | cut -d: -f1; }
 NC=$(head -1 "$PC" | tr '\t' '\n' | wc -l | tr -d ' ')   # census columns of phase A
@@ -104,7 +104,7 @@ check_join() {  # dir want
 for v in good meta mzid scan dupscan; do
   ext=idXML; [ $v = mzid ] && ext=mzid
   mkdir -p "$TMP/$v"
-  run "$TMP/$v/log" -in "$IN" -out "$TMP/$v/tags.tsv" -census -census_ids "$TMP/$v.$ext" "${ARGS[@]}"
+  run "$TMP/$v/log" -in "$IN" -out "$TMP/$v/tags.tsv" -census -census_ids "$TMP/$v.$ext" ${ARGS[@]+"${ARGS[@]}"}
   check_join "$TMP/$v" "$TMP/$v.want"
   grep -q "^Census ids:" "$TMP/$v/log" || fail "$v: no 'Census ids:' log line"
 done
@@ -117,9 +117,9 @@ done
 
 # With -fasta -recon_out: recon.tsv unchanged, placed rows joined too.
 mkdir -p "$TMP/r0" "$TMP/r1"
-run "$TMP/r0/log" -in "$IN" -out "$TMP/r0/tags.tsv" -fasta "$DB" -recon_out "$TMP/r0/recon.tsv" -tag_length 4 -census "${ARGS[@]}"
+run "$TMP/r0/log" -in "$IN" -out "$TMP/r0/tags.tsv" -fasta "$DB" -recon_out "$TMP/r0/recon.tsv" -tag_length 4 -census ${ARGS[@]+"${ARGS[@]}"}
 run "$TMP/r1/log" -in "$IN" -out "$TMP/r1/tags.tsv" -fasta "$DB" -recon_out "$TMP/r1/recon.tsv" -tag_length 4 -census \
-  -census_ids "$TMP/good.idXML" "${ARGS[@]}"
+  -census_ids "$TMP/good.idXML" ${ARGS[@]+"${ARGS[@]}"}
 cmp -s "$TMP/r0/recon.tsv" "$TMP/r1/recon.tsv" || fail "(a) recon.tsv differs with -census_ids"
 cmp -s "$TMP/r0/tags.tsv" "$TMP/r1/tags.tsv" || fail "(a) -fasta: tags differ with -census_ids"
 cmp -s "$TMP/r0/tags.census.tsv" <(cut -f1-"$NC" "$TMP/r1/tags.census.tsv") || fail "(a) -recon_out: census columns differ"
@@ -127,13 +127,13 @@ cmp -s "$TMP/r0/tags.census.tsv" <(cut -f1-"$NC" "$TMP/r1/tags.census.tsv") || f
 
 # ---- (f) provenance and refusals ----------------------------------------------------
 mkdir -p "$TMP/wrongrun"
-run "$TMP/wrongrun/log" -in "$IN" -out "$TMP/wrongrun/tags.tsv" -census -census_ids "$TMP/wrongrun.idXML" "${ARGS[@]}"
+run "$TMP/wrongrun/log" -in "$IN" -out "$TMP/wrongrun/tags.tsv" -census -census_ids "$TMP/wrongrun.idXML" ${ARGS[@]+"${ARGS[@]}"}
 grep -q "census_ids names the run 'other_run'" "$TMP/wrongrun/log" || fail "(f) no warning for a wrong run"
 check_join "$TMP/wrongrun" "$TMP/wrongrun.want"
 [ "$(val "$TMP/wrongrun/tags.census_summary.tsv" census_ids run_check)" = mismatch ] || fail "(f) run_check mismatch"
 for v in merged noq; do
   mkdir -p "$TMP/$v"
-  "$BIN" -in "$IN" -out "$TMP/$v/tags.tsv" -census -census_ids "$TMP/$v.idXML" "${ARGS[@]}" >"$TMP/$v/log" 2>&1 \
+  "$BIN" -in "$IN" -out "$TMP/$v/tags.tsv" -census -census_ids "$TMP/$v.idXML" ${ARGS[@]+"${ARGS[@]}"} >"$TMP/$v/log" 2>&1 \
     && fail "(f) $v ran (exit 0)"
   [ ! -e "$TMP/$v/tags.tsv" ] || fail "(f) $v: refused only after writing outputs"
   ls "$TMP/$v" | grep -q census && fail "(f) $v: a census file was written"
@@ -144,7 +144,7 @@ grep -q "more than one run" "$TMP/merged/log" || fail "(f) the merged-run refusa
 # ---- (j) identifications without a spectrum_reference --------------------------------
 for v in noref allnoref; do
   mkdir -p "$TMP/$v"
-  "$BIN" -in "$IN" -out "$TMP/$v/tags.tsv" -census -census_ids "$TMP/$v.idXML" "${ARGS[@]}" >"$TMP/$v/log" 2>&1
+  "$BIN" -in "$IN" -out "$TMP/$v/tags.tsv" -census -census_ids "$TMP/$v.idXML" ${ARGS[@]+"${ARGS[@]}"} >"$TMP/$v/log" 2>&1
   rc=$?
   [ $rc != 0 ] || fail "(j) $v ran (exit 0)"
   [ ! -e "$TMP/$v/tags.tsv" ] || fail "(j) $v: refused only after writing outputs"
@@ -156,17 +156,17 @@ done
 # also under subsampling, where the unmatched check is skipped
 mkdir -p "$TMP/norefsub"
 "$BIN" -in "$IN" -out "$TMP/norefsub/tags.tsv" -census -census_ids "$TMP/noref.idXML" -subsample_spectra 40 \
-  -subsample_seed 3 "${ARGS[@]}" >"$TMP/norefsub/log" 2>&1 && fail "(j) noref under subsampling ran (exit 0)"
+  -subsample_seed 3 ${ARGS[@]+"${ARGS[@]}"} >"$TMP/norefsub/log" 2>&1 && fail "(j) noref under subsampling ran (exit 0)"
 grep -q "carry no spectrum_reference" "$TMP/norefsub/log" || fail "(j) noref under subsampling: no refusal"
 [ "$(val "$TMP/good/tags.census_summary.tsv" census_ids id_no_ref)" = 0 ] || fail "(j) id_no_ref row"
 
 mkdir -p "$TMP/foreign" "$TMP/fewforeign"
-"$BIN" -in "$IN" -out "$TMP/foreign/tags.tsv" -census -census_ids "$TMP/foreign.idXML" "${ARGS[@]}" >"$TMP/foreign/log" 2>&1 \
+"$BIN" -in "$IN" -out "$TMP/foreign/tags.tsv" -census -census_ids "$TMP/foreign.idXML" ${ARGS[@]+"${ARGS[@]}"} >"$TMP/foreign/log" 2>&1 \
   && fail "(f) more than 50% foreign references ran (exit 0)"
 grep -q "match no spectrum" "$TMP/foreign/log" || fail "(f) no message for the foreign references"
 cmp -s "$TMP/plain/tags.tsv" "$TMP/foreign/tags.tsv" || fail "(f) foreign: the tag TSV is not complete"
 ls "$TMP/foreign" | grep -q census && fail "(f) foreign: a census file was written"
-run "$TMP/fewforeign/log" -in "$IN" -out "$TMP/fewforeign/tags.tsv" -census -census_ids "$TMP/fewforeign.idXML" "${ARGS[@]}"
+run "$TMP/fewforeign/log" -in "$IN" -out "$TMP/fewforeign/tags.tsv" -census -census_ids "$TMP/fewforeign.idXML" ${ARGS[@]+"${ARGS[@]}"}
 grep -q "match no spectrum" "$TMP/fewforeign/log" || fail "(f) no warning for 1-50% foreign references"
 check_join "$TMP/fewforeign" "$TMP/fewforeign.want"
 [ "$(val "$TMP/fewforeign/tags.census_summary.tsv" census_ids refs_unmatched)" -gt 0 ] || fail "(f) refs_unmatched"
@@ -174,31 +174,31 @@ grep -q "match no spectrum" "$TMP/good/log" && fail "(f) good: unmatched warning
 
 # ---- (g) -census_ids_fdr ------------------------------------------------------------
 mkdir -p "$TMP/fdr"
-run "$TMP/fdr/log" -in "$IN" -out "$TMP/fdr/tags.tsv" -census -census_ids "$TMP/good.idXML" -census_ids_fdr 0.03 "${ARGS[@]}"
+run "$TMP/fdr/log" -in "$IN" -out "$TMP/fdr/tags.tsv" -census -census_ids "$TMP/good.idXML" -census_ids_fdr 0.03 ${ARGS[@]+"${ARGS[@]}"}
 # the q = 0.02 targets (MS2 ordinal k % 6 == 1) are identified at 0.03
 want1=$(awk -F'\t' '$2 == "1"' "$TMP/good.want" | wc -l)
 plus=$(awk 'NR % 6 == 2' "$TMP/good.want" | wc -l)
 [ "$(val "$TMP/fdr/tags.census_summary.tsv" census_ids identified_1)" = $((want1 + plus)) ] || fail "(g) -census_ids_fdr 0.03"
 [ "$(val "$TMP/fdr/tags.census_summary.tsv" census_ids ids_fdr)" = 0.03 ] || fail "(g) ids_fdr row"
 mkdir -p "$TMP/tri"
-run "$TMP/tri/log" -in "$IN" -out "$TMP/tri/tags.tsv" -census -census_ids "$TMP/good.idXML" -census_triage_evalue 1e-9 "${ARGS[@]}"
+run "$TMP/tri/log" -in "$IN" -out "$TMP/tri/tags.tsv" -census -census_ids "$TMP/good.idXML" -census_triage_evalue 1e-9 ${ARGS[@]+"${ARGS[@]}"}
 check_join "$TMP/tri" "$TMP/good.want" 1e-9
 
 # ---- (h) subsampling: unmatched unknown, nothing refused -------------------------------
 mkdir -p "$TMP/sub"
 run "$TMP/sub/log" -in "$IN" -out "$TMP/sub/tags.tsv" -census -census_ids "$TMP/foreign.idXML" -subsample_spectra 40 \
-  -subsample_seed 3 "${ARGS[@]}"
+  -subsample_seed 3 ${ARGS[@]+"${ARGS[@]}"}
 [ -z "$(val "$TMP/sub/tags.census_summary.tsv" census_ids refs_unmatched)" ] || fail "(h) refs_unmatched under subsampling"
 [ "$(rows "$TMP/sub/tags.census.tsv")" -lt 139 ] || fail "(h) not subsampled"
 
 # ---- (i) orphans -----------------------------------------------------------------------
 mkdir -p "$TMP/orph"
-run "$TMP/orph/log" -in "$IN" -out "$TMP/orph/tags.tsv" -census_ids "$TMP/good.idXML" "${ARGS[@]}"
+run "$TMP/orph/log" -in "$IN" -out "$TMP/orph/tags.tsv" -census_ids "$TMP/good.idXML" ${ARGS[@]+"${ARGS[@]}"}
 grep -q -- "-census_ids is only read for -census" "$TMP/orph/log" || fail "(i) no warning for -census_ids without -census"
 [ "$(ls "$TMP/orph")" = "log
 tags.tsv" ] || fail "(i) -census_ids without -census wrote $(ls "$TMP/orph" | tr '\n' ' ')"
 cmp -s "$TMP/plain/tags.tsv" "$TMP/orph/tags.tsv" || fail "(i) -census_ids without -census changed the tags"
-run "$TMP/orph/log2" -in "$IN" -out "$TMP/orph/t2.tsv" -census -census_ids_fdr 0.05 -census_triage_evalue 0.1 "${ARGS[@]}"
+run "$TMP/orph/log2" -in "$IN" -out "$TMP/orph/t2.tsv" -census -census_ids_fdr 0.05 -census_triage_evalue 0.1 ${ARGS[@]+"${ARGS[@]}"}
 grep -q -- "-census_ids_fdr is only read for -census_ids" "$TMP/orph/log2" || fail "(i) no warning for -census_ids_fdr alone"
 grep -q -- "-census_triage_evalue is only read for -census_ids" "$TMP/orph/log2" || fail "(i) no warning for -census_triage_evalue alone"
 cmp -s "$PC" "$TMP/orph/t2.census.tsv" || fail "(i) -census_ids_fdr without -census_ids changed the census"

@@ -37,7 +37,7 @@ for t in 1 3 8; do
     -glyco -glyco_out "$d/glyco.tsv" -recon_id_out "$d/ids.idXML" \
     >"$d/log" 2>&1 || { cat "$d/log" >&2; fail "-threads $t run failed"; }
 done
-for f in "${OUTS[@]}"; do
+for f in ${OUTS[@]+"${OUTS[@]}"}; do
   [ "$(wc -l < "$TMP/t1/$f.tsv")" -gt 1 ] || fail "$f.tsv has no rows at -threads 1; the check would prove nothing"
   for t in 3 8; do
     cmp -s "$TMP/t1/$f.tsv" "$TMP/t$t/$f.tsv" || fail "$f.tsv differs between -threads 1 and $t"
@@ -128,7 +128,7 @@ for t in 1 3 8; do
     -census -census_out "$d/census.tsv" >"$d/log" 2>&1 || { cat "$d/log" >&2; fail "-ion_series auto -threads $t run failed"; }
 done
 [ "$(awk -F'\t' 'NR > 1 { print $NF }' "$TMP/z1/tags.tsv" | sort -u)" = cz ] || fail "-ion_series auto: the ETD copy was not read as c/z"
-for f in "${ZOUTS[@]}"; do
+for f in ${ZOUTS[@]+"${ZOUTS[@]}"}; do
   [ "$(wc -l < "$TMP/z1/$f.tsv")" -gt 1 ] || fail "-ion_series auto: $f.tsv has no rows"
   for t in 3 8; do
     cmp -s "$TMP/z1/$f.tsv" "$TMP/z$t/$f.tsv" || fail "-ion_series auto: $f.tsv differs between -threads 1 and $t"
@@ -149,14 +149,14 @@ if [ -n "$PROF" ]; then
       extra=(); [ $r = ondisc ] && extra=(-out_spectra "$d/spectra.mzML")
       "$BIN" -in "$PROF" -out "$d/tags.tsv" -threads "$t" -pick_profile auto -min_filter_length 3 \
         -fasta "$DB" -recon_out "$d/recon.tsv" -delta_out "$d/delta.tsv" \
-        -digest_out "$d/digest.tsv" -label_out "$d/label.tsv" -massgap_out "$d/massgap.tsv" "${extra[@]}" \
+        -digest_out "$d/digest.tsv" -label_out "$d/label.tsv" -massgap_out "$d/massgap.tsv" ${extra[@]+"${extra[@]}"} \
         >"$d/log" 2>&1 || { cat "$d/log" >&2; fail "-pick_profile auto ($r) -threads $t run failed"; }
       grep -q 'mzML: centroided 10 profile spectra on read' "$d/log" \
         || { cat "$d/log" >&2; fail "-pick_profile auto ($r) -threads $t: the 10 profile spectra were not centroided"; }
     done
   done
   for r in ondisc fast; do
-    for f in "${POUTS[@]}" recon delta; do
+    for f in ${POUTS[@]+"${POUTS[@]}"} recon delta; do
       case " ${POUTS[*]} " in *" $f "*)
         [ "$(wc -l < "$TMP/p${r}1/$f.tsv")" -gt 1 ] || fail "auto ($r): $f.tsv has no rows at -threads 1; the check would prove nothing" ;;
       esac
