@@ -1487,10 +1487,10 @@ jobs:
       # no Linux assets. A dry run only says so.
       - name: Process lifetime (P1 PR b) present?
         run: |
-          if grep -rqs 'PR_SET_PDEATHSIG' gui/src-tauri/src; then
-            echo "PR_SET_PDEATHSIG found in gui/src-tauri/src"
+          if grep -rqs 'libc::PR_SET_PDEATHSIG' gui/src-tauri/src; then
+            echo "libc::PR_SET_PDEATHSIG found in gui/src-tauri/src"
           else
-            echo "::warning::no PR_SET_PDEATHSIG in gui/src-tauri/src (P1 PR b not merged): a tag build would not attach the Linux desktop app"
+            echo "::warning::no libc::PR_SET_PDEATHSIG call in gui/src-tauri/src (P1 PR b not merged): a tag build would not attach the Linux desktop app"
           fi
       - name: Stage the portable CLI as the app's bundled resources
         shell: bash
@@ -1915,8 +1915,9 @@ jobs:
   #
   # Ordering with P1 PR b (GUI-DESIGN section 8: "PDEATHSIG and the watchdog
   # ship with the first Linux release"): killing the GUI must end its CLI
-  # within 3 s, and on Linux that is PR b's prctl(PR_SET_PDEATHSIG) in the
-  # spawner. Until that is in gui/src-tauri/src this job fails before
+  # within 3 s, and on Linux that is PR b's prctl(libc::PR_SET_PDEATHSIG)
+  # (#17, lifetime.rs). Until that call is in gui/src-tauri/src (a comment
+  # naming it does not count) this job fails before
   # attaching anything, so a tag cut before PR b lands ships no Linux GUI
   # and release-complete turns red on the missing .deb and tarball.
   gui-linux-release:
@@ -1932,8 +1933,8 @@ jobs:
           sparse-checkout: gui/src-tauri/src
       - name: The process lifetime of P1 PR b is in this build
         run: |
-          grep -rqs 'PR_SET_PDEATHSIG' gui/src-tauri/src || {
-            echo "::error::no PR_SET_PDEATHSIG in gui/src-tauri/src: P1 PR b (process lifetime) must ship with the first Linux release (GUI-DESIGN section 8); not attaching the Linux desktop app"
+          grep -rqs 'libc::PR_SET_PDEATHSIG' gui/src-tauri/src || {
+            echo "::error::no libc::PR_SET_PDEATHSIG call in gui/src-tauri/src: P1 PR b (process lifetime) must ship with the first Linux release (GUI-DESIGN section 8); not attaching the Linux desktop app"
             exit 1
           }
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8

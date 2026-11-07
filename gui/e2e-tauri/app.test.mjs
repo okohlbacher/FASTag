@@ -200,26 +200,39 @@ test('table: time to first rows on a generated 1M-row file (recorded)', { timeou
 })
 
 // Counts delivered log LINES, not messages: today every line is one
-// fastag:log event (the pre-batching baseline), and P1 PR a batches them as
-// Log{lines} on a Channel, after which a message carries many lines. A
-// payload that is an array, or has a `lines` array, counts its length. PR a
-// must point the subscription below at its API if window.fastag.onLog goes.
+// fastag:log event through window.fastag.onLog (the pre-batching baseline).
+// P1 PR a (#16) drops onLog: each run gets a Channel<RunEvent> passed to
+// window.fastag.run(params, onEvent), and one {kind: 'log', lines} message
+// carries every line of a 50-100 ms flush. The spec reads whichever of the
+// two the app has, so it keeps counting every line after PR a lands.
 test('IPC: every log line of a chatty run reaches the webview; message rate recorded', { timeout: 300000, skip: MODE !== 'stub' && 'the stub only' }, () =>
   withApp(async (s) => {
-    const subscribed = await s.exec(
-      `if (typeof window.fastag.onLog !== 'function') return false
-      window.__wd = { messages: 0, lines: 0, t0: 0, t1: 0 }
-      window.fastag.onLog((p) => {
-        const w = window.__wd
+    const via = await s.exec(
+      `const w = (window.__wd = { messages: 0, lines: 0, t0: 0, t1: 0 })
+      const seen = (n) => {
         const t = performance.now()
         if (!w.messages) w.t0 = t
         w.t1 = t
         w.messages++
-        w.lines += Array.isArray(p) ? p.length : p && Array.isArray(p.lines) ? p.lines.length : 1
-      })
-      return true`
+        w.lines += n
+      }
+      const f = window.fastag
+      if (typeof f.onLog === 'function') {
+        f.onLog((p) => seen(Array.isArray(p) ? p.length : p && Array.isArray(p.lines) ? p.lines.length : 1))
+        return 'fastag:log events (onLog)'
+      }
+      if (typeof f.run === 'function' && f.run.length >= 2) {
+        const run = f.run
+        f.run = (params, onEvent, ...rest) =>
+          run(params, (e) => {
+            if (e && e.kind === 'log') seen(Array.isArray(e.lines) ? e.lines.length : 1)
+            return onEvent(e)
+          }, ...rest)
+        return 'the run Channel (RunEvent log)'
+      }
+      return null`
     )
-    assert.ok(subscribed, 'window.fastag.onLog is gone: point this spec at the log subscription of the Channel API (P1 PR a)')
+    assert.ok(via, 'neither window.fastag.onLog nor a run(params, onEvent) Channel: point this spec at the log API')
     const input = spectra('run03.chatty.mzML')
     await chooseInput(s, input)
     await s.click(await s.button('Run on run03.chatty.mzML'))
@@ -233,6 +246,7 @@ test('IPC: every log line of a chatty run reaches the webview; message rate reco
     assert.ok(w.lines >= 5000, `only ${w.lines} log lines arrived (${w.messages} messages)`)
     const secs = Math.max((w.t1 - w.t0) / 1000, 1e-3)
     gates.ipc = {
+      via,
       messages: w.messages,
       lines: w.lines,
       seconds: Number(secs.toFixed(3)),

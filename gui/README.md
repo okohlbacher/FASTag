@@ -206,7 +206,7 @@ with the portable linux-x64 CLI staged into `src-tauri/resources/fastag`:
 A `gui_dry_run` dispatch with `gui_full_payload` embeds the taxonomy index as
 a tag does, so the release-sized bundles are built and smoke-tested first.
 A tag attaches them only once P1 PR b's process lifetime
-(`PR_SET_PDEATHSIG`) is in `src-tauri/src`.
+(a `libc::PR_SET_PDEATHSIG` call, #17) is in `src-tauri/src`.
 The supported floor is glibc 2.35 and WebKitGTK 4.1 (Ubuntu 22.04, Debian 12).
 Rocky/RHEL 9 is below it: glibc 2.34 and only WebKitGTK API 4.0
 (`webkit2gtk3`); the Rocky 9 smoke job records both and is informational
