@@ -40,9 +40,11 @@ namespace FASTag::RunReport
 {
   /// Version of the run section format written by Emit::Versioned.
   /// 1 = the FASTag 1.11 `run` rows followed by `run_report_version`.
-  /// 2 = format 1, then the E picking rows (#9). Bumped once per item in the
-  /// PLAN-INTEGRATION merge order (E#7 adds fields only, E#9 = 2, E#15A = 3).
-  inline constexpr int kFormatVersion = 2;
+  /// 2 = format 1, then the E picking rows (#9).
+  /// 3 = format 2, then the E activation rows (#15 phase A). Bumped once per
+  /// item in the PLAN-INTEGRATION merge order (E#7 adds fields only, E#9 = 2,
+  /// E#15A = 3).
+  inline constexpr int kFormatVersion = 3;
 
   /// Run-level facts shared by every long-form report. Filled once per run.
   struct RunMeta
@@ -67,6 +69,12 @@ namespace FASTag::RunReport
     std::string pick_profile = "legacy";  ///< -pick_profile
     std::size_t pick_picked = 0;          ///< profile MS2 centroided
     std::size_t pick_failed = 0;          ///< profile MS2 kept as profile (picking yielded nothing)
+    // #15 phase A: tagged MS2 spectra per activation class (src/IonSeries.h);
+    // filled after the tagging loop.
+    std::size_t activation_collisional = 0;
+    std::size_t activation_electron = 0;
+    std::size_t activation_hybrid = 0;
+    std::size_t activation_unknown = 0;
     // ---- 1.12 A ----
     // ---- 1.12 D ----
     // ---- 1.12 F ----
@@ -110,15 +118,33 @@ namespace FASTag::RunReport
     r.push_back({"run", "run_report_version", v, "-", "The run section follows FASTag run report format " + v + "."});
     // ---- 1.12 E ----
     {
-      // #9: value = spectra, n = profile MS2 that needed picking.
-      const std::string n = std::to_string(m.pick_picked + m.pick_failed);
-      r.push_back({"run", "pick_profile", m.pick_profile, "-",
-                   "Profile MS2 was centroided under -pick_profile " + m.pick_profile + "."});
-      const std::string pk = std::to_string(m.pick_picked), fl = std::to_string(m.pick_failed);
-      r.push_back({"run", "profile_ms2_picked", pk, n,
-                   pk + " of " + n + " profile MS2 spectra were centroided before tagging."});
-      r.push_back({"run", "profile_ms2_kept", fl, n,
-                   fl + " of " + n + " profile MS2 spectra were tagged as profile (picking yielded nothing)."});
+      {
+        // #9: value = spectra, n = profile MS2 that needed picking.
+        const std::string n = std::to_string(m.pick_picked + m.pick_failed);
+        r.push_back({"run", "pick_profile", m.pick_profile, "-",
+                     "Profile MS2 was centroided under -pick_profile " + m.pick_profile + "."});
+        const std::string pk = std::to_string(m.pick_picked), fl = std::to_string(m.pick_failed);
+        r.push_back({"run", "profile_ms2_picked", pk, n,
+                     pk + " of " + n + " profile MS2 spectra were centroided before tagging."});
+        r.push_back({"run", "profile_ms2_kept", fl, n,
+                     fl + " of " + n + " profile MS2 spectra were tagged as profile (picking yielded nothing)."});
+      }
+      {
+        // #15 phase A: value = spectra of the class, n = all tagged MS2.
+        const std::size_t all = m.activation_collisional + m.activation_electron + m.activation_hybrid
+                              + m.activation_unknown;
+        const std::string n = std::to_string(all);
+        const auto row = [&](const char* key, std::size_t k, const std::string& how) {
+          const std::string c = std::to_string(k);
+          r.push_back({"run", key, c, n, c + " of " + n + " MS2 spectra " + how + "."});
+        };
+        row("activation_collisional", m.activation_collisional,
+            "were activated by collision (CID, HCD, trap-type CID, PQD)");
+        row("activation_electron", m.activation_electron,
+            "were activated by electron transfer or capture (ETD, ECD)");
+        row("activation_hybrid", m.activation_hybrid, "were activated by a hybrid method (EThcD, ETciD)");
+        row("activation_unknown", m.activation_unknown, "carry no activation FASTag classifies");
+      }
     }
     // ---- 1.12 A ----
     // ---- 1.12 D ----

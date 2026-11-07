@@ -22,6 +22,7 @@
 #pragma once
 
 #include "Centroid.h"
+#include "IonSeries.h"
 
 #include <cstddef>
 
@@ -33,7 +34,14 @@ namespace FASTag::ClusterAcc
     /// #9: profile MS2 of an mzML input centroided in the tagging loop
     /// (-pick_profile auto; mzPeak counts its own, in MzPeakStream).
     Centroid::Counts pick;
-    void merge(const ThreadE& o) { pick.merge(o.pick); }
+    /// #15 phase A: activation class of every tagged MS2. Counted at every
+    /// run (no option): the b/y warning needs it, and it changes no output.
+    IonSeries::ActivationCounts activation;
+    void merge(const ThreadE& o)
+    {
+      pick.merge(o.pick);
+      activation.merge(o.activation);
+    }
   };
   struct BlockE
   {

@@ -78,15 +78,21 @@ int main()
 
   // Versioned: the legacy rows are a byte prefix, then the version row.
   const std::string versioned = written(RR::runRows(m, RR::Emit::Versioned));
-  check(RR::kFormatVersion == 2, "format version 2");
+  check(RR::kFormatVersion == 3, "format version 3");
   check(versioned.rfind(legacy, 0) == 0, "Versioned starts with the legacy bytes");
   check(versioned.substr(legacy.size()) ==
-          "run\trun_report_version\t2\t-\tThe run section follows FASTag run report format 2.\n"
+          "run\trun_report_version\t3\t-\tThe run section follows FASTag run report format 3.\n"
           "run\tpick_profile\tlegacy\t-\tProfile MS2 was centroided under -pick_profile legacy.\n"
           "run\tprofile_ms2_picked\t0\t0\t0 of 0 profile MS2 spectra were centroided before tagging.\n"
           "run\tprofile_ms2_kept\t0\t0\t0 of 0 profile MS2 spectra were tagged as profile "
-          "(picking yielded nothing).\n",
-        "Versioned appends the version row, then the E picking rows (format 2, #9)");
+          "(picking yielded nothing).\n"
+          "run\tactivation_collisional\t0\t0\t0 of 0 MS2 spectra were activated by collision "
+          "(CID, HCD, trap-type CID, PQD).\n"
+          "run\tactivation_electron\t0\t0\t0 of 0 MS2 spectra were activated by electron transfer or "
+          "capture (ETD, ECD).\n"
+          "run\tactivation_hybrid\t0\t0\t0 of 0 MS2 spectra were activated by a hybrid method (EThcD, ETciD).\n"
+          "run\tactivation_unknown\t0\t0\t0 of 0 MS2 spectra carry no activation FASTag classifies.\n",
+        "Versioned appends the version row, then the E picking rows (#9) and the E activation rows (#15 phase A), format 3");
   // The E picking rows (#9): value the count, n the profile MS2 that needed picking.
   {
     RR::RunMeta e = m;
@@ -94,7 +100,7 @@ int main()
     e.pick_picked = 47470;
     e.pick_failed = 3;
     const auto re = RR::runRows(e, RR::Emit::Versioned);
-    check(re.size() == 11, "Versioned format 2 has 11 rows");
+    check(re.size() == 15, "Versioned format 3 has 15 rows");
     check(re[8].key == "pick_profile" && re[8].value == "auto" && re[8].n == "-" &&
             re[8].description == "Profile MS2 was centroided under -pick_profile auto.",
           "pick_profile row");
@@ -104,6 +110,24 @@ int main()
     check(re[10].key == "profile_ms2_kept" && re[10].value == "3" && re[10].n == "47473",
           "profile_ms2_kept row");
     check(written(RR::runRows(e)) == legacy, "picking counts never reach the Legacy rows");
+  }
+  // The E activation counts (#15 phase A): value the count, n all MS2.
+  {
+    RR::RunMeta a = m;
+    a.activation_collisional = 3491;
+    a.activation_electron = 3492;
+    a.activation_hybrid = 1;
+    a.activation_unknown = 0;
+    const auto ra = RR::runRows(a, RR::Emit::Versioned);
+    check(ra.size() == 15, "Versioned format 3 has 15 rows");
+    check(ra[11].key == "activation_collisional" && ra[11].value == "3491" && ra[11].n == "6984",
+          "activation_collisional row");
+    check(ra[12].key == "activation_electron" && ra[12].value == "3492" && ra[12].n == "6984" &&
+            ra[12].description == "3492 of 6984 MS2 spectra were activated by electron transfer or capture (ETD, ECD).",
+          "activation_electron row");
+    check(ra[13].key == "activation_hybrid" && ra[13].value == "1", "activation_hybrid row");
+    check(ra[14].key == "activation_unknown" && ra[14].value == "0", "activation_unknown row");
+    check(written(RR::runRows(a)) == legacy, "activation counts never reach the Legacy rows");
   }
 
   // ClusterAcc: composes and merges without touching anything.

@@ -1004,6 +1004,14 @@ tags fill the slots (hence the small change in total recall):
   16; shared node, indicative figures). `-subsample_*` draws over blocks, so it
   picks different spectra than the mzML the MGF came from. A malformed block
   that `-subsample_*` skips goes unnoticed.
+- **b/y ions only.** Tags and flanks are read as b/y ions. ETD/ECD spectra
+  (c/z ions) and hybrid EThcD/ETciD spectra are tagged the same way, so their
+  tags are unreliable. FASTag reads each MS2 spectrum's activation from the
+  mzML `<activation>` terms, or from the Thermo filter string when there are
+  none. When more than 1% of the MS2 spectra are electron or hybrid
+  activated, it writes one `Electron activation:` warning to stderr with the
+  count per class (collisional, electron, hybrid, unknown). MGF and mzPeak
+  input carry no activation, so their spectra count as unknown.
 - **A tag is not an identification.** No per-tag q-value or FDR is emitted, and
   a `-fasta` match, a species call, a `delta_out` bin and a glyco flag are all
   candidates to follow up, not results to report.

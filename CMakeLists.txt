@@ -249,7 +249,7 @@ if(FASTAG_BUILD_TESTS)
   # their tests only to their own anchored list.
   set(FASTAG_UNIT_TESTS ranksum_test fastag_test fasta_filter_test tagrecon_test tagfdr_test proteome_index_test glyco_test taxindex_test taxstats_test taxdeconv_test species_evidence_test sampler_test proforma_test numformat_test peakgrid_test formats_test digest_test)
   # ---- 1.12 E: unit tests ----
-  set(FASTAG_UNIT_TESTS_E cli_param_test centroid_test complement_test)
+  set(FASTAG_UNIT_TESTS_E cli_param_test centroid_test complement_test ion_series_test)
   # ---- 1.12 A: unit tests ----
   set(FASTAG_UNIT_TESTS_A)
   # ---- 1.12 D: unit tests ----
@@ -421,6 +421,13 @@ if(FASTAG_BUILD_TESTS)
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/complement_cli_test.sh $<TARGET_FILE:FASTag>
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML)
   set_tests_properties(complement_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # #15 phase A: activation counts and the b/y warning on derived ETD, EThcD
+  # and filter-string fixtures; tags unchanged; fast reader equals OnDisc.
+  add_test(NAME ion_series_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/ion_series_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mgf)
+  set_tests_properties(ion_series_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # ---- 1.12 A: CLI tests ----
   # ---- 1.12 D: CLI tests ----
   # ---- 1.12 F: CLI tests ----
