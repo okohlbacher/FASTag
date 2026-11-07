@@ -1,4 +1,5 @@
-// Keyboard shortcuts and native-menu actions (GUI-DESIGN 2, P0b minimal set).
+// Keyboard shortcuts and native-menu actions (GUI-DESIGN 2; P0b minimal set,
+// the full set with the views, themes, FAQ and About in P2a PR s).
 // The same action names come from the native menus (menu.rs, MENU_EVENT) and
 // from the webview's own key handler below. Cmd on macOS, Ctrl elsewhere.
 
@@ -11,6 +12,15 @@ export type Action =
   | 'cancel'
   | 'help'
   | 'search-params'
+  | 'view-setup'
+  | 'view-results'
+  | 'view-batch'
+  | 'view-history'
+  | 'theme-system'
+  | 'theme-light'
+  | 'theme-dark'
+  | 'faq'
+  | 'about'
 
 export const ACTIONS: readonly Action[] = [
   'open-spectra',
@@ -20,8 +30,31 @@ export const ACTIONS: readonly Action[] = [
   'run',
   'cancel',
   'help',
-  'search-params'
+  'search-params',
+  'view-setup',
+  'view-results',
+  'view-batch',
+  'view-history',
+  'theme-system',
+  'theme-light',
+  'theme-dark',
+  'faq',
+  'about'
 ]
+
+/// The four top-level views (GUI-DESIGN 2 D2), in top-bar order.
+export type View = 'setup' | 'results' | 'batch' | 'history'
+export const VIEWS: readonly { id: View; label: string; key: string }[] = [
+  { id: 'setup', label: 'Setup', key: '1' },
+  { id: 'results', label: 'Results', key: '2' },
+  { id: 'batch', label: 'Batch', key: '3' },
+  { id: 'history', label: 'History', key: '4' }
+]
+
+/// The view a view action switches to.
+export function viewOfAction(a: Action): View | null {
+  return a.startsWith('view-') ? (a.slice(5) as View) : null
+}
 
 export const isMac = (): boolean => typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
 
@@ -53,6 +86,8 @@ export function actionOfKey(
   if (k === '.') return 'cancel'
   if (k === 'e') return 'export'
   if (k === 'k') return 'search-params'
+  const v = VIEWS.find((x) => x.key === k)
+  if (v) return `view-${v.id}`
   if (k === '?') return 'help'
   return null
 }

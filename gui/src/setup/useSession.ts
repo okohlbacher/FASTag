@@ -153,6 +153,29 @@ export function useSession() {
     if (p) setValues((v) => applyInstrument(v, p))
   }
 
+  // Settings into form (History, GUI-DESIGN 3 S9): the input, output and
+  // parameters of a recorded run replace the form's, over the defaults;
+  // only parameters the form renders, with a value of a form type. Returns
+  // the Undo, which puts the form back as it was.
+  function takeRun(runInput: string, runOut: string, params: Record<string, unknown>): () => void {
+    const before = { input, out, values }
+    const v = initialValues()
+    for (const [name, x] of Object.entries(params)) {
+      if (!RENDERED.includes(name)) continue
+      if (typeof x === 'string' || typeof x === 'boolean') v[name] = x
+      else if (typeof x === 'number') v[name] = String(x)
+      else if (Array.isArray(x) && x.every((i) => typeof i === 'string')) v[name] = x as string[]
+    }
+    setInput(runInput)
+    setOut(runOut)
+    setValues(v)
+    return () => {
+      setInput(before.input)
+      setOut(before.out)
+      setValues(before.values)
+    }
+  }
+
   // Values the CLI would refuse, field by field, and combinations it refuses
   // before reading a spectrum (rc 6): either keeps Run and Run batch disabled.
   const invalid = invalidParams(values)
@@ -188,6 +211,7 @@ export function useSession() {
     setValues,
     setValue,
     reset: (): void => setValues(initialValues()),
+    takeRun,
     applyFix: (v: Record<string, ParamValue>): void => setValues((cur) => ({ ...cur, ...v })),
     openGroups,
     setOpenGroups,

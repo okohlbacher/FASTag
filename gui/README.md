@@ -18,13 +18,23 @@ backend has to satisfy.
 ```
 gui/
   src/                 React frontend
-    App.tsx            the window shell: header, close/overwrite questions, shortcuts and menus,
-                       laying out the setup, the run bar and the result tabs
+    App.tsx            the window shell: the top bar and the four views (Setup, Results,
+                       Batch, History; Cmd+1..4), the Help side panel, close/overwrite
+                       questions, shortcuts, menus, drops and the finish toast and notification
+    shell/             TopBar.tsx (logo, view switcher, progress pill, theme, Help toggle),
+                       HistoryView.tsx (the run record), AboutDialog.tsx, and dropRoute.ts
+                       (what a drop drop.rs sorted does, and which view it lands on)
+    styles/tokens.css  the D9 design tokens (ProSE structure, v6 logo colours), light, dark
+                       and system on :root[data-theme]; tokens.test.ts pins them and their contrast
     app/               viewStore.ts (result tab and log drawer, one store per window),
-                       output-path and text helpers (paths.ts, format.ts)
-    run/               useRun.ts (a run or batch, its log, progress and results), RunBar.tsx,
-                       LogDrawer.tsx, BatchList.tsx and the batch job naming (batch.ts)
-    results/           ResultTabs.tsx (Tags, Species, Digest and the failure banner), reports.ts
+                       theme.ts (the chosen theme), output-path and text helpers (paths.ts, format.ts)
+    run/               useRun.ts (a run or batch, its log, progress and results) over one
+                       reducer (runReducer.ts: jobs, RUN_START/EVENT/DONE/CANCEL_REQUESTED/
+                       BATCH_ADD/BATCH_REMOVE), each job's log in a store outside React
+                       state (logStore.ts), RunBar.tsx, LogDrawer.tsx, BatchList.tsx and
+                       the batch job naming (batch.ts)
+    results/           ResultTabs.tsx (Tags, Species, Digest), FailureBanner.tsx (over the tabs, or
+                       on the Batch view beside the queue), reports.ts
     ParamField.tsx     one form field per manifest parameter
     ResultsTable.tsx   tags browser: virtualized table with filters, column choice and export
     SpeciesPanel.tsx   species report
@@ -43,8 +53,9 @@ gui/
     setup/             useSession.ts (the form's values, last-used offer, presets), SetupForm.tsx,
                        parameter search (Cmd+K, "/"), instrument presets and the
                        species fixes (presets.ts), shortcuts and menu actions (shortcuts.ts)
-    help/              the Help view (F1): pages as data (content.tsx, faq.tsx, params.ts),
-                       HelpView.tsx, the link store (link.ts) and the "?" links (HelpLink.tsx)
+    help/              the Help side panel (F1, Cmd+?): pages as data (content.tsx, faq.tsx, params.ts),
+                       HelpView.tsx with its search (search.ts, over every page, the FAQ, the
+                       glossary and the settings), the link store (link.ts) and the "?" links (HelpLink.tsx)
   scripts/             gen-params.mjs (parameter manifest), bundle-macos.sh (macOS resource tree for release bundles),
                        check-dist-clean.mjs (a release dist/ carries no mock or fixture code)
   testing/stub-fastag/ a sh stand-in for the CLI, for the Rust run-lifecycle tests
@@ -59,7 +70,10 @@ gui/
     src/settings.rs    named presets + last-used, atomic JSON in the app config dir
     src/browser.rs     indexed million-row results browser: head read on open, index and
                        E-value order built in the background and swapped in (D5)
-    src/menu.rs        File, Run and Help menus with their CmdOrCtrl shortcuts
+    src/menu.rs        File, Run, View and Help menus with their CmdOrCtrl shortcuts, and the
+                       dispatch of a menu click (Quit and Close through the close guard)
+    src/drop.rs        the window-wide drop zone: dropped paths sorted by type into one route
+    src/notify.rs      the system notification when a run or batch finishes
     src/reveal.rs      ResolvedOutputs (every output, absolute) and Reveal / Open folder, limited to run outputs
     src/species.rs     species TSV read + FTX2 taxdb header read
     src/report.rs      digest/label/mass-gap report read
@@ -114,19 +128,55 @@ script replaces the manifest only once it is complete, so a missing or broken
 binary leaves the old one in place. Do not redirect its stdout into the
 manifest: the shell empties the file before the script runs.
 
+## The window
+
+Four views, switched from the top bar: **Setup** (the input, the parameters
+and Run), **Results** (Tags, Species and Digest, full width), **Batch** (the
+queue, its run bar, the failure banner and each job's log) and **History**
+(every recorded run: input, status, duration, tags, outputs; Open, Reveal,
+Copy command, Settings into form with Undo, Re-run, Delete record). Copy command
+copies the command line exactly as the run was started, with the outputs at
+their final paths; a cancelled or failed run is marked incomplete and does
+not open. Re-run starts the recorded run again with the parameters it was
+sent (not the form's), so its command line is the recorded one; it asks
+before overwriting like any run. Delete record asks first and keeps its
+files; the record of a run that did not finish is kept while it alone marks
+a file that run left behind as incomplete. Run moves to
+Results; the first file of a batch moves to Batch. The progress pill in the
+top bar shows the job in flight (file, phase or percentage, ETA) and, outside
+the view with the run bar, its Cancel. When a run or batch finishes while the
+window is in the background, the system shows a notification; a toast
+offers Open results.
+
+Help is a side panel beside any view, with a search over every page, the
+troubleshooting entries, the glossary and the settings reference.
+
+Files dropped anywhere on the window go by type: one spectra file to the
+input, two or more (or a folder) to the batch, a FASTA to `-fasta`, a
+`.taxdb` to `-taxdb`, a tags TSV to Results, a digest, label or mass-gap
+report to the Digest tab and a species report to the Species tab. Nothing is
+taken while FASTag runs. Reports without a tab yet (recon, delta, glyco) and
+SDRF files are named, not read.
+
+Themes: System (the default), Light and Dark, from the top bar or View >
+Theme; the choice is remembered on this machine. Text uses the system UI
+font; IBM Plex Mono is bundled for sequences and IDs.
+
 ## Shortcuts
 
 Cmd on macOS, Ctrl on Windows and Linux; the same items are in the native
-File, Run and Help menus.
+File, Run, View and Help menus.
 
 | Keys | Action |
 |---|---|
 | Cmd+O / Cmd+Shift+O | Open spectra / open a tags TSV |
 | Cmd+Enter | Run (or run the batch) |
-| Cmd+. | Cancel the run |
+| Cmd+. or Esc | Cancel the run |
 | Cmd+E | Export the shown rows |
+| Cmd+1 .. Cmd+4 | Setup, Results, Batch, History |
 | Cmd+? (F1, ?) | Help |
 | Cmd+K or / | Search parameters by name, flag or help text |
+| Cmd+W / Cmd+Q | Close the window / quit (both ask first while a run is active) |
 
 ## Browser bench
 
@@ -159,17 +209,26 @@ The parts of the window have tests of their own beside them: the hooks
 `RunBar`, `LogDrawer`, `BatchList` and `ResultTabs` rendered alone with their
 props. The App-level tests, which render the whole window, are split by area
 beside the parts they drive: `run/batch.app.test.tsx` (run and batch
-orchestration), `results/digest.app.test.tsx` (the Digest tab) and
+orchestration), `results/digest.app.test.tsx` (the Digest tab),
 `setup/setup.app.test.tsx` (the setup form and run bar, with the checks that
-App wires Reset, the phase and the elapsed time into the run bar); they share
-their helpers from `src/testing/render.tsx`.
+App wires Reset, the phase and the elapsed time into the run bar) and
+`shell/shell.app.test.tsx` (the views, the pill, Help and its search, menus,
+drops, the finish notice and the themes); they share their helpers from
+`src/testing/render.tsx`, whose getters go to the view that holds their
+control (`showView`, `goTo`). `styles/tokens.test.ts` pins the D9 tokens and
+their contrast. Native menus and OS file drops cannot be driven from a test:
+cargo tests drive their handlers instead (`menu::on_menu_event` with every
+item id, `drop::on_drag_drop` with the DragDrop payloads).
 
 The Playwright specs in `e2e-web/` drive the app in Chromium and WebKit on an
 explicit e2e build, `npm run build:e2e` (`vite build --mode e2e`, into
 `dist-e2e/`), which installs `src/testing/e2eBridge.ts`; each spec picks a
 scenario with `?fixture=` (`default`, `batch-fail`, `big`, `slow`,
 `lastused`). Run them with `npm run e2e` (`npx playwright install chromium
-webkit` once). Any console error fails a spec. `npm run check:dist` checks
+webkit` once). Any console error fails a spec. `shell.spec.ts` drives the
+views, Help and its search, the themes and drops (through the e2e bridge's
+`drop` and `menu` controls), and saves screenshots of every view in both
+themes at 960×600 and 1440×900 to `e2e-web/test-results/`. `npm run check:dist` checks
 that a release `dist/` carries none of the bridges' strings; the `ui`
 workflow runs both.
 

@@ -31,3 +31,8 @@ export function mockState<T>(page: Page, pick: string): Promise<T> {
     return JSON.parse(JSON.stringify(m[p]))
   }, pick)
 }
+
+/// Go to one of the four views (P2a shell) through the top bar.
+export async function goTo(page: Page, view: 'Setup' | 'Results' | 'Batch' | 'History'): Promise<void> {
+  await page.getByRole('navigation', { name: 'Views' }).getByRole('button', { name: new RegExp(`^${view}`) }).click()
+}

@@ -1,10 +1,12 @@
 #[doc(hidden)]
 pub mod browser;
 mod close_guard;
+mod drop;
 mod events;
 mod fastag;
 mod history;
 mod menu;
+mod notify;
 mod outputs;
 mod progress;
 mod report;
@@ -33,17 +35,25 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_opener::init());
-    // File, Run and Help with their shortcuts on every platform (menu.rs).
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init());
+    // File, Run, View and Help with their shortcuts on every platform (menu.rs).
     let builder = builder.menu(menu::build).on_menu_event(|app, event| {
-        let id = event.id().as_ref();
-        // AppHandle::exit raises RunEvent::ExitRequested, which the close
-        // guard can prevent while a run is active.
-        if id == menu::QUIT_ID {
-            app.exit(0);
-        } else if let Some(action) = menu::action_of(id) {
-            let _ = app.emit(menu::MENU_EVENT, action);
-        }
+        menu::on_menu_event(
+            event.id().as_ref(),
+            // AppHandle::exit raises RunEvent::ExitRequested, which the close
+            // guard can prevent while a run is active.
+            || app.exit(0),
+            // close() raises CloseRequested: the close guard again.
+            || {
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.close();
+                }
+            },
+            |action| {
+                let _ = app.emit(menu::MENU_EVENT, action);
+            },
+        );
     });
     builder
         .manage(RunManager::default())
@@ -55,9 +65,12 @@ pub fn run() {
             fastag::outputs_check,
             history::history_list,
             history::history_of,
+            history::history_delete,
+            history::history_rerun,
             reveal::reveal_output,
             close_guard::set_ui_busy,
             close_guard::close_answer,
+            notify::notify_finished,
             browser::results_open,
             browser::results_query,
             browser::results_position,
@@ -81,6 +94,16 @@ pub fn run() {
                     || close_guard::ask(app, "close"),
                 );
             }
+            // An OS file drop anywhere on the window: routed by type (drop.rs).
+            WindowEvent::DragDrop(ev) => drop::on_drag_drop(
+                ev,
+                |over| {
+                    let _ = window.emit(drop::HOVER_EVENT, over);
+                },
+                |route| {
+                    let _ = window.emit(drop::DROP_EVENT, route);
+                },
+            ),
             // Closing the window must not orphan a running CLI process.
             WindowEvent::Destroyed => fastag::kill_current(window.app_handle()),
             _ => {}

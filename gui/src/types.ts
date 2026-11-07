@@ -122,6 +122,11 @@ export interface RunRecord {
   start: number
   end: number
   cleanup: Cleanup
+  // The parameters the run was sent (Settings into form); absent in records
+  // written before P2a.
+  params?: Record<string, unknown> | null
+  // The tags it wrote (the CLI's summary line); absent when it printed none.
+  tags?: number | null
 }
 
 // The reply of `run` (fastag.rs RunStarted). The run's events come on the
@@ -175,6 +180,20 @@ export interface Settings {
   presets: Record<string, Record<string, unknown>>
 }
 
+// An OS file drop, sorted by type (drop.rs DropRoute).
+export interface DropRoute {
+  spectra: string[]
+  // Two or more spectra files, or a folder: the batch queue.
+  batch: boolean
+  fasta: string | null
+  taxdb: string | null
+  // A tags table.
+  results: string | null
+  reports: { kind: string; path: string }[]
+  sdrf: string | null
+  ignored: string[]
+}
+
 // Declared here (not in api.ts) so tests can install a mock bridge without
 // importing api.ts, whose module body executes Tauri plumbing.
 declare global {
@@ -212,6 +231,13 @@ export interface FastagApi {
   // The recorded runs, newest first; the newest run that wrote a path.
   historyList: (limit?: number) => Promise<RunRecord[]>
   historyOf: (path: string) => Promise<RunRecord | null>
+  // Delete one record (its files stay); false when no record has that id.
+  // Rejects with the reason when the record is kept: it alone marks a file
+  // its run left behind as incomplete (history.rs marks_incomplete).
+  historyDelete: (id: string) => Promise<boolean>
+  // What a Re-run of the record starts: the `run` parameters it was started
+  // with ({ in, out, params }); rejects for a record without them.
+  historyRerun: (id: string) => Promise<Record<string, unknown>>
   cancel: () => Promise<{ cancelled: boolean }>
   resultsQuery: (path: string, view: ResultsView, offset: number, limit: number) => Promise<ResultsPage>
   // D5: the head rows now; index and E-value order announced through onEvent.
@@ -233,4 +259,10 @@ export interface FastagApi {
   answerClose: (quit: boolean) => Promise<void>
   // A batch is running (no CLI child exists between two jobs).
   setBusy: (busy: boolean) => Promise<void>
+  // Files dropped on the window, sorted by type (drop.rs).
+  onDrop: (cb: (route: DropRoute) => void) => () => void
+  // A drag with files is over the window (true) or has left it (false).
+  onDragHover: (cb: (over: boolean) => void) => () => void
+  // The system notification when a run or batch finishes.
+  notify: (title: string, body: string) => Promise<void>
 }

@@ -2,7 +2,7 @@
 // the batch queue, the output and the parameter form; while a run is in
 // flight, a locked summary of what it uses.
 
-import { useRef, type JSX, type RefObject } from 'react'
+import type { JSX, RefObject } from 'react'
 import {
   SECTIONS,
   PARAM_BY_NAME,
@@ -24,7 +24,6 @@ import { HelpButton, HelpLink } from '../help/HelpLink'
 import { isMac, keyText } from './shortcuts'
 import type { Session } from './useSession'
 import type { RunState } from '../run/useRun'
-import BatchList from '../run/BatchList'
 import { dirName, revealLabel } from '../app/paths'
 import { cliText, clock, duration } from '../app/format'
 
@@ -37,18 +36,18 @@ export interface SetupFormProps {
   session: Session
   run: RunState
   onPickInput(): void
-  // The batch job whose log the drawer shows, and whether it is open.
-  logJob: string | null
-  logOpen: boolean
-  openLog(job: string): void
   onSearch(): void
   searchBtnRef: RefObject<HTMLButtonElement | null>
+  // Show the Batch view, where the queue is.
+  onOpenBatch(): void
+  // The "Add files for a batch…" button, where focus goes when the queue
+  // is cleared.
+  addBatchRef: RefObject<HTMLButtonElement | null>
 }
 
-export default function SetupForm({ session, run, onPickInput, logJob, logOpen, openLog, onSearch, searchBtnRef }: SetupFormProps): JSX.Element {
+export default function SetupForm({ session, run, onPickInput, onSearch, searchBtnRef, onOpenBatch, addBatchRef }: SetupFormProps): JSX.Element {
   const { input, out, values, setValue, openGroups, setOpenGroups, lastUsed, lastUsedDiff, writingFiles, changedParams } = session
   const { busy, jobs, lastRun, evidence, revealErr, reveal } = run
-  const addBatchRef = useRef<HTMLButtonElement>(null)
 
   const field = (name: string): JSX.Element | null => {
     const spec = PARAM_BY_NAME.get(name)
@@ -69,20 +68,18 @@ export default function SetupForm({ session, run, onPickInput, logJob, logOpen, 
     )
   }
 
-  const batchList = (
-    <BatchList
-      jobs={jobs}
-      busy={busy}
-      results={run.results}
-      logJob={logJob}
-      logOpen={logOpen}
-      onAdd={run.addBatchFiles}
-      onClear={() => run.setJobs([])}
-      onRemove={(i) => run.setJobs((js) => js.filter((_, k) => k !== i))}
-      onShow={run.showJob}
-      onLog={openLog}
-      addBatchRef={addBatchRef}
-    />
+  // The queue itself is on the Batch view (GUI-DESIGN 2, P2a PR s); the
+  // form says the parameters are the batch's.
+  const batchSummary = (
+    <section className="block batch-summary" aria-labelledby="batch-sum-h">
+      <h2 id="batch-sum-h">Input</h2>
+      <p>
+        A batch of {jobs.length} {jobs.length === 1 ? 'file' : 'files'}: each runs with the parameters below.
+      </p>
+      <button type="button" className="secondary small" onClick={onOpenBatch}>
+        Open the batch
+      </button>
+    </section>
   )
 
   return (
@@ -96,7 +93,7 @@ export default function SetupForm({ session, run, onPickInput, logJob, logOpen, 
             <span>Input, output and parameters are locked while FASTag runs.</span>
           </p>
           {jobs.length > 0 ? (
-            batchList
+            batchSummary
           ) : (
             <section className="block">
               <h2>Input</h2>
@@ -163,7 +160,7 @@ export default function SetupForm({ session, run, onPickInput, logJob, logOpen, 
           )}
 
           {jobs.length > 0 ? (
-            batchList
+            batchSummary
           ) : (
             <section className="block" aria-labelledby="input-label">
               <div className="block-head">

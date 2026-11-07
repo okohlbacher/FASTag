@@ -172,9 +172,16 @@ its command line to copy. A **Digest** tab
 shows the `-digest_out`, `-label_out` and `-massgap_out` reports: the protease
 call or no-call with its reason, sequence logos P4..P1 | P1'..P4' of the
 observed tag ends and of the called and runner-up models (in bits against the
-background in use), the label counts, a histogram of the mass gaps and the mass-gap peaks. A
-built-in **Help** (F1, or the Help button) covers every tab, setting and error
-message. It is built with
+background in use), the label counts, a histogram of the mass gaps and the mass-gap peaks. The
+window has four views, switched from the top bar or with Cmd/Ctrl+1..4:
+**Setup**, **Results**, **Batch** and **History** (every recorded run, with
+its exact command line to copy, its settings to load back into Setup, and a
+Re-run of the same command line); a
+progress pill in the top bar follows the run from any view, and a finished
+run in the background raises a system notification. Spectra, FASTA,
+taxonomy, tags and report files can be dropped anywhere on the window. A
+built-in **Help** side panel (F1, or the Help button), with a search, covers
+every tab, setting and error message. Light, dark and system themes. It is built with
 [Tauri 2](https://tauri.app) — a Rust backend and the OS's native webview, not a
 bundled browser. The CLI remains the source of truth; the GUI shells out to it.
 

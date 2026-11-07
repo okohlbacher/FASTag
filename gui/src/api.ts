@@ -8,6 +8,7 @@ import { openUrl } from '@tauri-apps/plugin-opener'
 import type {
   BinaryInfo,
   BrowserEvent,
+  DropRoute,
   ResultsHead,
   FastagApi,
   ResultsPage,
@@ -86,6 +87,8 @@ const api: FastagApi = {
   },
   historyList: (limit?: number) => invoke<RunRecord[]>('history_list', { limit }),
   historyOf: (path: string) => invoke<RunRecord | null>('history_of', { path }),
+  historyDelete: (id: string) => invoke<boolean>('history_delete', { id }),
+  historyRerun: (id: string) => invoke<Record<string, unknown>>('history_rerun', { id }),
   cancel: () => invoke<{ cancelled: boolean }>('cancel'),
   resultsQuery: (path: string, view: ResultsView, offset: number, limit: number) =>
     invoke<ResultsPage>('results_query', { path, view, offset, limit }),
@@ -121,7 +124,10 @@ const api: FastagApi = {
 
   onCloseRequested: (cb) => subscribe<'close' | 'quit'>('fastag:close-requested', cb),
   answerClose: (quit: boolean) => invoke<void>('close_answer', { quit }),
-  setBusy: (busy: boolean) => invoke<void>('set_ui_busy', { busy })
+  setBusy: (busy: boolean) => invoke<void>('set_ui_busy', { busy }),
+  onDrop: (cb) => subscribe<DropRoute>('fastag:drop', cb),
+  onDragHover: (cb) => subscribe<boolean>('fastag:drag', cb),
+  notify: (title: string, body: string) => invoke<void>('notify_finished', { title, body })
 }
 
 export default api
