@@ -38,6 +38,7 @@ gui/
     ParamField.tsx     one form field per manifest parameter
     ResultsTable.tsx   tags browser: virtualized table with filters, column choice and export
     SpeciesPanel.tsx   species report
+    Leftovers.tsx      the startup offer to remove files an unfinished run left (sweep.rs)
     DigestPanel.tsx    digest, label and mass-gap reports
     digestReport.ts    reader of the digest/label/mass-gap TSVs and the sequence-logo arithmetic
     SequenceLogo.tsx   SVG sequence logo (bits against a background)
@@ -69,6 +70,11 @@ gui/
     src/events.rs      RunEvent (Log/Progress/Phase/Done) and the batching: one Log{lines} per 75 ms or 500 lines
     src/progress.rs    phase labels from the CLI's output (tests/fixtures/stderr) and the ETA from a weighted rate
     src/outputs.rs     the files a run writes (from its argv); removes them when it is cancelled or fails
+    src/lifetime.rs    process lifetime: the one spawner thread every CLI child starts from, PDEATHSIG
+                       (Linux), the per-run watchdog (Unix), the per-run kill-on-close job (Windows)
+    src/sweep.rs       the marker (with a heartbeat) of a running run; at startup, interrupted runs
+                       recorded and their leftovers (.part, .incomplete, the outputs they wrote while
+                       alive) offered for removal
     src/close_guard.rs asks before a window close or Cmd+Q kills an active run
     src/settings.rs    named presets (diffs) + last-used in a tauri-plugin-store file (settings.json
                        in the app config dir); migrates the v1 file once (kept as settings.v1.json.bak)
@@ -240,6 +246,11 @@ control (`showView`, `goTo`). `styles/tokens.test.ts` pins the D9 tokens and
 their contrast. Native menus and OS file drops cannot be driven from a test:
 cargo tests drive their handlers instead (`menu::on_menu_event` with every
 item id, `drop::on_drag_drop` with the DragDrop payloads).
+The process-lifetime tests (`lifetime::tests`, and
+`a_killed_gui_ends_the_run_and_the_next_start_offers_what_it_left`) run the
+test binary again as a stand-in GUI process and kill it with SIGKILL; the
+PDEATHSIG ones run on Linux only (the `gui` CI job), the job-object one on
+Windows only (`gui-windows`).
 
 Setup (P2a): `setup/setupScreen.app.test.tsx` renders the window as it starts
 (`renderColdApp`: the task "Characterize a run") and checks the two-action
@@ -260,9 +271,10 @@ The Playwright specs in `e2e-web/` drive the app in Chromium and WebKit on an
 explicit e2e build, `npm run build:e2e` (`vite build --mode e2e`, into
 `dist-e2e/`), which installs `src/testing/e2eBridge.ts`; each spec picks a
 scenario with `?fixture=` (`default`, `batch-fail`, `big`, `slow`,
-`lastused`); `&start=defaults` starts the session from FASTag's defaults
-instead of the task the app lands on. `setup.spec.ts` drives the Setup
-screen and saves its screenshots. Run them with `npm run e2e` (`npx playwright install chromium
+`lastused`, `existing`, `interrupted`, and the others in `e2eBridge.ts`);
+`&start=defaults` starts the session from FASTag's defaults instead of the
+task the app lands on. `setup.spec.ts` drives the Setup screen and saves its
+screenshots. Run them with `npm run e2e` (`npx playwright install chromium
 webkit` once). Any console error fails a spec. `shell.spec.ts` drives the
 views, Help and its search, the themes and drops (through the e2e bridge's
 `drop` and `menu` controls), and saves screenshots of every view in both

@@ -108,6 +108,7 @@ mod tests {
             child: Arc::new(Mutex::new(child)),
             cancelled: Arc::new(AtomicBool::new(false)),
             reaped: Arc::new(AtomicBool::new(false)),
+            job: Arc::default(),
         });
         mgr
     }

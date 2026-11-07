@@ -240,6 +240,12 @@ export interface FastagApi {
   // The recorded runs, newest first; the newest run that wrote a path.
   historyList: (limit?: number) => Promise<RunRecord[]>
   historyOf: (path: string) => Promise<RunRecord | null>
+  // Files unfinished runs left (sweep.rs): <output>.part, <output>.incomplete
+  // and the outputs of a run the app did not see end. Offered at startup;
+  // only listed files are removed, and kept ones are not offered again.
+  leftovers: () => Promise<string[]>
+  sweepLeftovers: (paths: string[]) => Promise<Cleanup>
+  keepLeftovers: (paths: string[]) => Promise<void>
   cancel: () => Promise<{ cancelled: boolean }>
   resultsQuery: (path: string, view: ResultsView, offset: number, limit: number) => Promise<ResultsPage>
   // D5: the head rows now; index and E-value order announced through onEvent.
