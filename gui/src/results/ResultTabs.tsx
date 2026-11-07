@@ -4,8 +4,8 @@
 // (GUI-DESIGN 3 S3), and the running state over the tabs while a single run
 // goes (S2).
 
-import type { Dispatch, JSX, KeyboardEvent, ReactNode, SetStateAction } from 'react'
-import type { SpeciesReport } from '../types'
+import { useEffect, useMemo, useState, type Dispatch, type JSX, type KeyboardEvent, type ReactNode, type SetStateAction } from 'react'
+import type { SpeciesReport, SpectrumSupport } from '../types'
 import ResultsTable from '../ResultsTable'
 import FailureBanner from './FailureBanner'
 import SpeciesPanel from '../SpeciesPanel'
@@ -19,12 +19,15 @@ import type { Evidence, Failure, Reports, Results } from '../run/useRun'
 import type { speciesReach } from '../paramLayout'
 import OverviewPanel from './OverviewPanel'
 import type { Overview, TileAction } from './overview'
+import SpectrumPanel, { type SpectrumSource, type SpectrumTarget } from '../spectrum/SpectrumPanel'
 
-const TAB_LABEL: Record<Tab, string> = { overview: 'Overview', results: 'Tags', species: 'Species', digest: 'Digest' }
+const TAB_LABEL: Record<Tab, string> = { overview: 'Overview', results: 'Tags', spectrum: 'Spectrum', species: 'Species', digest: 'Digest' }
 // The tabs, in order. Digest is always there: its empty state is a way to
-// open a report. The Overview is there while a run's results are shown.
-const TABS: Tab[] = ['results', 'species', 'digest']
-const WITH_OVERVIEW: Tab[] = ['overview', ...TABS]
+// open a report. The Overview is there while a run's results are shown, the
+// Spectrum tab (P4) only with a CLI that has -dump_spectrum.
+function tabsOf(overview: boolean, spectrum: boolean): Tab[] {
+  return [...(overview ? (['overview'] as Tab[]) : []), 'results', ...(spectrum ? (['spectrum'] as Tab[]) : []), 'species', 'digest']
+}
 
 export interface ResultTabsProps {
   tab: Tab
@@ -63,13 +66,57 @@ export interface ResultTabsProps {
   // for a file without res_conf; null when the form would not repeat the
   // run that wrote the file shown.
   rerunResConf?: { run(): void; disabled: boolean } | null
+  // P4: whether the CLI has -dump_spectrum (null: still asking), and the
+  // run whose results are shown (its input and what it was sent), from
+  // which the Spectrum tab dumps peaks under the run's own options.
+  spectrumSupport?: SpectrumSupport | null
+  spectrumRun?: { input: string; params: Record<string, unknown> } | null
 }
 
 export default function ResultTabs(p: ResultTabsProps): JSX.Element {
   const { setTab, species, speciesRun, reports, batchMiss, results, running, busy, failure, copied } = p
-  const tabs = p.overview ? WITH_OVERVIEW : TABS
-  // An Overview tab whose run is gone (a new run started) shows the Tags.
-  const tab: Tab = p.tab === 'overview' && !p.overview ? 'results' : p.tab
+  const spectrumOn = !!p.spectrumSupport?.supported
+  const tabs = tabsOf(!!p.overview, spectrumOn)
+  // An Overview tab whose run is gone (a new run started) shows the Tags;
+  // so does the Spectrum tab with a CLI that cannot dump spectra.
+  const tab: Tab = (p.tab === 'overview' && !p.overview) || (p.tab === 'spectrum' && !spectrumOn) ? 'results' : p.tab
+
+  // The Spectrum tab (P4): the spectrum opened from the Tags table, and
+  // the input and parameters of the run that wrote the table shown.
+  const [target, setTarget] = useState<SpectrumTarget | null>(null)
+  const [located, setLocated] = useState<Record<string, string>>({})
+  const [record, setRecord] = useState<{ path: string; input: string | null; params: Record<string, unknown> | null } | null>(null)
+  const path = results?.path ?? null
+  const fromRun = !!(p.spectrumRun && results?.input && p.spectrumRun.input === results.input)
+  useEffect(() => {
+    if (!path || fromRun || !spectrumOn) return
+    let live = true
+    window.fastag
+      .historyOf(path)
+      .catch(() => null)
+      .then((r) => live && setRecord({ path, input: r?.input ?? null, params: r?.params ?? null }))
+    return () => {
+      live = false
+    }
+  }, [path, fromRun, spectrumOn])
+  const runInput = fromRun ? p.spectrumRun!.input : null
+  const runParams = fromRun ? p.spectrumRun!.params : null
+  const rec = record && record.path === path ? record : null
+  const source = useMemo((): SpectrumSource => {
+    const loc = path ? located[path] : undefined
+    if (fromRun) return { input: loc ?? runInput, params: runParams, from: loc ? 'located' : 'run' }
+    const params = rec?.params ?? null
+    if (loc) return { input: loc, params, from: 'located' }
+    if (rec?.input) return { input: rec.input, params, from: 'history' }
+    return { input: null, params: null, from: 'none' }
+  }, [path, located, fromRun, runInput, runParams, rec])
+  // A target of another file (a new run, another TSV) is not shown.
+  const shownTarget = target && target.path === path ? target : null
+  function openSpectrum(spectrum: string, rowId: number | null): void {
+    if (!path) return
+    setTarget({ path, spectrum, rowId })
+    setTab('spectrum')
+  }
   // Arrow keys, Home and End move between the tabs (WAI-ARIA tabs pattern).
   function onTabKey(e: KeyboardEvent<HTMLDivElement>): void {
     const i = tabs.indexOf(tab)
@@ -138,6 +185,25 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
               busy={busy || p.overview.locked}
               onAction={(a) => p.onOverviewAction?.(a)}
             />
+          </div>
+        ) : tab === 'spectrum' ? (
+          <div className="tablewrap">
+            {shownTarget ? (
+              <SpectrumPanel
+                target={shownTarget}
+                source={source}
+                onTarget={setTarget}
+                onLocate={(input) => path && setLocated((l) => ({ ...l, [path]: input }))}
+              />
+            ) : (
+              <div className="empty-state">
+                <h2>No spectrum chosen</h2>
+                <p>
+                  In Tags, choose a row and press Enter (or Open in Spectrum) to see its spectrum with FASTag&apos;s
+                  processed peaks and the tag&apos;s ladder on them.
+                </p>
+              </div>
+            )}
           </div>
         ) : tab === 'digest' ? (
           <div className="tablewrap">
@@ -225,6 +291,10 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
             path={results.path}
             source={results.input ? `from the run of ${results.input}` : 'opened from disk'}
             rerunResConf={p.rerunResConf}
+            spectrum={{
+              state: spectrumOn ? 'yes' : p.spectrumSupport == null ? 'checking' : 'no',
+              open: openSpectrum
+            }}
           />
         ) : (
           <div className="tablewrap">

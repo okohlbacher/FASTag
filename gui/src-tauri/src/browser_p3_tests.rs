@@ -152,9 +152,12 @@ fn spec() -> impl Strategy<Value = ViewSpec> {
     let max_evalue = prop::option::of(prop::sample::select(vec![0.0, 0.003, 1e-5, -1.0, 1e308, f64::INFINITY, 7.0]));
     let hit = prop::option::of(prop::sample::select(vec!["only", "none", "entrapment", "any"]));
     let per = prop::option::of(0u32..4);
-    (sort, needle, min_length, max_evalue, hit, per).prop_map(|(sort, s, min_length, max_evalue, hit, per)| ViewSpec {
+    // Exact: the Spectrum tab's one-spectrum lookup ("scan=1" is then not
+    // "scan=10 frame=3" nor "SCAN=1").
+    (sort, needle, any::<bool>(), min_length, max_evalue, hit, per).prop_map(|(sort, s, spectrum_exact, min_length, max_evalue, hit, per)| ViewSpec {
         sort,
         spectrum: s.map(str::to_string),
+        spectrum_exact,
         min_length,
         max_evalue,
         fasta_hit: hit.map(str::to_string),
@@ -374,6 +377,7 @@ fn filters_run_on_the_typed_columns_without_another_file_scan() {
             max_evalue: Some(500.0),
             fasta_hit: Some(["only", "none", "entrapment", "only", "none"][k].into()),
             per_spectrum: if k == 4 { Some(1) } else { None },
+            spectrum_exact: false,
         };
         assert_eq!(view_rows(&shared, &p, &s).unwrap(), oracle(&p, &s), "{s:?}");
     }
@@ -894,6 +898,7 @@ proptest! {
             max_evalue: b.max_evalue.or(a.max_evalue),
             fasta_hit: b.fasta_hit.clone().or(a.fasta_hit.clone()),
             per_spectrum: None,
+            spectrum_exact: if b.spectrum.is_some() { b.spectrum_exact } else { a.spectrum_exact },
         };
         let only_a = ViewSpec { per_spectrum: None, ..a.clone() };
         let b_alone = ViewSpec { sort: a.sort.clone(), per_spectrum: None, ..b.clone() };
@@ -984,6 +989,11 @@ fn the_backend_views_of_the_fixture_match_the_golden() {
         json!({ "perSpectrum": 1, "maxEvalue": 1.0, "sort": sort("tag", false) }),
         json!({ "spectrum": "scan=115", "perSpectrum": 3, "sort": sort("tag", true) }),
         json!({ "minLength": 3, "fastaHit": "none", "spectrum": "SCAN=11", "perSpectrum": 2, "maxEvalue": 50.0 }),
+        // The Spectrum tab's lookups: one spectrum exactly (case-sensitive).
+        json!({ "spectrum": "controllerType=0 controllerNumber=1 scan=11461", "spectrumExact": true, "sort": sort("evalue", false) }),
+        json!({ "spectrum": "controllerType=0 controllerNumber=1 scan=11461", "spectrumExact": true, "perSpectrum": 1 }),
+        json!({ "spectrum": "CONTROLLERTYPE=0 CONTROLLERNUMBER=1 SCAN=11461", "spectrumExact": true }),
+        json!({ "spectrum": "scan=11461", "spectrumExact": true }),
     ];
     let shared = Arc::new(Shared::default());
     let mut got = Vec::new();

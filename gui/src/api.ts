@@ -25,8 +25,11 @@ import type {
   RunStarted,
   Settings,
   SpeciesReport,
+  SpectrumDump,
+  SpectrumSupport,
   TaxdbInfo
 } from './types'
+import { parseSpecies } from './results/species'
 
 // The spectra the CLI reads as -in (its input-format check is by extension).
 export const SPECTRA = [{ name: 'Spectra', extensions: ['mzML', 'mzml', 'mzpeak', 'mzPeak', 'mgf', 'MGF'] }]
@@ -139,7 +142,18 @@ const api: FastagApi = {
     ch.onmessage = onEvent
     return invoke<number>('denovo_export', { source: path, dest, format, topN, minLength, onEvent: ch })
   },
-  species: (path: string) => invoke<SpeciesReport | null>('species', { path }),
+  // Read as text like every report (report.rs: size-capped, lossy UTF-8)
+  // and parsed here (results/species.ts, P4). null: missing, unreadable or
+  // empty, as before.
+  species: async (path: string): Promise<SpeciesReport | null> => {
+    const text = await invoke<string | null>('report_text', { path }).catch(() => null)
+    return text == null ? null : parseSpecies(text, path)
+  },
+  // The Spectrum tab (spectrum.rs, P4): whether the CLI has -dump_spectrum,
+  // and one spectrum's dump under the run's params (spectrum/dump.ts parses it).
+  spectrumSupport: () => invoke<SpectrumSupport>('spectrum_support'),
+  spectrumPeaks: (input: string, nativeId: string, params: Record<string, unknown> | null) =>
+    invoke<SpectrumDump>('spectrum_peaks', { input, nativeId, params }),
   report: (path: string) => invoke<string | null>('report_text', { path }),
   taxdbInfo: (explicit?: string) => invoke<TaxdbInfo | null>('taxdb_info', { explicit }),
 

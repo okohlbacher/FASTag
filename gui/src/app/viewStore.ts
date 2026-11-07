@@ -10,7 +10,8 @@
 
 import { useSyncExternalStore } from 'react'
 
-export type Tab = 'overview' | 'results' | 'species' | 'digest'
+// spectrum: P4, only with a CLI that has -dump_spectrum (spectrum/).
+export type Tab = 'overview' | 'results' | 'spectrum' | 'species' | 'digest'
 
 export interface ViewState {
   tab: Tab

@@ -29,6 +29,8 @@ import type {
   RunStarted,
   Settings,
   SpeciesReport,
+  SpectrumDump,
+  SpectrumSupport,
   TaxdbInfo
 } from '../types'
 import runStartedFixture from './fixtures/run-started.json'
@@ -80,6 +82,13 @@ export interface MockBridge extends FastagApi {
   // path -> species report; a path not named here reads speciesResult.
   speciesFiles: Record<string, SpeciesReport>
   speciesError: Error | null
+  // The Spectrum tab (P4): what spectrumSupport answers, and nativeId ->
+  // the dump text spectrumPeaks serves (an ID not here: exit 6 as the CLI;
+  // an input in spectrumMissing: moved).
+  spectrumSupportResult: SpectrumSupport
+  spectrumDumps: Record<string, string>
+  spectrumMissing: string[]
+  spectrumCalls: { input: string; nativeId: string; params: Record<string, unknown> | null }[]
   taxdbInfoResult: TaxdbInfo | null
   // The CLI's --helphelp options. The default is a CLI without
   // -probe_input, as every released FASTag is.
@@ -307,6 +316,10 @@ export function installMockBridge(): MockBridge {
     speciesResult: null,
     speciesFiles: {},
     speciesError: null,
+    spectrumSupportResult: { supported: false, probed: true, detail: 'the CLI has no -dump_spectrum' },
+    spectrumDumps: {},
+    spectrumMissing: [],
+    spectrumCalls: [],
     taxdbInfoResult: null,
     cliOptions: { options: ['in', 'out', 'fasta', 'fragment_tolerance', 'fragment_tolerance_unit'], ok: true, detail: '5 options' },
     probeOutputs: {},
@@ -464,6 +477,16 @@ export function installMockBridge(): MockBridge {
     species: (path) => {
       mock.speciesCalls.push(path)
       return mock.speciesError ? Promise.reject(mock.speciesError) : Promise.resolve(mock.speciesFiles[path] ?? mock.speciesResult)
+    },
+    spectrumSupport: () => Promise.resolve({ ...mock.spectrumSupportResult }),
+    spectrumPeaks: (input, nativeId, params) => {
+      mock.spectrumCalls.push({ input, nativeId, params })
+      const base = { timedOut: false, cached: false }
+      let d: SpectrumDump
+      if (mock.spectrumMissing.includes(input)) d = { ...base, ok: false, code: null, missing: true, stdout: '', reason: `${input} does not exist` }
+      else if (nativeId in mock.spectrumDumps) d = { ...base, ok: true, code: 0, missing: false, stdout: mock.spectrumDumps[nativeId], reason: null }
+      else d = { ...base, ok: false, code: 6, missing: false, stdout: '', reason: `-dump_spectrum: no spectrum of '${input}' has the native ID '${nativeId}'.` }
+      return Promise.resolve(d)
     },
     resultsQuery: (path, view, offset, limit) => {
       mock.resultsQueryCalls.push({ path, view, offset, limit })

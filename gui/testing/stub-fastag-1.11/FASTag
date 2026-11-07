@@ -1,0 +1,5 @@
+#!/bin/sh
+# The stub CLI (../stub-fastag/FASTag) answering as FASTag 1.11.0: its
+# --helphelp lists no -dump_spectrum and it refuses the option. For the
+# tests that the Spectrum tab is hidden with an older CLI.
+STUB_CLI=1.11 exec "$(cd "$(dirname "$0")" && pwd)/../stub-fastag/FASTag" "$@"

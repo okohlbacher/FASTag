@@ -17,6 +17,7 @@ mod report;
 mod reveal;
 mod settings;
 mod species;
+mod spectrum;
 mod sweep;
 
 use std::time::Duration;
@@ -70,6 +71,7 @@ pub fn run() {
         })
         .manage(RunManager::default())
         .manage(browser::BrowserCache::default())
+        .manage(spectrum::SpectrumCache::default())
         .invoke_handler(tauri::generate_handler![
             fastag::probe,
             inspect::cli_capabilities,
@@ -92,12 +94,13 @@ pub fn run() {
             browser::results_position,
             browser::results_export,
             browser::results_cancel,
-            species::species,
             report::report_text,
             report::summary_write,
             denovo::denovo_export,
             drop::folder_spectra_list,
             species::taxdb_info,
+            spectrum::spectrum_support,
+            spectrum::spectrum_peaks,
             settings::load_settings,
             settings::save_last,
             settings::save_preset,
