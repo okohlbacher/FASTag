@@ -57,6 +57,7 @@ async function batchOfThree(): Promise<MockBridge> {
 const sdrfTable = (): HTMLElement => screen.getByRole('table', { name: /^SDRF comparison/ })
 const rows = (t: HTMLElement): HTMLElement[] => within(t).getAllByRole('row').filter((r) => r.closest('tbody'))
 const texts = (r: HTMLElement): string[] => within(r).getAllByRole('cell').map((c) => c.getAttribute('data-text') ?? '')
+const last = (a: string[]): string => a[a.length - 1]
 const states = (r: HTMLElement): string[] => within(r).getAllByRole('cell').flatMap((c) => (c.dataset.state ? [c.dataset.state] : []))
 
 describe('the SDRF comparison in the Batch view', () => {
@@ -77,11 +78,11 @@ describe('the SDRF comparison in the Batch view', () => {
     // Genus "Homo" against SDRF "Homo sapiens": consistent at genus.
     expect(texts(a)[2]).toBe('✓ consistent at genus: FASTag Homo (taxid 9605) · SDRF Homo sapiens')
     expect(texts(c)[2]).toBe('✗ differs: FASTag Homo (taxid 9605) · SDRF Mus musculus')
-    expect(texts(c).at(-1)).toBe('✗ organism')
+    expect(last(texts(c))).toBe('✗ organism')
     // The summary gains the SDRF verdict column.
     const sum = screen.getByRole('table', { name: /^Batch summary/ })
     expect(within(sum).getByRole('columnheader', { name: 'SDRF' })).toBeDefined()
-    expect(rows(sum).map((r) => texts(r).at(-1))).toEqual(['✓ consistent', '✗ fragment tolerance', '✗ organism'])
+    expect(rows(sum).map((r) => last(texts(r)))).toEqual(['✓ consistent', '✗ fragment tolerance', '✗ organism'])
     // The SDRF row no job ran is listed.
     expect(screen.getByText(/gate-batch\.sdrf\.tsv · 10 rows · 2 differences · 4 SDRF data files not in the batch/)).toBeDefined()
   })
@@ -144,7 +145,7 @@ describe('the SDRF comparison in the Batch view', () => {
     mock.nextPickSdrf = SDRF_PATH
     await click(screen.getByRole('button', { name: 'Load SDRF…' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Close SDRF' })).toBeDefined())
-    expect(texts(rows(sdrfTable())[0]).at(-1)).toBe('not compared: not run yet')
+    expect(last(texts(rows(sdrfTable())[0]))).toBe('not compared: not run yet')
     await click(screen.getByRole('button', { name: 'Close SDRF' }))
     expect(screen.queryByRole('table', { name: /^SDRF comparison/ })).toBeNull()
     expect(screen.getByRole('button', { name: 'Load SDRF…' })).toBeDefined()
