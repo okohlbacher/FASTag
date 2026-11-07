@@ -40,6 +40,7 @@
 
 #include <OpenMS/FORMAT/FASTAFile.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <unordered_map>
@@ -93,6 +94,17 @@ namespace FASTag
     /// cost of sum(|S|^2) over k-mer taxon sets S -- cheap because the reference
     /// is deliberately small and most k-mers sit in one or two taxa.
     std::vector<uint64_t> pairwiseOverlap() const;
+
+    /// The same overlap at the level of GROUPS of index taxa: entry (a, b) of
+    /// the row-major n_groups x n_groups result is the number of DISTINCT
+    /// indexed k-mers whose taxon set contains a member of group a and a member
+    /// of group b, so the diagonal is the number of k-mers in group a. @p
+    /// group_of maps each index taxon (taxa() order) to its group, or -1 for a
+    /// taxon outside every group. Unlike summing pairwiseOverlap() over the
+    /// members, a k-mer shared by several members of one group counts once,
+    /// so conditionalMatrix() of the result is P(k-mer in a | k-mer in b) also
+    /// when a group holds several index taxa. One pass over the postings.
+    std::vector<uint64_t> groupOverlap(const std::vector<int>& group_of, std::size_t n_groups) const;
 
     /// Compact binary (de)serialization. save() writes v2; load() accepts v1
     /// and v2 and returns false on any other magic or version.

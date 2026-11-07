@@ -49,6 +49,7 @@
 #include "RunMeta.h"
 #include "SearchConfig.h"
 #include "Shortlist.h"
+#include "SpeciesCall.h"
 #include "SpeciesEvidence.h"
 #include "SpeciesLookup.h"
 #include "SpectrumSampler.h"
@@ -806,6 +807,33 @@ protected:
     registerStringOption_("search_decoy_prefix", "<s>", "",
                           "Decoy prefix the engine generates; empty = rev_ (Sage) or DECOY_ (Comet)", false);
     // ---- 1.12 D: options ----
+    // #1 calibrated species presence or abstention (src/SpeciesCall.h). Off
+    // by default: at 'none' nothing of it runs and the report is 1.11's. A
+    // default flip needs the held-out acceptance and a user decision.
+    registerStringOption_("species_call", "<mode>", "none",
+                          "Call each taxon of the -species report present, no_call or not_detected: "
+                          "'decoy' tests its count against a null of decoy tags (looked up like the "
+                          "tags) plus the spill expected from stronger related taxa, and appends the "
+                          "columns call, call_reason, decoy_spectra, decoy_expected, decoy_qvalue, "
+                          "share and lod. 'none' = the ranked report only", false, true);
+    setValidStrings_("species_call", ListUtils::create<std::string>("none,decoy"));
+    registerInputFile_("species_call_params", "<file>", "",
+                       "Decision parameters of -species_call decoy (alpha, tau, n_min). Default: "
+                       "species_call.tsv in the taxonomy directory", false, true);
+    setValidFormats_("species_call_params", ListUtils::create<std::string>("tsv"));
+    registerIntOption_("species_call_min_units", "<n>", 200,
+                       "Fewer spectra with taxon evidence than this make -species_call decoy a "
+                       "run-level no_call (few_spectra)", false, true);
+    setMinInt_("species_call_min_units", 0);
+    registerIntOption_("species_call_decoys", "<n>", 5,
+                       "Decoy tags per tag for -species_call decoy", false, true);
+    setMinInt_("species_call_decoys", 1);
+    setMaxInt_("species_call_decoys", 100);
+    registerDoubleOption_("species_pi0", "<f>", 1.0,
+                          "Proportion of null taxa for the -species_call q-values: 1 = "
+                          "Benjamini-Hochberg; 0 estimates it from the run (Storey)", false, true);
+    setMinFloat_("species_pi0", 0.0);
+    setMaxFloat_("species_pi0", 1.0);
     // ---- 1.12 F: options ----
     // #11 phase A: the per-spectrum census. Opt-in; every other output is
     // the same with or without it (src/Census.h).
@@ -1097,6 +1125,8 @@ protected:
     // which is how species detection was driven before the flag existed.
     const bool want_species = getFlag_("species")
         || (!getStringOption_("taxdb").empty() && !getStringOption_("species_out").empty());
+    // 1.12 #1: the calibrated call runs only with species detection.
+    const bool species_call_on = want_species && getStringOption_("species_call") == "decoy";
 
     // The seed lengths this run tags at, ascending and distinct: -tag_lengths
     // when given, else the one -tag_length.
@@ -1208,6 +1238,7 @@ protected:
           {"shortlist_background", nullptr},
           {"search_config_out", nullptr},
           // ---- 1.12 D: -stream refusals ----
+          {"species_call", "-stream cannot be combined with -species_call."},
           // ---- 1.12 F: -stream refusals ----
           {"census", nullptr},
           {"census_out", nullptr},
@@ -1265,6 +1296,38 @@ protected:
                             "order, class, phylum, kingdom, domain)." << std::endl;
         return ILLEGAL_PARAMETERS;
       }
+    }
+    // 1.12 #1: the -species_call decision parameters, read before tagging so
+    // a missing or malformed file refuses the run instead of failing after it.
+    std::string species_call_params_path;
+    FASTag::SpeciesCall::Params species_call_params;
+    if (species_call_on)
+    {
+      species_call_params_path = getStringOption_("species_call_params");
+      if (species_call_params_path.empty())
+      {
+        const std::string d = taxonomyDir_();
+        if (d.empty() || !File::exists(d + "/species_call.tsv"))
+        {
+          OPENMS_LOG_ERROR << "-species_call decoy: no shipped species_call.tsv"
+                           << (d.empty() ? std::string(" (no taxonomy directory next to the executable)")
+                                         : " in '" + d + "'")
+                           << ". Pass -species_call_params, or set FASTAG_TAXONOMY_DIR." << std::endl;
+          return ILLEGAL_PARAMETERS;
+        }
+        species_call_params_path = d + "/species_call.tsv";
+      }
+      std::string perr;
+      if (!FASTag::SpeciesCall::loadParams(species_call_params_path, species_call_params, &perr))
+      {
+        OPENMS_LOG_ERROR << "-species_call_params: " << perr << std::endl;
+        return ILLEGAL_PARAMETERS;
+      }
+      if (species_call_params.decoys > 0 && species_call_params.decoys != getIntOption_("species_call_decoys"))
+        OPENMS_LOG_WARN << "-species_call: the parameters in " << species_call_params_path
+                        << " were calibrated with " << species_call_params.decoys
+                        << " decoy replicates; this run uses -species_call_decoys "
+                        << getIntOption_("species_call_decoys") << "." << std::endl;
     }
     const std::string fasta = getStringOption_("fasta");
     const std::string out_spectra = getStringOption_("out_spectra");
@@ -1722,6 +1785,11 @@ protected:
           {"search_isotope_errors", "-search_config_out", !search_config_out.empty()},
           {"search_decoy_prefix", "-search_config_out", !search_config_out.empty()},
           // ---- 1.12 D: ignored-option warnings ----
+          {"species_call", "-species", want_species},
+          {"species_call_params", "-species_call decoy", species_call_on},
+          {"species_call_min_units", "-species_call decoy", species_call_on},
+          {"species_call_decoys", "-species_call decoy", species_call_on},
+          {"species_pi0", "-species_call decoy", species_call_on},
           // ---- 1.12 F: ignored-option warnings ----
           {"census_out", "-census", getFlag_("census")},
           {"census_summary_out", "-census", getFlag_("census")},
@@ -2511,6 +2579,7 @@ protected:
       guard.input("shortlist_background", getStringOption_("shortlist_background"));
       guard.input("search_config_template", getStringOption_("search_config_template"));
       // ---- 1.12 D: guarded inputs ----
+      guard.input("species_call_params", species_call_params_path);
       // ---- 1.12 F: guarded inputs ----
       guard.output("out", out);
       guard.output("out_spectra", out_spectra);
@@ -4382,19 +4451,55 @@ protected:
       const FASTag::SpeciesEvidence ev_mode = getStringOption_("species_evidence") == "all"
           ? FASTag::SpeciesEvidence::All : FASTag::SpeciesEvidence::Best;
       std::vector<FASTag::TagSupport> support;  // this spectrum's informative tags
+      // 1.12 #1 (-species_call decoy): every tag the target lookup evaluates
+      // is also looked up as D decoys through the same rule, with the
+      // target's E-value; replicate j of a spectrum counts like the spectrum
+      // (best/all evidence, once per node, lineage roll-up). A trial is a
+      // spectrum with at least one evaluated target tag. Own counters, so the
+      // target's log line is unchanged.
+      const int n_decoys = species_call_on ? getIntOption_("species_call_decoys") : 0;
+      std::map<uint32_t, uint64_t> decoy_hits;  // per NODE, summed over the D replicates
+      uint64_t n_trials = 0, n_decoy_less = 0;
+      FASTag::TagLookupCounters decoy_counters;
+      std::vector<std::vector<FASTag::TagSupport>> decoy_support(static_cast<size_t>(n_decoys));
       for (const auto& sp : by_spec)
       {
         support.clear();
+        for (auto& ds : decoy_support) ds.clear();
+        bool trial = false;
         for (const auto& row : sp.second)
         {
           const std::string seq = FASTag::baseSequence(row.first);
           if (static_cast<int>(seq.size()) < min_len) continue;
+          trial = true;
+          bool decoy_less = false;
+          for (int j = 0; j < n_decoys; ++j)
+          {
+            // A homopolymer (or a periodic tag whose permutation cannot leave
+            // both orientations) has no decoy j: it is counted, not looked up.
+            const std::string dseq = FASTag::decoyTag(seq, static_cast<uint32_t>(j));
+            if (dseq.empty()) { decoy_less = true; continue; }
+            FASTag::TagSupport dts;
+            if (!FASTag::tagSupport(idx, dseq, index_k, share_cap, min_margin, dts.taxa, decoy_counters)) continue;
+            dts.evalue = row.second;
+            decoy_support[static_cast<size_t>(j)].push_back(std::move(dts));
+          }
+          if (decoy_less) ++n_decoy_less;
           // The per-tag rule (share skip, whole-tag rule, margin) lives in
           // SpeciesLookup.h.
           FASTag::TagSupport ts;
           if (!FASTag::tagSupport(idx, seq, index_k, share_cap, min_margin, ts.taxa, lookup_counters)) continue;
           ts.evalue = row.second;
           support.push_back(std::move(ts));
+        }
+        if (trial) ++n_trials;
+        for (const auto& ds : decoy_support)
+        {
+          const std::set<uint32_t> dtaxa = FASTag::spectrumTaxa(ds, ev_mode);
+          std::set<uint32_t> dnodes;
+          for (uint32_t tx : dtaxa)
+            for (uint32_t a : tax.lineage(tx)) dnodes.insert(a);
+          for (uint32_t a : dnodes) ++decoy_hits[a];
         }
         // The taxa this spectrum counts for: by default those of its best
         // informative tag, not the union over all reported tags (see
@@ -4421,10 +4526,13 @@ protected:
       // See TaxDeconv.h for the model and its limits.
       std::map<uint32_t, double> adjusted_leaf;
       const bool deconvolved = getFlag_("species_deconvolve") && !idx_taxa.empty();
+      // The pairwise overlap of the leaves, for the deconvolution only (the
+      // homology term of -species_call counts its own group-level overlap).
+      std::vector<uint64_t> overlap;
+      if (deconvolved) overlap = idx.pairwiseOverlap();
       if (deconvolved)
       {
         const size_t nt = idx_taxa.size();
-        const std::vector<uint64_t> overlap = idx.pairwiseOverlap();
         std::vector<double> obs(nt, 0.0);
         for (size_t i = 0; i < nt; ++i)
         {
@@ -4479,13 +4587,78 @@ protected:
       auto calls = tax.call(rolled, bg_pairs, static_cast<uint64_t>(n_units), qthr);
 
       const std::string want_rank = getStringOption_("species_rank");
+
+      // 1.12 #1: the calibrated call per taxon at the report rank
+      // (src/SpeciesCall.h). Groups are the report-rank ancestors of the
+      // index taxa; the overlap matrix is rolled up to them for the homology
+      // term, and their deconvolved counts are the spill sources.
+      std::map<uint32_t, FASTag::SpeciesCall::GenusStat> call_stats;
+      FASTag::SpeciesCall::RunInput call_run;
+      if (species_call_on)
+      {
+        std::map<uint32_t, int> group_index;  // report-rank taxid -> group
+        std::vector<uint32_t> group_taxid;
+        std::vector<int> group_of(idx_taxa.size(), -1);
+        for (size_t i = 0; i < idx_taxa.size(); ++i)
+          for (uint32_t a : tax.lineage(idx_taxa[i]))
+            if (tax.rank(a) == want_rank)
+            {
+              auto ins = group_index.emplace(a, static_cast<int>(group_taxid.size()));
+              if (ins.second) group_taxid.push_back(a);
+              group_of[i] = ins.first->second;
+              break;
+            }
+        const size_t ng = group_taxid.size();
+        // Distinct k-mers per group pair, not a sum of the members' pairwise
+        // overlaps: a k-mer shared by two members of one group counts once,
+        // so C[g][h] = P(k-mer in g | k-mer in h) also at family or order
+        // rank and for indexes with several strains per genus.
+        const std::vector<uint64_t> rolled_overlap = idx.groupOverlap(group_of, ng);
+        const std::vector<double> C = FASTag::conditionalMatrix(rolled_overlap, ng);
+        std::vector<double> obs(ng, 0.0);
+        for (size_t g = 0; g < ng; ++g)
+        {
+          auto it = hits.find(group_taxid[g]);
+          if (it != hits.end()) obs[g] = static_cast<double>(it->second);
+        }
+        const std::vector<double> est = FASTag::deconvolve(rolled_overlap, obs, ng);
+        std::vector<FASTag::SpeciesCall::GenusInput> in_g(ng);
+        const double units = static_cast<double>(std::max<size_t>(1, n_units));
+        for (size_t g = 0; g < ng; ++g)
+        {
+          FASTag::SpeciesCall::GenusInput& x = in_g[g];
+          x.taxid = group_taxid[g];
+          x.observed = static_cast<uint64_t>(obs[g]);
+          auto dit = decoy_hits.find(x.taxid);
+          x.decoy_spectra = dit == decoy_hits.end() ? 0 : dit->second;
+          double cnt = obs[g];
+          if (deconvolved)
+          {
+            auto ait = adjusted.find(x.taxid);
+            cnt = ait == adjusted.end() ? 0.0 : ait->second;
+          }
+          x.share = cnt / units;
+          x.deconvolved = g < est.size() ? est[g] : obs[g];
+        }
+        call_run.n_units = n_units;
+        call_run.n_trials = n_trials;
+        call_run.decoys = n_decoys;
+        call_run.min_units = static_cast<uint64_t>(getIntOption_("species_call_min_units"));
+        call_run.low_resolution = getStringOption_("fragment_tolerance_unit") == "Da";
+        call_run.pi0 = getDoubleOption_("species_pi0");
+        for (const auto& st : FASTag::SpeciesCall::callGenera(in_g, C, call_run, species_call_params))
+          call_stats[st.taxid] = st;
+      }
+
       std::ofstream so(species_out.c_str());
       if (!so)
       {
         OPENMS_LOG_ERROR << "Cannot open species report " << species_out << std::endl;
         return CANNOT_WRITE_OUTPUT_FILE;
       }
-      so << "rank\ttaxid\tname\tobserved\tadjusted\texpected\tlog_pvalue\tqvalue\n";
+      so << "rank\ttaxid\tname\tobserved\tadjusted\texpected\tlog_pvalue\tqvalue";
+      if (species_call_on) so << "\tcall\tcall_reason\tdecoy_spectra\tdecoy_expected\tdecoy_qvalue\tshare\tlod";
+      so << '\n';
 
       // Order by the corrected count, not by q. Significance ranks a near
       // neighbour highly precisely because its borrowed count IS significant.
@@ -4511,16 +4684,43 @@ protected:
         return o;
       };
       size_t shown = 0;
+      size_t n_call[3] = {0, 0, 0};  // present, no_call, not_detected among the rows
       for (const FASTag::TaxonCall* cp : ranked)
       {
         const FASTag::TaxonCall& c = *cp;
         auto ait = adjusted.find(c.taxid);
         const double adj = ait == adjusted.end() ? 0.0 : ait->second;
         char num[128];
-        std::snprintf(num, sizeof num, "\t%llu\t%.1f\t%.1f\t%g\t%g\n",
+        std::snprintf(num, sizeof num, "\t%llu\t%.1f\t%.1f\t%g\t%g",
                       static_cast<unsigned long long>(c.observed), adj, c.expected,
                       c.log_pvalue, c.qvalue);
         so << clean(c.rank) << '\t' << c.taxid << '\t' << clean(c.name) << num;
+        if (species_call_on)
+        {
+          auto sit = call_stats.find(c.taxid);
+          if (sit == call_stats.end())
+          {
+            // Not an ancestor of any index taxon at this rank: cannot happen
+            // for a counted taxon, but never leave the columns short.
+            so << "\tnot_detected\tnot_significant\t0\tNA\tNA\tNA\tNA";
+            ++n_call[2];
+          }
+          else
+          {
+            const FASTag::SpeciesCall::GenusStat& st = sit->second;
+            char lod[32];
+            if (st.lod >= 0.0) std::snprintf(lod, sizeof lod, "%.6g", st.lod);
+            else std::snprintf(lod, sizeof lod, "NA");
+            char cnum[160];
+            std::snprintf(cnum, sizeof cnum, "\t%llu\t%.3f\t%g\t%.6g\t%s",
+                          static_cast<unsigned long long>(st.decoy_spectra), st.expected, st.qvalue,
+                          st.share, lod);
+            so << '\t' << FASTag::SpeciesCall::callName(st.call) << '\t' << st.reason << cnum;
+            ++n_call[st.call == FASTag::SpeciesCall::Call::Present ? 0
+                     : st.call == FASTag::SpeciesCall::Call::NoCall ? 1 : 2];
+          }
+        }
+        so << '\n';
         if (++shown >= 50) break;
       }
       so.flush();
@@ -4538,6 +4738,22 @@ protected:
         OPENMS_LOG_INFO << " (" << lookup_counters.kmer_skipped << " k-mers too widely shared, "
                         << lookup_counters.tag_generic << " tags too generic)";
       OPENMS_LOG_INFO << "; top " << want_rank << " calls -> " << species_out << std::endl;
+      if (species_call_on)
+      {
+        OPENMS_LOG_INFO << "Species call (-species_call decoy): " << n_call[0] << " present, " << n_call[1]
+                        << " no_call, " << n_call[2] << " not_detected among the reported " << want_rank
+                        << " rows";
+        if (call_run.low_resolution) OPENMS_LOG_INFO << " (run-level no_call: low_resolution, Da tolerance)";
+        else if (call_run.n_units < call_run.min_units)
+          OPENMS_LOG_INFO << " (run-level no_call: few_spectra, " << call_run.n_units << " < "
+                          << call_run.min_units << ")";
+        OPENMS_LOG_INFO << "; " << n_trials << " trials, " << n_decoys << " decoys per tag";
+        if (n_decoy_less) OPENMS_LOG_INFO << ", " << n_decoy_less << " tags without a decoy";
+        OPENMS_LOG_INFO << "; parameters " << species_call_params_path
+                        << (species_call_params.version.empty() ? std::string()
+                                                                : " (" + species_call_params.version + ")")
+                        << std::endl;
+      }
     }
 
     OPENMS_LOG_INFO << n_ms2 << " MS2 spectra, " << n_tags << " tags";

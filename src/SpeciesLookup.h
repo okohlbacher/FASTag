@@ -42,4 +42,14 @@ namespace FASTag
   bool tagSupport(const TaxIndex& idx, const std::string& seq, int k,
                   std::size_t share_cap, double min_margin,
                   std::vector<uint32_t>& taxa, TagLookupCounters& counters);
+
+  /// Decoy @p j of a tag for the -species_call null (1.12 #1): a permutation
+  /// of the I/L-folded @p seq, seeded by FNV-1a 64 over (folded seq, j), so it
+  /// depends on nothing but the tag and j (not on thread, order or the
+  /// standard library's shuffle). It keeps composition and length. It never
+  /// equals the folded tag or the folded tag reversed: a permutation that does
+  /// is rotated by one position until it differs. Returns the empty string
+  /// when no rotation differs from both (a homopolymer, a two-residue tag):
+  /// that tag has no decoy.
+  std::string decoyTag(const std::string& seq, uint32_t j);
 }

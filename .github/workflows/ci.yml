@@ -942,6 +942,10 @@ jobs:
           rm -rf dist/FASTag/share-FASTag-taxonomy
           tar -xzf /tmp/taxdb/FASTag-taxonomy-k7.tar.gz -C dist/FASTag
           test -s dist/FASTag/share-FASTag-taxonomy/tax_k7.taxdb
+          # The asset predates -species_call (1.12 #1): put its frozen
+          # parameters back beside the index, or -species_call decoy refuses.
+          cp data/taxonomy/species_call.tsv dist/FASTag/share-FASTag-taxonomy/
+          test -s dist/FASTag/share-FASTag-taxonomy/species_call.tsv
           MZ=dist/FASTag/share-OpenMS/examples/ID/Ecoli_MS2_small.mzML
           test -s "$MZ" || { echo "smoke fixture missing from bundle"; exit 1; }
           dist/FASTag/FASTag -in "$MZ" -out /tmp/smoke.tsv \
@@ -949,6 +953,15 @@ jobs:
             -tag_length 7 -extension 2 \
             -fragment_tolerance 0.3 -fragment_tolerance_unit Da
           [ "$(wc -l < /tmp/smoke.species.tsv)" -ge 2 ] || { echo "species smoke wrote an empty report"; exit 1; }
+          # -species_call decoy must find the shipped parameters (no
+          # -species_call_params) and write the 15-column report. Da
+          # tolerance makes every row a low_resolution no_call by design.
+          dist/FASTag/FASTag -in "$MZ" -out /tmp/smoke_call.tsv \
+            -species -species_call decoy -species_out /tmp/smoke_call.species.tsv \
+            -tag_length 7 -extension 2 \
+            -fragment_tolerance 0.3 -fragment_tolerance_unit Da
+          nf=$(head -1 /tmp/smoke_call.species.tsv | tr -d '\r' | awk -F'\t' '{print NF}')
+          [ "$nf" = 15 ] || { echo "species_call smoke: $nf header fields, expected 15"; exit 1; }
 
 
       # ------------------------------------------------- desktop app (macOS)

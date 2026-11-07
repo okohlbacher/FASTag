@@ -5,11 +5,14 @@
 // Returns 0 when every check passes.
 
 #include "SpeciesEvidence.h"
+#include "SpeciesLookup.h"
+#include "TaxIndex.h"
 
 #include <cmath>
 #include <cstdio>
 #include <limits>
 #include <set>
+#include <string>
 #include <vector>
 
 namespace
@@ -71,6 +74,44 @@ int main()
     CHECK(spectrumTaxa(tags, SpeciesEvidence::Best) == (Set{2}), "NaN does not beat a finite E-value");
     std::vector<TagSupport> only_nan = {{nan, {1}}, {nan, {2}}};
     CHECK(spectrumTaxa(only_nan, SpeciesEvidence::Best) == (Set{1, 2}), "only NaN: union");
+  }
+
+  // 6. The decoy list of -species_call (1.12 #1): every target tag's decoys
+  //    carry the target's E-value and go through the same lookup and the same
+  //    Best rule, so a spectrum's decoy taxa never borrow the target's taxa by
+  //    construction. On a toy index the decoys of genuine tags map nowhere.
+  {
+    std::vector<OpenMS::FASTAFile::FASTAEntry> se;
+    se.emplace_back("t1", "", "ACDEFGHKLMNPQRSTVWY");
+    se.emplace_back("t2", "", "YWVTSRQPNMLKHGFEDCA");
+    std::vector<uint32_t> st = {1, 2};
+    FASTag::TaxIndex idx;
+    idx.build(se, st, 4);
+    const std::vector<std::pair<std::string, double>> rows = {{"CDEFGHK", 0.01}, {"MNPQRST", 2.0}};
+    std::vector<TagSupport> target;
+    FASTag::TagLookupCounters c;
+    for (const auto& r : rows)
+    {
+      TagSupport t;
+      t.evalue = r.second;
+      if (FASTag::tagSupport(idx, r.first, 4, 2, 0.0, t.taxa, c)) target.push_back(t);
+    }
+    CHECK(spectrumTaxa(target, SpeciesEvidence::Best) == (Set{1}), "decoy list: the target counts for taxon 1");
+    for (uint32_t j = 0; j < 5; ++j)
+    {
+      std::vector<TagSupport> decoy;
+      FASTag::TagLookupCounters dc;
+      for (const auto& r : rows)
+      {
+        TagSupport t;
+        t.evalue = r.second;
+        const std::string d = FASTag::decoyTag(r.first, j);
+        CHECK(!d.empty() && d != r.first, "decoy list: each tag has a decoy that is not the tag");
+        if (FASTag::tagSupport(idx, d, 4, 2, 0.0, t.taxa, dc)) decoy.push_back(t);
+      }
+      CHECK(spectrumTaxa(decoy, SpeciesEvidence::Best).count(1) == 0, "decoy list: decoys do not reproduce the target taxon");
+      CHECK(c.kmer_skipped == 0 && c.tag_generic == 0, "decoy list: target counters untouched by the decoy pass");
+    }
   }
 
   if (g_fail) { std::fprintf(stderr, "species_evidence_test: %d failure(s)\n", g_fail); return 1; }

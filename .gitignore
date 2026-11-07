@@ -16,6 +16,8 @@ build-rel/
 
 # ...but the species reference-set manifest is source, not a test output
 !data/taxonomy/reference-set.tsv
+# ...and so are the frozen -species_call decoy parameters (1.12 #1)
+!data/taxonomy/species_call.tsv
 __pycache__/
 
 # Test fixtures are the one place data files belong in the repo.
