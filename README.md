@@ -186,7 +186,7 @@ in four step cards, presets store only what differs from their task, and
 **Export INI…** writes the same parameters for `FASTag -ini`. The
 window has four views, switched from the top bar or with Cmd/Ctrl+1..4:
 **Setup**, **Results**, **Batch** and **History** (every recorded run); a
-progress pill in the top bar follows the run from any view, and a finished
+progress pill in the top bar follows the run from any view (the Batch view compares a batch with its SDRF: organism by NCBI taxid, protease, label, modifications, instrument and tolerance, with a corrections TSV), and a finished
 run in the background raises a system notification. Spectra, FASTA,
 taxonomy, tags and report files can be dropped anywhere on the window. A
 built-in **Help** side panel (F1, or the Help button), with a search, covers

@@ -40,6 +40,9 @@
 //               testing/batchFixtures.ts): each prints that job's log and
 //               serves its reports; /data/pxd006096-dia.mzML is refused
 //               with exit 11 (raw DIA, E7). Choose output folder… picks /out.
+//               SDRF… picks /data/gate-batch.sdrf.tsv, the synthetic SDRF of
+//               src/fixtures/sdrf (its bytes fetched as they are, BOM and
+//               CRLF included), and the taxonomy is the bundled pruned dump.
 //
 // &start=defaults starts the session from FASTag's defaults instead of the
 // task the app lands on (D1, "Characterize a run"): the specs written
@@ -58,6 +61,9 @@ import massgapTsv from '../fixtures/massgap.tsv?raw'
 import { CLI_CASES, logLines, type CliCase } from './cliFixtures'
 import { speciesFromTsv } from './speciesTsv'
 import { BATCH_CASES, DIA_REFUSAL } from './batchFixtures'
+import gateSdrfUrl from '../fixtures/sdrf/gate-batch.sdrf.tsv?url'
+import taxNodes from '../fixtures/sdrf/nodes.dmp?raw'
+import taxNames from '../fixtures/sdrf/names.dmp?raw'
 
 // The ?fixture= names of the real-CLI Overview scenarios.
 const GATE: Record<string, CliCase> = {
@@ -257,6 +263,16 @@ export function installE2EBridge(): Origin | undefined {
         mock.reportFiles[`${dir}/${c.name}.label.tsv`] = c.label
         mock.speciesFiles[`${dir}/${c.name}.tags.species.tsv`] = speciesFromTsv(c.species, `${dir}/${c.name}.tags.species.tsv`)
       }
+    // P4 SDRF: the file's bytes as committed (fetched, not decoded), and
+    // the taxonomy dumps the species call uses.
+    mock.nextPickSdrf = '/data/gate-batch.sdrf.tsv'
+    mock.taxonomyResult = { nodesPath: '/opt/FASTag/taxonomy/nodes.dmp', namesPath: '/opt/FASTag/taxonomy/names.dmp', nodes: taxNodes, names: taxNames }
+    const sdrfRead = mock.sdrfRead
+    mock.sdrfRead = async (path) => {
+      if (path === '/data/gate-batch.sdrf.tsv' && !mock.sdrfFiles[path])
+        mock.sdrfFiles[path] = new Uint8Array(await (await fetch(gateSdrfUrl)).arrayBuffer())
+      return sdrfRead(path)
+    }
   }
   if (fixture === 'lastused') {
     mock.settings.lastUsed = { tag_length: '7', species: true }

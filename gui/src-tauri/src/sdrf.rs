@@ -147,7 +147,7 @@ mod tests {
         assert!(t.names.contains("Homo sapiens"));
         assert_eq!(t.nodes_path, b.join("nodes.dmp").display().to_string());
         // Nothing found: None, not an error.
-        assert_eq!(find_dump(None, None, &[a.clone()]).unwrap(), None);
+        assert_eq!(find_dump(None, None, std::slice::from_ref(&a)).unwrap(), None);
         assert_eq!(find_dump(Some("  "), Some(""), &[]).unwrap(), None);
         std::fs::remove_dir_all(&a).ok();
         std::fs::remove_dir_all(&b).ok();
@@ -163,13 +163,13 @@ mod tests {
         }
         let n = a.join("nodes.dmp");
         let m = a.join("names.dmp");
-        let t = find_dump(n.to_str(), m.to_str(), &[b.clone()]).unwrap().unwrap();
+        let t = find_dump(n.to_str(), m.to_str(), std::slice::from_ref(&b)).unwrap().unwrap();
         assert!(t.nodes.contains("tax-own"));
         // One given: its sibling.
-        let t = find_dump(n.to_str(), None, &[b.clone()]).unwrap().unwrap();
+        let t = find_dump(n.to_str(), None, std::slice::from_ref(&b)).unwrap().unwrap();
         assert_eq!(t.names_path, m.display().to_string());
         // A given dump that is missing is an error that names it.
-        let e = find_dump(Some("/nonexistent/nodes.dmp"), Some("/nonexistent/names.dmp"), &[b.clone()]).unwrap_err();
+        let e = find_dump(Some("/nonexistent/nodes.dmp"), Some("/nonexistent/names.dmp"), std::slice::from_ref(&b)).unwrap_err();
         assert!(e.contains("/nonexistent/nodes.dmp"), "{e}");
         std::fs::remove_dir_all(&a).ok();
         std::fs::remove_dir_all(&b).ok();
@@ -180,7 +180,7 @@ mod tests {
         let d = tmp("tax-latin1");
         std::fs::write(d.join("nodes.dmp"), "5\t|\t1\t|\tspecies\t|\n").unwrap();
         std::fs::write(d.join("names.dmp"), b"5\t|\tCaf\xe9 sp.\t|\t\t|\tscientific name\t|\n").unwrap();
-        let t = find_dump(None, None, &[d.clone()]).unwrap().unwrap();
+        let t = find_dump(None, None, std::slice::from_ref(&d)).unwrap().unwrap();
         assert!(t.names.contains("Caf"));
         std::fs::remove_dir_all(&d).ok();
     }

@@ -167,6 +167,14 @@ export const START: HelpPage = {
               When a file is done, click it in the batch list to see its tags and reports. The results of the last
               file are shown at the end.
             </li>
+            <li>
+              <strong>Load SDRF…</strong> on the Batch view (or dropping an <code>.sdrf.tsv</code> on the window)
+              compares each file with its SDRF rows, matched by <code>comment[data file]</code>: organism (by NCBI
+              taxid; a genus call that contains the SDRF species is consistent at genus), cleavage agent, label,
+              modifications, instrument and fragment tolerance. Only FASTag&apos;s own calls and reports count, so a
+              no call is never a difference. <strong>Export SDRF corrections TSV…</strong> writes the differences;
+              the SDRF itself is never changed.
+            </li>
           </ul>
           <p>
             If a file fails, see <L to="faq-batch-failed">Some files of a batch failed</L>.

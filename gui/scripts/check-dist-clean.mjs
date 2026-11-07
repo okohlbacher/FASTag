@@ -21,7 +21,9 @@ const MARKERS = [
   '20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01', // the real-CLI fixtures (src/fixtures/cli)
   'KristenJeff_p53_mod_AspN_03_02_07',
   'Hog1p_WT_Rep3_Chymo_5uL', // the batch fixtures (src/fixtures/cli/batch)
-  '100815_MM_ABPP_H1993_DMSO_DIA1_new'
+  '100815_MM_ABPP_H1993_DMSO_DIA1_new',
+  'gate-batch.sdrf', // the SDRF fixture (src/fixtures/sdrf)
+  'Saccharomyces cerevisiae S288C' // the taxonomy dump fixture
 ]
 
 function* files(d) {

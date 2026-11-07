@@ -35,6 +35,10 @@ gui/
                        BatchList.tsx, the batch job naming (batch.ts), and the batch
                        summary: batchSummary.ts (rows and the majority rule),
                        useBatchSummary.ts (each done job's reports) and SummaryTable.tsx
+    sdrf/              the Batch view's SDRF comparison (P4): sdrfTable.ts (an SDRF read and
+                       written back byte for byte), taxonomy.ts (organisms by NCBI taxid over
+                       nodes.dmp/names.dmp), compare.ts (the six fields and the corrections TSV),
+                       useSdrf.ts and SdrfPanel.tsx; fixtures in src/fixtures/sdrf
     results/           ResultTabs.tsx (Overview, Tags, Species, Digest), FailureBanner.tsx (over
                        the tabs, or on the Batch view beside the queue), reports.ts,
                        RunningPanel.tsx (the running state), OverviewPanel.tsx over
@@ -98,6 +102,7 @@ gui/
     src/reveal.rs      ResolvedOutputs (every output, absolute) and Reveal / Open folder, limited to run outputs
     src/species.rs     species TSV read + FTX2 taxdb header read
     src/report.rs      digest/label/mass-gap report read
+    src/sdrf.rs        an SDRF's bytes, unchanged (never written), and the taxonomy dumps the species call reads
     src/denovo.rs      the Stitch/ALPS export job: tools/tags_to_denovo.py ported (the same golden
                        files), one pass over the file, progress and Cancel, the reads to a .csv via .part
     examples/browser_bench.rs  the browser bench (bench/bench-<version>.json)
@@ -194,7 +199,24 @@ call and more than half of them, and a no call, "too little evidence", a
 ranking without call columns, a failed or a queued job never counts. A raw
 DIA input that FASTag 1.12 refuses (exit 11) fails with the CLI's sentence.
 **Export summary TSV…** writes the table, cell for cell, with a `yes` column
-after each call column where it differs. The SDRF comparison follows in P4.
+after each call column where it differs.
+
+**Load SDRF…** (or an `.sdrf.tsv` dropped on the window) compares each job
+with its SDRF rows, matched by `comment[data file]` (the input's name, else
+the input the CLI's reports name; spectra and archive extensions aside), on
+organism, cleavage agent, label, modification parameters, instrument and
+fragment tolerance. Only FASTag's output counts: the summary's calls (a no
+call or "too little evidence" is never a difference), the instrument the
+input names and the run's tolerance (the reports' meta and run rows), and the
+run's fixed modifications (its log; FASTag writes no alkylation call). The
+organism is matched by NCBI taxid through the `nodes.dmp`/`names.dmp` next to
+the index: a genus call "Homo" against an SDRF "Homo sapiens" is consistent at
+genus, and an organism the taxonomy does not hold is "not checkable". The
+summary gains an SDRF column, and **Export SDRF corrections TSV…** writes one
+line per difference with the report row it came from; it is a function of the
+SDRF, the reports and the taxonomy alone (pinned by a golden test), so the
+same TSV follows from a cluster run's reports. The SDRF is read byte for byte
+and never rewritten.
 
 Setup starts from a task: **Characterize a run** (the default: species with
 extension 2, the digest, label and glyco reports, a tenth of the spectra),
@@ -246,8 +268,8 @@ Files dropped anywhere on the window go by type: one spectra file to the
 input, two or more (or a folder) to the batch, a FASTA to `-fasta`, a
 `.taxdb` to `-taxdb`, a tags TSV to Results, a digest, label or mass-gap
 report to the Digest tab and a species report to the Species tab. Nothing is
-taken while FASTag runs. Reports without a tab yet (recon, delta, glyco) and
-SDRF files are named, not read.
+taken while FASTag runs. An SDRF goes to the Batch view's comparison. Reports
+without a tab yet (recon, delta, glyco) are named, not read.
 
 Themes: System (the default), Light and Dark, from the top bar or View >
 Theme; the choice is remembered on this machine. Text uses the system UI
