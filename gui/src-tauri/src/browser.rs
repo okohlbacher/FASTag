@@ -80,6 +80,9 @@ const MAX_VIEWS: usize = 4;
 const EXPORT_WINDOW: usize = 32 << 20;
 /// ... and at most this many rows.
 const EXPORT_WINDOW_ROWS: usize = 1 << 20;
+/// What an export holds besides the view: the window and its row ids,
+/// offsets and (row, slot) pairs, a read span, the writer's buffer.
+const EXPORT_TRANSIENT: usize = EXPORT_WINDOW + EXPORT_WINDOW_ROWS * 16 + CHUNK + (4 << 20);
 /// Rows closer than this are read in one span (the bytes in between are
 /// cheaper to read than another call).
 const GAP: u64 = 32 << 10;
@@ -256,7 +259,7 @@ pub(crate) const CANCELLED: &str = "cancelled";
 pub(crate) struct Rank {
     /// Ascending: the numeric block (by value, ties in file order), then the
     /// unparsable block (by bytes, ties in file order).
-    pub(crate) asc: Vec<u32>,
+    pub(crate) asc: Mapped<u32>,
     /// Rows in the numeric block (asc[..num_len]).
     pub(crate) num_len: usize,
     /// Bit i set: asc[i] starts a new run of equal keys (within its block).
@@ -409,8 +412,9 @@ fn threads() -> usize {
 }
 
 /// A growable array of plain values in an anonymous mapping of its own, for
-/// the large transients of the builds (the row offsets while they grow, the
-/// rank's 16 B per row). The allocators keep a freed block of that size
+/// the large transients of the builds and what is evicted from the cache
+/// (the row offsets while they grow, the key records of an order build, the
+/// orders themselves, an export's window buffers). The allocators keep a freed block of that size
 /// resident for reuse (macOS's large cache, glibc's arenas), so it would
 /// still count when the next build allocates: the backend peak (GUI-DESIGN
 /// 7, < 450 MB at 10M rows) would be the sum of every build's transient. A
@@ -458,6 +462,14 @@ impl<T: Copy> Mapped<T> {
         self.cap = cap;
     }
 
+    /// @p len zero values (a fresh anonymous mapping is zero-filled; only
+    /// the pages written become resident). For plain integers only.
+    pub(crate) fn zeroed(len: usize) -> Mapped<T> {
+        let mut m = Mapped::with_capacity(len);
+        m.len = len;
+        m
+    }
+
     pub(crate) fn push(&mut self, v: T) {
         if self.len == self.cap {
             self.grow(self.cap * 2);
@@ -499,6 +511,11 @@ impl<T: Copy> std::ops::DerefMut for Mapped<T> {
 impl<T: Copy> Mapped<T> {
     pub(crate) fn with_capacity(cap: usize) -> Mapped<T> {
         Mapped { v: Vec::with_capacity(cap) }
+    }
+    pub(crate) fn zeroed(len: usize) -> Mapped<T> {
+        // SAFETY: only used with plain integers, for which zero bits are a
+        // value (and vec! of a zero integer asks the heap for zeroed pages).
+        Mapped { v: vec![unsafe { std::mem::zeroed::<T>() }; len] }
     }
     pub(crate) fn push(&mut self, v: T) {
         self.v.push(v)
@@ -1147,7 +1164,7 @@ fn dict_order(t: &Typed) -> Rank {
         }
     }
     let mut next = start;
-    let mut asc = vec![0u32; n];
+    let mut asc: Mapped<u32> = Mapped::zeroed(n);
     for (row, &s) in t.spec_id.iter().enumerate() {
         let r = rank_of[s as usize] as usize;
         asc[next[r]] = row as u32;
@@ -1388,6 +1405,8 @@ pub struct Shared {
     view_build: Mutex<Option<(String, ViewSpec, Cancel)>>,
     /// Files with more rows are not typed (item 12).
     typed_max_rows: AtomicUsize,
+    /// The transient budget of an order build by another column.
+    order_budget: AtomicUsize,
     /// Running exports: id -> (token, destination).
     jobs: Mutex<HashMap<u64, (Cancel, String)>>,
     next_job: AtomicU64,
@@ -1402,6 +1421,7 @@ impl Default for Shared {
             open: Mutex::new(None),
             view_build: Mutex::new(None),
             typed_max_rows: AtomicUsize::new(TYPED_MAX_ROWS),
+            order_budget: AtomicUsize::new(ORDER_BUDGET),
             jobs: Mutex::default(),
             next_job: AtomicU64::new(0),
         }
@@ -1702,23 +1722,10 @@ fn total_key(v: f64) -> u64 {
     (b as u64) ^ (1 << 63)
 }
 
-/// The first 8 bytes of @p b, big-endian, zero-padded, and a length class:
-/// the length up to 8, 9 for a longer cell. For two cells, (prefix, class)
-/// orders as their bytes do, except two longer cells with the same first 8
-/// bytes, which compare by the rest (item 8).
-fn prefix_key(b: &[u8]) -> (u64, u32) {
-    let mut pre = [0u8; 8];
-    let k = b.len().min(8);
-    pre[..k].copy_from_slice(&b[..k]);
-    (u64::from_be_bytes(pre), if b.len() > 8 { 9 } else { b.len() as u32 })
-}
-
-/// Build the order of @p index's rows by column @p column, exactly as
-/// build_view sorts it ascending: finite numbers by value (total_cmp), then
-/// every other cell ('-', NAN, INF, anything the parser rejects) by its bytes;
-/// ties in file order. Reads only that column. Text sorts by (8-byte prefix,
-/// row), equal-prefix groups of longer cells resolved from their full bytes.
-/// @p progress gets (rows read, rows) now and then.
+/// The E-value order (D5) of @p index's rows by column @p column: build_order
+/// with room for all 8 key bytes of a number in one round (9 B per row of
+/// transients, one read of the column). @p progress gets (rows read, rows)
+/// now and then.
 pub(crate) fn build_rank(
     path: &str,
     index: &Index,
@@ -1726,104 +1733,353 @@ pub(crate) fn build_rank(
     cancel: &Cancel,
     progress: &dyn Fn(usize, usize),
 ) -> Result<Rank, String> {
+    build_order(path, index, column, index.offsets.len().saturating_mul(9), cancel, progress)
+}
+
+/// The transient budget of an order build by a column other than the
+/// E-value one (GUI-DESIGN 7: backend peak < 450 MB at 10M rows, the cache
+/// and the new order included). A build never holds less than 4 B per row.
+const ORDER_BUDGET: usize = 32 << 20;
+
+/// Groups up to this size are sorted through a buffer of (key, slot) pairs;
+/// larger ones in place (16 B per entry: the buffer stays at 4 MB).
+const SORT_BUF: usize = 1 << 18;
+
+/// The sort key of a cell for build_order: the finite numbers' total_key
+/// (8 bytes, big-endian, so bytes order as values; block 0) or the cell's
+/// bytes (block 1), as build_view's comparator sees them.
+fn order_bytes<'a>(cell: &'a [u8], num: &'a mut [u8; 8]) -> (u8, Cow<'a, [u8]>) {
+    let text = String::from_utf8_lossy(cell);
+    match numeric(&text) {
+        Some(v) => {
+            *num = total_key(v).to_be_bytes();
+            (0, Cow::Borrowed(&num[..]))
+        }
+        None => (
+            1,
+            match text {
+                Cow::Borrowed(s) => Cow::Borrowed(s.as_bytes()),
+                Cow::Owned(s) => Cow::Owned(s.into_bytes()),
+            },
+        ),
+    }
+}
+
+/// One round's slots: rows -> records of `w` key bytes from byte `off` of
+/// each cell (zero-padded) and one flag byte, block << 7 | min(bytes left,
+/// w + 1). For two cells with the same first `off` bytes, comparing records
+/// bytewise orders them as their bytes do, w + 1 meaning "more follows":
+/// a zero pad sorts before every byte but NUL, and the count settles a NUL
+/// against the end of the cell.
+struct Round {
+    off: usize,
+    w: usize,
+    /// slot * (w + 1): the records.
+    rec: Mapped<u8>,
+    /// The rows with a slot, ascending (slot k is rows[k]); None: every
+    /// row, slot = row.
+    rows: Option<Mapped<u32>>,
+}
+
+impl Round {
+    fn stride(&self) -> usize {
+        self.w + 1
+    }
+    fn rec(&self, slot: u32) -> &[u8] {
+        let s = self.stride();
+        &self.rec[slot as usize * s..slot as usize * s + s]
+    }
+}
+
+/// Fill @p round's records from one read of the column, on up to threads()
+/// threads (each its own share of the slots, read in spans of up to
+/// ROW_CAP bytes into its part of @p bufs, threads() * ROW_CAP bytes kept
+/// across the rounds: no allocation per thread). Only the rows with a slot
+/// are read (with `rows` unset, those set in @p need, or every row).
+/// @p report gets (rows read, rows) on this thread now and then.
+#[allow(clippy::too_many_arguments)]
+fn fill_round(
+    path: &str,
+    index: &Index,
+    column: usize,
+    round: &mut Round,
+    need: Option<&[u64]>,
+    bufs: &mut [u8],
+    cancel: &Cancel,
+    report: Option<&dyn Fn(usize, usize)>,
+) -> Result<(), String> {
     let n = index.offsets.len();
-    let file = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
-    let mut reader = BufReader::with_capacity(1 << 20, file);
-    reader
-        .seek(SeekFrom::Start(index.offsets.first().copied().unwrap_or(index.data_end)))
-        .map_err(|e| e.to_string())?;
-    let mut nums: Mapped<(u64, u32)> = Mapped::with_capacity(n);
-    // Unparsable cells: (prefix, length class, row); the bytes after the
-    // first 8 of the longer ones in one arena, by row.
-    let mut strs: Mapped<(u64, u32, u32)> = Mapped::with_capacity(1 << 10);
-    let mut tail_rows: Vec<u32> = Vec::new();
-    let mut tail_at: Vec<(u64, u32)> = Vec::new();
-    let mut arena: Vec<u8> = Vec::new();
-    let mut raw: Vec<u8> = Vec::new();
-    let step = (n / 100).max(65536);
-    let mut last = Instant::now();
-    for i in 0..n {
-        if i % step == 0 && i > 0 {
-            if cancel.is_cancelled() {
-                return Err(CANCELLED.into());
-            }
-            if last.elapsed().as_millis() >= 100 {
-                progress(i, n);
-                last = Instant::now();
-            }
+    let slots = round.rows.as_ref().map_or(n, |r| r.len());
+    if slots == 0 {
+        return Ok(());
+    }
+    let (off, w, s) = (round.off, round.w, round.stride());
+    let parts = threads().min(slots.div_ceil(1 << 16)).max(1);
+    let done = AtomicUsize::new(0);
+    let rows: Option<&[u32]> = round.rows.as_deref();
+    let mut rest: &mut [u8] = &mut round.rec;
+    let mut spans = bufs.chunks_mut(ROW_CAP);
+    let mut jobs: Vec<(usize, usize, &mut [u8], &mut [u8])> = Vec::with_capacity(parts);
+    for p in 0..parts {
+        let (ka, kb) = (slots * p / parts, slots * (p + 1) / parts);
+        let (mine, tail) = std::mem::take(&mut rest).split_at_mut((kb - ka) * s);
+        rest = tail;
+        jobs.push((ka, kb, mine, spans.next().expect("a span buffer per thread")));
+    }
+    let work = |ka: usize, kb: usize, out: &mut [u8], span: &mut [u8]| -> Result<(), String> {
+        if ka == kb {
+            return Ok(());
         }
-        let (start, len) = row_span(index, i);
-        let full = (index.end_of(i) - start) as usize;
-        raw.resize(len, 0);
-        reader.read_exact(&mut raw).map_err(|e| format!("cannot read {path}: {e}"))?;
-        if full > len {
-            reader.seek_relative((full - len) as i64).map_err(|e| e.to_string())?;
-        }
-        let cell = field_at(&raw, column);
-        // As fields_of: invalid UTF-8 is read lossily, and the sort sees
-        // those bytes.
-        let text = String::from_utf8_lossy(cell);
-        match numeric(&text) {
-            Some(v) => nums.push((total_key(v), i as u32)),
-            None => {
-                let b = text.as_bytes();
-                let (pre, class) = prefix_key(b);
-                if class == 9 {
-                    tail_rows.push(i as u32);
-                    tail_at.push((arena.len() as u64, (b.len() - 8) as u32));
-                    arena.extend_from_slice(&b[8..]);
+        let row_of = |k: usize| rows.map_or(k, |r| r[k] as usize);
+        let file = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
+        // span[..have] holds the file's bytes from `at`.
+        let (mut at, mut have) = (0u64, 0usize);
+        let mut num = [0u8; 8];
+        for k in ka..kb {
+            if (k - ka) % 65536 == 65535 {
+                if cancel.is_cancelled() {
+                    return Err(CANCELLED.into());
                 }
-                strs.push((pre, class, i as u32));
+                done.fetch_add(65536, Ordering::Relaxed);
             }
+            let i = row_of(k);
+            if need.is_some_and(|b| !bit(b, i)) {
+                continue;
+            }
+            let (start, len) = row_span(index, i);
+            if start < at || start + len as u64 > at + have as u64 {
+                // The next span from this row on (a capped row fits).
+                have = ((index.data_end - start) as usize).min(span.len()).max(len);
+                read_exact_at(&file, &mut span[..have], start).map_err(|e| format!("cannot read {path}: {e}"))?;
+                at = start;
+            }
+            let a = (start - at) as usize;
+            let (block, b) = order_bytes(field_at(&span[a..a + len], column), &mut num);
+            let left = &b[off.min(b.len())..];
+            let take = left.len().min(w);
+            let r = &mut out[(k - ka) * s..(k - ka + 1) * s];
+            r[..take].copy_from_slice(&left[..take]);
+            r[w] = block << 7 | left.len().min(w + 1) as u8;
+        }
+        Ok(())
+    };
+    let work = &work;
+    if jobs.len() == 1 {
+        let (ka, kb, out, span) = jobs.pop().expect("one job");
+        return work(ka, kb, out, span);
+    }
+    let me = std::thread::current();
+    let results: Vec<Result<(), String>> = std::thread::scope(|sc| {
+        let handles: Vec<_> = jobs
+            .into_iter()
+            .map(|(ka, kb, out, span)| {
+                let me = me.clone();
+                sc.spawn(move || {
+                    let r = work(ka, kb, out, span);
+                    me.unpark();
+                    r
+                })
+            })
+            .collect();
+        if let Some(progress) = report {
+            let mut last = Instant::now();
+            while !handles.iter().all(|h| h.is_finished()) {
+                std::thread::park_timeout(Duration::from_millis(20));
+                if last.elapsed().as_millis() >= 100 {
+                    progress(done.load(Ordering::Relaxed).min(n), n);
+                    last = Instant::now();
+                }
+            }
+        }
+        handles.into_iter().map(|h| h.join().unwrap_or_else(|_| Err("order build failed".into()))).collect()
+    });
+    results.into_iter().collect()
+}
+
+/// Sort the slots @p g of one group by (record, slot) (slot order is file
+/// order), then mark where @p g's subgroups of equal records start in
+/// @p run_start (from position @p at) and which of them are still open
+/// (more than one slot, bytes left in each) in @p open.
+fn sort_group(round: &Round, g: &mut [u32], at: usize, buf: &mut Vec<(u64, u32)>, run_start: &mut [u64], open: &mut [u64]) {
+    let s = round.stride();
+    let key8 = |slot: u32| -> u64 {
+        let r = round.rec(slot);
+        let mut k = [0u8; 8];
+        let m = r.len().min(8);
+        k[..m].copy_from_slice(&r[..m]);
+        u64::from_be_bytes(k)
+    };
+    if g.len() > 1 {
+        if g.len() <= SORT_BUF {
+            buf.clear();
+            buf.extend(g.iter().map(|&k| (key8(k), k)));
+            if s <= 8 {
+                buf.sort_unstable();
+            } else {
+                buf.sort_unstable_by(|a, b| a.0.cmp(&b.0).then_with(|| round.rec(a.1)[8..].cmp(&round.rec(b.1)[8..])).then(a.1.cmp(&b.1)));
+            }
+            for (x, &(_, k)) in g.iter_mut().zip(buf.iter()) {
+                *x = k;
+            }
+        } else {
+            g.sort_unstable_by(|&a, &b| round.rec(a).cmp(round.rec(b)).then(a.cmp(&b)));
         }
     }
+    let set = |bits: &mut [u64], i: usize| bits[i / 64] |= 1 << (i % 64);
+    let clear = |bits: &mut [u64], i: usize| bits[i / 64] &= !(1 << (i % 64));
+    let mut a = 0;
+    while a < g.len() {
+        let mut e = a + 1;
+        while e < g.len() && round.rec(g[e]) == round.rec(g[a]) {
+            e += 1;
+        }
+        set(run_start, at + a);
+        let more = (round.rec(g[a])[round.w] & 0x7f) as usize == round.w + 1;
+        for q in at + a..at + e {
+            if more && e - a > 1 {
+                set(open, q);
+            } else {
+                clear(open, q);
+            }
+        }
+        a = e;
+    }
+}
+
+/// What build_order holds besides the order it returns, at most: the
+/// records of a round (every row a slot), the span buffers, two bitsets and
+/// the group sort's buffer (open rounds hold no more than that).
+fn order_transient(n: usize, budget: usize) -> usize {
+    let per_row = budget.checked_div(n).map_or(0, |b| b.clamp(4, 121));
+    n * per_row + threads() * ROW_CAP + 2 * n.div_ceil(64) * 8 + SORT_BUF * 16
+}
+
+/// The order of @p index's rows by column @p column, as build_view sorts it
+/// ascending (finite numbers by value, then every other cell by its bytes,
+/// ties in file order), within about @p budget bytes of transients besides
+/// the order itself (never less than 4 B per row). An MSD radix sort over
+/// the cell bytes in rounds (item 8, GUI-DESIGN 7): each round reads the
+/// column once more for the rows whose group of equal keys is still open,
+/// takes the next bytes of each such cell (as many as the budget allows,
+/// at least 3) and sorts each open group by them. The numbers are 8 key
+/// bytes each. No cell is held whole: a re-sort by text at 10M rows needs
+/// 4 B per row for the keys and 4 B for the order.
+pub(crate) fn build_order(
+    path: &str,
+    index: &Index,
+    column: usize,
+    budget: usize,
+    cancel: &Cancel,
+    progress: &dyn Fn(usize, usize),
+) -> Result<Rank, String> {
+    let n = index.offsets.len();
+    let words = n.div_ceil(64);
+    let mut asc: Mapped<u32> = Mapped::zeroed(n);
+    let mut run_start = vec![0u64; words];
+    if n == 0 {
+        progress(0, 0);
+        return Ok(Rank { asc, num_len: 0, run_start });
+    }
+    let mut open = vec![0u64; words];
+    let mut buf: Vec<(u64, u32)> = Vec::new();
+    let mut bufs: Mapped<u8> = Mapped::zeroed(threads() * ROW_CAP);
+    // Round 0: every row; first by (block, first two key bytes), then each
+    // such bucket by its records.
+    let w = (budget / n).clamp(4, 121) - 1;
+    let mut round = Round { off: 0, w, rec: Mapped::zeroed(n * (w + 1)), rows: None };
+    fill_round(path, index, column, &mut round, None, &mut bufs, cancel, Some(progress))?;
     if cancel.is_cancelled() {
         return Err(CANCELLED.into());
     }
     progress(n, n);
-    // (key, row) pairs: equal keys fall back to the row, i.e. file order.
-    nums.sort_unstable();
-    strs.sort_unstable();
-    let tail = |row: u32| -> &[u8] {
-        let k = tail_rows.binary_search(&row).expect("a long cell has a tail");
-        let (s, l) = tail_at[k];
-        &arena[s as usize..s as usize + l as usize]
-    };
-    // Longer cells with one prefix: by the rest of their bytes, then row.
-    let mut j = 0;
-    while j < strs.len() {
-        let mut e = j + 1;
-        while e < strs.len() && strs[e].0 == strs[j].0 && strs[e].1 == strs[j].1 {
-            e += 1;
-        }
-        if strs[j].1 == 9 && e - j > 1 {
-            strs[j..e].sort_unstable_by(|a, b| tail(a.2).cmp(tail(b.2)).then(a.2.cmp(&b.2)));
-        }
-        j = e;
+    let bucket = |r: &[u8]| (((r[w] >> 7) as usize) << 16) | (r[0] as usize) << 8 | r[1] as usize;
+    let mut next = vec![0u32; (2 << 16) + 1];
+    for row in 0..n as u32 {
+        next[bucket(round.rec(row)) + 1] += 1;
     }
-    if cancel.is_cancelled() {
-        return Err(CANCELLED.into());
+    for b in 0..2 << 16 {
+        next[b + 1] += next[b];
     }
-    let mut asc = Vec::with_capacity(n);
-    let mut run_start = vec![0u64; n.div_ceil(64)];
-    let mut mark = |i: usize| run_start[i / 64] |= 1 << (i % 64);
-    for (j, (k, row)) in nums.iter().enumerate() {
-        if j == 0 || nums[j - 1].0 != *k {
-            mark(asc.len());
+    let num_len = next[1 << 16] as usize;
+    let starts = next.clone();
+    for row in 0..n as u32 {
+        let b = bucket(round.rec(row));
+        asc[next[b] as usize] = row;
+        next[b] += 1;
+    }
+    drop(next);
+    for b in 0..2 << 16 {
+        let (a, e) = (starts[b] as usize, starts[b + 1] as usize);
+        if a < e {
+            sort_group(&round, &mut asc[a..e], a, &mut buf, &mut run_start, &mut open);
         }
-        asc.push(*row);
     }
-    let num_len = asc.len();
-    drop(nums);
-    for (j, t) in strs.iter().enumerate() {
-        let new = j == 0 || {
-            let p = &strs[j - 1];
-            p.0 != t.0 || p.1 != t.1 || (t.1 == 9 && tail(p.2) != tail(t.2))
+    drop(starts);
+    let mut off = w;
+    drop(round);
+    // Later rounds: the open groups only.
+    loop {
+        if cancel.is_cancelled() {
+            return Err(CANCELLED.into());
+        }
+        let u: usize = open.iter().map(|x| x.count_ones() as usize).sum();
+        if u == 0 {
+            break;
+        }
+        let compact = u <= n / 2;
+        let mut need: Option<Vec<u64>> = None;
+        let mut round = if compact {
+            let w = (budget / u).saturating_sub(4).clamp(4, 121) - 1;
+            let mut rows: Mapped<u32> = Mapped::with_capacity(u);
+            for (q, &r) in asc.iter().enumerate() {
+                if bit(&open, q) {
+                    rows.push(r);
+                }
+            }
+            rows.sort_unstable();
+            Round { off, w, rec: Mapped::zeroed(u * (w + 1)), rows: Some(rows) }
+        } else {
+            // Every row has a slot; only the open ones are read (the
+            // others' records stay zero, and nothing reads them).
+            let mut bits = vec![0u64; words];
+            for (q, &r) in asc.iter().enumerate() {
+                if bit(&open, q) {
+                    bits[r as usize / 64] |= 1 << (r % 64);
+                }
+            }
+            need = Some(bits);
+            let w = (budget / n).clamp(4, 121) - 1;
+            Round { off, w, rec: Mapped::zeroed(n * (w + 1)), rows: None }
         };
-        if new {
-            mark(asc.len());
+        fill_round(path, index, column, &mut round, need.as_deref(), &mut bufs, cancel, None)?;
+        drop(need);
+        // Open positions: rows -> slots, each open group sorted, back.
+        if let Some(rows) = &round.rows {
+            for (q, x) in asc.iter_mut().enumerate() {
+                if bit(&open, q) {
+                    *x = rows.binary_search(x).expect("an open row has a slot") as u32;
+                }
+            }
         }
-        asc.push(t.2);
+        let mut q = 0;
+        while q < n {
+            if !bit(&open, q) {
+                q += 1;
+                continue;
+            }
+            let mut e = q + 1;
+            while e < n && bit(&open, e) && !bit(&run_start, e) {
+                e += 1;
+            }
+            sort_group(&round, &mut asc[q..e], q, &mut buf, &mut run_start, &mut open);
+            if let Some(rows) = &round.rows {
+                for x in &mut asc[q..e] {
+                    *x = rows[*x as usize];
+                }
+            }
+            q = e;
+        }
+        off += round.w;
     }
     Ok(Rank { asc, num_len, run_start })
 }
@@ -2025,7 +2281,7 @@ impl Shared {
     /// The E-value order of @p snap, now (an export, the per-spectrum rule,
     /// and the max-E-value cutoff outside the table). A build in flight is
     /// waited for, never doubled: two rank builds side by side would hold
-    /// their 16 B per row transients twice. With none in flight it is built
+    /// their 9 B per row transients twice. With none in flight it is built
     /// here, and other callers wait for this one. @p token (the caller's
     /// view or export token) stops the wait and a build made here; the
     /// slot's own token marks the build in flight only, so an open of
@@ -2150,17 +2406,20 @@ impl Shared {
         if let Some(r) = snap.cached_order(column) {
             return Ok(r);
         }
-        // Room for the new order before its build (its transients come on
-        // top of what the cache holds).
+        // Room for the new order and its build's transients (GUI-DESIGN 7:
+        // the cache and a build together stay within the cache budget; the
+        // spectrum's dictionary order holds little besides its order).
         let n = snap.index.offsets.len();
-        snap.trim(n * 4 + n.div_ceil(64) * 8, None);
+        let budget = self.order_budget.load(Ordering::Relaxed);
         let spectrum = snap.index.columns.iter().position(|c| c == "spectrum");
+        let transient = if Some(column) == spectrum { 0 } else { order_transient(n, budget) };
+        snap.trim(n * 4 + n.div_ceil(64) * 8 + transient, None);
         let typed = if Some(column) == spectrum { self.typed_now(snap, &self.typed_token(snap, mode, token))? } else { None };
         let r = Arc::new(match typed {
             Some(t) => dict_order(&t),
             None => {
                 snap.scans.fetch_add(1, Ordering::Relaxed);
-                build_rank(&snap.path, &snap.index, column, token, &|_, _| {})?
+                build_order(&snap.path, &snap.index, column, budget, token, &|_, _| {})?
             }
         });
         snap.orders_built.fetch_add(1, Ordering::SeqCst);
@@ -2591,6 +2850,7 @@ pub(crate) fn export_to(
     }
     let total = rows.len();
     let ncols = index.columns.len();
+    snap.trim(EXPORT_TRANSIENT, spec.sort.as_ref().and_then(|s| index.columns.iter().position(|c| *c == s.column)));
     let typed = snap.typed.lock().unwrap().clone();
     let mut rw = RowWriter {
         pick: &pick,
@@ -2615,7 +2875,10 @@ pub(crate) fn export_to(
         w.write_all(&head).map_err(err)?;
         progress(0, total);
         let src = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
-        let mut chunk: Vec<u8> = Vec::new();
+        // The read span (at most CHUNK, or one capped row), in a mapping of
+        // its own like the window buffers below: returned when the export
+        // ends, not kept by the allocator (GUI-DESIGN 7, backend peak).
+        let mut span: Mapped<u8> = Mapped::zeroed(CHUNK.max(ROW_CAP));
         match &rows {
             ViewRows::All(_) => {
                 let start = index.offsets.first().copied().unwrap_or(index.data_end);
@@ -2628,9 +2891,9 @@ pub(crate) fn export_to(
                             return Err(CANCELLED.into());
                         }
                         let len = ((index.data_end - at) as usize).min(CHUNK);
-                        chunk.resize(len, 0);
-                        read_exact_at(&src, &mut chunk, at).map_err(rerr)?;
-                        w.write_all(&chunk).map_err(err)?;
+                        let chunk = &mut span[..len];
+                        read_exact_at(&src, chunk, at).map_err(rerr)?;
+                        w.write_all(chunk).map_err(err)?;
                         at += len as u64;
                         progress(index.offsets.partition_point(|&o| o < at), total);
                     }
@@ -2649,8 +2912,8 @@ pub(crate) fn export_to(
                             }
                         }
                         let len = if e == r + 1 { ((index.end_of(r) - s0) as usize).min(ROW_CAP) } else { (index.end_of(e - 1) - s0) as usize };
-                        chunk.resize(len, 0);
-                        read_exact_at(&src, &mut chunk, s0).map_err(rerr)?;
+                        let chunk = &mut span[..len];
+                        read_exact_at(&src, chunk, s0).map_err(rerr)?;
                         for i in r..e {
                             let (s, l) = row_span(index, i);
                             let a = (s - s0) as usize;
@@ -2662,17 +2925,16 @@ pub(crate) fn export_to(
                 }
             }
             _ => {
-                let mut wbuf: Vec<u8> = Vec::new();
-                let mut dpos: Vec<u32> = Vec::new();
-                let mut pairs: Vec<u64> = Vec::new();
+                let mut wbuf: Mapped<u8> = Mapped::zeroed(EXPORT_WINDOW.max(ROW_CAP));
+                let mut dpos: Mapped<u32> = Mapped::zeroed(EXPORT_WINDOW_ROWS + 1);
+                let mut pairs: Mapped<u64> = Mapped::zeroed(EXPORT_WINDOW_ROWS);
                 let mut k = 0;
                 while k < total {
                     // One pass: the next view rows up to EXPORT_WINDOW bytes
                     // (ids holds view positions k.. of them).
                     let ids = rows.window(k, EXPORT_WINDOW_ROWS);
                     let ids = &ids[..];
-                    dpos.clear();
-                    dpos.push(0);
+                    dpos[0] = 0;
                     let mut bytes = 0;
                     let mut e = k;
                     while e < total && e - k < EXPORT_WINDOW_ROWS {
@@ -2681,12 +2943,13 @@ pub(crate) fn export_to(
                             break;
                         }
                         bytes += l;
-                        dpos.push(bytes as u32);
+                        dpos[e - k + 1] = bytes as u32;
                         e += 1;
                     }
-                    wbuf.resize(bytes, 0);
-                    pairs.clear();
-                    pairs.extend((k..e).map(|j| (ids[j - k] as u64) << 32 | (j - k) as u64));
+                    let pairs = &mut pairs[..e - k];
+                    for (j, p) in pairs.iter_mut().enumerate() {
+                        *p = (ids[j] as u64) << 32 | j as u64;
+                    }
                     pairs.sort_unstable();
                     let mut j = 0;
                     while j < pairs.len() {
@@ -2706,8 +2969,8 @@ pub(crate) fn export_to(
                             end = end.max(s + l as u64);
                             q += 1;
                         }
-                        chunk.resize((end - s0) as usize, 0);
-                        read_exact_at(&src, &mut chunk, s0).map_err(rerr)?;
+                        let chunk = &mut span[..(end - s0) as usize];
+                        read_exact_at(&src, chunk, s0).map_err(rerr)?;
                         for &pq in &pairs[j..q] {
                             let (r, slot) = ((pq >> 32) as usize, (pq & 0xffff_ffff) as usize);
                             let (s, l) = row_span(index, r);
@@ -2893,7 +3156,7 @@ pub mod bench {
         let col = ix.0.columns.iter().position(|c| c == RANK_COLUMN).ok_or("no evalue column")?;
         let r = build_rank(path, &ix.0, col, &Cancel::default(), &|_, _| {})?;
         let d = r.desc();
-        Ok((r.asc, d))
+        Ok((r.asc.to_vec(), d))
     }
 
     /// The first page of the E-value view through the app's own query path
