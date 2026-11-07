@@ -78,10 +78,22 @@ export default function App(): JSX.Element {
     hadJobs.current = jobs.length
   }, [jobs.length])
 
+  // A view switch that hid the focused control (Run moving to Results, a
+  // drop, Cmd+1..4, a toast's Open) would leave focus on the page body: move
+  // it to the view now shown, whose label a screen reader then announces.
+  const viewsRef = useRef<HTMLDivElement>(null)
+  const shownView = useRef(view)
+  useEffect(() => {
+    if (shownView.current === view) return
+    shownView.current = view
+    const a = document.activeElement
+    if (a && a !== document.body && !a.closest('[hidden]')) return
+    viewsRef.current?.querySelector<HTMLElement>(`.view[data-view="${view}"]`)?.focus()
+  }, [view])
+
   useFinish({
     lastRun: run.lastRun,
-    batchRunning,
-    jobs,
+    batchEnd: run.batchEnd,
     view: () => viewRef.current,
     toast: setToast,
     ended: () => setHistoryVersion((n) => n + 1)
@@ -117,9 +129,19 @@ export default function App(): JSX.Element {
   // OS file drops, routed by type (drop.rs, shell/useDrops.ts).
   const { dragOver, dropNote, dismissNote } = useDrops({ busy, jobs: jobs.length, setInputPath, session, run, setView })
 
-  // Esc outside a field: cancels a run when no question or dialog is open.
+  // Esc outside a field: dismisses a shown notice (the drop note, then the
+  // toast) first, so dismissing one never kills a run; else cancels a run
+  // when no question or dialog is open.
   const escape = (): boolean => {
     if (closeAsk || run.overwriteAsk || aboutOpen || searchOpen) return false
+    if (dropNote) {
+      dismissNote()
+      return true
+    }
+    if (toast) {
+      setToast(null)
+      return true
+    }
     if (!running || run.cancelling) return false
     run.cancelRun()
     return true
@@ -308,9 +330,9 @@ export default function App(): JSX.Element {
       </p>
 
       <div className="shell">
-        <div className="views">
+        <div className="views" ref={viewsRef}>
           {/* Hidden, not unmounted: the form, the batch and the results stay as they were. */}
-          <section className="view view-setup" data-view="setup" hidden={view !== 'setup'} aria-label="Setup">
+          <section className="view view-setup" data-view="setup" hidden={view !== 'setup'} tabIndex={-1} aria-label="Setup">
             <aside className="controls" aria-label="Run setup">
               {searchOpen && !busy && (
                 <ParamSearch
@@ -334,7 +356,7 @@ export default function App(): JSX.Element {
             </aside>
           </section>
 
-          <section className="view view-results" data-view="results" hidden={view !== 'results'} aria-label="Results">
+          <section className="view view-results" data-view="results" hidden={view !== 'results'} tabIndex={-1} aria-label="Results">
             <ResultTabs
               tab={tab}
               setTab={viewStore.setTab}
@@ -362,7 +384,7 @@ export default function App(): JSX.Element {
             </ResultTabs>
           </section>
 
-          <section className="view view-batch" data-view="batch" hidden={view !== 'batch'} aria-label="Batch">
+          <section className="view view-batch" data-view="batch" hidden={view !== 'batch'} tabIndex={-1} aria-label="Batch">
             {jobs.length > 0 ? (
               <div className="batchview">
                 <div className="batch-main">
@@ -407,7 +429,7 @@ export default function App(): JSX.Element {
             )}
           </section>
 
-          <section className="view view-history" data-view="history" hidden={view !== 'history'} aria-label="History">
+          <section className="view view-history" data-view="history" hidden={view !== 'history'} tabIndex={-1} aria-label="History">
             <HistoryView active={view === 'history'} version={historyVersion} busy={busy} onOpenResults={openResults} />
           </section>
         </div>

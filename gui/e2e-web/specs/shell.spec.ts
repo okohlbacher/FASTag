@@ -125,6 +125,34 @@ test('drops go where their type belongs', async ({ page }) => {
   await expect(page.getByRole('alert')).toContainText('notes.txt')
 })
 
+test('a view switch that hides the focused control moves focus into the view shown', async ({ page }) => {
+  await openApp(page)
+  // Where focus is: the view it sits in, or BODY.
+  const focusIn = (): Promise<string> =>
+    page.evaluate(() => {
+      const a = document.activeElement as HTMLElement | null
+      if (!a || a === document.body) return 'BODY'
+      const v = a.closest<HTMLElement>('.view')
+      return v && v.offsetParent !== null ? (v.dataset.view ?? '?') : 'hidden or outside'
+    })
+  await page.getByRole('button', { name: 'Choose file…' }).click()
+  // By keyboard: WebKit does not focus a clicked button.
+  await page.getByRole('button', { name: 'Run on run01.mzML' }).focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()
+  expect(await shownViews(page)).toEqual(['results'])
+  expect(await focusIn()).toBe('results')
+  await page.keyboard.press('ControlOrMeta+1')
+  expect(await focusIn()).toBe('setup')
+  await page.locator('.view[data-view="setup"] button:visible').first().focus()
+  await page.keyboard.press('ControlOrMeta+2')
+  expect(await shownViews(page)).toEqual(['results'])
+  expect(await focusIn()).toBe('results')
+  await e2e(page, 'drop', { spectra: ['/data/run01.mzML', '/data/run02.mzML'], batch: true })
+  await expect(page.getByRole('heading', { name: /Batch · 2 files/ })).toBeVisible()
+  expect(await focusIn()).toBe('batch')
+})
+
 // Screenshots for review: every view, both themes, both window sizes.
 for (const [w, h] of [
   [960, 600],

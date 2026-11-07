@@ -4,16 +4,15 @@
 // run neither notifies nor toasts. Every end bumps the History.
 
 import { useEffect, useRef } from 'react'
-import type { LastRun } from '../run/useRun'
-import type { BatchJob } from '../run/batch'
+import type { BatchEnd, LastRun } from '../run/useRun'
 import { baseName } from '../digestReport'
 import { duration } from '../app/format'
 import type { Toast } from './Notices'
 
 export interface FinishInputs {
   lastRun: LastRun | null
-  batchRunning: boolean
-  jobs: BatchJob[]
+  // How the last batch pass ended (runReducer.ts BatchEnd).
+  batchEnd: BatchEnd | null
   // The view shown now.
   view(): string
   toast(t: Toast): void
@@ -32,7 +31,7 @@ function notify(title: string, body: string): void {
   }
 }
 
-export function useFinish({ lastRun, batchRunning, jobs, view, toast, ended }: FinishInputs): void {
+export function useFinish({ lastRun, batchEnd, view, toast, ended }: FinishInputs): void {
   const finished = (title: string, body: string, to: Toast['to']): void => {
     ended()
     notify(title, body)
@@ -55,28 +54,23 @@ export function useFinish({ lastRun, batchRunning, jobs, view, toast, ended }: F
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastRun])
-  // A batch: what its jobs were when it started, to tell what it ran.
-  const batchStart = useRef<Map<string, string> | null>(null)
+  // A batch: what the pass ran, as runBatch counted it (a status diff
+  // misses a Retry failed whose jobs fail again).
+  const seenBatchEnd = useRef(batchEnd)
   useEffect(() => {
-    if (batchRunning) {
-      batchStart.current = new Map(jobs.map((j) => [j.input, j.status]))
-      return
-    }
-    const before = batchStart.current
-    batchStart.current = null
-    if (!before) return
-    const ran = jobs.filter((j) => j.status !== before.get(j.input))
-    if (ran.length === 0) return
-    if (ran.some((j) => j.status === 'cancelled')) {
+    if (batchEnd === seenBatchEnd.current) return
+    seenBatchEnd.current = batchEnd
+    if (!batchEnd || batchEnd.ran === 0) return
+    if (batchEnd.cancelled) {
       ended()
       return
     }
-    const failed = ran.filter((j) => j.status === 'failed').length
+    const { ran, failed } = batchEnd
     finished(
-      failed ? `Batch done, ${failed} of ${ran.length} failed` : 'Batch finished',
-      `${ran.length - failed} of ${ran.length} ${ran.length === 1 ? 'file' : 'files'} finished.`,
+      failed ? `Batch done, ${failed} of ${ran} failed` : 'Batch finished',
+      `${ran - failed} of ${ran} ${ran === 1 ? 'file' : 'files'} finished.`,
       'batch'
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [batchRunning])
+  }, [batchEnd])
 }

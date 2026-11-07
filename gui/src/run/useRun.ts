@@ -22,13 +22,14 @@ import {
   createRunState,
   queueView,
   runReducer,
+  type BatchEnd,
   type Failure,
   type OverwriteAsk,
   type Results
 } from './runReducer'
 
 export { appendLog } from './logStore'
-export type { Evidence, Failure, LastRun, Reports, Results } from './runReducer'
+export type { BatchEnd, Evidence, Failure, LastRun, Reports, Results } from './runReducer'
 
 // TOPPBase prints this epilogue on stdout at every exit, after a refusal on
 // stderr too (the two pipes are read on separate threads), so it is never the
@@ -371,6 +372,8 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     let lastDone: string | undefined
     let lastRunJob: { input: string; ok: boolean } | undefined
     const failedInputs: string[] = []
+    // What this pass ran, for the finish notice (useFinish.ts).
+    const ended: BatchEnd = { ran: 0, failed: 0, cancelled: false }
     batchCancel.current = false
     try {
       // One question for the whole batch, before its first job.
@@ -384,6 +387,9 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
         // (status, reason, time, outputs and its own log) in the queue.
         const r = await runOne(job.input, job.out, perJobOutputs(values, job.out), overwrite)
         const status: BatchJob['status'] = r.ok ? 'done' : isCancelled(r) ? 'cancelled' : 'failed'
+        ended.ran++
+        if (status === 'failed') ended.failed++
+        if (status === 'cancelled') ended.cancelled = true
         lastRunJob = { input: job.input, ok: r.ok }
         if (r.ok) lastDone = job.input
         if (status === 'failed') {
@@ -417,7 +423,8 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
           }
         })
     } finally {
-      dispatch({ type: 'BATCH_RUNNING', on: false })
+      if (batchCancel.current) ended.cancelled = true
+      dispatch({ type: 'BATCH_RUNNING', on: false, ended: ended.ran > 0 ? ended : undefined })
       batchCancel.current = false
     }
   }
@@ -540,6 +547,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   return {
     running,
     batchRunning,
+    batchEnd: state.batchEnd,
     busy: running || batchRunning,
     cancelling,
     progress:

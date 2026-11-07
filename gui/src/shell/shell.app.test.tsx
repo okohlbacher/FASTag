@@ -6,7 +6,7 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
-import { click, flush, key, pickSingle, renderApp, runButton } from '../testing/render'
+import { addBatch, click, flush, key, pickSingle, renderApp, runButton, startBatch } from '../testing/render'
 import { closeHelp, resetHelp } from '../help/link'
 
 afterEach(() => {
@@ -97,6 +97,66 @@ describe('shell: views', () => {
     await waitFor(() => expect(mock.runCalls).toHaveLength(1))
     await key({ key: 'Escape' })
     expect(mock.cancelCalls).toBe(1)
+  })
+
+  it('Esc first dismisses a drop note shown during a run, and cancels nothing', async () => {
+    const mock = installMockBridge()
+    await renderApp(mock)
+    await pickSingle(mock, '/d/a.mzML')
+    await click(runButton())
+    await waitFor(() => expect(mock.runCalls).toHaveLength(1))
+    await act(async () => mock.emitDrop({ spectra: ['/d/other.mzML'] }))
+    expect(screen.getByRole('alert').textContent).toMatch(/while FASTag runs/)
+    await key({ key: 'Escape' })
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(mock.cancelCalls).toBe(0)
+    // The next Esc, with no notice shown, cancels.
+    await key({ key: 'Escape' })
+    expect(mock.cancelCalls).toBe(1)
+  })
+
+  it('Esc dismisses the finish toast', async () => {
+    const mock = installMockBridge()
+    await renderApp(mock)
+    await pickSingle(mock, '/d/a.mzML')
+    await click(runButton())
+    await waitFor(() => expect(mock.runCalls).toHaveLength(1))
+    await click(viewButton('Setup'))
+    await finishRun(mock)
+    expect(screen.getByRole('status', { name: 'Run finished' })).toBeDefined()
+    await key({ key: 'Escape' })
+    expect(screen.queryByRole('status', { name: 'Run finished' })).toBeNull()
+  })
+
+  it('a view switch that hides the focused control moves focus into the view shown', async () => {
+    const mock = installMockBridge()
+    const c = await renderApp(mock)
+    const inShown = (): boolean => {
+      const a = document.activeElement
+      return !!a && a !== document.body && !a.closest('[hidden]') && !!a.closest('.view')
+    }
+    // Run (focused, on Setup) moves to Results.
+    await pickSingle(mock, '/d/a.mzML')
+    runButton().focus()
+    await click(runButton())
+    await waitFor(() => expect(mock.runCalls).toHaveLength(1))
+    expect(shown(c)).toEqual(['results'])
+    expect(inShown()).toBe(true)
+    expect((document.activeElement as HTMLElement).closest('.view')?.getAttribute('data-view')).toBe('results')
+    await finishRun(mock)
+    // Ctrl+2 from a focused control on Setup.
+    await click(viewButton('Setup'))
+    ;(c.querySelector('.view[data-view="setup"] button') as HTMLElement).focus()
+    await key({ key: '2', ctrlKey: true })
+    expect(current()).toBe('results')
+    expect(inShown()).toBe(true)
+    // A drop of two spectra files moves to Batch.
+    ;(c.querySelector('.view[data-view="results"]') as HTMLElement).querySelector<HTMLElement>('button, [tabindex]')?.focus()
+    await act(async () => mock.emitDrop({ spectra: ['/d/x.mzML', '/d/y.mzML'], batch: true }))
+    await flush()
+    expect(shown(c)).toEqual(['batch'])
+    expect(inShown()).toBe(true)
+    expect((document.activeElement as HTMLElement).closest('.view')?.getAttribute('data-view')).toBe('batch')
   })
 
   it('opening a results file lands on Results', async () => {
@@ -331,6 +391,80 @@ describe('shell: finish', () => {
     await flush()
     expect(mock.notifyCalls).toHaveLength(0)
     expect(screen.queryByRole('status', { name: 'Run finished' })).toBeNull()
+  })
+})
+
+// A batch's finish, watched from History: the toast offers Open batch there,
+// and History reads the record again (historyList) when a pass ends.
+describe('shell: batch finish', () => {
+  const toastText = (): string | null => screen.queryByRole('status', { name: 'Run finished' })?.textContent ?? null
+  async function pass(mock: MockBridge, outcomes: boolean[], start: () => Promise<void>): Promise<void> {
+    await start()
+    await click(viewButton('History'))
+    for (let i = 0; i < outcomes.length; i++) {
+      const n = mock.runCalls.length
+      await waitFor(() => expect(mock.runCalls.length).toBeGreaterThan(0))
+      const ok = outcomes[i]
+      await act(async () => mock.emitDone({ ok, code: ok ? 0 : 1, runId: mock.lastRunId }))
+      await flush()
+      if (i < outcomes.length - 1) await waitFor(() => expect(mock.runCalls.length).toBe(n + 1))
+    }
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Running batch…' })).toBeNull())
+    await flush()
+  }
+  const retry = (): Promise<void> => {
+    fireEvent.click(viewButton('Batch'))
+    return click(screen.getByRole('button', { name: /^Retry failed/ }))
+  }
+  async function setup(files: string[]): Promise<{ mock: MockBridge; reads: () => number }> {
+    const mock = installMockBridge()
+    await renderApp(mock)
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false)
+    const list = vi.spyOn(window.fastag, 'historyList')
+    await addBatch(mock, files)
+    return { mock, reads: () => list.mock.calls.length }
+  }
+
+  it('all done: Batch finished, notified, toast, History read again', async () => {
+    const { mock, reads } = await setup(['/d/a.mzML', '/d/b.mzML'])
+    await pass(mock, [true, true], startBatch)
+    expect(mock.notifyCalls).toEqual([{ title: 'Batch finished', body: '2 of 2 files finished.' }])
+    expect(toastText()).toMatch(/Batch finished/)
+    expect(within(screen.getByRole('status', { name: 'Run finished' })).getByRole('button', { name: 'Open batch' })).toBeDefined()
+    // Once on entering History, once more when the pass ended.
+    expect(reads()).toBeGreaterThanOrEqual(2)
+  })
+
+  it('some failed: the title counts them', async () => {
+    const { mock, reads } = await setup(['/d/a.mzML', '/d/b.mzML'])
+    await pass(mock, [false, true], startBatch)
+    expect(mock.notifyCalls).toEqual([{ title: 'Batch done, 1 of 2 failed', body: '1 of 2 files finished.' }])
+    expect(toastText()).toMatch(/Batch done, 1 of 2 failed/)
+    expect(reads()).toBeGreaterThanOrEqual(2)
+  })
+
+  it('Retry failed whose job fails again still notifies, toasts and bumps History', async () => {
+    const { mock, reads } = await setup(['/d/a.mzML', '/d/b.mzML'])
+    await pass(mock, [false, true], startBatch)
+    await click(screen.getByRole('button', { name: 'Dismiss' }))
+    const before = reads()
+    await pass(mock, [false], retry)
+    expect(mock.notifyCalls).toHaveLength(2)
+    expect(mock.notifyCalls[1]).toEqual({ title: 'Batch done, 1 of 1 failed', body: '0 of 1 file finished.' })
+    expect(toastText()).toMatch(/Batch done, 1 of 1 failed/)
+    expect(reads()).toBeGreaterThan(before)
+  })
+
+  it('Retry failed with mixed results counts both jobs it ran', async () => {
+    const { mock, reads } = await setup(['/d/a.mzML', '/d/b.mzML', '/d/c.mzML'])
+    await pass(mock, [false, false, true], startBatch)
+    await click(screen.getByRole('button', { name: 'Dismiss' }))
+    const before = reads()
+    await pass(mock, [false, true], retry)
+    expect(mock.notifyCalls).toHaveLength(2)
+    expect(mock.notifyCalls[1]).toEqual({ title: 'Batch done, 1 of 2 failed', body: '1 of 2 files finished.' })
+    expect(toastText()).toMatch(/Batch done, 1 of 2 failed/)
+    expect(reads()).toBeGreaterThan(before)
   })
 })
 
