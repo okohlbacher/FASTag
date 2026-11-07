@@ -1,0 +1,504 @@
+{
+  "bench": "browser",
+  "os": "macos",
+  "arch": "aarch64",
+  "machine": "Apple M4 Max, 128 GB",
+  "power": "AC power (pmset -g batt: \"Now drawing from 'AC Power'\", before and after); pmset -g reports no lowpowermode key, powermode 2 (High Power), so Low Power Mode is off",
+  "version": "1.16.0 (P3 PR a, branch gui/p3a-browser, version string still 1.11.1)",
+  "commit": "5cfb6c8 (on gui/p2b-batch 983073f)",
+  "date": "2026-11-07",
+  "cache": "warm page cache (each file read once first), except the cold mode",
+  "harness": "gui/src-tauri/examples/browser_bench.rs: cargo run --release --example browser_bench -- <files>; each mode a child process of its own (its peak RSS, ru_maxrss, is its own); p3 runs the app's own paths (browser::open with its Channel events, query_mode Interactive as results_query, export_to as the export job runs it)",
+  "data": "the bench-1.12.0 recipe, regenerated: the public E. coli fixture tags (gui/e2e-web/fixtures/ecoli.tags.tsv, 2,028 rows) replicated 814x, 3,255x and 4,932x (1,650,792 / 6,601,140 / 10,002,096 rows) with shifted scan numbers; every 997th/1999th/2999th E-value replaced by -, NAN, INF; in the 10M file every 3rd remaining E-value randomized (log-uniform 1e-6..1e3, seed 12). The randomized values print differently from 1.12's generator, so the 10M file is 1,023,416,946 bytes (1.12: 1,016,754,579). Generated, measured, deleted.",
+  "gates_p3_at_10M": [
+    {
+      "metric": "filter change (5 new view specs, median)",
+      "target": "< 100 ms at 10M (P3)",
+      "baseline": "99 ms: P0b typed-column prototype, bench-1.12.0.json",
+      "values": [
+        9,
+        8.9
+      ],
+      "unit": "ms",
+      "gated": true,
+      "pass": true
+    },
+    {
+      "metric": "export unsorted (every column, TSV)",
+      "target": "< 1 s per GB (P3)",
+      "baseline": "0.109 s/GB: P0b prototype byte-range copy, bench-1.12.0.json",
+      "values": [
+        0.104,
+        0.104
+      ],
+      "unit": "s/GB",
+      "gated": true,
+      "pass": true
+    },
+    {
+      "metric": "export sorted by E-value (every column, TSV; ascending and descending)",
+      "target": "< 3 s per GB (P3)",
+      "baseline": "6.307 s/GB: P0b prototype, 64k-row batches, bench-1.12.0.json",
+      "values": [
+        1.848,
+        1.881,
+        1.903,
+        1.898
+      ],
+      "unit": "s/GB",
+      "gated": true,
+      "pass": true
+    },
+    {
+      "metric": "backend peak RSS (open, index, E-value order, typed columns, 5 filters, cached page, best per spectrum, 3 exports and a filtered CSV)",
+      "target": "< 450 MB at 10M (P3)",
+      "baseline": "513 MB: P0b prototype; 443 MB: P0b first cut, bench-1.12.0.json",
+      "values": [
+        419,
+        420
+      ],
+      "unit": "MB",
+      "gated": true,
+      "pass": true
+    }
+  ],
+  "firm_at_10M": [
+    {
+      "metric": "first rows on open (head read)",
+      "target": "< 150 ms (firm, P0)",
+      "values": [
+        0.6,
+        0.6
+      ],
+      "unit": "ms",
+      "pass": true
+    },
+    {
+      "metric": "ranked view swapped in (Ranked event after the open)",
+      "target": "< 1.5 s at 10M (firm, P0)",
+      "values": [
+        1131.3,
+        1118.6
+      ],
+      "unit": "ms",
+      "pass": true
+    },
+    {
+      "metric": "cached 200-row page",
+      "target": "< 1 ms (firm)",
+      "values": [
+        0.2,
+        0.2
+      ],
+      "unit": "ms",
+      "pass": true
+    }
+  ],
+  "recorded_not_gated_at_10M": [
+    {
+      "metric": "cold-cache first rows, local SSD",
+      "target": "< 1 s (provisional: no P0 baseline was recorded, so measure and record)",
+      "gated": false,
+      "values_ms": [
+        1.3,
+        1.1
+      ],
+      "indexed_ms": [
+        426.8,
+        413.5
+      ],
+      "tail_read_gb_per_s": [
+        4.02,
+        6.48
+      ],
+      "method": "the file is copied with F_NOCACHE writes, so its pages are not in the page cache, then opened in a fresh process (results_open path: head read, then Indexed). Witness that the copy was cold: its last 256 MB read raw at 4.0-6.5 GB/s against 13.7 GB/s from a warm cache with the same reader. purge needs root and was not used."
+    },
+    {
+      "metric": "cold-cache first rows, Ceph/SMB share",
+      "target": "< 3 s (provisional)",
+      "gated": false,
+      "values_ms": null,
+      "note": "not measured: no network share mounted on this Mac"
+    },
+    {
+      "metric": "re-sort by another column, first time / cached (descending after ascending)",
+      "target": "< 1 s first time, < 50 ms after (provisional for columns other than the E-value)",
+      "gated": false,
+      "tag_ms": [
+        [
+          684.8,
+          7
+        ],
+        [
+          682.9,
+          7.8
+        ]
+      ],
+      "spectrum_ms": [
+        [
+          100.6,
+          7.2
+        ],
+        [
+          96.5,
+          7.4
+        ]
+      ],
+      "length_ms": [
+        [
+          355.8,
+          7.6
+        ],
+        [
+          348.2,
+          7.7
+        ]
+      ],
+      "peak_rss_mb": [
+        686,
+        689
+      ],
+      "note": "after the open builds (typed columns included); the peak holds three cached orders besides the E-value one (each 40 MB ascending + 40 MB descending at 10M) and the tag order transient (16 B per row): the 450 MB gate is for the workload above, not for this one"
+    },
+    {
+      "metric": "best tag per spectrum (whole view)",
+      "gated": false,
+      "values_ms": [
+        36.2,
+        35.8
+      ],
+      "rows": 636228,
+      "note": "one row per spectrum: 636,228 spectra"
+    },
+    {
+      "metric": "filtered CSV export (the cached filter view, every column)",
+      "gated": false,
+      "values_s": [
+        0.033,
+        0.032
+      ],
+      "rows": 71824
+    }
+  ],
+  "all_gated_pass": true,
+  "files": [
+    {
+      "file": "ecoli_x1m65.tags.tsv",
+      "bytes": 166293999,
+      "firstcut": {
+        "rows": 1650792,
+        "head_rows": 1000,
+        "first_rows_ms": 0.8,
+        "index_ms": 68.9,
+        "rank_asc_desc_ms": 107.1,
+        "ranked_swap_ms": 176.8,
+        "interactive_first_page_ms": 61.1,
+        "interactive_first_page_rows": 500,
+        "interactive_first_page_ranked": false,
+        "peak_rss_mb": 58
+      },
+      "typed": {
+        "rows": 1650792,
+        "spectra": 105006,
+        "build_ms": 263.1,
+        "evalue_perm_ms": 32.7,
+        "filter_ms_median5": 5.8,
+        "filter_matched": 22320,
+        "export_bytes": 166293898,
+        "export_unsorted_s_per_gb": 0.185,
+        "export_sorted_s_per_gb": 2.962,
+        "peak_rss_mb": 99,
+        "bytes_per_row_typed": 15.1
+      },
+      "p3": {
+        "head_rows": 1000,
+        "first_rows_ms": 0.6,
+        "indexed_ms": 65.1,
+        "ranked_swap_ms": 175.3,
+        "typed_ready_ms": 212.8,
+        "filter_ms": [
+          1.5,
+          1.4,
+          1.4,
+          1.4,
+          1.4
+        ],
+        "filter_ms_median5": 1.4,
+        "filter_matched": [
+          2095,
+          2556,
+          2092,
+          2326,
+          2092
+        ],
+        "cached_page_ms": 0,
+        "best_per_spectrum_ms": 3.1,
+        "best_per_spectrum_rows": 105006,
+        "export_bytes": 166293898,
+        "export_unsorted_rows": 1650792,
+        "export_unsorted_s_per_gb": 0.134,
+        "export_sorted_rows": 1650792,
+        "export_sorted_s_per_gb": 0.637,
+        "export_sorted_desc_rows": 1650792,
+        "export_sorted_desc_s_per_gb": 0.648,
+        "export_filtered_csv_rows": 2092,
+        "export_filtered_csv_s": 0.001,
+        "peak_rss_mb": 161
+      },
+      "sort": {
+        "tag": {
+          "first_ms": 98.2,
+          "desc_after_ms": 1.3
+        },
+        "spectrum": {
+          "first_ms": 13.1,
+          "desc_after_ms": 1.2
+        },
+        "length": {
+          "first_ms": 51.6,
+          "desc_after_ms": 1.1
+        },
+        "peak_rss_mb": 121
+      },
+      "cold": {
+        "head_rows": 1000,
+        "first_rows_ms": 0.7,
+        "indexed_ms": 64,
+        "tail_read_gb_per_s": 6.31
+      }
+    },
+    {
+      "file": "ecoli_x6m6.tags.tsv",
+      "bytes": 670400117,
+      "firstcut": {
+        "rows": 6601140,
+        "head_rows": 1000,
+        "first_rows_ms": 0.6,
+        "index_ms": 248.9,
+        "rank_asc_desc_ms": 442.8,
+        "ranked_swap_ms": 692.3,
+        "interactive_first_page_ms": 246.7,
+        "interactive_first_page_rows": 500,
+        "interactive_first_page_ranked": false,
+        "peak_rss_mb": 201
+      },
+      "typed": {
+        "rows": 6601140,
+        "spectra": 419895,
+        "build_ms": 1058.5,
+        "evalue_perm_ms": 187.1,
+        "filter_ms_median5": 37,
+        "filter_matched": 222553,
+        "export_bytes": 670400016,
+        "export_unsorted_s_per_gb": 0.1,
+        "export_sorted_s_per_gb": 3.491,
+        "peak_rss_mb": 293,
+        "bytes_per_row_typed": 15.1
+      },
+      "p3": {
+        "head_rows": 1000,
+        "first_rows_ms": 0.6,
+        "indexed_ms": 250.5,
+        "ranked_swap_ms": 700.2,
+        "typed_ready_ms": 857.6,
+        "filter_ms": [
+          5.0,
+          4.6,
+          4.7,
+          4.6,
+          4.6
+        ],
+        "filter_ms_median5": 4.6,
+        "filter_matched": [
+          22327,
+          22548,
+          22095,
+          22327,
+          22080
+        ],
+        "cached_page_ms": 0.2,
+        "best_per_spectrum_ms": 18.1,
+        "best_per_spectrum_rows": 419895,
+        "export_bytes": 670400016,
+        "export_unsorted_rows": 6601140,
+        "export_unsorted_s_per_gb": 0.129,
+        "export_sorted_rows": 6601140,
+        "export_sorted_s_per_gb": 1.361,
+        "export_sorted_desc_rows": 6601140,
+        "export_sorted_desc_s_per_gb": 1.34,
+        "export_filtered_csv_rows": 22080,
+        "export_filtered_csv_s": 0.018,
+        "peak_rss_mb": 320
+      },
+      "sort": {
+        "tag": {
+          "first_ms": 390.3,
+          "desc_after_ms": 4.5
+        },
+        "spectrum": {
+          "first_ms": 62.8,
+          "desc_after_ms": 4.6
+        },
+        "length": {
+          "first_ms": 211.1,
+          "desc_after_ms": 4.1
+        },
+        "peak_rss_mb": 439
+      },
+      "cold": {
+        "head_rows": 1000,
+        "first_rows_ms": 1.1,
+        "indexed_ms": 265.9,
+        "tail_read_gb_per_s": 6.54
+      }
+    },
+    {
+      "file": "ecoli_x10m.tags.tsv",
+      "bytes": 1023416946,
+      "firstcut": {
+        "rows": 10002096,
+        "head_rows": 1000,
+        "first_rows_ms": 0.6,
+        "index_ms": 383.4,
+        "rank_asc_desc_ms": 743.7,
+        "ranked_swap_ms": 1127.7,
+        "interactive_first_page_ms": 387.3,
+        "interactive_first_page_rows": 500,
+        "interactive_first_page_ranked": false,
+        "peak_rss_mb": 331
+      },
+      "typed": {
+        "rows": 10002096,
+        "spectra": 636228,
+        "build_ms": 1666.8,
+        "evalue_perm_ms": 356.1,
+        "filter_ms_median5": 98.5,
+        "filter_matched": 723843,
+        "export_bytes": 1023416845,
+        "export_unsorted_s_per_gb": 0.101,
+        "export_sorted_s_per_gb": 5.93,
+        "peak_rss_mb": 449,
+        "bytes_per_row_typed": 15.1
+      },
+      "p3": {
+        "head_rows": 1000,
+        "first_rows_ms": 0.6,
+        "indexed_ms": 393.9,
+        "ranked_swap_ms": 1131.3,
+        "typed_ready_ms": 1391.2,
+        "filter_ms": [
+          10.2,
+          9.0,
+          9.0,
+          8.9,
+          8.9
+        ],
+        "filter_ms_median5": 9,
+        "filter_matched": [
+          72694,
+          73319,
+          71770,
+          72643,
+          71824
+        ],
+        "cached_page_ms": 0.2,
+        "best_per_spectrum_ms": 36.2,
+        "best_per_spectrum_rows": 636228,
+        "export_bytes": 1023416845,
+        "export_unsorted_rows": 10002096,
+        "export_unsorted_s_per_gb": 0.104,
+        "export_sorted_rows": 10002096,
+        "export_sorted_s_per_gb": 1.848,
+        "export_sorted_desc_rows": 10002096,
+        "export_sorted_desc_s_per_gb": 1.881,
+        "export_filtered_csv_rows": 71824,
+        "export_filtered_csv_s": 0.033,
+        "peak_rss_mb": 419
+      },
+      "sort": {
+        "tag": {
+          "first_ms": 684.8,
+          "desc_after_ms": 7
+        },
+        "spectrum": {
+          "first_ms": 100.6,
+          "desc_after_ms": 7.2
+        },
+        "length": {
+          "first_ms": 355.8,
+          "desc_after_ms": 7.6
+        },
+        "peak_rss_mb": 686
+      },
+      "cold": {
+        "head_rows": 1000,
+        "first_rows_ms": 1.3,
+        "indexed_ms": 426.8,
+        "tail_read_gb_per_s": 4.02
+      },
+      "repeat_run": {
+        "p3": {
+          "head_rows": 1000,
+          "first_rows_ms": 0.6,
+          "indexed_ms": 388.6,
+          "ranked_swap_ms": 1118.6,
+          "typed_ready_ms": 1372.8,
+          "filter_ms": [
+            9.2,
+            8.9,
+            8.9,
+            8.9,
+            8.8
+          ],
+          "filter_ms_median5": 8.9,
+          "filter_matched": [
+            72694,
+            73319,
+            71770,
+            72643,
+            71824
+          ],
+          "cached_page_ms": 0.2,
+          "best_per_spectrum_ms": 35.8,
+          "best_per_spectrum_rows": 636228,
+          "export_bytes": 1023416845,
+          "export_unsorted_rows": 10002096,
+          "export_unsorted_s_per_gb": 0.104,
+          "export_sorted_rows": 10002096,
+          "export_sorted_s_per_gb": 1.903,
+          "export_sorted_desc_rows": 10002096,
+          "export_sorted_desc_s_per_gb": 1.898,
+          "export_filtered_csv_rows": 71824,
+          "export_filtered_csv_s": 0.032,
+          "peak_rss_mb": 420
+        },
+        "sort": {
+          "tag": {
+            "first_ms": 682.9,
+            "desc_after_ms": 7.8
+          },
+          "spectrum": {
+            "first_ms": 96.5,
+            "desc_after_ms": 7.4
+          },
+          "length": {
+            "first_ms": 348.2,
+            "desc_after_ms": 7.7
+          },
+          "peak_rss_mb": 689
+        },
+        "cold": {
+          "head_rows": 1000,
+          "first_rows_ms": 1.1,
+          "indexed_ms": 413.5,
+          "tail_read_gb_per_s": 6.48
+        },
+        "firstcut": {
+          "ranked_swap_ms": 1111.1,
+          "peak_rss_mb": 331
+        }
+      }
+    }
+  ],
+  "notes": "p3: open -> first rows (head read) -> Indexed -> Ranked -> typed columns ready; five filter changes sorted by E-value (max E-value 100, min length 3, spectrum contains scan=1<k>); a cached page; the best tag per spectrum; export unsorted, sorted ascending and descending (every column, TSV) and the filtered view as CSV. firstcut and typed are the P0b modes (typed: the bench-only prototype, whose peak is now 449 MB because the index it reuses keeps its offsets in a mapping). Filters read nothing from the file once the typed columns exist; the max-E-value cutoff uses the E-value order (no f64 column)."
+}
