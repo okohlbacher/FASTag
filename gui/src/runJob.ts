@@ -15,9 +15,10 @@
 //    failed exit after a requested cancel counts as cancelled (a killed
 //    child's exit code says nothing; Windows reports 1).
 
-import type { FastagApi, LogLine, ResolvedOutputs, RunEvent, RunResult, RunStarted } from './types'
+import type { FastagApi, ResolvedOutputs, RunEvent, RunResult, RunStarted } from './types'
 
-/// The log a job keeps: its last MAX_LOG lines.
+/// The log a job keeps: its last MAX_LOG lines (in its log store,
+/// run/logStore.ts; this job only counts them).
 export const MAX_LOG = 5000
 
 export interface Progress {
@@ -36,9 +37,10 @@ export interface Job {
   outputs?: ResolvedOutputs
   command?: string[]
   result?: RunResult
-  log: LogLine[]
-  // Lines dropped from the front of log to keep it at MAX_LOG.
-  dropped: number
+  // Log lines received. The lines themselves go to onChange with their
+  // action and from there to the job's log store (run/logStore.ts), the
+  // only copy of the log (P2a PR r).
+  logLines: number
   progress: Progress | null
   phase: string | null
   cancelRequested: boolean
@@ -58,7 +60,7 @@ export function newJobId(): string {
 }
 
 export function newJob(id: string): Job {
-  return { id, status: 'starting', replied: false, log: [], dropped: 0, progress: null, phase: null, cancelRequested: false }
+  return { id, status: 'starting', replied: false, logLines: 0, progress: null, phase: null, cancelRequested: false }
 }
 
 /// The result is known and so is the reply: nothing more will change.
@@ -99,9 +101,7 @@ export function jobReducer(j: Job, a: JobAction): Job {
       switch (e.kind) {
         case 'log': {
           if (e.lines.length === 0) return j
-          const all = j.log.concat(e.lines)
-          const cut = Math.max(0, all.length - MAX_LOG)
-          return { ...j, log: cut ? all.slice(cut) : all, dropped: j.dropped + cut }
+          return { ...j, logLines: j.logLines + e.lines.length }
         }
         case 'progress':
           return { ...j, progress: { done: e.done, total: e.total, ratePerSec: e.ratePerSec ?? null, etaSec: e.etaSec ?? null } }

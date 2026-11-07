@@ -189,13 +189,18 @@ async function renderApp(): Promise<HTMLElement> {
 }
 
 describe('help: in the app', () => {
-  it('the Help button opens Getting started; Back returns to the run view with focus on the Help button', async () => {
+  // P2a: Help is a side panel beside the view (GUI-DESIGN 2), no longer a
+  // page in place of it; "Close Help" replaces "Back to FASTag".
+  const setupView = (c: HTMLElement): HTMLElement => c.querySelector('.view[data-view="setup"]') as HTMLElement
+
+  it('the Help button opens Getting started beside the view; Close Help returns focus to the Help button', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     const c = await renderApp()
     const helpBtn = screen.getByRole('button', { name: 'Help' })
     helpBtn.focus()
     await click(helpBtn)
-    expect((c.querySelector('.layout') as HTMLElement).hidden).toBe(true)
+    expect(screen.getByRole('complementary', { name: 'Help' })).toBeDefined()
+    expect(setupView(c).hidden).toBe(false)
     const nav = screen.getByRole('navigation', { name: 'Help pages' })
     expect(nav.querySelector('[aria-current="page"]')?.textContent).toBe('Getting started')
     expect(document.activeElement?.id).toBe('help-page-h')
@@ -211,11 +216,12 @@ describe('help: in the app', () => {
     for (const svg of c.querySelectorAll('.help-page svg[role="img"]')) {
       expect(document.getElementById(svg.getAttribute('aria-labelledby')!)?.tagName).toBe('title')
     }
-    await click(screen.getByRole('button', { name: 'Back to FASTag' }))
+    await click(screen.getByRole('button', { name: 'Close Help' }))
     await act(async () => {
       vi.runAllTimers()
     })
-    expect((c.querySelector('.layout') as HTMLElement).hidden).toBe(false)
+    expect(screen.queryByRole('complementary', { name: 'Help' })).toBeNull()
+    expect(setupView(c).hidden).toBe(false)
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Help' }))
     vi.useRealTimers()
   })
@@ -235,7 +241,7 @@ describe('help: in the app', () => {
       fireEvent.keyDown(window, { key: 'Escape' })
     })
     expect(screen.queryByRole('navigation', { name: 'Help pages' })).toBeNull()
-    expect((c.querySelector('.layout') as HTMLElement).hidden).toBe(false)
+    expect(setupView(c).hidden).toBe(false)
   })
 
   it('? with Help open keeps the place; Back returns to the last place', async () => {
@@ -276,7 +282,7 @@ describe('help: in the app', () => {
     await click(screen.getByRole('button', { name: 'Glossary' }))
     expect(document.activeElement?.id).toBe('help-page-h')
     expect(document.activeElement?.textContent).toBe('Glossary')
-    await click(screen.getByRole('button', { name: 'Back to FASTag' }))
+    await click(screen.getByRole('button', { name: 'Close Help' }))
     expect((screen.getByLabelText('Tag length tag_length') as HTMLInputElement).value).toBe('5')
   })
 

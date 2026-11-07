@@ -9,7 +9,7 @@ import App from '../App'
 import { perJobOutputs } from '../app/paths'
 import { SPECTRA } from '../api'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
-import { addBatch, click, logText, pickSingle, renderApp, runButton, startBatch } from '../testing/render'
+import { addBatch, click, goTo, logText, pickSingle, renderApp, runButton, startBatch } from '../testing/render'
 import { applyLastUsed, formValue } from '../testing/lastUsed'
 
 // fireEvent wraps only the synchronous handler in act; the async continuations
@@ -222,6 +222,7 @@ describe('run/batch orchestration', () => {
     await pickSingle(mock, '/d/a.mzML')
     expect(runButton()).toHaveProperty('disabled', false)
     await click(runButton())
+    await goTo('setup') // the run bar and the form (P2a: a run moves to Results)
     expect(screen.getByRole('button', { name: 'Running…' })).toHaveProperty('disabled', true)
     // The form is locked mid-run: the input controls give way to a summary.
     expect(screen.queryByRole('button', { name: /^(Add files for a batch|Add)…$/ })).toBeNull()

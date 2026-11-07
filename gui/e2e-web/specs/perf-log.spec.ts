@@ -16,10 +16,23 @@ import { test, expect, openApp } from './fixtures'
 // message, without it (the global fastag:log events before P1a) it is 500
 // log events in one task, as the backend sent them then.
 
+// mean_ms (P2a PR r): WebKit's performance.now() is coarsened to 1 ms, so
+// its median and p95 are whole milliseconds and cannot show a time under
+// 1 ms. Each sample starts at a random phase of that 1 ms grid (after a
+// frame and a task), so the mean of the coarsened samples still estimates
+// the true mean; the gate's statistics stay median and p95 (section 7).
+//
+// batch_x10 is back-to-back, no frame between: ten 500-line batches in a
+// row, each to its commit, divided by ten. No rendering update runs between
+// them (each batch's effect cleanup cancels the previous frame's scroll, and
+// there is no content-visibility pass, style or paint per frame), so it is
+// not a per-frame-batch time and is not evidence for the gate; it is
+// recorded only to compare builds.
 interface Stats {
   n: number
   median_ms: number
   p95_ms: number
+  mean_ms: number
 }
 
 test('the log drawer commits a line and a 500-line batch quickly with 5,000 lines in it', async ({ page, browserName }) => {
@@ -61,11 +74,24 @@ test('the log drawer commits a line and a 500-line batch quickly with 5,000 line
       await frame()
       return dt
     }
-    const stats = (xs: number[]): { n: number; median_ms: number; p95_ms: number } => {
+    // The same without the frame after it: back-to-back, no frame between
+    // (batch_x10; not a per-frame-batch time).
+    const commitNow = (lines: string[]): Promise<void> =>
+      new Promise<void>((res) => {
+        const mo = new MutationObserver(() => {
+          mo.disconnect()
+          void pre.scrollHeight
+          res()
+        })
+        mo.observe(pre, { childList: true, subtree: true, characterData: true })
+        emit(lines)
+      })
+    const stats = (xs: number[]): Stats => {
       const s = xs.slice().sort((a, b) => a - b)
       const q = (p: number): number => s[Math.min(s.length - 1, Math.floor(p * s.length))]
       const round = (x: number): number => Math.round(x * 100) / 100
-      return { n: s.length, median_ms: round(q(0.5)), p95_ms: round(q(0.95)) }
+      const mean = s.reduce((a, b) => a + b, 0) / s.length
+      return { n: s.length, median_ms: round(q(0.5)), p95_ms: round(q(0.95)), mean_ms: round(mean) }
     }
     let k = 0
     const lines = (n: number): string[] =>
@@ -79,11 +105,20 @@ test('the log drawer commits a line and a 500-line batch quickly with 5,000 line
     for (let i = 0; i < 200; i++) perLine.push(await commit(lines(1)))
     const perBatch: number[] = []
     for (let i = 0; i < 60; i++) perBatch.push(await commit(lines(500)))
+    const perTen: number[] = []
+    for (let g = 0; g < 12; g++) {
+      const batches = Array.from({ length: 10 }, () => lines(500))
+      const t0 = performance.now()
+      for (const b of batches) await commitNow(b)
+      perTen.push((performance.now() - t0) / 10)
+      await frame()
+    }
     return {
       batched,
       domLines: (pre.textContent ?? '').split('\n').length,
       line: stats(perLine.slice(20)),
-      batch: stats(perBatch.slice(10))
+      batch: stats(perBatch.slice(10)),
+      batch_x10: stats(perTen.slice(2))
     }
   })
 
@@ -91,6 +126,7 @@ test('the log drawer commits a line and a 500-line batch quickly with 5,000 line
   console.log(`log drawer perf ${JSON.stringify(out)}`)
   expect(r.line.n).toBe(180)
   expect(r.batch.n).toBe(50)
+  expect(r.batch_x10.n).toBe(10)
   expect(Number.isFinite(r.batch.median_ms)).toBe(true)
   const file = process.env.PERF_OUT
   if (file) writeFileSync(`${file}.${browserName}.json`, JSON.stringify(out, null, 2))

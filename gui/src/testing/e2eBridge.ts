@@ -21,10 +21,15 @@
 //               E-value is served in file order (ranked: false), as
 //               browser.rs does
 //
+// &start=defaults starts the session from FASTag's defaults instead of the
+// task the app lands on (D1, "Characterize a run"): the specs written
+// before P2a PR u check what a run from the defaults sends.
+//
 // window.__fastagE2E gives the specs the mock and a few controls.
 
 import { installMockBridge, type MockBridge } from './mockBridge'
-import type { BrowserEvent, ResultsPage, ResultsView, RunEvent, RunStarted } from '../types'
+import { DEFAULTS, type Origin } from '../setup/tasks'
+import type { BrowserEvent, DropRoute, ResultsPage, ResultsView, RunEvent, RunStarted } from '../types'
 import ecoliTags from '../../e2e-web/fixtures/ecoli.tags.tsv?raw'
 import digestTsv from '../fixtures/digest.tsv?raw'
 import labelTsv from '../fixtures/label.tsv?raw'
@@ -39,6 +44,9 @@ export interface E2EControls {
   mock: MockBridge
   /// The backend's close guard asking (a close or quit while busy).
   requestClose(what: 'close' | 'quit'): void
+  /// An OS file drop as drop.rs routes it, and a native menu click.
+  drop(route: Partial<DropRoute>): void
+  menu(action: string): void
   /// rank fixture: progress of the E-value order, and its end (Ranked).
   rankProgress(done: number, total: number): void
   finishRanking(): void
@@ -84,8 +92,10 @@ export function rankOrder(cells: string[], desc: boolean): number[] {
   return [...nums, ...strs]
 }
 
-export function installE2EBridge(): void {
-  const fixture = new URLSearchParams(window.location.search).get('fixture') ?? 'default'
+/// Installs the bridge; returns where the session starts (?start=).
+export function installE2EBridge(): Origin | undefined {
+  const query = new URLSearchParams(window.location.search)
+  const fixture = query.get('fixture') ?? 'default'
   const mock = installMockBridge()
   mock.binaryInfo = { bin: '/e2e/FASTag', source: 'env', ok: true, version: '1.11.0', detail: 'e2e fixture: no CLI' }
   const tags = parseTsv(ecoliTags)
@@ -246,10 +256,13 @@ export function installE2EBridge(): void {
     fixture,
     mock,
     requestClose: (what) => mock.emitCloseRequested(what),
+    drop: (route) => mock.emitDrop(route),
+    menu: (action) => mock.emitMenu(action),
     rankProgress: (done, total) => rankCb?.({ kind: 'rankProgress', generation: 1, done, total }),
     finishRanking: () => {
       ranked = true
       rankCb?.({ kind: 'ranked', generation: 1, column: 'evalue' })
     }
   }
+  return query.get('start') === 'defaults' ? DEFAULTS : undefined
 }

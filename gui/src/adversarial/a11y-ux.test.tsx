@@ -11,7 +11,7 @@ import ParamField from '../ParamField'
 import { PARAM_BY_NAME } from '../paramLayout'
 import { parseReport } from '../digestReport'
 import { installMockBridge } from '../testing/mockBridge'
-import { click, flush, renderApp } from '../testing/render'
+import { click, flush, goTo, renderApp } from '../testing/render'
 import digestTsv from '../fixtures/digest.tsv?raw'
 import labelTsv from '../fixtures/label.tsv?raw'
 
@@ -87,7 +87,9 @@ describe('a11y: run feedback in App', () => {
     // ...but the collapsed log is display:none, outside the accessibility
     // tree. The run bar's status is not hidden and says what happened.
     expect(log.hidden).toBe(true)
-    const status = container.querySelector('.runbar > [role="status"]') as HTMLElement
+    // P2a: the run's status sits in the app frame, outside the four views,
+    // so it is announced whichever view is shown (was: in the run bar).
+    const status = container.querySelector('.app > [role="status"]') as HTMLElement
     expect(status.closest('[hidden]')).toBeNull()
     expect(status.textContent).toBe('Run started on a.mzML.')
     await act(async () => { mock.emitLog('42092 MS2 spectra, 1130228 tags') })
@@ -299,6 +301,7 @@ describe('UX: a known-failing species run stays one click away', () => {
     await click(screen.getByLabelText('Species species'))
     expect((screen.getByRole('button', { name: /^Run( on .+)?$/ }) as HTMLButtonElement).disabled).toBe(true)
     // Default tab is Tags: the reason is beside Run, not only in the Species tab.
+    await goTo('results')
     expect(screen.getByRole('tab', { selected: true }).textContent).toBe('Tags')
     expect(container.querySelector('.controls')!.textContent).toMatch(/cannot reach the species index k = 7/)
     await click(screen.getByRole('tab', { name: /Species/ }))
