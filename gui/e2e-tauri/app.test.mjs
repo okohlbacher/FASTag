@@ -95,7 +95,7 @@ test('run: Choose file, Run, and the table shows what the CLI wrote', { timeout:
     fullRows = lines(out) - 1
     assert.ok(fullRows > 0, 'the run wrote no tags')
     assert.equal(count(m[2]), fullRows, 'the table total is not the row count of the file')
-    const first = await s.exec("const r = document.querySelector('table tbody tr'); return r ? r.innerText : ''")
+    const first = await s.exec("const r = document.querySelector('.rt-rows [role=row]'); return r ? r.innerText : ''")
     assert.match(first, /scan=/)
     if (MODE === 'stub') assert.equal(fullRows, 1)
   }))
@@ -152,7 +152,7 @@ test('table: time to first rows on a generated 1M-row file (recorded)', { timeou
     const open = await s.button('Open a tags TSV…')
     const t0 = Date.now()
     await s.click(open)
-    await until('the first row', () => s.exec("return !!document.querySelector('table tbody tr')"), 60000, 10)
+    await until('the first row', () => s.exec("return !!document.querySelector('.rt-rows [role=row]')"), 60000, 10)
     const firstRows = Date.now() - t0
     await s.waitText(/Showing 1,000,000 of 1,000,000/, 120000)
     gates.firstRowsMs1M = firstRows
