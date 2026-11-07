@@ -30,6 +30,8 @@ export interface SdrfPanelProps {
   busy: boolean
   outDir: string | null
   onShow(input: string): void
+  /// The files no export may write (App's list; default: the loaded SDRF).
+  protect?: string[]
 }
 
 /// The mark and word of a field's state, as the table and its legend show them.
@@ -110,7 +112,7 @@ function Row({ j, busy, onShow }: { j: JobComparison; busy: boolean; onShow(inpu
   )
 }
 
-export default function SdrfPanel({ sdrf, busy, outDir, onShow }: SdrfPanelProps): JSX.Element {
+export default function SdrfPanel({ sdrf, busy, outDir, onShow, protect }: SdrfPanelProps): JSX.Element {
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null)
   const { file, comparison: c } = sdrf
   const mismatches = c ? c.jobs.reduce((n, j) => n + (j.verdict.state === 'checked' ? j.verdict.mismatches.length : 0), 0) : 0
@@ -123,12 +125,13 @@ export default function SdrfPanel({ sdrf, busy, outDir, onShow }: SdrfPanelProps
     const stem = baseName(file.path).replace(/\.(tsv|txt|sdrf)$/i, '').replace(/\.sdrf$/i, '')
     const dest = await window.fastag.saveFile(`${dir}${stem}.corrections.tsv`, ['tsv'])
     if (!dest) return
-    if (samePath(dest, file.path)) {
+    const guard = protect ?? [file.path]
+    if (guard.some((p) => samePath(dest, p))) {
       setNote({ ok: false, text: `Not written: ${dest} is the loaded SDRF, which is never changed. Choose another name for the corrections.` })
       return
     }
     try {
-      await window.fastag.writeSummary(dest, correctionsTsv(c), [file.path])
+      await window.fastag.writeSummary(dest, correctionsTsv(c), guard)
       setNote({ ok: true, text: `${mismatches} ${mismatches === 1 ? 'correction' : 'corrections'} written to ${dest}. The SDRF was not changed.` })
     } catch (e) {
       setNote({ ok: false, text: `Could not write the corrections: ${e instanceof Error ? e.message : String(e)}` })

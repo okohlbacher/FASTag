@@ -7,6 +7,7 @@ import { useState, type JSX } from 'react'
 import { dirName } from '../app/paths'
 import { folderPath } from './batch'
 import type { SdrfComparison } from '../sdrf/compare'
+import { samePath } from '../sdrf/SdrfPanel'
 import { COLUMN_LABEL, majorityWords, MIN_CALLS, SUMMARY_COLUMNS, summaryTsv, type Summary } from './batchSummary'
 
 export interface SummaryTableProps {
@@ -19,6 +20,9 @@ export interface SummaryTableProps {
   // The SDRF comparison (P4), when an SDRF is loaded: an SDRF column with
   // each job's verdict (the SDRF panel has the fields).
   sdrf?: SdrfComparison | null
+  // The files the export must never write (the loaded SDRF, App's list):
+  // refused here and passed to the backend, which refuses them too.
+  protect?: string[]
 }
 
 const count = (n: number | null): string => (n == null ? '—' : n.toLocaleString('en-US'))
@@ -34,7 +38,7 @@ function SdrfCell({ v }: { v: SdrfComparison['jobs'][number]['verdict'] | undefi
   )
 }
 
-export default function SummaryTable({ summary, busy, outDir, onShow, sdrf }: SummaryTableProps): JSX.Element {
+export default function SummaryTable({ summary, busy, outDir, onShow, sdrf, protect = [] }: SummaryTableProps): JSX.Element {
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null)
   // Each cell's cutoff or caveat: always in the cell's text for a screen
   // reader, shown under its value on request (they make rows tall).
@@ -47,8 +51,12 @@ export default function SummaryTable({ summary, busy, outDir, onShow, sdrf }: Su
     const dir = outDir ? folderPath(outDir) : rows[0] ? dirName(rows[0].input) : ''
     const dest = await window.fastag.saveFile(`${dir}batch-summary.tsv`, ['tsv'])
     if (!dest) return
+    if (protect.some((p) => samePath(dest, p))) {
+      setNote({ ok: false, text: `Not written: ${dest} is the loaded SDRF, which is never changed. Choose another name for the summary.` })
+      return
+    }
     try {
-      await window.fastag.writeSummary(dest, summaryTsv(summary))
+      await window.fastag.writeSummary(dest, summaryTsv(summary), protect.length ? protect : undefined)
       setNote({ ok: true, text: `Summary of ${rows.length} ${rows.length === 1 ? 'job' : 'jobs'} written to ${dest}.` })
     } catch (e) {
       setNote({ ok: false, text: `Could not write the summary: ${e instanceof Error ? e.message : String(e)}` })

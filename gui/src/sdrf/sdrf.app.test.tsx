@@ -131,6 +131,29 @@ describe('the SDRF comparison in the Batch view', () => {
     expect(mock.summaryProtect).toEqual([[SDRF_PATH]])
   })
 
+  it('the batch summary export refuses the loaded SDRF too: its bytes unchanged, the backend told to protect it', async () => {
+    const mock = await batchOfThree()
+    mock.nextPickSdrf = SDRF_PATH
+    await click(screen.getByRole('button', { name: 'Load SDRF…' }))
+    await waitFor(() => expect(sdrfTable()).toBeDefined())
+    const before = Array.from(mock.sdrfFiles[SDRF_PATH])
+    for (const pick of [SDRF_PATH, '/proj/./Gate-Batch.SDRF.tsv']) {
+      mock.nextPickOutput = pick
+      await click(screen.getByRole('button', { name: 'Export summary TSV…' }))
+      expect((await screen.findByRole('alert')).textContent).toBe(
+        `Not written: ${pick} is the loaded SDRF, which is never changed. Choose another name for the summary.`
+      )
+    }
+    expect(mock.summaryWrites).toEqual([])
+    expect(Array.from(mock.sdrfFiles[SDRF_PATH])).toEqual(before)
+    // Another name is written, and the backend is told to protect the SDRF.
+    mock.nextPickOutput = '/proj/batch-summary.tsv'
+    await click(screen.getByRole('button', { name: 'Export summary TSV…' }))
+    await waitFor(() => expect(mock.summaryWrites).toHaveLength(1))
+    expect(mock.summaryWrites[0].dest).toBe('/proj/batch-summary.tsv')
+    expect(mock.summaryProtect).toEqual([[SDRF_PATH]])
+  })
+
   it('a dropped SDRF is loaded and lands on Batch', async () => {
     const mock = await batchOfThree()
     await goTo('setup')

@@ -235,16 +235,24 @@ lines (the GUI keeps the last 5000) and with them the "Modifications:" line is
 a no call, not "none". The organism is matched by NCBI taxid through the
 `nodes.dmp`/`names.dmp` next to the index: a genus call "Homo" against an SDRF
 "Homo sapiens" is consistent at genus; so is an SDRF taxon above genus that
-contains the call ("Hominidae", "Bacteria") and an SDRF genus the species
-report also calls present, ranked below the top one; an organism the taxonomy
-does not hold is "not checkable". The summary gains an SDRF column, and
-**Export SDRF corrections TSV…** writes one line per difference with the
+contains the call ("Hominidae", "Bacteria"). Only the call (the top genus)
+counts: an SDRF organism the species report calls present only below it (a
+keratin "Homo" under a yeast call) differs, unless the SDRF lists several
+organisms for the run (a mixed sample), where it is "~ present, not called"
+and no correction; an organism the taxonomy does not hold is "not
+checkable". A label call joins its labels with "+" (TMT+SILAC): the field
+matches when every SDRF label is one of them; an SDRF iTRAQ8plex against a
+TMTpro call is "not checkable" (the same mass, as the CLI says), and an
+instrument given by accession only (no NT=) is "not checkable" too. A cell
+that opens with a quote holds a line break only when its row then has the
+header's width; otherwise it is read as written, up to the next tab. The
+summary gains an SDRF column, and **Export SDRF corrections TSV…** writes one line per difference with the
 report row it came from; it is a function of the SDRF, the reports and the
 taxonomy alone (the log only feeds the modifications, a run setting that is
 never written there; pinned by a golden test), so the same TSV follows from a
 cluster run's reports. The SDRF is read byte for byte and never
-rewritten: the export refuses the SDRF's own path, in the panel and in the
-backend (`summary_write`'s protect list, which also catches another spelling
+rewritten: both exports of the Batch view (the corrections and the batch
+summary) refuse the SDRF's own path, in the panel and in the backend (`summary_write`'s protect list, which also catches another spelling
 or a link to the same file).
 
 Setup starts from a task: **Characterize a run** (the default: species with

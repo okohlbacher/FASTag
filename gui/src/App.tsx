@@ -99,6 +99,11 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
     nodes: typeof values['taxonomy_nodes'] === 'string' ? values['taxonomy_nodes'] : undefined,
     names: typeof values['taxonomy_names'] === 'string' ? values['taxonomy_names'] : undefined
   })
+  // The files no export may write (the loaded SDRF): every writeSummary
+  // caller in the Batch view passes this one list, and the backend refuses
+  // a destination that is one of them (report.rs write_summary).
+  const sdrfPath = sdrf.file?.path ?? null
+  const writeProtect = useMemo(() => (sdrfPath ? [sdrfPath] : []), [sdrfPath])
   // The checks before a run (GUI-DESIGN 3 S1, P2b): from the CLI's metadata
   // probe when it has one, and the form.
   const inspector = useInspector({ input, values, binOk: !!bin?.ok })
@@ -665,6 +670,7 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
                     busy={busy}
                     outDir={run.outDir}
                     sdrf={sdrf.comparison}
+                    protect={writeProtect}
                     onShow={(input) => {
                       const j = jobs.find((x) => x.input === input)
                       if (j) showBatchJob(j)
@@ -672,6 +678,7 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
                   />
                   <SdrfPanel
                     sdrf={sdrf}
+                    protect={writeProtect}
                     busy={busy}
                     outDir={run.outDir}
                     onShow={(input) => {
