@@ -20,6 +20,22 @@
 //               spec calls finishRanking(); until then a query sorted by
 //               E-value is served in file order (ranked: false), as
 //               browser.rs does
+//   iontrap-probe  P2b: the CLI has -probe_input, and run01.mzML probes as
+//               the ion-trap gate input (src/fixtures/probe/iontrap)
+//   dia-probe   P2b: the CLI has -probe_input, and run01.mzML probes as
+//               raw DIA (src/fixtures/probe/dia_raw)
+//   orbitrap-probe  P2b: the CLI has -probe_input, and run01.mzML probes
+//               as the Orbitrap HCD gate input (its index stale, as FASTag
+//               1.12 reports it; src/fixtures/probe/orbitrap)
+//   iontrap     P2b: a CLI without the probe; a run of run01.mzML prints
+//               the real FASTag 1.12 log of the ion-trap gate input at
+//               20 ppm and writes its digest and label reports
+//               (src/fixtures/cli-1.12/iontrap_20ppm.*)
+//   dia-refusal P2b: a run prints FASTag 1.12's real raw-DIA refusal and
+//               exits 11 (src/fixtures/cli-1.12/dia_raw.*)
+//
+// &hold=probes holds every probe until a spec calls
+// __fastagE2E.mock.releaseProbes() (a probe still in flight).
 //
 // &start=defaults starts the session from FASTag's defaults instead of the
 // task the app lands on (D1, "Characterize a run"): the specs written
@@ -39,6 +55,15 @@ import ecoliTags from '../../e2e-web/fixtures/ecoli.tags.tsv?raw'
 import digestTsv from '../fixtures/digest.tsv?raw'
 import labelTsv from '../fixtures/label.tsv?raw'
 import massgapTsv from '../fixtures/massgap.tsv?raw'
+import iontrapProbe from '../fixtures/probe/iontrap.probe.jsonl?raw'
+import diaRawProbe from '../fixtures/probe/dia_raw.probe.jsonl?raw'
+import orbitrapProbe from '../fixtures/probe/orbitrap.probe.jsonl?raw'
+import it20Digest from '../fixtures/cli-1.12/iontrap_20ppm.digest.tsv?raw'
+import it20Label from '../fixtures/cli-1.12/iontrap_20ppm.label.tsv?raw'
+import it20Err from '../fixtures/cli-1.12/iontrap_20ppm.stderr?raw'
+import it20Out from '../fixtures/cli-1.12/iontrap_20ppm.stdout?raw'
+import diaErr from '../fixtures/cli-1.12/dia_raw.stderr?raw'
+import diaOut from '../fixtures/cli-1.12/dia_raw.stdout?raw'
 
 /// A string a release dist/ must never contain.
 export const E2E_MARKER = '__FASTAG_E2E_BRIDGE__'
@@ -138,6 +163,16 @@ export function installE2EBridge(): Origin | undefined {
   mock.nextPickResults = '/data/run01.tags.tsv'
   mock.nextPickReport = '/data/run01.digest.tsv'
 
+  // P2b: the inspector. A CLI whose --helphelp lists -probe_input.
+  if (fixture === 'iontrap-probe' || fixture === 'dia-probe' || fixture === 'orbitrap-probe') {
+    mock.cliOptions = { options: [...mock.cliOptions.options, 'probe_input'], ok: true, detail: 'e2e fixture' }
+    mock.probeOutputs['/data/run01.mzML'] =
+      fixture === 'dia-probe' ? diaRawProbe : fixture === 'orbitrap-probe' ? orbitrapProbe : iontrapProbe
+  }
+  if (query.get('hold') === 'probes') mock.holdProbes = true
+  if (fixture === 'iontrap') {
+    mock.reportFiles = { '/data/run01.digest.tsv': it20Digest, '/data/run01.label.tsv': it20Label }
+  }
   if (fixture === 'lastused') {
     mock.settings.lastUsed = { tag_length: '7', species: true }
   }
@@ -237,6 +272,9 @@ export function installE2EBridge(): Origin | undefined {
     const name = base(input)
     const reading = [`${name}: Reading spectra`, `${name}: Loading the spectra index`]
     if (fixture === 'slow') return { phase: 'Reading spectra', lines: reading, ok: false, code: null, hang: true }
+    const real = (...logs: string[]): string[] => logs.flatMap((l) => l.split('\n')).filter((l) => l.trim() !== '')
+    if (fixture === 'iontrap') return { phase: 'Reading spectra', lines: real(it20Err, it20Out), ok: true, code: 0 }
+    if (fixture === 'dia-refusal') return { phase: 'Reading spectra', lines: real(diaErr, diaOut), ok: false, code: 11 }
     if (fixture === 'batch-fail' && name === 'run02.mzML')
       return {
         phase: 'Reading spectra',

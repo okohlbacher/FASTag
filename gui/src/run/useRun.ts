@@ -17,6 +17,7 @@ import type { ViewStore } from '../app/viewStore'
 import { loadReports, sameRun } from '../results/reports'
 import type { BatchJob } from './batch'
 import { createLogStore, type LogStore } from './logStore'
+import { NOTE_LINE, refusalOf } from '../inspector/checks'
 import {
   activeJob,
   createRunState,
@@ -85,6 +86,9 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   const lastLine = useRef<string | null>(null)
   // Inside the --help dump OpenMS prints after a ConversionError.
   const inHelp = useRef(false)
+  // The run's lines the inspector reads (checks.ts NOTE_LINE): the
+  // acquisition check, a refusal, the tolerance and activation warnings.
+  const notes = useRef<string[]>([])
   // The job in flight (runJob.ts): its events come on its own Channel, so
   // none can reach another job, and a Done before the reply is a state of
   // the job, not a race.
@@ -137,6 +141,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     // The reason for the banner: neither the exit epilogue nor the help
     // dump that follows a ConversionError can be it.
     if (HELP_START.test(line)) inHelp.current = true
+    if (!inHelp.current && notes.current.length < 50 && NOTE_LINE.test(line)) notes.current.push(line)
     if (!inHelp.current && !EPILOGUE.test(line)) {
       if (ERROR_WORD.test(line)) lastError.current = line
       if (line.trim()) lastLine.current = line.trim()
@@ -246,6 +251,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
       lastError.current = null
       lastLine.current = null
       inHelp.current = false
+      notes.current = []
       cancelled.current = false
       const sent = call ?? runParams(inFile, outFile, overrides)
       const params = overwrite ? { ...sent, overwrite: true } : sent
@@ -262,7 +268,8 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
           result: isCancelled(r) ? { ...r, cancelled: true } : r,
           at: Date.now(),
           tags: lastTags.current,
-          reason: failedRun ? failureReason(r) : undefined
+          reason: failedRun ? failureReason(r) : undefined,
+          notes: notes.current.slice()
         })
         if (currentJob.current?.job().id === id) currentJob.current = null
         settle({ ...r, outputs: j.outputs, ms: Date.now() - at })
@@ -306,17 +313,25 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   // The message above the tabs when a run failed: the CLI's exit status and
   // its last error line, which may have scrolled out of the log.
   function failureWhy(): string | null {
-    return lastError.current ?? lastLine.current
+    // FASTag's refusal names the reason; its last line is the sentinel.
+    return refusalOf(notes.current, null)?.message ?? lastError.current ?? lastLine.current
   }
   function failureReason(r: RunResult): string {
     const why = failureWhy()
     return `${failText(r)}${why ? `: ${why}` : ''}`
   }
   const failed = (r: RunResult, what: string): void => {
-    const why = failureWhy()
+    // A refusal (exit 11) names FASTag's own reason, not its last line
+    // (the FASTAG_REFUSED sentinel).
+    const refusal = refusalOf(notes.current, r.code) ?? undefined
+    const why = refusal?.message ?? failureWhy()
     dispatch({
       type: 'FAILURE',
-      failure: { title: `${what} failed (${failText(r)})`, reasons: why ? [{ text: why }] : [], command: command.current }
+      failure: {
+        title: refusal ? `${what}: raw DIA, not tagged (${failText(r)})` : `${what} failed (${failText(r)})`,
+        reasons: why ? [{ text: why, refusal }] : [],
+        command: command.current
+      }
     })
   }
 
@@ -422,8 +437,14 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
         lastRunJob = { input: job.input, ok: r.ok }
         if (r.ok) lastDone = job.input
         if (status === 'failed') {
-          const why = failureWhy()
-          failures.push({ what: `${baseName(job.input)} (${failText(r)})`, text: why ?? '', input: job.input })
+          const refusal = refusalOf(notes.current, r.code) ?? undefined
+          const why = refusal?.message ?? failureWhy()
+          failures.push({
+            what: `${baseName(job.input)} (${refusal ? 'raw DIA, not tagged, ' : ''}${failText(r)})`,
+            text: why ?? '',
+            input: job.input,
+            refusal
+          })
           failedInputs.push(job.input)
           failedCommand = failedCommand ?? command.current
         }
@@ -589,6 +610,8 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     announce: state.announce,
     startedAt: active?.startedAt ?? 0,
     evidence: state.evidence,
+    // The inspector's CLI lines of the run whose results are shown.
+    shownNotes: state.jobs.find((j) => j.input === state.results?.input && j.status !== 'running')?.notes ?? [],
     jobs,
     addBatchFiles,
     addBatchPaths,

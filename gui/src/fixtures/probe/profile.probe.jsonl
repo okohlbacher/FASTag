@@ -1,0 +1,7 @@
+{"record":"probe","format":1,"version":"1.12.0","input":"/data/profile.mzML","file_format":"mzML"}
+{"record":"instrument","name":"Q Exactive HF","model":null,"ms2_analyzer":"orbitrap","ion_mobility":null}
+{"record":"spectra","ms1":9000,"ms2":47470,"ms2_probed":4000,"ms2_centroid":0,"ms2_profile":4000,"ms2_type_unknown":0}
+{"record":"activation","of":4000,"collisional":4000,"electron":0,"hybrid":0,"unknown":0}
+{"record":"index","state":"ok"}
+{"record":"acquisition","mode":"DDA","why":"no repeating window scheme","warn":false,"refuse":false,"windows":0,"median_width":0}
+{"record":"end"}
