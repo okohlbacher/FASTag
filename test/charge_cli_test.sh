@@ -35,6 +35,12 @@ export FASTAG_DIGEST_DIR="$DATA"
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/fastag-charge-cli.XXXXXX") || exit 1
 [ "${FASTAG_TEST_KEEP:-0}" = 1 ] && echo "work directory kept: $TMP" || trap 'rm -rf "$TMP"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
+# The reports name -fasta as given (run background fasta:<path>): run from
+# the work directory with a relative database path, so the stored digests
+# below do not depend on where the source tree lives.
+cp "$DB" "$TMP/db.fasta" || exit 1
+cd "$TMP" || exit 1
+DB=db.fasta
 sha() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
 mzml_masked() { tr -d '\r' < "$1" | sed -E 's/completionTime="[^"]*"//; s/<fileChecksum>[^<]*</<fileChecksum></'; }
 
@@ -70,7 +76,7 @@ want() {
     tsv) echo cd817b1edd24f3e8fa8f63c4b946061b78afd6fd22750ecd88369803755b24ed ;;
     recon.tsv) echo b9da0d0ed5762ac4fa11e7a69e8bd7864e43a64d3795da9a7b2344f422791116 ;;
     delta.tsv) echo 6a07a01bea5d1a76b1350776b88963773b4a904a81f3a060359cc78ab6e66eb6 ;;
-    digest.tsv) echo 4eaf90c12429ab29a1b4cd073295749f69a86d0a654593c51571b49dd680d712 ;;
+    digest.tsv) echo a6e192b07d26f898054298c7e3ef60e179e2db76729da67700951b5d3b2d44aa ;;
     massgap.tsv) echo 837aef37bf41d6193d2d80b52dbd0273bc959fc3b90758545390abcc071f7786 ;;
     label.tsv) echo b22a2a285822ebc91dadff79b376d4736dcf0ebd660e064e040410af514a33ff ;;
   esac

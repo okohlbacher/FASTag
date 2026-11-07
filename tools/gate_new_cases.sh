@@ -139,7 +139,7 @@ run_case() { # $1 case, $2 case dir; writes the digest to stdout, sets rc and th
       (cd "$d" && digest_case $rc)
       echo "info $(grep -m1 -o '[0-9]* of [0-9]* MS2 spectra carry no precursor charge; under .*charges;' "$d/run.log" || echo 'no -unknown_charge line')"
       local orig=$PA/valset_all/in/PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.mzML  # read only
-      [ -f "$orig" ] && echo "info $(grep -o 'name="charge state" value="[0-9]*"' "$orig" | grep -o '[0-9]*"$' | tr -d '"' \
+      [ -f "$orig" ] && echo "info $(grep 'accession="MS:1000041"' "$orig" | sed -E 's/.*value="([0-9]+)".*/\1/' \
         | paste - <(awk -F'\t' 'NR > 1 { print $6 }' "$d/tags.census.tsv") \
         | awk '{ n++; if ($1 == $2) ok++ } END { printf "charge calls equal to the removed header charge: %d of %d", ok, n }')" ;;
     *)
