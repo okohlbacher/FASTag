@@ -27,6 +27,7 @@ use serde_json::{Map, Value};
 use tauri::AppHandle;
 
 use crate::fastag::{build_args, no_console_window, quiet_blas, resolve_binary, taxonomy_dir, Resolved, RunParams, MANIFEST};
+use crate::inspect::parse_options;
 use crate::lifetime;
 
 /// --helphelp loads the library closure: seconds on a cold cache.
@@ -63,26 +64,6 @@ pub struct SpectrumDump {
     pub reason: Option<String>,
     /// Served from the LRU.
     pub cached: bool,
-}
-
-/// The option names of a TOPP `--help`/`--helphelp` text: the lines indented
-/// by exactly two spaces that start with one dash ("  -dump_spectrum
-/// <nativeId>"). Continuation lines are indented deeper, and the common TOPP
-/// flags have two dashes. (The same rule as P2b's inspect.rs, which this
-/// follows until both share one probe.)
-pub fn parse_options(text: &str) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    for line in text.lines() {
-        let Some(rest) = line.strip_prefix("  -") else { continue };
-        if rest.starts_with('-') || rest.starts_with(' ') {
-            continue;
-        }
-        let name: String = rest.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == ':').collect();
-        if !name.is_empty() && !out.contains(&name) {
-            out.push(name);
-        }
-    }
-    out
 }
 
 /// Option families of the run that do not change the peaks of a spectrum or
