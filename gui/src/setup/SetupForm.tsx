@@ -25,6 +25,7 @@ import { isMac, keyText } from './shortcuts'
 import type { Session } from './useSession'
 import type { RunState } from '../run/useRun'
 import BatchList from '../run/BatchList'
+import { Leftovers } from '../Leftovers'
 import { dirName, revealLabel } from '../app/paths'
 import { cliText, clock, duration } from '../app/format'
 
@@ -125,6 +126,7 @@ export default function SetupForm({ session, run, onPickInput, logJob, logOpen, 
         </>
       ) : (
         <>
+          <Leftovers />
           {lastRun && jobs.length === 0 && (
             <section className="block last-run" aria-labelledby="last-run-h">
               <h2 id="last-run-h">Last run</h2>

@@ -66,6 +66,12 @@ export interface MockBridge extends FastagApi {
   existingOutputs: string[]
   // The run record (history.rs), newest first.
   history: RunRecord[]
+  // What sweep.rs would offer at startup; the sweep and keep calls, and the
+  // paths a sweep fails to remove.
+  leftoverFiles: string[]
+  sweepCalls: string[][]
+  keepCalls: string[][]
+  sweepFails: string[]
   failNextRun: string | null // one-shot: run() resolves { started: false, reason }
   rejectNextRun: Error | null // one-shot: run() rejects
   // Recorded calls.
@@ -182,6 +188,10 @@ export function installMockBridge(): MockBridge {
     taxdbInfoResult: null,
     existingOutputs: [],
     history: [],
+    leftoverFiles: [],
+    sweepCalls: [],
+    keepCalls: [],
+    sweepFails: [],
     failNextRun: null,
     rejectNextRun: null,
     runCalls: [],
@@ -303,6 +313,20 @@ export function installMockBridge(): MockBridge {
     },
     historyList: (limit) => Promise.resolve(mock.history.slice(0, limit ?? 50)),
     historyOf: (path) => Promise.resolve(mock.history.find((r) => r.outputs.includes(path)) ?? null),
+    leftovers: () => Promise.resolve([...mock.leftoverFiles]),
+    sweepLeftovers: (paths) => {
+      mock.sweepCalls.push(paths)
+      const listed = paths.filter((p) => mock.leftoverFiles.includes(p))
+      const failed = paths.filter((p) => !listed.includes(p) || mock.sweepFails.includes(p))
+      const removed = listed.filter((p) => !failed.includes(p))
+      mock.leftoverFiles = mock.leftoverFiles.filter((p) => !removed.includes(p))
+      return Promise.resolve({ removed, renamed: [], failed })
+    },
+    keepLeftovers: (paths) => {
+      mock.keepCalls.push(paths)
+      mock.leftoverFiles = mock.leftoverFiles.filter((p) => !paths.includes(p))
+      return Promise.resolve()
+    },
     run: (params, onEvent) => {
       mock.runCalls.push(params as unknown as RunCall)
       if (mock.rejectNextRun) {

@@ -20,7 +20,7 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::events::{Batcher, RunEvent, RunResult, Sink, FLUSH_INTERVAL};
 use crate::reveal::ResolvedOutputs;
-use crate::{history, outputs};
+use crate::{history, lifetime, outputs, sweep};
 
 // name -> declared type, straight from the tool's own -write_ini. This is the
 // allowlist build_args() validates against. Embedded at compile time from the
@@ -79,6 +79,9 @@ pub struct CurrentRun {
     // its process group (whose id cannot be reused while the group has
     // members), and only while the run still holds the slot.
     pub reaped: Arc<AtomicBool>,
+    // What ties the run's processes to the GUI on Windows (its kill-on-close
+    // job, lifetime::spawn_cli); kill_tree ends the job. Nothing elsewhere.
+    pub job: Arc<lifetime::RunJob>,
 }
 
 #[derive(Serialize)]
@@ -261,13 +264,17 @@ fn probe_blocking(app: &AppHandle) -> BinaryInfo {
         };
     }
     let mut cmd = Command::new(&r.bin);
-    cmd.arg("--help");
+    cmd.arg("--help").stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     no_console_window(&mut cmd);
     if let Some(d) = &r.data {
         cmd.env("OPENMS_DATA_PATH", d);
     }
     quiet_blas(&mut cmd);
-    match cmd.output() {
+    // Started by the spawner thread like every CLI child (lifetime.rs): this
+    // blocking-pool thread may exit as soon as it is idle.
+    lifetime::die_with_parent(&mut cmd);
+    // On Windows in a job of its own, which is closed once it has ended.
+    match lifetime::spawn_cli(cmd).and_then(|(c, _job)| c.wait_with_output()) {
         Ok(out) => {
             let text = format!(
                 "{}\n{}",
@@ -649,7 +656,16 @@ pub fn start_run(
     if !files.overwrite && !existing.is_empty() {
         return Err(exists_reason(&existing));
     }
-    let mut child = cmd.spawn().map_err(|e| e.to_string())?;
+    // Every CLI child is started by the one long-lived spawner thread and
+    // ends with the GUI: PDEATHSIG on Linux, the watchdog on every Unix, a
+    // kill-on-close job of the run's own on Windows (lifetime.rs,
+    // GUI-DESIGN 6.6).
+    lifetime::die_with_parent(&mut cmd);
+    let (mut child, job) = lifetime::spawn_cli(cmd).map_err(|e| e.to_string())?;
+    // Held by the slot (kill_run) and the coordinator until the run ends.
+    let job = Arc::new(job);
+    #[cfg(unix)]
+    let watchdog = lifetime::watch(child.id());
 
     let pid = child.id();
     let stdout = child.stdout.take();
@@ -661,6 +677,7 @@ pub fn start_run(
         child: child_arc.clone(),
         cancelled: cancelled.clone(),
         reaped: reaped.clone(),
+        job: job.clone(),
     });
 
     let batcher = Arc::new(Batcher::start(sink, FLUSH_INTERVAL));
@@ -691,6 +708,19 @@ pub fn start_run(
     }
     drop(eof_tx);
 
+    #[cfg(windows)]
+    if job.is_none() {
+        batcher.line("warning: no job object for this run: if the app is killed, the run may go on".into(), false);
+    }
+    #[cfg(unix)]
+    let mut watchdog = match watchdog {
+        Ok(w) => Some(w),
+        Err(e) => {
+            batcher.line(format!("warning: no watchdog for this run ({e}): if the app is killed, the run may go on"), false);
+            None
+        }
+    };
+
     // Coordinator: once the child has exited, take the rest of its output
     // (at most DRAIN), remove what an unfinished run left, record the run,
     // release the slot and send exactly one Done. The child is polled, not
@@ -701,6 +731,19 @@ pub fn start_run(
     let current = mgr.current.clone();
     std::thread::spawn(move || {
         let status = loop {
+            // The watchdog is released once the child has exited but before
+            // it is reaped (lifetime::exited does not reap): until then the
+            // group id it would kill cannot be reused.
+            #[cfg(unix)]
+            if watchdog.is_some() {
+                if !lifetime::exited(pid) {
+                    std::thread::sleep(POLL);
+                    continue;
+                }
+                if let Some(w) = watchdog.take() {
+                    w.release();
+                }
+            }
             {
                 let mut c = child_arc.lock().unwrap_or_else(|e| e.into_inner());
                 match c.try_wait() {
@@ -733,12 +776,19 @@ pub fn start_run(
         if !drain(DRAIN) {
             // A process the CLI started (a wrapper's worker, a backgrounded
             // helper) still holds the pipes: kill the CLI's process group
-            // before the cleanup and the slot release, or it would go on
-            // writing to outputs the cleanup removes or the next run writes.
-            // The group id cannot be reused while the group has members.
-            kill_tree(pid);
+            // (Windows: the run's job) before the cleanup and the slot
+            // release, or it would go on writing to outputs the cleanup
+            // removes or the next run writes. The group id cannot be reused
+            // while the group has members.
+            kill_tree(pid, &job);
             let note = if drain(KILL_GRACE) { LEFT_BEHIND_KILLED } else { STREAMS_OPEN };
             batcher.line(note.to_string(), false);
+        }
+        // Windows: the run has ended and its output is in; end anything of
+        // it still left in its job, as closing the job would (lifetime.rs).
+        #[cfg(windows)]
+        if let Some(j) = &*job {
+            j.terminate();
         }
         let (ok, code, message) = match &status {
             Ok(s) => (s.success(), s.code(), exit_message(s)),
@@ -788,6 +838,25 @@ pub fn record_of(
         start,
         end: history::now_ms(),
         cleanup: end.cleanup.clone(),
+    }
+}
+
+/// The record of a run that is about to start, for its marker
+/// (sweep::mark_running): what the next session records if this one never
+/// sees the run end.
+pub fn marker_of(files: &RunFiles<'_>, argv: &[String], start: u64) -> history::RunRecord {
+    history::RunRecord {
+        id: format!("{start}-interrupted"),
+        input: files.input.to_string(),
+        outputs: files.outputs.to_vec(),
+        cwd: files.cwd.map(|d| d.display().to_string()),
+        argv: argv.to_vec(),
+        status: history::Status::Failed,
+        exit_code: None,
+        message: Some(sweep::INTERRUPTED.to_string()),
+        start,
+        end: start,
+        cleanup: outputs::Cleanup::default(),
     }
 }
 
@@ -882,15 +951,24 @@ pub fn launch(mgr: &RunManager, r: &Resolved, params: RunParams, sink: Sink, his
         cmd.env("FASTAG_TAXONOMY_DIR", t);
     }
     let start = history::now_ms();
+    let files = RunFiles { input: &params.input, outputs: &outputs, cwd: cwd.as_deref(), overwrite: params.overwrite };
+    // Before the CLI starts: if the app is killed while it runs, the next
+    // start finds this run's marker and offers what it left (sweep.rs).
+    let marker = history_dir.as_deref().and_then(|d| sweep::mark_running(d, &marker_of(&files, &command, start)).ok());
     // When the run has ended: record it (history.rs).
     let (rec_input, rec_outputs, rec_cwd, rec_argv) = (params.input.clone(), outputs.clone(), cwd.clone(), command.clone());
+    let run_marker = marker.clone();
     let finish = Box::new(move |end: &RunEnd| {
+        // The marker first: a record next to a stale marker would be
+        // followed by a second, "interrupted" one at the next start.
+        if let Some(m) = &run_marker {
+            sweep::clear_running(m);
+        }
         if let Some(d) = history_dir {
             let files = RunFiles { input: &rec_input, outputs: &rec_outputs, cwd: rec_cwd.as_deref(), overwrite: true };
             record_run(&d, &record_of(&files, &rec_argv, start, end), &end.log);
         }
     });
-    let files = RunFiles { input: &params.input, outputs: &outputs, cwd: cwd.as_deref(), overwrite: params.overwrite };
     let abs: Vec<PathBuf> = resolved.paths().into_iter().map(PathBuf::from).collect();
     // A spawn failure is known synchronously: report it as a non-start so the
     // frontend reports "FASTag could not start" and settles cleanly.
@@ -907,7 +985,14 @@ pub fn launch(mgr: &RunManager, r: &Resolved, params: RunParams, sink: Sink, his
                 command: Some(command),
             }
         }
-        Err(e) => refused(e),
+        Err(e) => {
+            // Its own marker only: a refusal because another run is live
+            // must not take that run's marker.
+            if let Some(m) = &marker {
+                sweep::clear_running(m);
+            }
+            refused(e)
+        }
     }
 }
 
@@ -941,11 +1026,14 @@ extern "C" {
 }
 
 /// Kill the process group of a run's child (Unix: the child leads it, see
-/// new_process_group) or, on Windows, its process tree. True when the
-/// signal reached a process. Only while the slot of the run is held: the
+/// new_process_group) or, on Windows, everything in the run's job @p job
+/// (lifetime::spawn_cli), or its process tree when it has no job. True when
+/// the kill reached a process. Only while the slot of the run is held: the
 /// child's handle keeps its pid (Windows), and the group id cannot be
 /// reused while the group has members (Unix).
-fn kill_tree(pid: u32) -> bool {
+fn kill_tree(pid: u32, job: &lifetime::RunJob) -> bool {
+    #[cfg(not(windows))]
+    let () = *job;
     #[cfg(unix)]
     {
         let Ok(pgid) = i32::try_from(pid) else { return false };
@@ -954,7 +1042,13 @@ fn kill_tree(pid: u32) -> bool {
     }
     #[cfg(windows)]
     {
-        // A .bat wrapper runs the real exe as a grandchild that TerminateProcess
+        // The job holds the whole tree, the real exe a .bat wrapper starts
+        // included, also once the CLI itself has ended.
+        if let Some(j) = job {
+            return j.terminate();
+        }
+        // No job (lifetime::spawn_in_job could not set one up): a .bat
+        // wrapper runs the real exe as a grandchild that TerminateProcess
         // on cmd.exe does not reach: end the whole tree.
         let taskkill = std::env::var_os("SystemRoot")
             .map(|r| PathBuf::from(r).join("System32").join("taskkill.exe"))
@@ -987,9 +1081,15 @@ pub fn kill_run(run: &CurrentRun, cancel: bool) -> bool {
         // The CLI has ended, but its run still holds the slot (the
         // coordinator is draining its output or cleaning up): what it started
         // may still run in its group. Signal the group only, never the pid.
-        return kill_tree(pid);
+        return kill_tree(pid, &run.job);
     }
-    kill_tree(pid);
+    // The child leads its own group (new_process_group): signal the group,
+    // and again until the child is reaped, for a process the group was
+    // forking at the first kill (lifetime.rs).
+    #[cfg(unix)]
+    lifetime::kill_group_until_reaped(pid, run.child.clone(), run.reaped.clone());
+    #[cfg(not(unix))]
+    kill_tree(pid, &run.job);
     let _ = child.kill(); // the coordinator reaps and emits done
     true
 }
@@ -1177,6 +1277,7 @@ mod tests {
             child: Arc::new(Mutex::new(child)),
             cancelled: Arc::new(AtomicBool::new(false)),
             reaped: Arc::new(AtomicBool::new(false)),
+            job: Arc::default(),
         };
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
@@ -1383,12 +1484,18 @@ mod tests {
             });
             let (input, outs, h) = (p.input.clone(), outputs.clone(), hist.clone());
             let argv: Vec<String> = std::iter::once("FASTag".to_string()).chain(args.iter().cloned()).collect();
+            let files = RunFiles { input: &p.input, outputs: &outputs, cwd: None, overwrite: p.overwrite };
+            let marker = sweep::mark_running(&hist, &marker_of(&files, &argv, 1)).unwrap();
+            let run_marker = marker.clone();
             let finish = Box::new(move |end: &RunEnd| {
+                sweep::clear_running(&run_marker);
                 let files = RunFiles { input: &input, outputs: &outs, cwd: None, overwrite: true };
                 record_run(&h, &record_of(&files, &argv, 1, end), &end.log);
             });
-            let files = RunFiles { input: &p.input, outputs: &outputs, cwd: None, overwrite: p.overwrite };
-            start_run(&mgr, cmd, files, sink, finish)?;
+            if let Err(e) = start_run(&mgr, cmd, files, sink, finish) {
+                sweep::clear_running(&marker);
+                return Err(e);
+            }
             Ok(Run { mgr, events, done, outputs, hist })
         }
 
@@ -1441,7 +1548,11 @@ mod tests {
                     d.join("a.tags.species.tsv").display().to_string()
                 ]
             );
-            wait_for(&out); // the partial table is on disk
+            // The stub writes the partial table, then prints progress 2/4:
+            // waiting for the file alone let the cancel land before that
+            // line, and the log check below failed now and then.
+            wait_for_line(&r, "progress 2/4");
+            assert!(out.exists(), "the partial table is on disk");
             assert!(r.mgr.is_busy());
             cancel_of(&r.mgr);
             let done = r.done.recv_timeout(Duration::from_secs(10)).expect("no done event");
@@ -1454,8 +1565,6 @@ mod tests {
             assert!(input.exists());
             // The slot is free before the done event: a quit may go ahead.
             assert!(!r.mgr.is_busy());
-            let log: Vec<String> = r.events.try_iter().collect();
-            assert!(log.iter().any(|l| l == "progress 2/4"), "{log:?}");
             // The record marks the run cancelled, before the done event.
             let (rec, faillog) = recorded(&r);
             assert_eq!(rec.status, history::Status::Cancelled);
@@ -1464,6 +1573,7 @@ mod tests {
             assert_eq!(history::of_output(&r.hist, &out).unwrap().status, history::Status::Cancelled);
             let faillog = faillog.expect("no last-failure.log");
             assert!(faillog.contains("status: Cancelled") && faillog.contains("Reading spectra (stub)"), "{faillog}");
+            assert!(sweep::markers(&r.hist).is_empty(), "a cancelled run left its marker");
             let _ = std::fs::remove_dir_all(&d);
         }
 
@@ -1490,6 +1600,7 @@ mod tests {
             assert_eq!(std::fs::read_to_string(&digest).unwrap(), "earlier digest\n");
             assert!(!d.join("a.label.tsv").exists());
             assert!(history::list(&input.with_extension("appdata"), 1).is_empty());
+            assert!(sweep::markers(&input.with_extension("appdata")).is_empty(), "a refused run left a marker");
             let _ = std::fs::remove_dir_all(&d);
         }
 
@@ -1574,6 +1685,7 @@ mod tests {
             assert_eq!(rec.status, history::Status::Ok);
             assert_eq!(rec.exit_code, Some(0));
             assert!(faillog.is_none(), "a finished run writes no last-failure.log");
+            assert!(sweep::markers(&r.hist).is_empty(), "a finished run left its marker");
             let _ = std::fs::remove_dir_all(&d);
         }
 
@@ -1591,6 +1703,93 @@ mod tests {
             kill_current_of(&r.mgr);
             let _ = r.done.recv_timeout(Duration::from_secs(10));
             let _ = std::fs::remove_dir_all(&d);
+        }
+
+        // A stand-in GUI process for the test below: this test binary run
+        // again with FASTAG_GUI_HELPER=<data folder>. It starts a run as the
+        // `run` command does, waits until the partial table is on disk,
+        // prints "ready <pgid of the CLI>" and waits to be killed.
+        const GUI_HELPER: &str = "FASTAG_GUI_HELPER";
+
+        #[test]
+        #[ignore = "a helper process of a_killed_gui_ends_the_run_and_the_next_start_offers_what_it_left"]
+        fn gui_process_helper() {
+            let Ok(d) = std::env::var(GUI_HELPER) else { return };
+            let input = Path::new(&d).join("a.mzML");
+            let params = format!(r#"{{"in":"{}","out":"a.tags.tsv","params":{{"digest_out":"a.digest.tsv"}}}}"#, input.display());
+            let r = start(&params, &[("STUB_SLEEP", "30")]).unwrap();
+            wait_for(&Path::new(&d).join("a.tags.tsv"));
+            let pgid = r.mgr.current.lock().unwrap().as_ref().unwrap().child.lock().unwrap().id();
+            println!("ready {pgid}");
+            std::thread::sleep(Duration::from_secs(60));
+        }
+
+        /// A process of group @p pgid is alive (a zombie is not).
+        fn group_alive(pgid: u32) -> bool {
+            let ps = Command::new("ps").args(["-A", "-o", "pgid=,stat="]).output().unwrap();
+            String::from_utf8_lossy(&ps.stdout).lines().any(|l| {
+                let mut f = l.split_whitespace();
+                f.next() == Some(&pgid.to_string()) && f.next().is_some_and(|st| !st.starts_with('Z'))
+            })
+        }
+
+        // P1 acceptance: killing the GUI process (kill -9) ends the CLI
+        // within 3 s, and the next start records the run as interrupted and
+        // offers the partial table it left for removal.
+        #[test]
+        fn a_killed_gui_ends_the_run_and_the_next_start_offers_what_it_left() {
+            use std::io::BufRead;
+            let d = dir("killed");
+            let input = d.join("a.mzML");
+            std::fs::write(&input, "spectra").unwrap();
+            let mut gui = Command::new(std::env::current_exe().unwrap())
+                .args(["fastag::tests::stub_cli::gui_process_helper", "--exact", "--ignored", "--nocapture", "--test-threads=1"])
+                .env(GUI_HELPER, &d)
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap();
+            let mut out = BufReader::new(gui.stdout.take().unwrap());
+            let mut line = String::new();
+            let pgid: u32 = loop {
+                line.clear();
+                assert!(out.read_line(&mut line).unwrap() > 0, "the helper ended before it was ready");
+                // libtest prints "test <name> ... " before it, on the same line.
+                if let Some(i) = line.find("ready ") {
+                    break line[i + 6..].trim().parse().unwrap();
+                }
+            };
+            assert!(group_alive(pgid));
+            gui.kill().unwrap();
+            let _ = gui.wait();
+            let t = std::time::Instant::now();
+            while group_alive(pgid) && t.elapsed() < Duration::from_secs(3) {
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            let alive = group_alive(pgid);
+            if alive {
+                lifetime_kill(pgid);
+            }
+            assert!(!alive, "the CLI outlived the killed GUI by more than 3 s");
+            // The next start.
+            let hist = input.with_extension("appdata");
+            let out_path = d.join("a.tags.tsv");
+            assert_eq!(sweep::markers(&hist).len(), 1, "no marker of the run");
+            let rec = sweep::recover(&hist).pop().expect("the killed run was not recovered");
+            assert_eq!(rec.status, history::Status::Failed);
+            assert_eq!(rec.message.as_deref(), Some(sweep::INTERRUPTED));
+            assert_eq!(history::of_output(&hist, &out_path).unwrap().message.as_deref(), Some(sweep::INTERRUPTED));
+            assert_eq!(sweep::leftovers(&hist), vec![out_path.clone()]);
+            let c = sweep::sweep(&hist, &[out_path.display().to_string()]);
+            assert_eq!(c.removed, vec![out_path.display().to_string()]);
+            assert!(!out_path.exists() && input.exists());
+            assert!(sweep::leftovers(&hist).is_empty());
+            let _ = std::fs::remove_dir_all(&d);
+        }
+
+        fn lifetime_kill(pgid: u32) {
+            let _ = Command::new("kill").args(["-9", "--", &format!("-{pgid}")]).status();
         }
 
         /// What the renderer gets on a run's Channel: the JSON of each

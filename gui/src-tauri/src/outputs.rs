@@ -121,7 +121,8 @@ pub struct Cleanup {
     pub failed: Vec<String>,
 }
 
-#[cfg(test)]
+// Only the Unix tests use it (cleanup_never_touches_a_device).
+#[cfg(all(test, unix))]
 impl Cleanup {
     pub fn is_empty(&self) -> bool {
         self.removed.is_empty() && self.renamed.is_empty() && self.failed.is_empty()
