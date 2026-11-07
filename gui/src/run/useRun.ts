@@ -612,6 +612,8 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     evidence: state.evidence,
     jobs,
     summary,
+    // What each done batch job wrote (useBatchData), for the SDRF comparison.
+    batchData,
     outDir: state.batchOutDir,
     setOutDir,
     chooseOutDir,

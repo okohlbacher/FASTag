@@ -20,6 +20,8 @@ export interface DropPlan {
   /// Reports for the Digest tab (digest, label, mass gaps).
   reports: string[]
   species?: string
+  /// An SDRF for the Batch view's comparison.
+  sdrf?: string
   view?: View
   /// What was not taken, and why, in the app's words.
   notes: string[]
@@ -76,7 +78,8 @@ export function planDrop(r: DropRoute, ctx: { busy: boolean; queued?: boolean })
   if (plan.reports.length || plan.species) land('results')
   if (later.length) plan.notes.push(`No tab shows ${names(later)} yet; open ${later.length === 1 ? 'it' : 'them'} in a spreadsheet.`)
   if (r.sdrf) {
-    plan.notes.push(`${base(r.sdrf)}: the SDRF comparison comes in a later release; the file was not read.`)
+    plan.sdrf = r.sdrf
+    plan.notes.push(`Comparing the batch with the SDRF ${base(r.sdrf)}; the SDRF is not changed.`)
     land('batch')
   }
   if (r.ignored.length) plan.notes.push(`Not a file FASTag opens: ${names(r.ignored)}.`)
