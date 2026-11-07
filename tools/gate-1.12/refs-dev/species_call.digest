@@ -1,0 +1,10 @@
+summary 27345 MS2 spectra, 1291042 tags
+exit 0
+file species.tsv c2c507bf8b67bf771d4495519d8b29f89c9929f61faef38358490954521b0dea
+file tags.tsv 91fc010940d0a10eba3581f4e4b6d311a91b9356a23719ad1e72d8e913cd34c1
+info mzML: no centroiding line
+same_as species tags.tsv yes
+columns species.tsv rank taxid name observed adjusted expected log_pvalue qvalue call call_reason decoy_spectra decoy_expected decoy_qvalue share lod
+cols1_8 species.tsv 8482fe8b13a6aa836b1fd7ca3ab4c5a8f24bac27f2cdbce77b66106c35cccb27
+info cols1_8 species.tsv equal to refs-1.10.0 species.tsv: yes
+info calls no_call=33 not_detected=7 present=10 
