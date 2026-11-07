@@ -275,6 +275,11 @@ table.history-table th { font-size: var(--text-xs); color: var(--muted-foregroun
 .hist-status { display: inline-flex; align-items: center; gap: var(--space-1); }
 .hist-status.failed { color: var(--destructive-text); }
 .hist-status.cancelled { color: var(--flag-text); }
+.hist-incomplete { margin-left: var(--space-2); font-size: var(--text-xs); color: var(--flag-text); border: 1px solid currentColor; border-radius: 999px; padding: 0 6px; }
+table.history-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+td.hist-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); align-items: center; }
+.hist-confirm { display: inline-flex; flex-wrap: wrap; gap: var(--space-1); align-items: center; }
+.history-note:empty { display: none; }
 
 /* Help beside any view, 380-480 px. */
 .help-panel { flex: 0 0 clamp(380px, 34vw, 480px); min-height: 0; display: flex; border-left: 1px solid var(--border); background: var(--panel); }
@@ -1029,3 +1034,25 @@ kbd { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--mut
 .overview .evidence { display: inline-block; padding: 0 6px; border-radius: var(--radius-sm); font-size: var(--text-xs); background: var(--panel); color: var(--muted-foreground); }
 .overview .evidence.ev-call { background: var(--primary-soft); color: var(--foreground); }
 .overview .caveat { margin: var(--space-2) 0 0; font-size: var(--text-xs); }
+
+/* ---- Inspector (P2b): checks before and after a run ----------------------------- */
+/* position: relative keeps the always-mounted live region (.sr-only, absolute) inside the scrolling form. */
+.inspector { position: relative; display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2); }
+.inspector h3 { font-size: var(--text-sm); font-weight: 600; margin: 0; }
+.inspector.after-run { margin: var(--space-4) var(--space-5) 0; padding: var(--space-3) 14px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--card); }
+.inspector .detected { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0; font-size: var(--text-sm); }
+.inspector .checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.inspector .check { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-2) 10px; border: 1px solid var(--border); border-left-width: 3px; border-radius: var(--radius-sm); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.inspector .check p { margin: 0; }
+.inspector .check-head { display: flex; gap: 6px; align-items: flex-start; }
+.inspector .check-head .icon { margin-top: 3px; flex: none; }
+.inspector .check-block { border-left-color: var(--destructive); }
+.inspector .check-block .check-head { color: var(--destructive-text); }
+.inspector .check-flag { border-left-color: var(--flag); }
+.inspector .check-flag .check-head { color: var(--flag-text); }
+.inspector .check-warn { border-left-color: var(--border); }
+.inspector .check-actions { flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.check-command { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.check-command code.why { flex: 1 1 100%; }
+.refusal { display: flex; flex-direction: column; gap: var(--space-2); }
+.refusal p { margin: 0; }

@@ -631,6 +631,8 @@ mod tests {
     }
 
     /// The bytes of every file in @p d (None for a file that cannot be read).
+    /// Only the unix permission tests use it.
+    #[cfg(unix)]
     fn snapshot(d: &Path) -> Vec<(String, Option<Vec<u8>>)> {
         let mut v: Vec<_> = std::fs::read_dir(d)
             .unwrap()
@@ -646,6 +648,7 @@ mod tests {
     /// The refusal of prepare() holds through the whole session and the
     /// exit: nothing in @p d changes, no plugin store is opened, the session
     /// saves nothing and still reads @p presets presets.
+    #[cfg(unix)]
     fn refused_session_writes_nothing(d: &Path, presets: usize) {
         let before = snapshot(d);
         let app = mock_init(d);

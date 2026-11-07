@@ -7,6 +7,8 @@ import { open, save } from '@tauri-apps/plugin-dialog'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import type {
   BinaryInfo,
+  CliOptions,
+  ProbeRun,
   BrowserEvent,
   Cleanup,
   ExportEvent,
@@ -61,6 +63,8 @@ function subscribe<T>(event: string, cb: (payload: T) => void): () => void {
 
 const api: FastagApi = {
   probe: () => invoke<BinaryInfo>('probe'),
+  cliCapabilities: () => invoke<CliOptions>('cli_capabilities'),
+  probeInput: (input: string, fasta?: string | null) => invoke<ProbeRun>('probe_input', { input, fasta: fasta || null }),
 
   // Native dialogs live in the frontend via the dialog plugin; the backend only
   // ever receives already-chosen paths.
@@ -99,6 +103,8 @@ const api: FastagApi = {
   },
   historyList: (limit?: number) => invoke<RunRecord[]>('history_list', { limit }),
   historyOf: (path: string) => invoke<RunRecord | null>('history_of', { path }),
+  historyDelete: (id: string) => invoke<boolean>('history_delete', { id }),
+  historyRerun: (id: string) => invoke<Record<string, unknown>>('history_rerun', { id }),
   leftovers: () => invoke<string[]>('leftovers_list'),
   sweepLeftovers: (paths: string[]) => invoke<Cleanup>('leftovers_sweep', { paths }),
   keepLeftovers: (paths: string[]) => invoke<void>('leftovers_keep', { paths }),

@@ -11,6 +11,7 @@ import { faqForMessage } from '../help/faq'
 import { shellLine } from '../app/format'
 import { focusLater } from '../app/focus'
 import type { Failure } from '../run/useRun'
+import { RefusalBlock } from '../inspector/InspectorPanel'
 
 export interface FailureBannerProps {
   failure: Failure
@@ -44,6 +45,8 @@ export default function FailureBanner(p: FailureBannerProps): JSX.Element {
       {failure.reasons.map((r, i) => (
         <div className="failure-reason" key={i}>
           {r.what && <div className="what">{r.what}</div>}
+          {/* FASTag refused the input (exit 11): what to run first. */}
+          {r.refusal && <RefusalBlock windows={r.refusal.windows} medianWidth={r.refusal.medianWidth} command={r.refusal.command} />}
           {r.text && (
             <>
               <div className="why-label">FASTag&apos;s reason:</div>
