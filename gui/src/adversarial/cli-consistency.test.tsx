@@ -11,7 +11,8 @@
 // Where the GUI refuses a run up front, the CLI is run directly on the same
 // option to show the refusal is its.
 // Skipped unless FASTAG_BIN names the CLI, the pipe-order helper is found
-// (FASTAG_ORDER_RS, or cli/order_rs under FASTAG_GUI_TEST_OUTPUTS) and the
+// (FASTAG_ORDER_RS, cli/order_rs under FASTAG_GUI_TEST_OUTPUTS, or the
+// order_rs example in src-tauri, which `cargo test` builds) and the
 // build_args example is built; see ./external.ts.
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'

@@ -8,6 +8,7 @@
 #       portable linux-x64 CLI staged by ci.yml, or an installed .deb).
 #
 # FASTAG_APP names the app (default: the debug build in src-tauri/target);
+# E2E_ONLY, if set, runs only the specs whose name matches it (a regex);
 # tauri-driver and WebKitWebDriver must be on PATH. The app's settings and
 # history go to a throwaway XDG folder, so a run starts like a fresh install.
 set -euo pipefail
@@ -45,4 +46,4 @@ for _ in $(seq 1 100); do
   sleep 0.2
 done
 cd "$GUI"
-node --test --test-concurrency=1 --test-reporter=spec e2e-tauri/app.test.mjs
+node --test --test-concurrency=1 --test-reporter=spec ${E2E_ONLY:+"--test-name-pattern=$E2E_ONLY"} e2e-tauri/app.test.mjs

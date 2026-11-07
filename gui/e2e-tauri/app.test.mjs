@@ -12,16 +12,23 @@
 //                real: the app runs its bundled resources/fastag CLI
 //   E2E_VERSION  real mode: the version the bundled CLI must report
 //   E2E_MZML     real mode: the spectra to run (the public E. coli fixture)
+//   E2E_CANCEL_COPIES  real mode: how many times the cancel spec repeats
+//                E2E_MZML's spectra, so the run is still going at the Cancel
+//                (default 500: 69,500 spectra, about 570 MB, at -threads 1)
+//   E2E_BIN_PREFIX  optional: the probe must report a bundled CLI under this
+//                path (the tarball smoke: the app found its own resources)
+//   E2E_ONLY     optional: run only the specs whose name matches (run.sh)
 //   E2E_OUT      a folder for tauri-driver-<mode>.json, the recorded gates
 import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, createWriteStream } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, createWriteStream } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { once } from 'node:events'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { Session, until } from './wd.mjs'
+import { repeatMzML } from './mzml.mjs'
 
 const APP = process.env.FASTAG_APP
 const MODE = process.env.E2E_CLI === 'real' ? 'real' : 'stub'
@@ -80,6 +87,12 @@ test('probe: the app finds its CLI and reads its version', { timeout: 120000 }, 
     assert.equal(info.ok, true, JSON.stringify(info))
     if (MODE === 'stub') assert.equal(info.version, '0.0.0-stub')
     else assert.equal(info.version, process.env.E2E_VERSION)
+    const prefix = process.env.E2E_BIN_PREFIX
+    if (prefix) {
+      assert.equal(info.source, 'bundled', JSON.stringify(info))
+      assert.ok(info.bin.startsWith(prefix), `the app runs ${info.bin}, not a CLI under ${prefix}`)
+      gates.bin = info.bin
+    }
     gates.webview = await s.exec('return navigator.userAgent')
   }))
 
@@ -100,36 +113,62 @@ test('run: Choose file, Run, and the table shows what the CLI wrote', { timeout:
     if (MODE === 'stub') assert.equal(fullRows, 1)
   }))
 
-test('cancel leaves no truncated output', { timeout: 300000 }, () =>
+// The CLI processes of a run: the stub (a shell script) or the bundled CLI.
+const CLI_PATTERN = MODE === 'stub' ? 'testing/stub-fastag/FASTag' : 'resources/fastag/bin/FASTag'
+const cliAlive = () => spawnSync('pgrep', ['-f', '--', CLI_PATTERN]).status === 0
+
+/** Open the Performance section and set -threads to @p n through the form. */
+async function setThreads(s, n) {
+  await s.exec(`for (const b of document.querySelectorAll('button.disclosure')) {
+      if ((b.querySelector('.sec-title') || {}).textContent === 'Performance' && b.getAttribute('aria-expanded') !== 'true') b.click()
+    }`)
+  await until('the threads field', () => s.exec("return !!document.getElementById('p-threads')"), 10000)
+  // A React controlled input: the native setter, then the input event.
+  await s.exec(`const i = document.getElementById('p-threads');
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(i, arguments[0]);
+    i.dispatchEvent(new Event('input', { bubbles: true }))`, String(n))
+  await until(`threads = ${n}`, () => s.exec("return document.getElementById('p-threads').value === arguments[0]", String(n)), 5000)
+}
+
+test('cancel: a Cancel mid-run ends the CLI and leaves no truncated output', { timeout: 300000 }, () =>
   withApp(async (s) => {
-    // The stub keeps running on a .slow. input; the real CLI on the small
-    // fixture may finish first, and then its output must be whole.
-    const input = spectra(MODE === 'stub' ? 'run02.slow.mzML' : 'run02.mzML')
-    const out = tagsOf(input)
-    await chooseInput(s, input)
-    await s.click(await s.button(`Run on ${basename(input)}`))
-    const cancel = await until('Cancel, or the finished table', async () => {
-      const c = await s.buttonNow('Cancel')
-      if (c) return c
-      return /Showing [\d,]+ of/.test(await s.bodyText()) ? 'finished' : null
-    }, 240000)
-    // The stub's partial table is on disk before the Cancel: the cleanup
-    // then has something to remove, and the banner says so.
-    if (MODE === 'stub') await until(`the partial ${basename(out)}`, () => existsSync(out), 30000)
-    if (cancel !== 'finished') await s.click(cancel).catch(() => {})
-    const end = await until('the run to end', async () => {
-      const l = await lastRun(s)
-      if (/^Cancelled/m.test(l) || /partial outputs removed/.test(l)) return 'cancelled'
-      if (/Showing [\d,]+ of/.test(await s.bodyText())) return 'finished'
-      return null
-    }, 60000)
-    if (MODE === 'stub') {
-      assert.equal(end, 'cancelled')
-      assert.match(await lastRun(s), /partial outputs removed/)
+    // The stub keeps running on a .slow. input. The real CLI reads the
+    // 139-spectrum fixture in well under a second, so it gets the fixture's
+    // spectra repeated, on one thread: still running at the Cancel.
+    let input
+    if (MODE === 'stub') input = spectra('run02.slow.mzML')
+    else {
+      input = join(mkdtempSync(join(tmpdir(), 'fastag-wd-')), 'run02.mzML')
+      const copies = Number(process.env.E2E_CANCEL_COPIES || 500)
+      gates.cancelSpectra = await repeatMzML(process.env.E2E_MZML, input, copies)
     }
-    if (end === 'cancelled') assert.ok(!existsSync(out), `${out} survived the cancel`)
-    else assert.equal(lines(out) - 1, fullRows, 'a finished run after Cancel wrote a different table')
-    gates.cancel = end
+    const out = tagsOf(input)
+    try {
+      await chooseInput(s, input)
+      if (MODE === 'real') await setThreads(s, 1)
+      assert.ok(!cliAlive(), `a ${CLI_PATTERN} process is running before the run`)
+      await s.click(await s.button(`Run on ${basename(input)}`))
+      const cancel = await s.button('Cancel', 60000)
+      // The CLI has opened -out (FASTag.cpp opens it before the first
+      // spectrum): the cleanup then has something to remove.
+      await until(`the partial ${basename(out)}`, () => existsSync(out), 60000)
+      assert.ok(cliAlive(), 'the CLI is not running when Cancel is clicked')
+      const t0 = Date.now()
+      await s.click(cancel)
+      const end = await until('the run to end', async () => {
+        const l = await lastRun(s)
+        if (/^Cancelled/m.test(l) || /partial outputs removed/.test(l)) return 'cancelled'
+        if (/Showing [\d,]+ of/.test(await s.bodyText())) return 'finished'
+        return null
+      }, 60000)
+      assert.equal(end, 'cancelled', `the run finished before the Cancel took effect${MODE === 'real' ? ': raise E2E_CANCEL_COPIES' : ''}`)
+      assert.match(await lastRun(s), /partial outputs removed/)
+      assert.ok(!existsSync(out), `${out} survived the cancel`)
+      await until(`no ${CLI_PATTERN} process`, () => !cliAlive(), 5000, 100)
+      gates.cancel = { end, cliGoneMs: Date.now() - t0 }
+    } finally {
+      rmSync(dirname(input), { recursive: true, force: true })
+    }
   }))
 
 test('table: time to first rows on a generated 1M-row file (recorded)', { timeout: 300000 }, async () => {
@@ -160,11 +199,27 @@ test('table: time to first rows on a generated 1M-row file (recorded)', { timeou
   })
 })
 
+// Counts delivered log LINES, not messages: today every line is one
+// fastag:log event (the pre-batching baseline), and P1 PR a batches them as
+// Log{lines} on a Channel, after which a message carries many lines. A
+// payload that is an array, or has a `lines` array, counts its length. PR a
+// must point the subscription below at its API if window.fastag.onLog goes.
 test('IPC: every log line of a chatty run reaches the webview; message rate recorded', { timeout: 300000, skip: MODE !== 'stub' && 'the stub only' }, () =>
   withApp(async (s) => {
-    await s.exec(
-      "window.__wd = { n: 0, t0: 0, t1: 0 }; window.fastag.onLog(() => { const w = window.__wd; const t = performance.now(); if (!w.n) w.t0 = t; w.t1 = t; w.n++ })"
+    const subscribed = await s.exec(
+      `if (typeof window.fastag.onLog !== 'function') return false
+      window.__wd = { messages: 0, lines: 0, t0: 0, t1: 0 }
+      window.fastag.onLog((p) => {
+        const w = window.__wd
+        const t = performance.now()
+        if (!w.messages) w.t0 = t
+        w.t1 = t
+        w.messages++
+        w.lines += Array.isArray(p) ? p.length : p && Array.isArray(p.lines) ? p.lines.length : 1
+      })
+      return true`
     )
+    assert.ok(subscribed, 'window.fastag.onLog is gone: point this spec at the log subscription of the Channel API (P1 PR a)')
     const input = spectra('run03.chatty.mzML')
     await chooseInput(s, input)
     await s.click(await s.button('Run on run03.chatty.mzML'))
@@ -173,9 +228,16 @@ test('IPC: every log line of a chatty run reaches the webview; message rate reco
       const a = await s.exec('return window.__wd')
       await new Promise((r) => setTimeout(r, 300))
       const b = await s.exec('return window.__wd')
-      return a.n === b.n && b.n > 0 ? b : null
+      return a.lines === b.lines && b.lines > 0 ? b : null
     })
-    assert.ok(w.n >= 5000, `only ${w.n} log messages arrived`)
-    const secs = (w.t1 - w.t0) / 1000
-    gates.ipc = { messages: w.n, seconds: Number(secs.toFixed(3)), perSecond: Math.round(w.n / Math.max(secs, 1e-3)) }
+    assert.ok(w.lines >= 5000, `only ${w.lines} log lines arrived (${w.messages} messages)`)
+    const secs = Math.max((w.t1 - w.t0) / 1000, 1e-3)
+    gates.ipc = {
+      messages: w.messages,
+      lines: w.lines,
+      seconds: Number(secs.toFixed(3)),
+      messagesPerSecond: Math.round(w.messages / secs),
+      linesPerSecond: Math.round(w.lines / secs),
+      batching: w.messages === w.lines ? 'none (one event per line: the pre-batching baseline)' : 'batched'
+    }
   }))

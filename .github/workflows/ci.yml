@@ -42,10 +42,12 @@ on:
       # A plain dry run ships no taxonomy index (~450 MB), so its dmg is far
       # smaller than a release dmg and the size ceiling on the ULMO step says
       # nothing about the real payload. With this switch on as well, the
-      # macos-arm64 leg embeds the same pinned index a tag build embeds, and
-      # the dry run builds, notarizes and size-checks the real release image.
+      # macos-arm64 and linux-x64 legs embed the same pinned index a tag build
+      # embeds, and the dry run builds, notarizes and size-checks the real
+      # release image -- and builds, smoke-tests and size-checks the
+      # release-sized Linux .deb, tarball and AppImage (gui-linux).
       gui_full_payload:
-        description: 'With gui_dry_run: embed the pinned taxonomy index (release-sized dmg)'
+        description: 'With gui_dry_run: embed the pinned taxonomy index (release-sized dmg and Linux bundles)'
         type: boolean
         default: false
 
@@ -931,10 +933,12 @@ jobs:
       # particular taxon ranking (139 spectra cannot rank stably).
       #
       # A gui_dry_run dispatch with gui_full_payload also runs it, on the
-      # macOS leg only, so the release-sized dmg can be built and checked
-      # before the tag (see the input's comment).
+      # macos-arm64 and linux-x64 legs (the two that feed a desktop app), so
+      # the release-sized dmg and Linux bundles can be built and checked
+      # before the tag (see the input's comment). linux-x64 embeds it before
+      # the portable-CLI pack below, which gui-linux stages.
       - name: Embed taxonomy index (tag builds)
-        if: startsWith(github.ref, 'refs/tags/v') || (inputs.gui_dry_run && inputs.gui_full_payload && matrix.name == 'macos-arm64')
+        if: startsWith(github.ref, 'refs/tags/v') || (inputs.gui_dry_run && inputs.gui_full_payload && (matrix.name == 'macos-arm64' || matrix.name == 'linux-x64'))
         shell: bash -el {0}
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1479,6 +1483,15 @@ jobs:
         with:
           name: FASTag-linux-x64-portable
           path: ${{ runner.temp }}/cli
+      # See gui-linux-release: a tag without P1 PR b's process lifetime gets
+      # no Linux assets. A dry run only says so.
+      - name: Process lifetime (P1 PR b) present?
+        run: |
+          if grep -rqs 'PR_SET_PDEATHSIG' gui/src-tauri/src; then
+            echo "PR_SET_PDEATHSIG found in gui/src-tauri/src"
+          else
+            echo "::warning::no PR_SET_PDEATHSIG in gui/src-tauri/src (P1 PR b not merged): a tag build would not attach the Linux desktop app"
+          fi
       - name: Stage the portable CLI as the app's bundled resources
         shell: bash
         run: |
@@ -1499,15 +1512,17 @@ jobs:
           cp "$D/LICENSE" "$D/THIRD-PARTY-NOTICES.txt" "$R/"
           test -x "$R/bin/FASTag"
           test -s "$R/share/OpenMS/examples/ID/Ecoli_MS2_small.mzML"
-          # A tag build carries the k-mer index (the linux-x64 leg embeds it
-          # on tags); a dry run has none, as on macOS.
+          # A tag build, and a gui_full_payload dry run, carry the k-mer index
+          # (the linux-x64 leg embeds it in both); a plain dry run has none.
+          # The same rule as the macOS staging step: a hard failure where the
+          # index is due, so the release-sized bundle is what gets tested.
           if [ -s "$R/share/FASTag/taxonomy/tax_k7.taxdb" ]; then
             echo "taxonomy index present: $(du -h "$R/share/FASTag/taxonomy/tax_k7.taxdb" | cut -f1)"
-          elif [ "${{ startsWith(github.ref, 'refs/tags/v') }}" = "true" ]; then
+          elif [ "${{ startsWith(github.ref, 'refs/tags/v') || (inputs.gui_dry_run && inputs.gui_full_payload) }}" = "true" ]; then
             echo "::error::the Linux app bundle has no tax_k7.taxdb -- -species would fail in the shipped app"
             exit 1
           else
-            echo "::warning::no taxonomy index (not a tag build); -species unavailable in this app"
+            echo "::warning::no taxonomy index (not a tag or full-payload build); -species unavailable in this app"
           fi
           # Run the CLI as the app will, with nothing of this runner's
           # environment, and check it reports FASTag's version.
@@ -1517,6 +1532,11 @@ jobs:
           grep -q "^Version: $want" /tmp/bundle-help.txt \
             || { echo "::error::the staged CLI does not report version $want"; grep '^Version: ' /tmp/bundle-help.txt || true; exit 1; }
           du -sh "$R"
+          # The staged copy is all the build needs: free the extracted CLI and
+          # its tarball (about 1 GB each at release size) before the bundlers
+          # make three more copies.
+          rm -rf "$RUNNER_TEMP/cli"
+          df -h / "$RUNNER_TEMP" | tee -a /tmp/disk.txt
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
@@ -1532,6 +1552,7 @@ jobs:
           npm ci
           npx tauri build --bundles deb
           ls -la src-tauri/target/release/bundle/deb/
+          df -h / | tail -1
       # Best-effort (GUI-DESIGN section 8): linuxdeploy also bundles
       # WebKitGTK and GStreamer on top of the resources, and a failure here
       # must not hold back the .deb and the tarball. NO_STRIP: linuxdeploy's
@@ -1546,29 +1567,49 @@ jobs:
           set -euo pipefail
           npx tauri build --bundles appimage
           ls -la src-tauri/target/release/bundle/appimage/
+          df -h / | tail -1
           compgen -G 'src-tauri/target/release/bundle/appimage/*.AppImage' > /dev/null
           echo "built=true" >> "$GITHUB_OUTPUT"
+      # The Debian package is named fastag-gui (GUI-DESIGN section 8:
+      # fastag-gui_<ver>_amd64.deb), not the `fas-tag` Tauri derives from
+      # productName: tauri.conf.json has no option for it, so the .deb is
+      # repacked with only the Package field changed. The name has to be
+      # right before the first Linux release -- dpkg treats a renamed
+      # package as a different one, so a later rename breaks upgrades. The
+      # download keeps its versionless name for the /releases/latest links.
       - name: Name the assets, make the tarball, check the .deb
         shell: bash
+        env:
+          DEB_PACKAGE: fastag-gui
         run: |
           set -euo pipefail
           B=gui/src-tauri/target/release/bundle
           shopt -s nullglob
           debs=("$B"/deb/*.deb)
           [ ${#debs[@]} -eq 1 ] || { echo "::error::expected one .deb from tauri, found ${#debs[@]}"; exit 1; }
-          cp "${debs[0]}" FASTag-gui-linux-x64.deb
+          X="$RUNNER_TEMP/debx"; rm -rf "$X"
+          dpkg-deb -R "${debs[0]}" "$X"
+          echo "Tauri's package name: $(sed -n 's/^Package: //p' "$X/DEBIAN/control")"
+          sed -i "s/^Package: .*/Package: $DEB_PACKAGE/" "$X/DEBIAN/control"
+          dpkg-deb --root-owner-group -Zgzip --build "$X" FASTag-gui-linux-x64.deb
+          rm -f "${debs[0]}"
           dpkg-deb -I FASTag-gui-linux-x64.deb
+          [ "$(dpkg-deb -f FASTag-gui-linux-x64.deb Package)" = "$DEB_PACKAGE" ] \
+            || { echo "::error::the .deb is not named $DEB_PACKAGE"; exit 1; }
           dep=$(dpkg-deb -f FASTag-gui-linux-x64.deb Depends)
           for want in libwebkit2gtk-4.1-0 libgtk-3-0; do
             grep -q "$want" <<< "$dep" || { echo "::error::the .deb does not depend on $want (Depends: $dep)"; exit 1; }
           done
-          X="$RUNNER_TEMP/debx"; rm -rf "$X"; dpkg-deb -x FASTag-gui-linux-x64.deb "$X"
           cli=$(find "$X" -path '*/resources/fastag/bin/FASTag' -type f -perm -u+x | head -1)
           [ -n "$cli" ] || { echo "::error::the .deb carries no executable resources/fastag/bin/FASTag"; exit 1; }
           echo "CLI in the .deb: ${cli#"$X"}"
+          # The tarball is the .deb's /usr tree, renamed; moved, not copied,
+          # as the repacked .deb already holds it.
           T="$RUNNER_TEMP/guitar"; rm -rf "$T"; mkdir -p "$T"
-          cp -a "$X/usr" "$T/FASTag-gui"
+          mv "$X/usr" "$T/FASTag-gui"
+          rm -rf "$X"
           tar -C "$T" -czf FASTag-gui-linux-x64.tar.gz FASTag-gui
+          rm -rf "$T"
           apps=("$B"/appimage/*.AppImage)
           if [ ${#apps[@]} -eq 1 ]; then cp "${apps[0]}" FASTag-gui-linux-x64.AppImage; fi
           # GitHub refuses a release asset of 2 GiB or more.
@@ -1579,6 +1620,10 @@ jobs:
             echo "- $f: $(mb "$size") MB" >> "$GITHUB_STEP_SUMMARY"
             [ "$size" -lt 2147483648 ] || { echo "::error::$f is $(mb "$size") MB, at or above GitHub's 2 GiB asset limit"; exit 1; }
           done
+          # The headroom at release size is a gate input (a full disk would
+          # first show up on the tag): the free space after staging, and now.
+          { echo '- disk after staging:'; echo '```'; cat /tmp/disk.txt; echo '```'
+            echo '- disk with every asset written:'; echo '```'; df -h / "$RUNNER_TEMP"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: FASTag-gui-linux-x64
@@ -1587,11 +1632,20 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
-  # The .deb installs and runs on the oldest and the newest supported Ubuntu
-  # LTS (P1 acceptance): apt resolves its dependencies, the bundled CLI runs
-  # the E. coli fixture from the installed path with an empty environment,
-  # and the app starts under xvfb and stays up. Then the tauri-driver specs
-  # run against the installed app and its real CLI (informational, as in the
+  # The tarball, then the .deb, on the oldest and the newest supported Ubuntu
+  # LTS (P1 acceptance).
+  #
+  # The tarball first, while no /usr/lib/FASTag exists to mask a failure:
+  # extracted into an arbitrary prefix with only the two runtime libraries
+  # the README names, its bundled CLI runs the fixture, the app starts under
+  # xvfb and stays up, and the tauri-driver probe asserts that the app
+  # resolved the CLI in its own resources (<exe>/../lib/FASTag), not on
+  # PATH or in /usr.
+  #
+  # Then the .deb: apt resolves its dependencies, the bundled CLI runs the
+  # E. coli fixture from the installed path with an empty environment, and
+  # the app starts under xvfb and stays up. Then the tauri-driver specs run
+  # against the installed app and its real CLI (informational, as in the
   # tauri-driver job).
   gui-linux-smoke-deb:
     name: gui-linux .deb on ${{ matrix.os }}
@@ -1611,10 +1665,73 @@ jobs:
         with:
           name: FASTag-gui-linux-x64
           path: ${{ runner.temp }}/gui
-      - name: Install the .deb
+      - name: The tarball runs from an arbitrary prefix
         run: |
           set -euo pipefail
           sudo apt-get update -q
+          # Only what the README tells a tarball user to install, plus the
+          # display and the session bus of the check itself.
+          sudo apt-get install -y -q libwebkit2gtk-4.1-0 libgtk-3-0 xvfb dbus dbus-x11
+          P="$RUNNER_TEMP/some where/prefix"; mkdir -p "$P"
+          tar -xzf "$RUNNER_TEMP/gui/FASTag-gui-linux-x64.tar.gz" -C "$P"
+          T="$P/FASTag-gui"
+          [ -x "$T/bin/fastag" ] || { echo "::error::the tarball has no FASTag-gui/bin/fastag"; ls -la "$T" "$T/bin" || true; exit 1; }
+          [ ! -e /usr/lib/FASTag ] || { echo "::error::/usr/lib/FASTag exists before the .deb is installed"; exit 1; }
+          CLI="$T/lib/FASTag/resources/fastag/bin/FASTag"
+          [ -x "$CLI" ] || { echo "::error::the tarball has no $CLI"; exit 1; }
+          W="$RUNNER_TEMP/tarfixture"; mkdir -p "$W"
+          cp test/fixtures/Ecoli_MS2_small.mzML "$W/"
+          env -i HOME="$HOME" PATH=/usr/bin:/bin OPENMS_DATA_PATH="$T/lib/FASTag/resources/fastag/share/OpenMS" "$CLI" \
+            -in "$W/Ecoli_MS2_small.mzML" -out "$W/ecoli.tags.tsv" -threads 2
+          n=$(($(wc -l < "$W/ecoli.tags.tsv") - 1))
+          [ "$n" -gt 0 ] || { echo "::error::the tarball's CLI wrote no tags"; exit 1; }
+          echo "TARAPP=$T/bin/fastag" >> "$GITHUB_ENV"
+          echo "TARPREFIX=$T/" >> "$GITHUB_ENV"
+          echo "tarball CLI: $n tags from the E. coli fixture"
+      - name: The tarball's app starts and stays up
+        run: |
+          # The default shell is bash -e: without +e the expected 124 from
+          # timeout would end the step before rc is read.
+          set +e -uo pipefail
+          dbus-run-session -- xvfb-run -a timeout 20 "$TARAPP" > "$RUNNER_TEMP/tarapp.log" 2>&1
+          rc=$?
+          cat "$RUNNER_TEMP/tarapp.log"
+          [ "$rc" -eq 124 ] || { echo "::error::$TARAPP exited with $rc within 20 s"; exit 1; }
+          if grep -qiE 'error while loading shared libraries|cannot open shared object|panicked|Gdk-ERROR|bwrap:' "$RUNNER_TEMP/tarapp.log"; then
+            echo "::error::$TARAPP logged a fatal start-up error"; exit 1
+          fi
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+      - name: WebKitWebDriver
+        run: sudo apt-get install -y -q webkit2gtk-driver
+      - name: Restore tauri-driver
+        id: tauri-driver
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.cargo/bin/tauri-driver
+          key: tauri-driver-2.1.0-${{ matrix.os }}
+      - name: Install tauri-driver
+        if: steps.tauri-driver.outputs.cache-hit != 'true'
+        run: |
+          rustup update stable --no-self-update
+          cargo +stable install tauri-driver --version 2.1.0 --locked
+      # Not informational: this is the check that the tarball finds its own
+      # resources from wherever it is unpacked.
+      - name: The tarball's app resolves its bundled CLI (tauri-driver probe)
+        working-directory: gui
+        env:
+          FASTAG_APP: ${{ env.TARAPP }}
+          E2E_BIN_PREFIX: ${{ env.TARPREFIX }}
+          E2E_ONLY: '^probe'
+          E2E_OUT: ${{ runner.temp }}/tarball-results
+        run: |
+          dbus-run-session -- xvfb-run -a -s "-screen 0 1440x900x24" bash e2e-tauri/run.sh real
+          cat "$E2E_OUT/tauri-driver-real.json"
+          echo "### tarball on ${{ matrix.os }}: runs the fixture, the app stays up and runs $(sed -n 's/.*"bin": "\(.*\)".*/\1/p' "$E2E_OUT/tauri-driver-real.json")" >> "$GITHUB_STEP_SUMMARY"
+      - name: Install the .deb
+        run: |
+          set -euo pipefail
           sudo apt-get install -y -q "$RUNNER_TEMP/gui/FASTag-gui-linux-x64.deb" xvfb dbus dbus-x11
           PKG=$(dpkg-deb -f "$RUNNER_TEMP/gui/FASTag-gui-linux-x64.deb" Package)
           dpkg -s "$PKG" | head -12
@@ -1651,22 +1768,6 @@ jobs:
             echo "::error::$APP logged a fatal start-up error"; exit 1
           fi
           echo "### .deb on ${{ matrix.os }}: installs, runs the fixture, the app stays up" >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
-        with:
-          node-version: 24
-      - name: WebKitWebDriver
-        run: sudo apt-get install -y -q webkit2gtk-driver
-      - name: Restore tauri-driver
-        id: tauri-driver
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: ~/.cargo/bin/tauri-driver
-          key: tauri-driver-2.1.0-${{ matrix.os }}
-      - name: Install tauri-driver
-        if: steps.tauri-driver.outputs.cache-hit != 'true'
-        run: |
-          rustup update stable --no-self-update
-          cargo +stable install tauri-driver --version 2.1.0 --locked
       - name: tauri-driver specs against the installed app (real CLI)
         id: real-specs
         continue-on-error: true
@@ -1811,6 +1912,13 @@ jobs:
   # passed on both Ubuntu releases. The AppImage goes up only when it
   # launched on both Ubuntu releases (Rocky 9 is informational, see above). Never on a dry run: that run's artifact
   # FASTag-gui-linux-x64 is the thing to open and check by hand.
+  #
+  # Ordering with P1 PR b (GUI-DESIGN section 8: "PDEATHSIG and the watchdog
+  # ship with the first Linux release"): killing the GUI must end its CLI
+  # within 3 s, and on Linux that is PR b's prctl(PR_SET_PDEATHSIG) in the
+  # spawner. Until that is in gui/src-tauri/src this job fails before
+  # attaching anything, so a tag cut before PR b lands ships no Linux GUI
+  # and release-complete turns red on the missing .deb and tarball.
   gui-linux-release:
     if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') && needs.gui-linux-smoke-deb.result == 'success' }}
     needs: [gui-linux, gui-linux-smoke-deb, gui-linux-smoke-appimage, gui-linux-smoke-rocky9]
@@ -1818,6 +1926,16 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: gui/src-tauri/src
+      - name: The process lifetime of P1 PR b is in this build
+        run: |
+          grep -rqs 'PR_SET_PDEATHSIG' gui/src-tauri/src || {
+            echo "::error::no PR_SET_PDEATHSIG in gui/src-tauri/src: P1 PR b (process lifetime) must ship with the first Linux release (GUI-DESIGN section 8); not attaching the Linux desktop app"
+            exit 1
+          }
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: FASTag-gui-linux-x64
@@ -1840,6 +1958,67 @@ jobs:
           else
             echo "::warning::no AppImage on this release (not built, or it did not launch on ubuntu-22.04 and 24.04)"
           fi
+
+  # ----------------------------------------- GUI argv against the real CLI
+  # GUI-DESIGN section 9, "Re-enabled (P1)": gui/src/adversarial/
+  # cli-consistency.test.tsx (18 tests, skipped in the gui job, which has no
+  # CLI) runs the real App's run requests through the shipped build_args and
+  # the FASTag CLI, with the pipe-order helper order_rs, both cargo examples
+  # in gui/src-tauri/examples. Release-only: on a v* tag and on a gui_dry_run
+  # dispatch, against the portable linux-x64 CLI the build leg uploads -- the
+  # version params.generated.json was made from, which only holds at a
+  # release. release-complete fails when this job did not pass.
+  gui-cli-consistency:
+    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run) }}
+    needs: [build]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: FASTag-linux-x64-portable
+          path: ${{ runner.temp }}/cli
+      - name: Unpack the portable CLI
+        run: |
+          set -euo pipefail
+          tar -xzf "$RUNNER_TEMP/cli/FASTag-linux-x64-portable.tar.gz" -C "$RUNNER_TEMP/cli"
+          rm -f "$RUNNER_TEMP/cli/FASTag-linux-x64-portable.tar.gz"
+          B="$RUNNER_TEMP/cli/FASTag/FASTag"
+          want=$(sed -n 's/^project(FASTag VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          "$B" --help 2>&1 | grep -q "^Version: $want" || { echo "::error::the portable CLI does not report version $want"; exit 1; }
+          echo "FASTAG_BIN=$B" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+      - name: Tauri build deps (the examples link fastag_lib)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q libwebkit2gtk-4.1-dev librsvg2-dev libgtk-3-dev
+      - name: Build build_args and order_rs
+        working-directory: gui/src-tauri
+        run: |
+          mkdir -p resources/fastag
+          cargo build --examples
+          test -x target/debug/examples/build_args
+          test -x target/debug/examples/order_rs
+      - name: cli-consistency (vitest, real CLI)
+        working-directory: gui
+        run: |
+          set -euo pipefail
+          npm ci
+          npx vitest run src/adversarial/cli-consistency.test.tsx --reporter=default --reporter=json --outputFile.json=cli-consistency.json
+          # Skipped is not passed: the file skips itself when anything it
+          # needs is missing, and a skipped suite would leave this job green.
+          node - <<'JS'
+          const r = require(process.cwd() + '/cli-consistency.json')
+          const msg = `cli-consistency: ${r.numPassedTests} passed, ${r.numFailedTests} failed, ${r.numPendingTests + r.numTodoTests} skipped`
+          console.log(msg)
+          require('fs').appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### ${msg} (FASTag CLI ${process.env.FASTAG_BIN})\n`)
+          if (r.numPassedTests < 18 || r.numFailedTests || r.numPendingTests || r.numTodoTests) process.exit(1)
+          JS
 
   # ---------------------------------------------------- release data asset
   # Copies the pinned taxonomy tarball onto the new release as a standalone
@@ -1895,9 +2074,14 @@ jobs:
     # would otherwise turn the cancelled run's completeness check red for
     # uploads the NEW run will finish.
     if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
-    needs: [build, taxonomy-asset, gui-linux-release]
+    needs: [build, taxonomy-asset, gui-linux-release, gui-cli-consistency]
     runs-on: ubuntu-24.04
     steps:
+      - name: The GUI's argv passed against the release CLI
+        if: needs.gui-cli-consistency.result != 'success'
+        run: |
+          echo "::error::gui-cli-consistency was ${{ needs.gui-cli-consistency.result }}: the GUI may send this CLI options it refuses"
+          exit 1
       - name: Assert this workflow's assets are on the release
         env:
           GH_TOKEN: ${{ github.token }}

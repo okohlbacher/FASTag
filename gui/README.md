@@ -147,12 +147,18 @@ input named `*.slow.*` keeps running, `*.chatty.*` prints 5,000 log lines and
 The tauri-driver specs in `e2e-tauri/` drive the real debug app in WebKitGTK
 on Linux (tauri-driver and WebKitWebDriver under xvfb): probe, run, table,
 cancel, and two recorded gates, the time to first rows on a generated
-1M-row file and the IPC message rate of a chatty run. Native dialogs cannot
+1M-row file and the IPC rate of a chatty run (log lines and messages, counted
+apart, so batched log events still count every line). Native dialogs cannot
 be driven, so a spec replaces only `window.fastag.pickInput` /
 `pickResults`. `bash e2e-tauri/run.sh stub` runs them against the stub (CI
 does on every push and PR, informational until P5); `run.sh real` against
 the CLI in the app's own resources (CI does against the installed `.deb`
-before a tag). Results go to `e2e-tauri/results/`.
+and, for the probe, the unpacked tarball before a tag). In real mode the
+cancel spec runs the E. coli fixture's spectra repeated 500 times
+(`e2e-tauri/mzml.mjs`, `E2E_CANCEL_COPIES`) on one thread, clicks Cancel once
+the partial output exists, and asserts the run was cancelled, the partial file
+removed and no CLI process left. `E2E_ONLY` picks specs by name. Results go to
+`e2e-tauri/results/`.
 
 The Playwright specs in `e2e-web/` drive the app in Chromium and WebKit on an
 explicit e2e build, `npm run build:e2e` (`vite build --mode e2e`, into
@@ -168,11 +174,14 @@ the run lifecycle, report parsing, and agreement with the CLI and with this
 README. The real CLI outputs they parse are committed in
 `src/fixtures/real/` (public inputs only; see its README.md);
 `FASTAG_GUI_TEST_OUTPUTS` names another directory of them instead. The
-`cli-consistency` tests also need `FASTAG_BIN` (a FASTag CLI to run) and
-`FASTAG_ORDER_RS` (a helper that replays stdout/stderr in the order two
-reader threads receive them) and are skipped without them.
-`cli-consistency` also needs the `build_args` example, which `cargo test`
-builds. See `src/adversarial/external.ts`.
+`cli-consistency` tests also need `FASTAG_BIN` (a FASTag CLI of the version
+`params.generated.json` was made from) and are skipped without it. They also
+need the `build_args` and `order_rs` examples in `src-tauri/examples`
+(`order_rs` replays stdout/stderr in the order two reader threads receive
+them), which `cargo test` or `cargo build --examples` builds;
+`FASTAG_ORDER_RS` names another helper. CI runs them in the release-only
+`gui-cli-consistency` job, on a tag and on a `gui_dry_run` dispatch, against
+the portable linux-x64 CLI. See `src/adversarial/external.ts`.
 
 The tests in `src/help/` check that every Help link lands on a section that
 exists, that every CLI parameter has a settings entry, that every digest
@@ -191,13 +200,19 @@ resources are machine-specific symlinks and are gitignored.
 On Linux (from 1.13.0) the `gui-linux` job in `.github/workflows/ci.yml`
 builds the app outside conda on ubuntu-22.04 against apt's WebKitGTK 4.1,
 with the portable linux-x64 CLI staged into `src-tauri/resources/fastag`:
-`FASTag-gui-linux-x64.deb`, `FASTag-gui-linux-x64.tar.gz` (the `.deb`'s
+`FASTag-gui-linux-x64.deb` (Debian package `fastag-gui`; Tauri would name it
+`fas-tag`, so the job repacks it), `FASTag-gui-linux-x64.tar.gz` (the `.deb`'s
 `/usr` tree, relocatable) and a best-effort `FASTag-gui-linux-x64.AppImage`.
+A `gui_dry_run` dispatch with `gui_full_payload` embeds the taxonomy index as
+a tag does, so the release-sized bundles are built and smoke-tested first.
+A tag attaches them only once P1 PR b's process lifetime
+(`PR_SET_PDEATHSIG`) is in `src-tauri/src`.
 The supported floor is glibc 2.35 and WebKitGTK 4.1 (Ubuntu 22.04, Debian 12).
 Rocky/RHEL 9 is below it: glibc 2.34 and only WebKitGTK API 4.0
 (`webkit2gtk3`); the Rocky 9 smoke job records both and is informational
 until decision Q13 is revisited. Before anything is attached to a release, the `.deb` is
-installed and run on ubuntu-22.04 and 24.04 and the AppImage launched on
+installed and run on ubuntu-22.04 and 24.04 (and the tarball unpacked into
+an arbitrary prefix, run and probed there first) and the AppImage launched on
 both (and tried in a Rocky 9 container); a `gui_dry_run` dispatch runs the same
 jobs without a tag and leaves the bundles as the `FASTag-gui-linux-x64`
 artifact.
