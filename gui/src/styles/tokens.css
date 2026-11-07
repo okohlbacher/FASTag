@@ -1,0 +1,183 @@
+/* Design tokens (GUI-DESIGN 4, D9): the ProSE token set with the v6 Five
+   Peaks colours. One accent colour, for the primary action of a screen, the
+   current view, selected toggles, links and the focus ring; everything else
+   is neutral. Dark cards are flat: a card is the page with a border, not a
+   lighter plate.
+
+   Themes: light, dark and system on :root[data-theme]; without the
+   attribute (or with data-theme="system") prefers-color-scheme decides.
+   Every colour of the app is a token: a hardcoded hex is invisible in one
+   theme and wrong in the other. styles/tokens.test.ts pins the D9 values
+   and the contrast rules below.
+
+   Where the D9 table and its own contrast rule disagree, the rule wins:
+   - dark --muted-foreground is #adb3bd, not #9aa0ab: the table value is
+     6.8:1 on the page and 6.2:1 on a panel, below the "keep >= 7.5:1";
+   - text in the accent colour uses --primary-text: #2f6fe0 is 4.3:1 on the
+     light panel, so light links and accent text take #2559c2 (5.8:1); in
+     dark it is the accent itself;
+   - text in the error and flag colours uses --destructive-text and
+     --flag-text, which reach 4.5:1 on their tinted backgrounds; the D9
+     --destructive and --flag stay for fills, borders and markers.
+
+   Contrast (WCAG 2), light / dark:
+     foreground on background 16.9 / 14.5, on panel 15.6 / 13.3;
+     muted on background 5.2 / 8.4, on panel 4.7 / 7.7;
+     primary-text on background 6.4 / 6.5, on panel 5.8 / 6.0;
+     primary-foreground on primary 4.7 / 6.9. */
+
+:root {
+  /* Brand: the v6 Five Peaks mark (PR #11). */
+  --brand-tag: #2f6fe0;
+  --brand-gap: #b56d00;
+  --brand-peaks: #5f6878;
+
+  /* Semantic tokens (D9). */
+  --background: #ffffff;
+  --card: #ffffff;
+  --panel: #f3f4f7;
+  --border: #d6d9e0;
+  --foreground: #1a1d23;
+  --muted-foreground: #666d7a;
+  --primary: var(--brand-tag);
+  --ring: var(--brand-tag);
+  --primary-foreground: #ffffff;
+  --ok: #15803d;
+  --destructive: #d92d20;
+  --flag: var(--brand-gap);
+  --radius: 0.5rem;
+
+  /* Derived: text in a semantic colour, tints, and the neutrals of
+     controls. */
+  --primary-text: #2559c2;
+  --primary-hover: #2457bd;
+  --primary-soft: #e8eefc;
+  --primary-weak: #7090e0;
+  --ok-bg: #eaf6ee;
+  --destructive-text: #b42318;
+  --destructive-ink: #8a1c12;
+  --destructive-bg: #fdecea;
+  --destructive-border: #f1b8b2;
+  --flag-text: #6b4500;
+  --flag-bg: #fff4d6;
+  --control: #858e9b;
+  --row-rule: #eef0f3;
+  --track: #e3e7ee;
+  /* The OpenMS lettering sits on a light plate in the dark theme. */
+  --logo-chip: transparent;
+  --logo-pad: 0;
+  /* Behind a dialog, and the lift of a popover. */
+  --scrim: rgba(0, 0, 0, 0.35);
+  --scrim-light: rgba(15, 18, 24, 0.25);
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+
+  /* Plot tokens: fixed light values for exported SVG/PNG figures, the same
+     in both themes. */
+  --plot-background: #ffffff;
+  --plot-foreground: #1a1d23;
+  --plot-muted: #666d7a;
+  --plot-grid: #d6d9e0;
+  --plot-accent: #2f6fe0;
+  --plot-flag: #b56d00;
+
+  /* Residue groups in the sequence logo. */
+  --aa-acid: #c62828;
+  --aa-base: #1d4ed8;
+  --aa-polar: #15803d;
+  --aa-hydro: #1a1d23;
+
+  /* Fonts: the system UI stack; IBM Plex Mono (bundled, latin 400/500)
+     for sequences and IDs, since WebKitGTK falls back to a wider mono. */
+  --font-sans: -apple-system, "Segoe UI", system-ui, "Noto Sans", sans-serif;
+  --font-seq: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --font-mono: var(--font-seq);
+
+  color-scheme: light;
+}
+
+/* Dark: by the system unless the light theme is chosen ... */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --brand-tag: #5c9dff;
+    --brand-gap: #f7b23b;
+    --brand-peaks: #939cab;
+    --background: #16181d;
+    --card: #16181d;
+    --panel: #1d2026;
+    --border: rgba(255, 255, 255, 0.10);
+    --foreground: #e6e8ec;
+    --muted-foreground: #adb3bd;
+    --primary-foreground: #0b1220;
+    --ok: #46c977;
+    --destructive: #f2666a;
+    --primary-text: #5c9dff;
+    --primary-hover: #8ab8ff;
+    --primary-soft: #1d2b4d;
+    --primary-weak: #4f6fb5;
+    --ok-bg: #123222;
+    --destructive-text: #f2666a;
+    --destructive-ink: #ffb4ab;
+    --destructive-bg: #3d1916;
+    --destructive-border: #7a2c25;
+    --flag-text: #f7b23b;
+    --flag-bg: #352a0e;
+    --control: #768091;
+    --row-rule: #232831;
+    --track: #2a303a;
+    --logo-chip: #ffffff;
+    --logo-pad: 3px 5px;
+    --aa-acid: #ff6b6b;
+    --aa-base: #7aa7ff;
+    --aa-polar: #4fd08a;
+    --aa-hydro: #e6e8ec;
+    color-scheme: dark;
+  }
+}
+
+/* ... or when it is chosen. */
+:root[data-theme="dark"] {
+  --brand-tag: #5c9dff;
+  --brand-gap: #f7b23b;
+  --brand-peaks: #939cab;
+  --background: #16181d;
+  --card: #16181d;
+  --panel: #1d2026;
+  --border: rgba(255, 255, 255, 0.10);
+  --foreground: #e6e8ec;
+  --muted-foreground: #adb3bd;
+  --primary-foreground: #0b1220;
+  --ok: #46c977;
+  --destructive: #f2666a;
+  --primary-text: #5c9dff;
+  --primary-hover: #8ab8ff;
+  --primary-soft: #1d2b4d;
+  --primary-weak: #4f6fb5;
+  --ok-bg: #123222;
+  --destructive-text: #f2666a;
+  --destructive-ink: #ffb4ab;
+  --destructive-bg: #3d1916;
+  --destructive-border: #7a2c25;
+  --flag-text: #f7b23b;
+  --flag-bg: #352a0e;
+  --control: #768091;
+  --row-rule: #232831;
+  --track: #2a303a;
+  --logo-chip: #ffffff;
+  --logo-pad: 3px 5px;
+  --aa-acid: #ff6b6b;
+  --aa-base: #7aa7ff;
+  --aa-polar: #4fd08a;
+  --aa-hydro: #e6e8ec;
+  color-scheme: dark;
+}
+
+/* Windows High Contrast and other forced colours: the accent is the
+   system's Highlight. */
+@media (forced-colors: active) {
+  :root {
+    --primary: Highlight;
+    --ring: Highlight;
+    --primary-text: LinkText;
+    --primary-foreground: HighlightText;
+  }
+}

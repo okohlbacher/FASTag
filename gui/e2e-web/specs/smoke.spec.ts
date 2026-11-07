@@ -1,10 +1,12 @@
-import { test, expect, openApp } from './fixtures'
+import { test, expect, goTo, openApp } from './fixtures'
 
 test('the e2e build starts on its fixture bridge with nothing run yet', async ({ page }) => {
   await openApp(page)
   await expect(page).toHaveTitle(/FASTag/)
-  await expect(page.getByRole('heading', { name: 'No results yet' })).toBeVisible()
+  // P2a: the app lands on Setup; the empty Results is its own view.
   await expect(page.getByRole('button', { name: 'Run' })).toBeDisabled()
+  await goTo(page, 'Results')
+  await expect(page.getByRole('heading', { name: 'No results yet' })).toBeVisible()
   const fixture = await page.evaluate(() => (window as unknown as { __fastagE2E: { fixture: string } }).__fastagE2E.fixture)
   expect(fixture).toBe('default')
 })

@@ -1,15 +1,18 @@
-import { test, expect, openApp } from './fixtures'
+import { test, expect, goTo, openApp } from './fixtures'
 
 // The narrow-window freeze (P0a): a 10 M-row file in a small window drew
 // every row. The window is at least 960 x 600 (tauri.conf.json); 800 x 600
-// is below it and must not break the layout either.
+// is below it and must not break the layout either. P2a: Results is a view
+// of its own, full width, so "side by side" became "Setup hidden, the table
+// full width".
 for (const [w, h] of [
   [800, 600],
   [960, 600]
 ] as const) {
-  test(`${w}x${h}: side by side, no page scroll, a 10 M-row file draws at most 200 rows and scrolls`, async ({ page }) => {
+  test(`${w}x${h}: Results full width, no page scroll, a 10 M-row file draws at most 200 rows and scrolls`, async ({ page }) => {
     await page.setViewportSize({ width: w, height: h })
     await openApp(page, 'big')
+    await goTo(page, 'Results')
     await page.getByRole('button', { name: 'Open a tags TSV…' }).click()
     await expect(page.getByText('Showing 10,000,000 of 10,000,000')).toBeVisible()
     const box = await page.evaluate(() => {
@@ -21,14 +24,17 @@ for (const [w, h] of [
         pageH: se.scrollHeight,
         scrollerBottom: sc.bottom,
         scrollerH: sc.height,
-        setupRight: setup.right,
-        scrollerLeft: sc.left,
+        scrollerW: sc.width,
+        setupW: setup.width,
+        scrollerRight: sc.right,
         rows: document.querySelectorAll('.rt-row').length
       }
     })
     expect(box.pageW).toBeLessThanOrEqual(w) // no horizontal page scroll
     expect(box.pageH).toBeLessThanOrEqual(h) // the page itself does not scroll
-    expect(box.scrollerLeft).toBeGreaterThanOrEqual(box.setupRight - 1) // not stacked
+    expect(box.setupW).toBe(0) // Setup is hidden, not beside or above the table
+    expect(box.scrollerW).toBeGreaterThan(w * 0.8) // the table has the width
+    expect(box.scrollerRight).toBeLessThanOrEqual(w)
     expect(box.scrollerH).toBeGreaterThan(100)
     expect(box.scrollerBottom).toBeLessThanOrEqual(h)
     expect(box.rows).toBeLessThanOrEqual(200)
@@ -54,6 +60,7 @@ test('without a definite scroller height, MAX_DOM_ROWS alone keeps a 10 M-row fi
   await page.addStyleTag({
     content: '.rt-scroll { flex: none !important; height: auto !important; min-height: 0 !important; overflow: visible !important; }'
   })
+  await goTo(page, 'Results')
   await page.getByRole('button', { name: 'Open a tags TSV…' }).click()
   await expect(page.getByText('Showing 10,000,000 of 10,000,000')).toBeVisible()
   await expect(page.locator('.rt-row').first()).toBeVisible()
@@ -83,6 +90,7 @@ test('a fling sends at most one page request per animation frame', async ({ page
       })
   })
   await openApp(page, 'big')
+  await goTo(page, 'Results')
   await page.getByRole('button', { name: 'Open a tags TSV…' }).click()
   await expect(page.getByText('Showing 10,000,000 of 10,000,000')).toBeVisible()
   const result = await page.evaluate(async () => {

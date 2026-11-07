@@ -15,6 +15,7 @@
 import type {
   BinaryInfo,
   BrowserEvent,
+  DropRoute,
   FastagApi,
   ResolvedOutputs,
   ResultsView,
@@ -103,6 +104,10 @@ export interface MockBridge extends FastagApi {
   emitEvent(runId: number, e: RunEvent): void
   // The backend's close guard: a close or quit request while busy.
   emitCloseRequested(what: 'close' | 'quit'): void
+  // An OS file drop (drop.rs DropRoute), and a drag over the window.
+  emitDrop(route: Partial<DropRoute>): void
+  emitDragHover(over: boolean): void
+  notifyCalls: { title: string; body: string }[]
   holdRun(): void
   releaseRun(): void
 }
@@ -151,6 +156,8 @@ export function installMockBridge(): MockBridge {
   }
   const closeListeners: ((what: 'close' | 'quit') => void)[] = []
   const menuListeners: ((action: string) => void)[] = []
+  const dropListeners: ((r: DropRoute) => void)[] = []
+  const hoverListeners: ((over: boolean) => void)[] = []
   let browserCb: ((e: BrowserEvent) => void) | null = null
   const on = <T>(list: ((v: T) => void)[]) => {
     return (cb: (v: T) => void): (() => void) => {
@@ -216,6 +223,22 @@ export function installMockBridge(): MockBridge {
     emitDone: ({ runId, ...r }) => send(runId, { kind: 'done', ...r }),
     emitEvent: (runId, e) => send(runId, e),
     emitCloseRequested: (what) => closeListeners.slice().forEach((cb) => cb(what)),
+    emitDrop: (r) => {
+      const route: DropRoute = {
+        spectra: [],
+        batch: false,
+        fasta: null,
+        taxdb: null,
+        results: null,
+        reports: [],
+        sdrf: null,
+        ignored: [],
+        ...r
+      }
+      dropListeners.slice().forEach((cb) => cb(route))
+    },
+    emitDragHover: (over) => hoverListeners.slice().forEach((cb) => cb(over)),
+    notifyCalls: [],
     holdRun: () => {
       held = held ?? []
     },
@@ -362,6 +385,12 @@ export function installMockBridge(): MockBridge {
     },
     setBusy: (busy) => {
       mock.busyCalls.push(busy)
+      return Promise.resolve()
+    },
+    onDrop: on(dropListeners),
+    onDragHover: on(hoverListeners),
+    notify: (title, body) => {
+      mock.notifyCalls.push({ title, body })
       return Promise.resolve()
     }
   }

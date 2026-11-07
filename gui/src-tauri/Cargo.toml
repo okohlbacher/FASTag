@@ -20,6 +20,9 @@ tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri-plugin-single-instance = "2"
+# The system notification when a run finishes (GUI-DESIGN 2). 2.4 is the last
+# release on the tauri 2.11 line this lock pins; 2.5 pulls a tauri update.
+tauri-plugin-notification = "~2.4.0"
 
 # Process lifetime (lifetime.rs): prctl/getppid on Linux, the per-run job
 # object on Windows. Both already in the lock file through tauri.

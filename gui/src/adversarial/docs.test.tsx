@@ -14,7 +14,7 @@ import { parseReport } from '../digestReport'
 import { HIDDEN, PARAM_BY_NAME, RENDERED } from '../paramLayout'
 import manifest from '../params.generated.json'
 import { installMockBridge } from '../testing/mockBridge'
-import { click, pickSingle, renderApp, runButton } from '../testing/render'
+import { click, goTo, pickSingle, renderApp, runButton } from '../testing/render'
 import { applyAndCheck } from '../testing/lastUsed'
 import type { SpeciesReport } from '../types'
 import digestTsv from '../fixtures/digest.tsv?raw'
@@ -67,6 +67,7 @@ describe('docs: species precondition (README "FASTag refuses the run up front")'
     await pickSingle(mock, '/d/a.mzML')
     expect((runButton() as HTMLButtonElement).disabled).toBe(true)
     expect(c.querySelector('.controls')!.textContent).toMatch(/cannot reach the species index k = 7/)
+    await goTo('results')
     await click(screen.getByRole('tab', { name: /Species/ }))
     expect(screen.getByText(/FASTag refuses the run/)).toBeDefined()
     expect(screen.queryByText(/the report would be empty/)).toBeNull()

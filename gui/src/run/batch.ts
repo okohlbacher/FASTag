@@ -1,10 +1,11 @@
-// A batch job and the queue's naming of its outputs (moved from App.tsx, P1
-// PR c).
+// A batch job as the queue's list shows it (runReducer.ts queueView) and the
+// queue's naming of its outputs (moved from App.tsx, P1 PR c).
 
 import type { ResolvedOutputs } from '../types'
 import type { JobStatus } from '../icons'
 import { defaultOut } from '../app/paths'
 import { duration } from '../app/format'
+import type { LogStore } from './logStore'
 
 export interface BatchJob {
   input: string
@@ -18,9 +19,9 @@ export interface BatchJob {
   // Every output of a done job, as the backend resolved them (its tags are
   // outputs.out).
   outputs?: ResolvedOutputs
-  // This job's own log, kept when the next job starts (the live log is
-  // cleared then): a failed job's banner and its [Log] button open it.
-  log?: string[]
+  // This job's own log, kept when the next job starts (the live log moves
+  // to that job then): a failed job's banner and its [Log] button open it.
+  log?: LogStore
   // A job that did not finish: the partial outputs the backend removed.
   cleaned?: number
 }
