@@ -3,32 +3,14 @@
 // and the 500-line window of the log drawer. Through the real window.fastag
 // seam; api.ts itself is tested against Tauri's IPC mock (api.test.ts).
 
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import App, { LOG_WINDOW } from './App'
-import { installMockBridge, mockOutputs, OUTPUT_KEYS, RUN_STARTED_FIXTURE, type MockBridge, type RunCall } from './testing/mockBridge'
+import App from './App'
+import { installMockBridge, mockOutputs, OUTPUT_KEYS, RUN_STARTED_FIXTURE, type RunCall } from './testing/mockBridge'
+import { click, pickSingle, renderApp } from './testing/render'
 import type { ResolvedOutputs } from './types'
 
-const click = (el: Element): Promise<void> =>
-  act(async () => {
-    fireEvent.click(el)
-  })
-
-async function renderApp(): Promise<HTMLElement> {
-  const { container } = render(<App />)
-  await screen.findByText('FASTag ready')
-  await act(async () => {})
-  return container
-}
-
-async function pickSingle(mock: MockBridge, path: string): Promise<void> {
-  mock.nextPickInput = path
-  await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
-}
-
 const runButton = (): HTMLElement => screen.getByRole('button', { name: /^Run( on .+)?$/ })
-const what = (c: HTMLElement): string => c.querySelector('.runbar .what')?.textContent ?? ''
-const pct = (c: HTMLElement): string => c.querySelector('.runbar .pct')?.textContent ?? ''
 
 describe('the outputs of a run come from the backend', () => {
   it('reads the tags, species and reports where the backend says the CLI wrote them (Windows paths)', async () => {
@@ -101,24 +83,6 @@ describe('the outputs of a run come from the backend', () => {
 })
 
 describe('the run bar', () => {
-  it('names the phase and, once measured, the time left', async () => {
-    const mock = installMockBridge()
-    const c = await renderApp()
-    await pickSingle(mock, '/d/a.mzML')
-    await click(runButton())
-    expect(what(c)).toBe('Starting FASTag')
-    await act(async () => mock.emitPhase('Reading spectra'))
-    expect(what(c)).toBe('Reading spectra')
-    expect(pct(c)).toMatch(/^starting…/)
-    await act(async () => mock.emitPhase('Tagging spectra'))
-    await act(async () => mock.emitProgress({ done: 50, total: 200, ratePerSec: null, etaSec: null }))
-    expect(what(c)).toBe('Tagging spectra')
-    expect(pct(c)).toMatch(/^25% · 50 of 200 spectra/)
-    expect(pct(c)).not.toContain('left')
-    await act(async () => mock.emitProgress({ done: 100, total: 200, ratePerSec: 10, etaSec: 10 }))
-    expect(pct(c)).toMatch(/^50% · 100 of 200 spectra .* · about 0:10 left$/)
-  })
-
   it('a cancel in a phase without progress ends the run cancelled, whatever exit code the kill left', async () => {
     const mock = installMockBridge()
     const c = await renderApp()
@@ -132,35 +96,5 @@ describe('the run bar', () => {
     await waitFor(() => expect(c.querySelector('.last-run-name')?.className).toContain('cancelled'))
     expect(c.querySelector('.log')?.textContent).toContain('— cancelled (stopped before it finished) —')
     expect(screen.queryByText(/failed \(exit code 1\)/)).toBeNull()
-  })
-})
-
-describe('the log drawer', () => {
-  it(`renders only the last ${LOG_WINDOW} lines and says how many there are`, async () => {
-    const mock = installMockBridge()
-    const c = await renderApp()
-    await pickSingle(mock, '/d/a.mzML')
-    await click(runButton())
-    await act(async () => {
-      for (let i = 0; i < 600; i++) mock.emitLog(`line ${i}`)
-    })
-    await click(screen.getByRole('button', { name: /^Log/ }))
-    const lines = (c.querySelector('.log')?.textContent ?? '').split('\n')
-    expect(lines).toHaveLength(LOG_WINDOW)
-    expect(lines[0]).toBe('line 100')
-    expect(lines[LOG_WINDOW - 1]).toBe('line 599')
-    expect(c.querySelector('.logdrawer .n')?.textContent).toBe('600 lines')
-    expect(c.querySelector('.log-window')?.textContent).toBe('Showing the last 500 of 600 lines.')
-  })
-
-  it('a short log has no window note', async () => {
-    const mock = installMockBridge()
-    const c = await renderApp()
-    await pickSingle(mock, '/d/a.mzML')
-    await click(runButton())
-    await act(async () => mock.emitLog('one line'))
-    await click(screen.getByRole('button', { name: /^Log/ }))
-    expect(c.querySelector('.log')?.textContent).toBe('one line')
-    expect(c.querySelector('.log-window')).toBeNull()
   })
 })

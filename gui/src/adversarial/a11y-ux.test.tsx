@@ -10,19 +10,10 @@ import SpeciesPanel from '../SpeciesPanel'
 import ParamField from '../ParamField'
 import { PARAM_BY_NAME } from '../paramLayout'
 import { parseReport } from '../digestReport'
-import { installMockBridge, type MockBridge } from '../testing/mockBridge'
+import { installMockBridge } from '../testing/mockBridge'
+import { click, flush, renderApp } from '../testing/render'
 import digestTsv from '../fixtures/digest.tsv?raw'
 import labelTsv from '../fixtures/label.tsv?raw'
-
-const flush = (): Promise<void> => act(async () => {})
-const click = (el: Element): Promise<void> => act(async () => { fireEvent.click(el) })
-
-async function renderApp(mock: MockBridge): Promise<HTMLElement> {
-  const { container } = render(<App />)
-  await screen.findByText('FASTag ready')
-  await flush()
-  return container
-}
 
 afterEach(() => vi.restoreAllMocks())
 

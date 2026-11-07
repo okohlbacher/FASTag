@@ -3,33 +3,16 @@
 // CLI line sequences are copied from real FASTag 1.9.0 runs on the public
 // E. coli fixture (scratch/lifecycle/*_combined.txt).
 
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import App, { appendLog, LOG_WINDOW } from '../App'
+import App from '../App'
+import { appendLog } from '../run/useRun'
+import { LOG_WINDOW } from '../run/LogDrawer'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
+import { addBatch, click, logText, pickSingle, renderApp, runButton } from '../testing/render'
 import { applyAndCheck } from '../testing/lastUsed'
 import type { SpeciesReport } from '../types'
 
-async function renderApp(mock: MockBridge): Promise<HTMLElement> {
-  const { container } = render(<App />)
-  await screen.findByText('FASTag ready')
-  await act(async () => {})
-  return container
-}
-const click = (el: Element): Promise<void> =>
-  act(async () => {
-    fireEvent.click(el)
-  })
-const logText = (c: HTMLElement): string => c.querySelector('.log')?.textContent ?? ''
-const runButton = (): HTMLElement => screen.getByRole('button', { name: /^(Run( on .+)?|Running…)$/ })
-async function pickSingle(mock: MockBridge, path: string): Promise<void> {
-  mock.nextPickInput = path
-  await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
-}
-async function addBatch(mock: MockBridge, files: string[]): Promise<void> {
-  mock.nextPickInputs = files
-  await click(screen.getByRole('button', { name: /^(Add files for a batch|Add)…$/ }))
-}
 const done = (mock: MockBridge, runId: number, ok: boolean, code: number | null = ok ? 0 : 1): Promise<void> =>
   act(async () => mock.emitDone({ ok, code, runId }))
 const log = (mock: MockBridge, line: string): Promise<void> => act(async () => mock.emitLog(line))

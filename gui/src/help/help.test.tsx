@@ -9,6 +9,7 @@ import { parseReport } from '../digestReport'
 import { PARAM_BY_NAME, RENDERED, SECTIONS, defaultText } from '../paramLayout'
 import manifest from '../params.generated.json'
 import { installMockBridge } from '../testing/mockBridge'
+import { click, flush } from '../testing/render'
 import nocallTsv from '../fixtures/digest_nocall.tsv?raw'
 import digestTsv from '../fixtures/digest.tsv?raw'
 import labelTsv from '../fixtures/label.tsv?raw'
@@ -18,12 +19,6 @@ import { CLASSES, FAQ, FAQ_GROUPS, faqForMessage } from './faq'
 import HelpView, { COMMON, PAGE_OF, slug } from './HelpView'
 import { PARAM_HELP } from './params'
 import { helpBack, openHelp, resetHelp, showHelpPage, useHelp } from './link'
-
-const flush = (): Promise<void> => act(async () => {})
-const click = (el: Element): Promise<void> =>
-  act(async () => {
-    fireEvent.click(el)
-  })
 
 afterEach(() => {
   resetHelp()

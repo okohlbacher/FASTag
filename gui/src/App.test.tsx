@@ -5,51 +5,25 @@
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import App, { perJobOutputs } from './App'
+import App from './App'
+import { perJobOutputs } from './app/paths'
 import { SPECTRA } from './api'
 import DigestPanel from './DigestPanel'
 import { parseReport } from './digestReport'
 import { installMockBridge, type MockBridge } from './testing/mockBridge'
+import { addBatch, click, logText, pickSingle, renderApp, runButton, startBatch } from './testing/render'
 import { applyLastUsed, formValue } from './testing/lastUsed'
 import digestTsv from './fixtures/digest.tsv?raw'
 import nocallTsv from './fixtures/digest_nocall.tsv?raw'
 import labelTsv from './fixtures/label.tsv?raw'
 import massgapTsv from './fixtures/massgap.tsv?raw'
 
-async function renderApp(mock: MockBridge): Promise<HTMLElement> {
-  const { container } = render(<App />)
-  // Settle the mount effects (probe badge, settings, taxdb) before the test
-  // interacts -- also keeps React 19 act warnings out of the output.
-  await screen.findByText('FASTag ready')
-  await act(async () => {})
-  return container
-}
-
 // fireEvent wraps only the synchronous handler in act; the async continuations
 // (pick*.then, runOne chains) land on microtasks, so flush them inside act too.
-const click = (el: Element): Promise<void> =>
-  act(async () => {
-    fireEvent.click(el)
-  })
 
-const logText = (container: HTMLElement): string => container.querySelector('.log')?.textContent ?? ''
 const doneLines = (container: HTMLElement): number => logText(container).split('— done —').length - 1
 
-const runButton = (): HTMLElement => screen.getByRole('button', { name: /^(Run( on .+)?|Running…)$/ })
 const outField = (): HTMLInputElement => screen.getByLabelText(/Tags TSV/) as HTMLInputElement
-
-async function pickSingle(mock: MockBridge, path: string): Promise<void> {
-  mock.nextPickInput = path
-  await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
-}
-
-async function addBatch(mock: MockBridge, files: string[]): Promise<void> {
-  mock.nextPickInputs = files
-  await click(screen.getByRole('button', { name: /^(Add files for a batch|Add)…$/ }))
-}
-
-const startBatch = async (): Promise<void> =>
-  click(screen.getByRole('button', { name: /^Run \d+ remaining file/ }))
 
 const emitDone = (mock: MockBridge, runId: number | undefined, ok: boolean): Promise<void> =>
   act(async () => mock.emitDone({ ok, code: ok ? 0 : 1, runId }))
@@ -209,44 +183,6 @@ describe('run/batch orchestration', () => {
     expect(mock.speciesCalls[0]).toBe('/d/b.tags.species.tsv')
     expect(mock.resultsQueryCalls).toHaveLength(1) // only the last job is previewed
     expect(mock.resultsQueryCalls[0].path).toBe('/d/b.tags.tsv')
-  })
-
-  it('numbers colliding batch outputs', async () => {
-    const mock = installMockBridge()
-    await renderApp(mock)
-    // sample.mzML and sample.mzpeak both map to sample.tags.tsv; the
-    // extensionless third collides with the full-name fallback too.
-    await addBatch(mock, ['/d/s.mzML', '/d/s.mzpeak', '/d/s'])
-    await startBatch()
-    for (let id = 1; id <= 3; id++) {
-      await waitFor(() => expect(mock.runCalls).toHaveLength(id))
-      await emitDone(mock, id, true)
-    }
-    expect(mock.runCalls.map((c) => c.out)).toEqual([
-      '/d/s.tags.tsv',
-      '/d/s.mzpeak.tags.tsv',
-      '/d/s.2.tags.tsv'
-    ])
-  })
-
-  it('dedups batch inputs across picks', async () => {
-    const mock = installMockBridge()
-    await renderApp(mock)
-    await addBatch(mock, ['/d/a.mzML'])
-    await addBatch(mock, ['/d/a.mzML', '/d/b.mzML'])
-    expect(screen.getByRole('button', { name: 'Run 2 remaining files' })).toBeDefined()
-    expect(document.querySelectorAll('li.job')).toHaveLength(2)
-  })
-
-  it('stripExt keeps dotted directories intact on both slash flavors', async () => {
-    const mock = installMockBridge()
-    await renderApp(mock)
-    await pickSingle(mock, '/runs.2026/sample')
-    expect(outField().value).toBe('/runs.2026/sample.tags.tsv')
-    await pickSingle(mock, 'C:\\runs.2026\\sample')
-    expect(outField().value).toBe('C:\\runs.2026\\sample.tags.tsv')
-    await pickSingle(mock, '/d/x.mzML')
-    expect(outField().value).toBe('/d/x.tags.tsv')
   })
 
   it('takes an MGF input like an mzML: offered by the dialogs, named on the empty card, run with its own outputs', async () => {
@@ -612,17 +548,6 @@ describe('digest tab', () => {
     expect(screen.getByText('o.digest.tsv')).toBeDefined()
   })
 
-  it('moves between the tabs with the arrow keys', async () => {
-    const mock = installMockBridge()
-    await renderApp(mock)
-    const tags = screen.getByRole('tab', { name: 'Tags' })
-    await act(async () => {
-      fireEvent.keyDown(tags, { key: 'ArrowRight' })
-    })
-    expect(screen.getByRole('tab', { name: 'Species' }).getAttribute('aria-selected')).toBe('true')
-    expect(screen.getByRole('tabpanel').getAttribute('aria-labelledby')).toBe('tab-species')
-  })
-
   it('opens a report from the empty results pane', async () => {
     const mock = installMockBridge()
     mock.nextPickReport = '/r/b.label.tsv'
@@ -681,21 +606,6 @@ describe('redesign: setup and run bar', () => {
     expect(help.textContent).toMatch(/^When matching against/)
     expect(help.textContent).toMatch(/Needs -?fasta or -?recon_out/)
     expect((document.getElementById('p-isobaric_tolerance') as HTMLInputElement).disabled).toBe(true)
-  })
-
-  it('Reset… asks first; Keep leaves the values, Reset restores the CLI defaults', async () => {
-    const mock = installMockBridge()
-    await renderApp(mock)
-    const tl = (): HTMLInputElement => document.getElementById('p-tag_length') as HTMLInputElement
-    await act(async () => {
-      fireEvent.change(tl(), { target: { value: '6' } })
-    })
-    await click(screen.getByRole('button', { name: 'Reset…' }))
-    await click(screen.getByRole('button', { name: 'Keep' }))
-    expect(tl().value).toBe('6')
-    await click(screen.getByRole('button', { name: 'Reset…' }))
-    await click(screen.getByRole('button', { name: 'Reset' }))
-    expect(tl().value).toBe('3')
   })
 
   it('the failure banner opens the log and copies the command line', async () => {

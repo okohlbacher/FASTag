@@ -8,34 +8,11 @@ import App from './App'
 import { closeHelp } from './help/link'
 import ResultsTable, { headServes, scrollTopFor } from './ResultsTable'
 import { installMockBridge, type MockBridge } from './testing/mockBridge'
+import { click, flush, key, pickSingle, renderApp } from './testing/render'
 import { searchParams } from './setup/searchRank'
 import { applyInstrument, INSTRUMENTS, matchesInstrument, presetText, speciesFixes } from './setup/presets'
 import { actionOfKey, deduper } from './setup/shortcuts'
 import type { ResultsPage } from './types'
-
-const flush = (): Promise<void> => act(async () => {})
-const click = (el: Element): Promise<void> =>
-  act(async () => {
-    fireEvent.click(el)
-  })
-
-async function renderApp(mock: MockBridge): Promise<HTMLElement> {
-  const { container } = render(<App />)
-  await screen.findByText('FASTag ready')
-  await act(async () => {})
-  void mock
-  return container
-}
-
-async function pickSingle(mock: MockBridge, path: string): Promise<void> {
-  mock.nextPickInput = path
-  await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
-}
-
-const key = (init: KeyboardEventInit, target: EventTarget = window): Promise<void> =>
-  act(async () => {
-    target.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }))
-  })
 
 describe('parameter search ranking', () => {
   it('finds fragment_tolerance for "tolerance", flag and name matches above help-text ones', () => {
