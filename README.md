@@ -739,7 +739,9 @@ options and their values.
   cysteinylated or dehydroalanine Cys) from the placements of the run's own
   reconciler: each MS2 spectrum votes once with its best tag placed on a
   peptide with exactly one C on the gap side, and the reagent mass is the gap
-  plus the fixed C modification. Without `-recon_out` the placements are made
+  plus the fixed C modification. On a labelled run (a fixed N- or C-terminal
+  TMT or iTRAQ modification) the label is first taken off a gap on its side,
+  as the reconciler's flanks carry it. Without `-recon_out` the placements are made
   on `-recon_fasta` or `-alkylation_proteome` and not written; every other
   output is the same with and without it. Sections `alk_run`, `alk_cys` and
   `alkylation_call`; the format is documented and versioned in

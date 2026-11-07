@@ -18,6 +18,8 @@ alk_run	format	1	-	The alkylation report follows format 1 (doc/ALKYLATION-REPORT
 alk_run	database	Ecoli_MS2_small.fasta	-	The placements are on the database Ecoli_MS2_small.fasta.
 alk_run	database_source	proteome	-	The database is the -alkylation_proteome FASTA.
 alk_run	fixed_c_delta	57.021464	-	The run's fixed Carbamidomethyl on C adds 57.021464 Da to every gap: the reagent mass is gap + 57.021464.
+alk_run	fixed_nterm_delta	0	-	The run has no fixed peptide N-terminal modification.
+alk_run	fixed_cterm_delta	0	-	The run has no fixed peptide C-terminal modification.
 alk_run	window	0.5	-	A reagent mass bins to a Cys form within 0.5 Da of it.
 alk_run	min_spectra	10	-	A call needs 10 spectra binned in total and for the called class.
 alk_run	min_share	0.6	-	A call needs a share of 0.6 of the binned spectra.
@@ -49,6 +51,7 @@ alk_cys	excluded.cys_outside_region	0	183	0 of 183 placements are left out: they
 alk_cys	excluded.protein_nterm	0	183	0 of 183 placements are left out: they have the gap at the protein N-terminus.
 alk_cys	excluded.truncation	0	183	0 of 183 placements are left out: they have a gap equal to the mass of the outermost one or two residues (a shorter product).
 alk_cys	excluded.met_ambiguous	0	183	0 of 183 placements are left out: they read as two classes with and without an M oxidation in the gap.
+alk_cys	excluded.non_by	0	1147	0 of 1147 tags are left out because they are not b/y tags (c/z); they are not placed for the call.
 alkylation_call	status	no_call	0	No alkylation is called: 0 binned spectra are fewer than 10.
 alkylation_call	reagent	-	-	No reagent is called.
 alkylation_call	mass	-	-	No reagent is called.

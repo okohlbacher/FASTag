@@ -54,6 +54,8 @@ version. Their format is owned by RunMeta and numbered by
 | `database` | path of the FASTA the placements are on | `-` |
 | `database_source` | `recon_fasta`, `fasta` (the run's placement database), `proteome` (an `-alkylation_proteome` FASTA) or `bundled:<name>` (`human`, `mouse`, `yeast`, `ecoli`) | `-` |
 | `fixed_c_delta` | the run's fixed modification mass on C in Da (`0` without one); reagent mass = gap + this | `-` |
+| `fixed_nterm_delta` | the run's fixed peptide N-terminal modification mass in Da (a TMT or iTRAQ label; `0` without one), taken off an N-side gap first | `-` |
+| `fixed_cterm_delta` | the same for a fixed peptide C-terminal modification | `-` |
 | `window` | bin window in Da (`-alkylation_window`; default 0.02 on a ppm run, 0.5 on a Da run) | `-` |
 | `min_spectra` | `-alkylation_min_spectra` | `-` |
 | `min_share` | `-alkylation_min_share` | `-` |
@@ -72,6 +74,7 @@ placement.
 | `unexplained` | voting spectra whose reagent mass no form explains within the window | `spectra` |
 | `conflict` | voting spectra whose best tag's counted placements disagree on the class | `spectra` |
 | `excluded.no_cys`, `excluded.multi_cys`, `excluded.cys_in_tag`, `excluded.cys_outside_region`, `excluded.protein_nterm`, `excluded.truncation`, `excluded.met_ambiguous` (7 rows, this order) | placements (not spectra) left out by that rule | all placements evaluated |
+| `excluded.non_by` (last `alk_cys` row) | tags (not placements) left out because they are not b/y tags (c/z, #15 phase B); `0` until c/z tagging exists | `alk_run tags` + this value |
 
 A form row counts a spectrum only when all its counted placements agree on the
 form; two family forms (say unmodified and Oxidation) still count for
@@ -84,7 +87,13 @@ Form masses come from OpenMS ModificationsDB (Unimod): `Carbamidomethyl (C)`,
 `Cysteinyl (C)`, `Cys->Dha (C)`; `unmodified` is 0.
 
 Placement rules (src/AlkylationCall.h): the peptide has exactly one C, outside
-the tag; an exact placement counts with gap 0; a gapped placement counts only
+the tag; an exact placement counts with gap 0. A fixed terminal label is in the
+spectrum flank but not in the database prefix (src/TagRecon.h,
+`setFixedTermMods`), so a gap on the labelled side is first reduced by
+`fixed_nterm_delta` (or `fixed_cterm_delta`), the rule of
+`Shortlist::classifyPlacement`: a rest within the window makes the placement
+label-exact (it counts like an exact one, the C on either side), otherwise the
+rest is the gap and reagent = rest + `fixed_c_delta`. Otherwise a gapped placement counts only
 when the C is on the gap side, the gap side is not the protein N-terminus, and
 the gap is not the mass of the one or two outermost residues of the gap side
 (a shorter non-specific product). With an M on the gap side, the reading with
@@ -111,7 +120,8 @@ and `share`, and `alk_run database_source` for the caveat.
 
 ## Stability
 
-- Format 1 is frozen. Any change to a section name, a key, the order of rows,
+- Format 1 is frozen from the 1.12.0 release on (the rows `fixed_nterm_delta`,
+  `fixed_cterm_delta` and `excluded.non_by` were added before it). Any change to a section name, a key, the order of rows,
   the meaning or formatting of a `value` or `n`, or a new row, bumps
   `alk_run format` (`FASTag::Alkylation::kReportFormat`) and this file.
 - The `description` column is for people. Its wording may change within a
@@ -138,3 +148,45 @@ and `share`, and `alk_run database_source` for the caveat.
 `auto` takes the human proteome. The plan's "top `-species` genus" needs the
 species call before the tagging loop that places the tags, so it is not
 implemented.
+
+## Merge obligations (integration/1.12)
+
+Recorded here so the integrator of D#3g finds them beside the format:
+
+- **E#6 (precursor hypotheses, merges first).** Every aggregating consumer
+  reads only the selected hypothesis (PLAN-INTEGRATION 2.3 contract 1). The
+  D#3g consumer in `tag_one` is one gate and two calls: edit the gate to
+  `alk_tag = alkylation_on && sel && Alkylation::countsTag(t.gapped, t.evalue)`
+  (this also stops losing hypotheses being placed in alkylation-only mode);
+  `Alkylation::addTag` and `Alkylation::addSpectrum` stay as they are. Add a
+  digest_cli_test (or charge_cli_test) case under `-unknown_charge enumerate`
+  or `-isotope_error`: `alk_run tags` equals a recount of the selected,
+  ungapped, E <= 1 rows, and `-alkylation_out` is identical at defaults with
+  and without E#6's options.
+- **A#17 (`-search_shifts`, merges before D#3g).** `ShiftSettings::alkylation_call`
+  is fed from the Call computed right after the per-thread merge (FASTag.cpp,
+  "the alkylation call (#3g), once, right after the merge"), which is before
+  the hand-off exports: pass the reagent name, or `none` / `no_call`, when
+  `-alkylation_out` is set. `-alkylation_out` writes the same Call. Add the
+  digest_cli_test case A#17 asks for: `-alkylation_out` with `-search_shifts`
+  writes no `fixed` row that contradicts the call, and a no_call writes
+  `deferred_alkylation_call`.
+- **E#15B (c/z tags, merges last).** Contract 2: c/z tags do not vote. In
+  `tag_one`, a c/z tag (`tag_cz`) that passes `countsTag` goes to
+  `pt.acc.d.alk.excludeNonBy()` instead of `addTag`, and is not placed for the
+  call. Add a CLI check under `-ion_series cz` (or `auto` on an electron run):
+  `alk_cys excluded.non_by` equals the c/z rows the TSV writes with E <= 1,
+  ungapped, and the binned counts equal a run without them.
+
+## Shipped proteomes
+
+PLAN-organism-chemistry #3g decides that the human, mouse, yeast and E. coli
+UniProt reference proteomes (UP000005640, UP000000589, UP000002311,
+UP000000625, CC BY 4.0, about 15 MB) ship in `data/alkylation/` with a README
+(release, sha256, licence notice) and a BOM.md row. They are not in the
+repository yet: fetching them from UniProt needs the user's approval. Until
+they are added, `-alkylation_proteome auto` and the named values refuse with a
+clear message; `-recon_fasta` or a FASTA path works. CMake installs them only
+together with `data/alkylation/README.md` (a drop without it is a configure
+error). digest_cli_test checks the installed-path lookup with a gzip it makes
+itself.
