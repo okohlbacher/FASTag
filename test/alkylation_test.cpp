@@ -189,6 +189,75 @@ int main()
     check(formOf(A::evaluate(place("PDCAPLLTEVK", 5, 'N', OX), s, two), two) == "X73", "without an M there is one reading");
   }
 
+  // ---- a fixed N-terminal label (TMT): the gap on the N side carries it
+  {
+    const double TMT = mod("TMT6plex (N-term)");
+    A::Settings s = settings(CAM);
+    s.fixed_term_n = TMT;
+    const char* pep = "PDCAGLLTEVK";  // C on the N side
+    check(formOf(A::evaluate(place(pep, 5, 'N', TMT), s, forms), forms) == "Carbamidomethyl",
+          "fixed TMT N-term, N-side gap = TMT, C on the N side: label-exact, Carbamidomethyl");
+    check(formOf(A::evaluate(place("PDAAGLLTECK", 5, 'N', TMT), s, forms), forms) == "Carbamidomethyl",
+          "fixed TMT N-term, gap = TMT + 0 on a C-free N side, C on the C side: label-exact, counts");
+    check(formOf(A::evaluate(place(pep, 5, 'N', TMT - CAM), s, forms), forms) == "unmodified",
+          "fixed TMT N-term, gap = TMT - 57.021: unmodified");
+    check(formOf(A::evaluate(place(pep, 5, 'N', TMT + TRIOX - CAM), s, forms), forms) == "Trioxidation",
+          "fixed TMT N-term, gap = TMT + trioxidation - 57.021: Trioxidation");
+    check(A::evaluate(place(pep, 5, 'N', TMT - CAM), s, forms).reagent == (TMT - CAM - TMT) + CAM,
+          "reagent = (gap - label) + fixed C delta");
+    check(formOf(A::evaluate(place("PDAAGLLTECK", 5, 'N', TMT - CAM), s, forms), forms) == "cys_outside_region",
+          "fixed TMT N-term, a gap beyond the label on the side without the C is excluded");
+    check(formOf(A::evaluate(place(pep, 5, 'C', TMT), s, forms), forms) == "cys_outside_region",
+          "an N-term label is not taken off a C-side gap");
+    check(formOf(A::evaluate(place(pep, 5, 'N', TMT - CAM, 0), s, forms), forms) == "protein_nterm",
+          "fixed TMT N-term: a gapped placement at the protein N-terminus is still excluded");
+    // the same placements without the label setting: the 1.12 r2 behaviour
+    const A::Settings plain = settings(CAM);
+    check(formOf(A::evaluate(place(pep, 5, 'N', TMT), plain, forms), forms) == "unexplained",
+          "without fixed_term_n the label reads as an unexplained gap");
+    // a C-terminal label on the C side
+    A::Settings sc = settings(CAM);
+    sc.fixed_term_c = 10.0;
+    check(formOf(A::evaluate(place("PDAAGLLTECK", 5, 'C', 10.0), sc, forms), forms) == "Carbamidomethyl" &&
+              formOf(A::evaluate(place("PDAAGLLTECK", 5, 'C', 10.0 - CAM), sc, forms), forms) == "unmodified",
+          "fixed C-term label: taken off a C-side gap");
+    // a labelled run's call: CAM on the N side read through the label
+    A::Tally t;
+    vote(t, place(pep, 5, 'N', TMT), 20, s, forms);
+    vote(t, place("PDAAGLLTECK", 5, 'N', TMT), 10, s, forms);
+    check(callOf(t, s) == "call Carbamidomethyl" && t.unexplained == 0, "a TMT-labelled CAM run is called Carbamidomethyl");
+  }
+
+  // ---- addTag: one call per tag, the spectrum's best tag votes
+  {
+    const A::Settings s = settings(CAM);
+    auto rec = [](const char* pep, char side, double gap) {
+      FASTag::Reconciliation r;
+      r.peptide = pep;
+      r.start = 10;
+      r.pos = 5;
+      r.tag_len = 4;
+      r.nterm_match = side != 'N';
+      r.cterm_match = side != 'C';
+      r.delta_mass = side == 'E' ? 0.0 : gap;
+      return r;
+    };
+    A::Tally t;
+    A::Vote sv;
+    A::addTag(t, sv, {rec("PDCAGLLTEVK", 'N', -CAM)}, 0.5, s, forms);  // unmodified
+    A::addTag(t, sv, {rec("PDCAGLLTEVK", 'E', 0)}, 0.1, s, forms);     // CAM, better E
+    A::addTag(t, sv, {rec("PDAAGLLTEVK", 'E', 0)}, 0.01, s, forms);    // no C: no vote
+    A::addTag(t, sv, {}, 0.001, s, forms);                             // no placement
+    check(t.tags == 4 && sv.have && sv.cls == A::Carbamidomethyl && sv.evalue == 0.1,
+          "addTag: every tag counted, the best tag with a counted placement votes");
+    check(t.outcomes[static_cast<std::size_t>(A::Outcome::NoCys)] == 1 && t.outcomes[static_cast<std::size_t>(A::Outcome::Binned)] == 2,
+          "addTag: placement outcomes counted");
+    A::addSpectrum(t, sv);
+    A::addSpectrum(t, A::Vote());
+    check(t.spectra == 1 && t.cls[A::Carbamidomethyl] == 1, "addSpectrum: one vote per spectrum, none without one");
+    check(A::countsTag(false, 1.0) && !A::countsTag(true, 0.1) && !A::countsTag(false, 1.5), "countsTag: ungapped, E <= 1");
+  }
+
   // ---- votes and run-level calls from placements
   {
     const A::Settings s = settings(CAM);
@@ -252,6 +321,22 @@ int main()
               value(none_rows, "alkylation_call", "share") == "-",
           "an empty run: no_call few_cys_spectra");
     check(rows.size() == none_rows.size(), "the same rows whatever the counts");
+    check(value(rows, "alk_cys", "excluded.non_by") == "0" && value(rows, "alk_run", "fixed_nterm_delta") == "0" &&
+              value(rows, "alk_run", "fixed_cterm_delta") == "0",
+          "excluded.non_by 0 and no terminal label by default");
+    A::Tally nb = t;
+    nb.excludeNonBy();
+    nb.excludeNonBy();
+    A::Tally nbm;
+    nbm.merge(nb);
+    const auto nb_rows = A::alkylationRows(nbm, A::callAlkylation(nbm, s), s, forms, info);
+    check(value(nb_rows, "alk_cys", "excluded.non_by") == "2" && nb_rows.size() == rows.size(),
+          "excluded.non_by counts the c/z tags and merges");
+    // the row order of alk_cys ends with the excluded rules, then non_by
+    std::string last_cys;
+    for (const D::Row& r : rows)
+      if (r.section == "alk_cys") last_cys = r.key;
+    check(last_cys == "excluded.non_by", "excluded.non_by is the last alk_cys row");
   }
 
   // ---- FASTA reading (plain; .gz is covered by digest_cli_test)

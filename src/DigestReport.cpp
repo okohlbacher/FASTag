@@ -430,6 +430,39 @@ namespace FASTag::Digest
   }
 
   // ---- 1.12 D: instrument class (#3c) ----
+  Fragmentation fragmentationFromFilter(std::string_view filter)
+  {
+    bool beam = false, res = false;
+    for (std::size_t at = filter.find('@'); at != std::string_view::npos; at = filter.find('@', at + 1))
+    {
+      std::string tok;
+      for (std::size_t i = at + 1; i < filter.size(); ++i)
+      {
+        const char c = static_cast<char>(std::tolower(static_cast<unsigned char>(filter[i])));
+        if (c < 'a' || c > 'z') break;
+        tok += c;
+      }
+      if (tok == "hcd") beam = true;
+      else if (tok == "cid" || tok == "pqd") res = true;
+    }
+    return beam ? Fragmentation::Beam : res ? Fragmentation::Resonance : Fragmentation::Unknown;
+  }
+
+  void addFragmentation(RunMeta& meta, Fragmentation frag, std::string_view filter)
+  {
+    if (frag == Fragmentation::Unknown) frag = fragmentationFromFilter(filter);
+    if (frag == Fragmentation::Beam) ++meta.ms2_beam;
+    else if (frag == Fragmentation::Resonance) ++meta.ms2_resonance;
+    const std::size_t b = filter.find_first_not_of(" \t");
+    if (b != std::string_view::npos && filter.size() - b >= 4)
+    {
+      std::string head(filter.substr(b, 4));
+      for (char& c : head) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+      if (head == "ITMS") ++meta.ms2_itms;
+      else if (head == "FTMS") ++meta.ms2_ftms;
+    }
+  }
+
   std::string instrumentClass(const RunMeta& meta)
   {
     // The timstof and ion_counts rules of digestRows(), read the same way.
@@ -444,8 +477,17 @@ namespace FASTag::Digest
     if (!have_meta && meta.peaks > 0 &&
         static_cast<double>(meta.peaks_whole) / static_cast<double>(meta.peaks) >= 0.5)
       return "timstof";
+    bool orbi = meta.analyzer_orbitrap;
     for (const char* k : {"orbitrap", "q exactive", "exploris", "astral", "lumos", "fusion", "eclipse", "ascend"})
+      if (inst.find(k) != std::string::npos) orbi = true;
+    if (!orbi) return "other";
+    if (meta.ms2_itms > meta.ms2_ftms) return "other";  // MS2 mostly read in the ion trap
+    if (meta.ms2_beam + meta.ms2_resonance > 0)
+      return meta.ms2_beam > meta.ms2_resonance ? "orbitrap_hcd" : "other";
+    // No activation information: only what can only be HCD in the Orbitrap.
+    for (const char* k : {"q exactive", "exploris", "astral"})
       if (inst.find(k) != std::string::npos) return "orbitrap_hcd";
+    if (meta.analyzer_orbitrap && !meta.analyzer_iontrap) return "orbitrap_hcd";
     return "other";
   }
   // ---- end 1.12 D ----

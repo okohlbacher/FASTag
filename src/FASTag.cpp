@@ -2938,6 +2938,7 @@ protected:
       FASTag::Digest::TerminusCounter digest;
       std::vector<double> first_peak, scan_low;
       size_t ms2_meta = 0, im_vssc = 0, im_drift = 0, im_faims = 0, im_other = 0;
+      FASTag::Digest::RunMeta frag;  ///< 1.12 D #3c: MS2 fragmentation counts only (addFragmentation)
       size_t peaks = 0, peaks_whole = 0;
       // FASTAG_TIMING only, thread-seconds: reading (getSpectrum), of that in
       // reads slower than 1 ms (a wait for the mzPeak reader, for one),
@@ -2972,6 +2973,10 @@ protected:
       alk_settings.min_share = getDoubleOption_("alkylation_min_share");
       for (const auto& [res, delta] : fixed_deltas)
         if (res == 'C') alk_settings.fixed_c += delta;
+      // A fixed N-/C-terminal label (TMT, iTRAQ) is in the spectrum flank,
+      // not the database prefix, as the reconciler is told (setFixedTermMods).
+      alk_settings.fixed_term_n = fixed_term_n;
+      alk_settings.fixed_term_c = fixed_term_c;
       alk_settings.met_oxidation = ModificationsDB::getInstance()->getModification("Oxidation (M)")->getDiffMonoMass();
       alk_settings.residue_mass = FASTag::Alkylation::residueMasses(fixed_deltas);
     }
@@ -3062,6 +3067,18 @@ protected:
           double b = std::numeric_limits<double>::infinity();
           for (const auto& w : wins) b = std::min(b, w.begin);
           pt.scan_low.push_back(b);
+        }
+        // 1.12 D #3c: fragmentation and MS2 analyzer, for the detection class.
+        {
+          using AM = Precursor::ActivationMethod;
+          const auto& am = spec.getPrecursors().front().getActivationMethods();
+          FASTag::Digest::Fragmentation fr = FASTag::Digest::Fragmentation::Unknown;
+          if (am.count(AM::HCD) || am.count(AM::HCID)) fr = FASTag::Digest::Fragmentation::Beam;
+          else if (am.count(AM::CID) || am.count(AM::TRAP) || am.count(AM::PQD) || am.count(AM::LCID))
+            fr = FASTag::Digest::Fragmentation::Resonance;
+          const std::string filter =
+              spec.metaValueExists("filter string") ? std::string(spec.getMetaValue("filter string").toString()) : std::string();
+          FASTag::Digest::addFragmentation(pt.frag, fr, filter);
         }
         bool has_im = false;
         DriftTimeUnit unit = DriftTimeUnit::NONE;
@@ -3174,7 +3191,9 @@ protected:
           pt.digest.add(t.nterm_mass, t.cterm_mass, FASTag::baseSequence(t.seq));
 
         // 1.12 D #3g: the tags -alkylation_out reads (as the digest report).
-        const bool alk_tag = alkylation_on && !t.gapped && t.evalue <= 1.0;
+        // Merge onto E6: gate by the selected hypothesis (`&& sel`); onto
+        // E15B: c/z tags go to Alkylation::Tally::excludeNonBy() instead.
+        const bool alk_tag = alkylation_on && FASTag::Alkylation::countsTag(t.gapped, t.evalue);
         if (place_on && !row_entrap && (place_every || alk_tag))  // known-false rows must not place or bin
         {
           // The tag's own variable mods go on the localization ladder.
@@ -3260,33 +3279,8 @@ protected:
               }
           }
           // ---- 1.12 D: per-tag placement records ----
-          if (alk_tag)
-          {
-            // #3g: the tag's single-Cys placements; the spectrum votes with
-            // its best tag that has one (Alkylation::tagVote).
-            FASTag::Alkylation::Tally& at = pt.acc.d.alk;
-            ++at.tags;
-            static thread_local std::vector<FASTag::Alkylation::Eval> alk_evals;
-            alk_evals.clear();
-            for (const auto& pl : places)
-            {
-              FASTag::Alkylation::Placement ap;
-              ap.peptide = pl.peptide;
-              ap.start = pl.start;
-              ap.tag_pos = static_cast<int>(pl.pos);
-              ap.tag_len = static_cast<int>(pl.tag_len);
-              ap.nterm_match = pl.nterm_match;
-              ap.cterm_match = pl.cterm_match;
-              ap.gap = pl.delta_mass;
-              alk_evals.push_back(FASTag::Alkylation::evaluate(ap, alk_settings, alk_forms));
-            }
-            FASTag::Alkylation::Vote v = FASTag::Alkylation::tagVote(alk_evals, alk_forms, at.outcomes);
-            if (v.have && (!alk_vote.have || t.evalue < alk_vote.evalue))
-            {
-              v.evalue = t.evalue;
-              alk_vote = v;
-            }
-          }
+          if (alk_tag)  // #3g
+            FASTag::Alkylation::addTag(pt.acc.d.alk, alk_vote, places, t.evalue, alk_settings, alk_forms);
           // A candidate for the spectrum's -delta_out sample: take this
           // tag's min-|delta| placement.
           if (delta_on && !places.empty() && (!delta_have || t.evalue < delta_e))
@@ -3318,7 +3312,7 @@ protected:
         if (delta_clamped) ++pt.delta_clamped;
         else pt.delta.push_back(std::move(delta_sample));
       }
-      if (alk_vote.have) pt.acc.d.alk.add(alk_vote);  // 1.12 D #3g
+      FASTag::Alkylation::addSpectrum(pt.acc.d.alk, alk_vote);  // 1.12 D #3g
       if (!id_hits.empty())
         res.ids.push_back(FASTag::reconSpectrum(spec.getNativeID(), spec.getRT(), prec.getMZ(),
                                                 std::move(id_hits)));
@@ -3962,6 +3956,12 @@ protected:
       run_meta.activation_hybrid = act.of(Activation::Hybrid);
       run_meta.activation_unknown = act.of(Activation::Unknown);
     }
+    // ---- 1.12 D: the alkylation call (#3g), once, right after the merge ----
+    // Before the hand-off exports, so a reader of the call there (the A17
+    // merge: ShiftSettings::alkylation_call for -search_shifts) sees the same
+    // Call that -alkylation_out writes after phase 9.
+    FASTag::Alkylation::Call alk_call;
+    if (alkylation_on) alk_call = FASTag::Alkylation::callAlkylation(run_acc.d.alk, alk_settings);
     tsv.close();  // flushes; a failed write anywhere leaves the stream failed
     if (tsv.fail())
     {
@@ -4482,6 +4482,10 @@ protected:
           meta.im_other += pt.im_other;
           meta.peaks += pt.peaks;
           meta.peaks_whole += pt.peaks_whole;
+          meta.ms2_beam += pt.frag.ms2_beam;
+          meta.ms2_resonance += pt.frag.ms2_resonance;
+          meta.ms2_itms += pt.frag.ms2_itms;
+          meta.ms2_ftms += pt.frag.ms2_ftms;
           meta.first_peak.insert(meta.first_peak.end(), pt.first_peak.begin(), pt.first_peak.end());
           meta.scan_low.insert(meta.scan_low.end(), pt.scan_low.begin(), pt.scan_low.end());
         }
@@ -4516,6 +4520,15 @@ protected:
         }
         meta.instrument_name = es.getInstrument().getName();
         meta.instrument_model = es.getInstrument().getModel();
+        for (const MassAnalyzer& ma : es.getInstrument().getMassAnalyzers())
+        {
+          using AT = MassAnalyzer::AnalyzerType;
+          const AT at = ma.getType();
+          if (at == AT::ORBITRAP) meta.analyzer_orbitrap = true;
+          else if (at == AT::PAULIONTRAP || at == AT::RADIALEJECTIONLINEARIONTRAP || at == AT::AXIALEJECTIONLINEARIONTRAP ||
+                   at == AT::IT || at == AT::LIT)
+            meta.analyzer_iontrap = true;
+        }
         for (const SourceFile& sf : es.getSourceFiles())
           if (!sf.getNativeIDTypeAccession().empty()) { meta.native_id_type = sf.getNativeIDTypeAccession(); break; }
         std::vector<FD::Row> rows = run_rows();
@@ -4553,7 +4566,7 @@ protected:
     if (alkylation_on)
     {
       const FASTag::Alkylation::Tally& at = run_acc.d.alk;
-      const FASTag::Alkylation::Call call = FASTag::Alkylation::callAlkylation(at, alk_settings);
+      const FASTag::Alkylation::Call& call = alk_call;
       FASTag::Alkylation::ReportInfo info;
       info.database = recon_db;
       info.database_source = alk_db_source;

@@ -379,7 +379,25 @@ namespace FASTag::Digest
     std::vector<double> first_peak;              ///< lowest peak m/z per MS2
     std::uint64_t peaks = 0, peaks_whole = 0;    ///< MS2 peaks with an intensity above 0, and those of them that are whole numbers
     bool im_unread = false;                      ///< the input format carries no ion mobility (MGF)
+    // ---- 1.12 D #3c: MS2 fragmentation and analyzer, for instrumentClass() only ----
+    std::uint64_t ms2_beam = 0;       ///< MS2 with beam-type CID (HCD) activation (addFragmentation())
+    std::uint64_t ms2_resonance = 0;  ///< MS2 with resonance (ion-trap) CID, trap-type CID or PQD
+    std::uint64_t ms2_itms = 0, ms2_ftms = 0;  ///< MS2 whose Thermo filter string starts ITMS / FTMS
+    bool analyzer_orbitrap = false, analyzer_iontrap = false;  ///< mass analyzers the run header names
+    // ---- end 1.12 D ----
   };
+
+  // ---- 1.12 D #3c: MS2 fragmentation ----
+  /// What one MS2 spectrum says about its fragmentation and analyzer.
+  enum class Fragmentation : int { Unknown = 0, Beam, Resonance };
+  /// Counts one MS2 into @p meta: @p frag from its activation methods (or
+  /// its filter string's @hcd/@cid token when they say nothing), and the
+  /// ITMS/FTMS prefix of @p filter (empty: none).
+  void addFragmentation(RunMeta& meta, Fragmentation frag, std::string_view filter);
+  /// The @<method> tokens of a Thermo filter string: hcd is Beam; cid and
+  /// pqd are Resonance (hcd wins when both appear).
+  Fragmentation fragmentationFromFilter(std::string_view filter);
+  // ---- end 1.12 D ----
 
   struct DigestSettings
   {
@@ -409,11 +427,20 @@ namespace FASTag::Digest
   };
 
   // ---- 1.12 D: instrument class (#3c) ----
-  /// The detection class of a run (kInstrumentClasses): timstof when the
-  /// timstof or ion_counts no-call rule of -digest_out would read "yes";
-  /// orbitrap_hcd when the instrument name or model names an Orbitrap-family
-  /// instrument (Orbitrap, Q Exactive, Exploris, Astral, Lumos, Fusion,
-  /// Eclipse, Ascend); other otherwise.
+  /// The detection class of a run (kInstrumentClasses). Detection is a
+  /// property of the MS2 analyzer and the fragmentation, not of the
+  /// instrument's name:
+  ///   - timstof when the timstof or ion_counts no-call rule of -digest_out
+  ///     would read "yes";
+  ///   - orbitrap_hcd for an Orbitrap-family run (the name or model names
+  ///     Orbitrap, Q Exactive, Exploris, Astral, Lumos, Fusion, Eclipse or
+  ///     Ascend, or the run header lists an Orbitrap analyzer) whose MS2 are
+  ///     mostly beam-type CID (HCD) and not mostly read in the ion trap (ITMS
+  ///     filter strings). Without any activation information, only the
+  ///     HCD-only families (Q Exactive, Exploris, Astral) or a header with an
+  ///     Orbitrap and no ion-trap analyzer count;
+  ///   - other otherwise: an LTQ Orbitrap or Velos run with ion-trap CID MS2
+  ///     is other, not orbitrap_hcd.
   std::string instrumentClass(const RunMeta& meta);
   // ---- end 1.12 D ----
 

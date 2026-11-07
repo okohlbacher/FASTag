@@ -8,6 +8,12 @@
 // the run's fixed modifications, so the cysteine's own mass shift is
 //   reagent = gap + fixed C delta
 // (gap -57.021 under a fixed Carbamidomethyl reads 0: unmodified).
+// A fixed peptide-terminal label (TMT, iTRAQ: -fixed_modifications on the
+// N- or C-terminus) is in the spectrum flank but not in the database prefix
+// (TagRecon.h setFixedTermMods), so a gap on the labelled side is first
+// reduced by the label, by the rule of Shortlist::classifyPlacement: a
+// remainder within the window is an exact placement (label-exact), otherwise
+//   reagent = (gap - label) + fixed C delta.
 //
 // Rules, each counted when it drops a placement (alk_cys excluded.*):
 //   - no_cys / multi_cys / cys_in_tag: the peptide has no C, two or more, or
@@ -42,6 +48,7 @@
 #pragma once
 
 #include "Digest.h"
+#include "TagRecon.h"
 
 #include <OpenMS/FORMAT/FASTAFile.h>
 
@@ -94,6 +101,9 @@ namespace FASTag::Alkylation
     std::uint64_t min_spectra = 10;    ///< -alkylation_min_spectra
     double min_share = 0.6;            ///< -alkylation_min_share
     double fixed_c = 0.0;              ///< the run's fixed modification on C (0: none)
+    /// The run's fixed peptide N-/C-terminal modification masses (TMT,
+    /// iTRAQ; 0: none), as the reconciler gets them (setFixedTermMods).
+    double fixed_term_n = 0.0, fixed_term_c = 0.0;
     double met_oxidation = 15.9949146; ///< Oxidation (M), set from ModificationsDB by the caller
     /// Residue masses as the index sums them: unmodified residue masses plus
     /// the run's fixed modifications, by ASCII code (residueMasses()).
@@ -135,7 +145,7 @@ namespace FASTag::Alkylation
   {
     Outcome outcome = Outcome::NoCys;
     int form = -1;         ///< index into forms() (Binned)
-    double reagent = 0.0;  ///< gap + fixed C delta (from NoCys on: 0)
+    double reagent = 0.0;  ///< (gap - terminal label) + fixed C delta (from NoCys on: 0)
   };
   Eval evaluate(const Placement& p, const Settings& s, const std::vector<Form>& forms);
 
@@ -154,6 +164,11 @@ namespace FASTag::Alkylation
   Vote tagVote(const std::vector<Eval>& evals, const std::vector<Form>& forms,
                std::array<std::uint64_t, static_cast<int>(Outcome::kCount)>& outcomes);
 
+  /// Whether a written tag row feeds the call: ungapped with E <= 1, the
+  /// tags the digest report counts. The caller adds its own gates (the
+  /// selected precursor hypothesis once #6 is merged, b/y tags only).
+  inline bool countsTag(bool gapped, double evalue) { return !gapped && evalue <= 1.0; }
+
   /// Run totals, summed over threads (merge) after the tagging loop.
   struct Tally
   {
@@ -163,9 +178,25 @@ namespace FASTag::Alkylation
     std::array<std::uint64_t, kNumClasses> cls{};  ///< votes per call class
     std::array<std::uint64_t, kNumForms> form{};   ///< votes per form (forms() order; agreed form only)
     std::array<std::uint64_t, static_cast<int>(Outcome::kCount)> outcomes{};  ///< placements per outcome
+    /// Tags left out because they are not b/y tags (c/z, PLAN-INTEGRATION
+    /// 2.3 contract 2; excludeNonBy()). Always 0 before c/z tagging (#15
+    /// phase B): the E15B merge counts its c/z tags here instead of placing
+    /// them for the call.
+    std::uint64_t excluded_non_by = 0;
     void add(const Vote& v);
+    void excludeNonBy() { ++excluded_non_by; }
     void merge(const Tally& o);
   };
+
+  /// One counted tag (countsTag()) with its placements, the whole per-tag
+  /// work of the consumer in tag_one: counts the tag in t.tags, its
+  /// placements' outcomes in t.outcomes, and keeps the tag's vote in
+  /// @p spectrum_vote when it has one and is the spectrum's best (lowest
+  /// E-value) so far. Call addSpectrum() once after the spectrum's tags.
+  void addTag(Tally& t, Vote& spectrum_vote, const std::vector<Reconciliation>& places, double evalue,
+              const Settings& s, const std::vector<Form>& forms);
+  /// The spectrum's vote (from addTag()) into @p t; nothing without one.
+  inline void addSpectrum(Tally& t, const Vote& spectrum_vote) { t.add(spectrum_vote); }
 
   struct Call
   {

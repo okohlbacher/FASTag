@@ -15,6 +15,7 @@
 #include <cmath>
 #include <cstdio>
 #include <stdexcept>
+#include <tuple>
 
 namespace FASTag::Alkylation
 {
@@ -119,15 +120,28 @@ namespace FASTag::Alkylation
     if (ncys > 1) { e.outcome = Outcome::MultiCys; return e; }
     const int tag_end = p.tag_pos + p.tag_len;  // one past the tag
     if (cpos >= p.tag_pos && cpos < tag_end) { e.outcome = Outcome::CysInTag; return e; }
-    const bool exact = p.nterm_match && p.cterm_match;
+    bool exact = p.nterm_match && p.cterm_match;
     bool nside = cpos < p.tag_pos;
     double gap = 0.0;
     if (!exact)
     {
       const bool gap_n = !p.nterm_match;  // the reconciler allows one mismatched side
-      if (gap_n != nside) { e.outcome = Outcome::CysOutsideRegion; return e; }
-      gap = p.gap;
-      if (nside && p.start == 0) { e.outcome = Outcome::ProteinNTerm; return e; }
+      // A fixed terminal label on the gap side is in the spectrum flank, not
+      // in the database prefix: take it off (Shortlist::classifyPlacement).
+      // What is left within the window is a label-exact placement.
+      const double label = gap_n ? s.fixed_term_n : s.fixed_term_c;
+      double rest = p.gap;
+      if (label != 0.0)
+      {
+        rest -= label;
+        if (std::fabs(rest) <= s.window) exact = true;
+      }
+      if (!exact)
+      {
+        if (gap_n != nside) { e.outcome = Outcome::CysOutsideRegion; return e; }
+        gap = rest;
+        if (nside && p.start == 0) { e.outcome = Outcome::ProteinNTerm; return e; }
+      }
     }
     // The gap side: [0, tag_pos) or [tag_end, L).
     const int lo = nside ? 0 : tag_end, hi = nside ? p.tag_pos - 1 : L - 1;
@@ -187,6 +201,32 @@ namespace FASTag::Alkylation
     return v;
   }
 
+  void addTag(Tally& t, Vote& spectrum_vote, const std::vector<Reconciliation>& places, double evalue,
+              const Settings& s, const std::vector<Form>& forms)
+  {
+    ++t.tags;
+    static thread_local std::vector<Eval> evals;
+    evals.clear();
+    for (const Reconciliation& pl : places)
+    {
+      Placement ap;
+      ap.peptide = pl.peptide;
+      ap.start = pl.start;
+      ap.tag_pos = static_cast<int>(pl.pos);
+      ap.tag_len = static_cast<int>(pl.tag_len);
+      ap.nterm_match = pl.nterm_match;
+      ap.cterm_match = pl.cterm_match;
+      ap.gap = pl.delta_mass;
+      evals.push_back(evaluate(ap, s, forms));
+    }
+    Vote v = tagVote(evals, forms, t.outcomes);
+    if (v.have && (!spectrum_vote.have || evalue < spectrum_vote.evalue))
+    {
+      v.evalue = evalue;
+      spectrum_vote = v;
+    }
+  }
+
   void Tally::add(const Vote& v)
   {
     if (!v.have) return;
@@ -206,6 +246,7 @@ namespace FASTag::Alkylation
     spectra += o.spectra;
     conflict += o.conflict;
     unexplained += o.unexplained;
+    excluded_non_by += o.excluded_non_by;
     for (std::size_t k = 0; k < cls.size(); ++k) cls[k] += o.cls[k];
     for (std::size_t k = 0; k < form.size(); ++k) form[k] += o.form[k];
     for (std::size_t k = 0; k < outcomes.size(); ++k) outcomes[k] += o.outcomes[k];
@@ -262,6 +303,13 @@ namespace FASTag::Alkylation
         info.reagent_note.empty() ? "The run has no fixed modification on C; the reagent mass is the gap."
                                   : "The run's fixed " + info.reagent_note + " on C adds " + num(s.fixed_c) +
                                         " Da to every gap: the reagent mass is gap + " + num(s.fixed_c) + ".");
+    for (const auto& [key, label, side] : {std::tuple<const char*, double, const char*>{"fixed_nterm_delta", s.fixed_term_n, "N"},
+                                           std::tuple<const char*, double, const char*>{"fixed_cterm_delta", s.fixed_term_c, "C"}})
+      add("alk_run", key, num(label), "-",
+          label == 0.0 ? std::string("The run has no fixed peptide ") + side + "-terminal modification."
+                       : std::string("The run's fixed peptide ") + side + "-terminal modification of " + num(label) +
+                             " Da is taken off a gap on the " + side +
+                             " side first (the spectrum carries it, the database does not); a rest within the window is an exact placement.");
     add("alk_run", "window", num(s.window), "-", "A reagent mass bins to a Cys form within " + num(s.window) + " Da of it.");
     add("alk_run", "min_spectra", u(s.min_spectra), "-",
         "A call needs " + u(s.min_spectra) + " spectra binned in total and for the called class.");
@@ -299,6 +347,9 @@ namespace FASTag::Alkylation
       add("alk_cys", std::string("excluded.") + outcomeName(o), u(t.outcomes[static_cast<std::size_t>(k)]), u(placements),
           u(t.outcomes[static_cast<std::size_t>(k)]) + " of " + u(placements) + " placements are left out: they " + why[k] + ".");
     }
+    add("alk_cys", "excluded.non_by", u(t.excluded_non_by), u(t.tags + t.excluded_non_by),
+        u(t.excluded_non_by) + " of " + u(t.tags + t.excluded_non_by) +
+            " tags are left out because they are not b/y tags (c/z); they are not placed for the call.");
 
     // ---- alkylation_call
     const std::string name = c.cls >= 0 ? className(c.cls) : "-";

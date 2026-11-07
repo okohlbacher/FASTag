@@ -239,9 +239,15 @@ install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/data/digest/digest_models.tsv"
         DESTINATION share/FASTag/digest)
 # ---- 1.12 D: the -alkylation_proteome proteomes (#3g), beside the digest
 # data at <bin>/../share/FASTag/alkylation (flat layout: share-FASTag-alkylation).
-# Installed only once data/alkylation holds them (not in git yet).
+# Installed only once data/alkylation holds them (not in git yet). The
+# proteomes ship only with their README (UniProt release, sha256, CC BY 4.0
+# notice): a drop without it is a configure error, not an install failure.
 file(GLOB FASTAG_ALKYLATION_PROTEOMES "${CMAKE_CURRENT_SOURCE_DIR}/data/alkylation/*.fasta.gz")
 if(FASTAG_ALKYLATION_PROTEOMES)
+  if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/data/alkylation/README.md")
+    message(FATAL_ERROR "data/alkylation holds proteomes (${FASTAG_ALKYLATION_PROTEOMES}) but no README.md "
+                        "with their UniProt release, sha256 and licence notice; add it (and the BOM.md row).")
+  endif()
   install(FILES ${FASTAG_ALKYLATION_PROTEOMES} "${CMAKE_CURRENT_SOURCE_DIR}/data/alkylation/README.md"
           DESTINATION share/FASTag/alkylation)
 endif()

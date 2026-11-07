@@ -209,8 +209,8 @@ done
   || fail "v2: no LysargiNase or Asp-N_ambic model"
 [ "$(val "$TMP/vdigest2.tsv" call status) $(val "$TMP/vdigest2.tsv" call reason)" = "no_call ms2_first_peak" ] \
   || fail "v2 without flank2 is not withheld by ms2_first_peak"
-[ "$(val "$TMP/vdigest2.tsv" call flank2_used) $(val "$TMP/vdigest2.tsv" call timstof_call) $(val "$TMP/vdigest2.tsv" meta instrument_class)" = "no no orbitrap_hcd" ] \
-  || fail "v2: flank2_used/timstof_call/instrument_class"
+[ "$(val "$TMP/vdigest2.tsv" call flank2_used) $(val "$TMP/vdigest2.tsv" call timstof_call) $(val "$TMP/vdigest2.tsv" meta instrument_class)" = "no no other" ] \
+  || fail "v2: flank2_used/timstof_call/instrument_class (the LTQ Orbitrap XL fixture has ion-trap CID MS2: other)"
 # p_correct needs a call; the shipped calibration is unfitted (all coefficients 0)
 [ "$(val "$TMP/vdigest2.tsv" run calibration) $(val "$TMP/vdigest2.tsv" nocall low_confidence)" = "shipped no" ] \
   || fail "v2: the shipped calibration is not loaded"
@@ -318,6 +318,16 @@ same "$TMP/alk0.tsv" "$TMP/alk3.tsv" "-alkylation_out differs between 2 and 1 th
 run -in "$IN" -tag_length 4 -out "$TMP/a5.tsv" -alkylation_out "$TMP/alk5.tsv" -alkylation_proteome "$DB" -fixed_modifications
 alk_check "$TMP/alk5.tsv"
 [ "$(val "$TMP/alk5.tsv" alk_run window) $(val "$TMP/alk5.tsv" alk_run fixed_c_delta)" = "0.02 0" ] || fail "alk5: window/fixed_c_delta"
+[ "$(val "$TMP/alk0.tsv" alk_run fixed_nterm_delta) $(val "$TMP/alk0.tsv" alk_run fixed_cterm_delta) $(val "$TMP/alk0.tsv" alk_cys excluded.non_by)" = "0 0 0" ] \
+  || fail "alk0: an unlabelled run has no terminal label and no excluded c/z tag"
+# a fixed N-terminal label (TMT) reaches the alkylation settings, and -recon_out stays byte-identical with -alkylation_out
+TMTRUN=("${COMMON[@]}" -fixed_modifications 'Carbamidomethyl (C)' 'TMT6plex (K)' 'TMT6plex (N-term)' -recon_fasta "$DB")
+run "${TMTRUN[@]}" -out "$TMP/t1.tsv" -recon_out "$TMP/tr1.tsv"
+run "${TMTRUN[@]}" -out "$TMP/t2.tsv" -recon_out "$TMP/tr2.tsv" -alkylation_out "$TMP/talk.tsv"
+same "$TMP/tr1.tsv" "$TMP/tr2.tsv" "-alkylation_out changed -recon_out on a labelled run"
+alk_check "$TMP/talk.tsv"
+case "$(val "$TMP/talk.tsv" alk_run fixed_nterm_delta)" in 229.16*) ;; *) fail "talk: fixed_nterm_delta is not the TMT6plex mass";; esac
+[ "$(val "$TMP/talk.tsv" alk_run fixed_cterm_delta)" = 0 ] || fail "talk: fixed_cterm_delta"
 # the shipped proteomes beside the digest data (a gzip-compressed FASTA), found through FASTAG_DIGEST_DIR
 if command -v gzip > /dev/null 2>&1; then
   mkdir -p "$TMP/share/digest" "$TMP/share/alkylation"
