@@ -208,6 +208,35 @@ proptest! {
         std::fs::remove_file(&p).ok();
     }
 
+    /// The order builds in rounds: with no budget each round takes 3 key
+    /// bytes (the fewest), so long cells, shared prefixes, NUL bytes and
+    /// numbers (8 key bytes) take several rounds, through both kinds of
+    /// round (every row a slot, or the open rows only). Every view and the
+    /// order itself are still the reference's, and the same as with room
+    /// for one round.
+    #[test]
+    fn orders_built_in_rounds_equal_the_reference(t in tsv(), specs in prop::collection::vec(spec(), 1..6)) {
+        let p = temp("rounds.tsv", &t.body);
+        let lean = Arc::new(Shared::default());
+        lean.order_budget.store(0, Ordering::SeqCst);
+        for s in &specs {
+            prop_assert_eq!(&view_rows(&lean, &p, s).unwrap(), &oracle(&p, s), "{:?} on {:?}", s, t);
+        }
+        let index = build_index(&p, &Cancel::default()).unwrap();
+        for c in 0..index.columns.len() {
+            let a = build_order(&p, &index, c, 0, &Cancel::default(), &|_, _| {}).unwrap();
+            let b = build_order(&p, &index, c, usize::MAX, &Cancel::default(), &|_, _| {}).unwrap();
+            prop_assert_eq!(&a.asc[..], &b.asc[..]);
+            prop_assert_eq!(a.num_len, b.num_len);
+            prop_assert_eq!(&a.run_start, &b.run_start);
+            for desc in [false, true] {
+                let spec = ViewSpec { sort: by(&index.columns[c], desc), ..Default::default() };
+                prop_assert_eq!(view_rows(&lean, &p, &spec).unwrap(), oracle(&p, &spec), "{:?}", spec);
+            }
+        }
+        std::fs::remove_file(&p).ok();
+    }
+
     /// An export holds exactly the view's rows, in its order, in the chosen
     /// columns: byte for byte what the pages show, as TSV or as CSV.
     #[test]
@@ -589,6 +618,35 @@ fn a_failed_export_job_says_why_and_keeps_the_source() {
     assert_eq!(std::fs::read_to_string(&p).unwrap().lines().count(), 11);
     let id = start_export(&shared, &p, &ViewSpec::default(), &["nope".into()], &format!("{p}.x"), ExportFormat::Tsv, emit).unwrap();
     assert!(matches!(wait_end(&got, id), ExportEvent::Failed { .. }));
+    std::fs::remove_file(&p).ok();
+}
+
+/// A text sort in rounds on a file large enough for several reading
+/// threads: most rows share a long prefix (rounds where every row has a
+/// slot), a few differ only at the end (rounds over the open rows only),
+/// numbers among them (their own block, 8 key bytes over three rounds).
+#[test]
+fn a_text_sort_in_rounds_on_many_rows_equals_the_reference() {
+    let mut body = String::from("spectrum\ttag\tevalue\n");
+    for i in 0..200_000u32 {
+        let tag = match i % 10 {
+            0..=6 => format!("PEPTIDEPEPTIDEPEPTIDE{}", (i * 7919) % 13),
+            7 => format!("PEPTIDEPEPTIDEPEPTIDE{}X{}", i % 3, (i * 31) % 1000),
+            8 => format!("{}", (i as u64 * 104_729) % 977),
+            _ => "-".to_string(),
+        };
+        body.push_str(&format!("scan={i}\t{tag}\t{}\n", (i * 7919) % 1000));
+    }
+    let p = temp("rounds-big.tsv", body.as_bytes());
+    let shared = Arc::new(Shared::default());
+    shared.order_budget.store(0, Ordering::SeqCst);
+    for desc in [false, true] {
+        let s = ViewSpec { sort: by("tag", desc), ..Default::default() };
+        assert_eq!(view_rows(&shared, &p, &s).unwrap(), oracle(&p, &s), "desc {desc}");
+    }
+    let index = build_index(&p, &Cancel::default()).unwrap();
+    let r = build_order(&p, &index, 1, 0, &Cancel::default(), &|_, _| {}).unwrap();
+    assert_eq!(r.num_len, 20_000);
     std::fs::remove_file(&p).ok();
 }
 

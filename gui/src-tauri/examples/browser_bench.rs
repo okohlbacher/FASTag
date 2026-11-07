@@ -411,6 +411,9 @@ fn p3(path: &str) -> String {
     let t = Instant::now();
     let (best_rows, _) = s.query(&best, 0, 200).unwrap();
     let best_ms = ms(t);
+    if trace {
+        eprintln!("cached + best: peak {} MB, now {} MB", peak_rss_bytes() >> 20, rss_now_mb());
+    }
     // The header from the first line (no second index: it would count in
     // the peak).
     let mut first = String::new();
@@ -430,6 +433,9 @@ fn p3(path: &str) -> String {
             v.push((t.elapsed().as_secs_f64() / per * 1e3).round() / 1e3);
         }
         let m = median(v.clone());
+        if std::env::var_os("FASTAG_BENCH_TRACE").is_some() {
+            eprintln!("export {:?} {}: peak {} MB, now {} MB", spec.sort.as_ref().map(|x| (&x.column, x.desc)), per, peak_rss_bytes() >> 20, rss_now_mb());
+        }
         (n, v, m)
     };
     let (n_unsorted, unsorted_v, unsorted) = rep(&ViewSpec::default(), ExportFormat::Tsv, gb);
