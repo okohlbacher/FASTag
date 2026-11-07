@@ -13,6 +13,8 @@
 #include <OpenMS/CHEMISTRY/ResidueModification.h>
 
 #include <cctype>
+#include <cmath>
+#include <cstdio>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -144,6 +146,324 @@ namespace
     p.precursor_ppm = true;
     p.fastag_version = "test";
     return p;
+  }
+
+  // ---- #17 mass shifts: synthetic gap results ------------------------------
+  namespace FD = FASTag::Digest;
+  struct ShiftFixture
+  {
+    std::vector<FD::GapMod> mods;
+    std::vector<FD::Combo> combos;
+    double tol = 0.02;
+    ShiftFixture()
+    {
+      std::ifstream f(std::string(FASTAG_FIXTURES) + "/../../data/digest/massgap_mods.tsv");
+      std::string err;
+      if (!FD::parseGapMods(f, mods, &err)) std::cerr << "massgap_mods.tsv: " << err << "\n";
+      for (FD::GapMod& m : mods) m.mass = mod(m.site.c_str())->getDiffMonoMass();
+      combos = FD::combinations(mods, 3);
+    }
+    FD::GapPeak peak(double d, std::uint64_t n) const
+    {
+      FD::GapPeak p{d, n, {}, {}, {}, {}};
+      const auto ex = FD::explain(combos, mods, d, tol);
+      if (!ex.empty()) p.explained_by = ex.front();
+      return p;
+    }
+    FD::GapResult result(const std::vector<std::pair<double, std::uint64_t>>& peaks) const
+    {
+      FD::GapResult r;
+      for (const auto& [d, n] : peaks)
+      {
+        r.peaks.push_back(peak(d, n));
+        r.placed += n;
+        r.shifted += n;
+      }
+      return r;
+    }
+  };
+  SC::SearchPlan shiftPlan(std::vector<const OpenMS::ResidueModification*> fixed = {},
+                           std::vector<const OpenMS::ResidueModification*> variable = {})
+  {
+    SC::SearchPlan p = plan();
+    p.fixed = std::move(fixed);
+    p.variable = std::move(variable);
+    return p;
+  }
+  SC::ShiftSettings shiftSettings(const char* engine = "comet", SC::ShiftMode m = SC::ShiftMode::Both)
+  {
+    SC::ShiftSettings s;
+    s.engine = engine;
+    s.mode = m;
+    return s;
+  }
+  bool hasMod(const std::vector<const OpenMS::ResidueModification*>& v, const std::string& id)
+  {
+    for (const auto* m : v)
+      if (m->getFullId() == id) return true;
+    return false;
+  }
+  const SC::ShiftDecision* decisionAt(const SC::ShiftOutcome& o, double d)
+  {
+    for (const auto& x : o.decisions)
+      if (std::abs(x.delta - d) < 1e-9) return &x;
+    static const SC::ShiftDecision none{};  // a missing decision fails the checks, never crashes
+    return &none;
+  }
+  std::string actionAt(const SC::ShiftOutcome& o, double d)
+  {
+    const auto* x = decisionAt(o, d);
+    return x->action.empty() ? std::string("<none>") : x->action;
+  }
+
+  void shiftTests()
+  {
+    const ShiftFixture fx;
+    check(fx.mods.size() > 30, "shifts: massgap_mods.tsv loaded");
+    const auto* cam = mod("Carbamidomethyl (C)");
+    // 1. Oxidation peak -> variable Oxidation (M)
+    {
+      auto p = shiftPlan({cam});
+      const auto o = SC::shiftsToPlan(fx.result({{15.9949, 100}}), {}, fx.mods, fx.combos, shiftSettings(), p);
+      check(o.decisions.size() == 1 && actionAt(o, 15.9949) == "variable" && decisionAt(o, 15.9949)->mod_id == "Oxidation (M)",
+            "shifts 1: an Oxidation peak is variable Oxidation (M)");
+      check(hasMod(p.variable, "Oxidation (M)") && p.variable.size() == 1 && p.mass_offsets.empty(),
+            "shifts 1: the plan gains Oxidation (M) as its only variable modification");
+      check(decisionAt(o, 15.9949)->peak == 1, "shifts 1: peaks are numbered from 1 as -massgap_out numbers them");
+    }
+    // 2./3. combination and unexplained -> Comet offsets at the 4-decimal gap
+    {
+      const double combo = 15.994915 + 42.010565;  // Oxidation + Acetyl
+      check(fx.peak(combo, 1).explained_by.size() == 2, "shifts 2: the combination is a two-modification explanation");
+      check(fx.peak(123.4567, 1).explained_by.empty(), "shifts 3: 123.4567 has no explanation");
+      auto p = shiftPlan({cam});
+      const auto o = SC::shiftsToPlan(fx.result({{combo, 80}, {123.45671, 50}}), {}, fx.mods, fx.combos, shiftSettings(), p);
+      check(actionAt(o, combo) == "offset" && actionAt(o, 123.45671) == "offset", "shifts 2/3: combination and unexplained are offsets");
+      check(p.mass_offsets.size() == 2 && std::abs(p.mass_offsets[0] - 58.0055) < 1e-9 && std::abs(p.mass_offsets[1] - 123.4567) < 1e-9,
+            "shifts 2/3: offsets at the 4-decimal centroid, by spectra");
+      check(p.variable.empty(), "shifts 2/3: no variable modification from offsets");
+    }
+    // 4. fixed Carbamidomethyl (C)
+    {
+      auto p = shiftPlan({cam});
+      const auto o = SC::shiftsToPlan(fx.result({{57.0215, 100}, {-57.0215, 40}}), {}, fx.mods, fx.combos, shiftSettings(), p);
+      check(actionAt(o, 57.0215) == "variable", "shifts 4: +57.021 with fixed CAM is variable");
+      check(hasMod(p.variable, "Carbamidomethyl (K)") && hasMod(p.variable, "Carbamidomethyl (H)") &&
+                hasMod(p.variable, "Carbamidomethyl (N-term)") && !hasMod(p.variable, "Carbamidomethyl (C)"),
+            "shifts 4: overalkylation on K, H and N-term, not C");
+      check(actionAt(o, -57.0215) == "fixed_mod_questionable" && !o.warnings.empty(),
+            "shifts 4: -57.021 with fixed CAM is fixed_mod_questionable with a warning");
+      check(p.fixed.size() == 1, "shifts 4: the fixed CAM stays the only fixed modification");
+      // no fixed Cys modification, a dominant CAM peak -> suggest_fixed
+      auto q = shiftPlan();
+      auto s = shiftSettings();
+      s.c_placements = 100;
+      const auto o2 = SC::shiftsToPlan(fx.result({{57.0215, 60}}), {}, fx.mods, fx.combos, s, q);
+      check(actionAt(o2, 57.0215) == "fixed" && hasMod(q.fixed, "Carbamidomethyl (C)") && q.variable.empty() && !o2.warnings.empty(),
+            "shifts 4: no fixed CAM and a dominant CAM peak -> fixed Carbamidomethyl (C) with a warning");
+      auto q2 = shiftPlan();
+      const auto o3 = SC::shiftsToPlan(fx.result({{57.0215, 30}}), {}, fx.mods, fx.combos, s, q2);
+      check(actionAt(o3, 57.0215) == "variable" && hasMod(q2.variable, "Carbamidomethyl (C)") && q2.fixed.empty(),
+            "shifts 4: a CAM peak below half the C placements is variable");
+    }
+    // 5. caps with ties
+    {
+      auto p = shiftPlan({cam});
+      const auto o = SC::shiftsToPlan(
+          fx.result({{79.9663, 30}, {42.0106, 50}, {28.0313, 40}, {15.9949, 100}, {14.0157, 50}}), {}, fx.mods, fx.combos,
+          shiftSettings(), p);
+      check(actionAt(o, 15.9949) == "variable" && actionAt(o, 14.0157) == "variable" && actionAt(o, 42.0106) == "variable",
+            "shifts 5: the top 3 by spectra, the tie at 50 by |delta|");
+      check(actionAt(o, 28.0313) == "dropped_cap" && actionAt(o, 79.9663) == "dropped_cap" && p.variable.size() == 3,
+            "shifts 5: the rest dropped_cap");
+      check(o.decisions.size() == 5 && !o.decisions.empty() && o.decisions[0].delta == 79.9663, "shifts 5: decisions in GapResult order");
+      auto q = shiftPlan({cam});
+      auto s = shiftSettings();
+      s.max_offsets = 2;
+      const auto o2 = SC::shiftsToPlan(fx.result({{150.1234, 20}, {123.4567, 20}, {200.5555, 20}}), {}, fx.mods, fx.combos, s, q);
+      check(actionAt(o2, 123.4567) == "offset" && actionAt(o2, 150.1234) == "offset" && actionAt(o2, 200.5555) == "dropped_cap" &&
+                q.mass_offsets.size() == 2,
+            "shifts 5: offsets capped, the tie broken by |delta|");
+    }
+    // 6. Sage drops offsets
+    {
+      auto p = shiftPlan({cam});
+      const auto o = SC::shiftsToPlan(fx.result({{123.4567, 50}, {15.9949, 40}}), {}, fx.mods, fx.combos,
+                                      shiftSettings("sage"), p);
+      check(actionAt(o, 123.4567) == "dropped_engine" && p.mass_offsets.empty() && actionAt(o, 15.9949) == "variable",
+            "shifts 6: Sage drops offsets, keeps variable modifications");
+    }
+    // 7. Comet: offsets list, negative dropped, slot numbering after the user's
+    {
+      auto p = shiftPlan({cam}, {mod("Oxidation (M)")});
+      auto s = shiftSettings();
+      s.max_offsets = 1;
+      const auto o = SC::shiftsToPlan(fx.result({{123.4567, 50}, {-77.7777, 60}, {42.0106, 40}, {15.9949, 30}}), {}, fx.mods,
+                                      fx.combos, s, p);
+      check(actionAt(o, -77.7777) == "dropped_engine", "shifts 7: a negative Comet offset is dropped_engine");
+      check(actionAt(o, 123.4567) == "offset", "shifts 7: 0 is not counted against -shift_max_offsets 1");
+      check(actionAt(o, 15.9949) == "already_searched" && p.variable.size() == 2, "shifts 7: a searched modification is not added twice");
+      const auto m = kv(SC::renderComet(p));
+      check(m.at("mass_offsets") == "0.0 123.4567", "shifts 7: mass_offsets space-separated, 0 first");
+      check(m.at("variable_mod01").rfind("15.994915 M", 0) == 0 && m.at("variable_mod02").rfind("42.010565 K", 0) == 0,
+            "shifts 7: the shift modification follows the user's in variable_mod02");
+    }
+    // 8. isotope vs Deamidated
+    {
+      auto p = shiftPlan({cam});
+      const auto o = SC::shiftsToPlan(fx.result({{1.0034, 100}, {2.0067, 40}, {0.9841, 60}}), {}, fx.mods, fx.combos,
+                                      shiftSettings(), p);
+      check(actionAt(o, 1.0034) == "skipped_isotope" && actionAt(o, 2.0067) == "skipped_isotope", "shifts 8: isotope peaks skipped");
+      check(o.isotope_max == 2 && p.isotope_errors == 2, "shifts 8: the isotope range covers the largest multiple");
+      check(actionAt(o, 0.9841) == "variable" && hasMod(p.variable, "Deamidated (N)"), "shifts 8: 0.9841 is Deamidated");
+    }
+    // 9. fixed TMT N-term label
+    {
+      const auto* tmt = mod("TMT6plex (N-term)");
+      const double L = tmt->getDiffMonoMass();
+      auto p = shiftPlan({cam, tmt});
+      const auto o = SC::shiftsToPlan(fx.result({{L, 300}, {L + 15.994915, 80}, {-L, 30}}), {}, fx.mods, fx.combos,
+                                      shiftSettings(), p);
+      check(actionAt(o, L) == "expected_label", "shifts 9: a peak at the label is expected_label");
+      check(actionAt(o, L + 15.994915) == "variable" && decisionAt(o, L + 15.994915)->mod_id == "Oxidation (M)",
+            "shifts 9: label + Oxidation exports Oxidation");
+      check(actionAt(o, -L) == "label_incomplete" && !o.warnings.empty(), "shifts 9: -label is label_incomplete with a warning");
+      bool tmt_var = false;
+      for (const auto* v : p.variable) tmt_var = tmt_var || v->getId() == "TMT6plex";
+      check(!tmt_var && p.variable.size() == 1 && p.fixed.size() == 2, "shifts 9: the label is not exported again");
+    }
+    // 10. substitution-dominated -> offset
+    {
+      auto p = shiftPlan({cam});
+      SC::PeakEvidence ev;
+      ev.spectra = 100;
+      ev.substitution = 60;
+      const auto o = SC::shiftsToPlan(fx.result({{15.9949, 100}}), {ev}, fx.mods, fx.combos, shiftSettings(), p);
+      check(actionAt(o, 15.9949) == "offset" && p.variable.empty() && std::abs(decisionAt(o, 15.9949)->substitution_share - 0.6) < 1e-12,
+            "shifts 10: a substitution-dominated peak is an offset, not a variable modification");
+    }
+    // 11. member rows are counted once
+    {
+      FD::GapSettings gs;
+      gs.window = 0.02;
+      gs.min_spectra = 2;
+      gs.min_share = 0.0;
+      gs.min_bin = 1;
+      const std::vector<FD::GapRow> rows = {{15.9949, 100}, {15.9999, 20}, {16.0099, 5}, {16.0249, 60}, {16.0349, 7}};
+      const auto res = FD::gapResult(rows, fx.mods, fx.combos, gs);
+      std::vector<SC::RowEvidence> rev(rows.size());
+      for (std::size_t i = 0; i < rows.size(); ++i)
+      {
+        rev[i].spectra = rows[i].spectra;
+        rev[i].substitution = i;
+        rev[i].sites['S'] = rows[i].spectra;
+      }
+      std::set<std::size_t> seen;
+      bool disjoint = true;
+      std::uint64_t total = 0;
+      for (const auto& pk : res.peaks)
+      {
+        for (std::size_t m : pk.members) disjoint = disjoint && seen.insert(m).second;
+        const auto ev = SC::peakEvidence(pk, rev);
+        total += ev.spectra;
+        disjoint = disjoint && ev.spectra == pk.spectra && ev.sites.at('S') == pk.spectra;
+      }
+      check(res.peaks.size() == 2 && disjoint && total == 192, "shifts 11: overlapping windows, each row in one peak's evidence");
+      check(res.peaks.size() == 2 && res.peaks[1].delta > 16.0249 && res.peaks[1].delta < 16.0349,
+            "shifts 11: the second centroid lies between bins");
+    }
+    // 12. site expansion
+    {
+      check(SC::siteSampleCounts('S', 3, 1, 4, 2) && !SC::siteSampleCounts('S', 0, 1, 4, 0) && !SC::siteSampleCounts('S', 3, 2, 4, 2) &&
+                !SC::siteSampleCounts('S', 3, 1, 1, 2) && !SC::siteSampleCounts('S', 1, 1, 4, 2) && !SC::siteSampleCounts(0, 3, 1, 4, 2),
+            "shifts 12: only unique, scored sites in multi-residue regions count");
+      SC::PeakEvidence ev;
+      ev.spectra = 100;
+      ev.site_counted = 100;
+      ev.sites = {{'S', 60}, {'T', 30}, {'Y', 10}};
+      auto p = shiftPlan({cam});
+      SC::shiftsToPlan(fx.result({{79.9663, 100}}), {ev}, fx.mods, fx.combos, shiftSettings(), p);
+      check(p.variable.size() == 1 && hasMod(p.variable, "Phospho (S)"), "shifts 12: no site expansion by default");
+      auto q = shiftPlan({cam});
+      auto s = shiftSettings();
+      s.expand_sites = true;
+      const auto o = SC::shiftsToPlan(fx.result({{79.9663, 100}}), {ev}, fx.mods, fx.combos, s, q);
+      check(q.variable.size() == 2 && hasMod(q.variable, "Phospho (S)") && hasMod(q.variable, "Phospho (T)") &&
+                decisionAt(o, 79.9663)->sites == "S,T",
+            "shifts 12: S:60 T:30 Y:10 expands to S, T");
+      SC::PeakEvidence sparse;
+      sparse.spectra = 100;
+      sparse.site_counted = 10;
+      sparse.sites = {{'S', 6}, {'T', 3}, {'Y', 1}};
+      auto q2 = shiftPlan({cam});
+      SC::shiftsToPlan(fx.result({{79.9663, 100}}), {sparse}, fx.mods, fx.combos, s, q2);
+      check(q2.variable.size() == 1, "shifts 12: sparse support does not expand");
+      bool g_known = true;
+      try { OpenMS::ModificationsDB::getInstance()->getModification("Phospho", "G", OpenMS::ResidueModification::ANYWHERE); }
+      catch (...) { g_known = false; }
+      check(!g_known, "shifts 12: the test assumes ModificationsDB has no Phospho (G)");
+      SC::PeakEvidence unknown;
+      unknown.spectra = 100;
+      unknown.site_counted = 100;
+      unknown.sites = {{'S', 50}, {'G', 50}};
+      auto q3 = shiftPlan({cam});
+      SC::shiftsToPlan(fx.result({{79.9663, 100}}), {unknown}, fx.mods, fx.combos, s, q3);
+      check(q3.variable.size() == 1, "shifts 12: a residue ModificationsDB does not know is excluded");
+    }
+    // 13. SILAC only when called
+    {
+      const double k8 = mod("Label:13C(6)15N(2) (K)")->getDiffMonoMass();
+      auto p = shiftPlan({cam});
+      const auto o = SC::shiftsToPlan(fx.result({{k8, 100}}), {}, fx.mods, fx.combos, shiftSettings(), p);
+      check(actionAt(o, k8) == "skipped_silac" && p.variable.empty(), "shifts 13: no SILAC call, no label exported");
+      auto gr = fx.result({{k8, 100}});
+      gr.silac = "SILAC (Lys8/Arg10)";
+      auto q = shiftPlan({cam});
+      const auto o2 = SC::shiftsToPlan(gr, {}, fx.mods, fx.combos, shiftSettings(), q);
+      check(actionAt(o2, k8) == "variable" && hasMod(q.variable, "Label:13C(6)15N(2) (K)"), "shifts 13: called SILAC is exported");
+    }
+    // 14. empty gap result
+    {
+      auto p = shiftPlan({cam});
+      const auto o = SC::shiftsToPlan(FD::GapResult{}, {}, fx.mods, fx.combos, shiftSettings(), p);
+      check(o.decisions.empty() && !o.info.empty() && p.variable.empty() && p.mass_offsets.empty() && p.isotope_errors == 0,
+            "shifts 14: an empty gap result exports nothing and says so");
+    }
+    // modes
+    {
+      auto p = shiftPlan({cam});
+      const auto o = SC::shiftsToPlan(fx.result({{15.9949, 100}, {123.4567, 50}}), {}, fx.mods, fx.combos,
+                                      shiftSettings("comet", SC::ShiftMode::Variable), p);
+      check(actionAt(o, 15.9949) == "variable" && actionAt(o, 123.4567) == "dropped_mode" && p.mass_offsets.empty(),
+            "shifts mode variable: no offsets");
+      auto q = shiftPlan({cam});
+      const auto o2 = SC::shiftsToPlan(fx.result({{15.9949, 100}, {123.4567, 50}}), {}, fx.mods, fx.combos,
+                                       shiftSettings("comet", SC::ShiftMode::Offsets), q);
+      check(actionAt(o2, 15.9949) == "offset" && actionAt(o2, 123.4567) == "offset" && q.variable.empty() && q.mass_offsets.size() == 2,
+            "shifts mode offsets: every exported shift is an offset");
+      SC::ShiftMode m;
+      check(SC::parseShiftMode("both", m) && m == SC::ShiftMode::Both && !SC::parseShiftMode("all", m), "parseShiftMode");
+    }
+    // the TSV
+    {
+      auto p = shiftPlan({cam});
+      const auto o = SC::shiftsToPlan(fx.result({{15.9949, 100}, {123.4567, 50}}), {}, fx.mods, fx.combos, shiftSettings(), p);
+      const std::string path = "search_config_test_shifts.tsv";
+      std::string err;
+      check(SC::writeShiftDecisions(path, {"a header"}, o.decisions, &err) && err.empty(), "writeShiftDecisions");
+      std::ifstream f(path);
+      std::string l1, l2, l3, l4;
+      std::getline(f, l1);
+      std::getline(f, l2);
+      std::getline(f, l3);
+      std::getline(f, l4);
+      check(l1 == "# a header" &&
+                l2 == "peak\tdelta\tspectra\texplanation\taction\tmod_id\tsites\texported\tsubstitution_share\tlocalized\treason" &&
+                l3.rfind("1\t15.9949\t100\tOxidation\tvariable\tOxidation (M)\tM\t15.9949\t", 0) == 0 &&
+                l4.rfind("2\t123.4567\t50\tnone\toffset\t-\t-\t123.4567\t", 0) == 0,
+            "the -search_shifts_out rows");
+      std::remove(path.c_str());
+    }
   }
 }
 
@@ -454,6 +774,8 @@ int main()
     for (const auto& e : kv(comet))
       check(comet_keys.count(e.first) || SC::cometManagedFamily(e.first), "Comet key known: " + e.first);
   }
+
+  shiftTests();
 
   if (failures)
   {
