@@ -1,0 +1,7 @@
+{"record":"probe","format":1,"version":"1.12.0","input":"/data/PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.mzML","file_format":"mzML"}
+{"record":"instrument","name":"Q Exactive","model":null,"ms2_analyzer":"orbitrap","ion_mobility":null}
+{"record":"spectra","ms1":5168,"ms2":27345,"ms2_probed":4000,"ms2_centroid":4000,"ms2_profile":0,"ms2_type_unknown":0}
+{"record":"index","state":"stale"}
+{"record":"acquisition","mode":"DDA","why":"no repeating window scheme (periodicity 0.01 over 1694 repeat gaps, cycle 177, 2306 distinct precursor m/z, 0% uncharged, 4000 MS2 probed)","warn":false,"refuse":false,"windows":2306,"median_width":0}
+{"record":"fasta","path":"/data/db/Homo_sapiens.fasta","proteins":20416,"decoys":0,"decoy_affix":null}
+{"record":"end"}

@@ -7,6 +7,8 @@ import { open, save } from '@tauri-apps/plugin-dialog'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import type {
   BinaryInfo,
+  CliOptions,
+  ProbeRun,
   BrowserEvent,
   Cleanup,
   DropRoute,
@@ -59,6 +61,8 @@ function subscribe<T>(event: string, cb: (payload: T) => void): () => void {
 
 const api: FastagApi = {
   probe: () => invoke<BinaryInfo>('probe'),
+  cliCapabilities: () => invoke<CliOptions>('cli_capabilities'),
+  probeInput: (input: string, fasta?: string | null) => invoke<ProbeRun>('probe_input', { input, fasta: fasta || null }),
 
   // Native dialogs live in the frontend via the dialog plugin; the backend only
   // ever receives already-chosen paths.

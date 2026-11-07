@@ -72,7 +72,7 @@ test('Overview figures and calls equal the oracles of the 1.12 gate output', asy
   await expect(value(page, 'Label')).toHaveText('none (label-free)')
   // Every tile names its cutoff or caveat.
   for (const note of await page.locator('.tile .tile-note').allTextContents()) expect(note.trim()).not.toBe('')
-  await expect(page.getByRole('list', { name: 'Checks' })).toContainText('Acquisition check: DDA')
+  await expect(page.getByRole('list', { name: 'Checks', exact: true })).toContainText('Acquisition check: DDA')
 })
 
 test('no FASTA, no alkylation call: "not assessed (needs a FASTA)", and C+57.021 a default', async ({ page }) => {
@@ -98,7 +98,7 @@ test('FASTag 1.11 output: no label call and no acquisition check, never filled i
   await characterize(page, 'gate-1.11')
   await expect(value(page, 'Label')).toHaveText('not called')
   await expect(value(page, 'Protease')).toHaveText(o.protease!)
-  await expect(page.getByRole('list', { name: 'Checks' })).toContainText('Acquisition not checked')
+  await expect(page.getByRole('list', { name: 'Checks', exact: true })).toContainText('Acquisition not checked')
 })
 
 test('a Da run without a census: the CLI no calls with their reason, the cutoff not applied, Da and ETD flagged', async ({ page }) => {
@@ -116,7 +116,9 @@ test('a Da run without a census: the CLI no calls with their reason, the cutoff 
   for (const t of ['Protease', 'Label']) await expect(value(page, t)).toHaveText('no call')
   await expect(tile(page, 'Protease')).toContainText(why)
   for (const t of ['Protease', 'Top genus', 'Label']) await expect(value(page, t)).not.toHaveText('too little evidence')
-  const checks = page.getByRole('list', { name: 'Checks' })
+  // The Overview's own checks: the Inspector's "Checks after the run" (#24)
+  // is a second list beside it, so the name is matched exactly.
+  const checks = page.getByRole('list', { name: 'Checks', exact: true })
   await expect(checks).toContainText('Evidence cutoff not applied: this run did not count tagged spectra')
   await expect(checks).toContainText('species calls are unreliable on ion-trap/Da data')
   await expect(checks).toContainText('electron-activated')

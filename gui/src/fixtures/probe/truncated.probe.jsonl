@@ -1,0 +1,3 @@
+{"record":"probe","format":1,"version":"1.12.0","input":"/data/run01.mzML","file_format":"mzML"}
+{"record":"instrument","name":"LTQ","model":null,"ms2_analyzer":"ion trap","ion_mobility":null}
+{"record":"spectra","ms1":100,"ms2":0
