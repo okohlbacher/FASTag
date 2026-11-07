@@ -839,6 +839,14 @@ namespace FASTag
         assert(t.res_conf.size() == t.n_res);
       }
       t.low_mz = s.spec[peaks.front()].getMZ();
+      // Census facts, not serialised: the highest path peak and the summed
+      // intensity of the path peaks (ScanRanker's BestTagTIC).
+      t.high_mz = t.low_mz;
+      for (const uint32_t pk : peaks)
+      {
+        t.high_mz = std::max(t.high_mz, s.spec[pk].getMZ());
+        t.peak_tic += s.spec[pk].getIntensity();
+      }
       return t;
     }
 
@@ -1246,25 +1254,52 @@ namespace FASTag
     return out;
   }
 
-  std::vector<Tag> tagSpectrum(const MSSpectrum& in, double precursor_mz, int charge,
-                               const Param& p, const Tables& tables)
+  namespace
   {
+    /// The census facts of a prepared spectrum (SpectrumDiag).
+    void fillDiag(SpectrumDiag* diag, const Prepared& s, bool enough)
+    {
+      if (!diag) return;
+      diag->prepared = true;
+      diag->n_kept = s.spec.size();
+      diag->n_compl = s.n_with_compl.size() > 1 ? static_cast<std::size_t>(s.n_with_compl[1]) : 0;
+      diag->enough_peaks = enough;
+    }
+    void countEdges(SpectrumDiag* diag, const std::vector<Graph>& graphs)
+    {
+      if (!diag) return;
+      for (const Graph& g : graphs) diag->n_edges += g.dst.size();
+    }
+  }
+
+  std::vector<Tag> tagSpectrum(const MSSpectrum& in, double precursor_mz, int charge,
+                               const Param& p, const Tables& tables, SpectrumDiag* diag)
+  {
+    if (diag) *diag = SpectrumDiag{};
     // !(x > 0): NaN must not pass. A NaN precursor turned off the precursor
     // cut and the complements and reported nterm_mass max(0, NaN) = 0, a false
     // N-terminal claim; +inf reported nterm_mass inf.
+    if (diag) diag->bad_precursor = !(precursor_mz > 0) || !std::isfinite(precursor_mz);
     if (p.tag_length < 1 || in.empty() || !(precursor_mz > 0) || !std::isfinite(precursor_mz)) return {};
     if (charge <= 0) charge = 2;
 
     const Prepared s = prepare(in, precursor_mz, charge, p, tables.complement());
-    if (s.spec.size() < minPeaks(p)) return {};
-    return tagPrepared(s, buildGraphs(s, p, tables.alphabet()), p, tables);
+    const bool enough = s.spec.size() >= minPeaks(p);
+    fillDiag(diag, s, enough);
+    if (!enough) return {};
+    const std::vector<Graph> graphs = buildGraphs(s, p, tables.alphabet());
+    countEdges(diag, graphs);
+    return tagPrepared(s, graphs, p, tables);
   }
 
   std::vector<std::vector<Tag>> tagSpectrum(const MSSpectrum& in, double precursor_mz, int charge,
                                             const std::vector<Param>& params,
-                                            const std::vector<Tables>& tables)
+                                            const std::vector<Tables>& tables,
+                                            SpectrumDiag* diag)
   {
+    if (diag) *diag = SpectrumDiag{};
     std::vector<std::vector<Tag>> out(params.size());
+    if (diag) diag->bad_precursor = !(precursor_mz > 0) || !std::isfinite(precursor_mz);
     if (params.empty() || in.empty() || !(precursor_mz > 0) || !std::isfinite(precursor_mz)) return out;
     if (charge <= 0) charge = 2;
 
@@ -1272,12 +1307,19 @@ namespace FASTag
     // serves every length; built only once some length has enough peaks.
     const Prepared s = prepare(in, precursor_mz, charge, params[0], tables[0].complement());
     std::vector<Graph> graphs;
+    bool enough = false;
     for (size_t i = 0; i < params.size(); ++i)
     {
       if (params[i].tag_length < 1 || s.spec.size() < minPeaks(params[i])) continue;
-      if (graphs.empty()) graphs = buildGraphs(s, params[0], tables[0].alphabet());
+      enough = true;
+      if (graphs.empty())
+      {
+        graphs = buildGraphs(s, params[0], tables[0].alphabet());
+        countEdges(diag, graphs);
+      }
       out[i] = tagPrepared(s, graphs, params[i], tables[i]);
     }
+    fillDiag(diag, s, enough);
     return out;
   }
 

@@ -478,6 +478,9 @@ MGF→mzML direction is exact.
 | `-glyco` | off | Flag oxonium-bearing MS2 spectra to `<out>` with its extension replaced by `.glyco.tsv` (see Glyco flag) |
 | `-glyco_out <file>` | `<out>` with its extension replaced by `.glyco.tsv` | With `-glyco`: per-spectrum oxonium report |
 | `-glyco_min_fraction <f>` | 0.10 | With `-glyco`: summed oxonium intensity over base peak, the literature threshold |
+| `-census` | off | Per-spectrum census: one row per MS2 spectrum read, tagged or not, plus a run summary (see Census) |
+| `-census_out <file>` | `<out>` with its extension replaced by `.census.tsv` | With `-census`: the per-spectrum table |
+| `-census_summary_out <file>` | `<out>` with its extension replaced by `.census_summary.tsv` | With `-census`: the run summary |
 | `-stream` | off | Resident single-spectrum mode: spectrum blocks on stdin, TSV rows + `#end` sentinels on stdout (see Streaming) |
 | `-progress` | off | Emit `FASTAG_PROGRESS done=<n> total=<n>` on stderr for a progress bar |
 | `-species` | off | Infer taxa from the tags (see Species detection) |
@@ -498,7 +501,8 @@ MGF→mzML direction is exact.
 | `-pick_profile <legacy\|auto\|off>` | legacy | Centroid profile MS2 (MS:1000128) with OpenMS `PeakPickerHiRes` before tagging: `legacy` on mzPeak input only (as 1.11), `auto` on mzML and mzPeak input (not MGF), `off` never. Centroided MS2 are never re-picked. `-out_spectra` writes the spectra as they were tagged. Not with `-stream` |
 | `-pick_unknown_type` | off | With `-pick_profile auto`: also centroid MS2 that declare no spectrum type, when OpenMS's `PeakTypeEstimator` reads their data as profile (advanced) |
 
-The `-glyco_*` options are read only with `-glyco`, and the `-taxdb`,
+The `-glyco_*` options are read only with `-glyco`, the `-census_*` options only
+with `-census`, and the `-taxdb`,
 `-taxonomy_*` and `-species_*` options only with `-species`; otherwise they are
 ignored with a warning. Default report names replace the extension of `-out`:
 `-out run.tags.tsv` gives `run.tags.species.tsv` and `run.tags.glyco.tsv` (a dot
@@ -740,6 +744,43 @@ at the run's fragment tolerance. At 0.3 Da the TMT reporter 126.128 collides
 with the HexNAc fragment 126.055, so glyco flags on labeled ion-trap data are
 unreliable; on high-resolution MS2 use a ppm tolerance.
 Measured specificity on non-enriched runs: 0.6% (Astral, ppm) flagged.
+
+## Census
+
+`-census` writes `<out>` with its extension replaced by `.census.tsv`: one row
+per MS2 spectrum read (the sampled ones with `-subsample_*`), including the
+spectra that give no tag, in input order. Every other output is the same with
+or without it. Columns: `index` (input position), `spectrum`, `rt`,
+`precursor_mz`, `charge_given` (0 = none), `charge_used` (2 when none was
+given), `n_peaks` (positive, finite), `n_peaks_kept` (after the precursor cut,
+m/z collapse, deisotoping and the peak budget), `n_edges` (residue edges over
+all fragment charges), `n_compl` (kept peaks with a 1+ complement), `int_gini`
+(Gini coefficient of the intensities, zero peaks included), `status`,
+`n_found` (tags before `-fasta`), `n_reported` (rows in the tag TSV), and from
+the reported tag with the lowest E-value (not necessarily the first row with
+`-tag_lengths`): `best_evalue`, `best_len`, `best_min_conf`,
+`best_mean_conf`, `best_tic` (summed intensity of its peaks), plus
+`tag_cover` (m/z covered by the union of the reported tags). Fields that were
+not computed for a spectrum are empty.
+
+`status` is the first that applies: `empty` (no peaks), `no_precursor`,
+`no_signal` (no positive intensity), `bad_precursor` (m/z not finite or <= 0),
+`too_few_peaks`, `no_tags`, `filtered` (every tag rejected by `-fasta`),
+`placed` (a `-recon_out` placement; only with `-recon_out`), `tagged`. The
+first two are not tagged and not in the log's "N MS2 spectra"; all others are.
+A status is not a quality call: `tagged` says a tag passed `-max_evalue`, not
+that it is right, and acquisition (DIA or DDA) is never a census status.
+
+The summary (`.census_summary.tsv`, the long form of the digest reports)
+starts with the `run` rows and adds section `census`: `census_version`,
+`input_spectra` (all MS levels), `ms2_seen`, `ms2_processed`, `ms2_total`
+(empty when subsampling, because masked spectra are never read),
+`subsampled`, `subsample_basis`, `count_` and `share_` per status,
+`no_charge`, and p10/p50/p90 of the best E-value (tagged and placed spectra),
+of `n_peaks_kept` and of `int_gini`. Subsampling draws from the input spectra
+of all MS levels, so `-subsample_spectra 1000` on a run with MS1 scans reads
+fewer than 1000 MS2 spectra. Both files are written as `.part` files and
+renamed when the run finishes; `-census` cannot be combined with `-stream`.
 
 ## Tag diversity
 

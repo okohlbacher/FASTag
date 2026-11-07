@@ -207,5 +207,47 @@ done
   >"$TMP/ctu.log" 2>&1 || { cat "$TMP/ctu.log"; fail "-complement_tolerance_unit fragment alone was refused"; }
 "$BIN" -in "$IN" -out "$TMP/cru.tsv" -complement_rule nonsense "${ARGS[@]}" >"$TMP/cru.log" 2>&1 \
   && fail "-complement_rule nonsense ran (exit 0)"
+# -census (1.12 #11): refused with -stream; its outputs may not name -out, each
+# other, another output's default path or a consumed input (by name, symlink
+# or hard link), and the input is unchanged afterwards.
+"$BIN" -stream -census "${ARGS[@]}" </dev/null >"$TMP/cs.log" 2>&1 && fail "-stream -census ran (exit 0)"
+grep -q "stream cannot be combined with -census" "$TMP/cs.log" || fail "no -stream refusal naming -census"
+"$BIN" -stream -census_out "$TMP/cs.tsv" "${ARGS[@]}" </dev/null >"$TMP/cs2.log" 2>&1 && fail "-stream -census_out ran (exit 0)"
+"$BIN" -in "$IN" -out "$TMP/c1.tsv" -census -census_out "$TMP/c1.tsv" "${ARGS[@]}" >"$TMP/c1.log" 2>&1 \
+  && fail "-census_out equal to -out ran (exit 0)"
+grep -q "name the same file" "$TMP/c1.log" || fail "no message for -census_out equal to -out"
+"$BIN" -in "$IN" -out "$TMP/c2.tsv" -census -census_out "$TMP/c2c.tsv" -census_summary_out "$TMP/c2c.tsv" "${ARGS[@]}" \
+  >"$TMP/c2.log" 2>&1 && fail "-census_summary_out equal to -census_out ran (exit 0)"
+grep -q "name the same file" "$TMP/c2.log" || fail "no message for -census_summary_out equal to -census_out"
+"$BIN" -in "$IN" -out "$TMP/c3.tsv" -census -glyco -glyco_out "$TMP/c3.census.tsv" "${ARGS[@]}" \
+  >"$TMP/c3.log" 2>&1 && fail "-glyco_out on the default census path ran (exit 0)"
+grep -q "name the same file" "$TMP/c3.log" || fail "no message for -glyco_out on the default census path"
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) ;;
+  *)
+    cp "$DB" "$TMP/cdb.tsv"
+    cdb_before=$(cksum < "$TMP/cdb.tsv")
+    ln -s "$TMP/cdb.tsv" "$TMP/cdblink.fasta"
+    ln "$TMP/cdb.tsv" "$TMP/cdbhard.fasta"
+    "$BIN" -in "$IN" -out "$TMP/c4.tsv" -fasta "$TMP/cdblink.fasta" -census -census_out "$TMP/cdb.tsv" -tag_length 4 "${ARGS[@]}" \
+      >"$TMP/c4.log" 2>&1 && fail "-census_out aliasing -fasta through a symlink ran (exit 0)"
+    grep -q "is the -fasta file" "$TMP/c4.log" || fail "no message naming -fasta for -census_out"
+    "$BIN" -in "$IN" -out "$TMP/c5.tsv" -fasta "$TMP/cdbhard.fasta" -census -census_summary_out "$TMP/cdb.tsv" -tag_length 4 "${ARGS[@]}" \
+      >"$TMP/c5.log" 2>&1 && fail "-census_summary_out aliasing -fasta through a hard link ran (exit 0)"
+    grep -q "is the -fasta file" "$TMP/c5.log" || fail "no message naming -fasta for -census_summary_out"
+    [ "$(cksum < "$TMP/cdb.tsv")" = "$cdb_before" ] || fail "the -fasta file was modified by a census run"
+    cp "$IN" "$TMP/crun.mzML"
+    crun_before=$(cksum < "$TMP/crun.mzML")
+    ln -s "$TMP/crun.mzML" "$TMP/crun.tsv"
+    "$BIN" -in "$TMP/crun.mzML" -out "$TMP/c6.tsv" -census -census_out "$TMP/crun.tsv" "${ARGS[@]}" \
+      >"$TMP/c6.log" 2>&1 && fail "-census_out aliasing -in through a symlink ran (exit 0)"
+    grep -q "is the input file" "$TMP/c6.log" || fail "no message naming the input for -census_out"
+    [ "$(cksum < "$TMP/crun.mzML")" = "$crun_before" ] || fail "the input was modified by a census run" ;;
+esac
+# -census_out / -census_summary_out without -census: warned and ignored.
+"$BIN" -in "$IN" -out "$TMP/c7.tsv" -census_summary_out "$TMP/c7s.tsv" "${ARGS[@]}" >"$TMP/c7.log" 2>&1 \
+  || fail "-census_summary_out without -census failed"
+grep -q -- "-census_summary_out is only read for -census" "$TMP/c7.log" || fail "no warning for -census_summary_out alone"
+[ ! -e "$TMP/c7s.tsv" ] || fail "-census_summary_out without -census wrote a file"
 
 echo "cli_guards_test: all checks passed"

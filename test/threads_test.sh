@@ -57,7 +57,26 @@ done
 for t in 3 8; do
   cmp -s "$TMP/t1/compl.tsv" "$TMP/t$t/compl.tsv" || fail "-complement_rule both differs between -threads 1 and $t"
 done
-msg="${#OUTS[@]} TSVs and the idXML"
+# -census (1.12 #11): the census table and summary, with -recon_out so that
+# placed spectra occur, and with -tag_lengths 3 5 so that the best tag is not
+# always row 1; the tags equal the run without -census at every count.
+for t in 1 3 8; do
+  d="$TMP/c$t"; mkdir -p "$d"
+  "$BIN" -in "$IN" -out "$d/tags.tsv" -threads "$t" -tag_lengths 3 5 \
+    -fragment_tolerance 0.3 -fragment_tolerance_unit Da -recon_fasta "$DB" -recon_out "$d/recon.tsv" \
+    -census -census_out "$d/census.tsv" -census_summary_out "$d/census_summary.tsv" \
+    >"$d/log" 2>&1 || { cat "$d/log" >&2; fail "-census -threads $t run failed"; }
+  "$BIN" -in "$IN" -out "$d/plain.tsv" -threads "$t" -tag_lengths 3 5 \
+    -fragment_tolerance 0.3 -fragment_tolerance_unit Da >"$d/plog" 2>&1 || fail "-threads $t plain run failed"
+  cmp -s "$d/tags.tsv" "$d/plain.tsv" || fail "the tags differ with -census at -threads $t"
+done
+[ "$(awk -F'\t' 'NR > 1 && $12 == "placed"' "$TMP/c1/census.tsv" | wc -l)" -gt 0 ] || fail "no placed census row; the check is weak"
+for f in census census_summary recon; do
+  for t in 3 8; do
+    cmp -s "$TMP/c1/$f.tsv" "$TMP/c$t/$f.tsv" || fail "$f.tsv differs between -threads 1 and $t"
+  done
+done
+msg="${#OUTS[@]} TSVs, the idXML, the census tables"
 
 if [ -n "$PROF" ]; then
   # On the profile fixture's 10 spectra the tags (at -min_filter_length 3),
