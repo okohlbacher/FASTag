@@ -7,6 +7,7 @@ import { createRef } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import BatchList, { type BatchListProps } from './BatchList'
 import { addJobs, type BatchJob } from './batch'
+import { createLogStore } from './logStore'
 import { click } from '../testing/render'
 
 describe('batch job naming', () => {
@@ -52,8 +53,8 @@ function list(p: Partial<BatchListProps> = {}): BatchListProps {
 }
 
 const jobs: BatchJob[] = [
-  { input: '/d/a.mzML', out: '/d/a.tags.tsv', status: 'done', ms: 61_000, outputs: { out: '/d/a.tags.tsv' }, log: ['a'] },
-  { input: '/d/b.mzML', out: '/d/b.tags.tsv', status: 'failed', reason: 'exit code 1: Error', log: ['b'] },
+  { input: '/d/a.mzML', out: '/d/a.tags.tsv', status: 'done', ms: 61_000, outputs: { out: '/d/a.tags.tsv' }, log: createLogStore(['a']) },
+  { input: '/d/b.mzML', out: '/d/b.tags.tsv', status: 'failed', reason: 'exit code 1: Error', log: createLogStore(['b']) },
   { input: '/d/c.mzML', out: '/d/c.tags.tsv', status: 'cancelled', cleaned: 2 },
   { input: '/d/d.mzML', out: '/d/d.tags.tsv', status: 'queued' }
 ]

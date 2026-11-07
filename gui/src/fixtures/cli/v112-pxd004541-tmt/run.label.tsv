@@ -1,0 +1,31 @@
+section	key	value	n	description
+run	version	1.11.0	-	FASTag 1.11.0 wrote this report.
+run	input	HF1_201501212_GM_RJ1511D_TMT10_hpHRP_DMSO1_2p5ug_4uL_fr02.mzML	-	The spectra were read from HF1_201501212_GM_RJ1511D_TMT10_hpHRP_DMSO1_2p5ug_4uL_fr02.mzML.
+run	fragment_tolerance	20	-	The fragment tolerance is 20 ppm.
+run	fragment_tolerance_unit	ppm	-	The fragment tolerance is in ppm.
+run	tag_length	3	-	Tags were seeded at length 3.
+run	subsample_fraction	0.1	-	A fraction of 0.1 of the spectra was tagged (0 = all).
+run	subsample_spectra	0	-	0 spectra were drawn for tagging (0 = all).
+run	window_da	0.008	-	A tag end counts for a label when its mass is within 0.008 Da of it.
+run	low_resolution	no	-	The fragment tolerance is in ppm.
+run	silac_min	50	-	The heavy shares are gated on 50 K- and R-terminal tag ends each.
+count	tags_filtered	60663	60663	60663 reported tags are ungapped with an E-value of at most 1.
+nlabel	TMT.count	4747	60663	4747 tag ends are a bare 229.1629 Da gap (TMT), 917 N- and 3830 C-terminal.
+nlabel	TMT.background	0	60663	0 tag ends are a gap of 229.6629 Da, 0.5 Da above TMT.
+nlabel	TMT.share	0.07825198226266422	60663	A share of 0.0783 of the filtered tags end in the TMT gap.
+nlabel	TMTpro.count	0	60663	0 tag ends are a bare 304.2071 Da gap (TMTpro), 0 N- and 0 C-terminal.
+nlabel	TMTpro.background	0	60663	0 tag ends are a gap of 304.7071 Da, 0.5 Da above TMTpro.
+nlabel	TMTpro.share	0	60663	A share of 0 of the filtered tags end in the TMTpro gap.
+nlabel	iTRAQ4.count	0	60663	0 tag ends are a bare 144.1021 Da gap (iTRAQ4), 0 N- and 0 C-terminal.
+nlabel	iTRAQ4.background	0	60663	0 tag ends are a gap of 144.6021 Da, 0.5 Da above iTRAQ4.
+nlabel	iTRAQ4.share	0	60663	A share of 0 of the filtered tags end in the iTRAQ4 gap.
+heavy	K8.share	1	5	Lys8 is a share of 1 of the C-terminal K and Lys8 ends.
+heavy	R10.share	0.0005640157924421883	1773	Arg10 is a share of 0.000564 of the C-terminal R and Arg10 ends.
+heavy	K.tags	5	-	5 C-terminal tag ends are K or Lys8.
+heavy	R.tags	1773	-	1773 C-terminal tag ends are R or Arg10.
+heavy	gate	no	-	5 K and 1773 R tag ends against a minimum of 50 each.
+label_call	status	call	7199	A label call is made from 7199 C-terminal tag ends and 60663 filtered tags.
+label_call	label	TMT	60663	The run is labelled TMT.
+label_call	basis	nterm_gap	-	The call rests on N-terminal label gaps of at least 1% of the filtered tags and 20x their background.
+label_call	silac	none	-	SILAC needs Lys8 and Arg10 shares of at least 0.2, a K/R share of at least 0.8 and 50 K- and R-terminal ends each.
+label_call	reason	-	-	A label call is made.

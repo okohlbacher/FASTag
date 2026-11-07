@@ -1,0 +1,9 @@
+Modifications: Carbamidomethyl (C, fixed)
+'/scratch/kohlbach/gate-in/PXD004541/HF1_201501212_GM_RJ1511D_TMT10_hpHRP_DMSO1_2p5ug_4uL_fr02.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 46803 spectra by scanning it instead (0.03 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Subsampling: tagging 4680 of 46803 input spectra (seed 1)
+Glyco: 19 of 3992 processed MS2 spectra carry oxonium evidence -> run.tags.glyco.tsv
+Digest: 60663 filtered tags, model Trypsin -> run.digest.tsv
+Labels: 60663 filtered tags -> run.label.tsv
+Species: 2400 spectra contributed taxon evidence; top genus calls -> run.tags.species.tsv
+3992 MS2 spectra, 172237 tags
+FASTag took 0.62 s (wall), 3.03 s (CPU), 0.42 s (system), 2.61 s (user); Peak Memory Usage: 1058 MB.

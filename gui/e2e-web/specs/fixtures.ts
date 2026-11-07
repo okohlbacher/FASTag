@@ -19,8 +19,11 @@ export const test = base.extend<{ errors: string[] }>({
 export { expect }
 
 /// Open the app on the e2e @p fixture and wait for the probe badge.
-export async function openApp(page: Page, fixture = 'default'): Promise<void> {
-  await page.goto(`/?fixture=${fixture}`)
+/// @p from 'defaults': the session starts from FASTag's defaults, not from
+/// the task the app lands on (D1), for the specs that check what a run from
+/// the defaults sends.
+export async function openApp(page: Page, fixture = 'default', from: 'landing' | 'defaults' = 'landing'): Promise<void> {
+  await page.goto(`/?fixture=${fixture}${from === 'defaults' ? '&start=defaults' : ''}`)
   await expect(page.getByText('FASTag ready')).toBeVisible()
 }
 
@@ -30,4 +33,9 @@ export function mockState<T>(page: Page, pick: string): Promise<T> {
     const m = (window as unknown as { __fastagE2E: { mock: Record<string, unknown> } }).__fastagE2E.mock
     return JSON.parse(JSON.stringify(m[p]))
   }, pick)
+}
+
+/// Go to one of the four views (P2a shell) through the top bar.
+export async function goTo(page: Page, view: 'Setup' | 'Results' | 'Batch' | 'History'): Promise<void> {
+  await page.getByRole('navigation', { name: 'Views' }).getByRole('button', { name: new RegExp(`^${view}`) }).click()
 }

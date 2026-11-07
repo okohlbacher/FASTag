@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import type { Page } from '@playwright/test'
-import { test, expect, openApp, mockState } from './fixtures'
+import { test, expect, goTo, openApp, mockState } from './fixtures'
 
 const TSV = readFileSync(fileURLToPath(new URL('../fixtures/ecoli.tags.tsv', import.meta.url)), 'utf8')
 const [HEAD, ...LINES] = TSV.split('\n').filter((l) => l !== '')
@@ -37,6 +37,7 @@ const column = (page: Page, j: number): Promise<string[]> =>
 
 async function openTags(page: Page): Promise<void> {
   await openApp(page, 'rank')
+  await goTo(page, 'Results')
   await page.getByRole('button', { name: 'Open tags…' }).click()
 }
 
@@ -100,7 +101,7 @@ test('search to field: "tolerance" focuses fragment_tolerance', async ({ page })
 })
 
 test('presets: "Ion trap CID" sets 0.3 Da and nothing else', async ({ page }) => {
-  await openApp(page)
+  await openApp(page, 'default', 'defaults')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await expect(page.getByLabel('Instrument').locator('option')).toHaveText([
     'Choose a preset…',

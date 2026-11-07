@@ -4,7 +4,7 @@
 import { act, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
-import { click, pickSingle, renderApp, runButton } from '../testing/render'
+import { click, goTo, pickSingle, renderApp, runButton } from '../testing/render'
 import { applyLastUsed, formValue } from '../testing/lastUsed'
 import digestTsv from '../fixtures/digest.tsv?raw'
 import nocallTsv from '../fixtures/digest_nocall.tsv?raw'
@@ -124,6 +124,7 @@ describe('digest tab', () => {
     mock.nextPickReport = '/r/b.label.tsv'
     mock.reportFiles = { '/r/b.label.tsv': labelTsv, '/r/o.digest.tsv': other }
     await renderApp(mock)
+    await goTo('results') // the empty results pane
     await click(screen.getByRole('button', { name: 'Open a digest, label or mass-gap report…' }))
     await screen.findAllByText('TMTpro')
     mock.nextPickReport = '/r/o.digest.tsv'
@@ -138,6 +139,7 @@ describe('digest tab', () => {
     mock.nextPickReport = '/r/b.label.tsv'
     mock.reportFiles = { '/r/b.label.tsv': labelTsv }
     await renderApp(mock)
+    await goTo('results') // the empty results pane
     await click(screen.getByRole('button', { name: 'Open a digest, label or mass-gap report…' }))
     await screen.findAllByText('TMTpro')
     expect(screen.getByRole('tab', { name: /Digest/ }).getAttribute('aria-selected')).toBe('true')

@@ -18,13 +18,26 @@ backend has to satisfy.
 ```
 gui/
   src/                 React frontend
-    App.tsx            the window shell: header, close/overwrite questions, shortcuts and menus,
-                       laying out the setup, the run bar and the result tabs
+    App.tsx            the window shell: the top bar and the four views (Setup, Results,
+                       Batch, History; Cmd+1..4), the Help side panel, close/overwrite
+                       questions, shortcuts, menus, drops and the finish toast and notification
+    shell/             TopBar.tsx (logo, view switcher, progress pill, theme, Help toggle),
+                       HistoryView.tsx (the run record), AboutDialog.tsx, and dropRoute.ts
+                       (what a drop drop.rs sorted does, and which view it lands on)
+    styles/tokens.css  the D9 design tokens (ProSE structure, v6 logo colours), light, dark
+                       and system on :root[data-theme]; tokens.test.ts pins them and their contrast
     app/               viewStore.ts (result tab and log drawer, one store per window),
-                       output-path and text helpers (paths.ts, format.ts)
-    run/               useRun.ts (a run or batch, its log, progress and results), RunBar.tsx,
-                       LogDrawer.tsx, BatchList.tsx and the batch job naming (batch.ts)
-    results/           ResultTabs.tsx (Tags, Species, Digest and the failure banner), reports.ts
+                       theme.ts (the chosen theme), output-path and text helpers (paths.ts, format.ts)
+    run/               useRun.ts (a run or batch, its log, progress and results) over one
+                       reducer (runReducer.ts: jobs, RUN_START/EVENT/DONE/CANCEL_REQUESTED/
+                       BATCH_ADD/BATCH_REMOVE), each job's log in a store outside React
+                       state (logStore.ts), RunBar.tsx, LogDrawer.tsx, BatchList.tsx and
+                       the batch job naming (batch.ts)
+    results/           ResultTabs.tsx (Overview, Tags, Species, Digest), FailureBanner.tsx (over
+                       the tabs, or on the Batch view beside the queue), reports.ts,
+                       RunningPanel.tsx (the running state), OverviewPanel.tsx over
+                       overview.ts (tiles, checks, suggested settings) and calls.ts (the
+                       parser of the calls FASTag wrote)
     ParamField.tsx     one form field per manifest parameter
     ResultsTable.tsx   tags browser: virtualized table with filters, column choice and export
     SpeciesPanel.tsx   species report
@@ -40,11 +53,15 @@ gui/
                        the e2e bridge with its ?fixture= scenarios (Playwright build only),
                        and the shared test helpers (render.tsx: renderApp, click, pickSingle, ...)
     adversarial/       end-to-end GUI tests (see Tests)
-    setup/             useSession.ts (the form's values, last-used offer, presets), SetupForm.tsx,
-                       parameter search (Cmd+K, "/"), instrument presets and the
+    setup/             useSession.ts (the form's values, where they started, last-used offer, presets),
+                       SetupForm.tsx (task chooser, four step cards), PlanFooter.tsx (plan,
+                       diff, Copy command line, Export INI), the built-in tasks (tasks.ts),
+                       presets as diffs and the v1 preset reader (presetDiff.ts), card and plan
+                       text (plan.ts), parameter search (Cmd+K, "/"), instrument presets and the
                        species fixes (presets.ts), shortcuts and menu actions (shortcuts.ts)
-    help/              the Help view (F1): pages as data (content.tsx, faq.tsx, params.ts),
-                       HelpView.tsx, the link store (link.ts) and the "?" links (HelpLink.tsx)
+    help/              the Help side panel (F1, Cmd+?): pages as data (content.tsx, faq.tsx, params.ts),
+                       HelpView.tsx with its search (search.ts, over every page, the FAQ, the
+                       glossary and the settings), the link store (link.ts) and the "?" links (HelpLink.tsx)
   scripts/             gen-params.mjs (parameter manifest), bundle-macos.sh (macOS resource tree for release bundles),
                        check-dist-clean.mjs (a release dist/ carries no mock or fixture code)
   testing/stub-fastag/ a sh stand-in for the CLI, for the Rust run-lifecycle tests
@@ -56,10 +73,15 @@ gui/
     src/progress.rs    phase labels from the CLI's output (tests/fixtures/stderr) and the ETA from a weighted rate
     src/outputs.rs     the files a run writes (from its argv); removes them when it is cancelled or fails
     src/close_guard.rs asks before a window close or Cmd+Q kills an active run
-    src/settings.rs    named presets + last-used, atomic JSON in the app config dir
+    src/settings.rs    named presets (diffs) + last-used in a tauri-plugin-store file (settings.json
+                       in the app config dir); migrates the v1 file once (kept as settings.v1.json.bak)
+    src/ini.rs         Export INI: the run's argv as a temporary INI, merged by `FASTag -ini <tmp> -write_ini <out>`
     src/browser.rs     indexed million-row results browser: head read on open, index and
                        E-value order built in the background and swapped in (D5)
-    src/menu.rs        File, Run and Help menus with their CmdOrCtrl shortcuts
+    src/menu.rs        File, Run, View and Help menus with their CmdOrCtrl shortcuts, and the
+                       dispatch of a menu click (Quit and Close through the close guard)
+    src/drop.rs        the window-wide drop zone: dropped paths sorted by type into one route
+    src/notify.rs      the system notification when a run or batch finishes
     src/reveal.rs      ResolvedOutputs (every output, absolute) and Reveal / Open folder, limited to run outputs
     src/species.rs     species TSV read + FTX2 taxdb header read
     src/report.rs      digest/label/mass-gap report read
@@ -114,19 +136,90 @@ script replaces the manifest only once it is complete, so a missing or broken
 binary leaves the old one in place. Do not redirect its stdout into the
 manifest: the shell empties the file before the script runs.
 
+## The window
+
+Four views, switched from the top bar: **Setup** (the input, the parameters
+and Run), **Results** (Overview, Tags, Species and Digest, full width), **Batch** (the
+queue, its run bar, the failure banner and each job's log) and **History**
+(every recorded run: input, status, duration, outputs). Run moves to
+Results; the first file of a batch moves to Batch. The progress pill in the
+top bar shows the job in flight (file, phase or percentage, ETA) and, outside
+the view with the run bar or the running state, its Cancel. While a run goes,
+Results shows its running state (file, phase, progress with rate and ETA,
+Cancel, Show log). When a run or batch finishes while the
+window is in the background, the system shows a notification; a toast
+offers Open results.
+
+A run of **Characterize a run** or **Batch QC** lands on the **Overview**:
+key figures (MS2 spectra, spectra with tags, tags, tags with E ≤ 1, glyco
+flags), the calls FASTag made (protease from the digest report, top genus
+from the species report, label from the `label_call` rows of `-label_out`,
+alkylation only from a mass-gap report, so only with a FASTA; otherwise
+"not assessed (needs a FASTA)"), the checks (the 1.12 acquisition check
+line, a Da tolerance, electron activation) and suggested search settings,
+each line naming its evidence (a call, a default, a preset or the run).
+Every tile names its cutoff or caveat; with fewer than 1,000 spectra a call
+reads "too little evidence". The GUI computes no call itself: `calls.ts`
+only parses what the CLI wrote, and what an older CLI does not write reads
+"not called" or "not checked" (detected from the rows and columns present,
+never from the version string). A tile whose report the run did not write
+offers to turn it on and run again ("Add FASTA and run again" for the
+alkylation tile). Runs from FASTag's defaults land where they did before and
+offer the Overview as a tab.
+
+Setup starts from a task: **Characterize a run** (the default: species with
+extension 2, the digest, label and glyco reports, a tenth of the spectra),
+**Batch QC vs SDRF**, **Export tags** (with the per-residue confidence
+column) or **Open results / inspect spectra** (no run). "Starting from" also
+offers FASTag's own defaults and your saved presets. The parameters sit in
+four step cards (Spectra, Database & taxonomy, Tagging, Reports), each with a
+one-line summary; settings that only a section's switch turns on (species,
+glyco, a FASTA, reconciliation) stay hidden until it is on. The footer above
+Run states the plan, counts what differs from the task or preset (Reset takes
+it back), copies the command line and exports an INI. Choosing a task or a
+preset replaces the form; Undo brings back what it replaced.
+
+A preset stores only what differs from the task or defaults it was saved
+over, and no paths: input files (a FASTA, a taxonomy) are left out, and a
+report is stored by its name (`digest.tsv`), written beside each input.
+**Export INI…** writes the parameters a run would use as a TOPP INI: the GUI
+writes them to a temporary INI and lets the CLI merge it into its defaults
+(`FASTag -ini <tmp> -write_ini <file>`), so `FASTag -ini <file>` runs with
+the same effective parameters (`-progress`, which the GUI adds for its
+progress bar, is left out). Presets and the last-used offer are kept with
+tauri-plugin-store in `settings.json` in the app config folder; a settings
+file of an earlier version is migrated on the first start, every preset
+kept, and the old file stays beside it as `settings.v1.json.bak`.
+
+Help is a side panel beside any view, with a search over every page, the
+troubleshooting entries, the glossary and the settings reference.
+
+Files dropped anywhere on the window go by type: one spectra file to the
+input, two or more (or a folder) to the batch, a FASTA to `-fasta`, a
+`.taxdb` to `-taxdb`, a tags TSV to Results, a digest, label or mass-gap
+report to the Digest tab and a species report to the Species tab. Nothing is
+taken while FASTag runs. Reports without a tab yet (recon, delta, glyco) and
+SDRF files are named, not read.
+
+Themes: System (the default), Light and Dark, from the top bar or View >
+Theme; the choice is remembered on this machine. Text uses the system UI
+font; IBM Plex Mono is bundled for sequences and IDs.
+
 ## Shortcuts
 
 Cmd on macOS, Ctrl on Windows and Linux; the same items are in the native
-File, Run and Help menus.
+File, Run, View and Help menus.
 
 | Keys | Action |
 |---|---|
 | Cmd+O / Cmd+Shift+O | Open spectra / open a tags TSV |
 | Cmd+Enter | Run (or run the batch) |
-| Cmd+. | Cancel the run |
+| Cmd+. or Esc | Cancel the run |
 | Cmd+E | Export the shown rows |
+| Cmd+1 .. Cmd+4 | Setup, Results, Batch, History |
 | Cmd+? (F1, ?) | Help |
 | Cmd+K or / | Search parameters by name, flag or help text |
+| Cmd+W / Cmd+Q | Close the window / quit (both ask first while a run is active) |
 
 ## Browser bench
 
@@ -159,17 +252,46 @@ The parts of the window have tests of their own beside them: the hooks
 `RunBar`, `LogDrawer`, `BatchList` and `ResultTabs` rendered alone with their
 props. The App-level tests, which render the whole window, are split by area
 beside the parts they drive: `run/batch.app.test.tsx` (run and batch
-orchestration), `results/digest.app.test.tsx` (the Digest tab) and
+orchestration), `results/digest.app.test.tsx` (the Digest tab),
+`results/overview.app.test.tsx` (the Overview and the running state; the
+parser and model tests `results/calls.test.ts` and `results/overview.test.ts`
+read real CLI output on the gate PXDs from `src/fixtures/cli/`),
 `setup/setup.app.test.tsx` (the setup form and run bar, with the checks that
-App wires Reset, the phase and the elapsed time into the run bar); they share
-their helpers from `src/testing/render.tsx`.
+App wires Reset, the phase and the elapsed time into the run bar) and
+`shell/shell.app.test.tsx` (the views, the pill, Help and its search, menus,
+drops, the finish notice and the themes); they share their helpers from
+`src/testing/render.tsx`, whose getters go to the view that holds their
+control (`showView`, `goTo`). `styles/tokens.test.ts` pins the D9 tokens and
+their contrast. Native menus and OS file drops cannot be driven from a test:
+cargo tests drive their handlers instead (`menu::on_menu_event` with every
+item id, `drop::on_drag_drop` with the DragDrop payloads).
+
+Setup (P2a): `setup/setupScreen.app.test.tsx` renders the window as it starts
+(`renderColdApp`: the task "Characterize a run") and checks the two-action
+cold start, the task chooser and Undo, hidden dependent fields, the plan
+footer, Copy command line, Export INI and presets saved as diffs; the older
+App-level tests start from FASTag's defaults (`renderApp`).
+`setup/presetDiff.test.ts` checks the diffs and reads the v1 settings file
+`src-tauri/tests/fixtures/settings-v1.json`, which the cargo migration test
+(`settings::tests`) migrates into the store. The Export INI round trip
+(`ini::tests::round_trip`) exports a request, then compares the CLI's
+effective parameters under `-ini` with the run's argv over the CLI's
+defaults, and the tags and digest report of a run from the argv with those
+of a run from the INI. It runs the stub CLI always and the real CLI when one
+is found (`FASTAG_REAL_CLI`, else `FASTag` on PATH); `cargo test --lib
+round_trip -- --nocapture` prints which.
 
 The Playwright specs in `e2e-web/` drive the app in Chromium and WebKit on an
 explicit e2e build, `npm run build:e2e` (`vite build --mode e2e`, into
 `dist-e2e/`), which installs `src/testing/e2eBridge.ts`; each spec picks a
 scenario with `?fixture=` (`default`, `batch-fail`, `big`, `slow`,
-`lastused`). Run them with `npm run e2e` (`npx playwright install chromium
-webkit` once). Any console error fails a spec. `npm run check:dist` checks
+`lastused`); `&start=defaults` starts the session from FASTag's defaults
+instead of the task the app lands on. `setup.spec.ts` drives the Setup
+screen and saves its screenshots. Run them with `npm run e2e` (`npx playwright install chromium
+webkit` once). Any console error fails a spec. `shell.spec.ts` drives the
+views, Help and its search, the themes and drops (through the e2e bridge's
+`drop` and `menu` controls), and saves screenshots of every view in both
+themes at 960×600 and 1440×900 to `e2e-web/test-results/`. `npm run check:dist` checks
 that a release `dist/` carries none of the bridges' strings; the `ui`
 workflow runs both.
 

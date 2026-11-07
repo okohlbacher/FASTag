@@ -17,7 +17,9 @@ const MARKERS = [
   'FASTag 9.9.9 (mock)', // mockBridge.ts
   '/mock/FASTag', // mockBridge.ts
   'browser preview: no CLI', // devBridge.ts
-  'controllerType=0 controllerNumber=1 scan=11461' // the e2e tags fixture
+  'controllerType=0 controllerNumber=1 scan=11461', // the e2e tags fixture
+  '20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01', // the real-CLI fixtures (src/fixtures/cli)
+  'KristenJeff_p53_mod_AspN_03_02_07'
 ]
 
 function* files(d) {

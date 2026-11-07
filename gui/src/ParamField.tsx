@@ -15,6 +15,9 @@ interface Props {
   /// hiding it would make the option undiscoverable and the form jump around
   /// as switches flip -- but it is disabled and names what it needs.
   needs?: Dependency | null
+  /// A section switch that is off: how many settings it turns on, which
+  /// stay hidden until it is (GUI-DESIGN 3 S1). Said once, here.
+  turnsOn?: number
   /// The unit of a value, drawn as one control with it (fragment_tolerance).
   unit?: { spec: ParamSpec; value: ParamValue; onChange: (v: ParamValue) => void }
 }
@@ -23,7 +26,7 @@ interface Props {
 // string with `choices` becomes a select. A number is a text field checked by
 // invalidBecause() against the type, min and max the CLI declares; a value the
 // CLI would refuse is marked invalid and says why (App keeps Run disabled).
-export default function ParamField({ spec, value, onChange, onPickFile, needs, unit }: Props): JSX.Element {
+export default function ParamField({ spec, value, onChange, onPickFile, needs, unit, turnsOn }: Props): JSX.Element {
   const off = !!needs
   // An inert field is not sent, so its value cannot fail the run.
   const invalid = off ? null : invalidBecause(spec, value)
@@ -87,6 +90,11 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
               {` (${needs.note}).`}
             </span>
           </>
+        )}
+        {!!turnsOn && (
+          <span className="turns-on">
+            {' '}Turns on {turnsOn} {turnsOn === 1 ? 'setting' : 'settings'}.
+          </span>
         )}
         {changed && (
           <span className="changed">

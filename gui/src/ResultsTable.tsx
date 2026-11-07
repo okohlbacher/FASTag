@@ -38,7 +38,7 @@ function colWidth(name: string): number {
   if (name === 'tag' || name === 'proforma') return 150
   return 90
 }
-// IBM Plex Sans at 13 px: an upper-case tag runs to about 9 px a character.
+// The system UI font at 13 px: an upper-case tag runs to about 9 px a character.
 const CHAR_W = 9
 const CELL_PAD = 20
 const MIN_W = 48

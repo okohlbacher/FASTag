@@ -16,6 +16,12 @@ pub struct Taxon {
     observed: f64,
     adjusted: f64,
     q: f64,
+    // FASTag 1.12 -species_call decoy (D1) appends call and call_reason;
+    // absent from a report written without it, and then not serialised.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    call: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    call_reason: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -59,6 +65,8 @@ fn read_species(path: &str) -> Option<SpeciesReport> {
     };
     let (i_rank, i_taxid, i_name) = (col("rank"), col("taxid"), col("name"));
     let (i_obs, i_adj, i_q) = (col("observed"), col("adjusted"), col("qvalue"));
+    let (i_call, i_reason) = (col("call"), col("call_reason"));
+    let opt = |f: &[&str], i: Option<usize>| -> Option<String> { i.map(|_| get(f, i)) };
 
     let mut taxa: Vec<Taxon> = Vec::new();
     for line in &lines[1..] {
@@ -70,6 +78,8 @@ fn read_species(path: &str) -> Option<SpeciesReport> {
             observed: num(&get(&f, i_obs)),
             adjusted: num(&get(&f, i_adj)),
             q: get(&f, i_q).parse().ok().filter(|v: &f64| v.is_finite()).unwrap_or(1.0),
+            call: opt(&f, i_call),
+            call_reason: opt(&f, i_reason),
         });
     }
 
@@ -234,6 +244,36 @@ mod tests {
         std::fs::write(&f, b"NOPEnopeNOPEnopeNOPEnope").unwrap();
         assert!(read_taxdb_info(f.to_str().unwrap()).is_none());
         std::fs::remove_file(&f).ok();
+    }
+
+    // Real CLI output on PXD003531 (gui/src/fixtures/cli/README.md): the
+    // -species_call decoy columns of FASTag 1.12 (D1) reach the renderer as
+    // call and callReason, in the CLI's order; a 1.11 report has neither.
+    // src/testing/speciesTsv.ts reads the same files for vitest and e2e.
+    fn cli_fixture(case: &str) -> String {
+        format!("{}/../src/fixtures/cli/{case}/run.tags.species.tsv", env!("CARGO_MANIFEST_DIR"))
+    }
+
+    #[test]
+    fn species_call_columns_of_the_real_fixture() {
+        let r = read_species(&cli_fixture("v112-pxd003531-call")).expect("fixture");
+        assert_eq!(r.taxa.len(), 50);
+        let present: Vec<&str> =
+            r.taxa.iter().filter(|t| t.call.as_deref() == Some("present")).map(|t| t.name.as_str()).collect();
+        assert_eq!(present, ["Homo", "Macaca", "Sus", "Equus"]);
+        assert_eq!(r.taxa[0].call_reason.as_deref(), Some("pass"));
+        let json = serde_json::to_value(&r.taxa[0]).unwrap();
+        assert_eq!(json["call"], "present");
+        assert_eq!(json["callReason"], "pass");
+    }
+
+    #[test]
+    fn a_report_without_the_call_columns_serialises_no_call_fields() {
+        let r = read_species(&cli_fixture("v111-pxd003531")).expect("fixture");
+        assert_eq!(r.taxa[0].name, "Homo");
+        assert!(r.taxa.iter().all(|t| t.call.is_none() && t.call_reason.is_none()));
+        let json = serde_json::to_value(&r.taxa[0]).unwrap();
+        assert!(json.get("call").is_none() && json.get("callReason").is_none(), "{json}");
     }
 
     fn tempfile_path(name: &str) -> std::path::PathBuf {
