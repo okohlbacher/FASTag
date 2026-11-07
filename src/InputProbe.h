@@ -172,6 +172,10 @@ namespace FASTag::Probe
   /// telling whether the reader centroided it) at input position @p index:
   /// native_id, index, ms_level, precursor, charge (as tagged), charge_given,
   /// tolerance, tolerance_unit, picked, deisotoped, tagged, n_read, n, mz,
-  /// int. Pure; the unit test checks it against preparedPeaks().
+  /// int. The precursor is the 1.11 rule (the header m/z, its charge or
+  /// else 2), the only one a run tags while -unknown_charge and
+  /// -isotope_error (1.12 #6) are at their defaults; the tool refuses
+  /// -dump_spectrum otherwise. Pure; the unit test checks it against
+  /// preparedPeaks().
   std::string spectrumRecord(const OpenMS::MSSpectrum& spec, std::size_t index, bool picked, const Param& p);
 }

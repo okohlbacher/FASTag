@@ -868,7 +868,8 @@ protected:
     registerStringOption_("dump_spectrum", "<nativeId>", "",
                           "Print the peaks FASTag tags of the spectrum of -in with this native ID (after "
                           "centroiding, the precursor cut, deisotoping and the peak budget, under the "
-                          "options given) as JSON lines and exit; needs no -out",
+                          "options given) as JSON lines and exit; needs no -out. Prepares the "
+                          "given precursor at its charge (or 2+) only",
                           false, true);
   }
 
@@ -887,6 +888,18 @@ protected:
       case ParameterInformation::DOUBLE: return getDoubleOption_(name) != static_cast<double>(e.default_value);
       default: return getStringOption_(name) != static_cast<std::string>(e.default_value);
     }
+  }
+
+  /// True when option @p name is registered in this build and holds a value
+  /// other than its default (optionNonDefault_, plus integer lists). False
+  /// for a name this build does not register.
+  bool registeredNonDefault_(const std::string& name) const
+  {
+    const ParameterInformation* e = nullptr;
+    try { e = &findEntry_(name); }
+    catch (const Exception::UnregisteredParameter&) { return false; }
+    if (e->type == ParameterInformation::INTLIST) return getIntList_(name) != e->default_value.toIntVector();
+    return optionNonDefault_(name);
   }
 
   /// Default report path: @p out with its extension replaced by @p suffix --
@@ -1139,6 +1152,20 @@ protected:
     namespace P = FASTag::Probe;
     if (!getStringOption_("out").empty())
       OPENMS_LOG_WARN << "-dump_spectrum writes no file; -out and every other output are ignored." << std::endl;
+    // The dump prepares the peaks at the 1.11 precursor rule: the header m/z,
+    // its charge or else 2. Options that tag a spectrum at other precursor
+    // hypotheses (1.12 #6: -unknown_charge, -isotope_error) would make those
+    // peaks and that charge not the ones tagged, so the dump refuses them
+    // until it follows the selected hypothesis. They are looked up by name:
+    // in a build without #6 they are not registered and nothing is refused.
+    for (const char* name : {"unknown_charge", "isotope_error"})
+    {
+      if (!registeredNonDefault_(name)) continue;
+      OPENMS_LOG_ERROR << "-dump_spectrum prepares the peaks at the given precursor and its charge (or 2+) "
+                          "only and does not follow -" << name << " yet; leave -unknown_charge and "
+                          "-isotope_error at their defaults." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
     P::DumpOptions opt;
     FASTag::Centroid::parseMode(getStringOption_("pick_profile"), opt.pick_mode);
     opt.pick_unknown_type = getFlag_("pick_unknown_type");

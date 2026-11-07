@@ -803,7 +803,9 @@ listed in `--helphelp`, which is how the GUI detects them.
   them under the options given; plus `precursor`, `charge` (as tagged; an
   uncharged precursor is tagged as 2+), `charge_given`, `native_id`, `index`,
   `tolerance` and `tolerance_unit`. An unknown ID exits 6 with the ID on stderr
-  and nothing on stdout.
+  and nothing on stdout. The dump prepares the given precursor at its charge
+  (or 2+) only; with `-unknown_charge` or `-isotope_error` away from their
+  defaults it exits 6 rather than print peaks that were not tagged.
 
 ## Glyco flag
 

@@ -22,7 +22,8 @@
 #       (every unmodified tag's b or y ladder lies on dumped peaks within
 #       the tolerance; both ends of it for a gapped tag); the MGF twin and the mzPeak export
 #       give the same peaks; threads 1/3/8 give the same bytes; no file is
-#       written, -out included
+#       written, -out included; with the 1.12 #6 options in the binary,
+#       -unknown_charge or -isotope_error away from the default exits 6
 #   (e) -dump_spectrum refusals: an unknown native ID (exit 6, the ID on
 #       stderr, nothing on stdout), no -in, under -stream; an MS1 is
 #       dumped with tagged false and no peaks
@@ -465,6 +466,27 @@ if [ $RC = 0 ] && [ -s "$TMP/mzp/e.mzpeak" ]; then
     && [ "$(val "$TMP/p_mzpeak.v" index)" = '"not_applicable"' ] || fail "(b) mzPeak probe: $(tr '\n' ' ' < "$TMP/p_mzpeak.v")"
 else
   echo "note: no mzPeak support in this build; the mzPeak dump and probe are not checked" >&2
+fi
+
+# Precursor hypotheses (1.12 #6): the dump prepares the given precursor at
+# its charge (or 2+) only, so it must refuse -unknown_charge and
+# -isotope_error away from their defaults (exit 6, the option on stderr,
+# nothing on stdout) rather than print peaks that were not tagged, and
+# give the plain dump's bytes with them at their defaults. Checked when
+# the binary has them.
+if grep -qE '^ +-unknown_charge <mode>' "$TMP/helphelp.txt"; then
+  for a in "-unknown_charge infer" "-unknown_charge enumerate" "-isotope_error 0 1"; do
+    rm -rf "$TMP/dh"; run_in "$TMP/dh" "$TMP/dh.out" "$TMP/dh.err" -in "$IN" -dump_spectrum "${EIDS[0]}" $a
+    [ $RC = 6 ] || fail "(d) -dump_spectrum with $a exited $RC, not 6"
+    [ -s "$TMP/dh.out" ] && fail "(d) -dump_spectrum with $a printed to stdout"
+    grep -q -- "-dump_spectrum prepares the peaks at the given precursor .* does not follow ${a%% *}" "$TMP/dh.err" \
+      || { cat "$TMP/dh.err" >&2; fail "(d) $a is not refused by -dump_spectrum naming ${a%% *}"; }
+    only_files "$TMP/dh" ""
+  done
+  dump "$IN" "${EIDS[0]}" "$TMP/dh_def.jsonl" -unknown_charge assume2 -isotope_error 0
+  cmp -s "$TMP/dh_def.jsonl" "$TMP/d_default/0.jsonl" || fail "(d) the #6 defaults given change the dump"
+else
+  echo "note: no -unknown_charge in this build; the #6 refusal of -dump_spectrum is not checked" >&2
 fi
 
 # ---- (e) -dump_spectrum refusals and an MS1 ----------------------------------------
