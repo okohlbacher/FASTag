@@ -1,0 +1,10 @@
+# FASTag 1.12 calibration of the protease call (#3f) for -digest_min_confidence: a logistic model
+# p_correct = 1 / (1 + exp(-(intercept + margin * margin + log_n * ln(n) + first_peak * first_peak))).
+# OPT-IN AND UNFITTED: all coefficients are 0, so p_correct reads 0.5 for every call. Fitted by
+# tools/digest_models.py --fit (IRLS, at most these three features) at the DEV regeneration on
+# the 1.12 release candidate; not validated on held-out data.
+feature	coef
+intercept	0
+margin	0
+log_n	0
+first_peak	0

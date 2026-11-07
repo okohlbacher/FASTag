@@ -474,6 +474,13 @@ MGF→mzML direction is exact.
 | `-massgap_min_spectra <n>` / `-massgap_min_share <f>` / `-massgap_min_bin <n>` | 20 / 0.005 / 2 | Advanced: spectra and share a gap peak needs; spectra a histogram row needs to take part |
 | `-massgap_max_mods <n>` / `-massgap_top <n>` | 3 / 5 | Advanced: modifications per explanation; modifications listed by share |
 | `-massgap_silac_share <f>` / `-massgap_silac_min <n>` | 0.08 / 500 | Advanced: share a SILAC label needs; shifted spectra a SILAC call needs |
+| `-digest_models_version <shipped\|v2>` | shipped | Experimental (1.12), not validated on held-out data: `v2` reads `digest_models_v2.tsv` (rule-only LysargiNase and Asp-N_ambic rows, detection weights per instrument class, pooled specificity); the shipped v2 values are unfitted priors |
+| `-digest_detection <none\|shipped>` | none | Experimental: score the tag ends with the table's detection weights of the run's instrument class (orbitrap_hcd, timstof, other) and call timsTOF runs instead of withholding them; needs a v2 table |
+| `-digest_flank2 <off\|auto>` | off | Experimental: where y1 is cut off or the P1 counts are too few, score the two-residue flank sums m(P2) + m(P1) instead |
+| `-digest_min_confidence <f>` / `-digest_calibration <file>` | 0 / shipped | Experimental: write the calibrated `p_correct` of a call and withhold one below the threshold (`low_confidence`); the shipped calibration is unfitted (p_correct 0.5) |
+| `-alkylation_out <file>` | none | Experimental (1.12), not validated on held-out data: which reagent alkylated the cysteines, or none, from the placements of single-Cys peptides (see Digest, label and mass-gap reports; format in doc/ALKYLATION-REPORT.md) |
+| `-alkylation_proteome <name\|file>` | auto | Database of `-alkylation_out` when nothing else places: `auto` (= human), `human`, `mouse`, `yeast`, `ecoli` (`share/FASTag/alkylation/<name>.fasta.gz`) or a FASTA (`.gz` allowed); ignored with `-recon_fasta` |
+| `-alkylation_min_spectra <n>` / `-alkylation_min_share <f>` / `-alkylation_window <Da>` | 10 / 0.6 / 0 | Advanced: spectra and share the call needs; bin window (0 = 0.02 Da on ppm runs, 0.5 Da on Da runs) |
 | `-shortlist_out <file>` | none | Experimental (1.12): ranked protein shortlist from the tag placements on `-recon_fasta` (or `-fasta`), one row per protein with evidence (see Protein shortlist and search hand-off). A search-space reduction, NOT FDR-controlled |
 | `-fasta_out <file>` | none | Experimental: reduced FASTA of the kept proteins (never decoys), then `-shortlist_background` |
 | `-shortlist_background <file>` | none | Proteins always written to `-fasta_out` (host proteome, contaminants), decoys left out; an entry identical to a database entry is written once, as that entry (kept even below the shortlist cut, reason `background`) |
@@ -738,6 +745,26 @@ options and their values.
   Cys alkylation): spectra near each Cys alkylation mass, and gap peaks
   explained as the smallest combination of up to three of 38 Unimod
   modifications.
+- **`-alkylation_out`** (1.12, experimental, not validated on held-out data)
+  calls the Cys alkylation reagent (Carbamidomethyl, Propionamide,
+  Nethylmaleimide, Methylthio, Carboxymethyl) or `none` (unmodified, oxidised,
+  cysteinylated or dehydroalanine Cys) from the placements of the run's own
+  reconciler: each MS2 spectrum votes once with its best tag placed on a
+  peptide with exactly one C on the gap side, and the reagent mass is the gap
+  plus the fixed C modification. On a labelled run (a fixed N- or C-terminal
+  TMT or iTRAQ modification) the label is first taken off a gap on its side,
+  as the reconciler's flanks carry it. Without `-recon_out` the placements are made
+  on `-recon_fasta` or `-alkylation_proteome` and not written; every other
+  output is the same with and without it. Sections `alk_run`, `alk_cys` and
+  `alkylation_call`; the format is documented and versioned in
+  doc/ALKYLATION-REPORT.md.
+
+The `-digest_out` options of 1.12 (`-digest_models_version v2`,
+`-digest_detection`, `-digest_flank2`, `-digest_min_confidence`) are opt-in
+and not validated on held-out data; at their defaults the report is the
+FASTag 1.11 one byte for byte, and with any of them on it gains `run`,
+`meta instrument_class`, `count flank2_n`, `call p_correct`/`flank2_used`/
+`timstof_call` and `nocall low_confidence` rows.
 
 `-digest_out` also writes the background in use and each model's residue
 distribution before mixing, from which the Desktop GUI draws its logos. The

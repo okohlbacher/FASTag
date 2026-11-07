@@ -18,6 +18,7 @@
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -65,12 +66,24 @@ namespace FASTag::Digest
   };
   const std::array<LabelKey, kNumLabels>& labelKeys();
 
+  struct Flank2Bins;  // 1.12 D #3d, below
+
   /// Counts over the filtered tags (gapped == 0, evalue <= 1), added one tag
   /// at a time. "Near m" below means within [m - w, m + w], w the window.
   class TerminusCounter
   {
   public:
     explicit TerminusCounter(double window = 0.008) : w_(window) {}
+
+    // ---- 1.12 D: flank2 (#3d), off unless enabled ----
+    /// Also count the dipeptide histogram dip: per Flank2Bins bin at this
+    /// window, the tags whose C-terminal flank (or N-terminal flank less
+    /// H2O, a reversed b tag) is a two-residue sum of that bin.
+    void enableFlank2();
+    bool flank2() const { return bins_ != nullptr; }
+    const Flank2Bins* flank2Table() const { return bins_.get(); }
+    std::vector<std::uint64_t> dip;  ///< empty unless enableFlank2()
+    // ---- end 1.12 D ----
 
     /// One filtered tag: its flanking masses and its sequence without
     /// modification annotations.
@@ -107,6 +120,7 @@ namespace FASTag::Digest
   private:
     bool near_(double v, double m) const { return v >= m - w_ && v <= m + w_; }
     double w_;
+    std::shared_ptr<const Flank2Bins> bins_;  ///< 1.12 D #3d; shared by copies
   };
 
   // ---- model table ------------------------------------------------------
@@ -120,12 +134,43 @@ namespace FASTag::Digest
     bool c_bg = true, n_bg = true;  ///< that end is the background
   };
 
+  // ---- 1.12 D: model table v2 (#3c, #3e) ----
+  /// The header line ('#' and this text) that makes a table a v2 table. Only
+  /// a v2 table reads the reserved model names detection, reference and
+  /// specificity; in a table without it they are ordinary models, as in 1.11.
+  inline constexpr std::string_view kModelsV2Marker = "fastag_digest_models v2";
+  /// Instrument classes of the detection weights (instrumentClass()).
+  inline constexpr std::array<std::string_view, 3> kInstrumentClasses = {"orbitrap_hcd", "timstof", "other"};
+
+  /// Detection weights of one instrument class: observed P1 (C) or P1' (N)
+  /// is proportional to e(a) * p(a). A residue without a row weighs 1.
+  struct Detection
+  {
+    std::string cls;
+    Dist c{}, n{};
+  };
+  // ---- end 1.12 D ----
+
   struct ModelTable
   {
     std::vector<std::string> header;  ///< the '#' lines, without '#'
     std::vector<Model> models;        ///< in first-appearance order
     bool has_bg = false;
     Dist bg_c{}, bg_n{};
+    // ---- 1.12 D: v2 rows (empty in a v1 table) ----
+    int version = 1;                   ///< 2 with the kModelsV2Marker header line
+    std::vector<Detection> detection;  ///< rows "detection <class> <end> <residue> <weight>"
+    /// "reference - C K|R <freq>": the in-silico tryptic K and R shares of the
+    /// fixed reference the detection weights were fitted against (provenance;
+    /// never read by the classifier).
+    bool has_reference = false;
+    double ref_k = 0.0, ref_r = 0.0;
+    /// "specificity trypsin|nontryptic - - <s>": the background share mixed
+    /// into the Trypsin-class models and into every other model.
+    bool has_specificity = false;
+    double s_trypsin = 0.05, s_nontryptic = 0.05;
+    /// The detection weights of instrument class @p cls, or null.
+    const Detection* detectionFor(std::string_view cls) const;
   };
 
   /// Reads a model table (columns model, class, end, residue, freq; '#' lines
@@ -133,6 +178,10 @@ namespace FASTag::Digest
   /// and must cover all 19 residues at both ends; residue "*" sets that end of
   /// a model to the background, as does an end without rows. Returns false
   /// with @p err on a malformed table.
+  ///
+  /// A v2 table (header line kModelsV2Marker) may also hold detection,
+  /// reference and specificity rows (ModelTable). A v1 table parses as in
+  /// FASTag 1.11.
   bool loadModelTable(const std::string& path, ModelTable& out, std::string* err);
   bool parseModelTable(std::istream& in, ModelTable& out, std::string* err);
 
@@ -179,6 +228,74 @@ namespace FASTag::Digest
   Classification classify(const std::array<std::uint64_t, kNumAA>& cterm,
                           const std::array<std::uint64_t, kNumAA>& nterm,
                           const ModelTable& table, double share, int tag_min);
+
+  // ---- 1.12 D: detection, specificity, flank2 (#3c-#3e), all opt-in ----
+
+  /// What classify() and classify2() add to the 1.11 model. Default: nothing,
+  /// and classify() is the 1.11 classifier bit for bit.
+  struct ClassifyOptions
+  {
+    /// #3c: weights applied to each model end and to the background before
+    /// they are mixed: (1 - s) * w(p) + s * w(bg), w(x) = e * x rescaled to
+    /// the sum of x (so unit weights give the 1.11 scores bit for bit).
+    const Detection* detection = nullptr;
+    /// #3e: s per model from the table's specificity rows (Trypsin class:
+    /// s_trypsin, every other class: s_nontryptic) instead of @p share.
+    bool specificity = false;
+    double s_trypsin = 0.05, s_nontryptic = 0.05;
+    bool active() const { return detection != nullptr || specificity; }
+  };
+
+  Classification classify(const std::array<std::uint64_t, kNumAA>& cterm,
+                          const std::array<std::uint64_t, kNumAA>& nterm,
+                          const ModelTable& table, double share, int tag_min,
+                          const ClassifyOptions& opt);
+
+  /// #3d: the two-residue flank masses. When y1 is cut off, a tag's C-terminal
+  /// flank is m(P2) + m(P1). Every ordered residue pair (X, Y) = (P2, P1) is
+  /// put into one bin: pairs whose sums lie within the window of each other
+  /// (single linkage) share it, so a collision (AG, GA; GG at the mass of N)
+  /// is one bin whose pairs are summed once.
+  struct Flank2Bins
+  {
+    double window = 0.0;
+    std::vector<double> lo, hi;                           ///< per bin: lowest and highest pair sum
+    std::vector<std::vector<std::pair<int, int>>> pairs;  ///< per bin: (P2, P1) in kAAs indices
+    std::vector<double> sums;                             ///< every pair sum, ascending
+    std::vector<int> bin_of;                              ///< the bin of sums[i]
+    /// The bin of the pair sum nearest @p mass when it is within the window,
+    /// else -1.
+    int find(double mass) const;
+  };
+  /// The bins at @p window over the residueKeys() masses (C carbamidomethylated).
+  Flank2Bins flank2Bins(double window);
+
+  /// #3d: the flank2 call over the dipeptide histogram @p dip (one count per
+  /// bin of @p bins): each model predicts bin b as the sum over its pairs of
+  /// bg_C(P2) * model_C(P1), mixed as classify() mixes, and is scored by the
+  /// multinomial log-likelihood of the counts. Scored with >= tag_min counts;
+  /// n_c is the histogram total, uses_nterm is false.
+  Classification classify2(const std::vector<std::uint64_t>& dip, const Flank2Bins& bins,
+                           const ModelTable& table, double share, int tag_min,
+                           const ClassifyOptions& opt = ClassifyOptions());
+
+  /// #3f: the calibrated probability that a call is correct, a logistic model
+  /// over at most three features: p = 1 / (1 + exp(-(intercept + margin_coef
+  /// * margin + log_n_coef * ln(n) + first_peak_coef * first_peak))).
+  struct Calibration
+  {
+    bool loaded = false;
+    std::vector<std::string> header;  ///< the '#' lines, without '#'
+    double intercept = 0.0, margin = 0.0, log_n = 0.0, first_peak = 0.0;
+  };
+  /// Columns feature, coef; the features intercept, margin, log_n and
+  /// first_peak, each exactly once. False with @p err on a malformed table.
+  bool parseCalibration(std::istream& in, Calibration& out, std::string* err);
+  bool loadCalibration(const std::string& path, Calibration& out, std::string* err);
+  /// p_correct of a call with this margin (per tag end), @p n tag ends
+  /// (at least 1 is used) and the first-peak flag.
+  double pCorrect(const Calibration& cal, double margin, std::uint64_t n, bool first_peak);
+  // ---- end 1.12 D ----
 
   // ---- mass gaps --------------------------------------------------------
 
@@ -262,7 +379,25 @@ namespace FASTag::Digest
     std::vector<double> first_peak;              ///< lowest peak m/z per MS2
     std::uint64_t peaks = 0, peaks_whole = 0;    ///< MS2 peaks with an intensity above 0, and those of them that are whole numbers
     bool im_unread = false;                      ///< the input format carries no ion mobility (MGF)
+    // ---- 1.12 D #3c: MS2 fragmentation and analyzer, for instrumentClass() only ----
+    std::uint64_t ms2_beam = 0;       ///< MS2 with beam-type CID (HCD) activation (addFragmentation())
+    std::uint64_t ms2_resonance = 0;  ///< MS2 with resonance (ion-trap) CID, trap-type CID or PQD
+    std::uint64_t ms2_itms = 0, ms2_ftms = 0;  ///< MS2 whose Thermo filter string starts ITMS / FTMS
+    bool analyzer_orbitrap = false, analyzer_iontrap = false;  ///< mass analyzers the run header names
+    // ---- end 1.12 D ----
   };
+
+  // ---- 1.12 D #3c: MS2 fragmentation ----
+  /// What one MS2 spectrum says about its fragmentation and analyzer.
+  enum class Fragmentation : int { Unknown = 0, Beam, Resonance };
+  /// Counts one MS2 into @p meta: @p frag from its activation methods (or
+  /// its filter string's @hcd/@cid token when they say nothing), and the
+  /// ITMS/FTMS prefix of @p filter (empty: none).
+  void addFragmentation(RunMeta& meta, Fragmentation frag, std::string_view filter);
+  /// The @<method> tokens of a Thermo filter string: hcd is Beam; cid and
+  /// pqd are Resonance (hcd wins when both appear).
+  Fragmentation fragmentationFromFilter(std::string_view filter);
+  // ---- end 1.12 D ----
 
   struct DigestSettings
   {
@@ -273,7 +408,41 @@ namespace FASTag::Digest
     bool low_resolution = false;               ///< fragment tolerance in Da
     std::string models = "shipped", background = "shipped_human";
     bool background_pseudocount = false;       ///< one count added per residue of the FASTA
+    // ---- 1.12 D: chemistry v2 (#3c-#3f), all off by default ----
+    // At these defaults digestRows() writes the 1.11 rows byte for byte. Not
+    // validated on held-out data; the fits come at the DEV regeneration on
+    // the release candidate.
+    std::string models_version = "shipped";  ///< -digest_models_version: shipped | v2
+    bool detection = false;                   ///< -digest_detection shipped (#3c; the timsTOF call)
+    bool flank2 = false;                      ///< -digest_flank2 auto (#3d)
+    double min_confidence = 0.0;              ///< -digest_min_confidence (#3f); 0 = off
+    Calibration calibration;                  ///< loaded when p_correct is written (#3f)
+    std::string calibration_source;           ///< "shipped" or the -digest_calibration path
+    /// Any of the above is on: digestRows() writes the v2 rows.
+    bool chemV2() const
+    {
+      return models_version != "shipped" || detection || flank2 || min_confidence > 0.0 || calibration.loaded;
+    }
+    // ---- end 1.12 D ----
   };
+
+  // ---- 1.12 D: instrument class (#3c) ----
+  /// The detection class of a run (kInstrumentClasses). Detection is a
+  /// property of the MS2 analyzer and the fragmentation, not of the
+  /// instrument's name:
+  ///   - timstof when the timstof or ion_counts no-call rule of -digest_out
+  ///     would read "yes";
+  ///   - orbitrap_hcd for an Orbitrap-family run (the name or model names
+  ///     Orbitrap, Q Exactive, Exploris, Astral, Lumos, Fusion, Eclipse or
+  ///     Ascend, or the run header lists an Orbitrap analyzer) whose MS2 are
+  ///     mostly beam-type CID (HCD) and not mostly read in the ion trap (ITMS
+  ///     filter strings). Without any activation information, only the
+  ///     HCD-only families (Q Exactive, Exploris, Astral) or a header with an
+  ///     Orbitrap and no ion-trap analyzer count;
+  ///   - other otherwise: an LTQ Orbitrap or Velos run with ion-trap CID MS2
+  ///     is other, not orbitrap_hcd.
+  std::string instrumentClass(const RunMeta& meta);
+  // ---- end 1.12 D ----
 
   /// Python statistics.median; NaN for none.
   double median(std::vector<double> v);

@@ -80,6 +80,7 @@ namespace FASTag
     r.peptide = idx_->originalText(w.start, w.end);  // original DB spelling
     r.start = idx_->proteinOffset(w.start);
     r.pos = pos;
+    r.tag_len = klen;
     r.reversed = occ.reversed;
     r.nterm_match = n_ok;
     r.cterm_match = c_ok;

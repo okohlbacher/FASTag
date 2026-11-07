@@ -180,6 +180,26 @@ not caught; zero-intensity peaks are left out of the share, so profile-like MGFs
 do not fire the rule. The rule comes after
 `ms2_first_peak`, so it changes no reason that 1.9.0 already gave.
 
+### Instrument class of the detection weights (1.12, #3c)
+
+`meta instrument_class` (written with any 1.12 v2 option) picks the detection weights of
+`-digest_detection shipped`. Detection is a property of the MS2 analyzer and the fragmentation,
+so the class is read from them, not from the instrument name alone (`Digest::instrumentClass`):
+
+- `timstof`: the `timstof` or `ion_counts` no-call rule reads `yes`.
+- `orbitrap_hcd`: an Orbitrap-family run (name or model contains Orbitrap, Q Exactive, Exploris,
+  Astral, Lumos, Fusion, Eclipse or Ascend, or the run header lists an Orbitrap analyzer) whose MS2
+  are mostly beam-type CID (HCD: PSI-MS MS:1000422, or a filter-string `@hcd` token when the
+  activation terms say nothing) and not mostly read in the ion trap (`ITMS` filter strings). With no
+  activation information at all, only the HCD-only families (Q Exactive, Exploris, Astral) or a
+  header with an Orbitrap and no ion-trap analyzer.
+- `other`: everything else, in particular LTQ Orbitrap, Velos and Elite runs with ion-trap CID MS2
+  (the vendored LTQ Orbitrap XL fixture is `other`).
+
+The per-MS2 counts are taken in the tagging loop only with `-digest_out`. This rule is fixed before
+the DEV fit, so the fitted `orbitrap_hcd` weights pool no ion-trap CID runs; PREREG-chem.md records
+it when it is written.
+
 ## Model table (`-digest_models`)
 
 ```
@@ -345,7 +365,10 @@ The logo is a small React SVG component in `gui/src`; no new dependency.
 - The margin = 0 override when isobaric K (`residue` K+TMT, K+TMTpro, K+iTRAQ4) exceeds half the merged K
   and a Lys-C/Arg-C call has Trypsin as runner-up.
 - The alkylation call rule, the 2 % / 10 % variable-modification and enrichment shares, and the HLA
-  class mapping. The label rule (≥ 1 % of the tags and ≥ 20× background, the SILAC heavy-share
+  class mapping. FASTag 1.12 also has an alkylation call of its own (`-alkylation_out`, opt-in,
+  doc/ALKYLATION-REPORT.md): it bins the single-Cys placements of the reconciler instead of taking
+  prose-auto's argmax over all gap placements, so it can call "none"; prose-auto switches to it only
+  by a later decision, after the held-out test. The label rule (≥ 1 % of the tags and ≥ 20× background, the SILAC heavy-share
   thresholds and the `KR_TRYPTIC` gate) is also in FASTag since 1.12 (`label_call`, above); prose-auto
   switches to reading it only by a later decision.
 - Reagent-genus handling of the species report.

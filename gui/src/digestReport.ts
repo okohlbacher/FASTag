@@ -1,9 +1,10 @@
-// Readers for FASTag's three long-form reports (-digest_out, -label_out,
-// -massgap_out; doc/DESIGN-digest.md). Every file has the header
+// Readers for FASTag's long-form reports (-digest_out, -label_out,
+// -massgap_out; doc/DESIGN-digest.md; and, from 1.12, -alkylation_out;
+// doc/ALKYLATION-REPORT.md). Every file has the header
 // `section key value n description`; the reports differ only in their sections.
 // Everything here is pure so it can be tested without the bridge.
 
-export type ReportKind = 'digest' | 'label' | 'massgap'
+export type ReportKind = 'digest' | 'label' | 'massgap' | 'alkylation'
 
 export interface ReportRow {
   section: string
@@ -54,10 +55,14 @@ export function parseReport(text: string, path: string): Report {
   const warnings = [...repeated].map((id) => `${baseName(path)} has more than one ${id} row; the first one is used.`)
   const sections = new Set(rows.map((r) => r.section))
   let kind: ReportKind
-  if (['call', 'pos', 'residue', 'model', 'nocall'].some((x) => sections.has(x))) kind = 'digest'
+  // The alkylation report's sections (alk_run, alk_cys, alkylation_call) are
+  // tested first: they never collide with the others' names, and a mass-gap
+  // report is recognised by its `cys` section.
+  if (sections.has('alkylation_call')) kind = 'alkylation'
+  else if (['call', 'pos', 'residue', 'model', 'nocall'].some((x) => sections.has(x))) kind = 'digest'
   else if (sections.has('nlabel') || sections.has('heavy')) kind = 'label'
   else if (sections.has('hist') || sections.has('peak') || sections.has('cys')) kind = 'massgap'
-  else throw new Error('not a digest, label or mass-gap report: none of their sections is present')
+  else throw new Error('not a digest, label, mass-gap or alkylation report: none of their sections is present')
   return { kind, path, rows, warnings }
 }
 
@@ -266,6 +271,45 @@ export function labelFindings(r: Report): LabelFinding[] {
     share: num(value(r, 'nlabel', `${label}.share`)),
     n: row(r, 'nlabel', `${label}.count`)?.n ?? null
   }))
+}
+
+// ---- alkylation (1.12, -alkylation_out format 1) ---------------------------
+
+export interface AlkylationCall {
+  status: 'call' | 'no_call' | 'unknown'
+  /// Unimod name of the reagent, or `none` (not alkylated); absent on no_call.
+  reagent?: string
+  /// Mass on C in Da; null for `none` and on no_call.
+  mass: number | null
+  /// Share of the binned spectra (the leading class's on no_call).
+  share: number | null
+  /// Binned spectra the call is based on.
+  binned: number | null
+  /// `few_cys_spectra` or `ambiguous` on no_call.
+  reason?: string
+  /// `recon_fasta`, `fasta`, `proteome` or `bundled:<name>`.
+  databaseSource?: string
+  /// The `alk_run format` value; a reader knows format 1.
+  format: number | null
+}
+
+/// The call of an -alkylation_out report, read by (section, key) as
+/// doc/ALKYLATION-REPORT.md requires.
+export function alkylationCall(r: Report): AlkylationCall {
+  const v = (k: string): string | undefined => value(r, 'alkylation_call', k)
+  const st = v('status')
+  const called = st === 'call'
+  const reagent = v('reagent')
+  return {
+    status: called || st === 'no_call' ? st : 'unknown',
+    reagent: called && reagent != null && reagent !== '-' ? reagent : undefined,
+    mass: called ? num(v('mass')) : null,
+    share: num(v('share')),
+    binned: row(r, 'alkylation_call', 'status')?.n ?? null,
+    reason: v('reason') == null || v('reason') === '-' ? undefined : v('reason'),
+    databaseSource: value(r, 'alk_run', 'database_source'),
+    format: num(value(r, 'alk_run', 'format'))
+  }
 }
 
 // ---- mass gaps -----------------------------------------------------------

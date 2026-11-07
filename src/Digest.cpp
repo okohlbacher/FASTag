@@ -122,6 +122,12 @@ namespace FASTag::Digest
       lab_bg_n[l] += near_(nterm, mb);
       lab_bg_c[l] += near_(cterm, mb);
     }
+    // 1.12 D #3d: one count per flank that is a two-residue sum.
+    if (bins_)
+    {
+      if (const int b = bins_->find(cterm); b >= 0) ++dip[static_cast<std::size_t>(b)];
+      if (const int b = bins_->find(nterm - kH2O); b >= 0) ++dip[static_cast<std::size_t>(b)];
+    }
   }
 
   void TerminusCounter::merge(const TerminusCounter& o)
@@ -136,6 +142,11 @@ namespace FASTag::Digest
     add(lab_bg_n, o.lab_bg_n);
     add(lab_bg_c, o.lab_bg_c);
     for (std::size_t p = 0; p < 4; ++p) { add(cpos[p], o.cpos[p]); add(npos[p], o.npos[p]); }
+    if (o.bins_)
+    {
+      if (!bins_) { bins_ = o.bins_; dip.assign(o.dip.size(), 0); }
+      if (dip.size() == o.dip.size()) add(dip, o.dip);
+    }
   }
 
   std::uint64_t TerminusCounter::tot() const
@@ -234,12 +245,75 @@ namespace FASTag::Digest
       out.models.push_back(Model{name, cls, {}, {}, true, true});
       return &out.models.back();
     };
+    // 1.12 D (#3c, #3e): the v2 rows, read only below the v2 marker.
+    std::map<std::string, std::pair<std::array<bool, kNumAA>, std::array<bool, kNumAA>>> det_seen;
+    bool ref_seen[2] = {false, false}, spec_seen[2] = {false, false};
+    auto is_v2 = [&]() {
+      for (const std::string& h : out.header)
+      {
+        const std::size_t a = h.find_first_not_of(" \t");
+        const std::size_t b = h.find_last_not_of(" \t");
+        if (a != std::string::npos && h.compare(a, b - a + 1, kModelsV2Marker) == 0) return true;
+      }
+      return false;
+    };
     const bool ok = readTable(
         in, {"model", "class", "end", "residue", "freq"}, &out.header, err,
         [&](const std::vector<std::string>& f, std::size_t ln) {
           const std::string at = "line " + std::to_string(ln) + ": ";
           const std::string &name = f[0], &cls = f[1], &end = f[2], &res = f[3];
           if (name.empty()) return fail(err, at + "empty model name");
+          if ((name == "detection" || name == "reference" || name == "specificity") && is_v2())
+          {
+            out.version = 2;
+            double v = 0;
+            if (!parseDouble(f[4], v) || !(v >= 0) || !std::isfinite(v))
+              return fail(err, at + "'" + name + "' value '" + f[4] + "' is not a non-negative number");
+            if (name == "specificity")
+            {
+              const int k = cls == "trypsin" ? 0 : cls == "nontryptic" ? 1 : -1;
+              if (k < 0) return fail(err, at + "specificity class must be trypsin or nontryptic, not '" + cls + "'");
+              if (end != "-" || res != "-") return fail(err, at + "a specificity row has end and residue '-'");
+              if (!(v < 1)) return fail(err, at + "a specificity must be below 1");
+              if (spec_seen[k]) return fail(err, at + "specificity " + cls + " given twice");
+              spec_seen[k] = true;
+              (k == 0 ? out.s_trypsin : out.s_nontryptic) = v;
+              out.has_specificity = true;
+              return true;
+            }
+            if (name == "reference")
+            {
+              const int k = res == "K" ? 0 : res == "R" ? 1 : -1;
+              if (cls != "-" || end != "C" || k < 0) return fail(err, at + "a reference row is 'reference - C K|R <freq>'");
+              if (!(v <= 1)) return fail(err, at + "a reference share must be at most 1");
+              if (ref_seen[k]) return fail(err, at + "reference " + res + " given twice");
+              ref_seen[k] = true;
+              (k == 0 ? out.ref_k : out.ref_r) = v;
+              out.has_reference = true;
+              return true;
+            }
+            if (std::find(kInstrumentClasses.begin(), kInstrumentClasses.end(), cls) == kInstrumentClasses.end())
+              return fail(err, at + "detection class must be orbitrap_hcd, timstof or other, not '" + cls + "'");
+            if (end != "C" && end != "N") return fail(err, at + "end must be C or N, not '" + end + "'");
+            if (res.size() != 1 || aaIndex(res[0]) < 0 || res[0] == 'I')
+              return fail(err, at + "residue '" + res + "' is none of " + std::string(kAAs));
+            Detection* d = nullptr;
+            for (Detection& x : out.detection)
+              if (x.cls == cls) d = &x;
+            if (!d)
+            {
+              out.detection.push_back(Detection{cls, {}, {}});
+              d = &out.detection.back();
+              d->c.fill(1.0);
+              d->n.fill(1.0);
+            }
+            const std::size_t a = static_cast<std::size_t>(aaIndex(res[0]));
+            auto& seen = end == "C" ? det_seen[cls].first : det_seen[cls].second;
+            if (seen[a]) return fail(err, at + "detection " + cls + " " + end + " " + res + " given twice");
+            seen[a] = true;
+            (end == "C" ? d->c : d->n)[a] = v;
+            return true;
+          }
           if (end != "C" && end != "N") return fail(err, at + "end must be C or N, not '" + end + "'");
           const bool cend = end == "C";
           if (res == "*")
@@ -282,6 +356,14 @@ namespace FASTag::Digest
           return true;
         });
     if (!ok) return false;
+    if (is_v2()) out.version = 2;
+    if (out.has_reference && !(ref_seen[0] && ref_seen[1]))
+      return fail(err, "a reference needs both its K and its R row");
+    if (out.has_specificity && !(spec_seen[0] && spec_seen[1]))
+      return fail(err, "the specificity needs both its trypsin and its nontryptic row");
+    for (const Detection& d : out.detection)
+      if (std::accumulate(d.c.begin(), d.c.end(), 0.0) <= 0.0 || std::accumulate(d.n.begin(), d.n.end(), 0.0) <= 0.0)
+        return fail(err, "detection " + d.cls + " has an end whose weights are all 0");
     if (out.has_bg)
       for (int a = 0; a < kNumAA; ++a)
         if (!bgc_seen[a] || !bgn_seen[a])
@@ -361,6 +443,10 @@ namespace FASTag::Digest
     }
   }
 
+  /// Ranks r.scores: top, runner_up (best of another class), nonfinite, tied
+  /// and margin, as the 1.11 classifier did.
+  void rankScores(Classification& r);
+
   Classification classify(const std::array<std::uint64_t, kNumAA>& cterm,
                           const std::array<std::uint64_t, kNumAA>& nterm,
                           const ModelTable& table, double share, int tag_min)
@@ -379,6 +465,12 @@ namespace FASTag::Digest
       else sc = sc + 0.0;
       r.scores.push_back({m.name, m.cls, sc});
     }
+    rankScores(r);
+    return r;
+  }
+
+  void rankScores(Classification& r)
+  {
     std::vector<int> rk(r.scores.size());
     std::iota(rk.begin(), rk.end(), 0);
     // NaN ranks last, so the order stays a strict weak ordering.
@@ -398,8 +490,199 @@ namespace FASTag::Digest
     if (r.runner_up >= 0)
       r.margin = (best - r.scores[r.runner_up].loglik) /
                  static_cast<double>(r.n_c + (r.uses_nterm ? r.n_n : 0));
+  }
+
+  // ---- 1.12 D: detection, specificity, flank2, calibration (#3c-#3f) ----
+
+  const Detection* ModelTable::detectionFor(std::string_view cls) const
+  {
+    for (const Detection& d : detection)
+      if (d.cls == cls) return &d;
+    return nullptr;
+  }
+
+  namespace
+  {
+    /// e * p rescaled to the sum of p (p as is when e is null or the product
+    /// is 0). Keeping p's scale makes unit weights the 1.11 ends bit for bit:
+    /// the factor is then exactly 1 (mix() does not normalise, so a table
+    /// whose background does not sum to 1 keeps its 1.11 scores too).
+    Dist weigh(const Dist& p, const Dist* e)
+    {
+      if (!e) return p;
+      Dist out{};
+      PySum z, zp;
+      for (int a = 0; a < kNumAA; ++a)
+      {
+        out[a] = (*e)[a] * p[a];
+        z.add(out[a]);
+        zp.add(p[a]);
+      }
+      const double zz = z.value();
+      if (!(zz > 0)) return p;
+      const double k = zp.value() / zz;
+      for (double& x : out) x *= k;
+      return out;
+    }
+
+    double shareOf(const Model& m, double share, const ClassifyOptions& opt)
+    {
+      if (!opt.specificity) return share;
+      return m.cls == "Trypsin" ? opt.s_trypsin : opt.s_nontryptic;
+    }
+
+    /// The model's C (or N) end as classify() scores it under @p opt.
+    Dist endOf(const Model& m, bool cend, const ModelTable& t, double share, const ClassifyOptions& opt)
+    {
+      const Dist* e = opt.detection ? (cend ? &opt.detection->c : &opt.detection->n) : nullptr;
+      const Dist& bg = cend ? t.bg_c : t.bg_n;
+      const Dist& p = cend ? (m.c_bg ? t.bg_c : m.c) : (m.n_bg ? t.bg_n : m.n);
+      return mix(weigh(p, e), weigh(bg, e), shareOf(m, share, opt));
+    }
+
+    /// loglik() over any number of bins.
+    double loglikV(const std::vector<std::uint64_t>& cnt, const std::vector<double>& p)
+    {
+      PySum z;
+      for (double x : p) z.add(x);
+      const double zz = z.value();
+      PySum s;
+      for (std::size_t b = 0; b < cnt.size(); ++b)
+        if (cnt[b]) s.add(static_cast<double>(cnt[b]) * std::log(p[b] / zz));
+      return s.value();
+    }
+  }
+
+  Classification classify(const std::array<std::uint64_t, kNumAA>& cterm,
+                          const std::array<std::uint64_t, kNumAA>& nterm,
+                          const ModelTable& table, double share, int tag_min,
+                          const ClassifyOptions& opt)
+  {
+    if (!opt.active()) return classify(cterm, nterm, table, share, tag_min);
+    Classification r;
+    for (int a = 0; a < kNumAA; ++a) { r.n_c += cterm[a]; r.n_n += nterm[a]; }
+    const std::uint64_t min = static_cast<std::uint64_t>(std::max(0, tag_min));
+    if (r.n_c < min) return r;
+    r.scored = true;
+    r.uses_nterm = r.n_n >= min;
+    for (const Model& m : table.models)
+    {
+      double sc = loglik(cterm, endOf(m, true, table, share, opt));
+      if (r.uses_nterm) sc = sc + loglik(nterm, endOf(m, false, table, share, opt));
+      else sc = sc + 0.0;  // as the 1.11 classifier (-0 reads 0)
+      r.scores.push_back({m.name, m.cls, sc});
+    }
+    rankScores(r);
     return r;
   }
+
+  Flank2Bins flank2Bins(double window)
+  {
+    Flank2Bins b;
+    b.window = window;
+    const auto& keys = residueKeys();
+    struct P { double m; int x, y; };
+    std::vector<P> all;
+    for (int x = 0; x < kNumAA; ++x)
+      for (int y = 0; y < kNumAA; ++y)
+        all.push_back({keys[static_cast<std::size_t>(x)].mass + keys[static_cast<std::size_t>(y)].mass, x, y});
+    std::stable_sort(all.begin(), all.end(), [](const P& a, const P& c) { return a.m < c.m; });
+    for (std::size_t i = 0; i < all.size(); ++i)
+    {
+      if (i == 0 || all[i].m - all[i - 1].m > window)
+      {
+        b.lo.push_back(all[i].m);
+        b.hi.push_back(all[i].m);
+        b.pairs.emplace_back();
+      }
+      b.hi.back() = all[i].m;
+      b.pairs.back().emplace_back(all[i].x, all[i].y);
+      b.sums.push_back(all[i].m);
+      b.bin_of.push_back(static_cast<int>(b.pairs.size()) - 1);
+    }
+    return b;
+  }
+
+  int Flank2Bins::find(double mass) const
+  {
+    if (sums.empty() || !std::isfinite(mass)) return -1;
+    const auto it = std::lower_bound(sums.begin(), sums.end(), mass);
+    std::size_t k = static_cast<std::size_t>(it - sums.begin());
+    if (k == sums.size() || (k > 0 && mass - sums[k - 1] <= sums[k] - mass)) --k;
+    return std::fabs(sums[k] - mass) <= window ? bin_of[k] : -1;
+  }
+
+  void TerminusCounter::enableFlank2()
+  {
+    bins_ = std::make_shared<const Flank2Bins>(flank2Bins(w_));
+    dip.assign(bins_->pairs.size(), 0);
+  }
+
+  Classification classify2(const std::vector<std::uint64_t>& dip, const Flank2Bins& bins,
+                           const ModelTable& table, double share, int tag_min, const ClassifyOptions& opt)
+  {
+    Classification r;
+    for (std::uint64_t v : dip) r.n_c += v;
+    const std::uint64_t min = static_cast<std::uint64_t>(std::max(0, tag_min));
+    if (r.n_c < min || dip.size() != bins.pairs.size()) return r;
+    r.scored = true;
+    for (const Model& m : table.models)
+    {
+      const Dist p1 = endOf(m, true, table, share, opt);
+      std::vector<double> pred(bins.pairs.size(), 0.0);
+      for (std::size_t k = 0; k < bins.pairs.size(); ++k)
+      {
+        PySum s;
+        for (const auto& [x, y] : bins.pairs[k]) s.add(table.bg_c[static_cast<std::size_t>(x)] * p1[static_cast<std::size_t>(y)]);
+        pred[k] = s.value();
+      }
+      r.scores.push_back({m.name, m.cls, loglikV(dip, pred)});
+    }
+    rankScores(r);
+    return r;
+  }
+
+  bool parseCalibration(std::istream& in, Calibration& out, std::string* err)
+  {
+    out = Calibration();
+    bool seen[4] = {false, false, false, false};
+    const bool ok = readTable(in, {"feature", "coef"}, &out.header, err,
+                              [&](const std::vector<std::string>& f, std::size_t ln) {
+                                const std::string at = "line " + std::to_string(ln) + ": ";
+                                static const char* const names[4] = {"intercept", "margin", "log_n", "first_peak"};
+                                int k = -1;
+                                for (int i = 0; i < 4; ++i)
+                                  if (f[0] == names[i]) k = i;
+                                if (k < 0) return fail(err, at + "feature '" + f[0] + "' is none of intercept, margin, log_n, first_peak");
+                                if (seen[k]) return fail(err, at + "feature '" + f[0] + "' given twice");
+                                double v = 0;
+                                if (!parseDouble(f[1], v) || !std::isfinite(v)) return fail(err, at + "coef '" + f[1] + "' is not a number");
+                                seen[k] = true;
+                                (k == 0 ? out.intercept : k == 1 ? out.margin : k == 2 ? out.log_n : out.first_peak) = v;
+                                return true;
+                              });
+    if (!ok) return false;
+    for (int i = 0; i < 4; ++i)
+      if (!seen[i]) return fail(err, "the calibration needs all four features intercept, margin, log_n and first_peak");
+    out.loaded = true;
+    return true;
+  }
+
+  bool loadCalibration(const std::string& path, Calibration& out, std::string* err)
+  {
+    std::ifstream in(path);
+    if (!in) return fail(err, "cannot read " + path);
+    return parseCalibration(in, out, err);
+  }
+
+  double pCorrect(const Calibration& cal, double margin, std::uint64_t n, bool first_peak)
+  {
+    const double z = cal.intercept + cal.margin * margin +
+                     cal.log_n * std::log(static_cast<double>(std::max<std::uint64_t>(n, 1))) +
+                     cal.first_peak * (first_peak ? 1.0 : 0.0);
+    return 1.0 / (1.0 + std::exp(-z));
+  }
+  // ---- end 1.12 D ----
 
   // ---- mass gaps --------------------------------------------------------
 
