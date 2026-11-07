@@ -10,12 +10,25 @@
 #                   (a Cancel while the real CLI is still loading)
 #   STUB_SLEEP=<s>  after writing a partial -out, sleep this long (for Cancel)
 #   STUB_FAIL=<rc>  after writing partial outputs, exit with this code
-#   STUB_CHATTY=<n> print n "Scoring spectrum" lines on stderr while running
-# The real app passes the CLI no environment of its own, so the tauri-driver
-# specs (gui/e2e-tauri) steer the stub by the input's name instead: an -in
-# whose basename contains ".slow." is STUB_SLEEP=30, ".chatty." is
-# STUB_CHATTY=5000, ".fail." is STUB_FAIL=2. A variable that is set wins.
+#   STUB_CHATTY=<n> while tagging, print n warning lines to stderr, with a
+#                   progress line every 100 (a chatty phase, for the IPC rate)
+#   STUB_CHATTY_PAUSE=<s>  with STUB_CHATTY: pause s seconds after every
+#                   100 lines (a sustained rate instead of one burst)
+#   STUB_ORPHAN=<s> leave a process behind that holds stdout and stderr open
+#                   for s seconds after the stub has exited, in the stub's
+#                   own process group
+#   STUB_ORPHAN_PID=<file>  with STUB_ORPHAN: write that process's pid here
+#   STUB_ORPHAN_DETACH=1    with STUB_ORPHAN: put that process in a process
+#                   group of its own (one that inherited the pipes from a
+#                   parallel spawn, which a group kill does not reach)
 #   --help          print a version banner, as the probe expects
+# The same variables can also be set in <in>.stub, a file next to the input
+# that the stub sources: tests that start it through the GUI's own `run`
+# (which passes no environment of its own) control it that way.
+# The tauri-driver specs (gui/e2e-tauri) cannot write a file next to every
+# input, so they steer the stub by the input's name: an -in whose basename
+# contains ".slow." is STUB_SLEEP=30, ".chatty." is STUB_CHATTY=5000, ".fail."
+# is STUB_FAIL=2. A variable that is set (or set in <in>.stub) wins.
 set -u
 
 if [ "${1:-}" = "--help" ]; then
@@ -24,10 +37,10 @@ if [ "${1:-}" = "--help" ]; then
   exit 0
 fi
 
-input=""; out=""; reports=""; species=0; glyco=0; species_out=""; glyco_out=""
+in=""; out=""; reports=""; species=0; glyco=0; species_out=""; glyco_out=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    -in) input="$2"; shift 2 ;;
+    -in) in="$2"; shift 2 ;;
     -out) out="$2"; shift 2 ;;
     -species) species=1; shift ;;
     -glyco) glyco=1; shift ;;
@@ -47,12 +60,18 @@ derive() {
     *) echo "$out$1" ;;
   esac
 }
-case "${input##*/}" in *.slow.*) : "${STUB_SLEEP:=30}" ;; esac
-case "${input##*/}" in *.chatty.*) : "${STUB_CHATTY:=5000}" ;; esac
-case "${input##*/}" in *.fail.*) : "${STUB_FAIL:=2}" ;; esac
-
 [ $species -eq 1 ] && [ -z "$species_out" ] && species_out=$(derive .species.tsv)
 [ $glyco -eq 1 ] && [ -z "$glyco_out" ] && glyco_out=$(derive .glyco.tsv)
+
+if [ -n "$in" ] && [ -f "$in.stub" ]; then
+  . "$in.stub"
+fi
+case "${in##*/}" in *.slow.*) : "${STUB_SLEEP:=30}" ;; esac
+case "${in##*/}" in *.chatty.*) : "${STUB_CHATTY:=5000}" ;; esac
+case "${in##*/}" in *.fail.*) : "${STUB_FAIL:=2}" ;; esac
+
+total=4
+[ -n "${STUB_CHATTY:-}" ] && total=$((STUB_CHATTY + 4))
 
 # Each sleeper is forked BEFORE the line or file a test waits for, then waited
 # on. A test cancels right after that point, and macOS lets a child forked
@@ -61,21 +80,25 @@ case "${input##*/}" in *.fail.*) : "${STUB_FAIL:=2}" ;; esac
 # from ever ending (the 1-in-8 flake of the early-cancel test).
 pre=""; mid=""
 [ -n "${STUB_SLEEP_BEFORE:-}" ] && { sleep "$STUB_SLEEP_BEFORE" & pre=$!; }
+# The real CLI's first line: progress.rs starts "Reading spectra" on it.
+echo "-threads 0: using 1 of 1 logical cores." >&2
 echo "Reading spectra (stub)" >&2
-echo "FASTAG_PROGRESS done=0 total=4" >&2
+echo "FASTAG_PROGRESS done=0 total=$total" >&2
 [ -n "$pre" ] && wait "$pre"
 [ -n "${STUB_SLEEP:-}" ] && { sleep "$STUB_SLEEP" & mid=$!; }
-if [ -n "${STUB_CHATTY:-}" ]; then
-  i=1
-  while [ "$i" -le "$STUB_CHATTY" ]; do
-    echo "Scoring spectrum $i of $STUB_CHATTY" >&2
-    i=$((i + 1))
-  done
-fi
 # The progress line goes out before the partial -out appears, so a test that
 # waits for the file knows the line is already in the pipe.
-echo "FASTAG_PROGRESS done=2 total=4" >&2
+echo "FASTAG_PROGRESS done=2 total=$total" >&2
 [ -n "$out" ] && printf 'spectrum\ttag\tlength\tevalue\n' > "$out"
+if [ -n "${STUB_CHATTY:-}" ]; then
+  awk -v n="$STUB_CHATTY" -v t="$total" -v p="${STUB_CHATTY_PAUSE:-}" 'BEGIN { for (i = 1; i <= n; i++) {
+    print "Warning: spectrum " i " has no precursor charge, assuming 2+"
+    if (i % 100 == 0) {
+      print "FASTAG_PROGRESS done=" i " total=" t
+      if (p != "") { fflush(); system("sleep " p) }
+    }
+  } }' >&2
+fi
 [ -n "$mid" ] && wait "$mid"
 printf 'scan=1\tPEPTK\t5\t0.001\n' >> "$out"
 printf '%s\n' "$reports" | while IFS= read -r r; do
@@ -87,6 +110,14 @@ if [ -n "${STUB_FAIL:-}" ]; then
   echo "Error: stub told to fail" >&2
   exit "$STUB_FAIL"
 fi
-echo "FASTAG_PROGRESS done=4 total=4" >&2
+echo "FASTAG_PROGRESS done=$total total=$total" >&2
 echo "4 MS2 spectra, 1 tags"
+if [ -n "${STUB_ORPHAN:-}" ]; then
+  if [ -n "${STUB_ORPHAN_DETACH:-}" ]; then
+    perl -e 'setpgrp(0, 0); exec @ARGV' sleep "$STUB_ORPHAN" &
+  else
+    sleep "$STUB_ORPHAN" &
+  fi
+  [ -n "${STUB_ORPHAN_PID:-}" ] && echo $! > "$STUB_ORPHAN_PID"
+fi
 exit 0

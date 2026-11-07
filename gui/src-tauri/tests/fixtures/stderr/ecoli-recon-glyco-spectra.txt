@@ -1,0 +1,105 @@
+-threads 0: using 8 of 16 logical cores.
+Modifications: Carbamidomethyl (C, fixed)
+Recon index: 3 proteins, 876 residues, 13 isobaric rules; min tag length 4 (derived)
+No two peaks anywhere in this file are closer than 0.600342 Th, yet the fragment tolerance is 0.00722706 Th near m/z 361.353. That is what low-resolution (ion trap) MS2 read with a high-resolution tolerance looks like, and it yields almost no tags for a reason the output cannot show. If the MS2 is ion trap, try -fragment_tolerance 0.3 -fragment_tolerance_unit Da.
+FASTAG_PROGRESS done=1 total=139
+FASTAG_PROGRESS done=2 total=139
+FASTAG_PROGRESS done=3 total=139
+FASTAG_PROGRESS done=6 total=139
+FASTAG_PROGRESS done=8 total=139
+FASTAG_PROGRESS done=9 total=139
+FASTAG_PROGRESS done=10 total=139
+FASTAG_PROGRESS done=12 total=139
+FASTAG_PROGRESS done=13 total=139
+FASTAG_PROGRESS done=14 total=139
+FASTAG_PROGRESS done=16 total=139
+FASTAG_PROGRESS done=17 total=139
+FASTAG_PROGRESS done=19 total=139
+FASTAG_PROGRESS done=20 total=139
+FASTAG_PROGRESS done=21 total=139
+FASTAG_PROGRESS done=23 total=139
+FASTAG_PROGRESS done=24 total=139
+FASTAG_PROGRESS done=26 total=139
+FASTAG_PROGRESS done=27 total=139
+FASTAG_PROGRESS done=28 total=139
+FASTAG_PROGRESS done=31 total=139
+FASTAG_PROGRESS done=32 total=139
+FASTAG_PROGRESS done=34 total=139
+FASTAG_PROGRESS done=35 total=139
+FASTAG_PROGRESS done=37 total=139
+FASTAG_PROGRESS done=38 total=139
+FASTAG_PROGRESS done=39 total=139
+FASTAG_PROGRESS done=41 total=139
+FASTAG_PROGRESS done=42 total=139
+FASTAG_PROGRESS done=44 total=139
+FASTAG_PROGRESS done=45 total=139
+FASTAG_PROGRESS done=46 total=139
+FASTAG_PROGRESS done=48 total=139
+FASTAG_PROGRESS done=49 total=139
+FASTAG_PROGRESS done=51 total=139
+FASTAG_PROGRESS done=52 total=139
+FASTAG_PROGRESS done=53 total=139
+FASTAG_PROGRESS done=55 total=139
+FASTAG_PROGRESS done=56 total=139
+FASTAG_PROGRESS done=58 total=139
+FASTAG_PROGRESS done=59 total=139
+FASTAG_PROGRESS done=60 total=139
+FASTAG_PROGRESS done=62 total=139
+FASTAG_PROGRESS done=63 total=139
+FASTAG_PROGRESS done=64 total=139
+FASTAG_PROGRESS done=66 total=139
+FASTAG_PROGRESS done=67 total=139
+FASTAG_PROGRESS done=69 total=139
+FASTAG_PROGRESS done=70 total=139
+FASTAG_PROGRESS done=71 total=139
+FASTAG_PROGRESS done=73 total=139
+FASTAG_PROGRESS done=74 total=139
+FASTAG_PROGRESS done=76 total=139
+FASTAG_PROGRESS done=77 total=139
+FASTAG_PROGRESS done=78 total=139
+FASTAG_PROGRESS done=80 total=139
+FASTAG_PROGRESS done=81 total=139
+FASTAG_PROGRESS done=83 total=139
+FASTAG_PROGRESS done=84 total=139
+FASTAG_PROGRESS done=85 total=139
+FASTAG_PROGRESS done=87 total=139
+FASTAG_PROGRESS done=89 total=139
+FASTAG_PROGRESS done=91 total=139
+FASTAG_PROGRESS done=93 total=139
+FASTAG_PROGRESS done=94 total=139
+FASTAG_PROGRESS done=95 total=139
+FASTAG_PROGRESS done=96 total=139
+FASTAG_PROGRESS done=98 total=139
+FASTAG_PROGRESS done=99 total=139
+FASTAG_PROGRESS done=101 total=139
+FASTAG_PROGRESS done=102 total=139
+FASTAG_PROGRESS done=103 total=139
+FASTAG_PROGRESS done=105 total=139
+FASTAG_PROGRESS done=106 total=139
+FASTAG_PROGRESS done=108 total=139
+FASTAG_PROGRESS done=110 total=139
+FASTAG_PROGRESS done=112 total=139
+FASTAG_PROGRESS done=114 total=139
+FASTAG_PROGRESS done=116 total=139
+FASTAG_PROGRESS done=117 total=139
+FASTAG_PROGRESS done=119 total=139
+FASTAG_PROGRESS done=120 total=139
+FASTAG_PROGRESS done=121 total=139
+FASTAG_PROGRESS done=123 total=139
+FASTAG_PROGRESS done=124 total=139
+FASTAG_PROGRESS done=126 total=139
+FASTAG_PROGRESS done=127 total=139
+FASTAG_PROGRESS done=128 total=139
+FASTAG_PROGRESS done=130 total=139
+FASTAG_PROGRESS done=131 total=139
+FASTAG_PROGRESS done=133 total=139
+FASTAG_PROGRESS done=134 total=139
+FASTAG_PROGRESS done=135 total=139
+FASTAG_PROGRESS done=137 total=139
+FASTAG_PROGRESS done=138 total=139
+Glyco: 0 of 139 processed MS2 spectra carry oxonium evidence -> g.tags.glyco.tsv
+Mass gaps: 0 histogram rows -> g.massgap.tsv
+139 MS2 spectra, 2028 tags
+Wrote 129 spectra to g.spectra.mzML (two-pass, O(1) memory)
+FASTAG_PROGRESS done=139 total=139
+FASTag took 0.08 s (wall), 0.13 s (CPU), 0.01 s (system), 0.12 s (user); Peak Memory Usage: 81 MB.

@@ -173,13 +173,18 @@ compiled from source with the libraries listed in
 
 A cross-platform desktop app ([`gui/`](gui/)) wraps the CLI: pick spectra, set
 parameters from a form generated out of the tool's own `-write_ini`, watch a
-progress bar, and browse the tags and the ranked species report (with a
+progress bar with the phase of the run and the time left, and browse the tags and the ranked species report (with a
 "Relative to top taxon" column showing each taxon's evidence relative to the
 top hit, and an Adjusted column after `-species_deconvolve`). The **Database
 hit** filter on `fasta_hit` offers All, In database (`fwd`/`rev`), Entrapment
 (`efwd`/`erev`) or Not in database; **Export shown rows…** writes the filtered rows, in
 the shown columns, to a new TSV. A failed run quotes FASTag's reason and offers
-its command line to copy. A **Digest** tab
+its command line to copy. A run never outlives the app: if the app is killed,
+the CLI ends within seconds (a watchdog on macOS and Linux, plus the parent-death
+signal on Linux; a kill-on-close job per run on Windows, which a browser or editor the app
+opens is never part of), and the files such a run, or a cancelled or failed one, left behind
+are offered for removal at the next start (of an interrupted run, only what it wrote while it
+was alive: a result remade later, or an older one it had not rewritten yet, is never offered). A **Digest** tab
 shows the `-digest_out`, `-label_out` and `-massgap_out` reports: the protease
 call or no-call with its reason, sequence logos P4..P1 | P1'..P4' of the
 observed tag ends and of the called and runner-up models (in bits against the

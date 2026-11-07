@@ -8,13 +8,14 @@ import { openUrl } from '@tauri-apps/plugin-opener'
 import type {
   BinaryInfo,
   BrowserEvent,
+  Cleanup,
   ResultsHead,
   FastagApi,
   ResultsPage,
   OutputsCheck,
   ResultsView,
+  RunEvent,
   RunRecord,
-  RunResult,
   RunStarted,
   Settings,
   SpeciesReport,
@@ -77,9 +78,18 @@ const api: FastagApi = {
   pickReport: () => openOne([{ name: 'Reports (TSV)', extensions: ['tsv'] }]),
 
   outputsCheck: (params: Record<string, unknown>) => invoke<OutputsCheck>('outputs_check', { params }),
-  run: (params: Record<string, unknown>) => invoke<RunStarted>('run', { params }),
+  // Each run gets a Channel of its own (GUI-DESIGN 6.2): its events cannot
+  // reach another job, and they may arrive before this reply does.
+  run: (params: Record<string, unknown>, onEvent: (e: RunEvent) => void) => {
+    const ch = new Channel<RunEvent>()
+    ch.onmessage = onEvent
+    return invoke<RunStarted>('run', { params, onEvent: ch })
+  },
   historyList: (limit?: number) => invoke<RunRecord[]>('history_list', { limit }),
   historyOf: (path: string) => invoke<RunRecord | null>('history_of', { path }),
+  leftovers: () => invoke<string[]>('leftovers_list'),
+  sweepLeftovers: (paths: string[]) => invoke<Cleanup>('leftovers_sweep', { paths }),
+  keepLeftovers: (paths: string[]) => invoke<void>('leftovers_keep', { paths }),
   cancel: () => invoke<{ cancelled: boolean }>('cancel'),
   resultsQuery: (path: string, view: ResultsView, offset: number, limit: number) =>
     invoke<ResultsPage>('results_query', { path, view, offset, limit }),
@@ -113,12 +123,11 @@ const api: FastagApi = {
     return true
   },
 
-  onLog: (cb) => subscribe<string>('fastag:log', cb),
-  onProgress: (cb) => subscribe<{ done: number; total: number }>('fastag:progress', cb),
-  onDone: (cb) => subscribe<RunResult>('fastag:done', cb),
   onCloseRequested: (cb) => subscribe<'close' | 'quit'>('fastag:close-requested', cb),
   answerClose: (quit: boolean) => invoke<void>('close_answer', { quit }),
   setBusy: (busy: boolean) => invoke<void>('set_ui_busy', { busy })
 }
+
+export default api
 
 window.fastag = api

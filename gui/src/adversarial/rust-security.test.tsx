@@ -2,24 +2,11 @@
 // The frontend half of the contracts whose backend half lives in src-tauri
 // (fastag.rs run/cancel/build_args): paths, cancels and crashes.
 
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import App from '../App'
-import { installMockBridge, type MockBridge } from '../testing/mockBridge'
+import { installMockBridge } from '../testing/mockBridge'
+import { click, logText, renderApp, runButton } from '../testing/render'
 import manifest from '../params.generated.json'
-
-async function renderApp(mock: MockBridge): Promise<HTMLElement> {
-  const { container } = render(<App />)
-  await screen.findByText('FASTag ready')
-  await act(async () => {})
-  return container
-}
-const click = (el: Element): Promise<void> =>
-  act(async () => {
-    fireEvent.click(el)
-  })
-const logText = (c: HTMLElement): string => c.querySelector('.log')?.textContent ?? ''
-const runButton = (): HTMLElement => screen.getByRole('button', { name: /^(Run( on .+)?|Running…)$/ })
 
 describe('rust-security: working directory', () => {
   it('a bare Output name is resolved beside the input by fastag.rs, and the renderer reads the results there', async () => {
