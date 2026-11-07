@@ -1716,7 +1716,10 @@ jobs:
           # timeout would end the step before rc is read.
           set +e -uo pipefail
           sudo apt-get update -q
-          sudo apt-get install -y -q ${{ matrix.fuse }} xvfb dbus dbus-x11
+          # libegl1: the AppImage takes EGL/GL from the host, as every
+          # desktop has it; a bare runner does not (dry run 42314786620:
+          # "libEGL.so.1: cannot open shared object file").
+          sudo apt-get install -y -q ${{ matrix.fuse }} libegl1 libgl1 xvfb dbus dbus-x11
           A="$RUNNER_TEMP/gui/FASTag-gui-linux-x64.AppImage"
           chmod +x "$A"
           dbus-run-session -- xvfb-run -a timeout 30 "$A" > "$RUNNER_TEMP/app.log" 2>&1
@@ -1729,11 +1732,13 @@ jobs:
           echo "### AppImage on ${{ matrix.os }}: launches and stays up" >> "$GITHUB_STEP_SUMMARY"
 
   # Rocky 9 (RHEL 9): decision Q13 puts the GUI floor at glibc 2.35 /
-  # WebKitGTK 4.1 and names Rocky 9 among the supported systems, on the
-  # condition that P1 confirms Rocky 9 ships WebKitGTK 4.1. The first step is
-  # that confirmation (which package and repository provide
-  # libwebkit2gtk-4.1.so.0); the second launches the AppImage. A container
-  # has no /dev/fuse, so the AppImage runs extracted
+  # WebKitGTK 4.1 and named Rocky 9 among the supported systems, on the
+  # condition that P1 confirms Rocky 9 ships WebKitGTK 4.1. It does not: the
+  # first dry run (42314786620, Rocky 9.8) found only webkit2gtk3 (API 4.0,
+  # 2.52-2.54) in BaseOS, AppStream, CRB and EPEL. The first step keeps
+  # recording that answer; the second launches the AppImage, which bundles
+  # WebKitGTK 4.1 and is therefore the only Linux GUI asset for Rocky 9. A
+  # container has no /dev/fuse, so the AppImage runs extracted
   # (APPIMAGE_EXTRACT_AND_RUN=1).
   gui-linux-smoke-rocky9:
     name: gui-linux AppImage on Rocky 9
@@ -1774,8 +1779,13 @@ jobs:
           # The default shell is bash -e: without +e the expected 124 from
           # timeout would end the step before rc is read.
           set +e -uo pipefail
+          # The base of a Rocky 9 desktop: gtk3 (pango, fribidi, cairo, ...)
+          # and Mesa's EGL/GL, which the AppImage takes from the host. A bare
+          # container has none of it (dry run 42314786620: "libfribidi.so.0:
+          # cannot open shared object file"). WebKitGTK 4.1 itself comes from
+          # the AppImage: Rocky 9 has only webkit2gtk3 (API 4.0).
           dnf -y -q install xorg-x11-server-Xvfb /usr/bin/dbus-run-session mesa-dri-drivers \
-            mesa-libGL mesa-libEGL libX11 libxcb fontconfig procps-ng findutils
+            mesa-libGL mesa-libEGL gtk3 libX11 libxcb fontconfig procps-ng findutils
           A="$RUNNER_TEMP/gui/FASTag-gui-linux-x64.AppImage"
           chmod +x "$A"
           Xvfb :99 -screen 0 1440x900x24 > /tmp/xvfb.log 2>&1 &

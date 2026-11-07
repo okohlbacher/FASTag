@@ -193,8 +193,10 @@ builds the app outside conda on ubuntu-22.04 against apt's WebKitGTK 4.1,
 with the portable linux-x64 CLI staged into `src-tauri/resources/fastag`:
 `FASTag-gui-linux-x64.deb`, `FASTag-gui-linux-x64.tar.gz` (the `.deb`'s
 `/usr` tree, relocatable) and a best-effort `FASTag-gui-linux-x64.AppImage`.
-The supported floor is glibc 2.35 and WebKitGTK 4.1 (Ubuntu 22.04, Debian 12,
-Rocky/RHEL 9). Before anything is attached to a release, the `.deb` is
+The supported floor is glibc 2.35 and WebKitGTK 4.1 (Ubuntu 22.04, Debian 12).
+Rocky/RHEL 9 has only WebKitGTK API 4.0 (`webkit2gtk3`; the Rocky 9 smoke job
+records what its repositories provide), so there only the AppImage, which
+bundles WebKitGTK 4.1, runs. Before anything is attached to a release, the `.deb` is
 installed and run on ubuntu-22.04 and 24.04 and the AppImage launched on
 both and in a Rocky 9 container; a `gui_dry_run` dispatch runs the same
 jobs without a tag and leaves the bundles as the `FASTag-gui-linux-x64`
