@@ -278,7 +278,7 @@ export default function SpectrumPanel({ target, source, onTarget, onLocate }: Pr
       <section className="sp-tags" aria-label="Tags of this spectrum">
         <h3>
           Tags of this spectrum{tags ? ` (n=${tags.rows.length.toLocaleString('en-US')})` : ''}
-          <span className="hint"> · choose one to draw its ladder · <HelpLink to="results-columns">the columns</HelpLink></span>
+          <span className="hint"> · choose one to draw its ladder · <HelpLink to="results-spectrum">the Spectrum tab</HelpLink></span>
         </h3>
         {tagsError ? (
           <p className="hint">Cannot read the tags: {tagsError}</p>

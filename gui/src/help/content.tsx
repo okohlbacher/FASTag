@@ -556,6 +556,29 @@ export const RESULTS: HelpPage = {
           </p>
         </>
       )
+    },
+    {
+      id: 'results-spectrum',
+      title: 'The Spectrum tab',
+      body: (
+        <>
+          <p>
+            In Tags, choose a row and press Enter (or Open in Spectrum). The Spectrum tab shows that spectrum with the
+            peaks FASTag tagged: after centroiding, the precursor cut, deisotoping and the peak budget, as the run
+            prepared them (FASTag prints them with -dump_spectrum, under the options of the run that wrote the
+            table). The chosen tag&apos;s ladder is drawn on them: its b or y ions one residue apart (the residue
+            divided by the fragment charge), each step with its error in ppm. A <L to="tags-gapped">gapped tag</L>{' '}
+            crossed a missing peak, shown dashed. Choose another tag of the spectrum below to draw its ladder; ◀ and ▶
+            go to the previous and next tagged spectrum. The wheel or + and − zoom, dragging or the arrow keys pan.
+          </p>
+          <p>
+            The tab needs a FASTag that has -dump_spectrum; with an older one it is not there, and the row action says
+            &quot;Spectrum view needs FASTag 1.17 or later&quot;. A table no run of this app wrote asks for its input
+            (Locate input…) and is shown at FASTag&apos;s default settings, which it says. No other reader is used:
+            peaks read another way are not the peaks FASTag tagged.
+          </p>
+        </>
+      )
     }
   ]
 }
