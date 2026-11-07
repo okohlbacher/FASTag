@@ -275,6 +275,11 @@ table.history-table th { font-size: var(--text-xs); color: var(--muted-foregroun
 .hist-status { display: inline-flex; align-items: center; gap: var(--space-1); }
 .hist-status.failed { color: var(--destructive-text); }
 .hist-status.cancelled { color: var(--flag-text); }
+.hist-incomplete { margin-left: var(--space-2); font-size: var(--text-xs); color: var(--flag-text); border: 1px solid currentColor; border-radius: 999px; padding: 0 6px; }
+table.history-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+td.hist-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); align-items: center; }
+.hist-confirm { display: inline-flex; flex-wrap: wrap; gap: var(--space-1); align-items: center; }
+.history-note:empty { display: none; }
 
 /* Help beside any view, 380-480 px. */
 .help-panel { flex: 0 0 clamp(380px, 34vw, 480px); min-height: 0; display: flex; border-left: 1px solid var(--border); background: var(--panel); }
