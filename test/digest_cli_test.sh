@@ -170,7 +170,7 @@ same "$TMP/sgap0.tsv" "$TMP/sgap1.tsv" "-search_shifts changed -massgap_out"
 # at the -massgap_* defaults too, against the runs above without it
 run "${SC[@]}" -out "$TMP/s2a.tsv" "${R[@]}" -delta_out "$TMP/sdelta2a.tsv" -massgap_out "$TMP/sgap2a.tsv"
 run "${SC[@]}" -out "$TMP/s2.tsv" "${R[@]}" -delta_out "$TMP/sdelta2.tsv" -massgap_out "$TMP/sgap2.tsv" \
-  -search_shifts both "${SH[@]}"
+  -search_shifts both -search_engine comet -search_config_out "$TMP/sh2.params"
 same "$TMP/sdelta2a.tsv" "$TMP/sdelta2.tsv" "-search_shifts changed -delta_out at the -massgap defaults"
 same "$TMP/sgap2a.tsv" "$TMP/sgap2.tsv" "-search_shifts changed -massgap_out at the -massgap defaults"
 # -search_shifts none equals the option absent
