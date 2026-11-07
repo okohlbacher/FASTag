@@ -724,6 +724,26 @@ int main(int argc, char** argv)
     }
     std::cout << "b3. complement excess of 5 c/z ladders: c/z pairs " << e_cz << ", b/y pairs " << e_by << "\n";
     check(e_cz > 20.0 && e_cz > e_by + 15.0, "b3: c/z-dot pairs carry the charge evidence of a c/z ladder");
+    // The infer call on ETD spectra as the instrument writes them: c/z-dot
+    // ladders plus the unreacted precursor and its charge-reduced species
+    // (the 1+ one at M + c*p lies above every fragment, so the b/y range
+    // evidence would rule the true charge out).
+    FASTag::Hyp::HypParam hp;
+    hp.mode = FASTag::Hyp::ChargeMode::Infer;
+    int right = 0, total = 0;
+    const double P = OpenMS::Constants::PROTON_MASS_U;
+    for (const char* pep : kPeptides)
+      for (int z : {2, 3})
+      {
+        CzSynth::Spec s = CzSynth::make(pep, z, CzSynth::Ions::CZ, z - 1, 0, 500u + static_cast<unsigned>(z));
+        for (int k = 0; k < z; ++k) s.spec.emplace_back((s.M + z * P) / (z - k), 3.0 + k);
+        s.spec.sortByPosition();
+        const auto call = FASTag::Hyp::inferCharge(s.spec, s.prec_mz, {2, 3, 4}, hp, cs_cz);
+        ++total;
+        if (call.charge == z && call.src != FASTag::Hyp::ChargeSource::Assumed) ++right;
+      }
+    std::cout << "b3. infer on 10 ETD spectra with charge-reduced species: " << right << " at the true charge\n";
+    check(right >= 8, "b3: infer calls the true charge of c/z spectra with charge-reduced species");
   }
 
   // ---- (c) the ETD precursor filter ----
