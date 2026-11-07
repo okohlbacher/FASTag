@@ -131,3 +131,13 @@ intensities are all 0, 6 one whose intensities are all NaN, 7-11 five MS2 as
 in the source, index 9 without a charge state. 64-bit m/z, 32-bit intensity,
 indexedmzML with an exact index. sha256
 `673eff96641ceb6a56b419385f73b6065cd75df25c729032a7cb18b9e62ca0db`.
+
+`label_1.11.0_Ecoli_MS2_small_Da.tsv` — the `-label_out` report of the FASTag
+1.11.0 release binary (78390cd, node data
+`/ceph/ibmi/abi/oliver/opt/fastag-1.11.0/FASTag/FASTag`) on
+`Ecoli_MS2_small.mzML` with `-tag_length 4 -fragment_tolerance 0.5
+-fragment_tolerance_unit Da -threads 2`. `test/digest_cli_test.sh` checks that
+the rows before the 1.12 `label_call` rows are these, the `run version` row
+aside. sha256
+`7be84af167c367b58732a9503f89328a2a790185dc4d1c660363bfb66525dff6`. Derived from
+the OpenMS example, so BSD-3-Clause as well.

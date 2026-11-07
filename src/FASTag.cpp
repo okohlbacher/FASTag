@@ -3783,6 +3783,10 @@ protected:
         std::vector<FD::Row> rows = run_rows();
         const auto more = FD::labelRows(tc, digest_settings);
         rows.insert(rows.end(), more.begin(), more.end());
+        // ---- 1.12 D: label_call (#3a) ----
+        // Appended after the 1.11 rows, which stay a byte prefix.
+        const auto call = FD::labelCallRows(FD::labelCall(tc, digest_settings), tc, digest_settings);
+        rows.insert(rows.end(), call.begin(), call.end());
         if (!FD::writeReport(label_out, rows))
         {
           OPENMS_LOG_ERROR << "Failed writing " << label_out << "." << std::endl;

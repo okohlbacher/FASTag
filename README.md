@@ -675,7 +675,10 @@ options and their values.
   with scaled or averaged intensities is not caught.
 - **`-label_out`** counts tag ends that are a bare TMT, TMTpro or iTRAQ4 mass,
   against the same count 0.5 Da higher, and the Lys8 and Arg10 shares of the
-  C-terminal K and R.
+  C-terminal K and R. Its last five rows (section `label_call`) give the label
+  call prose-auto 0.1.10 makes from these counts: TMT, TMTpro, iTRAQ4, SILAC
+  or label-free, or no call on a Da tolerance and below 175 C-terminal tag
+  ends (doc/DESIGN-digest.md).
 - **`-massgap_out`** reads the `-delta_out` histogram (built even when
   `-delta_out` is not written; run it without fixed modifications to see the
   Cys alkylation): spectra near each Cys alkylation mass, and gap peaks

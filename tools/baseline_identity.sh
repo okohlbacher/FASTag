@@ -27,6 +27,10 @@
 #   - exit code and the "N MS2 spectra, M tags" summary line (what gate.sh digests);
 #   - the set of files written;
 #   - every file, canonicalised, with cmp (the first differing lines are shown);
+#     one change is accepted and reported as PREFIX: -label_out (label.tsv)
+#     may end in the label_call rows FASTag 1.12 appends (#3a), when the
+#     baseline's file is a byte prefix of the candidate's and every added
+#     line is a label_call row;
 #   - interface: `--help`, `--helphelp`, the -write_ctd CTD and the -write_ini
 #     INI, raw bytes (versions masked when the two binaries report different
 #     versions). Options added after 1.11 may ADD whole option blocks and
@@ -122,6 +126,13 @@ iface_rec() {
   rec interface - "$1" "$st"
 }
 showdiff() { diff "$1" "$2" | head -8 | cut -c1-200 | sed 's/^/      /'; }
+# label_prefix BASE CAND: BASE is a byte prefix of CAND and every further line
+# of CAND is a label_call row (FASTag 1.12 #3a); prints the number of them.
+label_prefix() {
+  local nb; nb=$(wc -c < "$1" | tr -d ' ')
+  cmp -s -n "$nb" "$1" "$2" || return 1
+  tail -c +"$((nb + 1))" "$2" | awk -F'\t' '$1 != "label_call" { bad = 1 } END { if (bad || NR == 0) exit 1; print NR }'
+}
 
 # args for case $1 into CASE_ARGS
 case_args() {
@@ -202,6 +213,8 @@ run_case() { # case threads
     "$PY" "$CANON" "$d/c/$f" "$CV" "$CO" > "$d/c/$f.canon" || { rec "$c" "$t" "$f" "ERROR (canon failed on candidate)"; continue; }
     "$PY" "$CANON" "$d/b/$f" "$BV" "$BO" > "$d/b/$f.canon" || { rec "$c" "$t" "$f" "ERROR (canon failed on baseline)"; continue; }
     if cmp -s "$d/c/$f.canon" "$d/b/$f.canon"; then rec "$c" "$t" "$f" SAME
+    elif [ "$f" = label.tsv ] && n=$(label_prefix "$d/b/$f.canon" "$d/c/$f.canon"); then
+      rec "$c" "$t" "$f" "PREFIX (the baseline's rows, then $n label_call rows)"
     else rec "$c" "$t" "$f" DIFF; showdiff "$d/b/$f.canon" "$d/c/$f.canon"; fi
   done
 }

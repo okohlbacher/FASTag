@@ -11,6 +11,7 @@ BIN="$1"
 IN="$2"
 DB="$3"
 DATA="$4"   # data/digest
+FIX="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/fixtures"
 
 if ! "$BIN" --help >/dev/null 2>&1; then
   echo "SKIP: binary cannot initialize (OpenMS share data unreachable?)" >&2
@@ -115,6 +116,39 @@ for g in gap1 gap2; do
 done
 [ "$(val "$TMP/gap2.tsv" cys spectra)" = "$(awk -F'\t' 'NR > 1 { s += $2 } END { print s + 0 }' "$TMP/delta0.tsv")" ] \
   || fail "cys spectra is not the histogram total"
+
+# ---- label_call (1.12 #3a): five rows appended after the 1.11 rows
+# the rows before label_call are the 1.11.0 binary's -label_out on the same run
+# (test/fixtures/label_1.11.0_Ecoli_MS2_small_Da.tsv), the run version row aside
+legacy() { tr -d '\r' < "$1" | awk -F'\t' '$1 != "label_call" && !($1 == "run" && $2 == "version")'; }
+legacy "$TMP/label.tsv" > "$TMP/label.old"
+legacy "$FIX/label_1.11.0_Ecoli_MS2_small_Da.tsv" > "$TMP/label.want"
+same "$TMP/label.want" "$TMP/label.old" "-label_out: the rows before label_call are not the 1.11.0 rows"
+tr -d '\r' < "$TMP/label.tsv" | awk -F'\t' -v n="$(tr -d '\r' < "$TMP/label.tsv" | wc -l)" '
+  $1 == "label_call" { keys = keys (keys == "" ? "" : ",") $2; if (NR <= n - 5) early = 1 }
+  END { if (early || keys != "status,label,basis,silac,reason") { print keys; exit 1 } }' \
+  || fail "-label_out: label_call is not the last five rows status, label, basis, silac, reason"
+[ "$(val "$TMP/label.tsv" label_call status) $(val "$TMP/label.tsv" label_call reason)" = "no_call low_resolution" ] \
+  || fail "label_call: a Da run is not no_call low_resolution"
+# a ppm run: few_tags exactly when the digest counts fewer than 175 C-terminal tag ends
+run -in "$IN" -tag_length 4 -out "$TMP/p.tsv" -digest_out "$TMP/pdigest.tsv" -label_out "$TMP/plabel.tsv"
+ptot=$(val "$TMP/pdigest.tsv" count tot)
+pcall="$(val "$TMP/plabel.tsv" label_call status) $(val "$TMP/plabel.tsv" label_call reason)"
+if [ "$ptot" -lt 175 ]; then [ "$pcall" = "no_call few_tags" ] || fail "label_call: $ptot tag ends at 20 ppm gave '$pcall'"
+else [ "$pcall" = "call -" ] || fail "label_call: $ptot tag ends at 20 ppm gave '$pcall'"; fi
+# label_call reads the tag ends only: the same with and without -recon_out/-massgap_out, at 1, 2 and 3
+# threads (all with R's empty -fixed_modifications, which changes the tags themselves)
+run "${COMMON[@]}" -out "$TMP/l0.tsv" -fixed_modifications -label_out "$TMP/label0.tsv"
+run "${COMMON[@]}" -out "$TMP/l1.tsv" "${R[@]}" -delta_out "$TMP/delta2.tsv" -label_out "$TMP/label1.tsv"
+run "${COMMON[@]}" -out "$TMP/l2.tsv" "${R[@]}" -delta_out "$TMP/delta3.tsv" -massgap_out "$TMP/gap3.tsv" -label_out "$TMP/label2.tsv"
+same "$TMP/label1.tsv" "$TMP/label2.tsv" "-massgap_out changed -label_out"
+same "$TMP/label0.tsv" "$TMP/label1.tsv" "-recon_out changed -label_out"
+"$BIN" "${COMMON[@]}" -threads 1 -out "$TMP/l3.tsv" -fixed_modifications -label_out "$TMP/label3.tsv" > "$TMP/log" 2>&1 \
+  || fail "FASTag -threads 1"
+"$BIN" "${COMMON[@]}" -threads 3 -out "$TMP/l4.tsv" -fixed_modifications -label_out "$TMP/label4.tsv" > "$TMP/log" 2>&1 \
+  || fail "FASTag -threads 3"
+same "$TMP/label3.tsv" "$TMP/label4.tsv" "-label_out differs between 1 and 3 threads"
+same "$TMP/label0.tsv" "$TMP/label3.tsv" "-label_out differs between 2 and 1 threads"
 
 # ---- refusals
 "$BIN" "${COMMON[@]}" -out "$TMP/x.tsv" -massgap_out "$TMP/x2.tsv" > "$TMP/log" 2>&1 \
