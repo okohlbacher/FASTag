@@ -15,6 +15,8 @@ Performance for the bound and the options that keep per-run state). The citation
 *J. Proteome Res.* 2008, 7:3838 — is for that original DirecTag paper; FASTag
 has no separate publication of its own.
 
+What changed in each release: [CHANGELOG.md](CHANGELOG.md).
+
 ## What it does
 
 A *sequence tag* is a short peptide read inferred directly from a fragment-ion
