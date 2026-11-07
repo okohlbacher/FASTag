@@ -347,6 +347,14 @@ jobs:
           echo "MZPEAK_VALIDATE=$V" >> "$GITHUB_ENV"
           echo "validator: $V"
 
+      - name: Diag complement_ref_gen (1.11.0 tree)
+        shell: bash -el {0}
+        run: |
+          set -o pipefail
+          cmake --build build --target complement_ref_gen
+          build/complement_ref_gen | tee complement_ref_${{ matrix.name }}.inc
+          shasum -a 256 complement_ref_${{ matrix.name }}.inc
+
       - name: Test
         shell: bash -el {0}
         run: |

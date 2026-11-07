@@ -74,6 +74,9 @@ target_include_directories(fastag_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
 target_link_libraries(fastag_core PUBLIC OpenMS)
+# diag/arm64-ref-1.11: the 1.12 complement_ref_gen against this 1.11.0 tree
+add_executable(complement_ref_gen test/complement_ref_gen.cpp)
+target_link_libraries(complement_ref_gen PRIVATE fastag_core)
 # Boost.Math (header-only) for the scoring tails. Named here rather than
 # taken through OpenMS's target, which carries no Boost include path on
 # Windows.
