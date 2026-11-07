@@ -18,7 +18,11 @@
 //       enumerate gives no more rows with E <= 1 than assume2 (3 SD slack),
 //       and the Bonferroni factor is what keeps it there;
 //   (i) selection follows the charge evidence: a construct whose 4+
-//       hypothesis has the lower E-value while infer calls 3 selects 3.
+//       hypothesis has the lower E-value while infer calls 3 selects 3;
+//   (j) every hypothesis lies in the candidates: infer and enumerate with
+//       -charge_min = -charge_max = 4 (random peaks, a 2+ and a 3+ spectrum),
+//       with possible charges {3,4} and no complement evidence (assumed 3,
+//       the lowest candidate), and with -charge_min 2 on a 1+ spectrum.
 // Plus: the defaults give the single 1.11 hypothesis; mergeHypotheses order
 // and cap; tagSpectrum's multiplicity; validate()'s refusals.
 //
@@ -346,6 +350,79 @@ namespace
       const H::Hypothesis* sel = selected(h);
       CHECK(call.charge == 3 && sel && sel->charge == 3, "%s (i): selected %d (call %d), not the lowest E-value",
             label, sel ? sel->charge : -1, call.charge);
+    }
+
+    // ---- (j) every hypothesis lies in the candidates ----
+    {
+      auto inside = [](const std::vector<H::Hypothesis>& h, const std::vector<int>& cands) {
+        if (h.empty() || !selected(h)) return false;
+        for (const auto& x : h)
+          if (std::find(cands.begin(), cands.end(), x.charge) == cands.end()) return false;
+        return true;
+      };
+      auto ranged = [](H::ChargeMode m, int lo, int hi) {
+        H::HypParam hp = mode(m);
+        hp.charge_min = lo;
+        hp.charge_max = hi;
+        return hp;
+      };
+      std::mt19937 rng(977);
+      std::vector<MSSpectrum> specs;
+      std::vector<double> mzs;
+      for (int k = 0; k < 10; ++k)
+      {
+        specs.push_back(randomPeaks(rng, 150, 150.0, 1400.0));
+        mzs.push_back(700.0);
+      }
+      const auto s2 = ComplementSynth::make("VGAHAGEYGAEALER", 2, false, 1, 0.0, 30, 11);
+      const auto s3 = ComplementSynth::make("SAMPLERKDLVEGFNTWQR", 3, false, 0, 0.0, 40, 12);
+      const auto s1 = ComplementSynth::make("GDFQKMVYTNPAWSR", 1, false, 1, 0.0, 20, 21);
+      for (const auto* c : {&s1, &s2, &s3})
+      {
+        specs.push_back(c->spec);
+        mzs.push_back(c->prec_mz);
+      }
+      for (const H::ChargeMode m : {H::ChargeMode::Infer, H::ChargeMode::Enumerate})
+      {
+        const char* mn = m == H::ChargeMode::Infer ? "infer" : "enumerate";
+        int n_out = 0;
+        for (size_t k = 0; k < specs.size(); ++k)
+        {
+          // -charge_min = -charge_max = 4.
+          const auto h4 = H::precursorHypotheses(specs[k], precursor(mzs[k], 0), ranged(m, 4, 4), cs);
+          n_out += !inside(h4, {4});
+          // -charge_min 3 -charge_max 4.
+          const auto h34 = H::precursorHypotheses(specs[k], precursor(mzs[k], 0), ranged(m, 3, 4), cs);
+          n_out += !inside(h34, {3, 4});
+          // Possible charges {3,4}.
+          const auto hp34 = H::precursorHypotheses(specs[k], precursor(mzs[k], 0, {4, 3}), mode(m), cs);
+          n_out += !inside(hp34, {3, 4});
+          // -charge_min 2 (the default range): never 1.
+          const auto h24 = H::precursorHypotheses(specs[k], precursor(mzs[k], 0), ranged(m, 2, 4), cs);
+          n_out += !inside(h24, {2, 3, 4});
+        }
+        CHECK(n_out == 0, "%s (j) %s: %d hypothesis sets with a charge outside the candidates", label, mn, n_out);
+      }
+      // No complement evidence with possible {3,4}: the lowest candidate, assumed.
+      int low = 0;
+      for (int k = 0; k < 10; ++k)
+      {
+        const auto h = H::precursorHypotheses(specs[k], precursor(mzs[k], 0, {3, 4}), mode(H::ChargeMode::Infer), cs);
+        const H::Hypothesis* sel = selected(h);
+        low += h.size() == 1 && sel && sel->charge == 3 && sel->src == H::ChargeSource::Assumed;
+      }
+      CHECK(low == 10, "%s (j): %d of 10 random spectra with possible {3,4} assumed 3", label, low);
+      // The 1+ spectrum under -charge_min 2: the 1+ test does not run, and with
+      // -charge_min 1 it does (the construct is a valid 1+).
+      H::ChargeCall c2, c1;
+      const auto h2 = H::precursorHypotheses(s1.spec, precursor(s1.prec_mz, 0), ranged(H::ChargeMode::Infer, 2, 4), cs, &c2);
+      const auto h1 = H::precursorHypotheses(s1.spec, precursor(s1.prec_mz, 0), ranged(H::ChargeMode::Infer, 1, 4), cs, &c1);
+      const H::Hypothesis* sel1 = selected(h1);
+      CHECK(c2.charge >= 2 && sel1 && sel1->charge == 1, "%s (j): 1+ spectrum gives %d at -charge_min 2, %d at 1",
+            label, c2.charge, sel1 ? sel1->charge : -1);
+      // A 2+ spectrum at -charge_min = -charge_max = 4: 4, never the 2 it would infer.
+      const auto h44 = H::precursorHypotheses(s2.spec, precursor(s2.prec_mz, 0), ranged(H::ChargeMode::Infer, 4, 4), cs);
+      CHECK(h44.size() == 1 && h44[0].charge == 4 && h44[0].selected, "%s (j): 2+ spectrum at range 4..4 gives 4", label);
     }
   }
 }

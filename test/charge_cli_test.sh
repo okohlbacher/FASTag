@@ -16,6 +16,9 @@
 #   - species: a toy taxon whose k-mers only losing hypotheses read is never
 #     reported, under -species_evidence best and all, while a toy taxon read
 #     by selected rows is (the construct is not vacuous);
+#   - every hypothesis lies in the candidates: possible charges {3,4} on
+#     every spectrum, and -charge_min/-charge_max 4..4 and 3..4, under infer
+#     and enumerate (TSV prec_charge and census charge_used);
 #   - refusals: -charge_min above -charge_max, -isotope_error outside -1..3,
 #     -isotope_error 1 at a 0.5 Da fragment tolerance, the options in -stream.
 # Exits 77 (ctest SKIP) when the binary cannot start.
@@ -140,6 +143,32 @@ done
 grep -q "^run	run_report_version	4	" "$TMP/inf.census_summary.tsv" || fail "infer: run report format is not 4"
 grep -q "^run	unknown_charge	infer	" "$TMP/inf.census_summary.tsv" || fail "infer: unknown_charge row is not infer"
 grep -q "under -unknown_charge infer" "$TMP/inf.log" || fail "infer: no -unknown_charge summary warning"
+
+# ---- candidates: no hypothesis outside the charge range or the listed charges
+# Under enumerate and infer every row's prec_charge, and the census
+# charge_used, lies in -charge_min..-charge_max, or in the possible charges
+# when the precursor lists any (here every spectrum: "CHARGE=3+ and 4+").
+tr -d '\r' < "$MGF" | sed -E 's/^CHARGE=.*/CHARGE=3+ and 4+/' > "$TMP/p34.mgf"
+[ "$(grep -c '^CHARGE=3+ and 4+$' "$TMP/p34.mgf")" = 139 ] || fail "the possible-charge MGF lacks 139 CHARGE lines"
+cand_check() {  # label tsv census allowed-regex
+  local n
+  n=$(awk -F'\t' 'NR > 1' "$2" | wc -l | tr -d ' ')
+  [ "$n" -gt 20 ] || fail "$1: only $n rows; the candidate check is vacuous"
+  awk -F'\t' -v re="$4" 'NR > 1 && $13 !~ re { bad++ } END { exit bad > 0 }' "$2" \
+    || fail "$1: a row's prec_charge lies outside the candidates ($(awk -F'\t' 'NR > 1 { print $13 }' "$2" | sort | uniq -c | tr '\n' ' '))"
+  awk -F'\t' -v re="$4" 'NR > 1 && $6 !~ re { bad++ } END { exit bad > 0 }' "$3" \
+    || fail "$1: a census charge_used lies outside the candidates"
+}
+for m in infer enumerate; do
+  for spec in "p34.mgf::^[34]\$" "noz.mgf:-charge_min 4 -charge_max 4:^4\$" "noz.mgf:-charge_min 3 -charge_max 4:^[34]\$"; do
+    in=${spec%%:*}; rest=${spec#*:}; extra=${rest%%:*}; re=${rest#*:}
+    tag="cand_${m}_${in%.mgf}_$(echo "$extra" | tr -dc '0-9')"
+    # shellcheck disable=SC2086
+    "$BIN" -in "$TMP/$in" -out "$TMP/$tag.tsv" "${COMMON[@]}" -unknown_charge $m $extra -census -threads 2 \
+      > "$TMP/$tag.log" 2>&1 || { cat "$TMP/$tag.log" >&2; fail "$tag failed"; }
+    cand_check "$m on $in $extra" "$TMP/$tag.tsv" "$TMP/$tag.census.tsv" "$re"
+  done
+done
 
 # ---- header charges: never replaced -----------------------------------------
 full "$TMP/c_assume" "$MGF" -threads 2

@@ -1418,6 +1418,9 @@ protected:
       return ILLEGAL_PARAMETERS;
     }
     const bool hyp_on = !hyp_param.isDefault();
+    // #6: -species reads the selected hypothesis' rows only, through a per-row
+    // flag carried beside the rows (Block::row_species).
+    const bool species_sel_on = hyp_on && want_species;
     // The complement pairs the infer call counts: #2's rule and tolerance.
     const FASTag::ComplementSpec hyp_cs = FASTag::ComplementSpec::fromParam(p);
     // The residue modifications in use; -recon_id_out reports exactly these.
@@ -2796,6 +2799,11 @@ protected:
       std::vector<std::vector<PeptideIdentification>> recon_id_lists;  ///< (recon_ids_on only)
       std::vector<std::string> glyco_rows;  ///< glyco rows (glyco_on only)
       std::vector<std::vector<std::pair<double, bool>>> row_meta;  ///< (entrap_on only)
+      /// Per spectrum, per written tag row in row order: 1 when the row may be
+      /// species evidence (#6: its hypothesis is the selected one); hyp_on &&
+      /// want_species only. A flag beside the rows, never a column read back
+      /// off them, so adding TSV columns cannot change it.
+      std::vector<std::vector<char>> row_species;
       std::vector<char> keep, keep_target;
       FASTag::ClusterAcc::ClusterBlock acc;  ///< 1.12 per-cluster slots (src/ClusterAcc.h)
     };
@@ -2871,6 +2879,8 @@ protected:
       /// serialized %g evalue back off the TSV.
       std::vector<std::pair<double, bool>> meta;
       bool any_target = false;  ///< at least one non-entrapment reported tag
+      /// Per written tag row: may it be species evidence (Block::row_species).
+      std::vector<char> row_species;
       /// -recon_id_out: the spectrum's identification, when it placed anything.
       std::vector<PeptideIdentification> ids;
       /// -census: the spectrum's census row (an MS2 spectrum read, census_on only).
@@ -2970,7 +2980,7 @@ protected:
       // aggregates over spectra reads the selected hypothesis' rows only
       // (PLAN-INTEGRATION 2.3 contract 1): digest/label counts, delta and
       // massgap samples, the shortlist evidence (#5), the census row (#11)
-      // and, through the TSV's selected column, the species evidence. The
+      // and, through a per-row flag (Block::row_species), the species evidence. The
       // TSV, -recon_out and -recon_id_out keep every row at its hypothesis'
       // charge.
       const std::vector<FASTag::Hyp::Hypothesis> hyps = FASTag::Hyp::precursorHypotheses(spec, prec, hyp_param, hyp_cs);
@@ -3095,6 +3105,7 @@ protected:
 
         appendTagRow(buf, t, spec.getNativeID(), hit, want_proforma, proforma_fixed,
                      p.per_residue_conf, usi, hyp_on ? &hy : nullptr);
+        if (species_sel_on) res.row_species.push_back(sel ? 1 : 0);
         // The tags the digest and label reports count: every written row that
         // is ungapped with E <= 1 (of the selected hypothesis, #6).
         if (count_on && sel && !t.gapped && t.evalue <= 1.0)
@@ -3298,6 +3309,7 @@ protected:
       if (recon_on) b.recon_rows[idx].swap(r.rbuf);
       if (recon_ids_on) b.recon_id_lists[idx].swap(r.ids);
       if (entrap_on) b.row_meta[idx].swap(r.meta);
+      if (species_sel_on) b.row_species[idx].swap(r.row_species);
       b.keep[idx] = 1;
       // A spectrum whose only reported tags are entrapment matches is
       // calibration material, not a hit -- keep it out of -out_spectra.
@@ -3317,6 +3329,7 @@ protected:
         if (recon_ids_on) b.recon_id_lists.resize(n_used);
         if (glyco_on) b.glyco_rows.resize(n_used);
         if (entrap_on) b.row_meta.resize(n_used);
+        if (species_sel_on) b.row_species.resize(n_used);
       }
       b.keep.assign(n_used, 0);
       if (want_out) b.keep_target.assign(n_used, 0);
@@ -3393,7 +3406,7 @@ protected:
         if (want_species)
         {
           const std::string& r = b.rows[i];
-          size_t start = 0;
+          size_t start = 0, row = 0;
           std::string id, tag;
           bool gapped = false;
           double evalue = 0;
@@ -3402,8 +3415,8 @@ protected:
             size_t nl = r.find('\n', start);
             if (nl == std::string::npos) nl = r.size();
             // #6: a row of a losing precursor hypothesis is no species
-            // evidence; the selected column is the row's last field.
-            if (hyp_on && nl > start && r[nl - 1] == '0') { start = nl + 1; continue; }
+            // evidence (the per-row flag from tag_one, not a TSV column).
+            if (species_sel_on && !b.row_species[i][row++]) { start = nl + 1; continue; }
             if (readSpeciesFields(r, start, nl, id, tag, gapped, evalue))
             {
               // Skip GAPPED tags unless asked for. A gap spells two residues
@@ -4918,7 +4931,7 @@ protected:
                       << sel_of(ChargeSource::Inferred) << " inferred, " << sel_of(ChargeSource::Ambiguous)
                       << " ambiguous (better of two), " << sel_of(ChargeSource::Possible) << " listed, "
                       << sel_of(ChargeSource::Enumerated) << " enumerated and " << sel_of(ChargeSource::Assumed)
-                      << " assumed (2+) charges; " << hc.multi << " spectra were tagged under several "
+                      << " assumed (2+, or the lowest candidate when 2 is none) charges; " << hc.multi << " spectra were tagged under several "
                       << "hypotheses, with their E-values multiplied by the number tagged." << std::endl;
     }
     else if (n_no_charge > 0)

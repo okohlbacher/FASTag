@@ -18,6 +18,11 @@ namespace FASTag::Hyp
   {
     const double kProton = OpenMS::Constants::PROTON_MASS_U;
     const double kC13 = OpenMS::Constants::C13C12_MASSDIFF_U;
+    /// The infer rule for a best excess E_c* in (0, margin): false = the plan's
+    /// rule (the call is c*, ambiguous when the runner-up lies within the
+    /// margin; assumed only when E_c* <= 0), true = assumed 2+ (the first
+    /// E6 build). Measured on the dev sets in E6-04 (7).
+    constexpr bool kAssumeBelowMargin = false;
 
     /// m/z of the strongest kInferTopPeaks finite, positive peaks (intensity
     /// desc, m/z desc: a total order, so the input order does not matter),
@@ -109,6 +114,10 @@ namespace FASTag::Hyp
         if (m > prec_mz) above += in;
       }
       call.above_share = tic > 0 ? above / tic : 0.0;
+      // Every call lies in @p charges: the 1+ test runs only where 1 is a
+      // candidate (a -charge_min above 1, or a possible list without 1, rules
+      // it out).
+      one_plus_test = one_plus_test && std::find(charges.begin(), charges.end(), 1) != charges.end();
       if (one_plus_test && tic > 0 && call.above_share < kOnePlusMaxShare)
       {
         call.charge = 1;
@@ -140,10 +149,12 @@ namespace FASTag::Hyp
         if (e > e1) { c2 = c1; e2 = e1; c1 = c; e1 = e; }
         else if (e > e2) { c2 = c; e2 = e; }
       }
-      // No charge reaches the margin: no complement evidence for any, so 2
-      // (assumed) -- or, when the range evidence ruled out the lower charges,
-      // the lowest charge left (inferred).
-      if (c1 == 0 || !(e1 > 0) || e1 < hp.infer_margin)
+      // No complement evidence for any charge (the best excess is not above
+      // 0): 2 (assumed) when 2 is a candidate left, else the lowest candidate
+      // left (assumed) -- or, when the range evidence ruled out the lower
+      // charges, the lowest charge left (inferred). With kAssumeBelowMargin
+      // a best excess below the margin counts as no evidence as well.
+      if (c1 == 0 || !(e1 > 0) || (kAssumeBelowMargin && e1 < hp.infer_margin))
       {
         if (call.range_min > 0)
         {
@@ -151,7 +162,7 @@ namespace FASTag::Hyp
           call.src = ChargeSource::Inferred;
           return call;
         }
-        call.charge = 2;
+        call.charge = left.empty() || std::find(left.begin(), left.end(), 2) != left.end() ? 2 : left.front();
         call.src = ChargeSource::Assumed;
         return call;
       }
@@ -273,7 +284,7 @@ namespace FASTag::Hyp
 
     const std::vector<int> cands = possible.empty() ? range(hp.charge_min, hp.charge_max) : possible;
     // The 1+ test only where 1 can be the answer: a list without 1 rules it out.
-    const bool one_plus = possible.empty() || possible.front() == 1;
+    const bool one_plus = possible.empty() ? hp.charge_min <= 1 : possible.front() == 1;
     const ChargeCall call = inferFromTop(spec, top_mz(), prec_mz, cands, one_plus, hp, cs);
     if (call_out) *call_out = call;
 
