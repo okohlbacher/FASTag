@@ -148,3 +148,15 @@ def test_attribution_with_no_matching_tags():
     tags = pd.DataFrame({"key": ["scan=9"], "rank": [1], "tag": ["AMP"], "nterm_mass": [1.0], "cterm_mass": [1.0]})
     per_tag, per_spec = C.attribute_tags(tags, chim)
     assert per_tag.empty and list(per_spec["rank1_attribution"]) == ["untagged"]
+
+
+def test_pairing_caps_appearances_per_identity():
+    sp = _spectra(n=36)
+    meta = pd.DataFrame([m for _, _, m in sp.values()])
+    free = C.pair_spectra(meta, seed=5)
+    assert free.equals(C.pair_spectra(meta, seed=5, max_per_identity=None))  # default unchanged
+    capped = C.pair_spectra(meta, seed=5, max_per_identity=1)
+    pep = {k: S.normalize_peptide(m["peptide"]) for k, (_, _, m) in sp.items()}
+    ids = [pep[k] for k in list(capped["key_a"]) + list(capped["key_b"])]
+    assert len(capped) > 0 and len(ids) == len(set(ids))  # every identity in at most one chimera
+    assert len(free) > len(capped)

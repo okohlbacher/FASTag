@@ -6,8 +6,11 @@ Steps (each reads what the previous one wrote under work_dir; every table carrie
   splits         draw all ProteomeTools splits at once from the PRIDE file list and write the splits table
                  (PLAN-qc.md #4: dev seed 1, test seed 2, F7 seeds 3/4/5 on batches #4 does not use, reserved
                  seeds 6/7/8). Refuses to overwrite an existing table.
+  shared-identities  fetch the pool lists of EVERY eligible split pool (all splits, reserved ones included) and
+                 freeze the identities shared across splits in config/ (refuses to overwrite); score reads only
+                 that file and refuses to run when a pool list in hand differs from the frozen one.
   pool-truth     per pool of the split: fetch the tryptic MaxQuant searches, pool peptide list (union), decoy
-                 pool, pool FASTA; peptide-level disjointness of every split whose lists are present.
+                 pool, pool FASTA; also for the pool-swap partners and the +-1 carryover neighbours.
   sage-modes     fetch and convert the 3xHCD raw file; Sage 'closed' (full human proteome) and 'pool' searches.
   run            FASTag profiles on each pool run (and on the chimera MGFs when present).
   chimera-build  synthetic chimeras from S0 spectra of different pools of the split, per ratio.
@@ -39,8 +42,9 @@ from . import score as S
 from .strata import assign_axes
 from .tsv import read_tsv, write_tsv
 
-STEPS = ("splits", "pool-truth", "sage-modes", "run", "chimera-build", "score", "collect", "v190-check")
-SPLITS = ("dev", "test", "f7train", "f7test", "final")
+STEPS = ("splits", "shared-identities", "pool-truth", "sage-modes", "run", "chimera-build", "score", "collect",
+         "v190-check")
+SPLITS = ("dev", "test", "f7train", "f7test", "final", "reserved_2", "reserved_15", "reserved_16")
 NOT_SCORED = ("no_pool_candidate", "shared_identity")  # reported, never scored
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -125,6 +129,10 @@ def load(path: str | Path) -> dict:
     u.setdefault("swap_seed", 1)
     u.setdefault("chimera_seed", 1)
     u.setdefault("max_pairs", 3000)
+    u.setdefault("chimera_max_per_identity", 1)
+    u.setdefault("shared_tsv", "config/proteometools_shared_identities.tsv")
+    u.setdefault("pool_lists_tsv", "config/proteometools_pool_lists.tsv")
+    u.setdefault("margin_frozen", None)  # set only from the registry row that freezes the F4-01 margin
     u.setdefault("static", {"C": 57.021464})
     u.setdefault("variable", {"M": [15.994915]})
     u.setdefault("fastag_args", ["-fixed_modifications", "Carbamidomethyl (C)"])
@@ -152,9 +160,13 @@ def _prov(cfg, what: str) -> str:
     return f"source: fastag-bench {__version__} unidentified {what} ({_now()}, host {platform.node()})"
 
 
-def _splits_path(cfg) -> Path:
-    p = Path(cfg["unidentified"].get("splits_tsv", "config/proteometools_splits.tsv"))
+def _cfg_path(cfg, key: str, default: str) -> Path:
+    p = Path(cfg["unidentified"].get(key) or default)
     return p if p.is_absolute() else ROOT / p
+
+
+def _splits_path(cfg) -> Path:
+    return _cfg_path(cfg, "splits_tsv", "config/proteometools_splits.tsv")
 
 
 def eligible(pools: pd.DataFrame) -> pd.Series:
@@ -266,34 +278,84 @@ def _has_list(cfg, pool: str) -> bool:
     return (_wd(cfg) / "pools" / pool / "peptides.tsv").exists()
 
 
+def _carry_split(cfg, pools: list[str]) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+    """+-1 neighbours of each pool, split into those with a pool list source (tryptic searches) and those
+    without (their carryover cannot be measured; reported as carryover_unavailable)."""
+    allp = PT.pool_table(_files(cfg))
+    carry = T.carryover_pools(allp)
+    ok = set(allp.loc[eligible(allp), "pool"])
+    have = {p: [q for q in carry.get(p, []) if q in ok] for p in pools}
+    miss = {p: [q for q in carry.get(p, []) if q not in ok] for p in pools}
+    return have, miss
+
+
 def step_pool_truth(cfg, split: str, log=print) -> list[Path]:
-    """Pool lists of the split's pools and of their pool-swap partners; then peptide-level disjointness
-    over every split whose lists are present."""
+    """Pool lists of the split's pools, their pool-swap partners and their +-1 carryover neighbours.
+    The shared identities are not touched here: they are frozen once over all splits (shared-identities)."""
     files = _files(cfg)
     pools = list(_split_pools(cfg, split)["pool"])
     sw = swap_partners(cfg)
-    written = _pool_truth(cfg, pools + sorted({sw[p] for p in pools}), files, log)
-    sp, _ = read_tsv(_splits_path(cfg))
-    have = {q: set(pool_peptides(cfg, q)) for q in sp["pool"] if _has_list(cfg, q)}
-    a = sp[sp["pool"].isin(have)]
-    T.assert_disjoint(a)  # pool level; identities shared across splits are excluded from scoring instead
-    shared = T.shared_identities(a, have)
-    out = _wd(cfg) / "shared_identities.tsv"
-    written.append(write_tsv(pd.DataFrame({"identity": list(shared), "splits": [";".join(v) for v in shared.values()]}),
-                             out, [_prov(cfg, "pool-truth shared identities"),
-                                   f"identities in pools of more than one split, over the {len(have)} split pools with "
-                                   "lists; excluded from scoring (size_label shared_identity)"]))
+    have, miss = _carry_split(cfg, pools)
+    nb = sorted({q for p in pools for q in have[p]})
+    written = _pool_truth(cfg, pools + sorted({sw[p] for p in pools}) + nb, files, log)
     swl = {sw[p]: set(pool_peptides(cfg, sw[p])) for p in pools}
-    log(f"{len(shared)} identities shared across splits over {len(have)} split pools with lists "
-        f"({', '.join(f'{k} {v}' for k, v in a.groupby('split').size().items())}); "
-        f"swap partners {', '.join(f'{p}->{sw[p]} ({len(swl[sw[p]])})' for p in pools)}")
+    log(f"{split}: {len(pools)} pools; swap partners {', '.join(f'{p}->{sw[p]} ({len(swl[sw[p]])})' for p in pools)}; "
+        f"carryover neighbours with lists {len(nb)}, without a tryptic search "
+        f"{sorted({q for p in pools for q in miss[p]})}")
     return written
 
 
-def _shared(cfg) -> set[str]:
-    p = _wd(cfg) / "shared_identities.tsv"
-    if not p.exists():
-        raise FileNotFoundError(f"{p}: run pool-truth first")
+def _list_table(cfg, pools) -> pd.DataFrame:
+    rows = []
+    for q in pools:
+        pep = pool_peptides(cfg, q)
+        rows.append({"pool": q, "peptides": len(pep), "sha256": T.list_digest(pep)})
+    return pd.DataFrame(rows, columns=["pool", "peptides", "sha256"])
+
+
+def step_shared_identities(cfg, log=print) -> list[Path]:
+    """Fetch the pool lists of every eligible split pool (all splits, reserved included) and freeze the
+    identities shared across splits, once, before any further scoring. Writes the shared identities and
+    the per-pool list digests to config/ (committed); refuses to overwrite either."""
+    out, lists = _cfg_path(cfg, "shared_tsv", "config/proteometools_shared_identities.tsv"), _cfg_path(cfg, "pool_lists_tsv", "config/proteometools_pool_lists.tsv")
+    for p in (out, lists):
+        if p.exists():
+            raise FileExistsError(f"{p} exists: the shared identities are frozen once over all splits")
+    sp, _ = read_tsv(_splits_path(cfg))
+    el = sp[eligible(sp)]
+    _pool_truth(cfg, list(el["pool"]), _files(cfg), log)
+    have = {q: set(pool_peptides(cfg, q)) for q in el["pool"]}
+    T.assert_disjoint(el)  # pool level
+    shared = T.shared_identities(el, have)
+    tab = _list_table(cfg, el["pool"]).merge(el[["pool", "split"]], on="pool")
+    lsha = T.list_digest(f"{r.pool}\t{r.sha256}" for r in tab.itertuples())
+    by_pair = pd.Series([";".join(v) for v in shared.values()], dtype=str).value_counts()
+    prov = [_prov(cfg, "shared-identities"),
+            f"over all {len(el)} eligible split pools of {_splits_path(cfg).name} "
+            f"({', '.join(f'{k} {v}' for k, v in el.groupby('split', sort=False).size().items())}); "
+            f"{len(sp) - len(el)} drawn pools without a tryptic search have no list"]
+    written = [write_tsv(tab[["pool", "split", "peptides", "sha256"]], lists, prov + [
+        f"sha256 = pooltruth.list_digest of the pool list; table digest {lsha}"])]
+    written.append(write_tsv(pd.DataFrame({"identity": list(shared), "splits": [";".join(v) for v in shared.values()]}),
+                             out, prov + [f"pool list table digest {lsha} ({lists.name}); identities in pools of more "
+                                          "than one split, excluded from scoring in every split (size_label "
+                                          "shared_identity); amends F4-06 (merge rule), see the registry"]))
+    log(f"{len(shared)} identities shared across splits over {len(el)} split pools; split pairs: "
+        + ", ".join(f"{k} {v}" for k, v in by_pair.items()))
+    return written
+
+
+def _shared(cfg, pools: list[str] | None = None) -> set[str]:
+    """The frozen shared identities. Refuses when a pool list in hand differs from the frozen digest."""
+    p, lp = _cfg_path(cfg, "shared_tsv", "config/proteometools_shared_identities.tsv"), _cfg_path(cfg, "pool_lists_tsv", "config/proteometools_pool_lists.tsv")
+    if not p.exists() or not lp.exists():
+        raise FileNotFoundError(f"{p} / {lp}: run shared-identities first (once, over all splits)")
+    frozen = dict(read_tsv(lp)[0][["pool", "sha256"]].itertuples(index=False, name=None))
+    for q in pools or []:
+        got = T.list_digest(pool_peptides(cfg, q))
+        if frozen.get(q) != got:
+            raise ValueError(f"{q}: pool list sha256 {got[:12]} differs from the frozen {str(frozen.get(q))[:12]} "
+                             f"({lp.name}); the shared identities would change")
     return set(read_tsv(p)[0]["identity"])
 
 
@@ -369,18 +431,45 @@ def step_sage_modes(cfg, split: str, log=print) -> None:
         _sage(cfg, "pool", mz, base / "pool", pool_dir(cfg, r.pool) / "pool.fasta", log)
 
 
+def _command_record(cmd: list[str], inp: Path) -> str:
+    from .fetch import file_digest
+    return " ".join(cmd) + f"\n# input sha256 {file_digest(inp, 'sha256')}\n"
+
+
+def cached_tags(tags: Path, cmd: list[str], inp: Path) -> bool:
+    """True when tags.tsv can be reused: command.txt records this exact command line and the sha256 of
+    this exact input. A record without the sha line (runs before the check existed) is accepted only when
+    the command matches and the input is older than tags.tsv; the sha line is then added."""
+    rec = tags.parent / "command.txt"
+    if not tags.exists() or not rec.exists():
+        return False
+    lines = rec.read_text().splitlines()
+    if not lines or lines[0] != " ".join(cmd):
+        return False
+    want = _command_record(cmd, inp)
+    if len(lines) > 1:
+        return rec.read_text() == want
+    if inp.stat().st_mtime < tags.stat().st_mtime:
+        rec.write_text(want)
+        return True
+    return False
+
+
 def _fastag(cfg, inp: Path, out: Path, profile: str, log=print) -> Path:
     from .run import tool_path, tool_version
     from .timing import run_timed
     tags = out / "tags.tsv"
-    if tags.exists():
-        return tags
-    out.mkdir(parents=True, exist_ok=True)
     u = cfg["unidentified"]
     exe = tool_path(cfg, "fastag")
     cmd = [exe, "-in", str(inp), "-out", str(tags), "-threads", str(cfg["accuracy"]["threads"])]
     cmd += [str(a) for a in u["fastag_args"]] + [str(a) for a in u["profiles"][profile]]
-    (out / "command.txt").write_text(" ".join(cmd) + "\n")
+    if cached_tags(tags, cmd, inp):
+        return tags
+    if tags.exists():
+        log(f"{tags}: command or input changed, rerunning {profile}")
+        tags.unlink()
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "command.txt").write_text(_command_record(cmd, inp))
     (out / "version.txt").write_text(tool_version(exe) + "\n")
     t = run_timed(cmd, log=out / "run.log", env=cfg.get("env") or {})
     if t["returncode"] != 0:
@@ -439,15 +528,20 @@ def step_chimera_build(cfg, split: str, log=print) -> list[Path]:
             spectra[kk] = (mz, it, m)
             metas.append(m)
     meta = pd.DataFrame(metas)
-    pairs = CH.pair_spectra(meta, seed=int(u["chimera_seed"]), max_pairs=int(u["max_pairs"]))
+    cap = u.get("chimera_max_per_identity")
+    pairs = CH.pair_spectra(meta, seed=int(u["chimera_seed"]), max_pairs=int(u["max_pairs"]),
+                            max_per_identity=None if cap is None else int(cap))
     written = []
     for ratio in u["ratios"]:
         ch, rej = CH.build_chimeras(spectra, pairs, ratio=float(ratio))
         d = _wd(cfg) / "chimeras" / split / f"ratio{ratio:g}"
+        if (d / "fastag").exists():
+            shutil.rmtree(d / "fastag")  # tags of an earlier chimera set must never be mapped onto this one
         written += CH.write_chimeras(ch, d / "chimeras.mgf", d / "chimeras.tsv", [
             _prov(cfg, f"chimera-build {split} ratio {ratio:g}"),
             f"{len(ch)} chimeras from {len(pairs)} pairs of S0 spectra (closed Sage q <= {cfg['sage']['fdr']}) of "
-            f"different pools; seed {u['chimera_seed']}; rejected {len(rej)}; unit-TIC, minor 1/ratio, 0.002 Da summed collapse"])
+            f"different pools; seed {u['chimera_seed']}; at most {cap} pair(s) per normalized peptide; rejected "
+            f"{len(rej)}; unit-TIC, minor 1/ratio, 0.002 Da summed collapse"])
         log(f"{split} ratio {ratio:g}: {len(ch)} chimeras")
     return written
 
@@ -479,49 +573,69 @@ def _cluster(c, pool: str) -> str:
     return next(iter(ids)) if len(ids) == 1 else pool
 
 
-def score_pool(cfg, r, swap_pool: str, carry_pools: list[str], log=print) -> tuple[pd.DataFrame, dict]:
+ARMS = ("truth", "decoy", "chance", "byproduct")
+
+
+def score_pool(cfg, r, swap_pool: str, carry_pools: list[str], carry_unavailable: list[str] | None = None,
+               shared: set[str] | None = None, log=print) -> tuple[pd.DataFrame, dict]:
     """All arms of one pool run. Rows: key x profile x arm with the score_spectra columns plus
-    identification, size_label, cluster, pool. Arms: S0 'truth' (closed-search peptide) and 'chance'
-    (shuffled_peptides over S0); S3-PT 'truth' (pool candidates), 'chance' (pool-swap candidates under
-    the same mass constraint) and 'byproduct' (byproduct candidates only). size_label and cluster always
-    come from the real candidate set ('s0' for S0)."""
+    identification, size_label, cluster, pool, n_byproduct, n_decoy, n_carryover, pool_hit.
+
+    Arms: S0 'truth' (closed-search peptide), 'chance' (shuffled_peptides over S0), 'decoy' and
+    'byproduct' empty. S3-PT 'truth' (pool candidates); 'decoy' (the same-mass shuffled decoys of the
+    truth candidates, decoy_pool keeps composition and mass, so every truth candidate has one: the
+    mass- and composition-matched chance of F4-01); 'chance' (pool-swap candidates under the same mass
+    constraint; most spectra have none, so it is reported with its coverage, never as the F4-01 null);
+    'byproduct' (byproduct candidates only). size_label and cluster always come from the real candidate
+    set ('s0' for S0). carry_pools must all have lists (ValueError otherwise); carry_unavailable are the
+    neighbours without a tryptic search, reported in the controls."""
     u = cfg["unidentified"]
     st, var, mv = u["static"], u["variable"], int(u["max_var"])
     tol, zs, iso = float(u["tol_ppm"]), tuple(u["charges"]), tuple(u["iso"])
     peps = pool_peptides(cfg, r.pool)
     sw_peps = T.swap_peptides(peps, pool_peptides(cfg, swap_pool), seed=int(u["swap_seed"]))
-    co = [p for q in carry_pools if _has_list(cfg, q) for p in pool_peptides(cfg, q)]
+    missing = [q for q in carry_pools if not _has_list(cfg, q)]
+    if missing:
+        raise ValueError(f"{r.pool}: carryover neighbours without a pool list {missing}: run pool-truth first")
+    co = [p for q in carry_pools for p in pool_peptides(cfg, q)]
     decoys = list(read_tsv(pool_dir(cfg, r.pool) / "decoys.tsv")[0]["peptide"])
+    dmap = T.decoy_map(peps, decoys)
     idx = T.PoolIndex.from_peptides(peps, st, var, mv, cls="target", byproducts=True, decoys=decoys, carryover=co)
     sidx = T.PoolIndex.from_peptides(sw_peps, st, var, mv, cls="target")
     meta = _meta_table(cfg, r)
     s0 = _s0(cfg, r.pool)
+    ph = _pool_hits(cfg, r.pool)
     ax = assign_axes(meta[["key"]], set(s0["key"]), pt_keys=set(meta["key"]))
     ax = ax.merge(meta[["key", "precursor_mz", "charge", "nce"]], on="key").assign(pool=r.pool)
     s0p = dict(zip(s0["key"], s0["peptide"]))
     shp = dict(zip(*S.shuffled_peptides(s0, seed=int(u["swap_seed"]))[["key", "peptide"]].to_numpy().T)) if len(s0) else {}
-    shared = _shared(cfg)
-    arms: dict[str, list] = {"truth": [], "chance": [], "byproduct": []}
+    hit = {k: ("ENTRAP" if e else S.normalize_peptide(p)) for k, p, e in zip(ph["key"], ph["peptide"], ph["entrapment"])}
+    shared = _shared(cfg, [r.pool]) if shared is None else shared
+    arms: dict[str, list] = {a: [] for a in ARMS}
     extra = []
     for m in ax.itertuples():
         if m.identification == "S0":
             arms["truth"].append([s0p[m.key]])
             arms["chance"].append([shp[m.key]] if m.key in shp else [])
+            arms["decoy"].append([])
             arms["byproduct"].append([])
             ident = S.normalize_peptide(s0p[m.key])
             extra.append({"size_label": "shared_identity" if ident in shared else "s0", "cluster": ident,
-                          "n_byproduct": 0, "n_decoy": 0, "n_carryover": 0})
+                          "n_byproduct": 0, "n_decoy": 0, "n_carryover": 0, "pool_hit": hit.get(m.key, "")})
             continue
         ms = {"precursor_mz": m.precursor_mz, "charge": None if pd.isna(m.charge) else int(m.charge)}
         c = T.candidates_by_mass(ms, idx, tol, zs, iso)
         cs = T.candidates_by_mass(ms, sidx, tol, zs, iso)
         tv = [v for vs in c["target"].values() for v in vs]
+        own = {d for t in c["target"] for d in dmap.get(t, [])}
         arms["truth"].append(tv)
+        arms["decoy"].append([v for d, vs in c["decoy"].items() if d in own for v in vs])
         arms["chance"].append([v for vs in cs["target"].values() for v in vs])
         arms["byproduct"].append([v for vs in c["byproduct"].values() for v in vs])
         lab_ = "shared_identity" if set(c["target"]) & shared else T.size_label(len(c["target"]))
         extra.append({"size_label": lab_, "cluster": _cluster(tv, r.pool),
-                      "n_byproduct": len(c["byproduct"]), "n_decoy": len(c["decoy"]), "n_carryover": len(c["carryover"])})
+                      "n_byproduct": len(c["byproduct"]), "n_decoy": len(c["decoy"]), "n_carryover": len(c["carryover"]),
+                      "pool_hit": hit.get(m.key, "")})
     lab = pd.concat([ax.reset_index(drop=True), pd.DataFrame(extra)], axis=1)
     parts = []
     for prof in [p for p in u["profiles"] if not p.endswith("_div")]:
@@ -531,12 +645,12 @@ def score_pool(cfg, r, swap_pool: str, carry_pools: list[str], log=print) -> tup
             sc = score_spectra(tags, tr).drop(columns=["candidates", "size_label"])
             parts.append(lab.merge(sc, on="key").assign(arm=arm, profile=prof, swap_pool=swap_pool))
     # validity controls
-    ph = _pool_hits(cfg, r.pool)
     both = s0.merge(ph[~ph["entrapment"]], on="key", suffixes=("_closed", "_pool"))
     agree = float(np.mean([S.normalize_peptide(a) == S.normalize_peptide(b)
                            for a, b in zip(both["peptide_closed"], both["peptide_pool"])])) if len(both) else np.nan
     s3 = lab[lab["identification"] == "S3-PT"]
     ph3 = ph[ph["key"].isin(set(s3["key"]))]
+    s1 = s3[s3["size_label"] == "size1"]
     ctl = {"pool": r.pool, "batch": r.batch, "swap_pool": swap_pool, "pool_peptides": len(peps),
            "swap_peptides": len(sw_peps), "ms2": len(meta), "s0": len(s0), "s3": len(s3),
            "both_identified": len(both), "pool_agreement": round(agree, 6) if len(both) else np.nan,
@@ -546,9 +660,15 @@ def score_pool(cfg, r, swap_pool: str, carry_pools: list[str], log=print) -> tup
            "s3_labels_uncertain": bool(len(ph3) and ph3["entrapment"].sum() / len(ph3) > 1.5 * cfg["sage"]["fdr"]),
            **{f"s3_{k}": int((s3["size_label"] == k).sum()) for k in T.SIZE_LABELS},
            "s3_with_byproduct": int((s3["n_byproduct"] > 0).sum()), "s3_with_decoy_candidate": int((s3["n_decoy"] > 0).sum()),
-           "s3_with_carryover": int((s3["n_carryover"] > 0).sum()), "carryover_pools": ";".join(carry_pools)}
+           "s3_size1_with_byproduct": int((s1["n_byproduct"] > 0).sum()),
+           "s3_size1_with_own_decoy": int(sum(len(arms["decoy"][i]) > 0 for i in s1.index)),
+           "s3_size1_with_swap_candidate": int(sum(len(arms["chance"][i]) > 0 for i in s1.index)),
+           "s3_with_carryover": int((s3["n_carryover"] > 0).sum()), "carryover_pools": ";".join(carry_pools),
+           "carryover_unavailable": ";".join(carry_unavailable or []),
+           "carryover_peptides": len(set(co))}
     log(f"{r.pool}: MS2 {len(meta)}, S0 {len(s0)}, S3 {len(s3)} (size1 {ctl['s3_size1']}, pool_consistent "
-        f"{ctl['s3_pool_consistent']}, none {ctl['s3_no_pool_candidate']}), agreement {agree:.4f}")
+        f"{ctl['s3_pool_consistent']}, none {ctl['s3_no_pool_candidate']}), agreement {agree:.4f}, carryover "
+        f"{ctl['s3_with_carryover']} from {len(carry_pools)} neighbours")
     return pd.concat(parts, ignore_index=True), ctl
 
 
@@ -556,11 +676,12 @@ def step_score(cfg, split: str, log=print) -> list[Path]:
     u = cfg["unidentified"]
     pools = _split_pools(cfg, split)
     sw = swap_partners(cfg)
-    carry = T.carryover_pools(PT.pool_table(_files(cfg)))
+    have, miss = _carry_split(cfg, list(pools["pool"]))
+    shared = _shared(cfg, list(pools["pool"]))
     out_dir = Path(cfg["results_dir"]) / "unidentified" / split
     parts, controls = [], []
     for r in pools.itertuples():
-        sc, ctl = score_pool(cfg, r, sw[r.pool], carry.get(r.pool, []), log)
+        sc, ctl = score_pool(cfg, r, sw[r.pool], have[r.pool], miss[r.pool], shared, log)
         parts.append(sc)
         controls.append(ctl)
     prov = [_prov(cfg, f"score {split}"),
@@ -568,9 +689,11 @@ def step_score(cfg, split: str, log=print) -> list[Path]:
             f"proteome) q <= {cfg['sage']['fdr']}; S3-PT candidates: pool peptides within {u['tol_ppm']} ppm, charges "
             f"{u['charges']} when none given, isotope errors {u['iso']}, static {u['static']}, variable {u['variable']} "
             f"(max {u['max_var']}); flank rule for any candidate (score.tag_correct_any)",
-            "arm truth = real candidates; chance = S0: shuffled_peptides, S3-PT: pool-swap candidates (another batch, "
-            "shared identities removed, same mass constraint); byproduct = byproduct candidates only; cluster = "
-            "normalized peptide (one identity) or pool (pool_consistent)"]
+            "arm truth = real candidates; decoy = S3-PT: the same-mass shuffled decoys of the truth candidates (the F4-01 "
+            "null); chance = S0: shuffled_peptides, S3-PT: pool-swap candidates (another batch, shared identities removed, "
+            "same mass constraint; coverage reported); byproduct = byproduct candidates only; cluster = normalized peptide "
+            "(one identity) or pool (pool_consistent); pool_hit = pool-search rank-1 hit at q <= fdr (normalized; ENTRAP "
+            f"= entrapment); shared identities frozen in {_cfg_path(cfg, 'shared_tsv', 'config/proteometools_shared_identities.tsv').name}"]
     written = [write_tsv(pd.concat(parts, ignore_index=True), out_dir / "spectra.tsv", prov),
                write_tsv(pd.DataFrame(controls), out_dir / "controls.tsv", prov[:2])]
     rows = []
@@ -582,6 +705,8 @@ def step_score(cfg, split: str, log=print) -> list[Path]:
         for prof in u["chimera_profiles"]:
             f = d / "fastag" / prof / "tags.tsv"
             if f.exists():
+                if f.stat().st_mtime < (d / "chimeras.mgf").stat().st_mtime:
+                    raise ValueError(f"{f} is older than {d / 'chimeras.mgf'}: run 'run' again")
                 _, per = CH.attribute_tags(_mgf_tags(f), chim, k=50)
                 per = per.merge(chim[["key", "parent1", "parent2", "pep1", "pep2"]], on="key")
                 rows.append(per.assign(ratio=float(ratio), profile=prof))
@@ -604,7 +729,8 @@ def step_collect(cfg, split: str, log=print) -> list[Path]:
     spec = importlib.util.spec_from_file_location("stats_unidentified", ROOT / "scripts" / "stats_unidentified.py")
     SU = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(SU)
-    return SU.collect(Path(cfg["results_dir"]) / "unidentified" / split, log=log)
+    return SU.collect(Path(cfg["results_dir"]) / "unidentified" / split, log=log,
+                      margin_frozen=cfg["unidentified"].get("margin_frozen"))
 
 
 def step_v190_check(cfg, log=print) -> Path:
@@ -644,6 +770,8 @@ def step_v190_check(cfg, log=print) -> Path:
 def run_step(cfg, step: str, split: str | None, log=print):
     if step == "splits":
         return step_splits(cfg, log)
+    if step == "shared-identities":
+        return step_shared_identities(cfg, log)
     if step == "v190-check":
         return step_v190_check(cfg, log)
     if split is None:

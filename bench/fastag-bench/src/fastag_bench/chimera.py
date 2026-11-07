@@ -90,26 +90,39 @@ def compatible(a: dict, b: dict, iso_halfwidth: float | None = None) -> tuple[bo
 
 
 def pair_spectra(meta: pd.DataFrame, seed: int, iso_halfwidth: float | None = None,
-                 max_pairs: int | None = None) -> pd.DataFrame:
+                 max_pairs: int | None = None, max_per_identity: int | None = None) -> pd.DataFrame:
     """Deterministic pairing: parents in a seeded random order; each takes a random compatible partner
-    among the unused spectra; every spectrum is used at most once. Columns key_a, key_b."""
+    among the unused spectra; every spectrum is used at most once. max_per_identity caps how many pairs
+    an I/L-normalized peptide may appear in (over both roles): with 1 every identity is in at most one
+    chimera, so the union-of-parents clusters of the statistics stay single chimeras (without a cap a
+    parent peptide with many PSMs chains most chimeras into one cluster). Columns key_a, key_b."""
     m = meta.sort_values("precursor_mz", kind="stable").reset_index(drop=True)
     recs = m.to_dict("records")
     mz = m["precursor_mz"].to_numpy(float)
+    ident = [S.normalize_peptide(r["peptide"]) for r in recs]
+    count: dict[str, int] = {}
+    cap = None if max_per_identity is None else int(max_per_identity)
+
+    def full(k: int) -> bool:
+        return cap is not None and count.get(ident[k], 0) >= cap
+
     rng = np.random.default_rng(seed)
     used = np.zeros(len(m), bool)
     pairs = []
     span = float(iso_halfwidth) if iso_halfwidth is not None else float(
         max(m.get("iso_lower", pd.Series([0.0])).max(), m.get("iso_upper", pd.Series([0.0])).max()))
     for i in rng.permutation(len(m)):
-        if used[i]:
+        if used[i] or full(i):
             continue
         lo, hi = np.searchsorted(mz, mz[i] - span - 1e-9), np.searchsorted(mz, mz[i] + span + 1e-9, "right")
-        cand = [j for j in range(lo, hi) if j != i and not used[j] and compatible(recs[i], recs[j], iso_halfwidth)[0]]
+        cand = [j for j in range(lo, hi) if j != i and not used[j] and not full(j)
+                and compatible(recs[i], recs[j], iso_halfwidth)[0]]
         if not cand:
             continue
         j = cand[int(rng.integers(len(cand)))]
         used[i] = used[j] = True
+        for k in (i, j):
+            count[ident[k]] = count.get(ident[k], 0) + 1
         pairs.append((recs[i]["key"], recs[j]["key"]))
         if max_pairs is not None and len(pairs) >= max_pairs:
             break

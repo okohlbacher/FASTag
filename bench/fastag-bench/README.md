@@ -412,22 +412,39 @@ item #4; the endpoints are pre-registered in `validation-registry.tsv` rows F4-0
   size 1 = spectrum-level label, size > 1 = `pool_consistent` (reported separately). Controls: pool-restricted vs
   full-DB Sage agreement (>= 95% or the pool is excluded), a same-size shuffled entrapment pool in the pool search
   (labels flagged uncertain above 1.5x the nominal rate), synthesis byproducts, pool-swap chance (a pool of
-  another LC-MS batch, shared identities removed, same mass constraint), carryover from neighbouring pools.
+  another LC-MS batch, shared identities removed, same mass constraint; reported with its coverage, since most
+  size-1 spectra have no swap candidate), carryover from the +-1 neighbouring pools (neighbours without a tryptic
+  search are listed as `carryover_unavailable`). Excluded pools leave every endpoint; uncertain pools form a
+  sensitivity scope.
+- F4-01 null: the label's own same-mass shuffled decoy (`pooltruth.decoy_map`; same composition, mass and
+  C-terminal residue, so every size-1 spectrum has exactly this one chance candidate). Primary profile matched
+  TL3, secondary matched TL5 (Holm over the two), default descriptive. Label rules for the byproduct conflict
+  (`all`, `no_byproduct_candidate`, `rank1_not_byproduct_explained`, `pool_search_agrees`; `label_conflict.tsv`).
+  The verdict reads `not frozen` until `unidentified.margin_frozen` is set from the registry row that freezes it.
+- Shared identities (`config/proteometools_shared_identities.tsv`, `config/proteometools_pool_lists.tsv`): frozen
+  once over the lists of every eligible split pool (`shared-identities`, refuses to overwrite); `score` reads only
+  these files and refuses a pool whose list digest differs.
+- FASTag runs are reused only when `command.txt` records the same command line and the input's sha256;
+  `chimera-build` deletes the chimera tag runs whenever it rewrites the MGF.
 - Pool lists (`proteometools.py`): PRIDE holds no synthesis lists for PXD004732, so a pool's list is the union of
   the MaxQuant-identified pool peptides over its four deposited tryptic searches.
 - Synthetic S4 chimeras (`chimera.py`): two S0 spectra of different pools, same activation and NCE, precursor
   within the isolation half-width; unit TIC, minor scaled 1/ratio (1:1, 1:10), peaks within 0.002 Da summed at
-  the weighted centroid; precursor and charge from the dominant parent. Scored with and without `-diversity`.
+  the weighted centroid; precursor and charge from the dominant parent. Each normalized peptide is in at most one
+  chimera (`chimera_max_per_identity: 1`), so the union-of-parents clusters stay single chimeras (`collect`
+  refuses a largest cluster of 10% or more). Scored with and without `-diversity`; verdict row from
+  `diversity_verdict`.
 - Chance for S0: `score.shuffled_peptides`, a derangement over I/L-normalized identities (`shuffled_psms`, the
   v1.9.0 row derangement, is unchanged for the v1.9.0 tables).
 - Statistics (`scripts/stats_unidentified.py`): cluster bootstrap (clusters = normalized peptide; pool for
   pool_consistent; union of both parents for chimeras) and a cluster sign-flip permutation test with Holm.
 - Splits (`config/proteometools_splits.tsv`): drawn once, before any scoring: #4 dev 3 pools (seed 1), test 10
   (seed 2), F7 train/test/final 20/10/10 (seeds 3/4/5, on LC-MS batches #4 does not use), reserved for #2, #15
-  and #16 (seeds 6/7/8). The test split is scored once.
+  and #16 (seeds 6/7/8; `--split reserved_2|reserved_15|reserved_16`). The test split is scored once.
 
 ```bash
 C=config/unidentified-data.yaml   # node data paths
+fastag-bench unidentified shared-identities -c $C   # once, over all splits (writes config/, then commit)
 for step in pool-truth sage-modes chimera-build run score collect; do
   fastag-bench unidentified $step -c $C --split dev
 done

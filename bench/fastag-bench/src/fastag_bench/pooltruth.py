@@ -107,6 +107,30 @@ def decoy_pool(peptides: list[str], seed: int, max_tries: int = 200) -> list[str
     return out
 
 
+def decoy_map(targets: list[str], decoys: list[str]) -> dict[str, list[str]]:
+    """Normalized target identity -> normalized identities of its own shuffled decoys (decoy_pool keeps
+    the order of its input, so decoys[i] is the shuffle of targets[i]; I/L twins map to both decoys).
+    The decoy of a target has the target's composition, mass and C-terminal residue: the mass- and
+    composition-matched chance candidate of a spectrum labelled with that target."""
+    if len(targets) != len(decoys):
+        raise ValueError(f"decoy_map: {len(targets)} targets but {len(decoys)} decoys")
+    out: dict[str, list[str]] = {}
+    for t, d in zip(targets, decoys):
+        lst = out.setdefault(normalize_peptide(t), [])
+        nd = normalize_peptide(d)
+        if nd not in lst:
+            lst.append(nd)
+    return out
+
+
+def list_digest(peptides) -> str:
+    """sha256 of a pool list (sorted, unique, upper case, one per line): the identity of the list used
+    to freeze the shared identities, independent of provenance lines and row order."""
+    import hashlib
+    body = "\n".join(sorted({str(p).upper() for p in peptides})) + "\n"
+    return hashlib.sha256(body.encode()).hexdigest()
+
+
 _byproducts = byproducts
 
 
