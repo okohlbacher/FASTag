@@ -45,6 +45,11 @@
 // task the app lands on (D1, "Characterize a run"): the specs written
 // before P2a PR u check what a run from the defaults sends.
 //
+// Every scenario records each run that ends in the mock's run record, as
+// fastag.rs does: the History view lists it, and its argv is the command
+// line the run reply offered (e2eCommand, the argv build_args writes). The
+// Setup footer's Copy command line answers the same argv (command_of).
+//
 // window.__fastagE2E gives the specs the mock and a few controls.
 
 import { installMockBridge, type MockBridge } from './mockBridge'
@@ -218,12 +223,34 @@ export function exportLine(cells: string[], format: ExportFormat): string {
   return cells.map((c) => (/[,"\r\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c)).join(',') + '\r\n'
 }
 
+/// The argv fastag.rs build_args writes for @p params, binary first (the
+/// same rules for the values the e2e form sends): -in and -out, each switch
+/// that is on by its name, each value as its own element (a list item by
+/// item, a cleared list as ''), and -progress last.
+export function e2eCommand(bin: string, params: Record<string, unknown>, out: string): string[] {
+  const argv = [bin, '-in', String(params['in']), '-out', out]
+  const p = (params['params'] ?? {}) as Record<string, unknown>
+  for (const [name, v] of Object.entries(p)) {
+    if (v === true) argv.push(`-${name}`)
+    else if (Array.isArray(v)) {
+      const items = v.map(String).filter((x) => x.trim() !== '')
+      if (items.length) argv.push(`-${name}`, ...items)
+    } else if ((typeof v === 'string' && v.trim() !== '') || typeof v === 'number') argv.push(`-${name}`, String(v).trim())
+  }
+  argv.push('-progress')
+  return argv
+}
+
 /// Installs the bridge; returns where the session starts (?start=).
 export function installE2EBridge(): Origin | undefined {
   const query = new URLSearchParams(window.location.search)
   const fixture = query.get('fixture') ?? 'default'
   const mock = installMockBridge()
+  mock.recordRuns = true
   mock.binaryInfo = { bin: '/e2e/FASTag', source: 'env', ok: true, version: '1.11.0', detail: 'e2e fixture: no CLI' }
+  // Copy command line (Setup) answers the argv the run reply offers and
+  // History records, as fastag.rs builds both with command_of.
+  mock.commandOf = (call) => e2eCommand(mock.binaryInfo.bin, call as unknown as Record<string, unknown>, call.out)
   const tags = parseTsv(fixture === 'denovo' ? ecoliResConf : ecoliTags)
   if (fixture === 'denovo') mock.tagsFiles['/data/run01.tags.tsv'] = ecoliResConf
   mock.resultsColumns = tags.columns
@@ -450,6 +477,8 @@ export function installE2EBridge(): Origin | undefined {
   mock.run = async (params, onEvent): Promise<RunStarted> => {
     const started = await origRun(params, onEvent)
     if (!started.started) return started
+    // The reply's command, which the run record keeps (mockBridge recordRuns).
+    started.command = e2eCommand(mock.binaryInfo.bin, params, started.out ?? '')
     const id = mock.lastRunId
     const s = script(String(params['in']))
     const at = (ms: number, f: () => void): void => {

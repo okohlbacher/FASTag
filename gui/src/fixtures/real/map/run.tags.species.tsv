@@ -1,0 +1,12 @@
+rank	taxid	name	observed	adjusted	expected	log_pvalue	qvalue
+genus	561	Escherichia	7	7.0	0.1	-31.3546	1.54456e-13
+genus	570	Klebsiella	7	7.0	0.1	-30.2128	2.37241e-13
+genus	590	Salmonella	7	7.0	0.1	-30.9602	1.54456e-13
+genus	629	Yersinia	7	7.0	0.1	-31.8878	1.54456e-13
+genus	9822	Sus	7	7.0	0.6	-17.3159	6.70042e-08
+genus	9903	Bos	7	7.0	0.6	-17.2389	6.70042e-08
+genus	9935	Ovis	7	7.0	0.6	-17.1691	6.70042e-08
+genus	10088	Mus	7	7.0	0.6	-17.0711	6.8221e-08
+genus	122277	Pectobacterium	7	7.0	0.1	-30.8998	1.54456e-13
+genus	204037	Dickeya	7	7.0	0.1	-31.0416	1.54456e-13
+genus	3052	Chlamydomonas	5	5.0	0.6	-9.5786	8.52567e-05

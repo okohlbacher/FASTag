@@ -91,6 +91,11 @@ export interface MockBridge extends FastagApi {
   // answers it. (run()'s reply keeps its short -in/-out command, which the
   // failure-banner tests pin; fastag.rs builds both from one function.)
   commandOf(call: RunCall): string[]
+  // Record every run that ends in `history`, as fastag.rs does (argv = the
+  // run reply's command). Off by default: most tests set `history` by hand.
+  recordRuns: boolean
+  historyDeleteCalls: string[]
+  historyRerunCalls: string[]
   // What sweep.rs would offer at startup; the sweep and keep calls, and the
   // paths a sweep fails to remove.
   leftoverFiles: string[]
@@ -213,8 +218,34 @@ function mockArgv(call: RunCall): string[] {
 export function installMockBridge(): MockBridge {
   // Each started run's Channel, by its number.
   const channels = new Map<number, (e: RunEvent) => void>()
+  // What each started run was sent and replied, for recordRuns.
+  const runs = new Map<number, { call: RunCall; started: RunStarted; start: number }>()
   const send = (id: number | undefined, e: RunEvent): void => {
-    if (id != null) channels.get(id)?.(e)
+    if (id == null) return
+    const ch = channels.get(id)
+    if (e.kind === 'done' && ch && mock.recordRuns) record(id, e)
+    ch?.(e)
+  }
+  // The record fastag.rs writes when a run ends (record_of).
+  const record = (id: number, r: RunResult): void => {
+    const run = runs.get(id)
+    if (!run || mock.history.some((h) => h.id === `mock-${id}`)) return
+    const o = run.started.outputs ?? {}
+    mock.history.unshift({
+      id: `mock-${id}`,
+      input: run.call.in,
+      outputs: Object.values(o).filter((p): p is string => !!p),
+      cwd: run.call.in.startsWith('/') ? run.call.in.slice(0, run.call.in.lastIndexOf('/')) : null,
+      argv: run.started.command ?? [],
+      status: r.ok ? 'ok' : r.cancelled ? 'cancelled' : 'failed',
+      exitCode: r.code ?? null,
+      message: r.message ?? null,
+      start: run.start,
+      end: Date.now(),
+      cleanup: r.cleanup ?? { removed: [], renamed: [], failed: [] },
+      params: run.call.params,
+      tags: null
+    })
   }
   const closeListeners: ((what: 'close' | 'quit') => void)[] = []
   const menuListeners: ((action: string) => void)[] = []
@@ -280,6 +311,9 @@ export function installMockBridge(): MockBridge {
       if (mock.exportIniError) return Promise.reject(mock.exportIniError)
       return Promise.resolve({ dest, items: mockArgv(params as unknown as RunCall).filter((a) => a.startsWith('-')).length })
     },
+    recordRuns: false,
+    historyDeleteCalls: [],
+    historyRerunCalls: [],
     leftoverFiles: [],
     sweepCalls: [],
     keepCalls: [],
@@ -497,6 +531,35 @@ export function installMockBridge(): MockBridge {
     },
     historyList: (limit) => Promise.resolve(mock.history.slice(0, limit ?? 50)),
     historyOf: (path) => Promise.resolve(mock.history.find((r) => r.outputs.includes(path)) ?? null),
+    // As history.rs delete: a record that did not finish and is the newest
+    // of an output still on disk (existingOutputs) is kept.
+    historyDelete: (id) => {
+      mock.historyDeleteCalls.push(id)
+      const r = mock.history.find((h) => h.id === id)
+      const marked =
+        r && r.status !== 'ok'
+          ? [...r.outputs, ...r.cleanup.failed].find(
+              (p) => mock.existingOutputs.includes(p) && mock.history.find((h) => h.outputs.includes(p))?.id === id
+            )
+          : undefined
+      if (marked)
+        return Promise.reject(
+          new Error(
+            `The record was kept: it is what marks ${marked} as incomplete (the run did not finish, and its cleanup could not remove the file). Delete or replace that file first.`
+          )
+        )
+      const n = mock.history.length
+      mock.history = mock.history.filter((h) => h.id !== id)
+      return Promise.resolve(mock.history.length < n)
+    },
+    // As history.rs rerun_params.
+    historyRerun: (id) => {
+      mock.historyRerunCalls.push(id)
+      const r = mock.history.find((h) => h.id === id)
+      const i = r ? r.argv.indexOf('-out', 1) : -1
+      if (!r?.params || i < 0 || i + 1 >= r.argv.length) return Promise.reject(new Error('no parameters'))
+      return Promise.resolve({ in: r.input, out: r.argv[i + 1], params: r.params })
+    },
     leftovers: () => Promise.resolve([...mock.leftoverFiles]),
     sweepLeftovers: (paths) => {
       mock.sweepCalls.push(paths)
@@ -535,6 +598,7 @@ export function installMockBridge(): MockBridge {
         outputs,
         command: [mock.binaryInfo.bin, '-in', call.in, '-out', outputs.out ?? '']
       }
+      runs.set(mock.lastRunId, { call, started, start: Date.now() })
       if (held) return new Promise<RunStarted>((resolve, reject) => held!.push((e) => (e ? reject(e) : resolve(started))))
       return Promise.resolve(started)
     },

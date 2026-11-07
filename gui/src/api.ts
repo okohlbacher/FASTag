@@ -99,6 +99,8 @@ const api: FastagApi = {
   },
   historyList: (limit?: number) => invoke<RunRecord[]>('history_list', { limit }),
   historyOf: (path: string) => invoke<RunRecord | null>('history_of', { path }),
+  historyDelete: (id: string) => invoke<boolean>('history_delete', { id }),
+  historyRerun: (id: string) => invoke<Record<string, unknown>>('history_rerun', { id }),
   leftovers: () => invoke<string[]>('leftovers_list'),
   sweepLeftovers: (paths: string[]) => invoke<Cleanup>('leftovers_sweep', { paths }),
   keepLeftovers: (paths: string[]) => invoke<void>('leftovers_keep', { paths }),
