@@ -744,8 +744,9 @@ resolution, in the `-search_shifts_out` header; a WARN when the remaining uncert
 precursor tolerance). A called SILAC channel is exported as a whole (all its
 labels, outside `-shift_max_variable`) or not at all, with a WARN. Without a
 fixed Cys modification, a Cys alkylation on at least half the C-containing
-placements is written as a fixed modification, with a WARN; this rule does not
-yet read `-alkylation_out`'s call. `-search_shifts_out` lists every decision. These are candidates
+placements is written as a fixed modification, with a WARN; with
+`-alkylation_out` the run's alkylation call decides the fixed Cys modification
+instead (a reagent call becomes it; `none` or `no_call` adds none). `-search_shifts_out` lists every decision. These are candidates
 for an FDR-controlling engine, not identifications: whether they improve
 identifications is not yet validated. Offsets need a narrow precursor
 tolerance, which the configuration sets explicitly. See

@@ -4950,6 +4950,11 @@ protected:
           shift_ev.push_back(FASTag::SearchConfig::peakEvidence(pk, shift_rows));
         shift_settings.tol = gap_settings.window;
         shift_settings.c_placements = shift_c_samples;
+        // 1.12 D #3g hand-off: -alkylation_out's call decides the fixed Cys
+        // modification (the reagent, or none for the not-alkylated family);
+        // no call made is no_call. Without -alkylation_out rule 3 applies.
+        if (alkylation_on)
+          shift_settings.alkylation_call = alk_call.called ? FASTag::Alkylation::className(alk_call.cls) : "no_call";
         const auto shifts = FASTag::SearchConfig::shiftsToPlan(gap_result, shift_ev, gap_mods, gap_combos,
                                                                shift_settings, sl_plan);
         for (const std::string& w : shifts.warnings) OPENMS_LOG_WARN << "-search_shifts: " << w << "." << std::endl;
@@ -4966,7 +4971,7 @@ protected:
             FASTag::appendNum(t, v, std::chars_format::fixed, 4);
             return t;
           };
-          const std::vector<std::string> header = {
+          std::vector<std::string> header = {
               "FASTag " FASTAG_VERSION " mass shifts for -search_config_out: candidates for an FDR-controlling "
               "engine, NOT identifications.",
               "input: " + File::basename(in) + "; database: " + File::basename(recon_db) + "; engine: " + search_engine +
@@ -4988,6 +4993,9 @@ protected:
                         " Da (90 % of their spectra)"
                   : "calibration: no single-modification peak; offsets uncorrected, known to the window " +
                         shortest(gap_settings.window) + " Da"};
+          if (alkylation_on)
+            header.push_back("alkylation call: " + shift_settings.alkylation_call +
+                             " (-alkylation_out; it decides the fixed Cys modification)");
           std::string err;
           if (!FASTag::SearchConfig::writeShiftDecisions(search_shifts_out, header, shifts.decisions, &err))
           {

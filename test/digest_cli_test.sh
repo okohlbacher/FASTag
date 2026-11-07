@@ -261,6 +261,31 @@ done
 run "${SC[@]}" -out "$TMP/se.tsv" "${R[@]}" -recon_localize -massgap_min_spectra 2 -search_shifts both \
   -search_engine comet -search_config_out "$TMP/se.params" -shift_expand_sites -search_shifts_out "$TMP/se.shifts.tsv"
 [ -s "$TMP/se.params" ] || fail "-shift_expand_sites: no config"
+# -alkylation_out with -search_shifts: #3g's call is handed to the shift rules
+# (ShiftSettings::alkylation_call). The fixture's peptides hold no C, so the
+# call is no_call: no fixed Cys modification is added and every decision, the
+# config and the reports equal the run without -alkylation_out.
+run "${SC[@]}" -out "$TMP/sa.tsv" "${R[@]}" -delta_out "$TMP/sadelta.tsv" -massgap_out "$TMP/sagap.tsv" "${G2[@]}" \
+  -search_shifts both -search_engine comet -search_config_out "$TMP/sa.params" -search_shifts_out "$TMP/sa.shifts.tsv" \
+  -alkylation_out "$TMP/sa.alk.tsv"
+cp "$TMP/log" "$TMP/sa.log"
+[ -s "$TMP/sa.alk.tsv" ] || fail "-alkylation_out with -search_shifts wrote no alkylation report"
+sa_status=$(val "$TMP/sa.alk.tsv" alkylation_call status)
+if [ "$sa_status" = call ]; then sa_call=$(val "$TMP/sa.alk.tsv" alkylation_call reagent); else sa_call=no_call; fi
+[ "$sa_status" = no_call ] || fail "the C-free shift fixture made an alkylation call: $sa_status $sa_call"
+tr -d '\r' < "$TMP/sa.shifts.tsv" | grep -qx "# alkylation call: $sa_call (-alkylation_out; it decides the fixed Cys modification)" \
+  || fail "-search_shifts_out does not name -alkylation_out's call ($sa_call)"
+grep -q -- "-search_shifts: the alkylation call is $sa_call: no fixed Cys modification is added" "$TMP/sa.log" \
+  || fail "the alkylation call did not reach the shift rules"
+tr -d '\r' < "$TMP/sa.shifts.tsv" | grep -v '^# alkylation call: ' > "$TMP/sa.shifts.noalk"
+same "$TMP/shifts.tsv" "$TMP/sa.shifts.noalk" "-alkylation_out (no_call) changed -search_shifts_out beyond its call line"
+same "$TMP/sh.params" "$TMP/sa.params" "-alkylation_out (no_call) changed the shift config"
+same "$TMP/s1.tsv" "$TMP/sa.tsv" "-alkylation_out changed the tag TSV with -search_shifts"
+same "$TMP/srecon0.tsv" "$TMP/recon.tsv" "-alkylation_out changed -recon_out with -search_shifts"
+same "$TMP/sdelta1.tsv" "$TMP/sadelta.tsv" "-alkylation_out changed -delta_out with -search_shifts"
+same "$TMP/sgap1.tsv" "$TMP/sagap.tsv" "-alkylation_out changed -massgap_out with -search_shifts"
+# without -alkylation_out no call line (rule 3 decides)
+tr -d '\r' < "$TMP/shifts.tsv" | grep -q '^# alkylation call: ' && fail "-search_shifts_out names a call without -alkylation_out"
 # refusals
 nope() { local want="$1"; shift; "$BIN" "${SC[@]}" -out "$TMP/n.tsv" "$@" > "$TMP/log" 2>&1; local rc=$?
   [ "$rc" = "$want" ] || { cat "$TMP/log" >&2; fail "exit $rc (want $want): $*"; }; }

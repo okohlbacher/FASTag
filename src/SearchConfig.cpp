@@ -549,6 +549,8 @@ namespace FASTag::SearchConfig
         out.info.push_back("the alkylation call " + s.alkylation_call + " is written as the fixed " + rm->getFullId());
       }
     }
+    else if (alk_call)
+      out.info.push_back("the alkylation call is " + s.alkylation_call + ": no fixed Cys modification is added");
     if (gaps.peaks.empty())
     {
       out.info.push_back("no mass-gap peak in the run; no mass shift is exported");

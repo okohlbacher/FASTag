@@ -171,15 +171,12 @@ first (ties: smaller |delta|):
    are at least half the run's C-containing samples is written as a FIXED
    modification (`fixed`, WARN). Only C-containing samples count, so +57 on
    K, the N-term or a Gly-isobaric truncation does not.
-   **This rule does not read `-alkylation_out` (#3g) yet**: a run with both
-   options can write a fixed Cys modification its own alkylation call
-   contradicts. `shiftsToPlan` already takes the call
-   (`ShiftSettings::alkylation_call`: a reagent becomes the fixed Cys
-   modification, `none`/`no_call` adds none, and a peak that would have been
-   `fixed` is `deferred_alkylation_call`, WARN); feeding #3g's call into it,
-   with a digest_cli_test case running `-alkylation_out` with
-   `-search_shifts`, belongs to the D3cg merge onto integration/1.12 (owner:
-   the integrator of D3cg).
+   With `-alkylation_out` (#3g) the run's alkylation call decides instead
+   (`ShiftSettings::alkylation_call`): a reagent call becomes the fixed Cys
+   modification when the configuration has none, the not-alkylated family
+   (`none`) and `no_call` add none, and a peak that would have been `fixed`
+   is `deferred_alkylation_call` (WARN). The `-search_shifts_out` header then
+   names the call.
 3. one modification: a variable modification under its `massgap_mods.tsv`
    id, mass from ModificationsDB (`already_searched` when the configuration
    has it; a SILAC label only when the SILAC call is not `none`, else
