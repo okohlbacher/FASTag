@@ -27,6 +27,7 @@ import { HelpButton, HelpLink } from '../help/HelpLink'
 import { isMac, keyText } from './shortcuts'
 import type { Session } from './useSession'
 import type { RunState } from '../run/useRun'
+import { Leftovers } from '../Leftovers'
 import { dirName, revealLabel } from '../app/paths'
 import { clock, duration } from '../app/format'
 import TaskChooser from './TaskChooser'
@@ -286,6 +287,7 @@ export default function SetupForm({ session, run, onPickInput, onSearch, searchB
         </>
       ) : (
         <>
+          <Leftovers />
           {lastRun && jobs.length === 0 && (
             <section className="block last-run" aria-labelledby="last-run-h">
               <h2 id="last-run-h">Last run</h2>
