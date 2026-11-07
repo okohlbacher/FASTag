@@ -496,6 +496,9 @@ MGF→mzML direction is exact.
 | `-census` | off | Per-spectrum census: one row per MS2 spectrum read, tagged or not, plus a run summary (see Census) |
 | `-census_out <file>` | `<out>` with its extension replaced by `.census.tsv` | With `-census`: the per-spectrum table |
 | `-census_summary_out <file>` | `<out>` with its extension replaced by `.census_summary.tsv` | With `-census`: the run summary |
+| `-census_ids <file>` | none | With `-census`: identifications of `-in` (idXML or mzid with q-values); adds the columns `identified` and `triage` and a `census_ids` summary section (see Census) |
+| `-census_ids_fdr <f>` | 0.01 | With `-census_ids`: the q-value a target hit needs to identify its spectrum (advanced) |
+| `-census_triage_evalue <f>` | 0.01 | With `-census_ids`: the best E-value at or below which an unidentified tagged or placed spectrum is a triage candidate (advanced) |
 | `-stream` | off | Resident single-spectrum mode: spectrum blocks on stdin, TSV rows + `#end` sentinels on stdout (see Streaming) |
 | `-progress` | off | Emit `FASTAG_PROGRESS done=<n> total=<n>` on stderr for a progress bar |
 | `-species` | off | Infer taxa from the tags (see Species detection) |
@@ -826,6 +829,31 @@ of `n_peaks_kept` and of `int_gini`. Subsampling draws from the input spectra
 of all MS levels, so `-subsample_spectra 1000` on a run with MS1 scans reads
 fewer than 1000 MS2 spectra. Both files are written as `.part` files and
 renamed when the run finishes; `-census` cannot be combined with `-stream`.
+
+`-census_ids <idXML|mzid>` joins the identifications of the same run to the
+census. The table gains two columns: `identified` (1, 0, or empty when the
+spectrum cannot be matched unambiguously) and `triage` (1 for spectra with
+`identified` 0, status `tagged` or `placed` and `best_evalue` at or below
+`-census_triage_evalue`, as written in the row; empty when `identified` is
+empty). Without `-census_ids` the census is unchanged. A spectrum is
+identified when one of its identifications holds a target hit whose q-value
+is at most `-census_ids_fdr`: the hit's score when the score type is a
+q-value (lower is better), otherwise its `q-value` or `MS:1002354` meta
+value. Decoy hits are ignored (target+decoy counts as a target), an empty hit
+list is not an identification, and a spectrum no identification names is 0.
+A file in which no hit carries a q-value is refused: filter it with
+FalseDiscoveryRate and IDFilter first. References are matched to native ids
+exactly; a scan number is used only when it is unique among the references
+and the spectra read. A file naming another run warns, one naming several
+runs is refused, and when more than 1% of the references match no spectrum
+FASTag warns, above 50% it writes no census (exit code
+INCOMPATIBLE_INPUT_DATA; the other outputs are complete). Under subsampling
+that count is not known and is left empty. The summary adds section
+`census_ids`: the file name, the thresholds, `run_check`, the reference
+counts (`refs`, `refs_exact`, `refs_scan`, `refs_ambiguous`,
+`refs_unmatched`), `identified_1/0/unknown`, the cross-tab
+`<status>_identified_<1|0|unknown>` and `triage_candidates`. Triage is an
+E-value threshold, not a quality call.
 
 ## Tag diversity
 

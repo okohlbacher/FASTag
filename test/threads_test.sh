@@ -76,6 +76,36 @@ for f in census census_summary recon; do
     cmp -s "$TMP/c1/$f.tsv" "$TMP/c$t/$f.tsv" || fail "$f.tsv differs between -threads 1 and $t"
   done
 done
+# -census_ids (1.12 #11B): the joined table and the census_ids section at
+# 1, 3 and 8 threads; the idXML is FASTag's own -recon_id_out of the 1-thread
+# run with a q-value added to every hit (score type q-value), so that
+# identified and triage both take several values.
+if [ -s "$TMP/c1/recon.tsv" ]; then
+  "$BIN" -in "$IN" -out "$TMP/c1/ri.tsv" -threads 1 -tag_lengths 3 5 -fragment_tolerance 0.3 \
+    -fragment_tolerance_unit Da -recon_fasta "$DB" -recon_out "$TMP/c1/ri_recon.tsv" \
+    -recon_id_out "$TMP/c1/ri.idXML" >"$TMP/c1/rilog" 2>&1 || fail "-recon_id_out run failed"
+  # Every other identification becomes a q = 0.001 target, the rest q = 0.5.
+  awk 'BEGIN { n = 0 }
+       /<PeptideIdentification / { n++; sub(/score_type="[^"]*"/, "score_type=\"q-value\""); sub(/higher_score_better="[^"]*"/, "higher_score_better=\"false\"") }
+       /<PeptideHit / { sub(/score="[^"]*"/, "score=\"" (n % 2 ? "0.001" : "0.5") "\"") }
+       { print }' "$TMP/c1/ri.idXML" > "$TMP/ids.idXML"
+  grep -q 'score_type="q-value"' "$TMP/ids.idXML" || fail "could not prepare the -census_ids file"
+  for t in 1 3 8; do
+    d="$TMP/i$t"; mkdir -p "$d"
+    "$BIN" -in "$IN" -out "$d/tags.tsv" -threads "$t" -tag_lengths 3 5 -fragment_tolerance 0.3 \
+      -fragment_tolerance_unit Da -census -census_ids "$TMP/ids.idXML" -census_triage_evalue 1 \
+      -census_out "$d/census.tsv" -census_summary_out "$d/census_summary.tsv" >"$d/log" 2>&1 \
+      || { cat "$d/log" >&2; fail "-census_ids -threads $t run failed"; }
+  done
+  for v in 0 1; do
+    [ "$(awk -F'\t' -v v=$v 'NR > 1 && $21 == v' "$TMP/i1/census.tsv" | wc -l)" -gt 0 ] || fail "-census_ids: no row identified $v; the check is weak"
+  done
+  for f in census census_summary; do
+    for t in 3 8; do
+      cmp -s "$TMP/i1/$f.tsv" "$TMP/i$t/$f.tsv" || fail "-census_ids: $f.tsv differs between -threads 1 and $t"
+    done
+  done
+fi
 msg="${#OUTS[@]} TSVs, the idXML, the census tables"
 
 if [ -n "$PROF" ]; then
