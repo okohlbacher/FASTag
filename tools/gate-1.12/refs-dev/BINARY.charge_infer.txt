@@ -1,5 +1,5 @@
-binary /scratch/kohlbach/fastag112-integ/w2-m7-e15b/opt/FASTag
+binary /scratch/kohlbach/fastag112-rc/rc2/opt/FASTag
 sha256 b84c190a1348e2f4c8435671fc27c94e0af89691d8ca7bebeef7efcca5fdb43b
-FASTag.bin sha256 ddfde22f49f5a22d14973c9501e294bf3c378c0e969a6cc4e003904993b2db0f
-Version: 1.11.0 (OpenMS 3.7.0-pre-HEAD-2026-11-02)
-host data threads 24 date 2026-11-07T23:12:54+01:00
+FASTag.bin sha256 bc36282b3c1cfd3e5ce63b60bd038c1687ccee6c2f9faaefb02a4b527999c481
+Version: 1.12.0 (OpenMS 3.7.0-pre-HEAD-2026-11-02)
+host data threads 32 date 2026-11-07T23:49:18+01:00
