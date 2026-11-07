@@ -188,6 +188,8 @@ namespace FASTag::RunReport
         row("charge_enumerated", m.charge_enumerated, "were reported at an enumerated charge");
         row("isotope_shifted", m.iso_shifted, "were reported at a precursor isotope offset other than 0");
         row("multi_hypothesis", m.multi_hypothesis, "were tagged under more than one precursor hypothesis");
+      }
+      {
         // #15 phase B: value = spectra read as the series, n = all tagged MS2.
         const std::string n = std::to_string(m.ion_series_ms2_by + m.ion_series_ms2_cz);
         r.push_back({"run", "ion_series", m.ion_series, "-",
