@@ -38,6 +38,9 @@ export interface MassGapChartProps {
   peaks?: GapPeak[]
   /// Gaps within this many Da count as one mass (the report's window_da).
   window: number
+  /// No mass-gap report gave the window: @p window is assumed (ReconView
+  /// ASSUMED_WINDOW), and the caption and tooltip say so.
+  windowAssumed?: boolean
   /// The file the bins come from, for the caption.
   source: string
 }
@@ -108,7 +111,7 @@ interface Drawn {
   peak: GapPeak | null
 }
 
-export default function MassGapChart({ bins, peaks = [], window, source }: MassGapChartProps): JSX.Element {
+export default function MassGapChart({ bins, peaks = [], window, windowAssumed = false, source }: MassGapChartProps): JSX.Element {
   // The modification window first: where the bundled deltas lie.
   const [range, setRange] = useState<GapRange>('mods')
   const [view, setView] = useState<'chart' | 'table'>('chart')
@@ -257,6 +260,7 @@ export default function MassGapChart({ bins, peaks = [], window, source }: MassG
     <figure className="mg-chart" aria-labelledby={`${id}-cap`}>
       <figcaption id={`${id}-cap`}>
         Spectra placed in a database peptide, by precursor − peptide mass (Da) <span className="muted">· {source}</span>
+        {windowAssumed && <span className="muted"> · window assumed {fmt(window, 1)} Da (no mass-gap report)</span>}
       </figcaption>
       <div className="mg-controls">
         <div className="seg" role="group" aria-label="View">
@@ -395,6 +399,7 @@ export default function MassGapChart({ bins, peaks = [], window, source }: MassG
                 ) : (
                   <span className="muted">no bundled delta within {fmt(window, 3)} Da</span>
                 )}
+                {windowAssumed && <span className="muted">window assumed {fmt(window, 1)} Da (no mass-gap report)</span>}
                 {cur.bin.interps && cur.bin.interps.length > 0 && (
                   <span className="muted">recon: {cur.bin.interps.map((i) => `${i.name} ${fmt(i.n)}`).join(', ')}</span>
                 )}

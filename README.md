@@ -197,8 +197,12 @@ background in use), the label counts, a histogram of the mass gaps and the mass-
 common Unimod deltas marked and the CLI's explained peaks labelled (hover or the arrow keys
 for each value, or the same values as a table), warns when too few spectra are placed for
 any conclusion, and shows the `-recon_out` placements, the gap peaks and an mzTab
-`-recon_id_out` in one keyboard table with filters; without a FASTA it offers to choose one
-and run again. A **Glyco** tab lists the `-glyco_out` spectra, flagged ones first by their
+`-recon_id_out` in one keyboard table with filters (kept, with their sort, across tab
+switches); without a FASTA it offers to choose one and run again, and when a FASTA run
+placed too few spectra with an extension below 3 it offers the run with extension 3. A
+`-delta_out` opened without its run's `-massgap_out` beside it is matched with an assumed
+0.5 Da window, and the chart says so. Tables up to 128 MB open in the app; larger ones
+open only in a spreadsheet. A **Glyco** tab lists the `-glyco_out` spectra, flagged ones first by their
 oxonium intensity. Setup starts
 from a task (by default **Characterize a run**: species, digest, label and
 glyco reports), so a file and Run are all a first run needs; the settings sit

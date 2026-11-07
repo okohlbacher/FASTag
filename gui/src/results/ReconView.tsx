@@ -5,14 +5,17 @@
 // state that offers the FASTA and the run. It reports what the CLI wrote and
 // adds no judgement of its own: every gap is a candidate.
 
-import { useMemo, useState, type JSX } from 'react'
-import { baseName, fmt, gapHistogram, gapPeaks, num, section, value, type Report } from '../digestReport'
+import { useEffect, useMemo, useState, type JSX } from 'react'
+import { baseName, fmt, gapHistogram, gapPeaks, num, parseReport, section, value, type Report } from '../digestReport'
+import { dirName } from '../app/paths'
+import { runStem } from './reports'
 import { HelpLink } from '../help/HelpLink'
 import { IconWarning } from '../icons'
 import DataTable, { type Column } from './DataTable'
 import MassGapChart, { type GapBin } from './MassGapChart'
 import { filterRecon, type DeltaTable, type ReconFilter, type ReconIdTable, type ReconTable, type TableGen, type TablePaths } from './tables'
 import { useTable } from './useTable'
+import { useSticky } from './tableStore'
 import { FASTA_EXTENSION, type TileAction } from './overview'
 import './viewers.css'
 
@@ -20,6 +23,12 @@ import './viewers.css'
 /// conclusion (provisional: the CLI's own gap peaks need 20 spectra, and a
 /// share of 0.005 of the placed; 100 is where one such peak can stand out).
 export const LOW_PLACED = 100
+
+/// The gap window when no mass-gap report of the run is at hand (a delta.tsv
+/// opened alone): the wider of the CLI's two defaults, -massgap_window_da
+/// (a Da fragment tolerance; -massgap_window is 0.02 on a ppm run). The
+/// delta file does not record the window, so the view says it assumed it.
+export const ASSUMED_WINDOW = 0.5
 
 export interface ReconViewProps {
   /// The -massgap_out report of the run shown, if any.
@@ -31,6 +40,9 @@ export interface ReconViewProps {
   notice?: string
   /// "Choose a FASTA and write these reports" and the run; null: not offered.
   action?: { label: string; run(): void; disabled: boolean } | null
+  /// "Run again with extension 3" in the low-placed banner (reconExtend);
+  /// null: not offered.
+  extend?: { label: string; run(): void; disabled: boolean } | null
   onOpen(): void
 }
 
@@ -42,14 +54,57 @@ const given = (v: unknown): boolean => (typeof v === 'string' ? v.trim() !== '' 
 /// proteome index needs); with one, turn the three reports on.
 export function reconRerun(params: Record<string, unknown>): TileAction {
   const reports = { recon_out: 'recon.tsv', delta_out: 'delta.tsv', massgap_out: 'massgap.tsv' }
+  // Either way the extension the FASTA needs: with a FASTA and extension 2
+  // the run places nothing (v112-pxd014764-recon-ext2).
+  const raise: Record<string, string> = extensionOf(params) < FASTA_EXTENSION ? { extension: String(FASTA_EXTENSION) } : {}
   if (given(params['fasta']) || given(params['recon_fasta']))
-    return { kind: 'enable', label: 'Write these reports and run again', values: reports }
-  const ext = Number(typeof params['extension'] === 'string' ? params['extension'] : 0) || 0
-  return {
-    kind: 'add-fasta',
-    label: 'Choose a FASTA and run again',
-    values: { delta_out: 'delta.tsv', ...(ext < FASTA_EXTENSION ? { extension: String(FASTA_EXTENSION) } : {}) }
-  }
+    return { kind: 'enable', label: 'Write these reports and run again', values: { ...reports, ...raise } }
+  return { kind: 'add-fasta', label: 'Choose a FASTA and run again', values: { delta_out: 'delta.tsv', ...raise } }
+}
+
+/// The low-placed banner's action for a run sent @p params: the run again
+/// with extension 3, when it had a FASTA and a shorter extension; else null.
+export function reconExtend(params: Record<string, unknown>): TileAction | null {
+  if (!(given(params['fasta']) || given(params['recon_fasta']))) return null
+  const ext = extensionOf(params)
+  if (ext >= FASTA_EXTENSION) return null
+  return { kind: 'enable', label: `Run again with extension ${FASTA_EXTENSION}`, values: { extension: String(FASTA_EXTENSION) } }
+}
+
+// The CLI's -extension default is 0.
+function extensionOf(params: Record<string, unknown>): number {
+  const v = params['extension']
+  const x = typeof v === 'string' && v.trim() !== '' ? Number(v) : typeof v === 'number' ? v : NaN
+  return Number.isFinite(x) ? x : 0
+}
+
+/// The gap window of the run whose delta.tsv is shown without its mass-gap
+/// report: run/window_da of the sibling <stem>.massgap.tsv (same folder and
+/// stem), read once; null while unknown.
+function useSiblingWindow(deltaPath: string | undefined, skip: boolean): number | null {
+  const [found, setFound] = useState<{ at: string; win: number | null } | null>(null)
+  const sib = deltaPath && !skip ? siblingMassgap(deltaPath) : null
+  useEffect(() => {
+    if (!sib) return
+    let live = true
+    window.fastag
+      .report(sib)
+      .then((text) => {
+        const win = text == null ? null : num(value(parseReport(text, sib), 'run', 'window_da'))
+        if (live) setFound({ at: sib, win: win ?? null })
+      })
+      .catch(() => live && setFound({ at: sib, win: null }))
+    return () => {
+      live = false
+    }
+  }, [sib])
+  return sib && found?.at === sib ? found.win : null
+}
+
+/// <dir>/<stem>.massgap.tsv beside @p deltaPath (massgap.tsv for a bare delta.tsv).
+export function siblingMassgap(deltaPath: string): string {
+  const stem = runStem(deltaPath)
+  return `${dirName(deltaPath)}${stem == null ? '' : `${stem}.`}massgap.tsv`
 }
 
 type Dataset = 'recon' | 'delta' | 'reconIds'
@@ -61,7 +116,7 @@ const DATASET_LABEL: Record<Dataset, string> = {
 
 const signed = (v: number, d = 4): string => (Number.isNaN(v) ? '' : v > 0 ? `+${v.toFixed(d)}` : v < 0 ? `−${(-v).toFixed(d)}` : (0).toFixed(d))
 
-export default function ReconView({ massgap, tables, gen = {}, notice, action, onOpen }: ReconViewProps): JSX.Element {
+export default function ReconView({ massgap, tables, gen = {}, notice, action, extend, onOpen }: ReconViewProps): JSX.Element {
   const recon = useTable(tables.recon, 'recon', gen.recon)
   const delta = useTable(tables.delta, 'delta', gen.delta)
   const ids = useTable(tables.reconIds, 'reconIds', gen.reconIds)
@@ -76,7 +131,12 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, o
     return massgap ? gapHistogram(massgap).map((b) => ({ gap: b.gap, key: b.key, spectra: b.spectra })) : []
   }, [delta.table, massgap])
   const peaks = useMemo(() => (massgap ? gapPeaks(massgap) : []), [massgap])
-  const win = (massgap && num(value(massgap, 'run', 'window_da'))) ?? 0.02
+  // The window the CLI matched with: the report's; else the sibling
+  // report's; else assumed (and said so).
+  const sibWin = useSiblingWindow(tables.delta, !!massgap)
+  const reportWin = (massgap && num(value(massgap, 'run', 'window_da'))) ?? sibWin
+  const win = reportWin ?? ASSUMED_WINDOW
+  const winAssumed = reportWin == null
   const placed =
     (massgap && num(value(massgap, 'cys', 'spectra'))) ?? (bins.length ? bins.reduce((n, b) => n + b.spectra, 0) : null)
 
@@ -144,6 +204,11 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, o
             That is too few for any conclusion about modifications or alkylation (this view asks for {LOW_PLACED}).
             {placed === 0 && ' Tags may be shorter than the recon index needs; its log line names the minimum length.'}
           </span>
+          {extend && (
+            <button type="button" className="secondary" disabled={extend.disabled} onClick={extend.run}>
+              {extend.label}
+            </button>
+          )}
         </div>
       )}
       <dl className="headline stats">
@@ -181,7 +246,7 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, o
         interpretation names a hypothesis.
       </p>
       {bins.length > 0 ? (
-        <MassGapChart bins={bins} peaks={peaks} window={win} source={baseName(tables.delta ?? massgap?.path ?? '')} />
+        <MassGapChart bins={bins} peaks={peaks} window={win} windowAssumed={winAssumed} source={baseName(tables.delta ?? massgap?.path ?? '')} />
       ) : (
         !loading && <p className="muted">No gap rows to draw.</p>
       )}
@@ -192,7 +257,7 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, o
 
 function ReconTables({ recon, delta, ids, loading }: { recon: ReconTable | null; delta: DeltaTable | null; ids: ReconIdTable | null; loading: boolean }): JSX.Element | null {
   const avail = (['recon', 'delta', 'reconIds'] as Dataset[]).filter((d) => (d === 'recon' ? recon : d === 'delta' ? delta : ids))
-  const [pick, setPick] = useState<Dataset | null>(null)
+  const [pick, setPick] = useSticky<Dataset | null>(recon ?? delta ?? ids, 'dataset', null)
   const ds = pick && avail.includes(pick) ? pick : avail[0]
   if (!ds) return loading ? <p className="muted">Reading the tables…</p> : null
   return (
@@ -222,10 +287,10 @@ const INTERP_CHOICES: { v: string; label: string }[] = [
 ]
 
 function PlacementTable({ t }: { t: ReconTable }): JSX.Element {
-  const [text, setText] = useState('')
-  const [gapped, setGapped] = useState(false)
-  const [minAbs, setMinAbs] = useState('')
-  const [interp, setInterp] = useState('*')
+  const [text, setText] = useSticky(t, 'text', '')
+  const [gapped, setGapped] = useSticky(t, 'gapped', false)
+  const [minAbs, setMinAbs] = useSticky(t, 'minAbs', '')
+  const [interp, setInterp] = useSticky(t, 'interp', '*')
   const f: ReconFilter = {
     text: text || undefined,
     gapped: gapped || undefined,
@@ -283,13 +348,13 @@ function PlacementTable({ t }: { t: ReconTable }): JSX.Element {
           <input type="checkbox" checked={gapped} onChange={(e) => setGapped(e.target.checked)} /> One flank off (a localized gap)
         </label>
       </div>
-      <DataTable label="Placements" columns={cols} ids={rows} total={t.rows} empty="No placement matches these filters." />
+      <DataTable label="Placements" columns={cols} ids={rows} total={t.rows} empty="No placement matches these filters." keep={t} />
     </>
   )
 }
 
 function DeltaPeaks({ t }: { t: DeltaTable }): JSX.Element {
-  const [minSpectra, setMinSpectra] = useState('')
+  const [minSpectra, setMinSpectra] = useSticky(t, 'minSpectra', '')
   const min = minSpectra.trim() !== '' && Number.isFinite(Number(minSpectra)) ? Number(minSpectra) : 0
   const rows = useMemo(() => {
     const out = new Uint32Array(t.rows)
@@ -310,13 +375,13 @@ function DeltaPeaks({ t }: { t: DeltaTable }): JSX.Element {
           <input type="number" min={0} step={1} value={minSpectra} onChange={(e) => setMinSpectra(e.target.value)} />
         </label>
       </div>
-      <DataTable label="Gap peaks" columns={cols} ids={rows} total={t.rows} sort={{ column: 'spectra', desc: true }} />
+      <DataTable label="Gap peaks" columns={cols} ids={rows} total={t.rows} sort={{ column: 'spectra', desc: true }} keep={t} />
     </>
   )
 }
 
 function IdTable({ t }: { t: ReconIdTable }): JSX.Element {
-  const [text, setText] = useState('')
+  const [text, setText] = useSticky(t, 'text', '')
   const rows = useMemo(() => {
     const needle = text.trim().toLowerCase()
     const out = new Uint32Array(t.rows)
@@ -347,7 +412,7 @@ function IdTable({ t }: { t: ReconIdTable }): JSX.Element {
           <input type="search" value={text} placeholder="peptide, protein or spectrum" onChange={(e) => setText(e.target.value)} />
         </label>
       </div>
-      <DataTable label="Identifications" columns={cols} ids={rows} total={t.rows} sort={{ column: 'score', desc: false }} />
+      <DataTable label="Identifications" columns={cols} ids={rows} total={t.rows} sort={{ column: 'score', desc: false }} keep={t} />
     </>
   )
 }

@@ -94,6 +94,7 @@ pub fn run() {
             browser::results_cancel,
             species::species,
             report::report_text,
+            report::report_head,
             report::summary_write,
             denovo::denovo_export,
             drop::folder_spectra_list,

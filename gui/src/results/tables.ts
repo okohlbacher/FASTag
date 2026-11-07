@@ -99,12 +99,21 @@ const header = (text: string): string[] => {
   const nl = text.search(/\r?\n/)
   return (nl < 0 ? text : text.slice(0, nl)).split('\t').map((h) => h.trim())
 }
+// An mzTab line: a section prefix and a tab.
+const MZTAB_LINE = /^(MTD|PSH|PSM|PRH|PRT|PEH|PEP|SMH|SML|COM)\t/
+const firstLine = (text: string): string => {
+  const m = /^[ \t]*\S[^\r\n]*/m.exec(text.slice(0, 1 << 16))
+  return m ? m[0].trimStart() : ''
+}
 const has = (head: string[], cols: readonly string[]): boolean => cols.every((c) => head.includes(c))
 
 /// The kind of table a file holds, by its header; null for anything else
 /// (a long-form report, a tags table, an empty file).
 export function sniffTable(text: string): TableKind | null {
-  if (/^(MTD|PSH|PSM|PRH|PRT|PEH|PEP|SMH|SML|COM)\t/m.test(text.slice(0, 1 << 16)) && /^PSH\t/m.test(text)) return 'reconIds'
+  // An mzTab by its first line, with or without a PSM section: OpenMS writes
+  // the PSH header only when there are PSMs, so the -recon_id_out of a run
+  // that placed nothing holds only MTD lines (MzTabFile::store).
+  if (MZTAB_LINE.test(firstLine(text))) return 'reconIds'
   const head = header(text)
   if (has(head, RECON)) return 'recon'
   if (has(head, DELTA) && head.length === 3) return 'delta'
@@ -305,14 +314,17 @@ export function parseGlyco(text: string, path: string): GlycoTable {
   return t
 }
 
-/// The PSM section of an mzTab -recon_id_out.
+const RECON_ID_NEED = ['sequence', 'accession', 'search_engine_score[1]', 'charge', 'exp_mass_to_charge', 'spectra_ref'] as const
+
+/// The PSM section of an mzTab -recon_id_out (no rows when it has none).
 export function parseReconIds(text: string, path: string): ReconIdTable {
   const ls = lines(text)
   const psh = ls.find((l) => l.startsWith('PSH\t'))
-  if (!psh) throw new Error(`${baseName(path)} has no PSM section (no PSH line)`)
-  const head = psh.split('\t')
-  const need = ['sequence', 'accession', 'search_engine_score[1]', 'charge', 'exp_mass_to_charge', 'spectra_ref']
-  const missing = need.filter((c) => !head.includes(c))
+  // No PSH line: a run that placed nothing (only the metadata is written);
+  // a file with no mzTab line at all is not an mzTab.
+  if (!psh && !ls.some((l) => MZTAB_LINE.test(l))) throw new Error(`${baseName(path)} is not an mzTab file (no MTD or PSH line)`)
+  const head = psh ? psh.split('\t') : [...RECON_ID_NEED]
+  const missing = RECON_ID_NEED.filter((c) => !head.includes(c))
   if (missing.length) throw new Error(`${baseName(path)}: the PSM header has no ${missing.join(', ')} column`)
   const body = ls.filter((l) => l.startsWith('PSM\t'))
   const n = body.length

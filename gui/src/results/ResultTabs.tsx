@@ -80,6 +80,8 @@ export interface ResultTabsProps {
   // P4c, the Mass gaps & recon empty state: choose a FASTA (or turn the
   // reports on) and run again; null: not offered (no run of the form's input).
   reconAction?: { label: string; run(): void; disabled: boolean } | null
+  // The low-placed banner: the run again with extension 3 (reconExtend).
+  reconExtend?: { label: string; run(): void; disabled: boolean } | null
 }
 
 export default function ResultTabs(p: ResultTabsProps): JSX.Element {
@@ -161,7 +163,7 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
           </div>
         ) : tab === 'recon' ? (
           <div className="tablewrap">
-            <ReconView massgap={massgap} tables={tables} gen={reports.gen} notice={reports.notice} action={p.reconAction} onOpen={p.openReport} />
+            <ReconView massgap={massgap} tables={tables} gen={reports.gen} notice={reports.notice} action={p.reconAction} extend={p.reconExtend} onOpen={p.openReport} />
           </div>
         ) : tab === 'glyco' && tables.glyco ? (
           <div className="tablewrap">
@@ -170,7 +172,7 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
                 {reports.notice}
               </p>
             )}
-            <GlycoTable key={`${reports.gen?.glyco ?? 0}:${tables.glyco}`} path={tables.glyco} />
+            <GlycoTable key={`${reports.gen?.glyco ?? 0}:${tables.glyco}`} path={tables.glyco} gen={reports.gen?.glyco} />
           </div>
         ) : tab === 'digest' ? (
           <div className="tablewrap">

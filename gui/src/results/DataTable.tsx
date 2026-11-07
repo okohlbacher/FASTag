@@ -6,6 +6,7 @@
 // typed columns; a column reads a row by its id.
 
 import { useEffect, useId, useMemo, useRef, useState, type JSX, type KeyboardEvent, type ReactNode } from 'react'
+import { useSticky } from './tableStore'
 
 export interface Column {
   id: string
@@ -37,6 +38,9 @@ export interface DataTableProps {
   /// What shows when no row passed the filters.
   empty?: ReactNode
   sort?: { column: string; desc: boolean } | null
+  /// The parsed table the rows come from: the sort is kept with it
+  /// (tableStore.ts useSticky), so a tab switch does not reset it.
+  keep?: object | null
 }
 
 /// The ids of @p ids in the order of @p col (stable: ties keep file order).
@@ -67,8 +71,8 @@ export function sortIds(ids: ArrayLike<number>, col: Column | undefined, desc: b
   return order.map((j) => out[j])
 }
 
-export default function DataTable({ label, columns, ids, total, empty, sort: initial = null }: DataTableProps): JSX.Element {
-  const [sort, setSort] = useState(initial)
+export default function DataTable({ label, columns, ids, total, empty, sort: initial = null, keep }: DataTableProps): JSX.Element {
+  const [sort, setSort] = useSticky(keep, `sort:${label}`, initial)
   const [active, setActive] = useState(0)
   const base = useId()
   const gridRef = useRef<HTMLTableElement>(null)
@@ -133,7 +137,7 @@ export default function DataTable({ label, columns, ids, total, empty, sort: ini
     move(to)
   }
   function sortBy(c: Column): void {
-    setSort((s) => (s?.column === c.id ? (s.desc ? null : { column: c.id, desc: true }) : { column: c.id, desc: false }))
+    setSort(sort?.column === c.id ? (sort.desc ? null : { column: c.id, desc: true }) : { column: c.id, desc: false })
   }
 
   return (

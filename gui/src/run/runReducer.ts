@@ -399,7 +399,9 @@ function start(s: RunState, a: Extract<RunAction, { type: 'RUN_START' }>): RunSt
     // Nothing of the run before reads as this run's: its counts, reports,
     // species, failure and copy note go.
     evidence: noEvidence,
-    reports: { list: [], errors: [] },
+    // The table generations go on counting: a kept table (tableStore.ts)
+    // of the run before is never taken for this run's file at that path.
+    reports: { list: [], errors: [], ...(s.reports.gen ? { gen: s.reports.gen } : {}) },
     species: null,
     shown: null,
     speciesRun: { input: a.input, enabled: a.speciesOn },

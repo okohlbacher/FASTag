@@ -5,7 +5,8 @@
 //              folder (Batch); .fasta -> Database; .taxdb -> Taxonomy;
 //   a tags TSV -> Results; digest, label and mass-gap reports -> the Digest
 //   tab; recon and delta tables -> Mass gaps & recon, a glyco report ->
-//   Glyco (P4c: the report opener sniffs which); a species report -> the
+//   Glyco (P4c: the report opener sniffs which), a -recon_id_out (.mzTab;
+//   .idXML and .mzid are named there) -> Mass gaps & recon; a species report -> the
 //   Species tab; .sdrf.tsv -> Batch.
 // Nothing is taken while FASTag runs (the Open buttons are disabled then).
 
@@ -29,7 +30,7 @@ export interface DropPlan {
 
 // The report kinds a tab shows (the long-form reports in Digest; P4c: recon
 // and delta in Mass gaps & recon, glyco in Glyco).
-const REPORT_TABS = new Set(['digest', 'label', 'massgap', 'recon', 'delta', 'glyco'])
+const REPORT_TABS = new Set(['digest', 'label', 'massgap', 'recon', 'delta', 'glyco', 'recon_ids'])
 
 const base = (p: string): string => p.slice(Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\')) + 1)
 const names = (ps: string[]): string => ps.map(base).join(', ')

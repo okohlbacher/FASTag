@@ -11,6 +11,7 @@ import humanRecon from '../fixtures/cli/v112-pxd014764-delta-ext3/run.recon.tsv?
 import humanDelta from '../fixtures/cli/v112-pxd014764-delta-ext3/run.delta.tsv?raw'
 import humanMassgap from '../fixtures/cli/v112-pxd014764-delta-ext3/run.massgap.tsv?raw'
 import humanGlyco from '../fixtures/cli/v112-pxd014764-delta-ext3/run.tags.glyco.tsv?raw'
+import ext2Massgap from '../fixtures/cli/v112-pxd014764-recon-ext2/run.massgap.tsv?raw'
 
 const emitDone = (mock: MockBridge, runId: number | undefined, ok: boolean): Promise<void> =>
   act(async () => mock.emitDone({ ok, code: ok ? 0 : 1, runId }))
@@ -151,5 +152,65 @@ describe('P4c viewers in the app', () => {
     await click(screen.getByRole('button', { name: 'Open report…' }))
     await flush()
     expect((await screen.findByRole('grid', { name: 'Placements' })).getAttribute('aria-rowcount')).toBe('11')
+  })
+
+  // Review fix: a run that placed nothing writes an mzTab of MTD lines only
+  // (OpenMS writes no PSH line for an empty PSM section). The tab shows the
+  // 0-placed banner, no error, and the way forward: extension 3.
+  it('a 0-placed run (ext2) with an MTD-only mzTab: the banner and its run with extension 3, no alert', async () => {
+    const mock = installMockBridge()
+    const paths = { recon_out: '/r/a.recon.tsv', delta_out: '/r/a.delta.tsv', massgap_out: '/r/a.massgap.tsv', recon_id_out: '/r/a.recon_id.mzTab' }
+    mock.settings.lastUsed = { ...paths, recon_fasta: '/db/human.fasta', extension: '2' }
+    mock.reportFiles = {
+      [paths.recon_out]: 'spectrum\ttag\tprotein\tpeptide\tpos\treversed\tnterm_match\tcterm_match\tdelta_mass\tregion\tdelta_interp\n',
+      [paths.delta_out]: 'delta\tspectra\ttop_interps\n',
+      [paths.massgap_out]: ext2Massgap,
+      [paths.recon_id_out]: 'MTD\tmzTab-version\t1.0.0\nMTD\tmzTab-mode\tSummary\nMTD\tmzTab-type\tIdentification\n'
+    }
+    await renderApp(mock)
+    await applyLastUsed(6)
+    await pickSingle(mock, '/r/a.mzML')
+    await click(runButton())
+    await emitDone(mock, 1, true)
+    await click(await screen.findByRole('tab', { name: 'Mass gaps & recon' }))
+    await flush()
+    expect(mock.reportCalls).toContain(paths.recon_id_out)
+    expect(screen.queryByRole('alert')).toBeNull()
+    const banner = document.querySelector('.recon-view .banner.warn') as HTMLElement
+    expect(banner.textContent).toMatch(/No spectrum is placed with a mass gap/)
+    expect(mock.runCalls).toHaveLength(1)
+    await click(within(banner).getByRole('button', { name: 'Run again with extension 3' }))
+    await flush()
+    expect(mock.runCalls).toHaveLength(2)
+    expect(mock.runCalls[1].params.extension).toBe('3')
+    expect(mock.runCalls[1].params.recon_fasta).toBe('/db/human.fasta')
+  })
+
+  // Review fix (GUI-DESIGN 5): switching tabs neither reads the table again
+  // nor resets its filters and sort; the sniff reads only the head.
+  it('a tab switch keeps the parsed table, its filters and its sort; opening reads the file once', async () => {
+    const mock = installMockBridge()
+    mock.reportFiles = { '/r/run.recon.tsv': humanRecon }
+    mock.nextPickReport = '/r/run.recon.tsv'
+    await renderApp(mock)
+    await goTo('results')
+    await click(screen.getByRole('button', { name: 'Open a digest, label or mass-gap report…' }))
+    await screen.findByRole('grid', { name: 'Placements' })
+    expect(mock.reportHeadCalls).toEqual(['/r/run.recon.tsv'])
+    expect(mock.reportCalls).toEqual(['/r/run.recon.tsv'])
+    await click(screen.getByRole('checkbox', { name: /One flank off/ }))
+    const grid = screen.getByRole('grid', { name: 'Placements' })
+    await click(within(grid).getByRole('button', { name: /^Pos/ }))
+    const count = document.querySelector('.dt-count')?.textContent
+    const firstRow = within(grid).getAllByRole('row')[1].textContent
+    expect(count).toMatch(/ of 4,706 rows/)
+    await click(screen.getByRole('tab', { name: 'Digest' }))
+    await click(screen.getByRole('tab', { name: 'Mass gaps & recon' }))
+    const again = screen.getByRole('grid', { name: 'Placements' })
+    expect(mock.reportCalls).toEqual(['/r/run.recon.tsv'])
+    expect((screen.getByRole('checkbox', { name: /One flank off/ }) as HTMLInputElement).checked).toBe(true)
+    expect(document.querySelector('.dt-count')?.textContent).toBe(count)
+    expect(within(again).getAllByRole('row')[1].textContent).toBe(firstRow)
+    expect(within(again).getByRole('button', { name: /^Pos/ }).closest('th')?.getAttribute('aria-sort')).toBe('ascending')
   })
 })

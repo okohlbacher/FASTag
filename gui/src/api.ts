@@ -141,6 +141,7 @@ const api: FastagApi = {
   },
   species: (path: string) => invoke<SpeciesReport | null>('species', { path }),
   report: (path: string) => invoke<string | null>('report_text', { path }),
+  reportHead: (path: string) => invoke<string | null>('report_head', { path }),
   taxdbInfo: (explicit?: string) => invoke<TaxdbInfo | null>('taxdb_info', { explicit }),
 
   loadSettings: () => invoke<Settings>('load_settings'),

@@ -33,6 +33,7 @@ import type {
 } from '../types'
 import runStartedFixture from './fixtures/run-started.json'
 import { tagsToDenovo } from '../export/denovo'
+import { forgetTables } from '../results/tableStore'
 
 export interface RunCall {
   in: string
@@ -73,6 +74,8 @@ export interface MockBridge extends FastagApi {
   // path -> report text; a missing path reads as "not written".
   reportFiles: Record<string, string>
   reportCalls: string[]
+  // reportHead() calls (the sniff of an opened or dropped file).
+  reportHeadCalls: string[]
   resultsColumns: string[]
   resultsRows: string[][]
   resultsError: Error | null
@@ -228,6 +231,8 @@ function mockArgv(call: RunCall): string[] {
 }
 
 export function installMockBridge(): MockBridge {
+  // One bridge per test: no table read under another test's files.
+  forgetTables()
   // Each started run's Channel, by its number.
   const channels = new Map<number, (e: RunEvent) => void>()
   // What each started run was sent and replied, for recordRuns.
@@ -297,6 +302,7 @@ export function installMockBridge(): MockBridge {
     summaryWriteError: null,
     reportFiles: {},
     reportCalls: [],
+    reportHeadCalls: [],
     resultsColumns: ['spectrum', 'tag', 'length', 'evalue', 'fasta_hit'],
     resultsRows: [
       ['frame=5', 'AQRQAAN', '7', '0.003', 'fwd'],
@@ -456,6 +462,11 @@ export function installMockBridge(): MockBridge {
     report: (path) => {
       mock.reportCalls.push(path)
       return Promise.resolve(mock.reportFiles[path] ?? null)
+    },
+    reportHead: (path) => {
+      mock.reportHeadCalls.push(path)
+      const t = mock.reportFiles[path]
+      return Promise.resolve(t == null ? null : t.slice(0, 64 << 10))
     },
     cancel: () => {
       mock.cancelCalls++

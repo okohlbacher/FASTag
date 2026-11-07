@@ -229,6 +229,20 @@ test('a dropped recon table and glyco report open in their tabs', async ({ page 
   await expect(page.getByText(/No tab shows/)).toHaveCount(0)
 })
 
+// Review fix: a dropped mzTab -recon_id_out opens as the picker opens it.
+test('a dropped run.recon.mzTab opens in Mass gaps & recon', async ({ page }) => {
+  const psm = read('v1111-ecoli-recon-loc', 'run.recon.mzTab').split('\n').filter((l) => l.startsWith('PSM\t')).length
+  await openApp(page, 'gate-recon-loc')
+  await page.evaluate(() => {
+    ;(window as unknown as { __fastagE2E: { drop(r: unknown): void } }).__fastagE2E.drop({
+      reports: [{ kind: 'recon_ids', path: '/data/run01.recon.mzTab' }]
+    })
+  })
+  await expect(page.getByRole('tab', { name: 'Mass gaps & recon' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('grid', { name: 'Identifications' })).toHaveAttribute('aria-rowcount', String(psm + 1))
+  await expect(page.getByText(/No tab shows|Not a file FASTag opens/)).toHaveCount(0)
+})
+
 // Review fix: the tables scroll only their own box, and only when the
 // keyboard moves the active row; opening a tab or filtering leaves the page
 // where it is (the heading, the low-placed warning and the chart in view).

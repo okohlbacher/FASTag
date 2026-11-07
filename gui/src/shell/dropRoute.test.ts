@@ -71,6 +71,15 @@ describe('planDrop', () => {
     expect(p.notes.join(' ')).not.toMatch(/glyco|r\.recon\.tsv|delta/)
   })
 
+  // P4c review: a dropped mzTab -recon_id_out opens as Open report… opens it
+  // (the opener sniffs it into Mass gaps & recon; idXML and mzid are named there).
+  it('an mzTab -recon_id_out goes to the reports, like the picker', () => {
+    const p = planDrop(route({ reports: [{ kind: 'recon_ids', path: '/d/run.recon.mzTab' }] }), { busy: false })
+    expect(p.reports).toEqual(['/d/run.recon.mzTab'])
+    expect(p.view).toBe('results')
+    expect(p.notes).toEqual([])
+  })
+
   it('an SDRF lands on Batch with a note; unknown files are named', () => {
     const p = planDrop(route({ sdrf: '/d/p.sdrf.tsv', ignored: ['/d/readme.txt'] }), { busy: false })
     expect(p.view).toBe('batch')

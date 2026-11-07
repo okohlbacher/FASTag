@@ -54,6 +54,9 @@ pub fn classify(p: &Path) -> Kind {
         "mzml" | "mzpeak" | "mgf" => return Kind::Spectra,
         "fasta" | "fa" | "faa" => return Kind::Fasta,
         "taxdb" => return Kind::Taxdb,
+        // -recon_id_out (P4c): the Mass gaps & recon tab reads the mzTab
+        // form; an idXML or mzIdentML one is sniffed there and named.
+        "mztab" | "idxml" | "mzid" => return Kind::Report("recon_ids"),
         "tsv" => {}
         _ => return Kind::Other,
     }
@@ -229,6 +232,10 @@ mod tests {
         // "digest" alone is a tags table named digest.tsv, not a report.
         assert_eq!(k("/d/digest.tsv"), Kind::Tags);
         assert_eq!(k("C:\\data\\Run01.mzML"), Kind::Spectra);
+        assert_eq!(k("/d/run01.recon.mzTab"), Kind::Report("recon_ids"));
+        assert_eq!(k("/d/run01.recon_id.MZTAB"), Kind::Report("recon_ids"));
+        assert_eq!(k("/d/run01.recon.idXML"), Kind::Report("recon_ids"));
+        assert_eq!(k("/d/run01.recon.mzid"), Kind::Report("recon_ids"));
         assert_eq!(k("/d/notes.txt"), Kind::Other);
         assert_eq!(k("/d/noext"), Kind::Other);
     }
@@ -272,6 +279,20 @@ mod tests {
         );
         // The second FASTA and the second digest report are not taken.
         assert_eq!(r.ignored, vec!["/d/readme.txt", "/d/other.fasta", "/d/s.digest.tsv"]);
+    }
+
+    // P4c: an mzTab -recon_id_out goes to the reports, as Open report… takes it.
+    #[test]
+    fn an_mztab_recon_id_out_is_a_report() {
+        let r = route(&pb(&["/d/run.recon.mzTab", "/d/run.recon.tsv", "/d/b.recon_id.mzTab"]));
+        assert_eq!(
+            r.reports,
+            vec![
+                ReportDrop { kind: "recon_ids", path: "/d/run.recon.mzTab".into() },
+                ReportDrop { kind: "recon", path: "/d/run.recon.tsv".into() },
+            ]
+        );
+        assert_eq!(r.ignored, vec!["/d/b.recon_id.mzTab"]);
     }
 
     #[test]

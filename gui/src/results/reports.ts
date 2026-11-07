@@ -54,9 +54,12 @@ export async function loadReports(paths: string[]): Promise<{ reports: Report[];
 /// mzIdentML -recon_id_out); null for anything else, which is read as a
 /// long-form report.
 export async function sniffPath(path: string): Promise<{ kind: TableKind } | { error: string } | null> {
+  // The head only (report.rs HEAD_BYTES): the header line, the mzTab
+  // prefixes and the XML root are at the start, and the file is read whole
+  // once, by its viewer or loadReports.
   let text: string | null
   try {
-    text = await window.fastag.report(path)
+    text = await window.fastag.reportHead(path)
   } catch {
     return null
   }

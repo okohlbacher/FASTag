@@ -3,7 +3,8 @@
 // and the CLI's flag, and how often each ion occurs among the flagged
 // spectra. Oxonium ions are evidence of a glycan, not an identification.
 
-import { useMemo, useState, type JSX } from 'react'
+import { useMemo, type JSX } from 'react'
+import { useSticky } from './tableStore'
 import { baseName, fmt, pct } from '../digestReport'
 import DataTable, { type Column } from './DataTable'
 import type { GlycoTable as Glyco } from './tables'
@@ -12,12 +13,14 @@ import './viewers.css'
 
 export interface GlycoTableProps {
   path: string
+  /// How often the table was opened (Reports.gen): a new count reads it again.
+  gen?: number
   /// The run's -glyco_min_fraction, when it was sent one.
   minFraction?: number | null
 }
 
-export default function GlycoTable({ path, minFraction }: GlycoTableProps): JSX.Element {
-  const st = useTable(path, 'glyco')
+export default function GlycoTable({ path, gen, minFraction }: GlycoTableProps): JSX.Element {
+  const st = useTable(path, 'glyco', gen)
   if (st.error)
     return (
       <p className="warn" role="alert">
@@ -30,9 +33,9 @@ export default function GlycoTable({ path, minFraction }: GlycoTableProps): JSX.
 }
 
 function GlycoBody({ t, minFraction }: { t: Glyco; minFraction: number | null }): JSX.Element {
-  const [flaggedOnly, setFlaggedOnly] = useState(t.flaggedCount > 0)
-  const [ion, setIon] = useState('')
-  const [text, setText] = useState('')
+  const [flaggedOnly, setFlaggedOnly] = useSticky(t, 'flaggedOnly', t.flaggedCount > 0)
+  const [ion, setIon] = useSticky(t, 'ion', '')
+  const [text, setText] = useSticky(t, 'text', '')
   const rows = useMemo(() => {
     const needle = text.trim().toLowerCase()
     const out = new Uint32Array(t.rows)
@@ -107,11 +110,11 @@ function GlycoBody({ t, minFraction }: { t: Glyco; minFraction: number | null })
           <input type="search" value={text} onChange={(e) => setText(e.target.value)} />
         </label>
       </div>
-      <DataTable label="Glyco spectra" columns={cols} ids={rows} total={t.rows} sort={{ column: 'frac', desc: true }} empty="No spectrum matches these filters." />
+      <DataTable label="Glyco spectra" columns={cols} ids={rows} total={t.rows} sort={{ column: 'frac', desc: true }} empty="No spectrum matches these filters." keep={t} />
       {t.ionCounts.length > 0 && (
         <details className="raw">
           <summary>Oxonium ions among the flagged spectra ({fmt(t.ionCounts.length)} ions)</summary>
-          <DataTable label="Oxonium ions" columns={ionCols} ids={ionIds} total={t.ionCounts.length} />
+          <DataTable label="Oxonium ions" columns={ionCols} ids={ionIds} total={t.ionCounts.length} keep={t} />
         </details>
       )}
     </div>

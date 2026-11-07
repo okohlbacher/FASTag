@@ -9,6 +9,10 @@
 # headers and one row each: -recon_out, -delta_out, -recon_id_out (mzTab by
 # a .mzTab name, else a bare idXML) and the glyco report; the long-form
 # reports carry their header. Deterministic. Controlled by:
+#   STUB_NO_PLACEMENTS=1  the recon run places nothing: -recon_out and
+#                   -delta_out carry their header only, and an mzTab
+#                   -recon_id_out only its MTD lines (OpenMS writes no PSH
+#                   line for an empty PSM section)
 #   STUB_SLEEP_BEFORE=<s>  before writing any output, sleep this long
 #                   (a Cancel while the real CLI is still loading)
 #   STUB_SLEEP=<s>  after writing a partial -out, sleep this long (for Cancel)
@@ -180,7 +184,18 @@ printf '%s\n' "$reports" | while IFS= read -r r; do
 done
 [ -n "$species_out" ] && printf 'rank\ttaxid\tname\n' > "$species_out"
 [ -n "$glyco_out" ] && printf 'spectrum\tn_oxonium\toxonium_frac\tglyco\tions\nscan=1\t3\t0.204\t1\tHex;HexNAc;HexHexNAc\n' > "$glyco_out"
-# FASTag.cpp's recon, delta and mzTab writers, one row each.
+# FASTag.cpp's recon, delta and mzTab writers, one row each (none with
+# STUB_NO_PLACEMENTS).
+if [ -n "${STUB_NO_PLACEMENTS:-}" ]; then
+  [ -n "$recon_out" ] && printf 'spectrum\ttag\tprotein\tpeptide\tpos\treversed\tnterm_match\tcterm_match\tdelta_mass\tregion\tdelta_interp\n' > "$recon_out"
+  [ -n "$delta_out" ] && printf 'delta\tspectra\ttop_interps\n' > "$delta_out"
+  case "$recon_id_out" in
+    '') ;;
+    *.mzTab|*.mztab) printf 'MTD\tmzTab-version\t1.0.0\nMTD\tmzTab-mode\tSummary\nMTD\tmzTab-type\tIdentification\n' > "$recon_id_out" ;;
+    *) printf '<?xml version="1.0" encoding="UTF-8"?>\n<IdXML version="1.5"/>\n' > "$recon_id_out" ;;
+  esac
+  recon_id_out=""; recon_out=""; delta_out=""
+fi
 [ -n "$recon_out" ] && printf 'spectrum\ttag\tprotein\tpeptide\tpos\treversed\tnterm_match\tcterm_match\tdelta_mass\tregion\tdelta_interp\nscan=1\tPEPTK\tSTUB_PROTEIN\tKPEPTKR\t1\t0\t1\t0\t15.9949\t6-6\t?\n' > "$recon_out"
 [ -n "$delta_out" ] && printf 'delta\tspectra\ttop_interps\n15.9950\t1\t?:1\n' > "$delta_out"
 if [ -n "$recon_id_out" ]; then

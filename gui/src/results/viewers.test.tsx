@@ -11,7 +11,7 @@ import { installMockBridge } from '../testing/mockBridge'
 import { click, flush } from '../testing/render'
 import type { Tab } from '../app/viewStore'
 import ResultTabs, { type ResultTabsProps } from './ResultTabs'
-import ReconView, { LOW_PLACED, reconRerun } from './ReconView'
+import ReconView, { LOW_PLACED, reconExtend, reconRerun } from './ReconView'
 import GlycoTable from './GlycoTable'
 import MassGapChart, { gapDomain, type GapBin } from './MassGapChart'
 import DataTable, { sortIds, type Column } from './DataTable'
@@ -312,11 +312,73 @@ describe('ReconView', () => {
       values: { delta_out: 'delta.tsv', extension: '3' }
     })
     expect(reconRerun({ extension: '4' })).toEqual({ kind: 'add-fasta', label: 'Choose a FASTA and run again', values: { delta_out: 'delta.tsv' } })
-    expect(reconRerun({ fasta: '/db/h.fasta' })).toEqual({
+    // With a FASTA and extension 3 or more: the reports only.
+    expect(reconRerun({ fasta: '/db/h.fasta', extension: '3' })).toEqual({
       kind: 'enable',
       label: 'Write these reports and run again',
       values: { recon_out: 'recon.tsv', delta_out: 'delta.tsv', massgap_out: 'massgap.tsv' }
     })
+    // Review fix: with a FASTA and a shorter extension (2, or the CLI's
+    // default 0) the run would place nothing again (ext2): extension 3 too.
+    for (const params of [{ fasta: '/db/h.fasta', extension: '2' }, { recon_fasta: '/db/h.fasta' }])
+      expect(reconRerun(params)).toEqual({
+        kind: 'enable',
+        label: 'Write these reports and run again',
+        values: { recon_out: 'recon.tsv', delta_out: 'delta.tsv', massgap_out: 'massgap.tsv', extension: '3' }
+      })
+  })
+
+  it('reconExtend: extension 3 for a FASTA run with a shorter one, else nothing', () => {
+    expect(reconExtend({ fasta: '/db/h.fasta', extension: '2' })).toEqual({ kind: 'enable', label: 'Run again with extension 3', values: { extension: '3' } })
+    expect(reconExtend({ recon_fasta: '/db/h.fasta' })).toEqual({ kind: 'enable', label: 'Run again with extension 3', values: { extension: '3' } })
+    expect(reconExtend({ fasta: '/db/h.fasta', extension: '3' })).toBeNull()
+    expect(reconExtend({ extension: '2' })).toBeNull()
+  })
+
+  // Review fix: the 0-placed case (ext2) has a way forward in the banner.
+  it('the low-placed banner offers the run with extension 3', async () => {
+    installMockBridge()
+    const run = vi.fn()
+    const { rerender } = render(
+      <ReconView massgap={parseReport(ext2Massgap, '/r/e2.massgap.tsv')} tables={{}} extend={{ label: 'Run again with extension 3', run, disabled: false }} onOpen={vi.fn()} />
+    )
+    const banner = screen.getByRole('status')
+    expect(banner.textContent).toMatch(/No spectrum is placed/)
+    await click(within(banner).getByRole('button', { name: 'Run again with extension 3' }))
+    expect(run).toHaveBeenCalledTimes(1)
+    // Not offered: no button.
+    rerender(<ReconView massgap={parseReport(ext2Massgap, '/r/e2.massgap.tsv')} tables={{}} extend={null} onOpen={vi.fn()} />)
+    expect(within(screen.getByRole('status')).queryByRole('button')).toBeNull()
+  })
+
+  // Review fix: a delta.tsv alone carries no window; the CLI's depends on the
+  // run (0.02 Da on ppm, 0.5 Da on a Da tolerance, as the E. coli run).
+  it('a delta.tsv opened alone takes the window of its sibling mass-gap report', async () => {
+    const mock = installMockBridge()
+    const ecoliDelta = '/e/run.delta.tsv'
+    mock.reportFiles = { [ecoliDelta]: 'delta\tspectra\ttop_interps\n15.8000\t30\t?:30\n', '/e/run.massgap.tsv': ecoliMassgap }
+    render(<ReconView massgap={null} tables={{ delta: ecoliDelta }} onOpen={vi.fn()} />)
+    await flush()
+    expect(mock.reportCalls).toContain('/e/run.massgap.tsv')
+    expect(document.querySelector('figcaption')?.textContent).not.toMatch(/assumed/)
+    await click(screen.getAllByRole('button', { name: 'Table' })[0])
+    const grid = screen.getAllByRole('grid', { name: 'Gap peaks' })[0]
+    // 15.80 is 0.19 Da off Oxidation: within the run's 0.5 Da, not 0.02.
+    expect(within(grid).getAllByRole('row')[1].textContent).toMatch(/^15\.800030Oxidation \(M\)/)
+  })
+
+  it('a delta.tsv with no mass-gap report beside it: the window is assumed 0.5 Da, and said so', async () => {
+    const mock = installMockBridge()
+    const real = '/e/run.delta.tsv'
+    mock.reportFiles = { [real]: 'delta\tspectra\ttop_interps\n15.8000\t30\t?:30\n' }
+    render(<ReconView massgap={null} tables={{ delta: real }} onOpen={vi.fn()} />)
+    await flush()
+    expect(document.querySelector('figcaption')?.textContent).toMatch(/window assumed 0\.5 Da \(no mass-gap report\)/)
+    const plot = screen.getByRole('group', { name: /^Mass-gap chart/ })
+    await act(async () => void fireEvent.keyDown(plot, { key: 'Home' }))
+    const tip = screen.getByRole('tooltip').textContent ?? ''
+    expect(tip).toMatch(/Oxidation \(M\), 194\.9 mDa off/)
+    expect(tip).toMatch(/window assumed 0\.5 Da/)
   })
 })
 

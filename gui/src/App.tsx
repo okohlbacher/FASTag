@@ -34,7 +34,7 @@ import { SECTION_OF } from './paramLayout'
 import type { ParamValue } from './ParamField'
 import RunningPanel from './results/RunningPanel'
 import { buildOverview, type TileAction } from './results/overview'
-import { reconRerun } from './results/ReconView'
+import { reconExtend, reconRerun } from './results/ReconView'
 import { useInspector } from './inspector/useInspector'
 import { AfterRunPanel, PreStartPanel } from './inspector/InspectorPanel'
 import { postRunChecks } from './inspector/checks'
@@ -604,6 +604,15 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
                     ? (() => {
                         const a = reconRerun(shown.params)
                         return { label: a.label, run: () => void overviewAction(a), disabled: busy || !!blocked }
+                      })()
+                    : null
+                }
+                reconExtend={
+                  // The same run, when it placed too few with a short extension.
+                  shown && overview && !overview.locked && bin?.ok
+                    ? (() => {
+                        const a = reconExtend(shown.params)
+                        return a ? { label: a.label, run: () => void overviewAction(a), disabled: busy || !!blocked } : null
                       })()
                     : null
                 }

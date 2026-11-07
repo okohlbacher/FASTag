@@ -195,6 +195,27 @@ describe('tables.ts: -recon_id_out (mzTab)', () => {
     expect(() => parseTable('<?xml version="1.0"?><IdXML>', '/d/run.recon.idXML')).toThrow(/idXML.*mzTab/)
     expect(() => parseTable('<?xml version="1.0"?><MzIdentML>', '/d/run.recon.mzid')).toThrow(/mzIdentML.*mzTab/)
   })
+
+  // A run that placed nothing: OpenMS MzTabFile::store writes the PSH header
+  // only for a non-empty PSM section, so the file is MTD lines only (the
+  // metadata block of the E. coli file, its PSM section cut).
+  it('reads an mzTab with no PSM section (0 placed) as an empty table', () => {
+    const mtd =
+      read(ECOLI, 'run.recon.mzTab')
+        .split('\n')
+        .filter((l) => l.startsWith('MTD\t'))
+        .join('\n') + '\n'
+    expect(mtd).not.toMatch(/^PS[HM]\t/m)
+    expect(sniffTable(mtd)).toBe('reconIds')
+    const t = parseTable(mtd, '/d/run.recon.mzTab')
+    expect(t.kind).toBe('reconIds')
+    expect(t.rows).toBe(0)
+    expect(t.warnings).toEqual([])
+    // A blank line before it changes nothing; a file with no mzTab line is
+    // still refused.
+    expect(sniffTable('\n' + mtd)).toBe('reconIds')
+    expect(() => parseReconIds('a\tb\n', '/d/x.mzTab')).toThrow(/not an mzTab file/)
+  })
 })
 
 describe('tables.ts: sniffing and the run outputs', () => {
