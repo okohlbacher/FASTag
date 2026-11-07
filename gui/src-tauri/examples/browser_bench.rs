@@ -10,6 +10,14 @@
 //!
 //! Each measurement runs in a child process of its own, so its peak RSS is
 //! its own. `--mode <firstcut|typed|p3|sort|cold> <file>` runs one of them.
+//!
+//! The Stitch/ALPS export job (denovo.rs) on a -res_conf file of its own:
+//!
+//!   cargo run --release --example browser_bench -- --gen-reads <res_conf.tags.tsv> <out.tsv> <rows>
+//!   cargo run --release --example browser_bench -- --mode reads <out.tsv>
+//!
+//! (`reads_stitch` / `reads_alps` run one of its two cases, so the peak RSS
+//! is that case's own.)
 //! (v1.11's build_view, which the `today` and `verify` modes of 1.12 timed,
 //! is now the test oracle only: bench-1.12.0.json keeps those numbers.)
 
@@ -580,8 +588,64 @@ fn coldopen(path: &str) -> String {
     )
 }
 
+/// A -res_conf tags file of @p rows rows: the rows of @p src over and over,
+/// each copy's spectrum IDs made unique (`<id> copy=<k>`).
+fn gen_reads(src: &str, out: &str, rows: usize) {
+    let text = std::fs::read_to_string(src).unwrap();
+    let mut lines = text.lines();
+    let head = lines.next().unwrap();
+    let body: Vec<&str> = lines.filter(|l| !l.is_empty()).collect();
+    let mut w = BufWriter::with_capacity(8 << 20, File::create(out).unwrap());
+    writeln!(w, "{head}").unwrap();
+    for i in 0..rows {
+        let l = body[i % body.len()];
+        let (spec, rest) = l.split_once('\t').unwrap();
+        writeln!(w, "{spec} copy={}\t{rest}", i / body.len()).unwrap();
+    }
+    w.flush().unwrap();
+}
+
+/// The reads export job's own path (denovo::export_reads) on @p path: the
+/// GUI's defaults (Stitch, top-n 1, min 8) and the heaviest options (ALPS,
+/// top-n 50, min 1), 3 times each; the median and the process's peak RSS.
+/// @p only picks one of the two (`--mode reads_stitch|reads_alps`), so the
+/// peak RSS is that case's own.
+fn reads(path: &str, only: Option<&str>) -> String {
+    use fastag_lib::denovo::{export_reads, DenovoFormat, DenovoOptions};
+    let dir = std::env::temp_dir();
+    let mut parts = Vec::new();
+    for (name, opts) in [
+        ("stitch_top1_min8", DenovoOptions { format: DenovoFormat::Stitch, top_n: 1, min_length: 8 }),
+        ("alps_top50_min1", DenovoOptions { format: DenovoFormat::Alps, top_n: 50, min_length: 1 }),
+    ] {
+        if only.is_some_and(|o| !name.starts_with(o)) {
+            continue;
+        }
+        let dest = dir.join(format!("fastag-bench-{}-{name}.csv", std::process::id()));
+        let mut ms = Vec::new();
+        let mut reads = 0;
+        let mut out_bytes = 0;
+        for _ in 0..3 {
+            let t = Instant::now();
+            let s = export_reads(path, dest.to_str().unwrap(), opts, &Default::default(), &mut |_, _| {}).unwrap();
+            ms.push(t.elapsed().as_secs_f64() * 1e3);
+            reads = s.reads;
+            out_bytes = std::fs::metadata(&dest).unwrap().len();
+            std::fs::remove_file(&dest).unwrap();
+        }
+        let runs = ms.iter().map(|m| format!("{m:.0}")).collect::<Vec<_>>().join(",");
+        ms.sort_by(f64::total_cmp);
+        parts.push(format!(r#""{name}":{{"ms":[{runs}],"median_ms":{:.0},"reads":{reads},"out_bytes":{out_bytes}}}"#, ms[1]));
+    }
+    format!(r#"{{{},"peak_rss_mb":{}}}"#, parts.join(","), peak_rss_bytes() >> 20)
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if args.len() == 5 && args[1] == "--gen-reads" {
+        gen_reads(&args[2], &args[3], args[4].parse().unwrap());
+        return;
+    }
     if args.len() == 6 && args[1] == "--gen" {
         gen(&args[2], &args[3], args[4].parse().unwrap(), args[5].parse().unwrap());
         return;
@@ -593,6 +657,9 @@ fn main() {
             "p3" => p3(&args[3]),
             "sort" => sort(&args[3]),
             "cold" => cold(&args[3]),
+            "reads" => reads(&args[3], None),
+            "reads_stitch" => reads(&args[3], Some("stitch")),
+            "reads_alps" => reads(&args[3], Some("alps")),
             "coldopen" => coldopen(&args[3]),
             "tprobe" => {
                 let ix = bench::index(&args[3]).unwrap();
