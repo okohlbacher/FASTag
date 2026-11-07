@@ -67,7 +67,8 @@ export interface Taxon {
   name: string
   observed: number
   adjusted: number
-  q: number
+  // null: the CLI wrote NA (-species_orientation both): uncalibrated, not q = 1.
+  q: number | null
 }
 
 export interface SpeciesReport {
