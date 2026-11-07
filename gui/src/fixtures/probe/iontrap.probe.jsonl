@@ -1,0 +1,7 @@
+{"record":"probe","format":1,"version":"1.12.0","input":"/data/PXD010783/KristenJeff_p53_mod_AspN_03_02_07.mzML","file_format":"mzML"}
+{"record":"instrument","name":"LTQ Orbitrap XL","model":null,"ms2_analyzer":"ion trap","ion_mobility":null}
+{"record":"spectra","ms1":2668,"ms2":7626,"ms2_probed":4000,"ms2_centroid":4000,"ms2_profile":0,"ms2_type_unknown":0}
+{"record":"activation","of":4000,"collisional":2000,"electron":2000,"hybrid":0,"unknown":0}
+{"record":"index","state":"stale"}
+{"record":"acquisition","mode":"DDA","why":"no repeating window scheme (periodicity 0.03 over 406 repeat gaps, cycle 126, 1571 distinct precursor m/z, 0% uncharged, 4000 MS2 probed)","warn":false,"refuse":false,"windows":1571,"median_width":0}
+{"record":"end"}

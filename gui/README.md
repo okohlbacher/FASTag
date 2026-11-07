@@ -35,6 +35,10 @@ gui/
                        BatchList.tsx, the batch job naming (batch.ts), and the batch
                        summary: batchSummary.ts (rows and the majority rule),
                        useBatchSummary.ts (each done job's reports) and SummaryTable.tsx
+    inspector/         the checks before and after a run (P2b): probe.ts (the -probe_input
+                       contract and its parser), capabilities.ts (CLI features from --helphelp),
+                       instrument.ts (instrument family and preset), checks.ts (the checks, the
+                       exit-11 refusal), useInspector.ts and InspectorPanel.tsx
     results/           ResultTabs.tsx (Overview, Tags, Spectrum, Species, Digest), FailureBanner.tsx (over
                        the tabs, or on the Batch view beside the queue), reports.ts, species.ts
                        (the parser of the -species TSV),
@@ -56,7 +60,9 @@ gui/
     DigestPanel.tsx    digest, label and mass-gap reports
     digestReport.ts    reader of the digest/label/mass-gap TSVs and the sequence-logo arithmetic
     SequenceLogo.tsx   SVG sequence logo (bits against a background)
-    fixtures/          synthetic report TSVs for the tests and the browser preview
+    fixtures/          synthetic report TSVs for the tests and the browser preview; cli-1.12/
+                       (real FASTag 1.12 output on public gate inputs) and probe/ (the probe
+                       contract's fixtures), see fixtures/cli-1.12/README.md
     api.ts             the window.fastag bridge over Tauri invoke, one Channel per run, events + dialog/opener plugins
     runJob.ts          one run as the renderer tracks it: id made before invoke, Channel events and the reply merged
     paramLayout.ts     section/ordering overlay on the generated manifest (one flat list)
@@ -107,6 +113,8 @@ gui/
     src/report.rs      digest/label/mass-gap/species report read (as text)
     src/spectrum.rs    the Spectrum tab: spectrum_support (-dump_spectrum in --helphelp) and
                        spectrum_peaks (`-dump_spectrum <nativeId>` under the run's argv; LRU of 64)
+    src/inspect.rs     the CLI's options (--helphelp) and the metadata probe (-probe_input, run
+                       only when --helphelp lists it; timeout and output cap)
     src/denovo.rs      the Stitch/ALPS export job: tools/tags_to_denovo.py ported (the same golden
                        files), one pass over the file, progress and Cancel, the reads to a .csv via .part
     examples/browser_bench.rs  the browser bench (bench/bench-<version>.json)
@@ -269,6 +277,78 @@ SDRF files are named, not read.
 Themes: System (the default), Light and Dark, from the top bar or View >
 Theme; the choice is remembered on this machine. Text uses the system UI
 font; IBM Plex Mono is bundled for sequences and IDs.
+
+## Inspector
+
+The inspector checks a spectra file before a run and the run after it
+(GUI-DESIGN 3 S1, P2b). The GUI reads no spectra file itself: before a run
+everything comes from the CLI's metadata probe, after a run from the reports
+and the log lines FASTag wrote. Every check names its evidence and its Help
+entry.
+
+- **Blocks the run** (Run disabled): no MS2 spectra; raw DIA, which FASTag
+  1.12 refuses with exit code 11 (the check shows the DIAspeXtract command to
+  run first).
+- **Red flag** (Run waits for the fix or "Run anyway"): ion-trap MS2 with a
+  ppm tolerance (fix: Ion trap CID 0.3 Da), profile MS2 in mzML or MGF input
+  (FASTag centroids mzPeak input itself; for mzML it names `-pick_profile
+  auto`), species detection with a tolerance in Da.
+- **Warning**: a stale or missing mzML index (FASTag scans the file instead;
+  results are the same: a deviation from GUI-DESIGN S1, which lists the stale
+  index as a red flag), electron activation (ETD, ECD, hybrids), a FASTA
+  without decoys, a DIA-like acquisition FASTag still tags.
+
+Run also waits while the checks are not known yet ("Checking the input with
+FASTag…": `--helphelp`, then the probe). A probe error or its 60 s timeout
+releases Run as "Not checked before the run". The spectra file is probed once
+per input; the FASTA is probed separately, once its field has stayed
+unchanged for 0.7 s and names a FASTA file, and a newer probe kills the
+superseded CLI child in the backend. The instrument family is the CLI's
+`ms2_analyzer` where it names one; by name only an instrument without a
+second analyser (LTQ XL, LTQ Velos) is an ion trap, while the hybrids (LTQ
+Orbitrap, Orbitrap Elite, the Tribrids, LTQ FT, LTQ FT Ultra) need the
+analyser or FASTag's low-resolution warning.
+
+The instrument the probe or the digest report names proposes a preset,
+marked "(detected)" in the instrument list; nothing is applied until it is
+chosen. After a run, the digest report's `meta instrument` rows and FASTag's
+low-resolution warning flag an ion-trap run at ppm, with "Re-run with
+0.3 Da". A run FASTag refuses as raw DIA (exit 11, `FASTAG_REFUSED
+reason=raw_dia`) shows that reason and the DIAspeXtract command instead of a
+generic failure.
+
+Optional CLI features are detected through `--helphelp`, never through the
+version string. No FASTag has `-probe_input` yet (1.12 has the probe only
+inside a run, src/AcquisitionProbe): with such a CLI the inspector says "Not
+checked before the run" and guesses nothing; the checks after the run work
+with any CLI that writes the digest report.
+
+**Probe contract** (format 1; the parser is `src/inspector/probe.ts`, the
+fixtures are `src/fixtures/probe/`):
+
+    FASTag -probe_input <file> [-acquisition_probe_spectra <n>] [-fasta <file>]
+
+- Reads metadata only, through FASTag's own mzML, mzPeak and MGF readers;
+  writes no file and needs no `-in` or `-out`.
+- Exit 0 whenever the file could be read, whatever it holds (raw DIA too:
+  the probe never refuses); an unreadable file exits as a run would (3, 4 or
+  5) with the reason on stderr.
+- stdout is JSON lines only, one object per line with a `record` key, first
+  `{"record":"probe","format":1,...}`, last `{"record":"end"}`:
+
+| record | fields |
+|---|---|
+| `probe` | `format`, `version`, `input`, `file_format` (`mzML`, `mzPeak`, `MGF`) |
+| `instrument` | `name`, `model` (CV names or null), `ms2_analyzer` (CV name of the analyzer of the instrument configuration most MS2 reference, or null), `ion_mobility` (`1/K0`, `drift`, `FAIMS` or null) |
+| `spectra` | `ms1`, `ms2` (whole file), `ms2_probed`, `ms2_centroid`, `ms2_profile`, `ms2_type_unknown` (of the probed MS2) |
+| `activation` | `of`, `collisional`, `electron`, `hybrid`, `unknown` (the RunMeta activation classes, of the probed MS2) |
+| `index` | `state`: `ok`, `stale`, `absent` or `not_applicable` |
+| `acquisition` | `mode` (Acquisition::modeName), `why` (the reason of the "Acquisition check:" line), `warn`, `refuse` (true exactly when `-acquisition_check refuse` would exit 11), `windows`, `median_width` (as in the `FASTAG_REFUSED` sentinel) |
+| `fasta` | with `-fasta` only: `path`, `proteins`, `decoys`, `decoy_affix` |
+
+- Unknown records and fields are ignored; a missing record leaves its checks
+  "not checked". A probe of a higher format, or one without its `end`
+  record, is not used.
 
 ## Shortcuts
 

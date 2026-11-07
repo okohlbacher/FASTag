@@ -10,6 +10,26 @@ export interface BinaryInfo {
   detail: string
 }
 
+// The options the CLI's --helphelp lists (inspect.rs Capabilities): every
+// optional CLI feature is detected by them, never by the version string.
+export interface CliOptions {
+  options: string[]
+  ok: boolean
+  detail: string
+}
+
+// One run of the metadata probe, `FASTag -probe_input <file>` (inspect.rs
+// ProbeRun); stdout holds its JSON lines (src/inspector/probe.ts).
+export interface ProbeRun {
+  // The CLI has -probe_input; false: nothing was run.
+  supported: boolean
+  ok: boolean
+  code: number | null
+  timed_out: boolean
+  stdout: string
+  reason: string | null
+}
+
 export interface ResultsSort {
   column: string
   desc: boolean
@@ -258,6 +278,11 @@ export interface FastagApi {
   report: (path: string) => Promise<string | null>
   openTaxon: (taxid: number) => Promise<boolean>
   probe: () => Promise<BinaryInfo>
+  // The options of the CLI (--helphelp), cached per binary by the backend.
+  cliCapabilities: () => Promise<CliOptions>
+  // The metadata probe of a spectra file; refused (supported: false) when
+  // the CLI has no -probe_input. fasta: probed too, when given.
+  probeInput: (input: string, fasta?: string | null) => Promise<ProbeRun>
   pickInput: () => Promise<string | null>
   pickInputs: () => Promise<string[]>
   pickOutput: (defaultPath?: string) => Promise<string | null>
