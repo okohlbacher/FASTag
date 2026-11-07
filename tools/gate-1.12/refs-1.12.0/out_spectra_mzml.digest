@@ -1,0 +1,5 @@
+summary 6983 MS2 spectra, 158162 tags
+exit 0
+mzml spectra.mzML masked=340f942b6171e911ca9c6dd4843559b003adff6fda1013ca8c422e125bb8ea7f
+info mzml spectra.mzML software_version=1.12.0
+file tags.tsv fe945d958379e5939fbdeb5b00310606c7670fe1e3bb2a4f4ebefdadfcc89cc4
