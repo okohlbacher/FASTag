@@ -279,6 +279,51 @@ describe('label', () => {
     expect(compareLabel(['TMTpro126'], [], 'TMT').state).toBe('mismatch')
   })
 
+  it("the CLI's iTRAQ4 call: told from an SDRF iTRAQ8plex, matched by an iTRAQ4plex channel", () => {
+    expect(compareLabel(['iTRAQ8plex-113'], [], 'iTRAQ4').state).toBe('mismatch')
+    expect(compareLabel(['iTRAQ4plex-114'], [], 'iTRAQ4').state).toBe('match')
+    expect(compareLabel(['iTRAQ8plex-114'], [], 'iTRAQ4').state).toBe('mismatch')
+  })
+
+  it('a combined call (TMT+SILAC): every SDRF label must be one the call holds', () => {
+    expect(compareLabel(['SILAC light', 'SILAC heavy'], [], 'TMT+SILAC').state).toBe('match')
+    expect(compareLabel(['SILAC light', 'SILAC heavy'], [], 'TMT+SILAC').note).toMatch(/FASTag also called TMT, which the SDRF does not list/)
+    expect(compareLabel(['TMT126', 'TMT127N'], [], 'TMT+SILAC').state).toBe('match')
+    expect(compareLabel(['TMT126', 'SILAC heavy'], [], 'TMT+SILAC').state).toBe('match')
+    expect(compareLabel(['TMTpro126', 'SILAC heavy'], [], 'TMTpro+SILAC').state).toBe('match')
+    expect(compareLabel(['NT=label free sample'], [], 'TMT+SILAC').state).toBe('mismatch')
+    // An SDRF label the call does not hold still differs.
+    expect(compareLabel(['TMT126', 'SILAC heavy'], [], 'TMT').state).toBe('mismatch')
+  })
+
+  it('TMTpro against iTRAQ8plex: FASTag cannot tell them apart, not checkable', () => {
+    const r = compareLabel(['iTRAQ8plex-113'], [], 'TMTpro')
+    expect(r.state).toBe('not_checkable')
+    expect(r.note).toMatch(/TMTpro and iTRAQ8plex have the same mass; the reporter ions decide/)
+    expect(compareLabel(['iTRAQ8plex-113', 'SILAC heavy'], [], 'TMTpro+SILAC').state).toBe('not_checkable')
+    // iTRAQ4 has another mass: a TMTpro call against it differs.
+    expect(compareLabel(['iTRAQ4plex-114'], [], 'TMTpro').state).toBe('mismatch')
+  })
+
+  it('no indistinguishable or partly called label reaches the corrections TSV', () => {
+    const b = BATCH_CASES.pxd004541
+    const sdrf = (label: string): ReturnType<typeof parseSdrf> =>
+      parseSdrf(new TextEncoder().encode(`source name\tcomment[label]\tcomment[data file]\nS1\t${label}\tpxd004541-tmt.mzML\n`))
+    const withCall = (call: string): SdrfJob => done({ ...b, label: b.label.replace(/^label_call\tlabel\tTMT\t/m, `label_call\tlabel\t${call}\t`) })
+    for (const [label, call, state] of [
+      ['SILAC heavy', 'TMT+SILAC', 'match'],
+      ['TMT126', 'TMT+SILAC', 'match'],
+      ['iTRAQ8plex-113', 'TMTpro', 'not_checkable']
+    ] as const) {
+      const c = compareSdrf(sdrf(label), [withCall(call)], tx)
+      expect(c.jobs[0].fields!.label.fastag).toBe(call)
+      expect(c.jobs[0].fields!.label.state).toBe(state)
+      expect(correctionsTsv(c)).not.toMatch(/\tlabel\t/)
+    }
+    // A label-free SDRF against TMT+SILAC is a correction.
+    expect(correctionsTsv(compareSdrf(sdrf('label free sample'), [withCall('TMT+SILAC')], tx))).toMatch(/\tlabel\t/)
+  })
+
   it('a label this app does not know is not checkable; no call is no call', () => {
     expect(compareLabel(['18O'], [], 'label-free').state).toBe('not_checkable')
     expect(compareLabel(['TMT126'], [], null).state).toBe('no_call')
@@ -355,6 +400,12 @@ describe('instrument and fragment tolerance', () => {
     expect(compareInstrument(['NT=q exactive hf'], 'Q Exactive HF').state).toBe('match')
     expect(compareInstrument(['NT=Q Exactive'], 'Q Exactive HF').state).toBe('mismatch')
     expect(compareInstrument(['NT=Q Exactive'], null).state).toBe('no_call')
+    // By accession only: no name to compare, not checkable, never a mismatch.
+    expect(compareInstrument(['AC=MS:1001911'], 'Q Exactive').state).toBe('not_checkable')
+    expect(compareInstrument(['AC=MS:1001911'], 'Q Exactive').note).toMatch(/cannot read the instrument AC=MS:1001911/)
+    // One named value that matches still counts; one named value that differs, with an AC-only one, is not checkable.
+    expect(compareInstrument(['AC=MS:1001911', 'NT=Q Exactive'], 'Q Exactive').state).toBe('match')
+    expect(compareInstrument(['AC=MS:1001911', 'NT=Orbitrap Astral'], 'Q Exactive').state).toBe('not_checkable')
   })
 
   it("a converter's generic instrument term is no instrument: the model row, else no call", () => {

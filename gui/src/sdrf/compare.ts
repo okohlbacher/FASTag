@@ -221,7 +221,8 @@ function labelClass(v: string): LabelClass | null {
   if (/label[\s_-]*free|^lfq$|unlabel/.test(s)) return { family: 'label-free', variant: null }
   if (/tmt\s*pro/.test(s)) return { family: 'TMT', variant: 'TMTpro' }
   if (/^tmt/.test(s)) return { family: 'TMT', variant: s === 'tmt' ? 'TMT' : null }
-  if (/itraq/.test(s)) return { family: 'iTRAQ', variant: /8\s*plex|113|118|119|121/.test(s) ? 'iTRAQ8' : /4\s*plex/.test(s) ? 'iTRAQ4' : null }
+  // The CLI writes iTRAQ4 (src/Digest.cpp); an SDRF iTRAQ4plex-114, iTRAQ8plex-113.
+  if (/itraq/.test(s)) return { family: 'iTRAQ', variant: /itraq\s*8|8\s*plex|113|118|119|121/.test(s) ? 'iTRAQ8' : /itraq\s*4|4\s*plex/.test(s) ? 'iTRAQ4' : null }
   if (/silac|heavy|medium|light|lys\s*\d|arg\s*\d|13c|15n/.test(s)) return { family: 'SILAC', variant: null }
   if (/dimethyl/.test(s)) return { family: 'dimethyl', variant: null }
   return null
@@ -241,25 +242,48 @@ function labelVariant(mods: readonly string[]): string | null {
   return null
 }
 
+// The CLI's sentence for a TMTpro call (DigestReport.cpp labelCallRows).
+const TMTPRO_ITRAQ8 = 'TMTpro and iTRAQ8plex have the same mass; the reporter ions decide'
+
 /// The SDRF labels (and the reagent its modifications name) against the
-/// label call (null: no call).
+/// label call (null: no call). The CLI joins every label that passes with
+/// "+" (TMT+SILAC): the field matches when every SDRF label is one the call
+/// holds. FASTag cannot tell TMTpro from iTRAQ8plex (the same mass): an SDRF
+/// iTRAQ8 against a TMTpro call is not checkable, never a mismatch.
 export function compareLabel(values: readonly string[], mods: readonly string[], call: string | null): Partial3 {
   const vs = distinct(values)
   const sdrf = join(vs)
   if (!vs.length) return { state: 'no_sdrf', sdrf, fastag: call ?? '', note: 'the SDRF names no label' }
   if (call == null) return { state: 'no_call', sdrf, fastag: '', note: 'FASTag made no label call' }
-  const got = labelClass(call) ?? { family: call, variant: null }
+  const got = call
+    .split('+')
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => labelClass(p) ?? { family: p, variant: null })
   const reagent = labelVariant(mods)
+  // The variant an SDRF label names, or (TMT, unspecified) the reagent its modifications name.
+  const variantOf = (c: LabelClass): string | null => {
+    if (c.variant && c.variant !== 'TMT') return c.variant
+    return reagent && reagent.startsWith(c.family) ? reagent : c.variant
+  }
+  const fits = (c: LabelClass): boolean =>
+    got.some((g) => {
+      if (c.family !== g.family) return false
+      const v = variantOf(c)
+      return !v || !g.variant || v === g.variant
+    })
+  // An SDRF iTRAQ (8plex, or of unstated plex) that a TMTpro call cannot be told from.
+  const twin = (c: LabelClass): boolean => c.family === 'iTRAQ' && variantOf(c) !== 'iTRAQ4' && got.some((g) => g.variant === 'TMTpro')
   const classes = vs.map(labelClass)
-  const ok = classes.some((c) => {
-    if (!c || c.family !== got.family) return false
-    const v = c.variant && c.variant !== 'TMT' ? c.variant : (reagent ?? c.variant)
-    return !v || !got.variant || v === got.variant
-  })
-  if (ok) return { state: 'match', sdrf, fastag: call, note: `FASTag's ${call} call agrees with the SDRF's labels` }
-  if (classes.every((c) => c == null)) return { state: 'not_checkable', sdrf, fastag: call, note: `this app does not know the label ${sdrf}` }
-  const names = [...new Set(classes.filter((c): c is LabelClass => !!c).map((c) => (c.family === 'TMT' ? (c.variant === 'TMTpro' ? 'TMTpro' : (reagent ?? 'TMT')) : c.family)))]
-  return { state: 'mismatch', sdrf, fastag: call, note: `the SDRF's labels are ${names.join(', ')}; FASTag called ${call}` }
+  const known = classes.filter((c): c is LabelClass => !!c)
+  if (!known.length) return { state: 'not_checkable', sdrf, fastag: call, note: `this app does not know the label ${sdrf}` }
+  const extra = got.filter((g) => !known.some((c) => c.family === g.family)).map((g) => g.variant ?? g.family)
+  const extraWords = extra.length ? `; FASTag also called ${extra.join(', ')}, which the SDRF does not list` : ''
+  const off = known.filter((c) => !fits(c))
+  if (!off.length) return { state: 'match', sdrf, fastag: call, note: `FASTag's ${call} call agrees with the SDRF's labels${extraWords}` }
+  if (off.every(twin)) return { state: 'not_checkable', sdrf, fastag: call, note: `${TMTPRO_ITRAQ8} (FASTag called ${call}; the SDRF names ${sdrf})` }
+  const names = [...new Set(off.map((c) => (c.family === 'TMT' ? (variantOf(c) === 'TMTpro' ? 'TMTpro' : 'TMT') : (variantOf(c) ?? c.family))))]
+  return { state: 'mismatch', sdrf, fastag: call, note: `the SDRF's labels include ${names.join(', ')}; FASTag called ${call}` }
 }
 
 // Label modifications belong to the label field: TMT, TMTpro, iTRAQ, SILAC
@@ -379,9 +403,14 @@ export function compareInstrument(values: readonly string[], instrument: string 
   }
   if (!instrument) return { state: 'no_call', sdrf, fastag: '', note: generic ? 'the input names only a generic instrument model' : 'the input names no instrument' }
   const ok = vs.some((v) => instrumentKey(nameOf(v)) === instrumentKey(instrument))
-  return ok
-    ? { state: 'match', sdrf, fastag: instrument, note: `the input names the instrument ${instrument}` }
-    : { state: 'mismatch', sdrf, fastag: instrument, note: `the SDRF names ${vs.map(nameOf).join(', ')}; the input names ${instrument}` }
+  if (ok) return { state: 'match', sdrf, fastag: instrument, note: `the input names the instrument ${instrument}` }
+  // A cell given by accession only (AC=MS:1001911) names no instrument this
+  // app can read (it holds no PSI-MS table): a difference needs every SDRF
+  // value to have a name.
+  const nameless = vs.filter((v) => !instrumentKey(nameOf(v)))
+  if (nameless.length)
+    return { state: 'not_checkable', sdrf, fastag: instrument, note: `this app cannot read the instrument ${nameless.join(', ')} (no NT= name)` }
+  return { state: 'mismatch', sdrf, fastag: instrument, note: `the SDRF names ${vs.map(nameOf).join(', ')}; the input names ${instrument}` }
 }
 
 function tolerance(v: string): { value: number; unit: 'ppm' | 'Da' } | null {
