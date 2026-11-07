@@ -349,6 +349,7 @@ done
   && fail "an unknown -alkylation_proteome was accepted"
 grep -q "is neither auto" "$TMP/log" || fail "no message for an unknown -alkylation_proteome"
 printf '' | "$BIN" -stream -alkylation_out "$TMP/x10.tsv" > "$TMP/log" 2>&1 && fail "-stream with -alkylation_out was accepted"
+grep -q -- "-stream cannot be combined with -alkylation_out" "$TMP/log" || fail "no -stream refusal message for -alkylation_out"
 "$BIN" "${COMMON[@]}" -out "$TMP/w.tsv" -alkylation_min_spectra 5 > "$TMP/log" 2>&1 \
   || fail "-alkylation_min_spectra without -alkylation_out was refused"
 grep -q -- "-alkylation_min_spectra is only read for -alkylation_out" "$TMP/log" || fail "no warning for -alkylation_min_spectra"
