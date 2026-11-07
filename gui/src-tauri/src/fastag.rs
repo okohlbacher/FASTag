@@ -1681,6 +1681,86 @@ mod tests {
             let _ = std::fs::remove_dir_all(&d);
         }
 
+        // The flake of a_cancel_before_the_cli_writes_removes_the_confirmed_earlier_outputs
+        // (about 1 in 8 parallel runs on macOS): the stub printed the line
+        // the test waits for and only then forked its `sleep`, so the
+        // process-group kill could land while sh was inside fork(). macOS
+        // lets a child forked during a group signal escape it; the orphaned
+        // `sleep 30` kept the pipes open, the readers saw no EOF and no done
+        // event came. The stub now starts its sleeper before it prints or
+        // writes anything a test synchronises on. This repeats the exact
+        // cancel point, so the old race shows up within a few rounds.
+        #[test]
+        fn a_cancel_at_the_moment_the_stub_reports_always_ends_the_run() {
+            // Eight runs at a time, as the parallel test harness starts them:
+            // the race needs a loaded machine to show.
+            let workers: Vec<_> = (0..8)
+                .map(|w| {
+                    std::thread::spawn(move || {
+                        for round in 0..16 {
+                            let env = if (w + round) % 2 == 0 { ("STUB_SLEEP_BEFORE", "30") } else { ("STUB_SLEEP", "30") };
+                            let d = dir(&format!("race{w}-{round}"));
+                            let input = d.join("a.mzML");
+                            std::fs::write(&input, "spectra").unwrap();
+                            let params = format!(r#"{{"in":"{}","out":"a.tags.tsv"}}"#, input.display());
+                            let r = start(&params, &[env]).unwrap();
+                            if env.0 == "STUB_SLEEP" {
+                                wait_for(&d.join("a.tags.tsv"));
+                            } else {
+                                wait_for_line(&r, "Reading spectra (stub)");
+                            }
+                            // Swept across the few hundred microseconds in
+                            // which sh goes from the line to its fork.
+                            std::thread::sleep(Duration::from_micros((round * 8 + w) as u64 * 25));
+                            cancel_of(&r.mgr);
+                            let done = r.done.recv_timeout(Duration::from_secs(5));
+                            let _ = std::fs::remove_dir_all(&d);
+                            let done = done.unwrap_or_else(|_| {
+                                panic!("worker {w} round {round} ({}): no done event within 5 s of the cancel", env.0)
+                            });
+                            assert_eq!(done["cancelled"], true);
+                        }
+                    })
+                })
+                .collect();
+            for t in workers {
+                t.join().unwrap();
+            }
+        }
+
+        // The tauri-driver specs (gui/e2e-tauri) drive the real app, which
+        // passes no environment of its own to the CLI: they steer the stub
+        // by the input's name instead.
+        #[test]
+        fn the_stub_keeps_running_on_an_input_named_slow() {
+            let d = dir("slow");
+            let input = d.join("a.slow.mzML");
+            std::fs::write(&input, "spectra").unwrap();
+            let params = format!(r#"{{"in":"{}","out":"a.tags.tsv"}}"#, input.display());
+            let r = start(&params, &[]).unwrap();
+            wait_for(&d.join("a.tags.tsv"));
+            assert!(r.done.recv_timeout(Duration::from_millis(500)).is_err(), "a .slow. input finished at once");
+            assert!(r.mgr.is_busy());
+            cancel_of(&r.mgr);
+            let done = r.done.recv_timeout(Duration::from_secs(5)).expect("no done event");
+            assert_eq!(done["cancelled"], true);
+            let _ = std::fs::remove_dir_all(&d);
+        }
+
+        #[test]
+        fn the_stub_prints_five_thousand_log_lines_on_an_input_named_chatty() {
+            let d = dir("chatty");
+            let input = d.join("a.chatty.mzML");
+            std::fs::write(&input, "spectra").unwrap();
+            let params = format!(r#"{{"in":"{}","out":"a.tags.tsv"}}"#, input.display());
+            let r = start(&params, &[]).unwrap();
+            let done = r.done.recv_timeout(Duration::from_secs(20)).expect("no done event");
+            assert_eq!(done["ok"], true);
+            let lines: Vec<String> = r.events.try_iter().filter(|l| l.starts_with("Warning: spectrum ")).collect();
+            assert_eq!(lines.len(), 5000, "{:?}", lines.last());
+            let _ = std::fs::remove_dir_all(&d);
+        }
+
         #[test]
         fn a_finished_run_keeps_its_outputs() {
             let d = dir("ok");
