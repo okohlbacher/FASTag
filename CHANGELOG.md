@@ -63,7 +63,11 @@ held-out data yet. The README's command-line reference describes each option.
   `-search_config_out`, `-search_engine sage|comet`, `-search_config_template`,
   `-search_decoy_prefix`, `-search_precursor_tolerance` (10),
   `-search_precursor_unit` (ppm), `-search_isotope_errors` (0).
-  NOT FDR-controlled.
+  NOT FDR-controlled. **The Sage and Comet configurations are unverified in
+  1.12.0:** no run of Sage 0.14.7 or Comet 2026.03.0 on a FASTag-written
+  configuration has been recorded (`search_engine_smoke_test` skipped), so
+  the Comet key layout, the isotope_error mapping and the variable_mod slot
+  format are taken from the OpenMS adapters, not from the engines.
 - **Machine interfaces for the desktop GUI:** `-probe_input <file>` (metadata
   as JSON lines) and `-dump_spectrum <nativeId>` (the peaks FASTag tags in one
   spectrum, as JSON lines). Both write no file and exit.
