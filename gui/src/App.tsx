@@ -17,6 +17,7 @@ import SummaryTable from './run/SummaryTable'
 import ResultTabs from './results/ResultTabs'
 import FailureBanner from './results/FailureBanner'
 import { createViewStore, useView } from './app/viewStore'
+import { createExportJobs, ExportJobsContext } from './results/exportJobs'
 import { defaultOut, rebaseOutputs } from './app/paths'
 import { focusLater, focusLost } from './app/focus'
 import { useTheme, type Theme } from './app/theme'
@@ -76,6 +77,8 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   const searchBtnRef = useRef<HTMLButtonElement>(null)
   const logRef = useRef<HTMLPreElement>(null)
   const [viewStore] = useState(() => createViewStore())
+  // Export jobs outlive the tags table (it unmounts on a tab switch).
+  const [exportJobs] = useState(createExportJobs)
   const { tab, logOpen, logJob } = useView(viewStore)
   const session = useSession(start)
   const { input, out, values, blocked } = session
@@ -495,47 +498,49 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
           </section>
 
           <section className="view view-results" data-view="results" hidden={view !== 'results'} tabIndex={-1} aria-label="Results">
-            <ResultTabs
-              tab={tab}
-              setTab={viewStore.setTab}
-              species={run.species}
-              speciesRun={run.speciesRun}
-              speciesOn={session.speciesOn}
-              tooShort={session.tooShort}
-              evidence={run.evidence}
-              reports={run.reports}
-              batchMiss={run.batchMiss}
-              results={run.results}
-              setResults={run.setResults}
-              running={running}
-              busy={busy}
-              failure={run.failure}
-              setFailure={run.setFailure}
-              copied={run.copied}
-              setCopied={run.setCopied}
-              openResults={openResults}
-              openReport={run.openReport}
-              openLog={openLog}
-              showFailure={jobs.length === 0}
-              overview={overview}
-              onOverviewAction={(a) => void overviewAction(a)}
-              runningState={
-                running && jobs.length === 0 ? (
-                  <RunningPanel
-                    input={input}
-                    phase={run.phase}
-                    progress={run.progress}
-                    startedAt={run.startedAt}
-                    cancelling={run.cancelling}
-                    onCancel={run.cancelRun}
-                    onShowLog={() => openLog(null)}
-                    onFocusLost={runStateGone}
-                  />
-                ) : null
-              }
-            >
-              {jobs.length === 0 && drawer}
-            </ResultTabs>
+            <ExportJobsContext.Provider value={exportJobs}>
+              <ResultTabs
+                tab={tab}
+                setTab={viewStore.setTab}
+                species={run.species}
+                speciesRun={run.speciesRun}
+                speciesOn={session.speciesOn}
+                tooShort={session.tooShort}
+                evidence={run.evidence}
+                reports={run.reports}
+                batchMiss={run.batchMiss}
+                results={run.results}
+                setResults={run.setResults}
+                running={running}
+                busy={busy}
+                failure={run.failure}
+                setFailure={run.setFailure}
+                copied={run.copied}
+                setCopied={run.setCopied}
+                openResults={openResults}
+                openReport={run.openReport}
+                openLog={openLog}
+                showFailure={jobs.length === 0}
+                overview={overview}
+                onOverviewAction={(a) => void overviewAction(a)}
+                runningState={
+                  running && jobs.length === 0 ? (
+                    <RunningPanel
+                      input={input}
+                      phase={run.phase}
+                      progress={run.progress}
+                      startedAt={run.startedAt}
+                      cancelling={run.cancelling}
+                      onCancel={run.cancelRun}
+                      onShowLog={() => openLog(null)}
+                      onFocusLost={runStateGone}
+                    />
+                  ) : null
+                }
+              >
+                {jobs.length === 0 && drawer}
+              </ResultTabs>
+            </ExportJobsContext.Provider>
           </section>
 
           <section className="view view-batch" data-view="batch" hidden={view !== 'batch'} tabIndex={-1} aria-label="Batch">

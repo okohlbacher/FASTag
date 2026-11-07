@@ -78,6 +78,8 @@ export interface E2EControls {
   finishRanking(): void
   /// view fixture: every export written, in order.
   exports: { dest: string; format: ExportFormat; text: string }[]
+  /// view fixture, with mock.holdExport: end the held export (Done).
+  finishExport(): void
 }
 
 declare global {
@@ -305,6 +307,7 @@ export function installE2EBridge(): Origin | undefined {
   }
 
   const exports: { dest: string; format: ExportFormat; text: string }[] = []
+  let held: { jobId: number; finish: () => void; cancel: () => void } | null = null
   if (fixture === 'view') {
     const ids = (view: ResultsView): number[] => viewIds(tags.columns, tags.rows, view)
     mock.resultsQuery = (path, view, offset, limit): Promise<ResultsPage> => {
@@ -329,15 +332,29 @@ export function installE2EBridge(): Origin | undefined {
       const jobId = ++mock.lastExportId
       const pick = columns.map((c) => tags.columns.indexOf(c)).filter((j) => j >= 0)
       const rows = ids(view)
-      setTimeout(() => {
-        onEvent({ kind: 'progress', jobId, done: 0, total: rows.length })
+      const finish = (): void => {
         let text = exportLine(pick.map((j) => tags.columns[j]), format)
         for (const i of rows) text += exportLine(pick.map((j) => tags.rows[i][j] ?? ''), format)
         exports.push({ dest, format, text })
         onEvent({ kind: 'progress', jobId, done: rows.length, total: rows.length })
         onEvent({ kind: 'done', jobId, rows: rows.length, dest })
+      }
+      setTimeout(() => {
+        onEvent({ kind: 'progress', jobId, done: 0, total: rows.length })
+        if (!mock.holdExport) return finish()
+        // Held (mock.holdExport): half way, until finishExport() or Cancel.
+        onEvent({ kind: 'progress', jobId, done: Math.floor(rows.length / 2), total: rows.length })
+        held = { jobId, finish, cancel: () => onEvent({ kind: 'cancelled', jobId }) }
       }, 20)
       return Promise.resolve(jobId)
+    }
+    mock.cancelExport = (jobId) => {
+      mock.exportCancelCalls.push(jobId)
+      const h = held
+      if (h?.jobId !== jobId) return Promise.resolve(false)
+      held = null
+      setTimeout(h.cancel, 10)
+      return Promise.resolve(true)
     }
   }
 
@@ -466,7 +483,12 @@ export function installE2EBridge(): Origin | undefined {
       ranked = true
       rankCb?.({ kind: 'ranked', generation: 1, column: 'evalue' })
     },
-    exports
+    exports,
+    finishExport: () => {
+      const h = held
+      held = null
+      h?.finish()
+    }
   }
   return query.get('start') === 'defaults' ? DEFAULTS : undefined
 }

@@ -164,3 +164,41 @@ test('an export equals the view: its rows, its order, the shown columns, as TSV 
   expect(dom.length).toBeGreaterThan(5)
   expect(dom.slice(0, 5)).toEqual(rows.slice(0, 5).map((r) => pick.map((j) => r[j] ?? '')))
 })
+
+test('an export outlives a tab switch: its progress, its Cancel and its outcome stay, and a second export cannot start over it', async ({ page }) => {
+  await openTags(page)
+  await page.evaluate(() => {
+    const m = (window as unknown as { __fastagE2E: { mock: { holdExport: boolean; nextPickOutput: string } } }).__fastagE2E.mock
+    m.holdExport = true
+    m.nextPickOutput = '/data/run01.held.tsv'
+  })
+  const exportBtn = page.getByRole('button', { name: 'Export shown rows…' })
+  await exportBtn.click()
+  const bar = page.getByRole('progressbar', { name: 'Export progress' })
+  await expect(bar).toHaveAttribute('aria-valuenow', '50')
+  // Away to another tab (the table unmounts) and back.
+  await page.getByRole('tab', { name: 'Digest' }).click()
+  await expect(bar).toHaveCount(0)
+  await page.getByRole('tab', { name: 'Tags' }).click()
+  await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()
+  await expect(bar).toHaveAttribute('aria-valuenow', '50')
+  await expect(page.getByRole('button', { name: 'Cancel export' })).toBeVisible()
+  // No second export over the running one (Cmd+E is the same action).
+  await expect(exportBtn).toBeDisabled()
+  await page.evaluate(() => (window as unknown as { __fastagE2E: { menu(a: string): void } }).__fastagE2E.menu('export'))
+  expect(await mockState<unknown[]>(page, 'exportCalls')).toHaveLength(1)
+  await page.evaluate(() => (window as unknown as { __fastagE2E: { finishExport(): void } }).__fastagE2E.finishExport())
+  await expect(page.getByText('Wrote 2,028 rows to /data/run01.held.tsv.')).toBeVisible()
+  await expect(exportBtn).toBeEnabled()
+  // Once more, cancelled after a switch: Cancel reaches the job, focus stays on a control.
+  await exportBtn.click()
+  await expect(bar).toHaveAttribute('aria-valuenow', '50')
+  await page.getByRole('tab', { name: 'Species' }).click()
+  await page.getByRole('tab', { name: 'Tags' }).click()
+  const cancel = page.getByRole('button', { name: 'Cancel export' })
+  await cancel.focus()
+  await cancel.press('Enter')
+  await expect(page.getByText('Export cancelled; nothing was written.')).toBeVisible()
+  await expect(exportBtn).toBeFocused()
+  expect(await mockState<number[]>(page, 'exportCancelCalls')).toEqual([2])
+})

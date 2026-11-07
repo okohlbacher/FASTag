@@ -3,10 +3,12 @@
 // tag, best N), against the mock bridge. The backend side is browser.rs's
 // cargo tests; api.ts's Channel wiring is in api.test.ts.
 
+import type { JSX } from 'react'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import ResultsTable, { headServes } from './ResultsTable'
 import { installMockBridge } from './testing/mockBridge'
+import { createExportJobs, ExportJobsContext } from './results/exportJobs'
 
 const flush = (): Promise<void> => act(async () => {})
 const clickIn = (el: Element): Promise<void> =>
@@ -78,6 +80,76 @@ describe('export as a job', () => {
     await clickIn(screen.getByRole('button', { name: 'Export shown rows…' }))
     expect(mock.exportFormats).toEqual(['csv', 'tsv'])
     expect(screen.getByText('Wrote 3 rows to /d/x.shown.tsv.')).toBeDefined()
+  })
+})
+
+describe('export job state and accessibility', () => {
+  it('announces only the start and the end; progress is a progress bar, Cancel is outside the live region', async () => {
+    const mock = await renderTable()
+    mock.holdExport = true
+    mock.nextPickOutput = '/d/x.shown.tsv'
+    const live = screen.getAllByRole('status')
+    const said: string[] = []
+    const note = (): void => {
+      const t = live.map((s) => s.textContent ?? '').join('|')
+      if (said[said.length - 1] !== t) said.push(t)
+    }
+    note()
+    await clickIn(screen.getByRole('button', { name: 'Export shown rows…' }))
+    note()
+    const id = mock.lastExportId
+    for (let k = 0; k <= 3; k++) {
+      await act(async () => mock.emitExport({ kind: 'progress', jobId: id, done: k, total: 3 }))
+      note()
+    }
+    const bar = screen.getByRole('progressbar', { name: 'Export progress' })
+    expect(bar.getAttribute('aria-valuenow')).toBe('100')
+    expect(bar.getAttribute('aria-valuetext')).toBe('100% (3 of 3 rows)')
+    expect(bar.closest('[role="status"]')).toBeNull()
+    const cancel = screen.getByRole('button', { name: 'Cancel export' })
+    expect(cancel.closest('[role="status"], [aria-live]')).toBeNull()
+    cancel.focus()
+    await clickIn(cancel)
+    await act(async () => mock.emitExport({ kind: 'cancelled', jobId: id }))
+    note()
+    // Before, the start, the end: two changes for the whole job.
+    expect(said.length).toBe(3)
+    expect(screen.getByText('Export cancelled; nothing was written.').getAttribute('role')).toBe('status')
+    expect(said[1]).toContain('Exporting to /d/x.shown.tsv…')
+    // Focus does not fall to the page when Cancel goes away.
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Export shown rows…' }))
+  })
+
+  it('outlives the table: a table mounted again shows the running job, its Cancel and its outcome', async () => {
+    const mock = installMockBridge()
+    const jobs = createExportJobs()
+    const table = (): JSX.Element => (
+      <ExportJobsContext.Provider value={jobs}>
+        <ResultsTable path="/d/x.tags.tsv" />
+      </ExportJobsContext.Provider>
+    )
+    const first = render(table())
+    await flush()
+    await screen.findByText('Showing 3 of 3')
+    mock.holdExport = true
+    mock.nextPickOutput = '/d/x.shown.tsv'
+    await clickIn(screen.getByRole('button', { name: 'Export shown rows…' }))
+    const id = mock.lastExportId
+    // A switch to another tab, or the file opened again: the table goes.
+    first.unmount()
+    await act(async () => mock.emitExport({ kind: 'progress', jobId: id, done: 2, total: 3 }))
+    render(table())
+    await flush()
+    await screen.findByText('Showing 3 of 3')
+    expect(screen.getByText(/Exporting… 66%/)).toBeDefined()
+    // No second export of this file over the running one.
+    expect(screen.getByRole('button', { name: 'Export shown rows…' })).toHaveProperty('disabled', true)
+    expect(mock.exportCalls).toHaveLength(1)
+    await clickIn(screen.getByRole('button', { name: 'Cancel export' }))
+    expect(mock.exportCancelCalls).toEqual([id])
+    await act(async () => mock.emitExport({ kind: 'done', jobId: id, rows: 3, dest: '/d/x.shown.tsv' }))
+    expect(screen.getByText('Wrote 3 rows to /d/x.shown.tsv.')).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Export shown rows…' })).toHaveProperty('disabled', false)
   })
 })
 

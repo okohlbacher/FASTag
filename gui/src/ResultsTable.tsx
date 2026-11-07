@@ -1,7 +1,8 @@
 import { useEffect, useId, useMemo, useRef, useState, type JSX, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
-import type { BrowserEvent, ExportEvent, ResultsHead, ResultsPage, ResultsSort, ResultsView } from './types'
+import type { BrowserEvent, ResultsHead, ResultsPage, ResultsSort, ResultsView } from './types'
 import { baseName, DECIMAL } from './digestReport'
 import { HelpButton, HelpLink } from './help/HelpLink'
+import { useExportJob, useExportJobs } from './results/exportJobs'
 
 // Hand-rolled fixed-row-height virtualization. Not react-window: above ~600k
 // rows the spacer div would exceed WebKit's ~16.7M px element-height limit and
@@ -218,6 +219,8 @@ export type RankState = { state: 'ranking'; pct: number | null } | { state: 'ran
 /// The column the backend ranks in the background (browser.rs RANK_COLUMN).
 export const RANK_COLUMN = 'evalue'
 
+const exportPct = (done: number, total: number): number => (total > 0 ? Math.floor((100 * done) / total) : 0)
+
 /// A view the head rows of results_open can stand in for: no filter, and
 /// file order or the E-value order that is still being built.
 export function headServes(view: ResultsView): boolean {
@@ -267,13 +270,12 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
   // Columns the user hid with Columns…; Export writes the shown ones.
   const [hidden, setHidden] = useState<Set<string>>(new Set())
   const [colsOpen, setColsOpen] = useState(false)
-  const [exported, setExported] = useState<{ ok: boolean; text: string } | null>(null)
-  // The export job in progress (GUI-DESIGN 6.1 item 11): its id once the
-  // backend answered, and rows written of the view's rows.
-  const [exporting, setExporting] = useState<{ jobId: number | null; done: number; total: number } | null>(null)
-  // Bumped per export: the Channel of an earlier job is not listened to.
-  const exportSeq = useRef(0)
-  const cancelWanted = useRef(false)
+  // This file's export job (GUI-DESIGN 6.1 item 11), kept by the App's
+  // store across tab switches and re-opens (results/exportJobs.ts).
+  const exportJobs = useExportJobs()
+  const job = useExportJob(exportJobs, path)
+  const exportBtnRef = useRef<HTMLButtonElement>(null)
+  const cancelHasFocus = useRef(false)
   const id = useId()
 
   const scrollerRef = useRef<HTMLDivElement>(null)
@@ -636,43 +638,28 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
     const dest = await window.fastag.saveFile(`${stem}.shown.tsv`, ['tsv', 'csv'])
     if (!dest) return
     const format = dest.toLowerCase().endsWith('.csv') ? 'csv' : 'tsv'
-    const seq = ++exportSeq.current
-    cancelWanted.current = false
-    setExported(null)
-    setExporting({ jobId: null, done: 0, total: matched })
-    const onEvent = (e: ExportEvent): void => {
-      if (exportSeq.current !== seq) return
-      if (e.kind === 'progress') {
-        setExporting((x) => (x ? { ...x, done: e.done, total: e.total } : x))
-        return
-      }
-      setExporting(null)
-      if (e.kind === 'done') setExported({ ok: true, text: `Wrote ${e.rows.toLocaleString('en-US')} rows to ${e.dest}.` })
-      else if (e.kind === 'cancelled') setExported({ ok: true, text: 'Export cancelled; nothing was written.' })
-      else setExported({ ok: false, text: `Export failed: ${e.message}` })
-    }
-    try {
-      const jobId = await window.fastag.exportResults(path, view, shown.map((j) => columns[j]), dest, format, onEvent)
-      if (exportSeq.current !== seq) return
-      setExporting((x) => (x ? { ...x, jobId } : x))
-      // Cancel was pressed before the backend answered.
-      if (cancelWanted.current) void window.fastag.cancelExport(jobId)
-    } catch (err) {
-      if (exportSeq.current !== seq) return
-      setExporting(null)
-      setExported({ ok: false, text: `Export failed: ${err instanceof Error ? err.message : String(err)}` })
-    }
+    await exportJobs.start(path, view, shown.map((j) => columns[j]), dest, format, matched)
   }
 
-  const cancelExport = (): void => {
-    cancelWanted.current = true
-    if (exporting?.jobId != null) void window.fastag.cancelExport(exporting.jobId)
-  }
+  const cancelExport = (): void => exportJobs.cancel(path)
+
+  // The job ended while its Cancel had focus (or focus fell to the page as
+  // the progress went away): focus goes to Export, not to the body.
+  const wasRunning = useRef(false)
+  useEffect(() => {
+    const running = !!job?.running
+    if (wasRunning.current && !running) {
+      const lost = document.activeElement == null || document.activeElement === document.body
+      if (cancelHasFocus.current || lost) exportBtnRef.current?.focus()
+      cancelHasFocus.current = false
+    }
+    wasRunning.current = running
+  }, [job?.running])
 
   // Cmd+E and File > Export Shown Rows… (App dispatches 'fastag-action').
   const exportRef = useRef(exportShown)
   exportRef.current = exportShown
-  const canExport = !!meta && matched > 0 && !exporting
+  const canExport = !!meta && matched > 0 && !job?.running
   useEffect(() => {
     const on = (e: Event): void => {
       if ((e as CustomEvent<string>).detail === 'export' && canExport) void exportRef.current()
@@ -753,7 +740,7 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
         >
           Columns…
         </button>
-        <button type="button" className="secondary" disabled={!canExport} onClick={exportShown}>
+        <button ref={exportBtnRef} type="button" className="secondary" disabled={!canExport} onClick={exportShown}>
           Export shown rows…
         </button>
       </div>
@@ -774,20 +761,37 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
           ))}
         </fieldset>
       )}
-      {exporting && (
-        <p className="rt-note" role="status">
-          Exporting… {exporting.total > 0 ? Math.floor((100 * exporting.done) / exporting.total) : 0}% (
-          {exporting.done.toLocaleString('en-US')} of {exporting.total.toLocaleString('en-US')} rows){' '}
-          <button type="button" className="secondary" onClick={cancelExport}>
+      {job?.running && (
+        // A progress bar, not a live region: its text changes up to ten
+        // times a second, and a screen reader would read every one. Cancel
+        // stays outside the live region below.
+        <div className="rt-note">
+          <span
+            role="progressbar"
+            aria-label="Export progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={exportPct(job.done, job.total)}
+            aria-valuetext={`${exportPct(job.done, job.total)}% (${job.done.toLocaleString('en-US')} of ${job.total.toLocaleString('en-US')} rows)`}
+          >
+            Exporting… {exportPct(job.done, job.total)}% ({job.done.toLocaleString('en-US')} of{' '}
+            {job.total.toLocaleString('en-US')} rows)
+          </span>{' '}
+          <button
+            type="button"
+            className="secondary"
+            onClick={cancelExport}
+            onFocus={() => (cancelHasFocus.current = true)}
+            onBlur={() => (cancelHasFocus.current = false)}
+          >
             Cancel export
           </button>
-        </p>
+        </div>
       )}
-      {exported && (
-        <p className={exported.ok ? 'rt-note' : 'rt-note bad'} role="status">
-          {exported.text}
-        </p>
-      )}
+      {/* Always in the page; said twice per job: when it starts, when it ends. */}
+      <p className={job?.result ? (job.result.ok ? 'rt-note' : 'rt-note bad') : 'sr-only'} role="status" aria-live="polite">
+        {job?.result ? job.result.text : job?.running ? `Exporting to ${job.dest}…` : ''}
+      </p>
       <form
         ref={formRef}
         onBlur={() => {
