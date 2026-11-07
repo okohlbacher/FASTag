@@ -4,7 +4,9 @@
 //   spectra -> the input (Setup), or the batch queue when two or more or a
 //              folder (Batch); .fasta -> Database; .taxdb -> Taxonomy;
 //   a tags TSV -> Results; digest, label and mass-gap reports -> the Digest
-//   tab; a species report -> the Species tab; .sdrf.tsv -> Batch.
+//   tab; recon and delta tables -> Mass gaps & recon, a glyco report ->
+//   Glyco (P4c: the report opener sniffs which); a species report -> the
+//   Species tab; .sdrf.tsv -> Batch.
 // Nothing is taken while FASTag runs (the Open buttons are disabled then).
 
 import type { View } from '../setup/shortcuts'
@@ -17,7 +19,7 @@ export interface DropPlan {
   batch?: string[]
   values?: Record<string, string>
   results?: string
-  /// Reports for the Digest tab (digest, label, mass gaps).
+  /// Reports for the Digest, Mass gaps & recon and Glyco tabs.
   reports: string[]
   species?: string
   view?: View
@@ -25,8 +27,9 @@ export interface DropPlan {
   notes: string[]
 }
 
-// The report kinds a tab shows today; the others get their viewers in P4.
-const DIGEST_TAB = new Set(['digest', 'label', 'massgap'])
+// The report kinds a tab shows (the long-form reports in Digest; P4c: recon
+// and delta in Mass gaps & recon, glyco in Glyco).
+const REPORT_TABS = new Set(['digest', 'label', 'massgap', 'recon', 'delta', 'glyco'])
 
 const base = (p: string): string => p.slice(Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\')) + 1)
 const names = (ps: string[]): string => ps.map(base).join(', ')
@@ -69,7 +72,7 @@ export function planDrop(r: DropRoute, ctx: { busy: boolean; queued?: boolean })
   }
   const later: string[] = []
   for (const x of r.reports) {
-    if (DIGEST_TAB.has(x.kind)) plan.reports.push(x.path)
+    if (REPORT_TABS.has(x.kind)) plan.reports.push(x.path)
     else if (x.kind === 'species') plan.species = x.path
     else later.push(x.path)
   }

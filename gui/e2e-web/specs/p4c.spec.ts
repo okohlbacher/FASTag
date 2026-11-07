@@ -210,3 +210,21 @@ test('dark mode is its own: the chart and table take the dark tokens, the number
   expect(look.dark.grid).not.toBe(look.light.grid)
   expect(look.dark.text).toBe(look.light.text)
 })
+
+test('a dropped recon table and glyco report open in their tabs', async ({ page }) => {
+  await openApp(page, 'gate-recon')
+  await page.evaluate(() => {
+    ;(window as unknown as { __fastagE2E: { drop(r: unknown): void } }).__fastagE2E.drop({
+      reports: [
+        { kind: 'recon', path: '/data/run01.recon.tsv' },
+        { kind: 'glyco', path: '/data/run01.tags.glyco.tsv' }
+      ]
+    })
+  })
+  await expect(page.getByRole('tab', { name: 'Glyco' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('grid', { name: 'Glyco spectra' })).toBeVisible()
+  await page.getByRole('tab', { name: 'Mass gaps & recon' }).click()
+  await expect(page.getByRole('grid', { name: 'Placements' })).toHaveAttribute('aria-rowcount', '4707')
+  // No "no tab shows" note for them.
+  await expect(page.getByText(/No tab shows/)).toHaveCount(0)
+})

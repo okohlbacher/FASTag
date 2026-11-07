@@ -35,11 +35,15 @@ gui/
                        BatchList.tsx, the batch job naming (batch.ts), and the batch
                        summary: batchSummary.ts (rows and the majority rule),
                        useBatchSummary.ts (each done job's reports) and SummaryTable.tsx
-    results/           ResultTabs.tsx (Overview, Tags, Species, Digest), FailureBanner.tsx (over
+    results/           ResultTabs.tsx (Overview, Tags, Species, Digest, Mass gaps & recon, Glyco), FailureBanner.tsx (over
                        the tabs, or on the Batch view beside the queue), reports.ts,
                        RunningPanel.tsx (the running state), OverviewPanel.tsx over
                        overview.ts (tiles, checks, suggested settings) and calls.ts (the
-                       parser of the calls FASTag wrote)
+                       parser of the calls FASTag wrote); P4c: ReconView.tsx (Mass gaps &
+                       recon), MassGapChart.tsx (the gap sticks with the bundled Unimod
+                       deltas of unimod.ts), GlycoTable.tsx, DataTable.tsx (the shared
+                       keyboard table) and tables.ts (readers of -recon_out, -delta_out,
+                       the mzTab -recon_id_out and -glyco_out)
     ParamField.tsx     one form field per manifest parameter
     ResultsTable.tsx   tags browser: virtualized table with filters, column choice and export,
                        a keyboard active row, copy row and copy USI
@@ -154,7 +158,7 @@ manifest: the shell empties the file before the script runs.
 ## The window
 
 Four views, switched from the top bar: **Setup** (the input, the parameters
-and Run), **Results** (Overview, Tags, Species and Digest, full width), **Batch** (the
+and Run), **Results** (Overview, Tags, Species, Digest, Mass gaps & recon and Glyco, full width), **Batch** (the
 queue, its run bar, the failure banner, the summary table and each job's log) and **History**
 (every recorded run: input, status, duration, outputs). Run moves to
 Results; the first file of a batch moves to Batch. The progress pill in the
@@ -245,9 +249,9 @@ troubleshooting entries, the glossary and the settings reference.
 Files dropped anywhere on the window go by type: one spectra file to the
 input, two or more (or a folder) to the batch, a FASTA to `-fasta`, a
 `.taxdb` to `-taxdb`, a tags TSV to Results, a digest, label or mass-gap
-report to the Digest tab and a species report to the Species tab. Nothing is
-taken while FASTag runs. Reports without a tab yet (recon, delta, glyco) and
-SDRF files are named, not read.
+report to the Digest tab, a recon or delta table to Mass gaps & recon, a
+glyco report to Glyco and a species report to the Species tab. Nothing is
+taken while FASTag runs. SDRF files are named, not read.
 
 Themes: System (the default), Light and Dark, from the top bar or View >
 Theme; the choice is remembered on this machine. Text uses the system UI
@@ -320,6 +324,10 @@ The parts of the window have tests of their own beside them: the hooks
 props. The App-level tests, which render the whole window, are split by area
 beside the parts they drive: `run/batch.app.test.tsx` (run and batch
 orchestration), `results/digest.app.test.tsx` (the Digest tab),
+`results/viewers.app.test.tsx` (Mass gaps & recon and Glyco; the component
+and parser tests `results/viewers.test.tsx`, `results/tables.test.ts` and
+`results/unimod.test.ts` read the real recon, delta, mzTab and glyco output
+in `src/fixtures/cli/`),
 `results/overview.app.test.tsx` (the Overview and the running state; the
 parser and model tests `results/calls.test.ts` and `results/overview.test.ts`
 read real CLI output on the gate PXDs from `src/fixtures/cli/`),
