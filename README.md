@@ -196,7 +196,9 @@ glyco reports), so a file and Run are all a first run needs; the settings sit
 in four step cards, presets store only what differs from their task, and
 **Export INI…** writes the same parameters for `FASTag -ini`. The
 window has four views, switched from the top bar or with Cmd/Ctrl+1..4:
-**Setup**, **Results**, **Batch** and **History** (every recorded run); a
+**Setup**, **Results**, **Batch** and **History** (every recorded run, with
+its exact command line to copy, its settings to load back into Setup, and a
+Re-run of the same command line); a
 progress pill in the top bar follows the run from any view, and a finished
 run in the background raises a system notification. Spectra, FASTA,
 taxonomy, tags and report files can be dropped anywhere on the window. A

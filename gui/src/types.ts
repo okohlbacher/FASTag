@@ -142,6 +142,11 @@ export interface RunRecord {
   start: number
   end: number
   cleanup: Cleanup
+  // The parameters the run was sent (Settings into form); absent in records
+  // written before P2a.
+  params?: Record<string, unknown> | null
+  // The tags it wrote (the CLI's summary line); absent when it printed none.
+  tags?: number | null
 }
 
 // The reply of `run` (fastag.rs RunStarted). The run's events come on the
@@ -265,6 +270,13 @@ export interface FastagApi {
   // The recorded runs, newest first; the newest run that wrote a path.
   historyList: (limit?: number) => Promise<RunRecord[]>
   historyOf: (path: string) => Promise<RunRecord | null>
+  // Delete one record (its files stay); false when no record has that id.
+  // Rejects with the reason when the record is kept: it alone marks a file
+  // its run left behind as incomplete (history.rs marks_incomplete).
+  historyDelete: (id: string) => Promise<boolean>
+  // What a Re-run of the record starts: the `run` parameters it was started
+  // with ({ in, out, params }); rejects for a record without them.
+  historyRerun: (id: string) => Promise<Record<string, unknown>>
   // Files unfinished runs left (sweep.rs): <output>.part, <output>.incomplete
   // and the outputs of a run the app did not see end. Offered at startup;
   // only listed files are removed, and kept ones are not offered again.
