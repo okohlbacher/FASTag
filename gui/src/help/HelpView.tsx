@@ -1,10 +1,11 @@
-import { useEffect, useRef, type JSX } from 'react'
+import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import { DEPENDS, HIDDEN, PARAM_BY_NAME, SECTIONS, defaultText, humanName, masters } from '../paramLayout'
 import { GLOSSARY, PAGES, SETTINGS_INTRO, type HelpPage } from './content'
 import { FAQ, FAQ_BY_ID, FAQ_GROUPS } from './faq'
 import { HelpLink } from './HelpLink'
 import { PARAM_HELP } from './params'
-import { helpBack, rememberHelpPage, showHelpPage, useHelp } from './link'
+import { closeHelp, helpBack, openHelp, rememberHelpPage, showHelpPage, useHelp } from './link'
+import { searchHelp } from './search'
 
 export const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 
@@ -232,8 +233,57 @@ function PageBody({ page }: { page: HelpPage }): JSX.Element {
   )
 }
 
-/// The Help view: page navigation on the left (above, in a narrow window), the
-/// page on the right.
+/// Search over every page, the FAQ, the glossary and the settings
+/// (search.ts); a hit opens its entry and clears the box.
+function HelpSearch(): JSX.Element {
+  const [q, setQ] = useState('')
+  const hits = useMemo(() => searchHelp(q), [q])
+  return (
+    <div className="help-search" role="search">
+      <input
+        type="search"
+        aria-label="Search Help"
+        placeholder="Search Help"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' && q) {
+            e.stopPropagation()
+            setQ('')
+          } else if (e.key === 'Enter' && hits[0]) {
+            openHelp(hits[0].id)
+            setQ('')
+          }
+        }}
+      />
+      {q.trim() !== '' &&
+        (hits.length ? (
+          <ul className="help-hits" aria-label="Search results">
+            {hits.map((h) => (
+              <li key={h.id}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    openHelp(h.id)
+                    setQ('')
+                  }}
+                >
+                  <span className="hit-title">{h.title}</span>
+                  <span className="hit-where">{h.where}</span>
+                  <span className="hit-snippet">{h.snippet}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="hint">Nothing in Help matches “{q.trim()}”.</p>
+        ))}
+    </div>
+  )
+}
+
+/// The Help panel (GUI-DESIGN 3 S10, a side panel beside any view from P2a):
+/// search and the page list above, the page below.
 export default function HelpView(): JSX.Element {
   const { page, target, back } = useHelp()
   const shown = (target && PAGE_OF.get(target.id)) || page
@@ -257,6 +307,12 @@ export default function HelpView(): JSX.Element {
 
   return (
     <div className="helpview">
+      <div className="help-head">
+        <HelpSearch />
+        <button type="button" className="secondary small" onClick={() => closeHelp()}>
+          Close Help
+        </button>
+      </div>
       <nav className="help-nav" aria-label="Help pages">
         <ul>
           {PAGES.map((p) => (
@@ -277,7 +333,7 @@ export default function HelpView(): JSX.Element {
             <span aria-hidden="true">←</span> Back to {PAGES.find((p) => p.id === back.page)?.title ?? 'the last page'}
           </button>
         )}
-        <p className="hint">F1 opens Help; Esc returns to FASTag.</p>
+        <p className="hint">F1 opens Help; Esc closes it.</p>
       </nav>
       <main className="help-main" ref={mainRef} aria-labelledby="help-page-h">
         <article className="help-page">

@@ -128,6 +128,15 @@ export interface OverwriteAsk {
   answer: (yes: boolean) => void
 }
 
+export interface BatchEnd {
+  // The jobs this pass started.
+  ran: number
+  // Of them, the ones that failed.
+  failed: number
+  // The pass was cancelled.
+  cancelled: boolean
+}
+
 export interface RunState {
   jobs: Job[]
   // The job last started: the one running, or the one whose log is live.
@@ -136,6 +145,9 @@ export interface RunState {
   batchMode: boolean
   // A batch is being worked through (between two jobs no job runs).
   batchRunning: boolean
+  // How the last batch pass ended: the jobs it ran, not the queue's
+  // statuses (a Retry failed whose jobs fail again ends as it started).
+  batchEnd: BatchEnd | null
   // The log the drawer shows by default: the last started job's.
   liveLog: LogStore
   results: Results | null
@@ -175,7 +187,8 @@ export type RunAction =
   | { type: 'CANCEL_REQUESTED' }
   | { type: 'BATCH_ADD'; files: string[] }
   | { type: 'BATCH_REMOVE'; inputs: string[] }
-  | { type: 'BATCH_RUNNING'; on: boolean }
+  // ended: when a pass ends, what it ran (none: it ran nothing).
+  | { type: 'BATCH_RUNNING'; on: boolean; ended?: BatchEnd }
   | { type: 'RESULTS'; update: Update<Results | null> }
   | { type: 'BATCH_MISS'; miss: RunState['batchMiss'] }
   | { type: 'SPECIES'; species: SpeciesReport | null }
@@ -196,6 +209,7 @@ export const initialRunState: RunState = {
   activeJobId: null,
   batchMode: false,
   batchRunning: false,
+  batchEnd: null,
   liveLog: createLogStore(),
   results: null,
   batchMiss: null,
@@ -397,6 +411,7 @@ export function runReducer(s: RunState, a: RunAction): RunState {
     case 'BATCH_REMOVE':
       return batchRemove(s, a.inputs)
     case 'BATCH_RUNNING':
+      if (a.ended) return { ...s, batchRunning: a.on, batchEnd: a.ended }
       return s.batchRunning === a.on ? s : { ...s, batchRunning: a.on }
     case 'RESULTS': {
       const results = apply(a.update, s.results)

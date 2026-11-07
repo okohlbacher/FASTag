@@ -9,6 +9,7 @@ import type {
   BinaryInfo,
   BrowserEvent,
   Cleanup,
+  DropRoute,
   ResultsHead,
   FastagApi,
   ResultsPage,
@@ -125,7 +126,10 @@ const api: FastagApi = {
 
   onCloseRequested: (cb) => subscribe<'close' | 'quit'>('fastag:close-requested', cb),
   answerClose: (quit: boolean) => invoke<void>('close_answer', { quit }),
-  setBusy: (busy: boolean) => invoke<void>('set_ui_busy', { busy })
+  setBusy: (busy: boolean) => invoke<void>('set_ui_busy', { busy }),
+  onDrop: (cb) => subscribe<DropRoute>('fastag:drop', cb),
+  onDragHover: (cb) => subscribe<boolean>('fastag:drag', cb),
+  notify: (title: string, body: string) => invoke<void>('notify_finished', { title, body })
 }
 
 export default api

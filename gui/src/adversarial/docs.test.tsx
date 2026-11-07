@@ -14,7 +14,7 @@ import { parseReport } from '../digestReport'
 import { HIDDEN, PARAM_BY_NAME, RENDERED } from '../paramLayout'
 import manifest from '../params.generated.json'
 import { installMockBridge } from '../testing/mockBridge'
-import { click, pickSingle, renderApp, runButton } from '../testing/render'
+import { click, goTo, pickSingle, renderApp, runButton } from '../testing/render'
 import { applyAndCheck } from '../testing/lastUsed'
 import type { SpeciesReport } from '../types'
 import digestTsv from '../fixtures/digest.tsv?raw'
@@ -67,6 +67,7 @@ describe('docs: species precondition (README "FASTag refuses the run up front")'
     await pickSingle(mock, '/d/a.mzML')
     expect((runButton() as HTMLButtonElement).disabled).toBe(true)
     expect(c.querySelector('.controls')!.textContent).toMatch(/cannot reach the species index k = 7/)
+    await goTo('results')
     await click(screen.getByRole('tab', { name: /Species/ }))
     expect(screen.getByText(/FASTag refuses the run/)).toBeDefined()
     expect(screen.queryByText(/the report would be empty/)).toBeNull()
@@ -136,6 +137,7 @@ describe('docs: Digest tab vs doc/DESIGN-digest.md "GUI: Digest tab"', () => {
     const mock = installMockBridge()
     mock.reportFiles = { '/rep1/Ecoli_MS2_small.label.tsv': lab, '/rep2/Ecoli_MS2_small.digest.tsv': dig }
     await renderApp(mock)
+    await goTo('results') // the report picker lives in the empty results pane
     mock.nextPickReport = '/rep1/Ecoli_MS2_small.label.tsv'
     await click(screen.getByRole('button', { name: 'Open a digest, label or mass-gap report…' }))
     mock.nextPickReport = '/rep2/Ecoli_MS2_small.digest.tsv'

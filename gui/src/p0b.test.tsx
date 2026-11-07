@@ -8,7 +8,7 @@ import App from './App'
 import { closeHelp } from './help/link'
 import ResultsTable, { headServes, scrollTopFor } from './ResultsTable'
 import { installMockBridge, type MockBridge } from './testing/mockBridge'
-import { click, flush, key, pickSingle, renderApp } from './testing/render'
+import { click, flush, goTo, key, pickSingle, renderApp } from './testing/render'
 import { searchParams } from './setup/searchRank'
 import { applyInstrument, INSTRUMENTS, matchesInstrument, presetText, speciesFixes } from './setup/presets'
 import { actionOfKey, deduper } from './setup/shortcuts'
@@ -197,7 +197,8 @@ describe('App wiring', () => {
     await act(async () => mock.emitDone({ ok: false, code: null, cancelled: true, runId: mock.lastRunId }))
     expect(mock.runCalls).toHaveLength(1)
     await act(async () => mock.emitMenu('help'))
-    await waitFor(() => expect(document.querySelector('.layout')?.hasAttribute('hidden')).toBe(true))
+    // P2a: Help is a side panel beside the view (was: it replaced the layout).
+    await waitFor(() => expect(screen.getByRole('complementary', { name: 'Help' })).toBeDefined())
     await act(async () => closeHelp()) // the help store is module-wide
   })
 
@@ -217,6 +218,8 @@ describe('App wiring', () => {
     await click(screen.getByRole('button', { name: /^Run on a\.mzML$/ }))
     await waitFor(() => expect(mock.runCalls).toHaveLength(1))
     await act(async () => mock.emitDone({ ok: true, code: 0, runId: mock.lastRunId }))
+    // The Last run block is on Setup (P2a: a run moves to Results).
+    await goTo('setup')
     await click(await screen.findByRole('button', { name: /Reveal in Finder|Show in Explorer|Show in folder/ }))
     await click(screen.getByRole('button', { name: 'Open folder' }))
     expect(mock.revealCalls).toEqual([

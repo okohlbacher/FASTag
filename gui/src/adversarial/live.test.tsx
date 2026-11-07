@@ -5,7 +5,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import ResultsTable from '../ResultsTable'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
-import { click, renderApp, runButton } from '../testing/render'
+import { click, goTo, renderApp, runButton, showView } from '../testing/render'
 
 const change = (el: Element, value: string): Promise<void> =>
   act(async () => {
@@ -18,6 +18,7 @@ const openSection = async (title: string): Promise<void> => {
   if (b.getAttribute('aria-expanded') !== 'true') await click(b)
 }
 async function pick(mock: MockBridge, path: string): Promise<void> {
+  showView('setup') // the input card (P2a: Setup is a view of its own)
   mock.nextPickInput = path
   await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
 }
@@ -81,6 +82,7 @@ describe('live: run inputs', () => {
     await click(field(c, 'species'))
     expect((runButton() as HTMLButtonElement).disabled).toBe(true)
     expect(c.querySelector('.controls .warn')!.textContent).toMatch(/cannot reach the species index k = 7/)
+    await goTo('results')
     await click(screen.getByRole('tab', { name: /Species/ }))
     expect(c.querySelector('.tabpanel')!.textContent).toContain('FASTag refuses the run')
   })
@@ -135,6 +137,7 @@ describe('live: failure and stale results', () => {
   it('after a run, permanent controls open another tags TSV or a report', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
+    await goTo('results') // the empty Tags pane
     expect(screen.getByRole('button', { name: /Open a tags TSV/ })).toBeTruthy()
     await pick(mock, '/r/A.mzML')
     await click(runButton())
