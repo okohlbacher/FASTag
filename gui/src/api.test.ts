@@ -86,7 +86,10 @@ describe('api.run over a Channel of its own', () => {
     expect(before.replied).toBe(false)
     expect(before.outputs).toBeUndefined()
     expect(isSettled(before)).toBe(false)
-    expect(before.log).toEqual([
+    // The job counts its log lines; the lines reach onChange with their
+    // action (from there the log store keeps them, the only copy).
+    expect(before.logLines).toBe(2)
+    expect(changes.flatMap(([, a]) => (a.type === 'EVENT' && a.event.kind === 'log' ? a.event.lines : []))).toEqual([
       ['-threads 0: using 8 of 16 logical cores.', true],
       ['139 MS2 spectra, 2028 tags', false]
     ])
@@ -133,7 +136,8 @@ describe('api.run over a Channel of its own', () => {
     const { changes, run } = start()
     const j = await run.settled
     await tick()
-    expect(j.log).toEqual([['Reading spectra', true]])
+    expect(j.logLines).toBe(1)
+    expect(changes.flatMap(([, a]) => (a.type === 'EVENT' && a.event.kind === 'log' ? a.event.lines : []))).toEqual([['Reading spectra', true]])
     expect(run.job()).toBe(j)
     expect(j.result).toMatchObject({ ok: true, code: 0 })
     expect(j.progress).toBeNull()

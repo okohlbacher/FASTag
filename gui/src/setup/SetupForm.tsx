@@ -78,8 +78,8 @@ export default function SetupForm({ session, run, onPickInput, logJob, logOpen, 
       logJob={logJob}
       logOpen={logOpen}
       onAdd={run.addBatchFiles}
-      onClear={() => run.setJobs([])}
-      onRemove={(i) => run.setJobs((js) => js.filter((_, k) => k !== i))}
+      onClear={() => run.removeJobs(jobs.map((j) => j.input))}
+      onRemove={(i) => run.removeJobs([jobs[i].input])}
       onShow={run.showJob}
       onLog={openLog}
       addBatchRef={addBatchRef}

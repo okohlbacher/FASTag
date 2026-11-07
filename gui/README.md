@@ -22,8 +22,11 @@ gui/
                        laying out the setup, the run bar and the result tabs
     app/               viewStore.ts (result tab and log drawer, one store per window),
                        output-path and text helpers (paths.ts, format.ts)
-    run/               useRun.ts (a run or batch, its log, progress and results), RunBar.tsx,
-                       LogDrawer.tsx, BatchList.tsx and the batch job naming (batch.ts)
+    run/               useRun.ts (a run or batch, its log, progress and results) over one
+                       reducer (runReducer.ts: jobs, RUN_START/EVENT/DONE/CANCEL_REQUESTED/
+                       BATCH_ADD/BATCH_REMOVE), each job's log in a store outside React
+                       state (logStore.ts), RunBar.tsx, LogDrawer.tsx, BatchList.tsx and
+                       the batch job naming (batch.ts)
     results/           ResultTabs.tsx (Tags, Species, Digest and the failure banner), reports.ts
     ParamField.tsx     one form field per manifest parameter
     ResultsTable.tsx   tags browser: virtualized table with filters, column choice and export
