@@ -264,6 +264,15 @@ namespace FASTag
   std::vector<int> complementPopulation(const OpenMS::MSSpectrum& spec, double precursor_mz,
                                         int charge, const Param& p);
 
+  /// The peaks tagSpectrum tags of @p spec: the precursor cut, the m/z
+  /// collapse, deisotoping (Param::deisotope) and the peak budget, m/z
+  /// sorted, exactly as tagSpectrum prepares them (1.12 -dump_spectrum).
+  /// Empty when tagSpectrum would prepare nothing (no peaks, a precursor
+  /// m/z that is not finite and positive). The charge is defaulted as
+  /// tagSpectrum does. Reads no tag_length, so any Param of a run serves.
+  OpenMS::MSSpectrum preparedPeaks(const OpenMS::MSSpectrum& spec, double precursor_mz, int charge,
+                                   const Param& p);
+
   /// Precomputed nulls, built once and shared read-only.
   ///
   /// Eager construction is what lets several spectra be tagged concurrently: a

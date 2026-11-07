@@ -1258,6 +1258,13 @@ namespace FASTag
     return out;
   }
 
+  MSSpectrum preparedPeaks(const MSSpectrum& in, double precursor_mz, int charge, const Param& p)
+  {
+    if (in.empty() || !(precursor_mz > 0) || !std::isfinite(precursor_mz)) return {};
+    if (charge <= 0) charge = 2;
+    return prepare(in, precursor_mz, charge, p, ComplementSpec::fromParam(p)).spec;
+  }
+
   namespace
   {
     /// The census facts of a prepared spectrum (SpectrumDiag).

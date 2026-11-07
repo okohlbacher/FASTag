@@ -105,8 +105,11 @@ endif()
 # links the same library.
 find_package(ZLIB REQUIRED)
 
+# ---- 1.12 G: executable sources ----
+# G1: -probe_input and -dump_spectrum, which read through the readers below.
+set(FASTAG_EXE_SOURCES_G src/InputProbe.cpp)
 add_executable(FASTag src/FASTag.cpp src/IndexedMzMLReader.cpp src/MzMLDirectDecoder.cpp src/MgfReader.cpp src/MzPeakStream.cpp
-               src/AcquisitionProbe.cpp)
+               src/AcquisitionProbe.cpp ${FASTAG_EXE_SOURCES_G})
 
 # mimalloc on Windows, with redirection of the C runtime heap.
 #
@@ -523,6 +526,28 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta)
   set_tests_properties(census_ids_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # ---- 1.12 G: CLI tests ----
+  # G1: the JSON writers, the mzML header parse and the spectrum record
+  # against the tagger's preprocessing; probeInput()/dumpSpectrum() on the
+  # fixtures. Built with the readers they read through.
+  add_executable(input_probe_test test/input_probe_test.cpp src/InputProbe.cpp src/AcquisitionProbe.cpp
+                 src/IndexedMzMLReader.cpp src/MzMLDirectDecoder.cpp src/MgfReader.cpp src/MzPeakStream.cpp)
+  target_link_libraries(input_probe_test PRIVATE fastag_core ZLIB::ZLIB)
+  if(OpenMP_CXX_FOUND)
+    target_link_libraries(input_probe_test PRIVATE OpenMP::OpenMP_CXX)
+  endif()
+  target_compile_definitions(input_probe_test PRIVATE
+                             FASTAG_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
+  add_test(NAME input_probe_test COMMAND input_probe_test ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures)
+  # G1: -probe_input and -dump_spectrum against the real binary (JSON
+  # schema, peaks equal to what the tagger tags, exit codes, no file
+  # written) and the shipped digest data in the installed layouts.
+  add_test(NAME gui_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/gui_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
+                   ${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt)
+  set_tests_properties(gui_cli_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # mzPeak reader vs its own mzML twin. Needs a matched pair of real files, so
   # it SKIPs unless FASTAG_E2E_MZML and FASTAG_E2E_MZPEAK point at one.
