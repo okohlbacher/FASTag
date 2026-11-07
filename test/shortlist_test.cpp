@@ -390,8 +390,14 @@ int main()
     std::mt19937 rng(7);
     for (std::uint32_t sp = 0; sp < 300; ++sp)
       for (int k = 0; k < 3; ++k)
-        e.push_back(ev(sp, static_cast<std::uint32_t>(rng() % 20), 0.001f * static_cast<float>(rng() % 100),
-                       rng() % 4 != 0, static_cast<std::uint32_t>(rng() % 5) * 10));
+      {
+        // One draw per statement, last argument first (the x86-64 GCC order of the former argument list).
+        const auto d = static_cast<std::uint32_t>(rng() % 5) * 10;
+        const bool c = rng() % 4 != 0;
+        const float b = 0.001f * static_cast<float>(rng() % 100);
+        const auto a = static_cast<std::uint32_t>(rng() % 20);
+        e.push_back(ev(sp, a, b, c, d));
+      }
     auto s = open_settings();
     s.gapped = true;
     s.parsimony = SL::Parsimony::Greedy;

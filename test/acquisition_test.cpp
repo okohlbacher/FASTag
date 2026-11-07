@@ -119,7 +119,13 @@ namespace
     std::uniform_real_distribution<double> mz(lo, hi);
     std::uniform_int_distribution<int> z(2, 4);
     std::vector<Ms2Meta> r;
-    for (std::size_t i = 0; i < n; ++i) r.push_back(meta(mz(rng), half_width, half_width, z(rng)));
+    for (std::size_t i = 0; i < n; ++i)
+    {
+      // One draw per statement, charge first (the x86-64 GCC order of the former argument list).
+      const int zz = z(rng);
+      const double x = mz(rng);
+      r.push_back(meta(x, half_width, half_width, zz));
+    }
     return r;
   }
 

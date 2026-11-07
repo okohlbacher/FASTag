@@ -275,7 +275,11 @@ int main()
       const size_t len = 3 + rng() % 9;
       const size_t start = rng() % src.size();
       std::string seq = src.substr(start, len);
-      if (rng() % 4 == 0 && !seq.empty()) seq[rng() % seq.size()] = alpha[rng() % alpha.size()];
+      if (rng() % 4 == 0 && !seq.empty())
+      {
+        const char c = alpha[rng() % alpha.size()];  // one draw per statement, in the C++17 order of `=`
+        seq[rng() % seq.size()] = c;
+      }
       const size_t cap = rng() % 6;
       const double margins[] = {0.0, 0.2, 0.34, 0.5, 0.67, 1.0};
       const double m = margins[rng() % 6];
@@ -370,7 +374,11 @@ int main()
       const size_t len = 3 + rng() % 7;
       std::string seq = src.substr(rng() % src.size(), len);
       if (rng() % 2) std::reverse(seq.begin(), seq.end());
-      if (rng() % 5 == 0 && !seq.empty()) seq[rng() % seq.size()] = alpha[rng() % alpha.size()];
+      if (rng() % 5 == 0 && !seq.empty())
+      {
+        const char c = alpha[rng() % alpha.size()];  // one draw per statement, in the C++17 order of `=`
+        seq[rng() % seq.size()] = c;
+      }
       const size_t cap = 1 + rng() % 4;
       TagLookupCounters c0, c1, r1, c2, r2, cr;
       V ref, f, b, rev;

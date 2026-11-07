@@ -68,7 +68,13 @@ namespace CzSynth
     const auto u01 = [&rng]() { return (rng() >> 8) * (1.0 / 16777216.0); };
     for (const auto& pk : th) r.spec.emplace_back(pk.getMZ(), 0.5 + 0.5 * u01());
     const double hi = r.M > 190.0 ? r.M - 40.0 : 150.0;
-    for (int k = 0; k < noise; ++k) r.spec.emplace_back(150.0 + (hi - 150.0) * u01(), 0.02 + 0.2 * u01());
+    for (int k = 0; k < noise; ++k)
+    {
+      // One draw per statement, intensity first (the x86-64 GCC order); see complement_synth.h.
+      const double in = 0.02 + 0.2 * u01();
+      const double mz = 150.0 + (hi - 150.0) * u01();
+      r.spec.emplace_back(mz, in);
+    }
     r.spec.sortByPosition();
     return r;
   }
