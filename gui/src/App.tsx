@@ -15,6 +15,7 @@ import LogDrawer from './run/LogDrawer'
 import BatchList from './run/BatchList'
 import SummaryTable from './run/SummaryTable'
 import ResultTabs from './results/ResultTabs'
+import { useSpectrumSupport } from './spectrum/support'
 import FailureBanner from './results/FailureBanner'
 import { createViewStore, useView } from './app/viewStore'
 import { createExportJobs, ExportJobsContext } from './results/exportJobs'
@@ -97,6 +98,8 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   useEffect(() => {
     window.fastag.probe().then(setBin)
   }, [])
+  // P4: the Spectrum tab needs a CLI with -dump_spectrum.
+  const spectrumSupport = useSpectrumSupport(bin)
 
   // The backend asks before a close or quit kills an active run.
   useEffect(() => window.fastag.onCloseRequested((what) => setCloseAsk(what)), [])
@@ -240,6 +243,8 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   // fragment tolerance came from the instrument preset chosen when that
   // preset still matches what the run was sent.
   const shown = run.shown
+  // The Spectrum tab dumps peaks under the options of the run shown.
+  const spectrumRun = useMemo(() => (shown ? { input: shown.input, params: shown.params } : null), [shown])
   const preset = INSTRUMENTS.find((x) => x.id === session.instrument)
   const presetLabel = shown && preset && matchesInstrument(shown.params, preset) ? presetText(preset) : null
   const overview = useMemo(
@@ -523,6 +528,8 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
                 showFailure={jobs.length === 0}
                 overview={overview}
                 onOverviewAction={(a) => void overviewAction(a)}
+                spectrumSupport={spectrumSupport}
+                spectrumRun={spectrumRun}
                 rerunResConf={
                   // Only for the output of the run the form would repeat.
                   run.results?.input && run.results.input === input && jobs.length === 0 && bin?.ok
