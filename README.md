@@ -855,6 +855,15 @@ counts (`refs`, `refs_exact`, `refs_scan`, `refs_ambiguous`,
 `<status>_identified_<1|0|unknown>` and `triage_candidates`. Triage is an
 E-value threshold, not a quality call.
 
+For front ends that list a run's outputs by option name (the GUI's resolved
+outputs): the census files are `census_out` and `census_summary_out`. With
+`-census` and no path of their own they are `<out>` with its extension
+replaced by `.census.tsv` and `.census_summary.tsv` (the rule of
+`-glyco_out` and `-species_out`); without `-census` neither is written, and a
+`-census_ids` run refused for foreign references writes neither. The log
+names both paths (`Census: ... -> <census_out>, summary ->
+<census_summary_out>`).
+
 ## Tag diversity
 
 `-diversity` changes which tags occupy the `-max_tags` slots on chimeric
