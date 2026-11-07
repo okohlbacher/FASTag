@@ -18,6 +18,7 @@ use serde_json::Value;
 use tauri::AppHandle;
 
 use crate::fastag::{self, RunParams, MANIFEST};
+use crate::lifetime;
 
 /// A parameter's value as an INI holds it.
 #[derive(Clone, Debug, PartialEq)]
@@ -194,15 +195,16 @@ pub fn export_with(mut cmd: Command, params: &RunParams, dest: &Path, tmp_dir: &
     let items = items_from_argv(&fastag::build_args(params));
     let tmp = temp_ini(tmp_dir);
     std::fs::write(&tmp, ini_xml(&items)).map_err(|e| format!("cannot write the temporary INI {}: {e}", tmp.display()))?;
-    let out = cmd
-        .arg("-ini")
+    cmd.arg("-ini")
         .arg(&tmp)
         .arg("-write_ini")
         .arg(dest)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output();
+        .stderr(Stdio::piped());
+    // Started by the spawner thread like every CLI child (lifetime.rs); on
+    // Windows in a job of its own, which is closed once it has ended.
+    let out = lifetime::spawn_cli(cmd).and_then(|(c, _job)| c.wait_with_output());
     let _ = std::fs::remove_file(&tmp);
     let out = out.map_err(|e| format!("cannot start FASTag: {e}"))?;
     if !out.status.success() {
@@ -233,6 +235,7 @@ pub async fn export_ini(app: AppHandle, params: RunParams, dest: String) -> Resu
             cmd.env("OPENMS_DATA_PATH", d);
         }
         fastag::quiet_blas(&mut cmd);
+        lifetime::die_with_parent(&mut cmd);
         export_with(cmd, &params, Path::new(&dest), &std::env::temp_dir())
     })
     .await
