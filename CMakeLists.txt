@@ -429,6 +429,17 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mgf)
   set_tests_properties(ion_series_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # #6: -unknown_charge, -charge_*, -isotope_error on the fixture MGF with its
+  # charges stripped: defaults equal 1.11.0, the infer call, header charges
+  # kept, threads, losing hypotheses add no species, refusals.
+  add_test(NAME charge_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/charge_cli_test.sh $<TARGET_FILE:FASTag>
+                   $<TARGET_FILE:buildtaxdb>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mgf
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy)
+  set_tests_properties(charge_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # ---- 1.12 A: CLI tests ----
   # #5: shortlist, reduced FASTA and engine configuration on the vendored
   # fixture: ranking, no decoys, existing outputs unchanged, threads, the
