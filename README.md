@@ -531,6 +531,7 @@ MGF→mzML direction is exact.
 | `-acquisition_probe_spectra <n>` | 4000 | MS2 spectra the acquisition check reads, metadata only, reading at most ten times as many spectra in all (advanced) |
 | `-pick_profile <legacy\|auto\|off>` | legacy | Centroid profile MS2 (MS:1000128) with OpenMS `PeakPickerHiRes` before tagging: `legacy` on mzPeak input only (as 1.11), `auto` on mzML and mzPeak input (not MGF), `off` never. Centroided MS2 are never re-picked. `-out_spectra` writes the spectra as they were tagged. Not with `-stream` |
 | `-pick_unknown_type` | off | With `-pick_profile auto`: also centroid MS2 that declare no spectrum type, when OpenMS's `PeakTypeEstimator` reads their data as profile (advanced) |
+| `-ion_series <by\|cz\|auto>` | by | Ion series the MS2 spectra are read as: `by` (b/y ions, as 1.11), `cz` (c/z• ions of ETD/ECD, every spectrum), `auto` (c/z• for spectra whose activation is ETD or ECD, b/y for all others, hybrid EThcD/ETciD included, with a warning). Under `cz`, and under `auto` when the run has electron-activated spectra, the tag TSV gains a last `ion_series` column and the census a `best_ion_series` column (see Ion series). Not with `-stream`. Experimental: `auto` is not validated yet |
 | `-unknown_charge <assume2\|enumerate\|infer>` | assume2 | How a precursor without a charge is tagged: `assume2` as 2+ (as 1.11); `enumerate` at each listed possible charge (MS:1000633, MGF `2+ and 3+`), else at every charge `-charge_min`..`-charge_max`; `infer` at the charge its complement pairs support (1+ when `-charge_min` is 1, or 1 is listed, and almost no intensity lies above the precursor; both charges of a close call, `ambiguous`; without evidence 2+, or the lowest candidate when 2 is none, `assumed`). Every charge tagged is a listed possible charge, else one of `-charge_min`..`-charge_max`. A header charge is never replaced. A spectrum tagged under H hypotheses has every E-value multiplied by H before `-max_evalue` and `-max_tags`; its rows are merged by E-value. The reports that aggregate over spectra (digest, label, massgap, delta, species, shortlist, census) read the rows of one selected hypothesis, chosen from the charge evidence, never from the E-values. Experimental, not validated; not with `-stream` |
 | `-charge_min <n>` / `-charge_max <n>` | 2 / 4 | The charges `enumerate` and `infer` try (1-8); `-charge_min 1` enables infer's 1+ test |
 | `-charge_infer_margin <x>` | 2 | Complement-pair excess by which an inferred charge must beat the runner-up to be tagged alone; closer, both are tagged (`ambiguous`). Any excess above 0 is a call; none is `assumed` (advanced) |
@@ -600,6 +601,32 @@ tagged at), `charge_src` (`header`, `possible`, `inferred`, `ambiguous`,
 `assumed` or `enumerated`), `iso_offset` (k) and `selected` (1 when the row's
 hypothesis feeds the aggregating reports). `-recon_out` and `-recon_id_out`
 keep every row at its hypothesis' charge.
+
+**Ion series** (`-ion_series`, 1.12). Under the default `by` the flanks follow
+the y-ion convention above: `nterm_mass` + tag residues + `cterm_mass` + H2O =
+the precursor's neutral mass, and a tag read off the b ions appears reversed
+with one water moved between its flanks. A tag read as c/z• ions (`cz`, or
+`auto` on ETD/ECD spectra; `ion_series` = `cz`) uses the same residue-sum
+convention for forward reads (the low peak a z• ion), and a reversed read (the
+low peak a c ion) carries the offset offC - offN = (H2O - NH2) - NH3 =
+-15.0347 Da instead of +H2O: N-side residues = `cterm_mass` - 15.0347, C-side
+residues = `nterm_mass` + 15.0347. Under c/z• the complement partner of a peak
+is the one whose neutral masses sum to M + H (under `-complement_rule
+precursor` at the c - 1 charges an electron-activated precursor of charge c
+leaves its fragments), and peaks at the unreacted
+precursor and its charge-reduced species (with their isotope and
+hydrogen-transfer forms) are dropped before tagging. `-recon_*`, `-digest_out`,
+`-label_out`, `-massgap_out`, `-delta_out` and the census take the offset from
+each tag; `-species` counts b/y tags only and reports how many c/z• rows it
+left out. Hybrid EThcD/ETciD spectra are read as b/y under `auto` (reading
+both series at once is not supported yet), and a/x ions are not read.
+`-ion_series auto` on a run without electron activation writes exactly what
+`by` writes. `auto` reads the activation of mzML input only: MGF and mzPeak
+spectra are read as b/y (an electron-activated spectrum such a reader delivers
+is counted in a warning), so a c/z row always comes with the `ion_series`
+column. With `-unknown_charge enumerate|infer` a spectrum read as c/z• takes
+its charge and isotope evidence from c/z• pairs, and its charge-reduced
+precursor species do not count as fragments.
 
 **Tag confidence.** The `evalue` is the primary, validated confidence — lower is
 better, and on real identifications (PXD000001) it separates correct from
@@ -1223,14 +1250,21 @@ tags fill the slots (hence the small change in total recall):
   16; shared node, indicative figures). `-subsample_*` draws over blocks, so it
   picks different spectra than the mzML the MGF came from. A malformed block
   that `-subsample_*` skips goes unnoticed.
-- **b/y ions only.** Tags and flanks are read as b/y ions. ETD/ECD spectra
-  (c/z ions) and hybrid EThcD/ETciD spectra are tagged the same way, so their
-  tags are unreliable. FASTag reads each MS2 spectrum's activation from the
-  mzML `<activation>` terms, or from the Thermo filter string when there are
-  none. When more than 1% of the MS2 spectra are electron or hybrid
-  activated, it writes one `Electron activation:` warning to stderr with the
-  count per class (collisional, electron, hybrid, unknown). MGF and mzPeak
-  input carry no activation, so their spectra count as unknown.
+- **b/y ions by default.** Under the default `-ion_series by`, tags and flanks
+  are read as b/y ions, and ETD/ECD spectra (c/z ions) and hybrid EThcD/ETciD
+  spectra are tagged the same way, so their tags are unreliable. FASTag reads
+  each MS2 spectrum's activation from the mzML `<activation>` terms, or from
+  the Thermo filter string when there are none. When more than 1% of the MS2
+  spectra are electron or hybrid activated, it writes one `Electron
+  activation:` warning to stderr with the count per class (collisional,
+  electron, hybrid, unknown). MGF and mzPeak input carry no activation, so
+  their spectra count as unknown, and `-ion_series auto` reads them as b/y.
+  `-ion_series cz` or `auto` (1.12, experimental, not yet validated on real
+  ETD data) reads c/z• ions (see Ion series); under them one `Ion series`
+  line on stderr gives the spectra per series, `auto` warns (`Hybrid
+  activation:`) when more than 1% of the spectra are hybrid and were read as
+  b/y, and `cz` warns (`Collisional activation:`) when more than 1% are
+  collisional.
 - **A tag is not an identification.** No per-tag q-value or FDR is emitted, and
   a `-fasta` match, a species call, a `delta_out` bin and a glyco flag are all
   candidates to follow up, not results to report.

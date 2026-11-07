@@ -41,11 +41,12 @@ namespace FASTag::RunReport
   /// Version of the run section format written by Emit::Versioned.
   /// 1 = the FASTag 1.11 `run` rows followed by `run_report_version`.
   /// 2 = format 1, then the E picking rows (#9).
-  /// 3 = format 2, then the E activation rows (#15 phase A). Bumped once per
-  /// item in the PLAN-INTEGRATION merge order (E#7 adds fields only, E#9 = 2,
-  /// E#15A = 3).
+  /// 3 = format 2, then the E activation rows (#15 phase A).
   /// 4 = format 3, then the E precursor-hypothesis rows (#6, wave 2).
-  inline constexpr int kFormatVersion = 4;
+  /// 5 = format 4, then the E ion-series rows (#15 phase B, wave 2).
+  /// Bumped once per item in the PLAN-INTEGRATION merge order (E#7 adds
+  /// fields only, E#9 = 2, E#15A = 3, E#6 = 4, E#15B = 5).
+  inline constexpr int kFormatVersion = 5;
 
   /// Run-level facts shared by every long-form report. Filled once per run.
   struct RunMeta
@@ -90,6 +91,11 @@ namespace FASTag::RunReport
     std::size_t charge_enumerated = 0;       ///< selected: one of -charge_min..-charge_max
     std::size_t iso_shifted = 0;             ///< selected hypothesis with an isotope offset
     std::size_t multi_hypothesis = 0;        ///< spectra tagged under more than one hypothesis
+    // #15 phase B: -ion_series and the tagged MS2 spectra per series; filled
+    // after the tagging loop.
+    std::string ion_series = "by";
+    std::size_t ion_series_ms2_by = 0;
+    std::size_t ion_series_ms2_cz = 0;
     // ---- 1.12 A ----
     // ---- 1.12 D ----
     // ---- 1.12 F ----
@@ -182,6 +188,15 @@ namespace FASTag::RunReport
         row("charge_enumerated", m.charge_enumerated, "were reported at an enumerated charge");
         row("isotope_shifted", m.iso_shifted, "were reported at a precursor isotope offset other than 0");
         row("multi_hypothesis", m.multi_hypothesis, "were tagged under more than one precursor hypothesis");
+      }
+      {
+        // #15 phase B: value = spectra read as the series, n = all tagged MS2.
+        const std::string n = std::to_string(m.ion_series_ms2_by + m.ion_series_ms2_cz);
+        r.push_back({"run", "ion_series", m.ion_series, "-",
+                     "MS2 spectra were read under -ion_series " + m.ion_series + "."});
+        const std::string by = std::to_string(m.ion_series_ms2_by), cz = std::to_string(m.ion_series_ms2_cz);
+        r.push_back({"run", "ion_series_by", by, n, by + " of " + n + " MS2 spectra were tagged as b/y ions."});
+        r.push_back({"run", "ion_series_cz", cz, n, cz + " of " + n + " MS2 spectra were tagged as c/z-dot ions."});
       }
     }
     // ---- 1.12 A ----

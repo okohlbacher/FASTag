@@ -18,6 +18,11 @@ namespace FASTag::Hyp
   {
     const double kProton = OpenMS::Constants::PROTON_MASS_U;
     const double kC13 = OpenMS::Constants::C13C12_MASSDIFF_U;
+    /// c/z range evidence: a charge-reduced species' window, as the tagger's
+    /// ETD filter (FASTagger.cpp ETD_REDUCED_ABOVE): one H below (hydrogen
+    /// transfer), its isotopes and H transfer up to 3 Da above, neutral.
+    constexpr double kHydrogen = 1.00782503207;
+    constexpr double kEtdReducedAbove = 3.0;
     /// The infer rule for a best excess E_c* in (0, margin): false = the plan's
     /// rule (the call is c*, ambiguous when the runner-up lies within the
     /// margin; assumed only when E_c* <= 0), true = assumed 2+ (the first
@@ -67,7 +72,11 @@ namespace FASTag::Hyp
 
     double excessOf(const std::vector<double>& mz, double M, const ComplementSpec& cs)
     {
-      const double target = M + 2.0 * kProton;
+      // 1+ pairs sum to M + 2p (b/y); a series with a pair delta (c/z-dot:
+      // M + H, #15 phase B) adds it. b/y's single delta 0 leaves the sum as
+      // it was, bit for bit.
+      double target = M + 2.0 * kProton;
+      if (!cs.pair_deltas.empty() && cs.pair_deltas.front() != 0.0) target += cs.pair_deltas.front();
       double off = 0;
       for (const double d : kOffTargetShifts) off += pairCount(mz, target + d, cs);
       return pairCount(mz, target, cs) - off / static_cast<double>(std::size(kOffTargetShifts));
@@ -131,9 +140,30 @@ namespace FASTag::Hyp
       // is the highest strong peak). Nothing is ruled out when every charge
       // would be: the evidence then contradicts itself.
       const double top_mz = mz.empty() ? 0.0 : mz.back();
+      // #15 phase B: an electron-activated spectrum (a series that loses a
+      // charge, ComplementSpec::charge_loss) keeps its unreacted precursor
+      // and charge-reduced species, the 1+ one at M + c*p, above every
+      // fragment; they are not fragments, so for candidate c the ceiling is
+      // tested against the highest strong peak outside c's species windows
+      // (as the tagger's ETD filter drops them). b/y: top_mz, as before.
+      const auto top_for = [&](int c) {
+        if (cs.charge_loss <= 0) return top_mz;
+        for (auto it = mz.rbegin(); it != mz.rend(); ++it)
+        {
+          bool species = false;
+          for (int zr = c; zr >= 1 && !species; --zr)
+          {
+            const double cr = c * prec_mz / zr;
+            const double tol = cs.tol(cr, cr);
+            species = *it >= cr - kHydrogen / zr - tol && *it <= cr + kEtdReducedAbove / zr + tol;
+          }
+          if (!species) return *it;
+        }
+        return 0.0;
+      };
       std::vector<int> left;
       for (const int c : charges)
-        if (c >= 1 && !(top_mz > c * prec_mz - (c - 1) * kProton + kCeilingMargin)) left.push_back(c);
+        if (c >= 1 && !(top_for(c) > c * prec_mz - (c - 1) * kProton + kCeilingMargin)) left.push_back(c);
       std::vector<int> all;
       for (const int c : charges)
         if (c >= 1) all.push_back(c);

@@ -184,7 +184,8 @@ namespace FASTag::Hyp
 
   /// Complement-pair excess of @p spec for a precursor of neutral mass @p M:
   /// pairs of the strongest kInferTopPeaks peaks (intensity desc, m/z desc)
-  /// whose m/z sum to M + 2p within ComplementSpec::tol, minus the mean count
+  /// whose m/z sum to M + 2p (plus the series' pair delta, ComplementSpec::
+  /// pair_deltas: c/z-dot M + H + 2p) within ComplementSpec::tol, minus the mean count
   /// at the kOffTargetShifts sums. Independent of the input peak order.
   double complementExcess(const OpenMS::MSSpectrum& spec, double M, const ComplementSpec& cs);
 

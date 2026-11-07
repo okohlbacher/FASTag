@@ -342,7 +342,8 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
-                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/profile_ms2_small.mzML)
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/profile_ms2_small.mzML
+                   $<TARGET_FILE:ion_series_test>)
   set_tests_properties(threads_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # Windows with FASTAG_MIMALLOC: the redirection is active for the whole
@@ -449,10 +450,20 @@ if(FASTAG_BUILD_TESTS)
   set_tests_properties(complement_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # #15 phase A: activation counts and the b/y warning on derived ETD, EThcD
   # and filter-string fixtures; tags unchanged; fast reader equals OnDisc.
+  # Phase B: -ion_series by|cz|auto (by == absent, auto on collisional ==
+  # by, c/z rows and column, hybrid/collisional WARNs, species exclusion,
+  # -stream refusal, OnDisc and threads).
   add_test(NAME ion_series_cli_test
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/ion_series_cli_test.sh $<TARGET_FILE:FASTag>
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
-                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mgf)
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mgf
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   $<TARGET_FILE:buildtaxdb>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
+                   $<TARGET_FILE:ion_series_test>
+                   # census_ids_test once F11B (-census_ids) is in the tree; empty before
+                   "$<$<TARGET_EXISTS:census_ids_test>:$<TARGET_FILE:census_ids_test>>")
   set_tests_properties(ion_series_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # #6: -unknown_charge, -charge_*, -isotope_error on the fixture MGF with its
   # charges stripped: defaults equal 1.11.0, the infer call, header charges

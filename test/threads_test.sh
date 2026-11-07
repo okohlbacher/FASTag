@@ -9,6 +9,8 @@
 # and the -out_spectra re-read (a serial picker) each centroid: every TSV and
 # the exported spectra, with -out_spectra (OnDisc reader) and without it (fast
 # reader), byte-identical at 1, 3 and 8 threads.
+# With a 6th argument (ion_series_test), also -ion_series auto (1.12 #15
+# phase B) on a synthetic ETD run.
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 BIN="$1"
@@ -110,6 +112,30 @@ if [ -s "$TMP/c1/recon.tsv" ]; then
   done
 fi
 msg="${#OUTS[@]} TSVs, the idXML, the census tables"
+# 1.12 #15 phase B: -ion_series auto on a synthetic ETD run (6th argument,
+# ion_series_test --write-mzml: c/z-dot ladders of 40 fixture peptides,
+# activation ETD): every spectrum is read as c/z-dot through the tagger,
+# recon, digest, label, mass gap and census.
+GEN="${6:-}"
+if [ -n "$GEN" ]; then
+"$GEN" --write-mzml "$DB" "$TMP/etd.mzML" cz > /dev/null || fail "writing the synthetic ETD run"
+ZOUTS=(tags recon digest label massgap census)
+for t in 1 3 8; do
+  d="$TMP/z$t"; mkdir -p "$d"
+  "$BIN" -in "$TMP/etd.mzML" -out "$d/tags.tsv" -threads "$t" -ion_series auto \
+    -tag_length 4 -extension 1 -fragment_tolerance 0.02 -fragment_tolerance_unit Da -recon_fasta "$DB" -recon_out "$d/recon.tsv" \
+    -digest_out "$d/digest.tsv" -label_out "$d/label.tsv" -massgap_out "$d/massgap.tsv" \
+    -census -census_out "$d/census.tsv" >"$d/log" 2>&1 || { cat "$d/log" >&2; fail "-ion_series auto -threads $t run failed"; }
+done
+[ "$(awk -F'\t' 'NR > 1 { print $NF }' "$TMP/z1/tags.tsv" | sort -u)" = cz ] || fail "-ion_series auto: the ETD copy was not read as c/z"
+for f in "${ZOUTS[@]}"; do
+  [ "$(wc -l < "$TMP/z1/$f.tsv")" -gt 1 ] || fail "-ion_series auto: $f.tsv has no rows"
+  for t in 3 8; do
+    cmp -s "$TMP/z1/$f.tsv" "$TMP/z$t/$f.tsv" || fail "-ion_series auto: $f.tsv differs between -threads 1 and $t"
+  done
+done
+msg="$msg; -ion_series auto: ${#ZOUTS[@]} TSVs on a synthetic ETD run"
+fi
 
 if [ -n "$PROF" ]; then
   # On the profile fixture's 10 spectra the tags (at -min_filter_length 3),

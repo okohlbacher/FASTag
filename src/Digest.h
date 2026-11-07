@@ -86,8 +86,14 @@ namespace FASTag::Digest
     // ---- end 1.12 D ----
 
     /// One filtered tag: its flanking masses and its sequence without
-    /// modification annotations.
+    /// modification annotations. A b/y tag (FASTag 1.11).
     void add(double nterm, double cterm, std::string_view seq);
+    /// The same for a tag of another ion series (1.12 #15 phase B): a
+    /// reversed read's N-terminal flank is the C-side residues +
+    /// @p reversed_offset (IonSeries::IonPair::reversedOffset(); +H2O is the
+    /// b/y overload above, c/z-dot -15.0347). The n_h2o counts are the
+    /// reversed reads' C-terminal residues in every series.
+    void add(double nterm, double cterm, std::string_view seq, double reversed_offset);
     void merge(const TerminusCounter& o);
 
     std::uint64_t tags = 0;                         ///< number of tags counted
@@ -118,6 +124,7 @@ namespace FASTag::Digest
     std::array<std::uint64_t, kNumAA> nterm() const { return npos[0]; }
 
   private:
+    void add_(double nterm, double cterm, std::string_view seq, const double* reversed_offset);
     bool near_(double v, double m) const { return v >= m - w_ && v <= m + w_; }
     double w_;
     std::shared_ptr<const Flank2Bins> bins_;  ///< 1.12 D #3d; shared by copies

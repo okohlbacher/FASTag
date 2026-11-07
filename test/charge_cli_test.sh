@@ -9,7 +9,7 @@
 #     default listed in the -out_spectra provenance;
 #   - -unknown_charge infer calls the original charge on >= 80% of the
 #     spectra (census charge_used), adds the four hypothesis columns, and
-#     writes the hypothesis rows of run report format 4;
+#     writes the hypothesis rows of run report format 5 (4 = #6, 5 = #15B);
 #   - a header charge is never replaced, and on the fully charged input
 #     -digest_out is identical under assume2 and infer;
 #   - enumerate and infer write the same bytes at 1, 3 and 8 threads;
@@ -140,7 +140,7 @@ awk -F'\t' 'NR == FNR { if (FNR > 1) used[$2] = $6; next }
 for k in run_report_version unknown_charge charge_inferred charge_ambiguous charge_assumed multi_hypothesis; do
   grep -q "^run	$k	" "$TMP/inf.census_summary.tsv" || fail "infer: no run row $k in the census summary"
 done
-grep -q "^run	run_report_version	4	" "$TMP/inf.census_summary.tsv" || fail "infer: run report format is not 4"
+grep -q "^run	run_report_version	5	" "$TMP/inf.census_summary.tsv" || fail "infer: run report format is not 5"
 grep -q "^run	unknown_charge	infer	" "$TMP/inf.census_summary.tsv" || fail "infer: unknown_charge row is not infer"
 grep -q "under -unknown_charge infer" "$TMP/inf.log" || fail "infer: no -unknown_charge summary warning"
 

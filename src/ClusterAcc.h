@@ -47,11 +47,14 @@ namespace FASTag::ClusterAcc
     /// #6: hypotheses tagged and selected, by charge source (non-default
     /// -unknown_charge or -isotope_error only).
     Hyp::SourceCounts hyp;
+    /// #15 phase B: MS2 tagged per ion series (-ion_series).
+    IonSeries::SeriesCounts series;
     void merge(const ThreadE& o)
     {
       pick.merge(o.pick);
       activation.merge(o.activation);
       hyp.merge(o.hyp);
+      series.merge(o.series);
     }
   };
   struct BlockE

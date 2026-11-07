@@ -7,6 +7,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "TagRecon.h"
+#include "cz_synth.h"
 
 #include <OpenMS/CHEMISTRY/EmpiricalFormula.h>
 #include <OpenMS/CHEMISTRY/Residue.h>
@@ -295,6 +296,50 @@ int main()
       if (x.peptide == gp && x.pos == 3 && !x.nterm_match && x.cterm_match)
         right = x.loc_pos == 1 && x.loc_ties == 1;
     check(right, "a gap equal to the tag's own mod localizes to M1 with the mod on the ladder");
+  }
+
+  // --- c/z-dot localization (1.12 #15 phase B) ---
+  {
+    // SAMPLEVGATS[Phospho]DGK as an ETD spectrum: c and z-dot ions at 1+ and
+    // 2+ from OpenMS's TheoreticalSpectrumGenerator. Tag LEVG at 4, the gap
+    // (+79.966) on the C side ATSDGK, true site S at 10, a competing T at 9.
+    r.setFixedTermMods(0.0, 0.0);  // the label section above set TMT
+    const size_t pos = 4, site = 10;
+    const double ph = 79.96633;
+    const IonSeries::IonPair cz = IonSeries::ionPair(IonSeries::Series::CZ);
+    const CzSynth::Spec etd = CzSynth::make("SAMPLEVGATS(Phospho)DGK", 3, CzSynth::Ions::CZ, 2);
+    const std::string tag = pep.substr(pos, 4), rev(tag.rbegin(), tag.rend());
+    const double nside = sumMass(pep.substr(0, pos)), cside = sumMass(pep.substr(pos + 4)) + ph;
+    auto gapC = [&](const Reconciliation& x, bool reversed) {
+      return x.peptide == pep && x.pos == pos && x.reversed == reversed && x.nterm_match && !x.cterm_match;
+    };
+    bool fwd_unique = false, rev_unique = false, by_unique = false, fwd_found = false;
+    for (const auto& x : r.reconcile(tag, nside, cside, &etd.spec, 3, nullptr, &cz))
+      if (gapC(x, false))
+      {
+        fwd_found = true;
+        fwd_unique = x.loc_pos == static_cast<int>(site) && x.loc_ties == 1 && x.loc_score > 0;
+      }
+    // The reversed (c-derived) read: flanks in the c/z convention.
+    const double off = cz.reversedOffset();
+    for (const auto& x : r.reconcile(rev, cside + off, nside - off, &etd.spec, 3, nullptr, &cz))
+      if (gapC(x, true)) rev_unique = x.loc_pos == static_cast<int>(site) && x.loc_ties == 1;
+    // The same spectrum localized on b/y ladders explains nothing: no unique site.
+    for (const auto& x : r.reconcile(tag, nside, cside, &etd.spec, 3))
+      if (gapC(x, false)) by_unique = x.loc_pos == static_cast<int>(site) && x.loc_ties == 1;
+    check(fwd_found, "c/z: the phospho gap places on the C side");
+    check(fwd_unique, "c/z: a phosphopeptide c/z-dot ladder localizes the gap uniquely to S under cz");
+    check(rev_unique, "c/z: the reversed (c-derived) read localizes it uniquely too");
+    check(!by_unique, "c/z: on b/y ladders the ETD spectrum does not localize it");
+    // A b/y spectrum under the b/y default is unchanged by the new argument.
+    const CzSynth::Spec cid = CzSynth::make("SAMPLEVGATS(Phospho)DGK", 3, CzSynth::Ions::BY, 2);
+    bool by_ok = false, by_explicit = false;
+    for (const auto& x : r.reconcile(tag, nside, cside, &cid.spec, 3))
+      if (gapC(x, false)) by_ok = x.loc_pos == static_cast<int>(site) && x.loc_ties == 1;
+    const IonSeries::IonPair byp = IonSeries::ionPair(IonSeries::Series::BY);
+    for (const auto& x : r.reconcile(tag, nside, cside, &cid.spec, 3, nullptr, &byp))
+      if (gapC(x, false)) by_explicit = x.loc_pos == static_cast<int>(site) && x.loc_ties == 1;
+    check(by_ok && by_explicit, "c/z: a b/y ladder still localizes under b/y, with and without the pair");
   }
 
   // --- protein_index: the placement's protein ordinal (1.12 P2) ---
