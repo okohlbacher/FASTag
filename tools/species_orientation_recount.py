@@ -120,17 +120,37 @@ def main():
     genus = dict(tuple(int(x) for x in p.split(":")) for p in a.genus.split(","))
 
     # by_spec: spectrum -> [(base tag, evalue)], reported ungapped rows only.
+    # Columns are bound by header name, not position, so optional columns
+    # added by other 1.12 items cannot shift them. Contract 2.3: when the TSV
+    # has a "selected" column (#6 precursor hypotheses) only selected rows are
+    # species evidence; when it has an "ion_series" column (#15B) only "by"
+    # rows are.
     by_spec = {}
+    col = None
     with open(a.tags) as fh:
         for line in fh:
             f = line.rstrip("\n").split("\t")
-            if len(f) < 2 or f[0] == "spectrum" or line.startswith("#"):
+            if line.startswith("#") or len(f) < 2:
                 continue
-            gapped = len(f) > 7 and f[7][:1] == "1"
-            ev = strtod(f[8]) if len(f) > 8 else math.nan
-            if gapped:
+            if f[0] == "spectrum":
+                col = {name: i for i, name in enumerate(f)}
+                for need in ("spectrum", "tag", "gapped", "evalue"):
+                    if need not in col:
+                        sys.exit("recount: tags TSV header lacks column %r" % need)
                 continue
-            by_spec.setdefault(f[0], []).append((base(f[1]), ev))
+            if col is None:
+                sys.exit("recount: tags TSV without a header line")
+            def get(name):
+                i = col.get(name)
+                return f[i] if i is not None and i < len(f) else ""
+            if "selected" in col and get("selected") != "1":
+                continue
+            if "ion_series" in col and get("ion_series") != "by":
+                continue
+            if get("gapped")[:1] == "1":
+                continue
+            ev = strtod(get("evalue")) if get("evalue") else math.nan
+            by_spec.setdefault(get("spectrum"), []).append((base(get("tag")), ev))
 
     # Only the k-mers the tags can ask for are indexed.
     wanted = set()

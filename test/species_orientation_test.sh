@@ -4,7 +4,8 @@
 #
 #   * forward (the default) is byte-identical to the option absent, and with
 #     FASTAG_BASELINE_BIN to the 1.11.0 binary;
-#   * both without -species_call decoy writes qvalue NA and warns;
+#   * both writes log_pvalue and qvalue (the analytic, forward-background
+#     columns 7 and 8) as NA and warns, also with -species_call decoy;
 #   * exact counts: tools/species_orientation_recount.py (Python, not the C++
 #     lookup) recomputes per genus the forward count, the reverse-only gains
 #     and the ambiguity losses; the both count must equal forward + gains -
@@ -12,8 +13,8 @@
 #   * at the default -max_evalue/-max_tags the absent genera gain at most the
 #     predicted reverse-only gain, which is <= 2;
 #   * both with -orientation forward is the same report; both is the same at
-#     1, 3 and 8 threads; both with -species_call decoy keeps 15 fields, and
-#     its decoy_spectra equal the recount's decoy tags under the same rule;
+#     1, 3 and 8 threads; both with -species_call decoy keeps 15 fields,
+#     columns 7 and 8 NA, a numeric decoy_qvalue (13), and its decoy_spectra equal the recount's decoy tags under the same rule;
 #   * the ignored-option warning and the -stream refusal.
 # Exits 77 (ctest SKIP) when the binary cannot start or python3 is missing.
 set -u
@@ -109,7 +110,7 @@ if [ -n "${FASTAG_BASELINE_BIN:-}" ] && [ -x "${FASTAG_BASELINE_BIN}" ]; then
   echo "species_orientation_test: forward equals $FASTAG_BASELINE_BIN"
 fi
 
-# ---- both without decoy: qvalue NA, warning, threads ---------------------------
+# ---- both without decoy: log_pvalue/qvalue NA, warning, threads ---------------------------
 for t in 1 3 8; do
   run both_t$t "${COMMON[@]}" -species "${TAX[@]}" -species_orientation both -threads $t \
     || { cat "$TMP/both_t$t.log" >&2; fail "both, -threads $t"; }
@@ -119,9 +120,9 @@ cmp -s "$B" "$TMP/both_t3.species.tsv" && cmp -s "$B" "$TMP/both_t8.species.tsv"
 cmp -s "$TMP/absent.tsv" "$TMP/both_t1.tsv" || fail "both changed the tags"
 [ "$(fields "$B")" = 8 ] || fail "both: not 8 fields"
 [ "$(head -1 "$B")" = "$(head -1 "$TMP/absent.species.tsv")" ] || fail "both: header changed"
-bad=$(awk -F'\t' 'NR > 1 && $8 != "NA"' "$B" | wc -l | tr -d ' ')
-[ "$bad" = 0 ] || fail "both without decoy: $bad rows with a numeric qvalue"
-grep -q -- "-species_orientation both: the qvalue column of the species report is NA" "$TMP/both_t1.log" \
+bad=$(awk -F'\t' 'NR > 1 && ($7 != "NA" || $8 != "NA")' "$B" | wc -l | tr -d ' ')
+[ "$bad" = 0 ] || fail "both without decoy: $bad rows with a numeric log_pvalue or qvalue"
+grep -q -- "-species_orientation both: the analytic log_pvalue and qvalue columns of the species report are NA under both; use decoy_qvalue from -species_call decoy" "$TMP/both_t1.log" \
   || { cat "$TMP/both_t1.log" >&2; fail "no NA warning"; }
 grep -q "Species orientation (both)" "$TMP/both_t1.log" || fail "no orientation line in the log"
 
@@ -161,6 +162,19 @@ read -r _ _ _ n_int _ n_amb < <(grep '^tags' "$TMP/all.recount")
 [ "$n_int" -gt 0 ] && [ "$n_amb" -gt 0 ] || fail "no intersection ($n_int) or ambiguous ($n_amb) tags (test is vacuous)"
 loss_of() { awk -F'\t' -v g="$2" '$1 == g { print $4 }' "$1"; }
 [ "$(loss_of "$TMP/all.recount" 561)" -gt 0 ] || fail "Escherichia loses nothing to ambiguity (test is vacuous)"
+# The recount binds columns by header name and keeps only species evidence
+# (contract 2.3): rows with selected != 1 (#6) and ion_series != by (#15B)
+# are dropped. A copy of the tags with those columns appended last, with
+# a duplicate of every row under selected 0 and one under ion_series cz,
+# must recount exactly like the original; a moved column must not matter.
+awk -F'\t' -v OFS='\t' 'NR == 1 { print $0, "selected", "ion_series"; next }
+  { print $0, 1, "by"; x = $0; print x, 0, "by"; print x, 1, "cz" }' "$TMP/absent.tsv" > "$TMP/sel.tsv"
+awk -F'\t' -v OFS='\t' '{ n = $8; for (i = 8; i < NF; ++i) $i = $(i + 1); $NF = n; print }' "$TMP/sel.tsv" > "$TMP/sel_moved.tsv"
+for v in sel sel_moved; do
+  python3 "$RECOUNT" --tags "$TMP/$v.tsv" --prot-dir "$TMP/prot" --k 7 --genus "$GENUS" > "$TMP/$v.recount" \
+    || fail "recount script ($v)"
+  cmp -s "$TMP/all.recount" "$TMP/$v.recount" || { diff "$TMP/all.recount" "$TMP/$v.recount" >&2; fail "recount ($v): selected/ion_series filter or header binding"; }
+done
 # At the default -max_evalue and -max_tags the genera absent from the sample
 # gain at most 2 spectra from the reversed readings, and the both count is
 # at most forward + that predicted gain.
@@ -194,8 +208,15 @@ run dec "${COMMON[@]}" -species "${TAX[@]}" -species_orientation both -species_c
     -species_call_min_units 10 -species_call_params "$TMP/params.tsv" -threads 2 \
   || { cat "$TMP/dec.log" >&2; fail "both with decoy"; }
 [ "$(fields "$TMP/dec.species.tsv")" = 15 ] || fail "both with decoy: not 15 fields"
-awk -F'\t' 'NR > 1 && $8 == "NA" { exit 1 }' "$TMP/dec.species.tsv" || fail "both with decoy: qvalue NA"
-! grep -q "qvalue column of the species report is NA" "$TMP/dec.log" || fail "NA warning under decoy"
+# The analytic columns stay NA under decoy: decoy calls calibrate only
+# decoy_qvalue and call, not the forward-background log_pvalue/qvalue.
+bad=$(awk -F'\t' 'NR > 1 && ($7 != "NA" || $8 != "NA")' "$TMP/dec.species.tsv" | wc -l | tr -d ' ')
+[ "$bad" = 0 ] || fail "both with decoy: $bad rows with a numeric log_pvalue or qvalue"
+bad=$(awk -F'\t' 'NR > 1 && $13 !~ /^[0-9.eE+-]+$/' "$TMP/dec.species.tsv" | wc -l | tr -d ' ')
+[ "$bad" = 0 ] || fail "both with decoy: $bad rows without a numeric decoy_qvalue"
+[ "$(awk 'END { print NR }' "$TMP/dec.species.tsv")" -ge 2 ] || fail "both with decoy: no rows (vacuous)"
+grep -q -- "are NA under both; use decoy_qvalue and call from -species_call decoy" "$TMP/dec.log" \
+  || { cat "$TMP/dec.log" >&2; fail "no NA warning under decoy"; }
 for g in 561 590 1279 4930 1301; do
   [ "$(obs "$TMP/dec.species.tsv" "$g")" = "$(obs "$B" "$g")" ] || fail "decoy changed the observed count of $g"
 done
@@ -205,6 +226,9 @@ done
 run decf "${COMMON[@]}" -species "${TAX[@]}" -species_call decoy \
     -species_call_min_units 10 -species_call_params "$TMP/params.tsv" -threads 2 \
   || { cat "$TMP/decf.log" >&2; fail "forward with decoy"; }
+awk -F'\t' 'NR > 1 && ($7 == "NA" || $8 == "NA") { exit 1 }' "$TMP/decf.species.tsv" \
+  || fail "forward with decoy: analytic log_pvalue/qvalue NA (must keep the 1.10 meaning)"
+! grep -q "are NA under both" "$TMP/decf.log" || fail "NA warning under forward"
 python3 "$RECOUNT" --tags "$TMP/absent.tsv" --prot-dir "$TMP/prot" --k 7 --genus "$GENUS" --decoys 5 \
   > "$TMP/decoy.recount" || fail "recount script (decoys)"
 grep '^decoy' "$TMP/decoy.recount"
