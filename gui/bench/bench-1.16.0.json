@@ -3,12 +3,12 @@
   "os": "macos",
   "arch": "aarch64",
   "machine": "Apple M4 Max, 128 GB",
-  "power": "AC power (pmset -g batt: \"Now drawing from 'AC Power'\", before and after); powermode 2 (High Power), so Low Power Mode is off; load average 3.6-4.9 before the runs (other sessions on this Mac)",
+  "power": "AC power before and after each run (pmset -g batt: \"Now drawing from 'AC Power'\"); pmset powermode 2 (High Power), so Low Power Mode is off; load average 3.4-5.5 over the three runs (1-minute 4.10, 3.36, 3.40 before; 3.36, 3.40, 5.48 after; other sessions on this shared Mac, lightly loaded at the time)",
   "version": "1.16.0 (P3 PR a, branch gui/p3a-browser, version string still 1.11.1)",
-  "commit": "fc629bf + the bench changes of the commit carrying this file (on gui/p2b-batch 983073f)",
+  "commit": "83603bf (gui/p3a-browser: build_order in radix rounds, exports and order builds trim the cache by their transients, Mapped orders and export buffers) + the commit carrying this file",
   "date": "2026-11-07",
   "cache": "warm page cache (each file read once first), except the cold mode",
-  "harness": "gui/src-tauri/examples/browser_bench.rs: cargo run --release --example browser_bench -- <files>; each mode a child process of its own (its peak RSS, ru_maxrss, is its own); p3 runs the app's own paths (browser::open with its Channel events, query_mode Interactive as results_query, export_to as the export job runs it); runs 1 and 2 are two full harness runs; their p3 entries are two later --mode p3 runs after the cached-page fix of the bench (the page's view is built once just before it is timed; in the harness runs the many new filter specs had pushed it out of the view cache, so 12.9 ms there measured a rebuild)",
+  "harness": "gui/src-tauri/examples/browser_bench.rs: cargo run --release --example browser_bench -- <file>, three full harness runs back to back (runs 1-3); each mode a child process of its own (its peak RSS, ru_maxrss, is its own); p3 runs the app's own paths (browser::open with its Channel events, query_mode Interactive as results_query, export_to as the export job runs it). Values are listed per run; the gate is judged on the median of the three.",
   "data": "browser_bench --gen ../e2e-web/fixtures/ecoli.tags.tsv <out> 10002096 12: the public E. coli fixture tags (2,028 rows) replicated with shifted scan numbers, tag lengths 3..12 (median 5; the tag extended with random residues, the length column to match), hit classes '-' 65%, a protein 30%, efwd/erev 5%, E-values log-uniform 1e-6..1e3 with every 997th/1999th/2999th '-', NAN, INF. 10,002,096 rows, 1,127,556,655 bytes. Not real PXD004541 rows (no 10M-row PXD004541 tags file on this Mac); the generator varies the lengths so every filter cuts. Generated, measured, deleted.",
   "gates_p3_at_10M": [
     {
@@ -16,15 +16,23 @@
       "target": "< 100 ms at 10M (P3)",
       "baseline": "99 ms: P0b typed-column prototype, bench-1.12.0.json",
       "values": [
-        12.8,
-        12.8
+        12.7,
+        12.9,
+        12.9
       ],
+      "median": 12.9,
       "unit": "ms",
       "gated": true,
       "pass": true,
       "max_ms": [
-        19.4,
-        19.5
+        19.3,
+        20.6,
+        21
+      ],
+      "narrow5_median_ms": [
+        12.7,
+        13,
+        13
       ]
     },
     {
@@ -32,22 +40,29 @@
       "target": "< 1 s per GB (P3)",
       "baseline": "0.109 s/GB: bench-1.12.0.json",
       "values": [
-        0.165,
-        0.148
+        0.16,
+        0.154,
+        0.161
       ],
+      "median": 0.16,
       "unit": "s/GB",
       "gated": true,
       "pass": true,
       "runs": [
         [
-          0.105,
-          0.19,
-          0.165
+          0.101,
+          0.199,
+          0.16
         ],
         [
-          0.106,
-          0.187,
-          0.148
+          0.102,
+          0.229,
+          0.154
+        ],
+        [
+          0.111,
+          0.197,
+          0.161
         ]
       ]
     },
@@ -55,35 +70,53 @@
       "metric": "export sorted by E-value (every column, TSV), ascending then descending, median of 3 per run",
       "target": "< 3 s per GB (P3)",
       "baseline": "6.307 s/GB: bench-1.12.0.json",
-      "values": [
-        2.05,
-        2.11,
-        2.066,
-        2.242
+      "values_ascending": [
+        1.889,
+        1.965,
+        2.024
       ],
+      "values_descending": [
+        1.975,
+        1.972,
+        2.11
+      ],
+      "median_ascending": 1.965,
+      "median_descending": 1.975,
       "unit": "s/GB",
       "gated": true,
       "pass": true,
-      "runs": [
+      "runs_ascending": [
         [
-          2.062,
+          1.883,
+          1.889,
+          1.897
+        ],
+        [
+          1.93,
+          2.026,
+          1.965
+        ],
+        [
+          1.982,
+          2.024,
+          2.041
+        ]
+      ],
+      "runs_descending": [
+        [
+          1.907,
+          2.022,
+          1.975
+        ],
+        [
+          1.968,
+          1.972,
+          1.994
+        ],
+        [
           2.05,
-          2.047
-        ],
-        [
-          2.109,
-          2.125,
+          2.122,
           2.11
-        ],
-        [
-          2.082,
-          2.066,
-          2.064
-        ],
-        [
-          2.243,
-          2.242,
-          2.188
         ]
       ]
     },
@@ -92,13 +125,15 @@
       "target": "< 450 MB at 10M (P3)",
       "baseline": "513 MB: P0b prototype; 443 MB: P0b first cut, bench-1.12.0.json",
       "values": [
-        595,
-        591
+        424,
+        423,
+        425
       ],
+      "median": 424,
       "unit": "MB",
       "gated": true,
-      "pass": false,
-      "note": "FAILS. Steady state stays under 450 MB (FASTAG_BENCH_TRACE: 336 MB after the open's builds, 387 MB with the tag order cached, 436 MB with the spectrum order too). The peak, 591-595 MB, is the transient of the first tag sort (text order: 8-byte prefix keys and length classes, about 25 B per row on top of the cache). The narrow-only workload of the first measurement peaked at 419-420 MB; the bench's sort mode, which sorts by tag, spectrum and length, now peaks at 590-592 MB (was 686-689 MB). Needs a decision: a lower-transient text sort, or a different gate for re-sorts by text columns."
+      "pass": true,
+      "note": "PASSES (was 588-596 MB). Trace (FASTAG_BENCH_TRACE, one p3 run): 334-335 MB after the open's builds; the first tag sort peaks at 419-423 MB (was 591: the 16 B per row entries of the text sort, their growth copy and the tails); 377 MB with the tag order cached, 425 MB with the spectrum order too; exports 349-353 MB (each export trims the cache by its 60 MB of window buffers, now mappings of their own). Before the export fix, once the sort fitted, sorted exports had left the backend at 535-641 MB: their freed window buffers stayed with the allocator."
     }
   ],
   "firm_at_10M": [
@@ -106,9 +141,11 @@
       "metric": "first rows on open (head read)",
       "target": "< 150 ms (firm, P0)",
       "values": [
-        0.9,
+        0.6,
+        0.6,
         0.6
       ],
+      "median": 0.6,
       "unit": "ms",
       "pass": true
     },
@@ -116,19 +153,24 @@
       "metric": "ranked view swapped in",
       "target": "< 1.5 s at 10M (firm, P0)",
       "values": [
-        1295.2,
-        1289.8
+        999.3,
+        997.2,
+        1020.6
       ],
+      "median": 999.3,
       "unit": "ms",
-      "pass": true
+      "pass": true,
+      "note": "the E-value order now comes from build_order too (one round, 9 B per row): rank_asc_desc_ms [581.6, 576.9, 574.3] against 820-836 before"
     },
     {
       "metric": "cached 200-row page",
       "target": "< 1 ms (firm)",
       "values": [
         0.2,
+        0.2,
         0.2
       ],
+      "median": 0.2,
       "unit": "ms",
       "pass": true
     }
@@ -140,15 +182,18 @@
       "gated": false,
       "values_ms": [
         1.1,
-        1.1
+        1.1,
+        1.2
       ],
       "indexed_ms": [
-        461.5,
-        465.2
+        447.4,
+        446.7,
+        450.2
       ],
       "tail_read_gb_per_s": [
-        6.8,
-        6.73
+        5.33,
+        6.17,
+        6.55
       ],
       "method": "the file is copied with F_NOCACHE writes, so its pages are not in the page cache, then opened in a fresh process (results_open path: head read, then Indexed). Witness that the copy was cold: its last 256 MB read raw at 4.0-6.5 GB/s against 13.7 GB/s from a warm cache with the same reader. purge needs root and was not used."
     },
@@ -165,33 +210,48 @@
       "sort_mode": [
         {
           "tag": {
-            "first_ms": 744.4,
+            "first_ms": 612.3,
             "desc_after_ms": 0.3
           },
           "spectrum": {
-            "first_ms": 104.6,
+            "first_ms": 109.8,
             "desc_after_ms": 0.1
           },
           "length": {
-            "first_ms": 612.7,
+            "first_ms": 373.6,
             "desc_after_ms": 0.2
           },
-          "peak_rss_mb": 590
+          "peak_rss_mb": 429
         },
         {
           "tag": {
-            "first_ms": 743.3,
+            "first_ms": 637.2,
             "desc_after_ms": 0.3
           },
           "spectrum": {
-            "first_ms": 106.9,
+            "first_ms": 102.4,
             "desc_after_ms": 0.1
           },
           "length": {
-            "first_ms": 597.2,
+            "first_ms": 376.1,
             "desc_after_ms": 0.2
           },
-          "peak_rss_mb": 592
+          "peak_rss_mb": 435
+        },
+        {
+          "tag": {
+            "first_ms": 652.7,
+            "desc_after_ms": 0.3
+          },
+          "spectrum": {
+            "first_ms": 107.4,
+            "desc_after_ms": 0.1
+          },
+          "length": {
+            "first_ms": 377.4,
+            "desc_after_ms": 0.2
+          },
+          "peak_rss_mb": 430
         }
       ],
       "p3_resorts": [
@@ -199,7 +259,7 @@
           {
             "column": "tag",
             "desc": false,
-            "ms": 756.9
+            "ms": 568.6
           },
           {
             "column": "tag",
@@ -209,7 +269,7 @@
           {
             "column": "spectrum",
             "desc": false,
-            "ms": 102.8
+            "ms": 94.1
           },
           {
             "column": "spectrum",
@@ -221,7 +281,7 @@
           {
             "column": "tag",
             "desc": false,
-            "ms": 775.7
+            "ms": 588.6
           },
           {
             "column": "tag",
@@ -231,7 +291,29 @@
           {
             "column": "spectrum",
             "desc": false,
-            "ms": 104.7
+            "ms": 100.1
+          },
+          {
+            "column": "spectrum",
+            "desc": true,
+            "ms": 0.1
+          }
+        ],
+        [
+          {
+            "column": "tag",
+            "desc": false,
+            "ms": 612.5
+          },
+          {
+            "column": "tag",
+            "desc": true,
+            "ms": 0.3
+          },
+          {
+            "column": "spectrum",
+            "desc": false,
+            "ms": 104.8
           },
           {
             "column": "spectrum",
@@ -239,14 +321,16 @@
             "ms": 0.1
           }
         ]
-      ]
+      ],
+      "note": "sort mode sorts by tag, spectrum and length after the open: peak 429-435 MB (was 590-592; 464-467 before order builds counted their transients against the cache budget, which now drops the older orders for the third). Tag first sort 557-653 ms (was 744-776)."
     },
     {
       "metric": "best tag per spectrum (whole view)",
       "gated": false,
       "values_ms": [
-        47.8,
-        55.9
+        38.7,
+        44.4,
+        50.3
       ],
       "rows": 636228,
       "note": "636,228 rows = 636,228 distinct spectra"
@@ -255,26 +339,33 @@
       "metric": "filtered CSV export, median of 3",
       "gated": false,
       "values_s": [
+        0.049,
         0.048,
-        0.051
+        0.053
       ],
       "runs": [
         [
-          0.062,
-          0.048,
-          0.047
+          0.081,
+          0.049,
+          0.049
         ],
         [
-          0.065,
-          0.051,
-          0.05
+          0.078,
+          0.048,
+          0.048
+        ],
+        [
+          0.081,
+          0.05,
+          0.053
         ]
       ],
       "rows": 199620
     }
   ],
-  "all_gated_pass": false,
-  "previous_measurement": "the first P3a measurement (commit aa6051b, the E. coli rows replicated, every tag of length 3, only the 5 narrow filter specs, one export each) is in git history of this file: filter 8.9-9.0 ms, peak 419-420 MB",
+  "all_gated_pass": true,
+  "previous_measurement": "the measurement before this one (commits fc629bf/e0341e8, same generated file, two harness runs) failed only the peak gate: 591-595 MB (tag sort transient); filter 12.8 ms, unsorted export 0.148-0.165 s/GB, sorted 2.05-2.24 s/GB, ranked swap 1290-1295 ms. Its full numbers are in git history of this file; the first P3a measurement (aa6051b) before that.",
+  "notes": "p3 mode: see the harness. Exports are each run 3 times per run and the median recorded. Warm and cold runs are separate modes.",
   "files": [
     {
       "file": "gen10M.tsv (browser_bench --gen, seed 12)",
@@ -282,44 +373,44 @@
       "firstcut": {
         "rows": 10002096,
         "head_rows": 1000,
-        "first_rows_ms": 1.2,
-        "index_ms": 432.7,
-        "rank_asc_desc_ms": 835.8,
-        "ranked_swap_ms": 1269.7,
-        "interactive_first_page_ms": 438.1,
+        "first_rows_ms": 0.7,
+        "index_ms": 415.1,
+        "rank_asc_desc_ms": 581.6,
+        "ranked_swap_ms": 997.3,
+        "interactive_first_page_ms": 420.3,
         "interactive_first_page_rows": 500,
         "interactive_first_page_ranked": false,
-        "peak_rss_mb": 293
+        "peak_rss_mb": 294
       },
       "typed": {
         "rows": 10002096,
         "spectra": 636228,
-        "build_ms": 1883,
-        "evalue_perm_ms": 388.8,
-        "filter_ms_median5": 150.9,
+        "build_ms": 1858.1,
+        "evalue_perm_ms": 377.7,
+        "filter_ms_median5": 146.2,
         "filter_matched": 1900538,
         "export_bytes": 1127556554,
-        "export_unsorted_s_per_gb": 0.166,
-        "export_sorted_s_per_gb": 6.949,
-        "peak_rss_mb": 482,
+        "export_unsorted_s_per_gb": 0.095,
+        "export_sorted_s_per_gb": 6.328,
+        "peak_rss_mb": 479,
         "bytes_per_row_typed": 15.1
       },
       "p3": {
         "head_rows": 1000,
-        "first_rows_ms": 0.9,
-        "indexed_ms": 456,
-        "ranked_swap_ms": 1295.2,
-        "typed_ready_ms": 1573.9,
+        "first_rows_ms": 0.6,
+        "indexed_ms": 423.1,
+        "ranked_swap_ms": 999.3,
+        "typed_ready_ms": 1285.2,
         "median_length": 5,
         "filters": [
           {
             "spec": "evalue: maxE 100, len>=3, scan=10",
-            "ms": 12.9,
+            "ms": 12.8,
             "matched": 199836
           },
           {
             "spec": "evalue: maxE 100, len>=3, scan=11",
-            "ms": 12.8,
+            "ms": 12.7,
             "matched": 203298
           },
           {
@@ -329,62 +420,62 @@
           },
           {
             "spec": "evalue: maxE 100, len>=3, scan=13",
-            "ms": 12.8,
+            "ms": 12.7,
             "matched": 199892
           },
           {
             "spec": "evalue: maxE 100, len>=3, scan=14",
-            "ms": 12.9,
+            "ms": 12.6,
             "matched": 199620
           },
           {
             "spec": "evalue: maxE 1000",
-            "ms": 11.4,
+            "ms": 11.1,
             "matched": 9983734
           },
           {
             "spec": "evalue: len>=5",
-            "ms": 10.9,
+            "ms": 10.7,
             "matched": 5184359
           },
           {
             "spec": "evalue: spectrum 'scan'",
-            "ms": 7.8,
+            "ms": 7.6,
             "matched": 10002096
           },
           {
             "spec": "evalue: maxE 1000, len>=3, spectrum 'scan'",
-            "ms": 15.7,
+            "ms": 15.5,
             "matched": 9983734
           },
           {
             "spec": "evalue: target hits only",
-            "ms": 7.8,
+            "ms": 7.9,
             "matched": 2998035
           },
           {
             "spec": "tag desc: maxE 100",
-            "ms": 15.5,
+            "ms": 14.7,
             "matched": 8874313
           },
           {
             "spec": "tag desc: maxE 10",
-            "ms": 15.5,
+            "ms": 15.4,
             "matched": 7765930
           },
           {
             "spec": "tag desc: maxE 1000",
-            "ms": 14.9,
+            "ms": 14.6,
             "matched": 9983734
           },
           {
             "spec": "tag desc: len>=median",
-            "ms": 10.5,
+            "ms": 10.4,
             "matched": 5184359
           },
           {
             "spec": "tag desc: maxE 1000, len>=3, spectrum 'scan'",
-            "ms": 19.4,
+            "ms": 19.3,
             "matched": 9983734
           },
           {
@@ -394,12 +485,12 @@
           },
           {
             "spec": "spectrum desc: maxE 10",
-            "ms": 11.9,
+            "ms": 11.7,
             "matched": 7765930
           },
           {
             "spec": "spectrum desc: maxE 1000",
-            "ms": 11.7,
+            "ms": 11.3,
             "matched": 9983734
           },
           {
@@ -409,18 +500,18 @@
           },
           {
             "spec": "spectrum desc: maxE 1000, len>=3, spectrum 'scan'",
-            "ms": 16.2,
+            "ms": 16,
             "matched": 9983734
           }
         ],
-        "filter_ms_median": 12.8,
-        "filter_ms_max": 19.4,
-        "filter_ms_median_narrow5": 12.8,
+        "filter_ms_median": 12.7,
+        "filter_ms_max": 19.3,
+        "filter_ms_median_narrow5": 12.7,
         "resorts": [
           {
             "column": "tag",
             "desc": false,
-            "ms": 756.9
+            "ms": 568.6
           },
           {
             "column": "tag",
@@ -430,7 +521,7 @@
           {
             "column": "spectrum",
             "desc": false,
-            "ms": 102.8
+            "ms": 94.1
           },
           {
             "column": "spectrum",
@@ -439,61 +530,60 @@
           }
         ],
         "cached_page_ms": 0.2,
-        "best_per_spectrum_ms": 47.8,
+        "best_per_spectrum_ms": 38.7,
         "best_per_spectrum_rows": 636228,
         "export_bytes": 1127556554,
         "export_unsorted_rows": 10002096,
         "export_unsorted_s_per_gb_runs": [
-          0.105,
-          0.19,
-          0.165
+          0.101,
+          0.199,
+          0.16
         ],
-        "export_unsorted_s_per_gb": 0.165,
+        "export_unsorted_s_per_gb": 0.16,
         "export_sorted_rows": 10002096,
         "export_sorted_s_per_gb_runs": [
-          2.062,
-          2.05,
-          2.047
+          1.883,
+          1.889,
+          1.897
         ],
-        "export_sorted_s_per_gb": 2.05,
+        "export_sorted_s_per_gb": 1.889,
         "export_sorted_desc_rows": 10002096,
         "export_sorted_desc_s_per_gb_runs": [
-          2.082,
-          2.066,
-          2.064
+          1.907,
+          2.022,
+          1.975
         ],
-        "export_sorted_desc_s_per_gb": 2.066,
+        "export_sorted_desc_s_per_gb": 1.975,
         "export_filtered_csv_rows": 199620,
         "export_filtered_csv_s_runs": [
-          0.062,
-          0.048,
-          0.047
+          0.081,
+          0.049,
+          0.049
         ],
-        "export_filtered_csv_s": 0.048,
-        "peak_rss_mb": 595
+        "export_filtered_csv_s": 0.049,
+        "peak_rss_mb": 424
       },
       "sort": {
         "tag": {
-          "first_ms": 744.4,
+          "first_ms": 612.3,
           "desc_after_ms": 0.3
         },
         "spectrum": {
-          "first_ms": 104.6,
+          "first_ms": 109.8,
           "desc_after_ms": 0.1
         },
         "length": {
-          "first_ms": 612.7,
+          "first_ms": 373.6,
           "desc_after_ms": 0.2
         },
-        "peak_rss_mb": 590
+        "peak_rss_mb": 429
       },
       "cold": {
         "head_rows": 1000,
         "first_rows_ms": 1.1,
-        "indexed_ms": 461.5,
-        "tail_read_gb_per_s": 6.8
-      },
-      "run": 1
+        "indexed_ms": 447.4,
+        "tail_read_gb_per_s": 5.33
+      }
     },
     {
       "file": "gen10M.tsv (browser_bench --gen, seed 12)",
@@ -502,58 +592,58 @@
         "rows": 10002096,
         "head_rows": 1000,
         "first_rows_ms": 0.6,
-        "index_ms": 434.2,
-        "rank_asc_desc_ms": 840.4,
-        "ranked_swap_ms": 1275.2,
-        "interactive_first_page_ms": 438.6,
+        "index_ms": 419.7,
+        "rank_asc_desc_ms": 576.9,
+        "ranked_swap_ms": 997.2,
+        "interactive_first_page_ms": 419.4,
         "interactive_first_page_rows": 500,
         "interactive_first_page_ranked": false,
-        "peak_rss_mb": 292
+        "peak_rss_mb": 295
       },
       "typed": {
         "rows": 10002096,
         "spectra": 636228,
-        "build_ms": 1923.6,
-        "evalue_perm_ms": 383.5,
-        "filter_ms_median5": 153.2,
+        "build_ms": 1890.2,
+        "evalue_perm_ms": 387.9,
+        "filter_ms_median5": 151.9,
         "filter_matched": 1900538,
         "export_bytes": 1127556554,
-        "export_unsorted_s_per_gb": 0.105,
-        "export_sorted_s_per_gb": 7.013,
-        "peak_rss_mb": 482,
+        "export_unsorted_s_per_gb": 0.099,
+        "export_sorted_s_per_gb": 7.316,
+        "peak_rss_mb": 479,
         "bytes_per_row_typed": 15.1
       },
       "p3": {
         "head_rows": 1000,
         "first_rows_ms": 0.6,
-        "indexed_ms": 450,
-        "ranked_swap_ms": 1289.8,
-        "typed_ready_ms": 1568.3,
+        "indexed_ms": 426.8,
+        "ranked_swap_ms": 997.2,
+        "typed_ready_ms": 1278.8,
         "median_length": 5,
         "filters": [
           {
             "spec": "evalue: maxE 100, len>=3, scan=10",
-            "ms": 13,
+            "ms": 13.2,
             "matched": 199836
           },
           {
             "spec": "evalue: maxE 100, len>=3, scan=11",
-            "ms": 12.9,
+            "ms": 13,
             "matched": 203298
           },
           {
             "spec": "evalue: maxE 100, len>=3, scan=12",
-            "ms": 12.8,
+            "ms": 12.9,
             "matched": 199789
           },
           {
             "spec": "evalue: maxE 100, len>=3, scan=13",
-            "ms": 12.8,
+            "ms": 12.9,
             "matched": 199892
           },
           {
             "spec": "evalue: maxE 100, len>=3, scan=14",
-            "ms": 12.8,
+            "ms": 13,
             "matched": 199620
           },
           {
@@ -563,7 +653,7 @@
           },
           {
             "spec": "evalue: len>=5",
-            "ms": 12.1,
+            "ms": 10.9,
             "matched": 5184359
           },
           {
@@ -573,22 +663,22 @@
           },
           {
             "spec": "evalue: maxE 1000, len>=3, spectrum 'scan'",
-            "ms": 17.5,
+            "ms": 16.1,
             "matched": 9983734
           },
           {
             "spec": "evalue: target hits only",
-            "ms": 8.7,
+            "ms": 7.9,
             "matched": 2998035
           },
           {
             "spec": "tag desc: maxE 100",
-            "ms": 15.6,
+            "ms": 14.8,
             "matched": 8874313
           },
           {
             "spec": "tag desc: maxE 10",
-            "ms": 15.6,
+            "ms": 15.5,
             "matched": 7765930
           },
           {
@@ -598,32 +688,32 @@
           },
           {
             "spec": "tag desc: len>=median",
-            "ms": 11,
+            "ms": 10.6,
             "matched": 5184359
           },
           {
             "spec": "tag desc: maxE 1000, len>=3, spectrum 'scan'",
-            "ms": 19.5,
+            "ms": 20.6,
             "matched": 9983734
           },
           {
             "spec": "spectrum desc: maxE 100",
-            "ms": 11.5,
+            "ms": 11.3,
             "matched": 8874313
           },
           {
             "spec": "spectrum desc: maxE 10",
-            "ms": 11.8,
+            "ms": 11.7,
             "matched": 7765930
           },
           {
             "spec": "spectrum desc: maxE 1000",
-            "ms": 11.7,
+            "ms": 11.5,
             "matched": 9983734
           },
           {
             "spec": "spectrum desc: len>=median",
-            "ms": 10.9,
+            "ms": 10.5,
             "matched": 5184359
           },
           {
@@ -632,14 +722,14 @@
             "matched": 9983734
           }
         ],
-        "filter_ms_median": 12.8,
-        "filter_ms_max": 19.5,
-        "filter_ms_median_narrow5": 12.8,
+        "filter_ms_median": 12.9,
+        "filter_ms_max": 20.6,
+        "filter_ms_median_narrow5": 13,
         "resorts": [
           {
             "column": "tag",
             "desc": false,
-            "ms": 775.7
+            "ms": 588.6
           },
           {
             "column": "tag",
@@ -649,7 +739,7 @@
           {
             "column": "spectrum",
             "desc": false,
-            "ms": 104.7
+            "ms": 100.1
           },
           {
             "column": "spectrum",
@@ -658,62 +748,278 @@
           }
         ],
         "cached_page_ms": 0.2,
-        "best_per_spectrum_ms": 55.9,
+        "best_per_spectrum_ms": 44.4,
         "best_per_spectrum_rows": 636228,
         "export_bytes": 1127556554,
         "export_unsorted_rows": 10002096,
         "export_unsorted_s_per_gb_runs": [
-          0.106,
-          0.187,
-          0.148
+          0.102,
+          0.229,
+          0.154
         ],
-        "export_unsorted_s_per_gb": 0.148,
+        "export_unsorted_s_per_gb": 0.154,
         "export_sorted_rows": 10002096,
         "export_sorted_s_per_gb_runs": [
-          2.109,
-          2.125,
-          2.11
+          1.93,
+          2.026,
+          1.965
         ],
-        "export_sorted_s_per_gb": 2.11,
+        "export_sorted_s_per_gb": 1.965,
         "export_sorted_desc_rows": 10002096,
         "export_sorted_desc_s_per_gb_runs": [
-          2.243,
-          2.242,
-          2.188
+          1.968,
+          1.972,
+          1.994
         ],
-        "export_sorted_desc_s_per_gb": 2.242,
+        "export_sorted_desc_s_per_gb": 1.972,
         "export_filtered_csv_rows": 199620,
         "export_filtered_csv_s_runs": [
-          0.065,
-          0.051,
-          0.05
+          0.078,
+          0.048,
+          0.048
         ],
-        "export_filtered_csv_s": 0.051,
-        "peak_rss_mb": 591
+        "export_filtered_csv_s": 0.048,
+        "peak_rss_mb": 423
       },
       "sort": {
         "tag": {
-          "first_ms": 743.3,
+          "first_ms": 637.2,
           "desc_after_ms": 0.3
         },
         "spectrum": {
-          "first_ms": 106.9,
+          "first_ms": 102.4,
           "desc_after_ms": 0.1
         },
         "length": {
-          "first_ms": 597.2,
+          "first_ms": 376.1,
           "desc_after_ms": 0.2
         },
-        "peak_rss_mb": 592
+        "peak_rss_mb": 435
       },
       "cold": {
         "head_rows": 1000,
         "first_rows_ms": 1.1,
-        "indexed_ms": 465.2,
-        "tail_read_gb_per_s": 6.73
+        "indexed_ms": 446.7,
+        "tail_read_gb_per_s": 6.17
+      }
+    },
+    {
+      "file": "gen10M.tsv (browser_bench --gen, seed 12)",
+      "bytes": 1127556655,
+      "firstcut": {
+        "rows": 10002096,
+        "head_rows": 1000,
+        "first_rows_ms": 0.9,
+        "index_ms": 425.1,
+        "rank_asc_desc_ms": 574.3,
+        "ranked_swap_ms": 1000.4,
+        "interactive_first_page_ms": 429.5,
+        "interactive_first_page_rows": 500,
+        "interactive_first_page_ranked": false,
+        "peak_rss_mb": 298
       },
-      "run": 2
+      "typed": {
+        "rows": 10002096,
+        "spectra": 636228,
+        "build_ms": 1902.6,
+        "evalue_perm_ms": 388.5,
+        "filter_ms_median5": 153.4,
+        "filter_matched": 1900538,
+        "export_bytes": 1127556554,
+        "export_unsorted_s_per_gb": 0.103,
+        "export_sorted_s_per_gb": 7.067,
+        "peak_rss_mb": 482,
+        "bytes_per_row_typed": 15.1
+      },
+      "p3": {
+        "head_rows": 1000,
+        "first_rows_ms": 0.6,
+        "indexed_ms": 433.6,
+        "ranked_swap_ms": 1020.6,
+        "typed_ready_ms": 1305.5,
+        "median_length": 5,
+        "filters": [
+          {
+            "spec": "evalue: maxE 100, len>=3, scan=10",
+            "ms": 13.3,
+            "matched": 199836
+          },
+          {
+            "spec": "evalue: maxE 100, len>=3, scan=11",
+            "ms": 12.9,
+            "matched": 203298
+          },
+          {
+            "spec": "evalue: maxE 100, len>=3, scan=12",
+            "ms": 13,
+            "matched": 199789
+          },
+          {
+            "spec": "evalue: maxE 100, len>=3, scan=13",
+            "ms": 12.9,
+            "matched": 199892
+          },
+          {
+            "spec": "evalue: maxE 100, len>=3, scan=14",
+            "ms": 13,
+            "matched": 199620
+          },
+          {
+            "spec": "evalue: maxE 1000",
+            "ms": 11.2,
+            "matched": 9983734
+          },
+          {
+            "spec": "evalue: len>=5",
+            "ms": 10.8,
+            "matched": 5184359
+          },
+          {
+            "spec": "evalue: spectrum 'scan'",
+            "ms": 8,
+            "matched": 10002096
+          },
+          {
+            "spec": "evalue: maxE 1000, len>=3, spectrum 'scan'",
+            "ms": 15.8,
+            "matched": 9983734
+          },
+          {
+            "spec": "evalue: target hits only",
+            "ms": 7.8,
+            "matched": 2998035
+          },
+          {
+            "spec": "tag desc: maxE 100",
+            "ms": 14.8,
+            "matched": 8874313
+          },
+          {
+            "spec": "tag desc: maxE 10",
+            "ms": 15.6,
+            "matched": 7765930
+          },
+          {
+            "spec": "tag desc: maxE 1000",
+            "ms": 15,
+            "matched": 9983734
+          },
+          {
+            "spec": "tag desc: len>=median",
+            "ms": 10.6,
+            "matched": 5184359
+          },
+          {
+            "spec": "tag desc: maxE 1000, len>=3, spectrum 'scan'",
+            "ms": 21,
+            "matched": 9983734
+          },
+          {
+            "spec": "spectrum desc: maxE 100",
+            "ms": 11.4,
+            "matched": 8874313
+          },
+          {
+            "spec": "spectrum desc: maxE 10",
+            "ms": 12,
+            "matched": 7765930
+          },
+          {
+            "spec": "spectrum desc: maxE 1000",
+            "ms": 11.4,
+            "matched": 9983734
+          },
+          {
+            "spec": "spectrum desc: len>=median",
+            "ms": 10.6,
+            "matched": 5184359
+          },
+          {
+            "spec": "spectrum desc: maxE 1000, len>=3, spectrum 'scan'",
+            "ms": 16.2,
+            "matched": 9983734
+          }
+        ],
+        "filter_ms_median": 12.9,
+        "filter_ms_max": 21,
+        "filter_ms_median_narrow5": 13,
+        "resorts": [
+          {
+            "column": "tag",
+            "desc": false,
+            "ms": 612.5
+          },
+          {
+            "column": "tag",
+            "desc": true,
+            "ms": 0.3
+          },
+          {
+            "column": "spectrum",
+            "desc": false,
+            "ms": 104.8
+          },
+          {
+            "column": "spectrum",
+            "desc": true,
+            "ms": 0.1
+          }
+        ],
+        "cached_page_ms": 0.2,
+        "best_per_spectrum_ms": 50.3,
+        "best_per_spectrum_rows": 636228,
+        "export_bytes": 1127556554,
+        "export_unsorted_rows": 10002096,
+        "export_unsorted_s_per_gb_runs": [
+          0.111,
+          0.197,
+          0.161
+        ],
+        "export_unsorted_s_per_gb": 0.161,
+        "export_sorted_rows": 10002096,
+        "export_sorted_s_per_gb_runs": [
+          1.982,
+          2.024,
+          2.041
+        ],
+        "export_sorted_s_per_gb": 2.024,
+        "export_sorted_desc_rows": 10002096,
+        "export_sorted_desc_s_per_gb_runs": [
+          2.05,
+          2.122,
+          2.11
+        ],
+        "export_sorted_desc_s_per_gb": 2.11,
+        "export_filtered_csv_rows": 199620,
+        "export_filtered_csv_s_runs": [
+          0.081,
+          0.05,
+          0.053
+        ],
+        "export_filtered_csv_s": 0.053,
+        "peak_rss_mb": 425
+      },
+      "sort": {
+        "tag": {
+          "first_ms": 652.7,
+          "desc_after_ms": 0.3
+        },
+        "spectrum": {
+          "first_ms": 107.4,
+          "desc_after_ms": 0.1
+        },
+        "length": {
+          "first_ms": 377.4,
+          "desc_after_ms": 0.2
+        },
+        "peak_rss_mb": 430
+      },
+      "cold": {
+        "head_rows": 1000,
+        "first_rows_ms": 1.2,
+        "indexed_ms": 450.2,
+        "tail_read_gb_per_s": 6.55
+      }
     }
-  ],
-  "notes": "p3 mode: see the harness. Exports are each run 3 times per run and the median recorded. Warm and cold runs are separate modes."
+  ]
 }
