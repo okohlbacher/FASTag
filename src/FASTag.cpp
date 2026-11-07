@@ -31,6 +31,7 @@
 
 #include "Acquisition.h"
 #include "AcquisitionProbe.h"
+#include "AlkylationCall.h"
 #include "Centroid.h"
 #include "CliParam.h"
 #include "Census.h"
@@ -155,6 +156,21 @@ namespace
     for (const std::string& c : {exe + "../share/FASTag/digest", exe + "share-FASTag-digest", exe + "digest"})
       if (File::exists(c + "/digest_models.tsv")) return c;
     return std::string();
+  }
+
+  /// 1.12 D (#3g): directory of the shipped -alkylation_proteome proteomes:
+  /// $FASTAG_ALKYLATION_DIR, else "alkylation" beside the digest data
+  /// directory (share/FASTag/digest -> share/FASTag/alkylation,
+  /// share-FASTag-digest -> share-FASTag-alkylation). "" when there is none.
+  std::string alkylationDir_()
+  {
+    const char* env = std::getenv("FASTAG_ALKYLATION_DIR");
+    if (env != nullptr && *env != '\0' && File::isDirectory(std::string(env))) return std::string(env);
+    std::string d = digestDir_();
+    while (!d.empty() && (d.back() == '/' || d.back() == '\\')) d.pop_back();
+    if (d.size() < 6 || d.compare(d.size() - 6, 6, "digest") != 0) return std::string();
+    const std::string a = d.substr(0, d.size() - 6) + "alkylation";
+    return File::isDirectory(a) ? a : std::string();
   }
 
   /// k of a taxonomy index, read from its 16-byte header alone.
@@ -834,6 +850,56 @@ protected:
                           "Benjamini-Hochberg; 0 estimates it from the run (Storey)", false, true);
     setMinFloat_("species_pi0", 0.0);
     setMaxFloat_("species_pi0", 1.0);
+    // #3c-#3f chemistry v2 for -digest_out (src/Digest.h). Off by default: at
+    // these defaults -digest_out is 1.11's. Not validated on held-out data;
+    // the shipped v2 table and calibration are unfitted priors until the DEV
+    // regeneration on the release candidate.
+    registerStringOption_("digest_models_version", "<v>", "shipped",
+                          "Shipped protease models of -digest_out: 'shipped' (1.11) or 'v2' (detection, "
+                          "LysargiNase and Asp-N_ambic rows, pooled specificity; not validated on held-out data)",
+                          false, true);
+    setValidStrings_("digest_models_version", ListUtils::create<std::string>("shipped,v2"));
+    registerStringOption_("digest_detection", "<mode>", "none",
+                          "Per-instrument detection weights of -digest_out from the model table: 'shipped' "
+                          "applies them and calls timsTOF runs instead of withholding them (needs a v2 table; "
+                          "not validated on held-out data); 'none' = 1.11",
+                          false, true);
+    setValidStrings_("digest_detection", ListUtils::create<std::string>("none,shipped"));
+    registerStringOption_("digest_flank2", "<mode>", "off",
+                          "Two-residue flank model of -digest_out: 'auto' scores the flank sums m(P2) + m(P1) when "
+                          "the P1 counts are too few or y1 is cut off (not validated on held-out data); 'off' = 1.11",
+                          false, true);
+    setValidStrings_("digest_flank2", ListUtils::create<std::string>("off,auto"));
+    registerDoubleOption_("digest_min_confidence", "<f>", 0.0,
+                          "Withhold a -digest_out call whose calibrated p_correct is below this (no_call "
+                          "low_confidence); 0 = off. Not validated on held-out data", false, true);
+    setMinFloat_("digest_min_confidence", 0.0);
+    setMaxFloat_("digest_min_confidence", 1.0);
+    registerInputFile_("digest_calibration", "<file>", "",
+                       "Calibration of p_correct for -digest_out (columns feature, coef). Default: the shipped "
+                       "digest_calibration.tsv when p_correct is written", false, true);
+    setValidFormats_("digest_calibration", ListUtils::create<std::string>("tsv"));
+    // #3g the alkylation call (src/AlkylationCall.h), from the reconciler's
+    // placements. Opt-in; every other output is the same with or without it.
+    registerOutputFile_("alkylation_out", "<file>", "",
+                        "Report which reagent alkylated the cysteines (or none), from the placements of "
+                        "single-Cys peptides on -recon_fasta or -alkylation_proteome: Cys form counts and "
+                        "the call (not validated on held-out data)", false);
+    setValidFormats_("alkylation_out", ListUtils::create<std::string>("tsv"));
+    registerStringOption_("alkylation_proteome", "<name>", "auto",
+                          "Database of -alkylation_out without -recon_fasta: auto (= human), human, mouse, yeast, "
+                          "ecoli (shipped proteomes) or a FASTA file (.gz allowed)", false, true);
+    registerIntOption_("alkylation_min_spectra", "<n>", 10,
+                       "Spectra the -alkylation_out call needs, binned and for the called class", false, true);
+    setMinInt_("alkylation_min_spectra", 1);
+    registerDoubleOption_("alkylation_min_share", "<f>", 0.6,
+                          "Share of the binned spectra the -alkylation_out call needs", false, true);
+    setMinFloat_("alkylation_min_share", 0.0);
+    setMaxFloat_("alkylation_min_share", 1.0);
+    registerDoubleOption_("alkylation_window", "<Da>", 0.0,
+                          "Window of -alkylation_out around each Cys form mass; 0 = 0.02 Da on a ppm run, "
+                          "0.5 Da on a run with a Da fragment tolerance", false, true);
+    setMinFloat_("alkylation_window", 0.0);
     // ---- 1.12 F: options ----
     // #11 phase A: the per-spectrum census. Opt-in; every other output is
     // the same with or without it (src/Census.h).
@@ -1239,6 +1305,7 @@ protected:
           {"search_config_out", nullptr},
           // ---- 1.12 D: -stream refusals ----
           {"species_call", "-stream cannot be combined with -species_call."},
+          {"alkylation_out", nullptr},
           // ---- 1.12 F: -stream refusals ----
           {"census", nullptr},
           {"census_out", nullptr},
@@ -1457,10 +1524,19 @@ protected:
     const std::string search_config_out = getStringOption_("search_config_out");
     const bool shortlist_on = !shortlist_out.empty() || !fasta_out.empty();
     const bool handoff_on = shortlist_on || !search_config_out.empty();
+    // #3g: -alkylation_out reads the placements of the run's own reconciler.
+    const std::string alkylation_out = getStringOption_("alkylation_out");
+    const bool alkylation_on = !alkylation_out.empty();
     const bool place_on = recon_on
         // ---- 1.12 A: placement readers ----
         || handoff_on
+        // ---- 1.12 D: placement readers ----
+        || alkylation_on
         ;
+    // Only -alkylation_out places: every other placement reader is off, so
+    // the index is built on its database and only the tags it reads are
+    // placed (recon_out, the hand-off and -delta_out read every tag).
+    const bool alkylation_only_db = alkylation_on && !recon_on && !handoff_on;
     if (!delta_out.empty() && !place_on)
     {
       OPENMS_LOG_ERROR << "-delta_out requires -recon_out (the histogram is "
@@ -1578,10 +1654,55 @@ protected:
     std::vector<std::uint32_t> sl_bg_twins;  // database entries the background duplicates
     std::array<std::uint64_t, FASTag::Digest::kNumAA> sl_db_residues{};
     std::size_t sl_decoys = 0;
+    // #3g: where -alkylation_out's placements come from (its report says).
+    std::string alk_db_source, alk_db;
+    if (alkylation_on)
+    {
+      const std::string prot = getStringOption_("alkylation_proteome");
+      if (!getStringOption_("recon_fasta").empty() || !alkylation_only_db)
+      {
+        if (optionNonDefault_("alkylation_proteome"))
+          OPENMS_LOG_WARN << "-alkylation_proteome is ignored: -alkylation_out reads the placements on "
+                          << (getStringOption_("recon_fasta").empty() ? "-fasta" : "-recon_fasta") << "." << std::endl;
+        alk_db_source = getStringOption_("recon_fasta").empty() ? "fasta" : "recon_fasta";
+      }
+      else
+      {
+        const bool named = prot == "auto" || prot == "human" || prot == "mouse" || prot == "yeast" || prot == "ecoli";
+        if (named)
+        {
+          // auto: the human proteome. Taking the top -species genus would need
+          // the species call before the tagging loop that places the tags.
+          const std::string name = prot == "auto" ? "human" : prot;
+          const std::string dir = alkylationDir_();
+          const std::string path = dir.empty() ? std::string() : dir + "/" + name + ".fasta.gz";
+          if (path.empty() || !File::exists(path))
+          {
+            OPENMS_LOG_ERROR << "-alkylation_out: no shipped " << name << " proteome found (expected "
+                                "<bin>/../share/FASTag/alkylation/" << name << ".fasta.gz, or set "
+                                "FASTAG_ALKYLATION_DIR). Give -alkylation_proteome <fasta> or -recon_fasta." << std::endl;
+            return ILLEGAL_PARAMETERS;
+          }
+          alk_db = path;
+          alk_db_source = "bundled:" + name;
+        }
+        else if (File::exists(prot) && !File::isDirectory(prot))
+        {
+          alk_db = prot;
+          alk_db_source = "proteome";
+        }
+        else
+        {
+          OPENMS_LOG_ERROR << "-alkylation_proteome '" << prot << "' is neither auto, human, mouse, yeast, ecoli "
+                              "nor a readable FASTA file." << std::endl;
+          return ILLEGAL_PARAMETERS;
+        }
+      }
+    }
     if (place_on)
     {
       recon_db = getStringOption_("recon_fasta");
-      if (recon_db.empty()) recon_db = fasta;
+      if (recon_db.empty()) recon_db = alkylation_only_db ? alk_db : fasta;
       if (recon_db.empty())
       {
         OPENMS_LOG_ERROR << "-recon_out needs a database: give -recon_fasta "
@@ -1589,7 +1710,9 @@ protected:
         return ILLEGAL_PARAMETERS;
       }
       std::vector<FASTAFile::FASTAEntry> rentries;
-      FASTAFile().load(recon_db, rentries);
+      // #3g: the shipped proteomes are gzip-compressed, which FASTAFile cannot read.
+      if (alkylation_only_db) FASTag::Alkylation::loadFasta(recon_db, rentries);
+      else FASTAFile().load(recon_db, rentries);
       pindex.build(rentries, fixed_deltas, iso_tol);
       if (handoff_on)
       {
@@ -1790,6 +1913,15 @@ protected:
           {"species_call_min_units", "-species_call decoy", species_call_on},
           {"species_call_decoys", "-species_call decoy", species_call_on},
           {"species_pi0", "-species_call decoy", species_call_on},
+          {"digest_models_version", "-digest_out", digest_on},
+          {"digest_detection", "-digest_out", digest_on},
+          {"digest_flank2", "-digest_out", digest_on},
+          {"digest_min_confidence", "-digest_out", digest_on},
+          {"digest_calibration", "-digest_out", digest_on},
+          {"alkylation_proteome", "-alkylation_out", alkylation_on},
+          {"alkylation_min_spectra", "-alkylation_out", alkylation_on},
+          {"alkylation_min_share", "-alkylation_out", alkylation_on},
+          {"alkylation_window", "-alkylation_out", alkylation_on},
           // ---- 1.12 F: ignored-option warnings ----
           {"census_out", "-census", getFlag_("census")},
           {"census_summary_out", "-census", getFlag_("census")},
@@ -1810,21 +1942,51 @@ protected:
                           "massgap_mods.tsv" << (digest_on ? ", or give -digest_models." : ".") << std::endl;
       return ILLEGAL_PARAMETERS;
     };
+    // 1.12 D (#3c-#3f): the v2 models, detection, flank2 and calibration.
+    digest_settings.models_version = getStringOption_("digest_models_version");
+    digest_settings.detection = getStringOption_("digest_detection") == "shipped";
+    digest_settings.flank2 = getStringOption_("digest_flank2") == "auto";
+    digest_settings.min_confidence = getDoubleOption_("digest_min_confidence");
+    const bool digest_v2 = digest_settings.models_version == "v2";
     if (digest_on)
     {
       std::string models_path = digest_models;
       if (models_path.empty())
       {
         if (digest_dir.empty()) return no_digest_dir("protease models");
-        models_path = digest_dir + "/digest_models.tsv";
+        models_path = digest_dir + (digest_v2 ? "/digest_models_v2.tsv" : "/digest_models.tsv");
       }
+      else if (digest_v2)
+        OPENMS_LOG_WARN << "-digest_models_version v2 is ignored: -digest_models '" << digest_models
+                        << "' is read as given." << std::endl;
       std::string err;
       if (!FD::loadModelTable(models_path, protease_models, &err))
       {
         OPENMS_LOG_ERROR << "-digest_models '" << models_path << "': " << err << std::endl;
         return INPUT_FILE_CORRUPT;
       }
-      digest_settings.models = digest_models.empty() ? "shipped" : digest_models;
+      digest_settings.models = digest_models.empty() ? (digest_v2 ? "shipped_v2" : "shipped") : digest_models;
+      if (digest_settings.detection)
+        for (std::string_view cls : FD::kInstrumentClasses)
+          if (!protease_models.detectionFor(cls))
+          {
+            OPENMS_LOG_ERROR << "-digest_detection shipped needs detection rows for orbitrap_hcd, timstof and other in "
+                                "the model table; '" << models_path << "' has none for " << cls
+                             << " (use -digest_models_version v2 or a v2 -digest_models table)." << std::endl;
+            return ILLEGAL_PARAMETERS;
+          }
+      const std::string cal_path = getStringOption_("digest_calibration");
+      if (digest_v2 || digest_settings.min_confidence > 0.0 || !cal_path.empty())
+      {
+        if (cal_path.empty() && digest_dir.empty()) return no_digest_dir("calibration");
+        const std::string cp = cal_path.empty() ? digest_dir + "/digest_calibration.tsv" : cal_path;
+        if (!FD::loadCalibration(cp, digest_settings.calibration, &err))
+        {
+          OPENMS_LOG_ERROR << "-digest_calibration '" << cp << "': " << err << std::endl;
+          return INPUT_FILE_CORRUPT;
+        }
+        digest_settings.calibration_source = cal_path.empty() ? "shipped" : cal_path;
+      }
       // The table's own background wins; else the FASTA's composition; else
       // the shipped human one.
       std::string background_fasta = getStringOption_("recon_fasta");
@@ -2580,6 +2742,8 @@ protected:
       guard.input("search_config_template", getStringOption_("search_config_template"));
       // ---- 1.12 D: guarded inputs ----
       guard.input("species_call_params", species_call_params_path);
+      guard.input("digest_calibration", getStringOption_("digest_calibration"));
+      if (alk_db_source == "proteome") guard.input("alkylation_proteome", alk_db);
       // ---- 1.12 F: guarded inputs ----
       guard.output("out", out);
       guard.output("out_spectra", out_spectra);
@@ -2607,6 +2771,7 @@ protected:
       guard.output("fasta_out", fasta_out, true);
       guard.output("search_config_out", search_config_out, true);
       // ---- 1.12 D: output paths ----
+      guard.output("alkylation_out", alkylation_out, true);
       // ---- 1.12 F: output paths ----
       if (getFlag_("census"))
       {
@@ -2780,7 +2945,33 @@ protected:
       FASTag::ClusterAcc::ClusterThread acc;  ///< 1.12 per-cluster accumulators (src/ClusterAcc.h)
     };
     std::vector<PerThread> per_thread(static_cast<size_t>(std::max(1, omp_get_max_threads())));
-    for (PerThread& q : per_thread) q.digest = FASTag::Digest::TerminusCounter(digest_settings.window);
+    for (PerThread& q : per_thread)
+    {
+      q.digest = FASTag::Digest::TerminusCounter(digest_settings.window);
+      if (digest_on && digest_settings.flank2) q.digest.enableFlank2();  // 1.12 D #3d
+    }
+    // 1.12 D #3g: -alkylation_out's Cys forms and settings; placements are
+    // read for every tag only when another reader needs them all.
+    const bool place_every = recon_on || handoff_on || delta_on;
+    std::vector<FASTag::Alkylation::Form> alk_forms;
+    FASTag::Alkylation::Settings alk_settings;
+    if (alkylation_on)
+    {
+      try { alk_forms = FASTag::Alkylation::forms(); }
+      catch (const std::exception& e)
+      {
+        OPENMS_LOG_ERROR << "-alkylation_out: " << e.what() << "." << std::endl;
+        return INTERNAL_ERROR;
+      }
+      const double w = getDoubleOption_("alkylation_window");
+      alk_settings.window = w > 0.0 ? w : (p.tol_ppm ? 0.02 : 0.5);
+      alk_settings.min_spectra = static_cast<std::uint64_t>(getIntOption_("alkylation_min_spectra"));
+      alk_settings.min_share = getDoubleOption_("alkylation_min_share");
+      for (const auto& [res, delta] : fixed_deltas)
+        if (res == 'C') alk_settings.fixed_c += delta;
+      alk_settings.met_oxidation = ModificationsDB::getInstance()->getModification("Oxidation (M)")->getDiffMonoMass();
+      alk_settings.residue_mass = FASTag::Alkylation::residueMasses(fixed_deltas);
+    }
 
     // The per-spectrum work, shared by every input path.
     //
@@ -2906,6 +3097,7 @@ protected:
       bool delta_have = false, delta_clamped = false;
       double delta_e = 0.0;
       DeltaSample delta_sample;
+      FASTag::Alkylation::Vote alk_vote;  // 1.12 D #3g
       const std::string usi = usi_prefix.empty() || tags.empty()
           ? std::string()
           : usi_prefix + (mgf_in ? FASTag::usiIndexMgf(spec.metaValueExists("Scan_ID")
@@ -2978,7 +3170,9 @@ protected:
         if (count_on && !t.gapped && t.evalue <= 1.0)
           pt.digest.add(t.nterm_mass, t.cterm_mass, FASTag::baseSequence(t.seq));
 
-        if (place_on && !row_entrap)  // known-false rows must not place or bin
+        // 1.12 D #3g: the tags -alkylation_out reads (as the digest report).
+        const bool alk_tag = alkylation_on && !t.gapped && t.evalue <= 1.0;
+        if (place_on && !row_entrap && (place_every || alk_tag))  // known-false rows must not place or bin
         {
           // The tag's own variable mods go on the localization ladder.
           const bool tag_modded = t.seq.find('[') != std::string::npos;
@@ -3062,6 +3256,34 @@ protected:
                 a.sl.push_back(ev);
               }
           }
+          // ---- 1.12 D: per-tag placement records ----
+          if (alk_tag)
+          {
+            // #3g: the tag's single-Cys placements; the spectrum votes with
+            // its best tag that has one (Alkylation::tagVote).
+            FASTag::Alkylation::Tally& at = pt.acc.d.alk;
+            ++at.tags;
+            static thread_local std::vector<FASTag::Alkylation::Eval> alk_evals;
+            alk_evals.clear();
+            for (const auto& pl : places)
+            {
+              FASTag::Alkylation::Placement ap;
+              ap.peptide = pl.peptide;
+              ap.start = pl.start;
+              ap.tag_pos = static_cast<int>(pl.pos);
+              ap.tag_len = static_cast<int>(pl.tag_len);
+              ap.nterm_match = pl.nterm_match;
+              ap.cterm_match = pl.cterm_match;
+              ap.gap = pl.delta_mass;
+              alk_evals.push_back(FASTag::Alkylation::evaluate(ap, alk_settings, alk_forms));
+            }
+            FASTag::Alkylation::Vote v = FASTag::Alkylation::tagVote(alk_evals, alk_forms, at.outcomes);
+            if (v.have && (!alk_vote.have || t.evalue < alk_vote.evalue))
+            {
+              v.evalue = t.evalue;
+              alk_vote = v;
+            }
+          }
           // A candidate for the spectrum's -delta_out sample: take this
           // tag's min-|delta| placement.
           if (delta_on && !places.empty() && (!delta_have || t.evalue < delta_e))
@@ -3093,6 +3315,7 @@ protected:
         if (delta_clamped) ++pt.delta_clamped;
         else pt.delta.push_back(std::move(delta_sample));
       }
+      if (alk_vote.have) pt.acc.d.alk.add(alk_vote);  // 1.12 D #3g
       if (!id_hits.empty())
         res.ids.push_back(FASTag::reconSpectrum(spec.getNativeID(), spec.getRT(), prec.getMZ(),
                                                 std::move(id_hits)));
@@ -4321,6 +4544,31 @@ protected:
         }
         OPENMS_LOG_INFO << "Labels: " << tc.tags << " filtered tags -> " << label_out << std::endl;
       }
+    }
+
+    // ---- 1.12 D: -alkylation_out (#3g) ----
+    if (alkylation_on)
+    {
+      const FASTag::Alkylation::Tally& at = run_acc.d.alk;
+      const FASTag::Alkylation::Call call = FASTag::Alkylation::callAlkylation(at, alk_settings);
+      FASTag::Alkylation::ReportInfo info;
+      info.database = recon_db;
+      info.database_source = alk_db_source;
+      for (const auto& m : p.mods)
+        if (!m.variable && m.residue == 'C') info.reagent_note += (info.reagent_note.empty() ? "" : "+") + m.name;
+      std::vector<FD::Row> rows = FASTag::RunReport::runRows(run_meta, FASTag::RunReport::Emit::Versioned);
+      for (FD::Row& r : FASTag::Alkylation::alkylationRows(at, call, alk_settings, alk_forms, info)) rows.push_back(std::move(r));
+      FASTag::PartFile alk_part(alkylation_out);
+      if (!alk_part.begin() || !FD::writeReport(alk_part.writePath(), rows) || !alk_part.commit())
+      {
+        OPENMS_LOG_ERROR << "Failed writing " << alkylation_out
+                         << (alk_part.error().empty() ? std::string() : ": " + alk_part.error()) << std::endl;
+        return CANNOT_WRITE_OUTPUT_FILE;
+      }
+      OPENMS_LOG_INFO << "Alkylation: " << at.spectra << " spectra with a single-Cys placement, "
+                      << (call.called ? std::string("call ") + FASTag::Alkylation::className(call.cls)
+                                      : "no_call " + call.reason)
+                      << " -> " << alkylation_out << std::endl;
     }
 
     // ---- phase 10: species detection ---------------------------------------

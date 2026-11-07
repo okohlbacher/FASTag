@@ -170,4 +170,124 @@ grep -q -- "-digest_window is only read" "$TMP/log" && fail "-digest_window warn
 grep -q -- "-digest_silac_min is only read for -label_out" "$TMP/log" || fail "no warning for -digest_silac_min"
 grep -q -- "-glyco_out is only read for -glyco" "$TMP/log" || fail "no warning for -glyco_out"
 
+# ---- 1.12 D: chemistry v2 (#3c-#3f), all opt-in
+# default -digest_out equals the 1.11.0 binary's on the same run
+# (test/fixtures/digest_1.11.0_Ecoli_MS2_small_Da.tsv), the run version row aside
+legacy "$TMP/digest.tsv" > "$TMP/digest.old"
+legacy "$FIX/digest_1.11.0_Ecoli_MS2_small_Da.tsv" > "$TMP/digest.want"
+same "$TMP/digest.want" "$TMP/digest.old" "-digest_out at the defaults is not the 1.11.0 report"
+# every new option at its default equals the option absent
+run "${COMMON[@]}" -out "$TMP/v0.tsv" -digest_out "$TMP/vdigest0.tsv" -label_out "$TMP/vlabel0.tsv" \
+  -digest_models_version shipped -digest_detection none -digest_flank2 off -digest_min_confidence 0 \
+  -alkylation_proteome auto -alkylation_min_spectra 10 -alkylation_min_share 0.6 -alkylation_window 0
+same "$TMP/digest.tsv" "$TMP/vdigest0.tsv" "-digest_out changed with the 1.12 D options at their defaults"
+same "$TMP/label.tsv" "$TMP/vlabel0.tsv" "-label_out changed with the 1.12 D options at their defaults"
+same "$TMP/base.tsv" "$TMP/v0.tsv" "the tag TSV changed with the 1.12 D options at their defaults"
+# a ppm run with v2, detection, flank2 and the calibration: the v2 rows, p_correct with a call
+PPM=(-in "$IN" -tag_length 4 -digest_tag_min 5)
+run "${PPM[@]}" -out "$TMP/v1.tsv" -digest_out "$TMP/vdigest1.tsv"
+run "${PPM[@]}" -out "$TMP/v2.tsv" -digest_out "$TMP/vdigest2.tsv" -digest_models_version v2 \
+  -digest_detection shipped -digest_flank2 auto
+same "$TMP/v1.tsv" "$TMP/v2.tsv" "-digest_models_version v2 changed the tag TSV"
+tr -d '\r' < "$TMP/vdigest2.tsv" | awk -F'\t' 'NF != 5 || $5 == "" { bad = 1 } END { exit bad }' || fail "v2 digest: a malformed row"
+[ "$(val "$TMP/vdigest2.tsv" run models) $(val "$TMP/vdigest2.tsv" run models_version)" = "shipped_v2 v2" ] \
+  || fail "v2: run.models/models_version"
+[ "$(val "$TMP/vdigest2.tsv" run detection) $(val "$TMP/vdigest2.tsv" run flank2) $(val "$TMP/vdigest2.tsv" run calibration)" = "shipped auto shipped" ] \
+  || fail "v2: run.detection/flank2/calibration"
+[ -n "$(val "$TMP/vdigest2.tsv" meta instrument_class)" ] && [ -n "$(val "$TMP/vdigest2.tsv" count flank2_n)" ] \
+  && [ -n "$(val "$TMP/vdigest2.tsv" nocall low_confidence)" ] && [ -n "$(val "$TMP/vdigest2.tsv" call flank2_used)" ] \
+  || fail "v2: instrument_class, flank2_n, low_confidence or flank2_used row missing"
+[ "$(val "$TMP/vdigest2.tsv" call status)" = call ] || fail "v2 on the ppm fixture is not a call: $(val "$TMP/vdigest2.tsv" call reason)"
+# the shipped calibration is unfitted (all coefficients 0): p_correct 0.5
+[ "$(val "$TMP/vdigest2.tsv" call p_correct)" = 0.5 ] || fail "v2 does not write p_correct 0.5"
+run "${PPM[@]}" -out "$TMP/v3.tsv" -digest_out "$TMP/vdigest3.tsv" -digest_min_confidence 0.9
+[ "$(val "$TMP/vdigest3.tsv" call status) $(val "$TMP/vdigest3.tsv" call reason)" = "no_call low_confidence" ] \
+  || fail "-digest_min_confidence 0.9 with p_correct 0.5 is not no_call low_confidence"
+# the calls of the v1 rows are kept: v2 without detection, flank2 or calibration calls the same model here
+[ "$(val "$TMP/vdigest1.tsv" call model)" = "$(val "$TMP/vdigest2.tsv" call model)" ] \
+  || fail "v2 on the ppm fixture calls $(val "$TMP/vdigest2.tsv" call model), v1 $(val "$TMP/vdigest1.tsv" call model)"
+# refusals: detection without detection rows (v1 table; a v2 table missing a class), a bad calibration
+"$BIN" "${PPM[@]}" -out "$TMP/x.tsv" -digest_out "$TMP/x5.tsv" -digest_detection shipped > "$TMP/log" 2>&1 \
+  && fail "-digest_detection shipped with the v1 table was accepted"
+grep -q "needs detection rows" "$TMP/log" || fail "no message for detection without rows"
+grep -v $'^detection\ttimstof' "$DATA/digest_models_v2.tsv" > "$TMP/notims.tsv"
+"$BIN" "${PPM[@]}" -out "$TMP/x.tsv" -digest_out "$TMP/x6.tsv" -digest_models "$TMP/notims.tsv" -digest_detection shipped \
+  > "$TMP/log" 2>&1 && fail "a v2 table without the timstof detection class was accepted"
+grep -q "none for timstof" "$TMP/log" || fail "no message for the missing timstof class"
+printf 'feature\tcoef\nintercept\t1\n' > "$TMP/badcal.tsv"
+"$BIN" "${PPM[@]}" -out "$TMP/x.tsv" -digest_out "$TMP/x7.tsv" -digest_calibration "$TMP/badcal.tsv" > "$TMP/log" 2>&1 \
+  && fail "a malformed -digest_calibration was accepted"
+"$BIN" "${COMMON[@]}" -out "$TMP/w.tsv" -digest_flank2 auto -digest_detection shipped > "$TMP/log" 2>&1 \
+  || fail "-digest_flank2 without -digest_out was refused"
+grep -q -- "-digest_flank2 is only read for -digest_out" "$TMP/log" || fail "no warning for -digest_flank2"
+
+# ---- 1.12 D: -alkylation_out (#3g)
+alk_check() {  # FILE: sections, five fields, the call rows
+  tr -d '\r' < "$1" | awk -F'\t' 'NF != 5 || $5 == "" { bad = 1 } END { exit bad }' || fail "$1: a malformed row"
+  for sct in run alk_run alk_cys alkylation_call; do
+    tr -d '\r' < "$1" | cut -f1 | grep -qx "$sct" || fail "$1: no $sct section"
+  done
+  tr -d '\r' < "$1" | cut -f1 | grep -qx -e cys -e call && fail "$1: a cys or call section (the mass-gap or digest names)"
+  [ "$(tr -d '\r' < "$1" | awk -F'\t' '$1 == "alkylation_call" { k = k (k == "" ? "" : ",") $2 } END { print k }')" \
+    = "status,reagent,mass,share,reason" ] || fail "$1: alkylation_call rows"
+  [ "$(val "$1" alk_run format)" = 1 ] || fail "$1: alk_run format"
+}
+counts_of() { tr -d '\r' < "$1" | awk -F'\t' '$1 == "alk_cys" || $1 == "alkylation_call" || ($1 == "alk_run" && ($2 == "tags" || $2 == "spectra"))'; }
+run "${COMMON[@]}" -out "$TMP/a0.tsv" -alkylation_out "$TMP/alk0.tsv" -alkylation_proteome "$DB"
+same "$TMP/base.tsv" "$TMP/a0.tsv" "-alkylation_out changed the tag TSV"
+alk_check "$TMP/alk0.tsv"
+[ "$(val "$TMP/alk0.tsv" alk_run database_source)" = proteome ] || fail "alk0: database_source"
+[ "$(val "$TMP/alk0.tsv" alk_run window)" = 0.5 ] || fail "alk0: a Da run's window is not 0.5"
+[ "$(val "$TMP/alk0.tsv" run run_report_version)" = 3 ] || fail "alk0: run rows are not the versioned format 3"
+[ "$(val "$TMP/alk0.tsv" alk_run tags)" -gt 0 ] || fail "alk0: no tag looked at"
+# -recon_out is byte-identical with and without -alkylation_out; the counts are those on the same database
+run "${COMMON[@]}" -out "$TMP/a1.tsv" -recon_fasta "$DB" -recon_out "$TMP/ar1.tsv"
+run "${COMMON[@]}" -out "$TMP/a2.tsv" -recon_fasta "$DB" -recon_out "$TMP/ar2.tsv" -alkylation_out "$TMP/alk2.tsv"
+same "$TMP/ar1.tsv" "$TMP/ar2.tsv" "-alkylation_out changed -recon_out"
+same "$TMP/a1.tsv" "$TMP/a2.tsv" "-alkylation_out changed the tag TSV (with -recon_out)"
+alk_check "$TMP/alk2.tsv"
+[ "$(val "$TMP/alk2.tsv" alk_run database_source)" = recon_fasta ] || fail "alk2: database_source"
+counts_of "$TMP/alk0.tsv" > "$TMP/alk0.counts"; counts_of "$TMP/alk2.tsv" > "$TMP/alk2.counts"
+same "$TMP/alk0.counts" "$TMP/alk2.counts" "-alkylation_out counts differ with and without -recon_out on one database"
+# threads 1 and 3
+"$BIN" "${COMMON[@]}" -threads 1 -out "$TMP/a3.tsv" -alkylation_out "$TMP/alk3.tsv" -alkylation_proteome "$DB" > "$TMP/log" 2>&1 \
+  || fail "FASTag -threads 1 -alkylation_out"
+"$BIN" "${COMMON[@]}" -threads 3 -out "$TMP/a4.tsv" -alkylation_out "$TMP/alk4.tsv" -alkylation_proteome "$DB" > "$TMP/log" 2>&1 \
+  || fail "FASTag -threads 3 -alkylation_out"
+same "$TMP/alk3.tsv" "$TMP/alk4.tsv" "-alkylation_out differs between 1 and 3 threads"
+same "$TMP/alk0.tsv" "$TMP/alk3.tsv" "-alkylation_out differs between 2 and 1 threads"
+# a ppm run: window 0.02; no fixed C modification: fixed_c_delta 0
+run -in "$IN" -tag_length 4 -out "$TMP/a5.tsv" -alkylation_out "$TMP/alk5.tsv" -alkylation_proteome "$DB" -fixed_modifications
+alk_check "$TMP/alk5.tsv"
+[ "$(val "$TMP/alk5.tsv" alk_run window) $(val "$TMP/alk5.tsv" alk_run fixed_c_delta)" = "0.02 0" ] || fail "alk5: window/fixed_c_delta"
+# the shipped proteomes beside the digest data (a gzip-compressed FASTA), found through FASTAG_DIGEST_DIR
+if command -v gzip > /dev/null 2>&1; then
+  mkdir -p "$TMP/share/digest" "$TMP/share/alkylation"
+  cp "$DATA"/*.tsv "$TMP/share/digest/"
+  gzip -c "$DB" > "$TMP/share/alkylation/ecoli.fasta.gz"
+  FASTAG_DIGEST_DIR="$TMP/share/digest" run "${COMMON[@]}" -out "$TMP/a6.tsv" -alkylation_out "$TMP/alk6.tsv" \
+    -alkylation_proteome ecoli
+  [ "$(val "$TMP/alk6.tsv" alk_run database_source)" = bundled:ecoli ] || fail "alk6: database_source"
+  counts_of "$TMP/alk6.tsv" > "$TMP/alk6.counts"
+  same "$TMP/alk0.counts" "$TMP/alk6.counts" "the gzip-compressed shipped proteome gives other counts than the plain FASTA"
+  FASTAG_DIGEST_DIR="$TMP/share/digest" "$BIN" "${COMMON[@]}" -out "$TMP/x.tsv" -alkylation_out "$TMP/x8.tsv" \
+    > "$TMP/log" 2>&1 && fail "-alkylation_proteome auto without a shipped human proteome was accepted"
+  grep -q "no shipped human proteome" "$TMP/log" || fail "no message for the missing human proteome"
+else
+  echo "note: gzip not found; the shipped-proteome check is skipped" >&2
+fi
+# refusals and warnings
+"$BIN" "${COMMON[@]}" -out "$TMP/x.tsv" -alkylation_out "$TMP/x.tsv" -alkylation_proteome "$DB" > "$TMP/log" 2>&1 \
+  && fail "-alkylation_out equal to -out was accepted"
+"$BIN" "${COMMON[@]}" -out "$TMP/x.tsv" -alkylation_out "$TMP/x9.tsv" -alkylation_proteome zebrafish > "$TMP/log" 2>&1 \
+  && fail "an unknown -alkylation_proteome was accepted"
+grep -q "is neither auto" "$TMP/log" || fail "no message for an unknown -alkylation_proteome"
+printf '' | "$BIN" -stream -alkylation_out "$TMP/x10.tsv" > "$TMP/log" 2>&1 && fail "-stream with -alkylation_out was accepted"
+"$BIN" "${COMMON[@]}" -out "$TMP/w.tsv" -alkylation_min_spectra 5 > "$TMP/log" 2>&1 \
+  || fail "-alkylation_min_spectra without -alkylation_out was refused"
+grep -q -- "-alkylation_min_spectra is only read for -alkylation_out" "$TMP/log" || fail "no warning for -alkylation_min_spectra"
+run "${COMMON[@]}" -out "$TMP/a7.tsv" -recon_fasta "$DB" -alkylation_out "$TMP/alk7.tsv" -alkylation_proteome human
+grep -q -- "-alkylation_proteome is ignored" "$TMP/log" || fail "no warning for -alkylation_proteome with -recon_fasta"
+[ ! -e "$TMP/alk7.tsv.part" ] || fail "a .part file is left behind"
+
 echo "digest_cli_test: all checks passed"

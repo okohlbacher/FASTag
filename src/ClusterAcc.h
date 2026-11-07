@@ -21,6 +21,7 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "AlkylationCall.h"
 #include "Centroid.h"
 #include "IonSeries.h"
 #include "Census.h"
@@ -74,9 +75,11 @@ namespace FASTag::ClusterAcc
   };
 
   // ---- 1.12 D ----
+  // #3g: the alkylation votes and placement outcomes (-alkylation_out only).
   struct ThreadD
   {
-    void merge(const ThreadD&) {}
+    Alkylation::Tally alk;
+    void merge(const ThreadD& o) { alk.merge(o.alk); }
   };
   struct BlockD
   {

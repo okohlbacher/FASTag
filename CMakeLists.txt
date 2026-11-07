@@ -79,7 +79,7 @@ set(FASTAG_CORE_SOURCES_E src/Acquisition.cpp src/Centroid.cpp)
 # ---- 1.12 A: core sources ----
 set(FASTAG_CORE_SOURCES_A src/Shortlist.cpp src/SearchConfig.cpp)
 # ---- 1.12 D: core sources ----
-set(FASTAG_CORE_SOURCES_D src/SpeciesLookup.cpp src/SpeciesCall.cpp)
+set(FASTAG_CORE_SOURCES_D src/SpeciesLookup.cpp src/SpeciesCall.cpp src/AlkylationCall.cpp)
 # ---- 1.12 F: core sources ----
 set(FASTAG_CORE_SOURCES_F src/OutputGuard.cpp)
 add_library(fastag_core STATIC ${FASTAG_CORE_SOURCES}
@@ -233,7 +233,18 @@ target_link_libraries(buildtaxdb PRIVATE fastag_core)
 install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/data/digest/digest_models.tsv"
               "${CMAKE_CURRENT_SOURCE_DIR}/data/digest/massgap_mods.tsv"
               "${CMAKE_CURRENT_SOURCE_DIR}/data/digest/README.md"
+              # ---- 1.12 D: chemistry v2 (#3c-#3f; opt-in, unfitted until the DEV regeneration) ----
+              "${CMAKE_CURRENT_SOURCE_DIR}/data/digest/digest_models_v2.tsv"
+              "${CMAKE_CURRENT_SOURCE_DIR}/data/digest/digest_calibration.tsv"
         DESTINATION share/FASTag/digest)
+# ---- 1.12 D: the -alkylation_proteome proteomes (#3g), beside the digest
+# data at <bin>/../share/FASTag/alkylation (flat layout: share-FASTag-alkylation).
+# Installed only once data/alkylation holds them (not in git yet).
+file(GLOB FASTAG_ALKYLATION_PROTEOMES "${CMAKE_CURRENT_SOURCE_DIR}/data/alkylation/*.fasta.gz")
+if(FASTAG_ALKYLATION_PROTEOMES)
+  install(FILES ${FASTAG_ALKYLATION_PROTEOMES} "${CMAKE_CURRENT_SOURCE_DIR}/data/alkylation/README.md"
+          DESTINATION share/FASTag/alkylation)
+endif()
 
 install(TARGETS buildtaxdb RUNTIME DESTINATION bin)
 
@@ -254,7 +265,7 @@ if(FASTAG_BUILD_TESTS)
   # ---- 1.12 A: unit tests ----
   set(FASTAG_UNIT_TESTS_A shortlist_test search_config_test)
   # ---- 1.12 D: unit tests ----
-  set(FASTAG_UNIT_TESTS_D species_call_test)
+  set(FASTAG_UNIT_TESTS_D species_call_test digest_v2_test alkylation_test)
   # ---- 1.12 F: unit tests ----
   set(FASTAG_UNIT_TESTS_F output_guard_test census_test)
   foreach(t ${FASTAG_UNIT_TESTS} ${FASTAG_UNIT_TESTS_E} ${FASTAG_UNIT_TESTS_A} ${FASTAG_UNIT_TESTS_D} ${FASTAG_UNIT_TESTS_F})
@@ -336,6 +347,8 @@ if(FASTAG_BUILD_TESTS)
 
   # The shipped digest data, for digest_test and digest_cli_test.
   target_compile_definitions(digest_test PRIVATE
+                             FASTAG_DIGEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/data/digest")
+  target_compile_definitions(digest_v2_test PRIVATE
                              FASTAG_DIGEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/data/digest")
 
   # Integration: -digest_out, -label_out and -massgap_out on the vendored
