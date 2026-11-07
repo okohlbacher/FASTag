@@ -286,6 +286,10 @@ alk_check "$TMP/alk0.tsv"
 # the run rows are the versioned RunMeta rows (their own format number, src/RunMeta.h)
 case "$(val "$TMP/alk0.tsv" run run_report_version)" in ''|*[!0-9]*) fail "alk0: no versioned run rows";; esac
 [ "$(val "$TMP/alk0.tsv" alk_run tags)" -gt 0 ] || fail "alk0: no tag looked at"
+# every placement of the looked-at tags is evaluated (the fixture proteome's
+# placed peptides have no C: all of them are excluded.no_cys, n = all placements)
+[ "$(tr -d '\r' < "$TMP/alk0.tsv" | awk -F'\t' '$1 == "alk_cys" && $2 == "excluded.no_cys" { print $4 }')" -gt 0 ] \
+  || fail "alk0: no placement evaluated"
 # -recon_out is byte-identical with and without -alkylation_out; the counts are those on the same database
 run "${COMMON[@]}" -out "$TMP/a1.tsv" -recon_fasta "$DB" -recon_out "$TMP/ar1.tsv"
 run "${COMMON[@]}" -out "$TMP/a2.tsv" -recon_fasta "$DB" -recon_out "$TMP/ar2.tsv" -alkylation_out "$TMP/alk2.tsv"
