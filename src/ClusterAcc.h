@@ -21,6 +21,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "Centroid.h"
+
 #include <cstddef>
 
 namespace FASTag::ClusterAcc
@@ -28,7 +30,10 @@ namespace FASTag::ClusterAcc
   // ---- 1.12 E ----
   struct ThreadE
   {
-    void merge(const ThreadE&) {}
+    /// #9: profile MS2 of an mzML input centroided in the tagging loop
+    /// (-pick_profile auto; mzPeak counts its own, in MzPeakStream).
+    Centroid::Counts pick;
+    void merge(const ThreadE& o) { pick.merge(o.pick); }
   };
   struct BlockE
   {

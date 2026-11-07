@@ -78,15 +78,46 @@ int main()
 
   // Versioned: the legacy rows are a byte prefix, then the version row.
   const std::string versioned = written(RR::runRows(m, RR::Emit::Versioned));
-  check(RR::kFormatVersion == 1, "format version 1");
+  check(RR::kFormatVersion == 2, "format version 2");
   check(versioned.rfind(legacy, 0) == 0, "Versioned starts with the legacy bytes");
   check(versioned.substr(legacy.size()) ==
-          "run\trun_report_version\t1\t-\tThe run section follows FASTag run report format 1.\n",
-        "Versioned appends exactly the version row (format 1 has no cluster rows yet)");
+          "run\trun_report_version\t2\t-\tThe run section follows FASTag run report format 2.\n"
+          "run\tpick_profile\tlegacy\t-\tProfile MS2 was centroided under -pick_profile legacy.\n"
+          "run\tprofile_ms2_picked\t0\t0\t0 of 0 profile MS2 spectra were centroided before tagging.\n"
+          "run\tprofile_ms2_kept\t0\t0\t0 of 0 profile MS2 spectra were tagged as profile "
+          "(picking yielded nothing).\n",
+        "Versioned appends the version row, then the E picking rows (format 2, #9)");
+  // The E picking rows (#9): value the count, n the profile MS2 that needed picking.
+  {
+    RR::RunMeta e = m;
+    e.pick_profile = "auto";
+    e.pick_picked = 47470;
+    e.pick_failed = 3;
+    const auto re = RR::runRows(e, RR::Emit::Versioned);
+    check(re.size() == 11, "Versioned format 2 has 11 rows");
+    check(re[8].key == "pick_profile" && re[8].value == "auto" && re[8].n == "-" &&
+            re[8].description == "Profile MS2 was centroided under -pick_profile auto.",
+          "pick_profile row");
+    check(re[9].key == "profile_ms2_picked" && re[9].value == "47470" && re[9].n == "47473" &&
+            re[9].description == "47470 of 47473 profile MS2 spectra were centroided before tagging.",
+          "profile_ms2_picked row");
+    check(re[10].key == "profile_ms2_kept" && re[10].value == "3" && re[10].n == "47473",
+          "profile_ms2_kept row");
+    check(written(RR::runRows(e)) == legacy, "picking counts never reach the Legacy rows");
+  }
 
   // ClusterAcc: composes and merges without touching anything.
   FASTag::ClusterAcc::ClusterThread a, b;
   a.merge(b);
+  // ThreadE (#9): the picking counts add up across threads.
+  {
+    FASTag::ClusterAcc::ClusterThread t1, t2, run;
+    t1.e.pick.add(1); t1.e.pick.add(1); t1.e.pick.add(0);
+    t2.e.pick.add(1); t2.e.pick.add(-1);
+    run.merge(t1);
+    run.merge(t2);
+    check(run.e.pick.picked == 3 && run.e.pick.failed == 1, "ThreadE::merge sums the picking counts");
+  }
   FASTag::ClusterAcc::ClusterBlock blk;
   blk.prepare(65536);
   static_assert(std::is_default_constructible_v<FASTag::ClusterAcc::ClusterThread>);

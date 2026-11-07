@@ -3,12 +3,19 @@
 # secondary output: the vendored fixture at -threads 1, 3 and 8 must write
 # byte-identical files. (fastag_test 5 repeats one spectrum in one thread;
 # mzpeak_roundtrip compares thread counts on mzPeak input only.)
+# With a 5th argument (test/fixtures/profile_ms2_small.mzML), also
+# -pick_profile auto (1.12 #9) on profile MS2, where the tagging loop (one
+# picker per thread), the tolerance probe (its own picker, before the loop)
+# and the -out_spectra re-read (a serial picker) each centroid: every TSV and
+# the exported spectra, with -out_spectra (OnDisc reader) and without it (fast
+# reader), byte-identical at 1, 3 and 8 threads.
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 BIN="$1"
 IN="$2"
 DB="$3"
 DATA="$4"   # data/digest
+PROF="${5:-}"  # test/fixtures/profile_ms2_small.mzML (optional)
 if ! "$BIN" --help >/dev/null 2>&1; then
   echo "SKIP: binary cannot initialize (OpenMS share data unreachable?)" >&2
   exit 77
@@ -39,4 +46,47 @@ for t in 3 8; do
   cmp -s <(grep -v 'date=' "$TMP/t1/ids.idXML") <(grep -v 'date=' "$TMP/t$t/ids.idXML") \
     || fail "ids.idXML differs between -threads 1 and $t"
 done
-echo "threads_test: all checks passed (${#OUTS[@]} TSVs and the idXML identical at 1, 3 and 8 threads)"
+msg="${#OUTS[@]} TSVs and the idXML"
+
+if [ -n "$PROF" ]; then
+  # On the profile fixture's 10 spectra the tags (at -min_filter_length 3),
+  # digest, label and massgap reports have rows; recon and delta are header
+  # only (no tag reaches the fixture database's proteins) and are compared
+  # as written.
+  POUTS=(tags digest label massgap)
+  for t in 1 3 8; do
+    for r in ondisc fast; do
+      d="$TMP/p$r$t"; mkdir -p "$d"
+      extra=(); [ $r = ondisc ] && extra=(-out_spectra "$d/spectra.mzML")
+      "$BIN" -in "$PROF" -out "$d/tags.tsv" -threads "$t" -pick_profile auto -min_filter_length 3 \
+        -fasta "$DB" -recon_out "$d/recon.tsv" -delta_out "$d/delta.tsv" \
+        -digest_out "$d/digest.tsv" -label_out "$d/label.tsv" -massgap_out "$d/massgap.tsv" "${extra[@]}" \
+        >"$d/log" 2>&1 || { cat "$d/log" >&2; fail "-pick_profile auto ($r) -threads $t run failed"; }
+      grep -q 'mzML: centroided 10 profile spectra on read' "$d/log" \
+        || { cat "$d/log" >&2; fail "-pick_profile auto ($r) -threads $t: the 10 profile spectra were not centroided"; }
+    done
+  done
+  for r in ondisc fast; do
+    for f in "${POUTS[@]}" recon delta; do
+      case " ${POUTS[*]} " in *" $f "*)
+        [ "$(wc -l < "$TMP/p${r}1/$f.tsv")" -gt 1 ] || fail "auto ($r): $f.tsv has no rows at -threads 1; the check would prove nothing" ;;
+      esac
+      for t in 3 8; do
+        cmp -s "$TMP/p${r}1/$f.tsv" "$TMP/p$r$t/$f.tsv" || fail "auto ($r): $f.tsv differs between -threads 1 and $t"
+      done
+    done
+  done
+  cmp -s "$TMP/pondisc1/tags.tsv" "$TMP/pfast1/tags.tsv" || fail "auto: tags differ between the OnDisc and the fast reader"
+  # The exported spectra (the processing info lists -threads, so compare the
+  # spectrumList): centroided, and the same at every thread count.
+  spl() { tr -d '\r' < "$1" | sed -n '/<spectrumList /,/<\/spectrumList>/p'; }
+  n=$(spl "$TMP/pondisc1/spectra.mzML" | grep -c '<spectrum ')
+  [ "$n" -gt 0 ] || fail "auto -out_spectra exported no spectra at -threads 1"
+  [ "$(spl "$TMP/pondisc1/spectra.mzML" | grep -c 'MS:1000127')" -ge "$n" ] || fail "auto -out_spectra: not every exported spectrum is centroid"
+  for t in 3 8; do
+    cmp -s <(spl "$TMP/pondisc1/spectra.mzML") <(spl "$TMP/pondisc$t/spectra.mzML") \
+      || fail "auto -out_spectra: exported spectra differ between -threads 1 and $t"
+  done
+  msg="$msg; -pick_profile auto: ${#POUTS[@]} TSVs (+ recon, delta headers) on two readers and $n exported spectra"
+fi
+echo "threads_test: all checks passed ($msg identical at 1, 3 and 8 threads)"

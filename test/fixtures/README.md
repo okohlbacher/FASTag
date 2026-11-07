@@ -95,3 +95,27 @@ sha256: `dia_like.mzML` `85708ffbfecb481fe65fc4fac8fa1f4663077df4398deb930a2bd68
 `diapasef_split_like.mzML` `32b88e6d7df7f37c6772d4558a6d742171643e1b84cfa13e3f3e5f894dab3515`, `dia_shifted_target.mzML` `4fb2541dbb6782cc5ade93bda0f4f280a6206b2a7279d4cf826a0e8af724d08a`,
 `dia_pseudo_like.mzML` `15827a97f0f39c45812593175f8dff906320c764779c0a3b4f8cabafc680c96a`, `dia_pseudo_repeat_like.mzML` `846f6d12fa6ac7be27b3d8fecbf8b804fa672caf42d7ffa315f9e3d9faa53f1b`,
 `prm_like.mzML` `f10e516500089eb86fae255c48849b8772a975bda101fe885809b4f04290194d`, `wwa_dda_like.mzML` `ab13880d8223152904ee9f5d2538b2167b1e892abbd91d515633999542209ec3`, `dia_nowin_like.mgf` `c7cb54169823a0bf6fd53973864f0c5f561b269afab8a5dd1c9172af5eb5e122`, `prm_noz_like.mgf` `9d666015736332de22efbd662f297e82beae0324dd24fa8cc9298716007af012`.
+
+`profile_ms2_small.mzML`, `profile_ms2_untyped.mzML`,
+`profile_ms2_paramgroup.mzML` and `profile_ms2_lowres.mzML` — the profile-MS2
+fixtures of `profile_cli_test` and `indexed_mzml_test` (FASTag 1.12 #9,
+`-pick_profile`). Written by `make_profile_fixtures.py` (Python 3.15.0, zlib
+1.2.12, standard library only) from `Ecoli_MS2_small.mzML`: each centroid of
+the source spectra becomes a sampled Gaussian with its intensity as apex, so
+BSD-3-Clause as well. Native IDs, retention times, precursors and scan windows
+are the source's; 64-bit m/z, 32-bit intensity, zlib; indexedmzML with an exact
+index and SHA-1 checksum.
+
+- `profile_ms2_small.mzML`: source spectra 0-9, resolving power 60,000 (FWHM =
+  m/z / 60000), 6 samples per FWHM, MS:1000128 in each spectrum's cvParams,
+  orbitrap analyser.
+- `profile_ms2_untyped.mzML`: spectra 0-3 as above with no MS:1000127/128.
+- `profile_ms2_paramgroup.mzML`: spectra 0-3 as above, the type only in a
+  `referenceableParamGroup` (the MS level stays an own cvParam).
+- `profile_ms2_lowres.mzML`: spectra 10-13, FWHM 0.3 Th sampled every 0.05 Th,
+  linear ion trap analyser.
+
+sha256: `profile_ms2_small.mzML` `d2b63aab24eaf2fc3d30e4576efcf379269b91e0102657c1aa1d6a5de59a8344`,
+`profile_ms2_untyped.mzML` `be6b92b3c7aacb3db1324e486170346a13714f39594f88f15488cefbbac9aceb`,
+`profile_ms2_paramgroup.mzML` `745df24ee8f5a923003c2308427ff295271d8926eefb678799382ea266de9147`,
+`profile_ms2_lowres.mzML` `30d1f9d64f016e5824493da0a0ae18cb9cb6846e50c523d533c410225e523338`.

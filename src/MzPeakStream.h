@@ -29,6 +29,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "Centroid.h"
+
 namespace OpenMS
 {
   class PeakPickerHiRes;
@@ -36,14 +38,9 @@ namespace OpenMS
 
 namespace FASTag
 {
-  /// Centroids @p s in place if it is a non-empty PROFILE MS2, with @p picker.
-  ///
-  /// mzPeak archives converted from raw files routinely carry profile MS2,
-  /// and tagging profile samples instead of peaks costs recall. A picker that
-  /// yields nothing (data too sparse for peak shapes) leaves the profile
-  /// points. Returns +1 when picked, -1 when picking yielded nothing, 0 when
-  /// the spectrum needed no picking.
-  int centroidProfileMs2(OpenMS::MSSpectrum& s, OpenMS::PeakPickerHiRes& picker);
+  // centroidProfileMs2 (Centroid.h): mzPeak archives converted from raw files
+  // routinely carry profile MS2, and tagging profile samples instead of peaks
+  // costs recall.
 
   /// One pass over an mzPeak archive, consumed by index from several threads.
   ///
@@ -56,7 +53,7 @@ namespace FASTag
   ///
   /// MS1 spectra come with their metadata and no peaks: nothing in FASTag
   /// reads an MS1's peaks. Profile MS2 are centroided by take(), on the
-  /// calling thread (centroidProfileMs2()).
+  /// calling thread (centroidProfileMs2()), as start()'s policy says.
   class MzPeakStream : public OpenMS::Interfaces::IMSDataConsumer
   {
   public:
@@ -75,9 +72,12 @@ namespace FASTag
 
     /// Lets the reader go on past the header. @p mask (empty = all) says which
     /// spectra will be taken; the others are dropped as they are read.
-    /// Copies of the spectra at @p keep_copy (profile MS2 centroided) are
-    /// kept aside for copy(), whatever the mask says.
-    void start(std::vector<char> mask, std::set<std::size_t> keep_copy = {});
+    /// Copies of the spectra at @p keep_copy (centroided as @p picking says)
+    /// are kept aside for copy(), whatever the mask says. @p picking: what
+    /// take() and the copies do with profile MS2; the default, picking every
+    /// PROFILE MS2, is -pick_profile legacy (FASTag 1.11).
+    void start(std::vector<char> mask, std::set<std::size_t> keep_copy = {},
+               Centroid::Policy picking = Centroid::Policy{true, false});
 
     /// Spectrum @p i, waiting until it is read. Each wanted index once.
     /// @p picker: the calling thread's own (PeakPickerHiRes is not
@@ -131,17 +131,20 @@ namespace FASTag
     std::unordered_map<std::size_t, OpenMS::MSSpectrum> slots_;
     std::vector<char> mask_;
     std::set<std::size_t> keep_copy_;
+    Centroid::Policy picking_{true, false};  ///< set by start(), before the first spectrum
     std::map<std::size_t, OpenMS::MSSpectrum> copies_;
     std::atomic<std::size_t> picked_{0}, pick_failed_{0};
     std::thread reader_;
   };
 
   /// The spectra at @p indices (ascending) of an mzPeak archive, in one pass,
-  /// each handed to @p sink as read (profile MS2 centroided, as by
-  /// MzPeakStream). Decodes with @p threads OpenMP threads. Throws the
-  /// reader's error, or a ParseError if an index is past the run's end.
+  /// each handed to @p sink as read (profile MS2 centroided as @p picking
+  /// says; the default is MzPeakStream's legacy one). Decodes with @p threads
+  /// OpenMP threads. Throws the reader's error, or a ParseError if an index
+  /// is past the run's end.
   void readMzPeakSpectra(const std::string& path, int threads, const std::vector<std::size_t>& indices,
-                         const std::function<void(OpenMS::MSSpectrum&)>& sink);
+                         const std::function<void(OpenMS::MSSpectrum&)>& sink,
+                         Centroid::Policy picking = Centroid::Policy{true, false});
 
   /// The acquisition probe of an mzPeak archive (1.12 item #7): the
   /// Ms2Meta of its first MS2, in file order, within @p limits. A

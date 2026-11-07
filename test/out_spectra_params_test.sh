@@ -43,4 +43,14 @@ cmp -s "$TMP/legacy.txt" "$TMP/written2.txt" || fail "a non-default legacy optio
 tr -d '\r' < "$TMP/s2.mzML" | grep -q 'name="parameter: max_tags" type="xsd:int" value="7"' \
   || tr -d '\r' < "$TMP/s2.mzML" | grep 'parameter: max_tags' | grep -q '"7"' \
   || fail "-max_tags 7 is not listed with its value"
+# A 1.12 option set away from its default is listed, a flag as well as a
+# string (a flag's registered default never equals its Param value, so the
+# shim asks the flag; #9 added the first 1.12 options).
+"$BIN" -in "$IN" -out "$TMP/t3.tsv" -out_spectra "$TMP/s3.mzML" -pick_profile auto -pick_unknown_type -threads 2 \
+  > "$TMP/log" 2>&1 || { cat "$TMP/log" >&2; fail "FASTag -out_spectra -pick_profile auto -pick_unknown_type"; }
+names "$TMP/s3.mzML" > "$TMP/written3.txt"
+printf 'pick_profile\npick_unknown_type\n' | cat - "$TMP/legacy.txt" | LC_ALL=C sort > "$TMP/want3.txt"
+cmp -s "$TMP/want3.txt" "$TMP/written3.txt" || { diff "$TMP/want3.txt" "$TMP/written3.txt" >&2; fail "non-default 1.12 options are not listed exactly"; }
+tr -d '\r' < "$TMP/s3.mzML" | grep 'parameter: pick_profile' | grep -q '"auto"' || fail "-pick_profile auto is not listed with its value"
+tr -d '\r' < "$TMP/s3.mzML" | grep 'parameter: pick_unknown_type' | grep -q '"true"' || fail "-pick_unknown_type is not listed as true"
 echo "out_spectra_params_test: passed"

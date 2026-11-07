@@ -19,25 +19,6 @@ using namespace OpenMS;
 
 namespace FASTag
 {
-  int centroidProfileMs2(MSSpectrum& s, PeakPickerHiRes& picker)
-  {
-    if (s.getMSLevel() != 2 || s.empty() || s.getType() != SpectrumSettings::SpectrumType::PROFILE) return 0;
-    // pick() copies the spectrum's metadata (precursors included) and labels
-    // the result CENTROID.
-    MSSpectrum picked;
-    try
-    {
-      picker.pick(s, picked);
-    }
-    catch (const Exception::BaseException&)
-    {
-      return -1;
-    }
-    if (picked.empty()) return -1;
-    s = std::move(picked);
-    return 1;
-  }
-
   namespace
   {
     void setThreads(int threads)
@@ -143,12 +124,13 @@ namespace FASTag
     return expected_;
   }
 
-  void MzPeakStream::start(std::vector<char> mask, std::set<std::size_t> keep_copy)
+  void MzPeakStream::start(std::vector<char> mask, std::set<std::size_t> keep_copy, Centroid::Policy picking)
   {
     {
       std::lock_guard<std::mutex> lock(mutex_);
       mask_ = std::move(mask);
       keep_copy_ = std::move(keep_copy);
+      picking_ = picking;
       slots_.reserve(window_);
       started_ = true;
     }
@@ -168,7 +150,7 @@ namespace FASTag
     {
       static thread_local PeakPickerHiRes picker;
       MSSpectrum c = s;
-      centroidProfileMs2(c, picker);
+      Centroid::apply(c, picker, picking_);
       copies_.emplace(i, std::move(c));
     }
     if (!mask_.empty() && (i >= mask_.size() || !mask_[i])) return;
@@ -211,7 +193,7 @@ namespace FASTag
       space = held_-- == window_;
     }
     if (space) space_cv_.notify_one();
-    const int r = centroidProfileMs2(s, picker);
+    const int r = Centroid::apply(s, picker, picking_);
     if (r > 0) ++picked_;
     else if (r < 0) ++pick_failed_;
     return s;
@@ -250,8 +232,9 @@ namespace FASTag
     class Picking : public Interfaces::IMSDataConsumer
     {
     public:
-      Picking(const std::vector<std::size_t>& indices, const std::function<void(MSSpectrum&)>& sink)
-        : indices_(indices), sink_(sink)
+      Picking(const std::vector<std::size_t>& indices, const std::function<void(MSSpectrum&)>& sink,
+              Centroid::Policy picking)
+        : indices_(indices), sink_(sink), picking_(picking)
       {
       }
       void setExperimentalSettings(const ExperimentalSettings&) override {}
@@ -261,7 +244,7 @@ namespace FASTag
         const std::size_t i = next_++;
         if (k_ >= indices_.size() || indices_[k_] != i) return;
         ++k_;
-        centroidProfileMs2(s, picker_);
+        Centroid::apply(s, picker_, picking_);
         sink_(s);
       }
       void consumeChromatogram(ChromatogramType&) override {}
@@ -270,15 +253,16 @@ namespace FASTag
     private:
       const std::vector<std::size_t>& indices_;
       const std::function<void(MSSpectrum&)>& sink_;
+      const Centroid::Policy picking_;
       PeakPickerHiRes picker_;
       std::size_t next_ = 0, k_ = 0;
     };
   }
 
   void readMzPeakSpectra(const std::string& path, int threads, const std::vector<std::size_t>& indices,
-                         const std::function<void(MSSpectrum&)>& sink)
+                         const std::function<void(MSSpectrum&)>& sink, Centroid::Policy picking)
   {
-    Picking consumer(indices, sink);
+    Picking consumer(indices, sink, picking);
 #ifdef _OPENMP
     const int before = omp_get_max_threads();
 #endif
