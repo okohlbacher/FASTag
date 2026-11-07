@@ -52,9 +52,11 @@ export interface SetupFormProps {
   addBatchRef: RefObject<HTMLButtonElement | null>
   // "Open results…" of the task "Open results / inspect spectra".
   onOpenResults(): void
+  // The inspector's checks of the input (inspector/InspectorPanel.tsx).
+  inspector?: JSX.Element | null
 }
 
-export default function SetupForm({ session, run, onPickInput, onSearch, searchBtnRef, onOpenBatch, addBatchRef, onOpenResults }: SetupFormProps): JSX.Element {
+export default function SetupForm({ session, run, onPickInput, onSearch, searchBtnRef, onOpenBatch, addBatchRef, onOpenResults, inspector }: SetupFormProps): JSX.Element {
   const { input, out, values, setValue, openGroups, setOpenGroups, writingFiles, changedParams } = session
   const { busy, jobs, lastRun, evidence, revealErr, reveal } = run
   // A batch task (Batch QC) asks for the files of a batch before one file.
@@ -156,6 +158,7 @@ export default function SetupForm({ session, run, onPickInput, onSearch, searchB
             <span aria-hidden="true">+ </span>Add files for a batch…
           </button>
         )}
+        {!batchFirst && input && inspector}
       </section>
     )}
 

@@ -1,0 +1,6 @@
+Modifications: Carbamidomethyl (C, fixed)
+Subsampling: tagging 3000 of 71431 input spectra (seed 1)
+Digest: 4075 filtered tags, model Trypsin -> /scratch/kohlbach/gui-p2b-fixtures/dia_pseudo.digest.tsv
+Labels: 4075 filtered tags -> /scratch/kohlbach/gui-p2b-fixtures/dia_pseudo.label.tsv
+3000 MS2 spectra, 67203 tags
+FASTag took 0.21 s (wall), 0.70 s (CPU), 0.11 s (system), 0.59 s (user); Peak Memory Usage: 67 MB.
