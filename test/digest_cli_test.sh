@@ -212,14 +212,16 @@ awk -F'\t' 'NR > 1 && ($5 ~ /^dropped_/ || $5 ~ /^skipped_/ || $5 == "expected_l
 if awk -F'\t' 'NR > 1 && $5 == "offset"' "$TMP/shifts.rows" | grep -q .; then
   tr -d '\r' < "$TMP/sh.params" | grep -q '^mass_offsets = 0.0 ' || fail "offsets without 0 first"
 fi
-# the same at 1 and 3 threads
-for t in 1 3; do
+# the same at 1, 3 and 8 threads
+for t in 1 3 8; do
   "$BIN" -threads $t "${COMMON[@]}" -out "$TMP/st$t.tsv" "${R[@]}" -massgap_min_spectra 2 -search_shifts both \
     -search_engine comet -search_config_out "$TMP/sht$t.params" -search_shifts_out "$TMP/shiftst$t.tsv" > "$TMP/log" 2>&1 \
     || { cat "$TMP/log" >&2; fail "-search_shifts at $t threads"; }
 done
 same "$TMP/shiftst1.tsv" "$TMP/shiftst3.tsv" "-search_shifts_out differs between 1 and 3 threads"
 same "$TMP/sht1.params" "$TMP/sht3.params" "the shift config differs between 1 and 3 threads"
+same "$TMP/shiftst1.tsv" "$TMP/shiftst8.tsv" "-search_shifts_out differs between 1 and 8 threads"
+same "$TMP/sht1.params" "$TMP/sht8.params" "the shift config differs between 1 and 8 threads"
 same "$TMP/shifts.tsv" "$TMP/shiftst1.tsv" "-search_shifts_out differs between 2 and 1 threads"
 # report-free: no -recon_out, -delta_out, -massgap_out or -digest_out, with and without -recon_localize
 for loc in "" -recon_localize; do

@@ -489,6 +489,11 @@ MGF→mzML direction is exact.
 | `-search_precursor_tolerance <f>` / `-search_precursor_unit <ppm\|Da>` | 10 / ppm | Precursor tolerance written to the configuration |
 | `-search_isotope_errors <n>` | 0 | Precursor isotope errors 0..n (at most 3) |
 | `-search_decoy_prefix <s>` | `rev_` (Sage) / `DECOY_` (Comet) | Prefix of the decoys the engine generates |
+| `-search_shifts <none\|variable\|offsets\|both>` | none | Experimental (1.12): add the run's mass-gap peaks (the `-massgap_out` peaks, computed without writing it) to `-search_config_out` as variable modifications or Comet mass offsets (see Mass shifts as search configuration). Candidates for an FDR-controlling engine, NOT identifications. Needs `-search_config_out` and a database; `offsets` needs `-search_engine comet` |
+| `-search_shifts_out <file>` | none | With `-search_shifts`: one row per mass-gap peak with its explanation and the action taken (`variable`, `offset`, `fixed`, `skipped_isotope`, `expected_label`, `label_incomplete`, `fixed_mod_questionable`, `skipped_silac`, `already_searched`, `dropped_cap`, `dropped_engine`, `dropped_mode`) |
+| `-shift_max_variable <n>` / `-shift_max_offsets <n>` | 3 / 10 | Advanced: gap peaks exported as variable modifications / as offsets besides 0, most spectra first |
+| `-shift_expand_sites` | off | Advanced, unvalidated: add the residues `-recon_localize` places a variable shift on to that modification (needs `-recon_localize`) |
+| `-shift_site_min_share <f>` / `-shift_site_min_count <n>` / `-shift_site_min_ions <n>` | 0.2 / 10 / 2 | Advanced: share and count of a peak's localized samples a residue needs for `-shift_expand_sites`; b/y ions a sample needs to count |
 | `-entrapment_fasta <file>` | none | Entrapment database (foreign species) calibrating a `q_db` column: the estimated false-match rate of the `-fasta` filter at each E-value (see q_db). Requires `-fasta` |
 | `-glyco` | off | Flag oxonium-bearing MS2 spectra to `<out>` with its extension replaced by `.glyco.tsv` (see Glyco flag) |
 | `-glyco_out <file>` | `<out>` with its extension replaced by `.glyco.tsv` | With `-glyco`: per-spectrum oxonium report |
@@ -664,6 +669,28 @@ exits with `ILLEGAL_PARAMETERS` unless `-shortlist_force` (a run asking for
 `-shortlist_out` alone withholds nothing: WARN, exit 0). Only tags at or
 above the placement floor place (`-recon_min_length`, derived as 8 residues on
 the human proteome), so give `-extension` (3 on the gate runs). See [doc/SHORTLIST.md](doc/SHORTLIST.md).
+
+### Mass shifts as search configuration
+
+Experimental in 1.12 and opt-in: `-search_shifts variable|offsets|both` adds
+the run's mass-gap peaks to `-search_config_out`, closing an open-search loop
+cheaply. The peaks are exactly the ones `-massgap_out` reports (same
+`-massgap_*` thresholds), computed whether or not a report is written;
+`-delta_out` and `-massgap_out` are byte-identical with and without it. A peak
+at a precursor isotope spacing raises the engine's isotope errors instead; a
+peak equal to a fixed terminal label is expected; a peak at minus a fixed
+modification or label is warned about; a fixed residue modification seen
+again becomes a variable modification on its other sites (overalkylation);
+one modification becomes a variable modification (at most
+`-shift_max_variable`); combinations, unexplained and substitution-dominated
+peaks become Comet mass offsets (Sage has none; negative offsets are left
+out; 0 is always first). Without a fixed Cys modification, a Cys alkylation on
+at least half the C-containing placements is written as a fixed modification,
+with a WARN. `-search_shifts_out` lists every decision. These are candidates
+for an FDR-controlling engine, not identifications: whether they improve
+identifications is not yet validated. Offsets need a narrow precursor
+tolerance, which the configuration sets explicitly. See
+[doc/SHORTLIST.md](doc/SHORTLIST.md#mass-shifts-as-engine-configuration-112-17).
 
 ## Digest, label and mass-gap reports
 

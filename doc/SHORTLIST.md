@@ -140,6 +140,70 @@ against the binary: the `isotope_error` value for 0..3 (copied from
 format, an empty or 0-first `mass_offsets`, and how Comet treats negative
 offsets. Check a Comet configuration by hand before relying on it.
 
+## Mass shifts as engine configuration (1.12, #17)
+
+`-search_shifts variable|offsets|both` (needs `-search_config_out` and a
+database; refused with `-stream`) adds the run's mass-gap peaks to the
+configuration above. The peaks are one `FD::gapResult` over the delta
+histogram, the same result `-massgap_out` prints (same `-massgap_window`,
+`-massgap_min_spectra`, `-massgap_min_share`, `-massgap_min_bin`,
+`-massgap_max_mods`), so the export and the report never disagree, and the
+histogram runs without `-delta_out`/`-massgap_out` (report-free run). Each
+peak's evidence is the sum over the histogram rows it claimed
+(`GapPeak::members`): substitution interpretations, localized samples and,
+for site expansion, unique localized sites.
+
+Deltas are relative to the peptide with the fixed modifications applied, and
+on the labelled side contain a fixed terminal label. Per peak, most spectra
+first (ties: smaller |delta|):
+
+0. within `-massgap_window` of n x 1.00335 (n = 1..3) and closer to it than to
+   any single modification: `skipped_isotope`; the largest n raises the
+   configuration's isotope errors (Sage `isotope_errors`, Comet
+   `isotope_error`). Deamidated is exported only when the centroid is closer to
+   0.98402 than to 1.00335.
+1. a fixed terminal label L: a peak at L is `expected_label`, at -L
+   `label_incomplete` (WARN); a peak explained as L + X goes on as X.
+2. a fixed residue modification F: a peak at +F becomes the same Unimod name
+   on K, H and the peptide N-term where ModificationsDB knows it (the fixed
+   residue left out); a peak at -F is `fixed_mod_questionable` (WARN). Without
+   a fixed Cys modification, a Cys alkylation peak holding at least half the
+   C-containing placements is written as a FIXED modification (`fixed`, WARN).
+   Once the CLI's alkylation call (#3) lands it supersedes this rule.
+3. one modification: a variable modification under its `massgap_mods.tsv`
+   id, mass from ModificationsDB (`already_searched` when the configuration
+   has it; a SILAC label only when the SILAC call is not `none`, else
+   `skipped_silac`).
+4. a combination, no explanation, or a substitution share above 0.5: a Comet
+   mass offset at the 4-decimal centroid. Sage and negative offsets are
+   `dropped_engine`; 0 is always written first and not counted.
+5. caps: `-shift_max_variable` (3) peaks as variable modifications,
+   `-shift_max_offsets` (10) offsets, at most 15 Comet variable slots with the
+   run's own: the rest `dropped_cap`. Under `variable` or `offsets` alone, what
+   the mode does not export is `dropped_mode` (under `offsets` rules 2 and 3
+   export the gap as an offset).
+
+`-shift_expand_sites` (off; needs `-recon_localize`; unvalidated, so not
+recommended) adds a residue to a rule-3 modification when it has at least
+`-shift_site_min_count` (10) samples and `-shift_site_min_share` (0.2) of the
+peak's counted samples, counting only samples with a unique site
+(`loc_ties` 1), at least `-shift_site_min_ions` (2) explaining ions and a
+region longer than one residue, and only residues ModificationsDB knows the
+name on.
+
+`-search_shifts_out` has `#` header lines (input, database, engine, mode,
+settings, counts) and one row per gap peak: `peak`, `delta`, `spectra`,
+`explanation`, `action`, `mod_id`, `sites`, `exported` (mass written, `-` for
+none), `substitution_share`, `localized`, `reason`.
+
+Limits: an undeclared label shows as a single-modification peak and becomes a
+variable modification; more variable modifications can lower sensitivity
+(cap 3); Comet's handling of negative offsets and of the offset list is
+unverified against the pinned 2026.03.0 binary (as A5-01). Engine acceptance
+(Comet and Sage with a shift-carrying configuration) and the held-out protocol
+(PSMs, entrapment FDP, recall of an open search's top peaks) run on node data
+before this is documented as improving identifications.
+
 ## Known limits
 
 - Counts under `-subsample_*` are subsample counts; with `-fasta` the tags are
