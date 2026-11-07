@@ -196,7 +196,11 @@ first (ties: smaller |delta|):
    Calibration: a centroid carries the run's precursor mass bias (PXD003531:
    about +0.007 Da on every explained peak), a modification mass does not. The
    bias is the spectra-weighted median of centroid - mass over the peaks one
-   modification explains; the `-search_shifts_out` header gives it, the number
+   modification explains, other than a rule-0 isotope peak (its
+   Deamidated reading is the one rule 0 rejects). A bias within the centroid
+   resolution (0.00025 Da, half the 0.0005 Da histogram bin) is the binning,
+   not the run: it is reported but not applied, so an exact (in-silico)
+   offset is exported at its centroid; the `-search_shifts_out` header gives it, the number
    of peaks and the residual (90th percentile of their remaining error), and
    each offset row its centroid. When the residual (or, with no such peak,
    the gap window) exceeds the precursor tolerance at 1000 Da, a WARN says

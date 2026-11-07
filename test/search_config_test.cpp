@@ -474,6 +474,31 @@ namespace
                 warned2,
             "shifts 15: no calibration peak leaves the offset uncorrected, with a tolerance warning");
     }
+    // 15b. an in-silico run (digest_cli_test's fixture): the centroids sit on
+    // the 0.0005 Da grid, so the single-modification errors are the binning's
+    // (Oxidation +0.00009, Acetyl -0.00007); the 13C peak (1.0035, within the
+    // window of Deamidated 0.98402) is rule 0's and not a calibration peak.
+    // The exact offset is exported at its centroid.
+    {
+      auto p = shiftPlan({cam});
+      const auto o = SC::shiftsToPlan(
+          fx.result({{15.9950, 300}, {42.0105, 120}, {1.0035, 200}, {123.4565, 50}}), {}, fx.mods, fx.combos,
+          shiftSettings(), p);
+      check(actionAt(o, 1.0035) == "skipped_isotope", "shifts 15b: the 13C peak is skipped_isotope");
+      check(o.bias_peaks == 2, "shifts 15b: the isotope peak is not a calibration peak (" + std::to_string(o.bias_peaks) + ")");
+      check(o.bias == 0.0 && std::abs(o.measured_bias) <= 0.0001,
+            "shifts 15b: a bias within the centroid resolution is measured, not applied");
+      check(o.residual < 0.0002, "shifts 15b: the residual is the binning's, not the 13C peak's 0.0195 Da");
+      check(p.mass_offsets.size() == 1 && p.mass_offsets[0] == 123.4565, "shifts 15b: the exact offset is its centroid");
+      check(decisionAt(o, 123.4565)->reason.find("calibration bias") == std::string::npos,
+            "shifts 15b: the row claims no correction");
+      // just beyond the resolution the bias is applied
+      auto q = shiftPlan({cam});
+      const auto o3 =
+          SC::shiftsToPlan(fx.result({{15.9950 + 0.0005, 300}, {123.4565, 50}}), {}, fx.mods, fx.combos, shiftSettings(), q);
+      check(o3.bias_peaks == 1 && o3.bias > 0.00025 && q.mass_offsets.size() == 1 && q.mass_offsets[0] == 123.4559,
+            "shifts 15b: a bias beyond the resolution comes off the offset");
+    }
     // 16. a called SILAC channel is one unit (PXD014764: triplex, Lys4 was dropped_cap)
     {
       const auto idx = [&](const char* name) {

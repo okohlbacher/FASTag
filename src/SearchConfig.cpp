@@ -573,21 +573,42 @@ namespace FASTag::SearchConfig
       return x.empty() ? std::string("none") : x;
     };
 
+    // Rule 0: the n (1..3) of a peak within tol of n x 13C spacing and closer
+    // to it than to any single-modification mass, else 0.
+    const auto isotopeStep = [&](double d) {
+      for (int n = 1; n <= 3; ++n)
+      {
+        const double di = std::fabs(d - n * c13);
+        if (di > tol) continue;
+        bool closer = true;
+        for (const FD::GapMod& m : mods)
+          if (std::fabs(d - m.mass) <= tol && std::fabs(d - m.mass) <= di) closer = false;
+        if (closer) return n;
+      }
+      return 0;
+    };
+
     // Calibration: a gap peak's centroid carries the run's precursor mass
     // bias, a modification's mass does not. The bias is the spectra-weighted
     // median of centroid - mass over the peaks one modification explains, and
-    // comes off every exported offset.
+    // comes off every exported offset. A rule-0 isotope peak is not one of
+    // them: its single-modification explanation (1.00335 read as Deamidated)
+    // is the one rule 0 rejects. A bias within the centroid's resolution
+    // (ShiftSettings::resolution, half the 0.0005 Da histogram bin) is the
+    // binning, not the run: it is measured but not applied, so an exact
+    // offset is exported at its centroid.
     {
       std::vector<std::pair<double, double>> err;
       for (const FD::GapPeak& pk : gaps.peaks)
-        if (pk.explained_by.size() == 1 && pk.spectra > 0)
+        if (pk.explained_by.size() == 1 && pk.spectra > 0 && !isotopeStep(pk.delta))
           err.emplace_back(pk.delta - mods[static_cast<std::size_t>(pk.explained_by.front())].mass,
                            static_cast<double>(pk.spectra));
       out.bias_peaks = err.size();
       out.residual = tol;
       if (!err.empty())
       {
-        out.bias = weightedQuantile(err, 0.5);
+        out.measured_bias = weightedQuantile(err, 0.5);
+        out.bias = std::fabs(out.measured_bias) > s.resolution ? out.measured_bias : 0.0;
         for (auto& e : err) e.first = std::fabs(e.first - out.bias);
         out.residual = weightedQuantile(err, 0.9);
       }
@@ -667,16 +688,7 @@ namespace FASTag::SearchConfig
       const double d = pk.delta;
 
       // 0. precursor isotope error
-      int iso = 0;
-      for (int n = 1; n <= 3 && !iso; ++n)
-      {
-        const double di = std::fabs(d - n * c13);
-        if (di > tol) continue;
-        bool closer = true;
-        for (const FD::GapMod& m : mods)
-          if (std::fabs(d - m.mass) <= tol && std::fabs(d - m.mass) <= di) closer = false;
-        if (closer) iso = n;
-      }
+      const int iso = isotopeStep(d);
       if (iso)
       {
         D.action = "skipped_isotope";
@@ -926,8 +938,8 @@ namespace FASTag::SearchConfig
       }
       const double value = round4(base - out.bias);
       D.exported = value;
-      const std::string calib = out.bias_peaks ? "; centroid " + f4(base) + " minus the calibration bias " + f4(out.bias)
-                                               : std::string();
+      const std::string calib = out.bias != 0.0 ? "; centroid " + f4(base) + " minus the calibration bias " + f4(out.bias)
+                                                : std::string();
       if (!comet)
       {
         D.action = "dropped_engine";

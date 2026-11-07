@@ -4193,8 +4193,11 @@ protected:
                   std::to_string(shifts.variable) + " variable, " + std::to_string(shifts.offsets) + " offsets, " +
                   std::to_string(shifts.fixed) + " fixed; isotope errors 0.." + std::to_string(sl_plan.isotope_errors),
               shifts.bias_peaks
-                  ? "calibration: offsets corrected by the bias " + f4(shifts.bias) +
-                        " Da, the spectra-weighted median of centroid - mass over " + std::to_string(shifts.bias_peaks) +
+                  ? (shifts.bias != 0.0
+                         ? "calibration: offsets corrected by the bias " + f4(shifts.bias) + " Da"
+                         : "calibration: offsets uncorrected, the bias " + f4(shifts.measured_bias) +
+                               " Da is within the centroid resolution " + shortest(shift_settings.resolution) + " Da") +
+                        ", the spectra-weighted median of centroid - mass over " + std::to_string(shifts.bias_peaks) +
                         " single-modification peaks; residual " + f4(shifts.residual) +
                         " Da (90 % of their spectra)"
                   : "calibration: no single-modification peak; offsets uncorrected, known to the window " +

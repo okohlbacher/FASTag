@@ -685,8 +685,9 @@ one modification becomes a variable modification (at most
 `-shift_max_variable`); combinations, unexplained and substitution-dominated
 peaks become Comet mass offsets (Sage has none; negative offsets are left
 out; 0 is always first), corrected by the run's calibration bias (the
-spectra-weighted median error of the single-modification peaks, in the
-`-search_shifts_out` header; a WARN when the remaining uncertainty exceeds the
+spectra-weighted median error of the single-modification peaks other than
+13C isotope peaks, applied only when larger than the 0.00025 Da centroid
+resolution, in the `-search_shifts_out` header; a WARN when the remaining uncertainty exceeds the
 precursor tolerance). A called SILAC channel is exported as a whole (all its
 labels, outside `-shift_max_variable`) or not at all, with a WARN. Without a
 fixed Cys modification, a Cys alkylation on at least half the C-containing

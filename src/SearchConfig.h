@@ -144,7 +144,8 @@ namespace FASTag::SearchConfig
   //   4. a combination, no explanation, or a substitution share > 0.5 ->
   //      Comet offset at the 4-decimal gap minus the run's calibration bias
   //      (the spectra-weighted median of centroid - mass over the
-  //      single-modification peaks; Sage, or a negative offset:
+  //      single-modification peaks other than rule-0 isotope peaks, applied
+  //      only beyond ShiftSettings::resolution; Sage, or a negative offset:
   //      dropped_engine); a combination of exported SILAC labels only ->
   //      already_searched;
   //   5. caps: max_variable peaks as variable modifications, max_offsets
@@ -191,6 +192,9 @@ namespace FASTag::SearchConfig
     double site_min_share = 0.2;
     std::uint64_t site_min_count = 10;
     std::uint64_t c_placements = 0;    ///< delta samples whose peptide holds a C
+    /// A gap centroid's resolution in Da: half the 0.0005 Da delta histogram
+    /// bin. A calibration bias no larger is not applied (ShiftOutcome::bias 0).
+    double resolution = 0.00025;
     /// #3g's alkylation call when the run makes one: "" = none made (rule 3's
     /// suggested fixed Cys alkylation applies); a reagent's Unimod name
     /// (Carbamidomethyl, ...) becomes the fixed Cys modification; "none" or
@@ -220,12 +224,14 @@ namespace FASTag::SearchConfig
     std::vector<std::string> warnings, info;
     int isotope_max = 0;                   ///< largest isotope multiple skipped
     std::size_t variable = 0, offsets = 0, fixed = 0;  ///< exported entries
-    /// Calibration: the spectra-weighted median of centroid - mass over the
-    /// peaks explained by one modification, subtracted from every offset;
+    /// Calibration: measured_bias the spectra-weighted median of centroid -
+    /// mass over the peaks explained by one modification (rule-0 isotope
+    /// peaks excluded); bias the correction subtracted from every offset,
+    /// measured_bias when it exceeds ShiftSettings::resolution, else 0;
     /// bias_peaks such peaks (0: no correction, residual = the gap window);
     /// residual the spectra-weighted 90th percentile of their |error - bias|,
     /// the uncertainty an exported offset keeps.
-    double bias = 0.0, residual = 0.0;
+    double bias = 0.0, measured_bias = 0.0, residual = 0.0;
     std::size_t bias_peaks = 0;
   };
 

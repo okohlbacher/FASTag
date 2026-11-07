@@ -211,6 +211,10 @@ act() { awk -F'\t' -v d="$1" 'NR > 1 && $2 == d { print $5 }' "$TMP/shifts.rows"
 [ "$(act -77.7775)" = dropped_engine ] || fail "the negative offset is not dropped_engine: $(act -77.7775)"
 tr -d '\r' < "$TMP/sh.params" | grep -qx 'isotope_error = 1' || fail "the 13C peak did not set isotope_error 1"
 tr -d '\r' < "$TMP/sh.params" | grep -qx 'mass_offsets = 0.0 123.4565' || fail "mass_offsets is not 0.0 123.4565"
+# the in-silico fixture has no precursor bias: the 13C peak is no calibration
+# peak and the binning's error (within the centroid resolution) is not applied
+tr -d '\r' < "$TMP/shifts.tsv" | grep -q '^# calibration: offsets uncorrected, .* over 2 single-modification peaks' \
+  || { grep '^# calibration' "$TMP/shifts.tsv" >&2; fail "the calibration header: not uncorrected over the 2 non-isotope peaks"; }
 # Sage: no offsets, the variable ones written
 run "${SC[@]}" -out "$TMP/sg.tsv" "${R[@]}" "${G2[@]}" -search_shifts variable -search_config_out "$TMP/sg.json" \
   -search_shifts_out "$TMP/sg.shifts.tsv"
