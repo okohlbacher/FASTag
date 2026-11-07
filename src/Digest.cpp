@@ -503,20 +503,25 @@ namespace FASTag::Digest
 
   namespace
   {
-    /// e * p normalised (p as is when e is null or the product is 0).
+    /// e * p rescaled to the sum of p (p as is when e is null or the product
+    /// is 0). Keeping p's scale makes unit weights the 1.11 ends bit for bit:
+    /// the factor is then exactly 1 (mix() does not normalise, so a table
+    /// whose background does not sum to 1 keeps its 1.11 scores too).
     Dist weigh(const Dist& p, const Dist* e)
     {
       if (!e) return p;
       Dist out{};
-      PySum z;
+      PySum z, zp;
       for (int a = 0; a < kNumAA; ++a)
       {
         out[a] = (*e)[a] * p[a];
         z.add(out[a]);
+        zp.add(p[a]);
       }
       const double zz = z.value();
       if (!(zz > 0)) return p;
-      for (double& x : out) x /= zz;
+      const double k = zp.value() / zz;
+      for (double& x : out) x *= k;
       return out;
     }
 

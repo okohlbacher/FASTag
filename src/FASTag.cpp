@@ -1537,14 +1537,17 @@ protected:
     // the index is built on its database and only the tags it reads are
     // placed (recon_out, the hand-off and -delta_out read every tag).
     const bool alkylation_only_db = alkylation_on && !recon_on && !handoff_on;
-    if (!delta_out.empty() && !place_on)
+    // The placement-report checks below keep their 1.11 meaning: placing for
+    // -alkylation_out alone does not satisfy them (1.12 D #3g).
+    const bool place_reports = place_on && !alkylation_only_db;
+    if (!delta_out.empty() && !place_reports)
     {
       OPENMS_LOG_ERROR << "-delta_out requires -recon_out (the histogram is "
                           "aggregated over reconciliations)." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
     const bool recon_loc = getFlag_("recon_localize");
-    if (recon_loc && !place_on)
+    if (recon_loc && !place_reports)
     {
       OPENMS_LOG_ERROR << "-recon_localize requires -recon_out (it adds columns "
                           "to the reconciliations)." << std::endl;
@@ -1832,7 +1835,7 @@ protected:
         ;
     // delta_on: one delta sample per spectrum is taken and binned.
     const bool delta_on = !delta_out.empty() || gap_needed;
-    if (massgap_on && !place_on)
+    if (massgap_on && !place_reports)
     {
       OPENMS_LOG_ERROR << "-massgap_out requires -recon_out (the gaps are those of the "
                           "reconciliations, as in -delta_out)." << std::endl;

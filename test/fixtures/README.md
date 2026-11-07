@@ -142,6 +142,14 @@ aside. sha256
 `7be84af167c367b58732a9503f89328a2a790185dc4d1c660363bfb66525dff6`. Derived from
 the OpenMS example, so BSD-3-Clause as well.
 
+`digest_1.11.0_Ecoli_MS2_small_Da.tsv` — the `-digest_out` report of the same
+FASTag 1.11.0 run (same binary, input and options, written together with the
+label report above, whose sha256 it reproduced). `test/digest_cli_test.sh`
+checks that `-digest_out` at the 1.12 defaults, the chemistry v2 options
+(#3c-#3f) included, writes these rows, the `run version` row aside. sha256
+`f9e49767ca4a51f1369ea2c3ad6d9c7f45d5baca9c69f7527fd08715972a7eb7`. Derived from
+the OpenMS example, so BSD-3-Clause as well.
+
 `Ecoli_shortlist.fasta`, `chymo_insilico.mgf` — the #5 shortlist fixtures
 (FASTag 1.12), written by `make_shortlist_fixtures.py` (standard library,
 Python 3) from OpenMS `release/3.5.0`

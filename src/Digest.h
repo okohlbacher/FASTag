@@ -236,7 +236,8 @@ namespace FASTag::Digest
   struct ClassifyOptions
   {
     /// #3c: weights applied to each model end and to the background before
-    /// they are mixed: (1 - s) * norm(e * p) + s * norm(e * bg).
+    /// they are mixed: (1 - s) * w(p) + s * w(bg), w(x) = e * x rescaled to
+    /// the sum of x (so unit weights give the 1.11 scores bit for bit).
     const Detection* detection = nullptr;
     /// #3e: s per model from the table's specificity rows (Trypsin class:
     /// s_trypsin, every other class: s_nontryptic) instead of @p share.

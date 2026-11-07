@@ -38,7 +38,7 @@ namespace FASTag::Alkylation
         {"Dioxidation", "Dioxidation (C)", None},
         {"Trioxidation", "Trioxidation (C)", None},
         {"Cysteinyl", "Cysteinyl (C)", None},
-        {"Dehydroalanine", "Dehydroalanine (C)", None}};
+        {"Dehydroalanine", "Cys->Dha (C)", None}};
     std::vector<Form> out;
     const OpenMS::ModificationsDB* mdb = OpenMS::ModificationsDB::getInstance();
     for (const auto& d : defs)

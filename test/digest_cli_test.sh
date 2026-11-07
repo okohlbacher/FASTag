@@ -238,7 +238,8 @@ same "$TMP/base.tsv" "$TMP/a0.tsv" "-alkylation_out changed the tag TSV"
 alk_check "$TMP/alk0.tsv"
 [ "$(val "$TMP/alk0.tsv" alk_run database_source)" = proteome ] || fail "alk0: database_source"
 [ "$(val "$TMP/alk0.tsv" alk_run window)" = 0.5 ] || fail "alk0: a Da run's window is not 0.5"
-[ "$(val "$TMP/alk0.tsv" run run_report_version)" = 3 ] || fail "alk0: run rows are not the versioned format 3"
+# the run rows are the versioned RunMeta rows (their own format number, src/RunMeta.h)
+case "$(val "$TMP/alk0.tsv" run run_report_version)" in ''|*[!0-9]*) fail "alk0: no versioned run rows";; esac
 [ "$(val "$TMP/alk0.tsv" alk_run tags)" -gt 0 ] || fail "alk0: no tag looked at"
 # -recon_out is byte-identical with and without -alkylation_out; the counts are those on the same database
 run "${COMMON[@]}" -out "$TMP/a1.tsv" -recon_fasta "$DB" -recon_out "$TMP/ar1.tsv"
@@ -279,6 +280,14 @@ fi
 # refusals and warnings
 "$BIN" "${COMMON[@]}" -out "$TMP/x.tsv" -alkylation_out "$TMP/x.tsv" -alkylation_proteome "$DB" > "$TMP/log" 2>&1 \
   && fail "-alkylation_out equal to -out was accepted"
+# placing for -alkylation_out alone does not stand in for -recon_out (1.11 refusals kept)
+for extra in "-delta_out $TMP/x11.tsv" "-massgap_out $TMP/x12.tsv" "-recon_localize"; do
+  # shellcheck disable=SC2086
+  "$BIN" "${COMMON[@]}" -out "$TMP/x.tsv" -alkylation_out "$TMP/x13.tsv" -alkylation_proteome "$DB" $extra \
+    > "$TMP/log" 2>&1 && fail "$extra with -alkylation_out but without -recon_out was accepted"
+  grep -q "requires -recon_out" "$TMP/log" || fail "no -recon_out message for $extra with -alkylation_out"
+  [ ! -e "$TMP/x13.tsv" ] || fail "$extra: -alkylation_out written although the run was refused"
+done
 "$BIN" "${COMMON[@]}" -out "$TMP/x.tsv" -alkylation_out "$TMP/x9.tsv" -alkylation_proteome zebrafish > "$TMP/log" 2>&1 \
   && fail "an unknown -alkylation_proteome was accepted"
 grep -q "is neither auto" "$TMP/log" || fail "no message for an unknown -alkylation_proteome"

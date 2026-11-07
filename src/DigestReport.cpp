@@ -89,8 +89,9 @@ namespace FASTag::Digest
           : s.background == "models_table" ? "The background is the one in the model table."
                                            : "The background is the residue composition of " + s.background.substr(6) +
                                                  (s.background_pseudocount ? ", with one count added to every residue because one is absent." : "."));
-    // 1.12 D (#3c-#3f): the v2 settings, only when one of them is on.
-    const bool v2 = s.chemV2();
+    // 1.12 D (#3c-#3f): the v2 settings, only when one of them is on or the
+    // table is a v2 table (its specificity rows change the scores).
+    const bool v2 = s.chemV2() || table.version == 2;
     if (v2)
     {
       r.add("run", "models_version", table.version == 2 ? "v2" : "v1", "-",

@@ -248,7 +248,7 @@ int main()
     D::ClassifyOptions neutral;
     neutral.detection = other;
     const D::Classification n1 = D::classify(tryp, {}, v2, 0.05, 100, neutral), n0 = D::classify(tryp, {}, v2, 0.05, 100);
-    check(top(n1) == top(n0) && std::fabs(n1.margin - n0.margin) < 1e-12, "detection: unit weights give the 1.11 call and margin");
+    check(sameClassification(n1, n0), "detection: unit weights give the 1.11 classification bit for bit");
     // specificity: s per class replaces the global share
     D::ClassifyOptions sp;
     sp.specificity = true;
