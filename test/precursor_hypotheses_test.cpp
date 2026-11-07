@@ -3,6 +3,8 @@
 // Every case runs under cliDefaultParam() (deisotoping on, as the tool runs)
 // and with deisotoping off (PLAN-data-types item #6, Tests):
 //   (a) a 3+ synthetic spectrum with the charge removed infers 3; 2+ infers 2;
+//   (a2) range evidence: a 3+ spectrum of b ions only (no complement pair)
+//       with b ions above the 2+ fragment ceiling infers 3;
 //   (b) a 1+ synthetic spectrum infers 1;
 //   (c) an uncharged 3+ spectrum with the m/z shifted by C13C12/3 gives
 //       iso 1 under -isotope_error 0,1, and nterm within 0.01 Da;
@@ -125,6 +127,30 @@ namespace
       CHECK(h.size() == 1 && sel && sel->charge == 2 && sel->src == H::ChargeSource::Inferred,
             "%s (a): %s 2+ infers 2 (got charge %d, src %s)", label, c.pep, sel ? sel->charge : -1,
             sel ? H::sourceName(sel->src) : "-");
+    }
+
+    // ---- (a2) range evidence: a 3+ spectrum of b ions only (no complement
+    // pair at all) whose large b ions lie above the 2+ fragment ceiling
+    // infers 3, not assumed 2 ----
+    {
+      const AASequence aa = AASequence::fromString("SAMPLERKDLVEGFNTWQR");
+      const double M = aa.getMonoWeight();
+      MSSpectrum s;
+      std::mt19937 rng(31);
+      for (size_t i = 1; i < aa.size(); ++i)
+        ComplementSynth::addFragment(s, aa.getPrefix(i).getMonoWeight(Residue::BIon, 1) - kP, 1,
+                                     0.5 + 0.5 * ComplementSynth::u01(rng), 0);
+      for (int k = 0; k < 30; ++k) s.emplace_back(150.0 + (M - 200.0) * ComplementSynth::u01(rng), 0.05);
+      s.sortByPosition();
+      const double mz3 = (M + 3 * kP) / 3.0;
+      H::ChargeCall call;
+      const auto h = H::precursorHypotheses(s, precursor(mz3, 0), mode(H::ChargeMode::Infer), cs, &call);
+      const H::Hypothesis* sel = selected(h);
+      CHECK(h.size() == 1 && sel && sel->charge == 3 && sel->src == H::ChargeSource::Inferred && call.range_min == 3,
+            "%s (a2): b-only 3+ infers 3 by range (got charge %d, src %s, range_min %d)", label,
+            sel ? sel->charge : -1, sel ? H::sourceName(sel->src) : "-", call.range_min);
+      // Its complement evidence alone has nothing: the 2+ call would be assumed.
+      CHECK(H::complementExcess(s, M, cs) < 1.0, "%s (a2): the construct has complement pairs", label);
     }
 
     // ---- (b) 1+ infers 1 ----

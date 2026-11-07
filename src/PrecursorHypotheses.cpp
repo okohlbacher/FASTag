@@ -116,11 +116,23 @@ namespace FASTag::Hyp
         return call;
       }
       const std::vector<int> order = isoOrder(hp.isotope_errors);
+      // Range evidence: a charge whose fragment ceiling M_c + p lies below one
+      // of the strongest peaks is ruled out (mz is ascending: its last entry
+      // is the highest strong peak). Nothing is ruled out when every charge
+      // would be: the evidence then contradicts itself.
+      const double top_mz = mz.empty() ? 0.0 : mz.back();
+      std::vector<int> left;
+      for (const int c : charges)
+        if (c >= 1 && !(top_mz > c * prec_mz - (c - 1) * kProton + kCeilingMargin)) left.push_back(c);
+      std::vector<int> all;
+      for (const int c : charges)
+        if (c >= 1) all.push_back(c);
+      if (left.empty()) left = all;
+      if (!left.empty() && !all.empty() && left.front() != all.front()) call.range_min = left.front();
       int c1 = 0, c2 = 0;
       double e1 = -std::numeric_limits<double>::infinity(), e2 = e1;
-      for (const int c : charges)
+      for (const int c : left)
       {
-        if (c < 1) continue;
         double e = 0;
         const int k = bestIso(mz, prec_mz, c, order, cs, &e);
         call.excess.push_back({c, {e, k}});
@@ -128,9 +140,17 @@ namespace FASTag::Hyp
         if (e > e1) { c2 = c1; e2 = e1; c1 = c; e1 = e; }
         else if (e > e2) { c2 = c; e2 = e; }
       }
-      // No charge reaches the margin: no evidence for any, so 2 (assumed).
+      // No charge reaches the margin: no complement evidence for any, so 2
+      // (assumed) -- or, when the range evidence ruled out the lower charges,
+      // the lowest charge left (inferred).
       if (c1 == 0 || !(e1 > 0) || e1 < hp.infer_margin)
       {
+        if (call.range_min > 0)
+        {
+          call.charge = call.range_min;
+          call.src = ChargeSource::Inferred;
+          return call;
+        }
         call.charge = 2;
         call.src = ChargeSource::Assumed;
         return call;

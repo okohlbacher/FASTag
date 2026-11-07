@@ -15,7 +15,12 @@
 //              else the charge whose 1+ complement pairs (b + y = M + 2p) are
 //              most in excess of chance; two charges when the runner-up is
 //              within -charge_infer_margin (ambiguous); 2 when no charge
-//              reaches the margin (assumed).
+//              reaches the margin (assumed). Range evidence first rules out
+//              every charge c whose largest possible fragment m/z (M_c + p,
+//              a 1+ ion of the whole peptide) lies below one of the strongest
+//              peaks: such a peak cannot be a fragment of a c+ precursor.
+//              When that rules out 2, the lowest charge left is the call
+//              without complement evidence (inferred, not assumed).
 //
 // Isotope candidates (-isotope_error). Every listed k (-1 .. 3) shifts the
 // precursor's neutral mass by -k * (13C - 12C), header-charged precursors
@@ -125,6 +130,11 @@ namespace FASTag::Hyp
   inline constexpr std::size_t kInferTopPeaks = 150;
   /// Off-target pair sums whose mean count estimates chance pairs (Da).
   inline constexpr double kOffTargetShifts[6] = {-11.5, -7.5, -4.5, 4.5, 7.5, 11.5};
+  /// Range evidence: a peak of the strongest kInferTopPeaks this far (Da)
+  /// above a charge's fragment ceiling M_c + p rules the charge out. Covers
+  /// the isotope offsets (k = -1 raises M by 1.003 Da) and a low-resolution
+  /// m/z error.
+  inline constexpr double kCeilingMargin = 1.5;
 
   struct HypParam
   {
@@ -163,6 +173,7 @@ namespace FASTag::Hyp
     ChargeSource src = ChargeSource::Assumed;  ///< Inferred, Ambiguous or Assumed
     int runner_up = 0;            ///< the second charge of an ambiguous call, else 0
     double above_share = 0;       ///< intensity share above the precursor (1+ test)
+    int range_min = 0;            ///< lowest charge the range evidence leaves (0 = none ruled out)
     /// Per charge tried: (charge, best excess, the isotope k it was found at).
     std::vector<std::pair<int, std::pair<double, int>>> excess;
   };
