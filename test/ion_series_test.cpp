@@ -196,23 +196,26 @@ namespace
     }
   }
 
-  /// ion_series_test --write-mzml <fasta> <out.mzML> <cz|by> [n]: a synthetic
+  /// ion_series_test --write-mzml <fasta> <out.mzML> <cz|cz0|by> [n]: a synthetic
   /// run for the CLI tests (ion_series_cli_test, threads_test). n (40)
   /// tryptic peptides of @p fasta (up to one missed cleavage, length 8-18, no
   /// C/U/X/B/Z, unique, in protein order), at precursor charge 2 and 3 alternately: cz = c and z-dot ions
   /// (OpenMS TheoreticalSpectrumGenerator) at fragment charges 1 .. z-1 with
   /// the activation ETD (MS:1000598), the unreacted precursor and its
   /// charge-reduced species as ETD spectra carry them, and 15 noise peaks; by
-  /// = b and y ions of the same peptides with CID (MS:1000133). Seeded,
+  /// = b and y ions of the same peptides with CID (MS:1000133); cz0 = cz
+  /// without a precursor charge. Seeded,
   /// deterministic; written by OpenMS MzMLFile (indexed).
   int writeMzml(int argc, char** argv)
   {
     if (argc < 5)
     {
-      std::cerr << "usage: ion_series_test --write-mzml <fasta> <out.mzML> <cz|by> [n]\n";
+      std::cerr << "usage: ion_series_test --write-mzml <fasta> <out.mzML> <cz|cz0|by> [n]\n";
       return 2;
     }
-    const bool cz = std::string(argv[4]) == "cz";
+    // cz0: cz without a precursor charge (for -unknown_charge infer).
+    const bool cz = std::string(argv[4]) == "cz" || std::string(argv[4]) == "cz0";
+    const bool no_charge = std::string(argv[4]) == "cz0";
     const size_t n = argc > 5 ? static_cast<size_t>(std::stoul(argv[5])) : 40;
     std::vector<OpenMS::FASTAFile::FASTAEntry> prot;
     OpenMS::FASTAFile().load(argv[2], prot);
@@ -251,7 +254,7 @@ namespace
       sp.spec.setType(OpenMS::SpectrumSettings::SpectrumType::CENTROID);
       OpenMS::Precursor pr;
       pr.setMZ(sp.prec_mz);
-      pr.setCharge(z);
+      if (!no_charge) pr.setCharge(z);
       pr.setActivationMethods({cz ? AM::ETD : AM::CID});
       sp.spec.setPrecursors({pr});
       exp.addSpectrum(sp.spec);

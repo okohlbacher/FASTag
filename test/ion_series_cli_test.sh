@@ -291,6 +291,20 @@ if [ -n "$GEN" ] && [ -n "$DB" ]; then
   [ "$(dcall "$TMP/s_etd_by.digest.tsv")" != "$dc" ] || fail "synthetic: ETD read as b/y calls the protease too (the check is weak)"
   [ "$(grep -c '^Ion series (-ion_series auto): 40 MS2 spectra tagged as c/z-dot ions, 0 as b/y' "$TMP/s_etd_auto.err")" -eq 1 ] \
     || fail "synthetic ETD under auto: INFO counts"
+  # With #6: the same ETD run without precursor charges under -unknown_charge
+  # infer. A spectrum read as c/z-dot counts c/z-dot pairs (M + H + 2p) as
+  # its charge evidence, so the selected charge is the true one (2 for even,
+  # 3 for odd scan indices) for most spectra; b/y pairs would leave them at
+  # the assumed 2.
+  "$GEN" --write-mzml "$DB" "$TMP/syn_etd0.mzML" cz0 > /dev/null || fail "writing the uncharged synthetic ETD run"
+  runb s_etd_inf "$TMP/syn_etd0.mzML" 2 -ion_series auto -unknown_charge infer "${RX[@]}"
+  scol() { head -1 "$1" | tr '\t' '\n' | grep -nx -- "$2" | head -1 | cut -d: -f1; }
+  pc_=$(scol "$TMP/s_etd_inf.tsv" prec_charge); se_=$(scol "$TMP/s_etd_inf.tsv" selected)
+  [ -n "$pc_" ] && [ -n "$se_" ] || fail "synthetic infer: no #6 columns"
+  right=$(awk -F'\t' -v pc="$pc_" -v se="$se_" 'NR > 1 && $se == "1" { s = $1; sub(/.*scan=/, "", s); want = (s % 2 == 1) ? 2 : 3
+           if (!(s in seen)) { seen[s] = 1; if ($pc == want) n++ } } END { print n + 0 }' "$TMP/s_etd_inf.tsv")
+  echo "synthetic ETD, no charges, auto + infer: $right of 40 spectra selected at their true charge"
+  [ "$right" -ge 30 ] || fail "synthetic infer: only $right of 40 spectra at their true charge (c/z charge evidence)"
 fi
 
 # ---- cz on collisional spectra: the WARN ----
