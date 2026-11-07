@@ -29,7 +29,10 @@ test('a cold start reaches Run in two actions, with the task it lands on', async
   // 1: the input. 2: Run.
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
-  await expect(page.getByRole('tab', { name: /^Digest/ })).toHaveAttribute('aria-selected', 'true')
+  // P2b (D8): the task lands on the Overview, with the Digest tab beside it
+  // (was: the Digest tab selected).
+  await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('tab', { name: /^Digest/ })).toBeVisible()
   const calls = await mockState<RunCall[]>(page, 'runCalls')
   expect(calls).toHaveLength(1)
   const p = calls[0].params

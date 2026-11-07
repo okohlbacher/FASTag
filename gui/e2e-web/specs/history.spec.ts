@@ -84,11 +84,11 @@ test('a cancelled run is marked incomplete in History and never opens as if comp
   await openApp(page, 'slow')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
-  // Click Cancel once the pill has stopped changing width: a click while the
-  // phase text grows can land on the pill's other button.
-  const pill = page.getByRole('group', { name: 'Run status' })
-  await expect(pill).toContainText(/Tagging spectra.*50%/)
-  await pill.getByRole('button', { name: 'Cancel' }).click()
+  // P2b: Cancel is the Results running state's (GUI-DESIGN 3 S2; was the
+  // pill's, safety.spec). Click it once the run is under way.
+  const running = page.getByRole('region', { name: 'Running' })
+  await expect(running).toContainText(/Tagging spectra.*50%/)
+  await running.getByRole('button', { name: 'Cancel' }).click()
   await expect(page.locator('.last-run')).toContainText('partial outputs removed')
   await goTo(page, 'History')
   const row = historyRow(page, 'run01.mzML')

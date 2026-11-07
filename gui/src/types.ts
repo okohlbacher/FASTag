@@ -182,6 +182,10 @@ export interface Taxon {
   observed: number
   adjusted: number
   q: number
+  // FASTag 1.12 -species_call decoy (D1): present, no_call or not_detected,
+  // and why. Absent from a report written without the call.
+  call?: string
+  callReason?: string
 }
 
 export interface SpeciesReport {

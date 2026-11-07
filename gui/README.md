@@ -37,8 +37,11 @@ gui/
                        contract and its parser), capabilities.ts (CLI features from --helphelp),
                        instrument.ts (instrument family and preset), checks.ts (the checks, the
                        exit-11 refusal), useInspector.ts and InspectorPanel.tsx
-    results/           ResultTabs.tsx (Tags, Species, Digest), FailureBanner.tsx (over the tabs, or
-                       on the Batch view beside the queue), reports.ts
+    results/           ResultTabs.tsx (Overview, Tags, Species, Digest), FailureBanner.tsx (over
+                       the tabs, or on the Batch view beside the queue), reports.ts,
+                       RunningPanel.tsx (the running state), OverviewPanel.tsx over
+                       overview.ts (tiles, checks, suggested settings) and calls.ts (the
+                       parser of the calls FASTag wrote)
     ParamField.tsx     one form field per manifest parameter
     ResultsTable.tsx   tags browser: virtualized table with filters, column choice and export
     SpeciesPanel.tsx   species report
@@ -150,7 +153,7 @@ manifest: the shell empties the file before the script runs.
 ## The window
 
 Four views, switched from the top bar: **Setup** (the input, the parameters
-and Run), **Results** (Tags, Species and Digest, full width), **Batch** (the
+and Run), **Results** (Overview, Tags, Species and Digest, full width), **Batch** (the
 queue, its run bar, the failure banner and each job's log) and **History**
 (every recorded run: input, status, duration, tags, outputs; Open, Reveal,
 Copy command, Settings into form with Undo, Re-run, Delete record). Copy command
@@ -163,9 +166,28 @@ files; the record of a run that did not finish is kept while it alone marks
 a file that run left behind as incomplete. Run moves to
 Results; the first file of a batch moves to Batch. The progress pill in the
 top bar shows the job in flight (file, phase or percentage, ETA) and, outside
-the view with the run bar, its Cancel. When a run or batch finishes while the
+the view with the run bar or the running state, its Cancel. While a run goes,
+Results shows its running state (file, phase, progress with rate and ETA,
+Cancel, Show log). When a run or batch finishes while the
 window is in the background, the system shows a notification; a toast
 offers Open results.
+
+A run of **Characterize a run** or **Batch QC** lands on the **Overview**:
+key figures (MS2 spectra, spectra with tags, tags, tags with E ≤ 1, glyco
+flags), the calls FASTag made (protease from the digest report, top genus
+from the species report, label from the `label_call` rows of `-label_out`,
+alkylation only from a mass-gap report, so only with a FASTA; otherwise
+"not assessed (needs a FASTA)"), the checks (the 1.12 acquisition check
+line, a Da tolerance, electron activation) and suggested search settings,
+each line naming its evidence (a call, a default, a preset or the run).
+Every tile names its cutoff or caveat; with fewer than 1,000 spectra a call
+reads "too little evidence". The GUI computes no call itself: `calls.ts`
+only parses what the CLI wrote, and what an older CLI does not write reads
+"not called" or "not checked" (detected from the rows and columns present,
+never from the version string). A tile whose report the run did not write
+offers to turn it on and run again ("Add FASTA and run again" for the
+alkylation tile). Runs from FASTag's defaults land where they did before and
+offer the Overview as a tab.
 
 Setup starts from a task: **Characterize a run** (the default: species with
 extension 2, the digest, label and glyco reports, a tenth of the spectra),
@@ -325,6 +347,9 @@ The parts of the window have tests of their own beside them: the hooks
 props. The App-level tests, which render the whole window, are split by area
 beside the parts they drive: `run/batch.app.test.tsx` (run and batch
 orchestration), `results/digest.app.test.tsx` (the Digest tab),
+`results/overview.app.test.tsx` (the Overview and the running state; the
+parser and model tests `results/calls.test.ts` and `results/overview.test.ts`
+read real CLI output on the gate PXDs from `src/fixtures/cli/`),
 `setup/setup.app.test.tsx` (the setup form and run bar, with the checks that
 App wires Reset, the phase and the elapsed time into the run bar) and
 `shell/shell.app.test.tsx` (the views, the pill, Help and its search, menus,

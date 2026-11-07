@@ -141,6 +141,17 @@ export interface BatchEnd {
   cancelled: boolean
 }
 
+// The run whose results the tabs show, as the Overview reads it (GUI-DESIGN
+// 3 S3): its input, what it was sent, its log, and the reports and species
+// it wrote, as they were read when it finished. Cleared by the next run.
+export interface Shown {
+  input: string
+  params: Record<string, unknown>
+  log: readonly string[]
+  reports: Report[]
+  species: SpeciesReport | null
+}
+
 export interface RunState {
   jobs: Job[]
   // The job last started: the one running, or the one whose log is live.
@@ -176,6 +187,7 @@ export interface RunState {
   // Why Reveal did nothing.
   revealErr: string | null
   evidence: Evidence
+  shown: Shown | null
 }
 
 type Update<T> = T | ((cur: T) => T)
@@ -205,6 +217,7 @@ export type RunAction =
   | { type: 'ASK'; ask: OverwriteAsk | null }
   | { type: 'REVEAL_ERR'; error: string | null }
   | { type: 'EVIDENCE'; evidence: Partial<Evidence> }
+  | { type: 'SHOWN'; shown: Shown | null }
 
 const noProgress: JobProgress = { done: null, total: null, phase: null, ratePerSec: null, etaSec: null }
 const noEvidence: Evidence = { contributed: null, ms2: null }
@@ -227,7 +240,8 @@ export const initialRunState: RunState = {
   overwriteAsk: null,
   announce: '',
   revealErr: null,
-  evidence: noEvidence
+  evidence: noEvidence,
+  shown: null
 }
 
 /// A fresh state, with a log store of its own (one per App instance).
@@ -372,6 +386,7 @@ function start(s: RunState, a: Extract<RunAction, { type: 'RUN_START' }>): RunSt
     evidence: noEvidence,
     reports: { list: [], errors: [] },
     species: null,
+    shown: null,
     speciesRun: { input: a.input, enabled: a.speciesOn },
     batchMiss: null,
     failure: null,
@@ -445,6 +460,8 @@ export function runReducer(s: RunState, a: RunAction): RunState {
       return { ...s, overwriteAsk: a.ask }
     case 'REVEAL_ERR':
       return s.revealErr === a.error ? s : { ...s, revealErr: a.error }
+    case 'SHOWN':
+      return s.shown === a.shown ? s : { ...s, shown: a.shown }
     case 'EVIDENCE': {
       const e = { ...s.evidence, ...a.evidence }
       return e.contributed === s.evidence.contributed && e.ms2 === s.evidence.ms2 ? s : { ...s, evidence: e }

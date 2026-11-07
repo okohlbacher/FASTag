@@ -20,6 +20,12 @@
 //               spec calls finishRanking(); until then a query sorted by
 //               E-value is served in file order (ranked: false), as
 //               browser.rs does
+//   gate, gate-1.11, gate-da, gate-call
+//               P2b Overview: a run prints the real log of FASTag on a gate
+//               PXD and its reports and species report are the real ones
+//               (src/fixtures/cli, testing/cliFixtures.ts): integration/1.12
+//               on PXD003531, 1.11.0 on it (the 1.12 output absent), 1.12 on
+//               the Da run PXD010783, and 1.12 with -species_call decoy
 //   iontrap-probe  P2b: the CLI has -probe_input, and run01.mzML probes as
 //               the ion-trap gate input (src/fixtures/probe/iontrap)
 //   dia-probe   P2b: the CLI has -probe_input, and run01.mzML probes as
@@ -55,6 +61,16 @@ import ecoliTags from '../../e2e-web/fixtures/ecoli.tags.tsv?raw'
 import digestTsv from '../fixtures/digest.tsv?raw'
 import labelTsv from '../fixtures/label.tsv?raw'
 import massgapTsv from '../fixtures/massgap.tsv?raw'
+import { CLI_CASES, logLines, type CliCase } from './cliFixtures'
+import { speciesFromTsv } from './speciesTsv'
+
+// The ?fixture= names of the real-CLI Overview scenarios.
+const GATE: Record<string, CliCase> = {
+  gate: CLI_CASES.v112,
+  'gate-1.11': CLI_CASES.v111,
+  'gate-da': CLI_CASES.v112Da,
+  'gate-call': CLI_CASES.v112Call
+}
 import iontrapProbe from '../fixtures/probe/iontrap.probe.jsonl?raw'
 import diaRawProbe from '../fixtures/probe/dia_raw.probe.jsonl?raw'
 import orbitrapProbe from '../fixtures/probe/orbitrap.probe.jsonl?raw'
@@ -96,6 +112,8 @@ interface Script {
   code: number | null
   // Never ends on its own (until Cancel).
   hang?: boolean
+  // ms between two log lines (default 40).
+  step?: number
 }
 
 function parseTsv(text: string): { columns: string[]; rows: string[][] } {
@@ -163,6 +181,11 @@ export function installE2EBridge(): Origin | undefined {
   mock.nextPickResults = '/data/run01.tags.tsv'
   mock.nextPickReport = '/data/run01.digest.tsv'
 
+  const gate = GATE[fixture]
+  if (gate) {
+    mock.reportFiles = { '/data/run01.digest.tsv': gate.digest, '/data/run01.label.tsv': gate.label }
+    mock.speciesResult = speciesFromTsv(gate.species, '/data/run01.tags.species.tsv')
+  }
   // P2b: the inspector. A CLI whose --helphelp lists -probe_input.
   if (fixture === 'iontrap-probe' || fixture === 'dia-probe' || fixture === 'orbitrap-probe') {
     mock.cliOptions = { options: [...mock.cliOptions.options, 'probe_input'], ok: true, detail: 'e2e fixture' }
@@ -282,6 +305,7 @@ export function installE2EBridge(): Origin | undefined {
         ok: false,
         code: 1
       }
+    if (gate) return { phase: 'Reading spectra', lines: logLines(gate), ok: true, code: 0, step: 100 }
     return { phase: 'Reading spectra', lines: [...reading, `${name}: 139 MS2 spectra, 2028 tags`], ok: true, code: 0 }
   }
 
@@ -320,11 +344,12 @@ export function installE2EBridge(): Origin | undefined {
     }
     const emit = (e: RunEvent): void => mock.emitEvent(id, e)
     at(20, () => emit({ kind: 'phase', label: s.phase }))
-    s.lines.forEach((l, i) => at(40 + i * 40, () => emit({ kind: 'log', lines: [[l, true]] })))
+    const step = s.step ?? 40
+    s.lines.forEach((l, i) => at(40 + i * step, () => emit({ kind: 'log', lines: [[l, true]] })))
     at(60, () => emit({ kind: 'phase', label: 'Tagging spectra' }))
     at(60, () => emit({ kind: 'progress', done: 70, total: 139, ratePerSec: 700, etaSec: 0.1 }))
     if (!s.hang) {
-      const end = 80 + s.lines.length * 40
+      const end = 80 + s.lines.length * step
       at(end - 10, () => emit({ kind: 'progress', done: 139, total: 139 }))
       at(end, () =>
         mock.emitDone({

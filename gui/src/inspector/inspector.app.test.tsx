@@ -309,6 +309,12 @@ describe('inspector after a run (real 1.12 reports and log)', () => {
     await goTo('results')
     // Guard: the digest report was read, so its meta rows were looked at.
     expect(mock.reportCalls).toContain('/data/run01.digest.tsv')
+    // A Characterize run lands on the Overview (P2b #25, D8), not on the
+    // Digest tab: the digest report is there, and no checks after the run.
+    expect(screen.getByRole('tab', { name: /Overview/ }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('tab', { name: /Digest/ })).toBeDefined()
+    expect(screen.queryByRole('list', { name: 'Checks after the run' })).toBeNull()
+    await click(screen.getByRole('tab', { name: /Digest/ }))
     expect(screen.getByRole('tab', { name: /Digest/ }).getAttribute('aria-selected')).toBe('true')
     expect(screen.queryByRole('list', { name: 'Checks after the run' })).toBeNull()
   })
