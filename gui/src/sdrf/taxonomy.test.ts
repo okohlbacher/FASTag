@@ -3,6 +3,7 @@
 // bundled nodes.dmp and names.dmp, copied to src/fixtures/sdrf), and a genus
 // call that contains the SDRF species is consistent at genus, not a mismatch.
 
+// @ts-ignore -- node built-in; the app's tsconfig has no node types
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { genusOf, matchOrganism, parseTaxdump, resolveOrganism } from './taxonomy'

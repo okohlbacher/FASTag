@@ -5,6 +5,7 @@
 // rows, repeated and unknown columns, a missing or doubled final line break,
 // and bytes that are not UTF-8.
 
+// @ts-ignore -- node built-in; the app's tsconfig has no node types
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { columnsNamed, dataRows, parseSdrf, serializeSdrf, cellValue, type SdrfTable } from './sdrfTable'
@@ -13,7 +14,7 @@ import { columnsNamed, dataRows, parseSdrf, serializeSdrf, cellValue, type SdrfT
 const FIXTURE = 'src/fixtures/sdrf/gate-batch.sdrf.tsv'
 const enc = (s: string): Uint8Array => new TextEncoder().encode(s)
 const roundTrip = (b: Uint8Array): Uint8Array => serializeSdrf(parseSdrf(b))
-const hex = (b: Uint8Array): string => Buffer.from(b).toString('hex')
+const hex = (b: Uint8Array): string => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')
 
 function expectSame(b: Uint8Array): SdrfTable {
   const t = parseSdrf(b)
