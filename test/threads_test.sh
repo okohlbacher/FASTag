@@ -72,7 +72,12 @@ for t in 1 3 8; do
     -fragment_tolerance 0.3 -fragment_tolerance_unit Da >"$d/plog" 2>&1 || fail "-threads $t plain run failed"
   cmp -s "$d/tags.tsv" "$d/plain.tsv" || fail "the tags differ with -census at -threads $t"
 done
-[ "$(awk -F'\t' 'NR > 1 && $12 == "placed"' "$TMP/c1/census.tsv" | wc -l)" -gt 0 ] || fail "no placed census row; the check is weak"
+# The phase-A status column is found by its header name, as the other census
+# readers do (CensusIds::layoutOf), not by its position (12 in Census::header).
+n_placed=$(awk -F'\t' 'NR == 1 { for (i = 1; i <= NF; ++i) if ($i == "status") c = i; next }
+                        c && $c == "placed" { n++ } END { if (!c) print "nocol"; else print n + 0 }' "$TMP/c1/census.tsv")
+[ "$n_placed" != nocol ] || fail "census.tsv has no status column"
+[ "$n_placed" -gt 0 ] || fail "no placed census row; the check is weak"
 for f in census census_summary recon; do
   for t in 3 8; do
     cmp -s "$TMP/c1/$f.tsv" "$TMP/c$t/$f.tsv" || fail "$f.tsv differs between -threads 1 and $t"
