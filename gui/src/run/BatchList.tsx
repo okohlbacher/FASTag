@@ -31,11 +31,14 @@ export interface BatchListProps {
   // The form's "Add files for a batch…", where focus goes when the queue is
   // cleared.
   addBatchRef: RefObject<HTMLButtonElement | null>
+  // The Add… button, for focus from outside (App.tsx).
+  addRef?: RefObject<HTMLButtonElement | null>
 }
 
 export default function BatchList(p: BatchListProps): JSX.Element {
   const { jobs, busy, results, logOpen, addBatchRef } = p
-  const addRef = useRef<HTMLButtonElement>(null)
+  const ownAddRef = useRef<HTMLButtonElement>(null)
+  const addRef = p.addRef ?? ownAddRef
   // The drawer shows the kept log of this job.
   const logJobEntry = p.logJob ? jobs.find((j) => j.input === p.logJob && j.log) : undefined
   return (

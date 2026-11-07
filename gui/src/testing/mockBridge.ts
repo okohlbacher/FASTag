@@ -124,7 +124,9 @@ export interface MockBridge extends FastagApi {
   emitDragHover(over: boolean): void
   notifyCalls: { title: string; body: string }[]
   holdRun(): void
-  releaseRun(): void
+  // With @p error: the held invoke replies fail (an invoke that fails after
+  // its Done: the job settles without outputs, runJob.ts).
+  releaseRun(error?: Error): void
 }
 
 /// The reply of `run` exactly as fastag.rs serialises it (cargo test
@@ -199,7 +201,7 @@ export function installMockBridge(): MockBridge {
   }
 
   let seq = 0
-  let held: (() => void)[] | null = null
+  let held: ((error?: Error) => void)[] | null = null
 
   const mock: MockBridge = {
     binaryInfo: { bin: '/mock/FASTag', source: 'env', ok: true, detail: 'FASTag 9.9.9 (mock)' },
@@ -288,10 +290,10 @@ export function installMockBridge(): MockBridge {
     holdRun: () => {
       held = held ?? []
     },
-    releaseRun: () => {
+    releaseRun: (error) => {
       const q = held ?? []
       held = null
-      q.forEach((release) => release())
+      q.forEach((release) => release(error))
     },
 
     probe: () => Promise.resolve(mock.binaryInfo),
@@ -419,7 +421,7 @@ export function installMockBridge(): MockBridge {
         outputs,
         command: [mock.binaryInfo.bin, '-in', call.in, '-out', outputs.out ?? '']
       }
-      if (held) return new Promise<RunStarted>((resolve) => held!.push(() => resolve(started)))
+      if (held) return new Promise<RunStarted>((resolve, reject) => held!.push((e) => (e ? reject(e) : resolve(started))))
       return Promise.resolve(started)
     },
 

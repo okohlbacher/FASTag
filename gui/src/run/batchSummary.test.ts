@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseReport } from '../digestReport'
 import type { BatchJob } from './batch'
-import { buildSummary, jobCells, majority, MIN_CALLS, summaryTsv, SUMMARY_COLUMNS, type JobData } from './batchSummary'
+import { buildSummary, jobCells, majority, MIN_CALLS, NOT_READ, summaryTsv, SUMMARY_COLUMNS, type JobData } from './batchSummary'
 import { BATCH_CASES, type BatchCase } from '../testing/batchFixtures'
 import { speciesFromTsv } from '../testing/speciesTsv'
 import { CLI_CASES, logLines } from '../testing/cliFixtures'
@@ -158,6 +158,22 @@ describe('the summary of a batch', () => {
     expect(partial.majority.label.calls).toBe(2)
   })
 
+  it('a done job without outputs (the reply never came) is not "reading…" and cannot be opened', () => {
+    const lost = buildSummary([job('/b/lost.mzML', 'done', { ms: 1000 })], new Map())
+    for (const k of SUMMARY_COLUMNS) {
+      expect(lost.rows[0].cells[k]).toEqual({ text: '—', call: null, note: expect.stringContaining('did not learn where this run wrote its outputs') })
+    }
+    expect(lost.rows[0].canOpen).toBe(false)
+    expect(s.rows[0].canOpen).toBe(true)
+    expect(s.rows[7].canOpen).toBe(false)
+  })
+
+  it('a job whose reports could not be read at all says so, with why, and counts nothing', () => {
+    const d: JobData = { log: [], reports: [], species: null, census: null, params: {}, failed: 'invoke failed' }
+    const r = buildSummary([jobs[0]], new Map([[jobs[0].input, d]])).rows[0]
+    for (const k of SUMMARY_COLUMNS) expect(r.cells[k]).toEqual({ text: 'unreadable', call: null, note: 'its reports could not be read: invoke failed' })
+  })
+
   it('the TSV has the table: a header and one line per row, the same text', () => {
     const tsv = summaryTsv(s)
     const lines = tsv.split('\n')
@@ -201,5 +217,31 @@ describe('the summary of a batch', () => {
     const lines = summaryTsv(odd).split('\n')
     expect(lines).toHaveLength(3)
     expect(lines[1].split('\t')).toHaveLength(14)
+  })
+})
+
+describe('a report the job was sent but could not read', () => {
+  it('says "unreadable" with the read or parse error, not "not written" or "detection was off"', () => {
+    const c = BATCH_CASES.pxd003531
+    const d: JobData = {
+      ...dataOf(c),
+      // The digest report parsed as empty, the species read rejected.
+      reports: [parseReport(c.label, `/b/x.label.tsv`)],
+      species: null,
+      unread: {
+        digest_out: 'Cannot read /b/x.digest.tsv: the file is empty',
+        species_out: 'Cannot read /b/x.tags.species.tsv: permission denied'
+      }
+    }
+    const { cells } = jobCells(d)
+    expect(cells.protease).toEqual({ text: 'unreadable', call: null, note: 'Cannot read /b/x.digest.tsv: the file is empty' })
+    expect(cells.genus).toEqual({ text: 'unreadable', call: null, note: 'Cannot read /b/x.tags.species.tsv: permission denied' })
+    // The label report was read: its call stands.
+    expect(cells.label.call).toBe('label-free')
+  })
+
+  it('a species report the backend gave nothing for is "not read", with the path', () => {
+    const d: JobData = { ...dataOf(BATCH_CASES.pxd003531), species: null, unread: { species_out: `${NOT_READ}the species report /b/x.tags.species.tsv was not found or could not be parsed` } }
+    expect(jobCells(d).cells.genus).toEqual({ text: 'not read', call: null, note: 'the species report /b/x.tags.species.tsv was not found or could not be parsed' })
   })
 })

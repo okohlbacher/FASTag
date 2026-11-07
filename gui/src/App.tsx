@@ -18,7 +18,7 @@ import ResultTabs from './results/ResultTabs'
 import FailureBanner from './results/FailureBanner'
 import { createViewStore, useView } from './app/viewStore'
 import { defaultOut, rebaseOutputs } from './app/paths'
-import { focusLater } from './app/focus'
+import { focusLater, focusLost } from './app/focus'
 import { useTheme, type Theme } from './app/theme'
 import TopBar from './shell/TopBar'
 import HistoryView from './shell/HistoryView'
@@ -58,11 +58,15 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   const [aboutOpen, setAboutOpen] = useState(false)
   const [toast, setToast] = useState<Toast | null>(null)
   // What Add folder… found: a folder without spectra, or one that could not
-  // be read.
-  const [folderNote, setFolderNote] = useState<string | null>(null)
+  // be read; shown where it was asked from (Setup's Batch QC card or the
+  // Batch view), in a live region always in the page there.
+  const [folderNote, setFolderNote] = useState<{ text: string; from: 'setup' | 'batch' } | null>(null)
   // Bumped when a run ends: History reads the record again.
   const [historyVersion, setHistoryVersion] = useState(0)
   const emptyBatchRef = useRef<HTMLButtonElement>(null)
+  // The queue's Add… button, where focus goes when the empty state that
+  // held it is replaced by the queue.
+  const queueAddRef = useRef<HTMLButtonElement>(null)
   const addBatchRef = useRef<HTMLButtonElement>(null)
   // The backend's close guard asks: the window was closed, or the app asked
   // to quit, while a run or batch is active.
@@ -98,9 +102,28 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   // the first file of a queue moves to Batch.
   const hadJobs = useRef(0)
   useEffect(() => {
-    if (jobs.length > 0 && hadJobs.current === 0) setView('batch')
+    if (jobs.length > 0 && hadJobs.current === 0) {
+      setView('batch')
+      // Files or a folder added from the Batch view's empty state: the
+      // button that added them is gone with it.
+      focusLater(() => (focusLost() ? queueAddRef.current : null))
+    }
     hadJobs.current = jobs.length
   }, [jobs.length])
+
+  // A batch pass ended: the Run and the queue's buttons were disabled or
+  // gone while it ran, so focus moves to the summary it filled.
+  const seenBatchEnd = useRef(run.batchEnd)
+  useEffect(() => {
+    if (run.batchEnd === seenBatchEnd.current) return
+    seenBatchEnd.current = run.batchEnd
+    if (!run.batchEnd) return
+    focusLater(() => {
+      const batch = viewsRef.current?.querySelector<HTMLElement>('.view[data-view="batch"]')
+      if (!focusLost() || !batch || batch.hidden) return null
+      return batch.querySelector<HTMLElement>('#sum-h') ?? batch
+    })
+  }, [run.batchEnd])
 
   // A view switch that hid the focused control (Run moving to Results, a
   // drop, Cmd+1..4, a toast's Open) would leave focus on the page body: move
@@ -165,15 +188,22 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
 
   // Add folder… (the Batch view, Batch QC's input card): the spectra files
   // directly inside a folder join the queue, as a dropped folder's do.
-  async function addFolder(): Promise<void> {
+  async function addFolder(from: 'setup' | 'batch'): Promise<void> {
     setFolderNote(null)
     try {
       const r = await run.addBatchFolder()
-      if (r && r.files === 0) setFolderNote(`No spectra files (mzML, mzPeak, MGF) directly in ${r.dir}.`)
+      if (r && r.files === 0) setFolderNote({ text: `No spectra files (mzML, mzPeak, MGF) directly in ${r.dir}.`, from })
     } catch (e) {
-      setFolderNote(`Cannot read the folder: ${e instanceof Error ? e.message : String(e)}`)
+      setFolderNote({ text: `Cannot read the folder: ${e instanceof Error ? e.message : String(e)}`, from })
     }
   }
+  // The folder note's live region at @p from: always mounted, empty there
+  // unless the note was asked from there.
+  const folderNoteAt = (from: 'setup' | 'batch'): JSX.Element => (
+    <p className="hint note-flag folder-note" role="status">
+      {folderNote?.from === from ? folderNote.text : ''}
+    </p>
+  )
 
   // A results file picked (menu, History, the empty states): Results.
   async function openResults(): Promise<void> {
@@ -454,7 +484,8 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
                 onSearch={() => setSearchOpen(true)}
                 searchBtnRef={searchBtnRef}
                 onOpenBatch={() => setView('batch')}
-                onAddFolder={() => void addFolder()}
+                onAddFolder={() => void addFolder('setup')}
+                folderNote={folderNoteAt('setup')}
                 addBatchRef={addBatchRef}
                 onOpenResults={openResults}
               />
@@ -528,7 +559,7 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
                     logJob={logJob}
                     logOpen={logOpen}
                     onAdd={run.addBatchFiles}
-                    onAddFolder={() => void addFolder()}
+                    onAddFolder={() => void addFolder('batch')}
                     outDir={run.outDir}
                     onChooseOutDir={() => void run.chooseOutDir()}
                     onClearOutDir={() => run.setOutDir(null)}
@@ -537,12 +568,9 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
                     onShow={showBatchJob}
                     onLog={openLog}
                     addBatchRef={emptyBatchRef}
+                    addRef={queueAddRef}
                   />
-                  {folderNote && (
-                    <p className="hint note-flag" role="status">
-                      {folderNote}
-                    </p>
-                  )}
+                  {folderNoteAt('batch')}
                   {runBar}
                 </div>
                 <div className="batch-side">
@@ -566,15 +594,11 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
                   <button type="button" className="secondary" ref={emptyBatchRef} onClick={run.addBatchFiles} disabled={busy}>
                     Add files for a batch…
                   </button>
-                  <button type="button" className="secondary" onClick={() => void addFolder()} disabled={busy}>
+                  <button type="button" className="secondary" onClick={() => void addFolder('batch')} disabled={busy}>
                     Add folder…
                   </button>
                 </div>
-                {folderNote && (
-                  <p className="hint note-flag" role="status">
-                    {folderNote}
-                  </p>
-                )}
+                {folderNoteAt('batch')}
               </div>
             )}
           </section>

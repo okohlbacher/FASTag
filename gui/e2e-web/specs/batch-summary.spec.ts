@@ -161,3 +161,20 @@ test('an output folder takes every job output; fewer than 3 jobs flag nothing', 
   await expect(table(page).locator('td.differs')).toHaveCount(0)
   await expect(table(page).locator('tfoot')).toContainText('no majority (2 calls, fewer than 3)')
 })
+
+test('by keyboard, focus does not fall to the page body after Add folder… or a batch pass', async ({ page }) => {
+  await openApp(page, 'gate-batch')
+  await goTo(page, 'Batch')
+  // The empty state's Add folder…: the queue replaces it, focus goes to its Add….
+  await page.locator('.batch-empty').getByRole('button', { name: 'Add folder…' }).focus()
+  await page.keyboard.press('Enter')
+  await expect(bodyRows(page)).toHaveCount(NAMES.length)
+  await expect(page.locator('.view[data-view="batch"] .block-head').getByRole('button', { name: 'Add…', exact: true })).toBeFocused()
+  // Run by keyboard: Run and the queue's buttons are disabled or gone while
+  // the batch runs; when it ends, focus is on the summary it filled.
+  await page.getByRole('button', { name: `Run ${NAMES.length} remaining files` }).focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByText(`${NAMES.length - 1}/${NAMES.length} done`)).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByRole('heading', { name: 'Summary' })).toBeFocused()
+  expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe('BODY')
+})

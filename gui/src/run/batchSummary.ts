@@ -45,7 +45,16 @@ export interface JobData {
   census: string | null
   /// The parameters the job was sent.
   params: Record<string, unknown>
+  /// The reports the job was sent (a path in its resolved outputs) that
+  /// could not be read or parsed, with why: their cells say so, not that
+  /// the report was not written or the detection was off.
+  unread?: Partial<Record<SentReport, string>>
+  /// Reading the job's reports failed as a whole, with why.
+  failed?: string
 }
+
+/// The reports a summary cell reads, by the output that names them.
+export type SentReport = 'digest_out' | 'label_out' | 'massgap_out' | 'species_out'
 
 export interface Cell {
   /// What the cell shows, and the TSV writes.
@@ -100,17 +109,28 @@ export function jobCells(d: JobData): { tags: number | null; cells: Record<Summa
         { text: g.tone === 'call' ? `${g.value} (ranking)` : g.value, call: null, note: g.note }
       : called(g, sp.state === 'called' && sp.present.length > 0 ? sp.present[0].name : null)
   const a = tile('alkylation')
+  // A report the job was sent that could not be read: its cell says that,
+  // with the reason, and never counts.
+  const or = (k: SentReport, c: Cell): Cell => {
+    const why = d.unread?.[k]
+    if (!why) return c
+    return why.startsWith(NOT_READ) ? { text: 'not read', call: null, note: why.slice(NOT_READ.length) } : { text: 'unreadable', call: null, note: why }
+  }
   return {
     tags: parseLog(d.log).tags,
     cells: {
-      genus,
-      protease: called(tile('protease'), p.state === 'call' ? p.enzyme : null),
-      label: called(tile('label'), l.state === 'call' ? l.label : null),
+      genus: or('species_out', genus),
+      protease: or('digest_out', called(tile('protease'), p.state === 'call' ? p.enzyme : null)),
+      label: or('label_out', called(tile('label'), l.state === 'call' ? l.label : null)),
       // FASTag writes no alkylation call (calls.ts): never counted.
-      alkylation: { text: a.value, call: null, note: a.note }
+      alkylation: or('massgap_out', { text: a.value, call: null, note: a.note })
     }
   }
 }
+
+/// The start of an unread entry for a report the job was sent that gave no
+/// content (the backend does not say whether it is missing or unreadable).
+export const NOT_READ = 'not read: '
 
 export interface SummaryRow {
   input: string
@@ -124,6 +144,8 @@ export interface SummaryRow {
   differs: Record<SummaryColumn, boolean>
   /// The job's tags table, once it is done.
   tagsPath: string | null
+  /// A done job whose outputs the app knows: it can be opened in Results.
+  canOpen: boolean
 }
 
 export interface Summary {
@@ -135,11 +157,20 @@ const none = (text: string, note: string): Record<SummaryColumn, Cell> =>
   Object.fromEntries(SUMMARY_COLUMNS.map((k) => [k, { text, call: null, note }])) as Record<SummaryColumn, Cell>
 
 /// The rows of @p jobs, in queue order; @p data: what each done job wrote,
-/// by its input (a done job without an entry is still being read).
+/// by its input (a done job with outputs and without an entry is still being
+/// read).
 export function buildSummary(jobs: readonly BatchJob[], data: ReadonlyMap<string, JobData>): Summary {
   const base = jobs.map((j) => {
-    const d = j.status === 'done' ? data.get(j.input) : undefined
-    const c = d ? jobCells(d) : null
+    const done = j.status === 'done'
+    const d = done && j.outputs ? data.get(j.input) : undefined
+    const c = d && !d.failed ? jobCells(d) : null
+    const doneCells = (): Record<SummaryColumn, Cell> =>
+      // Done without outputs (runJob.ts): the reply naming them never came.
+      !j.outputs
+        ? none('—', 'the app did not learn where this run wrote its outputs; open them with Open a tags TSV…')
+        : d?.failed
+          ? none('unreadable', `its reports could not be read: ${d.failed}`)
+          : none('reading…', 'its reports are being read')
     return {
       input: j.input,
       file: baseName(j.input),
@@ -149,10 +180,11 @@ export function buildSummary(jobs: readonly BatchJob[], data: ReadonlyMap<string
       tags: c ? c.tags : j.status === 'done' ? (j.tags ?? null) : null,
       cells: c
         ? c.cells
-        : j.status === 'done'
-          ? none('reading…', 'its reports are being read')
+        : done
+          ? doneCells()
           : none('—', j.status === 'failed' ? 'the job failed: no reports' : j.status === 'cancelled' ? 'the job was cancelled' : 'not run yet'),
-      tagsPath: j.status === 'done' ? (j.outputs?.out ?? j.out) : null
+      tagsPath: done ? (j.outputs?.out ?? j.out) : null,
+      canOpen: done && !!j.outputs?.out
     }
   })
   const maj = Object.fromEntries(SUMMARY_COLUMNS.map((k) => [k, majority(base.map((r) => r.cells[k].call))])) as Record<SummaryColumn, Majority>

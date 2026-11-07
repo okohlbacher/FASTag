@@ -191,4 +191,101 @@ describe('folder input and the output folder', () => {
     // The summary reads them there.
     await waitFor(() => expect(within(bodyRows()[1]).getByText('TMT')).toBeDefined())
   })
+
+})
+
+describe('what a summary cell says when a read goes wrong, and where notes show', () => {
+  it('a report the job was sent but could not read says "unreadable" with the error, in the cell', async () => {
+    const mock = installMockBridge()
+    await renderColdApp(mock)
+    serve(mock, 'a', BATCH_CASES.pxd003531)
+    // An empty digest report (parseRows: the file is empty), a species read
+    // that rejects.
+    mock.reportFiles['/d/a.digest.tsv'] = ''
+    mock.speciesError = new Error('permission denied')
+    await addBatch(mock, ['/d/a.mzML'])
+    await runAll(mock, [BATCH_CASES.pxd003531])
+    await waitFor(() => expect(within(bodyRows()[0]).getAllByText('unreadable')).toHaveLength(2))
+    const [genus, protease] = [...bodyRows()[0].querySelectorAll('td.call-cell')] as HTMLElement[]
+    expect(genus.getAttribute('data-text')).toBe('unreadable')
+    expect(genus.textContent).toContain('Cannot read /d/a.tags.species.tsv: permission denied')
+    expect(genus.textContent).not.toContain('detection was off')
+    expect(protease.getAttribute('data-text')).toBe('unreadable')
+    expect(protease.textContent).toMatch(/^unreadable; Cannot read \/d\/a\.digest\.tsv: .*empty/)
+    expect(protease.textContent).not.toContain('not written')
+  })
+
+  it('a job whose reports cannot be read at all says so instead of "reading…" forever', async () => {
+    const mock = installMockBridge()
+    await renderColdApp(mock)
+    serve(mock, 'a', BATCH_CASES.pxd003531)
+    window.fastag.species = () => {
+      throw new Error('bridge gone')
+    }
+    await addBatch(mock, ['/d/a.mzML'])
+    await runAll(mock, [BATCH_CASES.pxd003531])
+    await waitFor(() => expect(cells(bodyRows()[0]).slice(3)).toEqual(['unreadable', 'unreadable', 'unreadable', 'unreadable']))
+    expect(bodyRows()[0].querySelector('td.call-cell')!.textContent).toContain('its reports could not be read: bridge gone')
+  })
+
+  it('a done job whose outputs the app never learned is not "reading…", and offers no Open', async () => {
+    const mock = installMockBridge()
+    await renderColdApp(mock)
+    await addBatch(mock, ['/d/a.mzML'])
+    mock.holdRun()
+    await startBatch()
+    await waitFor(() => expect(mock.runCalls).toHaveLength(1))
+    await act(async () => {
+      for (const l of BATCH_CASES.pxd003531.log.split('\n').filter(Boolean)) mock.emitLog(l)
+      mock.emitDone({ ok: true, code: 0, runId: mock.lastRunId })
+    })
+    // The reply never comes: the invoke fails after the Done.
+    await act(async () => mock.releaseRun(new Error('reply refused')))
+    await waitFor(() => expect(cells(bodyRows()[0])[1]).toMatch(/^Done/))
+    expect(cells(bodyRows()[0]).slice(3)).toEqual(['—', '—', '—', '—'])
+    expect(within(table()).queryByText('reading…')).toBeNull()
+    expect(bodyRows()[0].querySelector('td.call-cell')!.textContent).toContain('did not learn where this run wrote its outputs')
+    expect(within(table()).queryByRole('button', { name: /^Open .* in Results$/ })).toBeNull()
+  })
+
+  it("each call cell shows its cutoff or caveat, not only on hover", async () => {
+    const mock = installMockBridge()
+    await renderColdApp(mock)
+    serve(mock, 'a', BATCH_CASES.pxd003531)
+    await addBatch(mock, ['/d/a.mzML'])
+    await runAll(mock, [BATCH_CASES.pxd003531])
+    await waitFor(() => expect(within(bodyRows()[0]).getByText('none (label-free)')).toBeDefined())
+    // In the cell's text, so a screen reader reads it with the value; no
+    // tooltip-only caveat.
+    const label = within(bodyRows()[0]).getByText('none (label-free)').closest('td')!
+    expect(label.textContent).toMatch(/^none \(label-free\); CLI label call over/)
+    for (const td of bodyRows()[0].querySelectorAll<HTMLElement>('td.call-cell')) expect(td.getAttribute('title')).toBeNull()
+    // Shown under each value by a keyboard-reachable toggle.
+    expect(table().querySelectorAll('.cell-note')).toHaveLength(0)
+    const toggle = screen.getByRole('button', { name: 'Show cutoffs and caveats' })
+    expect(toggle.getAttribute('aria-pressed')).toBe('false')
+    await click(toggle)
+    expect(toggle.getAttribute('aria-pressed')).toBe('true')
+    const notes = [...bodyRows()[0].querySelectorAll<HTMLElement>('td.call-cell .cell-note')]
+    expect(notes).toHaveLength(4)
+    for (const n of notes) expect(n.textContent!.replace(/^; /, '')).toBeTruthy()
+    expect(within(label).getByText(/^CLI label call over/).closest('.cell-note')).not.toBeNull()
+  })
+
+  it('an empty folder picked from the Batch QC card on Setup says so there', async () => {
+    const mock = installMockBridge()
+    await renderColdApp(mock)
+    await click(screen.getByRole('radio', { name: /^Batch QC/ }))
+    mock.nextPickFolder = '/empty'
+    mock.folderFiles['/empty'] = []
+    await click(screen.getByRole('button', { name: 'Or add a folder…' }))
+    const note = await screen.findByText('No spectra files (mzML, mzPeak, MGF) directly in /empty.')
+    expect(note.closest('.view')!.getAttribute('data-view')).toBe('setup')
+    expect(note.closest('.view')!.hasAttribute('hidden')).toBe(false)
+    expect(note.getAttribute('role')).toBe('status')
+    // A folder that cannot be listed, too.
+    mock.nextPickFolder = '/nope'
+    await click(screen.getByRole('button', { name: 'Or add a folder…' }))
+    expect(await screen.findByText('Cannot read the folder: /nope is not a folder')).toBeDefined()
+  })
 })

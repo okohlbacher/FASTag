@@ -6,25 +6,51 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { REPORT_PARAMS } from '../app/paths'
 import { loadReports } from '../results/reports'
-import type { JobData } from './batchSummary'
+import { NOT_READ, type JobData, type SentReport } from './batchSummary'
 import type { Job } from './runReducer'
+
+const message = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 
 async function readJob(j: Job): Promise<JobData> {
   const o = j.resolvedOutputs!
-  const sent = REPORT_PARAMS.map((n) => o[n]).filter((p): p is string => !!p)
-  const [rep, species] = await Promise.all([
-    loadReports(sent),
+  const unread: Partial<Record<SentReport, string>> = {}
+  // One report at a time, so a read or parse error names its own cell.
+  const reads = REPORT_PARAMS.filter((n) => !!o[n]).map(async (n) => {
+    const r = await loadReports([o[n]!])
+    if (r.errors.length) unread[n] = r.errors.join('; ')
+    return r.reports
+  })
+  const sp = o.species_out
+  const [reports, species] = await Promise.all([
+    Promise.all(reads).then((rs) => rs.flat()),
     // An unreadable species report costs the genus cell only.
-    o.species_out ? window.fastag.species(o.species_out).catch(() => null) : Promise.resolve(null)
+    sp
+      ? window.fastag.species(sp).then(
+          (r) => {
+            // The run was sent -species; the backend reads a missing, empty
+            // or malformed report as none.
+            if (!r) unread.species_out = `${NOT_READ}the species report ${sp} was not found or could not be parsed`
+            return r
+          },
+          (e: unknown) => {
+            unread.species_out = `Cannot read ${sp}: ${message(e)}`
+            return null
+          }
+        )
+      : Promise.resolve(null)
   ])
   return {
     log: j.log?.get() ?? [],
-    reports: rep.reports,
+    reports,
     species,
     census: null,
-    params: (j.params?.['params'] ?? {}) as Record<string, unknown>
+    params: (j.params?.['params'] ?? {}) as Record<string, unknown>,
+    unread
   }
 }
+
+// A job whose reports could not be read at all: its row says so.
+const failedRead = (e: unknown): JobData => ({ log: [], reports: [], species: null, census: null, params: {}, failed: message(e) })
 
 export function useBatchData(jobs: readonly Job[]): ReadonlyMap<string, JobData> {
   // input -> the job id the data was read for, and the data.
@@ -35,8 +61,8 @@ export function useBatchData(jobs: readonly Job[]): ReadonlyMap<string, JobData>
       if (!j.batch || j.status !== 'ok' || !j.resolvedOutputs || asked.current.has(j.id)) continue
       asked.current.add(j.id)
       void readJob(j)
+        .catch(failedRead)
         .then((data) => setRead((m) => new Map(m).set(j.input, { id: j.id, data })))
-        .catch(() => asked.current.delete(j.id))
     }
   }, [jobs])
   return useMemo(() => {

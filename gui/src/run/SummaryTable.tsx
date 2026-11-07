@@ -21,6 +21,9 @@ const count = (n: number | null): string => (n == null ? '—' : n.toLocaleStrin
 
 export default function SummaryTable({ summary, busy, outDir, onShow }: SummaryTableProps): JSX.Element {
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null)
+  // Each cell's cutoff or caveat: always in the cell's text for a screen
+  // reader, shown under its value on request (they make rows tall).
+  const [showNotes, setShowNotes] = useState(false)
   const { rows } = summary
 
   async function exportTsv(): Promise<void> {
@@ -39,7 +42,13 @@ export default function SummaryTable({ summary, busy, outDir, onShow }: SummaryT
   return (
     <section className="block batch-table" aria-labelledby="sum-h">
       <div className="block-head">
-        <h2 id="sum-h">Summary</h2>
+        {/* Focusable: focus lands here when a batch pass ends (App.tsx). */}
+        <h2 id="sum-h" tabIndex={-1}>
+          Summary
+        </h2>
+        <button type="button" className="secondary small" aria-pressed={showNotes} onClick={() => setShowNotes((v) => !v)}>
+          Show cutoffs and caveats
+        </button>
         <button type="button" className="secondary small" onClick={() => void exportTsv()} disabled={rows.length === 0}>
           Export summary TSV…
         </button>
@@ -65,7 +74,7 @@ export default function SummaryTable({ summary, busy, outDir, onShow }: SummaryT
             {rows.map((r) => (
               <tr key={r.input} className={`st-${r.status}`}>
                 <td data-text={r.file} title={r.input}>
-                  {r.status === 'done' && !busy ? (
+                  {r.canOpen && !busy ? (
                     <button type="button" className="link" aria-label={`Open ${r.file} in Results`} title={r.input} onClick={() => onShow(r.input)}>
                       {r.file}
                     </button>
@@ -83,15 +92,22 @@ export default function SummaryTable({ summary, busy, outDir, onShow }: SummaryT
                   const c = r.cells[k]
                   const differs = r.differs[k]
                   return (
-                    <td key={k} data-text={c.text} title={c.note} className={`call-cell ${c.call != null ? 'called' : 'muted'}${differs ? ' differs' : ''}`}>
-                      {c.text}
+                    <td key={k} data-text={c.text} className={`call-cell ${c.call != null ? 'called' : 'muted'}${differs ? ' differs' : ''}`}>
+                      <span className="cell-value">{c.text}</span>
                       {differs && (
                         <>
                           <span className="flag-mark" aria-hidden="true">
                             {' '}≠
                           </span>
-                          <span className="sr-only">differs from the majority {summary.majority[k].value}</span>
+                          <span className="sr-only"> differs from the majority {summary.majority[k].value}</span>
                         </>
+                      )}
+                      {/* Its cutoff or caveat, not only on hover: every call names it. */}
+                      {c.note && (
+                        <span className={showNotes ? 'cell-note' : 'sr-only'}>
+                          <span className="sr-only">; </span>
+                          {c.note}
+                        </span>
                       )}
                     </td>
                   )
@@ -119,7 +135,8 @@ export default function SummaryTable({ summary, busy, outDir, onShow }: SummaryT
       <p className="hint">
         ≠: the call differs from the majority of its column, which needs at least {MIN_CALLS} jobs with a call and more than half of
         them. A no call, too little evidence, a ranking and a job without reports never count. Not validated: these are the calls
-        FASTag wrote; a cell's caveat is in its tooltip and in the run's Overview.
+        FASTag wrote; each cell's cutoff or caveat is read with it by a screen reader and shown under it with Show cutoffs and caveats,
+        as the run's Overview states them.
       </p>
     </section>
   )
