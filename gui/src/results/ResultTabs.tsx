@@ -19,12 +19,26 @@ import type { Evidence, Failure, Reports, Results } from '../run/useRun'
 import type { speciesReach } from '../paramLayout'
 import OverviewPanel from './OverviewPanel'
 import type { Overview, TileAction } from './overview'
+import ReconView from './ReconView'
+import GlycoTable from './GlycoTable'
 
-const TAB_LABEL: Record<Tab, string> = { overview: 'Overview', results: 'Tags', species: 'Species', digest: 'Digest' }
+const TAB_LABEL: Record<Tab, string> = {
+  overview: 'Overview',
+  results: 'Tags',
+  species: 'Species',
+  digest: 'Digest',
+  recon: 'Mass gaps & recon',
+  glyco: 'Glyco'
+}
 // The tabs, in order. Digest is always there: its empty state is a way to
 // open a report. The Overview is there while a run's results are shown.
+// P4c: Mass gaps & recon while a run is shown (its empty state offers the
+// FASTA) or a mass-gap, recon, delta or mzTab file is open; Glyco while a
+// glyco report is.
 const TABS: Tab[] = ['results', 'species', 'digest']
-const WITH_OVERVIEW: Tab[] = ['overview', ...TABS]
+function tabsOf(overview: boolean, recon: boolean, glyco: boolean): Tab[] {
+  return [...(overview ? (['overview'] as Tab[]) : []), ...TABS, ...(recon ? (['recon'] as Tab[]) : []), ...(glyco ? (['glyco'] as Tab[]) : [])]
+}
 
 export interface ResultTabsProps {
   tab: Tab
@@ -63,13 +77,19 @@ export interface ResultTabsProps {
   // for a file without res_conf; null when the form would not repeat the
   // run that wrote the file shown.
   rerunResConf?: { run(): void; disabled: boolean } | null
+  // P4c, the Mass gaps & recon empty state: choose a FASTA (or turn the
+  // reports on) and run again; null: not offered (no run of the form's input).
+  reconAction?: { label: string; run(): void; disabled: boolean } | null
 }
 
 export default function ResultTabs(p: ResultTabsProps): JSX.Element {
   const { setTab, species, speciesRun, reports, batchMiss, results, running, busy, failure, copied } = p
-  const tabs = p.overview ? WITH_OVERVIEW : TABS
-  // An Overview tab whose run is gone (a new run started) shows the Tags.
-  const tab: Tab = p.tab === 'overview' && !p.overview ? 'results' : p.tab
+  const tables = reports.tables ?? {}
+  const massgap = reports.list.find((r) => r.kind === 'massgap') ?? null
+  const hasRecon = !!(p.overview || massgap || tables.recon || tables.delta || tables.reconIds)
+  const tabs = tabsOf(!!p.overview, hasRecon, !!tables.glyco)
+  // A tab whose content is gone (a new run started) shows the Tags.
+  const tab: Tab = tabs.includes(p.tab) ? p.tab : 'results'
   // Arrow keys, Home and End move between the tabs (WAI-ARIA tabs pattern).
   function onTabKey(e: KeyboardEvent<HTMLDivElement>): void {
     const i = tabs.indexOf(tab)
@@ -138,6 +158,14 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
               busy={busy || p.overview.locked}
               onAction={(a) => p.onOverviewAction?.(a)}
             />
+          </div>
+        ) : tab === 'recon' ? (
+          <div className="tablewrap">
+            <ReconView massgap={massgap} tables={tables} action={p.reconAction} onOpen={p.openReport} />
+          </div>
+        ) : tab === 'glyco' && tables.glyco ? (
+          <div className="tablewrap">
+            <GlycoTable key={tables.glyco} path={tables.glyco} />
           </div>
         ) : tab === 'digest' ? (
           <div className="tablewrap">

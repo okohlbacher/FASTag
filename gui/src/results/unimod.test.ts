@@ -5,6 +5,7 @@
 // massgap_mods.tsv) is in the table; and the masses the CLI prints in its
 // own mass-gap report agree with the table to the 4 decimals printed.
 
+// @ts-ignore -- node built-in; the app's tsconfig has no node types
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { compositionMass, marksIn, nearestMark, UNIMOD_MARKS } from './unimod'
@@ -31,7 +32,7 @@ describe('unimod.ts', () => {
   })
 
   it('carries every modification the CLI combines (data/digest/massgap_mods.tsv)', () => {
-    const tsv = readFileSync('../data/digest/massgap_mods.tsv', 'utf8')
+    const tsv: string = readFileSync('../data/digest/massgap_mods.tsv', 'utf8')
     const names = tsv
       .split('\n')
       .filter((l) => l && !l.startsWith('#') && !l.startsWith('name\t'))
@@ -42,7 +43,7 @@ describe('unimod.ts', () => {
   })
 
   it('agrees with the Cys masses the CLI prints in its mass-gap report', () => {
-    const text = readFileSync(`${CLI}v112-pxd014764-delta-ext3/run.massgap.tsv`, 'utf8')
+    const text: string = readFileSync(`${CLI}v112-pxd014764-delta-ext3/run.massgap.tsv`, 'utf8')
     const re = /of (-?\d+\.\d{4}) Da \(([^)]+) \(C\)\)/g
     const seen: string[] = []
     for (const m of text.matchAll(re)) {

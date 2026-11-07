@@ -18,6 +18,7 @@ import type { JobAction } from '../runJob'
 import { baseName, type Report } from '../digestReport'
 import { addJobs, renameJobs, type BatchJob } from './batch'
 import { createLogStore, type LogStore } from './logStore'
+import type { TablePaths } from '../results/tables'
 
 // A run that failed: what failed, and FASTag's own words for why (each failed
 // job of a batch has its own), plus the command line to reproduce it.
@@ -78,6 +79,9 @@ export interface Evidence {
 export interface Reports {
   list: Report[]
   errors: string[]
+  // The wide tables of the run shown or opened (P4c: recon, delta, the
+  // mzTab ids, glyco), read by their viewers when shown.
+  tables?: TablePaths
 }
 
 export type JobStatus = 'queued' | 'running' | 'ok' | 'failed' | 'cancelled'

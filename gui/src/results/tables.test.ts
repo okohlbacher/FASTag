@@ -4,6 +4,7 @@
 // fixture files by hand (awk over the TSVs, the run.log lines), never
 // computed by the GUI.
 
+// @ts-ignore -- node built-in; the app's tsconfig has no node types
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {

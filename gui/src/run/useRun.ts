@@ -14,7 +14,8 @@ import { baseName, value, type Report } from '../digestReport'
 import { perJobOutputs, REPORT_PARAMS } from '../app/paths'
 import { cleanupLines, failText } from '../app/format'
 import type { ViewStore } from '../app/viewStore'
-import { loadReports, sameRun } from '../results/reports'
+import { loadReports, sameRun, sniffPath } from '../results/reports'
+import { tablePaths } from '../results/tables'
 import type { BatchJob } from './batch'
 import { buildSummary } from './batchSummary'
 import { useBatchData } from './useBatchSummary'
@@ -333,7 +334,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     // path is not an output and may hold an old file.
     const sent = REPORT_PARAMS.map((n) => outputs[n]).filter((p): p is string => !!p)
     const rep = await loadReports(sent)
-    dispatch({ type: 'REPORTS', update: { list: rep.reports, errors: rep.errors } })
+    dispatch({ type: 'REPORTS', update: { list: rep.reports, errors: rep.errors, tables: tablePaths(outputs) } })
     if (ran) {
       const sentParams = (ran.params['params'] ?? {}) as Record<string, unknown>
       dispatch({ type: 'SHOWN', shown: { input: inFile, params: sentParams, log: ran.log.get(), reports: rep.reports, species } })
@@ -532,6 +533,20 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   }
 
   async function openReportPath(p: string): Promise<void> {
+    // A wide table (P4c: recon, delta, mzTab ids, glyco) opens in its viewer.
+    const table = await sniffPath(p)
+    if (table) {
+      dispatch({
+        type: 'REPORTS',
+        update: (cur) =>
+          'kind' in table
+            ? { ...cur, tables: { ...(cur.tables ?? {}), [table.kind]: p } }
+            : { ...cur, errors: [...cur.errors, table.error] }
+      })
+      // An unreadable one is named where report errors are: the Digest tab.
+      setTab('kind' in table ? (table.kind === 'glyco' ? 'glyco' : 'recon') : 'digest')
+      return
+    }
     const rep = await loadReports([p])
     if (rep.reports.length === 0 && rep.errors.length === 0) rep.errors.push(`${p} does not exist.`)
     dispatch({
@@ -550,7 +565,8 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
             ]
           : []
         const kept = cur.list.filter((r) => !other.includes(r) && !rep.reports.some((n) => n.kind === r.kind))
-        return { list: [...kept, ...rep.reports], errors: [...notes, ...rep.errors] }
+        // Tables opened with the reports of another run go with them.
+        return { list: [...kept, ...rep.reports], errors: [...notes, ...rep.errors], tables: other.length ? undefined : cur.tables }
       }
     })
     setTab('digest')

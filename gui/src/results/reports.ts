@@ -2,6 +2,7 @@
 
 import { parseReport, value, type Report } from '../digestReport'
 import { dirName } from '../app/paths'
+import { parseTable, sniffTable, type TableKind } from './tables'
 
 // Two runs wrote the same report when the run rows they share agree and the
 // files sit in one folder. run.input is only a basename (sample.mzML from two
@@ -25,4 +26,28 @@ export async function loadReports(paths: string[]): Promise<{ reports: Report[];
     }
   }
   return { reports, errors }
+}
+
+/// What a file the user opens holds when it is one of the wide tables
+/// (results/tables.ts): its kind, or why it cannot be shown (an idXML or
+/// mzIdentML -recon_id_out); null for anything else, which is read as a
+/// long-form report.
+export async function sniffPath(path: string): Promise<{ kind: TableKind } | { error: string } | null> {
+  let text: string | null
+  try {
+    text = await window.fastag.report(path)
+  } catch {
+    return null
+  }
+  if (text == null) return null
+  const kind = sniffTable(text)
+  if (kind) return { kind }
+  if (/^\s*</.test(text)) {
+    try {
+      parseTable(text, path)
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+  return null
 }

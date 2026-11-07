@@ -79,7 +79,7 @@ const api: FastagApi = {
     return typeof r === 'string' ? r : null
   },
   pickResults: () => openOne(TAGS),
-  pickReport: () => openOne([{ name: 'Reports (TSV)', extensions: ['tsv'] }]),
+  pickReport: () => openOne([{ name: 'Reports (TSV, mzTab)', extensions: ['tsv', 'mzTab', 'mztab'] }]),
   pickFolder: async () => {
     const r = await open({ directory: true, multiple: false })
     return typeof r === 'string' ? r : null

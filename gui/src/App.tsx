@@ -34,6 +34,7 @@ import { SECTION_OF } from './paramLayout'
 import type { ParamValue } from './ParamField'
 import RunningPanel from './results/RunningPanel'
 import { buildOverview, type TileAction } from './results/overview'
+import { reconRerun } from './results/ReconView'
 import { INSTRUMENTS, matchesInstrument, presetText } from './setup/presets'
 
 // The tasks whose run lands on the Overview tab (D8): they characterize it.
@@ -530,6 +531,15 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
                         run: () => void overviewAction({ kind: 'enable', label: 'Re-run with per-residue confidence', values: { res_conf: true } }),
                         disabled: busy || !!blocked
                       }
+                    : null
+                }
+                reconAction={
+                  // The run shown, repeated with a FASTA or the reports on.
+                  shown && overview && !overview.locked && bin?.ok
+                    ? (() => {
+                        const a = reconRerun(shown.params)
+                        return { label: a.label, run: () => void overviewAction(a), disabled: busy || !!blocked }
+                      })()
                     : null
                 }
                 runningState={

@@ -10,7 +10,7 @@
 
 import { useSyncExternalStore } from 'react'
 
-export type Tab = 'overview' | 'results' | 'species' | 'digest'
+export type Tab = 'overview' | 'results' | 'species' | 'digest' | 'recon' | 'glyco'
 
 export interface ViewState {
   tab: Tab
