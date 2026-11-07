@@ -18,7 +18,11 @@ under forward and under both orientations:
 
 Prints one line per genus: genus, forward, gain, loss, both, where gain are
 spectra counted only under both and loss spectra counted only under forward,
-then one 'tags' line with the orientation outcome counts.
+then one 'tags' line with the orientation outcome counts. With --decoys D it
+also recomputes the -species_call decoy null (SpeciesLookup::decoyTag, FNV-1a
+plus splitmix64 shuffle, reimplemented here) and prints one 'decoy' line per
+genus: genus, decoy_spectra under forward, decoy_spectra under both (summed
+over the D replicates, one count per genus per spectrum and replicate).
 """
 import argparse
 import math
@@ -51,6 +55,41 @@ def strtod(text):
     return float(m.group(0)) if m else 0.0
 
 
+M64 = (1 << 64) - 1
+
+
+def decoy_tag(seq, j):
+    """SpeciesLookup.cpp decoyTag(): a fixed permutation of the folded tag
+    that is neither the tag nor its reverse, '' when there is none."""
+    f = fold(seq)
+    n = len(f)
+    if n < 2:
+        return ""
+    r = f[::-1]
+    h = 0xcbf29ce484222325
+    for c in f.encode() + bytes(((j >> (8 * b)) & 0xFF) for b in range(4)):
+        h = ((h ^ c) * 0x100000001b3) & M64
+    state = [h]
+
+    def nxt():
+        state[0] = (state[0] + 0x9e3779b97f4a7c15) & M64
+        z = state[0]
+        z = ((z ^ (z >> 30)) * 0xbf58476d1ce4e5b9) & M64
+        z = ((z ^ (z >> 27)) * 0x94d049bb133111eb) & M64
+        return z ^ (z >> 31)
+
+    p = list(f)
+    for i in range(n - 1, 0, -1):
+        k = nxt() % (i + 1)
+        p[i], p[k] = p[k], p[i]
+    p = "".join(p)
+    for _ in range(n):
+        if p != f and p != r:
+            return p
+        p = p[1:] + p[:1]
+    return ""
+
+
 def read_fasta(path):
     seq = []
     with open(path) as fh:
@@ -74,6 +113,7 @@ def main():
     ap.add_argument("--genus", required=True, help="taxid:genus,... for every proteome")
     ap.add_argument("--share-cap", type=int, default=0, help="0 = number of taxa (no skip)")
     ap.add_argument("--min-margin", type=float, default=0.0)
+    ap.add_argument("--decoys", type=int, default=0, help="D of -species_call_decoys; 0 = no decoy lines")
     a = ap.parse_args()
     k = a.k
     min_len = max(a.min_len, k)
@@ -98,9 +138,11 @@ def main():
         for seq, _ in rows:
             if len(seq) < min_len:
                 continue
-            for s in (fold(seq), fold(seq[::-1])):
-                for i in range(len(s) - k + 1):
-                    wanted.add(s[i:i + k])
+            variants = [seq] + [decoy_tag(seq, j) for j in range(a.decoys)]
+            for v in variants:
+                for s in (fold(v), fold(v[::-1])):
+                    for i in range(len(s) - k + 1):
+                        wanted.add(s[i:i + k])
     index = {}
     taxa_all = sorted(genus)
     for tx in taxa_all:
@@ -137,23 +179,26 @@ def main():
 
     outcome = {"forward": 0, "reverse": 0, "both": 0, "palindrome": 0, "ambiguous": 0}
 
-    def both(seq):
+    def both(seq, oc=outcome):
+        # oc=None: a decoy tag, whose outcomes the run log does not count.
+        oc = oc if oc is not None else {}
         fwd = support(seq)
         r = fold(seq[::-1])
         if r == fold(seq):
             if fwd:
-                outcome["palindrome"] += 1
+                oc["palindrome"] = oc.get("palindrome", 0) + 1
             return fwd
         rev = support(r)
         if fwd and rev:
             inter = sorted(set(fwd) & set(rev))
-            outcome["both" if inter else "ambiguous"] += 1
+            key = "both" if inter else "ambiguous"
+            oc[key] = oc.get(key, 0) + 1
             return inter
         if fwd:
-            outcome["forward"] += 1
+            oc["forward"] = oc.get("forward", 0) + 1
             return fwd
         if rev:
-            outcome["reverse"] += 1
+            oc["reverse"] = oc.get("reverse", 0) + 1
             return rev
         return []
 
@@ -166,13 +211,27 @@ def main():
         return {x for ev, t in inf if ev == b for x in t}
 
     fcount, bcount, gain, loss = {}, {}, {}, {}
+    dfwd, dboth = {}, {}
     for rows in by_spec.values():
         fs, bs = [], []
+        dfs = [[] for _ in range(a.decoys)]
+        dbs = [[] for _ in range(a.decoys)]
         for seq, ev in rows:
             if len(seq) < min_len:
                 continue
+            for j in range(a.decoys):
+                d = decoy_tag(seq, j)
+                if not d:
+                    continue
+                dfs[j].append((ev, support(d)))
+                dbs[j].append((ev, both(d, None)))
             fs.append((ev, support(seq)))
             bs.append((ev, both(seq)))
+        for j in range(a.decoys):
+            for g in {genus[t] for t in spectrum_taxa(dfs[j])}:
+                dfwd[g] = dfwd.get(g, 0) + 1
+            for g in {genus[t] for t in spectrum_taxa(dbs[j])}:
+                dboth[g] = dboth.get(g, 0) + 1
         fg = {genus[t] for t in spectrum_taxa(fs)}
         bg = {genus[t] for t in spectrum_taxa(bs)}
         for g in fg:
@@ -185,6 +244,9 @@ def main():
             loss[g] = loss.get(g, 0) + 1
     for g in sorted(set(genus.values())):
         print("%d\t%d\t%d\t%d\t%d" % (g, fcount.get(g, 0), gain.get(g, 0), loss.get(g, 0), bcount.get(g, 0)))
+    if a.decoys:
+        for g in sorted(set(genus.values())):
+            print("decoy\t%d\t%d\t%d" % (g, dfwd.get(g, 0), dboth.get(g, 0)))
     print("tags\t%(forward)d\t%(reverse)d\t%(both)d\t%(palindrome)d\t%(ambiguous)d" % outcome)
     return 0
 

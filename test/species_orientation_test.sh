@@ -12,7 +12,8 @@
 #   * at the default -max_evalue/-max_tags the absent genera gain at most the
 #     predicted reverse-only gain, which is <= 2;
 #   * both with -orientation forward is the same report; both is the same at
-#     1, 3 and 8 threads; both with -species_call decoy keeps 15 fields;
+#     1, 3 and 8 threads; both with -species_call decoy keeps 15 fields, and
+#     its decoy_spectra equal the recount's decoy tags under the same rule;
 #   * the ignored-option warning and the -stream refusal.
 # Exits 77 (ctest SKIP) when the binary cannot start or python3 is missing.
 set -u
@@ -134,7 +135,7 @@ check_counts() {  # label forward-tags forward-report both-report -> $TMP/<label
     || fail "recount script ($1)"
   echo "recount $1:"; cat "$TMP/$1.recount"
   while IFS=$'\t' read -r g f gain loss b; do
-    [ "$g" = tags ] && continue
+    [ "$g" = tags ] || [ "$g" = decoy ] && continue
     [ "$b" = $((f + gain - loss)) ] || fail "recount inconsistent for $g"
     same_count "$3" "$g" "$f" "$1 forward"
     same_count "$4" "$g" "$b" "$1 both"
@@ -183,6 +184,31 @@ awk -F'\t' 'NR > 1 && $8 == "NA" { exit 1 }' "$TMP/dec.species.tsv" || fail "bot
 for g in 561 590 1279 4930; do
   [ "$(obs "$TMP/dec.species.tsv" "$g")" = "$(obs "$B" "$g")" ] || fail "decoy changed the observed count of $g"
 done
+# The decoy null follows the orientation rule: decoy_spectra (column 11) of
+# forward and both runs equal the recount of SpeciesLookup::decoyTag under
+# each rule (D = 5, the default -species_call_decoys).
+run decf "${COMMON[@]}" -species "${TAX[@]}" -species_call decoy \
+    -species_call_min_units 10 -species_call_params "$TMP/params.tsv" -threads 2 \
+  || { cat "$TMP/decf.log" >&2; fail "forward with decoy"; }
+python3 "$RECOUNT" --tags "$TMP/absent.tsv" --prot-dir "$TMP/prot" --k 7 --genus "$GENUS" --decoys 5 \
+  > "$TMP/decoy.recount" || fail "recount script (decoys)"
+grep '^decoy' "$TMP/decoy.recount"
+dcol() { awk -F'\t' -v t="$2" 'NR > 1 && $2 == t { v = $11 } END { print v + 0 }' "$1"; }
+n_dec=0; n_diff=0; n_nz=0
+while IFS=$'\t' read -r _ g df db; do
+  if seen "$TMP/decf.species.tsv" "$g"; then
+    [ "$(dcol "$TMP/decf.species.tsv" "$g")" = "$df" ] || fail "genus $g: forward decoy_spectra $(dcol "$TMP/decf.species.tsv" "$g") != recount $df"
+    n_dec=$((n_dec + 1))
+  fi
+  if seen "$TMP/dec.species.tsv" "$g"; then
+    [ "$(dcol "$TMP/dec.species.tsv" "$g")" = "$db" ] || fail "genus $g: both decoy_spectra $(dcol "$TMP/dec.species.tsv" "$g") != recount $db"
+    n_dec=$((n_dec + 1))
+  fi
+  [ "$db" -gt 0 ] && n_nz=$((n_nz + 1))
+  [ "$db" != "$df" ] && n_diff=$((n_diff + 1))
+done < <(grep '^decoy' "$TMP/decoy.recount")
+[ "$n_dec" -ge 4 ] && [ "$n_nz" -gt 0 ] && [ "$n_diff" -gt 0 ] \
+  || fail "decoy check vacuous ($n_dec rows compared, $n_nz genera with decoy hits, $n_diff differ between the rules)"
 
 # ---- warnings and refusals --------------------------------------------------------
 run warn "${COMMON[@]}" -species_orientation both -threads 2 || { cat "$TMP/warn.log" >&2; fail "without -species"; }
