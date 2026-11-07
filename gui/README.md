@@ -45,7 +45,11 @@ gui/
                        overview.ts (tiles, checks, suggested settings) and calls.ts (the
                        parser of the calls FASTag wrote)
     ParamField.tsx     one form field per manifest parameter
-    ResultsTable.tsx   tags browser: virtualized table with filters, column choice and export
+    ResultsTable.tsx   tags browser: virtualized table with filters, column choice and export,
+                       a keyboard active row, copy row and copy USI
+    export/            denovo.ts: Stitch and ALPS reads, a byte-exact port of
+                       tools/tags_to_denovo.py (its golden files in fixtures/denovo/),
+                       the reference the test bridges convert with
     SpeciesPanel.tsx   species report
     Leftovers.tsx      the startup offer to remove files an unfinished run left (sweep.rs)
     DigestPanel.tsx    digest, label and mass-gap reports
@@ -72,7 +76,8 @@ gui/
                        HelpView.tsx with its search (search.ts, over every page, the FAQ, the
                        glossary and the settings), the link store (link.ts) and the "?" links (HelpLink.tsx)
   scripts/             gen-params.mjs (parameter manifest), bundle-macos.sh (macOS resource tree for release bundles),
-                       check-dist-clean.mjs (a release dist/ carries no mock or fixture code)
+                       check-dist-clean.mjs (a release dist/ carries no mock or fixture code),
+                       denovo-golden.mjs (the de novo golden files from tools/tags_to_denovo.py)
   testing/stub-fastag/ a sh stand-in for the CLI, for the Rust run-lifecycle tests
   e2e-web/             Playwright specs and their fixtures (see Tests)
   src-tauri/           Rust backend
@@ -101,6 +106,8 @@ gui/
     src/report.rs      digest/label/mass-gap report read
     src/inspect.rs     the CLI's options (--helphelp) and the metadata probe (-probe_input, run
                        only when --helphelp lists it; timeout and output cap)
+    src/denovo.rs      the Stitch/ALPS export job: tools/tags_to_denovo.py ported (the same golden
+                       files), one pass over the file, progress and Cancel, the reads to a .csv via .part
     examples/browser_bench.rs  the browser bench (bench/bench-<version>.json)
     tauri.conf.json    window, bundle, icons
     resources/fastag/  the bundled FASTag binary + share/ (dev: symlinks; release: real files)
@@ -229,6 +236,25 @@ tauri-plugin-store in `settings.json` in the app config folder; a settings
 file of an earlier version is migrated on the first start, every preset
 kept, and the old file stays beside it as `settings.v1.json.bak`.
 
+The **Tags** table opens in file order and swaps in the E-value order when
+it is ready. Its rows can be walked by keyboard: the arrows, Page Up/Down and
+Home/End move the active row (a roving tabindex: the active row is the
+table's one tab stop), Cmd+C copies it (its shown cells, tab-separated) and
+Cmd+Shift+C its USI (from the `usi` column, `-usi_collection`); **Copy row**
+and **Copy USI** do the same. The spectrum filter's placeholder is the first
+spectrum ID's scan, frame or index part. **Export as** writes the table (TSV,
+or CSV for a name ending in .csv: the shown rows, columns and order) or, for
+a file with the `res_conf` column (`-res_conf`), **Stitch** or **ALPS**
+reads: exactly what `tools/tags_to_denovo.py --format stitch|alps --top-n N
+--min-length L` writes from the whole file, by default the best tag of each
+spectrum of at least 8 residues. The table's filters do not apply to reads.
+The reads export is a job like the table export: the backend (`denovo.rs`,
+checked byte for byte against the script's golden files) reads the file once,
+with no size limit, and shows its progress in MB read with **Cancel export**;
+a cancelled or failed export leaves no file. For a run's output without
+`res_conf`, **Re-run with per-residue confidence** runs the same input again
+with `-res_conf` on.
+
 Help is a side panel beside any view, with a search over every page, the
 troubleshooting entries, the glossary and the settings reference.
 
@@ -325,7 +351,9 @@ File, Run, View and Help menus.
 | Cmd+O / Cmd+Shift+O | Open spectra / open a tags TSV |
 | Cmd+Enter | Run (or run the batch) |
 | Cmd+. or Esc | Cancel the run |
-| Cmd+E | Export the shown rows |
+| Cmd+E | Export the shown rows (or the reads, with Stitch or ALPS chosen) |
+| ↑ ↓, Page Up/Down, Home/End | Move the active row of the Tags table |
+| Cmd+C / Cmd+Shift+C | Copy the active row / its USI |
 | Cmd+1 .. Cmd+4 | Setup, Results, Batch, History |
 | Cmd+? (F1, ?) | Help |
 | Cmd+K or / | Search parameters by name, flag or help text |
@@ -467,6 +495,18 @@ them), which `cargo test` or `cargo build --examples` builds;
 `FASTAG_ORDER_RS` names another helper. CI runs them in the release-only
 `gui-cli-consistency` job, on a tag and on a `gui_dry_run` dispatch, against
 the portable linux-x64 CLI. See `src/adversarial/external.ts`.
+
+The Stitch/ALPS export (P3) is tested against golden files that the
+repository's `tools/tags_to_denovo.py` writes (`src/fixtures/denovo/`: the
+real `-res_conf -usi_collection` tags of the E. coli fixture and a
+hand-written file with every edge case the script handles, each in the
+cases of `cases.json`). `node scripts/denovo-golden.mjs` (the `gui` CI job)
+runs the script on every case and fails when its output differs from the
+committed files; `--write` regenerates them. `src/export/denovo.test.ts`
+checks that `export/denovo.ts` writes them byte for byte, the `denovo`
+cargo tests that `src/denovo.rs` does, and
+`e2e-web/specs/p3b.spec.ts` that the app exports them, with the keyboard
+row navigation and the copy actions.
 
 The tests in `src/help/` check that every Help link lands on a section that
 exists, that every CLI parameter has a settings entry, that every digest

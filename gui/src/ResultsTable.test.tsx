@@ -67,9 +67,9 @@ describe('ResultsTable', () => {
     mock.resultsRows = [['a', 'fwd'], ['b', 'erev'], ['c', '-']]
     render(<ResultsTable path="/d/y.tags.tsv" />)
     await flush()
-    expect(screen.getByRole('cell', { name: 'fwd' }).textContent).toBe('In database')
-    expect(screen.getByRole('cell', { name: 'erev' }).textContent).toBe('Entrapment')
-    expect(screen.getByRole('cell', { name: '-' }).textContent).toBe('No match')
+    expect(screen.getByRole('gridcell', { name: 'fwd' }).textContent).toBe('In database')
+    expect(screen.getByRole('gridcell', { name: 'erev' }).textContent).toBe('Entrapment')
+    expect(screen.getByRole('gridcell', { name: '-' }).textContent).toBe('No match')
   })
 
   it('filters commit on Enter, not per keystroke', async () => {
@@ -122,7 +122,7 @@ describe('ResultsTable', () => {
     mock.resultsRows = [['scan=1', 'PEPTIDE', '4.17011e-08', 'efwd']]
     render(<ResultsTable path="/d/x.tags.tsv" />)
     await flush()
-    const cell = screen.getByRole('cell', { name: '4.17011e-08' })
+    const cell = screen.getByRole('gridcell', { name: '4.17011e-08' })
     expect(cell.textContent).toBe('4.2 × 10−8')
     expect(cell.className).toContain(' n') // numeric: right-aligned
     const ent = screen.getByRole('button', { name: 'Entrapment' })

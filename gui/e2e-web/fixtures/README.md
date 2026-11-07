@@ -11,3 +11,9 @@ writes for the repository's public test fixture
 OpenMS's own example (BSD-3-Clause, see `test/fixtures/README.md`). Only the
 Playwright e2e build reads it (`src/testing/e2eBridge.ts`); a release build
 must not contain it (`scripts/check-dist-clean.mjs`).
+
+The `denovo` scenario serves `src/fixtures/denovo/ecoli.res_conf.tags.tsv`
+instead: the same mzML with `-res_conf -usi_collection` (see the README
+there), whose Stitch/ALPS reads `specs/p3b.spec.ts` compares with the golden
+files `tools/tags_to_denovo.py` writes. Its first spectrum ID is the same,
+so the release-dist check above covers it as well.

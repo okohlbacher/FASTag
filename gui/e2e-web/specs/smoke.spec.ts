@@ -20,5 +20,5 @@ test('first result in two clicks: choose the file, run it', async ({ page }) => 
   // The real FASTag 1.11.0 tags of the public E. coli fixture.
   await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'run01.tags.tsv' })).toBeVisible()
-  await expect(page.getByRole('table').getByRole('row').nth(1)).toContainText('scan=')
+  await expect(page.getByRole('grid').getByRole('row').nth(1)).toContainText('scan=')
 })

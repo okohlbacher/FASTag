@@ -36,6 +36,8 @@ e2e-web/playwright-report
 # .log files are source too
 !src/fixtures/cli/**/*.tsv
 !src/fixtures/cli/**/*.log
+# ...and the de novo inputs (gui/src/fixtures/denovo/), the golden files' sources
+!src/fixtures/denovo/*.tsv
 # The tauri-driver specs' recorded gates and logs (e2e-tauri/run.sh)
 e2e-tauri/results
 # The committed real CLI outputs (the repository ignores *.tsv)

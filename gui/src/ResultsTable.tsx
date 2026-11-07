@@ -2,7 +2,8 @@ import { useEffect, useId, useMemo, useRef, useState, type JSX, type KeyboardEve
 import type { BrowserEvent, ResultsHead, ResultsPage, ResultsSort, ResultsView } from './types'
 import { baseName, DECIMAL } from './digestReport'
 import { HelpButton, HelpLink } from './help/HelpLink'
-import { useExportJob, useExportJobs } from './results/exportJobs'
+import { READS_NAME, useExportJob, useExportJobs, type ExportJob } from './results/exportJobs'
+import { canExportReads, DENOVO_DEFAULTS, type DenovoFormat } from './export/denovo'
 
 // Hand-rolled fixed-row-height virtualization. Not react-window: above ~600k
 // rows the spacer div would exceed WebKit's ~16.7M px element-height limit and
@@ -234,6 +235,33 @@ export function headServes(view: ResultsView): boolean {
   )
 }
 
+/// The spectrum filter's placeholder, from the file's first spectrum ID: its
+/// scan, frame or index part (`scan=11461`, `frame=5`), else its last
+/// key=value part, else the ID itself (an MGF title) cut to 30 characters.
+/// A fixed `scan=4112` misled on files whose IDs are `frame=N`.
+export function spectrumHint(id: string | undefined): string {
+  const t = (id ?? '').trim()
+  if (!t) return ''
+  const parts = t.split(/\s+/).filter((p) => /^[^=]+=./.test(p))
+  return parts.find((p) => /^(scan|frame|index)=/i.test(p)) ?? parts[parts.length - 1] ?? t.slice(0, 30)
+}
+
+/// What a job's progress counts: rows written, or (a reads job) MB read.
+function progressText(job: ExportJob): string {
+  const pct = exportPct(job.done, job.total)
+  if (job.unit === 'rows') return `${pct}% (${job.done.toLocaleString('en-US')} of ${job.total.toLocaleString('en-US')} rows)`
+  const mb = (b: number): string => (b / 1e6).toLocaleString('en-US', { maximumFractionDigits: b < 1e7 ? 1 : 0 })
+  return `${pct}% (${mb(job.done)} of ${mb(job.total)} MB read)`
+}
+
+/// What a job is said to do when it starts: a reads job names the tags it
+/// reads (the reads it writes are known only at its end).
+function jobStartText(job: ExportJob): string {
+  if (job.kind === 'table') return `Exporting to ${job.dest}…`
+  const n = job.tags ?? 0
+  return `Writing ${READS_NAME[job.kind]} reads from ${n.toLocaleString('en-US')} ${n === 1 ? 'tag' : 'tags'} to ${job.dest}…`
+}
+
 /// The scrollTop that puts row @p pos in the middle of a viewport of @p viewH
 /// (the same mapping the virtualization reads back, capped spacer included).
 export function scrollTopFor(pos: number, matched: number, viewH: number): number {
@@ -248,9 +276,13 @@ interface Props {
   path: string
   /// Where the file came from, beside its row count: the run that wrote it.
   source?: string
+  /// A file without res_conf (GUI-DESIGN S8): runs the form's input again
+  /// with -res_conf on. Given only when this file is the output of the run
+  /// the form would repeat; disabled while busy.
+  rerunResConf?: { run(): void; disabled: boolean } | null
 }
 
-export default function ResultsTable({ path, source }: Props): JSX.Element {
+export default function ResultsTable({ path, source, rerunResConf }: Props): JSX.Element {
   const [meta, setMeta] = useState<Meta | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Best tags first, as the CLI ranks them. A file without an evalue column
@@ -296,6 +328,19 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
   activeRef.current = active
   // Said once the ranked order is in (aria-live).
   const [rankNote, setRankNote] = useState('')
+  // The active row's place in the view (keyboard model, GUI-DESIGN S4);
+  // null: not known (no active row, or the view changed under it).
+  const [activePos, setActivePos] = useState<number | null>(null)
+  // The keyboard moved to a row whose page has not arrived: its file row is
+  // taken when it does.
+  const idPending = useRef(false)
+  // The keyboard moved: focus follows the active row once it is rendered.
+  const wantFocus = useRef(false)
+  // What Copy row / Copy USI did (aria-live).
+  const [copyNote, setCopyNote] = useState('')
+  // Export as the table (TSV or CSV) or as de novo reads (export/denovo.ts).
+  const [exportKind, setExportKind] = useState<'table' | DenovoFormat>('table')
+  const [readsOpts, setReadsOpts] = useState({ minLength: String(DENOVO_DEFAULTS.minLength), topN: String(DENOVO_DEFAULTS.topN) })
   const firstRef = useRef(0)
   const matchedRef = useRef(0)
   const formRef = useRef<HTMLFormElement>(null)
@@ -346,7 +391,10 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
     setHead(null)
     setRank(null)
     setActive(null)
+    setActivePos(null)
+    idPending.current = false
     setRankNote('')
+    setCopyNote('')
     rankedSeen.current = false
     openedRef.current = null
     // D5: the first rows from the head read, at once; the index and the
@@ -409,6 +457,9 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
     pumpFrame.current = null
     setError(null)
     setScrollTop(0)
+    // The active row stays (by file row); its place in the new view is not known.
+    setActivePos(null)
+    idPending.current = false
     if (scrollerRef.current) scrollerRef.current.scrollTop = 0
     return () => {
       genRef.current++
@@ -543,6 +594,9 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
     }
     swapWaiting.current = false
     fileOrderShown.current = false
+    // The active row's place changes with the order: it comes back below.
+    setActivePos(null)
+    idPending.current = false
     const firstId = pagesRef.current.get(Math.floor(firstRef.current / PAGE))?.ids?.[firstRef.current % PAGE]
     const anchor = activeRef.current ?? (scrollerRef.current && scrollerRef.current.scrollTop > 0 ? firstId ?? null : null)
     genRef.current++
@@ -562,6 +616,7 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
           const el = scrollerRef.current
           el.scrollTop = scrollTopFor(pos, matchedRef.current, el.clientHeight || 600)
           setScrollTop(el.scrollTop)
+          if (anchor === activeRef.current) setActivePos(pos)
         },
         () => {}
       )
@@ -656,10 +711,31 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
     wasRunning.current = running
   }, [job?.running])
 
+  // Stitch/ALPS (GUI-DESIGN 10 P3): reads from the whole file as
+  // tools/tags_to_denovo.py writes them (export/denovo.ts), with its two
+  // options; the table's filters do not apply.
+  const readsOk = canExportReads(columns)
+  const kind = readsOk ? exportKind : 'table'
+  const readsMin = /^\s*-?\d+\s*$/.test(readsOpts.minLength) ? Number(readsOpts.minLength) : null
+  const readsTop = /^\s*\d+\s*$/.test(readsOpts.topN) && Number(readsOpts.topN) >= 1 ? Number(readsOpts.topN) : null
+  // A job in the backend (denovo.rs) with progress and Cancel, as the table
+  // export: the file is read there, never in the renderer.
+  async function exportReads(format: DenovoFormat): Promise<void> {
+    if (readsMin == null || readsTop == null || !meta) return
+    const stem = path.endsWith('.tsv') ? path.slice(0, -4) : path
+    const dest = await window.fastag.saveFile(`${stem}.${format}.csv`, ['csv'])
+    if (!dest) return
+    await exportJobs.startReads(path, dest, { format, topN: readsTop, minLength: readsMin }, meta.total)
+  }
+  const startExport = (): void => void (kind === 'table' ? exportShown() : exportReads(kind))
+
   // Cmd+E and File > Export Shown Rows… (App dispatches 'fastag-action').
-  const exportRef = useRef(exportShown)
-  exportRef.current = exportShown
-  const canExport = !!meta && matched > 0 && !job?.running
+  const exportRef = useRef(startExport)
+  exportRef.current = startExport
+  const canExport =
+    !!meta &&
+    !job?.running &&
+    (kind === 'table' ? matched > 0 : meta.total > 0 && readsMin != null && readsTop != null)
   useEffect(() => {
     const on = (e: Event): void => {
       if ((e as CustomEvent<string>).detail === 'export' && canExport) void exportRef.current()
@@ -668,34 +744,208 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
     return () => window.removeEventListener('fastag-action', on)
   }, [canExport])
 
+  // The row at place @p pos of the view, and its file row, when loaded.
+  const rowAt = (pos: number): { row?: string[]; id?: number } => {
+    const pg = pagesRef.current.get(Math.floor(pos / PAGE))
+    if (pg) return { row: pg.rows[pos % PAGE], id: pg.ids?.[pos % PAGE] }
+    if (useHead && head) return { row: head.rows[pos], id: pos }
+    return {}
+  }
+
+  // A keyboard move reached a row before its page: take its file row now.
+  useEffect(() => {
+    if (!idPending.current || activePos == null) return
+    const { id } = rowAt(activePos)
+    if (id != null) {
+      idPending.current = false
+      setActive(id)
+    }
+  })
+
+  // Focus follows the active row (roving tabindex) after a keyboard move.
+  useEffect(() => {
+    if (!wantFocus.current) return
+    const el = scrollerRef.current?.querySelector<HTMLElement>('.rt-rows .rt-row.active')
+    if (el) {
+      wantFocus.current = false
+      if (document.activeElement !== el) el.focus({ preventScroll: true })
+    }
+  })
+
+  // The active row's place: known, or found among the loaded rows.
+  const currentPos = (): number | null => {
+    if (activePos != null) return activePos
+    if (active == null) return null
+    for (const [p, pg] of pagesRef.current) {
+      const k = pg.ids?.indexOf(active) ?? -1
+      if (k >= 0) return p * PAGE + k
+    }
+    return null
+  }
+
+  // Scroll so that row @p pos is in view, below the sticky header.
+  const reveal = (pos: number): void => {
+    const el = scrollerRef.current
+    if (!el) return
+    const h = el.clientHeight || 600
+    const m = matchedRef.current
+    let top = el.scrollTop
+    if (m * ROW_H <= SPACER_CAP) {
+      const area = h - HEAD_H
+      if (pos * ROW_H < top) top = pos * ROW_H
+      else if ((pos + 1) * ROW_H > top + area) top = (pos + 1) * ROW_H - area
+    } else {
+      const vis = Math.min(MAX_DOM_ROWS, Math.ceil(h / ROW_H) + OVERSCAN)
+      const f = firstRef.current
+      if (pos < f || pos > f + vis - OVERSCAN - 2) top = scrollTopFor(pos, m, h)
+    }
+    if (top !== el.scrollTop) {
+      el.scrollTop = top
+      setScrollTop(el.scrollTop)
+    }
+  }
+
+  const moveTo = (pos: number): void => {
+    const { id } = rowAt(pos)
+    setActivePos(pos)
+    setActive(id ?? null)
+    idPending.current = id == null
+    wantFocus.current = true
+    // The row may leave the DOM before its new place renders: hold focus in
+    // the table meanwhile, not on the page.
+    const el = scrollerRef.current
+    if (el && el.contains(document.activeElement) && !el.querySelector(`.rt-rows .rt-row[aria-rowindex="${pos + 2}"]`)) {
+      el.focus({ preventScroll: true })
+    }
+    reveal(pos)
+  }
+
+  // The active row as the shown cells; its usi cell.
+  const activeRowCells = (): string[] | null => {
+    const pos = currentPos()
+    const row = pos != null ? rowAt(pos).row : undefined
+    return row ?? null
+  }
+  const usiCol = columns.indexOf('usi')
+  async function copy(text: string, what: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopyNote(`Copied the ${what}.`)
+    } catch {
+      setCopyNote(`The clipboard refused the ${what}.`)
+    }
+  }
+  const rowText = (row: string[]): string => shown.map((j) => row[j] ?? '').join('\t')
+  const copyRow = (): void => {
+    const row = activeRowCells()
+    if (row) void copy(rowText(row), 'row')
+  }
+  const copyUsi = (): void => {
+    const row = activeRowCells()
+    if (!row) return
+    if (usiCol < 0) {
+      setCopyNote('This file has no usi column: run FASTag with -usi_collection to write one.')
+      return
+    }
+    const usi = row[usiCol] ?? ''
+    if (usi === '' || usi === '-') {
+      setCopyNote('This row has no USI.')
+      return
+    }
+    void copy(usi, 'USI')
+  }
+
+  const onTableKey = (e: KeyboardEvent<HTMLDivElement>): void => {
+    // The header's sort buttons and resize handles keep their own keys.
+    if ((e.target as HTMLElement).closest('.rt-head')) return
+    const mod = e.metaKey || e.ctrlKey
+    if (mod && (e.key === 'c' || e.key === 'C')) {
+      // A text selection is copied as text, as everywhere.
+      const sel = window.getSelection?.()
+      if (sel && !sel.isCollapsed && sel.toString() !== '') return
+      if (currentPos() == null) return
+      e.preventDefault()
+      if (e.shiftKey) copyUsi()
+      else copyRow()
+      return
+    }
+    if (mod || e.altKey) return
+    const m = matchedRef.current
+    if (m === 0) return
+    const page = Math.max(1, Math.floor(((scrollerRef.current?.clientHeight || 600) - HEAD_H) / ROW_H) - 1)
+    const cur = currentPos()
+    const from = cur ?? firstRef.current
+    let next: number
+    switch (e.key) {
+      case 'ArrowDown':
+        next = cur == null ? from : cur + 1
+        break
+      case 'ArrowUp':
+        next = cur == null ? from : cur - 1
+        break
+      case 'PageDown':
+        next = from + page
+        break
+      case 'PageUp':
+        next = from - page
+        break
+      case 'Home':
+        next = 0
+        break
+      case 'End':
+        next = m - 1
+        break
+      default:
+        return
+    }
+    e.preventDefault()
+    moveTo(Math.max(0, Math.min(m - 1, next)))
+  }
+
   const rowsOut: JSX.Element[] = []
+  let activeShown = false
   for (let i = first; i < last; i++) {
     const pg = pagesRef.current.get(Math.floor(i / PAGE))
     const row = pg?.rows[i % PAGE] ?? (useHead ? head!.rows[i] : undefined)
     const rowId = pg ? pg.ids?.[i % PAGE] : useHead ? i : undefined
-    const selected = rowId != null && rowId === active
+    // By file row once it is known; by place while its page is on the way
+    // (or from a backend that sends no file rows).
+    const selected = rowId != null && active != null ? rowId === active : row != null && activePos === i
+    if (selected) activeShown = true
     rowsOut.push(
       <div
         className={`rt-row${selected ? ' active' : ''}`}
         role="row"
         aria-rowindex={i + 2}
-        aria-selected={rowId != null ? selected : undefined}
+        aria-selected={row != null ? selected : undefined}
+        // Roving tabindex: the active row is the rows' one tab stop.
+        tabIndex={row != null ? (selected ? 0 : -1) : undefined}
         key={i}
         style={{ gridTemplateColumns: grid }}
-        onClick={() => rowId != null && setActive((a) => (a === rowId ? null : rowId))}
+        onClick={() => {
+          if (row == null) return
+          if (selected) {
+            setActive(null)
+            setActivePos(null)
+          } else {
+            setActive(rowId ?? null)
+            setActivePos(i)
+          }
+          idPending.current = false
+        }}
       >
         {row ? (
           shown.map((j) => {
             const c = row[j] ?? ''
             const name = columns[j] ?? ''
             return (
-              <div className={`rt-cell${numeric.has(name) ? ' n' : ''}`} role="cell" key={j} title={c} aria-label={c}>
+              <div className={`rt-cell${numeric.has(name) ? ' n' : ''}`} role="gridcell" key={j} title={c} aria-label={c}>
                 {name === 'evalue' ? <EValue text={c} /> : name === 'fasta_hit' ? hitWords(c) : fitMiddle(c, width(name))}
               </div>
             )
           })
         ) : (
-          <div className="rt-cell dim" role="cell">
+          <div className="rt-cell dim" role="gridcell">
             …
           </div>
         )}
@@ -740,10 +990,104 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
         >
           Columns…
         </button>
-        <button ref={exportBtnRef} type="button" className="secondary" disabled={!canExport} onClick={exportShown}>
-          Export shown rows…
+        <button
+          type="button"
+          className="secondary"
+          disabled={currentPos() == null}
+          title="Copy the active row's shown cells, tab-separated (⌘C)"
+          onClick={copyRow}
+        >
+          Copy row
         </button>
+        <button
+          type="button"
+          className="secondary"
+          disabled={currentPos() == null}
+          title={usiCol >= 0 ? "Copy the active row's USI (⇧⌘C)" : 'This file has no usi column: run FASTag with -usi_collection to write one'}
+          onClick={copyUsi}
+        >
+          Copy USI
+        </button>
+        <span className="rt-exp">
+          <label htmlFor={`${id}-fmt`}>Export as</label>
+          <select
+            id={`${id}-fmt`}
+            value={kind}
+            disabled={!meta}
+            title={readsOk ? undefined : 'Stitch and ALPS reads need the res_conf column: run FASTag with -res_conf'}
+            onChange={(e) => setExportKind(e.target.value as 'table' | DenovoFormat)}
+          >
+            <option value="table">Table (TSV or CSV)</option>
+            <option value="stitch" disabled={!readsOk}>
+              Stitch reads (CSV)
+            </option>
+            <option value="alps" disabled={!readsOk}>
+              ALPS reads (CSV)
+            </option>
+          </select>
+        </span>
+        {meta && !readsOk && rerunResConf && (
+          <button
+            type="button"
+            className="secondary"
+            disabled={rerunResConf.disabled}
+            title="Stitch and ALPS reads need the res_conf column: runs this input again with -res_conf on"
+            onClick={rerunResConf.run}
+          >
+            Re-run with per-residue confidence
+          </button>
+        )}
+        <button ref={exportBtnRef} type="button" className="secondary" disabled={!canExport} onClick={startExport}>
+          {kind === 'table' ? 'Export shown rows…' : 'Export reads…'}
+        </button>
+        <span className="rt-copied" role="status" aria-live="polite">
+          {copyNote}
+        </span>
       </div>
+      {kind !== 'table' && (
+        <div className="rt-reads">
+          <div className="rt-f">
+            <label htmlFor={`${id}-rmin`}>Min. read length</label>
+            <input
+              id={`${id}-rmin`}
+              className="num"
+              inputMode="numeric"
+              aria-invalid={readsMin == null || undefined}
+              aria-describedby={readsMin == null ? `${id}-rmin-h` : undefined}
+              value={readsOpts.minLength}
+              onChange={(e) => setReadsOpts((o) => ({ ...o, minLength: e.target.value }))}
+            />
+            {readsMin == null && (
+              <span className="rt-hint bad" id={`${id}-rmin-h`}>
+                a whole number
+              </span>
+            )}
+          </div>
+          <div className="rt-f">
+            <label htmlFor={`${id}-rtop`}>Reads per spectrum</label>
+            <input
+              id={`${id}-rtop`}
+              className="num"
+              inputMode="numeric"
+              aria-invalid={readsTop == null || undefined}
+              aria-describedby={readsTop == null ? `${id}-rtop-h` : undefined}
+              value={readsOpts.topN}
+              onChange={(e) => setReadsOpts((o) => ({ ...o, topN: e.target.value }))}
+            />
+            {readsTop == null && (
+              <span className="rt-hint bad" id={`${id}-rtop-h`}>
+                at least 1
+              </span>
+            )}
+          </div>
+          <p className="muted">
+            {READS_NAME[kind]} reads from the whole file, as tools/tags_to_denovo.py writes them: the best tags of each spectrum by
+            E-value, of at least the minimum length; the table's filters do not apply. The tags of one spectrum are re-reads of one
+            fragment ladder, so more than one read per spectrum inflates the assembly's depth. I and L are not told apart (L is
+            written).
+          </p>
+        </div>
+      )}
       {colsOpen && meta && (
         <fieldset className="rt-cols" id={`${id}-cols`}>
           <legend>Columns shown</legend>
@@ -772,10 +1116,9 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={exportPct(job.done, job.total)}
-            aria-valuetext={`${exportPct(job.done, job.total)}% (${job.done.toLocaleString('en-US')} of ${job.total.toLocaleString('en-US')} rows)`}
+            aria-valuetext={progressText(job)}
           >
-            Exporting… {exportPct(job.done, job.total)}% ({job.done.toLocaleString('en-US')} of{' '}
-            {job.total.toLocaleString('en-US')} rows)
+            {job.kind === 'table' ? 'Exporting…' : `Writing ${READS_NAME[job.kind]} reads…`} {progressText(job)}
           </span>{' '}
           <button
             type="button"
@@ -790,7 +1133,7 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
       )}
       {/* Always in the page; said twice per job: when it starts, when it ends. */}
       <p className={job?.result ? (job.result.ok ? 'rt-note' : 'rt-note bad') : 'sr-only'} role="status" aria-live="polite">
-        {job?.result ? job.result.text : job?.running ? `Exporting to ${job.dest}…` : ''}
+        {job?.result ? job.result.text : job?.running ? jobStartText(job) : ''}
       </p>
       <form
         ref={formRef}
@@ -812,7 +1155,7 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
             <input
               id={`${id}-sp`}
               className="wide"
-              placeholder="scan=4112"
+              placeholder={spectrumHint(head?.rows[0]?.[columns.indexOf('spectrum')] ?? pagesRef.current.get(0)?.rows[0]?.[columns.indexOf('spectrum')])}
               value={draft.spectrum}
               onChange={(e) => setDraft((d) => ({ ...d, spectrum: e.target.value }))}
               onKeyDown={onEnter}
@@ -907,16 +1250,34 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
       {error ? (
         <div className="empty">Cannot read results: {error}</div>
       ) : (
-        // Focusable scroller: PageUp/PageDown/arrows scroll the rows from the
-        // keyboard (the virtualized rows themselves hold nothing focusable).
-        // A table, not a grid: the cells are read-only, and a grid would
-        // promise arrow-key cell navigation.
+        // Focusable scroller: the arrows, PageUp/PageDown and Home/End move
+        // the active row (GUI-DESIGN S4), ⌘C copies it and ⇧⌘C its USI. With
+        // the active row in the DOM, that row is the tab stop instead
+        // (roving tabindex); its keys bubble up here. A read-only grid, not a
+        // table: the rows move by arrow keys, which screen readers pass to
+        // the page only in a grid (focus mode), and ARIA has aria-selected on
+        // a row only in a grid. While the active row is not rendered (its
+        // page is on the way) the scroller holds focus and the live region
+        // below says where the active row is.
+        <>
         <div
           className="rt-scroll"
           ref={scrollerRef}
-          tabIndex={0}
+          tabIndex={activeShown ? -1 : 0}
           role="region"
           aria-label="Tags table"
+          onKeyDown={onTableKey}
+          onCopy={(e) => {
+            // Edit > Copy (the native menu's ⌘C) with an active row and no
+            // text selection copies the row.
+            const sel = window.getSelection?.()
+            if (sel && !sel.isCollapsed && sel.toString() !== '') return
+            const row = activeRowCells()
+            if (!row) return
+            e.preventDefault()
+            e.clipboardData.setData('text/plain', rowText(row))
+            setCopyNote('Copied the row.')
+          }}
           onScroll={() => {
             if (scrollFrame.current) return
             scrollFrame.current = onNextFrame(() => {
@@ -927,7 +1288,8 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
         >
           <div
             className="rt-canvas"
-            role="table"
+            role="grid"
+            aria-readonly="true"
             aria-label={`Tags in ${baseName(path)}`}
             aria-rowcount={matched + 1}
             aria-colcount={shown.length}
@@ -998,6 +1360,16 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
             </div>
           )}
         </div>
+        {/* Where the active row is while it is not rendered (focus is on
+          the scroller then, and no row's focus says it). Outside the
+          scroller: an absolutely positioned child there would sit at the
+          foot of the 10M-row canvas and make the page itself scroll. */}
+        <span className="sr-only" role="status" aria-live="polite" data-testid="rt-pos">
+          {activePos != null && !activeShown && matched > 0
+            ? `Row ${(activePos + 1).toLocaleString('en-US')} of ${matched.toLocaleString('en-US')}, loading…`
+            : ''}
+        </span>
+        </>
       )}
     </div>
   )

@@ -32,6 +32,7 @@ import type {
   TaxdbInfo
 } from '../types'
 import runStartedFixture from './fixtures/run-started.json'
+import { tagsToDenovo } from '../export/denovo'
 
 export interface RunCall {
   in: string
@@ -136,6 +137,18 @@ export interface MockBridge extends FastagApi {
   lastExportSend: (e: ExportEvent) => void
   emitExport(e: ExportEvent): void
   exportCancelCalls: number[]
+  // Stitch/ALPS export, a job as denovo.rs runs it: path -> the tags file's
+  // text (a job of a path not named here fails as missing); each
+  // exportReads call; the reads written (export/denovo.ts, the port the
+  // golden files check, stands in for denovo.rs). readsWriteError: the next
+  // jobs fail with it. holdExport holds a reads job's end as a table job's:
+  // emitExport sends its events, and finishReads ends it as denovo.rs would
+  // (it writes the reads and sends readsDone).
+  tagsFiles: Record<string, string>
+  readsCalls: { path: string; dest: string; format: 'stitch' | 'alps'; topN: number; minLength: number }[]
+  readsWrites: { source: string; dest: string; text: string }[]
+  readsWriteError: string | null
+  finishReads(): void
   speciesCalls: string[]
   cancelCalls: number
   savedLast: Record<string, unknown>[]
@@ -263,6 +276,7 @@ export function installMockBridge(): MockBridge {
 
   let seq = 0
   let exportSeq = 0
+  let finishReads: (() => void) | null = null
   let held: ((error?: Error) => void)[] | null = null
   const heldProbes: (() => void)[] = []
 
@@ -336,6 +350,11 @@ export function installMockBridge(): MockBridge {
     lastExportId: 0,
     lastExportSend: () => {},
     exportCancelCalls: [],
+    tagsFiles: {},
+    readsCalls: [],
+    readsWrites: [],
+    readsWriteError: null,
+    finishReads: () => finishReads?.(),
     resultsOpenCalls: [],
     revealCalls: [],
     revealError: null,
@@ -496,6 +515,41 @@ export function installMockBridge(): MockBridge {
     cancelExport: (jobId) => {
       mock.exportCancelCalls.push(jobId)
       return Promise.resolve(jobId === mock.lastExportId)
+    },
+    // A reads job (denovo.rs start_reads): its id now; progress in bytes of
+    // the file, then readsDone (the reads in readsWrites) or failed.
+    exportReads: (path, dest, format, topN, minLength, onEvent) => {
+      mock.readsCalls.push({ path, dest, format, topN, minLength })
+      const jobId = ++exportSeq
+      mock.lastExportId = jobId
+      mock.lastExportSend = onEvent
+      const finish = (): void => {
+        finishReads = null
+        const text = mock.tagsFiles[path]
+        if (text == null) return onEvent({ kind: 'failed', jobId, message: `${path} does not exist` })
+        if (mock.readsWriteError) return onEvent({ kind: 'failed', jobId, message: mock.readsWriteError })
+        let out
+        try {
+          out = tagsToDenovo(text, { format, topN, minLength })
+        } catch (err) {
+          return onEvent({ kind: 'failed', jobId, message: err instanceof Error ? err.message : String(err) })
+        }
+        mock.readsWrites.push({ source: path, dest, text: out.text })
+        onEvent({ kind: 'progress', jobId, done: text.length, total: text.length })
+        onEvent({
+          kind: 'readsDone',
+          jobId,
+          reads: out.reads,
+          rowsRead: out.rowsRead,
+          short: out.short,
+          malformed: out.malformed,
+          unknownMods: Object.keys(out.unknownMods),
+          dest
+        })
+      }
+      if (mock.holdExport) finishReads = finish
+      else queueMicrotask(finish)
+      return Promise.resolve(jobId)
     },
     // Which outputs a run would write: -out (resolved like run() does) and
     // every *_out parameter with a value; those in existingOutputs exist.

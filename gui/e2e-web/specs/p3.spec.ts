@@ -62,7 +62,7 @@ async function setBox(page: Page, label: string, value: string): Promise<void> {
 /// The raw cells of the rows in the DOM, top to bottom.
 const domRows = (page: Page): Promise<string[][]> =>
   page.$$eval('.rt-rows .rt-row', (rows) =>
-    rows.map((r) => Array.from(r.querySelectorAll('[role="cell"]')).map((c) => c.getAttribute('aria-label') ?? ''))
+    rows.map((r) => Array.from(r.querySelectorAll('[role="gridcell"]')).map((c) => c.getAttribute('aria-label') ?? ''))
   )
 
 test('a tighter E-value cutoff never adds rows, with and without the best tag per spectrum', async ({ page }) => {
