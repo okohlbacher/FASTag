@@ -1,7 +1,8 @@
 // The session hook (P1 PR c): the form's values, the last-used offer (D6),
 // presets and what a run would send. The defaults Reset restores (half of
 // App.test.tsx "Reset… asks first", whose confirmation moved to RunBar) are
-// tested here.
+// tested here; the App-level test itself stays, in setup/setup.app.test.tsx,
+// and guards the wiring of the two.
 
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'

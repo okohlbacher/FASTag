@@ -2,7 +2,8 @@
 // Reset confirmation. "names the phase and, once measured, the time left"
 // moved here from p1a.test.tsx ("the run bar"); the events that feed it are
 // tested on useRun (useRun.test.tsx). "Reset… asks first" moved here from
-// App.test.tsx, with the defaults it restores tested on useSession.
+// App.test.tsx, with the defaults it restores tested on useSession; the
+// App-level test stays too (setup/setup.app.test.tsx) and guards the wiring.
 
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'

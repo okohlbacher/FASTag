@@ -157,7 +157,12 @@ reply, a late log after Done, a cancel during a phase without progress.
 The parts of the window have tests of their own beside them: the hooks
 (`setup/useSession`, `run/useRun`, `app/viewStore`) through `renderHook`, and
 `RunBar`, `LogDrawer`, `BatchList` and `ResultTabs` rendered alone with their
-props. The App-level tests share their helpers from `src/testing/render.tsx`.
+props. The App-level tests, which render the whole window, are split by area
+beside the parts they drive: `run/batch.app.test.tsx` (run and batch
+orchestration), `results/digest.app.test.tsx` (the Digest tab) and
+`setup/setup.app.test.tsx` (the setup form and run bar, with the checks that
+App wires Reset, the phase and the elapsed time into the run bar); they share
+their helpers from `src/testing/render.tsx`.
 
 The Playwright specs in `e2e-web/` drive the app in Chromium and WebKit on an
 explicit e2e build, `npm run build:e2e` (`vite build --mode e2e`, into
