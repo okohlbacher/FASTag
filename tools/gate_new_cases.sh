@@ -14,6 +14,10 @@
 #   pseudo_pass   #7  the DIAspeXtract 1.7.0 pseudo-DDA mzML of the same run: exit 0, and the
 #                     tags equal to -acquisition_check off
 #   profile_mzml  #9  PXD000865 (Q Exactive, TMT8, profile MS2), -pick_profile auto
+#   charge_infer  #6  PXD003531 (Q Exactive DDA) with every precursor charge (MS:1000041)
+#                     removed (a derived input, written by --stage), -unknown_charge infer
+#                     -census: tags with the hypothesis columns and the census charge_used;
+#                     info lines: the charge calls against the removed header charges
 # The references here are DEVELOPMENT references (tools/gate-1.12/refs-dev,
 # written by the item's branch build and reviewed with it). They move into
 # refs-1.12.0 only with the user's approval of that reference set.
@@ -31,14 +35,18 @@ export OPENBLAS_NUM_THREADS=${OPENBLAS_NUM_THREADS:-1}
 export OPENMS_DISABLE_UPDATE_CHECK=ON
 mkdir -p "$OPENMS_TMPDIR"
 
-ALL_CASES="dia_refuse pseudo_pass profile_mzml"
+ALL_CASES="dia_refuse pseudo_pass profile_mzml charge_infer"
 CASES=${GATE_CASES:-${GATE_NEW_CASES:-$ALL_CASES}}
 
 PA=/ceph/ibmi/abi/oliver/prose-auto-20261029
-# relative path under GATE_NEW_IN, persistent source (read only), sha256; tab-separated
+# relative path under GATE_NEW_IN, persistent source (read only), sha256; tab-separated.
+# A source strip_charge:<path> is derived by --stage: <path> without its
+# precursor charge cvParams (MS:1000041); the mzML index goes stale, which the
+# fast reader handles by scanning (as for the PXD003531 gate input itself).
 INPUTS="PXD006096/100815_MM_ABPP_H1993_DMSO_DIA1_new.mzML	$PA/bench2/mzml/PXD006096/100815_MM_ABPP_H1993_DMSO_DIA1_new.mzML	1a27eee3b164ec355620a02a20860a7f49b2b900fe5a6cfc9fd14bc11d6b0d42
 PXD006096/100815_MM_ABPP_H1993_DMSO_DIA1_new.pseudo.mzML	$PA/borg_ho_v9b/out/PXD006096/auto/100815_MM_ABPP_H1993_DMSO_DIA1_new.pseudo.mzML	6020bd4eaa135083d9dbd4455e1d9b2b38cb1c29c1f0f72db3cfa0cdebab27da
-PXD000865/0299_F1_R1_P77628B02_TMT8.mzML	/ceph/ibmi/abi/projects/proteomics/kuster_proteome/MZML/8/0299_F1_R1_P77628B02_TMT8.mzML	8ec0952126809c9516cb476f5a79287d1b26ce11dcf631a78d6342340c54441c"
+PXD000865/0299_F1_R1_P77628B02_TMT8.mzML	/ceph/ibmi/abi/projects/proteomics/kuster_proteome/MZML/8/0299_F1_R1_P77628B02_TMT8.mzML	8ec0952126809c9516cb476f5a79287d1b26ce11dcf631a78d6342340c54441c
+PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.nocharge.mzML	strip_charge:$PA/valset_all/in/PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.mzML	19d8ee3ffc40d98f1c05a145ab3909f77334e1da0afff9b4d8db6b6ab8cdccbd"
 
 define_case() { # sets PXD IN ARGS
   ARGS=()
@@ -47,6 +55,8 @@ define_case() { # sets PXD IN ARGS
     pseudo_pass)  PXD=PXD006096; IN=PXD006096/100815_MM_ABPP_H1993_DMSO_DIA1_new.pseudo.mzML ;;
     profile_mzml) PXD=PXD000865; IN=PXD000865/0299_F1_R1_P77628B02_TMT8.mzML
                   ARGS=(-pick_profile auto -fixed_modifications 'Carbamidomethyl (C)' 'TMT6plex (K)' 'TMT6plex (N-term)') ;;
+    charge_infer) PXD=PXD003531; IN=PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.nocharge.mzML
+                  ARGS=(-unknown_charge infer -census) ;;
     *) echo "unknown case $1" >&2; return 1 ;;
   esac
   IN=$IN_DIR/$IN
@@ -73,7 +83,13 @@ stage() {
   while IFS=$'\t' read -r rel src want; do
     grep -qxF "$rel" <<< "$need" || continue
     mkdir -p "$IN_DIR/$(dirname "$rel")"
-    [ -f "$IN_DIR/$rel" ] || cp "$src" "$IN_DIR/$rel" || return 1
+    if [ ! -f "$IN_DIR/$rel" ]; then
+      case $src in
+        strip_charge:*) grep -v 'accession="MS:1000041"' "${src#strip_charge:}" > "$IN_DIR/$rel.tmp" \
+                          && mv "$IN_DIR/$rel.tmp" "$IN_DIR/$rel" || return 1 ;;
+        *) cp "$src" "$IN_DIR/$rel" || return 1 ;;
+      esac
+    fi
   done <<< "$INPUTS"
   check_inputs && echo "inputs OK in $IN_DIR"
 }
@@ -118,6 +134,14 @@ run_case() { # $1 case, $2 case dir; writes the digest to stdout, sets rc and th
       echo "acquisition $(grep -m1 -o '^Acquisition check: [^ ]*' "$d/run.log" || echo MISSING)"
       echo "file tags.tsv $(sha256sum "$d/tags.tsv" | cut -d' ' -f1)"
       if [ $rc_off = 0 ] && cmp -s "$d/tags.tsv" "$d/off/tags.tsv"; then echo "equals_off yes"; else echo "equals_off no"; fi ;;
+    charge_infer) # #6: the default digest, plus the calls against the removed charges (info)
+      ( cd "$d" && /usr/bin/time -f '%e %M' -o time.txt "$BIN" -in "$IN" -out tags.tsv "${ARGS[@]}" -threads "$THREADS" > run.log 2>&1 ); rc=$?
+      (cd "$d" && digest_case $rc)
+      echo "info $(grep -m1 -o '[0-9]* of [0-9]* MS2 spectra carry no precursor charge; under .*charges;' "$d/run.log" || echo 'no -unknown_charge line')"
+      local orig=$PA/valset_all/in/PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.mzML  # read only
+      [ -f "$orig" ] && echo "info $(grep -o 'name="charge state" value="[0-9]*"' "$orig" | grep -o '[0-9]*"$' | tr -d '"' \
+        | paste - <(awk -F'\t' 'NR > 1 { print $6 }' "$d/tags.census.tsv") \
+        | awk '{ n++; if ($1 == $2) ok++ } END { printf "charge calls equal to the removed header charge: %d of %d", ok, n }')" ;;
     *)
       ( cd "$d" && /usr/bin/time -f '%e %M' -o time.txt "$BIN" -in "$IN" -out tags.tsv "${ARGS[@]}" -threads "$THREADS" > run.log 2>&1 ); rc=$?
       (cd "$d" && digest_case $rc) ;;

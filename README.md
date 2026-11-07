@@ -520,6 +520,10 @@ MGF→mzML direction is exact.
 | `-acquisition_probe_spectra <n>` | 4000 | MS2 spectra the acquisition check reads, metadata only, reading at most ten times as many spectra in all (advanced) |
 | `-pick_profile <legacy\|auto\|off>` | legacy | Centroid profile MS2 (MS:1000128) with OpenMS `PeakPickerHiRes` before tagging: `legacy` on mzPeak input only (as 1.11), `auto` on mzML and mzPeak input (not MGF), `off` never. Centroided MS2 are never re-picked. `-out_spectra` writes the spectra as they were tagged. Not with `-stream` |
 | `-pick_unknown_type` | off | With `-pick_profile auto`: also centroid MS2 that declare no spectrum type, when OpenMS's `PeakTypeEstimator` reads their data as profile (advanced) |
+| `-unknown_charge <assume2\|enumerate\|infer>` | assume2 | How a precursor without a charge is tagged: `assume2` as 2+ (as 1.11); `enumerate` at each listed possible charge (MS:1000633, MGF `2+ and 3+`), else at every charge `-charge_min`..`-charge_max`; `infer` at the charge its complement pairs support (1+ when almost no intensity lies above the precursor; both charges of a close call, `ambiguous`; 2+ without evidence, `assumed`). A header charge is never replaced. A spectrum tagged under H hypotheses has every E-value multiplied by H before `-max_evalue` and `-max_tags`; its rows are merged by E-value. The reports that aggregate over spectra (digest, label, massgap, delta, species, shortlist, census) read the rows of one selected hypothesis, chosen from the charge evidence, never from the E-values. Experimental, not validated; not with `-stream` |
+| `-charge_min <n>` / `-charge_max <n>` | 2 / 4 | The charges `enumerate` and `infer` try (1-8) |
+| `-charge_infer_margin <x>` | 2 | Complement-pair excess by which an inferred charge must beat the runner-up to be tagged alone, and that it must reach at all (advanced) |
+| `-isotope_error <k> ...` | 0 | Precursor isotope offsets (-1..3) to consider, for every precursor: the neutral mass is lowered by k x 1.00336 Da, and each charge is tagged at the offset its complement pairs support best. Needs a fragment tolerance below 0.05 Da (or the ppm equivalent at m/z 1000); refused otherwise (advanced) |
 
 The `-glyco_*` options are read only with `-glyco`, the `-census_*` options only
 with `-census`, and the `-taxdb`,
@@ -576,6 +580,13 @@ matching tags are written, as `fwd` / `rev`, plus `efwd` / `erev` for
 entrapment-only matches under `-entrapment_fasta`. The `evalue` of a gapped row
 is the ranking value, E × `-gap_penalty`, so it can exceed `-max_evalue`; divide
 by the penalty for the raw E-value.
+
+With a non-default `-unknown_charge` or `-isotope_error` (1.12), four columns
+follow the optional ones: `prec_charge` (the precursor charge the row was
+tagged at), `charge_src` (`header`, `possible`, `inferred`, `ambiguous`,
+`assumed` or `enumerated`), `iso_offset` (k) and `selected` (1 when the row's
+hypothesis feeds the aggregating reports). `-recon_out` and `-recon_id_out`
+keep every row at its hypothesis' charge.
 
 **Tag confidence.** The `evalue` is the primary, validated confidence — lower is
 better, and on real identifications (PXD000001) it separates correct from
