@@ -15,6 +15,8 @@ Performance for the bound and the options that keep per-run state). The citation
 *J. Proteome Res.* 2008, 7:3838 — is for that original DirecTag paper; FASTag
 has no separate publication of its own.
 
+What changed in each release: [CHANGELOG.md](CHANGELOG.md).
+
 ## What it does
 
 A *sequence tag* is a short peptide read inferred directly from a fragment-ion
@@ -474,6 +476,13 @@ MGF→mzML direction is exact.
 | `-massgap_min_spectra <n>` / `-massgap_min_share <f>` / `-massgap_min_bin <n>` | 20 / 0.005 / 2 | Advanced: spectra and share a gap peak needs; spectra a histogram row needs to take part |
 | `-massgap_max_mods <n>` / `-massgap_top <n>` | 3 / 5 | Advanced: modifications per explanation; modifications listed by share |
 | `-massgap_silac_share <f>` / `-massgap_silac_min <n>` | 0.08 / 500 | Advanced: share a SILAC label needs; shifted spectra a SILAC call needs |
+| `-digest_models_version <shipped\|v2>` | shipped | Experimental (1.12), not validated on held-out data: `v2` reads `digest_models_v2.tsv` (rule-only LysargiNase and Asp-N_ambic rows, detection weights per instrument class, pooled specificity); the shipped v2 values are unfitted priors |
+| `-digest_detection <none\|shipped>` | none | Experimental: score the tag ends with the table's detection weights of the run's instrument class (orbitrap_hcd, timstof, other) and call timsTOF runs instead of withholding them; needs a v2 table |
+| `-digest_flank2 <off\|auto>` | off | Experimental: where y1 is cut off or the P1 counts are too few, score the two-residue flank sums m(P2) + m(P1) instead |
+| `-digest_min_confidence <f>` / `-digest_calibration <file>` | 0 / shipped | Experimental: write the calibrated `p_correct` of a call and withhold one below the threshold (`low_confidence`); the shipped calibration is unfitted (p_correct 0.5) |
+| `-alkylation_out <file>` | none | Experimental (1.12), not validated on held-out data: which reagent alkylated the cysteines, or none, from the placements of single-Cys peptides (see Digest, label and mass-gap reports; format in doc/ALKYLATION-REPORT.md) |
+| `-alkylation_proteome <name\|file>` | auto | Database of `-alkylation_out` when nothing else places: `auto` (= human), `human`, `mouse`, `yeast`, `ecoli` (`share/FASTag/alkylation/<name>.fasta.gz`) or a FASTA (`.gz` allowed); ignored with `-recon_fasta` |
+| `-alkylation_min_spectra <n>` / `-alkylation_min_share <f>` / `-alkylation_window <Da>` | 10 / 0.6 / 0 | Advanced: spectra and share the call needs; bin window (0 = 0.02 Da on ppm runs, 0.5 Da on Da runs) |
 | `-shortlist_out <file>` | none | Experimental (1.12): ranked protein shortlist from the tag placements on `-recon_fasta` (or `-fasta`), one row per protein with evidence (see Protein shortlist and search hand-off). A search-space reduction, NOT FDR-controlled |
 | `-fasta_out <file>` | none | Experimental: reduced FASTA of the kept proteins (never decoys), then `-shortlist_background` |
 | `-shortlist_background <file>` | none | Proteins always written to `-fasta_out` (host proteome, contaminants), decoys left out; an entry identical to a database entry is written once, as that entry (kept even below the shortlist cut, reason `background`) |
@@ -501,6 +510,9 @@ MGF→mzML direction is exact.
 | `-census` | off | Per-spectrum census: one row per MS2 spectrum read, tagged or not, plus a run summary (see Census) |
 | `-census_out <file>` | `<out>` with its extension replaced by `.census.tsv` | With `-census`: the per-spectrum table |
 | `-census_summary_out <file>` | `<out>` with its extension replaced by `.census_summary.tsv` | With `-census`: the run summary |
+| `-census_ids <file>` | none | With `-census`: identifications of `-in` (idXML or mzid with q-values); adds the columns `identified` and `triage` and a `census_ids` summary section (see Census) |
+| `-census_ids_fdr <f>` | 0.01 | With `-census_ids`: the q-value a target hit needs to identify its spectrum (advanced) |
+| `-census_triage_evalue <f>` | 0.01 | With `-census_ids`: the best E-value at or below which an unidentified tagged or placed spectrum is a triage candidate (advanced) |
 | `-stream` | off | Resident single-spectrum mode: spectrum blocks on stdin, TSV rows + `#end` sentinels on stdout (see Streaming) |
 | `-progress` | off | Emit `FASTAG_PROGRESS done=<n> total=<n>` on stderr for a progress bar |
 | `-species` | off | Infer taxa from the tags (see Species detection) |
@@ -518,6 +530,7 @@ MGF→mzML direction is exact.
 | `-species_call_min_units <n>` | 200 | With `-species_call decoy`: fewer spectra with taxon evidence make the run a few_spectra no_call |
 | `-species_call_decoys <n>` | 5 | With `-species_call decoy`: decoy tags per tag (1-100) |
 | `-species_pi0 <f>` | 1 | With `-species_call decoy`: pi0 of the q-values; 1 = Benjamini-Hochberg, 0 = estimate (Storey) |
+| `-species_orientation <mode>` | forward | `both`: also look each tag up reversed (a tag read from b ions is written reversed); one informative reading is used as it is, two are intersected, two without a common taxon skip the tag. Independent of `-orientation` (which applies to `-fasta` and `-recon_fasta`). The analytic `log_pvalue` and `qvalue` columns are NA under `both`, also with `-species_call decoy`; the calibrated value is its `decoy_qvalue` |
 | `-subsample_spectra <n>` / `-subsample_fraction <f>` | 0 | Tag only a random subset (count or fraction; if both are given, the count wins); 0 = all |
 | `-subsample_seed <n>` | 1 | Seed for the `-subsample_*` selection |
 | `-mzpeak_read_memory <MB>` | 0 | No effect; accepted for existing command lines |
@@ -525,6 +538,13 @@ MGF→mzML direction is exact.
 | `-acquisition_probe_spectra <n>` | 4000 | MS2 spectra the acquisition check reads, metadata only, reading at most ten times as many spectra in all (advanced) |
 | `-pick_profile <legacy\|auto\|off>` | legacy | Centroid profile MS2 (MS:1000128) with OpenMS `PeakPickerHiRes` before tagging: `legacy` on mzPeak input only (as 1.11), `auto` on mzML and mzPeak input (not MGF), `off` never. Centroided MS2 are never re-picked. `-out_spectra` writes the spectra as they were tagged. Not with `-stream` |
 | `-pick_unknown_type` | off | With `-pick_profile auto`: also centroid MS2 that declare no spectrum type, when OpenMS's `PeakTypeEstimator` reads their data as profile (advanced) |
+| `-ion_series <by\|cz\|auto>` | by | Ion series the MS2 spectra are read as: `by` (b/y ions, as 1.11), `cz` (c/z• ions of ETD/ECD, every spectrum), `auto` (c/z• for spectra whose activation is ETD or ECD, b/y for all others, hybrid EThcD/ETciD included, with a warning). Under `cz`, and under `auto` when the run has electron-activated spectra, the tag TSV gains a last `ion_series` column and the census a `best_ion_series` column (see Ion series). Not with `-stream`. Experimental: `auto` is not validated yet |
+| `-unknown_charge <assume2\|enumerate\|infer>` | assume2 | How a precursor without a charge is tagged: `assume2` as 2+ (as 1.11); `enumerate` at each listed possible charge (MS:1000633, MGF `2+ and 3+`), else at every charge `-charge_min`..`-charge_max`; `infer` at the charge its complement pairs support (1+ when `-charge_min` is 1, or 1 is listed, and almost no intensity lies above the precursor; both charges of a close call, `ambiguous`; without evidence 2+, or the lowest candidate when 2 is none, `assumed`). Every charge tagged is a listed possible charge, else one of `-charge_min`..`-charge_max`. A header charge is never replaced. A spectrum tagged under H hypotheses has every E-value multiplied by H before `-max_evalue` and `-max_tags`; its rows are merged by E-value. The reports that aggregate over spectra (digest, label, massgap, delta, species, shortlist, census) read the rows of one selected hypothesis, chosen from the charge evidence, never from the E-values. Experimental, not validated; not with `-stream` |
+| `-charge_min <n>` / `-charge_max <n>` | 2 / 4 | The charges `enumerate` and `infer` try (1-8); `-charge_min 1` enables infer's 1+ test |
+| `-charge_infer_margin <x>` | 2 | Complement-pair excess by which an inferred charge must beat the runner-up to be tagged alone; closer, both are tagged (`ambiguous`). Any excess above 0 is a call; none is `assumed` (advanced) |
+| `-isotope_error <k> ...` | 0 | Precursor isotope offsets (-1..3) to consider, for every precursor: the neutral mass is lowered by k x 1.00336 Da, and each charge is tagged at the offset its complement pairs support best. Needs a fragment tolerance below 0.05 Da (or the ppm equivalent at m/z 1000); refused otherwise (advanced) |
+| `-probe_input <file>` | (none) | Print the metadata of a spectra file (or a FASTA alone) as JSON lines and exit; writes no file, needs no `-in`/`-out` (advanced; see Probe and spectrum dump) |
+| `-dump_spectrum <nativeId>` | (none) | Print the peaks FASTag tags of one spectrum of `-in` as JSON lines and exit; writes no file (advanced; see Probe and spectrum dump) |
 
 The `-glyco_*` options are read only with `-glyco`, the `-census_*` options only
 with `-census`, and the `-taxdb`,
@@ -581,6 +601,39 @@ matching tags are written, as `fwd` / `rev`, plus `efwd` / `erev` for
 entrapment-only matches under `-entrapment_fasta`. The `evalue` of a gapped row
 is the ranking value, E × `-gap_penalty`, so it can exceed `-max_evalue`; divide
 by the penalty for the raw E-value.
+
+With a non-default `-unknown_charge` or `-isotope_error` (1.12), four columns
+follow the optional ones: `prec_charge` (the precursor charge the row was
+tagged at), `charge_src` (`header`, `possible`, `inferred`, `ambiguous`,
+`assumed` or `enumerated`), `iso_offset` (k) and `selected` (1 when the row's
+hypothesis feeds the aggregating reports). `-recon_out` and `-recon_id_out`
+keep every row at its hypothesis' charge.
+
+**Ion series** (`-ion_series`, 1.12). Under the default `by` the flanks follow
+the y-ion convention above: `nterm_mass` + tag residues + `cterm_mass` + H2O =
+the precursor's neutral mass, and a tag read off the b ions appears reversed
+with one water moved between its flanks. A tag read as c/z• ions (`cz`, or
+`auto` on ETD/ECD spectra; `ion_series` = `cz`) uses the same residue-sum
+convention for forward reads (the low peak a z• ion), and a reversed read (the
+low peak a c ion) carries the offset offC - offN = (H2O - NH2) - NH3 =
+-15.0347 Da instead of +H2O: N-side residues = `cterm_mass` - 15.0347, C-side
+residues = `nterm_mass` + 15.0347. Under c/z• the complement partner of a peak
+is the one whose neutral masses sum to M + H (under `-complement_rule
+precursor` at the c - 1 charges an electron-activated precursor of charge c
+leaves its fragments), and peaks at the unreacted
+precursor and its charge-reduced species (with their isotope and
+hydrogen-transfer forms) are dropped before tagging. `-recon_*`, `-digest_out`,
+`-label_out`, `-massgap_out`, `-delta_out` and the census take the offset from
+each tag; `-species` counts b/y tags only and reports how many c/z• rows it
+left out. Hybrid EThcD/ETciD spectra are read as b/y under `auto` (reading
+both series at once is not supported yet), and a/x ions are not read.
+`-ion_series auto` on a run without electron activation writes exactly what
+`by` writes. `auto` reads the activation of mzML input only: MGF and mzPeak
+spectra are read as b/y (an electron-activated spectrum such a reader delivers
+is counted in a warning), so a c/z row always comes with the `ion_series`
+column. With `-unknown_charge enumerate|infer` a spectrum read as c/z• takes
+its charge and isotope evidence from c/z• pairs, and its charge-reduced
+precursor species do not count as fragments.
 
 **Tag confidence.** The `evalue` is the primary, validated confidence — lower is
 better, and on real identifications (PXD000001) it separates correct from
@@ -759,6 +812,26 @@ options and their values.
   Cys alkylation): spectra near each Cys alkylation mass, and gap peaks
   explained as the smallest combination of up to three of 38 Unimod
   modifications.
+- **`-alkylation_out`** (1.12, experimental, not validated on held-out data)
+  calls the Cys alkylation reagent (Carbamidomethyl, Propionamide,
+  Nethylmaleimide, Methylthio, Carboxymethyl) or `none` (unmodified, oxidised,
+  cysteinylated or dehydroalanine Cys) from the placements of the run's own
+  reconciler: each MS2 spectrum votes once with its best tag placed on a
+  peptide with exactly one C on the gap side, and the reagent mass is the gap
+  plus the fixed C modification. On a labelled run (a fixed N- or C-terminal
+  TMT or iTRAQ modification) the label is first taken off a gap on its side,
+  as the reconciler's flanks carry it. Without `-recon_out` the placements are made
+  on `-recon_fasta` or `-alkylation_proteome` and not written; every other
+  output is the same with and without it. Sections `alk_run`, `alk_cys` and
+  `alkylation_call`; the format is documented and versioned in
+  doc/ALKYLATION-REPORT.md.
+
+The `-digest_out` options of 1.12 (`-digest_models_version v2`,
+`-digest_detection`, `-digest_flank2`, `-digest_min_confidence`) are opt-in
+and not validated on held-out data; at their defaults the report is the
+FASTag 1.11 one byte for byte, and with any of them on it gains `run`,
+`meta instrument_class`, `count flank2_n`, `call p_correct`/`flank2_used`/
+`timstof_call` and `nocall low_confidence` rows.
 
 `-digest_out` also writes the background in use and each model's residue
 distribution before mixing, from which the Desktop GUI draws its logos. The
@@ -806,6 +879,37 @@ and the options `-fasta`, `-entrapment_fasta`, `-taxdb`, `-usi_collection`,
 `-out_spectra`, `-recon_out`, `-recon_id_out`, `-delta_out`, `-species_out`,
 `-digest_out`, `-label_out` and `-massgap_out` are refused; parameter changes
 need a restart.
+
+## Probe and spectrum dump
+
+Two machine interfaces, used by the desktop GUI (1.12). Both print JSON lines
+to stdout only, write no file, exit without tagging, and are refused with
+`-stream`. Every line is an object with a `record` key; the first is the
+format record (`"format":1`), the last is `{"record":"end"}`, so a cut stream
+is detectable. Readers ignore records and fields they do not know. Both are
+listed in `--helphelp`, which is how the GUI detects them.
+
+- `-probe_input <file>` reads metadata only (mzML, mzPeak or MGF) and prints the
+  records `probe` (format, version, input, file_format), `instrument` (name,
+  model, ms2_analyzer, ion_mobility), `spectra` (MS1 and MS2 counts, the
+  centroid/profile verdict of the probed MS2 and `will_pick`, whether
+  `-pick_profile` as given would centroid them), `activation` (collisional,
+  electron, hybrid, unknown), `index` (ok, stale, absent, not_applicable) and
+  `acquisition` (the raw-DIA check's call and whether `-acquisition_check` as
+  given would refuse the run). With `-fasta` it adds a `fasta` record (proteins,
+  decoys by `-shortlist_decoy_affix`). A FASTA file (`.fasta`, `.fa`, `.faa`,
+  `.fas`) given alone prints only `probe`, `fasta` and `end`. The exit code is 0
+  whenever the file could be read, also for raw DIA.
+- `-dump_spectrum <nativeId>` prints one `spectrum` record for the spectrum of
+  `-in` with that native ID (MGF: `index=<i>`): `mz` and `int`, the peaks
+  after the reader's centroiding (`-pick_profile`), the precursor cut, the m/z
+  collapse, deisotoping and the peak budget, exactly as the tagger prepares
+  them under the options given; plus `precursor`, `charge` (as tagged; an
+  uncharged precursor is tagged as 2+), `charge_given`, `native_id`, `index`,
+  `tolerance` and `tolerance_unit`. An unknown ID exits 6 with the ID on stderr
+  and nothing on stdout. The dump prepares the given precursor at its charge
+  (or 2+) only; with `-unknown_charge` or `-isotope_error` away from their
+  defaults it exits 6 rather than print peaks that were not tagged.
 
 ## Glyco flag
 
@@ -859,6 +963,43 @@ of `n_peaks_kept` and of `int_gini`. Subsampling draws from the input spectra
 of all MS levels, so `-subsample_spectra 1000` on a run with MS1 scans reads
 fewer than 1000 MS2 spectra. Both files are written as `.part` files and
 renamed when the run finishes; `-census` cannot be combined with `-stream`.
+
+`-census_ids <idXML|mzid>` joins the identifications of the same run to the
+census. The table gains two columns: `identified` (1, 0, or empty when the
+spectrum cannot be matched unambiguously) and `triage` (1 for spectra with
+`identified` 0, status `tagged` or `placed` and `best_evalue` at or below
+`-census_triage_evalue`, as written in the row; empty when `identified` is
+empty). Without `-census_ids` the census is unchanged. A spectrum is
+identified when one of its identifications holds a target hit whose q-value
+is at most `-census_ids_fdr`: the hit's score when the score type is a
+q-value (lower is better), otherwise its `q-value` or `MS:1002354` meta
+value. Decoy hits are ignored (target+decoy counts as a target), an empty hit
+list is not an identification, and a spectrum no identification names is 0.
+A file in which no hit carries a q-value is refused: filter it with
+FalseDiscoveryRate and IDFilter first. So is a file with identifications
+(with hits) that carry no `spectrum_reference`, as pepXML converted without
+`-mz_file` and older idXML may: add the references with IDFileConverter
+`-mz_file`. References are matched to native ids
+exactly; a scan number is used only when it is unique among the references
+and the spectra read. A file naming another run warns, one naming several
+runs is refused, and when more than 1% of the references match no spectrum
+FASTag warns, above 50% it writes no census (exit code
+INCOMPATIBLE_INPUT_DATA; the other outputs are complete). Under subsampling
+that count is not known and is left empty. The summary adds section
+`census_ids`: the file name, the thresholds, `run_check`, `id_no_ref`, the reference
+counts (`refs`, `refs_exact`, `refs_scan`, `refs_ambiguous`,
+`refs_unmatched`), `identified_1/0/unknown`, the cross-tab
+`<status>_identified_<1|0|unknown>` and `triage_candidates`. Triage is an
+E-value threshold, not a quality call.
+
+For front ends that list a run's outputs by option name (the GUI's resolved
+outputs): the census files are `census_out` and `census_summary_out`. With
+`-census` and no path of their own they are `<out>` with its extension
+replaced by `.census.tsv` and `.census_summary.tsv` (the rule of
+`-glyco_out` and `-species_out`); without `-census` neither is written, and a
+`-census_ids` run refused for foreign references writes neither. The log
+names both paths (`Census: ... -> <census_out>, summary ->
+<census_summary_out>`).
 
 ## Tag diversity
 
@@ -942,6 +1083,18 @@ looked up like the tags plus the spill a stronger related taxon is expected to
 cause; `decoy_expected` is that null's expectation (`expected` keeps its 1.10
 meaning). The shipped parameters are provisional. See
 [doc/SPECIES-DETECTOR.md](doc/SPECIES-DETECTOR.md).
+
+**Both tag orientations (opt-in).** Tags are written N->C under a y-ion
+assumption, so a tag read from b ions is written reversed, and `-species`
+looks up only the written reading. `-species_orientation both` looks up both
+readings: one informative reading is used, two are intersected, and a tag
+whose readings share no taxon is skipped (so counts can fall as well as
+rise). No analytic background follows from that rule, so the analytic
+`log_pvalue` and `qvalue` columns are NA under `both`, with or without
+`-species_call decoy`, and a warning says so; the calibrated value is the
+`decoy_qvalue` (and `call`) of `-species_call decoy`. It is
+not coupled to `-orientation`, whose default (both) would otherwise change
+the species report.
 
 The longest `-tag_length` plus 2 × `-extension` must reach the index k (7).
 Otherwise no tag can be long enough to look up, and FASTag refuses the run up
@@ -1132,14 +1285,21 @@ tags fill the slots (hence the small change in total recall):
   16; shared node, indicative figures). `-subsample_*` draws over blocks, so it
   picks different spectra than the mzML the MGF came from. A malformed block
   that `-subsample_*` skips goes unnoticed.
-- **b/y ions only.** Tags and flanks are read as b/y ions. ETD/ECD spectra
-  (c/z ions) and hybrid EThcD/ETciD spectra are tagged the same way, so their
-  tags are unreliable. FASTag reads each MS2 spectrum's activation from the
-  mzML `<activation>` terms, or from the Thermo filter string when there are
-  none. When more than 1% of the MS2 spectra are electron or hybrid
-  activated, it writes one `Electron activation:` warning to stderr with the
-  count per class (collisional, electron, hybrid, unknown). MGF and mzPeak
-  input carry no activation, so their spectra count as unknown.
+- **b/y ions by default.** Under the default `-ion_series by`, tags and flanks
+  are read as b/y ions, and ETD/ECD spectra (c/z ions) and hybrid EThcD/ETciD
+  spectra are tagged the same way, so their tags are unreliable. FASTag reads
+  each MS2 spectrum's activation from the mzML `<activation>` terms, or from
+  the Thermo filter string when there are none. When more than 1% of the MS2
+  spectra are electron or hybrid activated, it writes one `Electron
+  activation:` warning to stderr with the count per class (collisional,
+  electron, hybrid, unknown). MGF and mzPeak input carry no activation, so
+  their spectra count as unknown, and `-ion_series auto` reads them as b/y.
+  `-ion_series cz` or `auto` (1.12, experimental, not yet validated on real
+  ETD data) reads c/z• ions (see Ion series); under them one `Ion series`
+  line on stderr gives the spectra per series, `auto` warns (`Hybrid
+  activation:`) when more than 1% of the spectra are hybrid and were read as
+  b/y, and `cz` warns (`Collisional activation:`) when more than 1% are
+  collisional.
 - **A tag is not an identification.** No per-tag q-value or FDR is emitted, and
   a `-fasta` match, a species call, a `delta_out` bin and a glyco flag are all
   candidates to follow up, not results to report.

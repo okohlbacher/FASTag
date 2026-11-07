@@ -18,11 +18,12 @@ describe('map: param overlay vs CLI manifest', () => {
     expect(c).toContain('domain')
     expect(c).not.toContain('superkingdom')
   })
-  it('renders 67 parameters and hides 11 (mzpeak_read_memory among them)', () => {
-    // 1.10.0 added species_evidence (rendered) to the 1.9.0 set.
+  it('renders 67 parameters and hides 67 (mzpeak_read_memory and the 56 1.12 options among them)', () => {
+    // 1.10.0 added species_evidence (rendered) to the 1.9.0 set; 1.12.0 adds
+    // 56 options, all hidden until each has its GUI design.
     expect(RENDERED.length).toBe(67)
-    expect(Object.keys(HIDDEN).length).toBe(11)
-    expect(manifest.params.length).toBe(78)
+    expect(Object.keys(HIDDEN).length).toBe(67)
+    expect(manifest.params.length).toBe(134)
   })
   it('tag_lengths reaches the UI as an int list with min 1', () => {
     const p = PARAM_BY_NAME.get('tag_lengths')

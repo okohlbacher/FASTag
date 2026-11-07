@@ -14,6 +14,11 @@ precursor neutral mass. For an occurrence of the tag as written at peptide posit
 nterm_mass is the residue mass before it (N-terminal modification included) and cterm_mass the
 residue mass after it. A b-ion read appears reversed; for an occurrence of the reversed tag at
 position j, cterm_mass = prefix mass before j minus H2O and nterm_mass = suffix mass plus H2O.
+
+Ion series (FASTag 1.12 #15 phase B, -ion_series cz|auto): a tag read as c/z-dot ions carries
+`ion_series` = cz in the tag TSV. Its forward reads use the same residue-sum convention; its
+reversed (c-ion) reads carry the offset offC - offN = (H2O - NH2) - NH3 = -15.034708 instead of
++H2O (`REVERSED_OFFSET`). A TSV without the column is b/y throughout.
 """
 from __future__ import annotations
 
@@ -61,6 +66,9 @@ RESIDUE_MASS = {
     "U": 150.953636, "O": 237.147727,
 }
 WATER = 18.010565
+# Reversed-read flank offset per ion series (offC - offN; FASTag src/IonSeries.h, OpenMS
+# Residue::getInternalTo{B,Y,C,Zp1}Ion): b/y one water, c/z-dot H2O - NH2 - NH3.
+REVERSED_OFFSET = {"by": WATER, "cz": 1.991841 - 17.026549}
 FLANK_TOL = 0.05
 RULES = ("flank", "sequence")
 _TOKEN = re.compile(r"([A-Z])((?:\[[^\]]*\])*)")
@@ -105,10 +113,11 @@ def _find_all(hay: str, needle: str) -> list[int]:
 
 
 def tag_correct_flank(tag: str, nterm_mass: float, cterm_mass: float, residues: str, pref: list[float],
-                      total: float, tol: float = FLANK_TOL) -> bool:
+                      total: float, tol: float = FLANK_TOL, reversed_offset: float = WATER) -> bool:
     """Paper rule: tag (or its reverse) is a substring of the peptide (I=L) AND at least one
     flanking mass agrees within tol at that position (see module docstring for the convention).
-    residues, pref and total come from peptide_masses()."""
+    residues, pref and total come from peptide_masses(). reversed_offset is the tag's series'
+    REVERSED_OFFSET (default b/y, one water)."""
     t = normalize_tag(tag)
     if not t or not pref:
         return False
@@ -118,9 +127,22 @@ def tag_correct_flank(tag: str, nterm_mass: float, cterm_mass: float, residues: 
             return True
     rt = t[::-1]
     for j in _find_all(residues, rt):
-        if abs(cterm_mass - (pref[j] - WATER)) <= tol or abs(nterm_mass - (total - pref[j + L] + WATER)) <= tol:
+        if (abs(cterm_mass - (pref[j] - reversed_offset)) <= tol
+                or abs(nterm_mass - (total - pref[j + L] + reversed_offset)) <= tol):
             return True
     return False
+
+
+def tag_correct_precursor_flank(tag: str, nterm_mass: float, residues: str, pref: list[float],
+                                tol: float = FLANK_TOL) -> bool:
+    """#6: the precursor-derived flank alone. FASTag derives a forward (y-ion) read's nterm_mass
+    from the precursor mass, so a wrong precursor charge or isotope shows there first: true when
+    the tag as written (not reversed) occurs in the peptide (I=L) with nterm_mass equal to the
+    residue mass before it within tol. residues and pref come from peptide_masses()."""
+    t = normalize_tag(tag)
+    if not t or not pref:
+        return False
+    return any(abs(nterm_mass - pref[i]) <= tol for i in _find_all(residues, t))
 
 
 def _mark(tags: pd.DataFrame, psms: pd.DataFrame, rule: str = "flank") -> pd.DataFrame:
@@ -134,14 +156,17 @@ def _mark(tags: pd.DataFrame, psms: pd.DataFrame, rule: str = "flank") -> pd.Dat
     if {"nterm_mass", "cterm_mass"} <= set(m.columns):
         cache: dict[str, tuple[str, list[float], float]] = {}
         out = []
-        for t, p, n, c, ok in zip(m["tag"], m["peptide"], pd.to_numeric(m["nterm_mass"], errors="coerce"),
-                                  pd.to_numeric(m["cterm_mass"], errors="coerce"), m["correct_seq"]):
+        series = m["ion_series"].fillna("by") if "ion_series" in m.columns else ["by"] * len(m)
+        for t, p, n, c, ok, sr in zip(m["tag"], m["peptide"], pd.to_numeric(m["nterm_mass"], errors="coerce"),
+                                      pd.to_numeric(m["cterm_mass"], errors="coerce"), m["correct_seq"], series):
             if not ok:  # the flank rule implies the sequence rule
                 out.append(False)
                 continue
             if p not in cache:
                 cache[p] = peptide_masses(p)
-            out.append(tag_correct_flank(t, n, c, *cache[p]))
+            if sr not in REVERSED_OFFSET:
+                raise ValueError(f"unknown ion_series {sr!r}")
+            out.append(tag_correct_flank(t, n, c, *cache[p], reversed_offset=REVERSED_OFFSET[sr]))
         m["correct_flank"] = out
     elif rule == "flank":
         raise ValueError("rule 'flank' needs nterm_mass and cterm_mass columns")

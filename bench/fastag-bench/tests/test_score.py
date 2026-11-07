@@ -155,6 +155,33 @@ def test_flank_forward_and_reverse():
     assert not S.tag_correct_flank("PEP", 500.0, 500.0, res, pref, total)
 
 
+def test_flank_reversed_offset_per_ion_series():
+    # FASTag 1.12 #15 phase B: a reversed c-ion read carries offC - offN = -15.034708, not +H2O.
+    res, pref, total = _flank_case()
+    j = res.index("TLD")
+    off = S.REVERSED_OFFSET["cz"]
+    assert abs(off + 15.034708) < 1e-6 and S.REVERSED_OFFSET["by"] == S.WATER
+    n_cz, c_cz = total - pref[j + 3] + off, pref[j] - off
+    assert S.tag_correct_flank("DLT", n_cz, c_cz, res, pref, total, reversed_offset=off)
+    assert not S.tag_correct_flank("DLT", n_cz, c_cz, res, pref, total)          # read as b/y: wrong
+    # forward reads use the same residue-sum convention in every series
+    i = res.index("TLD")
+    assert S.tag_correct_flank("TID", pref[i], total - pref[i + 3], res, pref, total, reversed_offset=off)
+    # the tag TSV's ion_series column selects the offset per row; no column means b/y
+    psms = pd.DataFrame({"key": ["scan=1", "scan=2"], "peptide": ["PEPTIDEK", "PEPTIDEK"]})
+    tags = _tags([("scan=1", "DLT"), ("scan=2", "DLT")])
+    tags["nterm_mass"] = [n_cz, n_cz]
+    tags["cterm_mass"] = [c_cz, c_cz]
+    plain = S.score_tags(tags, psms, ks=(1,), rule="flank")
+    assert plain["all_tags_correct"] == 0
+    tags["ion_series"] = ["cz", "by"]
+    mixed = S.score_tags(tags, psms, ks=(1,), rule="flank")
+    assert mixed["all_tags_correct"] == 1
+    tags["ion_series"] = ["ax", "by"]
+    with pytest.raises(ValueError):
+        S.score_tags(tags, psms, ks=(1,), rule="flank")
+
+
 def test_score_tags_flank_vs_sequence_and_chance():
     res, pref, total = S.peptide_masses("PEPTIDEK")
     i = res.index("TLD")
@@ -258,3 +285,18 @@ def test_tag_correct_any():
     # equals the paper rule against the single candidate
     assert S.tag_correct_any("AMP", (n, c), ["SAMPLER"]) == S.tag_correct_flank("AMP", n, c, *S.peptide_masses("SAMPLER"))
     assert S.correct_candidates("AMP", (n, c), ["SAMPLER", "PEPTIDEK", "SAMPLER"]) == ["SAMPLER"]
+
+
+def test_precursor_flank_scores_the_nterm_flank_of_forward_reads_only():
+    # #6: APEPTIDEK, tag PTI at position 3 (I=L); the residue mass before it is A+P+E
+    res, pref, total = S.peptide_masses("APEPTIDEK")
+    n = pref[3]
+    c = total - pref[6]
+    assert S.tag_correct_flank("PTL", n, c, res, pref, total)
+    assert S.tag_correct_precursor_flank("PTL", n, res, pref)
+    # a precursor flank off by one isotope (1.00336 Da) fails, even with the C-terminal flank right
+    assert S.tag_correct_flank("PTL", n + 1.00336, c, res, pref, total)
+    assert not S.tag_correct_precursor_flank("PTL", n + 1.00336, res, pref)
+    # a reversed read never scores here
+    assert not S.tag_correct_precursor_flank("LTP", n, res, pref)
+    assert not S.tag_correct_precursor_flank("", n, res, pref)

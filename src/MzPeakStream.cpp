@@ -347,4 +347,127 @@ namespace FASTag
 #endif
     return std::move(probe.out);
   }
+
+  /****************************************************************************/
+  namespace
+  {
+    /// -probe_input: settings, MS levels, the first MS2 heads.
+    class RunScan : public Interfaces::IMSDataConsumer
+    {
+    public:
+      explicit RunScan(const Acquisition::ProbeLimits& limits) : limits_(limits) {}
+      void setExperimentalSettings(const ExperimentalSettings& exp) override { out.settings = exp; }
+      void setExpectedSize(Size, Size) override {}
+      void consumeSpectrum(SpectrumType& s) override
+      {
+        const std::size_t i = out.spectra++;
+        if (s.getMSLevel() == 1) ++out.ms1;
+        if (s.getMSLevel() != 2) return;
+        ++out.ms2;
+        if (i < limits_.max_spectra && out.ms2_head.size() < limits_.max_ms2)
+        {
+          MSSpectrum h = s;
+          h.clear(false);
+          out.ms2_head.push_back(std::move(h));
+        }
+      }
+      void consumeChromatogram(ChromatogramType&) override {}
+      MzPeakRunScan out;
+
+    private:
+      const Acquisition::ProbeLimits limits_;
+    };
+
+    /// -dump_spectrum: the first spectrum with one native ID, then stop.
+    class ById : public Interfaces::IMSDataConsumer
+    {
+    public:
+      struct Stop {};
+      ById(const std::string& id, Centroid::Policy picking) : id_(id), picking_(picking) {}
+      void setExperimentalSettings(const ExperimentalSettings&) override {}
+      void setExpectedSize(Size, Size) override {}
+      void consumeSpectrum(SpectrumType& s) override
+      {
+        const std::size_t i = next_++;
+        if (s.getNativeID() != id_) return;
+        pick_result = Centroid::apply(s, picker_, picking_);
+        found = s;
+        index = i;
+        hit = true;
+        throw Stop();
+      }
+      void consumeChromatogram(ChromatogramType&) override {}
+      MSSpectrum found;
+      std::size_t index = 0;
+      int pick_result = 0;
+      bool hit = false;
+
+    private:
+      const std::string id_;
+      const Centroid::Policy picking_;
+      PeakPickerHiRes picker_;
+      std::size_t next_ = 0;
+    };
+  }
+
+  MzPeakRunScan scanMzPeakRun(const std::string& path, const Acquisition::ProbeLimits& limits, int threads)
+  {
+    RunScan scan(limits);
+#ifdef _OPENMP
+    const int before = omp_get_max_threads();
+#endif
+    setThreads(threads);
+    MzPeakFile f;
+    PeakFileOptions opt = f.getOptions();
+    opt.setFillData(false);
+    f.setOptions(opt);
+    try
+    {
+      f.transform(path, &scan);
+    }
+    catch (...)
+    {
+#ifdef _OPENMP
+      omp_set_num_threads(before);
+#endif
+      rethrowAsOpenMS(std::current_exception(), path);
+    }
+#ifdef _OPENMP
+    omp_set_num_threads(before);
+#endif
+    return std::move(scan.out);
+  }
+
+  bool readMzPeakSpectrumById(const std::string& path, int threads, const std::string& native_id,
+                              Centroid::Policy picking, MSSpectrum& out, std::size_t& index,
+                              int& pick_result)
+  {
+    ById consumer(native_id, picking);
+#ifdef _OPENMP
+    const int before = omp_get_max_threads();
+#endif
+    setThreads(threads);
+    try
+    {
+      MzPeakFile().transform(path, &consumer);
+    }
+    catch (const ById::Stop&)
+    {
+    }
+    catch (...)
+    {
+#ifdef _OPENMP
+      omp_set_num_threads(before);
+#endif
+      rethrowAsOpenMS(std::current_exception(), path);
+    }
+#ifdef _OPENMP
+    omp_set_num_threads(before);
+#endif
+    if (!consumer.hit) return false;
+    out = std::move(consumer.found);
+    index = consumer.index;
+    pick_result = consumer.pick_result;
+    return true;
+  }
 }

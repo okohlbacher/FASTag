@@ -77,4 +77,42 @@ namespace FASTag
     }
     return std::string();
   }
+  std::string reversedFolded(const std::string& seq)
+  {
+    return TaxIndex::fold(std::string(seq.rbegin(), seq.rend()));
+  }
+
+  bool orientedTagSupport(const TaxIndex& idx, const std::string& seq, int k,
+                          std::size_t share_cap, double min_margin, SpeciesOrientation orient,
+                          std::vector<uint32_t>& taxa, TagLookupCounters& counters,
+                          TagLookupCounters& rev_counters, OrientationCounts* oc)
+  {
+    if (orient == SpeciesOrientation::Forward)
+      return tagSupport(idx, seq, k, share_cap, min_margin, taxa, counters);
+    std::vector<uint32_t> fwd;
+    tagSupport(idx, seq, k, share_cap, min_margin, fwd, counters);
+    const std::string rseq = reversedFolded(seq);
+    if (rseq == TaxIndex::fold(seq))
+    {
+      // A palindrome reads the same both ways: one lookup, its result as is.
+      taxa = std::move(fwd);
+      if (oc && !taxa.empty()) ++oc->palindrome;
+      return !taxa.empty();
+    }
+    std::vector<uint32_t> rev;
+    tagSupport(idx, rseq, k, share_cap, min_margin, rev, rev_counters);
+    const OrientationOutcome o = combineOrientations(fwd, rev, taxa);
+    if (oc)
+    {
+      switch (o)
+      {
+        case OrientationOutcome::Forward: ++oc->forward; break;
+        case OrientationOutcome::Reverse: ++oc->reverse; break;
+        case OrientationOutcome::Intersection: ++oc->intersection; break;
+        case OrientationOutcome::Ambiguous: ++oc->ambiguous; break;
+        case OrientationOutcome::None: break;
+      }
+    }
+    return !taxa.empty();
+  }
 }

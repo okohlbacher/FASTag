@@ -30,6 +30,9 @@
 #     shortlist and the background only, with a WARN; a conflicting duplicate
 #     identifier is refused; a chymotryptic run writes no FASTA/configuration
 #     and exits non-zero unless -shortlist_force
+#   - #11B: -stream -census_ids*, census outputs naming -census_ids (by name,
+#     symlink, hard link; the file unchanged) and a missing or unreadable
+#     -census_ids are refused before -out is written
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 BIN="$1"
@@ -257,6 +260,44 @@ esac
   || fail "-census_summary_out without -census failed"
 grep -q -- "-census_summary_out is only read for -census" "$TMP/c7.log" || fail "no warning for -census_summary_out alone"
 [ ! -e "$TMP/c7s.tsv" ] || fail "-census_summary_out without -census wrote a file"
+# -census_ids (1.12 #11 phase B): refused with -stream; no census output may
+# name it (by name, symlink or hard link; the file unchanged); a missing file
+# is an input error. Collisions are refused before the file is read, so a
+# placeholder file suffices here (census_ids_cli_test covers the join).
+printf 'placeholder, never read\n' > "$TMP/ids.idXML"
+"$BIN" -stream -census_ids "$TMP/ids.idXML" "${ARGS[@]}" </dev/null >"$TMP/ci0.log" 2>&1 && fail "-stream -census_ids ran (exit 0)"
+grep -q "stream cannot be combined with -census_ids" "$TMP/ci0.log" || fail "no -stream refusal naming -census_ids"
+"$BIN" -stream -census_ids_fdr 0.05 "${ARGS[@]}" </dev/null >"$TMP/ci0b.log" 2>&1 && fail "-stream -census_ids_fdr ran (exit 0)"
+"$BIN" -stream -census_triage_evalue 0.05 "${ARGS[@]}" </dev/null >"$TMP/ci0c.log" 2>&1 && fail "-stream -census_triage_evalue ran (exit 0)"
+ids_before=$(cksum < "$TMP/ids.idXML")
+"$BIN" -in "$IN" -out "$TMP/ci1.tsv" -census -census_ids "$TMP/ids.idXML" -census_out "$TMP/ids.idXML" "${ARGS[@]}" \
+  >"$TMP/ci1.log" 2>&1 && fail "-census_out equal to -census_ids ran (exit 0)"
+# By the same name the .tsv-only output check refuses it first (the ids
+# file is an idXML); through a .tsv alias (below) the guard has to.
+grep -q -E "is the -census_ids file|Invalid output file extension" "$TMP/ci1.log" || fail "no refusal message for -census_out = -census_ids"
+"$BIN" -in "$IN" -out "$TMP/ci2.tsv" -census -census_ids "$TMP/ids.idXML" -census_summary_out "$TMP/ids.idXML" "${ARGS[@]}" \
+  >"$TMP/ci2.log" 2>&1 && fail "-census_summary_out equal to -census_ids ran (exit 0)"
+grep -q -E "is the -census_ids file|Invalid output file extension" "$TMP/ci2.log" || fail "no refusal message for -census_summary_out = -census_ids"
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) ;;
+  *)
+    ln -s "$TMP/ids.idXML" "$TMP/idslink.tsv"
+    ln "$TMP/ids.idXML" "$TMP/idshard.tsv"
+    "$BIN" -in "$IN" -out "$TMP/ci3.tsv" -census -census_ids "$TMP/ids.idXML" -census_out "$TMP/idslink.tsv" "${ARGS[@]}" \
+      >"$TMP/ci3.log" 2>&1 && fail "-census_out aliasing -census_ids through a symlink ran (exit 0)"
+    grep -q "is the -census_ids file" "$TMP/ci3.log" || fail "no message naming -census_ids (symlink)"
+    "$BIN" -in "$IN" -out "$TMP/ci4.tsv" -census -census_ids "$TMP/ids.idXML" -census_out "$TMP/idshard.tsv" "${ARGS[@]}" \
+      >"$TMP/ci4.log" 2>&1 && fail "-census_out aliasing -census_ids through a hard link ran (exit 0)"
+    grep -q "is the -census_ids file" "$TMP/ci4.log" || fail "no message naming -census_ids (hard link)" ;;
+esac
+[ "$(cksum < "$TMP/ids.idXML")" = "$ids_before" ] || fail "the -census_ids file was modified by a census run"
+[ ! -e "$TMP/ci1.tsv" ] && [ ! -e "$TMP/ci3.tsv" ] || fail "a refused -census_ids collision wrote -out"
+"$BIN" -in "$IN" -out "$TMP/ci5.tsv" -census -census_ids "$TMP/missing.idXML" "${ARGS[@]}" >"$TMP/ci5.log" 2>&1 \
+  && fail "-census_ids on a missing file ran (exit 0)"
+[ ! -e "$TMP/ci5.tsv" ] || fail "-census_ids on a missing file wrote -out"
+"$BIN" -in "$IN" -out "$TMP/ci6.tsv" -census -census_ids "$TMP/ids.idXML" "${ARGS[@]}" >"$TMP/ci6.log" 2>&1 \
+  && fail "-census_ids on an unreadable idXML ran (exit 0)"
+grep -q "census_ids" "$TMP/ci6.log" || fail "no message naming -census_ids for an unreadable file"
 # #5 shortlist, reduced FASTA and engine configuration. The protease check
 # reads the shipped models.
 export FASTAG_DIGEST_DIR="${FASTAG_DIGEST_DIR:-$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)/data/digest}"

@@ -18,7 +18,10 @@ const CONTAMINANT: Record<string, string> = {
   Homo: 'keratin / handling (or the sample itself)'
 }
 
-function fmtQ(q: number): string {
+// null: the CLI wrote NA (1.12 #10, -species_orientation both). The analytic
+// q-value is withheld there, so it is shown as uncalibrated, never as q = 1.
+function fmtQ(q: number | null): string {
+  if (q === null) return 'uncalibrated'
   if (q === 0) return '<1e-300'
   if (q < 0.001) return q.toExponential(1)
   return q.toFixed(3)
@@ -133,7 +136,7 @@ export default function SpeciesPanel({
           </div>
           <div className="muted">
             Ranked first by {counted} spectra ·{' '}
-            <span title={Q_TITLE}>q {fmtQ(top.q)}</span>
+            <span title={top.q === null ? Q_NA_TITLE : Q_TITLE}>q {fmtQ(top.q)}</span>
             {next && (
               <>
                 {' '}· next: <TaxonName t={next} /> at {relOf(next)}% of its evidence
@@ -213,7 +216,7 @@ export default function SpeciesPanel({
                   </td>
                   <td className="num">{t.observed.toLocaleString('en-US')}</td>
                   {deconvolved && <td className="num">{t.adjusted.toLocaleString('en-US')}</td>}
-                  <td className="num dim">{fmtQ(t.q)}</td>
+                  <td className="num dim" title={t.q === null ? Q_NA_TITLE : undefined}>{fmtQ(t.q)}</td>
                 </tr>
               )
             })}
@@ -245,6 +248,9 @@ export default function SpeciesPanel({
     </div>
   )
 }
+
+const Q_NA_TITLE =
+  'Uncalibrated: under -species_orientation both no analytic background applies, so the CLI writes the q-value as NA. Use the decoy_qvalue of -species_call decoy.'
 
 const Q_TITLE = 'q-value: smaller means the evidence is less likely to be chance. Use it to rank taxa, not as an error rate.'
 

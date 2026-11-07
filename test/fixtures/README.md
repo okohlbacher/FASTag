@@ -142,6 +142,14 @@ aside. sha256
 `7be84af167c367b58732a9503f89328a2a790185dc4d1c660363bfb66525dff6`. Derived from
 the OpenMS example, so BSD-3-Clause as well.
 
+`digest_1.11.0_Ecoli_MS2_small_Da.tsv` — the `-digest_out` report of the same
+FASTag 1.11.0 run (same binary, input and options, written together with the
+label report above, whose sha256 it reproduced). `test/digest_cli_test.sh`
+checks that `-digest_out` at the 1.12 defaults, the chemistry v2 options
+(#3c-#3f) included, writes these rows, the `run version` row aside. sha256
+`f9e49767ca4a51f1369ea2c3ad6d9c7f45d5baca9c69f7527fd08715972a7eb7`. Derived from
+the OpenMS example, so BSD-3-Clause as well.
+
 `Ecoli_shortlist.fasta`, `chymo_insilico.mgf` — the #5 shortlist fixtures
 (FASTag 1.12), written by `make_shortlist_fixtures.py` (standard library,
 Python 3) from OpenMS `release/3.5.0`
@@ -169,6 +177,24 @@ the enzyme is Lys_C on purpose (see its header).
 sha256: `Ecoli_shortlist.fasta` `842262adfd982bcee9e0f135ba4b6214ea21282c06bf8b9d4982d32d5ae87ed4`,
 `chymo_insilico.mgf` `d5bbde1229e2862f7f308626f735455b4328689f60dc0d0b777799c7ebaa6582`,
 `comet_template.params` `75966c005779290916dfc104024f439924d91cf6010d6ea1d6ff3bd7658983c9`.
+
+**Ion series (1.12 #15 phase B).** No fixture file is committed. The tests
+derive what they need at run time:
+- `ion_series_cli_test.sh` edits `Ecoli_MS2_small.mzML` into `etd_all`,
+  `etd_1`/`etd_2`, `ethcd_all` and `filter_etd` (activation terms or the filter
+  string only, at equal byte length where the index must stay exact; peaks
+  untouched), as in phase A;
+- `ion_series_test --write-mzml <fasta> <out.mzML> cz|by [n]` writes the
+  synthetic runs `ion_series_cli_test.sh` and `threads_test.sh` use: 40
+  tryptic peptides of `Ecoli_MS2_small.fasta` (up to one missed cleavage,
+  8-18 residues, no C), precursor charge 2 and 3 alternately, c and z-dot ions
+  (activation ETD, plus the unreacted precursor and its charge-reduced
+  species) or b and y ions (activation CID) from OpenMS
+  TheoreticalSpectrumGenerator at fragment charges 1 .. z-1, 15 noise peaks,
+  fixed seed;
+- `indexed_mzml_test` writes `etd_like` (every CID term of the indexed gate
+  fixture replaced by ETD) and `etd_paramgroup` (ETD, EThcD and CID in param
+  groups and own terms, one filter-string-only spectrum).
 
 ## #17 mass-shift fixture (1.12)
 

@@ -46,6 +46,10 @@ namespace FASTag
   /// Peaks above precursor mass + proton + this (Da) are dropped.
   static constexpr double PRECURSOR_TOL = 1.5;
 
+  /// c/z only: how far above a charge-reduced precursor species (in Da,
+  /// neutral) its isotope and hydrogen-transfer forms reach.
+  static constexpr double ETD_REDUCED_ABOVE = 3.0;
+
   /// Highest fragment charge the deisotoper tries.
   static constexpr int DEISOTOPE_MAX_CHARGE = 3;
   /// The deisotoper's intensity floor (OpenMS ThresholdMower's 0.05), applied
@@ -205,6 +209,30 @@ namespace FASTag
       return p.tol_ppm ? mz * p.frag_tol * 1e-6 : p.frag_tol;
     }
 
+    /// The m/z windows the ETD precursor filter drops (c/z only): around the
+    /// unreacted precursor and each charge-reduced species of a charge-c
+    /// precursor of neutral mass M, (M + c*p)/(c - k) for k = 0 .. c-1, from
+    /// one hydrogen below to 3 Da above (isotopes and hydrogen transfer), in
+    /// neutral mass, each widened by the fragment tolerance.
+    void etdPrecursorWindows(double M, int charge, const Param& p, std::vector<std::pair<double, double>>& out)
+    {
+      out.clear();
+      const double kH = EmpiricalFormula("H").getMonoWeight();
+      for (int k = 0; k < charge; ++k)
+      {
+        const int zr = charge - k;
+        const double cr = (M + charge * PROTON) / zr;
+        out.emplace_back(cr - kH / zr - tolAt(p, cr), cr + ETD_REDUCED_ABOVE / zr + tolAt(p, cr));
+      }
+    }
+
+    inline bool inWindows(const std::vector<std::pair<double, double>>& w, double mz)
+    {
+      for (const auto& lo_hi : w)
+        if (mz >= lo_hi.first && mz <= lo_hi.second) return true;
+      return false;
+    }
+
     /// Combine independent-ish p-values by Fisher's method.
     ///
     /// The three subscores are computed from the same peaks and are therefore not
@@ -348,10 +376,16 @@ namespace FASTag
       MSSpectrum work;
       work.reserve(in.size());
       const double max_mz = s.precursor_mass + PROTON + PRECURSOR_TOL;
+      // c/z (electron activation, #15 phase B): the unreacted precursor and
+      // its charge-reduced species carry no sequence; they are dropped below.
+      const bool etd_filter = p.ion_pair.kind == IonSeries::Series::CZ;
+      static thread_local std::vector<std::pair<double, double>> etd_windows;
+      if (etd_filter) etdPrecursorWindows(s.precursor_mass, charge, p, etd_windows);
       for (const auto& pk : in)
       {
         if (!std::isfinite(pk.getMZ()) || !std::isfinite(pk.getIntensity())) continue;
         if (pk.getIntensity() <= 0 || pk.getMZ() > max_mz) continue;
+        if (etd_filter && inWindows(etd_windows, pk.getMZ())) continue;
         work.push_back(pk);
       }
 
@@ -544,7 +578,11 @@ namespace FASTag
             for (int r = 0; r < 2 && !found; ++r)
             {
               if (r == 0 ? !same_rule : !prec_rule) continue;
-              const double cmz = complementMz(M, s.prec_charge, z, mz,
+              // The Precursor rule shares the charges the pair carries: c
+              // for b/y, c - 1 for c/z-dot (ETD/ECD take up one electron);
+              // complementMz() gives NaN when z leaves none for the partner.
+              const int pair_charge = s.prec_charge - cs.charge_loss;
+              const double cmz = complementMz(M, pair_charge, z, mz,
                                               r == 0 ? ComplementRule::SameCharge
                                                      : ComplementRule::Precursor);
               if (std::isnan(cmz)) continue;
@@ -825,8 +863,22 @@ namespace FASTag
       // only consumer of the fit, and they are what a downstream search matches on.
       // The low peak is assumed to be a y ion, so a b-derived tag reads reversed
       // and its flanks carry a one-water offset.
-      t.cterm_mass = std::max(0.0, avg * charge - PROTON * charge - WATER);
-      t.nterm_mass = std::max(0.0, s.precursor_mass - ((avg + cum) * charge - PROTON * charge));
+      if (p.ion_pair.kind == IonSeries::Series::BY)
+      {
+        t.cterm_mass = std::max(0.0, avg * charge - PROTON * charge - WATER);
+        t.nterm_mass = std::max(0.0, s.precursor_mass - ((avg + cum) * charge - PROTON * charge));
+      }
+      else
+      {
+        // Another series (#15 phase B, c/z-dot): the low peak is the
+        // C-terminal ion, residues + offC, and the residue-sum convention of
+        // b/y holds for forward reads: nterm + tag + cterm + H2O = M. A
+        // reversed read (the N-terminal series) carries reversedOffset().
+        const double offC = p.ion_pair.offC;
+        t.cterm_mass = std::max(0.0, avg * charge - PROTON * charge - offC);
+        t.nterm_mass = std::max(0.0, s.precursor_mass - ((avg + cum) * charge - PROTON * charge) - (WATER - offC));
+      }
+      t.ion_series = p.ion_pair.kind;
 
       t.seq = spell(A, path);
       for (const Step& st : path) { t.n_res += stepResidues(st); t.gapped = t.gapped || st.gap; }
@@ -1007,7 +1059,7 @@ namespace FASTag
   /// Everything that depends on the seed length -- the walk, extension,
   /// scoring and selection -- over a prepared spectrum and its graphs.
   static std::vector<Tag> tagPrepared(const Prepared& s, const std::vector<Graph>& graphs,
-                                      const Param& p, const Tables& tables)
+                                      const Param& p, const Tables& tables, double multiplicity = 1.0)
   {
     std::vector<Tag> out;
     // scored and the DFS state below are scratch reused across paths, charges
@@ -1119,6 +1171,10 @@ namespace FASTag
     for (ScoredTag& cand : scored)
     {
       cand.tag.evalue *= static_cast<double>(std::max<size_t>(n_seeds, 1));
+      // 1.12 #6: H precursor hypotheses tagged for this spectrum (Bonferroni),
+      // before the cut and the cap below. 1 (the default) is skipped, so the
+      // 1.11 doubles are untouched.
+      if (multiplicity != 1.0) cand.tag.evalue *= multiplicity;
       if (cand.tag.gapped) cand.tag.evalue *= gap_penalty;
     }
 
@@ -1254,6 +1310,13 @@ namespace FASTag
     return out;
   }
 
+  MSSpectrum preparedPeaks(const MSSpectrum& in, double precursor_mz, int charge, const Param& p)
+  {
+    if (in.empty() || !(precursor_mz > 0) || !std::isfinite(precursor_mz)) return {};
+    if (charge <= 0) charge = 2;
+    return prepare(in, precursor_mz, charge, p, ComplementSpec::fromParam(p)).spec;
+  }
+
   namespace
   {
     /// The census facts of a prepared spectrum (SpectrumDiag).
@@ -1273,7 +1336,8 @@ namespace FASTag
   }
 
   std::vector<Tag> tagSpectrum(const MSSpectrum& in, double precursor_mz, int charge,
-                               const Param& p, const Tables& tables, SpectrumDiag* diag)
+                               const Param& p, const Tables& tables, SpectrumDiag* diag,
+                               double multiplicity)
   {
     if (diag) *diag = SpectrumDiag{};
     // !(x > 0): NaN must not pass. A NaN precursor turned off the precursor
@@ -1289,13 +1353,13 @@ namespace FASTag
     if (!enough) return {};
     const std::vector<Graph> graphs = buildGraphs(s, p, tables.alphabet());
     countEdges(diag, graphs);
-    return tagPrepared(s, graphs, p, tables);
+    return tagPrepared(s, graphs, p, tables, multiplicity);
   }
 
   std::vector<std::vector<Tag>> tagSpectrum(const MSSpectrum& in, double precursor_mz, int charge,
                                             const std::vector<Param>& params,
                                             const std::vector<Tables>& tables,
-                                            SpectrumDiag* diag)
+                                            SpectrumDiag* diag, double multiplicity)
   {
     if (diag) *diag = SpectrumDiag{};
     std::vector<std::vector<Tag>> out(params.size());
@@ -1317,7 +1381,7 @@ namespace FASTag
         graphs = buildGraphs(s, params[0], tables[0].alphabet());
         countEdges(diag, graphs);
       }
-      out[i] = tagPrepared(s, graphs, params[i], tables[i]);
+      out[i] = tagPrepared(s, graphs, params[i], tables[i], multiplicity);
     }
     fillDiag(diag, s, enough);
     return out;

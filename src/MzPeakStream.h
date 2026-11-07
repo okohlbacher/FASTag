@@ -153,4 +153,25 @@ namespace FASTag
   /// Throws the reader's error.
   std::vector<Acquisition::Ms2Meta> probeMzPeakMetadata(const std::string& path, const Acquisition::ProbeLimits& limits,
                                                         int threads);
+
+  /// What -probe_input reads of an mzPeak archive (1.12 G1): its run-level
+  /// settings, the MS level of every spectrum, and the metadata (no peaks)
+  /// of its first MS2 within @p limits, in file order. One metadata-only
+  /// pass. Throws the reader's error.
+  struct MzPeakRunScan
+  {
+    OpenMS::ExperimentalSettings settings;
+    std::size_t spectra = 0, ms1 = 0, ms2 = 0;
+    std::vector<OpenMS::MSSpectrum> ms2_head;  ///< the first MS2, without peaks
+  };
+  MzPeakRunScan scanMzPeakRun(const std::string& path, const Acquisition::ProbeLimits& limits, int threads);
+
+  /// The spectrum of an mzPeak archive whose native ID is @p native_id,
+  /// centroided as @p picking says (what MzPeakStream::take() hands the
+  /// tagger), and its index (1.12 G1 -dump_spectrum). Reads in file order
+  /// and stops at the first match; @p pick_result is Centroid::apply()'s.
+  /// False when no spectrum has that ID. Throws the reader's error.
+  bool readMzPeakSpectrumById(const std::string& path, int threads, const std::string& native_id,
+                              Centroid::Policy picking, OpenMS::MSSpectrum& out, std::size_t& index,
+                              int& pick_result);
 }

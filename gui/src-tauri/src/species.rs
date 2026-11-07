@@ -15,7 +15,9 @@ pub struct Taxon {
     name: String,
     observed: f64,
     adjusted: f64,
-    q: f64,
+    // None = the CLI wrote NA: under -species_orientation both the analytic
+    // q-value is withheld (uncalibrated), which is not the same as q = 1.
+    q: Option<f64>,
 }
 
 #[derive(Serialize)]
@@ -36,6 +38,16 @@ pub struct TaxdbInfo {
 fn num(s: &str) -> f64 {
     let t = s.trim().trim_end_matches(['x', 'X']);
     t.parse::<f64>().ok().filter(|v| v.is_finite()).unwrap_or(0.0)
+}
+
+// The qvalue column: "NA" (1.12 #10, -species_orientation both) is kept as
+// its own state, None; anything else unparsable falls back to 1.0 as before.
+fn qvalue(s: &str) -> Option<f64> {
+    let t = s.trim();
+    if t == "NA" {
+        return None;
+    }
+    Some(t.parse::<f64>().ok().filter(|v| v.is_finite()).unwrap_or(1.0))
 }
 
 // Only regular files: opening a FIFO or a device would block, or never end.
@@ -69,7 +81,7 @@ fn read_species(path: &str) -> Option<SpeciesReport> {
             name: get(&f, i_name),
             observed: num(&get(&f, i_obs)),
             adjusted: num(&get(&f, i_adj)),
-            q: get(&f, i_q).parse().ok().filter(|v: &f64| v.is_finite()).unwrap_or(1.0),
+            q: qvalue(&get(&f, i_q)),
         });
     }
 
@@ -177,6 +189,23 @@ mod tests {
         assert_eq!(r.taxa.len(), 1);
         assert_eq!(r.taxa[0].name, "Caf\u{FFFD}ella");
         assert_eq!(r.taxa[0].observed, 5.0);
+        std::fs::remove_file(&f).ok();
+    }
+
+    #[test]
+    fn na_qvalue_is_uncalibrated_not_one() {
+        // -species_orientation both writes log_pvalue and qvalue as NA.
+        let f = tempfile_path("na.tsv");
+        std::fs::write(&f, "rank\ttaxid\tname\tobserved\tadjusted\texpected\tlog_pvalue\tqvalue\n\
+            genus\t1\tA\t5\t5\t0.5\tNA\tNA\n\
+            genus\t2\tB\t4\t4\t0.5\t-3\t0.01\n\
+            genus\t3\tC\t3\t3\t0.5\t-3\tgarbage\n").unwrap();
+        let r = read_species(f.to_str().unwrap()).unwrap();
+        assert_eq!(r.taxa[0].q, None, "NA must stay NA, not q = 1");
+        assert_eq!(r.taxa[1].q, Some(0.01));
+        assert_eq!(r.taxa[2].q, Some(1.0), "other unparsable values keep the 1.0 fallback");
+        let js = serde_json::to_value(&r.taxa[0]).unwrap();
+        assert!(js["q"].is_null(), "NA serialises as null for the frontend");
         std::fs::remove_file(&f).ok();
     }
 

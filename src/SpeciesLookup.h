@@ -5,6 +5,11 @@
 // species decoy null (#1) and the orientation option (#10) can evaluate the
 // same rule on decoy and reversed tags without copying it.
 //
+// 1.12 #10 adds orientedTagSupport(): under -species_orientation both a tag is
+// also looked up reversed (I/L folded, as -orientation both folds for -fasta)
+// and the two readings are combined by combineOrientations()
+// (SpeciesEvidence.h). Under forward it is tagSupport() exactly.
+//
 // The rule, per tag (base sequence, I/L folded per k-mer):
 //   * a k-mer in NO taxon kills the tag (the reference cannot explain it);
 //   * a k-mer carried by more than share_cap taxa is skipped, not deleted
@@ -18,6 +23,7 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "SpeciesEvidence.h"
 #include "TaxIndex.h"
 
 #include <cstddef>
@@ -52,4 +58,31 @@ namespace FASTag
   /// when no rotation differs from both (a homopolymer, a two-residue tag):
   /// that tag has no decoy.
   std::string decoyTag(const std::string& seq, uint32_t j);
+  /// @p seq reversed and I/L folded: the reading of a tag written N->C under a
+  /// y-ion assumption when it was really read from b ions.
+  std::string reversedFolded(const std::string& seq);
+
+  /// Run-level counts of the orientation rule (1.12 #10), one per tag looked
+  /// up under SpeciesOrientation::Both. Tags that are informative in neither
+  /// orientation are not counted.
+  struct OrientationCounts
+  {
+    uint64_t forward = 0;       ///< informative only as written
+    uint64_t reverse = 0;       ///< informative only reversed (the gains of both)
+    uint64_t intersection = 0;  ///< informative both ways, the common taxa used
+    uint64_t ambiguous = 0;     ///< informative both ways without a common taxon: skipped
+    uint64_t palindrome = 0;    ///< folded tag equals its reverse: looked up once
+  };
+
+  /// The taxa supporting one tag in the orientations @p orient asks for.
+  /// Forward: tagSupport(seq) exactly, @p rev_counters and @p oc untouched.
+  /// Both: tagSupport() of @p seq (counted in @p counters) and of
+  /// reversedFolded(@p seq) (counted in @p rev_counters, so the forward
+  /// counters equal a forward run's), combined by combineOrientations(); a
+  /// palindrome (folded) is looked up once. Returns true and fills @p taxa
+  /// when the combined support is non-empty. @p oc may be null.
+  bool orientedTagSupport(const TaxIndex& idx, const std::string& seq, int k,
+                          std::size_t share_cap, double min_margin, SpeciesOrientation orient,
+                          std::vector<uint32_t>& taxa, TagLookupCounters& counters,
+                          TagLookupCounters& rev_counters, OrientationCounts* oc);
 }

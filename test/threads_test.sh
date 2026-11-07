@@ -9,6 +9,8 @@
 # and the -out_spectra re-read (a serial picker) each centroid: every TSV and
 # the exported spectra, with -out_spectra (OnDisc reader) and without it (fast
 # reader), byte-identical at 1, 3 and 8 threads.
+# With a 6th argument (ion_series_test), also -ion_series auto (1.12 #15
+# phase B) on a synthetic ETD run.
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 BIN="$1"
@@ -35,7 +37,7 @@ for t in 1 3 8; do
     -glyco -glyco_out "$d/glyco.tsv" -recon_id_out "$d/ids.idXML" \
     >"$d/log" 2>&1 || { cat "$d/log" >&2; fail "-threads $t run failed"; }
 done
-for f in "${OUTS[@]}"; do
+for f in ${OUTS[@]+"${OUTS[@]}"}; do
   [ "$(wc -l < "$TMP/t1/$f.tsv")" -gt 1 ] || fail "$f.tsv has no rows at -threads 1; the check would prove nothing"
   for t in 3 8; do
     cmp -s "$TMP/t1/$f.tsv" "$TMP/t$t/$f.tsv" || fail "$f.tsv differs between -threads 1 and $t"
@@ -76,7 +78,64 @@ for f in census census_summary recon; do
     cmp -s "$TMP/c1/$f.tsv" "$TMP/c$t/$f.tsv" || fail "$f.tsv differs between -threads 1 and $t"
   done
 done
+# -census_ids (1.12 #11B): the joined table and the census_ids section at
+# 1, 3 and 8 threads; the idXML is FASTag's own -recon_id_out of the 1-thread
+# run with a q-value added to every hit (score type q-value), so that
+# identified and triage both take several values.
+if [ -s "$TMP/c1/recon.tsv" ]; then
+  "$BIN" -in "$IN" -out "$TMP/c1/ri.tsv" -threads 1 -tag_lengths 3 5 -fragment_tolerance 0.3 \
+    -fragment_tolerance_unit Da -recon_fasta "$DB" -recon_out "$TMP/c1/ri_recon.tsv" \
+    -recon_id_out "$TMP/c1/ri.idXML" >"$TMP/c1/rilog" 2>&1 || fail "-recon_id_out run failed"
+  # Every other identification becomes a q = 0.001 target, the rest q = 0.5.
+  awk 'BEGIN { n = 0 }
+       /<PeptideIdentification / { n++; sub(/score_type="[^"]*"/, "score_type=\"q-value\""); sub(/higher_score_better="[^"]*"/, "higher_score_better=\"false\"") }
+       /<PeptideHit / { sub(/score="[^"]*"/, "score=\"" (n % 2 ? "0.001" : "0.5") "\"") }
+       { print }' "$TMP/c1/ri.idXML" > "$TMP/ids.idXML"
+  grep -q 'score_type="q-value"' "$TMP/ids.idXML" || fail "could not prepare the -census_ids file"
+  for t in 1 3 8; do
+    d="$TMP/i$t"; mkdir -p "$d"
+    "$BIN" -in "$IN" -out "$d/tags.tsv" -threads "$t" -tag_lengths 3 5 -fragment_tolerance 0.3 \
+      -fragment_tolerance_unit Da -census -census_ids "$TMP/ids.idXML" -census_triage_evalue 1 \
+      -census_out "$d/census.tsv" -census_summary_out "$d/census_summary.tsv" >"$d/log" 2>&1 \
+      || { cat "$d/log" >&2; fail "-census_ids -threads $t run failed"; }
+  done
+  # identified is found by name (a later census column moves it)
+  idc=$(head -1 "$TMP/i1/census.tsv" | tr '\t' '\n' | grep -nx identified | cut -d: -f1)
+  [ -n "$idc" ] || fail "-census_ids: no identified column"
+  for v in 0 1; do
+    [ "$(awk -F'\t' -v v=$v -v c="$idc" 'NR > 1 && $c == v' "$TMP/i1/census.tsv" | wc -l)" -gt 0 ] || fail "-census_ids: no row identified $v; the check is weak"
+  done
+  for f in census census_summary; do
+    for t in 3 8; do
+      cmp -s "$TMP/i1/$f.tsv" "$TMP/i$t/$f.tsv" || fail "-census_ids: $f.tsv differs between -threads 1 and $t"
+    done
+  done
+fi
 msg="${#OUTS[@]} TSVs, the idXML, the census tables"
+# 1.12 #15 phase B: -ion_series auto on a synthetic ETD run (6th argument,
+# ion_series_test --write-mzml: c/z-dot ladders of 40 fixture peptides,
+# activation ETD): every spectrum is read as c/z-dot through the tagger,
+# recon, digest, label, mass gap and census.
+GEN="${6:-}"
+if [ -n "$GEN" ]; then
+"$GEN" --write-mzml "$DB" "$TMP/etd.mzML" cz > /dev/null || fail "writing the synthetic ETD run"
+ZOUTS=(tags recon digest label massgap census)
+for t in 1 3 8; do
+  d="$TMP/z$t"; mkdir -p "$d"
+  "$BIN" -in "$TMP/etd.mzML" -out "$d/tags.tsv" -threads "$t" -ion_series auto \
+    -tag_length 4 -extension 1 -fragment_tolerance 0.02 -fragment_tolerance_unit Da -recon_fasta "$DB" -recon_out "$d/recon.tsv" \
+    -digest_out "$d/digest.tsv" -label_out "$d/label.tsv" -massgap_out "$d/massgap.tsv" \
+    -census -census_out "$d/census.tsv" >"$d/log" 2>&1 || { cat "$d/log" >&2; fail "-ion_series auto -threads $t run failed"; }
+done
+[ "$(awk -F'\t' 'NR > 1 { print $NF }' "$TMP/z1/tags.tsv" | sort -u)" = cz ] || fail "-ion_series auto: the ETD copy was not read as c/z"
+for f in ${ZOUTS[@]+"${ZOUTS[@]}"}; do
+  [ "$(wc -l < "$TMP/z1/$f.tsv")" -gt 1 ] || fail "-ion_series auto: $f.tsv has no rows"
+  for t in 3 8; do
+    cmp -s "$TMP/z1/$f.tsv" "$TMP/z$t/$f.tsv" || fail "-ion_series auto: $f.tsv differs between -threads 1 and $t"
+  done
+done
+msg="$msg; -ion_series auto: ${#ZOUTS[@]} TSVs on a synthetic ETD run"
+fi
 
 if [ -n "$PROF" ]; then
   # On the profile fixture's 10 spectra the tags (at -min_filter_length 3),
@@ -90,14 +149,14 @@ if [ -n "$PROF" ]; then
       extra=(); [ $r = ondisc ] && extra=(-out_spectra "$d/spectra.mzML")
       "$BIN" -in "$PROF" -out "$d/tags.tsv" -threads "$t" -pick_profile auto -min_filter_length 3 \
         -fasta "$DB" -recon_out "$d/recon.tsv" -delta_out "$d/delta.tsv" \
-        -digest_out "$d/digest.tsv" -label_out "$d/label.tsv" -massgap_out "$d/massgap.tsv" "${extra[@]}" \
+        -digest_out "$d/digest.tsv" -label_out "$d/label.tsv" -massgap_out "$d/massgap.tsv" ${extra[@]+"${extra[@]}"} \
         >"$d/log" 2>&1 || { cat "$d/log" >&2; fail "-pick_profile auto ($r) -threads $t run failed"; }
       grep -q 'mzML: centroided 10 profile spectra on read' "$d/log" \
         || { cat "$d/log" >&2; fail "-pick_profile auto ($r) -threads $t: the 10 profile spectra were not centroided"; }
     done
   done
   for r in ondisc fast; do
-    for f in "${POUTS[@]}" recon delta; do
+    for f in ${POUTS[@]+"${POUTS[@]}"} recon delta; do
       case " ${POUTS[*]} " in *" $f "*)
         [ "$(wc -l < "$TMP/p${r}1/$f.tsv")" -gt 1 ] || fail "auto ($r): $f.tsv has no rows at -threads 1; the check would prove nothing" ;;
       esac

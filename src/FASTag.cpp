@@ -31,19 +31,23 @@
 
 #include "Acquisition.h"
 #include "AcquisitionProbe.h"
+#include "AlkylationCall.h"
 #include "Centroid.h"
 #include "CliParam.h"
 #include "Census.h"
+#include "CensusIds.h"
 #include "ClusterAcc.h"
 #include "Digest.h"
 #include "FASTagger.h"
 #include "FastaFilter.h"
 #include "Glyco.h"
 #include "IndexedMzMLReader.h"
+#include "InputProbe.h"
 #include "IonSeries.h"
 #include "MgfReader.h"
 #include "NumFormat.h"
 #include "OutputGuard.h"
+#include "PrecursorHypotheses.h"
 #include "Proforma.h"
 #include "ReconIds.h"
 #include "RunMeta.h"
@@ -155,6 +159,21 @@ namespace
     for (const std::string& c : {exe + "../share/FASTag/digest", exe + "share-FASTag-digest", exe + "digest"})
       if (File::exists(c + "/digest_models.tsv")) return c;
     return std::string();
+  }
+
+  /// 1.12 D (#3g): directory of the shipped -alkylation_proteome proteomes:
+  /// $FASTAG_ALKYLATION_DIR, else "alkylation" beside the digest data
+  /// directory (share/FASTag/digest -> share/FASTag/alkylation,
+  /// share-FASTag-digest -> share-FASTag-alkylation). "" when there is none.
+  std::string alkylationDir_()
+  {
+    const char* env = std::getenv("FASTAG_ALKYLATION_DIR");
+    if (env != nullptr && *env != '\0' && File::isDirectory(std::string(env))) return std::string(env);
+    std::string d = digestDir_();
+    while (!d.empty() && (d.back() == '/' || d.back() == '\\')) d.pop_back();
+    if (d.size() < 6 || d.compare(d.size() - 6, 6, "digest") != 0) return std::string();
+    const std::string a = d.substr(0, d.size() - 6) + "alkylation";
+    return File::isDirectory(a) ? a : std::string();
   }
 
   /// k of a taxonomy index, read from its 16-byte header alone.
@@ -744,6 +763,50 @@ protected:
     registerFlag_("complement_midp",
                   "Score complements with DirecTag's hypergeometric mid-p P(X>c) + P(X=c)/2 "
                   "for tags with 0 or 1 complemented peaks; 2 or more keep P(X>=c)", true);
+    // #6: precursor charge and isotope hypotheses (src/PrecursorHypotheses.h).
+    // Defaults are FASTag 1.11: uncharged precursors are tagged as 2+, no
+    // isotope offset; validation decides any other default.
+    registerStringOption_("unknown_charge", "<mode>", FASTag::Hyp::kModeDefault,
+                          "How a precursor without a charge is tagged: assume2 (as 2+, as before "
+                          "1.12), enumerate (at each listed possible charge, else at every charge "
+                          "-charge_min..-charge_max) or infer (at the charge its complement pairs "
+                          "support; both of two close calls; 1+ when 1 is a candidate and almost no "
+                          "intensity lies above the precursor; without evidence 2+, or the lowest "
+                          "candidate when 2 is none). Every charge tagged is a listed possible charge, "
+                          "else one of -charge_min..-charge_max. With several, E-values are multiplied "
+                          "by their number and the reports count the charge-evidence choice only. A "
+                          "header charge is never replaced", false);
+    setValidStrings_("unknown_charge", ListUtils::create<std::string>(FASTag::Hyp::kModeValues));
+    registerIntOption_("charge_min", "<n>", FASTag::Hyp::kChargeMinDefault,
+                       "Lowest charge -unknown_charge enumerate or infer tries (1 enables infer's "
+                       "1+ test)", false);
+    setMinInt_("charge_min", 1);
+    setMaxInt_("charge_min", FASTag::Hyp::kChargeLimit);
+    registerIntOption_("charge_max", "<n>", FASTag::Hyp::kChargeMaxDefault,
+                       "Highest charge -unknown_charge enumerate or infer tries", false);
+    setMinInt_("charge_max", 1);
+    setMaxInt_("charge_max", FASTag::Hyp::kChargeLimit);
+    registerDoubleOption_("charge_infer_margin", "<value>", FASTag::Hyp::kInferMarginDefault,
+                          "Complement-pair excess by which the inferred charge must beat the "
+                          "runner-up to be tagged alone; closer, both are tagged (ambiguous). Any "
+                          "excess above 0 is a call", false, true);
+    setMinFloat_("charge_infer_margin", 0.0);
+    registerIntList_("isotope_error", "<k>", ListUtils::create<Int>("0"),
+                     "Precursor isotope offsets (-1..3) to consider: the precursor mass is "
+                     "lowered by k x 1.00336 Da, for every precursor; each charge is tagged at "
+                     "the offset its complement pairs support best. Needs a fragment tolerance "
+                     "below 0.05 Da", false, true);
+    setMinInt_("isotope_error", FASTag::Hyp::kIsotopeMin);
+    setMaxInt_("isotope_error", FASTag::Hyp::kIsotopeMax);
+    // #15 phase B: c/z-dot ions for electron activation (src/IonSeries.h).
+    // Default by is FASTag 1.11; validation decides any other default.
+    registerStringOption_("ion_series", "<mode>", FASTag::IonSeries::kModeDefault,
+                          "Ion series the MS2 spectra are read as: by (b/y ions, as before 1.12), cz "
+                          "(c/z-dot ions of electron transfer or capture dissociation, ETD/ECD), or auto "
+                          "(c/z-dot for spectra whose activation is ETD or ECD, b/y for all others, hybrid "
+                          "EThcD/ETciD included). Under cz and auto the tag TSV gains an ion_series column "
+                          "when some spectrum can be read as c/z", false);
+    setValidStrings_("ion_series", ListUtils::create<std::string>(FASTag::IonSeries::kModeValues));
     // ---- 1.12 A: options ----
     // #5: ranked protein shortlist, reduced FASTA and a search-engine
     // configuration from the tag placements. A search-space reduction, NOT an
@@ -865,6 +928,68 @@ protected:
                           "Benjamini-Hochberg; 0 estimates it from the run (Storey)", false, true);
     setMinFloat_("species_pi0", 0.0);
     setMaxFloat_("species_pi0", 1.0);
+    // #10 species lookup in both tag orientations (SpeciesEvidence.h
+    // combineOrientations). Forward by default: the report is 1.11's. Not
+    // coupled to -orientation (default both), which would change it.
+    registerStringOption_("species_orientation", "<mode>", "forward",
+                          "Which readings of a tag -species looks up: 'forward' = as written; 'both' = "
+                          "also reversed (a tag read from b ions is written reversed), using the one "
+                          "informative reading, or the taxa both share; a tag whose two readings share "
+                          "none is skipped. Independent of -orientation, which applies to -fasta and "
+                          "-recon_fasta only. Under 'both' the analytic log_pvalue and qvalue columns are NA "
+                          "(no analytic background follows); only decoy_qvalue and call from "
+                          "-species_call decoy are calibrated", false, true);
+    setValidStrings_("species_orientation", ListUtils::create<std::string>("forward,both"));
+    // #3c-#3f chemistry v2 for -digest_out (src/Digest.h). Off by default: at
+    // these defaults -digest_out is 1.11's. Not validated on held-out data;
+    // the shipped v2 table and calibration are unfitted priors until the DEV
+    // regeneration on the release candidate.
+    registerStringOption_("digest_models_version", "<v>", "shipped",
+                          "Shipped protease models of -digest_out: 'shipped' (1.11) or 'v2' (detection, "
+                          "LysargiNase and Asp-N_ambic rows, pooled specificity; not validated on held-out data)",
+                          false, true);
+    setValidStrings_("digest_models_version", ListUtils::create<std::string>("shipped,v2"));
+    registerStringOption_("digest_detection", "<mode>", "none",
+                          "Per-instrument detection weights of -digest_out from the model table: 'shipped' "
+                          "applies them and calls timsTOF runs instead of withholding them (needs a v2 table; "
+                          "not validated on held-out data); 'none' = 1.11",
+                          false, true);
+    setValidStrings_("digest_detection", ListUtils::create<std::string>("none,shipped"));
+    registerStringOption_("digest_flank2", "<mode>", "off",
+                          "Two-residue flank model of -digest_out: 'auto' scores the flank sums m(P2) + m(P1) when "
+                          "the P1 counts are too few or y1 is cut off (not validated on held-out data); 'off' = 1.11",
+                          false, true);
+    setValidStrings_("digest_flank2", ListUtils::create<std::string>("off,auto"));
+    registerDoubleOption_("digest_min_confidence", "<f>", 0.0,
+                          "Withhold a -digest_out call whose calibrated p_correct is below this (no_call "
+                          "low_confidence); 0 = off. Not validated on held-out data", false, true);
+    setMinFloat_("digest_min_confidence", 0.0);
+    setMaxFloat_("digest_min_confidence", 1.0);
+    registerInputFile_("digest_calibration", "<file>", "",
+                       "Calibration of p_correct for -digest_out (columns feature, coef). Default: the shipped "
+                       "digest_calibration.tsv when p_correct is written", false, true);
+    setValidFormats_("digest_calibration", ListUtils::create<std::string>("tsv"));
+    // #3g the alkylation call (src/AlkylationCall.h), from the reconciler's
+    // placements. Opt-in; every other output is the same with or without it.
+    registerOutputFile_("alkylation_out", "<file>", "",
+                        "Report which reagent alkylated the cysteines (or none), from the placements of "
+                        "single-Cys peptides on -recon_fasta or -alkylation_proteome: Cys form counts and "
+                        "the call (not validated on held-out data)", false);
+    setValidFormats_("alkylation_out", ListUtils::create<std::string>("tsv"));
+    registerStringOption_("alkylation_proteome", "<name>", "auto",
+                          "Database of -alkylation_out without -recon_fasta: auto (= human), human, mouse, yeast, "
+                          "ecoli (shipped proteomes) or a FASTA file (.gz allowed)", false, true);
+    registerIntOption_("alkylation_min_spectra", "<n>", 10,
+                       "Spectra the -alkylation_out call needs, binned and for the called class", false, true);
+    setMinInt_("alkylation_min_spectra", 1);
+    registerDoubleOption_("alkylation_min_share", "<f>", 0.6,
+                          "Share of the binned spectra the -alkylation_out call needs", false, true);
+    setMinFloat_("alkylation_min_share", 0.0);
+    setMaxFloat_("alkylation_min_share", 1.0);
+    registerDoubleOption_("alkylation_window", "<Da>", 0.0,
+                          "Window of -alkylation_out around each Cys form mass; 0 = 0.02 Da on a ppm run, "
+                          "0.5 Da on a run with a Da fragment tolerance", false, true);
+    setMinFloat_("alkylation_window", 0.0);
     // ---- 1.12 F: options ----
     // #11 phase A: the per-spectrum census. Opt-in; every other output is
     // the same with or without it (src/Census.h).
@@ -883,6 +1008,40 @@ protected:
                         "Default: <out> with its extension replaced by "
                         ".census_summary.tsv", false);
     setValidFormats_("census_summary_out", ListUtils::create<std::string>("tsv"));
+    // #11 phase B: the ids join (src/CensusIds.h). Without -census_ids the
+    // census is phase A's, byte for byte.
+    registerInputFile_("census_ids", "<file>", "",
+                       "Identifications of -in (idXML or mzid) for -census: adds the columns identified "
+                       "(1, 0, empty = unknown) and triage, and a census_ids section to the summary. A "
+                       "spectrum is identified by a target hit whose q-value passes -census_ids_fdr; a "
+                       "file without q-values is refused (filter it with IDFilter first)", false);
+    setValidFormats_("census_ids", ListUtils::create<std::string>("idXML,mzid"));
+    registerDoubleOption_("census_ids_fdr", "<f>", FASTag::CensusIds::kDefaultFdr,
+                          "q-value a target hit of -census_ids needs to identify its spectrum", false, true);
+    setMinFloat_("census_ids_fdr", 0.0);
+    setMaxFloat_("census_ids_fdr", 1.0);
+    registerDoubleOption_("census_triage_evalue", "<f>", FASTag::CensusIds::kDefaultTriageEvalue,
+                          "best_evalue at or below which an unidentified tagged or placed spectrum is a "
+                          "triage candidate (an E-value threshold, not a quality call)", false, true);
+    setMinFloat_("census_triage_evalue", 0.0);
+    // ---- 1.12 G: options ----
+    // G1: the two machine interfaces of the desktop GUI (src/InputProbe.h).
+    // Each prints JSON lines to stdout, writes no file and exits without
+    // tagging; the GUI finds them in --helphelp. Empty (the default) runs
+    // FASTag as before.
+    registerInputFile_("probe_input", "<file>", "",
+                       "Print the metadata of this spectra file (mzML, mzpeak or MGF) as JSON lines "
+                       "and exit: instrument and MS2 analyzer, activation, spectrum counts, "
+                       "centroid/profile, mzML index state, the acquisition check's call and, with "
+                       "-fasta, its protein and decoy counts. A FASTA file (.fasta, .fa, .faa, .fas) alone gives "
+                       "only those counts. Reads metadata only; needs no -in or -out",
+                       false, true);
+    registerStringOption_("dump_spectrum", "<nativeId>", "",
+                          "Print the peaks FASTag tags of the spectrum of -in with this native ID (after "
+                          "centroiding, the precursor cut, deisotoping and the peak budget, under the "
+                          "options given) as JSON lines and exit; needs no -out. Prepares the "
+                          "given precursor at its charge (or 2+) only",
+                          false, true);
   }
 
   /// True when option @p name holds a value other than its registered
@@ -898,8 +1057,21 @@ protected:
       case ParameterInformation::FLAG: return getFlag_(name);
       case ParameterInformation::INT: return getIntOption_(name) != static_cast<int>(e.default_value);
       case ParameterInformation::DOUBLE: return getDoubleOption_(name) != static_cast<double>(e.default_value);
+      case ParameterInformation::INTLIST: return getIntList_(name) != e.default_value.toIntVector();
       default: return getStringOption_(name) != static_cast<std::string>(e.default_value);
     }
+  }
+
+  /// True when option @p name is registered in this build and holds a value
+  /// other than its default (optionNonDefault_, plus integer lists). False
+  /// for a name this build does not register.
+  bool registeredNonDefault_(const std::string& name) const
+  {
+    const ParameterInformation* e = nullptr;
+    try { e = &findEntry_(name); }
+    catch (const Exception::UnregisteredParameter&) { return false; }
+    if (e->type == ParameterInformation::INTLIST) return getIntList_(name) != e->default_value.toIntVector();
+    return optionNonDefault_(name);
   }
 
   /// Default report path: @p out with its extension replaced by @p suffix --
@@ -922,13 +1094,18 @@ protected:
   }
 
   /// The tag TSV header line, matching appendTagRow's columns.
-  static std::string tagHeader(bool proforma, bool res_conf, bool usi)
+  /// @p hyp (1.12 #6, non-default -unknown_charge or -isotope_error only)
+  /// adds the hypothesis columns after the other optional ones; @p
+  /// ion_series (1.12 #15 phase B) the ion_series column after those.
+  static std::string tagHeader(bool proforma, bool res_conf, bool usi, bool hyp = false, bool ion_series = false)
   {
     std::string h = "spectrum\ttag\tlength\tcharge\tnterm_mass\tcterm_mass\textended"
                     "\tgapped\tevalue\tmin_conf\tmean_conf\tfasta_hit";
     if (proforma) h += "\tproforma";
     if (res_conf) h += "\tres_conf";
     if (usi) h += "\tusi";
+    if (hyp) h += "\tprec_charge\tcharge_src\tiso_offset\tselected";
+    if (ion_series) h += "\tion_series";  // 1.12 #15 phase B: after #6's, by or cz
     return h + "\n";
   }
 
@@ -945,7 +1122,9 @@ protected:
   static void appendTagRow(std::string& buf, const FASTag::Tag& t,
                            const std::string& native_id, const char* hit,
                            bool want_proforma, const std::string& proforma_fixed,
-                           bool want_res_conf, const std::string& usi = std::string())
+                           bool want_res_conf, const std::string& usi = std::string(),
+                           const FASTag::Hyp::Hypothesis* hyp = nullptr,
+                           bool want_series = false)
   {
     using FASTag::appendNum;
     constexpr auto fixed = std::chars_format::fixed;
@@ -982,6 +1161,15 @@ protected:
       }
     }
     if (!usi.empty()) { buf += '\t'; buf += usi; }
+    if (hyp)
+    {
+      // 1.12 #6: the hypothesis the row was tagged under.
+      buf += '\t'; appendNum(buf, hyp->charge);
+      buf += '\t'; buf += FASTag::Hyp::sourceName(hyp->src);
+      buf += '\t'; appendNum(buf, hyp->iso);
+      buf += '\t'; buf += hyp->selected ? '1' : '0';
+    }
+    if (want_series) { buf += '\t'; buf += FASTag::IonSeries::seriesName(t.ion_series); }
     buf += '\n';
   }
 
@@ -1094,6 +1282,104 @@ protected:
 
   FILE* stream_data_ = nullptr;  ///< the REAL stdout in -stream mode
 
+  /// The exit code of a G1 mode's status (src/InputProbe.h).
+  ExitCodes probeExit_(FASTag::Probe::Status s) const
+  {
+    using S = FASTag::Probe::Status;
+    switch (s)
+    {
+      case S::Ok: return EXECUTION_OK;
+      case S::Unsupported: return ILLEGAL_PARAMETERS;
+      case S::NotReadable: return INPUT_FILE_NOT_READABLE;
+      case S::Empty: return INPUT_FILE_EMPTY;
+      case S::Corrupt: break;
+    }
+    return INPUT_FILE_CORRUPT;
+  }
+
+  /// Writes @p jsonl to the sealed stdout; false when that fails.
+  bool writeGuiStream_(const std::string& jsonl)
+  {
+    if (!stream_data_) return false;
+    const bool ok = std::fwrite(jsonl.data(), 1, jsonl.size(), stream_data_) == jsonl.size();
+    return std::fflush(stream_data_) == 0 && ok;
+  }
+
+  /// 1.12 G1 -probe_input: the input's metadata as JSON lines, nothing else.
+  ExitCodes probeInputMode_()
+  {
+    namespace P = FASTag::Probe;
+    P::ProbeOptions opt;
+    opt.probe_spectra = static_cast<std::size_t>(getIntOption_("acquisition_probe_spectra"));
+    opt.mzpeak_threads = std::min(std::max(1, omp_get_max_threads()), 8);
+    FASTag::Centroid::parseMode(getStringOption_("pick_profile"), opt.pick_mode);
+    opt.pick_unknown_type = getFlag_("pick_unknown_type");
+    opt.acquisition_check = getStringOption_("acquisition_check");
+    opt.fasta = getStringOption_("fasta");
+    for (const std::string& a : getStringList_("shortlist_decoy_affix"))
+      if (!a.empty()) opt.decoy_affixes.push_back(a);
+    opt.version = FASTAG_VERSION;
+    const std::string file = getStringOption_("probe_input");
+    const P::ProbeOutput r = P::probeInput(file, opt);
+    if (r.status != P::Status::Ok)
+    {
+      OPENMS_LOG_ERROR << "-probe_input: " << r.error << std::endl;
+      return probeExit_(r.status);
+    }
+    if (!writeGuiStream_(r.jsonl))
+    {
+      OPENMS_LOG_ERROR << "-probe_input: cannot write to stdout." << std::endl;
+      return CANNOT_WRITE_OUTPUT_FILE;
+    }
+    return EXECUTION_OK;
+  }
+
+  /// 1.12 G1 -dump_spectrum: one spectrum's tagged peaks as JSON lines.
+  ExitCodes dumpSpectrumMode_(const std::string& in, const FASTag::Param& p)
+  {
+    namespace P = FASTag::Probe;
+    if (!getStringOption_("out").empty())
+      OPENMS_LOG_WARN << "-dump_spectrum writes no file; -out and every other output are ignored." << std::endl;
+    // The dump prepares the peaks at the 1.11 precursor rule: the header m/z,
+    // its charge or else 2. Options that tag a spectrum at other precursor
+    // hypotheses (1.12 #6: -unknown_charge, -isotope_error) would make those
+    // peaks and that charge not the ones tagged, so the dump refuses them
+    // until it follows the selected hypothesis. They are looked up by name:
+    // in a build without #6 they are not registered and nothing is refused.
+    for (const char* name : {"unknown_charge", "isotope_error"})
+    {
+      if (!registeredNonDefault_(name)) continue;
+      OPENMS_LOG_ERROR << "-dump_spectrum prepares the peaks at the given precursor and its charge (or 2+) "
+                          "only and does not follow -" << name << " yet; leave -unknown_charge and "
+                          "-isotope_error at their defaults." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    P::DumpOptions opt;
+    FASTag::Centroid::parseMode(getStringOption_("pick_profile"), opt.pick_mode);
+    opt.pick_unknown_type = getFlag_("pick_unknown_type");
+    opt.mzpeak_threads = std::min(std::max(1, omp_get_max_threads()), 8);
+    opt.param = p;
+    const std::string id = getStringOption_("dump_spectrum");
+    const P::DumpOutput r = P::dumpSpectrum(in, id, opt);
+    if (r.status != P::Status::Ok)
+    {
+      OPENMS_LOG_ERROR << "-dump_spectrum: " << r.error << std::endl;
+      return probeExit_(r.status);
+    }
+    if (!r.found)
+    {
+      OPENMS_LOG_ERROR << "-dump_spectrum: no spectrum of '" << in << "' has the native ID '" << id << "'."
+                       << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    if (!writeGuiStream_(r.jsonl))
+    {
+      OPENMS_LOG_ERROR << "-dump_spectrum: cannot write to stdout." << std::endl;
+      return CANNOT_WRITE_OUTPUT_FILE;
+    }
+    return EXECUTION_OK;
+  }
+
   ExitCodes main_(int, const char**) override
   {
     // The phases of a run, in order; each starts at a "// ---- phase N" banner:
@@ -1115,6 +1401,13 @@ protected:
     // runs on unusable for the minutes it needs, and the read path stops
     // scaling well before the core count anyway. An explicit -threads <n> is
     // honoured unchanged.
+    // ---- 1.12 G: GUI modes (-probe_input, -dump_spectrum) ----
+    // Under -stream the -stream refusal table refuses them; otherwise their
+    // stdout carries JSON lines only, sealed below as -stream seals its data
+    // channel.
+    const bool probe_mode = !getFlag_("stream") && !getStringOption_("probe_input").empty();
+    const bool dump_mode = !getFlag_("stream") && !getStringOption_("dump_spectrum").empty();
+
     if (getIntOption_("threads") == 0)
     {
       const unsigned cores = std::thread::hardware_concurrency();  // 0 if unknown
@@ -1122,11 +1415,11 @@ protected:
       TOPPBase::setMaxNumberOfThreads(n);  // omp_set_num_threads, or a no-op without OpenMP
       // Not under -stream: this runs before stdout is rewired into the data
       // channel, and a log line there is a corrupt spectrum block.
-      if (!getFlag_("stream"))
+      if (!getFlag_("stream") && !probe_mode && !dump_mode)
         OPENMS_LOG_INFO << "-threads 0: using " << n << " of " << cores << " logical cores." << std::endl;
     }
 
-    if (getFlag_("stream"))
+    if (getFlag_("stream") || probe_mode || dump_mode)
     {
       // stdout is the -stream DATA CHANNEL. OpenMS logs through thread-local
       // streams that do not follow a global reconfig, and TOPPBase prints its
@@ -1140,7 +1433,8 @@ protected:
 #ifndef _WIN32
         if (data_fd >= 0 && !stream_data_) close(data_fd);
 #endif
-        OPENMS_LOG_ERROR << "-stream: cannot rewire stdout." << std::endl;
+        OPENMS_LOG_ERROR << (getFlag_("stream") ? "-stream" : probe_mode ? "-probe_input" : "-dump_spectrum")
+                         << ": cannot rewire stdout." << std::endl;
         return ILLEGAL_PARAMETERS;
       }
 #ifndef _WIN32
@@ -1149,6 +1443,13 @@ protected:
       signal(SIGPIPE, SIG_IGN);
 #endif
     }
+    // After the seal, so that a refusal, too, leaves stdout empty.
+    if (probe_mode && dump_mode)
+    {
+      OPENMS_LOG_ERROR << "-probe_input and -dump_spectrum are separate modes; give one of them." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    if (probe_mode) return probeInputMode_();
 
     // ---- phase 1: option checks, refusals and tagging parameters ----------
 
@@ -1158,6 +1459,10 @@ protected:
         || (!getStringOption_("taxdb").empty() && !getStringOption_("species_out").empty());
     // 1.12 #1: the calibrated call runs only with species detection.
     const bool species_call_on = want_species && getStringOption_("species_call") == "decoy";
+    // 1.12 #10: both tag orientations in the species lookup.
+    const FASTag::SpeciesOrientation species_orient = getStringOption_("species_orientation") == "both"
+        ? FASTag::SpeciesOrientation::Both : FASTag::SpeciesOrientation::Forward;
+    const bool species_both = want_species && species_orient == FASTag::SpeciesOrientation::Both;
 
     // The seed lengths this run tags at, ascending and distinct: -tag_lengths
     // when given, else the one -tag_length.
@@ -1227,7 +1532,12 @@ protected:
     const std::string in = getStringOption_("in");
     const std::string out = getStringOption_("out");
     const bool stream_mode = getFlag_("stream");
-    if (!stream_mode && (in.empty() || out.empty()))
+    if (dump_mode && in.empty())
+    {
+      OPENMS_LOG_ERROR << "-dump_spectrum needs -in, the file holding the spectrum." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    if (!stream_mode && !dump_mode && (in.empty() || out.empty()))
     {
       OPENMS_LOG_ERROR << "The parameters 'in' and 'out' are required (or use -stream)." << std::endl;
       return ILLEGAL_PARAMETERS;
@@ -1263,6 +1573,12 @@ protected:
           // ---- 1.12 E: -stream refusals ----
           {"pick_profile", nullptr},
           {"pick_unknown_type", nullptr},
+          {"ion_series", nullptr},
+          {"unknown_charge", nullptr},
+          {"charge_min", nullptr},
+          {"charge_max", nullptr},
+          {"charge_infer_margin", nullptr},
+          {"isotope_error", nullptr},
           // ---- 1.12 A: -stream refusals ----
           {"shortlist_out", nullptr},
           {"fasta_out", nullptr},
@@ -1272,10 +1588,18 @@ protected:
           {"search_shifts_out", nullptr},
           // ---- 1.12 D: -stream refusals ----
           {"species_call", "-stream cannot be combined with -species_call."},
+          {"species_orientation", nullptr},
+          {"alkylation_out", nullptr},
           // ---- 1.12 F: -stream refusals ----
           {"census", nullptr},
           {"census_out", nullptr},
           {"census_summary_out", nullptr},
+          {"census_ids", nullptr},
+          {"census_ids_fdr", nullptr},
+          {"census_triage_evalue", nullptr},
+          // ---- 1.12 G: -stream refusals ----
+          {"probe_input", nullptr},
+          {"dump_spectrum", nullptr},
       };
       for (const StreamRefusal& r : stream_refusals)
         if (optionNonDefault_(r.option))
@@ -1362,6 +1686,16 @@ protected:
                         << " decoy replicates; this run uses -species_call_decoys "
                         << getIntOption_("species_call_decoys") << "." << std::endl;
     }
+    // 1.12 #10: no analytic background follows from the orientation rule, so
+    // the analytic log_pvalue and qvalue (forward index background) are
+    // withheld under both, with or without -species_call decoy; only the
+    // decoy null (decoy_qvalue, call) is calibrated.
+    if (species_both)
+      OPENMS_LOG_WARN << "-species_orientation both: the analytic log_pvalue and qvalue columns of the species "
+                         "report are NA under both; "
+                      << (species_call_on ? "use decoy_qvalue and call from -species_call decoy."
+                                          : "use decoy_qvalue from -species_call decoy.")
+                      << std::endl;
     const std::string fasta = getStringOption_("fasta");
     const std::string out_spectra = getStringOption_("out_spectra");
 
@@ -1386,6 +1720,31 @@ protected:
                                         getDoubleOption_("complement_tol_factor"),
                                         getStringOption_("complement_tolerance_unit"));
     p.complement_midp = getFlag_("complement_midp");
+    // 1.12 #6: the precursor hypotheses; at the defaults (assume2, isotope 0)
+    // hyp_on is false and the tagging loop runs exactly as in 1.11.
+    FASTag::Hyp::HypParam hyp_param;
+    FASTag::Hyp::parseMode(getStringOption_("unknown_charge"), hyp_param.mode);
+    hyp_param.charge_min = getIntOption_("charge_min");
+    hyp_param.charge_max = getIntOption_("charge_max");
+    hyp_param.infer_margin = getDoubleOption_("charge_infer_margin");
+    hyp_param.isotope_errors.clear();
+    for (const Int k : getIntList_("isotope_error")) hyp_param.isotope_errors.push_back(k);
+    if (const std::string herr = FASTag::Hyp::validate(hyp_param, p.frag_tol, p.tol_ppm); !herr.empty())
+    {
+      OPENMS_LOG_ERROR << herr << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    const bool hyp_on = !hyp_param.isDefault();
+    // #6: -species reads the selected hypothesis' rows only, through a per-row
+    // flag carried beside the rows (Block::row_species).
+    const bool species_sel_on = hyp_on && want_species;
+    // The complement pairs the infer call counts: #2's rule and tolerance.
+    const FASTag::ComplementSpec hyp_cs = FASTag::ComplementSpec::fromParam(p);
+    // #15 phase B: a spectrum read as c/z-dot counts c/z-dot pairs (they sum
+    // to M + H) for its charge and isotope evidence, as its tags do.
+    FASTag::Param p_cz = p;
+    p_cz.ion_pair = FASTag::IonSeries::ionPair(FASTag::IonSeries::Series::CZ);
+    const FASTag::ComplementSpec hyp_cs_cz = FASTag::ComplementSpec::fromParam(p_cz);
     // The residue modifications in use; -recon_id_out reports exactly these.
     StringList fixed_mods, variable_mods;
     double fixed_term_n = 0, fixed_term_c = 0;
@@ -1417,10 +1776,24 @@ protected:
     // that length's own run would use.
     std::vector<FASTag::Param> len_params(lengths.size(), p);
     for (size_t i = 0; i < lengths.size(); ++i) len_params[i].tag_length = lengths[i];
-    auto build_tables = [&len_params]() {
+    // ---- 1.12 G: -dump_spectrum ----
+    // The preprocessing reads no tag length, so the first Param serves.
+    if (dump_mode) return dumpSpectrumMode_(in, len_params.front());
+    // #15 phase B: under -ion_series cz or auto a second set reads spectra as
+    // c/z-dot ions (only the ion pair differs); under by it stays empty.
+    const FASTag::IonSeries::Mode ion_mode = FASTag::IonSeries::modeFromString(getStringOption_("ion_series"));
+    const FASTag::IonSeries::IonPair cz_pair = FASTag::IonSeries::ionPair(FASTag::IonSeries::Series::CZ);
+    std::vector<FASTag::Param> len_params_cz;
+    if (ion_mode != FASTag::IonSeries::Mode::By)
+    {
+      len_params_cz = len_params;
+      for (FASTag::Param& lp : len_params_cz) lp.ion_pair = cz_pair;
+    }
+    auto build_tables = [&len_params, &len_params_cz](bool cz = false) {
+      const std::vector<FASTag::Param>& lps = cz ? len_params_cz : len_params;
       std::vector<FASTag::Tables> t;
-      t.reserve(len_params.size());
-      for (const FASTag::Param& lp : len_params) t.emplace_back(lp);
+      t.reserve(lps.size());
+      for (const FASTag::Param& lp : lps) t.emplace_back(lp);
       return t;
     };
     // One spectrum at every length: each length's tags as its own run reports
@@ -1428,11 +1801,17 @@ protected:
     // several lengths report kept from one of them only (mergeLengths). Every
     // consumer -- TSV, recon, identifications, -stream -- sees these rows.
     // @p diag (-census) is filled when given; it never changes the tags.
-    auto tag_all = [&len_params](const MSSpectrum& s, double prec_mz, int charge,
-                                 const std::vector<FASTag::Tables>& tabs,
-                                 FASTag::SpectrumDiag* diag = nullptr) {
-      if (len_params.size() == 1) return FASTag::tagSpectrum(s, prec_mz, charge, len_params[0], tabs[0], diag);
-      return FASTag::mergeLengths(FASTag::tagSpectrum(s, prec_mz, charge, len_params, tabs, diag));
+    // @p multiplicity (1.12 #6) is the number of precursor hypotheses tagged
+    // for the spectrum; 1 changes nothing. @p cz (#15 phase B) reads the
+    // spectrum as c/z-dot ions: len_params_cz with @p tabs built from it.
+    auto tag_all = [&len_params, &len_params_cz](const MSSpectrum& s, double prec_mz, int charge,
+                                                 const std::vector<FASTag::Tables>& tabs,
+                                                 FASTag::SpectrumDiag* diag = nullptr, double multiplicity = 1.0,
+                                                 bool cz = false) {
+      const std::vector<FASTag::Param>& lps = cz ? len_params_cz : len_params;
+      if (lps.size() == 1)
+        return FASTag::tagSpectrum(s, prec_mz, charge, lps[0], tabs[0], diag, multiplicity);
+      return FASTag::mergeLengths(FASTag::tagSpectrum(s, prec_mz, charge, lps, tabs, diag, multiplicity));
     };
     if (lengths.size() > 1)
     {
@@ -1490,18 +1869,30 @@ protected:
     const std::string search_config_out = getStringOption_("search_config_out");
     const bool shortlist_on = !shortlist_out.empty() || !fasta_out.empty();
     const bool handoff_on = shortlist_on || !search_config_out.empty();
+    // #3g: -alkylation_out reads the placements of the run's own reconciler.
+    const std::string alkylation_out = getStringOption_("alkylation_out");
+    const bool alkylation_on = !alkylation_out.empty();
     const bool place_on = recon_on
         // ---- 1.12 A: placement readers ----
         || handoff_on
+        // ---- 1.12 D: placement readers ----
+        || alkylation_on
         ;
-    if (!delta_out.empty() && !place_on)
+    // Only -alkylation_out places: every other placement reader is off, so
+    // the index is built on its database and only the tags it reads are
+    // placed (recon_out, the hand-off and -delta_out read every tag).
+    const bool alkylation_only_db = alkylation_on && !recon_on && !handoff_on;
+    // The placement-report checks below keep their 1.11 meaning: placing for
+    // -alkylation_out alone does not satisfy them (1.12 D #3g).
+    const bool place_reports = place_on && !alkylation_only_db;
+    if (!delta_out.empty() && !place_reports)
     {
       OPENMS_LOG_ERROR << "-delta_out requires -recon_out (the histogram is "
                           "aggregated over reconciliations)." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
     const bool recon_loc = getFlag_("recon_localize");
-    if (recon_loc && !place_on)
+    if (recon_loc && !place_reports)
     {
       OPENMS_LOG_ERROR << "-recon_localize requires -recon_out (it adds columns "
                           "to the reconciliations)." << std::endl;
@@ -1640,10 +2031,55 @@ protected:
     std::vector<std::uint32_t> sl_bg_twins;  // database entries the background duplicates
     std::array<std::uint64_t, FASTag::Digest::kNumAA> sl_db_residues{};
     std::size_t sl_decoys = 0;
+    // #3g: where -alkylation_out's placements come from (its report says).
+    std::string alk_db_source, alk_db;
+    if (alkylation_on)
+    {
+      const std::string prot = getStringOption_("alkylation_proteome");
+      if (!getStringOption_("recon_fasta").empty() || !alkylation_only_db)
+      {
+        if (optionNonDefault_("alkylation_proteome"))
+          OPENMS_LOG_WARN << "-alkylation_proteome is ignored: -alkylation_out reads the placements on "
+                          << (getStringOption_("recon_fasta").empty() ? "-fasta" : "-recon_fasta") << "." << std::endl;
+        alk_db_source = getStringOption_("recon_fasta").empty() ? "fasta" : "recon_fasta";
+      }
+      else
+      {
+        const bool named = prot == "auto" || prot == "human" || prot == "mouse" || prot == "yeast" || prot == "ecoli";
+        if (named)
+        {
+          // auto: the human proteome. Taking the top -species genus would need
+          // the species call before the tagging loop that places the tags.
+          const std::string name = prot == "auto" ? "human" : prot;
+          const std::string dir = alkylationDir_();
+          const std::string path = dir.empty() ? std::string() : dir + "/" + name + ".fasta.gz";
+          if (path.empty() || !File::exists(path))
+          {
+            OPENMS_LOG_ERROR << "-alkylation_out: no shipped " << name << " proteome found (expected "
+                                "<bin>/../share/FASTag/alkylation/" << name << ".fasta.gz, or set "
+                                "FASTAG_ALKYLATION_DIR). Give -alkylation_proteome <fasta> or -recon_fasta." << std::endl;
+            return ILLEGAL_PARAMETERS;
+          }
+          alk_db = path;
+          alk_db_source = "bundled:" + name;
+        }
+        else if (File::exists(prot) && !File::isDirectory(prot))
+        {
+          alk_db = prot;
+          alk_db_source = "proteome";
+        }
+        else
+        {
+          OPENMS_LOG_ERROR << "-alkylation_proteome '" << prot << "' is neither auto, human, mouse, yeast, ecoli "
+                              "nor a readable FASTA file." << std::endl;
+          return ILLEGAL_PARAMETERS;
+        }
+      }
+    }
     if (place_on)
     {
       recon_db = getStringOption_("recon_fasta");
-      if (recon_db.empty()) recon_db = fasta;
+      if (recon_db.empty()) recon_db = alkylation_only_db ? alk_db : fasta;
       if (recon_db.empty())
       {
         OPENMS_LOG_ERROR << "-recon_out needs a database: give -recon_fasta "
@@ -1651,7 +2087,9 @@ protected:
         return ILLEGAL_PARAMETERS;
       }
       std::vector<FASTAFile::FASTAEntry> rentries;
-      FASTAFile().load(recon_db, rentries);
+      // #3g: the shipped proteomes are gzip-compressed, which FASTAFile cannot read.
+      if (alkylation_only_db) FASTag::Alkylation::loadFasta(recon_db, rentries);
+      else FASTAFile().load(recon_db, rentries);
       pindex.build(rentries, fixed_deltas, iso_tol);
       if (handoff_on)
       {
@@ -1772,7 +2210,7 @@ protected:
         ;
     // delta_on: one delta sample per spectrum is taken and binned.
     const bool delta_on = !delta_out.empty() || gap_needed;
-    if (massgap_on && !place_on)
+    if (massgap_on && !place_reports)
     {
       OPENMS_LOG_ERROR << "-massgap_out requires -recon_out (the gaps are those of the "
                           "reconciliations, as in -delta_out)." << std::endl;
@@ -1834,6 +2272,10 @@ protected:
           {"acquisition_probe_spectra", "-acquisition_check refuse or warn",
            getStringOption_("acquisition_check") != "off"},
           {"pick_unknown_type", "-pick_profile auto", pick_mode == FASTag::Centroid::Mode::Auto},
+          {"charge_min", "-unknown_charge enumerate or infer", hyp_param.mode != FASTag::Hyp::ChargeMode::Assume2},
+          {"charge_max", "-unknown_charge enumerate or infer", hyp_param.mode != FASTag::Hyp::ChargeMode::Assume2},
+          {"charge_infer_margin", "-unknown_charge enumerate or infer",
+           hyp_param.mode != FASTag::Hyp::ChargeMode::Assume2},
           // ---- 1.12 A: ignored-option warnings ----
           {"shortlist_background", "-fasta_out", !fasta_out.empty()},
           {"shortlist_max_evalue", "-shortlist_out or -fasta_out", shortlist_on},
@@ -1860,9 +2302,22 @@ protected:
           {"species_call_min_units", "-species_call decoy", species_call_on},
           {"species_call_decoys", "-species_call decoy", species_call_on},
           {"species_pi0", "-species_call decoy", species_call_on},
+          {"species_orientation", "-species", want_species},
+          {"digest_models_version", "-digest_out", digest_on},
+          {"digest_detection", "-digest_out", digest_on},
+          {"digest_flank2", "-digest_out", digest_on},
+          {"digest_min_confidence", "-digest_out", digest_on},
+          {"digest_calibration", "-digest_out", digest_on},
+          {"alkylation_proteome", "-alkylation_out", alkylation_on},
+          {"alkylation_min_spectra", "-alkylation_out", alkylation_on},
+          {"alkylation_min_share", "-alkylation_out", alkylation_on},
+          {"alkylation_window", "-alkylation_out", alkylation_on},
           // ---- 1.12 F: ignored-option warnings ----
           {"census_out", "-census", getFlag_("census")},
           {"census_summary_out", "-census", getFlag_("census")},
+          {"census_ids", "-census", getFlag_("census")},
+          {"census_ids_fdr", "-census_ids", getFlag_("census") && !getStringOption_("census_ids").empty()},
+          {"census_triage_evalue", "-census_ids", getFlag_("census") && !getStringOption_("census_ids").empty()},
       };
       for (const IgnoredOption& r : ignored)
       {
@@ -1880,21 +2335,51 @@ protected:
                           "massgap_mods.tsv" << (digest_on ? ", or give -digest_models." : ".") << std::endl;
       return ILLEGAL_PARAMETERS;
     };
+    // 1.12 D (#3c-#3f): the v2 models, detection, flank2 and calibration.
+    digest_settings.models_version = getStringOption_("digest_models_version");
+    digest_settings.detection = getStringOption_("digest_detection") == "shipped";
+    digest_settings.flank2 = getStringOption_("digest_flank2") == "auto";
+    digest_settings.min_confidence = getDoubleOption_("digest_min_confidence");
+    const bool digest_v2 = digest_settings.models_version == "v2";
     if (digest_on)
     {
       std::string models_path = digest_models;
       if (models_path.empty())
       {
         if (digest_dir.empty()) return no_digest_dir("protease models");
-        models_path = digest_dir + "/digest_models.tsv";
+        models_path = digest_dir + (digest_v2 ? "/digest_models_v2.tsv" : "/digest_models.tsv");
       }
+      else if (digest_v2)
+        OPENMS_LOG_WARN << "-digest_models_version v2 is ignored: -digest_models '" << digest_models
+                        << "' is read as given." << std::endl;
       std::string err;
       if (!FD::loadModelTable(models_path, protease_models, &err))
       {
         OPENMS_LOG_ERROR << "-digest_models '" << models_path << "': " << err << std::endl;
         return INPUT_FILE_CORRUPT;
       }
-      digest_settings.models = digest_models.empty() ? "shipped" : digest_models;
+      digest_settings.models = digest_models.empty() ? (digest_v2 ? "shipped_v2" : "shipped") : digest_models;
+      if (digest_settings.detection)
+        for (std::string_view cls : FD::kInstrumentClasses)
+          if (!protease_models.detectionFor(cls))
+          {
+            OPENMS_LOG_ERROR << "-digest_detection shipped needs detection rows for orbitrap_hcd, timstof and other in "
+                                "the model table; '" << models_path << "' has none for " << cls
+                             << " (use -digest_models_version v2 or a v2 -digest_models table)." << std::endl;
+            return ILLEGAL_PARAMETERS;
+          }
+      const std::string cal_path = getStringOption_("digest_calibration");
+      if (digest_v2 || digest_settings.min_confidence > 0.0 || !cal_path.empty())
+      {
+        if (cal_path.empty() && digest_dir.empty()) return no_digest_dir("calibration");
+        const std::string cp = cal_path.empty() ? digest_dir + "/digest_calibration.tsv" : cal_path;
+        if (!FD::loadCalibration(cp, digest_settings.calibration, &err))
+        {
+          OPENMS_LOG_ERROR << "-digest_calibration '" << cp << "': " << err << std::endl;
+          return INPUT_FILE_CORRUPT;
+        }
+        digest_settings.calibration_source = cal_path.empty() ? "shipped" : cal_path;
+      }
       // The table's own background wins; else the FASTA's composition; else
       // the shipped human one.
       std::string background_fasta = getStringOption_("recon_fasta");
@@ -2510,6 +2995,32 @@ protected:
       }
     }
 
+    // #15 phase B: whether the tag TSV and the census carry an ion_series
+    // column. Under cz always; under auto when some MS2 of the run is
+    // electron activated -- found by a metadata-only scan here, before any
+    // output opens, that stops at the first one -- so a collisional run
+    // under auto writes exactly what by writes. MGF and mzPeak carry no
+    // activation (IonSeries.h): auto reads them as b/y, without the column.
+    bool ion_column = ion_mode == FASTag::IonSeries::Mode::Cz;
+    if (ion_mode == FASTag::IonSeries::Mode::Auto && FASTag::IonSeries::autoReadsActivation(mzpeak_in, mgf_in))
+    {
+      std::shared_ptr<PeakMap> od_meta;
+      if (!fastmz && streaming) od_meta = ondisc->getMetaData();
+      FASTag::IonSeries::ActivationCounts scan;
+      for (size_t i = 0; i < n_total && scan.of(FASTag::IonSeries::Activation::Electron) == 0; ++i)
+      {
+        MSSpectrum head;
+        if (fastmz) head = fastmz->getSpectrumMetadata(i);
+        else if (od_meta) { if (i < od_meta->size()) head = (*od_meta)[i]; }
+        else if (i < exp.size()) head = exp[i];
+        if (head.getMSLevel() == 2) scan.add(FASTag::IonSeries::activationClass(head));
+      }
+      ion_column = FASTag::IonSeries::seriesColumn(ion_mode, scan);
+    }
+    // The census layout of this run (Census::header() reads it; so does
+    // -census_ids, which takes that header as the table's layout).
+    FASTag::Census::runColumns().ion_series = ion_column;
+
     // Subsampling selection. The mask is exact for every input -- it is built
     // over the spectrum indices up front. The count over ALL input spectra,
     // not MS2 only: the fast reader does not know the MS level up front, and
@@ -2609,6 +3120,9 @@ protected:
     const auto t_tables_a = std::chrono::steady_clock::now();
     g_t_probe = std::chrono::duration<double>(t_tables_a - t_probe_a).count();
     const std::vector<FASTag::Tables> tables = build_tables();
+    // #15 phase B: the c/z-dot tables (empty under by).
+    const std::vector<FASTag::Tables> tables_cz =
+        ion_mode != FASTag::IonSeries::Mode::By ? build_tables(true) : std::vector<FASTag::Tables>();
     g_t_tables = std::chrono::duration<double>(std::chrono::steady_clock::now() - t_tables_a).count();
     // mzPeak output cannot store an ion mobility per peak: refuse before any
     // work. For mzML the first MS2 is checked here; an mzPeak input is read
@@ -2651,7 +3165,10 @@ protected:
       guard.input("search_config_template", getStringOption_("search_config_template"));
       // ---- 1.12 D: guarded inputs ----
       guard.input("species_call_params", species_call_params_path);
+      guard.input("digest_calibration", getStringOption_("digest_calibration"));
+      if (alk_db_source == "proteome") guard.input("alkylation_proteome", alk_db);
       // ---- 1.12 F: guarded inputs ----
+      if (getFlag_("census")) guard.input("census_ids", getStringOption_("census_ids"));
       guard.output("out", out);
       guard.output("out_spectra", out_spectra);
       guard.output("recon_out", recon_out);
@@ -2679,6 +3196,7 @@ protected:
       guard.output("search_config_out", search_config_out, true);
       guard.output("search_shifts_out", search_shifts_out, true);
       // ---- 1.12 D: output paths ----
+      guard.output("alkylation_out", alkylation_out, true);
       // ---- 1.12 F: output paths ----
       if (getFlag_("census"))
       {
@@ -2696,6 +3214,34 @@ protected:
       }
     }
 
+    // -census_ids (#11 phase B): read and checked before any output is
+    // opened; the join itself runs on the finished census table (phase 8).
+    const std::string census_ids = getFlag_("census") ? getStringOption_("census_ids") : std::string();
+    const bool census_ids_on = !census_ids.empty();
+    const double census_ids_fdr = getDoubleOption_("census_ids_fdr");
+    const double census_triage_evalue = getDoubleOption_("census_triage_evalue");
+    FASTag::CensusIds::Index census_ids_index;
+    FASTag::CensusIds::Loaded census_ids_loaded;
+    std::string census_ids_run_check;
+    bool census_ids_refused = false;  ///< the census was withheld after the run (foreign references)
+    if (census_ids_on)
+    {
+      census_ids_loaded = FASTag::CensusIds::load(census_ids, census_ids_fdr, census_ids_index);
+      if (!census_ids_loaded.refusal.empty())
+      {
+        OPENMS_LOG_ERROR << census_ids_loaded.refusal << std::endl;
+        return INCOMPATIBLE_INPUT_DATA;
+      }
+      census_ids_run_check = FASTag::CensusIds::runCheck(census_ids_loaded, in);
+      if (census_ids_run_check == "mismatch")
+        OPENMS_LOG_WARN << "Warning: -census_ids names the run '" << census_ids_loaded.runs.front() << "', -in is '"
+                        << FASTag::CensusIds::runStem(in) << "'; the spectrum references are matched anyway."
+                        << std::endl;
+      OPENMS_LOG_INFO << "Census ids: " << census_ids_loaded.n_accepted << " of " << census_ids_loaded.n_ids
+                      << " spectrum identifications pass q <= " << census_ids_fdr << " (" << census_ids << ")"
+                      << std::endl;
+    }
+
     std::ofstream tsv(out.c_str());
     if (!tsv)
     {
@@ -2703,7 +3249,7 @@ protected:
       return CANNOT_WRITE_OUTPUT_FILE;
     }
     const bool want_proforma = getFlag_("proforma");
-    tsv << tagHeader(want_proforma, p.per_residue_conf, !usi_prefix.empty());
+    tsv << tagHeader(want_proforma, p.per_residue_conf, !usi_prefix.empty(), hyp_on, ion_column);
 
     std::ofstream rtsv;
     if (recon_on)
@@ -2752,6 +3298,12 @@ protected:
         OPENMS_LOG_ERROR << census_part.error() << std::endl;
         return CANNOT_WRITE_OUTPUT_FILE;
       }
+      if (census_ids_on && census_part.direct())
+      {
+        OPENMS_LOG_ERROR << "-census_ids needs -census_out to be a regular file (" << census_out
+                         << " is not): the ids are joined to the finished table." << std::endl;
+        return ILLEGAL_PARAMETERS;
+      }
       ctsv << FASTag::Census::header();
     }
 
@@ -2794,7 +3346,17 @@ protected:
       std::vector<std::vector<PeptideIdentification>> recon_id_lists;  ///< (recon_ids_on only)
       std::vector<std::string> glyco_rows;  ///< glyco rows (glyco_on only)
       std::vector<std::vector<std::pair<double, bool>>> row_meta;  ///< (entrap_on only)
+      /// Per spectrum, per written tag row in row order: 1 when the row may be
+      /// species evidence (#6: its hypothesis is the selected one); hyp_on &&
+      /// want_species only. A flag beside the rows, never a column read back
+      /// off them, so adding TSV columns cannot change it.
+      std::vector<std::vector<char>> row_species;
       std::vector<char> keep, keep_target;
+      /// #15 phase B: per spectrum, whether its rows were read as c/z-dot
+      /// ions (SpecResult::cz); every row of a spectrum shares its series.
+      /// -species leaves these rows out and counts them; no reader finds the
+      /// ion_series column by position.
+      std::vector<char> row_cz;
       FASTag::ClusterAcc::ClusterBlock acc;  ///< 1.12 per-cluster slots (src/ClusterAcc.h)
     };
     // Three: a fourth only helped within noise, for another block of rows
@@ -2843,6 +3405,7 @@ protected:
       FASTag::Digest::TerminusCounter digest;
       std::vector<double> first_peak, scan_low;
       size_t ms2_meta = 0, im_vssc = 0, im_drift = 0, im_faims = 0, im_other = 0;
+      FASTag::Digest::RunMeta frag;  ///< 1.12 D #3c: MS2 fragmentation counts only (addFragmentation)
       size_t peaks = 0, peaks_whole = 0;
       // FASTAG_TIMING only, thread-seconds: reading (getSpectrum), of that in
       // reads slower than 1 ms (a wait for the mzPeak reader, for one),
@@ -2853,7 +3416,37 @@ protected:
       FASTag::ClusterAcc::ClusterThread acc;  ///< 1.12 per-cluster accumulators (src/ClusterAcc.h)
     };
     std::vector<PerThread> per_thread(static_cast<size_t>(std::max(1, omp_get_max_threads())));
-    for (PerThread& q : per_thread) q.digest = FASTag::Digest::TerminusCounter(digest_settings.window);
+    for (PerThread& q : per_thread)
+    {
+      q.digest = FASTag::Digest::TerminusCounter(digest_settings.window);
+      if (digest_on && digest_settings.flank2) q.digest.enableFlank2();  // 1.12 D #3d
+    }
+    // 1.12 D #3g: -alkylation_out's Cys forms and settings; placements are
+    // read for every tag only when another reader needs them all.
+    const bool place_every = recon_on || handoff_on || delta_on;
+    std::vector<FASTag::Alkylation::Form> alk_forms;
+    FASTag::Alkylation::Settings alk_settings;
+    if (alkylation_on)
+    {
+      try { alk_forms = FASTag::Alkylation::forms(); }
+      catch (const std::exception& e)
+      {
+        OPENMS_LOG_ERROR << "-alkylation_out: " << e.what() << "." << std::endl;
+        return INTERNAL_ERROR;
+      }
+      const double w = getDoubleOption_("alkylation_window");
+      alk_settings.window = w > 0.0 ? w : (p.tol_ppm ? 0.02 : 0.5);
+      alk_settings.min_spectra = static_cast<std::uint64_t>(getIntOption_("alkylation_min_spectra"));
+      alk_settings.min_share = getDoubleOption_("alkylation_min_share");
+      for (const auto& [res, delta] : fixed_deltas)
+        if (res == 'C') alk_settings.fixed_c += delta;
+      // A fixed N-/C-terminal label (TMT, iTRAQ) is in the spectrum flank,
+      // not the database prefix, as the reconciler is told (setFixedTermMods).
+      alk_settings.fixed_term_n = fixed_term_n;
+      alk_settings.fixed_term_c = fixed_term_c;
+      alk_settings.met_oxidation = ModificationsDB::getInstance()->getModification("Oxidation (M)")->getDiffMonoMass();
+      alk_settings.residue_mass = FASTag::Alkylation::residueMasses(fixed_deltas);
+    }
 
     // The per-spectrum work, shared by every input path.
     //
@@ -2870,11 +3463,15 @@ protected:
       /// serialized %g evalue back off the TSV.
       std::vector<std::pair<double, bool>> meta;
       bool any_target = false;  ///< at least one non-entrapment reported tag
+      /// Per written tag row: may it be species evidence (Block::row_species).
+      std::vector<char> row_species;
       /// -recon_id_out: the spectrum's identification, when it placed anything.
       std::vector<PeptideIdentification> ids;
       /// -census: the spectrum's census row (an MS2 spectrum read, census_on only).
       bool census = false;
       FASTag::Census::Row census_row;
+      /// #15 phase B: the rows were read as c/z-dot ions (Block::row_cz).
+      bool cz = false;
     };
 
     // @p index is the spectrum's position in the input, for a USI that cannot
@@ -2918,7 +3515,17 @@ protected:
       PerThread& pt = per_thread[tid];
       ++pt.ms2;
       // ---- 1.12 E: per-spectrum counters ----
-      pt.acc.e.activation.add(FASTag::IonSeries::activationClass(spec));  // #15 phase A
+      const FASTag::IonSeries::Activation act = FASTag::IonSeries::activationClass(spec);
+      pt.acc.e.activation.add(act);  // #15 phase A
+      // #15 phase B: the series this spectrum is read as (by under by): c/z
+      // only in a run that writes the ion_series column, the one rule both
+      // decisions share (IonSeries::seriesInRun).
+      const bool read_cz = FASTag::IonSeries::seriesInRun(ion_mode, act, ion_column) == FASTag::IonSeries::Series::CZ;
+      if (read_cz) ++pt.acc.e.series.ms2_cz;
+      else ++pt.acc.e.series.ms2_by;
+      res.cz = read_cz;
+      if (!read_cz && FASTag::IonSeries::seriesFor(ion_mode, act) == FASTag::IonSeries::Series::CZ)
+        ++pt.acc.e.series.auto_by_no_column;
       if (digest_on)
       {
         ++pt.ms2_meta;
@@ -2942,6 +3549,18 @@ protected:
           for (const auto& w : wins) b = std::min(b, w.begin);
           pt.scan_low.push_back(b);
         }
+        // 1.12 D #3c: fragmentation and MS2 analyzer, for the detection class.
+        {
+          using AM = Precursor::ActivationMethod;
+          const auto& am = spec.getPrecursors().front().getActivationMethods();
+          FASTag::Digest::Fragmentation fr = FASTag::Digest::Fragmentation::Unknown;
+          if (am.count(AM::HCD) || am.count(AM::HCID)) fr = FASTag::Digest::Fragmentation::Beam;
+          else if (am.count(AM::CID) || am.count(AM::TRAP) || am.count(AM::PQD) || am.count(AM::LCID))
+            fr = FASTag::Digest::Fragmentation::Resonance;
+          const std::string filter =
+              spec.metaValueExists("filter string") ? std::string(spec.getMetaValue("filter string").toString()) : std::string();
+          FASTag::Digest::addFragmentation(pt.frag, fr, filter);
+        }
         bool has_im = false;
         DriftTimeUnit unit = DriftTimeUnit::NONE;
         if (spec.containsIMData()) { has_im = true; unit = spec.getIMData().second; }
@@ -2961,8 +3580,59 @@ protected:
         ++pt.no_charge;
         if (!prec.getPossibleChargeStates().empty()) ++pt.multi_charge;
       }
+      // 1.12 #6: the precursor hypotheses (src/PrecursorHypotheses.h). At the
+      // defaults there is one, the 1.11 one (the header charge, <= 0 tagged
+      // as 2+, the given m/z, multiplicity 1), and the loop below is 1.11's.
+      // Otherwise every hypothesis is tagged with its E-values multiplied by
+      // H, the rows are merged by E-value and capped, and every consumer that
+      // aggregates over spectra reads the selected hypothesis' rows only
+      // (PLAN-INTEGRATION 2.3 contract 1): digest/label counts, delta and
+      // massgap samples, the shortlist evidence (#5), the census row (#11)
+      // and, through a per-row flag (Block::row_species), the species evidence. The
+      // TSV, -recon_out and -recon_id_out keep every row at its hypothesis'
+      // charge.
+      const std::vector<FASTag::Hyp::Hypothesis> hyps = FASTag::Hyp::precursorHypotheses(spec, prec, hyp_param, read_cz ? hyp_cs_cz : hyp_cs);
+      if (hyp_on) pt.acc.e.hyp.add(hyps);
       FASTag::SpectrumDiag cdiag;
-      const auto tags = tag_all(spec, prec.getMZ(), prec.getCharge(), tables, res.census ? &cdiag : nullptr);
+      std::vector<FASTag::Tag> tags;
+      std::vector<std::uint8_t> tag_hyp;  // per row: its hypothesis (hyp_on only)
+      size_t sel_found = 0;                // rows of the selected hypothesis
+      // The one place a hypothesis is tagged: its m/z and charge, the
+      // multiplicity H (1 = the 1.11 call), the census diagnostics only for
+      // the selected one. #15 phase B: the ion series (read_cz, decided once
+      // per spectrum above) picks the tables, for every hypothesis alike.
+      const auto tag_at = [&](const FASTag::Hyp::Hypothesis& hy, double H, FASTag::SpectrumDiag* diag) {
+        return tag_all(spec, hy.mz, hy.charge, read_cz ? tables_cz : tables, diag, H, read_cz);
+      };
+      if (hyps.size() == 1)
+      {
+        tags = tag_at(hyps[0], 1.0, res.census ? &cdiag : nullptr);
+        sel_found = tags.size();
+      }
+      else
+      {
+        const double H = static_cast<double>(hyps.size());
+        std::vector<std::vector<FASTag::Tag>> per(hyps.size());
+        for (size_t h = 0; h < hyps.size(); ++h)
+        {
+          per[h] = tag_at(hyps[h], H, res.census && hyps[h].selected ? &cdiag : nullptr);
+          if (hyps[h].selected) sel_found = per[h].size();
+        }
+        // The cap over all hypotheses: -max_tags per seed length, as one
+        // hypothesis reports at most.
+        const size_t cap = p.max_tag_count > 0 ? static_cast<size_t>(p.max_tag_count) * lengths.size() : 0;
+        auto merged = FASTag::Hyp::mergeHypotheses(std::move(per), cap);
+        tags.reserve(merged.size());
+        tag_hyp.reserve(merged.size());
+        for (auto& m : merged)
+        {
+          tags.push_back(std::move(m.first));
+          tag_hyp.push_back(m.second);
+        }
+      }
+      const auto hyp_of = [&](size_t i) -> const FASTag::Hyp::Hypothesis& {
+        return hyps[tag_hyp.empty() ? 0 : tag_hyp[i]];
+      };
       pt.tags += tags.size();
       // -census: the reported rows (scratch reused per thread) and placements.
       static thread_local std::vector<FASTag::Census::TagView> ctags;
@@ -2979,6 +3649,7 @@ protected:
       bool delta_have = false, delta_clamped = false;
       double delta_e = 0.0;
       DeltaSample delta_sample;
+      FASTag::Alkylation::Vote alk_vote;  // 1.12 D #3g
       const std::string usi = usi_prefix.empty() || tags.empty()
           ? std::string()
           : usi_prefix + (mgf_in ? FASTag::usiIndexMgf(spec.metaValueExists("Scan_ID")
@@ -2998,8 +3669,11 @@ protected:
         loc_peaks.sortByPosition();
       }
 
-      for (const auto& t : tags)
+      for (size_t ti = 0; ti < tags.size(); ++ti)
       {
+        const FASTag::Tag& t = tags[ti];
+        const FASTag::Hyp::Hypothesis& hy = hyp_of(ti);
+        const bool sel = hy.selected;  // always true at the defaults
         const char* hit = "-";
         bool row_entrap = false;
         if (filtering)
@@ -3031,7 +3705,7 @@ protected:
         if (!row_entrap) res.any_target = true;
         if (entrap_on) res.meta.emplace_back(t.evalue, row_entrap);
         ++pt.reported;
-        if (res.census)
+        if (res.census && sel)
         {
           FASTag::Census::TagView v;
           v.evalue = t.evalue;
@@ -3041,17 +3715,32 @@ protected:
           v.min_conf = t.min_conf;
           v.mean_conf = t.mean_conf;
           v.peak_tic = t.peak_tic;
+          v.cz = t.ion_series == FASTag::IonSeries::Series::CZ;
           ctags.push_back(v);
         }
 
         appendTagRow(buf, t, spec.getNativeID(), hit, want_proforma, proforma_fixed,
-                     p.per_residue_conf, usi);
+                     p.per_residue_conf, usi, hyp_on ? &hy : nullptr, ion_column);
+        if (species_sel_on) res.row_species.push_back(sel ? 1 : 0);
         // The tags the digest and label reports count: every written row that
-        // is ungapped with E <= 1.
-        if (count_on && !t.gapped && t.evalue <= 1.0)
-          pt.digest.add(t.nterm_mass, t.cterm_mass, FASTag::baseSequence(t.seq));
+        // is ungapped with E <= 1 (of the selected hypothesis, #6). A c/z tag
+        // (#15 phase B) with its series' reversed-read offset.
+        const bool tag_cz = t.ion_series == FASTag::IonSeries::Series::CZ;
+        if (count_on && sel && !t.gapped && t.evalue <= 1.0)
+        {
+          if (tag_cz) pt.digest.add(t.nterm_mass, t.cterm_mass, FASTag::baseSequence(t.seq), cz_pair.reversedOffset());
+          else pt.digest.add(t.nterm_mass, t.cterm_mass, FASTag::baseSequence(t.seq));
+        }
 
-        if (place_on && !row_entrap)  // known-false rows must not place or bin
+        // 1.12 D #3g: the tags -alkylation_out reads (as the digest report),
+        // of the selected hypothesis only (#6, PLAN-INTEGRATION 2.4). A c/z
+        // tag (#15 phase B) is not placed for the call: the Cys form rules
+        // are b/y-only, so it is counted in Tally::excludeNonBy() instead
+        // (PLAN-INTEGRATION 2.3 contract 2; doc/ALKYLATION-REPORT.md).
+        const bool alk_counted = alkylation_on && sel && FASTag::Alkylation::countsTag(t.gapped, t.evalue);
+        const bool alk_tag = alk_counted && !tag_cz;
+        if (alk_counted && tag_cz) pt.acc.d.alk.excludeNonBy();
+        if (place_on && !row_entrap && (place_every || alk_tag))  // known-false rows must not place or bin
         {
           // The tag's own variable mods go on the localization ladder.
           const bool tag_modded = t.seq.find('[') != std::string::npos;
@@ -3060,9 +3749,10 @@ protected:
           const auto places = recon.reconcile(FASTag::baseSequence(t.seq),
                                               t.nterm_mass, t.cterm_mass,
                                               recon_loc ? &loc_peaks : nullptr,
-                                              prec.getCharge(),
-                                              tag_modded ? &tag_shift : nullptr);
-          if (res.census && recon_on) cplaced += places.size();
+                                              hy.charge,
+                                              tag_modded ? &tag_shift : nullptr,
+                                              tag_cz ? &cz_pair : nullptr);
+          if (res.census && recon_on && sel) cplaced += places.size();
           // -recon_out rows: one per placement.
           if (recon_on)
           {
@@ -3103,9 +3793,9 @@ protected:
               res.rbuf += '\n';
             }
           }
-          if (recon_ids_on) FASTag::addReconHits(id_hits, places, t.seq, t.evalue, prec.getCharge(), id_fixed);
+          if (recon_ids_on) FASTag::addReconHits(id_hits, places, t.seq, t.evalue, hy.charge, id_fixed);
           // ---- 1.12 A: per-tag placement records ----
-          if (handoff_on)
+          if (handoff_on && sel)
           {
             // #5: the spectra the protease check counts (once each), and the
             // qualifying placements of the shortlist.
@@ -3135,9 +3825,12 @@ protected:
                 a.sl.push_back(ev);
               }
           }
+          // ---- 1.12 D: per-tag placement records ----
+          if (alk_tag)  // #3g
+            FASTag::Alkylation::addTag(pt.acc.d.alk, alk_vote, places, t.evalue, alk_settings, alk_forms);
           // A candidate for the spectrum's -delta_out sample: take this
           // tag's min-|delta| placement.
-          if (delta_on && !places.empty() && (!delta_have || t.evalue < delta_e))
+          if (delta_on && sel && !places.empty() && (!delta_have || t.evalue < delta_e))
           {
             const FASTag::Reconciliation* best = nullptr;
             for (const auto& pl : places)
@@ -3167,13 +3860,17 @@ protected:
         if (delta_clamped) ++pt.delta_clamped;
         else pt.delta.push_back(std::move(delta_sample));
       }
+      FASTag::Alkylation::addSpectrum(pt.acc.d.alk, alk_vote);  // 1.12 D #3g
       if (!id_hits.empty())
         res.ids.push_back(FASTag::reconSpectrum(spec.getNativeID(), spec.getRT(), prec.getMZ(),
                                                 std::move(id_hits)));
       if (res.census)
       {
+        // The selected hypothesis' facts (#6; all rows at the defaults).
+        for (const auto& h : hyps)
+          if (h.selected) crow.charge_used = h.charge > 0 ? h.charge : 2;
         cfacts.enough_peaks = cdiag.enough_peaks;
-        cfacts.n_found = tags.size();
+        cfacts.n_found = sel_found;
         cfacts.n_reported = ctags.size();
         cfacts.n_placed = cplaced;
         cfacts.count_placements = recon_on;
@@ -3182,7 +3879,7 @@ protected:
         crow.n_kept = cdiag.n_kept;
         crow.n_edges = cdiag.n_edges;
         crow.n_compl = cdiag.n_compl;
-        crow.n_found = tags.size();
+        crow.n_found = sel_found;
         crow.n_reported = ctags.size();
         const size_t best = FASTag::Census::bestTag(ctags);
         if (best != FASTag::Census::kNone)
@@ -3240,13 +3937,15 @@ protected:
       {
         std::string& cr = b.acc.f.census_rows[idx];
         cr.clear();
-        FASTag::Census::appendRow(cr, r.census_row, spec.getNativeID());
+        FASTag::Census::appendRow(cr, r.census_row, spec.getNativeID(), ion_column);
       }
       if (r.buf.empty()) return;  // rbuf is only ever non-empty alongside buf
       b.rows[idx].swap(r.buf);
       if (recon_on) b.recon_rows[idx].swap(r.rbuf);
       if (recon_ids_on) b.recon_id_lists[idx].swap(r.ids);
       if (entrap_on) b.row_meta[idx].swap(r.meta);
+      if (species_sel_on) b.row_species[idx].swap(r.row_species);
+      b.row_cz[idx] = r.cz ? 1 : 0;
       b.keep[idx] = 1;
       // A spectrum whose only reported tags are entrapment matches is
       // calibration material, not a hit -- keep it out of -out_spectra.
@@ -3266,8 +3965,10 @@ protected:
         if (recon_ids_on) b.recon_id_lists.resize(n_used);
         if (glyco_on) b.glyco_rows.resize(n_used);
         if (entrap_on) b.row_meta.resize(n_used);
+        if (species_sel_on) b.row_species.resize(n_used);
       }
       b.keep.assign(n_used, 0);
+      b.row_cz.assign(n_used, 0);
       if (want_out) b.keep_target.assign(n_used, 0);
       b.acc.prepare(n_used);
     };
@@ -3278,6 +3979,9 @@ protected:
     const bool species_use_gapped = getFlag_("species_use_gapped");
     // Per spectrum: (tag, E-value) of every row that may count, in row order.
     std::map<std::string, std::vector<std::pair<std::string, double>>> by_spec;
+    // #15 phase B: -species counts b/y tags only (PLAN-INTEGRATION 2.3,
+    // contract 2); the c/z rows it leaves out (writer thread only).
+    size_t species_cz_excluded = 0;
 
     // Write one finished block's rows in index order and recycle the buffers.
     //
@@ -3342,7 +4046,7 @@ protected:
         if (want_species)
         {
           const std::string& r = b.rows[i];
-          size_t start = 0;
+          size_t start = 0, row = 0;
           std::string id, tag;
           bool gapped = false;
           double evalue = 0;
@@ -3350,7 +4054,13 @@ protected:
           {
             size_t nl = r.find('\n', start);
             if (nl == std::string::npos) nl = r.size();
-            if (readSpeciesFields(r, start, nl, id, tag, gapped, evalue))
+            // #6: a row of a losing precursor hypothesis is no species
+            // evidence (the per-row flag from tag_one, not a TSV column).
+            if (species_sel_on && !b.row_species[i][row++]) { start = nl + 1; continue; }
+            // #15 phase B: a c/z row (Block::row_cz, one flag per spectrum,
+            // every row of it alike) is left out and counted.
+            if (b.row_cz[i]) ++species_cz_excluded;
+            else if (readSpeciesFields(r, start, nl, id, tag, gapped, evalue))
             {
               // Skip GAPPED tags unless asked for. A gap spells two residues
               // from one summed mass -- an inference, not a read -- and an
@@ -3809,7 +4519,34 @@ protected:
       run_meta.activation_electron = act.of(Activation::Electron);
       run_meta.activation_hybrid = act.of(Activation::Hybrid);
       run_meta.activation_unknown = act.of(Activation::Unknown);
+      // #6: where the selected hypotheses' charges came from (RunMeta
+      // Versioned rows; zero at the defaults, where no hypothesis step runs).
+      using FASTag::Hyp::ChargeSource;
+      const FASTag::Hyp::SourceCounts& hc = run_acc.e.hyp;
+      const auto sel_of = [&](ChargeSource s) { return hc.selected[static_cast<size_t>(s)]; };
+      run_meta.unknown_charge = getStringOption_("unknown_charge");
+      run_meta.isotope_error.clear();
+      for (const int k : hyp_param.isotope_errors)
+        run_meta.isotope_error += (run_meta.isotope_error.empty() ? "" : ",") + std::to_string(k);
+      run_meta.charge_header = sel_of(ChargeSource::Header);
+      run_meta.charge_possible = sel_of(ChargeSource::Possible);
+      run_meta.charge_inferred = sel_of(ChargeSource::Inferred);
+      run_meta.charge_ambiguous = sel_of(ChargeSource::Ambiguous);
+      run_meta.charge_assumed = sel_of(ChargeSource::Assumed);
+      run_meta.charge_enumerated = sel_of(ChargeSource::Enumerated);
+      run_meta.iso_shifted = hc.iso_shifted;
+      run_meta.multi_hypothesis = hc.multi;
+      // #15 phase B: the series per tagged MS2.
+      run_meta.ion_series = FASTag::IonSeries::modeName(ion_mode);
+      run_meta.ion_series_ms2_by = run_acc.e.series.ms2_by;
+      run_meta.ion_series_ms2_cz = run_acc.e.series.ms2_cz;
     }
+    // ---- 1.12 D: the alkylation call (#3g), once, right after the merge ----
+    // Before the hand-off exports, so a reader of the call there (the A17
+    // merge: ShiftSettings::alkylation_call for -search_shifts) sees the same
+    // Call that -alkylation_out writes after phase 9.
+    FASTag::Alkylation::Call alk_call;
+    if (alkylation_on) alk_call = FASTag::Alkylation::callAlkylation(run_acc.d.alk, alk_settings);
     tsv.close();  // flushes; a failed write anywhere leaves the stream failed
     if (tsv.fail())
     {
@@ -3964,9 +4701,49 @@ protected:
 
     // -census (#11): the table is complete; the summary starts with the run
     // rows (format Versioned: a new 1.12 report) and adds section `census`.
+    FASTag::CensusIds::JoinTally ids_tally;
+    FASTag::CensusIds::Index::Counts ids_counts;
     if (census_on)
     {
       ctsv.close();
+      // -census_ids: the join, from the finished table to a second .part
+      // file that replaces it before the commit.
+      if (census_ids_on && !ctsv.fail())
+      {
+        FASTag::PartFile joined(census_part.writePath());
+        std::string err;
+        if (!joined.begin()
+            || !FASTag::CensusIds::joinTable(census_part.writePath(), joined.writePath(), census_ids_index,
+                                             census_triage_evalue, ids_tally, err)
+            || !joined.commit())
+        {
+          OPENMS_LOG_ERROR << "Failed joining -census_ids to " << census_out << ": "
+                           << (err.empty() ? joined.error() : err) << std::endl;
+          census_part.discard();
+          return CANNOT_WRITE_OUTPUT_FILE;
+        }
+        ids_counts = census_ids_index.counts();
+        // Foreign references: only known when every spectrum was read.
+        const double share = ids_counts.refs ? static_cast<double>(ids_counts.unmatched) /
+                                                   static_cast<double>(ids_counts.refs)
+                                             : 0.0;
+        if (!subsampling && share > FASTag::CensusIds::kRefuseUnmatched)
+        {
+          OPENMS_LOG_ERROR << "-census_ids: " << ids_counts.unmatched << " of " << ids_counts.refs
+                           << " spectrum references match no spectrum of -in (more than "
+                           << FASTag::CensusIds::kRefuseUnmatched * 100
+                           << "%): the file belongs to another run, or names spectra by an id FASTag cannot "
+                              "match. No census was written; the other outputs are complete." << std::endl;
+          census_part.discard();
+          census_ids_refused = true;
+        }
+        else if (!subsampling && share > FASTag::CensusIds::kWarnUnmatched)
+          OPENMS_LOG_WARN << "Warning: -census_ids: " << ids_counts.unmatched << " of " << ids_counts.refs
+                          << " spectrum references match no spectrum of -in." << std::endl;
+      }
+    }
+    if (census_on && !census_ids_refused)
+    {
       if (ctsv.fail() || !census_part.commit())
       {
         OPENMS_LOG_ERROR << "Failed writing " << census_out << " (disk full?)"
@@ -3977,6 +4754,11 @@ protected:
       std::vector<FD::Row> rows = FASTag::RunReport::runRows(run_meta, FASTag::RunReport::Emit::Versioned);
       for (FD::Row& r : FASTag::Census::summaryRows(tally, static_cast<std::uint64_t>(n_total), subsampling))
         rows.push_back(std::move(r));
+      if (census_ids_on)
+        for (FD::Row& r : FASTag::CensusIds::summaryRows(census_ids_loaded, ids_counts, ids_tally, census_ids,
+                                                         census_ids_run_check, census_ids_fdr,
+                                                         census_triage_evalue, !subsampling))
+          rows.push_back(std::move(r));
       FASTag::PartFile summary_part(census_summary_out);
       if (!summary_part.begin() || !FD::writeReport(summary_part.writePath(), rows) || !summary_part.commit())
       {
@@ -3991,6 +4773,10 @@ protected:
                       << count(FASTag::Census::Status::Placed) << " placed), "
                       << count(FASTag::Census::Status::NoTags) << " no_tags -> " << census_out
                       << ", summary -> " << census_summary_out << std::endl;
+      if (census_ids_on)
+        OPENMS_LOG_INFO << "Census ids: " << ids_tally.by_ident[1] << " identified, " << ids_tally.by_ident[0]
+                        << " not, " << ids_tally.by_ident[2] << " unknown; " << ids_tally.triage
+                        << " triage candidates (best_evalue <= " << census_triage_evalue << ")" << std::endl;
       if (tally.n_processed() != n_ms2)
         OPENMS_LOG_WARN << "Census: " << tally.n_processed() << " processed spectra, but " << n_ms2
                         << " MS2 spectra were tagged; please report this." << std::endl;
@@ -4416,6 +5202,10 @@ protected:
           meta.im_other += pt.im_other;
           meta.peaks += pt.peaks;
           meta.peaks_whole += pt.peaks_whole;
+          meta.ms2_beam += pt.frag.ms2_beam;
+          meta.ms2_resonance += pt.frag.ms2_resonance;
+          meta.ms2_itms += pt.frag.ms2_itms;
+          meta.ms2_ftms += pt.frag.ms2_ftms;
           meta.first_peak.insert(meta.first_peak.end(), pt.first_peak.begin(), pt.first_peak.end());
           meta.scan_low.insert(meta.scan_low.end(), pt.scan_low.begin(), pt.scan_low.end());
         }
@@ -4450,6 +5240,15 @@ protected:
         }
         meta.instrument_name = es.getInstrument().getName();
         meta.instrument_model = es.getInstrument().getModel();
+        for (const MassAnalyzer& ma : es.getInstrument().getMassAnalyzers())
+        {
+          using AT = MassAnalyzer::AnalyzerType;
+          const AT at = ma.getType();
+          if (at == AT::ORBITRAP) meta.analyzer_orbitrap = true;
+          else if (at == AT::PAULIONTRAP || at == AT::RADIALEJECTIONLINEARIONTRAP || at == AT::AXIALEJECTIONLINEARIONTRAP ||
+                   at == AT::IT || at == AT::LIT)
+            meta.analyzer_iontrap = true;
+        }
         for (const SourceFile& sf : es.getSourceFiles())
           if (!sf.getNativeIDTypeAccession().empty()) { meta.native_id_type = sf.getNativeIDTypeAccession(); break; }
         std::vector<FD::Row> rows = run_rows();
@@ -4481,6 +5280,31 @@ protected:
         }
         OPENMS_LOG_INFO << "Labels: " << tc.tags << " filtered tags -> " << label_out << std::endl;
       }
+    }
+
+    // ---- 1.12 D: -alkylation_out (#3g) ----
+    if (alkylation_on)
+    {
+      const FASTag::Alkylation::Tally& at = run_acc.d.alk;
+      const FASTag::Alkylation::Call& call = alk_call;
+      FASTag::Alkylation::ReportInfo info;
+      info.database = recon_db;
+      info.database_source = alk_db_source;
+      for (const auto& m : p.mods)
+        if (!m.variable && m.residue == 'C') info.reagent_note += (info.reagent_note.empty() ? "" : "+") + m.name;
+      std::vector<FD::Row> rows = FASTag::RunReport::runRows(run_meta, FASTag::RunReport::Emit::Versioned);
+      for (FD::Row& r : FASTag::Alkylation::alkylationRows(at, call, alk_settings, alk_forms, info)) rows.push_back(std::move(r));
+      FASTag::PartFile alk_part(alkylation_out);
+      if (!alk_part.begin() || !FD::writeReport(alk_part.writePath(), rows) || !alk_part.commit())
+      {
+        OPENMS_LOG_ERROR << "Failed writing " << alkylation_out
+                         << (alk_part.error().empty() ? std::string() : ": " + alk_part.error()) << std::endl;
+        return CANNOT_WRITE_OUTPUT_FILE;
+      }
+      OPENMS_LOG_INFO << "Alkylation: " << at.spectra << " spectra with a single-Cys placement, "
+                      << (call.called ? std::string("call ") + FASTag::Alkylation::className(call.cls)
+                                      : "no_call " + call.reason)
+                      << " -> " << alkylation_out << std::endl;
     }
 
     // ---- phase 10: species detection ---------------------------------------
@@ -4621,6 +5445,10 @@ protected:
       std::map<uint32_t, uint64_t> decoy_hits;  // per NODE, summed over the D replicates
       uint64_t n_trials = 0, n_decoy_less = 0;
       FASTag::TagLookupCounters decoy_counters;
+      // 1.12 #10: the reversed lookups count on their own, so the forward
+      // counters (and the log line) are a forward run's.
+      FASTag::TagLookupCounters rev_counters, decoy_rev_counters;
+      FASTag::OrientationCounts orient_counts;
       std::vector<std::vector<FASTag::TagSupport>> decoy_support(static_cast<size_t>(n_decoys));
       for (const auto& sp : by_spec)
       {
@@ -4640,15 +5468,21 @@ protected:
             const std::string dseq = FASTag::decoyTag(seq, static_cast<uint32_t>(j));
             if (dseq.empty()) { decoy_less = true; continue; }
             FASTag::TagSupport dts;
-            if (!FASTag::tagSupport(idx, dseq, index_k, share_cap, min_margin, dts.taxa, decoy_counters)) continue;
+            // Under both orientations the decoy takes the target's rule.
+            if (!FASTag::orientedTagSupport(idx, dseq, index_k, share_cap, min_margin, species_orient, dts.taxa,
+                                            decoy_counters, decoy_rev_counters, nullptr))
+              continue;
             dts.evalue = row.second;
             decoy_support[static_cast<size_t>(j)].push_back(std::move(dts));
           }
           if (decoy_less) ++n_decoy_less;
-          // The per-tag rule (share skip, whole-tag rule, margin) lives in
-          // SpeciesLookup.h.
+          // The per-tag rule (share skip, whole-tag rule, margin, and under
+          // -species_orientation both the orientation rule) lives in
+          // SpeciesLookup.h. Forward is tagSupport() exactly.
           FASTag::TagSupport ts;
-          if (!FASTag::tagSupport(idx, seq, index_k, share_cap, min_margin, ts.taxa, lookup_counters)) continue;
+          if (!FASTag::orientedTagSupport(idx, seq, index_k, share_cap, min_margin, species_orient, ts.taxa,
+                                          lookup_counters, rev_counters, &orient_counts))
+            continue;
           ts.evalue = row.second;
           support.push_back(std::move(ts));
         }
@@ -4851,9 +5685,15 @@ protected:
         auto ait = adjusted.find(c.taxid);
         const double adj = ait == adjusted.end() ? 0.0 : ait->second;
         char num[128];
-        std::snprintf(num, sizeof num, "\t%llu\t%.1f\t%.1f\t%g\t%g",
-                      static_cast<unsigned long long>(c.observed), adj, c.expected,
-                      c.log_pvalue, c.qvalue);
+        if (species_both)
+          // 1.12 #10: uncalibrated under both orientations, also with
+          // -species_call decoy (see the warning); decoy_qvalue is calibrated.
+          std::snprintf(num, sizeof num, "\t%llu\t%.1f\t%.1f\tNA\tNA",
+                        static_cast<unsigned long long>(c.observed), adj, c.expected);
+        else
+          std::snprintf(num, sizeof num, "\t%llu\t%.1f\t%.1f\t%g\t%g",
+                        static_cast<unsigned long long>(c.observed), adj, c.expected,
+                        c.log_pvalue, c.qvalue);
         so << clean(c.rank) << '\t' << c.taxid << '\t' << clean(c.name) << num;
         if (species_call_on)
         {
@@ -4898,6 +5738,15 @@ protected:
         OPENMS_LOG_INFO << " (" << lookup_counters.kmer_skipped << " k-mers too widely shared, "
                         << lookup_counters.tag_generic << " tags too generic)";
       OPENMS_LOG_INFO << "; top " << want_rank << " calls -> " << species_out << std::endl;
+      if (species_both)
+      {
+        // 1.12 #10: on stderr only, like every new 1.12 INFO line.
+        std::cerr << "Species orientation (both): informative tags " << orient_counts.forward
+                  << " forward only, " << orient_counts.reverse << " reverse only, "
+                  << orient_counts.intersection << " both (shared taxa), " << orient_counts.palindrome
+                  << " palindromes; " << orient_counts.ambiguous
+                  << " orientation-ambiguous tags skipped" << std::endl;
+      }
       if (species_call_on)
       {
         OPENMS_LOG_INFO << "Species call (-species_call decoy): " << n_call[0] << " present, " << n_call[1]
@@ -4919,7 +5768,24 @@ protected:
     OPENMS_LOG_INFO << n_ms2 << " MS2 spectra, " << n_tags << " tags";
     if (filtering) OPENMS_LOG_INFO << " -> " << n_reported << " after filtering";
     OPENMS_LOG_INFO << std::endl;
-    if (n_no_charge > 0)
+    if (n_no_charge > 0 && hyp_on)
+    {
+      // 1.12 #6: the uncharged precursors were tagged under -unknown_charge.
+      using FASTag::Hyp::ChargeSource;
+      const FASTag::Hyp::SourceCounts& hc = run_acc.e.hyp;
+      const auto sel_of = [&](ChargeSource s) { return hc.selected[static_cast<size_t>(s)]; };
+      OPENMS_LOG_WARN << n_no_charge << " of " << n_ms2 << " MS2 spectra carry no precursor charge"
+                      << (n_multi_charge > 0 ? " (" + std::to_string(n_multi_charge)
+                                                   + " of them list several possible charges)"
+                                             : std::string())
+                      << "; under -unknown_charge " << getStringOption_("unknown_charge") << " their reports use "
+                      << sel_of(ChargeSource::Inferred) << " inferred, " << sel_of(ChargeSource::Ambiguous)
+                      << " ambiguous (better of two), " << sel_of(ChargeSource::Possible) << " listed, "
+                      << sel_of(ChargeSource::Enumerated) << " enumerated and " << sel_of(ChargeSource::Assumed)
+                      << " assumed (2+, or the lowest candidate when 2 is none) charges; " << hc.multi << " spectra were tagged under several "
+                      << "hypotheses, with their E-values multiplied by the number tagged." << std::endl;
+    }
+    else if (n_no_charge > 0)
       OPENMS_LOG_WARN << n_no_charge << " of " << n_ms2 << " MS2 spectra carry no precursor "
                          "charge"
                       << (n_multi_charge > 0 ? " (" + std::to_string(n_multi_charge)
@@ -4929,10 +5795,29 @@ protected:
                          "mass are dropped, and their nterm_mass flanks assume charge 2 (wrong "
                          "for a 3+ or higher precursor)." << std::endl;
     // ---- 1.12 E: end-of-run warnings ----
-    // #15 phase A: tagging reads b/y ions; warn (stderr) when more than 1% of
-    // the MS2 spectra are electron or hybrid activated.
-    if (run_acc.e.activation.warnUnderBy())
-      OPENMS_LOG_WARN << FASTag::IonSeries::byModeWarning(run_acc.e.activation) << std::endl;
+    // #15 phase A: under -ion_series by tagging reads b/y ions; warn (stderr)
+    // when more than 1% of the MS2 spectra are electron or hybrid activated.
+    // Phase B: under auto and cz, one INFO line with the spectra per series
+    // (stderr), and a warning for what the mode reads as the other series.
+    {
+      namespace IS = FASTag::IonSeries;
+      const IS::ActivationCounts& act = run_acc.e.activation;
+      if (ion_mode == IS::Mode::By)
+      {
+        if (act.warnUnderBy()) OPENMS_LOG_WARN << IS::byModeWarning(act) << std::endl;
+      }
+      else
+      {
+        std::cerr << IS::seriesInfo(ion_mode, run_acc.e.series, act) << std::endl;
+        if (ion_mode == IS::Mode::Auto && IS::warnHybridUnderAuto(act))
+          OPENMS_LOG_WARN << IS::hybridAutoWarning(act) << std::endl;
+        if (ion_mode == IS::Mode::Cz && IS::warnCollisionalUnderCz(act))
+          OPENMS_LOG_WARN << IS::collisionalCzWarning(act) << std::endl;
+      }
+      if (species_cz_excluded > 0) OPENMS_LOG_WARN << IS::speciesExcludedWarning(species_cz_excluded) << std::endl;
+      if (run_acc.e.series.auto_by_no_column > 0)
+        OPENMS_LOG_WARN << IS::autoNoColumnWarning(run_acc.e.series.auto_by_no_column) << std::endl;
+    }
 
     // ---- phase 11: filter summary and -out_spectra writing ----------------
 
@@ -5097,6 +5982,8 @@ protected:
     // #5: a confidently non-tryptic run withheld the FASTA or the
     // configuration it was asked for (a shortlist-only run is not refused).
     if (handoff_refused) return ILLEGAL_PARAMETERS;
+    // #11B: -census_ids named mostly foreign spectra; the census was withheld.
+    if (census_ids_refused) return INCOMPATIBLE_INPUT_DATA;
     return EXECUTION_OK;
   }
 };

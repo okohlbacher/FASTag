@@ -18,6 +18,8 @@
 
 #include <FASTag/ranksum.h>
 
+#include "IonSeries.h"
+
 #include <limits>
 #include <memory>
 #include <string>
@@ -90,6 +92,12 @@ namespace FASTag
     /// complemented peaks; larger counts keep the plain tail P(X >= c).
     /// Off reproduces 1.11.
     bool   complement_midp = false;
+    /// The ion series the spectrum is read as (1.12 #15 phase B): b/y, as
+    /// FASTag 1.11, or c/z-dot for electron activation. Sets the flanking
+    /// masses' terminal offsets, the complement partner (ComplementSpec) and,
+    /// for c/z, the ETD precursor filter. The tags themselves are spelled
+    /// from residue differences, the same in every series.
+    IonSeries::IonPair ion_pair = IonSeries::ionPair(IonSeries::Series::BY);
     size_t max_peak_count = 100;   ///< hard ceiling; also bounds the null tables
     /// Peaks kept per 100 Da window; 0 selects the strongest max_peak_count
     /// overall instead. Windowed selection makes the effective budget scale with
@@ -133,9 +141,11 @@ namespace FASTag
     std::vector<ModSpec> mods;
   };
 
-  /// One tag. Flanking masses assume the low-m/z peak is a y ion, as DirecTag
-  /// does; a tag read off the b series therefore reads reversed relative to the
-  /// peptide and its flanks carry a one-water offset.
+  /// One tag. Flanking masses assume the low-m/z peak is a C-terminal ion (y,
+  /// or z-dot under Param::ion_pair c/z), as DirecTag does for y; a tag read off
+  /// the N-terminal series (b, c) therefore reads reversed relative to the
+  /// peptide and its flanks carry the offset ion_pair.reversedOffset() (one
+  /// water for b/y).
   struct Tag
   {
     std::string seq;            ///< N->C. Modified residues are written inline as
@@ -166,6 +176,9 @@ namespace FASTag
     double low_mz = 0;          ///< lowest peak; also the output tie-break
     double high_mz = 0;         ///< highest path peak (census tag_cover); not serialised
     float  peak_tic = 0;        ///< summed intensity of the path peaks (census best_tic); not serialised
+    /// The series the tag was read as (Param::ion_pair.kind); every consumer
+    /// of the flanks takes the reversed-read offset from it.
+    IonSeries::Series ion_series = IonSeries::Series::BY;
   };
 
   /// What tagSpectrum saw of one spectrum, for the census (-census). Filled
@@ -213,6 +226,10 @@ namespace FASTag
     double frag_tol = 20.0;        ///< the run's fragment tolerance, Fragment mode
     bool   frag_tol_ppm = true;
     std::vector<double> pair_deltas{0.0};
+    /// Charges the pair lost against the precursor (IonPair::charge_loss):
+    /// the Precursor rule looks for a partner at prec_charge - charge_loss
+    /// minus the fragment's charge. b/y 0 (1.11's expression); c/z-dot 1.
+    int    charge_loss = 0;
     bool   midp = false;
 
     static ComplementSpec fromParam(const Param& p)
@@ -225,6 +242,13 @@ namespace FASTag
       c.frag_tol = p.frag_tol;
       c.frag_tol_ppm = p.tol_ppm;
       c.midp = p.complement_midp;
+      // b/y keeps the single delta 0 (1.11's doubles); c/z-dot pairs sum to
+      // M + H (IonSeries::IonPair::compl_delta).
+      if (p.ion_pair.kind != IonSeries::Series::BY)
+      {
+        c.pair_deltas = {p.ion_pair.compl_delta};
+        c.charge_loss = p.ion_pair.charge_loss;
+      }
       return c;
     }
 
@@ -263,6 +287,15 @@ namespace FASTag
   /// tests and diagnostics; the charge is defaulted as tagSpectrum does.
   std::vector<int> complementPopulation(const OpenMS::MSSpectrum& spec, double precursor_mz,
                                         int charge, const Param& p);
+
+  /// The peaks tagSpectrum tags of @p spec: the precursor cut, the m/z
+  /// collapse, deisotoping (Param::deisotope) and the peak budget, m/z
+  /// sorted, exactly as tagSpectrum prepares them (1.12 -dump_spectrum).
+  /// Empty when tagSpectrum would prepare nothing (no peaks, a precursor
+  /// m/z that is not finite and positive). The charge is defaulted as
+  /// tagSpectrum does. Reads no tag_length, so any Param of a run serves.
+  OpenMS::MSSpectrum preparedPeaks(const OpenMS::MSSpectrum& spec, double precursor_mz, int charge,
+                                   const Param& p);
 
   /// Precomputed nulls, built once and shared read-only.
   ///
@@ -304,9 +337,13 @@ namespace FASTag
   /// @param charge     precursor charge; <= 0 is treated as 2
   /// @return tags ordered by E-value, best first
   /// @param diag       optional; filled with what the census reads
+  /// @param multiplicity  factor on every E-value with the seed count, before
+  ///                   the max_evalue cut and the max_tag_count cap: the number
+  ///                   of precursor hypotheses tagged for this spectrum (1.12
+  ///                   #6, src/PrecursorHypotheses.h). 1 changes nothing.
   std::vector<Tag> tagSpectrum(const OpenMS::MSSpectrum& spec, double precursor_mz,
                                int charge, const Param& p, const Tables& tables,
-                               SpectrumDiag* diag = nullptr);
+                               SpectrumDiag* diag = nullptr, double multiplicity = 1.0);
 
   /// Tag one spectrum at several seed lengths, preprocessing it and building
   /// its graphs once. Entry i is exactly tagSpectrum(spec, precursor_mz,
@@ -316,10 +353,11 @@ namespace FASTag
   /// @param tables  built from the matching params entry
   /// @param diag    optional; one preprocessing serves every length, so one
   ///                diag; enough_peaks when some length has enough
+  /// @param multiplicity  as for the single-length overload
   std::vector<std::vector<Tag>> tagSpectrum(const OpenMS::MSSpectrum& spec, double precursor_mz,
                                             int charge, const std::vector<Param>& params,
                                             const std::vector<Tables>& tables,
-                                            SpectrumDiag* diag = nullptr);
+                                            SpectrumDiag* diag = nullptr, double multiplicity = 1.0);
 
   /// One spectrum's rows for a multi-length run, from its per-length tag lists
   /// (ascending length, as the overload above returns them). A tag several

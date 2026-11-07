@@ -68,6 +68,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace FASTag
@@ -131,6 +132,11 @@ namespace FASTag
     /// empty instead of throwing. For a probe over many spectra (the 1.12
     /// acquisition check) that must not pay for decoding.
     OpenMS::MSSpectrum getSpectrumMetadata(OpenMS::Size i);
+    /// Byte range [first, second) of spectrum @p i in the file, as the
+    /// offsets in use give it; {0, 0} when there is no such spectrum. Read
+    /// only, for callers that scrape what the reader does not keep (1.12
+    /// -probe_input: a scan's instrumentConfigurationRef).
+    std::pair<std::uint64_t, std::uint64_t> spectrumByteRange(OpenMS::Size i) const;
 
     /// MS2 peaks are decoded by MzMLDirectDecoder, and by OpenMS's
     /// domParseSpectrum for every spectrum it declines. On by default;
