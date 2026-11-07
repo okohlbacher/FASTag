@@ -150,6 +150,113 @@ same "$TMP/label0.tsv" "$TMP/label1.tsv" "-recon_out changed -label_out"
 same "$TMP/label3.tsv" "$TMP/label4.tsv" "-label_out differs between 1 and 3 threads"
 same "$TMP/label0.tsv" "$TMP/label3.tsv" "-label_out differs between 2 and 1 threads"
 
+# ---- -search_shifts (1.12 #17): -delta_out/-massgap_out unchanged, the decisions in the config
+# masked: the run version row aside (the baseline binary may carry another version)
+nover() { tr -d '\r' < "$1" | awk -F'\t' '!($1 == "run" && $2 == "version")'; }
+SH=(-search_engine comet -search_config_out "$TMP/sh.params")
+G2=(-massgap_min_spectra 2)
+run "${COMMON[@]}" -out "$TMP/s0.tsv" "${R[@]}" -delta_out "$TMP/sdelta0.tsv" -massgap_out "$TMP/sgap0.tsv" "${G2[@]}"
+cp "$TMP/recon.tsv" "$TMP/srecon0.tsv"
+run "${COMMON[@]}" -out "$TMP/s1.tsv" "${R[@]}" -delta_out "$TMP/sdelta1.tsv" -massgap_out "$TMP/sgap1.tsv" "${G2[@]}" \
+  -search_shifts both "${SH[@]}" -search_shifts_out "$TMP/shifts.tsv"
+same "$TMP/s0.tsv" "$TMP/s1.tsv" "-search_shifts changed the tag TSV"
+same "$TMP/srecon0.tsv" "$TMP/recon.tsv" "-search_shifts changed -recon_out"
+same "$TMP/sdelta0.tsv" "$TMP/sdelta1.tsv" "-search_shifts changed -delta_out"
+same "$TMP/sgap0.tsv" "$TMP/sgap1.tsv" "-search_shifts changed -massgap_out"
+# at the -massgap_* defaults too, against the runs above without it
+run "${COMMON[@]}" -out "$TMP/s2.tsv" "${R[@]}" -delta_out "$TMP/sdelta2.tsv" -massgap_out "$TMP/sgap2.tsv" \
+  -search_shifts both "${SH[@]}"
+same "$TMP/delta0.tsv" "$TMP/sdelta2.tsv" "-search_shifts changed -delta_out at the -massgap defaults"
+same "$TMP/gap1.tsv" "$TMP/sgap2.tsv" "-search_shifts changed -massgap_out at the -massgap defaults"
+# -search_shifts none equals the option absent
+run "${COMMON[@]}" -out "$TMP/s3.tsv" "${R[@]}" -delta_out "$TMP/sdelta3.tsv" -massgap_out "$TMP/sgap3.tsv" "${G2[@]}" -search_shifts none
+same "$TMP/sdelta0.tsv" "$TMP/sdelta3.tsv" "-search_shifts none changed -delta_out"
+same "$TMP/sgap0.tsv" "$TMP/sgap3.tsv" "-search_shifts none changed -massgap_out"
+if [ -n "${FASTAG_BASELINE_BIN:-}" ]; then
+  mkdir -p "$TMP/bl"
+  "$FASTAG_BASELINE_BIN" -threads 2 "${COMMON[@]}" -out "$TMP/bl/s.tsv" -recon_fasta "$DB" -recon_out "$TMP/bl/recon.tsv" \
+    -fixed_modifications -delta_out "$TMP/bl/delta.tsv" -massgap_out "$TMP/bl/gap.tsv" "${G2[@]}" > "$TMP/log" 2>&1 \
+    || { cat "$TMP/log" >&2; fail "baseline binary"; }
+  same "$TMP/bl/delta.tsv" "$TMP/sdelta1.tsv" "-delta_out with -search_shifts differs from the baseline binary"
+  nover "$TMP/bl/gap.tsv" > "$TMP/bl/gap.nv"; nover "$TMP/sgap1.tsv" > "$TMP/sgap1.nv"
+  same "$TMP/bl/gap.nv" "$TMP/sgap1.nv" "-massgap_out with -search_shifts differs from the baseline binary"
+  same "$TMP/bl/s.tsv" "$TMP/s1.tsv" "the tag TSV with -search_shifts differs from the baseline binary"
+elif [ "${FASTAG_BASELINE_REQUIRED:-0}" = 1 ]; then
+  fail "FASTAG_BASELINE_REQUIRED=1 but FASTAG_BASELINE_BIN is not set"
+else
+  echo "NOTE: FASTAG_BASELINE_BIN not set; -search_shifts baseline compare skipped" >&2
+fi
+# one row per gap peak, every exported row in the config, no dropped/skipped one
+npeaks=$(tr -d '\r' < "$TMP/sgap1.tsv" | awk -F'\t' '$1 == "peak" && $2 ~ /\.delta$/' | wc -l | tr -d ' ')
+tr -d '\r' < "$TMP/shifts.tsv" | grep -v '^#' > "$TMP/shifts.rows"
+head -1 "$TMP/shifts.rows" | grep -qx $'peak\tdelta\tspectra\texplanation\taction\tmod_id\tsites\texported\tsubstitution_share\tlocalized\treason' \
+  || fail "-search_shifts_out header"
+[ "$(($(wc -l < "$TMP/shifts.rows") - 1))" = "$npeaks" ] || fail "-search_shifts_out has not one row per -massgap_out peak ($npeaks)"
+[ "$npeaks" -gt 0 ] || fail "the fixture gives no gap peak at -massgap_min_spectra 2"
+nexp=$(awk -F'\t' 'NR > 1 && ($5 == "variable" || $5 == "offset" || $5 == "fixed")' "$TMP/shifts.rows" | wc -l | tr -d ' ')
+[ "$nexp" -gt 0 ] || fail "no exported shift on the fixture (the checks below would be vacuous)"
+nvar=$(awk -F'\t' 'NR > 1 && $5 == "variable"' "$TMP/shifts.rows" | wc -l | tr -d ' ')
+[ "$nvar" -le 3 ] || fail "$nvar variable shifts exceed -shift_max_variable 3"
+# the config's masses, 4 decimals: variable_modNN, mass_offsets and add_* values
+tr -d '\r' < "$TMP/sh.params" | awk '
+  /^variable_mod[0-9][0-9] = / && $3 + 0 != 0 { printf "v %.4f\n", $3 }
+  /^mass_offsets = / { for (i = 3; i <= NF; i++) printf "o %.4f\n", $i }
+  /^add_/ && $3 + 0 != 0 { printf "f %.4f\n", $3 }' | sort -u > "$TMP/cfg.masses"
+awk -F'\t' 'NR > 1 { k = ($5 == "variable" ? "v" : $5 == "offset" ? "o" : $5 == "fixed" ? "f" : "")
+  if (k != "") print k " " $8 }' "$TMP/shifts.rows" | sort -u > "$TMP/exp.masses"
+[ -z "$(comm -23 "$TMP/exp.masses" "$TMP/cfg.masses")" ] || { comm -23 "$TMP/exp.masses" "$TMP/cfg.masses" >&2; fail "an exported shift is not in the config"; }
+awk -F'\t' 'NR > 1 && ($5 ~ /^dropped_/ || $5 ~ /^skipped_/ || $5 == "expected_label" || $5 ~ /_questionable$/ || $5 == "label_incomplete") && $8 != "-" {
+  print "v " $8; print "o " $8 }' "$TMP/shifts.rows" | sort -u > "$TMP/drop.masses"
+[ -z "$(comm -12 "$TMP/drop.masses" "$TMP/cfg.masses" | comm -23 - "$TMP/exp.masses")" ] \
+  || fail "a dropped or skipped shift is in the config"
+if awk -F'\t' 'NR > 1 && $5 == "offset"' "$TMP/shifts.rows" | grep -q .; then
+  tr -d '\r' < "$TMP/sh.params" | grep -q '^mass_offsets = 0.0 ' || fail "offsets without 0 first"
+fi
+# the same at 1 and 3 threads
+for t in 1 3; do
+  "$BIN" -threads $t "${COMMON[@]}" -out "$TMP/st$t.tsv" "${R[@]}" -massgap_min_spectra 2 -search_shifts both \
+    -search_engine comet -search_config_out "$TMP/sht$t.params" -search_shifts_out "$TMP/shiftst$t.tsv" > "$TMP/log" 2>&1 \
+    || { cat "$TMP/log" >&2; fail "-search_shifts at $t threads"; }
+done
+same "$TMP/shiftst1.tsv" "$TMP/shiftst3.tsv" "-search_shifts_out differs between 1 and 3 threads"
+same "$TMP/sht1.params" "$TMP/sht3.params" "the shift config differs between 1 and 3 threads"
+same "$TMP/shifts.tsv" "$TMP/shiftst1.tsv" "-search_shifts_out differs between 2 and 1 threads"
+# report-free: no -recon_out, -delta_out, -massgap_out or -digest_out, with and without -recon_localize
+for loc in "" -recon_localize; do
+  rf="$TMP/rf$loc"; mkdir -p "$rf"
+  run "${COMMON[@]}" -out "$rf/t.tsv" -recon_fasta "$DB" -fixed_modifications -massgap_min_spectra 2 $loc \
+    -search_shifts both -search_engine comet -search_config_out "$rf/c.params"
+  [ -s "$rf/c.params" ] || fail "report-free -search_shifts$loc: no config"
+  [ "$(ls "$rf" | tr '\n' ' ')" = "c.params t.tsv " ] || fail "report-free -search_shifts$loc wrote $(ls "$rf" | tr '\n' ' ')"
+  same "$TMP/sht1.params" "$rf/c.params" "report-free -search_shifts$loc: the config differs from the run with reports"
+done
+# site expansion with -recon_localize runs
+run "${COMMON[@]}" -out "$TMP/se.tsv" "${R[@]}" -recon_localize -massgap_min_spectra 2 -search_shifts both \
+  -search_engine comet -search_config_out "$TMP/se.params" -shift_expand_sites -search_shifts_out "$TMP/se.shifts.tsv"
+[ -s "$TMP/se.params" ] || fail "-shift_expand_sites: no config"
+# refusals
+nope() { local want="$1"; shift; "$BIN" "${COMMON[@]}" -out "$TMP/n.tsv" "$@" > "$TMP/log" 2>&1; local rc=$?
+  [ "$rc" = "$want" ] || { cat "$TMP/log" >&2; fail "exit $rc (want $want): $*"; }; }
+nope 6 "${R[@]}" -search_shifts both
+grep -q -- "-search_shifts writes into the engine configuration" "$TMP/log" || fail "no -search_config_out: message"
+nope 6 "${R[@]}" -search_shifts offsets -search_config_out "$TMP/n.json"
+grep -q -- "Sage has no mass offsets" "$TMP/log" || fail "offsets with sage: message"
+nope 6 -search_shifts both -search_engine comet -search_config_out "$TMP/n.params"
+grep -q -- "needs a database" "$TMP/log" || fail "no database: message"
+nope 6 "${R[@]}" -search_shifts both "${SH[@]}" -shift_expand_sites
+grep -q -- "-shift_expand_sites needs -recon_localize" "$TMP/log" || fail "expand without localize: message"
+printf '' | "$BIN" -stream -search_shifts both > "$TMP/log" 2>&1 && fail "-stream with -search_shifts was accepted"
+grep -q -- "-stream cannot be combined with -search_shifts" "$TMP/log" || fail "-stream: message"
+mkdir -p "$TMP/baddig"; cp "$DATA"/* "$TMP/baddig/"
+printf 'Bogus\tBogusmod (X)\t1.0\n' >> "$TMP/baddig/massgap_mods.tsv"
+FASTAG_DIGEST_DIR="$TMP/baddig" nope 3 "${R[@]}" -search_shifts both "${SH[@]}"
+grep -q -- "-search_shifts: OpenMS does not know the modification 'Bogusmod (X)'" "$TMP/log" || fail "unknown mod id: message"
+"$BIN" "${COMMON[@]}" -out "$TMP/w.tsv" -search_shifts_out "$TMP/w.shifts.tsv" -shift_max_variable 5 > "$TMP/log" 2>&1 \
+  || fail "-search_shifts_out without -search_shifts was refused"
+grep -q -- "-search_shifts_out is only read for -search_shifts" "$TMP/log" || fail "no warning for -search_shifts_out"
+grep -q -- "-shift_max_variable is only read for -search_shifts" "$TMP/log" || fail "no warning for -shift_max_variable"
+[ ! -e "$TMP/w.shifts.tsv" ] || fail "-search_shifts_out written without -search_shifts"
+
 # ---- refusals
 "$BIN" "${COMMON[@]}" -out "$TMP/x.tsv" -massgap_out "$TMP/x2.tsv" > "$TMP/log" 2>&1 \
   && fail "-massgap_out without -recon_out was accepted"
