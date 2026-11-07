@@ -3,8 +3,10 @@ import digestTsv from './fixtures/digest.tsv?raw'
 import nocallTsv from './fixtures/digest_nocall.tsv?raw'
 import labelTsv from './fixtures/label.tsv?raw'
 import massgapTsv from './fixtures/massgap.tsv?raw'
+import alkylationTsv from './fixtures/alkylation.tsv?raw'
 import {
   ALPHABET,
+  alkylationCall,
   backgroundWords,
   baseName,
   digestCall,
@@ -183,5 +185,55 @@ describe('label and mass gaps', () => {
     ]
     expect(topBins(bins, 2).map((b) => b.gap)).toEqual([-1, 1])
     expect(topBins(bins, null)).toBe(bins)
+  })
+})
+
+describe('alkylation (1.12 -alkylation_out)', () => {
+  // gui/src/fixtures/alkylation.tsv: FASTag 1.12 on the vendored Ecoli fixture
+  // with -alkylation_proteome Ecoli_MS2_small.fasta (no Cys placement: no_call).
+  const called = (text: string): string =>
+    text
+      .replace(/^alkylation_call\tstatus\t[^\n]*$/m, 'alkylation_call\tstatus\tcall\t32\tThe cysteines are alkylated.')
+      .replace(/^alkylation_call\treagent\t[^\n]*$/m, 'alkylation_call\treagent\tCarbamidomethyl\t30\tThe call is Carbamidomethyl.')
+      .replace(/^alkylation_call\tmass\t[^\n]*$/m, 'alkylation_call\tmass\t57.021464\t-\tCarbamidomethyl adds 57.021464 Da to C.')
+      .replace(/^alkylation_call\tshare\t[^\n]*$/m, 'alkylation_call\tshare\t0.9375\t32\tA share of 0.938.')
+      .replace(/^alkylation_call\treason\t[^\n]*$/m, 'alkylation_call\treason\t-\t-\tThe call is made.')
+
+  it('is its own kind, never a mass-gap report', () => {
+    const r = parseReport(alkylationTsv, 'a')
+    expect(r.kind).toBe('alkylation')
+    expect(r.warnings).toEqual([])
+    // the mass-gap report keeps its kind, and its cys section alone still means mass gap
+    expect(parseReport(massgapTsv, 'm').kind).toBe('massgap')
+    expect(parseReport('section\tkey\tvalue\tn\tdescription\ncys\tC.57.021\t3\t-\tx\n', 'c').kind).toBe('massgap')
+    // an alkylation report that also carried a cys row would still be one
+    expect(parseReport(alkylationTsv + 'cys\tx\t1\t-\ty\n', 'a').kind).toBe('alkylation')
+  })
+
+  it('reads a no-call with its reason and the database caveat', () => {
+    const c = alkylationCall(parseReport(alkylationTsv, 'a'))
+    expect(c).toEqual({
+      status: 'no_call',
+      reagent: undefined,
+      mass: null,
+      share: null,
+      binned: 0,
+      reason: 'few_cys_spectra',
+      databaseSource: 'proteome',
+      format: 1
+    })
+  })
+
+  it('reads a call', () => {
+    const c = alkylationCall(parseReport(called(alkylationTsv), 'a'))
+    expect(c).toMatchObject({ status: 'call', reagent: 'Carbamidomethyl', mass: 57.021464, share: 0.9375, binned: 32 })
+    expect(c.reason).toBeUndefined()
+  })
+
+  it('reads a call of none without a mass', () => {
+    const none = called(alkylationTsv)
+      .replace(/^alkylation_call\treagent\t[^\n]*$/m, 'alkylation_call\treagent\tnone\t30\tThe call is none.')
+      .replace(/^alkylation_call\tmass\t[^\n]*$/m, 'alkylation_call\tmass\t-\t-\tA call of none has no reagent mass.')
+    expect(alkylationCall(parseReport(none, 'a'))).toMatchObject({ status: 'call', reagent: 'none', mass: null })
   })
 })

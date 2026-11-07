@@ -11,6 +11,8 @@ BIN="$1"
 IN="$2"
 DB="$3"
 DATA="$4"   # data/digest
+BUILDTAXDB="${5:-}"  # optional: buildtaxdb, for the species-independence check (1.12 D #3c)
+TAXDIR="${6:-}"      # optional: data/taxonomy (nodes.dmp, names.dmp)
 FIX="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/fixtures"
 
 if ! "$BIN" --help >/dev/null 2>&1; then
@@ -183,29 +185,58 @@ run "${COMMON[@]}" -out "$TMP/v0.tsv" -digest_out "$TMP/vdigest0.tsv" -label_out
 same "$TMP/digest.tsv" "$TMP/vdigest0.tsv" "-digest_out changed with the 1.12 D options at their defaults"
 same "$TMP/label.tsv" "$TMP/vlabel0.tsv" "-label_out changed with the 1.12 D options at their defaults"
 same "$TMP/base.tsv" "$TMP/v0.tsv" "the tag TSV changed with the 1.12 D options at their defaults"
-# a ppm run with v2, detection, flank2 and the calibration: the v2 rows, p_correct with a call
-PPM=(-in "$IN" -tag_length 4 -digest_tag_min 5)
+# A wide ppm tolerance gives filtered tags; the fixture's first MS2 peak is
+# above y1 (ms2_first_peak), so the 1.11 call is withheld there.
+PPM=(-in "$IN" -tag_length 4 -digest_tag_min 5 -fragment_tolerance 300 -fragment_tolerance_unit ppm)
 run "${PPM[@]}" -out "$TMP/v1.tsv" -digest_out "$TMP/vdigest1.tsv"
-run "${PPM[@]}" -out "$TMP/v2.tsv" -digest_out "$TMP/vdigest2.tsv" -digest_models_version v2 \
-  -digest_detection shipped -digest_flank2 auto
+[ "$(val "$TMP/vdigest1.tsv" call status) $(val "$TMP/vdigest1.tsv" call reason)" = "no_call ms2_first_peak" ] \
+  || fail "the ppm fixture run is not no_call ms2_first_peak at the defaults"
+[ "$(val "$TMP/vdigest1.tsv" count tags_filtered)" -ge 100 ] || fail "the ppm fixture run has fewer than 100 filtered tags"
+# v2 alone: the v2 rows; its pooled specificity at the v1 share scores every v1
+# model as 1.11 does (same log-likelihoods), and the same rule withholds the call
+run "${PPM[@]}" -out "$TMP/v2.tsv" -digest_out "$TMP/vdigest2.tsv" -digest_models_version v2
 same "$TMP/v1.tsv" "$TMP/v2.tsv" "-digest_models_version v2 changed the tag TSV"
 tr -d '\r' < "$TMP/vdigest2.tsv" | awk -F'\t' 'NF != 5 || $5 == "" { bad = 1 } END { exit bad }' || fail "v2 digest: a malformed row"
 [ "$(val "$TMP/vdigest2.tsv" run models) $(val "$TMP/vdigest2.tsv" run models_version)" = "shipped_v2 v2" ] \
   || fail "v2: run.models/models_version"
-[ "$(val "$TMP/vdigest2.tsv" run detection) $(val "$TMP/vdigest2.tsv" run flank2) $(val "$TMP/vdigest2.tsv" run calibration)" = "shipped auto shipped" ] \
-  || fail "v2: run.detection/flank2/calibration"
-[ -n "$(val "$TMP/vdigest2.tsv" meta instrument_class)" ] && [ -n "$(val "$TMP/vdigest2.tsv" count flank2_n)" ] \
-  && [ -n "$(val "$TMP/vdigest2.tsv" nocall low_confidence)" ] && [ -n "$(val "$TMP/vdigest2.tsv" call flank2_used)" ] \
-  || fail "v2: instrument_class, flank2_n, low_confidence or flank2_used row missing"
-[ "$(val "$TMP/vdigest2.tsv" call status)" = call ] || fail "v2 on the ppm fixture is not a call: $(val "$TMP/vdigest2.tsv" call reason)"
-# the shipped calibration is unfitted (all coefficients 0): p_correct 0.5
-[ "$(val "$TMP/vdigest2.tsv" call p_correct)" = 0.5 ] || fail "v2 does not write p_correct 0.5"
-run "${PPM[@]}" -out "$TMP/v3.tsv" -digest_out "$TMP/vdigest3.tsv" -digest_min_confidence 0.9
-[ "$(val "$TMP/vdigest3.tsv" call status) $(val "$TMP/vdigest3.tsv" call reason)" = "no_call low_confidence" ] \
+[ "$(val "$TMP/vdigest2.tsv" run specificity) $(val "$TMP/vdigest2.tsv" run detection) $(val "$TMP/vdigest2.tsv" run flank2)" = "0.05,0.05 none off" ] \
+  || fail "v2: run.specificity/detection/flank2"
+for m in Trypsin Lys-C Arg-C Lys-N Asp-N Glu-C Chymotrypsin unspecific; do
+  [ "$(val "$TMP/vdigest1.tsv" model "$m.loglik")" = "$(val "$TMP/vdigest2.tsv" model "$m.loglik")" ] \
+    || fail "v2 scores $m otherwise than the v1 table at the same share"
+done
+[ -n "$(val "$TMP/vdigest2.tsv" model LysargiNase.loglik)" ] && [ -n "$(val "$TMP/vdigest2.tsv" model Asp-N_ambic.loglik)" ] \
+  || fail "v2: no LysargiNase or Asp-N_ambic model"
+[ "$(val "$TMP/vdigest2.tsv" call status) $(val "$TMP/vdigest2.tsv" call reason)" = "no_call ms2_first_peak" ] \
+  || fail "v2 without flank2 is not withheld by ms2_first_peak"
+[ "$(val "$TMP/vdigest2.tsv" call flank2_used) $(val "$TMP/vdigest2.tsv" call timstof_call) $(val "$TMP/vdigest2.tsv" meta instrument_class)" = "no no orbitrap_hcd" ] \
+  || fail "v2: flank2_used/timstof_call/instrument_class"
+# p_correct needs a call; the shipped calibration is unfitted (all coefficients 0)
+[ "$(val "$TMP/vdigest2.tsv" run calibration) $(val "$TMP/vdigest2.tsv" nocall low_confidence)" = "shipped no" ] \
+  || fail "v2: the shipped calibration is not loaded"
+[ -z "$(val "$TMP/vdigest2.tsv" call p_correct)" ] || fail "v2: p_correct written without a call"
+# flank2 with detection: the two-residue sums are scored where y1 is cut off;
+# on the shipped table the N-end models (background C end) tie there
+run "${PPM[@]}" -out "$TMP/v4.tsv" -digest_out "$TMP/vdigest4.tsv" -digest_models_version v2 \
+  -digest_detection shipped -digest_flank2 auto
+[ "$(val "$TMP/vdigest4.tsv" call flank2_used) $(val "$TMP/vdigest4.tsv" run detection) $(val "$TMP/vdigest4.tsv" run flank2)" = "yes shipped auto" ] \
+  || fail "flank2 auto is not used on the first-peak run"
+[ "$(val "$TMP/vdigest4.tsv" count flank2_n)" -ge 5 ] || fail "flank2: fewer than 5 two-residue sums"
+[ -n "$(val "$TMP/vdigest4.tsv" model Trypsin.flank2_loglik)" ] || fail "flank2: no flank2_loglik rows"
+# a v2 table of the C-end proteases only: flank2 calls the run, with p_correct
+awk -F'\t' '/^#/ || $1 == "model" || $1 == "background" || $1 == "Trypsin" || $1 == "Lys-C" || $1 == "Arg-C" ||
+  $1 == "detection" || $1 == "specificity"' "$DATA/digest_models_v2.tsv" > "$TMP/cend.tsv"
+run "${PPM[@]}" -out "$TMP/v5.tsv" -digest_out "$TMP/vdigest5.tsv" -digest_models "$TMP/cend.tsv" \
+  -digest_detection shipped -digest_flank2 auto -digest_calibration "$DATA/digest_calibration.tsv"
+[ "$(val "$TMP/vdigest5.tsv" call status) $(val "$TMP/vdigest5.tsv" call flank2_used)" = "call yes" ] \
+  || fail "flank2 on the C-end table is not a call: $(val "$TMP/vdigest5.tsv" call reason)"
+[ "$(val "$TMP/vdigest5.tsv" call p_correct) $(val "$TMP/vdigest5.tsv" run calibration)" = "0.5 $DATA/digest_calibration.tsv" ] \
+  || fail "the unfitted calibration does not give p_correct 0.5"
+run "${PPM[@]}" -out "$TMP/v3.tsv" -digest_out "$TMP/vdigest3.tsv" -digest_models "$TMP/cend.tsv" \
+  -digest_detection shipped -digest_flank2 auto -digest_min_confidence 0.9
+[ "$(val "$TMP/vdigest3.tsv" call status) $(val "$TMP/vdigest3.tsv" call reason) $(val "$TMP/vdigest3.tsv" call p_correct)" = "no_call low_confidence 0.5" ] \
   || fail "-digest_min_confidence 0.9 with p_correct 0.5 is not no_call low_confidence"
-# the calls of the v1 rows are kept: v2 without detection, flank2 or calibration calls the same model here
-[ "$(val "$TMP/vdigest1.tsv" call model)" = "$(val "$TMP/vdigest2.tsv" call model)" ] \
-  || fail "v2 on the ppm fixture calls $(val "$TMP/vdigest2.tsv" call model), v1 $(val "$TMP/vdigest1.tsv" call model)"
+[ "$(val "$TMP/vdigest3.tsv" nocall low_confidence)" = yes ] || fail "nocall.low_confidence is not yes"
 # refusals: detection without detection rows (v1 table; a v2 table missing a class), a bad calibration
 "$BIN" "${PPM[@]}" -out "$TMP/x.tsv" -digest_out "$TMP/x5.tsv" -digest_detection shipped > "$TMP/log" 2>&1 \
   && fail "-digest_detection shipped with the v1 table was accepted"
@@ -220,6 +251,20 @@ printf 'feature\tcoef\nintercept\t1\n' > "$TMP/badcal.tsv"
 "$BIN" "${COMMON[@]}" -out "$TMP/w.tsv" -digest_flank2 auto -digest_detection shipped > "$TMP/log" 2>&1 \
   || fail "-digest_flank2 without -digest_out was refused"
 grep -q -- "-digest_flank2 is only read for -digest_out" "$TMP/log" || fail "no warning for -digest_flank2"
+# the protease call never reads the run's species (#3c: the detection weights
+# are fitted against one fixed reference): -digest_out is the same with and
+# without -species on a toy index of the fixture proteome
+if [ -n "$BUILDTAXDB" ] && [ -n "$TAXDIR" ]; then
+  mkdir -p "$TMP/prot"
+  cp "$DB" "$TMP/prot/562.fasta"
+  "$BUILDTAXDB" "$TMP/prot" "$TMP/toy.taxdb" 4 > "$TMP/btx.log" 2>&1 || { cat "$TMP/btx.log" >&2; fail "buildtaxdb"; }
+  V2=(-digest_models_version v2 -digest_detection shipped -digest_flank2 auto)
+  run "${PPM[@]}" -out "$TMP/s0.tsv" -digest_out "$TMP/sdigest0.tsv" "${V2[@]}"
+  run "${PPM[@]}" -out "$TMP/s1.tsv" -digest_out "$TMP/sdigest1.tsv" "${V2[@]}" -species -taxdb "$TMP/toy.taxdb" \
+    -taxonomy_nodes "$TAXDIR/nodes.dmp" -taxonomy_names "$TAXDIR/names.dmp" -species_out "$TMP/s1.species.tsv"
+  [ -s "$TMP/s1.species.tsv" ] || fail "-species wrote no species report"
+  same "$TMP/sdigest0.tsv" "$TMP/sdigest1.tsv" "-digest_out (v2, detection, flank2) changed with -species"
+fi
 
 # ---- 1.12 D: -alkylation_out (#3g)
 alk_check() {  # FILE: sections, five fields, the call rows

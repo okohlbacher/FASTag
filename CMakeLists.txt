@@ -358,7 +358,10 @@ if(FASTAG_BUILD_TESTS)
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/digest_cli_test.sh $<TARGET_FILE:FASTag>
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
-                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
+                   # 1.12 D #3c: the species-independence check of the v2 call
+                   $<TARGET_FILE:buildtaxdb>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy)
   set_tests_properties(digest_cli_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # Integration: -recon_id_out in mzid, idXML and mzTab holds what -recon_out

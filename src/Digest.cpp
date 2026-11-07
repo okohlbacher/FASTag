@@ -569,6 +569,7 @@ namespace FASTag::Digest
     {
       double sc = loglik(cterm, endOf(m, true, table, share, opt));
       if (r.uses_nterm) sc = sc + loglik(nterm, endOf(m, false, table, share, opt));
+      else sc = sc + 0.0;  // as the 1.11 classifier (-0 reads 0)
       r.scores.push_back({m.name, m.cls, sc});
     }
     rankScores(r);

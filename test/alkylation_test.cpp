@@ -111,9 +111,11 @@ int main()
     check(callOf(tally(10, 10), s) == "no_call ambiguous", "a tie is ambiguous");
     check(callOf(tally(9, 1), s) == "no_call ambiguous", "the leading class below 10 spectra is ambiguous");
     A::Settings strict = s;
-    strict.min_share = 0.95;
-    check(callOf(tally(30, 2), strict) == "call Carbamidomethyl" && callOf(tally(30, 3), strict) == "no_call ambiguous",
+    strict.min_share = 0.9;  // 30/32 = 0.9375 passes, 30/34 = 0.882 does not
+    check(callOf(tally(30, 2), strict) == "call Carbamidomethyl" && callOf(tally(30, 4), strict) == "no_call ambiguous",
           "-alkylation_min_share is the share bound");
+    check(callOf(tally(30, 2), s) == "call Carbamidomethyl" && callOf(tally(30, 4), s) == "call Carbamidomethyl",
+          "at the default share 0.6 both are calls");
   }
 
   // ---- placements under a fixed CAM: the reagent is gap + 57.021
