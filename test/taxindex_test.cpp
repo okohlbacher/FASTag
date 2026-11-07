@@ -287,6 +287,89 @@ int main()
     check(n_ok > 1000, "random tags exercise the informative path");
   }
 
+  // 1.12 #10: orientedTagSupport. Forward is tagSupport exactly; Both looks
+  // the tag up reversed too (I/L folded) and combines the two readings.
+  {
+    std::vector<FASTAFile::FASTAEntry> se;
+    se.emplace_back("t1", "", "ACDEFGHKLMNPQ");   // taxon 1
+    se.emplace_back("t2", "", "WVTSRQPNGG");      // taxon 2: NPQRSTVW only reversed
+    se.emplace_back("t3", "", "GGYWLRSEYY");      // taxon 3: ESRIWY reversed = YWIRSE -> YWLRSE
+    se.emplace_back("t4", "", "QPNMLKHGFF");      // taxon 4: reverse of a taxon-1 stretch
+    std::vector<uint32_t> st = {1, 2, 3, 4};
+    TaxIndex oidx;
+    oidx.build(se, st, /*k=*/4);
+    const int k = 4;
+    using V = std::vector<uint32_t>;
+    auto run = [&](const std::string& seq, SpeciesOrientation o, V& taxa, OrientationCounts* oc) {
+      TagLookupCounters c, rc;
+      return orientedTagSupport(oidx, seq, k, 4, 0.0, o, taxa, c, rc, oc);
+    };
+    V taxa;
+    OrientationCounts oc;
+    // A reversed-only k-mer path: found under both, not under forward.
+    check(!run("NPQRSTVW", SpeciesOrientation::Forward, taxa, nullptr) && taxa.empty(),
+          "orientation: reversed-only tag not found under forward");
+    check(run("NPQRSTVW", SpeciesOrientation::Both, taxa, &oc) && taxa == V({2}) && oc.reverse == 1,
+          "orientation: reversed-only tag found under both");
+    // I/L folding after reversal.
+    oc = {};
+    check(run("ESRIWY", SpeciesOrientation::Both, taxa, &oc) && taxa == V({3}) && oc.reverse == 1,
+          "orientation: I/L folded after reversal");
+    check(!run("ESRIWY", SpeciesOrientation::Forward, taxa, nullptr), "orientation: ESRIWY not found as written");
+    check(reversedFolded("ESRIWY") == "YWLRSE", "reversedFolded reverses and folds");
+    // Both readings informative and disjoint: HKLMNP is taxon 1 as written,
+    // PNMLKH taxon 4 reversed -> ambiguous, skipped.
+    oc = {};
+    check(!run("HKLMNP", SpeciesOrientation::Both, taxa, &oc) && taxa.empty() && oc.ambiguous == 1,
+          "orientation: disjoint readings are ambiguous and skipped");
+    check(run("HKLMNP", SpeciesOrientation::Forward, taxa, nullptr) && taxa == V({1}),
+          "orientation: the ambiguous tag counted under forward (counts can fall)");
+    // Shorter than k, also after reversal; non-alphabet residues.
+    check(!run("NPQ", SpeciesOrientation::Both, taxa, nullptr), "orientation: shorter than k after reversal");
+    check(!run("NPQXSTVW", SpeciesOrientation::Both, taxa, nullptr), "orientation: non-alphabet residue");
+    check(!run("NP1RSTVW", SpeciesOrientation::Both, taxa, nullptr), "orientation: non-letter residue");
+    // Forward counters are those of a forward run; the reverse lookups have
+    // their own.
+    {
+      TagLookupCounters c1, r1, c2, r2;
+      V t1, t2;
+      orientedTagSupport(oidx, "ACDEFGHK", k, 1, 0.0, SpeciesOrientation::Forward, t1, c1, r1, nullptr);
+      orientedTagSupport(oidx, "ACDEFGHK", k, 1, 0.0, SpeciesOrientation::Both, t2, c2, r2, nullptr);
+      check(c1.kmer_skipped == c2.kmer_skipped && c1.tag_generic == c2.tag_generic && r1.kmer_skipped == 0,
+            "orientation: forward counters unchanged under both");
+    }
+
+    // Randomised against tagSupport: Forward equals it; Both equals the
+    // combination of the two readings looked up separately.
+    std::mt19937 rng(4711);
+    const std::string alpha = "ACDEFGHIKLMNPQRSTVWY";
+    int bad_fwd = 0, bad_both = 0, n_rev = 0;
+    for (int trial = 0; trial < 20000; ++trial)
+    {
+      const std::string& src = se[rng() % se.size()].sequence;
+      const size_t len = 3 + rng() % 7;
+      std::string seq = src.substr(rng() % src.size(), len);
+      if (rng() % 2) std::reverse(seq.begin(), seq.end());
+      if (rng() % 5 == 0 && !seq.empty()) seq[rng() % seq.size()] = alpha[rng() % alpha.size()];
+      const size_t cap = 1 + rng() % 4;
+      TagLookupCounters c0, c1, r1, c2, r2, cr;
+      V ref, f, b, rev;
+      const bool ok0 = tagSupport(oidx, seq, k, cap, 0.0, ref, c0);
+      const bool ok1 = orientedTagSupport(oidx, seq, k, cap, 0.0, SpeciesOrientation::Forward, f, c1, r1, nullptr);
+      if (ok0 != ok1 || ref != f || c0.kmer_skipped != c1.kmer_skipped) ++bad_fwd;
+      tagSupport(oidx, std::string(seq.rbegin(), seq.rend()), k, cap, 0.0, rev, cr);
+      V want;
+      combineOrientations(ref, rev, want);
+      OrientationCounts o2;
+      const bool ok2 = orientedTagSupport(oidx, seq, k, cap, 0.0, SpeciesOrientation::Both, b, c2, r2, &o2);
+      if (ok2 != !want.empty() || b != want || c2.kmer_skipped != c0.kmer_skipped) ++bad_both;
+      if (o2.reverse) ++n_rev;
+    }
+    check(bad_fwd == 0, "orientation: forward equals tagSupport on 20000 random tags");
+    check(bad_both == 0, "orientation: both equals the combined readings on 20000 random tags");
+    check(n_rev > 500, "random tags exercise the reverse-only path");
+  }
+
   if (failures == 0) std::cout << "taxindex_test: all checks passed\n";
   return failures == 0 ? 0 : 1;
 }

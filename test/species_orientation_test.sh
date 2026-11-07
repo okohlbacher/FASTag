@@ -1,0 +1,168 @@
+#!/usr/bin/env bash
+# -species_orientation (1.12 #10): species lookup in both tag orientations on
+# the fixture against the toy taxonomy index of species_call_test.sh.
+#
+#   * forward (the default) is byte-identical to the option absent, and with
+#     FASTAG_BASELINE_BIN to the 1.11.0 binary;
+#   * both without -species_call decoy writes qvalue NA and warns;
+#   * exact counts: tools/species_orientation_recount.py (Python, not the C++
+#     lookup) recomputes per genus the forward count, the reverse-only gains
+#     and the ambiguity losses; the both count must equal forward + gains -
+#     losses, and the forward count the forward report (FASTAG_FULL_PRECISION=1);
+#   * the absent genera gain at most the predicted reverse-only gain (<= 2);
+#   * both with -orientation forward is the same report; both is the same at
+#     1, 3 and 8 threads; both with -species_call decoy keeps 15 fields;
+#   * the ignored-option warning and the -stream refusal.
+# Exits 77 (ctest SKIP) when the binary cannot start or python3 is missing.
+set -u
+BIN="$1"
+BUILDTAXDB="$2"
+IN="$3"       # test/fixtures/Ecoli_MS2_small.mzML
+DB="$4"       # test/fixtures/Ecoli_MS2_small.fasta
+TAXDIR="$5"   # data/taxonomy
+RECOUNT="$6"  # tools/species_orientation_recount.py
+
+if ! "$BIN" --help >/dev/null 2>&1; then
+  echo "SKIP: binary cannot initialize (OpenMS share data unreachable?)" >&2
+  exit 77
+fi
+command -v python3 >/dev/null 2>&1 || { echo "SKIP: no python3" >&2; exit 77; }
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/fastag-species-orient-test.XXXXXX") || exit 1
+[ "${FASTAG_TEST_KEEP:-0}" = 1 ] && echo "work directory kept: $TMP" || trap 'rm -rf "$TMP"' EXIT
+fail() { echo "FAIL: $*" >&2; exit 1; }
+
+# ---- toy index (as species_call_test.sh) -----------------------------------
+gen() {  # seed nprot len
+  awk -v seed="$1" -v np="$2" -v len="$3" 'BEGIN {
+    a = "ACDEFGHIKLMNPQRSTVWY"; x = seed
+    for (p = 1; p <= np; ++p) {
+      s = ""
+      for (i = 0; i < len; ++i) { x = (x * 16807) % 2147483647; s = s substr(a, int(x / 2147483647 * 20) + 1, 1) }
+      print ">syn" seed "_" p; print s
+    } }'
+}
+mutate() {  # seed rate < fasta
+  awk -v seed="$1" -v rate="$2" 'BEGIN { a = "ACDEFGHIKLMNPQRSTVWY"; x = seed }
+    /^>/ { print $0 "_mut"; next }
+    { s = ""; n = length($0)
+      for (i = 1; i <= n; ++i) {
+        c = substr($0, i, 1); x = (x * 16807) % 2147483647
+        if (x / 2147483647 < rate) {
+          do { x = (x * 16807) % 2147483647; d = substr(a, int(x / 2147483647 * 20) + 1, 1) } while (d == c)
+          c = d
+        }
+        s = s c
+      }
+      print s }'
+}
+mkdir -p "$TMP/prot"
+{ awk '/^>/ { if (s != "") print s; print; s = ""; next } { s = s $0 } END { if (s != "") print s }' "$DB"
+  gen 11 500 300; } > "$TMP/prot/562.fasta"
+mutate 12 0.05 < "$TMP/prot/562.fasta" > "$TMP/prot/28901.fasta"
+gen 13 2000 300 > "$TMP/prot/1280.fasta"
+gen 14 6000 300 > "$TMP/prot/4932.fasta"
+"$BUILDTAXDB" "$TMP/prot" "$TMP/toy.taxdb" 7 > "$TMP/buildtaxdb.log" 2>&1 \
+  || { cat "$TMP/buildtaxdb.log" >&2; fail "buildtaxdb"; }
+GENUS="562:561,28901:590,1280:1279,4932:4930"
+
+TAX=(-taxdb "$TMP/toy.taxdb" -taxonomy_nodes "$TAXDIR/nodes.dmp" -taxonomy_names "$TAXDIR/names.dmp")
+COMMON=(-in "$IN" -tag_length 7 -extension 1 -fragment_tolerance 600 -fragment_tolerance_unit ppm
+        -max_evalue 0 -max_tags 200)
+export FASTAG_TAXONOMY_DIR="$TAXDIR"
+export FASTAG_FULL_PRECISION=1
+
+run() {  # name args...
+  local n=$1; shift
+  "$BIN" -out "$TMP/$n.tsv" "$@" < /dev/null > "$TMP/$n.log" 2>&1
+}
+fields() { awk -F'\t' '{ print NF }' "$1" | sort -u | tr '\n' ' ' | sed 's/ $//'; }
+obs() {  # report genus -> observed (0 when absent)
+  awk -F'\t' -v t="$2" 'NR > 1 && $2 == t { v = $4 } END { print v + 0 }' "$1"
+}
+
+# ---- forward: byte-identical -------------------------------------------------
+run absent "${COMMON[@]}" -species "${TAX[@]}" -threads 2 || { cat "$TMP/absent.log" >&2; fail "run without the option"; }
+run fwd "${COMMON[@]}" -species "${TAX[@]}" -species_orientation forward -threads 2 \
+  || { cat "$TMP/fwd.log" >&2; fail "-species_orientation forward"; }
+[ "$(wc -l < "$TMP/absent.species.tsv")" -ge 3 ] || fail "the toy run reports fewer than 2 genera (test is vacuous)"
+cmp -s "$TMP/absent.species.tsv" "$TMP/fwd.species.tsv" || fail "forward changed the species report"
+cmp -s "$TMP/absent.tsv" "$TMP/fwd.tsv" || fail "forward changed the tags"
+grep -v "^FASTAG_\|took\|time" "$TMP/absent.log" > "$TMP/absent.logx"
+grep -v "^FASTAG_\|took\|time" "$TMP/fwd.log" > "$TMP/fwd.logx"
+! grep -q "Species orientation" "$TMP/fwd.log" || fail "forward logs the orientation line"
+if [ -n "${FASTAG_BASELINE_BIN:-}" ] && [ -x "${FASTAG_BASELINE_BIN}" ]; then
+  "$FASTAG_BASELINE_BIN" -out "$TMP/base.tsv" "${COMMON[@]}" -species "${TAX[@]}" -threads 2 > "$TMP/base.log" 2>&1 \
+    || { cat "$TMP/base.log" >&2; fail "baseline run"; }
+  cmp -s "$TMP/base.species.tsv" "$TMP/fwd.species.tsv" || fail "species report differs from $FASTAG_BASELINE_BIN"
+  cmp -s "$TMP/base.tsv" "$TMP/fwd.tsv" || fail "tags differ from $FASTAG_BASELINE_BIN"
+  echo "species_orientation_test: forward equals $FASTAG_BASELINE_BIN"
+fi
+
+# ---- both without decoy: qvalue NA, warning, threads ---------------------------
+for t in 1 3 8; do
+  run both_t$t "${COMMON[@]}" -species "${TAX[@]}" -species_orientation both -threads $t \
+    || { cat "$TMP/both_t$t.log" >&2; fail "both, -threads $t"; }
+done
+B="$TMP/both_t1.species.tsv"
+cmp -s "$B" "$TMP/both_t3.species.tsv" && cmp -s "$B" "$TMP/both_t8.species.tsv" || fail "both differs between 1, 3 and 8 threads"
+cmp -s "$TMP/absent.tsv" "$TMP/both_t1.tsv" || fail "both changed the tags"
+[ "$(fields "$B")" = 8 ] || fail "both: not 8 fields"
+[ "$(head -1 "$B")" = "$(head -1 "$TMP/absent.species.tsv")" ] || fail "both: header changed"
+bad=$(awk -F'\t' 'NR > 1 && $8 != "NA"' "$B" | wc -l | tr -d ' ')
+[ "$bad" = 0 ] || fail "both without decoy: $bad rows with a numeric qvalue"
+grep -q -- "-species_orientation both: the qvalue column of the species report is NA" "$TMP/both_t1.log" \
+  || { cat "$TMP/both_t1.log" >&2; fail "no NA warning"; }
+grep -q "Species orientation (both)" "$TMP/both_t1.log" || fail "no orientation line in the log"
+
+# ---- exact counts against the independent recount ------------------------------
+python3 "$RECOUNT" --tags "$TMP/absent.tsv" --prot-dir "$TMP/prot" --k 7 --genus "$GENUS" > "$TMP/recount.tsv" \
+  || fail "recount script"
+cat "$TMP/recount.tsv"
+total_gain=0
+while IFS=$'\t' read -r g f gain loss b; do
+  [ "$g" = tags ] && continue
+  [ "$(obs "$TMP/absent.species.tsv" "$g")" = "$f" ] || fail "genus $g: forward report $(obs "$TMP/absent.species.tsv" "$g") != recount $f"
+  [ "$(obs "$B" "$g")" = $((f + gain - loss)) ] || fail "genus $g: both report $(obs "$B" "$g") != $f + $gain - $loss"
+  [ "$b" = $((f + gain - loss)) ] || fail "recount inconsistent for $g"
+  total_gain=$((total_gain + gain))
+  case "$g" in
+    1279|4930)
+      [ "$(obs "$B" "$g")" -le $((f + gain)) ] || fail "absent genus $g: both above forward + predicted gain"
+      [ "$gain" -le 2 ] || fail "absent genus $g: predicted reverse-only gain $gain > 2" ;;
+  esac
+done < "$TMP/recount.tsv"
+[ "$(awk -F'\t' '$1 == 561 { print $3 }' "$TMP/recount.tsv")" -gt 0 ] || fail "Escherichia gains nothing (test is vacuous)"
+# The tag-level outcome counts of the log equal the recount's.
+read -r _ rf rr rb rp ra < <(grep '^tags' "$TMP/recount.tsv")
+want="informative tags $rf forward only, $rr reverse only, $rb both (shared taxa), $rp palindromes; $ra orientation-ambiguous"
+grep -q "$want" "$TMP/both_t1.log" || { grep "Species orientation" "$TMP/both_t1.log" >&2; fail "log counts differ from the recount: $want"; }
+# Gapped rows are excluded: the run reports some, so the exclusion matters.
+ng=$(awk -F'\t' 'NR > 1 && substr($8, 1, 1) == "1"' "$TMP/absent.tsv" | wc -l | tr -d ' ')
+[ "$ng" -gt 0 ] || fail "no gapped rows in the tags (gapped exclusion untested)"
+
+# ---- -orientation forward does not matter --------------------------------------
+run orf "${COMMON[@]}" -species "${TAX[@]}" -species_orientation both -orientation forward -threads 2 \
+  || { cat "$TMP/orf.log" >&2; fail "both with -orientation forward"; }
+cmp -s "$B" "$TMP/orf.species.tsv" || fail "-orientation forward changed the both report"
+
+# ---- with -species_call decoy ----------------------------------------------------
+printf 'version\ttest\nalpha\t0.05\ntau\t0\nn_min\t5\n' > "$TMP/params.tsv"
+run dec "${COMMON[@]}" -species "${TAX[@]}" -species_orientation both -species_call decoy \
+    -species_call_min_units 10 -species_call_params "$TMP/params.tsv" -threads 2 \
+  || { cat "$TMP/dec.log" >&2; fail "both with decoy"; }
+[ "$(fields "$TMP/dec.species.tsv")" = 15 ] || fail "both with decoy: not 15 fields"
+awk -F'\t' 'NR > 1 && $8 == "NA" { exit 1 }' "$TMP/dec.species.tsv" || fail "both with decoy: qvalue NA"
+! grep -q "qvalue column of the species report is NA" "$TMP/dec.log" || fail "NA warning under decoy"
+for g in 561 590 1279 4930; do
+  [ "$(obs "$TMP/dec.species.tsv" "$g")" = "$(obs "$B" "$g")" ] || fail "decoy changed the observed count of $g"
+done
+
+# ---- warnings and refusals --------------------------------------------------------
+run warn "${COMMON[@]}" -species_orientation both -threads 2 || { cat "$TMP/warn.log" >&2; fail "without -species"; }
+grep -q -- "-species_orientation is only read for -species" "$TMP/warn.log" || { cat "$TMP/warn.log" >&2; fail "no ignored-option warning"; }
+if run stream -stream -species_orientation both; then fail "-stream not refused"; fi
+grep -q -- "-stream cannot be combined with -species_orientation" "$TMP/stream.log" || { cat "$TMP/stream.log" >&2; fail "-stream refusal text"; }
+if run badmode "${COMMON[@]}" -species "${TAX[@]}" -species_orientation reverse -threads 2; then fail "bad mode accepted"; fi
+[ ! -e "$TMP/badmode.species.tsv" ] || fail "bad mode wrote a report"
+
+echo "species_orientation_test: passed (total predicted gain $total_gain)"
