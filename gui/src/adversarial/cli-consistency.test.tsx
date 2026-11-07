@@ -21,6 +21,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import App from '../App'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
+import { click } from '../testing/render'
 import { applyAndCheck } from '../testing/lastUsed'
 import { PARAM_BY_NAME, invalidBecause, invalidParams } from '../paramLayout'
 import { FASTAG_BIN, ORDER_RS, REPO_FIXTURES_DIR, SRC_TAURI_DIR } from './external'
@@ -38,11 +39,6 @@ if (ready) {
   copyFileSync(`${FIX}.mzML`, IN)
   copyFileSync(`${FIX}.fasta`, FA)
 }
-
-const click = (el: Element): Promise<void> =>
-  act(async () => {
-    fireEvent.click(el)
-  })
 
 interface Outcome {
   argv: string[]

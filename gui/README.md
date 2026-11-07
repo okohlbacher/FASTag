@@ -18,7 +18,13 @@ backend has to satisfy.
 ```
 gui/
   src/                 React frontend
-    App.tsx            the window: parameter form, run and batch, result tabs
+    App.tsx            the window shell: header, close/overwrite questions, shortcuts and menus,
+                       laying out the setup, the run bar and the result tabs
+    app/               viewStore.ts (result tab and log drawer, one store per window),
+                       output-path and text helpers (paths.ts, format.ts)
+    run/               useRun.ts (a run or batch, its log, progress and results), RunBar.tsx,
+                       LogDrawer.tsx, BatchList.tsx and the batch job naming (batch.ts)
+    results/           ResultTabs.tsx (Tags, Species, Digest and the failure banner), reports.ts
     ParamField.tsx     one form field per manifest parameter
     ResultsTable.tsx   tags browser: virtualized table with filters, column choice and export
     SpeciesPanel.tsx   species report
@@ -31,9 +37,11 @@ gui/
     paramLayout.ts     section/ordering overlay on the generated manifest (one flat list)
     params.generated.json   `-write_ini` dump of the tool (the source of truth for params)
     testing/           mock bridge for the tests and the browser preview (`npm run dev`),
-                       and the e2e bridge with its ?fixture= scenarios (Playwright build only)
+                       the e2e bridge with its ?fixture= scenarios (Playwright build only),
+                       and the shared test helpers (render.tsx: renderApp, click, pickSingle, ...)
     adversarial/       end-to-end GUI tests (see Tests)
-    setup/             parameter search (Cmd+K, "/"), instrument presets and the
+    setup/             useSession.ts (the form's values, last-used offer, presets), SetupForm.tsx,
+                       parameter search (Cmd+K, "/"), instrument presets and the
                        species fixes (presets.ts), shortcuts and menu actions (shortcuts.ts)
     help/              the Help view (F1): pages as data (content.tsx, faq.tsx, params.ts),
                        HelpView.tsx, the link store (link.ts) and the "?" links (HelpLink.tsx)
@@ -146,6 +154,15 @@ real Channel, the IPC message rate of a chatty phase) run
 --nocapture` prints the measured rate. `src/api.test.ts` tests the bridge itself
 against Tauri's IPC mock (`@tauri-apps/api/mocks`): a Done before the `run`
 reply, a late log after Done, a cancel during a phase without progress.
+The parts of the window have tests of their own beside them: the hooks
+(`setup/useSession`, `run/useRun`, `app/viewStore`) through `renderHook`, and
+`RunBar`, `LogDrawer`, `BatchList` and `ResultTabs` rendered alone with their
+props. The App-level tests, which render the whole window, are split by area
+beside the parts they drive: `run/batch.app.test.tsx` (run and batch
+orchestration), `results/digest.app.test.tsx` (the Digest tab) and
+`setup/setup.app.test.tsx` (the setup form and run bar, with the checks that
+App wires Reset, the phase and the elapsed time into the run bar); they share
+their helpers from `src/testing/render.tsx`.
 
 The Playwright specs in `e2e-web/` drive the app in Chromium and WebKit on an
 explicit e2e build, `npm run build:e2e` (`vite build --mode e2e`, into

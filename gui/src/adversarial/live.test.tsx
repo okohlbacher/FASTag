@@ -3,25 +3,14 @@
 // batches and the tags filter.
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import App from '../App'
 import ResultsTable from '../ResultsTable'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
+import { click, renderApp, runButton } from '../testing/render'
 
-async function renderApp(mock: MockBridge): Promise<HTMLElement> {
-  const { container } = render(<App />)
-  await screen.findByText('FASTag ready')
-  await act(async () => {})
-  return container
-}
-const click = (el: Element): Promise<void> =>
-  act(async () => {
-    fireEvent.click(el)
-  })
 const change = (el: Element, value: string): Promise<void> =>
   act(async () => {
     fireEvent.change(el, { target: { value } })
   })
-const runButton = (): HTMLElement => screen.getByRole('button', { name: /^(Run( on .+)?|Running…)$/ })
 const field = (c: HTMLElement, name: string): HTMLInputElement =>
   c.querySelector(`#p-${name}`) as HTMLInputElement
 const openSection = async (title: string): Promise<void> => {
