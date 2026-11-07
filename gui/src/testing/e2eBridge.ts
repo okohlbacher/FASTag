@@ -167,6 +167,26 @@ export function installE2EBridge(): Origin | undefined {
       }
     ]
   }
+  // A run of an earlier session that the app did not see end (sweep.rs
+  // recover): recorded as failed, its partial table and a .part offered.
+  if (fixture === 'interrupted') {
+    mock.history = [
+      {
+        id: '1762419600000-interrupted',
+        input: '/data/run01.mzML',
+        outputs: ['/data/run01.tags.tsv', '/data/run01.digest.tsv'],
+        cwd: '/data',
+        argv: ['/e2e/FASTag', '-in', '/data/run01.mzML', '-out', '/data/run01.tags.tsv'],
+        status: 'failed',
+        exitCode: null,
+        message: 'interrupted: the app ended while this run was in progress',
+        start: 1762419600000,
+        end: 1762419660000,
+        cleanup: { removed: [], renamed: [], failed: [] }
+      }
+    ]
+    mock.leftoverFiles = ['/data/run01.tags.tsv', '/data/run01.digest.tsv.part']
+  }
   if (fixture === 'big') {
     const N = 10_000_000
     mock.resultsQuery = (path, view, offset, limit): Promise<ResultsPage> => {

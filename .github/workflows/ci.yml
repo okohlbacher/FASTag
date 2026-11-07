@@ -1348,8 +1348,11 @@ jobs:
       # exactly enough. Verified locally by reproducing the CI condition:
       # without the directory cargo fails with "resource path
       # `resources/fastag` doesn't exist"; with an empty one the lib tests pass
-      # (108 on macOS from P1 PR a, 91 from P0b, 73 from P0a, 54 before). The run lifecycle tests drive
-      # gui/testing/stub-fastag, a sh script, instead of the CLI.
+      # (122 on macOS after P1 PRs a and b, 108 from P1 PR a, 100 from P1 PR b, 91 from P0b, 73 from P0a, 54 before). The run lifecycle tests drive
+      # gui/testing/stub-fastag, a sh script, instead of the CLI. The process
+      # lifetime tests (lifetime.rs, P1 PR b) have three Linux-only ones
+      # (PDEATHSIG, the getppid check): this job is where they run. Two
+      # ignored tests are the helper processes of the kill -9 tests.
       - name: Backend unit tests
         working-directory: gui/src-tauri
         run: |
@@ -1366,16 +1369,22 @@ jobs:
           cargo test --lib ipc_rate -- --nocapture --test-threads=1 2>&1 | tee ipc-rate.txt
           { echo '### IPC message rate (stub CLI, ubuntu-24.04)'; echo '```'; grep -o 'IPC rate.*' ipc-rate.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
-  # The backend's unit tests on Windows: path handling differs there (a
-  # root-relative \data\x.tsv is not absolute; ResolvedOutputs, GUI-DESIGN
-  # 6.3), and the GUI ships for Windows, yet these tests ran only on Linux and
-  # macOS. No OpenMS and no CLI: the run-lifecycle tests that drive the sh
-  # stub are cfg(unix). pwsh, not bash: Git Bash's link.exe would shadow
-  # MSVC's (see windows.yml). Informational until it has been green once.
+  # The backend on Windows. Two parts:
+  # - the Windows half of the process lifetime (P1 PR b): the kill-on-close
+  #   job object each run is started in (lifetime.rs), including the kill of
+  #   a stand-in GUI process with a .bat-like grandchild. windows.yml builds
+  #   the app only on tags, so without this step the cfg(windows) code would
+  #   first compile at a release. Required.
+  # - every lib test (P1 PR a): path handling differs there (a root-relative
+  #   \data\x.tsv is not absolute; ResolvedOutputs, GUI-DESIGN 6.3), and the
+  #   GUI ships for Windows. No OpenMS and no CLI: the run-lifecycle tests that
+  #   drive the sh stub are cfg(unix). Informational (step-level
+  #   continue-on-error) until it has been green once.
+  # pwsh, not bash: Git Bash's link.exe shadows MSVC's linker (windows.yml,
+  # "Build the desktop app").
   gui-windows:
     runs-on: windows-2022
-    timeout-minutes: 40
-    continue-on-error: true
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -1388,16 +1397,29 @@ jobs:
         working-directory: gui
         shell: pwsh
         run: |
-          npm ci;        if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          npm run build; if ($LASTEXITCODE) { exit $LASTEXITCODE }
-      - name: Backend unit tests (Windows)
+          $ErrorActionPreference = 'Stop'
+          npm ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Backend lifetime tests (Windows)
         working-directory: gui/src-tauri
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force resources/fastag | Out-Null
+          cargo test --lib --no-run
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --lib lifetime
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Backend unit tests (Windows)
+        working-directory: gui/src-tauri
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $ErrorActionPreference = 'Stop'
           cargo test --lib
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   # ---------------------------------------------------- release data asset
   # Copies the pinned taxonomy tarball onto the new release as a standalone

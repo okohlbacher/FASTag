@@ -10,7 +10,8 @@
 //
 // The GUI reads no spectra file itself: no mzML, mzPeak or MGF reader is
 // added here. Both commands spawn the CLI with an argv array (no shell),
-// with the same environment a run gets.
+// with the same environment a run gets, through lifetime::spawn_cli (the
+// spawner thread; on Windows a job of its own) like every CLI child.
 
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -23,6 +24,7 @@ use serde::Serialize;
 use tauri::AppHandle;
 
 use crate::fastag::{no_console_window, quiet_blas, resolve_binary, taxonomy_dir, Resolved};
+use crate::lifetime;
 
 /// How long a probe may take: it reads metadata only (the 1.12 acquisition
 /// probe reads at most 10 x 4000 spectrum heads), so a minute means a hung
@@ -109,6 +111,9 @@ fn command(r: &Resolved) -> Command {
         cmd.env("FASTAG_TAXONOMY_DIR", t);
     }
     quiet_blas(&mut cmd);
+    // Started by the spawner thread like every CLI child (lifetime.rs, see
+    // run_bounded): the blocking-pool thread that asks may exit when idle.
+    lifetime::die_with_parent(&mut cmd);
     cmd
 }
 
@@ -125,7 +130,9 @@ struct Bounded {
 /// (then kill it), reading at most @p max bytes of stdout.
 fn run_bounded(mut cmd: Command, timeout: Duration, max: usize, cancel: &dyn Fn() -> bool) -> std::io::Result<Bounded> {
     cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
-    let mut child = cmd.spawn()?;
+    // On Windows in a kill-on-close job of its own: job is dropped after the
+    // child is reaped, which also ends any process the CLI left behind.
+    let (mut child, job) = lifetime::spawn_cli(cmd)?;
     let mut so = child.stdout.take().expect("piped");
     let mut se = child.stderr.take().expect("piped");
     let out = std::thread::spawn(move || {
@@ -151,12 +158,22 @@ fn run_bounded(mut cmd: Command, timeout: Duration, max: usize, cancel: &dyn Fn(
         cancelled = cancel();
         if cancelled || Instant::now() >= until {
             timed_out = !cancelled;
+            // Windows: the job holds the whole tree (a .bat wrapper's exe).
+            #[cfg(windows)]
+            if let Some(j) = &job {
+                j.terminate();
+            }
             let _ = child.kill();
             let _ = child.wait();
             break None;
         }
         std::thread::sleep(Duration::from_millis(20));
     };
+    // The child is reaped: closing its job (Windows) ends what it left behind.
+    #[cfg(windows)]
+    drop(job);
+    #[cfg(not(windows))]
+    let () = job;
     // A grandchild holding the pipes would keep the readers alive: they are
     // joined only when the child itself has ended without a timeout.
     let (stdout, stderr) = if status.is_none() {

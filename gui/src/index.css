@@ -371,6 +371,7 @@ button.add-batch { align-self: flex-start; }
 .last-run-name.ok .icon { color: var(--ok); }
 .last-run-name.bad .icon { color: var(--destructive-text); }
 .last-run .muted { font-size: var(--text-xs); }
+.leftovers-list { margin: var(--space-1) 0; padding-left: var(--space-4); font-size: var(--text-xs); overflow-wrap: anywhere; }
 .last-run-params { display: block; margin-top: var(--space-1); font-size: var(--text-xs); overflow-wrap: anywhere; white-space: normal; }
 .fill-soft { fill: color-mix(in srgb, currentColor 14%, transparent); }
 
