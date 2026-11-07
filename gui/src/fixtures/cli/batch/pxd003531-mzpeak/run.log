@@ -1,0 +1,11 @@
+Modifications: Carbamidomethyl (C, fixed)
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1694 repeat gaps, cycle 177, 2306 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Subsampling: tagging 3251 of 32513 input spectra (seed 1)
+Glyco: 1318 of 2738 processed MS2 spectra carry oxonium evidence -> run.tags.glyco.tsv
+Census: 2738 MS2 spectra read, 2723 with a reported tag (0 placed), 15 no_tags -> run.tags.census.tsv, summary -> run.tags.census_summary.tsv
+Digest: 38300 filtered tags, model Trypsin -> run.digest.tsv
+Labels: 38300 filtered tags -> run.label.tsv
+Species: 1760 spectra contributed taxon evidence; top genus calls -> run.tags.species.tsv
+Species call (-species_call decoy): 4 present, 21 no_call, 25 not_detected among the reported genus rows; 1878 trials, 5 decoys per tag, 21 tags without a decoy; parameters /scratch/kohlbach/fastag112-integ/src/data/taxonomy/species_call.tsv (1.12.0-provisional)
+2738 MS2 spectra, 128821 tags
+FASTag took 3.09 s (wall), 7.48 s (CPU), 0.67 s (system), 6.81 s (user); Peak Memory Usage: 1250 MB.

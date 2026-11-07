@@ -18,6 +18,12 @@ export interface BatchListProps {
   logJob: string | null
   logOpen: boolean
   onAdd(): void
+  // Add the spectra files of a folder (P2b); absent: no such button.
+  onAddFolder?(): void
+  // The batch's output folder (null: beside each input), and its choice.
+  outDir?: string | null
+  onChooseOutDir?(): void
+  onClearOutDir?(): void
   onClear(): void
   onRemove(index: number): void
   onShow(job: BatchJob): void
@@ -25,11 +31,14 @@ export interface BatchListProps {
   // The form's "Add files for a batch…", where focus goes when the queue is
   // cleared.
   addBatchRef: RefObject<HTMLButtonElement | null>
+  // The Add… button, for focus from outside (App.tsx).
+  addRef?: RefObject<HTMLButtonElement | null>
 }
 
 export default function BatchList(p: BatchListProps): JSX.Element {
   const { jobs, busy, results, logOpen, addBatchRef } = p
-  const addRef = useRef<HTMLButtonElement>(null)
+  const ownAddRef = useRef<HTMLButtonElement>(null)
+  const addRef = p.addRef ?? ownAddRef
   // The drawer shows the kept log of this job.
   const logJobEntry = p.logJob ? jobs.find((j) => j.input === p.logJob && j.log) : undefined
   return (
@@ -46,6 +55,11 @@ export default function BatchList(p: BatchListProps): JSX.Element {
             <button className="secondary small" ref={addRef} onClick={p.onAdd}>
               Add…
             </button>
+            {p.onAddFolder && (
+              <button className="secondary small" onClick={p.onAddFolder} title="Add the spectra files of a folder">
+                Add folder…
+              </button>
+            )}
             <button
               className="secondary small"
               onClick={() => {
@@ -124,8 +138,35 @@ export default function BatchList(p: BatchListProps): JSX.Element {
           )
         })}
       </ul>
+      {p.onChooseOutDir && (
+        // For inputs on a read-only share: every output goes to one folder.
+        <div className="outdir">
+          <span className="outdir-label">Output folder:</span>{' '}
+          {p.outDir ? <code title={p.outDir}>{p.outDir}</code> : <span className="muted">beside each input</span>}
+          {!busy && (
+            <>
+              <button type="button" className="secondary small" onClick={p.onChooseOutDir}>
+                Choose output folder…
+              </button>
+              {p.outDir && (
+                <button type="button" className="secondary small" onClick={p.onClearOutDir}>
+                  Beside inputs
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
       <p className="hint">
-        Each file writes its own <code>&lt;name&gt;.tags.tsv</code> and reports next to the input.{' '}
+        {p.outDir ? (
+          <>
+            Each file writes its own <code>&lt;name&gt;.tags.tsv</code> and reports in the output folder.{' '}
+          </>
+        ) : (
+          <>
+            Each file writes its own <code>&lt;name&gt;.tags.tsv</code> and reports next to the input.{' '}
+          </>
+        )}
         <HelpLink to="start-batch">About batch runs</HelpLink>
       </p>
     </section>

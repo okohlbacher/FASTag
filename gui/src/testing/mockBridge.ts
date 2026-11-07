@@ -59,6 +59,14 @@ export interface MockBridge extends FastagApi {
   pickFileCalls: { kind: 'open' | 'save'; formats?: string[] }[]
   nextPickResults: string | null
   nextPickReport: string | null
+  nextPickFolder: string | null
+  // folder -> the spectra files folderSpectra lists; a folder not named
+  // here is not a folder.
+  folderFiles: Record<string, string[]>
+  folderSpectraCalls: string[]
+  // writeSummary() calls; summaryWriteError: the next writes reject.
+  summaryWrites: { dest: string; text: string }[]
+  summaryWriteError: string | null
   // path -> report text; a missing path reads as "not written".
   reportFiles: Record<string, string>
   reportCalls: string[]
@@ -66,6 +74,8 @@ export interface MockBridge extends FastagApi {
   resultsRows: string[][]
   resultsError: Error | null
   speciesResult: SpeciesReport | null
+  // path -> species report; a path not named here reads speciesResult.
+  speciesFiles: Record<string, SpeciesReport>
   speciesError: Error | null
   taxdbInfoResult: TaxdbInfo | null
   // The CLI's --helphelp options. The default is a CLI without
@@ -137,7 +147,9 @@ export interface MockBridge extends FastagApi {
   emitDragHover(over: boolean): void
   notifyCalls: { title: string; body: string }[]
   holdRun(): void
-  releaseRun(): void
+  // With @p error: the held invoke replies fail (an invoke that fails after
+  // its Done: the job settles without outputs, runJob.ts).
+  releaseRun(error?: Error): void
 }
 
 /// The reply of `run` exactly as fastag.rs serialises it (cargo test
@@ -238,7 +250,7 @@ export function installMockBridge(): MockBridge {
   }
 
   let seq = 0
-  let held: (() => void)[] | null = null
+  let held: ((error?: Error) => void)[] | null = null
   const heldProbes: (() => void)[] = []
 
   const mock: MockBridge = {
@@ -251,6 +263,11 @@ export function installMockBridge(): MockBridge {
     pickFileCalls: [],
     nextPickResults: null,
     nextPickReport: null,
+    nextPickFolder: null,
+    folderFiles: {},
+    folderSpectraCalls: [],
+    summaryWrites: [],
+    summaryWriteError: null,
     reportFiles: {},
     reportCalls: [],
     resultsColumns: ['spectrum', 'tag', 'length', 'evalue', 'fasta_hit'],
@@ -261,6 +278,7 @@ export function installMockBridge(): MockBridge {
     ],
     resultsError: null,
     speciesResult: null,
+    speciesFiles: {},
     speciesError: null,
     taxdbInfoResult: null,
     cliOptions: { options: ['in', 'out', 'fasta', 'fragment_tolerance', 'fragment_tolerance_unit'], ok: true, detail: '5 options' },
@@ -337,10 +355,10 @@ export function installMockBridge(): MockBridge {
     holdRun: () => {
       held = held ?? []
     },
-    releaseRun: () => {
+    releaseRun: (error) => {
       const q = held ?? []
       held = null
-      q.forEach((release) => release())
+      q.forEach((release) => release(error))
     },
 
     probe: () => Promise.resolve(mock.binaryInfo),
@@ -387,6 +405,17 @@ export function installMockBridge(): MockBridge {
     },
     pickResults: () => Promise.resolve(mock.nextPickResults),
     pickReport: () => Promise.resolve(mock.nextPickReport),
+    pickFolder: () => Promise.resolve(mock.nextPickFolder),
+    folderSpectra: (dir) => {
+      mock.folderSpectraCalls.push(dir)
+      const f = mock.folderFiles[dir]
+      return f ? Promise.resolve(f.slice()) : Promise.reject(new Error(`${dir} is not a folder`))
+    },
+    writeSummary: (dest, text) => {
+      if (mock.summaryWriteError) return Promise.reject(new Error(mock.summaryWriteError))
+      mock.summaryWrites.push({ dest, text })
+      return Promise.resolve()
+    },
     report: (path) => {
       mock.reportCalls.push(path)
       return Promise.resolve(mock.reportFiles[path] ?? null)
@@ -397,7 +426,7 @@ export function installMockBridge(): MockBridge {
     },
     species: (path) => {
       mock.speciesCalls.push(path)
-      return mock.speciesError ? Promise.reject(mock.speciesError) : Promise.resolve(mock.speciesResult)
+      return mock.speciesError ? Promise.reject(mock.speciesError) : Promise.resolve(mock.speciesFiles[path] ?? mock.speciesResult)
     },
     resultsQuery: (path, view, offset, limit) => {
       mock.resultsQueryCalls.push({ path, view, offset, limit })
@@ -514,7 +543,7 @@ export function installMockBridge(): MockBridge {
         command: [mock.binaryInfo.bin, '-in', call.in, '-out', outputs.out ?? '']
       }
       runs.set(mock.lastRunId, { call, started, start: Date.now() })
-      if (held) return new Promise<RunStarted>((resolve) => held!.push(() => resolve(started)))
+      if (held) return new Promise<RunStarted>((resolve, reject) => held!.push((e) => (e ? reject(e) : resolve(started))))
       return Promise.resolve(started)
     },
 

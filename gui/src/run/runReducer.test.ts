@@ -259,6 +259,18 @@ describe('runReducer: BATCH_ADD and BATCH_REMOVE', () => {
     expect(queueView(f)[0].outputs).toBeUndefined()
   })
 
+  it('an output folder names the jobs added after it, and renames those not run yet', () => {
+    const q = apply(initialRunState, { type: 'BATCH_ADD', files: ['/d/a.mzML'] }, { type: 'BATCH_OUT_DIR', dir: '/out' })
+    expect(q.batchOutDir).toBe('/out')
+    expect(q.jobs[0].out).toBe('/out/a.tags.tsv')
+    const r = apply(q, { type: 'BATCH_ADD', files: ['/e/b.mzML'] })
+    expect(queueView(r).map((j) => j.out)).toEqual(['/out/a.tags.tsv', '/out/b.tags.tsv'])
+    // A started job keeps the -out it was sent; clearing the folder moves the rest back.
+    const s = apply(r, start('job-1', '/d/a.mzML'), { type: 'BATCH_OUT_DIR', dir: null })
+    expect(queueView(s).map((j) => j.out)).toEqual(['/out/a.tags.tsv', '/e/b.tags.tsv'])
+    expect(runReducer(deepFreeze(s), { type: 'BATCH_OUT_DIR', dir: null })).toBe(s)
+  })
+
   it('a retried job starts clean: no reason, result or end from the run before', () => {
     const q = apply(initialRunState, { type: 'BATCH_ADD', files: ['/d/a.mzML'] })
     const f = apply(q, start('job-1', '/d/a.mzML'), done('job-1', { ok: false, code: 1 }, 3000, { reason: 'exit code 1' }))

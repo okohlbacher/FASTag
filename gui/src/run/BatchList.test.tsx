@@ -6,7 +6,7 @@ import { render, screen } from '@testing-library/react'
 import { createRef } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import BatchList, { type BatchListProps } from './BatchList'
-import { addJobs, type BatchJob } from './batch'
+import { addJobs, jobOut, renameJobs, type BatchJob } from './batch'
 import { createLogStore } from './logStore'
 import { click } from '../testing/render'
 
@@ -30,6 +30,37 @@ describe('batch job naming', () => {
   it('keeps the jobs it has, and returns the same list when nothing is new', () => {
     const one = addJobs([], ['/d/a.mzML'])
     expect(addJobs(one, ['/d/a.mzML'])).toEqual(one)
+  })
+
+  // P2b: an output folder (for inputs on a read-only share) holds every
+  // job's tags; the reports follow them (perJobOutputs).
+  it('names each output in the output folder, by the input name', () => {
+    expect(jobOut('/share/run01.mzML', '/out')).toBe('/out/run01.tags.tsv')
+    expect(jobOut('/share/run01.mzML', '/out/')).toBe('/out/run01.tags.tsv')
+    expect(jobOut('C:\\share\\run01.mzML', 'D:\\out')).toBe('D:\\out\\run01.tags.tsv')
+    expect(jobOut('/share/run01.mzML', null)).toBe('/share/run01.tags.tsv')
+    expect(addJobs([], ['/a/run01.mzML', '/b/run02.mgf'], '/out').map((j) => j.out)).toEqual(['/out/run01.tags.tsv', '/out/run02.tags.tsv'])
+  })
+
+  it('in one output folder, inputs of the same name from two folders still get distinct outputs', () => {
+    expect(addJobs([], ['/a/s.mzML', '/b/s.mzML', '/c/s.mzML', '/a/s.mzpeak'], '/out').map((j) => j.out)).toEqual([
+      '/out/s.tags.tsv',
+      '/out/s.mzML.tags.tsv',
+      '/out/s.mzML.2.tags.tsv',
+      '/out/s.mzpeak.tags.tsv'
+    ])
+  })
+
+  it('choosing or clearing the folder renames the jobs not run yet; a done or running job keeps what it wrote', () => {
+    const js: BatchJob[] = addJobs([], ['/a/x.mzML', '/a/y.mzML', '/a/z.mzML', '/a/w.mzML']).map((j, i) =>
+      i === 0 ? { ...j, status: 'done' } : i === 1 ? { ...j, status: 'running' } : i === 2 ? { ...j, status: 'failed' } : j
+    )
+    const moved = renameJobs(js, '/out')
+    expect(moved.map((j) => j.out)).toEqual(['/a/x.tags.tsv', '/a/y.tags.tsv', '/out/z.tags.tsv', '/out/w.tags.tsv'])
+    expect(renameJobs(moved, null).map((j) => j.out)).toEqual(['/a/x.tags.tsv', '/a/y.tags.tsv', '/a/z.tags.tsv', '/a/w.tags.tsv'])
+    // A kept output is never given to a second job.
+    const kept = renameJobs([{ ...js[0], out: '/out/w.tags.tsv' }, js[3]], '/out')
+    expect(kept.map((j) => j.out)).toEqual(['/out/w.tags.tsv', '/out/w.mzML.tags.tsv'])
   })
 })
 

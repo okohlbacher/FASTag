@@ -72,13 +72,14 @@ export function cardSummary(id: Card['id'], values: V, ctx: { input: string; out
 
 /// The plan line of the footer: "1 file · species on · digest+label+glyco ·
 /// out: beside input".
-export function planLine(values: V, ctx: { input: string; out: string; files: number }): string {
+/// ctx.outDir: the batch's output folder (none: beside each input).
+export function planLine(values: V, ctx: { input: string; out: string; files: number; outDir?: string | null }): string {
   const parts: string[] = []
   parts.push(ctx.files > 0 ? `${ctx.files} ${ctx.files === 1 ? 'file' : 'files'}` : ctx.input ? '1 file' : 'no file')
   parts.push(isActive('species', values) ? 'species on' : 'species off')
   const on = reportsOn(values)
   parts.push(on.length ? on.join('+') : 'no reports')
-  if (ctx.files > 0) parts.push('out: beside each input')
+  if (ctx.files > 0) parts.push(ctx.outDir ? `out: ${ctx.outDir}` : 'out: beside each input')
   else if (ctx.out) {
     const dir = (p: string): string => p.slice(0, Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\')) + 1)
     parts.push(ctx.input && dir(ctx.input) === dir(ctx.out) ? 'out: beside input' : `out: ${baseName(ctx.out)}`)

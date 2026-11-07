@@ -47,6 +47,10 @@ export interface SetupFormProps {
   searchBtnRef: RefObject<HTMLButtonElement | null>
   // Show the Batch view, where the queue is.
   onOpenBatch(): void
+  // Add the spectra files of a folder to the batch (P2b).
+  onAddFolder?(): void
+  // What Add folder… found here (App.tsx): its live region.
+  folderNote?: JSX.Element
   // The "Add files for a batch…" button, where focus goes when the queue
   // is cleared.
   addBatchRef: RefObject<HTMLButtonElement | null>
@@ -56,7 +60,7 @@ export interface SetupFormProps {
   inspector?: JSX.Element | null
 }
 
-export default function SetupForm({ session, run, onPickInput, onSearch, searchBtnRef, onOpenBatch, addBatchRef, onOpenResults, inspector }: SetupFormProps): JSX.Element {
+export default function SetupForm({ session, run, onPickInput, onSearch, searchBtnRef, onOpenBatch, onAddFolder, folderNote, addBatchRef, onOpenResults, inspector }: SetupFormProps): JSX.Element {
   const { input, out, values, setValue, openGroups, setOpenGroups, writingFiles, changedParams } = session
   const { busy, jobs, lastRun, evidence, revealErr, reveal } = run
   // A batch task (Batch QC) asks for the files of a batch before one file.
@@ -129,6 +133,12 @@ export default function SetupForm({ session, run, onPickInput, onSearch, searchB
                 Add files for a batch…
               </button>
             </div>
+            {onAddFolder && (
+              <button className="link add-batch" onClick={onAddFolder}>
+                Or add a folder…
+              </button>
+            )}
+            {folderNote}
             <button className="link add-batch" onClick={onPickInput}>
               Or choose one file…
             </button>

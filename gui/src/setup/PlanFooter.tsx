@@ -51,7 +51,7 @@ export default function PlanFooter({ session, run }: { session: Session; run: Ru
     <section className="plan-footer" role="region" aria-label="Plan">
       <p className="plan-line">
         <span className="muted">Plan: </span>
-        <span>{planLine(values, { input, out, files: run.jobs.length })}</span>
+        <span>{planLine(values, { input, out, files: run.jobs.length, outDir: run.outDir })}</span>
       </p>
       <div className="row tight plan-actions">
         <span className={diff.length ? 'differs' : 'muted'} title={diff.length ? diff.join(', ') : undefined}>

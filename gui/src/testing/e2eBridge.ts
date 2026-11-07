@@ -26,6 +26,11 @@
 //               (src/fixtures/cli, testing/cliFixtures.ts): integration/1.12
 //               on PXD003531, 1.11.0 on it (the 1.12 output absent), 1.12 on
 //               the Da run PXD010783, and 1.12 with -species_call decoy
+//   gate-batch  P2b Batch summary: Add folder… on /data lists eight spectra
+//               files, one per job of a real batch (src/fixtures/cli/batch,
+//               testing/batchFixtures.ts): each prints that job's log and
+//               serves its reports; /data/pxd006096-dia.mzML is refused
+//               with exit 11 (raw DIA, E7). Choose output folder… picks /out.
 //   iontrap-probe  P2b: the CLI has -probe_input, and run01.mzML probes as
 //               the ion-trap gate input (src/fixtures/probe/iontrap)
 //   dia-probe   P2b: the CLI has -probe_input, and run01.mzML probes as
@@ -63,6 +68,7 @@ import labelTsv from '../fixtures/label.tsv?raw'
 import massgapTsv from '../fixtures/massgap.tsv?raw'
 import { CLI_CASES, logLines, type CliCase } from './cliFixtures'
 import { speciesFromTsv } from './speciesTsv'
+import { BATCH_CASES, DIA_REFUSAL } from './batchFixtures'
 
 // The ?fixture= names of the real-CLI Overview scenarios.
 const GATE: Record<string, CliCase> = {
@@ -186,6 +192,21 @@ export function installE2EBridge(): Origin | undefined {
     mock.reportFiles = { '/data/run01.digest.tsv': gate.digest, '/data/run01.label.tsv': gate.label }
     mock.speciesResult = speciesFromTsv(gate.species, '/data/run01.tags.species.tsv')
   }
+  // gate-batch: the jobs by input, in the folder's (name) order.
+  const batchCases = Object.values(BATCH_CASES)
+  const batchInput = (name: string, dir = '/data'): string => `${dir}/${name}.mzML`
+  if (fixture === 'gate-batch') {
+    const names = [...batchCases.map((c) => c.name), DIA_REFUSAL.name].sort()
+    mock.nextPickFolder = '/data'
+    mock.folderFiles = { '/data': names.map((n) => batchInput(n)), '/out': [] }
+    // Reports wherever the batch puts them: beside the inputs or in /out.
+    for (const dir of ['/data', '/out'])
+      for (const c of batchCases) {
+        mock.reportFiles[`${dir}/${c.name}.digest.tsv`] = c.digest
+        mock.reportFiles[`${dir}/${c.name}.label.tsv`] = c.label
+        mock.speciesFiles[`${dir}/${c.name}.tags.species.tsv`] = speciesFromTsv(c.species, `${dir}/${c.name}.tags.species.tsv`)
+      }
+  }
   // P2b: the inspector. A CLI whose --helphelp lists -probe_input.
   if (fixture === 'iontrap-probe' || fixture === 'dia-probe' || fixture === 'orbitrap-probe') {
     mock.cliOptions = { options: [...mock.cliOptions.options, 'probe_input'], ok: true, detail: 'e2e fixture' }
@@ -306,6 +327,12 @@ export function installE2EBridge(): Origin | undefined {
         code: 1
       }
     if (gate) return { phase: 'Reading spectra', lines: logLines(gate), ok: true, code: 0, step: 100 }
+    if (fixture === 'gate-batch') {
+      const lines = (t: string): string[] => t.split(/\r?\n/).filter((l) => l !== '')
+      if (name === `${DIA_REFUSAL.name}.mzML`) return { phase: 'Reading spectra', lines: lines(DIA_REFUSAL.log), ok: false, code: DIA_REFUSAL.code, step: 10 }
+      const c = batchCases.find((x) => name === `${x.name}.mzML`)
+      if (c) return { phase: 'Reading spectra', lines: lines(c.log), ok: true, code: 0, step: 10 }
+    }
     return { phase: 'Reading spectra', lines: [...reading, `${name}: 139 MS2 spectra, 2028 tags`], ok: true, code: 0 }
   }
 

@@ -32,6 +32,8 @@ describe('the step cards', () => {
     expect(planLine(baseValues('defaults'), { input: '', out: '', files: 0 })).toBe('no file · species off · no reports')
     expect(planLine(v, { input: '/d/a.mzML', out: '/elsewhere/x.tsv', files: 0 })).toMatch(/out: x\.tsv$/)
     expect(planLine(v, { input: '', out: '', files: 2 })).toBe('2 files · species on · digest+label+glyco · out: beside each input')
+    // P2b: the batch's output folder.
+    expect(planLine(v, { input: '', out: '', files: 2, outDir: '/share/out' })).toBe('2 files · species on · digest+label+glyco · out: /share/out')
     expect(reportsOn({ ...v, recon_out: '/d/r.tsv', recon_fasta: '/db/x.fasta', massgap_out: '/d/m.tsv' })).toEqual([
       'digest',
       'label',

@@ -173,9 +173,14 @@ describe('run/batch orchestration', () => {
     await waitFor(() => expect(mock.runCalls).toHaveLength(2))
     await emitDone(mock, 2, true)
 
-    await waitFor(() => expect(mock.speciesCalls).toHaveLength(1))
-    expect(mock.speciesCalls[0]).toBe('/d/b.tags.species.tsv')
-    expect(mock.resultsQueryCalls).toHaveLength(1) // only the last job is previewed
+    // Each job's report is its own derived path. The Species tab reads the
+    // last job's; the batch summary (P2b) reads every done job's once for its
+    // genus column: b's twice, a's once, never another path.
+    await waitFor(() => expect(mock.speciesCalls).toHaveLength(3))
+    expect(new Set(mock.speciesCalls)).toEqual(new Set(['/d/a.tags.species.tsv', '/d/b.tags.species.tsv']))
+    expect(mock.speciesCalls.filter((p) => p === '/d/b.tags.species.tsv')).toHaveLength(2)
+    expect(mock.speciesCalls.filter((p) => p === '/d/a.tags.species.tsv')).toHaveLength(1)
+    await waitFor(() => expect(mock.resultsQueryCalls).toHaveLength(1)) // only the last job is previewed
     expect(mock.resultsQueryCalls[0].path).toBe('/d/b.tags.tsv')
   })
 

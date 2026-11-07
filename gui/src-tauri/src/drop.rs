@@ -117,6 +117,22 @@ fn folder_spectra(dir: &Path) -> Vec<PathBuf> {
     v
 }
 
+/// The spectra directly inside folder @p dir, sorted by name: the Batch
+/// view's "Add folder…" adds them as a dropped folder would. A folder without
+/// spectra gives none; a path that is not a folder is refused.
+pub(crate) fn folder_spectra_cmd(dir: String) -> Result<Vec<String>, String> {
+    let p = Path::new(&dir);
+    if !p.is_dir() {
+        return Err(format!("{dir} is not a folder"));
+    }
+    Ok(folder_spectra(p).iter().map(|f| text(f)).collect())
+}
+
+#[tauri::command]
+pub fn folder_spectra_list(dir: String) -> Result<Vec<String>, String> {
+    folder_spectra_cmd(dir)
+}
+
 /// Sort the dropped @p paths by kind. The first file of a kind that takes
 /// one file (FASTA, taxonomy, tags, SDRF) wins; the others are ignored.
 pub fn route(paths: &[PathBuf]) -> DropRoute {
@@ -272,6 +288,32 @@ mod tests {
         assert_eq!(r.spectra, vec![text(&dir.join("a.mzML")), text(&dir.join("b.mzML"))]);
         assert!(r.batch, "a folder is a batch, even of one file");
         assert_eq!(r.ignored, vec![text(&empty)]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // The Batch view's "Add folder…" (P2b): the same spectra a dropped
+    // folder adds, through the folder_spectra command.
+    #[test]
+    fn the_folder_command_lists_the_spectra_directly_inside_sorted() {
+        let dir = std::env::temp_dir().join(format!("fastag-folder-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("sub")).unwrap();
+        for f in ["b.MGF", "a.mzML", "c.mzpeak", "notes.txt", "run.tags.tsv", "sub/d.mzML"] {
+            std::fs::write(dir.join(f), b"x").unwrap();
+        }
+        // A folder named like spectra is not a file to run.
+        std::fs::create_dir_all(dir.join("e.mzML")).unwrap();
+        let got = folder_spectra_cmd(text(&dir)).unwrap();
+        assert_eq!(got, vec![text(&dir.join("a.mzML")), text(&dir.join("b.MGF")), text(&dir.join("c.mzpeak"))]);
+        // A folder without spectra: none, not an error.
+        assert!(folder_spectra_cmd(text(&dir.join("sub").join(".."))).unwrap().len() == 3);
+        let empty = dir.join("empty");
+        std::fs::create_dir_all(&empty).unwrap();
+        assert!(folder_spectra_cmd(text(&empty)).unwrap().is_empty());
+        // A file or a missing path is refused, with the path named.
+        let e = folder_spectra_cmd(text(&dir.join("a.mzML"))).unwrap_err();
+        assert!(e.contains("a.mzML") && e.contains("not a folder"), "{e}");
+        assert!(folder_spectra_cmd(text(&dir.join("missing"))).is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

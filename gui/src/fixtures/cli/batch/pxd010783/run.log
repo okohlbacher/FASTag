@@ -1,0 +1,14 @@
+Modifications: Carbamidomethyl (C, fixed)
+'/scratch/kohlbach/gate-in/PXD010783/KristenJeff_p53_mod_AspN_03_02_07.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 10294 spectra by scanning it instead (0.02 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.03 over 406 repeat gaps, cycle 126, 1571 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Subsampling: tagging 1029 of 10294 input spectra (seed 1)
+No two peaks anywhere in this file are closer than 0.600159 Th, yet the fragment tolerance is 0.0132908 Th near m/z 664.538. That is what low-resolution (ion trap) MS2 read with a high-resolution tolerance looks like, and it yields almost no tags for a reason the output cannot show. If the MS2 is ion trap, try -fragment_tolerance 0.3 -fragment_tolerance_unit Da.
+Glyco: 1 of 686 processed MS2 spectra carry oxonium evidence -> run.tags.glyco.tsv
+Census: 761 MS2 spectra read, 411 with a reported tag (0 placed), 197 no_tags -> run.tags.census.tsv, summary -> run.tags.census_summary.tsv
+Digest: 0 filtered tags, reason ms2_first_peak -> run.digest.tsv
+Labels: 0 filtered tags -> run.label.tsv
+Species: 0 spectra contributed taxon evidence; top genus calls -> run.tags.species.tsv
+Species call (-species_call decoy): 0 present, 0 no_call, 0 not_detected among the reported genus rows (run-level no_call: few_spectra, 0 < 200); 0 trials, 5 decoys per tag; parameters /scratch/kohlbach/fastag112-integ/src/data/taxonomy/species_call.tsv (1.12.0-provisional)
+686 MS2 spectra, 7848 tags
+Electron activation: 328 of 686 MS2 spectra were activated by electron transfer or capture (ETD, ECD) or by a hybrid method (EThcD, ETciD), but tags are read as b/y ions only; electron activation yields mostly c/z ions, so tags and flanks from these spectra are unreliable. Activation per MS2 spectrum: 358 collisional, 328 electron, 0 hybrid, 0 unknown.
+FASTag took 2.64 s (wall), 3.26 s (CPU), 0.35 s (system), 2.91 s (user); Peak Memory Usage: 723 MB.

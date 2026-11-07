@@ -35,6 +35,32 @@ pub fn report_text(path: String) -> Result<Option<String>, String> {
     read_report(&path)
 }
 
+/// Write the batch summary TSV (P2b) to @p dest, a .tsv the user chose:
+/// to `<dest>.part` first, renamed over @p dest once complete, so a failed
+/// write never leaves a truncated summary under the chosen name.
+pub(crate) fn write_summary(dest: &str, text: &str) -> Result<(), String> {
+    if !dest.to_ascii_lowercase().ends_with(".tsv") {
+        return Err(format!("the summary is a .tsv file, not {dest:?}"));
+    }
+    if text.len() as u64 > MAX_BYTES {
+        return Err(format!("the summary is {} MB, too large", text.len() >> 20));
+    }
+    if std::path::Path::new(dest).is_dir() {
+        return Err(format!("cannot write {dest}: it is a folder"));
+    }
+    let part = format!("{dest}.part");
+    let done = std::fs::write(&part, text).and_then(|_| std::fs::rename(&part, dest));
+    done.map_err(|e| {
+        std::fs::remove_file(&part).ok();
+        format!("cannot write {dest}: {e}")
+    })
+}
+
+#[tauri::command]
+pub fn summary_write(dest: String, text: String) -> Result<(), String> {
+    write_summary(&dest, &text)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -60,6 +86,37 @@ mod tests {
         std::fs::write(&f, "section\tkey\tvalue\tn\tdescription\n").unwrap();
         assert_eq!(read_report(f.to_str().unwrap()).unwrap().unwrap(), "section\tkey\tvalue\tn\tdescription\n");
         std::fs::remove_file(&f).ok();
+    }
+
+    // The batch summary TSV (P2b): written whole or not at all.
+    #[test]
+    fn summary_is_written_through_a_part_file() {
+        let f = tmp("summary.tsv");
+        std::fs::write(&f, "old\n").unwrap();
+        write_summary(f.to_str().unwrap(), "file\tstatus\na.mzML\tdone\n").unwrap();
+        assert_eq!(std::fs::read_to_string(&f).unwrap(), "file\tstatus\na.mzML\tdone\n");
+        assert!(!std::path::Path::new(&format!("{}.part", f.display())).exists());
+        std::fs::remove_file(&f).ok();
+    }
+
+    #[test]
+    fn summary_needs_a_tsv_name_and_a_writable_folder() {
+        let e = write_summary(tmp("summary.txt").to_str().unwrap(), "x\n").unwrap_err();
+        assert!(e.contains(".tsv"), "{e}");
+        let e = write_summary("", "x\n").unwrap_err();
+        assert!(e.contains(".tsv"), "{e}");
+        let missing = std::env::temp_dir().join("fastag-no-such-dir").join("s.tsv");
+        let e = write_summary(missing.to_str().unwrap(), "x\n").unwrap_err();
+        assert!(e.contains("cannot write"), "{e}");
+        assert!(!std::path::Path::new(&format!("{}.part", missing.display())).exists());
+        // Not over a folder of that name.
+        let d = tmp("dir.tsv");
+        std::fs::create_dir_all(&d).unwrap();
+        assert!(write_summary(d.to_str().unwrap(), "x\n").is_err());
+        assert!(d.is_dir());
+        std::fs::remove_dir_all(&d).ok();
+        let e = write_summary(tmp("huge.tsv").to_str().unwrap(), &"x".repeat(MAX_BYTES as usize + 1)).unwrap_err();
+        assert!(e.contains("too large"), "{e}");
     }
 
     #[test]

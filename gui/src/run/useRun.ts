@@ -16,6 +16,8 @@ import { cleanupLines, failText } from '../app/format'
 import type { ViewStore } from '../app/viewStore'
 import { loadReports, sameRun } from '../results/reports'
 import type { BatchJob } from './batch'
+import { buildSummary } from './batchSummary'
+import { useBatchData } from './useBatchSummary'
 import { createLogStore, type LogStore } from './logStore'
 import { NOTE_LINE, refusalOf } from '../inspector/checks'
 import {
@@ -39,6 +41,9 @@ const EPILOGUE = /^\S+ took .*Peak Memory Usage/
 // OpenMS follows a ConversionError with the whole --help; this header starts
 // that dump, and nothing in it explains the failure.
 const HELP_START = /^FASTag -- /
+// FASTag 1.12 (E7) follows a refusal (raw DIA, exit 11) with this line for
+// scripts; the sentence before it is the reason a person reads.
+const REFUSED = /^FASTAG_REFUSED\b/
 // "Error:", "ConversionError", "exception", "fatal".
 const ERROR_WORD = /(error|exception)\b|\bfatal\b/i
 
@@ -107,6 +112,9 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   // that finished ok despite the kill stays ok.
   const isCancelled = (r: RunResult): boolean => !r.ok && (r.cancelled === true || cancelled.current)
   const jobs = useMemo(() => queueView(state), [state.jobs])
+  // The batch summary (GUI-DESIGN 3 S6): one row per job, from its reports.
+  const batchData = useBatchData(state.jobs)
+  const summary = useMemo(() => buildSummary(jobs, batchData), [jobs, batchData])
 
   // The last run of an earlier session, from the run record: a cancelled or
   // failed one still reads as such after a restart.
@@ -147,7 +155,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     // dump that follows a ConversionError can be it.
     if (HELP_START.test(line)) inHelp.current = true
     if (!inHelp.current && notes.current.length < 50 && NOTE_LINE.test(line)) notes.current.push(line)
-    if (!inHelp.current && !EPILOGUE.test(line)) {
+    if (!inHelp.current && !EPILOGUE.test(line) && !REFUSED.test(line)) {
       if (ERROR_WORD.test(line)) lastError.current = line
       if (line.trim()) lastLine.current = line.trim()
     }
@@ -169,6 +177,25 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   function addBatchPaths(files: string[]): void {
     if (!files.length) return
     dispatch({ type: 'BATCH_ADD', files })
+  }
+
+  // The spectra files of a folder, picked (the Batch view's Add folder…), to
+  // the queue. Resolves with the folder and how many files it held; null
+  // when no folder was picked. Rejects when the folder cannot be listed.
+  async function addBatchFolder(): Promise<{ dir: string; files: number } | null> {
+    const dir = await window.fastag.pickFolder()
+    if (!dir) return null
+    const files = await window.fastag.folderSpectra(dir)
+    addBatchPaths(files)
+    return { dir, files: files.length }
+  }
+
+  // The batch's output folder (null: beside each input); the jobs not run
+  // yet are named in it (runReducer BATCH_OUT_DIR).
+  const setOutDir = (dir: string | null): void => dispatch({ type: 'BATCH_OUT_DIR', dir })
+  async function chooseOutDir(): Promise<void> {
+    const dir = await window.fastag.pickFolder()
+    if (dir) setOutDir(dir)
   }
 
   // Remove these inputs from the queue (a running job stays).
@@ -643,7 +670,12 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     // The inspector's CLI lines of the run whose results are shown.
     shownNotes: state.jobs.find((j) => j.input === state.results?.input && j.status !== 'running')?.notes ?? [],
     jobs,
+    summary,
+    outDir: state.batchOutDir,
+    setOutDir,
+    chooseOutDir,
     addBatchFiles,
+    addBatchFolder,
     addBatchPaths,
     removeJobs,
     // Failed jobs are Retry failed's, not the remaining ones.
