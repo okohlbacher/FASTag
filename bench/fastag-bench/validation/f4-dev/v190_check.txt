@@ -1,0 +1,3 @@
+source: fastag-bench 1.9.0 unidentified v190-check (2026-11-07T00:32:27+01:00, host data)
+pairs rows 584986 vs stored 584986; identical: True
+stats rows 116; counts identical: True

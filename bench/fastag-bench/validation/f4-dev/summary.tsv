@@ -1,0 +1,58 @@
+# source: fastag-bench 1.9.0 unidentified score dev (2026-11-07T01:21:46+01:00, host data)
+# FASTag 1.11.0 (OpenMS 3.7.0-pre-HEAD-2026-11-02); truth Sage closed (full human proteome) q <= 0.01; S3-PT candidates: pool peptides within 10.0 ppm, charges [2, 3, 4] when none given, isotope errors [0, 1], static {'C': 57.021464}, variable {'M': [15.994915]} (max 1); flank rule for any candidate (score.tag_correct_any)
+# per cell; rank-1 and top-k over tagged scored spectra
+profile	identification	arm	size_label	spectra	scored	tagged	tagged_rate	rank1_accuracy	rank1_recall	top5_any	top10_any	top50_any	tag_precision	tags_e001	tag_precision_e001
+default	S0	byproduct	s0	75823	75823	75417	0.994645	0.0	0.0	0.0	0.0	0.0	0.0	264693	0.0
+default	S0	byproduct	shared_identity	396	0	0								0	
+default	S0	chance	s0	75823	75823	75417	0.994645	0.000743	0.000739	0.001167	0.001286	0.00183	8.7e-05	264693	0.000329
+default	S0	chance	shared_identity	396	0	0								0	
+default	S0	truth	s0	75823	75823	75417	0.994645	0.743599	0.739617	0.866608	0.893101	0.916955	0.166224	264693	0.722184
+default	S0	truth	shared_identity	396	0	0								0	
+default	S3-PT	byproduct	no_pool_candidate	16594	0	0								0	
+default	S3-PT	byproduct	pool_consistent	27615	27615	25151	0.910773	0.162141	0.147673	0.203213	0.214584	0.227705	0.041026	23983	0.3063
+default	S3-PT	byproduct	shared_identity	812	0	0								0	
+default	S3-PT	byproduct	size1	33731	33731	30799	0.913077	0.136368	0.124515	0.169973	0.18137	0.195753	0.034369	32764	0.239653
+default	S3-PT	chance	no_pool_candidate	16594	0	0								0	
+default	S3-PT	chance	pool_consistent	27615	27615	25151	0.910773	0.0	0.0	0.0	0.0	0.0	0.0	23983	0.0
+default	S3-PT	chance	shared_identity	812	0	0								0	
+default	S3-PT	chance	size1	33731	33731	30799	0.913077	0.0	0.0	0.0	0.0	0.0	0.0	32764	0.0
+default	S3-PT	truth	no_pool_candidate	16594	0	0								0	
+default	S3-PT	truth	pool_consistent	27615	27615	25151	0.910773	0.091169	0.083035	0.113157	0.118405	0.125641	0.02601	23983	0.223533
+default	S3-PT	truth	shared_identity	812	0	0								0	
+default	S3-PT	truth	size1	33731	33731	30799	0.913077	0.125913	0.114968	0.148836	0.155167	0.162116	0.035223	32764	0.299536
+matched	S0	byproduct	s0	75823	75823	73282	0.966488	0.0	0.0	0.0	0.0	0.0	0.0	376148	0.0
+matched	S0	byproduct	shared_identity	396	0	0								0	
+matched	S0	chance	s0	75823	75823	73282	0.966488	0.00045	0.000435	0.001037	0.001214	0.001597	8e-05	376148	0.000154
+matched	S0	chance	shared_identity	396	0	0								0	
+matched	S0	truth	s0	75823	75823	73282	0.966488	0.695628	0.672316	0.849526	0.880312	0.90875	0.160639	376148	0.560162
+matched	S0	truth	shared_identity	396	0	0								0	
+matched	S3-PT	byproduct	no_pool_candidate	16594	0	0								0	
+matched	S3-PT	byproduct	pool_consistent	27615	27615	22155	0.802281	0.160912	0.129097	0.217648	0.231234	0.244685	0.048612	47873	0.209325
+matched	S3-PT	byproduct	shared_identity	812	0	0								0	
+matched	S3-PT	byproduct	size1	33731	33731	27110	0.803712	0.140317	0.112775	0.184581	0.195057	0.210328	0.040111	63399	0.166675
+matched	S3-PT	chance	no_pool_candidate	16594	0	0								0	
+matched	S3-PT	chance	pool_consistent	27615	27615	22155	0.802281	0.0	0.0	0.0	0.0	0.0	0.0	47873	0.0
+matched	S3-PT	chance	shared_identity	812	0	0								0	
+matched	S3-PT	chance	size1	33731	33731	27110	0.803712	0.0	0.0	0.0	0.0	0.0	0.0	63399	0.0
+matched	S3-PT	truth	no_pool_candidate	16594	0	0								0	
+matched	S3-PT	truth	pool_consistent	27615	27615	22155	0.802281	0.088332	0.070867	0.118258	0.126653	0.134733	0.028546	47873	0.122971
+matched	S3-PT	truth	shared_identity	812	0	0								0	
+matched	S3-PT	truth	size1	33731	33731	27110	0.803712	0.125747	0.101064	0.161195	0.168536	0.176208	0.039943	63399	0.171201
+matched_tl5	S0	byproduct	s0	75823	75823	67731	0.893278	0.0	0.0	0.0	0.0	0.0	0.0	481634	0.0
+matched_tl5	S0	byproduct	shared_identity	396	0	0								0	
+matched_tl5	S0	chance	s0	75823	75823	67731	0.893278	1.5e-05	1.3e-05	0.000251	0.000295	0.000325	1.8e-05	481634	1e-05
+matched_tl5	S0	chance	shared_identity	396	0	0								0	
+matched_tl5	S0	truth	s0	75823	75823	67731	0.893278	0.656125	0.586102	0.772468	0.790775	0.805436	0.114763	481634	0.385851
+matched_tl5	S0	truth	shared_identity	396	0	0								0	
+matched_tl5	S3-PT	byproduct	no_pool_candidate	16594	0	0								0	
+matched_tl5	S3-PT	byproduct	pool_consistent	27615	27615	17178	0.622053	0.166783	0.103748	0.203691	0.210676	0.215566	0.037583	56817	0.17053
+matched_tl5	S3-PT	byproduct	shared_identity	812	0	0								0	
+matched_tl5	S3-PT	byproduct	size1	33731	33731	20821	0.617266	0.144566	0.089235	0.173287	0.178426	0.182796	0.030275	74734	0.128215
+matched_tl5	S3-PT	chance	no_pool_candidate	16594	0	0								0	
+matched_tl5	S3-PT	chance	pool_consistent	27615	27615	17178	0.622053	0.0	0.0	0.0	0.0	0.0	0.0	56817	0.0
+matched_tl5	S3-PT	chance	shared_identity	812	0	0								0	
+matched_tl5	S3-PT	chance	size1	33731	33731	20821	0.617266	0.0	0.0	0.0	0.0	0.0	0.0	74734	0.0
+matched_tl5	S3-PT	truth	no_pool_candidate	16594	0	0								0	
+matched_tl5	S3-PT	truth	pool_consistent	27615	27615	17178	0.622053	0.092793	0.057722	0.115904	0.120503	0.12353	0.021524	56817	0.093282
+matched_tl5	S3-PT	truth	shared_identity	812	0	0								0	
+matched_tl5	S3-PT	truth	size1	33731	33731	20821	0.617266	0.13472	0.083158	0.170069	0.173623	0.178041	0.031495	74734	0.135066

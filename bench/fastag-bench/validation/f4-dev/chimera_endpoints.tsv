@@ -1,0 +1,17 @@
+# source: fastag-bench 1.9.0 unidentified score dev (2026-11-07T01:21:46+01:00, host data)
+# -diversity on minus off; cluster sign-flip permutation (union-of-parents clusters), Holm over the 4 tests
+endpoint	ratio	metric	chimeras	clusters	off	on	diff_on_minus_off	ci_lo	ci_hi	p_perm	p_holm
+F4-04 chimera	1.0	both_topk	3000	82.0	0.5373333333333333	0.541	0.003666666666666707	0.0	0.003981179876945349	1.0	1.0
+F4-04 chimera	1.0	pep1_rank1	3000	82.0	0.45966666666666667	0.45966666666666667	0.0	0.0	0.0	1.0	1.0
+F4-04 attribution (rank-1 tag)	1.0	pep1	3000		0.45966666666666667	0.45966666666666667					
+F4-04 attribution (rank-1 tag)	1.0	pep2	3000		0.264	0.264					
+F4-04 attribution (rank-1 tag)	1.0	both	3000		0.0	0.0					
+F4-04 attribution (rank-1 tag)	1.0	neither	3000		0.26966666666666667	0.26966666666666667					
+F4-04 attribution (rank-1 tag)	1.0	untagged	3000		0.006666666666666667	0.006666666666666667					
+F4-04 chimera	10.0	both_topk	3000	82.0	0.098	0.102	0.00399999999999999	-0.003194888178913738	0.01785847547974413	0.37493125343732814	1.0
+F4-04 chimera	10.0	pep1_rank1	3000	82.0	0.6643333333333333	0.6643333333333333	0.0	0.0	0.0	1.0	1.0
+F4-04 attribution (rank-1 tag)	10.0	pep1	3000		0.6643333333333333	0.6643333333333333					
+F4-04 attribution (rank-1 tag)	10.0	pep2	3000		0.02266666666666667	0.02266666666666667					
+F4-04 attribution (rank-1 tag)	10.0	both	3000		0.0	0.0					
+F4-04 attribution (rank-1 tag)	10.0	neither	3000		0.30633333333333335	0.30633333333333335					
+F4-04 attribution (rank-1 tag)	10.0	untagged	3000		0.006666666666666667	0.006666666666666667					

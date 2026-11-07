@@ -1,0 +1,24 @@
+# source: fastag-bench 1.9.0 unidentified pool-truth shared identities (2026-11-07T01:18:18+01:00, host data)
+# identities in pools of more than one split, over the 12 split pools with lists; excluded from scoring (size_label shared_identity)
+identity	splits
+AGNVLMTLEGDLR	dev;test
+ALDQYLMEFNACR	dev;test
+ASTFCGTPDYLAPELLQGLK	dev;test
+AWTSETMSTPLMRTSDPGER	dev;test
+DAECALSSGAGQGAGR	dev;test
+ESESSPGEFSVSVNNRAQR	dev;test
+GLGETPLVPLGLSYLDDFAK	dev;test
+LAAFNLQTFGETK	dev;test
+LHTGEKPYECNECGK	dev;test
+LLQTLWTSSPNDVVSPSEFK	dev;test
+LTLSQLYQYVAGNFPFYK	dev;test
+LYDPGQEYSEFVK	dev;test
+MGALDVCPFLPVR	dev;test
+MLLEFYESPDPER	dev;test
+NYDLPAEMTGLWR	dev;test
+PKTCEQNTQLNSLENYLNK	dev;test
+PTTVVTSCQPK	dev;test
+PYECSECGK	dev;test
+SPGRAGAAPALLR	dev;test
+VLVCSKPVTYATVLFPGGNK	dev;test
+VPEEEYWYCPSCK	dev;test
