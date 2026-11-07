@@ -2877,7 +2877,7 @@ protected:
     // the reader the run uses (the export's reader under -out_spectra, so
     // nothing new is read from the spectra it writes), then the pure
     // classifier of src/Acquisition.h. -stream is not checked (returned
-    // above). The thresholds are provisional (validation-registry.tsv E7-*).
+    // above). The thresholds are frozen (validation-registry.tsv E7-09).
     {
       namespace Acq = FASTag::Acquisition;
       const std::string acq_check = getStringOption_("acquisition_check");

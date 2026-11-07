@@ -17,6 +17,9 @@ held-out data yet. The README's command-line reference describes each option.
   PRM and pseudo-DDA input are tagged as before. `-acquisition_check warn`
   tags raw DIA as 1.11 did, with a warning; `off` skips the check.
   `-acquisition_probe_spectra` (4000) sets how many MS2 the check reads.
+  The rule was tuned once on 183 public data sets (one change: the
+  periodicity threshold is 0.2, so converted raw diaPASEF, which writes the
+  windows of a frame in a varying order, is refused too).
 
 ### Changed output when an existing option is given
 
