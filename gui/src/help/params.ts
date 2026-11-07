@@ -324,7 +324,9 @@ export const PARAM_HELP: Record<string, ParamHelp> = {
   alkylation_out: {
     text: 'Write a report of which reagent alkylated the cysteines, or none, from the placements of peptides with one cysteine. Not validated on held-out data.'
   },
-  alkylation_proteome: { text: 'The database the alkylation report uses when no reconciliation database is given: a shipped proteome (human, mouse, yeast, E. coli) or a FASTA file.' },
+  alkylation_proteome: {
+    text: 'The database the alkylation report uses when no reconciliation database is given: a FASTA file. In 1.12.0 the alkylation report needs this FASTA file or a reconciliation database: the shipped proteomes (human, mouse, yeast, E. coli) that the names stand for are not in this release, and naming one, or leaving the default auto, stops the run with an error.'
+  },
   alkylation_min_spectra: { text: 'How many spectra the alkylation call needs.' },
   alkylation_min_share: { text: 'Which share of the counted spectra the alkylation call needs.' },
   alkylation_window: { text: 'The mass window around each cysteine form for the alkylation report. 0 means 0.02 Da on a ppm run and 0.5 Da on a Da run.' },

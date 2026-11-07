@@ -946,8 +946,10 @@ protected:
                         "the call (not validated on held-out data)", false);
     setValidFormats_("alkylation_out", ListUtils::create<std::string>("tsv"));
     registerStringOption_("alkylation_proteome", "<name>", "auto",
-                          "Database of -alkylation_out without -recon_fasta: auto (= human), human, mouse, yeast, "
-                          "ecoli (shipped proteomes) or a FASTA file (.gz allowed)", false, true);
+                          "Database of -alkylation_out without -recon_fasta: a FASTA file (.gz allowed). The names "
+                          "auto (= human), human, mouse, yeast and ecoli stand for shipped proteomes, which 1.12.0 "
+                          "does not ship: they stop with exit code 6, so give a FASTA file here or -recon_fasta",
+                          false, true);
     registerIntOption_("alkylation_min_spectra", "<n>", 10,
                        "Spectra the -alkylation_out call needs, binned and for the called class", false, true);
     setMinInt_("alkylation_min_spectra", 1);
