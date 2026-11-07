@@ -43,9 +43,13 @@ test('a run moves to Results with the pill; it finishes into History', async ({ 
   expect(await shownViews(page)).toEqual(['results'])
   await expect(page.getByRole('group', { name: 'Run status' })).toHaveText('Idle')
   await goTo(page, 'History')
-  // The e2e bridge keeps no record of its own runs: the list is empty, but
-  // read again after the run (no console error, no stale state).
-  await expect(page.getByText('Runs you start appear here.')).toBeVisible()
+  // The e2e bridge records its runs as fastag.rs does (P2a PR h): the list,
+  // read again after the run, holds it.
+  const rows = page.getByRole('table', { name: 'Run history' }).getByRole('row')
+  await expect(rows).toHaveCount(2)
+  await expect(rows.nth(1)).toContainText('run01.mzML')
+  await expect(rows.nth(1)).toContainText('Finished')
+  await expect(page.getByText('Runs you start appear here.')).toHaveCount(0)
 })
 
 test('Help opens beside the view; its search finds a setting and opens it', async ({ page }) => {
