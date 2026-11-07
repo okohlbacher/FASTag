@@ -53,6 +53,7 @@ namespace
     PeptideHit h;
     h.setScore(score);
     h.setSequence(AASequence::fromString("PEPTIDEK"));
+    h.setCharge(2);  // mzid stores the hit's m/z
     if (td == TD::Target) h.setMetaValue("target_decoy", "target");
     if (td == TD::Decoy) h.setMetaValue("target_decoy", "decoy");
     if (td == TD::Both) h.setMetaValue("target_decoy", "target+decoy");

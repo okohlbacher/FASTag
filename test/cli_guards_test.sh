@@ -272,10 +272,12 @@ grep -q "stream cannot be combined with -census_ids" "$TMP/ci0.log" || fail "no 
 ids_before=$(cksum < "$TMP/ids.idXML")
 "$BIN" -in "$IN" -out "$TMP/ci1.tsv" -census -census_ids "$TMP/ids.idXML" -census_out "$TMP/ids.idXML" "${ARGS[@]}" \
   >"$TMP/ci1.log" 2>&1 && fail "-census_out equal to -census_ids ran (exit 0)"
-grep -q "is the -census_ids file" "$TMP/ci1.log" || fail "no message naming -census_ids for -census_out"
+# By the same name the .tsv-only output check refuses it first (the ids
+# file is an idXML); through a .tsv alias (below) the guard has to.
+grep -q -E "is the -census_ids file|Invalid output file extension" "$TMP/ci1.log" || fail "no refusal message for -census_out = -census_ids"
 "$BIN" -in "$IN" -out "$TMP/ci2.tsv" -census -census_ids "$TMP/ids.idXML" -census_summary_out "$TMP/ids.idXML" "${ARGS[@]}" \
   >"$TMP/ci2.log" 2>&1 && fail "-census_summary_out equal to -census_ids ran (exit 0)"
-grep -q "is the -census_ids file" "$TMP/ci2.log" || fail "no message naming -census_ids for -census_summary_out"
+grep -q -E "is the -census_ids file|Invalid output file extension" "$TMP/ci2.log" || fail "no refusal message for -census_summary_out = -census_ids"
 case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*) ;;
   *)
