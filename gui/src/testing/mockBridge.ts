@@ -27,7 +27,8 @@ import type {
   RunStarted,
   Settings,
   SpeciesReport,
-  TaxdbInfo
+  TaxdbInfo,
+  TaxonomyDump
 } from '../types'
 import runStartedFixture from './fixtures/run-started.json'
 import { tagsToDenovo } from '../export/denovo'
@@ -68,6 +69,15 @@ export interface MockBridge extends FastagApi {
   // writeSummary() calls; summaryWriteError: the next writes reject.
   summaryWrites: { dest: string; text: string }[]
   summaryWriteError: string | null
+  // pickSdrf() answers nextPickSdrf; sdrfRead() serves sdrfFiles (a path
+  // not named there rejects as missing); taxonomyDump() answers
+  // taxonomyResult (or rejects with taxonomyError) and records its calls.
+  nextPickSdrf: string | null
+  sdrfFiles: Record<string, Uint8Array>
+  sdrfReadCalls: string[]
+  taxonomyResult: TaxonomyDump | null
+  taxonomyError: string | null
+  taxonomyCalls: { nodes?: string; names?: string }[]
   // path -> report text; a missing path reads as "not written".
   reportFiles: Record<string, string>
   reportCalls: string[]
@@ -251,6 +261,12 @@ export function installMockBridge(): MockBridge {
     folderSpectraCalls: [],
     summaryWrites: [],
     summaryWriteError: null,
+    nextPickSdrf: null,
+    sdrfFiles: {},
+    sdrfReadCalls: [],
+    taxonomyResult: null,
+    taxonomyError: null,
+    taxonomyCalls: [],
     reportFiles: {},
     reportCalls: [],
     resultsColumns: ['spectrum', 'tag', 'length', 'evalue', 'fasta_hit'],
@@ -384,6 +400,16 @@ export function installMockBridge(): MockBridge {
       if (mock.summaryWriteError) return Promise.reject(new Error(mock.summaryWriteError))
       mock.summaryWrites.push({ dest, text })
       return Promise.resolve()
+    },
+    pickSdrf: () => Promise.resolve(mock.nextPickSdrf),
+    sdrfRead: (path) => {
+      mock.sdrfReadCalls.push(path)
+      const b = mock.sdrfFiles[path]
+      return b ? Promise.resolve(b.slice()) : Promise.reject(new Error(`${path} does not exist`))
+    },
+    taxonomyDump: (nodes, names) => {
+      mock.taxonomyCalls.push({ nodes, names })
+      return mock.taxonomyError ? Promise.reject(new Error(mock.taxonomyError)) : Promise.resolve(mock.taxonomyResult)
     },
     report: (path) => {
       mock.reportCalls.push(path)

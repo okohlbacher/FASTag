@@ -193,6 +193,15 @@ export interface SpeciesReport {
   taxa: Taxon[]
 }
 
+// The NCBI taxonomy dumps FASTag's species call reads (sdrf.rs
+// taxonomy_dump), for the SDRF organism comparison (sdrf/taxonomy.ts).
+export interface TaxonomyDump {
+  nodesPath: string
+  namesPath: string
+  nodes: string
+  names: string
+}
+
 export interface TaxdbInfo {
   path: string
   k: number
@@ -263,6 +272,13 @@ export interface FastagApi {
   // Write the batch summary TSV to @p dest (report.rs summary_write, via a
   // .part file). Rejects with the reason.
   writeSummary: (dest: string, text: string) => Promise<void>
+  // The Batch view's SDRF… (P4): pick an SDRF, read its bytes unchanged
+  // (sdrf.rs sdrf_read; never written), and read the taxonomy dumps the
+  // species call uses: the given ones, else the bundled folder's (null:
+  // none found).
+  pickSdrf: () => Promise<string | null>
+  sdrfRead: (path: string) => Promise<Uint8Array>
+  taxonomyDump: (nodes?: string, names?: string) => Promise<TaxonomyDump | null>
   // The command line a run of these params is, binary first (fastag.rs
   // command_line: the argv `run` replies and History records).
   commandLine: (params: Record<string, unknown>) => Promise<string[]>

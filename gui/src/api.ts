@@ -23,7 +23,8 @@ import type {
   RunStarted,
   Settings,
   SpeciesReport,
-  TaxdbInfo
+  TaxdbInfo,
+  TaxonomyDump
 } from './types'
 
 // The spectra the CLI reads as -in (its input-format check is by extension).
@@ -86,6 +87,10 @@ const api: FastagApi = {
   },
   folderSpectra: (dir: string) => invoke<string[]>('folder_spectra_list', { dir }),
   writeSummary: (dest: string, text: string) => invoke<void>('summary_write', { dest, text }),
+  pickSdrf: () => openOne([{ name: 'SDRF (TSV)', extensions: ['tsv', 'txt', 'sdrf'] }]),
+  // sdrf_read answers with the raw bytes (an ArrayBuffer, not JSON).
+  sdrfRead: (path: string) => invoke<ArrayBuffer>('sdrf_read', { path }).then((b) => new Uint8Array(b)),
+  taxonomyDump: (nodes?: string, names?: string) => invoke<TaxonomyDump | null>('taxonomy_dump', { nodes, names }),
 
   outputsCheck: (params: Record<string, unknown>) => invoke<OutputsCheck>('outputs_check', { params }),
   commandLine: (params: Record<string, unknown>) => invoke<string[]>('command_line', { params }),

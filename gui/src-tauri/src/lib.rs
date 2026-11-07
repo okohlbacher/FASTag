@@ -14,6 +14,7 @@ mod outputs;
 mod progress;
 mod report;
 mod reveal;
+mod sdrf;
 mod settings;
 mod species;
 mod sweep;
@@ -90,6 +91,8 @@ pub fn run() {
             species::species,
             report::report_text,
             report::summary_write,
+            sdrf::sdrf_read,
+            sdrf::taxonomy_dump,
             denovo::denovo_export,
             drop::folder_spectra_list,
             species::taxdb_info,
