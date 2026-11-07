@@ -1,0 +1,1 @@
+-species: tag_length (3) + 2*extension (0) = 3 cannot reach the index k = 7, so every tag would be too short to look up and the report would be empty. Set -tag_length 7 (or raise -extension).
