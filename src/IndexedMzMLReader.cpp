@@ -803,6 +803,12 @@ namespace FASTag
 
   MSSpectrum IndexedMzMLReader::getSpectrumMetadata(Size i) { return read_(i, /*want_peaks=*/false); }
 
+  std::pair<std::uint64_t, std::uint64_t> IndexedMzMLReader::spectrumByteRange(Size i) const
+  {
+    if (!impl_->ok || i + 1 >= impl_->offsets->size()) return {0, 0};
+    return {(*impl_->offsets)[i], (*impl_->offsets)[i + 1]};
+  }
+
   bool IndexedMzMLReader::reportsSpectrumMetadata()
   {
     // Up to the FIRST MS2, not a fixed 64: a DDA run can open with minutes of

@@ -40,6 +40,7 @@
 #include "FastaFilter.h"
 #include "Glyco.h"
 #include "IndexedMzMLReader.h"
+#include "InputProbe.h"
 #include "IonSeries.h"
 #include "MgfReader.h"
 #include "NumFormat.h"
@@ -852,6 +853,22 @@ protected:
                         "Default: <out> with its extension replaced by "
                         ".census_summary.tsv", false);
     setValidFormats_("census_summary_out", ListUtils::create<std::string>("tsv"));
+    // ---- 1.12 G: options ----
+    // G1: the two machine interfaces of the desktop GUI (src/InputProbe.h).
+    // Each prints JSON lines to stdout, writes no file and exits without
+    // tagging; the GUI finds them in --helphelp. Empty (the default) runs
+    // FASTag as before.
+    registerInputFile_("probe_input", "<file>", "",
+                       "Print the metadata of this spectra file (mzML, mzpeak or MGF) as JSON lines "
+                       "and exit: instrument and MS2 analyzer, activation, spectrum counts, "
+                       "centroid/profile, mzML index state, the acquisition check's call and, with "
+                       "-fasta, its protein and decoy counts. Reads metadata only; needs no -in or -out",
+                       false, true);
+    registerStringOption_("dump_spectrum", "<nativeId>", "",
+                          "Print the peaks FASTag tags of the spectrum of -in with this native ID (after "
+                          "centroiding, the precursor cut, deisotoping and the peak budget, under the "
+                          "options given) as JSON lines and exit; needs no -out",
+                          false, true);
   }
 
   /// True when option @p name holds a value other than its registered
@@ -1063,6 +1080,90 @@ protected:
 
   FILE* stream_data_ = nullptr;  ///< the REAL stdout in -stream mode
 
+  /// The exit code of a G1 mode's status (src/InputProbe.h).
+  ExitCodes probeExit_(FASTag::Probe::Status s) const
+  {
+    using S = FASTag::Probe::Status;
+    switch (s)
+    {
+      case S::Ok: return EXECUTION_OK;
+      case S::Unsupported: return ILLEGAL_PARAMETERS;
+      case S::NotReadable: return INPUT_FILE_NOT_READABLE;
+      case S::Empty: return INPUT_FILE_EMPTY;
+      case S::Corrupt: break;
+    }
+    return INPUT_FILE_CORRUPT;
+  }
+
+  /// Writes @p jsonl to the sealed stdout; false when that fails.
+  bool writeGuiStream_(const std::string& jsonl)
+  {
+    if (!stream_data_) return false;
+    const bool ok = std::fwrite(jsonl.data(), 1, jsonl.size(), stream_data_) == jsonl.size();
+    return std::fflush(stream_data_) == 0 && ok;
+  }
+
+  /// 1.12 G1 -probe_input: the input's metadata as JSON lines, nothing else.
+  ExitCodes probeInputMode_()
+  {
+    namespace P = FASTag::Probe;
+    P::ProbeOptions opt;
+    opt.probe_spectra = static_cast<std::size_t>(getIntOption_("acquisition_probe_spectra"));
+    opt.mzpeak_threads = std::min(std::max(1, omp_get_max_threads()), 8);
+    FASTag::Centroid::parseMode(getStringOption_("pick_profile"), opt.pick_mode);
+    opt.pick_unknown_type = getFlag_("pick_unknown_type");
+    opt.acquisition_check = getStringOption_("acquisition_check");
+    opt.fasta = getStringOption_("fasta");
+    for (const std::string& a : getStringList_("shortlist_decoy_affix"))
+      if (!a.empty()) opt.decoy_affixes.push_back(a);
+    opt.version = FASTAG_VERSION;
+    const std::string file = getStringOption_("probe_input");
+    const P::ProbeOutput r = P::probeInput(file, opt);
+    if (r.status != P::Status::Ok)
+    {
+      OPENMS_LOG_ERROR << "-probe_input: " << r.error << std::endl;
+      return probeExit_(r.status);
+    }
+    if (!writeGuiStream_(r.jsonl))
+    {
+      OPENMS_LOG_ERROR << "-probe_input: cannot write to stdout." << std::endl;
+      return CANNOT_WRITE_OUTPUT_FILE;
+    }
+    return EXECUTION_OK;
+  }
+
+  /// 1.12 G1 -dump_spectrum: one spectrum's tagged peaks as JSON lines.
+  ExitCodes dumpSpectrumMode_(const std::string& in, const FASTag::Param& p)
+  {
+    namespace P = FASTag::Probe;
+    if (!getStringOption_("out").empty())
+      OPENMS_LOG_WARN << "-dump_spectrum writes no file; -out and every other output are ignored." << std::endl;
+    P::DumpOptions opt;
+    FASTag::Centroid::parseMode(getStringOption_("pick_profile"), opt.pick_mode);
+    opt.pick_unknown_type = getFlag_("pick_unknown_type");
+    opt.mzpeak_threads = std::min(std::max(1, omp_get_max_threads()), 8);
+    opt.param = p;
+    const std::string id = getStringOption_("dump_spectrum");
+    const P::DumpOutput r = P::dumpSpectrum(in, id, opt);
+    if (r.status != P::Status::Ok)
+    {
+      OPENMS_LOG_ERROR << "-dump_spectrum: " << r.error << std::endl;
+      return probeExit_(r.status);
+    }
+    if (!r.found)
+    {
+      OPENMS_LOG_ERROR << "-dump_spectrum: no spectrum of '" << in << "' has the native ID '" << id << "'."
+                       << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    if (!writeGuiStream_(r.jsonl))
+    {
+      OPENMS_LOG_ERROR << "-dump_spectrum: cannot write to stdout." << std::endl;
+      return CANNOT_WRITE_OUTPUT_FILE;
+    }
+    return EXECUTION_OK;
+  }
+
   ExitCodes main_(int, const char**) override
   {
     // The phases of a run, in order; each starts at a "// ---- phase N" banner:
@@ -1084,6 +1185,13 @@ protected:
     // runs on unusable for the minutes it needs, and the read path stops
     // scaling well before the core count anyway. An explicit -threads <n> is
     // honoured unchanged.
+    // ---- 1.12 G: GUI modes (-probe_input, -dump_spectrum) ----
+    // Under -stream the -stream refusal table refuses them; otherwise their
+    // stdout carries JSON lines only, sealed below as -stream seals its data
+    // channel.
+    const bool probe_mode = !getFlag_("stream") && !getStringOption_("probe_input").empty();
+    const bool dump_mode = !getFlag_("stream") && !getStringOption_("dump_spectrum").empty();
+
     if (getIntOption_("threads") == 0)
     {
       const unsigned cores = std::thread::hardware_concurrency();  // 0 if unknown
@@ -1091,11 +1199,11 @@ protected:
       TOPPBase::setMaxNumberOfThreads(n);  // omp_set_num_threads, or a no-op without OpenMP
       // Not under -stream: this runs before stdout is rewired into the data
       // channel, and a log line there is a corrupt spectrum block.
-      if (!getFlag_("stream"))
+      if (!getFlag_("stream") && !probe_mode && !dump_mode)
         OPENMS_LOG_INFO << "-threads 0: using " << n << " of " << cores << " logical cores." << std::endl;
     }
 
-    if (getFlag_("stream"))
+    if (getFlag_("stream") || probe_mode || dump_mode)
     {
       // stdout is the -stream DATA CHANNEL. OpenMS logs through thread-local
       // streams that do not follow a global reconfig, and TOPPBase prints its
@@ -1109,7 +1217,8 @@ protected:
 #ifndef _WIN32
         if (data_fd >= 0 && !stream_data_) close(data_fd);
 #endif
-        OPENMS_LOG_ERROR << "-stream: cannot rewire stdout." << std::endl;
+        OPENMS_LOG_ERROR << (getFlag_("stream") ? "-stream" : probe_mode ? "-probe_input" : "-dump_spectrum")
+                         << ": cannot rewire stdout." << std::endl;
         return ILLEGAL_PARAMETERS;
       }
 #ifndef _WIN32
@@ -1118,6 +1227,13 @@ protected:
       signal(SIGPIPE, SIG_IGN);
 #endif
     }
+    // After the seal, so that a refusal, too, leaves stdout empty.
+    if (probe_mode && dump_mode)
+    {
+      OPENMS_LOG_ERROR << "-probe_input and -dump_spectrum are separate modes; give one of them." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    if (probe_mode) return probeInputMode_();
 
     // ---- phase 1: option checks, refusals and tagging parameters ----------
 
@@ -1196,7 +1312,12 @@ protected:
     const std::string in = getStringOption_("in");
     const std::string out = getStringOption_("out");
     const bool stream_mode = getFlag_("stream");
-    if (!stream_mode && (in.empty() || out.empty()))
+    if (dump_mode && in.empty())
+    {
+      OPENMS_LOG_ERROR << "-dump_spectrum needs -in, the file holding the spectrum." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    if (!stream_mode && !dump_mode && (in.empty() || out.empty()))
     {
       OPENMS_LOG_ERROR << "The parameters 'in' and 'out' are required (or use -stream)." << std::endl;
       return ILLEGAL_PARAMETERS;
@@ -1243,6 +1364,9 @@ protected:
           {"census", nullptr},
           {"census_out", nullptr},
           {"census_summary_out", nullptr},
+          // ---- 1.12 G: -stream refusals ----
+          {"probe_input", nullptr},
+          {"dump_spectrum", nullptr},
       };
       for (const StreamRefusal& r : stream_refusals)
         if (optionNonDefault_(r.option))
@@ -1384,6 +1508,9 @@ protected:
     // that length's own run would use.
     std::vector<FASTag::Param> len_params(lengths.size(), p);
     for (size_t i = 0; i < lengths.size(); ++i) len_params[i].tag_length = lengths[i];
+    // ---- 1.12 G: -dump_spectrum ----
+    // The preprocessing reads no tag length, so the first Param serves.
+    if (dump_mode) return dumpSpectrumMode_(in, len_params.front());
     auto build_tables = [&len_params]() {
       std::vector<FASTag::Tables> t;
       t.reserve(len_params.size());
