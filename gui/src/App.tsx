@@ -111,6 +111,24 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
     viewsRef.current?.querySelector<HTMLElement>(`.view[data-view="${view}"]`)?.focus()
   }, [view])
 
+  // The running state goes away when the run ends or is cancelled; focus
+  // that was on its Cancel or Show log would fall to the page body. After a
+  // finished run it moves to the selected results tab (the Overview of a
+  // characterizing run), after a cancel or a failure to the Results view.
+  const lastRunRef = useRef(run.lastRun)
+  lastRunRef.current = run.lastRun
+  function runStateGone(): void {
+    focusLater(() => {
+      const a = document.activeElement
+      if (a && a !== document.body) return null
+      const results = viewsRef.current?.querySelector<HTMLElement>('.view[data-view="results"]')
+      if (!results || results.hidden) return null
+      const lr = lastRunRef.current
+      const tab = lr?.ok && !lr.cancelled ? results.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]') : null
+      return tab ?? results
+    })
+  }
+
   useFinish({
     lastRun: run.lastRun,
     batchEnd: run.batchEnd,
@@ -197,7 +215,9 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
     if (a.kind === 'add-fasta') {
       const p = await window.fastag.pickFile(FASTA_FORMATS)
       if (!p) return
-      set = { recon_fasta: p, recon_out: 'recon.tsv', massgap_out: 'massgap.tsv' }
+      // With the extension the tile names (overview.ts FASTA_EXTENSION):
+      // Characterize's tags are too short for a proteome's recon index.
+      set = { ...a.values, recon_fasta: p, recon_out: 'recon.tsv', massgap_out: 'massgap.tsv' }
     } else set = a.values
     const beside = rebaseOutputs({ ...values, ...set }, out)
     const over: Record<string, ParamValue> = Object.fromEntries(
@@ -455,6 +475,7 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
                     cancelling={run.cancelling}
                     onCancel={run.cancelRun}
                     onShowLog={() => openLog(null)}
+                    onFocusLost={runStateGone}
                   />
                 ) : null
               }

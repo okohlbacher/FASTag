@@ -47,7 +47,7 @@ describe('Overview panel', () => {
     const onAction = vi.fn()
     const { rerender } = render(<OverviewPanel overview={model(CLI_CASES.v112)} input="/d/a.mzML" busy={false} onAction={onAction} />)
     await click(within(tile('Alkylation')).getByRole('button', { name: 'Add FASTA and run again' }))
-    expect(onAction).toHaveBeenCalledWith({ kind: 'add-fasta', label: 'Add FASTA and run again' })
+    expect(onAction).toHaveBeenCalledWith({ kind: 'add-fasta', label: 'Add FASTA and run again', values: { extension: '3' } })
     rerender(<OverviewPanel overview={model(CLI_CASES.v112)} input="/d/a.mzML" busy onAction={onAction} />)
     expect(within(tile('Alkylation')).getByRole('button', { name: 'Add FASTA and run again' }).hasAttribute('disabled')).toBe(true)
   })
@@ -65,6 +65,8 @@ describe('Overview panel', () => {
     render(<OverviewPanel overview={model(CLI_CASES.v112Da)} input="/d/a.mzML" busy={false} onAction={vi.fn()} />)
     const checks = within(screen.getByRole('list', { name: 'Checks' })).getAllByRole('listitem')
     expect(checks.filter((c) => c.classList.contains('flag'))).toHaveLength(2)
-    expect(within(tile('Protease')).getByText('too little evidence')).toBeDefined()
+    // No census: the CLI's no call stands, with its reason.
+    expect(within(tile('Protease')).getByText('no call')).toBeDefined()
+    expect(tile('Protease').textContent).toMatch(/the fragment tolerance is in Da/)
   })
 })

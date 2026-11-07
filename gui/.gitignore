@@ -32,3 +32,7 @@ e2e-web/test-results
 e2e-web/playwright-report
 # ...but its fixtures are source
 !e2e-web/fixtures/*.tsv
+# ...and the real-CLI fixtures (gui/src/fixtures/cli/<case>/): their .tsv and
+# .log files are source too
+!src/fixtures/cli/**/*.tsv
+!src/fixtures/cli/**/*.log

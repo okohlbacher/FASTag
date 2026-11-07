@@ -1,0 +1,12 @@
+Modifications: Carbamidomethyl (C, fixed)
+Recon index: 20416 proteins, 11414601 residues, 13 isobaric rules; min tag length 8 (derived)
+'/scratch/kohlbach/gate-in/PXD014764/20190412_KEH_HF_SA_ANW_R11_100419_CNOT_R1_f008.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 37021 spectra by scanning it instead (0.02 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2574 repeat gaps, cycle 74, 1424 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Subsampling: tagging 3702 of 37021 input spectra (seed 1)
+Glyco: 44 of 3016 processed MS2 spectra carry oxonium evidence -> run.tags.glyco.tsv
+Mass gaps: 0 histogram rows -> run.massgap.tsv
+Digest: 20084 filtered tags, model Trypsin -> run.digest.tsv
+Labels: 20084 filtered tags -> run.label.tsv
+Species: 1195 spectra contributed taxon evidence; top genus calls -> run.tags.species.tsv
+3016 MS2 spectra, 108147 tags
+FASTag took 0.98 s (wall), 4.26 s (CPU), 0.52 s (system), 3.74 s (user); Peak Memory Usage: 1104 MB.

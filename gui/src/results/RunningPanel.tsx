@@ -3,7 +3,7 @@
 // and Show log. A phase that prints no progress gets an indeterminate bar
 // with its step label (progress.rs) and the time elapsed.
 
-import { useEffect, useState, type JSX } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
 import type { Progress } from '../runJob'
 import { baseName } from '../digestReport'
 import { duration } from '../app/format'
@@ -16,6 +16,10 @@ export interface RunningPanelProps {
   cancelling: boolean
   onCancel(): void
   onShowLog(): void
+  /// Called when the state goes away (the run ended or was cancelled) while
+  /// focus was inside it: the caller moves focus on, so it does not fall to
+  /// the page body.
+  onFocusLost?(): void
 }
 
 const en = (v: number): string => v.toLocaleString('en-US')
@@ -26,6 +30,21 @@ export default function RunningPanel(p: RunningPanelProps): JSX.Element {
   useEffect(() => {
     const t = setInterval(() => setTick((n) => n + 1), 1000)
     return () => clearInterval(t)
+  }, [])
+  // Checked before React removes the section (a layout cleanup runs while
+  // the node is still in the document). Focus inside it counts, and so does
+  // focus that left it for nowhere: Cancel turns disabled while cancelling,
+  // and the browser drops its focus to the page body before the run ends.
+  const ref = useRef<HTMLElement>(null)
+  const inside = useRef(false)
+  const lost = useRef(p.onFocusLost)
+  lost.current = p.onFocusLost
+  useLayoutEffect(() => {
+    const el = ref.current
+    return () => {
+      const a = document.activeElement
+      if (el && (el.contains(a) || (inside.current && (!a || a === document.body)))) lost.current?.()
+    }
   }, [])
   const { progress } = p
   const pct = progress && progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : null
@@ -38,7 +57,18 @@ export default function RunningPanel(p: RunningPanelProps): JSX.Element {
     elapsed ? `${elapsed} elapsed` : null
   ].filter(Boolean)
   return (
-    <section className="running" aria-label="Running">
+    <section
+      className="running"
+      aria-label="Running"
+      ref={ref}
+      onFocus={() => {
+        inside.current = true
+      }}
+      onBlur={(e) => {
+        // To another control: no longer ours. To nowhere: still ours.
+        if (e.relatedTarget && !e.currentTarget.contains(e.relatedTarget as Node)) inside.current = false
+      }}
+    >
       <p className="running-what">
         <span className="mono">{baseName(p.input)}</span> — {what}
         {pct != null && ` ${pct}%`}

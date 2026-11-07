@@ -101,15 +101,45 @@ test('FASTag 1.11 output: no label call and no acquisition check, never filled i
   await expect(page.getByRole('list', { name: 'Checks' })).toContainText('Acquisition not checked')
 })
 
-test('a Da run with fewer than 1,000 spectra: too little evidence, and the checks flag Da and ETD', async ({ page }) => {
+test('a Da run without a census: the CLI no calls with their reason, the cutoff not applied, Da and ETD flagged', async ({ page }) => {
   const o = oracle('v112-pxd010783-da')
+  // Oracle: fewer than 1,000 MS2 spectra, no Census line, and the CLI's own
+  // no call with its reason in the digest and label reports.
   expect(o.ms2).toBeLessThan(1000)
+  expect(read('v112-pxd010783-da', 'run.log')).not.toMatch(/^Census:/m)
+  const digest = read('v112-pxd010783-da', 'run.digest.tsv')
+  expect(cell(digest, 'call', 'reason')).toBe('low_resolution')
+  const why = cell(digest, 'call', 'status', 4)!
   await characterize(page, 'gate-da')
   await expect(value(page, 'MS2 spectra')).toHaveText(en(o.ms2))
-  for (const t of ['Protease', 'Top genus', 'Label']) await expect(value(page, t)).toHaveText('too little evidence')
+  // The MS2 count is not a stand-in for tagged spectra: no GUI verdict.
+  for (const t of ['Protease', 'Label']) await expect(value(page, t)).toHaveText('no call')
+  await expect(tile(page, 'Protease')).toContainText(why)
+  for (const t of ['Protease', 'Top genus', 'Label']) await expect(value(page, t)).not.toHaveText('too little evidence')
   const checks = page.getByRole('list', { name: 'Checks' })
+  await expect(checks).toContainText('Evidence cutoff not applied: this run did not count tagged spectra')
   await expect(checks).toContainText('species calls are unreliable on ion-trap/Da data')
   await expect(checks).toContainText('electron-activated')
+  // The instrument as the meta rows name it, no ion-trap inference.
+  await expect(value(page, 'Instrument')).toHaveText(cell(digest, 'meta', 'instrument')!)
+})
+
+test('focus does not fall to the page body when the run ends or is cancelled', async ({ page }) => {
+  await characterize(page, 'gate')
+  await page.getByRole('region', { name: 'Running' }).getByRole('button', { name: 'Show log' }).focus()
+  await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('region', { name: 'Running' })).toHaveCount(0)
+  await expect(page.getByRole('tab', { name: 'Overview' })).toBeFocused()
+
+  await openApp(page, 'slow')
+  await page.getByRole('button', { name: 'Choose file…' }).click()
+  await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+  const cancel = page.getByRole('region', { name: 'Running' }).getByRole('button', { name: 'Cancel' })
+  await cancel.focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('region', { name: 'Running' })).toHaveCount(0)
+  await expect(page.locator('.view[data-view="results"]')).toBeFocused()
+  expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe('BODY')
 })
 
 test('-species_call decoy: the top genus is the first present one, the others named', async ({ page }) => {

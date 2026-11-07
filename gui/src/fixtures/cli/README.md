@@ -31,10 +31,18 @@ Binaries:
 | v112-pxd004541-tmt | 1.12 | PXD004541 (TMT10) | |
 | v112-pxd010783-da | 1.12 | PXD010783 KristenJeff_p53_mod_AspN_03_02_07.mzML | -fragment_tolerance 0.5 -fragment_tolerance_unit Da |
 | v112-pxd014764-fasta | 1.12 | PXD014764 ..._CNOT_R1_f008.mzML | -extension 3 -fasta Homo_sapiens.fasta -recon_out -delta_out -massgap_out |
+| v112-pxd014764-recon-ext2 | 1.12 | PXD014764 | -recon_fasta Homo_sapiens.fasta -recon_out -massgap_out (Characterize's extension 2) |
+| v112-pxd014764-recon-ext3 | 1.12 | PXD014764 | -extension 3 -recon_fasta Homo_sapiens.fasta -recon_out -massgap_out |
 
 PXD014764 needs extension 3 with a FASTA, as the gate's fasta_recon case
-uses: with extension 2 the CLI refuses (exit 6, the database needs tags of
-at least 8 residues). No AGXT or other non-public sample is used. A release
+uses: the recon index derives a minimum tag length of 8 for the human
+proteome ("min tag length 8 (derived)" in the log), and extension 2 with tag
+length 3 reaches 7. The two recon cases are the exact commands "Add FASTA
+and run again" sends: before the review fix (Characterize's extension 2,
+v112-pxd014764-recon-ext2: exit 0, 0 placed spectra in the mass-gap report)
+and after it (extension 3, v112-pxd014764-recon-ext3: 475 placed spectra).
+They were run with `/scratch/kohlbach/p2b_fixtures2.sh` on node data; their
+tags, recon and glyco outputs are left out like the others'. No AGXT or other non-public sample is used. A release
 `dist/` must not contain these files (`scripts/check-dist-clean.mjs`).
 
 sha256 of each file:
@@ -76,3 +84,15 @@ sha256 of each file:
     5a268cf64bb54aea01c3a789b4de60e90cff8c3549f380de333713e905a4752d  v112-pxd014764-fasta/run.log
     51d8f6ef6985fd48c8543886a076c27aefc8e0645961a4f1d6de30c4183606db  v112-pxd014764-fasta/run.massgap.tsv
     f89c2ed6b0d7856d2ca24994cbcc13428349b842fbe2b515394cd5a00e339115  v112-pxd014764-fasta/run.tags.species.tsv
+    1fdada5d37f4e89be282ab370597b71cefd1ef012dfce67c207355d0396fea96  v112-pxd014764-recon-ext2/cmd.txt
+    d90ea84cdce2ae72085bd4a63d358e9f36a6d40c9bbd4289ee36a1fa92139c88  v112-pxd014764-recon-ext2/run.digest.tsv
+    c4e9c2a1e659443ba7c0bb5347b2ac17775fe9ae6863d0a4557884160508a497  v112-pxd014764-recon-ext2/run.label.tsv
+    f2459268ca1c955d4bce668e2619139a2131ce17ab688512254ba0bddbcf858a  v112-pxd014764-recon-ext2/run.log
+    85cab455ba38e0e51bf6b851f4ca719be2b9ef30864e5c827d21f6c592446d91  v112-pxd014764-recon-ext2/run.massgap.tsv
+    c44792bbeda95584c6cdc8a03c65645368d6f162aee15ce2a9c9f600206d783b  v112-pxd014764-recon-ext2/run.tags.species.tsv
+    1c65778ed54a2cbc545ce65319c61542cf4173a7a1fd98f94015e90fc28868fc  v112-pxd014764-recon-ext3/cmd.txt
+    56583212439bfcef4d7cda01e677fd3709cde7178a41843d66856ad06ff7cdc0  v112-pxd014764-recon-ext3/run.digest.tsv
+    e68f29e43d88eef3b7143e099fe6ff0cf6823cfb7881040e67728bf2d415fbda  v112-pxd014764-recon-ext3/run.label.tsv
+    97e3f0418fafd8e4cc9d30aedf38fa4fe1cc72660800f73ab516d339bc4b48bd  v112-pxd014764-recon-ext3/run.log
+    51d8f6ef6985fd48c8543886a076c27aefc8e0645961a4f1d6de30c4183606db  v112-pxd014764-recon-ext3/run.massgap.tsv
+    9211b7d265e1b886632f307e02f7e3b1868417c3b00f4fefcc8820fa931b1e2c  v112-pxd014764-recon-ext3/run.tags.species.tsv

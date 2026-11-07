@@ -93,7 +93,10 @@ describe('Overview model: calls', () => {
     const t = tile(o, 'alkylation')
     expect(t.value).toBe('not assessed (needs a FASTA)')
     expect(t.tone).toBe('off')
-    expect(t.action).toEqual({ kind: 'add-fasta', label: 'Add FASTA and run again' })
+    // Characterize's extension 2 cannot place tags in a proteome: the action
+    // raises it to 3, and the tile says so.
+    expect(t.action).toEqual({ kind: 'add-fasta', label: 'Add FASTA and run again', values: { extension: '3' } })
+    expect(t.note).toMatch(/sets the extension from 2 to 3/)
     expect(line(o, 'fixed C+57.021')).toMatchObject({ evidence: 'default' })
     expect(line(o, 'fixed C+57.021').note).toBe('default, alkylation not assessed (no FASTA)')
     expect(line(o, 'variable M+15.995').note).toBe('default; mass gaps not assessed (no FASTA)')
@@ -115,16 +118,89 @@ describe('Overview model: calls', () => {
     expect(line(o, 'fixed C+57.021').note).toMatch(/no alkylation call/)
   })
 
-  it('with fewer than 1,000 spectra the calls read "too little evidence", the CLI result in the note', () => {
+  it('with a FASTA but tags too short for the recon index: not assessed, not an absence', () => {
+    // The exact command "Add FASTA and run again" sent before the fix:
+    // extension 2 with -recon_fasta; the CLI exits 0 and places nothing.
+    const o = overviewOf(CLI_CASES.v112ReconExt2)
+    const t = tile(o, 'alkylation')
+    expect(t.value).toBe('not assessed (no tag placed in the FASTA)')
+    expect(t.tone).toBe('off')
+    expect(t.note).toBe('tags reach at most 7 residues (tag length 3 + 2 × extension 2); the recon index needs 8 (its log line)')
+    expect(t.action).toEqual({ kind: 'enable', label: 'Run again with extension 3', values: { extension: '3' } })
+    expect(line(o, 'fixed C+57.021').note).toBe('default, alkylation not assessed (no tag placed in the FASTA)')
+  })
+
+  it('what "Add FASTA and run again" sends now (extension 3, -recon_fasta) places tags: the Cys counts', () => {
+    const t = tile(overviewOf(CLI_CASES.v112ReconExt3), 'alkylation')
+    expect(t.value).toBe('no call (counts only)')
+    expect(t.note).toMatch(/Carbamidomethyl \(C\) 11 of 475 placed spectra/)
+  })
+
+  // A census line added to real output (GUI runs do not send -census yet):
+  // the cutoff counts tagged spectra, never the MS2 spectra processed.
+  const withCensus = (c: CliCase, read: number, tagged: number): CliCase => ({
+    ...c,
+    log: `${c.log}\nCensus: ${read} MS2 spectra read, ${tagged} with a reported tag (0 placed), ${read - tagged} no_tags`
+  })
+
+  it('with fewer than 1,000 tagged spectra the CLI calls read "too little evidence", the CLI result in the note', () => {
     expect(MIN_TAGGED).toBe(1000)
-    const o = overviewOf(CLI_CASES.v112Da) // 686 MS2 spectra
+    const o = overviewOf(withCensus(CLI_CASES.v112, 2738, 400)) // 2,738 MS2 spectra, 400 tagged
     expect(o.lowEvidence).toBe(true)
+    expect(o.cutoffApplied).toBe(true)
     for (const id of ['protease', 'genus', 'label']) {
       expect(tile(o, id).value, id).toBe('too little evidence')
-      expect(tile(o, id).note, id).toMatch(/686 MS2 spectra, fewer than 1,000/)
+      expect(tile(o, id).note, id).toMatch(/^400 tagged spectra, fewer than 1,000; CLI: /)
     }
-    expect(tile(o, 'protease').note).toMatch(/CLI: no call/)
+    expect(tile(o, 'protease').note).toMatch(/CLI: Trypsin \(digest call over 4,257/)
+    expect(tile(o, 'genus').note).toMatch(/CLI: Homo/)
+    expect(line(o, 'enzyme').evidence).toBe('default')
+    expect(o.suggestions.find((x) => x.setting === 'database')).toBeUndefined()
+  })
+
+  it('a CLI no call is never overridden: the Da run keeps its low_resolution reason', () => {
+    const o = overviewOf(withCensus(CLI_CASES.v112Da, 686, 600))
+    expect(o.lowEvidence).toBe(true)
+    for (const id of ['protease', 'label']) {
+      expect(tile(o, id).value, id).toBe('no call')
+      expect(tile(o, id).note, id).toMatch(/the fragment tolerance is in Da.*; also 600 tagged spectra, fewer than 1,000$/)
+    }
+    // The genus is a ranking the CLI made: held back.
+    expect(tile(o, 'genus').value).toBe('too little evidence')
     expect(tile(o, 'genus').note).toMatch(/CLI: Gallus/)
+  })
+
+  it('without a census the cutoff is not applied, and the Overview says so', () => {
+    for (const c of [CLI_CASES.v112Da, CLI_CASES.v112]) {
+      const o = overviewOf(c)
+      expect(o.lowEvidence, c.name).toBe(false)
+      expect(o.cutoffApplied, c.name).toBe(false)
+      expect(o.checks, c.name).toContainEqual({ tone: 'muted', text: expect.stringMatching(/^Evidence cutoff not applied: this run did not count tagged spectra/) })
+      for (const id of ['protease', 'genus', 'label']) expect(tile(o, id).note, `${c.name} ${id}`).toMatch(/evidence cutoff \(1,000 tagged spectra\) not applied/)
+    }
+    // 686 MS2 spectra: the Da run's calls are what the CLI wrote.
+    const da = overviewOf(CLI_CASES.v112Da)
+    expect(tile(da, 'protease')).toMatchObject({ value: 'no call', tone: 'nocall' })
+    expect(tile(da, 'protease').note).toMatch(/^No protease is called: the fragment tolerance is in Da/)
+    expect(tile(da, 'genus').value).toBe('Gallus')
+    // With a census of at least 1,000 tagged spectra it is applied, and passes.
+    const called = overviewOf(CLI_CASES.v112Call)
+    expect(called.cutoffApplied).toBe(true)
+    expect(called.lowEvidence).toBe(false)
+    expect(called.checks.map((c) => c.text).join(' ')).not.toMatch(/Evidence cutoff not applied/)
+  })
+})
+
+describe('Overview model: instrument', () => {
+  it('the instrument as the digest meta rows name it, never read as an analyzer', () => {
+    const da = tile(overviewOf(CLI_CASES.v112Da), 'instrument')
+    expect(da).toMatchObject({ value: 'LTQ Orbitrap XL', tone: 'figure' })
+    expect(da.note).toMatch(/from the report meta rows/)
+    // No GUI rule turns the model name into "ion trap": no re-run offer.
+    expect(da.action).toBeUndefined()
+    expect(tile(overviewOf(CLI_CASES.v112), 'instrument').value).toBe('Q Exactive')
+    const none = buildOverview({ log: [], reports: [], species: null, census: null, params: {}, instrument: null })
+    expect(tile(none, 'instrument')).toMatchObject({ value: 'not named', tone: 'off' })
   })
 })
 

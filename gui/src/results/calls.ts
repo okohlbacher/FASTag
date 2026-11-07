@@ -36,6 +36,9 @@ export interface LogFacts {
   speciesCall: { present: number; noCall: number; notDetected: number } | null
   /// FASTag 1.12 (E15A): "Electron activation: 328 of 686 MS2 spectra were activated ...".
   electron: { electron: number; of: number } | null
+  /// "Recon index: ... min tag length 8 (derived)": the shortest tag the
+  /// -recon_out index places.
+  reconMinLength: number | null
 }
 
 const n = (s: string): number => Number(s)
@@ -53,7 +56,8 @@ export function parseLog(lines: readonly string[]): LogFacts {
     acquisition: null,
     census: null,
     speciesCall: null,
-    electron: null
+    electron: null,
+    reconMinLength: null
   }
   for (const raw of lines) {
     const l = raw.trim()
@@ -69,6 +73,7 @@ export function parseLog(lines: readonly string[]): LogFacts {
     else if ((m = /^Census: (\d+) MS2 spectra read, (\d+) with a reported tag/.exec(l))) f.census = { read: n(m[1]), tagged: n(m[2]) }
     else if ((m = /^Species call \([^)]*\): (\d+) present, (\d+) no_call, (\d+) not_detected/.exec(l)))
       f.speciesCall = { present: n(m[1]), noCall: n(m[2]), notDetected: n(m[3]) }
+    else if ((m = /^Recon index: .*\bmin tag length (\d+)/.exec(l))) f.reconMinLength = n(m[1])
     else if ((m = /^Electron activation: (\d+) of (\d+) MS2 spectra were activated/.exec(l))) f.electron = { electron: n(m[1]), of: n(m[2]) }
   }
   return f

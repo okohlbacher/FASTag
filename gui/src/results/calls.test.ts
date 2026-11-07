@@ -51,6 +51,18 @@ describe('calls.ts: the run log', () => {
     expect(f.afterFilter).toBe(3464)
   })
 
+  it('reads the recon index minimum tag length of a FASTA run, and none without one', () => {
+    expect(parseLog(logLines(CLI_CASES.v112ReconExt2)).reconMinLength).toBe(8)
+    expect(parseLog(logLines(CLI_CASES.v112Fasta)).reconMinLength).toBe(8)
+    expect(parseLog(logLines(CLI_CASES.v112)).reconMinLength).toBeNull()
+  })
+
+  it('the mass-gap report of extension 2 with -recon_fasta places 0 spectra; extension 3 places 475', () => {
+    const mg = (c: CliCase) => alkylationCall(parseReport(c.massgap!, `/d/${c.name}.massgap.tsv`))
+    expect(mg(CLI_CASES.v112ReconExt2)).toMatchObject({ state: 'counts', placed: 0 })
+    expect(mg(CLI_CASES.v112ReconExt3)).toMatchObject({ state: 'counts', placed: 475 })
+  })
+
   it('takes the last summary line and ignores lines it does not know', () => {
     const f = parseLog(['10 MS2 spectra, 5 tags', 'noise', 'Glyco: x of y', '20 MS2 spectra, 7 tags'])
     expect(f.ms2).toBe(20)

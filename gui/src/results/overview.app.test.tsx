@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
 import { click, goTo, renderApp, renderColdApp, runButton } from '../testing/render'
 import { CLI_CASES, logLines, type CliCase } from '../testing/cliFixtures'
+import { applyLastUsed } from '../testing/lastUsed'
 import { speciesFromTsv } from '../testing/speciesTsv'
 
 function gate(mock: MockBridge, c: CliCase, stem = '/d/run01'): void {
@@ -91,7 +92,7 @@ describe('Overview in the app', () => {
     await waitFor(() => expect(selectedTab()).toBe('Overview'))
   })
 
-  it('"Add FASTA and run again" picks a FASTA, turns the mass-gap report on and runs again', async () => {
+  it('"Add FASTA and run again" picks a FASTA, turns the mass-gap report on, raises the extension to 3 and runs again', async () => {
     const mock = installMockBridge()
     gate(mock, CLI_CASES.v112)
     await renderColdApp(mock)
@@ -99,7 +100,8 @@ describe('Overview in the app', () => {
     await click(runButton())
     await finish(mock, CLI_CASES.v112)
     await waitFor(() => expect(selectedTab()).toBe('Overview'))
-    gate(mock, CLI_CASES.v112Fasta)
+    // The CLI output of the exact command the action sends (cmd.txt).
+    gate(mock, CLI_CASES.v112ReconExt3)
     mock.nextPickInput = '/db/human.fasta'
     mock.existingOutputs = []
     await click(within(tile('Alkylation')).getByRole('button', { name: 'Add FASTA and run again' }))
@@ -107,12 +109,72 @@ describe('Overview in the app', () => {
     expect(mock.pickFileCalls[mock.pickFileCalls.length - 1]).toEqual({ kind: 'open', formats: expect.arrayContaining(['fasta']) })
     const p = mock.runCalls[1].params
     expect([p.recon_fasta, p.recon_out, p.massgap_out]).toEqual(['/db/human.fasta', '/d/run01.recon.tsv', '/d/run01.massgap.tsv'])
-    await finish(mock, CLI_CASES.v112Fasta, 2)
+    // Characterize's extension 2 places nothing in a proteome (see the next test).
+    expect(mock.runCalls[0].params.extension).toBe('2')
+    expect(p.extension).toBe('3')
+    expect(p.fasta ?? '').toBe('')
+    await finish(mock, CLI_CASES.v112ReconExt3, 2)
     await waitFor(() => expect(within(tile('Alkylation')).getByText('no call (counts only)')).toBeDefined())
+    expect(tile('Alkylation').textContent).toMatch(/Carbamidomethyl \(C\) 11 of 475 placed spectra/)
     // The form holds what the run was given: a plain Run sends it again.
     await click(runButton())
     await waitFor(() => expect(mock.runCalls).toHaveLength(3))
     expect(mock.runCalls[2].params.recon_fasta).toBe('/db/human.fasta')
+  })
+
+  it('a FASTA run that placed no tag says "not assessed", never an absence of alkylation', async () => {
+    // What the action sent before the fix: Characterize's extension 2 with
+    // -recon_fasta (here set by the last-used offer). The CLI output is that
+    // exact command's (v112-pxd014764-recon-ext2/cmd.txt): 0 placed spectra.
+    const mock = installMockBridge()
+    const c = CLI_CASES.v112ReconExt2
+    mock.settings.lastUsed = { ...c.params, recon_fasta: '/db/human.fasta' }
+    gate(mock, c)
+    await renderApp(mock)
+    await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
+    await applyLastUsed(9)
+    await goTo('setup')
+    await click(runButton())
+    const p = mock.runCalls[0].params
+    expect([p.extension, p.recon_fasta, p.massgap_out]).toEqual(['2', '/db/human.fasta', '/d/run01.massgap.tsv'])
+    await finish(mock, c)
+    await click(await screen.findByRole('tab', { name: 'Overview' }))
+    expect(within(tile('Alkylation')).getByText('not assessed (no tag placed in the FASTA)')).toBeDefined()
+    expect(within(tile('Alkylation')).queryByText('no call (counts only)')).toBeNull()
+    expect(tile('Alkylation').textContent).toMatch(/tags reach at most 7 residues .* the recon index needs 8/)
+    await click(within(tile('Alkylation')).getByRole('button', { name: 'Run again with extension 3' }))
+    await waitFor(() => expect(mock.runCalls).toHaveLength(2))
+    expect(mock.runCalls[1].params.extension).toBe('3')
+  })
+
+  it('focus does not fall to the page body when the run ends: the selected tab gets it', async () => {
+    const mock = installMockBridge()
+    gate(mock, CLI_CASES.v112)
+    await renderColdApp(mock)
+    await click(screen.getByRole('button', { name: 'Choose file…' }))
+    await click(runButton())
+    const showLog = within(screen.getByRole('region', { name: 'Running' })).getByRole('button', { name: 'Show log' })
+    showLog.focus()
+    expect(document.activeElement).toBe(showLog)
+    await finish(mock, CLI_CASES.v112)
+    await waitFor(() => expect(selectedTab()).toBe('Overview'))
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Overview' })))
+  })
+
+  it('focus does not fall to the page body after Cancel: the Results view gets it', async () => {
+    const mock = installMockBridge()
+    gate(mock, CLI_CASES.v112)
+    await renderColdApp(mock)
+    await click(screen.getByRole('button', { name: 'Choose file…' }))
+    await click(runButton())
+    const cancel = within(screen.getByRole('region', { name: 'Running' })).getByRole('button', { name: 'Cancel' })
+    cancel.focus()
+    await click(cancel)
+    await act(async () => {
+      mock.emitDone({ ok: false, code: null, cancelled: true, runId: mock.lastRunId })
+    })
+    expect(screen.queryByRole('region', { name: 'Running' })).toBeNull()
+    await waitFor(() => expect(document.activeElement).toBe(document.querySelector('.view[data-view="results"]')))
   })
 
   it('from the defaults: the old landing tab, the Overview offered, and "Turn on and run again"', async () => {

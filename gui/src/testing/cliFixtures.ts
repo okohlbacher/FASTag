@@ -34,6 +34,16 @@ import fastaDigest from '../fixtures/cli/v112-pxd014764-fasta/run.digest.tsv?raw
 import fastaLabel from '../fixtures/cli/v112-pxd014764-fasta/run.label.tsv?raw'
 import fastaMassgap from '../fixtures/cli/v112-pxd014764-fasta/run.massgap.tsv?raw'
 import fastaSpecies from '../fixtures/cli/v112-pxd014764-fasta/run.tags.species.tsv?raw'
+import recon2Log from '../fixtures/cli/v112-pxd014764-recon-ext2/run.log?raw'
+import recon2Digest from '../fixtures/cli/v112-pxd014764-recon-ext2/run.digest.tsv?raw'
+import recon2Label from '../fixtures/cli/v112-pxd014764-recon-ext2/run.label.tsv?raw'
+import recon2Massgap from '../fixtures/cli/v112-pxd014764-recon-ext2/run.massgap.tsv?raw'
+import recon2Species from '../fixtures/cli/v112-pxd014764-recon-ext2/run.tags.species.tsv?raw'
+import recon3Log from '../fixtures/cli/v112-pxd014764-recon-ext3/run.log?raw'
+import recon3Digest from '../fixtures/cli/v112-pxd014764-recon-ext3/run.digest.tsv?raw'
+import recon3Label from '../fixtures/cli/v112-pxd014764-recon-ext3/run.label.tsv?raw'
+import recon3Massgap from '../fixtures/cli/v112-pxd014764-recon-ext3/run.massgap.tsv?raw'
+import recon3Species from '../fixtures/cli/v112-pxd014764-recon-ext3/run.tags.species.tsv?raw'
 
 export interface CliCase {
   /// The directory under src/fixtures/cli.
@@ -83,6 +93,28 @@ export const CLI_CASES = {
     label: fastaLabel,
     massgap: fastaMassgap,
     species: fastaSpecies
+  },
+  // What "Add FASTA and run again" sent before the fix: Characterize's
+  // extension 2 with -recon_fasta. Tags reach 3+2*2 = 7 residues, the recon
+  // index needs 8: the CLI exits 0 and places no spectrum.
+  v112ReconExt2: {
+    name: 'v112-pxd014764-recon-ext2',
+    params: { ...CHARACTERIZE, recon_fasta: 'Homo_sapiens.fasta', recon_out: 'run.recon.tsv', massgap_out: 'run.massgap.tsv' },
+    log: recon2Log,
+    digest: recon2Digest,
+    label: recon2Label,
+    massgap: recon2Massgap,
+    species: recon2Species
+  },
+  // What it sends now: the same with extension 3.
+  v112ReconExt3: {
+    name: 'v112-pxd014764-recon-ext3',
+    params: { ...CHARACTERIZE, extension: '3', recon_fasta: 'Homo_sapiens.fasta', recon_out: 'run.recon.tsv', massgap_out: 'run.massgap.tsv' },
+    log: recon3Log,
+    digest: recon3Digest,
+    label: recon3Label,
+    massgap: recon3Massgap,
+    species: recon3Species
   }
 } satisfies Record<string, CliCase>
 
