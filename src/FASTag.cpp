@@ -255,12 +255,13 @@ class TOPPFASTag : public TOPPBase
       if (k.compare(0, prefix.size(), prefix) != 0) continue;
       const std::string name = k.substr(prefix.size());
       if (FASTag::Cli::isLegacyOutSpectraParameter(name)) continue;
-      // A flag is compared through getFlag_: its Param value ("false") does
-      // not compare equal to the registered default (a bool DataValue), so
-      // an unset 1.12 flag would otherwise stay listed.
+      // A flag's registered default is the bool false while the Param holds
+      // the string "false", so the two never compare equal: read flags
+      // through getFlag_ (first met with 1.12 E2's -complement_midp).
       const ParameterInformation& e = findEntry_(name);
-      const bool at_default = e.type == ParameterInformation::FLAG ? !getFlag_(name)
-                                                                   : getParam_().getValue(name) == e.default_value;
+      const bool at_default = e.type == ParameterInformation::FLAG
+                                  ? !getFlag_(name)
+                                  : getParam_().getValue(name) == e.default_value;
       if (at_default) p.removeMetaValue(k);
     }
     return p;

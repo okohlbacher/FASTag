@@ -66,9 +66,8 @@ else
   echo "baseline_identity_gate: buildtaxdb $CBT vs $BBT: $(awk -F'\t' '$5 == "SAME"' "$BT/report.tsv" | wc -l) equal"
 fi
 cat "$OUT"/PXD*/report.tsv "$BT/report.tsv" | awk 'NR == 1 || $1 != "label"' > "$OUT/report.tsv"
-# ADDED: --help or the CTD only gained lines (a 1.12 option); counted as equal,
-# and reported, so an addition is visible in the PASS line.
-n_added=$(awk -F'\t' 'NR > 1 && $5 ~ /^ADDED/' "$OUT/report.tsv" | wc -l)
-if [ $rc = 0 ]; then echo "BASELINE IDENTITY PASS ($(awk -F'\t' '$5 == "SAME" || $5 ~ /^ADDED/' "$OUT/report.tsv" | wc -l) comparisons; $n_added interface files only added lines)"
-else echo "BASELINE IDENTITY FAIL"; awk -F'\t' 'NR > 1 && $5 != "SAME" && $5 !~ /^INFO/ && $5 !~ /^ADDED/' "$OUT/report.tsv"; fi
+# Accepted statuses: SAME, INFO*, ADDED*, PREFIX* (see baseline_identity.sh).
+nacc=$(awk -F'\t' '$5 ~ /^(ADDED|PREFIX)/' "$OUT/report.tsv" | wc -l | tr -d ' ')
+if [ $rc = 0 ]; then echo "BASELINE IDENTITY PASS ($(awk -F'\t' '$5 == "SAME"' "$OUT/report.tsv" | wc -l | tr -d ' ') comparisons$([ "$nacc" = 0 ] || echo ", $nacc accepted additions (ADDED/PREFIX)"))"
+else echo "BASELINE IDENTITY FAIL"; awk -F'\t' 'NR > 1 && $5 != "SAME" && $5 !~ /^(INFO|ADDED|PREFIX)/' "$OUT/report.tsv"; fi
 exit $rc
