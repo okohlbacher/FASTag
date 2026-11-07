@@ -182,6 +182,9 @@ describe('keyboard active row', () => {
     await screen.findByText(`Showing 3,000 of 3,000`)
     const pos = screen.getByTestId('rt-pos')
     expect(pos.getAttribute('role')).toBe('status')
+    // Not inside the scroller: an absolutely positioned child there sits at
+    // the foot of the canvas and makes the page scroll (layout.spec.ts).
+    expect(pos.closest('.rt-scroll')).toBeNull()
     expect(pos.textContent).toBe('')
     await key(table(), 'ArrowDown')
     await key(activeRow()!, 'End')

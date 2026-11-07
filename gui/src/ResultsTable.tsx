@@ -1259,6 +1259,7 @@ export default function ResultsTable({ path, source, rerunResConf }: Props): JSX
         // a row only in a grid. While the active row is not rendered (its
         // page is on the way) the scroller holds focus and the live region
         // below says where the active row is.
+        <>
         <div
           className="rt-scroll"
           ref={scrollerRef}
@@ -1345,13 +1346,6 @@ export default function ResultsTable({ path, source, rerunResConf }: Props): JSX
               {rowsOut}
             </div>
           </div>
-          {/* Where the active row is while it is not rendered (focus is on
-              the scroller then, and no row's focus says it). */}
-          <span className="sr-only" role="status" aria-live="polite" data-testid="rt-pos">
-            {activePos != null && !activeShown && matched > 0
-              ? `Row ${(activePos + 1).toLocaleString('en-US')} of ${matched.toLocaleString('en-US')}, loading…`
-              : ''}
-          </span>
           {/* The first page of a large file takes a while to read. */}
           {!meta && !useHead && <div className="empty" role="status">Reading…</div>}
           {meta && matched === 0 && (
@@ -1366,6 +1360,16 @@ export default function ResultsTable({ path, source, rerunResConf }: Props): JSX
             </div>
           )}
         </div>
+        {/* Where the active row is while it is not rendered (focus is on
+          the scroller then, and no row's focus says it). Outside the
+          scroller: an absolutely positioned child there would sit at the
+          foot of the 10M-row canvas and make the page itself scroll. */}
+        <span className="sr-only" role="status" aria-live="polite" data-testid="rt-pos">
+          {activePos != null && !activeShown && matched > 0
+            ? `Row ${(activePos + 1).toLocaleString('en-US')} of ${matched.toLocaleString('en-US')}, loading…`
+            : ''}
+        </span>
+        </>
       )}
     </div>
   )
