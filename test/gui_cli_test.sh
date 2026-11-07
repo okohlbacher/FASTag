@@ -19,8 +19,8 @@
 #       spectrum (n_peaks_kept, precursor_mz, charge_used) at the CLI
 #       default and at 0.3 Da, with -pick_profile auto on profile MS2 (the
 #       picked peaks), and against the tag ladders of the run's tag TSV
-#       (every ungapped, unmodified tag's b or y ladder lies on dumped
-#       peaks within the tolerance); the MGF twin and the mzPeak export
+#       (every unmodified tag's b or y ladder lies on dumped peaks within
+#       the tolerance; both ends of it for a gapped tag); the MGF twin and the mzPeak export
 #       give the same peaks; threads 1/3/8 give the same bytes; no file is
 #       written, -out included
 #   (e) -dump_spectrum refusals: an unknown native ID (exit 6, the ID on
@@ -210,9 +210,10 @@ MONO = {"G": 57.02146372057, "A": 71.03711378471, "S": 87.03202840427, "P": 97.0
 PROTON, WATER = 1.007276466812, 18.0105646837
 
 def ladders(dumps_dir, tags):
-    # Every ungapped, unmodified tag of a dumped spectrum: its b ladder
-    # (nterm_mass + prefix) or its y ladder (cterm_mass + suffix + water)
-    # lies on dumped peaks within the dump's tolerance.
+    # Every unmodified tag of a dumped spectrum: its b ladder (nterm_mass +
+    # prefix) or its y ladder (cterm_mass + suffix + water) lies on dumped
+    # peaks within the dump's tolerance; for a gapped tag (it crossed one
+    # missing peak) both ends of the ladder do.
     import glob
     dumps = {}
     for p in glob.glob(dumps_dir + "/*.jsonl"):
@@ -233,7 +234,7 @@ def ladders(dumps_dir, tags):
             v = dict(zip(head, line.rstrip("\n").split("\t")))
             s = dumps.get(v["spectrum"])
             seq = v["tag"]
-            if s is None or v["gapped"] != "0" or any(c not in MONO for c in seq):
+            if s is None or any(c not in MONO for c in seq):
                 continue
             z = int(v["charge"]); ppm = s["tolerance_unit"] == "ppm"; tol = s["tolerance"]
             # The printed flanks carry 4 decimals; allow that rounding on top.
@@ -241,8 +242,11 @@ def ladders(dumps_dir, tags):
             mzs = s["mz"]
             # Each step matches within the tolerance, so the k-th peak may
             # drift up to k + 1 tolerances from the ladder of the printed flank.
+            gapped = v["gapped"] != "0"
             def on(masses):
                 for k, m in enumerate(masses):
+                    if gapped and 0 < k < len(masses) - 1:
+                        continue
                     x = (m + z * PROTON) / z
                     t = (k + 1) * (x * tol * 1e-6 if ppm else tol) + slack / z
                     if not near(mzs, x, t, False):
