@@ -101,7 +101,7 @@ test('search to field: "tolerance" focuses fragment_tolerance', async ({ page })
 })
 
 test('presets: "Ion trap CID" sets 0.3 Da and nothing else', async ({ page }) => {
-  await openApp(page)
+  await openApp(page, 'default', 'defaults')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await expect(page.getByLabel('Instrument').locator('option')).toHaveText([
     'Choose a preset…',

@@ -12,7 +12,9 @@ test('the e2e build starts on its fixture bridge with nothing run yet', async ({
 })
 
 test('first result in two clicks: choose the file, run it', async ({ page }) => {
-  await openApp(page)
+  // From FASTag's defaults: the tags table is the first result (the landing
+  // task's run opens on its digest report, setup.spec.ts).
+  await openApp(page, 'default', 'defaults')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
   // The real FASTag 1.11.0 tags of the public E. coli fixture.

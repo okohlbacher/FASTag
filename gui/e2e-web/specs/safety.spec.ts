@@ -1,7 +1,7 @@
 import { test, expect, goTo, openApp, mockState } from './fixtures'
 
 test('last-used is an offer: a fresh start runs with defaults until the chip is clicked', async ({ page }) => {
-  await openApp(page, 'lastused')
+  await openApp(page, 'lastused', 'defaults')
   const chip = page.getByRole('button', { name: 'Apply last-used (2)' })
   await expect(chip).toBeVisible()
   await expect(page.locator('#p-tag_length')).toHaveValue('3')
@@ -56,7 +56,7 @@ test('a cancelled run says its partial outputs were removed', async ({ page }) =
 })
 
 test('an existing output is confirmed before the run; a cancelled run of an earlier session reads as cancelled', async ({ page }) => {
-  await openApp(page, 'existing')
+  await openApp(page, 'existing', 'defaults')
   // The run record of the earlier session.
   await expect(page.locator('.last-run')).toContainText('Cancelled in an earlier session')
   await goTo(page, 'Results')

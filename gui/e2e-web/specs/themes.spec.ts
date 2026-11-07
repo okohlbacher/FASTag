@@ -12,7 +12,7 @@ for (const [w, h] of [
     const look: Record<string, { bg: string; status: string }> = {}
     for (const scheme of ['light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme: scheme })
-      await openApp(page)
+      await openApp(page, 'default', 'defaults')
       await page.getByRole('button', { name: 'Choose file…' }).click()
       await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
       await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()

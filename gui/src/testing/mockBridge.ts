@@ -67,6 +67,14 @@ export interface MockBridge extends FastagApi {
   existingOutputs: string[]
   // The run record (history.rs), newest first.
   history: RunRecord[]
+  // commandLine() and exportIni() calls; exportIniError: the next exports reject.
+  commandLineCalls: RunCall[]
+  exportIniCalls: { params: RunCall; dest: string }[]
+  exportIniError: string | null
+  // The command line of a run request, binary first, as commandLine()
+  // answers it. (run()'s reply keeps its short -in/-out command, which the
+  // failure-banner tests pin; fastag.rs builds both from one function.)
+  commandOf(call: RunCall): string[]
   failNextRun: string | null // one-shot: run() resolves { started: false, reason }
   rejectNextRun: Error | null // one-shot: run() rejects
   // Recorded calls.
@@ -142,6 +150,20 @@ export function mockOutputs(call: RunCall): ResolvedOutputs {
   return o
 }
 
+/// The argv of a run request as the mock spells it: -in, -out, then each
+/// parameter that has a value (switches as presence), in request order.
+function mockArgv(call: RunCall): string[] {
+  const a = ['-in', call.in, '-out', call.out]
+  for (const [n, v] of Object.entries(call.params ?? {})) {
+    if (v === true) a.push(`-${n}`)
+    else if (Array.isArray(v)) {
+      const items = v.map((x) => String(x).trim()).filter(Boolean)
+      if (items.length) a.push(`-${n}`, ...items)
+    } else if (typeof v === 'string' && v.trim() !== '') a.push(`-${n}`, v.trim())
+  }
+  return a
+}
+
 export function installMockBridge(): MockBridge {
   // Each started run's Channel, by its number.
   const channels = new Map<number, (e: RunEvent) => void>()
@@ -189,6 +211,20 @@ export function installMockBridge(): MockBridge {
     taxdbInfoResult: null,
     existingOutputs: [],
     history: [],
+    commandLineCalls: [],
+    exportIniCalls: [],
+    exportIniError: null,
+    commandOf: (call) => [mock.binaryInfo.bin, ...mockArgv(call)],
+    commandLine: (params) => {
+      const call = params as unknown as RunCall
+      mock.commandLineCalls.push(call)
+      return Promise.resolve(mock.commandOf(call))
+    },
+    exportIni: (params, dest) => {
+      mock.exportIniCalls.push({ params: params as unknown as RunCall, dest })
+      if (mock.exportIniError) return Promise.reject(mock.exportIniError)
+      return Promise.resolve({ dest, items: mockArgv(params as unknown as RunCall).filter((a) => a.startsWith('-')).length })
+    },
     failNextRun: null,
     rejectNextRun: null,
     runCalls: [],

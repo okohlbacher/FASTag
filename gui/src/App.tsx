@@ -26,13 +26,19 @@ import { useDrops } from './shell/useDrops'
 import { CloseQuestion, OverwriteQuestion } from './shell/Questions'
 import Notices, { type Toast } from './shell/Notices'
 import { useFinish } from './shell/useFinish'
+import { LANDING, type Origin } from './setup/tasks'
+import PlanFooter from './setup/PlanFooter'
+import { SECTION_OF } from './paramLayout'
 
 // The app shell (P1 PR c; the P2a shell, PR s): the top bar with the four
 // views and the progress pill, the Help side panel, the close and overwrite
 // questions, shortcuts, native menus, drops and the finish notice. The state
 // lives in useSession (the form), useRun (runs and their results) and the
 // view store (tab and log drawer); the views render it.
-export default function App(): JSX.Element {
+///
+/// @p start: where the session's values come from; the app lands on the
+/// built-in task "Characterize a run" (D1, GUI-DESIGN 3 S1).
+export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.Element {
   const [bin, setBin] = useState<BinaryInfo | null>(null)
   // The view shown (Cmd+1..4, the top bar, the View menu).
   const [view, setView] = useState<View>('setup')
@@ -54,7 +60,7 @@ export default function App(): JSX.Element {
   const logRef = useRef<HTMLPreElement>(null)
   const [viewStore] = useState(() => createViewStore())
   const { tab, logOpen, logJob } = useView(viewStore)
-  const session = useSession()
+  const session = useSession(start)
   const { input, out, values, blocked } = session
   const run = useRun(session, viewStore, { onStart: () => setView('results') })
   const { running, batchRunning, busy, jobs } = run
@@ -159,6 +165,9 @@ export default function App(): JSX.Element {
     if (hit.section) session.setOpenGroups((g) => ({ ...g, [hit.section]: true }))
     setTimeout(() => {
       let el = document.getElementById(`p-${hit.name}`) as HTMLInputElement | null
+      // Hidden until its section's switch is on: the switch.
+      const master = SECTION_OF.get(hit.name)?.master
+      if (el?.closest('[hidden]') && master) el = document.getElementById(`p-${master}`) as HTMLInputElement | null
       if (el && el.disabled) {
         const dep = inertDependency(hit.name, values)
         const on = dep ? (Array.isArray(dep.on) ? dep.on[0] : dep.on) : null
@@ -351,8 +360,10 @@ export default function App(): JSX.Element {
                 searchBtnRef={searchBtnRef}
                 onOpenBatch={() => setView('batch')}
                 addBatchRef={addBatchRef}
+                onOpenResults={openResults}
               />
-              {runBarView === 'setup' && runBar}
+              {!busy && session.task !== 'open-results' && <PlanFooter session={session} run={run} />}
+              {runBarView === 'setup' && session.task !== 'open-results' && runBar}
             </aside>
           </section>
 

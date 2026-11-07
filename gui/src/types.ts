@@ -172,7 +172,15 @@ export interface TaxdbInfo {
 export interface Settings {
   schemaVersion: number
   lastUsed: Record<string, unknown> | null
+  // Schema 2: {v: 2, base, diff} (setup/presetDiff.ts); a v1 preset is the
+  // flat record of the form's values. normalizePreset reads both.
   presets: Record<string, Record<string, unknown>>
+}
+
+// What Export INI wrote (ini.rs IniExport).
+export interface IniExport {
+  dest: string
+  items: number
 }
 
 // An OS file drop, sorted by type (drop.rs DropRoute).
@@ -217,6 +225,12 @@ export interface FastagApi {
   saveFile: (defaultPath?: string, formats?: string[]) => Promise<string | null>
   pickResults: () => Promise<string | null>
   pickReport: () => Promise<string | null>
+  // The command line a run of these params is, binary first (fastag.rs
+  // command_line: the argv `run` replies and History records).
+  commandLine: (params: Record<string, unknown>) => Promise<string[]>
+  // Export INI (ini.rs): the request a run would be given, through
+  // `FASTag -ini <tmp> -write_ini <dest>`. Rejects with the CLI's reason.
+  exportIni: (params: Record<string, unknown>, dest: string) => Promise<IniExport>
   // The outputs a run of these params would write, and which exist already.
   outputsCheck: (params: Record<string, unknown>) => Promise<OutputsCheck>
   // params.overwrite: the user confirmed overwriting the existing outputs;
