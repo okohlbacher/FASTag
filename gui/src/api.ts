@@ -128,6 +128,8 @@ const api: FastagApi = {
     return invoke<number>('results_export', { path, view, columns, dest, format, onEvent: ch })
   },
   cancelExport: (jobId: number) => invoke<boolean>('results_cancel', { jobId }),
+  tagsText: (path: string) => invoke<string>('tags_text', { path }),
+  writeReads: (source: string, dest: string, text: string) => invoke<void>('denovo_write', { source, dest, text }),
   species: (path: string) => invoke<SpeciesReport | null>('species', { path }),
   report: (path: string) => invoke<string | null>('report_text', { path }),
   taxdbInfo: (explicit?: string) => invoke<TaxdbInfo | null>('taxdb_info', { explicit }),

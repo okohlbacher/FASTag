@@ -167,7 +167,9 @@ progress bar with the phase of the run and the time left, and browse the tags an
 top hit, and an Adjusted column after `-species_deconvolve`). The **Database
 hit** filter on `fasta_hit` offers All, In database (`fwd`/`rev`), Entrapment
 (`efwd`/`erev`) or Not in database; **Export shown rows…** writes the filtered rows, in
-the shown columns, to a new TSV. A failed run quotes FASTag's reason and offers
+the shown columns, to a new TSV, and a `-res_conf` table also exports as Stitch or ALPS
+reads, byte for byte what `tools/tags_to_denovo.py` writes. The tags table can be walked
+by keyboard; Cmd/Ctrl+C copies the active row and Cmd/Ctrl+Shift+C its USI. A failed run quotes FASTag's reason and offers
 its command line to copy. A run never outlives the app: if the app is killed,
 the CLI ends within seconds (a watchdog on macOS and Linux, plus the parent-death
 signal on Linux; a kill-on-close job per run on Windows, which a browser or editor the app

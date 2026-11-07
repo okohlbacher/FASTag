@@ -119,6 +119,13 @@ export interface MockBridge extends FastagApi {
   lastExportSend: (e: ExportEvent) => void
   emitExport(e: ExportEvent): void
   exportCancelCalls: number[]
+  // Stitch/ALPS export: path -> the tags file's text (a path not named here
+  // rejects as missing); the reads written; readsWriteError: the next
+  // writes reject.
+  tagsFiles: Record<string, string>
+  tagsTextCalls: string[]
+  readsWrites: { source: string; dest: string; text: string }[]
+  readsWriteError: string | null
   speciesCalls: string[]
   cancelCalls: number
   savedLast: Record<string, unknown>[]
@@ -281,6 +288,10 @@ export function installMockBridge(): MockBridge {
     lastExportId: 0,
     lastExportSend: () => {},
     exportCancelCalls: [],
+    tagsFiles: {},
+    tagsTextCalls: [],
+    readsWrites: [],
+    readsWriteError: null,
     resultsOpenCalls: [],
     revealCalls: [],
     revealError: null,
@@ -428,6 +439,16 @@ export function installMockBridge(): MockBridge {
     cancelExport: (jobId) => {
       mock.exportCancelCalls.push(jobId)
       return Promise.resolve(jobId === mock.lastExportId)
+    },
+    tagsText: (path) => {
+      mock.tagsTextCalls.push(path)
+      const t = mock.tagsFiles[path]
+      return t == null ? Promise.reject(new Error(`${path} does not exist`)) : Promise.resolve(t)
+    },
+    writeReads: (source, dest, text) => {
+      if (mock.readsWriteError) return Promise.reject(new Error(mock.readsWriteError))
+      mock.readsWrites.push({ source, dest, text })
+      return Promise.resolve()
     },
     // Which outputs a run would write: -out (resolved like run() does) and
     // every *_out parameter with a value; those in existingOutputs exist.

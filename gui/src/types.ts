@@ -295,6 +295,11 @@ export interface FastagApi {
   ) => Promise<number>
   // Stop an export job; false when it is not running (any more).
   cancelExport: (jobId: number) => Promise<boolean>
+  // Stitch/ALPS export (denovo.rs): the whole tags file as text, for
+  // export/denovo.ts (rejects above 256 MB, or when it is not UTF-8); and the
+  // reads it made, to a .csv through a .part file, never over @p source.
+  tagsText: (path: string) => Promise<string>
+  writeReads: (source: string, dest: string, text: string) => Promise<void>
   // Close guard: the window was closed ('close') or the app asked to quit
   // ('quit') while a run or batch is active; the backend prevented it and
   // waits for answerClose.

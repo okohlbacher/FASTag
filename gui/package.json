@@ -11,6 +11,7 @@
     "build": "tsc && vite build",
     "build:e2e": "tsc && vite build --mode e2e",
     "check:dist": "node scripts/check-dist-clean.mjs dist",
+    "golden:denovo": "node scripts/denovo-golden.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "e2e": "playwright test -c e2e-web",

@@ -1,0 +1,12 @@
+[
+  { "input": "ecoli.res_conf.tags.tsv", "format": "stitch", "topN": 1, "minLength": 8, "golden": "ecoli.stitch.csv" },
+  { "input": "ecoli.res_conf.tags.tsv", "format": "alps", "topN": 1, "minLength": 8, "golden": "ecoli.alps.csv" },
+  { "input": "ecoli.res_conf.tags.tsv", "format": "stitch", "topN": 1, "minLength": 1, "golden": "ecoli.stitch.best.csv" },
+  { "input": "ecoli.res_conf.tags.tsv", "format": "alps", "topN": 3, "minLength": 6, "golden": "ecoli.alps.top3.csv" },
+  { "input": "edge.tags.tsv", "format": "stitch", "topN": 1, "minLength": 8, "golden": "edge.stitch.csv" },
+  { "input": "edge.tags.tsv", "format": "alps", "topN": 1, "minLength": 8, "golden": "edge.alps.csv" },
+  { "input": "edge.tags.tsv", "format": "stitch", "topN": 2, "minLength": 1, "golden": "edge.stitch.top2.csv" },
+  { "input": "edge.tags.tsv", "format": "alps", "topN": 2, "minLength": 1, "golden": "edge.alps.top2.csv" },
+  { "input": "edge.tags.tsv", "format": "stitch", "topN": 50, "minLength": 1, "golden": "edge.stitch.all.csv" },
+  { "input": "edge.tags.tsv", "format": "alps", "topN": 50, "minLength": 1, "golden": "edge.alps.all.csv" }
+]

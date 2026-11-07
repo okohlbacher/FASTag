@@ -30,6 +30,10 @@
 //               filter, the per-spectrum rule, a sort by any column) and
 //               export as a job; the text of each export is kept in
 //               window.__fastagE2E.exports
+//   denovo      P3 PR b: the view fixture on the real E. coli tags with the
+//               res_conf and usi columns (src/fixtures/denovo), whose text
+//               tagsText serves for the Stitch/ALPS export; the reads
+//               written are in mock.readsWrites
 //   gate-batch  P2b Batch summary: Add folder… on /data lists eight spectra
 //               files, one per job of a real batch (src/fixtures/cli/batch,
 //               testing/batchFixtures.ts): each prints that job's log and
@@ -46,6 +50,7 @@ import { installMockBridge, type MockBridge } from './mockBridge'
 import { DEFAULTS, type Origin } from '../setup/tasks'
 import type { BrowserEvent, DropRoute, ExportFormat, ResultsPage, ResultsView, RunEvent, RunStarted } from '../types'
 import ecoliTags from '../../e2e-web/fixtures/ecoli.tags.tsv?raw'
+import ecoliResConf from '../fixtures/denovo/ecoli.res_conf.tags.tsv?raw'
 import digestTsv from '../fixtures/digest.tsv?raw'
 import labelTsv from '../fixtures/label.tsv?raw'
 import massgapTsv from '../fixtures/massgap.tsv?raw'
@@ -218,7 +223,8 @@ export function installE2EBridge(): Origin | undefined {
   const fixture = query.get('fixture') ?? 'default'
   const mock = installMockBridge()
   mock.binaryInfo = { bin: '/e2e/FASTag', source: 'env', ok: true, version: '1.11.0', detail: 'e2e fixture: no CLI' }
-  const tags = parseTsv(ecoliTags)
+  const tags = parseTsv(fixture === 'denovo' ? ecoliResConf : ecoliTags)
+  if (fixture === 'denovo') mock.tagsFiles['/data/run01.tags.tsv'] = ecoliResConf
   mock.resultsColumns = tags.columns
   mock.resultsRows = tags.rows
   mock.reportFiles = {
@@ -308,7 +314,7 @@ export function installE2EBridge(): Origin | undefined {
 
   const exports: { dest: string; format: ExportFormat; text: string }[] = []
   let held: { jobId: number; finish: () => void; cancel: () => void } | null = null
-  if (fixture === 'view') {
+  if (fixture === 'view' || fixture === 'denovo') {
     const ids = (view: ResultsView): number[] => viewIds(tags.columns, tags.rows, view)
     mock.resultsQuery = (path, view, offset, limit): Promise<ResultsPage> => {
       mock.resultsQueryCalls.push({ path, view, offset, limit })

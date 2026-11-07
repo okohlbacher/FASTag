@@ -1332,6 +1332,16 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q libwebkit2gtk-4.1-dev librsvg2-dev libgtk-3-dev
+      # The de novo golden files (P3): the repository's own
+      # tools/tags_to_denovo.py, called as it is, writes each case of
+      # gui/src/fixtures/denovo/cases.json, and its output must equal the
+      # committed golden files byte for byte (and pass the script's --check).
+      # The vitest suite below then holds export/denovo.ts to the same files.
+      - name: De novo golden files from tools/tags_to_denovo.py
+        working-directory: gui
+        run: |
+          python3 --version
+          node scripts/denovo-golden.mjs
       - name: Frontend typecheck + tests + build
         working-directory: gui
         run: |
