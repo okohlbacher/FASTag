@@ -20,7 +20,9 @@
 #include <OpenMS/FORMAT/MzIdentMLFile.h>
 #include <OpenMS/FORMAT/MzMLFile.h>
 #include <OpenMS/KERNEL/MSExperiment.h>
+#include <OpenMS/METADATA/PeptideEvidence.h>
 #include <OpenMS/METADATA/PeptideHit.h>
+#include <OpenMS/METADATA/ProteinHit.h>
 #include <OpenMS/METADATA/PeptideIdentification.h>
 #include <OpenMS/METADATA/PeptideIdentificationList.h>
 #include <OpenMS/METADATA/ProteinIdentification.h>
@@ -128,7 +130,20 @@ static int writeIds(int argc, char** argv)
   std::vector<ProteinIdentification> prots;
   if (variant == "merged") prots = {prot("run0", {"a.mzML"}), prot("run1", {"b.mzML"})};
   else prots = {prot("run0", {variant == "wrongrun" ? std::string("other_run.mzML") : run})};
-  const bool meta = variant == "meta" || variant == "mzid";
+  const bool mzid = variant == "mzid";
+  const bool meta = variant == "meta" || mzid;
+  if (mzid)
+  {
+    // mzIdentML keeps a hit's target/decoy state only in its PeptideEvidence
+    // (isDecoy), and the evidence needs a protein of the run: without them a
+    // decoy hit is read back as a hit without target_decoy, that is a target.
+    ProteinHit t, d;
+    t.setAccession("PROT_T");
+    t.setMetaValue("target_decoy", "target");
+    d.setAccession("DECOY_PROT_T");
+    d.setMetaValue("target_decoy", "decoy");
+    prots[0].setHits({t, d});
+  }
   const bool noq = variant == "noq";
   PeptideIdentificationList peps;
   std::ofstream ex(expected);
@@ -144,6 +159,15 @@ static int writeIds(int argc, char** argv)
     const bool hb = meta || noq;
     auto h = [&](double q, TD td) {
       if (noq) return hit(10, TD::None);
+      if (mzid)
+      {
+        PeptideHit x = hit(10 + q, td, (k % 2) ? "MS:1002354" : "q-value", q);
+        // The writer keeps one evidence set per peptide sequence, so decoy
+        // hits carry a sequence of their own.
+        if (td == TD::Decoy) x.setSequence(AASequence::fromString("KEDITPEP"));
+        x.setPeptideEvidences({PeptideEvidence(td == TD::Decoy ? "DECOY_PROT_T" : "PROT_T", 0, 7, '-', '-')});
+        return x;
+      }
       if (meta) return hit(10 + q, td, (k % 2) ? "MS:1002354" : "q-value", q);
       return hit(q, td);
     };
@@ -155,7 +179,12 @@ static int writeIds(int argc, char** argv)
       case 2: peps.push_back(pid(ref, st, hb, {h(0.001, TD::Decoy)})); break;
       case 3: peps.push_back(pid(ref, st, hb, {})); break;
       case 4: break;
-      case 5: peps.push_back(pid(ref, st, hb, {h(0.005, TD::Decoy), h(0.005, TD::Both)})); want = "1"; break;
+      case 5:
+        // mzIdentML writes isDecoy for a target+decoy hit as decoy (one flag
+        // per hit), so the mzid variant pairs the decoy with a plain target.
+        peps.push_back(pid(ref, st, hb, {h(0.005, TD::Decoy), h(0.005, mzid ? TD::Target : TD::Both)}));
+        want = "1";
+        break;
     }
     if (want == "1" && first_yes_scan < 0 && variant == "dupscan")
     {
