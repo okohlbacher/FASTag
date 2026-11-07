@@ -254,6 +254,38 @@ calibrated for D = 5) are PROVISIONAL: they are not fitted yet, and
 `-species_call_decoys` from the one the file states gives a warning.
 `-species_call` refuses `-stream`.
 
+## Both tag orientations (`-species_orientation both`, opt-in, 1.12)
+
+Tags are written N->C under a y-ion assumption, so a tag read from b ions is
+written reversed. The species lookup reads only the written orientation;
+`-orientation` (default both) applies to `-fasta` and reconciliation only and
+is deliberately not coupled to it, because its default would change the
+species report. `-species_orientation both` looks every tag up as written and
+reversed (I/L folded after reversal, as `-orientation both` folds), each
+reading through the same per-tag rule (share cap, whole-tag rule, margin),
+and combines them (`combineOrientations`, SpeciesEvidence.h):
+
+| Readings informative | Result |
+|---|---|
+| one | that reading's taxa |
+| both, common taxa | the common taxa (never the union: it would let a tag count for the chance hits of both readings) |
+| both, no common taxon | orientation-ambiguous: skipped and counted, so counts can fall as well as rise |
+| palindrome (folded) | looked up once |
+
+The tag's E-value is kept, so `-species_evidence best|all` is unchanged.
+Under `-species_call decoy` every decoy tag goes through the same rule, so the
+random-hit part of the null follows; the homology matrix stays the forward
+k-mer overlap. That is the only calibrated path: `decoy_qvalue` and `call`.
+The analytic `log_pvalue` and `qvalue` columns come from the forward index
+background, which the orientation rule does not follow, so under `both` they
+are NA, with or without `-species_call decoy`, and a warning says so. The run log gets one stderr line with the
+orientation counts (forward only, reverse only, shared, palindromes,
+ambiguous skips). The forward k-mer counters of the `Species:` line are those
+of a forward run. Default forward is byte-identical to 1.11. Expect up to 2x
+the species-phase lookups (times the decoy replicates under decoy). It stays
+opt-in until #1's held-out evaluation scores it as its second
+pre-registered configuration.
+
 ## Honest limitations
 
 - **Conserved proteins inflate near-neighbours.** Bacterial genera (Escherichia,

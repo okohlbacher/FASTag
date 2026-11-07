@@ -513,6 +513,7 @@ MGF→mzML direction is exact.
 | `-species_call_min_units <n>` | 200 | With `-species_call decoy`: fewer spectra with taxon evidence make the run a few_spectra no_call |
 | `-species_call_decoys <n>` | 5 | With `-species_call decoy`: decoy tags per tag (1-100) |
 | `-species_pi0 <f>` | 1 | With `-species_call decoy`: pi0 of the q-values; 1 = Benjamini-Hochberg, 0 = estimate (Storey) |
+| `-species_orientation <mode>` | forward | `both`: also look each tag up reversed (a tag read from b ions is written reversed); one informative reading is used as it is, two are intersected, two without a common taxon skip the tag. Independent of `-orientation` (which applies to `-fasta` and `-recon_fasta`). The analytic `log_pvalue` and `qvalue` columns are NA under `both`, also with `-species_call decoy`; the calibrated value is its `decoy_qvalue` |
 | `-subsample_spectra <n>` / `-subsample_fraction <f>` | 0 | Tag only a random subset (count or fraction; if both are given, the count wins); 0 = all |
 | `-subsample_seed <n>` | 1 | Seed for the `-subsample_*` selection |
 | `-mzpeak_read_memory <MB>` | 0 | No effect; accepted for existing command lines |
@@ -920,6 +921,18 @@ looked up like the tags plus the spill a stronger related taxon is expected to
 cause; `decoy_expected` is that null's expectation (`expected` keeps its 1.10
 meaning). The shipped parameters are provisional. See
 [doc/SPECIES-DETECTOR.md](doc/SPECIES-DETECTOR.md).
+
+**Both tag orientations (opt-in).** Tags are written N->C under a y-ion
+assumption, so a tag read from b ions is written reversed, and `-species`
+looks up only the written reading. `-species_orientation both` looks up both
+readings: one informative reading is used, two are intersected, and a tag
+whose readings share no taxon is skipped (so counts can fall as well as
+rise). No analytic background follows from that rule, so the analytic
+`log_pvalue` and `qvalue` columns are NA under `both`, with or without
+`-species_call decoy`, and a warning says so; the calibrated value is the
+`decoy_qvalue` (and `call`) of `-species_call decoy`. It is
+not coupled to `-orientation`, whose default (both) would otherwise change
+the species report.
 
 The longest `-tag_length` plus 2 × `-extension` must reach the index k (7).
 Otherwise no tag can be long enough to look up, and FASTag refuses the run up

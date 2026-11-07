@@ -20,7 +20,9 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
+#include <iterator>
 #include <set>
 #include <vector>
 
@@ -58,5 +60,39 @@ namespace FASTag
     for (const TagSupport& t : tags)
       if (!t.taxa.empty() && t.evalue == best->evalue) out.insert(t.taxa.begin(), t.taxa.end());
     return out;
+  }
+  /// Which orientations of a tag -species looks up (1.12 #10,
+  /// -species_orientation). Independent of -orientation, which governs -fasta
+  /// and reconciliation only.
+  enum class SpeciesOrientation { Forward, Both };
+
+  /// What combineOrientations() made of one tag.
+  enum class OrientationOutcome
+  {
+    None,          ///< neither orientation is informative
+    Forward,       ///< only the tag as written is informative
+    Reverse,       ///< only the reversed tag is informative
+    Intersection,  ///< both are informative and share taxa: the shared taxa
+    Ambiguous      ///< both are informative with no common taxon: skipped
+  };
+
+  /// Combine the taxon support of a tag as written (@p fwd) and reversed
+  /// (@p rev); an empty vector is an orientation that is not informative.
+  /// Both inputs are ascending (as tagSupport() returns them). One
+  /// informative orientation is used as it is; two are intersected; two
+  /// without a common taxon make the tag orientation-ambiguous, and it
+  /// supports nothing. The union is never taken: it would let a tag count
+  /// for the chance hits of both readings. Swapping @p fwd and @p rev gives
+  /// the same @p out (with Forward and Reverse swapped).
+  inline OrientationOutcome combineOrientations(const std::vector<uint32_t>& fwd,
+                                                const std::vector<uint32_t>& rev,
+                                                std::vector<uint32_t>& out)
+  {
+    out.clear();
+    if (fwd.empty() && rev.empty()) return OrientationOutcome::None;
+    if (rev.empty()) { out = fwd; return OrientationOutcome::Forward; }
+    if (fwd.empty()) { out = rev; return OrientationOutcome::Reverse; }
+    std::set_intersection(fwd.begin(), fwd.end(), rev.begin(), rev.end(), std::back_inserter(out));
+    return out.empty() ? OrientationOutcome::Ambiguous : OrientationOutcome::Intersection;
   }
 }

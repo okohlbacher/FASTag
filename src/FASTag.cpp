@@ -870,6 +870,18 @@ protected:
                           "Benjamini-Hochberg; 0 estimates it from the run (Storey)", false, true);
     setMinFloat_("species_pi0", 0.0);
     setMaxFloat_("species_pi0", 1.0);
+    // #10 species lookup in both tag orientations (SpeciesEvidence.h
+    // combineOrientations). Forward by default: the report is 1.11's. Not
+    // coupled to -orientation (default both), which would change it.
+    registerStringOption_("species_orientation", "<mode>", "forward",
+                          "Which readings of a tag -species looks up: 'forward' = as written; 'both' = "
+                          "also reversed (a tag read from b ions is written reversed), using the one "
+                          "informative reading, or the taxa both share; a tag whose two readings share "
+                          "none is skipped. Independent of -orientation, which applies to -fasta and "
+                          "-recon_fasta only. Under 'both' the analytic log_pvalue and qvalue columns are NA "
+                          "(no analytic background follows); only decoy_qvalue and call from "
+                          "-species_call decoy are calibrated", false, true);
+    setValidStrings_("species_orientation", ListUtils::create<std::string>("forward,both"));
     // ---- 1.12 F: options ----
     // #11 phase A: the per-spectrum census. Opt-in; every other output is
     // the same with or without it (src/Census.h).
@@ -1176,6 +1188,10 @@ protected:
         || (!getStringOption_("taxdb").empty() && !getStringOption_("species_out").empty());
     // 1.12 #1: the calibrated call runs only with species detection.
     const bool species_call_on = want_species && getStringOption_("species_call") == "decoy";
+    // 1.12 #10: both tag orientations in the species lookup.
+    const FASTag::SpeciesOrientation species_orient = getStringOption_("species_orientation") == "both"
+        ? FASTag::SpeciesOrientation::Both : FASTag::SpeciesOrientation::Forward;
+    const bool species_both = want_species && species_orient == FASTag::SpeciesOrientation::Both;
 
     // The seed lengths this run tags at, ascending and distinct: -tag_lengths
     // when given, else the one -tag_length.
@@ -1293,6 +1309,7 @@ protected:
           {"search_config_out", nullptr},
           // ---- 1.12 D: -stream refusals ----
           {"species_call", "-stream cannot be combined with -species_call."},
+          {"species_orientation", nullptr},
           // ---- 1.12 F: -stream refusals ----
           {"census", nullptr},
           {"census_out", nullptr},
@@ -1383,6 +1400,16 @@ protected:
                         << " decoy replicates; this run uses -species_call_decoys "
                         << getIntOption_("species_call_decoys") << "." << std::endl;
     }
+    // 1.12 #10: no analytic background follows from the orientation rule, so
+    // the analytic log_pvalue and qvalue (forward index background) are
+    // withheld under both, with or without -species_call decoy; only the
+    // decoy null (decoy_qvalue, call) is calibrated.
+    if (species_both)
+      OPENMS_LOG_WARN << "-species_orientation both: the analytic log_pvalue and qvalue columns of the species "
+                         "report are NA under both; "
+                      << (species_call_on ? "use decoy_qvalue and call from -species_call decoy."
+                                          : "use decoy_qvalue from -species_call decoy.")
+                      << std::endl;
     const std::string fasta = getStringOption_("fasta");
     const std::string out_spectra = getStringOption_("out_spectra");
 
@@ -1871,6 +1898,7 @@ protected:
           {"species_call_min_units", "-species_call decoy", species_call_on},
           {"species_call_decoys", "-species_call decoy", species_call_on},
           {"species_pi0", "-species_call decoy", species_call_on},
+          {"species_orientation", "-species", want_species},
           // ---- 1.12 F: ignored-option warnings ----
           {"census_out", "-census", getFlag_("census")},
           {"census_summary_out", "-census", getFlag_("census")},
@@ -4629,6 +4657,10 @@ protected:
       std::map<uint32_t, uint64_t> decoy_hits;  // per NODE, summed over the D replicates
       uint64_t n_trials = 0, n_decoy_less = 0;
       FASTag::TagLookupCounters decoy_counters;
+      // 1.12 #10: the reversed lookups count on their own, so the forward
+      // counters (and the log line) are a forward run's.
+      FASTag::TagLookupCounters rev_counters, decoy_rev_counters;
+      FASTag::OrientationCounts orient_counts;
       std::vector<std::vector<FASTag::TagSupport>> decoy_support(static_cast<size_t>(n_decoys));
       for (const auto& sp : by_spec)
       {
@@ -4648,15 +4680,21 @@ protected:
             const std::string dseq = FASTag::decoyTag(seq, static_cast<uint32_t>(j));
             if (dseq.empty()) { decoy_less = true; continue; }
             FASTag::TagSupport dts;
-            if (!FASTag::tagSupport(idx, dseq, index_k, share_cap, min_margin, dts.taxa, decoy_counters)) continue;
+            // Under both orientations the decoy takes the target's rule.
+            if (!FASTag::orientedTagSupport(idx, dseq, index_k, share_cap, min_margin, species_orient, dts.taxa,
+                                            decoy_counters, decoy_rev_counters, nullptr))
+              continue;
             dts.evalue = row.second;
             decoy_support[static_cast<size_t>(j)].push_back(std::move(dts));
           }
           if (decoy_less) ++n_decoy_less;
-          // The per-tag rule (share skip, whole-tag rule, margin) lives in
-          // SpeciesLookup.h.
+          // The per-tag rule (share skip, whole-tag rule, margin, and under
+          // -species_orientation both the orientation rule) lives in
+          // SpeciesLookup.h. Forward is tagSupport() exactly.
           FASTag::TagSupport ts;
-          if (!FASTag::tagSupport(idx, seq, index_k, share_cap, min_margin, ts.taxa, lookup_counters)) continue;
+          if (!FASTag::orientedTagSupport(idx, seq, index_k, share_cap, min_margin, species_orient, ts.taxa,
+                                          lookup_counters, rev_counters, &orient_counts))
+            continue;
           ts.evalue = row.second;
           support.push_back(std::move(ts));
         }
@@ -4859,9 +4897,15 @@ protected:
         auto ait = adjusted.find(c.taxid);
         const double adj = ait == adjusted.end() ? 0.0 : ait->second;
         char num[128];
-        std::snprintf(num, sizeof num, "\t%llu\t%.1f\t%.1f\t%g\t%g",
-                      static_cast<unsigned long long>(c.observed), adj, c.expected,
-                      c.log_pvalue, c.qvalue);
+        if (species_both)
+          // 1.12 #10: uncalibrated under both orientations, also with
+          // -species_call decoy (see the warning); decoy_qvalue is calibrated.
+          std::snprintf(num, sizeof num, "\t%llu\t%.1f\t%.1f\tNA\tNA",
+                        static_cast<unsigned long long>(c.observed), adj, c.expected);
+        else
+          std::snprintf(num, sizeof num, "\t%llu\t%.1f\t%.1f\t%g\t%g",
+                        static_cast<unsigned long long>(c.observed), adj, c.expected,
+                        c.log_pvalue, c.qvalue);
         so << clean(c.rank) << '\t' << c.taxid << '\t' << clean(c.name) << num;
         if (species_call_on)
         {
@@ -4906,6 +4950,15 @@ protected:
         OPENMS_LOG_INFO << " (" << lookup_counters.kmer_skipped << " k-mers too widely shared, "
                         << lookup_counters.tag_generic << " tags too generic)";
       OPENMS_LOG_INFO << "; top " << want_rank << " calls -> " << species_out << std::endl;
+      if (species_both)
+      {
+        // 1.12 #10: on stderr only, like every new 1.12 INFO line.
+        std::cerr << "Species orientation (both): informative tags " << orient_counts.forward
+                  << " forward only, " << orient_counts.reverse << " reverse only, "
+                  << orient_counts.intersection << " both (shared taxa), " << orient_counts.palindrome
+                  << " palindromes; " << orient_counts.ambiguous
+                  << " orientation-ambiguous tags skipped" << std::endl;
+      }
       if (species_call_on)
       {
         OPENMS_LOG_INFO << "Species call (-species_call decoy): " << n_call[0] << " present, " << n_call[1]
