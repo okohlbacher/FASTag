@@ -1,0 +1,2 @@
+Modifications: Carbamidomethyl (C, fixed)
+-dump_spectrum: no spectrum of '/scratch/kohlbach/fastag112-g1/src6/test/fixtures/Ecoli_MS2_small.mzML' has the native ID 'scan=does-not-exist'.

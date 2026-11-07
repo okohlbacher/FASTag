@@ -101,6 +101,11 @@ pub struct ViewSpec {
     pub sort: Option<SortSpec>,
     /// Case-insensitive substring on the `spectrum` column.
     pub spectrum: Option<String>,
+    /// With `spectrum`: the cell must equal it exactly (case-sensitive),
+    /// instead of containing it. The Spectrum tab asks for one spectrum's
+    /// tags this way: 'scan=1' as a substring also matches scan=10..19,
+    /// 100..199 and so on.
+    pub spectrum_exact: bool,
     /// Minimum value of the `length` column.
     pub min_length: Option<u32>,
     /// Maximum value of the `evalue` column (unparsable values never match).
@@ -794,10 +799,13 @@ pub(crate) fn build_typed(path: &str, index: &Index, cancel: &Cancel) -> Result<
 }
 
 /// Which dictionary entries contain @p needle (lowercase), case-insensitive
-/// as `str::to_lowercase().contains`; matched once per distinct spectrum.
-fn spec_matches(dict: &[Box<str>], needle: &str) -> Vec<bool> {
+/// as `str::to_lowercase().contains`, or with @p exact equal it; matched
+/// once per distinct spectrum.
+fn spec_matches(dict: &[Box<str>], needle: &str, exact: bool) -> Vec<bool> {
     let one = |s: &str| -> bool {
-        if s.is_ascii() {
+        if exact {
+            s == needle
+        } else if s.is_ascii() {
             let (h, nd) = (s.as_bytes(), needle.as_bytes());
             nd.len() <= h.len() && h.windows(nd.len()).any(|w| w.iter().zip(nd).all(|(a, b)| a.to_ascii_lowercase() == *b))
         } else {
@@ -818,7 +826,7 @@ fn spec_matches(dict: &[Box<str>], needle: &str) -> Vec<bool> {
 /// over the typed columns; parallel over whole words.
 /// @p ev: the rows passing the max-E-value cutoff (evalue_bits).
 fn keep_bits(t: &Typed, res: &Resolved, n: usize, ev: Option<&[u64]>) -> Vec<u64> {
-    let spec_ok = res.spectrum.as_ref().map(|(_, needle)| spec_matches(&t.dict, needle));
+    let spec_ok = res.spectrum.as_ref().map(|(_, needle, exact)| spec_matches(&t.dict, needle, *exact));
     let pass = |i: usize| -> bool {
         if let Some(ok) = &spec_ok {
             if !ok[t.spec_id[i] as usize] {
@@ -1584,7 +1592,8 @@ fn row_span(index: &Index, i: usize) -> (u64, usize) {
 /// column that does not exist deactivates that predicate.
 struct Resolved {
     sort: Option<(usize, bool)>,
-    spectrum: Option<(usize, String)>,
+    /// (column, needle, exact): the needle is lowercase unless exact.
+    spectrum: Option<(usize, String, bool)>,
     min_length: Option<(usize, u32)>,
     max_evalue: Option<(usize, f64)>,
     fasta_hit: Option<(usize, HitFilter)>,
@@ -1623,7 +1632,7 @@ impl Resolved {
                 .spectrum
                 .as_ref()
                 .filter(|s| !s.is_empty())
-                .and_then(|s| col("spectrum").map(|i| (i, s.to_lowercase()))),
+                .and_then(|s| col("spectrum").map(|i| if spec.spectrum_exact { (i, s.clone(), true) } else { (i, s.to_lowercase(), false) })),
             min_length: col("length").zip(spec.min_length),
             max_evalue: col("evalue").zip(spec.max_evalue),
             fasta_hit: match spec.fasta_hit.as_deref() {
@@ -1654,8 +1663,8 @@ impl Resolved {
     /// The row filters (all but per-spectrum, which is not row-local).
     fn matches(&self, fields: &[String]) -> bool {
         let get = |i: usize| fields.get(i).map(String::as_str).unwrap_or("");
-        if let Some((i, needle)) = &self.spectrum {
-            if !get(*i).to_lowercase().contains(needle.as_str()) {
+        if let Some((i, needle, exact)) = &self.spectrum {
+            if if *exact { get(*i) != needle.as_str() } else { !get(*i).to_lowercase().contains(needle.as_str()) } {
                 return false;
             }
         }
@@ -3516,6 +3525,44 @@ mod tests {
     }
 
     #[test]
+    fn the_exact_spectrum_filter_is_one_spectrum_not_a_substring() {
+        // 'scan=5' is a substring of scan=50..59 and scan=500..599: 3 tags
+        // of scan=5 behind 1,100 better tags of the others.
+        assert_eq!(
+            spec_matches(&["scan=5".into(), "scan=50".into(), "SCAN=5".into(), "x scan=5".into()], "scan=5", true),
+            [true, false, false, false]
+        );
+        let mut t = String::from("spectrum\ttag\tevalue\n");
+        for k in (50..60).chain(500..600) {
+            for j in 0..10 {
+                t.push_str(&format!("controllerType=0 controllerNumber=1 scan={k}\tAAA\t0.000{j}\n"));
+            }
+        }
+        for j in 0..3 {
+            t.push_str(&format!("controllerType=0 controllerNumber=1 scan=5\tKK{j}\t9.{j}\n"));
+        }
+        let p = write_fixture("exact.tsv", &t);
+        let id = "controllerType=0 controllerNumber=1 scan=5";
+        let sub = q(&p, &ViewSpec { spectrum: Some(id.into()), sort: Some(SortSpec { column: "evalue".into(), desc: false }), ..Default::default() }, 0, 5000).unwrap();
+        assert_eq!(sub.matched_rows, 1103);
+        assert_eq!(sub.rows.len(), MAX_WINDOW, "a page is capped");
+        assert!(sub.rows.iter().all(|r| r[0] != id), "the substring's best page holds none of scan=5");
+        let exact = ViewSpec { spectrum: Some(id.into()), spectrum_exact: true, sort: Some(SortSpec { column: "evalue".into(), desc: false }), ..Default::default() };
+        let r = q(&p, &exact, 0, 5000).unwrap();
+        assert_eq!(r.matched_rows, 3);
+        assert_eq!((0..3).map(|i| col(&r, i, "tag")).collect::<Vec<_>>(), ["KK0", "KK1", "KK2"]);
+        // Case-sensitive, and the per-spectrum rule keeps the best of it.
+        assert_eq!(q(&p, &ViewSpec { spectrum: Some(id.to_uppercase()), ..exact.clone() }, 0, 10).unwrap().matched_rows, 0);
+        let best = q(&p, &ViewSpec { per_spectrum: Some(1), sort: None, ..exact.clone() }, 0, 10).unwrap();
+        assert_eq!((best.matched_rows, col(&best, 0, "tag")), (1, "KK0".to_string()));
+        // The chunk-scan fallback (beyond the typed budget) agrees.
+        let scan = Arc::new(Shared::default());
+        scan.typed_max_rows.store(0, Ordering::SeqCst);
+        assert_eq!(query(&scan, &p, &exact, 0, 10).unwrap().matched_rows, 3);
+        std::fs::remove_file(&p).ok();
+    }
+
+    #[test]
     fn a_directory_is_refused_not_read() {
         // Only regular files; a FIFO or device would block the reader.
         let d = std::env::temp_dir();
@@ -3551,6 +3598,7 @@ mod tests {
                 spectrum: Some("zz".into()),
                 sort: Some(SortSpec { column: "evalue".into(), desc: false }),
                 per_spectrum: Some(1),
+                spectrum_exact: false,
             },
             0,
             100,

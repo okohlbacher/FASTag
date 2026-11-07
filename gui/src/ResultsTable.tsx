@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type JSX, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import { SPECTRUM_NEEDS } from './spectrum/support'
 import type { BrowserEvent, ResultsHead, ResultsPage, ResultsSort, ResultsView } from './types'
 import { baseName, DECIMAL } from './digestReport'
 import { HelpButton, HelpLink } from './help/HelpLink'
@@ -280,9 +281,13 @@ interface Props {
   /// with -res_conf on. Given only when this file is the output of the run
   /// the form would repeat; disabled while busy.
   rerunResConf?: { run(): void; disabled: boolean } | null
+  /// P4: the row action Open in Spectrum (and Enter on the active row).
+  /// state 'no': the CLI has no -dump_spectrum, and the action says so;
+  /// 'checking': the CLI is still being asked.
+  spectrum?: { state: 'yes' | 'no' | 'checking'; open(spectrum: string, rowId: number | null): void } | null
 }
 
-export default function ResultsTable({ path, source, rerunResConf }: Props): JSX.Element {
+export default function ResultsTable({ path, source, rerunResConf, spectrum }: Props): JSX.Element {
   const [meta, setMeta] = useState<Meta | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Best tags first, as the CLI ranks them. A file without an evalue column
@@ -855,9 +860,32 @@ export default function ResultsTable({ path, source, rerunResConf }: Props): JSX
     void copy(usi, 'USI')
   }
 
+  // The active row's spectrum in the Spectrum tab (P4).
+  const spectrumCol = columns.indexOf('spectrum')
+  const openSpectrum = (): void => {
+    const pos = currentPos()
+    if (pos == null || !spectrum) return
+    if (spectrum.state !== 'yes') {
+      setCopyNote(spectrum.state === 'no' ? `${SPECTRUM_NEEDS}.` : 'Still asking FASTag whether it can show spectra.')
+      return
+    }
+    const { row, id } = rowAt(pos)
+    const sp = row?.[spectrumCol]
+    if (sp == null || sp === '') {
+      setCopyNote('This row names no spectrum.')
+      return
+    }
+    spectrum.open(sp, id ?? null)
+  }
+
   const onTableKey = (e: KeyboardEvent<HTMLDivElement>): void => {
     // The header's sort buttons and resize handles keep their own keys.
     if ((e.target as HTMLElement).closest('.rt-head')) return
+    if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && spectrum && currentPos() != null) {
+      e.preventDefault()
+      openSpectrum()
+      return
+    }
     const mod = e.metaKey || e.ctrlKey
     if (mod && (e.key === 'c' || e.key === 'C')) {
       // A text selection is copied as text, as everywhere.
@@ -1008,6 +1036,23 @@ export default function ResultsTable({ path, source, rerunResConf }: Props): JSX
         >
           Copy USI
         </button>
+        {spectrum && (
+          <button
+            type="button"
+            className="secondary"
+            disabled={spectrum.state !== 'yes' || currentPos() == null || spectrumCol < 0}
+            title={
+              spectrum.state === 'no'
+                ? `${SPECTRUM_NEEDS}: this FASTag has no -dump_spectrum`
+                : spectrum.state === 'checking'
+                  ? 'Asking FASTag whether it can show spectra…'
+                  : "The active row's spectrum, with FASTag's processed peaks and the tag's ladder (Enter)"
+            }
+            onClick={openSpectrum}
+          >
+            {spectrum.state === 'no' ? SPECTRUM_NEEDS : 'Open in Spectrum'}
+          </button>
+        )}
         <span className="rt-exp">
           <label htmlFor={`${id}-fmt`}>Export as</label>
           <select

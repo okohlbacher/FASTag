@@ -1076,3 +1076,34 @@ kbd { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--mut
 .rt-copied { font-size: var(--text-xs); color: var(--muted-foreground); }
 .rt-reads { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-2) var(--space-4); padding: 0 var(--space-5) var(--space-2); }
 .rt-reads p { flex: 1 1 320px; margin: 0; font-size: var(--text-xs); max-width: 70ch; }
+
+/* The Spectrum tab (P4, GUI-DESIGN S5): FASTag's processed peaks as a stick
+   plot, the tag's ladder on them, the tags of the spectrum. */
+.banner.error { background: var(--destructive-bg); color: var(--destructive-text); font-size: var(--text-sm); }
+.warn-text { color: var(--flag-text); }
+.sp { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4) var(--space-5); min-width: 0; }
+.sp .banner { margin: 0; }
+.sp-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-3); }
+.sp-head h2 { margin: 0; font-size: var(--text-md); overflow-wrap: anywhere; }
+.sp-head .spacer { flex: 1; }
+.sp-caveat { margin: 0; }
+.sp-plot { display: flex; flex-direction: column; gap: var(--space-2); }
+.sp-plot-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.sp-svg { width: 100%; height: 260px; background: var(--plot-background); border: 1px solid var(--border); border-radius: var(--radius-md); touch-action: none; cursor: grab; }
+.sp-svg:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.sp-axis { stroke: var(--plot-grid); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.sp-tick { fill: var(--plot-muted); font-size: 11px; }
+.sp-peak { stroke: var(--brand-peaks); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.sp-peak.on { stroke: var(--plot-accent); stroke-width: 2.5; }
+.sp-missing { stroke: var(--plot-flag); stroke-width: 1.5; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+.sp-step { stroke: var(--plot-accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.sp-res-label { fill: var(--plot-foreground); font: 600 12px var(--font-seq); }
+.sp-ladder p { margin: 0 0 var(--space-1); }
+.sp-steps { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); margin: 0; padding: 0; list-style: none; font-size: var(--text-xs); }
+.sp-steps li.off .mono { color: var(--flag-text); }
+.sp-res { font: 600 var(--text-xs) var(--font-seq); color: var(--primary-text); }
+.sp-tags h3 { margin: 0 0 var(--space-2); font-size: var(--text-sm); font-weight: 600; }
+.sp-tags-wrap { max-height: 320px; overflow: auto; }
+.sp-tags-table tbody tr { cursor: pointer; }
+.sp-tags-table tbody tr.on td { background: var(--primary-soft); }
+.sp-tags-table tbody tr:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }

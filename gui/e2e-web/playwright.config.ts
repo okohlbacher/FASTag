@@ -9,7 +9,10 @@ import { defineConfig, devices } from '@playwright/test'
 import { fileURLToPath } from 'node:url'
 
 const gui = fileURLToPath(new URL('..', import.meta.url))
-const PORT = 4173
+// E2E_PORT: another port for the preview, when several worktrees run their
+// suites on one machine (a server already on the port is reused locally,
+// and it may serve another worktree's build).
+const PORT = Number(process.env.E2E_PORT || 4173)
 
 export default defineConfig({
   testDir: './specs',
