@@ -63,9 +63,18 @@ mkdir -p "$TMP/prot"
 mutate 12 0.05 < "$TMP/prot/562.fasta" > "$TMP/prot/28901.fasta"
 gen 13 2000 300 > "$TMP/prot/1280.fasta"
 gen 14 6000 300 > "$TMP/prot/4932.fasta"
+# A taxon that makes both readings informative: prsA as written and reversed
+# (its tags: both readings share this taxon -> intersection) and the second
+# fixture protein reversed only (its tags: Escherichia as written, this taxon
+# reversed -> orientation-ambiguous, skipped).
+awk '/^>/ { if (s != "") print s; print; s = ""; next } { s = s $0 } END { if (s != "") print s }' "$DB" \
+  | awk 'function rev(x,  r, i) { r = ""; for (i = length(x); i > 0; --i) r = r substr(x, i, 1); return r }
+         /^>/ { ++n; next }
+         n == 1 { print ">both_fwd"; print; print ">both_rev"; print rev($0) }
+         n == 2 { print ">amb_rev"; print rev($0) }' > "$TMP/prot/1313.fasta"
 "$BUILDTAXDB" "$TMP/prot" "$TMP/toy.taxdb" 7 > "$TMP/buildtaxdb.log" 2>&1 \
   || { cat "$TMP/buildtaxdb.log" >&2; fail "buildtaxdb"; }
-GENUS="562:561,28901:590,1280:1279,4932:4930"
+GENUS="562:561,28901:590,1280:1279,4932:4930,1313:1301"
 
 TAX=(-taxdb "$TMP/toy.taxdb" -taxonomy_nodes "$TAXDIR/nodes.dmp" -taxonomy_names "$TAXDIR/names.dmp")
 COMMON=(-in "$IN" -tag_length 7 -extension 1 -fragment_tolerance 600 -fragment_tolerance_unit ppm
@@ -146,6 +155,12 @@ check_counts all "$TMP/absent.tsv" "$TMP/absent.species.tsv" "$B"
 [ "$n_rows" -ge 5 ] || fail "only $n_rows report rows compared with the recount (test is vacuous)"
 gain_of() { awk -F'\t' -v g="$2" '$1 == g { print $3 }' "$1"; }
 [ "$(gain_of "$TMP/all.recount" 561)" -gt 0 ] || fail "Escherichia gains nothing (test is vacuous)"
+# Both readings informative: the run has intersection and ambiguous tags,
+# and the ambiguity costs Escherichia spectra (counts can fall).
+read -r _ _ _ n_int _ n_amb < <(grep '^tags' "$TMP/all.recount")
+[ "$n_int" -gt 0 ] && [ "$n_amb" -gt 0 ] || fail "no intersection ($n_int) or ambiguous ($n_amb) tags (test is vacuous)"
+loss_of() { awk -F'\t' -v g="$2" '$1 == g { print $4 }' "$1"; }
+[ "$(loss_of "$TMP/all.recount" 561)" -gt 0 ] || fail "Escherichia loses nothing to ambiguity (test is vacuous)"
 # At the default -max_evalue and -max_tags the genera absent from the sample
 # gain at most 2 spectra from the reversed readings, and the both count is
 # at most forward + that predicted gain.
@@ -181,7 +196,7 @@ run dec "${COMMON[@]}" -species "${TAX[@]}" -species_orientation both -species_c
 [ "$(fields "$TMP/dec.species.tsv")" = 15 ] || fail "both with decoy: not 15 fields"
 awk -F'\t' 'NR > 1 && $8 == "NA" { exit 1 }' "$TMP/dec.species.tsv" || fail "both with decoy: qvalue NA"
 ! grep -q "qvalue column of the species report is NA" "$TMP/dec.log" || fail "NA warning under decoy"
-for g in 561 590 1279 4930; do
+for g in 561 590 1279 4930 1301; do
   [ "$(obs "$TMP/dec.species.tsv" "$g")" = "$(obs "$B" "$g")" ] || fail "decoy changed the observed count of $g"
 done
 # The decoy null follows the orientation rule: decoy_spectra (column 11) of
