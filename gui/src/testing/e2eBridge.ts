@@ -21,6 +21,10 @@
 //               E-value is served in file order (ranked: false), as
 //               browser.rs does
 //
+// Every scenario records each run that ends in the mock's run record, as
+// fastag.rs does: the History view lists it, and its argv is the command
+// line the run reply offered (e2eCommand, the argv build_args writes).
+//
 // window.__fastagE2E gives the specs the mock and a few controls.
 
 import { installMockBridge, type MockBridge } from './mockBridge'
@@ -87,9 +91,28 @@ export function rankOrder(cells: string[], desc: boolean): number[] {
   return [...nums, ...strs]
 }
 
+/// The argv fastag.rs build_args writes for @p params, binary first (the
+/// same rules for the values the e2e form sends): -in and -out, each switch
+/// that is on by its name, each value as its own element (a list item by
+/// item, a cleared list as ''), and -progress last.
+export function e2eCommand(bin: string, params: Record<string, unknown>, out: string): string[] {
+  const argv = [bin, '-in', String(params['in']), '-out', out]
+  const p = (params['params'] ?? {}) as Record<string, unknown>
+  for (const [name, v] of Object.entries(p)) {
+    if (v === true) argv.push(`-${name}`)
+    else if (Array.isArray(v)) {
+      const items = v.map(String).filter((x) => x.trim() !== '')
+      if (items.length) argv.push(`-${name}`, ...items)
+    } else if ((typeof v === 'string' && v.trim() !== '') || typeof v === 'number') argv.push(`-${name}`, String(v).trim())
+  }
+  argv.push('-progress')
+  return argv
+}
+
 export function installE2EBridge(): void {
   const fixture = new URLSearchParams(window.location.search).get('fixture') ?? 'default'
   const mock = installMockBridge()
+  mock.recordRuns = true
   mock.binaryInfo = { bin: '/e2e/FASTag', source: 'env', ok: true, version: '1.11.0', detail: 'e2e fixture: no CLI' }
   const tags = parseTsv(ecoliTags)
   mock.resultsColumns = tags.columns
@@ -237,6 +260,8 @@ export function installE2EBridge(): void {
   mock.run = async (params, onEvent): Promise<RunStarted> => {
     const started = await origRun(params, onEvent)
     if (!started.started) return started
+    // The reply's command, which the run record keeps (mockBridge recordRuns).
+    started.command = e2eCommand(mock.binaryInfo.bin, params, started.out ?? '')
     const id = mock.lastRunId
     const s = script(String(params['in']))
     const at = (ms: number, f: () => void): void => {

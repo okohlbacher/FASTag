@@ -201,11 +201,13 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   // Resolves with how it ended, every output the backend resolved for it
   // (none for a run that never started), its command line and how long it
   // ran. overwrite: the user confirmed overwriting its existing outputs.
+  // call: what `run` is sent, instead of the form's (a History Re-run).
   function runOne(
     inFile: string,
     outFile: string,
     overrides?: Record<string, ParamValue>,
-    overwrite = false
+    overwrite = false,
+    call?: Record<string, unknown>
   ): Promise<RunResult & { outputs?: ResolvedOutputs; ms: number }> {
     return new Promise((settle) => {
       const id = newJobId()
@@ -245,7 +247,8 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
       lastLine.current = null
       inHelp.current = false
       cancelled.current = false
-      const params = overwrite ? { ...runParams(inFile, outFile, overrides), overwrite: true } : runParams(inFile, outFile, overrides)
+      const sent = call ?? runParams(inFile, outFile, overrides)
+      const params = overwrite ? { ...sent, overwrite: true } : sent
       dispatch({ type: 'RUN_START', id, input: inFile, out: outFile, params, at, log, speciesOn })
       const job = runJob(window.fastag, params, id, onChange)
       currentJob.current = job
@@ -324,35 +327,61 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     pushLog(`Could not show the results: ${err instanceof Error ? err.message : String(err)}`)
 
   async function run(): Promise<void> {
-    if (!input || !out || checking.current) return
+    if (!input || !out) return
+    await single(input, out, runParams(input, out), () => window.fastag.saveLast(values), changedParams)
+  }
+
+  // A History Re-run (GUI-DESIGN 3 S9, 6.5): the recorded run of @p id
+  // again, with the parameters it was sent (history_rerun), not the form's,
+  // so its command line is the recorded one. Like Run: the overwrite
+  // question, then Results. False when it did not start.
+  async function rerun(id: string): Promise<boolean> {
+    if (running || batchRunning || checking.current) return false
+    const call = await window.fastag.historyRerun(id)
+    const inFile = typeof call.in === 'string' ? call.in : ''
+    const outFile = typeof call.out === 'string' ? call.out : ''
+    if (!inFile || !outFile) return false
+    return single(inFile, outFile, call)
+  }
+
+  // One run of @p call (input @p inFile, tags @p outFile): Run and Re-run.
+  async function single(
+    inFile: string,
+    outFile: string,
+    call: Record<string, unknown>,
+    beforeStart?: () => void,
+    changed?: string[]
+  ): Promise<boolean> {
+    if (checking.current) return false
     checking.current = true
     let existing: string[]
     try {
-      existing = await existingOutputs([runParams(input, out)])
+      existing = await existingOutputs([call])
     } finally {
       checking.current = false
     }
     const overwrite = existing.length > 0
-    if (overwrite && !(await askOverwrite(existing))) return
-    window.fastag.saveLast(values)
+    if (overwrite && !(await askOverwrite(existing))) return false
+    beforeStart?.()
     view.setLogJob(null)
     hooks.onStart?.()
-    const r = await runOne(input, out, undefined, overwrite)
+    const r = await runOne(inFile, outFile, undefined, overwrite, call)
     dispatch({
       type: 'LAST_RUN',
       lastRun: {
-        input,
+        input: inFile,
         ok: r.ok,
         cancelled: isCancelled(r),
         at: Date.now(),
         ms: r.ms,
-        changed: changedParams,
+        ...(changed ? { changed } : {}),
         cleaned: r.cleanup?.removed.length ?? 0,
         out: r.outputs?.out ?? undefined
       }
     })
-    if (r.ok) await showResults(input, r.outputs ?? noOutputs).catch(logResultsError)
-    else if (!isCancelled(r)) failed(r, baseName(input))
+    if (r.ok) await showResults(inFile, r.outputs ?? noOutputs).catch(logResultsError)
+    else if (!isCancelled(r)) failed(r, baseName(inFile))
+    return true
   }
 
   async function runBatch(only?: BatchJob['status']): Promise<void> {
@@ -582,6 +611,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     overwriteAsk: state.overwriteAsk,
     setOverwriteAsk,
     run,
+    rerun,
     runBatch,
     cancelRun,
     cancelForQuit,
