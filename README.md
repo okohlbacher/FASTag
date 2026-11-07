@@ -152,13 +152,13 @@ connection — a plain tarball cannot carry a notarization ticket.
 **Linux desktop app: glibc 2.35 and WebKitGTK 4.1 or later** — Ubuntu 22.04,
 Debian 12 or newer. The `.deb` pulls in `libwebkit2gtk-4.1-0` and `libgtk-3-0`
 (`sudo apt install ./FASTag-gui-linux-x64.deb`); the tarball needs them
-installed and runs as `FASTag-gui/bin/fastag`. Rocky/RHEL 9 ships only the
-older WebKitGTK API 4.0 (`webkit2gtk3`, in no repository up to EPEL), so there
-only the best-effort `FASTag-gui-linux-x64.AppImage` runs: it carries its own
-WebKitGTK 4.1, takes GTK 3 and EGL from the desktop, and needs FUSE 2
-(`libfuse2`, or `libfuse2t64` on Ubuntu 24.04) or `APPIMAGE_EXTRACT_AND_RUN=1`.
-The command line keeps the older floor of glibc 2.28, so on Rocky/RHEL 8 and
-other older systems use the CLI tarball.
+installed and runs as `FASTag-gui/bin/fastag`. A best-effort
+`FASTag-gui-linux-x64.AppImage` carries its own WebKitGTK 4.1, takes GTK 3,
+EGL and GL from the desktop, and needs FUSE 2 (`libfuse2`, or `libfuse2t64`
+on Ubuntu 24.04) or `APPIMAGE_EXTRACT_AND_RUN=1`. Rocky/RHEL 9 is below the
+floor (glibc 2.34, and only WebKitGTK API 4.0), so the desktop app does not run
+there yet. The command line keeps the older floor of glibc 2.28: on Rocky/RHEL
+8 and 9 and other older systems use the CLI tarball.
 
 **Windows builds are not yet code-signed** — the signing path is wired up but
 the SignPath project is not live — so SmartScreen will warn on first run.
@@ -196,8 +196,7 @@ cd gui && npm install && npm run tauri dev     # or: npm run tauri build
 Installable bundles ship with every release: signed, notarized and stapled disk
 images for macOS (also on Homebrew, above), an installer for Windows, which
 is not yet code-signed (see above), and from 1.13.0 a `.deb` and a tarball for
-Linux x64 (glibc ≥ 2.35, WebKitGTK 4.1: Ubuntu 22.04, Debian 12; an AppImage
-for Rocky/RHEL 9) — see the install table at the top. Details in [gui/README.md](gui/README.md).
+Linux x64 (glibc ≥ 2.35, WebKitGTK 4.1: Ubuntu 22.04, Debian 12) — see the install table at the top. Details in [gui/README.md](gui/README.md).
 
 ## Usage
 

@@ -194,10 +194,10 @@ with the portable linux-x64 CLI staged into `src-tauri/resources/fastag`:
 `FASTag-gui-linux-x64.deb`, `FASTag-gui-linux-x64.tar.gz` (the `.deb`'s
 `/usr` tree, relocatable) and a best-effort `FASTag-gui-linux-x64.AppImage`.
 The supported floor is glibc 2.35 and WebKitGTK 4.1 (Ubuntu 22.04, Debian 12).
-Rocky/RHEL 9 has only WebKitGTK API 4.0 (`webkit2gtk3`; the Rocky 9 smoke job
-records what its repositories provide), so there only the AppImage, which
-bundles WebKitGTK 4.1, runs. Before anything is attached to a release, the `.deb` is
+Rocky/RHEL 9 is below it: glibc 2.34 and only WebKitGTK API 4.0
+(`webkit2gtk3`); the Rocky 9 smoke job records both and is informational
+until decision Q13 is revisited. Before anything is attached to a release, the `.deb` is
 installed and run on ubuntu-22.04 and 24.04 and the AppImage launched on
-both and in a Rocky 9 container; a `gui_dry_run` dispatch runs the same
+both (and tried in a Rocky 9 container); a `gui_dry_run` dispatch runs the same
 jobs without a tag and leaves the bundles as the `FASTag-gui-linux-x64`
 artifact.
