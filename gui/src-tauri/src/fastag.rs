@@ -1733,6 +1733,44 @@ mod tests {
             let _ = std::fs::remove_dir_all(&d);
         }
 
+        // Review of PR h (GUI-DESIGN 3 S9, 6.5 history_rerun): a Re-run
+        // starts the recorded run again through launch, so its record keeps
+        // the same argv; over the outputs the first run left it needs the
+        // overwrite confirmation like any run.
+        #[test]
+        fn a_rerun_starts_the_recorded_command_line() {
+            let d = dir("hist-rerun");
+            let params = r#"{"in":"$IN","out":"a.tags.tsv","params":{"species":true,"digest_out":"a.digest.tsv","tag_length":"4"}}"#;
+            let (_mgr, started, wire) = launch_stub(&d, params, "");
+            assert!(started.started, "{:?}", started.reason);
+            let first = record_after(&d, &wire);
+            assert_eq!(first.status, history::Status::Ok);
+            let again = history::rerun_params(&first).expect("the record keeps its parameters");
+            let r = Resolved { bin: PathBuf::from(STUB), data: None, taxonomy: None, source: "env" };
+            let mgr = Arc::new(RunManager::default());
+            // Not over the existing outputs without the confirmation.
+            let (sink, _w) = channel();
+            let refused = launch(&mgr, &r, serde_json::from_value(again.clone()).unwrap(), sink, Some(d.join("appdata")));
+            assert!(!refused.started);
+            let mut confirmed = again.clone();
+            confirmed["overwrite"] = Value::Bool(true);
+            let (sink, wire) = channel();
+            let started2 = launch(&mgr, &r, serde_json::from_value(confirmed).unwrap(), sink, Some(d.join("appdata")));
+            assert!(started2.started, "{:?}", started2.reason);
+            let second = record_after(&d, &wire);
+            assert_ne!(second.id, first.id);
+            assert_eq!(second.status, history::Status::Ok);
+            assert_eq!(second.argv, first.argv);
+            assert_eq!(started2.command.as_ref(), Some(&first.argv));
+            assert_eq!(second.params, first.params);
+            assert_eq!(history::list(&d.join("appdata"), 10).len(), 2);
+            // A record of 1.13 keeps no parameters: no Re-run.
+            let mut old = first.clone();
+            old.params = None;
+            assert!(history::rerun_params(&old).is_none());
+            let _ = std::fs::remove_dir_all(&d);
+        }
+
         // A failed run is recorded failed (P0a), with its exit code and the
         // same command line, and its outputs are gone from their paths.
         #[test]

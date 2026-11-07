@@ -121,3 +121,56 @@ test('Settings into form puts a recorded run back into Setup, and Undo takes it 
   await goTo(page, 'Setup')
   await expect(page.locator('#out')).toHaveValue('/data/elsewhere.tags.tsv')
 })
+
+// Review of PR h (P0a): the record that alone marks a left-over tags file as
+// incomplete is not deleted, so the file never opens as complete.
+test('Delete record asks first, and keeps the record that marks a left-over tags file incomplete', async ({ page }) => {
+  await openApp(page, 'existing')
+  await goTo(page, 'History')
+  const row = historyRow(page, 'run01.mzML')
+  await expect(row).toContainText('Cancelled')
+  await row.getByRole('button', { name: 'Delete record' }).click()
+  const ask = row.getByRole('group', { name: 'Delete this record?' })
+  await expect(ask.getByRole('button', { name: 'Keep' })).toBeFocused()
+  await ask.getByRole('button', { name: 'Delete' }).click()
+  await expect(page.getByRole('status', { name: 'History' })).toContainText(
+    'The record was kept: it is what marks /data/run01.tags.tsv as incomplete'
+  )
+  await expect(row).toHaveCount(1)
+  await expect(row.getByRole('button', { name: 'Delete record' })).toBeFocused()
+  expect((await mockState<RunRecord[]>(page, 'history')).map((r) => r.id)).toEqual(['1762419600000-1'])
+  await goTo(page, 'Results')
+  await page.getByRole('button', { name: 'Open a tags TSV…' }).click()
+  await expect(page.locator('.tabpanel')).toContainText('The run that wrote /data/run01.tags.tsv was cancelled')
+})
+
+// Review of PR h (GUI-DESIGN 3 S9, 6.5): Re-run starts the recorded run
+// again with its own parameters; its record keeps the same command line,
+// and a deleted record hands keyboard focus to the row that takes its place.
+test('Re-run records the same command line; Delete record keeps focus in the list', async ({ page }) => {
+  await openApp(page)
+  await page.getByRole('button', { name: 'Choose file…' }).click()
+  await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+  await expect(page.locator('.last-run')).toContainText('run01.mzML')
+  // The form moves on; the Re-run does not use it.
+  await goTo(page, 'Setup')
+  await page.locator('#out').fill('/data/elsewhere.tags.tsv')
+  await goTo(page, 'History')
+  await historyRow(page, 'run01.mzML').getByRole('button', { name: 'Re-run' }).click()
+  await expect(page.locator('nav[aria-label="Views"] [aria-current="page"]')).toHaveAttribute('data-view', 'results')
+  await expect(page.locator('.last-run')).toContainText('run01.mzML')
+  await goTo(page, 'History')
+  await expect(historyRow(page, 'run01.mzML')).toHaveCount(2)
+  const recs = await mockState<RunRecord[]>(page, 'history')
+  expect(recs).toHaveLength(2)
+  expect(recs[0].argv).toEqual(recs[1].argv)
+  expect(recs[0].params).toEqual(recs[1].params)
+  expect(recs[0].argv).toContain('/data/run01.tags.tsv')
+  // Delete the newer record: focus moves to the remaining row.
+  const first = page.getByRole('table', { name: 'Run history' }).getByRole('row').nth(1)
+  await first.getByRole('button', { name: 'Delete record' }).click()
+  await first.getByRole('group', { name: 'Delete this record?' }).getByRole('button', { name: 'Delete' }).click()
+  await expect(page.getByRole('status', { name: 'History' })).toContainText('files were kept')
+  await expect(historyRow(page, 'run01.mzML')).toHaveCount(1)
+  await expect(historyRow(page, 'run01.mzML').getByRole('button').first()).toBeFocused()
+})

@@ -2,12 +2,15 @@
 // of PR h): one row per recorded run, newest first, from the backend's run
 // record (history.rs). Each row offers Copy command (the argv the record
 // keeps, which is the command line the run was started with), Settings into
-// form (with Undo) and Delete record (the record only, never its files); a
-// finished run also Open and Reveal. A run that did not finish is marked
-// incomplete and offers neither: its outputs were removed, and one its
-// cleanup could not remove opens as incomplete wherever it is opened.
+// form (with Undo), Re-run (the recorded run again, with the parameters it
+// was sent) and Delete record (the record only, never its files; asked
+// first, and refused by the backend for a record that alone marks a file
+// its run left behind as incomplete); a finished run also Open and Reveal.
+// A run that did not finish is marked incomplete and offers neither: its
+// outputs were removed, and one its cleanup could not remove opens as
+// incomplete wherever it is opened.
 
-import { useEffect, useState, type JSX } from 'react'
+import { useEffect, useRef, useState, type JSX } from 'react'
 import type { RunRecord } from '../types'
 import { baseName } from '../digestReport'
 import { duration, shellLine } from '../app/format'
@@ -50,6 +53,8 @@ export interface HistoryViewProps {
   // Put a recorded run's input, output and parameters into the form;
   // returns the Undo.
   onSettings(input: string, out: string, params: Record<string, unknown>): () => void
+  // Start the recorded run @p id again (useRun.rerun).
+  onRerun(id: string): Promise<unknown>
   onGoSetup(): void
 }
 
@@ -61,6 +66,15 @@ export default function HistoryView(p: HistoryViewProps): JSX.Element {
   const [copied, setCopied] = useState<{ id: string; ok: boolean } | null>(null)
   const [note, setNote] = useState<Note | null>(null)
   const [reread, setReread] = useState(0)
+  // The record whose Delete record asks for confirmation.
+  const [confirming, setConfirming] = useState<string | null>(null)
+  // Where keyboard focus goes once the list has re-rendered after a delete
+  // (WCAG 2.4.3): a row's first action or its Delete record, else (the list
+  // is empty) the heading.
+  const [focusTo, setFocusTo] = useState<{ id: string | null; what: 'first' | 'delete' } | null>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  const keepRef = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     if (!active) return
     let live = true
@@ -77,6 +91,18 @@ export default function HistoryView(p: HistoryViewProps): JSX.Element {
     }
   }, [active, version, reread])
 
+  useEffect(() => {
+    if (confirming) keepRef.current?.focus()
+  }, [confirming])
+
+  useEffect(() => {
+    if (!focusTo) return
+    const row = focusTo.id ? rootRef.current?.querySelector(`tr[data-id="${CSS.escape(focusTo.id)}"]`) : null
+    const target = row?.querySelector<HTMLElement>(focusTo.what === 'delete' ? '[data-action="delete"]' : 'button')
+    ;(target ?? headingRef.current)?.focus()
+    setFocusTo(null)
+  }, [focusTo, records])
+
   const fail = (e: unknown): void => setNote({ kind: 'error', text: e instanceof Error ? e.message : String(e) })
 
   function copy(r: RunRecord): void {
@@ -87,11 +113,30 @@ export default function HistoryView(p: HistoryViewProps): JSX.Element {
   }
 
   function remove(r: RunRecord): void {
-    window.fastag.historyDelete(r.id).then(() => {
-      setRecords((rs) => rs?.filter((x) => x.id !== r.id) ?? rs)
-      setNote({ kind: 'deleted', input: r.input })
-      setReread((n) => n + 1)
-    }, fail)
+    // The row that takes its place: the next one, else the one before.
+    const rs = records ?? []
+    const i = rs.findIndex((x) => x.id === r.id)
+    const next = rs[i + 1]?.id ?? rs[i - 1]?.id ?? null
+    window.fastag.historyDelete(r.id).then(
+      () => {
+        setConfirming(null)
+        setRecords((list) => list?.filter((x) => x.id !== r.id) ?? list)
+        setNote({ kind: 'deleted', input: r.input })
+        setFocusTo({ id: next, what: 'first' })
+        setReread((n) => n + 1)
+      },
+      (e: unknown) => {
+        // Kept (or the delete failed): the row stays, and so does focus.
+        setConfirming(null)
+        fail(e)
+        setFocusTo({ id: r.id, what: 'delete' })
+      }
+    )
+  }
+
+  function keep(id: string): void {
+    setConfirming(null)
+    setFocusTo({ id, what: 'delete' })
   }
 
   function settings(r: RunRecord, out: string): void {
@@ -100,8 +145,10 @@ export default function HistoryView(p: HistoryViewProps): JSX.Element {
   }
 
   return (
-    <div className="history">
-      <h2 id="history-h">History</h2>
+    <div className="history" ref={rootRef}>
+      <h2 id="history-h" ref={headingRef} tabIndex={-1}>
+        History
+      </h2>
       <div className="history-note" role="status" aria-label="History">
         {note?.kind === 'settings' && (
           <>
@@ -158,7 +205,7 @@ export default function HistoryView(p: HistoryViewProps): JSX.Element {
               const out = recordOut(r)
               const finished = r.status === 'ok'
               return (
-                <tr key={r.id}>
+                <tr key={r.id} data-id={r.id}>
                   <td>{new Date(r.start).toLocaleString()}</td>
                   <td title={r.input}>{baseName(r.input)}</td>
                   <td>
@@ -204,9 +251,40 @@ export default function HistoryView(p: HistoryViewProps): JSX.Element {
                         Settings into form
                       </button>
                     )}
-                    <button type="button" className="secondary small" onClick={() => remove(r)}>
-                      Delete record
-                    </button>
+                    {r.params && out && (
+                      <button
+                        type="button"
+                        className="secondary small"
+                        disabled={busy}
+                        onClick={() => void p.onRerun(r.id).catch(fail)}
+                      >
+                        Re-run
+                      </button>
+                    )}
+                    {confirming === r.id ? (
+                      <span
+                        className="hist-confirm"
+                        role="group"
+                        aria-label="Delete this record?"
+                        onKeyDown={(e) => {
+                          if (e.key !== 'Escape') return
+                          e.preventDefault()
+                          keep(r.id)
+                        }}
+                      >
+                        Delete this record? Its files stay.{' '}
+                        <button type="button" className="danger small" onClick={() => remove(r)}>
+                          Delete
+                        </button>{' '}
+                        <button type="button" className="secondary small" ref={keepRef} onClick={() => keep(r.id)}>
+                          Keep
+                        </button>
+                      </span>
+                    ) : (
+                      <button type="button" className="secondary small" data-action="delete" onClick={() => setConfirming(r.id)}>
+                        Delete record
+                      </button>
+                    )}
                     {copied?.id === r.id && !copied.ok && <span className="muted">The clipboard refused the command.</span>}
                   </td>
                 </tr>

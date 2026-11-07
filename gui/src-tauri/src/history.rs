@@ -180,17 +180,60 @@ pub fn list(dir: &Path, limit: usize) -> Vec<RunRecord> {
     text.lines().rev().filter_map(|l| serde_json::from_str(l).ok()).take(limit).collect()
 }
 
+/// What delete did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Deleted {
+    Yes,
+    /// No record has that id.
+    NotFound,
+    /// Kept: the record is the only mark that this file, still at its final
+    /// path, is incomplete (marks_incomplete).
+    Kept(PathBuf),
+}
+
+/// A file that only @p rec marks as incomplete: @p rec did not finish, the
+/// file is one of its outputs or one its cleanup could not remove, it is
+/// still on disk, and @p rec is the newest run that wrote it (the one
+/// of_output reads). Deleting that record would let the file open as
+/// complete (an older finished run of the same path, or none), so delete
+/// keeps it (P0a: a run that did not finish never opens as complete).
+fn marks_incomplete(text: &str, rec: &RunRecord) -> Option<PathBuf> {
+    if rec.status == Status::Ok {
+        return None;
+    }
+    let failed = crate::outputs::resolve(&rec.cleanup.failed, rec.cwd.as_deref().map(Path::new));
+    rec.output_paths().into_iter().chain(failed).find(|p| {
+        p.exists() && newest_of(text, p).is_some_and(|n| n.id == rec.id)
+    })
+}
+
+/// The reason delete gives for a record it keeps.
+pub fn kept_reason(p: &Path) -> String {
+    format!(
+        "The record was kept: it is what marks {} as incomplete (the run did not finish, and its cleanup could not remove the file). Delete or replace that file first.",
+        p.display()
+    )
+}
+
 /// Remove the record @p id from <dir>/history.jsonl; every other line stays
 /// byte for byte (also one this version cannot read). The run's files are
-/// not touched. False when no record has that id.
-pub fn delete(dir: &Path, id: &str) -> std::io::Result<bool> {
+/// not touched. A record that alone marks a file on disk as incomplete is
+/// kept (marks_incomplete).
+pub fn delete(dir: &Path, id: &str) -> std::io::Result<Deleted> {
     let _g = LOCK.lock().unwrap_or_else(|p| p.into_inner());
     let path = dir.join(HISTORY_FILE);
     let text = match std::fs::read_to_string(&path) {
         Ok(t) => t,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Deleted::NotFound),
         Err(e) => return Err(e),
     };
+    let target = text
+        .lines()
+        .filter_map(|l| serde_json::from_str::<RunRecord>(l).ok())
+        .find(|r| r.id == id);
+    if let Some(p) = target.as_ref().and_then(|r| marks_incomplete(&text, r)) {
+        return Ok(Deleted::Kept(p));
+    }
     let mut found = false;
     let mut kept = String::with_capacity(text.len());
     for l in text.split_inclusive('\n') {
@@ -204,17 +247,22 @@ pub fn delete(dir: &Path, id: &str) -> std::io::Result<bool> {
         }
     }
     if !found {
-        return Ok(false);
+        return Ok(Deleted::NotFound);
     }
     let tmp = dir.join(format!("{HISTORY_FILE}.tmp"));
     std::fs::write(&tmp, kept)?;
     std::fs::rename(&tmp, &path)?;
-    Ok(true)
+    Ok(Deleted::Yes)
 }
 
 /// The newest run that wrote @p path, if any.
 pub fn of_output(dir: &Path, path: &Path) -> Option<RunRecord> {
     let Ok(text) = std::fs::read_to_string(dir.join(HISTORY_FILE)) else { return None };
+    newest_of(&text, path)
+}
+
+/// The newest record in @p text (history.jsonl) that wrote @p path.
+fn newest_of(text: &str, path: &Path) -> Option<RunRecord> {
     let canon = |p: &Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
     let want = canon(path);
     text.lines()
@@ -233,11 +281,38 @@ pub fn history_list(app: AppHandle, limit: Option<usize>) -> Vec<RunRecord> {
     dir(&app).map(|d| list(&d, limit.unwrap_or(50))).unwrap_or_default()
 }
 
-/// Delete the record @p id (the record only: its files stay).
+/// Delete the record @p id (the record only: its files stay). False when no
+/// record has that id; an error with the reason when it is kept.
 #[tauri::command]
 pub fn history_delete(app: AppHandle, id: String) -> Result<bool, String> {
     let d = dir(&app).ok_or("no app data folder")?;
-    delete(&d, &id).map_err(|e| e.to_string())
+    match delete(&d, &id).map_err(|e| e.to_string())? {
+        Deleted::Yes => Ok(true),
+        Deleted::NotFound => Ok(false),
+        Deleted::Kept(p) => Err(kept_reason(&p)),
+    }
+}
+
+/// What a Re-run of @p rec starts: the `run` parameters it was started with
+/// ({"in", "out", "params"}), so build_args gives the recorded argv again
+/// (fastag.rs a_rerun_starts_the_recorded_command_line). "out" is the -out
+/// of the recorded argv, which build_args made final (absolute beside the
+/// input). None for a record without its parameters (1.13) or its -out.
+pub fn rerun_params(rec: &RunRecord) -> Option<Value> {
+    let params = rec.params.clone()?;
+    let i = rec.argv.iter().skip(1).position(|a| a == "-out")? + 1;
+    let out = rec.argv.get(i + 1)?;
+    Some(serde_json::json!({ "in": rec.input, "out": out, "params": params }))
+}
+
+/// The `run` parameters of a Re-run of the record @p id (rerun_params). The
+/// renderer starts it with `run` itself, through the same overwrite question
+/// and job as any run, so the new record's argv equals this one's.
+#[tauri::command]
+pub fn history_rerun(app: AppHandle, id: String) -> Result<Value, String> {
+    let d = dir(&app).ok_or("no app data folder")?;
+    let rec = list(&d, usize::MAX).into_iter().find(|r| r.id == id).ok_or("the record is gone")?;
+    rerun_params(&rec).ok_or_else(|| "this record does not keep the parameters of its run (it was written by 1.13)".into())
 }
 
 #[tauri::command]
@@ -353,13 +428,58 @@ mod tests {
         std::fs::OpenOptions::new().append(true).open(d.join(HISTORY_FILE)).unwrap().write_all(b"{\"future\":1}\n").unwrap();
         append(&d, &rec("2-2", &out.display().to_string(), Status::Cancelled)).unwrap();
         append(&d, &rec("3-3", &out.display().to_string(), Status::Ok)).unwrap();
-        assert!(delete(&d, "2-2").unwrap());
+        assert_eq!(delete(&d, "2-2").unwrap(), Deleted::Yes);
         assert_eq!(list(&d, 10).iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), vec!["3-3", "1-1"]);
         // A line this version cannot read is not this version's to drop.
         assert!(std::fs::read_to_string(d.join(HISTORY_FILE)).unwrap().contains("{\"future\":1}\n"));
         assert_eq!(std::fs::read_to_string(&out).unwrap(), "tags");
-        assert!(!delete(&d, "2-2").unwrap());
-        assert!(!delete(&tmp("delete-none"), "1-1").unwrap());
+        assert_eq!(delete(&d, "2-2").unwrap(), Deleted::NotFound);
+        assert_eq!(delete(&tmp("delete-none"), "1-1").unwrap(), Deleted::NotFound);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    // Review of PR h: Delete record must not remove the only mark that a
+    // file a run left behind is incomplete (P0a, GUI-DESIGN 3 S9, 6.4).
+    #[test]
+    fn delete_keeps_the_record_that_alone_marks_a_left_over_file_incomplete() {
+        let d = tmp("delete-marker");
+        std::fs::create_dir_all(&d).unwrap();
+        let out = d.join("a.tags.tsv");
+        let o = out.display().to_string();
+        // Run 1 finished and wrote it; run 2 wrote over it, was cancelled,
+        // and its cleanup could neither remove nor rename it.
+        std::fs::write(&out, "partial").unwrap();
+        append(&d, &rec("1-1", &o, Status::Ok)).unwrap();
+        let mut cancelled = rec("2-2", &o, Status::Cancelled);
+        cancelled.cleanup.failed.push(o.clone());
+        append(&d, &cancelled).unwrap();
+        let before = std::fs::read_to_string(d.join(HISTORY_FILE)).unwrap();
+        assert_eq!(delete(&d, "2-2").unwrap(), Deleted::Kept(out.clone()));
+        assert!(kept_reason(&out).contains(&o));
+        // Nothing changed: the file still opens as incomplete.
+        assert_eq!(std::fs::read_to_string(d.join(HISTORY_FILE)).unwrap(), before);
+        assert_eq!(of_output(&d, &out).unwrap().status, Status::Cancelled);
+        // The finished run's record is not the marker: it may go.
+        assert_eq!(delete(&d, "1-1").unwrap(), Deleted::Yes);
+        assert_eq!(of_output(&d, &out).unwrap().id, "2-2");
+        // Once the file is gone, nothing is left to mark.
+        std::fs::remove_file(&out).unwrap();
+        assert_eq!(delete(&d, "2-2").unwrap(), Deleted::Yes);
+        assert!(of_output(&d, &out).is_none());
+        // A newer run of the same path decides how it opens: the older
+        // cancelled record is no longer the marker.
+        std::fs::write(&out, "complete").unwrap();
+        append(&d, &cancelled).unwrap();
+        append(&d, &rec("3-3", &o, Status::Ok)).unwrap();
+        assert_eq!(delete(&d, "2-2").unwrap(), Deleted::Yes);
+        assert_eq!(of_output(&d, &out).unwrap().id, "3-3");
+        // A failed run whose output is still at its final path is kept too,
+        // also when its cleanup reported nothing.
+        let mut failed = rec("4-4", &o, Status::Failed);
+        failed.cleanup = Cleanup::default();
+        append(&d, &failed).unwrap();
+        assert_eq!(delete(&d, "4-4").unwrap(), Deleted::Kept(out.clone()));
+        assert_eq!(of_output(&d, &out).unwrap().status, Status::Failed);
         let _ = std::fs::remove_dir_all(&d);
     }
 

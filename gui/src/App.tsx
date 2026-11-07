@@ -437,6 +437,7 @@ export default function App(): JSX.Element {
               onOpenResults={openResults}
               onOpen={(p) => void run.openResultsPath(p).then(() => setView('results'))}
               onSettings={session.takeRun}
+              onRerun={run.rerun}
               onGoSetup={() => setView('setup')}
             />
           </section>

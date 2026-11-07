@@ -66,6 +66,7 @@ pub fn run() {
             history::history_list,
             history::history_of,
             history::history_delete,
+            history::history_rerun,
             reveal::reveal_output,
             close_guard::set_ui_busy,
             close_guard::close_answer,

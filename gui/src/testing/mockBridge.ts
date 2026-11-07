@@ -71,6 +71,7 @@ export interface MockBridge extends FastagApi {
   // run reply's command). Off by default: most tests set `history` by hand.
   recordRuns: boolean
   historyDeleteCalls: string[]
+  historyRerunCalls: string[]
   failNextRun: string | null // one-shot: run() resolves { started: false, reason }
   rejectNextRun: Error | null // one-shot: run() rejects
   // Recorded calls.
@@ -221,6 +222,7 @@ export function installMockBridge(): MockBridge {
     history: [],
     recordRuns: false,
     historyDeleteCalls: [],
+    historyRerunCalls: [],
     failNextRun: null,
     rejectNextRun: null,
     runCalls: [],
@@ -358,11 +360,34 @@ export function installMockBridge(): MockBridge {
     },
     historyList: (limit) => Promise.resolve(mock.history.slice(0, limit ?? 50)),
     historyOf: (path) => Promise.resolve(mock.history.find((r) => r.outputs.includes(path)) ?? null),
+    // As history.rs delete: a record that did not finish and is the newest
+    // of an output still on disk (existingOutputs) is kept.
     historyDelete: (id) => {
       mock.historyDeleteCalls.push(id)
+      const r = mock.history.find((h) => h.id === id)
+      const marked =
+        r && r.status !== 'ok'
+          ? [...r.outputs, ...r.cleanup.failed].find(
+              (p) => mock.existingOutputs.includes(p) && mock.history.find((h) => h.outputs.includes(p))?.id === id
+            )
+          : undefined
+      if (marked)
+        return Promise.reject(
+          new Error(
+            `The record was kept: it is what marks ${marked} as incomplete (the run did not finish, and its cleanup could not remove the file). Delete or replace that file first.`
+          )
+        )
       const n = mock.history.length
-      mock.history = mock.history.filter((r) => r.id !== id)
+      mock.history = mock.history.filter((h) => h.id !== id)
       return Promise.resolve(mock.history.length < n)
+    },
+    // As history.rs rerun_params.
+    historyRerun: (id) => {
+      mock.historyRerunCalls.push(id)
+      const r = mock.history.find((h) => h.id === id)
+      const i = r ? r.argv.indexOf('-out', 1) : -1
+      if (!r?.params || i < 0 || i + 1 >= r.argv.length) return Promise.reject(new Error('no parameters'))
+      return Promise.resolve({ in: r.input, out: r.argv[i + 1], params: r.params })
     },
     run: (params, onEvent) => {
       mock.runCalls.push(params as unknown as RunCall)
