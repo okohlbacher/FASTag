@@ -26,7 +26,7 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 use tauri::AppHandle;
 
-use crate::fastag::{build_args, no_console_window, quiet_blas, resolve_binary, taxonomy_dir, Resolved, RunParams};
+use crate::fastag::{build_args, no_console_window, quiet_blas, resolve_binary, taxonomy_dir, Resolved, RunParams, MANIFEST};
 use crate::lifetime;
 
 /// --helphelp loads the library closure: seconds on a cold cache.
@@ -85,11 +85,42 @@ pub fn parse_options(text: &str) -> Vec<String> {
     out
 }
 
+/// Option families of the run that do not change the peaks of a spectrum or
+/// its tags: the species, glyco, reconciliation, mass-gap and digest/label
+/// reports and their settings, and subsampling (which could skip the very
+/// spectrum asked for). A dump drops them, beside every file-typed option.
+const NOT_FOR_A_DUMP: &[&str] = &["species", "glyco", "recon_", "massgap_", "digest_", "label_", "delta_", "subsample_"];
+const NOT_FOR_A_DUMP_EXACT: &[&str] = &["stream", "log", "test", "progress", "no_progress", "dump_spectrum", "probe_input"];
+
+/// Whether a dump keeps the run's option @p name: not a file (TOPPBase
+/// checks every file option it reads, so a moved -taxdb or an unwritable
+/// report folder would refuse the dump, and the CLI would warn that every
+/// output is ignored), nor one of NOT_FOR_A_DUMP.
+fn kept_for_a_dump(name: &str, types: &std::collections::HashMap<String, String>) -> bool {
+    let file = types.get(name).is_some_and(|t| t == "input-file" || t == "output-file");
+    !file && !NOT_FOR_A_DUMP_EXACT.contains(&name) && !NOT_FOR_A_DUMP.iter().any(|p| name.starts_with(p))
+}
+
+/// The manifest's option types by name.
+fn manifest_types() -> std::collections::HashMap<String, String> {
+    let m: Value = serde_json::from_str(MANIFEST).unwrap_or(Value::Null);
+    m.get("params")
+        .and_then(|v| v.as_array())
+        .map(|a| {
+            a.iter()
+                .filter_map(|it| Some((it.get("name")?.as_str()?.to_string(), it.get("type")?.as_str()?.to_string())))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// The argv of a dump of @p native_id in @p input under the run's @p params
 /// (as `run` was sent them; none: the CLI's defaults), or why there is none.
-/// The run's own options are kept, since the peaks depend on them (the
-/// tolerance, centroiding, deisotoping and the peak budget); -out (the
-/// dump writes no file), -progress and any GUI mode the params name are not.
+/// The options that prepare the peaks and build the tags are kept (the
+/// tolerance, deisotoping, the peak budget, modifications, tag lengths,
+/// threads); -in is the one file. Every other file option (-out, -fasta,
+/// -taxdb, the reports), the species/glyco/report modes, subsampling and
+/// -progress are not (kept_for_a_dump).
 pub fn dump_args(input: &str, native_id: &str, params: Option<&Map<String, Value>>) -> Result<Vec<String>, String> {
     if !Path::new(input).is_absolute() || input.starts_with('-') {
         return Err(format!("not an absolute path: {input}"));
@@ -99,7 +130,8 @@ pub fn dump_args(input: &str, native_id: &str, params: Option<&Map<String, Value
     }
     let mut rp = serde_json::json!({ "in": input, "out": "" });
     if let Some(p) = params {
-        rp["params"] = Value::Object(p.clone());
+        let types = manifest_types();
+        rp["params"] = Value::Object(p.iter().filter(|(k, _)| kept_for_a_dump(k, &types)).map(|(k, v)| (k.clone(), v.clone())).collect());
     }
     let rp: RunParams = serde_json::from_value(rp).map_err(|e| e.to_string())?;
     let built = build_args(&rp);
@@ -263,6 +295,11 @@ fn last_line(text: &str) -> Option<String> {
     text.lines().map(str::trim).rfind(|l| !l.is_empty() && !l.starts_with("FASTag took ")).map(|l| l.chars().take(300).collect())
 }
 
+/// The CLI's answer for a native ID the input does not have (exit 6).
+fn is_not_found(code: Option<i32>, reason: Option<&str>) -> bool {
+    code == Some(6) && reason.is_some_and(|r| r.starts_with("-dump_spectrum: no spectrum of"))
+}
+
 /// The dump of @p native_id in @p input under @p params, through @p lru.
 pub fn dump_of(
     r: &Resolved,
@@ -288,7 +325,9 @@ pub fn dump_of(
         }
     };
     let mtime = meta.modified().ok().and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok());
-    let key = format!("{}\u{0}{}\u{0}{:?}\u{0}{}", bin_key(&r.bin), meta.len(), mtime, args.join("\u{0}"));
+    // The environment the CLI is given is part of what it answers.
+    let env = format!("{:?}\u{0}{:?}", r.data, taxonomy_dir(r));
+    let key = format!("{}\u{0}{}\u{0}{:?}\u{0}{}\u{0}{}", bin_key(&r.bin), meta.len(), mtime, env, args.join("\u{0}"));
     if let Some(hit) = lru.lock().map_err(|_| "the dump cache is poisoned")?.get(&key) {
         return Ok(SpectrumDump { cached: true, ..(*hit).clone() });
     }
@@ -308,8 +347,11 @@ pub fn dump_of(
         reason: if ok { None } else if b.timed_out { Some(format!("no answer within {} s", DUMP_TIMEOUT.as_secs())) } else { last_line(&b.stderr) },
         cached: false,
     };
-    // Only answers: a timeout may pass on a second try.
-    if ok || b.code == Some(6) {
+    // Only answers that hold until the input changes: a dump, or the
+    // spectrum is not in the file. Every other refusal (exit 6 is any
+    // ILLEGAL_PARAMETERS: an option this CLI does not take, a check on a file
+    // the key does not cover) and a timeout may pass on a second try.
+    if ok || is_not_found(b.code, d.reason.as_deref()) {
         lru.lock().map_err(|_| "the dump cache is poisoned")?.put(key, Arc::new(d.clone()));
     }
     Ok(d)
@@ -398,7 +440,11 @@ mod tests {
     fn a_dump_keeps_the_runs_options_and_drops_out_and_progress() {
         let params: Map<String, Value> = serde_json::from_str(
             r#"{"fragment_tolerance": "0.3", "fragment_tolerance_unit": "Da", "deisotope": true,
-                "digest_out": "run.digest.tsv", "dump_spectrum": "other", "fixed_modifications": []}"#,
+                "digest_out": "run.digest.tsv", "dump_spectrum": "other", "fixed_modifications": [],
+                "taxdb": "/moved/custom.taxdb", "species": true, "species_out": "/ro/run.species.tsv",
+                "species_rank": "genus", "taxonomy_nodes": "/moved/nodes.dmp", "fasta": "/db/ecoli.fasta",
+                "glyco": true, "glyco_out": "/ro/g.tsv", "recon_out": "/ro/r.tsv", "subsample_spectra": 10,
+                "max_peaks": 300, "tag_length": 4, "threads": 2, "no_deisotope": true}"#,
         )
         .unwrap();
         let a = dump_args("/data/run01.mzML", SCAN, Some(&params)).unwrap();
@@ -407,6 +453,15 @@ mod tests {
         let t = has("-fragment_tolerance").expect("the run's tolerance");
         assert_eq!(a[t + 1], "0.3");
         assert!(has("-out").is_none() && has("-progress").is_none(), "{a:?}");
+        // No file but -in, no species/glyco/report mode, no subsampling.
+        for o in ["-digest_out", "-taxdb", "-species_out", "-species", "-species_rank", "-taxonomy_nodes", "-fasta", "-glyco", "-glyco_out", "-recon_out", "-subsample_spectra"] {
+            assert!(has(o).is_none(), "{o} in {a:?}");
+        }
+        // What prepares the peaks and builds the tags stays.
+        for (o, v) in [("-max_peaks", "300"), ("-tag_length", "4"), ("-threads", "2")] {
+            assert_eq!(a[has(o).unwrap_or_else(|| panic!("{o} in {a:?}")) + 1], v);
+        }
+        assert!(has("-no_deisotope").is_some() && has("-fragment_tolerance_unit").is_some(), "{a:?}");
         assert_eq!(a.iter().filter(|x| *x == "-dump_spectrum").count(), 1, "{a:?}");
         assert_eq!(&a[a.len() - 2..], ["-dump_spectrum", SCAN]);
         // A cleared fixed-modification list stays cleared ("-name ''").
@@ -478,9 +533,17 @@ mod tests {
         // An input that moved: "Locate input…", no CLI started.
         let moved = dump_of(&r, &lru, &format!("{input}.moved"), SCAN, None).unwrap();
         assert!(moved.missing && !moved.ok);
-        // The 1.11 CLI refuses the option.
-        let old = dump_of(&resolved(STUB_111), &Mutex::new(Lru::new(4)), input, SCAN, None).unwrap();
+        // ... and is cached: the input does not have it.
+        assert!(dump_of(&r, &lru, input, "scan=does-not-exist", None).unwrap().cached);
+        // The 1.11 CLI refuses the option: exit 6 too, but no answer about
+        // the spectrum, so it is asked again (Try again can pass).
+        let old_lru = Mutex::new(Lru::new(4));
+        let old = dump_of(&resolved(STUB_111), &old_lru, input, SCAN, None).unwrap();
         assert!(!old.ok && old.code == Some(6), "{old:?}");
+        assert!(!old.reason.as_deref().unwrap_or("").starts_with("-dump_spectrum: no spectrum of"), "{old:?}");
+        let again = dump_of(&resolved(STUB_111), &old_lru, input, SCAN, None).unwrap();
+        assert!(!again.cached && again.code == Some(6), "{again:?}");
+        assert_eq!(old_lru.lock().unwrap().len(), 0);
         std::fs::remove_dir_all(&dir).ok();
     }
 
