@@ -18,11 +18,14 @@ describe('map: param overlay vs CLI manifest', () => {
     expect(c).toContain('domain')
     expect(c).not.toContain('superkingdom')
   })
-  it('renders 67 parameters and hides 67 (mzpeak_read_memory and the 56 1.12 options among them)', () => {
+  it('renders 68 parameters and hides 66 (mzpeak_read_memory and 55 of the 56 1.12 options among them)', () => {
     // 1.10.0 added species_evidence (rendered) to the 1.9.0 set; 1.12.0 adds
-    // 56 options, all hidden until each has its GUI design.
-    expect(RENDERED.length).toBe(67)
-    expect(Object.keys(HIDDEN).length).toBe(67)
+    // 56 options, hidden until each has its GUI design, except
+    // acquisition_check: its default refuses raw DIA, so the form offers warn/off.
+    expect(RENDERED.length).toBe(68)
+    expect(Object.keys(HIDDEN).length).toBe(66)
+    expect(RENDERED).toContain('acquisition_check')
+    expect(PARAM_BY_NAME.get('acquisition_check')?.choices).toEqual(['refuse', 'warn', 'off'])
     expect(manifest.params.length).toBe(134)
   })
   it('tag_lengths reaches the UI as an int list with min 1', () => {

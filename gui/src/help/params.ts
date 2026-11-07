@@ -20,6 +20,10 @@ export interface ParamHelp {
 
 export const PARAM_HELP: Record<string, ParamHelp> = {
   // Spectra
+  acquisition_check: {
+    text: 'Before tagging, FASTag checks whether the file is raw DIA data, whose MS2 spectra each mix several peptides. By default (refuse) such a file is not tagged: the run stops with exit code 11 before any file is written. warn tags it anyway, with a warning in the log; off skips the check. DDA and pseudo-DDA files pass the check and are tagged the same under every setting.',
+    tip: 'Better than warn: make pseudo-DDA spectra with DIAspeXtract (or diaTracer for timsTOF .d) first, and tag those. Tags of raw DIA spectra get wrong flanking masses and complement statistics.'
+  },
   no_deisotope: {
     text: 'FASTag normally merges each isotope cluster into its first (monoisotopic) peak and moves fragments of charge 2 or 3 to the mass they would have at charge 1, before it picks peaks. This switch turns both steps off.',
     tip: 'Leave it off. Turn it on only for the fastest possible run, or to compare with a tool that has no such step.'
@@ -315,11 +319,8 @@ export const PARAM_HELP: Record<string, ParamHelp> = {
   test: { text: 'A standard OpenMS option for its internal tests.' },
 
   // Not in the form: FASTag 1.12 command-line options. Each is opt-in; at its
-  // default the output is the same as FASTag 1.11, except acquisition_check.
-  acquisition_check: {
-    text: 'Before tagging, FASTag checks whether the file is raw DIA data, whose MS2 spectra each mix several peptides. By default such a file is refused (exit code 11); warn tags it anyway with a warning, off skips the check. The app always uses the default.',
-    tip: 'Make pseudo-DDA spectra with DIAspeXtract (or diaTracer for timsTOF .d) first; their output passes the check.'
-  },
+  // default the output is the same as FASTag 1.11. (acquisition_check, the one
+  // changed default, is in the form, under Spectra.)
   acquisition_probe_spectra: { text: 'How many MS2 spectra at the start of the run the acquisition check reads (metadata only).' },
   alkylation_out: {
     text: 'Write a report of which reagent alkylated the cysteines, or none, from the placements of peptides with one cysteine. Not validated on held-out data.'
