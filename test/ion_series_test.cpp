@@ -9,6 +9,9 @@
 //       at 2+ and 3+: under cz every tag whose sequence the peptide holds has
 //       flanks within 0.01 Da of the truth and p_complement < 1; under by the
 //       same reads carry the documented offset and p_complement is 1.
+//       (b2) under -complement_rule precursor a c/z-dot pair shares c - 1
+//       charges (the precursor takes up one electron): 1+ partners on 3+,
+//       none on 2+.
 //   (c) the ETD precursor filter drops the unreacted precursor and the
 //       charge-reduced species (with isotopes and hydrogen transfer) but no
 //       fragment, and keeps peaks 5 Da away from them.
@@ -25,6 +28,7 @@
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
 
+#include "Census.h"
 #include "CliParam.h"
 #include "ClusterAcc.h"
 #include "Digest.h"
@@ -411,6 +415,18 @@ int main(int argc, char** argv)
           "c/z complement pairs sum to M + H");
   }
 
+  // ---- the census header is run-level (PLAN-INTEGRATION 2.3/2) ----
+  {
+    namespace C = FASTag::Census;
+    check(C::header() == C::header(false), "the census header defaults to the 1.11 layout");
+    C::runColumns().ion_series = true;
+    const std::string h = C::header();
+    check(h == C::header(true) && h.size() > 17 && h.compare(h.size() - 17, 17, "\tbest_ion_series\n") == 0,
+          "a run with the ion_series column: header() ends with best_ion_series");
+    C::runColumns().ion_series = false;
+    check(C::header() == C::header(false), "the run-level census columns reset");
+  }
+
   // ---- modes ----
   {
     check(IS::modeFromString("by") == IS::Mode::By && IS::modeFromString("cz") == IS::Mode::Cz &&
@@ -438,6 +454,32 @@ int main(int argc, char** argv)
     check(IS::seriesColumn(IS::Mode::Cz, col), "cz always writes it");
     check(!IS::seriesColumn(IS::Mode::Auto, col), "auto on a run without electron activation writes what by writes");
     check(IS::seriesColumn(IS::Mode::Auto, el), "auto with electron activation writes the column");
+    // One rule for the column and the per-spectrum series: auto reads the
+    // activation of mzML only, and a c/z row exists only with the column.
+    check(IS::autoReadsActivation(false, false) && !IS::autoReadsActivation(true, false) &&
+            !IS::autoReadsActivation(false, true),
+          "auto reads activation from mzML, not from mzPeak or MGF");
+    for (A a : {A::Collisional, A::Electron, A::Hybrid, A::Unknown})
+      for (IS::Mode m : {IS::Mode::By, IS::Mode::Cz, IS::Mode::Auto})
+      {
+        check(IS::seriesInRun(m, a, true) == IS::seriesFor(m, a), "with the column the run reads seriesFor()");
+        check(IS::seriesInRun(m, a, false) == IS::Series::BY, "without the column every spectrum is read as b/y");
+      }
+    // Per input type under auto: the column needs a pre-scan, which only
+    // inputs whose activation auto reads get; an ETD spectrum that an mzPeak
+    // reader delivers is then read as b/y, never as an unlabelled c/z row.
+    for (int in = 0; in < 3; ++in)
+    {
+      const bool mzpeak = in == 1, mgf = in == 2;
+      const bool column = IS::autoReadsActivation(mzpeak, mgf) && IS::seriesColumn(IS::Mode::Auto, el);
+      const bool cz_row = IS::seriesInRun(IS::Mode::Auto, A::Electron, column) == IS::Series::CZ;
+      check(cz_row == column, "auto: a c/z row only with the ion_series column");
+      check(cz_row == (in == 0), "auto: ETD is read as c/z from mzML only");
+    }
+    const std::string nw = IS::autoNoColumnWarning(7);
+    check(nw.find("7 electron-activated") != std::string::npos && nw.find('\n') == std::string::npos &&
+            !std::regex_search(nw, kGateSummary),
+          "the auto no-column warning");
     // Warnings and the INFO line: one line each, never the gate pattern.
     IS::ActivationCounts h;
     for (int i = 0; i < 99; ++i) h.add(A::Electron);
@@ -579,6 +621,54 @@ int main(int argc, char** argv)
       }
     }
     check(ok >= 5, "b/y ladder under b/y: flanks in the water convention (" + std::to_string(ok) + " tags)");
+  }
+
+  // ---- (b2) the precursor complement rule on c/z-dot ladders ----
+  // ETD/ECD: [M+cH]^c+ takes up one electron, so a c and a z-dot fragment
+  // share c - 1 charges. With 1+ fragments only, the partner of a 1+ ion of
+  // a 3+ precursor is a 1+ ion; a 2+ precursor's fragment pairs cannot both
+  // be charged. The b/y reading (charge loss 0) is the 1.11 expression.
+  {
+    const auto cs_by = FASTag::ComplementSpec::fromParam(FASTag::cliDefaultParam());
+    const auto cs_cz = FASTag::ComplementSpec::fromParam(withPair(FASTag::cliDefaultParam(), IS::Series::CZ));
+    check(cs_by.charge_loss == 0 && cs_cz.charge_loss == 1 && IS::ionPair(IS::Series::BY).charge_loss == 0 &&
+            IS::ionPair(IS::Series::CZ).charge_loss == 1,
+          "charge loss: b/y 0, c/z-dot 1");
+    for (const auto& [pname, base0] : bothParams())
+    {
+      FASTag::Param base = base0;
+      base.complement_rule = FASTag::ComplementRule::Precursor;
+      const FASTag::Param pcz = withPair(base, IS::Series::CZ);
+      const FASTag::Tables tcz(pcz);
+      size_t peaks3 = 0, compl3 = 0, compl2 = 0, compl3_both = 0;
+      for (const char* pep : kPeptides)
+        for (int z : {2, 3})
+        {
+          const CzSynth::Spec s = CzSynth::make(pep, z, CzSynth::Ions::CZ, 1, 0, 300u + static_cast<unsigned>(z));
+          FASTag::SpectrumDiag d;
+          FASTag::tagSpectrum(s.spec, s.prec_mz, z, pcz, tcz, &d);
+          check(d.prepared, std::string(pname) + " " + pep + ": prepared");
+          if (z == 3) { peaks3 += d.n_kept; compl3 += d.n_compl; }
+          else compl2 += d.n_compl;
+          if (z == 3)
+          {
+            FASTag::Param pb = pcz;
+            pb.complement_rule = FASTag::ComplementRule::Both;
+            const FASTag::Tables tb(pb);
+            FASTag::SpectrumDiag db;
+            FASTag::tagSpectrum(s.spec, s.prec_mz, z, pb, tb, &db);
+            compl3_both += db.n_compl;
+          }
+        }
+      std::cout << "b2. " << pname << ": precursor rule on c/z, 3+: " << compl3 << " of " << peaks3
+                << " kept peaks complemented at 1+; 2+: " << compl2 << "\n";
+      // The c ion's partner is the z-dot ion at the same 1+: nearly every
+      // ladder peak has it (the first and last rungs may not).
+      check(peaks3 > 0 && 10 * compl3 >= 8 * peaks3,
+            std::string(pname) + ": 3+ c/z under the precursor rule finds the 1+ partners (c - 1 charges)");
+      check(compl2 == 0, std::string(pname) + ": 2+ c/z under the precursor rule has no partner (z >= c - 1)");
+      check(compl3_both >= compl3, std::string(pname) + ": both is at least the precursor rule");
+    }
   }
 
   // ---- (c) the ETD precursor filter ----

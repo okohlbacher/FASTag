@@ -226,6 +226,10 @@ namespace FASTag
     double frag_tol = 20.0;        ///< the run's fragment tolerance, Fragment mode
     bool   frag_tol_ppm = true;
     std::vector<double> pair_deltas{0.0};
+    /// Charges the pair lost against the precursor (IonPair::charge_loss):
+    /// the Precursor rule looks for a partner at prec_charge - charge_loss
+    /// minus the fragment's charge. b/y 0 (1.11's expression); c/z-dot 1.
+    int    charge_loss = 0;
     bool   midp = false;
 
     static ComplementSpec fromParam(const Param& p)
@@ -240,7 +244,11 @@ namespace FASTag
       c.midp = p.complement_midp;
       // b/y keeps the single delta 0 (1.11's doubles); c/z-dot pairs sum to
       // M + H (IonSeries::IonPair::compl_delta).
-      if (p.ion_pair.kind != IonSeries::Series::BY) c.pair_deltas = {p.ion_pair.compl_delta};
+      if (p.ion_pair.kind != IonSeries::Series::BY)
+      {
+        c.pair_deltas = {p.ion_pair.compl_delta};
+        c.charge_loss = p.ion_pair.charge_loss;
+      }
       return c;
     }
 

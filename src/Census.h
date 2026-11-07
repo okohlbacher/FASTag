@@ -267,15 +267,34 @@ namespace FASTag::Census
     double tag_cover = 0;
   };
 
-  /// The census TSV header line. @p ion_series (a run that can read c/z,
-  /// IonSeries::seriesColumn) appends best_ion_series.
-  inline std::string header(bool ion_series = false)
+  /// The census TSV header line with or without best_ion_series (@p
+  /// ion_series: a run that can read c/z, IonSeries::seriesColumn).
+  inline std::string header(bool ion_series)
   {
     return std::string("index\tspectrum\trt\tprecursor_mz\tcharge_given\tcharge_used\tn_peaks\tn_peaks_kept"
                        "\tn_edges\tn_compl\tint_gini\tstatus\tn_found\tn_reported\tbest_evalue\tbest_len"
                        "\tbest_min_conf\tbest_mean_conf\tbest_tic\ttag_cover")
          + (ion_series ? "\tbest_ion_series\n" : "\n");
   }
+
+  /// The run's optional census columns: one run-level setting, set once by
+  /// the tool before the census table opens (and before any thread starts),
+  /// read by header(). A reader of the census that takes header() as the
+  /// layout (-census_ids, CensusIds::joinTable) thus sees the columns this
+  /// run writes, with no argument of its own (PLAN-INTEGRATION 2.3/2). The
+  /// default is the 1.11 layout.
+  struct RunColumns
+  {
+    bool ion_series = false;  ///< best_ion_series (#15 phase B)
+  };
+  inline RunColumns& runColumns()
+  {
+    static RunColumns c;
+    return c;
+  }
+
+  /// The census TSV header line of this run (runColumns()).
+  inline std::string header() { return header(runColumns().ion_series); }
 
   /// Free text as one TSV field: a tab, CR or LF becomes a space.
   inline void appendField(std::string& buf, const std::string& text)

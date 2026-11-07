@@ -2473,7 +2473,7 @@ protected:
     // under auto writes exactly what by writes. MGF and mzPeak carry no
     // activation (IonSeries.h): auto reads them as b/y, without the column.
     bool ion_column = ion_mode == FASTag::IonSeries::Mode::Cz;
-    if (ion_mode == FASTag::IonSeries::Mode::Auto && !mzpeak_in && !mgf_in)
+    if (ion_mode == FASTag::IonSeries::Mode::Auto && FASTag::IonSeries::autoReadsActivation(mzpeak_in, mgf_in))
     {
       std::shared_ptr<PeakMap> od_meta;
       if (!fastmz && streaming) od_meta = ondisc->getMetaData();
@@ -2488,6 +2488,9 @@ protected:
       }
       ion_column = FASTag::IonSeries::seriesColumn(ion_mode, scan);
     }
+    // The census layout of this run (Census::header() reads it; so does
+    // -census_ids, which takes that header as the table's layout).
+    FASTag::Census::runColumns().ion_series = ion_column;
 
     // Subsampling selection. The mask is exact for every input -- it is built
     // over the spectrum indices up front. The count over ALL input spectra,
@@ -2733,7 +2736,7 @@ protected:
         OPENMS_LOG_ERROR << census_part.error() << std::endl;
         return CANNOT_WRITE_OUTPUT_FILE;
       }
-      ctsv << FASTag::Census::header(ion_column);
+      ctsv << FASTag::Census::header();
     }
 
     const std::string proforma_fixed =
@@ -2776,6 +2779,11 @@ protected:
       std::vector<std::string> glyco_rows;  ///< glyco rows (glyco_on only)
       std::vector<std::vector<std::pair<double, bool>>> row_meta;  ///< (entrap_on only)
       std::vector<char> keep, keep_target;
+      /// #15 phase B: per spectrum, whether its rows were read as c/z-dot
+      /// ions (SpecResult::cz); every row of a spectrum shares its series.
+      /// -species leaves these rows out and counts them; no reader finds the
+      /// ion_series column by position.
+      std::vector<char> row_cz;
       FASTag::ClusterAcc::ClusterBlock acc;  ///< 1.12 per-cluster slots (src/ClusterAcc.h)
     };
     // Three: a fourth only helped within noise, for another block of rows
@@ -2855,6 +2863,8 @@ protected:
       /// -census: the spectrum's census row (an MS2 spectrum read, census_on only).
       bool census = false;
       FASTag::Census::Row census_row;
+      /// #15 phase B: the rows were read as c/z-dot ions (Block::row_cz).
+      bool cz = false;
     };
 
     // @p index is the spectrum's position in the input, for a USI that cannot
@@ -2900,10 +2910,15 @@ protected:
       // ---- 1.12 E: per-spectrum counters ----
       const FASTag::IonSeries::Activation act = FASTag::IonSeries::activationClass(spec);
       pt.acc.e.activation.add(act);  // #15 phase A
-      // #15 phase B: the series this spectrum is read as (by under by).
-      const bool read_cz = FASTag::IonSeries::seriesFor(ion_mode, act) == FASTag::IonSeries::Series::CZ;
+      // #15 phase B: the series this spectrum is read as (by under by): c/z
+      // only in a run that writes the ion_series column, the one rule both
+      // decisions share (IonSeries::seriesInRun).
+      const bool read_cz = FASTag::IonSeries::seriesInRun(ion_mode, act, ion_column) == FASTag::IonSeries::Series::CZ;
       if (read_cz) ++pt.acc.e.series.ms2_cz;
       else ++pt.acc.e.series.ms2_by;
+      res.cz = read_cz;
+      if (!read_cz && FASTag::IonSeries::seriesFor(ion_mode, act) == FASTag::IonSeries::Series::CZ)
+        ++pt.acc.e.series.auto_by_no_column;
       if (digest_on)
       {
         ++pt.ms2_meta;
@@ -3239,6 +3254,7 @@ protected:
       if (recon_on) b.recon_rows[idx].swap(r.rbuf);
       if (recon_ids_on) b.recon_id_lists[idx].swap(r.ids);
       if (entrap_on) b.row_meta[idx].swap(r.meta);
+      b.row_cz[idx] = r.cz ? 1 : 0;
       b.keep[idx] = 1;
       // A spectrum whose only reported tags are entrapment matches is
       // calibration material, not a hit -- keep it out of -out_spectra.
@@ -3260,6 +3276,7 @@ protected:
         if (entrap_on) b.row_meta.resize(n_used);
       }
       b.keep.assign(n_used, 0);
+      b.row_cz.assign(n_used, 0);
       if (want_out) b.keep_target.assign(n_used, 0);
       b.acc.prepare(n_used);
     };
@@ -3345,10 +3362,8 @@ protected:
           {
             size_t nl = r.find('\n', start);
             if (nl == std::string::npos) nl = r.size();
-            // A c/z row (the ion_series column, last, reads "cz") is left
-            // out and counted.
-            const bool row_cz = ion_column && nl >= start + 3 && r.compare(nl - 3, 3, "\tcz") == 0;
-            if (row_cz) ++species_cz_excluded;
+            // A c/z row (Block::row_cz) is left out and counted.
+            if (b.row_cz[i]) ++species_cz_excluded;
             else if (readSpeciesFields(r, start, nl, id, tag, gapped, evalue))
             {
               // Skip GAPPED tags unless asked for. A gap spells two residues
@@ -4866,6 +4881,8 @@ protected:
           OPENMS_LOG_WARN << IS::collisionalCzWarning(act) << std::endl;
       }
       if (species_cz_excluded > 0) OPENMS_LOG_WARN << IS::speciesExcludedWarning(species_cz_excluded) << std::endl;
+      if (run_acc.e.series.auto_by_no_column > 0)
+        OPENMS_LOG_WARN << IS::autoNoColumnWarning(run_acc.e.series.auto_by_no_column) << std::endl;
     }
 
     // ---- phase 11: filter summary and -out_spectra writing ----------------

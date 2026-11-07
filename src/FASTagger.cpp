@@ -578,7 +578,11 @@ namespace FASTag
             for (int r = 0; r < 2 && !found; ++r)
             {
               if (r == 0 ? !same_rule : !prec_rule) continue;
-              const double cmz = complementMz(M, s.prec_charge, z, mz,
+              // The Precursor rule shares the charges the pair carries: c
+              // for b/y, c - 1 for c/z-dot (ETD/ECD take up one electron);
+              // complementMz() gives NaN when z leaves none for the partner.
+              const int pair_charge = s.prec_charge - cs.charge_loss;
+              const double cmz = complementMz(M, pair_charge, z, mz,
                                               r == 0 ? ComplementRule::SameCharge
                                                      : ComplementRule::Precursor);
               if (std::isnan(cmz)) continue;

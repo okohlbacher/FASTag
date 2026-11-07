@@ -29,7 +29,9 @@
 //                method listed together;
 //   unknown      no method, or only methods that are neither (photo, IR,
 //                surface, post-source, in-source, LIFT), and no filter token
-//                that classifies. MGF and mzPeak input carry no activation.
+//                that classifies. MGF and mzPeak input carry no activation;
+//                -ion_series auto never reads one from them
+//                (autoReadsActivation, seriesInRun).
 // A method of no class never hides one that has a class.
 //
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
@@ -216,6 +218,10 @@ namespace FASTag::IonSeries
     double offN = std::numeric_limits<double>::quiet_NaN();  ///< N-terminal ion neutral mass minus its residues
     double offC = std::numeric_limits<double>::quiet_NaN();  ///< C-terminal ion neutral mass minus its residues
     double compl_delta = 0.0;   ///< offN + offC - H2O: the pair's neutral masses sum to M + this
+    /// Charges the precursor loses on the way to the pair: 0 for b/y; 1 for
+    /// c/z-dot, since [M+cH]^c+ takes up one electron and its c and z-dot
+    /// fragments share c - 1 charges (the complement's precursor rule).
+    int charge_loss = 0;
     /// What a reversed read (the low peak an N-terminal ion) adds to the
     /// residue sum it reports: N-side residues = cterm_mass + this, C-side
     /// residues = nterm_mass - this. b/y: +H2O; c/z-dot: -15.034708.
@@ -233,6 +239,7 @@ namespace FASTag::IonSeries
     {
       p.offN = Residue::getInternalToCIon().getMonoWeight();
       p.offC = Residue::getInternalToZp1Ion().getMonoWeight();
+      p.charge_loss = 1;
     }
     else
     {
@@ -291,6 +298,25 @@ namespace FASTag::IonSeries
     return m == Mode::Auto && c.of(Activation::Electron) > 0;
   }
 
+  /// Whether -ion_series auto reads the activation of an input: mzML yes;
+  /// MGF and mzPeak no (the file comment), so auto reads them as b/y and
+  /// writes no ion_series column, whatever activation a reader may deliver.
+  inline bool autoReadsActivation(bool mzpeak_in, bool mgf_in) { return !mzpeak_in && !mgf_in; }
+
+  /// The series a spectrum of class @p a is read as in a run under @p m whose
+  /// tag TSV carries the ion_series column iff @p run_column: seriesFor(),
+  /// but c/z only in a run with the column. The tagging loop and the column
+  /// rule thus cannot disagree: a c/z row always says so. Under cz the column
+  /// is always written, so this is seriesFor(); under auto a spectrum the
+  /// column rule did not foresee (an input auto does not read the activation
+  /// of, autoReadsActivation()) is read as b/y and counted (SeriesCounts::
+  /// auto_by_no_column).
+  inline Series seriesInRun(Mode m, Activation a, bool run_column)
+  {
+    const Series s = seriesFor(m, a);
+    return s == Series::CZ && !run_column ? Series::BY : s;
+  }
+
   /// Per-run (or per-thread) phase B counts: MS2 spectra tagged per series,
   /// and the c/z tags a consumer that reads b/y only left out (PLAN-
   /// INTEGRATION 2.3, contract 2).
@@ -298,11 +324,15 @@ namespace FASTag::IonSeries
   {
     std::size_t ms2_by = 0, ms2_cz = 0;
     std::size_t species_excluded = 0;  ///< c/z rows -species did not count
+    /// MS2 that seriesFor() reads as c/z but seriesInRun() read as b/y: the
+    /// run writes no ion_series column (auto on mzPeak or MGF input).
+    std::size_t auto_by_no_column = 0;
     void merge(const SeriesCounts& o)
     {
       ms2_by += o.ms2_by;
       ms2_cz += o.ms2_cz;
       species_excluded += o.species_excluded;
+      auto_by_no_column += o.auto_by_no_column;
     }
   };
 
@@ -345,6 +375,14 @@ namespace FASTag::IonSeries
          + std::to_string(c.total())
          + " MS2 spectra were activated by collision (CID, HCD), which yields b/y ions, but -ion_series cz reads "
            "every spectrum as c/z-dot ions; use -ion_series auto or by for them.";
+  }
+
+  /// The warning for SeriesCounts::auto_by_no_column > 0.
+  inline std::string autoNoColumnWarning(std::size_t n)
+  {
+    return "Ion series: " + std::to_string(n)
+         + " electron-activated MS2 spectra were tagged as b/y ions: -ion_series auto reads the activation of mzML "
+           "input only and writes no ion_series column here; use -ion_series cz to read them as c/z-dot ions.";
   }
 
   /// A c/z tag that -species left out (it reads b/y tags only): the warning.

@@ -90,6 +90,13 @@ namespace FASTag::Digest
 
   void TerminusCounter::add_(double nterm, double cterm, std::string_view seq, const double* reversed_offset)
   {
+    // The tag's reversed-read offset: 1.11's water for b/y (no offset given,
+    // the same double), offC - offN for c/z-dot. Named kH2O on purpose: it
+    // shadows Digest::kH2O in this body, so every nterm expression below --
+    // also one written against the b/y constant by a later item (#3d's
+    // two-residue dip, "nterm - kH2O") -- takes the tag's series (PLAN-
+    // INTEGRATION 2.3/2). Do not rename it or use Digest::kH2O here.
+    const double kH2O = reversed_offset ? *reversed_offset : FASTag::Digest::kH2O;
     ++tags;
     // P2..P4 from the residues next to the counted end: the tag's last three
     // for a y tag (cterm_mass), its first three for a reversed b tag
@@ -112,8 +119,8 @@ namespace FASTag::Digest
         ++c_near[k];
         if (a >= 0) { ++cpos[0][static_cast<std::size_t>(a)]; tail(cpos); }
       }
-      // b/y (no offset given): 1.11's m + kH2O.
-      if (near_(nterm, reversed_offset ? m + *reversed_offset : m + kH2O))
+      // b/y (no offset given): 1.11's m + kH2O; c/z-dot: m + offC - offN.
+      if (near_(nterm, m + kH2O))
       {
         ++n_h2o[k];
         if (a >= 0) { ++cpos[0][static_cast<std::size_t>(a)]; head(cpos); }
