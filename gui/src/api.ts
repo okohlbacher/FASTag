@@ -8,6 +8,7 @@ import { openUrl } from '@tauri-apps/plugin-opener'
 import type {
   BinaryInfo,
   BrowserEvent,
+  Cleanup,
   DropRoute,
   ResultsHead,
   FastagApi,
@@ -89,6 +90,9 @@ const api: FastagApi = {
   historyOf: (path: string) => invoke<RunRecord | null>('history_of', { path }),
   historyDelete: (id: string) => invoke<boolean>('history_delete', { id }),
   historyRerun: (id: string) => invoke<Record<string, unknown>>('history_rerun', { id }),
+  leftovers: () => invoke<string[]>('leftovers_list'),
+  sweepLeftovers: (paths: string[]) => invoke<Cleanup>('leftovers_sweep', { paths }),
+  keepLeftovers: (paths: string[]) => invoke<void>('leftovers_keep', { paths }),
   cancel: () => invoke<{ cancelled: boolean }>('cancel'),
   resultsQuery: (path: string, view: ResultsView, offset: number, limit: number) =>
     invoke<ResultsPage>('results_query', { path, view, offset, limit }),

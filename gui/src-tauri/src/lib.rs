@@ -5,6 +5,7 @@ mod drop;
 mod events;
 mod fastag;
 mod history;
+mod lifetime;
 mod menu;
 mod notify;
 mod outputs;
@@ -13,6 +14,7 @@ mod report;
 mod reveal;
 mod settings;
 mod species;
+mod sweep;
 
 use std::time::Duration;
 
@@ -82,7 +84,19 @@ pub fn run() {
             settings::save_last,
             settings::save_preset,
             settings::delete_preset,
+            sweep::leftovers_list,
+            sweep::leftovers_sweep,
+            sweep::leftovers_keep,
         ])
+        // A run of an earlier session that the app did not see end (it was
+        // killed) is recorded as interrupted before the window asks for the
+        // last run and the leftovers (sweep.rs).
+        .setup(|app| {
+            if let Some(d) = history::dir(app.handle()) {
+                sweep::recover(&d);
+            }
+            Ok(())
+        })
         .on_window_event(|window, event| match event {
             // Closing the window while a run or batch is active asks first
             // (close_guard); when idle it closes as usual.
