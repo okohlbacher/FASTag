@@ -345,7 +345,10 @@ The logo is a small React SVG component in `gui/src`; no new dependency.
 - The margin = 0 override when isobaric K (`residue` K+TMT, K+TMTpro, K+iTRAQ4) exceeds half the merged K
   and a Lys-C/Arg-C call has Trypsin as runner-up.
 - The alkylation call rule, the 2 % / 10 % variable-modification and enrichment shares, and the HLA
-  class mapping. The label rule (≥ 1 % of the tags and ≥ 20× background, the SILAC heavy-share
+  class mapping. FASTag 1.12 also has an alkylation call of its own (`-alkylation_out`, opt-in,
+  doc/ALKYLATION-REPORT.md): it bins the single-Cys placements of the reconciler instead of taking
+  prose-auto's argmax over all gap placements, so it can call "none"; prose-auto switches to it only
+  by a later decision, after the held-out test. The label rule (≥ 1 % of the tags and ≥ 20× background, the SILAC heavy-share
   thresholds and the `KR_TRYPTIC` gate) is also in FASTag since 1.12 (`label_call`, above); prose-auto
   switches to reading it only by a later decision.
 - Reagent-genus handling of the species report.

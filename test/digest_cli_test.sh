@@ -223,6 +223,11 @@ run "${PPM[@]}" -out "$TMP/v4.tsv" -digest_out "$TMP/vdigest4.tsv" -digest_model
   || fail "flank2 auto is not used on the first-peak run"
 [ "$(val "$TMP/vdigest4.tsv" count flank2_n)" -ge 5 ] || fail "flank2: fewer than 5 two-residue sums"
 [ -n "$(val "$TMP/vdigest4.tsv" model Trypsin.flank2_loglik)" ] || fail "flank2: no flank2_loglik rows"
+for th in 1 8; do
+  "$BIN" "${PPM[@]}" -threads $th -out "$TMP/v4t.tsv" -digest_out "$TMP/vdigest4t$th.tsv" -digest_models_version v2 \
+    -digest_detection shipped -digest_flank2 auto > "$TMP/log" 2>&1 || fail "FASTag -threads $th v2"
+  same "$TMP/vdigest4.tsv" "$TMP/vdigest4t$th.tsv" "the v2 digest report differs at $th threads"
+done
 # a v2 table of the C-end proteases only: flank2 calls the run, with p_correct
 awk -F'\t' '/^#/ || $1 == "model" || $1 == "background" || $1 == "Trypsin" || $1 == "Lys-C" || $1 == "Arg-C" ||
   $1 == "detection" || $1 == "specificity"' "$DATA/digest_models_v2.tsv" > "$TMP/cend.tsv"
@@ -305,6 +310,9 @@ same "$TMP/alk0.counts" "$TMP/alk2.counts" "-alkylation_out counts differ with a
 "$BIN" "${COMMON[@]}" -threads 3 -out "$TMP/a4.tsv" -alkylation_out "$TMP/alk4.tsv" -alkylation_proteome "$DB" > "$TMP/log" 2>&1 \
   || fail "FASTag -threads 3 -alkylation_out"
 same "$TMP/alk3.tsv" "$TMP/alk4.tsv" "-alkylation_out differs between 1 and 3 threads"
+"$BIN" "${COMMON[@]}" -threads 8 -out "$TMP/a8.tsv" -alkylation_out "$TMP/alk8.tsv" -alkylation_proteome "$DB" > "$TMP/log" 2>&1 \
+  || fail "FASTag -threads 8 -alkylation_out"
+same "$TMP/alk3.tsv" "$TMP/alk8.tsv" "-alkylation_out differs between 1 and 8 threads"
 same "$TMP/alk0.tsv" "$TMP/alk3.tsv" "-alkylation_out differs between 2 and 1 threads"
 # a ppm run: window 0.02; no fixed C modification: fixed_c_delta 0
 run -in "$IN" -tag_length 4 -out "$TMP/a5.tsv" -alkylation_out "$TMP/alk5.tsv" -alkylation_proteome "$DB" -fixed_modifications

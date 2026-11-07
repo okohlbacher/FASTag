@@ -193,6 +193,9 @@ int main()
     check(v2.has_reference && v2.ref_k == 0.55 && v2.ref_r == 0.45, "v2: reference K:R");
     check(v2.has_specificity && v2.s_trypsin == 0.05 && v2.s_nontryptic == 0.05, "v2: specificity");
     check(v2.models.size() == v1.models.size(), "v2: reserved rows are not models");
+    // the marker alone makes a v2 table (version 2 without detection, reference or specificity rows)
+    const D::ModelTable bare = parse("# fastag_digest_models v2\nmodel\tclass\tend\tresidue\tfreq\n" + background() + kModels);
+    check(bare.version == 2 && bare.detection.empty() && !bare.has_specificity, "v2: the marker line alone gives version 2");
     std::string err;
     parse(v2Text("detection\tqtof\tC\tK\t1\n"), false, &err);
     check(err.find("detection class") != std::string::npos, "v2: an unknown detection class is refused (" + err + ")");
