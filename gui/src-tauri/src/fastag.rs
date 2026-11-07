@@ -1190,7 +1190,16 @@ mod tests {
         let st = run.child.lock().unwrap().wait().unwrap();
         run.reaped.store(true, Ordering::SeqCst);
         assert!(!st.success());
-        assert!(!kill_run(&run, false), "a reaped child is never signalled");
+        // A reaped run signals only its group, and only while the group
+        // exists: wait until the killed grandchild's zombie is gone (it is
+        // reaped by its new parent, not by us), then nothing is signalled.
+        let pgid = run.child.lock().unwrap().id() as i32;
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        // SAFETY: signal 0 only checks that the group exists.
+        while unsafe { kill(-pgid, 0) } == 0 && std::time::Instant::now() < until {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(!kill_run(&run, false), "a reaped child whose group is gone is never signalled");
     }
 
     #[test]
@@ -1712,11 +1721,11 @@ mod tests {
         #[test]
         fn ipc_rate_a_burst_of_log_lines_goes_out_in_full_batches() {
             let (lines, msgs, secs) = chatty("burst", 20_000, "STUB_CHATTY=20000\n");
-            // Full batches, plus a few for the phases, progress and Done. On a
-            // loaded runner the burst can span a few flush timers, and each
-            // timer may send one short batch (CI saw 53 for a bound of 52), so
-            // allow one extra message per 50 ms the burst took.
-            let bound = lines / crate::events::MAX_BATCH + 12 + (secs / 0.050) as usize;
+            // Batches, not lines: on a loaded runner the sender can drain a
+            // part-filled buffer (CI: 45 log + 6 progress + 3 phase = 55 in
+            // 0.077 s, ideal 41 log), so allow twice the full-batch count.
+            // Still about 200x fewer messages than one per line.
+            let bound = 2 * (lines / crate::events::MAX_BATCH) + 12;
             assert!(msgs <= bound, "{msgs} messages for {lines} lines in {secs:.3} s (bound {bound})");
         }
 
