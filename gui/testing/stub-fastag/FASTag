@@ -30,6 +30,10 @@
 # The same variables can also be set in <in>.stub, a file next to the input
 # that the stub sources: tests that start it through the GUI's own `run`
 # (which passes no environment of its own) control it that way.
+# The tauri-driver specs (gui/e2e-tauri) cannot write a file next to every
+# input, so they steer the stub by the input's name: an -in whose basename
+# contains ".slow." is STUB_SLEEP=30, ".chatty." is STUB_CHATTY=5000, ".fail."
+# is STUB_FAIL=2. A variable that is set (or set in <in>.stub) wins.
 set -u
 
 if [ "${1:-}" = "--help" ]; then
@@ -92,19 +96,30 @@ derive() {
 if [ -n "$in" ] && [ -f "$in.stub" ]; then
   . "$in.stub"
 fi
+case "${in##*/}" in *.slow.*) : "${STUB_SLEEP:=30}" ;; esac
+case "${in##*/}" in *.chatty.*) : "${STUB_CHATTY:=5000}" ;; esac
+case "${in##*/}" in *.fail.*) : "${STUB_FAIL:=2}" ;; esac
 
 total=4
 [ -n "${STUB_CHATTY:-}" ] && total=$((STUB_CHATTY + 4))
 
+# Each sleeper is forked BEFORE the line or file a test waits for, then waited
+# on. A test cancels right after that point, and macOS lets a child forked
+# while a process-group SIGKILL is being delivered escape it: a `sleep` forked
+# after the line could outlive the kill, hold the pipes open and keep the run
+# from ever ending (the 1-in-8 flake of the early-cancel test).
+pre=""; mid=""
+[ -n "${STUB_SLEEP_BEFORE:-}" ] && { sleep "$STUB_SLEEP_BEFORE" & pre=$!; }
 # The real CLI's first line: progress.rs starts "Reading spectra" on it.
 echo "-threads 0: using 1 of 1 logical cores." >&2
 echo "Reading spectra (stub)" >&2
 echo "FASTAG_PROGRESS done=0 total=$total" >&2
-if [ -n "${STUB_SLEEP_BEFORE:-}" ]; then
-  sleep "$STUB_SLEEP_BEFORE"
-fi
-[ -n "$out" ] && printf 'spectrum\ttag\tlength\tevalue\n' > "$out"
+[ -n "$pre" ] && wait "$pre"
+[ -n "${STUB_SLEEP:-}" ] && { sleep "$STUB_SLEEP" & mid=$!; }
+# The progress line goes out before the partial -out appears, so a test that
+# waits for the file knows the line is already in the pipe.
 echo "FASTAG_PROGRESS done=2 total=$total" >&2
+[ -n "$out" ] && printf 'spectrum\ttag\tlength\tevalue\n' > "$out"
 if [ -n "${STUB_CHATTY:-}" ]; then
   awk -v n="$STUB_CHATTY" -v t="$total" -v p="${STUB_CHATTY_PAUSE:-}" 'BEGIN { for (i = 1; i <= n; i++) {
     print "Warning: spectrum " i " has no precursor charge, assuming 2+"
@@ -114,9 +129,7 @@ if [ -n "${STUB_CHATTY:-}" ]; then
     }
   } }' >&2
 fi
-if [ -n "${STUB_SLEEP:-}" ]; then
-  sleep "$STUB_SLEEP"
-fi
+[ -n "$mid" ] && wait "$mid"
 printf 'scan=1\tPEPTK\t5\t0.001\n' >> "$out"
 printf '%s\n' "$reports" | while IFS= read -r r; do
   [ -n "$r" ] && printf 'section\tkey\tvalue\tn\tdescription\n' > "$r"
