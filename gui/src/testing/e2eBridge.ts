@@ -24,7 +24,7 @@
 // window.__fastagE2E gives the specs the mock and a few controls.
 
 import { installMockBridge, type MockBridge } from './mockBridge'
-import type { BrowserEvent, ResultsPage, ResultsView, RunStarted } from '../types'
+import type { BrowserEvent, ResultsPage, ResultsView, RunEvent, RunStarted } from '../types'
 import ecoliTags from '../../e2e-web/fixtures/ecoli.tags.tsv?raw'
 import digestTsv from '../fixtures/digest.tsv?raw'
 import labelTsv from '../fixtures/label.tsv?raw'
@@ -51,6 +51,8 @@ declare global {
 }
 
 interface Script {
+  // The phase (progress.rs) the run is in while it prints them.
+  phase: string
   lines: string[]
   ok: boolean
   code: number | null
@@ -177,14 +179,15 @@ export function installE2EBridge(): void {
   const script = (input: string): Script => {
     const name = base(input)
     const reading = [`${name}: Reading spectra`, `${name}: Loading the spectra index`]
-    if (fixture === 'slow') return { lines: reading, ok: false, code: null, hang: true }
+    if (fixture === 'slow') return { phase: 'Reading spectra', lines: reading, ok: false, code: null, hang: true }
     if (fixture === 'batch-fail' && name === 'run02.mzML')
       return {
+        phase: 'Reading spectra',
         lines: [...reading, `${name}: Error: Unable to read file (in: ${input}): the index is stale`],
         ok: false,
         code: 1
       }
-    return { lines: [...reading, `${name}: 139 MS2 spectra, 2028 tags`], ok: true, code: 0 }
+    return { phase: 'Reading spectra', lines: [...reading, `${name}: 139 MS2 spectra, 2028 tags`], ok: true, code: 0 }
   }
 
   const cancelled = new Set<number>()
@@ -208,21 +211,24 @@ export function installE2EBridge(): void {
     )
     return origCancel()
   }
-  mock.run = async (params): Promise<RunStarted> => {
-    const started = await origRun(params)
-    if (!started.started || started.runId == null) return started
-    const id = started.runId
+  mock.run = async (params, onEvent): Promise<RunStarted> => {
+    const started = await origRun(params, onEvent)
+    if (!started.started) return started
+    const id = mock.lastRunId
     const s = script(String(params['in']))
     const at = (ms: number, f: () => void): void => {
       setTimeout(() => {
         if (!cancelled.has(id)) f()
       }, ms)
     }
-    s.lines.forEach((l, i) => at(40 + i * 40, () => mock.emitLog(l)))
-    at(60, () => mock.emitProgress({ done: 70, total: 139 }))
+    const emit = (e: RunEvent): void => mock.emitEvent(id, e)
+    at(20, () => emit({ kind: 'phase', label: s.phase }))
+    s.lines.forEach((l, i) => at(40 + i * 40, () => emit({ kind: 'log', lines: [[l, true]] })))
+    at(60, () => emit({ kind: 'phase', label: 'Tagging spectra' }))
+    at(60, () => emit({ kind: 'progress', done: 70, total: 139, ratePerSec: 700, etaSec: 0.1 }))
     if (!s.hang) {
       const end = 80 + s.lines.length * 40
-      at(end - 10, () => mock.emitProgress({ done: 139, total: 139 }))
+      at(end - 10, () => emit({ kind: 'progress', done: 139, total: 139 }))
       at(end, () =>
         mock.emitDone({
           runId: id,

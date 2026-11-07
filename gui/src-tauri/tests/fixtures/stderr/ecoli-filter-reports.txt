@@ -1,0 +1,106 @@
+-threads 0: using 8 of 16 logical cores.
+Modifications: Carbamidomethyl (C, fixed)
+Filter index: 1545 keys
+Filter: 3 sequences, 876 residues; minimum tag length 4 (derived); 13 isobaric rules
+No two peaks anywhere in this file are closer than 0.600342 Th, yet the fragment tolerance is 0.00722706 Th near m/z 361.353. That is what low-resolution (ion trap) MS2 read with a high-resolution tolerance looks like, and it yields almost no tags for a reason the output cannot show. If the MS2 is ion trap, try -fragment_tolerance 0.3 -fragment_tolerance_unit Da.
+FASTAG_PROGRESS done=1 total=139
+FASTAG_PROGRESS done=2 total=139
+FASTAG_PROGRESS done=3 total=139
+FASTAG_PROGRESS done=6 total=139
+FASTAG_PROGRESS done=8 total=139
+FASTAG_PROGRESS done=9 total=139
+FASTAG_PROGRESS done=10 total=139
+FASTAG_PROGRESS done=12 total=139
+FASTAG_PROGRESS done=15 total=139
+FASTAG_PROGRESS done=16 total=139
+FASTAG_PROGRESS done=18 total=139
+FASTAG_PROGRESS done=19 total=139
+FASTAG_PROGRESS done=20 total=139
+FASTAG_PROGRESS done=22 total=139
+FASTAG_PROGRESS done=23 total=139
+FASTAG_PROGRESS done=24 total=139
+FASTAG_PROGRESS done=26 total=139
+FASTAG_PROGRESS done=27 total=139
+FASTAG_PROGRESS done=28 total=139
+FASTAG_PROGRESS done=30 total=139
+FASTAG_PROGRESS done=33 total=139
+FASTAG_PROGRESS done=34 total=139
+FASTAG_PROGRESS done=35 total=139
+FASTAG_PROGRESS done=37 total=139
+FASTAG_PROGRESS done=38 total=139
+FASTAG_PROGRESS done=39 total=139
+FASTAG_PROGRESS done=41 total=139
+FASTAG_PROGRESS done=42 total=139
+FASTAG_PROGRESS done=44 total=139
+FASTAG_PROGRESS done=45 total=139
+FASTAG_PROGRESS done=47 total=139
+FASTAG_PROGRESS done=48 total=139
+FASTAG_PROGRESS done=49 total=139
+FASTAG_PROGRESS done=51 total=139
+FASTAG_PROGRESS done=52 total=139
+FASTAG_PROGRESS done=53 total=139
+FASTAG_PROGRESS done=55 total=139
+FASTAG_PROGRESS done=56 total=139
+FASTAG_PROGRESS done=57 total=139
+FASTAG_PROGRESS done=59 total=139
+FASTAG_PROGRESS done=60 total=139
+FASTAG_PROGRESS done=62 total=139
+FASTAG_PROGRESS done=64 total=139
+FASTAG_PROGRESS done=66 total=139
+FASTAG_PROGRESS done=67 total=139
+FASTAG_PROGRESS done=69 total=139
+FASTAG_PROGRESS done=70 total=139
+FASTAG_PROGRESS done=71 total=139
+FASTAG_PROGRESS done=73 total=139
+FASTAG_PROGRESS done=75 total=139
+FASTAG_PROGRESS done=76 total=139
+FASTAG_PROGRESS done=77 total=139
+FASTAG_PROGRESS done=78 total=139
+FASTAG_PROGRESS done=80 total=139
+FASTAG_PROGRESS done=81 total=139
+FASTAG_PROGRESS done=83 total=139
+FASTAG_PROGRESS done=84 total=139
+FASTAG_PROGRESS done=86 total=139
+FASTAG_PROGRESS done=87 total=139
+FASTAG_PROGRESS done=88 total=139
+FASTAG_PROGRESS done=89 total=139
+FASTAG_PROGRESS done=91 total=139
+FASTAG_PROGRESS done=92 total=139
+FASTAG_PROGRESS done=94 total=139
+FASTAG_PROGRESS done=95 total=139
+FASTAG_PROGRESS done=96 total=139
+FASTAG_PROGRESS done=98 total=139
+FASTAG_PROGRESS done=99 total=139
+FASTAG_PROGRESS done=101 total=139
+FASTAG_PROGRESS done=102 total=139
+FASTAG_PROGRESS done=103 total=139
+FASTAG_PROGRESS done=105 total=139
+FASTAG_PROGRESS done=106 total=139
+FASTAG_PROGRESS done=108 total=139
+FASTAG_PROGRESS done=111 total=139
+FASTAG_PROGRESS done=112 total=139
+FASTAG_PROGRESS done=113 total=139
+FASTAG_PROGRESS done=114 total=139
+FASTAG_PROGRESS done=116 total=139
+FASTAG_PROGRESS done=118 total=139
+FASTAG_PROGRESS done=120 total=139
+FASTAG_PROGRESS done=121 total=139
+FASTAG_PROGRESS done=123 total=139
+FASTAG_PROGRESS done=124 total=139
+FASTAG_PROGRESS done=126 total=139
+FASTAG_PROGRESS done=128 total=139
+FASTAG_PROGRESS done=130 total=139
+FASTAG_PROGRESS done=131 total=139
+FASTAG_PROGRESS done=133 total=139
+FASTAG_PROGRESS done=134 total=139
+FASTAG_PROGRESS done=135 total=139
+FASTAG_PROGRESS done=137 total=139
+FASTAG_PROGRESS done=138 total=139
+Digest: 0 filtered tags, reason ms2_first_peak -> f.digest.tsv
+Labels: 0 filtered tags -> f.label.tsv
+Species: 0 spectra contributed taxon evidence; top genus calls -> f.tags.species.tsv
+139 MS2 spectra, 8 tags -> 0 after filtering
+  len         tags      matched    by chance enrichment
+    7            8            0            0          -
+FASTAG_PROGRESS done=139 total=139
+FASTag took 0.11 s (wall), 0.15 s (CPU), 0.02 s (system), 0.13 s (user); Peak Memory Usage: 508 MB.

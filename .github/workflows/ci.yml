@@ -1348,7 +1348,7 @@ jobs:
       # exactly enough. Verified locally by reproducing the CI condition:
       # without the directory cargo fails with "resource path
       # `resources/fastag` doesn't exist"; with an empty one the lib tests pass
-      # (91 on macOS from P0b, 73 from P0a, 54 before). The run lifecycle tests drive
+      # (108 on macOS from P1 PR a, 91 from P0b, 73 from P0a, 54 before). The run lifecycle tests drive
       # gui/testing/stub-fastag, a sh script, instead of the CLI.
       - name: Backend unit tests
         working-directory: gui/src-tauri
@@ -1357,6 +1357,47 @@ jobs:
           cargo test --lib
           # The browser bench (P0b) is not run here, only kept compiling.
           cargo check --example browser_bench
+      # The P1 gate "IPC message rate during a chatty phase" (GUI-DESIGN 10),
+      # measured on this Linux runner against the stub CLI and printed into
+      # the job summary. The bound itself is asserted by the tests above.
+      - name: IPC message rate of a chatty phase (recorded)
+        working-directory: gui/src-tauri
+        run: |
+          cargo test --lib ipc_rate -- --nocapture --test-threads=1 2>&1 | tee ipc-rate.txt
+          { echo '### IPC message rate (stub CLI, ubuntu-24.04)'; echo '```'; grep -o 'IPC rate.*' ipc-rate.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+  # The backend's unit tests on Windows: path handling differs there (a
+  # root-relative \data\x.tsv is not absolute; ResolvedOutputs, GUI-DESIGN
+  # 6.3), and the GUI ships for Windows, yet these tests ran only on Linux and
+  # macOS. No OpenMS and no CLI: the run-lifecycle tests that drive the sh
+  # stub are cfg(unix). pwsh, not bash: Git Bash's link.exe would shadow
+  # MSVC's (see windows.yml). Informational until it has been green once.
+  gui-windows:
+    runs-on: windows-2022
+    timeout-minutes: 40
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+      # tauri's generate_context! embeds frontendDist (../dist), which must exist.
+      - name: Frontend build (for the embedded assets)
+        working-directory: gui
+        shell: pwsh
+        run: |
+          npm ci;        if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          npm run build; if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Backend unit tests (Windows)
+        working-directory: gui/src-tauri
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force resources/fastag | Out-Null
+          cargo test --lib
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
   # ---------------------------------------------------- release data asset
   # Copies the pinned taxonomy tarball onto the new release as a standalone

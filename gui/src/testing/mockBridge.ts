@@ -3,12 +3,22 @@
 // the shipped code uses. Tests install this in its place and drive the run
 // lifecycle by hand (emit*), including the done-before-run()-resolves race
 // (holdRun/releaseRun).
+//
+// Like the backend, every run has a Channel of its own (the onEvent its
+// run() call was given). The mock numbers the runs it started, 1, 2, ...
+// (lastRunId): emitDone({runId}) and emitEvent(runId, ...) send to that
+// run's Channel, emitLog/emitProgress/emitPhase to the newest run's. A
+// runId no run has, or none, reaches no Channel, as nothing can on the
+// backend. This fake Channel only feeds App-level tests; api.ts itself is
+// tested against Tauri's IPC mock (api.test.ts).
 
 import type {
   BinaryInfo,
   BrowserEvent,
   FastagApi,
+  ResolvedOutputs,
   ResultsView,
+  RunEvent,
   RunRecord,
   RunResult,
   RunStarted,
@@ -16,6 +26,7 @@ import type {
   SpeciesReport,
   TaxdbInfo
 } from '../types'
+import runStartedFixture from './fixtures/run-started.json'
 
 export interface RunCall {
   in: string
@@ -74,23 +85,64 @@ export interface MockBridge extends FastagApi {
   // answerClose(quit) calls, and the setBusy values, in order.
   closeAnswers: boolean[]
   busyCalls: boolean[]
-  // The id the most recent run() allocated (allocated at call time, so a test
-  // can emit its terminal event before releasing the held invoke reply).
+  // The number of the most recent run() that started (allocated at call
+  // time, so a test can emit its terminal event before releasing the held
+  // invoke reply).
   lastRunId: number
-  // Control surface.
+  // Control surface: messages on a run's Channel (see the header).
   emitLog(line: string): void
-  emitProgress(p: { done: number; total: number }): void
-  emitDone(r: RunResult): void
+  emitProgress(p: { done: number; total: number; ratePerSec?: number | null; etaSec?: number | null }): void
+  emitPhase(label: string): void
+  emitDone(r: RunResult & { runId?: number }): void
+  emitEvent(runId: number, e: RunEvent): void
   // The backend's close guard: a close or quit request while busy.
   emitCloseRequested(what: 'close' | 'quit'): void
   holdRun(): void
   releaseRun(): void
 }
 
+/// The reply of `run` exactly as fastag.rs serialises it (cargo test
+/// the_run_reply_names_every_output_by_its_option_name compares the two).
+export const RUN_STARTED_FIXTURE: RunStarted = runStartedFixture
+/// Every key of ResolvedOutputs on the wire.
+export const OUTPUT_KEYS = Object.keys(runStartedFixture.outputs) as (keyof ResolvedOutputs)[]
+
+const isAbs = (p: string): boolean => p.startsWith('/')
+const dirOf = (p: string): string => p.slice(0, p.lastIndexOf('/') + 1)
+
+/// The outputs a run of @p call writes, as fastag.rs resolves them (the
+/// same rules on Unix paths): relative against the folder of an absolute
+/// input, the species and glyco reports derived from -out when on without a
+/// path of their own.
+export function mockOutputs(call: RunCall): ResolvedOutputs {
+  const dir = isAbs(call.in) ? dirOf(call.in) : ''
+  const abs = (p: string): string => (isAbs(p) || !dir ? p : `${dir}${p}`)
+  const params = call.params ?? {}
+  const str = (n: string): string => (typeof params[n] === 'string' ? String(params[n]).trim() : '')
+  const out = call.out ? abs(call.out) : null
+  const derive = (suffix: string): string | null => {
+    if (!out) return null
+    const slash = out.lastIndexOf('/')
+    const dot = out.lastIndexOf('.')
+    return `${dot > slash ? out.slice(0, dot) : out}${suffix}`
+  }
+  const o: ResolvedOutputs = { out }
+  // The keys the backend sends (fixtures/run-started.json, which cargo pins
+  // to the JSON of `run`'s reply), never a list of this mock's own.
+  for (const n of OUTPUT_KEYS) {
+    if (n !== 'out') o[n] = str(n) ? abs(str(n)) : null
+  }
+  if (params['species'] === true && !o.species_out) o.species_out = derive('.species.tsv')
+  if (params['glyco'] === true && !o.glyco_out) o.glyco_out = derive('.glyco.tsv')
+  return o
+}
+
 export function installMockBridge(): MockBridge {
-  const logListeners: ((line: string) => void)[] = []
-  const progressListeners: ((p: { done: number; total: number }) => void)[] = []
-  const doneListeners: ((r: RunResult) => void)[] = []
+  // Each started run's Channel, by its number.
+  const channels = new Map<number, (e: RunEvent) => void>()
+  const send = (id: number | undefined, e: RunEvent): void => {
+    if (id != null) channels.get(id)?.(e)
+  }
   const closeListeners: ((what: 'close' | 'quit') => void)[] = []
   const menuListeners: ((action: string) => void)[] = []
   let browserCb: ((e: BrowserEvent) => void) | null = null
@@ -148,9 +200,11 @@ export function installMockBridge(): MockBridge {
     busyCalls: [],
     lastRunId: 0,
 
-    emitLog: (line) => logListeners.slice().forEach((cb) => cb(line)),
-    emitProgress: (p) => progressListeners.slice().forEach((cb) => cb(p)),
-    emitDone: (r) => doneListeners.slice().forEach((cb) => cb(r)),
+    emitLog: (line) => send(mock.lastRunId, { kind: 'log', lines: [[line, true]] }),
+    emitProgress: (p) => send(mock.lastRunId, { kind: 'progress', ...p }),
+    emitPhase: (label) => send(mock.lastRunId, { kind: 'phase', label }),
+    emitDone: ({ runId, ...r }) => send(runId, { kind: 'done', ...r }),
+    emitEvent: (runId, e) => send(runId, e),
     emitCloseRequested: (what) => closeListeners.slice().forEach((cb) => cb(what)),
     holdRun: () => {
       held = held ?? []
@@ -249,7 +303,7 @@ export function installMockBridge(): MockBridge {
     },
     historyList: (limit) => Promise.resolve(mock.history.slice(0, limit ?? 50)),
     historyOf: (path) => Promise.resolve(mock.history.find((r) => r.outputs.includes(path)) ?? null),
-    run: (params) => {
+    run: (params, onEvent) => {
       mock.runCalls.push(params as unknown as RunCall)
       if (mock.rejectNextRun) {
         const e = mock.rejectNextRun
@@ -262,19 +316,21 @@ export function installMockBridge(): MockBridge {
         return Promise.resolve({ started: false, reason })
       }
       mock.lastRunId = ++seq
-      // As fastag.rs does: a relative -out is resolved against the folder of
-      // an absolute input, and the resolved path comes back as `out`.
-      const { in: inFile, out } = params as unknown as RunCall
-      const resolved =
-        out && !out.startsWith('/') && inFile.startsWith('/') ? `${inFile.slice(0, inFile.lastIndexOf('/') + 1)}${out}` : out
-      const started: RunStarted = { started: true, runId: mock.lastRunId, out: resolved, command: [mock.binaryInfo.bin, '-in', inFile, '-out', resolved] }
+      channels.set(mock.lastRunId, onEvent)
+      // As fastag.rs does: every output resolved (a relative one against the
+      // folder of an absolute input) comes back in `outputs`.
+      const call = params as unknown as RunCall
+      const outputs = mockOutputs(call)
+      const started: RunStarted = {
+        started: true,
+        out: outputs.out,
+        outputs,
+        command: [mock.binaryInfo.bin, '-in', call.in, '-out', outputs.out ?? '']
+      }
       if (held) return new Promise<RunStarted>((resolve) => held!.push(() => resolve(started)))
       return Promise.resolve(started)
     },
 
-    onLog: on(logListeners),
-    onProgress: on(progressListeners),
-    onDone: on(doneListeners),
     onCloseRequested: on(closeListeners),
     answerClose: (quit) => {
       mock.closeAnswers.push(quit)
