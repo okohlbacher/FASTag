@@ -75,7 +75,7 @@ endif()
 # control).
 set(FASTAG_CORE_SOURCES src/FASTagger.cpp src/AveragineDeisotoper.cpp src/Digest.cpp src/DigestReport.cpp src/FastaFilter.cpp src/ProteomeIndex.cpp src/ReconIds.cpp src/TagRecon.cpp src/TaxDeconv.cpp src/TaxIndex.cpp src/TaxStats.cpp)
 # ---- 1.12 E: core sources ----
-set(FASTAG_CORE_SOURCES_E)
+set(FASTAG_CORE_SOURCES_E src/Acquisition.cpp)
 # ---- 1.12 A: core sources ----
 set(FASTAG_CORE_SOURCES_A)
 # ---- 1.12 D: core sources ----
@@ -105,7 +105,8 @@ endif()
 # links the same library.
 find_package(ZLIB REQUIRED)
 
-add_executable(FASTag src/FASTag.cpp src/IndexedMzMLReader.cpp src/MzMLDirectDecoder.cpp src/MgfReader.cpp src/MzPeakStream.cpp)
+add_executable(FASTag src/FASTag.cpp src/IndexedMzMLReader.cpp src/MzMLDirectDecoder.cpp src/MgfReader.cpp src/MzPeakStream.cpp
+               src/AcquisitionProbe.cpp)
 
 # mimalloc on Windows, with redirection of the C runtime heap.
 #
@@ -386,6 +387,27 @@ if(FASTAG_BUILD_TESTS)
                    $<TARGET_FILE:cli_param_test>
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML)
   set_tests_properties(out_spectra_params_test PROPERTIES SKIP_RETURN_CODE 77)
+  # #7: the raw-DIA classifier on the 21 synthetic cases of the plan, the
+  # probe helpers, both mzML readers on the fixtures, the mzPeak probe and
+  # the messages. Built with the readers it probes through.
+  add_executable(acquisition_test test/acquisition_test.cpp src/AcquisitionProbe.cpp src/IndexedMzMLReader.cpp
+                 src/MzMLDirectDecoder.cpp src/MgfReader.cpp src/MzPeakStream.cpp)
+  target_link_libraries(acquisition_test PRIVATE fastag_core ZLIB::ZLIB)
+  if(OpenMP_CXX_FOUND)
+    target_link_libraries(acquisition_test PRIVATE OpenMP::OpenMP_CXX)
+  endif()
+  target_compile_definitions(acquisition_test PRIVATE
+                             FASTAG_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
+  add_test(NAME acquisition_test COMMAND acquisition_test ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures)
+  # #7: raw DIA refused (exit 11, outputs untouched) on every reader, warn
+  # equal to 1.11.0, pseudo-DDA and DDA-like inputs equal to off.
+  add_test(NAME acquisition_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/acquisition_cli_test.sh $<TARGET_FILE:FASTag>
+                   $<TARGET_FILE:acquisition_test>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
+  set_tests_properties(acquisition_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # ---- 1.12 A: CLI tests ----
   # ---- 1.12 D: CLI tests ----
   # ---- 1.12 F: CLI tests ----

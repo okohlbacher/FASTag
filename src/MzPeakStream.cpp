@@ -5,6 +5,7 @@
 
 #include <OpenMS/CONCEPT/Exception.h>
 #include <OpenMS/FORMAT/MzPeakFile.h>
+#include <OpenMS/FORMAT/OPTIONS/PeakFileOptions.h>
 #include <OpenMS/PROCESSING/CENTROIDING/PeakPickerHiRes.h>
 
 #include <algorithm>
@@ -301,5 +302,65 @@ namespace FASTag
       throw Exception::ParseError(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION, path,
                                   "mzPeak run ended before spectrum " + std::to_string(indices[consumer.found()]));
     }
+  }
+
+  /****************************************************************************/
+  namespace
+  {
+    /// Collects Ms2Meta until the limits are reached, then stops the read.
+    class AcquisitionProbe : public Interfaces::IMSDataConsumer
+    {
+    public:
+      struct Stop {};
+      explicit AcquisitionProbe(const Acquisition::ProbeLimits& limits) : limits_(limits) {}
+      void setExperimentalSettings(const ExperimentalSettings&) override {}
+      void setExpectedSize(Size, Size) override {}
+      void consumeSpectrum(SpectrumType& s) override
+      {
+        if (seen_ >= limits_.max_spectra || out.size() >= limits_.max_ms2) throw Stop();
+        ++seen_;
+        if (auto m = Acquisition::fromSpectrum(s)) out.push_back(*m);
+      }
+      void consumeChromatogram(ChromatogramType&) override {}
+      std::vector<Acquisition::Ms2Meta> out;
+
+    private:
+      const Acquisition::ProbeLimits limits_;
+      std::size_t seen_ = 0;
+    };
+  }
+
+  std::vector<Acquisition::Ms2Meta> probeMzPeakMetadata(const std::string& path, const Acquisition::ProbeLimits& limits,
+                                                        int threads)
+  {
+    AcquisitionProbe probe(limits);
+    if (limits.max_ms2 == 0 || limits.max_spectra == 0) return {};
+#ifdef _OPENMP
+    const int before = omp_get_max_threads();
+#endif
+    setThreads(threads);
+    MzPeakFile f;
+    PeakFileOptions opt = f.getOptions();
+    opt.setMSLevels({2});
+    opt.setFillData(false);
+    f.setOptions(opt);
+    try
+    {
+      f.transform(path, &probe);
+    }
+    catch (const AcquisitionProbe::Stop&)
+    {
+    }
+    catch (...)
+    {
+#ifdef _OPENMP
+      omp_set_num_threads(before);
+#endif
+      rethrowAsOpenMS(std::current_exception(), path);
+    }
+#ifdef _OPENMP
+    omp_set_num_threads(before);
+#endif
+    return std::move(probe.out);
   }
 }

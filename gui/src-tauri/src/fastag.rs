@@ -512,7 +512,10 @@ fn parse_progress_line(line: &str) -> Option<(u64, u64)> {
     Some((done?, total?))
 }
 
-fn read_stream<R: Read>(stream: R, app: &AppHandle, parse_progress: bool) {
+/// Forwards every line as log (stderr's progress lines as progress). Returns
+/// whether the stream carried FASTag's raw-DIA refusal line (1.12 #7).
+fn read_stream<R: Read>(stream: R, app: &AppHandle, parse_progress: bool) -> bool {
+    let mut refused_dia = false;
     for_each_line(stream, |line| {
         if parse_progress {
             if let Some((done, total)) = parse_progress_line(&line) {
@@ -520,8 +523,29 @@ fn read_stream<R: Read>(stream: R, app: &AppHandle, parse_progress: bool) {
                 return;
             }
         }
+        refused_dia |= is_dia_refusal_line(&line);
         let _ = app.emit("fastag:log", line);
     });
+    refused_dia
+}
+
+/// FASTag 1.12 refuses raw DIA with exit code 11 and this stderr line.
+const DIA_REFUSAL_PREFIX: &str = "FASTAG_REFUSED reason=raw_dia";
+
+fn is_dia_refusal_line(line: &str) -> bool {
+    line.starts_with(DIA_REFUSAL_PREFIX)
+}
+
+/// The run's terminal message for a raw-DIA refusal: exit code 11 together
+/// with the refusal line (exit 11 alone has other causes, such as ion
+/// mobility that -out_spectra .mzpeak cannot store).
+fn dia_refusal_message(code: Option<i32>, refused_dia: bool) -> Option<String> {
+    (code == Some(11) && refused_dia).then(|| {
+        "the input is raw DIA, which FASTag does not tag. Run DIAspeXtract on it first (diaTracer also works \
+         for Bruker .d) to generate pseudo-DDA spectra, then open its .pseudo.mzML output here. The log has the \
+         details; -acquisition_check warn tags raw DIA anyway (experts)."
+            .to_string()
+    })
 }
 
 /// Every line of @p stream, decoded lossily, until EOF. lines() stops at the
@@ -616,15 +640,11 @@ pub fn run(app: AppHandle, state: State<'_, RunManager>, params: RunParams) -> R
     // One reader thread per stream (stderr carries the progress contract; stdout
     // is drained as log so a full pipe can never block the child).
     let a_err = app.clone();
-    let t_err = std::thread::spawn(move || {
-        if let Some(s) = stderr {
-            read_stream(s, &a_err, true);
-        }
-    });
+    let t_err = std::thread::spawn(move || stderr.map(|s| read_stream(s, &a_err, true)).unwrap_or(false));
     let a_out = app.clone();
     let t_out = std::thread::spawn(move || {
         if let Some(s) = stdout {
-            read_stream(s, &a_out, false);
+            let _ = read_stream(s, &a_out, false);
         }
     });
 
@@ -633,7 +653,7 @@ pub fn run(app: AppHandle, state: State<'_, RunManager>, params: RunParams) -> R
     // closed window is a harmless no-op.
     let a_done = app.clone();
     std::thread::spawn(move || {
-        let _ = t_err.join();
+        let refused_dia = t_err.join().unwrap_or(false);
         let _ = t_out.join();
         let status = {
             let mut c = child_arc.lock().unwrap();
@@ -647,7 +667,11 @@ pub fn run(app: AppHandle, state: State<'_, RunManager>, params: RunParams) -> R
         };
         // A cancel that lost the race to a clean exit is not a cancellation.
         let was_cancelled = !ok && cancelled.load(Ordering::SeqCst);
-        let message = if was_cancelled { Some("cancelled".to_string()) } else { message };
+        let message = if was_cancelled {
+            Some("cancelled".to_string())
+        } else {
+            dia_refusal_message(code, refused_dia).or(message)
+        };
         {
             let st = a_done.state::<RunManager>();
             let mut cur = st.current.lock().unwrap();
@@ -883,6 +907,18 @@ mod tests {
         assert_eq!(signal_text(64), "killed by signal 64");
         assert_eq!(ntstatus_text(1), None);
         assert!(ntstatus_text(0xC000_0005_u32 as i32).unwrap().contains("0xC0000005"));
+    }
+
+    #[test]
+    fn dia_refusal_needs_exit_11_and_the_line() {
+        assert!(is_dia_refusal_line("FASTAG_REFUSED reason=raw_dia windows=20 median_width=25"));
+        assert!(!is_dia_refusal_line("Acquisition check: DIA (...)"));
+        assert!(!is_dia_refusal_line(" FASTAG_REFUSED reason=raw_dia"));
+        let m = dia_refusal_message(Some(11), true).unwrap();
+        assert!(m.contains("DIAspeXtract") && m.contains("pseudo-DDA"));
+        assert_eq!(dia_refusal_message(Some(11), false), None);
+        assert_eq!(dia_refusal_message(Some(0), true), None);
+        assert_eq!(dia_refusal_message(None, true), None);
     }
 
     #[cfg(unix)]

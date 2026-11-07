@@ -10,6 +10,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "Acquisition.h"
+
 #include <OpenMS/INTERFACES/IMSDataConsumer.h>
 #include <OpenMS/KERNEL/MSSpectrum.h>
 #include <OpenMS/METADATA/ExperimentalSettings.h>
@@ -140,4 +142,12 @@ namespace FASTag
   /// reader's error, or a ParseError if an index is past the run's end.
   void readMzPeakSpectra(const std::string& path, int threads, const std::vector<std::size_t>& indices,
                          const std::function<void(OpenMS::MSSpectrum&)>& sink);
+
+  /// The acquisition probe of an mzPeak archive (1.12 item #7): the
+  /// Ms2Meta of its first MS2, in file order, within @p limits. A
+  /// metadata-only read (PeakFileOptions: MS2 only, no peaks) that stops
+  /// once the limits are reached. Decodes with @p threads OpenMP threads.
+  /// Throws the reader's error.
+  std::vector<Acquisition::Ms2Meta> probeMzPeakMetadata(const std::string& path, const Acquisition::ProbeLimits& limits,
+                                                        int threads);
 }
