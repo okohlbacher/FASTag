@@ -3948,13 +3948,13 @@ protected:
 
     // -census (#11): the table is complete; the summary starts with the run
     // rows (format Versioned: a new 1.12 report) and adds section `census`.
+    FASTag::CensusIds::JoinTally ids_tally;
+    FASTag::CensusIds::Index::Counts ids_counts;
     if (census_on)
     {
       ctsv.close();
       // -census_ids: the join, from the finished table to a second .part
       // file that replaces it before the commit.
-      FASTag::CensusIds::JoinTally ids_tally;
-      FASTag::CensusIds::Index::Counts ids_counts;
       if (census_ids_on && !ctsv.fail())
       {
         FASTag::PartFile joined(census_part.writePath());

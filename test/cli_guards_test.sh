@@ -264,11 +264,11 @@ grep -q -- "-census_summary_out is only read for -census" "$TMP/c7.log" || fail 
 # name it (by name, symlink or hard link; the file unchanged); a missing file
 # is an input error. Collisions are refused before the file is read, so a
 # placeholder file suffices here (census_ids_cli_test covers the join).
-"$BIN" -stream -census_ids "$TMP/none.idXML" "${ARGS[@]}" </dev/null >"$TMP/ci0.log" 2>&1 && fail "-stream -census_ids ran (exit 0)"
+printf 'placeholder, never read\n' > "$TMP/ids.idXML"
+"$BIN" -stream -census_ids "$TMP/ids.idXML" "${ARGS[@]}" </dev/null >"$TMP/ci0.log" 2>&1 && fail "-stream -census_ids ran (exit 0)"
 grep -q "stream cannot be combined with -census_ids" "$TMP/ci0.log" || fail "no -stream refusal naming -census_ids"
 "$BIN" -stream -census_ids_fdr 0.05 "${ARGS[@]}" </dev/null >"$TMP/ci0b.log" 2>&1 && fail "-stream -census_ids_fdr ran (exit 0)"
 "$BIN" -stream -census_triage_evalue 0.05 "${ARGS[@]}" </dev/null >"$TMP/ci0c.log" 2>&1 && fail "-stream -census_triage_evalue ran (exit 0)"
-printf 'placeholder, never read\n' > "$TMP/ids.idXML"
 ids_before=$(cksum < "$TMP/ids.idXML")
 "$BIN" -in "$IN" -out "$TMP/ci1.tsv" -census -census_ids "$TMP/ids.idXML" -census_out "$TMP/ids.idXML" "${ARGS[@]}" \
   >"$TMP/ci1.log" 2>&1 && fail "-census_out equal to -census_ids ran (exit 0)"
