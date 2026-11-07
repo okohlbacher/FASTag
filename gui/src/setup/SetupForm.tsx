@@ -56,6 +56,8 @@ export interface SetupFormProps {
 export default function SetupForm({ session, run, onPickInput, onSearch, searchBtnRef, onOpenBatch, addBatchRef, onOpenResults }: SetupFormProps): JSX.Element {
   const { input, out, values, setValue, openGroups, setOpenGroups, writingFiles, changedParams } = session
   const { busy, jobs, lastRun, evidence, revealErr, reveal } = run
+  // A batch task (Batch QC) asks for the files of a batch before one file.
+  const batchFirst = !input && !!session.task && taskById(session.task)?.batch === true
 
   const field = (name: string, sec?: Section): JSX.Element | null => {
     const spec = PARAM_BY_NAME.get(name)
@@ -113,7 +115,22 @@ export default function SetupForm({ session, run, onPickInput, onSearch, searchB
           <h2 id="input-label">Input</h2>
           <HelpButton to="files-inputs" what="input files" />
         </div>
-        {input ? (
+        {batchFirst ? (
+          // Batch QC (tasks.ts): the input is a queue of files, so adding
+          // them is the card's own action; one file stays possible.
+          <>
+            <div className="input-card empty-input">
+              <IconFile />
+              <span className="muted">The files of the batch, as mzML, mzPeak or MGF</span>
+              <button className="secondary" ref={addBatchRef} onClick={run.addBatchFiles} title="Queue several files to run in turn">
+                Add files for a batch…
+              </button>
+            </div>
+            <button className="link add-batch" onClick={onPickInput}>
+              Or choose one file…
+            </button>
+          </>
+        ) : input ? (
           <div className="input-card">
             <IconFile />
             <div className="path" title={input}>
@@ -133,9 +150,11 @@ export default function SetupForm({ session, run, onPickInput, onSearch, searchB
             </button>
           </div>
         )}
-        <button className="link add-batch" ref={addBatchRef} onClick={run.addBatchFiles} title="Queue several files to run in turn">
-          <span aria-hidden="true">+ </span>Add files for a batch…
-        </button>
+        {!(batchFirst) && (
+          <button className="link add-batch" ref={addBatchRef} onClick={run.addBatchFiles} title="Queue several files to run in turn">
+            <span aria-hidden="true">+ </span>Add files for a batch…
+          </button>
+        )}
       </section>
     )}
 

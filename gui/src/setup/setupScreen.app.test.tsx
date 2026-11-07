@@ -50,10 +50,51 @@ describe('Setup: the task chooser', () => {
     await click(screen.getByRole('button', { name: 'Undo' }))
     expect(field('tag_length')!.value).toBe('5')
     expect(task(/^Characterize a run/).checked).toBe(true)
-    // Nothing to undo when nothing was changed by hand.
+    // Nothing to undo when nothing was changed by hand. The values Undo
+    // brought back are the user's own again, so Reset takes them back first.
+    await click(screen.getByRole('button', { name: /^Reset to Characterize a run/ }))
+    expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
     await click(task(/^Export tags/))
     await click(task(/^Characterize a run/))
     expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
+  })
+
+  it('edits survive two task switches in a row, by keyboard: Undo brings them back', async () => {
+    const mock = installMockBridge()
+    await renderColdApp(mock)
+    await change(field('tag_length')!, '5')
+    // Arrowing through the native radio group replaces the form once per
+    // task it passes: Batch QC, then Export tags.
+    await click(task(/^Batch QC/))
+    await click(task(/^Export tags/))
+    expect(field('tag_length')!.value).toBe('3')
+    await click(screen.getByRole('button', { name: 'Undo' }))
+    expect(field('tag_length')!.value).toBe('5')
+    expect(task(/^Characterize a run/).checked).toBe(true)
+  })
+
+  it('Batch QC asks for the files of a batch first; one file is still possible', async () => {
+    const mock = installMockBridge()
+    await renderColdApp(mock)
+    expect(screen.queryByRole('button', { name: 'Or choose one file…' })).toBeNull()
+    await click(task(/^Batch QC/))
+    // The same values as Characterize: only the input differs (P2a).
+    expect(field('extension')!.value).toBe('2')
+    expect(screen.queryByRole('button', { name: 'Choose file…' })).toBeNull()
+    mock.nextPickInputs = ['/d/a.mzML', '/d/b.mzML']
+    await click(screen.getByRole('button', { name: 'Add files for a batch…' }))
+    await waitFor(() => expect(screen.getByText(/A batch of 2 files/)).toBeDefined())
+  })
+
+  it('Batch QC keeps the single-file path', async () => {
+    const mock = installMockBridge()
+    await renderColdApp(mock)
+    await click(task(/^Batch QC/))
+    mock.nextPickInput = '/d/run01.mzML'
+    await click(screen.getByRole('button', { name: 'Or choose one file…' }))
+    await click(runButton())
+    expect(mock.runCalls).toHaveLength(1)
+    expect(mock.runCalls[0].params.digest_out).toBe('/d/run01.digest.tsv')
   })
 
   it('Open results collapses the cards to an Open… button', async () => {
@@ -208,6 +249,37 @@ describe('Setup: presets as diffs', () => {
     await click(runButton())
     expect(mock.runCalls[0].params.digest_out).toBe('/data/run02.digest.tsv')
     expect(mock.runCalls[0].params.species).toBe(true)
+  })
+
+  it('a preset the settings file refuses is not taken for saved', async () => {
+    const mock = installMockBridge()
+    mock.settingsWritable = false
+    await renderColdApp(mock)
+    await change(field('tag_length')!, '4')
+    await click(screen.getByRole('button', { name: 'Save…' }))
+    await change(screen.getByLabelText('Preset name'), 'Mine')
+    await click(screen.getByRole('button', { name: 'Save' }))
+    expect(screen.getByRole('alert').textContent).toMatch(/“Mine” could not be saved: the settings file cannot be written/)
+    expect(mock.settings.presets['Mine']).toBeUndefined()
+    // The name stays open to retry or cancel; the origin is still the task.
+    expect(screen.getByLabelText('Preset name')).toBeDefined()
+    await click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect((screen.getByLabelText('Preset') as HTMLSelectElement).value).toBe('builtin:characterize')
+    expect(footer().textContent).not.toContain('preset Mine')
+    expect((screen.getByRole('button', { name: 'Delete' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('a preset the settings file refuses to delete stays the origin', async () => {
+    const mock = installMockBridge()
+    mock.settings.presets = { kept: { v: 2, base: 'defaults', diff: { tag_length: '6' } } }
+    await renderColdApp(mock)
+    await change(screen.getByLabelText('Preset'), 'kept')
+    mock.settingsWritable = false
+    await click(screen.getByRole('button', { name: 'Delete' }))
+    expect(screen.getByRole('alert').textContent).toMatch(/“kept” could not be deleted/)
+    expect((screen.getByLabelText('Preset') as HTMLSelectElement).value).toBe('kept')
+    expect(footer().textContent).toContain('preset kept')
   })
 
   it('a v1 preset (a full record) applies as it always did', async () => {

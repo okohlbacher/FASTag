@@ -114,6 +114,11 @@ export default function TaskChooser({ session }: { session: Session }): JSX.Elem
           </>
         )}
       </div>
+      {session.presetError && (
+        <p className="warn" role="alert">
+          {session.presetError}
+        </p>
+      )}
     </section>
   )
 }

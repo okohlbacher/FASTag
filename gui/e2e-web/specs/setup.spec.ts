@@ -109,3 +109,27 @@ for (const [w, h] of [
     }
   })
 }
+
+test('arrowing through the tasks by keyboard keeps the edits for Undo', async ({ page }) => {
+  await openApp(page)
+  await page.locator('#p-tag_length').fill('5')
+  // The native radio group selects on each arrow key: two tasks replace
+  // the form in turn, and Undo still brings back the edited values.
+  await page.getByRole('radio', { name: /^Characterize a run/ }).focus()
+  await page.keyboard.press('ArrowDown')
+  await expect(page.getByRole('radio', { name: /^Batch QC/ })).toBeChecked()
+  await page.keyboard.press('ArrowDown')
+  await expect(page.getByRole('radio', { name: /^Export tags/ })).toBeChecked()
+  await expect(page.locator('#p-tag_length')).toHaveValue('3')
+  await page.getByRole('button', { name: 'Undo' }).click()
+  await expect(page.locator('#p-tag_length')).toHaveValue('5')
+  await expect(page.getByRole('radio', { name: /^Characterize a run/ })).toBeChecked()
+})
+
+test('Batch QC asks for the files of a batch first', async ({ page }) => {
+  await openApp(page)
+  await page.getByRole('radio', { name: /^Batch QC/ }).check()
+  await expect(page.getByRole('button', { name: 'Choose file…' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Add files for a batch…' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Or choose one file…' })).toBeVisible()
+})

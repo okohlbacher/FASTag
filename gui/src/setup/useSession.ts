@@ -70,6 +70,9 @@ export function useSession(start: Origin = DEFAULTS) {
   const [instrument, setInstrument] = useState('')
   const [presets, setPresets] = useState<string[]>([])
   const [savingName, setSavingName] = useState<string | null>(null) // non-null = the 'save as' input is open
+  // Why the last save or delete of a preset was refused (the settings file
+  // cannot be written, the name is not allowed); null when it was not.
+  const [presetError, setPresetError] = useState<string | null>(null)
   // Where focus goes when the control that had it disappears.
   const presetRef = useRef<HTMLSelectElement>(null)
 
@@ -130,9 +133,13 @@ export function useSession(start: Origin = DEFAULTS) {
   const beside = (v: Record<string, ParamValue>): Record<string, ParamValue> => (out ? { ...v, ...rebaseOutputs(v, out) } : v)
 
   // A task or preset replaces the form. What it replaced can be undone,
-  // when it held changes of the user's own.
+  // when it held changes of the user's own. A form without such changes
+  // keeps the snapshot taken before it: arrowing through the task radios
+  // replaces the form once per task, and the edits made before the first
+  // one must survive the second.
   function replaceForm(o: Origin, ov: Record<string, ParamValue>): void {
-    setUndoSnapshot(diffNames(originValues, values).length > 0 ? { values, origin, originValues } : null)
+    if (diffNames(originValues, values).length > 0) setUndoSnapshot({ values, origin, originValues })
+    setPresetError(null)
     setOrigin(o)
     setOriginValues(ov)
     setValues(beside(ov))
@@ -168,9 +175,11 @@ export function useSession(start: Origin = DEFAULTS) {
     if (!p) return
     replaceForm({ kind: 'preset', name, base: p.base }, presetValues(p, ''))
   }
-  async function refreshPresets(): Promise<void> {
+  async function refreshPresets(): Promise<string[]> {
     const st = await window.fastag.loadSettings()
-    setPresets(Object.keys(st.presets).sort())
+    const names = Object.keys(st.presets).sort()
+    setPresets(names)
+    return names
   }
   // A preset stores its diff over its base and no paths (presetDiff.ts).
   const presetBase = baseOf(origin)
@@ -181,8 +190,15 @@ export function useSession(start: Origin = DEFAULTS) {
       return
     }
     const diff = presetDiff(baseValues(presetBase), values)
-    await window.fastag.savePreset(name, { v: 2, base: presetBase, diff })
+    setPresetError(null)
+    const saved = await window.fastag.savePreset(name, { v: 2, base: presetBase, diff })
     await refreshPresets()
+    if (!saved) {
+      // Nothing was stored: the form keeps its origin and the name input
+      // stays open, so the values are not taken for a saved preset.
+      setPresetError(`The preset “${name}” could not be saved: the settings file cannot be written, or the name is not allowed.`)
+      return
+    }
     setOrigin({ kind: 'preset', name, base: presetBase })
     setOriginValues({ ...baseValues(presetBase), ...diff })
     setSavingName(null)
@@ -190,12 +206,19 @@ export function useSession(start: Origin = DEFAULTS) {
   }
   function cancelPreset(): void {
     setSavingName(null)
+    setPresetError(null)
     focusLater(() => presetRef.current)
   }
   async function removePreset(): Promise<void> {
     if (origin.kind !== 'preset') return
-    await window.fastag.deletePreset(origin.name)
-    await refreshPresets()
+    setPresetError(null)
+    const deleted = await window.fastag.deletePreset(origin.name)
+    // A preset already gone from the file counts as deleted.
+    const left = await refreshPresets()
+    if (!deleted && left.includes(origin.name)) {
+      setPresetError(`The preset “${origin.name}” could not be deleted: the settings file cannot be written.`)
+      return
+    }
     // The form stays; it now starts from what the preset was saved over.
     const base = origin.base
     setOrigin(base === 'defaults' ? DEFAULTS : { kind: 'builtin', id: base.slice('builtin:'.length) as TaskId })
@@ -280,6 +303,7 @@ export function useSession(start: Origin = DEFAULTS) {
     commitPreset,
     cancelPreset,
     removePreset,
+    presetError,
     instrument,
     chooseInstrument,
     taxdbK,

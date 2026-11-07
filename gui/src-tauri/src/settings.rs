@@ -9,8 +9,10 @@
 // applies to the same values.
 //
 // The plugin ignores a file it cannot parse and then writes over it, and it
-// writes in place. So before the store opens, prepare() checks the file: an
-// unreadable one is never written; a corrupt one is restored from the copy
+// writes in place, and it saves every store it holds when the app exits. So
+// before the store opens, prepare() checks the file: an unreadable one is
+// never written (that session keeps its settings in memory and never opens
+// a plugin store at the path); a corrupt one is restored from the copy
 // taken before the last save (settings.json.bak) or moved aside. The v1 file
 // is migrated once and kept as settings.v1.json.bak.
 
@@ -227,15 +229,20 @@ pub fn prepare(dir: &Path) -> Prepared {
     }
 }
 
-/// The settings as load_settings returns them, from the store.
-pub fn read_store<R: Runtime>(store: &Store<R>) -> Value {
-    let last_used = store.get("lastUsed").and_then(|v| v.as_object().map(|m| Value::Object(sanitize_map(m)))).unwrap_or(Value::Null);
-    let presets: Map<String, Value> = store
-        .get("presets")
+/// The settings as load_settings returns them, from the entries of a store
+/// (or of the in-memory map of a session that cannot write the file).
+fn read_doc(get: impl Fn(&str) -> Option<Value>) -> Value {
+    let last_used = get("lastUsed").and_then(|v| v.as_object().map(|m| Value::Object(sanitize_map(m)))).unwrap_or(Value::Null);
+    let presets: Map<String, Value> = get("presets")
         .and_then(|v| v.as_object().cloned())
         .map(|m| sanitize_map(&m).into_iter().filter_map(|(k, v)| sanitize_preset(v).map(|p| (k, p))).collect())
         .unwrap_or_default();
     serde_json::json!({ "schemaVersion": SCHEMA, "lastUsed": last_used, "presets": presets })
+}
+
+/// The settings as load_settings returns them, from the store.
+pub fn read_store<R: Runtime>(store: &Store<R>) -> Value {
+    read_doc(|k| store.get(k))
 }
 
 /// Save @p store to @p path, keeping a copy of the file it replaces: the
@@ -280,59 +287,92 @@ pub fn remove_preset<R: Runtime>(store: &Store<R>, name: &str) -> bool {
 pub struct SettingsState {
     path: Option<PathBuf>,
     writable: bool,
+    /// A session that cannot write the file keeps its settings here (the
+    /// seed from prepare(), or nothing) and never opens a plugin store: the
+    /// plugin saves every store it holds when the app exits, unasked, and
+    /// would write over the very file prepare() refused to touch.
+    memory: std::sync::Mutex<Map<String, Value>>,
 }
 
 /// Open the store (lib.rs setup): migrate, check, then load.
 pub fn init<R: Runtime>(app: &AppHandle<R>) {
-    let dir = app.path().app_config_dir().ok();
-    let (path, writable) = match &dir {
+    init_in(app, app.path().app_config_dir().ok());
+}
+
+/// init() over the config dir @p dir (a scratch dir in the tests).
+pub fn init_in<R: Runtime>(app: &AppHandle<R>, dir: Option<PathBuf>) {
+    let (path, writable, memory) = match &dir {
         Some(d) => {
             let p = prepare(d);
             let path = d.join(STORE_FILE);
-            if let Ok(store) = StoreBuilder::new(app, &path).disable_auto_save().build() {
-                for (k, v) in p.seed.into_iter().flatten() {
-                    store.set(k, v);
-                }
+            if p.writable {
+                let _ = StoreBuilder::new(app, &path).disable_auto_save().build();
             }
-            (Some(path), p.writable)
+            (Some(path), p.writable, p.seed.unwrap_or_default())
         }
-        None => (None, false),
+        None => (None, false, Map::new()),
     };
-    app.manage(SettingsState { path, writable });
+    app.manage(SettingsState { path, writable, memory: std::sync::Mutex::new(memory) });
 }
 
-fn with_store<R: Runtime, T>(app: &AppHandle<R>, f: impl FnOnce(&Store<R>, &Path, bool) -> T) -> Option<T> {
+/// The store of a session that can write it; None otherwise (never opened).
+fn with_store<R: Runtime, T>(app: &AppHandle<R>, f: impl FnOnce(&Store<R>, &Path) -> T) -> Option<T> {
     let st = app.try_state::<SettingsState>()?;
+    if !st.writable {
+        return None;
+    }
     let path = st.path.clone()?;
     let store = StoreBuilder::new(app, &path).disable_auto_save().build().ok()?;
-    Some(f(&store, &path, st.writable))
+    Some(f(&store, &path))
 }
 
-#[tauri::command]
-pub fn load_settings(app: AppHandle) -> Value {
-    with_store(&app, |s, _, _| read_store(s))
-        .unwrap_or_else(|| serde_json::json!({ "schemaVersion": SCHEMA, "lastUsed": null, "presets": {} }))
-}
-
-#[tauri::command]
-pub fn save_last(app: AppHandle, values: Value) -> bool {
-    with_store(&app, |s, p, w| {
-        w && {
-            put_last(s, values);
-            persist(s, p, w)
+fn load_in<R: Runtime>(app: &AppHandle<R>) -> Value {
+    if let Some(v) = with_store(app, |s, _| read_store(s)) {
+        return v;
+    }
+    match app.try_state::<SettingsState>() {
+        Some(st) => {
+            let m = st.memory.lock().map(|m| m.clone()).unwrap_or_default();
+            read_doc(|k| m.get(k).cloned())
         }
+        None => read_doc(|_| None),
+    }
+}
+
+fn save_last_in<R: Runtime>(app: &AppHandle<R>, values: Value) -> bool {
+    with_store(app, |s, p| {
+        put_last(s, values);
+        persist(s, p, true)
     })
     .unwrap_or(false)
 }
 
+fn save_preset_in<R: Runtime>(app: &AppHandle<R>, name: &str, values: Value) -> bool {
+    with_store(app, |s, p| put_preset(s, name, values) && persist(s, p, true)).unwrap_or(false)
+}
+
+fn delete_preset_in<R: Runtime>(app: &AppHandle<R>, name: &str) -> bool {
+    with_store(app, |s, p| remove_preset(s, name) && persist(s, p, true)).unwrap_or(false)
+}
+
+#[tauri::command]
+pub fn load_settings(app: AppHandle) -> Value {
+    load_in(&app)
+}
+
+#[tauri::command]
+pub fn save_last(app: AppHandle, values: Value) -> bool {
+    save_last_in(&app, values)
+}
+
 #[tauri::command]
 pub fn save_preset(app: AppHandle, name: String, values: Value) -> bool {
-    with_store(&app, |s, p, w| w && put_preset(s, &name, values) && persist(s, p, w)).unwrap_or(false)
+    save_preset_in(&app, &name, values)
 }
 
 #[tauri::command]
 pub fn delete_preset(app: AppHandle, name: String) -> bool {
-    with_store(&app, |s, p, w| w && remove_preset(s, &name) && persist(s, p, w)).unwrap_or(false)
+    delete_preset_in(&app, &name)
 }
 
 #[cfg(test)]
@@ -563,6 +603,152 @@ mod tests {
             assert!(!prepare(&d).writable);
         }
         std::fs::set_permissions(&f, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// A mock app with the store plugin, its settings opened by init() over
+    /// @p d as the app opens them.
+    fn mock_init(d: &Path) -> tauri::App<tauri::test::MockRuntime> {
+        let app = tauri::test::mock_builder()
+            .plugin(tauri_plugin_store::Builder::new().build())
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap();
+        init_in(app.handle(), Some(d.to_path_buf()));
+        app
+    }
+
+    /// What the store plugin does on RunEvent::Exit for the settings file:
+    /// save the store it holds at that path, if it holds one.
+    fn exit_save(app: &tauri::App<tauri::test::MockRuntime>, d: &Path) -> bool {
+        use tauri_plugin_store::StoreExt;
+        match app.get_store(d.join(STORE_FILE)) {
+            Some(st) => {
+                let _ = st.save();
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// The bytes of every file in @p d (None for a file that cannot be read).
+    fn snapshot(d: &Path) -> Vec<(String, Option<Vec<u8>>)> {
+        let mut v: Vec<_> = std::fs::read_dir(d)
+            .unwrap()
+            .map(|e| {
+                let e = e.unwrap();
+                (e.file_name().to_string_lossy().to_string(), std::fs::read(e.path()).ok())
+            })
+            .collect();
+        v.sort();
+        v
+    }
+
+    /// The refusal of prepare() holds through the whole session and the
+    /// exit: nothing in @p d changes, no plugin store is opened, the session
+    /// saves nothing and still reads @p presets presets.
+    fn refused_session_writes_nothing(d: &Path, presets: usize) {
+        let before = snapshot(d);
+        let app = mock_init(d);
+        assert_eq!(load_in(app.handle())["presets"].as_object().unwrap().len(), presets);
+        assert!(!save_last_in(app.handle(), serde_json::json!({"tag_length": "9"})));
+        assert!(!save_preset_in(app.handle(), "x", serde_json::json!({"v": 2, "base": "defaults", "diff": {}})));
+        assert!(!delete_preset_in(app.handle(), "x"));
+        assert!(!exit_save(&app, d), "no plugin store at settings.json");
+        assert_eq!(snapshot(d), before);
+    }
+
+    #[cfg(unix)]
+    fn chmod(p: &Path, mode: u32) {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(p, std::fs::Permissions::from_mode(mode)).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_unreadable_v1_file_survives_the_session_and_migrates_later() {
+        let d = scratch("exit-v1-unreadable");
+        let v1 = d.join(V1_FILE);
+        std::fs::write(&v1, std::fs::read(V1_FIXTURE).unwrap()).unwrap();
+        chmod(&v1, 0o000);
+        if std::fs::read(&v1).is_err() {
+            refused_session_writes_nothing(&d, 0);
+            assert!(!d.join(STORE_FILE).exists());
+        }
+        chmod(&v1, 0o600);
+        // The next start migrates it.
+        assert!(prepare(&d).migrated.is_some());
+        assert_eq!(store_doc(&d)["presets"].as_object().unwrap().len(), 2);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_v1_file_that_cannot_be_migrated_survives_the_session_and_migrates_later() {
+        // A valid v1 file in a read-only dir (seeds the session) and a
+        // corrupt one that cannot be set aside (refused outright).
+        for (tag, body, presets) in [("ro", std::fs::read(V1_FIXTURE).unwrap(), 2), ("corrupt", b"{\"presets\": {".to_vec(), 0)] {
+            let d = scratch(&format!("exit-v1-{tag}"));
+            std::fs::write(d.join(V1_FILE), &body).unwrap();
+            chmod(&d, 0o500);
+            if std::fs::write(d.join("probe"), b"").is_err() {
+                refused_session_writes_nothing(&d, presets);
+                assert!(!d.join(STORE_FILE).exists());
+            }
+            chmod(&d, 0o700);
+            let p = prepare(&d);
+            assert!(p.writable, "{tag}");
+            if presets > 0 {
+                assert!(p.migrated.is_some());
+                assert_eq!(store_doc(&d)["presets"].as_object().unwrap().len(), presets);
+            } else {
+                assert!(d.join(format!("{V1_FILE}.corrupt")).exists());
+            }
+            let _ = std::fs::remove_dir_all(&d);
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_unreadable_store_survives_the_session_and_the_exit() {
+        let d = scratch("exit-store-unreadable");
+        let f = d.join(STORE_FILE);
+        std::fs::write(&f, br#"{"schemaVersion":2,"presets":{"keep":{"v":2,"base":"defaults","diff":{}}}}"#).unwrap();
+        chmod(&f, 0o000);
+        if std::fs::read(&f).is_err() {
+            refused_session_writes_nothing(&d, 0);
+        }
+        chmod(&f, 0o600);
+        assert!(prepare(&d).writable);
+        assert!(store_doc(&d)["presets"].get("keep").is_some());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_corrupt_store_that_cannot_be_set_aside_survives_the_session_and_the_exit() {
+        let d = scratch("exit-store-corrupt");
+        let f = d.join(STORE_FILE);
+        std::fs::write(&f, b"{\"presets\": {\"a\"").unwrap();
+        chmod(&d, 0o500);
+        if std::fs::write(d.join("probe"), b"").is_err() {
+            refused_session_writes_nothing(&d, 0);
+            assert_eq!(std::fs::read(&f).unwrap(), b"{\"presets\": {\"a\"");
+        }
+        chmod(&d, 0o700);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_writable_session_opens_the_store_and_saves_through_it() {
+        let d = scratch("exit-writable");
+        std::fs::write(d.join(V1_FILE), std::fs::read(V1_FIXTURE).unwrap()).unwrap();
+        let app = mock_init(&d);
+        assert_eq!(load_in(app.handle())["presets"].as_object().unwrap().len(), 2);
+        assert!(save_preset_in(app.handle(), "new", serde_json::json!({"v": 2, "base": "defaults", "diff": {"tag_length": "4"}})));
+        assert!(delete_preset_in(app.handle(), "new"));
+        assert!(!delete_preset_in(app.handle(), "new"));
+        assert!(exit_save(&app, &d));
+        assert_eq!(store_doc(&d)["presets"].as_object().unwrap().len(), 2);
         let _ = std::fs::remove_dir_all(&d);
     }
 

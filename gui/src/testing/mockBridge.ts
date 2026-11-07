@@ -48,6 +48,9 @@ export interface MockBridge extends FastagApi {
   // Programmable returns.
   binaryInfo: BinaryInfo
   settings: Settings
+  /// False: savePreset and deletePreset refuse, as the app does when the
+  /// settings file cannot be written.
+  settingsWritable: boolean
   nextPickInput: string | null
   nextPickInputs: string[]
   nextPickOutput: string | null
@@ -191,6 +194,7 @@ export function installMockBridge(): MockBridge {
   const mock: MockBridge = {
     binaryInfo: { bin: '/mock/FASTag', source: 'env', ok: true, detail: 'FASTag 9.9.9 (mock)' },
     settings: { schemaVersion: 1, lastUsed: null, presets: {} },
+    settingsWritable: true,
     nextPickInput: null,
     nextPickInputs: [],
     nextPickOutput: null,
@@ -281,10 +285,12 @@ export function installMockBridge(): MockBridge {
       return Promise.resolve(true)
     },
     savePreset: (name, values) => {
+      if (!mock.settingsWritable) return Promise.resolve(false)
       mock.settings.presets[name] = values
       return Promise.resolve(true)
     },
     deletePreset: (name) => {
+      if (!mock.settingsWritable || !(name in mock.settings.presets)) return Promise.resolve(false)
       delete mock.settings.presets[name]
       return Promise.resolve(true)
     },

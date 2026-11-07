@@ -181,7 +181,8 @@ export const START: HelpPage = {
         <>
           <p>
             Setup starts from a task: <strong>Characterize a run</strong> (species with extension 2, the digest, label
-            and glyco reports, a tenth of the spectra), <strong>Batch QC vs SDRF</strong>, <strong>Export tags</strong>{' '}
+            and glyco reports, a tenth of the spectra), <strong>Batch QC vs SDRF</strong> (the same reports, and the input
+            asks for the files of a batch first), <strong>Export tags</strong> (adds the per-residue confidence column){' '}
             or <strong>Open results / inspect spectra</strong>. <strong>Starting from</strong> also offers FASTag&apos;s
             own defaults and your presets. Choosing one replaces the form; <strong>Undo</strong> brings back what it
             replaced. The footer above Run counts what differs from where the form started, and its{' '}

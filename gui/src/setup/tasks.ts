@@ -16,7 +16,8 @@ export interface Task {
   blurb: string
   /// False for "Open results": no run, the cards collapse to Open….
   runs: boolean
-  /// Batch QC: the input is a queue of files.
+  /// Batch QC: the input is a queue of files; Setup's input card offers
+  /// "Add files for a batch…" first (SetupForm).
   batch: boolean
   /// What the task changes from FASTag's defaults. A report is switched on
   /// by its output name (digest.tsv), which goes beside the tags output once
@@ -47,7 +48,10 @@ export const TASKS: readonly Task[] = [
   {
     id: 'batch-qc',
     label: 'Batch QC vs SDRF',
-    blurb: 'The same reports for every file of a batch, each beside its own input.',
+    // Only the input differs from Characterize in P2a: Setup asks for the
+    // files of a batch first. The output folder and the cross-run summary
+    // are the Batch view's (GUI-DESIGN 10 P2b), the SDRF comparison P4's.
+    blurb: 'The Characterize reports for every file of a batch, each beside its own input.',
     runs: true,
     batch: true,
     values: CHARACTERIZE
@@ -55,7 +59,9 @@ export const TASKS: readonly Task[] = [
   {
     id: 'export-tags',
     label: 'Export tags',
-    blurb: 'Every tag with a per-residue confidence column, for de novo assembly and export.',
+    // The best-tag-per-spectrum thinning is the Export menu's, with the
+    // results browser rewrite (GUI-DESIGN S8, 10 P3); the run writes every tag.
+    blurb: 'Every tag with a per-residue confidence column (res_conf), for de novo assembly and export.',
     runs: true,
     batch: false,
     values: { res_conf: true }
