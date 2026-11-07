@@ -162,7 +162,7 @@ compiled from source with the libraries listed in
 
 A cross-platform desktop app ([`gui/`](gui/)) wraps the CLI: pick spectra, set
 parameters from a form generated out of the tool's own `-write_ini`, watch a
-progress bar, and browse the tags and the ranked species report (with a
+progress bar with the phase of the run and the time left, and browse the tags and the ranked species report (with a
 "Relative to top taxon" column showing each taxon's evidence relative to the
 top hit, and an Adjusted column after `-species_deconvolve`). The **Database
 hit** filter on `fasta_hit` offers All, In database (`fwd`/`rev`), Entrapment

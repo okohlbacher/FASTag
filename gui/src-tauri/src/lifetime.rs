@@ -205,6 +205,29 @@ pub fn kill_group_until_reaped(
     });
 }
 
+/// Whether child @p pid has exited, without reaping it (waitid with
+/// WNOWAIT): the coordinator releases the run's watchdog between the exit
+/// and the reap, while the group id cannot be reused yet. An error (no such
+/// child) counts as exited, so the caller never waits for it forever.
+#[cfg(unix)]
+pub fn exited(pid: u32) -> bool {
+    let id: libc::id_t = pid;
+    // SAFETY: siginfo_t is plain data; waitid only writes into it, and with
+    // WNOWAIT it leaves the child waitable.
+    unsafe {
+        let mut info: libc::siginfo_t = std::mem::zeroed();
+        if libc::waitid(libc::P_PID, id, &mut info, libc::WEXITED | libc::WNOHANG | libc::WNOWAIT) != 0 {
+            return true;
+        }
+        // WNOHANG: si_pid stays 0 while the child is still running.
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        let who = info.si_pid();
+        #[cfg(not(any(target_os = "linux", target_os = "android")))]
+        let who = info.si_pid;
+        who != 0
+    }
+}
+
 /// What keeps a run's processes tied to the GUI on Windows: the run's job
 /// (None when it could not be set up). Nothing elsewhere.
 #[cfg(windows)]
@@ -237,6 +260,16 @@ pub struct Job(windows_sys::Win32::Foundation::HANDLE);
 unsafe impl Send for Job {}
 #[cfg(windows)]
 unsafe impl Sync for Job {}
+
+#[cfg(windows)]
+impl Job {
+    /// End every process in the job now (TerminateJobObject, exit code 1,
+    /// as a killed child has on Windows). True when the call succeeded.
+    pub fn terminate(&self) -> bool {
+        // SAFETY: the handle is ours and open until drop().
+        unsafe { windows_sys::Win32::System::JobObjects::TerminateJobObject(self.0, 1) != 0 }
+    }
+}
 
 #[cfg(windows)]
 impl Drop for Job {

@@ -3,33 +3,16 @@
 // CLI line sequences are copied from real FASTag 1.9.0 runs on the public
 // E. coli fixture (scratch/lifecycle/*_combined.txt).
 
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import App from '../App'
+import { appendLog } from '../run/useRun'
+import { LOG_WINDOW } from '../run/LogDrawer'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
+import { addBatch, click, logText, pickSingle, renderApp, runButton } from '../testing/render'
 import { applyAndCheck } from '../testing/lastUsed'
 import type { SpeciesReport } from '../types'
 
-async function renderApp(mock: MockBridge): Promise<HTMLElement> {
-  const { container } = render(<App />)
-  await screen.findByText('FASTag ready')
-  await act(async () => {})
-  return container
-}
-const click = (el: Element): Promise<void> =>
-  act(async () => {
-    fireEvent.click(el)
-  })
-const logText = (c: HTMLElement): string => c.querySelector('.log')?.textContent ?? ''
-const runButton = (): HTMLElement => screen.getByRole('button', { name: /^(Run( on .+)?|Running…)$/ })
-async function pickSingle(mock: MockBridge, path: string): Promise<void> {
-  mock.nextPickInput = path
-  await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
-}
-async function addBatch(mock: MockBridge, files: string[]): Promise<void> {
-  mock.nextPickInputs = files
-  await click(screen.getByRole('button', { name: /^(Add files for a batch|Add)…$/ }))
-}
 const done = (mock: MockBridge, runId: number, ok: boolean, code: number | null = ok ? 0 : 1): Promise<void> =>
   act(async () => mock.emitDone({ ok, code, runId }))
 const log = (mock: MockBridge, line: string): Promise<void> => act(async () => mock.emitLog(line))
@@ -337,7 +320,7 @@ describe('lifecycle: run gating races', () => {
     await pickSingle(mock, '/d/a.mzML')
     mock.holdRun()
     await click(runButton())
-    await done(mock, mock.lastRunId, true) // parked in earlyDone, pending is empty
+    await done(mock, mock.lastRunId, true) // the job has its result but no reply yet
     expect(runButton().textContent).toBe('Running…')
     expect(runButton()).toHaveProperty('disabled', true)
     await click(runButton())
@@ -397,9 +380,18 @@ describe('lifecycle: run gating races', () => {
     await act(async () => {
       for (let i = 0; i < 6000; i++) mock.emitLog(`line ${i}`)
     })
+    // P1: the kept log is bounded at 5,000 lines (the drawer counts them),
+    // and only its last LOG_WINDOW lines are in the DOM.
+    expect(c.querySelector('.logdrawer .n')?.textContent).toBe('5000 lines')
     const lines = logText(c).split('\n')
-    expect(lines.length).toBeLessThanOrEqual(5000)
-    expect(lines[0]).toBe('… earlier lines dropped …')
+    expect(lines).toHaveLength(LOG_WINDOW)
+    expect(lines[0]).toBe(`line ${6000 - LOG_WINDOW}`)
     expect(lines[lines.length - 1]).toBe('line 5999')
+    // The kept tail starts with the marker of what it dropped.
+    const kept = appendLog([], Array.from({ length: 6000 }, (_, i) => `line ${i}`))
+    expect(kept).toHaveLength(5000)
+    expect(kept[0]).toBe('… earlier lines dropped …')
+    expect(kept[kept.length - 1]).toBe('line 5999')
+    expect(appendLog(kept, ['line 6000'])[0]).toBe('… earlier lines dropped …')
   })
 })

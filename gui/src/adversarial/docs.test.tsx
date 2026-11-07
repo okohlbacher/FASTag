@@ -7,13 +7,14 @@
 // what the CLI writes; those tests skip when it is unset.
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import App, { rebaseOutputs } from '../App'
+import { rebaseOutputs } from '../app/paths'
 import DigestPanel from '../DigestPanel'
 import SpeciesPanel from '../SpeciesPanel'
 import { parseReport } from '../digestReport'
 import { HIDDEN, PARAM_BY_NAME, RENDERED } from '../paramLayout'
 import manifest from '../params.generated.json'
-import { installMockBridge, type MockBridge } from '../testing/mockBridge'
+import { installMockBridge } from '../testing/mockBridge'
+import { click, pickSingle, renderApp, runButton } from '../testing/render'
 import { applyAndCheck } from '../testing/lastUsed'
 import type { SpeciesReport } from '../types'
 import digestTsv from '../fixtures/digest.tsv?raw'
@@ -21,22 +22,6 @@ import { haveScratch, readScratch } from './external'
 import massgapTsv from '../fixtures/massgap.tsv?raw'
 
 const cli = (f: string): string => readScratch(`map/${f}`) as string
-
-async function renderApp(mock: MockBridge): Promise<HTMLElement> {
-  const { container } = render(<App />)
-  await screen.findByText('FASTag ready')
-  await act(async () => {})
-  return container
-}
-const click = (el: Element): Promise<void> =>
-  act(async () => {
-    fireEvent.click(el)
-  })
-const runButton = (): HTMLElement => screen.getByRole('button', { name: /^(Run( on .+)?|Running…)$/ })
-async function pickSingle(mock: MockBridge, path: string): Promise<void> {
-  mock.nextPickInput = path
-  await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
-}
 
 // species.rs reader, minus the observed <= 0 filter (none here).
 function speciesFromTsv(text: string): SpeciesReport {

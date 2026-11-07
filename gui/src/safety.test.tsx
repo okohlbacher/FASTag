@@ -5,37 +5,13 @@
 
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import App from './App'
 import ResultsTable, { MAX_DOM_ROWS } from './ResultsTable'
 import { installMockBridge, type MockBridge } from './testing/mockBridge'
+import { addBatch, click, logText, pickSingle, renderApp, runButton } from './testing/render'
 import { applyLastUsed, formValue } from './testing/lastUsed'
 import type { ResultsPage, RunRecord } from './types'
 
-async function renderApp(): Promise<HTMLElement> {
-  const { container } = render(<App />)
-  await screen.findByText('FASTag ready')
-  await act(async () => {})
-  return container
-}
-
-const click = (el: Element): Promise<void> =>
-  act(async () => {
-    fireEvent.click(el)
-  })
-
-const runButton = (): HTMLElement => screen.getByRole('button', { name: /^(Run( on .+)?|Running…)$/ })
-const logText = (c: HTMLElement): string => c.querySelector('pre.log')?.textContent ?? ''
 const drawerLabel = (c: HTMLElement): string => c.querySelector('.drawer-toggle .lbl')?.textContent ?? ''
-
-async function pickSingle(mock: MockBridge, path: string): Promise<void> {
-  mock.nextPickInput = path
-  await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
-}
-
-async function addBatch(mock: MockBridge, files: string[]): Promise<void> {
-  mock.nextPickInputs = files
-  await click(screen.getByRole('button', { name: /^(Add files for a batch|Add)…$/ }))
-}
 
 describe('P0a: last-used is an offer, never applied on its own (D6)', () => {
   it('a fresh start runs with the defaults; the chip names what it would change and applies it on click', async () => {

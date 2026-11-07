@@ -58,9 +58,22 @@ export type BrowserEvent =
   | { kind: 'ranked'; generation: number; column: string }
   | { kind: 'failed'; generation: number; message: string }
 
-// A run's outputs as the CLI writes them (reveal.rs; -out only in P0b).
+// Every output of a run as the CLI writes them (reveal.rs ResolvedOutputs,
+// GUI-DESIGN 6.3): absolute, resolved by the backend from the argv the CLI
+// was given. The renderer never resolves an output path itself. A species
+// or glyco report the CLI derives from -out is under species_out or
+// glyco_out; null: the run does not write it.
 export interface ResolvedOutputs {
-  out?: string | null
+  out: string | null
+  species_out?: string | null
+  digest_out?: string | null
+  label_out?: string | null
+  massgap_out?: string | null
+  recon_out?: string | null
+  delta_out?: string | null
+  recon_id_out?: string | null
+  glyco_out?: string | null
+  out_spectra?: string | null
 }
 
 export interface RunResult {
@@ -68,15 +81,11 @@ export interface RunResult {
   code: number | null
   // Filled by the backend on failure: 'cancelled', a signal name (SIGSEGV ...)
   // or a Windows NTSTATUS name.
-  message?: string
+  message?: string | null
   // True when the run ended because Cancel killed it. A killed child has no
   // reliable exit status of its own (null on Unix, 1 from TerminateProcess on
   // Windows), so the renderer must not read a cancel off `code`.
   cancelled?: boolean
-  // Set on results delivered via the fastag:done event; correlates the terminal
-  // event to the run the renderer is awaiting. Absent on synthetic failures the
-  // renderer builds itself (a run that never started).
-  runId?: number
   // A run that did not finish: what the backend did with the outputs it had
   // written (fastag.rs / outputs.rs). Absent on a finished run.
   cleanup?: Cleanup
@@ -115,19 +124,31 @@ export interface RunRecord {
   cleanup: Cleanup
 }
 
+// The reply of `run` (fastag.rs RunStarted). The run's events come on the
+// job's own Channel (RunEvent), never as global events.
 export interface RunStarted {
   started: boolean
-  reason?: string
-  runId?: number
-  // The -out the CLI was actually given: a relative Output is resolved against
-  // the input's folder, which is also the child's working directory.
-  out?: string
-  // Every file the run writes, as the CLI was given them.
-  outputs?: string[]
+  reason?: string | null
+  // The -out the CLI was given, absolute (outputs.out).
+  out?: string | null
+  // Every output of the run (GUI-DESIGN 6.3).
+  outputs?: ResolvedOutputs | null
   // The command line, binary first, for the failure banner's Copy command.
-  command?: string[]
-  resolvedOutputs?: ResolvedOutputs
+  command?: string[] | null
 }
+
+// One log line as the CLI wrote it: its text, and true when on stderr.
+export type LogLine = [string, boolean]
+
+// One message on a run's Channel (events.rs RunEvent, serde tag "kind").
+// The backend batches: one Log carries every line of a flush interval
+// (50-100 ms), Progress and Phase the latest of it, and Done is the last
+// message of the run.
+export type RunEvent =
+  | { kind: 'log'; lines: LogLine[] }
+  | { kind: 'progress'; done: number; total: number; ratePerSec?: number | null; etaSec?: number | null }
+  | { kind: 'phase'; label: string }
+  | ({ kind: 'done' } & RunResult)
 
 export interface Taxon {
   rank: string
@@ -185,8 +206,9 @@ export interface FastagApi {
   // The outputs a run of these params would write, and which exist already.
   outputsCheck: (params: Record<string, unknown>) => Promise<OutputsCheck>
   // params.overwrite: the user confirmed overwriting the existing outputs;
-  // without it the backend refuses a run whose outputs exist.
-  run: (params: Record<string, unknown>) => Promise<RunStarted>
+  // without it the backend refuses a run whose outputs exist. The run's
+  // events go to onEvent (its own Channel), and may come before the reply.
+  run: (params: Record<string, unknown>, onEvent: (e: RunEvent) => void) => Promise<RunStarted>
   // The recorded runs, newest first; the newest run that wrote a path.
   historyList: (limit?: number) => Promise<RunRecord[]>
   historyOf: (path: string) => Promise<RunRecord | null>
@@ -209,9 +231,6 @@ export interface FastagApi {
   // Write the rows of a view, only the named columns, to dest; resolves with
   // the number of rows written.
   exportResults: (path: string, view: ResultsView, columns: string[], dest: string) => Promise<number>
-  onLog: (cb: (line: string) => void) => () => void
-  onProgress: (cb: (p: { done: number; total: number }) => void) => () => void
-  onDone: (cb: (result: RunResult) => void) => () => void
   // Close guard: the window was closed ('close') or the app asked to quit
   // ('quit') while a run or batch is active; the backend prevented it and
   // waits for answerClose.

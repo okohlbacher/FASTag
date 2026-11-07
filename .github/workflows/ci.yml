@@ -1348,7 +1348,7 @@ jobs:
       # exactly enough. Verified locally by reproducing the CI condition:
       # without the directory cargo fails with "resource path
       # `resources/fastag` doesn't exist"; with an empty one the lib tests pass
-      # (100 on macOS from P1 PR b, 91 from P0b, 73 from P0a, 54 before). The run lifecycle tests drive
+      # (122 on macOS after P1 PRs a and b, 108 from P1 PR a, 100 from P1 PR b, 91 from P0b, 73 from P0a, 54 before). The run lifecycle tests drive
       # gui/testing/stub-fastag, a sh script, instead of the CLI. The process
       # lifetime tests (lifetime.rs, P1 PR b) have three Linux-only ones
       # (PDEATHSIG, the getppid check): this job is where they run. Two
@@ -1360,15 +1360,28 @@ jobs:
           cargo test --lib
           # The browser bench (P0b) is not run here, only kept compiling.
           cargo check --example browser_bench
+      # The P1 gate "IPC message rate during a chatty phase" (GUI-DESIGN 10),
+      # measured on this Linux runner against the stub CLI and printed into
+      # the job summary. The bound itself is asserted by the tests above.
+      - name: IPC message rate of a chatty phase (recorded)
+        working-directory: gui/src-tauri
+        run: |
+          cargo test --lib ipc_rate -- --nocapture --test-threads=1 2>&1 | tee ipc-rate.txt
+          { echo '### IPC message rate (stub CLI, ubuntu-24.04)'; echo '```'; grep -o 'IPC rate.*' ipc-rate.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
-  # The Windows half of the process lifetime (P1 PR b): the kill-on-close job
-  # object each run is started in (lifetime.rs), including the kill of a
-  # stand-in GUI process with a .bat-like grandchild. windows.yml
-  # builds the app only on tags, so without this job the cfg(windows) code
-  # would first compile at a release. Every lib test is compiled here, but
-  # only the lifetime ones run: the rest have never run on Windows, and this
-  # job is not the place to find out. pwsh, not bash: Git Bash's link.exe
-  # shadows MSVC's linker (windows.yml, "Build the desktop app").
+  # The backend on Windows. Two parts:
+  # - the Windows half of the process lifetime (P1 PR b): the kill-on-close
+  #   job object each run is started in (lifetime.rs), including the kill of
+  #   a stand-in GUI process with a .bat-like grandchild. windows.yml builds
+  #   the app only on tags, so without this step the cfg(windows) code would
+  #   first compile at a release. Required.
+  # - every lib test (P1 PR a): path handling differs there (a root-relative
+  #   \data\x.tsv is not absolute; ResolvedOutputs, GUI-DESIGN 6.3), and the
+  #   GUI ships for Windows. No OpenMS and no CLI: the run-lifecycle tests that
+  #   drive the sh stub are cfg(unix). Informational (step-level
+  #   continue-on-error) until it has been green once.
+  # pwsh, not bash: Git Bash's link.exe shadows MSVC's linker (windows.yml,
+  # "Build the desktop app").
   gui-windows:
     runs-on: windows-2022
     timeout-minutes: 45
@@ -1379,8 +1392,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
-      # tauri::generate_context! embeds the built frontend.
-      - name: Frontend build
+      # tauri's generate_context! embeds frontendDist (../dist), which must exist.
+      - name: Frontend build (for the embedded assets)
         working-directory: gui
         shell: pwsh
         run: |
@@ -1398,6 +1411,14 @@ jobs:
           cargo test --lib --no-run
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo test --lib lifetime
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Backend unit tests (Windows)
+        working-directory: gui/src-tauri
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cargo test --lib
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   # ---------------------------------------------------- release data asset

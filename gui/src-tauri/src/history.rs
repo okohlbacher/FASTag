@@ -31,7 +31,7 @@ pub enum Status {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct RunRecord {
-    /// <start in ms>-<run id>: unique across sessions.
+    /// <start in ms>-<pid of the CLI>: unique across sessions.
     pub id: String,
     pub input: String,
     /// Every file the run writes (outputs::resolved_outputs), as given to the

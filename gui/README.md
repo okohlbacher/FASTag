@@ -18,7 +18,13 @@ backend has to satisfy.
 ```
 gui/
   src/                 React frontend
-    App.tsx            the window: parameter form, run and batch, result tabs
+    App.tsx            the window shell: header, close/overwrite questions, shortcuts and menus,
+                       laying out the setup, the run bar and the result tabs
+    app/               viewStore.ts (result tab and log drawer, one store per window),
+                       output-path and text helpers (paths.ts, format.ts)
+    run/               useRun.ts (a run or batch, its log, progress and results), RunBar.tsx,
+                       LogDrawer.tsx, BatchList.tsx and the batch job naming (batch.ts)
+    results/           ResultTabs.tsx (Tags, Species, Digest and the failure banner), reports.ts
     ParamField.tsx     one form field per manifest parameter
     ResultsTable.tsx   tags browser: virtualized table with filters, column choice and export
     SpeciesPanel.tsx   species report
@@ -27,13 +33,16 @@ gui/
     digestReport.ts    reader of the digest/label/mass-gap TSVs and the sequence-logo arithmetic
     SequenceLogo.tsx   SVG sequence logo (bits against a background)
     fixtures/          synthetic report TSVs for the tests and the browser preview
-    api.ts             the window.fastag bridge over Tauri invoke/events + dialog/opener plugins
+    api.ts             the window.fastag bridge over Tauri invoke, one Channel per run, events + dialog/opener plugins
+    runJob.ts          one run as the renderer tracks it: id made before invoke, Channel events and the reply merged
     paramLayout.ts     section/ordering overlay on the generated manifest (one flat list)
     params.generated.json   `-write_ini` dump of the tool (the source of truth for params)
     testing/           mock bridge for the tests and the browser preview (`npm run dev`),
-                       and the e2e bridge with its ?fixture= scenarios (Playwright build only)
+                       the e2e bridge with its ?fixture= scenarios (Playwright build only),
+                       and the shared test helpers (render.tsx: renderApp, click, pickSingle, ...)
     adversarial/       end-to-end GUI tests (see Tests)
-    setup/             parameter search (Cmd+K, "/"), instrument presets and the
+    setup/             useSession.ts (the form's values, last-used offer, presets), SetupForm.tsx,
+                       parameter search (Cmd+K, "/"), instrument presets and the
                        species fixes (presets.ts), shortcuts and menu actions (shortcuts.ts)
     help/              the Help view (F1): pages as data (content.tsx, faq.tsx, params.ts),
                        HelpView.tsx, the link store (link.ts) and the "?" links (HelpLink.tsx)
@@ -43,7 +52,9 @@ gui/
   e2e-web/             Playwright specs and their fixtures (see Tests)
   src-tauri/           Rust backend
     src/lib.rs         plugin setup and Tauri command registration
-    src/fastag.rs      resolve/probe the binary, run it, stream stderr and stdout lines as events, cancel
+    src/fastag.rs      resolve/probe the binary, run it (its events to the job's Channel), cancel
+    src/events.rs      RunEvent (Log/Progress/Phase/Done) and the batching: one Log{lines} per 75 ms or 500 lines
+    src/progress.rs    phase labels from the CLI's output (tests/fixtures/stderr) and the ETA from a weighted rate
     src/outputs.rs     the files a run writes (from its argv); removes them when it is cancelled or fails
     src/lifetime.rs    process lifetime: the one spawner thread every CLI child starts from, PDEATHSIG
                        (Linux), the per-run watchdog (Unix), the per-run kill-on-close job (Windows)
@@ -55,7 +66,7 @@ gui/
     src/browser.rs     indexed million-row results browser: head read on open, index and
                        E-value order built in the background and swapped in (D5)
     src/menu.rs        File, Run and Help menus with their CmdOrCtrl shortcuts
-    src/reveal.rs      ResolvedOutputs (-out) and Reveal / Open folder, limited to run outputs
+    src/reveal.rs      ResolvedOutputs (every output, absolute) and Reveal / Open folder, limited to run outputs
     src/species.rs     species TSV read + FTX2 taxdb header read
     src/report.rs      digest/label/mass-gap report read
     examples/browser_bench.rs  the browser bench (bench/bench-<version>.json)
@@ -143,8 +154,22 @@ reading, browser bounds): `cargo test` in `src-tauri/` (it needs
 tests (run/batch orchestration, layout completeness, results browser, report
 parsing and logo arithmetic, Digest tab) and a typecheck: `npm test`,
 `npm run typecheck`. The Rust tests of the run lifecycle (a cancelled or
-failed run leaves no output behind) run `testing/stub-fastag/FASTag`, not the
-CLI. The process-lifetime tests (`lifetime::tests`, and
+failed run leaves no output behind, the `run` command's events in order on a
+real Channel, the IPC message rate of a chatty phase) run
+`testing/stub-fastag/FASTag`, not the CLI; `cargo test --lib ipc_rate --
+--nocapture` prints the measured rate. `src/api.test.ts` tests the bridge itself
+against Tauri's IPC mock (`@tauri-apps/api/mocks`): a Done before the `run`
+reply, a late log after Done, a cancel during a phase without progress.
+The parts of the window have tests of their own beside them: the hooks
+(`setup/useSession`, `run/useRun`, `app/viewStore`) through `renderHook`, and
+`RunBar`, `LogDrawer`, `BatchList` and `ResultTabs` rendered alone with their
+props. The App-level tests, which render the whole window, are split by area
+beside the parts they drive: `run/batch.app.test.tsx` (run and batch
+orchestration), `results/digest.app.test.tsx` (the Digest tab) and
+`setup/setup.app.test.tsx` (the setup form and run bar, with the checks that
+App wires Reset, the phase and the elapsed time into the run bar); they share
+their helpers from `src/testing/render.tsx`.
+The process-lifetime tests (`lifetime::tests`, and
 `a_killed_gui_ends_the_run_and_the_next_start_offers_what_it_left`) run the
 test binary again as a stand-in GUI process and kill it with SIGKILL; the
 PDEATHSIG ones run on Linux only (the `gui` CI job), the job-object one on

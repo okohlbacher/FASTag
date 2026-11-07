@@ -1,0 +1,18 @@
+{
+  "started": true,
+  "reason": null,
+  "out": "/d/a.tags.tsv",
+  "outputs": {
+    "out": "/d/a.tags.tsv",
+    "species_out": "/d/a.tags.species.tsv",
+    "digest_out": "/d/a.digest.tsv",
+    "label_out": "/d/a.label.tsv",
+    "massgap_out": "/d/a.massgap.tsv",
+    "recon_out": "/d/a.recon.tsv",
+    "delta_out": "/d/a.delta.tsv",
+    "recon_id_out": "/d/a.recon_id.tsv",
+    "glyco_out": "/d/a.tags.glyco.tsv",
+    "out_spectra": "/d/a.spectra.mzpeak"
+  },
+  "command": ["/bin/FASTag", "-in", "/d/a.mzML", "-out", "/d/a.tags.tsv", "-progress"]
+}
