@@ -40,6 +40,10 @@ export interface ResultsSort {
 export interface ResultsView {
   sort?: ResultsSort | null
   spectrum?: string | null
+  // With spectrum: the cell must equal it exactly (case-sensitive), not
+  // contain it (browser.rs spectrum_exact). The Spectrum tab's lookups:
+  // 'scan=1' as a substring also matches scan=10..19, 100..199, ...
+  spectrumExact?: boolean
   minLength?: number | null
   maxEvalue?: number | null
   // only: a target hit (fwd/rev); none: no target hit (entrapment-only rows

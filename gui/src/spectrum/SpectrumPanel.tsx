@@ -59,28 +59,34 @@ interface TagsOf {
 
 const PER_SPECTRUM: ResultsView = { sort: null, perSpectrum: 1 }
 const TAGS_SHOWN = 500
+// One page of resultsQuery (browser.rs MAX_WINDOW).
+const PAGE = 1000
 
 const fmt = (x: number, d = 4): string => x.toFixed(d)
 const ppm = (x: number | null): string => (x == null ? '–' : `${x >= 0 ? '+' : '−'}${Math.abs(x).toFixed(1)}`)
 
-/** The tags of @p spectrum in @p path, best E-value first (exact ID). */
+/** The tags of @p spectrum in @p path, best E-value first: the exact ID
+ *  (as a substring, scan=1 would also match scan=10..19, 100..199, ...),
+ *  every page of them (a page holds at most PAGE rows). */
 async function tagsOf(path: string, spectrum: string): Promise<TagsOf> {
-  const page = await window.fastag.resultsQuery(path, { sort: { column: 'evalue', desc: false }, spectrum }, 0, 5000)
-  const sp = page.columns.indexOf('spectrum')
-  const out: TagsOf = { columns: page.columns, rows: [], rowIds: [] }
-  page.rows.forEach((r, i) => {
-    if ((r[sp] ?? '') !== spectrum) return
-    out.rows.push(r)
-    out.rowIds.push(page.rowIds?.[i] ?? null)
-  })
-  return out
+  const view: ResultsView = { sort: { column: 'evalue', desc: false }, spectrum, spectrumExact: true }
+  const out: TagsOf = { columns: [], rows: [], rowIds: [] }
+  for (;;) {
+    const page = await window.fastag.resultsQuery(path, view, out.rows.length, PAGE)
+    out.columns = page.columns
+    page.rows.forEach((r, i) => {
+      out.rows.push(r)
+      out.rowIds.push(page.rowIds?.[i] ?? null)
+    })
+    if (page.rows.length === 0 || out.rows.length >= page.matchedRows) return out
+  }
 }
 
 /** The spectrum before (-1) or after (+1) @p spectrum in the file's order of
  *  tagged spectra, with the count; null at an end. */
 async function neighbour(path: string, spectrum: string, rowId: number | null, dir: -1 | 1): Promise<{ spectrum: string; rowId: number | null } | null> {
   // The file row the per-spectrum view keeps for this spectrum (its best tag).
-  const mine = await window.fastag.resultsQuery(path, { ...PER_SPECTRUM, spectrum }, 0, 5000)
+  const mine = await window.fastag.resultsQuery(path, { ...PER_SPECTRUM, spectrum, spectrumExact: true }, 0, 1)
   const sp = mine.columns.indexOf('spectrum')
   const i = mine.rows.findIndex((r) => r[sp] === spectrum)
   const row = i >= 0 ? (mine.rowIds?.[i] ?? null) : rowId

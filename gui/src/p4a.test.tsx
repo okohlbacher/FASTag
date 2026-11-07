@@ -11,7 +11,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { goTo, renderApp } from './testing/render'
 import { installMockBridge, type MockBridge } from './testing/mockBridge'
-import { viewIds } from './testing/e2eBridge'
+import { MAX_WINDOW, viewIds } from './testing/e2eBridge'
 import { splitDumps } from './spectrum/dump'
 import type { RunRecord } from './types'
 
@@ -50,7 +50,7 @@ const record = (over: Partial<RunRecord> = {}): RunRecord => ({
 })
 
 /// The app on the E. coli tags, the views as browser.rs builds them.
-function bridge(supported: boolean, history: RunRecord[] = [record()]): MockBridge {
+function bridge(supported: boolean, history: RunRecord[] = [record()], rows: string[][] = ROWS): MockBridge {
   const mock = installMockBridge()
   mock.spectrumSupportResult = supported
     ? { supported: true, probed: true, detail: 'the CLI has -dump_spectrum' }
@@ -59,22 +59,23 @@ function bridge(supported: boolean, history: RunRecord[] = [record()]): MockBrid
   mock.history = history
   mock.nextPickResults = TAGS
   mock.resultsColumns = COLUMNS
-  mock.resultsRows = ROWS
+  mock.resultsRows = rows
   mock.resultsQuery = (path, view, offset, limit) => {
     mock.resultsQueryCalls.push({ path, view, offset, limit })
-    const all = viewIds(COLUMNS, ROWS, view)
-    const sel = all.slice(offset, offset + limit)
-    return Promise.resolve({ columns: COLUMNS, totalRows: ROWS.length, matchedRows: all.length, rows: sel.map((i) => ROWS[i]), rowIds: sel, ranked: true, pending: false })
+    const all = viewIds(COLUMNS, rows, view)
+    // A page holds at most MAX_WINDOW rows, as browser.rs's.
+    const sel = all.slice(offset, offset + Math.min(limit, MAX_WINDOW))
+    return Promise.resolve({ columns: COLUMNS, totalRows: rows.length, matchedRows: all.length, rows: sel.map((i) => rows[i]), rowIds: sel, ranked: true, pending: false })
   }
-  mock.resultsPosition = (_p, view, row) => Promise.resolve(viewIds(COLUMNS, ROWS, view).indexOf(row))
+  mock.resultsPosition = (_p, view, row) => Promise.resolve(viewIds(COLUMNS, rows, view).indexOf(row))
   return mock
 }
 
-async function openTags(mock: MockBridge): Promise<void> {
+async function openTags(mock: MockBridge, n: number = ROWS.length): Promise<void> {
   await renderApp(mock)
   await goTo('results')
   await click(screen.getByRole('button', { name: 'Open a tags TSV…' }))
-  await screen.findByText(`Showing ${ROWS.length.toLocaleString('en-US')} of ${ROWS.length.toLocaleString('en-US')}`)
+  await screen.findByText(`Showing ${n.toLocaleString('en-US')} of ${n.toLocaleString('en-US')}`)
 }
 
 const table = (): HTMLElement => screen.getByRole('region', { name: 'Tags table' })
@@ -161,6 +162,59 @@ describe('P4a: open a row in the Spectrum tab', () => {
     await click(screen.getByRole('button', { name: 'Locate input…' }))
     await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/Spectrum not found\..*other\.mzML has no spectrum/))
     expect(screen.getByRole('button', { name: 'Locate input…' })).toBeTruthy()
+  })
+})
+
+describe('P4a: a native ID that is a prefix of many others', () => {
+  it('lists exactly its own tags, draws the opened tag\'s ladder, and ◀ ▶ work, past 1,000 better tags of other spectra', async () => {
+    // S (a real spectrum with its real tags and dump) is a substring of
+    // S0..S9 and S00..S99 here, as scan=1 is of scan=10..19, 100..199 in a
+    // real file: 1,210 tags of those, all better by E-value, come before
+    // S's own in a substring view, more than a page (MAX_WINDOW) of them.
+    const S = SPECTRA[0]
+    const own = ROWS.filter((r: string[]) => r[0] === S)
+    const ev = COLUMNS.indexOf('evalue')
+    const other = (id: string, k: number): string[] => {
+      const r = own[0].slice()
+      r[0] = id
+      r[ev] = `1e-${30 + (k % 9)}`
+      return r
+    }
+    const ids = [...Array(10).keys()].map((k) => `${S}${k}`).concat([...Array(100).keys()].map((k) => `${S}${String(k).padStart(2, '0')}`))
+    const rows = [other(`${S}0`, 0), ...own]
+    ids.forEach((id, k) => {
+      for (let j = 0; j < 11; j++) rows.push(other(id, k + j))
+    })
+    expect(viewIds(COLUMNS, rows, { spectrum: S }).length).toBeGreaterThan(MAX_WINDOW + own.length)
+    const mock = bridge(true, [record()], rows)
+    await openTags(mock, rows.length)
+    // Sorted by spectrum, S's tags come first (S sorts before S0), in file
+    // order: the first row is S's first tag.
+    await click(within(table()).getByTitle(/^Sort by spectrum$/i))
+    await waitFor(() => expect(firstRow().querySelector('[role=gridcell]')!.getAttribute('title')).toBe(S))
+    await click(firstRow())
+    await click(screen.getByRole('button', { name: 'Open in Spectrum' }))
+    await screen.findByTestId('ladder-verdict')
+    const tags = screen.getByRole('region', { name: 'Tags of this spectrum' })
+    expect(within(tags).getByText(new RegExp(`Tags of this spectrum \\(n=${own.length}\\)`))).toBeTruthy()
+    // The opened tag is the chosen one and its ladder is drawn.
+    const chosen = within(tags).getAllByRole('row').find((r) => r.getAttribute('aria-selected') === 'true')!
+    expect(chosen.querySelector('td')!.textContent).toBe(own[0][COLUMNS.indexOf('tag')])
+    expect(screen.getByTestId('ladder').textContent).toContain(own[0][COLUMNS.indexOf('tag')])
+    expect(screen.getByTestId('ladder-verdict').textContent).toMatch(/^on \d+ of \d+ positions/)
+    // ◀ ▶ walk the best tag of each spectrum in file order: S's best is
+    // its first row (S0's row 0 is not S0's best), so S is first, and S0
+    // (whose best tag is its next row) follows it.
+    const prev = (): HTMLButtonElement => screen.getByRole('button', { name: 'Previous tagged spectrum' })
+    const next = (): HTMLButtonElement => screen.getByRole('button', { name: 'Next tagged spectrum' })
+    await waitFor(() => expect(next().disabled).toBe(false))
+    expect(prev().disabled).toBe(true)
+    await click(next())
+    await waitFor(() => expect(screen.getByRole('heading', { level: 2 }).textContent).toBe(`${S}0`))
+    await waitFor(() => expect(prev().disabled).toBe(false))
+    await click(prev())
+    await waitFor(() => expect(screen.getByRole('heading', { level: 2 }).textContent).toBe(S))
+    await waitFor(() => expect(within(screen.getByRole('region', { name: 'Tags of this spectrum' })).getByText(new RegExp(`\\(n=${own.length}\\)`))).toBeTruthy())
   })
 })
 

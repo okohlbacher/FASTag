@@ -180,6 +180,10 @@ function rustF64(cell: string): number | null {
   return Number(s)
 }
 
+/// The most rows one page of browser.rs's results_query holds (MAX_WINDOW):
+/// a larger limit is cut to it.
+export const MAX_WINDOW = 1000
+
 /// The rows of @p view over @p columns/@p rows as browser.rs builds them:
 /// the filters (bound by column name), the per-spectrum rule (the first N
 /// of each spectrum in E-value order, after the other filters), then the
@@ -187,6 +191,7 @@ function rustF64(cell: string): number | null {
 /// order is byte order for this ASCII fixture), ties in file order, each
 /// block reversed on its own when descending.
 export function viewIds(columns: string[], rows: string[][], view: ResultsView): number[] {
+  const exact = !!view.spectrum && !!view.spectrumExact
   const col = (n: string): number => columns.indexOf(n)
   const get = (r: string[], c: number): string => r[c] ?? ''
   const [sp, len, ev, hit] = [col('spectrum'), col('length'), col('evalue'), col('fasta_hit')]
@@ -195,7 +200,8 @@ export function viewIds(columns: string[], rows: string[][], view: ResultsView):
   const u32 = (s: string): number | null => (/^\+?\d+$/.test(s) && Number(s) <= 4294967295 ? Number(s) : null)
   let ids = rows.map((_, i) => i).filter((i) => {
     const r = rows[i]
-    if (needle && sp >= 0 && !get(r, sp).toLowerCase().includes(needle)) return false
+    if (exact && sp >= 0 && get(r, sp) !== view.spectrum) return false
+    if (!exact && needle && sp >= 0 && !get(r, sp).toLowerCase().includes(needle)) return false
     if (view.minLength != null && len >= 0) {
       const v = u32(get(r, len))
       if (v == null || v < view.minLength) return false
@@ -418,7 +424,7 @@ export function installE2EBridge(): Origin | undefined {
     mock.resultsQuery = (path, view, offset, limit): Promise<ResultsPage> => {
       mock.resultsQueryCalls.push({ path, view, offset, limit })
       const all = ids(view)
-      const sel = all.slice(offset, offset + limit)
+      const sel = all.slice(offset, offset + Math.min(limit, MAX_WINDOW))
       return Promise.resolve({
         columns: tags.columns,
         totalRows: tags.rows.length,
