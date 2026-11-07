@@ -458,8 +458,10 @@ run_in "$TMP/mzp" "$TMP/mzp.out" "$TMP/mzp.err" -in "$IN" -out tags.tsv -out_spe
 if [ $RC = 0 ] && [ -s "$TMP/mzp/e.mzpeak" ]; then
   dump "$TMP/mzp/e.mzpeak" "${EIDS[3]}" "$TMP/mzp3.jsonl"
   cmp -s <(val "$TMP/mzp3.jsonl.v" peaks) <(val "$TMP/d_default/3.jsonl.v" peaks) || fail "(d) mzPeak dumps other peaks"
+  # -out_spectra keeps only the spectra that carry a reported tag.
+  ntagged=$(tail -n +2 "$TMP/mzp/tags.tsv" | cut -f1 | sort -u | wc -l | tr -d ' ')
   probe mzpeak "$TMP/mzp/e.mzpeak"
-  [ "$(val "$TMP/p_mzpeak.v" format)" = '"mzPeak"' ] && [ "$(val "$TMP/p_mzpeak.v" ms2)" = 139 ] \
+  [ "$(val "$TMP/p_mzpeak.v" format)" = '"mzPeak"' ] && [ "$(val "$TMP/p_mzpeak.v" ms2)" = "$ntagged" ] \
     && [ "$(val "$TMP/p_mzpeak.v" index)" = '"not_applicable"' ] || fail "(b) mzPeak probe: $(tr '\n' ' ' < "$TMP/p_mzpeak.v")"
 else
   echo "note: no mzPeak support in this build; the mzPeak dump and probe are not checked" >&2
