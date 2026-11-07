@@ -9,7 +9,8 @@
 #     lookup) recomputes per genus the forward count, the reverse-only gains
 #     and the ambiguity losses; the both count must equal forward + gains -
 #     losses, and the forward count the forward report (FASTAG_FULL_PRECISION=1);
-#   * the absent genera gain at most the predicted reverse-only gain (<= 2);
+#   * at the default -max_evalue/-max_tags the absent genera gain at most the
+#     predicted reverse-only gain, which is <= 2;
 #   * both with -orientation forward is the same report; both is the same at
 #     1, 3 and 8 threads; both with -species_call decoy keeps 15 fields;
 #   * the ignored-option warning and the -stream refusal.
@@ -115,25 +116,51 @@ grep -q -- "-species_orientation both: the qvalue column of the species report i
 grep -q "Species orientation (both)" "$TMP/both_t1.log" || fail "no orientation line in the log"
 
 # ---- exact counts against the independent recount ------------------------------
-python3 "$RECOUNT" --tags "$TMP/absent.tsv" --prot-dir "$TMP/prot" --k 7 --genus "$GENUS" > "$TMP/recount.tsv" \
-  || fail "recount script"
-cat "$TMP/recount.tsv"
-total_gain=0
-while IFS=$'\t' read -r g f gain loss b; do
-  [ "$g" = tags ] && continue
-  [ "$(obs "$TMP/absent.species.tsv" "$g")" = "$f" ] || fail "genus $g: forward report $(obs "$TMP/absent.species.tsv" "$g") != recount $f"
-  [ "$(obs "$B" "$g")" = $((f + gain - loss)) ] || fail "genus $g: both report $(obs "$B" "$g") != $f + $gain - $loss"
-  [ "$b" = $((f + gain - loss)) ] || fail "recount inconsistent for $g"
-  total_gain=$((total_gain + gain))
-  case "$g" in
-    1279|4930)
-      [ "$(obs "$B" "$g")" -le $((f + gain)) ] || fail "absent genus $g: both above forward + predicted gain"
-      [ "$gain" -le 2 ] || fail "absent genus $g: predicted reverse-only gain $gain > 2" ;;
-  esac
-done < "$TMP/recount.tsv"
-[ "$(awk -F'\t' '$1 == 561 { print $3 }' "$TMP/recount.tsv")" -gt 0 ] || fail "Escherichia gains nothing (test is vacuous)"
+# The report lists a taxon only from 5 spectra on (TaxStats kObservedFloor):
+# a genus without a row must have fewer in the recount.
+FLOOR=5
+seen() { awk -F'\t' -v t="$2" 'NR > 1 && $2 == t { f = 1 } END { exit !f }' "$1"; }
+n_rows=0
+same_count() {  # report genus expected label
+  if seen "$1" "$2"; then
+    [ "$(obs "$1" "$2")" = "$3" ] || fail "genus $2: $4 report $(obs "$1" "$2") != recount $3"
+    n_rows=$((n_rows + 1))
+  else
+    [ "$3" -lt "$FLOOR" ] || fail "genus $2: no $4 row, but the recount gives $3 >= $FLOOR"
+  fi
+}
+check_counts() {  # label forward-tags forward-report both-report -> $TMP/<label>.recount
+  python3 "$RECOUNT" --tags "$2" --prot-dir "$TMP/prot" --k 7 --genus "$GENUS" > "$TMP/$1.recount" \
+    || fail "recount script ($1)"
+  echo "recount $1:"; cat "$TMP/$1.recount"
+  while IFS=$'\t' read -r g f gain loss b; do
+    [ "$g" = tags ] && continue
+    [ "$b" = $((f + gain - loss)) ] || fail "recount inconsistent for $g"
+    same_count "$3" "$g" "$f" "$1 forward"
+    same_count "$4" "$g" "$b" "$1 both"
+  done < "$TMP/$1.recount"
+}
+# Every tag reported (-max_evalue 0, -max_tags 200): many rows, chance hits.
+check_counts all "$TMP/absent.tsv" "$TMP/absent.species.tsv" "$B"
+[ "$n_rows" -ge 5 ] || fail "only $n_rows report rows compared with the recount (test is vacuous)"
+gain_of() { awk -F'\t' -v g="$2" '$1 == g { print $3 }' "$1"; }
+[ "$(gain_of "$TMP/all.recount" 561)" -gt 0 ] || fail "Escherichia gains nothing (test is vacuous)"
+# At the default -max_evalue and -max_tags the genera absent from the sample
+# gain at most 2 spectra from the reversed readings, and the both count is
+# at most forward + that predicted gain.
+LIGHT=(-in "$IN" -tag_length 7 -extension 1 -fragment_tolerance 600 -fragment_tolerance_unit ppm)
+run light "${LIGHT[@]}" -species "${TAX[@]}" -threads 2 || { cat "$TMP/light.log" >&2; fail "default-cutoff run"; }
+run light_both "${LIGHT[@]}" -species "${TAX[@]}" -species_orientation both -threads 2 \
+  || { cat "$TMP/light_both.log" >&2; fail "default-cutoff both run"; }
+check_counts light "$TMP/light.tsv" "$TMP/light.species.tsv" "$TMP/light_both.species.tsv"
+for g in 1279 4930; do
+  read -r _ f gain loss b < <(awk -F'\t' -v g=$g '$1 == g' "$TMP/light.recount")
+  [ "$gain" -le 2 ] || fail "absent genus $g: predicted reverse-only gain $gain > 2"
+  [ "$b" -le $((f + gain)) ] || fail "absent genus $g: both above forward + predicted gain"
+done
+[ "$(gain_of "$TMP/light.recount" 561)" -gt 0 ] || fail "Escherichia gains nothing at the default cutoffs"
 # The tag-level outcome counts of the log equal the recount's.
-read -r _ rf rr rb rp ra < <(grep '^tags' "$TMP/recount.tsv")
+read -r _ rf rr rb rp ra < <(grep '^tags' "$TMP/all.recount")
 want="informative tags $rf forward only, $rr reverse only, $rb both (shared taxa), $rp palindromes; $ra orientation-ambiguous"
 grep -q "$want" "$TMP/both_t1.log" || { grep "Species orientation" "$TMP/both_t1.log" >&2; fail "log counts differ from the recount: $want"; }
 # Gapped rows are excluded: the run reports some, so the exclusion matters.
@@ -165,4 +192,4 @@ grep -q -- "-stream cannot be combined with -species_orientation" "$TMP/stream.l
 if run badmode "${COMMON[@]}" -species "${TAX[@]}" -species_orientation reverse -threads 2; then fail "bad mode accepted"; fi
 [ ! -e "$TMP/badmode.species.tsv" ] || fail "bad mode wrote a report"
 
-echo "species_orientation_test: passed (total predicted gain $total_gain)"
+echo "species_orientation_test: passed ($n_rows report rows equal the recount)"

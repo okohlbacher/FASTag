@@ -168,6 +168,7 @@ int main()
     FASTag::TaxIndex idx;
     idx.build(se, st, 4);
     using FASTag::SpeciesOrientation;
+    using V = std::vector<uint32_t>;
     FASTag::TagLookupCounters c, rc;
     FASTag::OrientationCounts oc;
     // Spectrum: a forward tag of taxon 1 at E 1.0 and a reverse-only tag of
