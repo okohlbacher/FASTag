@@ -133,7 +133,7 @@ describe('the comparison table of the gate batch against the fixture SDRF', () =
     expect(m.note).toMatch(/Mus musculus \(taxid 10090, genus Mus \(taxid 10088\)\)/)
   })
 
-  it('an SDRF genus the species report calls present below the top one is consistent, not a mismatch', () => {
+  it('an SDRF genus the species report calls present below the top one is not consistent', () => {
     // pxd014764 with Mus called present too (ranked below Homo and the others).
     const b = BATCH_CASES.pxd014764
     const species = b.species.replace(/^genus\t10088\tMus\t(.*)$/m, (line) => {
@@ -146,11 +146,39 @@ describe('the comparison table of the gate batch against the fixture SDRF', () =
     const j = done({ ...b, species })
     const r = compareSdrf(SDRF, [j], tx).jobs[0]
     const o = r.fields!.organism
-    expect(o.state).toBe('genus')
+    expect(o.state).toBe('mismatch')
     expect(o.fastag).toBe('Homo (taxid 9605)')
-    expect(o.note).toMatch(/Mus musculus \(taxid 10090\) lies in the genus Mus \(taxid 10088\), present, ranked \d+ of the \d+ present genera/)
-    expect(r.verdict.mismatches).toEqual([])
-    expect(correctionsTsv(compareSdrf(SDRF, [j], tx))).not.toMatch(/\torganism\t/)
+    expect(o.note).toMatch(/Mus musculus \(taxid 10090\) lies in the genus Mus \(taxid 10088\), present but ranked \d+ of the \d+ present genera/)
+    expect(r.verdict.mismatches).toEqual(['organism'])
+    expect(correctionsTsv(compareSdrf(SDRF, [j], tx))).toMatch(/\torganism\t/)
+  })
+
+  it('SDRF Homo sapiens, top call Saccharomyces, Homo present at rank 2: not consistent', () => {
+    // pxd014764's species report with its genera renamed: Saccharomyces is the
+    // top genus and Homo (keratin, say) the second present one.
+    const b = BATCH_CASES.pxd014764
+    const rename: Record<string, string> = { '9605\tHomo': '4930\tSaccharomyces', '9539\tMacaca': '9605\tHomo', '4930\tSaccharomyces': '9539\tMacaca' }
+    const species = b.species.replace(/^genus\t(9605\tHomo|9539\tMacaca|4930\tSaccharomyces)\t/gm, (_, k: string) => `genus\t${rename[k]}\t`)
+    const sp = speciesFromTsv(species, '/data/x.tags.species.tsv').taxa.filter((t) => t.rank === 'genus' && t.call === 'present')
+    expect(sp.slice(0, 2).map((t) => t.name)).toEqual(['Saccharomyces', 'Homo'])
+    const j = done({ ...b, species })
+    const t = parseSdrf(new TextEncoder().encode('source name\tcharacteristics[organism]\tcomment[data file]\nS1\tHomo sapiens\tpxd014764.mzML\n'))
+    const c1 = compareSdrf(t, [j], tx)
+    const o = c1.jobs[0].fields!.organism
+    expect(o.state).toBe('mismatch')
+    expect(o.fastag).toBe('Saccharomyces (taxid 4930)')
+    expect(o.note).toMatch(/Homo sapiens \(taxid 9606\) lies in the genus Homo \(taxid 9605\), present but ranked 2 of/)
+    expect(c1.jobs[0].verdict.text).not.toMatch(/✓/)
+    expect(c1.jobs[0].verdict.mismatches).toEqual(['organism'])
+    expect(correctionsTsv(c1)).toMatch(/\torganism\t/)
+    // The same run with a mixed SDRF (Homo sapiens and Escherichia coli): present, not called; no correction.
+    const t2 = parseSdrf(
+      new TextEncoder().encode('source name\tcharacteristics[organism]\tcomment[data file]\nS1\tHomo sapiens\tpxd014764.mzML\nS1\tEscherichia coli\tpxd014764.mzML\n')
+    )
+    const c2 = compareSdrf(t2, [j], tx)
+    expect(c2.jobs[0].fields!.organism.state).toBe('present_not_called')
+    expect(c2.jobs[0].verdict.text).not.toMatch(/✓/)
+    expect(correctionsTsv(c2)).not.toMatch(/\torganism\t/)
   })
 
   it('evidence names the CLI report and row each value came from', () => {

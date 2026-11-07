@@ -1,8 +1,9 @@
 // The SDRF comparison (GUI-DESIGN 3 S6, 10 P4; Q8 provisional): each batch
 // job's SDRF rows against what FASTag wrote for that run, on six fields:
 //
-// - organism: the genus call, by NCBI taxid (taxonomy.ts): a call that
-//   contains the SDRF species is consistent at genus;
+// - organism: the genus call (the top genus only), by NCBI taxid
+//   (taxonomy.ts): a call that contains the SDRF species is consistent at
+//   genus; an SDRF organism found only lower in the present list is not;
 // - cleavage agent: the protease call (digest report);
 // - label: the label call (label report, label_call rows);
 // - modification parameters: the SDRF's fixed residue modifications against
@@ -58,14 +59,15 @@ export const FIELD_COLUMNS: Record<FieldId, string[]> = {
 }
 export const DATA_FILE = 'comment[data file]'
 
-/// match: the same; genus: the SDRF species lies in the called genus;
-/// (or, above genus, contains it; or names a genus the report calls present
-/// below the top one); mismatch: they differ; setting_differs: the SDRF
+/// match: the same; genus: the SDRF species lies in the called genus
+/// (or, above genus, contains it); present_not_called: a mixed sample whose
+/// SDRF organism lies only in a genus the report calls present below the
+/// call (not consistent, not a correction); mismatch: they differ; setting_differs: the SDRF
 /// differs from a setting of the run (modifications, fragment tolerance),
 /// not from anything measured; no_call: FASTag made no call (or it is held
 /// back, or the report does not say); no_sdrf: the SDRF states nothing;
 /// not_checkable: the SDRF value is one FASTag cannot call or this app cannot read.
-export type FieldState = 'match' | 'genus' | 'mismatch' | 'setting_differs' | 'no_call' | 'no_sdrf' | 'not_checkable'
+export type FieldState = 'match' | 'genus' | 'present_not_called' | 'mismatch' | 'setting_differs' | 'no_call' | 'no_sdrf' | 'not_checkable'
 
 /// The fields whose FASTag side is a run setting, not a call.
 export const SETTING_FIELDS: ReadonlySet<FieldId> = new Set<FieldId>(['modifications', 'tolerance'])

@@ -9,8 +9,9 @@
 // organism are compared by taxid: the organism is resolved (an NCBITaxon
 // accession first, else its name), walked up to its genus, and a genus call
 // equal to that genus is consistent at genus; so is an SDRF taxon above
-// genus that contains the call, and an organism in another genus the report
-// calls present. An organism the taxonomy does not hold is one FASTag cannot
+// genus that contains the call. Only the call counts: an organism in a lower
+// ranked genus the report calls present is not consistent (a mixed sample:
+// present_not_called; else a mismatch). An organism the taxonomy does not hold is one FASTag cannot
 // detect: not checkable, never a mismatch.
 
 export interface TaxNode {
@@ -109,7 +110,7 @@ export function resolveOrganism(tx: Taxonomy, value: string): Organism | null {
   return null
 }
 
-export type OrganismState = 'match' | 'genus' | 'mismatch' | 'not_checkable'
+export type OrganismState = 'match' | 'genus' | 'present_not_called' | 'mismatch' | 'not_checkable'
 
 export interface OrganismMatch {
   state: OrganismState
@@ -136,33 +137,44 @@ export function isAncestor(tx: Taxonomy, ancestor: number, taxid: number): boole
 /// A genus call (@p genus, its taxid) against the SDRF organisms of a run;
 /// @p present: every genus the species report calls present, the call first
 /// (default: the call alone).
-/// match: an SDRF organism is that genus; genus: one lies in it (a species
-/// or strain), or is a taxon above genus that contains it (a family, an
-/// order, "Bacteria"), or lies in (or contains) another genus the report
-/// calls present, ranked below the top one; not_checkable: none of these and
-/// one is not in the taxonomy (FASTag cannot call it); mismatch: every SDRF
-/// organism resolves and none lies in, or contains, a present genus.
+/// Only the call (the top genus) counts: match: an SDRF organism is that
+/// genus; genus: one lies in it (a species or strain), or is a taxon above
+/// genus that contains it (a family, an order, "Bacteria").
+/// A genus ranked below the call is a contaminant as often as a sample, so
+/// an SDRF organism that lies only in such a genus is no consistency:
+/// present_not_called when the SDRF lists several organisms for the run (a
+/// mixed sample, of which FASTag called another), else a mismatch (the run's
+/// top genus is not the SDRF's organism; the note says where the SDRF's
+/// organism ranks). not_checkable: no SDRF organism fits the call and one is
+/// not in the taxonomy (FASTag cannot call it); mismatch: every SDRF organism
+/// resolves and none lies in, or contains, the called genus.
 export function matchOrganism(tx: Taxonomy, values: readonly string[], genus: number, present: readonly number[] = [genus]): OrganismMatch {
   const resolved = values.map((value) => ({ value, organism: resolveOrganism(tx, value) }))
   const ranked = [genus, ...present.filter((g) => g !== genus)]
   // Whether an organism lies in genus g (or is it), or contains it from above genus.
   const fits = (o: Organism, g: number): 'in' | 'contains' | null =>
     o.genus === g ? 'in' : o.genus == null && isAncestor(tx, o.taxid, g) ? 'contains' : null
-  for (let i = 0; i < ranked.length; i++) {
-    const g = ranked[i]
-    for (const r of resolved) {
-      const o = r.organism
-      const how = o ? fits(o, g) : null
-      if (!o || !how) continue
-      const rank = i === 0 ? '' : `, present, ranked ${i + 1} of the ${ranked.length} present genera (the call is ${named(tx, genus)})`
-      if (how === 'contains')
-        return { state: 'genus', resolved, note: `${o.name} (taxid ${o.taxid}, ${o.rank || 'no rank'}) contains the ${i === 0 ? 'called ' : ''}genus ${named(tx, g)}${rank}: consistent` }
-      if (i === 0 && o.taxid === genus) return { state: 'match', resolved, note: `the SDRF names the genus ${named(tx, genus)}` }
-      return i === 0
-        ? { state: 'genus', resolved, note: `${o.name} (taxid ${o.taxid}) lies in the called genus ${named(tx, genus)}: consistent at genus` }
-        : { state: 'genus', resolved, note: `${o.name} (taxid ${o.taxid}) lies in the genus ${named(tx, g)}${rank}: consistent at genus` }
-    }
+  for (const r of resolved) {
+    const o = r.organism
+    const how = o ? fits(o, genus) : null
+    if (!o || !how) continue
+    if (how === 'contains')
+      return { state: 'genus', resolved, note: `${o.name} (taxid ${o.taxid}, ${o.rank || 'no rank'}) contains the called genus ${named(tx, genus)}: consistent` }
+    if (o.taxid === genus) return { state: 'match', resolved, note: `the SDRF names the genus ${named(tx, genus)}` }
+    return { state: 'genus', resolved, note: `${o.name} (taxid ${o.taxid}) lies in the called genus ${named(tx, genus)}: consistent at genus` }
   }
+  // The best-ranked present genus below the call that holds an SDRF organism.
+  let lower: { o: Organism; g: number; i: number } | null = null
+  for (let i = 1; i < ranked.length && !lower; i++)
+    for (const r of resolved) if (r.organism && fits(r.organism, ranked[i])) {
+      lower = { o: r.organism, g: ranked[i], i }
+      break
+    }
+  const lowerWords = lower
+    ? `${lower.o.name} (taxid ${lower.o.taxid}) lies in the genus ${named(tx, lower.g)}, present but ranked ${lower.i + 1} of the ${ranked.length} present genera; the call is ${named(tx, genus)}`
+    : ''
+  if (lower && resolved.length > 1)
+    return { state: 'present_not_called', resolved, note: `a mixed sample: ${lowerWords}, which the SDRF does not name` }
   const missing = resolved.filter((r) => !r.organism)
   if (missing.length)
     return {
@@ -170,6 +182,7 @@ export function matchOrganism(tx: Taxonomy, values: readonly string[], genus: nu
       resolved,
       note: `${missing.map((r) => r.value).join(', ')} is not in the taxonomy FASTag's species call uses, so FASTag cannot call it`
     }
+  if (lower) return { state: 'mismatch', resolved, note: `${lowerWords}: the run's top genus is not the SDRF's organism` }
   const words = resolved.map((r) => `${r.organism!.name} (taxid ${r.organism!.taxid}, genus ${named(tx, r.organism!.genus)})`).join(', ')
   const others = ranked.length > 1 ? ` (none of the ${ranked.length} genera the species report calls present holds an SDRF organism)` : ''
   return { state: 'mismatch', resolved, note: `the SDRF names ${words}; FASTag called the genus ${named(tx, genus)}${others}` }

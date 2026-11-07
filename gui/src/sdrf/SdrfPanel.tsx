@@ -36,6 +36,7 @@ export interface SdrfPanelProps {
 export const STATE_WORDS: Record<FieldState, { mark: string; word: string }> = {
   match: { mark: '✓', word: 'consistent' },
   genus: { mark: '✓', word: 'consistent at genus' },
+  present_not_called: { mark: '~', word: 'present, not called' },
   mismatch: { mark: '✗', word: 'differs' },
   setting_differs: { mark: '≠', word: 'run setting differs' },
   no_call: { mark: '–', word: 'no call' },
@@ -230,8 +231,9 @@ export default function SdrfPanel({ sdrf, busy, outDir, onShow }: SdrfPanelProps
             the instrument the input names (its reports), the run's fragment tolerance (its reports) and the run's fixed modifications
             (its log; FASTag writes no alkylation call). The last two are settings of the run, not measurements: where they differ
             from the SDRF the table shows ≠ run setting differs, a hint on how the run was set up, and no correction is written. The
-            organism is matched by NCBI taxid: a genus call that contains the SDRF species, an SDRF taxon above genus that contains
-            the call, or an SDRF genus the species report also calls present is consistent. Not validated: the corrections are
+            organism is matched by NCBI taxid against the called (top) genus only: a call that contains the SDRF species, or an SDRF
+            taxon above genus that contains the call, is consistent. An SDRF organism the species report finds only below the call
+            differs, unless the SDRF lists several organisms for the run (a mixed sample): then it is ~ present, not called. Not validated: the corrections are
             FASTag's view of each run, for a curator to check.
           </p>
         </>

@@ -2,8 +2,8 @@
 // organism is resolved through the taxonomy FASTag's species call uses (the
 // bundled nodes.dmp and names.dmp, copied to src/fixtures/sdrf), and a genus
 // call that contains the SDRF species is consistent at genus, not a mismatch;
-// so is an SDRF taxon above genus that contains the call, and an SDRF genus
-// the species report also calls present.
+// so is an SDRF taxon above genus that contains the call. An SDRF genus the
+// species report calls present only below the call is not consistent.
 
 // @ts-ignore -- node built-in; the app's tsconfig has no node types
 import { readFileSync } from 'node:fs'
@@ -90,13 +90,21 @@ describe('a genus call against an SDRF organism', () => {
     expect(matchOrganism(tx, ['Mus musculus'], 9605)).toMatchObject({ state: 'mismatch' })
   })
 
-  it('an SDRF genus the report calls present, ranked below the call, is consistent, not a mismatch', () => {
-    // Homo first, Mus also present.
+  it('only the called (top) genus counts: an SDRF genus present lower down is not consistent', () => {
+    // Homo first, Mus also present (ranked 3): one SDRF organism, a mismatch.
     const m = matchOrganism(tx, ['Mus musculus'], 9605, [9605, 9539, 10088])
-    expect(m.state).toBe('genus')
-    expect(m.note).toMatch(/Mus musculus \(taxid 10090\) lies in the genus Mus \(taxid 10088\), present, ranked 3 of the 3 present genera \(the call is Homo \(taxid 9605\)\)/)
+    expect(m.state).toBe('mismatch')
+    expect(m.note).toMatch(/Mus musculus \(taxid 10090\) lies in the genus Mus \(taxid 10088\), present but ranked 3 of the 3 present genera; the call is Homo \(taxid 9605\)/)
+    // SDRF Homo sapiens, Saccharomyces called, Homo present at rank 2 (keratin): a mismatch.
+    expect(matchOrganism(tx, ['Homo sapiens'], 4930, [4930, 9605])).toMatchObject({ state: 'mismatch' })
+    // A mixed sample (several SDRF organisms), one present below the call: present, not called.
+    const mixed = matchOrganism(tx, ['Mus musculus', 'Escherichia coli'], 9605, [9605, 10088])
+    expect(mixed.state).toBe('present_not_called')
+    expect(mixed.note).toMatch(/a mixed sample: Mus musculus .* ranked 2 of the 2 present genera; the call is Homo/)
     // The top genus still wins when the SDRF names it.
     expect(matchOrganism(tx, ['Homo sapiens', 'Mus musculus'], 9605, [9605, 10088]).note).toMatch(/lies in the called genus Homo/)
+    // An SDRF taxon above genus containing only a lower genus: not consistent either.
+    expect(matchOrganism(tx, ['Bacteria'], 9605, [9605, 561])).toMatchObject({ state: 'mismatch' })
     // No SDRF organism among the present genera: a mismatch.
     expect(matchOrganism(tx, ['Mus musculus'], 9605, [9605, 9539])).toMatchObject({ state: 'mismatch' })
   })
