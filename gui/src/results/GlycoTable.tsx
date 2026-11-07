@@ -48,7 +48,7 @@ function GlycoBody({ t, minFraction }: { t: Glyco; minFraction: number | null })
   const cols: Column[] = [
     { id: 'spectrum', label: 'Spectrum', mono: true, text: (i) => t.spectrum[i] },
     { id: 'n', label: 'Oxonium ions', num: true, text: (i) => String(t.nOxonium[i]), key: (i) => t.nOxonium[i] },
-    { id: 'frac', label: 'Oxonium fraction', num: true, title: 'Summed oxonium intensity as a fraction of the spectrum', text: (i) => (Number.isNaN(t.frac[i]) ? '' : t.frac[i].toFixed(3)), key: (i) => t.frac[i] },
+    { id: 'frac', label: 'Oxonium / base peak', num: true, title: 'Summed oxonium intensity over the base peak (can exceed 1)', text: (i) => (Number.isNaN(t.frac[i]) ? '' : t.frac[i].toFixed(3)), key: (i) => t.frac[i] },
     { id: 'flag', label: 'Flagged', text: (i) => (t.flagged[i] ? 'yes' : '') },
     { id: 'ions', label: 'Ions', mono: true, text: (i) => t.ions[i].join(', ') }
   ]

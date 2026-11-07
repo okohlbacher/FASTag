@@ -122,3 +122,40 @@ export type CliCaseId = keyof typeof CLI_CASES
 
 /// The log as the run's log store holds it: one line per entry.
 export const logLines = (c: CliCase): string[] => c.log.split(/\r?\n/).filter((l) => l !== '')
+
+// P4c (GUI-DESIGN S7, S8): the files the Mass gaps & recon and Glyco tabs
+// read, as the CLI wrote them (src/fixtures/cli/README.md).
+import p4cLog from '../fixtures/cli/v112-pxd014764-delta-ext3/run.log?raw'
+import p4cMassgap from '../fixtures/cli/v112-pxd014764-delta-ext3/run.massgap.tsv?raw'
+import p4cRecon from '../fixtures/cli/v112-pxd014764-delta-ext3/run.recon.tsv?raw'
+import p4cDelta from '../fixtures/cli/v112-pxd014764-delta-ext3/run.delta.tsv?raw'
+import p4cGlyco from '../fixtures/cli/v112-pxd014764-delta-ext3/run.tags.glyco.tsv?raw'
+import ecoliLog from '../fixtures/cli/v1111-ecoli-recon-loc/run.log?raw'
+import ecoliMassgap from '../fixtures/cli/v1111-ecoli-recon-loc/run.massgap.tsv?raw'
+import ecoliRecon from '../fixtures/cli/v1111-ecoli-recon-loc/run.recon.tsv?raw'
+import ecoliDelta from '../fixtures/cli/v1111-ecoli-recon-loc/run.delta.tsv?raw'
+import ecoliGlyco from '../fixtures/cli/v1111-ecoli-recon-loc/run.tags.glyco.tsv?raw'
+import ecoliMzTab from '../fixtures/cli/v1111-ecoli-recon-loc/run.recon.mzTab?raw'
+
+export interface ReconCase {
+  name: string
+  log: string
+  massgap: string
+  recon: string
+  delta: string
+  glyco: string
+  mzTab?: string
+}
+
+export const RECON_CASES = {
+  human: { name: 'v112-pxd014764-delta-ext3', log: p4cLog, massgap: p4cMassgap, recon: p4cRecon, delta: p4cDelta, glyco: p4cGlyco },
+  ecoli: {
+    name: 'v1111-ecoli-recon-loc',
+    log: ecoliLog,
+    massgap: ecoliMassgap,
+    recon: ecoliRecon,
+    delta: ecoliDelta,
+    glyco: ecoliGlyco,
+    mzTab: ecoliMzTab
+  }
+} satisfies Record<string, ReconCase>

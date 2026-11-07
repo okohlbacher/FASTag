@@ -35,6 +35,13 @@
 //               Stitch/ALPS export job converts them with export/denovo.ts
 //               (as denovo.rs would) and keeps the reads in
 //               mock.readsWrites
+//   gate-recon, gate-recon-loc
+//               P4c viewers: a run prints the real log of the PXD014764
+//               recon run (integration/1.12, -recon_out -delta_out
+//               -massgap_out -glyco) or of the E. coli recon run (1.11.1,
+//               with -recon_localize and an mzTab -recon_id_out), and its
+//               reply names those outputs whatever the form sent; their
+//               files are the real ones (testing/cliFixtures.ts RECON_CASES)
 //   gate-batch  P2b Batch summary: Add folder… on /data lists eight spectra
 //               files, one per job of a real batch (src/fixtures/cli/batch,
 //               testing/batchFixtures.ts): each prints that job's log and
@@ -55,7 +62,7 @@ import ecoliResConf from '../fixtures/denovo/ecoli.res_conf.tags.tsv?raw'
 import digestTsv from '../fixtures/digest.tsv?raw'
 import labelTsv from '../fixtures/label.tsv?raw'
 import massgapTsv from '../fixtures/massgap.tsv?raw'
-import { CLI_CASES, logLines, type CliCase } from './cliFixtures'
+import { CLI_CASES, logLines, RECON_CASES, type CliCase, type ReconCase } from './cliFixtures'
 import { speciesFromTsv } from './speciesTsv'
 import { BATCH_CASES, DIA_REFUSAL } from './batchFixtures'
 
@@ -65,6 +72,12 @@ const GATE: Record<string, CliCase> = {
   'gate-1.11': CLI_CASES.v111,
   'gate-da': CLI_CASES.v112Da,
   'gate-call': CLI_CASES.v112Call
+}
+
+// The ?fixture= names of the P4c viewer scenarios.
+const RECON: Record<string, ReconCase> = {
+  'gate-recon': RECON_CASES.human,
+  'gate-recon-loc': RECON_CASES.ecoli
 }
 
 /// A string a release dist/ must never contain.
@@ -243,6 +256,16 @@ export function installE2EBridge(): Origin | undefined {
     mock.reportFiles = { '/data/run01.digest.tsv': gate.digest, '/data/run01.label.tsv': gate.label }
     mock.speciesResult = speciesFromTsv(gate.species, '/data/run01.tags.species.tsv')
   }
+  const recon = RECON[fixture]
+  if (recon) {
+    mock.reportFiles = {
+      '/data/run01.massgap.tsv': recon.massgap,
+      '/data/run01.recon.tsv': recon.recon,
+      '/data/run01.delta.tsv': recon.delta,
+      '/data/run01.tags.glyco.tsv': recon.glyco,
+      ...(recon.mzTab ? { '/data/run01.recon.mzTab': recon.mzTab } : {})
+    }
+  }
   // gate-batch: the jobs by input, in the folder's (name) order.
   const batchCases = Object.values(BATCH_CASES)
   const batchInput = (name: string, dir = '/data'): string => `${dir}/${name}.mzML`
@@ -417,6 +440,7 @@ export function installE2EBridge(): Origin | undefined {
         code: 1
       }
     if (gate) return { phase: 'Reading spectra', lines: logLines(gate), ok: true, code: 0, step: 100 }
+    if (recon) return { phase: 'Reading spectra', lines: recon.log.split(/\r?\n/).filter((l) => l !== ''), ok: true, code: 0, step: 40 }
     if (fixture === 'gate-batch') {
       const lines = (t: string): string[] => t.split(/\r?\n/).filter((l) => l !== '')
       if (name === `${DIA_REFUSAL.name}.mzML`) return { phase: 'Reading spectra', lines: lines(DIA_REFUSAL.log), ok: false, code: DIA_REFUSAL.code, step: 10 }
@@ -450,6 +474,17 @@ export function installE2EBridge(): Origin | undefined {
   mock.run = async (params, onEvent): Promise<RunStarted> => {
     const started = await origRun(params, onEvent)
     if (!started.started) return started
+    if (recon && started.outputs) {
+      // The outputs of the recorded run, whatever the form sent.
+      started.outputs = {
+        ...started.outputs,
+        massgap_out: '/data/run01.massgap.tsv',
+        recon_out: '/data/run01.recon.tsv',
+        delta_out: '/data/run01.delta.tsv',
+        glyco_out: '/data/run01.tags.glyco.tsv',
+        recon_id_out: recon.mzTab ? '/data/run01.recon.mzTab' : null
+      }
+    }
     const id = mock.lastRunId
     const s = script(String(params['in']))
     const at = (ms: number, f: () => void): void => {

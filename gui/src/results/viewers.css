@@ -27,6 +27,7 @@
 .mg-legend .key { display: inline-block; width: 2px; height: 12px; border-radius: 1px; }
 .mg-legend .key.stick { background: var(--brand-peaks); }
 .mg-legend .key.mark { width: 0; border-left: 1px solid var(--flag); }
+.mg-legend .key.mark.faint { opacity: 0.3; }
 .mg-plot { position: relative; border-radius: var(--radius-sm); }
 .mg-plot:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .mg-plot svg { display: block; width: 100%; height: auto; overflow: visible; }
@@ -34,7 +35,8 @@
 .mg-grid text,
 .mg-axis { fill: var(--muted-foreground); font-size: 11px; font-variant-numeric: tabular-nums; }
 .mg-base { stroke: var(--muted-foreground); stroke-width: 1; shape-rendering: crispEdges; }
-.mg-mark { stroke: var(--flag); stroke-width: 1; opacity: 0.55; }
+.mg-mark { stroke: var(--flag); stroke-width: 1; opacity: 0.22; }
+.mg-mark.hit { opacity: 0.9; }
 .mg-mark.isotope,
 .mg-mark.residue { stroke-dasharray: 2 3; }
 .mg-stick { stroke: var(--brand-peaks); stroke-width: 2; stroke-linecap: round; }
@@ -72,7 +74,7 @@ table.dt thead th { position: sticky; top: 0; background: var(--panel); z-index:
 table.dt .th-sort { all: unset; cursor: pointer; font: inherit; font-weight: 600; }
 table.dt .th-sort:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 table.dt tr.active td { background: var(--primary-soft); }
-table.dt td.mono { font-family: var(--font-seq); font-size: var(--text-xs); }
+table.taxa.dt td.mono { font-family: var(--font-seq); font-size: var(--text-xs); white-space: nowrap; }
 .dt-empty { padding: var(--space-3); color: var(--muted-foreground); font-size: var(--text-sm); }
 .dt-help { margin: 0; font-size: var(--text-xs); color: var(--muted-foreground); }
 .dt-filters { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); align-items: flex-end; font-size: var(--text-sm); }

@@ -27,8 +27,8 @@ export interface GapBin {
 export type GapRange = 'central' | 'mods' | 'all'
 
 const RANGE_LABEL: Record<GapRange, string> = {
-  central: 'Central 98 %',
   mods: '−150 to +400 Da',
+  central: 'Central 98 %',
   all: 'All gaps'
 }
 
@@ -48,6 +48,8 @@ const H = 260
 const M = { l: 52, r: 16, t: 34, b: 30 }
 const PW = W - M.l - M.r
 const PH = H - M.t - M.b
+
+const MIN_HIT = 2
 
 const da = (v: number, d = 4): string => (v > 0 ? `+${fmt(v, d)}` : v < 0 ? `−${fmt(-v, d)}` : '0')
 
@@ -107,7 +109,8 @@ interface Drawn {
 }
 
 export default function MassGapChart({ bins, peaks = [], window, source }: MassGapChartProps): JSX.Element {
-  const [range, setRange] = useState<GapRange>('central')
+  // The modification window first: where the bundled deltas lie.
+  const [range, setRange] = useState<GapRange>('mods')
   const [view, setView] = useState<'chart' | 'table'>('chart')
   const [showMarks, setShowMarks] = useState(true)
   const [active, setActive] = useState<number | null>(null)
@@ -139,6 +142,9 @@ export default function MassGapChart({ bins, peaks = [], window, source }: MassG
     peak: peakOf(b)
   }))
   const marks = showMarks ? marksIn(lo, hi) : []
+  // A mark is drawn full when a gap peak of at least MIN_HIT spectra (the
+  // CLI's min_bin default) lies within the window; single spectra do not.
+  const hit = new Set(drawn.flatMap((d) => (d.mark && d.bin.spectra >= MIN_HIT ? [d.mark.name] : [])))
 
   // Direct labels, sparingly: the CLI's explained peaks, then the fullest
   // shifted bins that sit on a mark; at most 5, never two within 70 px.
@@ -148,13 +154,13 @@ export default function MassGapChart({ bins, peaks = [], window, source }: MassG
       .filter((p) => p.delta != null && p.delta >= lo && p.delta <= hi && p.explainedBy !== 'none')
       .map((p) => ({ x: x(p.delta!), text: `${da(p.delta!, 3)} ${p.explainedBy}` })),
     ...drawn
-      .filter((d) => d.mark && Math.abs(d.bin.gap) > shiftedAt)
+      .filter((d) => d.mark && d.h >= MIN_HIT && Math.abs(d.bin.gap) > shiftedAt)
       .sort((a, b) => b.h - a.h)
       .map((d) => ({ x: d.x, text: `${da(d.bin.gap, 3)} ${d.mark!.name}` }))
   ]
   for (const c of candidates) {
-    if (labels.length >= 5) break
-    if (labels.some((l) => Math.abs(l.x - c.x) < 70)) continue
+    if (labels.length >= 4) break
+    if (labels.some((l) => Math.abs(l.x - c.x) < 140)) continue
     labels.push(c)
   }
 
@@ -292,9 +298,14 @@ export default function MassGapChart({ bins, peaks = [], window, source }: MassG
               <span className="key stick" aria-hidden="true" /> Spectra per gap peak
             </li>
             {showMarks && (
-              <li>
-                <span className="key mark" aria-hidden="true" /> Unimod delta ({fmt(marks.length)} in range)
-              </li>
+              <>
+                <li>
+                  <span className="key mark" aria-hidden="true" /> Unimod delta at a gap peak ({fmt(marks.filter((m) => hit.has(m.name)).length)})
+                </li>
+                <li>
+                  <span className="key mark faint" aria-hidden="true" /> Other Unimod delta ({fmt(marks.filter((m) => !hit.has(m.name)).length)})
+                </li>
+              </>
             )}
           </ul>
           <div
@@ -327,7 +338,15 @@ export default function MassGapChart({ bins, peaks = [], window, source }: MassG
               ))}
               <line className="mg-base" x1={M.l} x2={W - M.r} y1={M.t + PH} y2={M.t + PH} />
               {marks.map((m) => (
-                <line key={m.name} className={`mg-mark ${m.kind}`} x1={x(m.mass)} x2={x(m.mass)} y1={M.t} y2={M.t + PH}>
+                <line
+                  key={m.name}
+                  // A mark with a gap peak within the window is drawn full; the others recede.
+                  className={`mg-mark ${m.kind}${hit.has(m.name) ? ' hit' : ''}`}
+                  x1={x(m.mass)}
+                  x2={x(m.mass)}
+                  y1={M.t}
+                  y2={M.t + PH}
+                >
                   <title>{`${m.name} (${m.site}) ${da(m.mass)} Da`}</title>
                 </line>
               ))}
@@ -349,7 +368,13 @@ export default function MassGapChart({ bins, peaks = [], window, source }: MassG
                   </text>
                 ))}
               {labels.map((l) => (
-                <text key={`l${l.x}`} className="mg-label" x={l.x} y={M.t - 8} textAnchor="middle">
+                <text
+                  key={`l${l.x}`}
+                  className="mg-label"
+                  x={Math.min(W - M.r, Math.max(M.l, l.x))}
+                  y={M.t - 10}
+                  textAnchor={l.x < M.l + 80 ? 'start' : l.x > W - M.r - 80 ? 'end' : 'middle'}
+                >
                   {l.text}
                 </text>
               ))}

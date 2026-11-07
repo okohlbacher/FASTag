@@ -42,7 +42,7 @@ function deltaBins(): GapBin[] {
 describe('MassGapChart', () => {
   it('draws one thin stick per gap peak in range, the zero bin cut and labelled', () => {
     const bins = deltaBins()
-    const [lo, hi] = gapDomain(bins, 'central')
+    const [lo, hi] = gapDomain(bins, 'mods') // the default range
     const inRange = bins.filter((b) => b.gap >= lo && b.gap <= hi)
     const { container } = render(<MassGapChart bins={bins} window={0.02} source="run.delta.tsv" />)
     expect(container.querySelectorAll('.mg-stick').length).toBe(inRange.length)
@@ -53,7 +53,7 @@ describe('MassGapChart', () => {
     expect(container.querySelectorAll('.mg-grid line').length).toBeGreaterThanOrEqual(3)
     const legend = screen.getByRole('list', { name: 'Legend' })
     expect(legend.textContent).toMatch(/Spectra per gap peak/)
-    expect(legend.textContent).toMatch(/Unimod delta \(\d+ in range\)/)
+    expect(legend.textContent).toMatch(/Unimod delta at a gap peak \(\d+\)/)
   })
 
   it('marks the bundled Unimod deltas, and hides them on request', async () => {
@@ -100,9 +100,13 @@ describe('MassGapChart', () => {
     expect(row?.textContent).toMatch(/Label:13C\(6\)15N\(4\) \(R\)0\.71: Label:13C\(6\)15N\(4\)\? 10/)
   })
 
-  it('the three ranges: central, the modification window and all', async () => {
+  it('the three ranges: the modification window (default), central and all', async () => {
     const bins = deltaBins()
     const { container } = render(<MassGapChart bins={bins} window={0.02} source="d" />)
+    expect(screen.getByRole('button', { name: '−150 to +400 Da' }).getAttribute('aria-pressed')).toBe('true')
+    await click(screen.getByRole('button', { name: 'Central 98 %' }))
+    const [lo, hi] = gapDomain(bins, 'central')
+    expect(container.querySelectorAll('.mg-stick').length).toBe(bins.filter((b) => b.gap >= lo && b.gap <= hi).length)
     await click(screen.getByRole('button', { name: 'All gaps' }))
     expect(container.querySelectorAll('.mg-stick').length).toBe(bins.length)
     await click(screen.getByRole('button', { name: '−150 to +400 Da' }))
