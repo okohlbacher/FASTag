@@ -338,6 +338,26 @@ int main()
       check(c1.kmer_skipped == c2.kmer_skipped && c1.tag_generic == c2.tag_generic && r1.kmer_skipped == 0,
             "orientation: forward counters unchanged under both");
     }
+    // The reversed reading's skipped k-mers go to the reverse counters only:
+    // CDEFG is taxon 1 as written; GFEDC is in taxa 2 and 3, so at share cap
+    // 1 both of its k-mers are skipped (and that reading is not informative).
+    {
+      std::vector<FASTAFile::FASTAEntry> ce;
+      ce.emplace_back("c1", "", "CDEFG");
+      ce.emplace_back("c2", "", "GFEDC");
+      ce.emplace_back("c3", "", "GFEDC");
+      std::vector<uint32_t> ct = {1, 2, 3};
+      TaxIndex cidx;
+      cidx.build(ce, ct, /*k=*/4);
+      TagLookupCounters c, rc;
+      OrientationCounts co;
+      V t;
+      check(orientedTagSupport(cidx, "CDEFG", 4, 1, 0.0, SpeciesOrientation::Both, t, c, rc, &co)
+                && t == V({1}) && co.forward == 1,
+            "orientation: a reversed reading with only skipped k-mers is not informative");
+      check(c.kmer_skipped == 0 && rc.kmer_skipped == 2,
+            "orientation: skipped k-mers of the reversed reading counted in the reverse counters only");
+    }
 
     // Randomised against tagSupport: Forward equals it; Both equals the
     // combination of the two readings looked up separately.
