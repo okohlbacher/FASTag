@@ -35,6 +35,13 @@
 //               Stitch/ALPS export job converts them with export/denovo.ts
 //               (as denovo.rs would) and keeps the reads in
 //               mock.readsWrites
+//   spectrum    P4 PR a: the view fixture on the real E. coli tags, with a
+//               CLI that has -dump_spectrum: the Spectrum tab dumps the real
+//               peaks of each spectrum (src/fixtures/cli/v112-ecoli-dump,
+//               the G1 CLI's output for those tags), and the run record of
+//               /data/run01.tags.tsv names its input and parameters
+//   spectrum-1.11  the same with a CLI without -dump_spectrum (FASTag 1.11):
+//               no Spectrum tab, and the row action says so
 //   gate-batch  P2b Batch summary: Add folder… on /data lists eight spectra
 //               files, one per job of a real batch (src/fixtures/cli/batch,
 //               testing/batchFixtures.ts): each prints that job's log and
@@ -57,6 +64,8 @@ import { DEFAULTS, type Origin } from '../setup/tasks'
 import type { BrowserEvent, DropRoute, ExportFormat, ResultsPage, ResultsView, RunEvent, RunStarted } from '../types'
 import ecoliTags from '../../e2e-web/fixtures/ecoli.tags.tsv?raw'
 import ecoliResConf from '../fixtures/denovo/ecoli.res_conf.tags.tsv?raw'
+import ecoliDumps from '../fixtures/cli/v112-ecoli-dump/dumps.ppm.jsonl?raw'
+import { splitDumps } from '../spectrum/dump'
 import digestTsv from '../fixtures/digest.tsv?raw'
 import labelTsv from '../fixtures/label.tsv?raw'
 import massgapTsv from '../fixtures/massgap.tsv?raw'
@@ -342,7 +351,34 @@ export function installE2EBridge(): Origin | undefined {
 
   const exports: { dest: string; format: ExportFormat; text: string }[] = []
   let held: { jobId: number; finish: () => void; cancel: () => void } | null = null
-  if (fixture === 'view' || fixture === 'denovo') {
+  if (fixture === 'spectrum' || fixture === 'spectrum-1.11') {
+    const has = fixture === 'spectrum'
+    mock.spectrumSupportResult = has
+      ? { supported: true, probed: true, detail: 'the CLI has -dump_spectrum' }
+      : { supported: false, probed: true, detail: 'the CLI has no -dump_spectrum' }
+    for (const d of splitDumps(ecoliDumps)) {
+      const id = (JSON.parse(d.slice(0, d.indexOf('\n'))) as { native_id: string }).native_id
+      mock.spectrumDumps[id] = d
+    }
+    mock.history = [
+      {
+        id: '1762419600000-1',
+        input: '/data/run01.mzML',
+        outputs: ['/data/run01.tags.tsv'],
+        cwd: '/data',
+        argv: ['/e2e/FASTag', '-in', '/data/run01.mzML', '-out', '/data/run01.tags.tsv', '-threads', '1', '-progress'],
+        status: 'ok',
+        exitCode: 0,
+        message: null,
+        start: 1762419600000,
+        end: 1762419690000,
+        cleanup: { removed: [], renamed: [], failed: [] },
+        params: { threads: '1' },
+        tags: tags.rows.length
+      }
+    ]
+  }
+  if (fixture === 'view' || fixture === 'denovo' || fixture === 'spectrum' || fixture === 'spectrum-1.11') {
     const ids = (view: ResultsView): number[] => viewIds(tags.columns, tags.rows, view)
     mock.resultsQuery = (path, view, offset, limit): Promise<ResultsPage> => {
       mock.resultsQueryCalls.push({ path, view, offset, limit })
