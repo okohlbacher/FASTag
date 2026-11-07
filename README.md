@@ -608,7 +608,12 @@ each tag; `-species` counts b/y tags only and reports how many c/z• rows it
 left out. Hybrid EThcD/ETciD spectra are read as b/y under `auto` (reading
 both series at once is not supported yet), and a/x ions are not read.
 `-ion_series auto` on a run without electron activation writes exactly what
-`by` writes.
+`by` writes. `auto` reads the activation of mzML input only: MGF and mzPeak
+spectra are read as b/y (an electron-activated spectrum such a reader delivers
+is counted in a warning), so a c/z row always comes with the `ion_series`
+column. With `-unknown_charge enumerate|infer` a spectrum read as c/z• takes
+its charge and isotope evidence from c/z• pairs, and its charge-reduced
+precursor species do not count as fragments.
 
 **Tag confidence.** The `evalue` is the primary, validated confidence — lower is
 better, and on real identifications (PXD000001) it separates correct from
