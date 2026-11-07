@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState, type JSX, type KeyboardEve
 import type { BrowserEvent, ResultsHead, ResultsPage, ResultsSort, ResultsView } from './types'
 import { baseName, DECIMAL } from './digestReport'
 import { HelpButton, HelpLink } from './help/HelpLink'
+import { useExportJob, useExportJobs } from './results/exportJobs'
 
 // Hand-rolled fixed-row-height virtualization. Not react-window: above ~600k
 // rows the spacer div would exceed WebKit's ~16.7M px element-height limit and
@@ -152,6 +153,16 @@ function parseMaxEvalue(s: string): { value: number | null; invalid: boolean } {
 type FastaHitChoice = 'any' | 'only' | 'none' | 'entrapment'
 // The fasta_hit filter as a segmented control. In database: fwd/rev.
 // Entrapment: efwd/erev, only in the entrapment database. Not in database: '-' or efwd/erev (no -fasta hit).
+// The per-spectrum rule (browser.rs per_spectrum): every tag, or the best N
+// of each spectrum by E-value.
+const PER_SPECTRUM: [string, string][] = [
+  ['', 'All tags'],
+  ['1', 'Best tag'],
+  ['2', 'Best 2'],
+  ['3', 'Best 3'],
+  ['5', 'Best 5']
+]
+
 const HIT_CHOICES: [FastaHitChoice, string][] = [
   ['any', 'All'],
   ['only', 'In database'],
@@ -208,6 +219,8 @@ export type RankState = { state: 'ranking'; pct: number | null } | { state: 'ran
 /// The column the backend ranks in the background (browser.rs RANK_COLUMN).
 export const RANK_COLUMN = 'evalue'
 
+const exportPct = (done: number, total: number): number => (total > 0 ? Math.floor((100 * done) / total) : 0)
+
 /// A view the head rows of results_open can stand in for: no filter, and
 /// file order or the E-value order that is still being built.
 export function headServes(view: ResultsView): boolean {
@@ -216,6 +229,7 @@ export function headServes(view: ResultsView): boolean {
     view.minLength == null &&
     view.maxEvalue == null &&
     view.fastaHit == null &&
+    view.perSpectrum == null &&
     (view.sort == null || view.sort.column === RANK_COLUMN)
   )
 }
@@ -247,6 +261,7 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
   const [draft, setDraft] = useState({ spectrum: '', minLength: '', maxEvalue: '' })
   const [filters, setFilters] = useState(draft)
   const [fastaHit, setFastaHit] = useState<FastaHitChoice>('any')
+  const [perSpectrum, setPerSpectrum] = useState<number | null>(null)
   const [scrollTop, setScrollTop] = useState(0)
   const [viewH, setViewH] = useState(600)
   const [autoW, setAutoW] = useState<Record<string, number> | null>(null)
@@ -255,7 +270,12 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
   // Columns the user hid with Columns…; Export writes the shown ones.
   const [hidden, setHidden] = useState<Set<string>>(new Set())
   const [colsOpen, setColsOpen] = useState(false)
-  const [exported, setExported] = useState<{ ok: boolean; text: string } | null>(null)
+  // This file's export job (GUI-DESIGN 6.1 item 11), kept by the App's
+  // store across tab switches and re-opens (results/exportJobs.ts).
+  const exportJobs = useExportJobs()
+  const job = useExportJob(exportJobs, path)
+  const exportBtnRef = useRef<HTMLButtonElement>(null)
+  const cancelHasFocus = useRef(false)
   const id = useId()
 
   const scrollerRef = useRef<HTMLDivElement>(null)
@@ -308,9 +328,10 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
       spectrum: filters.spectrum || null,
       minLength: minLength.value,
       maxEvalue: maxEvalue.value,
-      fastaHit: fastaHit === 'any' ? null : (fastaHit as ResultsView['fastaHit'])
+      fastaHit: fastaHit === 'any' ? null : (fastaHit as ResultsView['fastaHit']),
+      perSpectrum
     }),
-    [sort, filters.spectrum, minLength.value, maxEvalue.value, fastaHit]
+    [sort, filters.spectrum, minLength.value, maxEvalue.value, fastaHit, perSpectrum]
   )
   const ignored = [minLength.invalid && 'min. length', maxEvalue.invalid && 'max. E-value'].filter(Boolean)
   // How a decimal comma in the box is read, before it is committed.
@@ -610,24 +631,35 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
     })
 
   // Export what the table shows: this view's rows, in its order, in the shown
-  // columns. The backend writes it; the renderer holds only a window.
+  // columns, as TSV or (a name ending in .csv) CSV. The backend writes it as
+  // a job with progress and cancel; the renderer holds only a window.
   async function exportShown(): Promise<void> {
     const stem = path.endsWith('.tsv') ? path.slice(0, -4) : path
-    const dest = await window.fastag.saveFile(`${stem}.shown.tsv`, ['tsv'])
+    const dest = await window.fastag.saveFile(`${stem}.shown.tsv`, ['tsv', 'csv'])
     if (!dest) return
-    setExported(null)
-    try {
-      const n = await window.fastag.exportResults(path, view, shown.map((j) => columns[j]), dest)
-      setExported({ ok: true, text: `Wrote ${n.toLocaleString('en-US')} rows to ${dest}.` })
-    } catch (err) {
-      setExported({ ok: false, text: `Export failed: ${err instanceof Error ? err.message : String(err)}` })
-    }
+    const format = dest.toLowerCase().endsWith('.csv') ? 'csv' : 'tsv'
+    await exportJobs.start(path, view, shown.map((j) => columns[j]), dest, format, matched)
   }
+
+  const cancelExport = (): void => exportJobs.cancel(path)
+
+  // The job ended while its Cancel had focus (or focus fell to the page as
+  // the progress went away): focus goes to Export, not to the body.
+  const wasRunning = useRef(false)
+  useEffect(() => {
+    const running = !!job?.running
+    if (wasRunning.current && !running) {
+      const lost = document.activeElement == null || document.activeElement === document.body
+      if (cancelHasFocus.current || lost) exportBtnRef.current?.focus()
+      cancelHasFocus.current = false
+    }
+    wasRunning.current = running
+  }, [job?.running])
 
   // Cmd+E and File > Export Shown Rows… (App dispatches 'fastag-action').
   const exportRef = useRef(exportShown)
   exportRef.current = exportShown
-  const canExport = !!meta && matched > 0
+  const canExport = !!meta && matched > 0 && !job?.running
   useEffect(() => {
     const on = (e: Event): void => {
       if ((e as CustomEvent<string>).detail === 'export' && canExport) void exportRef.current()
@@ -708,7 +740,7 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
         >
           Columns…
         </button>
-        <button type="button" className="secondary" disabled={!meta || matched === 0} onClick={exportShown}>
+        <button ref={exportBtnRef} type="button" className="secondary" disabled={!canExport} onClick={exportShown}>
           Export shown rows…
         </button>
       </div>
@@ -729,11 +761,37 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
           ))}
         </fieldset>
       )}
-      {exported && (
-        <p className={exported.ok ? 'rt-note' : 'rt-note bad'} role="status">
-          {exported.text}
-        </p>
+      {job?.running && (
+        // A progress bar, not a live region: its text changes up to ten
+        // times a second, and a screen reader would read every one. Cancel
+        // stays outside the live region below.
+        <div className="rt-note">
+          <span
+            role="progressbar"
+            aria-label="Export progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={exportPct(job.done, job.total)}
+            aria-valuetext={`${exportPct(job.done, job.total)}% (${job.done.toLocaleString('en-US')} of ${job.total.toLocaleString('en-US')} rows)`}
+          >
+            Exporting… {exportPct(job.done, job.total)}% ({job.done.toLocaleString('en-US')} of{' '}
+            {job.total.toLocaleString('en-US')} rows)
+          </span>{' '}
+          <button
+            type="button"
+            className="secondary"
+            onClick={cancelExport}
+            onFocus={() => (cancelHasFocus.current = true)}
+            onBlur={() => (cancelHasFocus.current = false)}
+          >
+            Cancel export
+          </button>
+        </div>
       )}
+      {/* Always in the page; said twice per job: when it starts, when it ends. */}
+      <p className={job?.result ? (job.result.ok ? 'rt-note' : 'rt-note bad') : 'sr-only'} role="status" aria-live="polite">
+        {job?.result ? job.result.text : job?.running ? `Exporting to ${job.dest}…` : ''}
+      </p>
       <form
         ref={formRef}
         onBlur={() => {
@@ -800,6 +858,23 @@ export default function ResultsTable({ path, source }: Props): JSX.Element {
             <span className={maxEvalue.invalid ? 'rt-hint bad' : 'rt-hint'} id={`${id}-ev-h`}>
               {maxEvalue.invalid ? 'not a number' : commaRead != null ? `read as ${commaRead}` : ''}
             </span>
+          </div>
+        )}
+        {has('spectrum') && has(RANK_COLUMN) && (
+          <div className="rt-f">
+            <label htmlFor={`${id}-per`}>Per spectrum</label>
+            <select
+              id={`${id}-per`}
+              title="Keep the best tags of each spectrum by E-value, after the other filters"
+              value={perSpectrum == null ? '' : String(perSpectrum)}
+              onChange={(e) => setPerSpectrum(e.target.value === '' ? null : Number(e.target.value))}
+            >
+              {PER_SPECTRUM.map(([v, words]) => (
+                <option key={v} value={v}>
+                  {words}
+                </option>
+              ))}
+            </select>
           </div>
         )}
         {has('fasta_hit') && (

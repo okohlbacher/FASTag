@@ -45,7 +45,20 @@ export interface ResultsView {
   // only: a target hit (fwd/rev); none: no target hit (entrapment-only rows
   // included); entrapment: efwd/erev only.
   fastaHit?: 'only' | 'none' | 'entrapment' | null
+  // The best N tags per spectrum by E-value (1: the best tag), after the
+  // other filters; null: every tag (browser.rs per_spectrum).
+  perSpectrum?: number | null
 }
+
+// The file format of an export (browser.rs ExportFormat).
+export type ExportFormat = 'tsv' | 'csv'
+
+// The events of one export job, on its own Channel (browser.rs ExportEvent).
+export type ExportEvent =
+  | { kind: 'progress'; jobId: number; done: number; total: number }
+  | { kind: 'done'; jobId: number; rows: number; dest: string }
+  | { kind: 'failed'; jobId: number; message: string }
+  | { kind: 'cancelled'; jobId: number }
 
 export interface ResultsPage {
   columns: string[]
@@ -306,9 +319,19 @@ export interface FastagApi {
   revealOutput: (path: string, folder: boolean) => Promise<void>
   // A native menu item (menu.rs): its action name.
   onMenu: (cb: (action: string) => void) => () => void
-  // Write the rows of a view, only the named columns, to dest; resolves with
-  // the number of rows written.
-  exportResults: (path: string, view: ResultsView, columns: string[], dest: string) => Promise<number>
+  // Start an export job: the rows of a view, only the named columns, to dest
+  // as TSV or CSV; resolves with the job's id. Its progress and its end come
+  // through onEvent (its own Channel), possibly before the reply.
+  exportResults: (
+    path: string,
+    view: ResultsView,
+    columns: string[],
+    dest: string,
+    format: ExportFormat,
+    onEvent: (e: ExportEvent) => void
+  ) => Promise<number>
+  // Stop an export job; false when it is not running (any more).
+  cancelExport: (jobId: number) => Promise<boolean>
   // Close guard: the window was closed ('close') or the app asked to quit
   // ('quit') while a run or batch is active; the backend prevented it and
   // waits for answerClose.

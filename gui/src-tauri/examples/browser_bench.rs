@@ -1,12 +1,17 @@
-//! Browser bench (GUI-DESIGN 7 and 10, P0b): today's sorted view, the P0b
-//! first cut (head read, index, background E-value order) and a bench-only
-//! typed-column prototype (filter time, peak memory, export throughput), the
-//! baselines for the provisional P3 targets.
+//! Browser bench (GUI-DESIGN 7 and 10): the P0b first cut (head read, index,
+//! background E-value order), the bench-only typed-column prototype of P0b
+//! (the baselines of the provisional P3 targets), and the P3 browser itself
+//! through the app's own open, query and export paths: filter changes,
+//! export throughput, backend peak memory, sorts by other columns, and
+//! first rows from a cold page cache.
 //!
 //!   cargo run --release --example browser_bench -- <tags.tsv> [more.tsv ...] > bench.json
+//!   cargo run --release --example browser_bench -- --gen <ecoli.tags.tsv> <out.tsv> <rows> <seed>
 //!
 //! Each measurement runs in a child process of its own, so its peak RSS is
-//! its own. `--mode <today|firstcut|verify|typed> <file>` runs one of them.
+//! its own. `--mode <firstcut|typed|p3|sort|cold> <file>` runs one of them.
+//! (v1.11's build_view, which the `today` and `verify` modes of 1.12 timed,
+//! is now the test oracle only: bench-1.12.0.json keeps those numbers.)
 
 use std::collections::HashMap;
 use std::fs::File;
@@ -32,6 +37,12 @@ fn peak_rss_bytes() -> u64 {
     0
 }
 
+/// Resident now (ps), for the trace only.
+fn rss_now_mb() -> u64 {
+    let o = Command::new("ps").args(["-o", "rss=", "-p", &std::process::id().to_string()]).output().unwrap();
+    String::from_utf8_lossy(&o.stdout).trim().parse::<u64>().unwrap_or(0) / 1024
+}
+
 fn ms(t: Instant) -> f64 {
     (t.elapsed().as_secs_f64() * 1e4).round() / 10.0
 }
@@ -39,23 +50,6 @@ fn ms(t: Instant) -> f64 {
 fn median(mut v: Vec<f64>) -> f64 {
     v.sort_by(f64::total_cmp);
     v[v.len() / 2]
-}
-
-/// v1.11: index, then build_view sorted by E-value (what the first page
-/// waited for).
-fn today(path: &str) -> String {
-    let t = Instant::now();
-    let ix = bench::index(path).unwrap();
-    let index_ms = ms(t);
-    let t = Instant::now();
-    let v = bench::today_sorted(path, &ix, false).unwrap();
-    let view_ms = ms(t);
-    format!(
-        r#"{{"rows":{},"index_ms":{index_ms},"sorted_view_ms":{view_ms},"first_rows_ms":{},"peak_rss_mb":{}}}"#,
-        v.len(),
-        ((index_ms + view_ms) * 10.0).round() / 10.0,
-        peak_rss_bytes() / (1 << 20)
-    )
 }
 
 /// P0b: first rows from the head read; the ranked swap after index + order.
@@ -79,15 +73,6 @@ fn firstcut(path: &str) -> String {
         asc.len(),
         peak_rss_bytes() / (1 << 20)
     )
-}
-
-/// The first cut's orders equal today's, both directions.
-fn verify(path: &str) -> String {
-    let ix = bench::index(path).unwrap();
-    let (asc, desc) = bench::rank(path, &ix).unwrap();
-    let a = bench::today_sorted(path, &ix, false).unwrap() == asc;
-    let d = bench::today_sorted(path, &ix, true).unwrap() == desc;
-    format!(r#"{{"asc_identical":{a},"desc_identical":{d}}}"#)
 }
 
 /// The typed-column prototype of GUI-DESIGN 6.1 item 7: one sequential pass
@@ -299,14 +284,328 @@ fn typed(path: &str) -> String {
     )
 }
 
+use fastag_lib::browser::bench::{ExportFormat, Session, SortSpec, ViewSpec};
+
+fn by(column: &str, desc: bool) -> Option<SortSpec> {
+    Some(SortSpec { column: column.into(), desc })
+}
+
+/// The median tag length of @p path (from its first 200k rows): the
+/// min-length cutoff of the bench that cuts the file about in half.
+fn median_length(path: &str) -> u32 {
+    let mut r = std::io::BufReader::new(File::open(path).unwrap());
+    let mut line = String::new();
+    std::io::BufRead::read_line(&mut r, &mut line).unwrap();
+    let col = line.trim_end().split('\t').position(|c| c == "length").unwrap();
+    let mut v = Vec::new();
+    while v.len() < 200_000 {
+        line.clear();
+        if std::io::BufRead::read_line(&mut r, &mut line).unwrap() == 0 {
+            break;
+        }
+        if let Some(Ok(l)) = line.trim_end().split('\t').nth(col).map(str::parse::<u32>) {
+            v.push(l);
+        }
+    }
+    v.sort_unstable();
+    v[v.len() / 2]
+}
+
+/// P3 through the app's own paths: open (head rows), Indexed, Ranked, the
+/// typed columns; filter changes (each a new view spec, as the table sends
+/// them): five narrow ones sorted by E-value (max E-value 100, min length
+/// 3, spectrum contains "scan=1<k>"), the unrestricted ones (max E 1000,
+/// min length at the file's median length, a spectrum substring every row
+/// has), then a re-sort by tag and by spectrum (each order built once,
+/// both directions) and cutoff changes on those non-E-value sorts,
+/// unrestricted ones among them; a cached page, the best tag per spectrum;
+/// then exports, each three times (median): unsorted (every column, TSV),
+/// sorted by E-value both ways (every column, TSV) and a filtered CSV. Peak
+/// RSS of the whole sequence.
+fn p3(path: &str) -> String {
+    let med = median_length(path);
+    let t0 = Instant::now();
+    let (s, head) = Session::open(path).unwrap();
+    let first_rows_ms = ms(t0);
+    s.wait_indexed();
+    let indexed_ms = ms(t0);
+    if std::env::var_os("FASTAG_BENCH_TRACE").is_some() {
+        eprintln!("indexed: peak {} MB, now {} MB", peak_rss_bytes() >> 20, rss_now_mb());
+    }
+    s.wait_ranked();
+    let ranked_swap_ms = ms(t0);
+    if std::env::var_os("FASTAG_BENCH_TRACE").is_some() {
+        eprintln!("ranked: peak {} MB, now {} MB", peak_rss_bytes() >> 20, rss_now_mb());
+    }
+    s.wait_typed();
+    let typed_ready_ms = ms(t0);
+    if std::env::var_os("FASTAG_BENCH_TRACE").is_some() {
+        eprintln!("open + builds: peak {} MB, now {} MB", peak_rss_bytes() >> 20, rss_now_mb());
+        #[cfg(target_os = "macos")]
+        {
+            extern "C" {
+                fn malloc_zone_pressure_relief(zone: *mut libc::c_void, goal: usize) -> usize;
+            }
+            let freed = unsafe { malloc_zone_pressure_relief(std::ptr::null_mut(), 0) };
+            eprintln!("relief {} MB: now {} MB", freed >> 20, rss_now_mb());
+        }
+    }
+    let mut named: Vec<(String, f64, usize)> = Vec::new();
+    let trace = std::env::var_os("FASTAG_BENCH_TRACE").is_some();
+    let time = |name: String, spec: &ViewSpec, named: &mut Vec<(String, f64, usize)>| {
+        let t = Instant::now();
+        let (m, _) = s.query(spec, 0, 200).unwrap();
+        if trace {
+            eprintln!("{name}: peak {} MB, now {} MB", peak_rss_bytes() >> 20, rss_now_mb());
+        }
+        named.push((name, ms(t), m));
+    };
+    let ev = by("evalue", false);
+    for k in 0..5 {
+        let spec = ViewSpec { sort: ev.clone(), max_evalue: Some(100.0), min_length: Some(3), spectrum: Some(format!("scan=1{k}")), ..Default::default() };
+        time(format!("evalue: maxE 100, len>=3, scan=1{k}"), &spec, &mut named);
+    }
+    time("evalue: maxE 1000".into(), &ViewSpec { sort: ev.clone(), max_evalue: Some(1000.0), ..Default::default() }, &mut named);
+    time(format!("evalue: len>={med}"), &ViewSpec { sort: ev.clone(), min_length: Some(med), ..Default::default() }, &mut named);
+    time("evalue: spectrum 'scan'".into(), &ViewSpec { sort: ev.clone(), spectrum: Some("scan".into()), ..Default::default() }, &mut named);
+    time(
+        "evalue: maxE 1000, len>=3, spectrum 'scan'".into(),
+        &ViewSpec { sort: ev.clone(), max_evalue: Some(1000.0), min_length: Some(3), spectrum: Some("scan".into()), ..Default::default() },
+        &mut named,
+    );
+    time("evalue: target hits only".into(), &ViewSpec { sort: ev.clone(), fasta_hit: Some("only".into()), ..Default::default() }, &mut named);
+    // Re-sorts: the first build of each order is a sort, not a filter change.
+    let mut resort = Vec::new();
+    for c in ["tag", "spectrum"] {
+        for desc in [false, true] {
+            let t = Instant::now();
+            s.query(&ViewSpec { sort: by(c, desc), ..Default::default() }, 0, 200).unwrap();
+            resort.push(format!(r#"{{"column":"{c}","desc":{desc},"ms":{}}}"#, ms(t)));
+            if trace {
+                eprintln!("sort {c} {desc}: peak {} MB, now {} MB", peak_rss_bytes() >> 20, rss_now_mb());
+            }
+        }
+        let o = by(c, true);
+        for (name, spec) in [
+            ("maxE 100", ViewSpec { sort: o.clone(), max_evalue: Some(100.0), ..Default::default() }),
+            ("maxE 10", ViewSpec { sort: o.clone(), max_evalue: Some(10.0), ..Default::default() }),
+            ("maxE 1000", ViewSpec { sort: o.clone(), max_evalue: Some(1000.0), ..Default::default() }),
+            ("len>=median", ViewSpec { sort: o.clone(), min_length: Some(med), ..Default::default() }),
+            ("maxE 1000, len>=3, spectrum 'scan'", ViewSpec { sort: o.clone(), max_evalue: Some(1000.0), min_length: Some(3), spectrum: Some("scan".into()), ..Default::default() }),
+        ] {
+            time(format!("{c} desc: {name}"), &spec, &mut named);
+        }
+    }
+    let times: Vec<f64> = named.iter().map(|x| x.1).collect();
+    let filter_ms_median = median(times.clone());
+    let filter_ms_max = times.iter().copied().fold(0.0, f64::max);
+    let filter_ms_median_evalue5 = median(times[..5].to_vec());
+    let cached = ViewSpec { sort: by("evalue", false), max_evalue: Some(100.0), min_length: Some(3), spectrum: Some("scan=14".into()), ..Default::default() };
+    // Built once here (the filters above may have pushed it out of the
+    // view cache), then a page of it timed: a cached page.
+    s.query(&cached, 0, 200).unwrap();
+    let t = Instant::now();
+    s.query(&cached, 5000, 200).unwrap();
+    let cached_page_ms = ms(t);
+    let best = ViewSpec { sort: by("evalue", false), per_spectrum: Some(1), ..Default::default() };
+    let t = Instant::now();
+    let (best_rows, _) = s.query(&best, 0, 200).unwrap();
+    let best_ms = ms(t);
+    if trace {
+        eprintln!("cached + best: peak {} MB, now {} MB", peak_rss_bytes() >> 20, rss_now_mb());
+    }
+    // The header from the first line (no second index: it would count in
+    // the peak).
+    let mut first = String::new();
+    std::io::BufRead::read_line(&mut std::io::BufReader::new(File::open(path).unwrap()), &mut first).unwrap();
+    let all: Vec<String> = first.trim_end().split('\t').map(str::to_string).collect();
+    let bytes = std::fs::metadata(path).unwrap().len() - first.len() as u64;
+    let gb = bytes as f64 / 1e9;
+    let dest = std::env::temp_dir().join(format!("fastag-bench-p3-{}.tsv", std::process::id()));
+    let dest = dest.to_string_lossy().into_owned();
+    // Each export three times: (rows, s per GB of the source, the median).
+    let rep = |spec: &ViewSpec, fmt: ExportFormat, per: f64| -> (usize, Vec<f64>, f64) {
+        let mut v = Vec::new();
+        let mut n = 0;
+        for _ in 0..3 {
+            let t = Instant::now();
+            n = s.export(spec, &all, &dest, fmt).unwrap();
+            v.push((t.elapsed().as_secs_f64() / per * 1e3).round() / 1e3);
+        }
+        let m = median(v.clone());
+        if std::env::var_os("FASTAG_BENCH_TRACE").is_some() {
+            eprintln!("export {:?} {}: peak {} MB, now {} MB", spec.sort.as_ref().map(|x| (&x.column, x.desc)), per, peak_rss_bytes() >> 20, rss_now_mb());
+        }
+        (n, v, m)
+    };
+    let (n_unsorted, unsorted_v, unsorted) = rep(&ViewSpec::default(), ExportFormat::Tsv, gb);
+    let (n_sorted, sorted_v, sorted) = rep(&ViewSpec { sort: by("evalue", false), ..Default::default() }, ExportFormat::Tsv, gb);
+    let (n_desc, desc_v, sorted_desc) = rep(&ViewSpec { sort: by("evalue", true), ..Default::default() }, ExportFormat::Tsv, gb);
+    let (n_csv, csv_v, csv_s) = rep(&cached, ExportFormat::Csv, 1.0);
+    std::fs::remove_file(&dest).ok();
+    let specs: Vec<String> = named.iter().map(|(n, t, m)| format!(r#"{{"spec":"{n}","ms":{t},"matched":{m}}}"#)).collect();
+    format!(
+        r#"{{"head_rows":{head},"first_rows_ms":{first_rows_ms},"indexed_ms":{indexed_ms},"ranked_swap_ms":{ranked_swap_ms},"typed_ready_ms":{typed_ready_ms},"median_length":{med},"filters":[{}],"filter_ms_median":{filter_ms_median},"filter_ms_max":{filter_ms_max},"filter_ms_median_narrow5":{filter_ms_median_evalue5},"resorts":[{}],"cached_page_ms":{cached_page_ms},"best_per_spectrum_ms":{best_ms},"best_per_spectrum_rows":{best_rows},"export_bytes":{bytes},"export_unsorted_rows":{n_unsorted},"export_unsorted_s_per_gb_runs":{unsorted_v:?},"export_unsorted_s_per_gb":{unsorted:.3},"export_sorted_rows":{n_sorted},"export_sorted_s_per_gb_runs":{sorted_v:?},"export_sorted_s_per_gb":{sorted:.3},"export_sorted_desc_rows":{n_desc},"export_sorted_desc_s_per_gb_runs":{desc_v:?},"export_sorted_desc_s_per_gb":{sorted_desc:.3},"export_filtered_csv_rows":{n_csv},"export_filtered_csv_s_runs":{csv_v:?},"export_filtered_csv_s":{csv_s:.3},"peak_rss_mb":{}}}"#,
+        specs.join(","),
+        resort.join(","),
+        peak_rss_bytes() / (1 << 20)
+    )
+}
+
+/// A bench file of @p rows rows from the public E. coli fixture tags,
+/// varied so that every filter cuts: each replicate shifts the scan
+/// numbers; tag lengths 3..=12 (geometric-like, median 4 or 5), the tag
+/// extended with random residues and the length column to match; hit
+/// classes '-' (65%), a protein (30%), efwd/erev (5%); E-values
+/// log-uniform 1e-6..1e3, every 997th '-', 1999th NAN, 2999th INF.
+fn gen(fixture: &str, out: &str, rows: usize, seed: u64) {
+    let text = std::fs::read_to_string(fixture).unwrap();
+    let mut lines = text.lines();
+    let head = lines.next().unwrap();
+    let cols: Vec<&str> = head.split('\t').collect();
+    let at = |n: &str| cols.iter().position(|c| *c == n).unwrap();
+    let (sp, tag, len, ev, hit) = (at("spectrum"), at("tag"), at("length"), at("evalue"), at("fasta_hit"));
+    let base: Vec<Vec<&str>> = lines.filter(|l| !l.is_empty()).map(|l| l.split('\t').collect()).collect();
+    let mut x = seed | 1;
+    let mut rnd = move || {
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        x
+    };
+    const AA: &[u8] = b"ACDEFGHIKLMNPQRSTVWY";
+    const PROT: [&str; 6] = ["sp|P0A7V8|RS4_ECOLI", "sp|P0A6F5|CH60_ECOLI", "sp|P0ABK5|CYSK_ECOLI", "sp|P0A9B2|G3P1_ECOLI", "sp|P0CE47|EFTU1_ECOLI", "sp|P02358|RS6_ECOLI"];
+    let mut w = BufWriter::with_capacity(8 << 20, File::create(out).unwrap());
+    writeln!(w, "{head}").unwrap();
+    let mut cells: Vec<String> = Vec::new();
+    for i in 0..rows {
+        let r = &base[i % base.len()];
+        let rep = i / base.len();
+        cells.clear();
+        cells.extend(r.iter().map(|c| c.to_string()));
+        // scan=<n> -> scan=<n + rep * 100000>
+        if let Some(k) = cells[sp].rfind("scan=") {
+            let n: u64 = cells[sp][k + 5..].parse().unwrap_or(0);
+            cells[sp] = format!("{}scan={}", &cells[sp][..k], n + rep as u64 * 100_000);
+        }
+        let mut l = 3;
+        while l < 12 && rnd() % 100 < 72 {
+            l += 1;
+        }
+        let mut t = cells[tag].clone();
+        while t.len() < l {
+            t.push(AA[(rnd() % AA.len() as u64) as usize] as char);
+        }
+        cells[len] = t.len().to_string();
+        cells[tag] = t;
+        let h = rnd() % 100;
+        cells[hit] = if h < 65 { "-".into() } else if h < 95 { PROT[(rnd() % 6) as usize].into() } else if h < 98 { "efwd".into() } else { "erev".into() };
+        cells[ev] = if i % 997 == 0 {
+            "-".into()
+        } else if i % 1999 == 0 {
+            "NAN".into()
+        } else if i % 2999 == 0 {
+            "INF".into()
+        } else {
+            let u = (rnd() >> 11) as f64 / (1u64 << 53) as f64;
+            format!("{:.4e}", 10f64.powf(-6.0 + 9.0 * u))
+        };
+        writeln!(w, "{}", cells.join("\t")).unwrap();
+    }
+    w.flush().unwrap();
+}
+
+/// Sorts by the other columns, each the first time and once more (cached),
+/// after the open's builds: not gated (GUI-DESIGN 7: provisional).
+fn sort(path: &str) -> String {
+    let (s, _) = Session::open(path).unwrap();
+    s.wait_typed();
+    let mut parts = Vec::new();
+    for c in ["tag", "spectrum", "length"] {
+        let spec = ViewSpec { sort: by(c, false), ..Default::default() };
+        let t = Instant::now();
+        s.query(&spec, 0, 200).unwrap();
+        let first = ms(t);
+        let spec = ViewSpec { sort: by(c, true), ..Default::default() };
+        let t = Instant::now();
+        s.query(&spec, 0, 200).unwrap();
+        let again = ms(t);
+        parts.push(format!(r#""{c}":{{"first_ms":{first},"desc_after_ms":{again}}}"#));
+    }
+    format!(r#"{{{},"peak_rss_mb":{}}}"#, parts.join(","), peak_rss_bytes() / (1 << 20))
+}
+
+/// First rows from a cold page cache (local SSD): the file is copied with
+/// F_NOCACHE writes, so its pages are not cached, and opened in a fresh
+/// process. `tail_read_gb_per_s` says whether the copy was really cold.
+fn cold(path: &str) -> String {
+    let copy = format!("{path}.cold-copy");
+    {
+        let mut src = File::open(path).unwrap();
+        let dst = File::create(&copy).unwrap();
+        #[cfg(target_os = "macos")]
+        unsafe {
+            use std::os::fd::AsRawFd;
+            libc::fcntl(dst.as_raw_fd(), libc::F_NOCACHE, 1);
+        }
+        let mut w = dst;
+        let mut buf = vec![0u8; 8 << 20];
+        loop {
+            let n = src.read(&mut buf).unwrap();
+            if n == 0 {
+                break;
+            }
+            w.write_all(&buf[..n]).unwrap();
+        }
+        w.sync_all().unwrap();
+    }
+    let me = std::env::current_exe().unwrap();
+    let o = Command::new(&me).args(["--mode", "coldopen", &copy]).output().unwrap();
+    std::fs::remove_file(&copy).ok();
+    assert!(o.status.success(), "coldopen: {}", String::from_utf8_lossy(&o.stderr));
+    String::from_utf8_lossy(&o.stdout).trim().to_string()
+}
+
+fn coldopen(path: &str) -> String {
+    let bytes = std::fs::metadata(path).unwrap().len();
+    // The witness: the last 256 MB read raw first (the head read takes the
+    // first 1 MB); a warm page cache reads them at about 25 GB/s here.
+    let tail = bytes.min(256 << 20);
+    let mut f = File::open(path).unwrap();
+    f.seek(SeekFrom::Start(bytes - tail)).unwrap();
+    let t = Instant::now();
+    std::io::copy(&mut f.take(tail), &mut std::io::sink()).unwrap();
+    let tail_gb_per_s = tail as f64 / 1e9 / t.elapsed().as_secs_f64();
+    let t0 = Instant::now();
+    let (s, head) = Session::open(path).unwrap();
+    let first_rows_ms = ms(t0);
+    s.wait_indexed();
+    let indexed_ms = ms(t0);
+    format!(
+        r#"{{"head_rows":{head},"first_rows_ms":{first_rows_ms},"indexed_ms":{indexed_ms},"tail_read_gb_per_s":{tail_gb_per_s:.2}}}"#
+    )
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if args.len() == 6 && args[1] == "--gen" {
+        gen(&args[2], &args[3], args[4].parse().unwrap(), args[5].parse().unwrap());
+        return;
+    }
     if args.len() == 4 && args[1] == "--mode" {
         let out = match args[2].as_str() {
-            "today" => today(&args[3]),
             "firstcut" => firstcut(&args[3]),
-            "verify" => verify(&args[3]),
             "typed" => typed(&args[3]),
+            "p3" => p3(&args[3]),
+            "sort" => sort(&args[3]),
+            "cold" => cold(&args[3]),
+            "coldopen" => coldopen(&args[3]),
+            "tprobe" => {
+                let ix = bench::index(&args[3]).unwrap();
+                eprintln!("indexed now {}", rss_now_mb());
+                bench::typed_probe(&args[3], &ix, &|w| eprintln!("{w}: now {} peak {}", rss_now_mb(), peak_rss_bytes() >> 20));
+                String::new()
+            }
             m => panic!("unknown mode {m}"),
         };
         println!("{out}");
@@ -319,7 +618,7 @@ fn main() {
         // Warm page cache (GUI-DESIGN 7): read the file once first.
         std::io::copy(&mut File::open(path).unwrap(), &mut std::io::sink()).unwrap();
         let mut parts = vec![format!(r#""file":"{}","bytes":{size}"#, path.replace('\\', "/").replace('"', "\\\""))];
-        for mode in ["firstcut", "today", "verify", "typed"] {
+        for mode in ["firstcut", "typed", "p3", "sort", "cold"] {
             // Warm page cache: the first child also warms it for the others.
             let o = Command::new(&me).args(["--mode", mode, path]).output().unwrap();
             assert!(o.status.success(), "{mode}: {}", String::from_utf8_lossy(&o.stderr));
