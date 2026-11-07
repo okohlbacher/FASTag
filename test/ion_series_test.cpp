@@ -39,7 +39,10 @@
 #include <OpenMS/CHEMISTRY/Residue.h>
 #include <OpenMS/CHEMISTRY/ResidueDB.h>
 #include <OpenMS/CONCEPT/Constants.h>
+#include <OpenMS/CHEMISTRY/ProteaseDigestion.h>
 #include <OpenMS/FORMAT/FASTAFile.h>
+#include <OpenMS/FORMAT/MzMLFile.h>
+#include <OpenMS/KERNEL/MSExperiment.h>
 
 #include <OpenMS/KERNEL/MSSpectrum.h>
 #include <OpenMS/METADATA/Precursor.h>
@@ -155,10 +158,76 @@ namespace
   // Tryptic peptides without C (fixed CAM), I (read as L) or P.
   const char* const kPeptides[5] = {"VGAHAGEYGAEALER", "LLEQTHGGLNAWK", "DLVEGFNTWQR", "GDFQAMVYTNSAWR",
                                     "YLGYLEQLLR"};
+
+  /// ion_series_test --write-mzml <fasta> <out.mzML> <cz|by> [n]: a synthetic
+  /// run for the CLI tests (ion_series_cli_test, threads_test). n (40)
+  /// tryptic peptides of @p fasta (up to one missed cleavage, length 8-18, no
+  /// C/U/X/B/Z, unique, in protein order), at precursor charge 2 and 3 alternately: cz = c and z-dot ions
+  /// (OpenMS TheoreticalSpectrumGenerator) at fragment charges 1 .. z-1 with
+  /// the activation ETD (MS:1000598), the unreacted precursor and its
+  /// charge-reduced species as ETD spectra carry them, and 15 noise peaks; by
+  /// = b and y ions of the same peptides with CID (MS:1000133). Seeded,
+  /// deterministic; written by OpenMS MzMLFile (indexed).
+  int writeMzml(int argc, char** argv)
+  {
+    if (argc < 5)
+    {
+      std::cerr << "usage: ion_series_test --write-mzml <fasta> <out.mzML> <cz|by> [n]\n";
+      return 2;
+    }
+    const bool cz = std::string(argv[4]) == "cz";
+    const size_t n = argc > 5 ? static_cast<size_t>(std::stoul(argv[5])) : 40;
+    std::vector<OpenMS::FASTAFile::FASTAEntry> prot;
+    OpenMS::FASTAFile().load(argv[2], prot);
+    OpenMS::ProteaseDigestion dig;
+    dig.setEnzyme("Trypsin");
+    dig.setMissedCleavages(1);
+    std::set<std::string> seen;
+    std::vector<std::string> peps;
+    for (const auto& e : prot)
+    {
+      std::vector<OpenMS::AASequence> out;
+      dig.digest(OpenMS::AASequence::fromString(e.sequence), out, 8, 18);
+      for (const auto& a : out)
+      {
+        const std::string s = a.toUnmodifiedString();
+        if (s.find_first_of("CUXBZ") != std::string::npos || !seen.insert(s).second) continue;
+        peps.push_back(s);
+        if (peps.size() == n) break;
+      }
+      if (peps.size() == n) break;
+    }
+    const double P = OpenMS::Constants::PROTON_MASS_U;
+    OpenMS::PeakMap exp;
+    for (size_t i = 0; i < peps.size(); ++i)
+    {
+      const int z = i % 2 == 0 ? 2 : 3;
+      CzSynth::Spec sp = CzSynth::make(peps[i], z, cz ? CzSynth::Ions::CZ : CzSynth::Ions::BY, std::max(1, z - 1), 15,
+                                       1000u + static_cast<unsigned>(i));
+      if (cz)
+        for (int k = 0; k < z; ++k)  // the unreacted precursor (k = 0) and the charge-reduced species
+          sp.spec.emplace_back((sp.M + z * P) / (z - k), 3.0 + k);
+      sp.spec.sortByPosition();
+      sp.spec.setMSLevel(2);
+      sp.spec.setRT(10.0 + i);
+      sp.spec.setNativeID("controllerType=0 controllerNumber=1 scan=" + std::to_string(i + 1));
+      sp.spec.setType(OpenMS::SpectrumSettings::SpectrumType::CENTROID);
+      OpenMS::Precursor pr;
+      pr.setMZ(sp.prec_mz);
+      pr.setCharge(z);
+      pr.setActivationMethods({cz ? AM::ETD : AM::CID});
+      sp.spec.setPrecursors({pr});
+      exp.addSpectrum(sp.spec);
+    }
+    OpenMS::MzMLFile().store(argv[3], exp);
+    std::cout << "wrote " << exp.size() << " " << (cz ? "c/z (ETD)" : "b/y (CID)") << " spectra to " << argv[3] << "\n";
+    return peps.size() == n ? 0 : 1;
+  }
 }
 
-int main()
+int main(int argc, char** argv)
 {
+  if (argc > 1 && std::string(argv[1]) == "--write-mzml") return writeMzml(argc, argv);
   using A = IS::Activation;
 
   // ---- classes of the PSI-MS dissociation methods the readers map ----
@@ -420,7 +489,7 @@ int main()
     {
       const FASTag::Param pcz = withPair(base, IS::Series::CZ), pby = withPair(base, IS::Series::BY);
       const FASTag::Tables tcz(pcz), tby(pby);
-      int spectra_with_true = 0, true_tags = 0, compl_ok = 0, by_true = 0;
+      int spectra_with_true = 0, true_tags = 0, compl_ok = 0, by_true = 0, coincidental_spectra = 0;
       for (const char* pep : kPeptides)
         for (int z : {2, 3})
         {
@@ -450,8 +519,20 @@ int main()
             else check(false, what + ": true tag " + seq + " has p_complement 1 under cz");
           }
           if (here > 0) ++spectra_with_true;
-          // b/y: the same ladder read as b/y.
-          const auto btags = FASTag::tagSpectrum(s.spec, s.prec_mz, z, pby, tby);
+          // b/y: the same ladder, without the noise (a noise peak may
+          // complement by chance), read as b/y.
+          const CzSynth::Spec s0 = CzSynth::make(pep, z, CzSynth::Ions::CZ, z - 1, 0, 100u + static_cast<unsigned>(z));
+          const auto btags = FASTag::tagSpectrum(s0.spec, s0.prec_mz, z, pby, tby);
+          // A c/z ladder can hold a pair whose m/z happen to sum to a b/y
+          // complement (DLVEGFNTWQR: c4 + z7 = M + 2p - 0.0099): then b/y
+          // finds that complement by coincidence, and p_complement < 1 is
+          // right. Such spectra are left out of the p_complement = 1 check.
+          bool coincidental = false;
+          for (size_t a = 0; a < s0.spec.size() && !coincidental; ++a)
+            for (size_t b = a + 1; b < s0.spec.size() && !coincidental; ++b)
+              for (int fz = 1; fz <= std::max(1, z - 1) && !coincidental; ++fz)
+                coincidental = std::fabs(s0.spec[a].getMZ() + s0.spec[b].getMZ() - (s0.M / fz + 2 * OpenMS::Constants::PROTON_MASS_U)) < 0.03;
+          if (coincidental) ++coincidental_spectra;
           for (const FASTag::Tag& t : btags)
           {
             check(t.ion_series == IS::Series::BY, what + ": tags carry ion_series by");
@@ -459,7 +540,7 @@ int main()
             const std::string seq = FASTag::baseSequence(t.seq);
             const auto occ = occurrences(pep, seq);
             if (occ.empty()) continue;
-            check(t.p_complement == 1.0, what + ": under by a c/z read has no complements");
+            if (!coincidental) check(t.p_complement == 1.0, what + ": under by a c/z read has no complements");
             double best = 1e9, best_cz = 1e9;
             for (const auto& [pos, rev] : occ)
             {
@@ -475,8 +556,11 @@ int main()
           (void)byp;
         }
       std::cout << "b. " << pname << ": " << true_tags << " true c/z tags in " << spectra_with_true
-                << " of 10 spectra, " << compl_ok << " with p_complement < 1; " << by_true << " b/y reads\n";
+                << " of 10 spectra, " << compl_ok << " with p_complement < 1; " << by_true << " b/y reads ("
+                << coincidental_spectra << " spectra with a coincidental b/y pair)\n";
       check(spectra_with_true == 10, std::string(pname) + ": every spectrum yields a true tag under cz");
+      check(coincidental_spectra <= 5, std::string(pname) + ": at most 5 of 10 spectra hold a coincidental b/y pair (" +
+                                           std::to_string(coincidental_spectra) + ")");
       check(true_tags >= 50 && by_true >= 20, std::string(pname) + ": enough true tags for a meaningful check");
     }
     // b/y ladders under b/y still read with 1.11's water convention.
@@ -503,8 +587,26 @@ int main()
     for (const auto& [pname, base] : bothParams())
       for (int z : {2, 3})
       {
-        const std::string what = std::string(pname) + " " + std::to_string(z) + "+";
-        const CzSynth::Spec lad = CzSynth::make("VGAHAGEYGAEALER", z, CzSynth::Ions::CZ, 1);
+        // The first test peptide whose fragments all lie more than 5 Da from
+        // every precursor species below the cut, so "no fragment dropped" is
+        // a property of the filter, not of luck.
+        std::string pick;
+        for (const char* cand : kPeptides)
+        {
+          const CzSynth::Spec t = CzSynth::make(cand, z, CzSynth::Ions::CZ, 1);
+          double nf = 1e9;
+          for (int k = 0; k < z; ++k)
+          {
+            const double cr = (t.M + z * P) / (z - k);
+            if (cr > t.M + P + 1.5) continue;
+            for (const auto& pk : t.spec) nf = std::min(nf, std::fabs(pk.getMZ() - cr));
+          }
+          if (nf > 6.0) { pick = cand; break; }
+        }
+        check(!pick.empty(), "(c) a test peptide clear of its precursor species at " + std::to_string(z) + "+");
+        if (pick.empty()) continue;
+        const std::string what = std::string(pname) + " " + std::to_string(z) + "+ " + pick;
+        const CzSynth::Spec lad = CzSynth::make(pick, z, CzSynth::Ions::CZ, 1);
         const double max_mz = lad.M + P + 1.5;  // the tagger's precursor cut
         OpenMS::MSSpectrum withred = lad.spec, withprobe = lad.spec;
         int probes = 0, reduced_below_cut = 0;
@@ -522,7 +624,8 @@ int main()
           }
           for (double d : {-5.0, 5.0})
             if (cr + d <= max_mz) { withprobe.emplace_back(cr + d, 0.7); ++probes; }
-          for (const auto& pk : lad.spec) nearest_fragment = std::min(nearest_fragment, std::fabs(pk.getMZ() - cr));
+          if (cr <= max_mz)
+            for (const auto& pk : lad.spec) nearest_fragment = std::min(nearest_fragment, std::fabs(pk.getMZ() - cr));
         }
         withred.sortByPosition();
         withprobe.sortByPosition();
@@ -601,12 +704,14 @@ int main()
     check(!exact_rev(r.reconcile(rev, n, c)), "(e) read with the b/y water offset it does not");
     // From the tagger: a c-only ladder, tagged under cz.
     const CzSynth::Spec s = CzSynth::make(pep, 2, CzSynth::Ions::C, 1);
-    const FASTag::Param pcz = withPair(FASTag::cliDefaultParam(), IS::Series::CZ);
+    // Tag length 4: the index looks up tags of at least 4 residues.
+    FASTag::Param pcz = withPair(FASTag::cliDefaultParam(), IS::Series::CZ);
+    pcz.tag_length = 4;
     const FASTag::Tables tcz(pcz);
     int reversed_tags = 0, placed = 0, unplaced_as_by = 0;
     for (const FASTag::Tag& t : FASTag::tagSpectrum(s.spec, s.prec_mz, 2, pcz, tcz))
     {
-      if (t.gapped || t.n_res < 3) continue;
+      if (t.gapped || t.n_res < 4) continue;
       const std::string seq = FASTag::baseSequence(t.seq);
       const std::string fwd(seq.rbegin(), seq.rend());
       if (pep.find(fwd) == std::string::npos) continue;
@@ -616,6 +721,14 @@ int main()
         ok = ok || (x.peptide == pep && x.reversed && x.nterm_match && x.cterm_match);
       for (const auto& x : r.reconcile(seq, t.nterm_mass, t.cterm_mass))
         ok_by = ok_by || (x.peptide == pep && x.reversed && x.nterm_match && x.cterm_match);
+      if (!ok)
+      {
+        const size_t at = pep.find(fwd);
+        const auto [en, ec] = flanksOf(pep, at, fwd.size(), true, czp);
+        std::cerr << "(e) unplaced: " << t.seq << " n " << t.nterm_mass << " c " << t.cterm_mass << " want n " << en
+                  << " c " << ec << " ext " << t.extended << " n_res " << t.n_res << " places "
+                  << r.reconcile(seq, t.nterm_mass, t.cterm_mass, nullptr, 2, nullptr, &czp).size() << "\n";
+      }
       placed += ok;
       unplaced_as_by += !ok_by;
     }

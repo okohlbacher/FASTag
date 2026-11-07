@@ -9,7 +9,8 @@
 # and the -out_spectra re-read (a serial picker) each centroid: every TSV and
 # the exported spectra, with -out_spectra (OnDisc reader) and without it (fast
 # reader), byte-identical at 1, 3 and 8 threads.
-# Also -ion_series auto (1.12 #15 phase B) on an ETD copy of the fixture.
+# With a 6th argument (ion_series_test), also -ion_series auto (1.12 #15
+# phase B) on a synthetic ETD run.
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 BIN="$1"
@@ -78,21 +79,18 @@ for f in census census_summary recon; do
   done
 done
 msg="${#OUTS[@]} TSVs, the idXML, the census tables"
-# 1.12 #15 phase B: -ion_series auto on an ETD copy of the fixture (every CID
-# term replaced by ETD at equal length, so the index stays exact): every
-# spectrum is read as c/z-dot through the tagger, recon, digest, label, mass
-# gap and census.
-CID='accession="MS:1000133" name="collision-induced dissociation"'
-ETD='accession="MS:1000598" name="electron transfer dissociation"'
-awk -v cid="$CID" -v etd="$ETD" 'function out(l) { if (started) printf "\n"; printf "%s", l; started = 1 }
-  index($0, cid) { i = index($0, cid); $0 = substr($0, 1, i - 1) etd substr($0, i + length(cid)) }
-  { out($0) }' "$IN" > "$TMP/etd.mzML"
-[ "$(wc -c < "$TMP/etd.mzML")" -eq "$(wc -c < "$IN")" ] || fail "the ETD copy is not byte-length equal"
+# 1.12 #15 phase B: -ion_series auto on a synthetic ETD run (6th argument,
+# ion_series_test --write-mzml: c/z-dot ladders of 40 fixture peptides,
+# activation ETD): every spectrum is read as c/z-dot through the tagger,
+# recon, digest, label, mass gap and census.
+GEN="${6:-}"
+if [ -n "$GEN" ]; then
+"$GEN" --write-mzml "$DB" "$TMP/etd.mzML" cz > /dev/null || fail "writing the synthetic ETD run"
 ZOUTS=(tags recon digest label massgap census)
 for t in 1 3 8; do
   d="$TMP/z$t"; mkdir -p "$d"
   "$BIN" -in "$TMP/etd.mzML" -out "$d/tags.tsv" -threads "$t" -ion_series auto \
-    -fragment_tolerance 0.3 -fragment_tolerance_unit Da -recon_fasta "$DB" -recon_out "$d/recon.tsv" \
+    -tag_length 4 -extension 1 -fragment_tolerance 0.02 -fragment_tolerance_unit Da -recon_fasta "$DB" -recon_out "$d/recon.tsv" \
     -digest_out "$d/digest.tsv" -label_out "$d/label.tsv" -massgap_out "$d/massgap.tsv" \
     -census -census_out "$d/census.tsv" >"$d/log" 2>&1 || { cat "$d/log" >&2; fail "-ion_series auto -threads $t run failed"; }
 done
@@ -103,7 +101,8 @@ for f in "${ZOUTS[@]}"; do
     cmp -s "$TMP/z1/$f.tsv" "$TMP/z$t/$f.tsv" || fail "-ion_series auto: $f.tsv differs between -threads 1 and $t"
   done
 done
-msg="$msg; -ion_series auto: ${#ZOUTS[@]} TSVs on an ETD copy"
+msg="$msg; -ion_series auto: ${#ZOUTS[@]} TSVs on a synthetic ETD run"
+fi
 
 if [ -n "$PROF" ]; then
   # On the profile fixture's 10 spectra the tags (at -min_filter_length 3),

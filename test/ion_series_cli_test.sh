@@ -37,6 +37,9 @@ MGF="$3"   # Ecoli_MS2_small.mgf
 DB="${4:-}"          # Ecoli_MS2_small.fasta (phase B recon and species checks)
 BUILDTAXDB="${5:-}"  # buildtaxdb (phase B species check)
 TAXDIR="${6:-}"      # data/taxonomy (phase B species check)
+DIGDIR="${7:-}"      # data/digest (FASTAG_DIGEST_DIR for -digest_out/-label_out)
+GEN="${8:-}"         # ion_series_test (writes the synthetic c/z and b/y runs)
+[ -n "$DIGDIR" ] && export FASTAG_DIGEST_DIR="$DIGDIR"
 
 if ! "$BIN" --help >/dev/null 2>&1; then
   echo "SKIP: binary cannot initialize (OpenMS share data unreachable?)" >&2
@@ -226,9 +229,9 @@ grep -q "^Hybrid activation: $N of $N MS2 spectra .*EThcD" "$TMP/auto_ethcd.err"
 runb auto_mgf "$MGF" 2 -ion_series auto
 cmp -s "$TMP/mgf.tsv" "$TMP/auto_mgf.tsv" || fail "MGF under auto differs from by"
 if [ -n "$DB" ]; then
-  runb rby "$SRC" 2 -recon_fasta "$DB" -recon_out "$TMP/rby.recon.tsv" -census -census_out "$TMP/rby.census.tsv" \
+  runb rby "$SRC" 2 -tag_length 4 -extension 1 -recon_fasta "$DB" -recon_out "$TMP/rby.recon.tsv" -census -census_out "$TMP/rby.census.tsv" \
     -digest_out "$TMP/rby.digest.tsv" -label_out "$TMP/rby.label.tsv" -massgap_out "$TMP/rby.massgap.tsv"
-  runb rauto "$SRC" 2 -ion_series auto -recon_fasta "$DB" -recon_out "$TMP/rauto.recon.tsv" -census \
+  runb rauto "$SRC" 2 -ion_series auto -tag_length 4 -extension 1 -recon_fasta "$DB" -recon_out "$TMP/rauto.recon.tsv" -census \
     -census_out "$TMP/rauto.census.tsv" -digest_out "$TMP/rauto.digest.tsv" -label_out "$TMP/rauto.label.tsv" \
     -massgap_out "$TMP/rauto.massgap.tsv"
   for o in tsv recon.tsv census.tsv digest.tsv label.tsv massgap.tsv; do
@@ -236,11 +239,52 @@ if [ -n "$DB" ]; then
       || fail "CID under auto: $o differs from by"
   done
   [ "$(wc -l < "$TMP/rby.recon.tsv")" -gt 1 ] || fail "no recon rows on the CID source; the check is weak"
-  # c/z through every consumer: recon, digest, label and mass gap run; a c/z
-  # placement exists (the ETD fixture's peaks are CID, so few place).
+  # c/z through every consumer: recon, digest, label and mass gap run on
+  # the ETD copy (its peaks are CID, so few tags place).
   runb rcz "$TMP/etd_all.mzML" 2 -ion_series auto -recon_fasta "$DB" -recon_out "$TMP/rcz.recon.tsv" \
     -digest_out "$TMP/rcz.digest.tsv" -label_out "$TMP/rcz.label.tsv" -massgap_out "$TMP/rcz.massgap.tsv"
   for o in recon digest label massgap; do [ -s "$TMP/rcz.$o.tsv" ] || fail "auto on etd_all: no $o output"; done
+fi
+
+# ---- synthetic c/z (ETD) and b/y (CID) runs of the same 40 peptides ----
+# Written by ion_series_test --write-mzml (OpenMS TheoreticalSpectrumGenerator).
+# Under auto the ETD run must place its tags on the true peptides about as
+# well as the CID run does under by, and far better than the ETD run under by.
+if [ -n "$GEN" ] && [ -n "$DB" ]; then
+  "$GEN" --write-mzml "$DB" "$TMP/syn_etd.mzML" cz > /dev/null || fail "writing the synthetic ETD run"
+  "$GEN" --write-mzml "$DB" "$TMP/syn_cid.mzML" by > /dev/null || fail "writing the synthetic CID run"
+  RX=(-recon_fasta "$DB" -tag_length 4 -extension 1 -fragment_tolerance 20 -fragment_tolerance_unit ppm)
+  sruns() {  # name input mode
+    runb "$1" "$2" 2 -ion_series "$3" "${RX[@]}" -recon_out "$TMP/$1.recon.tsv" -digest_out "$TMP/$1.digest.tsv" \
+      -label_out "$TMP/$1.label.tsv" -massgap_out "$TMP/$1.massgap.tsv" -census -census_out "$TMP/$1.census.tsv"
+  }
+  sruns s_etd_auto "$TMP/syn_etd.mzML" auto
+  sruns s_etd_by "$TMP/syn_etd.mzML" by
+  sruns s_cid_by "$TMP/syn_cid.mzML" by
+  sruns s_cid_auto "$TMP/syn_cid.mzML" auto
+  # exact placements (both flanks match) per spectrum
+  placed() { awk -F'\t' 'NR > 1 && $7 == "1" && $8 == "1" { print $1 }' "$1" | sort -u | wc -l | tr -d ' '; }
+  pa=$(placed "$TMP/s_etd_auto.recon.tsv"); pb=$(placed "$TMP/s_etd_by.recon.tsv"); pc=$(placed "$TMP/s_cid_by.recon.tsv")
+  echo "synthetic: spectra with an exact placement: ETD auto $pa, ETD by $pb, CID by $pc (of 40)"
+  [ "$pc" -ge 30 ] || fail "synthetic CID under by: only $pc of 40 spectra place exactly (the fixture is weak)"
+  [ "$pa" -ge $((pc * 3 / 4)) ] || fail "synthetic ETD under auto: $pa spectra place exactly, CID under by $pc"
+  [ "$pa" -ge $((pb * 2 + 5)) ] || fail "synthetic ETD: auto ($pa) does not place far more spectra than by ($pb)"
+  [ "$(valuesof "$TMP/s_etd_auto.tsv")" = cz ] || fail "synthetic ETD under auto: rows not all cz"
+  for o in tsv recon.tsv digest.tsv label.tsv massgap.tsv census.tsv; do
+    cmp -s "$TMP/s_cid_by.$o" "$TMP/s_cid_auto.$o" || fail "synthetic CID: auto differs from by in $o"
+  done
+  # Reversed c-derived placements exist and land on the true peptide.
+  [ "$(awk -F'\t' 'NR > 1 && $6 == "1" && $7 == "1" && $8 == "1"' "$TMP/s_etd_auto.recon.tsv" | wc -l)" -gt 5 ] \
+    || fail "synthetic ETD under auto: too few reversed (c-ion) exact placements"
+  # The digest report calls the same protease from the c/z tags as from the
+  # b/y tags (trypsin: K/R at P1).
+  dcall() { awk -F'\t' '$1 == "call" && ($2 == "status" || $2 == "model") { printf "%s ", $3 }' "$1"; }
+  dc=$(dcall "$TMP/s_cid_by.digest.tsv"); de=$(dcall "$TMP/s_etd_auto.digest.tsv")
+  echo "synthetic digest call: CID by [$dc], ETD auto [$de], ETD by [$(dcall "$TMP/s_etd_by.digest.tsv")]"
+  [ "$dc" = "call Trypsin " ] && [ "$dc" = "$de" ] || fail "synthetic: the digest call from c/z tags ($de) differs from b/y ($dc)"
+  [ "$(dcall "$TMP/s_etd_by.digest.tsv")" != "$dc" ] || fail "synthetic: ETD read as b/y calls the protease too (the check is weak)"
+  [ "$(grep -c '^Ion series (-ion_series auto): 40 MS2 spectra tagged as c/z-dot ions, 0 as b/y' "$TMP/s_etd_auto.err")" -eq 1 ] \
+    || fail "synthetic ETD under auto: INFO counts"
 fi
 
 # ---- cz on collisional spectra: the WARN ----
@@ -250,19 +294,21 @@ runb cz_cid "$SRC" 2 -ion_series cz
 grep -q "^Collisional activation: $N of $N MS2 spectra" "$TMP/cz_cid.err" || fail "cz on CID: WARN counts"
 
 # ---- -species counts b/y tags only ----
-if [ -n "$BUILDTAXDB" ] && [ -n "$TAXDIR" ] && [ -n "$DB" ]; then
+# On the synthetic runs at -tag_length 5 -extension 1 (the toy index's k = 7).
+if [ -n "$BUILDTAXDB" ] && [ -n "$TAXDIR" ] && [ -n "$DB" ] && [ -n "$GEN" ]; then
   mkdir -p "$TMP/prot"
   awk '/^>/ { if (s != "") print s; print; s = ""; next } { s = s $0 } END { if (s != "") print s }' "$DB" > "$TMP/prot/562.fasta"
   "$BUILDTAXDB" "$TMP/prot" "$TMP/toy.taxdb" 7 > "$TMP/buildtaxdb.log" 2>&1 || { cat "$TMP/buildtaxdb.log" >&2; fail "buildtaxdb"; }
   TAX=(-species -taxdb "$TMP/toy.taxdb" -taxonomy_nodes "$TAXDIR/nodes.dmp" -taxonomy_names "$TAXDIR/names.dmp")
-  runb sp_by "$TMP/etd_all.mzML" 2 "${TAX[@]}"
-  runb sp_cz "$TMP/etd_all.mzML" 2 -ion_series cz "${TAX[@]}"
+  SP=(-tag_length 5 -extension 1 -fragment_tolerance 20 -fragment_tolerance_unit ppm "${TAX[@]}")
+  runb sp_by "$TMP/syn_cid.mzML" 2 "${SP[@]}"
+  runb sp_cz "$TMP/syn_etd.mzML" 2 -ion_series cz "${SP[@]}"
   grep -q 'left out of -species' "$TMP/sp_by.err" && fail "by excludes rows from -species"
   rows=$(($(wc -l < "$TMP/sp_cz.tsv") - 1))
   [ "$rows" -gt 0 ] || fail "species: no c/z rows"
   grep -q "^Ion series: $rows tag rows read as c/z-dot ions were left out of -species" "$TMP/sp_cz.err" \
     || { grep 'species' "$TMP/sp_cz.err" >&2; fail "species: the exclusion count is not the c/z row count ($rows)"; }
-  [ -s "$TMP/sp_by.species.tsv" ] || fail "species: no b/y species report"
+  [ "$(wc -l < "$TMP/sp_by.species.tsv")" -ge 2 ] || fail "species: the b/y run reports no taxon (the check is weak)"
 fi
 
 # ---- -stream refuses -ion_series away from by ----

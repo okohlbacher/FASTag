@@ -821,12 +821,12 @@ int main(int argc, char** argv)
     const std::string ms2 = cv("MS:1000511", "ms level", "2");
     std::vector<std::string> sp;
     sp.push_back(param_spectrum(0, cv("MS:1000511", "ms level", "1"), "", ""));
-    sp.push_back(param_spectrum(1, ms2, "", prec("500.25", ref("pg_etd"))));
-    sp.push_back(param_spectrum(2, ms2, "", prec("600.25", ref("pg_ethcd2"))));
+    sp.push_back(param_spectrum(1, ms2, "", prec("500.25", ::ref("pg_etd"))));
+    sp.push_back(param_spectrum(2, ms2, "", prec("600.25", ::ref("pg_ethcd2"))));
     sp.push_back(param_spectrum(3, ms2, cv("MS:1000512", "filter string", "ITMS + c NSI d Full ms2 700.25@etd66.67 [50.00-2000.00]"),
                                 prec("700.25", "")));
     sp.push_back(param_spectrum(4, ms2, "", prec("800.25", cv("MS:1000133", "collision-induced dissociation"))));
-    sp.push_back(param_spectrum(5, ms2, "", prec("900.25", ref("pg_etd") + cv("MS:1000422", "beam-type collision-induced dissociation"))));
+    sp.push_back(param_spectrum(5, ms2, "", prec("900.25", ::ref("pg_etd") + cv("MS:1000422", "beam-type collision-induced dissociation"))));
     const std::string pgf = tmp + "/fastag_etd_paramgroup.mzML";
     check(write_group_mzml(indexed, pgf, groups, sp), "etd_paramgroup: written");
     PeakMap want;
