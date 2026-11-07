@@ -1,6 +1,8 @@
 // The result tabs (moved from App.tsx, P1 PR c): Tags, Species and Digest,
 // the failure banner over them, and the empty and withheld states of the
-// Tags pane.
+// Tags pane. P2b: the Overview tab first, once a run's results are shown
+// (GUI-DESIGN 3 S3), and the running state over the tabs while a single run
+// goes (S2).
 
 import type { Dispatch, JSX, KeyboardEvent, ReactNode, SetStateAction } from 'react'
 import type { SpeciesReport } from '../types'
@@ -15,11 +17,14 @@ import { focusLater } from '../app/focus'
 import type { Tab } from '../app/viewStore'
 import type { Evidence, Failure, Reports, Results } from '../run/useRun'
 import type { speciesReach } from '../paramLayout'
+import OverviewPanel from './OverviewPanel'
+import type { Overview, TileAction } from './overview'
 
-const TAB_LABEL: Record<Tab, string> = { results: 'Tags', species: 'Species', digest: 'Digest' }
+const TAB_LABEL: Record<Tab, string> = { overview: 'Overview', results: 'Tags', species: 'Species', digest: 'Digest' }
 // The tabs, in order. Digest is always there: its empty state is a way to
-// open a report.
+// open a report. The Overview is there while a run's results are shown.
 const TABS: Tab[] = ['results', 'species', 'digest']
+const WITH_OVERVIEW: Tab[] = ['overview', ...TABS]
 
 export interface ResultTabsProps {
   tab: Tab
@@ -48,30 +53,39 @@ export interface ResultTabsProps {
   children?: ReactNode
   // false: the failure banner is shown elsewhere (the Batch view, P2a).
   showFailure?: boolean
+  // The Overview of the run shown (none: no Overview tab), its input, and
+  // what its actions do; locked while busy.
+  overview?: { model: Overview; input: string; locked: boolean } | null
+  onOverviewAction?(a: TileAction): void
+  // Over the tabs while a single run goes (RunningPanel).
+  runningState?: ReactNode
 }
 
 export default function ResultTabs(p: ResultTabsProps): JSX.Element {
-  const { tab, setTab, species, speciesRun, reports, batchMiss, results, running, busy, failure, copied } = p
+  const { setTab, species, speciesRun, reports, batchMiss, results, running, busy, failure, copied } = p
+  const tabs = p.overview ? WITH_OVERVIEW : TABS
+  // An Overview tab whose run is gone (a new run started) shows the Tags.
+  const tab: Tab = p.tab === 'overview' && !p.overview ? 'results' : p.tab
   // Arrow keys, Home and End move between the tabs (WAI-ARIA tabs pattern).
   function onTabKey(e: KeyboardEvent<HTMLDivElement>): void {
-    const i = TABS.indexOf(tab)
+    const i = tabs.indexOf(tab)
     const to =
-      e.key === 'ArrowRight' ? (i + 1) % TABS.length
-      : e.key === 'ArrowLeft' ? (i - 1 + TABS.length) % TABS.length
+      e.key === 'ArrowRight' ? (i + 1) % tabs.length
+      : e.key === 'ArrowLeft' ? (i - 1 + tabs.length) % tabs.length
       : e.key === 'Home' ? 0
-      : e.key === 'End' ? TABS.length - 1
+      : e.key === 'End' ? tabs.length - 1
       : -1
     if (to < 0) return
     e.preventDefault()
-    setTab(TABS[to])
-    document.getElementById(`tab-${TABS[to]}`)?.focus()
+    setTab(tabs[to])
+    document.getElementById(`tab-${tabs[to]}`)?.focus()
   }
 
   return (
     <section className="results" aria-label="Results">
       <div className="tabs">
         <div role="tablist" aria-label="Results" onKeyDown={onTabKey}>
-          {TABS.map((t) => (
+          {tabs.map((t) => (
             <button
               key={t}
               id={`tab-${t}`}
@@ -109,8 +123,19 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
         />
       )}
 
+      {p.runningState}
+
       <div className="tabpanel" id="tabpanel" role="tabpanel" aria-labelledby={`tab-${tab}`}>
-        {tab === 'digest' ? (
+        {tab === 'overview' && p.overview ? (
+          <div className="tablewrap">
+            <OverviewPanel
+              overview={p.overview.model}
+              input={p.overview.input}
+              busy={busy || p.overview.locked}
+              onAction={(a) => p.onOverviewAction?.(a)}
+            />
+          </div>
+        ) : tab === 'digest' ? (
           <div className="tablewrap">
             <DigestPanel reports={reports.list} errors={reports.errors} onOpen={p.openReport} />
           </div>

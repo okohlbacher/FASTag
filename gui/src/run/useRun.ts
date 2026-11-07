@@ -6,7 +6,7 @@
 // React state, so a Log batch re-renders only the drawer.
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, type Dispatch, type SetStateAction } from 'react'
-import type { LogLine, ResolvedOutputs, RunResult } from '../types'
+import type { LogLine, ResolvedOutputs, RunResult, SpeciesReport } from '../types'
 import { newJobId, runJob, type Job as RunJob, type JobAction } from '../runJob'
 import { RENDERED, inertBecause } from '../paramLayout'
 import type { ParamValue } from '../ParamField'
@@ -29,7 +29,7 @@ import {
 } from './runReducer'
 
 export { appendLog } from './logStore'
-export type { BatchEnd, Evidence, Failure, LastRun, Reports, Results } from './runReducer'
+export type { BatchEnd, Evidence, Failure, LastRun, Reports, Results, Shown } from './runReducer'
 
 // TOPPBase prints this epilogue on stdout at every exit, after a refusal on
 // stderr too (the two pipes are read on separate threads), so it is never the
@@ -58,8 +58,13 @@ const noOutputs: ResolvedOutputs = { out: null }
 // The shell's part in a run (P2a PR s): onStart is called when a single run
 // is about to start (after the overwrite question), so the app can show
 // Results, where its state and a refused start's reason are.
+//
+// overviewLanding: a run's results land on the Overview tab (GUI-DESIGN 3
+// S3, D8) rather than on the Species or Digest tab: the tasks that
+// characterize a run say yes.
 export interface RunHooks {
   onStart?(): void
+  overviewLanding?(): boolean
 }
 
 export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
@@ -206,7 +211,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     outFile: string,
     overrides?: Record<string, ParamValue>,
     overwrite = false
-  ): Promise<RunResult & { outputs?: ResolvedOutputs; ms: number }> {
+  ): Promise<RunResult & { outputs?: ResolvedOutputs; ms: number; params: Record<string, unknown>; log: LogStore }> {
     return new Promise((settle) => {
       const id = newJobId()
       const log = createLogStore()
@@ -239,7 +244,8 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
         dispatch({ type: 'EVENT', id, action: a })
       }
       lastTags.current = null
-      setTab((t) => (t === 'digest' ? 'results' : t))
+      // The Overview and the Digest reports of the run before go.
+      setTab((t) => (t === 'digest' || t === 'overview' ? 'results' : t))
       command.current = undefined
       lastError.current = null
       lastLine.current = null
@@ -262,14 +268,16 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
           reason: failedRun ? failureReason(r) : undefined
         })
         if (currentJob.current?.job().id === id) currentJob.current = null
-        settle({ ...r, outputs: j.outputs, ms: Date.now() - at })
+        settle({ ...r, outputs: j.outputs, ms: Date.now() - at, params, log })
       })
     })
   }
 
   // The tags and reports of a run, at the paths the backend resolved for it
   // (ResolvedOutputs): the renderer never derives an output path itself.
-  async function showResults(inFile: string, outputs: ResolvedOutputs): Promise<void> {
+  //
+  // @p ran: what the run was sent and its log, for the Overview.
+  async function showResults(inFile: string, outputs: ResolvedOutputs, ran?: { params: Record<string, unknown>; log: LogStore }): Promise<void> {
     const outFile = outputs.out
     if (!outFile) {
       // Done without outputs: the reply that names them never came.
@@ -279,10 +287,12 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     dispatch({ type: 'RESULTS', update: (r) => ({ path: outFile, gen: (r?.gen ?? 0) + 1, input: inFile }) })
     dispatch({ type: 'BATCH_MISS', miss: null })
     let switched = false
+    let species: SpeciesReport | null = null
     if (speciesOn && outputs.species_out) {
       // An unreadable species report must not also cost the Digest reports.
       try {
         const sp = await window.fastag.species(outputs.species_out)
+        species = sp
         dispatch({ type: 'SPECIES', species: sp })
         if (sp && sp.taxa.length > 0) {
           setTab('species')
@@ -297,6 +307,14 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     const sent = REPORT_PARAMS.map((n) => outputs[n]).filter((p): p is string => !!p)
     const rep = await loadReports(sent)
     dispatch({ type: 'REPORTS', update: { list: rep.reports, errors: rep.errors } })
+    if (ran) {
+      const sentParams = (ran.params['params'] ?? {}) as Record<string, unknown>
+      dispatch({ type: 'SHOWN', shown: { input: inFile, params: sentParams, log: ran.log.get(), reports: rep.reports, species } })
+      if (hooks.overviewLanding?.()) {
+        setTab('overview')
+        return
+      }
+    }
     if (!switched && (rep.reports.length || rep.errors.length)) setTab('digest')
   }
 
@@ -323,21 +341,24 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   const logResultsError = (err: unknown): void =>
     pushLog(`Could not show the results: ${err instanceof Error ? err.message : String(err)}`)
 
-  async function run(): Promise<void> {
+  // Run the single input. @p overrides: values the run is sent over the
+  // form's (an Overview action turns an option on and runs again; the form
+  // gets the same values).
+  async function runWith(overrides?: Record<string, ParamValue>): Promise<void> {
     if (!input || !out || checking.current) return
     checking.current = true
     let existing: string[]
     try {
-      existing = await existingOutputs([runParams(input, out)])
+      existing = await existingOutputs([runParams(input, out, overrides)])
     } finally {
       checking.current = false
     }
     const overwrite = existing.length > 0
     if (overwrite && !(await askOverwrite(existing))) return
-    window.fastag.saveLast(values)
+    window.fastag.saveLast(overrides ? { ...values, ...overrides } : values)
     view.setLogJob(null)
     hooks.onStart?.()
-    const r = await runOne(input, out, undefined, overwrite)
+    const r = await runOne(input, out, overrides, overwrite)
     dispatch({
       type: 'LAST_RUN',
       lastRun: {
@@ -351,9 +372,10 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
         out: r.outputs?.out ?? undefined
       }
     })
-    if (r.ok) await showResults(input, r.outputs ?? noOutputs).catch(logResultsError)
+    if (r.ok) await showResults(input, r.outputs ?? noOutputs, r).catch(logResultsError)
     else if (!isCancelled(r)) failed(r, baseName(input))
   }
+  const run = (): Promise<void> => runWith()
 
   async function runBatch(only?: BatchJob['status']): Promise<void> {
     if (jobs.length === 0 || batchRunning || running || blocked) return
@@ -401,7 +423,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
         if (batchCancel.current) break
         if (r.ok && i === queue.length - 1)
           // preview the last
-          await showResults(job.input, r.outputs ?? noOutputs).catch(logResultsError)
+          await showResults(job.input, r.outputs ?? noOutputs, r).catch(logResultsError)
       }
       // The pane must not keep an older table as if it were this batch's:
       // name the job without tags, and a done one to select instead.
@@ -453,7 +475,8 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   function showJob(j: BatchJob): void {
     if (!j.outputs) return
     setTab('results')
-    showResults(j.input, j.outputs).catch(logResultsError)
+    const params = state.jobs.find((x) => x.batch && x.input === j.input)?.params
+    showResults(j.input, j.outputs, params && j.log ? { params, log: j.log } : undefined).catch(logResultsError)
   }
 
   // Add one report to those shown, replacing one of the same kind. A report
@@ -586,6 +609,8 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     // anything a run would not do.
     paramsFor: (): Record<string, unknown> => runParams(input, out),
     run,
+    runWith,
+    shown: state.shown,
     runBatch,
     cancelRun,
     cancelForQuit,

@@ -61,7 +61,12 @@ describe('shell: views', () => {
     expect(viewButton('Results').getAttribute('aria-keyshortcuts')).toMatch(/2$/)
   })
 
-  it('Run moves to Results; the pill shows the phase, the percentage and Cancel there', async () => {
+  // P2b: in Results the running state (GUI-DESIGN 3 S2) holds the progress
+  // bar and Cancel, so the pill there shows the phase and the percentage
+  // only; History (a view without the run) is where the pill keeps its bar
+  // and Cancel. Successor of "Run moves to Results; the pill shows the
+  // phase, the percentage and Cancel there".
+  it('Run moves to Results; the pill shows the phase and the percentage, the running state the bar and Cancel', async () => {
     const mock = installMockBridge()
     const c = await renderApp(mock)
     expect(within(pill()).getByText('Idle')).toBeDefined()
@@ -78,10 +83,16 @@ describe('shell: views', () => {
     expect(p.textContent).toMatch(/a\.mzML/)
     expect(p.textContent).toMatch(/Tagging spectra/)
     expect(p.textContent).toMatch(/25%/)
-    // Outside Setup the pill is the only progress element.
+    // One progress element: in Results the running state's.
     expect(screen.getAllByRole('progressbar')).toHaveLength(1)
-    expect(within(p).getByRole('progressbar')).toBeDefined()
-    await click(within(p).getByRole('button', { name: 'Cancel' }))
+    const running = screen.getByRole('region', { name: 'Running' })
+    expect(within(running).getByRole('progressbar')).toBeDefined()
+    expect(within(p).queryByRole('button', { name: 'Cancel' })).toBeNull()
+    // In a view without the run the pill has the bar and Cancel.
+    await click(viewButton('History'))
+    expect(screen.getAllByRole('progressbar')).toHaveLength(1)
+    expect(within(pill()).getByRole('progressbar')).toBeDefined()
+    await click(within(pill()).getByRole('button', { name: 'Cancel' }))
     expect(mock.cancelCalls).toBe(1)
     // In Setup the run bar shows the progress, and the pill no second Cancel.
     await click(viewButton('Setup'))
@@ -386,7 +397,8 @@ describe('shell: finish', () => {
     await pickSingle(mock, '/d/a.mzML')
     await click(runButton())
     await waitFor(() => expect(mock.runCalls).toHaveLength(1))
-    await click(within(pill()).getByRole('button', { name: 'Cancel' }))
+    // In Results, Cancel is the running state's (P2b, GUI-DESIGN 3 S2).
+    await click(within(screen.getByRole('region', { name: 'Running' })).getByRole('button', { name: 'Cancel' }))
     await act(async () => mock.emitDone({ ok: false, code: null, cancelled: true, runId: mock.lastRunId }))
     await flush()
     expect(mock.notifyCalls).toHaveLength(0)

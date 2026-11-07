@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type JSX } from 'react'
+import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import type { BinaryInfo } from './types'
 import { inertDependency } from './paramLayout'
 import HelpView from './help/HelpView'
@@ -29,6 +29,15 @@ import { useFinish } from './shell/useFinish'
 import { LANDING, type Origin } from './setup/tasks'
 import PlanFooter from './setup/PlanFooter'
 import { SECTION_OF } from './paramLayout'
+import type { ParamValue } from './ParamField'
+import RunningPanel from './results/RunningPanel'
+import { buildOverview, type TileAction } from './results/overview'
+import { INSTRUMENTS, matchesInstrument, presetText } from './setup/presets'
+
+// The tasks whose run lands on the Overview tab (D8): they characterize it.
+const OVERVIEW_TASKS: readonly (string | null)[] = ['characterize', 'batch-qc']
+// The FASTA formats the recon_fasta field takes.
+const FASTA_FORMATS = ['fasta', 'fa', 'faa']
 
 // The app shell (P1 PR c; the P2a shell, PR s): the top bar with the four
 // views and the progress pill, the Help side panel, the close and overwrite
@@ -62,7 +71,12 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   const { tab, logOpen, logJob } = useView(viewStore)
   const session = useSession(start)
   const { input, out, values, blocked } = session
-  const run = useRun(session, viewStore, { onStart: () => setView('results') })
+  const taskRef = useRef(session.task)
+  taskRef.current = session.task
+  const run = useRun(session, viewStore, {
+    onStart: () => setView('results'),
+    overviewLanding: () => OVERVIEW_TASKS.includes(taskRef.current)
+  })
   const { running, batchRunning, busy, jobs } = run
 
   const help = useHelp()
@@ -154,6 +168,44 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   }
   const escRef = useRef(escape)
   escRef.current = escape
+
+  // The Overview of the run whose results are shown (GUI-DESIGN 3 S3). Its
+  // fragment tolerance came from the instrument preset chosen when that
+  // preset still matches what the run was sent.
+  const shown = run.shown
+  const preset = INSTRUMENTS.find((x) => x.id === session.instrument)
+  const presetLabel = shown && preset && matchesInstrument(shown.params, preset) ? presetText(preset) : null
+  const overview = useMemo(
+    () =>
+      shown
+        ? {
+            model: buildOverview({ log: shown.log, reports: shown.reports, species: shown.species, census: null, params: shown.params, instrument: presetLabel }),
+            input: shown.input,
+            // Its actions run the form's input again: not another file's.
+            locked: shown.input !== input || jobs.length > 0
+          }
+        : null,
+    [shown, presetLabel, input, jobs.length]
+  )
+
+  // An Overview tile's action: the option on in the form, and the run again
+  // with it. An output named by its file (digest.tsv) goes beside -out.
+  async function overviewAction(a: TileAction): Promise<void> {
+    // Not over a value the CLI would refuse: Run is disabled for it too.
+    if (busy || blocked) return
+    let set: Record<string, ParamValue>
+    if (a.kind === 'add-fasta') {
+      const p = await window.fastag.pickFile(FASTA_FORMATS)
+      if (!p) return
+      set = { recon_fasta: p, recon_out: 'recon.tsv', massgap_out: 'massgap.tsv' }
+    } else set = a.values
+    const beside = rebaseOutputs({ ...values, ...set }, out)
+    const over: Record<string, ParamValue> = Object.fromEntries(
+      Object.entries(set).map(([k, v]) => [k, k in beside ? beside[k] : v])
+    )
+    session.setValues((v) => ({ ...v, ...over }))
+    await run.runWith(over)
+  }
 
   // Not behind a batch queue: the single input and output are hidden then.
   const canRun = !!bin?.ok && !!input && !!out && !running && !batchRunning && jobs.length === 0 && !blocked
@@ -324,7 +376,8 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
           batch: batchAt,
           phase: run.phase,
           progress: run.progress,
-          runBarShown: view === runBarView,
+          // The run bar, or the Results pane's running state, shows it.
+          runBarShown: view === runBarView || (view === 'results' && running && jobs.length === 0),
           onShow: () => setView(jobs.length > 0 ? 'batch' : 'results'),
           onCancel: run.cancelRun
         }}
@@ -390,6 +443,21 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
               openReport={run.openReport}
               openLog={openLog}
               showFailure={jobs.length === 0}
+              overview={overview}
+              onOverviewAction={(a) => void overviewAction(a)}
+              runningState={
+                running && jobs.length === 0 ? (
+                  <RunningPanel
+                    input={input}
+                    phase={run.phase}
+                    progress={run.progress}
+                    startedAt={run.startedAt}
+                    cancelling={run.cancelling}
+                    onCancel={run.cancelRun}
+                    onShowLog={() => openLog(null)}
+                  />
+                ) : null
+              }
             >
               {jobs.length === 0 && drawer}
             </ResultTabs>

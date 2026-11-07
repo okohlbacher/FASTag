@@ -30,25 +30,32 @@ export const ALPHABET = 'ACDEFGHKLMNPQRSTVWY'.split('')
 export const C_POSITIONS = ['P4', 'P3', 'P2', 'P1'] as const
 export const N_POSITIONS = ["P1'", "P2'", "P3'", "P4'"] as const
 
-/// Parse one report. Throws with a readable message when the file is not one.
-export function parseReport(text: string, path: string): Report {
+/// The rows of any long-form FASTag report (`section key value n
+/// description`), whatever its sections: the reports below, and the 1.12
+/// census summary (results/calls.ts). Throws when the header is not one.
+export function parseRows(text: string): ReportRow[] {
   const lines = text.split(/\r?\n/).filter((l) => l.trim() !== '')
   if (lines.length === 0) throw new Error('the file is empty')
   const head = lines[0].split('\t').map((h) => h.trim())
   const idx = COLUMNS.map((c) => head.indexOf(c))
   const missing = COLUMNS.filter((_, i) => idx[i] < 0)
   if (missing.length) throw new Error(`not a FASTag report: no ${missing.join(', ')} column`)
-  const rows: ReportRow[] = []
-  const seen = new Set<string>()
-  const repeated = new Set<string>()
-  for (const line of lines.slice(1)) {
+  return lines.slice(1).map((line) => {
     const f = line.split('\t')
     const at = (i: number): string => (f[idx[i]] ?? '').trim()
-    const r = { section: at(0), key: at(1), value: at(2), n: num(at(3)), description: at(4) }
+    return { section: at(0), key: at(1), value: at(2), n: num(at(3)), description: at(4) }
+  })
+}
+
+/// Parse one report. Throws with a readable message when the file is not one.
+export function parseReport(text: string, path: string): Report {
+  const rows = parseRows(text)
+  const seen = new Set<string>()
+  const repeated = new Set<string>()
+  for (const r of rows) {
     const id = `${r.section} ${r.key}`
     if (seen.has(id)) repeated.add(id)
     seen.add(id)
-    rows.push(r)
   }
   // The writer never repeats a key; the first row is the one read.
   const warnings = [...repeated].map((id) => `${baseName(path)} has more than one ${id} row; the first one is used.`)

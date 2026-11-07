@@ -26,8 +26,10 @@ test('while a run goes the open buttons are locked; the close guard asks, and Ke
   await openApp(page, 'slow')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
-  // P2a: the run moved to Results, where the pill has its Cancel.
-  await expect(page.getByRole('group', { name: 'Run status' }).getByRole('button', { name: 'Cancel' })).toBeVisible()
+  // P2a: the run moved to Results. P2b: its Cancel is the running state's
+  // there (GUI-DESIGN 3 S2; was the pill's), and the pill has none.
+  await expect(page.getByRole('region', { name: 'Running' }).getByRole('button', { name: 'Cancel' })).toBeVisible()
+  await expect(page.getByRole('group', { name: 'Run status' }).getByRole('button', { name: 'Cancel' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Open a tags TSV…' })).toBeDisabled()
   await expect(page.getByRole('button', { name: 'Open a digest, label or mass-gap report…' })).toBeDisabled()
 
