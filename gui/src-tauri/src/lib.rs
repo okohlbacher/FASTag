@@ -7,6 +7,7 @@ mod events;
 mod fastag;
 mod history;
 mod ini;
+mod inspect;
 mod lifetime;
 mod menu;
 mod notify;
@@ -72,6 +73,8 @@ pub fn run() {
         .manage(browser::BrowserCache::default())
         .invoke_handler(tauri::generate_handler![
             fastag::probe,
+            inspect::cli_capabilities,
+            inspect::probe_input,
             fastag::run,
             fastag::cancel,
             fastag::outputs_check,
@@ -79,6 +82,8 @@ pub fn run() {
             ini::export_ini,
             history::history_list,
             history::history_of,
+            history::history_delete,
+            history::history_rerun,
             reveal::reveal_output,
             close_guard::set_ui_busy,
             close_guard::close_answer,

@@ -10,6 +10,26 @@ export interface BinaryInfo {
   detail: string
 }
 
+// The options the CLI's --helphelp lists (inspect.rs Capabilities): every
+// optional CLI feature is detected by them, never by the version string.
+export interface CliOptions {
+  options: string[]
+  ok: boolean
+  detail: string
+}
+
+// One run of the metadata probe, `FASTag -probe_input <file>` (inspect.rs
+// ProbeRun); stdout holds its JSON lines (src/inspector/probe.ts).
+export interface ProbeRun {
+  // The CLI has -probe_input; false: nothing was run.
+  supported: boolean
+  ok: boolean
+  code: number | null
+  timed_out: boolean
+  stdout: string
+  reason: string | null
+}
+
 export interface ResultsSort {
   column: string
   desc: boolean
@@ -147,6 +167,11 @@ export interface RunRecord {
   start: number
   end: number
   cleanup: Cleanup
+  // The parameters the run was sent (Settings into form); absent in records
+  // written before P2a.
+  params?: Record<string, unknown> | null
+  // The tags it wrote (the CLI's summary line); absent when it printed none.
+  tags?: number | null
 }
 
 // The reply of `run` (fastag.rs RunStarted). The run's events come on the
@@ -254,6 +279,11 @@ export interface FastagApi {
   report: (path: string) => Promise<string | null>
   openTaxon: (taxid: number) => Promise<boolean>
   probe: () => Promise<BinaryInfo>
+  // The options of the CLI (--helphelp), cached per binary by the backend.
+  cliCapabilities: () => Promise<CliOptions>
+  // The metadata probe of a spectra file; refused (supported: false) when
+  // the CLI has no -probe_input. fasta: probed too, when given.
+  probeInput: (input: string, fasta?: string | null) => Promise<ProbeRun>
   pickInput: () => Promise<string | null>
   pickInputs: () => Promise<string[]>
   pickOutput: (defaultPath?: string) => Promise<string | null>
@@ -294,6 +324,13 @@ export interface FastagApi {
   // The recorded runs, newest first; the newest run that wrote a path.
   historyList: (limit?: number) => Promise<RunRecord[]>
   historyOf: (path: string) => Promise<RunRecord | null>
+  // Delete one record (its files stay); false when no record has that id.
+  // Rejects with the reason when the record is kept: it alone marks a file
+  // its run left behind as incomplete (history.rs marks_incomplete).
+  historyDelete: (id: string) => Promise<boolean>
+  // What a Re-run of the record starts: the `run` parameters it was started
+  // with ({ in, out, params }); rejects for a record without them.
+  historyRerun: (id: string) => Promise<Record<string, unknown>>
   // Files unfinished runs left (sweep.rs): <output>.part, <output>.incomplete
   // and the outputs of a run the app did not see end. Offered at startup;
   // only listed files are removed, and kept ones are not offered again.

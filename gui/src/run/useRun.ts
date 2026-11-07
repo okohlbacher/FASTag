@@ -19,6 +19,7 @@ import type { BatchJob } from './batch'
 import { buildSummary } from './batchSummary'
 import { useBatchData } from './useBatchSummary'
 import { createLogStore, type LogStore } from './logStore'
+import { NOTE_LINE, refusalOf } from '../inspector/checks'
 import {
   activeJob,
   createRunState,
@@ -95,6 +96,9 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   const lastLine = useRef<string | null>(null)
   // Inside the --help dump OpenMS prints after a ConversionError.
   const inHelp = useRef(false)
+  // The run's lines the inspector reads (checks.ts NOTE_LINE): the
+  // acquisition check, a refusal, the tolerance and activation warnings.
+  const notes = useRef<string[]>([])
   // The job in flight (runJob.ts): its events come on its own Channel, so
   // none can reach another job, and a Done before the reply is a state of
   // the job, not a race.
@@ -150,6 +154,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     // The reason for the banner: neither the exit epilogue nor the help
     // dump that follows a ConversionError can be it.
     if (HELP_START.test(line)) inHelp.current = true
+    if (!inHelp.current && notes.current.length < 50 && NOTE_LINE.test(line)) notes.current.push(line)
     if (!inHelp.current && !EPILOGUE.test(line) && !REFUSED.test(line)) {
       if (ERROR_WORD.test(line)) lastError.current = line
       if (line.trim()) lastLine.current = line.trim()
@@ -233,11 +238,13 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   // Resolves with how it ended, every output the backend resolved for it
   // (none for a run that never started), its command line and how long it
   // ran. overwrite: the user confirmed overwriting its existing outputs.
+  // call: what `run` is sent, instead of the form's (a History Re-run).
   function runOne(
     inFile: string,
     outFile: string,
     overrides?: Record<string, ParamValue>,
-    overwrite = false
+    overwrite = false,
+    call?: Record<string, unknown>
   ): Promise<RunResult & { outputs?: ResolvedOutputs; ms: number; params: Record<string, unknown>; log: LogStore }> {
     return new Promise((settle) => {
       const id = newJobId()
@@ -277,8 +284,10 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
       lastError.current = null
       lastLine.current = null
       inHelp.current = false
+      notes.current = []
       cancelled.current = false
-      const params = overwrite ? { ...runParams(inFile, outFile, overrides), overwrite: true } : runParams(inFile, outFile, overrides)
+      const sent = call ?? runParams(inFile, outFile, overrides)
+      const params = overwrite ? { ...sent, overwrite: true } : sent
       dispatch({ type: 'RUN_START', id, input: inFile, out: outFile, params, at, log, speciesOn })
       const job = runJob(window.fastag, params, id, onChange)
       currentJob.current = job
@@ -292,7 +301,8 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
           result: isCancelled(r) ? { ...r, cancelled: true } : r,
           at: Date.now(),
           tags: lastTags.current,
-          reason: failedRun ? failureReason(r) : undefined
+          reason: failedRun ? failureReason(r) : undefined,
+          notes: notes.current.slice()
         })
         if (currentJob.current?.job().id === id) currentJob.current = null
         settle({ ...r, outputs: j.outputs, ms: Date.now() - at, params, log })
@@ -348,17 +358,25 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   // The message above the tabs when a run failed: the CLI's exit status and
   // its last error line, which may have scrolled out of the log.
   function failureWhy(): string | null {
-    return lastError.current ?? lastLine.current
+    // FASTag's refusal names the reason; its last line is the sentinel.
+    return refusalOf(notes.current, null)?.message ?? lastError.current ?? lastLine.current
   }
   function failureReason(r: RunResult): string {
     const why = failureWhy()
     return `${failText(r)}${why ? `: ${why}` : ''}`
   }
   const failed = (r: RunResult, what: string): void => {
-    const why = failureWhy()
+    // A refusal (exit 11) names FASTag's own reason, not its last line
+    // (the FASTAG_REFUSED sentinel).
+    const refusal = refusalOf(notes.current, r.code) ?? undefined
+    const why = refusal?.message ?? failureWhy()
     dispatch({
       type: 'FAILURE',
-      failure: { title: `${what} failed (${failText(r)})`, reasons: why ? [{ text: why }] : [], command: command.current }
+      failure: {
+        title: refusal ? `${what}: raw DIA, not tagged (${failText(r)})` : `${what} failed (${failText(r)})`,
+        reasons: why ? [{ text: why, refusal }] : [],
+        command: command.current
+      }
     })
   }
 
@@ -372,37 +390,70 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   // form's (an Overview action turns an option on and runs again; the form
   // gets the same values).
   async function runWith(overrides?: Record<string, ParamValue>): Promise<void> {
-    if (!input || !out || checking.current) return
+    if (!input || !out) return
+    await single(
+      input,
+      out,
+      runParams(input, out, overrides),
+      () => window.fastag.saveLast(overrides ? { ...values, ...overrides } : values),
+      changedParams
+    )
+  }
+  const run = (): Promise<void> => runWith()
+
+  // A History Re-run (GUI-DESIGN 3 S9, 6.5): the recorded run of @p id
+  // again, with the parameters it was sent (history_rerun), not the form's,
+  // so its command line is the recorded one. Like Run: the overwrite
+  // question, then Results. False when it did not start.
+  async function rerun(id: string): Promise<boolean> {
+    if (running || batchRunning || checking.current) return false
+    const call = await window.fastag.historyRerun(id)
+    const inFile = typeof call.in === 'string' ? call.in : ''
+    const outFile = typeof call.out === 'string' ? call.out : ''
+    if (!inFile || !outFile) return false
+    return single(inFile, outFile, call)
+  }
+
+  // One run of @p call (input @p inFile, tags @p outFile): Run, an
+  // Overview action and Re-run.
+  async function single(
+    inFile: string,
+    outFile: string,
+    call: Record<string, unknown>,
+    beforeStart?: () => void,
+    changed?: string[]
+  ): Promise<boolean> {
+    if (checking.current) return false
     checking.current = true
     let existing: string[]
     try {
-      existing = await existingOutputs([runParams(input, out, overrides)])
+      existing = await existingOutputs([call])
     } finally {
       checking.current = false
     }
     const overwrite = existing.length > 0
-    if (overwrite && !(await askOverwrite(existing))) return
-    window.fastag.saveLast(overrides ? { ...values, ...overrides } : values)
+    if (overwrite && !(await askOverwrite(existing))) return false
+    beforeStart?.()
     view.setLogJob(null)
     hooks.onStart?.()
-    const r = await runOne(input, out, overrides, overwrite)
+    const r = await runOne(inFile, outFile, undefined, overwrite, call)
     dispatch({
       type: 'LAST_RUN',
       lastRun: {
-        input,
+        input: inFile,
         ok: r.ok,
         cancelled: isCancelled(r),
         at: Date.now(),
         ms: r.ms,
-        changed: changedParams,
+        ...(changed ? { changed } : {}),
         cleaned: r.cleanup?.removed.length ?? 0,
         out: r.outputs?.out ?? undefined
       }
     })
-    if (r.ok) await showResults(input, r.outputs ?? noOutputs, r).catch(logResultsError)
-    else if (!isCancelled(r)) failed(r, baseName(input))
+    if (r.ok) await showResults(inFile, r.outputs ?? noOutputs, r).catch(logResultsError)
+    else if (!isCancelled(r)) failed(r, baseName(inFile))
+    return true
   }
-  const run = (): Promise<void> => runWith()
 
   async function runBatch(only?: BatchJob['status']): Promise<void> {
     if (jobs.length === 0 || batchRunning || running || blocked) return
@@ -442,8 +493,14 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
         lastRunJob = { input: job.input, ok: r.ok }
         if (r.ok) lastDone = job.input
         if (status === 'failed') {
-          const why = failureWhy()
-          failures.push({ what: `${baseName(job.input)} (${failText(r)})`, text: why ?? '', input: job.input })
+          const refusal = refusalOf(notes.current, r.code) ?? undefined
+          const why = refusal?.message ?? failureWhy()
+          failures.push({
+            what: `${baseName(job.input)} (${refusal ? 'raw DIA, not tagged, ' : ''}${failText(r)})`,
+            text: why ?? '',
+            input: job.input,
+            refusal
+          })
           failedInputs.push(job.input)
           failedCommand = failedCommand ?? command.current
         }
@@ -610,6 +667,8 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     announce: state.announce,
     startedAt: active?.startedAt ?? 0,
     evidence: state.evidence,
+    // The inspector's CLI lines of the run whose results are shown.
+    shownNotes: state.jobs.find((j) => j.input === state.results?.input && j.status !== 'running')?.notes ?? [],
     jobs,
     summary,
     // What each done batch job wrote (useBatchData), for the SDRF comparison.
@@ -645,6 +704,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     run,
     runWith,
     shown: state.shown,
+    rerun,
     runBatch,
     cancelRun,
     cancelForQuit,

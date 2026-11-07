@@ -36,6 +36,9 @@ import { SECTION_OF } from './paramLayout'
 import type { ParamValue } from './ParamField'
 import RunningPanel from './results/RunningPanel'
 import { buildOverview, type TileAction } from './results/overview'
+import { useInspector } from './inspector/useInspector'
+import { AfterRunPanel, PreStartPanel } from './inspector/InspectorPanel'
+import { postRunChecks } from './inspector/checks'
 import { INSTRUMENTS, matchesInstrument, presetText } from './setup/presets'
 
 // The tasks whose run lands on the Overview tab (D8): they characterize it.
@@ -96,6 +99,11 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
     nodes: typeof values['taxonomy_nodes'] === 'string' ? values['taxonomy_nodes'] : undefined,
     names: typeof values['taxonomy_names'] === 'string' ? values['taxonomy_names'] : undefined
   })
+  // The checks before a run (GUI-DESIGN 3 S1, P2b): from the CLI's metadata
+  // probe when it has one, and the form.
+  const inspector = useInspector({ input, values, binOk: !!bin?.ok })
+  // Re-run with this instrument preset once the form holds its values.
+  const [rerunWith, setRerunWith] = useState<string | null>(null)
 
   const help = useHelp()
   // F1, ?, Esc, the Cmd/Ctrl shortcuts and the native menus (shell/useKeys.ts).
@@ -284,7 +292,31 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   }
 
   // Not behind a batch queue: the single input and output are hidden then.
-  const canRun = !!bin?.ok && !!input && !!out && !running && !batchRunning && jobs.length === 0 && !blocked
+  const canRun = !!bin?.ok && !!input && !!out && !running && !batchRunning && jobs.length === 0 && !blocked && !inspector.held
+
+  // The checks after a run, from its reports and FASTag's log lines.
+  const after = postRunChecks({ reports: run.reports.list, notes: run.shownNotes })
+  const afterInput = run.results?.input ?? ''
+  // A finished run names its red flags after the run too (the panel over
+  // the result tabs shows them).
+  const afterFlags = after.checks.filter((c) => c.level === 'flag').length
+  const announce =
+    !running && afterFlags > 0 && run.announce.startsWith('Finished ')
+      ? `${run.announce} ${afterFlags} ${afterFlags === 1 ? 'red flag' : 'red flags'} after the run: see Checks after the run.`
+      : run.announce
+  const canRerun = !busy && jobs.length === 0 && !!bin?.ok && !!afterInput && afterInput === input && run.lastRun?.input === input
+  useEffect(() => {
+    if (!rerunWith) return
+    const p = INSTRUMENTS.find((x) => x.id === rerunWith)
+    if (!p || !matchesInstrument(values, p)) return
+    setRerunWith(null)
+    // Another check holds the run (species with a Da tolerance): Setup
+    // shows it, with its Run anyway.
+    if (canRun) void run.run()
+    else setView('setup')
+  }, [rerunWith, values, canRun])
+  const detectedPreset = inspector.pre.detected?.preset ?? null
+  const chosenInstrument = INSTRUMENTS.find((x) => x.id === detectedPreset && matchesInstrument(values, x))?.id ?? ''
 
   // A parameter chosen in the search: open its section, focus its field (or,
   // while the field is inert, the switch it waits for).
@@ -412,6 +444,9 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
       binOk={!!bin?.ok}
       canRun={canRun}
       instrument={session.instrument}
+      detectedInstrument={detectedPreset}
+      inspectorHeld={inspector.held}
+      inspectorChecking={inspector.checking}
       values={values}
       onInstrument={session.chooseInstrument}
       onRun={run.run}
@@ -470,7 +505,7 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
       />
       {/* The run's live region: always in the page, whichever view is shown. */}
       <p className="sr-only" role="status">
-        {run.announce}
+        {announce}
       </p>
 
       <div className="shell">
@@ -498,6 +533,21 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
                 folderNote={folderNoteAt('setup')}
                 addBatchRef={addBatchRef}
                 onOpenResults={openResults}
+                inspector={
+                  <PreStartPanel
+                    checks={inspector.pre.checks}
+                    detected={inspector.pre.detected}
+                    notChecked={inspector.pre.notChecked}
+                    pending={inspector.pre.pending}
+                    chosenInstrument={chosenInstrument}
+                    isAnswered={inspector.isAnswered}
+                    onRunAnyway={inspector.runAnyway}
+                    onUndoRunAnyway={inspector.undoRunAnyway}
+                    hasInput={!!input}
+                    onInstrument={session.chooseInstrument}
+                    onRecheck={inspector.recheck}
+                  />
+                }
               />
               {!busy && session.task !== 'open-results' && <PlanFooter session={session} run={run} />}
               {runBarView === 'setup' && session.task !== 'open-results' && runBar}
@@ -505,6 +555,21 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
           </section>
 
           <section className="view view-results" data-view="results" hidden={view !== 'results'} tabIndex={-1} aria-label="Results">
+            {!running && jobs.length === 0 && (
+              <AfterRunPanel
+                checks={after.checks}
+                detected={after.detected}
+                input={afterInput}
+                onRerun={
+                  canRerun
+                    ? (id) => {
+                        session.chooseInstrument(id)
+                        setRerunWith(id)
+                      }
+                    : null
+                }
+              />
+            )}
             <ExportJobsContext.Provider value={exportJobs}>
               <ResultTabs
                 tab={tab}
@@ -646,7 +711,16 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
           </section>
 
           <section className="view view-history" data-view="history" hidden={view !== 'history'} tabIndex={-1} aria-label="History">
-            <HistoryView active={view === 'history'} version={historyVersion} busy={busy} onOpenResults={openResults} />
+            <HistoryView
+              active={view === 'history'}
+              version={historyVersion}
+              busy={busy}
+              onOpenResults={openResults}
+              onOpen={(p) => void run.openResultsPath(p).then(() => setView('results'))}
+              onSettings={session.takeRun}
+              onRerun={run.rerun}
+              onGoSetup={() => setView('setup')}
+            />
           </section>
         </div>
         {help.open && (

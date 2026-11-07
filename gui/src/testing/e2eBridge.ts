@@ -43,10 +43,31 @@
 //               SDRF… picks /data/gate-batch.sdrf.tsv, the synthetic SDRF of
 //               src/fixtures/sdrf (its bytes fetched as they are, BOM and
 //               CRLF included), and the taxonomy is the bundled pruned dump.
+//   iontrap-probe  P2b: the CLI has -probe_input, and run01.mzML probes as
+//               the ion-trap gate input (src/fixtures/probe/iontrap)
+//   dia-probe   P2b: the CLI has -probe_input, and run01.mzML probes as
+//               raw DIA (src/fixtures/probe/dia_raw)
+//   orbitrap-probe  P2b: the CLI has -probe_input, and run01.mzML probes
+//               as the Orbitrap HCD gate input (its index stale, as FASTag
+//               1.12 reports it; src/fixtures/probe/orbitrap)
+//   iontrap     P2b: a CLI without the probe; a run of run01.mzML prints
+//               the real FASTag 1.12 log of the ion-trap gate input at
+//               20 ppm and writes its digest and label reports
+//               (src/fixtures/cli-1.12/iontrap_20ppm.*)
+//   dia-refusal P2b: a run prints FASTag 1.12's real raw-DIA refusal and
+//               exits 11 (src/fixtures/cli-1.12/dia_raw.*)
+//
+// &hold=probes holds every probe until a spec calls
+// __fastagE2E.mock.releaseProbes() (a probe still in flight).
 //
 // &start=defaults starts the session from FASTag's defaults instead of the
 // task the app lands on (D1, "Characterize a run"): the specs written
 // before P2a PR u check what a run from the defaults sends.
+//
+// Every scenario records each run that ends in the mock's run record, as
+// fastag.rs does: the History view lists it, and its argv is the command
+// line the run reply offered (e2eCommand, the argv build_args writes). The
+// Setup footer's Copy command line answers the same argv (command_of).
 //
 // window.__fastagE2E gives the specs the mock and a few controls.
 
@@ -72,6 +93,15 @@ const GATE: Record<string, CliCase> = {
   'gate-da': CLI_CASES.v112Da,
   'gate-call': CLI_CASES.v112Call
 }
+import iontrapProbe from '../fixtures/probe/iontrap.probe.jsonl?raw'
+import diaRawProbe from '../fixtures/probe/dia_raw.probe.jsonl?raw'
+import orbitrapProbe from '../fixtures/probe/orbitrap.probe.jsonl?raw'
+import it20Digest from '../fixtures/cli-1.12/iontrap_20ppm.digest.tsv?raw'
+import it20Label from '../fixtures/cli-1.12/iontrap_20ppm.label.tsv?raw'
+import it20Err from '../fixtures/cli-1.12/iontrap_20ppm.stderr?raw'
+import it20Out from '../fixtures/cli-1.12/iontrap_20ppm.stdout?raw'
+import diaErr from '../fixtures/cli-1.12/dia_raw.stderr?raw'
+import diaOut from '../fixtures/cli-1.12/dia_raw.stdout?raw'
 
 /// A string a release dist/ must never contain.
 export const E2E_MARKER = '__FASTAG_E2E_BRIDGE__'
@@ -224,12 +254,34 @@ export function exportLine(cells: string[], format: ExportFormat): string {
   return cells.map((c) => (/[,"\r\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c)).join(',') + '\r\n'
 }
 
+/// The argv fastag.rs build_args writes for @p params, binary first (the
+/// same rules for the values the e2e form sends): -in and -out, each switch
+/// that is on by its name, each value as its own element (a list item by
+/// item, a cleared list as ''), and -progress last.
+export function e2eCommand(bin: string, params: Record<string, unknown>, out: string): string[] {
+  const argv = [bin, '-in', String(params['in']), '-out', out]
+  const p = (params['params'] ?? {}) as Record<string, unknown>
+  for (const [name, v] of Object.entries(p)) {
+    if (v === true) argv.push(`-${name}`)
+    else if (Array.isArray(v)) {
+      const items = v.map(String).filter((x) => x.trim() !== '')
+      if (items.length) argv.push(`-${name}`, ...items)
+    } else if ((typeof v === 'string' && v.trim() !== '') || typeof v === 'number') argv.push(`-${name}`, String(v).trim())
+  }
+  argv.push('-progress')
+  return argv
+}
+
 /// Installs the bridge; returns where the session starts (?start=).
 export function installE2EBridge(): Origin | undefined {
   const query = new URLSearchParams(window.location.search)
   const fixture = query.get('fixture') ?? 'default'
   const mock = installMockBridge()
+  mock.recordRuns = true
   mock.binaryInfo = { bin: '/e2e/FASTag', source: 'env', ok: true, version: '1.11.0', detail: 'e2e fixture: no CLI' }
+  // Copy command line (Setup) answers the argv the run reply offers and
+  // History records, as fastag.rs builds both with command_of.
+  mock.commandOf = (call) => e2eCommand(mock.binaryInfo.bin, call as unknown as Record<string, unknown>, call.out)
   const tags = parseTsv(fixture === 'denovo' ? ecoliResConf : ecoliTags)
   if (fixture === 'denovo') mock.tagsFiles['/data/run01.tags.tsv'] = ecoliResConf
   mock.resultsColumns = tags.columns
@@ -273,6 +325,16 @@ export function installE2EBridge(): Origin | undefined {
         mock.sdrfFiles[path] = new Uint8Array(await (await fetch(gateSdrfUrl)).arrayBuffer())
       return sdrfRead(path)
     }
+  }
+  // P2b: the inspector. A CLI whose --helphelp lists -probe_input.
+  if (fixture === 'iontrap-probe' || fixture === 'dia-probe' || fixture === 'orbitrap-probe') {
+    mock.cliOptions = { options: [...mock.cliOptions.options, 'probe_input'], ok: true, detail: 'e2e fixture' }
+    mock.probeOutputs['/data/run01.mzML'] =
+      fixture === 'dia-probe' ? diaRawProbe : fixture === 'orbitrap-probe' ? orbitrapProbe : iontrapProbe
+  }
+  if (query.get('hold') === 'probes') mock.holdProbes = true
+  if (fixture === 'iontrap') {
+    mock.reportFiles = { '/data/run01.digest.tsv': it20Digest, '/data/run01.label.tsv': it20Label }
   }
   if (fixture === 'lastused') {
     mock.settings.lastUsed = { tag_length: '7', species: true }
@@ -425,6 +487,9 @@ export function installE2EBridge(): Origin | undefined {
     const name = base(input)
     const reading = [`${name}: Reading spectra`, `${name}: Loading the spectra index`]
     if (fixture === 'slow') return { phase: 'Reading spectra', lines: reading, ok: false, code: null, hang: true }
+    const real = (...logs: string[]): string[] => logs.flatMap((l) => l.split('\n')).filter((l) => l.trim() !== '')
+    if (fixture === 'iontrap') return { phase: 'Reading spectra', lines: real(it20Err, it20Out), ok: true, code: 0 }
+    if (fixture === 'dia-refusal') return { phase: 'Reading spectra', lines: real(diaErr, diaOut), ok: false, code: 11 }
     if (fixture === 'batch-fail' && name === 'run02.mzML')
       return {
         phase: 'Reading spectra',
@@ -466,6 +531,8 @@ export function installE2EBridge(): Origin | undefined {
   mock.run = async (params, onEvent): Promise<RunStarted> => {
     const started = await origRun(params, onEvent)
     if (!started.started) return started
+    // The reply's command, which the run record keeps (mockBridge recordRuns).
+    started.command = e2eCommand(mock.binaryInfo.bin, params, started.out ?? '')
     const id = mock.lastRunId
     const s = script(String(params['in']))
     const at = (ms: number, f: () => void): void => {

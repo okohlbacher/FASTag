@@ -1,0 +1,6 @@
+Modifications: Carbamidomethyl (C, fixed)
+Subsampling: tagging 3000 of 10294 input spectra (seed 1)
+Digest: 7 filtered tags, reason ms2_first_peak -> /scratch/kohlbach/gui-p2b-fixtures/iontrap_20ppm.digest.tsv
+Labels: 7 filtered tags -> /scratch/kohlbach/gui-p2b-fixtures/iontrap_20ppm.label.tsv
+2020 MS2 spectra, 23059 tags
+FASTag took 0.24 s (wall), 0.81 s (CPU), 0.18 s (system), 0.63 s (user); Peak Memory Usage: 62 MB.
