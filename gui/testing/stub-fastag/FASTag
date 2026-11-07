@@ -23,6 +23,13 @@
 #                   parallel spawn, which a group kill does not reach)
 #   STUB_INI_FAIL=<rc>  with -write_ini: fail with this code, writing nothing
 #   --help          print a version banner, as the probe expects
+#   --helphelp      print a few options as TOPP does (inspect.rs reads the
+#                   option names); -probe_input only with STUB_PROBE_INPUT=1,
+#                   since no released FASTag has it yet
+#   -probe_input <f>  the metadata probe (src/inspector/probe.ts): prints
+#                   <f>.probe.jsonl if it exists and exits 0; exits 5 when
+#                   <f> does not exist. <f>.stub may set STUB_PROBE_SLEEP=<s>
+#                   (a probe that hangs)
 #   -write_ini <f>  write an INI and exit, as TOPPBase does: with -ini <g>,
 #                   the items of <g> (the stub has no defaults to merge them
 #                   into), else an empty parameter set
@@ -35,6 +42,37 @@ set -u
 if [ "${1:-}" = "--help" ]; then
   echo "FASTag -- stub for the GUI tests"
   echo "Version: 0.0.0-stub"
+  exit 0
+fi
+
+if [ "${1:-}" = "--helphelp" ]; then
+  echo "FASTag -- stub for the GUI tests"
+  echo "Version: 0.0.0-stub"
+  echo ""
+  echo "Options (mandatory options marked with '*'):"
+  echo "  -in <file>*                      Input spectra"
+  echo "  -out <file>*                     Tag list"
+  echo "  -fasta <file>                    Report only tags that occur in this database"
+  if [ -n "${STUB_PROBE_INPUT:-}" ]; then
+    echo "  -probe_input <file>              Print the metadata of a spectra file as JSON lines and exit"
+  fi
+  echo ""
+  echo "Common TOPP options:"
+  echo "  --helphelp                       Shows all options (including advanced)"
+  exit 0
+fi
+
+if [ "${1:-}" = "-probe_input" ]; then
+  f="${2:-}"
+  if [ -n "$f" ] && [ -f "$f.stub" ]; then
+    . "$f.stub"
+  fi
+  [ -n "${STUB_PROBE_SLEEP:-}" ] && sleep "$STUB_PROBE_SLEEP"
+  if [ -z "$f" ] || [ ! -e "$f" ]; then
+    echo "Error: cannot read $f" >&2
+    exit 5
+  fi
+  [ -f "$f.probe.jsonl" ] && cat "$f.probe.jsonl"
   exit 0
 fi
 

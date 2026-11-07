@@ -15,8 +15,10 @@
 import type {
   BinaryInfo,
   BrowserEvent,
+  CliOptions,
   DropRoute,
   FastagApi,
+  ProbeRun,
   ResolvedOutputs,
   ResultsView,
   RunEvent,
@@ -66,6 +68,16 @@ export interface MockBridge extends FastagApi {
   speciesResult: SpeciesReport | null
   speciesError: Error | null
   taxdbInfoResult: TaxdbInfo | null
+  // The CLI's --helphelp options. The default is a CLI without
+  // -probe_input, as every released FASTag is.
+  cliOptions: CliOptions
+  // input path -> the probe's stdout (the CLI has -probe_input only when
+  // cliOptions lists it); a path without one fails as the CLI does (exit 5).
+  probeOutputs: Record<string, string>
+  probeCalls: { input: string; fasta?: string | null }[]
+  // Held probes answer only when releaseProbes() is called.
+  holdProbes: boolean
+  releaseProbes(): void
   // Output paths that "exist": outputsCheck reports those a run would write.
   existingOutputs: string[]
   // The run record (history.rs), newest first.
@@ -190,6 +202,7 @@ export function installMockBridge(): MockBridge {
 
   let seq = 0
   let held: (() => void)[] | null = null
+  const heldProbes: (() => void)[] = []
 
   const mock: MockBridge = {
     binaryInfo: { bin: '/mock/FASTag', source: 'env', ok: true, detail: 'FASTag 9.9.9 (mock)' },
@@ -213,6 +226,14 @@ export function installMockBridge(): MockBridge {
     speciesResult: null,
     speciesError: null,
     taxdbInfoResult: null,
+    cliOptions: { options: ['in', 'out', 'fasta', 'fragment_tolerance', 'fragment_tolerance_unit'], ok: true, detail: '5 options' },
+    probeOutputs: {},
+    probeCalls: [],
+    holdProbes: false,
+    releaseProbes: () => {
+      const q = heldProbes.splice(0)
+      q.forEach((f) => f())
+    },
     existingOutputs: [],
     history: [],
     commandLineCalls: [],
@@ -295,6 +316,19 @@ export function installMockBridge(): MockBridge {
       return Promise.resolve(true)
     },
     taxdbInfo: () => Promise.resolve(mock.taxdbInfoResult),
+    cliCapabilities: () => Promise.resolve(mock.cliOptions),
+    probeInput: (input, fasta) => {
+      mock.probeCalls.push({ input, fasta })
+      const supported = mock.cliOptions.options.includes('probe_input')
+      const out = mock.probeOutputs[input]
+      const reply: ProbeRun = !supported
+        ? { supported: false, ok: false, code: null, timed_out: false, stdout: '', reason: 'this FASTag has no -probe_input' }
+        : out != null
+          ? { supported: true, ok: true, code: 0, timed_out: false, stdout: out, reason: null }
+          : { supported: true, ok: false, code: 5, timed_out: false, stdout: '', reason: `Error: cannot read ${input}` }
+      if (!mock.holdProbes) return Promise.resolve(reply)
+      return new Promise((resolve) => heldProbes.push(() => resolve(reply)))
+    },
     openTaxon: () => Promise.resolve(true),
     pickInput: () => Promise.resolve(mock.nextPickInput),
     pickInputs: () => Promise.resolve(mock.nextPickInputs),

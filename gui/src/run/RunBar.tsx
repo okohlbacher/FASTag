@@ -42,6 +42,10 @@ export interface RunBarProps {
   canRun: boolean
   // The instrument preset last chosen, and the values it is checked against.
   instrument: string
+  // The preset the inspector proposes for the input (inspector/checks.ts).
+  detectedInstrument?: string | null
+  // Run waits for the inspector: a block, or a red flag not yet answered.
+  inspectorHeld?: boolean
   values: Record<string, ParamValue>
   onInstrument(id: string): void
   onRun(): void
@@ -159,6 +163,12 @@ export default function RunBar(p: RunBarProps): JSX.Element {
         </div>
       )}
       {!busy && !blocked && jobs === 0 && !p.input && <p className="hint">Choose an input file to run.</p>}
+      {!busy && !blocked && jobs === 0 && p.input && p.inspectorHeld && (
+        <p className="warn" role="status">
+          <IconError />
+          <span>Run waits for the checks before the run: fix them, or answer a red flag with Run anyway.</span>
+        </p>
+      )}
 
       {!busy && (
         <div className="instrument">
@@ -174,6 +184,7 @@ export default function RunBar(p: RunBarProps): JSX.Element {
             {INSTRUMENTS.map((x) => (
               <option key={x.id} value={x.id}>
                 {presetText(x)}
+                {p.detectedInstrument === x.id ? ' (detected)' : ''}
               </option>
             ))}
           </select>
