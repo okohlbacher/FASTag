@@ -144,7 +144,15 @@ manifest: the shell empties the file before the script runs.
 Four views, switched from the top bar: **Setup** (the input, the parameters
 and Run), **Results** (Tags, Species and Digest, full width), **Batch** (the
 queue, its run bar, the failure banner and each job's log) and **History**
-(every recorded run: input, status, duration, outputs). Run moves to
+(every recorded run: input, status, duration, tags, outputs; Open, Reveal,
+Copy command, Settings into form with Undo, Re-run, Delete record). Copy command
+copies the command line exactly as the run was started, with the outputs at
+their final paths; a cancelled or failed run is marked incomplete and does
+not open. Re-run starts the recorded run again with the parameters it was
+sent (not the form's), so its command line is the recorded one; it asks
+before overwriting like any run. Delete record asks first and keeps its
+files; the record of a run that did not finish is kept while it alone marks
+a file that run left behind as incomplete. Run moves to
 Results; the first file of a batch moves to Batch. The progress pill in the
 top bar shows the job in flight (file, phase or percentage, ETA) and, outside
 the view with the run bar, its Cancel. When a run or batch finishes while the
