@@ -862,7 +862,8 @@ protected:
                        "Print the metadata of this spectra file (mzML, mzpeak or MGF) as JSON lines "
                        "and exit: instrument and MS2 analyzer, activation, spectrum counts, "
                        "centroid/profile, mzML index state, the acquisition check's call and, with "
-                       "-fasta, its protein and decoy counts. Reads metadata only; needs no -in or -out",
+                       "-fasta, its protein and decoy counts. A FASTA file (.fasta, .fa, .faa, .fas) alone gives "
+                       "only those counts. Reads metadata only; needs no -in or -out",
                        false, true);
     registerStringOption_("dump_spectrum", "<nativeId>", "",
                           "Print the peaks FASTag tags of the spectrum of -in with this native ID (after "

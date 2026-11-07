@@ -8,8 +8,8 @@
 #       probe record first and the end record last, the GUI's records and
 #       types), no file written; the values for the Ecoli mzML and MGF,
 #       profile MS2 under legacy and auto, raw DIA (refuse, still exit 0;
-#       warn does not refuse), the index states ok, absent and stale, and
-#       -fasta counts
+#       warn does not refuse), the index states ok, absent and stale,
+#       -fasta counts, and a FASTA alone (probe, fasta and end records)
 #   (c) -probe_input refusals: a missing file, an unsupported or compressed
 #       one, a corrupt mzML, with -dump_spectrum, under -stream; nothing on
 #       stdout for any of them
@@ -200,8 +200,10 @@ def census_match(dumps_dir, census):
         n += 1
     print(n)
 
+# C carries the CLI's default fixed Carbamidomethyl (C) (the tag TSV still
+# writes it as C), so every run here keeps -fixed_modifications at its default.
 MONO = {"G": 57.02146372057, "A": 71.03711378471, "S": 87.03202840427, "P": 97.05276384885,
-        "V": 99.06841391299, "T": 101.04767846841, "C": 103.00918478471, "L": 113.08406397713,
+        "V": 99.06841391299, "T": 101.04767846841, "C": 160.03064850528, "L": 113.08406397713,
         "I": 113.08406397713, "N": 114.04292744114, "D": 115.02694302383, "Q": 128.05857750527,
         "K": 128.09496301399, "E": 129.04259308797, "M": 131.04048491299, "H": 137.05891185845,
         "F": 147.06841391299, "R": 156.10111102359, "Y": 163.06332853255, "W": 186.07931294986}
@@ -355,6 +357,19 @@ probe fasta "$IN" -fasta "$DB"
 sed 's/^>/>DECOY_/' "$DB" > "$TMP/decoys.fasta"; cat "$DB" >> "$TMP/decoys.fasta"
 probe decoys "$IN" -fasta "$TMP/decoys.fasta"
 [ "$(val "$TMP/p_decoys.v" decoys)" = "$(grep -c '^>' "$DB")" ] || fail "(b) decoy count $(val "$TMP/p_decoys.v" decoys)"
+
+# A FASTA alone: probe, fasta and end records only, the same counts.
+run_in "$TMP/p_fa" "$TMP/p_fa.jsonl" "$TMP/p_fa.err" -probe_input "$TMP/decoys.fasta"
+[ $RC = 0 ] || { cat "$TMP/p_fa.err" >&2; fail "(b) -probe_input <FASTA> exited $RC"; }
+only_files "$TMP/p_fa" ""
+"$PY" -I - "$TMP/p_fa.jsonl" "$(grep -c '^>' "$TMP/decoys.fasta")" "$(grep -c '^>' "$DB")" <<'PYEOF' || fail "(b) -probe_input <FASTA>: $(cat "$TMP/p_fa.jsonl")"
+import json, sys
+recs = [json.loads(l) for l in open(sys.argv[1])]
+assert [r["record"] for r in recs] == ["probe", "fasta", "end"], [r["record"] for r in recs]
+assert recs[0]["format"] == 1 and recs[0]["file_format"] == "FASTA"
+assert recs[1]["proteins"] == int(sys.argv[2]) and recs[1]["decoys"] == int(sys.argv[3]), recs[1]
+assert recs[1]["decoy_affix"] == "DECOY_", recs[1]
+PYEOF
 
 # ---- (c) -probe_input refusals ------------------------------------------------
 refused() { # refused <name> <min exit> args: nonzero exit, empty stdout, a reason on stderr

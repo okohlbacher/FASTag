@@ -418,11 +418,69 @@ namespace FASTag::Probe
 
   // ---- -probe_input -------------------------------------------------------
 
+  bool isFastaPath(const std::string& p)
+  {
+    std::string l = p;
+    std::transform(l.begin(), l.end(), l.begin(), [](unsigned char c) { return std::tolower(c); });
+    for (const char* ext : {".fasta", ".fa", ".faa", ".fas"})
+    {
+      const std::size_t n = std::char_traits<char>::length(ext);
+      if (l.size() > n && l.compare(l.size() - n, n, ext) == 0) return true;
+    }
+    return false;
+  }
+
+  std::string fastaRecord(const std::string& path, const std::vector<std::string>& decoy_affixes)
+  {
+    JsonObject f("fasta");
+    f.str("path", path);
+    try
+    {
+      std::vector<FASTAFile::FASTAEntry> entries;
+      FASTAFile().load(path, entries);
+      std::size_t decoys = 0;
+      std::map<std::string, std::size_t> by_affix;
+      for (const FASTAFile::FASTAEntry& e : entries)
+      {
+        if (!FASTag::Shortlist::isDecoy(e.identifier, decoy_affixes)) continue;
+        ++decoys;
+        for (const std::string& af : decoy_affixes)
+          if (FASTag::Shortlist::isDecoy(e.identifier, {af})) { ++by_affix[af]; break; }
+      }
+      std::string affix;
+      std::size_t best = 0;
+      for (const auto& [af, n] : by_affix)
+        if (n > best) { best = n; affix = af; }
+      f.count("proteins", entries.size()).count("decoys", decoys).strOrNull("decoy_affix", affix);
+    }
+    catch (const Exception::BaseException& e)
+    {
+      f.null("proteins").null("decoys").null("decoy_affix").str("error", e.what());
+    }
+    return f.line();
+  }
+
   ProbeOutput probeInput(const std::string& in, const ProbeOptions& opt)
   {
     namespace Acq = FASTag::Acquisition;
     namespace IS = FASTag::IonSeries;
     ProbeOutput out;
+    // A FASTA alone (the GUI's cheap database check): the probe and fasta
+    // records only; no spectra file is read.
+    if (isFastaPath(in))
+    {
+      if (!File::readable(in))
+      {
+        out.status = Status::NotReadable;
+        out.error = "Cannot read '" + in + "'.";
+        return out;
+      }
+      out.jsonl = JsonObject("probe").integer("format", kFormat).str("version", opt.version).str("input", in)
+                      .str("file_format", "FASTA").line();
+      out.jsonl += fastaRecord(in, opt.decoy_affixes);
+      out.jsonl += JsonObject("end").line();
+      return out;
+    }
     Kind kind = Kind::MzML;
     if ((out.status = kindOf(in, kind, out.error)) != Status::Ok) return out;
     const Acq::ProbeLimits lim = Acq::probeLimits(opt.probe_spectra);
@@ -671,35 +729,7 @@ namespace FASTag::Probe
     a.num("median_width", c.median_width);
     j += a.line();
 
-    if (!opt.fasta.empty())
-    {
-      JsonObject f("fasta");
-      f.str("path", opt.fasta);
-      try
-      {
-        std::vector<FASTAFile::FASTAEntry> entries;
-        FASTAFile().load(opt.fasta, entries);
-        std::size_t decoys = 0;
-        std::map<std::string, std::size_t> by_affix;
-        for (const FASTAFile::FASTAEntry& e : entries)
-        {
-          if (!FASTag::Shortlist::isDecoy(e.identifier, opt.decoy_affixes)) continue;
-          ++decoys;
-          for (const std::string& af : opt.decoy_affixes)
-            if (FASTag::Shortlist::isDecoy(e.identifier, {af})) { ++by_affix[af]; break; }
-        }
-        std::string affix;
-        std::size_t best = 0;
-        for (const auto& [af, n] : by_affix)
-          if (n > best) { best = n; affix = af; }
-        f.count("proteins", entries.size()).count("decoys", decoys).strOrNull("decoy_affix", affix);
-      }
-      catch (const Exception::BaseException& e)
-      {
-        f.null("proteins").null("decoys").null("decoy_affix").str("error", e.what());
-      }
-      j += f.line();
-    }
+    if (!opt.fasta.empty()) j += fastaRecord(opt.fasta, opt.decoy_affixes);
     j += JsonObject("end").line();
     return out;
   }

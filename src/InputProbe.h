@@ -5,6 +5,7 @@
 //                           MS2 analyser, activation, spectrum counts, the
 //                           centroid/profile verdict, the mzML index state
 //                           and the #7 acquisition call. Reads metadata only.
+//                           A FASTA alone gives its protein and decoy counts.
 //   -dump_spectrum <id>     the peaks FASTag tags of one spectrum of -in (after
 //                           the reader's centroiding, the precursor cut, the
 //                           m/z collapse, deisotoping and the peak budget), as
@@ -131,7 +132,17 @@ namespace FASTag::Probe
     std::string jsonl;  ///< the stream; complete (ends with the end record) only when Ok
   };
 
-  /// Probe @p in. Never throws.
+  /// True for the FASTA names -probe_input takes as a database alone
+  /// (.fasta, .fa, .faa, .fas; any case).
+  bool isFastaPath(const std::string& path);
+  /// The fasta record of @p path: proteins, decoys (by @p decoy_affixes, as
+  /// -shortlist_decoy_affix counts them) and the commonest decoy affix; null
+  /// counts and an error field when the file cannot be read as FASTA.
+  std::string fastaRecord(const std::string& path, const std::vector<std::string>& decoy_affixes);
+
+  /// Probe @p in. A FASTA (isFastaPath) gives the probe record (file_format
+  /// "FASTA"), its fasta record and the end record, and reads no spectra.
+  /// Never throws.
   ProbeOutput probeInput(const std::string& in, const ProbeOptions& opt);
 
   // ---- -dump_spectrum ------------------------------------------------------

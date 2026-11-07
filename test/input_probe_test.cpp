@@ -217,6 +217,20 @@ namespace
     check(field(record(P::probeInput(dir + "/Ecoli_MS2_small.mgf", opt).jsonl, "spectra"), "will_pick") == "false",
           "auto never picks MGF");
 
+    // A FASTA alone: probe, fasta and end records, no spectra records.
+    check(P::isFastaPath("a/B.FASTA") && P::isFastaPath("x.fa") && P::isFastaPath("x.faa") && !P::isFastaPath("x.mzML") &&
+              !P::isFastaPath(".fa"),
+          "FASTA names");
+    const P::ProbeOutput fa = P::probeInput(dir + "/Ecoli_MS2_small.fasta", opt);
+    check(fa.status == P::Status::Ok, "FASTA probe ok: " + fa.error);
+    check(field(record(fa.jsonl, "probe"), "file_format") == "FASTA", "FASTA format");
+    const std::string fr = record(fa.jsonl, "fasta");
+    check(!fr.empty() && field(fr, "decoys") == "0" && field(fr, "proteins") != "null", "FASTA counts: " + fr);
+    check(record(fa.jsonl, "spectra").empty() && record(fa.jsonl, "acquisition").empty(), "FASTA alone reads no spectra");
+    check(fa.jsonl.size() >= 17 && fa.jsonl.compare(fa.jsonl.size() - 17, 17, "{\"record\":\"end\"}\n") == 0,
+          "FASTA probe ends with the end record");
+    check(P::probeInput(dir + "/missing.fasta", opt).status == P::Status::NotReadable, "missing FASTA not readable");
+
     check(P::probeInput(dir + "/nope.txt", opt).status == P::Status::Unsupported, "unsupported extension");
     check(P::probeInput(dir + "/x.mzML.gz", opt).status == P::Status::Unsupported, "compressed refused");
   }
