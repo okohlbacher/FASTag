@@ -1,0 +1,107 @@
+
+FASTag -- Infers partial sequence tags from MS/MS spectra.
+Full documentation: http://www.openms.de/doxygen/nightly/html/TOPP_FASTag.html
+Version: 1.11.0 (OpenMS 3.7.0-pre-HEAD-2026-11-02)
+To cite OpenMS:
+ + Pfeuffer, J., Bielow, C., Wein, S. et al.. OpenMS 3 enables reproducible analysis of large-scale mass spectrometry data. Nat Methods (2024). doi:10.1038/s41592-024-02197-7.
+To cite FASTag:
+ + Tabb DL, Ma ZQ, Martin DB, Ham AJ, Chambers MC. DirecTag: accurate sequence tags from peptide MS/MS through statistical scoring. J Proteome Res 2008; 7(9): 3838-46. doi:10.1021/pr800154p.
+
+Usage:
+  FASTag <options>
+
+Options (mandatory options marked with '*'):
+  -in <file>                       Input spectra (mzML, mzpeak or MGF)
+  -out <file>                      Tag list (tab-separated) (valid formats: 'tsv')
+  -fasta <file>                    Report only tags occurring in these sequences (valid formats: 'fasta', 'fa', 'faa')
+  -out_spectra <file>              Write spectra carrying a reported tag here (mzML or mzpeak). Note this path holds one slot per input spectrum, so unlike the default it needs memory proportional to the FILE, not to the thread count
+  -tag_length <n>                  Seed tag length in residues (default: '3') (min: '1')
+  -tag_lengths <n>                 Seed tag lengths to run in one pass, replacing -tag_length. Each length is tagged, scored and capped (-max_tags) exactly as on its own; a spectrum's rows are those runs' rows in ascending length, except that a tag several lengths report is kept only from the length with its lowest E-value (min: '1')
+  -extension <n>                   Maximum residues appended per terminus; 0 disables extension (default: '0') (min: '0' max: '12')
+  -gaps <n>                        Allow a tag to cross one missing peak, spelling the two residues either side of it from their summed mass; 0 disables (default: '1') (min: '0' max: '1')
+  -no_deisotope                    Do not collapse isotope clusters to their monoisotopic peak, and do not move multiply-charged fragments onto the singly-charged scale, before peak selection
+  -fragment_tolerance <value>      Fragment mass tolerance (default: '20.0') (min: '1.0e-09')
+  -fragment_tolerance_unit <unit>  Tolerance unit (default: 'ppm') (valid: 'ppm', 'Da')
+  -max_peaks <n>                   Peaks kept per spectrum, at most 1024; 0 means 1024, not unlimited. Higher values use more memory. Also caps -peaks_per_window (default: '400') (min: '0' max: '1024')
+  -peaks_per_window <n>            Keep this many peaks per 100 Da window instead of the strongest -max_peaks overall; 0 disables. Scales the effective peak budget with the spectrum's m/z range, so dense spectra are not starved and sparse ones not padded (default: '10') (min: '0')
+  -max_tags <n>                    Tags reported per spectrum; 0 = unlimited (default: '50') (min: '0')
+  -subsample_spectra <n>           Tag only this many randomly chosen input spectra; 0 = all. Takes precedence over -subsample_fraction (default: '0') (min: '0')
+  -subsample_fraction <f>          Tag only this random fraction (0..1] of input spectra; 0 = all. Ignored when -subsample_spectra is set (default: '0.0') (min: '0.0' max: '1.0')
+  -mzpeak_read_memory <MB>         Ignored; mzPeak is read in file order without a decode cache (default: '0') (min: '0')
+  -subsample_seed <n>              Seed for -subsample_* selection (default: '1') (min: '0')
+  -progress                        Emit 'FASTAG_PROGRESS done=<n> total=<n>' lines to stderr for a GUI progress bar
+  -stream                          Resident single-spectrum mode: spectrum blocks on stdin, TSV rows + '#end' sentinels on stdout. Core tagging only (refuses -fasta, -entrapment_fasta, -species, -species_out, -taxdb, -glyco, -recon_out, -recon_id_out, -out_spectra, -delta_out, -digest_out, -label_out, -massgap_out, -usi_collection); parameter changes need a restart
+  -diversity                       On spectra with more tags than -max_tags, prefer tags built from different peaks over near-copies of a tag already kept. Changes which tags fill the slots, not how many
+  -proforma                        Append a ProForma 2.0 column ([+nterm]-SEQ-[+cterm]) for each tag
+  -res_conf                        Append a res_conf column: a confidence from 0 to 100 for each residue, N to C, space-separated (a gap's two residues share one score). Used for de novo assembly export (see README, Assembly export)
+  -usi_collection <id>             Append a usi column: each tag's spectrum as a HUPO-PSI Universal Spectrum Identifier, mzspec:<id>:<run>:scan:<n> (or the nativeId/index form USI 1.0 prescribes), where <run> is the input file name without its extension (an MGF keeps its .mgf) and <id> the dataset's PXD/MSV/RPXD/RMSV/PXL identifier, or USI000000 until it has one
+  -entrapment_fasta <file>         Entrapment database (foreign species the sample cannot contain; phylogenetically distant, e.g. archaea for a mammalian sample). Requires -fasta. Appends a q_db column and marks entrapment-only matches efwd/erev in fasta_hit (valid formats: 'fasta', 'fa', 'faa')
+  -recon_out <file>                Reconcile reported tags against a protein database and write one row per placement (protein, peptide, position, flank agreement, mass gap + interpretation). Uses -recon_fasta, or -fasta when that is not given (valid formats: 'tsv')
+  -recon_fasta <file>              Protein database for -recon_out. Default: the -fasta file (valid formats: 'fasta', 'fa', 'faa')
+  -recon_missed_cleavages <n>      Missed tryptic cleavages allowed in reconciliation windows (at most 10) (default: '1') (min: '0' max: '10')
+  -recon_min_length <n>            Shortest tag worth reconciling; 0 derives it from database size (the length where chance matches fall below 5%). Overridable because the floor is a noise gate, not a correctness rule (default: '0') (min: '0')
+  -recon_localize                  Localize each -recon_out mass gap to one residue of its region: the site whose shifted b/y fragments match the most peaks within -fragment_tolerance. Appends loc_site (residue + 1-based protein position; the first on a tie), loc_score (b/y ion/charge matches) and loc_ties (sites sharing that score; 1 = unique)
+  -delta_out <file>                Aggregated mass-shift histogram over the reconciliations (requires -recon_out): delta, spectrum count, top interpretations. Region-level candidates, NOT localized identifications and NOT FDR-controlled (valid formats: 'tsv')
+  -recon_id_out <file>             The -recon_out placements as identifications (requires -recon_out), as idXML, mzid or mzTab by extension: one hit per placement with its proteins, the database peptide carrying only the fixed residue modifications, scored by the tag's E-value (lower is better), the mass gap as metadata. NOT FDR-controlled (valid formats: 'idXML', 'mzid', 'mzTab')
+  -species                         Infer which taxa are present from the tags. Uses the bundled taxonomy unless -taxdb/-taxonomy_* are given, and writes <out> with its extension replaced by .species.tsv unless -species_out is given
+  -glyco                           Flag oxonium-bearing MS2 spectra (glycopeptide/glycan evidence, NOT an identification) to <out> with its extension replaced by .glyco.tsv (tags.tsv -> tags.glyco.tsv), or to -glyco_out
+  -glyco_out <file>                Per-spectrum oxonium report. Default: <out> with its extension replaced by .glyco.tsv (valid formats: 'tsv')
+  -glyco_min_fraction <f>          Minimum summed oxonium intensity as a fraction of the base peak (MSFragger-Glyco's diagnostic filter) (default: '0.1') (min: '0.0')
+  -digest_out <file>               Report the terminal residues of the tags (ungapped, E-value <= 1) and the protease call they support, with its margin or the reason for no call (valid formats: 'tsv')
+  -label_out <file>                Report N-terminal isobaric label gaps (TMT, TMTpro, iTRAQ4) and the heavy Lys8/Arg10 shares of the tag ends (valid formats: 'tsv')
+  -massgap_out <file>              Report the -delta_out mass-gap distribution (requires -recon_out): Cys alkylation counts, gap peaks explained as combinations of Unimod modifications, and SILAC labels among them (valid formats: 'tsv')
+  -digest_models <file>            Protease model table for -digest_out (columns model, class, end, residue, freq). Default: the shipped cleavage-rule models (valid formats: 'tsv')
+  -digest_tag_min <n>              Tag ends needed for a protease call; the N-terminal ends count from as many (default: '100') (min: '1')
+  -digest_window <Da>              Mass window around a residue or label mass at the tag ends (default: '8.0e-03') (min: '0.0')
+  -digest_background_share <f>     Share of the background mixed into every protease model (below 1) (default: '0.05') (min: '0.0' max: '1.0')
+  -digest_silac_min <n>            K- and R-terminal tag ends each before -label_out's heavy shares are gated in (default: '50') (min: '0')
+  -massgap_window <Da>             Gap window of -massgap_out on a ppm run (default: '0.02') (min: '0.0')
+  -massgap_window_da <Da>          Gap window of -massgap_out on a run with a Da fragment tolerance (default: '0.5') (min: '0.0')
+  -massgap_min_spectra <n>         Spectra a gap peak needs (default: '20') (min: '0')
+  -massgap_min_share <f>           Share of the placed spectra a gap peak needs (default: '5.0e-03') (min: '0.0')
+  -massgap_min_bin <n>             Spectra a -delta_out row needs to take part in the gap peaks (default: '2') (min: '1')
+  -massgap_max_mods <n>            Modifications combined to explain a gap (default: '3') (min: '1' max: '4')
+  -massgap_top <n>                 Modifications listed by share (default: '5') (min: '0')
+  -massgap_silac_share <f>         Share of the shifted spectra a SILAC label needs (default: '0.08') (min: '0.0')
+  -massgap_silac_min <n>           Shifted spectra a SILAC call needs (default: '500') (min: '0')
+  -taxdb <file>                    Tag->taxon index (built by buildtaxdb). Default: the bundled tax_k7.taxdb
+  -taxonomy_nodes <file>           NCBI taxonomy nodes.dmp. Default: the bundled nodes.dmp
+  -taxonomy_names <file>           NCBI taxonomy names.dmp. Default: the bundled names.dmp
+  -species_out <file>              Ranked taxa TSV. Default: <out> with its extension replaced by .species.tsv (valid formats: 'tsv')
+  -species_min_len <n>             Ignore tags shorter than this for taxonomy; 0 uses the index k (default: '0') (min: '0')
+  -species_max_kmer_share <f>      Ignore k-mers carried by more than this fraction of the indexed taxa: a k-mer in most of the reference cannot tell taxa apart. 1 keeps all (default: '1.0') (min: '0.0' max: '1.0')
+  -species_min_margin <f>          Require a tag's best taxa to carry this fraction more of its k-mers than the runner-up, else the tag is too generic to be evidence. 0 keeps all (default: '0.0') (min: '0.0' max: '1.0')
+  -species_use_gapped              Let gapped tags contribute taxonomic evidence. Off because a gap is an inferred residue pair, and an exact k-mer lookup cannot tell an inferred residue from an observed one
+  -species_deconvolve              Correct taxon counts for sequence shared between taxa, so a near neighbour cannot rank on a relative's evidence. Helps most when the true taxon's relatives are in the reference; can suppress genuine low-abundance taxa
+  -species_evidence <mode>         Which of a spectrum's tags make it count for a taxon: 'best' = the taxa of its lowest-E-value tag that maps into the index (ties united); 'all' = the union over every reported tag (more chance hits) (default: 'best') (valid: 'best', 'all')
+  -species_rank <rank>             Report taxa at this NCBI rank (genus, family, ...) (default: 'genus')
+  -max_evalue <value>              E-value cutoff; 0 disables (default: '20.0') (min: '0.0')
+  -gap_penalty <value>             Rank gapped tags as if their E-value were this many times worse. Never removes a tag at the -max_evalue cutoff (applied to the unpenalised value), but under -max_tags it decides which tags fill the capped slots, and a gapped row's printed evalue includes it. 1 disables (default: '100.0') (min: '1.0')
+  -isobaric_tolerance <value>      When matching against -fasta or reconciling against -recon_fasta, treat a residue as interchangeable with an isobaric residue pair within this tolerance; 0 requires exact strings (default: '0.04') (min: '0.0')
+  -min_filter_length <n>           Ignore tags shorter than this when matching against -fasta; 0 derives a floor from the database size (default: '0') (min: '0')
+  -orientation <mode>              Match a tag as written, or also reversed, against -fasta and in -recon_fasta reconciliation. Tags are stored N->C under a y-ion assumption, so b-derived tags read reversed (default: 'both') (valid: 'both', 'forward')
+  -fixed_modifications <mods>      Fixed modifications by OpenMS/UniMod name, e.g. 'Carbamidomethyl (C)' 'TMT6plex (K)'. Shift residue masses; not annotated in the tag (default: '[Carbamidomethyl (C)]')
+  -variable_modifications <mods>   Variable modifications by OpenMS/UniMod name, e.g. 'Phospho (S)' 'Phospho (T)' 'Phospho (Y)' 'Formyl (K)'. Add a modified alternative, written inline as X[Name]
+                                   
+Common UTIL options:
+  -ini <file>                      Use the given TOPP INI file
+  -log <file>                      Name of log file (created only when specified)
+  -debug <n>                       Sets the debug level (default: '0')
+  -threads <n>                     Sets the number of threads allowed to be used by the TOPP tool (0 = all available cores) (default: '1')
+  -write_ini <file>                Writes the default configuration file
+  -write_ctd <out_dir>             Writes the common tool description file(s) (Toolname(s).ctd) to <out_dir>
+  -write_nested_cwl <out_dir>      Writes the Common Workflow Language file(s) (Toolname(s).cwl) to <out_dir>
+  -write_cwl <out_dir>             Writes the Common Workflow Language file(s) (Toolname(s).cwl) to <out_dir>, but enforce a flat parameter hierarchy
+  -write_nested_json <out_dir>     Writes the default configuration file
+  -write_json <out_dir>            Writes the default configuration file, but compatible to the flat hierarchy
+  -no_progress                     Disables progress logging to command line
+  -force                           Overrides tool-specific checks
+  -test                            Enables the test mode (needed for internal use only)
+  --help                           Shows options
+  --helphelp                       Shows all options (including advanced)
+
+Note: in FASTag, -threads defaults to 0 = half the logical cores (at least 1);
+      the -threads line above is OpenMS's and shows OpenMS's own default.
+      With -ini, the file's threads value applies (1 if it has none) unless
+      -threads is also given on the command line.
+
