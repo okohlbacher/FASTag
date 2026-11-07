@@ -2989,9 +2989,16 @@ protected:
       std::vector<FASTag::Tag> tags;
       std::vector<std::uint8_t> tag_hyp;  // per row: its hypothesis (hyp_on only)
       size_t sel_found = 0;                // rows of the selected hypothesis
+      // The one place a hypothesis is tagged: its m/z and charge, the
+      // multiplicity H (1 = the 1.11 call), the census diagnostics only for
+      // the selected one. A per-spectrum choice of tables (E #15B's ion
+      // series) goes here, for every hypothesis alike.
+      const auto tag_at = [&](const FASTag::Hyp::Hypothesis& hy, double H, FASTag::SpectrumDiag* diag) {
+        return tag_all(spec, hy.mz, hy.charge, tables, diag, H);
+      };
       if (hyps.size() == 1)
       {
-        tags = tag_all(spec, hyps[0].mz, hyps[0].charge, tables, res.census ? &cdiag : nullptr);
+        tags = tag_at(hyps[0], 1.0, res.census ? &cdiag : nullptr);
         sel_found = tags.size();
       }
       else
@@ -3000,8 +3007,7 @@ protected:
         std::vector<std::vector<FASTag::Tag>> per(hyps.size());
         for (size_t h = 0; h < hyps.size(); ++h)
         {
-          per[h] = tag_all(spec, hyps[h].mz, hyps[h].charge, tables,
-                           res.census && hyps[h].selected ? &cdiag : nullptr, H);
+          per[h] = tag_at(hyps[h], H, res.census && hyps[h].selected ? &cdiag : nullptr);
           if (hyps[h].selected) sel_found = per[h].size();
         }
         // The cap over all hypotheses: -max_tags per seed length, as one

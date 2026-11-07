@@ -206,6 +206,22 @@ for r in digest label; do
   got=$(awk -F'\t' '$1 == "count" && $2 == "tags_filtered" { print $3 }' "$E1/t.$r.tsv")
   [ "$got" = "$nsel" ] || fail "enumerate: -${r}_out counts $got tags, want the $nsel selected rows (not the $nlose losing ones)"
 done
+# After the D #3g merge (feat/d3cg-chemistry): -alkylation_out looks at the
+# same tags as the digest report -- the selected hypothesis' ungapped rows
+# with E <= 1 (PLAN-INTEGRATION 2.3 contract 1; alk_tag needs "&& sel").
+# Skipped while the binary has no -alkylation_out.
+HELPHELP=$("$BIN" --helphelp 2>&1)
+if grep -q -- '-alkylation_out' <<< "$HELPHELP"; then
+  "$BIN" -in "$TMP/noz.mgf" -out "$TMP/alk_e.tsv" "${COMMON[@]}" -unknown_charge enumerate -threads 2 \
+    -alkylation_out "$TMP/alk_e.alk.tsv" -alkylation_proteome "$DB" > "$TMP/alk_e.log" 2>&1 \
+    || { cat "$TMP/alk_e.log" >&2; fail "enumerate with -alkylation_out failed"; }
+  cmp -s "$TMP/alk_e.tsv" "$E1/t.tsv" || fail "-alkylation_out changed the enumerate tags"
+  got=$(tr -d '\r' < "$TMP/alk_e.alk.tsv" | awk -F'\t' '$1 == "alk_run" && $2 == "tags" { print $3 }')
+  [ "$got" = "$nsel" ] || fail "enumerate: -alkylation_out looked at $got tags, want the $nsel selected rows (not the $nlose losing ones)"
+  echo "charge_cli_test: -alkylation_out reads the selected rows only ($got)"
+else
+  echo "charge_cli_test: no -alkylation_out in this binary; the #3g selected-row check is skipped"
+fi
 
 # ---- species: losing hypotheses add no taxon --------------------------------
 SPC=(-tag_length 7 -extension 1 -fragment_tolerance 600 -fragment_tolerance_unit ppm -max_evalue 0 -max_tags 200)
@@ -274,6 +290,27 @@ for ev in best all; do
   n=0; for t in 1280 1279; do n=$((n + $(spectra_of "$R" $t))); done
   [ "$n" -gt 0 ] || { cat "$R" >&2; fail "-species_evidence $ev: the selected-row taxon is not reported (construct vacuous)"; }
 done
+# After the E #15B merge (feat/e15b-cz-ions): with -ion_series, whose column
+# follows selected, the species filter must still drop the losing rows (it
+# reads a per-row flag, not a column position). Skipped while the binary has
+# no -ion_series.
+if grep -q -- '-ion_series' <<< "$HELPHELP"; then
+  for is in auto cz; do
+    "$BIN" -in "$TMP/noz.mgf" -out "$TMP/spi_$is.tsv" "${SPC[@]}" -unknown_charge enumerate -ion_series $is -species \
+      "${TAX[@]}" -species_evidence all -threads 2 > "$TMP/spi_$is.log" 2>&1 \
+      || { cat "$TMP/spi_$is.log" >&2; fail "species with -ion_series $is failed"; }
+    R="$TMP/spi_$is.species.tsv"
+    [ -s "$R" ] || fail "no species report (-ion_series $is)"
+    for t in 4932 4930; do
+      [ "$(spectra_of "$R" $t)" = 0 ] || { cat "$R" >&2; fail "-ion_series $is: taxon $t, read only by losing hypotheses, is reported"; }
+    done
+  done
+  n=0; for t in 1280 1279; do n=$((n + $(spectra_of "$TMP/spi_auto.species.tsv" $t))); done
+  [ "$n" -gt 0 ] || fail "-ion_series auto: the selected-row taxon is not reported (construct vacuous)"
+  echo "charge_cli_test: species filter holds under -ion_series auto and cz"
+else
+  echo "charge_cli_test: no -ion_series in this binary; the #15B species check is skipped"
+fi
 
 # ---- refusals --------------------------------------------------------------
 refused() {  # name args...
