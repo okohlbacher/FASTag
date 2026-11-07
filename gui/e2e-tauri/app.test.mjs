@@ -89,6 +89,21 @@ async function view(s, id) {
   await until(`the ${id} view`, () => s.exec(`const v = document.querySelector('.view[data-view="' + arguments[0] + '"]'); return !!v && !v.hidden`, id), 5000)
 }
 
+/** Start the session from FASTag's defaults through Setup's "Starting
+ *  from" select, as a user does (P2a D1: the app lands on "Characterize a
+ *  run", whose run opens on its digest report, not the tags table). The run
+ *  and IPC specs check what a run from the defaults writes and shows, as the
+ *  e2e-web smoke spec does with ?start=defaults. React's onChange on a select
+ *  listens to the change event, so the value goes through the native setter
+ *  and a bubbling change. */
+async function fromDefaults(s) {
+  await until('the Starting from select', () => s.exec("const e = document.getElementById('origin'); return !!e && e.getClientRects().length > 0"))
+  await s.exec(`const e = document.getElementById('origin')
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(e, '')
+    e.dispatchEvent(new Event('change', { bubbles: true }))`)
+  await until('the session to start from FASTag defaults', () => s.exec("const e = document.getElementById('origin'); return !!e && e.value === '' && !document.getElementById('p-digest_out')?.value"), 5000)
+}
+
 const lastRun = (s) => s.exec("const e = document.querySelector('.last-run'); return e ? e.innerText : ''")
 
 test('probe: the app finds its CLI and reads its version', { timeout: 120000 }, () =>
@@ -111,6 +126,7 @@ test('probe: the app finds its CLI and reads its version', { timeout: 120000 }, 
 let fullRows = -1
 test('run: Choose file, Run, and the table shows what the CLI wrote', { timeout: 300000 }, () =>
   withApp(async (s) => {
+    await fromDefaults(s)
     const input = spectra('run01.mzML')
     await chooseInput(s, input)
     await s.click(await s.button('Run on run01.mzML'))
@@ -246,6 +262,7 @@ test('IPC: every log line of a chatty run reaches the webview; message rate reco
       return null`
     )
     assert.ok(via, 'neither window.fastag.onLog nor a run(params, onEvent) Channel: point this spec at the log API')
+    await fromDefaults(s)
     const input = spectra('run03.chatty.mzML')
     await chooseInput(s, input)
     await s.click(await s.button('Run on run03.chatty.mzML'))
