@@ -1,0 +1,9 @@
+-threads 0: using 8 of 16 logical cores.
+Modifications: Carbamidomethyl (C, fixed)
+Recon index: 3 proteins, 876 residues, 13 isobaric rules; min tag length 4 (derived)
+Glyco: 35 of 139 processed MS2 spectra carry oxonium evidence -> run.tags.glyco.tsv
+Delta histogram: 8 spectra sampled -> run.delta.tsv
+Mass gaps: 2 histogram rows -> run.massgap.tsv
+Recon identifications: 194 hits on 8 spectra, not FDR-controlled -> run.recon.mzTab
+139 MS2 spectra, 6481 tags
+FASTag took 0.08 s (wall), 0.37 s (CPU), 0.01 s (system), 0.36 s (user); Peak Memory Usage: 119 MB.

@@ -33,6 +33,8 @@ Binaries:
 | v112-pxd014764-fasta | 1.12 | PXD014764 ..._CNOT_R1_f008.mzML | -extension 3 -fasta Homo_sapiens.fasta -recon_out -delta_out -massgap_out |
 | v112-pxd014764-recon-ext2 | 1.12 | PXD014764 | -recon_fasta Homo_sapiens.fasta -recon_out -massgap_out (Characterize's extension 2) |
 | v112-pxd014764-recon-ext3 | 1.12 | PXD014764 | -extension 3 -recon_fasta Homo_sapiens.fasta -recon_out -massgap_out |
+| v112-pxd014764-delta-ext3 | 1.12 | PXD014764 | -extension 3 -glyco -recon_fasta Homo_sapiens.fasta -recon_out -delta_out -massgap_out (P4c) |
+| v1111-ecoli-recon-loc | 1.11.1 | test/fixtures/Ecoli_MS2_small.mzML | -fragment_tolerance 0.3 Da -tag_length 4 -glyco -recon_fasta Ecoli_MS2_small.fasta -recon_out -recon_localize -delta_out -massgap_out -recon_id_out run.recon.mzTab (P4c) |
 
 PXD014764 needs extension 3 with a FASTA, as the gate's fasta_recon case
 uses: the recon index derives a minimum tag length of 8 for the human
@@ -44,6 +46,20 @@ and after it (extension 3, v112-pxd014764-recon-ext3: 475 placed spectra).
 They were run with `/scratch/kohlbach/p2b_fixtures2.sh` on node data; their
 tags, recon and glyco outputs are left out like the others'. No AGXT or other non-public sample is used. A release
 `dist/` must not contain these files (`scripts/check-dist-clean.mjs`).
+
+The two P4c directories keep the files the viewers read (GUI-DESIGN S7,
+S8): `run.recon.tsv`, `run.delta.tsv`, `run.recon.mzTab` and
+`run.tags.glyco.tsv` are what FASTag wrote, unchanged; only the tags table
+is left out. v112-pxd014764-delta-ext3 is the recon-ext3 command with
+`-delta_out` added and without `-species`, `-digest_out` and `-label_out`
+(its massgap report is byte-identical to recon-ext3's), run with
+`/scratch/kohlbach/p4c_fx.sh` on node data. v1111-ecoli-recon-loc is the
+public OpenMS example of `test/fixtures` (BSD-3-Clause) with the three
+proteins of `Ecoli_MS2_small.fasta`, run on macOS arm64 with the FASTag
+1.11.1 cask (`/opt/homebrew/Caskroom/fastag-cli/1.11.1/FASTag/FASTag.bin`,
+sha256 86b3a18a...b8b081): an ion-trap file, so 0.3 Da, and tag length 4,
+the minimum its recon index derives; it is the case with `-recon_localize`
+columns and an mzTab of the placements.
 
 sha256 of each file:
 
@@ -96,3 +112,16 @@ sha256 of each file:
     97e3f0418fafd8e4cc9d30aedf38fa4fe1cc72660800f73ab516d339bc4b48bd  v112-pxd014764-recon-ext3/run.log
     51d8f6ef6985fd48c8543886a076c27aefc8e0645961a4f1d6de30c4183606db  v112-pxd014764-recon-ext3/run.massgap.tsv
     9211b7d265e1b886632f307e02f7e3b1868417c3b00f4fefcc8820fa931b1e2c  v112-pxd014764-recon-ext3/run.tags.species.tsv
+    55d85648d28ef3baf623029e75b189d4aff2e183915f614269a6bb6b8ba0074b  v112-pxd014764-delta-ext3/cmd.txt
+    dbb138b126776b600b8d1a8e52dea2397f6e86e0113f40ba68d6cd46cdd48c2b  v112-pxd014764-delta-ext3/run.delta.tsv
+    9b474ab906d11cc707533a2ae676b75fceedb14658f5a2b164ca190170198fea  v112-pxd014764-delta-ext3/run.log
+    51d8f6ef6985fd48c8543886a076c27aefc8e0645961a4f1d6de30c4183606db  v112-pxd014764-delta-ext3/run.massgap.tsv
+    fd449606c101c7295e964c487d09dd575240e788a38aafcf2270cb68ab6abdba  v112-pxd014764-delta-ext3/run.recon.tsv
+    e38501f28bd3b892c3dd162ea10264d05bdf9c30ee9e00af48fab96ca5876101  v112-pxd014764-delta-ext3/run.tags.glyco.tsv
+    d4461087697052f3bfe431d8f6ed36075d74fdd44944e8747d9337e886fbb41a  v1111-ecoli-recon-loc/cmd.txt
+    6978da75755563d2596eb011c6c559644444a4042da68bbfc59e35950ef9c75a  v1111-ecoli-recon-loc/run.delta.tsv
+    cd14c1ad2d91f1c1ef6f2a0b224bd6e8ee9d7586ccd7d54d413ff68da7226677  v1111-ecoli-recon-loc/run.log
+    7506a8f84b3e1237e2f1dc42201c686e3ad4288e1a9e6c5d17485c660dea42da  v1111-ecoli-recon-loc/run.massgap.tsv
+    75de7aff1726057e2fc320fd5362e4bcf9ed65f04342828e180c9a8d1ca4f15e  v1111-ecoli-recon-loc/run.recon.mzTab
+    de18346938836c1b46d8f0212b69dec51de1f8c252b59df352553de1d8c9fa95  v1111-ecoli-recon-loc/run.recon.tsv
+    e65e2aeac74c682412201ca2804330161e0af83710ad32eb0c2c79436828ea74  v1111-ecoli-recon-loc/run.tags.glyco.tsv
