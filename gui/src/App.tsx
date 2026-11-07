@@ -430,7 +430,15 @@ export default function App(): JSX.Element {
           </section>
 
           <section className="view view-history" data-view="history" hidden={view !== 'history'} tabIndex={-1} aria-label="History">
-            <HistoryView active={view === 'history'} version={historyVersion} busy={busy} onOpenResults={openResults} />
+            <HistoryView
+              active={view === 'history'}
+              version={historyVersion}
+              busy={busy}
+              onOpenResults={openResults}
+              onOpen={(p) => void run.openResultsPath(p).then(() => setView('results'))}
+              onSettings={session.takeRun}
+              onGoSetup={() => setView('setup')}
+            />
           </section>
         </div>
         {help.open && (

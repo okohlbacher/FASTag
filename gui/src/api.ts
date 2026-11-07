@@ -87,6 +87,7 @@ const api: FastagApi = {
   },
   historyList: (limit?: number) => invoke<RunRecord[]>('history_list', { limit }),
   historyOf: (path: string) => invoke<RunRecord | null>('history_of', { path }),
+  historyDelete: (id: string) => invoke<boolean>('history_delete', { id }),
   cancel: () => invoke<{ cancelled: boolean }>('cancel'),
   resultsQuery: (path: string, view: ResultsView, offset: number, limit: number) =>
     invoke<ResultsPage>('results_query', { path, view, offset, limit }),

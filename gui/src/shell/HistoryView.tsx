@@ -1,12 +1,16 @@
-// The History view (GUI-DESIGN 3 S9; the list of P2a PR s): one row per
-// recorded run, newest first, from the backend's run record (history.rs).
-// Re-run, Settings into form, Copy command and Delete record follow with the
-// History PR.
+// The History view (GUI-DESIGN 3 S9, 6.5; the list of P2a PR s, the actions
+// of PR h): one row per recorded run, newest first, from the backend's run
+// record (history.rs). Each row offers Copy command (the argv the record
+// keeps, which is the command line the run was started with), Settings into
+// form (with Undo) and Delete record (the record only, never its files); a
+// finished run also Open and Reveal. A run that did not finish is marked
+// incomplete and offers neither: its outputs were removed, and one its
+// cleanup could not remove opens as incomplete wherever it is opened.
 
 import { useEffect, useState, type JSX } from 'react'
 import type { RunRecord } from '../types'
 import { baseName } from '../digestReport'
-import { duration } from '../app/format'
+import { duration, shellLine } from '../app/format'
 import { JobIcon } from '../icons'
 
 const STATUS: Record<RunRecord['status'], { text: string; icon: 'done' | 'failed' | 'cancelled' }> = {
@@ -15,6 +19,25 @@ const STATUS: Record<RunRecord['status'], { text: string; icon: 'done' | 'failed
   cancelled: { text: 'Cancelled', icon: 'cancelled' }
 }
 
+/// The tags file of @p r: the -out the CLI was given (absolute for a run the
+/// GUI started; a relative one is joined to the run's folder), else its
+/// first output.
+export function recordOut(r: RunRecord): string | null {
+  const i = r.argv.indexOf('-out')
+  const p = i > 0 && i + 1 < r.argv.length ? r.argv[i + 1] : (r.outputs[0] ?? null)
+  if (!p) return null
+  const absolute = p.startsWith('/') || p.startsWith('\\') || /^[A-Za-z]:[\\/]/.test(p)
+  if (absolute || !r.cwd) return p
+  const sep = r.cwd.includes('\\') && !r.cwd.includes('/') ? '\\' : '/'
+  return `${r.cwd.replace(/[\\/]+$/, '')}${sep}${p.replace(/^\.[\\/]/, '')}`
+}
+
+// What the note under the heading says after an action.
+type Note =
+  | { kind: 'settings'; input: string; undo: () => void }
+  | { kind: 'deleted'; input: string }
+  | { kind: 'error'; text: string }
+
 export interface HistoryViewProps {
   // Shown: the list is read again each time the view opens, and after a run.
   active: boolean
@@ -22,11 +45,22 @@ export interface HistoryViewProps {
   version: number
   busy: boolean
   onOpenResults(): void
+  // Open a recorded run's tags file in Results.
+  onOpen(path: string): void
+  // Put a recorded run's input, output and parameters into the form;
+  // returns the Undo.
+  onSettings(input: string, out: string, params: Record<string, unknown>): () => void
+  onGoSetup(): void
 }
 
-export default function HistoryView({ active, version, busy, onOpenResults }: HistoryViewProps): JSX.Element {
+export default function HistoryView(p: HistoryViewProps): JSX.Element {
+  const { active, version, busy } = p
   const [records, setRecords] = useState<RunRecord[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // The record whose command was copied (or refused by the clipboard).
+  const [copied, setCopied] = useState<{ id: string; ok: boolean } | null>(null)
+  const [note, setNote] = useState<Note | null>(null)
+  const [reread, setReread] = useState(0)
   useEffect(() => {
     if (!active) return
     let live = true
@@ -41,11 +75,55 @@ export default function HistoryView({ active, version, busy, onOpenResults }: Hi
     return () => {
       live = false
     }
-  }, [active, version])
+  }, [active, version, reread])
+
+  const fail = (e: unknown): void => setNote({ kind: 'error', text: e instanceof Error ? e.message : String(e) })
+
+  function copy(r: RunRecord): void {
+    navigator.clipboard.writeText(shellLine(r.argv)).then(
+      () => setCopied({ id: r.id, ok: true }),
+      () => setCopied({ id: r.id, ok: false })
+    )
+  }
+
+  function remove(r: RunRecord): void {
+    window.fastag.historyDelete(r.id).then(() => {
+      setRecords((rs) => rs?.filter((x) => x.id !== r.id) ?? rs)
+      setNote({ kind: 'deleted', input: r.input })
+      setReread((n) => n + 1)
+    }, fail)
+  }
+
+  function settings(r: RunRecord, out: string): void {
+    const undo = p.onSettings(r.input, out, r.params ?? {})
+    setNote({ kind: 'settings', input: r.input, undo })
+  }
 
   return (
     <div className="history">
       <h2 id="history-h">History</h2>
+      <div className="history-note" role="status" aria-label="History">
+        {note?.kind === 'settings' && (
+          <>
+            The settings of {baseName(note.input)} are in the form.{' '}
+            <button
+              type="button"
+              className="link"
+              onClick={() => {
+                note.undo()
+                setNote(null)
+              }}
+            >
+              Undo
+            </button>{' '}
+            <button type="button" className="link" onClick={p.onGoSetup}>
+              Go to Setup
+            </button>
+          </>
+        )}
+        {note?.kind === 'deleted' && <>The record of {baseName(note.input)} was deleted; its files were kept.</>}
+        {note?.kind === 'error' && <span className="warn">{note.text}</span>}
+      </div>
       {error && (
         <p className="warn" role="alert">
           Could not read the run record: {error}
@@ -54,7 +132,7 @@ export default function HistoryView({ active, version, busy, onOpenResults }: Hi
       {records && records.length === 0 && (
         <div className="empty">
           <p>Runs you start appear here.</p>
-          <button type="button" className="secondary" onClick={onOpenResults} disabled={busy}>
+          <button type="button" className="secondary" onClick={p.onOpenResults} disabled={busy}>
             Open results…
           </button>
         </div>
@@ -67,12 +145,18 @@ export default function HistoryView({ active, version, busy, onOpenResults }: Hi
               <th scope="col">Input</th>
               <th scope="col">Status</th>
               <th scope="col">Duration</th>
+              <th scope="col">Tags</th>
               <th scope="col">Outputs</th>
+              <th scope="col">
+                <span className="sr-only">Actions</span>
+              </th>
             </tr>
           </thead>
           <tbody>
             {records.map((r) => {
               const st = STATUS[r.status]
+              const out = recordOut(r)
+              const finished = r.status === 'ok'
               return (
                 <tr key={r.id}>
                   <td>{new Date(r.start).toLocaleString()}</td>
@@ -82,14 +166,48 @@ export default function HistoryView({ active, version, busy, onOpenResults }: Hi
                       <JobIcon status={st.icon} /> {st.text}
                       {r.status === 'failed' && r.exitCode != null ? ` (exit ${r.exitCode})` : ''}
                     </span>
+                    {!finished && (
+                      <span className="hist-incomplete" title="This run did not finish: its outputs are not complete.">
+                        incomplete
+                      </span>
+                    )}
                   </td>
                   <td>{duration(r.end - r.start)}</td>
+                  <td className="num">{finished && r.tags != null ? r.tags.toLocaleString('en-US') : '—'}</td>
                   <td>
                     {r.outputs.length === 0 ? (
                       <span className="muted">none</span>
                     ) : (
                       <span title={r.outputs.join('\n')}>{r.outputs.map(baseName).join(', ')}</span>
                     )}
+                  </td>
+                  <td className="hist-actions">
+                    {finished && out && (
+                      <>
+                        <button type="button" className="secondary small" disabled={busy} onClick={() => p.onOpen(out)}>
+                          Open
+                        </button>
+                        <button
+                          type="button"
+                          className="secondary small"
+                          onClick={() => window.fastag.revealOutput(out, false).catch(fail)}
+                        >
+                          Reveal
+                        </button>
+                      </>
+                    )}
+                    <button type="button" className="secondary small" onClick={() => copy(r)} title={shellLine(r.argv)}>
+                      {copied?.id === r.id && copied.ok ? 'Copied' : 'Copy command'}
+                    </button>
+                    {r.params && out && (
+                      <button type="button" className="secondary small" disabled={busy} onClick={() => settings(r, out)}>
+                        Settings into form
+                      </button>
+                    )}
+                    <button type="button" className="secondary small" onClick={() => remove(r)}>
+                      Delete record
+                    </button>
+                    {copied?.id === r.id && !copied.ok && <span className="muted">The clipboard refused the command.</span>}
                   </td>
                 </tr>
               )

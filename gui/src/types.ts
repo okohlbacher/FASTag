@@ -122,6 +122,11 @@ export interface RunRecord {
   start: number
   end: number
   cleanup: Cleanup
+  // The parameters the run was sent (Settings into form); absent in records
+  // written before P2a.
+  params?: Record<string, unknown> | null
+  // The tags it wrote (the CLI's summary line); absent when it printed none.
+  tags?: number | null
 }
 
 // The reply of `run` (fastag.rs RunStarted). The run's events come on the
@@ -226,6 +231,8 @@ export interface FastagApi {
   // The recorded runs, newest first; the newest run that wrote a path.
   historyList: (limit?: number) => Promise<RunRecord[]>
   historyOf: (path: string) => Promise<RunRecord | null>
+  // Delete one record (its files stay); false when no record has that id.
+  historyDelete: (id: string) => Promise<boolean>
   cancel: () => Promise<{ cancelled: boolean }>
   resultsQuery: (path: string, view: ResultsView, offset: number, limit: number) => Promise<ResultsPage>
   // D5: the head rows now; index and E-value order announced through onEvent.

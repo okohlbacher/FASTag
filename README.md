@@ -174,7 +174,8 @@ call or no-call with its reason, sequence logos P4..P1 | P1'..P4' of the
 observed tag ends and of the called and runner-up models (in bits against the
 background in use), the label counts, a histogram of the mass gaps and the mass-gap peaks. The
 window has four views, switched from the top bar or with Cmd/Ctrl+1..4:
-**Setup**, **Results**, **Batch** and **History** (every recorded run); a
+**Setup**, **Results**, **Batch** and **History** (every recorded run, with
+its exact command line to copy and its settings to load back into Setup); a
 progress pill in the top bar follows the run from any view, and a finished
 run in the background raises a system notification. Spectra, FASTA,
 taxonomy, tags and report files can be dropped anywhere on the window. A
