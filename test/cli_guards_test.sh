@@ -22,6 +22,14 @@
 #   - -out is written in place: an existing -out keeps its mode, every hard
 #     link sees the table, and a writable -out in a read-only directory works
 #   - -complement_tolerance or -complement_tol_factor 0 or NaN is refused (1.12 E2)
+#   - #5: -fasta_out naming -recon_fasta/-fasta (also by symlink) or
+#     -shortlist_out naming -shortlist_background is refused, the database
+#     unchanged; -stream -fasta_out, -shortlist_out without a database, an
+#     unknown -search_engine, a template with sage and a template without an
+#     enzyme table are refused; a database nothing places on gives an empty
+#     shortlist and the background only, with a WARN; a conflicting duplicate
+#     identifier is refused; a chymotryptic run writes no FASTA/configuration
+#     and exits non-zero unless -shortlist_force
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 BIN="$1"
@@ -249,5 +257,75 @@ esac
   || fail "-census_summary_out without -census failed"
 grep -q -- "-census_summary_out is only read for -census" "$TMP/c7.log" || fail "no warning for -census_summary_out alone"
 [ ! -e "$TMP/c7s.tsv" ] || fail "-census_summary_out without -census wrote a file"
+# #5 shortlist, reduced FASTA and engine configuration. The protease check
+# reads the shipped models.
+export FASTAG_DIGEST_DIR="${FASTAG_DIGEST_DIR:-$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)/data/digest}"
+SLA=(-in "$IN" -tag_length 4 -extension 1 -fragment_tolerance 0.5 -fragment_tolerance_unit Da -threads 2)
+cp "$DB" "$TMP/sl_db.fasta"
+db_sum=$(cksum < "$TMP/sl_db.fasta")
+"$BIN" "${SLA[@]}" -out "$TMP/sl.tsv" -recon_fasta "$TMP/sl_db.fasta" -fasta_out "$TMP/sl_db.fasta" >"$TMP/sl1.log" 2>&1 \
+  && fail "-fasta_out equal to -recon_fasta ran (exit 0)"
+grep -q -- "-fasta_out (.*) is the -recon_fasta file" "$TMP/sl1.log" || fail "no message naming -fasta_out and -recon_fasta"
+if [ -L "$TMP/link.mzML" ]; then
+  ln -s "$TMP/sl_db.fasta" "$TMP/sl_link.fasta"
+  "$BIN" "${SLA[@]}" -out "$TMP/sl.tsv" -fasta "$TMP/sl_db.fasta" -fasta_out "$TMP/sl_link.fasta" >"$TMP/sl1b.log" 2>&1 \
+    && fail "-fasta_out aliasing -fasta through a symlink ran (exit 0)"
+  grep -q -- "is the -fasta file" "$TMP/sl1b.log" || fail "no message naming -fasta_out and -fasta"
+fi
+# (the formats differ, so only a symlink can make the two one file)
+if [ -L "$TMP/link.mzML" ]; then
+  ln -s "$TMP/sl_db.fasta" "$TMP/sl_db_link.tsv"
+  "$BIN" "${SLA[@]}" -out "$TMP/sl.tsv" -recon_fasta "$DB" -fasta_out "$TMP/bgx.fasta" -shortlist_background "$TMP/sl_db.fasta" \
+    -shortlist_out "$TMP/sl_db_link.tsv" >"$TMP/sl1c.log" 2>&1 && fail "-shortlist_out aliasing -shortlist_background ran (exit 0)"
+  grep -q -- "is the -shortlist_background file" "$TMP/sl1c.log" || fail "no message naming -shortlist_out and -shortlist_background"
+fi
+[ "$(cksum < "$TMP/sl_db.fasta")" = "$db_sum" ] || fail "a refused -fasta_out/-shortlist_out touched the database"
+"$BIN" -stream -fasta_out "$TMP/x.fasta" -threads 2 </dev/null >"$TMP/sl2.log" 2>&1 && fail "-stream -fasta_out ran (exit 0)"
+grep -q "stream cannot be combined with -fasta_out" "$TMP/sl2.log" || fail "no -stream refusal for -fasta_out"
+"$BIN" "${SLA[@]}" -out "$TMP/sl.tsv" -shortlist_out "$TMP/x.tsv" >"$TMP/sl3.log" 2>&1 && fail "-shortlist_out without a database ran (exit 0)"
+grep -q "shortlist_out needs a database" "$TMP/sl3.log" || fail "no message that -shortlist_out needs a database"
+for e in msfragger foo; do
+  "$BIN" "${SLA[@]}" -out "$TMP/sl.tsv" -recon_fasta "$DB" -search_config_out "$TMP/x.cfg" -search_engine $e \
+    >"$TMP/sl4.log" 2>&1 && fail "-search_engine $e ran (exit 0)"
+done
+[ ! -e "$TMP/x.cfg" ] || fail "a refused -search_engine wrote a configuration"
+printf '# comet_version x\n[COMET_ENZYME_INFO]\n1.  Trypsin  1  KR  P\n' > "$TMP/t.params"
+"$BIN" "${SLA[@]}" -out "$TMP/sl.tsv" -recon_fasta "$DB" -search_config_out "$TMP/x.cfg" -search_config_template "$TMP/t.params" \
+  >"$TMP/sl5.log" 2>&1 && fail "-search_config_template with sage ran (exit 0)"
+grep -q "needs -search_engine comet" "$TMP/sl5.log" || fail "no message that the template needs comet"
+printf 'database_name = x\n' > "$TMP/bad.params"
+"$BIN" "${SLA[@]}" -out "$TMP/sl.tsv" -recon_fasta "$DB" -search_config_out "$TMP/x.cfg" -search_engine comet \
+  -search_config_template "$TMP/bad.params" >"$TMP/sl5b.log" 2>&1 && fail "a template without an enzyme table ran (exit 0)"
+grep -q "no \[COMET_ENZYME_INFO\]" "$TMP/sl5b.log" || fail "no message about the template's missing enzyme table"
+[ ! -s "$TMP/sl5b.log" ] || ! grep -q "MS2 spectra," "$TMP/sl5b.log" || fail "a bad template was refused only after tagging"
+# A database nothing places on: empty shortlist, the background only, a WARN, exit 0.
+printf '>W1\nWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWK\n>W2\nWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWR\n' > "$TMP/w.fasta"
+printf '>BG1 background\nMKWVTFISLLLLFSSAYSR\n' > "$TMP/wbg.fasta"
+"$BIN" "${SLA[@]}" -out "$TMP/w.tsv" -recon_fasta "$TMP/w.fasta" -shortlist_out "$TMP/w.sl.tsv" -fasta_out "$TMP/w.red.fasta" \
+  -shortlist_background "$TMP/wbg.fasta" >"$TMP/w.log" 2>&1 || { cat "$TMP/w.log" >&2; fail "a W-only database did not exit 0"; }
+grep -q "no protein has 2 qualifying spectra; -fasta_out holds the background only" "$TMP/w.log" || fail "no WARN for an empty shortlist"
+[ "$(grep -c '^>' "$TMP/w.red.fasta")" = 1 ] && grep -q '^>BG1 background' "$TMP/w.red.fasta" || fail "-fasta_out is not the background only"
+[ "$(grep -vc '^#' "$TMP/w.sl.tsv")" = 2 ] || fail "the empty shortlist is not header plus the background row"
+# Conflicting duplicate identifiers.
+printf '>D1\nPEPTIDEKAAAAR\n>D1\nPEPTIDEKCCCCR\n' > "$TMP/dup.fasta"
+"$BIN" "${SLA[@]}" -out "$TMP/dup.tsv" -recon_fasta "$TMP/dup.fasta" -shortlist_out "$TMP/dup.sl.tsv" >"$TMP/dup.log" 2>&1
+rc=$?
+[ $rc = 0 ] && fail "a conflicting duplicate identifier ran (exit 0)"
+grep -q "'D1' names two different sequences" "$TMP/dup.log" || fail "no message naming the duplicate identifier"
+# A non-tryptic run without -digest_out: protease ERROR, no FASTA/configuration, non-zero exit; -shortlist_force writes.
+CHY="$(dirname "$IN")/chymo_insilico.mgf"
+if [ -f "$CHY" ]; then
+  CHA=(-in "$CHY" -recon_fasta "$DB" -out "$TMP/ch.tsv" -shortlist_out "$TMP/ch.sl.tsv" -fasta_out "$TMP/ch.fasta"
+       -search_config_out "$TMP/ch.cfg" -threads 2)
+  "$BIN" "${CHA[@]}" >"$TMP/ch.log" 2>&1 && fail "a chymotryptic run wrote the hand-off outputs (exit 0)"
+  grep -q "ERROR.*Chymotrypsin fits the tag ends best\|Chymotrypsin fits the tag ends best.*Not writing" "$TMP/ch.log" \
+    || fail "no protease ERROR for a chymotryptic run"
+  [ ! -e "$TMP/ch.fasta" ] && [ ! -e "$TMP/ch.cfg" ] || fail "a refused run wrote -fasta_out or -search_config_out"
+  "$BIN" "${CHA[@]}" -shortlist_force >"$TMP/chf.log" 2>&1 || fail "-shortlist_force did not exit 0"
+  [ -e "$TMP/ch.fasta" ] && [ -s "$TMP/ch.cfg" ] && grep -q "shortlist_force writes" "$TMP/chf.log" \
+    || fail "-shortlist_force did not write with a WARN"
+else
+  fail "fixture $CHY missing"
+fi
 
 echo "cli_guards_test: all checks passed"

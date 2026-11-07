@@ -141,3 +141,31 @@ the rows before the 1.12 `label_call` rows are these, the `run version` row
 aside. sha256
 `7be84af167c367b58732a9503f89328a2a790185dc4d1c660363bfb66525dff6`. Derived from
 the OpenMS example, so BSD-3-Clause as well.
+
+`Ecoli_shortlist.fasta`, `chymo_insilico.mgf` — the #5 shortlist fixtures
+(FASTag 1.12), written by `make_shortlist_fixtures.py` (standard library,
+Python 3) from OpenMS `release/3.5.0`
+`share/OpenMS/examples/TOPPAS/data/Identification/crap.fasta` (sha256
+`2f346d83abc0f4d742a93d07e4a6ccb879c030932b8fffc5a93734b67e6eefc5`) and
+`target_decoy_Ecoli_K12_TaxID_83333.proteomes.fasta` (sha256 above), so
+BSD-3-Clause as well.
+
+- `Ecoli_shortlist.fasta` (37 entries): prsA, metK and rplF verbatim (as in
+  `Ecoli_MS2_small.fasta`), the first 30 crap.fasta entries as foreign
+  proteins, the reversed prsA/metK/rplF of the target-decoy FASTA renamed from
+  `rev_` to `DECOY_`, and `rev_VIMSS15051` verbatim.
+- `chymo_insilico.mgf` (300 MS2): in-silico spectra of chymotryptic peptides
+  (after F, W, Y, L, not before P; 7-20 residues, no C) of the first 400 target
+  proteins, charge 2, singly charged b2..b(n-1) and y1..y(n-1) at exact
+  monoisotopic masses, fixed seed. The protease check's non-tryptic negative
+  without shipping a real chymotrypsin run.
+
+`comet_template.params` — a Comet parameter file in the key layout OpenMS's
+CometAdapter writes (createParamFile_, OpenMS develop), with Comet's comments,
+as the stand-in for a `comet -p` file until the engine acceptance run records
+the real one. Required keys are left out, TMT and Carbamidomethyl are set and
+the enzyme is Lys_C on purpose (see its header).
+
+sha256: `Ecoli_shortlist.fasta` `842262adfd982bcee9e0f135ba4b6214ea21282c06bf8b9d4982d32d5ae87ed4`,
+`chymo_insilico.mgf` `d5bbde1229e2862f7f308626f735455b4328689f60dc0d0b777799c7ebaa6582`,
+`comet_template.params` `75966c005779290916dfc104024f439924d91cf6010d6ea1d6ff3bd7658983c9`.

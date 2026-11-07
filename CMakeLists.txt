@@ -77,7 +77,7 @@ set(FASTAG_CORE_SOURCES src/FASTagger.cpp src/AveragineDeisotoper.cpp src/Digest
 # ---- 1.12 E: core sources ----
 set(FASTAG_CORE_SOURCES_E src/Acquisition.cpp src/Centroid.cpp)
 # ---- 1.12 A: core sources ----
-set(FASTAG_CORE_SOURCES_A)
+set(FASTAG_CORE_SOURCES_A src/Shortlist.cpp src/SearchConfig.cpp)
 # ---- 1.12 D: core sources ----
 set(FASTAG_CORE_SOURCES_D src/SpeciesLookup.cpp)
 # ---- 1.12 F: core sources ----
@@ -251,7 +251,7 @@ if(FASTAG_BUILD_TESTS)
   # ---- 1.12 E: unit tests ----
   set(FASTAG_UNIT_TESTS_E cli_param_test centroid_test complement_test ion_series_test)
   # ---- 1.12 A: unit tests ----
-  set(FASTAG_UNIT_TESTS_A)
+  set(FASTAG_UNIT_TESTS_A shortlist_test search_config_test)
   # ---- 1.12 D: unit tests ----
   set(FASTAG_UNIT_TESTS_D)
   # ---- 1.12 F: unit tests ----
@@ -429,6 +429,26 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mgf)
   set_tests_properties(ion_series_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # ---- 1.12 A: CLI tests ----
+  # #5: shortlist, reduced FASTA and engine configuration on the vendored
+  # fixture: ranking, no decoys, existing outputs unchanged, threads, the
+  # refusals and the protease check (in-silico chymotryptic MGF).
+  target_compile_definitions(shortlist_test PRIVATE
+                             FASTAG_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
+  target_compile_definitions(search_config_test PRIVATE
+                             FASTAG_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
+  add_test(NAME shortlist_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/shortlist_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
+  set_tests_properties(shortlist_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # Sage and Comet on a generated configuration; SKIPs without
+  # FASTAG_SAGE_BIN / FASTAG_COMET_BIN (the acceptance job sets them and
+  # treats a skip as a failure).
+  add_test(NAME search_engine_smoke_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/search_engine_smoke_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
+  set_tests_properties(search_engine_smoke_test PROPERTIES SKIP_RETURN_CODE 77)
   # ---- 1.12 D: CLI tests ----
   # ---- 1.12 F: CLI tests ----
   # #11 phase A: -census on the fixture, its MGF twin, census_edge.mzML (every

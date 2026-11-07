@@ -14,6 +14,7 @@
 #include <OpenMS/CHEMISTRY/ProteaseDB.h>
 #include <OpenMS/CHEMISTRY/ResidueModification.h>
 #include <OpenMS/CONCEPT/LogStream.h>
+#include <OpenMS/DATASTRUCTURES/FASTAContainer.h>
 #include <OpenMS/DATASTRUCTURES/ListUtils.h>
 #include <OpenMS/DATASTRUCTURES/StringUtils.h>
 #include <OpenMS/FORMAT/FASTAFile.h>
@@ -46,6 +47,8 @@
 #include "Proforma.h"
 #include "ReconIds.h"
 #include "RunMeta.h"
+#include "SearchConfig.h"
+#include "Shortlist.h"
 #include "SpeciesEvidence.h"
 #include "SpeciesLookup.h"
 #include "SpectrumSampler.h"
@@ -81,6 +84,7 @@
 #include <memory>
 #include <mutex>
 #include <set>
+#include <sstream>
 #include <thread>
 #include <vector>
 #ifdef _WIN32
@@ -740,6 +744,67 @@ protected:
                   "Score complements with DirecTag's hypergeometric mid-p P(X>c) + P(X=c)/2 "
                   "for tags with 0 or 1 complemented peaks; 2 or more keep P(X>=c)", true);
     // ---- 1.12 A: options ----
+    // #5: ranked protein shortlist, reduced FASTA and a search-engine
+    // configuration from the tag placements. A search-space reduction, NOT an
+    // identification, NOT protein inference and NOT FDR-controlled. Every
+    // option is empty or off by default; without the three outputs nothing
+    // below runs.
+    registerOutputFile_("shortlist_out", "<file>", "",
+                        "Ranked protein shortlist from the tag placements on -recon_fasta (or -fasta): "
+                        "spectra, peptides, shared-spectrum weight and best E-value per protein, and "
+                        "whether it is kept. A search-space reduction, NOT FDR-controlled", false);
+    setValidFormats_("shortlist_out", ListUtils::create<std::string>("tsv"));
+    registerOutputFile_("fasta_out", "<file>", "",
+                        "Reduced FASTA: the shortlisted proteins of the database (no decoys; let the "
+                        "search engine generate them), then -shortlist_background", false);
+    setValidFormats_("fasta_out", ListUtils::create<std::string>("fasta"));
+    registerInputFile_("shortlist_background", "<file>", "",
+                       "Proteins always appended to -fasta_out (host proteome, contaminants); decoys "
+                       "and entries already in the database are left out", false);
+    setValidFormats_("shortlist_background", ListUtils::create<std::string>("fasta"));
+    registerDoubleOption_("shortlist_max_evalue", "<f>", 0.1,
+                          "E-value a tag needs for its placements to count for the shortlist", false, true);
+    setMinFloat_("shortlist_max_evalue", 0.0);
+    registerIntOption_("shortlist_min_spectra", "<n>", 2,
+                       "Spectra a protein needs to be kept", false, true);
+    setMinInt_("shortlist_min_spectra", 1);
+    registerFlag_("shortlist_gapped",
+                  "Let placements with one mismatched flank (a mass gap) count for the shortlist; "
+                  "by default only exact ones count (a gap equal to a fixed terminal label is exact)");
+    registerStringOption_("shortlist_parsimony", "<mode>", "none",
+                          "'none' keeps every protein above -shortlist_min_spectra; 'subset' drops a "
+                          "protein whose spectra a higher-ranked kept one has; 'greedy' keeps a greedy "
+                          "set cover of the spectra", false);
+    setValidStrings_("shortlist_parsimony", ListUtils::create<std::string>("none,subset,greedy"));
+    registerIntOption_("shortlist_top", "<n>", 0,
+                       "Keep at most this many proteins, ties at the cut kept; 0 = no cap", false, true);
+    setMinInt_("shortlist_top", 0);
+    registerStringList_("shortlist_decoy_affix", "<list>",
+                        ListUtils::create<std::string>("DECOY_,decoy_,rev_,REV_,reverse_,XXX_,shuffled_,random_,_DECOY,_rev"),
+                        "Accession prefixes (ending in _) and suffixes (starting with _) that mark a decoy "
+                        "entry, case-insensitive; decoys never enter the shortlist or -fasta_out", false, true);
+    registerFlag_("shortlist_force",
+                  "Write -fasta_out and -search_config_out although the tag ends call a protease the "
+                  "tryptic placement does not fit", true);
+    registerOutputFile_("search_config_out", "<file>", "",
+                        "Search-engine configuration for -fasta_out (or the input database): Sage JSON, or "
+                        "Comet parameters (merged into -search_config_template when given)", false);
+    registerStringOption_("search_engine", "<engine>", "sage", "Engine of -search_config_out", false);
+    setValidStrings_("search_engine", ListUtils::create<std::string>("sage,comet"));
+    registerInputFile_("search_config_template", "<file>", "",
+                       "Comet only: a `comet -p` parameter file the managed keys are merged into", false);
+    registerDoubleOption_("search_precursor_tolerance", "<f>", 10.0,
+                          "Precursor tolerance written to -search_config_out", false);
+    setMinFloat_("search_precursor_tolerance", 0.0);
+    registerStringOption_("search_precursor_unit", "<unit>", "ppm",
+                          "Unit of -search_precursor_tolerance", false);
+    setValidStrings_("search_precursor_unit", ListUtils::create<std::string>("ppm,Da"));
+    registerIntOption_("search_isotope_errors", "<n>", 0,
+                       "Precursor isotope errors 0..n the engine searches; 0 = none", false);
+    setMinInt_("search_isotope_errors", 0);
+    setMaxInt_("search_isotope_errors", 3);
+    registerStringOption_("search_decoy_prefix", "<s>", "",
+                          "Decoy prefix the engine generates; empty = rev_ (Sage) or DECOY_ (Comet)", false);
     // ---- 1.12 D: options ----
     // ---- 1.12 F: options ----
     // #11 phase A: the per-spectrum census. Opt-in; every other output is
@@ -1138,6 +1203,10 @@ protected:
           {"pick_profile", nullptr},
           {"pick_unknown_type", nullptr},
           // ---- 1.12 A: -stream refusals ----
+          {"shortlist_out", nullptr},
+          {"fasta_out", nullptr},
+          {"shortlist_background", nullptr},
+          {"search_config_out", nullptr},
           // ---- 1.12 D: -stream refusals ----
           // ---- 1.12 F: -stream refusals ----
           {"census", nullptr},
@@ -1318,8 +1387,16 @@ protected:
     // taken), whether or not -recon_out is written. Every reader of the
     // placements adds its term at its anchor.
     const bool recon_on = !recon_out.empty();
+    // #5: the shortlist and the reduced FASTA rank placements; the engine
+    // configuration needs the database and the protease check.
+    const std::string shortlist_out = getStringOption_("shortlist_out");
+    const std::string fasta_out = getStringOption_("fasta_out");
+    const std::string search_config_out = getStringOption_("search_config_out");
+    const bool shortlist_on = !shortlist_out.empty() || !fasta_out.empty();
+    const bool handoff_on = shortlist_on || !search_config_out.empty();
     const bool place_on = recon_on
         // ---- 1.12 A: placement readers ----
+        || handoff_on
         ;
     if (!delta_out.empty() && !place_on)
     {
@@ -1341,6 +1418,44 @@ protected:
       OPENMS_LOG_ERROR << "-recon_id_out requires -recon_out (it writes the same "
                           "placements as identifications)." << std::endl;
       return ILLEGAL_PARAMETERS;
+    }
+    // #5 checks: a database to place on, the template only for Comet.
+    const std::string search_engine = getStringOption_("search_engine");
+    if (handoff_on && getStringOption_("recon_fasta").empty() && fasta.empty())
+    {
+      OPENMS_LOG_ERROR << "-" << (!shortlist_out.empty() ? "shortlist_out" : !fasta_out.empty() ? "fasta_out" : "search_config_out")
+                       << " needs a database: give -recon_fasta (or -fasta)." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    if (!getStringOption_("search_config_template").empty() && search_engine != "comet")
+    {
+      OPENMS_LOG_ERROR << "-search_config_template is a `comet -p` parameter file; it needs -search_engine comet "
+                          "(a Sage configuration is written complete)." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    FASTag::Shortlist::Settings sl_settings;
+    sl_settings.max_evalue = getDoubleOption_("shortlist_max_evalue");
+    sl_settings.min_spectra = static_cast<std::uint64_t>(getIntOption_("shortlist_min_spectra"));
+    sl_settings.gapped = getFlag_("shortlist_gapped");
+    {
+      const std::string pm = getStringOption_("shortlist_parsimony");
+      sl_settings.parsimony = pm == "subset" ? FASTag::Shortlist::Parsimony::Subset
+                            : pm == "greedy" ? FASTag::Shortlist::Parsimony::Greedy
+                                             : FASTag::Shortlist::Parsimony::None;
+    }
+    sl_settings.top = static_cast<std::size_t>(getIntOption_("shortlist_top"));
+    const StringList sl_affix_option = getStringList_("shortlist_decoy_affix");
+    std::vector<std::string> sl_affixes;
+    for (const std::string& a : sl_affix_option)
+      if (!a.empty()) sl_affixes.push_back(a);
+    if (!handoff_on && optionNonDefault_("shortlist_force"))
+    {
+      OPENMS_LOG_WARN << "-shortlist_force is only read for -fasta_out or -search_config_out; it is ignored here." << std::endl;
+    }
+    if (!shortlist_on && std::vector<std::string>(sl_affix_option.begin(), sl_affix_option.end())
+                             != FASTag::Shortlist::defaultDecoyAffixes())
+    {
+      OPENMS_LOG_WARN << "-shortlist_decoy_affix is only read for -shortlist_out or -fasta_out; it is ignored here." << std::endl;
     }
     // TOPPBase lets an extension OpenMS does not know (ids.mzIdentML) through.
     if (recon_ids_on)
@@ -1392,6 +1507,14 @@ protected:
     // The database the index is built from (-recon_fasta, else -fasta), kept
     // for readers that stream it again; empty without placement.
     std::string recon_db;
+    // #5: per database entry its accession, length, decoy flag and canonical
+    // duplicate; the background to append; the residue composition of the
+    // database for the protease check's background.
+    std::vector<FASTag::Shortlist::ProteinInfo> sl_proteins;
+    std::vector<FASTAFile::FASTAEntry> sl_background;
+    std::vector<std::uint32_t> sl_bg_twins;  // database entries the background duplicates
+    std::array<std::uint64_t, FASTag::Digest::kNumAA> sl_db_residues{};
+    std::size_t sl_decoys = 0;
     if (place_on)
     {
       recon_db = getStringOption_("recon_fasta");
@@ -1405,6 +1528,67 @@ protected:
       std::vector<FASTAFile::FASTAEntry> rentries;
       FASTAFile().load(recon_db, rentries);
       pindex.build(rentries, fixed_deltas, iso_tol);
+      if (handoff_on)
+      {
+        // Decoys by accession, per entry; duplicates by identifier and
+        // sequence. Both aligned with the index ordinals (database order).
+        const FASTag::Shortlist::DuplicateCheck dup = FASTag::Shortlist::checkDuplicates(rentries);
+        if (!dup.conflict.empty())
+        {
+          OPENMS_LOG_ERROR << "'" << recon_db << "': the identifier '" << dup.conflict
+                           << "' names two different sequences; the shortlist selects proteins by entry and "
+                              "cannot tell which one is meant. Make the identifiers unique." << std::endl;
+          return INPUT_FILE_CORRUPT;
+        }
+        if (dup.identical > 0)
+          OPENMS_LOG_INFO << "Shortlist: " << dup.identical << " identical duplicate entries in '" << recon_db
+                          << "' counted as their first entry." << std::endl;
+        sl_proteins.resize(rentries.size());
+        for (std::size_t i = 0; i < rentries.size(); ++i)
+        {
+          FASTag::Shortlist::ProteinInfo& pi = sl_proteins[i];
+          pi.accession = rentries[i].identifier;
+          pi.length = pindex.proteinLength(static_cast<uint32_t>(i));
+          pi.decoy = FASTag::Shortlist::isDecoy(pi.accession, sl_affixes);
+          pi.canonical = dup.canonical[i];
+          if (pi.decoy) ++sl_decoys;
+          else FASTag::Digest::addResidues(rentries[i].sequence, sl_db_residues);
+        }
+        // DecoyHelper's whole-database heuristic only to say what the input is.
+        FASTAContainer<TFI_Vector> whole(rentries);
+        const DecoyHelper::Result dh = DecoyHelper::findDecoyString(whole, true);
+        if (sl_decoys > 0)
+          OPENMS_LOG_WARN << "'" << recon_db << "' holds " << sl_decoys << " decoy entries"
+                          << (dh.success ? " (a target-decoy database)" : "")
+                          << "; they never enter the shortlist or -fasta_out." << std::endl;
+        if (dh.success && !FASTag::Shortlist::isDecoy(dh.is_prefix ? dh.name + "x" : "x" + dh.name, sl_affixes))
+          OPENMS_LOG_WARN << "'" << recon_db << "' looks like a target-decoy database with the decoy "
+                          << (dh.is_prefix ? "prefix '" : "suffix '") << dh.name
+                          << "', which -shortlist_decoy_affix does not list; add it there, or its decoys "
+                             "count as targets." << std::endl;
+        const std::string bg_path = getStringOption_("shortlist_background");
+        if (!bg_path.empty() && !fasta_out.empty())
+        {
+          std::vector<FASTAFile::FASTAEntry> bg;
+          FASTAFile().load(bg_path, bg);
+          std::size_t bg_decoys = 0, bg_dup = 0;
+          const std::string conflict =
+              FASTag::Shortlist::selectBackground(rentries, bg, sl_affixes, sl_background, &bg_decoys, &bg_dup,
+                                                  &sl_bg_twins);
+          if (!conflict.empty())
+          {
+            OPENMS_LOG_ERROR << "-shortlist_background '" << bg_path << "': the identifier '" << conflict
+                             << "' names a different sequence than in '" << recon_db
+                             << "' (or than an earlier background entry). Make the identifiers unique." << std::endl;
+            return INPUT_FILE_CORRUPT;
+          }
+          OPENMS_LOG_INFO << "Shortlist background: " << sl_background.size() << " entries from '" << bg_path << "'"
+                          << (bg_decoys ? ", " + std::to_string(bg_decoys) + " decoys left out" : std::string())
+                          << (bg_dup ? ", " + std::to_string(bg_dup) + " already in the database (kept through it)"
+                                    : std::string())
+                          << std::endl;
+        }
+      }
       int rmin = getIntOption_("recon_min_length");
       if (rmin == 0) rmin = pindex.autoMinLen();
       recon.attach(&pindex, getIntOption_("recon_missed_cleavages"), rmin);
@@ -1449,6 +1633,7 @@ protected:
     const auto needCounting = [&]() {
       return digest_on || label_on
           // ---- 1.12 A: tag-end counting readers ----
+          || handoff_on  // #5 protease check
           // ---- 1.12 D: tag-end counting readers ----
           ;
     };
@@ -1524,6 +1709,18 @@ protected:
            getStringOption_("acquisition_check") != "off"},
           {"pick_unknown_type", "-pick_profile auto", pick_mode == FASTag::Centroid::Mode::Auto},
           // ---- 1.12 A: ignored-option warnings ----
+          {"shortlist_background", "-fasta_out", !fasta_out.empty()},
+          {"shortlist_max_evalue", "-shortlist_out or -fasta_out", shortlist_on},
+          {"shortlist_min_spectra", "-shortlist_out or -fasta_out", shortlist_on},
+          {"shortlist_gapped", "-shortlist_out or -fasta_out", shortlist_on},
+          {"shortlist_parsimony", "-shortlist_out or -fasta_out", shortlist_on},
+          {"shortlist_top", "-shortlist_out or -fasta_out", shortlist_on},
+          {"search_engine", "-search_config_out", !search_config_out.empty()},
+          {"search_config_template", "-search_config_out", !search_config_out.empty()},
+          {"search_precursor_tolerance", "-search_config_out", !search_config_out.empty()},
+          {"search_precursor_unit", "-search_config_out", !search_config_out.empty()},
+          {"search_isotope_errors", "-search_config_out", !search_config_out.empty()},
+          {"search_decoy_prefix", "-search_config_out", !search_config_out.empty()},
           // ---- 1.12 D: ignored-option warnings ----
           // ---- 1.12 F: ignored-option warnings ----
           {"census_out", "-census", getFlag_("census")},
@@ -1630,6 +1827,86 @@ protected:
       gap_settings.silac_share = getDoubleOption_("massgap_silac_share");
       gap_settings.silac_min = static_cast<std::uint64_t>(getIntOption_("massgap_silac_min"));
       gap_combos = FD::combinations(gap_mods, gap_settings.max_mods);
+    }
+    // #5: the protease models the hand-off check scores the tag ends with
+    // (-digest_out's table when that report is on, so both agree; else the
+    // shipped one over the database's composition), and the engine
+    // configuration, validated here so a bad template or an inexpressible
+    // modification is refused before any tagging.
+    FD::ModelTable sl_models;
+    const FD::DigestSettings sl_digest = digest_on ? digest_settings : FD::DigestSettings();
+    FASTag::SearchConfig::SearchPlan sl_plan;
+    std::string sl_template;
+    bool handoff_refused = false;
+    if (handoff_on)
+    {
+      if (digest_on) sl_models = protease_models;
+      else
+      {
+        const std::string dd = digestDir_();
+        std::string err;
+        if (dd.empty())
+        {
+          OPENMS_LOG_ERROR << "No shipped protease models found (expected <bin>/../share/FASTag/digest); the "
+                              "shortlist's protease check needs them. Set FASTAG_DIGEST_DIR to the directory "
+                              "holding digest_models.tsv." << std::endl;
+          return ILLEGAL_PARAMETERS;
+        }
+        if (!FD::loadModelTable(dd + "/digest_models.tsv", sl_models, &err))
+        {
+          OPENMS_LOG_ERROR << "'" << dd << "/digest_models.tsv': " << err << std::endl;
+          return INPUT_FILE_CORRUPT;
+        }
+        sl_models.bg_c = sl_models.bg_n = FD::composition(sl_db_residues, true);
+        sl_models.has_bg = true;
+      }
+      if (!search_config_out.empty())
+      {
+        sl_plan.database = fasta_out.empty() ? recon_db : fasta_out;
+        sl_plan.spectra = in;
+        const ModificationsDB* mdb = ModificationsDB::getInstance();
+        for (const std::string& nm : getStringList_("fixed_modifications"))
+          if (!nm.empty()) sl_plan.fixed.push_back(mdb->getModification(nm));
+        for (const std::string& nm : getStringList_("variable_modifications"))
+          if (!nm.empty()) sl_plan.variable.push_back(mdb->getModification(nm));
+        sl_plan.missed_cleavages = getIntOption_("recon_missed_cleavages");
+        sl_plan.fragment_tolerance = p.frag_tol;
+        sl_plan.fragment_ppm = p.tol_ppm;
+        sl_plan.precursor_tolerance = getDoubleOption_("search_precursor_tolerance");
+        sl_plan.precursor_ppm = getStringOption_("search_precursor_unit") == "ppm";
+        sl_plan.isotope_errors = getIntOption_("search_isotope_errors");
+        sl_plan.decoy_prefix = getStringOption_("search_decoy_prefix");
+        sl_plan.fastag_version = FASTAG_VERSION;
+        std::string err;
+        if (search_engine == "comet")
+        {
+          std::vector<std::pair<std::string, std::string>> keys;
+          err = FASTag::SearchConfig::cometKeys(sl_plan, keys);
+          const std::string tmpl_path = getStringOption_("search_config_template");
+          if (err.empty() && !tmpl_path.empty())
+          {
+            std::ifstream tf(tmpl_path.c_str(), std::ios::binary);
+            std::ostringstream ts;
+            ts << tf.rdbuf();
+            sl_template = ts.str();
+            if (!tf.good() && !tf.eof()) err = "cannot read -search_config_template '" + tmpl_path + "'";
+            else
+            {
+              const auto m = FASTag::SearchConfig::mergeKeyValueTemplate(sl_template, keys);
+              if (!m.error.empty()) err = "-search_config_template '" + tmpl_path + "': " + m.error;
+            }
+          }
+        }
+        if (!err.empty())
+        {
+          OPENMS_LOG_ERROR << "-search_config_out: " << err << "." << std::endl;
+          return ILLEGAL_PARAMETERS;
+        }
+        if (fasta_out.empty() && sl_decoys > 0)
+          OPENMS_LOG_WARN << "-search_config_out names '" << recon_db << "', which holds " << sl_decoys
+                          << " decoys, and lets the engine generate decoys as well; give -fasta_out to search "
+                             "a database without them." << std::endl;
+      }
     }
     // The run rows every report starts with (src/RunMeta.h), filled once.
     FASTag::RunReport::RunMeta run_meta;
@@ -2231,6 +2508,8 @@ protected:
         guard.input(opt, getStringOption_(opt));
       // ---- 1.12 E: guarded inputs ----
       // ---- 1.12 A: guarded inputs ----
+      guard.input("shortlist_background", getStringOption_("shortlist_background"));
+      guard.input("search_config_template", getStringOption_("search_config_template"));
       // ---- 1.12 D: guarded inputs ----
       // ---- 1.12 F: guarded inputs ----
       guard.output("out", out);
@@ -2255,6 +2534,9 @@ protected:
       // at its own anchor.
       // ---- 1.12 E: output paths ----
       // ---- 1.12 A: output paths ----
+      guard.output("shortlist_out", shortlist_out, true);
+      guard.output("fasta_out", fasta_out, true);
+      guard.output("search_config_out", search_config_out, true);
       // ---- 1.12 D: output paths ----
       // ---- 1.12 F: output paths ----
       if (getFlag_("census"))
@@ -2681,6 +2963,36 @@ protected:
           }
           if (recon_ids_on) FASTag::addReconHits(id_hits, places, t.seq, t.evalue, prec.getCharge(), id_fixed);
           // ---- 1.12 A: per-tag placement records ----
+          if (handoff_on)
+          {
+            // #5: the spectra the protease check counts (once each), and the
+            // qualifying placements of the shortlist.
+            FASTag::ClusterAcc::ThreadA& a = pt.acc.a;
+            if (!t.gapped && t.evalue <= 1.0 && a.last_counted != index)
+            {
+              ++a.protease_spectra;
+              a.last_counted = index;
+            }
+            if (shortlist_on && t.evalue <= sl_settings.max_evalue)
+              for (const auto& pl : places)
+              {
+                double flank = 0.0;
+                if (!pl.nterm_match) flank = pl.reversed ? t.cterm_mass : t.nterm_mass;
+                else if (!pl.cterm_match) flank = pl.reversed ? t.nterm_mass : t.cterm_mass;
+                const double tol_da = p.tol_ppm ? flank * p.frag_tol * 1e-6 : p.frag_tol;
+                const auto cls = FASTag::Shortlist::classifyPlacement(pl.nterm_match, pl.cterm_match, pl.delta_mass,
+                                                                      fixed_term_n, fixed_term_c, tol_da);
+                if (cls == FASTag::Shortlist::Placement::Gapped && !sl_settings.gapped) continue;
+                FASTag::Shortlist::Evidence ev;
+                ev.spectrum = static_cast<std::uint32_t>(index);
+                ev.protein = pl.protein_index;
+                ev.evalue = static_cast<float>(t.evalue);
+                ev.window_start = static_cast<std::uint32_t>(pl.start);
+                ev.window_len = static_cast<std::uint16_t>(std::min<std::size_t>(pl.peptide.size(), 65535));
+                ev.exact = cls != FASTag::Shortlist::Placement::Gapped;
+                a.sl.push_back(ev);
+              }
+          }
           // A candidate for the spectrum's -delta_out sample: take this
           // tag's min-|delta| placement.
           if (delta_on && !places.empty() && (!delta_have || t.evalue < delta_e))
@@ -3672,6 +3984,152 @@ protected:
         }
       }
       // ---- 1.12 A: placement processing and hand-off exports ----
+      // #5, in order: protease check, shortlist, reduced FASTA, engine
+      // configuration. The FASTA and the configuration are written only when
+      // the placement's tryptic windows fit the run (or -shortlist_force).
+      if (handoff_on)
+      {
+        FD::TerminusCounter sl_tc(digest_settings.window);
+        for (const PerThread& pt : per_thread) sl_tc.merge(pt.digest);
+        const FD::Classification sl_cls = FD::classify(sl_tc.cterm(), sl_tc.nterm(), sl_models,
+                                                       sl_digest.background_share, sl_digest.tag_min);
+        using Verdict = FASTag::Shortlist::ProteaseVerdict;
+        const Verdict verdict = FASTag::Shortlist::proteaseVerdict(sl_cls, !p.tol_ppm, run_acc.a.protease_spectra);
+        const bool force = getFlag_("shortlist_force");
+        const char* kind = verdict.kind == Verdict::Compatible ? "compatible"
+                         : verdict.kind == Verdict::NonTryptic ? "non_tryptic"
+                                                               : "inconclusive";
+        if (verdict.kind == Verdict::Compatible)
+          OPENMS_LOG_INFO << "Shortlist protease check: " << verdict.reason << "." << std::endl;
+        else if (verdict.kind == Verdict::Inconclusive)
+          OPENMS_LOG_WARN << "Shortlist protease check inconclusive: " << verdict.reason
+                          << "; the placement assumes trypsin." << std::endl;
+        else
+        {
+          // Refused only when something is withheld: a run asking for the
+          // shortlist alone gets it, with the call in its header, and exits 0.
+          std::string withheld;
+          if (!fasta_out.empty()) withheld = "-fasta_out";
+          if (!search_config_out.empty()) withheld += (withheld.empty() ? "" : " or ") + std::string("-search_config_out");
+          if (force)
+            OPENMS_LOG_WARN << "Shortlist protease check: " << verdict.reason
+                            << "; -shortlist_force writes the hand-off outputs anyway." << std::endl;
+          else if (withheld.empty())
+            OPENMS_LOG_WARN << "Shortlist protease check: " << verdict.reason
+                            << "; the placement windows are tryptic, so the shortlist does not describe this run "
+                               "(the call is in its header)." << std::endl;
+          else
+            OPENMS_LOG_ERROR << "Shortlist protease check: " << verdict.reason
+                             << "; the placement windows are tryptic, so the shortlist does not describe this run. "
+                                "Not writing " << withheld << " (-shortlist_force overrides)." << std::endl;
+          handoff_refused = !force && !withheld.empty();
+        }
+
+        std::vector<bool> keep(sl_proteins.size(), false);
+        if (shortlist_on)
+        {
+          auto rows = FASTag::Shortlist::rankProteins(run_acc.a.sl, sl_proteins, sl_settings);
+          std::size_t n_kept = 0, n_target = 0;
+          for (const auto& r : rows)
+          {
+            if (r.rank) ++n_target;
+            if (r.kept)
+            {
+              keep[r.ordinal] = true;
+              ++n_kept;
+            }
+          }
+          // The background is always kept, also where it duplicates a database
+          // entry the selection left out.
+          const std::size_t n_bg_db = FASTag::Shortlist::keepBackgroundTwins(sl_bg_twins, sl_proteins, keep, rows);
+          if (n_bg_db > 0)
+            OPENMS_LOG_INFO << "Shortlist background: " << n_bg_db
+                            << " database entries not selected are kept as background." << std::endl;
+          if (n_kept == 0)
+            OPENMS_LOG_WARN << "Shortlist: no protein has " << sl_settings.min_spectra << " qualifying spectra"
+                            << (fasta_out.empty() || handoff_refused ? "" : "; -fasta_out holds the background only")
+                            << "." << std::endl;
+          if (!shortlist_out.empty())
+          {
+            const char* pars[] = {"none", "subset", "greedy"};
+            const auto shortest = [](double v) {
+              std::string t;
+              FASTag::appendShortest(t, v);
+              return t;
+            };
+            std::vector<std::string> header = {
+                "FASTag " FASTAG_VERSION " protein shortlist: a search-space reduction from tag placements, "
+                "NOT an identification, NOT protein inference and NOT FDR-controlled.",
+                "input: " + File::basename(in) + "; database: " + File::basename(recon_db),
+                "settings: max_evalue " + shortest(sl_settings.max_evalue) + ", min_spectra " +
+                    std::to_string(sl_settings.min_spectra) + ", gapped " + (sl_settings.gapped ? "yes" : "no") +
+                    ", parsimony " + pars[static_cast<int>(sl_settings.parsimony)] + ", top " +
+                    std::to_string(sl_settings.top),
+                std::string("protease: ") + kind + (verdict.model.empty() ? "" : " " + verdict.model) + " (" +
+                    verdict.reason + ")",
+                "proteins: " + std::to_string(n_target) + " with evidence, " + std::to_string(n_kept) +
+                    " kept" + (n_bg_db ? ", " + std::to_string(n_bg_db) + " database entries kept as background"
+                                       : std::string()) +
+                    "; decoy entries in the database: " + std::to_string(sl_decoys)};
+            if (subsampling) header.push_back("counts are over the -subsample_* spectra only");
+            if (filtering) header.push_back("-fasta filtered the tags before placement");
+            std::string err;
+            if (!FASTag::Shortlist::writeShortlist(shortlist_out, header, rows, sl_background, &err))
+            {
+              OPENMS_LOG_ERROR << "Failed writing " << shortlist_out << ": " << err << std::endl;
+              return CANNOT_WRITE_OUTPUT_FILE;
+            }
+            OPENMS_LOG_INFO << "Shortlist: " << n_kept << " of " << n_target
+                            << " proteins with evidence kept, not FDR-controlled -> " << shortlist_out << std::endl;
+          }
+        }
+        if (!handoff_refused && !fasta_out.empty())
+        {
+          const auto res = FASTag::Shortlist::writeReducedFasta(recon_db, keep, sl_background, fasta_out);
+          if (!res.ok)
+          {
+            OPENMS_LOG_ERROR << "Failed writing " << fasta_out << ": " << res.error
+                             << "; -search_config_out not written." << std::endl;
+            return CANNOT_WRITE_OUTPUT_FILE;
+          }
+          OPENMS_LOG_INFO << "Reduced FASTA: " << res.entries << " entries (no decoys) -> " << fasta_out << std::endl;
+        }
+        if (!handoff_refused && !search_config_out.empty())
+        {
+          std::string text, err;
+          if (search_engine == "sage") text = FASTag::SearchConfig::renderSage(sl_plan);
+          else if (sl_template.empty()) text = FASTag::SearchConfig::renderComet(sl_plan, &err);
+          else
+          {
+            std::vector<std::pair<std::string, std::string>> keys;
+            err = FASTag::SearchConfig::cometKeys(sl_plan, keys);
+            if (err.empty())
+            {
+              const auto m = FASTag::SearchConfig::mergeKeyValueTemplate(sl_template, keys);
+              for (const std::string& w : m.warnings) OPENMS_LOG_WARN << "-search_config_template: " << w << "." << std::endl;
+              err = m.error;
+              text = m.text;
+            }
+          }
+          FASTag::PartFile pf(search_config_out);
+          std::ofstream cf;
+          if (err.empty() && !pf.open(cf, std::ios::out | std::ios::binary)) err = pf.error();
+          if (err.empty())
+          {
+            cf << text;
+            cf.close();
+            if (cf.fail()) err = "write failed (disk full?)";
+            else if (!pf.commit()) err = pf.error();
+          }
+          if (!err.empty())
+          {
+            OPENMS_LOG_ERROR << "Failed writing " << search_config_out << ": " << err << std::endl;
+            return CANNOT_WRITE_OUTPUT_FILE;
+          }
+          OPENMS_LOG_INFO << "Search configuration (" << search_engine << ", database " << sl_plan.database
+                          << ") -> " << search_config_out << std::endl;
+        }
+      }
     }
 
     // -recon_id_out: the placements as identifications.
@@ -4260,6 +4718,9 @@ protected:
     }
 
     g_t_main_end = std::chrono::steady_clock::now();
+    // #5: a confidently non-tryptic run withheld the FASTA or the
+    // configuration it was asked for (a shortlist-only run is not refused).
+    if (handoff_refused) return ILLEGAL_PARAMETERS;
     return EXECUTION_OK;
   }
 };

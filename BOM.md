@@ -107,7 +107,11 @@ BSD-3-Clause) written as MGF by `tools/mzml_to_mgf.py` with pyteomics 5.0.2
 (Apache-2.0; used to write the fixture, not shipped or linked).
 `test/fixtures/diatracer_like.mzML` and `ddapasef_empty.mzML` carry peaks of the
 same example in timsTOF-shaped mzML written by
-`test/fixtures/make_converter_fixtures.py`, so BSD-3-Clause as well. Provenance
+`test/fixtures/make_converter_fixtures.py`, so BSD-3-Clause as well.
+`test/fixtures/Ecoli_shortlist.fasta` and `chymo_insilico.mgf` (#5) are written
+by `test/fixtures/make_shortlist_fixtures.py` (standard library) from OpenMS
+example FASTAs (crap.fasta and the target-decoy E. coli FASTA, BSD-3-Clause);
+`comet_template.params` follows the layout of OpenMS's CometAdapter. Provenance
 and sha256 in `test/fixtures/README.md`.
 
 ## Provenance

@@ -24,8 +24,10 @@
 #include "Centroid.h"
 #include "IonSeries.h"
 #include "Census.h"
+#include "Shortlist.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -52,9 +54,19 @@ namespace FASTag::ClusterAcc
   };
 
   // ---- 1.12 A ----
+  // #5: the shortlist evidence (one record per qualifying placement, filled
+  // only with -shortlist_out/-fasta_out/-search_config_out) and the spectra
+  // whose tag ends the protease check counts.
   struct ThreadA
   {
-    void merge(const ThreadA&) {}
+    std::vector<Shortlist::Evidence> sl;
+    std::uint64_t protease_spectra = 0;
+    std::size_t last_counted = static_cast<std::size_t>(-1);  ///< last spectrum counted in protease_spectra
+    void merge(const ThreadA& o)
+    {
+      sl.insert(sl.end(), o.sl.begin(), o.sl.end());
+      protease_spectra += o.protease_spectra;
+    }
   };
   struct BlockA
   {

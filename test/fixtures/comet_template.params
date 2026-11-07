@@ -1,0 +1,111 @@
+# comet_version 2026.03 rev. 0
+# Comet MS/MS search engine parameters file.
+# Everything following the '#' symbol is treated as a comment.
+#
+# FASTag test fixture (FASTag 1.12, #5): the key layout CometAdapter.cpp
+# (OpenMS develop, createParamFile_) writes, with Comet's own comments, as a
+# stand-in for a `comet -p` file until the engine acceptance run on node data
+# records the real one. The keys peptide_mass_units, isotope_error and
+# allowed_missed_cleavage are left out on purpose (the merge must add them),
+# add_Nterm_peptide carries TMT6plex and add_C_cysteine Carbamidomethyl (the
+# merge must reset both), and search_enzyme_number names Lys_C (the merge
+# must set trypsin).
+database_name = /some/where/human.fasta
+decoy_search = 0                       # 0=no (default), 1=internal decoy concatenated, 2=internal decoy separate
+peff_format = 0
+peff_obo =
+num_threads = 0                        # 0=poll CPU to set num threads; else specify num threads directly (max 128)
+
+#
+# masses
+#
+peptide_mass_tolerance_upper = 20.0    # upper bound of the precursor mass tolerance
+peptide_mass_tolerance_lower = -20.0   # lower bound of the precursor mass tolerance; USUALLY NEGATIVE TO BE LOWER THAN 0
+mass_type_parent = 1                   # 0=average masses, 1=monoisotopic masses
+mass_type_fragment = 1                 # 0=average masses, 1=monoisotopic masses
+precursor_tolerance_type = 1           # 0=MH+ (default), 1=precursor m/z; only valid for amu/mmu tolerances
+
+#
+# search enzyme
+#
+search_enzyme_number = 3               # choose from list at end of this params file
+search_enzyme2_number = 0              # second enzyme; set to 0 if no second enzyme
+num_enzyme_termini = 2                 # 1 (semi-digested), 2 (fully digested, default), 8 C-term unspecific , 9 N-term unspecific
+
+#
+# Up to 9 variable modifications are supported
+# format:  <mass> <residues> <0=variable/else binary> <max_mods_per_peptide> <term_distance> <n/c-term> <required> <neutral_loss>
+#     e.g. 79.966331 STY 0 3 -1 0 0 97.976896
+#
+variable_mod01 = 15.9949 M 0 3 -1 0 0 0.0
+variable_mod02 = 79.966331 STY 0 3 -1 0 0 97.976896
+variable_mod03 = 0.0 X 0 3 -1 0 0 0.0
+variable_mod04 = 0.0 X 0 3 -1 0 0 0.0
+variable_mod05 = 0.0 X 0 3 -1 0 0 0.0
+variable_mod06 = 0.0 X 0 3 -1 0 0 0.0
+variable_mod07 = 0.0 X 0 3 -1 0 0 0.0
+variable_mod08 = 0.0 X 0 3 -1 0 0 0.0
+variable_mod09 = 0.0 X 0 3 -1 0 0 0.0
+max_variable_mods_in_peptide = 5
+require_variable_mod = 0
+
+#
+# fragment ions
+#
+# ion trap ms/ms:  1.0005 tolerance, 0.4 offset (mono masses), theoretical_fragment_ions = 1
+# high res ms/ms:    0.02 tolerance, 0.0 offset (mono masses), theoretical_fragment_ions = 0
+#
+fragment_bin_tol = 1.0005              # binning to use on fragment ions
+fragment_bin_offset = 0.4              # offset position to start the binning (0.0 to 1.0)
+theoretical_fragment_ions = 1          # 0=use flanking peaks, 1=M peak only
+use_A_ions = 0
+use_B_ions = 1
+use_C_ions = 0
+use_X_ions = 0
+use_Y_ions = 1
+use_Z_ions = 0
+use_NL_ions = 0                        # 0=no, 1=yes to consider NH3/H2O neutral loss peaks
+
+#
+# output
+#
+output_sqtfile = 0
+output_txtfile = 1
+output_pepxmlfile = 1
+output_mzidentmlfile = 0
+output_percolatorfile = 0
+print_expect_score = 1
+num_output_lines = 5
+
+mass_offsets = 0.0 28.0313             # one or more mass offsets to search (values subtracted from deconvoluted precursor mass)
+
+#
+# static modifications
+#
+add_Cterm_peptide = 0.0
+add_Nterm_peptide = 229.162932         # TMT6plex, must be reset by the merge
+add_Cterm_protein = 0.0
+add_Nterm_protein = 0.0
+add_G_glycine = 0.0000                 # added to G - avg.  57.0513, mono.  57.02146
+add_A_alanine = 0.0000                 # added to A - avg.  71.0779, mono.  71.03711
+add_S_serine = 0.0000                  # added to S - avg.  87.0773, mono.  87.03203
+add_C_cysteine = 57.021464             # added to C - avg. 103.1429, mono. 103.00918
+add_K_lysine = 229.162932              # TMT6plex on K
+add_M_methionine = 0.0000              # added to M - avg. 131.1961, mono. 131.04048
+
+#
+# COMET_ENZYME_INFO _must_ be at the end of this parameters file
+#
+[COMET_ENZYME_INFO]
+0.  Cut_everywhere         0      -           -
+1.  Trypsin                1      KR          P
+2.  Trypsin/P              1      KR          -
+3.  Lys_C                  1      K           P
+4.  Lys_N                  0      K           -
+5.  Arg_C                  1      R           P
+6.  Asp_N                  0      DN          -
+7.  CNBr                   1      M           -
+8.  Glu_C                  1      DE          P
+9.  PepsinA                1      FL          P
+10. Chymotrypsin           1      FWYL        P
+11. No_cut                 1      @           @
