@@ -3,10 +3,11 @@
 // Help entry; a red flag offers "Run anyway" (before a run) and its fix; a
 // block names what to do instead.
 
-import { useState, type JSX } from 'react'
+import { useRef, useState, type JSX } from 'react'
 import { IconError, IconFlag, IconWarning } from '../icons'
 import { HelpLink } from '../help/HelpLink'
 import { shellLine } from '../app/format'
+import { focusLater } from '../app/focus'
 import { INSTRUMENTS, presetText } from '../setup/presets'
 import type { Check, Detected, Level } from './checks'
 
@@ -43,13 +44,16 @@ function CopyCommand({ argv, label }: { argv: string[]; label: string }): JSX.El
 export function CheckItem(p: {
   check: Check
   answered?: boolean
+  // Run anyway, and taking it back (a pressed toggle).
   onRunAnyway?(): void
+  onUndoRunAnyway?(): void
   onFix?(): void
   fixDisabled?: boolean
 }): JSX.Element {
   const c = p.check
+  const open = c.level === 'flag' && !!p.onRunAnyway && !p.answered
   return (
-    <li className={`check check-${c.level}`} data-check={c.id}>
+    <li className={`check check-${c.level}`} data-check={c.id} data-unanswered={open || undefined}>
       <div className="check-head">
         <LevelIcon level={c.level} />
         <strong>
@@ -65,12 +69,17 @@ export function CheckItem(p: {
             {c.fix.label}
           </button>
         )}
-        {c.level === 'flag' && p.onRunAnyway && !p.answered && (
-          <button type="button" className="secondary small" onClick={p.onRunAnyway}>
-            Run anyway
+        {c.level === 'flag' && p.onRunAnyway && (
+          <button
+            type="button"
+            className="secondary small"
+            aria-pressed={!!p.answered}
+            onClick={p.answered ? p.onUndoRunAnyway : p.onRunAnyway}
+            title={p.answered ? 'Chosen: press again to take it back' : undefined}
+          >
+            {p.answered ? 'Run anyway: chosen' : 'Run anyway'}
           </button>
         )}
-        {c.level === 'flag' && p.answered && <span className="hint">Run anyway: chosen</span>}
         <HelpLink to={c.faq}>What this means</HelpLink>
       </div>
     </li>
@@ -92,7 +101,7 @@ function DetectedLine(p: { detected: Detected; chosen: string; onUse?(id: string
             · <strong>{presetText(preset)}</strong> <span className="chip">detected</span>
           </>
         ) : (
-          detected.family === 'hybrid-ion-trap' && ' · its MS2 may be read in the ion trap or the Orbitrap; the metadata do not say which'
+          detected.family === 'hybrid-ion-trap' && ' · its MS2 may be read in the ion trap or in the high-resolution analyser; the metadata do not say which'
         )}
         <span className="hint"> (from {detected.source})</span>
       </span>
@@ -114,8 +123,39 @@ export interface PreStartPanelProps {
   chosenInstrument: string
   isAnswered(id: string): boolean
   onRunAnyway(id: string): void
+  onUndoRunAnyway(id: string): void
   onInstrument(id: string): void
   onRecheck(): void
+  // A spectra file is chosen: the summary is announced only then.
+  hasInput: boolean
+}
+
+const count = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`
+
+/// What the live region says of the checks before the run.
+export function checksSummary(p: Pick<PreStartPanelProps, 'checks' | 'notChecked' | 'pending' | 'hasInput'>): string {
+  if (!p.hasInput) return ''
+  if (p.pending) return 'Checking the file with FASTag…'
+  const by = (l: Level): number => p.checks.filter((c) => c.level === l).length
+  const parts = [
+    by('block') && count(by('block'), 'block', 'blocks'),
+    by('flag') && count(by('flag'), 'red flag', 'red flags'),
+    by('warn') && count(by('warn'), 'warning', 'warnings')
+  ].filter(Boolean)
+  if (!parts.length) return p.notChecked ?? 'Checks before the run: no problem found.'
+  const what = `Checks before the run: ${parts.join(', ')}.`
+  return p.notChecked ? `${what} ${p.notChecked}` : what
+}
+
+/// Where focus goes once a fix or Run anyway was chosen (the control pressed
+/// may be gone): the next red flag still open, else Run, else the heading.
+function focusNext(section: HTMLElement | null, heading: HTMLElement | null): void {
+  focusLater(
+    () =>
+      section?.querySelector<HTMLElement>('li.check[data-unanswered] .check-actions button') ??
+      document.querySelector<HTMLButtonElement>('button[data-run]:not(:disabled)') ??
+      heading
+  )
 }
 
 /// The pre-start checks of the Spectra card.
@@ -123,24 +163,40 @@ export function PreStartPanel(p: PreStartPanelProps): JSX.Element {
   // The fix of a check names the preset; the detected line offers it only
   // when no check does.
   const fixed = new Set(p.checks.map((c) => c.fix?.instrument).filter(Boolean))
+  const sectionRef = useRef<HTMLElement>(null)
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  const next = (): void => focusNext(sectionRef.current, headingRef.current)
   return (
-    <section className="inspector" aria-labelledby="inspector-h">
+    <section className="inspector" aria-labelledby="inspector-h" ref={sectionRef}>
+      {/* Always in the page, so each new result of the checks is announced. */}
+      <p className="sr-only" role="status" data-testid="checks-summary">
+        {checksSummary(p)}
+      </p>
       <div className="block-head">
-        <h3 id="inspector-h">Checks before the run</h3>
+        <h3 id="inspector-h" tabIndex={-1} ref={headingRef}>
+          Checks before the run
+        </h3>
         {!p.pending && !p.notChecked && (
           <button type="button" className="link" onClick={p.onRecheck}>
             Check again
           </button>
         )}
       </div>
-      {p.pending && (
-        <p className="hint" role="status">
-          Checking the file with FASTag…
-        </p>
-      )}
+      {p.pending && <p className="hint">Checking the file with FASTag…</p>}
       {p.notChecked && <p className="hint not-checked">{p.notChecked}</p>}
       {p.detected && (
-        <DetectedLine detected={p.detected} chosen={p.chosenInstrument} onUse={fixed.has(p.detected.preset ?? '') ? undefined : p.onInstrument} />
+        <DetectedLine
+          detected={p.detected}
+          chosen={p.chosenInstrument}
+          onUse={
+            fixed.has(p.detected.preset ?? '')
+              ? undefined
+              : (id) => {
+                  p.onInstrument(id)
+                  next()
+                }
+          }
+        />
       )}
       {p.checks.length > 0 ? (
         <ul className="checks" aria-label="Checks before the run">
@@ -149,8 +205,19 @@ export function PreStartPanel(p: PreStartPanelProps): JSX.Element {
               key={c.id}
               check={c}
               answered={p.isAnswered(c.id)}
-              onRunAnyway={() => p.onRunAnyway(c.id)}
-              onFix={c.fix?.instrument ? () => p.onInstrument(c.fix!.instrument!) : undefined}
+              onRunAnyway={() => {
+                p.onRunAnyway(c.id)
+                next()
+              }}
+              onUndoRunAnyway={() => p.onUndoRunAnyway(c.id)}
+              onFix={
+                c.fix?.instrument
+                  ? () => {
+                      p.onInstrument(c.fix!.instrument!)
+                      next()
+                    }
+                  : undefined
+              }
             />
           ))}
         </ul>

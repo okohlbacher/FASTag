@@ -163,20 +163,30 @@ export function preStartChecks(o: {
       fix: { label: `Use ${presetText(IONTRAP)}`, instrument: IONTRAP.id }
     })
   }
-  if (sp && sp.profile != null && sp.probed && sp.profile * 2 > sp.probed) {
+  // FASTag centroids profile MS2 of mzPeak input itself (-pick_profile's
+  // default, legacy, as 1.11 did): only mzML and MGF input are flagged.
+  const fmt = (probe.fileFormat ?? '').toLowerCase()
+  if (fmt !== 'mzpeak' && sp && sp.profile != null && sp.probed && sp.profile * 2 > sp.probed) {
     checks.push({
       id: 'profile',
       level: 'flag',
       title: 'Profile MS2 spectra',
-      detail: `${pct(sp.profile, sp.probed)} of the ${sp.probed.toLocaleString('en-US')} MS2 spectra probed are profile data. They give fewer tags than centroided spectra; centroid them first, or convert the run to mzPeak.`,
+      detail: `${pct(sp.profile, sp.probed)} of the ${sp.probed.toLocaleString('en-US')} MS2 spectra probed are profile data. They give fewer tags than centroided spectra. ${
+        fmt === 'mgf'
+          ? 'Centroid them first, or convert the run to mzML or mzPeak.'
+          : 'FASTag 1.12 centroids them itself with -pick_profile auto (an option of the command line); or centroid them first, or convert the run to mzPeak.'
+      }`,
       faq: 'faq-no-tags',
       source: 'the probe'
     })
   }
+  // A warning, not a red flag (a deviation from GUI-DESIGN S1, which lists
+  // the stale index as one): FASTag scans the file instead, in seconds, and
+  // the results are the same.
   if (probe.index && (probe.index.state === 'stale' || probe.index.state === 'absent')) {
     checks.push({
       id: 'stale-index',
-      level: 'flag',
+      level: 'warn',
       title: probe.index.state === 'stale' ? 'The mzML index does not match the file' : 'The mzML file has no index',
       detail: 'FASTag finds the spectra by reading the whole file once more. The results are not affected; re-indexing the file (for example with OpenMS FileConverter) skips that pass.',
       faq: 'faq-stale-index',

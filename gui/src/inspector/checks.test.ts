@@ -42,18 +42,42 @@ describe('preStartChecks (from the probe)', () => {
     expect(flag.level).toBe('flag')
     expect(flag.fix).toEqual({ label: 'Use Ion trap CID 0.3 Da', instrument: 'iontrap-cid' })
     expect(flag.detail).toContain('ion trap')
-    // The stale index is a red flag too; the ETD half of the run a warning.
-    expect(ids(r.checks)).toEqual(['flag:iontrap-ppm', 'flag:stale-index', 'warn:electron'])
+    // The stale index (as FASTag 1.12 reports it for this file) and the ETD
+    // half of the run are warnings.
+    expect(ids(r.checks)).toEqual(['flag:iontrap-ppm', 'warn:stale-index', 'warn:electron'])
   })
 
   it('the same file at 0.3 Da: no tolerance flag', () => {
-    expect(ids(pre(iontrapProbe, da).checks)).toEqual(['flag:stale-index', 'warn:electron'])
+    expect(ids(pre(iontrapProbe, da).checks)).toEqual(['warn:stale-index', 'warn:electron'])
   })
 
-  it('an Orbitrap HCD run with an index passes every check and proposes Orbitrap HCD', () => {
+  it('the Orbitrap HCD gate input (its index stale, as FASTag 1.12 says): only a warning, and Orbitrap HCD proposed', () => {
     const r = pre(orbitrapProbe)
-    expect(r.checks).toEqual([])
+    expect(ids(r.checks)).toEqual(['warn:stale-index'])
+    expect(r.checks[0].title).toBe('The mzML index does not match the file')
     expect(r.detected?.preset).toBe('orbitrap-hcd')
+  })
+
+  it('a file that really is indexed (the DIAspeXtract output) passes every check', () => {
+    const r = pre(diaPseudoProbe)
+    expect(r.notChecked).toBeNull()
+    expect(r.checks).toEqual([])
+  })
+
+  it('a missing index is a warning too', () => {
+    const absent = orbitrapProbe.replace('{"record":"index","state":"stale"}', '{"record":"index","state":"absent"}')
+    expect(absent).not.toBe(orbitrapProbe) // guard
+    const r = pre(absent)
+    expect(ids(r.checks)).toEqual(['warn:stale-index'])
+    expect(r.checks[0].title).toBe('The mzML file has no index')
+  })
+
+  it('an LTQ FT Ultra whose probe names no MS2 analyser gets no ion-trap red flag at ppm', () => {
+    const ft = iontrapProbe.replace('"name":"LTQ Orbitrap XL"', '"name":"LTQ FT Ultra"').replace(/"ms2_analyzer":"[^"]*"/, '"ms2_analyzer":null')
+    expect(ft).toContain('"name":"LTQ FT Ultra"') // guard
+    const r = pre(ft)
+    expect(r.detected).toMatchObject({ family: 'hybrid-ion-trap', preset: null })
+    expect(ids(r.checks)).not.toContain('flag:iontrap-ppm')
   })
 
   it('raw DIA is a block with the DIAspeXtract command; pseudo-DDA passes', () => {
@@ -75,12 +99,22 @@ describe('preStartChecks (from the probe)', () => {
   it('no MS2 is a block; profile MS2 a red flag; a FASTA without decoys a warning', () => {
     expect(ids(pre(noMs2Probe).checks)).toEqual(['block:no-ms2'])
     expect(ids(pre(profileProbe).checks)).toEqual(['flag:profile'])
-    expect(ids(pre(fastaProbe).checks)).toEqual(['warn:fasta-decoys'])
+    expect(ids(pre(fastaProbe).checks)).toEqual(['warn:stale-index', 'warn:fasta-decoys'])
+  })
+
+  it('profile MS2: mzML names -pick_profile auto, MGF centroiding first, and mzPeak (centroided by FASTag) is not flagged', () => {
+    expect(profileProbe).toContain('"file_format":"mzML"') // guard
+    expect(pre(profileProbe).checks[0].detail).toContain('-pick_profile auto')
+    const mgf = pre(profileProbe.replace('"file_format":"mzML"', '"file_format":"MGF"')).checks
+    expect(ids(mgf)).toEqual(['flag:profile'])
+    expect(mgf[0].detail).toContain('Centroid them first')
+    expect(mgf[0].detail).not.toContain('-pick_profile')
+    expect(pre(profileProbe.replace('"file_format":"mzML"', '"file_format":"mzPeak"')).checks).toEqual([])
   })
 
   it('species with a Da tolerance is a red flag from the settings, probe or not', () => {
     const values = { ...da, species: true }
-    expect(ids(pre(orbitrapProbe, values).checks)).toEqual(['flag:da-species'])
+    expect(ids(pre(orbitrapProbe, values).checks)).toEqual(['flag:da-species', 'warn:stale-index'])
     const none = preStartChecks({ input: '/d/a.mzML', values, supported: false, probe: null })
     expect(ids(none.checks)).toEqual(['flag:da-species'])
   })
@@ -125,6 +159,17 @@ describe('postRunChecks (from the reports and the log of a real 1.12 run)', () =
     const ionTrapOnly = it20Digest.replace('meta\tinstrument\tLTQ Orbitrap XL', 'meta\tinstrument\tLTQ XL')
     expect(ids(postRunChecks({ reports: [rep(ionTrapOnly, '/d/a.digest.tsv')], notes: [] }).checks)).toEqual(['flag:iontrap-ppm'])
     expect(postRunChecks({ reports: [rep(it20Digest, '/d/a.digest.tsv')], notes: [] }).checks).toEqual([])
+  })
+
+  it('an LTQ FT Ultra (linear trap + FT-ICR) at ppm: no red flag from the meta rows alone, one with the low-resolution warning', () => {
+    const ft = it20Digest.replace('meta\tinstrument\tLTQ Orbitrap XL', 'meta\tinstrument\tLTQ FT Ultra')
+    expect(ft).not.toBe(it20Digest) // guard
+    const alone = postRunChecks({ reports: [rep(ft, '/d/a.digest.tsv')], notes: [] })
+    expect(alone.checks).toEqual([])
+    expect(alone.detected).toMatchObject({ text: 'LTQ FT Ultra', family: 'hybrid-ion-trap', preset: null })
+    const withLog = postRunChecks({ reports: [rep(ft, '/d/a.digest.tsv')], notes: notes(it20Err) })
+    expect(ids(withLog.checks)).toEqual(['flag:iontrap-ppm', 'warn:electron'])
+    expect(withLog.checks[0].detail).not.toContain('an ion trap.')
   })
 
   it('the same file at 0.3 Da, and an Orbitrap HCD run: no flag', () => {

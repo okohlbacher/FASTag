@@ -170,6 +170,13 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   // The checks after a run, from its reports and FASTag's log lines.
   const after = postRunChecks({ reports: run.reports.list, notes: run.shownNotes })
   const afterInput = run.results?.input ?? ''
+  // A finished run names its red flags after the run too (the panel over
+  // the result tabs shows them).
+  const afterFlags = after.checks.filter((c) => c.level === 'flag').length
+  const announce =
+    !running && afterFlags > 0 && run.announce.startsWith('Finished ')
+      ? `${run.announce} ${afterFlags} ${afterFlags === 1 ? 'red flag' : 'red flags'} after the run: see Checks after the run.`
+      : run.announce
   const canRerun = !busy && jobs.length === 0 && !!bin?.ok && !!afterInput && afterInput === input && run.lastRun?.input === input
   useEffect(() => {
     if (!rerunWith) return
@@ -306,6 +313,7 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
       instrument={session.instrument}
       detectedInstrument={detectedPreset}
       inspectorHeld={inspector.held}
+      inspectorChecking={inspector.checking}
       values={values}
       onInstrument={session.chooseInstrument}
       onRun={run.run}
@@ -363,7 +371,7 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
       />
       {/* The run's live region: always in the page, whichever view is shown. */}
       <p className="sr-only" role="status">
-        {run.announce}
+        {announce}
       </p>
 
       <div className="shell">
@@ -398,6 +406,8 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
                     chosenInstrument={chosenInstrument}
                     isAnswered={inspector.isAnswered}
                     onRunAnyway={inspector.runAnyway}
+                    onUndoRunAnyway={inspector.undoRunAnyway}
+                    hasInput={!!input}
                     onInstrument={session.chooseInstrument}
                     onRecheck={inspector.recheck}
                   />

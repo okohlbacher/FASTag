@@ -17,6 +17,8 @@ describe('familyOf', () => {
     expect(familyOf({ name: 'Orbitrap Astral', ms2Analyzer: 'orbitrap' })).toBe('astral')
     expect(familyOf({ name: 'timsTOF Pro', ms2Analyzer: 'time-of-flight', ionMobility: '1/K0' })).toBe('timstof')
     expect(familyOf({ name: 'TripleTOF 6600', ms2Analyzer: 'time-of-flight' })).toBe('tof')
+    expect(familyOf({ name: 'LTQ FT Ultra', ms2Analyzer: 'radial ejection linear ion trap' })).toBe('ion-trap')
+    expect(familyOf({ name: 'LTQ FT Ultra', ms2Analyzer: 'fourier transform ion cyclotron resonance mass spectrometer' })).toBe('orbitrap')
   })
 
   it('without the analyser, a hybrid with an ion trap stays undecided', () => {
@@ -26,6 +28,9 @@ describe('familyOf', () => {
     expect(familyOf({ name: 'Orbitrap Exploris 480' })).toBe('orbitrap')
     expect(familyOf({ name: 'LTQ Velos' })).toBe('ion-trap')
     expect(familyOf({ name: 'LTQ XL' })).toBe('ion-trap')
+    // Linear ion trap + FT-ICR (MS:1000448, MS:1000557): MS2 in either analyser.
+    expect(familyOf({ name: 'LTQ FT' })).toBe('hybrid-ion-trap')
+    expect(familyOf({ name: 'LTQ FT Ultra' })).toBe('hybrid-ion-trap')
     expect(familyOf({ name: 'timsTOF HT' })).toBe('timstof')
     expect(familyOf({ name: '-', model: '-' })).toBe('unknown')
     expect(familyOf({})).toBe('unknown')

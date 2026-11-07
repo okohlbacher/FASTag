@@ -7,8 +7,9 @@
 // The analyser of the MS2 decides where the CLI names it (the probe's
 // ms2_analyzer). The rows of the digest report name only the instrument, so
 // a hybrid whose MS2 may be read in either analyser (LTQ Orbitrap, Orbitrap
-// Elite, the Tribrids) stays undecided unless the run's log says more
-// (checks.ts).
+// Elite, the Tribrids, and the FT-ICR hybrids LTQ FT and LTQ FT Ultra) stays
+// undecided unless the run's log says more (checks.ts). Only an instrument
+// that has no other analyser (LTQ XL, LTQ Velos) is an ion trap by its name.
 
 import { value, type Report } from '../digestReport'
 
@@ -41,6 +42,8 @@ export function familyOf(f: InstrumentFacts): Family {
   // Hybrids with a linear ion trap: MS2 in either analyser.
   if (orbitrap && /\b(LTQ|Velos|Elite|Fusion|Lumos|Eclipse|Tribrid|Ascend)\b/i.test(text)) return 'hybrid-ion-trap'
   if (orbitrap || /exactive|exploris/i.test(text)) return 'orbitrap'
+  // Linear ion trap + FT-ICR (LTQ FT, LTQ FT Ultra: MS:1000448, MS:1000557).
+  if (/\b(LTQ|Velos)\b/i.test(text) && /\bFT\b|FT-?ICR|fourier transform/i.test(text)) return 'hybrid-ion-trap'
   if (/\b(LTQ|LCQ|Velos Pro|amaZon|HCT|esquire)\b|ion trap/i.test(text)) return 'ion-trap'
   if (/TOF|Synapt|impact|maXis|Xevo/i.test(text)) return 'tof'
   return 'unknown'

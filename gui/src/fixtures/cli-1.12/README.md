@@ -24,8 +24,12 @@ contract (`src/inspector/probe.ts`, gui/README.md "Inspector"), from the same
 gate inputs: the `acquisition` reasons are the "Acquisition check:" lines of
 the runs above; the MS1/MS2 counts, the analyser of the instrument
 configuration the MS2 reference and the activation methods were counted
-from the mzML headers on `data`; the stale index is the one FASTag reported
-for these files. `iontrap`, `orbitrap`, `dia_raw` and `dia_pseudo` come from
+from the mzML headers on `data`; the index state is the one FASTag reported
+for these files: each of the three gate inputs (PXD010783, PXD003531,
+PXD006096) has an `indexedmzML` wrapper whose offsets FASTag 1.12 rejects
+("has no index, or one that no longer matches the file", line 1 of each
+`.stderr` above), so their probes say `stale`. Only the DIAspeXtract output
+(`dia_pseudo`, whose log has no such line) is really indexed (`ok`). `iontrap`, `orbitrap`, `dia_raw` and `dia_pseudo` come from
 these inputs; `no_ms2`, `profile`, `fasta_nodecoys` (the gate FASTA,
 20,416 proteins, no decoy entries), `newer_format` and `truncated` are edge
 cases of the contract. Probe activation counts are over the 4,000 MS2

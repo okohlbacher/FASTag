@@ -203,10 +203,24 @@ entry.
   1.12 refuses with exit code 11 (the check shows the DIAspeXtract command to
   run first).
 - **Red flag** (Run waits for the fix or "Run anyway"): ion-trap MS2 with a
-  ppm tolerance (fix: Ion trap CID 0.3 Da), profile MS2, a stale or missing
-  mzML index, species detection with a tolerance in Da.
-- **Warning**: electron activation (ETD, ECD, hybrids), a FASTA without decoys,
-  a DIA-like acquisition FASTag still tags.
+  ppm tolerance (fix: Ion trap CID 0.3 Da), profile MS2 in mzML or MGF input
+  (FASTag centroids mzPeak input itself; for mzML it names `-pick_profile
+  auto`), species detection with a tolerance in Da.
+- **Warning**: a stale or missing mzML index (FASTag scans the file instead;
+  results are the same: a deviation from GUI-DESIGN S1, which lists the stale
+  index as a red flag), electron activation (ETD, ECD, hybrids), a FASTA
+  without decoys, a DIA-like acquisition FASTag still tags.
+
+Run also waits while the checks are not known yet ("Checking the input with
+FASTag…": `--helphelp`, then the probe). A probe error or its 60 s timeout
+releases Run as "Not checked before the run". The spectra file is probed once
+per input; the FASTA is probed separately, once its field has stayed
+unchanged for 0.7 s and names a FASTA file, and a newer probe kills the
+superseded CLI child in the backend. The instrument family is the CLI's
+`ms2_analyzer` where it names one; by name only an instrument without a
+second analyser (LTQ XL, LTQ Velos) is an ion trap, while the hybrids (LTQ
+Orbitrap, Orbitrap Elite, the Tribrids, LTQ FT, LTQ FT Ultra) need the
+analyser or FASTag's low-resolution warning.
 
 The instrument the probe or the digest report names proposes a preset,
 marked "(detected)" in the instrument list; nothing is applied until it is

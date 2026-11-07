@@ -15,6 +15,7 @@
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime};
 
@@ -111,9 +112,18 @@ fn command(r: &Resolved) -> Command {
     cmd
 }
 
-/// Run @p cmd to its end or @p timeout (then kill it), reading at most
-/// @p max bytes of stdout. Returns (exit code, timed out, stdout, stderr).
-fn run_bounded(mut cmd: Command, timeout: Duration, max: usize) -> std::io::Result<(Option<i32>, bool, String, String)> {
+struct Bounded {
+    code: Option<i32>,
+    timed_out: bool,
+    // @p cancel said stop before the child ended: it was killed.
+    cancelled: bool,
+    stdout: String,
+    stderr: String,
+}
+
+/// Run @p cmd to its end or @p timeout, or until @p cancel returns true
+/// (then kill it), reading at most @p max bytes of stdout.
+fn run_bounded(mut cmd: Command, timeout: Duration, max: usize, cancel: &dyn Fn() -> bool) -> std::io::Result<Bounded> {
     cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = cmd.spawn()?;
     let mut so = child.stdout.take().expect("piped");
@@ -133,12 +143,14 @@ fn run_bounded(mut cmd: Command, timeout: Duration, max: usize) -> std::io::Resu
     });
     let until = Instant::now() + timeout;
     let mut timed_out = false;
+    let mut cancelled = false;
     let status = loop {
         if let Some(s) = child.try_wait()? {
             break Some(s);
         }
-        if Instant::now() >= until {
-            timed_out = true;
+        cancelled = cancel();
+        if cancelled || Instant::now() >= until {
+            timed_out = !cancelled;
             let _ = child.kill();
             let _ = child.wait();
             break None;
@@ -147,17 +159,18 @@ fn run_bounded(mut cmd: Command, timeout: Duration, max: usize) -> std::io::Resu
     };
     // A grandchild holding the pipes would keep the readers alive: they are
     // joined only when the child itself has ended without a timeout.
-    let (stdout, stderr) = if timed_out {
+    let (stdout, stderr) = if status.is_none() {
         (Vec::new(), Vec::new())
     } else {
         (out.join().unwrap_or_default(), err.join().unwrap_or_default())
     };
-    Ok((
-        status.and_then(|s| s.code()),
+    Ok(Bounded {
+        code: status.and_then(|s| s.code()),
         timed_out,
-        String::from_utf8_lossy(&stdout).into_owned(),
-        String::from_utf8_lossy(&stderr).into_owned(),
-    ))
+        cancelled,
+        stdout: String::from_utf8_lossy(&stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&stderr).into_owned(),
+    })
 }
 
 /// The capabilities of the binary @p r resolves to.
@@ -167,11 +180,11 @@ pub fn capabilities_of(r: &Resolved) -> Capabilities {
     }
     let mut cmd = command(r);
     cmd.arg("--helphelp");
-    match run_bounded(cmd, HELP_TIMEOUT, 4 << 20) {
-        Ok((_, true, _, _)) => Capabilities { options: vec![], ok: false, detail: "--helphelp timed out".into() },
+    match run_bounded(cmd, HELP_TIMEOUT, 4 << 20, &|| false) {
+        Ok(b) if b.timed_out => Capabilities { options: vec![], ok: false, detail: "--helphelp timed out".into() },
         // TOPP prints the help on stdout; some builds exit non-zero after it.
-        Ok((_, false, so, se)) => {
-            let options = parse_options(&format!("{so}\n{se}"));
+        Ok(b) => {
+            let options = parse_options(&format!("{}\n{}", b.stdout, b.stderr));
             let ok = !options.is_empty();
             let detail = if ok { format!("{} options", options.len()) } else { "--helphelp listed no options".into() };
             Capabilities { options, ok, detail }
@@ -180,8 +193,16 @@ pub fn capabilities_of(r: &Resolved) -> Capabilities {
     }
 }
 
-/// Probe @p input with the binary @p r, if @p options has -probe_input.
-pub fn probe_with(r: &Resolved, options: &[String], input: &str, fasta: Option<&str>, timeout: Duration) -> ProbeRun {
+/// Probe @p input with the binary @p r, if @p options has -probe_input. The
+/// child is killed when @p cancel returns true (a newer probe superseded it).
+pub fn probe_with(
+    r: &Resolved,
+    options: &[String],
+    input: &str,
+    fasta: Option<&str>,
+    timeout: Duration,
+    cancel: &dyn Fn() -> bool,
+) -> ProbeRun {
     let none = |reason: String, supported: bool| ProbeRun {
         supported,
         ok: false,
@@ -196,16 +217,22 @@ pub fn probe_with(r: &Resolved, options: &[String], input: &str, fasta: Option<&
     };
     let mut cmd = command(r);
     cmd.args(&args);
-    match run_bounded(cmd, timeout, PROBE_MAX_BYTES) {
-        Ok((code, timed_out, stdout, stderr)) => {
-            let last = stderr.lines().map(str::trim).rfind(|l| !l.is_empty()).map(|l| l.chars().take(300).collect());
+    match run_bounded(cmd, timeout, PROBE_MAX_BYTES, cancel) {
+        Ok(b) => {
+            let last = b.stderr.lines().map(str::trim).rfind(|l| !l.is_empty()).map(|l| l.chars().take(300).collect());
             ProbeRun {
                 supported: true,
-                ok: !timed_out && code == Some(0),
-                code,
-                timed_out,
-                stdout,
-                reason: if timed_out { Some(format!("no answer within {} s", timeout.as_secs())) } else { last },
+                ok: !b.timed_out && !b.cancelled && b.code == Some(0),
+                code: b.code,
+                timed_out: b.timed_out,
+                stdout: b.stdout,
+                reason: if b.cancelled {
+                    Some("superseded by a newer probe".into())
+                } else if b.timed_out {
+                    Some(format!("no answer within {} s", timeout.as_secs()))
+                } else {
+                    last
+                },
             }
         }
         Err(e) => none(format!("cannot execute: {e}"), true),
@@ -241,12 +268,31 @@ pub async fn cli_capabilities(app: AppHandle) -> Capabilities {
         .unwrap_or_else(|e| Capabilities { options: vec![], ok: false, detail: format!("failed: {e}") })
 }
 
+// The generation of the newest probe of each kind (0: the spectra file, 1:
+// with a FASTA). The renderer probes one input at a time, so a newer call
+// of a kind supersedes the older one, whose CLI child is killed instead of
+// running on to its timeout.
+static PROBE_GEN: [AtomicU64; 2] = [AtomicU64::new(0), AtomicU64::new(0)];
+
 #[tauri::command]
 pub async fn probe_input(app: AppHandle, input: String, fasta: Option<String>) -> ProbeRun {
+    let kind = usize::from(fasta.as_deref().is_some_and(|f| !f.is_empty()));
+    let generation = PROBE_GEN[kind].fetch_add(1, Ordering::SeqCst) + 1;
     tauri::async_runtime::spawn_blocking(move || {
         let r = resolve_binary(&app);
         let caps = cached_capabilities(&r);
-        probe_with(&r, &caps.options, &input, fasta.as_deref(), PROBE_TIMEOUT)
+        let superseded = || PROBE_GEN[kind].load(Ordering::SeqCst) != generation;
+        if superseded() {
+            return ProbeRun {
+                supported: true,
+                ok: false,
+                code: None,
+                timed_out: false,
+                stdout: String::new(),
+                reason: Some("superseded by a newer probe".into()),
+            };
+        }
+        probe_with(&r, &caps.options, &input, fasta.as_deref(), PROBE_TIMEOUT, &superseded)
     })
     .await
     .unwrap_or_else(|e| ProbeRun {
@@ -342,7 +388,7 @@ mod tests {
             let input = d.join("run01.mzML");
             std::fs::write(&input, "").unwrap();
             std::fs::copy(PROBE_FIXTURE, d.join("run01.mzML.probe.jsonl")).unwrap();
-            let p = probe_with(&stub(), &opts(), input.to_str().unwrap(), None, PROBE_TIMEOUT);
+            let p = probe_with(&stub(), &opts(), input.to_str().unwrap(), None, PROBE_TIMEOUT, &|| false);
             assert!(p.ok && p.supported && !p.timed_out, "{p:?}");
             assert_eq!(p.code, Some(0));
             assert_eq!(p.stdout, std::fs::read_to_string(PROBE_FIXTURE).unwrap());
@@ -351,7 +397,7 @@ mod tests {
         #[test]
         fn a_file_the_probe_cannot_read_fails_with_its_reason() {
             let d = dir("unreadable");
-            let p = probe_with(&stub(), &opts(), d.join("gone.mzML").to_str().unwrap(), None, PROBE_TIMEOUT);
+            let p = probe_with(&stub(), &opts(), d.join("gone.mzML").to_str().unwrap(), None, PROBE_TIMEOUT, &|| false);
             assert!(!p.ok && p.supported);
             assert_eq!(p.code, Some(5));
             assert!(p.reason.unwrap().contains("cannot read"));
@@ -364,14 +410,29 @@ mod tests {
             std::fs::write(&input, "").unwrap();
             std::fs::write(d.join("run01.mzML.stub"), "STUB_PROBE_SLEEP=30\n").unwrap();
             let t = Instant::now();
-            let p = probe_with(&stub(), &opts(), input.to_str().unwrap(), None, Duration::from_millis(500));
+            let p = probe_with(&stub(), &opts(), input.to_str().unwrap(), None, Duration::from_millis(500), &|| false);
             assert!(p.timed_out && !p.ok, "{p:?}");
             assert!(t.elapsed() < Duration::from_secs(10));
         }
 
         #[test]
+        fn a_superseded_probe_is_killed_at_once() {
+            let d = dir("superseded");
+            let input = d.join("run01.mzML");
+            std::fs::write(&input, "").unwrap();
+            std::fs::write(d.join("run01.mzML.stub"), "STUB_PROBE_SLEEP=30\n").unwrap();
+            let t = Instant::now();
+            // A newer probe arrives 300 ms in.
+            let newer = || t.elapsed() > Duration::from_millis(300);
+            let p = probe_with(&stub(), &opts(), input.to_str().unwrap(), None, PROBE_TIMEOUT, &newer);
+            assert!(!p.ok && !p.timed_out, "{p:?}");
+            assert_eq!(p.reason.as_deref(), Some("superseded by a newer probe"));
+            assert!(t.elapsed() < Duration::from_secs(10));
+        }
+
+        #[test]
         fn without_the_flag_nothing_runs() {
-            let p = probe_with(&stub(), &["in".to_string()], "/d/a.mzML", None, PROBE_TIMEOUT);
+            let p = probe_with(&stub(), &["in".to_string()], "/d/a.mzML", None, PROBE_TIMEOUT, &|| false);
             assert!(!p.supported && !p.ok && p.code.is_none());
         }
     }
