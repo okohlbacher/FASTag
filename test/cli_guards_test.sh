@@ -21,6 +21,7 @@
 #     and hides neither the one-set rule nor the -stream refusals
 #   - -out is written in place: an existing -out keeps its mode, every hard
 #     link sees the table, and a writable -out in a read-only directory works
+#   - -complement_tolerance or -complement_tol_factor 0 or NaN is refused (1.12 E2)
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 BIN="$1"
@@ -187,5 +188,24 @@ case "$(uname -s)" in
       cmp -s "$TMP/r.tsv" "$TMP/ro/t.tsv" || fail "the -out in a read-only directory did not get the table"
     fi ;;
 esac
+
+# -complement_tolerance (1.12 E2): 0 and NaN are refused, as for
+# -fragment_tolerance; a positive value in either unit runs.
+for o in complement_tolerance complement_tol_factor; do
+  for v in 0 nan; do
+    "$BIN" -in "$IN" -out "$TMP/$o$v.tsv" -$o $v "${ARGS[@]}" >"$TMP/$o$v.log" 2>&1
+    rc=$?
+    [ $rc = 6 ] || { cat "$TMP/$o$v.log"; fail "-$o $v: exit $rc, want 6 (ILLEGAL_PARAMETERS)"; }
+    grep -q "$o" "$TMP/$o$v.log" || fail "-$o $v: no message naming it"
+  done
+done
+"$BIN" -in "$IN" -out "$TMP/ctok.tsv" -complement_tolerance 0.05 "${ARGS[@]}" >"$TMP/ctok.log" 2>&1 \
+  || { cat "$TMP/ctok.log"; fail "-complement_tolerance 0.05 was refused"; }
+"$BIN" -in "$IN" -out "$TMP/ctf.tsv" -complement_tol_factor 0.5 -complement_tolerance_unit fragment "${ARGS[@]}" \
+  >"$TMP/ctf.log" 2>&1 || { cat "$TMP/ctf.log"; fail "-complement_tolerance_unit fragment was refused"; }
+"$BIN" -in "$IN" -out "$TMP/ctu.tsv" -complement_tolerance_unit fragment "${ARGS[@]}" \
+  >"$TMP/ctu.log" 2>&1 || { cat "$TMP/ctu.log"; fail "-complement_tolerance_unit fragment alone was refused"; }
+"$BIN" -in "$IN" -out "$TMP/cru.tsv" -complement_rule nonsense "${ARGS[@]}" >"$TMP/cru.log" 2>&1 \
+  && fail "-complement_rule nonsense ran (exit 0)"
 
 echo "cli_guards_test: all checks passed"

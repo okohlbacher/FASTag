@@ -39,10 +39,39 @@ namespace FASTag::Cli
   inline constexpr double kMaxEvalue = 20.0;
   inline constexpr double kGapPenalty = 100.0;
   inline constexpr const char* kFixedModifications = "Carbamidomethyl (C)";
+  // 1.12 E2 complement options (-complement_*): defaults are FASTag 1.11.
+  inline constexpr const char* kComplementRule = "same_charge";
+  inline constexpr double kComplementTolerance = 0.02;      ///< Da, unit Da
+  inline constexpr double kComplementTolFactor = 0.5;       ///< k, unit fragment
+  inline constexpr const char* kComplementToleranceUnit = "Da";
+  inline constexpr bool kComplementMidp = false;  ///< -complement_midp is a flag, off
+
+  /// -complement_rule value to the library's rule; unknown values (TOPPBase
+  /// refuses them first) map to SameCharge.
+  inline ComplementRule complementRuleFromString(std::string_view s)
+  {
+    if (s == "precursor") return ComplementRule::Precursor;
+    if (s == "both") return ComplementRule::Both;
+    return ComplementRule::SameCharge;
+  }
+
+  /// Applies -complement_tolerance (Da), -complement_tol_factor (k) and
+  /// -complement_tolerance_unit, which selects the one in force: Da uses the
+  /// absolute window, fragment k*(fragment tol at m + at the partner). Each
+  /// value has its own default, so "-complement_tolerance_unit fragment"
+  /// alone runs at the library's k = 0.5, not at the Da default 0.02.
+  inline void setComplementTolerance(Param& p, double tol_da, double factor, std::string_view unit)
+  {
+    p.complement_tol = tol_da;
+    p.complement_tol_factor = factor;
+    p.complement_tol_mode = unit == "fragment" ? ComplementTolMode::Fragment : ComplementTolMode::Da;
+  }
 
   /// The Param the tool runs with when no option is given.
   ///
-  /// complement_tol keeps the library default: the CLI never sets it.
+  /// The complement options (1.12 E2) are set to their registered defaults,
+  /// which equal the library's: same-charge rule, 0.02 Da (k 0.5 in the
+  /// fragment unit), no mid-p.
   /// With @p resolve_mods the default fixed modification is resolved through
   /// ModificationsDB exactly as the tool's resolveMods_ resolves a residue
   /// modification (I folded to L); without it `mods` stays empty, which is
@@ -65,6 +94,9 @@ namespace FASTag::Cli
     p.per_residue_conf = false;
     p.max_evalue = kMaxEvalue;
     p.gap_penalty = kGapPenalty;
+    p.complement_rule = complementRuleFromString(kComplementRule);
+    setComplementTolerance(p, kComplementTolerance, kComplementTolFactor, kComplementToleranceUnit);
+    p.complement_midp = kComplementMidp;
     if (resolve_mods)
     {
       const OpenMS::ResidueModification* mod =

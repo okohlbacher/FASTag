@@ -13,10 +13,12 @@
 // the averagine deisotoper ported from OpenMS (AveragineDeisotoper.h).
 #pragma once
 
+#include <OpenMS/CONCEPT/Constants.h>
 #include <OpenMS/KERNEL/MSSpectrum.h>
 
 #include <FASTag/ranksum.h>
 
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -42,8 +44,28 @@ namespace FASTag
                            ///< false: shifts the residue's mass unconditionally
   };
 
-  /// Tagging parameters, set by the TOPP tool (complement_tol keeps its
-  /// default there; the tests and the benchmark set it).
+  /// Which fragment pairs count as complements (Param::complement_rule).
+  enum class ComplementRule
+  {
+    /// Both partners carry the fragment charge z: partner at M/z + 2p - m.
+    /// FASTag 1.11's rule and the default.
+    SameCharge,
+    /// The partner carries the remaining c - z charges of a charge-c
+    /// precursor (DirecTag's rule): (M + c*p - z*m)/(c - z); none when z >= c.
+    Precursor,
+    /// A peak has a partner when either rule finds one.
+    Both,
+  };
+
+  /// How the complement tolerance is set (Param::complement_tol_mode).
+  enum class ComplementTolMode
+  {
+    Da,        ///< complement_tol, absolute; FASTag 1.11's mode and the default
+    Fragment,  ///< complement_tol_factor * (fragment tol at m + at the partner)
+  };
+
+  /// Tagging parameters, set by the TOPP tool (src/CliParam.h holds the
+  /// values it starts from).
   struct Param
   {
     int    tag_length     = 3;      ///< seed length in residues
@@ -55,7 +77,19 @@ namespace FASTag
     bool   deisotope      = false;
     double frag_tol       = 20.0;   ///< fragment tolerance
     bool   tol_ppm        = true;
-    double complement_tol = 0.02;   ///< always absolute; complements span the whole range
+    double complement_tol = 0.02;   ///< absolute (Da); used when complement_tol_mode is Da
+    /// Which fragment pairs count as complements. SameCharge is FASTag 1.11.
+    ComplementRule complement_rule = ComplementRule::SameCharge;
+    /// Da: complement_tol. Fragment: complement_tol_factor times the sum of
+    /// the fragment tolerance at the peak and at its partner, so the window
+    /// follows the run's own -fragment_tolerance.
+    ComplementTolMode complement_tol_mode = ComplementTolMode::Da;
+    double complement_tol_factor = 0.5;  ///< k of the Fragment mode
+    /// Complement p-value as DirecTag's mid-p P(X > c) + P(X = c)/2 of the
+    /// hypergeometric for tags with c <= kComplementMidpMaxCount (0 or 1)
+    /// complemented peaks; larger counts keep the plain tail P(X >= c).
+    /// Off reproduces 1.11.
+    bool   complement_midp = false;
     size_t max_peak_count = 100;   ///< hard ceiling; also bounds the null tables
     /// Peaks kept per 100 Da window; 0 selects the strongest max_peak_count
     /// overall instead. Windowed selection makes the effective budget scale with
@@ -132,6 +166,88 @@ namespace FASTag
     double low_mz = 0;          ///< lowest peak; also the output tie-break
   };
 
+  /// Partner m/z of a fragment at m/z @p mz and fragment charge @p z, from
+  /// a precursor of neutral mass @p M and charge @p prec_charge under one
+  /// rule (SameCharge or Precursor; Both is a pair of these calls, not a
+  /// formula of its own). NaN when the rule has no partner: Precursor with
+  /// z >= prec_charge. The SameCharge branch is the expression FASTag 1.11
+  /// evaluates, so its doubles are unchanged; at prec_charge 2, z 1 the two
+  /// rules give the same value bit for bit.
+  inline double complementMz(double M, int prec_charge, int z, double mz, ComplementRule rule)
+  {
+    const double kProton = OpenMS::Constants::PROTON_MASS_U;
+    if (rule == ComplementRule::Precursor)
+    {
+      if (z >= prec_charge) return std::numeric_limits<double>::quiet_NaN();
+      return (M + prec_charge * kProton - z * mz) / (prec_charge - z);
+    }
+    return M / z + 2.0 * kProton - mz;
+  }
+
+  /// The complement test of one Param, built once per Param (Tables holds
+  /// it): the rule, the tolerance and the ion-pair mass deltas. A pair's
+  /// neutral masses sum to M + delta; b/y gives the single delta 0. Later
+  /// ion series (#15) and precursor hypotheses (#6) add entries here.
+  struct ComplementSpec
+  {
+    ComplementRule rule = ComplementRule::SameCharge;
+    ComplementTolMode tol_mode = ComplementTolMode::Da;
+    double tol_da = 0.02;          ///< Da mode
+    double tol_factor = 0.5;       ///< Fragment mode
+    double frag_tol = 20.0;        ///< the run's fragment tolerance, Fragment mode
+    bool   frag_tol_ppm = true;
+    std::vector<double> pair_deltas{0.0};
+    bool   midp = false;
+
+    static ComplementSpec fromParam(const Param& p)
+    {
+      ComplementSpec c;
+      c.rule = p.complement_rule;
+      c.tol_mode = p.complement_tol_mode;
+      c.tol_da = p.complement_tol;
+      c.tol_factor = p.complement_tol_factor;
+      c.frag_tol = p.frag_tol;
+      c.frag_tol_ppm = p.tol_ppm;
+      c.midp = p.complement_midp;
+      return c;
+    }
+
+    /// Search window around the partner m/z @p cmz of a peak at @p mz.
+    double tol(double mz, double cmz) const
+    {
+      if (tol_mode == ComplementTolMode::Da) return tol_da;
+      const auto at = [this](double x) { return frag_tol_ppm ? x * frag_tol * 1e-6 : frag_tol; };
+      return tol_factor * (at(mz) + at(cmz));
+    }
+  };
+
+  /// Scope of Param::complement_midp (PLAN-data-types E2 item 3: "DirecTag's
+  /// mid-p for 0 or 1 complemented peaks"): counts up to this use mid-p,
+  /// larger ones the plain tail. The p-value stays monotone in the count:
+  /// mid-p at 1 is P(X>1) + P(X=1)/2 >= P(X>=2), the plain value at 2.
+  inline constexpr unsigned kComplementMidpMaxCount = 1;
+
+  /// Whether a tag with @p obs complemented peaks is scored with mid-p.
+  inline bool complementMidpApplies(bool midp, unsigned obs)
+  {
+    return midp && obs <= kComplementMidpMaxCount;
+  }
+
+  /// P-value of @p obs complemented peaks among @p n drawn from @p N, of
+  /// which @p K are complemented (hypergeometric). Plain: P(X >= obs);
+  /// @p midp: P(X > obs) + P(X = obs)/2. Outside the support [max(0,
+  /// n+K-N), min(K, n)] the plain tail is resolved analytically (1 at or
+  /// below the lower end, 0 above the upper end), as FASTag 1.11 does; mid-p
+  /// gives 1 below the lower end and 0 above the upper one.
+  double complementPValue(unsigned N, unsigned K, unsigned n, unsigned obs, bool midp);
+
+  /// The complement population of one spectrum as tagSpectrum prepares it:
+  /// entry z (1 .. the fragment charges tried) counts the kept peaks with a
+  /// partner at fragment charge z; entry 0 is the number of kept peaks. For
+  /// tests and diagnostics; the charge is defaulted as tagSpectrum does.
+  std::vector<int> complementPopulation(const OpenMS::MSSpectrum& spec, double precursor_mz,
+                                        int charge, const Param& p);
+
   /// Precomputed nulls, built once and shared read-only.
   ///
   /// Eager construction is what lets several spectra be tagged concurrently: a
@@ -153,12 +269,16 @@ namespace FASTag
     /// The residue/pair alphabet for this run, built once from Param.mods.
     const Alphabet& alphabet() const { return *alpha_; }
 
+    /// The complement test for this run, built once from Param.
+    const ComplementSpec& complement() const { return compl_; }
+
   private:
     int k_min_, k_max_;
     size_t n_max_;
     std::vector<std::vector<std::vector<float>>> ranksum_;  ///< [k][npeaks] -> CDF
     std::vector<std::vector<double>> mz_null_;              ///< [k] -> sorted SSE samples
     std::shared_ptr<const Alphabet> alpha_;                 ///< residue + pair tables
+    ComplementSpec compl_;                                  ///< complement rule and tolerance
   };
 
   /// Infer sequence tags from one centroided MS/MS spectrum.

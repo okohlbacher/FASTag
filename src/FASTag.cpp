@@ -705,6 +705,38 @@ protected:
                   "With -pick_profile auto, also centroid MS2 that declare no spectrum type "
                   "(neither MS:1000127 nor MS:1000128) when OpenMS's PeakTypeEstimator reads "
                   "their data as profile", true);
+    // E2: complement-ion rules across fragment charges, tolerance tied to the
+    // run. Defaults are FASTag 1.11 (src/CliParam.h); validation decides any
+    // other default.
+    registerStringOption_("complement_rule", "<rule>", FASTag::Cli::kComplementRule,
+                          "Which fragment pairs count as complements in the complement "
+                          "subscore: same_charge (both at the fragment charge z, partner "
+                          "at M/z + 2p - m), precursor (the partner carries the precursor's "
+                          "remaining c - z charges, at (M + c*p - z*m)/(c - z)), or both "
+                          "(either rule)", false, true);
+    setValidStrings_("complement_rule", ListUtils::create<std::string>("same_charge,precursor,both"));
+    registerDoubleOption_("complement_tolerance", "<value>", FASTag::Cli::kComplementTolerance,
+                          "Window for a complement partner in Da (used with "
+                          "-complement_tolerance_unit Da)", false, true);
+    setMinFloat_("complement_tolerance", 1e-9);
+    // Its own option, not -complement_tolerance read as k: one value with one
+    // default would make "-complement_tolerance_unit fragment" alone run at
+    // k = 0.02. The name keeps the --helphelp column at the 1.11 width.
+    registerDoubleOption_("complement_tol_factor", "<k>", FASTag::Cli::kComplementTolFactor,
+                          "Factor k of the complement window k*(fragment tolerance at the "
+                          "peak + at the partner) (used with -complement_tolerance_unit "
+                          "fragment)", false, true);
+    setMinFloat_("complement_tol_factor", 1e-9);
+    // "<u>", not "<unit>": the longest option-and-argument column of the
+    // --helphelp listing must stay the 1.11 width, or every line reflows.
+    registerStringOption_("complement_tolerance_unit", "<u>", FASTag::Cli::kComplementToleranceUnit,
+                          "Da: the window is -complement_tolerance. fragment: "
+                          "-complement_tol_factor scales the run's -fragment_tolerance at "
+                          "both partners", false, true);
+    setValidStrings_("complement_tolerance_unit", ListUtils::create<std::string>("Da,fragment"));
+    registerFlag_("complement_midp",
+                  "Score complements with DirecTag's hypergeometric mid-p P(X>c) + P(X=c)/2 "
+                  "for tags with 0 or 1 complemented peaks; 2 or more keep P(X>=c)", true);
     // ---- 1.12 A: options ----
     // ---- 1.12 D: options ----
     // ---- 1.12 F: options ----
@@ -1004,6 +1036,17 @@ protected:
       return ILLEGAL_PARAMETERS;
     }
 
+    // E2: the same NaN hole as -fragment_tolerance.
+    for (const char* o : {"complement_tolerance", "complement_tol_factor"})
+    {
+      if (!std::isfinite(getDoubleOption_(o)))
+      {
+        OPENMS_LOG_ERROR << "-" << o << " must be a finite number greater than 0 (got "
+                         << getDoubleOption_(o) << ")." << std::endl;
+        return ILLEGAL_PARAMETERS;
+      }
+    }
+
     // Species precondition, checked BEFORE the run rather than after.
     //
     // The index is keyed on k-mers, so a tag shorter than k can never be looked
@@ -1151,6 +1194,11 @@ protected:
     p.per_residue_conf = getFlag_("res_conf");
     p.max_evalue = getDoubleOption_("max_evalue");
     p.gap_penalty = getDoubleOption_("gap_penalty");
+    p.complement_rule = FASTag::Cli::complementRuleFromString(getStringOption_("complement_rule"));
+    FASTag::Cli::setComplementTolerance(p, getDoubleOption_("complement_tolerance"),
+                                        getDoubleOption_("complement_tol_factor"),
+                                        getStringOption_("complement_tolerance_unit"));
+    p.complement_midp = getFlag_("complement_midp");
     // The residue modifications in use; -recon_id_out reports exactly these.
     StringList fixed_mods, variable_mods;
     double fixed_term_n = 0, fixed_term_c = 0;
