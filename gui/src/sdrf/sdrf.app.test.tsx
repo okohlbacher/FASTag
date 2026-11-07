@@ -73,7 +73,10 @@ describe('the SDRF comparison in the Batch view', () => {
     const [a, b, c] = rows(sdrfTable())
     expect(texts(a)[1]).toBe('20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.raw (row 1)')
     expect(states(a)).toEqual(['genus', 'match', 'match', 'match', 'match', 'match'])
-    expect(states(b)).toEqual(['genus', 'match', 'match', 'match', 'match', 'mismatch'])
+    // b's fragment tolerance: the run's setting differs, not a mismatch.
+    expect(states(b)).toEqual(['genus', 'match', 'match', 'match', 'match', 'setting_differs'])
+    expect(last(texts(b))).toBe('✓ consistent; ≠ run setting: fragment tolerance')
+    expect(texts(b)[7]).toBe('≠ run setting differs: FASTag 20 ppm · SDRF 0.02 Da')
     expect(states(c)).toEqual(['mismatch', 'match', 'match', 'match', 'match', 'match'])
     // Genus "Homo" against SDRF "Homo sapiens": consistent at genus.
     expect(texts(a)[2]).toBe('✓ consistent at genus: FASTag Homo (taxid 9605) · SDRF Homo sapiens')
@@ -82,9 +85,9 @@ describe('the SDRF comparison in the Batch view', () => {
     // The summary gains the SDRF verdict column.
     const sum = screen.getByRole('table', { name: /^Batch summary/ })
     expect(within(sum).getByRole('columnheader', { name: 'SDRF' })).toBeDefined()
-    expect(rows(sum).map((r) => last(texts(r)))).toEqual(['✓ consistent', '✗ fragment tolerance', '✗ organism'])
+    expect(rows(sum).map((r) => last(texts(r)))).toEqual(['✓ consistent', '✓ consistent; ≠ run setting: fragment tolerance', '✗ organism'])
     // The SDRF row no job ran is listed.
-    expect(screen.getByText(/gate-batch\.sdrf\.tsv · 10 rows · 2 differences · 4 SDRF data files not in the batch/)).toBeDefined()
+    expect(screen.getByText(/gate-batch\.sdrf\.tsv · 10 rows · 1 difference · 1 run setting differs \(not a correction\) · 4 SDRF data files not in the batch/)).toBeDefined()
   })
 
   it('exports the corrections TSV beside the SDRF; the SDRF itself is never written', async () => {
@@ -99,12 +102,33 @@ describe('the SDRF comparison in the Batch view', () => {
     expect(dest).toBe('/proj/gate-batch.corrections.tsv')
     const lines = text.trimEnd().split('\n').map((l) => l.split('\t'))
     expect(lines[0][0]).toBe('data_file')
-    expect(lines.slice(1).map((l) => [l[1], l[3]])).toEqual([
-      ['b.mzML', 'tolerance'],
-      ['c.mzML', 'organism']
-    ])
-    expect(await screen.findByText('2 corrections written to /proj/gate-batch.corrections.tsv. The SDRF was not changed.')).toBeDefined()
+    // b's tolerance is a run setting that differs: no correction.
+    expect(lines.slice(1).map((l) => [l[1], l[3]])).toEqual([['c.mzML', 'organism']])
+    expect(await screen.findByText('1 correction written to /proj/gate-batch.corrections.tsv. The SDRF was not changed.')).toBeDefined()
     expect(mock.summaryWrites.map((w) => w.dest)).not.toContain(SDRF_PATH)
+  })
+
+  it('refuses to export over the loaded SDRF: an error note, the SDRF bytes unchanged', async () => {
+    const mock = await batchOfThree()
+    mock.nextPickSdrf = SDRF_PATH
+    await click(screen.getByRole('button', { name: 'Load SDRF…' }))
+    await waitFor(() => expect(sdrfTable()).toBeDefined())
+    const before = Array.from(mock.sdrfFiles[SDRF_PATH])
+    // The SDRF's own path, and another spelling of it.
+    for (const pick of [SDRF_PATH, '/proj/./Gate-Batch.SDRF.tsv']) {
+      mock.nextPickOutput = pick
+      await click(screen.getByRole('button', { name: 'Export SDRF corrections TSV…' }))
+      expect((await screen.findByRole('alert')).textContent).toBe(
+        `Not written: ${pick} is the loaded SDRF, which is never changed. Choose another name for the corrections.`
+      )
+    }
+    expect(mock.summaryWrites).toEqual([])
+    expect(Array.from(mock.sdrfFiles[SDRF_PATH])).toEqual(before)
+    // Another name is written, and the backend is told to protect the SDRF.
+    mock.nextPickOutput = '/proj/gate-batch.corrections.tsv'
+    await click(screen.getByRole('button', { name: 'Export SDRF corrections TSV…' }))
+    await waitFor(() => expect(mock.summaryWrites).toHaveLength(1))
+    expect(mock.summaryProtect).toEqual([[SDRF_PATH]])
   })
 
   it('a dropped SDRF is loaded and lands on Batch', async () => {

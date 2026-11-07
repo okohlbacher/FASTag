@@ -5,7 +5,8 @@
 // count (the calls the batch summary counts: a no call or a call held back
 // for too little evidence is "no call", never a mismatch); instrument and
 // tolerance are what the CLI's reports say of the run, the modifications its
-// log's "Modifications:" line.
+// log's "Modifications:" line. Those two are run settings: a difference there
+// is "setting_differs", never a mismatch (Q8).
 
 // @ts-ignore -- node built-in; the app's tsconfig has no node types
 import { readFileSync } from 'node:fs'
@@ -21,11 +22,14 @@ import {
   compareModifications,
   compareSdrf,
   compareTolerance,
+  correctionsTsv,
   FIELDS,
+  inputInstrument,
   fileStem,
   type FieldId,
   type SdrfJob
 } from './compare'
+import { DROPPED_MARKER } from '../run/logStore'
 import { parseSdrf } from './sdrfTable'
 import { parseTaxdump } from './taxonomy'
 
@@ -81,29 +85,40 @@ describe('the comparison table of the gate batch against the fixture SDRF', () =
     expect(states).toEqual({
       'pxd003531.mzML': ['genus', 'match', 'match', 'match', 'match', 'match'],
       'pxd003531-mzpeak.mzML': ['genus', 'match', 'match', 'match', 'match', 'match'],
-      'pxd004541-tmt.mzML': ['genus', 'match', 'match', 'match', 'match', 'mismatch'],
+      // The run's 20 ppm against the SDRF's 0.02 Da: a run setting, not a mismatch.
+      'pxd004541-tmt.mzML': ['genus', 'match', 'match', 'match', 'match', 'setting_differs'],
       'pxd006096-dia.mzML': 'not_run',
       // The pseudo-DDA input names no instrument: no call.
       'pxd006096-pseudo.mzML': ['genus', 'match', 'match', 'match', 'no_call', 'match'],
       // Too few tagged spectra: protease and label no call, species a run-level no call.
-      'pxd010783.mzML': ['no_call', 'no_call', 'no_call', 'match', 'match', 'mismatch'],
+      'pxd010783.mzML': ['no_call', 'no_call', 'no_call', 'match', 'match', 'setting_differs'],
       'pxd014764.mzML': ['mismatch', 'match', 'match', 'match', 'match', 'match'],
       // 916 tagged spectra: the label-free call is held back (too little evidence).
-      'pxd040407-chymo.mzML': ['no_call', 'no_call', 'no_call', 'mismatch', 'mismatch', 'match']
+      'pxd040407-chymo.mzML': ['no_call', 'no_call', 'no_call', 'setting_differs', 'mismatch', 'match']
     })
   })
 
-  it('a verdict per job: the fields that differ, else consistent, else nothing checked', () => {
+  it('a verdict per job: the fields that differ, else consistent, else nothing checked; then the run settings that differ', () => {
     expect(Object.fromEntries(c.jobs.map((j) => [j.file, j.verdict.text]))).toEqual({
       'pxd003531.mzML': '✓ consistent',
       'pxd003531-mzpeak.mzML': '✓ consistent',
-      'pxd004541-tmt.mzML': '✗ fragment tolerance',
+      'pxd004541-tmt.mzML': '✓ consistent; ≠ run setting: fragment tolerance',
       'pxd006096-dia.mzML': 'not compared: the job failed',
       'pxd006096-pseudo.mzML': '✓ consistent',
-      'pxd010783.mzML': '✗ fragment tolerance',
+      'pxd010783.mzML': '✓ consistent; ≠ run setting: fragment tolerance',
       'pxd014764.mzML': '✗ organism',
-      'pxd040407-chymo.mzML': '✗ modifications, instrument'
+      'pxd040407-chymo.mzML': '✗ instrument; ≠ run setting: modifications'
     })
+    // A run setting is never among the verdict's mismatches.
+    expect(c.jobs.flatMap((j) => j.verdict.mismatches)).toEqual(['organism', 'instrument'])
+  })
+
+  it('a run setting that differs (tolerance, modifications) is no correction', () => {
+    const tsv = correctionsTsv(c)
+    expect(tsv).not.toMatch(/\ttolerance\t/)
+    expect(tsv).not.toMatch(/\tmodifications\t/)
+    const t = c.jobs[2].fields!.tolerance
+    expect(t.note).toMatch(/the run was set to 20 ppm \(a setting, not a measurement\)/)
   })
 
   it('genus "Homo" against SDRF "Homo sapiens" is consistent at genus, by taxid', () => {
@@ -116,6 +131,26 @@ describe('the comparison table of the gate batch against the fixture SDRF', () =
     const m = c.jobs[6].fields!.organism
     expect(m.state).toBe('mismatch')
     expect(m.note).toMatch(/Mus musculus \(taxid 10090, genus Mus \(taxid 10088\)\)/)
+  })
+
+  it('an SDRF genus the species report calls present below the top one is consistent, not a mismatch', () => {
+    // pxd014764 with Mus called present too (ranked below Homo and the others).
+    const b = BATCH_CASES.pxd014764
+    const species = b.species.replace(/^genus\t10088\tMus\t(.*)$/m, (line) => {
+      const f = line.split('\t')
+      f[8] = 'present'
+      f[9] = 'pass'
+      return f.join('\t')
+    })
+    expect(species).not.toBe(b.species)
+    const j = done({ ...b, species })
+    const r = compareSdrf(SDRF, [j], tx).jobs[0]
+    const o = r.fields!.organism
+    expect(o.state).toBe('genus')
+    expect(o.fastag).toBe('Homo (taxid 9605)')
+    expect(o.note).toMatch(/Mus musculus \(taxid 10090\) lies in the genus Mus \(taxid 10088\), present, ranked \d+ of the \d+ present genera/)
+    expect(r.verdict.mismatches).toEqual([])
+    expect(correctionsTsv(compareSdrf(SDRF, [j], tx))).not.toMatch(/\torganism\t/)
   })
 
   it('evidence names the CLI report and row each value came from', () => {
@@ -132,7 +167,7 @@ describe('the comparison table of the gate batch against the fixture SDRF', () =
     const n = compareSdrf(SDRF, JOBS, null)
     expect(n.jobs[6].fields!.organism.state).toBe('not_checkable')
     expect(n.jobs[6].fields!.organism.note).toMatch(/taxonomy/)
-    expect(n.jobs[2].fields!.tolerance.state).toBe('mismatch')
+    expect(n.jobs[2].fields!.tolerance.state).toBe('setting_differs')
   })
 
   it('a job with no SDRF row, and an SDRF without a data file column', () => {
@@ -228,10 +263,37 @@ describe('modification parameters', () => {
     expect(compareModifications(['NT=Carbamidomethyl;AC=UNIMOD:4;TA=C;MT=Fixed'], LOG).state).toBe('match')
     // By accession when NT is missing.
     expect(compareModifications(['AC=UNIMOD:4;TA=C;MT=fixed'], LOG).state).toBe('match')
+    // A difference is a run setting that differs, not a mismatch.
     const r = compareModifications(['NT=Oxidation;AC=UNIMOD:35;TA=M;MT=Variable'], LOG)
-    expect(r.state).toBe('mismatch')
+    expect(r.state).toBe('setting_differs')
     expect(r.note).toMatch(/Carbamidomethyl \(C\)/)
-    expect(compareModifications(['NT=Carbamidomethyl;TA=C;MT=Fixed', 'NT=Propionamide;TA=C;MT=Fixed'], LOG).state).toBe('mismatch')
+    expect(compareModifications(['NT=Carbamidomethyl;TA=C;MT=Fixed', 'NT=Propionamide;TA=C;MT=Fixed'], LOG).state).toBe('setting_differs')
+  })
+
+  it("label modifications are left out on the run's side too (TMT6plex fixed on K)", () => {
+    const tmt = ['Modifications: Carbamidomethyl (C, fixed), TMT6plex (K, fixed)']
+    expect(compareModifications(['NT=TMT6plex;AC=UNIMOD:737;TA=K;MT=Fixed', 'NT=Carbamidomethyl;AC=UNIMOD:4;TA=C;MT=Fixed'], tmt).state).toBe('match')
+    expect(compareModifications(['NT=Carbamidomethyl;AC=UNIMOD:4;TA=C;MT=Fixed'], ['Modifications: Carbamidomethyl (C, fixed), TMTpro (K, fixed), iTRAQ4plex (K, fixed)']).state).toBe('match')
+  })
+
+  it('I is folded to L, as FASTag folds it', () => {
+    expect(compareModifications(['NT=Methyl;TA=I;MT=Fixed'], ['Modifications: Methyl (L, fixed)']).state).toBe('match')
+  })
+
+  it("a log that dropped its first lines (and the Modifications line with them) is no call, not 'none'", () => {
+    const truncated = [DROPPED_MARKER, '139 MS2 spectra, 2028 tags']
+    const r = compareModifications(['NT=Carbamidomethyl;TA=C;MT=Fixed'], truncated)
+    expect(r.state).toBe('no_call')
+    expect(r.note).toMatch(/the log's Modifications line was dropped/)
+    // The line kept despite the drop still counts.
+    expect(compareModifications(['NT=Carbamidomethyl;TA=C;MT=Fixed'], [DROPPED_MARKER, 'Modifications: Carbamidomethyl (C, fixed)']).state).toBe('match')
+    // Through compareSdrf: the job's field is no call, and no correction.
+    const b = BATCH_CASES.pxd040407
+    const d = dataOf(b)
+    const j: SdrfJob = { input: '/data/pxd040407-chymo.mzML', status: 'done', data: { ...d, log: [DROPPED_MARKER, ...d.log.filter((l) => !l.startsWith('Modifications:'))] } }
+    const x = compareSdrf(SDRF, [j], tx).jobs[0]
+    expect(x.fields!.modifications.state).toBe('no_call')
+    expect(x.verdict.text).toBe('✗ instrument')
   })
 
   it('label, terminal and variable modifications are not compared', () => {
@@ -250,8 +312,8 @@ describe('modification parameters', () => {
     ).toBe('match')
   })
 
-  it('a run without a Modifications line used none; an unread log is no call', () => {
-    expect(compareModifications(['NT=Carbamidomethyl;TA=C;MT=Fixed'], ['139 MS2 spectra, 2028 tags']).state).toBe('mismatch')
+  it('a run without a Modifications line (its log complete) used none; an unread log is no call', () => {
+    expect(compareModifications(['NT=Carbamidomethyl;TA=C;MT=Fixed'], ['139 MS2 spectra, 2028 tags']).state).toBe('setting_differs')
     expect(compareModifications(['NT=Oxidation;TA=M;MT=Variable'], ['139 MS2 spectra, 2028 tags']).state).toBe('match')
     expect(compareModifications(['NT=Carbamidomethyl;TA=C;MT=Fixed'], []).state).toBe('no_call')
     expect(compareModifications([], LOG).state).toBe('no_sdrf')
@@ -267,13 +329,37 @@ describe('instrument and fragment tolerance', () => {
     expect(compareInstrument(['NT=Q Exactive'], null).state).toBe('no_call')
   })
 
+  it("a converter's generic instrument term is no instrument: the model row, else no call", () => {
+    const g = compareInstrument(['NT=Orbitrap Astral;AC=MS:1003378'], 'Thermo Fisher Scientific instrument model')
+    expect(g.state).toBe('no_call')
+    expect(g.note).toBe('the input names only a generic instrument model')
+    expect(inputInstrument('Thermo Fisher Scientific instrument model', 'Orbitrap Astral')).toEqual({ instrument: 'Orbitrap Astral', generic: false, from: 'instrument_model' })
+    expect(inputInstrument('Thermo Fisher Scientific instrument model', null)).toEqual({ instrument: null, generic: true, from: 'instrument' })
+    expect(inputInstrument('Q Exactive', 'Thermo Fisher Scientific instrument model')).toMatchObject({ instrument: 'Q Exactive' })
+    // Through compareSdrf: the digest report's meta rows.
+    const b = BATCH_CASES.pxd040407
+    const generic = (model: string): SdrfJob => {
+      const digest = b.digest
+        .replace(/^meta\tinstrument\tQ Exactive Plus\t/m, 'meta\tinstrument\tThermo Fisher Scientific instrument model\t')
+        .replace(/^meta\tinstrument_model\t-\t/m, `meta\tinstrument_model\t${model}\t`)
+      return done({ ...b, digest })
+    }
+    const none = compareSdrf(SDRF, [generic('-')], tx).jobs[0].fields!.instrument
+    expect(none.state).toBe('no_call')
+    expect(none.note).toBe('the input names only a generic instrument model')
+    const model = compareSdrf(SDRF, [generic('Orbitrap Exploris 480')], tx).jobs[0].fields!.instrument
+    expect(model.state).toBe('match')
+    expect(model.evidence).toBe('pxd040407-chymo.digest.tsv: meta instrument_model Orbitrap Exploris 480')
+  })
+
   it('tolerances in the same unit compare by value; Da against ppm differs', () => {
     expect(compareTolerance(['20 ppm'], { value: 20, unit: 'ppm' }).state).toBe('match')
     expect(compareTolerance(['20ppm'], { value: 20, unit: 'ppm' }).state).toBe('match')
     expect(compareTolerance(['0.5 Da'], { value: 0.5, unit: 'Da' }).state).toBe('match')
     expect(compareTolerance(['500 mmu'], { value: 0.5, unit: 'Da' }).state).toBe('match')
-    expect(compareTolerance(['0.02 Da'], { value: 20, unit: 'ppm' }).state).toBe('mismatch')
-    expect(compareTolerance(['10 ppm'], { value: 20, unit: 'ppm' }).state).toBe('mismatch')
+    // The run's tolerance is a setting: a difference is not a mismatch.
+    expect(compareTolerance(['0.02 Da'], { value: 20, unit: 'ppm' }).state).toBe('setting_differs')
+    expect(compareTolerance(['10 ppm'], { value: 20, unit: 'ppm' }).state).toBe('setting_differs')
     expect(compareTolerance(['about 20'], { value: 20, unit: 'ppm' }).state).toBe('not_checkable')
     expect(compareTolerance(['20 ppm'], null).state).toBe('no_call')
   })

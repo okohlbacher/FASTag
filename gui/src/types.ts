@@ -301,7 +301,9 @@ export interface FastagApi {
   folderSpectra: (dir: string) => Promise<string[]>
   // Write the batch summary TSV to @p dest (report.rs summary_write, via a
   // .part file). Rejects with the reason.
-  writeSummary: (dest: string, text: string) => Promise<void>
+  // protect: files the write must never replace (the loaded SDRF); the
+  // backend refuses a dest that is one of them.
+  writeSummary: (dest: string, text: string, protect?: string[]) => Promise<void>
   // The Batch view's SDRF… (P4): pick an SDRF, read its bytes unchanged
   // (sdrf.rs sdrf_read; never written), and read the taxonomy dumps the
   // species call uses: the given ones, else the bundled folder's (null:

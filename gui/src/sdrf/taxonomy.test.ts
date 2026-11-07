@@ -1,7 +1,9 @@
 // Organism matching by NCBI taxid (GUI-DESIGN 3 S6, 10 P4): an SDRF
 // organism is resolved through the taxonomy FASTag's species call uses (the
 // bundled nodes.dmp and names.dmp, copied to src/fixtures/sdrf), and a genus
-// call that contains the SDRF species is consistent at genus, not a mismatch.
+// call that contains the SDRF species is consistent at genus, not a mismatch;
+// so is an SDRF taxon above genus that contains the call, and an SDRF genus
+// the species report also calls present.
 
 // @ts-ignore -- node built-in; the app's tsconfig has no node types
 import { readFileSync } from 'node:fs'
@@ -76,6 +78,27 @@ describe('a genus call against an SDRF organism', () => {
 
   it('several SDRF organisms (a spike-in): the call matches one of them', () => {
     expect(matchOrganism(tx, ['Homo sapiens', 'Saccharomyces cerevisiae'], 4930)).toMatchObject({ state: 'genus' })
+  })
+
+  it('an SDRF taxon above genus that contains the call is consistent, never a mismatch', () => {
+    expect(matchOrganism(tx, ['Hominidae'], 9605)).toMatchObject({ state: 'genus' })
+    expect(matchOrganism(tx, ['Hominidae'], 9605).note).toMatch(/Hominidae \(taxid 9604, family\) contains the called genus Homo \(taxid 9605\): consistent/)
+    expect(matchOrganism(tx, ['Bacteria'], 561)).toMatchObject({ state: 'genus' })
+    expect(matchOrganism(tx, ['Mammalia'], 10088)).toMatchObject({ state: 'genus' })
+    // A taxon above genus that does not contain the call still differs.
+    expect(matchOrganism(tx, ['Bacteria'], 9605)).toMatchObject({ state: 'mismatch' })
+    expect(matchOrganism(tx, ['Mus musculus'], 9605)).toMatchObject({ state: 'mismatch' })
+  })
+
+  it('an SDRF genus the report calls present, ranked below the call, is consistent, not a mismatch', () => {
+    // Homo first, Mus also present.
+    const m = matchOrganism(tx, ['Mus musculus'], 9605, [9605, 9539, 10088])
+    expect(m.state).toBe('genus')
+    expect(m.note).toMatch(/Mus musculus \(taxid 10090\) lies in the genus Mus \(taxid 10088\), present, ranked 3 of the 3 present genera \(the call is Homo \(taxid 9605\)\)/)
+    // The top genus still wins when the SDRF names it.
+    expect(matchOrganism(tx, ['Homo sapiens', 'Mus musculus'], 9605, [9605, 10088]).note).toMatch(/lies in the called genus Homo/)
+    // No SDRF organism among the present genera: a mismatch.
+    expect(matchOrganism(tx, ['Mus musculus'], 9605, [9605, 9539])).toMatchObject({ state: 'mismatch' })
   })
 
   it('an SDRF organism FASTag cannot detect is not checkable, never a mismatch', () => {

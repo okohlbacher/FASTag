@@ -265,6 +265,8 @@ table.sdrf-table td .cell-note { display: block; margin-top: 2px; font-size: var
 table.sdrf-table td.st-match, table.sdrf-table td.st-genus { color: var(--ok); }
 table.sdrf-table td.st-mismatch, table.sdrf-table td.verdict.differs { color: var(--flag-text); font-weight: 600; }
 table.sdrf-table td.st-no_call, table.sdrf-table td.st-no_sdrf, table.sdrf-table td.st-not_checkable { color: var(--muted-foreground); }
+/* A run setting that differs from the SDRF: a hint on the run's configuration, not a difference. */
+table.sdrf-table td.st-setting_differs { color: var(--muted-foreground); font-style: italic; }
 .sdrf-unmatched { font-size: var(--text-sm); }
 .sdrf-unmatched ul { margin: var(--space-1) 0 0; padding-left: var(--space-4); overflow-wrap: anywhere; }
 .outdir { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: var(--text-sm); }

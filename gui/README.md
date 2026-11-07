@@ -224,15 +224,28 @@ organism, cleavage agent, label, modification parameters, instrument and
 fragment tolerance. Only FASTag's output counts: the summary's calls (a no
 call or "too little evidence" is never a difference), the instrument the
 input names and the run's tolerance (the reports' meta and run rows), and the
-run's fixed modifications (its log; FASTag writes no alkylation call). The
-organism is matched by NCBI taxid through the `nodes.dmp`/`names.dmp` next to
-the index: a genus call "Homo" against an SDRF "Homo sapiens" is consistent at
-genus, and an organism the taxonomy does not hold is "not checkable". The
-summary gains an SDRF column, and **Export SDRF corrections TSV…** writes one
-line per difference with the report row it came from; it is a function of the
-SDRF, the reports and the taxonomy alone (pinned by a golden test), so the
-same TSV follows from a cluster run's reports. The SDRF is read byte for byte
-and never rewritten.
+run's fixed modifications (its log; FASTag writes no alkylation call). A
+converter's generic instrument term ("Thermo Fisher Scientific instrument
+model") counts as no instrument name: the instrument_model row is read
+instead, else the field is a no call. Fragment tolerance and modifications are
+settings of the run, not measurements: where they differ from the SDRF the
+table shows "≠ run setting differs", a hint on how the run was set up, which
+is never a difference and never a correction. A log that dropped its first
+lines (the GUI keeps the last 5000) and with them the "Modifications:" line is
+a no call, not "none". The organism is matched by NCBI taxid through the
+`nodes.dmp`/`names.dmp` next to the index: a genus call "Homo" against an SDRF
+"Homo sapiens" is consistent at genus; so is an SDRF taxon above genus that
+contains the call ("Hominidae", "Bacteria") and an SDRF genus the species
+report also calls present, ranked below the top one; an organism the taxonomy
+does not hold is "not checkable". The summary gains an SDRF column, and
+**Export SDRF corrections TSV…** writes one line per difference with the
+report row it came from; it is a function of the SDRF, the reports and the
+taxonomy alone (the log only feeds the modifications, a run setting that is
+never written there; pinned by a golden test), so the same TSV follows from a
+cluster run's reports. The SDRF is read byte for byte and never
+rewritten: the export refuses the SDRF's own path, in the panel and in the
+backend (`summary_write`'s protect list, which also catches another spelling
+or a link to the same file).
 
 Setup starts from a task: **Characterize a run** (the default: species with
 extension 2, the digest, label and glyco reports, a tenth of the spectra),

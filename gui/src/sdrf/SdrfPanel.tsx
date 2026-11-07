@@ -1,7 +1,8 @@
 // The Batch view's SDRF comparison (GUI-DESIGN 3 S6, 10 P4): load the
 // project's SDRF, see each job against its SDRF rows field by field
 // (compare.ts), and export the mismatches as a corrections TSV. The SDRF
-// is never rewritten.
+// is never rewritten: the export refuses the SDRF's own path, here and in
+// the backend (report.rs write_summary's protect list).
 
 import { useState, type JSX } from 'react'
 import { dirName } from '../app/paths'
@@ -9,6 +10,20 @@ import { baseName } from '../digestReport'
 import { folderPath } from '../run/batch'
 import { correctionsTsv, FIELD_LABEL, FIELDS, type FieldResult, type FieldState, type JobComparison } from './compare'
 import type { SdrfState } from './useSdrf'
+
+/// A path as compared with another: separators unified, repeated and
+/// trailing ones dropped, "." segments gone, case aside (macOS and Windows
+/// file names are case-insensitive by default).
+export function samePath(a: string, b: string): boolean {
+  const norm = (p: string): string =>
+    p
+      .replace(/\\/g, '/')
+      .split('/')
+      .filter((s, i) => s !== '.' && (s !== '' || i === 0))
+      .join('/')
+      .toLowerCase()
+  return norm(a) === norm(b)
+}
 
 export interface SdrfPanelProps {
   sdrf: SdrfState
@@ -22,6 +37,7 @@ export const STATE_WORDS: Record<FieldState, { mark: string; word: string }> = {
   match: { mark: '✓', word: 'consistent' },
   genus: { mark: '✓', word: 'consistent at genus' },
   mismatch: { mark: '✗', word: 'differs' },
+  setting_differs: { mark: '≠', word: 'run setting differs' },
   no_call: { mark: '–', word: 'no call' },
   no_sdrf: { mark: '–', word: 'not in the SDRF' },
   not_checkable: { mark: '?', word: 'not checkable' }
@@ -97,6 +113,7 @@ export default function SdrfPanel({ sdrf, busy, outDir, onShow }: SdrfPanelProps
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null)
   const { file, comparison: c } = sdrf
   const mismatches = c ? c.jobs.reduce((n, j) => n + (j.verdict.state === 'checked' ? j.verdict.mismatches.length : 0), 0) : 0
+  const settings = c ? c.jobs.reduce((n, j) => n + (j.verdict.state === 'checked' ? j.verdict.settings.length : 0), 0) : 0
 
   async function exportTsv(): Promise<void> {
     if (!c || !file) return
@@ -105,8 +122,12 @@ export default function SdrfPanel({ sdrf, busy, outDir, onShow }: SdrfPanelProps
     const stem = baseName(file.path).replace(/\.(tsv|txt|sdrf)$/i, '').replace(/\.sdrf$/i, '')
     const dest = await window.fastag.saveFile(`${dir}${stem}.corrections.tsv`, ['tsv'])
     if (!dest) return
+    if (samePath(dest, file.path)) {
+      setNote({ ok: false, text: `Not written: ${dest} is the loaded SDRF, which is never changed. Choose another name for the corrections.` })
+      return
+    }
     try {
-      await window.fastag.writeSummary(dest, correctionsTsv(c))
+      await window.fastag.writeSummary(dest, correctionsTsv(c), [file.path])
       setNote({ ok: true, text: `${mismatches} ${mismatches === 1 ? 'correction' : 'corrections'} written to ${dest}. The SDRF was not changed.` })
     } catch (e) {
       setNote({ ok: false, text: `Could not write the corrections: ${e instanceof Error ? e.message : String(e)}` })
@@ -152,6 +173,7 @@ export default function SdrfPanel({ sdrf, busy, outDir, onShow }: SdrfPanelProps
           <p className="hint sdrf-summary" title={file.path}>
             {baseName(file.path)} · {file.rows} {file.rows === 1 ? 'row' : 'rows'} ·{' '}
             {mismatches === 0 ? 'no differences' : `${mismatches} ${mismatches === 1 ? 'difference' : 'differences'}`}
+            {settings > 0 && ` · ${settings} run ${settings === 1 ? 'setting differs' : 'settings differ'} (not a correction)`}
             {c.unmatched.length > 0 && ` · ${c.unmatched.length} SDRF data ${c.unmatched.length === 1 ? 'file' : 'files'} not in the batch`}
           </p>
           {!c.dataFileColumn && (
@@ -205,9 +227,12 @@ export default function SdrfPanel({ sdrf, busy, outDir, onShow }: SdrfPanelProps
           )}
           <p className="hint">
             Compared against FASTag's output only: the calls of the summary (a no call or too little evidence is never a difference),
-            the instrument the input names and the run's fragment tolerance (its reports), and the run's fixed modifications (its log;
-            FASTag writes no alkylation call). The organism is matched by NCBI taxid: a genus call that contains the SDRF species is
-            consistent at genus. Not validated: the corrections are FASTag's view of each run, for a curator to check.
+            the instrument the input names (its reports), the run's fragment tolerance (its reports) and the run's fixed modifications
+            (its log; FASTag writes no alkylation call). The last two are settings of the run, not measurements: where they differ
+            from the SDRF the table shows ≠ run setting differs, a hint on how the run was set up, and no correction is written. The
+            organism is matched by NCBI taxid: a genus call that contains the SDRF species, an SDRF taxon above genus that contains
+            the call, or an SDRF genus the species report also calls present is consistent. Not validated: the corrections are
+            FASTag's view of each run, for a curator to check.
           </p>
         </>
       )}

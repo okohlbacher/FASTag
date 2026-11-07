@@ -172,8 +172,10 @@ export const START: HelpPage = {
               compares each file with its SDRF rows, matched by <code>comment[data file]</code>: organism (by NCBI
               taxid; a genus call that contains the SDRF species is consistent at genus), cleavage agent, label,
               modifications, instrument and fragment tolerance. Only FASTag&apos;s own calls and reports count, so a
-              no call is never a difference. <strong>Export SDRF corrections TSV…</strong> writes the differences;
-              the SDRF itself is never changed.
+              no call is never a difference. Fragment tolerance and modifications are the run&apos;s settings, not
+              measurements: where they differ the table shows ≠ <em>run setting differs</em>, which is no
+              correction. <strong>Export SDRF corrections TSV…</strong> writes the differences; the SDRF itself is
+              never changed, and the export will not write over it.
             </li>
           </ul>
           <p>

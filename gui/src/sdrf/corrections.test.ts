@@ -53,17 +53,16 @@ describe('the SDRF corrections TSV', () => {
     expect(correctionsTsv(compareSdrf(sdrf(), jobs(), tx))).toBe(read(GOLDEN))
   })
 
-  it('lists the mismatches only, in SDRF order, whatever the queue order', () => {
+  it('lists the mismatches only (no run setting that differs), in SDRF order, whatever the queue order', () => {
     const j = jobs()
     const a = correctionsTsv(compareSdrf(sdrf(), j, tx))
     expect(correctionsTsv(compareSdrf(sdrf(), [...j].reverse(), tx))).toBe(a)
     const lines = a.trimEnd().split('\n')
     expect(lines[0].split('\t')).toEqual([...CORRECTIONS_HEADER])
+    // The fragment tolerances (pxd004541, pxd010783) and the run's
+    // Carbamidomethyl (pxd040407) are run settings that differ: not here.
     expect(lines.slice(1).map((l) => l.split('\t').slice(1, 4))).toEqual([
-      ['pxd004541-tmt.mzML', '2,3,4', 'tolerance'],
       ['pxd014764.mzML', '5,6', 'organism'],
-      ['pxd010783.mzML', '7', 'tolerance'],
-      ['pxd040407-chymo.mzML', '8', 'modifications'],
       ['pxd040407-chymo.mzML', '8', 'instrument']
     ])
     // Every line has every column, and no cell holds a tab or line break.

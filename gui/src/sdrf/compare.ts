@@ -8,10 +8,16 @@
 // - modification parameters: the SDRF's fixed residue modifications against
 //   the run's fixed ones (the log's "Modifications:" line). FASTag writes no
 //   alkylation call, so this says what the run assumed, not what the data
-//   show; label modifications are the label field's, terminal and variable
-//   ones are not compared;
-// - instrument: the instrument the input names (digest report, meta rows);
+//   show; label modifications are the label field's (on both sides),
+//   terminal and variable ones are not compared;
+// - instrument: the instrument the input names (digest report, meta rows;
+//   a generic "... instrument model" term falls back to the model row);
 // - fragment mass tolerance: the run's (the reports' run rows).
+//
+// Modifications and fragment tolerance are run settings, not measurements:
+// a difference there is "setting_differs", shown in the panel as a hint on
+// how the run was configured, never a mismatch, never in the verdict's
+// mismatches and never in the corrections TSV (Q8).
 //
 // Only the CLI's output counts, read through the parsers the Overview and
 // the batch summary use (calls.ts, batchSummary.ts jobCells): a no call, and
@@ -22,6 +28,7 @@
 // not depend on the queue order.
 
 import { baseName, value, type Report } from '../digestReport'
+import { DROPPED_MARKER } from '../run/logStore'
 import { jobCells, type JobData } from '../run/batchSummary'
 import type { BatchJob } from '../run/batch'
 import { runFacts, speciesCall } from '../results/calls'
@@ -52,10 +59,16 @@ export const FIELD_COLUMNS: Record<FieldId, string[]> = {
 export const DATA_FILE = 'comment[data file]'
 
 /// match: the same; genus: the SDRF species lies in the called genus;
-/// mismatch: they differ; no_call: FASTag made no call (or it is held back,
-/// or the report does not say); no_sdrf: the SDRF states nothing;
+/// (or, above genus, contains it; or names a genus the report calls present
+/// below the top one); mismatch: they differ; setting_differs: the SDRF
+/// differs from a setting of the run (modifications, fragment tolerance),
+/// not from anything measured; no_call: FASTag made no call (or it is held
+/// back, or the report does not say); no_sdrf: the SDRF states nothing;
 /// not_checkable: the SDRF value is one FASTag cannot call or this app cannot read.
-export type FieldState = 'match' | 'genus' | 'mismatch' | 'no_call' | 'no_sdrf' | 'not_checkable'
+export type FieldState = 'match' | 'genus' | 'mismatch' | 'setting_differs' | 'no_call' | 'no_sdrf' | 'not_checkable'
+
+/// The fields whose FASTag side is a run setting, not a call.
+export const SETTING_FIELDS: ReadonlySet<FieldId> = new Set<FieldId>(['modifications', 'tolerance'])
 
 export interface FieldResult {
   state: FieldState
@@ -71,8 +84,8 @@ export interface FieldResult {
 }
 
 export type Verdict =
-  | { state: 'checked'; text: string; mismatches: FieldId[] }
-  | { state: 'unchecked' | 'no_sdrf' | 'not_run' | 'pending'; text: string; mismatches: [] }
+  | { state: 'checked'; text: string; mismatches: FieldId[]; settings: FieldId[] }
+  | { state: 'unchecked' | 'no_sdrf' | 'not_run' | 'pending'; text: string; mismatches: []; settings?: [] }
 
 export interface SdrfJob {
   input: string
@@ -279,21 +292,28 @@ function sdrfFixed(values: readonly string[]): Mod[] | null {
       .split(/[,\s]+/)
       .map((s) => s.trim().toUpperCase())
       .filter((s) => /^[A-Z]$/.test(s))
-    for (const site of sites) out.push({ name, site })
+    // FASTag folds I to L in its alphabet (a fixed modification on I is one on L).
+    for (const site of sites) out.push({ name, site: site === 'I' ? 'L' : site })
   }
   return any ? out : null
 }
 
 const MOD_LINE = /^Modifications: (.*)$/
 
-/// The run's fixed residue modifications (its log); null when the log was not read.
+/// The run's fixed residue modifications (its log), label modifications
+/// left out as on the SDRF side; null when the log was not read, or when
+/// the GUI's log dropped its first lines (logStore DROPPED_MARKER) and with
+/// them the "Modifications:" line the CLI prints once near the top: a run
+/// without that line used none only if its log is complete.
 function runFixed(log: readonly string[]): { mods: Mod[]; line: string | null } | null {
   if (!log.length) return null
   let line: string | null = null
   for (const l of log) if (MOD_LINE.test(l.trim())) line = l.trim()
+  if (!line && log[0] === DROPPED_MARKER) return null
   const mods: Mod[] = []
   if (line)
-    for (const m of MOD_LINE.exec(line)![1].matchAll(/\s*([^,()]+?) \(([A-Z]), (fixed|variable)\)/g)) if (m[3] === 'fixed') mods.push({ name: m[1].trim(), site: m[2] })
+    for (const m of MOD_LINE.exec(line)![1].matchAll(/\s*([^,()]+?) \(([A-Z]), (fixed|variable)\)/g))
+      if (m[3] === 'fixed' && !LABEL_MOD.test(m[1].trim())) mods.push({ name: m[1].trim(), site: m[2] })
   return { mods, line }
 }
 
@@ -305,7 +325,8 @@ export function compareModifications(values: readonly string[], log: readonly st
   const run = runFixed(log)
   const fastag = run ? modWords(run.mods) : ''
   if (!want) return { state: 'no_sdrf', sdrf, fastag, note: 'the SDRF names no modification' }
-  if (!run) return { state: 'no_call', sdrf, fastag, note: "the run's log was not read" }
+  if (!run)
+    return { state: 'no_call', sdrf, fastag, note: log.length ? "the log's Modifications line was dropped (the log keeps its last lines only)" : "the run's log was not read" }
   const a = new Set(want.map(modKey))
   const b = new Set(run.mods.map(modKey))
   const extra = want.filter((m) => !b.has(modKey(m)))
@@ -313,10 +334,10 @@ export function compareModifications(values: readonly string[], log: readonly st
   const scope = 'fixed residue modifications (label, terminal and variable ones are not compared)'
   if (!extra.length && !missing.length) return { state: 'match', sdrf, fastag, note: `the SDRF and the run have the same ${scope}: ${modWords(run.mods)}` }
   return {
-    state: 'mismatch',
+    state: 'setting_differs',
     sdrf,
     fastag,
-    note: `${scope}: the SDRF lists ${modWords(want)}; the run assumed ${modWords(run.mods)}`
+    note: `${scope}: the SDRF lists ${modWords(want)}; the run was set to ${modWords(run.mods)} (a setting, not a measurement)`
   }
 }
 
@@ -328,12 +349,33 @@ const instrumentKey = (s: string): string =>
     .filter((w) => w && !VENDOR.has(w))
     .join('')
 
-/// The SDRF instrument against the one the input names (null: none).
-export function compareInstrument(values: readonly string[], instrument: string | null): Partial3 {
+/// A converter's placeholder for a model it does not know ("Thermo Fisher
+/// Scientific instrument model"): no instrument name at all.
+export const genericInstrument = (s: string | null | undefined): boolean => {
+  if (!s) return true
+  const k = instrumentKey(s)
+  return k === '' || k.endsWith('instrumentmodel') || /instrument model\s*$/i.test(s)
+}
+
+/// The instrument the input names: its name, else (a generic name) its
+/// model; null when neither names one. generic: only a generic term was found.
+export function inputInstrument(name: string | null, model: string | null): { instrument: string | null; generic: boolean; from: 'instrument' | 'instrument_model' } {
+  if (name && !genericInstrument(name)) return { instrument: name, generic: false, from: 'instrument' }
+  if (model && !genericInstrument(model)) return { instrument: model, generic: false, from: 'instrument_model' }
+  return { instrument: null, generic: !!(name || model), from: 'instrument' }
+}
+
+/// The SDRF instrument against the one the input names (null: none;
+/// @p generic: the input names only a generic instrument model).
+export function compareInstrument(values: readonly string[], instrument: string | null, generic = false): Partial3 {
   const vs = distinct(values)
   const sdrf = join(vs)
   if (!vs.length) return { state: 'no_sdrf', sdrf, fastag: instrument ?? '', note: 'the SDRF names no instrument' }
-  if (!instrument) return { state: 'no_call', sdrf, fastag: '', note: 'the input names no instrument' }
+  if (instrument && genericInstrument(instrument)) {
+    generic = true
+    instrument = null
+  }
+  if (!instrument) return { state: 'no_call', sdrf, fastag: '', note: generic ? 'the input names only a generic instrument model' : 'the input names no instrument' }
   const ok = vs.some((v) => instrumentKey(nameOf(v)) === instrumentKey(instrument))
   return ok
     ? { state: 'match', sdrf, fastag: instrument, note: `the input names the instrument ${instrument}` }
@@ -361,7 +403,7 @@ export function compareTolerance(values: readonly string[], run: { value: number
   const same = ts.some((t) => t!.unit === run.unit && Math.abs(t!.value - run.value) <= 1e-9 * Math.max(1, Math.abs(run.value)))
   return same
     ? { state: 'match', sdrf, fastag, note: `the run used the SDRF's fragment tolerance, ${fastag}` }
-    : { state: 'mismatch', sdrf, fastag, note: `the SDRF states ${ts.map((t) => tolWords(t!)).join(', ')}; the run used ${fastag} (a setting, not a measurement)` }
+    : { state: 'setting_differs', sdrf, fastag, note: `the SDRF states ${ts.map((t) => tolWords(t!)).join(', ')}; the run was set to ${fastag} (a setting, not a measurement)` }
 }
 
 // ---- a job against its rows -----------------------------------------------------
@@ -394,7 +436,9 @@ function compareJob(t: SdrfTable, rows: number[], d: JobData, tx: Taxonomy | nul
   else if (!tx)
     organism = { state: 'not_checkable', sdrf: join(orgVals), fastag: `${top.name} (taxid ${top.taxid})`, note: 'the taxonomy (nodes.dmp, names.dmp) was not read' }
   else {
-    const m = matchOrganism(tx, orgVals, top.taxid)
+    // Every genus the species report calls present, the top one first.
+    const present = sp.state === 'called' ? sp.present.map((g) => g.taxid) : [top.taxid]
+    const m = matchOrganism(tx, orgVals, top.taxid, present)
     organism = { state: m.state, sdrf: join(orgVals), fastag: `${top.name} (taxid ${top.taxid})`, note: m.note }
   }
 
@@ -409,8 +453,14 @@ function compareJob(t: SdrfTable, rows: number[], d: JobData, tx: Taxonomy | nul
   const fl = runFacts(label)
   const facts = fd.tolerance ? fd : fl
   const factsOf = fd.tolerance ? digest : label
-  const instFacts = fd.instrument ? fd : fl
-  const instOf = fd.instrument ? digest : label
+  // The instrument the input names: the meta instrument row, else (a
+  // converter's generic term) its instrument_model row.
+  const meta = (r: Report | undefined, k: string): string | null => {
+    const v = r ? value(r, 'meta', k) : undefined
+    return v && v !== '-' ? v : null
+  }
+  const instOf = meta(digest, 'instrument') || meta(digest, 'instrument_model') ? digest : label
+  const instr = inputInstrument(meta(instOf, 'instrument'), meta(instOf, 'instrument_model'))
   const modLine = runFixed(d.log)?.line
   const inst = pick('instrument')
   const tol = pick('tolerance')
@@ -421,7 +471,7 @@ function compareJob(t: SdrfTable, rows: number[], d: JobData, tx: Taxonomy | nul
     cleavage: res(compareCleavage(cleav.values, p, cls), cleav.column, `${of(digest)}: call model ${p}`),
     label: res(compareLabel(lab.values, mods.values, l), lab.column, `${of(label)}: label_call label ${l}`),
     modifications: res(compareModifications(mods.values, d.log), mods.column, `log: ${modLine ?? '(no Modifications line: none)'}`),
-    instrument: res(compareInstrument(inst.values, instFacts.instrument), inst.column, `${of(instOf)}: meta instrument ${instFacts.instrument}`),
+    instrument: res(compareInstrument(inst.values, instr.instrument, instr.generic), inst.column, `${of(instOf)}: meta ${instr.from} ${instr.instrument}`),
     tolerance: res(
       compareTolerance(tol.values, facts.tolerance),
       tol.column,
@@ -432,11 +482,20 @@ function compareJob(t: SdrfTable, rows: number[], d: JobData, tx: Taxonomy | nul
 
 const NOT_RUN: Record<string, string> = { failed: 'the job failed', cancelled: 'the job was cancelled', queued: 'not run yet', running: 'running' }
 
+const fieldWords = (fs: readonly FieldId[]): string => fs.map((f) => FIELD_LABEL[f].toLowerCase()).join(', ')
+
+/// A job's verdict: the fields that differ (✗), else consistent (✓), and
+/// after either the run settings that differ from the SDRF (≠), which are
+/// never a mismatch.
 function verdict(fields: Record<FieldId, FieldResult>): Verdict {
   const mismatches = FIELDS.filter((f) => fields[f].state === 'mismatch')
-  if (mismatches.length) return { state: 'checked', text: `✗ ${mismatches.map((f) => FIELD_LABEL[f].toLowerCase()).join(', ')}`, mismatches }
+  const settings = FIELDS.filter((f) => fields[f].state === 'setting_differs')
+  const set = settings.length ? `≠ run setting: ${fieldWords(settings)}` : ''
+  const withSet = (t: string): string => (set ? `${t}; ${set}` : t)
+  if (mismatches.length) return { state: 'checked', text: withSet(`✗ ${fieldWords(mismatches)}`), mismatches, settings }
   const checked = FIELDS.filter((f) => fields[f].state === 'match' || fields[f].state === 'genus')
-  return checked.length ? { state: 'checked', text: '✓ consistent', mismatches: [] } : { state: 'unchecked', text: '? nothing to compare', mismatches: [] }
+  if (checked.length) return { state: 'checked', text: withSet('✓ consistent'), mismatches: [], settings }
+  return settings.length ? { state: 'checked', text: set, mismatches: [], settings } : { state: 'unchecked', text: '? nothing to compare', mismatches: [] }
 }
 
 /// The input the CLI read, from its reports' run rows.
@@ -498,7 +557,8 @@ export const CORRECTIONS_HEADER = ['data_file', 'input', 'sdrf_rows', 'field', '
 
 const tsvCell = (s: string): string => s.replace(/[\t\r\n]+/g, ' ')
 
-/// The corrections TSV: one line per field that differs, ordered by the
+/// The corrections TSV: one line per field that differs (mismatch only: a
+/// run setting that differs is not a correction of the SDRF), ordered by the
 /// SDRF (its first row), then by input name, then by field, so it does not
 /// depend on the queue order. The SDRF itself is never rewritten.
 export function correctionsTsv(c: SdrfComparison): string {

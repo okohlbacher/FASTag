@@ -70,6 +70,8 @@ export interface MockBridge extends FastagApi {
   folderSpectraCalls: string[]
   // writeSummary() calls; summaryWriteError: the next writes reject.
   summaryWrites: { dest: string; text: string }[]
+  // The protect list of each writeSummary() call (undefined: none).
+  summaryProtect: (string[] | undefined)[]
   summaryWriteError: string | null
   // pickSdrf() answers nextPickSdrf; sdrfRead() serves sdrfFiles (a path
   // not named there rejects as missing); taxonomyDump() answers
@@ -304,6 +306,7 @@ export function installMockBridge(): MockBridge {
     folderFiles: {},
     folderSpectraCalls: [],
     summaryWrites: [],
+    summaryProtect: [],
     summaryWriteError: null,
     nextPickSdrf: null,
     sdrfFiles: {},
@@ -464,8 +467,11 @@ export function installMockBridge(): MockBridge {
       const f = mock.folderFiles[dir]
       return f ? Promise.resolve(f.slice()) : Promise.reject(new Error(`${dir} is not a folder`))
     },
-    writeSummary: (dest, text) => {
+    writeSummary: (dest, text, protect) => {
+      mock.summaryProtect.push(protect)
       if (mock.summaryWriteError) return Promise.reject(new Error(mock.summaryWriteError))
+      // As report.rs write_summary: never over a protected file (the SDRF).
+      if (protect?.includes(dest)) return Promise.reject(new Error(`cannot write ${dest}: it is the loaded SDRF, which is never written`))
       mock.summaryWrites.push({ dest, text })
       return Promise.resolve()
     },
