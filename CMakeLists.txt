@@ -424,10 +424,16 @@ if(FASTAG_BUILD_TESTS)
   set_tests_properties(complement_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # #15 phase A: activation counts and the b/y warning on derived ETD, EThcD
   # and filter-string fixtures; tags unchanged; fast reader equals OnDisc.
+  # Phase B: -ion_series by|cz|auto (by == absent, auto on collisional ==
+  # by, c/z rows and column, hybrid/collisional WARNs, species exclusion,
+  # -stream refusal, OnDisc and threads).
   add_test(NAME ion_series_cli_test
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/ion_series_cli_test.sh $<TARGET_FILE:FASTag>
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
-                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mgf)
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mgf
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   $<TARGET_FILE:buildtaxdb>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy)
   set_tests_properties(ion_series_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # ---- 1.12 A: CLI tests ----
   # #5: shortlist, reduced FASTA and engine configuration on the vendored

@@ -16,11 +16,27 @@
 # never match gate.sh's summary-line pattern. The fast reader and
 # OnDiscMSExperiment (used under -out_spectra) must give the same counts.
 #
+# Phase B (-ion_series by|cz|auto), PLAN-data-types E9 CLI tests:
+#   - -ion_series by (explicit) equals the option absent (and, with
+#     FASTAG_BASELINE_BIN, FASTag 1.11.0) on every fixture; etd_all under by
+#     keeps the WARN naming ETD (above);
+#   - auto on etd_all writes the ion_series column, every row cz, one INFO
+#     line on stderr, and the census best_ion_series column;
+#   - auto on the CID source, the EThcD fixture and the MGF is byte-identical
+#     to by (tags, stdout, census, recon); EThcD adds the hybrid WARN;
+#   - cz on the CID source warns about collisional spectra;
+#   - -species leaves c/z rows out and says how many;
+#   - -stream refuses -ion_series away from by;
+#   - auto through OnDisc (-out_spectra) equals the fast reader; threads 1/3/8.
+#
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 BIN="$1"
 SRC="$2"   # Ecoli_MS2_small.mzML
 MGF="$3"   # Ecoli_MS2_small.mgf
+DB="${4:-}"          # Ecoli_MS2_small.fasta (phase B recon and species checks)
+BUILDTAXDB="${5:-}"  # buildtaxdb (phase B species check)
+TAXDIR="${6:-}"      # data/taxonomy (phase B species check)
 
 if ! "$BIN" --help >/dev/null 2>&1; then
   echo "SKIP: binary cannot initialize (OpenMS share data unreachable?)" >&2
@@ -140,6 +156,132 @@ for th in 1 3 8; do
   run "etd_t$th" "$TMP/etd_all.mzML" "$th"
   cmp -s "$TMP/etd_all.warn" "$TMP/etd_t$th.warn" || fail "the warning differs at $th threads"
   cmp -s "$TMP/etd_all.tsv" "$TMP/etd_t$th.tsv" || fail "tags differ at $th threads"
+done
+
+# ================================================================ phase B
+# runb <name> <input> <threads> [extra args]: like run, keeping every stderr
+# line phase B adds.
+runb() {
+  local name=$1 in=$2 th=$3; shift 3
+  "$BIN" -in "$in" -out "$TMP/$name.tsv" -threads "$th" -fragment_tolerance 0.3 -fragment_tolerance_unit Da "$@" > "$TMP/$name.out" 2> "$TMP/$name.err" \
+    || { cat "$TMP/$name.err" >&2; fail "FASTag on $name exited non-zero"; }
+  grep -v 'took .* (wall)' "$TMP/$name.out" > "$TMP/$name.stdout"
+  grep -E '^(Electron activation|Hybrid activation|Collisional activation|Ion series)' "$TMP/$name.err" > "$TMP/$name.lines" || true
+}
+lastcol() { awk -F'\t' 'NR == 1 { print $NF; exit }' "$1"; }
+valuesof() { awk -F'\t' 'NR > 1 { print $NF }' "$1" | sort -u | tr '\n' ' ' | sed 's/ $//'; }
+
+# ---- by explicit == absent, on every fixture ----
+for f in base_src:base etd_all:etd_all ethcd_all:ethcd filter_etd:filter; do
+  src=${f%%:*}; ref=${f##*:}
+  in="$TMP/$src.mzML"; [ "$src" = base_src ] && in="$SRC"
+  runb "by_$ref" "$in" 2 -ion_series by
+  cmp -s "$TMP/$ref.tsv" "$TMP/by_$ref.tsv" || fail "$ref: -ion_series by differs from the option absent"
+  cmp -s "$TMP/$ref.stdout" "$TMP/by_$ref.stdout" || fail "$ref: stdout differs under -ion_series by"
+  cmp -s <(grep -v 'took .* (wall)' "$TMP/$ref.err") <(grep -v 'took .* (wall)' "$TMP/by_$ref.err") \
+    || { diff "$TMP/$ref.err" "$TMP/by_$ref.err" >&2; fail "$ref: stderr differs under -ion_series by"; }
+done
+grep -q 'Ion series' "$TMP/by_etd_all.err" && fail "by prints the phase B INFO line"
+grep -q 'ion_series' "$TMP/by_etd_all.tsv" && fail "by writes an ion_series column"
+if [ -n "${FASTAG_BASELINE_BIN:-}" ]; then
+  "$FASTAG_BASELINE_BIN" -in "$TMP/etd_all.mzML" -out "$TMP/v111_etd.tsv" -threads 2 -fragment_tolerance 0.3 \
+    -fragment_tolerance_unit Da > /dev/null 2>&1 || fail "baseline binary failed on etd_all"
+  cmp -s "$TMP/v111_etd.tsv" "$TMP/by_etd_all.tsv" || fail "etd_all under -ion_series by differs from $FASTAG_BASELINE_BIN"
+elif [ "${FASTAG_BASELINE_REQUIRED:-0}" = 1 ]; then
+  fail "FASTAG_BASELINE_REQUIRED=1 but FASTAG_BASELINE_BIN is not set"
+fi
+
+# ---- auto on the ETD fixture: c/z rows, INFO line, census column ----
+runb auto_etd "$TMP/etd_all.mzML" 2 -ion_series auto -census -census_out "$TMP/auto_etd.census.tsv"
+[ "$(lastcol "$TMP/auto_etd.tsv")" = ion_series ] || fail "auto on etd_all: no ion_series column (last: $(lastcol "$TMP/auto_etd.tsv"))"
+[ "$(wc -l < "$TMP/auto_etd.tsv")" -gt 20 ] || fail "auto on etd_all: too few tags for a meaningful check"
+[ "$(valuesof "$TMP/auto_etd.tsv")" = cz ] || fail "auto on etd_all: rows not all cz ($(valuesof "$TMP/auto_etd.tsv"))"
+head -1 "$TMP/auto_etd.tsv" | cmp -s - <(head -1 "$TMP/base.tsv" | sed 's/$/\tion_series/') \
+  || fail "auto on etd_all: the header is not the by header plus ion_series"
+[ "$(awk -F'\t' '{ print NF }' "$TMP/auto_etd.tsv" | sort -u | wc -l)" -eq 1 ] || fail "auto on etd_all: ragged rows"
+[ "$(grep -c '^Ion series (-ion_series auto): ' "$TMP/auto_etd.err")" -eq 1 ] || fail "auto on etd_all: expected one INFO line"
+grep -q "^Ion series (-ion_series auto): $N MS2 spectra tagged as c/z-dot ions, 0 as b/y ions (activation: 0 collisional, $N electron, 0 hybrid, 0 unknown)" "$TMP/auto_etd.err" \
+  || fail "auto on etd_all: INFO counts: $(grep '^Ion series' "$TMP/auto_etd.err")"
+grep -q '^Electron activation' "$TMP/auto_etd.err" && fail "auto still prints the by-mode warning"
+grep -qE 'Ion series|activation' "$TMP/auto_etd.out" && fail "a phase B line reached stdout"
+grep -qE "$GATE_RE" "$TMP/auto_etd.lines" && fail "a phase B line matches the gate summary pattern"
+cmp -s "$TMP/etd_all.tsv" "$TMP/auto_etd.tsv" && fail "auto on etd_all wrote the by tags"
+[ "$(awk -F'\t' 'NR == 1 { print $NF; exit }' "$TMP/auto_etd.census.tsv")" = best_ion_series ] || fail "census: no best_ion_series column under auto"
+[ "$(awk -F'\t' 'NR > 1 && $NF != "" { print $NF }' "$TMP/auto_etd.census.tsv" | sort -u)" = cz ] || fail "census: best tags not cz under auto"
+# The digest of the same tags under cz equals auto (every spectrum electron).
+runb cz_etd "$TMP/etd_all.mzML" 2 -ion_series cz
+cmp -s "$TMP/auto_etd.tsv" "$TMP/cz_etd.tsv" || fail "etd_all: cz and auto differ although every spectrum is ETD"
+grep -q '^Collisional activation' "$TMP/cz_etd.err" && fail "cz on an all-ETD run warns about collisional spectra"
+
+# ---- auto on collisional, EThcD and MGF input: byte-identical to by ----
+runb auto_cid "$SRC" 2 -ion_series auto
+cmp -s "$TMP/base.tsv" "$TMP/auto_cid.tsv" || fail "CID under auto differs from by"
+cmp -s "$TMP/base.stdout" "$TMP/auto_cid.stdout" || fail "CID under auto: stdout differs from by"
+grep -q "^Ion series (-ion_series auto): 0 MS2 spectra tagged as c/z-dot ions, $N as b/y ions" "$TMP/auto_cid.err" || fail "CID under auto: INFO counts"
+grep -qE '^(Hybrid|Collisional|Electron) activation' "$TMP/auto_cid.err" && fail "CID under auto warns"
+runb auto_ethcd "$TMP/ethcd_all.mzML" 2 -ion_series auto
+cmp -s "$TMP/base.tsv" "$TMP/auto_ethcd.tsv" || fail "EThcD under auto is not read as by"
+[ "$(grep -c '^Hybrid activation' "$TMP/auto_ethcd.err")" -eq 1 ] || fail "EThcD under auto: no hybrid WARN"
+grep -q "^Hybrid activation: $N of $N MS2 spectra .*EThcD" "$TMP/auto_ethcd.err" || fail "the hybrid WARN does not name EThcD and the counts"
+runb auto_mgf "$MGF" 2 -ion_series auto
+cmp -s "$TMP/mgf.tsv" "$TMP/auto_mgf.tsv" || fail "MGF under auto differs from by"
+if [ -n "$DB" ]; then
+  runb rby "$SRC" 2 -recon_fasta "$DB" -recon_out "$TMP/rby.recon.tsv" -census -census_out "$TMP/rby.census.tsv" \
+    -digest_out "$TMP/rby.digest.tsv" -label_out "$TMP/rby.label.tsv" -massgap_out "$TMP/rby.massgap.tsv"
+  runb rauto "$SRC" 2 -ion_series auto -recon_fasta "$DB" -recon_out "$TMP/rauto.recon.tsv" -census \
+    -census_out "$TMP/rauto.census.tsv" -digest_out "$TMP/rauto.digest.tsv" -label_out "$TMP/rauto.label.tsv" \
+    -massgap_out "$TMP/rauto.massgap.tsv"
+  for o in tsv recon.tsv census.tsv digest.tsv label.tsv massgap.tsv; do
+    cmp -s <(grep -v 'software_version\|^#' "$TMP/rby.$o") <(grep -v 'software_version\|^#' "$TMP/rauto.$o") \
+      || fail "CID under auto: $o differs from by"
+  done
+  [ "$(wc -l < "$TMP/rby.recon.tsv")" -gt 1 ] || fail "no recon rows on the CID source; the check is weak"
+  # c/z through every consumer: recon, digest, label and mass gap run; a c/z
+  # placement exists (the ETD fixture's peaks are CID, so few place).
+  runb rcz "$TMP/etd_all.mzML" 2 -ion_series auto -recon_fasta "$DB" -recon_out "$TMP/rcz.recon.tsv" \
+    -digest_out "$TMP/rcz.digest.tsv" -label_out "$TMP/rcz.label.tsv" -massgap_out "$TMP/rcz.massgap.tsv"
+  for o in recon digest label massgap; do [ -s "$TMP/rcz.$o.tsv" ] || fail "auto on etd_all: no $o output"; done
+fi
+
+# ---- cz on collisional spectra: the WARN ----
+runb cz_cid "$SRC" 2 -ion_series cz
+[ "$(lastcol "$TMP/cz_cid.tsv")" = ion_series ] || fail "cz always writes the ion_series column"
+[ "$(grep -c '^Collisional activation' "$TMP/cz_cid.err")" -eq 1 ] || fail "cz on CID: no collisional WARN"
+grep -q "^Collisional activation: $N of $N MS2 spectra" "$TMP/cz_cid.err" || fail "cz on CID: WARN counts"
+
+# ---- -species counts b/y tags only ----
+if [ -n "$BUILDTAXDB" ] && [ -n "$TAXDIR" ] && [ -n "$DB" ]; then
+  mkdir -p "$TMP/prot"
+  awk '/^>/ { if (s != "") print s; print; s = ""; next } { s = s $0 } END { if (s != "") print s }' "$DB" > "$TMP/prot/562.fasta"
+  "$BUILDTAXDB" "$TMP/prot" "$TMP/toy.taxdb" 7 > "$TMP/buildtaxdb.log" 2>&1 || { cat "$TMP/buildtaxdb.log" >&2; fail "buildtaxdb"; }
+  TAX=(-species -taxdb "$TMP/toy.taxdb" -taxonomy_nodes "$TAXDIR/nodes.dmp" -taxonomy_names "$TAXDIR/names.dmp")
+  runb sp_by "$TMP/etd_all.mzML" 2 "${TAX[@]}"
+  runb sp_cz "$TMP/etd_all.mzML" 2 -ion_series cz "${TAX[@]}"
+  grep -q 'left out of -species' "$TMP/sp_by.err" && fail "by excludes rows from -species"
+  rows=$(($(wc -l < "$TMP/sp_cz.tsv") - 1))
+  [ "$rows" -gt 0 ] || fail "species: no c/z rows"
+  grep -q "^Ion series: $rows tag rows read as c/z-dot ions were left out of -species" "$TMP/sp_cz.err" \
+    || { grep 'species' "$TMP/sp_cz.err" >&2; fail "species: the exclusion count is not the c/z row count ($rows)"; }
+  [ -s "$TMP/sp_by.species.tsv" ] || fail "species: no b/y species report"
+fi
+
+# ---- -stream refuses -ion_series away from by ----
+if "$BIN" -in "$SRC" -out "$TMP/st.tsv" -stream -ion_series auto > "$TMP/st.out" 2> "$TMP/st.err"; then
+  fail "-stream accepted -ion_series auto"
+fi
+grep -q 'ion_series' "$TMP/st.out" "$TMP/st.err" || fail "the -stream refusal does not name -ion_series"
+"$BIN" -in "$SRC" -out "$TMP/st_by.tsv" -stream -ion_series by -fragment_tolerance 0.3 -fragment_tolerance_unit Da > /dev/null 2>&1 \
+  || fail "-stream refuses -ion_series by (the default)"
+
+# ---- OnDisc (-out_spectra) and threads ----
+runb od_auto "$TMP/etd_all.mzML" 2 -ion_series auto -out_spectra "$TMP/od_auto.spectra.mzML"
+cmp -s "$TMP/auto_etd.tsv" "$TMP/od_auto.tsv" || fail "auto: OnDisc and the fast reader tag differently"
+cmp -s <(grep '^Ion series' "$TMP/auto_etd.err") <(grep '^Ion series' "$TMP/od_auto.err") || fail "auto: OnDisc INFO differs"
+for th in 1 3 8; do
+  runb "auto_t$th" "$TMP/etd_all.mzML" "$th" -ion_series auto -census -census_out "$TMP/auto_t$th.census.tsv"
+  cmp -s "$TMP/auto_etd.tsv" "$TMP/auto_t$th.tsv" || fail "auto: tags differ at $th threads"
+  cmp -s "$TMP/auto_etd.census.tsv" "$TMP/auto_t$th.census.tsv" || fail "auto: census differs at $th threads"
+  cmp -s "$TMP/auto_etd.lines" "$TMP/auto_t$th.lines" || fail "auto: INFO/WARN lines differ at $th threads"
 done
 
 echo "ion_series_cli_test: passed"
