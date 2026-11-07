@@ -1,0 +1,6 @@
+Modifications: Carbamidomethyl (C, fixed)
+Subsampling: tagging 3000 of 32513 input spectra (seed 1)
+Digest: 28833 filtered tags, model Trypsin -> /scratch/kohlbach/gui-p2b-fixtures/orbitrap_hcd.digest.tsv
+Labels: 28833 filtered tags -> /scratch/kohlbach/gui-p2b-fixtures/orbitrap_hcd.label.tsv
+2522 MS2 spectra, 112906 tags
+FASTag took 0.44 s (wall), 2.24 s (CPU), 0.24 s (system), 2.00 s (user); Peak Memory Usage: 78 MB.

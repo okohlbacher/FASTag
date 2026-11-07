@@ -35,6 +35,10 @@ gui/
                        BatchList.tsx, the batch job naming (batch.ts), and the batch
                        summary: batchSummary.ts (rows and the majority rule),
                        useBatchSummary.ts (each done job's reports) and SummaryTable.tsx
+    inspector/         the checks before and after a run (P2b): probe.ts (the -probe_input
+                       contract and its parser), capabilities.ts (CLI features from --helphelp),
+                       instrument.ts (instrument family and preset), checks.ts (the checks, the
+                       exit-11 refusal), useInspector.ts and InspectorPanel.tsx
     results/           ResultTabs.tsx (Overview, Tags, Species, Digest), FailureBanner.tsx (over
                        the tabs, or on the Batch view beside the queue), reports.ts,
                        RunningPanel.tsx (the running state), OverviewPanel.tsx over
@@ -51,7 +55,9 @@ gui/
     DigestPanel.tsx    digest, label and mass-gap reports
     digestReport.ts    reader of the digest/label/mass-gap TSVs and the sequence-logo arithmetic
     SequenceLogo.tsx   SVG sequence logo (bits against a background)
-    fixtures/          synthetic report TSVs for the tests and the browser preview
+    fixtures/          synthetic report TSVs for the tests and the browser preview; cli-1.12/
+                       (real FASTag 1.12 output on public gate inputs) and probe/ (the probe
+                       contract's fixtures), see fixtures/cli-1.12/README.md
     api.ts             the window.fastag bridge over Tauri invoke, one Channel per run, events + dialog/opener plugins
     runJob.ts          one run as the renderer tracks it: id made before invoke, Channel events and the reply merged
     paramLayout.ts     section/ordering overlay on the generated manifest (one flat list)
@@ -98,6 +104,8 @@ gui/
     src/reveal.rs      ResolvedOutputs (every output, absolute) and Reveal / Open folder, limited to run outputs
     src/species.rs     species TSV read + FTX2 taxdb header read
     src/report.rs      digest/label/mass-gap report read
+    src/inspect.rs     the CLI's options (--helphelp) and the metadata probe (-probe_input, run
+                       only when --helphelp lists it; timeout and output cap)
     src/denovo.rs      the Stitch/ALPS export job: tools/tags_to_denovo.py ported (the same golden
                        files), one pass over the file, progress and Cancel, the reads to a .csv via .part
     examples/browser_bench.rs  the browser bench (bench/bench-<version>.json)
@@ -156,7 +164,15 @@ manifest: the shell empties the file before the script runs.
 Four views, switched from the top bar: **Setup** (the input, the parameters
 and Run), **Results** (Overview, Tags, Species and Digest, full width), **Batch** (the
 queue, its run bar, the failure banner, the summary table and each job's log) and **History**
-(every recorded run: input, status, duration, outputs). Run moves to
+(every recorded run: input, status, duration, tags, outputs; Open, Reveal,
+Copy command, Settings into form with Undo, Re-run, Delete record). Copy command
+copies the command line exactly as the run was started, with the outputs at
+their final paths; a cancelled or failed run is marked incomplete and does
+not open. Re-run starts the recorded run again with the parameters it was
+sent (not the form's), so its command line is the recorded one; it asks
+before overwriting like any run. Delete record asks first and keeps its
+files; the record of a run that did not finish is kept while it alone marks
+a file that run left behind as incomplete. Run moves to
 Results; the first file of a batch moves to Batch. The progress pill in the
 top bar shows the job in flight (file, phase or percentage, ETA) and, outside
 the view with the run bar or the running state, its Cancel. While a run goes,
@@ -253,6 +269,78 @@ Themes: System (the default), Light and Dark, from the top bar or View >
 Theme; the choice is remembered on this machine. Text uses the system UI
 font; IBM Plex Mono is bundled for sequences and IDs.
 
+## Inspector
+
+The inspector checks a spectra file before a run and the run after it
+(GUI-DESIGN 3 S1, P2b). The GUI reads no spectra file itself: before a run
+everything comes from the CLI's metadata probe, after a run from the reports
+and the log lines FASTag wrote. Every check names its evidence and its Help
+entry.
+
+- **Blocks the run** (Run disabled): no MS2 spectra; raw DIA, which FASTag
+  1.12 refuses with exit code 11 (the check shows the DIAspeXtract command to
+  run first).
+- **Red flag** (Run waits for the fix or "Run anyway"): ion-trap MS2 with a
+  ppm tolerance (fix: Ion trap CID 0.3 Da), profile MS2 in mzML or MGF input
+  (FASTag centroids mzPeak input itself; for mzML it names `-pick_profile
+  auto`), species detection with a tolerance in Da.
+- **Warning**: a stale or missing mzML index (FASTag scans the file instead;
+  results are the same: a deviation from GUI-DESIGN S1, which lists the stale
+  index as a red flag), electron activation (ETD, ECD, hybrids), a FASTA
+  without decoys, a DIA-like acquisition FASTag still tags.
+
+Run also waits while the checks are not known yet ("Checking the input with
+FASTag…": `--helphelp`, then the probe). A probe error or its 60 s timeout
+releases Run as "Not checked before the run". The spectra file is probed once
+per input; the FASTA is probed separately, once its field has stayed
+unchanged for 0.7 s and names a FASTA file, and a newer probe kills the
+superseded CLI child in the backend. The instrument family is the CLI's
+`ms2_analyzer` where it names one; by name only an instrument without a
+second analyser (LTQ XL, LTQ Velos) is an ion trap, while the hybrids (LTQ
+Orbitrap, Orbitrap Elite, the Tribrids, LTQ FT, LTQ FT Ultra) need the
+analyser or FASTag's low-resolution warning.
+
+The instrument the probe or the digest report names proposes a preset,
+marked "(detected)" in the instrument list; nothing is applied until it is
+chosen. After a run, the digest report's `meta instrument` rows and FASTag's
+low-resolution warning flag an ion-trap run at ppm, with "Re-run with
+0.3 Da". A run FASTag refuses as raw DIA (exit 11, `FASTAG_REFUSED
+reason=raw_dia`) shows that reason and the DIAspeXtract command instead of a
+generic failure.
+
+Optional CLI features are detected through `--helphelp`, never through the
+version string. No FASTag has `-probe_input` yet (1.12 has the probe only
+inside a run, src/AcquisitionProbe): with such a CLI the inspector says "Not
+checked before the run" and guesses nothing; the checks after the run work
+with any CLI that writes the digest report.
+
+**Probe contract** (format 1; the parser is `src/inspector/probe.ts`, the
+fixtures are `src/fixtures/probe/`):
+
+    FASTag -probe_input <file> [-acquisition_probe_spectra <n>] [-fasta <file>]
+
+- Reads metadata only, through FASTag's own mzML, mzPeak and MGF readers;
+  writes no file and needs no `-in` or `-out`.
+- Exit 0 whenever the file could be read, whatever it holds (raw DIA too:
+  the probe never refuses); an unreadable file exits as a run would (3, 4 or
+  5) with the reason on stderr.
+- stdout is JSON lines only, one object per line with a `record` key, first
+  `{"record":"probe","format":1,...}`, last `{"record":"end"}`:
+
+| record | fields |
+|---|---|
+| `probe` | `format`, `version`, `input`, `file_format` (`mzML`, `mzPeak`, `MGF`) |
+| `instrument` | `name`, `model` (CV names or null), `ms2_analyzer` (CV name of the analyzer of the instrument configuration most MS2 reference, or null), `ion_mobility` (`1/K0`, `drift`, `FAIMS` or null) |
+| `spectra` | `ms1`, `ms2` (whole file), `ms2_probed`, `ms2_centroid`, `ms2_profile`, `ms2_type_unknown` (of the probed MS2) |
+| `activation` | `of`, `collisional`, `electron`, `hybrid`, `unknown` (the RunMeta activation classes, of the probed MS2) |
+| `index` | `state`: `ok`, `stale`, `absent` or `not_applicable` |
+| `acquisition` | `mode` (Acquisition::modeName), `why` (the reason of the "Acquisition check:" line), `warn`, `refuse` (true exactly when `-acquisition_check refuse` would exit 11), `windows`, `median_width` (as in the `FASTAG_REFUSED` sentinel) |
+| `fasta` | with `-fasta` only: `path`, `proteins`, `decoys`, `decoy_affix` |
+
+- Unknown records and fields are ignored; a missing record leaves its checks
+  "not checked". A probe of a higher format, or one without its `end`
+  record, is not used.
+
 ## Shortcuts
 
 Cmd on macOS, Ctrl on Windows and Linux; the same items are in the native
@@ -340,6 +428,27 @@ The process-lifetime tests (`lifetime::tests`, and
 test binary again as a stand-in GUI process and kill it with SIGKILL; the
 PDEATHSIG ones run on Linux only (the `gui` CI job), the job-object one on
 Windows only (`gui-windows`).
+The stub is steered by environment variables (`STUB_SLEEP`,
+`STUB_SLEEP_BEFORE`, `STUB_FAIL`, `STUB_CHATTY`, `STUB_ORPHAN`, ...), by
+`<in>.stub` next to the input, or, in the tauri-driver specs, by the input's
+name: an input named `*.slow.*` keeps running, `*.chatty.*` prints 5,000 log
+lines and `*.fail.*` fails.
+
+The tauri-driver specs in `e2e-tauri/` drive the real debug app in WebKitGTK
+on Linux (tauri-driver and WebKitWebDriver under xvfb): probe, run, table,
+cancel, and two recorded gates, the time to first rows on a generated
+1M-row file and the IPC rate of a chatty run (log lines and messages, counted
+apart, so batched log events still count every line). Native dialogs cannot
+be driven, so a spec replaces only `window.fastag.pickInput` /
+`pickResults`. `bash e2e-tauri/run.sh stub` runs them against the stub (CI
+does on every push and PR, informational until P5); `run.sh real` against
+the CLI in the app's own resources (CI does against the installed `.deb`
+and, for the probe, the unpacked tarball before a tag). In real mode the
+cancel spec runs the E. coli fixture's spectra repeated 500 times
+(`e2e-tauri/mzml.mjs`, `E2E_CANCEL_COPIES`) on one thread, clicks Cancel once
+the partial output exists, and asserts the run was cancelled, the partial file
+removed and no CLI process left. `E2E_ONLY` picks specs by name. Results go to
+`e2e-tauri/results/`.
 
 Setup (P2a): `setup/setupScreen.app.test.tsx` renders the window as it starts
 (`renderColdApp`: the task "Characterize a run") and checks the two-action
@@ -375,12 +484,17 @@ workflow runs both.
 
 The tests in `src/adversarial/` check GUI behaviour end to end: accessibility,
 the run lifecycle, report parsing, and agreement with the CLI and with this
-README. Some of them read inputs from outside the repository and are skipped
-unless these are set: `FASTAG_GUI_TEST_OUTPUTS` (a directory of real CLI outputs on the E. coli
-fixture), `FASTAG_BIN` (a FASTag CLI to run) and `FASTAG_ORDER_RS` (a helper
-that replays stdout/stderr in the order two reader threads receive them).
-`cli-consistency` also needs the `build_args` example, which `cargo test`
-builds. See `src/adversarial/external.ts`.
+README. The real CLI outputs they parse are committed in
+`src/fixtures/real/` (public inputs only; see its README.md);
+`FASTAG_GUI_TEST_OUTPUTS` names another directory of them instead. The
+`cli-consistency` tests also need `FASTAG_BIN` (a FASTag CLI of the version
+`params.generated.json` was made from) and are skipped without it. They also
+need the `build_args` and `order_rs` examples in `src-tauri/examples`
+(`order_rs` replays stdout/stderr in the order two reader threads receive
+them), which `cargo test` or `cargo build --examples` builds;
+`FASTAG_ORDER_RS` names another helper. CI runs them in the release-only
+`gui-cli-consistency` job, on a tag and on a `gui_dry_run` dispatch, against
+the portable linux-x64 CLI. See `src/adversarial/external.ts`.
 
 The Stitch/ALPS export (P3) is tested against golden files that the
 repository's `tools/tags_to_denovo.py` writes (`src/fixtures/denovo/`: the
@@ -407,3 +521,24 @@ avoids OpenMP error #15), the digest tables (`share/FASTag/digest`) and the
 ~1 GB taxonomy inside the app; see
 [../doc/SIGNING-macos-gui.md](../doc/SIGNING-macos-gui.md). In dev those
 resources are machine-specific symlinks and are gitignored.
+
+On Linux (from 1.13.0) the `gui-linux` job in `.github/workflows/ci.yml`
+builds the app outside conda on ubuntu-22.04 against apt's WebKitGTK 4.1,
+with the portable linux-x64 CLI staged into `src-tauri/resources/fastag`:
+`fastag-gui_<version>_amd64.deb` (Debian package `fastag-gui`; Tauri would
+name it `fas-tag`, so the job repacks it), `FASTag-gui-linux-x64.tar.gz` (the `.deb`'s
+`/usr` tree, relocatable) and a best-effort `FASTag-gui-linux-x64.AppImage`.
+A `gui_dry_run` dispatch with `gui_full_payload` embeds the taxonomy index as
+a tag does, so the release-sized bundles are built and smoke-tested first.
+A tag attaches them only once P1 PR b's process lifetime
+(a `libc::PR_SET_PDEATHSIG` call, #17) is in `src-tauri/src`.
+The supported systems are Ubuntu 22.04+ and Debian 12+ (glibc 2.35 and
+WebKitGTK 4.1). RHEL-family systems are not supported by the desktop app
+(RHEL/Rocky 9 has glibc 2.34 and only WebKitGTK API 4.0, `webkit2gtk3`, and
+there is no older build base); their users run the CLI, and no CI job tests
+the app there. Before anything is attached to a release, the `.deb` is
+installed and run on ubuntu-22.04 and 24.04 (and the tarball unpacked into
+an arbitrary prefix, run and probed there first) and the AppImage launched on
+both; a `gui_dry_run` dispatch runs the same
+jobs without a tag and leaves the bundles as the `FASTag-gui-linux-x64`
+artifact.

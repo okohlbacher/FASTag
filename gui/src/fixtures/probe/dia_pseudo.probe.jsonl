@@ -1,0 +1,7 @@
+{"record":"probe","format":1,"version":"1.12.0","input":"/data/PXD006096/100815_MM_ABPP_H1993_DMSO_DIA1_new.pseudo.mzML","file_format":"mzML"}
+{"record":"instrument","name":null,"model":null,"ms2_analyzer":null,"ion_mobility":null}
+{"record":"spectra","ms1":0,"ms2":71431,"ms2_probed":4000,"ms2_centroid":4000,"ms2_profile":0,"ms2_type_unknown":0}
+{"record":"activation","of":4000,"collisional":0,"electron":0,"hybrid":0,"unknown":4000}
+{"record":"index","state":"ok"}
+{"record":"acquisition","mode":"pseudo-DDA","why":"100% of the MS2 were written by a pseudo-DDA generator (DIAspeXtract or diaTracer)","warn":false,"refuse":false,"windows":0,"median_width":0}
+{"record":"end"}

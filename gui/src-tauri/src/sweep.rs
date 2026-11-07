@@ -248,6 +248,8 @@ mod tests {
             start: 1000,
             end: 1000,
             cleanup: Cleanup::default(),
+            params: None,
+            tags: None,
         }
     }
 

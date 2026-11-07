@@ -17,6 +17,7 @@ import type { ResolvedOutputs, RunResult, SpeciesReport } from '../types'
 import type { JobAction } from '../runJob'
 import { baseName, type Report } from '../digestReport'
 import { addJobs, renameJobs, type BatchJob } from './batch'
+import type { Refusal } from '../inspector/checks'
 import { createLogStore, type LogStore } from './logStore'
 
 // A run that failed: what failed, and FASTag's own words for why (each failed
@@ -24,7 +25,8 @@ import { createLogStore, type LogStore } from './logStore'
 export interface Failure {
   title: string
   // input: the batch job the reason belongs to, whose log it opens.
-  reasons: { what?: string; text: string; input?: string }[]
+  // refusal: FASTag refused the input (exit 11, raw DIA; inspector/checks.ts).
+  reasons: { what?: string; text: string; input?: string; refusal?: Refusal }[]
   command?: string[]
   // The batch job whose log "Show full log" opens; none: the live log.
   logOf?: string
@@ -121,6 +123,8 @@ export interface Job {
   cancelRequested: boolean
   // Why it failed, for its row: the next job clears the live log.
   reason?: string
+  // The CLI lines the inspector reads after the run (checks.ts NOTE_LINE).
+  notes?: string[]
 }
 
 export interface OverwriteAsk {
@@ -198,7 +202,8 @@ export type RunAction =
   | { type: 'EVENT'; id: string; action: JobAction }
   // The job is settled (its result and its reply are in). tags: the CLI's
   // summary count; reason: why a failed job failed.
-  | { type: 'DONE'; id: string; result: RunResult; at: number; tags?: number | null; reason?: string }
+  // notes: the log lines the inspector keeps (checks.ts NOTE_LINE).
+  | { type: 'DONE'; id: string; result: RunResult; at: number; tags?: number | null; reason?: string; notes?: string[] }
   | { type: 'CANCEL_REQUESTED' }
   | { type: 'BATCH_ADD'; files: string[] }
   | { type: 'BATCH_REMOVE'; inputs: string[] }
@@ -318,7 +323,14 @@ function done(s: RunState, a: Extract<RunAction, { type: 'DONE' }>): RunState {
   // cancel is read off the backend flag or the Cancel the user pressed. A
   // run that finished ok despite the kill stays ok.
   const status: JobStatus = r.ok ? 'ok' : r.cancelled === true || j.cancelRequested ? 'cancelled' : 'failed'
-  const next = withJob(s, a.id, (x) => ({ ...x, status, result: r, endedAt: a.at, reason: status === 'failed' ? a.reason : undefined }))
+  const next = withJob(s, a.id, (x) => ({
+    ...x,
+    status,
+    result: r,
+    endedAt: a.at,
+    reason: status === 'failed' ? a.reason : undefined,
+    notes: a.notes
+  }))
   // The CLI writes -out in place: a finished run rewrote it, so the table
   // reads it afresh; a failed or cancelled one may have left it truncated or
   // removed, so the table stays withheld as incomplete. The backend removed

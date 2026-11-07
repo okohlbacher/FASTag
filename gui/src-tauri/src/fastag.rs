@@ -838,6 +838,8 @@ pub fn record_of(
         start,
         end: history::now_ms(),
         cleanup: end.cleanup.clone(),
+        params: None,
+        tags: if end.ok { history::tags_of_log(&end.log) } else { None },
     }
 }
 
@@ -857,6 +859,8 @@ pub fn marker_of(files: &RunFiles<'_>, argv: &[String], start: u64) -> history::
         start,
         end: start,
         cleanup: outputs::Cleanup::default(),
+        params: None,
+        tags: None,
     }
 }
 
@@ -920,9 +924,17 @@ pub fn outputs_check(params: RunParams) -> OutputsCheck {
 }
 
 /// The command line of a run of @p params with the binary @p r, binary
-/// first: what `run` replies as `command` and History records.
+/// first: what `run` replies as `command` and History records (one vector,
+/// so Copy command in Setup and in History equal the run's): the argv as
+/// run, with no binary path that is gone once the app quits
+/// (history::argv_as_run).
 pub(crate) fn command_of(r: &Resolved, params: &RunParams) -> Vec<String> {
-    std::iter::once(r.bin.display().to_string()).chain(build_args(params)).collect()
+    argv_of(r, &build_args(params))
+}
+
+fn argv_of(r: &Resolved, args: &[String]) -> Vec<String> {
+    let appdir = std::env::var_os("APPDIR").map(PathBuf::from);
+    history::argv_as_run(&r.bin, args, appdir.as_deref())
 }
 
 /// The command line a run of @p params is (command_of), for the Setup
@@ -944,7 +956,7 @@ pub fn launch(mgr: &RunManager, r: &Resolved, params: RunParams, sink: Sink, his
         return refused("a run is already in progress".into());
     }
     let Plan { args, cwd, outputs, resolved } = plan(&params);
-    let command = command_of(r, &params);
+    let command = argv_of(r, &args);
     let mut cmd = Command::new(&r.bin);
     // stdin is null: the CLI never reads it, and an inherited one could block.
     cmd.args(&args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
@@ -970,6 +982,7 @@ pub fn launch(mgr: &RunManager, r: &Resolved, params: RunParams, sink: Sink, his
     let marker = history_dir.as_deref().and_then(|d| sweep::mark_running(d, &marker_of(&files, &command, start)).ok());
     // When the run has ended: record it (history.rs).
     let (rec_input, rec_outputs, rec_cwd, rec_argv) = (params.input.clone(), outputs.clone(), cwd.clone(), command.clone());
+    let rec_params = params.params.clone();
     let run_marker = marker.clone();
     let finish = Box::new(move |end: &RunEnd| {
         // The marker first: a record next to a stale marker would be
@@ -979,7 +992,9 @@ pub fn launch(mgr: &RunManager, r: &Resolved, params: RunParams, sink: Sink, his
         }
         if let Some(d) = history_dir {
             let files = RunFiles { input: &rec_input, outputs: &rec_outputs, cwd: rec_cwd.as_deref(), overwrite: true };
-            record_run(&d, &record_of(&files, &rec_argv, start, end), &end.log);
+            let mut rec = record_of(&files, &rec_argv, start, end);
+            rec.params = Some(rec_params);
+            record_run(&d, &rec, &end.log);
         }
     });
     let abs: Vec<PathBuf> = resolved.paths().into_iter().map(PathBuf::from).collect();
@@ -1681,6 +1696,86 @@ mod tests {
             let _ = std::fs::remove_dir_all(&d);
         }
 
+        // The flake of a_cancel_before_the_cli_writes_removes_the_confirmed_earlier_outputs
+        // (about 1 in 8 parallel runs on macOS): the stub printed the line
+        // the test waits for and only then forked its `sleep`, so the
+        // process-group kill could land while sh was inside fork(). macOS
+        // lets a child forked during a group signal escape it; the orphaned
+        // `sleep 30` kept the pipes open, the readers saw no EOF and no done
+        // event came. The stub now starts its sleeper before it prints or
+        // writes anything a test synchronises on. This repeats the exact
+        // cancel point, so the old race shows up within a few rounds.
+        #[test]
+        fn a_cancel_at_the_moment_the_stub_reports_always_ends_the_run() {
+            // Eight runs at a time, as the parallel test harness starts them:
+            // the race needs a loaded machine to show.
+            let workers: Vec<_> = (0..8)
+                .map(|w| {
+                    std::thread::spawn(move || {
+                        for round in 0..16 {
+                            let env = if (w + round) % 2 == 0 { ("STUB_SLEEP_BEFORE", "30") } else { ("STUB_SLEEP", "30") };
+                            let d = dir(&format!("race{w}-{round}"));
+                            let input = d.join("a.mzML");
+                            std::fs::write(&input, "spectra").unwrap();
+                            let params = format!(r#"{{"in":"{}","out":"a.tags.tsv"}}"#, input.display());
+                            let r = start(&params, &[env]).unwrap();
+                            if env.0 == "STUB_SLEEP" {
+                                wait_for(&d.join("a.tags.tsv"));
+                            } else {
+                                wait_for_line(&r, "Reading spectra (stub)");
+                            }
+                            // Swept across the few hundred microseconds in
+                            // which sh goes from the line to its fork.
+                            std::thread::sleep(Duration::from_micros((round * 8 + w) as u64 * 25));
+                            cancel_of(&r.mgr);
+                            let done = r.done.recv_timeout(Duration::from_secs(5));
+                            let _ = std::fs::remove_dir_all(&d);
+                            let done = done.unwrap_or_else(|_| {
+                                panic!("worker {w} round {round} ({}): no done event within 5 s of the cancel", env.0)
+                            });
+                            assert_eq!(done["cancelled"], true);
+                        }
+                    })
+                })
+                .collect();
+            for t in workers {
+                t.join().unwrap();
+            }
+        }
+
+        // The tauri-driver specs (gui/e2e-tauri) drive the real app, which
+        // passes no environment of its own to the CLI: they steer the stub
+        // by the input's name instead.
+        #[test]
+        fn the_stub_keeps_running_on_an_input_named_slow() {
+            let d = dir("slow");
+            let input = d.join("a.slow.mzML");
+            std::fs::write(&input, "spectra").unwrap();
+            let params = format!(r#"{{"in":"{}","out":"a.tags.tsv"}}"#, input.display());
+            let r = start(&params, &[]).unwrap();
+            wait_for(&d.join("a.tags.tsv"));
+            assert!(r.done.recv_timeout(Duration::from_millis(500)).is_err(), "a .slow. input finished at once");
+            assert!(r.mgr.is_busy());
+            cancel_of(&r.mgr);
+            let done = r.done.recv_timeout(Duration::from_secs(5)).expect("no done event");
+            assert_eq!(done["cancelled"], true);
+            let _ = std::fs::remove_dir_all(&d);
+        }
+
+        #[test]
+        fn the_stub_prints_five_thousand_log_lines_on_an_input_named_chatty() {
+            let d = dir("chatty");
+            let input = d.join("a.chatty.mzML");
+            std::fs::write(&input, "spectra").unwrap();
+            let params = format!(r#"{{"in":"{}","out":"a.tags.tsv"}}"#, input.display());
+            let r = start(&params, &[]).unwrap();
+            let done = r.done.recv_timeout(Duration::from_secs(20)).expect("no done event");
+            assert_eq!(done["ok"], true);
+            let lines: Vec<String> = r.events.try_iter().filter(|l| l.starts_with("Warning: spectrum ")).collect();
+            assert_eq!(lines.len(), 5000, "{:?}", lines.last());
+            let _ = std::fs::remove_dir_all(&d);
+        }
+
         #[test]
         fn a_finished_run_keeps_its_outputs() {
             let d = dir("ok");
@@ -1824,10 +1919,15 @@ mod tests {
         /// The stub as the `run` command starts it (launch), with @p control
         /// as <in>.stub (the stub's switches).
         fn launch_stub(d: &Path, params: &str, control: &str) -> (Arc<RunManager>, RunStarted, Wire) {
+            launch_bin(d, Path::new(STUB), params, control)
+        }
+
+        /// launch_stub with the stub at @p bin.
+        fn launch_bin(d: &Path, bin: &Path, params: &str, control: &str) -> (Arc<RunManager>, RunStarted, Wire) {
             let input = d.join("a.mzML");
             std::fs::write(&input, "spectra").unwrap();
             std::fs::write(d.join("a.mzML.stub"), control).unwrap();
-            let r = Resolved { bin: PathBuf::from(STUB), data: None, taxonomy: None, source: "env" };
+            let r = Resolved { bin: bin.to_path_buf(), data: None, taxonomy: None, source: "env" };
             let mgr = Arc::new(RunManager::default());
             let (sink, wire) = channel();
             let params = params.replace("$IN", &input.display().to_string());
@@ -1915,6 +2015,122 @@ mod tests {
             // Recorded and freed before Done.
             assert!(!mgr.is_busy());
             assert_eq!(history::list(&d.join("appdata"), 1)[0].status, history::Status::Ok);
+            let _ = std::fs::remove_dir_all(&d);
+        }
+
+        /// The newest record in @p d's app data, once the run of @p wire ended.
+        fn record_after(d: &Path, wire: &Wire) -> history::RunRecord {
+            until_done(wire, Duration::from_secs(10));
+            history::list(&d.join("appdata"), 1).pop().expect("the run was not recorded")
+        }
+
+        // P2a PR h: History's Copy command is the run's own command line.
+        // The record keeps the argv the CLI was started with, the same
+        // vector the run reply offered, its outputs at their final paths
+        // (no staging folder, no .part, no .incomplete), the parameters the
+        // run was sent and the tags it wrote.
+        #[test]
+        fn the_history_argv_is_the_command_line_the_run_was_started_with() {
+            let d = dir("hist-argv");
+            let params = r#"{"in":"$IN","out":"a.tags.tsv","params":{"species":true,"digest_out":"a.digest.tsv"}}"#;
+            let (_mgr, started, wire) = launch_stub(&d, params, "");
+            assert!(started.started, "{:?}", started.reason);
+            let rec = record_after(&d, &wire);
+            assert_eq!(rec.status, history::Status::Ok);
+            let command = started.command.clone().unwrap();
+            assert_eq!(rec.argv, command);
+            let sent = params.replace("$IN", &d.join("a.mzML").display().to_string());
+            assert_eq!(rec.argv[0], STUB);
+            assert_eq!(&rec.argv[1..], &build_args(&super::rp(&sent))[..]);
+            // Every output in it is a final path the reply named, beside the input.
+            let finals: Vec<String> = started.outputs.as_ref().unwrap().paths().iter().map(|p| p.to_string()).collect();
+            let given = outputs::resolved_outputs(&rec.argv[1..]);
+            assert!(!given.is_empty());
+            for o in &given {
+                assert!(finals.contains(o), "{o} is not a final output path: {finals:?}");
+                assert!(Path::new(o).starts_with(&d) && !o.ends_with(".part") && !o.ends_with(".incomplete"), "{o}");
+                assert!(Path::new(o).exists(), "{o}");
+            }
+            assert!(!rec.argv.iter().any(|a| a.contains("appdata")), "{:?}", rec.argv);
+            let sent_params = serde_json::from_str::<Value>(&sent).unwrap()["params"].as_object().cloned();
+            assert_eq!(rec.params, sent_params);
+            // The stub's summary line: "4 MS2 spectra, 1 tags".
+            assert_eq!(rec.tags, Some(1));
+            let _ = std::fs::remove_dir_all(&d);
+        }
+
+        // Review of PR h (GUI-DESIGN 3 S9, 6.5 history_rerun): a Re-run
+        // starts the recorded run again through launch, so its record keeps
+        // the same argv; over the outputs the first run left it needs the
+        // overwrite confirmation like any run.
+        #[test]
+        fn a_rerun_starts_the_recorded_command_line() {
+            let d = dir("hist-rerun");
+            let params = r#"{"in":"$IN","out":"a.tags.tsv","params":{"species":true,"digest_out":"a.digest.tsv","tag_length":"4"}}"#;
+            let (_mgr, started, wire) = launch_stub(&d, params, "");
+            assert!(started.started, "{:?}", started.reason);
+            let first = record_after(&d, &wire);
+            assert_eq!(first.status, history::Status::Ok);
+            let again = history::rerun_params(&first).expect("the record keeps its parameters");
+            let r = Resolved { bin: PathBuf::from(STUB), data: None, taxonomy: None, source: "env" };
+            let mgr = Arc::new(RunManager::default());
+            // Not over the existing outputs without the confirmation.
+            let (sink, _w) = channel();
+            let refused = launch(&mgr, &r, serde_json::from_value(again.clone()).unwrap(), sink, Some(d.join("appdata")));
+            assert!(!refused.started);
+            let mut confirmed = again.clone();
+            confirmed["overwrite"] = Value::Bool(true);
+            let (sink, wire) = channel();
+            let started2 = launch(&mgr, &r, serde_json::from_value(confirmed).unwrap(), sink, Some(d.join("appdata")));
+            assert!(started2.started, "{:?}", started2.reason);
+            let second = record_after(&d, &wire);
+            assert_ne!(second.id, first.id);
+            assert_eq!(second.status, history::Status::Ok);
+            assert_eq!(second.argv, first.argv);
+            assert_eq!(started2.command.as_ref(), Some(&first.argv));
+            assert_eq!(second.params, first.params);
+            assert_eq!(history::list(&d.join("appdata"), 10).len(), 2);
+            // A record of 1.13 keeps no parameters: no Re-run.
+            let mut old = first.clone();
+            old.params = None;
+            assert!(history::rerun_params(&old).is_none());
+            let _ = std::fs::remove_dir_all(&d);
+        }
+
+        // A failed run is recorded failed (P0a), with its exit code and the
+        // same command line, and its outputs are gone from their paths.
+        #[test]
+        fn a_failed_run_is_recorded_failed_with_its_command_line() {
+            let d = dir("hist-failed");
+            let (_mgr, started, wire) = launch_stub(&d, r#"{"in":"$IN","out":"a.tags.tsv"}"#, "STUB_FAIL=3\n");
+            assert!(started.started, "{:?}", started.reason);
+            let rec = record_after(&d, &wire);
+            assert_eq!((rec.status, rec.exit_code, rec.tags), (history::Status::Failed, Some(3), None));
+            assert_eq!(Some(&rec.argv), started.command.as_ref());
+            let out = d.join("a.tags.tsv");
+            assert!(rec.argv.contains(&out.display().to_string()), "{:?}", rec.argv);
+            assert!(!out.exists());
+            assert_eq!(history::of_output(&d.join("appdata"), &out).unwrap().status, history::Status::Failed);
+            let _ = std::fs::remove_dir_all(&d);
+        }
+
+        // An app started from a macOS App Translocation copy runs its CLI
+        // from there; that copy is gone when the app quits, so the reply and
+        // the record name the program, and the run itself is unchanged.
+        #[test]
+        fn a_cli_on_a_temporary_mount_is_recorded_by_its_name() {
+            let d = dir("hist-mount");
+            let bin_dir = d.join("AppTranslocation/0A1B/d/FASTag.app/Contents/Resources/fastag");
+            std::fs::create_dir_all(&bin_dir).unwrap();
+            let bin = bin_dir.join("FASTag");
+            std::fs::copy(STUB, &bin).unwrap();
+            let (_mgr, started, wire) = launch_bin(&d, &bin, r#"{"in":"$IN","out":"a.tags.tsv"}"#, "");
+            assert!(started.started, "{:?}", started.reason);
+            let rec = record_after(&d, &wire);
+            assert_eq!(rec.status, history::Status::Ok, "the CLI ran from the mount");
+            assert_eq!(rec.argv[0], history::PROGRAM);
+            assert_eq!(Some(&rec.argv), started.command.as_ref());
+            assert!(!rec.argv.iter().any(|a| a.contains("AppTranslocation")), "{:?}", rec.argv);
             let _ = std::fs::remove_dir_all(&d);
         }
 
