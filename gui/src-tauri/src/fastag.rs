@@ -1224,11 +1224,14 @@ mod tests {
         let d = std::env::temp_dir().join(format!("fastag-resolved-{}", std::process::id()));
         std::fs::create_dir_all(&d).unwrap();
         let input = d.join("a.mzML");
+        // ponytail: a JSON-escaped path and an ABS that is absolute on the host (Windows needs a drive).
+        let inp = input.display().to_string().replace('\\', "\\\\");
+        let abs = if cfg!(windows) { "C:/abs/l.tsv" } else { "/abs/l.tsv" };
         let params = format!(
             r#"{{"in":"{}","out":"a.tags.tsv","params":{{"species":true,"glyco":true,"digest_out":"a.digest.tsv",
-               "label_out":"/abs/l.tsv","massgap_out":"-m.tsv","recon_out":"r/recon.tsv","delta_out":"a.delta.tsv",
+               "label_out":"{abs}","massgap_out":"-m.tsv","recon_out":"r/recon.tsv","delta_out":"a.delta.tsv",
                "recon_id_out":"a.ids.tsv","out_spectra":"a.spectra.mzML"}}}}"#,
-            input.display()
+            inp
         );
         let pl = plan(&rp(&params));
         assert_eq!(pl.cwd.as_deref(), Some(d.as_path()));
@@ -1239,7 +1242,7 @@ mod tests {
                 out: at("a.tags.tsv"),
                 species_out: at("a.tags.species.tsv"),
                 digest_out: at("a.digest.tsv"),
-                label_out: Some("/abs/l.tsv".into()),
+                label_out: Some(abs.into()),
                 massgap_out: at("-m.tsv"),
                 recon_out: at("r/recon.tsv"),
                 delta_out: at("a.delta.tsv"),
@@ -1258,7 +1261,7 @@ mod tests {
         // Explicit report paths win over derived ones; an unset option is None.
         let pl = plan(&rp(&format!(
             r#"{{"in":"{}","out":"a.tags.tsv","params":{{"species":true,"species_out":"s.tsv"}}}}"#,
-            input.display()
+            inp
         )));
         assert_eq!(pl.resolved.species_out, at("s.tsv"));
         assert_eq!(pl.resolved.glyco_out, None);
