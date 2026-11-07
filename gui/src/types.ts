@@ -180,6 +180,7 @@ export type RunEvent =
   | { kind: 'phase'; label: string }
   | ({ kind: 'done' } & RunResult)
 
+// A row of the -species report (results/species.ts parses it; P4).
 export interface Taxon {
   rank: string
   taxid: number
@@ -245,7 +246,14 @@ export interface FastagApi {
   savePreset: (name: string, values: Record<string, unknown>) => Promise<boolean>
   deletePreset: (name: string) => Promise<boolean>
   taxdbInfo: (explicit?: string) => Promise<TaxdbInfo | null>
+  // The -species report, parsed in the renderer (results/species.ts); null
+  // when it is missing, unreadable or empty.
   species: (path: string) => Promise<SpeciesReport | null>
+  // Whether the CLI has -dump_spectrum (spectrum.rs, from --helphelp).
+  spectrumSupport: () => Promise<SpectrumSupport>
+  // `FASTag <the run's argv> -dump_spectrum <nativeId>` on @p input under
+  // the run's @p params (null: the CLI's defaults); its JSON lines in stdout.
+  spectrumPeaks: (input: string, nativeId: string, params: Record<string, unknown> | null) => Promise<SpectrumDump>
   // Text of a digest/label/mass-gap report; null when the file does not exist.
   report: (path: string) => Promise<string | null>
   openTaxon: (taxid: number) => Promise<boolean>
@@ -347,4 +355,26 @@ export interface FastagApi {
   onDragHover: (cb: (over: boolean) => void) => () => void
   // The system notification when a run or batch finishes.
   notify: (title: string, body: string) => Promise<void>
+}
+
+// spectrum.rs SpectrumSupport: --helphelp lists -dump_spectrum (supported);
+// probed false: the CLI could not be asked.
+export interface SpectrumSupport {
+  supported: boolean
+  probed: boolean
+  detail: string
+}
+
+// spectrum.rs SpectrumDump: one -dump_spectrum run (or the LRU's copy).
+export interface SpectrumDump {
+  ok: boolean
+  code: number | null
+  timedOut: boolean
+  // The input does not exist (it moved): "Locate input…".
+  missing: boolean
+  // The JSON lines (spectrum/dump.ts parses them).
+  stdout: string
+  // The last stderr line when it failed.
+  reason: string | null
+  cached: boolean
 }

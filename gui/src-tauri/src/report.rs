@@ -1,7 +1,7 @@
-// Read a digest, label or mass-gap report (-digest_out, -label_out,
-// -massgap_out). They are small long-form TSVs; the frontend parses them. A
-// file the run did not write is not an error. species.rs reads the -species
-// TSV through the same reader.
+// Read a digest, label, mass-gap or species report (-digest_out, -label_out,
+// -massgap_out, -species_out). They are small TSVs; the frontend parses them
+// (digestReport.ts, results/species.ts). A file the run did not write is
+// not an error.
 
 use std::io::ErrorKind;
 
@@ -117,6 +117,18 @@ mod tests {
         std::fs::remove_dir_all(&d).ok();
         let e = write_summary(tmp("huge.tsv").to_str().unwrap(), &"x".repeat(MAX_BYTES as usize + 1)).unwrap_err();
         assert!(e.contains("too large"), "{e}");
+    }
+
+    // Successor of species.rs non_utf8_name_does_not_hide_the_report (P4:
+    // the species TSV is parsed in TS): a Latin-1 byte becomes U+FFFD and
+    // the rest of the report is still read.
+    #[test]
+    fn a_non_utf8_byte_does_not_hide_the_report() {
+        let f = tmp("latin1.tsv");
+        std::fs::write(&f, b"rank\ttaxid\tname\tobserved\ngenus\t1\tCaf\xE9ella\t5\n").unwrap();
+        let t = read_report(f.to_str().unwrap()).unwrap().expect("report despite a non-UTF-8 byte");
+        assert_eq!(t, "rank\ttaxid\tname\tobserved\ngenus\t1\tCaf\u{FFFD}ella\t5\n");
+        std::fs::remove_file(&f).ok();
     }
 
     #[test]

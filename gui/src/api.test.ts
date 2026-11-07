@@ -277,3 +277,41 @@ describe('api.ts: export as a job', () => {
     ])
   })
 })
+
+// P4: the species report is parsed in TS (species.rs read_species is gone),
+// and the Spectrum tab's two commands.
+describe('api.ts: species through report_text, and the Spectrum commands', () => {
+  it('species reads the report as text and parses it; an unreadable one is null', async () => {
+    const calls: [string, Record<string, unknown>][] = []
+    mockIPC((cmd, args) => {
+      calls.push([cmd, args as Record<string, unknown>])
+      const p = (args as { path: string }).path
+      if (cmd !== 'report_text') throw new Error(`unexpected command ${cmd}`)
+      if (p === '/d/dir') throw new Error('/d/dir is not a file')
+      if (p === '/d/none.tsv') return null
+      return 'rank\ttaxid\tname\tobserved\tadjusted\tqvalue\ngenus\t9605\tHomo\t40\t38\t0\ngenus\t1\tZero\t0\t0\t1\n'
+    })
+    const r = await api.species('/d/a.tags.species.tsv')
+    expect(calls[0]).toEqual(['report_text', { path: '/d/a.tags.species.tsv' }])
+    expect(r).toEqual({ path: '/d/a.tags.species.tsv', taxa: [{ rank: 'genus', taxid: 9605, name: 'Homo', observed: 40, adjusted: 38, q: 0 }] })
+    expect(await api.species('/d/none.tsv')).toBeNull()
+    expect(await api.species('/d/dir')).toBeNull()
+    expect(calls.every(([c]) => c === 'report_text')).toBe(true)
+  })
+
+  it('spectrumSupport and spectrumPeaks go to the registered commands with the argument names Rust reads', async () => {
+    const calls: [string, Record<string, unknown>][] = []
+    mockIPC((cmd, args) => {
+      calls.push([cmd, args as Record<string, unknown>])
+      if (cmd === 'spectrum_support') return { supported: true, probed: true, detail: 'the CLI has -dump_spectrum' }
+      if (cmd === 'spectrum_peaks') return { ok: true, code: 0, timedOut: false, missing: false, stdout: '{"record":"end"}\n', reason: null, cached: false }
+      throw new Error(`unexpected command ${cmd}`)
+    })
+    expect((await api.spectrumSupport()).supported).toBe(true)
+    const d = await api.spectrumPeaks('/d/a.mzML', 'scan=7', { fragment_tolerance: '0.3' })
+    expect(d.ok).toBe(true)
+    expect(calls[1]).toEqual(['spectrum_peaks', { input: '/d/a.mzML', nativeId: 'scan=7', params: { fragment_tolerance: '0.3' } }])
+    await api.spectrumPeaks('/d/a.mzML', 'scan=7', null)
+    expect(calls[2][1]).toEqual({ input: '/d/a.mzML', nativeId: 'scan=7', params: null })
+  })
+})

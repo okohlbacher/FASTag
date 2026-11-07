@@ -27,6 +27,17 @@
 #                   the items of <g> (the stub has no defaults to merge them
 #                   into), else an empty parameter set
 #   -ini <f>        on a run: -in and -out come from <f> unless given
+#   --helphelp      print the G1 CLI's real --helphelp to stderr, as TOPP does
+#                   (src/fixtures/cli/v112-ecoli-dump/helphelp.txt: it lists
+#                   -dump_spectrum and -probe_input)
+#   -dump_spectrum <id>  with -in: print the dump of <id> from STUB_DUMPS
+#                   (default: that folder's dumps.ppm.jsonl, the real dumps of
+#                   the E. coli fixture) and exit, or exit 6 with the CLI's
+#                   message when it has none; writes no file
+#   STUB_CLI=1.11   answer as FASTag 1.11.0, which has neither: --helphelp
+#                   prints the 1.11.0 listing, -dump_spectrum is refused as an
+#                   unknown option (gui/testing/stub-fastag-1.11/FASTag sets it)
+#   STUB_DUMPS=<f>  the dumps -dump_spectrum serves
 # The same variables can also be set in <in>.stub, a file next to the input
 # that the stub sources: tests that start it through the GUI's own `run`
 # (which passes no environment of its own) control it that way.
@@ -42,11 +53,21 @@ if [ "${1:-}" = "--help" ]; then
   exit 0
 fi
 
-in=""; out=""; reports=""; species=0; glyco=0; species_out=""; glyco_out=""; ini=""; write_ini=""
+here=$(cd "$(dirname "$0")" && pwd)
+dumpdir="$here/../../src/fixtures/cli/v112-ecoli-dump"
+if [ "${1:-}" = "--helphelp" ]; then
+  if [ "${STUB_CLI:-}" = "1.11" ]; then cat "$dumpdir/helphelp-1.11.0.txt" >&2
+  else cat "$dumpdir/helphelp.txt" >&2
+  fi
+  exit 0
+fi
+
+in=""; out=""; reports=""; species=0; glyco=0; species_out=""; glyco_out=""; ini=""; write_ini=""; dump=""; dumping=0
 while [ $# -gt 0 ]; do
   case "$1" in
     -ini) ini="$2"; shift 2 ;;
     -write_ini) write_ini="$2"; shift 2 ;;
+    -dump_spectrum) dump="$2"; dumping=1; shift 2 ;;
     -in) in="$2"; shift 2 ;;
     -out) out="$2"; shift 2 ;;
     -species) species=1; shift ;;
@@ -71,6 +92,24 @@ if [ -n "$write_ini" ]; then
   else
     printf '<?xml version="1.0" encoding="ISO-8859-1"?>\n<PARAMETERS version="1.8.0">\n  <NODE name="FASTag">\n    <NODE name="1">\n    </NODE>\n  </NODE>\n</PARAMETERS>\n' > "$write_ini"
   fi
+  exit 0
+fi
+
+if [ $dumping -eq 1 ]; then
+  if [ "${STUB_CLI:-}" = "1.11" ]; then
+    echo "Unknown option(s) '[-dump_spectrum]' given. Aborting!" >&2
+    exit 6
+  fi
+  if [ -z "$in" ]; then
+    echo "-dump_spectrum needs -in, the file holding the spectrum." >&2
+    exit 6
+  fi
+  rec=$(grep -F "\"native_id\":\"$dump\"," "${STUB_DUMPS:-$dumpdir/dumps.ppm.jsonl}" | head -n 1)
+  if [ -z "$rec" ]; then
+    echo "-dump_spectrum: no spectrum of '$in' has the native ID '$dump'." >&2
+    exit 6
+  fi
+  printf '%s\n{"record":"end"}\n' "$rec"
   exit 0
 fi
 
