@@ -664,6 +664,22 @@ jobs:
           done
           exit $fail
 
+      # The macOS bundle as a workflow artifact, so a release candidate's macOS
+      # CLI can be compared with the released one on a Mac without a tag build
+      # (tools/baseline_identity.sh). tar keeps the dylib symlinks and the exec
+      # bits that a plain artifact upload would drop. Unsigned on a dispatch.
+      - name: Pack the bundle as an artifact (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: tar -C dist -czf FASTag-bundle-${{ matrix.name }}.tar.gz FASTag
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: runner.os == 'macOS'
+        with:
+          name: FASTag-bundle-${{ matrix.name }}
+          path: FASTag-bundle-${{ matrix.name }}.tar.gz
+          if-no-files-found: error
+
       # The actual regression guard: run the bundle exactly the way a user
       # who only downloaded the tarball would, and fail the build if it
       # resolves anything from this job's own build environment. Deliberately
