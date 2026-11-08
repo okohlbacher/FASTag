@@ -1,0 +1,6 @@
+7dd85f2888b4b082aae2762ca9ff4a8464adf1b811dafad01caf1551416ef15a  scorers/acclib.py
+f2693089ba38c71a3d0ab5984b2700348d16ef6a5014149c1e92c7dcba52900a  scorers/score_item02.py
+ef24599a4e978e3ed67f100333fd4cdf10c5b48f59eb5470248a1a8ab52ecc72  scorers/score_item06.py
+6103a749cde1ceff07aee6b97823f1871de5a5762af4e1b3c14487ff36bfb0c3  manifests/item06-H1-r2.tsv
+e2b8788a78f1176169f617c01b2e17f21578b8909f7c79b33d23ae1b71075f79  ../../bench/fastag-bench/src/fastag_bench/score.py
+01e27548bcae489d3f205960730c8bc36624e16935ea5df0bec5a6a04ea51f49  ../../bench/fastag-bench/src/fastag_bench/parsers.py

@@ -1,0 +1,7 @@
+CFG-06-base:G_L3:rc	CFG-06-base:S_L3:rc	CFG-06-base:S_L4:rc	CFG-06-base:S_L5:rc	CFG-06-cand:G_L3:rc	CFG-06-cand:S_L3:rc	CFG-06-cand:S_L4:rc	CFG-06-cand:S_L5:rc	G_L3_detail	G_L3_identical	arm_dirs	cand_tagged_truth	pxd	run	set	status	truth_psms
+0	0	0	0	0	0	0	0	0 differing rows of 2298008	True	CFG-06-base,CFG-06-cand	13851	PXD066944	item02/H1/PXD066944/TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	astral	ok	13858
+0	0	0	0	0	0	0	0	0 differing rows of 343521	True	CFG-06-base-it05,CFG-06-cand-it05	113	PXD000806	item02/H1/PXD000806/S2-2	ion_trap	ok	113
+0	0	0	0	0	0	0	0	0 differing rows of 228514	True	CFG-06-base-it05,CFG-06-cand-it05	0	PXD001473	item02/H1/PXD001473/Hammoc111214_3hr-1	ion_trap	ok	0
+0	0	0	0	0	0	0	0	0 differing rows of 954037	True	CFG-06-base-it05,CFG-06-cand-it05	2776	PXD002429	item02/H1/PXD002429/NR1510	ion_trap	ok	2787
+0	0	0	0	0	0	0	0	0 differing rows of 1129063	True	CFG-06-base-it05,CFG-06-cand-it05	2230	PXD001540	item02/H1/PXD001540/09JAN2014_HF_brain_new_45	ion_trap	ok	2235
+0	0	0	0	0	0	0	0	0 differing rows of 2508418	True	CFG-06-base,CFG-06-cand	37259	PXD069528	item02/H1r/PXD069528/005_3198_F3_1_5ug_4_3ul	qe	ok	37372

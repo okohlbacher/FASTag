@@ -1,0 +1,81 @@
+{
+ "manifest": "item06-H1-r2",
+ "sets": [
+  "astral",
+  "ion_trap",
+  "qe"
+ ],
+ "e1_charge_accuracy": 0.7511604332284053,
+ "e1_n": 56229,
+ "e1_wilson": [
+  0.7475698548626388,
+  0.7547166963279821
+ ],
+ "info_floor_pct": 1.8,
+ "e1": "FAIL",
+ "e2a": "FAIL",
+ "e2b": "PASS",
+ "e2b_need": 2,
+ "e3": "PASS",
+ "errors_ambiguous_share": 0.23813607775871926,
+ "truth2_called1": 0,
+ "sage_isotope_error": {
+  "-1": 1280,
+  "0": 36279,
+  "1": 11405,
+  "2": 5479,
+  "3": 1922
+ },
+ "precursor_flank_rank1": [
+  {
+   "cell": "item06-H1-r2:pflank:astral",
+   "clusters": 11647,
+   "spectra": 13858,
+   "base_pct": 34.860730264107374,
+   "cand_pct": 34.78856977918892,
+   "diff": -0.07216048491845584,
+   "se": 0.3299203472195173,
+   "p2_5": -0.6968168924245638,
+   "p97_5": 0.5703920529715776
+  },
+  {
+   "cell": "item06-H1-r2:pflank:ion_trap",
+   "clusters": 1444,
+   "spectra": 5135,
+   "base_pct": 3.3300876338851024,
+   "cand_pct": 5.024342745861733,
+   "diff": 1.6942551119766307,
+   "se": 0.36516557640699515,
+   "p2_5": 1.0058403927256894,
+   "p97_5": 2.415832164500607
+  },
+  {
+   "cell": "item06-H1-r2:pflank:qe",
+   "clusters": 18549,
+   "spectra": 37372,
+   "base_pct": 28.031681472760354,
+   "cand_pct": 35.32056084769346,
+   "diff": 7.288879374933103,
+   "se": 0.480952861616877,
+   "p2_5": 6.436177432152317,
+   "p97_5": 8.312698360492249
+  }
+ ],
+ "runs_not_ok": [],
+ "verdict": "FAIL",
+ "provenance": {
+  "python": "3.12.15",
+  "numpy": "2.4.6",
+  "pandas": "3.1.0",
+  "acclib.py": "7dd85f2888b4b082aae2762ca9ff4a8464adf1b811dafad01caf1551416ef15a",
+  "score_item01.py": "25f48ea2b6b6730c49cd020350a9952d7026f27e40b8264d3a41b0e5fc22cb56",
+  "score_item02.py": "f2693089ba38c71a3d0ab5984b2700348d16ef6a5014149c1e92c7dcba52900a",
+  "score_item03.py": "285df1d0dd70bf9d0411c35b45c354b5ec2ba16391008199ec6186d03e845848",
+  "score_item06.py": "ef24599a4e978e3ed67f100333fd4cdf10c5b48f59eb5470248a1a8ab52ecc72",
+  "score_item07.py": "b135aa9b5b9db5af7507ab81b5abd3f770c30590af7542789e3ad7ac6b0b750e",
+  "score_item09.py": "b0ef694172e5bb64e0487233819d663389cac0c4c3c540549bf2f8eef88cd3ca",
+  "score_item15B.py": "0e8534dba9f513008d53f69d988157fa3fecdda8a8f0de59324427744777cc62",
+  "bench/fastag-bench/src/fastag_bench/score.py": "e2b8788a78f1176169f617c01b2e17f21578b8909f7c79b33d23ae1b71075f79",
+  "bench/fastag-bench/src/fastag_bench/parsers.py": "01e27548bcae489d3f205960730c8bc36624e16935ea5df0bec5a6a04ea51f49"
+ }
+}

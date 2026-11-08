@@ -1,0 +1,2 @@
+{"sets": ["astral", "ion_trap", "qe"], "e1_charge_accuracy": 0.7511604332284053, "e1_n": 56229, "e1": "FAIL", "e2a": "FAIL", "e2b": "PASS", "e3": "PASS", "verdict": "FAIL", "runs_not_ok": []}
+SCORE_RC=0
