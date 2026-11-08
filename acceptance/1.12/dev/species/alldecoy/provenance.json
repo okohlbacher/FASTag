@@ -1,0 +1,32 @@
+{
+ "rc": "/scratch/kohlbach/fastag-heldout-1.12/rc-a117801/opt/FASTag",
+ "rc_bin_sha256": "c4c2ad67fcd9106e474f552267f7cdfefe107f394b268bbc236308b773e4d7f3",
+ "taxdir": "/scratch/kohlbach/fastag112-alldecoy/tax_decoy",
+ "taxdir_sha256": {
+  "tax_k7.taxdb": "d9cc661df44eeead22fef89a4531a29eb400ee84b72af2a36c0b395c935021dc",
+  "nodes.dmp": "d20f4f5b38e195c1ad77beef1f82296b96bab18588808c9c7527730928cdcecf",
+  "names.dmp": "397b70d74a91a8e0b46eb68e46f8669296d90396d01a472a71f0c8585df7cb2b",
+  "species_call.tsv": "8aa40c29d3440d2bde29941dab85426c644c6aeac68487f1403fd653ce2723bf"
+ },
+ "grid_table": "/scratch/kohlbach/fastag112-dev/species/grid/g_0.01_0_10.tsv",
+ "grid_sha256": "66eaeca346f930a3cd91faf4fccf3540d81eb7a5b4fd210dc93ca86eebdb9ce5",
+ "fitted_table": "/scratch/kohlbach/fastag112-dev/species/fitted/species_call.tsv",
+ "fitted_sha256": "c556d587297fddc20fe0128cb181d742c776936c0fa015b867a527d526bc305f",
+ "runs": 47,
+ "arms": {
+  "ad_g_0.01_0_10_off": [
+   "-species_call",
+   "decoy",
+   "-species_call_params",
+   "/scratch/kohlbach/fastag112-dev/species/grid/g_0.01_0_10.tsv"
+  ],
+  "ad_cand": [
+   "-species_call",
+   "decoy",
+   "-species_call_params",
+   "/scratch/kohlbach/fastag112-dev/species/fitted/species_call.tsv",
+   "-species_deconvolve"
+  ]
+ },
+ "threads": 16
+}

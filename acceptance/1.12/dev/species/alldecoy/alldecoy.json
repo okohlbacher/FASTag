@@ -1,0 +1,41 @@
+{
+ "primary_arm": "ad_g_0.01_0_10_off",
+ "ftms_runs": 36,
+ "iontrap_runs": 11,
+ "ks": {
+  "n": 1732,
+  "D": 0.1924,
+  "p": 1.999405273873018e-56,
+  "pass": false
+ },
+ "share_u_le_0.01": 0.0716,
+ "share_u_le_0.05": 0.1328,
+ "ks_raw_p_all_rows": {
+  "n": 1732,
+  "D": 0.2009,
+  "p": 1.5870231061419064e-61
+ },
+ "ks_raw_p_tested_rows": {
+  "n": 1732,
+  "D": 0.2009,
+  "p": 1.5870231061419064e-61
+ },
+ "false_present": {
+  "ad_g_0.01_0_10_off": {
+   "runs": 36,
+   "runs_with_false_present": 21,
+   "rate": 0.5833,
+   "false_present_per_run": 1.472,
+   "false_present_total": 53
+  },
+  "ad_cand": {
+   "runs": 36,
+   "runs_with_false_present": 20,
+   "rate": 0.5556,
+   "false_present_per_run": 1.25,
+   "false_present_total": 45
+  }
+ },
+ "negative_test_no_present": false,
+ "decision": "NO-GO"
+}

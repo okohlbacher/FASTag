@@ -77,6 +77,21 @@ held-out scorer is committed). DEV data only, frozen RC binary, no held-out run.
   randomised, truncation-corrected form u = [P(X > o) + V P(X = o)] / P(X >= 1) (only o >= 1 rows are reported)
   against U(0,1). Also reported: false presents per run in both arms (the plan's negative test: none).
 
+**Result (2026-11-08, data, 94 arms exit 0; dev/species/alldecoy/, alldecoy.json sha256 dfa52147...): NO-GO.**
+KS of u over 1732 genus rows of the 36 FTMS runs: D = 0.192, p = 2.0e-56 (needs > 0.01). The null is
+anti-conservative: 7.2% of rows have u <= 0.01 and 13.3% u <= 0.05. Raw p (non-randomised): D = 0.201, p = 1.6e-61.
+The plan's negative test ("an all-decoy run must give no present genus") fails. Every present is false here:
+- go/no-go point g_0.01_0_10_off: false present in 21 of 36 FTMS runs (0.583), 53 in all, 1.47 per run;
+- CFG-01-cand options (fitted table, deconvolve): 20 of 36 runs (0.556), 45 in all, 1.25 per run;
+- the 11 ion-trap runs are low_resolution no_calls (0 present). Per-run counts and genera: alldecoy_runs.tsv.
+Provenance: the RC buildtaxdb on the 50 current proteome files (589010 proteins, the ref50 set) does **not**
+reproduce tax_k7.taxdb byte for byte (8f2b4743... vs 34427bba..., 1137808145 vs 1138145846 bytes): the shipped
+index (from the 1.8.0 bundle) was built from slightly different proteome versions. On PXD003531_QE_NO_03 the
+rebuilt index gives genus counts within 0.2% of the shipped one (Homo 12006 = 12006, Bos 8842 vs 8829) and the
+same calls on the top rows. The decoy index (d9cc661d..., 171399728 distinct 7-mers) is shuffled from those
+current files. Both the stand-in and the plan's own test fail, so the NO-GO stands. No status changed:
+CFG-01-cand and CFG-10-cand stay `blocked_dev_nogo`.
+
 ## DEV (in-sample)
 
 - Runs: the 48 runs of bench/fastag-bench/config/species_runs.tsv minus PXD000001_Erwinia_TMT6 (the #17 held-out
