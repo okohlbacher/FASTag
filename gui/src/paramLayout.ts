@@ -1,8 +1,10 @@
-// Where each CLI parameter appears in the UI, and what it depends on.
+// Where each CLI parameter appears in the UI, and what it depends on: the
+// views of PARAM_UI (paramUi.ts, one entry per parameter) the app uses, and
+// the checks built on them.
 //
-// The manifest (params.generated.json) says what the parameters ARE; this says
-// how they are PRESENTED. They are deliberately separate: the manifest is
-// regenerated from the tool and must never be hand-edited, while this layout is
+// The manifest (params.generated.json) says what the parameters ARE; PARAM_UI
+// says how they are PRESENTED. They are deliberately separate: the manifest is
+// regenerated from the tool and must never be hand-edited, while PARAM_UI is
 // a human judgement about which knobs belong together and which are inert
 // unless another one is set.
 //
@@ -13,6 +15,9 @@
 
 import manifest from './params.generated.json'
 import { DECIMAL } from './digestReport'
+import { PARAM_UI, type Dependency, type ParamHelp, type ParamUi } from './paramUi'
+
+export { PARAM_UI, type Dependency, type ParamHelp, type ParamUi }
 
 export interface ParamSpec {
   name: string
@@ -31,53 +36,16 @@ export interface ParamSpec {
   itemType?: string
 }
 
-// UI overlays: the manifest is a faithful dump of the tool, but species_rank
-// has a known small set of useful values the tool does not itself declare as
-// restrictions. The CLI accepts any rank and reports nothing for one the bundled
-// taxonomy lacks, so the list holds only ranks its nodes.dmp has: NCBI names the
-// top rank `domain` there, and `superkingdom` gives an empty report.
-// Options the tool does restrict (orientation) take the manifest's choices.
-const CHOICES: Record<string, string[]> = {
-  species_rank: ['species', 'genus', 'family', 'order', 'class', 'phylum', 'kingdom', 'domain']
-}
+/// The entry of @p name, or an empty one for a name PARAM_UI lacks (which
+/// paramUi.test.ts reports).
+export const uiOf = (name: string): ParamUi => (Object.prototype.hasOwnProperty.call(PARAM_UI, name) ? PARAM_UI[name] : {})
 
-// TOPPBase registers -threads itself with default 1, and FASTag applies its
-// real default -- 0, half the logical cores -- to argv in main(), because
-// TOPPBase offers no hook to change a common option. The manifest is a dump of
-// -write_ini, so it carries TOPPBase's number and text; this is the tool's.
-//
-// The other entries replace a CLI help text that is written for developers
-// with plain words; the facts stay those of the CLI text.
-const OVERRIDES: Record<string, Partial<ParamSpec>> = {
-  threads: {
-    default: '0',
-    description: 'Threads to use. 0 (the default) means half the logical cores.'
-  },
-  max_peaks: { description: 'Peaks kept per spectrum, at most 1024; 0 means 1024. More peaks need more memory.' },
-  diversity: {
-    description:
-      'When a spectrum has more candidate tags than max_tags allows, prefer tags that read different peaks over near-copies of a tag already kept. The number of tags kept stays the same.'
-  },
-  res_conf: {
-    description:
-      'Add a res_conf column: a confidence from 0 to 100 for each residue, N- to C-terminal. De novo assembly tools can use it.'
-  },
-  species_evidence: {
-    description:
-      "Which tags of a spectrum count as evidence for a taxon: 'best' = only its best tag that matches the reference; 'all' = every reported tag (the behaviour before 1.10)."
-  },
-  taxdb: { description: 'Species reference index. Default: the one bundled with FASTag.' },
-  orientation: {
-    description:
-      'Match tags as written, or also reversed, against fasta and recon_fasta. Tags are written N- to C-terminal, so tags read from the other ion series match only reversed.'
-  }
-}
-
-export const PARAMS: ParamSpec[] = (manifest.params as ParamSpec[]).map((p) => ({
-  ...p,
-  ...(OVERRIDES[p.name] ?? {}),
-  ...(CHOICES[p.name] ? { choices: CHOICES[p.name] } : {})
-}))
+/// The manifest with PARAM_UI's overlays: its `override` (the tool's own
+/// default or a plain description) and its `choices`.
+export const PARAMS: ParamSpec[] = (manifest.params as ParamSpec[]).map((p) => {
+  const ui = uiOf(p.name)
+  return { ...p, ...(ui.override ?? {}), ...(ui.choices ? { choices: ui.choices } : {}) }
+})
 export const PARAM_BY_NAME = new Map(PARAMS.map((p) => [p.name, p]))
 
 export interface Section {
@@ -91,6 +59,8 @@ export interface Section {
   /// The switch that makes the rest of the section do anything, if there is
   /// one. Rendered first, and the section header shows whether it is on.
   master?: string
+  /// Its parameters, in form order: the PARAM_UI entries naming this
+  /// section, in table order.
   params: string[]
 }
 
@@ -99,217 +69,70 @@ export interface Section {
 ///
 /// One flat list of sections, grouped by content. There is no core-vs-advanced
 /// split: nothing in the tool supports that judgement.
-export const SECTIONS: Section[] = [
+const SECTION_DEFS: Omit<Section, 'params'>[] = [
   {
     title: 'Spectra',
     blurb: 'Which spectra are read, and which peaks survive preprocessing.',
-    open: false,
-    params: [
-      'acquisition_check',
-      'no_deisotope',
-      'max_peaks',
-      'peaks_per_window',
-      'subsample_spectra',
-      'subsample_fraction',
-      'subsample_seed'
-    ]
+    open: false
   },
   {
     title: 'Tagging',
     blurb: 'The tags themselves: how long, how tolerant, how many per spectrum.',
-    open: true,
-    params: [
-      'tag_length',
-      'tag_lengths',
-      'fragment_tolerance',
-      'fragment_tolerance_unit',
-      'gaps',
-      'gap_penalty',
-      'extension',
-      'max_tags',
-      'max_evalue',
-      'diversity'
-    ]
+    open: true
   },
   {
     title: 'Sequence matching',
     blurb: 'Keep only tags that occur in sequences you supply.',
     open: false,
-    master: 'fasta',
-    params: ['fasta', 'entrapment_fasta', 'orientation', 'isobaric_tolerance', 'min_filter_length']
+    master: 'fasta'
   },
   {
     title: 'Species detection',
     blurb: 'Infer which taxa are present from the tags, using the species index bundled with FASTag (or one you supply).',
     open: false,
-    master: 'species',
-    params: [
-      'species',
-      'species_rank',
-      'species_evidence',
-      'species_min_len',
-      'species_use_gapped',
-      'species_deconvolve',
-      'species_max_kmer_share',
-      'species_min_margin',
-      'species_out',
-      'taxdb',
-      'taxonomy_nodes',
-      'taxonomy_names'
-    ]
+    master: 'species'
   },
   {
     title: 'Glycopeptides',
     blurb: 'Flag spectra carrying oxonium ions.',
     open: false,
-    master: 'glyco',
-    params: ['glyco', 'glyco_min_fraction', 'glyco_out']
+    master: 'glyco'
   },
   {
     title: 'Digest and labels',
     blurb: 'Report the terminal residues of the tags, the protease they fit and the labels they carry. Both reports are shown in the Digest tab.',
-    open: false,
-    params: [
-      'digest_out',
-      'label_out',
-      'digest_models',
-      'digest_tag_min',
-      'digest_window',
-      'digest_background_share',
-      'digest_silac_min'
-    ]
+    open: false
   },
   {
     title: 'Reconciliation',
     blurb: 'Place tags in database peptides and report the mass left over. The mass-gap report (massgap_out) is shown in the Digest tab.',
     open: false,
-    master: 'recon_out',
-    params: [
-      'recon_out',
-      'recon_fasta',
-      'recon_missed_cleavages',
-      'recon_min_length',
-      'recon_localize',
-      'delta_out',
-      'recon_id_out',
-      'massgap_out',
-      'massgap_window',
-      'massgap_window_da',
-      'massgap_min_spectra',
-      'massgap_min_share',
-      'massgap_min_bin',
-      'massgap_max_mods',
-      'massgap_top',
-      'massgap_silac_share',
-      'massgap_silac_min'
-    ]
+    master: 'recon_out'
   },
   {
     title: 'Modifications',
     blurb: 'Residue masses used when spelling and matching tags.',
-    open: false,
-    params: ['fixed_modifications', 'variable_modifications']
+    open: false
   },
   {
     title: 'Output',
     blurb: 'Extra columns and extra files beside the tag list.',
-    open: false,
-    params: ['proforma', 'res_conf', 'usi_collection', 'out_spectra']
+    open: false
   },
   {
     title: 'Performance',
     blurb: 'How much of the computer a run may use.',
-    open: false,
-    params: ['threads']
+    open: false
   }
 ]
 
-/// Parameters that do nothing unless another parameter is set.
-///
-/// Without this a user could set `gap_penalty` with `gaps` at 0, or fill in
-/// three taxonomy paths with `-species` off, and the run would silently ignore
-/// all of it. Each dependency is the one stated in the option's own help text.
-export interface Dependency {
-  /// The parameter that has to be set, or a list of which any one will do.
-  on: string | string[]
-  /// Inverted: the parameter is inert while any of `on` IS set, because that
-  /// one replaces it (tag_lengths replaces tag_length).
-  replaced?: true
-  /// Shown in place of the field's help when unmet. Phrased as the consequence,
-  /// not the rule: a user wants to know what would happen, not what to obey.
-  note: string
-}
+export const SECTIONS: Section[] = SECTION_DEFS.map((s) => ({
+  ...s,
+  params: Object.keys(PARAM_UI).filter((n) => PARAM_UI[n].section === s.title)
+}))
 
-export const DEPENDS: Record<string, Dependency[]> = {
-  // -gaps 0 means no gapped tags exist, so nothing can be penalised.
-  gap_penalty: [{ on: 'gaps', note: 'only applies when tags may cross a gap' }],
-
-  // The CLI warns "tag_length N is ignored: tag_lengths replaces it".
-  tag_length: [{ on: 'tag_lengths', replaced: true, note: 'tag_lengths replaces it' }],
-
-  // Read only when the fasta filter runs.
-  entrapment_fasta: [{ on: 'fasta', note: 'the entrapment database is only searched together with fasta' }],
-  min_filter_length: [{ on: 'fasta', note: 'only affects matching against a sequence database' }],
-  // Read by the fasta filter AND by reconciliation (FASTag.cpp: TagReconciler
-  // takes the orientation, the proteome index the isobaric tolerance).
-  orientation: [{ on: ['fasta', 'recon_out'], note: 'only affects matching against fasta and reconciliation' }],
-  isobaric_tolerance: [{ on: ['fasta', 'recon_out'], note: 'only affects matching against fasta and reconciliation' }],
-
-  species_rank: [{ on: 'species', note: 'species detection is off' }],
-  species_evidence: [{ on: 'species', note: 'species detection is off' }],
-  species_min_len: [{ on: 'species', note: 'species detection is off' }],
-  species_deconvolve: [{ on: 'species', note: 'species detection is off' }],
-  species_max_kmer_share: [{ on: 'species', note: 'species detection is off' }],
-  species_min_margin: [{ on: 'species', note: 'species detection is off' }],
-  species_out: [{ on: 'species', note: 'species detection is off' }],
-  taxdb: [{ on: 'species', note: 'species detection is off' }],
-  taxonomy_nodes: [{ on: 'species', note: 'species detection is off' }],
-  taxonomy_names: [{ on: 'species', note: 'species detection is off' }],
-  // Two masters: a gapped tag has to exist before it can be let into the index.
-  species_use_gapped: [
-    { on: 'species', note: 'species detection is off' },
-    { on: 'gaps', note: 'no gapped tags are produced' }
-  ],
-
-  glyco_min_fraction: [{ on: 'glyco', note: 'oxonium flagging is off' }],
-  glyco_out: [{ on: 'glyco', note: 'oxonium flagging is off' }],
-
-  recon_fasta: [{ on: 'recon_out', note: 'reconciliation only runs when it has an output file' }],
-  recon_missed_cleavages: [{ on: 'recon_out', note: 'reconciliation only runs when it has an output file' }],
-  recon_min_length: [{ on: 'recon_out', note: 'reconciliation only runs when it has an output file' }],
-  recon_localize: [{ on: 'recon_out', note: 'reconciliation only runs when it has an output file' }],
-  delta_out: [{ on: 'recon_out', note: 'the histogram is built from the reconciliation results' }],
-  recon_id_out: [{ on: 'recon_out', note: 'it writes the reconciliation results as identifications' }],
-
-  subsample_seed: [{ on: ['subsample_spectra', 'subsample_fraction'], note: 'nothing is being subsampled' }],
-
-  digest_models: [{ on: 'digest_out', note: 'only the digest report uses the models' }],
-  digest_tag_min: [{ on: 'digest_out', note: 'only the digest report uses it' }],
-  digest_background_share: [{ on: 'digest_out', note: 'only the digest report uses it' }],
-  digest_window: [{ on: ['digest_out', 'label_out'], note: 'neither the digest nor the label report is written' }],
-  digest_silac_min: [{ on: 'label_out', note: 'only the label report uses it' }],
-
-  massgap_out: [{ on: 'recon_out', note: 'the mass gaps come from the reconciliation results' }],
-  ...Object.fromEntries(
-    [
-      'massgap_window',
-      'massgap_window_da',
-      'massgap_min_spectra',
-      'massgap_min_share',
-      'massgap_min_bin',
-      'massgap_max_mods',
-      'massgap_top',
-      'massgap_silac_share',
-      'massgap_silac_min'
-    ].map((n) => [
-      n,
-      [
-        { on: 'recon_out', note: 'reconciliation only runs when it has an output file' },
-        { on: 'massgap_out', note: 'only the mass-gap report uses it' }
-      ]
-    ])
-  )
-}
+/// The dependencies of @p name (PARAM_UI `depends`), none for most.
+export const dependsOf = (name: string): Dependency[] => uiOf(name).depends ?? []
 
 /// "Set" for dependency purposes: a checked box, a non-zero number, a non-empty
 /// path or list. This is the same test the tool applies -- every master here
@@ -334,7 +157,7 @@ export function isActive(name: string, values: Record<string, unknown>): boolean
 /// The FIRST unmet dependency of @p name right now, or null if it is live:
 /// naming one thing to fix beats listing two.
 export function inertDependency(name: string, values: Record<string, unknown>): Dependency | null {
-  for (const d of DEPENDS[name] ?? []) {
+  for (const d of dependsOf(name)) {
     const set = masters(d).some((n) => isActive(n, values))
     if (d.replaced ? set : !set) return d
   }
@@ -353,41 +176,13 @@ export function masters(d: Dependency): string[] {
 
 /// A value and its unit are one control: the unit parameter is drawn inside
 /// the value's field, not as a field of its own.
-export const UNIT_OF: Record<string, string> = { fragment_tolerance: 'fragment_tolerance_unit' }
-export const UNIT_PARAMS = new Set(Object.values(UNIT_OF))
-
-/// Labels for options whose CLI name is an abbreviation, not words. The CLI
-/// name is shown beside the label, so the label is the option in words.
-export const LABEL: Record<string, string> = {
-  recon_out: 'Reconciliation table',
-  recon_fasta: 'Reconciliation database',
-  recon_id_out: 'Reconciliation as identifications',
-  recon_localize: 'Localize mass gaps',
-  recon_min_length: 'Reconciliation: minimum tag length',
-  recon_missed_cleavages: 'Reconciliation: missed cleavages',
-  delta_out: 'Mass-shift histogram',
-  massgap_out: 'Mass-gap report',
-  massgap_window: 'Gap window (ppm runs)',
-  massgap_window_da: 'Gap window (Da runs)',
-  massgap_silac_min: 'SILAC: minimum shifted spectra',
-  massgap_silac_share: 'SILAC: minimum share of shifted spectra',
-  species_max_kmer_share: 'Maximum taxon share of a k-mer',
-  species_min_margin: 'Minimum lead over runner-up taxon',
-  res_conf: 'Per-residue confidence column',
-  usi_collection: 'USI column (dataset ID)',
-  out_spectra: 'Spectra with tags (file)',
-  no_deisotope: 'Skip deisotoping',
-  proforma: 'ProForma column',
-  taxdb: 'Species reference index',
-  digest_silac_min: 'Heavy-label check: minimum K and R ends',
-  max_evalue: 'Maximum E-value',
-  acquisition_check: 'Raw DIA check'
-}
+export const unitOf = (name: string): string | undefined => uiOf(name).unit
+export const UNIT_PARAMS = new Set(Object.keys(PARAM_UI).flatMap((n) => (PARAM_UI[n].unit ? [PARAM_UI[n].unit!] : [])))
 
 /// The CLI name in words, for the label beside it: tag_length -> Tag length.
 export function humanName(name: string): string {
   const s = name.replace(/_/g, ' ')
-  return LABEL[name] ?? s.charAt(0).toUpperCase() + s.slice(1)
+  return uiOf(name).label ?? s.charAt(0).toUpperCase() + s.slice(1)
 }
 
 const listText = (v: unknown): string =>
@@ -412,114 +207,40 @@ export function isChanged(name: string, value: unknown): boolean {
   return v !== listText(spec.default)
 }
 
-/// Deliberately not rendered, each for a stated reason. Listing them (rather
-/// than defaulting to hide) is what lets the check below be exhaustive.
-const OPT_IN_1_12 = '1.12 command-line option, not in the form yet (CLI default applies)'
-export const HIDDEN: Record<string, string> = {
-  in: 'dedicated input picker',
-  out: 'dedicated output field',
-  progress: 'forced on; the GUI consumes the progress stream',
-  version: 'TOPP boilerplate',
-  log: 'TOPP boilerplate',
-  debug: 'TOPP boilerplate',
-  no_progress: 'TOPP boilerplate; unrelated to -progress',
-  force: 'TOPP boilerplate',
-  test: 'TOPP boilerplate',
-  stream: 'stdin/stdout resident mode; meaningless under a GUI',
-  mzpeak_read_memory: 'ignored by the CLI: mzPeak is read in file order without a decode cache',
-  // FASTag 1.12 options. Each is opt-in and leaves the output as 1.11 at its
-  // default. Not offered in the form until each has its GUI design; until then
-  // a GUI run uses the CLI defaults. The exception is acquisition_check (under
-  // Spectra): its default refuses raw DIA, the one 1.12 default change, so the
-  // form offers warn and off, or a GUI user could not tag raw DIA at all.
-  probe_input: 'metadata probe for programs; prints JSON lines and exits',
-  dump_spectrum: 'spectrum dump for programs; prints JSON lines and exits',
-  acquisition_probe_spectra: OPT_IN_1_12,
-  alkylation_out: OPT_IN_1_12,
-  alkylation_proteome: OPT_IN_1_12,
-  alkylation_min_spectra: OPT_IN_1_12,
-  alkylation_min_share: OPT_IN_1_12,
-  alkylation_window: OPT_IN_1_12,
-  census: OPT_IN_1_12,
-  census_out: OPT_IN_1_12,
-  census_summary_out: OPT_IN_1_12,
-  census_ids: OPT_IN_1_12,
-  census_ids_fdr: OPT_IN_1_12,
-  census_triage_evalue: OPT_IN_1_12,
-  unknown_charge: OPT_IN_1_12,
-  charge_min: OPT_IN_1_12,
-  charge_max: OPT_IN_1_12,
-  charge_infer_margin: OPT_IN_1_12,
-  isotope_error: OPT_IN_1_12,
-  complement_rule: OPT_IN_1_12,
-  complement_tolerance: OPT_IN_1_12,
-  complement_tolerance_unit: OPT_IN_1_12,
-  complement_tol_factor: OPT_IN_1_12,
-  complement_midp: OPT_IN_1_12,
-  pick_profile: OPT_IN_1_12,
-  pick_unknown_type: OPT_IN_1_12,
-  ion_series: OPT_IN_1_12,
-  species_call: OPT_IN_1_12,
-  species_call_decoys: OPT_IN_1_12,
-  species_call_min_units: OPT_IN_1_12,
-  species_call_params: OPT_IN_1_12,
-  species_pi0: OPT_IN_1_12,
-  species_orientation: OPT_IN_1_12,
-  digest_models_version: OPT_IN_1_12,
-  digest_detection: OPT_IN_1_12,
-  digest_flank2: OPT_IN_1_12,
-  digest_min_confidence: OPT_IN_1_12,
-  digest_calibration: OPT_IN_1_12,
-  shortlist_out: OPT_IN_1_12,
-  fasta_out: OPT_IN_1_12,
-  shortlist_background: OPT_IN_1_12,
-  shortlist_min_spectra: OPT_IN_1_12,
-  shortlist_max_evalue: OPT_IN_1_12,
-  shortlist_top: OPT_IN_1_12,
-  shortlist_parsimony: OPT_IN_1_12,
-  shortlist_gapped: OPT_IN_1_12,
-  shortlist_decoy_affix: OPT_IN_1_12,
-  shortlist_force: OPT_IN_1_12,
-  search_config_out: OPT_IN_1_12,
-  search_engine: OPT_IN_1_12,
-  search_config_template: OPT_IN_1_12,
-  search_decoy_prefix: OPT_IN_1_12,
-  search_precursor_tolerance: OPT_IN_1_12,
-  search_precursor_unit: OPT_IN_1_12,
-  search_isotope_errors: OPT_IN_1_12,
-  search_shifts: OPT_IN_1_12,
-  search_shifts_out: OPT_IN_1_12,
-  shift_expand_sites: OPT_IN_1_12,
-  shift_max_offsets: OPT_IN_1_12,
-  shift_max_variable: OPT_IN_1_12,
-  shift_site_min_count: OPT_IN_1_12,
-  shift_site_min_ions: OPT_IN_1_12,
-  shift_site_min_share: OPT_IN_1_12
-}
+/// Deliberately not rendered (PARAM_UI `hidden`), in table order.
+export const HIDDEN_PARAMS: string[] = Object.keys(PARAM_UI).filter((n) => PARAM_UI[n].hidden !== undefined)
 
-/// The parameters actually shown, and so the only ones a run may send. HIDDEN
+/// Why @p name is not in the form, or undefined if it is.
+export const hiddenReason = (name: string): string | undefined => uiOf(name).hidden
+
+/// The parameters actually shown, and so the only ones a run may send. Hidden
 /// entries are not merely invisible: several are not settable at all (`-version`
 /// records the tool's version in the INI and the CLI rejects it as an option),
 /// so submitting the whole manifest aborts the run.
 export const RENDERED: string[] = SECTIONS.flatMap((s) => s.params)
 
-/// Every parameter must be placed somewhere. A new CLI option then shows up as
-/// a loud failure instead of silently never appearing in the GUI -- the whole
-/// point of generating the manifest from the tool.
+/// Every parameter must have its PARAM_UI entry, placed in a section or
+/// hidden. A new CLI option then shows up as a loud failure instead of
+/// silently never appearing in the GUI -- the whole point of generating the
+/// manifest from the tool.
 export function unplacedParams(): string[] {
-  const placed = new Set<string>([...RENDERED, ...Object.keys(HIDDEN)])
-  return PARAMS.map((p) => p.name).filter((n) => !placed.has(n))
+  const titles = new Set(SECTION_DEFS.map((s) => s.title))
+  return PARAMS.map((p) => p.name).filter((n) => {
+    const ui = Object.prototype.hasOwnProperty.call(PARAM_UI, n) ? PARAM_UI[n] : undefined
+    return !ui || (ui.hidden === undefined) === (ui.section === undefined) || (ui.section !== undefined && !titles.has(ui.section))
+  })
 }
 
-/// A layout that names a parameter the tool does not have is the other half of
-/// the same bug, and it fails silently: the field simply never renders (a stale
-/// manifest is only visible from this direction).
+/// An entry that names a parameter the tool does not have is the other half
+/// of the same bug, and it fails silently: the field simply never renders (a
+/// stale manifest is only visible from this direction). Masters and units
+/// count too.
 export function unknownParams(): string[] {
   return [
-    ...RENDERED,
-    ...Object.keys(DEPENDS),
-    ...SECTIONS.flatMap((s) => (s.master ? [s.master] : []))
-  ].filter((n) => !PARAM_BY_NAME.has(n))
+    ...Object.keys(PARAM_UI),
+    ...Object.values(PARAM_UI).flatMap((u) => [...(u.depends ?? []).flatMap(masters), ...(u.unit ? [u.unit] : [])]),
+    ...SECTION_DEFS.flatMap((s) => (s.master ? [s.master] : []))
+  ].filter((n, i, all) => !PARAM_BY_NAME.has(n) && all.indexOf(n) === i)
 }
 
 // ---------------------------------------------------------------------------
@@ -534,15 +255,6 @@ export function unknownParams(): string[] {
 const INT = /^[+-]?\d+$/
 // TOPP options are C++ ints.
 const INT_LIMIT = 2147483647
-
-// Options whose declared minimum is a tiny floor standing for "greater than 0"
-// (fragment_tolerance: 1e-9). 0 and negatives are reported as such rather than
-// as "must be at least 1e-9".
-const POSITIVE = new Set(['fragment_tolerance'])
-
-// Options whose declared maximum the CLI itself refuses (digest_background_share:
-// declared 0..1, but at 1 every protease model is the background, so all tie).
-const BELOW_MAX = new Set(['digest_background_share'])
 
 function badNumber(type: string, s: string, min?: number, max?: number): string | null {
   if (type === 'int') {
@@ -579,10 +291,10 @@ export function invalidBecause(spec: ParamSpec, value: unknown): string | null {
   if (s === '') return null
   if (spec.choices?.length && !spec.choices.includes(s)) return `not one of ${spec.choices.join(', ')}`
   if (spec.type === 'int' || spec.type === 'double') {
-    const positive = POSITIVE.has(spec.name)
+    const positive = uiOf(spec.name).positive === true
     const bad = badNumber(spec.type, s, positive ? undefined : spec.min, spec.max)
     if (bad) return bad
-    if (BELOW_MAX.has(spec.name) && spec.max !== undefined && Number(s) >= spec.max) return `must be below ${spec.max}`
+    if (uiOf(spec.name).belowMax && spec.max !== undefined && Number(s) >= spec.max) return `must be below ${spec.max}`
     if (positive) {
       const n = Number(s)
       if (!(n > 0)) return 'must be greater than 0'
@@ -714,7 +426,7 @@ export function conflicts(values: Record<string, unknown>, ctx: PreflightContext
 /// dependency on it.
 export function dependents(sec: Section): string[] {
   if (!sec.master) return []
-  return sec.params.filter((n) => n !== sec.master && (DEPENDS[n] ?? []).some((d) => !d.replaced && masters(d).includes(sec.master!)))
+  return sec.params.filter((n) => n !== sec.master && dependsOf(n).some((d) => !d.replaced && masters(d).includes(sec.master!)))
 }
 
 /// @p name is hidden right now: its first unmet dependency names the master

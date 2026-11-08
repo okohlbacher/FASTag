@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
-import { DEPENDS, HIDDEN, PARAM_BY_NAME, SECTIONS, defaultText, humanName, masters } from '../paramLayout'
+import { HIDDEN_PARAMS, PARAM_BY_NAME, PARAM_UI, SECTIONS, defaultText, dependsOf, humanName, masters, uiOf } from '../paramLayout'
 import { GLOSSARY, PAGES, SETTINGS_INTRO, type HelpPage } from './content'
 import { FAQ, FAQ_BY_ID, FAQ_GROUPS } from './faq'
 import { HelpLink } from './HelpLink'
-import { PARAM_HELP } from './params'
 import { closeHelp, helpBack, openHelp, rememberHelpPage, showHelpPage, useHelp } from './link'
 import { searchHelp } from './search'
 
@@ -34,7 +33,7 @@ export const PAGE_OF: Map<string, string> = (() => {
   for (const g of GLOSSARY) m.set(g.id, 'glossary')
   for (const s of SECTIONS) m.set(`param-sec-${slug(s.title)}`, 'settings')
   m.set('param-sec-hidden', 'settings')
-  for (const n of Object.keys(PARAM_HELP)) m.set(`param-${n}`, 'settings')
+  for (const [n, ui] of Object.entries(PARAM_UI)) if (ui.help) m.set(`param-${n}`, 'settings')
   return m
 })()
 
@@ -63,9 +62,9 @@ export function reveal(id: string): void {
 
 function ParamEntry({ name }: { name: string }): JSX.Element | null {
   const spec = PARAM_BY_NAME.get(name)
-  const h = PARAM_HELP[name]
+  const h = uiOf(name).help
   if (!spec || !h) return null
-  const needs = DEPENDS[name] ?? []
+  const needs = dependsOf(name)
   return (
     <details id={`param-${name}`} className="help-entry">
       <summary>
@@ -143,7 +142,7 @@ function Settings(): JSX.Element {
       <section id="param-sec-hidden" aria-labelledby="param-sec-hidden-h">
         <h3 id="param-sec-hidden-h">Not in the form</h3>
         <p className="help-blurb">FASTag options the app sets itself, that have no use in the app, or that the app does not offer yet (the 1.12 command-line options, used at their defaults).</p>
-        {Object.keys(HIDDEN).map((n) => (
+        {HIDDEN_PARAMS.map((n) => (
           <ParamEntry key={n} name={n} />
         ))}
       </section>

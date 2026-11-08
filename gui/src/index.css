@@ -420,7 +420,8 @@ button.add-batch { align-self: flex-start; }
    they look the same and open the same way. */
 .sec { border: 1px solid var(--border); border-radius: var(--radius-md); }
 .sec.active { border-color: var(--primary); }
-button.disclosure {
+/* A native <summary> (P5), styled as the button it replaces. */
+summary.disclosure {
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -432,11 +433,16 @@ button.disclosure {
   border: none;
   border-radius: var(--radius-md);
   color: var(--foreground);
+  font: inherit;
   font-weight: 500;
   text-align: left;
   white-space: normal;
+  cursor: pointer;
+  list-style: none;
 }
-button.disclosure:hover:not(:disabled) { background: var(--panel); border: none; }
+summary.disclosure::-webkit-details-marker,
+summary.drawer-toggle::-webkit-details-marker { display: none; }
+summary.disclosure:hover { background: var(--panel); }
 .sec-title { flex: 1; }
 .defaults { font-size: var(--text-xs); color: var(--muted-foreground); font-weight: 400; }
 .chev { display: inline-block; transition: transform 0.15s ease; color: var(--muted-foreground); }
@@ -657,7 +663,8 @@ code.why { display: block; background: var(--card); color: var(--foreground); bo
 
 /* ---- Log drawer --------------------------------------------------------------- */
 .logdrawer { margin: 0 var(--space-5) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--card); min-width: 0; }
-button.drawer-toggle {
+/* A native <summary> (P5), styled as the button it replaces. */
+summary.drawer-toggle {
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -666,10 +673,16 @@ button.drawer-toggle {
   padding: 10px var(--space-3);
   background: none;
   border: none;
+  border-radius: var(--radius-sm);
   color: var(--foreground);
+  font: inherit;
+  font-weight: 500;
   text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  list-style: none;
 }
-button.drawer-toggle:hover:not(:disabled) { background: var(--panel); border: none; }
+summary.drawer-toggle:hover { background: var(--panel); }
 .drawer-toggle .lbl { font-weight: 500; }
 .drawer-toggle .last { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); }
 .drawer-toggle .n { font-size: var(--text-xs); color: var(--muted-foreground); font-weight: 400; }

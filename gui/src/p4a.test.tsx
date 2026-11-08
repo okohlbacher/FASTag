@@ -184,6 +184,58 @@ describe('P4a: open a row in the Spectrum tab', () => {
   })
 })
 
+// browser.rs view_token: a query of a new view spec cancels the view build
+// in flight, whose query then fails with "cancelled". The panel's own
+// queries (its tags, then where ◀ ▶ lead) must not cancel each other, and
+// one cancelled by another view (the Tags table's) is asked again.
+describe('P4a: the Spectrum panel and the backend\'s view cancel', () => {
+  function cancelling(mock: MockBridge, outside = 0): { cancelled: number } {
+    const plain = mock.resultsQuery
+    let current = ''
+    const seen = { cancelled: 0 }
+    let left = outside
+    mock.resultsQuery = async (path, view, offset, limit) => {
+      if (!view.spectrum) return plain(path, view, offset, limit)
+      const mine = JSON.stringify(view)
+      current = mine
+      // The build takes a while; another spec meanwhile cancels it.
+      await new Promise((r) => setTimeout(r, 5))
+      if (current !== mine || (left > 0 && view.sort != null && left-- > 0)) {
+        seen.cancelled += 1
+        throw 'cancelled'
+      }
+      return plain(path, view, offset, limit)
+    }
+    return seen
+  }
+  it('the tags of the spectrum load although ◀ ▶ query another view', async () => {
+    const mock = bridge(true, [])
+    const seen = cancelling(mock)
+    await openTags(mock)
+    await click(firstRow())
+    await click(screen.getByRole('button', { name: 'Open in Spectrum' }))
+    mock.nextPickInput = INPUT
+    await click(await screen.findByRole('button', { name: 'Locate input…' }))
+    await screen.findByTestId('ladder-verdict', {}, { timeout: 3000 })
+    expect(screen.queryByText(/Cannot read the tags/)).toBeNull()
+    expect(seen.cancelled).toBe(0)
+    const next = screen.getByRole('button', { name: 'Next tagged spectrum' })
+    await waitFor(() => expect((next as HTMLButtonElement).disabled).toBe(false))
+  })
+  it('a tags query cancelled by another view is asked again', async () => {
+    const mock = bridge(true, [])
+    const seen = cancelling(mock, 2)
+    await openTags(mock)
+    await click(firstRow())
+    await click(screen.getByRole('button', { name: 'Open in Spectrum' }))
+    mock.nextPickInput = INPUT
+    await click(await screen.findByRole('button', { name: 'Locate input…' }))
+    await screen.findByTestId('ladder-verdict', {}, { timeout: 3000 })
+    expect(screen.queryByText(/Cannot read the tags/)).toBeNull()
+    expect(seen.cancelled).toBe(2)
+  })
+})
+
 describe('P4a: a native ID that is a prefix of many others', () => {
   it('lists exactly its own tags, draws the opened tag\'s ladder, and ◀ ▶ work, past 1,000 better tags of other spectra', async () => {
     // S (a real spectrum with its real tags and dump) is a substring of

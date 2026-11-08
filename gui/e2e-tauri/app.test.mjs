@@ -148,7 +148,7 @@ const cliAlive = () => spawnSync('pgrep', ['-f', '--', CLI_PATTERN]).status === 
 
 /** Open the Performance section and set -threads to @p n through the form. */
 async function setThreads(s, n) {
-  await s.exec(`for (const b of document.querySelectorAll('button.disclosure')) {
+  await s.exec(`for (const b of document.querySelectorAll('summary.disclosure')) {
       if ((b.querySelector('.sec-title') || {}).textContent === 'Performance' && b.getAttribute('aria-expanded') !== 'true') b.click()
     }`)
   await until('the threads field', () => s.exec("return !!document.getElementById('p-threads')"), 10000)
@@ -269,7 +269,24 @@ test('spectrum: a row of the Tags table opens in the Spectrum tab with its ladde
       await s.exec('const p = arguments[0]; window.fastag.pickInput = async () => p', input)
       const t0 = Date.now()
       await s.click(await s.button('Locate input…'))
-      const verdict = await until('the ladder', () => s.exec("const v = document.querySelector('[data-testid=ladder-verdict]'); return v ? v.textContent : ''"), 120000)
+      // The ladder takes about 130 ms. A timeout says what the panel showed
+      // (it once was "Cannot read the tags: cancelled": the panel's own
+      // queries cancelled each other's view build, fixed in P5).
+      let last = ''
+      const verdict = await until(
+        'the ladder',
+        async () => {
+          const v = await s.exec(`const v = document.querySelector('[data-testid=ladder-verdict]');
+            const p = document.querySelector('.sp[role=region]');
+            return { verdict: v ? v.textContent : '', text: p ? p.innerText.replace(/\\s+/g, ' ').slice(0, 1500) : '(no Spectrum panel)' }`)
+          last = v.text
+          return v.verdict
+        },
+        60000,
+        100
+      ).catch((e) => {
+        throw new Error(`${e.message}; the panel shows: ${last}`)
+      })
       gates.spectrumMs = Date.now() - t0
       assert.match(verdict, /^on \d+ of \d+ positions within the run's tolerance$/, verdict)
       assert.equal(await s.exec("return document.querySelector('.sp-head h2').textContent"), spectrum)

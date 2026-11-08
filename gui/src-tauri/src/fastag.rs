@@ -10,7 +10,7 @@ use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -26,6 +26,48 @@ use crate::{history, lifetime, outputs, sweep};
 // allowlist build_args() validates against. Embedded at compile time from the
 // single source of truth the frontend also reads.
 pub(crate) const MANIFEST: &str = include_str!("../../src/params.generated.json");
+
+/// One parameter the tool declares, as the manifest gives it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ParamType {
+    /// The declared type: bool, int, double, string, input-file,
+    /// output-file, string-list.
+    pub ty: String,
+    /// For a list: the type of each item ("int" for tag_lengths).
+    pub item_type: Option<String>,
+    /// A string list whose CLI default is not empty: an explicitly cleared
+    /// one must reach the CLI as "-name ''", or the default comes back.
+    pub nonempty_list_default: bool,
+}
+
+/// The manifest, parsed once (GUI-DESIGN P5) and shared by build_args, the
+/// INI export and the spectrum dump: name -> declared type. A manifest that
+/// does not parse yields no parameters, so build_args emits only -in, -out
+/// and -progress -- the allowlist fails closed.
+pub(crate) static PARAM_TYPES: LazyLock<HashMap<String, ParamType>> = LazyLock::new(|| parse_manifest(MANIFEST));
+
+fn parse_manifest(json: &str) -> HashMap<String, ParamType> {
+    let manifest: Value = serde_json::from_str(json).unwrap_or(Value::Null);
+    let mut out = HashMap::new();
+    for it in manifest.get("params").and_then(|v| v.as_array()).into_iter().flatten() {
+        let (Some(n), Some(t)) = (it.get("name").and_then(|v| v.as_str()), it.get("type").and_then(|v| v.as_str())) else {
+            continue;
+        };
+        let has_default = it
+            .get("default")
+            .and_then(|d| d.as_array())
+            .is_some_and(|d| d.iter().any(|x| x.as_str().is_some_and(|s| !s.trim().is_empty())));
+        out.insert(
+            n.to_string(),
+            ParamType {
+                ty: t.to_string(),
+                item_type: it.get("itemType").and_then(|v| v.as_str()).map(str::to_string),
+                nonempty_list_default: t == "string-list" && has_default,
+            },
+        );
+    }
+    out
+}
 
 const EXE: &str = if cfg!(windows) { "FASTag.exe" } else { "FASTag" };
 
@@ -453,28 +495,7 @@ fn value_to_scalar(v: &Value) -> Option<String> {
 // Build the argv from typed params. Only names the tool declares are emitted,
 // arrays only for list-typed options, and each value is its own argv element.
 pub(crate) fn build_args(p: &RunParams) -> Vec<String> {
-    let manifest: Value = serde_json::from_str(MANIFEST).unwrap_or(Value::Null);
-    let mut types: HashMap<String, String> = HashMap::new();
-    // String lists whose CLI default is not empty: an explicitly cleared one
-    // must reach the CLI as "-name ''", or the default comes back.
-    let mut nonempty_default: std::collections::HashSet<String> = std::collections::HashSet::new();
-    if let Some(arr) = manifest.get("params").and_then(|v| v.as_array()) {
-        for it in arr {
-            if let (Some(n), Some(t)) = (
-                it.get("name").and_then(|v| v.as_str()),
-                it.get("type").and_then(|v| v.as_str()),
-            ) {
-                types.insert(n.to_string(), t.to_string());
-                let has_default = it
-                    .get("default")
-                    .and_then(|d| d.as_array())
-                    .is_some_and(|d| d.iter().any(|x| x.as_str().is_some_and(|s| !s.trim().is_empty())));
-                if t == "string-list" && has_default {
-                    nonempty_default.insert(n.to_string());
-                }
-            }
-        }
-    }
+    let types = &*PARAM_TYPES;
 
     let base = base_dir(&p.input);
     let base = base.as_deref();
@@ -482,7 +503,8 @@ pub(crate) fn build_args(p: &RunParams) -> Vec<String> {
         vec!["-in".into(), defang_path(&p.input), "-out".into(), file_arg(&p.out, base)];
 
     for (name, value) in &p.params {
-        let Some(t) = types.get(name) else { continue };
+        let Some(pt) = types.get(name) else { continue };
+        let t = pt.ty.as_str();
         if NOT_SETTABLE.contains(&name.as_str()) {
             continue;
         }
@@ -507,7 +529,7 @@ pub(crate) fn build_args(p: &RunParams) -> Vec<String> {
             if !items.is_empty() {
                 args.push(format!("-{name}"));
                 args.extend(items);
-            } else if nonempty_default.contains(name) && !arr.iter().any(|v| {
+            } else if pt.nonempty_list_default && !arr.iter().any(|v| {
                 value_to_scalar(v).is_some_and(|s| looks_like_flag(s.trim()))
             }) {
                 // Cleared on purpose (e.g. no fixed modification for an
@@ -1145,6 +1167,29 @@ mod tests {
 
     fn rp(json: &str) -> RunParams {
         serde_json::from_str(json).unwrap()
+    }
+
+    // P5: the manifest is parsed once and every reader shares that parse.
+    #[test]
+    fn manifest_is_parsed_once_and_shared() {
+        let a: *const HashMap<String, ParamType> = &*PARAM_TYPES;
+        let b: *const HashMap<String, ParamType> = &*PARAM_TYPES;
+        assert_eq!(a, b);
+        let n = serde_json::from_str::<Value>(MANIFEST).unwrap()["params"].as_array().unwrap().len();
+        assert_eq!(PARAM_TYPES.len(), n);
+        let tl = &PARAM_TYPES["tag_lengths"];
+        assert_eq!((tl.ty.as_str(), tl.item_type.as_deref(), tl.nonempty_list_default), ("string-list", Some("int"), false));
+        assert!(PARAM_TYPES["fixed_modifications"].nonempty_list_default);
+        assert_eq!(PARAM_TYPES["gaps"].ty, "int");
+        assert!(!PARAM_TYPES["gaps"].nonempty_list_default);
+    }
+
+    // A manifest that does not parse declares nothing, so the allowlist
+    // fails closed instead of panicking.
+    #[test]
+    fn unparsable_manifest_declares_nothing() {
+        assert!(parse_manifest("not json").is_empty());
+        assert!(parse_manifest(r#"{"params": [{"name": "x"}]}"#).is_empty());
     }
 
     // build_args is the trust boundary: the renderer is untrusted, and only

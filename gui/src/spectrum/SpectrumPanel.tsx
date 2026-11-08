@@ -65,6 +65,21 @@ const PAGE = 1000
 const fmt = (x: number, d = 4): string => x.toFixed(d)
 const ppm = (x: number | null): string => (x == null ? '–' : `${x >= 0 ? '+' : '−'}${Math.abs(x).toFixed(1)}`)
 
+/** One resultsQuery of this panel. The browser backend lets a query of a
+ *  new view spec cancel the view build in flight (browser.rs view_token: the
+ *  Tags table's newer filter or sort supersedes the older one), and then
+ *  rejects that query with "cancelled". The panel's queries supersede
+ *  nothing: one cancelled by another view's query is asked again. */
+async function query(...a: Parameters<typeof window.fastag.resultsQuery>): ReturnType<typeof window.fastag.resultsQuery> {
+  for (let tries = 1; ; tries++) {
+    try {
+      return await window.fastag.resultsQuery(...a)
+    } catch (e) {
+      if (String(e) !== 'cancelled' || tries >= 5) throw e
+    }
+  }
+}
+
 /** The tags of @p spectrum in @p path, best E-value first: the exact ID
  *  (as a substring, scan=1 would also match scan=10..19, 100..199, ...),
  *  every page of them (a page holds at most PAGE rows). */
@@ -72,7 +87,7 @@ async function tagsOf(path: string, spectrum: string): Promise<TagsOf> {
   const view: ResultsView = { sort: { column: 'evalue', desc: false }, spectrum, spectrumExact: true }
   const out: TagsOf = { columns: [], rows: [], rowIds: [] }
   for (;;) {
-    const page = await window.fastag.resultsQuery(path, view, out.rows.length, PAGE)
+    const page = await query(path, view, out.rows.length, PAGE)
     out.columns = page.columns
     page.rows.forEach((r, i) => {
       out.rows.push(r)
@@ -86,7 +101,7 @@ async function tagsOf(path: string, spectrum: string): Promise<TagsOf> {
  *  tagged spectra, with the count; null at an end. */
 async function neighbour(path: string, spectrum: string, rowId: number | null, dir: -1 | 1): Promise<{ spectrum: string; rowId: number | null } | null> {
   // The file row the per-spectrum view keeps for this spectrum (its best tag).
-  const mine = await window.fastag.resultsQuery(path, { ...PER_SPECTRUM, spectrum, spectrumExact: true }, 0, 1)
+  const mine = await query(path, { ...PER_SPECTRUM, spectrum, spectrumExact: true }, 0, 1)
   const sp = mine.columns.indexOf('spectrum')
   const i = mine.rows.findIndex((r) => r[sp] === spectrum)
   const row = i >= 0 ? (mine.rowIds?.[i] ?? null) : rowId
@@ -95,7 +110,7 @@ async function neighbour(path: string, spectrum: string, rowId: number | null, d
   if (pos == null || pos < 0) return null
   const to = pos + dir
   if (to < 0) return null
-  const page = await window.fastag.resultsQuery(path, PER_SPECTRUM, to, 1)
+  const page = await query(path, PER_SPECTRUM, to, 1)
   if (page.rows.length === 0) return null
   return { spectrum: page.rows[0][page.columns.indexOf('spectrum')] ?? '', rowId: page.rowIds?.[0] ?? null }
 }
@@ -138,6 +153,9 @@ export default function SpectrumPanel({ target, source, onTarget, onLocate }: Pr
     let live = true
     setTags(null)
     setTagsError(null)
+    setNav({ prev: false, next: false })
+    // The tags first, then where ◀ ▶ lead: one view build at a time, so the
+    // panel's own queries do not cancel each other (see query()).
     tagsOf(target.path, target.spectrum)
       .then((t) => {
         if (!live) return
@@ -146,8 +164,7 @@ export default function SpectrumPanel({ target, source, onTarget, onLocate }: Pr
         setChosen(at >= 0 ? at : 0)
       })
       .catch((e: unknown) => live && setTagsError(e instanceof Error ? e.message : String(e)))
-    setNav({ prev: false, next: false })
-    Promise.all([neighbour(target.path, target.spectrum, target.rowId, -1), neighbour(target.path, target.spectrum, target.rowId, 1)])
+      .then(() => Promise.all([neighbour(target.path, target.spectrum, target.rowId, -1), neighbour(target.path, target.spectrum, target.rowId, 1)]))
       .then(([p, n]) => live && setNav({ prev: !!p, next: !!n }))
       .catch(() => live && setNav({ prev: false, next: false }))
     return () => {

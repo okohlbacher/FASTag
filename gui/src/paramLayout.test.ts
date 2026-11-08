@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
-  DEPENDS,
-  HIDDEN,
-  LABEL,
   PARAM_BY_NAME,
+  PARAM_UI,
+  hiddenReason,
   RENDERED,
   SECTIONS,
   conflicts,
@@ -16,6 +15,10 @@ import {
   unknownParams,
   unplacedParams
 } from './paramLayout'
+
+// The pre-P5 tables, as views of PARAM_UI.
+const DEPENDS = Object.fromEntries(Object.entries(PARAM_UI).flatMap(([n, u]) => (u.depends ? [[n, u.depends]] : [])))
+const LABEL = Object.fromEntries(Object.entries(PARAM_UI).flatMap(([n, u]) => (u.label ? [[n, u.label]] : [])))
 
 describe('layout completeness', () => {
   // unplacedParams() can only see what the manifest has; this is the other
@@ -152,7 +155,7 @@ describe('labels', () => {
   it('labels only rendered parameters, each with its own words', () => {
     for (const name of Object.keys(LABEL)) {
       expect(PARAM_BY_NAME.has(name), name).toBe(true)
-      expect(HIDDEN[name], name).toBeUndefined()
+      expect(hiddenReason(name), name).toBeUndefined()
       expect(RENDERED, name).toContain(name)
     }
     expect(new Set(Object.values(LABEL)).size).toBe(Object.keys(LABEL).length)

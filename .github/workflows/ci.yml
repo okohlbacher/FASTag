@@ -1499,12 +1499,13 @@ jobs:
   # the G1 CLI's real --helphelp and -dump_spectrum output), and two recorded
   # WebKitGTK gates: time to first rows on a generated 1M-row file and the
   # IPC message rate of a chatty run.
-  # Informational in P1-P4 (required from P5), hence continue-on-error.
+  # Blocking from P5 (informational with continue-on-error in P1-P4): a
+  # failing spec fails the run. Making it a required check of main is a
+  # branch-protection setting, not part of this file.
   # Independent of the CLI build, like the gui job.
   tauri-driver:
     runs-on: ubuntu-22.04
     timeout-minutes: 45
-    continue-on-error: true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
