@@ -10,14 +10,12 @@
 // the INI cannot say anything the run would not do. The temporary file is
 // removed again and never appears in an argv, History or Copy command.
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use serde_json::Value;
 use tauri::AppHandle;
 
-use crate::fastag::{self, RunParams, MANIFEST};
+use crate::fastag::{self, RunParams};
 use crate::lifetime;
 
 /// A parameter's value as an INI holds it.
@@ -35,20 +33,6 @@ pub struct IniItem {
     /// is a string with the value true, as TOPPBase writes it).
     pub ty: &'static str,
     pub value: IniValue,
-}
-
-/// The type and, for a list, the item type of every parameter the tool
-/// declares (its generated manifest, the allowlist build_args uses).
-pub(crate) fn param_types() -> HashMap<String, (String, Option<String>)> {
-    let manifest: Value = serde_json::from_str(MANIFEST).unwrap_or(Value::Null);
-    let mut out = HashMap::new();
-    for it in manifest.get("params").and_then(|v| v.as_array()).into_iter().flatten() {
-        if let (Some(n), Some(t)) = (it.get("name").and_then(|v| v.as_str()), it.get("type").and_then(|v| v.as_str())) {
-            let item = it.get("itemType").and_then(|v| v.as_str()).map(str::to_string);
-            out.insert(n.to_string(), (t.to_string(), item));
-        }
-    }
-    out
 }
 
 /// Parameters the app manages and an exported INI leaves to the CLI's own
@@ -71,7 +55,7 @@ fn ini_type(t: &str) -> &'static str {
 /// (empty for a list cleared with `-name ''`). Tokens that are no option of
 /// the tool are skipped; build_args never emits one.
 pub fn items_from_argv(argv: &[String]) -> Vec<IniItem> {
-    let types = param_types();
+    let types = &*fastag::PARAM_TYPES;
     let is_option = |tok: &str| tok.strip_prefix('-').is_some_and(|n| types.contains_key(n));
     let mut items = Vec::new();
     let mut i = 0;
@@ -79,7 +63,7 @@ pub fn items_from_argv(argv: &[String]) -> Vec<IniItem> {
         let tok = &argv[i];
         i += 1;
         let Some(name) = tok.strip_prefix('-') else { continue };
-        let Some((t, item)) = types.get(name) else { continue };
+        let Some(fastag::ParamType { ty: t, item_type: item, .. }) = types.get(name) else { continue };
         if APP_MANAGED.contains(&name) {
             continue;
         }
@@ -245,7 +229,7 @@ pub async fn export_ini(app: AppHandle, params: RunParams, dest: String) -> Resu
 /// The items of a TOPP INI by name, for the round-trip tests: every ITEM's
 /// value and every ITEMLIST's items, entities decoded.
 #[cfg(test)]
-pub fn parse_ini(xml: &str) -> HashMap<String, IniValue> {
+pub fn parse_ini(xml: &str) -> std::collections::HashMap<String, IniValue> {
     fn attr(line: &str, key: &str) -> Option<String> {
         let pat = format!(" {key}=\"");
         let s = line.find(&pat)? + pat.len();
@@ -262,7 +246,7 @@ pub fn parse_ini(xml: &str) -> HashMap<String, IniValue> {
             .replace("&#9;", "\t")
             .replace("&amp;", "&")
     }
-    let mut out = HashMap::new();
+    let mut out = std::collections::HashMap::new();
     let mut list: Option<(String, Vec<String>)> = None;
     for line in xml.lines() {
         let l = line.trim_start();
@@ -288,6 +272,7 @@ pub fn parse_ini(xml: &str) -> HashMap<String, IniValue> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
 
     fn rp(json: &str) -> RunParams {
         serde_json::from_str(json).unwrap()
