@@ -397,11 +397,11 @@ grep -q "is the -digest_models (shipped) file" "$TMP/g1.log" || { cat "$TMP/g1.l
 FASTAG_DIGEST_DIR="$TMP/dig" "$BIN" "${SLA[@]}" -out "$TMP/g2.tsv" -recon_fasta "$DB" -shortlist_out "$TMP/dig/digest_models.tsv" \
   >"$TMP/g2.log" 2>&1 && fail "-shortlist_out on the shipped digest_models.tsv ran (exit 0)"
 grep -q "is the -digest_models (shipped) file" "$TMP/g2.log" || { cat "$TMP/g2.log"; fail "no message naming the shipped digest_models.tsv for -shortlist_out"; }
-FASTAG_DIGEST_DIR="$TMP/dig" "$BIN" -in "$IN" -out "$TMP/g3.tsv" -massgap_out "$TMP/dig/massgap_mods.tsv" "${ARGS[@]}" \
+FASTAG_DIGEST_DIR="$TMP/dig" "$BIN" -in "$IN" -out "$TMP/g3.tsv" -recon_fasta "$DB" -recon_out "$TMP/g3.recon.tsv" -massgap_out "$TMP/dig/massgap_mods.tsv" -tag_length 4 "${ARGS[@]}" \
   >"$TMP/g3.log" 2>&1 && fail "-massgap_out on the shipped massgap_mods.tsv ran (exit 0)"
 grep -q "is the -massgap_mods (shipped) file" "$TMP/g3.log" || { cat "$TMP/g3.log"; fail "no message naming the shipped massgap_mods.tsv"; }
 [ "$(cksum < "$TMP/dig/digest_models.tsv")" = "$dm_before" ] || fail "the shipped digest_models.tsv was modified"
-[ ! -e "$TMP/g1.tsv" ] && [ ! -e "$TMP/g2.tsv" ] && [ ! -e "$TMP/g3.tsv" ] || fail "a refused shipped-table collision wrote -out"
+[ ! -e "$TMP/g1.tsv" ] && [ ! -e "$TMP/g2.tsv" ] && [ ! -e "$TMP/g3.tsv" ] && [ ! -e "$TMP/g3.recon.tsv" ] || fail "a refused shipped-table collision wrote -out"
 case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*) ;;
   *)
