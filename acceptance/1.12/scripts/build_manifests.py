@@ -13,7 +13,7 @@ def rd(p):
         return list(csv.DictReader((l for l in f if not l.startswith("# ")), delimiter="\t"))
 def staged(*names):
     d = {}
-    for n in names:
+    for n in names + ("staged_redo.tsv", "staged_redo_a.tsv"):   # re-staging of rows that failed once (later file wins)
         p = f"{S}/{n}"
         if not os.path.exists(p): continue
         for l in open(p):
@@ -79,6 +79,16 @@ for r in rd(f"{I}/raw_species_extra.tsv"):
     rows.append(put(dict(item="#1", split="heldout", stratum="multi_bigbio", pxd=r["pxd"], run=r["file"], source=r["url"],
                          pride_sha1=r["pride_sha1"], bytes=r["bytes"], organisms=r["organisms"], sdrf=r["sdrf"],
                          instrument=r["instrument"], selection=r["selection"]), s1.get(f"item01:multi_bigbio:{r['pxd']}")))
+scan1 = {r["id"]: r for r in rd(f"{S}/scan_1.tsv")}
+for r in rows:   # high-resolution MS2 check after conversion (PLAN #1: high-resolution DDA; pseudo-DDA is its own stratum)
+    k = {"multi_named": f"item01:multi_named:{r['pxd']}:{r['run']}", "multi_bigbio": f"item01:multi_bigbio:{r['pxd']}"}.get(
+        r["stratum"], f"item01:{r['stratum']}:{r['pxd']}")
+    sc = scan1.get(k, {})
+    f = sc.get("filter", "")
+    r["ms2_check"] = (f.split(" ")[0] if f else ("TOF (timsTOF .d via FileConverter)" if "FileConverter" in r.get("conversion", "")
+                      else (sc.get("ms2_analyser") or "not scanned")))
+    r["in_primary"] = "no (pseudo-DDA stratum, reported only)" if r["stratum"] == "pseudo" else \
+        ("NO: ion-trap MS2 (not high-resolution), left out" if f.startswith("ITMS") else "yes")
 write("item01-heldout", rows)
 # #3
 s3 = staged("staged_3.tsv")
@@ -111,6 +121,12 @@ for n in ("e703_conv_t.tsv", "e703_conv_d.tsv", "e703_conv_d2.tsv"):
         for l in open(p):
             x = l.rstrip("\n").split("\t")
             conv[x[0]] = x
+pseudo = {}
+for n in ("e703_pseudo_thermo_out.tsv", "e703_pseudo_bruker_out.tsv"):
+    if os.path.exists(f"{S}/{n}"):
+        for l in open(f"{S}/{n}"):
+            x = l.rstrip("\n").split("\t")
+            if len(x) >= 6 and x[4]: pseudo[x[0]] = x
 rows = []
 for r in rd(f"{I}/e7-03-manifest.tsv"):
     x = conv.get(r["id"])
@@ -122,7 +138,13 @@ for r in rd(f"{I}/e7-03-manifest.tsv"):
                  fastag_input_sha256=x[6], conversion_note=x[7])
         if x[3] == "NA": r["convertible_here"] = "no (SCIEX .wiff: msconvert on Windows)"
         elif x[3] == "0": r["convertible_here"] = "yes"
+        elif "analysis.baf" in x[7]: r["convertible_here"] = "no (Bruker .baf, not timsTOF: msconvert on Windows)"
+        elif "AcqData" in x[7] or r["id"] == "E7-03.DDA_qtof.10": r["convertible_here"] = "no (Agilent .d: msconvert on Windows)"
+        elif r["id"] == "E7-03.DDA_qtof.08": r["convertible_here"] = "no (Waters .raw directory in a zip: msconvert on Windows)"
         else: r["convertible_here"] = f"FAILED rc {x[3]}"
+        ps = pseudo.get(r["id"])
+        if ps:
+            r.update(pseudo_rc=ps[1], pseudo_input=("e7-03/" + ps[2]) if ps[4] else "", pseudo_bytes=ps[3], pseudo_sha256=ps[4], pseudo_note=ps[5])
     else:
         r.update(stage_status="NOT STAGED YET")
     rows.append(r)

@@ -18,7 +18,7 @@ dis = {r["manifest"]: r for r in rd(f"{A}/disjointness/summary.tsv")}
 # row id -> (manifest, configs, plan source, status note)
 SPEC = {
  "HO-01-heldout": ("item01-heldout", ["CFG-01-base", "CFG-01-cand"], "PLAN-organism-chemistry.md #1 Held-out protocol",
-   "NOT READY: PREREG-species-call.md is a skeleton (DEV regeneration, grid fit and fitted species_call.tsv open); the multi-organism runs need the high-resolution MS2 check after conversion (PXD001819 is an LTQ Orbitrap Velos set)."),
+   "NOT READY: PREREG-species-call.md is a skeleton (DEV regeneration, grid fit and fitted species_call.tsv open). High-resolution MS2 check after conversion (column ms2_check/in_primary): the 3 PXD001819 runs have ion-trap MS2 and leave the primary set; primary = 52 runs (41 single, 11 multi-organism: PXD006118 x3, PXD023217 x3, 5 bigbio two-organism PXDs) from 48 PXDs (>= 40 runs, >= 25 PXDs, >= 10 multi: met); 25 pseudo-DDA runs reported separately."),
  "HO-10-heldout": ("item01-heldout", ["CFG-10-cand"], "PLAN-organism-chemistry.md #10 Validation",
    "NOT READY: same set as HO-01-heldout, second pre-registered config of #1; waits for the #1 fit."),
  "HO-02-H2": ("item02-H2", ["CFG-02-base", "CFG-02-cand"], "PLAN-data-types.md #2 Validation data (H2 reserve, hashed before H1)",
@@ -38,7 +38,7 @@ SPEC = {
  "HO-05-negative": ("item05-negative", ["CFG-05"], "PLAN-handoff.md #5 scenario (d)",
    "NOT READY: as HO-05-heldout. Must raise the protease error without -digest_out."),
  "HO-07-E7-03": ("item07-E7-03", ["CFG-07"], "registry E7-03/E7-10; PLAN-data-types.md #7 Release test",
-   "BLOCKED: the 11 SCIEX .wiff files of DIA_swath (and 1 DDA_qexactive, 10 DDA_qtof) need msconvert on Windows. Without them the DIA strata hold 37 files (< 40) and SWATH/variable windows is not covered (DIA_swath.04 is a timsTOF .d), so the plan's rule does not allow dropping them. All other files staged and converted here (sha256 in the manifest); pseudo-DDA stratum generated from the convertible DIA files (DIAspeXtract 1.7.0 / diaTracer 2.2.1). Must pass before release."),
+   "BLOCKED: the 11 SCIEX .wiff files of DIA_swath (and 1 DDA_qexactive, 10 DDA_qtof) need msconvert on Windows. Without them the DIA strata hold 37 files (< 40) and SWATH/variable windows is not covered (DIA_swath.04 is a timsTOF .d), so the plan's rule does not allow dropping them. Not convertible on Linux either (column convertible_here): 11 more SCIEX .wiff (DDA_qtof, DDA_qexactive.03), 3 Agilent .d, 2 Bruker .baf, 1 Waters .raw. Converted here: 149 non-DIA and 37 DIA files (sha256 in the manifest); the pseudo-DDA stratum is made from the 37 convertible DIA files (DIAspeXtract 1.7.0 for Thermo via a constant-mobility copy, diaTracer 2.2.1 for .d; pseudo_sha256 column), so the non-DIA side reaches >= 150 only with pseudo-DDA. Note: DIA_astral.03 and DIA_swath.04 are timsTOF .d files drawn into those strata by project metadata. Must pass before release."),
  "HO-09-H1": ("item09-H1", ["CFG-09-base", "CFG-09-cand"], "PLAN-data-types.md #9 Validation (B)",
    "READY when staged: 3 profile-MS2 runs (1 ion trap, 2 Orbitrap) converted without peak picking (TRFP -p) + 1 reserve (Orbitrap: the corpora hold no second ion-trap profile run with raw, so an ion-trap re-check after an analyser restriction has no reserve). Truth = Sage 1% FDR on the corpus' centroided mzML (truth_staged)."),
  "HO-11-f7test": ("item11-f7test", ["CFG-11"], "PLAN-qc.md #11 phase C (F7-test, seed 4)",

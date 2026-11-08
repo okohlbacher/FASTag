@@ -1,0 +1,11 @@
+file	pxd	pool	pxd_in_dev	file_in_dev	result
+01748a_BE1-TUM_second_pool_11_02_01-3xHCD-1h-R1.raw	PXD004732	TUM_second_pool_11	n/a (one PXD, pool-level split)	no	PASS
+01717a_BA1-TUM_second_pool_13_01_01-3xHCD-1h-R1.raw	PXD004732	TUM_second_pool_13	n/a (one PXD, pool-level split)	no	PASS
+01709a_GE9-TUM_second_pool_5_01_01-3xHCD-1h-R1.raw	PXD004732	TUM_second_pool_5	n/a (one PXD, pool-level split)	no	PASS
+01748a_BD3-TUM_second_pool_54_01_01-3xHCD-1h-R1.raw	PXD004732	TUM_second_pool_54	n/a (one PXD, pool-level split)	no	PASS
+01812a_GF1-TUM_second_pool_90_01_01-3xHCD-1h-R1.raw	PXD004732	TUM_second_pool_90	n/a (one PXD, pool-level split)	no	PASS
+01866a_GD1-TUM_second_pool_96_03_01-3xHCD-1h-R1.raw	PXD004732	TUM_second_pool_96	n/a (one PXD, pool-level split)	no	PASS
+01812a_GD3-TUM_third_pool_6_01_01-3xHCD-1h-R1.raw	PXD004732	TUM_third_pool_6	n/a (one PXD, pool-level split)	no	PASS
+01640c_BE2-Thermo_SRM_Pool_13_01_01-3xHCD-1h-R2.raw	PXD004732	Thermo_SRM_Pool_13	n/a (one PXD, pool-level split)	no	PASS
+01640c_BG6-Thermo_SRM_Pool_47_01_01-3xHCD-1h-R2.raw	PXD004732	Thermo_SRM_Pool_47	n/a (one PXD, pool-level split)	no	PASS
+01640c_BD12-Thermo_SRM_Pool_92_01_01-3xHCD-1h-R2.raw	PXD004732	Thermo_SRM_Pool_92	n/a (one PXD, pool-level split)	no	PASS

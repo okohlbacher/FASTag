@@ -1,0 +1,11 @@
+file	pxd	pool	pxd_in_dev	file_in_dev	result
+01625b_GC7-TUM_first_pool_122_01_01-3xHCD-1h-R1.raw	PXD004732	TUM_first_pool_122	n/a (one PXD, pool-level split)	no	PASS
+01625b_GA6-TUM_first_pool_41_01_01-3xHCD-1h-R1.raw	PXD004732	TUM_first_pool_41	n/a (one PXD, pool-level split)	no	PASS
+01625b_GB6-TUM_first_pool_42_01_01-3xHCD-1h-R1.raw	PXD004732	TUM_first_pool_42	n/a (one PXD, pool-level split)	no	PASS
+01625b_GF1-TUM_first_pool_6_01_01-3xHCD-1h-R1.raw	PXD004732	TUM_first_pool_6	n/a (one PXD, pool-level split)	no	PASS
+01906a_BB1-TUM_second_pool_110_01_01-3xHCD-1h-R1.raw	PXD004732	TUM_second_pool_110	n/a (one PXD, pool-level split)	no	PASS
+01906a_BD1-TUM_second_pool_112_01_01-3xHCD-1h-R1.raw	PXD004732	TUM_second_pool_112	n/a (one PXD, pool-level split)	no	PASS
+01906a_BB2-TUM_second_pool_118_01_01-3xHCD-1h-R1.raw	PXD004732	TUM_second_pool_118	n/a (one PXD, pool-level split)	no	PASS
+01790a_BF2-TUM_second_pool_80_01_01-3xHCD-1h-R1.raw	PXD004732	TUM_second_pool_80	n/a (one PXD, pool-level split)	no	PASS
+01790a_BH2-TUM_second_pool_82_01_01-3xHCD-1h-R1.raw	PXD004732	TUM_second_pool_82	n/a (one PXD, pool-level split)	no	PASS
+01790a_BB3-TUM_second_pool_84_01_01-3xHCD-1h-R1.raw	PXD004732	TUM_second_pool_84	n/a (one PXD, pool-level split)	no	PASS

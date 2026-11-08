@@ -1,0 +1,11 @@
+#item	split	stratum	pxd	n	name_regex	note
+#5	heldout	human_vs_union	PXD054073	1	DDA	scenario (a) human; DDA-named runs only (the project also has DIA)
+#5	heldout	pxd076528	PXD076528	1	-	PLAN-handoff #5 held-out
+#5	heldout	ups1_yeast	PXD001819	1	-	PLAN-handoff #5 held-out
+#5	heldout	mixture_vs_union	PXD028735	1	LFQ_Orbitrap_DDA_Condition_	scenario (c) PXD028735 mixture (Condition A/B Orbitrap DDA), not a species-benchmark run
+#5	heldout	human_qehfx	PXD063151	1	-	PLAN-handoff #5 held-out
+#5	negative	chymotrypsin	PXD040407	1	Chymo	scenario (d): must raise the protease error without -digest_out; not the gate file
+#17	heldout	silac	PXD014764	1	-	PLAN-handoff #17 held-out (SILAC)
+#17	heldout	tmt10	PXD004541	1	TMT10	PLAN-handoff #17 held-out (TMT10, label rules)
+#17	heldout	tmt6	PXD000001	1	-	PLAN-handoff #17 held-out (TMT6)
+#17	heldout	human_qehfx	PXD063151	1	-	PLAN-handoff #17 held-out

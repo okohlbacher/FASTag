@@ -18,7 +18,7 @@ one() {
   local out=$P/$stem.pseudo.mzML rc=0 note=""
   if [ ! -s "$out" ]; then
     if [ "$kind" = thermo ]; then
-      $PAPY -c "import sys; sys.path.insert(0, '$PAH'); from prose_auto.external import with_constant_mobility as w; w(sys.argv[1], sys.argv[2])" \
+      OMP_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4 MKL_NUM_THREADS=4 $PAPY -c "import sys; sys.path.insert(0, '$PAH'); from prose_auto.external import with_constant_mobility as w; w(sys.argv[1], sys.argv[2])" \
         "$inp" "$P/$stem.im.mzML" > "$P/im.log" 2>&1; rc=$?
       if [ $rc = 0 ]; then
         ( source /ceph/ibmi/abi/oliver/spextract/v1.7.0/env.sh; timeout 43200 $SPX_BIN -in "$P/$stem.im.mzML" -out "$P/tmp.$stem.pseudo.mzML" -threads 8 \
@@ -29,11 +29,11 @@ one() {
       note="constant-IM copy + DIAspeXtract 1.7.0 (no-mobility options) -threads 8"
     else
       mkdir -p "$JT" "$P/dt"
-      ( cd $DT && LC_ALL=C LANG=C LD_LIBRARY_PATH=./ext/bruker timeout 43200 java -Xmx200G -Djna.tmpdir=$JT -Djava.io.tmpdir=$JT \
+      local m="$(dirname "$inp")/${stem}_diatracer.mzML"   # diaTracer writes <stem>_diatracer.mzML next to the .d
+      [ -s "$m" ] || ( cd $DT && LC_ALL=C LANG=C LD_LIBRARY_PATH=./ext/bruker timeout 43200 java -Xmx200G -Djna.tmpdir=$JT -Djava.io.tmpdir=$JT \
           -Djna.library.path=./ext/bruker -jar diaTracer-2.2.1.jar -d "$inp" -t 24 -w "$P/dt" \
           -mC 0.3 -dI 0.01 -dR 3 -rM 500 -mF 1 -mO 0.1 -r 0 ) > "$P/dt.log" 2>&1; rc=$?
-      local m=$(ls "$P"/dt/*.mzML 2>/dev/null | head -1)
-      [ $rc = 0 ] && [ -n "$m" ] && mv "$m" "$out"; rm -rf "$P/dt"
+      [ $rc = 0 ] && [ -s "$m" ] && mv "$m" "$out"; rm -rf "$P/dt"
       note="diaTracer 2.2.1 -t 24"
     fi
   fi

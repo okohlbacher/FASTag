@@ -1,0 +1,4 @@
+#item	split	stratum	pxd	n	name_regex	note
+#1	heldout	multi_named	PXD001819	3	^UPS1_	named mixture UPS1 (human) in yeast
+#1	heldout	multi_named	PXD006118	3	^Run[0-9]_[CPU][0-9]_[0-9]+ng[.]raw$	named mixture Kleiner mock communities, single-shot runs (not SCX salt fractions)
+#1	heldout	multi_named	PXD023217	3	^S[0-9][0-9][.]raw$	named mixture CAMPI SIHUMIx samples (S01-S12, single-shot; F = fecal, no composition truth)

@@ -14,6 +14,7 @@ ROOT=/scratch/kohlbach/fastag-heldout-1.12
 TRFP=${TRFP:-/ceph/ibmi/abi/oliver/prose-auto-20261029/env/bin/thermorawfileparser}  # #4/#11 override: the harness TRFP (2.0.0 too)
 FC=/ceph/ibmi/abi/oliver/spextract/diaweaver-7ed1169/bin/FileConverter
 PY=/ceph/ibmi/abi/oliver/envs/prepdda/bin/python
+SD=$(cd "$(dirname "$0")" && pwd)
 one() {
   IFS=$'\t' read -r key dir file bytes sha1 url route exp <<< "$1"
   local D=$ROOT/$dir; mkdir -p "$D"; cd "$D" || return
@@ -52,6 +53,7 @@ one() {
     fileconverter)
       local T=$D/unz.${file%%.*}; mkdir -p "$T"
       ls -d "$T"/*.d >/dev/null 2>&1 || $PY -I -m zipfile -e "$f" "$T" > "$D/unzip.log" 2>&1
+      $PY -I "$SD/fix_zip_paths.py" "$T"
       local d=$(ls -d "$T"/*.d 2>/dev/null | head -1)
  [ -z "$d" ] && d=$(find "$T" -maxdepth 3 -type d -iname '*.d' | head -1)
       if [ -z "$d" ] && [ -f "$T/analysis.tdf" ]; then   # archive holds the .d contents without the .d directory
@@ -70,6 +72,6 @@ one() {
   [ -n "$out" ] && [ -s "$out" ] && [ "$rc" = 0 ] && { osha=$(sha256sum "$out" | cut -c1-64); ob=$(stat -c %s "$out"); }
   printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "$key" "$dir/$file" "$st" "$sha" "$rc" "${out#$ROOT/}" "$ob" "$osha" "$note"
 }
-export -f one; export ROOT TRFP FC PY
+export -f one; export ROOT TRFP FC PY SD
 xargs -d '\n' -P "${3:-4}" -I{} bash -c 'one "{}"' < "$1" > "$2"
 echo "STAGE_DONE $(date -Is)" > "$2.done"

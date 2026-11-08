@@ -1,0 +1,23 @@
+E7-03.DIA_orbitrap.02	0	E7-03.DIA_orbitrap.02/pseudo/Anahita_S1508_024.pseudo.mzML	30156352	180d953f6c61a51ab4ab5f469f0ccbe743ec8982fdfac62f5209f8ef044c5f2c	
+E7-03.DIA_orbitrap.04	0	E7-03.DIA_orbitrap.04/pseudo/20250516_005_S944638_pH2_PK_rep4.pseudo.mzML	34425064	5ab622b3d308f2ba4a011375d786927f8dff90e95d8852020b8d7a6cd6b4c4db	
+E7-03.DIA_orbitrap.07	0	E7-03.DIA_orbitrap.07/pseudo/exLewis008429.pseudo.mzML	148164240	22eb4f8fb816a5413a4f7cb779f662bff30a6f72e0c629a29e1ce99fbc080f56	
+E7-03.DIA_orbitrap.06	0	E7-03.DIA_orbitrap.06/pseudo/CAB20221120yaonan_zhedaIP-MS_60min_DIA_usp7-biorep5-F7.pseudo.mzML	341893645	0ee4481ca201eac52986bfdf07f488004c98b28b82fd00aef8d85932a4a2281d	
+E7-03.DIA_orbitrap.05	0	E7-03.DIA_orbitrap.05/pseudo/20220120_FK_NiGa_19.pseudo.mzML	707802497	22dd7528f24d73abd296bcd0865e82c85cf500fddeb01fbd16673fd41060e5d5	
+E7-03.DIA_orbitrap.08	0	E7-03.DIA_orbitrap.08/pseudo/20190517_DIA_W2.pseudo.mzML	668700490	826cbea532fd822cded91f5ae400650da5c941525fe30d8db8f0158f199caa7a	
+E7-03.DIA_orbitrap.12	0	E7-03.DIA_orbitrap.12/pseudo/DIA_IP_NT.pseudo.mzML	275467376	c2e1002860a41a0b5edc8e4c26db43266d97c9e65101228e39ae388c5b459219	
+E7-03.DIA_orbitrap.03	0	E7-03.DIA_orbitrap.03/pseudo/230224_LU1_reberv_Ex31_23.pseudo.mzML	484857164	b1b8456105adab78ea47f41fc50ac3d6ca553b1a3440f6f9fbd4b07e7fa31eef	
+E7-03.DIA_orbitrap.01	0	E7-03.DIA_orbitrap.01/pseudo/C2-5_F2-5.pseudo.mzML	768927087	c05a8aeddeec47cf1d4c93f4a3f1a700af71c5dac9f5697276744c5dbf820a88	
+E7-03.DIA_orbitrap.10	0	E7-03.DIA_orbitrap.10/pseudo/2409_ZF_23.pseudo.mzML	549768506	e9041a70df511af437d4d812e3bcb3bc9042004de6ffa90b01c91c5c26ee88c5	
+E7-03.DIA_orbitrap.11	0	E7-03.DIA_orbitrap.11/pseudo/250508_D9_SCR_DP_G1_120min_Exploris_FAIMS_DIA_CV-45-60.pseudo.mzML	715401085	7fe46a75670b89c5a16a614efad8a298339a047468b6ad4abcf41e9430026892	
+E7-03.DIA_astral.01	0	E7-03.DIA_astral.01/pseudo/1727_MDA_MB_231_LargeEVs1_20260310061640-003.pseudo.mzML	560702383	8484ab6601ed724f2ec04a54a6ac943a87979eeee0d6eb59db8c73fc4319407c	
+E7-03.DIA_astral.08	0	E7-03.DIA_astral.08/pseudo/FWMS20250786_WT_1.pseudo.mzML	312716009	bc7bbe71bc7e022b2c91eb4d8fa5740db217328f7f15e3d788ad4ecd6271f96a	constant-IM copy + DIAspeXtract 1.7.0 (no-mobility options) -threads 8
+E7-03.DIA_astral.04	0	E7-03.DIA_astral.04/pseudo/20250922_OA3_Eno03_22p1min_MaMu_MM995_AdipoPD_Ctr_R1_KO01.pseudo.mzML	262908558	bd376fb46938696d7ce6696d49dc4c5a2e8ca004106bb2d3e949fca52ac7296d	constant-IM copy + DIAspeXtract 1.7.0 (no-mobility options) -threads 8
+E7-03.DIA_astral.07	0	E7-03.DIA_astral.07/pseudo/UP_25_01_18.pseudo.mzML	191726634	79036988a153be49f43e44d38fc7b3da5ce064353ff819b9c379d177f03e8e79	constant-IM copy + DIAspeXtract 1.7.0 (no-mobility options) -threads 8
+E7-03.DIA_astral.09	0	E7-03.DIA_astral.09/pseudo/NCWT1.pseudo.mzML	276017128	121c08d9acef02dcdc37a6f1a3687997adac2c8822f7db8bbfd416e2a774316f	constant-IM copy + DIAspeXtract 1.7.0 (no-mobility options) -threads 8
+E7-03.DIA_astral.05	0	E7-03.DIA_astral.05/pseudo/Astral-2_24_FPEP240188568-1A.pseudo.mzML	541290907	7ac6a06e1fc2f71f617c7fc47a43bf9c349e19e21738f4237537c42e95cad07d	constant-IM copy + DIAspeXtract 1.7.0 (no-mobility options) -threads 8
+E7-03.DIA_astral.10	0	E7-03.DIA_astral.10/pseudo/20230803_AST1_Neo1_UHG_7min_DIA_RR_1_4th_035.pseudo.mzML	235684665	3d32b2fbd2da020c442ef266b24e3deecfa9cdca7797faddb4e30ef19eb72e62	constant-IM copy + DIAspeXtract 1.7.0 (no-mobility options) -threads 8
+E7-03.DIA_astral.11	0	E7-03.DIA_astral.11/pseudo/EVE_250319_S4535_LKJ_PELSA_K562_Stau_control_rep1_120min_R1.pseudo.mzML	301816979	77a0f9e616bbc1a414c829814f9348e6e52c6b3bf2c7ebbd1949033ac9a7dc14	constant-IM copy + DIAspeXtract 1.7.0 (no-mobility options) -threads 8
+E7-03.DIA_astral.06	0	E7-03.DIA_astral.06/pseudo/EXP24090_2024ms0725X47_A.pseudo.mzML	379778173	b757d72fb417633f1d9fda4ae02dac5ae2d5b24b399124ffded2997fb30a8517	constant-IM copy + DIAspeXtract 1.7.0 (no-mobility options) -threads 8
+E7-03.DIA_orbitrap.09	0	E7-03.DIA_orbitrap.09/pseudo/20220902_Sarah_Inma_C_KO_4.pseudo.mzML	678595593	8e193b0285edadd0acca2dfe636e415e4e1f58c4b3c338cc86308a20570eaba8	constant-IM copy + DIAspeXtract 1.7.0 (no-mobility options) -threads 8
+E7-03.DIA_astral.12	0	E7-03.DIA_astral.12/pseudo/ASTRAL_dataset_mix_12_bacteria.pseudo.mzML	747179512	5ab8f12f9850512dfc09f933ecffbcd3db2471dc0f1a69b74bd9836dd6a96617	constant-IM copy + DIAspeXtract 1.7.0 (no-mobility options) -threads 8
+E7-03.DIA_astral.02	0	E7-03.DIA_astral.02/pseudo/20241105_Astral_AUR325075C18TS_DIA_30SPD_V100_MHQ_E2.pseudo.mzML	1146651133	ac20f8e72b64230daae5f74a47c3f08add497c0c96dbfd8ad593b9144483508d	constant-IM copy + DIAspeXtract 1.7.0 (no-mobility options) -threads 8

@@ -1,0 +1,18 @@
+manifest	item	files	failures	result
+item01-heldout	#1	80	0	PASS
+item02-H1	#2	12	0	PASS
+item02-H2	#2	4	0	PASS
+item03-heldout	#3	181	0	PASS
+item04-test	#4	10	0	PASS
+item05-heldout	#5	5	0	PASS
+item05-negative	#5	1	0	PASS
+item06-H1	#6	5	0	PASS
+item06-H2	#6	4	0	PASS
+item07-E7-03	#7	214	0	PASS
+item09-H1	#9	4	0	PASS
+item11-f7test	#11	10	0	PASS
+item11-final	#11	10	0	PASS
+item15B-sets	#15B	10	0	PASS
+item17-heldout	#17	4	0	PASS
+item02-H2_vs_H1		4	0	PASS
+item06-H2_vs_H1		4	0	PASS
