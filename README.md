@@ -580,7 +580,7 @@ MGF→mzML direction is exact.
 | `-species_call_min_units <n>` | 200 | With `-species_call decoy`: fewer spectra with taxon evidence make the run a few_spectra no_call |
 | `-species_call_decoys <n>` | 5 | With `-species_call decoy`: decoy tags per tag (1-100) |
 | `-species_pi0 <f>` | 1 | With `-species_call decoy`: pi0 of the q-values; 1 = Benjamini-Hochberg, 0 = estimate (Storey) |
-| `-species_orientation <mode>` | forward | `both`: also look each tag up reversed (a tag read from b ions is written reversed); one informative reading is used as it is, two are intersected, two without a common taxon skip the tag. Independent of `-orientation` (which applies to `-fasta` and `-recon_fasta`). The analytic `log_pvalue` and `qvalue` columns are NA under `both`, also with `-species_call decoy`; the calibrated value is its `decoy_qvalue` |
+| `-species_orientation <mode>` | forward | `both`: also look each tag up reversed (a tag read from b ions is written reversed); one informative reading is used as it is, two are intersected, two without a common taxon skip the tag. Independent of `-orientation` (which applies to `-fasta` and `-recon_fasta`). The analytic `log_pvalue` and `qvalue` columns are NA under `both`, also with `-species_call decoy`; the decoy-based value is its `decoy_qvalue` (not calibrated in 1.12.0; see `-species_call`) |
 | `-subsample_spectra <n>` / `-subsample_fraction <f>` | 0 | Tag only a random subset (count or fraction; if both are given, the count wins); 0 = all |
 | `-subsample_seed <n>` | 1 | Seed for the `-subsample_*` selection |
 | `-mzpeak_read_memory <MB>` | 0 | No effect; accepted for existing command lines |
@@ -1129,13 +1129,15 @@ Dickeya/Yersinia, but it also suppresses genuine low-abundance taxa, and on a
 human run it disperses the mammalian block without improving the margin. See
 [doc/SPECIES-DETECTOR.md](doc/SPECIES-DETECTOR.md) for the numbers.
 
-**Calibrated calls (opt-in).** `-species_call decoy` appends `call
+**Decoy-based calls (opt-in, experimental).** `-species_call decoy` appends `call
 call_reason decoy_spectra decoy_expected decoy_qvalue share lod` to every row:
 `present`, `no_call` (low_resolution, few_spectra, unstable, near_neighbour) or
 `not_detected` with a detection limit, never "absent". The null is decoy tags
 looked up like the tags plus the spill a stronger related taxon is expected to
 cause; `decoy_expected` is that null's expectation (`expected` keeps its 1.10
-meaning). The shipped parameters are provisional. See
+meaning). The shipped parameters are provisional (not fitted), and in 1.12.0
+the decoy null failed its development check on real runs, so `call` and
+`decoy_qvalue` are not calibrated. See
 [doc/SPECIES-DETECTOR.md](doc/SPECIES-DETECTOR.md).
 
 **Both tag orientations (opt-in).** Tags are written N->C under a y-ion
@@ -1145,7 +1147,7 @@ readings: one informative reading is used, two are intersected, and a tag
 whose readings share no taxon is skipped (so counts can fall as well as
 rise). No analytic background follows from that rule, so the analytic
 `log_pvalue` and `qvalue` columns are NA under `both`, with or without
-`-species_call decoy`, and a warning says so; the calibrated value is the
+`-species_call decoy`, and a warning says so; the decoy-based value is the
 `decoy_qvalue` (and `call`) of `-species_call decoy`. It is
 not coupled to `-orientation`, whose default (both) would otherwise change
 the species report.

@@ -6,8 +6,10 @@ All defaults are those of FASTag 1.11, with one exception (#7 below). At the
 defaults every output is the same as FASTag 1.11.0 byte for byte, with one
 exception: a `-label_out` report gains five appended `label_call` rows, its
 1.11 rows staying a byte prefix (#3a below; approved 2026-11-07). Every new
-option is opt-in. The options marked experimental are not validated on
-held-out data yet. The README's command-line reference describes each option.
+option is opt-in. No new option is validated on held-out data in 1.12.0:
+the held-out acceptance runs of the 1.12 items have not been scored, so every
+new option is experimental. The README's command-line reference describes
+each option.
 
 ### Changed default
 
@@ -21,7 +23,9 @@ held-out data yet. The README's command-line reference describes each option.
   `-acquisition_probe_spectra` (4000) sets how many MS2 the check reads.
   The rule was tuned once on 183 public data sets (one change: the
   periodicity threshold is 0.2, so converted raw diaPASEF, which writes the
-  windows of a frame in a varying order, is refused too).
+  windows of a frame in a varying order, is refused too). Its held-out
+  release test (a fresh PRIDE sample, registry E7-03) has not been run: the
+  SCIEX SWATH files of that sample still need converting on Windows.
 
 ### Changed output when an existing option is given
 
@@ -36,24 +40,31 @@ held-out data yet. The README's command-line reference describes each option.
   `-unknown_charge assume2|enumerate|infer` (default assume2, as 1.11),
   `-charge_min` (2), `-charge_max` (4), `-charge_infer_margin` (2),
   `-isotope_error` (0). A charge in the file header is never replaced.
-- **Complement rules (#2):** `-complement_rule same_charge|precursor|both`
-  (default same_charge), `-complement_tolerance` (0.02),
-  `-complement_tolerance_unit Da|fragment` (Da), `-complement_tol_factor`
-  (0.5), `-complement_midp` (off).
-- **Profile centroiding (#9):** `-pick_profile legacy|auto|off` (default
-  legacy: mzPeak only, as 1.11), `-pick_unknown_type` (off).
+- **Complement rules (#2, experimental):**
+  `-complement_rule same_charge|precursor|both` (default same_charge),
+  `-complement_tolerance` (0.02), `-complement_tolerance_unit Da|fragment`
+  (Da), `-complement_tol_factor` (0.5), `-complement_midp` (off).
+- **Profile centroiding (#9, experimental):** `-pick_profile legacy|auto|off`
+  (default legacy: mzPeak only, as 1.11), `-pick_unknown_type` (off).
 - **c/z-dot ion series (#15, experimental):** `-ion_series by|cz|auto`
   (default by).
-- **Census (#11):** `-census`, `-census_out`, `-census_summary_out`, and the
-  identifications join `-census_ids` (idXML or mzid with q-values),
-  `-census_ids_fdr` (0.01), `-census_triage_evalue` (0.01).
-- **Calibrated species call (#1, experimental):** `-species_call none|decoy`
+- **Census (#11, experimental):** `-census`, `-census_out`,
+  `-census_summary_out`, and the identifications join `-census_ids` (idXML
+  or mzid with q-values), `-census_ids_fdr` (0.01), `-census_triage_evalue`
+  (0.01).
+- **Species call (decoy, #1, experimental):** `-species_call none|decoy`
   (default none), `-species_call_params`, `-species_call_min_units` (200),
-  `-species_call_decoys` (5), `-species_pi0` (1).
+  `-species_call_decoys` (5), `-species_pi0` (1). The shipped parameter table
+  (`data/taxonomy/species_call.tsv`) is provisional, not fitted, and the
+  development check of the decoy null failed on real runs (the decoy
+  replicate counts are not Poisson around the modelled rate; KS p 6.7e-41
+  over 1760 genus rows of 36 public FTMS runs), so `call`, `decoy_qvalue`
+  and `lod` are not calibrated.
 - **Species lookup in both orientations (#10, experimental):**
   `-species_orientation forward|both` (default forward). Under `both` the
   analytic `log_pvalue` and `qvalue` columns are NA; only the decoy columns of
-  `-species_call decoy` are calibrated.
+  `-species_call decoy` (`decoy_qvalue`, `call`) carry a q-value, and they are
+  not calibrated (see #1).
 - **Chemistry v2 and the alkylation call (#3c-#3g, experimental):**
   `-digest_models_version shipped|v2`, `-digest_detection none|shipped`,
   `-digest_flank2 off|auto`, `-digest_min_confidence` (0, off),
