@@ -26,6 +26,23 @@ sha256 bc36282b..., integration/1.12 at fe4e12c, OpenMS 70cebcd144),
   three `BINARY.<case>.txt` files was added after the run to say so, and
   gate_new_cases.sh now writes it.
 
+**Added at the RC rebuild (2026-11-08), PROVISIONAL until the user
+approves them:** the five wave-2 cases of PLAN-INTEGRATION 4.2 from the
+`feat/gate-cases-112` track, etd_auto (#15, opt-in `-ion_series auto`),
+species_call (#1, opt-in `-species_call decoy`), chem_reports (#3),
+census_dda and census_recon (#11). The 2026-11-07 approval names only
+dia_refuse, pseudo_pass and profile_mzml; these five follow the plan's
+table (census_* through refs-dev first, as they were) and can be dropped
+by removing their `<case>.digest` and `BINARY.<case>.txt` files. Made with
+`GATE_NEW_REFS=<dir> GATE_CASES="etd_auto species_call chem_reports
+census_dda census_recon" gate_new_cases.sh --refs` at 32 threads with the
+RC rebuild binary (FASTag.bin sha256 cf3d73da..., integration/1.12 at
+69bfe94, inputs staged with `--stage` in data:/scratch/kohlbach/fastag112-rcb/in).
+Every non-info line equals its `../refs-dev` reference (chem_reports after
+the input-directory mask of c68cf5e). The 12 earlier digests were not
+re-made: the RC rebuild binary passes them unchanged (gate.sh `GATE PASS
+(9 cases)`, `NEW CASES PASS (3 cases)`), so their outputs did not change.
+
 charge_infer (#6) is not in this set: the approval names the three cases
 above, and the plan adds charge_infer only after its acceptance. It stays in
 `../refs-dev`.
@@ -36,7 +53,8 @@ they are in `data:/scratch/kohlbach/fastag112-rc/rc2/val/refs-1.12.0/out`.
 Check a binary against this set on data:
 
     GATE_REFS=<repo>/tools/gate-1.12/refs-1.12.0 /ceph/ibmi/abi/oliver/fastag-gate/gate.sh <FASTag> <outdir>
-    GATE_NEW_REFS=<repo>/tools/gate-1.12/refs-1.12.0 GATE_CASES="dia_refuse pseudo_pass profile_mzml" \
+    GATE_NEW_REFS=<repo>/tools/gate-1.12/refs-1.12.0 \
+      GATE_CASES="dia_refuse pseudo_pass profile_mzml etd_auto species_call chem_reports census_dda census_recon" \
       bash <repo>/tools/gate_new_cases.sh <FASTag> <outdir>
 
 The digests do not depend on the thread count, except the -out_spectra mzML,
