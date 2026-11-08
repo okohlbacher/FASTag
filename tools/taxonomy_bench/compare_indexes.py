@@ -126,8 +126,9 @@ def main() -> int:
                 if rp.exists():
                     repro["checked"] += 1
                     repro["identical"] += sha(rp) == sha(ref["path"])
-            pc = paper.get(rid, {}).get(PAPER_COL.get(arm, ""), "")
-            cur = paper.get(rid, {}).get(CURRENT_COL.get(arm, ""), "")
+            # per_run_top1.tsv marks a wrong call with a trailing " x".
+            pc = (paper.get(rid, {}).get(PAPER_COL.get(arm, ""), "") or "").split(" ")[0]
+            cur = (paper.get(rid, {}).get(CURRENT_COL.get(arm, ""), "") or "").split(" ")[0]
             if cur:
                 repro["calls_checked"] += 1
                 repro["calls_equal_v1110"] += cur == ref["top1"]
