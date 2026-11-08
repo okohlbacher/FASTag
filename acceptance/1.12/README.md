@@ -32,5 +32,18 @@ The RC bundle (opt/ and data/ of a117801) is at `data:/scratch/kohlbach/fastag-h
 ## Rules that bind the runs
 
 Each manifest row is in the registry and committed before its run; each frozen config is scored exactly once;
-never re-scored after seeing results; never tuned on held-out data; runs on node data only. A config whose status in
+never re-scored after seeing results; never tuned on held-out data. A config whose status in
 `frozen-configs.tsv` is not `frozen` cannot be scored until its open part is closed and committed.
+
+Where a run may happen (amended 2026-11-08, when the user asked to farm the acceptance runs out to BinAC2): on node
+data, or on BinAC2 under all of these conditions:
+
+- FASTag is the byte-identical RC binary (`FASTag.bin`, sha256
+  `c4c2ad67fcd9106e474f552267f7cdfefe107f394b268bbc236308b773e4d7f3`), started through the documented wrapper
+  (`bin/FASTag`, which runs it through data's loader and glibc; see `output/features-1.12/BINAC2-RUNTIME.md`).
+- The BinAC2 public gate has reproduced `refs-1.12.0`: 17/17 digests identical (Slurm jobs 6464655 and 6464797,
+  recorded in `output/features-1.12/BINAC2-RUNTIME.md`).
+- The item's inputs have passed sha256 verification on BinAC2 against their manifest before the run.
+
+Each config is still scored exactly once, on one of the two sites, and its registry row records where it ran (data or
+BinAC2, with the Slurm job id for BinAC2).
