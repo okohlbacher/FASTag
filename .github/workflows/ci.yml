@@ -1466,8 +1466,10 @@ jobs:
   # supported base). Every push and PR runs gui/e2e-tauri against the stub
   # CLI (gui/testing/stub-fastag); before a tag, gui-linux-smoke-deb runs
   # the same specs against the installed .deb and its real CLI. Probe, run,
-  # table, cancel, and two recorded WebKitGTK gates: time to first rows on a
-  # generated 1M-row file and the IPC message rate of a chatty run.
+  # table, cancel, a Tags row opened in the Spectrum tab (P4: the stub serves
+  # the G1 CLI's real --helphelp and -dump_spectrum output), and two recorded
+  # WebKitGTK gates: time to first rows on a generated 1M-row file and the
+  # IPC message rate of a chatty run.
   # Informational in P1-P4 (required from P5), hence continue-on-error.
   # Independent of the CLI build, like the gui job.
   tauri-driver:

@@ -19,7 +19,7 @@ describe("the view fixture's viewIds", () => {
   it('covers a spec of every kind', () => {
     const views = (golden as { view: ResultsView }[]).map((g) => g.view)
     expect(views.length).toBeGreaterThan(20)
-    for (const k of ['sort', 'spectrum', 'minLength', 'maxEvalue', 'fastaHit', 'perSpectrum'] as const)
+    for (const k of ['sort', 'spectrum', 'spectrumExact', 'minLength', 'maxEvalue', 'fastaHit', 'perSpectrum'] as const)
       expect(views.some((v) => v[k] != null), k).toBe(true)
   })
 

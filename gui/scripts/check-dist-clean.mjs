@@ -23,7 +23,9 @@ const MARKERS = [
   'Hog1p_WT_Rep3_Chymo_5uL', // the batch fixtures (src/fixtures/cli/batch)
   '100815_MM_ABPP_H1993_DMSO_DIA1_new',
   'sp|Q9NX58|LYAR_HUMAN', // the P4c recon fixtures (src/fixtures/cli/v112-pxd014764-delta-ext3)
-  'VIMSS17368' // and v1111-ecoli-recon-loc
+  'VIMSS17368', // and v1111-ecoli-recon-loc
+  'gate-batch.sdrf', // the SDRF fixture (src/fixtures/sdrf)
+  'Saccharomyces cerevisiae S288C' // the taxonomy dump fixture
 ]
 
 function* files(d) {

@@ -167,6 +167,18 @@ export const START: HelpPage = {
               When a file is done, click it in the batch list to see its tags and reports. The results of the last
               file are shown at the end.
             </li>
+            <li>
+              <strong>Load SDRF…</strong> on the Batch view (or dropping an <code>.sdrf.tsv</code> on the window)
+              compares each file with its SDRF rows, matched by <code>comment[data file]</code>: organism (by NCBI
+              taxid; a genus call that contains the SDRF species is consistent at genus, and only the called genus counts: an
+              SDRF organism found only lower in the present list differs, or, in a mixed sample, is ~ <em>present, not
+              called</em>), cleavage agent, label,
+              modifications, instrument and fragment tolerance. Only FASTag&apos;s own calls and reports count, so a
+              no call is never a difference. Fragment tolerance and modifications are the run&apos;s settings, not
+              measurements: where they differ the table shows ≠ <em>run setting differs</em>, which is no
+              correction. <strong>Export SDRF corrections TSV…</strong> writes the differences; the SDRF itself is
+              never changed, and neither this export nor the summary export will write over it.
+            </li>
           </ul>
           <p>
             If a file fails, see <L to="faq-batch-failed">Some files of a batch failed</L>.
@@ -553,6 +565,29 @@ export const RESULTS: HelpPage = {
             chance rate (on the safe side); at 0.05 to 0.1 the real rate was about 1.6 times higher. How well it holds
             depends on the entrapment database and on how many tags match it. A q_db of 0 means too few entrapment
             matches to measure, not no risk. It says nothing about whether the tag reads its peptide correctly.
+          </p>
+        </>
+      )
+    },
+    {
+      id: 'results-spectrum',
+      title: 'The Spectrum tab',
+      body: (
+        <>
+          <p>
+            In Tags, choose a row and press Enter (or Open in Spectrum). The Spectrum tab shows that spectrum with the
+            peaks FASTag tagged: after centroiding, the precursor cut, deisotoping and the peak budget, as the run
+            prepared them (FASTag prints them with -dump_spectrum, under the options of the run that wrote the
+            table). The chosen tag&apos;s ladder is drawn on them: its b or y ions one residue apart (the residue
+            divided by the fragment charge), each step with its error in ppm. A <L to="tags-gapped">gapped tag</L>{' '}
+            crossed a missing peak, shown dashed. Choose another tag of the spectrum below to draw its ladder; ◀ and ▶
+            go to the previous and next tagged spectrum. The wheel or + and − zoom, dragging or the arrow keys pan.
+          </p>
+          <p>
+            The tab needs a FASTag that has -dump_spectrum; with an older one it is not there, and the row action says
+            &quot;Spectrum view needs FASTag 1.17 or later&quot;. A table no run of this app wrote asks for its input
+            (Locate input…) and is shown at FASTag&apos;s default settings, which it says. No other reader is used:
+            peaks read another way are not the peaks FASTag tagged.
           </p>
         </>
       )

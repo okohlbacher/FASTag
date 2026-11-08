@@ -14,7 +14,10 @@ import RunBar from './run/RunBar'
 import LogDrawer from './run/LogDrawer'
 import BatchList from './run/BatchList'
 import SummaryTable from './run/SummaryTable'
+import SdrfPanel from './sdrf/SdrfPanel'
+import { useSdrf } from './sdrf/useSdrf'
 import ResultTabs from './results/ResultTabs'
+import { useSpectrumSupport } from './spectrum/support'
 import FailureBanner from './results/FailureBanner'
 import { createViewStore, useView } from './app/viewStore'
 import { createExportJobs, ExportJobsContext } from './results/exportJobs'
@@ -93,6 +96,16 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
     overviewLanding: () => OVERVIEW_TASKS.includes(taskRef.current)
   })
   const { running, batchRunning, busy, jobs } = run
+  // The Batch view's SDRF (P4): compared with the jobs as they finish.
+  const sdrf = useSdrf(run.jobs, run.batchData, {
+    nodes: typeof values['taxonomy_nodes'] === 'string' ? values['taxonomy_nodes'] : undefined,
+    names: typeof values['taxonomy_names'] === 'string' ? values['taxonomy_names'] : undefined
+  })
+  // The files no export may write (the loaded SDRF): every writeSummary
+  // caller in the Batch view passes this one list, and the backend refuses
+  // a destination that is one of them (report.rs write_summary).
+  const sdrfPath = sdrf.file?.path ?? null
+  const writeProtect = useMemo(() => (sdrfPath ? [sdrfPath] : []), [sdrfPath])
   // The checks before a run (GUI-DESIGN 3 S1, P2b): from the CLI's metadata
   // probe when it has one, and the form.
   const inspector = useInspector({ input, values, binOk: !!bin?.ok })
@@ -106,6 +119,8 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   useEffect(() => {
     window.fastag.probe().then(setBin)
   }, [])
+  // P4: the Spectrum tab needs a CLI with -dump_spectrum.
+  const spectrumSupport = useSpectrumSupport(bin)
 
   // The backend asks before a close or quit kills an active run.
   useEffect(() => window.fastag.onCloseRequested((what) => setCloseAsk(what)), [])
@@ -223,7 +238,7 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   }
 
   // OS file drops, routed by type (drop.rs, shell/useDrops.ts).
-  const { dragOver, dropNote, dismissNote } = useDrops({ busy, jobs: jobs.length, setInputPath, session, run, setView })
+  const { dragOver, dropNote, dismissNote } = useDrops({ busy, jobs: jobs.length, setInputPath, session, run, setView, loadSdrf: sdrf.load })
 
   // Esc outside a field: dismisses a shown notice (the drop note, then the
   // toast) first, so dismissing one never kills a run; else cancels a run
@@ -249,6 +264,8 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   // fragment tolerance came from the instrument preset chosen when that
   // preset still matches what the run was sent.
   const shown = run.shown
+  // The Spectrum tab dumps peaks under the options of the run shown.
+  const spectrumRun = useMemo(() => (shown ? { input: shown.input, params: shown.params } : null), [shown])
   const preset = INSTRUMENTS.find((x) => x.id === session.instrument)
   const presetLabel = shown && preset && matchesInstrument(shown.params, preset) ? presetText(preset) : null
   const overview = useMemo(
@@ -589,6 +606,8 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
                 showFailure={jobs.length === 0}
                 overview={overview}
                 onOverviewAction={(a) => void overviewAction(a)}
+                spectrumSupport={spectrumSupport}
+                spectrumRun={spectrumRun}
                 rerunResConf={
                   // Only for the output of the run the form would repeat.
                   run.results?.input && run.results.input === input && jobs.length === 0 && bin?.ok
@@ -676,6 +695,18 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
                     summary={run.summary}
                     busy={busy}
                     outDir={run.outDir}
+                    sdrf={sdrf.comparison}
+                    protect={writeProtect}
+                    onShow={(input) => {
+                      const j = jobs.find((x) => x.input === input)
+                      if (j) showBatchJob(j)
+                    }}
+                  />
+                  <SdrfPanel
+                    sdrf={sdrf}
+                    protect={writeProtect}
+                    busy={busy}
+                    outDir={run.outDir}
                     onShow={(input) => {
                       const j = jobs.find((x) => x.input === input)
                       if (j) showBatchJob(j)
@@ -697,6 +728,17 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
                   </button>
                 </div>
                 {folderNoteAt('batch')}
+                {/* An SDRF dropped before any file: kept for the batch. */}
+                {sdrf.file && (
+                  <p className="hint" role="status">
+                    SDRF {sdrf.file.path} loaded ({sdrf.file.rows} rows): add the batch's files to compare them with it.
+                  </p>
+                )}
+                {sdrf.error && (
+                  <p className="hint note-flag" role="alert">
+                    {sdrf.error}
+                  </p>
+                )}
               </div>
             )}
           </section>

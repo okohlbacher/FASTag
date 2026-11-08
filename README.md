@@ -182,7 +182,11 @@ hit** filter on `fasta_hit` offers All, In database (`fwd`/`rev`), Entrapment
 (`efwd`/`erev`) or Not in database; **Export shown rows…** writes the filtered rows, in
 the shown columns, to a new TSV, and a `-res_conf` table also exports as Stitch or ALPS
 reads, byte for byte what `tools/tags_to_denovo.py` writes. The tags table can be walked
-by keyboard; Cmd/Ctrl+C copies the active row and Cmd/Ctrl+Shift+C its USI. A failed run quotes FASTag's reason and offers
+by keyboard; Cmd/Ctrl+C copies the active row and Cmd/Ctrl+Shift+C its USI, and Enter opens its
+spectrum in the **Spectrum** tab: the peaks FASTag tagged (`-dump_spectrum`, under the run's own
+options) as a stick plot with zoom, the tag's b or y ladder drawn on them with the error of each step,
+and the spectrum's other tags. The tab needs a CLI whose `--helphelp` lists `-dump_spectrum`; with an
+older one it is hidden and the row action says "Spectrum view needs FASTag 1.17 or later". A failed run quotes FASTag's reason and offers
 its command line to copy. A run never outlives the app: if the app is killed,
 the CLI ends within seconds (a watchdog on macOS and Linux, plus the parent-death
 signal on Linux; a kill-on-close job per run on Windows, which a browser or editor the app
@@ -212,7 +216,7 @@ window has four views, switched from the top bar or with Cmd/Ctrl+1..4:
 **Setup**, **Results**, **Batch** and **History** (every recorded run, with
 its exact command line to copy, its settings to load back into Setup, and a
 Re-run of the same command line); a
-progress pill in the top bar follows the run from any view, and a finished
+progress pill in the top bar follows the run from any view (the Batch view compares a batch with its SDRF: organism by NCBI taxid, protease, label, modifications, instrument and tolerance, with a corrections TSV), and a finished
 run in the background raises a system notification. Spectra, FASTA,
 taxonomy, tags and report files can be dropped anywhere on the window. A
 built-in **Help** side panel (F1, or the Help button), with a search, covers

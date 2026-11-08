@@ -25,8 +25,12 @@ import type {
   RunStarted,
   Settings,
   SpeciesReport,
-  TaxdbInfo
+  SpectrumDump,
+  SpectrumSupport,
+  TaxdbInfo,
+  TaxonomyDump
 } from './types'
+import { parseSpecies } from './results/species'
 
 // The spectra the CLI reads as -in (its input-format check is by extension).
 export const SPECTRA = [{ name: 'Spectra', extensions: ['mzML', 'mzml', 'mzpeak', 'mzPeak', 'mgf', 'MGF'] }]
@@ -89,7 +93,11 @@ const api: FastagApi = {
     return typeof r === 'string' ? r : null
   },
   folderSpectra: (dir: string) => invoke<string[]>('folder_spectra_list', { dir }),
-  writeSummary: (dest: string, text: string) => invoke<void>('summary_write', { dest, text }),
+  writeSummary: (dest: string, text: string, protect?: string[]) => invoke<void>('summary_write', { dest, text, protect: protect ?? null }),
+  pickSdrf: () => openOne([{ name: 'SDRF (TSV)', extensions: ['tsv', 'txt', 'sdrf'] }]),
+  // sdrf_read answers with the raw bytes (an ArrayBuffer, not JSON).
+  sdrfRead: (path: string) => invoke<ArrayBuffer>('sdrf_read', { path }).then((b) => new Uint8Array(b)),
+  taxonomyDump: (nodes?: string, names?: string) => invoke<TaxonomyDump | null>('taxonomy_dump', { nodes, names }),
 
   outputsCheck: (params: Record<string, unknown>) => invoke<OutputsCheck>('outputs_check', { params }),
   commandLine: (params: Record<string, unknown>) => invoke<string[]>('command_line', { params }),
@@ -139,7 +147,18 @@ const api: FastagApi = {
     ch.onmessage = onEvent
     return invoke<number>('denovo_export', { source: path, dest, format, topN, minLength, onEvent: ch })
   },
-  species: (path: string) => invoke<SpeciesReport | null>('species', { path }),
+  // Read as text like every report (report.rs: size-capped, lossy UTF-8)
+  // and parsed here (results/species.ts, P4). null: missing, unreadable or
+  // empty, as before.
+  species: async (path: string): Promise<SpeciesReport | null> => {
+    const text = await invoke<string | null>('report_text', { path }).catch(() => null)
+    return text == null ? null : parseSpecies(text, path)
+  },
+  // The Spectrum tab (spectrum.rs, P4): whether the CLI has -dump_spectrum,
+  // and one spectrum's dump under the run's params (spectrum/dump.ts parses it).
+  spectrumSupport: () => invoke<SpectrumSupport>('spectrum_support'),
+  spectrumPeaks: (input: string, nativeId: string, params: Record<string, unknown> | null) =>
+    invoke<SpectrumDump>('spectrum_peaks', { input, nativeId, params }),
   report: (path: string) => invoke<string | null>('report_text', { path }),
   reportHead: (path: string) => invoke<string | null>('report_head', { path }),
   taxdbInfo: (explicit?: string) => invoke<TaxdbInfo | null>('taxdb_info', { explicit }),

@@ -40,6 +40,10 @@ export interface ResultsSort {
 export interface ResultsView {
   sort?: ResultsSort | null
   spectrum?: string | null
+  // With spectrum: the cell must equal it exactly (case-sensitive), not
+  // contain it (browser.rs spectrum_exact). The Spectrum tab's lookups:
+  // 'scan=1' as a substring also matches scan=10..19, 100..199, ...
+  spectrumExact?: boolean
   minLength?: number | null
   maxEvalue?: number | null
   // only: a target hit (fwd/rev); none: no target hit (entrapment-only rows
@@ -200,6 +204,7 @@ export type RunEvent =
   | { kind: 'phase'; label: string }
   | ({ kind: 'done' } & RunResult)
 
+// A row of the -species report (results/species.ts parses it; P4).
 export interface Taxon {
   rank: string
   taxid: number
@@ -216,6 +221,15 @@ export interface Taxon {
 export interface SpeciesReport {
   path: string
   taxa: Taxon[]
+}
+
+// The NCBI taxonomy dumps FASTag's species call reads (sdrf.rs
+// taxonomy_dump), for the SDRF organism comparison (sdrf/taxonomy.ts).
+export interface TaxonomyDump {
+  nodesPath: string
+  namesPath: string
+  nodes: string
+  names: string
 }
 
 export interface TaxdbInfo {
@@ -265,7 +279,14 @@ export interface FastagApi {
   savePreset: (name: string, values: Record<string, unknown>) => Promise<boolean>
   deletePreset: (name: string) => Promise<boolean>
   taxdbInfo: (explicit?: string) => Promise<TaxdbInfo | null>
+  // The -species report, parsed in the renderer (results/species.ts); null
+  // when it is missing, unreadable or empty.
   species: (path: string) => Promise<SpeciesReport | null>
+  // Whether the CLI has -dump_spectrum (spectrum.rs, from --helphelp).
+  spectrumSupport: () => Promise<SpectrumSupport>
+  // `FASTag <the run's argv> -dump_spectrum <nativeId>` on @p input under
+  // the run's @p params (null: the CLI's defaults); its JSON lines in stdout.
+  spectrumPeaks: (input: string, nativeId: string, params: Record<string, unknown> | null) => Promise<SpectrumDump>
   // Text of a digest/label/mass-gap report; null when the file does not exist.
   report: (path: string) => Promise<string | null>
   // The first 64 KiB of the same file (report.rs HEAD_BYTES): enough to tell
@@ -295,7 +316,16 @@ export interface FastagApi {
   folderSpectra: (dir: string) => Promise<string[]>
   // Write the batch summary TSV to @p dest (report.rs summary_write, via a
   // .part file). Rejects with the reason.
-  writeSummary: (dest: string, text: string) => Promise<void>
+  // protect: files the write must never replace (the loaded SDRF); the
+  // backend refuses a dest that is one of them.
+  writeSummary: (dest: string, text: string, protect?: string[]) => Promise<void>
+  // The Batch view's SDRF… (P4): pick an SDRF, read its bytes unchanged
+  // (sdrf.rs sdrf_read; never written), and read the taxonomy dumps the
+  // species call uses: the given ones, else the bundled folder's (null:
+  // none found).
+  pickSdrf: () => Promise<string | null>
+  sdrfRead: (path: string) => Promise<Uint8Array>
+  taxonomyDump: (nodes?: string, names?: string) => Promise<TaxonomyDump | null>
   // The command line a run of these params is, binary first (fastag.rs
   // command_line: the argv `run` replies and History records).
   commandLine: (params: Record<string, unknown>) => Promise<string[]>
@@ -375,4 +405,26 @@ export interface FastagApi {
   onDragHover: (cb: (over: boolean) => void) => () => void
   // The system notification when a run or batch finishes.
   notify: (title: string, body: string) => Promise<void>
+}
+
+// spectrum.rs SpectrumSupport: --helphelp lists -dump_spectrum (supported);
+// probed false: the CLI could not be asked.
+export interface SpectrumSupport {
+  supported: boolean
+  probed: boolean
+  detail: string
+}
+
+// spectrum.rs SpectrumDump: one -dump_spectrum run (or the LRU's copy).
+export interface SpectrumDump {
+  ok: boolean
+  code: number | null
+  timedOut: boolean
+  // The input does not exist (it moved): "Locate input…".
+  missing: boolean
+  // The JSON lines (spectrum/dump.ts parses them).
+  stdout: string
+  // The last stderr line when it failed.
+  reason: string | null
+  cached: boolean
 }

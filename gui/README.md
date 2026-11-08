@@ -35,12 +35,17 @@ gui/
                        BatchList.tsx, the batch job naming (batch.ts), and the batch
                        summary: batchSummary.ts (rows and the majority rule),
                        useBatchSummary.ts (each done job's reports) and SummaryTable.tsx
+    sdrf/              the Batch view's SDRF comparison (P4): sdrfTable.ts (an SDRF read and
+                       written back byte for byte), taxonomy.ts (organisms by NCBI taxid over
+                       nodes.dmp/names.dmp), compare.ts (the six fields and the corrections TSV),
+                       useSdrf.ts and SdrfPanel.tsx; fixtures in src/fixtures/sdrf
     inspector/         the checks before and after a run (P2b): probe.ts (the -probe_input
                        contract and its parser), capabilities.ts (CLI features from --helphelp),
                        instrument.ts (instrument family and preset), checks.ts (the checks, the
                        exit-11 refusal), useInspector.ts and InspectorPanel.tsx
-    results/           ResultTabs.tsx (Overview, Tags, Species, Digest, Mass gaps & recon, Glyco), FailureBanner.tsx (over
-                       the tabs, or on the Batch view beside the queue), reports.ts,
+    results/           ResultTabs.tsx (Overview, Tags, Spectrum, Species, Digest, Mass gaps & recon, Glyco),
+                       FailureBanner.tsx (over the tabs, or on the Batch view beside the queue), reports.ts,
+                       species.ts (the parser of the -species TSV),
                        RunningPanel.tsx (the running state), OverviewPanel.tsx over
                        overview.ts (tiles, checks, suggested settings) and calls.ts (the
                        parser of the calls FASTag wrote); P4c: ReconView.tsx (Mass gaps &
@@ -51,7 +56,11 @@ gui/
                        tables and their filters and sort, kept across tab switches)
     ParamField.tsx     one form field per manifest parameter
     ResultsTable.tsx   tags browser: virtualized table with filters, column choice and export,
-                       a keyboard active row, copy row and copy USI
+                       a keyboard active row, copy row and copy USI, Open in Spectrum (Enter)
+    spectrum/          the Spectrum tab (P4): SpectrumPanel.tsx (stick plot, ladder, the
+                       spectrum's tags, prev/next), dump.ts (the one parser of -dump_spectrum's
+                       JSON lines), ladder.ts (the tag ladder on the dumped peaks) and
+                       support.ts (whether the CLI has -dump_spectrum)
     export/            denovo.ts: Stitch and ALPS reads, a byte-exact port of
                        tools/tags_to_denovo.py (its golden files in fixtures/denovo/),
                        the reference the test bridges convert with
@@ -83,7 +92,9 @@ gui/
   scripts/             gen-params.mjs (parameter manifest), bundle-macos.sh (macOS resource tree for release bundles),
                        check-dist-clean.mjs (a release dist/ carries no mock or fixture code),
                        denovo-golden.mjs (the de novo golden files from tools/tags_to_denovo.py)
-  testing/stub-fastag/ a sh stand-in for the CLI, for the Rust run-lifecycle tests
+  testing/stub-fastag/ a sh stand-in for the CLI, for the Rust run-lifecycle tests and the
+                       tauri-driver specs (it serves the G1 CLI's real --helphelp and dumps);
+                       stub-fastag-1.11/ the same answering as FASTag 1.11.0 (no -dump_spectrum)
   e2e-web/             Playwright specs and their fixtures (see Tests)
   src-tauri/           Rust backend
     src/lib.rs         plugin setup and Tauri command registration
@@ -107,8 +118,11 @@ gui/
     src/drop.rs        the window-wide drop zone: dropped paths sorted by type into one route
     src/notify.rs      the system notification when a run or batch finishes
     src/reveal.rs      ResolvedOutputs (every output, absolute) and Reveal / Open folder, limited to run outputs
-    src/species.rs     species TSV read + FTX2 taxdb header read
-    src/report.rs      digest/label/mass-gap report read
+    src/species.rs     FTX2 taxdb header read (the species TSV is parsed in TS, results/species.ts)
+    src/report.rs      digest/label/mass-gap/species report read (as text)
+    src/spectrum.rs    the Spectrum tab: spectrum_support (-dump_spectrum in --helphelp) and
+                       spectrum_peaks (`-dump_spectrum <nativeId>` under the run's argv; LRU of 64)
+    src/sdrf.rs        an SDRF's bytes, unchanged (never written), and the taxonomy dumps the species call reads
     src/inspect.rs     the CLI's options (--helphelp) and the metadata probe (-probe_input, run
                        only when --helphelp lists it; timeout and output cap)
     src/denovo.rs      the Stitch/ALPS export job: tools/tags_to_denovo.py ported (the same golden
@@ -215,7 +229,45 @@ call and more than half of them, and a no call, "too little evidence", a
 ranking without call columns, a failed or a queued job never counts. A raw
 DIA input that FASTag 1.12 refuses (exit 11) fails with the CLI's sentence.
 **Export summary TSV…** writes the table, cell for cell, with a `yes` column
-after each call column where it differs. The SDRF comparison follows in P4.
+after each call column where it differs.
+
+**Load SDRF…** (or an `.sdrf.tsv` dropped on the window) compares each job
+with its SDRF rows, matched by `comment[data file]` (the input's name, else
+the input the CLI's reports name; spectra and archive extensions aside), on
+organism, cleavage agent, label, modification parameters, instrument and
+fragment tolerance. Only FASTag's output counts: the summary's calls (a no
+call or "too little evidence" is never a difference), the instrument the
+input names and the run's tolerance (the reports' meta and run rows), and the
+run's fixed modifications (its log; FASTag writes no alkylation call). A
+converter's generic instrument term ("Thermo Fisher Scientific instrument
+model") counts as no instrument name: the instrument_model row is read
+instead, else the field is a no call. Fragment tolerance and modifications are
+settings of the run, not measurements: where they differ from the SDRF the
+table shows "≠ run setting differs", a hint on how the run was set up, which
+is never a difference and never a correction. A log that dropped its first
+lines (the GUI keeps the last 5000) and with them the "Modifications:" line is
+a no call, not "none". The organism is matched by NCBI taxid through the
+`nodes.dmp`/`names.dmp` next to the index: a genus call "Homo" against an SDRF
+"Homo sapiens" is consistent at genus; so is an SDRF taxon above genus that
+contains the call ("Hominidae", "Bacteria"). Only the call (the top genus)
+counts: an SDRF organism the species report calls present only below it (a
+keratin "Homo" under a yeast call) differs, unless the SDRF lists several
+organisms for the run (a mixed sample), where it is "~ present, not called"
+and no correction; an organism the taxonomy does not hold is "not
+checkable". A label call joins its labels with "+" (TMT+SILAC): the field
+matches when every SDRF label is one of them; an SDRF iTRAQ8plex against a
+TMTpro call is "not checkable" (the same mass, as the CLI says), and an
+instrument given by accession only (no NT=) is "not checkable" too. A cell
+that opens with a quote holds a line break only when its row then has the
+header's width; otherwise it is read as written, up to the next tab. The
+summary gains an SDRF column, and **Export SDRF corrections TSV…** writes one line per difference with the
+report row it came from; it is a function of the SDRF, the reports and the
+taxonomy alone (the log only feeds the modifications, a run setting that is
+never written there; pinned by a golden test), so the same TSV follows from a
+cluster run's reports. The SDRF is read byte for byte and never
+rewritten: both exports of the Batch view (the corrections and the batch
+summary) refuse the SDRF's own path, in the panel and in the backend (`summary_write`'s protect list, which also catches another spelling
+or a link to the same file).
 
 Setup starts from a task: **Characterize a run** (the default: species with
 extension 2, the digest, label and glyco reports, a tenth of the spectra),
@@ -269,7 +321,7 @@ input, two or more (or a folder) to the batch, a FASTA to `-fasta`, a
 report to the Digest tab, a recon or delta table or an mzTab `-recon_id_out`
 to Mass gaps & recon (an idXML or mzid one is named with a pointer to the
 mzTab form), a glyco report to Glyco and a species report to the Species tab. Nothing is
-taken while FASTag runs. SDRF files are named, not read.
+taken while FASTag runs. An SDRF goes to the Batch view's comparison.
 
 Large tables: the recon, delta, mzTab and glyco tables are read through
 `report_text` (report.rs), capped at 128 MB; an opened or dropped file is
@@ -405,8 +457,8 @@ build_view, kept as the oracle (`browser::reference`), on generated files
 ## Tests
 
 Rust unit tests cover the trust boundaries (`build_args` allowlist and
-flag-injection defence, settings sanitisation, species/taxdb parsing, report
-reading, browser bounds): `cargo test` in `src-tauri/` (it needs
+flag-injection defence, settings sanitisation, taxdb parsing, report
+reading, browser bounds, the -dump_spectrum argv, capability probe and LRU): `cargo test` in `src-tauri/` (it needs
 `src-tauri/resources/fastag` to exist, even empty). The frontend has vitest
 tests (run/batch orchestration, layout completeness, results browser, report
 parsing and logo arithmetic, Digest tab) and a typecheck: `npm test`,
@@ -453,9 +505,21 @@ The stub is steered by environment variables (`STUB_SLEEP`,
 name: an input named `*.slow.*` keeps running, `*.chatty.*` prints 5,000 log
 lines and `*.fail.*` fails.
 
+The Spectrum tab (P4): `spectrum/ladder.test.ts` is the ladder oracle, every
+tag of two real runs of the G1 CLI on the E. coli fixture (20 ppm and 0.3 Da)
+checked on the peaks its `-dump_spectrum` printed
+(`src/fixtures/cli/v112-ecoli-dump/`), independently of ladder.ts;
+`spectrum/dump.test.ts` the dump parser on those dumps;
+`results/species.test.ts` the species parser on every real species report in
+the repository; `p4a.test.tsx` the tab at App level; `e2e-web/specs/p4a.spec.ts`
+the tab in Chromium and WebKit (`?fixture=spectrum`, and `spectrum-1.11` for a
+CLI without `-dump_spectrum`: no tab, and the row action says "Spectrum view
+needs FASTag 1.17 or later"). When another worktree's preview holds port 4173,
+`E2E_PORT=<port> npm run e2e` serves this one's build elsewhere.
+
 The tauri-driver specs in `e2e-tauri/` drive the real debug app in WebKitGTK
 on Linux (tauri-driver and WebKitWebDriver under xvfb): probe, run, table,
-cancel, and two recorded gates, the time to first rows on a generated
+cancel, a Tags row opened in the Spectrum tab, and two recorded gates, the time to first rows on a generated
 1M-row file and the IPC rate of a chatty run (log lines and messages, counted
 apart, so batched log events still count every line). Native dialogs cannot
 be driven, so a spec replaces only `window.fastag.pickInput` /

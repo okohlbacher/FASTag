@@ -125,3 +125,39 @@ sha256 of each file:
     75de7aff1726057e2fc320fd5362e4bcf9ed65f04342828e180c9a8d1ca4f15e  v1111-ecoli-recon-loc/run.recon.mzTab
     de18346938836c1b46d8f0212b69dec51de1f8c252b59df352553de1d8c9fa95  v1111-ecoli-recon-loc/run.recon.tsv
     e65e2aeac74c682412201ca2804330161e0af83710ad32eb0c2c79436828ea74  v1111-ecoli-recon-loc/run.tags.glyco.tsv
+
+## v112-ecoli-dump: -dump_spectrum (P4 PR a)
+
+The ladder oracle and the dump parser fixtures (`src/spectrum/*.test.ts`),
+the e2e `?fixture=spectrum` scenario and the stub CLI's `-dump_spectrum`
+(`gui/testing/stub-fastag`). The binary is the G1 build of
+`feat/g1-gui-cli-additions` (`-probe_input`, `-dump_spectrum`, with the #6
+refusal of c9e321f) on node `data`, `/scratch/kohlbach/fastag112-g1/build6`,
+copied to `/scratch/kohlbach/fastag-gui-p4a/bin/FASTag` (sha256
+12a99461...cd49b; it still says Version 1.11.0). Input: the repository's
+public `test/fixtures/Ecoli_MS2_small.mzML` (sha256 30717211...16f6e).
+Script: `/scratch/kohlbach/p4a_fx.sh`.
+
+- `dumps.ppm.jsonl`: `FASTag -in Ecoli_MS2_small.mzML -dump_spectrum <id>
+  -threads 1` for each of the 129 spectra of the CLI-default run
+  `FASTag -in Ecoli_MS2_small.mzML -out tags.tsv -threads 1`, one dump after
+  another in the order of the run's tags. That run's tags are byte-identical
+  to `e2e-web/fixtures/ecoli.tags.tsv` (sha256 479a0360...fa3f7), which the
+  tests read for them.
+- `dumps.da.jsonl` and `da.tags.tsv`: the same with `-fragment_tolerance 0.3
+  -fragment_tolerance_unit Da` (139 spectra, 5,937 tags).
+- `helphelp.txt`: that binary's `--helphelp` (stderr; the `stty` line its
+  OpenMS console probe prints without a terminal removed); `helphelp-1.11.0.txt`:
+  the same of FASTag 1.11.0 (`/ceph/ibmi/abi/oliver/opt/fastag-1.11.0`), which
+  has no `-dump_spectrum`.
+- `unknown.err`: stderr of `-dump_spectrum scan=does-not-exist` (exit 6,
+  nothing on stdout), without its timing line.
+
+sha256 of each file:
+
+    2279744ab2d971a7f49fbb56b51455089d311fd2415ef207bac258e6b88be7d4  v112-ecoli-dump/da.tags.tsv
+    d84008309aef5e75f708e4975423c3f931304745ff9a6093a42cd15452b93fef  v112-ecoli-dump/dumps.da.jsonl
+    60e0f579453df6b85767b2e3e2d394b90533420dea710eb6c8b6a85d8cf8afb3  v112-ecoli-dump/dumps.ppm.jsonl
+    575a8cc771bfb6275163bcbb0995d008eec00f2d423b5aee1793bc283dcb7c3d  v112-ecoli-dump/helphelp-1.11.0.txt
+    6e898e629a0085b33534d5d37f6c2eb395839db89ca7b2aa794afc2ad3774893  v112-ecoli-dump/helphelp.txt
+    1aff50da904ee24e42c3bd35ce1d22bd7bd989d44d397ff8ad3341a75a21d9c9  v112-ecoli-dump/unknown.err

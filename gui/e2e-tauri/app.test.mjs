@@ -1,7 +1,8 @@
 // tauri-driver + WebKitWebDriver specs against the real debug app on Linux
 // (GUI-DESIGN section 9, layer 4; P1). Limited to what runs inside the
 // webview: probe, run, table, cancel, time to first rows on a generated 1M
-// file and the IPC message rate of a chatty run. Native dialogs cannot be
+// file, the IPC message rate of a chatty run, and (P4) a row opened in the
+// Spectrum tab. Native dialogs cannot be
 // driven, so a spec replaces only window.fastag.pickInput / pickResults with
 // a function that returns its path; every other call goes through the real
 // invoke, the real Rust backend and the CLI.
@@ -226,6 +227,68 @@ test('table: time to first rows on a generated 1M-row file (recorded)', { timeou
     gates.firstRowsMs1M = firstRows
     gates.fullCountMs1M = Date.now() - t0
   })
+})
+
+// P4 PR a (GUI-DESIGN 3 S5, 9 layer 4, 10 P4): open a row of the Tags table
+// in the Spectrum tab through the real backend: spectrum_support asks the CLI's
+// --helphelp, spectrum_peaks runs `-dump_spectrum` and the ladder is drawn on
+// the peaks it printed. The stub serves the G1 CLI's real --helphelp and
+// dumps (src/fixtures/cli/v112-ecoli-dump); the real CLI dumps the E. coli
+// fixture, whose CLI-default tags e2e-web/fixtures/ecoli.tags.tsv are. A real
+// CLI without -dump_spectrum (before G1 ships) must hide the tab instead.
+test('spectrum: a row of the Tags table opens in the Spectrum tab with its ladder on the dumped peaks', { timeout: 300000 }, async () => {
+  const d = mkdtempSync(join(tmpdir(), 'fastag-wd-spectrum-'))
+  const tags = join(d, 'run01.tags.tsv')
+  const input = join(d, 'run01.mzML')
+  copyFileSync(join(HERE, '..', 'e2e-web', 'fixtures', 'ecoli.tags.tsv'), tags)
+  if (MODE === 'real') copyFileSync(process.env.E2E_MZML, input)
+  else writeFileSync(input, 'spectra (the stub reads nothing)\n')
+  try {
+    await withApp(async (s) => {
+      const support = await s.execAsync('const done = arguments[arguments.length - 1]; window.fastag.spectrumSupport().then(done, (e) => done({ error: String(e) }))')
+      gates.spectrumSupport = support
+      if (MODE === 'stub') assert.equal(support.supported, true, JSON.stringify(support))
+      await s.exec('const p = arguments[0]; window.fastag.pickResults = async () => p', tags)
+      await view(s, 'results')
+      await s.click(await s.button('Open a tags TSV…'))
+      await s.waitText(/Showing 2,028 of 2,028/, 60000)
+      const row = await until('the first row', async () => {
+        const el = await s.exec("return document.querySelector('.rt-rows .rt-row')")
+        return el && (el['element-6066-11e4-a52f-4a6976a6e3b5'] ?? Object.values(el)[0])
+      })
+      const spectrum = await s.exec("return document.querySelector('.rt-rows .rt-row [role=gridcell]').getAttribute('title')")
+      await s.click(row)
+      if (!support.supported) {
+        // A CLI without -dump_spectrum: no tab, and the row action says so.
+        assert.equal(await s.exec("return [...document.querySelectorAll('[role=tab]')].some((t) => t.textContent === 'Spectrum')"), false)
+        assert.match(await s.bodyText(), /Spectrum view needs FASTag 1\.17 or later/)
+        return
+      }
+      await s.click(await s.button('Open in Spectrum'))
+      // No run of this app wrote the table: its input is located.
+      await s.exec('const p = arguments[0]; window.fastag.pickInput = async () => p', input)
+      const t0 = Date.now()
+      await s.click(await s.button('Locate input…'))
+      const verdict = await until('the ladder', () => s.exec("const v = document.querySelector('[data-testid=ladder-verdict]'); return v ? v.textContent : ''"), 120000)
+      gates.spectrumMs = Date.now() - t0
+      assert.match(verdict, /^on \d+ of \d+ positions within the run's tolerance$/, verdict)
+      assert.equal(await s.exec("return document.querySelector('.sp-head h2').textContent"), spectrum)
+      const on = Number(/^on (\d+)/.exec(verdict)[1])
+      assert.equal(await s.exec("return document.querySelectorAll('.sp-svg [data-peak=ladder]').length"), on)
+      // Every tag of the spectrum lies on its peaks.
+      const off = await s.exec("return [...document.querySelectorAll('.sp-tags-table tbody tr')].filter((r) => /not on the peaks/.test(r.textContent)).length")
+      assert.equal(off, 0)
+      // A second dump of the same spectrum comes from the backend's LRU.
+      const again = await s.execAsync(
+        'const [i, id, done] = arguments; window.fastag.spectrumPeaks(i, id, null).then((d) => done(d.cached), (e) => done(String(e)))',
+        input,
+        spectrum
+      )
+      assert.equal(again, true)
+    })
+  } finally {
+    rmSync(d, { recursive: true, force: true })
+  }
 })
 
 // Counts delivered log LINES, not messages: today every line is one
