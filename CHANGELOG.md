@@ -1,5 +1,34 @@
 # Changelog
 
+## Unreleased (1.12.1)
+
+Documentation only: no code, default or output changes. The README now
+gives the held-out acceptance results of the 1.12 options (Validation,
+"Held-out acceptance of the 1.12 options"). Each item was preregistered,
+run once on held-out public data and scored once; nothing was re-scored.
+
+- **#4 tags on unidentified spectra: PASS.** On 9 ProteomeTools pools the
+  rank-1 tag of a spectrum the database search does not identify is correct
+  27.0 points above decoy chance (95% CI 23.7-30.7, margin 5). Not shown:
+  that the precision on identified spectra transfers to unidentified ones
+  (0.28 against 0.55 at E <= 0.01). `-diversity`: no benefit claimed.
+- **#9 `-pick_profile auto`: FAIL.** All 9 high-resolution cells pass
+  (+10.5 to +32.0 points rank-1 correct); two ion-trap charge-3 cells fail
+  non-inferiority, the ion-trap 4+ cells are underpowered, and one
+  high-resolution run tags fewer spectra at tag length 3. `auto` is now
+  recommended for high-resolution profile MS2 only, not ion trap; the
+  default stays `legacy`.
+- **#6 `-unknown_charge infer`: FAIL** on the high-resolution reserve sets
+  (charge-call accuracy 0.745 against 0.90; non-inferiority fails in 3 of
+  18 cells, all 2+); the first scoring was INCONCLUSIVE (one run without
+  truth). Gains on 3+, losses on 2+. The default stays `assume2`.
+- **#2 `-complement_rule both`: INCONCLUSIVE** (one Astral run has no
+  truth at 1% FDR); three of the four endpoints fail descriptively, so it
+  passes under no reading. The default stays `same_charge`.
+- **Not validated:** every other 1.12 option (#1/#10, #3, #5, #7 release
+  test, #11, #15, #17) stays experimental. Low-resolution (ion-trap) MS2 is
+  not validated for any 1.12 option.
+
 ## 1.12.0
 
 All defaults are those of FASTag 1.11, with one exception (#7 below). At the

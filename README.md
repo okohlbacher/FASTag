@@ -586,10 +586,10 @@ MGF→mzML direction is exact.
 | `-mzpeak_read_memory <MB>` | 0 | No effect; accepted for existing command lines |
 | `-acquisition_check <refuse\|warn\|off>` | refuse | Refuse raw DIA input with exit code 11, tag it anyway with a warning, or skip the check (see Raw DIA input is refused) |
 | `-acquisition_probe_spectra <n>` | 4000 | MS2 spectra the acquisition check reads, metadata only, reading at most ten times as many spectra in all (advanced) |
-| `-pick_profile <legacy\|auto\|off>` | legacy | Centroid profile MS2 (MS:1000128) with OpenMS `PeakPickerHiRes` before tagging: `legacy` on mzPeak input only (as 1.11), `auto` on mzML and mzPeak input (not MGF), `off` never. Centroided MS2 are never re-picked. `-out_spectra` writes the spectra as they were tagged. Not with `-stream` |
+| `-pick_profile <legacy\|auto\|off>` | legacy | Centroid profile MS2 (MS:1000128) with OpenMS `PeakPickerHiRes` before tagging: `legacy` on mzPeak input only (as 1.11), `auto` on mzML and mzPeak input (not MGF), `off` never. Centroided MS2 are never re-picked. `-out_spectra` writes the spectra as they were tagged. Not with `-stream`. Recommended: `auto` for high-resolution profile MS2 only, not ion trap (held-out test; see Performance) |
 | `-pick_unknown_type` | off | With `-pick_profile auto`: also centroid MS2 that declare no spectrum type, when OpenMS's `PeakTypeEstimator` reads their data as profile (advanced) |
 | `-ion_series <by\|cz\|auto>` | by | Ion series the MS2 spectra are read as: `by` (b/y ions, as 1.11), `cz` (c/z• ions of ETD/ECD, every spectrum), `auto` (c/z• for spectra whose activation is ETD or ECD, b/y for all others, hybrid EThcD/ETciD included, with a warning). Under `cz`, and under `auto` when the run has electron-activated spectra, the tag TSV gains a last `ion_series` column and the census a `best_ion_series` column (see Ion series). Not with `-stream`. Experimental: `auto` is not validated yet |
-| `-unknown_charge <assume2\|enumerate\|infer>` | assume2 | How a precursor without a charge is tagged: `assume2` as 2+ (as 1.11); `enumerate` at each listed possible charge (MS:1000633, MGF `2+ and 3+`), else at every charge `-charge_min`..`-charge_max`; `infer` at the charge its complement pairs support (1+ when `-charge_min` is 1, or 1 is listed, and almost no intensity lies above the precursor; both charges of a close call, `ambiguous`; without evidence 2+, or the lowest candidate when 2 is none, `assumed`). Every charge tagged is a listed possible charge, else one of `-charge_min`..`-charge_max`. A header charge is never replaced. A spectrum tagged under H hypotheses has every E-value multiplied by H before `-max_evalue` and `-max_tags`; its rows are merged by E-value. The reports that aggregate over spectra (digest, label, massgap, delta, species, shortlist, census) read the rows of one selected hypothesis, chosen from the charge evidence, never from the E-values. Experimental, not validated; not with `-stream` |
+| `-unknown_charge <assume2\|enumerate\|infer>` | assume2 | How a precursor without a charge is tagged: `assume2` as 2+ (as 1.11); `enumerate` at each listed possible charge (MS:1000633, MGF `2+ and 3+`), else at every charge `-charge_min`..`-charge_max`; `infer` at the charge its complement pairs support (1+ when `-charge_min` is 1, or 1 is listed, and almost no intensity lies above the precursor; both charges of a close call, `ambiguous`; without evidence 2+, or the lowest candidate when 2 is none, `assumed`). Every charge tagged is a listed possible charge, else one of `-charge_min`..`-charge_max`. A header charge is never replaced. A spectrum tagged under H hypotheses has every E-value multiplied by H before `-max_evalue` and `-max_tags`; its rows are merged by E-value. The reports that aggregate over spectra (digest, label, massgap, delta, species, shortlist, census) read the rows of one selected hypothesis, chosen from the charge evidence, never from the E-values. Experimental: `infer` failed its held-out test (see Validation); not with `-stream` |
 | `-charge_min <n>` / `-charge_max <n>` | 2 / 4 | The charges `enumerate` and `infer` try (1-8); `-charge_min 1` enables infer's 1+ test |
 | `-charge_infer_margin <x>` | 2 | Complement-pair excess by which an inferred charge must beat the runner-up to be tagged alone; closer, both are tagged (`ambiguous`). Any excess above 0 is a call; none is `assumed` (advanced) |
 | `-isotope_error <k> ...` | 0 | Precursor isotope offsets (-1..3) to consider, for every precursor: the neutral mass is lowered by k x 1.00336 Da, and each charge is tagged at the offset its complement pairs support best. Needs a fragment tolerance below 0.05 Da (or the ppm equivalent at m/z 1000); refused otherwise (advanced) |
@@ -1252,8 +1252,17 @@ sorted input): msconvert's Thermo profile mzML puts the zero-intensity point
 after some peaks' last sample at a slightly lower m/z, while mzpeak-convert
 stores the same non-zero points in m/z order (with zero runs shortened). With
 that, the PXD000865 profile mzML under `auto` and its mzpeak-convert 0.18.0
-archive give byte-identical tags (2,011,636). Its default is still `legacy`
-(mzML tagged as sampled) until it is validated on held-out profile runs.
+archive give byte-identical tags (2,011,636). Its default stays `legacy`
+(mzML tagged as sampled).
+
+**Use `-pick_profile auto` for high-resolution profile MS2 (Orbitrap, Astral,
+TOF) only, not for ion-trap MS2.** In the 1.12 held-out test (#9, scored once
+against Sage 1% FDR truths) `auto` raised rank-1 correct tags by +10.5 to
++32.0 points in all 9 high-resolution cells (tag length 3-5, charge 2, 3,
+4+). On the ion-trap run two charge-3 cells failed non-inferiority and the
+4+ cells were underpowered, and `auto` also tagged fewer spectra in one
+high-resolution run at tag length 3 (-567), so the test as a whole failed
+and the default does not change.
 
 Output is identical at every thread count (`threads_test` checks every output
 on the fixture). Row memory on the mzML path is bounded by a ring of three
@@ -1303,6 +1312,27 @@ sequence filter, that `-gap_penalty` never removes a tag at the E-value cutoff
 (uncapped), and
 the digest, label and mass-gap reports (`digest_test` against prose-auto
 0.1.3's functions on synthetic tables, `digest_cli_test` end to end).
+
+### Held-out acceptance of the 1.12 options
+
+Each item below was preregistered, run once on held-out public data
+(`acceptance/1.12` branch) and scored once against Sage 0.14.7 truths at 1%
+FDR (for #4, the pool's peptide labels). Nothing was re-scored or tuned
+afterwards.
+
+| Item | Verdict | What it means |
+|---|---|---|
+| #4 tags on unidentified spectra (default tagger) | **PASS** | On 9 ProteomeTools synthetic-peptide pools, spectra the database search does not identify still get a correct rank-1 tag 27.0 points above decoy chance (95% CI 23.7-30.7; margin 5 points; tag length 5: 23.7). That tags carry the *precision* measured on identified spectra over to unidentified ones is **not** shown (precision at E <= 0.01: 0.28 unidentified, 0.55 identified), and `-diversity` showed no benefit on chimeras |
+| #9 `-pick_profile auto` | **FAIL** | Passes all 9 high-resolution cells; fails on ion trap and on one tagged-spectra count. Recommended for high-resolution profile MS2 only (see Performance); default stays `legacy` |
+| #6 `-unknown_charge infer` | **FAIL** (high-resolution sets); first set INCONCLUSIVE | Charge-call accuracy 0.74-0.75 against a 0.90 target; gains on 3+ spectra, losses on 2+. Default stays `assume2` |
+| #2 `-complement_rule both` | **INCONCLUSIVE** | One Astral run has no truth at 1% FDR; three of the four endpoints fail descriptively, so it passes under no reading. Default stays `same_charge` |
+
+Every other 1.12 option (#1/#10 species call, #3 chemistry v2 and
+alkylation, #5 shortlist and search hand-off, #7 raw-DIA check, whose
+release test has not run, #11 census, #15 ion series, #17 search shifts) is experimental and not
+validated on held-out data. No held-out result covers low-resolution
+(ion-trap) MS2: none of the 1.12 options, and none of the numbers above, is
+validated there.
 
 ### Ranking, and the synthetic benchmark
 
@@ -1356,6 +1386,10 @@ tags fill the slots (hence the small change in total recall):
   activation:`) when more than 1% of the spectra are hybrid and were read as
   b/y, and `cz` warns (`Collisional activation:`) when more than 1% are
   collisional.
+- **Low-resolution (ion-trap) MS2 is not validated.** The validation numbers
+  and the 1.12 held-out results are for high-resolution MS2. On ion-trap
+  data `-pick_profile auto` failed, `-unknown_charge infer` scored worse
+  (inconclusive scoring), and the other 1.12 options were not tested.
 - **A tag is not an identification.** No per-tag q-value or FDR is emitted, and
   a `-fasta` match, a species call, a `delta_out` bin and a glyco flag are all
   candidates to follow up, not results to report.
