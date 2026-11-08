@@ -57,6 +57,26 @@ Options for the user:
 Until the user decides, CFG-01-cand and CFG-10-cand stay `blocked_dev_nogo` and HO-01-heldout / HO-10-heldout stay
 unscored. The DEV false-present rate already misses the held-out target by a wide margin under either test.
 
+### Plan's all-decoy run on DEV (option 2; protocol fixed 2026-11-08 before the run)
+
+Run as option 2 above, without changing the decision rule (GO iff KS p > 0.01; a GO changes nothing else and
+CFG-01-cand may then move only as far as the README scoring-protocol gate allows, i.e. `pending_prereg` until the
+held-out scorer is committed). DEV data only, frozen RC binary, no held-out run.
+
+- Script dev/scripts/species_alldecoy.py sha256 5b959b9655cc48148aa068dd8dbdf642abc85a1a8b13bf969bffe5c90d7f0ea2 (decoy index and runs; header fixes the
+  protocol); statistic dev/scripts/fit_alldecoy.py sha256 46388e8d9544bd25b0cf579c03ac48039fd41889446b8564e4fef78848f73749 (header fixes it).
+- "Decoys treated as targets": the RC binary has no switch that scores its own decoy tags as targets, so the
+  targets are made decoys on the index side. Decoy index = the 50 reference proteomes of tax_k7.taxdb
+  (jpr-bench/species/proteomes.sha256), every protein's residues shuffled (seeded per taxid and protein ordinal),
+  built with the RC buildtaxdb, k = 7; same nodes.dmp/names.dmp/species_call.tsv. Every genus of every run is then
+  false; the call's own null (5 decoy tags per tag, spill, BH) runs unchanged. Provenance check: the same
+  buildtaxdb on the unshuffled proteomes must reproduce tax_k7.taxdb 34427bba...
+- Runs: the 47 DEV runs with species_dev.py's command lines; primary arm the go/no-go point g_0.01_0_10_off,
+  secondary arm the CFG-01-cand options (false presents only).
+- Statistic: all genus rows of the 36 FTMS runs; the call's p = P(X >= o), X ~ Poisson(decoy_expected); KS of its
+  randomised, truncation-corrected form u = [P(X > o) + V P(X = o)] / P(X >= 1) (only o >= 1 rows are reported)
+  against U(0,1). Also reported: false presents per run in both arms (the plan's negative test: none).
+
 ## DEV (in-sample)
 
 - Runs: the 48 runs of bench/fastag-bench/config/species_runs.tsv minus PXD000001_Erwinia_TMT6 (the #17 held-out
