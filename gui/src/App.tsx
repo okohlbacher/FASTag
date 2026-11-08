@@ -37,6 +37,7 @@ import { SECTION_OF } from './paramLayout'
 import type { ParamValue } from './ParamField'
 import RunningPanel from './results/RunningPanel'
 import { buildOverview, type TileAction } from './results/overview'
+import { reconExtend, reconRerun } from './results/ReconView'
 import { useInspector } from './inspector/useInspector'
 import { AfterRunPanel, PreStartPanel } from './inspector/InspectorPanel'
 import { postRunChecks } from './inspector/checks'
@@ -614,6 +615,24 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
                         run: () => void overviewAction({ kind: 'enable', label: 'Re-run with per-residue confidence', values: { res_conf: true } }),
                         disabled: busy || !!blocked
                       }
+                    : null
+                }
+                reconAction={
+                  // The run shown, repeated with a FASTA or the reports on.
+                  shown && overview && !overview.locked && bin?.ok
+                    ? (() => {
+                        const a = reconRerun(shown.params)
+                        return { label: a.label, run: () => void overviewAction(a), disabled: busy || !!blocked }
+                      })()
+                    : null
+                }
+                reconExtend={
+                  // The same run, when it placed too few with a short extension.
+                  shown && overview && !overview.locked && bin?.ok
+                    ? (() => {
+                        const a = reconExtend(shown.params)
+                        return a ? { label: a.label, run: () => void overviewAction(a), disabled: busy || !!blocked } : null
+                      })()
                     : null
                 }
                 runningState={

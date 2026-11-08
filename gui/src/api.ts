@@ -87,7 +87,7 @@ const api: FastagApi = {
     return typeof r === 'string' ? r : null
   },
   pickResults: () => openOne(TAGS),
-  pickReport: () => openOne([{ name: 'Reports (TSV)', extensions: ['tsv'] }]),
+  pickReport: () => openOne([{ name: 'Reports (TSV, mzTab)', extensions: ['tsv', 'mzTab', 'mztab'] }]),
   pickFolder: async () => {
     const r = await open({ directory: true, multiple: false })
     return typeof r === 'string' ? r : null
@@ -160,6 +160,7 @@ const api: FastagApi = {
   spectrumPeaks: (input: string, nativeId: string, params: Record<string, unknown> | null) =>
     invoke<SpectrumDump>('spectrum_peaks', { input, nativeId, params }),
   report: (path: string) => invoke<string | null>('report_text', { path }),
+  reportHead: (path: string) => invoke<string | null>('report_head', { path }),
   taxdbInfo: (explicit?: string) => invoke<TaxdbInfo | null>('taxdb_info', { explicit }),
 
   loadSettings: () => invoke<Settings>('load_settings'),

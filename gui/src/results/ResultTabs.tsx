@@ -19,14 +19,35 @@ import type { Evidence, Failure, Reports, Results } from '../run/useRun'
 import type { speciesReach } from '../paramLayout'
 import OverviewPanel from './OverviewPanel'
 import type { Overview, TileAction } from './overview'
+import ReconView from './ReconView'
+import GlycoTable from './GlycoTable'
 import SpectrumPanel, { type SpectrumSource, type SpectrumTarget } from '../spectrum/SpectrumPanel'
 
-const TAB_LABEL: Record<Tab, string> = { overview: 'Overview', results: 'Tags', spectrum: 'Spectrum', species: 'Species', digest: 'Digest' }
+const TAB_LABEL: Record<Tab, string> = {
+  overview: 'Overview',
+  results: 'Tags',
+  spectrum: 'Spectrum',
+  species: 'Species',
+  digest: 'Digest',
+  recon: 'Mass gaps & recon',
+  glyco: 'Glyco'
+}
 // The tabs, in order. Digest is always there: its empty state is a way to
 // open a report. The Overview is there while a run's results are shown, the
 // Spectrum tab (P4) only with a CLI that has -dump_spectrum.
-function tabsOf(overview: boolean, spectrum: boolean): Tab[] {
-  return [...(overview ? (['overview'] as Tab[]) : []), 'results', ...(spectrum ? (['spectrum'] as Tab[]) : []), 'species', 'digest']
+// P4c: Mass gaps & recon while a run is shown (its empty state offers the
+// FASTA) or a mass-gap, recon, delta or mzTab file is open; Glyco while a
+// glyco report is.
+function tabsOf(overview: boolean, spectrum: boolean, recon: boolean, glyco: boolean): Tab[] {
+  return [
+    ...(overview ? (['overview'] as Tab[]) : []),
+    'results',
+    ...(spectrum ? (['spectrum'] as Tab[]) : []),
+    'species',
+    'digest',
+    ...(recon ? (['recon'] as Tab[]) : []),
+    ...(glyco ? (['glyco'] as Tab[]) : [])
+  ]
 }
 
 export interface ResultTabsProps {
@@ -66,6 +87,11 @@ export interface ResultTabsProps {
   // for a file without res_conf; null when the form would not repeat the
   // run that wrote the file shown.
   rerunResConf?: { run(): void; disabled: boolean } | null
+  // P4c, the Mass gaps & recon empty state: choose a FASTA (or turn the
+  // reports on) and run again; null: not offered (no run of the form's input).
+  reconAction?: { label: string; run(): void; disabled: boolean } | null
+  // The low-placed banner: the run again with extension 3 (reconExtend).
+  reconExtend?: { label: string; run(): void; disabled: boolean } | null
   // P4: whether the CLI has -dump_spectrum (null: still asking), and the
   // run whose results are shown (its input and what it was sent), from
   // which the Spectrum tab dumps peaks under the run's own options.
@@ -75,11 +101,14 @@ export interface ResultTabsProps {
 
 export default function ResultTabs(p: ResultTabsProps): JSX.Element {
   const { setTab, species, speciesRun, reports, batchMiss, results, running, busy, failure, copied } = p
+  const tables = reports.tables ?? {}
+  const massgap = reports.list.find((r) => r.kind === 'massgap') ?? null
+  const hasRecon = !!(p.overview || massgap || tables.recon || tables.delta || tables.reconIds)
   const spectrumOn = !!p.spectrumSupport?.supported
-  const tabs = tabsOf(!!p.overview, spectrumOn)
-  // An Overview tab whose run is gone (a new run started) shows the Tags;
-  // so does the Spectrum tab with a CLI that cannot dump spectra.
-  const tab: Tab = (p.tab === 'overview' && !p.overview) || (p.tab === 'spectrum' && !spectrumOn) ? 'results' : p.tab
+  const tabs = tabsOf(!!p.overview, spectrumOn, hasRecon, !!tables.glyco)
+  // A tab whose content is gone (a new run started, or the Spectrum tab with
+  // a CLI that cannot dump spectra) shows the Tags.
+  const tab: Tab = tabs.includes(p.tab) ? p.tab : 'results'
 
   // The Spectrum tab (P4): the spectrum opened from the Tags table, and
   // the input and parameters of the run that wrote the table shown.
@@ -185,6 +214,19 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
               busy={busy || p.overview.locked}
               onAction={(a) => p.onOverviewAction?.(a)}
             />
+          </div>
+        ) : tab === 'recon' ? (
+          <div className="tablewrap">
+            <ReconView massgap={massgap} tables={tables} gen={reports.gen} notice={reports.notice} action={p.reconAction} extend={p.reconExtend} onOpen={p.openReport} />
+          </div>
+        ) : tab === 'glyco' && tables.glyco ? (
+          <div className="tablewrap">
+            {reports.notice && (
+              <p className="caveat" role="status">
+                {reports.notice}
+              </p>
+            )}
+            <GlycoTable key={`${reports.gen?.glyco ?? 0}:${tables.glyco}`} path={tables.glyco} gen={reports.gen?.glyco} />
           </div>
         ) : tab === 'spectrum' ? (
           <div className="tablewrap">

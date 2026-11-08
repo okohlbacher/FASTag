@@ -11,7 +11,8 @@
 import { useSyncExternalStore } from 'react'
 
 // spectrum: P4, only with a CLI that has -dump_spectrum (spectrum/).
-export type Tab = 'overview' | 'results' | 'spectrum' | 'species' | 'digest'
+// recon, glyco: P4c, the Mass gaps & recon and Glyco viewers.
+export type Tab = 'overview' | 'results' | 'spectrum' | 'species' | 'digest' | 'recon' | 'glyco'
 
 export interface ViewState {
   tab: Tab

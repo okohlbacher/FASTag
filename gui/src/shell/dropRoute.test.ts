@@ -52,17 +52,32 @@ describe('planDrop', () => {
           { kind: 'digest', path: '/d/r.digest.tsv' },
           { kind: 'label', path: '/d/r.label.tsv' },
           { kind: 'species', path: '/d/r.species.tsv' },
-          { kind: 'glyco', path: '/d/r.glyco.tsv' }
+          { kind: 'glyco', path: '/d/r.glyco.tsv' },
+          { kind: 'recon', path: '/d/r.recon.tsv' },
+          { kind: 'delta', path: '/d/r.delta.tsv' },
+          { kind: 'recon_id', path: '/d/r.recon_id.tsv' }
         ]
       }),
       { busy: false }
     )
     expect(p.results).toBe('/d/r.tags.tsv')
-    expect(p.reports).toEqual(['/d/r.digest.tsv', '/d/r.label.tsv'])
+    // P4c: glyco, recon and delta have their tabs (Glyco, Mass gaps & recon).
+    expect(p.reports).toEqual(['/d/r.digest.tsv', '/d/r.label.tsv', '/d/r.glyco.tsv', '/d/r.recon.tsv', '/d/r.delta.tsv'])
     expect(p.species).toBe('/d/r.species.tsv')
     expect(p.view).toBe('results')
-    // No tab shows the glyco report yet: said, not dropped silently.
-    expect(p.notes.join(' ')).toMatch(/r\.glyco\.tsv/)
+    // A report no tab shows (the CLI writes -recon_id_out as idXML, mzid or
+    // mzTab, never .tsv): said, not dropped silently.
+    expect(p.notes.join(' ')).toMatch(/r\.recon_id\.tsv/)
+    expect(p.notes.join(' ')).not.toMatch(/glyco|r\.recon\.tsv|delta/)
+  })
+
+  // P4c review: a dropped mzTab -recon_id_out opens as Open report… opens it
+  // (the opener sniffs it into Mass gaps & recon; idXML and mzid are named there).
+  it('an mzTab -recon_id_out goes to the reports, like the picker', () => {
+    const p = planDrop(route({ reports: [{ kind: 'recon_ids', path: '/d/run.recon.mzTab' }] }), { busy: false })
+    expect(p.reports).toEqual(['/d/run.recon.mzTab'])
+    expect(p.view).toBe('results')
+    expect(p.notes).toEqual([])
   })
 
   it('an SDRF lands on Batch with a note; unknown files are named', () => {

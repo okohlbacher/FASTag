@@ -43,12 +43,17 @@ gui/
                        contract and its parser), capabilities.ts (CLI features from --helphelp),
                        instrument.ts (instrument family and preset), checks.ts (the checks, the
                        exit-11 refusal), useInspector.ts and InspectorPanel.tsx
-    results/           ResultTabs.tsx (Overview, Tags, Spectrum, Species, Digest), FailureBanner.tsx (over
-                       the tabs, or on the Batch view beside the queue), reports.ts, species.ts
-                       (the parser of the -species TSV),
+    results/           ResultTabs.tsx (Overview, Tags, Spectrum, Species, Digest, Mass gaps & recon, Glyco),
+                       FailureBanner.tsx (over the tabs, or on the Batch view beside the queue), reports.ts,
+                       species.ts (the parser of the -species TSV),
                        RunningPanel.tsx (the running state), OverviewPanel.tsx over
                        overview.ts (tiles, checks, suggested settings) and calls.ts (the
-                       parser of the calls FASTag wrote)
+                       parser of the calls FASTag wrote); P4c: ReconView.tsx (Mass gaps &
+                       recon), MassGapChart.tsx (the gap sticks with the bundled Unimod
+                       deltas of unimod.ts), GlycoTable.tsx, DataTable.tsx (the shared
+                       keyboard table) and tables.ts (readers of -recon_out, -delta_out,
+                       the mzTab -recon_id_out and -glyco_out), tableStore.ts (the parsed
+                       tables and their filters and sort, kept across tab switches)
     ParamField.tsx     one form field per manifest parameter
     ResultsTable.tsx   tags browser: virtualized table with filters, column choice and export,
                        a keyboard active row, copy row and copy USI, Open in Spectrum (Enter)
@@ -176,7 +181,7 @@ manifest: the shell empties the file before the script runs.
 ## The window
 
 Four views, switched from the top bar: **Setup** (the input, the parameters
-and Run), **Results** (Overview, Tags, Species and Digest, full width), **Batch** (the
+and Run), **Results** (Overview, Tags, Species, Digest, Mass gaps & recon and Glyco, full width), **Batch** (the
 queue, its run bar, the failure banner, the summary table and each job's log) and **History**
 (every recorded run: input, status, duration, tags, outputs; Open, Reveal,
 Copy command, Settings into form with Undo, Re-run, Delete record). Copy command
@@ -313,9 +318,19 @@ troubleshooting entries, the glossary and the settings reference.
 Files dropped anywhere on the window go by type: one spectra file to the
 input, two or more (or a folder) to the batch, a FASTA to `-fasta`, a
 `.taxdb` to `-taxdb`, a tags TSV to Results, a digest, label or mass-gap
-report to the Digest tab and a species report to the Species tab. Nothing is
-taken while FASTag runs. An SDRF goes to the Batch view's comparison. Reports
-without a tab yet (recon, delta, glyco) are named, not read.
+report to the Digest tab, a recon or delta table or an mzTab `-recon_id_out`
+to Mass gaps & recon (an idXML or mzid one is named with a pointer to the
+mzTab form), a glyco report to Glyco and a species report to the Species tab. Nothing is
+taken while FASTag runs. An SDRF goes to the Batch view's comparison.
+
+Large tables: the recon, delta, mzTab and glyco tables are read through
+`report_text` (report.rs), capped at 128 MB; an opened or dropped file is
+first told apart by its first 64 KiB (`report_head`), so it is read whole
+once. Parsing a 50 MB table (810,738 glyco rows or 402,313 recon rows, the
+PXD014764 rows repeated) took 0.18 to 0.25 s and 80 to 130 MB of heap
+beyond the text in Node 26 (V8, vitest) on an M4 Max; the IPC transfer of such a
+string is not measured. A larger table shows "too large" and opens only in
+a spreadsheet.
 
 Themes: System (the default), Light and Dark, from the top bar or View >
 Theme; the choice is remembered on this machine. Text uses the system UI
@@ -460,6 +475,10 @@ The parts of the window have tests of their own beside them: the hooks
 props. The App-level tests, which render the whole window, are split by area
 beside the parts they drive: `run/batch.app.test.tsx` (run and batch
 orchestration), `results/digest.app.test.tsx` (the Digest tab),
+`results/viewers.app.test.tsx` (Mass gaps & recon and Glyco; the component
+and parser tests `results/viewers.test.tsx`, `results/tables.test.ts` and
+`results/unimod.test.ts` read the real recon, delta, mzTab and glyco output
+in `src/fixtures/cli/`),
 `results/overview.app.test.tsx` (the Overview and the running state; the
 parser and model tests `results/calls.test.ts` and `results/overview.test.ts`
 read real CLI output on the gate PXDs from `src/fixtures/cli/`),

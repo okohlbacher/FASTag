@@ -14,7 +14,8 @@ import { baseName, value, type Report } from '../digestReport'
 import { perJobOutputs, REPORT_PARAMS } from '../app/paths'
 import { cleanupLines, failText } from '../app/format'
 import type { ViewStore } from '../app/viewStore'
-import { loadReports, sameRun } from '../results/reports'
+import { loadReports, sameRun, sameRunFiles, sniffPath } from '../results/reports'
+import { tablePaths, type TableGen, type TableKind, type TablePaths } from '../results/tables'
 import type { BatchJob } from './batch'
 import { buildSummary } from './batchSummary'
 import { useBatchData } from './useBatchSummary'
@@ -60,6 +61,30 @@ export interface RunInputs {
 
 // The outputs of a run whose reply never came (or was refused): none.
 const noOutputs: ResolvedOutputs = { out: null }
+
+// The tables shown that belong to the run of @p path (sameRunFiles), and
+// the paths of the others; @p replaced is the kind about to be replaced.
+function splitTables(tables: TablePaths | undefined, path: string, replaced?: TableKind): { kept: TablePaths; closed: string[] } {
+  const kept: TablePaths = {}
+  const closed: string[] = []
+  for (const [k, q] of Object.entries(tables ?? {}) as [TableKind, string | undefined][]) {
+    if (!q || k === replaced) continue
+    if (sameRunFiles(q, path)) kept[k] = q
+    else closed.push(q)
+  }
+  return { kept, closed }
+}
+
+function bumpGen(gen: TableGen | undefined, kinds: TableKind[]): TableGen {
+  const g: TableGen = { ...gen }
+  for (const k of kinds) g[k] = (g[k] ?? 0) + 1
+  return g
+}
+
+// The note when a file of another run closed what was shown.
+function closedNote(path: string, closed: string[]): string {
+  return `${baseName(path)} is from another run; ${closed.join(', ')} ${closed.length === 1 ? 'was' : 'were'} closed.`
+}
 
 // The shell's part in a run (P2a PR s): onStart is called when a single run
 // is about to start (after the overwrite question), so the app can show
@@ -343,7 +368,12 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     // path is not an output and may hold an old file.
     const sent = REPORT_PARAMS.map((n) => outputs[n]).filter((p): p is string => !!p)
     const rep = await loadReports(sent)
-    dispatch({ type: 'REPORTS', update: { list: rep.reports, errors: rep.errors } })
+    // A run re-reads its tables even where the last one wrote them.
+    const tables = tablePaths(outputs)
+    dispatch({
+      type: 'REPORTS',
+      update: (cur) => ({ list: rep.reports, errors: rep.errors, tables, gen: bumpGen(cur.gen, Object.keys(tables) as TableKind[]) })
+    })
     if (ran) {
       const sentParams = (ran.params['params'] ?? {}) as Record<string, unknown>
       dispatch({ type: 'SHOWN', shown: { input: inFile, params: sentParams, log: ran.log.get(), reports: rep.reports, species } })
@@ -589,6 +619,31 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   }
 
   async function openReportPath(p: string): Promise<void> {
+    // A wide table (P4c: recon, delta, mzTab ids, glyco) opens in its viewer.
+    const table = await sniffPath(p)
+    if (table) {
+      dispatch({
+        type: 'REPORTS',
+        update: (cur) => {
+          if (!('kind' in table)) return { ...cur, errors: [...cur.errors, table.error] }
+          // Like a long-form report of another run (below), a table of
+          // another run closes what the view showed of the run before:
+          // B's recon bins must not sit under A's peaks and counts.
+          const closedReports = cur.list.filter((r) => !sameRunFiles(r.path, p))
+          const { kept, closed: closedTables } = splitTables(cur.tables, p, table.kind)
+          const closed = [...closedReports.map((r) => r.path), ...closedTables]
+          const tables = { ...kept, [table.kind]: p }
+          // Opening the file again reads it again (it may have changed).
+          const gen = bumpGen(cur.gen, [table.kind])
+          if (closed.length === 0) return { ...cur, tables, gen, notice: undefined }
+          const note = closedNote(p, closed)
+          return { list: cur.list.filter((r) => !closedReports.includes(r)), errors: [note], tables, gen, notice: note }
+        }
+      })
+      // An unreadable one is named where report errors are: the Digest tab.
+      setTab('kind' in table ? (table.kind === 'glyco' ? 'glyco' : 'recon') : 'digest')
+      return
+    }
     const rep = await loadReports([p])
     if (rep.reports.length === 0 && rep.errors.length === 0) rep.errors.push(`${p} does not exist.`)
     dispatch({
@@ -607,7 +662,13 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
             ]
           : []
         const kept = cur.list.filter((r) => !other.includes(r) && !rep.reports.some((n) => n.kind === r.kind))
-        return { list: [...kept, ...rep.reports], errors: [...notes, ...rep.errors] }
+        // The tables of another run close too; those of the fresh report's
+        // run (its folder and stem) stay, so B's recon dropped with B's
+        // massgap is kept whichever opens first.
+        const split = fresh ? splitTables(cur.tables, fresh.path) : { kept: cur.tables ?? {}, closed: [] }
+        if (fresh && other.length === 0 && split.closed.length > 0) notes.push(closedNote(fresh.path, split.closed))
+        else if (notes.length && split.closed.length > 0) notes[0] = notes[0].replace(/ (was|were) closed\.$/, `, ${split.closed.join(', ')} were closed.`)
+        return { list: [...kept, ...rep.reports], errors: [...notes, ...rep.errors], tables: split.kept, gen: cur.gen }
       }
     })
     setTab('digest')

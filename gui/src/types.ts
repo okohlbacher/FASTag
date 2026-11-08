@@ -289,6 +289,9 @@ export interface FastagApi {
   spectrumPeaks: (input: string, nativeId: string, params: Record<string, unknown> | null) => Promise<SpectrumDump>
   // Text of a digest/label/mass-gap report; null when the file does not exist.
   report: (path: string) => Promise<string | null>
+  // The first 64 KiB of the same file (report.rs HEAD_BYTES): enough to tell
+  // a wide table (P4c) from a long-form report without reading it whole.
+  reportHead: (path: string) => Promise<string | null>
   openTaxon: (taxid: number) => Promise<boolean>
   probe: () => Promise<BinaryInfo>
   // The options of the CLI (--helphelp), cached per binary by the backend.

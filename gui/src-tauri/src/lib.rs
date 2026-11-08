@@ -96,6 +96,7 @@ pub fn run() {
             browser::results_export,
             browser::results_cancel,
             report::report_text,
+            report::report_head,
             report::summary_write,
             sdrf::sdrf_read,
             sdrf::taxonomy_dump,

@@ -1,0 +1,91 @@
+/* The P4c viewers: Mass gaps & recon, Glyco (GUI-DESIGN S7, S8). Theme
+   tokens only, so the dark theme is its own; the chart's two layers are
+   --brand-peaks (the data, neutral) and --flag (the brand's gap colour, for
+   the Unimod marks), with the accent for the active stick only. */
+
+.recon-view,
+.glyco-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  min-width: 0;
+}
+.recon-view .headline,
+.glyco-view .headline { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); margin: 0; }
+.recon-tables { display: flex; flex-direction: column; gap: var(--space-2); }
+.recon-tables > .seg { align-self: flex-start; }
+
+/* The chart */
+.mg-chart { margin: 0; display: flex; flex-direction: column; gap: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--space-3) var(--space-4); background: var(--card); }
+.mg-chart figcaption { font-size: var(--text-sm); font-weight: 600; }
+.mg-chart figcaption .muted { font-weight: 400; color: var(--muted-foreground); }
+.mg-controls { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: center; }
+.mg-toggle { display: inline-flex; gap: 6px; align-items: center; font-size: var(--text-sm); }
+.mg-legend { list-style: none; margin: 0; padding: 0; display: flex; gap: var(--space-4); font-size: var(--text-xs); color: var(--muted-foreground); }
+.mg-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.mg-legend .key { display: inline-block; width: 2px; height: 12px; border-radius: 1px; }
+.mg-legend .key.stick { background: var(--brand-peaks); }
+.mg-legend .key.mark { width: 0; border-left: 1px solid var(--flag); }
+.mg-legend .key.mark.faint { opacity: 0.3; }
+.mg-plot { position: relative; border-radius: var(--radius-sm); }
+.mg-plot:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.mg-plot svg { display: block; width: 100%; height: auto; overflow: visible; }
+.mg-grid line { stroke: var(--border); stroke-width: 1; shape-rendering: crispEdges; }
+.mg-grid text,
+.mg-axis { fill: var(--muted-foreground); font-size: 11px; font-variant-numeric: tabular-nums; }
+.mg-base { stroke: var(--muted-foreground); stroke-width: 1; shape-rendering: crispEdges; }
+.mg-mark { stroke: var(--flag); stroke-width: 1; opacity: 0.22; }
+.mg-mark.hit { opacity: 0.9; }
+.mg-mark.isotope,
+.mg-mark.residue { stroke-dasharray: 2 3; }
+.mg-stick { stroke: var(--brand-peaks); stroke-width: 2; stroke-linecap: round; }
+.mg-stick.on { stroke: var(--primary); stroke-width: 3; }
+.mg-cut,
+.mg-label { fill: var(--foreground); font-size: 11px; font-variant-numeric: tabular-nums; }
+.mg-label { fill: var(--muted-foreground); }
+.mg-tip {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 10px));
+  pointer-events: none;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 6px 10px;
+  font-size: var(--text-xs);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  z-index: 2;
+}
+.mg-tip strong { font-size: var(--text-sm); }
+.mg-tip .muted { color: var(--muted-foreground); }
+
+/* The shared table */
+.dtable { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.dt-bar { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: center; font-size: var(--text-sm); color: var(--muted-foreground); }
+.dt-pages { display: inline-flex; gap: var(--space-2); }
+.dt-wrap { overflow: auto; max-height: 420px; border: 1px solid var(--border); border-radius: var(--radius-md); }
+table.dt { width: 100%; }
+table.dt:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+table.dt thead th { position: sticky; top: 0; background: var(--panel); z-index: 1; }
+table.dt .th-sort { all: unset; cursor: pointer; font: inherit; font-weight: 600; }
+table.dt .th-sort:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+table.dt tr.active td { background: var(--primary-soft); }
+table.taxa.dt td.mono { font-family: var(--font-seq); font-size: var(--text-xs); white-space: nowrap; }
+.dt-empty { padding: var(--space-3); color: var(--muted-foreground); font-size: var(--text-sm); }
+.dt-help { margin: 0; font-size: var(--text-xs); color: var(--muted-foreground); }
+.dt-filters { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); align-items: flex-end; font-size: var(--text-sm); }
+.dt-filters label { display: flex; flex-direction: column; gap: 2px; }
+.dt-filters label.check { flex-direction: row; align-items: center; gap: 6px; }
+.dt-filters input[type='number'] { width: 8em; }
+.recon-empty { max-width: 560px; }
+
+@media (forced-colors: active) {
+  .mg-stick { stroke: CanvasText; }
+  .mg-stick.on { stroke: Highlight; }
+  .mg-mark { stroke: GrayText; opacity: 1; }
+  table.dt tr.active td { background: Highlight; color: HighlightText; }
+}
