@@ -528,7 +528,7 @@ cancel, a Tags row opened in the Spectrum tab, and two recorded gates, the time 
 apart, so batched log events still count every line). Native dialogs cannot
 be driven, so a spec replaces only `window.fastag.pickInput` /
 `pickResults`. `bash e2e-tauri/run.sh stub` runs them against the stub (CI
-does on every push and PR, informational until P5); `run.sh real` against
+does on every push and PR, blocking from P5); `run.sh real` against
 the CLI in the app's own resources (CI does against the installed `.deb`
 and, for the probe, the unpacked tarball before a tag). In real mode the
 cancel spec runs the E. coli fixture's spectra repeated 500 times
