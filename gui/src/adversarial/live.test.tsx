@@ -3,25 +3,14 @@
 // batches and the tags filter.
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import App from '../App'
 import ResultsTable from '../ResultsTable'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
+import { click, goTo, renderApp, runButton, showView } from '../testing/render'
 
-async function renderApp(mock: MockBridge): Promise<HTMLElement> {
-  const { container } = render(<App />)
-  await screen.findByText('FASTag ready')
-  await act(async () => {})
-  return container
-}
-const click = (el: Element): Promise<void> =>
-  act(async () => {
-    fireEvent.click(el)
-  })
 const change = (el: Element, value: string): Promise<void> =>
   act(async () => {
     fireEvent.change(el, { target: { value } })
   })
-const runButton = (): HTMLElement => screen.getByRole('button', { name: /^(Run( on .+)?|Running…)$/ })
 const field = (c: HTMLElement, name: string): HTMLInputElement =>
   c.querySelector(`#p-${name}`) as HTMLInputElement
 const openSection = async (title: string): Promise<void> => {
@@ -29,6 +18,7 @@ const openSection = async (title: string): Promise<void> => {
   if (b.getAttribute('aria-expanded') !== 'true') await click(b)
 }
 async function pick(mock: MockBridge, path: string): Promise<void> {
+  showView('setup') // the input card (P2a: Setup is a view of its own)
   mock.nextPickInput = path
   await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
 }
@@ -92,6 +82,7 @@ describe('live: run inputs', () => {
     await click(field(c, 'species'))
     expect((runButton() as HTMLButtonElement).disabled).toBe(true)
     expect(c.querySelector('.controls .warn')!.textContent).toMatch(/cannot reach the species index k = 7/)
+    await goTo('results')
     await click(screen.getByRole('tab', { name: /Species/ }))
     expect(c.querySelector('.tabpanel')!.textContent).toContain('FASTag refuses the run')
   })
@@ -146,6 +137,7 @@ describe('live: failure and stale results', () => {
   it('after a run, permanent controls open another tags TSV or a report', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
+    await goTo('results') // the empty Tags pane
     expect(screen.getByRole('button', { name: /Open a tags TSV/ })).toBeTruthy()
     await pick(mock, '/r/A.mzML')
     await click(runButton())

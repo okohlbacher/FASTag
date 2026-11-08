@@ -1,0 +1,1 @@
+FASTag -in Ecoli_MS2_small.mzML -out run.tags.tsv -fragment_tolerance 0.3 -fragment_tolerance_unit Da -tag_length 4 -glyco -recon_fasta Ecoli_MS2_small.fasta -recon_out run.recon.tsv -recon_localize -delta_out run.delta.tsv -massgap_out run.massgap.tsv -recon_id_out run.recon.mzTab

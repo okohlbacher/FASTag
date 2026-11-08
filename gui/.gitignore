@@ -25,3 +25,20 @@ dist-ssr
 
 # Synthetic report fixtures (the repo ignores *.tsv)
 !src/fixtures/*.tsv
+
+# The Playwright e2e build and its results (e2e-web/)
+dist-e2e
+e2e-web/test-results
+e2e-web/playwright-report
+# ...but its fixtures are source
+!e2e-web/fixtures/*.tsv
+# ...and the real-CLI fixtures (gui/src/fixtures/cli/<case>/): their .tsv and
+# .log files are source too
+!src/fixtures/cli/**/*.tsv
+!src/fixtures/cli/**/*.log
+# ...and the de novo inputs (gui/src/fixtures/denovo/), the golden files' sources
+!src/fixtures/denovo/*.tsv
+# The tauri-driver specs' recorded gates and logs (e2e-tauri/run.sh)
+e2e-tauri/results
+# The committed real CLI outputs (the repository ignores *.tsv)
+!src/fixtures/real/**/*.tsv

@@ -20,3 +20,26 @@ tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri-plugin-single-instance = "2"
+# The system notification when a run finishes (GUI-DESIGN 2). 2.4 is the last
+# release on the tauri 2.11 line this lock pins; 2.5 pulls a tauri update.
+tauri-plugin-notification = "~2.4.0"
+tauri-plugin-store = "~2.4.0"
+
+# Process lifetime (lifetime.rs): prctl/getppid on Linux, the per-run job
+# object on Windows. Both already in the lock file through tauri.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Diagnostics_ToolHelp", "Win32_System_JobObjects", "Win32_System_Threading"] }
+
+[dev-dependencies]
+# tauri::test (MockRuntime): settings.rs opens its store in a mock app.
+tauri = { version = "2", features = ["test"] }
+# The accelerator parser of tauri's menus (tauri drops an accelerator it cannot
+# parse without a word): menu.rs tests its strings with it. Same version as
+# tauri's own.
+muda = { version = "=0.19.3", default-features = false }
+# getrusage for the peak-memory figures of examples/browser_bench.rs.
+libc = "0.2"
+proptest = { version = "1", default-features = false, features = ["std"] }

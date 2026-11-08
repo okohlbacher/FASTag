@@ -5,7 +5,7 @@
 // absent. A "known limitation" test pins a behaviour that is kept on purpose.
 // @ts-ignore -- node built-in; the app's tsconfig has no node types
 import { readFileSync } from 'node:fs'
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import {
   digestCall,
@@ -295,14 +295,28 @@ describe('parsers: fuzzed reports', () => {
     expect(observedLogo(r).slice(4).map((c) => c.faded)).toEqual([false, false, false, false])
   })
 
-  it('20k-bin mass-gap report parses and renders in reasonable time', () => {
-    const rows = Array.from({ length: 20000 }, (_, i) => `hist\t${(i * 0.37 - 3000).toFixed(4)}\t${(i % 13) + 1}\t-\td`).join('\n')
-    const t0 = performance.now()
-    const r = parseReport(`${HEAD}\nrun\twindow_da\t0.02\t-\td\n${rows}`, '/x.massgap.tsv')
-    render(<DigestPanel reports={[r]} errors={[]} onOpen={() => {}} />)
-    const ms = performance.now() - t0
-    expect(ms).toBeLessThan(5000)
-  })
+  // ponytail: a fixed 5 s wall-clock bound failed on loaded CI runners (5.37 s) while the
+  // test takes ~1 s locally. What it guards is super-linear parse/render cost, so it compares
+  // 20k bins against 2k bins (best of 2 each): linear is ~10x, quadratic ~100x. The absolute
+  // bound stays as a backstop.
+  it('20k-bin mass-gap report parses and renders in linear time', () => {
+    const time = (n: number) => {
+      const rows = Array.from({ length: n }, (_, i) => `hist\t${(i * 0.37 - 3000).toFixed(4)}\t${(i % 13) + 1}\t-\td`).join('\n')
+      let best = Infinity
+      for (let k = 0; k < 2; k++) {
+        const t0 = performance.now()
+        const r = parseReport(`${HEAD}\nrun\twindow_da\t0.02\t-\td\n${rows}`, '/x.massgap.tsv')
+        const { unmount } = render(<DigestPanel reports={[r]} errors={[]} onOpen={() => {}} />)
+        best = Math.min(best, performance.now() - t0)
+        unmount()
+      }
+      return best
+    }
+    const small = time(2000)
+    const big = time(20000)
+    expect(big).toBeLessThan(Math.max(40 * small, 500))
+    expect(big).toBeLessThan(15000)
+  }, 30000) // four renders; vitest's 5 s default timeout is too short on loaded CI runners
 })
 
 // ---------------------------------------------------------------------------
@@ -400,8 +414,9 @@ describe('ResultsTable: filter inputs and size', () => {
       sc.scrollTop = 15_000_000 + 28 - 600
       fireEvent.scroll(sc)
     })
-    await flush()
-    const cells = [...c2.querySelectorAll('.rt-row')].map((r) => r.firstElementChild?.textContent)
-    expect(lastOf(cells)).toBe('scan=999999')
+    // Scroll positions are applied once per animation frame (P0a): wait for it.
+    const cells = (): (string | null | undefined)[] =>
+      [...c2.querySelectorAll('.rt-row')].map((r) => r.firstElementChild?.textContent)
+    await waitFor(() => expect(lastOf(cells())).toBe('scan=999999'))
   })
 })

@@ -11,7 +11,8 @@
 // Where the GUI refuses a run up front, the CLI is run directly on the same
 // option to show the refusal is its.
 // Skipped unless FASTAG_BIN names the CLI, the pipe-order helper is found
-// (FASTAG_ORDER_RS, or cli/order_rs under FASTAG_GUI_TEST_OUTPUTS) and the
+// (FASTAG_ORDER_RS, cli/order_rs under FASTAG_GUI_TEST_OUTPUTS, or the
+// order_rs example in src-tauri, which `cargo test` builds) and the
 // build_args example is built; see ./external.ts.
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
@@ -21,6 +22,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import App from '../App'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
+import { click } from '../testing/render'
+import { applyAndCheck } from '../testing/lastUsed'
 import { PARAM_BY_NAME, invalidBecause, invalidParams } from '../paramLayout'
 import { FASTAG_BIN, ORDER_RS, REPO_FIXTURES_DIR, SRC_TAURI_DIR } from './external'
 
@@ -37,11 +40,6 @@ if (ready) {
   copyFileSync(`${FIX}.mzML`, IN)
   copyFileSync(`${FIX}.fasta`, FA)
 }
-
-const click = (el: Element): Promise<void> =>
-  act(async () => {
-    fireEvent.click(el)
-  })
 
 interface Outcome {
   argv: string[]
@@ -82,6 +80,7 @@ async function guiRun(opts: {
   render(<App />)
   await screen.findByText('FASTag ready')
   await act(async () => {})
+  if (opts.lastUsed) await applyAndCheck(opts.lastUsed) // D6: the offer, clicked; guards the form
   mock.nextPickInput = IN
   await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
   const outField = screen.getByLabelText(/Tags TSV/) as HTMLInputElement
@@ -108,6 +107,7 @@ async function guiBlocked(lastUsed: Record<string, unknown>): Promise<{ mock: Mo
   const { container } = render(<App />)
   await screen.findByText('FASTag ready')
   await act(async () => {})
+  await applyAndCheck(lastUsed) // D6: the offer, clicked; guards the form
   mock.nextPickInput = IN
   await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
   const run = screen.getByRole('button', { name: /^Run( on .+)?$/ }) as HTMLButtonElement

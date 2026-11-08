@@ -1,0 +1,3 @@
+# Byte-exact inputs and golden files: CRLF and lone CR line ends are part of
+# the test (tools/tags_to_denovo.py splits on all three). Never normalized.
+* -text

@@ -1,0 +1,27 @@
+usi	spectrum	tag	length	charge	nterm_mass	cterm_mass	evalue	res_conf	extra
+-	scan=1	PEPTIDEK	8	2	0.0000	18.0106	0.01	50 60 70 80 90 99 10 20	x
+-	scan=1	PEPTLDEK	8	2	0.0000	18.0106	0.001	51 61 71 81 91 98 11 21	x
+-	scan=1	PEPTIDEQ	8	2	0.0000	18.0106	0.001	52 62 72 82 92 97 12 22	x
+-	scan=1	AEPTIDEK	8	2	0.0000	18.0106	-	1 2 3 4 5 6 7 8	x
+-	scan=1	GEPTIDEK	8	2	0.0000	18.0106	inf	9 9 9 9 9 9 9 9	x
+-	scan=2	AS[Phospho]DK	4	+3	1.0	2.0	1e-9	50 51 50 51	x-	scan=2	M[Oxidation]C[Carbamidomethyl]N[Deamidated]K[Acetyl]LLLLL	9	02	1.0	2.0	1e-5	10 20 30 40 50 60 70 80 90	x
+-	scan=2	C[Foo]AAAAAAA[]	8	x	1.0	2.0	 2.5e-5 	+50 007 50 50 50 50 50 51	x
+-	scan=2	WWWWWWWWW	9	2	1.0	2.0	1_0	100 100 100 100 100 100 100 100 0	x
+-	scan=3,frame;x"q	KKKKKKKKKK	10	1	5.5	6.6	1e400	33 33 33 33 33 33 33 33 33 34	x
+
+-	scan=3,frame;x"q	RRRRRRRRRR	10	1	5.5	6.6	-inf	34 34 34 34 34 34 34 34 34 34	x
+-	scan=3,frame;x"q	HHHHHHHHHH	10	1	5.5	6.6	Infinity	1 1 1 1 1 1 1 1 1 1	x
+-	scan=4	PEPTIDEK	8	2
+-	scan=4	peptidek	8	2	0	0	0.1	1 1 1 1 1 1 1 1	x
+-	scan=4	PEPTIDEK	8	2	0	0	0.1	1 1 1 1 1 1 1 x	x
+-	scan=4	PEPTIDEK	7	2	0	0	0.1	1 1 1 1 1 1 1 1	x
+-	scan=4	PEPTIDEK	8	2	0	0	0.1	1 1 1 1 1 1 1	x
+-	scan=4	PEPTIDEK	8	2	0	0	0.1	1 1 1 1 1 1 1 101	x
+-	scan=4	PEPT[Oxidation	8	2	0	0	0.1	1 1 1 1 1 1 1 1	x
+-	scan=5 é	AC	2	2	0	0	0.5	50 51	x
+-	scan=5 é	DE	2	2	0	0	0.5	51 52	x
+
+-	scan=5 é	FGH	3	2	0	0	0.25	0 0 1	x
+-	scan=6	LLLLLLLL	8	2	0	0	0.0	70 70 70 70 70 70 70 70	x	more	fields
+-	scan=6	IIIIIIII	8	2	0	0	-0	71 71 71 71 71 71 71 71	x
+-	scan=1	YYYYYYYY	8	2	0.0000	18.0106	0.001	53 63 73 83 93 96 13 23	x

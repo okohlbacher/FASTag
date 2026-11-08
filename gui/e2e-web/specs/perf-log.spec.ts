@@ -1,0 +1,133 @@
+import { writeFileSync } from 'node:fs'
+import { test, expect, openApp } from './fixtures'
+
+// The P1 gate "Log line with drawer open" (GUI-DESIGN section 7): with the
+// drawer open and 5,000 lines in the log, the time from a Log message to
+// its commit (React render, DOM mutation and the layout it forces; paint
+// excluded) per single line and per 500-line batch, median and p95, in
+// Chromium and Playwright's WebKit. Playwright's WebKit is not WebKitGTK:
+// that half of the gate, and the IPC message rate on WebKitGTK, are
+// measured by the tauri-driver job of P1 PR d.
+//
+// A measure-and-record gate (provisional target < 1 ms per frame batch):
+// the spec only checks that it measured, and with PERF_OUT=<file> writes its
+// numbers there (bench-<version>.json). It runs on any build whose bridge
+// has emitLog; with emitEvent (P1a's Channel) a batch is one Log{lines}
+// message, without it (the global fastag:log events before P1a) it is 500
+// log events in one task, as the backend sent them then.
+
+// mean_ms (P2a PR r): WebKit's performance.now() is coarsened to 1 ms, so
+// its median and p95 are whole milliseconds and cannot show a time under
+// 1 ms. Each sample starts at a random phase of that 1 ms grid (after a
+// frame and a task), so the mean of the coarsened samples still estimates
+// the true mean; the gate's statistics stay median and p95 (section 7).
+//
+// batch_x10 is back-to-back, no frame between: ten 500-line batches in a
+// row, each to its commit, divided by ten. No rendering update runs between
+// them (each batch's effect cleanup cancels the previous frame's scroll, and
+// there is no content-visibility pass, style or paint per frame), so it is
+// not a per-frame-batch time and is not evidence for the gate; it is
+// recorded only to compare builds.
+interface Stats {
+  n: number
+  median_ms: number
+  p95_ms: number
+  mean_ms: number
+}
+
+test('the log drawer commits a line and a 500-line batch quickly with 5,000 lines in it', async ({ page, browserName }) => {
+  test.setTimeout(180_000)
+  await openApp(page, 'slow')
+  await page.getByRole('button', { name: 'Choose file…' }).click()
+  await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+  await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible()
+  await page.locator('.logdrawer .drawer-toggle').click()
+  await expect(page.locator('pre.log')).toBeVisible()
+
+  const r = await page.evaluate(async () => {
+    type Mock = {
+      lastRunId: number
+      emitLog(line: string): void
+      emitEvent?: (runId: number, e: { kind: 'log'; lines: [string, boolean][] }) => void
+    }
+    const m = (window as unknown as { __fastagE2E: { mock: Mock } }).__fastagE2E.mock
+    const batched = typeof m.emitEvent === 'function'
+    const pre = document.querySelector('pre.log') as HTMLElement
+    const emit = (lines: string[]): void => {
+      if (batched) m.emitEvent!(m.lastRunId, { kind: 'log', lines: lines.map((l) => [l, true]) })
+      else for (const l of lines) m.emitLog(l)
+    }
+    const frame = (): Promise<void> => new Promise((res) => requestAnimationFrame(() => setTimeout(res, 0)))
+    // From the message to the commit it causes, with the layout it forces.
+    const commit = async (lines: string[]): Promise<number> => {
+      const t0 = performance.now()
+      const done = new Promise<number>((res) => {
+        const mo = new MutationObserver(() => {
+          mo.disconnect()
+          void pre.scrollHeight
+          res(performance.now() - t0)
+        })
+        mo.observe(pre, { childList: true, subtree: true, characterData: true })
+      })
+      emit(lines)
+      const dt = await done
+      await frame()
+      return dt
+    }
+    // The same without the frame after it: back-to-back, no frame between
+    // (batch_x10; not a per-frame-batch time).
+    const commitNow = (lines: string[]): Promise<void> =>
+      new Promise<void>((res) => {
+        const mo = new MutationObserver(() => {
+          mo.disconnect()
+          void pre.scrollHeight
+          res()
+        })
+        mo.observe(pre, { childList: true, subtree: true, characterData: true })
+        emit(lines)
+      })
+    const stats = (xs: number[]): Stats => {
+      const s = xs.slice().sort((a, b) => a - b)
+      const q = (p: number): number => s[Math.min(s.length - 1, Math.floor(p * s.length))]
+      const round = (x: number): number => Math.round(x * 100) / 100
+      const mean = s.reduce((a, b) => a + b, 0) / s.length
+      return { n: s.length, median_ms: round(q(0.5)), p95_ms: round(q(0.95)), mean_ms: round(mean) }
+    }
+    let k = 0
+    const lines = (n: number): string[] =>
+      Array.from({ length: n }, () => `Warning: spectrum ${k++} has no precursor charge, assuming 2+`)
+    // Fill the log to 5,000 lines.
+    for (let i = 0; i < 10; i++) {
+      emit(lines(500))
+      await frame()
+    }
+    const perLine: number[] = []
+    for (let i = 0; i < 200; i++) perLine.push(await commit(lines(1)))
+    const perBatch: number[] = []
+    for (let i = 0; i < 60; i++) perBatch.push(await commit(lines(500)))
+    const perTen: number[] = []
+    for (let g = 0; g < 12; g++) {
+      const batches = Array.from({ length: 10 }, () => lines(500))
+      const t0 = performance.now()
+      for (const b of batches) await commitNow(b)
+      perTen.push((performance.now() - t0) / 10)
+      await frame()
+    }
+    return {
+      batched,
+      domLines: (pre.textContent ?? '').split('\n').length,
+      line: stats(perLine.slice(20)),
+      batch: stats(perBatch.slice(10)),
+      batch_x10: stats(perTen.slice(2))
+    }
+  })
+
+  const out = { browser: browserName, ...r }
+  console.log(`log drawer perf ${JSON.stringify(out)}`)
+  expect(r.line.n).toBe(180)
+  expect(r.batch.n).toBe(50)
+  expect(r.batch_x10.n).toBe(10)
+  expect(Number.isFinite(r.batch.median_ms)).toBe(true)
+  const file = process.env.PERF_OUT
+  if (file) writeFileSync(`${file}.${browserName}.json`, JSON.stringify(out, null, 2))
+})

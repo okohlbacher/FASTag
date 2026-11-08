@@ -102,8 +102,11 @@ export const START: HelpPage = {
             While a run goes, <strong>Changed from defaults</strong> lists the settings it was given that differ from
             the defaults. Afterwards, <strong>Last run</strong> shows whether it finished, was cancelled or failed, and
             the same list (&quot;all defaults&quot; when there is none), even if the form was edited since. Cancel
-            stops a run; what it leaves behind is in{' '}
-            <L to="faq-incomplete">The Tags tab says Outdated or Incomplete</L>.
+            stops a run at once, and the files at its output paths are removed, so no half-written table is
+            later read as a result. If an output file already exists, the app asks before the run whether to
+            overwrite it; a run that is then cancelled or fails removes it too. Closing the window or quitting while a run goes asks first: Cancel run and quit,
+            or Keep running. More in{' '}
+            <L to="faq-incomplete">The Tags tab says Outdated, Removed or Incomplete</L>.
           </p>
         </>
       )
@@ -157,8 +160,24 @@ export const START: HelpPage = {
               the failed ones again. Cancel stops the whole queue.
             </li>
             <li>
+              Each file keeps its own log: <strong>Log</strong> beside a file in the list shows it, and Show full log
+              in the red box of a failed batch shows the failed file&apos;s log, also after later files have run.
+            </li>
+            <li>
               When a file is done, click it in the batch list to see its tags and reports. The results of the last
               file are shown at the end.
+            </li>
+            <li>
+              <strong>Load SDRF…</strong> on the Batch view (or dropping an <code>.sdrf.tsv</code> on the window)
+              compares each file with its SDRF rows, matched by <code>comment[data file]</code>: organism (by NCBI
+              taxid; a genus call that contains the SDRF species is consistent at genus, and only the called genus counts: an
+              SDRF organism found only lower in the present list differs, or, in a mixed sample, is ~ <em>present, not
+              called</em>), cleavage agent, label,
+              modifications, instrument and fragment tolerance. Only FASTag&apos;s own calls and reports count, so a
+              no call is never a difference. Fragment tolerance and modifications are the run&apos;s settings, not
+              measurements: where they differ the table shows ≠ <em>run setting differs</em>, which is no
+              correction. <strong>Export SDRF corrections TSV…</strong> writes the differences; the SDRF itself is
+              never changed, and neither this export nor the summary export will write over it.
             </li>
           </ul>
           <p>
@@ -169,14 +188,31 @@ export const START: HelpPage = {
     },
     {
       id: 'start-presets',
-      title: 'Presets and remembered settings',
+      title: 'Tasks, presets and remembered settings',
       body: (
-        <p>
-          <strong>Save…</strong> beside Parameters stores every parameter under a name; the preset menu loads it
-          again. The input file and the tags file are not part of a preset; report files set in a preset are moved
-          next to the current tags file when it is loaded. The app also remembers the parameters of the last run for the next start.{' '}
-          <strong>Reset…</strong> sets every parameter back to its default.
-        </p>
+        <>
+          <p>
+            Setup starts from a task: <strong>Characterize a run</strong> (species with extension 2, the digest, label
+            and glyco reports, a tenth of the spectra), <strong>Batch QC vs SDRF</strong> (the same reports, and the input
+            asks for the files of a batch first), <strong>Export tags</strong> (adds the per-residue confidence column){' '}
+            or <strong>Open results / inspect spectra</strong>. <strong>Starting from</strong> also offers FASTag&apos;s
+            own defaults and your presets. Choosing one replaces the form; <strong>Undo</strong> brings back what it
+            replaced. The footer above Run counts what differs from where the form started, and its{' '}
+            <strong>Reset</strong> takes that back.
+          </p>
+          <p>
+            <strong>Save…</strong> stores what differs from the task or defaults the form started from, under a name.
+            No paths are stored: input files such as a FASTA are left out, and a report is stored by its name and
+            written next to the current tags file. The app also remembers the parameters of the last run, but they
+            are never used on their own: <strong>Apply last-used (n)</strong> offers the n settings of the last run,
+            and nothing of them is used until you click it. <strong>Reset…</strong> beside Run sets every parameter
+            back to FASTag&apos;s default.
+          </p>
+          <p>
+            <strong>Export INI…</strong> writes the parameters a run would use as an INI file;{' '}
+            <code>FASTag -ini file.ini</code> runs the command line with the same parameters.
+          </p>
+        </>
       )
     },
     {
@@ -416,9 +452,12 @@ export const RESULTS: HelpPage = {
       body: (
         <p>
           Above the table, &quot;Spectrum contains&quot;, &quot;Min. length&quot; and &quot;Max. E-value&quot; filter
-          the rows; Database hit picks All, In database, Entrapment or Not in database. Click a column header to sort,
-          drag its edge to resize, and use <strong>Columns…</strong> to hide columns. <strong>Export shown
-          rows…</strong> writes the rows that pass the filters, in the shown columns, to a new TSV file.{' '}
+          the rows; Database hit picks All, In database, Entrapment or Not in database; &quot;Per spectrum&quot; keeps
+          only the best tag (or the best 2, 3 or 5) of each spectrum by E-value, among the rows the other filters
+          leave. Click a column header to sort, drag its edge to resize, and use <strong>Columns…</strong> to hide
+          columns. <strong>Export shown rows…</strong> writes the rows that pass the filters, in the table&apos;s
+          order and in the shown columns, to a new file: TSV, or CSV when the name ends in .csv. A large export shows
+          its progress and can be cancelled; nothing is written under the name until it is complete.{' '}
           <strong>Open tags…</strong> shows a tags file from an earlier run.
         </p>
       )
@@ -526,6 +565,29 @@ export const RESULTS: HelpPage = {
             chance rate (on the safe side); at 0.05 to 0.1 the real rate was about 1.6 times higher. How well it holds
             depends on the entrapment database and on how many tags match it. A q_db of 0 means too few entrapment
             matches to measure, not no risk. It says nothing about whether the tag reads its peptide correctly.
+          </p>
+        </>
+      )
+    },
+    {
+      id: 'results-spectrum',
+      title: 'The Spectrum tab',
+      body: (
+        <>
+          <p>
+            In Tags, choose a row and press Enter (or Open in Spectrum). The Spectrum tab shows that spectrum with the
+            peaks FASTag tagged: after centroiding, the precursor cut, deisotoping and the peak budget, as the run
+            prepared them (FASTag prints them with -dump_spectrum, under the options of the run that wrote the
+            table). The chosen tag&apos;s ladder is drawn on them: its b or y ions one residue apart (the residue
+            divided by the fragment charge), each step with its error in ppm. A <L to="tags-gapped">gapped tag</L>{' '}
+            crossed a missing peak, shown dashed. Choose another tag of the spectrum below to draw its ladder; ◀ and ▶
+            go to the previous and next tagged spectrum. The wheel or + and − zoom, dragging or the arrow keys pan.
+          </p>
+          <p>
+            The tab needs a FASTag that has -dump_spectrum; with an older one it is not there, and the row action says
+            &quot;Spectrum view needs FASTag 1.12 or later&quot;. A table no run of this app wrote asks for its input
+            (Locate input…) and is shown at FASTag&apos;s default settings, which it says. No other reader is used:
+            peaks read another way are not the peaks FASTag tagged.
           </p>
         </>
       )

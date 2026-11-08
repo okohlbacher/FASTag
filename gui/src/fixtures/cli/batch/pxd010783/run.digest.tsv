@@ -1,0 +1,242 @@
+section	key	value	n	description
+run	version	1.11.0	-	FASTag 1.11.0 wrote this report.
+run	input	KristenJeff_p53_mod_AspN_03_02_07.mzML	-	The spectra were read from KristenJeff_p53_mod_AspN_03_02_07.mzML.
+run	fragment_tolerance	20	-	The fragment tolerance is 20 ppm.
+run	fragment_tolerance_unit	ppm	-	The fragment tolerance is in ppm.
+run	tag_length	3	-	Tags were seeded at length 3.
+run	subsample_fraction	0.1	-	A fraction of 0.1 of the spectra was tagged (0 = all).
+run	subsample_spectra	0	-	0 spectra were drawn for tagging (0 = all).
+run	window_da	0.008	-	A tag end counts for a residue when its mass is within 0.008 Da of it.
+run	tag_min	100	-	The call needs 100 C-terminal tag ends, and uses the N-terminal ends when there are as many.
+run	background_share	0.05	-	Every model is mixed with the background at a share of 0.05.
+run	models	shipped	-	The models are the cleavage rules shipped with FASTag.
+run	background	shipped_human	-	The background is the residue composition of the human reference proteome shipped with FASTag.
+meta	instrument	LTQ Orbitrap XL	-	The input names the instrument LTQ Orbitrap XL.
+meta	instrument_model	-	-	The input names no instrument model (metadata absent).
+meta	native_id_format	MS:1000768	-	The native ID format of the input is MS:1000768.
+meta	ion_mobility	no	686	0 of 686 MS2 spectra carry an ion mobility.
+meta	ion_mobility_unit	-	0	0 MS2 spectra carry 1/K0, 0 a drift time, 0 a FAIMS compensation voltage and 0 another ion mobility.
+meta	ms2_scan_window_low	120	686	The median MS2 scan window starts at m/z 120.00 over 686 spectra.
+meta	ms2_first_peak_mz	310.1808319091797	686	The median first MS2 peak is at m/z 310.18 over 686 spectra.
+meta	ms2_whole_intensity_share	6.72988681553992e-05	163450	A share of 0.0001 of the 163450 MS2 peak intensities above 0 are whole numbers.
+count	tags_filtered	0	0	0 reported tags are ungapped with an E-value of at most 1.
+count	tot	0	0	0 C-terminal tag ends match a residue key, labelled K and R+10 included.
+count	n_c	0	0	0 C-terminal tag ends match a residue, labelled K counted as K and R+10 left out.
+count	n_n	0	0	0 N-terminal tag ends match a residue, labelled K counted as K and R+10 left out.
+residue	C.K	0	0	0 tag ends are a C-terminal K (0 after a y tag, 0 before a reversed b tag).
+residue	C.K+TMT	0	0	0 tag ends are a C-terminal K+TMT (0 after a y tag, 0 before a reversed b tag).
+residue	C.K+TMTpro	0	0	0 tag ends are a C-terminal K+TMTpro (0 after a y tag, 0 before a reversed b tag).
+residue	C.K+iTRAQ4	0	0	0 tag ends are a C-terminal K+iTRAQ4 (0 after a y tag, 0 before a reversed b tag).
+residue	C.K+8	0	0	0 tag ends are a C-terminal K+8 (0 after a y tag, 0 before a reversed b tag).
+residue	C.R	0	0	0 tag ends are a C-terminal R (0 after a y tag, 0 before a reversed b tag).
+residue	C.R+10	0	0	0 tag ends are a C-terminal R+10 (0 after a y tag, 0 before a reversed b tag).
+residue	N.K	0	-	0 tag ends are an N-terminal K.
+residue	N.K+TMT	0	-	0 tag ends are an N-terminal K+TMT.
+residue	N.K+TMTpro	0	-	0 tag ends are an N-terminal K+TMTpro.
+residue	N.K+iTRAQ4	0	-	0 tag ends are an N-terminal K+iTRAQ4.
+residue	N.K+8	0	-	0 tag ends are an N-terminal K+8.
+residue	N.R	0	-	0 tag ends are an N-terminal R.
+residue	N.R+10	0	-	0 tag ends are an N-terminal R+10.
+pos	C.P4.G	0	0	0 of 0 C-terminal tag ends have G at P4.
+pos	C.P4.A	0	0	0 of 0 C-terminal tag ends have A at P4.
+pos	C.P4.S	0	0	0 of 0 C-terminal tag ends have S at P4.
+pos	C.P4.P	0	0	0 of 0 C-terminal tag ends have P at P4.
+pos	C.P4.V	0	0	0 of 0 C-terminal tag ends have V at P4.
+pos	C.P4.T	0	0	0 of 0 C-terminal tag ends have T at P4.
+pos	C.P4.C	0	0	0 of 0 C-terminal tag ends have C at P4.
+pos	C.P4.L	0	0	0 of 0 C-terminal tag ends have L at P4.
+pos	C.P4.N	0	0	0 of 0 C-terminal tag ends have N at P4.
+pos	C.P4.D	0	0	0 of 0 C-terminal tag ends have D at P4.
+pos	C.P4.Q	0	0	0 of 0 C-terminal tag ends have Q at P4.
+pos	C.P4.K	0	0	0 of 0 C-terminal tag ends have K at P4.
+pos	C.P4.E	0	0	0 of 0 C-terminal tag ends have E at P4.
+pos	C.P4.M	0	0	0 of 0 C-terminal tag ends have M at P4.
+pos	C.P4.H	0	0	0 of 0 C-terminal tag ends have H at P4.
+pos	C.P4.F	0	0	0 of 0 C-terminal tag ends have F at P4.
+pos	C.P4.R	0	0	0 of 0 C-terminal tag ends have R at P4.
+pos	C.P4.Y	0	0	0 of 0 C-terminal tag ends have Y at P4.
+pos	C.P4.W	0	0	0 of 0 C-terminal tag ends have W at P4.
+pos	C.P3.G	0	0	0 of 0 C-terminal tag ends have G at P3.
+pos	C.P3.A	0	0	0 of 0 C-terminal tag ends have A at P3.
+pos	C.P3.S	0	0	0 of 0 C-terminal tag ends have S at P3.
+pos	C.P3.P	0	0	0 of 0 C-terminal tag ends have P at P3.
+pos	C.P3.V	0	0	0 of 0 C-terminal tag ends have V at P3.
+pos	C.P3.T	0	0	0 of 0 C-terminal tag ends have T at P3.
+pos	C.P3.C	0	0	0 of 0 C-terminal tag ends have C at P3.
+pos	C.P3.L	0	0	0 of 0 C-terminal tag ends have L at P3.
+pos	C.P3.N	0	0	0 of 0 C-terminal tag ends have N at P3.
+pos	C.P3.D	0	0	0 of 0 C-terminal tag ends have D at P3.
+pos	C.P3.Q	0	0	0 of 0 C-terminal tag ends have Q at P3.
+pos	C.P3.K	0	0	0 of 0 C-terminal tag ends have K at P3.
+pos	C.P3.E	0	0	0 of 0 C-terminal tag ends have E at P3.
+pos	C.P3.M	0	0	0 of 0 C-terminal tag ends have M at P3.
+pos	C.P3.H	0	0	0 of 0 C-terminal tag ends have H at P3.
+pos	C.P3.F	0	0	0 of 0 C-terminal tag ends have F at P3.
+pos	C.P3.R	0	0	0 of 0 C-terminal tag ends have R at P3.
+pos	C.P3.Y	0	0	0 of 0 C-terminal tag ends have Y at P3.
+pos	C.P3.W	0	0	0 of 0 C-terminal tag ends have W at P3.
+pos	C.P2.G	0	0	0 of 0 C-terminal tag ends have G at P2.
+pos	C.P2.A	0	0	0 of 0 C-terminal tag ends have A at P2.
+pos	C.P2.S	0	0	0 of 0 C-terminal tag ends have S at P2.
+pos	C.P2.P	0	0	0 of 0 C-terminal tag ends have P at P2.
+pos	C.P2.V	0	0	0 of 0 C-terminal tag ends have V at P2.
+pos	C.P2.T	0	0	0 of 0 C-terminal tag ends have T at P2.
+pos	C.P2.C	0	0	0 of 0 C-terminal tag ends have C at P2.
+pos	C.P2.L	0	0	0 of 0 C-terminal tag ends have L at P2.
+pos	C.P2.N	0	0	0 of 0 C-terminal tag ends have N at P2.
+pos	C.P2.D	0	0	0 of 0 C-terminal tag ends have D at P2.
+pos	C.P2.Q	0	0	0 of 0 C-terminal tag ends have Q at P2.
+pos	C.P2.K	0	0	0 of 0 C-terminal tag ends have K at P2.
+pos	C.P2.E	0	0	0 of 0 C-terminal tag ends have E at P2.
+pos	C.P2.M	0	0	0 of 0 C-terminal tag ends have M at P2.
+pos	C.P2.H	0	0	0 of 0 C-terminal tag ends have H at P2.
+pos	C.P2.F	0	0	0 of 0 C-terminal tag ends have F at P2.
+pos	C.P2.R	0	0	0 of 0 C-terminal tag ends have R at P2.
+pos	C.P2.Y	0	0	0 of 0 C-terminal tag ends have Y at P2.
+pos	C.P2.W	0	0	0 of 0 C-terminal tag ends have W at P2.
+pos	C.P1.G	0	0	0 of 0 C-terminal tag ends have G at P1.
+pos	C.P1.A	0	0	0 of 0 C-terminal tag ends have A at P1.
+pos	C.P1.S	0	0	0 of 0 C-terminal tag ends have S at P1.
+pos	C.P1.P	0	0	0 of 0 C-terminal tag ends have P at P1.
+pos	C.P1.V	0	0	0 of 0 C-terminal tag ends have V at P1.
+pos	C.P1.T	0	0	0 of 0 C-terminal tag ends have T at P1.
+pos	C.P1.C	0	0	0 of 0 C-terminal tag ends have C at P1.
+pos	C.P1.L	0	0	0 of 0 C-terminal tag ends have L at P1.
+pos	C.P1.N	0	0	0 of 0 C-terminal tag ends have N at P1.
+pos	C.P1.D	0	0	0 of 0 C-terminal tag ends have D at P1.
+pos	C.P1.Q	0	0	0 of 0 C-terminal tag ends have Q at P1.
+pos	C.P1.K	0	0	0 of 0 C-terminal tag ends have K at P1.
+pos	C.P1.E	0	0	0 of 0 C-terminal tag ends have E at P1.
+pos	C.P1.M	0	0	0 of 0 C-terminal tag ends have M at P1.
+pos	C.P1.H	0	0	0 of 0 C-terminal tag ends have H at P1.
+pos	C.P1.F	0	0	0 of 0 C-terminal tag ends have F at P1.
+pos	C.P1.R	0	0	0 of 0 C-terminal tag ends have R at P1.
+pos	C.P1.Y	0	0	0 of 0 C-terminal tag ends have Y at P1.
+pos	C.P1.W	0	0	0 of 0 C-terminal tag ends have W at P1.
+pos	N.P1'.G	0	0	0 of 0 N-terminal tag ends have G at P1'.
+pos	N.P1'.A	0	0	0 of 0 N-terminal tag ends have A at P1'.
+pos	N.P1'.S	0	0	0 of 0 N-terminal tag ends have S at P1'.
+pos	N.P1'.P	0	0	0 of 0 N-terminal tag ends have P at P1'.
+pos	N.P1'.V	0	0	0 of 0 N-terminal tag ends have V at P1'.
+pos	N.P1'.T	0	0	0 of 0 N-terminal tag ends have T at P1'.
+pos	N.P1'.C	0	0	0 of 0 N-terminal tag ends have C at P1'.
+pos	N.P1'.L	0	0	0 of 0 N-terminal tag ends have L at P1'.
+pos	N.P1'.N	0	0	0 of 0 N-terminal tag ends have N at P1'.
+pos	N.P1'.D	0	0	0 of 0 N-terminal tag ends have D at P1'.
+pos	N.P1'.Q	0	0	0 of 0 N-terminal tag ends have Q at P1'.
+pos	N.P1'.K	0	0	0 of 0 N-terminal tag ends have K at P1'.
+pos	N.P1'.E	0	0	0 of 0 N-terminal tag ends have E at P1'.
+pos	N.P1'.M	0	0	0 of 0 N-terminal tag ends have M at P1'.
+pos	N.P1'.H	0	0	0 of 0 N-terminal tag ends have H at P1'.
+pos	N.P1'.F	0	0	0 of 0 N-terminal tag ends have F at P1'.
+pos	N.P1'.R	0	0	0 of 0 N-terminal tag ends have R at P1'.
+pos	N.P1'.Y	0	0	0 of 0 N-terminal tag ends have Y at P1'.
+pos	N.P1'.W	0	0	0 of 0 N-terminal tag ends have W at P1'.
+pos	N.P2'.G	0	0	0 of 0 N-terminal tag ends have G at P2'.
+pos	N.P2'.A	0	0	0 of 0 N-terminal tag ends have A at P2'.
+pos	N.P2'.S	0	0	0 of 0 N-terminal tag ends have S at P2'.
+pos	N.P2'.P	0	0	0 of 0 N-terminal tag ends have P at P2'.
+pos	N.P2'.V	0	0	0 of 0 N-terminal tag ends have V at P2'.
+pos	N.P2'.T	0	0	0 of 0 N-terminal tag ends have T at P2'.
+pos	N.P2'.C	0	0	0 of 0 N-terminal tag ends have C at P2'.
+pos	N.P2'.L	0	0	0 of 0 N-terminal tag ends have L at P2'.
+pos	N.P2'.N	0	0	0 of 0 N-terminal tag ends have N at P2'.
+pos	N.P2'.D	0	0	0 of 0 N-terminal tag ends have D at P2'.
+pos	N.P2'.Q	0	0	0 of 0 N-terminal tag ends have Q at P2'.
+pos	N.P2'.K	0	0	0 of 0 N-terminal tag ends have K at P2'.
+pos	N.P2'.E	0	0	0 of 0 N-terminal tag ends have E at P2'.
+pos	N.P2'.M	0	0	0 of 0 N-terminal tag ends have M at P2'.
+pos	N.P2'.H	0	0	0 of 0 N-terminal tag ends have H at P2'.
+pos	N.P2'.F	0	0	0 of 0 N-terminal tag ends have F at P2'.
+pos	N.P2'.R	0	0	0 of 0 N-terminal tag ends have R at P2'.
+pos	N.P2'.Y	0	0	0 of 0 N-terminal tag ends have Y at P2'.
+pos	N.P2'.W	0	0	0 of 0 N-terminal tag ends have W at P2'.
+pos	N.P3'.G	0	0	0 of 0 N-terminal tag ends have G at P3'.
+pos	N.P3'.A	0	0	0 of 0 N-terminal tag ends have A at P3'.
+pos	N.P3'.S	0	0	0 of 0 N-terminal tag ends have S at P3'.
+pos	N.P3'.P	0	0	0 of 0 N-terminal tag ends have P at P3'.
+pos	N.P3'.V	0	0	0 of 0 N-terminal tag ends have V at P3'.
+pos	N.P3'.T	0	0	0 of 0 N-terminal tag ends have T at P3'.
+pos	N.P3'.C	0	0	0 of 0 N-terminal tag ends have C at P3'.
+pos	N.P3'.L	0	0	0 of 0 N-terminal tag ends have L at P3'.
+pos	N.P3'.N	0	0	0 of 0 N-terminal tag ends have N at P3'.
+pos	N.P3'.D	0	0	0 of 0 N-terminal tag ends have D at P3'.
+pos	N.P3'.Q	0	0	0 of 0 N-terminal tag ends have Q at P3'.
+pos	N.P3'.K	0	0	0 of 0 N-terminal tag ends have K at P3'.
+pos	N.P3'.E	0	0	0 of 0 N-terminal tag ends have E at P3'.
+pos	N.P3'.M	0	0	0 of 0 N-terminal tag ends have M at P3'.
+pos	N.P3'.H	0	0	0 of 0 N-terminal tag ends have H at P3'.
+pos	N.P3'.F	0	0	0 of 0 N-terminal tag ends have F at P3'.
+pos	N.P3'.R	0	0	0 of 0 N-terminal tag ends have R at P3'.
+pos	N.P3'.Y	0	0	0 of 0 N-terminal tag ends have Y at P3'.
+pos	N.P3'.W	0	0	0 of 0 N-terminal tag ends have W at P3'.
+pos	N.P4'.G	0	0	0 of 0 N-terminal tag ends have G at P4'.
+pos	N.P4'.A	0	0	0 of 0 N-terminal tag ends have A at P4'.
+pos	N.P4'.S	0	0	0 of 0 N-terminal tag ends have S at P4'.
+pos	N.P4'.P	0	0	0 of 0 N-terminal tag ends have P at P4'.
+pos	N.P4'.V	0	0	0 of 0 N-terminal tag ends have V at P4'.
+pos	N.P4'.T	0	0	0 of 0 N-terminal tag ends have T at P4'.
+pos	N.P4'.C	0	0	0 of 0 N-terminal tag ends have C at P4'.
+pos	N.P4'.L	0	0	0 of 0 N-terminal tag ends have L at P4'.
+pos	N.P4'.N	0	0	0 of 0 N-terminal tag ends have N at P4'.
+pos	N.P4'.D	0	0	0 of 0 N-terminal tag ends have D at P4'.
+pos	N.P4'.Q	0	0	0 of 0 N-terminal tag ends have Q at P4'.
+pos	N.P4'.K	0	0	0 of 0 N-terminal tag ends have K at P4'.
+pos	N.P4'.E	0	0	0 of 0 N-terminal tag ends have E at P4'.
+pos	N.P4'.M	0	0	0 of 0 N-terminal tag ends have M at P4'.
+pos	N.P4'.H	0	0	0 of 0 N-terminal tag ends have H at P4'.
+pos	N.P4'.F	0	0	0 of 0 N-terminal tag ends have F at P4'.
+pos	N.P4'.R	0	0	0 of 0 N-terminal tag ends have R at P4'.
+pos	N.P4'.Y	0	0	0 of 0 N-terminal tag ends have Y at P4'.
+pos	N.P4'.W	0	0	0 of 0 N-terminal tag ends have W at P4'.
+share	kr	-	0	No C-terminal tag end matches a residue.
+share	anchors_LVFYM	-	0	No C-terminal tag end matches a residue.
+share	nterm_D	0	0	A share of 0.000 of the N-terminal tag ends are D.
+background	C.G	0.06571545337960302	-	The C-terminal background gives G a share of 0.0657.
+background	C.A	0.0701306598037275	-	The C-terminal background gives A a share of 0.0701.
+background	C.S	0.0836145755756039	-	The C-terminal background gives S a share of 0.0836.
+background	C.P	0.06321403843958216	-	The C-terminal background gives P a share of 0.0632.
+background	C.V	0.05951634015681831	-	The C-terminal background gives V a share of 0.0595.
+background	C.T	0.053767982656902975	-	The C-terminal background gives T a share of 0.0538.
+background	C.C	0.02299264440680582	-	The C-terminal background gives C a share of 0.0230.
+background	C.L	0.14290466499003696	-	The C-terminal background gives L a share of 0.1429.
+background	C.N	0.0357872460920247	-	The C-terminal background gives N a share of 0.0358.
+background	C.D	0.04731311531560408	-	The C-terminal background gives D a share of 0.0473.
+background	C.Q	0.04766916345533766	-	The C-terminal background gives Q a share of 0.0477.
+background	C.K	0.05723951748537663	-	The C-terminal background gives K a share of 0.0572.
+background	C.E	0.07105006530895273	-	The C-terminal background gives E a share of 0.0711.
+background	C.M	0.02128380536989378	-	The C-terminal background gives M a share of 0.0213.
+background	C.H	0.02624787933573062	-	The C-terminal background gives H a share of 0.0262.
+background	C.F	0.03645639662872428	-	The C-terminal background gives F a share of 0.0365.
+background	C.R	0.056389506015720944	-	The C-terminal background gives R a share of 0.0564.
+background	C.Y	0.026585422399312313	-	The C-terminal background gives Y a share of 0.0266.
+background	C.W	0.012121523184241777	-	The C-terminal background gives W a share of 0.0121.
+background	N.G	0.06571545337960302	-	The N-terminal background gives G a share of 0.0657.
+background	N.A	0.0701306598037275	-	The N-terminal background gives A a share of 0.0701.
+background	N.S	0.0836145755756039	-	The N-terminal background gives S a share of 0.0836.
+background	N.P	0.06321403843958216	-	The N-terminal background gives P a share of 0.0632.
+background	N.V	0.05951634015681831	-	The N-terminal background gives V a share of 0.0595.
+background	N.T	0.053767982656902975	-	The N-terminal background gives T a share of 0.0538.
+background	N.C	0.02299264440680582	-	The N-terminal background gives C a share of 0.0230.
+background	N.L	0.14290466499003696	-	The N-terminal background gives L a share of 0.1429.
+background	N.N	0.0357872460920247	-	The N-terminal background gives N a share of 0.0358.
+background	N.D	0.04731311531560408	-	The N-terminal background gives D a share of 0.0473.
+background	N.Q	0.04766916345533766	-	The N-terminal background gives Q a share of 0.0477.
+background	N.K	0.05723951748537663	-	The N-terminal background gives K a share of 0.0572.
+background	N.E	0.07105006530895273	-	The N-terminal background gives E a share of 0.0711.
+background	N.M	0.02128380536989378	-	The N-terminal background gives M a share of 0.0213.
+background	N.H	0.02624787933573062	-	The N-terminal background gives H a share of 0.0262.
+background	N.F	0.03645639662872428	-	The N-terminal background gives F a share of 0.0365.
+background	N.R	0.056389506015720944	-	The N-terminal background gives R a share of 0.0564.
+background	N.Y	0.026585422399312313	-	The N-terminal background gives Y a share of 0.0266.
+background	N.W	0.012121523184241777	-	The N-terminal background gives W a share of 0.0121.
+call	status	no_call	0	No protease is called: the median first MS2 peak is at m/z 310.18, above y1 of K plus 0.1 (147.21).
+call	reason	ms2_first_peak	-	The first no-call rule that applies is ms2_first_peak.
+nocall	low_resolution	no	-	The fragment tolerance is in ppm.
+nocall	timstof	no	-	Neither the instrument, the native ID format nor the ion mobility marks the input as timsTOF data.
+nocall	ms2_scan_window	no	686	The median MS2 scan window starts at m/z 120.00, not above y1 of K plus 0.1 (147.21).
+nocall	ms2_first_peak	yes	686	The median first MS2 peak is at m/z 310.18, above y1 of K plus 0.1 (147.21).
+nocall	ion_counts	no	163450	The input names its instrument or native ID format, so the timstof rule decides.
+nocall	few_tags	yes	0	0 residue-key and 0 C-terminal tag ends against a minimum of 100.
+nocall	nonfinite_score	no	-	The call and the runner-up have finite log-likelihoods, or no call was scored.
+nocall	tie	no	0	No model of another class has the call's log-likelihood, or no call was scored.

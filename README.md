@@ -1,3 +1,5 @@
+<img src="gui/src/assets/logo.svg" alt="FASTag logo" width="80" align="right">
+
 # FASTag — a fast parallel mass spectrometry tagger and tag-based filter
 
 [![release](https://img.shields.io/github/v/release/okohlbacher/FASTag?label=release&color=5b5fd6)](https://github.com/okohlbacher/FASTag/releases/latest)
@@ -129,7 +131,7 @@ the right build for whatever you are reading this on. Everything is also on the
 |---|---|---|
 | macOS, Apple silicon | [.dmg](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-macos-arm64.dmg) | [.dmg](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-macos-arm64.dmg) |
 | Windows x64 | [installer](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-windows-x64-setup.exe) | [.zip](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-windows-x64.zip) |
-| Linux x64 | — | [.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-x64.tar.gz) |
+| Linux x64 | [.deb](https://github.com/okohlbacher/FASTag/releases/latest) (`fastag-gui_<version>_amd64.deb`) · [.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-linux-x64.tar.gz) (from 1.12.0) | [.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-x64.tar.gz) |
 | Linux arm64 | — | [.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-arm64.tar.gz) |
 
 Intel Macs are not built from 1.8.0 on; [1.6.1](https://github.com/okohlbacher/FASTag/releases/tag/v1.6.1) is the last release for them.
@@ -149,6 +151,19 @@ CLI it launches, on every platform.
 Developer ID certificate, notarized and **stapled**, so it opens with no network
 connection — a plain tarball cannot carry a notarization ticket.
 
+**Linux desktop app: Ubuntu 22.04 or newer, Debian 12 or newer** (glibc 2.35
+and WebKitGTK 4.1). The `.deb`, `fastag-gui_<version>_amd64.deb` on the release
+page (Debian package `fastag-gui`), pulls in `libwebkit2gtk-4.1-0` and
+`libgtk-3-0` (`sudo apt install ./fastag-gui_<version>_amd64.deb`); the tarball needs them
+installed and runs as `FASTag-gui/bin/fastag`. A best-effort
+`FASTag-gui-linux-x64.AppImage` carries its own WebKitGTK 4.1, takes GTK 3,
+EGL and GL from the desktop, and needs FUSE 2 (`libfuse2`, or `libfuse2t64`
+on Ubuntu 24.04) or `APPIMAGE_EXTRACT_AND_RUN=1`. RHEL-family systems (RHEL,
+Rocky, Alma) are not supported by the desktop app: RHEL 9 has glibc 2.34 and
+only WebKitGTK API 4.0. Use the command line there; it keeps the older floor of
+glibc 2.28, so the CLI tarball also runs on RHEL/Rocky 8 and 9 and other older
+systems.
+
 **Windows builds are not yet code-signed** — the signing path is wired up but
 the SignPath project is not live — so SmartScreen will warn on first run.
 
@@ -162,19 +177,52 @@ compiled from source with the libraries listed in
 
 A cross-platform desktop app ([`gui/`](gui/)) wraps the CLI: pick spectra, set
 parameters from a form generated out of the tool's own `-write_ini`, watch a
-progress bar, and browse the tags and the ranked species report (with a
+progress bar with the phase of the run and the time left, and browse the tags and the ranked species report (with a
 "Relative to top taxon" column showing each taxon's evidence relative to the
 top hit, and an Adjusted column after `-species_deconvolve`). The **Database
 hit** filter on `fasta_hit` offers All, In database (`fwd`/`rev`), Entrapment
 (`efwd`/`erev`) or Not in database; **Export shown rows…** writes the filtered rows, in
-the shown columns, to a new TSV. A failed run quotes FASTag's reason and offers
-its command line to copy. A **Digest** tab
+the shown columns, to a new TSV, and a `-res_conf` table also exports as Stitch or ALPS
+reads, byte for byte what `tools/tags_to_denovo.py` writes. The tags table can be walked
+by keyboard; Cmd/Ctrl+C copies the active row and Cmd/Ctrl+Shift+C its USI, and Enter opens its
+spectrum in the **Spectrum** tab: the peaks FASTag tagged (`-dump_spectrum`, under the run's own
+options) as a stick plot with zoom, the tag's b or y ladder drawn on them with the error of each step,
+and the spectrum's other tags. The tab needs a CLI whose `--helphelp` lists `-dump_spectrum`; with an
+older one it is hidden and the row action says "Spectrum view needs FASTag 1.12 or later". A failed run quotes FASTag's reason and offers
+its command line to copy. A run never outlives the app: if the app is killed,
+the CLI ends within seconds (a watchdog on macOS and Linux, plus the parent-death
+signal on Linux; a kill-on-close job per run on Windows, which a browser or editor the app
+opens is never part of), and the files such a run, or a cancelled or failed one, left behind
+are offered for removal at the next start (of an interrupted run, only what it wrote while it
+was alive: a result remade later, or an older one it had not rewritten yet, is never offered). A **Digest** tab
 shows the `-digest_out`, `-label_out` and `-massgap_out` reports: the protease
 call or no-call with its reason, sequence logos P4..P1 | P1'..P4' of the
 observed tag ends and of the called and runner-up models (in bits against the
 background in use), the label counts, a histogram of the mass gaps and the mass-gap peaks. A
-built-in **Help** (F1, or the Help button) covers every tab, setting and error
-message. It is built with
+**Mass gaps & recon** tab draws the `-delta_out` (or `-massgap_out`) gap peaks with about 60
+common Unimod deltas marked and the CLI's explained peaks labelled (hover or the arrow keys
+for each value, or the same values as a table), warns when too few spectra are placed for
+any conclusion, and shows the `-recon_out` placements, the gap peaks and an mzTab
+`-recon_id_out` in one keyboard table with filters (kept, with their sort, across tab
+switches); without a FASTA it offers to choose one and run again, and when a FASTA run
+placed too few spectra with an extension below 3 it offers the run with extension 3. A
+`-delta_out` opened without its run's `-massgap_out` beside it is matched with an assumed
+0.5 Da window, and the chart says so. Tables up to 128 MB open in the app; larger ones
+open only in a spreadsheet. A **Glyco** tab lists the `-glyco_out` spectra, flagged ones first by their
+oxonium intensity. Setup starts
+from a task (by default **Characterize a run**: species, digest, label and
+glyco reports), so a file and Run are all a first run needs; the settings sit
+in four step cards, presets store only what differs from their task, and
+**Export INI…** writes the same parameters for `FASTag -ini`. The
+window has four views, switched from the top bar or with Cmd/Ctrl+1..4:
+**Setup**, **Results**, **Batch** and **History** (every recorded run, with
+its exact command line to copy, its settings to load back into Setup, and a
+Re-run of the same command line); a
+progress pill in the top bar follows the run from any view (the Batch view compares a batch with its SDRF: organism by NCBI taxid, protease, label, modifications, instrument and tolerance, with a corrections TSV), and a finished
+run in the background raises a system notification. Spectra, FASTA,
+taxonomy, tags and report files can be dropped anywhere on the window. A
+built-in **Help** side panel (F1, or the Help button), with a search, covers
+every tab, setting and error message. Light, dark and system themes. It is built with
 [Tauri 2](https://tauri.app) — a Rust backend and the OS's native webview, not a
 bundled browser. The CLI remains the source of truth; the GUI shells out to it.
 
@@ -183,9 +231,9 @@ cd gui && npm install && npm run tauri dev     # or: npm run tauri build
 ```
 
 Installable bundles ship with every release: signed, notarized and stapled disk
-images for macOS (also on Homebrew, above) and an installer for Windows, which
-is not yet code-signed (see above) — see the install table at the top. Details
-in [gui/README.md](gui/README.md).
+images for macOS (also on Homebrew, above), an installer for Windows, which
+is not yet code-signed (see above), and from 1.12.0 a `.deb` and a tarball for
+Linux x64 (glibc ≥ 2.35, WebKitGTK 4.1: Ubuntu 22.04, Debian 12) — see the install table at the top. Details in [gui/README.md](gui/README.md).
 
 ## Usage
 

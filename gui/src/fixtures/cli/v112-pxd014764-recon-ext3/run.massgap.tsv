@@ -1,0 +1,308 @@
+section	key	value	n	description
+run	version	1.11.0	-	FASTag 1.11.0 wrote this report.
+run	input	20190412_KEH_HF_SA_ANW_R11_100419_CNOT_R1_f008.mzML	-	The spectra were read from 20190412_KEH_HF_SA_ANW_R11_100419_CNOT_R1_f008.mzML.
+run	fragment_tolerance	20	-	The fragment tolerance is 20 ppm.
+run	fragment_tolerance_unit	ppm	-	The fragment tolerance is in ppm.
+run	tag_length	3	-	Tags were seeded at length 3.
+run	subsample_fraction	0.1	-	A fraction of 0.1 of the spectra was tagged (0 = all).
+run	subsample_spectra	0	-	0 spectra were drawn for tagging (0 = all).
+run	window_da	0.02	-	Gaps within 0.02 Da count as one mass.
+run	min_spectra	20	-	A gap peak needs 20 spectra.
+run	min_share	0.005	-	A gap peak needs a share of 0.005 of the placed spectra.
+run	min_bin	2	-	Histogram rows with fewer than 2 spectra are left out of the peaks.
+run	max_mods	3	-	A gap is explained by up to 3 modifications.
+run	mods	38	-	38 modifications are combined.
+hist	-4181.0885	1	-	1 placed spectra have a gap of -4181.0885 Da.
+hist	-3193.5495	1	-	1 placed spectra have a gap of -3193.5495 Da.
+hist	-3173.2430	1	-	1 placed spectra have a gap of -3173.2430 Da.
+hist	-2961.3230	1	-	1 placed spectra have a gap of -2961.3230 Da.
+hist	-2291.1210	1	-	1 placed spectra have a gap of -2291.1210 Da.
+hist	-2232.1890	1	-	1 placed spectra have a gap of -2232.1890 Da.
+hist	-2231.9210	1	-	1 placed spectra have a gap of -2231.9210 Da.
+hist	-2086.1535	1	-	1 placed spectra have a gap of -2086.1535 Da.
+hist	-2052.8950	1	-	1 placed spectra have a gap of -2052.8950 Da.
+hist	-1754.0140	1	-	1 placed spectra have a gap of -1754.0140 Da.
+hist	-1685.8150	1	-	1 placed spectra have a gap of -1685.8150 Da.
+hist	-1501.6815	1	-	1 placed spectra have a gap of -1501.6815 Da.
+hist	-1434.6305	1	-	1 placed spectra have a gap of -1434.6305 Da.
+hist	-1422.8040	1	-	1 placed spectra have a gap of -1422.8040 Da.
+hist	-1352.7090	1	-	1 placed spectra have a gap of -1352.7090 Da.
+hist	-1285.6325	1	-	1 placed spectra have a gap of -1285.6325 Da.
+hist	-1200.5185	1	-	1 placed spectra have a gap of -1200.5185 Da.
+hist	-1085.5515	1	-	1 placed spectra have a gap of -1085.5515 Da.
+hist	-992.4970	1	-	1 placed spectra have a gap of -992.4970 Da.
+hist	-970.5670	1	-	1 placed spectra have a gap of -970.5670 Da.
+hist	-807.7360	1	-	1 placed spectra have a gap of -807.7360 Da.
+hist	-743.4535	1	-	1 placed spectra have a gap of -743.4535 Da.
+hist	-702.3860	1	-	1 placed spectra have a gap of -702.3860 Da.
+hist	-670.3530	1	-	1 placed spectra have a gap of -670.3530 Da.
+hist	-664.2615	1	-	1 placed spectra have a gap of -664.2615 Da.
+hist	-627.2955	1	-	1 placed spectra have a gap of -627.2955 Da.
+hist	-627.2950	1	-	1 placed spectra have a gap of -627.2950 Da.
+hist	-605.1610	1	-	1 placed spectra have a gap of -605.1610 Da.
+hist	-598.2820	1	-	1 placed spectra have a gap of -598.2820 Da.
+hist	-498.2755	1	-	1 placed spectra have a gap of -498.2755 Da.
+hist	-454.1840	1	-	1 placed spectra have a gap of -454.1840 Da.
+hist	-432.2460	1	-	1 placed spectra have a gap of -432.2460 Da.
+hist	-410.1600	1	-	1 placed spectra have a gap of -410.1600 Da.
+hist	-397.1880	1	-	1 placed spectra have a gap of -397.1880 Da.
+hist	-384.1515	1	-	1 placed spectra have a gap of -384.1515 Da.
+hist	-375.1780	1	-	1 placed spectra have a gap of -375.1780 Da.
+hist	-354.2200	1	-	1 placed spectra have a gap of -354.2200 Da.
+hist	-349.1400	1	-	1 placed spectra have a gap of -349.1400 Da.
+hist	-348.2385	1	-	1 placed spectra have a gap of -348.2385 Da.
+hist	-346.1830	1	-	1 placed spectra have a gap of -346.1830 Da.
+hist	-345.1350	1	-	1 placed spectra have a gap of -345.1350 Da.
+hist	-345.1165	1	-	1 placed spectra have a gap of -345.1165 Da.
+hist	-343.1755	1	-	1 placed spectra have a gap of -343.1755 Da.
+hist	-329.1180	1	-	1 placed spectra have a gap of -329.1180 Da.
+hist	-328.1785	1	-	1 placed spectra have a gap of -328.1785 Da.
+hist	-328.1550	1	-	1 placed spectra have a gap of -328.1550 Da.
+hist	-328.1105	1	-	1 placed spectra have a gap of -328.1105 Da.
+hist	-328.1040	1	-	1 placed spectra have a gap of -328.1040 Da.
+hist	-315.1040	1	-	1 placed spectra have a gap of -315.1040 Da.
+hist	-313.1710	1	-	1 placed spectra have a gap of -313.1710 Da.
+hist	-306.1375	1	-	1 placed spectra have a gap of -306.1375 Da.
+hist	-298.1585	1	-	1 placed spectra have a gap of -298.1585 Da.
+hist	-288.1235	1	-	1 placed spectra have a gap of -288.1235 Da.
+hist	-287.1280	1	-	1 placed spectra have a gap of -287.1280 Da.
+hist	-286.1010	1	-	1 placed spectra have a gap of -286.1010 Da.
+hist	-283.1550	1	-	1 placed spectra have a gap of -283.1550 Da.
+hist	-275.0455	1	-	1 placed spectra have a gap of -275.0455 Da.
+hist	-273.0875	1	-	1 placed spectra have a gap of -273.0875 Da.
+hist	-271.0255	1	-	1 placed spectra have a gap of -271.0255 Da.
+hist	-269.1850	1	-	1 placed spectra have a gap of -269.1850 Da.
+hist	-255.1155	1	-	1 placed spectra have a gap of -255.1155 Da.
+hist	-253.1535	1	-	1 placed spectra have a gap of -253.1535 Da.
+hist	-250.1385	1	-	1 placed spectra have a gap of -250.1385 Da.
+hist	-218.1055	1	-	1 placed spectra have a gap of -218.1055 Da.
+hist	-211.1140	1	-	1 placed spectra have a gap of -211.1140 Da.
+hist	-170.1140	1	-	1 placed spectra have a gap of -170.1140 Da.
+hist	-141.1035	1	-	1 placed spectra have a gap of -141.1035 Da.
+hist	-141.0655	1	-	1 placed spectra have a gap of -141.0655 Da.
+hist	-139.8925	1	-	1 placed spectra have a gap of -139.8925 Da.
+hist	-136.9955	1	-	1 placed spectra have a gap of -136.9955 Da.
+hist	-131.0330	1	-	1 placed spectra have a gap of -131.0330 Da.
+hist	-131.0315	1	-	1 placed spectra have a gap of -131.0315 Da.
+hist	-128.0530	1	-	1 placed spectra have a gap of -128.0530 Da.
+hist	-115.0245	1	-	1 placed spectra have a gap of -115.0245 Da.
+hist	-113.0720	1	-	1 placed spectra have a gap of -113.0720 Da.
+hist	-107.9195	1	-	1 placed spectra have a gap of -107.9195 Da.
+hist	-105.0705	1	-	1 placed spectra have a gap of -105.0705 Da.
+hist	-99.0945	1	-	1 placed spectra have a gap of -99.0945 Da.
+hist	-99.0680	1	-	1 placed spectra have a gap of -99.0680 Da.
+hist	-89.0295	1	-	1 placed spectra have a gap of -89.0295 Da.
+hist	-89.0290	1	-	1 placed spectra have a gap of -89.0290 Da.
+hist	-89.0285	1	-	1 placed spectra have a gap of -89.0285 Da.
+hist	-88.0300	1	-	1 placed spectra have a gap of -88.0300 Da.
+hist	-88.0165	1	-	1 placed spectra have a gap of -88.0165 Da.
+hist	-60.0680	1	-	1 placed spectra have a gap of -60.0680 Da.
+hist	-49.0315	1	-	1 placed spectra have a gap of -49.0315 Da.
+hist	-48.0055	1	-	1 placed spectra have a gap of -48.0055 Da.
+hist	-48.0040	1	-	1 placed spectra have a gap of -48.0040 Da.
+hist	-46.9905	1	-	1 placed spectra have a gap of -46.9905 Da.
+hist	-18.0075	1	-	1 placed spectra have a gap of -18.0075 Da.
+hist	-17.0280	1	-	1 placed spectra have a gap of -17.0280 Da.
+hist	-17.0245	1	-	1 placed spectra have a gap of -17.0245 Da.
+hist	-17.0240	1	-	1 placed spectra have a gap of -17.0240 Da.
+hist	-3.9175	1	-	1 placed spectra have a gap of -3.9175 Da.
+hist	-2.0135	1	-	1 placed spectra have a gap of -2.0135 Da.
+hist	-0.9675	1	-	1 placed spectra have a gap of -0.9675 Da.
+hist	0.0000	139	-	139 placed spectra have a gap of 0.0000 Da.
+hist	0.0030	1	-	1 placed spectra have a gap of 0.0030 Da.
+hist	0.0415	1	-	1 placed spectra have a gap of 0.0415 Da.
+hist	0.9905	1	-	1 placed spectra have a gap of 0.9905 Da.
+hist	0.9955	1	-	1 placed spectra have a gap of 0.9955 Da.
+hist	0.9960	1	-	1 placed spectra have a gap of 0.9960 Da.
+hist	0.9990	1	-	1 placed spectra have a gap of 0.9990 Da.
+hist	1.0000	1	-	1 placed spectra have a gap of 1.0000 Da.
+hist	1.0015	3	-	3 placed spectra have a gap of 1.0015 Da.
+hist	1.0020	2	-	2 placed spectra have a gap of 1.0020 Da.
+hist	1.0030	1	-	1 placed spectra have a gap of 1.0030 Da.
+hist	1.0035	1	-	1 placed spectra have a gap of 1.0035 Da.
+hist	1.0045	2	-	2 placed spectra have a gap of 1.0045 Da.
+hist	1.0055	4	-	4 placed spectra have a gap of 1.0055 Da.
+hist	1.0075	1	-	1 placed spectra have a gap of 1.0075 Da.
+hist	1.0080	1	-	1 placed spectra have a gap of 1.0080 Da.
+hist	1.0095	1	-	1 placed spectra have a gap of 1.0095 Da.
+hist	1.0105	3	-	3 placed spectra have a gap of 1.0105 Da.
+hist	1.0140	1	-	1 placed spectra have a gap of 1.0140 Da.
+hist	1.0145	1	-	1 placed spectra have a gap of 1.0145 Da.
+hist	1.0170	1	-	1 placed spectra have a gap of 1.0170 Da.
+hist	1.0175	1	-	1 placed spectra have a gap of 1.0175 Da.
+hist	1.0200	1	-	1 placed spectra have a gap of 1.0200 Da.
+hist	2.0005	1	-	1 placed spectra have a gap of 2.0005 Da.
+hist	2.0035	1	-	1 placed spectra have a gap of 2.0035 Da.
+hist	2.0075	1	-	1 placed spectra have a gap of 2.0075 Da.
+hist	2.0125	1	-	1 placed spectra have a gap of 2.0125 Da.
+hist	2.0140	1	-	1 placed spectra have a gap of 2.0140 Da.
+hist	2.0160	1	-	1 placed spectra have a gap of 2.0160 Da.
+hist	2.0165	1	-	1 placed spectra have a gap of 2.0165 Da.
+hist	4.0235	1	-	1 placed spectra have a gap of 4.0235 Da.
+hist	4.0250	1	-	1 placed spectra have a gap of 4.0250 Da.
+hist	4.0260	4	-	4 placed spectra have a gap of 4.0260 Da.
+hist	5.0345	1	-	1 placed spectra have a gap of 5.0345 Da.
+hist	6.0205	9	-	9 placed spectra have a gap of 6.0205 Da.
+hist	6.0220	1	-	1 placed spectra have a gap of 6.0220 Da.
+hist	8.0150	12	-	12 placed spectra have a gap of 8.0150 Da.
+hist	8.0160	2	-	2 placed spectra have a gap of 8.0160 Da.
+hist	8.0170	1	-	1 placed spectra have a gap of 8.0170 Da.
+hist	8.0190	1	-	1 placed spectra have a gap of 8.0190 Da.
+hist	8.0495	3	-	3 placed spectra have a gap of 8.0495 Da.
+hist	10.0060	1	-	1 placed spectra have a gap of 10.0060 Da.
+hist	10.0075	5	-	5 placed spectra have a gap of 10.0075 Da.
+hist	10.0090	10	-	10 placed spectra have a gap of 10.0090 Da.
+hist	10.0105	3	-	3 placed spectra have a gap of 10.0105 Da.
+hist	10.0110	2	-	2 placed spectra have a gap of 10.0110 Da.
+hist	10.0435	3	-	3 placed spectra have a gap of 10.0435 Da.
+hist	10.0450	2	-	2 placed spectra have a gap of 10.0450 Da.
+hist	10.0460	2	-	2 placed spectra have a gap of 10.0460 Da.
+hist	10.0470	2	-	2 placed spectra have a gap of 10.0470 Da.
+hist	11.0485	1	-	1 placed spectra have a gap of 11.0485 Da.
+hist	12.0245	1	-	1 placed spectra have a gap of 12.0245 Da.
+hist	13.0675	1	-	1 placed spectra have a gap of 13.0675 Da.
+hist	15.9940	1	-	1 placed spectra have a gap of 15.9940 Da.
+hist	16.0285	1	-	1 placed spectra have a gap of 16.0285 Da.
+hist	16.0305	1	-	1 placed spectra have a gap of 16.0305 Da.
+hist	16.0315	1	-	1 placed spectra have a gap of 16.0315 Da.
+hist	17.0070	1	-	1 placed spectra have a gap of 17.0070 Da.
+hist	17.0075	1	-	1 placed spectra have a gap of 17.0075 Da.
+hist	17.0415	1	-	1 placed spectra have a gap of 17.0415 Da.
+hist	18.0235	2	-	2 placed spectra have a gap of 18.0235 Da.
+hist	18.0245	2	-	2 placed spectra have a gap of 18.0245 Da.
+hist	18.0260	1	-	1 placed spectra have a gap of 18.0260 Da.
+hist	19.0340	1	-	1 placed spectra have a gap of 19.0340 Da.
+hist	20.1635	1	-	1 placed spectra have a gap of 20.1635 Da.
+hist	21.9840	1	-	1 placed spectra have a gap of 21.9840 Da.
+hist	22.9680	1	-	1 placed spectra have a gap of 22.9680 Da.
+hist	39.9730	1	-	1 placed spectra have a gap of 39.9730 Da.
+hist	54.9130	1	-	1 placed spectra have a gap of 54.9130 Da.
+hist	57.0165	1	-	1 placed spectra have a gap of 57.0165 Da.
+hist	57.0200	1	-	1 placed spectra have a gap of 57.0200 Da.
+hist	57.0215	1	-	1 placed spectra have a gap of 57.0215 Da.
+hist	57.0230	4	-	4 placed spectra have a gap of 57.0230 Da.
+hist	57.0250	3	-	3 placed spectra have a gap of 57.0250 Da.
+hist	57.0295	1	-	1 placed spectra have a gap of 57.0295 Da.
+hist	57.9655	1	-	1 placed spectra have a gap of 57.9655 Da.
+hist	59.0275	1	-	1 placed spectra have a gap of 59.0275 Da.
+hist	75.0610	1	-	1 placed spectra have a gap of 75.0610 Da.
+hist	93.0210	1	-	1 placed spectra have a gap of 93.0210 Da.
+hist	115.0530	1	-	1 placed spectra have a gap of 115.0530 Da.
+hist	117.0565	1	-	1 placed spectra have a gap of 117.0565 Da.
+hist	118.9130	1	-	1 placed spectra have a gap of 118.9130 Da.
+hist	128.0935	1	-	1 placed spectra have a gap of 128.0935 Da.
+hist	128.0950	2	-	2 placed spectra have a gap of 128.0950 Da.
+hist	128.0960	1	-	1 placed spectra have a gap of 128.0960 Da.
+hist	128.0985	1	-	1 placed spectra have a gap of 128.0985 Da.
+hist	128.1350	1	-	1 placed spectra have a gap of 128.1350 Da.
+hist	130.3625	1	-	1 placed spectra have a gap of 130.3625 Da.
+hist	132.0920	1	-	1 placed spectra have a gap of 132.0920 Da.
+hist	141.0995	1	-	1 placed spectra have a gap of 141.0995 Da.
+hist	149.0560	1	-	1 placed spectra have a gap of 149.0560 Da.
+hist	156.1015	2	-	2 placed spectra have a gap of 156.1015 Da.
+hist	156.1070	1	-	1 placed spectra have a gap of 156.1070 Da.
+hist	170.1080	1	-	1 placed spectra have a gap of 170.1080 Da.
+hist	174.0695	1	-	1 placed spectra have a gap of 174.0695 Da.
+hist	187.1315	1	-	1 placed spectra have a gap of 187.1315 Da.
+hist	199.1360	1	-	1 placed spectra have a gap of 199.1360 Da.
+hist	216.1460	1	-	1 placed spectra have a gap of 216.1460 Da.
+hist	227.1635	1	-	1 placed spectra have a gap of 227.1635 Da.
+hist	246.0990	1	-	1 placed spectra have a gap of 246.0990 Da.
+hist	256.1535	1	-	1 placed spectra have a gap of 256.1535 Da.
+hist	256.1935	1	-	1 placed spectra have a gap of 256.1935 Da.
+hist	257.1390	1	-	1 placed spectra have a gap of 257.1390 Da.
+hist	268.1380	1	-	1 placed spectra have a gap of 268.1380 Da.
+hist	271.0985	1	-	1 placed spectra have a gap of 271.0985 Da.
+hist	282.1695	1	-	1 placed spectra have a gap of 282.1695 Da.
+hist	284.1395	1	-	1 placed spectra have a gap of 284.1395 Da.
+hist	285.1810	1	-	1 placed spectra have a gap of 285.1810 Da.
+hist	285.1935	1	-	1 placed spectra have a gap of 285.1935 Da.
+hist	285.1955	1	-	1 placed spectra have a gap of 285.1955 Da.
+hist	308.1820	1	-	1 placed spectra have a gap of 308.1820 Da.
+hist	330.0130	1	-	1 placed spectra have a gap of 330.0130 Da.
+hist	339.2165	1	-	1 placed spectra have a gap of 339.2165 Da.
+hist	370.2205	1	-	1 placed spectra have a gap of 370.2205 Da.
+hist	371.2225	1	-	1 placed spectra have a gap of 371.2225 Da.
+hist	376.2205	1	-	1 placed spectra have a gap of 376.2205 Da.
+hist	378.1940	1	-	1 placed spectra have a gap of 378.1940 Da.
+hist	380.2740	1	-	1 placed spectra have a gap of 380.2740 Da.
+hist	382.2860	1	-	1 placed spectra have a gap of 382.2860 Da.
+hist	383.2330	1	-	1 placed spectra have a gap of 383.2330 Da.
+hist	384.2060	1	-	1 placed spectra have a gap of 384.2060 Da.
+hist	394.1940	1	-	1 placed spectra have a gap of 394.1940 Da.
+hist	411.2900	1	-	1 placed spectra have a gap of 411.2900 Da.
+hist	413.2275	1	-	1 placed spectra have a gap of 413.2275 Da.
+hist	415.2420	1	-	1 placed spectra have a gap of 415.2420 Da.
+hist	456.2565	1	-	1 placed spectra have a gap of 456.2565 Da.
+hist	470.3585	1	-	1 placed spectra have a gap of 470.3585 Da.
+hist	473.2955	1	-	1 placed spectra have a gap of 473.2955 Da.
+hist	483.2095	1	-	1 placed spectra have a gap of 483.2095 Da.
+hist	485.3050	1	-	1 placed spectra have a gap of 485.3050 Da.
+hist	491.2980	1	-	1 placed spectra have a gap of 491.2980 Da.
+hist	496.2570	1	-	1 placed spectra have a gap of 496.2570 Da.
+hist	498.3155	1	-	1 placed spectra have a gap of 498.3155 Da.
+hist	524.3335	1	-	1 placed spectra have a gap of 524.3335 Da.
+hist	526.3320	1	-	1 placed spectra have a gap of 526.3320 Da.
+hist	587.3045	1	-	1 placed spectra have a gap of 587.3045 Da.
+hist	608.2915	1	-	1 placed spectra have a gap of 608.2915 Da.
+hist	610.4670	1	-	1 placed spectra have a gap of 610.4670 Da.
+hist	613.3460	1	-	1 placed spectra have a gap of 613.3460 Da.
+hist	615.3395	1	-	1 placed spectra have a gap of 615.3395 Da.
+hist	639.3335	1	-	1 placed spectra have a gap of 639.3335 Da.
+hist	651.3135	1	-	1 placed spectra have a gap of 651.3135 Da.
+hist	672.3925	1	-	1 placed spectra have a gap of 672.3925 Da.
+hist	705.3870	1	-	1 placed spectra have a gap of 705.3870 Da.
+hist	713.4420	1	-	1 placed spectra have a gap of 713.4420 Da.
+hist	810.3990	1	-	1 placed spectra have a gap of 810.3990 Da.
+hist	886.5085	1	-	1 placed spectra have a gap of 886.5085 Da.
+hist	921.5860	1	-	1 placed spectra have a gap of 921.5860 Da.
+hist	968.4590	1	-	1 placed spectra have a gap of 968.4590 Da.
+hist	973.4720	1	-	1 placed spectra have a gap of 973.4720 Da.
+hist	976.3830	1	-	1 placed spectra have a gap of 976.3830 Da.
+hist	985.5890	1	-	1 placed spectra have a gap of 985.5890 Da.
+hist	1063.5750	1	-	1 placed spectra have a gap of 1063.5750 Da.
+hist	1081.6440	1	-	1 placed spectra have a gap of 1081.6440 Da.
+hist	1133.5530	1	-	1 placed spectra have a gap of 1133.5530 Da.
+hist	1135.5795	1	-	1 placed spectra have a gap of 1135.5795 Da.
+hist	1180.5755	1	-	1 placed spectra have a gap of 1180.5755 Da.
+hist	1207.6300	1	-	1 placed spectra have a gap of 1207.6300 Da.
+hist	1212.6375	1	-	1 placed spectra have a gap of 1212.6375 Da.
+hist	1243.7495	1	-	1 placed spectra have a gap of 1243.7495 Da.
+hist	1377.6505	1	-	1 placed spectra have a gap of 1377.6505 Da.
+hist	1406.7595	1	-	1 placed spectra have a gap of 1406.7595 Da.
+hist	1415.6680	1	-	1 placed spectra have a gap of 1415.6680 Da.
+hist	1430.5470	1	-	1 placed spectra have a gap of 1430.5470 Da.
+hist	1547.8110	1	-	1 placed spectra have a gap of 1547.8110 Da.
+hist	1560.7750	1	-	1 placed spectra have a gap of 1560.7750 Da.
+hist	1658.9980	1	-	1 placed spectra have a gap of 1658.9980 Da.
+hist	1721.9725	1	-	1 placed spectra have a gap of 1721.9725 Da.
+hist	1804.9615	1	-	1 placed spectra have a gap of 1804.9615 Da.
+hist	1871.8705	1	-	1 placed spectra have a gap of 1871.8705 Da.
+hist	1917.8810	1	-	1 placed spectra have a gap of 1917.8810 Da.
+hist	2197.9640	1	-	1 placed spectra have a gap of 2197.9640 Da.
+hist	2209.0860	1	-	1 placed spectra have a gap of 2209.0860 Da.
+hist	2297.1665	1	-	1 placed spectra have a gap of 2297.1665 Da.
+hist	2521.2650	1	-	1 placed spectra have a gap of 2521.2650 Da.
+hist	3045.4235	1	-	1 placed spectra have a gap of 3045.4235 Da.
+hist	3140.2440	1	-	1 placed spectra have a gap of 3140.2440 Da.
+cys	spectra	475	-	475 spectra are placed with a mass gap.
+cys	zero_bin	140	475	140 placed spectra have a gap within 0.02 Da of zero.
+cys	Carbamidomethyl (C)	11	475	11 placed spectra have a gap within 0.02 Da of 57.0215 Da (Carbamidomethyl (C)).
+cys	Propionamide (C)	0	475	0 placed spectra have a gap within 0.02 Da of 71.0371 Da (Propionamide (C)).
+cys	Nethylmaleimide (C)	0	475	0 placed spectra have a gap within 0.02 Da of 125.0477 Da (Nethylmaleimide (C)).
+cys	Methylthio (C)	0	475	0 placed spectra have a gap within 0.02 Da of 45.9877 Da (Methylthio (C)).
+cys	Carboxymethyl (C)	0	475	0 placed spectra have a gap within 0.02 Da of 58.0055 Da (Carboxymethyl (C)).
+combo	placed_spectra	227	-	227 placed spectra are in histogram rows of at least 2.
+combo	shifted_spectra	88	227	88 of them have a gap more than 0.04 Da from zero.
+peak	1.delta	10.00905	20	Peak 1 is at 10.0091 Da.
+peak	1.spectra	20	-	20 placed spectra are in peak 1.
+peak	1.explained_by	Label:13C(6)15N(4)	20	Label:13C(6)15N(4) sums to the gap of peak 1 within 0.02 Da.
+peak	1.alternatives	Glu->pyro-Glu + Dimethyl;Carbamidomethyl + Acetyl + Met-loss+Acetyl;Glu->pyro-Glu + Methyl + Methyl;Oxidation + Nethylmaleimide + Met-loss;Glu->pyro-Glu + Cation:Na + Label:13C(6);Carbamyl + Propionyl + Met-loss+Acetyl;Formyl + Propionamide + Met-loss+Acetyl	-	7 other combinations fit peak 1.
+peak	1.context	-	-	The explanation of peak 1 is the first by size and prior.
+share	Label:13C(6)15N(4)	0.22727272727272727	88	The peaks Label:13C(6)15N(4) explains hold a share of 0.227 of the shifted spectra.
+top	1	Label:13C(6)15N(4)	-	Label:13C(6)15N(4) has the 1st largest share.
+silac	call	none	88	Fewer than two SILAC labels reach a share of 0.08 of at least 500 shifted spectra.
+silac	Lys4	0	88	Lys4 explains a share of 0 of the shifted spectra.
+silac	Arg6	0	88	Arg6 explains a share of 0 of the shifted spectra.
+silac	Lys8	0	88	Lys8 explains a share of 0 of the shifted spectra.
+silac	Arg10	0.22727272727272727	88	Arg10 explains a share of 0.227 of the shifted spectra.

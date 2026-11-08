@@ -143,19 +143,6 @@ export const FAQ: FaqEntry[] = [
     ]
   },
   {
-    id: 'faq-raw-dia',
-    group: 'Running',
-    question: 'The run is refused: the input is raw DIA (exit code 11)',
-    symptoms: <>The run fails with exit code 11 before any file is written, and the reason says the file is raw DIA and names DIAspeXtract.</>,
-    causes: [
-      <>In raw DIA data each MS2 spectrum mixes the fragments of several peptides, and its &quot;precursor&quot; is an isolation window, not a peptide. Tags read from such spectra get wrong flanking masses and complement statistics, so FASTag refuses the file by default.</>
-    ],
-    fixes: [
-      <>Make pseudo-DDA spectra first, with DIAspeXtract (or diaTracer for timsTOF .d files), and tag those: they pass the check.</>,
-      <>Or set <L to="param-acquisition_check">Raw DIA check</L> (under Spectra) to warn, which tags the raw DIA spectra anyway with a warning, or to off.</>
-    ]
-  },
-  {
     id: 'faq-min-filter',
     group: 'Running',
     question: 'The run is refused: no tag can reach the minimum filter length',
@@ -171,11 +158,12 @@ export const FAQ: FaqEntry[] = [
   {
     id: 'faq-incomplete',
     group: 'Running',
-    question: 'The Tags tab says Outdated or Incomplete',
-    symptoms: <>A box in the Tags tab: &quot;Outdated&quot; while a run goes, or &quot;Incomplete&quot; with an Open it anyway link after it stopped.</>,
+    question: 'The Tags tab says Outdated, Removed or Incomplete',
+    symptoms: <>A box in the Tags tab: &quot;Outdated&quot; while a run goes, &quot;Removed&quot; after a run stopped part-way, or &quot;Incomplete&quot; with an Open it anyway link.</>,
     causes: [
       <>Outdated: a run is writing the tags file again, in place. Its tags appear when it finishes.</>,
-      <>Incomplete: the run was cancelled or failed while it wrote the tags file. The file may hold only part of the table, or none, and the reports may be missing, partial, or left from an earlier run.</>
+      <>Removed: the run was cancelled or failed, and the app removed every file it had written so far (the tags and each report), so none of them can later be read as a complete result. A file that cannot be removed is renamed to <code>&lt;name&gt;.incomplete</code>; the log names each one. A file that was already there before the run is removed too: the app asked before the run whether to overwrite it, so no report of an earlier run is left next to this run&apos;s missing tags.</>,
+      <>Incomplete: the run was cancelled or failed while it wrote the tags file, and the file is still there. The file may hold only part of the table, or none. The app keeps a record of each run, so a tags file whose run did not finish also opens as Incomplete in a later session.</>
     ],
     fixes: [
       <>Run again to get a complete tags file and reports.</>,
@@ -190,6 +178,42 @@ export const FAQ: FaqEntry[] = [
     causes: [<>A modification is not written as OpenMS names it, for example "Carbamidomethyl" without its residue.</>],
     fixes: [
       <>Write the Unimod name with the residue in brackets, one per line: <code>Carbamidomethyl (C)</code>, <code>Oxidation (M)</code>, <code>TMT6plex (N-term)</code>. See <L to="param-fixed_modifications">Fixed modifications</L>.</>
+    ]
+  },
+
+  {
+    id: 'faq-raw-dia',
+    group: 'Running',
+    question: 'FASTag refuses the file as raw DIA (exit code 11)',
+    symptoms: <>The run stops at once with "raw DIA, not tagged", or the checks before the run say "Raw DIA: FASTag will not tag this file".</>,
+    causes: [
+      <>The file is data-independent acquisition (DIA): its MS2 spectra repeat a cycle of isolation windows, and each one mixes the fragments of several peptides. Its "precursor" is a window, not a peptide, so the tags would get wrong flanking masses and complement statistics. From FASTag 1.12 the acquisition check (<C>acquisition_check</C>) refuses such files, before any output is written.</>
+    ],
+    fixes: [
+      <>Generate pseudo-DDA spectra first with DIAspeXtract (for Bruker .d also diaTracer), then run FASTag on the .pseudo.mzML file it writes; that file passes the check. The app shows the DIAspeXtract command to copy.</>,
+      <>Experts who want to tag the raw DIA spectra anyway can set <L to="param-acquisition_check">Raw DIA check</L> (under Spectra) to warn, or run the command line with <C>-acquisition_check warn</C>; the flanks and complements are then wrong.</>
+    ]
+  },
+  {
+    id: 'faq-no-ms2',
+    group: 'Running',
+    question: 'The checks say the file has no MS2 spectra',
+    symptoms: <>"Blocks the run: No MS2 spectra" under Checks before the run, and Run is disabled.</>,
+    causes: [<>The file holds only MS1 spectra (a survey or a converted MS1 file), or its MS2 spectra were filtered out when it was converted.</>],
+    fixes: [<>FASTag tags MS2 spectra only. Convert the run again with its MS2 spectra (for example with msconvert, without an MS level filter).</>]
+  },
+  {
+    id: 'faq-inspector',
+    group: 'Running',
+    question: 'What the checks before and after a run mean',
+    symptoms: <>A list of checks under the input on the Setup screen, or over the results after a run.</>,
+    causes: [
+      <>Before a run, FASTag reads the metadata of the file (instrument, MS2 count, centroid or profile, the index, the acquisition) and the app checks the settings against them. A FASTag without this probe (<C>probe_input</C>, from FASTag 1.12) cannot check a file before the run: the app then says "Not checked" and guesses nothing.</>,
+      <>After a run, the app reads the instrument from the digest report and FASTag's own warnings from the log.</>
+    ],
+    fixes: [
+      <>"Blocks the run" disables Run until the file or the settings change. A red flag waits for its fix or for "Run anyway". A warning changes nothing.</>,
+      <>No warning does not mean the data or the settings are right. The checks propose an instrument preset; the choice stays yours.</>
     ]
   },
 

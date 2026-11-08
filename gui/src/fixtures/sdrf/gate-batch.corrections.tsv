@@ -1,0 +1,3 @@
+data_file	input	sdrf_rows	field	sdrf_column	sdrf_value	fastag_value	note	evidence
+20190412_KEH_HF_SA_ANW_R11_100419_CNOT_R1_f008.raw	pxd014764.mzML	5,6	organism	characteristics[organism]	Mus musculus	Homo (taxid 9605)	the SDRF names Mus musculus (taxid 10090, genus Mus (taxid 10088)); FASTag called the genus Homo (taxid 9605) (none of the 9 genera the species report calls present holds an SDRF organism)	pxd014764.tags.species.tsv: genus Homo (taxid 9605) present
+Hog1p_WT_Rep3_Chymo_5uL.raw	pxd040407-chymo.mzML	8	instrument	comment[instrument]	NT=Orbitrap Exploris 480;AC=MS:1003028	Q Exactive Plus	the SDRF names Orbitrap Exploris 480; the input names Q Exactive Plus	pxd040407-chymo.digest.tsv: meta instrument Q Exactive Plus

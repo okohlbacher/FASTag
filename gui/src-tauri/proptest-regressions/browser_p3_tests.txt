@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc ca0290306c5e4009145a3f4941769ce4044504ce770d59708e9a0b6472637c10 # shrinks to t = Tsv { body: [101, 118, 97, 108, 117, 101, 9, 102, 97, 115, 116, 97, 95, 104, 105, 116, 9, 108, 101, 110, 103, 116, 104, 9, 115, 112, 101, 99, 116, 114, 117, 109, 10, 45, 49, 10, 45, 49, 9, 69, 70, 87, 68, 10, 48, 46, 48, 48, 48, 48, 49, 9, 69, 70, 87, 68, 10, 45, 49, 101, 57, 57, 57, 9, 45, 9, 52, 50, 57, 52, 57, 54, 55, 50, 57, 53, 9], names: ["evalue", "fasta_hit", "length", "spectrum"] }, a = ViewSpec { sort: Some(SortSpec { column: "length", desc: false }), spectrum: Some(""), min_length: None, max_evalue: Some(0.003), fasta_hit: None, per_spectrum: Some(3) }, b = ViewSpec { sort: None, spectrum: Some("scan=1"), min_length: Some(66000), max_evalue: Some(inf), fasta_hit: None, per_spectrum: Some(0) }, cut = 1e-5, n = 3

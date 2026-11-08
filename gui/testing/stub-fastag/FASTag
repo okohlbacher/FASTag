@@ -1,0 +1,253 @@
+#!/bin/sh
+# A stand-in for the FASTag CLI, for app-level tests that must not need the
+# 1.4 GB OpenMS bundle (GUI-DESIGN section 9, "CLI for app-level tests").
+#
+# It takes the argv the GUI builds (fastag.rs build_args), prints FASTag-like
+# stderr with FASTAG_PROGRESS lines, and writes -out and every report option
+# it is given, plus <out>.species.tsv / <out>.glyco.tsv for -species / -glyco
+# without a path, as the real CLI does. The P4c tables carry the real CLI's
+# headers and one row each: -recon_out, -delta_out, -recon_id_out (mzTab by
+# a .mzTab name, else a bare idXML) and the glyco report; the long-form
+# reports carry their header. Deterministic. Controlled by:
+#   STUB_NO_PLACEMENTS=1  the recon run places nothing: -recon_out and
+#                   -delta_out carry their header only, and an mzTab
+#                   -recon_id_out only its MTD lines (OpenMS writes no PSH
+#                   line for an empty PSM section)
+#   STUB_SLEEP_BEFORE=<s>  before writing any output, sleep this long
+#                   (a Cancel while the real CLI is still loading)
+#   STUB_SLEEP=<s>  after writing a partial -out, sleep this long (for Cancel)
+#   STUB_FAIL=<rc>  after writing partial outputs, exit with this code
+#   STUB_CHATTY=<n> while tagging, print n warning lines to stderr, with a
+#                   progress line every 100 (a chatty phase, for the IPC rate)
+#   STUB_CHATTY_PAUSE=<s>  with STUB_CHATTY: pause s seconds after every
+#                   100 lines (a sustained rate instead of one burst)
+#   STUB_ORPHAN=<s> leave a process behind that holds stdout and stderr open
+#                   for s seconds after the stub has exited, in the stub's
+#                   own process group
+#   STUB_ORPHAN_PID=<file>  with STUB_ORPHAN: write that process's pid here
+#   STUB_ORPHAN_DETACH=1    with STUB_ORPHAN: put that process in a process
+#                   group of its own (one that inherited the pipes from a
+#                   parallel spawn, which a group kill does not reach)
+#   STUB_INI_FAIL=<rc>  with -write_ini: fail with this code, writing nothing
+#   --help          print a version banner, as the probe expects
+#   --helphelp      print a few options as TOPP does (inspect.rs reads the
+#                   option names); -probe_input only with STUB_PROBE_INPUT=1,
+#                   since no released FASTag has it yet
+#   -probe_input <f>  the metadata probe (src/inspector/probe.ts): prints
+#                   <f>.probe.jsonl if it exists and exits 0; exits 5 when
+#                   <f> does not exist. <f>.stub may set STUB_PROBE_SLEEP=<s>
+#                   (a probe that hangs)
+#   -write_ini <f>  write an INI and exit, as TOPPBase does: with -ini <g>,
+#                   the items of <g> (the stub has no defaults to merge them
+#                   into), else an empty parameter set
+#   -ini <f>        on a run: -in and -out come from <f> unless given
+#                   -dump_spectrum is always listed (the G1 CLI has it)
+#   -dump_spectrum <id>  with -in: print the dump of <id> from STUB_DUMPS
+#                   (default: that folder's dumps.ppm.jsonl, the real dumps of
+#                   the E. coli fixture) and exit, or exit 6 with the CLI's
+#                   message when it has none; writes no file
+#   STUB_CLI=1.11   answer as FASTag 1.11.0, which has neither: --helphelp
+#                   prints the real 1.11.0 listing to stderr, -dump_spectrum is refused as an
+#                   unknown option (gui/testing/stub-fastag-1.11/FASTag sets it)
+#   STUB_DUMPS=<f>  the dumps -dump_spectrum serves
+# The same variables can also be set in <in>.stub, a file next to the input
+# that the stub sources: tests that start it through the GUI's own `run`
+# (which passes no environment of its own) control it that way.
+# The tauri-driver specs (gui/e2e-tauri) cannot write a file next to every
+# input, so they steer the stub by the input's name: an -in whose basename
+# contains ".slow." is STUB_SLEEP=30, ".chatty." is STUB_CHATTY=5000, ".fail."
+# is STUB_FAIL=2. A variable that is set (or set in <in>.stub) wins.
+set -u
+
+if [ "${1:-}" = "--help" ]; then
+  echo "FASTag -- stub for the GUI tests"
+  echo "Version: 0.0.0-stub"
+  exit 0
+fi
+
+here=$(cd "$(dirname "$0")" && pwd)
+dumpdir="$here/../../src/fixtures/cli/v112-ecoli-dump"
+if [ "${1:-}" = "--helphelp" ]; then
+  if [ "${STUB_CLI:-}" = "1.11" ]; then cat "$dumpdir/helphelp-1.11.0.txt" >&2; exit 0; fi
+  echo "FASTag -- stub for the GUI tests"
+  echo "Version: 0.0.0-stub"
+  echo ""
+  echo "Options (mandatory options marked with '*'):"
+  echo "  -in <file>*                      Input spectra"
+  echo "  -out <file>*                     Tag list"
+  echo "  -fasta <file>                    Report only tags that occur in this database"
+  echo "  -dump_spectrum <text>            Print the prepared peaks and the tags of one spectrum as JSON lines and exit"
+  if [ -n "${STUB_PROBE_INPUT:-}" ]; then
+    echo "  -probe_input <file>              Print the metadata of a spectra file as JSON lines and exit"
+  fi
+  echo ""
+  echo "Common TOPP options:"
+  echo "  --helphelp                       Shows all options (including advanced)"
+  exit 0
+fi
+
+if [ "${1:-}" = "-probe_input" ]; then
+  f="${2:-}"
+  if [ -n "$f" ] && [ -f "$f.stub" ]; then
+    . "$f.stub"
+  fi
+  [ -n "${STUB_PROBE_SLEEP:-}" ] && sleep "$STUB_PROBE_SLEEP"
+  if [ -z "$f" ] || [ ! -e "$f" ]; then
+    echo "Error: cannot read $f" >&2
+    exit 5
+  fi
+  [ -f "$f.probe.jsonl" ] && cat "$f.probe.jsonl"
+  exit 0
+fi
+
+in=""; out=""; reports=""; recon_out=""; delta_out=""; recon_id_out=""; species=0; glyco=0; species_out=""; glyco_out=""; ini=""; write_ini=""; dump=""; dumping=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -ini) ini="$2"; shift 2 ;;
+    -write_ini) write_ini="$2"; shift 2 ;;
+    -dump_spectrum) dump="$2"; dumping=1; shift 2 ;;
+    -in) in="$2"; shift 2 ;;
+    -out) out="$2"; shift 2 ;;
+    -species) species=1; shift ;;
+    -glyco) glyco=1; shift ;;
+    -species_out) species_out="$2"; shift 2 ;;
+    -glyco_out) glyco_out="$2"; shift 2 ;;
+    -recon_out) recon_out="$2"; shift 2 ;;
+    -delta_out) delta_out="$2"; shift 2 ;;
+    -recon_id_out) recon_id_out="$2"; shift 2 ;;
+    -digest_out|-label_out|-massgap_out|-out_spectra)
+      reports="$reports
+$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+
+if [ -n "$write_ini" ]; then
+  if [ -n "${STUB_INI_FAIL:-}" ]; then
+    echo "Error: stub told to fail writing the INI" >&2
+    exit "$STUB_INI_FAIL"
+  fi
+  if [ -n "$ini" ]; then
+    [ -r "$ini" ] || { echo "Error: cannot read $ini" >&2; exit 1; }
+    cp "$ini" "$write_ini"
+  else
+    printf '<?xml version="1.0" encoding="ISO-8859-1"?>\n<PARAMETERS version="1.8.0">\n  <NODE name="FASTag">\n    <NODE name="1">\n    </NODE>\n  </NODE>\n</PARAMETERS>\n' > "$write_ini"
+  fi
+  exit 0
+fi
+
+if [ $dumping -eq 1 ]; then
+  if [ "${STUB_CLI:-}" = "1.11" ]; then
+    echo "Unknown option(s) '[-dump_spectrum]' given. Aborting!" >&2
+    exit 6
+  fi
+  if [ -z "$in" ]; then
+    echo "-dump_spectrum needs -in, the file holding the spectrum." >&2
+    exit 6
+  fi
+  rec=$(grep -F "\"native_id\":\"$dump\"," "${STUB_DUMPS:-$dumpdir/dumps.ppm.jsonl}" | head -n 1)
+  if [ -z "$rec" ]; then
+    echo "-dump_spectrum: no spectrum of '$in' has the native ID '$dump'." >&2
+    exit 6
+  fi
+  printf '%s\n{"record":"end"}\n' "$rec"
+  exit 0
+fi
+
+# An ITEM's value from the -ini file (entities &amp; and &quot; decoded).
+ini_value() {
+  sed -n "s/.*<ITEM name=\"$1\" value=\"\([^\"]*\)\".*/\1/p" "$ini" | head -n 1 | sed 's/&quot;/"/g; s/&lt;/</g; s/&gt;/>/g; s/&apos;/'"'"'/g; s/&amp;/\&/g'
+}
+if [ -n "$ini" ]; then
+  [ -z "$in" ] && in=$(ini_value in)
+  [ -z "$out" ] && out=$(ini_value out)
+fi
+
+# <out> with the extension of its basename replaced (FASTag.cpp defaultReportPath).
+derive() {
+  case "${out##*/}" in
+    *.*) echo "${out%.*}$1" ;;
+    *) echo "$out$1" ;;
+  esac
+}
+[ $species -eq 1 ] && [ -z "$species_out" ] && species_out=$(derive .species.tsv)
+[ $glyco -eq 1 ] && [ -z "$glyco_out" ] && glyco_out=$(derive .glyco.tsv)
+
+if [ -n "$in" ] && [ -f "$in.stub" ]; then
+  . "$in.stub"
+fi
+case "${in##*/}" in *.slow.*) : "${STUB_SLEEP:=30}" ;; esac
+case "${in##*/}" in *.chatty.*) : "${STUB_CHATTY:=5000}" ;; esac
+case "${in##*/}" in *.fail.*) : "${STUB_FAIL:=2}" ;; esac
+
+total=4
+[ -n "${STUB_CHATTY:-}" ] && total=$((STUB_CHATTY + 4))
+
+# Each sleeper is forked BEFORE the line or file a test waits for, then waited
+# on. A test cancels right after that point, and macOS lets a child forked
+# while a process-group SIGKILL is being delivered escape it: a `sleep` forked
+# after the line could outlive the kill, hold the pipes open and keep the run
+# from ever ending (the 1-in-8 flake of the early-cancel test).
+pre=""; mid=""
+[ -n "${STUB_SLEEP_BEFORE:-}" ] && { sleep "$STUB_SLEEP_BEFORE" & pre=$!; }
+# The real CLI's first line: progress.rs starts "Reading spectra" on it.
+echo "-threads 0: using 1 of 1 logical cores." >&2
+echo "Reading spectra (stub)" >&2
+echo "FASTAG_PROGRESS done=0 total=$total" >&2
+[ -n "$pre" ] && wait "$pre"
+[ -n "${STUB_SLEEP:-}" ] && { sleep "$STUB_SLEEP" & mid=$!; }
+# The progress line goes out before the partial -out appears, so a test that
+# waits for the file knows the line is already in the pipe.
+echo "FASTAG_PROGRESS done=2 total=$total" >&2
+[ -n "$out" ] && printf 'spectrum\ttag\tlength\tevalue\n' > "$out"
+if [ -n "${STUB_CHATTY:-}" ]; then
+  awk -v n="$STUB_CHATTY" -v t="$total" -v p="${STUB_CHATTY_PAUSE:-}" 'BEGIN { for (i = 1; i <= n; i++) {
+    print "Warning: spectrum " i " has no precursor charge, assuming 2+"
+    if (i % 100 == 0) {
+      print "FASTAG_PROGRESS done=" i " total=" t
+      if (p != "") { fflush(); system("sleep " p) }
+    }
+  } }' >&2
+fi
+[ -n "$mid" ] && wait "$mid"
+printf 'scan=1\tPEPTK\t5\t0.001\n' >> "$out"
+printf '%s\n' "$reports" | while IFS= read -r r; do
+  [ -n "$r" ] && printf 'section\tkey\tvalue\tn\tdescription\n' > "$r"
+done
+[ -n "$species_out" ] && printf 'rank\ttaxid\tname\n' > "$species_out"
+[ -n "$glyco_out" ] && printf 'spectrum\tn_oxonium\toxonium_frac\tglyco\tions\nscan=1\t3\t0.204\t1\tHex;HexNAc;HexHexNAc\n' > "$glyco_out"
+# FASTag.cpp's recon, delta and mzTab writers, one row each (none with
+# STUB_NO_PLACEMENTS).
+if [ -n "${STUB_NO_PLACEMENTS:-}" ]; then
+  [ -n "$recon_out" ] && printf 'spectrum\ttag\tprotein\tpeptide\tpos\treversed\tnterm_match\tcterm_match\tdelta_mass\tregion\tdelta_interp\n' > "$recon_out"
+  [ -n "$delta_out" ] && printf 'delta\tspectra\ttop_interps\n' > "$delta_out"
+  case "$recon_id_out" in
+    '') ;;
+    *.mzTab|*.mztab) printf 'MTD\tmzTab-version\t1.0.0\nMTD\tmzTab-mode\tSummary\nMTD\tmzTab-type\tIdentification\n' > "$recon_id_out" ;;
+    *) printf '<?xml version="1.0" encoding="UTF-8"?>\n<IdXML version="1.5"/>\n' > "$recon_id_out" ;;
+  esac
+  recon_id_out=""; recon_out=""; delta_out=""
+fi
+[ -n "$recon_out" ] && printf 'spectrum\ttag\tprotein\tpeptide\tpos\treversed\tnterm_match\tcterm_match\tdelta_mass\tregion\tdelta_interp\nscan=1\tPEPTK\tSTUB_PROTEIN\tKPEPTKR\t1\t0\t1\t0\t15.9949\t6-6\t?\n' > "$recon_out"
+[ -n "$delta_out" ] && printf 'delta\tspectra\ttop_interps\n15.9950\t1\t?:1\n' > "$delta_out"
+if [ -n "$recon_id_out" ]; then
+  case "$recon_id_out" in
+    *.mzTab|*.mztab) printf 'MTD\tmzTab-version\t1.0.0\nPSH\tsequence\tPSM_ID\taccession\tsearch_engine_score[1]\tcharge\texp_mass_to_charge\tspectra_ref\nPSM\tKPEPTKR\t0\tSTUB_PROTEIN\t0.001\t2\t401.2\tms_run[1]:scan=1\n' > "$recon_id_out" ;;
+    *) printf '<?xml version="1.0" encoding="UTF-8"?>\n<IdXML version="1.5"/>\n' > "$recon_id_out" ;;
+  esac
+fi
+if [ -n "${STUB_FAIL:-}" ]; then
+  echo "Error: stub told to fail" >&2
+  exit "$STUB_FAIL"
+fi
+echo "FASTAG_PROGRESS done=$total total=$total" >&2
+echo "4 MS2 spectra, 1 tags"
+if [ -n "${STUB_ORPHAN:-}" ]; then
+  if [ -n "${STUB_ORPHAN_DETACH:-}" ]; then
+    perl -e 'setpgrp(0, 0); exec @ARGV' sleep "$STUB_ORPHAN" &
+  else
+    sleep "$STUB_ORPHAN" &
+  fi
+  [ -n "${STUB_ORPHAN_PID:-}" ] && echo $! > "$STUB_ORPHAN_PID"
+fi
+exit 0

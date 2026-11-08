@@ -1,0 +1,28 @@
+section	key	value	n	description
+run	version	1.11.0	-	FASTag 1.11.0 wrote this report.
+run	input	20190412_KEH_HF_SA_ANW_R11_100419_CNOT_R1_f008.mzML	-	The spectra were read from 20190412_KEH_HF_SA_ANW_R11_100419_CNOT_R1_f008.mzML.
+run	fragment_tolerance	20	-	The fragment tolerance is 20 ppm.
+run	fragment_tolerance_unit	ppm	-	The fragment tolerance is in ppm.
+run	tag_length	3	-	Tags were seeded at length 3.
+run	subsample_fraction	0.1	-	A fraction of 0.1 of the spectra was tagged (0 = all).
+run	subsample_spectra	0	-	0 spectra were drawn for tagging (0 = all).
+run	window_da	0.02	-	Gaps within 0.02 Da count as one mass.
+run	min_spectra	20	-	A gap peak needs 20 spectra.
+run	min_share	0.005	-	A gap peak needs a share of 0.005 of the placed spectra.
+run	min_bin	2	-	Histogram rows with fewer than 2 spectra are left out of the peaks.
+run	max_mods	3	-	A gap is explained by up to 3 modifications.
+run	mods	38	-	38 modifications are combined.
+cys	spectra	0	-	0 spectra are placed with a mass gap.
+cys	zero_bin	0	0	0 placed spectra have a gap within 0.02 Da of zero.
+cys	Carbamidomethyl (C)	0	0	0 placed spectra have a gap within 0.02 Da of 57.0215 Da (Carbamidomethyl (C)).
+cys	Propionamide (C)	0	0	0 placed spectra have a gap within 0.02 Da of 71.0371 Da (Propionamide (C)).
+cys	Nethylmaleimide (C)	0	0	0 placed spectra have a gap within 0.02 Da of 125.0477 Da (Nethylmaleimide (C)).
+cys	Methylthio (C)	0	0	0 placed spectra have a gap within 0.02 Da of 45.9877 Da (Methylthio (C)).
+cys	Carboxymethyl (C)	0	0	0 placed spectra have a gap within 0.02 Da of 58.0055 Da (Carboxymethyl (C)).
+combo	placed_spectra	0	-	0 placed spectra are in histogram rows of at least 2.
+combo	shifted_spectra	0	0	0 of them have a gap more than 0.04 Da from zero.
+silac	call	none	0	Fewer than two SILAC labels reach a share of 0.08 of at least 500 shifted spectra.
+silac	Lys4	0	0	Lys4 explains a share of 0 of the shifted spectra.
+silac	Arg6	0	0	Arg6 explains a share of 0 of the shifted spectra.
+silac	Lys8	0	0	Lys8 explains a share of 0 of the shifted spectra.
+silac	Arg10	0	0	Arg10 explains a share of 0 of the shifted spectra.

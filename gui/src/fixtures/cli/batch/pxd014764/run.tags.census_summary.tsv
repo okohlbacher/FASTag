@@ -1,0 +1,51 @@
+section	key	value	n	description
+run	version	1.11.0	-	FASTag 1.11.0 wrote this report.
+run	input	20190412_KEH_HF_SA_ANW_R11_100419_CNOT_R1_f008.mzML	-	The spectra were read from 20190412_KEH_HF_SA_ANW_R11_100419_CNOT_R1_f008.mzML.
+run	fragment_tolerance	20	-	The fragment tolerance is 20 ppm.
+run	fragment_tolerance_unit	ppm	-	The fragment tolerance is in ppm.
+run	tag_length	3	-	Tags were seeded at length 3.
+run	subsample_fraction	0.1	-	A fraction of 0.1 of the spectra was tagged (0 = all).
+run	subsample_spectra	0	-	0 spectra were drawn for tagging (0 = all).
+run	run_report_version	3	-	The run section follows FASTag run report format 3.
+run	pick_profile	legacy	-	Profile MS2 was centroided under -pick_profile legacy.
+run	profile_ms2_picked	0	0	0 of 0 profile MS2 spectra were centroided before tagging.
+run	profile_ms2_kept	0	0	0 of 0 profile MS2 spectra were tagged as profile (picking yielded nothing).
+run	activation_collisional	3016	3016	3016 of 3016 MS2 spectra were activated by collision (CID, HCD, trap-type CID, PQD).
+run	activation_electron	0	3016	0 of 3016 MS2 spectra were activated by electron transfer or capture (ETD, ECD).
+run	activation_hybrid	0	3016	0 of 3016 MS2 spectra were activated by a hybrid method (EThcD, ETciD).
+run	activation_unknown	0	3016	0 of 3016 MS2 spectra carry no activation FASTag classifies.
+census	census_version	1	-	The census follows format 1: one row per MS2 spectrum read; statuses are append-only; no status is a quality call.
+census	input_spectra	37021	-	37021 input spectra of all MS levels (the basis of subsampling).
+census	ms2_seen	3016	-	3016 MS2 spectra were read and have a census row.
+census	ms2_processed	3016	-	3016 MS2 spectra had peaks and a precursor and went to the tagger (the 'MS2 spectra' count of the log).
+census	ms2_total		-	Not known: masked spectra are never read when subsampling.
+census	subsampled	1	-	The spectra were subsampled.
+census	subsample_basis	input_spectra	-	Subsampling draws from the input spectra of all MS levels, not from MS2 only.
+census	count_empty	0	3016	0 MS2 spectra have status empty.
+census	share_empty	0	3016	The share of the MS2 spectra read that have status empty.
+census	count_no_precursor	0	3016	0 MS2 spectra have status no_precursor.
+census	share_no_precursor	0	3016	The share of the MS2 spectra read that have status no_precursor.
+census	count_no_signal	0	3016	0 MS2 spectra have status no_signal.
+census	share_no_signal	0	3016	The share of the MS2 spectra read that have status no_signal.
+census	count_bad_precursor	0	3016	0 MS2 spectra have status bad_precursor.
+census	share_bad_precursor	0	3016	The share of the MS2 spectra read that have status bad_precursor.
+census	count_too_few_peaks	0	3016	0 MS2 spectra have status too_few_peaks.
+census	share_too_few_peaks	0	3016	The share of the MS2 spectra read that have status too_few_peaks.
+census	count_no_tags	321	3016	321 MS2 spectra have status no_tags.
+census	share_no_tags	0.10643236074270557	3016	The share of the MS2 spectra read that have status no_tags.
+census	count_filtered	0	3016	0 MS2 spectra have status filtered.
+census	share_filtered	0	3016	The share of the MS2 spectra read that have status filtered.
+census	count_placed	0	3016	0 MS2 spectra have status placed.
+census	share_placed	0	3016	The share of the MS2 spectra read that have status placed.
+census	count_tagged	2695	3016	2695 MS2 spectra have status tagged.
+census	share_tagged	0.8935676392572944	3016	The share of the MS2 spectra read that have status tagged.
+census	no_charge	0	3016	0 processed MS2 spectra carry no precursor charge (tagged as 2+).
+census	best_evalue_p10	4.3954708145038525e-07	2695	The p10 of the best reported E-value of tagged and placed spectra over 2695 spectra.
+census	best_evalue_p50	0.006975448731469464	2695	The p50 of the best reported E-value of tagged and placed spectra over 2695 spectra.
+census	best_evalue_p90	24.47315788186222	2695	The p90 of the best reported E-value of tagged and placed spectra over 2695 spectra.
+census	n_peaks_kept_p10	33	3016	The p10 of the peaks kept after preprocessing over 3016 spectra.
+census	n_peaks_kept_p50	86	3016	The p50 of the peaks kept after preprocessing over 3016 spectra.
+census	n_peaks_kept_p90	136	3016	The p90 of the peaks kept after preprocessing over 3016 spectra.
+census	int_gini_p10	0.4221045658068715	3016	The p10 of the intensity Gini coefficient over 3016 spectra.
+census	int_gini_p50	0.561193981735647	3016	The p50 of the intensity Gini coefficient over 3016 spectra.
+census	int_gini_p90	0.703853852587754	3016	The p90 of the intensity Gini coefficient over 3016 spectra.

@@ -10,19 +10,10 @@ import SpeciesPanel from '../SpeciesPanel'
 import ParamField from '../ParamField'
 import { PARAM_BY_NAME } from '../paramLayout'
 import { parseReport } from '../digestReport'
-import { installMockBridge, type MockBridge } from '../testing/mockBridge'
+import { installMockBridge } from '../testing/mockBridge'
+import { click, flush, goTo, renderApp } from '../testing/render'
 import digestTsv from '../fixtures/digest.tsv?raw'
 import labelTsv from '../fixtures/label.tsv?raw'
-
-const flush = (): Promise<void> => act(async () => {})
-const click = (el: Element): Promise<void> => act(async () => { fireEvent.click(el) })
-
-async function renderApp(mock: MockBridge): Promise<HTMLElement> {
-  const { container } = render(<App />)
-  await screen.findByText('FASTag ready')
-  await flush()
-  return container
-}
 
 afterEach(() => vi.restoreAllMocks())
 
@@ -37,9 +28,10 @@ describe('a11y: tags browser (ResultsTable)', () => {
     await click(head)
     // aria-sort is only defined on columnheader/rowheader, so it is not on the button.
     expect(head.hasAttribute('aria-sort')).toBe(false)
-    // role=table: the cells are read-only, and a grid would promise arrow-key cell navigation.
-    expect(screen.queryByRole('grid')).toBeNull()
-    expect(screen.getByRole('table')).toBeDefined()
+    // P3b: a read-only grid (arrow keys move the active row; GUI-DESIGN S4),
+    // not a table, so screen readers pass the keys on and aria-selected holds.
+    expect(screen.queryByRole('table')).toBeNull()
+    expect(screen.getByRole('grid').getAttribute('aria-readonly')).toBe('true')
     const heads = screen.getAllByRole('columnheader')
     expect(heads).toHaveLength(3)
     expect(heads[0].getAttribute('aria-sort')).toBe('ascending')
@@ -96,7 +88,9 @@ describe('a11y: run feedback in App', () => {
     // ...but the collapsed log is display:none, outside the accessibility
     // tree. The run bar's status is not hidden and says what happened.
     expect(log.hidden).toBe(true)
-    const status = container.querySelector('.runbar > [role="status"]') as HTMLElement
+    // P2a: the run's status sits in the app frame, outside the four views,
+    // so it is announced whichever view is shown (was: in the run bar).
+    const status = container.querySelector('.app > [role="status"]') as HTMLElement
     expect(status.closest('[hidden]')).toBeNull()
     expect(status.textContent).toBe('Run started on a.mzML.')
     await act(async () => { mock.emitLog('42092 MS2 spectra, 1130228 tags') })
@@ -308,6 +302,7 @@ describe('UX: a known-failing species run stays one click away', () => {
     await click(screen.getByLabelText('Species species'))
     expect((screen.getByRole('button', { name: /^Run( on .+)?$/ }) as HTMLButtonElement).disabled).toBe(true)
     // Default tab is Tags: the reason is beside Run, not only in the Species tab.
+    await goTo('results')
     expect(screen.getByRole('tab', { selected: true }).textContent).toBe('Tags')
     expect(container.querySelector('.controls')!.textContent).toMatch(/cannot reach the species index k = 7/)
     await click(screen.getByRole('tab', { name: /Species/ }))
