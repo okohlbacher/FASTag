@@ -25,7 +25,8 @@
 #   - auto on the CID source, the EThcD fixture and the MGF is byte-identical
 #     to by (tags, stdout, census, recon); EThcD adds the hybrid WARN;
 #   - cz on the CID source warns about collisional spectra;
-#   - -species leaves c/z rows out and says how many;
+#   - -species leaves c/z rows out and says how many, also under
+#     -species_orientation both (its orientation counts exclude them);
 #   - -stream refuses -ion_series away from by;
 #   - auto through OnDisc (-out_spectra) equals the fast reader; threads 1/3/8;
 #   - with #6: -ion_series auto -unknown_charge infer on uncharged ETD spectra
@@ -342,6 +343,22 @@ if [ -n "$BUILDTAXDB" ] && [ -n "$TAXDIR" ] && [ -n "$DB" ] && [ -n "$GEN" ]; th
   grep -q "^Ion series: $rows tag rows read as c/z-dot ions were left out of -species" "$TMP/sp_cz.err" \
     || { grep 'species' "$TMP/sp_cz.err" >&2; fail "species: the exclusion count is not the c/z row count ($rows)"; }
   [ "$(wc -l < "$TMP/sp_by.species.tsv")" -ge 2 ] || fail "species: the b/y run reports no taxon (the check is weak)"
+  # D10 under -species_orientation both: the c/z rows are left out before
+  # the orientation lookup, so on the all-c/z run every orientation count is
+  # 0 and the exclusion count is the c/z row count; the b/y run counts tags.
+  if grep -q -- '-species_orientation' <<< "$("$BIN" --helphelp 2>&1)"; then
+    orient() { grep '^Species orientation (both): ' "$1" | sed -E 's/[^0-9]+/ /g; s/^ //; s/ $//'; }
+    runb spb_by "$TMP/syn_cid.mzML" 2 "${SP[@]}" -species_orientation both
+    runb spb_cz "$TMP/syn_etd.mzML" 2 -ion_series cz "${SP[@]}" -species_orientation both
+    grep -q "^Ion series: $rows tag rows read as c/z-dot ions were left out of -species" "$TMP/spb_cz.err" \
+      || { grep 'species' "$TMP/spb_cz.err" >&2; fail "species both: the exclusion count is not the c/z row count ($rows)"; }
+    [ "$(orient "$TMP/spb_cz.err")" = "0 0 0 0 0" ] \
+      || { grep 'orientation' "$TMP/spb_cz.err" >&2; fail "species both: the orientation counts include c/z rows"; }
+    read -r o1 o2 o3 o4 o5 o6 <<< "$(orient "$TMP/spb_by.err")"
+    [ -n "$o5" ] && [ -z "$o6" ] && [ $((o1 + o2 + o3 + o4 + o5)) -gt 0 ] \
+      || { grep 'orientation' "$TMP/spb_by.err" >&2; fail "species both: the b/y run counts no tags (the check is weak)"; }
+    grep -q 'left out of -species' "$TMP/spb_by.err" && fail "species both: by excludes rows from -species"
+  fi
 fi
 
 # ---- -stream refuses -ion_series away from by ----

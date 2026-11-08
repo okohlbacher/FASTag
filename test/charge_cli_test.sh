@@ -15,7 +15,8 @@
 #   - enumerate and infer write the same bytes at 1, 3 and 8 threads;
 #   - species: a toy taxon whose k-mers only losing hypotheses read is never
 #     reported, under -species_evidence best and all, while a toy taxon read
-#     by selected rows is (the construct is not vacuous);
+#     by selected rows is (the construct is not vacuous); also under
+#     -species_orientation both and -species_call decoy (D10);
 #   - every hypothesis lies in the candidates: possible charges {3,4} on
 #     every spectrum, and -charge_min/-charge_max 4..4 and 3..4, under infer
 #     and enumerate (TSV prec_charge and census charge_used);
@@ -316,6 +317,32 @@ if grep -q -- '-ion_series' <<< "$HELPHELP"; then
   echo "charge_cli_test: species filter holds under -ion_series auto and cz"
 else
   echo "charge_cli_test: no -ion_series in this binary; the #15B species check is skipped"
+fi
+# D10 (PLAN-INTEGRATION 2.3/2.4) on the binary: -species_orientation both
+# and -species_call decoy read the species evidence through the same
+# selected-row filter, so the losing-hypothesis taxon stays absent under
+# them too, and the selected-row taxon is reported (not vacuous).
+if grep -q -- '-species_orientation' <<< "$HELPHELP" && grep -q -- '-species_call ' <<< "$HELPHELP"; then
+  for v in both decoy both_decoy; do
+    case $v in
+      both) VA=(-species_orientation both) ;;
+      decoy) VA=(-species_call decoy) ;;
+      both_decoy) VA=(-species_orientation both -species_call decoy) ;;
+    esac
+    "$BIN" -in "$TMP/noz.mgf" -out "$TMP/spo_$v.tsv" "${SPC[@]}" -unknown_charge enumerate -species "${TAX[@]}" \
+      "${VA[@]}" -threads 2 > "$TMP/spo_$v.log" 2>&1 || { cat "$TMP/spo_$v.log" >&2; fail "species ($v) failed"; }
+    cmp -s <(cut -f1-16 "$TMP/sp0.tsv") <(cut -f1-16 "$TMP/spo_$v.tsv") || fail "-species ($v) changed the tags"
+    R="$TMP/spo_$v.species.tsv"
+    [ -s "$R" ] || fail "no species report ($v)"
+    for t in 4932 4930; do
+      [ "$(spectra_of "$R" $t)" = 0 ] || { cat "$R" >&2; fail "$v: taxon $t, read only by losing hypotheses, is reported"; }
+    done
+    n=0; for t in 1280 1279; do n=$((n + $(spectra_of "$R" $t))); done
+    [ "$n" -gt 0 ] || { cat "$R" >&2; fail "$v: the selected-row taxon is not reported (construct vacuous)"; }
+  done
+  echo "charge_cli_test: species filter holds under -species_orientation both and -species_call decoy"
+else
+  echo "charge_cli_test: no -species_orientation or -species_call in this binary; the D10 check is skipped"
 fi
 
 # ---- refusals --------------------------------------------------------------
