@@ -206,10 +206,10 @@ describe('docs: code comments that promise the CLI will not reject a GUI value',
     await click(runButton())
     expect(mock.runCalls).toHaveLength(0)
   })
-  it('the 47 advanced FASTag parameters (14 before 1.12) are in the manifest, and the ignored mzpeak_read_memory is hidden', () => {
+  it('the 53 advanced FASTag parameters (14 before 1.12) are in the manifest, and the ignored mzpeak_read_memory is hidden', () => {
     const own = ['version', 'log', 'debug', 'no_progress', 'force', 'test']
     const adv = (manifest.params as { name: string; toppAdvanced: boolean }[]).filter((p) => p.toppAdvanced && !own.includes(p.name))
-    expect(adv.length).toBe(47)
+    expect(adv.length).toBe(53)
     expect(adv.map((p) => p.name)).toContain('massgap_window')
     expect(HIDDEN.mzpeak_read_memory).toBeDefined()
     expect(RENDERED).not.toContain('mzpeak_read_memory')

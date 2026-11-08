@@ -398,6 +398,14 @@ export const PARAM_HELP: Record<string, ParamHelp> = {
   search_precursor_tolerance: { text: 'The precursor tolerance written into the search settings.' },
   search_precursor_unit: { text: 'The unit of that precursor tolerance.' },
   search_isotope_errors: { text: 'How many precursor isotope errors the search engine should consider.' },
+  search_shifts: { text: 'Add the mass shifts FASTag sees in the run to the search settings: as variable modifications, as Comet mass offsets, or both. Experimental.' },
+  search_shifts_out: { text: 'Write a table of the mass shifts FASTag found and what it did with each one in the search settings.' },
+  shift_expand_sites: { text: 'Let a variable modification also sit on the residues where FASTag placed that shift.' },
+  shift_max_offsets: { text: 'How many mass shifts are written as Comet mass offsets, besides 0.' },
+  shift_max_variable: { text: 'How many mass shifts are written as variable modifications.' },
+  shift_site_min_count: { text: 'How many placed spectra a residue needs before a shift is allowed on it.' },
+  shift_site_min_ions: { text: 'How many fragment ions a placed spectrum needs to count for a residue.' },
+  shift_site_min_share: { text: 'The share of the placed spectra of a shift that a residue needs before the shift is allowed on it.' },
   probe_input: { text: 'Print what a spectra file contains (instrument, activation, spectrum counts, profile or centroided) and exit. It writes no output file and is for other programs.' },
   dump_spectrum: { text: 'Print the peaks FASTag tags in one spectrum and exit. It writes no output file and is for other programs.' }
 }

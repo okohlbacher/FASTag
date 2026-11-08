@@ -486,7 +486,15 @@ export const HIDDEN: Record<string, string> = {
   search_decoy_prefix: OPT_IN_1_12,
   search_precursor_tolerance: OPT_IN_1_12,
   search_precursor_unit: OPT_IN_1_12,
-  search_isotope_errors: OPT_IN_1_12
+  search_isotope_errors: OPT_IN_1_12,
+  search_shifts: OPT_IN_1_12,
+  search_shifts_out: OPT_IN_1_12,
+  shift_expand_sites: OPT_IN_1_12,
+  shift_max_offsets: OPT_IN_1_12,
+  shift_max_variable: OPT_IN_1_12,
+  shift_site_min_count: OPT_IN_1_12,
+  shift_site_min_ions: OPT_IN_1_12,
+  shift_site_min_share: OPT_IN_1_12
 }
 
 /// The parameters actually shown, and so the only ones a run may send. HIDDEN
