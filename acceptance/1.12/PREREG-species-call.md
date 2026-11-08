@@ -1,46 +1,80 @@
-# PREREG-species-call: #1 calibrated species call and #10 both orientations (SKELETON)
+# PREREG-species-call: #1 calibrated species call and #10 both orientations
 
-Status 2026-11-08: **skeleton, not frozen.** The DEV regeneration, the grid fit and the leave-one-PXD-out CV have
-not been run. No held-out run may start until the sections marked TO FILL are filled, this file is committed with
-the fitted table's sha256 and the final parameter hash, and the registry rows HO-01-* and HO-10-* name that commit.
-Each config below is scored exactly once on the held-out set; nothing is tuned on held-out data.
+Status 2026-11-08: **DEV done; NO-GO. No held-out run.** The DEV regeneration on the RC, the grid fit and the
+leave-one-PXD-out CV are done and recorded below. The configs are frozen with their final hashes, but the
+pre-registered DEV go/no-go failed (the all-decoy KS check, which must pass "before any held-out run", gives
+p = 6.7e-41, and the best grid point has a false present in 35 of 36 FTMS runs). CFG-01-cand and CFG-10-cand are
+therefore `blocked_dev_nogo`: HO-01-heldout and HO-10-heldout must not be scored until the user decides. Nothing
+was relaxed. Each config is still scored at most once on the held-out set; nothing is tuned on held-out data.
 
 ## Frozen software
 
 | What | Value |
 |---|---|
 | Release candidate | origin/integration/1.12 at a117801 |
-| FASTag.bin sha256 | c4c2ad67fcd9106e474f552267f7cdfefe107f394b268bbc236308b773e4d7f3 |
+| FASTag.bin sha256 | c4c2ad67fcd9106e474f552267f7cdfefe107f394b268bbc236308b773e4d7f3 (unchanged; no rebuild) |
 | buildtaxdb sha256 | 47289931e0c3a8476aad6f40f13e6723b8209aa3623eed7a23a536e0a1485bf0 |
 | Bundle | data:/scratch/kohlbach/fastag-heldout-1.12/rc-a117801 (opt/ and data/ of a117801), SHA256SUMS sha256 93a1ad6d1184b156febb15b9f564e36a0a974f989fe9e5e7d8cf4849927cc051 |
 | OpenMS / env | /ceph/ibmi/abi/oliver/opt/openms-develop-70cebcd144, env /ceph/ibmi/abi/oliver/envs/fastag-omsdev |
 | nodes.dmp / names.dmp | d20f4f5b...cdcecf / 397b70d7...cb2b (data/taxonomy at a117801) |
-| species_call.tsv at a117801 | 8aa40c29d3440d2bde29941dab85426c644c6aeac68487f1403fd653ce2723bf, **PROVISIONAL** (training_sha256 none) |
-| taxdb | TO FILL (the index the DEV runs are regenerated with; path and sha256) |
+| species_call.tsv at a117801 | 8aa40c29d3440d2bde29941dab85426c644c6aeac68487f1403fd653ce2723bf, PROVISIONAL (training_sha256 none); **kept as shipped** (see "Fitted table") |
+| taxdb | tax_k7.taxdb sha256 34427bba2c3ba3240805d4e5266443fcdc4708e0131eb96ea4dfbb4dda771a4f (the 1.10/1.11 index, the refs-1.10.0 gate input), with the RC nodes.dmp/names.dmp, via FASTAG_TAXONOMY_DIR=data:/scratch/kohlbach/fastag112-dev/tax |
 | Truth search | Sage v0.14.7 (data, /ceph/ibmi/abi/oliver/opt/sage-0.14.7), /ceph/ibmi/abi/oliver/jpr-bench/species/ref50.fasta sha256 2bc7295c31bcb4643a59cd0dc8fdb0a28f74d8b47989902788eaa10d2d328626 |
-| Scoring script | TO FILL (path in fastag-bench, commit, sha256) |
+| DEV scoring script | acceptance/1.12/dev/scripts/fit_species.py (b293735), sha256 4e3c85cf77695dc257a144fec51cb14167b30c6d52703c931721077bc4a894bb |
+| Held-out scoring script | not written (no held-out run while the item is NO-GO) |
 
 Defaults in force: those of the RC (1.11 defaults plus #7 refuse). Decision 2 of PLAN-INTEGRATION section 8: the
 fit runs on this RC with these defaults; a later default flip of #2/#6/#9 triggers a recorded refit on DEV before
 any #1/#3 default flip (not before their held-out evaluation).
 
-## DEV (in-sample; TO FILL after the regeneration)
+## DEV (in-sample)
 
-- Runs: the 48 runs of bench/fastag-bench/config/species_runs.tsv (37 PXDs), regenerated with the RC binary.
-  Training run list sha256: TO FILL.
-- Go/no-go: d_g and spill_g distributions; all-decoy KS p > 0.01. Result: TO FILL.
-- Grid (pre-registered): alpha {0.01, 0.05} x tau {0, 0.002, 0.005, 0.01} x n_min {5, 10, 20} x deconvolve {off, on}.
-- Selection rule: minimise the run-level false-present rate subject to sensitivity >= 0.85; leave-one-PXD-out CV
-  reported. Chosen point: TO FILL. LOPO-CV table: TO FILL.
-- Fitted species_call.tsv: path and sha256 TO FILL (replaces the provisional 8aa40c29...).
+- Runs: the 48 runs of bench/fastag-bench/config/species_runs.tsv minus PXD000001_Erwinia_TMT6 (the #17 held-out
+  file, flagged by scripts/check_dev_inputs.py): **47 runs**, 36 FTMS (26 PXDs) and 11 ion-trap (run-level
+  low_resolution no_call, reported apart). Training run list dev/species/training_runs.tsv, sha256
+  **7bc1905c63e74fda88a2c34509553513da9eec866dec0f5241caa97f6ed5f499**.
+- Regeneration: dev/scripts/species_dev.py commands, 50 arms per run (base, 48 grid points, ks6) plus the #10
+  pass. 3 runs (150 arms) and 59 arms of 3 more ran on data; the other 2141 arms and the 47 `both_` arms ran on BinAC2
+  with the same binary and command lines (dev/binac2/README.md; equivalence check PXD028735_Ecoli_01 50/50
+  species.tsv byte-identical to data). Every arm exit 0. Reports: data:/scratch/kohlbach/fastag112-dev/
+  species_dev_reports.tgz (sha256 ae769959...2cba).
+- **Go/no-go at the provisional point g_0.01_0_10_off: FAIL.** 1760 genus rows (FTMS runs): d_g median 2687,
+  no row with d_g = 0, every genus has median d_g > 0 (lowest Helicobacter 587); spill_g median 332.4, positive in
+  97.95% of rows. **All-decoy KS: n = 1760 PIT values, D = 0.162, p = 6.7e-41 (needs p > 0.01): FAIL.** The decoy
+  replicate counts are not Poisson around (d_g + 0.5)/5, so the decoy null is not calibrated on real runs.
+- Grid (pre-registered): alpha {0.01, 0.05} x tau {0, 0.002, 0.005, 0.01} x n_min {5, 10, 20} x deconvolve {off, on};
+  dev/species/grid.tsv.
+- Selection rule: minimise the run-level false-present rate subject to sensitivity >= 0.85. **Chosen point
+  g_0.01_0.01_5_on** (alpha 0.01, tau 0.01, n_min 5, deconvolve on), constraint met: sensitivity 0.945 (52/55),
+  false present in 35/36 runs (0.972), 7.69 false presents per run, observed-universe specificity 0.816 (Wilson LB
+  0.796, n 1508), 1 run fully no_call. Every grid point has a run-level false-present rate of 0.97 or more.
+- LOPO-CV (dev/species/lopo_cv.tsv, 26 folds): every fold picks the same point; pooled false-present rate 0.972,
+  7.69 per run, sensitivity 0.945. Against the held-out targets (specificity >= 0.95 with LB >= 0.90, <= 10% runs
+  with a false present) the DEV numbers already miss by a wide margin.
+- #10 pass (both_g_0.01_0.01_5_on, 47 runs): regenerated, not tuned (no free parameter). Descriptive only:
+  genus `present` rows over all runs 416 forward, 313 both.
+- dev/species/fit.json holds every number above.
 
-## Configurations (acceptance/1.12/frozen-configs.tsv)
+### Fitted table
 
-| Config | Options | Parameter hash |
-|---|---|---|
-| CFG-01-base | `-species` (1.10.0 q-rule, RC defaults) | a59d5314...32b9 (pre-fit; final TO FILL) |
-| CFG-01-cand | `-species -species_call decoy -species_call_params <fitted table>` | 2ef1e705...50e3 (pre-fit hash with the provisional table; final TO FILL) |
-| CFG-10-cand | CFG-01-cand + `-species_orientation both` | 032af978...cd37 (pre-fit; final TO FILL) |
+dev/species/fitted/species_call.tsv, sha256 **c556d587297fddc20fe0128cb181d742c776936c0fa015b867a527d526bc305f**
+(version 1.12.0-dev-fit, training_sha256 7bc1905c..., alpha 0.01, tau 0.01, n_min 5, decoys 5). The RC loads it
+and reproduces the g_0.01_0.01_5_on report of PXD028735_Ecoli_01 byte for byte. **It does not replace
+data/taxonomy/species_call.tsv**, and the species_call gate case (tools/gate_new_cases.sh pin 8aa40c29...) and
+the provisional refs-1.12.0/species_call digest are unchanged: shipping a table whose null failed its own
+pre-registered check would present an uncalibrated call as fitted. The table is read at run time (not compiled
+in); replacing the shipped file would change the bundle and the species_call gate case, not FASTag.bin. That
+replacement, with the gate pin and the refs-1.12.0 case renewed together, waits for the user's decision on #1.
+
+## Configurations (acceptance/1.12/frozen-configs.tsv, scripts/make_configs.py)
+
+| Config | Options | Parameter hash | Status |
+|---|---|---|---|
+| CFG-01-base | `-extension 2 -species` (1.10.0 q-rule; species_dev.py arm base: label fixed mods, 0.3 Da on ion-trap MS2) with tax_k7.taxdb, nodes.dmp, names.dmp | d1e405fd6c1ac7f2561e2909dfc9d79667f192fa2720f9c76657efc0086db490 | frozen |
+| CFG-01-cand | CFG-01-base + `-species_call decoy -species_call_params <fitted table c556d587...> -species_deconvolve` | e939170ee78fbdc27df2461a895923f87f0fcad7f73c39871c0d5ed3e8f4aa5c | blocked_dev_nogo |
+| CFG-10-cand | CFG-01-cand + `-species_orientation both` | 93e97f05f5b0bf1648f2127425d6cacb28822e7ba5be600aedd334148b1feaca | blocked_dev_nogo |
+
+The pre-fit hashes (a59d5314..., 2ef1e705..., 032af978...) are superseded; they were never scored.
 
 Baselines under the same denominators: 1.10.0 q-rule, the 1% deconvolved-share rule, Unipept 4.2.2 1% rule.
 

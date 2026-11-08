@@ -16,16 +16,18 @@ T = {"species_call.tsv": "8aa40c29d3440d2bde29941dab85426c644c6aeac68487f1403fd6
      "names.dmp": "397b70d74a91a8e0b46eb68e46f8669296d90396d01a472a71f0c8585df7cb2b",
      # DEV fits on the RC (acceptance/1.12/dev, PREREG-chem.md / PREREG-species-call.md)
      "fitted:digest_models_v2.tsv": "51d5d582c61856c16908d3fe8cf7337c92b859be91aafc7ca754fdba169e28b4",
-     "fitted:digest_calibration.tsv": "901989f3d90915a1a120ad945018913c35870c81bae0c596e0a149a557d9ed2c"}
+     "fitted:digest_calibration.tsv": "901989f3d90915a1a120ad945018913c35870c81bae0c596e0a149a557d9ed2c",
+     "fitted:species_call.tsv": "c556d587297fddc20fe0128cb181d742c776936c0fa015b867a527d526bc305f",
+     "tax_k7.taxdb": "34427bba2c3ba3240805d4e5266443fcdc4708e0131eb96ea4dfbb4dda771a4f"}
 C = [
  # id, item, arm, options, tables, status, note
- ("CFG-01-base", "#1", "baseline", "-species (1.10.0 q-rule, RC defaults)", "", "pending_dev",
-  "taxdb and -species_* arguments fixed in PREREG-species-call.md after the DEV regeneration"),
- ("CFG-01-cand", "#1", "candidate", "-species -species_call decoy -species_call_params <fitted species_call.tsv> (alpha, tau, n_min, deconvolve from the DEV grid)",
-  "species_call.tsv,nodes.dmp,names.dmp", "pending_dev_fit",
-  "species_call.tsv at a117801 is PROVISIONAL (training_sha256 none); the fitted table and its sha256 go into PREREG-species-call.md before any held-out run"),
- ("CFG-10-cand", "#10", "candidate", "CFG-01-cand + -species_orientation both", "species_call.tsv,nodes.dmp,names.dmp",
-  "pending_dev_fit", "second pre-registered config of #1, scored once on the #1 held-out set; no free parameter"),
+ ("CFG-01-base", "#1", "baseline", "-extension 2 -species (1.10.0 q-rule, RC defaults; FASTAG_TAXONOMY_DIR with tax_k7.taxdb, nodes.dmp, names.dmp; label fixed mods; 0.3 Da on ion-trap MS2; fastag_bench.species.fastag_cmd arm default)",
+  "tax_k7.taxdb,nodes.dmp,names.dmp", "frozen", "options as the DEV regeneration (species_dev.py arm base); #1 held-out stays blocked by CFG-01-cand"),
+ ("CFG-01-cand", "#1", "candidate", "CFG-01-base + -species_call decoy -species_call_params <fitted species_call.tsv> -species_deconvolve (DEV point g_0.01_0.01_5_on: alpha 0.01, tau 0.01, n_min 5, decoys 5)",
+  "tax_k7.taxdb,nodes.dmp,names.dmp,fitted:species_call.tsv", "blocked_dev_nogo",
+  "DEV go/no-go and all-decoy KS (p 6.7e-41) failed; no held-out run until the user decides (PREREG-species-call.md)"),
+ ("CFG-10-cand", "#10", "candidate", "CFG-01-cand + -species_orientation both", "tax_k7.taxdb,nodes.dmp,names.dmp,fitted:species_call.tsv",
+  "blocked_dev_nogo", "second pre-registered config of #1, scored once on the #1 held-out set; no free parameter; blocked with CFG-01-cand"),
  ("CFG-02-base", "#2", "baseline", "RC defaults (-complement_rule same_charge)", "", "frozen", ""),
  ("CFG-02-cand", "#2", "candidate", "-complement_rule both (tolerance 0.02 Da, unit Da, factor 0.5, mid-p off: defaults)", "",
   "frozen", "PLAN-INTEGRATION 4.2 compl_both = defaults plus -complement_rule both; #2 dev (5 runs) has no registry row yet: a dev-driven change of tolerance/unit/mid-p would be a new config"),

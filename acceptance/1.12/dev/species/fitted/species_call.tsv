@@ -1,0 +1,17 @@
+# Decision parameters of -species_call decoy (FASTag 1.12, item #1).
+#
+# DEV FIT on the RC (a117801, FASTag.bin c4c2ad67...): grid point g_0.01_0.01_5_on chosen by the
+# pre-registered rule (min run-level false-present rate s.t. sensitivity >= 0.85) on the 36 FTMS DEV runs
+# of the 47-run training list (sha256 below). Use with -species_deconvolve (the point is deconvolve on).
+# NOT SHIPPED: the DEV go/no-go and the all-decoy KS check failed (PREREG-species-call.md), so this
+# table does not replace data/taxonomy/species_call.tsv and no held-out run may use it.
+#
+# key <TAB> value. alpha: q-value threshold; tau: minimum share of the run's
+# units; n_min: minimum observed spectra; decoys: the -species_call_decoys the
+# values were calibrated with (a different value warns).
+version	1.12.0-dev-fit
+training_sha256	7bc1905c63e74fda88a2c34509553513da9eec866dec0f5241caa97f6ed5f499
+alpha	0.01
+tau	0.01
+n_min	5
+decoys	5

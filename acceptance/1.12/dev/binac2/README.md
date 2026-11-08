@@ -16,3 +16,6 @@ The species DEV runs that were not finished on data (44 of 47 runs, 2141 arms) r
   pushed from data to the BinAC2 workspace directly (no relay through the laptop), sizes checked by the job.
 - Equivalence check before the main array: PXD028735_Ecoli_01, finished on data, rerun on BinAC2 for all 50 arms
   (job 6464167): species.tsv SAME 50, DIFF 0 (sha256).
+- Main array 6464388 (44 tasks, 2141 arms) and the #10 pass 6467105 (47 tasks, `both_g_0.01_0.01_5_on`): every
+  task COMPLETED 0:0, every arm exit 0; merged into data:/scratch/kohlbach/fastag112-dev/species/runs with
+  binac2_pull.sh (no arm overwritten). Wall time 11-55 min per task (16 threads, 32 logical CPUs).
