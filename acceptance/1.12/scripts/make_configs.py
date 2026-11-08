@@ -13,7 +13,10 @@ T = {"species_call.tsv": "8aa40c29d3440d2bde29941dab85426c644c6aeac68487f1403fd6
      "digest_calibration.tsv": "45451faf70e8691a95d4f5593fa1013b90505d0118763b42ab6e3467ed7c6a77",
      "massgap_mods.tsv": "c1ec6f57718c4f9ea84a975d9ef35a34ca542fcfcc7026aa21ff50f109caa106",
      "nodes.dmp": "d20f4f5b38e195c1ad77beef1f82296b96bab18588808c9c7527730928cdcecf",
-     "names.dmp": "397b70d74a91a8e0b46eb68e46f8669296d90396d01a472a71f0c8585df7cb2b"}
+     "names.dmp": "397b70d74a91a8e0b46eb68e46f8669296d90396d01a472a71f0c8585df7cb2b",
+     # DEV fits on the RC (acceptance/1.12/dev, PREREG-chem.md / PREREG-species-call.md)
+     "fitted:digest_models_v2.tsv": "51d5d582c61856c16908d3fe8cf7337c92b859be91aafc7ca754fdba169e28b4",
+     "fitted:digest_calibration.tsv": "901989f3d90915a1a120ad945018913c35870c81bae0c596e0a149a557d9ed2c"}
 C = [
  # id, item, arm, options, tables, status, note
  ("CFG-01-base", "#1", "baseline", "-species (1.10.0 q-rule, RC defaults)", "", "pending_dev",
@@ -26,11 +29,11 @@ C = [
  ("CFG-02-base", "#2", "baseline", "RC defaults (-complement_rule same_charge)", "", "frozen", ""),
  ("CFG-02-cand", "#2", "candidate", "-complement_rule both (tolerance 0.02 Da, unit Da, factor 0.5, mid-p off: defaults)", "",
   "frozen", "PLAN-INTEGRATION 4.2 compl_both = defaults plus -complement_rule both; #2 dev (5 runs) has no registry row yet: a dev-driven change of tolerance/unit/mid-p would be a new config"),
- ("CFG-03-cand", "#3", "candidate", "-digest_out -digest_models_version v2 -digest_detection shipped -digest_flank2 auto -digest_min_confidence <fit> -digest_calibration <fitted> -label_out -alkylation_out -alkylation_proteome <FASTA rule in PREREG-chem.md>",
-  "digest_models.tsv,digest_models_v2.tsv,digest_calibration.tsv,massgap_mods.tsv", "pending_dev_fit",
-  "v2 tables and calibration fitted on the 254 DEV runs (LOPO-CV) and frozen in PREREG-chem.md; bundled alkylation proteomes are not in 1.12.0, so the proteome rule must be fixed there"),
- ("CFG-03-base", "#3", "baseline", "-digest_out -label_out (shipped tables, 1.11 digest; label_call rows of #3a); majority / always-CAM baselines computed by the scorer",
-  "digest_models.tsv,massgap_mods.tsv", "frozen", ""),
+ ("CFG-03-cand", "#3", "candidate", "termini: -tag_length 4 -subsample_fraction 0.25 -fragment_tolerance 20.0 -fragment_tolerance_unit ppm -digest_out -label_out -digest_models_version v2 -digest_detection shipped -digest_flank2 auto -digest_calibration <fitted> -digest_min_confidence 0.8 (FASTAG_FULL_PRECISION=1; FASTAG_DIGEST_DIR = RC data/digest with the fitted v2 table and calibration); alkylation: -tag_length 4 -extension 6 -recon_fasta <SDRF organism panel FASTA> -recon_out -delta_out -recon_min_length 5 -fixed_modifications, 0.3 Da on ion-trap MS2 else 20 ppm, -massgap_out -alkylation_out",
+  "digest_models.tsv,fitted:digest_models_v2.tsv,fitted:digest_calibration.tsv,massgap_mods.tsv", "pending_scorer",
+  "fitted on 177 DEV runs (PREREG-chem.md); the held-out scoring script and the user's decision on the DEV results (protease, alkylation and label miss their targets on DEV) are open"),
+ ("CFG-03-base", "#3", "baseline", "termini: -tag_length 4 -subsample_fraction 0.25 -fragment_tolerance 20.0 -fragment_tolerance_unit ppm -digest_out -label_out (FASTAG_FULL_PRECISION=1; shipped v1 tables, label_call rows of #3a); majority / always-CAM baselines computed by the scorer",
+  "digest_models.tsv,massgap_mods.tsv", "pending_scorer", "options fixed with the DEV regeneration protocol (PREREG-chem.md)"),
  ("CFG-04", "#4", "harness", "fastag-bench unidentified (feat/f4-tag-accuracy-harness 7ef0f33) with FASTag at defaults; RC tags at defaults equal 1.11.0 (BASELINE IDENTITY PASS)", "",
   "blocked_user_signoff", "margin not frozen; F4-10, F4-11, F4-12 amendments need the user's sign-off before the test split is opened"),
  ("CFG-05", "#5", "candidate", "-shortlist_out -fasta_out -shortlist_background <host+cRAP> -search_config_out -search_engine sage|comet (shortlist defaults: min_spectra 2, max_evalue 0.1, top 0, parsimony as doc/SHORTLIST.md at a117801)",

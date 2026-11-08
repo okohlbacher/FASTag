@@ -1,0 +1,86 @@
+{
+ "cv_selected": {
+  "accuracy_nocall_wrong": 0.90625,
+  "balanced_accuracy": 0.9082125603864735,
+  "called": 94,
+  "called_accuracy": 0.925531914893617,
+  "called_accuracy_wilson": [
+   0.8541878776397197,
+   0.9634614191334335
+  ],
+  "called_correct": 87,
+  "n": 96,
+  "recall": {
+   "Lys-C": [
+    1.0,
+    4
+   ],
+   "Trypsin": [
+    0.9420289855072463,
+    69
+   ],
+   "nontryptic": [
+    0.782608695652174,
+    23
+   ]
+  }
+ },
+ "detection_fit": {
+  "orbitrap_hcd": {
+   "K": 1.1811807946249104,
+   "R": 0.8236464810670879,
+   "obs_K": 130516,
+   "obs_R": 93501,
+   "rho": 1.4340871014159053
+  },
+  "other": {
+   "K": 1.570838419473957,
+   "R": 0.44437066729536717,
+   "obs_K": 4184,
+   "obs_R": 1216,
+   "rho": 3.5349732443744806
+  }
+ },
+ "evaluable": 159,
+ "flank2_route_runs": 63,
+ "point": {
+  "detection": "fitted",
+  "kappa": null,
+  "s_nontryptic": 0.1,
+  "s_trypsin": 0.05
+ },
+ "reference": {
+  "K": "6636863",
+  "R": "6818532",
+  "ref_k": "0.4932492134195986",
+  "ref_r": "0.5067507865804014",
+  "sha256": "2bc7295c31bcb4643a59cd0dc8fdb0a28f74d8b47989902788eaa10d2d328626"
+ },
+ "runs": 177,
+ "v1_same_runs": {
+  "accuracy_nocall_wrong": 0.8854166666666666,
+  "balanced_accuracy": 0.8792270531400966,
+  "called": 94,
+  "called_accuracy": 0.9042553191489362,
+  "called_accuracy_wilson": [
+   0.8279587926975853,
+   0.9488080392369105
+  ],
+  "called_correct": 85,
+  "n": 96,
+  "recall": {
+   "Lys-C": [
+    1.0,
+    4
+   ],
+   "Trypsin": [
+    0.9420289855072463,
+    69
+   ],
+   "nontryptic": [
+    0.6956521739130435,
+    23
+   ]
+  }
+ }
+}

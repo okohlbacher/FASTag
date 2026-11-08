@@ -12,6 +12,8 @@ C-terminal tags):
       table at a117801): v2 log-likelihoods for the port check, flank2 on the no-call runs
   C   the prose-auto mass-gap command (gap_cmd of runs.json; nt_runs.tsv for the 10 nontryptic_new runs: organism
       FASTA of the prose-auto panel) plus -massgap_out C.massgap.tsv -alkylation_out C.alkylation.tsv
+  A   (later, --passes A) #3g on the whole run: the gap command without -subsample_fraction, -recon_out,
+      -delta_out and -recon_min_length, its -recon_fasta passed as -alkylation_proteome, plus -alkylation_out
   NAME (later, --table NAME DIGEST_DIR ["extra options"]): as V0 with a candidate digest dir
 Only DEV runs: the list is checked against every held-out manifest first (scripts/check_dev_inputs.py).
 Usage: chem_dev.py <dev check tsv> <out dir> <workers> <threads> [--passes B,V0,C] [--table NAME DIR ["extra"]]"""
@@ -83,6 +85,29 @@ def one(j, out, th, passes, table):
                      ("-delta_out", f"{w}/C.delta.tsv"), ("-threads", str(th))):
             c[c.index(k) + 1] = v
         todo["C"] = c + ["-massgap_out", f"{o}/C.massgap.tsv", "-alkylation_out", f"{o}/C.alkylation.tsv"]
+    if "A" in passes and j.get("gap_cmd"):
+        # #3g on the whole run: the gap command without its -subsample_fraction and without the recon/delta outputs,
+        # its -recon_fasta given as -alkylation_proteome (the held-out rule: the SDRF organism's panel FASTA)
+        c = list(j["gap_cmd"])
+        c[0] = RC
+        out_c, drop = [], {"-recon_out", "-delta_out", "-subsample_fraction"}
+        i = 0
+        while i < len(c):
+            if c[i] in drop:
+                i += 2
+                continue
+            if c[i] == "-recon_fasta":
+                out_c += ["-alkylation_proteome", c[i + 1]]
+                i += 2
+                continue
+            if c[i] == "-recon_min_length":
+                i += 2
+                continue
+            out_c.append(c[i])
+            i += 1
+        out_c[out_c.index("-out") + 1] = f"{w}/A.tags.tsv"
+        out_c[out_c.index("-threads") + 1] = str(th)
+        todo["A"] = out_c + ["-alkylation_out", f"{o}/A.alkylation.tsv"]
     if table:
         # a candidate digest dir (v2 table, calibration) replaces the RC's through FASTAG_DIGEST_DIR
         name = table[0]

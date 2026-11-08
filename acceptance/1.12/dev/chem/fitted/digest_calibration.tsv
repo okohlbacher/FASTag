@@ -1,0 +1,11 @@
+# FASTag 1.12 calibration of the protease call (#3f) for -digest_min_confidence: a logistic model
+# p_correct = 1 / (1 + exp(-(intercept + margin * margin + log_n * ln(n) + first_peak * first_peak))).
+# FITTED on 97 called evaluable DEV runs of the 1.12 RC a117801 (pass V1, the fitted v2 table) by
+# acceptance/1.12/dev/scripts/fit_chem.py calibrate (IRLS, L2 0.1 on the slopes); not validated on held-out data.
+# -digest_min_confidence chosen on LOPO-CV: 0.8 (the best CV balanced accuracy among thresholds with CV called
+# accuracy >= 0.95: found; CV called accuracy 0.956, Wilson LB 0.891).
+feature	coef
+intercept	-4.802551790468236
+margin	2.681532060266851
+log_n	0.7637997731009182
+first_peak	1.5335738590029946

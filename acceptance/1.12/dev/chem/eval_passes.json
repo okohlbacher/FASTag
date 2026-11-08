@@ -1,0 +1,118 @@
+{
+ "B": {
+  "balanced_accuracy": 0.6148614389369701,
+  "recall": {
+   "Trypsin": [
+    0.5284552845528455,
+    123
+   ],
+   "Lys-C": [
+    0.8,
+    5
+   ],
+   "nontryptic": [
+    0.5161290322580645,
+    31
+   ]
+  },
+  "n": 159,
+  "called": 94,
+  "called_correct": 85,
+  "called_accuracy": 0.9042553191489362,
+  "called_accuracy_wilson": [
+   0.8279587926975853,
+   0.9488080392369105
+  ],
+  "accuracy_nocall_wrong": 0.5345911949685535,
+  "timstof_runs": 0,
+  "timstof_called": 0,
+  "timstof_called_correct": 0
+ },
+ "V0": {
+  "balanced_accuracy": 0.644496896581869,
+  "recall": {
+   "Trypsin": [
+    0.5528455284552846,
+    123
+   ],
+   "Lys-C": [
+    0.8,
+    5
+   ],
+   "nontryptic": [
+    0.5806451612903226,
+    31
+   ]
+  },
+  "n": 159,
+  "called": 98,
+  "called_correct": 90,
+  "called_accuracy": 0.9183673469387755,
+  "called_accuracy_wilson": [
+   0.8471171284576644,
+   0.9580559410323579
+  ],
+  "accuracy_nocall_wrong": 0.5660377358490566,
+  "timstof_runs": 0,
+  "timstof_called": 0,
+  "timstof_called_correct": 0
+ },
+ "V1": {
+  "balanced_accuracy": 0.652539557653641,
+  "recall": {
+   "Trypsin": [
+    0.5447154471544715,
+    123
+   ],
+   "Lys-C": [
+    0.8,
+    5
+   ],
+   "nontryptic": [
+    0.6129032258064516,
+    31
+   ]
+  },
+  "n": 159,
+  "called": 97,
+  "called_correct": 90,
+  "called_accuracy": 0.9278350515463918,
+  "called_accuracy_wilson": [
+   0.8584683281060499,
+   0.964605841691335
+  ],
+  "accuracy_nocall_wrong": 0.5660377358490566,
+  "timstof_runs": 0,
+  "timstof_called": 0,
+  "timstof_called_correct": 0
+ },
+ "V2b": {
+  "balanced_accuracy": 0.5137861701197658,
+  "recall": {
+   "Trypsin": [
+    0.5284552845528455,
+    123
+   ],
+   "Lys-C": [
+    0.4,
+    5
+   ],
+   "nontryptic": [
+    0.6129032258064516,
+    31
+   ]
+  },
+  "n": 159,
+  "called": 90,
+  "called_correct": 86,
+  "called_accuracy": 0.9555555555555556,
+  "called_accuracy_wilson": [
+   0.8912314496718777,
+   0.9825827581472913
+  ],
+  "accuracy_nocall_wrong": 0.5408805031446541,
+  "timstof_runs": 0,
+  "timstof_called": 0,
+  "timstof_called_correct": 0
+ }
+}

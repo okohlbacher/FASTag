@@ -1,0 +1,124 @@
+{
+ "runs": 177,
+ "evaluable": 159,
+ "kappa_grid": [
+  [
+   -76022.80348022452,
+   10.0
+  ],
+  [
+   -75998.75168318058,
+   100.0
+  ],
+  [
+   -76361.08024574014,
+   1000.0
+  ],
+  [
+   -78618.42785075956,
+   10000.0
+  ],
+  [
+   -79766.39381549723,
+   null
+  ]
+ ],
+ "kappa": 100.0,
+ "s_trypsin": 0.1,
+ "s_nontryptic": 0.1,
+ "detection": {
+  "orbitrap_hcd": {
+   "K": 1.1811807946249104,
+   "R": 0.8236464810670879,
+   "obs_K": 130516,
+   "obs_R": 93501,
+   "rho": 1.4340871014159053
+  },
+  "other": {
+   "K": 1.570838419473957,
+   "R": 0.44437066729536717,
+   "obs_K": 4184,
+   "obs_R": 1216,
+   "rho": 3.5349732443744806
+  }
+ },
+ "cv_port": {
+  "balanced_accuracy": 0.7681159420289855,
+  "recall": {
+   "Trypsin": [
+    0.6086956521739131,
+    69
+   ],
+   "Lys-C": [
+    1.0,
+    4
+   ],
+   "nontryptic": [
+    0.6956521739130435,
+    23
+   ]
+  },
+  "n": 96,
+  "called": 96,
+  "called_correct": 62,
+  "called_accuracy": 0.6458333333333334,
+  "called_accuracy_wilson": [
+   0.5462430234225731,
+   0.7342015967856051
+  ],
+  "accuracy_nocall_wrong": 0.6458333333333334
+ },
+ "cv_flank2_route_runs": 63,
+ "insample_port": {
+  "balanced_accuracy": 0.552530815630737,
+  "recall": {
+   "Trypsin": [
+    0.34146341463414637,
+    123
+   ],
+   "Lys-C": [
+    0.8,
+    5
+   ],
+   "nontryptic": [
+    0.5161290322580645,
+    31
+   ]
+  },
+  "n": 159,
+  "called": 96,
+  "called_correct": 62,
+  "called_accuracy": 0.6458333333333334,
+  "called_accuracy_wilson": [
+   0.5462430234225731,
+   0.7342015967856051
+  ],
+  "accuracy_nocall_wrong": 0.389937106918239
+ },
+ "v1_shipped_port": {
+  "balanced_accuracy": 0.6148614389369701,
+  "recall": {
+   "Trypsin": [
+    0.5284552845528455,
+    123
+   ],
+   "Lys-C": [
+    0.8,
+    5
+   ],
+   "nontryptic": [
+    0.5161290322580645,
+    31
+   ]
+  },
+  "n": 159,
+  "called": 94,
+  "called_correct": 85,
+  "called_accuracy": 0.9042553191489362,
+  "called_accuracy_wilson": [
+   0.8279587926975853,
+   0.9488080392369105
+  ],
+  "accuracy_nocall_wrong": 0.5345911949685535
+ }
+}
