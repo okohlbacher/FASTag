@@ -194,12 +194,12 @@ namespace FASTag
 
   void PathGuard::input(const char* opt, const std::string& path)
   {
-    if (!path.empty()) ins_.push_back({opt, path, false});
+    if (!path.empty()) ins_.push_back({opt, path, false, false});
   }
 
-  void PathGuard::output(const char* opt, const std::string& path, bool via_part)
+  void PathGuard::output(const char* opt, const std::string& path, bool via_part, bool part_of_part)
   {
-    if (!path.empty()) outs_.push_back({opt, path, via_part});
+    if (!path.empty()) outs_.push_back({opt, path, via_part, via_part && part_of_part});
   }
 
   std::string PathGuard::check() const
@@ -214,7 +214,11 @@ namespace FASTag
       if (e.via_part)
       {
         const std::string t = resolveTarget(e.path);
-        if (!writesDirect(t)) c.push_back({t + ".part", true});
+        if (!writesDirect(t))
+        {
+          c.push_back({t + ".part", true});
+          if (e.part_of_part) c.push_back({partPathFor(t + ".part"), true});
+        }
       }
       return c;
     };

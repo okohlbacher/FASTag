@@ -33,6 +33,10 @@
 #   - #11B: -stream -census_ids*, census outputs naming -census_ids (by name,
 #     symlink, hard link; the file unchanged) and a missing or unreadable
 #     -census_ids are refused before -out is written
+#   - outputs on inputs no option names are refused: the shipped digest
+#     tables (-digest_out, -shortlist_out, -massgap_out on them), -fasta on
+#     the q_db temporary <out>.qtmp, -out on the -census_ids join's
+#     <census_out>.part.part
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 BIN="$1"
@@ -368,5 +372,45 @@ if [ -f "$CHY" ]; then
 else
   fail "fixture $CHY missing"
 fi
+
+# Inputs no option names are guarded too (OutputGuard.h): the shipped
+# digest tables resolved from FASTAG_DIGEST_DIR, the q_db temporary
+# <out>.qtmp and the -census_ids join's <census_out>.part.part. A copy of
+# the digest directory, so the shipped data is never at risk.
+mkdir -p "$TMP/dig"
+cp "$FASTAG_DIGEST_DIR"/* "$TMP/dig/"
+dm_before=$(cksum < "$TMP/dig/digest_models.tsv")
+FASTAG_DIGEST_DIR="$TMP/dig" "$BIN" -in "$IN" -out "$TMP/g1.tsv" -digest_out "$TMP/dig/digest_models.tsv" "${ARGS[@]}" \
+  >"$TMP/g1.log" 2>&1 && fail "-digest_out on the shipped digest_models.tsv ran (exit 0)"
+grep -q "is the -digest_models (shipped) file" "$TMP/g1.log" || { cat "$TMP/g1.log"; fail "no message naming the shipped digest_models.tsv for -digest_out"; }
+FASTAG_DIGEST_DIR="$TMP/dig" "$BIN" "${SLA[@]}" -out "$TMP/g2.tsv" -recon_fasta "$DB" -shortlist_out "$TMP/dig/digest_models.tsv" \
+  >"$TMP/g2.log" 2>&1 && fail "-shortlist_out on the shipped digest_models.tsv ran (exit 0)"
+grep -q "is the -digest_models (shipped) file" "$TMP/g2.log" || { cat "$TMP/g2.log"; fail "no message naming the shipped digest_models.tsv for -shortlist_out"; }
+FASTAG_DIGEST_DIR="$TMP/dig" "$BIN" -in "$IN" -out "$TMP/g3.tsv" -massgap_out "$TMP/dig/massgap_mods.tsv" "${ARGS[@]}" \
+  >"$TMP/g3.log" 2>&1 && fail "-massgap_out on the shipped massgap_mods.tsv ran (exit 0)"
+grep -q "is the -massgap_mods (shipped) file" "$TMP/g3.log" || { cat "$TMP/g3.log"; fail "no message naming the shipped massgap_mods.tsv"; }
+[ "$(cksum < "$TMP/dig/digest_models.tsv")" = "$dm_before" ] || fail "the shipped digest_models.tsv was modified"
+[ ! -e "$TMP/g1.tsv" ] && [ ! -e "$TMP/g2.tsv" ] && [ ! -e "$TMP/g3.tsv" ] || fail "a refused shipped-table collision wrote -out"
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) ;;
+  *)
+    # q_db: -fasta is (a link to) <out>.qtmp.
+    cp "$DB" "$TMP/q.tsv.qtmp"
+    ln -s "$TMP/q.tsv.qtmp" "$TMP/qlink.fasta"
+    q_before=$(cksum < "$TMP/q.tsv.qtmp")
+    printf '>ENT1\nMWWHHGWWYHHWWPHHWWHFHWWHNHWWHHKWWHHWMWHHWWHYHWWHHWWQHHWWHHR\n' > "$TMP/qent.fasta"
+    "$BIN" -in "$IN" -out "$TMP/q.tsv" -fasta "$TMP/qlink.fasta" -entrapment_fasta "$TMP/qent.fasta" -tag_length 4 "${ARGS[@]}" \
+      >"$TMP/q.log" 2>&1 && fail "-fasta on the q_db temporary file ran (exit 0)"
+    grep -q "is the -fasta file" "$TMP/q.log" || { cat "$TMP/q.log"; fail "no message naming -fasta for the q_db temporary file"; }
+    [ "$(cksum < "$TMP/q.tsv.qtmp")" = "$q_before" ] || fail "the -fasta file behind <out>.qtmp was modified"
+    # -census_ids join: -out is (behind a link) <census_out>.part.part.
+    printf 'an earlier table\n' > "$TMP/cj_out.tsv"
+    cj_before=$(cksum < "$TMP/cj_out.tsv")
+    ln -s "$TMP/cj_out.tsv" "$TMP/cj.tsv.part.part"
+    "$BIN" -in "$IN" -out "$TMP/cj_out.tsv" -census -census_ids "$TMP/ids.idXML" -census_out "$TMP/cj.tsv" "${ARGS[@]}" \
+      >"$TMP/cj.log" 2>&1 && fail "-out on the -census_ids join's temporary file ran (exit 0)"
+    grep -q "collide through a temporary file" "$TMP/cj.log" || { cat "$TMP/cj.log"; fail "no message for the -census_ids join's temporary file"; }
+    [ "$(cksum < "$TMP/cj_out.tsv")" = "$cj_before" ] && [ ! -e "$TMP/cj.tsv" ] || fail "a refused join collision wrote an output" ;;
+esac
 
 echo "cli_guards_test: all checks passed"

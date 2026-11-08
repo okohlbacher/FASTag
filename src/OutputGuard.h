@@ -57,8 +57,10 @@ namespace FASTag
     /// are ignored.
     void input(const char* opt, const std::string& path);
     /// An output, named by its option without the dash. Empty paths are
-    /// ignored. With `via_part`, the PartFile temporary path is checked too.
-    void output(const char* opt, const std::string& path, bool via_part = false);
+    /// ignored. With `via_part`, the PartFile temporary path is checked too;
+    /// with `part_of_part` also the temporary of a PartFile on that temporary
+    /// path (partPathFor(partPathFor(path)), the -census_ids join).
+    void output(const char* opt, const std::string& path, bool via_part = false, bool part_of_part = false);
     /// The first collision as an error message, or "" when there is none.
     /// Outputs are checked in registration order: against every input (in
     /// registration order), then against every earlier output.
@@ -69,6 +71,7 @@ namespace FASTag
     {
       std::string opt, path;
       bool via_part = false;
+      bool part_of_part = false;
     };
     std::vector<Entry> ins_, outs_;
   };

@@ -2334,6 +2334,10 @@ protected:
       }
     }
     const std::string digest_dir = (digest_on || gap_needed) ? digestDir_() : std::string();
+    // The shipped tables resolved from the digest directory below: inputs the
+    // run consumes although no option names them, so the path guard checks
+    // every output against them too ({label, path}).
+    std::vector<std::pair<std::string, std::string>> resolved_inputs;
     const auto no_digest_dir = [&](const char* what) {
       OPENMS_LOG_ERROR << "No shipped " << what << " found (expected <bin>/../share/FASTag/digest). "
                           "Set FASTAG_DIGEST_DIR to the directory holding digest_models.tsv and "
@@ -2363,6 +2367,7 @@ protected:
         OPENMS_LOG_ERROR << "-digest_models '" << models_path << "': " << err << std::endl;
         return INPUT_FILE_CORRUPT;
       }
+      if (digest_models.empty()) resolved_inputs.emplace_back("digest_models (shipped)", models_path);
       digest_settings.models = digest_models.empty() ? (digest_v2 ? "shipped_v2" : "shipped") : digest_models;
       if (digest_settings.detection)
         for (std::string_view cls : FD::kInstrumentClasses)
@@ -2384,6 +2389,7 @@ protected:
           return INPUT_FILE_CORRUPT;
         }
         digest_settings.calibration_source = cal_path.empty() ? "shipped" : cal_path;
+        if (cal_path.empty()) resolved_inputs.emplace_back("digest_calibration (shipped)", cp);
       }
       // The table's own background wins; else the FASTA's composition; else
       // the shipped human one.
@@ -2414,6 +2420,7 @@ protected:
         protease_models.bg_c = shipped.bg_c;
         protease_models.bg_n = shipped.bg_n;
         protease_models.has_bg = true;
+        resolved_inputs.emplace_back("digest_models (shipped)", digest_dir + "/digest_models.tsv");
       }
     }
     std::vector<FD::GapMod> gap_mods, cys_alkylations;
@@ -2429,6 +2436,7 @@ protected:
         OPENMS_LOG_ERROR << "'" << digest_dir << "/massgap_mods.tsv': " << (err.empty() ? "cannot read" : err) << std::endl;
         return INPUT_FILE_CORRUPT;
       }
+      resolved_inputs.emplace_back("massgap_mods (shipped)", digest_dir + "/massgap_mods.tsv");
       for (const char* c : {"Carbamidomethyl (C)", "Propionamide (C)", "Nethylmaleimide (C)",
                             "Methylthio (C)", "Carboxymethyl (C)"})
         cys_alkylations.push_back(FD::GapMod{c, c, 1.0, 0.0});
@@ -2486,6 +2494,7 @@ protected:
           OPENMS_LOG_ERROR << "'" << dd << "/digest_models.tsv': " << err << std::endl;
           return INPUT_FILE_CORRUPT;
         }
+        resolved_inputs.emplace_back("digest_models (shipped)", dd + "/digest_models.tsv");
         sl_models.bg_c = sl_models.bg_n = FD::composition(sl_db_residues, true);
         sl_models.has_bg = true;
       }
@@ -3171,7 +3180,21 @@ protected:
       // ---- 1.12 D: guarded inputs ----
       guard.input("species_call_params", species_call_params_path);
       guard.input("digest_calibration", getStringOption_("digest_calibration"));
-      if (alk_db_source == "proteome") guard.input("alkylation_proteome", alk_db);
+      // A named proteome (bundled:<name>) is read as much as a given one.
+      if (!alk_db.empty()) guard.input("alkylation_proteome", alk_db);
+      // Inputs resolved from defaults: the shipped digest tables loaded above,
+      // and the bundled taxonomy -species reads when no -taxdb set is given.
+      for (const auto& ri : resolved_inputs) guard.input(ri.first.c_str(), ri.second);
+      if (want_species && getStringOption_("taxdb").empty() && getStringOption_("taxonomy_nodes").empty()
+          && getStringOption_("taxonomy_names").empty())
+      {
+        const std::string tdir = taxonomyDir_();
+        if (!tdir.empty())
+          for (const auto& tf : {std::make_pair("taxdb (bundled)", "/tax_k7.taxdb"),
+                                 std::make_pair("taxonomy_nodes (bundled)", "/nodes.dmp"),
+                                 std::make_pair("taxonomy_names (bundled)", "/names.dmp")})
+            if (File::exists(tdir + tf.second)) guard.input(tf.first, tdir + tf.second);
+      }
       // ---- 1.12 F: guarded inputs ----
       if (getFlag_("census")) guard.input("census_ids", getStringOption_("census_ids"));
       guard.output("out", out);
@@ -3182,6 +3205,8 @@ protected:
       guard.output("digest_out", digest_out);
       guard.output("label_out", label_out);
       guard.output("massgap_out", massgap_out);
+      // The q_db post-pass writes <out>.qtmp and renames it onto -out.
+      if (entrap_on) guard.output("out (q_db temporary file)", out + ".qtmp");
       if (getFlag_("glyco"))
       {
         const std::string g = getStringOption_("glyco_out");
@@ -3207,7 +3232,11 @@ protected:
       {
         const std::string c = getStringOption_("census_out");
         const std::string cs = getStringOption_("census_summary_out");
-        guard.output("census_out", c.empty() ? defaultReportPath(out, ".census.tsv") : c, /*via_part=*/true);
+        // -census_ids joins the finished <census_out>.part into a .part of
+        // that .part (a PartFile on the temporary path), so that path is
+        // checked too.
+        guard.output("census_out", c.empty() ? defaultReportPath(out, ".census.tsv") : c, /*via_part=*/true,
+                     /*part_of_part=*/!getStringOption_("census_ids").empty());
         guard.output("census_summary_out", cs.empty() ? defaultReportPath(out, ".census_summary.tsv") : cs,
                      /*via_part=*/true);
       }

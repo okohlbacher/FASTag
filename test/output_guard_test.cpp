@@ -186,6 +186,29 @@ int main(int argc, char** argv)
     k.output("out", dir + "/y.tsv.part");
     k.output("census_out", dir + "/y.tsv", false);
     check(k.check().empty(), "no .part without via_part: " + k.check());
+    // The -census_ids join: a PartFile on the .part path writes .part.part.
+    put(dir + "/z.tsv.part.part", "input\n");
+    PathGuard q;
+    q.input("in", in);
+    q.input("search_config_template", dir + "/z.tsv.part.part");
+    q.output("census_out", dir + "/z.tsv", true, /*part_of_part=*/true);
+    check(q.check() == "-census_out's temporary file (" + dir + "/z.tsv.part.part) is the -search_config_template "
+                       "file; writing it would destroy that input.",
+          ".part.part = input: " + q.check());
+    PathGuard r;
+    r.input("in", in);
+    r.output("out", dir + "/z.tsv.part.part");
+    r.output("census_out", dir + "/z.tsv", true, true);
+    check(contains(r.check(), "collide through a temporary file"), ".part.part = other output: " + r.check());
+    PathGuard u;
+    u.input("in", in);
+    u.input("search_config_template", dir + "/z.tsv.part.part");
+    u.output("census_out", dir + "/z.tsv", true);
+    check(u.check().empty(), "no .part.part without part_of_part: " + u.check());
+    PathGuard w;
+    w.input("in", in);
+    w.output("census_out", dir + "/z.tsv", true, true);
+    check(w.check().empty(), "an output's own temporaries do not collide: " + w.check());
   }
 
   // ---- PartFile --------------------------------------------------------------
