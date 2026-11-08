@@ -21,7 +21,7 @@ const setMock = (page: Page, key: string, value: unknown): Promise<void> =>
     [key, value] as const
   )
 const plan = (page: Page) => page.getByRole('region', { name: 'Plan' })
-const section = (page: Page, title: string) => page.locator('button.disclosure', { has: page.locator('.sec-title', { hasText: new RegExp(`^${title}$`) }) })
+const section = (page: Page, title: string) => page.locator('summary.disclosure', { has: page.locator('.sec-title', { hasText: new RegExp(`^${title}$`) }) })
 
 test('a cold start reaches Run in two actions, with the task it lands on', async ({ page }) => {
   await openApp(page)

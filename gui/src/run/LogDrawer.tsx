@@ -5,6 +5,7 @@
 import { useEffect, type JSX, type RefObject } from 'react'
 import { baseName } from '../digestReport'
 import { createLogStore, useLog, type LogStore } from './logStore'
+import { disclosure } from '../disclosure'
 
 // The log drawer renders only its last LOG_WINDOW lines (GUI-DESIGN P1):
 // with all 5,000 lines in the DOM, a log line with the drawer open cost
@@ -91,39 +92,44 @@ export default function LogDrawer({ log: logStore, live: liveStore, open, job, o
   const eagerFrom = chunks.length ? chunks[chunks.length - 1].key : 0
   const lastLog = lastText(log)
 
+  // A native <details> (P5) inside the "Run log" region: the summary is the
+  // header, the log its body.
+  const d = disclosure(open, onToggle)
   return (
     <section className={`logdrawer${open ? ' open' : ''}`} aria-label="Run log">
-      <button className="drawer-toggle" aria-expanded={open} aria-controls="runlog" onClick={onToggle}>
-        <span className={`chev ${open ? 'open' : ''}`} aria-hidden="true">▸</span>
-        <span className="lbl">{job ? `Log of ${baseName(job)}` : 'Log'}</span>
-        <code className="last">{lastLog || 'Log output appears here.'}</code>
-        <span className="n">
-          {log.length} {log.length === 1 ? 'line' : 'lines'}
-        </span>
-      </button>
-      {job && open && (
-        <button type="button" className="link live-log" onClick={onShowLive}>
-          Show the current log
-        </button>
-      )}
-      {/* role=log is a polite live region while the drawer is open; a
-          collapsed one is display:none and announces nothing, so the
-          run bar's status says when a run starts and ends. Focusable,
-          so the keyboard can scroll it. */}
-      <pre id="runlog" className="log" ref={logRef} role="log" aria-label="Run log" tabIndex={0} hidden={!open}>
-        {log.length
-          ? chunks.map((c) => (
-              <span key={c.key} className={c.key < eagerFrom ? 'log-chunk far' : 'log-chunk'}>
-                {c.text}
-              </span>
-            ))
-          : 'Log output appears here.'}
-      </pre>
-      {open && hiddenLines > 0 && (
-        <p className="log-window">
-          Showing the last {LOG_WINDOW.toLocaleString('en-US')} of {log.length.toLocaleString('en-US')} lines.
-        </p>
-      )}
+      <details className="drawer" {...d.details}>
+        <summary className="drawer-toggle" aria-controls="runlog" {...d.summary}>
+          <span className={`chev ${open ? 'open' : ''}`} aria-hidden="true">▸</span>
+          <span className="lbl">{job ? `Log of ${baseName(job)}` : 'Log'}</span>
+          <code className="last">{lastLog || 'Log output appears here.'}</code>
+          <span className="n">
+            {log.length} {log.length === 1 ? 'line' : 'lines'}
+          </span>
+        </summary>
+        {job && open && (
+          <button type="button" className="link live-log" onClick={onShowLive}>
+            Show the current log
+          </button>
+        )}
+        {/* role=log is a polite live region while the drawer is open; a
+            collapsed one is display:none and announces nothing, so the
+            run bar's status says when a run starts and ends. Focusable,
+            so the keyboard can scroll it. */}
+        <pre id="runlog" className="log" ref={logRef} role="log" aria-label="Run log" tabIndex={0} hidden={!open}>
+          {log.length
+            ? chunks.map((c) => (
+                <span key={c.key} className={c.key < eagerFrom ? 'log-chunk far' : 'log-chunk'}>
+                  {c.text}
+                </span>
+              ))
+            : 'Log output appears here.'}
+        </pre>
+        {open && hiddenLines > 0 && (
+          <p className="log-window">
+            Showing the last {LOG_WINDOW.toLocaleString('en-US')} of {log.length.toLocaleString('en-US')} lines.
+          </p>
+        )}
+      </details>
     </section>
   )
 }

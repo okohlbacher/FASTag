@@ -20,6 +20,7 @@ import {
   unplacedParams
 } from '../paramLayout'
 import ParamField from '../ParamField'
+import { disclosure } from '../disclosure'
 import { baseName } from '../digestReport'
 import { IconError, IconFile, IconLock, JobIcon } from '../icons'
 import { slug } from '../help/HelpView'
@@ -223,13 +224,11 @@ export default function SetupForm({ session, run, onPickInput, onSearch, searchB
     // What a collapsed section hides: its live values that are not
     // the CLI's defaults.
     const changed = rest.filter((n) => !inertBecause(n, values) && isChanged(n, values[n])).length
+    // A native <details> (P5); its body is still only built while open.
+    const d = disclosure(open, (o) => setOpenGroups((st) => ({ ...st, [sec.title]: o })))
     return (
-      <section className={`sec${open ? ' open' : ''}${on || changed ? ' active' : ''}`} key={sec.title}>
-        <button
-          className="disclosure"
-          onClick={() => setOpenGroups((st) => ({ ...st, [sec.title]: !open }))}
-          aria-expanded={open}
-        >
+      <details className={`sec${open ? ' open' : ''}${on || changed ? ' active' : ''}`} key={sec.title} {...d.details}>
+        <summary className="disclosure" {...d.summary}>
           <span className={`chev ${open ? 'open' : ''}`} aria-hidden="true">▸</span>
           <span className="sec-title">{sec.title}</span>{' '}
           {on && (
@@ -239,7 +238,7 @@ export default function SetupForm({ session, run, onPickInput, onSearch, searchB
           )}
           {changed > 0 && <span className="chip accent">{changed} changed</span>}{' '}
           {!on && changed === 0 && <span className="defaults">defaults</span>}
-        </button>
+        </summary>
         {open && (
           <div className="sec-body">
             <p className="blurb">
@@ -253,7 +252,7 @@ export default function SetupForm({ session, run, onPickInput, onSearch, searchB
             {rest.map((n) => field(n, sec))}
           </div>
         )}
-      </section>
+      </details>
     )
   }
 

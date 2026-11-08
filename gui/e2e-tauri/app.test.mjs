@@ -148,7 +148,7 @@ const cliAlive = () => spawnSync('pgrep', ['-f', '--', CLI_PATTERN]).status === 
 
 /** Open the Performance section and set -threads to @p n through the form. */
 async function setThreads(s, n) {
-  await s.exec(`for (const b of document.querySelectorAll('button.disclosure')) {
+  await s.exec(`for (const b of document.querySelectorAll('summary.disclosure')) {
       if ((b.querySelector('.sec-title') || {}).textContent === 'Performance' && b.getAttribute('aria-expanded') !== 'true') b.click()
     }`)
   await until('the threads field', () => s.exec("return !!document.getElementById('p-threads')"), 10000)
