@@ -1228,7 +1228,19 @@ jobs:
             || { echo "::error::the CLI inside the dmg does not report version $want"; grep '^Version: ' "$RUNNER_TEMP/dmg-help.txt" || true; exit 1; }
           if [ "$SIGNED" = "true" ]; then
             codesign --verify --deep --strict --verbose=2 "${apps[0]}"
-            xcrun stapler validate "${apps[0]}"
+            # The .app inside the dmg carries no stapled ticket of its own (only the dmg is
+            # stapled), so this validate looks the ticket up online in Apple's CloudKit. That
+            # lookup failed with NSURLErrorDomain -1005 on every v1.12.0 attempt after the dmg
+            # itself was notarized, stapled and validated. Retry it; a lost connection after
+            # three tries is a warning, any other stapler error still fails the job.
+            ok=0
+            for i in 1 2 3; do
+              if out=$(xcrun stapler validate "${apps[0]}" 2>&1); then ok=1; echo "$out"; break; fi
+              echo "$out"
+              grep -q -- '-1005\|network connection was lost' <<<"$out" || { echo "::error::stapler validate of the app failed"; exit 1; }
+              sleep $((i * 30))
+            done
+            [ "$ok" = 1 ] || echo "::warning::stapler validate of the mounted app could not reach CloudKit (-1005) after 3 tries; the dmg itself was stapled and validated above"
           fi
           hdiutil detach "$MNT"
           trap - EXIT
