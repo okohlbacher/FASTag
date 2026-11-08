@@ -1499,6 +1499,20 @@ protected:
         return ILLEGAL_PARAMETERS;
       }
     }
+    // The same NaN hole for every other floating-point option 1.12 adds:
+    // setMin/MaxFloat_ cannot refuse NaN, and e.g. -shortlist_max_evalue nan
+    // rejected every placement and -census_ids_fdr nan left every spectrum
+    // unidentified, both with exit 0. Refused here, before any output opens.
+    for (const char* o : {"charge_infer_margin", "shortlist_max_evalue", "search_precursor_tolerance",
+                          "shift_site_min_share", "species_pi0", "digest_min_confidence", "alkylation_min_share",
+                          "alkylation_window", "census_ids_fdr", "census_triage_evalue"})
+    {
+      if (!std::isfinite(getDoubleOption_(o)))
+      {
+        OPENMS_LOG_ERROR << "-" << o << " must be a finite number (got " << getDoubleOption_(o) << ")." << std::endl;
+        return ILLEGAL_PARAMETERS;
+      }
+    }
 
     // Species precondition, checked BEFORE the run rather than after.
     //

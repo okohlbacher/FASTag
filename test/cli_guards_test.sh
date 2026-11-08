@@ -22,6 +22,7 @@
 #   - -out is written in place: an existing -out keeps its mode, every hard
 #     link sees the table, and a writable -out in a read-only directory works
 #   - -complement_tolerance or -complement_tol_factor 0 or NaN is refused (1.12 E2)
+#   - NaN in any other 1.12 floating-point option is refused
 #   - #5: -fasta_out naming -recon_fasta/-fasta (also by symlink) or
 #     -shortlist_out naming -shortlist_background is refused, the database
 #     unchanged; -stream -fasta_out, -shortlist_out without a database, an
@@ -222,6 +223,16 @@ done
   >"$TMP/ctu.log" 2>&1 || { cat "$TMP/ctu.log"; fail "-complement_tolerance_unit fragment alone was refused"; }
 "$BIN" -in "$IN" -out "$TMP/cru.tsv" -complement_rule nonsense "${ARGS[@]}" >"$TMP/cru.log" 2>&1 \
   && fail "-complement_rule nonsense ran (exit 0)"
+# Every other 1.12 floating-point option: NaN is refused (exit 6, the
+# option named, -out not written), as setMin/MaxFloat_ cannot refuse it.
+for o in charge_infer_margin shortlist_max_evalue search_precursor_tolerance shift_site_min_share species_pi0 \
+         digest_min_confidence alkylation_min_share alkylation_window census_ids_fdr census_triage_evalue; do
+  "$BIN" -in "$IN" -out "$TMP/nan_$o.tsv" -$o nan "${ARGS[@]}" >"$TMP/nan_$o.log" 2>&1
+  rc=$?
+  [ $rc = 6 ] || { cat "$TMP/nan_$o.log"; fail "-$o nan: exit $rc, want 6 (ILLEGAL_PARAMETERS)"; }
+  grep -q -- "-$o must be a finite number" "$TMP/nan_$o.log" || { cat "$TMP/nan_$o.log"; fail "-$o nan: no message naming it"; }
+  [ ! -e "$TMP/nan_$o.tsv" ] || fail "-$o nan wrote -out"
+done
 # -census (1.12 #11): refused with -stream; its outputs may not name -out, each
 # other, another output's default path or a consumed input (by name, symlink
 # or hard link), and the input is unchanged afterwards.
