@@ -1,0 +1,10 @@
+run	set	cell	tagged_base	tagged_cand	ok
+item09/H1/PXD009049/Nsco_Citro_CPX_rep1_fraction04.profile	ion_trap	L3_default	19773	19777	True
+item09/H1/PXD009049/Nsco_Citro_CPX_rep1_fraction04.profile	ion_trap	L4_default	19764	19739	False
+item09/H1/PXD009049/Nsco_Citro_CPX_rep1_fraction04.profile	ion_trap	L5_default	19658	19630	False
+item09/H1/PXD016519/170524_15_Orbi2_SK_SER_G90_T125_Chalmers_Campbell_EasyPhos_Glucose_P-R1-9.profile	orbitrap_tof	L3_default	16554	15987	False
+item09/H1/PXD016519/170524_15_Orbi2_SK_SER_G90_T125_Chalmers_Campbell_EasyPhos_Glucose_P-R1-9.profile	orbitrap_tof	L4_default	10645	11025	True
+item09/H1/PXD016519/170524_15_Orbi2_SK_SER_G90_T125_Chalmers_Campbell_EasyPhos_Glucose_P-R1-9.profile	orbitrap_tof	L5_default	7471	8150	True
+item09/reserve/PXD018024/Fozzie_20170704_GY_GBM_T3_Rph8.profile	orbitrap_tof	L3_default	37904	38407	True
+item09/reserve/PXD018024/Fozzie_20170704_GY_GBM_T3_Rph8.profile	orbitrap_tof	L4_default	35512	36860	True
+item09/reserve/PXD018024/Fozzie_20170704_GY_GBM_T3_Rph8.profile	orbitrap_tof	L5_default	31390	34739	True
