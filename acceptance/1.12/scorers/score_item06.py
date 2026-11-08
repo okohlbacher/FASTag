@@ -24,7 +24,13 @@ Endpoints (PLAN-data-types #6 'A later default of infer needs'; all must hold):
 Reported, not gating: share of charge errors with charge_src 'ambiguous' (plan target >= 50%), the Sage isotope_error
 distribution (the candidate's isotope_error is 0), precursor-flank-only rank-1 (score.tag_correct_precursor_flank),
 truth 2+ spectra called 1+.
-Usage: score_item06.py <acceptance dir> <manifest> <runs root> <truth root> <out dir> [--base .. --cand ..]"""
+Round 4 (DECISIONS-2026-11-08 round 4, PREREG-item06.md amendment 2): <manifest> may name several manifests,
+comma-separated (item06-H2,item06-H2r); each run keeps its own manifest in its run and truth paths; --sets keeps only
+the runs of the named sets (low-resolution ion_trap removed: --sets astral,qe); --exclude-pxd drops runs that the
+PREREG declared not evaluable before any run (PXD035981: no truth database); a truth without any target rank-1 PSM
+at spectrum_q <= 0.01 counts as without truth (NO_TRUTH_0PSM, rule 4); spectra are keyed by acclib.native_key.
+Usage: score_item06.py <acceptance dir> <manifest[,manifest]> <runs root> <truth root> <out dir> [--base .. --cand ..]
+       [--sets astral,qe] [--exclude-pxd PXD035981]"""
 import argparse
 import collections
 import json
@@ -82,20 +88,35 @@ def main():
         ap.add_argument(a)
     ap.add_argument("--base", default="CFG-06-base")
     ap.add_argument("--cand", default="CFG-06-cand")
+    ap.add_argument("--sets", help="comma-separated sets to score (round 4: astral,qe); default all")
+    ap.add_argument("--exclude-pxd", default="", help="comma-separated PXDs declared not evaluable in the PREREG")
     a = ap.parse_args()
+    A.use_native_keys()
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
-    rows = A.read_tsv(Path(a.acc) / "manifests" / f"{a.manifest}.tsv")
+    rows = []
+    for man in a.manifest.split(","):
+        for r in A.read_tsv(Path(a.acc) / "manifests" / f"{man}.tsv"):
+            r["_manifest"] = man
+            rows.append(r)
+    excl = {x for x in a.exclude_pxd.split(",") if x}
+    keep = set(a.sets.split(",")) if a.sets else None
+    rows = [r for r in rows if r["pxd"] not in excl and (keep is None or set_of(r) in keep)]
     recs, runinfo, calls, pf, iso = [], [], [], [], collections.Counter()
     for r in rows:
         rel = A.run_rel(r["fastag_input"])
-        tp = Path(a.truth) / a.manifest / rel / "results.sage.tsv"
-        info = {"pxd": r["pxd"], "run": rel, "set": set_of(r)}
+        MAN = r["_manifest"]
+        tp = Path(a.truth) / MAN / rel / "results.sage.tsv"
+        info = {"pxd": r["pxd"], "run": rel, "set": set_of(r), "manifest": MAN}
         if not tp.exists():
             info["status"] = "NO_TRUTH"
             runinfo.append(info)
             continue
         psms = A.sage_truth(tp)
+        if len(psms) == 0:      # round 4: no PSM at the preregistered q is no truth (rule 4)
+            info["status"], info["truth_psms"] = "NO_TRUTH_0PSM", 0
+            runinfo.append(info)
+            continue
         iso.update(int(x) for x in psms["isotope_error"])
         ch, cl = dict(zip(psms["key"], psms["charge"])), dict(zip(psms["key"], psms["cluster"]))
         ok = True
@@ -103,15 +124,15 @@ def main():
         info["arm_dirs"] = f"{D[a.base]},{D[a.cand]}"
         for cell in S_CELLS + ["G_L3"]:
             for arm in (a.base, a.cand):
-                rc = A.run_rc(Path(a.runs) / D[arm] / a.manifest / rel / cell)
+                rc = A.run_rc(Path(a.runs) / D[arm] / MAN / rel / cell)
                 info[f"{arm}:{cell}:rc"] = rc
                 ok &= rc == 0
         for cell in S_CELLS:
-            d = {arm: A.rank1_correct(Path(a.runs) / D[arm] / a.manifest / rel / cell / "tags.tsv", psms)
+            d = {arm: A.rank1_correct(Path(a.runs) / D[arm] / MAN / rel / cell / "tags.tsv", psms)
                  for arm in (a.base, a.cand)}
             for k in psms["key"]:
                 recs.append((info["set"], cell, int(ch[k]), cl[k], d[a.base][k], d[a.cand][k]))
-        cdir = Path(a.runs) / D[a.cand] / a.manifest / rel / "S_L3"
+        cdir = Path(a.runs) / D[a.cand] / MAN / rel / "S_L3"
         cc = charge_calls(cdir / "tags.tsv")
         for k in psms["key"]:
             if k in cc:
@@ -119,12 +140,12 @@ def main():
                 calls.append({"set": info["set"], "truth": int(ch[k]), "called": ",".join(map(str, sorted(qs))),
                               "correct": qs == {int(ch[k])}, "ambiguous": "ambiguous" in src})
         info["truth_psms"], info["cand_tagged_truth"] = len(psms), sum(1 for k in psms["key"] if k in cc)
-        pb = pflank(Path(a.runs) / D[a.base] / a.manifest / rel / "S_L3" / "tags.tsv", psms)
+        pb = pflank(Path(a.runs) / D[a.base] / MAN / rel / "S_L3" / "tags.tsv", psms)
         pc = pflank(cdir / "tags.tsv", psms)
         pf += [(info["set"], cl[k], pb[k], pc[k]) for k in psms["key"]]
         info["G_L3_identical"], info["G_L3_detail"] = same_rows(
-            Path(a.runs) / D[a.base] / a.manifest / rel / "G_L3" / "tags.tsv",
-            Path(a.runs) / D[a.cand] / a.manifest / rel / "G_L3" / "tags.tsv")
+            Path(a.runs) / D[a.base] / MAN / rel / "G_L3" / "tags.tsv",
+            Path(a.runs) / D[a.cand] / MAN / rel / "G_L3" / "tags.tsv")
         info["status"] = "ok" if ok else "RUN_FAILED"
         runinfo.append(info)
     sets = sorted({x["set"] for x in runinfo})
@@ -149,7 +170,7 @@ def main():
         better.append(d)
     need = 2 if len(sets) >= 3 else len(sets)
     e2b = "PASS" if sets and sum(d["better"] for d in better) >= need else "FAIL"
-    e3 = "PASS" if runinfo and all(x.get("G_L3_identical") for x in runinfo if x["status"] != "NO_TRUTH") else "FAIL"
+    e3 = "PASS" if runinfo and all(x.get("G_L3_identical") for x in runinfo if not x["status"].startswith("NO_TRUTH")) else "FAIL"
     e1 = "PASS" if calls and acc1 >= 0.90 else "FAIL"
     failed = [x for x in runinfo if x["status"] != "ok"]
     v = [e1, e2a, e2b, e3]

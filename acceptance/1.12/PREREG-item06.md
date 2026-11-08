@@ -171,3 +171,68 @@ tagged at 0.5 Da by CFG-02-base-it05 in the 18 cells of #2, scored against its p
 Charge-call accuracy is 0.757. (2a) is FAIL: at 0.5 Da, four ion-trap cells fail. S_L3 z2 loses 0.6 points, and
 S_L3/S_L4/S_L5 z3 lose 0.9-2.2 points (S_L3 z3: base 10.0%, cand 7.8%). The 4+ cells at S_L4 (1.0%) and S_L5 (0.4%)
 are uninformative. (3) is PASS. These are DEV numbers, not a #6 result.
+
+
+## Amendment 2 (round 4, 2026-11-08): low-resolution data removed; one scoring on the high-resolution H2/H2r runs
+
+User decisions (B) and (D) of round 4, `DECISIONS-2026-11-08.md` (round 4). This amendment replaces amendment 1
+wherever they differ. It is committed and pushed before any task it governs. No file of item06-H2 or item06-H2r has
+been run or read by FASTag.
+
+**H1 stays as scored.** item06-H1-r2 was scored once (HO-06-H1-r2-result, 607e625) and is INCONCLUSIVE under rule 4
+(HO-06-H1-r2-result-corr1). It is never re-scored, and its ion_trap results are not revised.
+
+**1. Low-resolution data removed.** The ion_trap set leaves #6: on H1 it is part of the scored INCONCLUSIVE result
+and is not re-scored; on H2 its runs PXD000266 and PXD004644 are not run and not scored. CFG-06-base-it05 and
+CFG-06-cand-it05 are not used again.
+
+**2. What is scored (once).** The unused high-resolution runs of the reserve, by user decision (B), with the 20 ppm
+configs CFG-06-base (`57ac9b06...`) and CFG-06-cand (`0f6bc39f...`):
+
+| Manifest | Run | Set | Truth row |
+|---|---|---|---|
+| item06-H2 (`de6bd371...`) | PXD020394 NEG5 (Q Exactive Plus) | qe | `item06-H2` PXD020394, Homo sapiens, CAM static, Trypsin, 10 ppm / 20 ppm |
+| item06-H2r (`0104ecf6...`) | PXD055983 20240312_AST1_EXT_CF_1139_sc_PR_NON_120 (Orbitrap Astral) | astral | `item06-H2r` PXD055983, S. cerevisiae, CAM static, Trypsin/P |
+
+- PXD035981 (item06-H2, qe) is not evaluable (no truth database for 'gut metagenome'), as this PREREG stated before
+  any run. It is excluded by name (`--exclude-pxd PXD035981`), not counted as a run without truth.
+- This scoring supersedes the earlier rule that H2 is used only to confirm a variant chosen after an H1 failure: the
+  user decided to score the same two configs once on the unused high-resolution reserve. It is the only scoring of
+  CFG-06-base/cand on item06-H2/H2r.
+- Each set has one run. Its cells are powered or not by their peptide-cluster counts, as before.
+
+**3. Inputs, cells, truth (unchanged in form).** Charge-stripped copy by `strip_charge.py` (`2b4e0c37...`); cells
+S_L3, S_L4, S_L5 (stripped copy, `-tag_length 3/4/5`) and G_L3 (staged input, `-tag_length 3`), both arms; truth
+Sage 0.14.7 mode `charge_truth` on the stripped copy from `truth_config.py` and `truth/item02.tsv` (`42920f3b...`,
+unchanged), target rank 1, spectrum_q <= 0.01.
+
+**4. Endpoints (all must hold).**
+1. Charge-call accuracy >= 0.90 (S_L3, candidate; pooled over the two runs).
+2. (a) Non-inferiority in every cell, 2 sets x 3 lengths x 3 charges = 18 cells (>= 200 clusters, point > -0.5,
+   Holm bound > -1.0, floor 1.8%; underpowered, empty or uninformative cells block).
+   (b) Better on **both** sets present (astral, qe): S_L3, all charges, point > 0 and 2.5th percentile > 0 (the
+   scorer's rule for fewer than 3 sets).
+3. G_L3 rows of the candidate equal the baseline rows in both runs.
+4. Any run with FASTAG_RC != 0 or without truth, including a truth with 0 PSMs at spectrum_q <= 0.01
+   (`NO_TRUTH_0PSM`, round-3 audit finding 1), makes the verdict INCONCLUSIVE.
+
+A PASS here is evidence for `-unknown_charge infer` on high-resolution MS2 only. It does not change the default by
+itself; that remains a user decision, and H1 remains INCONCLUSIVE.
+
+**5. Scorer.** `score_item06.py` (`7020e187e07588e2de3b77c6629cb8b1148392f23c2f37e24a1be3ef3bc04713`) with
+`acclib.py` (`fe387a3455a52678f78c20c3156b63c251e08daa5b92da2f3e205d1d9ab2b1c1`) and `score_item02.py`
+(`5704b8634c5a98f8993a4dccc4c331e6d84405dbf0b5dbaa42b523d68677e395`, for `set_of`). Changes, described in
+PREREG-item02.md amendment 2, point 4: several manifests in one scoring (each run keeps its own manifest in its paths),
+`--sets`, `--exclude-pxd`, `NO_TRUTH_0PSM`, and `acclib.native_key` (no effect here: no timsTOF IDs). The DEV
+regression reproduces `tests/dev_results_r3/item06/` byte for byte.
+
+**6. Erratum: scoring command.** `python3 -I` cannot import `acclib` (the script directory is off `sys.path` under
+`-I`); the H1-r2 scoring ran without `-I`. The corrected command:
+
+    <python 3.12.15, numpy 2.4.6, pandas 3.1.0> scorers/score_item06.py <acceptance dir> item06-H2,item06-H2r <runs> <truth> <out> \
+        --sets astral,qe --exclude-pxd PXD035981
+
+**7. Jobs.** `results/r4-jobs/` (BinAC2 `$FT/r4/jobs`): `item06-strip.slurm` (2), `item06-sage.slurm` (2),
+`item06-fastag.slurm` (16 = 2 runs x 2 arms x 4 cells; refuses ion-trap rows), then `item06-score.slurm`. Runs go
+to `$FT/runs/CFG-06-{base,cand}/item06-H2{,r}/...`, truths to `$FT/truth/item06-H2{,r}/...`. The run-start row is
+pushed while the jobs are held; they are released after the push.

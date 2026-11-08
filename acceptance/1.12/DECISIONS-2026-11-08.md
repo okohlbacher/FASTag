@@ -42,3 +42,32 @@ reserves stay as registered (corpus draws, item02-H2/item06-H2).
 PXD068073 was taken by the draw. It is dropped by decision 3, so the Astral reserve has one run where the plan wants
 two. No other Astral project passed the rule (2 of 546), so no replacement is drawn. The backup file of PXD068073 is
 not used either, because the whole project is excluded.
+
+# Round 4: user decisions of 2026-11-08 on the round-3 results
+
+The user's answers to "What 1.12.1 needs" in `ACCEPTANCE-1.12-round3.md`, passed on by the main session. They are
+recorded as given. Each one has a `DEC-1112-r4-NN` note row in `validation-registry.tsv`. When they were recorded,
+#2 had been run but not scored, #6 had been scored once on H1 (INCONCLUSIVE) and nothing of #6 H2/H2r had been run.
+
+| # | Question (round 3) | Decision | Consequence |
+|---|---|---|---|
+| A | #2: truth for the two timsTOF runs PXD033741, PXD076520 (Sage exit 134) and PXD001473 (0 PSMs) | **Amend the truth search for the two timsTOF runs**, with a fix chosen without looking at any FASTag output (Comet 2026.03.0 with equivalent settings, or a derived mzML without the MS2 whose precursor is missing, stating how many spectra are dropped). **Remove low-resolution data from #2**: the ion-trap cells and runs (PXD001473 included) are dropped by amendment. Run only the needed truth tasks and score #2 exactly once with CFG-02-base/cand on the remaining high-resolution cells. | PREREG-item02.md amendment 2: derived mzML (3,412 and 3,513 MS2 without a precursor m/z dropped; Sage settings unchanged); sets astral, qe, timstof; (ii) on astral alone; scorer fixes. CFG-02-*-it05 not scored. |
+| B | #6: next step after the INCONCLUSIVE H1 | **Remove low-resolution data from #6** (ion-trap cells and runs out). **H1 stays as scored** (INCONCLUSIVE, never re-scored). **Score #6 exactly once on its unused high-resolution H2 and H2r runs** with CFG-06-base/cand, following PREREG-item06 as amended. | PREREG-item06.md amendment 2: PXD020394 (qe, item06-H2) and PXD055983 (astral, item06-H2r); PXD035981 not evaluable; PXD000266, PXD004644 (ion trap) not run. |
+| C | #9: `auto` after the FAIL; ANALYSER_RESTRICTION_NEEDED | **The documentation recommends `-pick_profile auto` (the user wrote "-centroid auto"; the 1.12 option is `-pick_profile`) for high-resolution profile MS2 only, not ion trap, citing the held-out result. The default stays `legacy`.** | README.md (options table and Performance) on acceptance/1.12; no config, no re-scoring. |
+| D | Low-resolution held-out files | **List every ion-trap / low-resolution held-out file staged for 1.12** on data `/scratch/kohlbach/fastag-heldout-1.12` and BinAC2 `/pfs/10/project/bw26g016/fastag-1.12/heldout` (paths, sizes, items), and write the delete commands to `output/features-1.12/LOWRES-DELETE-COMMANDS.md` for the user. **Nothing is deleted** by the agent. | Listing only. |
+| E | PREREG scoring command (`python3 -I` cannot import acclib) | **Record as an erratum; correct the scoring command.** | Erratum sections in PREREG-item02.md and PREREG-item06.md amendment 2. |
+
+## Found while preparing round 4 (recorded before any #2 scoring)
+
+`fastag_bench.parsers.spectrum_key` keys spectra by `scan=<n>`. For timsTOF native IDs (`frame=<f> scan=<s>
+precursor=<p>`) the scan number repeats across frames, so the #2 timstof cells and (iii) would have joined tags and
+truth PSMs of different spectra. This was found by reading the code, not any output. The scorer now keys these IDs by
+the full native ID (`acclib.native_key`, PREREG-item02.md amendment 2, point 4a). No result that has been scored has
+timsTOF runs (#4, #6 H1, #9), so nothing scored is affected.
+
+## What round 4 does not change
+
+- Each config is scored once on each split; H1 of #6 and everything already scored are never re-scored.
+- The binary stays the frozen RC (FASTag.bin `c4c2ad67...`, = 1.12.0 CLI). Nothing under `src/` changes.
+- The registry stays append-only; `frozen-configs.tsv` is unchanged (the -it05 configs keep their status and are
+  simply not used again).

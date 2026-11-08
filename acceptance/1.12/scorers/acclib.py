@@ -205,6 +205,23 @@ def holm_ni(cells: list[dict], floor: float | None = None):
 
 # ---------------------------------------------------------------- truth and tags
 
+_SCAN_KEY = P.spectrum_key
+
+
+def native_key(native_id) -> str:
+    """Spectrum join key (round 4, PREREG-item02.md amendment 2): the full native ID for timsTOF IDs
+    ('frame=<f> scan=<s> precursor=<p>', in which 'scan' is the TIMS scan inside a frame and repeats across frames),
+    else fastag_bench's parsers.spectrum_key ('scan=<n>' or the ID), unchanged for every other run."""
+    s = str(native_id)
+    return s.strip() if "frame=" in s else _SCAN_KEY(s)
+
+
+def use_native_keys() -> None:
+    """Make fastag_bench's readers (read_sage_psms, read_fastag_tags) key spectra by native_key. Called by
+    score_item02.py and score_item06.py from round 4 on; a no-op on runs without timsTOF IDs."""
+    P.spectrum_key = native_key
+
+
 def sage_truth(path, truth_fields: bool = True) -> pd.DataFrame:
     """Target rank-1 PSMs at spectrum_q <= 0.01, with charge and isotope_error, and the cluster id."""
     df = P.read_sage_psms(path, FDR, truth_fields=truth_fields)

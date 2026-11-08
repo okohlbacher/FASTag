@@ -209,3 +209,102 @@ tagged at 0.5 Da by CFG-02-base-it05 in the 18 cells of #2, scored against its p
 The ion-trap z4+ cells are `uninformative`. The FAIL comes from three qe z3 cells (L4_default, L5_default and L5_nodeiso; the 20 ppm runs of the first DEV
 test). These are DEV
 numbers, not a #2 result.
+
+
+## Amendment 2 (round 4, 2026-11-08): timsTOF truth repair, low-resolution data removed, scorer fixes, erratum
+
+User decisions (A) and (D) of round 4, `DECISIONS-2026-11-08.md` (round 4). This amendment replaces amendment 1
+wherever they differ. It is committed and pushed before any task it governs. **State when committed: #2 is not
+scored.** The 156 FASTag runs of HO-02-H1-r2-run1 (job 6472366) and the timing (job 6472367) are kept and used as
+they are. No FASTag output has been compared with any truth, and the choices below were made without reading any
+FASTag output.
+
+**1. Low-resolution data removed.** The ion_trap set (PXD000806, PXD001473, PXD001540, PXD001739, PXD002429,
+PXD003397) is removed from #2. Its cells are not scored, and CFG-02-base-it05 and CFG-02-cand-it05 are never scored
+(their FASTag outputs stay on BinAC2, unread). PXD001473 (0 PSMs) leaves with the set, so its truth question is moot.
+The scored runs are the 7 high-resolution runs of `item02-H1-r2`:
+- astral: PXD066944, PXD070049, PXD074582 (CFG-02-base / CFG-02-cand, 20 ppm);
+- qe: PXD069528;
+- timstof: PXD033741, PXD050504, PXD076520.
+
+The manifest file is unchanged; the subset is selected by the scorer option `--sets astral,qe,timstof` (set =
+`score_item02.set_of`, i.e. ion_trap whenever ms2_analyser is ion_trap).
+
+**2. Endpoints on the remaining sets.**
+- (i) 3 sets x 2 profiles x 3 lengths x 3 charges = 54 cells; margins, Holm, floor (1.8%) unchanged.
+- (ii) pools the sets astral + ion_trap that are present: **astral alone** (L3_default, charges >= 2;
+  point >= +0.3 and 2.5th percentile > 0). The cell name in the output keeps the old label.
+- (iii) timsTOF 4+ unchanged, now on 3 timsTOF runs.
+- (iv) unchanged: the round-3 timing TSV of job 6472367 (HO-02-H1-r2-run1), measured and not yet scored.
+- Rule 5 unchanged in wording; see 4b for what "without truth" means.
+
+**3. Truth repair for PXD033741 and PXD076520 (timsTOF).** Diagnosis, from the inputs and Sage's source only:
+Sage 0.14.7's mzML reader (`crates/sage-cloudpath/src/mzml.rs`) adds a precursor to a spectrum only when its
+selected ion m/z (MS:1000744) is not 0.0, keeps the MS2 spectrum anyway, and `score_standard` (`scoring.rs:379`)
+then panics ("missing MS1 precursor for <id>"). The OpenMS-converted timsTOF mzMLs carry MS2 spectra whose only
+selected ion m/z is "0" with no isolation window (Bruker precursors without a monoisotopic m/z; the panicking IDs
+`frame=2 scan=725 precursor=3` and `frame=8309 scan=839 precursor=4814` are such spectra). They have no precursor
+mass, so no engine can identify them. Fix (the second option of decision A):
+- A derived mzML per run, `scorers/drop_noprecursor_ms2.py <staged input> input.noprec.mzML`, drops exactly the MS2
+  spectra in which no `<precursor>` has a non-zero selected ion m/z; every other line is copied byte for byte (native
+  IDs unchanged; the spectrumList count and the index go stale, which Sage does not read).
+- Counted before this amendment with `--count-only` (BinAC2 job 6474097, inputs only):
+
+| Run | spectra | MS2 | MS2 dropped | dropped IDs (scorers/truth/item02-r4-dropped/) |
+|---|---|---|---|---|
+| PXD033741 | 221,709 | 217,868 | **3,412** (1.57%) | `PXD033741.dropped_ids.txt` 2b6f29ff... |
+| PXD076520 | 126,647 | 120,136 | **3,513** (2.92%) | `PXD076520.dropped_ids.txt` 0bfd3930... |
+| PXD050504 (control, searched normally in round 3) | 144,636 | 139,538 | 0 | - |
+
+- The truth search is the round-3 Sage 0.14.7 configuration unchanged (`truth_config.py`, `truth/item02.tsv`
+  `42920f3b...`, mode closed, the `item02-H1-r2` rows): the job regenerates it and checks that it equals the round-3
+  `sage.json` except `mzml_paths`, which points to the derived file. The job stops before Sage if the dropped count
+  or the dropped-ID sha256 differs from the table.
+- Comet (the first option of decision A) is not used: it would change the engine, the FDR procedure and the PSM
+  format of the truth for two runs only.
+- The dropped spectra are outside the truth, hence outside the denominator, in both arms alike (the FASTag runs on
+  the staged input are unchanged).
+- The other five high-resolution truths are the round-3 files (job 6472365), unchanged; the scoring truth root
+  `acc112-item02/truth-r4` holds the two new truths and links to those five.
+
+**4. Scorer fixes (new sha256, below).**
+- (a) **timsTOF spectrum key (audit finding of this round, from code reading).** fastag_bench's
+  `parsers.spectrum_key` keys a spectrum by `scan=<n>`. In timsTOF IDs (`frame=<f> scan=<s> precursor=<p>`) `scan` is
+  the TIMS scan inside a frame and repeats across frames, so truth PSMs collapsed onto a few hundred keys
+  (`drop_duplicates`) and tags of different spectra were joined to one truth peptide. That would have made every
+  timstof cell and (iii) meaningless. `acclib.native_key` keys IDs containing `frame=` by the full native ID (FASTag
+  writes the native ID in `spectrum`, Sage in `scannr`) and leaves every other ID to `parsers.spectrum_key`;
+  `score_item02.py` and `score_item06.py` call `acclib.use_native_keys()`. The bench files are unchanged.
+- (b) **Truth with 0 PSMs (round-3 audit finding 1).** A run whose truth has no target rank-1 PSM at
+  spectrum_q <= 0.01 is a run without truth (status `NO_TRUTH_0PSM`) under rule 5, not only a missing file.
+- (c) `--sets` selects the scored sets (point 1).
+- Regression on DEV outputs only (node data, `dev-r3` work dir of `tests/run_dev_tests_r3.sh`, 2026-11-08): the
+  amended scorers reproduce `tests/dev_results_r3/` byte for byte (item02 `cells_i.tsv`, `cells_charge1.tsv`;
+  item06 `cells_2a.tsv`, `sets_2b.tsv`, `charge_calls.tsv`; same verdicts). A synthetic Sage TSV with two IDs
+  `frame=2 scan=725 ...` and `frame=9 scan=725 ...` gives one key under the old reader and two under `native_key`.
+
+| File (scorers/) | sha256 |
+|---|---|
+| `acclib.py` | `fe387a3455a52678f78c20c3156b63c251e08daa5b92da2f3e205d1d9ab2b1c1` |
+| `score_item02.py` | `5704b8634c5a98f8993a4dccc4c331e6d84405dbf0b5dbaa42b523d68677e395` |
+| `score_item06.py` | `7020e187e07588e2de3b77c6629cb8b1148392f23c2f37e24a1be3ef3bc04713` |
+| `drop_noprecursor_ms2.py` (new) | `1cfc6b664c8e9c45fc4f6494d910a455444682ef04decdef35d5aa4a1f77efc5` |
+| `truth/item02-r4-dropped/PXD033741.dropped_ids.txt` | `2b6f29ff0752ea001af515928b00539fca9dde95429a1db64263b32a796d366e` |
+| `truth/item02-r4-dropped/PXD076520.dropped_ids.txt` | `0bfd393060e555bc0056d712681f2167691e11efc345414f5125a5835c703cef` |
+| `truth_config.py`, `truth/item02.tsv`, `strip_charge.py`, `score_item09.py` | unchanged (amendment 1 values) |
+
+fastag_bench `score.py` (`e2b8788a...`) and `parsers.py` (`01e27548...`) are unchanged.
+
+**5. Erratum: scoring command.** The scoring commands of this file used `python3 -I`. Under `-I` the script's
+directory is not on `sys.path`, so `import acclib` fails (#9 job 6472745 failed this way, before reading any file).
+The #6 and #9 scorings ran without `-I`. The corrected command is:
+
+    <python 3.12.15, numpy 2.4.6, pandas 3.1.0> scorers/score_item02.py <acceptance dir> item02-H1-r2 <runs> <truth-r4> <out> \
+        --timing <timing.tsv> --sets astral,qe,timstof
+
+run from the acceptance directory of a git archive of the commit that carries this amendment
+(`results/r4-jobs/item02-score.slurm`). The scorer code was never the problem; only the interpreter flag.
+
+**6. Jobs.** `results/r4-jobs/` (BinAC2, `$FT/r4/jobs`): `item02-truth.slurm` (2 tasks), then `item02-score.slurm`
+(the single scoring of CFG-02-base and CFG-02-cand). The run-start row is pushed after submission with the jobs
+held, and the jobs are released only after it is pushed.

@@ -21,8 +21,13 @@ Endpoints (PLAN-data-types #2, Acceptance; all must hold):
        (point - 1.96 SE) > -1.0;
   (iv) time: --timing <tsv> (arm, repeat, seconds; PXD003531 DEV, 1 thread, 3 interleaved repeats): median ratio
        cand/base <= 1.03; without it (iv) is NOT MEASURED and the item cannot pass.
+Round 4 (DECISIONS-2026-11-08 round 4, PREREG-item02.md amendment 2): --sets keeps only the runs of the named sets
+(the low-resolution ion_trap set is removed: --sets astral,qe,timstof); a run whose truth has no target rank-1 PSM at
+spectrum_q <= 0.01 counts as without truth (status NO_TRUTH_0PSM, rule 5), not only a missing file; spectra are
+keyed by acclib.native_key (the full native ID for timsTOF 'frame=.. scan=.. precursor=..' IDs, whose 'scan' number
+repeats across frames). (ii) pools the sets astral + ion_trap that are present, i.e. astral alone after round 4.
 Usage: score_item02.py <acceptance dir> <manifest name> <runs root> <truth root> <out dir> [--timing tsv]
-       [--base CFG-02-base] [--cand CFG-02-cand]"""
+       [--base CFG-02-base] [--cand CFG-02-cand] [--sets astral,qe,timstof]"""
 import argparse
 import json
 import statistics
@@ -37,12 +42,15 @@ def set_of(row):
     return "ion_trap" if row.get("ms2_analyser", "").strip(";") == "ion_trap" else row["stratum"]
 
 
-def collect(acc, manifest, runs, truth, base, cand, cells, set_fn=set_of, truth_name="results.sage.tsv", only=None):
+def collect(acc, manifest, runs, truth, base, cand, cells, set_fn=set_of, truth_name="results.sage.tsv", only=None,
+            sets=None):
     """One record per (run, cell, truth spectrum): set, cell, charge, cluster, base_ok, cand_ok. only: run
-    directories (acclib.run_rel) to keep; None = every manifest row."""
+    directories (acclib.run_rel) to keep; None = every manifest row. sets: set names to keep (round 4); None = all."""
     rows = A.read_tsv(Path(acc) / "manifests" / f"{manifest}.tsv")
     if only is not None:
         rows = [r for r in rows if A.run_rel(r["fastag_input"]) in only]
+    if sets is not None:
+        rows = [r for r in rows if set_fn(r) in sets]
     recs, runinfo = [], []
     for r in rows:
         rel = A.run_rel(r["fastag_input"])
@@ -54,6 +62,10 @@ def collect(acc, manifest, runs, truth, base, cand, cells, set_fn=set_of, truth_
             continue
         psms = A.sage_truth(tp)
         info["truth_psms"] = len(psms)
+        if len(psms) == 0:      # round 4: a truth without any PSM at the preregistered q is no truth (rule 5)
+            info["status"] = "NO_TRUTH_0PSM"
+            runinfo.append(info)
+            continue
         ch = dict(zip(psms["key"], psms["charge"]))
         cl = dict(zip(psms["key"], psms["cluster"]))
         info["arm_dirs"] = f"{A.arm_dir(base, info['set'])},{A.arm_dir(cand, info['set'])}"
@@ -80,13 +92,17 @@ def main():
     ap.add_argument("--base", default="CFG-02-base")
     ap.add_argument("--cand", default="CFG-02-cand")
     ap.add_argument("--cells", default=",".join(CELLS))
+    ap.add_argument("--sets", help="comma-separated sets to score (round 4: astral,qe,timstof); default all")
     a = ap.parse_args()
+    A.use_native_keys()
     cells = a.cells.split(",")
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
-    recs, runinfo = collect(a.acc, a.manifest, a.runs, a.truth, a.base, a.cand, cells)
+    keep = a.sets.split(",") if a.sets else None
+    recs, runinfo = collect(a.acc, a.manifest, a.runs, a.truth, a.base, a.cand, cells, sets=keep)
     sets = sorted({x["set"] for x in runinfo})
-    res = {"manifest": a.manifest, "base": a.base, "cand": a.cand, "sets": sets, "provenance": A.provenance()}
+    res = {"manifest": a.manifest, "base": a.base, "cand": a.cand, "sets": sets, "sets_arg": a.sets,
+           "provenance": A.provenance()}
     # (i)
     grid = []
     for s in sets:

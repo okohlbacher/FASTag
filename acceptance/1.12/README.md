@@ -15,6 +15,7 @@ c4c2ad67fcd9106e474f552267f7cdfefe107f394b268bbc236308b773e4d7f3). No file under
 | `PREREG-species-call.md`, `PREREG-chem.md` | #1/#10 and #3: binary, tables, DEV fits and (2026-11-08) the held-out scoring protocol |
 | `PREREG-item02.md`, `-item06.md`, `-item07.md`, `-item09.md`, `-item15B.md` | scoring protocols of #2, #6, #7 (E7-03 as drawn), #9, #15B: truth search per run, cells and pooling, denominator, scorer sha256 |
 | `DECISIONS-2026-11-08.md` | round 3: the user's decisions on the open readiness questions (registry `DEC-1112-r3-NN`); new manifests `item02-H1-r2`, `item06-H1-r2`, `item02-H2r`, `item06-H2r`; 0.5 Da ion-trap twins `CFG-0{2,6,9}-*-it05`; `-r3` status rows (`scripts/append_r3_rows.py`, `r3_configs.py`, `r3_status.py`) |
+| `DECISIONS-2026-11-08.md` (round 4) | decisions A-E (registry `DEC-1112-r4-*`): low-resolution data removed from #2 and #6, #2 timsTOF truth repair, #6 scored once on the high-resolution H2/H2r runs, #9 documentation, scoring-command erratum; PREREG-item02/06.md amendment 2; jobs in `results/r4-jobs/` |
 | `scorers/` | the held-out scorers (`score_item*.py`, `acclib.py`), truth-search configs (`truth_config.py`, `truth/*.tsv`), `strip_charge.py` (#6), `SHA256SUMS`; `tests/` runs them on DEV outputs only (`run_dev_tests.sh`, `dev_results/`) |
 | `scripts/` | selection rules (in each script's header), staging and conversion, manifest build, disjointness, registry rows |
 | `inputs/` | selection inputs and raw draw outputs; `inputs/staged/` the staging logs from node data |
@@ -66,5 +67,9 @@ data, or on BinAC2 under all of these conditions:
   recorded in `output/features-1.12/BINAC2-RUNTIME.md`).
 - The item's inputs have passed sha256 verification on BinAC2 against their manifest before the run.
 
-Each config is still scored exactly once, on one of the two sites, and its registry row records where it ran (data or
+Round 4 (DECISIONS-2026-11-08 round 4, decision B): by the user's decision CFG-06-base and CFG-06-cand, scored once on
+item06-H1-r2, are scored once more, on the unused high-resolution reserve item06-H2 + item06-H2r (PREREG-item06.md
+amendment 2). H1 is not re-scored. Scoring commands run without `python -I` (erratum, amendment 2).
+
+Each config is still scored exactly once per split, on one of the two sites, and its registry row records where it ran (data or
 BinAC2, with the Slurm job id for BinAC2).
