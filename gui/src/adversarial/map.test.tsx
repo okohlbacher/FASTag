@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import manifest from '../params.generated.json'
-import { PARAM_BY_NAME, RENDERED, HIDDEN } from '../paramLayout'
+import { PARAM_BY_NAME, RENDERED, HIDDEN_PARAMS } from '../paramLayout'
 import SpeciesPanel from '../SpeciesPanel'
 
 const raw = (name: string) => (manifest.params as { name: string; choices?: string[] }[]).find((p) => p.name === name)
@@ -18,11 +18,12 @@ describe('map: param overlay vs CLI manifest', () => {
     expect(c).toContain('domain')
     expect(c).not.toContain('superkingdom')
   })
-  it('renders 67 parameters and hides 11 (mzpeak_read_memory among them)', () => {
-    // 1.10.0 added species_evidence (rendered) to the 1.9.0 set.
-    expect(RENDERED.length).toBe(67)
-    expect(Object.keys(HIDDEN).length).toBe(11)
-    expect(manifest.params.length).toBe(78)
+  it('renders or hides every parameter of the manifest once (mzpeak_read_memory hidden)', () => {
+    // Counted from the manifest, not fixed (P5): a regenerated manifest is a
+    // PARAM_UI edit only. 1.11 renders 67 of 78.
+    expect(RENDERED.length + HIDDEN_PARAMS.length).toBe(manifest.params.length)
+    expect(new Set([...RENDERED, ...HIDDEN_PARAMS]).size).toBe(manifest.params.length)
+    expect(HIDDEN_PARAMS).toContain('mzpeak_read_memory')
   })
   it('tag_lengths reaches the UI as an int list with min 1', () => {
     const p = PARAM_BY_NAME.get('tag_lengths')

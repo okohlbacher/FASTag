@@ -11,7 +11,7 @@ import { rebaseOutputs } from '../app/paths'
 import DigestPanel from '../DigestPanel'
 import SpeciesPanel from '../SpeciesPanel'
 import { parseReport } from '../digestReport'
-import { HIDDEN, PARAM_BY_NAME, RENDERED } from '../paramLayout'
+import { PARAM_BY_NAME, RENDERED, hiddenReason } from '../paramLayout'
 import manifest from '../params.generated.json'
 import { installMockBridge } from '../testing/mockBridge'
 import { click, goTo, pickSingle, renderApp, runButton } from '../testing/render'
@@ -196,12 +196,14 @@ describe('docs: code comments that promise the CLI will not reject a GUI value',
     await click(runButton())
     expect(mock.runCalls).toHaveLength(0)
   })
-  it('the 14 advanced FASTag parameters are in the manifest, and the ignored mzpeak_read_memory is hidden', () => {
+  it('advanced FASTag parameters are in the manifest, and the ignored mzpeak_read_memory is hidden', () => {
     const own = ['version', 'log', 'debug', 'no_progress', 'force', 'test']
     const adv = (manifest.params as { name: string; toppAdvanced: boolean }[]).filter((p) => p.toppAdvanced && !own.includes(p.name))
-    expect(adv.length).toBe(14)
+    // Not counted (P5: a regenerated manifest is a PARAM_UI edit only); the
+    // comment's point is that the flag does not follow depth.
     expect(adv.map((p) => p.name)).toContain('massgap_window')
-    expect(HIDDEN.mzpeak_read_memory).toBeDefined()
+    expect(adv.map((p) => p.name)).not.toContain('gap_penalty')
+    expect(hiddenReason('mzpeak_read_memory')).toBeDefined()
     expect(RENDERED).not.toContain('mzpeak_read_memory')
   })
 })

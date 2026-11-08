@@ -6,8 +6,7 @@
 import { isValidElement, type ReactNode } from 'react'
 import { GLOSSARY, PAGES } from './content'
 import { FAQ } from './faq'
-import { PARAM_HELP } from './params'
-import { PARAM_BY_NAME, humanName } from '../paramLayout'
+import { PARAM_BY_NAME, PARAM_UI, humanName } from '../paramLayout'
 
 /// The text of a JSX tree: strings and numbers, and the children of every
 /// element (a component's own output is not rendered).
@@ -39,8 +38,8 @@ export const HELP_INDEX: HelpDoc[] = (() => {
     docs.push({ id: f.id, title: f.question, where: `Troubleshooting · ${f.group}`, text: clean(text) })
   }
   for (const g of GLOSSARY) docs.push({ id: g.id, title: g.term, where: 'Glossary', text: clean(textOf(g.text)) })
-  for (const [name, h] of Object.entries(PARAM_HELP)) {
-    if (!PARAM_BY_NAME.has(name)) continue
+  for (const [name, { help: h }] of Object.entries(PARAM_UI)) {
+    if (!h || !PARAM_BY_NAME.has(name)) continue
     docs.push({
       id: `param-${name}`,
       title: humanName(name),

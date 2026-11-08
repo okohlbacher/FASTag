@@ -74,7 +74,9 @@ gui/
                        contract's fixtures), see fixtures/cli-1.12/README.md
     api.ts             the window.fastag bridge over Tauri invoke, one Channel per run, events + dialog/opener plugins
     runJob.ts          one run as the renderer tracks it: id made before invoke, Channel events and the reply merged
-    paramLayout.ts     section/ordering overlay on the generated manifest (one flat list)
+    paramUi.ts         PARAM_UI: one entry per CLI parameter (section or hidden, label, unit,
+                       dependencies, overlays, help), the presentation of the manifest
+    paramLayout.ts     the sections and every view of PARAM_UI the app uses; value and preflight checks
     params.generated.json   `-write_ini` dump of the tool (the source of truth for params)
     testing/           mock bridge for the tests and the browser preview (`npm run dev`),
                        the e2e bridge with its ?fixture= scenarios (Playwright build only),
@@ -164,9 +166,11 @@ npm run tauri build -- --debug   # faster, unsigned, for local checking
 ## Regenerate the param manifest
 
 The UI form is generated from the tool's own `-write_ini`. After changing a CLI
-parameter, refresh the manifest so the form stays in lockstep, and place the
-new option in `src/paramLayout.ts` and give it a plain-language entry in
-`src/help/params.ts` (the layout and Help tests fail until both are done):
+parameter, refresh the manifest so the form stays in lockstep, and give each
+new option its one entry in `PARAM_UI` (`src/paramUi.ts`): a section and help to
+put it in the form, or `hidden` with the reason and help to leave it out
+(paramUi.test.ts and the Help tests fail until every parameter has its entry,
+and when an entry names a parameter the manifest lacks):
 
 ```bash
 npm run params    # runs scripts/gen-params.mjs against the bundled binary

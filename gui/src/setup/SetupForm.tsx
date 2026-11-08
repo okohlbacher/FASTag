@@ -9,7 +9,6 @@ import {
   dependents,
   hiddenUntilMaster,
   type Section,
-  UNIT_OF,
   UNIT_PARAMS,
   humanName,
   inertBecause,
@@ -17,6 +16,7 @@ import {
   isActive,
   isChanged,
   unknownParams,
+  unitOf,
   unplacedParams
 } from '../paramLayout'
 import ParamField from '../ParamField'
@@ -75,7 +75,7 @@ export default function SetupForm({ session, run, onPickInput, onSearch, searchB
     // (a dropped taxonomy, a last-used path) stays where it was.
     const hidden = !!sec && hiddenUntilMaster(name, sec, values)
     const turnsOn = sec?.master === name && !isActive(name, values) ? dependents(sec).length : 0
-    const unitName = UNIT_OF[name]
+    const unitName = unitOf(name)
     const unitSpec = unitName ? PARAM_BY_NAME.get(unitName) : undefined
     const f = (
       <ParamField
