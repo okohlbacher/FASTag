@@ -282,6 +282,10 @@ if(FASTAG_BUILD_TESTS)
     target_link_libraries(${t} PRIVATE fastag_core)
     add_test(NAME ${t} COMMAND ${t})
   endforeach()
+  # complement_test includes Boost.Math itself (the reference tail); fastag_core
+  # links Boost::headers PRIVATE, and OpenMS's target carries no Boost include
+  # path on Windows.
+  target_link_libraries(complement_test PRIVATE Boost::headers)
 
   # 1.12 P4: the shared run report section (src/RunMeta.h) is frozen here.
   add_executable(runmeta_test test/runmeta_test.cpp)
