@@ -163,7 +163,8 @@ check_inputs || exit 1
 VER=$("$BIN" --help 2>&1 | grep -m1 '^Version:')
 { echo "binary $BIN"; echo "sha256 $(sha256sum "$BIN" | cut -d' ' -f1)"
   [ -f "$(dirname "$BIN")/FASTag.bin" ] && echo "FASTag.bin sha256 $(sha256sum "$(dirname "$BIN")/FASTag.bin" | cut -d' ' -f1)"
-  echo "$VER"; echo "host $(hostname) threads $THREADS date $(date -Is)"; } > "$OUT/BINARY.txt"
+  echo "$VER"; echo "digest python none pyarrow none (sha256sum and sed only)"
+  echo "host $(hostname) threads $THREADS date $(date -Is)"; } > "$OUT/BINARY.txt"
 echo "gate (1.12 new cases): $VER, $mode, out $OUT"
 
 fails=""

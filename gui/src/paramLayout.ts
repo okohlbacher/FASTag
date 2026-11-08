@@ -105,6 +105,7 @@ export const SECTIONS: Section[] = [
     blurb: 'Which spectra are read, and which peaks survive preprocessing.',
     open: false,
     params: [
+      'acquisition_check',
       'no_deisotope',
       'max_peaks',
       'peaks_per_window',
@@ -379,7 +380,8 @@ export const LABEL: Record<string, string> = {
   proforma: 'ProForma column',
   taxdb: 'Species reference index',
   digest_silac_min: 'Heavy-label check: minimum K and R ends',
-  max_evalue: 'Maximum E-value'
+  max_evalue: 'Maximum E-value',
+  acquisition_check: 'Raw DIA check'
 }
 
 /// The CLI name in words, for the label beside it: tag_length -> Tag length.
@@ -426,12 +428,12 @@ export const HIDDEN: Record<string, string> = {
   stream: 'stdin/stdout resident mode; meaningless under a GUI',
   mzpeak_read_memory: 'ignored by the CLI: mzPeak is read in file order without a decode cache',
   // FASTag 1.12 options. Each is opt-in and leaves the output as 1.11 at its
-  // default (acquisition_check refuses raw DIA by default, the one 1.12
-  // default change). Not offered in the form until each has its GUI design;
-  // until then a GUI run uses the CLI defaults.
+  // default. Not offered in the form until each has its GUI design; until then
+  // a GUI run uses the CLI defaults. The exception is acquisition_check (under
+  // Spectra): its default refuses raw DIA, the one 1.12 default change, so the
+  // form offers warn and off, or a GUI user could not tag raw DIA at all.
   probe_input: 'metadata probe for programs; prints JSON lines and exits',
   dump_spectrum: 'spectrum dump for programs; prints JSON lines and exits',
-  acquisition_check: OPT_IN_1_12,
   acquisition_probe_spectra: OPT_IN_1_12,
   alkylation_out: OPT_IN_1_12,
   alkylation_proteome: OPT_IN_1_12,

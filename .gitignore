@@ -24,3 +24,5 @@ __pycache__/
 !test/fixtures/*.mzML
 !test/fixtures/*.mgf
 !data/digest/*.tsv
+# ...and the gate reference sets' run tables (gate.sh --refs writes cases.tsv, results.tsv)
+!tools/gate-1.12/refs-*/*.tsv

@@ -16,7 +16,8 @@
 //       charge-reduced species (with isotopes and hydrogen transfer) but no
 //       fragment, and keeps peaks 5 Da away from them.
 //   (d) the b/y branch reproduces the E-values FASTag 1.11.0 (78390cd)
-//       wrote (test/complement_ref_1_11.inc), with the pair set explicitly.
+//       wrote (test/complement_ref_1_11.inc), with the pair set explicitly;
+//       bit for bit on glibc, and p_complement within 4 ulps elsewhere.
 //   (e) a reversed (c-derived) tag is placed by TagRecon and counted by the
 //       digest TerminusCounter with offset offC - offN, not with H2O.
 //   (f) on a c/z-dot synthetic set, the digest, label and mass-gap
@@ -53,8 +54,10 @@
 #include <OpenMS/METADATA/Precursor.h>
 
 #include <algorithm>
+#include <bit>
 #include <cstdint>
 #include <cmath>
+#include <cstdio>
 #include <iostream>
 #include <regex>
 #include <set>
@@ -68,6 +71,20 @@ namespace IS = FASTag::IonSeries;
 namespace
 {
   int failures = 0;
+
+  /// (d): ulps of p_complement allowed against the glibc-made 1.11 reference.
+#if defined(__GLIBC__)
+  constexpr std::int64_t kPcUlps = 0;
+#else
+  constexpr std::int64_t kPcUlps = 4;
+#endif
+  /// Distance of two non-negative finite doubles in units in the last place.
+  std::int64_t pcUlps(double a, double b)
+  {
+    if (!(a >= 0) || !(b >= 0) || !std::isfinite(a) || !std::isfinite(b)) return a == b ? 0 : INT64_MAX;
+    const auto ia = std::bit_cast<std::int64_t>(a), ib = std::bit_cast<std::int64_t>(b);
+    return ia > ib ? ia - ib : ib - ia;
+  }
   void check(bool ok, const std::string& what)
   {
     if (!ok) { std::cerr << "FAIL: " << what << "\n"; ++failures; }
@@ -814,7 +831,7 @@ int main(int argc, char** argv)
 
   // ---- (d) the b/y branch reproduces FASTag 1.11.0 ----
   {
-    int rows = 0;
+    int rows = 0, pc_off = 0;
     for (int pi = 0; pi < 2; ++pi)
     {
       FASTag::Param p = FASTag::cliDefaultParam();
@@ -833,14 +850,28 @@ int main(int argc, char** argv)
           ++rows;
           if (r.rank >= tags.size()) { check(false, "(d) rank missing"); continue; }
           const FASTag::Tag& t = tags[r.rank];
-          check(t.seq == r.seq && t.charge == r.charge && t.evalue == r.evalue && t.p_complement == r.p_complement,
-                "(d) case " + std::to_string(ci) + " rank " + std::to_string(r.rank) + " equals 1.11 bit for bit");
+          char got[256];
+          std::snprintf(got, sizeof got, ": %s/%d E %.17g p_c %.17g, 1.11 %s/%d E %.17g p_c %.17g (dE/E %.3g, dp_c %.3g)",
+                        t.seq.c_str(), t.charge, t.evalue, t.p_complement, r.seq, r.charge, r.evalue, r.p_complement,
+                        std::fabs(t.evalue - r.evalue) / std::max(1e-300, std::fabs(r.evalue)),
+                        std::fabs(t.p_complement - r.p_complement));
+          // The tag, its charge and its E-value equal 1.11 bit for bit everywhere.
+          // p_complement is Boost's hypergeometric tail, whose result follows the
+          // C library's math functions: glibc (where the .inc was made, x86-64 and
+          // aarch64 alike) gives it bit for bit, Apple's libm 1-2 ulps away (CI
+          // run 42427807615: 51 of 100 rows, E-value difference 0 in every row).
+          // Off glibc p_complement is therefore held to kPcUlps ulps.
+          check(t.seq == r.seq && t.charge == r.charge && t.evalue == r.evalue && pcUlps(t.p_complement, r.p_complement) <= kPcUlps,
+                "(d) case " + std::to_string(ci) + " rank " + std::to_string(r.rank) + " equals 1.11 bit for bit" +
+                    (kPcUlps ? " (p_complement within " + std::to_string(kPcUlps) + " ulps)" : std::string()) + got);
+          if (t.p_complement != r.p_complement) ++pc_off;
           check(t.ion_series == IS::Series::BY, "(d) b/y tags");
         }
       }
     }
     check(rows >= 40, "(d) enough 1.11 reference rows");
-    std::cout << "d. " << rows << " rows equal FASTag 1.11.0 under an explicit b/y pair\n";
+    std::cout << "d. " << rows << " rows equal FASTag 1.11.0 under an explicit b/y pair (" << pc_off
+              << " with p_complement off by at most " << kPcUlps << " ulps)\n";
   }
 
   // ---- (e) a reversed c-derived tag: TagRecon and Digest ----

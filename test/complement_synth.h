@@ -6,6 +6,13 @@
 // Deterministic on every platform: the random numbers are std::mt19937's raw
 // 32-bit output (fixed by the standard), mapped to [0,1) by hand; the
 // std::*_distribution classes are implementation-defined and are not used.
+// Every RNG draw must be its own statement: two draws in one expression or
+// argument list are unsequenced, so the result would follow the compiler's
+// evaluation order (x86-64 GCC right to left, clang and aarch64 left to right).
+// The sequenced draws below keep the x86-64 GCC order of FASTag 1.11, from
+// which complement_ref_1_11.inc was made. (The .inc names the sha256 of this
+// header before the draws were sequenced; the generator gives the same table,
+// byte for byte, with this version on x86-64.)
 //
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
@@ -76,7 +83,11 @@ namespace ComplementSynth
     }
     const double hi = std::max(300.0, r.M - 40.0);
     for (int k = 0; k < noise; ++k)
-      r.spec.emplace_back(150.0 + (hi - 150.0) * u01(rng), 0.02 + 0.2 * u01(rng));
+    {
+      const double in = 0.02 + 0.2 * u01(rng);  // intensity first (x86-64 GCC order)
+      const double mz = 150.0 + (hi - 150.0) * u01(rng);
+      r.spec.emplace_back(mz, in);
+    }
     r.spec.sortByPosition();
     return r;
   }

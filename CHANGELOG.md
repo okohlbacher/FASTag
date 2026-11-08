@@ -55,6 +55,10 @@ held-out data yet. The README's command-line reference describes each option.
   `-digest_calibration`; `-alkylation_out`, `-alkylation_proteome` (auto),
   `-alkylation_min_spectra` (10), `-alkylation_min_share` (0.6),
   `-alkylation_window` (0). At their defaults `-digest_out` is the 1.11 report.
+  In 1.12.0 `-alkylation_out` needs `-recon_fasta` or a FASTA path in
+  `-alkylation_proteome`: the shipped proteomes that `auto` (= human),
+  `human`, `mouse`, `yeast` and `ecoli` name are not in this release, so the
+  default `auto` and the names stop with exit code 6 (illegal parameters).
 - **Protein shortlist and search hand-off (#5, experimental):**
   `-shortlist_out`, `-fasta_out`, `-shortlist_background`,
   `-shortlist_min_spectra` (2), `-shortlist_max_evalue` (0.1),

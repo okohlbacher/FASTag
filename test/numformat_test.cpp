@@ -131,7 +131,9 @@ int main()
     checkInt(v);
   for (int i = 0; i < 100000; ++i)
   {
-    checkSize(static_cast<size_t>(rng() >> (rng() % 64)));
+    const uint64_t bits = rng();  // one draw per statement, in the C++17 order of `a >> b`
+    const uint64_t shift = rng() % 64;
+    checkSize(static_cast<size_t>(bits >> shift));
     checkInt(static_cast<int>(static_cast<int64_t>(rng() % 4294967296u) - 2147483648));
   }
 

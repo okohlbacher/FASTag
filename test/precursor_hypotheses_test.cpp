@@ -84,7 +84,12 @@ namespace
   {
     MSSpectrum s;
     for (int k = 0; k < n; ++k)
-      s.emplace_back(lo + (hi - lo) * ComplementSynth::u01(rng), 0.05 + ComplementSynth::u01(rng));
+    {
+      // One draw per statement, intensity first (the x86-64 GCC order); see complement_synth.h.
+      const double in = 0.05 + ComplementSynth::u01(rng);
+      const double mz = lo + (hi - lo) * ComplementSynth::u01(rng);
+      s.emplace_back(mz, in);
+    }
     s.sortByPosition();
     return s;
   }

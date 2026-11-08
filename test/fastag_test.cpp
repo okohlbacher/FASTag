@@ -60,7 +60,13 @@ static MSSpectrum synth(const std::string& pep, int noise, unsigned seed, double
     s.emplace_back(aa.getPrefix(i).getMonoWeight(Residue::BIon, 1), hi(rng));
     s.emplace_back(aa.getSuffix(i).getMonoWeight(Residue::YIon, 1), hi(rng));
   }
-  for (int i = 0; i < noise; ++i) s.emplace_back(nz(rng), lo(rng));
+  for (int i = 0; i < noise; ++i)
+  {
+    // One draw per statement, intensity first (the x86-64 GCC order); see complement_synth.h.
+    const double in = lo(rng);
+    const double mz = nz(rng);
+    s.emplace_back(mz, in);
+  }
   s.sortByPosition();
   return s;
 }

@@ -136,10 +136,23 @@ export const FAQ: FaqEntry[] = [
     question: 'A run failed with an exit code',
     symptoms: <>A red box above the results: "… failed (exit code N)" and FASTag&apos;s reason.</>,
     causes: [
-      <>The reason line is FASTag&apos;s own message, and usually says what to change. The exit code says what kind of problem it was: 1, a file was not found (OpenMS checks this before FASTag starts); 2, the input cannot be read; 3, an input cannot be decoded (the spectra, a protease table of your own, or the species reference); 4, an input holds nothing usable; 5, an output cannot be written; 6, settings that do not go together, a value out of range, or an input of a type FASTag does not read; 11, ion-mobility spectra cannot be written as mzPeak; 13, see the entries on the spectra file and the entrapment database below.</>
+      <>The reason line is FASTag&apos;s own message, and usually says what to change. The exit code says what kind of problem it was: 1, a file was not found (OpenMS checks this before FASTag starts); 2, the input cannot be read; 3, an input cannot be decoded (the spectra, a protease table of your own, or the species reference); 4, an input holds nothing usable; 5, an output cannot be written; 6, settings that do not go together, a value out of range, or an input of a type FASTag does not read; 11, the input is raw DIA (see below), or ion-mobility spectra cannot be written as mzPeak; 13, see the entries on the spectra file and the entrapment database below.</>
     ],
     fixes: [
       <>Show full log shows every message of the run. Copy command copies the command line, to run it in a terminal or to send with a question.</>
+    ]
+  },
+  {
+    id: 'faq-raw-dia',
+    group: 'Running',
+    question: 'The run is refused: the input is raw DIA (exit code 11)',
+    symptoms: <>The run fails with exit code 11 before any file is written, and the reason says the file is raw DIA and names DIAspeXtract.</>,
+    causes: [
+      <>In raw DIA data each MS2 spectrum mixes the fragments of several peptides, and its &quot;precursor&quot; is an isolation window, not a peptide. Tags read from such spectra get wrong flanking masses and complement statistics, so FASTag refuses the file by default.</>
+    ],
+    fixes: [
+      <>Make pseudo-DDA spectra first, with DIAspeXtract (or diaTracer for timsTOF .d files), and tag those: they pass the check.</>,
+      <>Or set <L to="param-acquisition_check">Raw DIA check</L> (under Spectra) to warn, which tags the raw DIA spectra anyway with a warning, or to off.</>
     ]
   },
   {
@@ -350,6 +363,7 @@ export const FAQ_BY_ID = new Map(FAQ.map((f) => [f.id, f]))
 
 /// The entry for a failure message from FASTag or the app.
 export const CLASSES: [RegExp, string][] = [
+  [/FASTAG_REFUSED reason=raw_dia|' is raw \S*DIA\b|-acquisition_check warn/, 'faq-raw-dia'],
   [/cannot reach the index k/, 'faq-species-short'],
   [/-species: no |taxonomy directory|Failed to load (-taxdb|taxonomy)/, 'faq-species-reference'],
   [/Unknown modification/, 'faq-modification'],

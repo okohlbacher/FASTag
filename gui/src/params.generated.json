@@ -56,7 +56,7 @@
       "name": "alkylation_proteome",
       "type": "string",
       "default": "auto",
-      "description": "Database of -alkylation_out without -recon_fasta: auto (= human), human, mouse, yeast, ecoli (shipped proteomes) or a FASTA file (.gz allowed)",
+      "description": "Database of -alkylation_out without -recon_fasta: a FASTA file (.gz allowed). The names auto (= human), human, mouse, yeast and ecoli stand for shipped proteomes, which 1.12.0 does not ship: they stop with exit code 6, so give a FASTA file here or -recon_fasta",
       "required": false,
       "toppAdvanced": true
     },

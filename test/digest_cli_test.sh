@@ -358,6 +358,31 @@ done
 "$BIN" "${COMMON[@]}" -out "$TMP/x.tsv" -alkylation_out "$TMP/x9.tsv" -alkylation_proteome zebrafish > "$TMP/log" 2>&1 \
   && fail "an unknown -alkylation_proteome was accepted"
 grep -q "is neither auto" "$TMP/log" || fail "no message for an unknown -alkylation_proteome"
+# 1.12.0 ships no proteomes: without -recon_fasta or a FASTA path, the default auto and every
+# name stop with ILLEGAL_PARAMETERS (exit 6) before any output opens. An empty
+# FASTAG_ALKYLATION_DIR stands for a release install, so the check holds in any tree.
+mkdir -p "$TMP/alk_empty" "$TMP/noprot"
+for prot in default auto human mouse yeast ecoli zebrafish; do
+  printf 'sentinel\n' > "$TMP/noprot/tags.tsv"
+  if [ "$prot" = default ]; then
+    FASTAG_ALKYLATION_DIR="$TMP/alk_empty" "$BIN" "${COMMON[@]}" -out "$TMP/noprot/tags.tsv" \
+      -alkylation_out "$TMP/noprot/alk.tsv" > "$TMP/log" 2>&1
+  else
+    FASTAG_ALKYLATION_DIR="$TMP/alk_empty" "$BIN" "${COMMON[@]}" -out "$TMP/noprot/tags.tsv" \
+      -alkylation_out "$TMP/noprot/alk.tsv" -alkylation_proteome "$prot" > "$TMP/log" 2>&1
+  fi
+  rc=$?
+  [ "$rc" = 6 ] || { cat "$TMP/log" >&2; fail "-alkylation_proteome $prot without a proteome: exit $rc, not 6 (ILLEGAL_PARAMETERS)"; }
+  case $prot in
+    zebrafish) grep -q "is neither auto" "$TMP/log" || fail "no message for -alkylation_proteome zebrafish" ;;
+    *) want=$prot; { [ "$want" = default ] || [ "$want" = auto ]; } && want=human
+       grep -q "no shipped $want proteome found" "$TMP/log" || fail "no 'no shipped $want proteome' message for $prot"
+       grep -q -- "Give -alkylation_proteome <fasta> or -recon_fasta" "$TMP/log" || fail "no advice for $prot" ;;
+  esac
+  { [ ! -e "$TMP/noprot/alk.tsv" ] && [ ! -e "$TMP/noprot/alk.tsv.part" ]; } \
+    || fail "$prot: -alkylation_out written although the run was refused"
+  [ "$(tr -d '\r' < "$TMP/noprot/tags.tsv")" = sentinel ] || fail "$prot: -out written although the run was refused"
+done
 printf '' | "$BIN" -stream -alkylation_out "$TMP/x10.tsv" > "$TMP/log" 2>&1 && fail "-stream with -alkylation_out was accepted"
 grep -q -- "-stream cannot be combined with -alkylation_out" "$TMP/log" || fail "no -stream refusal message for -alkylation_out"
 "$BIN" "${COMMON[@]}" -out "$TMP/w.tsv" -alkylation_min_spectra 5 > "$TMP/log" 2>&1 \

@@ -262,7 +262,11 @@ int main()
     {
       std::string s;
       const int len = 50 + static_cast<int>(rng() % 700);
-      for (int i = 0; i < len; ++i) s += (rng() % 50 == 0) ? '#' : "ACDEFGHKLMNPQRSTVWY"[rng() % 19];
+      for (int i = 0; i < len; ++i)
+      {
+        const bool gap = rng() % 50 == 0;  // one draw per statement
+        s += gap ? '#' : "ACDEFGHKLMNPQRSTVWY"[rng() % 19];
+      }
       prot.push_back(s);
     }
     for (int p = 0; p < 400; ++p) prot.push_back(prot[rng() % prot.size()]);
