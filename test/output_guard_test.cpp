@@ -39,9 +39,11 @@ namespace
       std::cerr << "FAIL: " << what << "\n";
     }
   }
+  // Text mode, as FASTag writes its outputs (and 1.11 did): on Windows a
+  // PartFile stream writes CRLF, which reads back as "\n" here.
   std::string slurp(const fs::path& p)
   {
-    std::ifstream f(p, std::ios::binary);
+    std::ifstream f(p);
     std::ostringstream s;
     s << f.rdbuf();
     return s.str();

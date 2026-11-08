@@ -18,6 +18,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -481,7 +482,8 @@ int main()
 
   // ---- 11. the parameter file -------------------------------------------------
   {
-    const std::string dir = std::string(std::getenv("TMPDIR") ? std::getenv("TMPDIR") : "/tmp");
+    // temp_directory_path: TMPDIR on POSIX, TEMP/TMP on Windows (no "/tmp" there).
+    const std::string dir = std::filesystem::temp_directory_path().string();
     const std::string f = dir + "/species_call_test_params.tsv";
     SC::Params p;
     std::string err;

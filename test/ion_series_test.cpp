@@ -78,6 +78,14 @@ namespace
 #else
   constexpr std::int64_t kPcUlps = 4;
 #endif
+  /// (d): ulps of the E-value allowed. Exact on glibc and Apple's libm; MSVC's
+  /// C runtime puts one row 1 ulp away (windows.yml run 42455067821: case 1
+  /// rank 2, LVE/1, dE/E 2.2e-16, tag, charge and p_complement equal).
+#if defined(_MSC_VER)
+  constexpr std::int64_t kEUlps = 4;
+#else
+  constexpr std::int64_t kEUlps = 0;
+#endif
   /// Distance of two non-negative finite doubles in units in the last place.
   std::int64_t pcUlps(double a, double b)
   {
@@ -855,15 +863,17 @@ int main(int argc, char** argv)
                         t.seq.c_str(), t.charge, t.evalue, t.p_complement, r.seq, r.charge, r.evalue, r.p_complement,
                         std::fabs(t.evalue - r.evalue) / std::max(1e-300, std::fabs(r.evalue)),
                         std::fabs(t.p_complement - r.p_complement));
-          // The tag, its charge and its E-value equal 1.11 bit for bit everywhere.
+          // The tag and its charge equal 1.11 bit for bit everywhere, the E-value
+          // too except under MSVC (kEUlps).
           // p_complement is Boost's hypergeometric tail, whose result follows the
           // C library's math functions: glibc (where the .inc was made, x86-64 and
           // aarch64 alike) gives it bit for bit, Apple's libm 1-2 ulps away (CI
           // run 42427807615: 51 of 100 rows, E-value difference 0 in every row).
           // Off glibc p_complement is therefore held to kPcUlps ulps.
-          check(t.seq == r.seq && t.charge == r.charge && t.evalue == r.evalue && pcUlps(t.p_complement, r.p_complement) <= kPcUlps,
+          check(t.seq == r.seq && t.charge == r.charge && pcUlps(t.evalue, r.evalue) <= kEUlps && pcUlps(t.p_complement, r.p_complement) <= kPcUlps,
                 "(d) case " + std::to_string(ci) + " rank " + std::to_string(r.rank) + " equals 1.11 bit for bit" +
-                    (kPcUlps ? " (p_complement within " + std::to_string(kPcUlps) + " ulps)" : std::string()) + got);
+                    (kPcUlps ? " (p_complement within " + std::to_string(kPcUlps) + " ulps)" : std::string()) +
+                    (kEUlps ? " (E-value within " + std::to_string(kEUlps) + " ulps, MSVC)" : std::string()) + got);
           if (t.p_complement != r.p_complement) ++pc_off;
           check(t.ion_series == IS::Series::BY, "(d) b/y tags");
         }

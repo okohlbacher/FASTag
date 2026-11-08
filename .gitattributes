@@ -1,0 +1,5 @@
+# Byte-exact inputs: no CRLF conversion on a Windows checkout. The tests read
+# indexed mzML fixtures (byte offsets), compare outputs with stored sha256s
+# and check byte lengths; the shipped tables are read as LF text.
+test/fixtures/** -text
+data/** -text
