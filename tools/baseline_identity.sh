@@ -130,7 +130,9 @@ showdiff() { diff "$1" "$2" | head -8 | cut -c1-200 | sed 's/^/      /'; }
 # of CAND is a label_call row (FASTag 1.12 #3a); prints the number of them.
 label_prefix() {
   local nb; nb=$(wc -c < "$1" | tr -d ' ')
-  cmp -s -n "$nb" "$1" "$2" || return 1
+  # head -c + cmp, not cmp -n: BSD cmp -n N reports "EOF on" a file of exactly
+  # N bytes and fails, so on macOS every label_call prefix read as DIFF.
+  head -c "$nb" "$2" | cmp -s - "$1" || return 1
   tail -c +"$((nb + 1))" "$2" | awk -F'\t' '$1 != "label_call" { bad = 1 } END { if (bad || NR == 0) exit 1; print NR }'
 }
 
