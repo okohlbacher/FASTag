@@ -1,0 +1,156 @@
+{
+ "manifest": "dev03",
+ "provenance": {
+  "python": "3.11.18",
+  "numpy": "2.4.6",
+  "pandas": "3.1.0",
+  "acclib.py": "d2342eb4c15e5801d9c13f2edcd1e56cec70349c941df0db2d061bb6630eeedf",
+  "score_item01.py": "25f48ea2b6b6730c49cd020350a9952d7026f27e40b8264d3a41b0e5fc22cb56",
+  "score_item02.py": "7928403d16627a7fab4f7e2faadaa76c87225b5f039ea42071af1f7a3b68c52e",
+  "score_item03.py": "285df1d0dd70bf9d0411c35b45c354b5ec2ba16391008199ec6186d03e845848",
+  "score_item06.py": "6eba125f39852862626b800826825acfa513e8645d3c8cf33836ebf6e2f009a0",
+  "score_item07.py": "b135aa9b5b9db5af7507ab81b5abd3f770c30590af7542789e3ad7ac6b0b750e",
+  "score_item09.py": "0f8078b77675f7a57013bdccbfe0c20ef6f4b8836e8a32f33ba9d169670afe34",
+  "score_item15B.py": "0e8534dba9f513008d53f69d988157fa3fecdda8a8f0de59324427744777cc62",
+  "bench/fastag-bench/src/fastag_bench/score.py": "e2b8788a78f1176169f617c01b2e17f21578b8909f7c79b33d23ae1b71075f79",
+  "bench/fastag-bench/src/fastag_bench/parsers.py": "01e27548bcae489d3f205960730c8bc36624e16935ea5df0bec5a6a04ea51f49"
+ },
+ "not_staged": [],
+ "protease": {
+  "CFG-03-base": {
+   "balanced_accuracy": 0.6280036133694671,
+   "recall": {
+    "Trypsin": [
+     0.5284552845528455,
+     123
+    ],
+    "Lys-C": [
+     0.8,
+     5
+    ],
+    "nontryptic": [
+     0.5555555555555556,
+     27
+    ]
+   },
+   "n": 155,
+   "called": 91,
+   "called_correct": 84,
+   "called_accuracy": 0.9230769230769231,
+   "called_accuracy_wilson": [
+    0.849640728767747,
+    0.962240498677047
+   ],
+   "accuracy_nocall_wrong": 0.5419354838709678,
+   "majority_baseline": 0.7935483870967742,
+   "criteria": {
+    "balanced_accuracy>=0.75": false,
+    "called_accuracy>=0.95_LB>=0.90": false,
+    "nocall_wrong>=majority": false
+   },
+   "piece": "FAIL"
+  },
+  "CFG-03-cand": {
+   "balanced_accuracy": 0.519361638060825,
+   "recall": {
+    "Trypsin": [
+     0.5284552845528455,
+     123
+    ],
+    "Lys-C": [
+     0.4,
+     5
+    ],
+    "nontryptic": [
+     0.6296296296296297,
+     27
+    ]
+   },
+   "n": 155,
+   "called": 86,
+   "called_correct": 84,
+   "called_accuracy": 0.9767441860465116,
+   "called_accuracy_wilson": [
+    0.9191198543736794,
+    0.9935990737957292
+   ],
+   "accuracy_nocall_wrong": 0.5419354838709678,
+   "majority_baseline": 0.7935483870967742,
+   "criteria": {
+    "balanced_accuracy>=0.75": false,
+    "called_accuracy>=0.95_LB>=0.90": true,
+    "nocall_wrong>=majority": false
+   },
+   "piece": "FAIL"
+  }
+ },
+ "protease_descriptive": {
+  "CFG-03-base": {
+   "Arg-C->Trypsin": 2,
+   "Arg-C->None": 1,
+   "Arg-C->Arg-C": 1
+  },
+  "CFG-03-cand": {
+   "Arg-C->Trypsin": 2,
+   "Arg-C->Arg-C": 2
+  }
+ },
+ "timstof": {
+  "scored": 0,
+  "called": 0,
+  "called_correct": 0,
+  "called_accuracy": NaN,
+  "piece": "WITHHELD (fewer than 10 scored runs)"
+ },
+ "alkylation": {
+  "evaluable": 95,
+  "not_evaluable": [
+   "valset__PXD014367__CSD16_C8EV_20180703203156",
+   "valset__PXD014778__T_Oellerich_091116_060117_72156_samp6_rep2_6",
+   "valset__PXD047517__12102021_TMT_Oglyco_F3",
+   "borg_ho__PXD012764__P17540",
+   "borg_ho__PXD014225__QECCF151223_35",
+   "borg_ho__PXD019291__S9588TPST_Fr1",
+   "borg_ho__PXD043057__7324_1566_Vd_Lung_070918",
+   "borg_ho__PXD052824__2012-09-28_velos_0887",
+   "borg_ho__PXD062749__P15-2",
+   "nontryptic__PXD000900__HeLa_GluC_HCD_1",
+   "nontryptic__PXD000900__HeLa_LysC_HCD_1",
+   "nontryptic__PXD000900__HeLa_chytry_HCD_3",
+   "nontryptic__PXD000900__HeLa_try_HCD_1",
+   "nontryptic__PXD051338__20220928_C29479_002_S412631_C_sample_DHFR_variant_1_Sample",
+   "nontryptic_dia__PXD058289__20231031_gagreda_PepMap50_ArathHistones_WT_Prep01_DIA_01",
+   "hla__PXD004894__20140304_EXQ6_MiBa_SA_MM3-HLAp-1",
+   "hla__PXD004894__20140306_EXQ6_MiBa_SA_MM3-HLAp-1",
+   "hla__PXD004894__20141225_QEp7_MiBa_SA_HLA-II-p_MM12",
+   "hla__PXD004894__20141225_QEp7_MiBa_SA_HLA-II-p_MM12_141226122233",
+   "hla__PXD005704__e000486_Raji_wt",
+   "hla__PXD006939__20170302_QEh1_LC2_FaMa_ChCh_SA_HLApI_RA957_1_R2",
+   "hla__PXD006939__20170317_QEh1_LC2_FaMa_ChCh_SA_HLApII_CD165_1_R1",
+   "hla__PXD006939__20170317_QEh1_LC2_FaMa_ChCh_SA_HLApII_CD165_2_R1",
+   "hla__PXD009752__IP_lung_1T_060317_1",
+   "hla__PXD013649__20180309_QE_HFX_LC2_HLAIIp_CHC_SA_tumC3N02289_4_5_R1",
+   "hla__PXD013649__20180309_QE_HFX_LC2_HLAIIp_CHC_SA_tumC3N02289_4_5_R2",
+   "hla__PXD013649__20180309_QE_HFX_LC2_HLAIp_CHC_SA_tumC3N02289_4_5_R1",
+   "hla__PXD013649__20180309_QE_HFX_LC2_HLAIp_CHC_SA_tumC3N02289_4_5_R2"
+  ],
+  "accuracy_nocall_wrong": 0.35789473684210527,
+  "always_cam": 0.9157894736842105,
+  "called": 37,
+  "called_accuracy": 0.918918918918919,
+  "called_wilson": [
+   0.7869932065071162,
+   0.9720394258995521
+  ],
+  "none_runs": 7,
+  "none_recall": 0.14285714285714285,
+  "piece": "FAIL"
+ },
+ "label": {
+  "evaluable": 158,
+  "accuracy_nocall_wrong": 0.6392405063291139,
+  "majority": "label-free",
+  "majority_baseline": 0.7974683544303798,
+  "piece": "FAIL"
+ }
+}

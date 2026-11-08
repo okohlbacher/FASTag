@@ -23,7 +23,7 @@ exactly once; nothing is tuned on held-out data.
 | Reference K:R (#3c) | ref50.fasta sha256 2bc7295c31bcb4643a59cd0dc8fdb0a28f74d8b47989902788eaa10d2d328626: ref_k 0.4932492134195986, ref_r 0.5067507865804014 (`dev/scripts/kr_reference.py`, `dev/chem/kr_reference.tsv`) |
 | Alkylation database rule | the SDRF organism of the run (manifest column `organisms`) mapped to the prose-auto panel FASTA `/ceph/ibmi/abi/oliver/prose-auto-20261029/panel/<Genus>_<species>.fasta` (the DEV C pass used the same panel through runs.json); a run whose organism has no panel FASTA is not evaluable for 3g and is listed, not dropped silently. No bundled proteomes (not in 1.12.0) |
 | Label rule (#3a) | ported from prose-auto 0.1.10 (`harness/v0110c_code/prose_auto/external.py`, sha256 97fb913cc80453e149cc905470ddc8df63b891f90a947e7df5c1ae39443692e5). **Parity on the 177 DEV runs: 177/177 identical** (`dev/chem/label_parity.tsv`) |
-| Scoring script | **TO FILL before the run** (see Status) |
+| Scoring script | `scorers/score_item03.py` sha256 `285df1d0dd70bf9d0411c35b45c354b5ec2ba16391008199ec6186d03e845848` (2026-11-08; section "Held-out scoring protocol" below); applies `endpoint()` of `dev/scripts/fit_chem.py` unchanged |
 
 **Why the #3 tables are not bundled.** They are read at run time (CMake `install(FILES ...)`, `FASTAG_DIGEST_DIR`),
 not compiled in, so FASTag.bin stays c4c2ad67.... Putting them into `data/digest` would change two things that
@@ -156,3 +156,40 @@ in this set (no DIA stratum was drawn). Disjointness: acceptance/1.12/disjointne
 - 3g alkylation: accuracy with no-call counted wrong >= always-CAM, with called accuracy >= 0.97 and 'none' recall >= 0.7.
 - 3a label: accuracy >= majority baseline + 5 points.
 Each piece passes or fails on its own. Metrics also reported: accuracy among called, per-class recall with Wilson CIs.
+
+## Held-out scoring protocol (fixed 2026-11-08, before any held-out run)
+
+The held-out scorer is committed; what remains open is your decision on the DEV results (protease, alkylation and
+label miss their targets in-sample; release readiness, decision 3). CFG-03-base and CFG-03-cand therefore move from
+`pending_scorer` to **`blocked_user_signoff`** (options, tables, hashes unchanged); the commit that records your decision
+in this file sets them `frozen` (README gate, with an appended registry row) when you decide to score them. Each piece passes or fails on its own; nothing is tuned on held-out data.
+
+- **Runs and truth:** `manifests/item03-heldout.tsv` (sha256 `6768c5fac1a43be056f9f26ab4a3da979735e949135010b74524af0813f4ed95`,
+  HO-03-heldout-r2): truth = the manifest columns `enzyme_truth`, `alk_truth`, `label_truth` (SDRF, fixed at the
+  draw); no search. The 2 rows without a staged input (DOWNLOAD_FAILED;CONVERSION_FAILED) are NOT_STAGED and listed;
+  the 4 SECOND_DOWNLOAD_DIFFERS ddaPASEF/tryptic rows are scored only if their re-verification passes before the run.
+- **Runs per file:** the commands of section "Commands" with outputs `runs/<CFG>/item03-heldout/<run dir>/termini/`
+  (`digest.tsv`, `label.tsv`; both configs) and `runs/CFG-03-cand/item03-heldout/<run dir>/alkylation/alkylation.tsv`.
+- **Protease (3c-3f):** runs of the strata tryptic, nontryptic:{Lys-C, Chymotrypsin, Glu-C, Asp-N, unspecific} and
+  alkylation_noncam whose enzyme truth is Trypsin, Lys-C, Chymotrypsin, Glu-C, Asp-N or unspecific; Arg-C (13 runs,
+  6 PXDs) and LysargiNase (6 runs, 3 PXDs) are descriptive only (< 15 runs), the ddapasef stratum is the timsTOF piece.
+  `fit_chem.endpoint()` on (truth class, call or no call): balanced accuracy >= 0.75; called accuracy >= 0.95 with
+  Wilson LB >= 0.90; accuracy with no call wrong >= the majority baseline (share of the most frequent truth class of
+  the same runs).
+- **timsTOF:** ddapasef stratum, truth Trypsin: called accuracy >= 0.90 on >= 10 scored runs; with fewer than 10
+  scored runs (now 6 of 10 verified) the piece is WITHHELD and the timsTOF call stays withheld.
+- **Alkylation (3g):** runs with alk_truth Carbamidomethyl, Propionamide, Methylthio or none that have an alkylation
+  report (a run whose organism has no panel FASTA has none: NOT_EVALUABLE, listed): accuracy (no call wrong) >=
+  always-CAM; called accuracy >= 0.97; 'none' recall >= 0.70.
+- **Label (3a):** runs with label_truth label-free, TMT, TMTpro, iTRAQ4, iTRAQ8 or SILAC (TMTpro and iTRAQ8 one class,
+  as `dev/scripts/label_parity.py`), the label_call of CFG-03-cand's `label.tsv`: accuracy (no call wrong) >= majority
+  baseline + 0.05.
+- **Scorer:** `scorers/score_item03.py` `285df1d0dd70bf9d0411c35b45c354b5ec2ba16391008199ec6186d03e845848`, with `scorers/acclib.py`
+  `d2342eb4c15e5801d9c13f2edcd1e56cec70349c941df0db2d061bb6630eeedf`, `dev/scripts/fit_chem.py` `82a2262b86c3c42fff30b45f35c2a22a7c21998735727946a797114b3eb57fb0` and `dev/scripts/chemport.py`
+  `13ca50677cf8519330bff59f6b9e2ad74bcb92d5d63a9a8cab106430c8d5cf75`. Command: `python3 -I scorers/score_item03.py acceptance/1.12 <root>/runs <out>`.
+- **DEV test (DEV outputs only):** the 177 DEV runs laid out as CFG-03-base = pass B and CFG-03-cand = pass V2b (+ C
+  alkylation): `scorers/tests/check_item03_endpoint.py` reproduces `dev/chem/eval_passes.json` exactly for B and V2b
+  (balanced accuracy 0.614861 / 0.513786, called 94 / 90 of 159: ENDPOINT_REPRODUCED); with the held-out class rules
+  (Arg-C left out, 155 runs) the scorer gives protease 0.628 / 0.519, alkylation 0.358 vs always-CAM 0.916 (called
+  0.919, none 1/7), label 0.639 vs 0.797: every piece FAIL, as the DEV results above. `scorers/tests/dev_results/item03*`.
+

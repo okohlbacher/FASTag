@@ -1,0 +1,1 @@
+dropped MS:1000041 lines 27345; MS:1000633 kept 0; sha256 19d8ee3ffc40d98f1c05a145ab3909f77334e1da0afff9b4d8db6b6ab8cdccbd  /scratch/kohlbach/fastag112-prereg/dev/staged/dev/PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.nocharge.mzML

@@ -1,0 +1,178 @@
+CFG-03-base	CFG-03-base:label	CFG-03-cand	CFG-03-cand:label	alk	alk_truth	label_truth	pxd	run	status	stratum	truth
+None	None	None	None	None		label-free	PXD003382	valset__PXD003382__AP_UNTAG_02	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	None	Carbamidomethyl	label-free	PXD003531	valset__PXD003531__20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01	ok	tryptic	Trypsin
+None	None	Trypsin	None	Carbamidomethyl	Carbamidomethyl	label-free	PXD003808	valset__PXD003808__QE2_131113_OPL0000_pTyr_IP_A_02	ok	tryptic	Trypsin
+None	None	None	None	None		label-free	PXD004133	valset__PXD004133__141212_JMK_AP5_FIND170_A	ok	tryptic	Trypsin
+Trypsin	TMT	Trypsin	TMT	None	Carbamidomethyl	TMT	PXD004541	valset__PXD004541__HF1_201501212_GM_RJ1511D_TMT10_hpHRP_DMSO1_2p5ug_4uL_fr02	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	None	Carbamidomethyl	label-free	PXD006272	valset__PXD006272__6	ok	tryptic	Trypsin
+None	None	None	None	None		label-free	PXD007875	valset__PXD007875__201708030201	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl	Carbamidomethyl	label-free	PXD009612	valset__PXD009612__170928_MW_3	ok	tryptic	Trypsin
+None	None	None	None	None	Carbamidomethyl	TMT	PXD010744	valset__PXD010744__ProstateTMT10plex_S3Fr23	ok	tryptic	Trypsin
+None	None	None	None	NO_REPORT		label-free	PXD013899	valset__PXD013899__20160108lc_8081_42357_2	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	NO_REPORT	Carbamidomethyl	label-free	PXD014367	valset__PXD014367__CSD16_C8EV_20180703203156	ok	tryptic	Trypsin
+Trypsin	SILAC	Trypsin	SILAC	Carbamidomethyl	Carbamidomethyl	SILAC	PXD014764	valset__PXD014764__20190412_KEH_HF_SA_ANW_R11_100419_CNOT_R1_f008	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	NO_REPORT	Carbamidomethyl	label-free	PXD014778	valset__PXD014778__T_Oellerich_091116_060117_72156_samp6_rep2_6	ok	tryptic	Trypsin
+None	None	None	None	None	Carbamidomethyl	label-free	PXD015108	valset__PXD015108__19Jul2018_ATPSynthase_Replicate_5	ok	tryptic	Trypsin
+None	None	None	None	None	Carbamidomethyl	label-free	PXD015959	valset__PXD015959__KAB05_SEC_3_03	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	None	Carbamidomethyl	SILAC	PXD016465	valset__PXD016465__040813_CR_GAB1_1fa	ok	tryptic	Trypsin
+Trypsin	SILAC	None	SILAC	None	Carbamidomethyl	SILAC	PXD023400	valset__PXD023400__20151125_Exactive_IS_14665	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	None	Carbamidomethyl	label-free	PXD024085	valset__PXD024085__PII_F4_Slice_e_repl2	ok	tryptic	Trypsin
+None	None	None	None	None	Carbamidomethyl	SILAC	PXD027712	valset__PXD027712__MS809_HS655_4_08	ok	tryptic	Trypsin
+None	None	None	None	None		label-free	PXD027795	valset__PXD027795__20190123_Ozdemir_11060-B	ok	tryptic	Trypsin
+None	None	None	None	None	Carbamidomethyl	SILAC	PXD028358	valset__PXD028358__2018-0326_SILAC-16_Chromosome-Yeast-F13	ok	tryptic	Trypsin
+None	None	None	None	None	Methylthio	TMTpro	PXD030111	valset__PXD030111__Lumos_201221_13	ok	tryptic	Trypsin
+None	None	None	None	None	Carbamidomethyl	label-free	PXD031975	valset__PXD031975__G-28	ok	tryptic	Trypsin
+None	None	None	None	None	Carbamidomethyl	SILAC	PXD034335	valset__PXD034335__SID1638_WQ_UbaE14_C6	ok	tryptic	Trypsin
+None	None	None	None	None		TMT	PXD036580	valset__PXD036580__Fusion_210511_51	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl	Carbamidomethyl	label-free	PXD039269	valset__PXD039269__480-1_FPEP210043913-1A	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	none	Carbamidomethyl	label-free	PXD040230	valset__PXD040230__20210629_Sample2red_CTRworms_repl1	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl		label-free	PXD045163	valset__PXD045163__July_24_2023_MSF_TD_8	ok	tryptic	Trypsin
+Trypsin	TMTpro	Trypsin	TMTpro	NO_REPORT	Carbamidomethyl	TMTpro	PXD047517	valset__PXD047517__12102021_TMT_Oglyco_F3	ok	tryptic	Trypsin
+None	None	None	None	None	Carbamidomethyl	label-free	PXD049370	valset__PXD049370__201111_13_Orbi1_KN_SER_G90_T115_Paternoga_ysgA_185	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl	Carbamidomethyl	label-free	PXD055189	valset__PXD055189__WT2-3	ok	tryptic	Trypsin
+None	label-free	None	label-free	Carbamidomethyl	Carbamidomethyl	label-free	PXD059369	valset__PXD059369__active2_1	ok	tryptic	Trypsin
+None	label-free	None	label-free	None	Carbamidomethyl	label-free	PXD061541	valset__PXD061541__209_4_Lenti_TID_eGFP_Sorted1_R1_Slot1-13_1_6861	ok	tryptic	Trypsin
+None	label-free	None	label-free	Carbamidomethyl	Carbamidomethyl	label-free	PXD074950	valset__PXD074950__B1_S2-A11_1_3404	ok	tryptic	Trypsin
+None	label-free	None	label-free	none	none	label-free	PXD078554	valset__PXD078554__100424_TA-BPD-004_Slot2-42_1_2475	ok	tryptic	Trypsin
+None	label-free	None	label-free	none	Carbamidomethyl	label-free	PXD083141	valset__PXD083141__H4_Slot1-2_1_13727	ok	tryptic	Trypsin
+None	label-free	None	label-free	Carbamidomethyl	Carbamidomethyl	label-free	PXD084909	valset__PXD084909__oecf3-AK0800-13-P	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl		label-free	PXD001587	borg_ho__PXD001587__140120_Lysate90min_38	ok	tryptic	Trypsin
+None	None	None	None	None	Carbamidomethyl	label-free	PXD001774	borg_ho__PXD001774__12HNP3timecourse	ok	tryptic	Trypsin
+Trypsin	SILAC	Trypsin	SILAC	Carbamidomethyl	Carbamidomethyl	isotope (unspecified)	PXD002411	borg_ho__PXD002411__EBV-BGLF4_48Hr_2SILAC_Nuclear_TotalProteome_Rep1_bRP6	ok	tryptic	Trypsin
+unspecific cleavage	None	None	None	None	Carbamidomethyl	label-free	PXD004732	borg_ho__PXD004732__01640c_BB4-Thermo_SRM_Pool_26_01_01-ETD-1h-R2	ok	tryptic	Trypsin
+None	None	None	None	None		TMT	PXD005236	borg_ho__PXD005236__Fusion_160519_70	ok	tryptic	Trypsin
+None	None	None	None	None	none	label-free	PXD006905	borg_ho__PXD006905__2017-10-27_CL03_Cell8_10252017_2	ok	tryptic	Trypsin
+None	None	None	None	None	Carbamidomethyl	TMT	PXD008579	borg_ho__PXD008579__R3_MS3_hSAX05_SILAC_TMT10	ok	tryptic	Trypsin
+None	None	None	None	None	Carbamidomethyl	SILAC	PXD009938	borg_ho__PXD009938__111214_Ines_LHC_1	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl	Carbamidomethyl	label-free	PXD010271	borg_ho__PXD010271__Darpa_2_human_02_23Jan17_Arwem_16-10-25	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl	Carbamidomethyl	label-free	PXD010809	borg_ho__PXD010809__1807_FR_C10	ok	tryptic	Trypsin
+Trypsin	TMT	Trypsin	TMT	None	Carbamidomethyl	TMT	PXD010941	borg_ho__PXD010941__170421_P0309_MR_JP_Rep12_fr3	ok	tryptic	Trypsin
+None	None	None	None	None	Carbamidomethyl	label-free	PXD011080	borg_ho__PXD011080__101105_Gustavo_TB2666_2_6	ok		
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl	Carbamidomethyl	label-free	PXD012636	borg_ho__PXD012636__20150821_QE7_UPLC11_PCP_SA_Rat_Heart_2_Left_Ventricle_Fraction_8	ok	tryptic	Trypsin
+Trypsin	TMTpro	Trypsin	TMTpro	NO_REPORT	Carbamidomethyl	iTRAQ8	PXD012764	borg_ho__PXD012764__P17540	ok	tryptic	Trypsin
+None	None	None	None	NO_REPORT	Carbamidomethyl	label-free	PXD014225	borg_ho__PXD014225__QECCF151223_35	ok	tryptic	Trypsin
+None	None	None	None	None	Carbamidomethyl	label-free	PXD014311	borg_ho__PXD014311__191230_NG_CWC_DDA_pool_WT_Duo	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	None	Carbamidomethyl	label-free	PXD017052	borg_ho__PXD017052__EXP19002_X2062_A_MSB39197A	ok	tryptic	Trypsin
+None	None	None	None	Carbamidomethyl	Carbamidomethyl	label-free	PXD017817	borg_ho__PXD017817__20190321_Nadia_S7-2	ok	tryptic	Trypsin
+Trypsin	None	None	None	Carbamidomethyl	Carbamidomethyl	label-free	PXD018027	borg_ho__PXD018027__WT_GluLac_Cell_Wall_3	ok	tryptic	Trypsin
+Trypsin	TMT	Trypsin	TMT	NO_REPORT	Carbamidomethyl	TMT	PXD019291	borg_ho__PXD019291__S9588TPST_Fr1	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	None		label-free	PXD019906	borg_ho__PXD019906__Sample-2	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl	Carbamidomethyl	SILAC	PXD023090	borg_ho__PXD023090__T_Oellerich_090114_040714_G2_AML18_10	ok	tryptic	Trypsin
+None	None	None	None	None	Carbamidomethyl	TMTpro	PXD024661	borg_ho__PXD024661__20210303_GT_XC_Protac2_Test	ok	tryptic	Trypsin
+None	None	None	None	None	Carbamidomethyl	label-free	PXD027038	borg_ho__PXD027038__LANE1_IN_PIANTE_AN_18_REP1_23SET16	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	None	Carbamidomethyl	label-free	PXD033162	borg_ho__PXD033162__Phyto_Variabilis_R_Control_36h_4	ok		
+Trypsin	label-free	Trypsin	label-free	None	Carbamidomethyl	isotope (unspecified)	PXD035256	borg_ho__PXD035256__U87_RICTOR_IP-3-1	ok	tryptic	Trypsin
+Trypsin	TMTpro	Trypsin	TMTpro	None	Carbamidomethyl	TMTpro	PXD035354	borg_ho__PXD035354__Lei_Set2_MS2_F1	ok	tryptic	Trypsin
+None	label-free	None	label-free	Carbamidomethyl	Carbamidomethyl	label-free	PXD038809	borg_ho__PXD038809__MALAT1_RNA_Capture_XG77_Rep3	ok	tryptic	Trypsin
+Trypsin	TMT	Trypsin	TMT	None		TMT	PXD041263	borg_ho__PXD041263__20190602_FB_Cofrac_Rep1_F24	ok	tryptic	Trypsin
+Trypsin	TMTpro	Trypsin	TMTpro	None		label-free	PXD041747	borg_ho__PXD041747__P102-6	ok	tryptic	Trypsin
+Chymotrypsin	label-free	None	label-free	NO_REPORT	none	label-free	PXD043057	borg_ho__PXD043057__7324_1566_Vd_Lung_070918	ok	nontryptic:unspecific	unspecific
+Trypsin	SILAC	Trypsin	SILAC	None	Carbamidomethyl	SILAC	PXD043214	borg_ho__PXD043214__170327_KJ_Q2_D_HKS_PDX22_DMSO_6hr_01	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl		label-free	PXD043707	borg_ho__PXD043707__20210210-MGQ	ok	tryptic	Trypsin
+Trypsin	SILAC	Trypsin	SILAC	Carbamidomethyl	Carbamidomethyl	SILAC	PXD043814	borg_ho__PXD043814__LA_SMC_silac_1a	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl	Carbamidomethyl	label-free	PXD044053	borg_ho__PXD044053__DDA_C_D_evosep_orbiexp_R06_R2_Split5	ok	tryptic	Trypsin
+None	None	None	None	None		label-free	PXD045216	borg_ho__PXD045216__EXT503_3	ok	tryptic	Trypsin
+Lys-C	TMTpro	None	TMTpro	NO_REPORT		TMTpro	PXD046211	borg_ho__PXD046211__CBIO680_1	ok	tryptic	Trypsin
+Trypsin	TMT	Trypsin	TMT	None	Carbamidomethyl	TMT	PXD046446	borg_ho__PXD046446__TDM_M2307_061	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl	Carbamidomethyl	label-free	PXD046503	borg_ho__PXD046503__EXP2_WM2664-T3KD_T3GS-his_3	ok	tryptic	Trypsin
+Trypsin	TMTpro	Trypsin	TMTpro	None	Carbamidomethyl	TMTpro	PXD048529	borg_ho__PXD048529__20201117_Lumos_PC604-Set5-MS2_TiO2_F3	ok	tryptic	Trypsin
+None	None	Trypsin	None	None	Carbamidomethyl	label-free	PXD049692	borg_ho__PXD049692__TOF01645_2_1_1687	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl		label-free	PXD052483	borg_ho__PXD052483__2019_S46_VNormant_14_FCR-2_500ng	ok	tryptic	Trypsin
+None	None	None	None	NO_REPORT	Carbamidomethyl	dimethyl	PXD052824	borg_ho__PXD052824__2012-09-28_velos_0887	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl	Carbamidomethyl	label-free	PXD053406	borg_ho__PXD053406__RK-Solanum-mock-03-F03	ok	tryptic	Trypsin
+None	label-free	None	label-free	Carbamidomethyl	Carbamidomethyl	label-free	PXD060638	borg_ho__PXD060638__JM_Bin1_1_90m_DIA_stock_1ul_Slot1-21_3-17-2022_2823	ok	tryptic	Trypsin
+None	label-free	None	label-free	NO_REPORT		label-free	PXD060724	borg_ho__PXD060724__Chymotrypsin_EThCD_WZ20spd_161224_1	ok	tryptic	Trypsin
+None	label-free	None	label-free	Carbamidomethyl	Carbamidomethyl	label-free	PXD061563	borg_ho__PXD061563__243_23_HAP1_WT_NoTID_R2_Slot2-23_1_8198	ok	tryptic	Trypsin
+None	label-free	None	label-free	Carbamidomethyl	Carbamidomethyl	label-free	PXD061636	borg_ho__PXD061636__P2024-07_Core_NKUAPharmacy_Nikolaou_20240720_11RR11LL_RIPA_heart_rep1_2_100ng_Slot1-13_1_8870	ok	tryptic	Trypsin
+None	None	None	None	None	none	label-free	PXD061893	borg_ho__PXD061893__Pl_36_S2_PNG_02	ok		
+None	None	None	None	None	Carbamidomethyl	TMTpro	PXD061926	borg_ho__PXD061926__1790151591_Hannah_TMT2_F7_20250216100520	ok	tryptic	Trypsin
+Trypsin	None	Trypsin	None	NO_REPORT	none	label-free	PXD062749	borg_ho__PXD062749__P15-2	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl	Carbamidomethyl	label-free	PXD066278	borg_ho__PXD066278__E240302_07_KL_HCT116_WT_PulldownID_inSitu_SDA_rep2_inj3	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	None	Carbamidomethyl	label-free	PXD066361	borg_ho__PXD066361__ZH11	ok	tryptic	Trypsin
+None	label-free	None	label-free	Carbamidomethyl		label-free	PXD066483	borg_ho__PXD066483__ddm1rdr2.DIA.Trypsin.B	ok	tryptic	Trypsin
+Trypsin	SILAC	Trypsin	SILAC	Carbamidomethyl		label-free	PXD066890	borg_ho__PXD066890__QEplus038766	ok	tryptic	Trypsin
+None	label-free	None	label-free	None	Carbamidomethyl	label-free	PXD068335	borg_ho__PXD068335__WT_RF_A_Slot2-4_1_3586	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl		label-free	PXD076528	borg_ho__PXD076528__7673_YB10_P116835_S00_R1	ok	tryptic	Trypsin
+None	label-free	None	label-free	Carbamidomethyl	Carbamidomethyl	label-free	PXD076863	borg_ho__PXD076863__XA06466B1DA_Vec_2_Slot2-38_1_12716	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	None	Carbamidomethyl		PXD077697	borg_ho__PXD077697__07122024_LR_AV_RGA_ga1-13_NYC_Acetic_Orca	ok	tryptic	Trypsin
+None	None	None	None	None	Carbamidomethyl	SILAC	PXD077960	borg_ho__PXD077960__CAR4815A9MA3DigestofJC-tFMC1-FHT-3-220113-SJD	ok	tryptic	Trypsin
+None	label-free	None	label-free	Carbamidomethyl	Carbamidomethyl	label-free	PXD078436	borg_ho__PXD078436__Ecoli_MG1655_tsp_3_S1-F5_1_4087	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	Nethylmaleimide	Carbamidomethyl	label-free	PXD000900	nontryptic__PXD000900__HeLa_ArgC_HCD_3	ok	nontryptic:Arg-C	Arg-C
+Glu-C	label-free	Glu-C	label-free	NO_REPORT	Carbamidomethyl	label-free	PXD000900	nontryptic__PXD000900__HeLa_GluC_HCD_1	ok	nontryptic:Glu-C	Glu-C
+Lys-C	label-free	Lys-C	label-free	NO_REPORT	Carbamidomethyl	label-free	PXD000900	nontryptic__PXD000900__HeLa_LysC_HCD_1	ok	nontryptic:Lys-C	Lys-C
+Chymotrypsin	label-free	Chymotrypsin	label-free	NO_REPORT	Carbamidomethyl	label-free	PXD000900	nontryptic__PXD000900__HeLa_chytry_HCD_3	ok	nontryptic:Chymotrypsin	Chymotrypsin
+Trypsin	label-free	Trypsin	label-free	NO_REPORT	Carbamidomethyl	label-free	PXD000900	nontryptic__PXD000900__HeLa_try_HCD_1	ok	tryptic	Trypsin
+None	None	None	None	None		label-free	PXD002198	nontryptic__PXD002198__08097	ok	nontryptic:Lys-C	Lys-C
+Lys-C	label-free	None	label-free	None		label-free	PXD012023	nontryptic__PXD012023__20170621_MS_TrpS_HipX_5mMATP_2nd_LysC	ok	nontryptic:Lys-C	Lys-C
+None	label-free	None	label-free	NO_REPORT		label-free	PXD040407	nontryptic__PXD040407__Hog1p_WT_Rep3_Chymo_5uL	ok	nontryptic:Chymotrypsin	Chymotrypsin
+unspecific cleavage	label-free	Asp-N	label-free	NO_REPORT	none	label-free	PXD051338	nontryptic__PXD051338__20220928_C29479_002_S412631_C_sample_DHFR_variant_1_Sample	ok	nontryptic:Asp-N	Asp-N
+Lys-C	label-free	None	label-free	None	Carbamidomethyl	label-free	PXD053116	nontryptic__PXD053116__Abcam_LysC_CW_X2404_281	ok	nontryptic:Lys-C	Lys-C
+None	None	None	None	None	Carbamidomethyl	label-free	PXD054186	nontryptic__PXD054186__20220120-A0664-01-TiO2-45_90ul-S4data-Gluc-4miss	ok	nontryptic:Glu-C	Glu-C
+None	label-free	Glu-C	label-free	NO_REPORT			PXD025671	nontryptic_dia__PXD025671__GluC_1_pos_B8_1_4537	ok		
+None	None	Glu-C	None	NO_REPORT			PXD025671	nontryptic_dia__PXD025671__GluC_1_pos_B8_1_4539	ok		
+None	label-free	None	label-free	NO_REPORT			PXD031516	nontryptic_dia__PXD031516__WT1	ok		
+Chymotrypsin	label-free	Chymotrypsin	label-free	NO_REPORT			PXD044821	nontryptic_dia__PXD044821__1223017205_Stephan_chymo_DIA_24mz_ST2_2	ok		
+None	None	Arg-C	None	NO_REPORT	none	label-free	PXD058289	nontryptic_dia__PXD058289__20231031_gagreda_PepMap50_ArathHistones_WT_Prep01_DIA_01	ok	nontryptic:Arg-C	Arg-C
+None	label-free	None	label-free	NO_REPORT			PXD072165	nontryptic_dia__PXD072165__01102024_P15_ChymoPrototype_insolution_DIA_sample07	ok		
+unspecific cleavage	label-free	unspecific cleavage	label-free	NO_REPORT	Carbamidomethyl	label-free	PXD004894	hla__PXD004894__20140304_EXQ6_MiBa_SA_MM3-HLAp-1	ok	nontryptic:unspecific	unspecific
+unspecific cleavage	label-free	unspecific cleavage	label-free	NO_REPORT	Carbamidomethyl	label-free	PXD004894	hla__PXD004894__20140306_EXQ6_MiBa_SA_MM3-HLAp-1	ok	nontryptic:unspecific	unspecific
+None	None	None	None	NO_REPORT	Carbamidomethyl	label-free	PXD004894	hla__PXD004894__20141225_QEp7_MiBa_SA_HLA-II-p_MM12	ok	nontryptic:unspecific	unspecific
+None	None	None	None	NO_REPORT	Carbamidomethyl	label-free	PXD004894	hla__PXD004894__20141225_QEp7_MiBa_SA_HLA-II-p_MM12_141226122233	ok	nontryptic:unspecific	unspecific
+None	label-free	None	label-free	NO_REPORT	none	label-free	PXD005704	hla__PXD005704__e000486_Raji_wt	ok	nontryptic:unspecific	unspecific
+unspecific cleavage	label-free	unspecific cleavage	label-free	NO_REPORT	Carbamidomethyl	label-free	PXD006939	hla__PXD006939__20170302_QEh1_LC2_FaMa_ChCh_SA_HLApI_RA957_1_R2	ok	nontryptic:unspecific	unspecific
+unspecific cleavage	label-free	unspecific cleavage	label-free	None	Carbamidomethyl	label-free	PXD006939	hla__PXD006939__20170302_QEh1_LC2_FaMa_ChCh_SA_HLApI_RA957_2_R2	ok	nontryptic:unspecific	unspecific
+unspecific cleavage	label-free	unspecific cleavage	label-free	NO_REPORT	Carbamidomethyl	label-free	PXD006939	hla__PXD006939__20170317_QEh1_LC2_FaMa_ChCh_SA_HLApII_CD165_1_R1	ok	nontryptic:unspecific	unspecific
+unspecific cleavage	label-free	unspecific cleavage	label-free	NO_REPORT	Carbamidomethyl	label-free	PXD006939	hla__PXD006939__20170317_QEh1_LC2_FaMa_ChCh_SA_HLApII_CD165_2_R1	ok	nontryptic:unspecific	unspecific
+unspecific cleavage	label-free	unspecific cleavage	label-free	NO_REPORT	none	label-free	PXD009752	hla__PXD009752__IP_lung_1T_060317_1	ok	nontryptic:unspecific	unspecific
+None	label-free	None	label-free	NO_REPORT	none	label-free	PXD013649	hla__PXD013649__20180309_QE_HFX_LC2_HLAIIp_CHC_SA_tumC3N02289_4_5_R1	ok	nontryptic:unspecific	unspecific
+unspecific cleavage	label-free	unspecific cleavage	label-free	NO_REPORT	none	label-free	PXD013649	hla__PXD013649__20180309_QE_HFX_LC2_HLAIIp_CHC_SA_tumC3N02289_4_5_R2	ok	nontryptic:unspecific	unspecific
+unspecific cleavage	label-free	unspecific cleavage	label-free	NO_REPORT	none	label-free	PXD013649	hla__PXD013649__20180309_QE_HFX_LC2_HLAIp_CHC_SA_tumC3N02289_4_5_R1	ok	nontryptic:unspecific	unspecific
+unspecific cleavage	label-free	unspecific cleavage	label-free	NO_REPORT	none	label-free	PXD013649	hla__PXD013649__20180309_QE_HFX_LC2_HLAIp_CHC_SA_tumC3N02289_4_5_R2	ok	nontryptic:unspecific	unspecific
+None	None	None	None	None			PXD000044	mixset__PXD000044__SILAX1_110520_X_03	ok		
+None	None	None	None	None	Carbamidomethyl	label-free	PXD000279	mixset__PXD000279__20070926_CL_Orbi2_XIC_Hela60_Ecoli10_Offgel_red_Frac16_03	ok	tryptic	Trypsin
+None	None	None	None	None	Carbamidomethyl	label-free	PXD006349	mixset__PXD006349__SD9_AH_19K_16	ok	tryptic	Trypsin
+Trypsin	iTRAQ4	Trypsin	iTRAQ4	None		label-free	PXD006679	mixset__PXD006679__Qex01777	ok	tryptic	Trypsin
+None	None	None	None	None	Carbamidomethyl	SILAC	PXD007040	mixset__PXD007040__20160709_JuDo_CFP_985_2_6	ok	tryptic	Trypsin
+None	None	None	None	Carbamidomethyl		label-free	PXD007885	mixset__PXD007885__131029_OV1_KRIS_HPI_P1_6h	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl			PXD008611	mixset__PXD008611__20160906_QLL_HM60_F3_R1	ok		
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl		label-free	PXD010700	mixset__PXD010700__Q22734_MS18-010_8	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl			PXD012772	mixset__PXD012772__20171208_SwiftJ_VM56C	ok		
+Trypsin	label-free	Trypsin	label-free	none		label-free	PXD016055	mixset__PXD016055__20170320_QE3_nLC11_MJ_RPL3-GFP_Rep1	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl		label-free	PXD016470	mixset__PXD016470__09-04-18_EcoliSpikeInSingleShot2x	ok	tryptic	Trypsin
+None	None	None	None	None	Carbamidomethyl	TMT	PXD016579	mixset__PXD016579__Shideh-PDX-GroupD-F31	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl	Carbamidomethyl	label-free	PXD017035	mixset__PXD017035__d12_12_hTT_I	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	Nethylmaleimide		label-free	PXD020401	mixset__PXD020401__20180918_Felix_ash_phag_ko3	ok	tryptic	Trypsin
+Trypsin	TMTpro	Trypsin	TMTpro	None	Carbamidomethyl	TMTpro	PXD020815	mixset__PXD020815__qb04194	ok	tryptic	Trypsin
+Trypsin	TMT	Trypsin	TMT	None		label-free	PXD027945	mixset__PXD027945__Lumos_P0605_PH_MS_PEP_R1_F8	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl	Carbamidomethyl	label-free	PXD028735	mixset__PXD028735-pure__LFQ_Orbitrap_DDA_Human_01	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl	Carbamidomethyl	label-free	PXD028735	mixset__PXD028735__LFQ_Orbitrap_DDA_Condition_B_Sample_Beta_02	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl	Carbamidomethyl	label-free	PXD033381	mixset__PXD033381__FLI06630	ok	tryptic	Trypsin
+None	None	None	None	NO_REPORT		label-free	PXD033852	mixset__PXD033852__MSB43757A	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl		label-free	PXD035449	mixset__PXD035449__IQ2160_20210817_Schumann_Anna_CO-CULTURE_G6_MCF7-BOCTAG_4T1-BOCTAG_Ac4GalNAlk6_10uM	ok	tryptic	Trypsin
+None	None	None	None	None	Carbamidomethyl	label-free	PXD035857	mixset__PXD035857__38716_2_MSPCL_0891_F2	ok	tryptic	Trypsin
+None	None	None	None	None		label-free	PXD036799	mixset__PXD036799__p001148_MDF_retry1_15plex-1	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl			PXD039576	mixset__PXD039576__20220502_E4_NEO1_Mayer_MS_group_uPAC5_SNB0050_HYE_8to1to1_30min_M9_200ng_02	ok		
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl	Carbamidomethyl	label-free	PXD041573	mixset__PXD041573__Obp3_TEV_6_R1	ok	tryptic	Trypsin
+None	None	None	None	Carbamidomethyl		label-free	PXD041711	mixset__PXD041711__20210127_005_S281136_1_Knock-out__KO_	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl			PXD042267	mixset__PXD042267__180316_31_18254_control_06_180min_11_27_HCD_OT_val45_4ul_03	ok		
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl		label-free	PXD044300	mixset__PXD044300__Exp1_E28157_1p_50uPAC13__trap9_5A-1_W3	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl			PXD045500	mixset__PXD045500-pure__20231003_E0_Neo0_FAIMS_uPAC_5cm_HT_Trap1500bar_200ngH_0ngY_iso1_rep0	ok		
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl			PXD045500	mixset__PXD045500__20231003_E0_Neo0_FAIMS_uPAC_5cm_HT_Trap1500bar_100ngH_100ngY_iso1_rep0	ok		
+Trypsin	label-free	Trypsin	label-free	None		label-free	PXD046460	mixset__PXD046460-pure__PC	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	None		label-free	PXD046460	mixset__PXD046460__LOD_T10P90_02	ok	tryptic	Trypsin
+Trypsin	label-free	Trypsin	label-free	None		label-free	PXD058521	mixset__PXD058521__0643	ok	tryptic	Trypsin
+Chymotrypsin	label-free	Chymotrypsin	label-free	NO_REPORT		label-free	PXD065430	mixset__PXD065430__MS240423-fat-yang-C	ok	tryptic	Trypsin
+Trypsin	TMT	Trypsin	TMT	None			PXD073843	mixset__PXD073843__DZ2172_proteome_Fr1	ok		
+Trypsin	label-free	Trypsin	label-free	None	Carbamidomethyl	label-free	PXD078382	mixset__PXD078382__Biotin-2	ok	tryptic	Trypsin
+None	None	None	None	None			PXD081656	mixset__PXD081656-pure__2019_br1_tr1	ok		
+None	None	None	None	None			PXD081656	mixset__PXD081656__2019_br25_tr1	ok		
+Glu-C	label-free	Glu-C	label-free	None	Carbamidomethyl	label-free	PXD004452	nontryptic_new__PXD004452__20150708_QE3_UPLC8_DBJ_QC_HELA_39frac_GluC_20	ok	nontryptic:Glu-C	Glu-C
+Chymotrypsin	label-free	Chymotrypsin	label-free	None	Carbamidomethyl	label-free	PXD004452	nontryptic_new__PXD004452__20150708_QE3_UPLC8_DBJ_QC_HELA_39frac_Chymotrypsin_20	ok	nontryptic:Chymotrypsin	Chymotrypsin
+Lys-C	label-free	Lys-C	label-free	Carbamidomethyl	Carbamidomethyl	label-free	PXD004452	nontryptic_new__PXD004452__20150708_QE3_UPLC8_DBJ_QC_HELA_39frac_LysC_20	ok	nontryptic:Lys-C	Lys-C
+Trypsin	label-free	Trypsin	label-free	Carbamidomethyl	Carbamidomethyl	label-free	PXD010154	nontryptic_new__PXD010154__01753_A01_P018442_S00_N01_R1	ok	nontryptic:Arg-C	Arg-C
+unspecific cleavage	label-free	unspecific cleavage	label-free	None	Carbamidomethyl	label-free	PXD010154	nontryptic_new__PXD010154__01753_H12_P018443_S00_N01_R1	ok	nontryptic:Asp-N	Asp-N
+None	None	None	None	None	none	label-free	PXD032010	nontryptic_new__PXD032010__20210316_NSN_L1_HNE	ok	nontryptic:unspecific	unspecific
+None	None	None	None	None	none	label-free	PXD032010	nontryptic_new__PXD032010__20210316_NSN_L1_GluC	ok	nontryptic:Glu-C	Glu-C
+Arg-C	TMT	Arg-C	TMT	None	none	TMT	PXD073683	nontryptic_new__PXD073683__20250806_ArgC_TMT_DDA_sHCD-FT_30-40-50_01	ok	nontryptic:Arg-C	Arg-C
+Chymotrypsin	label-free	Chymotrypsin	label-free	None	none	label-free	PXD073683	nontryptic_new__PXD073683__20250806_rChymo1-10_DDA_HCD-FT_01	ok	nontryptic:Chymotrypsin	Chymotrypsin
+unspecific cleavage	label-free	Asp-N	label-free	None	Carbamidomethyl	label-free	PXD068586	nontryptic_new__PXD068586__E20240820_20	ok	nontryptic:Asp-N	Asp-N

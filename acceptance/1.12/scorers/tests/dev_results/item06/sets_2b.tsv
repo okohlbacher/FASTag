@@ -1,0 +1,3 @@
+cell	clusters	spectra	base_pct	cand_pct	diff	se	p2_5	p97_5	better
+dev06:better:ion_trap:S_L3	3895	13342	2.9156	2.9381	0.0225	0.0400	-0.0580	0.0979	False
+dev06:better:qe:S_L3	4873	8254	65.7863	66.6101	0.8238	0.1777	0.4758	1.1870	True

@@ -25,7 +25,7 @@ plan's own test. Statuses are unchanged until the user decides.
 | taxdb | tax_k7.taxdb sha256 34427bba2c3ba3240805d4e5266443fcdc4708e0131eb96ea4dfbb4dda771a4f (the 1.10/1.11 index, the refs-1.10.0 gate input), with the RC nodes.dmp/names.dmp, via FASTAG_TAXONOMY_DIR=data:/scratch/kohlbach/fastag112-dev/tax |
 | Truth search | Sage v0.14.7 (data, /ceph/ibmi/abi/oliver/opt/sage-0.14.7), /ceph/ibmi/abi/oliver/jpr-bench/species/ref50.fasta sha256 2bc7295c31bcb4643a59cd0dc8fdb0a28f74d8b47989902788eaa10d2d328626 |
 | DEV scoring script | acceptance/1.12/dev/scripts/fit_species.py (b293735), sha256 4e3c85cf77695dc257a144fec51cb14167b30c6d52703c931721077bc4a894bb |
-| Held-out scoring script | not written (no held-out run while the item is NO-GO); until it is committed with its sha256, CFG-01-base is `pending_prereg` (README scoring-protocol gate) |
+| Held-out scoring script | `scorers/score_item01.py` sha256 `25f48ea2b6b6730c49cd020350a9952d7026f27e40b8264d3a41b0e5fc22cb56` (2026-11-08; section "Held-out scoring protocol" below). CFG-01-base `frozen` with it; CFG-01-cand and CFG-10-cand stay `blocked_dev_nogo` |
 
 Defaults in force: those of the RC (1.11 defaults plus #7 refuse). Decision 2 of PLAN-INTEGRATION section 8: the
 fit runs on this RC with these defaults; a later default flip of #2/#6/#9 triggers a recorded refit on DEV before
@@ -135,7 +135,7 @@ replacement, with the gate pin and the refs-1.12.0 case renewed together, waits 
 
 | Config | Options | Parameter hash | Status |
 |---|---|---|---|
-| CFG-01-base | `-extension 2 -species` (1.10.0 q-rule; species_dev.py arm base: label fixed mods, 0.3 Da on ion-trap MS2) with tax_k7.taxdb, nodes.dmp, names.dmp | d1e405fd6c1ac7f2561e2909dfc9d79667f192fa2720f9c76657efc0086db490 | pending_prereg (options frozen; held-out scorer missing) |
+| CFG-01-base | `-extension 2 -species` (1.10.0 q-rule; species_dev.py arm base: label fixed mods, 0.3 Da on ion-trap MS2) with tax_k7.taxdb, nodes.dmp, names.dmp | d1e405fd6c1ac7f2561e2909dfc9d79667f192fa2720f9c76657efc0086db490 | frozen (2026-11-08, held-out scorer below; scored only together with CFG-01-cand, which stays blocked) |
 | CFG-01-cand | CFG-01-base + `-species_call decoy -species_call_params <fitted table c556d587...> -species_deconvolve` | e939170ee78fbdc27df2461a895923f87f0fcad7f73c39871c0d5ed3e8f4aa5c | blocked_dev_nogo |
 | CFG-10-cand | CFG-01-cand + `-species_orientation both` | 93e97f05f5b0bf1648f2127425d6cacb28822e7ba5be600aedd334148b1feaca | blocked_dev_nogo |
 
@@ -161,7 +161,7 @@ Disjointness from DEV: acceptance/1.12/disjointness/item01-heldout.tsv.
 Truth: SDRF organism mapped to genus; Sage against ref50.fasta with >= 3 genus-unique peptides at 1% FDR; Sus and
 Bos count as present only when Sage supports them; genera outside the index are excluded.
 (a) observed-universe specificity: non-truth genera with o_g >= n_min; (b) hard-negative specificity: non-truth
-genera in the same family or order as a truth genus, or with pairwise overlap above TO FILL; (c) run level: the
+genera in the same family or order as a truth genus, or with pairwise overlap above a threshold (fixed below: not used); (c) run level: the
 fraction of runs with any false present, and false presents per run.
 
 ## Acceptance (#1; all must pass)
@@ -179,3 +179,56 @@ Failure keeps `-species_call` opt-in and the paper says so.
 (i) paired median true-genus count gain >= +10%; (ii) McNemar top-1, at most 1 run lost; (iii) run-level
 false-present rate no more than 2 points above forward, with #1's acceptance still met; (iv) the ratio of non-truth
 count inflation to true gain and the ambiguity-loss count are reported. No DEV tuning (no free parameter).
+
+## Held-out scoring protocol (fixed 2026-11-08, before any held-out run)
+
+This section closes the README scoring-protocol gate for #1/#10. It changes no config and no DEV result. CFG-01-base
+becomes `frozen` (options, tables and binary unchanged, param_hash `d1e405fd...`); it is scored only together with
+CFG-01-cand, so #1 stays blocked while CFG-01-cand and CFG-10-cand are `blocked_dev_nogo` (both DEV tests failed).
+
+- **Runs:** `manifests/item01-heldout.tsv` (sha256 `6b2dfe8dc55558921be7b9c54a34cea928192187834fdf0131395862c6693615`):
+  primary = `in_primary` yes (52 high-resolution runs); the 25 pseudo-DDA runs and the 3 ion-trap runs are scored
+  the same way and reported apart.
+- **FASTag per run and arm:** `fastag_bench.species.fastag_cmd` (`-extension 2 -species`), the run's label
+  `-fixed_modifications` and `-fragment_tolerance 0.3 -fragment_tolerance_unit Da` on ITMS MS2, as listed per run in
+  `scorers/truth/item01.tsv` (sha256 `be3ee235d3a17466a76180162d2e38b8e0d5b274f6bef8f05ec1d193e46f459f`; label class from `inputs/sdrf_truth_runs.tsv`,
+  else the prose-auto corpus SDRF truth, else label-free), plus the config's options (CFG-01-base none; CFG-01-cand
+  `-species_call decoy -species_call_params <fitted c556d587...> -species_deconvolve`; CFG-10-cand also
+  `-species_orientation both`), `FASTAG_TAXONOMY_DIR` = the RC taxonomy plus tax_k7.taxdb. Report:
+  `runs/<CFG>/item01-heldout/<run dir>/RC/tags.species.tsv`.
+- **Truth search per run:** Sage 0.14.7 (binary sha256 `d3820543a31bfa2a556e04f91719204ce0ac6f34dcca6670314a13df87064625`)
+  on the staged input against ref50.fasta (`2bc7295c...8626`), `fastag_bench.species.sage_species_config` settings:
+  Trypsin (KR, not before P), 2 missed cleavages, length 7-50, precursor 10 ppm, fragment 20 ppm (0.5 Da and no
+  deisotoping on ITMS MS2), isotope errors [0, 1], decoys `rev_`, static and variable modifications of the run's label
+  class (`truth/item01.tsv`; generated by `scorers/truth_config.py`, `899e387c2d08e02c371f7c1318994c0ecc3e0f208d7bce2eab740b0c25c66ec5`). FDR: target
+  peptides with spectrum and peptide q <= 0.01 (`species.sage_peptides`), length >= 5.
+- **Genus status per run** (`score_item01.statuses`): positive = an SDRF genus of the universe
+  (`bench/fastag-bench/config/species_universe.txt`) with >= 3 genus-unique Sage peptides (all proteins of the peptide
+  in one genus: ref50 header OX= -> genus via the RC's nodes.dmp/names.dmp); an SDRF genus with fewer is excluded
+  (truth unconfirmed); Sus and Bos are positive with >= 3, else negative; Oryctolagus, Ovis, Equus and Homo in a
+  non-human sample are excluded (the DEV rule); every other universe genus is negative, whatever Sage reports for it.
+- **Calls:** CFG-01-cand/CFG-10-cand `call` = present; CFG-01-base qvalue <= 0.01 (1.10.0 q-rule); baseline 1%
+  deconvolved share from CFG-01-cand's `adjusted`; Unipept 4.2.2 only if its genus table is supplied.
+- **Denominators and criteria** (CFG-01-cand on the primary runs; the plan's six, all must pass): (1) specificity (a)
+  over negatives with observed >= 5 (n_min of the chosen point), >= 0.95 and Wilson LB >= 0.90; (2) runs with any
+  false present <= 10%; (3) hard negatives = negatives in the same NCBI family or order as a positive genus of the
+  run, on the single-organism runs: false-present rate <= 0.01 + Wilson 95% half-width. **The plan's "pairwise
+  overlap" clause is not used:** the RC does not write its index overlap, so (b) is family/order only;
+  (4) sensitivity over all positives (no shares are stated) >= 0.80; (5) fully no_call runs <= 20%; (6) no positive
+  not_detected with a finite lod below its share (share 1 on single-organism runs; multi-organism runs without stated
+  shares are listed as not evaluable for (6)).
+- **#10** (CFG-10-cand vs CFG-01-cand, primary runs): (i) median over (run, positive genus) of the relative observed
+  gain >= +0.10; (ii) top-1 genus positive: runs lost <= 1 (exact McNemar p reported); (iii) run-level false-present
+  rate <= forward + 0.02 with the #1 acceptance met by CFG-10-cand; (iv) reported: non-truth observed inflation /
+  true observed gain, and positives present forward but not under both.
+- A run with a missing report or no truth makes the verdict INCONCLUSIVE.
+- **Scorer:** `scorers/score_item01.py` `25f48ea2b6b6730c49cd020350a9952d7026f27e40b8264d3a41b0e5fc22cb56` with `scorers/acclib.py`
+  `d2342eb4c15e5801d9c13f2edcd1e56cec70349c941df0db2d061bb6630eeedf`; the run commands and truth settings above are those of fastag_bench `species.py`
+  `57eaac089b1a4b8ba98c51dee8f889b20ae642b2a33a0aa1f9c2425f39d04301` (unchanged since a117801).
+  Command: `python3 -I scorers/score_item01.py acceptance/1.12 <root>/runs <root>/truth <ref50.fasta> <taxonomy dir> <out>`.
+- **DEV test (DEV outputs only):** the 47 DEV runs' frozen arms (base, g_0.01_0.01_5_on, both_g_0.01_0.01_5_on) and
+  the paper harness's Sage searches (`scorers/tests/run_dev_tests.sh`): 35 FTMS runs with truth (PXD035449_coculture
+  has no Sage search, so the DEV verdict is INCONCLUSIVE by the missing-truth rule); CFG-01-cand specificity (a)
+  0.832 (LB 0.812), false present in 34/35 runs (0.971), hard negatives 0.815, sensitivity 0.843, no_call 0.029:
+  criteria 1, 2, 3, 6 FAIL. This agrees with the DEV fit (35/36 runs, 0.972). `scorers/tests/dev_results/item01*`.
+

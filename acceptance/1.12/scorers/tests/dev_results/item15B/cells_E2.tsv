@@ -1,0 +1,4 @@
+cell	clusters	spectra	base_pct	cand_pct	diff	se	p2_5	p97_5	powered	p_one_sided	holm_alpha	holm_lb	ni
+dev15B:H1:collisional:z2	6675	13872	28.8351	28.8351	0.0000	0.0000	0.0000	0.0000	True	0.0000	0.0083	0.0000	pass
+dev15B:H1:collisional:z3	3174	7049	26.5286	26.5286	0.0000	0.0000	0.0000	0.0000	True	0.0000	0.0125	0.0000	pass
+dev15B:H1:collisional:z4+	275	698	15.6160	15.6160	0.0000	0.0000	0.0000	0.0000	True	0.0000	0.0250	0.0000	pass

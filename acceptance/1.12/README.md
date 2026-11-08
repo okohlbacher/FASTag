@@ -12,7 +12,9 @@ c4c2ad67fcd9106e474f552267f7cdfefe107f394b268bbc236308b773e4d7f3). No file under
 | `manifests/item*.tsv` | one manifest per item and split: PXD, file, PRIDE SHA-1, staged raw path and sha256, staged FASTag input and sha256, conversion, stratum, selection note |
 | `frozen-configs.tsv` | one row per item and arm: RC binary sha256, RC bundle SHA256SUMS sha256, options, tables, parameter hash, status |
 | `disjointness/` | per-file DEV overlap check per manifest, and `summary.tsv` (H2 vs H1 too) |
-| `PREREG-species-call.md`, `PREREG-chem.md` | skeletons for #1/#10 and #3: binary, tables and pre-fit hashes; the fitted tables follow after DEV |
+| `PREREG-species-call.md`, `PREREG-chem.md` | #1/#10 and #3: binary, tables, DEV fits and (2026-11-08) the held-out scoring protocol |
+| `PREREG-item02.md`, `-item06.md`, `-item07.md`, `-item09.md`, `-item15B.md` | scoring protocols of #2, #6, #7 (E7-03 as drawn), #9, #15B: truth search per run, cells and pooling, denominator, scorer sha256 |
+| `scorers/` | the held-out scorers (`score_item*.py`, `acclib.py`), truth-search configs (`truth_config.py`, `truth/*.tsv`), `strip_charge.py` (#6), `SHA256SUMS`; `tests/` runs them on DEV outputs only (`run_dev_tests.sh`, `dev_results/`) |
 | `scripts/` | selection rules (in each script's header), staging and conversion, manifest build, disjointness, registry rows |
 | `inputs/` | selection inputs and raw draw outputs; `inputs/staged/` the staging logs from node data |
 

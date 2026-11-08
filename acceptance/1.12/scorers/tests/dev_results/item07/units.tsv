@@ -1,0 +1,218 @@
+id	stratum	class	pxd	unit	must	outcome	detail
+PXD000806	nonDIA	nonDIA	PXD000806	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2033 repe
+PXD001186	nonDIA	nonDIA	PXD001186	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2086 r
+PXD001587	nonDIA	nonDIA	PXD001587	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2149 r
+PXD001774	nonDIA	nonDIA	PXD001774	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.13 over 2286 r
+PXD002411	nonDIA	nonDIA	PXD002411	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 1864 r
+PXD002429	nonDIA	nonDIA	PXD002429	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.11 over 2315 r
+PXD003643	nonDIA	nonDIA	PXD003643	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 653 re
+PXD004143	nonDIA	nonDIA	PXD004143	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2935 r
+PXD004725	nonDIA	nonDIA	PXD004725	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2708 repe
+PXD004732	nonDIA	nonDIA	PXD004732	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.35 over 1053 r
+PXD005236	nonDIA	nonDIA	PXD005236	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2055 r
+PXD006096	DIA_orbitrap	DIA	PXD006096	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=126 median_width=8
+PXD006536	nonDIA	nonDIA	PXD006536	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2092 repe
+PXD006745	nonDIA	nonDIA	PXD006745	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2462 r
+PXD006905	nonDIA	nonDIA	PXD006905	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.11 over 159 re
+PXD008579	nonDIA	nonDIA	PXD008579	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1303 r
+PXD009049	nonDIA	nonDIA	PXD009049	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.08 over 2714 r
+PXD009938	nonDIA	nonDIA	PXD009938	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2247 r
+PXD010271	nonDIA	nonDIA	PXD010271	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.03 over 2676 r
+PXD010376	nonDIA	nonDIA	PXD010376	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 2570 r
+PXD010429	nonDIA	nonDIA	PXD010429	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1855 r
+PXD010809	nonDIA	nonDIA	PXD010809	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0 over 1667 repe
+PXD010941	nonDIA	nonDIA	PXD010941	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.03 over 2213 r
+PXD011080	nonDIA	nonDIA	PXD011080	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 370 re
+PXD011848	nonDIA	nonDIA	PXD011848	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1500 r
+PXD012636	nonDIA	nonDIA	PXD012636	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1907 r
+PXD012758	nonDIA	nonDIA	PXD012758	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 2080 r
+PXD012764	nonDIA	nonDIA	PXD012764	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1559 r
+PXD014225	nonDIA	nonDIA	PXD014225	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 2363 r
+PXD014311	nonDIA	nonDIA	PXD014311	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1615 r
+PXD016112	nonDIA	nonDIA	PXD016112	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2589 r
+PXD016519	nonDIA	nonDIA	PXD016519	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2340 r
+PXD017052	nonDIA	nonDIA	PXD017052	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0 over 1990 repe
+PXD017817	nonDIA	nonDIA	PXD017817	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2590 r
+PXD018024	nonDIA	nonDIA	PXD018024	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2068 r
+PXD018027	nonDIA	nonDIA	PXD018027	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.05 over 2071 r
+PXD018332	nonDIA	nonDIA	PXD018332	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1953 r
+PXD018348	nonDIA	nonDIA	PXD018348	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.07 over 2840 r
+PXD019291	nonDIA	nonDIA	PXD019291	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2175 r
+PXD019591	nonDIA	nonDIA	PXD019591	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1878 r
+PXD019906	nonDIA	nonDIA	PXD019906	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2367 r
+PXD020394	nonDIA	nonDIA	PXD020394	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2205 repe
+PXD021394	DIA_orbitrap	DIA	PXD021394	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=32 median_width=16
+PXD023077	DIA_orbitrap	DIA	PXD023077	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=48 median_width=15
+PXD023090	nonDIA	nonDIA	PXD023090	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2492 r
+PXD024405	nonDIA	nonDIA	PXD024405	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.11 over 484 re
+PXD024661	nonDIA	nonDIA	PXD024661	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2339 repe
+PXD025560	DIA_orbitrap	DIA	PXD025560	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=36 median_width=18.7
+PXD027038	nonDIA	nonDIA	PXD027038	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 2243 r
+PXD027767	nonDIA	nonDIA	PXD027767	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2371 r
+PXD030676	nonDIA	nonDIA	PXD030676	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1803 r
+PXD031090	nonDIA	nonDIA	PXD031090	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.68 over 3744 r
+PXD032263	DIA_orbitrap	DIA	PXD032263	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=32 median_width=26
+PXD033100	nonDIA	nonDIA	PXD033100	dev	pass	passed	Acquisition check: undetermined (too few repeated precursor m/z to judge (0 repe
+PXD033162	nonDIA	nonDIA	PXD033162	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2900 r
+PXD034623	DIA_orbitrap	DIA	PXD034623	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=49 median_width=14.7
+PXD035256	nonDIA	nonDIA	PXD035256	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1840 r
+PXD035354	nonDIA	nonDIA	PXD035354	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2234 r
+PXD035815	nonDIA	nonDIA	PXD035815	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2578 r
+PXD035981	nonDIA	nonDIA	PXD035981	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 3045 r
+PXD037340	DIA_orbitrap	DIA	PXD037340	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=50 median_width=2.5
+PXD038809	nonDIA	nonDIA	PXD038809	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1701 r
+PXD041263	nonDIA	nonDIA	PXD041263	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1803 r
+PXD041747	nonDIA	nonDIA	PXD041747	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2195 repe
+PXD043057	nonDIA	nonDIA	PXD043057	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 2610 r
+PXD043214	nonDIA	nonDIA	PXD043214	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2213 repe
+PXD043707	nonDIA	nonDIA	PXD043707	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.08 over 1833 r
+PXD043814	nonDIA	nonDIA	PXD043814	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2635 r
+PXD044053	nonDIA	nonDIA	PXD044053	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2324 repe
+PXD045216	nonDIA	nonDIA	PXD045216	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1809 r
+PXD045899	DIA_orbitrap	DIA	PXD045899	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=75 median_width=8
+PXD046211	nonDIA	nonDIA	PXD046211	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2930 r
+PXD046446	nonDIA	nonDIA	PXD046446	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1948 r
+PXD046455	nonDIA	nonDIA	PXD046455	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2104 r
+PXD046503	nonDIA	nonDIA	PXD046503	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0 over 1985 repe
+PXD046634	nonDIA	nonDIA	PXD046634	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1939 r
+PXD048529	nonDIA	nonDIA	PXD048529	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 3114 r
+PXD049412	DIA_orbitrap	DIA	PXD049412	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=10 median_width=41.02
+PXD050587	nonDIA	nonDIA	PXD050587	dev	pass	passed	Acquisition check: undetermined (no MS2 spectrum with a precursor among the spec
+PXD050618	nonDIA	nonDIA	PXD050618	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 3093 r
+PXD052483	nonDIA	nonDIA	PXD052483	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 2426 r
+PXD052824	nonDIA	nonDIA	PXD052824	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1364 r
+PXD053053	nonDIA	nonDIA	PXD053053	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1347 r
+PXD053406	nonDIA	nonDIA	PXD053406	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2068 r
+PXD054073	nonDIA	nonDIA	PXD054073	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2275 repe
+PXD056915	nonDIA	nonDIA	PXD056915	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2147 repe
+PXD056930	nonDIA	nonDIA	PXD056930	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2475 repe
+PXD057432	nonDIA	nonDIA	PXD057432	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.1 over 3310 re
+PXD058770	DIA_orbitrap	DIA	PXD058770	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=47 median_width=12
+PXD059676	DIA_astral	DIA	PXD059676	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=300 median_width=2
+PXD060724	nonDIA	nonDIA	PXD060724	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2514 r
+PXD061695	nonDIA	nonDIA	PXD061695	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 2505 r
+PXD061893	nonDIA	nonDIA	PXD061893	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1617 r
+PXD061926	nonDIA	nonDIA	PXD061926	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2700 r
+PXD062749	nonDIA	nonDIA	PXD062749	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.03 over 1848 r
+PXD063917	DIA_orbitrap_charged	DIA	PXD063917	dev	refuse	passed	Acquisition check: DIA-like (the same 227 isolation windows repeat every cycle a
+PXD064675	nonDIA	nonDIA	PXD064675	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 2316 r
+PXD066108	DIA_orbitrap_charged	DIA	PXD066108	dev	refuse	passed	Acquisition check: DIA-like (the same 50 isolation windows repeat every cycle an
+PXD066278	nonDIA	nonDIA	PXD066278	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 2818 r
+PXD066361	nonDIA	nonDIA	PXD066361	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2007 repe
+PXD066483	DIA_astral	DIA	PXD066483	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=300 median_width=2
+PXD066672	DIA_astral	DIA	PXD066672	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=200 median_width=2
+PXD066890	nonDIA	nonDIA	PXD066890	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1287 r
+PXD066944	nonDIA	nonDIA	PXD066944	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2783 repe
+PXD067654	nonDIA	nonDIA	PXD067654	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.13 over 379 re
+PXD070049	nonDIA	nonDIA	PXD070049	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 544 re
+PXD071075	DIA_orbitrap_charged	DIA	PXD071075	dev	refuse	passed	Acquisition check: DIA-like (the same 8 isolation windows repeat every cycle and
+PXD071251	DIA_orbitrap	DIA	PXD071251	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=76 median_width=16
+PXD073447	DIA_astral	DIA	PXD073447	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=300 median_width=2
+PXD073687	nonDIA	nonDIA	PXD073687	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0 over 1260 repe
+PXD074582	nonDIA	nonDIA	PXD074582	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2512 r
+PXD075765	nonDIA	nonDIA	PXD075765	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2360 r
+PXD076528	nonDIA	nonDIA	PXD076528	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2558 r
+PXD077697	nonDIA	nonDIA	PXD077697	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 3563 r
+PXD077960	nonDIA	nonDIA	PXD077960	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 371 re
+PXD000266	nonDIA	nonDIA	PXD000266	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 2353 r
+PXD001473	nonDIA	nonDIA	PXD001473	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 997 re
+PXD001540	nonDIA	nonDIA	PXD001540	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.69 over 2897 r
+PXD001670	nonDIA	nonDIA	PXD001670	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 1479 r
+PXD001739	nonDIA	nonDIA	PXD001739	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 1177 r
+PXD003382	nonDIA	nonDIA	PXD003382	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.03 over 1980 r
+PXD003397	nonDIA	nonDIA	PXD003397	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.1 over 2194 re
+PXD003531	nonDIA	nonDIA	PXD003531	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1694 r
+PXD003575	nonDIA	nonDIA	PXD003575	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 2568 r
+PXD003808	nonDIA	nonDIA	PXD003808	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1965 r
+PXD004133	nonDIA	nonDIA	PXD004133	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1890 r
+PXD004541	nonDIA	nonDIA	PXD004541	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 2589 r
+PXD004644	nonDIA	nonDIA	PXD004644	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2305 r
+PXD005340	nonDIA	nonDIA	PXD005340	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.5 over 1363 re
+PXD006272	nonDIA	nonDIA	PXD006272	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2323 r
+PXD007875	nonDIA	nonDIA	PXD007875	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0 over 1909 repe
+PXD008287	nonDIA	nonDIA	PXD008287	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2192 r
+PXD009612	nonDIA	nonDIA	PXD009612	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1977 r
+PXD010744	nonDIA	nonDIA	PXD010744	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2507 r
+PXD013899	nonDIA	nonDIA	PXD013899	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2056 r
+PXD014367	nonDIA	nonDIA	PXD014367	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.03 over 1823 r
+PXD014764	nonDIA	nonDIA	PXD014764	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2574 r
+PXD014778	nonDIA	nonDIA	PXD014778	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 1916 r
+PXD015108	nonDIA	nonDIA	PXD015108	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 1549 r
+PXD015959	nonDIA	nonDIA	PXD015959	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.09 over 1329 r
+PXD016465	nonDIA	nonDIA	PXD016465	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2318 repe
+PXD023400	nonDIA	nonDIA	PXD023400	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.03 over 2068 r
+PXD024085	nonDIA	nonDIA	PXD024085	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2016 r
+PXD024702	nonDIA	nonDIA	PXD024702	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.26 over 2243 r
+PXD027712	nonDIA	nonDIA	PXD027712	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2405 repe
+PXD027795	nonDIA	nonDIA	PXD027795	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1360 r
+PXD028358	nonDIA	nonDIA	PXD028358	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1745 r
+PXD030111	nonDIA	nonDIA	PXD030111	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2034 repe
+PXD031975	nonDIA	nonDIA	PXD031975	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2671 repe
+PXD032835	nonDIA	nonDIA	PXD032835	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2369 r
+PXD034335	nonDIA	nonDIA	PXD034335	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.1 over 1745 re
+PXD036580	nonDIA	nonDIA	PXD036580	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0 over 1925 repe
+PXD037434	nonDIA	nonDIA	PXD037434	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2715 r
+PXD039269	nonDIA	nonDIA	PXD039269	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1633 r
+PXD039882	nonDIA	nonDIA	PXD039882	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.03 over 2289 r
+PXD040230	nonDIA	nonDIA	PXD040230	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 3200 r
+PXD044741	DIA_orbitrap	DIA	PXD044741	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=32 median_width=18.5
+PXD045163	nonDIA	nonDIA	PXD045163	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2915 repe
+PXD047517	nonDIA	nonDIA	PXD047517	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.37 over 2202 r
+PXD049123	DIA_orbitrap	DIA	PXD049123	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=17 median_width=40.5
+PXD049370	nonDIA	nonDIA	PXD049370	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2095 repe
+PXD050844	nonDIA	nonDIA	PXD050844	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 2120 r
+PXD055189	nonDIA	nonDIA	PXD055189	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2424 r
+PXD059369	nonDIA	nonDIA	PXD059369	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.03 over 2428 r
+PXD061649	nonDIA	nonDIA	PXD061649	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2278 r
+PXD063740	DIA_orbitrap	DIA	PXD063740	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=45 median_width=14.5
+PXD063744	DIA_orbitrap	DIA	PXD063744	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=45 median_width=14.5
+PXD065331	DIA_orbitrap	DIA	PXD065331	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=101 median_width=12
+PXD079013	nonDIA	nonDIA	PXD079013	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 3043 r
+PXD084909	nonDIA	nonDIA	PXD084909	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1909 r
+PXD033741	nonDIA	nonDIA	PXD033741	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 3205 r
+PXD049692	DIA_diapasef	DIA	PXD049692	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=24 median_width=28.99
+PXD050504	nonDIA	nonDIA	PXD050504	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.03 over 2385 r
+PXD060638	DIA_diapasef	DIA	PXD060638	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=32 median_width=26
+PXD061541	DIA_diapasef	DIA	PXD061541	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=50 median_width=13.12
+PXD061563	DIA_diapasef	DIA	PXD061563	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=50 median_width=13.12
+PXD061636	DIA_diapasef	DIA	PXD061636	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=24 median_width=40
+PXD068335	DIA_diapasef	DIA	PXD068335	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=40 median_width=30
+PXD074950	DIA_diapasef	DIA	PXD074950	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=21 median_width=25
+PXD076520	nonDIA	nonDIA	PXD076520	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 3031 r
+PXD078436	DIA_diapasef	DIA	PXD078436	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=21 median_width=25
+PXD078554	DIA_diapasef	DIA	PXD078554	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=32 median_width=26
+PXD083141	DIA_diapasef	DIA	PXD083141	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=21 median_width=25
+pseudo_PXD049692	nonDIA	nonDIA	PXD049692	dev	pass	passed	Acquisition check: pseudo-DDA (100% of the MS2 were written by a pseudo-DDA gene
+pseudo_PXD061636	nonDIA	nonDIA	PXD061636	dev	pass	passed	Acquisition check: pseudo-DDA (100% of the MS2 were written by a pseudo-DDA gene
+pseudo_PXD068335	nonDIA	nonDIA	PXD068335	dev	pass	passed	Acquisition check: pseudo-DDA (100% of the MS2 were written by a pseudo-DDA gene
+pseudo_PXD006096	nonDIA	nonDIA	PXD006096	dev	pass	passed	Acquisition check: pseudo-DDA (100% of the MS2 were written by a pseudo-DDA gene
+pseudo_PXD021394	nonDIA	nonDIA	PXD021394	dev	pass	passed	Acquisition check: pseudo-DDA (100% of the MS2 were written by a pseudo-DDA gene
+pseudo_PXD047793	nonDIA	nonDIA	PXD047793	dev	pass	passed	Acquisition check: pseudo-DDA (100% of the MS2 were written by a pseudo-DDA gene
+pseudo_PXD017703	nonDIA	nonDIA	PXD017703	dev	pass	passed	Acquisition check: pseudo-DDA (100% of the MS2 were written by a pseudo-DDA gene
+fx_astral_dia_like_mzML	DIA_fixture	DIA	astral	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=300 median_width=2
+fx_census_edge_mzML	nonDIA	nonDIA	census	dev	pass	passed	Acquisition check: undetermined (too few repeated precursor m/z to judge (0 repe
+fx_ddapasef_empty_mzML	nonDIA	nonDIA	ddapasef	dev	pass	passed	Acquisition check: undetermined (too few repeated precursor m/z to judge (2 repe
+fx_dia_like_mzML	DIA_fixture	DIA	dia	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=20 median_width=25
+fx_diapasef_split_like_mzML	DIA_fixture	DIA	diapasef	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=10 median_width=25
+fx_dia_pseudo_like_mzML	nonDIA	nonDIA	dia	dev	pass	passed	Acquisition check: pseudo-DDA (100% of the MS2 were written by a pseudo-DDA gene
+fx_dia_pseudo_repeat_like_mzML	nonDIA	nonDIA	dia	dev	pass	passed	Acquisition check: pseudo-DDA (100% of the MS2 were written by a pseudo-DDA gene
+fx_dia_shifted_target_mzML	DIA_fixture	DIA	dia	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=20 median_width=16
+fx_diatracer_like_mzML	nonDIA	nonDIA	diatracer	dev	pass	passed	Acquisition check: pseudo-DDA (100% of the MS2 were written by a pseudo-DDA gene
+fx_Ecoli_MS2_small_mzML	nonDIA	nonDIA	Ecoli	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.12 over 26 rep
+fx_prm_like_mzML	nonDIA	nonDIA	prm	dev	pass	passed	Acquisition check: PRM/targeted (the same 8 targets repeat every cycle but do no
+fx_profile_ms2_lowres_mzML	nonDIA	nonDIA	profile	dev	pass	passed	Acquisition check: undetermined (too few repeated precursor m/z to judge (0 repe
+fx_profile_ms2_paramgroup_mzML	nonDIA	nonDIA	profile	dev	pass	passed	Acquisition check: undetermined (too few repeated precursor m/z to judge (0 repe
+fx_profile_ms2_small_mzML	nonDIA	nonDIA	profile	dev	pass	passed	Acquisition check: undetermined (too few repeated precursor m/z to judge (0 repe
+fx_profile_ms2_untyped_mzML	nonDIA	nonDIA	profile	dev	pass	passed	Acquisition check: undetermined (too few repeated precursor m/z to judge (0 repe
+fx_wwa_dda_like_mzML	nonDIA	nonDIA	wwa	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.12 over 17 rep
+fx_chymo_insilico_mgf	nonDIA	nonDIA	chymo	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.06 over 33 rep
+fx_dia_nowin_like_mgf	DIA_fixture	DIA	dia	dev	refuse	refused	FASTAG_REFUSED reason=raw_dia windows=20 median_width=0
+fx_Ecoli_MS2_small_mgf	nonDIA	nonDIA	Ecoli	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.12 over 26 rep
+fx_prm_noz_like_mgf	nonDIA	nonDIA	prm	dev	pass	passed	Acquisition check: PRM/targeted (the same 40 precursor m/z repeat every cycle (n
+gate_PXD003531	nonDIA	nonDIA	PXD003531	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1694 r
+gate_PXD004541	nonDIA	nonDIA	PXD004541	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 2589 r
+gate_PXD040407	nonDIA	nonDIA	PXD040407	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1701 r
+gate_PXD014764	nonDIA	nonDIA	PXD014764	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2574 r
+gate_PXD010783	nonDIA	nonDIA	PXD010783	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.03 over 406 re
+gate_PXD003531_point	nonDIA	nonDIA	PXD003531	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1694 r
+gate_PXD003531_chunked	nonDIA	nonDIA	PXD003531	dev	pass	passed	Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1694 r

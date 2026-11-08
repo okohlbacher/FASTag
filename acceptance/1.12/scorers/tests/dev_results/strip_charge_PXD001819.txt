@@ -1,0 +1,1 @@
+dropped MS:1000041 lines 40856; MS:1000633 kept 0; sha256 ca8e552fd7b7a24e915763e80ed54b176bc7ddcff5c5c2033b1f47508f4bcd80  /scratch/kohlbach/fastag112-prereg/dev/staged/dev/PXD001819/UPS1_25000amol_R1.nocharge.mzML

@@ -1,0 +1,4 @@
+# DEV test manifest (not held-out): stand-in runs for the #9 scorer (centroided DEV runs; both arms read the same tags)
+item	split	stratum	pxd	ms2_analyser	fastag_input
+#9	H1	orbitrap_tof	PXD003531	orbitrap	dev/PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.mzML
+#9	H1	ion_trap	PXD001819	ion_trap	dev/PXD001819/UPS1_25000amol_R1.mzML

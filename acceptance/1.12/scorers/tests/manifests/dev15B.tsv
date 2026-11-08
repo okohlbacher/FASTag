@@ -1,0 +1,4 @@
+# DEV test manifest (not held-out): collisional DEV runs for the #15B scorer plumbing (Sage b/y truth in MSFragger tsv form)
+item	split	stratum	pxd	fastag_input	activation
+#15B	H1	devA	PXD003531	dev/PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.mzML	HCD
+#15B	H1	devB	PXD001819	dev/PXD001819/UPS1_25000amol_R1.mzML	CID

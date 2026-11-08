@@ -1,0 +1,4 @@
+# DEV test manifest (not held-out): #6 development runs (PXD003531; PXD001819 is a #2 DEV run) PXD003531 (Q Exactive) and PXD001819 (LTQ Orbitrap Velos, ion-trap MS2), PLAN-data-types #2 Validation data
+item	split	stratum	pxd	ms2_analyser	fastag_input
+#6	DEV	qe	PXD003531	orbitrap	dev/PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.mzML
+#6	DEV	ion_trap	PXD001819	ion_trap	dev/PXD001819/UPS1_25000amol_R1.mzML
