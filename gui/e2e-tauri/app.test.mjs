@@ -269,39 +269,25 @@ test('spectrum: a row of the Tags table opens in the Spectrum tab with its ladde
       await s.exec('const p = arguments[0]; window.fastag.pickInput = async () => p', input)
       const t0 = Date.now()
       await s.click(await s.button('Locate input…'))
-      // The ladder takes about 130 ms. On WebKitGTK the driver's click on
-      // Locate input… was seen to be lost now and then (the panel then waits
-      // for an input forever, the ladder never comes): while the panel still
-      // asks which file, the click is repeated, and counted. Any other state
-      // (Reading…, an error) is the app's and is waited on, then reported.
-      const panel = () =>
-        s.exec(`const v = document.querySelector('[data-testid=ladder-verdict]');
-          const p = document.querySelector('.sp[role=region]');
-          return { verdict: v ? v.textContent : '', asking: !!(p && p.querySelector('.empty-state')), text: p ? p.innerText.replace(/\\s+/g, ' ').slice(0, 1500) : '(no Spectrum panel)' }`)
-      let reclicks = 0
-      let asked = Date.now()
-      let last = null
+      // The ladder takes about 130 ms. A timeout says what the panel showed
+      // (it once was "Cannot read the tags: cancelled": the panel's own
+      // queries cancelled each other's view build, fixed in P5).
+      let last = ''
       const verdict = await until(
         'the ladder',
         async () => {
-          last = await panel()
-          if (last.verdict) return last.verdict
-          if (!last.asking) asked = Date.now()
-          else if (Date.now() - asked > 3000 && reclicks < 3) {
-            reclicks += 1
-            asked = Date.now()
-            const b = await s.buttonNow('Locate input…')
-            if (b) await s.click(b)
-          }
-          return ''
+          const v = await s.exec(`const v = document.querySelector('[data-testid=ladder-verdict]');
+            const p = document.querySelector('.sp[role=region]');
+            return { verdict: v ? v.textContent : '', text: p ? p.innerText.replace(/\\s+/g, ' ').slice(0, 1500) : '(no Spectrum panel)' }`)
+          last = v.text
+          return v.verdict
         },
         60000,
         100
       ).catch((e) => {
-        throw new Error(`${e.message}; after ${reclicks} repeated Locate clicks the panel shows: ${last ? last.text : '(nothing read)'}`)
+        throw new Error(`${e.message}; the panel shows: ${last}`)
       })
       gates.spectrumMs = Date.now() - t0
-      gates.spectrumLocateReclicks = reclicks
       assert.match(verdict, /^on \d+ of \d+ positions within the run's tolerance$/, verdict)
       assert.equal(await s.exec("return document.querySelector('.sp-head h2').textContent"), spectrum)
       const on = Number(/^on (\d+)/.exec(verdict)[1])
