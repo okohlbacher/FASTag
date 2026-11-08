@@ -9,6 +9,7 @@ DEV sets (from the item plans and the registry):
   #4      dev pools of proteometools_splits.tsv (pool level; peptide level via F4-12 shared identities)
   #5      PXD003531, PXD017035                                              (PLAN-handoff #5)
   #6      PXD001819, PXD003531                                              (PLAN-data-types #6)
+  #7      E7-02 development inputs and every excluded accession (inputs/e703_exclude.txt, 415 accessions)
   #9      PXD000865                                                         (PLAN-data-types #9)
   #11     F7-train pools and the #4 dev/test pools (pool level)             (PLAN-qc #11 phase C)
   #15B    PXD060724 (dev), PXD010783 (dev smoke)                            (registry E15B-02/03)
@@ -19,7 +20,7 @@ import csv, glob, os, re, sys
 A = sys.argv[1]
 def rd(p):
     with open(p) as f:
-        return list(csv.DictReader((l for l in f if not l.startswith("#")), delimiter="\t"))
+        return list(csv.DictReader((l for l in f if not l.startswith("# ")), delimiter="\t"))
 def stem(n):
     n = os.path.basename(str(n).replace("\\", "/")).lower()
     while True:
@@ -40,7 +41,9 @@ DEV = {"#1": (species_pxd, species_files), "#10": (species_pxd, species_files),
        "#2": ({"PXD076528", "PXD001819", "PXD003531", "PXD054073", "PXD000001"}, set()),
        "#3": (chem_pxd, chem_files),
        "#5": ({"PXD003531", "PXD017035"}, set()), "#6": ({"PXD001819", "PXD003531"}, set()),
-       "#9": ({"PXD000865"}, set()), "#15B": ({"PXD060724", "PXD010783"}, set()), "#17": ({"PXD003531"}, set())}
+       "#9": ({"PXD000865"}, set()),
+       "#7": ({l.strip() for l in open(f"{A}/inputs/e703_exclude.txt") if l.strip()},
+              {stem(r["run"]) for r in rd(f"{A}/inputs/e7-02-sweep.tsv")}), "#15B": ({"PXD060724", "PXD010783"}, set()), "#17": ({"PXD003531"}, set())}
 summ = []
 for m in sorted(glob.glob(f"{A}/manifests/item*.tsv")):
     name = os.path.basename(m)[:-4]

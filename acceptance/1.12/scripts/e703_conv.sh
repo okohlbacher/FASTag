@@ -37,6 +37,9 @@ one() {
       ls -d "$T"/*.d >/dev/null 2>&1 || $PY -I -m zipfile -e "$C/raw/$file" "$T" > "$C/conv/unzip.log" 2>&1
       local d=$(ls -d "$T"/*.d 2>/dev/null | head -1)
       if [ -z "$d" ]; then d=$(find "$T" -maxdepth 3 -type d -iname '*.d' | head -1); fi
+      if [ -z "$d" ] && [ -f "$T/analysis.tdf" ]; then   # archive holds the .d contents without the .d directory
+        local s0=$(basename "$file"); s0=${s0%.[Zz]ip}; s0=${s0%.d}; mkdir -p "$T/$s0.d"
+        find "$T" -mindepth 1 -maxdepth 1 ! -name "$s0.d" -exec mv {} "$T/$s0.d/" \; ; d="$T/$s0.d"; fi
       if [ -z "$d" ]; then rc=97; note="no .d directory in archive"; else
         local stem=$(basename "$d" .d); out=$C/conv/$stem.mzML
         local tdf="$d/analysis.tdf"
