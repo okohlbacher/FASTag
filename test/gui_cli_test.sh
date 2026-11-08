@@ -506,6 +506,8 @@ dest=$(awk '/install\(FILES .*data\/digest\/digest_models.tsv/ { f = 1 } f && /D
 layout() { # layout <name> <binary path inside> <digest dir inside or ''>: a copy of the binary and data
   local root="$TMP/l_$1"; mkdir -p "$root/$(dirname "$2")"
   cp "$BIN" "$root/$2"; chmod +x "$root/$2"
+  # Windows: the DLLs installed beside FASTag.exe (mimalloc.dll) go along.
+  for dll in "$(dirname "$BIN")"/*.dll; do [ -f "$dll" ] && cp "$dll" "$root/$(dirname "$2")/"; done
   if [ -n "$3" ]; then mkdir -p "$root/$3"; cp "$DIGEST"/digest_models.tsv "$DIGEST"/massgap_mods.tsv "$root/$3/"; fi
   echo "$root/$2"
 }

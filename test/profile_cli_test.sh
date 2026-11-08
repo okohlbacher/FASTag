@@ -64,7 +64,10 @@ run() { # run <name> <args...>: tags in $TMP/<name>.tsv, log in $TMP/<name>.log
   "$BIN" -out "$TMP/$n.tsv" -threads 2 "$@" > "$TMP/$n.log" 2>&1 || { cat "$TMP/$n.log" >&2; fail "run $n ($*) failed"; }
 }
 # Rows of the spectra whose native IDs are in $1 (one per line), header kept.
-rows_of() { awk -F'\t' 'NR==FNR{want[$0]=1; next} FNR==1 || ($1 in want)' "$1" "$2"; }
+# rows_of and lfcmp strip CR: on Windows FASTag writes CRLF and awk reads it
+# as LF, so a rows_of extract and a run's own TSV differ by CR alone.
+rows_of() { awk -F'\t' 'NR==FNR{want[$0]=1; next} FNR==1 || ($1 in want)' <(tr -d '\r' < "$1") <(tr -d '\r' < "$2"); }
+lfcmp() { cmp -s <(tr -d '\r' < "$1") <(tr -d '\r' < "$2"); }
 # Spectra with at least one tag.
 tagged() { awk -F'\t' 'FNR>1 && !seen[$1]++ {print $1}' "$1" | LC_ALL=C sort; }
 # rank1 <a.tsv> <b.tsv>: for every spectrum tagged in a, the lowest-E-value
@@ -129,17 +132,17 @@ cmp -s "$TMP/ecoli.tsv" "$TMP/ecoli_legacy.tsv" || fail "legacy on Ecoli differs
 rows_of "$TMP/ids4.txt" "$TMP/auto.tsv" > "$TMP/auto4.tsv"
 rows_of "$TMP/ids4.txt" "$TMP/absent.tsv" > "$TMP/legacy4.tsv"
 run unt_auto -in "$UNTYPED" -pick_profile auto
-cmp -s "$TMP/unt_auto.tsv" "$TMP/legacy4.tsv" || fail "untyped under auto without -pick_unknown_type is not legacy"
+lfcmp "$TMP/unt_auto.tsv" "$TMP/legacy4.tsv" || fail "untyped under auto without -pick_unknown_type is not legacy"
 grep -q 'centroided' "$TMP/unt_auto.log" && fail "untyped spectra were picked without -pick_unknown_type"
 run unt_flag -in "$UNTYPED" -pick_profile auto -pick_unknown_type
-cmp -s "$TMP/unt_flag.tsv" "$TMP/auto4.tsv" || fail "untyped with -pick_unknown_type differs from the typed fixture under auto"
+lfcmp "$TMP/unt_flag.tsv" "$TMP/auto4.tsv" || fail "untyped with -pick_unknown_type differs from the typed fixture under auto"
 grep -q 'mzML: centroided 4 profile spectra on read' "$TMP/unt_flag.log" || fail "untyped: the log does not report 4"
 
 # ---- 5. param group, fast reader and OnDisc; export as tagged ----------------
 run pg_fast -in "$PG" -pick_profile auto
-cmp -s "$TMP/pg_fast.tsv" "$TMP/auto4.tsv" || fail "param-group fixture under auto (fast reader) differs from the typed one"
+lfcmp "$TMP/pg_fast.tsv" "$TMP/auto4.tsv" || fail "param-group fixture under auto (fast reader) differs from the typed one"
 run pg_ondisc -in "$PG" -pick_profile auto -out_spectra "$TMP/pg_auto.mzML"
-cmp -s "$TMP/pg_ondisc.tsv" "$TMP/auto4.tsv" || fail "param-group fixture under auto (OnDisc, -out_spectra) differs"
+lfcmp "$TMP/pg_ondisc.tsv" "$TMP/auto4.tsv" || fail "param-group fixture under auto (OnDisc, -out_spectra) differs"
 n_exp=$(grep -c '<spectrum ' "$TMP/pg_auto.mzML")
 [ "$n_exp" -gt 0 ] || fail "auto -out_spectra exported nothing"
 [ "$(grep -c 'MS:1000127' "$TMP/pg_auto.mzML")" -ge "$n_exp" ] || fail "auto -out_spectra: exported spectra are not centroid"
@@ -246,9 +249,9 @@ if "$BIN" -in "$SMALL" -out "$TMP/mk.tsv" -out_spectra "$TMP/prof.mzpeak" -threa
   run mp_auto -in "$TMP/prof.mzpeak" -pick_profile auto
   run mp_off -in "$TMP/prof.mzpeak" -pick_profile off
   grep -q "mzPeak: centroided $na profile spectra on read" "$TMP/mp_legacy.log" || fail "mzPeak legacy does not centroid on read (1.11)"
-  cmp -s "$TMP/mp_legacy.tsv" "$TMP/auto_arch.tsv" || fail "mzPeak legacy tags differ from mzML auto tags"
+  lfcmp "$TMP/mp_legacy.tsv" "$TMP/auto_arch.tsv" || fail "mzPeak legacy tags differ from mzML auto tags"
   cmp -s "$TMP/mp_auto.tsv" "$TMP/mp_legacy.tsv" || fail "mzPeak auto differs from mzPeak legacy"
-  cmp -s "$TMP/mp_off.tsv" "$TMP/legacy_arch.tsv" || fail "mzPeak off differs from the unpicked mzML tags"
+  lfcmp "$TMP/mp_off.tsv" "$TMP/legacy_arch.tsv" || fail "mzPeak off differs from the unpicked mzML tags"
   grep -q 'centroided' "$TMP/mp_off.log" && fail "mzPeak off logs a centroiding line"
   # Export as tagged.
   run mpx_legacy -in "$TMP/prof.mzpeak" -out_spectra "$TMP/mpx_legacy.mzML"
