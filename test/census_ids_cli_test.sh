@@ -66,7 +66,7 @@ check_join() {  # dir want
   cmp -s "$PS" <(awk -F'\t' '$1 != "census_ids"' "$s") || fail "(a) $d: the phase-A summary rows differ"
   awk -F'\t' 'NF != 5 { exit 1 }' "$s" || fail "(a) $d: a summary line has not five fields"
   # (b) identified per native id
-  cmp -s <(sort "$want") <(awk -F'\t' -v sp=$CSP -v id=$CID 'BEGIN { OFS = "\t" } NR > 1 { print $sp, $id }' "$c" | sort) \
+  cmp -s <(tr -d '\r' < "$want" | sort) <(tr -d '\r' < "$c" | awk -F'\t' -v sp=$CSP -v id=$CID 'BEGIN { OFS = "\t" } NR > 1 { print $sp, $id }' | sort) \
     || fail "(b) $d: identified differs from the expectation"
   # (c) triage = identified 0, tagged/placed, best_evalue <= 0.01; empty for unknown
   awk -F'\t' -v t="${3:-0.01}" -v id=$CID -v tr=$CTR -v st=$CST -v be=$CBE 'NR > 1 {

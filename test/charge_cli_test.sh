@@ -44,7 +44,8 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 cp "$DB" "$TMP/db.fasta" || exit 1
 cd "$TMP" || exit 1
 DB=db.fasta
-sha() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
+# CR stripped: on Windows FASTag writes its text outputs with CRLF, as 1.11 did.
+sha() { if command -v sha256sum >/dev/null 2>&1; then tr -d '\r' < "$1" | sha256sum | cut -d' ' -f1; else tr -d '\r' < "$1" | shasum -a 256 | cut -d' ' -f1; fi; }
 mzml_masked() { tr -d '\r' < "$1" | sed -E 's/completionTime="[^"]*"//; s/<fileChecksum>[^<]*</<fileChecksum></'; }
 
 tr -d '\r' < "$MGF" | grep -v '^CHARGE=' > "$TMP/noz.mgf"
@@ -178,8 +179,8 @@ done
 # ---- header charges: never replaced -----------------------------------------
 full "$TMP/c_assume" "$MGF" -threads 2
 full "$TMP/c_infer" "$MGF" -threads 2 -unknown_charge infer
-cmp -s "$TMP/c_assume/t.digest.tsv" "$TMP/c_infer/t.digest.tsv" || fail "infer changed -digest_out on a fully charged input"
-cut -f1-12 "$TMP/c_infer/t.tsv" | cmp -s - "$TMP/c_assume/t.tsv" || fail "infer changed the tags of a fully charged input"
+cmp -s <(tr -d '\r' < "$TMP/c_assume/t.digest.tsv") <(tr -d '\r' < "$TMP/c_infer/t.digest.tsv") || fail "infer changed -digest_out on a fully charged input"
+tr -d '\r' < "$TMP/c_infer/t.tsv" | cut -f1-12 | cmp -s - <(tr -d '\r' < "$TMP/c_assume/t.tsv") || fail "infer changed the tags of a fully charged input"
 awk -F'\t' 'NR > 1 && ($14 != "header" || $16 != 1) { bad++ } END { exit bad > 0 }' "$TMP/c_infer/t.tsv" \
   || fail "infer: a charged precursor was not tagged at its header charge alone"
 tr -d '\r' < "$MGF" | awk '/^TITLE=/ { n++ } /^CHARGE=/ { sub(/^CHARGE=/, ""); sub(/\+$/, ""); print "index=" n - 1 "\t" $0 }' \

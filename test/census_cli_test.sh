@@ -153,7 +153,7 @@ for seed in 1 7; do
   grep -q "Subsampling: tagging 6 of 12 input spectra" "$d/log" || fail "(h) seed $seed: no subsampling line"
   "$HELPER" --sampled-ms2 "$E" 6 $seed > "$d/want" || fail "(h) the census_test helper failed"
   [ -s "$d/want" ] || fail "(h) seed $seed selects no MS2; pick another seed"
-  cmp -s "$d/want" <(col "$d/tags.census.tsv" 1) || fail "(h) seed $seed: rows $(col "$d/tags.census.tsv" 1 | tr '\n' ' ') are not the sampled MS2 $(tr '\n' ' ' < "$d/want")"
+  cmp -s <(tr -d '\r' < "$d/want") <(col "$d/tags.census.tsv" 1 | tr -d '\r') || fail "(h) seed $seed: rows $(col "$d/tags.census.tsv" 1 | tr '\n' ' ') are not the sampled MS2 $(tr '\n' ' ' < "$d/want")"
   check_run "$d/tags.census.tsv" "$d/tags.census_summary.tsv" "$d/tags.tsv" "$d/log" "" 1
   [ "$(summary "$d/tags.census_summary.tsv" input_spectra)" = 12 ] || fail "(h) input_spectra"
 done

@@ -511,8 +511,9 @@ layout() { # layout <name> <binary path inside> <digest dir inside or ''>: a cop
 }
 digest_in() { # digest_in <binary>: 0 when -digest_out finds the shipped models without FASTAG_DIGEST_DIR
   local b="$1" d; d=$(dirname "$b")/../run.$$; mkdir -p "$d"
-  (cd "$d" && env -u FASTAG_DIGEST_DIR "$b" -in "$IN" -out t.tsv -digest_out d.tsv -threads 2 > log 2>&1) || return 1
-  grep -q $'^run\tbackground\tshipped_human\t' "$d/d.tsv"
+  (cd "$d" && env -u FASTAG_DIGEST_DIR "$b" -in "$IN" -out t.tsv -digest_out d.tsv -threads 2 > log 2>&1) \
+    && grep -q $'^run\tbackground\tshipped_human\t' "$d/d.tsv" && return 0
+  echo "digest_in $b:" >&2; tail -5 "$d/log" >&2; head -14 "$d/d.tsv" 2>/dev/null | tail -2 >&2; return 1
 }
 B=$(layout cmake bin/FASTag "$dest"); digest_in "$B" || fail "(f) cmake --install layout (bin/ + $dest): digest data not found"
 B=$(layout flat FASTag/FASTag.bin FASTag/share-FASTag-digest); digest_in "$B" || fail "(f) flat release / Homebrew cask layout: digest data not found"

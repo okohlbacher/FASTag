@@ -149,7 +149,7 @@ check_counts() {  # label forward-tags forward-report both-report -> $TMP/<label
     [ "$b" = $((f + gain - loss)) ] || fail "recount inconsistent for $g"
     same_count "$3" "$g" "$f" "$1 forward"
     same_count "$4" "$g" "$b" "$1 both"
-  done < "$TMP/$1.recount"
+  done < <(tr -d '\r' < "$TMP/$1.recount")
 }
 # Every tag reported (-max_evalue 0, -max_tags 200): many rows, chance hits.
 check_counts all "$TMP/absent.tsv" "$TMP/absent.species.tsv" "$B"

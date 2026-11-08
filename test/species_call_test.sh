@@ -111,8 +111,8 @@ fi
 run dflt "${COMMON[@]}" -species "${TAX[@]}" -species_call decoy -threads 2 || { cat "$TMP/dflt.log" >&2; fail "-species_call decoy"; }
 cmp -s "$TMP/absent.tsv" "$TMP/dflt.tsv" || fail "-species_call decoy changed the tags"
 [ "$(fields "$TMP/dflt.species.tsv")" = 15 ] || fail "decoy report: not 15 fields on every line ($(fields "$TMP/dflt.species.tsv"))"
-cut -f1-8 "$TMP/dflt.species.tsv" > "$TMP/dflt.first8"
-cmp -s "$TMP/absent.species.tsv" "$TMP/dflt.first8" || fail "decoy report: the first 8 columns differ from the legacy report"
+tr -d '\r' < "$TMP/dflt.species.tsv" | cut -f1-8 > "$TMP/dflt.first8"
+tr -d '\r' < "$TMP/absent.species.tsv" | cmp -s - "$TMP/dflt.first8" || fail "decoy report: the first 8 columns differ from the legacy report"
 [ "$(head -1 "$TMP/dflt.species.tsv" | cut -f9-)" = "$(printf 'call\tcall_reason\tdecoy_spectra\tdecoy_expected\tdecoy_qvalue\tshare\tlod')" ] \
   || fail "decoy report: unexpected appended header: $(head -1 "$TMP/dflt.species.tsv" | cut -f9-)"
 bad=$(awk -F'\t' 'NR > 1 && !($9 == "no_call" && $10 == "few_spectra")' "$TMP/dflt.species.tsv" | wc -l | tr -d ' ')
@@ -128,7 +128,7 @@ done
 S="$TMP/call_t1.species.tsv"
 cmp -s "$S" "$TMP/call_t3.species.tsv" && cmp -s "$S" "$TMP/call_t8.species.tsv" || fail "decoy report differs between 1, 3 and 8 threads"
 [ "$(fields "$S")" = 15 ] || fail "decoy report (low floor): not 15 fields on every line"
-cut -f1-8 "$S" | cmp -s "$TMP/absent.species.tsv" - || fail "decoy report (low floor): first 8 columns differ"
+tr -d '\r' < "$S" | cut -f1-8 | cmp -s <(tr -d '\r' < "$TMP/absent.species.tsv") - || fail "decoy report (low floor): first 8 columns differ"
 [ "$(col "$S" 561 call)" = present ] || { cat "$S" >&2; fail "Escherichia is not present"; }
 c590="$(col "$S" 590 call)/$(col "$S" 590 call_reason)"
 case "$c590" in

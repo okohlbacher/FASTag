@@ -205,7 +205,7 @@ runb auto_etd "$TMP/etd_all.mzML" 2 -ion_series auto -census -census_out "$TMP/a
 [ "$(lastcol "$TMP/auto_etd.tsv")" = ion_series ] || fail "auto on etd_all: no ion_series column (last: $(lastcol "$TMP/auto_etd.tsv"))"
 [ "$(wc -l < "$TMP/auto_etd.tsv")" -gt 20 ] || fail "auto on etd_all: too few tags for a meaningful check"
 [ "$(valuesof "$TMP/auto_etd.tsv")" = cz ] || fail "auto on etd_all: rows not all cz ($(valuesof "$TMP/auto_etd.tsv"))"
-head -1 "$TMP/auto_etd.tsv" | cmp -s - <(head -1 "$TMP/base.tsv" | sed 's/$/\tion_series/') \
+head -1 "$TMP/auto_etd.tsv" | tr -d '\r' | cmp -s - <(head -1 "$TMP/base.tsv" | tr -d '\r' | sed 's/$/\tion_series/') \
   || fail "auto on etd_all: the header is not the by header plus ion_series"
 [ "$(awk -F'\t' '{ print NF }' "$TMP/auto_etd.tsv" | sort -u | wc -l)" -eq 1 ] || fail "auto on etd_all: ragged rows"
 [ "$(grep -c '^Ion series (-ion_series auto): ' "$TMP/auto_etd.err")" -eq 1 ] || fail "auto on etd_all: expected one INFO line"

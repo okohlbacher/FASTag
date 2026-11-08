@@ -57,7 +57,8 @@ fi
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/fastag-profile-test.XXXXXX") || exit 1
 trap 'rm -rf "$TMP"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
-sha() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
+# CR stripped: on Windows FASTag writes its text outputs with CRLF, as 1.11 did.
+sha() { if command -v sha256sum >/dev/null 2>&1; then tr -d '\r' < "$1" | sha256sum | cut -d' ' -f1; else tr -d '\r' < "$1" | shasum -a 256 | cut -d' ' -f1; fi; }
 run() { # run <name> <args...>: tags in $TMP/<name>.tsv, log in $TMP/<name>.log
   local n=$1; shift
   "$BIN" -out "$TMP/$n.tsv" -threads 2 "$@" > "$TMP/$n.log" 2>&1 || { cat "$TMP/$n.log" >&2; fail "run $n ($*) failed"; }
