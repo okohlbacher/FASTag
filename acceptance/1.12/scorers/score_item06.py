@@ -7,6 +7,9 @@ the staged mzML as given tagged by both arms at -tag_length 3 (cell G_L3). Truth
 (precursor_charge [1, 4], isotope_errors [-1, 3]) on the stripped copy: its PSM charge and isotope_error label each
 spectrum (target, rank 1, spectrum_q <= 0.01). Set = manifest stratum, ion_trap when the manifest's ms2_analyser is
 ion_trap (PXD001540).
+Round 3 (DECISIONS-2026-11-08 #2, PREREG-item06.md amendment 1): runs of the ion_trap set are read from the 0.5 Da
+twins <CFG>-it05 of both arms (acclib.arm_dir); manifest item06-H1-r2 (sets astral, ion_trap, qe); the
+informativeness floor acclib.INFO_FLOOR_PCT applies to every (2a) cell.
 Endpoints (PLAN-data-types #6 'A later default of infer needs'; all must hold):
   (1) charge-call accuracy >= 0.90 on S_L3: truth spectra the candidate tagged; the call is the prec_charge of the
       spectrum's selected rows (selected = 1); a spectrum with two selected charges is wrong; untagged truth spectra
@@ -96,17 +99,19 @@ def main():
         iso.update(int(x) for x in psms["isotope_error"])
         ch, cl = dict(zip(psms["key"], psms["charge"])), dict(zip(psms["key"], psms["cluster"]))
         ok = True
+        D = {arm: A.arm_dir(arm, info["set"]) for arm in (a.base, a.cand)}   # round 3: 0.5 Da twins on ion_trap
+        info["arm_dirs"] = f"{D[a.base]},{D[a.cand]}"
         for cell in S_CELLS + ["G_L3"]:
             for arm in (a.base, a.cand):
-                rc = A.run_rc(Path(a.runs) / arm / a.manifest / rel / cell)
+                rc = A.run_rc(Path(a.runs) / D[arm] / a.manifest / rel / cell)
                 info[f"{arm}:{cell}:rc"] = rc
                 ok &= rc == 0
         for cell in S_CELLS:
-            d = {arm: A.rank1_correct(Path(a.runs) / arm / a.manifest / rel / cell / "tags.tsv", psms)
+            d = {arm: A.rank1_correct(Path(a.runs) / D[arm] / a.manifest / rel / cell / "tags.tsv", psms)
                  for arm in (a.base, a.cand)}
             for k in psms["key"]:
                 recs.append((info["set"], cell, int(ch[k]), cl[k], d[a.base][k], d[a.cand][k]))
-        cdir = Path(a.runs) / a.cand / a.manifest / rel / "S_L3"
+        cdir = Path(a.runs) / D[a.cand] / a.manifest / rel / "S_L3"
         cc = charge_calls(cdir / "tags.tsv")
         for k in psms["key"]:
             if k in cc:
@@ -114,12 +119,12 @@ def main():
                 calls.append({"set": info["set"], "truth": int(ch[k]), "called": ",".join(map(str, sorted(qs))),
                               "correct": qs == {int(ch[k])}, "ambiguous": "ambiguous" in src})
         info["truth_psms"], info["cand_tagged_truth"] = len(psms), sum(1 for k in psms["key"] if k in cc)
-        pb = pflank(Path(a.runs) / a.base / a.manifest / rel / "S_L3" / "tags.tsv", psms)
+        pb = pflank(Path(a.runs) / D[a.base] / a.manifest / rel / "S_L3" / "tags.tsv", psms)
         pc = pflank(cdir / "tags.tsv", psms)
         pf += [(info["set"], cl[k], pb[k], pc[k]) for k in psms["key"]]
         info["G_L3_identical"], info["G_L3_detail"] = same_rows(
-            Path(a.runs) / a.base / a.manifest / rel / "G_L3" / "tags.tsv",
-            Path(a.runs) / a.cand / a.manifest / rel / "G_L3" / "tags.tsv")
+            Path(a.runs) / D[a.base] / a.manifest / rel / "G_L3" / "tags.tsv",
+            Path(a.runs) / D[a.cand] / a.manifest / rel / "G_L3" / "tags.tsv")
         info["status"] = "ok" if ok else "RUN_FAILED"
         runinfo.append(info)
     sets = sorted({x["set"] for x in runinfo})
@@ -132,7 +137,7 @@ def main():
             for z in ("2", "3", "4+"):
                 rr = [(c, b, k) for (st, ce, chg, c, b, k) in recs if st == s and ce == cell and A.charge_stratum(chg) == z]
                 grid.append(A.paired_diff(f"{a.manifest}:{s}:{cell}:z{z}", rr))
-    e2a = A.holm_ni(grid)
+    e2a = A.holm_ni(grid, floor=A.INFO_FLOOR_PCT)
     one = [A.paired_diff(f"{a.manifest}:{s}:{cell}:z1", [(c, b, k) for (st, ce, chg, c, b, k) in recs
                                                            if st == s and ce == cell and chg == 1])
            for s in sets for cell in S_CELLS]
@@ -149,7 +154,7 @@ def main():
     failed = [x for x in runinfo if x["status"] != "ok"]
     v = [e1, e2a, e2b, e3]
     res = {"manifest": a.manifest, "sets": sets, "e1_charge_accuracy": acc1, "e1_n": len(calls),
-           "e1_wilson": A.wilson(n_ok, len(calls)), "e1": e1, "e2a": e2a, "e2b": e2b, "e2b_need": need, "e3": e3,
+           "e1_wilson": A.wilson(n_ok, len(calls)), "info_floor_pct": A.INFO_FLOOR_PCT, "e1": e1, "e2a": e2a, "e2b": e2b, "e2b_need": need, "e3": e3,
            "errors_ambiguous_share": (sum(c["ambiguous"] for c in errs) / len(errs)) if errs else float("nan"),
            "truth2_called1": sum(1 for c in calls if c["truth"] == 2 and c["called"] == "1"),
            "sage_isotope_error": dict(sorted(iso.items())),

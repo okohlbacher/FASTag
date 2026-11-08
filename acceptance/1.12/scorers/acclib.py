@@ -19,7 +19,14 @@ Conventions used by every scorer:
     bootstrap draws (numpy default_rng, seed fixed per cell) and the normal quantile at one-sided level
     alpha_i = 0.025 / (m - r_i + 1) (Holm step-down over the m powered cells, r_i the cell's rank by its one-sided
     p-value for H0: difference <= -1.0); a cell with fewer than 200 clusters is underpowered: inconclusive, and it
-    blocks the endpoint."""
+    blocks the endpoint;
+  - informativeness floor (round 3, DECISIONS-2026-11-08 #2; #2, #6 and #9 only): a cell whose reference (baseline)
+    arm's rank-1 correct rate is below INFO_FLOOR_PCT is 'uninformative': it is not tested, never counts as a pass,
+    and makes the endpoint INCONCLUSIVE (unless another cell fails). The value was fixed from DEV ion-trap data only
+    (PXD001819 at 0.5 Da; PREREG-item02.md, amendment 1);
+  - ion-trap arms (round 3): runs of the ion_trap set are tagged with the '-it05' twin of each arm's config (the same
+    option string plus -fragment_tolerance 0.5 -fragment_tolerance_unit Da), so their run directories are
+    <runs>/<CFG>-it05/...; every other run uses <runs>/<CFG>/... (arm_dir)."""
 from __future__ import annotations
 
 import csv
@@ -45,6 +52,13 @@ NI_MARGIN = -1.0       # points, lower bound must be above
 NI_POINT = -0.5        # points, point estimate must be above
 MIN_CLUSTERS = 200
 FDR = 0.01
+INFO_FLOOR_PCT = None   # set in amendment 1 (PREREG-item02.md), from DEV ion-trap data only
+IT05_SUFFIX = "-it05"
+
+
+def arm_dir(cfg: str, set_name: str) -> str:
+    """Run-directory config of an arm: the 0.5 Da twin for the ion_trap set (round 3), else the config itself."""
+    return cfg + IT05_SUFFIX if set_name == "ion_trap" else cfg
 ND = NormalDist()
 
 
@@ -153,14 +167,21 @@ def paired_diff(name: str, records, draws: int = B_DRAWS):
     return out
 
 
-def holm_ni(cells: list[dict]):
-    """Adds to each cell dict: powered, p_one_sided, holm_alpha, holm_lb, ni ('pass'|'fail'|'inconclusive').
-    Returns the endpoint verdict: PASS (every cell powered and non-inferior), FAIL, or INCONCLUSIVE."""
-    powered = [c for c in cells if c["clusters"] >= MIN_CLUSTERS and c["se"] == c["se"]]
+def holm_ni(cells: list[dict], floor: float | None = None):
+    """Adds to each cell dict: informative, powered, p_one_sided, holm_alpha, holm_lb, ni ('pass'|'fail'|
+    'inconclusive'|'uninformative'). floor: informativeness floor in percent on the baseline arm's rank-1 correct
+    rate (None = no floor, the protocol before round 3; #15B). An uninformative cell is not tested (not in the Holm
+    family). Returns the endpoint verdict: PASS (every cell informative, powered and non-inferior), FAIL (any tested
+    cell fails), or INCONCLUSIVE."""
+    for c in cells:
+        c["floor_pct"] = float("nan") if floor is None else float(floor)
+        c["informative"] = floor is None or (c["base_pct"] == c["base_pct"] and c["base_pct"] >= floor)
+    powered = [c for c in cells if c["informative"] and c["clusters"] >= MIN_CLUSTERS and c["se"] == c["se"]]
     for c in cells:
         c["powered"] = c in powered
         if not c["powered"]:
-            c.update(p_one_sided=float("nan"), holm_alpha=float("nan"), holm_lb=float("nan"), ni="inconclusive")
+            c.update(p_one_sided=float("nan"), holm_alpha=float("nan"), holm_lb=float("nan"),
+                     ni="inconclusive" if c["informative"] else "uninformative")
     for c in powered:   # se 0 (both arms equal on every draw): the bound is the point estimate itself
         c["p_one_sided"] = (1 - ND.cdf((c["diff"] - NI_MARGIN) / c["se"]) if c["se"] > 0 else
                             0.0 if c["diff"] > NI_MARGIN else 1.0)
@@ -177,7 +198,7 @@ def holm_ni(cells: list[dict]):
         return "INCONCLUSIVE"
     if any(c["ni"] == "fail" for c in cells):
         return "FAIL"
-    if any(c["ni"] == "inconclusive" for c in cells):
+    if any(c["ni"] in ("inconclusive", "uninformative") for c in cells):
         return "INCONCLUSIVE"
     return "PASS"
 

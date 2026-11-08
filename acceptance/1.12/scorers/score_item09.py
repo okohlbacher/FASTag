@@ -8,6 +8,9 @@ PREREG-item09.md before any run. Truth: Sage on the run's centroided corpus mzML
 stored under the fastag_input's run directory as results.sage.tsv). Cells: analyser stratum (manifest stratum:
 ion_trap, orbitrap_tof) x length L3/L4/L5 (-tag_length added to both arms; CLI default profile) x Sage charge 2, 3,
 4+. Charge-1 PSMs are reported apart.
+Round 3 (DECISIONS-2026-11-08 #2, PREREG-item09.md amendment 1): the ion_trap stratum (PXD009049) is read from the
+0.5 Da twins CFG-09-base-it05 / CFG-09-cand-it05 (acclib.arm_dir in score_item02.collect), the orbitrap_tof stratum
+from CFG-09-base / CFG-09-cand; the informativeness floor acclib.INFO_FLOOR_PCT applies to every (B1) cell.
 Endpoints (PLAN-data-types #9 Validation (B); all must hold):
   (B1) non-inferiority of auto against legacy in every cell (#2 margins, acclib.holm_ni; underpowered blocks);
   (B2) no fewer tagged spectra: for every run and length, spectra with >= 1 tag row under auto >= under legacy;
@@ -57,7 +60,7 @@ def main():
             for z in ("2", "3", "4+"):
                 rr = [(c, b, k) for (st, ce, ch, c, b, k) in recs if st == s and ce == cell and A.charge_stratum(ch) == z]
                 grid.append(A.paired_diff(f"{a.manifest}:{s}:{cell}:z{z}", rr))
-    b1 = A.holm_ni(grid)
+    b1 = A.holm_ni(grid, floor=A.INFO_FLOOR_PCT)
     b2 = []
     for x in runinfo:
         for cell in CELLS:
@@ -70,7 +73,7 @@ def main():
     failed = [x for x in runinfo if x["status"] != "ok"]
     verdict = ("INCONCLUSIVE" if failed else "PASS" if (b1 == "PASS" and b2v == "PASS") else
                "FAIL" if "FAIL" in (b1, b2v) else "INCONCLUSIVE")
-    res = {"manifest": a.manifest, "runs": sorted(use), "not_evaluable": NOT_EVALUABLE, "B1": b1, "B2": b2v,
+    res = {"manifest": a.manifest, "runs": sorted(use), "not_evaluable": NOT_EVALUABLE, "B1": b1, "B2": b2v, "info_floor_pct": A.INFO_FLOOR_PCT,
            "ion_trap_failed": it_fail, "verdict": verdict + ("; ANALYSER_RESTRICTION_NEEDED" if it_fail else ""),
            "runs_not_ok": [(x["run"], x["status"]) for x in failed], "provenance": A.provenance()}
     A.write_rows(out / "cells_B1.tsv", grid)

@@ -6,6 +6,11 @@ Per run of the manifest and per cell run (L3/L4/L5 = -tag_length 3/4/5, 'default
 against the run's Sage truth (acclib conventions). Set = the manifest stratum, except that a run whose recorded MS2
 analyser (manifest column ms2_analyser) is ion_trap is scored in the ion_trap set (PXD001540, 'qe' in the plan).
 Charge stratum = the Sage PSM charge (2, 3, 4+; charge-1 PSMs are reported apart, never in a cell).
+Round 3 (DECISIONS-2026-11-08 #2, PREREG-item02.md amendment 1): runs of the ion_trap set are read from the 0.5 Da
+twins <CFG>-it05 of both arms (acclib.arm_dir), every other run from the 20 ppm configs; manifest item02-H1-r2
+(PXD001540 is stratum ion_trap there, PXD069528 is the qe run). The informativeness floor acclib.INFO_FLOOR_PCT on
+the baseline arm's rank-1 correct rate applies to every cell of (i): a cell below it is 'uninformative', is not in
+the Holm family and never counts as a pass.
 
 Endpoints (PLAN-data-types #2, Acceptance; all must hold):
   (i)  non-inferiority in every cell set x profile x length x charge (acclib.holm_ni: >= 200 peptide clusters,
@@ -51,10 +56,11 @@ def collect(acc, manifest, runs, truth, base, cand, cells, set_fn=set_of, truth_
         info["truth_psms"] = len(psms)
         ch = dict(zip(psms["key"], psms["charge"]))
         cl = dict(zip(psms["key"], psms["cluster"]))
+        info["arm_dirs"] = f"{A.arm_dir(base, info['set'])},{A.arm_dir(cand, info['set'])}"
         for cell in cells:
             d = {}
             for arm in (base, cand):
-                rd = Path(runs) / arm / manifest / rel / cell
+                rd = Path(runs) / A.arm_dir(arm, info["set"]) / manifest / rel / cell
                 rc = A.run_rc(rd)
                 info[f"{arm}:{cell}:rc"] = rc
                 info[f"{arm}:{cell}:tagged"] = A.tagged_spectra(rd / "tags.tsv")
@@ -88,7 +94,8 @@ def main():
             for z in ("2", "3", "4+"):
                 rr = [(c, b, k) for (st, ce, ch, c, b, k) in recs if st == s and ce == cell and A.charge_stratum(ch) == z]
                 grid.append(A.paired_diff(f"{a.manifest}:{s}:{cell}:z{z}", rr))
-    res["i"] = A.holm_ni(grid)
+    res["i"] = A.holm_ni(grid, floor=A.INFO_FLOOR_PCT)
+    res["info_floor_pct"] = A.INFO_FLOOR_PCT
     # charge 1, reported apart
     one = [A.paired_diff(f"{a.manifest}:{s}:{cell}:z1", [(c, b, k) for (st, ce, ch, c, b, k) in recs
                                                            if st == s and ce == cell and ch == 1])

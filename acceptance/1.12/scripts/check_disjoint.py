@@ -77,6 +77,20 @@ for item in ("item02", "item06"):
     h1 = {r["pxd"] for r in rd(f"{A}/manifests/{item}-H1.tsv")}
     h2 = {r["pxd"] for r in rd(f"{A}/manifests/{item}-H2.tsv")}
     summ.append([f"{item}-H2_vs_H1", "", str(len(h2)), str(len(h1 & h2)), "PASS" if not h1 & h2 else "FAIL"])
+# round 3 (DECISIONS-2026-11-08 #3): the PRIDE reserve H2r must repeat no PXD of H1, H1-r2 or H2; every PRIDE row
+# (H2r and the H1-r2 QE run) must be outside the 1389 accessions the project used before the draw
+# (inputs/h2r_exclude_pxd.txt, scripts/select_h2r_pride.py)
+if os.path.exists(f"{A}/manifests/item02-H2r.tsv"):
+    excl = {l.strip() for l in open(f"{A}/inputs/h2r_exclude_pxd.txt") if l.strip()}
+    for item in ("item02", "item06"):
+        h2r = {r["pxd"] for r in rd(f"{A}/manifests/{item}-H2r.tsv")}
+        for other in ("H1", "H1-r2", "H2"):
+            o = {r["pxd"] for r in rd(f"{A}/manifests/{item}-{other}.tsv")}
+            summ.append([f"{item}-H2r_vs_{other}", "", str(len(h2r)), str(len(h2r & o)), "PASS" if not h2r & o else "FAIL"])
+        pride = [r["pxd"] for m in (f"{item}-H2r", f"{item}-H1-r2") for r in rd(f"{A}/manifests/{m}.tsv")
+                 if r.get("corpus", "").startswith("PRIDE")]
+        bad = [p for p in pride if p in excl]
+        summ.append([f"{item}-PRIDE_rows_vs_used_accessions", "", str(len(pride)), str(len(bad)), "PASS" if not bad else "FAIL"])
 with open(f"{A}/disjointness/summary.tsv", "w") as o:
     o.write("manifest\titem\tfiles\tfailures\tresult\n")
     for s in summ: o.write("\t".join(s) + "\n")

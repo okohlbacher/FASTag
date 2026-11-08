@@ -1,13 +1,17 @@
 manifest	item	files	failures	result
 item01-heldout	#1	80	0	PASS
+item02-H1-r2	#2	13	0	PASS
 item02-H1	#2	12	0	PASS
 item02-H2	#2	4	0	PASS
+item02-H2r	#2	3	0	PASS
 item03-heldout	#3	179	0	PASS
 item04-test	#4	10	0	PASS
 item05-heldout	#5	5	0	PASS
 item05-negative	#5	1	0	PASS
+item06-H1-r2	#6	6	0	PASS
 item06-H1	#6	5	0	PASS
 item06-H2	#6	4	0	PASS
+item06-H2r	#6	1	0	PASS
 item07-E7-03	#7	214	0	PASS
 item09-H1	#9	4	0	PASS
 item11-f7test	#11	10	0	PASS
@@ -16,3 +20,11 @@ item15B-sets	#15B	8	0	PASS
 item17-heldout	#17	4	0	PASS
 item02-H2_vs_H1		4	0	PASS
 item06-H2_vs_H1		4	0	PASS
+item02-H2r_vs_H1		3	0	PASS
+item02-H2r_vs_H1-r2		3	0	PASS
+item02-H2r_vs_H2		3	0	PASS
+item02-PRIDE_rows_vs_used_accessions		4	0	PASS
+item06-H2r_vs_H1		1	0	PASS
+item06-H2r_vs_H1-r2		1	0	PASS
+item06-H2r_vs_H2		1	0	PASS
+item06-PRIDE_rows_vs_used_accessions		2	0	PASS

@@ -52,6 +52,7 @@ if STEP == "a":
                         input="acceptance/1.12/DECISIONS-2026-11-08.md",
                         input_sha256=sha(f"{A}/DECISIONS-2026-11-08.md"), notes=note))
 elif STEP == "b":
+    VJ = {"item02-H2r": 6471787, "item06-H2r": 6471788, "item02-H1-r2": 6471789, "item06-H1-r2": 6471790}
     M = [("HO-02-H2r", "item02-H2r", "#2 H2 reserve from PRIDE (DECISION 3, plan deviation): Astral PXD055983 (1 run, underpowered), timsTOF PXD070494, PXD081146; PXD068073 dropped. Used only as the H2 reserve rule of PREREG-item02.md says."),
          ("HO-06-H2r", "item06-H2r", "#6 H2 reserve from PRIDE (DECISION 3, plan deviation): Astral PXD055983 only (1 run, underpowered; #6 has no timsTOF class)."),
          ("HO-02-H1-r2", "item02-H1-r2", "#2 H1 revision (DECISION 3): the 12 runs of item02-H1 with PXD001540 in stratum ion_trap (ITMS CID MS2) plus PXD069528 (Q Exactive, PRIDE) as the QE cell; 13 runs. Supersedes item02-H1 for scoring."),
@@ -60,7 +61,7 @@ elif STEP == "b":
         rows.append(row(row_id=rid, kind="heldout_manifest", item=byid_item(case), case=case, pxd=pxds(case),
             input=f"acceptance/1.12/manifests/{case}.tsv (branch acceptance/1.12; files staged under data:/scratch/kohlbach/fastag-heldout-1.12 and BinAC2 $FT/heldout, sha256 per file in the manifest)",
             input_sha256=sha(f"{A}/manifests/{case}.tsv"),
-            notes=note + " Disjointness: disjointness/summary.tsv (check_disjoint.py). Not run, not scored.",
+            notes=note + f" sha256 of every FASTag input re-hashed from the staged file on node data (h2r-stage/r3_rehash.sha256, equal to the staging logs) and verified on BinAC2 against the manifest: jobs/verify-item.slurm job {VJ[case]} VERIFY_PASS. Disjointness: disjointness/summary.tsv (check_disjoint.py, PASS). Not run, not scored.",
             source="DECISIONS-2026-11-08.md; output/features-1.12/H2-reserve-proposal.md; scripts/build_r3_manifests.py"))
 else:
     import importlib.util
