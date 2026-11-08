@@ -3,7 +3,7 @@
 representation (profile MS:1000128 / centroid MS:1000127), activation and filter string of
 the first N MS2 spectra. Stops after N MS2 spectra; never reads peak arrays.
 Usage: ms2scan.py list.tsv out.tsv   (list: id<TAB>path)"""
-import sys, re
+import sys, re, os
 
 ANALYSERS = {"MS:1000484": "orbitrap", "MS:1000264": "ion_trap", "MS:1000082": "qit",
              "MS:1000291": "linear_ion_trap", "MS:1000084": "tof", "MS:1000079": "ft_icr",
@@ -11,13 +11,13 @@ ANALYSERS = {"MS:1000484": "orbitrap", "MS:1000264": "ion_trap", "MS:1000082": "
 ACT = {"MS:1000133": "CID", "MS:1000422": "HCD", "MS:1000598": "ETD", "MS:1002631": "EThcD",
        "MS:1000250": "ECD", "MS:1002472": "trap_CID", "MS:1003294": "EThcD", "MS:1002678": "supplemental_beam_CID"}
 
-def scan(path, nmax=50):
+def scan(path, nmax=int(os.environ.get('MS2SCAN_NMAX', 50))):
     model, confs, cur_conf, in_conf = "", {}, None, False
     ms2 = 0; prof = cent = 0; acts = {}; filt = ""; conf_ref = ""; spec = []; in_spec = False
     default_conf = ""
     with open(path, "r", errors="replace") as f:
         for nline, line in enumerate(f):
-            if nline > 400000: break
+            if nline > int(os.environ.get('MS2SCAN_MAXLINES', 400000)): break
             if "<referenceableParamGroup " in line: in_conf = True; cur_conf = "_group"; confs.setdefault(cur_conf, []); continue
             if "</referenceableParamGroup>" in line: in_conf = False; continue
             if "<instrumentConfiguration " in line:

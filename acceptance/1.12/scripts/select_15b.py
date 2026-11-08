@@ -14,8 +14,9 @@ Rule (fixed before drawing; no FASTag output is read):
   * the pool is sorted by accession and shuffled with random.Random('fastag-1.12:#15B'); projects are taken in
     that order; per project up to 3 raw files (Thermo .raw <= 6 GiB, E7-03 name filters; names saying ETD/EThcD
     preferred when the project has them) drawn with random.Random('fastag-1.12:#15B:<PXD>');
-  * a project is accepted only if the first drawn file's MS2 include electron activation (ETD/EThcD in the first 50
-    MS2 of its TRFP mzML); otherwise the next project is taken (recorded). Accepted projects 1-2 = H1, 3 = H2.
+  * a project is accepted only if the first drawn file has >= 500 electron-activated MS2 (ETD/EThcD over all MS2 of
+    its TRFP mzML; amended before any c/z run from 'in the first 50 MS2', see verify_15b.py); otherwise the next
+    project is taken (recorded). Accepted projects 1-2 = H1, 3 = H2.
 This script writes the ordered candidate list; stage + verification is done by verify_15b.sh.
 Usage: select_15b.py <catalog.jsonl> <exclude.txt> <e703_manifest.tsv> <pride cache> <out.tsv> [n_projects]
 """
