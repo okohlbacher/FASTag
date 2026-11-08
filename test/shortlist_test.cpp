@@ -364,7 +364,7 @@ int main()
             "a twin without evidence gets a background row");
       check(row(trows, "H3")->reason == "selected", "a selected protein stays selected");
       check(SL::keepBackgroundTwins(twins, tp, tkeep, trows) == 0, "keeping twins twice adds nothing");
-      const fs::path troot = fs::temp_directory_path() / ("fastag-sl-twins-" + std::to_string(::getpid()));
+      const fs::path troot = root / "twins";  // inside the per-run root (getpid is POSIX-only)
       fs::create_directories(troot);
       {
         std::ofstream f(troot / "db.fasta");
