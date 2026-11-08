@@ -277,7 +277,7 @@ test('spectrum: a row of the Tags table opens in the Spectrum tab with its ladde
       const panel = () =>
         s.exec(`const v = document.querySelector('[data-testid=ladder-verdict]');
           const p = document.querySelector('.sp[role=region]');
-          return { verdict: v ? v.textContent : '', asking: !!(p && p.querySelector('.empty-state')), text: p ? p.innerText.replace(/\\s+/g, ' ').slice(0, 400) : '(no Spectrum panel)' }`)
+          return { verdict: v ? v.textContent : '', asking: !!(p && p.querySelector('.empty-state')), text: p ? p.innerText.replace(/\\s+/g, ' ').slice(0, 1500) : '(no Spectrum panel)' }`)
       let reclicks = 0
       let asked = Date.now()
       let last = null
