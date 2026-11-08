@@ -3,7 +3,9 @@
 ## 1.12.0 (release candidate)
 
 All defaults are those of FASTag 1.11, with one exception (#7 below). At the
-defaults every output is the same as FASTag 1.11.0 byte for byte; every new
+defaults every output is the same as FASTag 1.11.0 byte for byte, with one
+exception: a `-label_out` report gains five appended `label_call` rows, its
+1.11 rows staying a byte prefix (#3a below; approved 2026-11-07). Every new
 option is opt-in. The options marked experimental are not validated on
 held-out data yet. The README's command-line reference describes each option.
 
