@@ -46,6 +46,7 @@
 set -u
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 IN_DIR=${GATE_NEW_IN:-/scratch/kohlbach/gate-in-1.12}
+IN_RE=$(printf '%s' "$IN_DIR" | sed 's/[][\\.*^$|]/\\&/g')  # IN_DIR as a literal sed pattern
 REFS=${GATE_NEW_REFS:-$HERE/gate-1.12/refs-dev}
 IDENT_REFS=${GATE_IDENT_REFS:-/ceph/ibmi/abi/oliver/fastag-gate/refs-1.10.0}
 THREADS=${GATE_THREADS:-32}
@@ -181,7 +182,9 @@ digest_case() { # in the case directory; $1 = exit code (as gate.sh)
       *.mzML)
         echo "mzml $f masked=$(sed -E -e 's/(name="completion time" value=")[^"]*"/\1MASKED"/' \
               -e 's/(<software id="so_dp_[^"]*" version=")[^"]*"/\1MASKED"/' "$f" | sha256sum | cut -d' ' -f1)" ;;
-      *) echo "file $f $(sha256sum "$f" | cut -d' ' -f1)" ;;
+      # The input directory is masked: -digest_out names its background FASTA
+      # by path, so the digest would otherwise depend on GATE_NEW_IN.
+      *) echo "file $f $(sed "s|$IN_RE|<GATE_NEW_IN>|g" "$f" | sha256sum | cut -d' ' -f1)" ;;
     esac
   done
   # Not compared: what picking did, for the reader of a failing diff.
