@@ -7,6 +7,13 @@
 # For each engine that is set: exit 0, at least FASTAG_SMOKE_MIN_PSMS (default
 # 1; to be fixed at 80 % of the first recorded run) target PSMs, a peptide of
 # prsA/metK/rplF among them, and the exported tolerances echoed by the engine.
+# Sage's target PSMs are counted at spectrum_q <= FASTAG_SMOKE_SAGE_Q (default
+# 0.05), not at 1 %: the fixture has 139 MS2 spectra against a 3-protein
+# database, so Sage 0.14.7 reports about 20 rank-1 targets and the smallest q
+# it can reach is 1/21 = 0.048 (first run on node data, 2026-11-08: 21 target
+# PSMs at q 0.048, all from prsA/metK/rplF; Sage's own log: "0 target
+# peptide-spectrum matches at 1% FDR"). A 1 % cut cannot pass on this fixture
+# whatever the configuration.
 # Without either engine it SKIPs (77); with FASTAG_ENGINES_REQUIRED=1 (the
 # acceptance job on node data) a missing engine FAILS.
 set -u
@@ -16,6 +23,7 @@ DATA="$3"
 IN="$FIX/Ecoli_MS2_small.mzML"
 DB="$FIX/Ecoli_shortlist.fasta"
 MIN=${FASTAG_SMOKE_MIN_PSMS:-1}
+SAGE_Q=${FASTAG_SMOKE_SAGE_Q:-0.05}
 export FASTAG_DIGEST_DIR="$DATA"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
@@ -42,12 +50,12 @@ if [ -n "${FASTAG_SAGE_BIN:-}" ]; then
   ( cd "$TMP" && "$FASTAG_SAGE_BIN" sage.json -o sage_out > sage.log 2>&1 ) || { cat "$TMP/sage.log" >&2; fail "Sage exited non-zero"; }
   R="$TMP/sage_out/results.sage.tsv"
   [ -s "$R" ] || fail "Sage wrote no results.sage.tsv"
-  n=$(awk -F'\t' 'NR == 1 { for (i = 1; i <= NF; ++i) { if ($i == "label") l = i; if ($i == "spectrum_q") q = i } next }
-                  $l == 1 && $q <= 0.01 { n++ } END { print n + 0 }' "$R")
-  [ "$n" -ge "$MIN" ] || fail "Sage: $n target PSMs at 1 % q, fewer than $MIN"
+  n=$(awk -F'\t' -v maxq="$SAGE_Q" 'NR == 1 { for (i = 1; i <= NF; ++i) { if ($i == "label") l = i; if ($i == "spectrum_q") q = i } next }
+                  $l == 1 && $q <= maxq { n++ } END { print n + 0 }' "$R")
+  [ "$n" -ge "$MIN" ] || fail "Sage: $n target PSMs at q <= $SAGE_Q, fewer than $MIN"
   grep -Eq "$KNOWN" "$R" || fail "Sage found no prsA/metK/rplF peptide"
   grep -q '"da"' "$TMP/sage_out/results.json" || fail "Sage's results.json does not echo the Da tolerances"
-  echo "Sage: $n target PSMs at 1 % q"
+  echo "Sage: $n target PSMs at q <= $SAGE_Q"
 fi
 
 if [ -n "${FASTAG_COMET_BIN:-}" ]; then

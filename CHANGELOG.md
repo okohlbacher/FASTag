@@ -70,11 +70,13 @@ held-out data yet. The README's command-line reference describes each option.
   `-search_config_out`, `-search_engine sage|comet`, `-search_config_template`,
   `-search_decoy_prefix`, `-search_precursor_tolerance` (10),
   `-search_precursor_unit` (ppm), `-search_isotope_errors` (0).
-  NOT FDR-controlled. **The Sage and Comet configurations are unverified in
-  1.12.0:** no run of Sage 0.14.7 or Comet 2026.03.0 on a FASTag-written
-  configuration has been recorded (`search_engine_smoke_test` skipped), so
-  the Comet key layout, the isotope_error mapping and the variable_mod slot
-  format are taken from the OpenMS adapters, not from the engines.
+  NOT FDR-controlled. **The Sage and Comet configurations are only
+  smoke-tested in 1.12.0:** `search_engine_smoke_test` ran Sage 0.14.7 and
+  Comet 2026.03.0 on the configuration FASTag writes for the 139-spectrum
+  E. coli fixture (both read it and report prsA/metK/rplF peptides), but no
+  engine acceptance on real data has been run (registry A5-02), so the Comet
+  key layout, the isotope_error mapping and the variable_mod slot format are
+  still taken from the OpenMS adapters, not validated against the engines.
 - **Machine interfaces for the desktop GUI:** `-probe_input <file>` (metadata
   as JSON lines) and `-dump_spectrum <nativeId>` (the peaks FASTag tags in one
   spectrum, as JSON lines). Both write no file and exit.
