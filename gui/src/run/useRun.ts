@@ -671,6 +671,8 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     shownNotes: state.jobs.find((j) => j.input === state.results?.input && j.status !== 'running')?.notes ?? [],
     jobs,
     summary,
+    // What each done batch job wrote (useBatchData), for the SDRF comparison.
+    batchData,
     outDir: state.batchOutDir,
     setOutDir,
     chooseOutDir,

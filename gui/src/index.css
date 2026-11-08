@@ -258,6 +258,17 @@ table.summary-table td.call-cell .cell-note { display: block; margin-top: 2px; f
 table.summary-table td.status { max-width: 11em; overflow: hidden; text-overflow: ellipsis; }
 table.summary-table tr.st-failed td.status { color: var(--destructive-text); }
 table.summary-table td .link { white-space: nowrap; text-align: left; }
+/* The SDRF comparison (P4): one cell per field, its state and the two values. */
+.sdrf-block { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+table.sdrf-table td { white-space: normal; vertical-align: top; min-width: 7em; max-width: 18em; }
+table.sdrf-table td .cell-note { display: block; margin-top: 2px; font-size: var(--text-xs); color: var(--muted-foreground); overflow-wrap: anywhere; }
+table.sdrf-table td.st-match, table.sdrf-table td.st-genus { color: var(--ok); }
+table.sdrf-table td.st-mismatch, table.sdrf-table td.verdict.differs { color: var(--flag-text); font-weight: 600; }
+table.sdrf-table td.st-no_call, table.sdrf-table td.st-no_sdrf, table.sdrf-table td.st-not_checkable { color: var(--muted-foreground); }
+/* A run setting that differs from the SDRF: a hint on the run's configuration, not a difference. */
+table.sdrf-table td.st-setting_differs, table.sdrf-table td.st-present_not_called { color: var(--muted-foreground); font-style: italic; }
+.sdrf-unmatched { font-size: var(--text-sm); }
+.sdrf-unmatched ul { margin: var(--space-1) 0 0; padding-left: var(--space-4); overflow-wrap: anywhere; }
 .outdir { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: var(--text-sm); }
 .outdir code { overflow-wrap: anywhere; }
 .hint.note-flag { color: var(--flag-text); }

@@ -15,6 +15,7 @@ mod outputs;
 mod progress;
 mod report;
 mod reveal;
+mod sdrf;
 mod settings;
 mod species;
 mod spectrum;
@@ -96,6 +97,8 @@ pub fn run() {
             browser::results_cancel,
             report::report_text,
             report::summary_write,
+            sdrf::sdrf_read,
+            sdrf::taxonomy_dump,
             denovo::denovo_export,
             drop::folder_spectra_list,
             species::taxdb_info,

@@ -6,6 +6,8 @@
 import { useState, type JSX } from 'react'
 import { dirName } from '../app/paths'
 import { folderPath } from './batch'
+import type { SdrfComparison } from '../sdrf/compare'
+import { samePath } from '../sdrf/SdrfPanel'
 import { COLUMN_LABEL, majorityWords, MIN_CALLS, SUMMARY_COLUMNS, summaryTsv, type Summary } from './batchSummary'
 
 export interface SummaryTableProps {
@@ -15,24 +17,46 @@ export interface SummaryTableProps {
   outDir: string | null
   // A done job's results, in Results.
   onShow(input: string): void
+  // The SDRF comparison (P4), when an SDRF is loaded: an SDRF column with
+  // each job's verdict (the SDRF panel has the fields).
+  sdrf?: SdrfComparison | null
+  // The files the export must never write (the loaded SDRF, App's list):
+  // refused here and passed to the backend, which refuses them too.
+  protect?: string[]
 }
 
 const count = (n: number | null): string => (n == null ? '—' : n.toLocaleString('en-US'))
 
-export default function SummaryTable({ summary, busy, outDir, onShow }: SummaryTableProps): JSX.Element {
+// A job's SDRF verdict (sdrf/compare.ts): ✗ and the fields that differ.
+function SdrfCell({ v }: { v: SdrfComparison['jobs'][number]['verdict'] | undefined }): JSX.Element {
+  const text = v?.text ?? '—'
+  const bad = v?.state === 'checked' && v.mismatches.length > 0
+  return (
+    <td data-text={text} className={`call-cell ${bad ? 'differs' : v?.state === 'checked' ? 'called' : 'muted'}`}>
+      {text}
+    </td>
+  )
+}
+
+export default function SummaryTable({ summary, busy, outDir, onShow, sdrf, protect = [] }: SummaryTableProps): JSX.Element {
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null)
   // Each cell's cutoff or caveat: always in the cell's text for a screen
   // reader, shown under its value on request (they make rows tall).
   const [showNotes, setShowNotes] = useState(false)
   const { rows } = summary
+  const verdict = new Map(sdrf?.jobs.map((j) => [j.input, j.verdict]) ?? [])
 
   async function exportTsv(): Promise<void> {
     setNote(null)
     const dir = outDir ? folderPath(outDir) : rows[0] ? dirName(rows[0].input) : ''
     const dest = await window.fastag.saveFile(`${dir}batch-summary.tsv`, ['tsv'])
     if (!dest) return
+    if (protect.some((p) => samePath(dest, p))) {
+      setNote({ ok: false, text: `Not written: ${dest} is the loaded SDRF, which is never changed. Choose another name for the summary.` })
+      return
+    }
     try {
-      await window.fastag.writeSummary(dest, summaryTsv(summary))
+      await window.fastag.writeSummary(dest, summaryTsv(summary), protect.length ? protect : undefined)
       setNote({ ok: true, text: `Summary of ${rows.length} ${rows.length === 1 ? 'job' : 'jobs'} written to ${dest}.` })
     } catch (e) {
       setNote({ ok: false, text: `Could not write the summary: ${e instanceof Error ? e.message : String(e)}` })
@@ -68,6 +92,7 @@ export default function SummaryTable({ summary, busy, outDir, onShow }: SummaryT
                   {COLUMN_LABEL[k]}
                 </th>
               ))}
+              {sdrf && <th scope="col">SDRF</th>}
             </tr>
           </thead>
           <tbody>
@@ -112,6 +137,7 @@ export default function SummaryTable({ summary, busy, outDir, onShow }: SummaryT
                     </td>
                   )
                 })}
+                {sdrf && <SdrfCell v={verdict.get(r.input)} />}
               </tr>
             ))}
           </tbody>
@@ -123,6 +149,7 @@ export default function SummaryTable({ summary, busy, outDir, onShow }: SummaryT
               {SUMMARY_COLUMNS.map((k) => (
                 <td key={k}>{majorityWords(summary.majority[k])}</td>
               ))}
+              {sdrf && <td />}
             </tr>
           </tfoot>
         </table>

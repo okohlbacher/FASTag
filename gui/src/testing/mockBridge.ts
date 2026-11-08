@@ -31,7 +31,8 @@ import type {
   SpeciesReport,
   SpectrumDump,
   SpectrumSupport,
-  TaxdbInfo
+  TaxdbInfo,
+  TaxonomyDump
 } from '../types'
 import runStartedFixture from './fixtures/run-started.json'
 import { tagsToDenovo } from '../export/denovo'
@@ -71,7 +72,18 @@ export interface MockBridge extends FastagApi {
   folderSpectraCalls: string[]
   // writeSummary() calls; summaryWriteError: the next writes reject.
   summaryWrites: { dest: string; text: string }[]
+  // The protect list of each writeSummary() call (undefined: none).
+  summaryProtect: (string[] | undefined)[]
   summaryWriteError: string | null
+  // pickSdrf() answers nextPickSdrf; sdrfRead() serves sdrfFiles (a path
+  // not named there rejects as missing); taxonomyDump() answers
+  // taxonomyResult (or rejects with taxonomyError) and records its calls.
+  nextPickSdrf: string | null
+  sdrfFiles: Record<string, Uint8Array>
+  sdrfReadCalls: string[]
+  taxonomyResult: TaxonomyDump | null
+  taxonomyError: string | null
+  taxonomyCalls: { nodes?: string; names?: string }[]
   // path -> report text; a missing path reads as "not written".
   reportFiles: Record<string, string>
   reportCalls: string[]
@@ -303,7 +315,14 @@ export function installMockBridge(): MockBridge {
     folderFiles: {},
     folderSpectraCalls: [],
     summaryWrites: [],
+    summaryProtect: [],
     summaryWriteError: null,
+    nextPickSdrf: null,
+    sdrfFiles: {},
+    sdrfReadCalls: [],
+    taxonomyResult: null,
+    taxonomyError: null,
+    taxonomyCalls: [],
     reportFiles: {},
     reportCalls: [],
     resultsColumns: ['spectrum', 'tag', 'length', 'evalue', 'fasta_hit'],
@@ -461,10 +480,23 @@ export function installMockBridge(): MockBridge {
       const f = mock.folderFiles[dir]
       return f ? Promise.resolve(f.slice()) : Promise.reject(new Error(`${dir} is not a folder`))
     },
-    writeSummary: (dest, text) => {
+    writeSummary: (dest, text, protect) => {
+      mock.summaryProtect.push(protect)
       if (mock.summaryWriteError) return Promise.reject(new Error(mock.summaryWriteError))
+      // As report.rs write_summary: never over a protected file (the SDRF).
+      if (protect?.includes(dest)) return Promise.reject(new Error(`cannot write ${dest}: it is the loaded SDRF, which is never written`))
       mock.summaryWrites.push({ dest, text })
       return Promise.resolve()
+    },
+    pickSdrf: () => Promise.resolve(mock.nextPickSdrf),
+    sdrfRead: (path) => {
+      mock.sdrfReadCalls.push(path)
+      const b = mock.sdrfFiles[path]
+      return b ? Promise.resolve(b.slice()) : Promise.reject(new Error(`${path} does not exist`))
+    },
+    taxonomyDump: (nodes, names) => {
+      mock.taxonomyCalls.push({ nodes, names })
+      return mock.taxonomyError ? Promise.reject(new Error(mock.taxonomyError)) : Promise.resolve(mock.taxonomyResult)
     },
     report: (path) => {
       mock.reportCalls.push(path)

@@ -68,6 +68,8 @@ describe('planDrop', () => {
   it('an SDRF lands on Batch with a note; unknown files are named', () => {
     const p = planDrop(route({ sdrf: '/d/p.sdrf.tsv', ignored: ['/d/readme.txt'] }), { busy: false })
     expect(p.view).toBe('batch')
+    // P4: the SDRF is loaded for the comparison, and the note says so.
+    expect(p.sdrf).toBe('/d/p.sdrf.tsv')
     expect(p.notes.join(' ')).toMatch(/p\.sdrf\.tsv/)
     expect(p.notes.join(' ')).toMatch(/readme\.txt/)
   })

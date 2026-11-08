@@ -36,20 +36,28 @@ fn read_taxdb_info(path: &str) -> Option<TaxdbInfo> {
     Some(TaxdbInfo { path: path.to_string(), k })
 }
 
-// The same search order the CLI uses (taxonomyDir_ in FASTag.cpp), so the GUI
-// reports on the index the run will actually load.
-fn bundled_taxdb(app: &AppHandle) -> Option<String> {
+/// The taxonomy folders the CLI searches, in its order (taxonomyDir_ in
+/// FASTag.cpp): the one run() hands the child (the user's, else the bundled
+/// one), then the install and tarball layouts next to the binary. The index
+/// and the nodes.dmp and names.dmp dumps (sdrf.rs) are looked up here.
+pub(crate) fn taxonomy_dirs(app: &AppHandle) -> Vec<PathBuf> {
     let r = crate::fastag::resolve_binary(app);
-    let bin_dir = r.bin.parent()?;
     let mut dirs: Vec<PathBuf> = Vec::new();
-    // The directory run() hands the child (the user's, else the bundled one).
     if let Some(t) = crate::fastag::taxonomy_dir(&r) {
         dirs.push(t);
     }
-    dirs.push(bin_dir.join("..").join("share").join("FASTag").join("taxonomy"));
-    dirs.push(bin_dir.join("share-FASTag-taxonomy"));
-    dirs.push(bin_dir.join("taxonomy"));
-    for d in dirs {
+    if let Some(bin_dir) = r.bin.parent() {
+        dirs.push(bin_dir.join("..").join("share").join("FASTag").join("taxonomy"));
+        dirs.push(bin_dir.join("share-FASTag-taxonomy"));
+        dirs.push(bin_dir.join("taxonomy"));
+    }
+    dirs
+}
+
+// The same search order the CLI uses (taxonomyDir_ in FASTag.cpp), so the GUI
+// reports on the index the run will actually load.
+fn bundled_taxdb(app: &AppHandle) -> Option<String> {
+    for d in taxonomy_dirs(app) {
         let p = d.join("tax_k7.taxdb");
         if p.exists() {
             return Some(p.display().to_string());

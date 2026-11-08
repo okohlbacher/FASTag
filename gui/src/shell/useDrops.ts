@@ -19,6 +19,8 @@ export interface DropInputs {
   session: Pick<Session, 'setValues' | 'setOpenGroups'>
   run: Pick<RunState, 'addBatchPaths' | 'openResultsPath' | 'openReportPaths' | 'openSpeciesPath'>
   setView(v: View): void
+  // A dropped SDRF is loaded for the Batch view's comparison (P4).
+  loadSdrf(path: string): Promise<void>
 }
 
 export function useDrops(d: DropInputs): { dragOver: boolean; dropNote: string | null; dismissNote(): void } {
@@ -40,6 +42,7 @@ export function useDrops(d: DropInputs): { dragOver: boolean; dropNote: string |
     if (plan.results) void d.run.openResultsPath(plan.results)
     if (plan.reports.length) void d.run.openReportPaths(plan.reports)
     if (plan.species) void d.run.openSpeciesPath(plan.species)
+    if (plan.sdrf) void d.loadSdrf(plan.sdrf)
     if (plan.view) d.setView(plan.view)
     setDropNote(plan.notes.length ? plan.notes.join(' ') : null)
   }

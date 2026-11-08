@@ -205,7 +205,7 @@ window has four views, switched from the top bar or with Cmd/Ctrl+1..4:
 **Setup**, **Results**, **Batch** and **History** (every recorded run, with
 its exact command line to copy, its settings to load back into Setup, and a
 Re-run of the same command line); a
-progress pill in the top bar follows the run from any view, and a finished
+progress pill in the top bar follows the run from any view (the Batch view compares a batch with its SDRF: organism by NCBI taxid, protease, label, modifications, instrument and tolerance, with a corrections TSV), and a finished
 run in the background raises a system notification. Spectra, FASTA,
 taxonomy, tags and report files can be dropped anywhere on the window. A
 built-in **Help** side panel (F1, or the Help button), with a search, covers
