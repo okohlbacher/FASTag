@@ -117,7 +117,12 @@ CFG-03-base's earlier row (37c1ff84..., "frozen") named no tagging options; it w
 this row, which fixes them. Baselines: the majority class on the held-out set (protease, label) and always-CAM
 (alkylation).
 
-## Held-out set (registry HO-03-heldout; manifest acceptance/1.12/manifests/item03-heldout.tsv)
+## Held-out set (registry HO-03-heldout-r2, which supersedes HO-03-heldout; manifest acceptance/1.12/manifests/item03-heldout.tsv)
+
+Registry note (2026-11-08 audit): HO-03-heldout still names the replaced configs (CFG-03-base 37c1ff84... as
+"frozen", CFG-03-cand 9c04f9c1... as "pending_dev_fit"). It stays in place as history; HO-03-heldout-r2 records
+the current hashes above (both pending_scorer) and the fitted table sha256s, and HO-03-heldout-SUPERSEDED marks the
+old row. `scripts/check_registry.py` passes on the registry.
 
 Mined by acceptance/1.12/scripts/mine_bigbio.py and select_chem.py (rules in their headers) from
 bigbio/sdrf-annotated-datasets 452596762d38f46924b5719aae9969c467c7fa17, PXDs outside the 234 DEV PXDs, the

@@ -7,6 +7,10 @@ p = 6.7e-41, and the best grid point has a false present in 35 of 36 FTMS runs).
 therefore `blocked_dev_nogo`: HO-01-heldout and HO-10-heldout must not be scored until the user decides. Nothing
 was relaxed. Each config is still scored at most once on the held-out set; nothing is tuned on held-out data.
 
+**Deviation from the plan's go/no-go test (recorded 2026-11-08, after the audit; user decision open).** See
+section "Deviation: all-decoy check" below. The NO-GO rests on a stand-in for the plan's KS criterion, not on the
+plan's own test. Statuses are unchanged until the user decides.
+
 ## Frozen software
 
 | What | Value |
@@ -21,11 +25,37 @@ was relaxed. Each config is still scored at most once on the held-out set; nothi
 | taxdb | tax_k7.taxdb sha256 34427bba2c3ba3240805d4e5266443fcdc4708e0131eb96ea4dfbb4dda771a4f (the 1.10/1.11 index, the refs-1.10.0 gate input), with the RC nodes.dmp/names.dmp, via FASTAG_TAXONOMY_DIR=data:/scratch/kohlbach/fastag112-dev/tax |
 | Truth search | Sage v0.14.7 (data, /ceph/ibmi/abi/oliver/opt/sage-0.14.7), /ceph/ibmi/abi/oliver/jpr-bench/species/ref50.fasta sha256 2bc7295c31bcb4643a59cd0dc8fdb0a28f74d8b47989902788eaa10d2d328626 |
 | DEV scoring script | acceptance/1.12/dev/scripts/fit_species.py (b293735), sha256 4e3c85cf77695dc257a144fec51cb14167b30c6d52703c931721077bc4a894bb |
-| Held-out scoring script | not written (no held-out run while the item is NO-GO) |
+| Held-out scoring script | not written (no held-out run while the item is NO-GO); until it is committed with its sha256, CFG-01-base is `pending_prereg` (README scoring-protocol gate) |
 
 Defaults in force: those of the RC (1.11 defaults plus #7 refuse). Decision 2 of PLAN-INTEGRATION section 8: the
 fit runs on this RC with these defaults; a later default flip of #2/#6/#9 triggers a recorded refit on DEV before
 any #1/#3 default flip (not before their held-out evaluation).
+
+## Deviation: all-decoy check (user decision open)
+
+The plan (PLAN-organism-chemistry #1, "Pre-freeze go/no-go on DEV") requires: "an all-decoy run (decoys treated
+as targets) must give empirical p roughly uniform (KS test, p > 0.01) before any held-out run". That is a test of
+the call's own reported p-values (spill term included) on a run where every hit is a decoy.
+
+`dev/scripts/fit_species.py` (committed in b293735 before any DEV run, sha256 4e3c85cf...) tests something
+narrower: decoy replicate 6 alone (o' = decoy_spectra(ks6) - decoy_spectra of the 5-decoy arm) against a Poisson
+with lambda = (d_g + 0.5)/5, by a randomised PIT (random.Random(112)), KS against U(0,1). That checks whether the
+Poisson model of the random-hit part fits the decoy replicates; it does not check whether the reported p/q values
+are calibrated. The test was fixed before the results, so it was not chosen from them, but calling its result
+"the pre-registered DEV go/no-go" overstates it.
+
+Result of the stand-in (re-run from the raw species.tsv outputs in the audit; fit.json, grid.tsv, lopo_cv.tsv and
+training_runs.tsv byte-identical): n = 1760 genus rows of 36 FTMS runs, D = 0.1622, p = 6.7e-41: FAIL. Reported
+next to it either way: at the chosen point g_0.01_0.01_5_on, 35 of 36 FTMS DEV runs (0.972) have a false present
+(7.69 per run), against the held-out target of at most 10% of runs.
+
+Options for the user:
+1. accept the Poisson-replicate test as the #1 go/no-go (the NO-GO stands as recorded); or
+2. run the plan's all-decoy run on DEV with the RC (decoys treated as targets, KS on its reported p-values) before
+   #1 is closed, and decide on that result.
+
+Until the user decides, CFG-01-cand and CFG-10-cand stay `blocked_dev_nogo` and HO-01-heldout / HO-10-heldout stay
+unscored. The DEV false-present rate already misses the held-out target by a wide margin under either test.
 
 ## DEV (in-sample)
 
@@ -70,7 +100,7 @@ replacement, with the gate pin and the refs-1.12.0 case renewed together, waits 
 
 | Config | Options | Parameter hash | Status |
 |---|---|---|---|
-| CFG-01-base | `-extension 2 -species` (1.10.0 q-rule; species_dev.py arm base: label fixed mods, 0.3 Da on ion-trap MS2) with tax_k7.taxdb, nodes.dmp, names.dmp | d1e405fd6c1ac7f2561e2909dfc9d79667f192fa2720f9c76657efc0086db490 | frozen |
+| CFG-01-base | `-extension 2 -species` (1.10.0 q-rule; species_dev.py arm base: label fixed mods, 0.3 Da on ion-trap MS2) with tax_k7.taxdb, nodes.dmp, names.dmp | d1e405fd6c1ac7f2561e2909dfc9d79667f192fa2720f9c76657efc0086db490 | pending_prereg (options frozen; held-out scorer missing) |
 | CFG-01-cand | CFG-01-base + `-species_call decoy -species_call_params <fitted table c556d587...> -species_deconvolve` | e939170ee78fbdc27df2461a895923f87f0fcad7f73c39871c0d5ed3e8f4aa5c | blocked_dev_nogo |
 | CFG-10-cand | CFG-01-cand + `-species_orientation both` | 93e97f05f5b0bf1648f2127425d6cacb28822e7ba5be600aedd334148b1feaca | blocked_dev_nogo |
 

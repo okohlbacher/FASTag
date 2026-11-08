@@ -27,13 +27,31 @@ The RC bundle (opt/ and data/ of a117801) is at `data:/scratch/kohlbach/fastag-h
     python3 -I scripts/select_corpus.py inputs manifests
     python3 -I scripts/build_manifests.py .
     python3 -I scripts/check_disjoint.py .
-    python3 -I scripts/registry_rows.py . validation-registry.tsv HO-...
+    python3 -I scripts/registry_rows.py . validation-registry.tsv HO-...   # only for rows not yet committed
+    python3 -I scripts/check_registry.py .                                # registry vs frozen-configs and manifests
+
+Once a row is committed it is not rewritten: later changes are appended as new rows (`-r2`, `-PREREG`,
+`-SUPERSEDED`, `-NOTRUN`; `scripts/append_status_rows.py` wrote the 2026-11-08 ones).
 
 ## Rules that bind the runs
 
 Each manifest row is in the registry and committed before its run; each frozen config is scored exactly once;
 never re-scored after seeing results; never tuned on held-out data. A config whose status in
 `frozen-configs.tsv` is not `frozen` cannot be scored until its open part is closed and committed.
+
+Scoring-protocol gate (amended 2026-11-08, after the audit): freezing the option string and the binary is not
+enough. A config may be run on held-out data only when a committed PREREG file for its item
+(`PREREG-item<NN>.md`; for #1/#10 `PREREG-species-call.md`, for #3 `PREREG-chem.md`) fixes all of:
+
+- the truth search per run: engine and version, database (path and sha256), fixed and variable modifications,
+  precursor and fragment tolerances, FDR level;
+- the cells and how they are pooled (including any bootstrap or multiplicity correction);
+- the denominator (which spectra, peptides, runs or genera count, and which are excluded);
+- the scorer script, committed, with its sha256.
+
+Until then the config's status is `pending_prereg`; it becomes `frozen` only in the commit that adds the PREREG
+file. `python3 -I scripts/check_registry.py .` must pass before every held-out run: the last registry row that
+names a config (rows are appended, never replaced) must carry its current param_hash and status.
 
 Where a run may happen (amended 2026-11-08, when the user asked to farm the acceptance runs out to BinAC2): on node
 data, or on BinAC2 under all of these conditions:

@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Write the held-out manifest rows (HO-<item>-<split>) into validation-registry.tsv: one row per item and split,
 with the manifest's sha256 (the manifest lists every file's sha256), the PXD list, strata, the frozen config(s) with
-the RC binary sha256 and parameter hash, the disjointness result and the status. Existing HO rows with the same id
-are replaced; all other rows are kept as they are. Only the ids given are written (so H2 rows can be committed
+the RC binary sha256 and parameter hash, the disjointness result and the status. An existing row with the same id
+is replaced only with --replace-uncommitted (never for a committed row); all other rows are kept as they are. Only the ids given are written (so H2 rows can be committed
 before H1 rows). Usage: registry_rows.py <acceptance dir> <registry.tsv> <row_id>..."""
 import collections, csv, hashlib, os, sys
 
-A, REG = sys.argv[1], sys.argv[2]; WANT = sys.argv[3:]
+A, REG = sys.argv[1], sys.argv[2]; WANT = [w for w in sys.argv[3:] if w != "--replace-uncommitted"]
+REPLACE = "--replace-uncommitted" in sys.argv[3:]   # only for rows that are not committed yet (registry is append-only)
 BIN = "c4c2ad67fcd9106e474f552267f7cdfefe107f394b268bbc236308b773e4d7f3"
 ROOT = "data:/scratch/kohlbach/fastag-heldout-1.12"
 def rd(p):
@@ -54,6 +55,10 @@ lines = open(REG).read().split("\n")
 if lines and lines[-1] == "": lines.pop()
 cols = lines[0].split("\t")
 idx = {c: i for i, c in enumerate(cols)}
+have = {l.split("\t", 1)[0] for l in lines[1:]}
+if (have & set(WANT)) and not REPLACE:
+    sys.exit(f"refusing to replace existing rows {sorted(have & set(WANT))}: append a new row instead "
+             "(scripts/append_status_rows.py), or pass --replace-uncommitted for a row that is not committed yet")
 keep = [l for l in lines[1:] if l.split("\t", 1)[0] not in WANT]   # other rows kept byte for byte
 for rid in WANT:
     man, cfgs, src, status = SPEC[rid]

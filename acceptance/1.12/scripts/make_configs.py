@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Frozen held-out configurations (FASTag 1.12 acceptance). One row per item and arm; param_hash = sha256 of
 'binary=<sha>;bundle=<SHA256SUMS sha>;options=<options>;tables=<name:sha,...>' (UTF-8, no newline).
-A config whose status is not 'frozen' cannot be scored: its open part is named in the row.
+A config whose status is not 'frozen' cannot be scored: its open part is named in the row. 'frozen' needs both the
+option string (hashed here) and a committed scoring protocol (README 'Rules that bind the runs': PREREG file with
+truth search per run, cells and pooling, denominator, scorer script and its sha256); until the protocol is
+committed the status is 'pending_prereg'. The status is not part of param_hash.
 Usage: make_configs.py <out.tsv>"""
 import hashlib, sys
 
@@ -22,15 +25,15 @@ T = {"species_call.tsv": "8aa40c29d3440d2bde29941dab85426c644c6aeac68487f1403fd6
 C = [
  # id, item, arm, options, tables, status, note
  ("CFG-01-base", "#1", "baseline", "-extension 2 -species (1.10.0 q-rule, RC defaults; FASTAG_TAXONOMY_DIR with tax_k7.taxdb, nodes.dmp, names.dmp; label fixed mods; 0.3 Da on ion-trap MS2; fastag_bench.species.fastag_cmd arm default)",
-  "tax_k7.taxdb,nodes.dmp,names.dmp", "frozen", "options as the DEV regeneration (species_dev.py arm base); #1 held-out stays blocked by CFG-01-cand"),
+  "tax_k7.taxdb,nodes.dmp,names.dmp", "pending_prereg", "options as the DEV regeneration (species_dev.py arm base); no held-out scorer script with sha256 in PREREG-species-call.md; #1 held-out also blocked by CFG-01-cand"),
  ("CFG-01-cand", "#1", "candidate", "CFG-01-base + -species_call decoy -species_call_params <fitted species_call.tsv> -species_deconvolve (DEV point g_0.01_0.01_5_on: alpha 0.01, tau 0.01, n_min 5, decoys 5)",
   "tax_k7.taxdb,nodes.dmp,names.dmp,fitted:species_call.tsv", "blocked_dev_nogo",
   "DEV go/no-go and all-decoy KS (p 6.7e-41) failed; no held-out run until the user decides (PREREG-species-call.md)"),
  ("CFG-10-cand", "#10", "candidate", "CFG-01-cand + -species_orientation both", "tax_k7.taxdb,nodes.dmp,names.dmp,fitted:species_call.tsv",
   "blocked_dev_nogo", "second pre-registered config of #1, scored once on the #1 held-out set; no free parameter; blocked with CFG-01-cand"),
- ("CFG-02-base", "#2", "baseline", "RC defaults (-complement_rule same_charge)", "", "frozen", ""),
+ ("CFG-02-base", "#2", "baseline", "RC defaults (-complement_rule same_charge)", "", "pending_prereg", "no PREREG-item02.md (truth search per run, lt_score.py rule, cells, Holm-adjusted cluster bootstrap, scorer sha256)"),
  ("CFG-02-cand", "#2", "candidate", "-complement_rule both (tolerance 0.02 Da, unit Da, factor 0.5, mid-p off: defaults)", "",
-  "frozen", "PLAN-INTEGRATION 4.2 compl_both = defaults plus -complement_rule both; #2 dev (5 runs) has no registry row yet: a dev-driven change of tolerance/unit/mid-p would be a new config"),
+  "pending_prereg", "no PREREG-item02.md; PLAN-INTEGRATION 4.2 compl_both = defaults plus -complement_rule both; #2 dev (5 runs) has no registry row yet: a dev-driven change of tolerance/unit/mid-p would be a new config"),
  ("CFG-03-cand", "#3", "candidate", "termini: -tag_length 4 -subsample_fraction 0.25 -fragment_tolerance 20.0 -fragment_tolerance_unit ppm -digest_out -label_out -digest_models_version v2 -digest_detection shipped -digest_flank2 auto -digest_calibration <fitted> -digest_min_confidence 0.8 (FASTAG_FULL_PRECISION=1; FASTAG_DIGEST_DIR = RC data/digest with the fitted v2 table and calibration); alkylation: -tag_length 4 -extension 6 -recon_fasta <SDRF organism panel FASTA> -recon_out -delta_out -recon_min_length 5 -fixed_modifications, 0.3 Da on ion-trap MS2 else 20 ppm, -massgap_out -alkylation_out",
   "digest_models.tsv,fitted:digest_models_v2.tsv,fitted:digest_calibration.tsv,massgap_mods.tsv", "pending_scorer",
   "fitted on 177 DEV runs (PREREG-chem.md); the held-out scoring script and the user's decision on the DEV results (protease, alkylation and label miss their targets on DEV) are open"),
@@ -40,17 +43,17 @@ C = [
   "blocked_user_signoff", "margin not frozen; F4-10, F4-11, F4-12 amendments need the user's sign-off before the test split is opened"),
  ("CFG-05", "#5", "candidate", "-shortlist_out -fasta_out -shortlist_background <host+cRAP> -search_config_out -search_engine sage|comet (shortlist defaults: min_spectra 2, max_evalue 0.1, top 0, parsimony as doc/SHORTLIST.md at a117801)",
   "", "pending_dev", "settings are frozen on dev PXD003531/PXD017035 and written to doc/SHORTLIST.md before held-out runs (PLAN-handoff #5); engine acceptance A5-02 on real data not run"),
- ("CFG-06-base", "#6", "baseline", "RC defaults (-unknown_charge assume2)", "", "frozen", ""),
+ ("CFG-06-base", "#6", "baseline", "RC defaults (-unknown_charge assume2)", "", "pending_prereg", "no PREREG-item06.md (E6-01 charge truth, cells, denominator, scorer sha256)"),
  ("CFG-06-cand", "#6", "candidate", "-unknown_charge infer (charge_min 2, charge_max 4, charge_infer_margin 2, isotope_error 0)", "",
-  "frozen", "E6-01 dev tuning not run; the RC constants are the frozen values (a tuned constant would need a new RC)"),
+  "pending_prereg", "no PREREG-item06.md; E6-01 dev tuning not run; the RC constants are the frozen values (a tuned constant would need a new RC)"),
  ("CFG-07", "#7", "release", "RC defaults (-acquisition_check refuse, probe 4000; thresholds frozen at 62abb64, E7-09)", "",
-  "frozen", "scored on E7-03; blocked by the SWATH stratum (SCIEX .wiff, msconvert on Windows)"),
- ("CFG-09-base", "#9", "baseline", "RC defaults (-pick_profile legacy)", "", "frozen", ""),
- ("CFG-09-cand", "#9", "candidate", "-pick_profile auto", "", "frozen", ""),
+  "pending_prereg", "no PREREG-item07.md (truth labels, strata pooling, denominator, scorer sha256); scored on E7-03; blocked by the SWATH stratum (SCIEX .wiff, msconvert on Windows)"),
+ ("CFG-09-base", "#9", "baseline", "RC defaults (-pick_profile legacy)", "", "pending_prereg", "no PREREG-item09.md (output/features-1.12/heldout-1.12/item09.md lists what is missing)"),
+ ("CFG-09-cand", "#9", "candidate", "-pick_profile auto", "", "pending_prereg", "no PREREG-item09.md (see CFG-09-base)"),
  ("CFG-11", "#11", "phase_C", "-census -census_ids <Sage 1% idXML> (F7 model not built; -census_score not in 1.12)", "",
   "not_in_sprint", "PLAN-qc #11 phase C (F7) is outside the 1.12 sprint; F7-test/final manifests registered only"),
- ("CFG-15B-base", "#15B", "baseline", "RC defaults (-ion_series by)", "", "frozen", ""),
- ("CFG-15B-cand", "#15B", "candidate", "-ion_series auto", "", "frozen", "truth: MSFragger c/z 1% PSM FDR with the z definition verified on PXD060724 (dev) first"),
+ ("CFG-15B-base", "#15B", "baseline", "RC defaults (-ion_series by)", "", "pending_prereg", "no PREREG-item15B.md (MSFragger c/z truth search per run, z definition checked on PXD060724, cells, denominator, scorer sha256)"),
+ ("CFG-15B-cand", "#15B", "candidate", "-ion_series auto", "", "pending_prereg", "no PREREG-item15B.md; truth: MSFragger c/z 1% PSM FDR with the z definition verified on PXD060724 (dev) first"),
  ("CFG-17-base", "#17", "baseline", "closed search (Carbamidomethyl C fixed, Oxidation M variable); FASTag -search_config_out without -search_shifts", "", "pending_dev",
   "engine settings frozen on dev PXD003531 first (PLAN-handoff #17)"),
  ("CFG-17-cand", "#17", "candidate", "-search_shifts both (Comet; variable for Sage) defaults: shift_max_variable 3, shift_max_offsets 10, no site expansion", "massgap_mods.tsv",
