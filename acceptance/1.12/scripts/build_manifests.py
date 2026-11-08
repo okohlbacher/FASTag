@@ -91,7 +91,7 @@ for r in rows:   # high-resolution MS2 check after conversion (PLAN #1: high-res
         ("NO: ion-trap MS2 (not high-resolution), left out" if f.startswith("ITMS") else "yes")
 write("item01-heldout", rows)
 # #3
-s3 = staged("staged_3.tsv")
+s3 = staged("staged_3.tsv", "staged_3_tail.tsv")
 write("item03-heldout", [put(dict(r), s3.get(f"item03:{r['stratum'].replace(':', '_')}:{r['pxd']}:{r['run']}"))
                          for r in rd(f"{I}/raw_chem_heldout.tsv")])
 # #5, #17
@@ -112,7 +112,14 @@ for name, split, item in (("item04-test", "test", "#4"), ("item11-f7test", "f7te
 # #15B
 r15 = rd(f"{I}/staged/item15B-split.tsv")
 if r15:
-    write("item15B-sets", [dict(item="#15B", **r) for r in r15])
+    conv = lambda r: dict(item="#15B", split=r["split"], stratum=f"set{r['order']}", pxd=r["pxd"], file=r["file"],
+                          bytes=r["bytes"], pride_sha1=r["pride_sha1"], stage_status=r["download"],
+                          staged_raw=f"item15B/sets/{r['pxd']}/{r['file']}", raw_sha256=r["raw_sha256"],
+                          fastag_input=r["mzml"], fastag_input_bytes=r["mzml_bytes"], fastag_input_sha256=r["mzml_sha256"],
+                          conversion="ThermoRawFileParser 2.0.0 -f 2", activation=r["activation"].split("|")[0],
+                          decision=r["decision"], title=r["title"])
+    write("item15B-sets", [conv(r) for r in r15 if r["split"] in ("H1", "H2")])
+    write("item15B-rejected", [conv(r) for r in r15 if r["split"] not in ("H1", "H2")])
 # #7 E7-03
 conv = {}
 for n in ("e703_conv_t.tsv", "e703_conv_d.tsv", "e703_conv_d2.tsv"):

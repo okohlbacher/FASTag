@@ -47,12 +47,14 @@ DEV = {"#1": (species_pxd, species_files), "#10": (species_pxd, species_files),
 summ = []
 for m in sorted(glob.glob(f"{A}/manifests/item*.tsv")):
     name = os.path.basename(m)[:-4]
+    if name.endswith("-rejected"): continue
     rows = rd(m)
     if not rows: continue
     out = []
     for r in rows:
         item = r.get("item", "")
         f = r.get("file") or r.get("run") or r.get("source", "")
+        if item == "#15B" and r.get("split") in ("-", ""): continue   # rejected candidate sets are not held-out
         if item in ("#4", "#11"):
             dev_pools = {p for p, s in pool_split.items() if s == "dev"} if item == "#4" else \
                         {p for p, s in pool_split.items() if s in ("f7train", "dev", "test")}
