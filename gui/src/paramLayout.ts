@@ -9,8 +9,8 @@
 // unless another one is set.
 //
 // TOPP's own advanced="true" flag is not used for this split: it marks the
-// TOPPBase boilerplate (log, debug, force, test, ...) and FASTag options such
-// as digest_*, massgap_* and mzpeak_read_memory, yet leaves deep internals like
+// TOPPBase boilerplate (log, debug, force, test, ...) and 14 FASTag options
+// (digest_*, massgap_*, mzpeak_read_memory), yet leaves deep internals like
 // gap_penalty non-advanced. The manifest keeps it as `toppAdvanced`.
 
 import manifest from './params.generated.json'

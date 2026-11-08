@@ -196,11 +196,11 @@ describe('docs: code comments that promise the CLI will not reject a GUI value',
     await click(runButton())
     expect(mock.runCalls).toHaveLength(0)
   })
-  it('advanced FASTag parameters are in the manifest, and the ignored mzpeak_read_memory is hidden', () => {
+  it('the 14 advanced FASTag parameters are in the manifest, and the ignored mzpeak_read_memory is hidden', () => {
     const own = ['version', 'log', 'debug', 'no_progress', 'force', 'test']
     const adv = (manifest.params as { name: string; toppAdvanced: boolean }[]).filter((p) => p.toppAdvanced && !own.includes(p.name))
-    // Not counted (P5: a regenerated manifest is a PARAM_UI edit only); the
-    // comment's point is that the flag does not follow depth.
+    expect(adv.length).toBe(14)
+    // The flag does not follow depth: massgap_window is advanced, gap_penalty is not.
     expect(adv.map((p) => p.name)).toContain('massgap_window')
     expect(adv.map((p) => p.name)).not.toContain('gap_penalty')
     expect(hiddenReason('mzpeak_read_memory')).toBeDefined()
