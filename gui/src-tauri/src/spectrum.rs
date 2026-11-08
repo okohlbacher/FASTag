@@ -26,7 +26,7 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 use tauri::AppHandle;
 
-use crate::fastag::{build_args, no_console_window, quiet_blas, resolve_binary, taxonomy_dir, Resolved, RunParams, MANIFEST};
+use crate::fastag::{build_args, no_console_window, quiet_blas, resolve_binary, taxonomy_dir, Resolved, RunParams, PARAM_TYPES};
 use crate::inspect::parse_options;
 use crate::lifetime;
 
@@ -77,22 +77,9 @@ const NOT_FOR_A_DUMP_EXACT: &[&str] = &["stream", "log", "test", "progress", "no
 /// checks every file option it reads, so a moved -taxdb or an unwritable
 /// report folder would refuse the dump, and the CLI would warn that every
 /// output is ignored), nor one of NOT_FOR_A_DUMP.
-fn kept_for_a_dump(name: &str, types: &std::collections::HashMap<String, String>) -> bool {
-    let file = types.get(name).is_some_and(|t| t == "input-file" || t == "output-file");
+fn kept_for_a_dump(name: &str) -> bool {
+    let file = PARAM_TYPES.get(name).is_some_and(|t| t.ty == "input-file" || t.ty == "output-file");
     !file && !NOT_FOR_A_DUMP_EXACT.contains(&name) && !NOT_FOR_A_DUMP.iter().any(|p| name.starts_with(p))
-}
-
-/// The manifest's option types by name.
-fn manifest_types() -> std::collections::HashMap<String, String> {
-    let m: Value = serde_json::from_str(MANIFEST).unwrap_or(Value::Null);
-    m.get("params")
-        .and_then(|v| v.as_array())
-        .map(|a| {
-            a.iter()
-                .filter_map(|it| Some((it.get("name")?.as_str()?.to_string(), it.get("type")?.as_str()?.to_string())))
-                .collect()
-        })
-        .unwrap_or_default()
 }
 
 /// The argv of a dump of @p native_id in @p input under the run's @p params
@@ -111,8 +98,7 @@ pub fn dump_args(input: &str, native_id: &str, params: Option<&Map<String, Value
     }
     let mut rp = serde_json::json!({ "in": input, "out": "" });
     if let Some(p) = params {
-        let types = manifest_types();
-        rp["params"] = Value::Object(p.iter().filter(|(k, _)| kept_for_a_dump(k, &types)).map(|(k, v)| (k.clone(), v.clone())).collect());
+        rp["params"] = Value::Object(p.iter().filter(|(k, _)| kept_for_a_dump(k)).map(|(k, v)| (k.clone(), v.clone())).collect());
     }
     let rp: RunParams = serde_json::from_value(rp).map_err(|e| e.to_string())?;
     let built = build_args(&rp);

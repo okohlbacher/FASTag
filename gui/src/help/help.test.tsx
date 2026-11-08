@@ -17,8 +17,11 @@ import massgapTsv from '../fixtures/massgap.tsv?raw'
 import { GLOSSARY, PAGES } from './content'
 import { CLASSES, FAQ, FAQ_GROUPS, faqForMessage } from './faq'
 import HelpView, { COMMON, PAGE_OF, slug } from './HelpView'
-import { PARAM_HELP } from './params'
+import { PARAM_UI } from '../paramUi'
 import { helpBack, openHelp, resetHelp, showHelpPage, useHelp } from './link'
+
+// The help of every PARAM_UI entry that has one (help/params.ts before P5).
+const PARAM_HELP = Object.fromEntries(Object.entries(PARAM_UI).flatMap(([n, u]) => (u.help ? [[n, u.help]] : [])))
 
 afterEach(() => {
   resetHelp()
