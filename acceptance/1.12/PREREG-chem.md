@@ -49,7 +49,7 @@ prose-auto validation sets and corpora, and the 37 species DEV PXDs; committed b
 | Stratum | Runs | PXDs | Gates? |
 |---|---|---|---|
 | nontryptic:Lys-C | 15 | 15 | yes (>= 15 runs from >= 3 PXDs) |
-| nontryptic:Arg-C | 15 | 7 | yes |
+| nontryptic:Arg-C | 13 | 6 | descriptive only (after the format replacement, see below) |
 | nontryptic:Chymotrypsin | 15 | 15 | yes |
 | nontryptic:Glu-C | 15 | 15 | yes |
 | nontryptic:Asp-N | 15 | 15 | yes |
@@ -59,7 +59,10 @@ prose-auto validation sets and corpora, and the 37 species DEV PXDs; committed b
 | alkylation_noncam | 15 | 15 | 'none' recall condition (>= 15 runs) |
 | tryptic | 60 | 60 | protease endpoint (>= 60 tryptic runs) |
 
-At most 3 runs per PXD per class; each PXD in one stratum. Runs whose staged file fails conversion, or whose
+At most 3 runs per PXD per class; each PXD in one stratum. Amendment before any run (scripts/replace_chem.py, from file
+formats only): PXD060719, PXD043396, PXD041616 and PXD000921 had files that cannot be converted on Linux and were
+replaced within their stratum by the next PXD of the seeded order (Asp-N, Chymotrypsin, tryptic restored; Arg-C has
+no further usable PXD). Runs whose staged file fails conversion, or whose
 #7 check refuses (to be investigated, not dropped silently), are recorded in the manifest. Pseudo-DDA is not
 in this set (no DIA stratum was drawn). Disjointness: acceptance/1.12/disjointness/item03-heldout.tsv.
 

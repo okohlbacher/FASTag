@@ -95,7 +95,7 @@ for k in ["astral", "ion_trap", "timstof", "qe"]:
     pick, rest = draw(cands, f"fastag-1.12:#2:H2:{k}", 2)
     for i in pick:
         h2.append(row(i, "#2", "H2", k, f"H2 reserve: random.Random('fastag-1.12:#2:H2:{k}') over {len(cands)} candidates"))
-write("item02-H2", h2)
+if not os.path.exists(f"{OUT}/item02-H2.tsv"): write("item02-H2", h2)   # frozen once registered (bcce994)
 h1 = []
 for i, k in H1_2.items():
     r = row(i, "#2", "H1", k, "H1 named by PLAN-data-types #2")
@@ -104,8 +104,9 @@ for i, k in H1_2.items():
 write("item02-H1", h1)
 write("item06-H1", [dict(r, item="#6", selection="H1 named by PLAN-data-types #6 (same run as #2 H1)")
                     for r in h1 if r["pxd"] in H1_6])
-write("item06-H2", [dict(r, item="#6", selection="H2 reserve per class = the #2 H2 run of this class")
-                    for r in h2 if r["stratum"] in ("ion_trap", "astral", "qe")])
+if not os.path.exists(f"{OUT}/item06-H2.tsv"):
+    write("item06-H2", [dict(r, item="#6", selection="H2 reserve per class = the #2 H2 run of this class")
+                        for r in h2 if r["stratum"] in ("ion_trap", "astral", "qe")])
 # #9
 c9 = {}
 for i in sweep:

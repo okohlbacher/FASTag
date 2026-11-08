@@ -44,7 +44,8 @@ def write(name, rows):
 
 # #2/#6/#9 (corpus): annotate the select_corpus.py manifests
 sc = staged("staged_corpus.tsv")
-for name in ("item02-H1", "item02-H2", "item06-H1", "item06-H2"):
+# the H2 reserves were committed and registered before H1 (bcce994): they are never rewritten here
+for name in ("item02-H1", "item06-H1"):
     rows = [r for r in rd(f"{M}/{name}.tsv")]
     src = "item02-H1" if name.endswith("H1") else "item02-H2"
     out = []
@@ -91,9 +92,9 @@ for r in rows:   # high-resolution MS2 check after conversion (PLAN #1: high-res
         ("NO: ion-trap MS2 (not high-resolution), left out" if f.startswith("ITMS") else "yes")
 write("item01-heldout", rows)
 # #3
-s3 = staged("staged_3.tsv", "staged_3_tail.tsv")
+s3 = staged("staged_3.tsv", "staged_3_tail.tsv", "staged_3_tail2.tsv", "staged_3_rest.tsv", "staged_redo3.tsv", "staged_redo4.tsv", "staged_3_b.tsv")
 write("item03-heldout", [put(dict(r), s3.get(f"item03:{r['stratum'].replace(':', '_')}:{r['pxd']}:{r['run']}"))
-                         for r in rd(f"{I}/raw_chem_heldout.tsv")])
+                         for r in rd(f"{I}/raw_chem_heldout_r.tsv")])   # first draw + within-stratum replacements (replace_chem.py)
 # #5, #17
 s5 = staged("staged_5_17.tsv")
 g = {}

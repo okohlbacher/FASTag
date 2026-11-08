@@ -2,7 +2,7 @@ manifest	item	files	failures	result
 item01-heldout	#1	80	0	PASS
 item02-H1	#2	12	0	PASS
 item02-H2	#2	4	0	PASS
-item03-heldout	#3	181	0	PASS
+item03-heldout	#3	179	0	PASS
 item04-test	#4	10	0	PASS
 item05-heldout	#5	5	0	PASS
 item05-negative	#5	1	0	PASS
