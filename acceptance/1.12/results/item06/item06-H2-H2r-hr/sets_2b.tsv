@@ -1,0 +1,3 @@
+cell	clusters	spectra	base_pct	cand_pct	diff	se	p2_5	p97_5	better
+item06-H2,item06-H2r:better:astral:S_L3	66062	182726	44.3965	45.5201	1.1235	0.0520	1.0207	1.2232	True
+item06-H2,item06-H2r:better:qe:S_L3	4827	6355	68.8592	68.8906	0.0315	0.1626	-0.2814	0.3476	False

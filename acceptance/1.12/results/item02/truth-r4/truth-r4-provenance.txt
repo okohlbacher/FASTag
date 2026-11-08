@@ -1,0 +1,37 @@
+== PXD033741
+host node1-023 job 6474438_1 PXD033741
+spectra 221709; ms2 217868; dropped_ms2_without_precursor_mz 3412; kept 218297; sha256 896f991ee506caad5f777de79529a895d42ffbfb314044f6beeb7f858c093386  /pfs/10/project/bw26g016/fastag-1.12/acc112-item02/truth-r4/item02-H1-r2/item02/H1/PXD033741/MD128LQB3_5_F1502149_Slot1-54_1_13363/input.noprec.mzML
+dropped_ids.txt: OK
+13 configurations written under /pfs/10/project/bw26g016/fastag-1.12/acc112-item02/truth-r4/item02-H1-r2/item02/H1/PXD033741/MD128LQB3_5_F1502149_Slot1-54_1_13363/cfg
+mzml_paths ['/pfs/10/project/bw26g016/fastag-1.12/heldout/item02/H1/PXD033741/MD128LQB3_5_F1502149_Slot1-54_1_13363.mzML'] -> ['/pfs/10/project/bw26g016/fastag-1.12/acc112-item02/truth-r4/item02-H1-r2/item02/H1/PXD033741/MD128LQB3_5_F1502149_Slot1-54_1_13363/input.noprec.mzML']
+/pfs/10/project/bw26g016/fastag-1.12/ceph/prose-auto-20261029/panel/Homo_sapiens.fasta: OK
+CONFIG_EQUALS_ROUND3 (except mzml_paths)
+d3820543a31bfa2a556e04f91719204ce0ac6f34dcca6670314a13df87064625  /pfs/10/project/bw26g016/fastag-1.12/opt/sage-0.14.7/sage-v0.14.7-x86_64-unknown-linux-gnu/sage
+4391506698261479926d3e7af04982b50f755aaa09a7b9881f2453c5db8cbff8  sage.json
+896f991ee506caad5f777de79529a895d42ffbfb314044f6beeb7f858c093386  input.noprec.mzML
+2b6f29ff0752ea001af515928b00539fca9dde95429a1db64263b32a796d366e  dropped_ids.txt
+792b4afe98f4b9e0d85e79a3a651eef0579d1b606b4114172157945f2f1becb1  results.sage.tsv
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:53.61
+	Maximum resident set size (kbytes): 9674644
+SAGE_RC=0
+== PXD076520
+host node1-027 job 6474438_2 PXD076520
+spectra 126647; ms2 120136; dropped_ms2_without_precursor_mz 3513; kept 123134; sha256 1c564fd8186fabd666731e9fec3fad366897fb55a153bb8b656fb9709d1ef4ce  /pfs/10/project/bw26g016/fastag-1.12/acc112-item02/truth-r4/item02-H1-r2/item02/H1/PXD076520/20240805_LAB_SZW_U2OS_APEX2_BioID_sgGal4_03c_3530/input.noprec.mzML
+dropped_ids.txt: OK
+13 configurations written under /pfs/10/project/bw26g016/fastag-1.12/acc112-item02/truth-r4/item02-H1-r2/item02/H1/PXD076520/20240805_LAB_SZW_U2OS_APEX2_BioID_sgGal4_03c_3530/cfg
+mzml_paths ['/pfs/10/project/bw26g016/fastag-1.12/heldout/item02/H1/PXD076520/20240805_LAB_SZW_U2OS_APEX2_BioID_sgGal4_03c_3530.mzML'] -> ['/pfs/10/project/bw26g016/fastag-1.12/acc112-item02/truth-r4/item02-H1-r2/item02/H1/PXD076520/20240805_LAB_SZW_U2OS_APEX2_BioID_sgGal4_03c_3530/input.noprec.mzML']
+/pfs/10/project/bw26g016/fastag-1.12/ceph/prose-auto-20261029/panel/Homo_sapiens.fasta: OK
+CONFIG_EQUALS_ROUND3 (except mzml_paths)
+d3820543a31bfa2a556e04f91719204ce0ac6f34dcca6670314a13df87064625  /pfs/10/project/bw26g016/fastag-1.12/opt/sage-0.14.7/sage-v0.14.7-x86_64-unknown-linux-gnu/sage
+c4b666a675c9b1f761b1efe129fb15ddfd345d53a3e0d16e633dfb9ac5428b08  sage.json
+1c564fd8186fabd666731e9fec3fad366897fb55a153bb8b656fb9709d1ef4ce  input.noprec.mzML
+0bfd393060e555bc0056d712681f2167691e11efc345414f5125a5835c703cef  dropped_ids.txt
+ab6c0a287b3ffa5ad27e3ebb08b5981c121d01dcf41ef5129ba324021154c205  results.sage.tsv
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:26.32
+	Maximum resident set size (kbytes): 7544336
+SAGE_RC=0
+JobID               JobName      State              Submit               Start                 End        NodeList ExitCode 
+------------ -------------- ---------- ------------------- ------------------- ------------------- --------------- -------- 
+6474439         r4-i02score  COMPLETED 2026-11-09T00:27:55 2026-11-09T00:31:10 2026-11-09T00:35:18       node1-023      0:0 
+6474438_1       r4-i02truth  COMPLETED 2026-11-09T00:27:55 2026-11-09T00:29:09 2026-11-09T00:31:05       node1-023      0:0 
+6474438_2       r4-i02truth  COMPLETED 2026-11-09T00:27:55 2026-11-09T00:29:09 2026-11-09T00:30:12       node1-027      0:0 

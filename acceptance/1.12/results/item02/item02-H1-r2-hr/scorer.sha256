@@ -1,0 +1,6 @@
+fe387a3455a52678f78c20c3156b63c251e08daa5b92da2f3e205d1d9ab2b1c1  scorers/acclib.py
+5704b8634c5a98f8993a4dccc4c331e6d84405dbf0b5dbaa42b523d68677e395  scorers/score_item02.py
+efa4e16e2cae451c529f74b2cbdad3c58bbf54f17babd72d56470d86f6de8b78  manifests/item02-H1-r2.tsv
+e2b8788a78f1176169f617c01b2e17f21578b8909f7c79b33d23ae1b71075f79  ../../bench/fastag-bench/src/fastag_bench/score.py
+01e27548bcae489d3f205960730c8bc36624e16935ea5df0bec5a6a04ea51f49  ../../bench/fastag-bench/src/fastag_bench/parsers.py
+6089c7e17647a2f8be45d772c12c4a1242f104d5dfdf2fce0ed8917d0b6889b4  /pfs/10/project/bw26g016/fastag-1.12/acc112-item02/timing/timing.tsv

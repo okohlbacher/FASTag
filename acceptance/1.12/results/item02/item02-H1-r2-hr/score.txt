@@ -1,0 +1,2 @@
+{"manifest": "item02-H1-r2", "sets": ["astral", "qe", "timstof"], "i": "FAIL", "ii": "FAIL", "iii": "FAIL", "iv": "PASS", "verdict": "INCONCLUSIVE", "runs_not_ok": [["item02/H1/PXD074582/ID136650_01_SPD60_OA10034_11063_091625", "NO_TRUTH_0PSM"]]}
+SCORE_RC=0

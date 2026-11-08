@@ -1,0 +1,27 @@
+/pfs/10/project/bw26g016/fastag-1.12/acc112-item02/truth-r4/item02-H1-r2/item02/H1/PXD033741:
+total 25
+drwxr-xr-x 2 tu_iisko01 tu_tu 25600 Nov  9 00:30 MD128LQB3_5_F1502149_Slot1-54_1_13363
+
+/pfs/10/project/bw26g016/fastag-1.12/acc112-item02/truth-r4/item02-H1-r2/item02/H1/PXD050504:
+total 5
+lrwxrwxrwx 1 tu_iisko01 tu_tu 135 Nov  9 00:27 221229kw_PHunRcoxHeart_PH_LV104_S1-A6_1_12890 -> /pfs/10/project/bw26g016/fastag-1.12/acc112-item02/truth/item02-H1-r2/item02/H1/PXD050504/221229kw_PHunRcoxHeart_PH_LV104_S1-A6_1_12890
+
+/pfs/10/project/bw26g016/fastag-1.12/acc112-item02/truth-r4/item02-H1-r2/item02/H1/PXD066944:
+total 5
+lrwxrwxrwx 1 tu_iisko01 tu_tu 183 Nov  9 00:27 TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03 -> /pfs/10/project/bw26g016/fastag-1.12/acc112-item02/truth/item02-H1-r2/item02/H1/PXD066944/TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03
+
+/pfs/10/project/bw26g016/fastag-1.12/acc112-item02/truth-r4/item02-H1-r2/item02/H1/PXD070049:
+total 5
+lrwxrwxrwx 1 tu_iisko01 tu_tu 124 Nov  9 00:27 LFQ_Astral_DDA_5min_250pg_Ecoli_01 -> /pfs/10/project/bw26g016/fastag-1.12/acc112-item02/truth/item02-H1-r2/item02/H1/PXD070049/LFQ_Astral_DDA_5min_250pg_Ecoli_01
+
+/pfs/10/project/bw26g016/fastag-1.12/acc112-item02/truth-r4/item02-H1-r2/item02/H1/PXD074582:
+total 5
+lrwxrwxrwx 1 tu_iisko01 tu_tu 128 Nov  9 00:27 ID136650_01_SPD60_OA10034_11063_091625 -> /pfs/10/project/bw26g016/fastag-1.12/acc112-item02/truth/item02-H1-r2/item02/H1/PXD074582/ID136650_01_SPD60_OA10034_11063_091625
+
+/pfs/10/project/bw26g016/fastag-1.12/acc112-item02/truth-r4/item02-H1-r2/item02/H1/PXD076520:
+total 25
+drwxr-xr-x 2 tu_iisko01 tu_tu 25600 Nov  9 00:30 20240805_LAB_SZW_U2OS_APEX2_BioID_sgGal4_03c_3530
+
+/pfs/10/project/bw26g016/fastag-1.12/acc112-item02/truth-r4/item02-H1-r2/item02/H1r/PXD069528:
+total 5
+lrwxrwxrwx 1 tu_iisko01 tu_tu 114 Nov  9 00:27 005_3198_F3_1_5ug_4_3ul -> /pfs/10/project/bw26g016/fastag-1.12/acc112-item02/truth/item02-H1-r2/item02/H1r/PXD069528/005_3198_F3_1_5ug_4_3ul

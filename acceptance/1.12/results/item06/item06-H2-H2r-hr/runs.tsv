@@ -1,0 +1,3 @@
+CFG-06-base:G_L3:rc	CFG-06-base:S_L3:rc	CFG-06-base:S_L4:rc	CFG-06-base:S_L5:rc	CFG-06-cand:G_L3:rc	CFG-06-cand:S_L3:rc	CFG-06-cand:S_L4:rc	CFG-06-cand:S_L5:rc	G_L3_detail	G_L3_identical	arm_dirs	cand_tagged_truth	manifest	pxd	run	set	status	truth_psms
+0	0	0	0	0	0	0	0	0 differing rows of 356947	True	CFG-06-base,CFG-06-cand	6163	item06-H2	PXD020394	item02/H2/PXD020394/NEG5	qe	ok	6355
+0	0	0	0	0	0	0	0	0 differing rows of 23606910	True	CFG-06-base,CFG-06-cand	182664	item06-H2r	PXD055983	item02/H2r/PXD055983/20240312_AST1_EXT_CF_1139_sc_PR_NON_120	astral	ok	182726

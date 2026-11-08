@@ -1,0 +1,2 @@
+{"sets": ["astral", "qe"], "e1_charge_accuracy": 0.7448616988036668, "e1_n": 188827, "e1": "FAIL", "e2a": "FAIL", "e2b": "FAIL", "e3": "PASS", "verdict": "FAIL", "runs_not_ok": []}
+SCORE_RC=0
