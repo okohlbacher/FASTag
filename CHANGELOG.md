@@ -1,0 +1,153 @@
+# Changelog
+
+## 1.12.0
+
+All defaults are those of FASTag 1.11, with one exception (#7 below). At the
+defaults every output is the same as FASTag 1.11.0 byte for byte, with one
+exception: a `-label_out` report gains five appended `label_call` rows, its
+1.11 rows staying a byte prefix (#3a below; approved 2026-11-07). Every new
+option is opt-in. No new option is validated on held-out data in 1.12.0:
+the held-out acceptance runs of the 1.12 items have not been scored, so every
+new option is experimental. The README's command-line reference describes
+each option.
+
+### Changed default
+
+- **Raw DIA input is refused (#7).** `-acquisition_check refuse` is the
+  default: a raw DIA run (MS2 "precursors" that are isolation windows) ends
+  with exit code 11 before any output is opened, with one
+  `FASTAG_REFUSED reason=raw_dia ...` line on stderr and the advice to make
+  pseudo-DDA spectra first (DIAspeXtract, or diaTracer for Bruker .d). DDA,
+  PRM and pseudo-DDA input are tagged as before. `-acquisition_check warn`
+  tags raw DIA as 1.11 did, with a warning; `off` skips the check.
+  `-acquisition_probe_spectra` (4000) sets how many MS2 the check reads.
+  The rule was tuned once on 183 public data sets (one change: the
+  periodicity threshold is 0.2, so converted raw diaPASEF, which writes the
+  windows of a frame in a varying order, is refused too). Its held-out
+  release test (a fresh PRIDE sample, registry E7-03) has not been run: the
+  SCIEX SWATH files of that sample still need converting on Windows.
+
+### Changed output when an existing option is given
+
+- **`-label_out` gains a `label_call` section (#3a)**: five rows appended
+  after the 1.11 rows, which stay a byte prefix. They give the label call
+  prose-auto 0.1.10 makes from the counts (TMT, TMTpro, iTRAQ4, SILAC,
+  label-free or no call).
+
+### New opt-in options
+
+- **Precursor charge and isotope hypotheses (#6, experimental):**
+  `-unknown_charge assume2|enumerate|infer` (default assume2, as 1.11),
+  `-charge_min` (2), `-charge_max` (4), `-charge_infer_margin` (2),
+  `-isotope_error` (0). A charge in the file header is never replaced.
+- **Complement rules (#2, experimental):**
+  `-complement_rule same_charge|precursor|both` (default same_charge),
+  `-complement_tolerance` (0.02), `-complement_tolerance_unit Da|fragment`
+  (Da), `-complement_tol_factor` (0.5), `-complement_midp` (off).
+- **Profile centroiding (#9, experimental):** `-pick_profile legacy|auto|off`
+  (default legacy: mzPeak only, as 1.11), `-pick_unknown_type` (off).
+- **c/z-dot ion series (#15, experimental):** `-ion_series by|cz|auto`
+  (default by).
+- **Census (#11, experimental):** `-census`, `-census_out`,
+  `-census_summary_out`, and the identifications join `-census_ids` (idXML
+  or mzid with q-values), `-census_ids_fdr` (0.01), `-census_triage_evalue`
+  (0.01).
+- **Species call (decoy, #1, experimental):** `-species_call none|decoy`
+  (default none), `-species_call_params`, `-species_call_min_units` (200),
+  `-species_call_decoys` (5), `-species_pi0` (1). The shipped parameter table
+  (`data/taxonomy/species_call.tsv`) is provisional, not fitted, and the
+  development check of the decoy null failed on real runs (the decoy
+  replicate counts are not Poisson around the modelled rate; KS p 6.7e-41
+  over 1760 genus rows of 36 public FTMS runs), so `call`, `decoy_qvalue`
+  and `lod` are not calibrated.
+- **Species lookup in both orientations (#10, experimental):**
+  `-species_orientation forward|both` (default forward). Under `both` the
+  analytic `log_pvalue` and `qvalue` columns are NA; only the decoy columns of
+  `-species_call decoy` (`decoy_qvalue`, `call`) carry a q-value, and they are
+  not calibrated (see #1).
+- **Chemistry v2 and the alkylation call (#3c-#3g, experimental):**
+  `-digest_models_version shipped|v2`, `-digest_detection none|shipped`,
+  `-digest_flank2 off|auto`, `-digest_min_confidence` (0, off),
+  `-digest_calibration`; `-alkylation_out`, `-alkylation_proteome` (auto),
+  `-alkylation_min_spectra` (10), `-alkylation_min_share` (0.6),
+  `-alkylation_window` (0). At their defaults `-digest_out` is the 1.11 report.
+  In 1.12.0 `-alkylation_out` needs `-recon_fasta` or a FASTA path in
+  `-alkylation_proteome`: the shipped proteomes that `auto` (= human),
+  `human`, `mouse`, `yeast` and `ecoli` name are not in this release, so the
+  default `auto` and the names stop with exit code 6 (illegal parameters).
+- **Protein shortlist and search hand-off (#5, experimental):**
+  `-shortlist_out`, `-fasta_out`, `-shortlist_background`,
+  `-shortlist_min_spectra` (2), `-shortlist_max_evalue` (0.1),
+  `-shortlist_top` (0), `-shortlist_parsimony none|subset|greedy`,
+  `-shortlist_gapped`, `-shortlist_decoy_affix`, `-shortlist_force`;
+  `-search_config_out`, `-search_engine sage|comet`, `-search_config_template`,
+  `-search_decoy_prefix`, `-search_precursor_tolerance` (10),
+  `-search_precursor_unit` (ppm), `-search_isotope_errors` (0).
+  NOT FDR-controlled. **The Sage and Comet configurations are only
+  smoke-tested in 1.12.0:** `search_engine_smoke_test` ran Sage 0.14.7 and
+  Comet 2026.03.0 on the configuration FASTag writes for the 139-spectrum
+  E. coli fixture (both read it and report prsA/metK/rplF peptides), but no
+  engine acceptance on real data has been run (registry A5-02), so the Comet
+  key layout, the isotope_error mapping and the variable_mod slot format are
+  still taken from the OpenMS adapters, not validated against the engines.
+- **Mass shifts as search-engine configuration (#17, experimental):**
+  `-search_shifts none|variable|offsets|both` (default none),
+  `-search_shifts_out`, `-shift_max_variable` (3), `-shift_max_offsets` (10),
+  `-shift_expand_sites` (off), `-shift_site_min_share` (0.2),
+  `-shift_site_min_count` (10), `-shift_site_min_ions` (2). They add the
+  run's mass-gap peaks (the `-massgap_out` peaks) to `-search_config_out` as
+  variable modifications or Comet mass offsets; `-delta_out` and
+  `-massgap_out` are unchanged with and without them. NOT FDR-controlled:
+  candidates for an FDR-controlling engine, not identifications; that they
+  improve identifications is not validated, and like the #5 hand-off the
+  engine configurations are not validated against the engines on real data.
+- **Machine interfaces for the desktop GUI:** `-probe_input <file>` (metadata
+  as JSON lines) and `-dump_spectrum <nativeId>` (the peaks FASTag tags in one
+  spectrum, as JSON lines). Both write no file and exit.
+
+### Desktop app
+
+The desktop app in 1.12.0 is the rebuilt GUI (pull requests #16-#31). The
+command-line options above other than `-acquisition_check` are not in its
+form yet: a GUI run uses their defaults. `-acquisition_check` is in the form
+(Raw DIA check, under Spectra), so a raw DIA file can still be tagged from
+the app with warn or off.
+
+- **Runs (P1):** one event channel per run with phases and time left; a run
+  never outlives the app (watchdog on macOS and Linux, parent-death signal on
+  Linux, a kill-on-close job on Windows), and what a killed, cancelled or
+  failed run left behind is offered for removal at the next start.
+- **Linux desktop app (P1d):** a `.deb`, a tarball and a best-effort
+  AppImage for Linux x64 (Ubuntu 22.04 / Debian 12 or newer, WebKitGTK 4.1).
+- **New shell (P2):** a top bar with four views (Setup, Results, Batch,
+  History) and a Help side panel with search; Setup starts from a task with
+  step cards, presets stored as differences and Export INI; History keeps
+  every run's exact command line, its settings and a Re-run.
+- **Checks before a run (P2b):** the app reads the input's metadata through
+  `-probe_input` and checks the settings against it, holds Run while it
+  checks, and explains the exit-11 raw-DIA refusal with the DIAspeXtract
+  command to copy. The Overview shows the CLI's calls; the Batch view has a
+  summary table, majority flags, a summary TSV and folder input.
+- **Tags browser (P3):** typed columns, cached orders, filters, an export
+  job, Stitch/ALPS export, keyboard navigation, copy row and USI.
+- **Viewers (P4):** a Spectrum tab (the tagged peaks through
+  `-dump_spectrum`, with the tag's b or y ladder), Mass gaps & recon and Glyco
+  tabs, and the SDRF comparison in the Batch view (organism by NCBI taxid,
+  corrections TSV). The species report is parsed in the app; a `qvalue` of NA
+  (`-species_orientation both`) is shown as uncalibrated, not as q = 1.
+
+## 1.11.1
+
+A desktop-app release: the command-line tool's behaviour and outputs are
+those of 1.11.0.
+
+- New logo and app icon (#11).
+- GUI safety fixes (#13): at most 200 table rows in the DOM, a close guard
+  while a run is busy, per-job batch logs, cleanup of partial outputs on
+  cancel, last-used settings offered instead of applied silently.
+- Smaller macOS download (#12): the disk image is LZMA-compressed (517 to
+  295 MB); built on the macos-15 runner.
+- Quick wins (#14): tags files open in file order at once and switch to
+  E-value order when ranking finishes; parameter search (Cmd/Ctrl+K or /);
+  instrument presets; File, Run and Help menus; Show in Finder for a run's
+  outputs.

@@ -141,7 +141,7 @@ function Settings(): JSX.Element {
       })}
       <section id="param-sec-hidden" aria-labelledby="param-sec-hidden-h">
         <h3 id="param-sec-hidden-h">Not in the form</h3>
-        <p className="help-blurb">FASTag options the app sets itself, or that have no use in the app.</p>
+        <p className="help-blurb">FASTag options the app sets itself, that have no use in the app, or that the app does not offer yet (the 1.12 command-line options, used at their defaults).</p>
         {HIDDEN_PARAMS.map((n) => (
           <ParamEntry key={n} name={n} />
         ))}

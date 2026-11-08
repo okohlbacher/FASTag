@@ -1,0 +1,8 @@
+summary 10618 MS2 spectra, 229700 tags
+exit 0
+file tags.tsv 9ace8f76b1383cc47b4693ac1e9287b6cb1310f6a555447663de48b582f5d95c
+info mzML: no centroiding line
+series Ion series (-ion_series auto): 0 MS2 spectra tagged as c/z-dot ions, 10618 as b/y ions (activation: 0 collisional, 0 electron, 10618 hybrid, 0 unknown).
+hybrid_warning 1
+equals_by yes
+info by run: exit 0, 1 electron-activation warning lines

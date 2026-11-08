@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react'
 import type { BinaryInfo, SpectrumSupport } from '../types'
 
-export const SPECTRUM_NEEDS = 'Spectrum view needs FASTag 1.17 or later'
+export const SPECTRUM_NEEDS = 'Spectrum view needs FASTag 1.12 or later'
 
 /** The answer for the CLI @p bin describes; null while asking (or before
  *  the CLI is known). A CLI that cannot run cannot dump either. */

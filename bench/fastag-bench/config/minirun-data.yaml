@@ -1,0 +1,23 @@
+# Configuration of the end-to-end mini run on IBMI node 'data' (2026-11-03).
+# FASTag 1.8.0 RC 71a68e0 (same source as tag v1.8.0); Sage from bioconda sage-proteomics=0.14.7.
+work_dir: /scratch/kohlbach/jpr-bench/work
+data_dir: /scratch/kohlbach/jpr-bench/data
+results_dir: /scratch/kohlbach/jpr-bench/results
+mirrors:
+  - /ceph/ibmi/abi/oliver/fastag-gate/inputs           # PXD003531 mzPeak archives
+  - /ceph/ibmi/abi/oliver/prose-auto-20261029/valset_all/in   # PXD003531 mzML
+tools:
+  fastag: /ceph/ibmi/abi/oliver/opt/fastag-1.8.0-71a68e0/FASTag
+  sage: /scratch/kohlbach/jpr-bench/envs/sage/bin/sage
+  directag: /scratch/kohlbach/jpr-comparators/envs/bumbershoot/bin/directag
+fastag:
+  threads: [1, 16, 64]
+  reps: 2
+  digest_dir: /ceph/ibmi/abi/oliver/opt/fastag-1.8.0-71a68e0/digest
+  species:   # bundled k=7 index of the gate (sha256 34427bba...); the 1.8.0 install ships no .taxdb
+    taxdb: /ceph/ibmi/abi/oliver/prose-auto-20261029/opt/FASTag/share-FASTag-taxonomy/tax_k7.taxdb
+    nodes: /ceph/ibmi/abi/oliver/prose-auto-20261029/opt/FASTag/share-FASTag-taxonomy/nodes.dmp
+    names: /ceph/ibmi/abi/oliver/prose-auto-20261029/opt/FASTag/share-FASTag-taxonomy/names.dmp
+sage:
+  threads: 32
+  fasta: /ceph/ibmi/abi/oliver/prose-auto-20261029/panel/Homo_sapiens.fasta

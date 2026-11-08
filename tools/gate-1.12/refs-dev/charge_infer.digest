@@ -1,0 +1,8 @@
+summary 27345 MS2 spectra, 1250698 tags
+exit 0
+file tags.census_summary.tsv caa2c250eae2153979ee4b77f1bc31bcd34ddf68bc2ff59edc13b15bf1ff317d
+file tags.census.tsv 2281770961206e8c01d505121b4ffbc61b1461ba2c166b8139251264de2e9935
+file tags.tsv 36019d18f0af78024ba91314cace46e6a42e5becdb77380c2af26247fccf5e5b
+info mzML: no centroiding line
+info 27345 of 27345 MS2 spectra carry no precursor charge; under -unknown_charge infer their reports use 12684 inferred, 6154 ambiguous (better of two), 0 listed, 0 enumerated and 8507 assumed (2+, or the lowest candidate when 2 is none) charges;
+info charge calls equal to the removed header charge: 17731 of 27345

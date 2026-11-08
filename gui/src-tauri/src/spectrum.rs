@@ -3,7 +3,7 @@
 // - spectrum_support: whether the CLI has -dump_spectrum, read from the
 //   options its `--helphelp` lists (never from the version string: the 1.12
 //   builds still say 1.11.0). Without it the renderer hides the tab and the
-//   Tags table's row action says "Spectrum view needs FASTag 1.17 or later".
+//   Tags table's row action says "Spectrum view needs FASTag 1.12 or later".
 // - spectrum_peaks: `FASTag <the run's argv> -dump_spectrum <nativeId>`, the
 //   peaks FASTag tagged in one spectrum, under the run's own options. The
 //   JSON lines go to the renderer as text; src/spectrum/dump.ts is their one

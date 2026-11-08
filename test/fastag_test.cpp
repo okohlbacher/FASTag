@@ -32,6 +32,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <random>
 #include <set>
 #include <string>
@@ -59,7 +60,13 @@ static MSSpectrum synth(const std::string& pep, int noise, unsigned seed, double
     s.emplace_back(aa.getPrefix(i).getMonoWeight(Residue::BIon, 1), hi(rng));
     s.emplace_back(aa.getSuffix(i).getMonoWeight(Residue::YIon, 1), hi(rng));
   }
-  for (int i = 0; i < noise; ++i) s.emplace_back(nz(rng), lo(rng));
+  for (int i = 0; i < noise; ++i)
+  {
+    // One draw per statement, intensity first (the x86-64 GCC order); see complement_synth.h.
+    const double in = lo(rng);
+    const double mz = nz(rng);
+    s.emplace_back(mz, in);
+  }
   s.sortByPosition();
   return s;
 }
@@ -985,6 +992,75 @@ int main()
     CHECK(dup == 0, "%zu tag pairs differ only by ~1e-4 Da flanks (1+ and moved 2+ copies)", dup);
     std::printf("22. 1+/2+ copies merged: %zu tags, %zu correct, %zu near-duplicate pairs\n",
                 tags.size(), correct, dup);
+  }
+
+  // 23. The census diag (-census): passing a SpectrumDiag never changes the
+  //     tags (seq, masses, E-value bits, order), n_kept agrees with the
+  //     minimum peak count, and every tag has high_mz >= low_mz and a
+  //     positive path TIC. Single- and multi-length overloads alike.
+  {
+    FASTag::Param p;
+    p.frag_tol = 0.02; p.tol_ppm = false; p.complement_tol = 0.02; p.max_gaps = 1;
+    const FASTag::Tables tab(p);
+    std::vector<FASTag::Param> lp(2, p);
+    lp[0].tag_length = 3; lp[1].tag_length = 5;
+    const std::vector<FASTag::Tables> ltab = {FASTag::Tables(lp[0]), FASTag::Tables(lp[1])};
+    auto same = [](const std::vector<FASTag::Tag>& a, const std::vector<FASTag::Tag>& b) {
+      if (a.size() != b.size()) return false;
+      for (size_t i = 0; i < a.size(); ++i)
+        if (a[i].seq != b[i].seq || std::memcmp(&a[i].evalue, &b[i].evalue, sizeof(double)) != 0
+            || a[i].nterm_mass != b[i].nterm_mass || a[i].cterm_mass != b[i].cterm_mass
+            || a[i].charge != b[i].charge || a[i].low_mz != b[i].low_mz)
+          return false;
+      return true;
+    };
+    size_t n_tags = 0, n_spec = 0;
+    for (const auto& pep : peps)
+      for (int noise : {0, 30})
+      {
+        double pmz = 0;
+        const MSSpectrum s = synth(pep, noise, 5, pmz);
+        FASTag::SpectrumDiag d;
+        const auto plain = FASTag::tagSpectrum(s, pmz, 2, p, tab);
+        const auto with = FASTag::tagSpectrum(s, pmz, 2, p, tab, &d);
+        CHECK(same(plain, with), "%s: tags differ with a diag pointer", pep.c_str());
+        CHECK(d.prepared && !d.bad_precursor, "%s: diag not filled", pep.c_str());
+        CHECK(d.enough_peaks == (d.n_kept >= size_t(std::max(2, p.tag_length + 1 - p.max_gaps))),
+              "%s: enough_peaks %d with %zu kept", pep.c_str(), int(d.enough_peaks), d.n_kept);
+        CHECK(d.n_kept > 0 && d.n_kept <= s.size(), "%s: n_kept %zu of %zu", pep.c_str(), d.n_kept, s.size());
+        CHECK(with.empty() || d.n_edges > 0, "%s: tags without edges", pep.c_str());
+        for (const auto& t : with)
+        {
+          CHECK(t.high_mz > t.low_mz, "%s: high_mz %g <= low_mz %g", pep.c_str(), t.high_mz, t.low_mz);
+          CHECK(t.peak_tic > 0, "%s: peak_tic %g", pep.c_str(), double(t.peak_tic));
+        }
+        n_tags += with.size();
+        ++n_spec;
+
+        FASTag::SpectrumDiag dm;
+        const auto mplain = FASTag::tagSpectrum(s, pmz, 2, lp, ltab);
+        const auto mwith = FASTag::tagSpectrum(s, pmz, 2, lp, ltab, &dm);
+        CHECK(mplain.size() == mwith.size() && same(mplain[0], mwith[0]) && same(mplain[1], mwith[1]),
+              "%s: multi-length tags differ with a diag pointer", pep.c_str());
+        CHECK(dm.n_kept == d.n_kept && dm.n_compl == d.n_compl && dm.n_edges == d.n_edges,
+              "%s: multi-length diag differs from single (%zu/%zu kept, %zu/%zu edges)", pep.c_str(),
+              dm.n_kept, d.n_kept, dm.n_edges, d.n_edges);
+      }
+    // Too few peaks, and a NaN precursor.
+    MSSpectrum two;
+    two.emplace_back(300.1, 10.0f);
+    two.emplace_back(400.2, 20.0f);
+    FASTag::SpectrumDiag d2;
+    CHECK(FASTag::tagSpectrum(two, 600.0, 2, p, tab, &d2).empty() && d2.prepared && !d2.enough_peaks
+              && d2.n_kept == 2 && d2.n_edges == 0,
+          "2 peaks: prepared %d enough %d kept %zu", int(d2.prepared), int(d2.enough_peaks), d2.n_kept);
+    FASTag::SpectrumDiag dn;
+    dn.n_kept = 99;  // reset by the call
+    CHECK(FASTag::tagSpectrum(two, std::nan(""), 2, p, tab, &dn).empty() && dn.bad_precursor && !dn.prepared
+              && dn.n_kept == 0,
+          "NaN precursor diag");
+    CHECK(n_tags > 0, "no tags at all; the check asserts nothing");
+    std::printf("23. census diag: %zu tags over %zu spectra unchanged by the diag pointer\n", n_tags, n_spec);
   }
 
   std::printf(failures ? "\n%d FAILURES\n" : "\nall checks passed\n", failures);

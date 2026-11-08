@@ -69,6 +69,20 @@ describe('parseSpecies (successors of the species.rs read_species tests)', () =>
     expect(r.taxa[0].callReason).toBe('pass')
   })
 
+  it('na_qvalue_is_uncalibrated_not_one (1.12 #10, -species_orientation both)', () => {
+    const r = parseSpecies(
+      'rank\ttaxid\tname\tobserved\tadjusted\texpected\tlog_pvalue\tqvalue\n' +
+        'genus\t1\tA\t5\t5\t0.5\tNA\tNA\n' +
+        'genus\t2\tB\t4\t4\t0.5\t-3\t0.01\n' +
+        'genus\t3\tC\t3\t3\t0.5\t-3\tgarbage\n',
+      'x'
+    )!
+    expect(r.taxa[0].q).toBeNull()
+    expect(r.taxa[1].q).toBe(0.01)
+    // other unparsable values keep the 1 fallback
+    expect(r.taxa[2].q).toBe(1)
+  })
+
   it('a_report_without_the_call_columns_has_no_call_fields', () => {
     const r = parseSpecies(realReports['../fixtures/cli/v111-pxd003531/run.tags.species.tsv'], 'v111')!
     expect(r.taxa[0].name).toBe('Homo')
@@ -94,7 +108,7 @@ describe('parseSpecies on every real species report in the repository', () => {
       expect(r.taxa.map((t) => t.taxid)).toEqual(expected.map((f) => Number(f[head.indexOf('taxid')])))
       for (const t of r.taxa) {
         expect(Number.isInteger(t.taxid) && t.taxid > 0).toBe(true)
-        expect(t.q >= 0 && t.q <= 1).toBe(true)
+        expect(t.q !== null && t.q >= 0 && t.q <= 1).toBe(true)
       }
       // The call columns are there exactly when the CLI wrote them (a
       // report without hits, as pxd010783's, has no rows to carry them).

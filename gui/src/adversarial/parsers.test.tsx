@@ -321,7 +321,7 @@ describe('parsers: fuzzed reports', () => {
 
 // ---------------------------------------------------------------------------
 describe('SpeciesPanel: edge values from species.rs', () => {
-  const taxon = (o: Partial<{ rank: string; taxid: number; name: string; observed: number; adjusted: number; q: number }>) => ({
+  const taxon = (o: Partial<{ rank: string; taxid: number; name: string; observed: number; adjusted: number; q: number | null }>) => ({
     rank: 'genus', taxid: 1, name: 'A', observed: 5, adjusted: 5, q: 0.01, ...o
   })
   it('an empty rank reads "Call at an unstated rank" and draws no empty rank chip', () => {
@@ -340,6 +340,12 @@ describe('SpeciesPanel: edge values from species.rs', () => {
     const dup = errs.mock.calls.some((c) => String(c[0]).includes('same key'))
     errs.mockRestore()
     expect(dup).toBe(true)
+  })
+  it('an NA q (null, -species_orientation both) reads "uncalibrated", never 1.000', () => {
+    render(<SpeciesPanel report={{ path: 'x', taxa: [taxon({ q: null }), taxon({ taxid: 2, name: 'B', q: null })] }} enabled tooShort={null} contributed={null} totalMs2={null} />)
+    expect(screen.getAllByText(/uncalibrated/).length).toBeGreaterThanOrEqual(2)
+    expect(screen.queryByText('1.000')).toBeNull()
+    expect(screen.queryByText(/NaN/)).toBeNull()
   })
   it('fmtQ: 0 -> <1e-300, tiny -> exponential', () => {
     render(<SpeciesPanel report={{ path: 'x', taxa: [taxon({ q: 0 }), taxon({ taxid: 2, q: 1.59964e-29 })] }} enabled tooShort={null} contributed={null} totalMs2={null} />)

@@ -1,0 +1,10 @@
+case	status	wall_s	maxrss_kb	load1_before
+dda_default	RAN	0.91	276348	58.23
+tmt_fixed	RAN	0.91	351204	58.23
+nontryptic_ext	RAN	0.39	138392	58.23
+fasta_recon	RAN	9.36	975324	58.23
+species	RAN	2.54	1401324	56.58
+out_spectra_mzml	RAN	4.27	680484	56.70
+out_spectra_mzpeak	RAN	4.36	793272	56.70
+mzpeak_point	RAN	1.15	722672	56.72
+mzpeak_chunked	RAN	1.64	910676	59.06

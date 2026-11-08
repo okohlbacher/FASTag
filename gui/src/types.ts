@@ -211,7 +211,8 @@ export interface Taxon {
   name: string
   observed: number
   adjusted: number
-  q: number
+  // null: the CLI wrote NA (-species_orientation both): uncalibrated, not q = 1.
+  q: number | null
   // FASTag 1.12 -species_call decoy (D1): present, no_call or not_detected,
   // and why. Absent from a report written without the call.
   call?: string

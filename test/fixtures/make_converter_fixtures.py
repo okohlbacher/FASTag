@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write the two timsTOF-shaped mzML fixtures of mzml_to_mgf_test.
+"""Write the two timsTOF-shaped mzML fixtures of mzml_to_mgf_test and census_edge.mzML.
 
     make_converter_fixtures.py Ecoli_MS2_small.mzML out_dir
 
@@ -27,6 +27,13 @@ ddapasef_empty.mzML, after msconvert-style ddaPASEF output (PXD054073-like):
     <precursor> has only isolation window offsets and an empty <activation/>
     (no selectedIonList), one whose only target is 0, and one whose first
     <precursor> is such and whose second carries the selected ion
+  - 64-bit m/z and 32-bit intensity, zlib; indexedmzML with an exact index
+
+census_edge.mzML, the edge cases of the -census statuses (census_cli_test):
+  - index 0 an MS1; 1 an MS2 without peaks; 2 an MS2 without precursorList;
+    3 an MS2 whose selected ion m/z is "nan"; 4 an MS2 with 2 peaks; 5 an MS2
+    whose intensities are all 0; 6 an MS2 whose intensities are all NaN;
+    7-11 five MS2 copied from the source, index 9 without a charge state
   - 64-bit m/z and 32-bit intensity, zlib; indexedmzML with an exact index
 
 Needs pyteomics and numpy (to read the source).
@@ -280,11 +287,78 @@ def ddapasef(src: list) -> bytes:
     return indexed(head, spectra, '</spectrumList>\n</run>\n</mzML>\n')
 
 
+def census_edge(src: list) -> bytes:
+    run = "census_edge_synthetic"
+    head = ('<mzML xmlns="http://psi.hupo.org/ms/mzml" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '
+            'xsi:schemaLocation="http://psi.hupo.org/ms/mzml http://psidev.info/files/ms/mzML/xsd/mzML1.1.0.xsd" '
+            f'id="{run}" version="1.1.0">\n' + CV +
+            '<fileDescription>\n<fileContent>\n'
+            '<cvParam cvRef="MS" accession="MS:1000579" name="MS1 spectrum" value=""/>\n'
+            '<cvParam cvRef="MS" accession="MS:1000580" name="MSn spectrum" value=""/>\n'
+            '</fileContent>\n</fileDescription>\n'
+            '<softwareList count="1">\n<software id="synthetic" version="1"/>\n</softwareList>\n'
+            '<instrumentConfigurationList count="1">\n<instrumentConfiguration id="IC1">\n'
+            '<componentList count="1">\n<analyzer order="1">\n'
+            '<cvParam cvRef="MS" accession="MS:1000264" name="ion trap" value=""/>\n</analyzer>\n'
+            '</componentList>\n</instrumentConfiguration>\n</instrumentConfigurationList>\n'
+            '<dataProcessingList count="1">\n<dataProcessing id="synthetic">\n'
+            '<processingMethod order="0" softwareRef="synthetic">\n'
+            '<cvParam cvRef="MS" accession="MS:1000544" name="Conversion to mzML" value=""/>\n'
+            '</processingMethod>\n</dataProcessing>\n</dataProcessingList>\n'
+            f'<run id="{run}" defaultInstrumentConfigurationRef="IC1">\n'
+            '<spectrumList count="12" defaultDataProcessingRef="synthetic">\n')
+
+    def spectrum(index, level, rt, prec, mz, it):
+        sid = f"scan={index + 1}"
+        return sid, (f'<spectrum index="{index}" id="{sid}" defaultArrayLength="{len(mz)}">\n'
+                     f'<cvParam cvRef="MS" accession="MS:1000511" name="ms level" value="{level}"/>\n'
+                     + ('<cvParam cvRef="MS" accession="MS:1000579" name="MS1 spectrum" value=""/>\n' if level == 1 else
+                        '<cvParam cvRef="MS" accession="MS:1000580" name="MSn spectrum" value=""/>\n')
+                     + '<cvParam cvRef="MS" accession="MS:1000127" name="centroid spectrum" value=""/>\n'
+                     '<scanList count="1">\n<cvParam cvRef="MS" accession="MS:1000795" name="no combination" value=""/>\n<scan>\n'
+                     f'<cvParam cvRef="MS" accession="MS:1000016" name="scan start time" value="{rt!r}" unitCvRef="UO" unitAccession="UO:0000010" unitName="second"/>\n'
+                     '</scan>\n</scanList>\n' + prec + arrays(mz, it, "<f4") + '</spectrum>\n')
+
+    def precursor(mz_text, z):
+        charge = f'<cvParam cvRef="MS" accession="MS:1000041" name="charge state" value="{z}"/>\n' if z else ''
+        return ('<precursorList count="1">\n<precursor>\n<isolationWindow>\n'
+                f'<cvParam cvRef="MS" accession="MS:1000827" name="isolation window target m/z" value="{mz_text}" unitCvRef="MS" unitAccession="MS:1000040" unitName="m/z"/>\n'
+                '<cvParam cvRef="MS" accession="MS:1000828" name="isolation window lower offset" value="1.0" unitCvRef="MS" unitAccession="MS:1000040" unitName="m/z"/>\n'
+                '<cvParam cvRef="MS" accession="MS:1000829" name="isolation window upper offset" value="1.0" unitCvRef="MS" unitAccession="MS:1000040" unitName="m/z"/>\n'
+                '</isolationWindow>\n<selectedIonList count="1">\n<selectedIon>\n'
+                f'<cvParam cvRef="MS" accession="MS:1000744" name="selected ion m/z" value="{mz_text}" unitCvRef="MS" unitAccession="MS:1000040" unitName="m/z"/>\n'
+                + charge + '</selectedIon>\n</selectedIonList>\n<activation>\n'
+                '<cvParam cvRef="MS" accession="MS:1000133" name="collision-induced dissociation" value=""/>\n'
+                '</activation>\n</precursor>\n</precursorList>\n')
+
+    empty = np.empty(0)
+    spectra = []
+    pmz, z, rt, mz, it = src[0]
+    spectra.append(spectrum(0, 1, rt - 0.5, "", np.sort(np.concatenate([mz, [pmz]])), np.full(len(mz) + 1, 500.0)))
+    pmz, z, rt, mz, it = src[1]
+    spectra.append(spectrum(1, 2, rt, precursor(repr(pmz), z), empty, empty))        # empty
+    pmz, z, rt, mz, it = src[2]
+    spectra.append(spectrum(2, 2, rt, "", mz, it))                                    # no precursor
+    pmz, z, rt, mz, it = src[3]
+    spectra.append(spectrum(3, 2, rt, precursor("nan", z), mz, it))                   # bad precursor
+    pmz, z, rt, mz, it = src[4]
+    spectra.append(spectrum(4, 2, rt, precursor(repr(pmz), z), mz[:2], it[:2]))        # 2 peaks
+    pmz, z, rt, mz, it = src[5]
+    spectra.append(spectrum(5, 2, rt, precursor(repr(pmz), z), mz, np.zeros(len(mz))))  # all zero
+    pmz, z, rt, mz, it = src[6]
+    spectra.append(spectrum(6, 2, rt, precursor(repr(pmz), z), mz, np.full(len(mz), np.nan)))  # all NaN
+    for k in range(5):
+        pmz, z, rt, mz, it = src[7 + k]
+        spectra.append(spectrum(7 + k, 2, rt, precursor(repr(pmz), 0 if k == 2 else z), mz, it))
+    return indexed(head, spectra, '</spectrumList>\n</run>\n</mzML>\n')
+
+
 def main() -> None:
     src_path, out = sys.argv[1], Path(sys.argv[2])
     src = list(source_spectra(src_path))
     (out / "diatracer_like.mzML").write_bytes(diatracer(src[:60]))
     (out / "ddapasef_empty.mzML").write_bytes(ddapasef(src[60:120]))
+    (out / "census_edge.mzML").write_bytes(census_edge(src[:12]))
 
 
 if __name__ == "__main__":

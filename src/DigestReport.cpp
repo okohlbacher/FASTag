@@ -12,6 +12,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <limits>
 
 namespace FASTag::Digest
@@ -80,12 +81,44 @@ namespace FASTag::Digest
     r.add("run", "background_share", num(s.background_share), "-",
           "Every model is mixed with the background at a share of " + num(s.background_share) + ".");
     r.add("run", "models", s.models, "-",
-          s.models == "shipped" ? "The models are the cleavage rules shipped with FASTag." : "The models are read from " + s.models + ".");
+          s.models == "shipped" ? "The models are the cleavage rules shipped with FASTag."
+          : s.models == "shipped_v2" ? "The models are the v2 table shipped with FASTag (-digest_models_version v2)."
+                                     : "The models are read from " + s.models + ".");
     r.add("run", "background", s.background, "-",
           s.background == "shipped_human" ? "The background is the residue composition of the human reference proteome shipped with FASTag."
           : s.background == "models_table" ? "The background is the one in the model table."
                                            : "The background is the residue composition of " + s.background.substr(6) +
                                                  (s.background_pseudocount ? ", with one count added to every residue because one is absent." : "."));
+    // 1.12 D (#3c-#3f): the v2 settings, only when one of them is on or the
+    // table is a v2 table (its specificity rows change the scores).
+    const bool v2 = s.chemV2() || table.version == 2;
+    if (v2)
+    {
+      r.add("run", "models_version", table.version == 2 ? "v2" : "v1", "-",
+            table.version == 2 ? "The model table is a v2 table (detection, reference and specificity rows); not validated on held-out data."
+                               : "The model table is a v1 table.");
+      r.add("run", "specificity", table.has_specificity ? num(table.s_trypsin) + "," + num(table.s_nontryptic) : "-", "-",
+            table.has_specificity ? "The Trypsin-class models are mixed with the background at a share of " + num(table.s_trypsin) +
+                                        ", every other model at " + num(table.s_nontryptic) + " (the table's specificity rows)."
+                                  : "Every model is mixed at the background share above.");
+      r.add("run", "reference_kr", table.has_reference ? num(table.ref_k) + "," + num(table.ref_r) : "-", "-",
+            table.has_reference ? "The detection weights were fitted against an in-silico tryptic K share of " + num(table.ref_k) +
+                                      " and R share of " + num(table.ref_r) + "."
+                                : "The table names no reference K:R.");
+      r.add("run", "detection", s.detection ? "shipped" : "none", "-",
+            s.detection ? "The tag ends are scored with the table's detection weights of the run's instrument class; not validated on held-out data."
+                        : "No detection weights are applied.");
+      r.add("run", "flank2", s.flank2 ? "auto" : "off", "-",
+            s.flank2 ? "Two-residue flank masses are scored when the P1 counts are too few or y1 is cut off; not validated on held-out data."
+                     : "Two-residue flank masses are not scored.");
+      r.add("run", "min_confidence", num(s.min_confidence), "-",
+            s.min_confidence > 0 ? "A call with a calibrated p_correct below " + num(s.min_confidence) + " is a no_call (low_confidence)."
+                                 : "No call is withheld for its p_correct.");
+      r.add("run", "calibration", s.calibration.loaded ? s.calibration_source : "-", "-",
+            s.calibration.loaded ? (s.calibration_source == "shipped" ? "p_correct uses the calibration shipped with FASTag."
+                                                                      : "p_correct uses the calibration in " + s.calibration_source + ".")
+                                 : "No p_correct is computed.");
+    }
 
     // ---- meta
     const bool have_inst = !meta.instrument_name.empty() || !meta.instrument_model.empty();
@@ -131,6 +164,10 @@ namespace FASTag::Digest
     r.add("meta", "ms2_whole_intensity_share", meta.peaks ? num(whole) : "-", u(meta.peaks),
           meta.peaks ? "A share of " + f(whole, 4) + " of the " + u(meta.peaks) + " MS2 peak intensities above 0 are whole numbers."
                      : "No MS2 spectrum has a peak with an intensity above 0.");
+    const std::string inst_class = instrumentClass(meta);
+    if (v2)
+      r.add("meta", "instrument_class", inst_class, "-",
+            "The detection class of the run is " + inst_class + " (orbitrap_hcd, timstof or other).");
 
     // ---- counts
     const auto cterm = tc.cterm(), nterm = tc.nterm();
@@ -142,6 +179,10 @@ namespace FASTag::Digest
           u(tot) + " C-terminal tag ends match a residue key, labelled K and R+10 included.");
     r.add("count", "n_c", u(n_c), u(tc.tags), u(n_c) + " C-terminal tag ends match a residue, labelled K counted as K and R+10 left out.");
     r.add("count", "n_n", u(n_n), u(tc.tags), u(n_n) + " N-terminal tag ends match a residue, labelled K counted as K and R+10 left out.");
+    std::uint64_t n_f2 = 0;
+    for (std::uint64_t v : tc.dip) n_f2 += v;
+    if (v2 && s.flank2)
+      r.add("count", "flank2_n", u(n_f2), u(tc.tags), u(n_f2) + " tag ends are a two-residue flank sum (C-terminal, or N-terminal less H2O).");
 
     for (const char* key : kKeys7)
     {
@@ -174,16 +215,13 @@ namespace FASTag::Digest
     }
 
     // ---- shares, from res / tot as the reference computes them
-    const auto& keys = residueKeys();
     if (tot > 0)
     {
-      PySum kr, anch;
-      for (int k = 0; k < kNumKeys; ++k)
-        if (keys[k].name[0] == 'K' || keys[k].name[0] == 'R')
-          kr.add(static_cast<double>(tc.res(k)) / static_cast<double>(tot));
+      const double kr = krShare(tc);
+      PySum anch;
       for (const char* a : {"L", "V", "F", "Y", "M"})
         anch.add(static_cast<double>(tc.res(keyIndex(a))) / static_cast<double>(tot));
-      r.add("share", "kr", num(kr.value()), u(tot), "A share of " + f(kr.value(), 3) + " of the C-terminal tag ends are K or R, labelled ones included.");
+      r.add("share", "kr", num(kr), u(tot), "A share of " + f(kr, 3) + " of the C-terminal tag ends are K or R, labelled ones included.");
       r.add("share", "anchors_LVFYM", num(anch.value()), u(tot), "A share of " + f(anch.value(), 3) + " of the C-terminal tag ends are L, V, F, Y or M.");
     }
     else
@@ -195,7 +233,17 @@ namespace FASTag::Digest
     r.add("share", "nterm_D", num(nd), u(n_n), "A share of " + f(nd, 3) + " of the N-terminal tag ends are D.");
 
     // ---- models and the call
-    const Classification c = classify(cterm, nterm, table, s.background_share, s.tag_min);
+    // 1.12 D: detection (#3c) and the table's specificity (#3e); inactive
+    // at the defaults, where this is the 1.11 classifier.
+    ClassifyOptions opt;
+    if (s.detection) opt.detection = table.detectionFor(inst_class);
+    if (table.has_specificity)
+    {
+      opt.specificity = true;
+      opt.s_trypsin = table.s_trypsin;
+      opt.s_nontryptic = table.s_nontryptic;
+    }
+    Classification c = classify(cterm, nterm, table, s.background_share, s.tag_min, opt);
     for (const ModelScore& m : c.scores)
     {
       r.add("model", m.name + ".loglik", num(m.loglik), u(c.n_c + (c.uses_nterm ? c.n_n : 0)),
@@ -240,12 +288,45 @@ namespace FASTag::Digest
     const std::string lowres = s.low_resolution ? "yes" : "no";
     const std::string nonfin = c.scored && c.nonfinite ? "yes" : "no";
     const std::string tie = c.scored && !c.tied.empty() ? "yes" : "no";
+    // 1.12 D: with detection weights for the run's class (#3c), a timsTOF
+    // run is called rather than withheld (the timsTOF call).
+    const bool tims_call = opt.detection != nullptr && inst_class == "timstof";
+    const std::string tims_rule = tims_call && tims == "yes" ? "no" : tims;
+    const std::string counts_rule = tims_call && counts == "yes" ? "no" : counts;
     std::string reason;
-    for (const auto& [name, v] : {std::pair{"low_resolution", lowres}, std::pair{"timstof", tims},
+    for (const auto& [name, v] : {std::pair{"low_resolution", lowres}, std::pair{"timstof", tims_rule},
                                   std::pair{"ms2_scan_window", scan}, std::pair{"ms2_first_peak", fpk},
-                                  std::pair{"ion_counts", counts}, std::pair{"few_tags", few}, std::pair{"nonfinite_score", nonfin},
+                                  std::pair{"ion_counts", counts_rule}, std::pair{"few_tags", few}, std::pair{"nonfinite_score", nonfin},
                                   std::pair{"tie", tie}})
       if (reason.empty() && v == "yes") reason = name;
+    // 1.12 D #3d: when the P1 counts are too few or y1 is cut off, the
+    // two-residue flank masses are scored instead, if there are enough.
+    bool flank2_used = false;
+    if (s.flank2 && tc.flank2() &&
+        (reason == "timstof" || reason == "ms2_scan_window" || reason == "ms2_first_peak" || reason == "ion_counts" ||
+         reason == "few_tags"))
+    {
+      Classification c2 = classify2(tc.dip, *tc.flank2Table(), table, s.background_share, s.tag_min, opt);
+      if (c2.scored)
+      {
+        flank2_used = true;
+        for (const ModelScore& m : c2.scores)
+          r.add("model", m.name + ".flank2_loglik", num(m.loglik), u(c2.n_c),
+                m.name + " gives the two-residue flank sums a log-likelihood of " + g(m.loglik, 6) + ".");
+        c = std::move(c2);
+        reason.clear();
+        if (c.nonfinite) reason = "nonfinite_score";
+        else if (!c.tied.empty()) reason = "tie";
+      }
+    }
+    // 1.12 D #3f: the calibrated p_correct of a call, and the low_confidence
+    // no-call below -digest_min_confidence.
+    double p_correct = std::numeric_limits<double>::quiet_NaN();
+    if (s.calibration.loaded && reason.empty())
+    {
+      p_correct = pCorrect(s.calibration, c.margin, c.n_c + (c.uses_nterm ? c.n_n : 0), fpk == "yes");
+      if (s.min_confidence > 0.0 && p_correct < s.min_confidence) reason = "low_confidence";
+    }
     std::string tied_names;
     for (const std::string& t : c.tied) tied_names += (tied_names.empty() ? "" : ", ") + t;
 
@@ -273,6 +354,9 @@ namespace FASTag::Digest
       r.add("call", "uses_nterm", c.uses_nterm ? "yes" : "no", u(c.n_n),
             c.uses_nterm ? "The call uses the " + u(c.n_n) + " N-terminal tag ends."
                          : "The call leaves out the N-terminal tag ends: " + u(c.n_n) + " are fewer than " + std::to_string(s.tag_min) + ".");
+      if (s.calibration.loaded)
+        r.add("call", "p_correct", num(p_correct), u(c.n_c + (c.uses_nterm ? c.n_n : 0)),
+              "The calibrated probability that the call is correct is " + f(p_correct, 3) + " (not validated on held-out data).");
     }
     else
     {
@@ -285,11 +369,26 @@ namespace FASTag::Digest
         why = "the input names no instrument, and a share of " + f(whole, 4) + " of its MS2 peak intensities above 0 are whole numbers, as in timsTOF data";
       else if (reason == "nonfinite_score") why = "a residue seen at the tag ends has probability 0 under the call or the runner-up";
       else if (reason == "tie") why = tied_names + " fit the tag ends equally well";
+      else if (reason == "low_confidence")
+        why = "the calibrated probability that " + c.scores[static_cast<std::size_t>(c.top)].name + " is correct, " + f(p_correct, 3) +
+              ", is below " + num(s.min_confidence);
       else why = u(n_c) + " C-terminal tag ends are fewer than " + std::to_string(s.tag_min);
       r.add("call", "status", "no_call", u(c.n_c), "No protease is called: " + why + ".");
       r.add("call", "reason", reason, "-", "The first no-call rule that applies is " + reason + ".");
       if (reason == "tie")
         r.add("call", "tied", tied_names, std::to_string(c.tied.size()), tied_names + " have the same log-likelihood.");
+      if (reason == "low_confidence")
+        r.add("call", "p_correct", num(p_correct), u(c.n_c + (c.uses_nterm ? c.n_n : 0)),
+              "The calibrated probability that the call is correct is " + f(p_correct, 3) + " (not validated on held-out data).");
+    }
+    if (v2)
+    {
+      r.add("call", "flank2_used", flank2_used ? "yes" : "no", flank2_used ? u(c.n_c) : "-",
+            flank2_used ? "The call is scored on " + u(c.n_c) + " two-residue flank sums, as the P1 counts are too few or y1 is cut off."
+                        : "The call is scored on the P1 and P1' counts.");
+      r.add("call", "timstof_call", tims_call ? "yes" : "no", "-",
+            tims_call ? "The run is timsTOF data and is called with the timstof detection weights rather than withheld."
+                      : "The timsTOF rule withholds the call as in FASTag 1.11, or the run is not timsTOF data.");
     }
 
     r.add("nocall", "low_resolution", lowres, "-",
@@ -319,7 +418,89 @@ namespace FASTag::Digest
     r.add("nocall", "tie", tie, std::to_string(c.tied.size()),
           tie == "yes" ? tied_names + " have the same log-likelihood."
                        : "No model of another class has the call's log-likelihood, or no call was scored.");
+    if (s.calibration.loaded)
+    {
+      const bool low = reason == "low_confidence";
+      r.add("nocall", "low_confidence", low ? "yes" : "no", "-",
+            low ? "The calibrated p_correct " + f(p_correct, 3) + " is below " + num(s.min_confidence) + "."
+            : std::isnan(p_correct) ? "No p_correct was computed: an earlier rule withheld the call."
+                                    : "The calibrated p_correct " + f(p_correct, 3) + " is not below " + num(s.min_confidence) + ".");
+    }
     return out;
+  }
+
+  // ---- 1.12 D: instrument class (#3c) ----
+  Fragmentation fragmentationFromFilter(std::string_view filter)
+  {
+    bool beam = false, res = false;
+    for (std::size_t at = filter.find('@'); at != std::string_view::npos; at = filter.find('@', at + 1))
+    {
+      std::string tok;
+      for (std::size_t i = at + 1; i < filter.size(); ++i)
+      {
+        const char c = static_cast<char>(std::tolower(static_cast<unsigned char>(filter[i])));
+        if (c < 'a' || c > 'z') break;
+        tok += c;
+      }
+      if (tok == "hcd") beam = true;
+      else if (tok == "cid" || tok == "pqd") res = true;
+    }
+    return beam ? Fragmentation::Beam : res ? Fragmentation::Resonance : Fragmentation::Unknown;
+  }
+
+  void addFragmentation(RunMeta& meta, Fragmentation frag, std::string_view filter)
+  {
+    if (frag == Fragmentation::Unknown) frag = fragmentationFromFilter(filter);
+    if (frag == Fragmentation::Beam) ++meta.ms2_beam;
+    else if (frag == Fragmentation::Resonance) ++meta.ms2_resonance;
+    const std::size_t b = filter.find_first_not_of(" \t");
+    if (b != std::string_view::npos && filter.size() - b >= 4)
+    {
+      std::string head(filter.substr(b, 4));
+      for (char& c : head) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+      if (head == "ITMS") ++meta.ms2_itms;
+      else if (head == "FTMS") ++meta.ms2_ftms;
+    }
+  }
+
+  std::string instrumentClass(const RunMeta& meta)
+  {
+    // The timstof and ion_counts rules of digestRows(), read the same way.
+    const std::string inst = lower(meta.instrument_name + " " + meta.instrument_model);
+    const bool tims = inst.find("timstof") != std::string::npos || meta.native_id_type == "MS:1002818" ||
+                      meta.native_id_type == "MS:1002819" || meta.im_vssc > 0;
+    if (tims) return "timstof";
+    const std::string& nid = meta.native_id_type;
+    const bool nid_generic = nid == "MS:1000774" || nid == "MS:1000775" || nid == "MS:1000776" ||
+                             nid == "MS:1000777" || nid == "MS:1000824";
+    const bool have_meta = !meta.instrument_name.empty() || !meta.instrument_model.empty() || (!nid.empty() && !nid_generic);
+    if (!have_meta && meta.peaks > 0 &&
+        static_cast<double>(meta.peaks_whole) / static_cast<double>(meta.peaks) >= 0.5)
+      return "timstof";
+    bool orbi = meta.analyzer_orbitrap;
+    for (const char* k : {"orbitrap", "q exactive", "exploris", "astral", "lumos", "fusion", "eclipse", "ascend"})
+      if (inst.find(k) != std::string::npos) orbi = true;
+    if (!orbi) return "other";
+    if (meta.ms2_itms > meta.ms2_ftms) return "other";  // MS2 mostly read in the ion trap
+    if (meta.ms2_beam + meta.ms2_resonance > 0)
+      return meta.ms2_beam > meta.ms2_resonance ? "orbitrap_hcd" : "other";
+    // No activation information: only what can only be HCD in the Orbitrap.
+    for (const char* k : {"q exactive", "exploris", "astral"})
+      if (inst.find(k) != std::string::npos) return "orbitrap_hcd";
+    if (meta.analyzer_orbitrap && !meta.analyzer_iontrap) return "orbitrap_hcd";
+    return "other";
+  }
+  // ---- end 1.12 D ----
+
+  double krShare(const TerminusCounter& tc)
+  {
+    const auto& keys = residueKeys();
+    const std::uint64_t tot = tc.tot();
+    PySum kr;
+    for (int k = 0; k < kNumKeys; ++k)
+      if (keys[k].name[0] == 'K' || keys[k].name[0] == 'R')
+        kr.add(static_cast<double>(tc.res(k)) / static_cast<double>(tot));
+    return kr.value();
   }
 
   std::vector<Row> labelRows(const TerminusCounter& tc, const DigestSettings& s)
@@ -367,9 +548,147 @@ namespace FASTag::Digest
     return out;
   }
 
+  namespace
+  {
+    /// The heavy share of -label_out's heavy rows: heavy / (heavy + light),
+    /// both as shares of tot.
+    double heavyShare(const TerminusCounter& tc, int light, int hv)
+    {
+      const std::uint64_t tot = tc.tot();
+      const double sl = static_cast<double>(tc.res(light)) / static_cast<double>(tot);
+      const double sh = static_cast<double>(tc.res(hv)) / static_cast<double>(tot);
+      return sh / std::max(sh + sl, 1e-9);
+    }
+
+    /// @p v rounded to 3 decimals as Python's round(v, 3) rounds it: the
+    /// decimal nearest to the double's exact value (no binary double lies
+    /// exactly half-way between two 3-decimal numbers), read back.
+    double round3(double v)
+    {
+      char b[64];
+      std::snprintf(b, sizeof b, "%.3f", v);
+      return std::strtod(b, nullptr);
+    }
+  }
+
+  LabelCall labelCall(const TerminusCounter& tc, const DigestSettings& s)
+  {
+    LabelCall c;
+    const std::uint64_t tot = tc.tot();
+    if (tot > 0) c.kr_rounded = round3(krShare(tc));
+    if (s.low_resolution) { c.reason = "low_resolution"; return c; }
+    if (tot < kLabelTagMin) { c.reason = "few_tags"; return c; }
+    c.called = true;
+    const double tags = static_cast<double>(tc.tags);
+    const auto& labs = labelKeys();
+    for (std::size_t l = 0; l < labs.size(); ++l)
+    {
+      const double x = static_cast<double>(tc.lab_n[l] + tc.lab_c[l]);
+      const double bg = static_cast<double>(tc.lab_bg_n[l] + tc.lab_bg_c[l]);
+      if (x >= kLabelMinShare * tags && x >= kLabelBackgroundFold * std::max(bg, 1.0))
+      {
+        c.labels.push_back(labs[l].name);
+        c.isobaric = true;
+      }
+    }
+    const int K = keyIndex("K"), K8 = keyIndex("K+8"), R = keyIndex("R"), R10 = keyIndex("R+10");
+    const double hk = heavyShare(tc, K, K8), hr = heavyShare(tc, R, R10);
+    const std::uint64_t nk = tc.res(K) + tc.res(K8), nr = tc.res(R) + tc.res(R10);
+    const std::uint64_t smin = static_cast<std::uint64_t>(std::max(0, s.silac_min));
+    if (hk >= kHeavyMin && hr >= kHeavyMin && c.kr_rounded >= kKrTryptic && std::min(nk, nr) >= smin)
+    {
+      c.labels.push_back("SILAC");
+      c.silac = true;
+      c.silac_strong = std::min(hk, hr) >= kHeavyStrong;
+    }
+    return c;
+  }
+
+  std::vector<Row> labelCallRows(const LabelCall& c, const TerminusCounter& tc, const DigestSettings& s)
+  {
+    std::vector<Row> out;
+    Rows r{out};
+    const std::uint64_t tot = tc.tot();
+    const std::string sec = "label_call";
+    if (!c.called)
+    {
+      const std::string why =
+          c.reason == "low_resolution"
+              ? "the fragment tolerance is in Da, so the label windows do not hold"
+              : u(tot) + " C-terminal tag ends are fewer than " + std::to_string(kLabelTagMin);
+      r.add(sec, "status", "no_call", u(tot), "No label is called: " + why + ".");
+      r.add(sec, "label", "-", "-", "There is no label call.");
+      r.add(sec, "basis", "-", "-", "There is no label call.");
+      r.add(sec, "silac", "-", "-", "There is no label call.");
+      r.add(sec, "reason", c.reason, "-", "The first no-call rule that applies is " + c.reason + ".");
+      return out;
+    }
+    std::string label;
+    for (const std::string& l : c.labels) label += (label.empty() ? "" : "+") + l;
+    if (label.empty()) label = "label-free";
+    r.add(sec, "status", "call", u(tot),
+          "A label call is made from " + u(tot) + " C-terminal tag ends and " + u(tc.tags) + " filtered tags.");
+    std::string desc;
+    if (c.labels.empty())
+      desc = "No label passes: no isobaric gap reaches " + g(kLabelMinShare * 100, 3) + "% of the filtered tags and " +
+             g(kLabelBackgroundFold, 3) + "x its background, and the heavy shares do not make SILAC.";
+    else
+    {
+      desc = "The run is labelled " + label + ".";
+      for (const std::string& l : c.labels)
+        if (l == "TMTpro") desc += " TMTpro and iTRAQ8plex have the same mass; the reporter ions decide.";
+    }
+    r.add(sec, "label", label, u(tc.tags), desc);
+    std::string basis = c.isobaric ? "nterm_gap" : "";
+    if (c.silac) basis += std::string(basis.empty() ? "" : "+") + "heavy_share";
+    if (basis.empty()) basis = "none";
+    r.add(sec, "basis", basis, "-",
+          basis == "none" ? "No label rule fired."
+          : "The call rests on " +
+                std::string(c.isobaric && c.silac ? "N-terminal label gaps of at least " + g(kLabelMinShare * 100, 3) +
+                                                        "% of the filtered tags and the heavy Lys8/Arg10 shares"
+                            : c.isobaric ? "N-terminal label gaps of at least " + g(kLabelMinShare * 100, 3) +
+                                               "% of the filtered tags and " + g(kLabelBackgroundFold, 3) + "x their background"
+                                         : "the heavy Lys8/Arg10 shares") +
+                ".");
+    const std::string sil = c.silac ? (c.silac_strong ? "strong" : "weak") : "none";
+    r.add(sec, "silac", sil, "-",
+          c.silac ? "Lys8 and Arg10 are each at least " + g(c.silac_strong ? kHeavyStrong : kHeavyMin, 3) +
+                        " of their residue's C-terminal ends, the K/R share is " + f(c.kr_rounded, 3) + " and " +
+                        std::to_string(s.silac_min) + " K- and R-terminal ends each are reached."
+                  : "SILAC needs Lys8 and Arg10 shares of at least " + g(kHeavyMin, 3) + ", a K/R share of at least " +
+                        g(kKrTryptic, 3) + " and " + std::to_string(s.silac_min) + " K- and R-terminal ends each.");
+    r.add(sec, "reason", "-", "-", "A label call is made.");
+    return out;
+  }
+
+  GapResult gapResult(const std::vector<GapRow>& rows, const std::vector<GapMod>& mods,
+                      const std::vector<Combo>& combos, const GapSettings& s)
+  {
+    std::vector<GapRow> hist;
+    std::vector<std::size_t> at;  // hist[k] is rows[at[k]]
+    for (std::size_t i = 0; i < rows.size(); ++i)
+      if (rows[i].spectra >= s.min_bin)
+      {
+        hist.push_back(rows[i]);
+        at.push_back(i);
+      }
+    GapResult res = detectGaps(hist, mods, combos, s.window, s.min_spectra, s.min_share, s.silac_share, s.silac_min);
+    for (GapPeak& p : res.peaks)
+      for (std::size_t& m : p.members) m = at[m];
+    return res;
+  }
+
   std::vector<Row> massgapRows(const std::vector<GapRow>& rows, const std::vector<std::string>& keys,
                                const std::vector<GapMod>& mods, const std::vector<Combo>& combos,
                                const std::vector<GapMod>& cys, const GapSettings& s)
+  {
+    return massgapRows(rows, keys, mods, cys, s, gapResult(rows, mods, combos, s));
+  }
+
+  std::vector<Row> massgapRows(const std::vector<GapRow>& rows, const std::vector<std::string>& keys,
+                               const std::vector<GapMod>& mods, const std::vector<GapMod>& cys,
+                               const GapSettings& s, const GapResult& res)
   {
     std::vector<Row> out;
     Rows r{out};
@@ -399,10 +718,6 @@ namespace FASTag::Digest
             u(n) + " placed spectra have a gap within " + num(t) + " Da of " + f(m.mass, 4) + " Da (" + m.site + ").");
     }
 
-    std::vector<GapRow> hist;
-    for (const GapRow& h : rows)
-      if (h.spectra >= s.min_bin) hist.push_back(h);
-    const GapResult res = detectGaps(hist, mods, combos, t, s.min_spectra, s.min_share, s.silac_share, s.silac_min);
     r.add("combo", "placed_spectra", u(res.placed), "-",
           u(res.placed) + " placed spectra are in histogram rows of at least " + u(s.min_bin) + ".");
     r.add("combo", "shifted_spectra", u(res.shifted), u(res.placed),

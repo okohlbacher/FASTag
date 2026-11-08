@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
-project(FASTag VERSION 1.11.1 LANGUAGES CXX)
+project(FASTag VERSION 1.12.0 LANGUAGES CXX)
 # The GUI carries that version in four more files; a bump that misses one
 # fails here rather than shipping (cmake/version-guard.cmake says why).
 include(cmake/version-guard.cmake)
@@ -69,7 +69,21 @@ if(NOT MSVC)
   add_compile_options(-ffp-contract=off)
 endif()
 
-add_library(fastag_core STATIC src/FASTagger.cpp src/AveragineDeisotoper.cpp src/Digest.cpp src/DigestReport.cpp src/FastaFilter.cpp src/ProteomeIndex.cpp src/ReconIds.cpp src/TagRecon.cpp src/TaxDeconv.cpp src/TaxIndex.cpp src/TaxStats.cpp)
+# fastag_core sources. 1.12 clusters add their sources only to their own
+# anchored list, in the fixed order E, A, D, F (E data types and acquisition,
+# A identification and search hand-off, D organism and run chemistry, F quality
+# control).
+set(FASTAG_CORE_SOURCES src/FASTagger.cpp src/AveragineDeisotoper.cpp src/Digest.cpp src/DigestReport.cpp src/FastaFilter.cpp src/ProteomeIndex.cpp src/ReconIds.cpp src/TagRecon.cpp src/TaxDeconv.cpp src/TaxIndex.cpp src/TaxStats.cpp)
+# ---- 1.12 E: core sources ----
+set(FASTAG_CORE_SOURCES_E src/Acquisition.cpp src/Centroid.cpp src/PrecursorHypotheses.cpp)
+# ---- 1.12 A: core sources ----
+set(FASTAG_CORE_SOURCES_A src/Shortlist.cpp src/SearchConfig.cpp)
+# ---- 1.12 D: core sources ----
+set(FASTAG_CORE_SOURCES_D src/SpeciesLookup.cpp src/SpeciesCall.cpp src/AlkylationCall.cpp)
+# ---- 1.12 F: core sources ----
+set(FASTAG_CORE_SOURCES_F src/OutputGuard.cpp src/CensusIds.cpp)
+add_library(fastag_core STATIC ${FASTAG_CORE_SOURCES}
+            ${FASTAG_CORE_SOURCES_E} ${FASTAG_CORE_SOURCES_A} ${FASTAG_CORE_SOURCES_D} ${FASTAG_CORE_SOURCES_F})
 target_include_directories(fastag_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
@@ -91,7 +105,11 @@ endif()
 # links the same library.
 find_package(ZLIB REQUIRED)
 
-add_executable(FASTag src/FASTag.cpp src/IndexedMzMLReader.cpp src/MzMLDirectDecoder.cpp src/MgfReader.cpp src/MzPeakStream.cpp)
+# ---- 1.12 G: executable sources ----
+# G1: -probe_input and -dump_spectrum, which read through the readers below.
+set(FASTAG_EXE_SOURCES_G src/InputProbe.cpp)
+add_executable(FASTag src/FASTag.cpp src/IndexedMzMLReader.cpp src/MzMLDirectDecoder.cpp src/MgfReader.cpp src/MzPeakStream.cpp
+               src/AcquisitionProbe.cpp ${FASTAG_EXE_SOURCES_G})
 
 # mimalloc on Windows, with redirection of the C runtime heap.
 #
@@ -207,6 +225,7 @@ install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy/nodes.dmp"
               "${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy/names.dmp"
               "${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy/README.md"
               "${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy/reference-set.tsv"
+              "${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy/species_call.tsv"
         DESTINATION share/FASTag/taxonomy)
 
 add_executable(buildtaxdb src/buildtaxdb.cpp)
@@ -217,7 +236,24 @@ target_link_libraries(buildtaxdb PRIVATE fastag_core)
 install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/data/digest/digest_models.tsv"
               "${CMAKE_CURRENT_SOURCE_DIR}/data/digest/massgap_mods.tsv"
               "${CMAKE_CURRENT_SOURCE_DIR}/data/digest/README.md"
+              # ---- 1.12 D: chemistry v2 (#3c-#3f; opt-in, unfitted until the DEV regeneration) ----
+              "${CMAKE_CURRENT_SOURCE_DIR}/data/digest/digest_models_v2.tsv"
+              "${CMAKE_CURRENT_SOURCE_DIR}/data/digest/digest_calibration.tsv"
         DESTINATION share/FASTag/digest)
+# ---- 1.12 D: the -alkylation_proteome proteomes (#3g), beside the digest
+# data at <bin>/../share/FASTag/alkylation (flat layout: share-FASTag-alkylation).
+# Installed only once data/alkylation holds them (not in git yet). The
+# proteomes ship only with their README (UniProt release, sha256, CC BY 4.0
+# notice): a drop without it is a configure error, not an install failure.
+file(GLOB FASTAG_ALKYLATION_PROTEOMES "${CMAKE_CURRENT_SOURCE_DIR}/data/alkylation/*.fasta.gz")
+if(FASTAG_ALKYLATION_PROTEOMES)
+  if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/data/alkylation/README.md")
+    message(FATAL_ERROR "data/alkylation holds proteomes (${FASTAG_ALKYLATION_PROTEOMES}) but no README.md "
+                        "with their UniProt release, sha256 and licence notice; add it (and the BOM.md row).")
+  endif()
+  install(FILES ${FASTAG_ALKYLATION_PROTEOMES} "${CMAKE_CURRENT_SOURCE_DIR}/data/alkylation/README.md"
+          DESTINATION share/FASTag/alkylation)
+endif()
 
 install(TARGETS buildtaxdb RUNTIME DESTINATION bin)
 
@@ -230,11 +266,31 @@ endif()
 option(FASTAG_BUILD_TESTS "Build tests" ON)
 if(FASTAG_BUILD_TESTS)
   enable_testing()
-  foreach(t ranksum_test fastag_test fasta_filter_test tagrecon_test tagfdr_test proteome_index_test glyco_test taxindex_test taxstats_test taxdeconv_test species_evidence_test sampler_test proforma_test numformat_test peakgrid_test formats_test digest_test)
+  # Unit tests: test/<name>.cpp linked against fastag_core. 1.12 clusters add
+  # their tests only to their own anchored list.
+  set(FASTAG_UNIT_TESTS ranksum_test fastag_test fasta_filter_test tagrecon_test tagfdr_test proteome_index_test glyco_test taxindex_test taxstats_test taxdeconv_test species_evidence_test sampler_test proforma_test numformat_test peakgrid_test formats_test digest_test)
+  # ---- 1.12 E: unit tests ----
+  set(FASTAG_UNIT_TESTS_E cli_param_test centroid_test complement_test ion_series_test precursor_hypotheses_test)
+  # ---- 1.12 A: unit tests ----
+  set(FASTAG_UNIT_TESTS_A shortlist_test search_config_test)
+  # ---- 1.12 D: unit tests ----
+  set(FASTAG_UNIT_TESTS_D species_call_test digest_v2_test alkylation_test)
+  # ---- 1.12 F: unit tests ----
+  set(FASTAG_UNIT_TESTS_F output_guard_test census_test census_ids_test)
+  foreach(t ${FASTAG_UNIT_TESTS} ${FASTAG_UNIT_TESTS_E} ${FASTAG_UNIT_TESTS_A} ${FASTAG_UNIT_TESTS_D} ${FASTAG_UNIT_TESTS_F})
     add_executable(${t} test/${t}.cpp)
     target_link_libraries(${t} PRIVATE fastag_core)
     add_test(NAME ${t} COMMAND ${t})
   endforeach()
+  # complement_test includes Boost.Math itself (the reference tail); fastag_core
+  # links Boost::headers PRIVATE, and OpenMS's target carries no Boost include
+  # path on Windows.
+  target_link_libraries(complement_test PRIVATE Boost::headers)
+
+  # 1.12 P4: the shared run report section (src/RunMeta.h) is frozen here.
+  add_executable(runmeta_test test/runmeta_test.cpp)
+  target_link_libraries(runmeta_test PRIVATE fastag_core)
+  add_test(NAME runmeta_test COMMAND runmeta_test WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 
   # Integration: tool description export against the real binary. Compares the
   # CTD's parameter set against the tool's own -write_ini output, and guards
@@ -289,7 +345,9 @@ if(FASTAG_BUILD_TESTS)
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/threads_test.sh $<TARGET_FILE:FASTag>
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
-                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/profile_ms2_small.mzML
+                   $<TARGET_FILE:ion_series_test>)
   set_tests_properties(threads_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # Windows with FASTAG_MIMALLOC: the redirection is active for the whole
@@ -304,6 +362,8 @@ if(FASTAG_BUILD_TESTS)
   # The shipped digest data, for digest_test and digest_cli_test.
   target_compile_definitions(digest_test PRIVATE
                              FASTAG_DIGEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/data/digest")
+  target_compile_definitions(digest_v2_test PRIVATE
+                             FASTAG_DIGEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/data/digest")
 
   # Integration: -digest_out, -label_out and -massgap_out on the vendored
   # fixture: the existing outputs unchanged, the reports' structure, a
@@ -312,16 +372,197 @@ if(FASTAG_BUILD_TESTS)
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/digest_cli_test.sh $<TARGET_FILE:FASTag>
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
-                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
+                   # 1.12 D #3c: the species-independence check of the v2 call
+                   $<TARGET_FILE:buildtaxdb>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy)
   set_tests_properties(digest_cli_test PROPERTIES SKIP_RETURN_CODE 77)
 
-  # Integration: -recon_id_out .mzid is written with placements, and empty
-  # (0 bytes) without them.
+  # Integration: -recon_id_out in mzid, idXML and mzTab holds what -recon_out
+  # holds; .mzid is empty (0 bytes) without placements; with
+  # FASTAG_BASELINE_BIN all of it equals the 1.11.0 binary's.
   add_test(NAME recon_ids_test
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/recon_ids_test.sh $<TARGET_FILE:FASTag>
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta)
   set_tests_properties(recon_ids_test PROPERTIES SKIP_RETURN_CODE 77)
+
+  # Baseline identity: every legacy output of this build equals the 1.11.0
+  # binary's (78390cd) on the fixtures, after date/version masking. Needs
+  # FASTAG_BASELINE_BIN (on node data: the 1.11.0 install); SKIPs without it.
+  # buildtaxdb is compared too when FASTAG_BASELINE_BUILDTAXDB is set. With
+  # FASTAG_BASELINE_REQUIRED=1 nothing may skip. Byte-identical branches are
+  # gated by tools/gate_job.sh (gate.sh, tools/baseline_identity_gate.sh on the
+  # PXD inputs and, with GATE_JOB_BUILD, this test with the baseline required).
+  add_test(NAME baseline_identity_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/baseline_identity_test.sh $<TARGET_FILE:FASTag>
+                   $<TARGET_FILE:buildtaxdb>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy)
+  set_tests_properties(baseline_identity_test PROPERTIES SKIP_RETURN_CODE 77)
+  # The harness's interface rule: new options may add whole option blocks to
+  # --help, --helphelp, the CTD and the INI; nothing existing may change.
+  add_test(NAME baseline_iface_added_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/baseline_iface_added_test.sh
+                   ${CMAKE_CURRENT_SOURCE_DIR}/tools/baseline_iface_added.py)
+  set_tests_properties(baseline_iface_added_test PROPERTIES SKIP_RETURN_CODE 77)
+
+  # 1.12 CLI tests against the real binary, one anchored block per cluster in
+  # the order E, A, D, F. A cluster adds its add_test calls only inside its
+  # own block.
+  # ---- 1.12 E: CLI tests ----
+  # P3: the -out_spectra compatibility shim keeps the 1.11 parameter list.
+  add_test(NAME out_spectra_params_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/out_spectra_params_test.sh $<TARGET_FILE:FASTag>
+                   $<TARGET_FILE:cli_param_test>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML)
+  set_tests_properties(out_spectra_params_test PROPERTIES SKIP_RETURN_CODE 77)
+  # #7: the raw-DIA classifier on the 21 synthetic cases of the plan, the
+  # probe helpers, both mzML readers on the fixtures, the mzPeak probe and
+  # the messages. Built with the readers it probes through.
+  add_executable(acquisition_test test/acquisition_test.cpp src/AcquisitionProbe.cpp src/IndexedMzMLReader.cpp
+                 src/MzMLDirectDecoder.cpp src/MgfReader.cpp src/MzPeakStream.cpp)
+  target_link_libraries(acquisition_test PRIVATE fastag_core ZLIB::ZLIB)
+  if(OpenMP_CXX_FOUND)
+    target_link_libraries(acquisition_test PRIVATE OpenMP::OpenMP_CXX)
+  endif()
+  target_compile_definitions(acquisition_test PRIVATE
+                             FASTAG_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
+  add_test(NAME acquisition_test COMMAND acquisition_test ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures)
+  # #7: raw DIA refused (exit 11, outputs untouched) on every reader, warn
+  # equal to 1.11.0, pseudo-DDA and DDA-like inputs equal to off.
+  add_test(NAME acquisition_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/acquisition_cli_test.sh $<TARGET_FILE:FASTag>
+                   $<TARGET_FILE:acquisition_test>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
+  set_tests_properties(acquisition_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # #9: -pick_profile / -pick_unknown_type on the profile fixtures
+  # (test/fixtures/make_profile_fixtures.py), legacy against 1.11.0.
+  add_test(NAME profile_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/profile_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures)
+  set_tests_properties(profile_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # E2: the complement options at their defaults equal 1.11 (and the
+  # baseline binary when FASTAG_BASELINE_BIN is set); away from them they act.
+  add_test(NAME complement_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/complement_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML)
+  set_tests_properties(complement_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # #15 phase A: activation counts and the b/y warning on derived ETD, EThcD
+  # and filter-string fixtures; tags unchanged; fast reader equals OnDisc.
+  # Phase B: -ion_series by|cz|auto (by == absent, auto on collisional ==
+  # by, c/z rows and column, hybrid/collisional WARNs, species exclusion,
+  # -stream refusal, OnDisc and threads).
+  add_test(NAME ion_series_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/ion_series_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mgf
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   $<TARGET_FILE:buildtaxdb>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
+                   $<TARGET_FILE:ion_series_test>
+                   # census_ids_test once F11B (-census_ids) is in the tree; empty before
+                   "$<$<TARGET_EXISTS:census_ids_test>:$<TARGET_FILE:census_ids_test>>")
+  set_tests_properties(ion_series_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # #6: -unknown_charge, -charge_*, -isotope_error on the fixture MGF with its
+  # charges stripped: defaults equal 1.11.0, the infer call, header charges
+  # kept, threads, losing hypotheses add no species, refusals.
+  add_test(NAME charge_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/charge_cli_test.sh $<TARGET_FILE:FASTag>
+                   $<TARGET_FILE:buildtaxdb>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mgf
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy)
+  set_tests_properties(charge_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # ---- 1.12 A: CLI tests ----
+  # #5: shortlist, reduced FASTA and engine configuration on the vendored
+  # fixture: ranking, no decoys, existing outputs unchanged, threads, the
+  # refusals and the protease check (in-silico chymotryptic MGF).
+  target_compile_definitions(shortlist_test PRIVATE
+                             FASTAG_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
+  target_compile_definitions(search_config_test PRIVATE
+                             FASTAG_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
+  add_test(NAME shortlist_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/shortlist_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
+  set_tests_properties(shortlist_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # Sage and Comet on a generated configuration; SKIPs without
+  # FASTAG_SAGE_BIN / FASTAG_COMET_BIN (the acceptance job sets them and
+  # treats a skip as a failure).
+  add_test(NAME search_engine_smoke_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/search_engine_smoke_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
+  set_tests_properties(search_engine_smoke_test PROPERTIES SKIP_RETURN_CODE 77)
+  # ---- 1.12 D: CLI tests ----
+  # #1: -species_call (decoy null, calls, warnings, refusals) on a toy index
+  # built at test time; none equals the option absent (and FASTAG_BASELINE_BIN).
+  add_test(NAME species_call_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/species_call_test.sh $<TARGET_FILE:FASTag>
+                   $<TARGET_FILE:buildtaxdb>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy)
+  set_tests_properties(species_call_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # #10: -species_orientation both on the same toy index; exact counts against
+  # an independent Python recount (tools/species_orientation_recount.py).
+  add_test(NAME species_orientation_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/species_orientation_test.sh $<TARGET_FILE:FASTag>
+                   $<TARGET_FILE:buildtaxdb>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy
+                   ${CMAKE_CURRENT_SOURCE_DIR}/tools/species_orientation_recount.py)
+  set_tests_properties(species_orientation_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # ---- 1.12 F: CLI tests ----
+  # #11 phase A: -census on the fixture, its MGF twin, census_edge.mzML (every
+  # status, subsampling) and diatracer_like.mzML; existing outputs unchanged.
+  add_test(NAME census_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/census_cli_test.sh $<TARGET_FILE:FASTag>
+                   $<TARGET_FILE:census_test>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mgf
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures)
+  set_tests_properties(census_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # #11 phase B: -census_ids, with identification files census_ids_test
+  # writes at test time (score-type and meta q-values, mzid, scan fallback,
+  # refusals); the phase-A census columns and summary rows unchanged.
+  add_test(NAME census_ids_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/census_ids_cli_test.sh $<TARGET_FILE:FASTag>
+                   $<TARGET_FILE:census_ids_test>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta)
+  set_tests_properties(census_ids_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # ---- 1.12 G: CLI tests ----
+  # G1: the JSON writers, the mzML header parse and the spectrum record
+  # against the tagger's preprocessing; probeInput()/dumpSpectrum() on the
+  # fixtures. Built with the readers they read through.
+  add_executable(input_probe_test test/input_probe_test.cpp src/InputProbe.cpp src/AcquisitionProbe.cpp
+                 src/IndexedMzMLReader.cpp src/MzMLDirectDecoder.cpp src/MgfReader.cpp src/MzPeakStream.cpp)
+  target_link_libraries(input_probe_test PRIVATE fastag_core ZLIB::ZLIB)
+  if(OpenMP_CXX_FOUND)
+    target_link_libraries(input_probe_test PRIVATE OpenMP::OpenMP_CXX)
+  endif()
+  target_compile_definitions(input_probe_test PRIVATE
+                             FASTAG_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
+  add_test(NAME input_probe_test COMMAND input_probe_test ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures)
+  # G1: -probe_input and -dump_spectrum against the real binary (JSON
+  # schema, peaks equal to what the tagger tags, exit codes, no file
+  # written) and the shipped digest data in the installed layouts.
+  add_test(NAME gui_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/gui_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
+                   ${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt)
+  set_tests_properties(gui_cli_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # mzPeak reader vs its own mzML twin. Needs a matched pair of real files, so
   # it SKIPs unless FASTAG_E2E_MZML and FASTAG_E2E_MZPEAK point at one.
@@ -380,10 +621,12 @@ if(FASTAG_BUILD_TESTS)
     target_link_libraries(indexed_mzml_test PRIVATE OpenMP::OpenMP_CXX)
   endif()
   # The fixture first, then every vendored mzML that OpenMS did not write
-  # (diaTracer and ddaPASEF layouts, where present), compared spectrum by
+  # (diaTracer and ddaPASEF layouts, the #9 profile fixtures, where present),
+  # compared spectrum by
   # spectrum between the direct decoder and OpenMS's.
   set(_fastag_direct_fixtures ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML)
-  foreach(_f diatracer_like.mzML ddapasef_empty.mzML)
+  foreach(_f diatracer_like.mzML ddapasef_empty.mzML profile_ms2_small.mzML profile_ms2_untyped.mzML
+             profile_ms2_paramgroup.mzML profile_ms2_lowres.mzML)
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/${_f})
       list(APPEND _fastag_direct_fixtures ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/${_f})
     endif()

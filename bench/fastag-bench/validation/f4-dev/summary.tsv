@@ -1,0 +1,76 @@
+# source: fastag-bench 1.9.0 unidentified score dev (2026-11-07T02:11:16+01:00, host data)
+# FASTag 1.11.0 (OpenMS 3.7.0-pre-HEAD-2026-11-02); truth Sage closed (full human proteome) q <= 0.01; S3-PT candidates: pool peptides within 10.0 ppm, charges [2, 3, 4] when none given, isotope errors [0, 1], static {'C': 57.021464}, variable {'M': [15.994915]} (max 1); flank rule for any candidate (score.tag_correct_any)
+# per cell; rank-1 and top-k over tagged scored spectra
+profile	identification	arm	size_label	spectra	scored	tagged	tagged_rate	rank1_accuracy	rank1_recall	top5_any	top10_any	top50_any	tag_precision	tags_e001	tag_precision_e001
+default	S0	byproduct	s0	74497	74497	74094	0.99459	0.0	0.0	0.0	0.0	0.0	0.0	257318	0.0
+default	S0	byproduct	shared_identity	1722	0	0								0	
+default	S0	chance	s0	74497	74497	74094	0.99459	0.000756	0.000752	0.001188	0.001309	0.001862	8.9e-05	257318	0.000338
+default	S0	chance	shared_identity	1722	0	0								0	
+default	S0	decoy	s0	74497	74497	74094	0.99459	0.0	0.0	0.0	0.0	0.0	0.0	257318	0.0
+default	S0	decoy	shared_identity	1722	0	0								0	
+default	S0	truth	s0	74497	74497	74094	0.99459	0.74311	0.73909	0.866183	0.892771	0.916525	0.165871	257318	0.722693
+default	S0	truth	shared_identity	1722	0	0								0	
+default	S3-PT	byproduct	no_pool_candidate	16594	0	0								0	
+default	S3-PT	byproduct	pool_consistent	26834	26834	24406	0.909518	0.159674	0.145226	0.199746	0.211096	0.224166	0.040182	22807	0.302495
+default	S3-PT	byproduct	shared_identity	2177	0	0								0	
+default	S3-PT	byproduct	size1	33147	33147	30264	0.913024	0.134219	0.122545	0.167294	0.178628	0.192803	0.033812	31734	0.235772
+default	S3-PT	chance	no_pool_candidate	16594	0	0								0	
+default	S3-PT	chance	pool_consistent	26834	26834	24406	0.909518	0.0	0.0	0.0	0.0	0.0	0.0	22807	0.0
+default	S3-PT	chance	shared_identity	2177	0	0								0	
+default	S3-PT	chance	size1	33147	33147	30264	0.913024	0.0	0.0	0.0	0.0	0.0	0.0	31734	0.0
+default	S3-PT	decoy	no_pool_candidate	16594	0	0								0	
+default	S3-PT	decoy	pool_consistent	26834	26834	24406	0.909518	0.000123	0.000112	0.000287	0.000778	0.002745	9.1e-05	22807	4.4e-05
+default	S3-PT	decoy	shared_identity	2177	0	0								0	
+default	S3-PT	decoy	size1	33147	33147	30264	0.913024	0.0	0.0	3.3e-05	6.6e-05	0.000463	1.5e-05	31734	0.0
+default	S3-PT	truth	no_pool_candidate	16594	0	0								0	
+default	S3-PT	truth	pool_consistent	26834	26834	24406	0.909518	0.093379	0.08493	0.115873	0.121241	0.128575	0.026659	22807	0.233876
+default	S3-PT	truth	shared_identity	2177	0	0								0	
+default	S3-PT	truth	size1	33147	33147	30264	0.913024	0.12695	0.115908	0.150013	0.156423	0.163462	0.035596	31734	0.306611
+matched	S0	byproduct	s0	74497	74497	71974	0.966133	0.0	0.0	0.0	0.0	0.0	0.0	365960	0.0
+matched	S0	byproduct	shared_identity	1722	0	0								0	
+matched	S0	chance	s0	74497	74497	71974	0.966133	0.000458	0.000443	0.001056	0.001237	0.001626	8.1e-05	365960	0.000158
+matched	S0	chance	shared_identity	1722	0	0								0	
+matched	S0	decoy	s0	74497	74497	71974	0.966133	0.0	0.0	0.0	0.0	0.0	0.0	365960	0.0
+matched	S0	decoy	shared_identity	1722	0	0								0	
+matched	S0	truth	s0	74497	74497	71974	0.966133	0.694584	0.671061	0.848987	0.879845	0.908217	0.160357	365960	0.559621
+matched	S0	truth	shared_identity	1722	0	0								0	
+matched	S3-PT	byproduct	no_pool_candidate	16594	0	0								0	
+matched	S3-PT	byproduct	pool_consistent	26834	26834	21497	0.801111	0.158255	0.126779	0.2151	0.228404	0.241801	0.048113	45930	0.207315
+matched	S3-PT	byproduct	shared_identity	2177	0	0								0	
+matched	S3-PT	byproduct	size1	33147	33147	26638	0.803632	0.138111	0.11099	0.181845	0.192019	0.206998	0.039334	61649	0.163474
+matched	S3-PT	chance	no_pool_candidate	16594	0	0								0	
+matched	S3-PT	chance	pool_consistent	26834	26834	21497	0.801111	0.0	0.0	0.0	0.0	0.0	0.0	45930	0.0
+matched	S3-PT	chance	shared_identity	2177	0	0								0	
+matched	S3-PT	chance	size1	33147	33147	26638	0.803632	0.0	0.0	0.0	0.0	0.0	0.0	61649	0.0
+matched	S3-PT	decoy	no_pool_candidate	16594	0	0								0	
+matched	S3-PT	decoy	pool_consistent	26834	26834	21497	0.801111	4.7e-05	3.7e-05	0.000233	0.000419	0.00093	3.5e-05	45930	2.2e-05
+matched	S3-PT	decoy	shared_identity	2177	0	0								0	
+matched	S3-PT	decoy	size1	33147	33147	26638	0.803632	0.0	0.0	3.8e-05	0.000113	0.000375	1.6e-05	61649	4.9e-05
+matched	S3-PT	truth	no_pool_candidate	16594	0	0								0	
+matched	S3-PT	truth	pool_consistent	26834	26834	21497	0.801111	0.090338	0.072371	0.121087	0.129646	0.13788	0.02914	45930	0.127237
+matched	S3-PT	truth	shared_identity	2177	0	0								0	
+matched	S3-PT	truth	size1	33147	33147	26638	0.803632	0.126886	0.10197	0.1624	0.16987	0.177641	0.040336	61649	0.174504
+matched_tl5	S0	byproduct	s0	74497	74497	66472	0.892278	0.0	0.0	0.0	0.0	0.0	0.0	466289	0.0
+matched_tl5	S0	byproduct	shared_identity	1722	0	0								0	
+matched_tl5	S0	chance	s0	74497	74497	66472	0.892278	1.5e-05	1.3e-05	0.000256	0.000301	0.000331	1.8e-05	466289	1.1e-05
+matched_tl5	S0	chance	shared_identity	1722	0	0								0	
+matched_tl5	S0	decoy	s0	74497	74497	66472	0.892278	0.0	0.0	0.0	0.0	0.0	0.0	466289	0.0
+matched_tl5	S0	decoy	shared_identity	1722	0	0								0	
+matched_tl5	S0	truth	s0	74497	74497	66472	0.892278	0.654321	0.583836	0.770881	0.789174	0.803767	0.11446	466289	0.387515
+matched_tl5	S0	truth	shared_identity	1722	0	0								0	
+matched_tl5	S3-PT	byproduct	no_pool_candidate	16594	0	0								0	
+matched_tl5	S3-PT	byproduct	pool_consistent	26834	26834	16700	0.622345	0.165689	0.103115	0.202575	0.209042	0.213892	0.037288	54419	0.171741
+matched_tl5	S3-PT	byproduct	shared_identity	2177	0	0								0	
+matched_tl5	S3-PT	byproduct	size1	33147	33147	20440	0.616647	0.142613	0.087942	0.170205	0.175342	0.179403	0.029597	72478	0.125845
+matched_tl5	S3-PT	chance	no_pool_candidate	16594	0	0								0	
+matched_tl5	S3-PT	chance	pool_consistent	26834	26834	16700	0.622345	0.0	0.0	0.0	0.0	0.0	0.0	54419	0.0
+matched_tl5	S3-PT	chance	shared_identity	2177	0	0								0	
+matched_tl5	S3-PT	chance	size1	33147	33147	20440	0.616647	0.0	0.0	0.0	0.0	0.0	0.0	72478	0.0
+matched_tl5	S3-PT	decoy	no_pool_candidate	16594	0	0								0	
+matched_tl5	S3-PT	decoy	pool_consistent	26834	26834	16700	0.622345	0.0	0.0	0.0	0.0	0.0	0.0	54419	0.0
+matched_tl5	S3-PT	decoy	shared_identity	2177	0	0								0	
+matched_tl5	S3-PT	decoy	size1	33147	33147	20440	0.616647	0.0	0.0	0.0	0.0	0.0	0.0	72478	0.0
+matched_tl5	S3-PT	truth	no_pool_candidate	16594	0	0								0	
+matched_tl5	S3-PT	truth	pool_consistent	26834	26834	16700	0.622345	0.09479	0.058992	0.118383	0.123114	0.126228	0.02198	54419	0.096474
+matched_tl5	S3-PT	truth	shared_identity	2177	0	0								0	
+matched_tl5	S3-PT	truth	size1	33147	33147	20440	0.616647	0.135861	0.083778	0.171477	0.175098	0.179599	0.03195	72478	0.138069

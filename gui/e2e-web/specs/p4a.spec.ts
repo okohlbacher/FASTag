@@ -101,16 +101,16 @@ test('five spectra in a row: every tag of each on its peaks, walking ◀ or ▶'
   }
 })
 
-test('with FASTag 1.11 (no -dump_spectrum): no Spectrum tab, and the row action says it needs 1.17', async ({ page }) => {
+test('with FASTag 1.11 (no -dump_spectrum): no Spectrum tab, and the row action says it needs 1.12', async ({ page }) => {
   await openTags(page, 'spectrum-1.11')
   await expect(page.getByRole('tab', { name: 'Tags' })).toBeVisible()
   await expect(page.getByRole('tab', { name: 'Spectrum' })).toHaveCount(0)
-  const action = page.getByRole('button', { name: 'Spectrum view needs FASTag 1.17 or later' })
+  const action = page.getByRole('button', { name: 'Spectrum view needs FASTag 1.12 or later' })
   await expect(action).toBeVisible()
   await expect(action).toBeDisabled()
   await firstRow(page).click()
   await page.keyboard.press('Enter')
-  await expect(page.getByText('Spectrum view needs FASTag 1.17 or later.')).toBeVisible()
+  await expect(page.getByText('Spectrum view needs FASTag 1.12 or later.')).toBeVisible()
   await expect(page.getByRole('tab', { name: 'Tags' })).toHaveAttribute('aria-selected', 'true')
   expect(await mockState<unknown[]>(page, 'spectrumCalls')).toEqual([])
 })

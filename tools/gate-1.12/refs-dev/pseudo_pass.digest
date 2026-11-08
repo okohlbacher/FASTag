@@ -1,0 +1,5 @@
+summary 71431 MS2 spectra, 1591526 tags
+exit 0
+acquisition Acquisition check: pseudo-DDA
+file tags.tsv 264a3f9006b328ae18d23fb9b0cf363894fc0e82dd8a0f0ed1c217e3178bcb56
+equals_off yes

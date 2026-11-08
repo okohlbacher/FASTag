@@ -148,7 +148,9 @@ namespace
     std::uniform_real_distribution<double> u01(0.0, 1.0);
     for (int c = 0; c < count; ++c)
     {
-      const double t = mzs[pi(rng)] + steps[pr(rng)];
+      // One draw per statement, left operand first (the x86-64 GCC order of the former sum).
+      const size_t at = pi(rng);
+      const double t = mzs[at] + steps[pr(rng)];
       const double tl = tolAt(t);
       const double a = t - tl, b = t + tl;
       const double near[] = {a, std::nextafter(a, -inf), std::nextafter(a, inf),
@@ -192,7 +194,12 @@ int main()
           break;
         case 2:   // dense clusters: many peaks inside one bucket
           for (size_t i = 0; i < n; ++i)
-            mzs.push_back(500.0 + std::floor(u(rng) / 400) + (u(rng) - 150.0) * 1e-4);
+          {
+            // One draw per statement, left operand first (the x86-64 GCC order of the former sum).
+            const double a = u(rng);
+            const double b = u(rng);
+            mzs.push_back(500.0 + std::floor(a / 400) + (b - 150.0) * 1e-4);
+          }
           break;
         default:  // span far beyond MAX_BUCKETS Th: buckets widen
           for (size_t i = 0; i < n; ++i)

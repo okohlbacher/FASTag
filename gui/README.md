@@ -518,7 +518,7 @@ checked on the peaks its `-dump_spectrum` printed
 the repository; `p4a.test.tsx` the tab at App level; `e2e-web/specs/p4a.spec.ts`
 the tab in Chromium and WebKit (`?fixture=spectrum`, and `spectrum-1.11` for a
 CLI without `-dump_spectrum`: no tab, and the row action says "Spectrum view
-needs FASTag 1.17 or later"). When another worktree's preview holds port 4173,
+needs FASTag 1.12 or later"). When another worktree's preview holds port 4173,
 `E2E_PORT=<port> npm run e2e` serves this one's build elsewhere.
 
 The tauri-driver specs in `e2e-tauri/` drive the real debug app in WebKitGTK
@@ -609,7 +609,7 @@ avoids OpenMP error #15), the digest tables (`share/FASTag/digest`) and the
 [../doc/SIGNING-macos-gui.md](../doc/SIGNING-macos-gui.md). In dev those
 resources are machine-specific symlinks and are gitignored.
 
-On Linux (from 1.13.0) the `gui-linux` job in `.github/workflows/ci.yml`
+On Linux (from 1.12.0) the `gui-linux` job in `.github/workflows/ci.yml`
 builds the app outside conda on ubuntu-22.04 against apt's WebKitGTK 4.1,
 with the portable linux-x64 CLI staged into `src-tauri/resources/fastag`:
 `fastag-gui_<version>_amd64.deb` (Debian package `fastag-gui`; Tauri would

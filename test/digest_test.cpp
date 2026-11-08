@@ -104,6 +104,36 @@ static std::string value(const std::vector<D::Row>& rows, const std::string& sec
   return "<missing " + section + " " + key + ">";
 }
 
+// ---- label_call (FASTag 1.12 #3a): counters set field by field
+static int key(const char* name)
+{
+  const auto& keys = D::residueKeys();
+  for (int k = 0; k < D::kNumKeys; ++k)
+    if (std::string(name) == keys[static_cast<std::size_t>(k)].name) return k;
+  return -1;
+}
+/// @p tags filtered tags; C-terminal tag ends per residue key (c_near);
+/// N-terminal label gaps and their +0.5 Da background per labelKeys() entry.
+static D::TerminusCounter labelCounter(std::uint64_t tags, const std::map<std::string, std::uint64_t>& ends,
+                                       std::array<std::uint64_t, D::kNumLabels> lab = {},
+                                       std::array<std::uint64_t, D::kNumLabels> bg = {})
+{
+  D::TerminusCounter tc;
+  tc.tags = tags;
+  for (const auto& [k, v] : ends) tc.c_near[static_cast<std::size_t>(key(k.c_str()))] = v;
+  tc.lab_n = lab;
+  tc.lab_bg_n = bg;
+  return tc;
+}
+/// "status label basis silac reason" of the label_call rows
+static std::string callOf(const D::TerminusCounter& tc, const D::DigestSettings& s = D::DigestSettings())
+{
+  const auto rows = D::labelCallRows(D::labelCall(tc, s), tc, s);
+  return value(rows, "label_call", "status") + " " + value(rows, "label_call", "label") + " " +
+         value(rows, "label_call", "basis") + " " + value(rows, "label_call", "silac") + " " +
+         value(rows, "label_call", "reason");
+}
+
 int main()
 {
   // ---- Python's sum(): Neumaier since 3.12
@@ -485,6 +515,158 @@ int main()
     }
     check(single, "massgap row: Met-loss+Acetyl alone");
     check(pair, "massgap row: Oxidation + Met-loss+Acetyl");
+  }
+
+  {
+    // gapResult (1.12 P2): detectGaps over the rows with >= min_bin spectra,
+    // members indexing the unfiltered rows; massgapRows with it equals the
+    // self-computing overload.
+    const std::vector<D::GapRow> rows = {{56.0262, 900}, {112.0524, 400}, {98.0368, 150}, {79.9663, 1200},
+                                         {15.9949, 200}, {0.0, 3000},     {137.3, 5},     {56.0302, 40},
+                                         {79.9603, 30},  {56.0282, 1},    {15.9939, 1}};
+    std::vector<std::string> keys;
+    for (const auto& r : rows) keys.push_back(D::num(r.delta));
+    for (const std::uint64_t min_bin : {std::uint64_t{1}, std::uint64_t{2}, std::uint64_t{50}})
+    {
+      D::GapSettings gs;
+      gs.min_bin = min_bin;
+      std::vector<D::GapRow> hist;
+      for (const auto& r : rows)
+        if (r.spectra >= min_bin) hist.push_back(r);
+      const D::GapResult old = D::detectGaps(hist, mods, combos, gs.window, gs.min_spectra, gs.min_share,
+                                             gs.silac_share, gs.silac_min);
+      const D::GapResult res = D::gapResult(rows, mods, combos, gs);
+      const std::string tag = " (min_bin " + std::to_string(min_bin) + ")";
+      bool eq = old.placed == res.placed && old.shifted == res.shifted && old.peaks.size() == res.peaks.size() &&
+                old.share == res.share && old.silac == res.silac && old.silac_share == res.silac_share;
+      for (std::size_t i = 0; eq && i < old.peaks.size(); ++i)
+        eq = old.peaks[i].delta == res.peaks[i].delta && old.peaks[i].spectra == res.peaks[i].spectra &&
+             old.peaks[i].explained_by == res.peaks[i].explained_by &&
+             old.peaks[i].alternatives == res.peaks[i].alternatives && old.peaks[i].context == res.peaks[i].context;
+      check(eq, "gapResult equals detectGaps on the min_bin-filtered rows" + tag);
+      bool members_ok = true;
+      for (const auto& p : res.peaks)
+      {
+        std::uint64_t n = 0;
+        for (std::size_t k = 0; k < p.members.size(); ++k)
+        {
+          const std::size_t m = p.members[k];
+          members_ok = members_ok && m < rows.size() && rows[m].spectra >= min_bin &&
+                       std::fabs(rows[m].delta - p.delta) <= 2 * gs.window && (k == 0 || p.members[k - 1] < m);
+          if (m < rows.size()) n += rows[m].spectra;
+        }
+        members_ok = members_ok && n == p.spectra;
+      }
+      check(members_ok, "peak members index the unfiltered rows and sum to the peak" + tag);
+      const auto a = D::massgapRows(rows, keys, mods, combos, {}, gs);
+      const auto b = D::massgapRows(rows, keys, mods, {}, gs, res);
+      bool same_rows = a.size() == b.size();
+      for (std::size_t i = 0; same_rows && i < a.size(); ++i)
+        same_rows = a[i].section == b[i].section && a[i].key == b[i].key && a[i].value == b[i].value &&
+                    a[i].n == b[i].n && a[i].description == b[i].description;
+      check(same_rows, "massgapRows with a precomputed gapResult equals the old path" + tag);
+    }
+    // Two rows, each below min_bin, that would form a peak together do not.
+    D::GapSettings gs;
+    gs.min_bin = 30;
+    gs.min_spectra = 20;
+    const auto split = D::gapResult({{15.9949, 25}, {15.9959, 25}, {0.0, 3000}}, mods, combos, gs);
+    check(split.peaks.empty(), "rows below min_bin never combine into a peak");
+  }
+
+  // ---- label_call: prose-auto 0.1.10 fastag_termini / termini_evidence
+  {
+    const D::DigestSettings s;
+    D::DigestSettings da = s;
+    da.low_resolution = true;
+    // a label-free tryptic run: 175 C-terminal K/R ends
+    const D::TerminusCounter lf = labelCounter(1000, {{"K", 100}, {"R", 75}});
+    check(lf.tot() == 175, "label_call: 175 tag ends");
+    check(callOf(lf) == "call label-free none none -", "label_call: 175 ends, no label: label-free (" + callOf(lf) + ")");
+    check(callOf(labelCounter(1000, {{"K", 100}, {"R", 74}})) == "no_call - - - few_tags",
+          "label_call: 174 ends (below prose-auto's TAG_MIN 175) is few_tags");
+    check(callOf(lf, da) == "no_call - - - low_resolution", "label_call: a Da run is low_resolution");
+    // low_resolution comes before few_tags, and a Da run never calls a label
+    check(callOf(labelCounter(1000, {{"K", 10}}, {500, 0, 0}), da) == "no_call - - - low_resolution",
+          "label_call: low_resolution before few_tags");
+
+    // isobaric: count >= 1% of the filtered tags AND >= 20 x max(background, 1)
+    const std::map<std::string, std::uint64_t> kr = {{"K", 200}, {"R", 100}};
+    check(callOf(labelCounter(10000, kr, {100, 0, 0})) == "call TMT nterm_gap none -", "label_call: TMT at exactly 1%, background 0");
+    check(callOf(labelCounter(10000, kr, {99, 0, 0})) == "call label-free none none -", "label_call: TMT at 0.99% is label-free");
+    check(callOf(labelCounter(1000, kr, {200, 0, 0}, {10, 0, 0})) == "call TMT nterm_gap none -", "label_call: TMT at exactly 20x background");
+    check(callOf(labelCounter(1000, kr, {200, 0, 0}, {11, 0, 0})) == "call label-free none none -", "label_call: TMT below 20x background");
+    check(callOf(labelCounter(1000, kr, {19, 0, 0})) == "call label-free none none -", "label_call: 19 gaps are below 20 x max(0, 1)");
+    check(callOf(labelCounter(1000, kr, {20, 0, 0})) == "call TMT nterm_gap none -", "label_call: 20 gaps reach 20 x max(0, 1) and 1%");
+    check(callOf(labelCounter(1000, kr, {0, 60, 0})) == "call TMTpro nterm_gap none -", "label_call: TMTpro, not TMT");
+    check(callOf(labelCounter(1000, kr, {0, 0, 60})) == "call iTRAQ4 nterm_gap none -", "label_call: iTRAQ4");
+    check(callOf(labelCounter(1000, kr, {60, 60, 0})) == "call TMT+TMTpro nterm_gap none -", "label_call: both hits listed, labelKeys() order");
+    {
+      const D::TerminusCounter pro = labelCounter(1000, kr, {0, 60, 0});
+      const auto rows = D::labelCallRows(D::labelCall(pro, s), pro, s);
+      bool itraq8 = false;
+      for (const D::Row& r : rows)
+        if (r.section == "label_call" && r.key == "label") itraq8 = r.description.find("iTRAQ8plex") != std::string::npos;
+      check(itraq8, "label_call: the TMTpro row says iTRAQ8plex has the same mass");
+    }
+
+    // SILAC (Lys8/Arg10): both heavy shares >= 0.2, K/R share >= 0.8 (rounded to 3 decimals, as prose-auto
+    // compares it), >= silac_min (50) K- and R-terminal ends; strong when both shares are >= 0.3
+    const D::TerminusCounter weak = labelCounter(1000, {{"K", 100}, {"K+8", 25}, {"R", 100}, {"R+10", 25}});
+    check(value(D::labelRows(weak, s), "heavy", "K8.share") == "0.2" && value(D::labelRows(weak, s), "heavy", "R10.share") == "0.2",
+          "label_call: the weak fixture sits at heavy shares 0.2");
+    check(callOf(weak) == "call SILAC heavy_share weak -", "label_call: SILAC at 0.2 is weak (" + callOf(weak) + ")");
+    check(callOf(labelCounter(1000, {{"K", 101}, {"K+8", 24}, {"R", 100}, {"R+10", 25}})) == "call label-free none none -",
+          "label_call: Lys8 below 0.2 is not SILAC");
+    const D::TerminusCounter strong = labelCounter(1000, {{"K", 70}, {"K+8", 30}, {"R", 70}, {"R+10", 30}});
+    check(value(D::labelRows(strong, s), "heavy", "K8.share") == "0.3" && value(D::labelRows(strong, s), "heavy", "R10.share") == "0.3",
+          "label_call: the strong fixture sits at heavy shares 0.3");
+    check(callOf(strong) == "call SILAC heavy_share strong -", "label_call: SILAC at 0.3 is strong (" + callOf(strong) + ")");
+    check(callOf(labelCounter(1000, {{"K", 70}, {"K+8", 30}, {"R", 75}, {"R+10", 25}})) == "call SILAC heavy_share weak -",
+          "label_call: strong needs both shares >= 0.3");
+    // K/R share 0.79 refuses; 0.7996 rounds to 0.800 and calls, 0.7994 rounds to 0.799 and refuses
+    auto withOthers = [](std::uint64_t k, std::uint64_t k8, std::uint64_t r, std::uint64_t r10, std::uint64_t other) {
+      return labelCounter(100000, {{"K", k}, {"K+8", k8}, {"R", r}, {"R+10", r10}, {"L", other}});
+    };
+    const D::TerminusCounter kr79 = withOthers(2000, 1950, 2000, 1950, 2100);
+    check(value(D::digestRows(kr79, table(), D::RunMeta(), s), "share", "kr").rfind("0.79", 0) == 0, "label_call: K/R share 0.79 fixture");
+    check(callOf(kr79) == "call label-free none none -", "label_call: SILAC refused at K/R share 0.79");
+    const D::TerminusCounter kr7996 = withOthers(2000, 1998, 2000, 1998, 2004);
+    const D::TerminusCounter kr7994 = withOthers(2000, 1997, 2000, 1997, 2006);
+    check(D::krShare(kr7996) < 0.8 && D::krShare(kr7996) > 0.7995, "label_call: K/R share 0.7996 fixture");
+    check(D::krShare(kr7994) < 0.7995, "label_call: K/R share 0.7994 fixture");
+    check(callOf(kr7996) == "call SILAC heavy_share strong -", "label_call: K/R share 0.7996 rounds to 0.800 (" + callOf(kr7996) + ")");
+    check(callOf(kr7994) == "call label-free none none -", "label_call: K/R share 0.7994 rounds to 0.799");
+    // 49 R-terminal ends refuse, 50 call; -digest_silac_min moves the gate
+    check(callOf(labelCounter(1000, {{"K", 100}, {"K+8", 50}, {"R", 29}, {"R+10", 20}})) == "call label-free none none -",
+          "label_call: SILAC refused at 49 R-terminal tag ends");
+    check(callOf(labelCounter(1000, {{"K", 100}, {"K+8", 50}, {"R", 30}, {"R+10", 20}})) == "call SILAC heavy_share strong -",
+          "label_call: SILAC at 50 R-terminal tag ends");
+    D::DigestSettings smin = s;
+    smin.silac_min = 60;
+    check(callOf(labelCounter(1000, {{"K", 100}, {"K+8", 50}, {"R", 30}, {"R+10", 20}}), smin) == "call label-free none none -",
+          "label_call: -digest_silac_min 60 refuses 50 R-terminal ends");
+    // isobaric and SILAC together: both listed, isobaric first
+    check(callOf(labelCounter(1000, {{"K", 100}, {"K+8", 50}, {"R", 100}, {"R+10", 50}}, {60, 0, 0})) ==
+              "call TMT+SILAC nterm_gap+heavy_share strong -",
+          "label_call: TMT and SILAC");
+
+    // the rows: section label_call, five keys in order, five non-empty fields
+    const auto rows = D::labelCallRows(D::labelCall(weak, s), weak, s);
+    std::string keys;
+    bool full = true;
+    for (const D::Row& r : rows)
+    {
+      keys += (keys.empty() ? "" : ",") + r.section + "." + r.key;
+      full = full && !r.value.empty() && !r.n.empty() && !r.description.empty();
+    }
+    check(keys == "label_call.status,label_call.label,label_call.basis,label_call.silac,label_call.reason",
+          "label_call: the five rows in order (" + keys + ")");
+    check(full, "label_call: every field filled");
+    // the K/R share is the -digest_out share.kr, bit for bit
+    for (const D::TerminusCounter& tc : {weak, strong, kr79, kr7996, kr7994, lf})
+      check(D::num(D::krShare(tc)) == value(D::digestRows(tc, table(), D::RunMeta(), s), "share", "kr"),
+            "label_call: krShare equals share.kr");
   }
 
   if (failures) std::cerr << failures << " failure(s)\n";

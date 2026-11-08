@@ -86,6 +86,12 @@ export interface ParamUi {
   help?: ParamHelp
 }
 
+/// FASTag 1.12 options. Each is opt-in and leaves the output as 1.11 at its
+/// default. Not offered in the form until each has its GUI design; until then
+/// a GUI run uses the CLI defaults. The exception is acquisition_check (under
+/// Spectra).
+const OPT_IN_1_12 = '1.12 command-line option, not in the form yet (CLI default applies)'
+
 const SPECIES_OFF: Dependency = { on: 'species', note: 'species detection is off' }
 const GLYCO_OFF: Dependency = { on: 'glyco', note: 'oxonium flagging is off' }
 const RECON_OFF: Dependency = { on: 'recon_out', note: 'reconciliation only runs when it has an output file' }
@@ -93,6 +99,16 @@ const MASSGAP_OFF: Dependency = { on: 'massgap_out', note: 'only the mass-gap re
 
 export const PARAM_UI: Record<string, ParamUi> = {
   // ---- Spectra
+  // 1.12: the one changed default (raw DIA is refused), so the form offers
+  // warn and off, or a GUI user could not tag raw DIA at all.
+  acquisition_check: {
+    section: 'Spectra',
+    label: 'Raw DIA check',
+    help: {
+      text: 'Before tagging, FASTag checks whether the file is raw DIA data, whose MS2 spectra each mix several peptides. By default (refuse) such a file is not tagged: the run stops with exit code 11 before any file is written. warn tags it anyway, with a warning in the log; off skips the check. DDA and pseudo-DDA files pass the check and are tagged the same under every setting.',
+      tip: 'Better than warn: make pseudo-DDA spectra with DIAspeXtract (or diaTracer for timsTOF .d) first, and tag those. Tags of raw DIA spectra get wrong flanking masses and complement statistics.'
+    }
+  },
   no_deisotope: {
     section: 'Spectra',
     label: 'Skip deisotoping',
@@ -750,6 +766,386 @@ export const PARAM_UI: Record<string, ParamUi> = {
     hidden: 'ignored by the CLI: mzPeak is read in file order without a decode cache',
     help: {
       text: 'Has no effect; kept so that old command lines still run.'
+    }
+  },
+
+  // ---- Not in the form: FASTag 1.12 command-line options (see OPT_IN_1_12)
+  acquisition_probe_spectra: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'How many MS2 spectra at the start of the run the acquisition check reads (metadata only).'
+    }
+  },
+  alkylation_min_share: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Which share of the counted spectra the alkylation call needs.'
+    }
+  },
+  alkylation_min_spectra: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'How many spectra the alkylation call needs.'
+    }
+  },
+  alkylation_out: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Write a report of which reagent alkylated the cysteines, or none, from the placements of peptides with one cysteine. Not validated on held-out data.'
+    }
+  },
+  alkylation_proteome: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'The database the alkylation report uses when no reconciliation database is given: a FASTA file. In 1.12.0 the alkylation report needs this FASTA file or a reconciliation database: the shipped proteomes (human, mouse, yeast, E. coli) that the names stand for are not in this release, and naming one, or leaving the default auto, stops the run with an error.'
+    }
+  },
+  alkylation_window: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'The mass window around each cysteine form for the alkylation report. 0 means 0.02 Da on a ppm run and 0.5 Da on a Da run.'
+    }
+  },
+  census: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Also write a census: one row for every MS2 spectrum read, tagged or not, and a run summary. A status in the census is not a quality call.'
+    }
+  },
+  census_ids: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Identifications of the same run (idXML or mzid) for the census: each spectrum is then marked identified or not. The file needs q-values.'
+    }
+  },
+  census_ids_fdr: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'The q-value a target hit needs for its spectrum to count as identified in the census.'
+    }
+  },
+  census_out: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Where the per-spectrum census goes. By default next to the tags file, ending in .census.tsv.'
+    }
+  },
+  census_summary_out: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Where the census run summary goes. By default next to the tags file, ending in .census_summary.tsv.'
+    }
+  },
+  census_triage_evalue: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'The E-value at or below which an unidentified spectrum with a tag is marked for a second look in the census. It is a threshold, not a quality call.'
+    }
+  },
+  charge_infer_margin: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'By how much the supported charge must beat the next one to be tagged alone; when the two are closer, both are tagged.'
+    }
+  },
+  charge_max: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'The highest charge tried for a precursor without a charge, when it is not tagged as 2+.'
+    }
+  },
+  charge_min: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'The lowest charge tried for a precursor without a charge, when it is not tagged as 2+.'
+    }
+  },
+  complement_midp: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Score tags with no or one complement pair with the mid-p variant of the complement test.'
+    }
+  },
+  complement_rule: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Which fragment pairs count as complements when tags are scored: pairs at the same charge (the default), pairs that share the precursor charge, or either.'
+    }
+  },
+  complement_tol_factor: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'The factor on the fragment tolerance when the complement window follows it.'
+    }
+  },
+  complement_tolerance: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'The mass window, in Da, for a complement partner.'
+    }
+  },
+  complement_tolerance_unit: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Whether the complement window is a fixed value in Da or follows the fragment tolerance.'
+    }
+  },
+  digest_calibration: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'A file that calibrates the confidence of the digest call. By default the shipped one.'
+    }
+  },
+  digest_detection: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Apply per-instrument weights in the digest report, which also gives a call on timsTOF runs. Not validated on held-out data.'
+    }
+  },
+  digest_flank2: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Let the digest report also use the two residues before each cut when the one-residue counts are too few. Not validated on held-out data.'
+    }
+  },
+  digest_min_confidence: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Give no digest call when its calibrated confidence is below this value. 0 turns it off.'
+    }
+  },
+  digest_models_version: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Which protease models the digest report uses: the shipped ones (as in 1.11) or v2. v2 is not validated on held-out data.'
+    }
+  },
+  dump_spectrum: {
+    hidden: 'spectrum dump for programs; prints JSON lines and exits',
+    help: {
+      text: 'Print the peaks FASTag tags in one spectrum and exit. It writes no output file and is for other programs.'
+    }
+  },
+  fasta_out: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Write a smaller FASTA with the proteins of the shortlist, for a database search. No decoys are added; let the search engine make them.'
+    }
+  },
+  ion_series: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Read the spectra as b/y ions (the default), as c/z ions of ETD or ECD, or choose per spectrum from its activation (auto).'
+    }
+  },
+  isotope_error: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Also consider precursor masses lowered by one or more isotope spacings (1.00336 Da each), for precursors picked on the wrong isotope peak. Needs a fragment tolerance below 0.05 Da.'
+    }
+  },
+  pick_profile: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Centroid profile MS2 spectra before tagging. By default only mzPeak input is centroided (as in 1.11); auto also centroids mzML; off never centroids. Spectra that are already centroided are never picked again.'
+    }
+  },
+  pick_unknown_type: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'With profile picking on auto, also centroid spectra that do not say whether they are profile or centroided, when their data look like profile.'
+    }
+  },
+  probe_input: {
+    hidden: 'metadata probe for programs; prints JSON lines and exits',
+    help: {
+      text: 'Print what a spectra file contains (instrument, activation, spectrum counts, profile or centroided) and exit. It writes no output file and is for other programs.'
+    }
+  },
+  search_config_out: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Write search-engine settings (Sage or Comet) for the smaller FASTA.'
+    }
+  },
+  search_config_template: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'For Comet only: a parameter file the written settings are merged into.'
+    }
+  },
+  search_decoy_prefix: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'The decoy prefix the search engine uses. Empty means the engine default.'
+    }
+  },
+  search_engine: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'The search engine the settings are written for: Sage or Comet.'
+    }
+  },
+  search_isotope_errors: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'How many precursor isotope errors the search engine should consider.'
+    }
+  },
+  search_precursor_tolerance: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'The precursor tolerance written into the search settings.'
+    }
+  },
+  search_precursor_unit: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'The unit of that precursor tolerance.'
+    }
+  },
+  search_shifts: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Add the mass shifts FASTag sees in the run to the search settings: as variable modifications, as Comet mass offsets, or both. Experimental.'
+    }
+  },
+  search_shifts_out: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Write a table of the mass shifts FASTag found and what it did with each one in the search settings.'
+    }
+  },
+  shift_expand_sites: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Let a variable modification also sit on the residues where FASTag placed that shift.'
+    }
+  },
+  shift_max_offsets: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'How many mass shifts are written as Comet mass offsets, besides 0.'
+    }
+  },
+  shift_max_variable: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'How many mass shifts are written as variable modifications.'
+    }
+  },
+  shift_site_min_count: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'How many placed spectra a residue needs before a shift is allowed on it.'
+    }
+  },
+  shift_site_min_ions: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'How many fragment ions a placed spectrum needs to count for a residue.'
+    }
+  },
+  shift_site_min_share: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'The share of the placed spectra of a shift that a residue needs before the shift is allowed on it.'
+    }
+  },
+  shortlist_background: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Proteins that are always added to the smaller FASTA, such as the host proteome or contaminants.'
+    }
+  },
+  shortlist_decoy_affix: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'The name prefixes and suffixes that mark a decoy entry; decoys never enter the shortlist.'
+    }
+  },
+  shortlist_force: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Write the smaller FASTA and the search settings even when the protease of the run does not fit tryptic placement.'
+    }
+  },
+  shortlist_gapped: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Let placements with one mismatched flank count for the shortlist.'
+    }
+  },
+  shortlist_max_evalue: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'The E-value a tag needs for its placements to count for the shortlist.'
+    }
+  },
+  shortlist_min_spectra: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'How many spectra a protein needs to stay on the shortlist.'
+    }
+  },
+  shortlist_out: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Write a ranked list of the proteins the tags were placed on. It narrows a later database search; it is not an identification and has no FDR control.'
+    }
+  },
+  shortlist_parsimony: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Whether proteins whose spectra a higher-ranked protein already has are dropped from the shortlist.'
+    }
+  },
+  shortlist_top: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Keep at most this many proteins on the shortlist. 0 means no limit.'
+    }
+  },
+  species_call: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Call each organism of the species report present, no call or not detected, by comparing it with decoy tags. Off by default.'
+    }
+  },
+  species_call_decoys: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'How many decoy tags are made for each tag when organisms are called.'
+    }
+  },
+  species_call_min_units: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Fewer spectra with organism evidence than this give no call for the whole run.'
+    }
+  },
+  species_call_params: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'A file with the decision settings of the organism call. By default the one in the taxonomy folder.'
+    }
+  },
+  species_orientation: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Look up each tag in the species index as written (the default) or also reversed. When reversed readings are used, the log p-value and q-value columns are NA.'
+    }
+  },
+  species_pi0: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'The share of absent organisms assumed for the q-values of the organism call. 1 is the standard (Benjamini-Hochberg) correction.'
+    }
+  },
+  unknown_charge: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'How a precursor whose charge the file does not give is tagged: as 2+ (the default, as before 1.12), at each possible charge, or at the charge its fragment pairs support best. A charge given in the file is never replaced.'
     }
   }
 }

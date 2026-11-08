@@ -24,7 +24,10 @@ export function parseSpecies(text: string, path: string): SpeciesReport | null {
   for (const line of lines.slice(1)) {
     const f = line.split('\t')
     const qs = (at(f, 'qvalue') ?? '').trim()
-    const q = qs === '' ? NaN : Number(qs)
+    // "NA" (1.12 #10, -species_orientation both): the analytic q-value is
+    // withheld (uncalibrated), kept as null, never read as q = 1. Anything
+    // else unparsable falls back to 1 as before.
+    const q = qs === 'NA' ? null : qs === '' ? NaN : Number(qs)
     const id = Number((at(f, 'taxid') ?? '').trim())
     const t: Taxon = {
       rank: at(f, 'rank') ?? '',
@@ -32,7 +35,7 @@ export function parseSpecies(text: string, path: string): SpeciesReport | null {
       name: at(f, 'name') ?? '',
       observed: num(at(f, 'observed')),
       adjusted: num(at(f, 'adjusted')),
-      q: Number.isFinite(q) ? q : 1
+      q: q === null ? null : Number.isFinite(q) ? q : 1
     }
     // FASTag 1.12 -species_call decoy (D1) appends these columns.
     const call = at(f, 'call')

@@ -136,7 +136,7 @@ export const FAQ: FaqEntry[] = [
     question: 'A run failed with an exit code',
     symptoms: <>A red box above the results: "… failed (exit code N)" and FASTag&apos;s reason.</>,
     causes: [
-      <>The reason line is FASTag&apos;s own message, and usually says what to change. The exit code says what kind of problem it was: 1, a file was not found (OpenMS checks this before FASTag starts); 2, the input cannot be read; 3, an input cannot be decoded (the spectra, a protease table of your own, or the species reference); 4, an input holds nothing usable; 5, an output cannot be written; 6, settings that do not go together, a value out of range, or an input of a type FASTag does not read; 11, ion-mobility spectra cannot be written as mzPeak; 13, see the entries on the spectra file and the entrapment database below.</>
+      <>The reason line is FASTag&apos;s own message, and usually says what to change. The exit code says what kind of problem it was: 1, a file was not found (OpenMS checks this before FASTag starts); 2, the input cannot be read; 3, an input cannot be decoded (the spectra, a protease table of your own, or the species reference); 4, an input holds nothing usable; 5, an output cannot be written; 6, settings that do not go together, a value out of range, or an input of a type FASTag does not read; 11, the input is raw DIA (see below), or ion-mobility spectra cannot be written as mzPeak; 13, see the entries on the spectra file and the entrapment database below.</>
     ],
     fixes: [
       <>Show full log shows every message of the run. Copy command copies the command line, to run it in a terminal or to send with a question.</>
@@ -191,7 +191,7 @@ export const FAQ: FaqEntry[] = [
     ],
     fixes: [
       <>Generate pseudo-DDA spectra first with DIAspeXtract (for Bruker .d also diaTracer), then run FASTag on the .pseudo.mzML file it writes; that file passes the check. The app shows the DIAspeXtract command to copy.</>,
-      <>Experts who want to tag the raw DIA spectra anyway can run the command line with <C>-acquisition_check warn</C>; the flanks and complements are then wrong.</>
+      <>Experts who want to tag the raw DIA spectra anyway can set <L to="param-acquisition_check">Raw DIA check</L> (under Spectra) to warn, or run the command line with <C>-acquisition_check warn</C>; the flanks and complements are then wrong.</>
     ]
   },
   {
@@ -208,7 +208,7 @@ export const FAQ: FaqEntry[] = [
     question: 'What the checks before and after a run mean',
     symptoms: <>A list of checks under the input on the Setup screen, or over the results after a run.</>,
     causes: [
-      <>Before a run, FASTag reads the metadata of the file (instrument, MS2 count, centroid or profile, the index, the acquisition) and the app checks the settings against them. A FASTag without this probe (<C>probe_input</C>; no release has it yet) cannot check a file before the run: the app then says "Not checked" and guesses nothing.</>,
+      <>Before a run, FASTag reads the metadata of the file (instrument, MS2 count, centroid or profile, the index, the acquisition) and the app checks the settings against them. A FASTag without this probe (<C>probe_input</C>, from FASTag 1.12) cannot check a file before the run: the app then says "Not checked" and guesses nothing.</>,
       <>After a run, the app reads the instrument from the digest report and FASTag's own warnings from the log.</>
     ],
     fixes: [
@@ -387,8 +387,8 @@ export const FAQ_BY_ID = new Map(FAQ.map((f) => [f.id, f]))
 
 /// The entry for a failure message from FASTag or the app.
 export const CLASSES: [RegExp, string][] = [
+  [/FASTAG_REFUSED reason=raw_dia|' is raw \S*DIA\b|-acquisition_check warn/, 'faq-raw-dia'],
   [/cannot reach the index k/, 'faq-species-short'],
-  [/' is raw DIA[: ]|FASTAG_REFUSED reason=raw_dia/, 'faq-raw-dia'],
   [/-species: no |taxonomy directory|Failed to load (-taxdb|taxonomy)/, 'faq-species-reference'],
   [/Unknown modification/, 'faq-modification'],
   [/reach the minimum filter length/, 'faq-min-filter'],

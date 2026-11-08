@@ -187,6 +187,105 @@ whole-tag intersection rule is evidently already doing most of this work. They
 are kept because they cost nothing when off and the numbers above are one data
 set, not a proof.
 
+## Calibrated presence or abstention (`-species_call decoy`, opt-in, 1.12)
+
+`-species_call decoy` adds a call to every row of the report: `present`,
+`no_call` or `not_detected`. The report never says "absent". The default,
+`none`, writes the report as before, byte for byte.
+
+**The null.** Every evaluated target tag is also looked up as
+`-species_call_decoys` (D, default 5) deterministic decoy tags through the same
+filters. A decoy tag keeps the composition and length of its tag (I/L folded)
+and is never the forward or reversed sequence. With d_g decoy spectra for
+taxon g, summed over the D replicates, and N trials (spectra with at least
+one evaluated target tag), the expected count is
+
+    lambda_g = spill_g + (d_g + 0.5) / D
+
+The second term is the random part. The first, `spill_g`, is the homology part:
+the sum over the taxa h that rank above g (more observed spectra) and are
+called present of C[g][h] * N_h. Here N_h is the deconvolved count of h, and
+C[g][h] = P(k-mer in g | k-mer in h) comes from the number of DISTINCT
+indexed k-mers shared by the two report-rank groups (`TaxIndex::groupOverlap`).
+A k-mer shared by several members of one group counts once, so C stays a
+probability at family or order rank and for an index with several strains
+per genus. The p-value is the Poisson tail P(X >= o_g | lambda_g). q-values
+are Benjamini-Hochberg over the taxa with at least 5 spectra, or Storey with
+`-species_pi0` below 1 (0 estimates pi0).
+
+**The decision**, in this order:
+
+| call | call_reason | when |
+|---|---|---|
+| no_call | low_resolution | `-fragment_tolerance_unit Da` (every row) |
+| no_call | few_spectra | fewer than `-species_call_min_units` (200) spectra with taxon evidence (every row) |
+| present | pass | q <= alpha, share >= tau, observed >= n_min, consistently with the spill (below) |
+| no_call | unstable | qualifies with spill from the present set, but cannot join it consistently |
+| no_call | near_neighbour | spill > 0, and q <= alpha on the random part alone but not with the spill |
+| not_detected | not_significant, low_share, few_genus_spectra | otherwise, with a detection limit `lod` |
+
+**The present set is self-consistent.** Spill only comes from taxa called
+present, and presence depends on the q-values of all taxa, so the present set S
+has to reproduce itself: S = F(S), where F(S) is the set of taxa that qualify
+with spill from S. Benjamini-Hochberg couples the taxa, so F can cycle. For
+example, taxon X explains Y through its spill, which ranks X first and lifts
+q_X over alpha; without X present the spill is gone and both qualify again.
+FASTag iterates F from the empty set until a set repeats. On a fixed point,
+that set is S. On a cycle, S is the intersection of the sets in the cycle,
+shrunk until every member qualifies on spill from S alone. A taxon that
+qualifies on spill from S but is not in S is `no_call unstable`. The reported
+statistics are always those computed with spill from the final S. Neither the
+number of untested taxa nor any iteration bound changes a call.
+
+**Columns** (appended after `qvalue`, only with `decoy`): `call`,
+`call_reason`, `decoy_spectra` (d_g), `decoy_expected` (lambda_g; named so
+because `expected` already holds the 1.10 binomial expectation), `decoy_qvalue`,
+`share` (the deconvolved count over the run's units, or observed over units)
+and `lod` (the smallest share that would have been called present in this run;
+-1 where it does not apply). Downstream readers (the GUI, fastag-bench species
+scoring) must read `decoy_expected`, not `expected`, for the call's null.
+
+**Parameters.** alpha, tau and n_min are read from `species_call.tsv` in the
+taxonomy directory (installed beside the index, and restored there by the
+release workflows after the index tarball is unpacked), or from
+`-species_call_params`. The shipped values (alpha 0.01, tau 0, n_min 10,
+calibrated for D = 5) are PROVISIONAL: they are not fitted yet, and
+`-species_call` stays opt-in until the held-out acceptance passes. A different
+`-species_call_decoys` from the one the file states gives a warning.
+`-species_call` refuses `-stream`.
+
+## Both tag orientations (`-species_orientation both`, opt-in, 1.12)
+
+Tags are written N->C under a y-ion assumption, so a tag read from b ions is
+written reversed. The species lookup reads only the written orientation;
+`-orientation` (default both) applies to `-fasta` and reconciliation only and
+is deliberately not coupled to it, because its default would change the
+species report. `-species_orientation both` looks every tag up as written and
+reversed (I/L folded after reversal, as `-orientation both` folds), each
+reading through the same per-tag rule (share cap, whole-tag rule, margin),
+and combines them (`combineOrientations`, SpeciesEvidence.h):
+
+| Readings informative | Result |
+|---|---|
+| one | that reading's taxa |
+| both, common taxa | the common taxa (never the union: it would let a tag count for the chance hits of both readings) |
+| both, no common taxon | orientation-ambiguous: skipped and counted, so counts can fall as well as rise |
+| palindrome (folded) | looked up once |
+
+The tag's E-value is kept, so `-species_evidence best|all` is unchanged.
+Under `-species_call decoy` every decoy tag goes through the same rule, so the
+random-hit part of the null follows; the homology matrix stays the forward
+k-mer overlap. That is the only calibrated path: `decoy_qvalue` and `call`.
+The analytic `log_pvalue` and `qvalue` columns come from the forward index
+background, which the orientation rule does not follow, so under `both` they
+are NA, with or without `-species_call decoy`, and a warning says so. The run log gets one stderr line with the
+orientation counts (forward only, reverse only, shared, palindromes,
+ambiguous skips). The forward k-mer counters of the `Species:` line are those
+of a forward run. Default forward is byte-identical to 1.11. Expect up to 2x
+the species-phase lookups (times the decoy replicates under decoy). It stays
+opt-in until #1's held-out evaluation scores it as its second
+pre-registered configuration.
+
 ## Honest limitations
 
 - **Conserved proteins inflate near-neighbours.** Bacterial genera (Escherichia,

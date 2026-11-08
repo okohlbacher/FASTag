@@ -585,7 +585,7 @@ export const RESULTS: HelpPage = {
           </p>
           <p>
             The tab needs a FASTag that has -dump_spectrum; with an older one it is not there, and the row action says
-            &quot;Spectrum view needs FASTag 1.17 or later&quot;. A table no run of this app wrote asks for its input
+            &quot;Spectrum view needs FASTag 1.12 or later&quot;. A table no run of this app wrote asks for its input
             (Locate input…) and is shown at FASTag&apos;s default settings, which it says. No other reader is used:
             peaks read another way are not the peaks FASTag tagged.
           </p>

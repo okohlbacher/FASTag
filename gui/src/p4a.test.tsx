@@ -2,7 +2,7 @@
 // the Tags table, with FASTag's processed peaks from -dump_spectrum (the
 // real dumps of the E. coli fixture, src/fixtures/cli/v112-ecoli-dump) and
 // the tag's ladder on them; hidden with a CLI that has no -dump_spectrum,
-// whose row action then says "Spectrum view needs FASTag 1.17 or later".
+// whose row action then says "Spectrum view needs FASTag 1.12 or later".
 // Against the mock bridge, the whole App.
 
 // @ts-ignore -- node built-in; the app's tsconfig has no node types
@@ -290,18 +290,18 @@ describe('P4a: a native ID that is a prefix of many others', () => {
 })
 
 describe('P4a: a CLI without -dump_spectrum (FASTag 1.11)', () => {
-  it('hides the Spectrum tab, and the row action says the view needs FASTag 1.17', async () => {
+  it('hides the Spectrum tab, and the row action says the view needs FASTag 1.12', async () => {
     const mock = bridge(false)
     await openTags(mock)
     expect(tabNames()).not.toContain('Spectrum')
-    const action = screen.getByRole('button', { name: 'Spectrum view needs FASTag 1.17 or later' })
+    const action = screen.getByRole('button', { name: 'Spectrum view needs FASTag 1.12 or later' })
     expect((action as HTMLButtonElement).disabled).toBe(true)
     await click(firstRow())
     await act(async () => {
       fireEvent.keyDown(table(), { key: 'Enter' })
     })
     expect(screen.getByRole('tab', { name: 'Tags' }).getAttribute('aria-selected')).toBe('true')
-    expect(screen.getByText('Spectrum view needs FASTag 1.17 or later.')).toBeTruthy()
+    expect(screen.getByText('Spectrum view needs FASTag 1.12 or later.')).toBeTruthy()
     expect(mock.spectrumCalls).toHaveLength(0)
   })
 })

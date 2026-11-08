@@ -399,10 +399,19 @@ namespace
       std::uniform_real_distribution<double> u(100, 2000), li(0, 5);
       std::vector<Peak1D> peaks;
       const int n = rep % 3 == 0 ? 60 : 500;
+      // One draw per statement, in the x86-64 GCC order (last argument first); see complement_synth.h.
       for (int k = 0; k < n; ++k)
-        peaks.emplace_back(std::round(u(rng) * 1e4) / 1e4, static_cast<float>(std::pow(10.0, li(rng))));
+      {
+        const float in = static_cast<float>(std::pow(10.0, li(rng)));
+        const double mz = std::round(u(rng) * 1e4) / 1e4;
+        peaks.emplace_back(mz, in);
+      }
       for (int c = 0; c < n / 25; ++c)
-        cluster(peaks, rng, u(rng) * 2, 1 + c % 3, 2 + c % 6, std::pow(10.0, li(rng) + 1), 0.1, 0.003);
+      {
+        const double scale = std::pow(10.0, li(rng) + 1);
+        const double mass = u(rng) * 2;
+        cluster(peaks, rng, mass, 1 + c % 3, 2 + c % 6, scale, 0.1, 0.003);
+      }
       all("random " + std::to_string(rep), spectrum(peaks), {3});
     }
   }

@@ -1,0 +1,8 @@
+enzyme = Trypsin
+fragmentation = HCD
+massAnalyzer = FT
+fragmentIonErrorTol = 0.02Da
+precursorErrorTol = 10ppm
+variableModifications = Oxidation (M), Phospho (ST), Phospho (Y)
+fixedModifications = Carbamidomethyl (C)
+forbiddenResidues = I,U

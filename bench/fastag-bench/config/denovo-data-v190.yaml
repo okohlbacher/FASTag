@@ -1,0 +1,82 @@
+# De novo reference points (open issue 4), IBMI node 'data' (2 x AMD EPYC 9654, 224 logical CPUs,
+# 2 x NVIDIA H100 PCIe; GPU index 1 via CUDA_VISIBLE_DEVICES=1), 2026-11-03.
+# FASTag 1.9.0 re-run (2026-11-04): identical to denovo-data.yaml except the three FASTag runs, which point to
+# /scratch/kohlbach/denovo/fastag_v190/<PXD> (FASTag 1.9.0, same args; run script
+# /ceph/ibmi/abi/oliver/jpr-bench/denovo/scripts/run_fastag_v190.sh, copies in /ceph/ibmi/abi/oliver/jpr-bench/denovo/runs/fastag_v190).
+# Comparator runs (Casanovo, InstaNovo, Novor, PepNovo+) are the 2026-11-03 outputs, reused unchanged.
+# Score with:  python -m fastag_bench.denovo config/denovo-data-v190.yaml --results results   (writes denovo_*_v190.tsv)
+# Run scripts: /ceph/ibmi/abi/oliver/jpr-bench/denovo/scripts/run_{sage_gt,casanovo,instanovo,novor,pepnovo}.sh
+# (copies in scripts/denovo_runs/). Spectra: every MS2 spectrum of the mzML written as MGF by
+# fastag_bench.mgf.write_first_ms2 (pyteomics 5.0.2); the same MGF feeds every de novo tool. No subsampling for
+# PXD003531 (27,345 MS2) and PXD000001 (6,103 MS2); PXD076528: fixed-seed 20,000-spectrum subsample.
+suffix: "_v190"
+source: "python -m fastag_bench.denovo config/denovo-data-v190.yaml); FASTag 1.9.0 runs under /scratch/kohlbach/denovo/fastag_v190 (copy /ceph/ibmi/abi/oliver/jpr-bench/denovo/runs/fastag_v190), comparator runs reused from 2026-11-03 under /scratch/kohlbach/denovo (copy /ceph/ibmi/abi/oliver/jpr-bench/denovo/runs)"
+sage_fdr: 0.01
+flank_tol: 0.05
+tag_lengths: [3, 4, 5]        # 3 = FASTag 1.9.0 default -tag_length (unchanged from 1.8.0)
+notes:
+  - "Hardware: node data, AMD EPYC 9654 (224 logical CPUs), NVIDIA H100 PCIe (GPU 1, CUDA_VISIBLE_DEVICES=1); node shared, load 1-min 230-330 during the runs, so times are indicative, not benchmarks"
+  - "Casanovo 5.2.1 (pip, torch 2.8.0+cu128), weights casanovo_orbitrap_v5-2-0.ckpt (sha256 236fee3d...59a8, GitHub release v5.2.0), default config: n_beams 1, predict_batch_size 1024, precursor 50 ppm, isotope 0-1, max_charge 4, min_peptide_len 6; vocabulary has no phospho, TMT or methylthio"
+  - "InstaNovo 1.2.2 (pip, torch 2.8.0+cu128), transformer model instanovo-v1.2.0 (weights CC BY-NC-SA 4.0), default inference config (num_beams 5, batch_size 128, fp16, no knapsack, no InstaNovo+ refinement); vocabulary includes phospho STY, not TMT or methylthio"
+  - "Novor v1.05.0573 free academic edition (novor.jar bundled in bioconda searchgui 4.3.15; academic EULA accepted by the user), HCD/FT, fragment 0.02 Da, precursor 10 ppm, CPU pinned to 16 cores (taskset -c 0-15); TMT6plex and Methylthio added through PTMFile"
+  - "PepNovo+ build 20101117 (bioconda pepnovo), model CID_IT_TRYP (ion-trap CID; no HCD model exists, these are HCD data), fragment and precursor 0.02 Da, 32 single-threaded chunks; Methylthio C, TMT6plex K/N-term and phospho STY added to PepNovo_PTMs.txt"
+  - "FASTag 1.9.0 release bundle (/ceph/ibmi/abi/oliver/opt/fastag-1.9.0/FASTag/FASTag, 'Version: 1.9.0 (OpenMS 3.7.0-pre-HEAD-2026-11-02)', FASTag.bin sha256 40cfa7c9...1b15), defaults (tag length 3, 50 tags), 16 threads, dataset fixed modifications as in datasets.yaml; run on node data 2026-11-04T02:48+01:00, 1-min load 85-105 (224 logical CPUs), so times are indicative only; OPENMS_TMPDIR=/dev/shm/kohlbach-tmp"
+datasets:
+  - id: PXD003531_QE_NO_03
+    pxd: PXD003531
+    sage: /ceph/ibmi/abi/oliver/jpr-bench/accuracy/sage-PXD003531/results.sage.tsv
+    sage_version: "Sage 0.14.7 (bioconda sage-proteomics 0.14.7 hc1c3326_2; the binary reports 0.14.6), harness sage_config, human UniProt panel FASTA"
+    mgf: /scratch/kohlbach/denovo/mgf/PXD003531.mgf
+    spectra: 27345
+    runs:
+      - {tool: FASTag, reader: fastag, tag_length: 3, version: "1.9.0", path: /scratch/kohlbach/denovo/fastag_v190/PXD003531/tags.tsv,
+         run_dir: /scratch/kohlbach/denovo/fastag_v190/PXD003531, hardware: "CPU, 16 threads"}
+      - {tool: Casanovo, reader: casanovo, version: "5.2.1 (weights v5.2.0)", path: /scratch/kohlbach/denovo/casanovo/PXD003531/casanovo.mztab,
+         run_dir: /scratch/kohlbach/denovo/casanovo/PXD003531, hardware: "GPU H100 PCIe, batch 1024, beam 1"}
+      - {tool: InstaNovo, reader: instanovo, version: "1.2.2 (instanovo-v1.2.0, transformer)", path: /scratch/kohlbach/denovo/instanovo/PXD003531/instanovo.csv,
+         run_dir: /scratch/kohlbach/denovo/instanovo/PXD003531, hardware: "GPU H100 PCIe, batch 128, beam 5, fp16"}
+      - {tool: Novor, reader: novor, version: "1.05.0573 (academic)", path: /scratch/kohlbach/denovo/novor/PXD003531/novor.csv,
+         run_dir: /scratch/kohlbach/denovo/novor/PXD003531, hardware: "CPU, 16 cores"}
+      - {tool: PepNovo+, reader: pepnovo, version: "20101117, CID_IT_TRYP", path: /scratch/kohlbach/denovo/pepnovo/PXD003531/pepnovo_denovo.txt,
+         run_dir: /scratch/kohlbach/denovo/pepnovo/PXD003531, hardware: "CPU, 32 single-threaded chunks"}
+      - {tool: PepNovo+ tags, reader: pepnovo_tags, tag_length: 3, version: "20101117, CID_IT_TRYP, -tag_length 3", path: /scratch/kohlbach/denovo/pepnovo/PXD003531/pepnovo_tags3.txt,
+         run_dir: /scratch/kohlbach/denovo/pepnovo/PXD003531, hardware: "CPU, 32 single-threaded chunks"}
+  - id: PXD000001_Erwinia_TMT6
+    pxd: PXD000001
+    sage: /ceph/ibmi/abi/oliver/jpr-bench/accuracy/sage-PXD000001/results.sage.tsv
+    sage_version: "Sage 0.14.7 (bioconda sage-proteomics 0.14.7 hc1c3326_2; the binary reports 0.14.6), harness sage_config, erwinia_carotovora.fasta from PXD000001"
+    mgf: /scratch/kohlbach/denovo/mgf/PXD000001.mgf
+    spectra: 6103
+    runs:
+      - {tool: FASTag, reader: fastag, tag_length: 3, version: "1.9.0", path: /scratch/kohlbach/denovo/fastag_v190/PXD000001/tags.tsv,
+         run_dir: /scratch/kohlbach/denovo/fastag_v190/PXD000001, hardware: "CPU, 16 threads"}
+      - {tool: Casanovo, reader: casanovo, version: "5.2.1 (weights v5.2.0)", path: /scratch/kohlbach/denovo/casanovo/PXD000001/casanovo.mztab,
+         run_dir: /scratch/kohlbach/denovo/casanovo/PXD000001, hardware: "GPU H100 PCIe, batch 1024, beam 1"}
+      - {tool: InstaNovo, reader: instanovo, version: "1.2.2 (instanovo-v1.2.0, transformer)", path: /scratch/kohlbach/denovo/instanovo/PXD000001/instanovo.csv,
+         run_dir: /scratch/kohlbach/denovo/instanovo/PXD000001, hardware: "GPU H100 PCIe, batch 128, beam 5, fp16"}
+      - {tool: Novor, reader: novor, version: "1.05.0573 (academic)", path: /scratch/kohlbach/denovo/novor/PXD000001/novor.csv,
+         run_dir: /scratch/kohlbach/denovo/novor/PXD000001, hardware: "CPU, 16 cores"}
+      - {tool: PepNovo+, reader: pepnovo, version: "20101117, CID_IT_TRYP", path: /scratch/kohlbach/denovo/pepnovo/PXD000001/pepnovo_denovo.txt,
+         run_dir: /scratch/kohlbach/denovo/pepnovo/PXD000001, hardware: "CPU, 32 single-threaded chunks"}
+      - {tool: PepNovo+ tags, reader: pepnovo_tags, tag_length: 3, version: "20101117, CID_IT_TRYP, -tag_length 3", path: /scratch/kohlbach/denovo/pepnovo/PXD000001/pepnovo_tags3.txt,
+         run_dir: /scratch/kohlbach/denovo/pepnovo/PXD000001, hardware: "CPU, 32 single-threaded chunks"}
+  - id: PXD076528_Astral_7673
+    pxd: PXD076528
+    sage: /ceph/ibmi/abi/oliver/jpr-bench/accuracy/sage-PXD076528/results.sage.tsv
+    sage_version: "Sage 0.14.7 (bioconda sage-proteomics 0.14.7 hc1c3326_2; the binary reports 0.14.6), harness sage_config, human UniProt panel FASTA (the PXD-supplied 20200824_swissprot_human_ci.fasta is 46 kB and not used); full mzML searched"
+    mgf: /scratch/kohlbach/denovo/mgf/PXD076528_sub20k_seed20261103.mgf
+    spectra: 20000
+    subsample: "fixed-seed random subsample of 20,000 MS2 spectra (fastag_bench.mgf.write_ms2_subsample, seed 20261103); ground truth and FASTag tags restricted to these spectra"
+    runs:
+      - {tool: FASTag, reader: fastag, tag_length: 3, version: "1.9.0", path: /scratch/kohlbach/denovo/fastag_v190/PXD076528/tags.tsv, spectra: 100245,
+         run_dir: /scratch/kohlbach/denovo/fastag_v190/PXD076528, hardware: "CPU, 16 threads, full mzML (all MS2; time not comparable)"}
+      - {tool: Casanovo, reader: casanovo, version: "5.2.1 (weights v5.2.0)", path: /scratch/kohlbach/denovo/casanovo/PXD076528/casanovo.mztab,
+         run_dir: /scratch/kohlbach/denovo/casanovo/PXD076528, hardware: "GPU H100 PCIe, batch 1024, beam 1"}
+      - {tool: InstaNovo, reader: instanovo, version: "1.2.2 (instanovo-v1.2.0, transformer)", path: /scratch/kohlbach/denovo/instanovo/PXD076528/instanovo.csv,
+         run_dir: /scratch/kohlbach/denovo/instanovo/PXD076528, hardware: "GPU H100 PCIe, batch 128, beam 5, fp16"}
+      - {tool: Novor, reader: novor, version: "1.05.0573 (academic)", path: /scratch/kohlbach/denovo/novor/PXD076528/novor.csv,
+         run_dir: /scratch/kohlbach/denovo/novor/PXD076528, hardware: "CPU, 16 cores"}
+      - {tool: PepNovo+, reader: pepnovo, version: "20101117, CID_IT_TRYP", path: /scratch/kohlbach/denovo/pepnovo/PXD076528/pepnovo_denovo.txt,
+         run_dir: /scratch/kohlbach/denovo/pepnovo/PXD076528, hardware: "CPU, 32 single-threaded chunks"}
+      - {tool: PepNovo+ tags, reader: pepnovo_tags, tag_length: 3, version: "20101117, CID_IT_TRYP, -tag_length 3", path: /scratch/kohlbach/denovo/pepnovo/PXD076528/pepnovo_tags3.txt,
+         run_dir: /scratch/kohlbach/denovo/pepnovo/PXD076528, hardware: "CPU, 32 single-threaded chunks"}

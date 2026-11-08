@@ -1,0 +1,15 @@
+# One-setting-at-a-time ablation of FASTag's defaults vs the matched profile (scripts/ablation_v190.py),
+# FASTag 1.9.0, IBMI node data (AMD EPYC 9654, 224 logical CPUs; shared with other users' jobs).
+# Inputs: the mzML files of the tag-accuracy pass (public PXD data), staged from
+# /ceph/ibmi/abi/oliver/jpr-bench/data to node-local /scratch; Sage truth = the Sage 0.14.7 run dirs of the
+# accuracy pass (/ceph/ibmi/abi/oliver/jpr-bench/accuracy/work/runs/<dataset>/sage/default), copied, not re-run.
+work_dir: /scratch/kohlbach/jpr-ablation-v190/work
+data_dir: /scratch/kohlbach/jpr-ablation-v190/data
+results_dir: /ceph/ibmi/abi/oliver/jpr-bench/ablation-v190
+tools:
+  fastag: /ceph/ibmi/abi/oliver/opt/fastag-1.9.0/FASTag/FASTag          # v1.9.0 release bundle
+env:
+  OPENBLAS_NUM_THREADS: "1"
+  OPENMS_TMPDIR: /dev/shm/kohlbach-tmp
+sage:
+  fdr: 0.01

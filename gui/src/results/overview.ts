@@ -347,7 +347,7 @@ function genusTile(c: SpeciesCall, da: boolean): Tile {
       ...base,
       value: c.top.name,
       tone: 'call',
-      note: `q = ${fmt(c.top.q)}; ranked first of ${c.genera} genera by adjusted count, not a presence call.${caveat}`
+      note: `q = ${c.top.q === null ? 'NA (uncalibrated under -species_orientation both)' : fmt(c.top.q)}; ranked first of ${c.genera} genera by adjusted count, not a presence call.${caveat}`
     }
   if (c.state === 'none') return { ...base, value: 'no genus', tone: 'nocall', note: `the species report lists no genus.${caveat}` }
   return { ...base, value: 'not assessed', tone: 'off', note: 'species detection was off', action: enable({ species: true, extension: '2' }) }

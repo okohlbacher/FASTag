@@ -12,6 +12,17 @@
 # on read with its own picker, not the vendor's, and the "readers agree" check
 # then reports ~96% -- a property of the two pickers, not of the reader.
 #
+# For a profile mzML and an archive converted from it (profile MS2 kept, e.g.
+# mzpeak-convert), set FASTAG_E2E_MZML_ARGS="-pick_profile auto": the mzML runs
+# then centroid with the picker the mzPeak reader uses (FASTag 1.12 #9), and
+# the mzML tags must EQUAL the mzPeak tags byte for byte (the plan's "mzML +
+# auto equals the mzPeak digest"). Measured on PXD000865
+# (0299_F1_R1_P77628B02_TMT8, msconvert profile mzML, mzpeak-convert 0.18.0):
+# the archive stores the same non-zero points, but in m/z order and with zero
+# runs shortened; the mzML puts a zero padding point after some peaks' last
+# sample at a lower m/z. auto picks from m/z-sorted points (Centroid.h), and
+# with that the two inputs give identical tags.
+#
 # Exits 77 (ctest SKIP) when they are not set, so a normal build is unaffected.
 set -u
 BIN="$1"
@@ -26,11 +37,13 @@ done
 
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 A=(-fragment_tolerance "${FASTAG_E2E_PPM:-20}" -fragment_tolerance_unit ppm)
+# shellcheck disable=SC2206
+ML=(${FASTAG_E2E_MZML_ARGS:-})
 fail=0
 ck() { if [ "$2" = "$3" ]; then echo "  ok   $1"; else echo "  FAIL $1: got '$2' want '$3'"; fail=1; fi; }
 rows() { [ -s "$1" ] || { echo MISSING; return; }; echo $(( $(grep -c . "$1") - 1 )); }
 
-"$BIN" -in "$FASTAG_E2E_MZML"   -out "$W/ml.tsv" -threads 4 "${A[@]}" >/dev/null 2>&1
+"$BIN" -in "$FASTAG_E2E_MZML"   -out "$W/ml.tsv" -threads 4 "${A[@]}" ${ML[@]+"${ML[@]}"} >/dev/null 2>&1
 "$BIN" -in "$FASTAG_E2E_MZPEAK" -out "$W/mp.tsv" -threads 4 "${A[@]}" >/dev/null 2>&1
 
 # Both readers must see the same run. Tag counts may differ by a hair -- an
@@ -38,6 +51,11 @@ rows() { [ -s "$1" ] || { echo MISSING; return; }; echo $(( $(grep -c . "$1") - 
 # -- so this asserts agreement, not equality: 99.9% of (spectrum, tag, length)
 # triples shared. An actual reader bug is nowhere near that line.
 a=$(rows "$W/ml.tsv"); b=$(rows "$W/mp.tsv")
+case " ${ML[*]:-} " in
+  *" -pick_profile auto "*)
+    ck "mzML -pick_profile auto equals the mzPeak tags (byte-identical)" \
+       "$(cmp -s "$W/ml.tsv" "$W/mp.tsv" && echo same || echo "differ ($a vs $b rows)")" "same" ;;
+esac
 ck "mzML produced tags"   "$([ "$a" != MISSING ] && [ "$a" -gt 0 ] && echo yes)" "yes"
 ck "mzPeak produced tags" "$([ "$b" != MISSING ] && [ "$b" -gt 0 ] && echo yes)" "yes"
 if [ "$a" != MISSING ] && [ "$b" != MISSING ]; then
@@ -73,7 +91,7 @@ cut -f1-3 "$W/re.tsv" 2>/dev/null | sort -u > "$W/re.keys"
 n=$(wc -l < "$W/o2.keys" | tr -d ' '); s=$(comm -12 "$W/o2.keys" "$W/re.keys" | wc -l | tr -d ' ')
 ck "re-tagging the written mzpeak reproduces >=99.9% of its tags" \
    "$(awk -v s="$s" -v n="$n" 'BEGIN{print (n > 0 && s >= 0.999*n) ? "yes" : "no ("s"/"n")"}')" "yes"
-"$BIN" -in "$FASTAG_E2E_MZML" -out "$W/o3.tsv" -out_spectra "$W/m.mzpeak" -threads 4 "${A[@]}" >/dev/null 2>&1
+"$BIN" -in "$FASTAG_E2E_MZML" -out "$W/o3.tsv" -out_spectra "$W/m.mzpeak" -threads 4 "${A[@]}" ${ML[@]+"${ML[@]}"} >/dev/null 2>&1
 ck "mzML -> mzpeak spectra" "$([ -s "$W/m.mzpeak" ] && echo ok)" "ok"
 
 [ "$fail" -eq 0 ] || exit 1

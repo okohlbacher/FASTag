@@ -79,6 +79,19 @@ namespace FASTag
 
     /// Accession of the protein covering text position @p pos.
     const std::string& proteinAt(uint32_t pos) const;
+    /// Ordinal (0-based, database order) of the protein covering text position
+    /// @p pos; proteinCount() for a position before the first protein, which
+    /// build() never produces.
+    uint32_t proteinIndexAt(uint32_t pos) const;
+    /// Accession of protein @p i (database order, i < proteinCount()).
+    const std::string& accession(uint32_t i) const { return acc_[i]; }
+    /// Residues the index keeps of protein @p i (the letters of its database
+    /// sequence; ambiguity residues count, dropped non-letters do not).
+    uint32_t proteinLength(uint32_t i) const
+    {
+      const size_t end = i + 1 < starts_.size() ? starts_[i + 1] : text_.size();
+      return static_cast<uint32_t>(end - starts_[i] - 1);  // less the '#' sentinel
+    }
     /// 0-based residue position of text position @p pos in that protein.
     /// Known limit: counts the letters the index keeps, so a non-letter inside a
     /// database sequence (a mid-protein '*') shifts the positions after it.

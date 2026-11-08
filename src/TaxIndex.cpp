@@ -216,6 +216,56 @@ namespace FASTag
     return m;
   }
 
+  std::vector<uint64_t> TaxIndex::groupOverlap(const std::vector<int>& group_of, std::size_t n_groups) const
+  {
+    std::vector<uint64_t> m(n_groups * n_groups, 0);
+    const std::vector<uint32_t> tx = taxa();
+    const size_t n = tx.size();
+    if (n == 0 || n_groups == 0 || group_of.size() < n) return m;
+
+    // The distinct groups of one k-mer (taxon sets are small, so a linear
+    // dedup beats a set), then every ordered pair of them once.
+    std::vector<uint32_t> gs;
+    auto add = [&](size_t idx) {
+      const int g = group_of[idx];
+      if (g < 0 || static_cast<std::size_t>(g) >= n_groups) return;
+      const uint32_t u = static_cast<uint32_t>(g);
+      if (std::find(gs.begin(), gs.end(), u) == gs.end()) gs.push_back(u);
+    };
+    auto bump = [&]() {
+      for (size_t a = 0; a < gs.size(); ++a)
+        for (size_t b = 0; b < gs.size(); ++b)
+          ++m[static_cast<size_t>(gs[a]) * n_groups + gs[b]];
+    };
+
+    if (!legacy_ && keys_ != nullptr)
+    {
+      for (uint64_t i = 0; i < n_kmers_; ++i)
+      {
+        gs.clear();
+        for (uint32_t p = offsets_[i]; p < offsets_[i + 1]; ++p)
+        {
+          const uint32_t idx = postingAt(p);
+          if (idx < n_taxa_) add(idx);
+        }
+        bump();
+      }
+      return m;
+    }
+
+    for (const auto& kv : index_)
+    {
+      gs.clear();
+      for (uint32_t t : kv.second)
+      {
+        auto it = std::lower_bound(tx.begin(), tx.end(), t);
+        if (it != tx.end() && *it == t) add(static_cast<size_t>(it - tx.begin()));
+      }
+      bump();
+    }
+    return m;
+  }
+
   uint64_t TaxIndex::postings(uint32_t taxid) const
   {
     if (!legacy_ && taxa_ != nullptr)

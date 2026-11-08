@@ -1,0 +1,51 @@
+# fastag-bench configuration. Every key is optional; unset keys take the defaults in
+# src/fastag_bench/config.py. Paths may use ~ and $ENV variables.
+work_dir: work          # run outputs (work/runs/<dataset>/<tool>/<label>/) and work/timing.tsv
+data_dir: data          # downloads: data/<PXD>/<file>
+results_dir: results    # scored tables: results/benchmark/<dataset>/
+mirrors: []             # directories searched for <PXD>/<file> or <file> before downloading (symlinked, checksum-verified)
+
+tools:                  # command name on PATH or absolute path
+  fastag: FASTag
+  sage: sage
+  directag: directag                # optional comparator (bioconda 'bumbershoot'); needs LC_ALL=C, set automatically
+  casanovo: casanovo                # optional comparator (pip install casanovo)
+  thermorawfileparser: ThermoRawFileParser
+  mzpeak_convert: mzpeak-convert
+
+env:                    # extra environment for every tool
+  OPENBLAS_NUM_THREADS: "1"
+
+fastag:
+  threads: [1, 2, 4, 8, 16, 32, 64, 128, 256]
+  reps: 3
+  args: []              # FASTag defaults; per-dataset args come from datasets.yaml fastag_args
+  digest_dir: null      # FASTAG_DIGEST_DIR when the binary runs outside its install tree
+  species:              # taxonomy index for -species (bundled with FASTag releases)
+    taxdb: null
+    nodes: null
+    names: null
+    args: ["-extension", "2"]
+
+sage:
+  fdr: 0.01             # spectrum-level q-value cut for ground-truth PSMs
+  threads: null         # RAYON_NUM_THREADS; null = all cores
+  fasta: null           # null = the dataset's 'fasta' file
+  missed_cleavages: 2
+  precursor_ppm: 10
+  fragment_ppm: 20
+  max_variable_mods: 2
+
+directag:
+  threads: 16
+  args: ["-TagLength", "3", "-MaxTagCount", "50", "-MaxPeakCount", "100",
+         "-FragmentMzTolerance", "0.02", "-PrecursorMzTolerance", "0.02"]
+
+casanovo:
+  max_spectra: 2000     # first N MS2 as MGF (needs pyteomics); null = whole file
+  model: null           # path to a weights .ckpt; null = Casanovo's own download
+  threads: 16
+
+score:
+  ks: [1, 5, 10, 50]
+  label_share_min: 0.01

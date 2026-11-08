@@ -1,0 +1,9 @@
+enzyme = Trypsin
+fragmentation = HCD
+massAnalyzer = FT
+fragmentIonErrorTol = 0.02Da
+precursorErrorTol = 10ppm
+variableModifications = Oxidation (M)
+fixedModifications = Methylthio (C), TMT6plex (K), TMT6plex (N-term)
+forbiddenResidues = I,U
+PTMFile = /scratch/kohlbach/denovo/novor/ptm_extra.txt
