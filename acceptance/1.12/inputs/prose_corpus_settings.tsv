@@ -1,0 +1,1099 @@
+corpus	dataset	run	mode	parameter	predicted	truth	match	truth_scope	quantms_truth	quantms_match	confidence	status	source
+heldout	PXD000806	S2-2	data	instrument	LTQ Orbitrap Velos	orbitrap elite	no	file			0.95	auto	metadata
+heldout	PXD000806	S2-2	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD000806	S2-2	data	label	TMTpro (16/18plex)	label free	no	file			0.796	auto	data
+heldout	PXD000806	S2-2	data	cys_alkylation	Carbamidomethyl (C)	none stated	n/a	file			0.3	default	default
+heldout	PXD000806	S2-2	data	enzyme	Trypsin		n/a	file			0.3	default	default
+heldout	PXD000806	S2-2	data	organism	not in panel	triticum aestivum	no	file			0.5	review	search
+heldout	PXD001186	20140225_Elite_FrPa_LIPID_SILACexpB_flowthr2	data	instrument	Orbitrap Elite	orbitrap elite	yes	file			0.95	auto	metadata
+heldout	PXD001186	20140225_Elite_FrPa_LIPID_SILACexpB_flowthr2	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD001186	20140225_Elite_FrPa_LIPID_SILACexpB_flowthr2	data	label	no isobaric label	label free	yes	file			0.578	review	data
+heldout	PXD001186	20140225_Elite_FrPa_LIPID_SILACexpB_flowthr2	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.95	auto	search
+heldout	PXD001186	20140225_Elite_FrPa_LIPID_SILACexpB_flowthr2	data	enzyme	Trypsin	Trypsin	yes	file			0.721	auto	search
+heldout	PXD001186	20140225_Elite_FrPa_LIPID_SILACexpB_flowthr2	data	organism	Homo_sapiens	homo sapiens	yes	file			0.476	review	search
+heldout	PXD001587	140120_Lysate90min_38	data	instrument	Q Exactive Plus	q exactive	yes	file			0.95	auto	metadata
+heldout	PXD001587	140120_Lysate90min_38	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD001587	140120_Lysate90min_38	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD001587	140120_Lysate90min_38	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.978	auto	search
+heldout	PXD001587	140120_Lysate90min_38	data	enzyme	Trypsin	trypsin	yes	file			0.853	auto	search
+heldout	PXD001587	140120_Lysate90min_38	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.48	review	search
+heldout	PXD001774	12HNP3timecourse	data	instrument	LTQ Orbitrap Discovery	LTQ Orbitrap	yes	file			0.95	auto	metadata
+heldout	PXD001774	12HNP3timecourse	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD001774	12HNP3timecourse	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD001774	12HNP3timecourse	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+heldout	PXD001774	12HNP3timecourse	data	enzyme	Trypsin	Trypsin	yes	file			0.3	default	default
+heldout	PXD001774	12HNP3timecourse	data	organism	not in panel	Oryza sativa	no	file			0.5	review	search
+heldout	PXD002411	EBV-BGLF4_48Hr_2SILAC_Nuclear_TotalProteome_Rep1_bRP6	data	instrument	LTQ Orbitrap Velos	orbitrap elite	no	file			0.95	auto	metadata
+heldout	PXD002411	EBV-BGLF4_48Hr_2SILAC_Nuclear_TotalProteome_Rep1_bRP6	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD002411	EBV-BGLF4_48Hr_2SILAC_Nuclear_TotalProteome_Rep1_bRP6	data	label	SILAC (Lys8/Arg10)	label free	no	file			0.606	review	data
+heldout	PXD002411	EBV-BGLF4_48Hr_2SILAC_Nuclear_TotalProteome_Rep1_bRP6	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.978	auto	search
+heldout	PXD002411	EBV-BGLF4_48Hr_2SILAC_Nuclear_TotalProteome_Rep1_bRP6	data	enzyme	Trypsin	Trypsin	yes	file			0.876	auto	search
+heldout	PXD002411	EBV-BGLF4_48Hr_2SILAC_Nuclear_TotalProteome_Rep1_bRP6	data	organism	Homo_sapiens	homo sapiens	yes	file			0.47	review	search
+heldout	PXD002429	NR1510	data	instrument	LTQ Orbitrap Discovery	LTQ Orbitrap XL	no	file			0.95	auto	metadata
+heldout	PXD002429	NR1510	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD002429	NR1510	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD002429	NR1510	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.698	review	search
+heldout	PXD002429	NR1510	data	enzyme	Trypsin	Trypsin	yes	file			0.647	review	search
+heldout	PXD002429	NR1510	data	organism	Arabidopsis_thaliana	Glycine max	no	file			0.634	review	search
+heldout	PXD003643	Belsom_Rappsilber_CASP11_Target1_Tx781_37	data	instrument	LTQ Orbitrap Velos	LTQ Orbitrap Velos	yes	file			0.95	auto	metadata
+heldout	PXD003643	Belsom_Rappsilber_CASP11_Target1_Tx781_37	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD003643	Belsom_Rappsilber_CASP11_Target1_Tx781_37	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD003643	Belsom_Rappsilber_CASP11_Target1_Tx781_37	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+heldout	PXD003643	Belsom_Rappsilber_CASP11_Target1_Tx781_37	data	enzyme	Trypsin	Lys-C+Trypsin	partial	file			0.3	default	default
+heldout	PXD003643	Belsom_Rappsilber_CASP11_Target1_Tx781_37	data	organism	Tetrahymena thermophila	ruminococcus gnavus	no	file			0.6	review	data
+heldout	PXD004143	OS02252_01_LyscTrypsin	data	instrument	Orbitrap Fusion	Q Exactive	no	file			0.95	auto	metadata
+heldout	PXD004143	OS02252_01_LyscTrypsin	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD004143	OS02252_01_LyscTrypsin	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD004143	OS02252_01_LyscTrypsin	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.95	auto	search
+heldout	PXD004143	OS02252_01_LyscTrypsin	data	enzyme	Trypsin	Trypsin	yes	file			0.95	auto	search
+heldout	PXD004143	OS02252_01_LyscTrypsin	data	organism	Homo_sapiens	homo sapiens	yes	file			0.95	auto	search
+heldout	PXD004725	Sina_Control-TMT126_16-015	data	instrument	Q Exactive Plus	Q Exactive Plus	yes	file			0.95	auto	metadata
+heldout	PXD004725	Sina_Control-TMT126_16-015	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD004725	Sina_Control-TMT126_16-015	data	label	TMT2plex	TMT+SILAC	partial	file			0.97	auto	data
+heldout	PXD004725	Sina_Control-TMT126_16-015	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.913	auto	search
+heldout	PXD004725	Sina_Control-TMT126_16-015	data	enzyme	Trypsin	Trypsin	yes	file			0.793	auto	search
+heldout	PXD004725	Sina_Control-TMT126_16-015	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.448	review	search
+heldout	PXD004732	01640c_BB4-Thermo_SRM_Pool_26_01_01-ETD-1h-R2	data	instrument	Orbitrap Fusion Lumos	Orbitrap Fusion Lumos	yes	file			0.95	auto	metadata
+heldout	PXD004732	01640c_BB4-Thermo_SRM_Pool_26_01_01-ETD-1h-R2	data	acquisition	PRM	DDA	no	file			0.8	auto	metadata
+heldout	PXD004732	01640c_BB4-Thermo_SRM_Pool_26_01_01-ETD-1h-R2	data	label	no isobaric label	label free	yes	file			0.68	review	data
+heldout	PXD004732	01640c_BB4-Thermo_SRM_Pool_26_01_01-ETD-1h-R2	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.971	auto	search
+heldout	PXD004732	01640c_BB4-Thermo_SRM_Pool_26_01_01-ETD-1h-R2	data	enzyme	Trypsin	Trypsin	yes	file			0.713	auto	search
+heldout	PXD004732	01640c_BB4-Thermo_SRM_Pool_26_01_01-ETD-1h-R2	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.95	auto	search
+heldout	PXD005236	Fusion_160519_70	data	instrument	Orbitrap Fusion	orbitrap fusion etd	yes	file			0.95	auto	metadata
+heldout	PXD005236	Fusion_160519_70	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD005236	Fusion_160519_70	data	label	TMT10/11plex	TMT	yes	file			0.911	auto	data
+heldout	PXD005236	Fusion_160519_70	data	cys_alkylation	Methylthio (C)		n/a	file			0.95	auto	search
+heldout	PXD005236	Fusion_160519_70	data	enzyme	Trypsin	trypsin	yes	file			0.809	auto	search
+heldout	PXD005236	Fusion_160519_70	data	organism	Escherichia_coli	Escherichia coli	yes	file			0.95	auto	search
+heldout	PXD006096	100815_MM_ABPP_H1993_DMSO_DIA1_new	data	instrument	Q Exactive Plus	Q Exactive	yes	file			0.95	auto	metadata
+heldout	PXD006096	100815_MM_ABPP_H1993_DMSO_DIA1_new	data	acquisition	DIA	DIA	yes	file			0.97	auto	metadata
+heldout	PXD006096	100815_MM_ABPP_H1993_DMSO_DIA1_new	data	label	no isobaric label	label free	yes	file			0.8	auto	data
+heldout	PXD006096	100815_MM_ABPP_H1993_DMSO_DIA1_new	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.517	review	data
+heldout	PXD006096	100815_MM_ABPP_H1993_DMSO_DIA1_new	data	enzyme	Trypsin	Trypsin	yes	file			0.6	review	data
+heldout	PXD006096	100815_MM_ABPP_H1993_DMSO_DIA1_new	data	organism	Homo sapiens	Homo sapiens	yes	file			0.631	review	data
+heldout	PXD006536	Bart_Rice_iTRAQ_08_FT_19May16_Pippin_16-03-37	data	instrument	Q Exactive Plus	Q Exactive Plus	yes	file			0.95	auto	metadata
+heldout	PXD006536	Bart_Rice_iTRAQ_08_FT_19May16_Pippin_16-03-37	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD006536	Bart_Rice_iTRAQ_08_FT_19May16_Pippin_16-03-37	data	label	iTRAQ4plex	iTRAQ	yes	file			0.95	auto	data
+heldout	PXD006536	Bart_Rice_iTRAQ_08_FT_19May16_Pippin_16-03-37	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.702	auto	search
+heldout	PXD006536	Bart_Rice_iTRAQ_08_FT_19May16_Pippin_16-03-37	data	enzyme	Trypsin	Trypsin	yes	file			0.77	auto	search
+heldout	PXD006536	Bart_Rice_iTRAQ_08_FT_19May16_Pippin_16-03-37	data	organism	Oryza_sativa	Oryza sativa Japonica Group	yes	file			0.95	auto	search
+heldout	PXD006745	20140828_QEP2_FBU_FB_Janzen_nuclear_01	data	instrument	Q Exactive Plus	Q Exactive	yes	file			0.95	auto	metadata
+heldout	PXD006745	20140828_QEP2_FBU_FB_Janzen_nuclear_01	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD006745	20140828_QEP2_FBU_FB_Janzen_nuclear_01	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD006745	20140828_QEP2_FBU_FB_Janzen_nuclear_01	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.978	auto	search
+heldout	PXD006745	20140828_QEP2_FBU_FB_Janzen_nuclear_01	data	enzyme	Trypsin	Trypsin	yes	file			0.888	auto	search
+heldout	PXD006745	20140828_QEP2_FBU_FB_Janzen_nuclear_01	data	organism	Trypanosoma_brucei	Trypanosoma brucei	yes	file			0.95	auto	search
+heldout	PXD006905	2017-10-27_CL03_Cell8_10252017_2	data	instrument	Q Exactive Plus	Q Exactive Plus	yes	file			0.95	auto	metadata
+heldout	PXD006905	2017-10-27_CL03_Cell8_10252017_2	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD006905	2017-10-27_CL03_Cell8_10252017_2	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD006905	2017-10-27_CL03_Cell8_10252017_2	data	cys_alkylation	Carbamidomethyl (C)	none stated	n/a	file			0.3	default	default
+heldout	PXD006905	2017-10-27_CL03_Cell8_10252017_2	data	enzyme	Trypsin	Trypsin	yes	file			0.728	auto	search
+heldout	PXD006905	2017-10-27_CL03_Cell8_10252017_2	data	organism	Xenopus_laevis	Xenopus laevis	yes	file			0.95	auto	search
+heldout	PXD008579	R3_MS3_hSAX05_SILAC_TMT10	data	instrument	Orbitrap Fusion Lumos	Orbitrap Fusion Lumos	yes	file			0.95	auto	metadata
+heldout	PXD008579	R3_MS3_hSAX05_SILAC_TMT10	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD008579	R3_MS3_hSAX05_SILAC_TMT10	data	label	TMT10/11plex	TMT+SILAC	partial	file			0.785	review	data
+heldout	PXD008579	R3_MS3_hSAX05_SILAC_TMT10	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.95	auto	search
+heldout	PXD008579	R3_MS3_hSAX05_SILAC_TMT10	data	enzyme	Trypsin	Trypsin/P	yes	file			0.749	auto	search
+heldout	PXD008579	R3_MS3_hSAX05_SILAC_TMT10	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.632	review	search
+heldout	PXD009049	Nsco_Citro_CPX_rep1_fraction04	data	instrument	LTQ Orbitrap Velos	LTQ Orbitrap Velos	yes	file			0.95	auto	metadata
+heldout	PXD009049	Nsco_Citro_CPX_rep1_fraction04	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD009049	Nsco_Citro_CPX_rep1_fraction04	data	label	no isobaric label	SILAC	no	file			0.68	review	data
+heldout	PXD009049	Nsco_Citro_CPX_rep1_fraction04	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.971	auto	search
+heldout	PXD009049	Nsco_Citro_CPX_rep1_fraction04	data	enzyme	Trypsin	Trypsin/P	yes	file			0.845	auto	search
+heldout	PXD009049	Nsco_Citro_CPX_rep1_fraction04	data	organism	Escherichia_coli	Citrobacter rodentium	no	file			0.95	auto	search
+heldout	PXD009938	111214_Ines_LHC_1	data	instrument	Orbitrap Velos Pro	Orbitrap Velos Pro	yes	file			0.95	auto	metadata
+heldout	PXD009938	111214_Ines_LHC_1	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD009938	111214_Ines_LHC_1	data	label	SILAC (Arg6)	SILAC	yes	file			0.6	review	data
+heldout	PXD009938	111214_Ines_LHC_1	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.95	auto	search
+heldout	PXD009938	111214_Ines_LHC_1	data	enzyme	Trypsin	Trypsin	yes	file			0.822	auto	search
+heldout	PXD009938	111214_Ines_LHC_1	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.523	review	search
+heldout	PXD010271	Darpa_2_human_02_23Jan17_Arwem_16-10-25	data	instrument	LTQ Orbitrap Velos	LTQ Orbitrap Velos	yes	file			0.95	auto	metadata
+heldout	PXD010271	Darpa_2_human_02_23Jan17_Arwem_16-10-25	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD010271	Darpa_2_human_02_23Jan17_Arwem_16-10-25	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD010271	Darpa_2_human_02_23Jan17_Arwem_16-10-25	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.98	auto	search
+heldout	PXD010271	Darpa_2_human_02_23Jan17_Arwem_16-10-25	data	enzyme	Trypsin	Trypsin	yes	file			0.806	auto	search
+heldout	PXD010271	Darpa_2_human_02_23Jan17_Arwem_16-10-25	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.555	review	search
+heldout	PXD010376	Kcr_6	data	instrument	Q Exactive	Q Exactive	yes	file			0.95	auto	metadata
+heldout	PXD010376	Kcr_6	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD010376	Kcr_6	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD010376	Kcr_6	data	cys_alkylation	Nethylmaleimide (C)		n/a	file			0.9	auto	search
+heldout	PXD010376	Kcr_6	data	enzyme	Trypsin	Trypsin	yes	file			0.77	auto	search
+heldout	PXD010376	Kcr_6	data	organism	Oryza_sativa	Oryza sativa	yes	file			0.95	auto	search
+heldout	PXD010429	20160609_Haura-SCC-PG_TMT28-fx02-run2	data	instrument	Q Exactive Plus	Q Exactive Plus	yes	file			0.95	auto	metadata
+heldout	PXD010429	20160609_Haura-SCC-PG_TMT28-fx02-run2	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD010429	20160609_Haura-SCC-PG_TMT28-fx02-run2	data	label	TMT6plex	TMT	yes	file			0.886	auto	data
+heldout	PXD010429	20160609_Haura-SCC-PG_TMT28-fx02-run2	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.962	auto	search
+heldout	PXD010429	20160609_Haura-SCC-PG_TMT28-fx02-run2	data	enzyme	Trypsin	Trypsin	yes	file			0.899	auto	search
+heldout	PXD010429	20160609_Haura-SCC-PG_TMT28-fx02-run2	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.553	review	search
+heldout	PXD010809	1807_FR_C10	data	instrument	Q Exactive HF	Q Exactive HF	yes	file			0.95	auto	metadata
+heldout	PXD010809	1807_FR_C10	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD010809	1807_FR_C10	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD010809	1807_FR_C10	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.979	auto	search
+heldout	PXD010809	1807_FR_C10	data	enzyme	Trypsin	Trypsin/P	yes	file			0.9	auto	search
+heldout	PXD010809	1807_FR_C10	data	organism	Spinacia_oleracea	Spinacia oleracea	yes	file			0.95	auto	search
+heldout	PXD010941	170421_P0309_MR_JP_Rep12_fr3	data	instrument	Q Exactive Plus	Q Exactive Plus	yes	dataset			0.95	auto	metadata
+heldout	PXD010941	170421_P0309_MR_JP_Rep12_fr3	data	acquisition	DDA	DDA	yes	dataset			0.7	auto	metadata
+heldout	PXD010941	170421_P0309_MR_JP_Rep12_fr3	data	label	TMT10/11plex	TMT	yes	dataset			0.85	auto	data
+heldout	PXD010941	170421_P0309_MR_JP_Rep12_fr3	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	dataset			0.965	auto	search
+heldout	PXD010941	170421_P0309_MR_JP_Rep12_fr3	data	enzyme	Trypsin	Trypsin	yes	dataset			0.809	auto	search
+heldout	PXD010941	170421_P0309_MR_JP_Rep12_fr3	data	organism	Homo_sapiens	homo sapiens	yes	dataset			0.503	review	search
+heldout	PXD011080	101105_Gustavo_TB2666_2_6	data	instrument	LTQ Orbitrap XL	ltq orbitrap	yes	file			0.95	auto	metadata
+heldout	PXD011080	101105_Gustavo_TB2666_2_6	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD011080	101105_Gustavo_TB2666_2_6	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD011080	101105_Gustavo_TB2666_2_6	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+heldout	PXD011080	101105_Gustavo_TB2666_2_6	data	enzyme	Trypsin		n/a	file			0.3	default	default
+heldout	PXD011080	101105_Gustavo_TB2666_2_6	data	organism	not in panel	mycobacterium tuberculosis	no	file			0.5	review	search
+heldout	PXD011848	BM3440	data	instrument	Q Exactive Plus	Q Exactive Plus	yes	file			0.95	auto	metadata
+heldout	PXD011848	BM3440	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD011848	BM3440	data	label	label free	SILAC	no	file			0.8	auto	data
+heldout	PXD011848	BM3440	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+heldout	PXD011848	BM3440	data	enzyme	Trypsin	Trypsin/P	yes	file			0.867	auto	search
+heldout	PXD011848	BM3440	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.495	review	search
+heldout	PXD012636	20150821_QE7_UPLC11_PCP_SA_Rat_Heart_2_Left_Ventricle_Fraction_8	data	instrument	Q Exactive HF	Q Exactive	yes	file			0.95	auto	metadata
+heldout	PXD012636	20150821_QE7_UPLC11_PCP_SA_Rat_Heart_2_Left_Ventricle_Fraction_8	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD012636	20150821_QE7_UPLC11_PCP_SA_Rat_Heart_2_Left_Ventricle_Fraction_8	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD012636	20150821_QE7_UPLC11_PCP_SA_Rat_Heart_2_Left_Ventricle_Fraction_8	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.978	auto	search
+heldout	PXD012636	20150821_QE7_UPLC11_PCP_SA_Rat_Heart_2_Left_Ventricle_Fraction_8	data	enzyme	Trypsin	Lys-C+Trypsin	partial	file			0.799	auto	search
+heldout	PXD012636	20150821_QE7_UPLC11_PCP_SA_Rat_Heart_2_Left_Ventricle_Fraction_8	data	organism	Rattus_norvegicus + Cricetulus_griseus	Rattus norvegicus	yes	file			0.5	review	search
+heldout	PXD012758	180601_C2C12_wt_H_IGF2_L_Medium_1	data	instrument	Orbitrap Fusion	Orbitrap Fusion ETD	yes	file			0.95	auto	metadata
+heldout	PXD012758	180601_C2C12_wt_H_IGF2_L_Medium_1	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD012758	180601_C2C12_wt_H_IGF2_L_Medium_1	data	label	label free	SILAC	no	file			0.8	auto	data
+heldout	PXD012758	180601_C2C12_wt_H_IGF2_L_Medium_1	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+heldout	PXD012758	180601_C2C12_wt_H_IGF2_L_Medium_1	data	enzyme	Trypsin	Trypsin	yes	file			0.3	default	default
+heldout	PXD012758	180601_C2C12_wt_H_IGF2_L_Medium_1	data	organism	not in panel	Mus musculus	no	file			0.5	review	search
+heldout	PXD012764	P17540	data	instrument	Q Exactive Plus	Q Exactive	yes	file			0.95	auto	metadata
+heldout	PXD012764	P17540	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD012764	P17540	data	label	iTRAQ4plex	iTRAQ	yes	file			0.95	auto	data
+heldout	PXD012764	P17540	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+heldout	PXD012764	P17540	data	enzyme	Trypsin	Trypsin	yes	file			0.6	review	data
+heldout	PXD012764	P17540	data	organism	Oryza sativa	Oryza sativa	yes	file			0.707	auto	data
+heldout	PXD014225	QECCF151223_35	data	instrument	Q Exactive Plus	q exactive	yes	file			0.95	auto	metadata
+heldout	PXD014225	QECCF151223_35	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD014225	QECCF151223_35	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD014225	QECCF151223_35	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+heldout	PXD014225	QECCF151223_35	data	enzyme	Trypsin	Trypsin	yes	file			0.3	default	default
+heldout	PXD014225	QECCF151223_35	data	organism	Mus musculus	mus musculus	yes	file			0.658	review	data
+heldout	PXD014311	191230_NG_CWC_DDA_pool_WT_Duo	data	instrument	Q Exactive HF	orbitrap fusion lumos	no	file			0.95	auto	metadata
+heldout	PXD014311	191230_NG_CWC_DDA_pool_WT_Duo	data	acquisition	DDA	DIA	no	file			0.95	auto	metadata
+heldout	PXD014311	191230_NG_CWC_DDA_pool_WT_Duo	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD014311	191230_NG_CWC_DDA_pool_WT_Duo	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.95	auto	search
+heldout	PXD014311	191230_NG_CWC_DDA_pool_WT_Duo	data	enzyme	Trypsin	Trypsin	yes	file			0.758	auto	search
+heldout	PXD014311	191230_NG_CWC_DDA_pool_WT_Duo	data	organism	Mus_musculus	mus musculus	yes	file			0.95	auto	search
+heldout	PXD016112	Karita_Fusion_20180730exp_4T1_HLA-peptides_10of10ul	data	instrument	Orbitrap Fusion	Orbitrap Fusion	yes	file			0.95	auto	metadata
+heldout	PXD016112	Karita_Fusion_20180730exp_4T1_HLA-peptides_10of10ul	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD016112	Karita_Fusion_20180730exp_4T1_HLA-peptides_10of10ul	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD016112	Karita_Fusion_20180730exp_4T1_HLA-peptides_10of10ul	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.3	default	default
+heldout	PXD016112	Karita_Fusion_20180730exp_4T1_HLA-peptides_10of10ul	data	enzyme	Trypsin	unspecific cleavage	no	file			0.3	default	default
+heldout	PXD016112	Karita_Fusion_20180730exp_4T1_HLA-peptides_10of10ul	data	organism	not in panel	Mus musculus	no	file			0.5	review	search
+heldout	PXD016519	170524_15_Orbi2_SK_SER_G90_T125_Chalmers_Campbell_EasyPhos_Glucose_P-R1-9	data	instrument	Q Exactive Plus	Q Exactive Plus	yes	file			0.95	auto	metadata
+heldout	PXD016519	170524_15_Orbi2_SK_SER_G90_T125_Chalmers_Campbell_EasyPhos_Glucose_P-R1-9	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD016519	170524_15_Orbi2_SK_SER_G90_T125_Chalmers_Campbell_EasyPhos_Glucose_P-R1-9	data	label	SILAC (Lys8/Arg10)	label free	no	file			0.691	review	data
+heldout	PXD016519	170524_15_Orbi2_SK_SER_G90_T125_Chalmers_Campbell_EasyPhos_Glucose_P-R1-9	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+heldout	PXD016519	170524_15_Orbi2_SK_SER_G90_T125_Chalmers_Campbell_EasyPhos_Glucose_P-R1-9	data	enzyme	Trypsin	Trypsin/P	yes	file			0.3	default	default
+heldout	PXD016519	170524_15_Orbi2_SK_SER_G90_T125_Chalmers_Campbell_EasyPhos_Glucose_P-R1-9	data	organism	Saccharomyces cerevisiae	Saccharomyces cerevisiae	yes	file			0.85	auto	data
+heldout	PXD017052	EXP19002_X2062_A_MSB39197A	data	instrument	Orbitrap Fusion Lumos	orbitrap fusion lumos	yes	file			0.95	auto	metadata
+heldout	PXD017052	EXP19002_X2062_A_MSB39197A	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD017052	EXP19002_X2062_A_MSB39197A	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD017052	EXP19002_X2062_A_MSB39197A	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+heldout	PXD017052	EXP19002_X2062_A_MSB39197A	data	enzyme	Trypsin	Trypsin	yes	file			0.775	auto	search
+heldout	PXD017052	EXP19002_X2062_A_MSB39197A	data	organism	Homo_sapiens	homo sapiens	yes	file			0.68	review	search
+heldout	PXD017817	20190321_Nadia_S7-2	data	instrument	Orbitrap Fusion Lumos	Orbitrap fusion	yes	file			0.95	auto	metadata
+heldout	PXD017817	20190321_Nadia_S7-2	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD017817	20190321_Nadia_S7-2	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD017817	20190321_Nadia_S7-2	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.968	auto	search
+heldout	PXD017817	20190321_Nadia_S7-2	data	enzyme	Trypsin	Trypsin	yes	file			0.794	auto	search
+heldout	PXD017817	20190321_Nadia_S7-2	data	organism	Bos_taurus	Mycobacterium tuberculosis variant bovis	no	file			0.896	auto	search
+heldout	PXD018024	Fozzie_20170704_GY_GBM_T3_Rph8	data	instrument	Q Exactive HF	Q Exactive HF	yes	file			0.95	auto	metadata
+heldout	PXD018024	Fozzie_20170704_GY_GBM_T3_Rph8	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD018024	Fozzie_20170704_GY_GBM_T3_Rph8	data	label	TMT10/11plex	TMT	yes	file			0.736	auto	data
+heldout	PXD018024	Fozzie_20170704_GY_GBM_T3_Rph8	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.965	auto	search
+heldout	PXD018024	Fozzie_20170704_GY_GBM_T3_Rph8	data	enzyme	Trypsin	Trypsin	yes	file			0.898	auto	search
+heldout	PXD018024	Fozzie_20170704_GY_GBM_T3_Rph8	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.459	review	search
+heldout	PXD018027	WT_GluLac_Cell_Wall_3	data	instrument	Q Exactive Plus	Q Exactive	yes	file			0.95	auto	metadata
+heldout	PXD018027	WT_GluLac_Cell_Wall_3	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD018027	WT_GluLac_Cell_Wall_3	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD018027	WT_GluLac_Cell_Wall_3	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.963	auto	search
+heldout	PXD018027	WT_GluLac_Cell_Wall_3	data	enzyme	Trypsin	Trypsin	yes	file			0.615	review	search
+heldout	PXD018027	WT_GluLac_Cell_Wall_3	data	organism	Candida_albicans	Candida albicans	yes	file			0.95	auto	search
+heldout	PXD018332	20200316_mh_13169_4	data	instrument	Exactive	Q Exactive	yes	file			0.95	auto	metadata
+heldout	PXD018332	20200316_mh_13169_4	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD018332	20200316_mh_13169_4	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD018332	20200316_mh_13169_4	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.3	default	default
+heldout	PXD018332	20200316_mh_13169_4	data	enzyme	Trypsin	Trypsin	yes	file			0.813	auto	search
+heldout	PXD018332	20200316_mh_13169_4	data	organism	Staphylococcus_aureus	Bacteria	no	file			0.95	auto	search
+heldout	PXD018348	C4	data	instrument	Q Exactive HF	Q Exactive HF	yes	file			0.95	auto	metadata
+heldout	PXD018348	C4	data	acquisition	DDA	DIA	no	file			0.7	auto	metadata
+heldout	PXD018348	C4	data	label	no isobaric label	label free	yes	file			0.68	review	data
+heldout	PXD018348	C4	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.3	default	default
+heldout	PXD018348	C4	data	enzyme	Trypsin	Trypsin	yes	file			0.3	default	default
+heldout	PXD018348	C4	data	organism	Nicotiana tabacum	Arabidopsis thaliana	no	file			0.642	review	data
+heldout	PXD019291	S9588TPST_Fr1	data	instrument	Q Exactive HF-X	Q Exactive	yes	file			0.95	auto	metadata
+heldout	PXD019291	S9588TPST_Fr1	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD019291	S9588TPST_Fr1	data	label	TMT6plex	TMT	yes	file			0.97	auto	data
+heldout	PXD019291	S9588TPST_Fr1	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.6	review	data
+heldout	PXD019291	S9588TPST_Fr1	data	enzyme	Trypsin	Trypsin	yes	file			0.6	review	data
+heldout	PXD019291	S9588TPST_Fr1	data	organism	Oryza sativa	Oryza sativa	yes	file			0.732	auto	data
+heldout	PXD019591	QE1_Pharmaco_PP_Sample_19C	data	instrument	Q Exactive Plus	q exactive plus	yes	file			0.95	auto	metadata
+heldout	PXD019591	QE1_Pharmaco_PP_Sample_19C	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD019591	QE1_Pharmaco_PP_Sample_19C	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD019591	QE1_Pharmaco_PP_Sample_19C	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.975	auto	search
+heldout	PXD019591	QE1_Pharmaco_PP_Sample_19C	data	enzyme	Trypsin	Trypsin	yes	file			0.932	auto	search
+heldout	PXD019591	QE1_Pharmaco_PP_Sample_19C	data	organism	Homo_sapiens	homo sapiens	yes	file			0.457	review	search
+heldout	PXD019906	Sample-2	data	instrument	Q Exactive Plus	LTQ Orbitrap XL	no	file			0.95	auto	metadata
+heldout	PXD019906	Sample-2	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD019906	Sample-2	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD019906	Sample-2	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.95	auto	search
+heldout	PXD019906	Sample-2	data	enzyme	Trypsin	Trypsin	yes	file			0.788	auto	search
+heldout	PXD019906	Sample-2	data	organism	Haloferax_volcanii	Haloferax volcanii ds2	yes	file			0.95	auto	search
+heldout	PXD020394	NEG5	data	instrument	Q Exactive Plus	Q Exactive Plus	yes	file			0.95	auto	metadata
+heldout	PXD020394	NEG5	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD020394	NEG5	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD020394	NEG5	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.978	auto	search
+heldout	PXD020394	NEG5	data	enzyme	Trypsin	Trypsin	yes	file			0.9	auto	search
+heldout	PXD020394	NEG5	data	organism	Homo_sapiens	homo sapiens	yes	file			0.511	review	search
+heldout	PXD021394	TDM_M2002_109	data	instrument	Q Exactive HF-X	Q Exactive HF-X	yes	file			0.95	auto	metadata
+heldout	PXD021394	TDM_M2002_109	data	acquisition	DIA	DIA	yes	file			0.97	auto	metadata
+heldout	PXD021394	TDM_M2002_109	data	label	no isobaric label	label free	yes	file			0.8	auto	data
+heldout	PXD021394	TDM_M2002_109	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.98	auto	search
+heldout	PXD021394	TDM_M2002_109	data	enzyme	Trypsin	Trypsin	yes	file			0.883	auto	search
+heldout	PXD021394	TDM_M2002_109	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.574	review	search
+heldout	PXD023077	20191101_DD_0068_TiKoe_rep1_10	data	instrument	Q Exactive HF-X	Q Exactive HF-X	yes	file			0.95	auto	metadata
+heldout	PXD023077	20191101_DD_0068_TiKoe_rep1_10	data	acquisition	DIA	DIA	yes	file			0.97	auto	metadata
+heldout	PXD023077	20191101_DD_0068_TiKoe_rep1_10	data	label	unknown	label free	no	file			0.2	review	data
+heldout	PXD023077	20191101_DD_0068_TiKoe_rep1_10	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+heldout	PXD023077	20191101_DD_0068_TiKoe_rep1_10	data	enzyme	Trypsin	Lys-C+Trypsin	partial	file			0.6	review	search
+heldout	PXD023077	20191101_DD_0068_TiKoe_rep1_10	data	organism	Chlorocebus_sabaeus	Chlorocebus aethiops	yes	file			0.354	review	search
+heldout	PXD023090	T_Oellerich_090114_040714_G2_AML18_10	data	instrument	Q Exactive	Q Exactive HF	yes	file			0.95	auto	metadata
+heldout	PXD023090	T_Oellerich_090114_040714_G2_AML18_10	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD023090	T_Oellerich_090114_040714_G2_AML18_10	data	label	no isobaric label	SILAC	no	file			0.68	review	data
+heldout	PXD023090	T_Oellerich_090114_040714_G2_AML18_10	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.977	auto	search
+heldout	PXD023090	T_Oellerich_090114_040714_G2_AML18_10	data	enzyme	Trypsin	Trypsin	yes	file			0.912	auto	search
+heldout	PXD023090	T_Oellerich_090114_040714_G2_AML18_10	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.47	review	search
+heldout	PXD024405	A_R01	data	instrument	Orbitrap Fusion Lumos	Orbitrap Fusion Lumos	yes	file			0.95	auto	metadata
+heldout	PXD024405	A_R01	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD024405	A_R01	data	label	SILAC (Lys8/Arg10)	label free	no	file			0.578	review	data
+heldout	PXD024405	A_R01	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+heldout	PXD024405	A_R01	data	enzyme	Trypsin		n/a	file			0.3	default	default
+heldout	PXD024405	A_R01	data	organism	Homo sapiens	Homo sapiens	yes	file			0.662	review	data
+heldout	PXD024661	20210303_GT_XC_Protac2_Test	data	instrument	Orbitrap Fusion Lumos	orbitrap fusion lumos	yes	file			0.95	auto	metadata
+heldout	PXD024661	20210303_GT_XC_Protac2_Test	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD024661	20210303_GT_XC_Protac2_Test	data	label	TMTpro (16/18plex)	TMTpro	yes	file			0.97	auto	data
+heldout	PXD024661	20210303_GT_XC_Protac2_Test	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.922	auto	search
+heldout	PXD024661	20210303_GT_XC_Protac2_Test	data	enzyme	Trypsin	Lys-C+Trypsin	partial	file			0.733	auto	search
+heldout	PXD024661	20210303_GT_XC_Protac2_Test	data	organism	Homo_sapiens	homo sapiens	yes	file			0.572	review	search
+heldout	PXD025560	GMLOOB_DIA_5ug_3hrgrad_sample29	data	instrument	Q Exactive HF	q exactive hf	yes	file			0.95	auto	metadata
+heldout	PXD025560	GMLOOB_DIA_5ug_3hrgrad_sample29	data	acquisition	DIA	DIA	yes	file			0.97	auto	metadata
+heldout	PXD025560	GMLOOB_DIA_5ug_3hrgrad_sample29	data	label	no isobaric label	TMT	no	file			0.8	auto	data
+heldout	PXD025560	GMLOOB_DIA_5ug_3hrgrad_sample29	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+heldout	PXD025560	GMLOOB_DIA_5ug_3hrgrad_sample29	data	enzyme	Trypsin	Trypsin	yes	file			0.3	default	default
+heldout	PXD025560	GMLOOB_DIA_5ug_3hrgrad_sample29	data	organism	Homo sapiens	homo sapiens	yes	file			0.63	review	data
+heldout	PXD027038	LANE1_IN_PIANTE_AN_18_REP1_23SET16	data	instrument	LTQ Orbitrap XL	ltq orbitrap	yes	file			0.95	auto	metadata
+heldout	PXD027038	LANE1_IN_PIANTE_AN_18_REP1_23SET16	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD027038	LANE1_IN_PIANTE_AN_18_REP1_23SET16	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD027038	LANE1_IN_PIANTE_AN_18_REP1_23SET16	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+heldout	PXD027038	LANE1_IN_PIANTE_AN_18_REP1_23SET16	data	enzyme	Trypsin	Trypsin	yes	file			0.696	review	search
+heldout	PXD027038	LANE1_IN_PIANTE_AN_18_REP1_23SET16	data	organism	Homo_sapiens	colobanthus quitensis	no	file			0.568	review	search
+heldout	PXD027767	QE_Plus_YangJing_TCP_Drosophila_melanogaster_366_Elution_50per_20171020	data	instrument	Q Exactive Plus	q exactive hf	no	file			0.95	auto	metadata
+heldout	PXD027767	QE_Plus_YangJing_TCP_Drosophila_melanogaster_366_Elution_50per_20171020	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD027767	QE_Plus_YangJing_TCP_Drosophila_melanogaster_366_Elution_50per_20171020	data	label	SILAC (Arg6)	label free	no	file			0.675	review	data
+heldout	PXD027767	QE_Plus_YangJing_TCP_Drosophila_melanogaster_366_Elution_50per_20171020	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.6	review	data
+heldout	PXD027767	QE_Plus_YangJing_TCP_Drosophila_melanogaster_366_Elution_50per_20171020	data	enzyme	Trypsin	trypsin	yes	file			0.6	review	data
+heldout	PXD027767	QE_Plus_YangJing_TCP_Drosophila_melanogaster_366_Elution_50per_20171020	data	organism	Drosophila melanogaster	Drosophila melanogaster	yes	file			0.85	auto	data
+heldout	PXD030676	Y3-1	data	instrument	Orbitrap Fusion Lumos	Orbitrap Fusion Lumos	yes	file			0.95	auto	metadata
+heldout	PXD030676	Y3-1	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD030676	Y3-1	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD030676	Y3-1	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.94	auto	search
+heldout	PXD030676	Y3-1	data	enzyme	Trypsin	Trypsin	yes	file			0.848	auto	search
+heldout	PXD030676	Y3-1	data	organism	Rattus_norvegicus	Gigantidas haimaensis	no	file			0.526	review	search
+heldout	PXD031090	Nsco_20170213_TiOx_Gina_samples10	data	instrument	Orbitrap Fusion Lumos	Thermo Fisher Scientific Orbitrap Fusion Lumos	yes	file			0.95	auto	metadata
+heldout	PXD031090	Nsco_20170213_TiOx_Gina_samples10	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD031090	Nsco_20170213_TiOx_Gina_samples10	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD031090	Nsco_20170213_TiOx_Gina_samples10	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.629	review	search
+heldout	PXD031090	Nsco_20170213_TiOx_Gina_samples10	data	enzyme	Trypsin	trypsin	yes	file			0.767	auto	search
+heldout	PXD031090	Nsco_20170213_TiOx_Gina_samples10	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.95	auto	search
+heldout	PXD032263	HF01_20211208_YWT_KR_DIA_B4_F1_R1	data	instrument	Q Exactive HF	Q Exactive HF	yes	file			0.95	auto	metadata
+heldout	PXD032263	HF01_20211208_YWT_KR_DIA_B4_F1_R1	data	acquisition	DIA	DIA	yes	file			0.97	auto	metadata
+heldout	PXD032263	HF01_20211208_YWT_KR_DIA_B4_F1_R1	data	label	no isobaric label	label free	yes	file			0.8	auto	data
+heldout	PXD032263	HF01_20211208_YWT_KR_DIA_B4_F1_R1	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.98	auto	search
+heldout	PXD032263	HF01_20211208_YWT_KR_DIA_B4_F1_R1	data	enzyme	Trypsin	Trypsin	yes	file			0.924	auto	search
+heldout	PXD032263	HF01_20211208_YWT_KR_DIA_B4_F1_R1	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.434	review	search
+heldout	PXD033100	E_20220110_MR_EFTu-ADr-15	data	instrument	Orbitrap Eclipse	QExactive HF	no	file			0.95	auto	metadata
+heldout	PXD033100	E_20220110_MR_EFTu-ADr-15	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD033100	E_20220110_MR_EFTu-ADr-15	data	label	unknown	label free	no	file			0.2	review	data
+heldout	PXD033100	E_20220110_MR_EFTu-ADr-15	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.3	default	default
+heldout	PXD033100	E_20220110_MR_EFTu-ADr-15	data	enzyme	Trypsin	trypsin	yes	file			0.3	default	default
+heldout	PXD033100	E_20220110_MR_EFTu-ADr-15	data	organism	not in panel	Escherichia coli	no	file			0.5	review	search
+heldout	PXD033162	Phyto_Variabilis_R_Control_36h_4	data	instrument	Orbitrap Fusion Lumos	orbitrap fusion lumos	yes	file			0.95	auto	metadata
+heldout	PXD033162	Phyto_Variabilis_R_Control_36h_4	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD033162	Phyto_Variabilis_R_Control_36h_4	data	label	no isobaric label	label free	yes	file			0.68	review	data
+heldout	PXD033162	Phyto_Variabilis_R_Control_36h_4	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.738	review	search
+heldout	PXD033162	Phyto_Variabilis_R_Control_36h_4	data	enzyme	Trypsin		n/a	file			0.735	auto	search
+heldout	PXD033162	Phyto_Variabilis_R_Control_36h_4	data	organism	Gossypium_hirsutum + Glycine_max	quercus variabilis	no	file			0.5	review	search
+heldout	PXD034623	20200330_EXPL2_Evo3_ZY_IDO4_16_12hp1_44min_DIA	data	instrument	Orbitrap Exploris 480	Orbitrap Exploris 480	yes	file			0.95	auto	metadata
+heldout	PXD034623	20200330_EXPL2_Evo3_ZY_IDO4_16_12hp1_44min_DIA	data	acquisition	DIA	DIA	yes	file			0.97	auto	metadata
+heldout	PXD034623	20200330_EXPL2_Evo3_ZY_IDO4_16_12hp1_44min_DIA	data	label	no isobaric label	label free	yes	file			0.8	auto	data
+heldout	PXD034623	20200330_EXPL2_Evo3_ZY_IDO4_16_12hp1_44min_DIA	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.98	auto	search
+heldout	PXD034623	20200330_EXPL2_Evo3_ZY_IDO4_16_12hp1_44min_DIA	data	enzyme	Trypsin	Trypsin	yes	file			0.829	auto	search
+heldout	PXD034623	20200330_EXPL2_Evo3_ZY_IDO4_16_12hp1_44min_DIA	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.42	review	search
+heldout	PXD035256	U87_RICTOR_IP-3-1	data	instrument	Q Exactive Plus	q exactive	yes	file			0.95	auto	metadata
+heldout	PXD035256	U87_RICTOR_IP-3-1	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD035256	U87_RICTOR_IP-3-1	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD035256	U87_RICTOR_IP-3-1	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.825	auto	search
+heldout	PXD035256	U87_RICTOR_IP-3-1	data	enzyme	Trypsin	Trypsin	yes	file			0.812	auto	search
+heldout	PXD035256	U87_RICTOR_IP-3-1	data	organism	Homo_sapiens	homo sapiens	yes	file			0.431	review	search
+heldout	PXD035354	Lei_Set2_MS2_F1	data	instrument	Orbitrap Fusion	Orbitrap Fusion	yes	file			0.95	auto	metadata
+heldout	PXD035354	Lei_Set2_MS2_F1	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD035354	Lei_Set2_MS2_F1	data	label	TMTpro (16/18plex)	TMTpro	yes	file			0.925	auto	data
+heldout	PXD035354	Lei_Set2_MS2_F1	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.82	review	search
+heldout	PXD035354	Lei_Set2_MS2_F1	data	enzyme	Trypsin	Trypsin	yes	file			0.867	auto	search
+heldout	PXD035354	Lei_Set2_MS2_F1	data	organism	Mus_musculus	Mus musculus	yes	file			0.618	review	search
+heldout	PXD035815	Adrian_Leyuan_20211105_Exploris_gutAliveFilter_P2H	data	instrument	Orbitrap Exploris 480	Orbitrap Exploris 480	yes	file			0.95	auto	metadata
+heldout	PXD035815	Adrian_Leyuan_20211105_Exploris_gutAliveFilter_P2H	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD035815	Adrian_Leyuan_20211105_Exploris_gutAliveFilter_P2H	data	label	TMT10/11plex	label free	no	file			0.97	auto	data
+heldout	PXD035815	Adrian_Leyuan_20211105_Exploris_gutAliveFilter_P2H	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.965	auto	search
+heldout	PXD035815	Adrian_Leyuan_20211105_Exploris_gutAliveFilter_P2H	data	enzyme	Trypsin	Trypsin	yes	file			0.869	auto	search
+heldout	PXD035815	Adrian_Leyuan_20211105_Exploris_gutAliveFilter_P2H	data	organism	Homo_sapiens	human feces metagenome	no	file			0.794	review	search
+heldout	PXD035981	201013_QExHFx_LA_MS731_21_3	data	instrument	Q Exactive HF-X	Q Exactive HF	yes	file			0.95	auto	metadata
+heldout	PXD035981	201013_QExHFx_LA_MS731_21_3	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD035981	201013_QExHFx_LA_MS731_21_3	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD035981	201013_QExHFx_LA_MS731_21_3	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.979	auto	search
+heldout	PXD035981	201013_QExHFx_LA_MS731_21_3	data	enzyme	Trypsin	Lys-C+Trypsin	partial	file			0.767	auto	search
+heldout	PXD035981	201013_QExHFx_LA_MS731_21_3	data	organism	Escherichia_coli	gut metagenome	no	file			0.414	review	search
+heldout	PXD037340	20220518_EXPL2_Evo5_OOE_DIA11min_PAC-M_Lib_G_007	data	instrument	Orbitrap Exploris 480	orbitrap exploris 480	yes	file			0.95	auto	metadata
+heldout	PXD037340	20220518_EXPL2_Evo5_OOE_DIA11min_PAC-M_Lib_G_007	data	acquisition	PRM	DIA	no	file			0.8	auto	metadata
+heldout	PXD037340	20220518_EXPL2_Evo5_OOE_DIA11min_PAC-M_Lib_G_007	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD037340	20220518_EXPL2_Evo5_OOE_DIA11min_PAC-M_Lib_G_007	data	cys_alkylation	none (free Cys)	Carbamidomethyl	no	file			0.95	auto	search
+heldout	PXD037340	20220518_EXPL2_Evo5_OOE_DIA11min_PAC-M_Lib_G_007	data	enzyme	Trypsin	Trypsin	yes	file			0.584	review	search
+heldout	PXD037340	20220518_EXPL2_Evo5_OOE_DIA11min_PAC-M_Lib_G_007	data	organism	Homo_sapiens	homo sapiens	yes	file			0.517	review	search
+heldout	PXD038809	MALAT1_RNA_Capture_XG77_Rep3	data	instrument	Orbitrap Fusion Lumos	Orbitrap Fusion Lumos	yes	file			0.95	auto	metadata
+heldout	PXD038809	MALAT1_RNA_Capture_XG77_Rep3	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD038809	MALAT1_RNA_Capture_XG77_Rep3	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD038809	MALAT1_RNA_Capture_XG77_Rep3	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.98	auto	search
+heldout	PXD038809	MALAT1_RNA_Capture_XG77_Rep3	data	enzyme	Trypsin	Trypsin	yes	file			0.512	review	search
+heldout	PXD038809	MALAT1_RNA_Capture_XG77_Rep3	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.463	review	search
+heldout	PXD041263	20190602_FB_Cofrac_Rep1_F24	data	instrument	Q Exactive HF	q exactive	yes	file			0.95	auto	metadata
+heldout	PXD041263	20190602_FB_Cofrac_Rep1_F24	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD041263	20190602_FB_Cofrac_Rep1_F24	data	label	TMT10/11plex	TMT	yes	file			0.839	auto	data
+heldout	PXD041263	20190602_FB_Cofrac_Rep1_F24	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.962	auto	search
+heldout	PXD041263	20190602_FB_Cofrac_Rep1_F24	data	enzyme	Trypsin	trypsin	yes	file			0.884	auto	search
+heldout	PXD041263	20190602_FB_Cofrac_Rep1_F24	data	organism	Escherichia_coli	Escherichia coli	yes	file			0.807	review	search
+heldout	PXD041747	P102-6	data	instrument	Q Exactive	Q Exactive	yes	file			0.95	auto	metadata
+heldout	PXD041747	P102-6	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD041747	P102-6	data	label	iTRAQ8plex	label free	no	file			0.95	auto	data
+heldout	PXD041747	P102-6	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.884	auto	search
+heldout	PXD041747	P102-6	data	enzyme	Trypsin	Trypsin	yes	file			0.965	auto	search
+heldout	PXD041747	P102-6	data	organism	Nicotiana_tabacum + Solanum_tuberosum	Solanum melongena	no	file			0.5	review	search
+heldout	PXD043057	7324_1566_Vd_Lung_070918	data	instrument	Q Exactive HF	Q Exactive HF	yes	file			0.95	auto	metadata
+heldout	PXD043057	7324_1566_Vd_Lung_070918	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD043057	7324_1566_Vd_Lung_070918	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD043057	7324_1566_Vd_Lung_070918	data	cys_alkylation	Carbamidomethyl (C)	none stated	n/a	file			0.3	default	default
+heldout	PXD043057	7324_1566_Vd_Lung_070918	data	enzyme	unspecific cleavage	unspecific cleavage	yes	file			0.45	review	data
+heldout	PXD043057	7324_1566_Vd_Lung_070918	data	organism	Homo sapiens	Homo sapiens	yes	file			0.63	review	data
+heldout	PXD043214	170327_KJ_Q2_D_HKS_PDX22_DMSO_6hr_01	data	instrument	Q Exactive Plus	Q Exactive Plus	yes	file			0.95	auto	metadata
+heldout	PXD043214	170327_KJ_Q2_D_HKS_PDX22_DMSO_6hr_01	data	acquisition	DIA	DDA	no	file			0.75	auto	metadata
+heldout	PXD043214	170327_KJ_Q2_D_HKS_PDX22_DMSO_6hr_01	data	label	no isobaric label	SILAC	no	file			0.68	review	data
+heldout	PXD043214	170327_KJ_Q2_D_HKS_PDX22_DMSO_6hr_01	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+heldout	PXD043214	170327_KJ_Q2_D_HKS_PDX22_DMSO_6hr_01	data	enzyme	Trypsin	Trypsin	yes	file			0.848	auto	search
+heldout	PXD043214	170327_KJ_Q2_D_HKS_PDX22_DMSO_6hr_01	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.46	review	search
+heldout	PXD043707	20210210-MGQ	data	instrument	Q Exactive HF	LTQ Orbitrap Velos	no	file			0.95	auto	metadata
+heldout	PXD043707	20210210-MGQ	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD043707	20210210-MGQ	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD043707	20210210-MGQ	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.978	auto	search
+heldout	PXD043707	20210210-MGQ	data	enzyme	Trypsin	Trypsin	yes	file			0.91	auto	search
+heldout	PXD043707	20210210-MGQ	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.465	review	search
+heldout	PXD043814	LA_SMC_silac_1a	data	instrument	Q Exactive	Q Exactive	yes	file			0.95	auto	metadata
+heldout	PXD043814	LA_SMC_silac_1a	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD043814	LA_SMC_silac_1a	data	label	label free	SILAC	no	file			0.8	auto	data
+heldout	PXD043814	LA_SMC_silac_1a	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.98	auto	search
+heldout	PXD043814	LA_SMC_silac_1a	data	enzyme	Trypsin	Trypsin	yes	file			0.889	auto	search
+heldout	PXD043814	LA_SMC_silac_1a	data	organism	Rattus_norvegicus	Rattus norvegicus	yes	file			0.439	review	search
+heldout	PXD044053	DDA_C_D_evosep_orbiexp_R06_R2_Split5	data	instrument	Orbitrap Exploris 480	timstof	no	file			0.95	auto	metadata
+heldout	PXD044053	DDA_C_D_evosep_orbiexp_R06_R2_Split5	data	acquisition	DDA	DIA	no	file			0.7	auto	metadata
+heldout	PXD044053	DDA_C_D_evosep_orbiexp_R06_R2_Split5	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD044053	DDA_C_D_evosep_orbiexp_R06_R2_Split5	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.977	auto	search
+heldout	PXD044053	DDA_C_D_evosep_orbiexp_R06_R2_Split5	data	enzyme	Trypsin	Trypsin	yes	file			0.694	review	search
+heldout	PXD044053	DDA_C_D_evosep_orbiexp_R06_R2_Split5	data	organism	Homo_sapiens	homo sapiens	yes	file			0.95	auto	search
+heldout	PXD045216	EXT503_3	data	instrument	Orbitrap Fusion Lumos	Orbitrap Fusion Lumos	yes	file			0.95	auto	metadata
+heldout	PXD045216	EXT503_3	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD045216	EXT503_3	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD045216	EXT503_3	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.3	default	default
+heldout	PXD045216	EXT503_3	data	enzyme	Trypsin	Trypsin	yes	file			0.3	default	default
+heldout	PXD045216	EXT503_3	data	organism	not in panel	Theobroma cacao	no	file			0.5	review	search
+heldout	PXD045899	202208_ECtissues_LIVER_R3_C	data	instrument	Orbitrap Fusion Lumos	Orbitrap Fusion Lumos	yes	file			0.95	auto	metadata
+heldout	PXD045899	202208_ECtissues_LIVER_R3_C	data	acquisition	DIA	DIA	yes	file			0.97	auto	metadata
+heldout	PXD045899	202208_ECtissues_LIVER_R3_C	data	label	unknown	label free	no	file			0.2	review	data
+heldout	PXD045899	202208_ECtissues_LIVER_R3_C	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.971	auto	search
+heldout	PXD045899	202208_ECtissues_LIVER_R3_C	data	enzyme	Trypsin	Trypsin	yes	file			0.908	auto	search
+heldout	PXD045899	202208_ECtissues_LIVER_R3_C	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.425	review	search
+heldout	PXD046211	CBIO680_1	data	instrument	Orbitrap Fusion Lumos	Orbitrap Fusion Lumos	yes	file			0.95	auto	metadata
+heldout	PXD046211	CBIO680_1	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD046211	CBIO680_1	data	label	TMT6plex	TMTpro	no	file			0.862	auto	data
+heldout	PXD046211	CBIO680_1	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+heldout	PXD046211	CBIO680_1	data	enzyme	Trypsin	Trypsin	yes	file			0.6	review	data
+heldout	PXD046211	CBIO680_1	data	organism	Homo sapiens	Homo sapiens	yes	file			0.619	review	data
+heldout	PXD046446	TDM_M2307_061	data	instrument	Q Exactive HF-X	Q Exactive HF-X	yes	file			0.95	auto	metadata
+heldout	PXD046446	TDM_M2307_061	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD046446	TDM_M2307_061	data	label	TMT10/11plex	TMT	yes	file			0.936	auto	data
+heldout	PXD046446	TDM_M2307_061	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.976	auto	search
+heldout	PXD046446	TDM_M2307_061	data	enzyme	Trypsin	Trypsin	yes	file			0.786	auto	search
+heldout	PXD046446	TDM_M2307_061	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.517	review	search
+heldout	PXD046455	01_EE09	data	instrument		orbitrap fusion	n/a	file					
+heldout	PXD046455	01_EE09	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD046455	01_EE09	data	label	no isobaric label	label free	yes	file			0.8	auto	data
+heldout	PXD046455	01_EE09	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.968	auto	search
+heldout	PXD046455	01_EE09	data	enzyme	Trypsin	trypsin	yes	file			0.673	review	search
+heldout	PXD046455	01_EE09	data	organism	Escherichia_coli	Dhillonvirus	no	file			0.409	review	search
+heldout	PXD046503	EXP2_WM2664-T3KD_T3GS-his_3	data	instrument	Orbitrap Fusion Lumos	orbitrap fusion lumos	yes	file			0.95	auto	metadata
+heldout	PXD046503	EXP2_WM2664-T3KD_T3GS-his_3	data	acquisition	DDA	DIA	no	file			0.95	auto	metadata
+heldout	PXD046503	EXP2_WM2664-T3KD_T3GS-his_3	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD046503	EXP2_WM2664-T3KD_T3GS-his_3	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.928	auto	search
+heldout	PXD046503	EXP2_WM2664-T3KD_T3GS-his_3	data	enzyme	Trypsin	Trypsin	yes	file			0.787	auto	search
+heldout	PXD046503	EXP2_WM2664-T3KD_T3GS-his_3	data	organism	Mus_musculus	homo sapiens	no	file			0.891	auto	search
+heldout	PXD046634	GUA3815-S05-GTPgS-FR11	data	instrument	Orbitrap Fusion	Orbitrap Fusion	yes	file			0.95	auto	metadata
+heldout	PXD046634	GUA3815-S05-GTPgS-FR11	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD046634	GUA3815-S05-GTPgS-FR11	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD046634	GUA3815-S05-GTPgS-FR11	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+heldout	PXD046634	GUA3815-S05-GTPgS-FR11	data	enzyme	Trypsin	Lys-C+Trypsin	partial	file			0.3	default	default
+heldout	PXD046634	GUA3815-S05-GTPgS-FR11	data	organism	Fusarium oxysporum	chlorobium tepidum	no	file			0.85	auto	data
+heldout	PXD048529	20201117_Lumos_PC604-Set5-MS2_TiO2_F3	data	instrument	Orbitrap Fusion Lumos	orbitrap fusion lumos	yes	file			0.95	auto	metadata
+heldout	PXD048529	20201117_Lumos_PC604-Set5-MS2_TiO2_F3	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD048529	20201117_Lumos_PC604-Set5-MS2_TiO2_F3	data	label	TMTpro (16/18plex)	TMTpro	yes	file			0.957	auto	data
+heldout	PXD048529	20201117_Lumos_PC604-Set5-MS2_TiO2_F3	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.961	auto	search
+heldout	PXD048529	20201117_Lumos_PC604-Set5-MS2_TiO2_F3	data	enzyme	Trypsin	Trypsin	yes	file			0.878	auto	search
+heldout	PXD048529	20201117_Lumos_PC604-Set5-MS2_TiO2_F3	data	organism	Homo_sapiens	homo sapiens	yes	file			0.429	review	search
+heldout	PXD049412	20231211_E0_NEO6_15cmAUR3_trap_LFSCP_run58_Armadillo_blank_H23	data	instrument	Orbitrap Exploris 480	Orbitrap Astral	no	file			0.95	auto	metadata
+heldout	PXD049412	20231211_E0_NEO6_15cmAUR3_trap_LFSCP_run58_Armadillo_blank_H23	data	acquisition	DIA	DIA	yes	file			0.97	auto	metadata
+heldout	PXD049412	20231211_E0_NEO6_15cmAUR3_trap_LFSCP_run58_Armadillo_blank_H23	data	label	no isobaric label	label free	yes	file			0.8	auto	data
+heldout	PXD049412	20231211_E0_NEO6_15cmAUR3_trap_LFSCP_run58_Armadillo_blank_H23	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+heldout	PXD049412	20231211_E0_NEO6_15cmAUR3_trap_LFSCP_run58_Armadillo_blank_H23	data	enzyme	Trypsin	Trypsin	yes	file			0.3	default	default
+heldout	PXD049412	20231211_E0_NEO6_15cmAUR3_trap_LFSCP_run58_Armadillo_blank_H23	data	organism	Danio rerio	Saccharomyces cerevisiae	no	file			0.659	review	data
+heldout	PXD049692	TOF01645_2_1_1687	data	instrument		timsTOF HT	n/a	file					
+heldout	PXD049692	TOF01645_2_1_1687	data	acquisition	DIA (diaPASEF)	DIA	yes	file			0.9	auto	metadata
+heldout	PXD049692	TOF01645_2_1_1687	data	label	no isobaric label	label free	yes	file			0.8	auto	data
+heldout	PXD049692	TOF01645_2_1_1687	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+heldout	PXD049692	TOF01645_2_1_1687	data	enzyme	Trypsin	Trypsin	yes	file			0.3	default	default
+heldout	PXD049692	TOF01645_2_1_1687	data	organism	Macaca mulatta	Homo sapiens	no	file			0.605	review	data
+heldout	PXD050587	20211103-1252_LUM2_1000539_FKJ_JB_ABRF4_02	data	instrument	Orbitrap Fusion Lumos	Orbitrap Fusion Lumos	yes	file			0.95	auto	metadata
+heldout	PXD050587	20211103-1252_LUM2_1000539_FKJ_JB_ABRF4_02	data	acquisition	MS1 only	DDA	no	file			0.9	auto	metadata
+heldout	PXD050587	20211103-1252_LUM2_1000539_FKJ_JB_ABRF4_02	data	label	no SILAC	label free	yes	file			0.6	review	data
+heldout	PXD050587	20211103-1252_LUM2_1000539_FKJ_JB_ABRF4_02	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+heldout	PXD050587	20211103-1252_LUM2_1000539_FKJ_JB_ABRF4_02	data	enzyme	Trypsin	Trypsin	yes	file			0.3	default	default
+heldout	PXD050587	20211103-1252_LUM2_1000539_FKJ_JB_ABRF4_02	data	organism	not in panel	metagenome	no	file			0.5	review	search
+heldout	PXD050618	Hubrecht_Institute_20231120_SdS_DDA_Mattiroli_S_G2_Dmso_rep2	data	instrument	Orbitrap Exploris 240	Orbitrap Exploris 240	yes	file			0.95	auto	metadata
+heldout	PXD050618	Hubrecht_Institute_20231120_SdS_DDA_Mattiroli_S_G2_Dmso_rep2	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD050618	Hubrecht_Institute_20231120_SdS_DDA_Mattiroli_S_G2_Dmso_rep2	data	label	SILAC (Arg6)	SILAC	yes	file			0.622	review	data
+heldout	PXD050618	Hubrecht_Institute_20231120_SdS_DDA_Mattiroli_S_G2_Dmso_rep2	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.98	auto	search
+heldout	PXD050618	Hubrecht_Institute_20231120_SdS_DDA_Mattiroli_S_G2_Dmso_rep2	data	enzyme	Trypsin	Trypsin	yes	file			0.863	auto	search
+heldout	PXD050618	Hubrecht_Institute_20231120_SdS_DDA_Mattiroli_S_G2_Dmso_rep2	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.448	review	search
+heldout	PXD052483	2019_S46_VNormant_14_FCR-2_500ng	data	instrument	Q Exactive Plus	mass spectrometer	no	file			0.95	auto	metadata
+heldout	PXD052483	2019_S46_VNormant_14_FCR-2_500ng	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD052483	2019_S46_VNormant_14_FCR-2_500ng	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD052483	2019_S46_VNormant_14_FCR-2_500ng	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.98	auto	search
+heldout	PXD052483	2019_S46_VNormant_14_FCR-2_500ng	data	enzyme	Trypsin	Trypsin	yes	file			0.819	auto	search
+heldout	PXD052483	2019_S46_VNormant_14_FCR-2_500ng	data	organism	Pseudomonas_aeruginosa	Pseudomonas aeruginosa pao1	yes	file			0.946	auto	search
+heldout	PXD052824	2012-09-28_velos_0887	data	instrument	Orbitrap Velos Pro	LTQ Orbitrap Velos	yes	file			0.95	auto	metadata
+heldout	PXD052824	2012-09-28_velos_0887	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD052824	2012-09-28_velos_0887	data	label	no SILAC	label free	yes	file			0.6	review	data
+heldout	PXD052824	2012-09-28_velos_0887	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+heldout	PXD052824	2012-09-28_velos_0887	data	enzyme	Trypsin	Trypsin	yes	file			0.3	default	default
+heldout	PXD052824	2012-09-28_velos_0887	data	organism	Physcomitrium patens	Physcomitrium patens	yes	file			0.695	review	data
+heldout	PXD053053	20221129_T4_038	data	instrument	Orbitrap Eclipse	Orbitrap Eclipse	yes	file			0.95	auto	metadata
+heldout	PXD053053	20221129_T4_038	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD053053	20221129_T4_038	data	label	label free	TMTpro	no	file			0.8	auto	data
+heldout	PXD053053	20221129_T4_038	data	cys_alkylation	Carbamidomethyl (C)	none stated	n/a	file			0.3	default	default
+heldout	PXD053053	20221129_T4_038	data	enzyme	Trypsin	Trypsin	yes	file			0.3	default	default
+heldout	PXD053053	20221129_T4_038	data	organism	not in panel	Homo sapiens	no	file			0.5	review	search
+heldout	PXD053406	RK-Solanum-mock-03-F03	data	instrument	Orbitrap Fusion Lumos	Orbitrap Fusion Lumos	yes	file			0.95	auto	metadata
+heldout	PXD053406	RK-Solanum-mock-03-F03	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD053406	RK-Solanum-mock-03-F03	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD053406	RK-Solanum-mock-03-F03	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.97	auto	search
+heldout	PXD053406	RK-Solanum-mock-03-F03	data	enzyme	Trypsin	Trypsin	yes	file			0.799	auto	search
+heldout	PXD053406	RK-Solanum-mock-03-F03	data	organism	Solanum_tuberosum	Solanum tuberosum	yes	file			0.697	review	search
+heldout	PXD054073	HeLa_T2_DDA_B_B_micro-flow_orbiexp_R02	data	instrument	Orbitrap Exploris 480	orbitrap fusion lumos	no	file			0.95	auto	metadata
+heldout	PXD054073	HeLa_T2_DDA_B_B_micro-flow_orbiexp_R02	data	acquisition	DDA	DIA	no	file			0.7	auto	metadata
+heldout	PXD054073	HeLa_T2_DDA_B_B_micro-flow_orbiexp_R02	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD054073	HeLa_T2_DDA_B_B_micro-flow_orbiexp_R02	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.978	auto	search
+heldout	PXD054073	HeLa_T2_DDA_B_B_micro-flow_orbiexp_R02	data	enzyme	Trypsin	Trypsin	yes	file			0.879	auto	search
+heldout	PXD054073	HeLa_T2_DDA_B_B_micro-flow_orbiexp_R02	data	organism	Homo_sapiens	homo sapiens	yes	file			0.437	review	search
+heldout	PXD056915	04854_F1_R8_P0109699E13_TMT10	data	instrument	Q Exactive HF	q exactive hf	yes	file			0.95	auto	metadata
+heldout	PXD056915	04854_F1_R8_P0109699E13_TMT10	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD056915	04854_F1_R8_P0109699E13_TMT10	data	label	TMT10/11plex	TMT	yes	file			0.97	auto	data
+heldout	PXD056915	04854_F1_R8_P0109699E13_TMT10	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.961	auto	search
+heldout	PXD056915	04854_F1_R8_P0109699E13_TMT10	data	enzyme	Trypsin	trypsin	yes	file			0.815	auto	search
+heldout	PXD056915	04854_F1_R8_P0109699E13_TMT10	data	organism	Homo_sapiens	Escherichia coli	no	file			0.448	review	search
+heldout	PXD056930	Leyuan_20220524_300drugs_V52_P1E3	data	instrument	Orbitrap Exploris 480	Orbitrap Exploris 480	yes	file			0.95	auto	metadata
+heldout	PXD056930	Leyuan_20220524_300drugs_V52_P1E3	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD056930	Leyuan_20220524_300drugs_V52_P1E3	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD056930	Leyuan_20220524_300drugs_V52_P1E3	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.6	review	data
+heldout	PXD056930	Leyuan_20220524_300drugs_V52_P1E3	data	enzyme	Trypsin	Trypsin	yes	file			0.6	review	data
+heldout	PXD056930	Leyuan_20220524_300drugs_V52_P1E3	data	organism	Triticum aestivum	human gut metagenome	no	file			0.623	review	data
+heldout	PXD057432	QEHF_2022122_PHaque_983984MVMD	data	instrument	Q Exactive HF	Q Exactive HF	yes	file			0.95	auto	metadata
+heldout	PXD057432	QEHF_2022122_PHaque_983984MVMD	data	acquisition	DDA	DIA	no	file			0.7	auto	metadata
+heldout	PXD057432	QEHF_2022122_PHaque_983984MVMD	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD057432	QEHF_2022122_PHaque_983984MVMD	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+heldout	PXD057432	QEHF_2022122_PHaque_983984MVMD	data	enzyme	Trypsin	Trypsin	yes	file			0.878	auto	search
+heldout	PXD057432	QEHF_2022122_PHaque_983984MVMD	data	organism	Homo_sapiens + Mus_musculus	Mus musculus	no	file			0.425	review	search
+heldout	PXD058770	OTEX2_230105_19-317_YD_38_Colon-RFP581	data	instrument	Orbitrap Exploris 480	Orbitrap Exploris 480	yes	file			0.95	auto	metadata
+heldout	PXD058770	OTEX2_230105_19-317_YD_38_Colon-RFP581	data	acquisition	DIA	DIA	yes	file			0.97	auto	metadata
+heldout	PXD058770	OTEX2_230105_19-317_YD_38_Colon-RFP581	data	label	no isobaric label	label free	yes	file			0.8	auto	data
+heldout	PXD058770	OTEX2_230105_19-317_YD_38_Colon-RFP581	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.98	auto	search
+heldout	PXD058770	OTEX2_230105_19-317_YD_38_Colon-RFP581	data	enzyme	Trypsin	Trypsin	yes	file			0.829	auto	search
+heldout	PXD058770	OTEX2_230105_19-317_YD_38_Colon-RFP581	data	organism	Bos_taurus	Mus musculus	no	file			0.653	review	search
+heldout	PXD059676	Astral-RHS_H_li2	data	instrument	Orbitrap Astral	Orbitrap Astral	yes	file			0.95	auto	metadata
+heldout	PXD059676	Astral-RHS_H_li2	data	acquisition	PRM	DDA	no	file			0.8	auto	metadata
+heldout	PXD059676	Astral-RHS_H_li2	data	label	no SILAC	label free	yes	file			0.6	review	data
+heldout	PXD059676	Astral-RHS_H_li2	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.3	default	default
+heldout	PXD059676	Astral-RHS_H_li2	data	enzyme	Trypsin	Trypsin	yes	file			0.6	review	data
+heldout	PXD059676	Astral-RHS_H_li2	data	organism	not in panel	Sus scrofa domesticus	no	file			0.5	review	search
+heldout	PXD060638	JM_Bin1_1_90m_DIA_stock_1ul_Slot1-21_3-17-2022_2823	data	instrument		timsTOF Pro	n/a	file					
+heldout	PXD060638	JM_Bin1_1_90m_DIA_stock_1ul_Slot1-21_3-17-2022_2823	data	acquisition	DIA (diaPASEF)	DDA	no	file			0.9	auto	metadata
+heldout	PXD060638	JM_Bin1_1_90m_DIA_stock_1ul_Slot1-21_3-17-2022_2823	data	label	no isobaric label	label free	yes	file			0.8	auto	data
+heldout	PXD060638	JM_Bin1_1_90m_DIA_stock_1ul_Slot1-21_3-17-2022_2823	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.971	auto	search
+heldout	PXD060638	JM_Bin1_1_90m_DIA_stock_1ul_Slot1-21_3-17-2022_2823	data	enzyme	Trypsin	Lys-C+Trypsin	partial	file			0.792	auto	search
+heldout	PXD060638	JM_Bin1_1_90m_DIA_stock_1ul_Slot1-21_3-17-2022_2823	data	organism	Homo_sapiens	mus musculus	no	file			0.415	review	search
+heldout	PXD060724	Chymotrypsin_EThCD_WZ20spd_161224_1	data	instrument	Orbitrap Ascend	Orbitrap Astral	no	file			0.95	auto	metadata
+heldout	PXD060724	Chymotrypsin_EThCD_WZ20spd_161224_1	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD060724	Chymotrypsin_EThCD_WZ20spd_161224_1	data	label	no SILAC	label free	yes	file			0.6	review	data
+heldout	PXD060724	Chymotrypsin_EThCD_WZ20spd_161224_1	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.3	default	default
+heldout	PXD060724	Chymotrypsin_EThCD_WZ20spd_161224_1	data	enzyme	Trypsin	Trypsin	yes	file			0.3	default	default
+heldout	PXD060724	Chymotrypsin_EThCD_WZ20spd_161224_1	data	organism	not in panel	Oryctolagus cuniculus	no	file			0.425	review	search
+heldout	PXD061563	243_23_HAP1_WT_NoTID_R2_Slot2-23_1_8198	data	instrument		timsTOF Pro 2	n/a	dataset					
+heldout	PXD061563	243_23_HAP1_WT_NoTID_R2_Slot2-23_1_8198	data	acquisition	DIA (diaPASEF)	DDA	no	dataset			0.9	auto	metadata
+heldout	PXD061563	243_23_HAP1_WT_NoTID_R2_Slot2-23_1_8198	data	label	no isobaric label	label free	yes	dataset			0.8	auto	data
+heldout	PXD061563	243_23_HAP1_WT_NoTID_R2_Slot2-23_1_8198	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	dataset			0.971	auto	search
+heldout	PXD061563	243_23_HAP1_WT_NoTID_R2_Slot2-23_1_8198	data	enzyme	Trypsin	Lys-C+Trypsin	partial	dataset			0.631	review	search
+heldout	PXD061563	243_23_HAP1_WT_NoTID_R2_Slot2-23_1_8198	data	organism	Homo_sapiens	homo sapiens	yes	dataset			0.447	review	search
+heldout	PXD061636	P2024-07_Core_NKUAPharmacy_Nikolaou_20240720_11RR11LL_RIPA_heart_rep1_2_100ng_Slot1-13_1_8870	data	instrument		timsTOF fleX	n/a	file					
+heldout	PXD061636	P2024-07_Core_NKUAPharmacy_Nikolaou_20240720_11RR11LL_RIPA_heart_rep1_2_100ng_Slot1-13_1_8870	data	acquisition	DIA (diaPASEF)	DIA	yes	file			0.9	auto	metadata
+heldout	PXD061636	P2024-07_Core_NKUAPharmacy_Nikolaou_20240720_11RR11LL_RIPA_heart_rep1_2_100ng_Slot1-13_1_8870	data	label	no isobaric label	label free	yes	file			0.8	auto	data
+heldout	PXD061636	P2024-07_Core_NKUAPharmacy_Nikolaou_20240720_11RR11LL_RIPA_heart_rep1_2_100ng_Slot1-13_1_8870	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.971	auto	search
+heldout	PXD061636	P2024-07_Core_NKUAPharmacy_Nikolaou_20240720_11RR11LL_RIPA_heart_rep1_2_100ng_Slot1-13_1_8870	data	enzyme	Trypsin	Trypsin	yes	file			0.74	review	search
+heldout	PXD061636	P2024-07_Core_NKUAPharmacy_Nikolaou_20240720_11RR11LL_RIPA_heart_rep1_2_100ng_Slot1-13_1_8870	data	organism	Mus_musculus	Mus musculus	yes	file			0.508	review	search
+heldout	PXD061695	Lumos_231212_FAIMS_32	data	instrument	Orbitrap Fusion Lumos	Orbitrap Fusion Lumos	yes	file			0.95	auto	metadata
+heldout	PXD061695	Lumos_231212_FAIMS_32	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD061695	Lumos_231212_FAIMS_32	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD061695	Lumos_231212_FAIMS_32	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.6	review	data
+heldout	PXD061695	Lumos_231212_FAIMS_32	data	enzyme	Trypsin	Trypsin	yes	file			0.6	review	data
+heldout	PXD061695	Lumos_231212_FAIMS_32	data	organism	Oncorhynchus mykiss	Blastobotrys illinoisensis	no	file			0.614	review	data
+heldout	PXD061893	Pl_36_S2_PNG_02	data	instrument	Orbitrap Fusion	orbitrap fusion	yes	file			0.95	auto	metadata
+heldout	PXD061893	Pl_36_S2_PNG_02	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD061893	Pl_36_S2_PNG_02	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD061893	Pl_36_S2_PNG_02	data	cys_alkylation	Carboxymethyl (C)	none stated	n/a	file			0.819	auto	search
+heldout	PXD061893	Pl_36_S2_PNG_02	data	enzyme	Trypsin		n/a	file			0.446	review	search
+heldout	PXD061893	Pl_36_S2_PNG_02	data	organism	Mus_musculus	mus musculus	yes	file			0.95	auto	search
+heldout	PXD061926	1790151591_Hannah_TMT2_F7_20250216100520	data	instrument	Orbitrap Ascend	Orbitrap Ascend	yes	file			0.95	auto	metadata
+heldout	PXD061926	1790151591_Hannah_TMT2_F7_20250216100520	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD061926	1790151591_Hannah_TMT2_F7_20250216100520	data	label	TMTpro (16/18plex)	TMTpro	yes	file			0.97	auto	data
+heldout	PXD061926	1790151591_Hannah_TMT2_F7_20250216100520	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+heldout	PXD061926	1790151591_Hannah_TMT2_F7_20250216100520	data	enzyme	Trypsin	Trypsin	yes	file			0.3	default	default
+heldout	PXD061926	1790151591_Hannah_TMT2_F7_20250216100520	data	organism	not in panel	Caulobacter vibrioides	no	file			0.5	review	search
+heldout	PXD062749	P15-2	data	instrument	Q Exactive HF-X	Q Exactive HF-X	yes	file			0.95	auto	metadata
+heldout	PXD062749	P15-2	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD062749	P15-2	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD062749	P15-2	data	cys_alkylation	Carbamidomethyl (C)	none stated	n/a	file			0.95	auto	search
+heldout	PXD062749	P15-2	data	enzyme	Trypsin	Lys-C+Trypsin	partial	file			0.696	review	search
+heldout	PXD062749	P15-2	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.65	review	search
+heldout	PXD063917	ACE_0882_NK35	data	instrument	Orbitrap Fusion Lumos	Orbitrap Fusion Lumos	yes	file			0.95	auto	metadata
+heldout	PXD063917	ACE_0882_NK35	data	acquisition	DIA	DIA	yes	file			0.97	auto	metadata
+heldout	PXD063917	ACE_0882_NK35	data	label	unknown	label free	no	file			0.2	review	data
+heldout	PXD063917	ACE_0882_NK35	data	cys_alkylation	none (free Cys)	Carbamidomethyl	no	file			0.592	review	search
+heldout	PXD063917	ACE_0882_NK35	data	enzyme	Trypsin	Trypsin	yes	file			0.889	auto	search
+heldout	PXD063917	ACE_0882_NK35	data	organism	Homo_sapiens	homo sapiens	yes	file			0.457	review	search
+heldout	PXD064675	C-022-NDUFA8-LH_4	data	instrument	Q Exactive Plus	Q Exactive Plus	yes	file			0.95	auto	metadata
+heldout	PXD064675	C-022-NDUFA8-LH_4	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD064675	C-022-NDUFA8-LH_4	data	label	SILAC (Lys8/Arg10)	SILAC	yes	file			0.615	review	data
+heldout	PXD064675	C-022-NDUFA8-LH_4	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.98	auto	search
+heldout	PXD064675	C-022-NDUFA8-LH_4	data	enzyme	Trypsin	Trypsin	yes	file			0.926	auto	search
+heldout	PXD064675	C-022-NDUFA8-LH_4	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.451	review	search
+heldout	PXD066108	Uterus_FPEP191626083_X16086	data	instrument	Q Exactive HF-X	Q Exactive HF	yes	file			0.95	auto	metadata
+heldout	PXD066108	Uterus_FPEP191626083_X16086	data	acquisition	DIA	DIA	yes	file			0.97	auto	metadata
+heldout	PXD066108	Uterus_FPEP191626083_X16086	data	label	no isobaric label	label free	yes	file			0.8	auto	data
+heldout	PXD066108	Uterus_FPEP191626083_X16086	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.98	auto	search
+heldout	PXD066108	Uterus_FPEP191626083_X16086	data	enzyme	Trypsin	Trypsin	yes	file			0.837	auto	search
+heldout	PXD066108	Uterus_FPEP191626083_X16086	data	organism	Chlorocebus_sabaeus	Macaca mulatta	no	file			0.372	review	search
+heldout	PXD066278	E240302_07_KL_HCT116_WT_PulldownID_inSitu_SDA_rep2_inj3	data	instrument	Orbitrap Eclipse	Orbitrap Eclipse	yes	file			0.95	auto	metadata
+heldout	PXD066278	E240302_07_KL_HCT116_WT_PulldownID_inSitu_SDA_rep2_inj3	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD066278	E240302_07_KL_HCT116_WT_PulldownID_inSitu_SDA_rep2_inj3	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD066278	E240302_07_KL_HCT116_WT_PulldownID_inSitu_SDA_rep2_inj3	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.979	auto	search
+heldout	PXD066278	E240302_07_KL_HCT116_WT_PulldownID_inSitu_SDA_rep2_inj3	data	enzyme	Trypsin	Trypsin/P	yes	file			0.908	auto	search
+heldout	PXD066278	E240302_07_KL_HCT116_WT_PulldownID_inSitu_SDA_rep2_inj3	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.44	review	search
+heldout	PXD066361	ZH11	data	instrument	Q Exactive HF-X	Q Exactive HF-X	yes	file			0.95	auto	metadata
+heldout	PXD066361	ZH11	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD066361	ZH11	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD066361	ZH11	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+heldout	PXD066361	ZH11	data	enzyme	Trypsin	Trypsin	yes	file			0.842	auto	search
+heldout	PXD066361	ZH11	data	organism	Oryza_sativa	oryza sativa	yes	file			0.606	review	search
+heldout	PXD066483	ddm1rdr2.DIA.Trypsin.B	data	instrument	Orbitrap Astral	Orbitrap Astral	yes	file			0.95	auto	metadata
+heldout	PXD066483	ddm1rdr2.DIA.Trypsin.B	data	acquisition	PRM	DIA	no	file			0.8	auto	metadata
+heldout	PXD066483	ddm1rdr2.DIA.Trypsin.B	data	label	no SILAC	label free	yes	file			0.6	review	data
+heldout	PXD066483	ddm1rdr2.DIA.Trypsin.B	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.3	default	default
+heldout	PXD066483	ddm1rdr2.DIA.Trypsin.B	data	enzyme	Trypsin	Trypsin	yes	file			0.6	review	data
+heldout	PXD066483	ddm1rdr2.DIA.Trypsin.B	data	organism	Arabidopsis thaliana	Arabidopsis thaliana	yes	file			0.731	auto	data
+heldout	PXD066672	20250520_AST0_NEO5_JVO_IO15_050SPD_3sppmix_200ng_400-800-05Y_50H_45E_NR0_100_01_OFF_20250522095610	data	instrument	Orbitrap Astral	Orbitrap Astral Zoom	yes	file			0.95	auto	metadata
+heldout	PXD066672	20250520_AST0_NEO5_JVO_IO15_050SPD_3sppmix_200ng_400-800-05Y_50H_45E_NR0_100_01_OFF_20250522095610	data	acquisition	PRM	DIA	no	file			0.8	auto	metadata
+heldout	PXD066672	20250520_AST0_NEO5_JVO_IO15_050SPD_3sppmix_200ng_400-800-05Y_50H_45E_NR0_100_01_OFF_20250522095610	data	label	no SILAC	label free	yes	file			0.6	review	data
+heldout	PXD066672	20250520_AST0_NEO5_JVO_IO15_050SPD_3sppmix_200ng_400-800-05Y_50H_45E_NR0_100_01_OFF_20250522095610	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+heldout	PXD066672	20250520_AST0_NEO5_JVO_IO15_050SPD_3sppmix_200ng_400-800-05Y_50H_45E_NR0_100_01_OFF_20250522095610	data	enzyme	Trypsin	Trypsin	yes	file			0.6	review	data
+heldout	PXD066672	20250520_AST0_NEO5_JVO_IO15_050SPD_3sppmix_200ng_400-800-05Y_50H_45E_NR0_100_01_OFF_20250522095610	data	organism	Homo sapiens	Homo sapiens	yes	file			0.645	review	data
+heldout	PXD066890	QEplus038766	data	instrument	Q Exactive Plus	Q Exactive	yes	file			0.95	auto	metadata
+heldout	PXD066890	QEplus038766	data	acquisition	DDA	DIA	no	file			0.7	auto	metadata
+heldout	PXD066890	QEplus038766	data	label	SILAC (Lys8/Arg10)	label free	no	file			0.653	review	data
+heldout	PXD066890	QEplus038766	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.98	auto	search
+heldout	PXD066890	QEplus038766	data	enzyme	Trypsin	Trypsin	yes	file			0.924	auto	search
+heldout	PXD066890	QEplus038766	data	organism	Trypanosoma_brucei	Trypanosoma brucei	yes	file			0.939	auto	search
+heldout	PXD066944	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	data	instrument	Orbitrap Astral	Orbitrap Astral Zoom	yes	file			0.95	auto	metadata
+heldout	PXD066944	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD066944	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	data	label	no SILAC	label free	yes	file			0.6	review	data
+heldout	PXD066944	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.826	review	search
+heldout	PXD066944	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	data	enzyme	Trypsin	Trypsin	yes	file			0.872	auto	search
+heldout	PXD066944	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.447	review	search
+heldout	PXD067654	20090912_FT_TC_115_SA_009_S05	data	instrument	LTQ FT	LTQ FT Ultra	yes	file			0.95	auto	metadata
+heldout	PXD067654	20090912_FT_TC_115_SA_009_S05	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD067654	20090912_FT_TC_115_SA_009_S05	data	label	label free	SILAC	no	file			0.8	auto	data
+heldout	PXD067654	20090912_FT_TC_115_SA_009_S05	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+heldout	PXD067654	20090912_FT_TC_115_SA_009_S05	data	enzyme	Trypsin	Trypsin	yes	file			0.3	default	default
+heldout	PXD067654	20090912_FT_TC_115_SA_009_S05	data	organism	not in panel	Homo sapiens	no	file			0.5	review	search
+heldout	PXD068335	WT_RF_A_Slot2-4_1_3586	data	instrument		Timstof pro	n/a	file					
+heldout	PXD068335	WT_RF_A_Slot2-4_1_3586	data	acquisition	DIA (diaPASEF)	DIA	yes	file			0.9	auto	metadata
+heldout	PXD068335	WT_RF_A_Slot2-4_1_3586	data	label	no isobaric label	label free	yes	file			0.8	auto	data
+heldout	PXD068335	WT_RF_A_Slot2-4_1_3586	data	cys_alkylation	none (free Cys)	Carbamidomethyl	no	file			0.677	review	search
+heldout	PXD068335	WT_RF_A_Slot2-4_1_3586	data	enzyme	Trypsin	Trypsin	yes	file			0.601	review	search
+heldout	PXD068335	WT_RF_A_Slot2-4_1_3586	data	organism	Mycobacterium_tuberculosis	Mycobacterium tuberculosis h37rv	yes	file			0.95	auto	search
+heldout	PXD070049	LFQ_Astral_DDA_5min_250pg_Ecoli_01	data	instrument	Orbitrap Astral	Orbitrap Astral	yes	file			0.95	auto	metadata
+heldout	PXD070049	LFQ_Astral_DDA_5min_250pg_Ecoli_01	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD070049	LFQ_Astral_DDA_5min_250pg_Ecoli_01	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD070049	LFQ_Astral_DDA_5min_250pg_Ecoli_01	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.95	auto	search
+heldout	PXD070049	LFQ_Astral_DDA_5min_250pg_Ecoli_01	data	enzyme	Trypsin	Trypsin	yes	file			0.823	auto	search
+heldout	PXD070049	LFQ_Astral_DDA_5min_250pg_Ecoli_01	data	organism	Escherichia_coli	Escherichia coli	yes	file			0.416	review	search
+heldout	PXD071075	Evosep_WLBSC3_203_062224	data	instrument	Orbitrap Eclipse	Orbitrap Eclipse	yes	file			0.95	auto	metadata
+heldout	PXD071075	Evosep_WLBSC3_203_062224	data	acquisition	DIA	DIA	yes	file			0.97	auto	metadata
+heldout	PXD071075	Evosep_WLBSC3_203_062224	data	label	unknown	label free	no	file			0.2	review	data
+heldout	PXD071075	Evosep_WLBSC3_203_062224	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+heldout	PXD071075	Evosep_WLBSC3_203_062224	data	enzyme	Trypsin	Trypsin	yes	file			0.415	review	search
+heldout	PXD071075	Evosep_WLBSC3_203_062224	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.95	auto	search
+heldout	PXD071251	PLK303_OE480_25cm_250717_IMG16_SWT_1-4uL_DIA-FAIMS_120M_90G	data	instrument	Orbitrap Exploris 480	Orbitrap Exploris 480	yes	file			0.95	auto	metadata
+heldout	PXD071251	PLK303_OE480_25cm_250717_IMG16_SWT_1-4uL_DIA-FAIMS_120M_90G	data	acquisition	DIA	DIA	yes	file			0.97	auto	metadata
+heldout	PXD071251	PLK303_OE480_25cm_250717_IMG16_SWT_1-4uL_DIA-FAIMS_120M_90G	data	label	unknown	label free	no	file			0.2	review	data
+heldout	PXD071251	PLK303_OE480_25cm_250717_IMG16_SWT_1-4uL_DIA-FAIMS_120M_90G	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.826	review	search
+heldout	PXD071251	PLK303_OE480_25cm_250717_IMG16_SWT_1-4uL_DIA-FAIMS_120M_90G	data	enzyme	Trypsin	Trypsin	yes	file			0.683	review	search
+heldout	PXD071251	PLK303_OE480_25cm_250717_IMG16_SWT_1-4uL_DIA-FAIMS_120M_90G	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.44	review	search
+heldout	PXD073447	YAS202407230073-1-W3	data	instrument	Orbitrap Astral	Q Exactive	no	file			0.95	auto	metadata
+heldout	PXD073447	YAS202407230073-1-W3	data	acquisition	PRM	DIA	no	file			0.8	auto	metadata
+heldout	PXD073447	YAS202407230073-1-W3	data	label	no SILAC	label free	yes	file			0.6	review	data
+heldout	PXD073447	YAS202407230073-1-W3	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.3	default	default
+heldout	PXD073447	YAS202407230073-1-W3	data	enzyme	Trypsin	Trypsin	yes	file			0.6	review	data
+heldout	PXD073447	YAS202407230073-1-W3	data	organism	Glycine max	Vicia costata	no	file			0.626	review	data
+heldout	PXD073687	Figure1_Blank_3	data	instrument	Orbitrap Exploris 480	Orbitrap Astral	no	file			0.95	auto	metadata
+heldout	PXD073687	Figure1_Blank_3	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD073687	Figure1_Blank_3	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD073687	Figure1_Blank_3	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.883	auto	search
+heldout	PXD073687	Figure1_Blank_3	data	enzyme	Trypsin	Trypsin	yes	file			0.849	auto	search
+heldout	PXD073687	Figure1_Blank_3	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.807	review	search
+heldout	PXD074582	ID136650_01_SPD60_OA10034_11063_091625	data	instrument	Orbitrap Astral	Orbitrap Astral	yes	file			0.95	auto	metadata
+heldout	PXD074582	ID136650_01_SPD60_OA10034_11063_091625	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD074582	ID136650_01_SPD60_OA10034_11063_091625	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD074582	ID136650_01_SPD60_OA10034_11063_091625	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.45	review	data
+heldout	PXD074582	ID136650_01_SPD60_OA10034_11063_091625	data	enzyme	Trypsin	Trypsin	yes	file			0.3	default	default
+heldout	PXD074582	ID136650_01_SPD60_OA10034_11063_091625	data	organism	Oncorhynchus mykiss	Bos taurus	no	file			0.771	auto	data
+heldout	PXD075765	Serum_Pool02_3578_3201_3778_3323_3760_02	data	instrument	Orbitrap Fusion Lumos	orbitrap fusion lumos	yes	file			0.95	auto	metadata
+heldout	PXD075765	Serum_Pool02_3578_3201_3778_3323_3760_02	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD075765	Serum_Pool02_3578_3201_3778_3323_3760_02	data	label	TMT10/11plex	TMT	yes	file			0.969	auto	data
+heldout	PXD075765	Serum_Pool02_3578_3201_3778_3323_3760_02	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.965	auto	search
+heldout	PXD075765	Serum_Pool02_3578_3201_3778_3323_3760_02	data	enzyme	Trypsin	Trypsin	yes	file			0.792	auto	search
+heldout	PXD075765	Serum_Pool02_3578_3201_3778_3323_3760_02	data	organism	Canis_lupus	felis catus	no	file			0.513	review	search
+heldout	PXD076528	7673_YB10_P116835_S00_R1	data	instrument	Orbitrap Astral	Orbitrap Astral	yes	file			0.95	auto	metadata
+heldout	PXD076528	7673_YB10_P116835_S00_R1	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD076528	7673_YB10_P116835_S00_R1	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD076528	7673_YB10_P116835_S00_R1	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.98	auto	search
+heldout	PXD076528	7673_YB10_P116835_S00_R1	data	enzyme	Trypsin	Trypsin	yes	file			0.908	auto	search
+heldout	PXD076528	7673_YB10_P116835_S00_R1	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.48	review	search
+heldout	PXD077697	07122024_LR_AV_RGA_ga1-13_NYC_Acetic_Orca	data	instrument	Orbitrap Fusion Lumos	Orbitrap Fusion Lumos	yes	file			0.95	auto	metadata
+heldout	PXD077697	07122024_LR_AV_RGA_ga1-13_NYC_Acetic_Orca	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+heldout	PXD077697	07122024_LR_AV_RGA_ga1-13_NYC_Acetic_Orca	data	label	label free	label free	yes	file			0.8	auto	data
+heldout	PXD077697	07122024_LR_AV_RGA_ga1-13_NYC_Acetic_Orca	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.797	auto	search
+heldout	PXD077697	07122024_LR_AV_RGA_ga1-13_NYC_Acetic_Orca	data	enzyme	Trypsin	Trypsin/P	yes	file			0.867	auto	search
+heldout	PXD077697	07122024_LR_AV_RGA_ga1-13_NYC_Acetic_Orca	data	organism	Arabidopsis_thaliana	Arabidopsis thaliana	yes	file			0.95	auto	search
+heldout	PXD077960	CAR4815A9MA3DigestofJC-tFMC1-FHT-3-220113-SJD	data	instrument	Q Exactive Plus	Q Exactive Plus	yes	file			0.95	auto	metadata
+heldout	PXD077960	CAR4815A9MA3DigestofJC-tFMC1-FHT-3-220113-SJD	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+heldout	PXD077960	CAR4815A9MA3DigestofJC-tFMC1-FHT-3-220113-SJD	data	label	label free	SILAC	no	file			0.8	auto	data
+heldout	PXD077960	CAR4815A9MA3DigestofJC-tFMC1-FHT-3-220113-SJD	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+heldout	PXD077960	CAR4815A9MA3DigestofJC-tFMC1-FHT-3-220113-SJD	data	enzyme	Trypsin	Trypsin	yes	file			0.72	auto	search
+heldout	PXD077960	CAR4815A9MA3DigestofJC-tFMC1-FHT-3-220113-SJD	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.95	auto	search
+heldout	PXD078436	Ecoli_MG1655_tsp_3_S1-F5_1_4087	data	instrument		timsTOF Pro 2	n/a	file					
+heldout	PXD078436	Ecoli_MG1655_tsp_3_S1-F5_1_4087	data	acquisition	DIA (diaPASEF)	DDA	no	file			0.9	auto	metadata
+heldout	PXD078436	Ecoli_MG1655_tsp_3_S1-F5_1_4087	data	label	no isobaric label	label free	yes	file			0.8	auto	data
+heldout	PXD078436	Ecoli_MG1655_tsp_3_S1-F5_1_4087	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.971	auto	search
+heldout	PXD078436	Ecoli_MG1655_tsp_3_S1-F5_1_4087	data	enzyme	Trypsin	Trypsin	yes	file			0.729	review	search
+heldout	PXD078436	Ecoli_MG1655_tsp_3_S1-F5_1_4087	data	organism	Escherichia_coli	Escherichia coli	yes	file			0.438	review	search
+validation_v3	PXD000266	0089-120719MaRiS01Tscx05pD	data	instrument	LTQ Orbitrap Discovery	ltq orbitrap	yes	file			0.95	auto	metadata
+validation_v3	PXD000266	0089-120719MaRiS01Tscx05pD	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD000266	0089-120719MaRiS01Tscx05pD	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD000266	0089-120719MaRiS01Tscx05pD	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.95	auto	search
+validation_v3	PXD000266	0089-120719MaRiS01Tscx05pD	data	enzyme	Trypsin	Trypsin	yes	file			0.79	auto	search
+validation_v3	PXD000266	0089-120719MaRiS01Tscx05pD	data	organism	Mus_musculus	mus musculus	yes	file			0.581	review	search
+validation_v3	PXD001473	Hammoc111214_3hr-1	data	instrument	LTQ Orbitrap XL	ltq orbitrap	yes	file			0.95	auto	metadata
+validation_v3	PXD001473	Hammoc111214_3hr-1	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD001473	Hammoc111214_3hr-1	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD001473	Hammoc111214_3hr-1	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+validation_v3	PXD001473	Hammoc111214_3hr-1	data	enzyme	Trypsin	Trypsin	yes	file			0.3	default	default
+validation_v3	PXD001473	Hammoc111214_3hr-1	data	organism	not in panel	arabidopsis thaliana	no	file			0.5	review	search
+validation_v3	PXD001540	09JAN2014_HF_brain_new_45	data	instrument	Orbitrap Elite	Orbitrap Elite	yes	file			0.95	auto	metadata
+validation_v3	PXD001540	09JAN2014_HF_brain_new_45	data	acquisition	DDA	DDA	yes	file			0.7	auto	metadata
+validation_v3	PXD001540	09JAN2014_HF_brain_new_45	data	label	iTRAQ8plex	iTRAQ	yes	file			0.927	auto	data
+validation_v3	PXD001540	09JAN2014_HF_brain_new_45	data	cys_alkylation	Methylthio (C)	Methylthio	yes	file			0.96	auto	search
+validation_v3	PXD001540	09JAN2014_HF_brain_new_45	data	enzyme	Trypsin	Trypsin	yes	file			0.887	auto	search
+validation_v3	PXD001540	09JAN2014_HF_brain_new_45	data	organism	Mus_musculus	Mus musculus	yes	file			0.83	auto	search
+validation_v3	PXD001670	BPI_5040_JIGAN_16	data	instrument	Q Exactive	Q Exactive	yes	file			0.95	auto	metadata
+validation_v3	PXD001670	BPI_5040_JIGAN_16	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD001670	BPI_5040_JIGAN_16	data	label	iTRAQ4plex	iTRAQ	yes	file			0.943	auto	data
+validation_v3	PXD001670	BPI_5040_JIGAN_16	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.6	review	data
+validation_v3	PXD001670	BPI_5040_JIGAN_16	data	enzyme	Trypsin	Trypsin	yes	file			0.6	review	data
+validation_v3	PXD001670	BPI_5040_JIGAN_16	data	organism	not in panel	Gallus gallus	no	file			0.5	review	search
+validation_v3	PXD001739	PY100_PHNL_1_B	data	instrument	LTQ Orbitrap Velos	LTQ Orbitrap Velos	yes	file			0.95	auto	metadata
+validation_v3	PXD001739	PY100_PHNL_1_B	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD001739	PY100_PHNL_1_B	data	label	SILAC (Lys8/Arg10)	SILAC	yes	file			0.7	auto	data
+validation_v3	PXD001739	PY100_PHNL_1_B	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.95	auto	search
+validation_v3	PXD001739	PY100_PHNL_1_B	data	enzyme	Trypsin	Trypsin/P	yes	file			0.881	auto	search
+validation_v3	PXD001739	PY100_PHNL_1_B	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.458	review	search
+validation_v3	PXD003382	AP_UNTAG_02	data	instrument	LTQ Orbitrap Velos	LTQ Orbitrap Velos	yes	file			0.95	auto	metadata
+validation_v3	PXD003382	AP_UNTAG_02	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD003382	AP_UNTAG_02	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD003382	AP_UNTAG_02	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.3	default	default
+validation_v3	PXD003382	AP_UNTAG_02	data	enzyme	Trypsin	Trypsin	yes	file			0.787	auto	search
+validation_v3	PXD003382	AP_UNTAG_02	data	organism	Bos_taurus	Gallus gallus	no	file			0.551	review	search
+validation_v3	PXD003397	R142F	data	instrument	LTQ Orbitrap Discovery	LTQ Orbitrap	yes	file			0.95	auto	metadata
+validation_v3	PXD003397	R142F	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD003397	R142F	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD003397	R142F	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.967	auto	search
+validation_v3	PXD003397	R142F	data	enzyme	Trypsin	Trypsin	yes	file			0.827	auto	search
+validation_v3	PXD003397	R142F	data	organism	Arabidopsis_thaliana	Glycine max	no	file			0.95	auto	search
+validation_v3	PXD003531	20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01	data	instrument	Q Exactive	Q Exactive	yes	file			0.95	auto	metadata
+validation_v3	PXD003531	20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD003531	20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD003531	20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.784	auto	search
+validation_v3	PXD003531	20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01	data	enzyme	Trypsin	Lys-C+Trypsin	yes	file			0.753	auto	search
+validation_v3	PXD003531	20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.495	review	search
+validation_v3	PXD003575	Suping_Exp1_TomatoRoot_16	data	instrument	Orbitrap Elite	LTQ Orbitrap Elite	yes	file			0.95	auto	metadata
+validation_v3	PXD003575	Suping_Exp1_TomatoRoot_16	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD003575	Suping_Exp1_TomatoRoot_16	data	label	iTRAQ8plex	iTRAQ	yes	file			0.95	auto	data
+validation_v3	PXD003575	Suping_Exp1_TomatoRoot_16	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.3	default	default
+validation_v3	PXD003575	Suping_Exp1_TomatoRoot_16	data	enzyme	Trypsin	Trypsin	yes	file			0.84	auto	search
+validation_v3	PXD003575	Suping_Exp1_TomatoRoot_16	data	organism	Nicotiana_tabacum + Arabidopsis_thaliana	Solanum lycopersicum	no	file			0.425	review	search
+validation_v3	PXD003808	QE2_131113_OPL0000_pTyr_IP_A_02	data	instrument	Q Exactive	Q Exactive	yes	file			0.95	auto	metadata
+validation_v3	PXD003808	QE2_131113_OPL0000_pTyr_IP_A_02	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD003808	QE2_131113_OPL0000_pTyr_IP_A_02	data	label	no SILAC	label free	yes	file			0.6	review	data
+validation_v3	PXD003808	QE2_131113_OPL0000_pTyr_IP_A_02	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.971	auto	search
+validation_v3	PXD003808	QE2_131113_OPL0000_pTyr_IP_A_02	data	enzyme	Trypsin	Trypsin	yes	file			0.93	auto	search
+validation_v3	PXD003808	QE2_131113_OPL0000_pTyr_IP_A_02	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.446	review	search
+validation_v3	PXD004133	141212_JMK_AP5_FIND170_A	data	instrument	Orbitrap Velos Pro	LTQ Orbitrap Velos	yes	file			0.95	auto	metadata
+validation_v3	PXD004133	141212_JMK_AP5_FIND170_A	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD004133	141212_JMK_AP5_FIND170_A	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD004133	141212_JMK_AP5_FIND170_A	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.3	default	default
+validation_v3	PXD004133	141212_JMK_AP5_FIND170_A	data	enzyme	Trypsin	Trypsin	yes	file			0.3	default	default
+validation_v3	PXD004133	141212_JMK_AP5_FIND170_A	data	organism	not in panel	Mycobacterium tuberculosis h37rv	no	file			0.5	review	search
+validation_v3	PXD004541	HF1_201501212_GM_RJ1511D_TMT10_hpHRP_DMSO1_2p5ug_4uL_fr02	data	instrument	Q Exactive HF	Q Exactive	yes	file			0.95	auto	metadata
+validation_v3	PXD004541	HF1_201501212_GM_RJ1511D_TMT10_hpHRP_DMSO1_2p5ug_4uL_fr02	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD004541	HF1_201501212_GM_RJ1511D_TMT10_hpHRP_DMSO1_2p5ug_4uL_fr02	data	label	TMT10/11plex	TMT	yes	file			0.97	auto	data
+validation_v3	PXD004541	HF1_201501212_GM_RJ1511D_TMT10_hpHRP_DMSO1_2p5ug_4uL_fr02	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.926	auto	search
+validation_v3	PXD004541	HF1_201501212_GM_RJ1511D_TMT10_hpHRP_DMSO1_2p5ug_4uL_fr02	data	enzyme	Trypsin	Trypsin	yes	file			0.823	auto	search
+validation_v3	PXD004541	HF1_201501212_GM_RJ1511D_TMT10_hpHRP_DMSO1_2p5ug_4uL_fr02	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.479	review	search
+validation_v3	PXD004644	IL12_15m_BR1_F3	data	instrument	Orbitrap Velos Pro	Orbitrap Velos Pro	yes	file			0.95	auto	metadata
+validation_v3	PXD004644	IL12_15m_BR1_F3	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD004644	IL12_15m_BR1_F3	data	label	SILAC (Lys8/Arg10)	SILAC	yes	file			0.713	auto	data
+validation_v3	PXD004644	IL12_15m_BR1_F3	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.796	auto	search
+validation_v3	PXD004644	IL12_15m_BR1_F3	data	enzyme	Trypsin	Trypsin	yes	file			0.715	auto	search
+validation_v3	PXD004644	IL12_15m_BR1_F3	data	organism	Mus_musculus	Mus musculus	yes	file			0.544	review	search
+validation_v3	PXD005340	Sample_D2_54a_2_151022	data	instrument	Q Exactive Plus	Q Exactive Plus	yes	file			0.95	auto	metadata
+validation_v3	PXD005340	Sample_D2_54a_2_151022	data	acquisition	PRM	PRM	yes	file			0.8	auto	metadata
+validation_v3	PXD005340	Sample_D2_54a_2_151022	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD005340	Sample_D2_54a_2_151022	data	cys_alkylation	Carboxymethyl (C)	Iodoacetamide derivatized	no	file			0.371	review	search
+validation_v3	PXD005340	Sample_D2_54a_2_151022	data	enzyme	Trypsin	Trypsin	yes	file			0.674	review	search
+validation_v3	PXD005340	Sample_D2_54a_2_151022	data	organism	Felis_catus	Felis catus	yes	file			0.95	auto	search
+validation_v3	PXD006272	6	data	instrument	Q Exactive Plus	Q Exactive	yes	file			0.95	auto	metadata
+validation_v3	PXD006272	6	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD006272	6	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD006272	6	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.962	auto	search
+validation_v3	PXD006272	6	data	enzyme	Trypsin	Trypsin	yes	file			0.77	auto	search
+validation_v3	PXD006272	6	data	organism	Yarrowia_lipolytica	Yarrowia lipolytica	yes	file			0.95	auto	search
+validation_v3	PXD007875	201708030201	data	instrument	Orbitrap Elite	Orbitrap Elite	yes	file			0.95	auto	metadata
+validation_v3	PXD007875	201708030201	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD007875	201708030201	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD007875	201708030201	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.881	auto	search
+validation_v3	PXD007875	201708030201	data	enzyme	Trypsin	Trypsin	yes	file			0.815	auto	search
+validation_v3	PXD007875	201708030201	data	organism	Arabidopsis_thaliana	Cicer arietinum	no	file			0.95	auto	search
+validation_v3	PXD008287	20160624_Q1_SA_NuDg_CBX2-NE3	data	instrument	Q Exactive	Q Exactive	yes	file			0.95	auto	metadata
+validation_v3	PXD008287	20160624_Q1_SA_NuDg_CBX2-NE3	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD008287	20160624_Q1_SA_NuDg_CBX2-NE3	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD008287	20160624_Q1_SA_NuDg_CBX2-NE3	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.98	auto	search
+validation_v3	PXD008287	20160624_Q1_SA_NuDg_CBX2-NE3	data	enzyme	Trypsin	Trypsin	yes	file			0.894	auto	search
+validation_v3	PXD008287	20160624_Q1_SA_NuDg_CBX2-NE3	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.489	review	search
+validation_v3	PXD009612	170928_MW_3	data	instrument	Q Exactive	Q Exactive	yes	file			0.95	auto	metadata
+validation_v3	PXD009612	170928_MW_3	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD009612	170928_MW_3	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD009612	170928_MW_3	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.912	auto	search
+validation_v3	PXD009612	170928_MW_3	data	enzyme	Trypsin	Trypsin	yes	file			0.906	auto	search
+validation_v3	PXD009612	170928_MW_3	data	organism	Labeo_rohita	Danio rerio	no	file			0.423	review	search
+validation_v3	PXD010744	ProstateTMT10plex_S3Fr23	data	instrument	Orbitrap Fusion Lumos	Orbitrap Fusion Lumos	yes	file			0.95	auto	metadata
+validation_v3	PXD010744	ProstateTMT10plex_S3Fr23	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD010744	ProstateTMT10plex_S3Fr23	data	label	TMT10/11plex	TMT	yes	file			0.853	auto	data
+validation_v3	PXD010744	ProstateTMT10plex_S3Fr23	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.95	auto	search
+validation_v3	PXD010744	ProstateTMT10plex_S3Fr23	data	enzyme	Trypsin	Trypsin	yes	file			0.832	auto	search
+validation_v3	PXD010744	ProstateTMT10plex_S3Fr23	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.783	auto	search
+validation_v3	PXD013899	20160108lc_8081_42357_2	data	instrument	Q Exactive	Q Exactive	yes	file			0.95	auto	metadata
+validation_v3	PXD013899	20160108lc_8081_42357_2	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD013899	20160108lc_8081_42357_2	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD013899	20160108lc_8081_42357_2	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.3	default	default
+validation_v3	PXD013899	20160108lc_8081_42357_2	data	enzyme	Trypsin	Trypsin	yes	file			0.3	default	default
+validation_v3	PXD013899	20160108lc_8081_42357_2	data	organism	not in panel	Giardia lamblia atcc 50803	no	file			0.5	review	search
+validation_v3	PXD014367	CSD16_C8EV_20180703203156	data	instrument	Q Exactive HF	Q Exactive	yes	file			0.95	auto	metadata
+validation_v3	PXD014367	CSD16_C8EV_20180703203156	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD014367	CSD16_C8EV_20180703203156	data	label	TMT0 / TMT (126 only)	label free	no	file			0.701	auto	data
+validation_v3	PXD014367	CSD16_C8EV_20180703203156	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.529	review	data
+validation_v3	PXD014367	CSD16_C8EV_20180703203156	data	enzyme	Trypsin	Trypsin	yes	file			0.6	review	data
+validation_v3	PXD014367	CSD16_C8EV_20180703203156	data	organism	Candida albicans	Candida albicans	yes	file			0.758	auto	data
+validation_v3	PXD014764	20190412_KEH_HF_SA_ANW_R11_100419_CNOT_R1_f008	data	instrument	Q Exactive HF	Q Exactive HF	yes	file			0.95	auto	metadata
+validation_v3	PXD014764	20190412_KEH_HF_SA_ANW_R11_100419_CNOT_R1_f008	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD014764	20190412_KEH_HF_SA_ANW_R11_100419_CNOT_R1_f008	data	label	SILAC triplex (Lys4/Arg6, Lys8/Arg10)	SILAC	yes	file			0.7	auto	data
+validation_v3	PXD014764	20190412_KEH_HF_SA_ANW_R11_100419_CNOT_R1_f008	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.98	auto	search
+validation_v3	PXD014764	20190412_KEH_HF_SA_ANW_R11_100419_CNOT_R1_f008	data	enzyme	Trypsin	Lys-C+Trypsin	yes	file			0.821	auto	search
+validation_v3	PXD014764	20190412_KEH_HF_SA_ANW_R11_100419_CNOT_R1_f008	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.452	review	search
+validation_v3	PXD014778	T_Oellerich_091116_060117_72156_samp6_rep2_6	data	instrument	Q Exactive HF	q exactive hf	yes	file			0.95	auto	metadata
+validation_v3	PXD014778	T_Oellerich_091116_060117_72156_samp6_rep2_6	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD014778	T_Oellerich_091116_060117_72156_samp6_rep2_6	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD014778	T_Oellerich_091116_060117_72156_samp6_rep2_6	data	cys_alkylation	Propionamide (C)	Carbamidomethyl	no	file			0.6	review	data
+validation_v3	PXD014778	T_Oellerich_091116_060117_72156_samp6_rep2_6	data	enzyme	Trypsin	Trypsin	yes	file			0.6	review	data
+validation_v3	PXD014778	T_Oellerich_091116_060117_72156_samp6_rep2_6	data	organism	Mus musculus	mus musculus	yes	file			0.685	review	data
+validation_v3	PXD015108	19Jul2018_ATPSynthase_Replicate_5	data	instrument	LTQ Orbitrap XL	LTQ Orbitrap	yes	file			0.95	auto	metadata
+validation_v3	PXD015108	19Jul2018_ATPSynthase_Replicate_5	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD015108	19Jul2018_ATPSynthase_Replicate_5	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD015108	19Jul2018_ATPSynthase_Replicate_5	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.95	auto	search
+validation_v3	PXD015108	19Jul2018_ATPSynthase_Replicate_5	data	enzyme	Trypsin	Trypsin	yes	file			0.826	auto	search
+validation_v3	PXD015108	19Jul2018_ATPSynthase_Replicate_5	data	organism	Bos_taurus	Bos taurus	yes	file			0.539	review	search
+validation_v3	PXD015959	KAB05_SEC_3_03	data	instrument	LTQ Velos	ltq orbitrap velos	yes	file			0.95	auto	metadata
+validation_v3	PXD015959	KAB05_SEC_3_03	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD015959	KAB05_SEC_3_03	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD015959	KAB05_SEC_3_03	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+validation_v3	PXD015959	KAB05_SEC_3_03	data	enzyme	Trypsin	Trypsin	yes	file			0.559	review	search
+validation_v3	PXD015959	KAB05_SEC_3_03	data	organism	Homo_sapiens	acinetobacter baumannii	no	file			0.559	review	search
+validation_v3	PXD016465	040813_CR_GAB1_1fa	data	instrument	Q Exactive	Q Exactive	yes	file			0.95	auto	metadata
+validation_v3	PXD016465	040813_CR_GAB1_1fa	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD016465	040813_CR_GAB1_1fa	data	label	SILAC triplex (Lys4/Arg6, Lys8/Arg10)	SILAC	yes	file			0.7	auto	data
+validation_v3	PXD016465	040813_CR_GAB1_1fa	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+validation_v3	PXD016465	040813_CR_GAB1_1fa	data	enzyme	Trypsin	Trypsin	yes	file			0.919	auto	search
+validation_v3	PXD016465	040813_CR_GAB1_1fa	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.466	review	search
+validation_v3	PXD023400	20151125_Exactive_IS_14665	data	instrument	Q Exactive	Q Exactive	yes	file			0.95	auto	metadata
+validation_v3	PXD023400	20151125_Exactive_IS_14665	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD023400	20151125_Exactive_IS_14665	data	label	SILAC (Lys8/Arg10)	SILAC	yes	file			0.7	auto	data
+validation_v3	PXD023400	20151125_Exactive_IS_14665	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.967	auto	search
+validation_v3	PXD023400	20151125_Exactive_IS_14665	data	enzyme	Trypsin	Trypsin	yes	file			0.791	auto	search
+validation_v3	PXD023400	20151125_Exactive_IS_14665	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.445	review	search
+validation_v3	PXD024085	PII_F4_Slice_e_repl2	data	instrument	Q Exactive Plus	q exactive	yes	file			0.95	auto	metadata
+validation_v3	PXD024085	PII_F4_Slice_e_repl2	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD024085	PII_F4_Slice_e_repl2	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD024085	PII_F4_Slice_e_repl2	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.883	auto	search
+validation_v3	PXD024085	PII_F4_Slice_e_repl2	data	enzyme	Trypsin	Trypsin	yes	file			0.816	auto	search
+validation_v3	PXD024085	PII_F4_Slice_e_repl2	data	organism	Homo_sapiens	streptomyces coelicolor a3(2)	no	file			0.432	review	search
+validation_v3	PXD024702	NP32	data	instrument	LTQ Orbitrap XL	LTQ Orbitrap XL	yes	file			0.95	auto	metadata
+validation_v3	PXD024702	NP32	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD024702	NP32	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD024702	NP32	data	cys_alkylation	Carbamidomethyl (C)	none stated	n/a	file			0.3	default	default
+validation_v3	PXD024702	NP32	data	enzyme	Trypsin	Trypsin	yes	file			0.3	default	default
+validation_v3	PXD024702	NP32	data	organism	not in panel	Bacillus cereus	no	file			0.5	review	search
+validation_v3	PXD027712	MS809_HS655_4_08	data	instrument	Orbitrap Elite	Orbitrap Elite	yes	file			0.95	auto	metadata
+validation_v3	PXD027712	MS809_HS655_4_08	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD027712	MS809_HS655_4_08	data	label	SILAC (Lys8/Arg10)	SILAC	yes	file			0.65	review	data
+validation_v3	PXD027712	MS809_HS655_4_08	data	cys_alkylation	Propionamide (C)	none stated	n/a	file			0.796	auto	search
+validation_v3	PXD027712	MS809_HS655_4_08	data	enzyme	Trypsin	Trypsin	yes	file			0.882	auto	search
+validation_v3	PXD027712	MS809_HS655_4_08	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.635	review	search
+validation_v3	PXD027795	20190123_Ozdemir_11060-B	data	instrument	Orbitrap Velos Pro	LTQ Orbitrap Velos	yes	file			0.95	auto	metadata
+validation_v3	PXD027795	20190123_Ozdemir_11060-B	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD027795	20190123_Ozdemir_11060-B	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD027795	20190123_Ozdemir_11060-B	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.777	auto	search
+validation_v3	PXD027795	20190123_Ozdemir_11060-B	data	enzyme	Trypsin	Trypsin	yes	file			0.9	auto	search
+validation_v3	PXD027795	20190123_Ozdemir_11060-B	data	organism	Homo_sapiens	Drosophila melanogaster	no	file			0.643	review	search
+validation_v3	PXD028358	2018-0326_SILAC-16_Chromosome-Yeast-F13	data	instrument	Orbitrap Fusion Lumos	Orbitrap Fusion Lumos	yes	file			0.95	auto	metadata
+validation_v3	PXD028358	2018-0326_SILAC-16_Chromosome-Yeast-F13	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD028358	2018-0326_SILAC-16_Chromosome-Yeast-F13	data	label	SILAC (Lys8/Arg10)	SILAC	yes	file			0.7	auto	data
+validation_v3	PXD028358	2018-0326_SILAC-16_Chromosome-Yeast-F13	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.969	auto	search
+validation_v3	PXD028358	2018-0326_SILAC-16_Chromosome-Yeast-F13	data	enzyme	Trypsin	Lys-C+Trypsin	yes	file			0.755	auto	search
+validation_v3	PXD028358	2018-0326_SILAC-16_Chromosome-Yeast-F13	data	organism	Saccharomyces_cerevisiae	Saccharomyces cerevisiae	yes	file			0.95	auto	search
+validation_v3	PXD030111	Lumos_201221_13	data	instrument	Orbitrap Fusion Lumos	Orbitrap Fusion Lumos	yes	file			0.95	auto	metadata
+validation_v3	PXD030111	Lumos_201221_13	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD030111	Lumos_201221_13	data	label	TMTpro (16/18plex)	TMTpro	yes	file			0.97	auto	data
+validation_v3	PXD030111	Lumos_201221_13	data	cys_alkylation	Methylthio (C)	Methylthio	yes	file			0.95	auto	search
+validation_v3	PXD030111	Lumos_201221_13	data	enzyme	Trypsin	Trypsin	yes	file			0.709	auto	search
+validation_v3	PXD030111	Lumos_201221_13	data	organism	Saccharomyces_cerevisiae	Saccharomyces cerevisiae	yes	file			0.95	auto	search
+validation_v3	PXD031975	G-28	data	instrument	Orbitrap Elite	Orbitrap Elite	yes	file			0.95	auto	metadata
+validation_v3	PXD031975	G-28	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD031975	G-28	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD031975	G-28	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+validation_v3	PXD031975	G-28	data	enzyme	Trypsin	Trypsin	yes	file			0.3	default	default
+validation_v3	PXD031975	G-28	data	organism	not in panel	Schizosaccharomyces pombe	no	file			0.5	review	search
+validation_v3	PXD032835	20181212_BertrandJ_chemprot_F06	data	instrument	Q Exactive HF	Q Exactive HF	yes	file			0.95	auto	metadata
+validation_v3	PXD032835	20181212_BertrandJ_chemprot_F06	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD032835	20181212_BertrandJ_chemprot_F06	data	label	TMT10/11plex	TMT	yes	file			0.97	auto	data
+validation_v3	PXD032835	20181212_BertrandJ_chemprot_F06	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.976	auto	search
+validation_v3	PXD032835	20181212_BertrandJ_chemprot_F06	data	enzyme	Trypsin	Lys-C+Trypsin	yes	file			0.823	auto	search
+validation_v3	PXD032835	20181212_BertrandJ_chemprot_F06	data	organism	Mus_musculus	Mus musculus	yes	file			0.543	review	search
+validation_v3	PXD033741	MD128LQB3_5_F1502149_Slot1-54_1_13363	data	instrument	timsTOF Pro	timstof pro	yes	file			0.95	auto	metadata
+validation_v3	PXD033741	MD128LQB3_5_F1502149_Slot1-54_1_13363	data	acquisition	DDA (ddaPASEF)	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD033741	MD128LQB3_5_F1502149_Slot1-54_1_13363	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD033741	MD128LQB3_5_F1502149_Slot1-54_1_13363	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.971	auto	search
+validation_v3	PXD033741	MD128LQB3_5_F1502149_Slot1-54_1_13363	data	enzyme	Trypsin	Trypsin	yes	file			0.9	auto	search
+validation_v3	PXD033741	MD128LQB3_5_F1502149_Slot1-54_1_13363	data	organism	Homo_sapiens	homo sapiens	yes	file			0.501	review	search
+validation_v3	PXD034335	SID1638_WQ_UbaE14_C6	data	instrument	LTQ Orbitrap XL	LTQ Orbitrap XL	yes	file			0.95	auto	metadata
+validation_v3	PXD034335	SID1638_WQ_UbaE14_C6	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD034335	SID1638_WQ_UbaE14_C6	data	label	label free	SILAC	no	file			0.8	auto	data
+validation_v3	PXD034335	SID1638_WQ_UbaE14_C6	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.852	auto	search
+validation_v3	PXD034335	SID1638_WQ_UbaE14_C6	data	enzyme	Trypsin	Trypsin	yes	file			0.888	auto	search
+validation_v3	PXD034335	SID1638_WQ_UbaE14_C6	data	organism	Homo_sapiens	Mus musculus	no	file			0.503	review	search
+validation_v3	PXD036580	Fusion_210511_51	data	instrument	Orbitrap Fusion	orbitrap fusion	yes	file			0.95	auto	metadata
+validation_v3	PXD036580	Fusion_210511_51	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD036580	Fusion_210511_51	data	label	TMT10/11plex	TMT	yes	file			0.97	auto	data
+validation_v3	PXD036580	Fusion_210511_51	data	cys_alkylation	Methylthio (C)		n/a	file			0.95	auto	search
+validation_v3	PXD036580	Fusion_210511_51	data	enzyme	Trypsin	trypsin	yes	file			0.783	auto	search
+validation_v3	PXD036580	Fusion_210511_51	data	organism	Escherichia_coli	Escherichia coli	yes	file			0.95	auto	search
+validation_v3	PXD037434	P20210201029_F8	data	instrument	Q Exactive HF-X	q exactive	yes	file			0.95	auto	metadata
+validation_v3	PXD037434	P20210201029_F8	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD037434	P20210201029_F8	data	label	TMTpro (16/18plex)	TMT	yes	file			0.97	auto	data
+validation_v3	PXD037434	P20210201029_F8	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.6	review	data
+validation_v3	PXD037434	P20210201029_F8	data	enzyme	Trypsin	trypsin	yes	file			0.6	review	data
+validation_v3	PXD037434	P20210201029_F8	data	organism	Triticum aestivum	Escherichia coli	no	file			0.716	auto	data
+validation_v3	PXD039269	480-1_FPEP210043913-1A	data	instrument	Orbitrap Exploris 480	Orbitrap Exploris 480	yes	file			0.95	auto	metadata
+validation_v3	PXD039269	480-1_FPEP210043913-1A	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD039269	480-1_FPEP210043913-1A	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD039269	480-1_FPEP210043913-1A	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.631	review	search
+validation_v3	PXD039269	480-1_FPEP210043913-1A	data	enzyme	Trypsin	Trypsin	yes	file			0.864	auto	search
+validation_v3	PXD039269	480-1_FPEP210043913-1A	data	organism	Glycine_max	acyrthosiphon pisum	no	file			0.95	auto	search
+validation_v3	PXD039882	Service_Burger_250315_5	data	instrument	Q Exactive Plus	Q Exactive Plus	yes	file			0.95	auto	metadata
+validation_v3	PXD039882	Service_Burger_250315_5	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD039882	Service_Burger_250315_5	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD039882	Service_Burger_250315_5	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.3	default	default
+validation_v3	PXD039882	Service_Burger_250315_5	data	enzyme	Trypsin	Trypsin	yes	file			0.765	auto	search
+validation_v3	PXD039882	Service_Burger_250315_5	data	organism	Homo_sapiens	Diplonema papillatum	no	file			0.807	review	search
+validation_v3	PXD040230	20210629_Sample2red_CTRworms_repl1	data	instrument	Q Exactive Plus	Q Exactive Plus	yes	file			0.95	auto	metadata
+validation_v3	PXD040230	20210629_Sample2red_CTRworms_repl1	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD040230	20210629_Sample2red_CTRworms_repl1	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD040230	20210629_Sample2red_CTRworms_repl1	data	cys_alkylation	none (free Cys)	Carbamidomethyl	no	file			0.95	auto	search
+validation_v3	PXD040230	20210629_Sample2red_CTRworms_repl1	data	enzyme	Trypsin	Trypsin	yes	file			0.851	auto	search
+validation_v3	PXD040230	20210629_Sample2red_CTRworms_repl1	data	organism	Caenorhabditis_elegans	Caenorhabditis elegans	yes	file			0.95	auto	search
+validation_v3	PXD044741	Emma_M1910_213	data	instrument	Q Exactive HF-X	Q Exactive HF-X	yes	file			0.95	auto	metadata
+validation_v3	PXD044741	Emma_M1910_213	data	acquisition	DIA	DIA	yes	file			0.97	auto	metadata
+validation_v3	PXD044741	Emma_M1910_213	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD044741	Emma_M1910_213	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.6	review	data
+validation_v3	PXD044741	Emma_M1910_213	data	enzyme	Trypsin	Trypsin	yes	file			0.6	review	data
+validation_v3	PXD044741	Emma_M1910_213	data	organism	not in panel	Equus caballus	no	file			0.5	review	search
+validation_v3	PXD045163	July_24_2023_MSF_TD_8	data	instrument	Orbitrap Exploris 240	Orbitrap Exploris 240	yes	file			0.95	auto	metadata
+validation_v3	PXD045163	July_24_2023_MSF_TD_8	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD045163	July_24_2023_MSF_TD_8	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD045163	July_24_2023_MSF_TD_8	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.963	auto	search
+validation_v3	PXD045163	July_24_2023_MSF_TD_8	data	enzyme	Trypsin	Trypsin	yes	file			0.926	auto	search
+validation_v3	PXD045163	July_24_2023_MSF_TD_8	data	organism	Cryptococcus_neoformans	Cryptococcus neoformans	yes	file			0.95	auto	search
+validation_v3	PXD047517	12102021_TMT_Oglyco_F3	data	instrument	Orbitrap Fusion Lumos	Orbitrap Fusion Lumos	yes	file			0.95	auto	metadata
+validation_v3	PXD047517	12102021_TMT_Oglyco_F3	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD047517	12102021_TMT_Oglyco_F3	data	label	TMTpro (16/18plex)	TMTpro	yes	file			0.892	auto	data
+validation_v3	PXD047517	12102021_TMT_Oglyco_F3	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+validation_v3	PXD047517	12102021_TMT_Oglyco_F3	data	enzyme	Trypsin	Trypsin	yes	file			0.6	review	data
+validation_v3	PXD047517	12102021_TMT_Oglyco_F3	data	organism	Mus musculus	Mus musculus	yes	file			0.713	auto	data
+validation_v3	PXD049123	20221020_EXPL1_Evo2_AE_SA_60spd_DIA_phospho_HeLa_DMSO_20_day1_R3_O19	data	instrument	Orbitrap Exploris 480	Orbitrap Exploris 480	yes	file			0.95	auto	metadata
+validation_v3	PXD049123	20221020_EXPL1_Evo2_AE_SA_60spd_DIA_phospho_HeLa_DMSO_20_day1_R3_O19	data	acquisition	DIA	DIA	yes	file			0.97	auto	metadata
+validation_v3	PXD049123	20221020_EXPL1_Evo2_AE_SA_60spd_DIA_phospho_HeLa_DMSO_20_day1_R3_O19	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD049123	20221020_EXPL1_Evo2_AE_SA_60spd_DIA_phospho_HeLa_DMSO_20_day1_R3_O19	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.6	review	data
+validation_v3	PXD049123	20221020_EXPL1_Evo2_AE_SA_60spd_DIA_phospho_HeLa_DMSO_20_day1_R3_O19	data	enzyme	Trypsin	Trypsin	yes	file			0.6	review	data
+validation_v3	PXD049123	20221020_EXPL1_Evo2_AE_SA_60spd_DIA_phospho_HeLa_DMSO_20_day1_R3_O19	data	organism	Homo sapiens	Homo sapiens	yes	file			0.689	review	data
+validation_v3	PXD049370	201111_13_Orbi1_KN_SER_G90_T115_Paternoga_ysgA_185	data	instrument	LTQ Orbitrap XL	LTQ Orbitrap XL	yes	file			0.95	auto	metadata
+validation_v3	PXD049370	201111_13_Orbi1_KN_SER_G90_T115_Paternoga_ysgA_185	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD049370	201111_13_Orbi1_KN_SER_G90_T115_Paternoga_ysgA_185	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD049370	201111_13_Orbi1_KN_SER_G90_T115_Paternoga_ysgA_185	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.948	auto	search
+validation_v3	PXD049370	201111_13_Orbi1_KN_SER_G90_T115_Paternoga_ysgA_185	data	enzyme	Trypsin	Trypsin	yes	file			0.776	auto	search
+validation_v3	PXD049370	201111_13_Orbi1_KN_SER_G90_T115_Paternoga_ysgA_185	data	organism	Bacillus_subtilis	Bacillus subtilis subsp. subtilis str. 168	yes	file			0.95	auto	search
+validation_v3	PXD050504	221229kw_PHunRcoxHeart_PH_LV104_S1-A6_1_12890	data	instrument	timsTOF Pro	timsTOF Pro	yes	file			0.95	auto	metadata
+validation_v3	PXD050504	221229kw_PHunRcoxHeart_PH_LV104_S1-A6_1_12890	data	acquisition	DDA (ddaPASEF)	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD050504	221229kw_PHunRcoxHeart_PH_LV104_S1-A6_1_12890	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD050504	221229kw_PHunRcoxHeart_PH_LV104_S1-A6_1_12890	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.971	auto	search
+validation_v3	PXD050504	221229kw_PHunRcoxHeart_PH_LV104_S1-A6_1_12890	data	enzyme	Trypsin	Trypsin	yes	file			0.624	review	search
+validation_v3	PXD050504	221229kw_PHunRcoxHeart_PH_LV104_S1-A6_1_12890	data	organism	Rattus_norvegicus + Mus_musculus	Rattus norvegicus	yes	file			0.5	review	search
+validation_v3	PXD050844	20190225_QPC_DK_CSI_WLT_LF_SAEC_PARP4_sh_IP_rev	data	instrument	Q Exactive HF	Q Exactive HF	yes	file			0.95	auto	metadata
+validation_v3	PXD050844	20190225_QPC_DK_CSI_WLT_LF_SAEC_PARP4_sh_IP_rev	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD050844	20190225_QPC_DK_CSI_WLT_LF_SAEC_PARP4_sh_IP_rev	data	label	label free	SILAC	no	file			0.8	auto	data
+validation_v3	PXD050844	20190225_QPC_DK_CSI_WLT_LF_SAEC_PARP4_sh_IP_rev	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.3	default	default
+validation_v3	PXD050844	20190225_QPC_DK_CSI_WLT_LF_SAEC_PARP4_sh_IP_rev	data	enzyme	Trypsin	Trypsin	yes	file			0.815	auto	search
+validation_v3	PXD050844	20190225_QPC_DK_CSI_WLT_LF_SAEC_PARP4_sh_IP_rev	data	organism	Homo_sapiens + Mus_musculus	Homo sapiens	yes	file			0.425	review	search
+validation_v3	PXD055189	WT2-3	data	instrument	Q Exactive Plus	Q Exactive Plus	yes	file			0.95	auto	metadata
+validation_v3	PXD055189	WT2-3	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD055189	WT2-3	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD055189	WT2-3	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.884	auto	search
+validation_v3	PXD055189	WT2-3	data	enzyme	Trypsin	Trypsin/P	yes	file			0.87	auto	search
+validation_v3	PXD055189	WT2-3	data	organism	Solanum_tuberosum + Homo_sapiens	Solanum tuberosum	yes	file			0.5	review	search
+validation_v3	PXD059369	active2_1	data	instrument	Q Exactive	Q Exactive	yes	file			0.95	auto	metadata
+validation_v3	PXD059369	active2_1	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD059369	active2_1	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD059369	active2_1	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.918	auto	search
+validation_v3	PXD059369	active2_1	data	enzyme	Trypsin	Lys-C+Trypsin	yes	file			0.847	auto	search
+validation_v3	PXD059369	active2_1	data	organism	Homo_sapiens	hordeum vulgare	no	file			0.491	review	search
+validation_v3	PXD061541	209_4_Lenti_TID_eGFP_Sorted1_R1_Slot1-13_1_6861	data	instrument	timsTOF Pro 2	timsTOF Pro 2	yes	dataset			0.95	auto	metadata
+validation_v3	PXD061541	209_4_Lenti_TID_eGFP_Sorted1_R1_Slot1-13_1_6861	data	acquisition	DIA (diaPASEF)	diaPASEF	yes	dataset			0.95	auto	metadata
+validation_v3	PXD061541	209_4_Lenti_TID_eGFP_Sorted1_R1_Slot1-13_1_6861	data	label	no isobaric label	label free	yes	dataset			0.8	auto	data
+validation_v3	PXD061541	209_4_Lenti_TID_eGFP_Sorted1_R1_Slot1-13_1_6861	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	dataset			0.954	auto	search
+validation_v3	PXD061541	209_4_Lenti_TID_eGFP_Sorted1_R1_Slot1-13_1_6861	data	enzyme	Trypsin	Lys-C+Trypsin	yes	dataset			0.807	review	search
+validation_v3	PXD061541	209_4_Lenti_TID_eGFP_Sorted1_R1_Slot1-13_1_6861	data	organism	Homo_sapiens	homo sapiens	yes	dataset			0.449	review	search
+validation_v3	PXD061649	MMW4894A48LC3H6MMW4894A48LC340233331	data	instrument	Q Exactive	Q Exactive	yes	file			0.95	auto	metadata
+validation_v3	PXD061649	MMW4894A48LC3H6MMW4894A48LC340233331	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD061649	MMW4894A48LC3H6MMW4894A48LC340233331	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD061649	MMW4894A48LC3H6MMW4894A48LC340233331	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.832	auto	search
+validation_v3	PXD061649	MMW4894A48LC3H6MMW4894A48LC340233331	data	enzyme	Trypsin	Trypsin	yes	file			0.898	auto	search
+validation_v3	PXD061649	MMW4894A48LC3H6MMW4894A48LC340233331	data	organism	Homo_sapiens	xenopus laevis	no	file			0.804	review	search
+validation_v3	PXD063740	PP_1769_PP_4189-R2	data	instrument	Orbitrap Exploris 480	Orbitrap Exploris 480	yes	file			0.95	auto	metadata
+validation_v3	PXD063740	PP_1769_PP_4189-R2	data	acquisition	DIA	DIA	yes	file			0.97	auto	metadata
+validation_v3	PXD063740	PP_1769_PP_4189-R2	data	label	no SILAC	label free	yes	file			0.6	review	data
+validation_v3	PXD063740	PP_1769_PP_4189-R2	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.3	default	default
+validation_v3	PXD063740	PP_1769_PP_4189-R2	data	enzyme	Trypsin	Trypsin	yes	file			0.811	auto	search
+validation_v3	PXD063740	PP_1769_PP_4189-R2	data	organism	Pseudomonas_putida	Pseudomonas putida kt2440	yes	file			0.532	review	search
+validation_v3	PXD063744	PP_0368_PP_0814_PP_0815-R2	data	instrument	Orbitrap Exploris 480	Orbitrap Exploris 480	yes	file			0.95	auto	metadata
+validation_v3	PXD063744	PP_0368_PP_0814_PP_0815-R2	data	acquisition	DIA	DIA	yes	file			0.97	auto	metadata
+validation_v3	PXD063744	PP_0368_PP_0814_PP_0815-R2	data	label	no SILAC	label free	yes	file			0.6	review	data
+validation_v3	PXD063744	PP_0368_PP_0814_PP_0815-R2	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.3	default	default
+validation_v3	PXD063744	PP_0368_PP_0814_PP_0815-R2	data	enzyme	Trypsin	Trypsin	yes	file			0.737	auto	search
+validation_v3	PXD063744	PP_0368_PP_0814_PP_0815-R2	data	organism	Pseudomonas_putida	Pseudomonas putida kt2440	yes	file			0.568	review	search
+validation_v3	PXD065331	17	data	instrument	Q Exactive HF-X	Q Exactive HF-X	yes	file			0.95	auto	metadata
+validation_v3	PXD065331	17	data	acquisition	DIA	DIA	yes	file			0.97	auto	metadata
+validation_v3	PXD065331	17	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD065331	17	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.98	auto	search
+validation_v3	PXD065331	17	data	enzyme	Trypsin	Lys-C+Trypsin	yes	file			0.951	auto	search
+validation_v3	PXD065331	17	data	organism	Mus_musculus + Homo_sapiens	Sus scrofa	no	file			0.425	review	search
+validation_v3	PXD074950	B1_S2-A11_1_3404	data	instrument	timsTOF HT	timsTOF HT	yes	file			0.95	auto	metadata
+validation_v3	PXD074950	B1_S2-A11_1_3404	data	acquisition	DIA (diaPASEF)	DIA	yes	file			0.95	auto	metadata
+validation_v3	PXD074950	B1_S2-A11_1_3404	data	label	no isobaric label	label free	yes	file			0.8	auto	data
+validation_v3	PXD074950	B1_S2-A11_1_3404	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.767	auto	search
+validation_v3	PXD074950	B1_S2-A11_1_3404	data	enzyme	Trypsin	Trypsin	yes	file			0.751	review	search
+validation_v3	PXD074950	B1_S2-A11_1_3404	data	organism	Homo_sapiens	homo sapiens	yes	file			0.613	review	search
+validation_v3	PXD076520	20240805_LAB_SZW_U2OS_APEX2_BioID_sgGal4_03c_3530	data	instrument	timsTOF fleX	timstof flex	yes	file			0.95	auto	metadata
+validation_v3	PXD076520	20240805_LAB_SZW_U2OS_APEX2_BioID_sgGal4_03c_3530	data	acquisition	DDA (ddaPASEF)	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD076520	20240805_LAB_SZW_U2OS_APEX2_BioID_sgGal4_03c_3530	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD076520	20240805_LAB_SZW_U2OS_APEX2_BioID_sgGal4_03c_3530	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.968	auto	search
+validation_v3	PXD076520	20240805_LAB_SZW_U2OS_APEX2_BioID_sgGal4_03c_3530	data	enzyme	Trypsin	Trypsin	yes	file			0.738	review	search
+validation_v3	PXD076520	20240805_LAB_SZW_U2OS_APEX2_BioID_sgGal4_03c_3530	data	organism	Homo_sapiens	homo sapiens	yes	file			0.48	review	search
+validation_v3	PXD078554	100424_TA-BPD-004_Slot2-42_1_2475	data	instrument	timsTOF Pro	timsTOF Pro	yes	file			0.95	auto	metadata
+validation_v3	PXD078554	100424_TA-BPD-004_Slot2-42_1_2475	data	acquisition	DIA (diaPASEF)	DIA	yes	file			0.95	auto	metadata
+validation_v3	PXD078554	100424_TA-BPD-004_Slot2-42_1_2475	data	label	no isobaric label	label free	yes	file			0.8	auto	data
+validation_v3	PXD078554	100424_TA-BPD-004_Slot2-42_1_2475	data	cys_alkylation	none (free Cys)	none stated	n/a	file			0.428	review	search
+validation_v3	PXD078554	100424_TA-BPD-004_Slot2-42_1_2475	data	enzyme	Trypsin	Lys-C+Trypsin	yes	file			0.735	auto	search
+validation_v3	PXD078554	100424_TA-BPD-004_Slot2-42_1_2475	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.559	review	search
+validation_v3	PXD079013	20241226_nLC_Eclipse_APROMPT_Mic_F24	data	instrument	Orbitrap Eclipse	Orbitrap Eclipse	yes	file			0.95	auto	metadata
+validation_v3	PXD079013	20241226_nLC_Eclipse_APROMPT_Mic_F24	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD079013	20241226_nLC_Eclipse_APROMPT_Mic_F24	data	label	TMTpro (16/18plex)	TMT	yes	file			0.97	auto	data
+validation_v3	PXD079013	20241226_nLC_Eclipse_APROMPT_Mic_F24	data	cys_alkylation	Carbamidomethyl (C)		n/a	file			0.405	review	data
+validation_v3	PXD079013	20241226_nLC_Eclipse_APROMPT_Mic_F24	data	enzyme	Trypsin	Trypsin	yes	file			0.6	review	data
+validation_v3	PXD079013	20241226_nLC_Eclipse_APROMPT_Mic_F24	data	organism	Triticum aestivum	Enterococcus faecalis	no	file			0.786	auto	data
+validation_v3	PXD083141	H4_Slot1-2_1_13727	data	instrument	timsTOF Pro 2	timsTOF Pro 2	yes	file			0.95	auto	metadata
+validation_v3	PXD083141	H4_Slot1-2_1_13727	data	acquisition	DIA (diaPASEF)	DIA	yes	file			0.95	auto	metadata
+validation_v3	PXD083141	H4_Slot1-2_1_13727	data	label	no isobaric label	label free	yes	file			0.8	auto	data
+validation_v3	PXD083141	H4_Slot1-2_1_13727	data	cys_alkylation	none (free Cys)	Carbamidomethyl	no	file			0.754	auto	search
+validation_v3	PXD083141	H4_Slot1-2_1_13727	data	enzyme	Trypsin	Trypsin	yes	file			0.757	auto	search
+validation_v3	PXD083141	H4_Slot1-2_1_13727	data	organism	Bos_taurus	Bos taurus	yes	file			0.95	auto	search
+validation_v3	PXD084909	oecf3-AK0800-13-P	data	instrument	Orbitrap Exploris 480	Orbitrap Exploris 480	yes	file			0.95	auto	metadata
+validation_v3	PXD084909	oecf3-AK0800-13-P	data	acquisition	DDA	DDA	yes	file			0.95	auto	metadata
+validation_v3	PXD084909	oecf3-AK0800-13-P	data	label	label free	label free	yes	file			0.8	auto	data
+validation_v3	PXD084909	oecf3-AK0800-13-P	data	cys_alkylation	Carbamidomethyl (C)	Carbamidomethyl	yes	file			0.979	auto	search
+validation_v3	PXD084909	oecf3-AK0800-13-P	data	enzyme	Trypsin	Trypsin	yes	file			0.829	auto	search
+validation_v3	PXD084909	oecf3-AK0800-13-P	data	organism	Homo_sapiens	Homo sapiens	yes	file			0.449	review	search
