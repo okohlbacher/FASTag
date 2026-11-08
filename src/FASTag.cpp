@@ -869,6 +869,37 @@ protected:
     setMaxInt_("search_isotope_errors", 3);
     registerStringOption_("search_decoy_prefix", "<s>", "",
                           "Decoy prefix the engine generates; empty = rev_ (Sage) or DECOY_ (Comet)", false);
+    // #17: the run's mass-gap peaks (the -massgap_out peaks) as variable
+    // modifications or Comet mass offsets in -search_config_out. Candidates
+    // for an FDR-controlling engine, NOT identifications. Off by default.
+    registerStringOption_("search_shifts", "<mode>", "none",
+                          "Add the run's mass-gap peaks to -search_config_out: 'variable' as variable "
+                          "modifications, 'offsets' as Comet mass offsets, 'both'. Isotope errors, fixed "
+                          "labels and caps are applied; -search_shifts_out lists every decision. "
+                          "Experimental", false);
+    setValidStrings_("search_shifts", ListUtils::create<std::string>("none,variable,offsets,both"));
+    registerOutputFile_("search_shifts_out", "<file>", "",
+                        "One row per mass-gap peak: its explanation and what -search_shifts did with it", false);
+    setValidFormats_("search_shifts_out", ListUtils::create<std::string>("tsv"));
+    registerIntOption_("shift_max_variable", "<n>", 3,
+                       "Mass-gap peaks exported as variable modifications, most spectra first", false, true);
+    setMinInt_("shift_max_variable", 0);
+    registerIntOption_("shift_max_offsets", "<n>", 10,
+                       "Mass-gap peaks exported as Comet mass offsets besides 0, most spectra first", false, true);
+    setMinInt_("shift_max_offsets", 0);
+    registerFlag_("shift_expand_sites",
+                  "Add the residues -recon_localize places a variable shift on (unique sites only) to "
+                  "that modification", true);
+    registerDoubleOption_("shift_site_min_share", "<f>", 0.2,
+                          "Share of a peak's localized samples a residue needs for -shift_expand_sites", false, true);
+    setMinFloat_("shift_site_min_share", 0.0);
+    setMaxFloat_("shift_site_min_share", 1.0);
+    registerIntOption_("shift_site_min_count", "<n>", 10,
+                       "Localized samples a residue needs for -shift_expand_sites", false, true);
+    setMinInt_("shift_site_min_count", 1);
+    registerIntOption_("shift_site_min_ions", "<n>", 2,
+                       "b/y ions a localized sample needs to count for -shift_expand_sites", false, true);
+    setMinInt_("shift_site_min_ions", 1);
     // ---- 1.12 D: options ----
     // #1 calibrated species presence or abstention (src/SpeciesCall.h). Off
     // by default: at 'none' nothing of it runs and the report is 1.11's. A
@@ -1555,6 +1586,8 @@ protected:
           {"fasta_out", nullptr},
           {"shortlist_background", nullptr},
           {"search_config_out", nullptr},
+          {"search_shifts", nullptr},
+          {"search_shifts_out", nullptr},
           // ---- 1.12 D: -stream refusals ----
           {"species_call", "-stream cannot be combined with -species_call."},
           {"species_orientation", nullptr},
@@ -1889,6 +1922,35 @@ protected:
                           "(a Sage configuration is written complete)." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
+    // #17 checks: the shifts go into -search_config_out; offsets are Comet's;
+    // site expansion reads -recon_localize.
+    const std::string search_shifts_out = getStringOption_("search_shifts_out");
+    FASTag::SearchConfig::ShiftSettings shift_settings;
+    FASTag::SearchConfig::parseShiftMode(getStringOption_("search_shifts"), shift_settings.mode);
+    const bool shifts_on = shift_settings.mode != FASTag::SearchConfig::ShiftMode::None;
+    if (shifts_on && search_config_out.empty())
+    {
+      OPENMS_LOG_ERROR << "-search_shifts writes into the engine configuration; it needs -search_config_out." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    if (shift_settings.mode == FASTag::SearchConfig::ShiftMode::Offsets && search_engine == "sage")
+    {
+      OPENMS_LOG_ERROR << "-search_shifts offsets: Sage has no mass offsets; use -search_engine comet, or "
+                          "-search_shifts variable." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    shift_settings.engine = search_engine;
+    shift_settings.max_variable = static_cast<std::size_t>(getIntOption_("shift_max_variable"));
+    shift_settings.max_offsets = static_cast<std::size_t>(getIntOption_("shift_max_offsets"));
+    shift_settings.expand_sites = getFlag_("shift_expand_sites");
+    shift_settings.site_min_share = getDoubleOption_("shift_site_min_share");
+    shift_settings.site_min_count = static_cast<std::uint64_t>(getIntOption_("shift_site_min_count"));
+    const int shift_site_min_ions = getIntOption_("shift_site_min_ions");
+    if (shifts_on && shift_settings.expand_sites && !recon_loc)
+    {
+      OPENMS_LOG_ERROR << "-shift_expand_sites needs -recon_localize (the sites are the localized ones)." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
     FASTag::Shortlist::Settings sl_settings;
     sl_settings.max_evalue = getDoubleOption_("shortlist_max_evalue");
     sl_settings.min_spectra = static_cast<std::uint64_t>(getIntOption_("shortlist_min_spectra"));
@@ -2146,6 +2208,7 @@ protected:
     // kept as gaps (GapRow), for -massgap_out and every other gap reader.
     const bool gap_needed = massgap_on
         // ---- 1.12 A: mass-gap readers ----
+        || shifts_on  // #17
         ;
     // delta_on: one delta sample per spectrum is taken and binned.
     const bool delta_on = !delta_out.empty() || gap_needed;
@@ -2228,6 +2291,13 @@ protected:
           {"search_precursor_unit", "-search_config_out", !search_config_out.empty()},
           {"search_isotope_errors", "-search_config_out", !search_config_out.empty()},
           {"search_decoy_prefix", "-search_config_out", !search_config_out.empty()},
+          {"search_shifts_out", "-search_shifts", shifts_on},
+          {"shift_max_variable", "-search_shifts", shifts_on},
+          {"shift_max_offsets", "-search_shifts", shifts_on},
+          {"shift_expand_sites", "-search_shifts", shifts_on},
+          {"shift_site_min_share", "-shift_expand_sites", shifts_on && shift_settings.expand_sites},
+          {"shift_site_min_count", "-shift_expand_sites", shifts_on && shift_settings.expand_sites},
+          {"shift_site_min_ions", "-shift_expand_sites", shifts_on && shift_settings.expand_sites},
           // ---- 1.12 D: ignored-option warnings ----
           {"species_call", "-species", want_species},
           {"species_call_params", "-species_call decoy", species_call_on},
@@ -2369,7 +2439,8 @@ protected:
           if (rm) m.mass = rm->getDiffMonoMass();
           else
           {
-            OPENMS_LOG_ERROR << "-massgap_out: OpenMS does not know the modification '" << m.site << "'." << std::endl;
+            OPENMS_LOG_ERROR << (massgap_on ? "-massgap_out" : "-search_shifts")
+                             << ": OpenMS does not know the modification '" << m.site << "'." << std::endl;
             return INPUT_FILE_CORRUPT;
           }
         }
@@ -3125,6 +3196,7 @@ protected:
       guard.output("shortlist_out", shortlist_out, true);
       guard.output("fasta_out", fasta_out, true);
       guard.output("search_config_out", search_config_out, true);
+      guard.output("search_shifts_out", search_shifts_out, true);
       // ---- 1.12 D: output paths ----
       guard.output("alkylation_out", alkylation_out, true);
       // ---- 1.12 F: output paths ----
@@ -3309,6 +3381,7 @@ protected:
       int loc_score = 0;     ///< b/y ions explained with the gap there
       int loc_ties = 0;      ///< region positions sharing loc_score
       int region_len = 0;    ///< residues the gap localizes to (0 when exact)
+      bool has_c = false;    ///< #17 (-search_shifts only): the placed peptide holds a C
     };
     // Per-thread accumulators, summed after the loop. One cache-line-aligned
     // struct per thread, so neighbouring threads' counters never share a line.
@@ -3778,6 +3851,7 @@ protected:
             delta_sample.loc_score = best->loc_score;
             delta_sample.loc_ties = best->loc_ties;
             delta_sample.region_len = best->region_hi >= best->region_lo ? best->region_hi - best->region_lo + 1 : 0;
+            if (shifts_on) delta_sample.has_c = best->peptide.find('C') != std::string::npos;
             delta_e = t.evalue;
             delta_have = true;
           }
@@ -4732,6 +4806,10 @@ protected:
       std::vector<FD::GapRow> gap_rows;
       std::vector<std::string> gap_keys;
       FD::GapResult gap_result;
+      // #17 (shifts_on only): the evidence of each gap row, aligned with
+      // gap_rows, and the samples whose placed peptide holds a C.
+      std::vector<FASTag::SearchConfig::RowEvidence> shift_rows;
+      std::uint64_t shift_c_samples = 0;
       // -delta_out: aggregate the per-spectrum samples into a histogram.
       // 0.0005 Da bins, adjacent-bin local-max grouping into peaks; each row
       // reports the peak center, its spectrum count, and the most frequent
@@ -4739,6 +4817,7 @@ protected:
       if (delta_on)
       {
         std::map<int64_t, std::pair<uint64_t, std::map<std::string, uint64_t>>> bins;
+        std::map<int64_t, FASTag::SearchConfig::RowEvidence> shift_bins;  // #17, shifts_on only
         size_t clamped = 0, samples = 0;
         for (const PerThread& pt : per_thread)
         {
@@ -4746,9 +4825,28 @@ protected:
           for (const auto& d : pt.delta)
           {
             ++samples;
-            auto& b = bins[static_cast<int64_t>(std::llround(d.delta / 0.0005))];
+            const int64_t bin_key = static_cast<int64_t>(std::llround(d.delta / 0.0005));
+            auto& b = bins[bin_key];
             ++b.first;
             if (!d.interp.empty()) ++b.second[d.interp];
+            if (shifts_on)
+            {
+              FASTag::SearchConfig::RowEvidence& e = shift_bins[bin_key];
+              ++e.spectra;
+              if (d.interp.compare(0, 4, "sub:") == 0) ++e.substitution;
+              if (d.loc_residue) ++e.localized;
+              if (FASTag::SearchConfig::siteSampleCounts(d.loc_residue, d.loc_score, d.loc_ties, d.region_len,
+                                                         shift_site_min_ions))
+              {
+                ++e.site_counted;
+                ++e.sites[d.loc_residue];
+              }
+              if (d.has_c)
+              {
+                ++shift_c_samples;
+                ++e.with_c;
+              }
+            }
           }
         }
         // Local-max grouping: a bin whose count is not exceeded by either
@@ -4777,6 +4875,8 @@ protected:
           if (kv.second.first < nl || kv.second.first < nh) continue;  // not the local max
           uint64_t count = kv.second.first;
           std::map<std::string, uint64_t> interps = kv.second.second;
+          FASTag::SearchConfig::RowEvidence row_ev;
+          if (shifts_on) row_ev = shift_bins[kv.first];
           for (auto* nb : {lo != bins.end() ? &*lo : nullptr, hi != bins.end() ? &*hi : nullptr})
             // A valley bin between two peaks goes to the first (lower-delta)
             // one only: counted twice, the rows summed to more spectra than
@@ -4785,6 +4885,7 @@ protected:
             {
               count += nb->second.first;
               for (const auto& ip : nb->second.second) interps[ip.first] += ip.second;
+              if (shifts_on) row_ev.add(shift_bins[nb->first]);
               absorbed.insert(nb->first);
             }
           // top 3 interpretations by count, deterministic tie-break on name
@@ -4801,6 +4902,7 @@ protected:
             const std::string key(dnum, std::strchr(dnum, '\t'));
             gap_rows.push_back({std::strtod(key.c_str(), nullptr), count});
             gap_keys.push_back(key);
+            if (shifts_on) shift_rows.push_back(std::move(row_ev));
           }
           if (!write_delta) continue;
           dtsv << dnum;
@@ -4841,6 +4943,72 @@ protected:
         }
       }
       // ---- 1.12 A: placement processing and hand-off exports ----
+      // #17: the gap peaks into the engine configuration, before it is
+      // written below, and the decisions into -search_shifts_out.
+      if (shifts_on)
+      {
+        std::vector<FASTag::SearchConfig::PeakEvidence> shift_ev;
+        for (const FD::GapPeak& pk : gap_result.peaks)
+          shift_ev.push_back(FASTag::SearchConfig::peakEvidence(pk, shift_rows));
+        shift_settings.tol = gap_settings.window;
+        shift_settings.c_placements = shift_c_samples;
+        // 1.12 D #3g hand-off: -alkylation_out's call decides the fixed Cys
+        // modification (the reagent, or none for the not-alkylated family);
+        // no call made is no_call. Without -alkylation_out rule 3 applies.
+        if (alkylation_on)
+          shift_settings.alkylation_call = alk_call.called ? FASTag::Alkylation::className(alk_call.cls) : "no_call";
+        const auto shifts = FASTag::SearchConfig::shiftsToPlan(gap_result, shift_ev, gap_mods, gap_combos,
+                                                               shift_settings, sl_plan);
+        for (const std::string& w : shifts.warnings) OPENMS_LOG_WARN << "-search_shifts: " << w << "." << std::endl;
+        for (const std::string& i : shifts.info) OPENMS_LOG_INFO << "-search_shifts: " << i << "." << std::endl;
+        if (!search_shifts_out.empty())
+        {
+          const auto shortest = [](double v) {
+            std::string t;
+            FASTag::appendShortest(t, v);
+            return t;
+          };
+          const auto f4 = [](double v) {
+            std::string t;
+            FASTag::appendNum(t, v, std::chars_format::fixed, 4);
+            return t;
+          };
+          std::vector<std::string> header = {
+              "FASTag " FASTAG_VERSION " mass shifts for -search_config_out: candidates for an FDR-controlling "
+              "engine, NOT identifications.",
+              "input: " + File::basename(in) + "; database: " + File::basename(recon_db) + "; engine: " + search_engine +
+                  "; mode: " + getStringOption_("search_shifts"),
+              "settings: window " + shortest(gap_settings.window) + " Da, max_variable " +
+                  std::to_string(shift_settings.max_variable) + ", max_offsets " +
+                  std::to_string(shift_settings.max_offsets) + ", expand_sites " +
+                  (shift_settings.expand_sites ? "yes" : "no"),
+              "gap peaks: " + std::to_string(gap_result.peaks.size()) + "; exported: " +
+                  std::to_string(shifts.variable) + " variable, " + std::to_string(shifts.offsets) + " offsets, " +
+                  std::to_string(shifts.fixed) + " fixed; isotope errors 0.." + std::to_string(sl_plan.isotope_errors),
+              shifts.bias_peaks
+                  ? (shifts.bias != 0.0
+                         ? "calibration: offsets corrected by the bias " + f4(shifts.bias) + " Da"
+                         : "calibration: offsets uncorrected, the bias " + f4(shifts.measured_bias) +
+                               " Da is within the centroid resolution " + shortest(shift_settings.resolution) + " Da") +
+                        ", the spectra-weighted median of centroid - mass over " + std::to_string(shifts.bias_peaks) +
+                        " single-modification peaks; residual " + f4(shifts.residual) +
+                        " Da (90 % of their spectra)"
+                  : "calibration: no single-modification peak; offsets uncorrected, known to the window " +
+                        shortest(gap_settings.window) + " Da"};
+          if (alkylation_on)
+            header.push_back("alkylation call: " + shift_settings.alkylation_call +
+                             " (-alkylation_out; it decides the fixed Cys modification)");
+          std::string err;
+          if (!FASTag::SearchConfig::writeShiftDecisions(search_shifts_out, header, shifts.decisions, &err))
+          {
+            OPENMS_LOG_ERROR << "Failed writing " << search_shifts_out << ": " << err << std::endl;
+            return CANNOT_WRITE_OUTPUT_FILE;
+          }
+        }
+        OPENMS_LOG_INFO << "Search shifts: " << gap_result.peaks.size() << " gap peaks, " << shifts.variable
+                        << " variable, " << shifts.offsets << " offsets, " << shifts.fixed << " fixed"
+                        << (search_shifts_out.empty() ? std::string() : " -> " + search_shifts_out) << std::endl;
+      }
       // #5, in order: protease check, shortlist, reduced FASTA, engine
       // configuration. The FASTA and the configuration are written only when
       // the placement's tryptic windows fit the run (or -shortlist_force).

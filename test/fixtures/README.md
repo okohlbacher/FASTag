@@ -195,3 +195,19 @@ derive what they need at run time:
 - `indexed_mzml_test` writes `etd_like` (every CID term of the indexed gate
   fixture replaced by ETD) and `etd_paramgroup` (ETD, EThcD and CID in param
   groups and own terms, one filter-string-only spectrum).
+
+## #17 mass-shift fixture (1.12)
+
+`shifts_insilico.mgf` (124 MS2), written by `make_shift_fixture.py
+Ecoli_MS2_small.fasta .` (standard-library Python 3, fixed seed 20261107)
+from the tryptic peptides (after K/R, not before P; 8-20 residues, no C) of
+`Ecoli_MS2_small.fasta`: charge 2, singly charged b2..b(n-1) and y1..y(n-1) at
+exact monoisotopic masses. Each spectrum carries one N-terminal mass shift on
+the precursor and every b ion (y ions unshifted): 0 (40 spectra), +15.994915
+Oxidation (30), +42.010565 Acetyl (20), +1.003355 13C (12), +123.4567
+unexplained (12), -77.7777 unexplained (10). With `-extension 3` and
+`-massgap_min_spectra 2` the run gives five gap peaks, one per rule
+`digest_cli_test` checks (variable, variable, skipped_isotope, offset,
+dropped_engine). Derived from the vendored FASTA only, so the same licence.
+
+sha256: `shifts_insilico.mgf` `bb609510728087057effddcf1fec8b0a52cec4907e2e954cdd287d27cee4d257`.

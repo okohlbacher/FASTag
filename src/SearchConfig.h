@@ -22,6 +22,11 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "Digest.h"
+
+#include <cstddef>
+#include <cstdint>
+#include <map>
 #include <string>
 #include <utility>
 #include <vector>
@@ -108,4 +113,138 @@ namespace FASTag::SearchConfig
   /// or no trypsin in it, is an error.
   MergeResult mergeKeyValueTemplate(const std::string& tmpl,
                                     const std::vector<std::pair<std::string, std::string>>& keys);
+
+  // ---- #17: mass shifts as search-engine configuration --------------------
+  //
+  // The gap peaks of one FD::GapResult (the one -massgap_out reports) become
+  // variable modifications, Comet mass offsets or, for an unalkylated-looking
+  // run, a suggested fixed Cys alkylation in the plan. A candidate list for an
+  // FDR-controlling engine, not an identification.
+  //
+  // Reference frame: a gap is relative to the peptide with the plan's fixed
+  // modifications applied; on the labelled side it contains a fixed terminal
+  // label. Rules, per peak in descending spectra order (ties: |delta|
+  // ascending, then delta):
+  //   0. isotope: within the window of n x 1.00335 (n = 1..3) and closer to it
+  //      than to every single modification -> skipped_isotope; the largest n
+  //      raises the plan's isotope errors;
+  //   1. a fixed terminal label L: a peak at L -> expected_label, at -L ->
+  //      label_incomplete (WARN); a peak explained as L + X goes on as X;
+  //   2. a fixed residue modification F: at +F -> the same Unimod name on K, H
+  //      or the peptide N-term (those ModificationsDB knows, the fixed residue
+  //      left out); at -F -> fixed_mod_questionable (WARN);
+  //   3. one modification -> variable (a SILAC label only when the SILAC call
+  //      is not none, else skipped_silac; a Cys alkylation without a fixed Cys
+  //      modification whose C-containing samples are >= half the run's
+  //      C-containing samples -> fixed, WARN; with #3g's alkylation call given
+  //      (ShiftSettings::alkylation_call) that call decides instead:
+  //      deferred_alkylation_call); already in the plan -> already_searched;
+  //      a called SILAC channel is one unit: all its labels are variable,
+  //      outside max_variable, or none of them (WARN);
+  //   4. a combination, no explanation, or a substitution share > 0.5 ->
+  //      Comet offset at the 4-decimal gap minus the run's calibration bias
+  //      (the spectra-weighted median of centroid - mass over the
+  //      single-modification peaks other than rule-0 isotope peaks, applied
+  //      only beyond ShiftSettings::resolution; Sage, or a negative offset:
+  //      dropped_engine); a combination of exported SILAC labels only ->
+  //      already_searched;
+  //   5. caps: max_variable peaks as variable modifications, max_offsets
+  //      offsets (0 is always first and not counted), 15 Comet slots with the
+  //      plan's own: the rest dropped_cap;
+  //   -search_shifts variable or offsets: what the mode does not export is
+  //      dropped_mode (offsets: rules 2 and 3 export the gap as an offset).
+  // Site expansion (expand_sites): a variable modification of rule 3 gains a
+  // residue with >= site_min_count counted samples and >= site_min_share of the
+  // peak's counted samples that ModificationsDB knows the name on.
+
+  /// The evidence of one histogram row (absorbed neighbour bins included).
+  struct RowEvidence
+  {
+    std::uint64_t spectra = 0;       ///< samples in the row
+    std::uint64_t substitution = 0;  ///< ... interpreted as a substitution (sub:X->Y)
+    std::uint64_t localized = 0;     ///< ... with a localized site
+    std::uint64_t site_counted = 0;  ///< ... that count for site expansion (siteSampleCounts)
+    std::uint64_t with_c = 0;        ///< ... whose placed peptide holds a C
+    std::map<char, std::uint64_t> sites;  ///< residue -> counted samples
+    void add(const RowEvidence& o);
+  };
+  using PeakEvidence = RowEvidence;
+
+  /// A localized sample counts for site expansion when its site is unique
+  /// (ties == 1), explained by at least @p min_ions ions and its region spans
+  /// more than one residue.
+  bool siteSampleCounts(char residue, int score, int ties, int region_len, int min_ions);
+
+  /// The evidence of @p peak: the sum over its member rows (indices into @p rows).
+  PeakEvidence peakEvidence(const FASTag::Digest::GapPeak& peak, const std::vector<RowEvidence>& rows);
+
+  enum class ShiftMode { None, Variable, Offsets, Both };
+  /// none, variable, offsets, both; false for anything else.
+  bool parseShiftMode(const std::string& s, ShiftMode& m);
+
+  struct ShiftSettings
+  {
+    ShiftMode mode = ShiftMode::None;
+    std::string engine = "sage";       ///< sage or comet
+    double tol = 0.02;                 ///< the gap window in Da (FD::GapSettings::window)
+    std::size_t max_variable = 3, max_offsets = 10;
+    bool expand_sites = false;
+    double site_min_share = 0.2;
+    std::uint64_t site_min_count = 10;
+    std::uint64_t c_placements = 0;    ///< delta samples whose peptide holds a C
+    /// A gap centroid's resolution in Da: half the 0.0005 Da delta histogram
+    /// bin. A calibration bias no larger is not applied (ShiftOutcome::bias 0).
+    double resolution = 0.00025;
+    /// #3g's alkylation call when the run makes one: "" = none made (rule 3's
+    /// suggested fixed Cys alkylation applies); a reagent's Unimod name
+    /// (Carbamidomethyl, ...) becomes the fixed Cys modification; "none" or
+    /// "no_call" adds no fixed Cys modification. Either way no peak is
+    /// turned into a fixed modification.
+    std::string alkylation_call;
+  };
+
+  struct ShiftDecision
+  {
+    std::size_t peak = 0;              ///< 1-based, as -massgap_out numbers the peaks
+    double delta = 0.0;
+    std::uint64_t spectra = 0;
+    std::string explanation;           ///< "A + B", or "none"
+    std::string action;
+    std::string mod_id;                ///< the exported modification(s), ';'-joined; "-" for none
+    std::string sites;                 ///< residues / terms of mod_id, ','-joined; "-" for none
+    double exported = 0.0;             ///< mass of the modification or the offset; NaN for none
+    double substitution_share = 0.0;
+    std::uint64_t localized = 0;
+    std::string reason;
+  };
+
+  struct ShiftOutcome
+  {
+    std::vector<ShiftDecision> decisions;  ///< one per peak, in GapResult order
+    std::vector<std::string> warnings, info;
+    int isotope_max = 0;                   ///< largest isotope multiple skipped
+    std::size_t variable = 0, offsets = 0, fixed = 0;  ///< exported entries
+    /// Calibration: measured_bias the spectra-weighted median of centroid -
+    /// mass over the peaks explained by one modification (rule-0 isotope
+    /// peaks excluded); bias the correction subtracted from every offset,
+    /// measured_bias when it exceeds ShiftSettings::resolution, else 0;
+    /// bias_peaks such peaks (0: no correction, residual = the gap window);
+    /// residual the spectra-weighted 90th percentile of their |error - bias|,
+    /// the uncertainty an exported offset keeps.
+    double bias = 0.0, measured_bias = 0.0, residual = 0.0;
+    std::size_t bias_peaks = 0;
+  };
+
+  /// Applies the rules above to @p gaps (with @p evidence aligned to its
+  /// peaks; missing entries count as no evidence), adding to @p plan's
+  /// variable and fixed modifications, mass offsets and isotope errors.
+  /// @p mods and @p combos are the ones the gap result was explained with.
+  ShiftOutcome shiftsToPlan(const FASTag::Digest::GapResult& gaps, const std::vector<PeakEvidence>& evidence,
+                            const std::vector<FASTag::Digest::GapMod>& mods,
+                            const std::vector<FASTag::Digest::Combo>& combos, const ShiftSettings& s,
+                            SearchPlan& plan);
+
+  /// The -search_shifts_out TSV: '# ' header lines, then one row per decision.
+  bool writeShiftDecisions(const std::string& path, const std::vector<std::string>& header,
+                           const std::vector<ShiftDecision>& decisions, std::string* err);
 }
