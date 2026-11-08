@@ -55,6 +55,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cmath>
+#include <cstdio>
 #include <iostream>
 #include <regex>
 #include <set>
@@ -833,8 +834,13 @@ int main(int argc, char** argv)
           ++rows;
           if (r.rank >= tags.size()) { check(false, "(d) rank missing"); continue; }
           const FASTag::Tag& t = tags[r.rank];
+          char got[256];
+          std::snprintf(got, sizeof got, ": %s/%d E %.17g p_c %.17g, 1.11 %s/%d E %.17g p_c %.17g (dE/E %.3g, dp_c %.3g)",
+                        t.seq.c_str(), t.charge, t.evalue, t.p_complement, r.seq, r.charge, r.evalue, r.p_complement,
+                        std::fabs(t.evalue - r.evalue) / std::max(1e-300, std::fabs(r.evalue)),
+                        std::fabs(t.p_complement - r.p_complement));
           check(t.seq == r.seq && t.charge == r.charge && t.evalue == r.evalue && t.p_complement == r.p_complement,
-                "(d) case " + std::to_string(ci) + " rank " + std::to_string(r.rank) + " equals 1.11 bit for bit");
+                "(d) case " + std::to_string(ci) + " rank " + std::to_string(r.rank) + " equals 1.11 bit for bit" + got);
           check(t.ion_series == IS::Series::BY, "(d) b/y tags");
         }
       }
