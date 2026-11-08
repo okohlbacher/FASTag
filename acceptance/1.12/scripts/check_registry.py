@@ -11,7 +11,7 @@ Usage: check_registry.py <acceptance dir> [registry.tsv]   (exit 0 = pass, 1 = m
 import csv, hashlib, re, sys
 
 A = sys.argv[1]; REG = sys.argv[2] if len(sys.argv) > 2 else f"{A}/validation-registry.tsv"
-LONG = re.compile(r"(CFG-[0-9A-Za-z]+(?:-[0-9A-Za-z]+)?) \[([a-z_]+)\](?:(?!CFG-[0-9A-Za-z-]+ \[).)*?param_hash ([0-9a-f]{64})")
+LONG = re.compile(r"(CFG-[0-9A-Za-z]+(?:-[0-9A-Za-z]+)*) \[([a-z0-9_.]+)\](?:(?!CFG-[0-9A-Za-z-]+ \[).)*?param_hash ([0-9a-f]{64})")
 def rd(p):
     with open(p) as f:
         return list(csv.DictReader((l for l in f if not l.startswith("# ")), delimiter="\t"))
