@@ -1,0 +1,27 @@
+# FASTag 1.12.0 mass shifts for -search_config_out: candidates for an FDR-controlling engine, NOT identifications.
+# input: run.mzML; database: Homo_sapiens.fasta; engine: sage; mode: variable
+# settings: window 0.02 Da, max_variable 3, max_offsets 10, expand_sites no
+# gap peaks: 21; exported: 3 variable, 0 offsets, 0 fixed; isotope errors 0..2
+# calibration: offsets corrected by the bias 0.0075 Da, the spectra-weighted median of centroid - mass over 10 single-modification peaks; residual 0.0034 Da (90 % of their spectra)
+peak	delta	spectra	explanation	action	mod_id	sites	exported	substitution_share	localized	reason
+1	79.9738	581	Phospho	variable	Phospho (S)	S	79.9663	0.0000	0	Phospho
+2	1.0104	677	none	skipped_isotope	-	-	-	0.0000	0	1 x 13C spacing: a precursor isotope error
+3	43.0124	226	Carbamyl	variable	Carbamyl (N-term)	N-term	43.0058	0.0133	0	Carbamyl
+4	31.9954	113	Dioxidation	variable	Dioxidation (M)	M	31.9898	0.0265	0	Dioxidation
+5	80.9790	227	Cation:K + Carbamyl	dropped_mode	-	-	-	0.0000	0	combination; -search_shifts variable exports no offsets
+6	0.9865	67	Deamidated	dropped_mode	-	-	-	0.6119	0	substitution share 0.61; -search_shifts variable exports no offsets
+7	16.0027	239	Oxidation	already_searched	Oxidation (M)	M	15.9949	0.0084	0	the plan searches Oxidation (M) already
+8	21.9860	69	Cation:Na	dropped_cap	Cation:Na (D)	D	21.9819	0.0000	0	-shift_max_variable 3 reached (Cation:Na)
+9	-17.0200	96	Gln->pyro-Glu	dropped_cap	Gln->pyro-Glu (N-term Q)	N-term Q	-17.0265	0.0000	0	-shift_max_variable 3 reached (Gln->pyro-Glu)
+10	17.0067	158	none	dropped_mode	-	-	-	0.0190	0	unexplained; -search_shifts variable exports no offsets
+11	-71.0291	71	none	dropped_mode	-	-	-	0.0000	0	unexplained; -search_shifts variable exports no offsets
+12	2.0133	217	none	skipped_isotope	-	-	-	0.0000	0	2 x 13C spacing: a precursor isotope error
+13	37.9532	51	Cation:K	dropped_cap	Cation:K (D)	D	37.9559	0.0000	0	-shift_max_variable 3 reached (Cation:K)
+14	18.0322	105	Methyl + Label:2H(4)	dropped_mode	-	-	-	0.0476	0	combination; -search_shifts variable exports no offsets
+15	19.0478	52	none	dropped_mode	-	-	-	0.0000	0	unexplained; -search_shifts variable exports no offsets
+16	-89.0221	78	Met-loss+Acetyl	dropped_cap	Met-loss+Acetyl (Protein N-term M)	Protein N-term M	-89.0299	0.0000	0	-shift_max_variable 3 reached (Met-loss+Acetyl)
+17	1.0347	39	none	dropped_mode	-	-	-	0.0000	0	unexplained; -search_shifts variable exports no offsets
+18	95.9685	46	Oxidation + Phospho	dropped_mode	-	-	-	0.0000	0	combination; -search_shifts variable exports no offsets
+19	-18.0042	46	Glu->pyro-Glu	dropped_cap	Glu->pyro-Glu (N-term E)	N-term E	-18.0106	0.0000	0	-shift_max_variable 3 reached (Glu->pyro-Glu)
+20	17.0358	46	none	dropped_mode	-	-	-	0.0000	0	unexplained; -search_shifts variable exports no offsets
+21	33.0043	40	none	dropped_mode	-	-	-	0.0000	0	unexplained; -search_shifts variable exports no offsets

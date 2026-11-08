@@ -1,0 +1,41 @@
+run	arm	engine	params	result	fasta	ref
+PXD003531	R_0.01_1	sage	max_evalue 0.01 min_spectra 1	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_0.01_1/sage_out/results.sage.tsv	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_0.01_1/red.fasta	F
+PXD003531	R_0.01_1	comet	max_evalue 0.01 min_spectra 1	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_0.01_1/comet.txt	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_0.01_1/red.fasta	F
+PXD003531	R_0.01_2	sage	max_evalue 0.01 min_spectra 2	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_0.01_2/sage_out/results.sage.tsv	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_0.01_2/red.fasta	F
+PXD003531	R_0.01_2	comet	max_evalue 0.01 min_spectra 2	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_0.01_2/comet.txt	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_0.01_2/red.fasta	F
+PXD003531	R_0.01_3	sage	max_evalue 0.01 min_spectra 3	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_0.01_3/sage_out/results.sage.tsv	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_0.01_3/red.fasta	F
+PXD003531	R_0.01_3	comet	max_evalue 0.01 min_spectra 3	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_0.01_3/comet.txt	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_0.01_3/red.fasta	F
+PXD003531	R_0.1_1	sage	max_evalue 0.1 min_spectra 1	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_0.1_1/sage_out/results.sage.tsv	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_0.1_1/red.fasta	F
+PXD003531	R_0.1_1	comet	max_evalue 0.1 min_spectra 1	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_0.1_1/comet.txt	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_0.1_1/red.fasta	F
+PXD003531	R_0.1_2	sage	max_evalue 0.1 min_spectra 2	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_0.1_2/sage_out/results.sage.tsv	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_0.1_2/red.fasta	F
+PXD003531	R_0.1_2	comet	max_evalue 0.1 min_spectra 2	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_0.1_2/comet.txt	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_0.1_2/red.fasta	F
+PXD003531	R_0.1_3	sage	max_evalue 0.1 min_spectra 3	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_0.1_3/sage_out/results.sage.tsv	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_0.1_3/red.fasta	F
+PXD003531	R_0.1_3	comet	max_evalue 0.1 min_spectra 3	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_0.1_3/comet.txt	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_0.1_3/red.fasta	F
+PXD003531	R_1_1	sage	max_evalue 1 min_spectra 1	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_1_1/sage_out/results.sage.tsv	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_1_1/red.fasta	F
+PXD003531	R_1_1	comet	max_evalue 1 min_spectra 1	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_1_1/comet.txt	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_1_1/red.fasta	F
+PXD003531	R_1_2	sage	max_evalue 1 min_spectra 2	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_1_2/sage_out/results.sage.tsv	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_1_2/red.fasta	F
+PXD003531	R_1_2	comet	max_evalue 1 min_spectra 2	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_1_2/comet.txt	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_1_2/red.fasta	F
+PXD003531	R_1_3	sage	max_evalue 1 min_spectra 3	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_1_3/sage_out/results.sage.tsv	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_1_3/red.fasta	F
+PXD003531	R_1_3	comet	max_evalue 1 min_spectra 3	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_1_3/comet.txt	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/R_1_3/red.fasta	F
+PXD003531	F	sage	full ref50+cRAP	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/F/sage_out/results.sage.tsv	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/F/full.fasta	-
+PXD003531	F	comet	full ref50+cRAP	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/F/comet.txt	/scratch/kohlbach/fastag112-engines/dev05/PXD003531/F/full.fasta	-
+PXD017035	R_0.01_1	sage	max_evalue 0.01 min_spectra 1	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_0.01_1/sage_out/results.sage.tsv	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_0.01_1/red.fasta	F
+PXD017035	R_0.01_1	comet	max_evalue 0.01 min_spectra 1	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_0.01_1/comet.txt	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_0.01_1/red.fasta	F
+PXD017035	R_0.01_2	sage	max_evalue 0.01 min_spectra 2	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_0.01_2/sage_out/results.sage.tsv	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_0.01_2/red.fasta	F
+PXD017035	R_0.01_2	comet	max_evalue 0.01 min_spectra 2	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_0.01_2/comet.txt	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_0.01_2/red.fasta	F
+PXD017035	R_0.01_3	sage	max_evalue 0.01 min_spectra 3	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_0.01_3/sage_out/results.sage.tsv	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_0.01_3/red.fasta	F
+PXD017035	R_0.01_3	comet	max_evalue 0.01 min_spectra 3	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_0.01_3/comet.txt	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_0.01_3/red.fasta	F
+PXD017035	R_0.1_1	sage	max_evalue 0.1 min_spectra 1	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_0.1_1/sage_out/results.sage.tsv	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_0.1_1/red.fasta	F
+PXD017035	R_0.1_1	comet	max_evalue 0.1 min_spectra 1	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_0.1_1/comet.txt	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_0.1_1/red.fasta	F
+PXD017035	R_0.1_2	sage	max_evalue 0.1 min_spectra 2	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_0.1_2/sage_out/results.sage.tsv	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_0.1_2/red.fasta	F
+PXD017035	R_0.1_2	comet	max_evalue 0.1 min_spectra 2	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_0.1_2/comet.txt	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_0.1_2/red.fasta	F
+PXD017035	R_0.1_3	sage	max_evalue 0.1 min_spectra 3	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_0.1_3/sage_out/results.sage.tsv	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_0.1_3/red.fasta	F
+PXD017035	R_0.1_3	comet	max_evalue 0.1 min_spectra 3	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_0.1_3/comet.txt	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_0.1_3/red.fasta	F
+PXD017035	R_1_1	sage	max_evalue 1 min_spectra 1	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_1_1/sage_out/results.sage.tsv	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_1_1/red.fasta	F
+PXD017035	R_1_1	comet	max_evalue 1 min_spectra 1	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_1_1/comet.txt	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_1_1/red.fasta	F
+PXD017035	R_1_2	sage	max_evalue 1 min_spectra 2	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_1_2/sage_out/results.sage.tsv	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_1_2/red.fasta	F
+PXD017035	R_1_2	comet	max_evalue 1 min_spectra 2	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_1_2/comet.txt	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_1_2/red.fasta	F
+PXD017035	R_1_3	sage	max_evalue 1 min_spectra 3	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_1_3/sage_out/results.sage.tsv	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_1_3/red.fasta	F
+PXD017035	R_1_3	comet	max_evalue 1 min_spectra 3	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_1_3/comet.txt	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/R_1_3/red.fasta	F
+PXD017035	F	sage	full ref50+cRAP	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/F/sage_out/results.sage.tsv	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/F/full.fasta	-
+PXD017035	F	comet	full ref50+cRAP	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/F/comet.txt	/scratch/kohlbach/fastag112-engines/dev05/PXD017035/F/full.fasta	-

@@ -1,0 +1,12 @@
+run	arm	engine	params	result	fasta	ref
+PXD003531	base	sage	closed	/scratch/kohlbach/fastag112-engines/dev17/d17/base/sage_out/results.sage.tsv	/scratch/kohlbach/gate-in/db/Homo_sapiens.fasta	-
+PXD003531	base	comet	closed	/scratch/kohlbach/fastag112-engines/dev17/d17/base/comet.txt	/scratch/kohlbach/gate-in/db/Homo_sapiens.fasta	-
+PXD003531	cand_3_10	comet	search_shifts both shift_max_variable 3 shift_max_offsets 10	/scratch/kohlbach/fastag112-engines/dev17/d17/cand_3_10/comet.txt	/scratch/kohlbach/gate-in/db/Homo_sapiens.fasta	base
+PXD003531	cand_3_10	sage	search_shifts variable shift_max_variable 3	/scratch/kohlbach/fastag112-engines/dev17/d17/cand_3_10/sage_out/results.sage.tsv	/scratch/kohlbach/gate-in/db/Homo_sapiens.fasta	base
+PXD003531	cand_1_10	comet	search_shifts both shift_max_variable 1 shift_max_offsets 10	/scratch/kohlbach/fastag112-engines/dev17/d17/cand_1_10/comet.txt	/scratch/kohlbach/gate-in/db/Homo_sapiens.fasta	base
+PXD003531	cand_1_10	sage	search_shifts variable shift_max_variable 1	/scratch/kohlbach/fastag112-engines/dev17/d17/cand_1_10/sage_out/results.sage.tsv	/scratch/kohlbach/gate-in/db/Homo_sapiens.fasta	base
+PXD003531	cand_3_3	comet	search_shifts both shift_max_variable 3 shift_max_offsets 3	/scratch/kohlbach/fastag112-engines/dev17/d17/cand_3_3/comet.txt	/scratch/kohlbach/gate-in/db/Homo_sapiens.fasta	base
+PXD003531	off_NEG	comet	base + mass_offsets 0.0 -17.026549	/scratch/kohlbach/fastag112-engines/dev17/d17/off_NEG/comet.txt	/scratch/kohlbach/gate-in/db/Homo_sapiens.fasta	base
+PXD003531	base_iso2	sage	closed + search_isotope_errors 2 (diagnostic)	/scratch/kohlbach/fastag112-engines/dev17/d17/base_iso2/sage_out/results.sage.tsv	/scratch/kohlbach/gate-in/db/Homo_sapiens.fasta	base
+PXD003531	base_iso2	comet	closed + search_isotope_errors 2 (diagnostic)	/scratch/kohlbach/fastag112-engines/dev17/d17/base_iso2/comet.txt	/scratch/kohlbach/gate-in/db/Homo_sapiens.fasta	base
+PXD003531	off_POS	comet	base + mass_offsets 0.0 17.026549	/scratch/kohlbach/fastag112-engines/dev17/d17/off_POS/comet.txt	/scratch/kohlbach/gate-in/db/Homo_sapiens.fasta	base

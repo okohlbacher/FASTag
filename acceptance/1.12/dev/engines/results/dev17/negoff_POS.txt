@@ -1,0 +1,11 @@
+target_psms_1pct	4219
+offset -17.026549	psms 0	of_which_Nterm_Q 0
+offset +17.026549	psms 399	of_which_Nterm_Q 11
+diff +0.01	psms 2723
+diff +0.00	psms 548
+diff +0.02	psms 415
+diff +17.01	psms 170
+diff +17.02	psms 103
+diff +17.04	psms 76
+diff +17.03	psms 60
+diff +0.03	psms 33

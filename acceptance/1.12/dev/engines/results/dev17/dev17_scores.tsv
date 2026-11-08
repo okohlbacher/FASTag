@@ -1,0 +1,12 @@
+run	arm	engine	params	psm_t	psm_e	fdp	fdp_ub	pep_t	residues	db_recall	retained	reduction	psm_gain	ref
+PXD003531	base	sage	closed	3930	24	0.0121	0.0171	2815	11414637	-	-	-	-	-
+PXD003531	base	comet	closed	3730	17	0.0091	0.0136	2647	11414637	-	-	-	-	-
+PXD003531	cand_3_10	comet	search_shifts both shift_max_variable 3 shift_max_offsets 10	10360	70	0.0134	0.0164	5085	11414637	1.0000	0.9826	1.00	+1.7775	base
+PXD003531	cand_3_10	sage	search_shifts variable shift_max_variable 3	9964	64	0.0128	0.0157	5451	11414637	1.0000	0.9904	1.00	+1.5354	base
+PXD003531	cand_1_10	comet	search_shifts both shift_max_variable 1 shift_max_offsets 10	9661	51	0.0105	0.0133	4985	11414637	1.0000	0.9853	1.00	+1.5901	base
+PXD003531	cand_1_10	sage	search_shifts variable shift_max_variable 1	9162	59	0.0128	0.0159	5293	11414637	1.0000	0.9940	1.00	+1.3313	base
+PXD003531	cand_3_3	comet	search_shifts both shift_max_variable 3 shift_max_offsets 3	9855	59	0.0119	0.0148	5078	11414637	1.0000	0.9868	1.00	+1.6421	base
+PXD003531	off_NEG	comet	base + mass_offsets 0.0 -17.026549	3730	17	0.0091	0.0136	2647	11414637	1.0000	1.0000	1.00	+0.0000	base
+PXD003531	base_iso2	sage	closed + search_isotope_errors 2 (diagnostic)	6022	41	0.0135	0.0175	3578	11414637	1.0000	0.9947	1.00	+0.5323	base
+PXD003531	base_iso2	comet	closed + search_isotope_errors 2 (diagnostic)	5808	42	0.0144	0.0186	3461	11414637	1.0000	0.9962	1.00	+0.5571	base
+PXD003531	off_POS	comet	base + mass_offsets 0.0 17.026549	4219	30	0.0141	0.0191	2792	11414637	1.0000	0.9966	1.00	+0.1311	base

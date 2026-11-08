@@ -21,6 +21,7 @@ T = {"species_call.tsv": "8aa40c29d3440d2bde29941dab85426c644c6aeac68487f1403fd6
      "fitted:digest_models_v2.tsv": "51d5d582c61856c16908d3fe8cf7337c92b859be91aafc7ca754fdba169e28b4",
      "fitted:digest_calibration.tsv": "901989f3d90915a1a120ad945018913c35870c81bae0c596e0a149a557d9ed2c",
      "fitted:species_call.tsv": "c556d587297fddc20fe0128cb181d742c776936c0fa015b867a527d526bc305f",
+     "comet.params.new": "0b6abd4c7415a9289d858d3c8fc84031c31d62acf10f174a8123070ebd8fb8fc",   # comet -p, Comet 2026.03.0 (dev/engines)
      "tax_k7.taxdb": "34427bba2c3ba3240805d4e5266443fcdc4708e0131eb96ea4dfbb4dda771a4f"}
 C = [
  # id, item, arm, options, tables, status, note
@@ -41,8 +42,8 @@ C = [
   "digest_models.tsv,massgap_mods.tsv", "pending_scorer", "options fixed with the DEV regeneration protocol (PREREG-chem.md)"),
  ("CFG-04", "#4", "harness", "fastag-bench unidentified (feat/f4-tag-accuracy-harness 7ef0f33) with FASTag at defaults; RC tags at defaults equal 1.11.0 (BASELINE IDENTITY PASS)", "",
   "blocked_user_signoff", "margin not frozen; F4-10, F4-11, F4-12 amendments need the user's sign-off before the test split is opened"),
- ("CFG-05", "#5", "candidate", "-shortlist_out -fasta_out -shortlist_background <host+cRAP> -search_config_out -search_engine sage|comet (shortlist defaults: min_spectra 2, max_evalue 0.1, top 0, parsimony as doc/SHORTLIST.md at a117801)",
-  "", "pending_dev", "settings are frozen on dev PXD003531/PXD017035 and written to doc/SHORTLIST.md before held-out runs (PLAN-handoff #5); engine acceptance A5-02 on real data not run"),
+ ("CFG-05", "#5", "candidate", "-tag_length 4 -extension 6 -variable_modifications 'Oxidation (M)' (Carbamidomethyl (C) fixed default) -shortlist_out -fasta_out -shortlist_background <host+cRAP> -shortlist_max_evalue 1 -shortlist_min_spectra 1 -shortlist_parsimony none -shortlist_top 0 -search_config_out -search_engine sage|comet (-search_config_template <comet.params.new> for comet); engine-config defaults (precursor 10 ppm, fragment 20 ppm, isotope errors 0, 1 missed cleavage); DEV freeze dev/engines/FREEZE-05-17.md",
+  "comet.params.new", "pending_prereg", "DEV freeze done (dev/engines/FREEZE-05-17.md; DEV miss: no grid point meets DB recall 0.95 / retained 0.90 in-sample, frozen point 1/1 by the rule); A5-02 PASS; no PREREG-item05.md (truth DB per run, arms incl. selection-symmetric, denominators, scorer sha256)"),
  ("CFG-06-base", "#6", "baseline", "RC defaults (-unknown_charge assume2)", "", "pending_prereg", "no PREREG-item06.md (E6-01 charge truth, cells, denominator, scorer sha256)"),
  ("CFG-06-cand", "#6", "candidate", "-unknown_charge infer (charge_min 2, charge_max 4, charge_infer_margin 2, isotope_error 0)", "",
   "pending_prereg", "no PREREG-item06.md; E6-01 dev tuning not run; the RC constants are the frozen values (a tuned constant would need a new RC)"),
@@ -54,10 +55,10 @@ C = [
   "not_in_sprint", "PLAN-qc #11 phase C (F7) is outside the 1.12 sprint; F7-test/final manifests registered only"),
  ("CFG-15B-base", "#15B", "baseline", "RC defaults (-ion_series by)", "", "pending_prereg", "no PREREG-item15B.md (MSFragger c/z truth search per run, z definition checked on PXD060724, cells, denominator, scorer sha256)"),
  ("CFG-15B-cand", "#15B", "candidate", "-ion_series auto", "", "pending_prereg", "no PREREG-item15B.md; truth: MSFragger c/z 1% PSM FDR with the z definition verified on PXD060724 (dev) first"),
- ("CFG-17-base", "#17", "baseline", "closed search (Carbamidomethyl C fixed, Oxidation M variable); FASTag -search_config_out without -search_shifts", "", "pending_dev",
-  "engine settings frozen on dev PXD003531 first (PLAN-handoff #17)"),
- ("CFG-17-cand", "#17", "candidate", "-search_shifts both (Comet; variable for Sage) defaults: shift_max_variable 3, shift_max_offsets 10, no site expansion", "massgap_mods.tsv",
-  "pending_dev", "engine settings frozen on dev PXD003531 first; A5-02 engine acceptance not run"),
+ ("CFG-17-base", "#17", "baseline", "-tag_length 4 -extension 6 -variable_modifications 'Oxidation (M)' (Carbamidomethyl (C) fixed default) -search_config_out -search_engine sage|comet (-search_config_template <comet.params.new> for comet), no -search_shifts: closed search, isotope errors 0, precursor 10 ppm, fragment 20 ppm; DEV freeze dev/engines/FREEZE-05-17.md",
+  "comet.params.new", "pending_prereg", "DEV freeze done (PXD003531); A5-02 PASS; no PREREG-item17.md (truth DB per run, entrapment, MSFragger+PTM-Shepherd top-10 reference, denominators, scorer sha256)"),
+ ("CFG-17-cand", "#17", "candidate", "CFG-17-base + -search_shifts both (comet) | variable (sage), -shift_max_variable 3 -shift_max_offsets 10, no site expansion; DEV freeze dev/engines/FREEZE-05-17.md",
+  "comet.params.new,massgap_mods.tsv", "pending_prereg", "DEV freeze done (PXD003531: RC defaults best, Sage +154 %, Comet +178 % PSMs vs closed at FDP <= 1.34 %); A5-02 PASS; negative Comet offsets ignored by Comet 2026.03.0 (dropped by the RC, nothing lost); no PREREG-item17.md"),
 ]
 with open(sys.argv[1], "w") as o:
     o.write("config\titem\tarm\tbinary_sha256\tbundle_sha256sums\toptions\ttables\tparam_hash\tstatus\tnote\n")

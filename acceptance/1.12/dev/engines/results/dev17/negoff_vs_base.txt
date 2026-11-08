@@ -1,0 +1,1 @@
+off_NEG comet.txt rows byte-identical to base comet.txt (header line differs only in run name/time)
