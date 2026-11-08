@@ -17,7 +17,7 @@ Each config below is scored exactly once on the held-out set; nothing is tuned o
 | nodes.dmp / names.dmp | d20f4f5b...cdcecf / 397b70d7...cb2b (data/taxonomy at a117801) |
 | species_call.tsv at a117801 | 8aa40c29d3440d2bde29941dab85426c644c6aeac68487f1403fd653ce2723bf, **PROVISIONAL** (training_sha256 none) |
 | taxdb | TO FILL (the index the DEV runs are regenerated with; path and sha256) |
-| Truth search | Sage v0.14.7 (data, /ceph/ibmi/abi/oliver/opt/sage-0.14.7), ref50.fasta sha256 2bc7295c... (full value TO FILL) |
+| Truth search | Sage v0.14.7 (data, /ceph/ibmi/abi/oliver/opt/sage-0.14.7), /ceph/ibmi/abi/oliver/jpr-bench/species/ref50.fasta sha256 2bc7295c31bcb4643a59cd0dc8fdb0a28f74d8b47989902788eaa10d2d328626 |
 | Scoring script | TO FILL (path in fastag-bench, commit, sha256) |
 
 Defaults in force: those of the RC (1.11 defaults plus #7 refuse). Decision 2 of PLAN-INTEGRATION section 8: the
