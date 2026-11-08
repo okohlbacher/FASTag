@@ -52,7 +52,7 @@ NI_MARGIN = -1.0       # points, lower bound must be above
 NI_POINT = -0.5        # points, point estimate must be above
 MIN_CLUSTERS = 200
 FDR = 0.01
-INFO_FLOOR_PCT = None   # set in amendment 1 (PREREG-item02.md), from DEV ion-trap data only
+INFO_FLOOR_PCT = 1.8    # amendment 1 (PREREG-item02.md): half the lowest powered DEV ion-trap reference cell (PXD001819, 0.5 Da: L5_nodeiso z3 3.678%), rounded down to 0.1
 IT05_SUFFIX = "-it05"
 
 

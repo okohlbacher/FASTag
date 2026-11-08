@@ -1,5 +1,8 @@
 # PREREG-item02: #2 complement rules (CFG-02-cand against CFG-02-base)
 
+**Amendment 1 (round 3, 2026-11-08) at the end of this file supersedes the provisional rules below. CFG-02-base,
+CFG-02-cand and their 0.5 Da ion-trap twins are `frozen`.**
+
 Status 2026-11-08: **protocol fixed; not run, not scored.** This file fixes the truth search per run, the cells and
 their pooling, the denominator and the scorer (README, scoring-protocol gate). Status of CFG-02-base and CFG-02-cand:
 **`blocked_user_signoff`**, not `frozen`: two open user decisions change what this protocol scores (release
@@ -120,3 +123,89 @@ ion-trap MS2) in all six cells with the RC bundle, against the paper harness's S
 fail, e.g. L5_default z3 point -0.47 with Holm bound -1.13, and every 4+ cell is underpowered, 106 and 169 clusters;
 (ii) point +0.02, FAIL; (iii) no timsTOF run, INCONCLUSIVE; (iv) NOT MEASURED). This exercises the cell, Holm and
 bootstrap code paths end to end. DEV numbers, not a #2 result.
+
+
+## Amendment 1 (round 3, 2026-11-08): ion-trap cells at 0.5 Da, revised sets, informativeness floor
+
+Decisions 2 and 3 of `DECISIONS-2026-11-08.md`. This amendment replaces the provisional rules above wherever they
+differ. It is committed together with the configs set to `frozen` in `frozen-configs.tsv`, before any held-out run.
+Nothing has been run or scored.
+
+**Configs.** Each arm has two frozen configs. The 20 ppm config is used on the high-resolution runs. Its 0.5 Da twin
+is used on the runs of the ion_trap set. The twin has the same option string plus `-fragment_tolerance 0.5
+-fragment_tolerance_unit Da`, and nothing else differs.
+
+| Arm | high-resolution runs | ion_trap runs |
+|---|---|---|
+| baseline | CFG-02-base `caa9e94e553ca38298013f20049118f8ef339b130679fe28ef38531625046cb6` | CFG-02-base-it05 `78cdc4fda54712b3031a072cf62935f0afd6058196b76be5bbdf88e37b60fd46` |
+| candidate | CFG-02-cand `ca907ff64dad8a861dc143c34a100b98cdf5caaad338a7dc2f8ba1840a92ad13` | CFG-02-cand-it05 `8316ac758d4156248eb4bd7972af9b15742db74b0a28a29964ca095e0212125f` |
+
+Each of the four configs is scored exactly once, the 20 ppm ones on the high-resolution sets, the twins on the
+ion_trap set. Run directories are `runs/<CFG>/...` for the high-resolution runs and `runs/<CFG>-it05/...` for the
+ion_trap runs (`acclib.arm_dir`). The cell options (`-tag_length`, `-no_deisotope`) are added as before. The truth
+search is unchanged: its ion-trap rows were already 0.5 Da.
+
+**Runs.**
+- H1 is `manifests/item02-H1-r2.tsv` (`efa4e16e2cae451c529f74b2cbdad3c58bbf54f17babd72d56470d86f6de8b78`, HO-02-H1-r2), with 13 runs: astral 3 (PXD066944,
+  PXD070049, PXD074582), ion_trap 6 (PXD000806, PXD001473, PXD001540, PXD001739, PXD002429, PXD003397), qe 1
+  (PXD069528, Q Exactive, PRIDE) and timstof 3. PXD001540 is stratum ion_trap there. `item02-H1` is not scored.
+- The H2 reserve is `item02-H2` (unchanged) plus `manifests/item02-H2r.tsv` (`cf90aeeb32eb5cfcd23298854f58005b34ff0c640631a8f95f8b61dd92801338`, HO-02-H2r). The
+  H2r runs are Astral PXD055983 (one run, underpowered) and timsTOF PXD070494 and PXD081146. They come from PRIDE,
+  a recorded plan deviation.
+- H2 is still used only to confirm a variant chosen after an H1 failure.
+- Truth rows for the new runs are in `truth/item02.tsv` (manifests `item02-H1-r2`, `item02-H2r`). They follow
+  PRIDE, because the new runs have no SDRF:
+  - PXD069528: mouse, CAM static (2-chloroacetamide), Trypsin.
+  - PXD055983: yeast, CAM static, Trypsin/P.
+  - PXD070494: human, alkylation not stated, so CAM variable; Trypsin; precursor 20 ppm.
+  - PXD081146: mouse, CAM static, Trypsin, precursor 20 ppm.
+
+**Cells, denominator.**
+- The cells are unchanged in form: set x profile x length x charge, now over 4 sets (astral, ion_trap, qe,
+  timstof) = 72 cells.
+- The qe set has a single run, so some of its cells (4+ certainly) may be underpowered. Under (i) such a cell is
+  inconclusive and blocks, as before.
+- The denominator is unchanged: every truth spectrum of the run, in both arms.
+- (ii) pools astral + ion_trap, with ion_trap read from the twins. (iii) timsTOF is unchanged.
+
+| Scorer file (scorers/) | sha256 |
+|---|---|
+| `acclib.py` | `7dd85f2888b4b082aae2762ca9ff4a8464adf1b811dafad01caf1551416ef15a` |
+| `score_item02.py` | `f2693089ba38c71a3d0ab5984b2700348d16ef6a5014149c1e92c7dcba52900a` |
+| `score_item06.py` | `ef24599a4e978e3ed67f100333fd4cdf10c5b48f59eb5470248a1a8ab52ecc72` |
+| `score_item09.py` | `b0ef694172e5bb64e0487233819d663389cac0c4c3c540549bf2f8eef88cd3ca` |
+| `truth_config.py` (unchanged) | `899e387c2d08e02c371f7c1318994c0ecc3e0f208d7bce2eab740b0c25c66ec5` |
+| `truth/item02.tsv` | `42920f3b4d4b27ce72efc998aa12d156aaafcfd081fc0f350e916c9e8aba720e` |
+| `truth/item09.tsv` (unchanged) | `fb13f923b75fa571c29aceab8ea7274bfc63b74b139b5539633222d3933b5b4b` |
+| `strip_charge.py` (unchanged) | `2b4e0c3753f7800c056f1be36ea7ba1872ccbec9ccdb4477a01adeaf561b34ab` |
+| `tests/run_dev_tests_r3.sh` | `818e8dc4f1896d51d91287b8d2f2225f2addbc3aae53db2ba8dbfdb31317eb3e` |
+
+The fastag_bench files `score.py` (`e2b8788a78f1176169f617c01b2e17f21578b8909f7c79b33d23ae1b71075f79`) and
+`parsers.py` (`01e27548bcae489d3f205960730c8bc36624e16935ea5df0bec5a6a04ea51f49`) are unchanged. Commit f93b33c
+already carried the scorer edits of this amendment, before SHA256SUMS and this text were updated. Nothing was run in
+between. The hashes above are the binding ones.
+
+**Informativeness floor (audit finding).** Non-inferiority passed on cells where both arms are near zero. The scorer
+now marks a cell `uninformative` when the reference (baseline) arm's rank-1 correct rate in that cell is below
+**1.8%** (`acclib.INFO_FLOOR_PCT`). Such a cell is not tested, is not in the Holm family, and never counts as a pass.
+Unless another cell fails, it makes the endpoint INCONCLUSIVE. The floor applies to every cell of the endpoint, in
+every set.
+
+The floor was derived from DEV ion-trap data only: the #2/#6 DEV run PXD001819 (LTQ Orbitrap Velos, ion-trap MS2),
+tagged at 0.5 Da by CFG-02-base-it05 in the 18 cells of #2, scored against its paper-harness Sage truth
+(`tests/run_dev_tests_r3.sh`; scored first without a floor,
+`tests/dev_results_r3/floor_input_cells_i_nofloor.tsv`).
+- The rule: one half of the lowest reference rate among the DEV ion-trap cells with at least 200 clusters, rounded
+  down to 0.1 point.
+- The lowest such cell is L5_nodeiso z3 at 3.678% (1,088 clusters), which gives 1.8%.
+- The other powered DEV ion-trap cells at 0.5 Da are L3-L5 z2 at 18.8-35.3% and z3 at 3.7-6.9%. The z4+ cells
+  have 106 clusters and are at 0.2-0.4%.
+- At 20 ppm, 16 of the 18 DEV ion-trap cells are below 1.8% (`tests/dev_results/item02/cells_i.tsv`). These are
+  the cells the audit named.
+- No held-out file was read.
+
+**DEV test (DEV outputs only).** `tests/dev_results_r3/item02.txt` and `dev_results_r3/item02/`, with PXD001819 at
+0.5 Da and PXD003531 at 20 ppm. The verdict is FAIL. The ion-trap z2/z3 cells differ by 0.0 to +0.3 points and pass.
+The ion-trap z4+ cells are `uninformative`. The FAIL comes from three qe z3 cells (L4_default, L5_default and L5_nodeiso; the 20 ppm runs of the first DEV
+test). These are DEV
+numbers, not a #2 result.

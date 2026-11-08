@@ -1,5 +1,8 @@
 # PREREG-item09: #9 profile centroiding (CFG-09-cand against CFG-09-base)
 
+**Amendment 1 (round 3, 2026-11-08) at the end of this file: the ion_trap stratum is scored with 0.5 Da twins,
+and an informativeness floor applies.**
+
 Status 2026-11-08: **protocol fixed; CFG-09-base and CFG-09-cand `frozen` in the commit that adds this file. Not
 run, not scored.** It closes the four gaps of `output/features-1.12/heldout-1.12/item09.md` (truth search per run,
 the run without a truth database, the cells, the scorer). Each config is scored exactly once, on data or on BinAC2
@@ -96,3 +99,62 @@ No profile DEV run has a Sage truth, so the test uses the centroided #2 DEV runs
 stand-ins in both arms (centroided input: `legacy` and `auto` tag the same). Expected and found: difference 0 in
 every cell (pass where powered), B2 PASS, B1 INCONCLUSIVE because every 4+ cell has fewer than 200 clusters (106,
 169). Result: `scorers/tests/dev_results/item09.txt`, `dev_results/item09/`.
+
+
+## Amendment 1 (round 3, 2026-11-08): ion-trap stratum at 0.5 Da, informativeness floor
+
+Decision 2 of `DECISIONS-2026-11-08.md`. It is committed before any #9 run. CFG-09-base and CFG-09-cand were
+`frozen` by this file and have not been run or scored. They stay frozen with their option strings unchanged. From
+now on they are scored only on the orbitrap_tof stratum.
+
+| Arm | orbitrap_tof (PXD016519, PXD018024) | ion_trap (PXD009049) |
+|---|---|---|
+| baseline | CFG-09-base `d8f123767df353602ac8b908f32867d99184d8e893c6df85b9b1ff59b24c59b2` | CFG-09-base-it05 `5f161daa1462998386eab74831aac7113dd7171d1a608f18226444dfa521b6ac` |
+| candidate | CFG-09-cand `7552cfe4ff8f72d0ffb3649c6e89bd9a1fb4d40c97e94f502b191f70444022a2` | CFG-09-cand-it05 `91cd355288bdeb1a97ed93c4c9945cc8a5149c4b3066d1c186b14795c0cc51b9` |
+
+- The twins add only `-fragment_tolerance 0.5 -fragment_tolerance_unit Da`. PXD009049's truth search was already at
+  0.5 Da.
+- The run directories of the ion_trap stratum are `runs/CFG-09-*-it05/item09-H1/...`. The array is 3 runs x 2 arms
+  x 3 cells, with the ion-trap run using the twins. Each of the four configs is scored exactly once.
+- Cells, denominators, B1/B2 and the ANALYSER_RESTRICTION_NEEDED rule are unchanged. B2 compares the twins on the
+  ion-trap run.
+
+| Scorer file (scorers/) | sha256 |
+|---|---|
+| `acclib.py` | `7dd85f2888b4b082aae2762ca9ff4a8464adf1b811dafad01caf1551416ef15a` |
+| `score_item02.py` | `f2693089ba38c71a3d0ab5984b2700348d16ef6a5014149c1e92c7dcba52900a` |
+| `score_item06.py` | `ef24599a4e978e3ed67f100333fd4cdf10c5b48f59eb5470248a1a8ab52ecc72` |
+| `score_item09.py` | `b0ef694172e5bb64e0487233819d663389cac0c4c3c540549bf2f8eef88cd3ca` |
+| `truth_config.py` (unchanged) | `899e387c2d08e02c371f7c1318994c0ecc3e0f208d7bce2eab740b0c25c66ec5` |
+| `truth/item02.tsv` | `42920f3b4d4b27ce72efc998aa12d156aaafcfd081fc0f350e916c9e8aba720e` |
+| `truth/item09.tsv` (unchanged) | `fb13f923b75fa571c29aceab8ea7274bfc63b74b139b5539633222d3933b5b4b` |
+| `strip_charge.py` (unchanged) | `2b4e0c3753f7800c056f1be36ea7ba1872ccbec9ccdb4477a01adeaf561b34ab` |
+| `tests/run_dev_tests_r3.sh` | `818e8dc4f1896d51d91287b8d2f2225f2addbc3aae53db2ba8dbfdb31317eb3e` |
+
+The fastag_bench files `score.py` (`e2b8788a78f1176169f617c01b2e17f21578b8909f7c79b33d23ae1b71075f79`) and
+`parsers.py` (`01e27548bcae489d3f205960730c8bc36624e16935ea5df0bec5a6a04ea51f49`) are unchanged. Commit f93b33c
+already carried the scorer edits of this amendment, before SHA256SUMS and this text were updated. Nothing was run in
+between. The hashes above are the binding ones.
+
+**Informativeness floor (audit finding).** Non-inferiority passed on cells where both arms are near zero. The scorer
+now marks a cell `uninformative` when the reference (baseline) arm's rank-1 correct rate in that cell is below
+**1.8%** (`acclib.INFO_FLOOR_PCT`). Such a cell is not tested, is not in the Holm family, and never counts as a pass.
+Unless another cell fails, it makes the endpoint INCONCLUSIVE. The floor applies to every cell of the endpoint, in
+every set.
+
+The floor was derived from DEV ion-trap data only: the #2/#6 DEV run PXD001819 (LTQ Orbitrap Velos, ion-trap MS2),
+tagged at 0.5 Da by CFG-02-base-it05 in the 18 cells of #2, scored against its paper-harness Sage truth
+(`tests/run_dev_tests_r3.sh`; scored first without a floor,
+`tests/dev_results_r3/floor_input_cells_i_nofloor.tsv`).
+- The rule: one half of the lowest reference rate among the DEV ion-trap cells with at least 200 clusters, rounded
+  down to 0.1 point.
+- The lowest such cell is L5_nodeiso z3 at 3.678% (1,088 clusters), which gives 1.8%.
+- The other powered DEV ion-trap cells at 0.5 Da are L3-L5 z2 at 18.8-35.3% and z3 at 3.7-6.9%. The z4+ cells
+  have 106 clusters and are at 0.2-0.4%.
+- At 20 ppm, 16 of the 18 DEV ion-trap cells are below 1.8% (`tests/dev_results/item02/cells_i.tsv`). These are
+  the cells the audit named.
+- No held-out file was read.
+
+**DEV test (DEV outputs only).** `tests/dev_results_r3/item09.txt`, with the stand-in arms of the first test and
+PXD001819 at 0.5 Da. B1 is INCONCLUSIVE: the ion-trap 4+ cells are uninformative and the orbitrap 4+ cells are
+underpowered. B2 is PASS.

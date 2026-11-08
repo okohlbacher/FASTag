@@ -1,5 +1,8 @@
 # PREREG-item06: #6 precursor charge inference (CFG-06-cand against CFG-06-base)
 
+**Amendment 1 (round 3, 2026-11-08) at the end of this file supersedes the provisional rules below. CFG-06-base,
+CFG-06-cand and their 0.5 Da ion-trap twins are `frozen`.**
+
 Status 2026-11-08: **protocol fixed; not run, not scored.** This file fixes the truth search per run, the cells and
 their pooling, the denominator and the scorer. Status of CFG-06-base and CFG-06-cand: **`blocked_user_signoff`**, not
 `frozen`: the same open user decision as #2 (release readiness, decision 4) changes the sets this protocol scores
@@ -96,3 +99,75 @@ truth charges are the header's; the held-out truth is charge_truth on the stripp
 `scorers/tests/dev_results/item06.txt`, `dev_results/item06/`: charge-call accuracy 0.757 (21,328 spectra; 38% of the
 errors flagged ambiguous), (2a) INCONCLUSIVE (every 4+ cell under 200 clusters), (2b) FAIL (ion_trap +0.02 points,
 bound below 0; qe +0.82, bound +0.48), (3) PASS (G_L3 rows identical). DEV numbers, not a #6 result.
+
+
+## Amendment 1 (round 3, 2026-11-08): ion-trap cells at 0.5 Da, revised sets, informativeness floor
+
+Decisions 2 and 3 of `DECISIONS-2026-11-08.md`. This amendment replaces the provisional rules above wherever they
+differ. It is committed together with the configs set to `frozen`, before any held-out run. Nothing has been run or
+scored.
+
+**Configs** (as PREREG-item02.md amendment 1):
+
+| Arm | high-resolution runs | ion_trap runs |
+|---|---|---|
+| baseline | CFG-06-base `57ac9b063dc3f15fe78e1aa4e94b8e92debe8c75cfcc7bad79f94cffb0d47338` | CFG-06-base-it05 `11d1f6f7e51fe809569c7d59489a7fa858496d44b852a0cd456fad43c34f6aa3` |
+| candidate | CFG-06-cand `0f6bc39fad2cd9b68ad0b5235ce77bf04c1b1c312aa0aadc23f21ab160862a00` | CFG-06-cand-it05 `a606fa84765aa41f9a62f3164717a9d296457abc2de0303e61469765eb0eefee` |
+
+- The twins add only `-fragment_tolerance 0.5 -fragment_tolerance_unit Da`. They are used in every cell (S_L3..S_L5,
+  G_L3) of the ion_trap runs, and each config is scored exactly once.
+- The charge-stripped input and the charge_truth search are unchanged.
+
+**Runs.**
+- H1 is `manifests/item06-H1-r2.tsv` (`6103a749cde1ceff07aee6b97823f1871de5a5762af4e1b3c14487ff36bfb0c3`, HO-06-H1-r2), with 6 runs: astral 1 (PXD066944),
+  ion_trap 4 (PXD000806, PXD001473, PXD002429, PXD001540) and qe 1 (PXD069528). `item06-H1` is not scored.
+- The H2 reserve is `item06-H2` plus `manifests/item06-H2r.tsv` (`0104ecf607e6a0f27bd2da193c13c25e0f95e5855e86ffc6e51d77a3fcba4202`, HO-06-H2r), Astral PXD055983
+  only (one run, underpowered). It is used only to confirm a variant chosen after an H1 failure.
+- Truth: the `item06-H1-r2` and `item06-H2r` rows of `truth/item02.tsv` (mode charge_truth).
+
+**Cells, endpoints.**
+- (2a) covers 3 sets x 3 lengths x 3 charges = 27 cells.
+- (2b) has its plan rule back: better on **at least 2 of the 3 sets** (astral, ion_trap, qe). It is no longer the
+  provisional "both of 2".
+- (1) and (3) are unchanged.
+
+| Scorer file (scorers/) | sha256 |
+|---|---|
+| `acclib.py` | `7dd85f2888b4b082aae2762ca9ff4a8464adf1b811dafad01caf1551416ef15a` |
+| `score_item02.py` | `f2693089ba38c71a3d0ab5984b2700348d16ef6a5014149c1e92c7dcba52900a` |
+| `score_item06.py` | `ef24599a4e978e3ed67f100333fd4cdf10c5b48f59eb5470248a1a8ab52ecc72` |
+| `score_item09.py` | `b0ef694172e5bb64e0487233819d663389cac0c4c3c540549bf2f8eef88cd3ca` |
+| `truth_config.py` (unchanged) | `899e387c2d08e02c371f7c1318994c0ecc3e0f208d7bce2eab740b0c25c66ec5` |
+| `truth/item02.tsv` | `42920f3b4d4b27ce72efc998aa12d156aaafcfd081fc0f350e916c9e8aba720e` |
+| `truth/item09.tsv` (unchanged) | `fb13f923b75fa571c29aceab8ea7274bfc63b74b139b5539633222d3933b5b4b` |
+| `strip_charge.py` (unchanged) | `2b4e0c3753f7800c056f1be36ea7ba1872ccbec9ccdb4477a01adeaf561b34ab` |
+| `tests/run_dev_tests_r3.sh` | `818e8dc4f1896d51d91287b8d2f2225f2addbc3aae53db2ba8dbfdb31317eb3e` |
+
+The fastag_bench files `score.py` (`e2b8788a78f1176169f617c01b2e17f21578b8909f7c79b33d23ae1b71075f79`) and
+`parsers.py` (`01e27548bcae489d3f205960730c8bc36624e16935ea5df0bec5a6a04ea51f49`) are unchanged. Commit f93b33c
+already carried the scorer edits of this amendment, before SHA256SUMS and this text were updated. Nothing was run in
+between. The hashes above are the binding ones.
+
+**Informativeness floor (audit finding).** Non-inferiority passed on cells where both arms are near zero. The scorer
+now marks a cell `uninformative` when the reference (baseline) arm's rank-1 correct rate in that cell is below
+**1.8%** (`acclib.INFO_FLOOR_PCT`). Such a cell is not tested, is not in the Holm family, and never counts as a pass.
+Unless another cell fails, it makes the endpoint INCONCLUSIVE. The floor applies to every cell of the endpoint, in
+every set.
+
+The floor was derived from DEV ion-trap data only: the #2/#6 DEV run PXD001819 (LTQ Orbitrap Velos, ion-trap MS2),
+tagged at 0.5 Da by CFG-02-base-it05 in the 18 cells of #2, scored against its paper-harness Sage truth
+(`tests/run_dev_tests_r3.sh`; scored first without a floor,
+`tests/dev_results_r3/floor_input_cells_i_nofloor.tsv`).
+- The rule: one half of the lowest reference rate among the DEV ion-trap cells with at least 200 clusters, rounded
+  down to 0.1 point.
+- The lowest such cell is L5_nodeiso z3 at 3.678% (1,088 clusters), which gives 1.8%.
+- The other powered DEV ion-trap cells at 0.5 Da are L3-L5 z2 at 18.8-35.3% and z3 at 3.7-6.9%. The z4+ cells
+  have 106 clusters and are at 0.2-0.4%.
+- At 20 ppm, 16 of the 18 DEV ion-trap cells are below 1.8% (`tests/dev_results/item02/cells_i.tsv`). These are
+  the cells the audit named.
+- No held-out file was read.
+
+**DEV test (DEV outputs only).** `tests/dev_results_r3/item06.txt` and `dev_results_r3/item06/`. The verdict is FAIL.
+Charge-call accuracy is 0.757. (2a) is FAIL: at 0.5 Da, four ion-trap cells fail. S_L3 z2 loses 0.6 points, and
+S_L3/S_L4/S_L5 z3 lose 0.9-2.2 points (S_L3 z3: base 10.0%, cand 7.8%). The 4+ cells at S_L4 (1.0%) and S_L5 (0.4%)
+are uninformative. (3) is PASS. These are DEV numbers, not a #6 result.

@@ -1,0 +1,3 @@
+CFG-06-base:G_L3:rc	CFG-06-base:S_L3:rc	CFG-06-base:S_L4:rc	CFG-06-base:S_L5:rc	CFG-06-cand:G_L3:rc	CFG-06-cand:S_L3:rc	CFG-06-cand:S_L4:rc	CFG-06-cand:S_L5:rc	G_L3_detail	G_L3_identical	arm_dirs	cand_tagged_truth	pxd	run	set	status	truth_psms
+0	0	0	0	0	0	0	0	0 differing rows of 1226728	True	CFG-06-base,CFG-06-cand	8254	PXD003531	dev/PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01	qe	ok	8254
+0	0	0	0	0	0	0	0	0 differing rows of 1963894	True	CFG-06-base-it05,CFG-06-cand-it05	13313	PXD001819	dev/PXD001819/UPS1_25000amol_R1	ion_trap	ok	13342

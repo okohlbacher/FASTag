@@ -1,0 +1,1 @@
+{"manifest": "dev02", "sets": ["ion_trap", "qe"], "i": "FAIL", "ii": "FAIL", "iii": "INCONCLUSIVE", "iv": "NOT MEASURED", "verdict": "FAIL", "runs_not_ok": []}

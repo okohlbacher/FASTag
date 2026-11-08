@@ -1,0 +1,7 @@
+run	set	cell	tagged_base	tagged_cand	ok
+dev/PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01	orbitrap_tof	L3_default	27221	27221	True
+dev/PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01	orbitrap_tof	L4_default	26873	26873	True
+dev/PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01	orbitrap_tof	L5_default	26552	26552	True
+dev/PXD001819/UPS1_25000amol_R1	ion_trap	L3_default	40847	40847	True
+dev/PXD001819/UPS1_25000amol_R1	ion_trap	L4_default	40846	40846	True
+dev/PXD001819/UPS1_25000amol_R1	ion_trap	L5_default	40759	40759	True

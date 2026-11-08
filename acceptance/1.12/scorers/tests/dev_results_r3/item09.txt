@@ -1,0 +1,1 @@
+{"runs": ["dev/PXD001819/UPS1_25000amol_R1", "dev/PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01"], "B1": "INCONCLUSIVE", "B2": "PASS", "verdict": "INCONCLUSIVE", "runs_not_ok": []}

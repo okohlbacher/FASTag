@@ -1,0 +1,66 @@
+{
+ "manifest": "dev06",
+ "sets": [
+  "ion_trap",
+  "qe"
+ ],
+ "e1_charge_accuracy": 0.7569434784624658,
+ "e1_n": 21567,
+ "e1_wilson": [
+  0.7511735338169039,
+  0.7626219071795792
+ ],
+ "info_floor_pct": 1.8,
+ "e1": "FAIL",
+ "e2a": "FAIL",
+ "e2b": "FAIL",
+ "e2b_need": 2,
+ "e3": "PASS",
+ "errors_ambiguous_share": 0.377527661198016,
+ "truth2_called1": 0,
+ "sage_isotope_error": {
+  "0": 19336,
+  "1": 2260
+ },
+ "precursor_flank_rank1": [
+  {
+   "cell": "dev06:pflank:ion_trap",
+   "clusters": 3895,
+   "spectra": 13342,
+   "base_pct": 22.01319142557338,
+   "cand_pct": 18.88772298006296,
+   "diff": -3.1254684455104176,
+   "se": 0.3183134681116235,
+   "p2_5": -3.7181240137808125,
+   "p97_5": -2.5025670132917837
+  },
+  {
+   "cell": "dev06:pflank:qe",
+   "clusters": 4873,
+   "spectra": 8254,
+   "base_pct": 33.05064211291495,
+   "cand_pct": 38.91446571359341,
+   "diff": 5.863823600678458,
+   "se": 0.3896594340386045,
+   "p2_5": 5.090369055786608,
+   "p97_5": 6.595732835082685
+  }
+ ],
+ "runs_not_ok": [],
+ "verdict": "FAIL",
+ "provenance": {
+  "python": "3.11.18",
+  "numpy": "2.4.6",
+  "pandas": "3.1.0",
+  "acclib.py": "7dd85f2888b4b082aae2762ca9ff4a8464adf1b811dafad01caf1551416ef15a",
+  "score_item01.py": "25f48ea2b6b6730c49cd020350a9952d7026f27e40b8264d3a41b0e5fc22cb56",
+  "score_item02.py": "f2693089ba38c71a3d0ab5984b2700348d16ef6a5014149c1e92c7dcba52900a",
+  "score_item03.py": "285df1d0dd70bf9d0411c35b45c354b5ec2ba16391008199ec6186d03e845848",
+  "score_item06.py": "ef24599a4e978e3ed67f100333fd4cdf10c5b48f59eb5470248a1a8ab52ecc72",
+  "score_item07.py": "b135aa9b5b9db5af7507ab81b5abd3f770c30590af7542789e3ad7ac6b0b750e",
+  "score_item09.py": "b0ef694172e5bb64e0487233819d663389cac0c4c3c540549bf2f8eef88cd3ca",
+  "score_item15B.py": "0e8534dba9f513008d53f69d988157fa3fecdda8a8f0de59324427744777cc62",
+  "bench/fastag-bench/src/fastag_bench/score.py": "e2b8788a78f1176169f617c01b2e17f21578b8909f7c79b33d23ae1b71075f79",
+  "bench/fastag-bench/src/fastag_bench/parsers.py": "01e27548bcae489d3f205960730c8bc36624e16935ea5df0bec5a6a04ea51f49"
+ }
+}

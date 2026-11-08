@@ -14,6 +14,7 @@ c4c2ad67fcd9106e474f552267f7cdfefe107f394b268bbc236308b773e4d7f3). No file under
 | `disjointness/` | per-file DEV overlap check per manifest, and `summary.tsv` (H2 vs H1 too) |
 | `PREREG-species-call.md`, `PREREG-chem.md` | #1/#10 and #3: binary, tables, DEV fits and (2026-11-08) the held-out scoring protocol |
 | `PREREG-item02.md`, `-item06.md`, `-item07.md`, `-item09.md`, `-item15B.md` | scoring protocols of #2, #6, #7 (E7-03 as drawn), #9, #15B: truth search per run, cells and pooling, denominator, scorer sha256 |
+| `DECISIONS-2026-11-08.md` | round 3: the user's decisions on the open readiness questions (registry `DEC-1112-r3-NN`); new manifests `item02-H1-r2`, `item06-H1-r2`, `item02-H2r`, `item06-H2r`; 0.5 Da ion-trap twins `CFG-0{2,6,9}-*-it05`; `-r3` status rows (`scripts/append_r3_rows.py`, `r3_configs.py`, `r3_status.py`) |
 | `scorers/` | the held-out scorers (`score_item*.py`, `acclib.py`), truth-search configs (`truth_config.py`, `truth/*.tsv`), `strip_charge.py` (#6), `SHA256SUMS`; `tests/` runs them on DEV outputs only (`run_dev_tests.sh`, `dev_results/`) |
 | `scripts/` | selection rules (in each script's header), staging and conversion, manifest build, disjointness, registry rows |
 | `inputs/` | selection inputs and raw draw outputs; `inputs/staged/` the staging logs from node data |
