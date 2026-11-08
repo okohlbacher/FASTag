@@ -862,7 +862,21 @@ namespace FASTag::Probe
       return out;
     }
     if (!out.found) return out;
-    out.jsonl = spectrumRecord(spec, index, pick_result > 0, opt.param);
+    // #15 phase B: the series the tagging loop reads this spectrum as. The
+    // run writes the ion_series column under cz, and under auto when it
+    // reads the activation (mzML) and some MS2 is electron activated -- this
+    // one, whenever auto reads it as c/z -- so for the dumped spectrum the
+    // column rule reduces to its own activation.
+    namespace IS = FASTag::IonSeries;
+    Param p = opt.param;
+    const IS::Activation act = IS::activationClass(spec);
+    const bool run_column = opt.ion_mode == IS::Mode::Cz
+                            || (opt.ion_mode == IS::Mode::Auto
+                                && IS::autoReadsActivation(kind == Kind::MzPeak, kind == Kind::Mgf)
+                                && act == IS::Activation::Electron);
+    if (spec.getMSLevel() == 2 && IS::seriesInRun(opt.ion_mode, act, run_column) == IS::Series::CZ)
+      p.ion_pair = IS::ionPair(IS::Series::CZ);
+    out.jsonl = spectrumRecord(spec, index, pick_result > 0, p);
     out.jsonl += JsonObject("end").line();
     return out;
   }

@@ -153,6 +153,11 @@ namespace FASTag::Probe
     bool pick_unknown_type = false;
     int mzpeak_threads = 1;
     Param param;  ///< the run's tagging parameters (one seed length serves)
+    /// -ion_series (1.12 #15): the dumped spectrum is prepared with the ion
+    /// pair the tagging loop reads it as (IonSeries::seriesInRun), so under
+    /// cz, or auto on an electron-activated mzML spectrum, with the c/z-dot
+    /// pair and its ETD precursor-window filter.
+    IonSeries::Mode ion_mode = IonSeries::Mode::By;
   };
 
   struct DumpOutput
@@ -175,7 +180,8 @@ namespace FASTag::Probe
   /// int. The precursor is the 1.11 rule (the header m/z, its charge or
   /// else 2), the only one a run tags while -unknown_charge and
   /// -isotope_error (1.12 #6) are at their defaults; the tool refuses
-  /// -dump_spectrum otherwise. Pure; the unit test checks it against
+  /// -dump_spectrum otherwise. @p p carries the ion pair the spectrum is
+  /// read as (dumpSpectrum() sets it). Pure; the unit test checks it against
   /// preparedPeaks().
   std::string spectrumRecord(const OpenMS::MSSpectrum& spec, std::size_t index, bool picked, const Param& p);
 }

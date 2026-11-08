@@ -1361,6 +1361,7 @@ protected:
     opt.pick_unknown_type = getFlag_("pick_unknown_type");
     opt.mzpeak_threads = std::min(std::max(1, omp_get_max_threads()), 8);
     opt.param = p;
+    opt.ion_mode = FASTag::IonSeries::modeFromString(getStringOption_("ion_series"));
     const std::string id = getStringOption_("dump_spectrum");
     const P::DumpOutput r = P::dumpSpectrum(in, id, opt);
     if (r.status != P::Status::Ok)
@@ -1779,7 +1780,9 @@ protected:
     std::vector<FASTag::Param> len_params(lengths.size(), p);
     for (size_t i = 0; i < lengths.size(); ++i) len_params[i].tag_length = lengths[i];
     // ---- 1.12 G: -dump_spectrum ----
-    // The preprocessing reads no tag length, so the first Param serves.
+    // The preprocessing reads no tag length, so the first Param serves; the
+    // dump sets the c/z-dot ion pair itself where -ion_series reads the
+    // spectrum as c/z (InputProbe dumpSpectrum).
     if (dump_mode) return dumpSpectrumMode_(in, len_params.front());
     // #15 phase B: under -ion_series cz or auto a second set reads spectra as
     // c/z-dot ions (only the ion pair differs); under by it stays empty.

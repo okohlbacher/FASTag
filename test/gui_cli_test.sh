@@ -18,7 +18,8 @@
 #       tags, checked against the run's own -census row of every dumped
 #       spectrum (n_peaks_kept, precursor_mz, charge_used) at the CLI
 #       default and at 0.3 Da, with -pick_profile auto on profile MS2 (the
-#       picked peaks), and against the tag ladders of the run's tag TSV
+#       picked peaks), under -ion_series cz and auto on an ETD run (the c/z
+#       preparation with its ETD precursor-window cut), and against the tag ladders of the run's tag TSV
 #       (every unmodified tag's b or y ladder lies on dumped peaks within
 #       the tolerance; both ends of it for a gapped tag); the MGF twin and the mzPeak export
 #       give the same peaks; threads 1/3/8 give the same bytes; no file is
@@ -453,6 +454,41 @@ J census "$TMP/d_pleg" "$TMP/c_pleg/tags.census.tsv" > /dev/null || fail "(d) le
 [ "$(val "$TMP/d_pauto/0.jsonl.v" picked)" = true ] && [ "$(val "$TMP/d_pleg/0.jsonl.v" picked)" = false ] \
   || fail "(d) picked flag: auto $(val "$TMP/d_pauto/0.jsonl.v" picked), legacy $(val "$TMP/d_pleg/0.jsonl.v" picked)"
 cmp -s <(val "$TMP/d_pauto/0.jsonl.v" peaks) <(val "$TMP/d_pleg/0.jsonl.v" peaks) && fail "(d) auto dumps the unpicked peaks"
+
+# Ion series (1.12 #15): under -ion_series cz, and auto on an ETD run, the
+# dump prepares the peaks as the tagger reads that spectrum, as c/z-dot ions
+# with the ETD precursor-window cut, so its peak count is the census's
+# n_peaks_kept. The ETD fixture swaps the CID term for the ETD term of the
+# same length (the index stays exact). Checked when the binary has the option.
+if grep -qE '^ +-ion_series <' "$TMP/helphelp.txt"; then
+  awk -v cid='accession="MS:1000133" name="collision-induced dissociation"' \
+      -v etd='accession="MS:1000598" name="electron transfer dissociation"' \
+      'function out(l) { if (started) printf "\n"; printf "%s", l; started = 1 }
+       index($0, cid) { i = index($0, cid); $0 = substr($0, 1, i - 1) etd substr($0, i + length(cid)) }
+       { out($0) }' "$IN" > "$TMP/etd_all.mzML"
+  census_run icz "$IN" -ion_series cz -threads 2
+  census_run iauto "$TMP/etd_all.mzML" -ion_series auto -threads 2
+  mkdir -p "$TMP/d_icz" "$TMP/d_iauto"
+  for k in "${!EIDS[@]}"; do
+    dump "$IN" "${EIDS[$k]}" "$TMP/d_icz/$k.jsonl" -ion_series cz
+    dump "$TMP/etd_all.mzML" "${EIDS[$k]}" "$TMP/d_iauto/$k.jsonl" -ion_series auto
+  done
+  m=$(J census "$TMP/d_icz" "$TMP/c_icz/tags.census.tsv") || fail "(d) -ion_series cz: dumps differ from the tagger's census rows"
+  [ "$m" = ${#EIDS[@]} ] || fail "(d) -ion_series cz: $m of ${#EIDS[@]} dumps matched"
+  m=$(J census "$TMP/d_iauto" "$TMP/c_iauto/tags.census.tsv") || fail "(d) -ion_series auto on ETD: dumps differ from the tagger's census rows"
+  [ "$m" = ${#EIDS[@]} ] || fail "(d) -ion_series auto on ETD: $m of ${#EIDS[@]} dumps matched"
+  # Not vacuous: the c/z preparation drops peaks the b/y one keeps.
+  ndiff=0
+  for k in "${!EIDS[@]}"; do
+    cmp -s <(val "$TMP/d_icz/$k.jsonl.v" peaks) <(val "$TMP/d_default/$k.jsonl.v" peaks) || ndiff=$((ndiff + 1))
+  done
+  [ "$ndiff" -gt 0 ] || fail "(d) -ion_series cz dumps the b/y peaks of every spectrum (the check is weak)"
+  # auto on the CID fixture reads b/y: the plain dump's bytes.
+  dump "$IN" "${EIDS[0]}" "$TMP/iauto_cid.jsonl" -ion_series auto
+  cmp -s "$TMP/iauto_cid.jsonl" "$TMP/d_default/0.jsonl" || fail "(d) -ion_series auto on CID changes the dump"
+else
+  echo "note: no -ion_series in this build; the c/z dump is not checked" >&2
+fi
 
 # mzPeak: the export of the Ecoli fixture dumps the same peaks.
 run_in "$TMP/mzp" "$TMP/mzp.out" "$TMP/mzp.err" -in "$IN" -out tags.tsv -out_spectra e.mzpeak -threads 2
