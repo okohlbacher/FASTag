@@ -77,10 +77,20 @@ held-out data yet. The README's command-line reference describes each option.
   engine acceptance on real data has been run (registry A5-02), so the Comet
   key layout, the isotope_error mapping and the variable_mod slot format are
   still taken from the OpenMS adapters, not validated against the engines.
+- **Mass shifts as search-engine configuration (#17, experimental):**
+  `-search_shifts none|variable|offsets|both` (default none),
+  `-search_shifts_out`, `-shift_max_variable` (3), `-shift_max_offsets` (10),
+  `-shift_expand_sites` (off), `-shift_site_min_share` (0.2),
+  `-shift_site_min_count` (10), `-shift_site_min_ions` (2). They add the
+  run's mass-gap peaks (the `-massgap_out` peaks) to `-search_config_out` as
+  variable modifications or Comet mass offsets; `-delta_out` and
+  `-massgap_out` are unchanged with and without them. NOT FDR-controlled:
+  candidates for an FDR-controlling engine, not identifications; that they
+  improve identifications is not validated, and like the #5 hand-off the
+  engine configurations are not validated against the engines on real data.
 - **Machine interfaces for the desktop GUI:** `-probe_input <file>` (metadata
   as JSON lines) and `-dump_spectrum <nativeId>` (the peaks FASTag tags in one
   spectrum, as JSON lines). Both write no file and exit.
 
 In the desktop GUI 1.12.0 the new options are not in the form yet; a GUI run
-uses their defaults. Not in 1.12.0: #17 (mass shifts as search-engine
-configuration), which is still in review.
+uses their defaults.
