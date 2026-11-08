@@ -1,5 +1,5 @@
-index	reports	headline_changed	top1_changed	table_changed	paper_correct_lost	paper_correct_gained	top1_correct
-SHIP	192	0	0	0	0	0	142
-B	192	56	56	192	2	3	124
-Bnw	192	23	23	192	2	3	138
-S50	192	0	0	192	0	0	142
+index	reports	headline_changed	top1_changed	table_changed	correct_lost	correct_gained	lost_vs_paper_correct	top1_correct
+SHIP	192	0	0	0	0	0	0	142
+B	192	56	56	192	21	3	2	124
+Bnw	192	23	23	192	7	3	2	138
+S50	192	0	0	192	0	0	0	142

@@ -16,6 +16,12 @@ and reports, per run and setting:
   * the paper's call (FASTag 1.9.0, per_run_top1.tsv) for the settings the
     paper reports.
 
+summary.tsv counts, per candidate: correct_lost (reference top-1 genus is in
+the truth set, the candidate's is not), correct_gained (the reverse), both
+over all reports, and lost_vs_paper_correct (the part of correct_lost where
+the paper's 1.9.0 call for that run and setting was also correct; the paper
+has no call for the `all` setting).
+
 Usage:
   compare_indexes.py --manifest species_runs.tsv --paper per_run_top1.tsv \
       --ref SHIP=<runs_SHIP> --cand B=<runs_B> --cand Bnw=<runs_Bnw> \
@@ -103,7 +109,7 @@ def main() -> int:
 
     per_run, diffs = [], []
     summ = {n: {"reports": 0, "headline_changed": 0, "top1_changed": 0, "table_changed": 0,
-                "paper_correct_lost": 0, "paper_correct_gained": 0, "top1_correct": 0}
+                "correct_lost": 0, "correct_gained": 0, "lost_vs_paper_correct": 0, "top1_correct": 0}
             for n, _ in cfgs}
     repro = {"checked": 0, "identical": 0, "calls_equal_v1110": 0, "calls_checked": 0}
     missing = []
@@ -151,10 +157,17 @@ def main() -> int:
                 s["top1_changed"] += tc
                 s["table_changed"] += tab
                 ref_ok, new_ok = ref["top1"] in truth, r["top1"] in truth
-                if pc and pc in truth and ref_ok and not new_ok:
-                    s["paper_correct_lost"] += 1
+                # correct_lost / correct_gained: the reference top-1 is a truth
+                # genus and the candidate's is not (or the reverse), over every
+                # report. lost_vs_paper_correct is the subset of correct_lost
+                # where the paper's 1.9.0 call (default, deconv, gapped only)
+                # was also correct.
+                if ref_ok and not new_ok:
+                    s["correct_lost"] += 1
+                    if pc and pc in truth:
+                        s["lost_vs_paper_correct"] += 1
                 if not ref_ok and new_ok:
-                    s["paper_correct_gained"] += 1
+                    s["correct_gained"] += 1
                 ref_top3 = [x[1] for x in ref["rows"][:3]]
                 new_top3 = [x[1] for x in r["rows"][:3]]
                 row[f"{n}_table_identical"] = "yes" if not tab else "no"

@@ -85,7 +85,10 @@ The CLI-only macOS dmg (FASTag-macos-arm64.dmg, UDZO, 532.3 MB in v1.11.1) moves
 | B | **56** | 192 | 21 | 3 | 124/192 |
 | Bnw | **23** | 192 | 7 | 3 | 138/192 |
 
-"Correct lost/gained" counts reports where SHIP's top-1 is a truth genus and the candidate's is not (or the reverse).
+"Correct lost/gained" counts reports, over all 192, where SHIP's top-1 genus is a truth genus and the candidate's is not
+(or the reverse); these are the `correct_lost` and `correct_gained` columns of `results/summary.tsv`. Its
+`lost_vs_paper_correct` column is the subset of the losses where the paper's 1.9.0 call was also correct (the paper has
+calls only for default, deconv and gapped): 2 for B and 2 for Bnw.
 Against the paper's own calls (`all` setting = the paper's 1.9.0 rule, byte-identical to the paper's default reports):
 B changes 17 of 48 and Bnw 7 of 48; S50 none.
 
