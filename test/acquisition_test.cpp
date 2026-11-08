@@ -288,6 +288,33 @@ namespace
       check(c.mode == Mode::DIA && c.im && A::modeName(c) == "DIA (diaPASEF)",
             "14 frame-split k=" + std::to_string(k) + ": " + name(c.mode) + " (" + c.why + ")");
     }
+    // 14b. Converted raw diaPASEF (E7-02: the OpenMS FileConverter on .d):
+    // each TIMS frame holds k windows at different ion mobilities, written in
+    // a varying order, so a window returns after cycle-1, cycle or cycle+1
+    // events and the periodicity is about 1/k (0.26-0.53 on 10 public runs).
+    for (int k = 2; k <= 4; ++k)
+    {
+      std::mt19937 r14(140 + k);
+      const auto w = tiled(400, 25, 8 * k);  // 8 frames of k windows each
+      std::vector<Ms2Meta> r;
+      for (int cy = 0; cy < 40; ++cy)
+        for (int f = 0; f < 8; ++f)
+        {
+          std::vector<int> pos(k);
+          for (int i = 0; i < k; ++i) pos[i] = f * k + i;
+          std::shuffle(pos.begin(), pos.end(), r14);
+          for (int p : pos)
+          {
+            const double t = 0.5 * (w[p].first + w[p].second);
+            Ms2Meta m = meta(t, 12.5, 12.5, 0);
+            m.im = true;
+            r.push_back(m);
+          }
+        }
+      const A::AcqCall c = A::classifyAcquisition(r);
+      check(c.mode == Mode::DIA && c.per < 0.8 && c.cycle == static_cast<std::size_t>(8 * k),
+            "14b diaPASEF, frame order varies, k=" + std::to_string(k) + ": " + name(c.mode) + " (" + c.why + ")");
+    }
     // 15. MSX-style: 100 x 4 Th over 500-900 visited in a fixed scrambled
     // order every cycle, two consecutive (multiplexed) MS2 per window.
     {

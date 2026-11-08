@@ -253,9 +253,10 @@ before tagging, through the reader the run uses, and logs one
 `Acquisition check:` line on stderr. Its rule follows prose-auto: raw DIA
 visits the same isolation windows in the same order every cycle. A run is
 refused when its selected-ion m/z repeat with a period equal to the number of
-distinct values (at least 5, periodicity at least 0.8 over at least 10 repeats,
+distinct values (at least 5, periodicity at least 0.2 over at least 10 repeats,
 consecutive MS2 on the same window counted once, as frame-split diaPASEF writes
-them), the windows (read from the isolation window target) cover at least 80%
+them; converted diaPASEF varies the order of the windows inside a frame, which
+lowers the periodicity to 0.26-0.53 on public runs), the windows (read from the isolation window target) cover at least 80%
 of a range of at least 100 Th, and at least half of the MS2 carry no charge; or,
 without recorded windows, when at least 90% are uncharged and the repeating
 m/z values form a regular grid at most 50 Th apart, as window centres do (at
@@ -265,7 +266,8 @@ is tagged with a warning; a periodic scheme whose windows do not tile a range
 is PRM or an inclusion list and passes; so do DDA with wide windows and
 pseudo-DDA spectra, which DIAspeXtract (its software entry and `spx_*`
 userParams) and diaTracer (its software entry) mark in the mzML. The
-thresholds are provisional until their validation on public data. A mixed file
+thresholds were frozen after a development sweep over 183 public data sets; a
+release test on a fresh PRIDE sample is pending. A mixed file
 is judged on its first MS2; `-stream` is not checked.
 
 `-acquisition_check warn` tags raw DIA anyway (experts; the tags are those

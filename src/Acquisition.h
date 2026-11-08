@@ -39,9 +39,16 @@
 //     diaTracer (its software entry) mark pseudo-DDA, which always passes.
 //     Provenance only ever passes a file.
 //
-// The thresholds are PROVISIONAL (validation-registry.tsv rows E7-*): they
-// are frozen only after the development sweep on the prose-auto corpora and
-// the release test on a fresh PRIDE sample.
+// The thresholds are FROZEN after the development sweep (validation-registry
+// rows E7-02 and E7-09: the prose-auto heldout and validation_v3 corpora,
+// 183 public data sets, 13 of them Bruker .d converted to mzML, plus
+// pseudo-DDA outputs, fixtures and the gate inputs). The sweep changed one
+// value, min_periodicity 0.8 -> 0.2: converted raw diaPASEF writes the
+// windows of one TIMS frame in a varying order, so a window returns after
+// cycle-1, cycle or cycle+1 events and the share of the commonest gap falls
+// to 0.26-0.53; |cycle - n_win| <= 0.1 n_win and n_win >= 5 are what keep
+// DDA (hundreds of distinct m/z, short gaps) out. The release test on a fresh
+// PRIDE sample (E7-03) is scored once on the frozen rule; it is not re-tuned.
 //
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
@@ -79,12 +86,13 @@ namespace FASTag::Acquisition
     DIA,        ///< raw DIA: refuse
   };
 
-  /// The classifier's thresholds. PROVISIONAL until the development sweep;
-  /// the defaults are the values in PLAN-data-types.md (item #7).
+  /// The classifier's thresholds, frozen after the development sweep
+  /// (validation-registry E7-09); the values of PLAN-data-types.md (item #7)
+  /// except min_periodicity.
   struct Thresholds
   {
     std::size_t min_gaps = 10;         ///< repeat gaps needed to judge periodicity
-    double min_periodicity = 0.8;      ///< share of gaps equal to the commonest gap
+    double min_periodicity = 0.2;      ///< share of gaps equal to the commonest gap (0.8 before E7-09)
     double cycle_tolerance = 0.1;      ///< |cycle - n_win| <= this * n_win
     std::size_t min_windows = 5;       ///< distinct m/z values in the cycle
     double windows_min_share = 0.5;    ///< events with an isolation window, for "windows recorded"
