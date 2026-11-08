@@ -110,3 +110,66 @@ Diagnosis of PXD001473, without reading any FASTag output:
 - **#17:** write PREREG-item17.
 - **#1 / #10:** a user decision on the failed DEV go/no-go.
 - **Process:** commit and push every run-start row before `sbatch`, as was done for #9.
+
+## Round 4 (2026-11-09)
+
+Commits on `acceptance/1.12`: d4c79b2 (decisions DEC-1112-r4-A..E, PREREG-item02/06 amendment 2 with the
+`python -I` erratum, scorer changes), 09e14b3 (run-start rows, pushed while every job was still PENDING), e769b93
+(result rows). #2 and #6 H2/H2r were each scored once. Neither passes, and both defaults stay.
+
+### #2: INCONCLUSIVE (item02-H1-r2, high-resolution sets astral, qe, timstof; Slurm 6474439)
+
+Rule 5: PXD074582 (Astral, Bos taurus database) has a truth with 0 target PSMs at q <= 0.01 (lowest q 0.47). The
+endpoints, descriptive only, fail either way:
+
+| Endpoint | Result |
+|---|---|
+| (i) 54 cells | FAIL: 41 pass, 13 fail (astral L3_default z3 -0.64, Holm bound -1.36; 12 are 4+ cells) |
+| (ii) astral | FAIL: -0.15 points (2.5-97.5%: -0.29 to -0.01) |
+| (iii) timstof 4+ | FAIL at L5 (-0.56); L3, L4 ok |
+| (iv) time ratio | PASS: 1.019 |
+| truth PSMs | PXD066944 14,641; PXD070049 351; **PXD074582 0**; PXD033741 72,363 and PXD076520 23,516 (both repaired, Slurm 6474438); PXD050504 6,829; PXD069528 29,843 |
+
+- Truth repair: Sage 0.14.7 panics on MS2 whose only precursor m/z is 0. A derived mzML drops exactly those spectra
+  (3,412 and 3,513); the Sage config is otherwise unchanged.
+- A scorer bug was fixed by amendment before scoring: timsTOF spectra are keyed by the full native ID, not `scan=`.
+- The six ion-trap runs are out of #2; the `-it05` configs are never scored. `same_charge` stays the default.
+
+### #6 H2/H2r: FAIL (PXD020394 qe, PXD055983 Astral; Slurm 6474440-6474443, 16/16 FASTag runs exit 0)
+
+| Endpoint | Result |
+|---|---|
+| (1) charge-call accuracy >= 0.90 | FAIL: 0.745 (n 188,827) |
+| (2a) cells | FAIL: 12 pass, 3 fail (astral S_L3 z2 -1.48, astral S_L4 z2 -0.91, qe S_L3 z2 -0.66), 3 underpowered (qe z4+, 195 clusters) |
+| (2b) better on both sets | FAIL: astral +1.12; qe +0.03 (-0.28 to 0.35) |
+| (3) G_L3 unchanged | PASS: 0 differing rows |
+
+Same pattern as H1: gains on 3+, losses on 2+. H1 stays INCONCLUSIVE. `assume2` stays the default.
+
+### #9: documentation only
+
+README on `acceptance/1.12` gives the item09-H1 subgroup as an observation, not a validated result (corrected in
+this round, see finding 2 below). The default stays `legacy`.
+
+### Audit findings (bookkeeping only, nothing re-scored)
+
+| # | Finding | Severity | Fix |
+|---|---|---|---|
+| 1 | PR #36 (docs/1.12.1-acceptance, bd1d2d4), CHANGELOG and README intros: "scored once; nothing was re-scored" is not true for #6 (CFG-06-base/cand scored on H1-r2 and again on H2/H2r; the PREREG rule keeping H2 for a variant was dropped by amendment 2; ion-trap data removed after H1 was seen). For #2 the ion-trap set was removed after the #6 H1 and #9 ion-trap failures. The README also says no held-out result covers ion-trap MS2, yet #9 and #6 H1 scored ion-trap cells | major | **Open, before PR #36 is merged:** each config scored once per split; #6 scored a second time on the H2/H2r reserve by user decision after the INCONCLUSIVE H1, without ion-trap runs; low-resolution data removed from #2 and #6 after the #6 H1 and #9 ion-trap results were known; ion-trap sentence becomes "ion-trap MS2 was tested for #9 and #6 H1 and failed or was worse; no 1.12 option is validated there" |
+| 2 | README #9 recommendation named Astral and TOF, but item09-H1 scored two Orbitrap runs only (PXD016519 QE Plus, PXD018024 QE HF; PXD035981 not evaluable), and the subgroup was chosen after a FAILED protocol (B2 also failed on PXD016519) | major | Fixed on `acceptance/1.12`: "Orbitrap profile MS2 (tested on two Q Exactive runs); Astral and TOF not tested", stated as a descriptive subgroup of a failed protocol. **Open:** the same change in PR #36 |
+| 3 | Amendment 2 added rule 4b (0-PSM truth = no truth) and declared the round-3 high-resolution truths usable without checking their PSM counts. PXD074582's 0-PSM truth was knowable from the truth file alone, so the only scoring of #2 ended INCONCLUSIVE. PXD070049 has only 351 PSMs, so (ii) rests mostly on PXD066944 | major | Registry row `HO-02-H1-r2-result-note1` records the deviation; not re-scored. Any future amendment needs a pre-scoring check of every truth against the scoring rules, from truth files only, before the run-start row is pushed |
+
+`scripts/check_registry.py`: 51 pairs, 0 failures.
+
+### Low-resolution files
+
+`output/features-1.12/LOWRES-DELETE-COMMANDS.md`: 188 ion-trap files (158.05 GB on data, 71.70 GB of them also on
+BinAC2) plus 4 derived copies on BinAC2, 288 `rm` lines. Nothing was deleted. Files of #1, #3, #5, #7 and #15B belong to
+unscored items and need a PREREG amendment before deletion; `header:` rows and 25 hard-linked files need a check.
+
+### Open
+
+- PR #36: findings 1 and 2, before merge.
+- The README #9 wording reaches integration/main only via the main session.
+- #2 has used its one scoring. A new PXD074582 truth (database mismatch suspected) would need a user decision and a new
+  amendment.

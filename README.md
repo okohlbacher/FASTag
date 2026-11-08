@@ -1205,16 +1205,21 @@ that, the PXD000865 profile mzML under `auto` and its mzpeak-convert 0.18.0
 archive give byte-identical tags (2,011,636). Its default stays `legacy`
 (mzML tagged as sampled).
 
-**Recommendation: use `-pick_profile auto` for high-resolution profile MS2
-(Orbitrap, Astral, TOF) only, not for ion-trap MS2.** The 1.12 held-out test
-(item09-H1, scored once; `acceptance/1.12/results/item09/`) found, against
-Sage 1% FDR truths, rank-1 correct tags up by +10.5 to +32.0 points in all 9
-high-resolution cells (tag length 3-5, charge 2, 3, 4+), while on the ion-trap
-run two charge-3 cells failed non-inferiority (+0.49 points, lower bound
-below -1.0) and the charge-4+ cells were underpowered. Even on high-resolution
-MS2 `auto` tagged fewer spectra in one run at tag length 3 (PXD016519: 15,987
-against 16,554), so the protocol as a whole failed and the default does not
-change. Ion-trap profile MS2 is rare; leave it at `legacy`.
+**Observation, not a validated result: `-pick_profile auto` helped on
+Orbitrap profile MS2 (tested on two Q Exactive runs); Astral and TOF profile
+MS2 were not tested, and ion-trap MS2 should stay at `legacy`.** The 1.12
+held-out test (item09-H1, scored once; `acceptance/1.12/results/item09/`)
+failed as a whole: non-inferiority (B1) and "no fewer tagged spectra" (B2)
+both failed. Within it, against Sage 1% FDR truths, rank-1 correct tags rose
+by +10.5 to +32.0 points in all 9 high-resolution cells (tag length 3-5,
+charge 2, 3, 4+), drawn from two Orbitrap runs only (PXD016519, Q Exactive
+Plus; PXD018024, Q Exactive HF); the set is named `orbitrap_tof`, but no TOF
+or Astral run was scored. This subgroup was picked after the protocol had
+failed, so it is descriptive. On the ion-trap run two charge-3 cells failed
+non-inferiority (+0.49 points, lower bound below -1.0) and the charge-4+
+cells were underpowered. Even on Orbitrap MS2 `auto` tagged fewer spectra in
+one run at tag length 3 (PXD016519: 15,987 against 16,554). The default
+stays `legacy`.
 
 Output is identical at every thread count (`threads_test` checks every output
 on the fixture). Row memory on the mzML path is bounded by a ring of three
