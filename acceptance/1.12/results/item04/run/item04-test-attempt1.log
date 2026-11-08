@@ -1,0 +1,63 @@
+=== start 2026-11-08T23:20:30+01:00 host data
+/scratch/kohlbach/fastag112-f4/ho-test-7ef0f33/acceptance/1.12/scorers/item04/unidentified-test.yaml: OK
+bench/fastag-bench/scripts/stats_unidentified.py: OK
+bench/fastag-bench/scripts/stats_paired.py: OK
+bench/fastag-bench/src/fastag_bench/unidentified.py: OK
+bench/fastag-bench/src/fastag_bench/pooltruth.py: OK
+bench/fastag-bench/src/fastag_bench/strata.py: OK
+bench/fastag-bench/src/fastag_bench/chimera.py: OK
+bench/fastag-bench/src/fastag_bench/proteometools.py: OK
+bench/fastag-bench/src/fastag_bench/score.py: OK
+bench/fastag-bench/src/fastag_bench/parsers.py: OK
+bench/fastag-bench/src/fastag_bench/sage.py: OK
+bench/fastag-bench/src/fastag_bench/tsv.py: OK
+bench/fastag-bench/config/proteometools_splits.tsv: OK
+bench/fastag-bench/config/proteometools_shared_identities.tsv: OK
+bench/fastag-bench/config/proteometools_pool_lists.tsv: OK
+/scratch/kohlbach/fastag-heldout-1.12/rc-a117801/opt/FASTag.bin: OK
+/scratch/kohlbach/fastag112-f4/unid/data/TUM_second_pool_11/01748a_BE1-TUM_second_pool_11_02_01-3xHCD-1h-R1.mzML: OK
+/scratch/kohlbach/fastag112-f4/unid/data/TUM_second_pool_13/01717a_BA1-TUM_second_pool_13_01_01-3xHCD-1h-R1.mzML: OK
+/scratch/kohlbach/fastag112-f4/unid/data/TUM_second_pool_5/01709a_GE9-TUM_second_pool_5_01_01-3xHCD-1h-R1.mzML: OK
+/scratch/kohlbach/fastag112-f4/unid/data/TUM_second_pool_54/01748a_BD3-TUM_second_pool_54_01_01-3xHCD-1h-R1.mzML: OK
+/scratch/kohlbach/fastag112-f4/unid/data/TUM_second_pool_90/01812a_GF1-TUM_second_pool_90_01_01-3xHCD-1h-R1.mzML: OK
+/scratch/kohlbach/fastag112-f4/unid/data/TUM_second_pool_96/01866a_GD1-TUM_second_pool_96_03_01-3xHCD-1h-R1.mzML: OK
+/scratch/kohlbach/fastag112-f4/unid/data/TUM_third_pool_6/01812a_GD3-TUM_third_pool_6_01_01-3xHCD-1h-R1.mzML: OK
+/scratch/kohlbach/fastag112-f4/unid/data/Thermo_SRM_Pool_13/01640c_BE2-Thermo_SRM_Pool_13_01_01-3xHCD-1h-R2.mzML: OK
+/scratch/kohlbach/fastag112-f4/unid/data/Thermo_SRM_Pool_47/01640c_BG6-Thermo_SRM_Pool_47_01_01-3xHCD-1h-R2.mzML: OK
+=== pool-truth 2026-11-08T23:20:33+01:00
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_10_02_01_ETD-1h-R1-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_10_02_01_2xIT_2xHCD-1h-R1-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_10_02_01_3xHCD-1h-R1-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_10_02_01_DDA-1h-R1-tryptic.zip
+TUM_second_pool_10: 735 pool peptides from 4 searches
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_12_02_01_ETD-1h-R2-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_12_02_01_2xIT_2xHCD-1h-R1-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_12_02_01_DDA-1h-R1-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_12_02_01_3xHCD-1h-R1-tryptic.zip
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/scratch/kohlbach/fastag112-f4/ho-test-7ef0f33/bench/fastag-bench/src/fastag_bench/cli.py", line 403, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/scratch/kohlbach/fastag112-f4/ho-test-7ef0f33/bench/fastag-bench/src/fastag_bench/cli.py", line 396, in main
+    return a.func(a)
+           ^^^^^^^^^
+  File "/scratch/kohlbach/fastag112-f4/ho-test-7ef0f33/bench/fastag-bench/src/fastag_bench/cli.py", line 273, in cmd_unidentified
+    U.run_step(cfg, a.step, a.split)
+  File "/scratch/kohlbach/fastag112-f4/ho-test-7ef0f33/bench/fastag-bench/src/fastag_bench/unidentified.py", line 779, in run_step
+    return {"pool-truth": step_pool_truth, "sage-modes": step_sage_modes, "run": step_run,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/kohlbach/fastag112-f4/ho-test-7ef0f33/bench/fastag-bench/src/fastag_bench/unidentified.py", line 300, in step_pool_truth
+    written = _pool_truth(cfg, pools + sorted({sw[p] for p in pools}) + nb, files, log)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/kohlbach/fastag112-f4/ho-test-7ef0f33/bench/fastag-bench/src/fastag_bench/unidentified.py", line 255, in _pool_truth
+    zp = _fetch(z.url, d / "search" / z.file, z.sha1 or None, log)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/kohlbach/fastag112-f4/ho-test-7ef0f33/bench/fastag-bench/src/fastag_bench/unidentified.py", line 224, in _fetch
+    download(url, dest)
+  File "/scratch/kohlbach/fastag112-f4/ho-test-7ef0f33/bench/fastag-bench/src/fastag_bench/fetch.py", line 55, in download
+    r.raise_for_status()
+  File "/scratch/kohlbach/fastag112-f4/envs/bench/lib/python3.11/site-packages/requests/models.py", line 1167, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 403 Client Error: Forbidden for url: https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_12_02_01_3xHCD-1h-R1-tryptic.zip

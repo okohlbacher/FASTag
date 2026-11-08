@@ -1,0 +1,115 @@
+{
+ "manifest": "item04-test",
+ "manifest_sha256": "4c7948e04ab2fb12b8e77621b9fafba7bb1938ca18136f7fef895dcde065b213",
+ "config": "CFG-04",
+ "param_hash": "fbb47bdb3a03eb59d11d0401d167ff469e80090374432230cc056fc578ad4013",
+ "frozen_config": "scorers/item04/unidentified-test.yaml",
+ "frozen_config_sha256": "ab7e64450bcb7f063f41d50a26a5b0dbe6667d1c60e5b23f89eb44442dfb2b2d",
+ "harness": "bench/fastag-bench 7ef0f33 (14 files sha256-checked, run/sums04.txt)",
+ "fastag_bin_sha256": "c4c2ad67fcd9106e474f552267f7cdfefe107f394b268bbc236308b773e4d7f3",
+ "host": "data",
+ "started": "2026-11-08T23:22:10+01:00",
+ "finished": "2026-11-08T23:45:55+01:00",
+ "cpu": "taskset 200-223 (24 CPUs), OMP_NUM_THREADS=4",
+ "pools_scored": 9,
+ "pools_excluded": [],
+ "pools_uncertain": [
+  "TUM_second_pool_13",
+  "TUM_second_pool_54",
+  "TUM_second_pool_96",
+  "TUM_third_pool_6",
+  "Thermo_SRM_Pool_13",
+  "Thermo_SRM_Pool_47"
+ ],
+ "margin": 0.05,
+ "primary": {
+  "scope": "pools_not_excluded",
+  "label_rule": "no_byproduct_candidate",
+  "profile": "matched",
+  "role": "primary",
+  "spectra": "27006",
+  "clusters": "1289.0",
+  "rank1_accuracy": "0.2710879063911723",
+  "chance": "0.0009257202103236318",
+  "value": "0.2701621861808487",
+  "ci_lo": "0.23694144358046196",
+  "ci_hi": "0.3067842075995934",
+  "p_one_sided": "0.0004997501249375312",
+  "p_holm": "0.0009995002498750624",
+  "verdict": "holds"
+ },
+ "secondary": {
+  "scope": "pools_not_excluded",
+  "label_rule": "no_byproduct_candidate",
+  "profile": "matched_tl5",
+  "role": "secondary (Holm)",
+  "spectra": "20432",
+  "clusters": "1132.0",
+  "rank1_accuracy": "0.23678543461237275",
+  "chance": "0.0",
+  "value": "0.23678543461237275",
+  "ci_lo": "0.19989033352089855",
+  "ci_hi": "0.2722399365624517",
+  "p_one_sided": "0.0004997501249375312",
+  "p_holm": "0.0009995002498750624",
+  "verdict": "holds"
+ },
+ "F4-02_F4-03_primary_scope_rule": [
+  {
+   "profile": "default",
+   "endpoint": "F4-03 selection bias S0 - S3PT size1 rank1",
+   "spectra": "153867",
+   "value": "0.48347138821470864",
+   "ci_lo": "0.45156143259186043",
+   "ci_hi": "0.515495406198491",
+   "verdict": "reported"
+  },
+  {
+   "profile": "default",
+   "endpoint": "F4-02 precision transfer E<=0.01 S0 - S3PT size1",
+   "spectra": "86765",
+   "value": "0.26722513830232847",
+   "ci_lo": "0.21486936582791452",
+   "ci_hi": "0.31920148303742174",
+   "verdict": "not shown"
+  },
+  {
+   "profile": "matched",
+   "endpoint": "F4-03 selection bias S0 - S3PT size1 rank1",
+   "spectra": "144836",
+   "value": "0.4303972841375555",
+   "ci_lo": "0.3924951673487392",
+   "ci_hi": "0.4663909569647808",
+   "verdict": "reported"
+  },
+  {
+   "profile": "matched",
+   "endpoint": "F4-02 precision transfer E<=0.01 S0 - S3PT size1",
+   "spectra": "114013",
+   "value": "0.2703767278237488",
+   "ci_lo": "0.23159803316704056",
+   "ci_hi": "0.3098944962820579",
+   "verdict": "not shown"
+  },
+  {
+   "profile": "matched_tl5",
+   "endpoint": "F4-03 selection bias S0 - S3PT size1 rank1",
+   "spectra": "127087",
+   "value": "0.39809338025800367",
+   "ci_lo": "0.36080265441433496",
+   "ci_hi": "0.43808648421142166",
+   "verdict": "reported"
+  },
+  {
+   "profile": "matched_tl5",
+   "endpoint": "F4-02 precision transfer E<=0.01 S0 - S3PT size1",
+   "spectra": "102030",
+   "value": "0.1975858444878015",
+   "ci_lo": "0.17404436766011572",
+   "ci_hi": "0.223511346135714",
+   "verdict": "not shown"
+  }
+ ],
+ "F4-04_verdict": "no benefit claimed",
+ "verdict": "PASS"
+}

@@ -1,0 +1,159 @@
+=== start 2026-11-08T23:22:10+01:00 host data
+/scratch/kohlbach/fastag112-f4/ho-test-7ef0f33/acceptance/1.12/scorers/item04/unidentified-test.yaml: OK
+bench/fastag-bench/scripts/stats_unidentified.py: OK
+bench/fastag-bench/scripts/stats_paired.py: OK
+bench/fastag-bench/src/fastag_bench/unidentified.py: OK
+bench/fastag-bench/src/fastag_bench/pooltruth.py: OK
+bench/fastag-bench/src/fastag_bench/strata.py: OK
+bench/fastag-bench/src/fastag_bench/chimera.py: OK
+bench/fastag-bench/src/fastag_bench/proteometools.py: OK
+bench/fastag-bench/src/fastag_bench/score.py: OK
+bench/fastag-bench/src/fastag_bench/parsers.py: OK
+bench/fastag-bench/src/fastag_bench/sage.py: OK
+bench/fastag-bench/src/fastag_bench/tsv.py: OK
+bench/fastag-bench/config/proteometools_splits.tsv: OK
+bench/fastag-bench/config/proteometools_shared_identities.tsv: OK
+bench/fastag-bench/config/proteometools_pool_lists.tsv: OK
+/scratch/kohlbach/fastag-heldout-1.12/rc-a117801/opt/FASTag.bin: OK
+/scratch/kohlbach/fastag112-f4/unid/data/TUM_second_pool_11/01748a_BE1-TUM_second_pool_11_02_01-3xHCD-1h-R1.mzML: OK
+/scratch/kohlbach/fastag112-f4/unid/data/TUM_second_pool_13/01717a_BA1-TUM_second_pool_13_01_01-3xHCD-1h-R1.mzML: OK
+/scratch/kohlbach/fastag112-f4/unid/data/TUM_second_pool_5/01709a_GE9-TUM_second_pool_5_01_01-3xHCD-1h-R1.mzML: OK
+/scratch/kohlbach/fastag112-f4/unid/data/TUM_second_pool_54/01748a_BD3-TUM_second_pool_54_01_01-3xHCD-1h-R1.mzML: OK
+/scratch/kohlbach/fastag112-f4/unid/data/TUM_second_pool_90/01812a_GF1-TUM_second_pool_90_01_01-3xHCD-1h-R1.mzML: OK
+/scratch/kohlbach/fastag112-f4/unid/data/TUM_second_pool_96/01866a_GD1-TUM_second_pool_96_03_01-3xHCD-1h-R1.mzML: OK
+/scratch/kohlbach/fastag112-f4/unid/data/TUM_third_pool_6/01812a_GD3-TUM_third_pool_6_01_01-3xHCD-1h-R1.mzML: OK
+/scratch/kohlbach/fastag112-f4/unid/data/Thermo_SRM_Pool_13/01640c_BE2-Thermo_SRM_Pool_13_01_01-3xHCD-1h-R2.mzML: OK
+/scratch/kohlbach/fastag112-f4/unid/data/Thermo_SRM_Pool_47/01640c_BG6-Thermo_SRM_Pool_47_01_01-3xHCD-1h-R2.mzML: OK
+=== pool-truth 2026-11-08T23:22:13+01:00
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_12_02_01_3xHCD-1h-R1-tryptic.zip
+TUM_second_pool_12: 730 pool peptides from 4 searches
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_4_01_01_DDA-1h-R1-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_4_01_01_ETD-1h-R1-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_4_01_01_3xHCD-1h-R1-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_4_01_01_2xIT_2xHCD-1h-R1-tryptic.zip
+TUM_second_pool_4: 639 pool peptides from 4 searches
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_53_01_01_ETD-1h-R1-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_53_01_01_2xIT_2xHCD-1h-R1-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_53_01_01_3xHCD-1h-R1-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_53_01_01_DDA-1h-R1-tryptic.zip
+TUM_second_pool_53: 1227 pool peptides from 4 searches
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_55_01_01_3xHCD-1h-R1-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_55_01_01_DDA-1h-R1-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_55_01_01_ETD-1h-R1-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_55_01_01_2xIT_2xHCD-1h-R1-tryptic.zip
+TUM_second_pool_55: 1212 pool peptides from 4 searches
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_6_01_01_2xIT_2xHCD-1h-R1-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_6_01_01_DDA-1h-R1-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_6_01_01_ETD-1h-R1-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_6_01_01_3xHCD-1h-R1-tryptic.zip
+TUM_second_pool_6: 584 pool peptides from 4 searches
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_89_01_01_3xHCD-1h-R1-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_89_01_01_2xIT_2xHCD-1h-R1-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_89_01_01_DDA-1h-R1-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_89_01_01_ETD-1h-R1-tryptic.zip
+TUM_second_pool_89: 975 pool peptides from 4 searches
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_95_03_01_DDA-1h-R1-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_95_03_01_3xHCD-1h-R1-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_95_03_01_ETD-1h-R1-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_second_pool_95_03_01_2xIT_2xHCD-1h-R1-tryptic.zip
+TUM_second_pool_95: 1003 pool peptides from 4 searches
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_third_pool_5_01_01_DDA-1h-R1-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_third_pool_5_01_01_3xHCD-1h-R1-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_third_pool_5_01_01_ETD-1h-R1-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/TUM_third_pool_5_01_01_2xIT_2xHCD-1h-R1-tryptic.zip
+TUM_third_pool_5: 647 pool peptides from 4 searches
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/Thermo_SRM_Pool_12_01_01_3xHCD-1h-R2-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/Thermo_SRM_Pool_12_01_01_ETD-1h-R2-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/Thermo_SRM_Pool_12_01_01_DDA-1h-R2-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/Thermo_SRM_Pool_12_01_01_2xIT_2xHCD-1h-R2-tryptic.zip
+Thermo_SRM_Pool_12: 804 pool peptides from 4 searches
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/Thermo_SRM_Pool_14_01_01_DDA-1h-R2-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/Thermo_SRM_Pool_14_01_01_3xHCD-1h-R2-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/Thermo_SRM_Pool_14_01_01_ETD-1h-R2-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/Thermo_SRM_Pool_14_01_01_2xIT_2xHCD-1h-R2-tryptic.zip
+Thermo_SRM_Pool_14: 717 pool peptides from 4 searches
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/Thermo_SRM_Pool_46_01_01_2xIT_2xHCD-1h-R2-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/Thermo_SRM_Pool_46_01_01_DDA-1h-R2-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/Thermo_SRM_Pool_46_01_01_ETD-1h-R2-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/Thermo_SRM_Pool_46_01_01_3xHCD-1h-R2-tryptic.zip
+Thermo_SRM_Pool_46: 789 pool peptides from 4 searches
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/Thermo_SRM_Pool_48_01_01_2xIT_2xHCD-1h-R2-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/Thermo_SRM_Pool_48_01_01_ETD-1h-R2-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/Thermo_SRM_Pool_48_01_01_DDA-1h-R2-tryptic.zip
+fetch https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/02/PXD004732/Thermo_SRM_Pool_48_01_01_3xHCD-1h-R2-tryptic.zip
+Thermo_SRM_Pool_48: 729 pool peptides from 4 searches
+test: 9 pools; swap partners TUM_second_pool_11->TUM_second_pool_91 (1033), TUM_second_pool_13->Thermo_SRM_Pool_11 (781), TUM_second_pool_5->Thermo_SRM_Pool_53 (767), TUM_second_pool_54->Thermo_SRM_Pool_6 (578), TUM_second_pool_90->TUM_second_pool_14 (713), TUM_second_pool_96->Thermo_SRM_Pool_49 (817), TUM_third_pool_6->TUM_first_pool_69 (1125), Thermo_SRM_Pool_13->TUM_first_pool_75 (1102), Thermo_SRM_Pool_47->TUM_second_pool_129 (618); carryover neighbours with lists 15, without a tryptic search []
+=== sage-modes 2026-11-08T23:27:46+01:00
+01748a_BE1-TUM_second_pool_11_02_01-3xHCD-1h-R1.mzML sage closed: 13.148 s
+01748a_BE1-TUM_second_pool_11_02_01-3xHCD-1h-R1.mzML sage pool: 5.031 s
+01717a_BA1-TUM_second_pool_13_01_01-3xHCD-1h-R1.mzML sage closed: 13.49 s
+01717a_BA1-TUM_second_pool_13_01_01-3xHCD-1h-R1.mzML sage pool: 5.197 s
+01709a_GE9-TUM_second_pool_5_01_01-3xHCD-1h-R1.mzML sage closed: 12.202 s
+01709a_GE9-TUM_second_pool_5_01_01-3xHCD-1h-R1.mzML sage pool: 4.589 s
+01748a_BD3-TUM_second_pool_54_01_01-3xHCD-1h-R1.mzML sage closed: 14.357 s
+01748a_BD3-TUM_second_pool_54_01_01-3xHCD-1h-R1.mzML sage pool: 5.624 s
+01812a_GF1-TUM_second_pool_90_01_01-3xHCD-1h-R1.mzML sage closed: 14.971 s
+01812a_GF1-TUM_second_pool_90_01_01-3xHCD-1h-R1.mzML sage pool: 5.202 s
+01866a_GD1-TUM_second_pool_96_03_01-3xHCD-1h-R1.mzML sage closed: 15.948 s
+01866a_GD1-TUM_second_pool_96_03_01-3xHCD-1h-R1.mzML sage pool: 5.954 s
+01812a_GD3-TUM_third_pool_6_01_01-3xHCD-1h-R1.mzML sage closed: 14.154 s
+01812a_GD3-TUM_third_pool_6_01_01-3xHCD-1h-R1.mzML sage pool: 5.534 s
+01640c_BE2-Thermo_SRM_Pool_13_01_01-3xHCD-1h-R2.mzML sage closed: 13.161 s
+01640c_BE2-Thermo_SRM_Pool_13_01_01-3xHCD-1h-R2.mzML sage pool: 5.095 s
+01640c_BG6-Thermo_SRM_Pool_47_01_01-3xHCD-1h-R2.mzML sage closed: 12.71 s
+01640c_BG6-Thermo_SRM_Pool_47_01_01-3xHCD-1h-R2.mzML sage pool: 4.807 s
+=== chimera-build 2026-11-08T23:30:39+01:00
+test ratio 1: 1841 chimeras
+test ratio 10: 1841 chimeras
+=== run 2026-11-08T23:33:40+01:00
+01748a_BE1-TUM_second_pool_11_02_01-3xHCD-1h-R1.mzML fastag default: 0.867 s
+01748a_BE1-TUM_second_pool_11_02_01-3xHCD-1h-R1.mzML fastag matched: 0.534 s
+01748a_BE1-TUM_second_pool_11_02_01-3xHCD-1h-R1.mzML fastag matched_tl5: 0.499 s
+01717a_BA1-TUM_second_pool_13_01_01-3xHCD-1h-R1.mzML fastag default: 0.826 s
+01717a_BA1-TUM_second_pool_13_01_01-3xHCD-1h-R1.mzML fastag matched: 0.524 s
+01717a_BA1-TUM_second_pool_13_01_01-3xHCD-1h-R1.mzML fastag matched_tl5: 0.508 s
+01709a_GE9-TUM_second_pool_5_01_01-3xHCD-1h-R1.mzML fastag default: 0.674 s
+01709a_GE9-TUM_second_pool_5_01_01-3xHCD-1h-R1.mzML fastag matched: 0.521 s
+01709a_GE9-TUM_second_pool_5_01_01-3xHCD-1h-R1.mzML fastag matched_tl5: 0.457 s
+01748a_BD3-TUM_second_pool_54_01_01-3xHCD-1h-R1.mzML fastag default: 0.986 s
+01748a_BD3-TUM_second_pool_54_01_01-3xHCD-1h-R1.mzML fastag matched: 0.539 s
+01748a_BD3-TUM_second_pool_54_01_01-3xHCD-1h-R1.mzML fastag matched_tl5: 0.514 s
+01812a_GF1-TUM_second_pool_90_01_01-3xHCD-1h-R1.mzML fastag default: 1.004 s
+01812a_GF1-TUM_second_pool_90_01_01-3xHCD-1h-R1.mzML fastag matched: 0.559 s
+01812a_GF1-TUM_second_pool_90_01_01-3xHCD-1h-R1.mzML fastag matched_tl5: 0.524 s
+01866a_GD1-TUM_second_pool_96_03_01-3xHCD-1h-R1.mzML fastag default: 1.362 s
+01866a_GD1-TUM_second_pool_96_03_01-3xHCD-1h-R1.mzML fastag matched: 0.545 s
+01866a_GD1-TUM_second_pool_96_03_01-3xHCD-1h-R1.mzML fastag matched_tl5: 0.547 s
+01812a_GD3-TUM_third_pool_6_01_01-3xHCD-1h-R1.mzML fastag default: 1.068 s
+01812a_GD3-TUM_third_pool_6_01_01-3xHCD-1h-R1.mzML fastag matched: 0.528 s
+01812a_GD3-TUM_third_pool_6_01_01-3xHCD-1h-R1.mzML fastag matched_tl5: 0.514 s
+01640c_BE2-Thermo_SRM_Pool_13_01_01-3xHCD-1h-R2.mzML fastag default: 0.966 s
+01640c_BE2-Thermo_SRM_Pool_13_01_01-3xHCD-1h-R2.mzML fastag matched: 0.527 s
+01640c_BE2-Thermo_SRM_Pool_13_01_01-3xHCD-1h-R2.mzML fastag matched_tl5: 0.504 s
+01640c_BG6-Thermo_SRM_Pool_47_01_01-3xHCD-1h-R2.mzML fastag default: 0.832 s
+01640c_BG6-Thermo_SRM_Pool_47_01_01-3xHCD-1h-R2.mzML fastag matched: 0.528 s
+01640c_BG6-Thermo_SRM_Pool_47_01_01-3xHCD-1h-R2.mzML fastag matched_tl5: 0.5 s
+chimeras.mgf fastag matched: 0.219 s
+chimeras.mgf fastag matched_div: 0.222 s
+chimeras.mgf fastag matched: 0.232 s
+chimeras.mgf fastag matched_div: 0.235 s
+=== score 2026-11-08T23:34:13+01:00
+TUM_second_pool_11: MS2 46845, S0 6049, S3 40796 (size1 17745, pool_consistent 10926, none 12017), agreement 0.9997, carryover 28949 from 2 neighbours
+TUM_second_pool_13: MS2 45888, S0 6878, S3 39010 (size1 16857, pool_consistent 9727, none 12053), agreement 0.9967, carryover 21133 from 1 neighbours
+TUM_second_pool_5: MS2 43143, S0 5387, S3 37756 (size1 16430, pool_consistent 7685, none 13541), agreement 0.9948, carryover 24382 from 2 neighbours
+TUM_second_pool_54: MS2 51069, S0 15188, S3 35881 (size1 14486, pool_consistent 13920, none 6570), agreement 0.9935, carryover 27702 from 2 neighbours
+TUM_second_pool_90: MS2 48732, S0 12366, S3 36366 (size1 15520, pool_consistent 11629, none 8386), agreement 0.9932, carryover 27672 from 2 neighbours
+TUM_second_pool_96: MS2 46377, S0 12756, S3 33621 (size1 13156, pool_consistent 11184, none 8781), agreement 0.9918, carryover 17794 from 1 neighbours
+TUM_third_pool_6: MS2 41700, S0 18736, S3 22964 (size1 10638, pool_consistent 2351, none 8554), agreement 0.9916, carryover 468 from 1 neighbours
+Thermo_SRM_Pool_13: MS2 52872, S0 28426, S3 24446 (size1 10893, pool_consistent 3761, none 8792), agreement 0.9960, carryover 7416 from 2 neighbours
+Thermo_SRM_Pool_47: MS2 46902, S0 23940, S3 22962 (size1 11362, pool_consistent 1962, none 7778), agreement 0.9958, carryover 7047 from 2 neighbours
+wrote /scratch/kohlbach/fastag112-f4/unid/results/unidentified/test/spectra.tsv
+wrote /scratch/kohlbach/fastag112-f4/unid/results/unidentified/test/controls.tsv
+wrote /scratch/kohlbach/fastag112-f4/unid/results/unidentified/test/chimeras.tsv
+=== collect 2026-11-08T23:44:57+01:00
+wrote /scratch/kohlbach/fastag112-f4/unid/results/unidentified/test/summary.tsv
+wrote /scratch/kohlbach/fastag112-f4/unid/results/unidentified/test/candidate_sizes.tsv
+wrote /scratch/kohlbach/fastag112-f4/unid/results/unidentified/test/endpoints.tsv
+wrote /scratch/kohlbach/fastag112-f4/unid/results/unidentified/test/label_conflict.tsv
+wrote /scratch/kohlbach/fastag112-f4/unid/results/unidentified/test/chimera_endpoints.tsv
+=== DONE 2026-11-08T23:45:55+01:00
