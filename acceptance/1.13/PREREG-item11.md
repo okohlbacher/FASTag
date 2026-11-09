@@ -108,3 +108,21 @@ instead of the frozen 99ec699 binary (`064b8278...`, as `frozen-configs.tsv` and
 first start refused (`refusing: binary sha256`) before any FASTag, MSFragger or scorer step; nothing ran on the
 held-out files. Only that constant changed; the script's sha256 in `item11/SHA256SUMS` is updated. Nothing else in
 this protocol changed.
+
+## Result (scored once, 2026-11-09, node data)
+
+`item11/scripts/run_item11.sh` from git archive 0ad00a8 (`data:/scratch/kohlbach/b113/ax/acc-run`); every check
+passed, all 16 FASTag runs and 24 MSFragger searches exited 0; outputs in `item11/results/` (provenance in
+`score/summary.json`: scorer, acclib, score.py and parsers.py sha256 as pinned).
+
+| Cell | UVPD spectra | Clusters | by | ax | ax - by (95% bootstrap) |
+|---|---|---|---|---|---|
+| **E1: T1 (HCD partner), pooled** | 77,643 | 12,280 | 30.87% | 0.04% | **-30.83 [-31.63, -30.02]** |
+| E2: T2 (UVPD a,b,x,y), pooled | 56,869 | 9,143 | 61.22% | 0.08% | -61.14 [-61.93, -60.37] |
+
+Per laser time (T1) by rises from 8.1% (5 ms) to 49.3% (100 ms); ax stays at 0.00-0.08%. Union of the arms 30.91%
+(T1). Shuffled-peptide chance 0.00% for both arms. a,x-only MSFragger PSMs per run: 0-214 against 2,518-9,218 for
+a,b,x,y.
+
+**E1 FAIL.** `-ion_series ax` and `-ion_series_photo` stay experimental and opt-in. On 213-nm UVPD of tryptic
+peptides (and on the one 193-nm DEV run) the spectra carry b/y ladders; a/x ions are too sparse to form tags.

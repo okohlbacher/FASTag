@@ -1,0 +1,45 @@
+{
+ "split": "heldout",
+ "base": "by",
+ "cand": "ax",
+ "cells": [
+  {
+   "cell": "item11:heldout:T1",
+   "clusters": 12280,
+   "spectra": 77643,
+   "base_pct": 30.868204474324795,
+   "cand_pct": 0.04121427559470912,
+   "diff": -30.826990198730087,
+   "se": 0.40010079729529,
+   "p2_5": -31.626449564188608,
+   "p97_5": -30.023634965498402,
+   "union_pct": 30.9055549115825
+  },
+  {
+   "cell": "item11:heldout:T2",
+   "clusters": 9143,
+   "spectra": 56869,
+   "base_pct": 61.21788672211574,
+   "cand_pct": 0.07561237229422005,
+   "diff": -61.14227434982152,
+   "se": 0.40872357242568197,
+   "p2_5": -61.93109980965764,
+   "p97_5": -60.36665074888272,
+   "union_pct": 61.28470695809668
+  }
+ ],
+ "chance_T1_pct": {
+  "by": 0.00257589222466932,
+  "ax": 0.00128794611233466
+ },
+ "provenance": {
+  "score_item11.py": "462ce916d6c777f71de4ce64d2a74cd63fd6c0ac4c0cb80b0996b01863857a55",
+  "acclib.py": "fe387a3455a52678f78c20c3156b63c251e08daa5b92da2f3e205d1d9ab2b1c1",
+  "score.py": "2130853fb32867a8b19b717df3e2aca308a17ce07b3bafbc8ec44034a6507a9b",
+  "parsers.py": "01e27548bcae489d3f205960730c8bc36624e16935ea5df0bec5a6a04ea51f49",
+  "score.py path": "/scratch/kohlbach/b113/ax/feat-99ec699/bench/fastag-bench/src/fastag_bench/score.py",
+  "python": "3.11.15",
+  "pandas": "3.0.6",
+  "numpy": "2.4.6"
+ }
+}
