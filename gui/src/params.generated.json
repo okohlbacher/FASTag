@@ -168,6 +168,15 @@
       "toppAdvanced": true
     },
     {
+      "name": "complement_probe",
+      "type": "int",
+      "default": "500",
+      "description": "MS2 spectra the -complement_tolerance_unit auto probe tags to measure the complement window",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 1
+    },
+    {
       "name": "complement_rule",
       "type": "string",
       "default": "same_charge",
@@ -202,12 +211,13 @@
       "name": "complement_tolerance_unit",
       "type": "string",
       "default": "Da",
-      "description": "Da: the window is -complement_tolerance. fragment: -complement_tol_factor scales the run's -fragment_tolerance at both partners",
+      "description": "Da: the window is -complement_tolerance. fragment: -complement_tol_factor scales the run's -fragment_tolerance at both partners. auto (experimental): the window is measured on the run, from the complement pairs of high-confidence tags in a probe of -complement_probe MS2 spectra; -complement_tolerance when too few pairs",
       "required": false,
       "toppAdvanced": true,
       "choices": [
         "Da",
-        "fragment"
+        "fragment",
+        "auto"
       ]
     },
     {

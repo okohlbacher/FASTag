@@ -211,3 +211,15 @@ unexplained (12), -77.7777 unexplained (10). With `-extension 3` and
 dropped_engine). Derived from the vendored FASTA only, so the same licence.
 
 sha256: `shifts_insilico.mgf` `bb609510728087057effddcf1fec8b0a52cec4907e2e954cdd287d27cee4d257`.
+
+## Complement-tolerance fixtures (1.13 item 15)
+
+`compltol_hires.mgf` and `compltol_lowres.mgf` (250 MS2 each), written by
+`make_compltol_fixture.py Ecoli_MS2_small.fasta .` (standard library only):
+in-silico charge-2 spectra of the tryptic peptides of `Ecoli_MS2_small.fasta`
+(b2..b(n-1), y1..y(n-1), 25 noise peaks), every fragment m/z with a Gaussian
+error of sd 0.004 Da (hires; a complement pair's 95% window 0.0111 Da) or
+0.1 Da (lowres; 0.277 Da). `complement_tol_cli_test` measures the window of
+`-complement_tolerance_unit auto` on them. sha256: `compltol_hires.mgf`
+`ff0210b513bf9c5515f845774617ca1de2959ed5c7f19d52d56e375e1cd3a7e0`,
+`compltol_lowres.mgf` `3437bfdef43f685735c8d00e39c302009ad4350d5173e5bd47e7254790ed8aa2`.

@@ -866,6 +866,12 @@ export const PARAM_UI: Record<string, ParamUi> = {
       text: 'Score tags with no or one complement pair with the mid-p variant of the complement test.'
     }
   },
+  complement_probe: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'How many MS2 spectra the auto complement window is measured on (experimental).'
+    }
+  },
   complement_rule: {
     hidden: OPT_IN_1_12,
     help: {
@@ -887,7 +893,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   complement_tolerance_unit: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'Whether the complement window is a fixed value in Da or follows the fragment tolerance.'
+      text: 'Whether the complement window is a fixed value in Da, follows the fragment tolerance, or (auto, experimental) is measured on the run from the complement pairs of confident tags.'
     }
   },
   digest_calibration: {

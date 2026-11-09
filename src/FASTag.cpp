@@ -34,6 +34,7 @@
 #include "AlkylationCall.h"
 #include "Centroid.h"
 #include "CliParam.h"
+#include "ComplementTol.h"
 #include "Census.h"
 #include "CensusIds.h"
 #include "ClusterAcc.h"
@@ -89,6 +90,7 @@
 #include <memory>
 #include <mutex>
 #include <set>
+#include <iomanip>
 #include <sstream>
 #include <thread>
 #include <vector>
@@ -758,8 +760,17 @@ protected:
     registerStringOption_("complement_tolerance_unit", "<u>", FASTag::Cli::kComplementToleranceUnit,
                           "Da: the window is -complement_tolerance. fragment: "
                           "-complement_tol_factor scales the run's -fragment_tolerance at "
-                          "both partners", false, true);
-    setValidStrings_("complement_tolerance_unit", ListUtils::create<std::string>("Da,fragment"));
+                          "both partners. auto (experimental): the window is measured on the run, "
+                          "from the complement pairs of high-confidence tags in a probe of "
+                          "-complement_probe MS2 spectra; -complement_tolerance when too few pairs",
+                          false, true);
+    setValidStrings_("complement_tolerance_unit", ListUtils::create<std::string>("Da,fragment,auto"));
+    // 1.13 item 15 (src/ComplementTol.h): the probe size of
+    // -complement_tolerance_unit auto. Read only under auto.
+    registerIntOption_("complement_probe", "<n>", 500,
+                       "MS2 spectra the -complement_tolerance_unit auto probe tags to measure "
+                       "the complement window", false, true);
+    setMinInt_("complement_probe", 1);
     registerFlag_("complement_midp",
                   "Score complements with DirecTag's hypergeometric mid-p P(X>c) + P(X=c)/2 "
                   "for tags with 0 or 1 complemented peaks; 2 or more keep P(X>=c)", true);
@@ -1596,6 +1607,7 @@ protected:
           {"charge_max", nullptr},
           {"charge_infer_margin", nullptr},
           {"isotope_error", nullptr},
+          {"complement_probe", nullptr},
           // ---- 1.12 A: -stream refusals ----
           {"shortlist_out", nullptr},
           {"fasta_out", nullptr},
@@ -1618,6 +1630,12 @@ protected:
           {"probe_input", nullptr},
           {"dump_spectrum", nullptr},
       };
+      // 1.13 item 15: the probe needs random access to the run.
+      if (getStringOption_("complement_tolerance_unit") == "auto")
+      {
+        OPENMS_LOG_ERROR << "-stream cannot be combined with -complement_tolerance_unit auto." << std::endl;
+        return ILLEGAL_PARAMETERS;
+      }
       for (const StreamRefusal& r : stream_refusals)
         if (optionNonDefault_(r.option))
         {
@@ -1756,12 +1774,14 @@ protected:
     // flag carried beside the rows (Block::row_species).
     const bool species_sel_on = hyp_on && want_species;
     // The complement pairs the infer call counts: #2's rule and tolerance.
-    const FASTag::ComplementSpec hyp_cs = FASTag::ComplementSpec::fromParam(p);
+    // Not const: -complement_tolerance_unit auto sets the window after the
+    // probe (phase 5) and rebuilds both.
+    FASTag::ComplementSpec hyp_cs = FASTag::ComplementSpec::fromParam(p);
     // #15 phase B: a spectrum read as c/z-dot counts c/z-dot pairs (they sum
     // to M + H) for its charge and isotope evidence, as its tags do.
     FASTag::Param p_cz = p;
     p_cz.ion_pair = FASTag::IonSeries::ionPair(FASTag::IonSeries::Series::CZ);
-    const FASTag::ComplementSpec hyp_cs_cz = FASTag::ComplementSpec::fromParam(p_cz);
+    FASTag::ComplementSpec hyp_cs_cz = FASTag::ComplementSpec::fromParam(p_cz);
     // The residue modifications in use; -recon_id_out reports exactly these.
     StringList fixed_mods, variable_mods;
     double fixed_term_n = 0, fixed_term_c = 0;
@@ -2778,6 +2798,15 @@ protected:
     }
     const bool mzpeak_in = is_mzpeak(in);
     const bool mgf_in = !mzpeak_in && is_mgf(in);
+    // 1.13 item 15: the auto probe reads spectra by index before the tagging
+    // pass; mzPeak input is read once, in file order.
+    const bool compl_auto = getStringOption_("complement_tolerance_unit") == "auto";
+    if (compl_auto && mzpeak_in)
+    {
+      OPENMS_LOG_ERROR << "-complement_tolerance_unit auto needs mzML or MGF input; mzPeak input is "
+                          "read in one pass. Give -complement_tolerance_unit Da or fragment." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
     // #9: what each reader does with profile MS2 (src/Centroid.h). mzPeak
     // centroids in MzPeakStream; mzML (any of its readers) in the tagging
     // loop, the probe and the -out_spectra re-read; MGF never.
@@ -3144,6 +3173,88 @@ protected:
       });
     }
     else tolerance_probe(read_spectrum);
+
+    // 1.13 item 15: -complement_tolerance_unit auto (src/ComplementTol.h).
+    // A probe of up to -complement_probe MS2 spectra, drawn uniformly over
+    // the run with a fixed seed and read as the tagging pass reads them, is
+    // tagged at the first seed length with the complement test made neutral;
+    // the rank-1 tags at or below ComplTol::kAutoMaxEvalue give the signed
+    // complement errors, and their distribution gives the window. Too few
+    // pairs keep -complement_tolerance (Da). Not reached under Da or fragment.
+    if (compl_auto)
+    {
+      namespace CT = FASTag::ComplTol;
+      const Size want = static_cast<Size>(getIntOption_("complement_probe"));
+      const double window = CT::measurementWindow(p.frag_tol, p.tol_ppm);
+      // Candidates: a uniform draw of 4x the probe size over all spectra
+      // (MS1 included; the level is known only once read), in file order.
+      const FASTag::SampleMask cand = FASTag::sampleByCount(n_total, std::min<Size>(n_total, 4 * want), 0x434F4D50u);
+      std::vector<MSSpectrum> probe_specs;
+      probe_specs.reserve(want);
+      PeakPickerHiRes ct_picker;
+      for (Size i = 0; i < n_total && probe_specs.size() < want; ++i)
+      {
+        if (!cand[i]) continue;
+        MSSpectrum s = read_spectrum(i);
+        if (s.getMSLevel() != 2 || s.empty() || s.getPrecursors().empty()) continue;
+        if (pick_in_loop) FC::apply(s, ct_picker, pick_mzml);
+        s.sortByPosition();
+        probe_specs.push_back(std::move(s));
+      }
+      // The Params the probe tags with: the first length's, b/y or c/z-dot
+      // per spectrum as the tagging pass decides.
+      const FASTag::Param probe_by = CT::probeParam(len_params.front(), window);
+      const FASTag::Tables probe_tab_by(probe_by);
+      const bool any_cz = !len_params_cz.empty();
+      const FASTag::Param probe_cz = any_cz ? CT::probeParam(len_params_cz.front(), window) : probe_by;
+      const FASTag::Tables probe_tab_cz(probe_cz);
+      std::vector<std::vector<double>> per_spec(probe_specs.size());
+      std::vector<char> confident(probe_specs.size(), 0);
+#pragma omp parallel for schedule(dynamic, 8)
+      for (std::ptrdiff_t k = 0; k < static_cast<std::ptrdiff_t>(probe_specs.size()); ++k)
+      {
+        const MSSpectrum& s = probe_specs[static_cast<Size>(k)];
+        const Precursor& pc = s.getPrecursors().front();
+        const bool cz = any_cz
+            && FASTag::IonSeries::seriesInRun(ion_mode, FASTag::IonSeries::activationClass(s), ion_column)
+                   == FASTag::IonSeries::Series::CZ;
+        const FASTag::Param& pp = cz ? probe_cz : probe_by;
+        const std::vector<FASTag::Tag> tg =
+            FASTag::tagSpectrum(s, pc.getMZ(), pc.getCharge(), pp, cz ? probe_tab_cz : probe_tab_by);
+        if (tg.empty() || !(tg.front().evalue <= CT::kAutoMaxEvalue)) continue;
+        confident[static_cast<Size>(k)] = 1;
+        const MSSpectrum prep = FASTag::preparedPeaks(s, pc.getMZ(), pc.getCharge(), pp);
+        CT::collectErrors(prep, pc.getMZ(), pc.getCharge(), tg.front(), FASTag::ComplementSpec::fromParam(pp),
+                          window, per_spec[static_cast<Size>(k)]);
+      }
+      std::vector<double> errors;
+      for (const auto& v : per_spec) errors.insert(errors.end(), v.begin(), v.end());
+      const CT::Estimate est = CT::estimate(errors, window);
+      const Size n_conf = static_cast<Size>(std::count(confident.begin(), confident.end(), char(1)));
+      if (est.ok)
+      {
+        p.complement_tol = est.tol;
+        for (FASTag::Param& lp : len_params) lp.complement_tol = est.tol;
+        for (FASTag::Param& lp : len_params_cz) lp.complement_tol = est.tol;
+        p_cz.complement_tol = est.tol;
+        hyp_cs = FASTag::ComplementSpec::fromParam(p);
+        hyp_cs_cz = FASTag::ComplementSpec::fromParam(p_cz);
+      }
+      // stderr only: nothing new may reach stdout or the gate's summary line.
+      // The window at full precision, so it can be given back as
+      // -complement_tolerance and reproduce the run.
+      std::ostringstream tol_txt;
+      tol_txt << std::setprecision(17) << (est.ok ? est.tol : p.complement_tol);
+      std::cerr << "Complement tolerance (auto): "
+                << (est.ok ? "measured " : "not measured, using -complement_tolerance ")
+                << tol_txt.str() << " Da; probe " << probe_specs.size()
+                << " MS2, " << n_conf << " confident tags, " << est.n << " pairs within " << window
+                << " Da (signal " << std::lround(est.signal) << ", median error " << est.median << " Da)"
+                << (est.ok ? std::string() : "; " + est.why) << std::endl;
+      run_meta.complement_tol_auto = true;
+      run_meta.complement_tol_measured = est.ok;
+      run_meta.complement_tol = est.ok ? est.tol : p.complement_tol;
+    }
 
     const auto t_tables_a = std::chrono::steady_clock::now();
     g_t_probe = std::chrono::duration<double>(t_tables_a - t_probe_a).count();

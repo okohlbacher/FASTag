@@ -96,6 +96,13 @@ namespace FASTag::RunReport
     std::string ion_series = "by";
     std::size_t ion_series_ms2_by = 0;
     std::size_t ion_series_ms2_cz = 0;
+    // ---- 1.13 item 15 ----
+    // -complement_tolerance_unit auto (src/ComplementTol.h): whether it ran,
+    // whether the probe measured a window, and the window in force (Da).
+    // Fields only, as #7: no report writes a row for them.
+    bool complement_tol_auto = false;
+    bool complement_tol_measured = false;
+    double complement_tol = 0;
     // ---- 1.12 A ----
     // ---- 1.12 D ----
     // ---- 1.12 F ----
