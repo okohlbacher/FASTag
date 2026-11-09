@@ -544,6 +544,12 @@ namespace
       CHECK(rr.verdict == r34.verdict && rr.call.charge == r34.call.charge && rr.call_excess == r34.call_excess
                 && rr.header_excess == r34.header_excess,
             "%s (k): the verdict depends on the peak order", label);
+      // A header above the fragment-charge cap is no candidate and never ruled
+      // out: no range disagreement for it.
+      const auto r39 = H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 12), warn, cs);
+      CHECK(!r39.header_ruled_out && r39.call.basis != H::CallBasis::Range,
+            "%s (k): header 12 is not ruled out by range (got ruled out %d, %s, %s)", label, int(r39.header_ruled_out),
+            H::basisName(r39.call.basis), H::verdictName(r39.verdict));
       // Candidates.
       CHECK((H::headerCheckCandidates(6, warn) == std::vector<int>{2, 3, 4, 6})
                 && (H::headerCheckCandidates(3, warn) == std::vector<int>{2, 3, 4})

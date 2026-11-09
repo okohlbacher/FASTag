@@ -297,7 +297,9 @@ namespace FASTag::Hyp
     }
     // The header is ruled out when the range evidence left charges and the
     // header is not among them (the 1+ test returns before any is tested).
-    r.header_ruled_out = c.basis != CallBasis::OnePlus && !c.excess.empty() && !header_seen;
+    // A header above kChargeLimit is no candidate: it is never "ruled out".
+    const bool header_candidate = std::find(cands.begin(), cands.end(), header) != cands.end();
+    r.header_ruled_out = header_candidate && c.basis != CallBasis::OnePlus && !c.excess.empty() && !header_seen;
     if (c.src == ChargeSource::Ambiguous)
     {
       // Two close charges. With the header one of them it agrees; else the
