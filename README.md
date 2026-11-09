@@ -1044,7 +1044,10 @@ that count is not known and is left empty. The summary adds section
 counts (`refs`, `refs_exact`, `refs_scan`, `refs_ambiguous`,
 `refs_unmatched`), `identified_1/0/unknown`, the cross-tab
 `<status>_identified_<1|0|unknown>` and `triage_candidates`. Triage is an
-E-value threshold, not a quality call.
+E-value threshold, not a quality call. Whether the candidates are the
+unidentified spectra a second (semi-specific or open) search identifies was
+tested on held-out runs: [doc/CENSUS-TRIAGE-EVAL.md](doc/CENSUS-TRIAGE-EVAL.md),
+which also describes `tools/census_triage_eval.py`, the scorer.
 
 For front ends that list a run's outputs by option name (the GUI's resolved
 outputs): the census files are `census_out` and `census_summary_out`. With
