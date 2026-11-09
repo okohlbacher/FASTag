@@ -14,7 +14,7 @@
 // (FASTAG_ORDER_RS, cli/order_rs under FASTAG_GUI_TEST_OUTPUTS, or the
 // order_rs example in src-tauri, which `cargo test` builds) and the
 // build_args example is built; see ./external.ts.
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { execFileSync, spawn } from 'node:child_process'
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, realpathSync } from 'node:fs'
@@ -22,7 +22,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import App from '../App'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
-import { click } from '../testing/render'
+import { DEFAULTS, LANDING, type Origin } from '../setup/tasks'
+import { click, showView } from '../testing/render'
 import { applyAndCheck } from '../testing/lastUsed'
 import { PARAM_BY_NAME, invalidBecause, invalidParams } from '../paramLayout'
 import { FASTAG_BIN, ORDER_RS, REPO_FIXTURES_DIR, SRC_TAURI_DIR } from './external'
@@ -74,10 +75,15 @@ async function guiRun(opts: {
   out?: string
   ui?: () => Promise<void>
   name: string
+  /// Where the session starts. FASTag's defaults unless a test asks for the
+  /// landing task: the app lands on "Characterize a run" (D1, P2a PR u),
+  /// which switches species on, and each test here states its options as a
+  /// diff over the CLI's defaults (as renderApp in testing/render.tsx does).
+  start?: Origin
 }): Promise<Outcome> {
   const mock = installMockBridge()
   if (opts.lastUsed) mock.settings.lastUsed = opts.lastUsed
-  render(<App />)
+  render(<App start={opts.start ?? DEFAULTS} />)
   await screen.findByText('FASTag ready')
   await act(async () => {})
   if (opts.lastUsed) await applyAndCheck(opts.lastUsed) // D6: the offer, clicked; guards the form
@@ -104,7 +110,8 @@ async function guiRun(opts: {
 async function guiBlocked(lastUsed: Record<string, unknown>): Promise<{ mock: MockBridge; run: HTMLButtonElement; controls: string }> {
   const mock = installMockBridge()
   mock.settings.lastUsed = lastUsed
-  const { container } = render(<App />)
+  // From FASTag's defaults, as guiRun.
+  const { container } = render(<App start={DEFAULTS} />)
   await screen.findByText('FASTag ready')
   await act(async () => {})
   await applyAndCheck(lastUsed) // D6: the offer, clicked; guards the form
@@ -114,8 +121,11 @@ async function guiBlocked(lastUsed: Record<string, unknown>): Promise<{ mock: Mo
   await click(run)
   return { mock, run, controls: container.querySelector('.controls')?.textContent ?? '' }
 }
-const openMatching = (): Promise<void> =>
-  click(screen.getAllByRole('button').find((b) => b.className === 'disclosure' && /Sequence matching/.test(b.textContent ?? ''))!)
+// Setup's section, which is hidden while a finished run shows its Results.
+const openMatching = (): Promise<void> => {
+  showView('setup')
+  return click(screen.getAllByRole('button').find((b) => b.className === 'disclosure' && /Sequence matching/.test(b.textContent ?? ''))!)
+}
 // The CLI on its own, with defaults plus @p extra.
 const cliDirect = (name: string, extra: string[]) =>
   runCli(['-in', IN, '-out', `${S}/${name}.tags.tsv`, '-threads', '1', ...extra])
@@ -134,6 +144,21 @@ describe.skipIf(!ready)('GUI-built argv against the FASTag CLI (FASTAG_BIN)', ()
     expect(argOf(o.argv, 'tag_length')).toBe('3')
     expect(o.argv).not.toContain('-species')
   }, 30000)
+
+  it('the run the app lands on ("Characterize a run", D1) is accepted and writes its reports', async () => {
+    const o = await guiRun({ name: 'landing', start: LANDING })
+    expect(o.rc).toBe(0)
+    expect(o.banner).toBeNull()
+    expect(o.argv).toContain('-species')
+    expect(argOf(o.argv, 'extension')).toBe('2')
+    expect(o.argv).toContain('-glyco')
+    expect(argOf(o.argv, 'subsample_fraction')).toBe('0.1')
+    // The task's reports, on the input's stem beside it (rebaseOutputs on Choose file).
+    for (const r of ['digest', 'label']) {
+      expect(argOf(o.argv, `${r}_out`)).toBe(`${S}/ecoli.${r}.tsv`)
+      expect(existsSync(`${S}/ecoli.${r}.tsv`)).toBe(true)
+    }
+  }, 120000)
 
   it('cleared fixed modifications reach the CLI as -fixed_modifications ""', async () => {
     const o = await guiRun({ name: 'nofixed', lastUsed: { fixed_modifications: [''] } })
@@ -296,7 +321,13 @@ describe.skipIf(!ready)('GUI-built argv against the FASTag CLI (FASTAG_BIN)', ()
     expect(c).not.toContain('superkingdom')
     const o = await guiRun({
       name: 'dom',
-      lastUsed: { species: true, tag_length: '7', fragment_tolerance: '0.3', fragment_tolerance_unit: 'Da', species_rank: 'domain' }
+      lastUsed: { species: true, tag_length: '7', fragment_tolerance: '0.3', fragment_tolerance_unit: 'Da', species_rank: 'domain' },
+      // Species with a Da tolerance is a pre-start red flag (GUI-DESIGN P2b
+      // Inspector): Run waits until the user answers it with Run anyway.
+      ui: async () => {
+        const flag = screen.getAllByRole('listitem').find((li) => /^Red flag: Species detection with a tolerance in Da/.test(li.textContent ?? ''))!
+        await click(within(flag).getByRole('button', { name: 'Run anyway' }))
+      }
     })
     expect(o.rc).toBe(0)
     const sp = readFileSync(`${S}/dom.tags.species.tsv`, 'utf8').trim().split('\n')

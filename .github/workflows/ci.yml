@@ -2019,7 +2019,7 @@ jobs:
 
   # ----------------------------------------- GUI argv against the real CLI
   # GUI-DESIGN section 9, "Re-enabled (P1)": gui/src/adversarial/
-  # cli-consistency.test.tsx (18 tests, skipped in the gui job, which has no
+  # cli-consistency.test.tsx (19 tests, skipped in the gui job, which has no
   # CLI) runs the real App's run requests through the shipped build_args and
   # the FASTag CLI, with the pipe-order helper order_rs, both cargo examples
   # in gui/src-tauri/examples. Release-only: on a v* tag and on a gui_dry_run
@@ -2075,7 +2075,7 @@ jobs:
           const msg = `cli-consistency: ${r.numPassedTests} passed, ${r.numFailedTests} failed, ${r.numPendingTests + r.numTodoTests} skipped`
           console.log(msg)
           require('fs').appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### ${msg} (FASTag CLI ${process.env.FASTAG_BIN})\n`)
-          if (r.numPassedTests < 18 || r.numFailedTests || r.numPendingTests || r.numTodoTests) process.exit(1)
+          if (r.numPassedTests < 19 || r.numFailedTests || r.numPendingTests || r.numTodoTests) process.exit(1)
           JS
 
   # ---------------------------------------------------- release data asset
