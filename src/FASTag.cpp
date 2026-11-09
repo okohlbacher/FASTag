@@ -284,6 +284,14 @@ class TOPPFASTag : public TOPPBase
       if (k.compare(0, prefix.size(), prefix) != 0) continue;
       const std::string name = k.substr(prefix.size());
       if (FASTag::Cli::isLegacyOutSpectraParameter(name)) continue;
+      // -label_discovery_* never: the report writes its own settings, and
+      // with the option on every other output stays byte-identical
+      // (doc/DESIGN-label-discovery.md sections 2 and 10).
+      if (name.rfind("label_discovery_", 0) == 0)
+      {
+        p.removeMetaValue(k);
+        continue;
+      }
       // A flag's registered default (false) and its Param value ("false")
       // never compare equal, so a flag at its default would stay listed; ask
       // the flag itself.
@@ -571,14 +579,13 @@ protected:
     setValidFormats_("label_discovery_out", ListUtils::create<std::string>("tsv"));
     registerDoubleOption_("label_discovery_max_flank", "<Da>", 700.0,
                           "Largest flank mass -label_discovery_out histograms, and the largest composition mass "
-                          "of its null image set (above 0, at most 2000)", false, true);
+                          "of its null image set (above 0)", false, true);
     setMinFloat_("label_discovery_max_flank", 0.0);
-    setMaxFloat_("label_discovery_max_flank", 2000.0);
     registerIntOption_("label_discovery_depth", "<n>", 2,
                        "Most residues a -label_discovery_out channel-peak explanation names (0, 1 or 2)", false, true);
     setMinInt_("label_discovery_depth", 0);
     setMaxInt_("label_discovery_depth", 2);
-    registerIntOption_("label_discovery_min_spectra", "<n>", 20,
+    registerIntOption_("label_discovery_min_spectra", "n", 20,
                        "Spectra a -label_discovery_out peak or site candidate needs", false, true);
     setMinInt_("label_discovery_min_spectra", 1);
     registerDoubleOption_("label_discovery_min_share", "<f>", 0.005,
