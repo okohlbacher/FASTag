@@ -36,5 +36,22 @@ in `acceptance/1.13/PREREG-item12.md`:
 
 ## Results
 
-DEV (PXD003531 NO_03, harness development only) and the single held-out scoring: see
-`acceptance/1.13/item12/RESULTS.md` on branch `acceptance/1.13`. The summary below is filled in from there.
+Held-out, scored once (2026-11-09; `acceptance/1.13/item12/RESULTS.md` on branch `acceptance/1.13`): five public
+runs (PXD066944, PXD076528 Astral; PXD009612, PXD040230, PXD049370 Q Exactive family), FASTag 1.12.1 defaults.
+28,146 Sage-chimeric and 71,259 single spectra (PXD049370 gave no Sage PSMs at 1 % in the chimera search and
+contributes none; PXD076528 holds 69 % of the chimeras).
+
+| | Result | Verdict |
+|---|---|---|
+| E1 | rank-1 tag correct for either peptide 0.723 (95 % CI 0.716-0.729; chance 0.0001); rank-1 peptide 0.513, rank-2 peptide 0.209 | descriptive |
+| H1 | 0.513 vs 0.781 on pure single spectra: -0.267 (-0.279 to -0.255) | penalty shown |
+| H2 | 0.723 vs 0.781: -0.058 (-0.069 to -0.047) | non-inferior (margin -0.10) |
+| H3 | single spectra, purity >= 0.9 vs < 0.5: 0.781 vs 0.493, +0.287 (0.276 to 0.299) | gradient shown |
+| H4 | `-diversity` under `-max_tags 10`: both peptides in the top 10 0.399 -> 0.491, +0.093 (0.088 to 0.097), rank 1 unchanged | benefit |
+
+Which peptide the rank-1 tag reads follows the header precursor. `-diversity` stays off by default; its benefit is
+shown for a 10-tag cap only (1.12 #4 found none on synthetic chimeras under a 50-tag cap). The comparison of
+chimeric with pure spectra is between different spectra, and Sage-chimeric spectra are selected for two
+confident identifications.
+
+DEV (PXD003531 NO_03, development only): union 0.722, H1 -0.163, H2 +0.021, H3 +0.244, H4 +0.178.
