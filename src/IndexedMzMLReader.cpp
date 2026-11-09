@@ -109,6 +109,29 @@ namespace FASTag
     constexpr std::string_view kValue = "value";
     constexpr std::string_view kUnit = "unitAccession";
 
+    /// xml.find(what, from) if that starts before @p to, else npos -- without
+    /// scanning past @p to (1.12.2). A match may still END after @p to, as
+    /// `k = xml.find(...); k < to` allows, so every `find ... k < to` test
+    /// can use this instead and give the same answer. An absent needle used
+    /// to cost a scan of the whole spectrum head.
+    ///
+    /// memmem where the C library has it: the needles here are mostly
+    /// `accession="MS:..."`, whose first letter recurs every few bytes of a
+    /// cvParam, and string_view::find stops at each one to compare; glibc's
+    /// memmem skips ahead. Same answer, the first occurrence.
+    std::size_t find_before(std::string_view xml, std::string_view what, std::size_t from, std::size_t to)
+    {
+      to = std::min(to, xml.size());
+      if (from >= to || what.empty()) return std::string_view::npos;
+      const std::size_t lim = std::min(xml.size(), to + what.size() - 1);
+#if defined(__GLIBC__) || defined(__APPLE__)
+      const void* hit = ::memmem(xml.data() + from, lim - from, what.data(), what.size());
+      return hit ? static_cast<std::size_t>(static_cast<const char*>(hit) - xml.data()) : std::string_view::npos;
+#else
+      return xml.substr(0, lim).find(what, from);
+#endif
+    }
+
     /// `value` of the first cvParam matching @p needle in [from, to).
     std::string_view cv_value(std::string_view xml,
                               std::string_view needle,
@@ -116,8 +139,8 @@ namespace FASTag
                               std::size_t to,
                               std::string_view attr = kValue)
     {
-      const std::size_t k = xml.find(needle, from);
-      if (k == std::string_view::npos || k >= to) return {};
+      const std::size_t k = find_before(xml, needle, from, to);
+      if (k == std::string_view::npos) return {};
       return tag_attr(xml, k, attr);
     }
 
@@ -799,9 +822,12 @@ namespace FASTag
   }
 
   /****************************************************************************/
-  MSSpectrum IndexedMzMLReader::getSpectrum(Size i) { return read_(i, /*want_peaks=*/true); }
+  MSSpectrum IndexedMzMLReader::getSpectrum(Size i, unsigned fields) { return read_(i, /*want_peaks=*/true, fields); }
 
-  MSSpectrum IndexedMzMLReader::getSpectrumMetadata(Size i) { return read_(i, /*want_peaks=*/false); }
+  MSSpectrum IndexedMzMLReader::getSpectrumMetadata(Size i, unsigned fields)
+  {
+    return read_(i, /*want_peaks=*/false, fields);
+  }
 
   std::pair<std::uint64_t, std::uint64_t> IndexedMzMLReader::spectrumByteRange(Size i) const
   {
@@ -819,7 +845,7 @@ namespace FASTag
     bool any_level = false;
     for (Size i = 0; i < probe; ++i)
     {
-      const MSSpectrum s = read_(i, /*want_peaks=*/false);
+      const MSSpectrum s = read_(i, /*want_peaks=*/false, kAllFields);
       if (s.getMSLevel() == 2) return !s.getPrecursors().empty();
       any_level = any_level || s.getMSLevel() > 0;
     }
@@ -828,7 +854,7 @@ namespace FASTag
     return any_level;
   }
 
-  MSSpectrum IndexedMzMLReader::read_(Size i, bool want_peaks)
+  MSSpectrum IndexedMzMLReader::read_(Size i, bool want_peaks, unsigned fields)
   {
     MSSpectrum spec;
     if (!impl_->ok || i + 1 >= impl_->offsets->size()) return spec;
@@ -877,7 +903,9 @@ namespace FASTag
       impl_->bytes = std::string_view(impl_->raw.data.get(), static_cast<std::size_t>(len));
       return {};
     };
-    if (impl_->bytes.find(kArrays) == std::string_view::npos && len > head_len)
+    std::size_t cut = impl_->bytes.find(kArrays);
+    std::size_t cut_in = impl_->bytes.size();  ///< the buffer size `cut` was searched in
+    if (cut == std::string_view::npos && len > head_len)
     {
       if (const std::string why = read_rest(); !why.empty()) return unreadable(why);
     }
@@ -885,10 +913,17 @@ namespace FASTag
     // The metadata region of whatever is in the buffer NOW: everything this
     // reader scrapes appears before <binaryDataArrayList>, and the arrays
     // after it are base64 that makes up almost the whole element. Taken
-    // fresh each time because read_rest() may have grown the buffer.
-    auto meta = [this]() -> std::string_view {
+    // fresh each time because read_rest() may have grown the buffer. The
+    // cut is searched once (1.12.2): read_rest() only appends, so a cut
+    // found in the head stays the first one, and only a cut not found yet
+    // is searched again in a grown buffer.
+    auto meta = [this, &cut, &cut_in]() -> std::string_view {
       const std::string_view all = impl_->bytes;
-      const std::size_t cut = all.find(kArrays);
+      if (cut == std::string_view::npos && all.size() != cut_in)
+      {
+        cut = all.find(kArrays);
+        cut_in = all.size();
+      }
       return cut == std::string_view::npos ? all : all.substr(0, cut);
     };
 
@@ -918,8 +953,8 @@ namespace FASTag
                                  std::size_t to) -> const GroupParam* {
       if (groups.empty()) return nullptr;
       constexpr std::string_view kRef = "<referenceableParamGroupRef";
-      for (std::size_t r = xml.find(kRef, from); r != std::string_view::npos && r < to;
-           r = xml.find(kRef, r + kRef.size()))
+      for (std::size_t r = find_before(xml, kRef, from, to); r != std::string_view::npos;
+           r = find_before(xml, kRef, r + kRef.size(), to))
       {
         const auto it = groups.find(std::string(tag_attr(xml, r + 1, "ref")));
         if (it == groups.end()) continue;
@@ -932,8 +967,8 @@ namespace FASTag
     auto for_group_params = [&groups](std::string_view xml, std::size_t from, std::size_t to, auto&& fn) {
       if (groups.empty()) return;
       constexpr std::string_view kRef = "<referenceableParamGroupRef";
-      for (std::size_t r = xml.find(kRef, from); r != std::string_view::npos && r < to;
-           r = xml.find(kRef, r + kRef.size()))
+      for (std::size_t r = find_before(xml, kRef, from, to); r != std::string_view::npos;
+           r = find_before(xml, kRef, r + kRef.size(), to))
       {
         const auto it = groups.find(std::string(tag_attr(xml, r + 1, "ref")));
         if (it == groups.end()) continue;
@@ -944,17 +979,27 @@ namespace FASTag
     // has one, else the referenced group's.
     auto cvg = [&](std::string_view xml, std::string_view needle, std::size_t from, std::size_t to,
                    std::string_view attr = kValue) -> std::string_view {
-      const std::size_t k = xml.find(needle, from);
-      if (k != std::string_view::npos && k < to) return tag_attr(xml, k, attr);
+      const std::size_t k = find_before(xml, needle, from, to);
+      if (k != std::string_view::npos) return tag_attr(xml, k, attr);
       const GroupParam* gp = group_param(xml, needle_accession(needle), from, to);
       if (!gp) return {};
       return attr == kUnit ? std::string_view(gp->unit) : std::string_view(gp->value);
     };
     // Where the spectrum's own cvParams and references end: at its first
-    // child list (the arrays are already cut off by meta()).
+    // child list (the arrays are already cut off by meta()). One walk over
+    // the tags from the start (1.12.2), not three searches of which the one
+    // for an absent <productList> read the whole head: the first '<' that
+    // opens any of the three is where the earliest of the three searches
+    // would have stopped.
     auto spectrum_params_end = [](std::string_view xml) {
-      return std::min({find_or(xml, "<scanList", 0, xml.size()), find_or(xml, "<precursorList", 0, xml.size()),
-                       find_or(xml, "<productList", 0, xml.size())});
+      constexpr std::string_view kChildren[] = {"<scanList", "<precursorList", "<productList"};
+      for (std::size_t k = xml.find('<'); k != std::string_view::npos; k = xml.find('<', k + 1))
+      {
+        const std::string_view rest = xml.substr(k);
+        for (const std::string_view c : kChildren)
+          if (rest.starts_with(c)) return k;
+      }
+      return xml.size();
     };
 
     // MS level first: it decides whether the body is worth reading at all.
@@ -1032,11 +1077,15 @@ namespace FASTag
     // sets them (-digest_out reads them). Searched in the scanList only: a
     // precursor's selected ion can carry an ion mobility of its own.
     const std::size_t plb = xml.find("<precursorList");
-    if (const std::size_t slb = xml.find("<scanList"); slb != std::string_view::npos && slb < std::min(plb, n))
+    // The scan list and its end, found once for the windows and the filter
+    // string (1.12.2; each searched for them itself before).
+    const std::size_t slb = xml.find("<scanList");
+    const bool has_scans = slb != std::string_view::npos && slb < std::min(plb, n);
+    const std::size_t sle = has_scans ? find_or(xml, "</scanList>", slb, n) : n;
+    if (has_scans)
     {
-      const std::size_t sle = find_or(xml, "</scanList>", slb, n);
-      for (std::size_t w = xml.find("<scanWindow", slb); w != std::string_view::npos && w < sle;
-           w = xml.find("<scanWindow", w + 11))
+      for (std::size_t w = find_before(xml, "<scanWindow", slb, sle); w != std::string_view::npos;
+           w = find_before(xml, "<scanWindow", w + 11, sle))
       {
         if (w + 11 >= n || !(is_name_end(xml[w + 11]) || xml[w + 11] == '/')) continue;  // <scanWindowList
         const std::size_t we = find_or(xml, "</scanWindow>", w, sle);
@@ -1070,9 +1119,16 @@ namespace FASTag
     // Spectrum representation (step 0): MS:1000127/128 among the spectrum's
     // own cvParams, the later one winning as in OpenMS, else from a group it
     // references. Neither leaves the type UNKNOWN, as OpenMS does.
+    if (fields & kStep0Type)
     {
       const std::size_t se = spectrum_params_end(xml);
-      const std::size_t c = find_or(xml, kCentroid, 0, se), pr = find_or(xml, kProfile, 0, se);
+      // Bounded to se (1.12.2): only a hit before se counts below, and the
+      // absent one of the two no longer reads the rest of the head.
+      const auto before_se = [&](std::string_view needle) {
+        const std::size_t k = find_before(xml, needle, 0, se);
+        return k == std::string_view::npos ? se : k;
+      };
+      const std::size_t c = before_se(kCentroid), pr = before_se(kProfile);
       if (c < se || pr < se)
         spec.setType(pr >= se || (c < se && c > pr) ? SpectrumSettings::SpectrumType::CENTROID
                                                      : SpectrumSettings::SpectrumType::PROFILE);
@@ -1084,19 +1140,23 @@ namespace FASTag
 
     // The filter string (step 0) of the first <scan>, as the meta value
     // "filter string" OpenMS gives the spectrum.
-    if (const std::size_t slb = xml.find("<scanList"); slb != std::string_view::npos && slb < std::min(plb, n))
+    if ((fields & kStep0FilterString) && has_scans)
     {
-      const std::size_t sle = find_or(xml, "</scanList>", slb, n);
-      std::size_t sc = xml.find("<scan", slb + 9);
-      while (sc != std::string_view::npos && sc < sle && !(sc + 5 < n && (is_name_end(xml[sc + 5]) || xml[sc + 5] == '/')))
-        sc = xml.find("<scan", sc + 5);
-      if (sc != std::string_view::npos && sc < sle)
+      std::size_t sc = find_before(xml, "<scan", slb + 9, sle);
+      while (sc != std::string_view::npos && !(sc + 5 < n && (is_name_end(xml[sc + 5]) || xml[sc + 5] == '/')))
+        sc = find_before(xml, "<scan", sc + 5, sle);
+      if (sc != std::string_view::npos)
       {
-        // The scan's own params end at its window list or its end tag.
-        const std::size_t sce = std::min(find_or(xml, "<scanWindowList", sc, sle), find_or(xml, "</scan>", sc, sle));
-        const std::size_t k = find_or(xml, kFilterString, sc, sce);
-        const GroupParam* gp = k < sce ? nullptr : group_param(xml, needle_accession(kFilterString), sc, sce);
-        if (k < sce || gp)
+        // The scan's own params end at its window list or its end tag. Both
+        // searched within the scan list first (1.12.2); only when neither is
+        // there (not well-formed) the unbounded searches decide, as before.
+        const std::size_t wl = find_before(xml, "<scanWindowList", sc, sle), se_ = find_before(xml, "</scan>", sc, sle);
+        const std::size_t sce = wl != std::string_view::npos || se_ != std::string_view::npos
+                                    ? std::min(wl, se_)
+                                    : std::min(find_or(xml, "<scanWindowList", sc, sle), find_or(xml, "</scan>", sc, sle));
+        const std::size_t k = find_before(xml, kFilterString, sc, sce);
+        const GroupParam* gp = k != std::string_view::npos ? nullptr : group_param(xml, needle_accession(kFilterString), sc, sce);
+        if (k != std::string_view::npos || gp)
         {
           static const UInt kFilterIdx = MetaInfoInterface::metaRegistry().registerName("filter string");
           spec.setMetaValue(kFilterIdx, DataValue(xml_unescape(gp ? std::string_view(gp->value) : tag_attr(xml, k, kValue))));
@@ -1120,19 +1180,22 @@ namespace FASTag
       return is_name_end(after) || after == '/';
     };
 
+    // The element searches below are bounded to the list, precursor or ion
+    // they belong to (1.12.2): each loop's last search, for an element that
+    // is not there, used to read the rest of the head.
     std::size_t p = plb;
     while (true)
     {
-      p = xml.find("<precursor", p);
-      if (p == std::string_view::npos || p >= ple) break;
+      p = find_before(xml, "<precursor", p, ple);
+      if (p == std::string_view::npos) break;
       if (!element_at(p, "<precursor")) { p += 10; continue; }
 
       // This precursor runs to the next one, or to the end of the list.
       std::size_t p_end = ple;
       for (std::size_t q = p + 10; q < ple;)
       {
-        q = xml.find("<precursor", q);
-        if (q == std::string_view::npos || q >= ple) break;
+        q = find_before(xml, "<precursor", q, ple);
+        if (q == std::string_view::npos) break;
         if (element_at(q, "<precursor")) { p_end = q; break; }
         q += 10;
       }
@@ -1141,14 +1204,14 @@ namespace FASTag
       // target again with the group fallback for the step-0 meta value only.
       double target = 0, lower = 0, upper = 0, meta_target = 0;
       bool has_meta_target = false;
-      const std::size_t iwb = xml.find("<isolationWindow", p);
-      if (iwb != std::string_view::npos && iwb < p_end)
+      const std::size_t iwb = find_before(xml, "<isolationWindow", p, p_end);
+      if (iwb != std::string_view::npos)
       {
         const std::size_t iwe = find_or(xml, "</isolationWindow>", iwb, p_end);
         to_number(cv_value(xml, kIsoTarget, iwb, iwe), target);
         to_number(cv_value(xml, kIsoLower, iwb, iwe), lower);
         to_number(cv_value(xml, kIsoUpper, iwb, iwe), upper);
-        has_meta_target = to_number(cvg(xml, kIsoTarget, iwb, iwe), meta_target);
+        if (fields & kStep0TargetMeta) has_meta_target = to_number(cvg(xml, kIsoTarget, iwb, iwe), meta_target);
       }
 
       // The activation (step 0): dissociation methods and activation energy,
@@ -1156,21 +1219,26 @@ namespace FASTag
       std::set<Precursor::ActivationMethod> methods;
       double activation_energy = 0;
       bool has_activation_energy = false;
-      std::size_t acb = xml.find("<activation", p);
-      while (acb != std::string_view::npos && acb < p_end && !element_at(acb, "<activation"))
-        acb = xml.find("<activation", acb + 11);
-      if (acb != std::string_view::npos && acb < p_end)
+      std::size_t acb = (fields & (kStep0Activation | kStep0ActivationEnergy)) ? find_before(xml, "<activation", p, p_end)
+                                                                       : std::string_view::npos;
+      while (acb != std::string_view::npos && !element_at(acb, "<activation"))
+        acb = find_before(xml, "<activation", acb + 11, p_end);
+      if (acb != std::string_view::npos)
       {
         const std::size_t ace = find_or(xml, "</activation>", acb, p_end);
-        auto add_method = [&methods](std::string_view acc) {
-          for (const ActivationTerm& t : kActivationTerms)
-            if (t.accession == acc) methods.insert(t.method);
-        };
-        for_group_params(xml, acb, ace, [&](const GroupParam& gp) { add_method(gp.accession); });
-        for (std::size_t c = xml.find("<cvParam", acb); c != std::string_view::npos && c < ace;
-             c = xml.find("<cvParam", c + 8))
-          add_method(tag_attr(xml, c + 1, "accession"));
-        has_activation_energy = to_number(cvg(xml, kActivationEnergy, acb, ace), activation_energy);
+        if (fields & kStep0Activation)
+        {
+          auto add_method = [&methods](std::string_view acc) {
+            for (const ActivationTerm& t : kActivationTerms)
+              if (t.accession == acc) methods.insert(t.method);
+          };
+          for_group_params(xml, acb, ace, [&](const GroupParam& gp) { add_method(gp.accession); });
+          for (std::size_t c = find_before(xml, "<cvParam", acb, ace); c != std::string_view::npos;
+               c = find_before(xml, "<cvParam", c + 8, ace))
+            add_method(tag_attr(xml, c + 1, "accession"));
+        }
+        if (fields & kStep0ActivationEnergy)
+          has_activation_energy = to_number(cvg(xml, kActivationEnergy, acb, ace), activation_energy);
       }
       auto set_activation = [&](Precursor& prec) {
         if (!methods.empty()) prec.setActivationMethods(methods);
@@ -1181,8 +1249,8 @@ namespace FASTag
       std::size_t s = p;
       while (true)
       {
-        s = xml.find("<selectedIon", s);
-        if (s == std::string_view::npos || s >= p_end) break;
+        s = find_before(xml, "<selectedIon", s, p_end);
+        if (s == std::string_view::npos) break;
         if (!element_at(s, "<selectedIon")) { s += 12; continue; }
         const std::size_t s_end = find_or(xml, "</selectedIon>", s, p_end);
 
@@ -1198,7 +1266,7 @@ namespace FASTag
           // ion moved the precursor m/z away from it -- 0 when the window
           // gave no target, as there.
           const double window_mz = has_meta_target ? meta_target : 0.0;
-          if (mz != window_mz)
+          if ((fields & kStep0TargetMeta) && mz != window_mz)
           {
             static const UInt kTargetIdx =
                 MetaInfoInterface::metaRegistry().registerName("isolation window target m/z");
@@ -1211,14 +1279,15 @@ namespace FASTag
           prec.setIntensity(static_cast<float>(intensity));
         // Possible charge states (MS:1000633, step 0), every one listed, in
         // the order OpenMS reads them: referenced groups, then own cvParams.
+        if (fields & kStep0PossibleCharges)
         {
           const std::string_view acc = needle_accession(kPossibleCharge);
           for_group_params(xml, s, s_end, [&](const GroupParam& gp) {
             if (int z = 0; gp.accession == acc && to_number(std::string_view(gp.value), z))
               prec.getPossibleChargeStates().push_back(z);
           });
-          for (std::size_t k = xml.find(kPossibleCharge, s); k != std::string_view::npos && k < s_end;
-               k = xml.find(kPossibleCharge, k + kPossibleCharge.size()))
+          for (std::size_t k = find_before(xml, kPossibleCharge, s, s_end); k != std::string_view::npos;
+               k = find_before(xml, kPossibleCharge, k + kPossibleCharge.size(), s_end))
           {
             if (int z = 0; to_number(tag_attr(xml, k, kValue), z)) prec.getPossibleChargeStates().push_back(z);
           }
