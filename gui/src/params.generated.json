@@ -175,7 +175,7 @@
     {
       "name": "check_header_margin",
       "type": "double",
-      "default": "2.0",
+      "default": "6.0",
       "description": "Complement-pair excess by which the supported charge must beat the header charge's own for -check_header_charge to call a disagreement",
       "required": false,
       "toppAdvanced": true,
