@@ -11,7 +11,10 @@
 #      -search_decoy_prefix sets the prefix of the appended decoys;
 #   d. -search_config_template with msfragger is refused;
 #   e. -search_shifts both with msfragger: mass_offsets starts with 0 and each
-#      decision row of an offset is in it; Comet's non-negative rule does not apply.
+#      decision row of an offset is in it; Comet's non-negative rule does not apply;
+#   f. decoys never enter the protease background (sage = msfragger on a
+#      decoy-heavy database); with FASTAG_PREV_BIN the Sage and Comet hand-off
+#      outputs and logs equal that build's.
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 BIN="$1"
@@ -110,4 +113,33 @@ grep -q 'kept non-negative' "$TMP/e/sh.tsv" && fail "e: Comet's non-negative rul
 [ "$(key "$TMP/e/f.params" localize_delta_mass)" = "$([ "$off" = 0 ] && echo 0 || echo 1)" ] \
   || fail "e: localize_delta_mass does not follow the offsets"
 echo "e: mass_offsets $off ($(wc -l < "$TMP/e/off.txt" | tr -d ' ') offsets)"
+# ---- f: decoys stay out of the protease background (sage and msfragger alike),
+# and with FASTAG_PREV_BIN (a build without -search_engine msfragger) the Sage
+# and Comet hand-off outputs are byte-identical to it. The database has many
+# W-only rev_ and DECOY_ entries, so counting them would move the background.
+{ cat "$DB"; for i in $(seq 1 40); do printf '>rev_W%d\n%s\n>DECOY_W%d\n%s\n' $i "$(printf 'W%.0s' $(seq 1 300))" $i "$(printf 'W%.0s' $(seq 1 300))"; done; } > "$TMP/skew.fasta"
+# The in-silico chymotryptic MGF at 20 ppm, so the protease check is scored
+# against the database background (a Da run is never scored).
+SK=(-in "$FIX/chymo_insilico.mgf" -recon_fasta "$TMP/skew.fasta" -fragment_tolerance 20 -fragment_tolerance_unit ppm
+    -shortlist_force -threads 2)
+runf() { local d=$1 bin=$2; shift 2; mkdir -p "$d"; ( cd "$d" && "$bin" "${SK[@]}" -out t.tsv -shortlist_out sl.tsv "$@" > run.log 2>&1 ) || { cat "$d/run.log" >&2; fail "f: $(basename "$d") exit non-zero"; }; }
+runf "$TMP/fs" "$BIN" -fasta_out red.fasta -search_config_out sage.json
+runf "$TMP/fm" "$BIN" -fasta_out red.fasta -search_config_out f.params -search_engine msfragger
+for f in t.tsv sl.tsv; do cmp -s "$TMP/fs/$f" "$TMP/fm/$f" || fail "f: $f differs between sage and msfragger on the decoy-heavy database"; done
+grep -q '^# protease: non_tryptic Chymotrypsin' "$TMP/fs/sl.tsv" || fail "f: the protease check was not scored"
+diff <(grep -i 'protease\|chymotrypsin\|fits' "$TMP/fs/run.log") <(grep -i 'protease\|chymotrypsin\|fits' "$TMP/fm/run.log") > /dev/null \
+  || fail "f: the protease call differs between sage and msfragger"
+if [ -n "${FASTAG_PREV_BIN:-}" ]; then
+  for eng in sage comet; do
+    X=(-fasta_out red.fasta -search_config_out cfg -search_engine $eng)
+    runf "$TMP/fp_$eng" "$FASTAG_PREV_BIN" "${X[@]}"
+    runf "$TMP/fn_$eng" "$BIN" "${X[@]}"
+    for f in t.tsv sl.tsv red.fasta cfg; do
+      cmp -s "$TMP/fp_$eng/$f" "$TMP/fn_$eng/$f" || fail "f: $eng $f differs from FASTAG_PREV_BIN"
+    done
+    diff <(grep -v 'took\|Peak Memory' "$TMP/fp_$eng/run.log") <(grep -v 'took\|Peak Memory' "$TMP/fn_$eng/run.log") > /dev/null \
+      || fail "f: $eng log differs from FASTAG_PREV_BIN"
+  done
+  echo "f: sage and comet hand-off outputs equal FASTAG_PREV_BIN"
+fi
 echo "msfragger_cli_test: all checks passed"

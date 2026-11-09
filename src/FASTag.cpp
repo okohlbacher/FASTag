@@ -2142,8 +2142,8 @@ protected:
           pi.length = pindex.proteinLength(static_cast<uint32_t>(i));
           pi.decoy = FASTag::Shortlist::isDecoy(pi.accession, sl_affixes);
           pi.canonical = dup.canonical[i];
-          if (pi.decoy) ++sl_decoys;
           if (msfragger_on && pi.accession.compare(0, msfragger_prefix.size(), msfragger_prefix) == 0) ++sl_prefix_decoys;
+          if (pi.decoy) ++sl_decoys;
           else FASTag::Digest::addResidues(rentries[i].sequence, sl_db_residues);
         }
         // DecoyHelper's whole-database heuristic only to say what the input is.
