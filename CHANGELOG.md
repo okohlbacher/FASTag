@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased (1.12.1)
+## 1.12.1 (2026-11-08)
 
-Documentation only: no code, default or output changes. The README now
+Documentation and packaging only: no code, default or output changes. The README now
 gives the held-out acceptance results of the 1.12 options (Validation,
 "Held-out acceptance of the 1.12 options"). Each item was preregistered
 and run on held-out public data; #2, #4 and #9 were scored once. #6 was
@@ -36,6 +36,10 @@ tuned on held-out data.
 - **Not validated:** every other 1.12 option (#1/#10, #3, #5, #7 release
   test, #11, #15, #17) stays experimental. Low-resolution (ion-trap) MS2 is
   not validated for any 1.12 option.
+- **Release packaging:** 1.12.0 shipped without the macOS downloads
+  (notarization could not be validated). 1.12.1 ships them again: the release
+  build retries Apple's validation service, and the release check of the
+  GUI against the CLI follows the 1.12 GUI.
 
 ## 1.12.0
 
