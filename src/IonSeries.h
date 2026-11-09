@@ -449,7 +449,8 @@ namespace FASTag::IonSeries
     return "Activation: " + std::to_string(k) + " of " + std::to_string(c.total())
          + " MS2 spectra were activated by collision (CID, HCD), electron transfer or capture (ETD, ECD) or a hybrid "
            "method, which yield b/y or c/z ions, but -ion_series ax reads every spectrum as a/x ions; use -ion_series "
-           "auto -ion_series_photo ax to read only photodissociation spectra as a/x.";
+           "auto -ion_series_photo ax to read only photodissociation spectra as a/x (a UVPD source that records its "
+           "spectra as HCD, such as a retrofitted HCD cell, also warns here).";
   }
 
   /// auto reads hybrid spectra as b/y: warn when more than 1% are hybrid.

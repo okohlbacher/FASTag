@@ -48,6 +48,10 @@ Every consumer takes the offset from the tag's series: `-recon_out`/`-recon_id_o
   (no activation). The run rows of the versioned reports gain `ion_series_ax` and `ion_series_photo`.
 - `-ion_series_photo ax` under `by`, `cz` or `ax` is ignored with a warning; `-stream` refuses it.
 
+Some UVPD sources record their spectra as HCD (a laser coupled into the HCD cell of a Q Exactive, as in
+PXD003109): ThermoRawFileParser then writes beam-type CID, `auto -ion_series_photo ax` reads them as b/y, and
+`-ion_series ax` reads them as a/x with the `Activation:` warning.
+
 PSI-MS has a child term for UVPD (MS:1003246); neither OpenMS's mzML reader nor FASTag's fast reader maps it, so a
 file that carries only that term is read through its filter string, or not at all. Use `-ion_series ax` there.
 
