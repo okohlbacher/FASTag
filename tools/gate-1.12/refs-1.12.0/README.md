@@ -61,3 +61,18 @@ The digests do not depend on the thread count, except the -out_spectra mzML,
 which records `parameter: threads` in its data processing: gate.sh at
 `GATE_THREADS` other than 32 reports out_spectra_mzml as FAIL by that one
 value (and the index offsets it moves).
+
+## 2026-11-10: version-row mask and C locale (gate_new_cases.sh)
+
+`gate_new_cases.sh` now lists files with `LC_ALL=C` and masks the `run version`
+row of the report files before hashing (as `gate.sh` masks the mzML software
+version). Before, the census cases depended on the locale (`ls | sort` put
+`tags.census_summary.tsv` before `tags.census.tsv` only under en_US.UTF-8), and
+chem_reports/census_* failed on every later version only because the `run
+version` row names the release. Cause: output/features-1.12/GATE-NEW-CASES-INVESTIGATION.md.
+
+Re-made with the frozen RC a117801 (FASTag.bin c4c2ad67fcd9106e474f552267f7cdfefe107f394b268bbc236308b773e4d7f3),
+which first passed the old refs 8/8 under en_US.UTF-8: `chem_reports.digest`,
+`census_dda.digest`, `census_recon.digest` and their `BINARY.*.txt`. No other
+ref changed. With the new refs the RC, v1.12.1, main 702b45c and release/1.12.2
+pass 8/8 under LC_ALL=C and en_US.UTF-8, and gate.sh 9/9.
