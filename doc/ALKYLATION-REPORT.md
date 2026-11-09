@@ -210,6 +210,18 @@ digest data directory (`$FASTAG_DIGEST_DIR`, `<bin>/../share/FASTag/digest`,
   replaced file) with exit code 3, before any output is written;
 - writes the `database_release` row.
 
+Tag length: the reconciler derives a minimum tag length from the database
+size (`Recon index: ... min tag length N (derived)` in the log): 8 on the
+shipped human and mouse proteomes, 7 on yeast and E. coli. Shorter tags are not
+placed, so at the default `-tag_length` a run on a shipped proteome places
+nothing and the call is `no_call` (`few_cys_spectra`); give `-tag_length 8`.
+Measured on data with `-tag_length 8` (1.13 branch build): PXD014764
+(`20190412_KEH_HF_SA_ANW_R11_100419_CNOT_R1_f008`) 636 spectra with a single-Cys placement (`alk_run spectra`),
+call Carbamidomethyl, share 0.937; PXD003531
+(`20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01`) 1,065, Carbamidomethyl,
+0.667. Both reports equal those on the same FASTA given as a path, apart from
+the `database*` rows.
+
 A directory without `proteomes.tsv` (one's own `FASTAG_ALKYLATION_DIR`) is
 read as in 1.12: `<name>.fasta.gz`, no `database_release` row. A missing file
 still stops with exit code 6 (ILLEGAL_PARAMETERS) and the message

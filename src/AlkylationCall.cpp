@@ -498,7 +498,7 @@ namespace FASTag::Alkylation
       got.file = at(8);
     }
     if (!found || got.entries == 0 || got.file.empty() || got.release.empty()
-        || got.file.find_first_of("/\\") != std::string::npos)
+        || got.file.find_first_of("/\\") != std::string::npos || got.file[0] == '.')
       return false;
     out = got;
     return true;

@@ -245,7 +245,7 @@ namespace FASTag::Alkylation
   /// The row of `name` in the manifest text (header line `name<TAB>proteome...`,
   /// tab-separated, CR tolerated). false when the header lacks a needed column,
   /// `name` has no row, its entries is not a positive number, its file names a
-  /// path (a '/' or '\\') rather than a file beside the manifest, or `name`
+  /// path (a '/' or '\\', or a leading '.') rather than a file beside the manifest, or `name`
   /// has two rows.
   bool findShippedProteome(const std::string& manifest_text, const std::string& name, ShippedProteome& out);
   /// The database_release value of a shipped proteome.

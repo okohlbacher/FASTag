@@ -387,6 +387,8 @@ int main()
           "entries not a number");
     check(!A::findShippedProteome(hdr + "human\tUP1\t9606\t2026_04\td\t5\taa\tbb\t../x.fasta.gz\n", "human", none),
           "a file with a path");
+    check(!A::findShippedProteome(hdr + "human\tUP1\t9606\t2026_04\td\t5\taa\tbb\t..\n", "human", none),
+          "a file named ..");
     check(!A::findShippedProteome(hdr + "human\tUP1\t9606\t\td\t5\taa\tbb\th.fasta.gz\n", "human", none),
           "an empty release");
     // columns in another order and a comment line
