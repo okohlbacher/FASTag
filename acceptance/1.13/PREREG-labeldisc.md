@@ -84,3 +84,35 @@ change of `label_call` reading `ld_site` is not part of this item. Option off mu
 
 `score_labeldisc.py` on the first evaluation's DEV reports (branch 1cdcb65): P1 32/80 false calls (FAIL),
 correct ld 50/99, majority 80, label_call 81. The TEST half of the first evaluation was not re-scored.
+
+## Addendum A1: frozen software (2026-11-10, committed before any TEST or held-out run)
+
+Fixed after the DEV runs only (DEV half, `output/label-discovery/eval2/dev/`); the TEST half and the held-out set
+have not been run with any evaluation-2 build.
+
+| What | Value |
+|---|---|
+| Source | `feat/label-discovery` **fda6026** (76bdff8 = 55d2b46 + merge of origin/main 076984a, then the fixes) |
+| FASTag binary | BinAC2 job 6515072 build of fda6026, `data:/scratch/kohlbach/fastag-labeldisc/frozen/FASTag.bin`, sha256 **c9275d35c47439be0110426c19a40721368798546ab0644a3f1296f17e4f5f1f**; wrapper `frozen/FASTag` b84c190a1348e2f4c8435671fc27c94e0af89691d8ca7bebeef7efcca5fdb43b (sets OPENMS_DATA_PATH to OpenMS 70cebcd144) |
+| Checks of that build | BUILD_RC=0; ctest 70/70 passed (3 environment skips); `gate.sh` vs refs-1.12.0 GATE PASS (9 cases); `gate_new_cases.sh` NEW CASES PASS (8 cases). On data its DEV reports equal the data build's (126/126 runs, run rows aside) |
+| Digest tables | `frozen/digest`: digest_models.tsv b486bbb2...7c36, massgap_mods.tsv c1ec6f57...a106 (= the branch's `data/digest`) |
+| Thresholds | the code's defaults; the DEV-fitted evidence bar `tier_min_relative` 0.15 / 0.35 / 0.5, `tier_min_clean_share` 0.02 / 0.1 / 0.2, `tier_min_ladder` 0 / 3 / 5 (tiers 0 known label, 1 Unimod label, 2 other); all `-label_discovery_*` options at their defaults |
+| TEST runner | `labeldisc/scripts/run_set.py` sha256 4e5103f383ab8851221a69d216141a4393aad7c419318803f2dd810e3394a54d (`split-256.tsv TEST`, 14 jobs) |
+| Held-out runner | `labeldisc/scripts/run_heldout_labeldisc.py` sha256 34b1bcff09ed8c940ac31e6068586423a417fe7580c58cfb103e08f6a30a053d (checks the binary and each input sha256) |
+| Scorer | unchanged, `score_labeldisc.py` efeaa227d760a283e1f0bf7e3be245522b210ede8fd345b17d76e2fa382c10b8 |
+
+Configs (`frozen-configs.tsv`): CFG-LD-test-113 (param_hash 95da356cbb9dcc0418c9217fb7b07a39f1413f8c905aa9ef98e09b3f1de23c76),
+CFG-LD-heldout-113 (060499a3dc4ed82a862013887f8ed398f39546413c1a71a26a22893da2dd8ff1); hash as acceptance/1.12.
+
+DEV result of this binary (in-sample, the tuning set): P1 3/80 false label calls (FAIL; all three, iTRAQ8plex on
+PXD041747, K:Lys8 on PXD066890, iTRAQ4 on PXD006679, agree with `label_call` and look like SDRF errors), P2 85/99
+correct against the majority's 80 (PASS), P3 85 against `label_call`'s 81 (PASS). Thread determinism: the report is
+byte-identical at 1, 8 and 24 threads on PXD004541, PXD001587, PXD001540 and PXD003531, with and without
+FASTAG_FULL_PRECISION.
+
+Commands (node data):
+
+    python3 -I labeldisc/scripts/run_set.py labeldisc/manifests/split-256.tsv TEST \
+      /scratch/kohlbach/fastag-labeldisc/frozen/FASTag /scratch/kohlbach/fastag-labeldisc/eval2/test 14
+    python3 -I labeldisc/scorers/score_labeldisc.py labeldisc/manifests/labeldisc-test256.tsv \
+      /scratch/kohlbach/fastag-labeldisc/eval2/test labeldisc/results test
