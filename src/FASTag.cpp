@@ -3177,7 +3177,9 @@ protected:
     // 1.13 item 15: -complement_tolerance_unit auto (src/ComplementTol.h).
     // A probe of up to -complement_probe MS2 spectra, drawn uniformly over
     // the run with a fixed seed and read as the tagging pass reads them, is
-    // tagged at the first seed length with the complement test made neutral;
+    // tagged at the first seed length with the complement window set to the
+    // whole measurement window, at the header charge (the precursor
+    // hypotheses of -unknown_charge and -isotope_error are not probed);
     // the rank-1 tags at or below ComplTol::kAutoMaxEvalue give the signed
     // complement errors, and their distribution gives the window. Too few
     // pairs keep -complement_tolerance (Da). Not reached under Da or fragment.
@@ -3187,16 +3189,23 @@ protected:
       const Size want = static_cast<Size>(getIntOption_("complement_probe"));
       const double window = CT::measurementWindow(p.frag_tol, p.tol_ppm);
       // Candidates: a uniform draw of 4x the probe size over all spectra
-      // (MS1 included; the level is known only once read), in file order.
+      // (MS1 included; the level is known only once read), every one read;
+      // of the MS2 among them, a second uniform draw keeps the probe size
+      // (ComplTol::pickProbe), so the probe spans the whole run.
       const FASTag::SampleMask cand = FASTag::sampleByCount(n_total, std::min<Size>(n_total, 4 * want), 0x434F4D50u);
+      std::vector<Size> ms2_idx;
+      for (Size i = 0; i < n_total; ++i)
+      {
+        if (!cand[i]) continue;
+        const MSSpectrum s = read_spectrum(i);
+        if (s.getMSLevel() == 2 && !s.empty() && !s.getPrecursors().empty()) ms2_idx.push_back(i);
+      }
       std::vector<MSSpectrum> probe_specs;
       probe_specs.reserve(want);
       PeakPickerHiRes ct_picker;
-      for (Size i = 0; i < n_total && probe_specs.size() < want; ++i)
+      for (const Size i : CT::pickProbe(ms2_idx, want, 0x50524F42u))
       {
-        if (!cand[i]) continue;
         MSSpectrum s = read_spectrum(i);
-        if (s.getMSLevel() != 2 || s.empty() || s.getPrecursors().empty()) continue;
         if (pick_in_loop) FC::apply(s, ct_picker, pick_mzml);
         s.sortByPosition();
         probe_specs.push_back(std::move(s));

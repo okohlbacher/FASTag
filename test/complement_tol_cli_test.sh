@@ -66,6 +66,10 @@ cmp -s "$TMP/hauto.tsv" "$TMP/hdef.tsv" && fail "auto left the tags at the defau
   || fail "auto at 1 thread failed"
 cmp -s "$TMP/hauto.tsv" "$TMP/hauto1.tsv" || fail "auto differs between -threads 1 and 2"
 [ "$(measured "$TMP/hauto1.log")" = "$T" ] || fail "the measured window differs between -threads 1 and 2"
+# The precursor hypotheses read the measured window too (hyp_cs).
+run hiso "$HI" -complement_tolerance_unit auto -isotope_error 0 1
+run hisoback "$HI" -complement_tolerance "$T" -complement_tolerance_unit Da -isotope_error 0 1
+cmp -s "$TMP/hiso.tsv" "$TMP/hisoback.tsv" || fail "auto with -isotope_error differs from Da at the measured window"
 # A probe too small to measure falls back.
 run hsmall "$HI" -complement_tolerance_unit auto -complement_probe 5
 grep -q '^Complement tolerance (auto): not measured' "$TMP/hsmall.log" || fail "-complement_probe 5 measured a window"

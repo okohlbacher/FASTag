@@ -16,12 +16,15 @@ and that differs by instrument and calibration. On ion-trap MS2 read at
 
 `auto` measures the window on the run before tagging:
 
-1. **Probe.** Up to `-complement_probe` MS2 spectra (default 500), drawn
-   uniformly over the run with a fixed seed and read as the tagging pass reads
-   them (centroided under `-pick_profile` as there), are tagged at the first
-   seed length. The complement test is made neutral for the probe: its window
-   is the whole measurement window W, so tags are not selected for having
-   partners inside the configured window.
+1. **Probe.** A uniform draw (fixed seed) of 4 x `-complement_probe` spectra
+   over the run is read; of the MS2 among them, a second uniform draw keeps
+   `-complement_probe` (default 500), so the probe spans the whole run. They
+   are read as the tagging pass reads them (centroided under
+   `-pick_profile` as there) and tagged at the first seed length, at the
+   header charge (2 when none). The probe's complement window is the whole
+   measurement window W: the complement subscore still acts, but it no longer
+   depends on the configured window, so tags are not selected for having
+   partners inside it.
 2. **Errors.** For each probe spectrum whose rank-1 tag has E <= 0.01, each
    end of that tag (two observed peaks) gives one signed error: the nearest
    other peak to the complement m/z under the run's rule(s), minus that m/z,
@@ -35,7 +38,8 @@ and that differs by instrument and calibration. On ion-trap MS2 read at
    least 0.001 Da). A systematic offset widens the window, because the
    window is centred on the complement m/z.
 4. **Fallback.** When the signal is below 40 pairs, or below three standard
-   deviations of the floor's fluctuation, or not contained in the inner two
+   deviations of its fluctuation (Poisson variance doubled for the shared
+   precursor error of a tag's two ends), or not contained in the inner two
    thirds of W, nothing is measured and the run keeps `-complement_tolerance`.
 
 The result goes to stderr, for example
@@ -57,6 +61,15 @@ mode at that window: the tags, the `-unknown_charge infer` and
   is good, so the measured window is somewhat narrower than the 95% bound of
   all fragment pairs (on the in-silico fixtures 0.0097 for a 0.0111 Da bound
   and 0.205 for 0.277 Da).
+- The probe reads the header charge and m/z only: the hypotheses of
+  `-unknown_charge` and `-isotope_error` are not probed (a run whose header
+  monoisotopes are often wrong measures fewer pairs and may fall back).
+- The floor model assumes chance partners are flat across W and true pairs
+  lie well inside 2W/3. A real error population near the edge of W (a second
+  calibration group, or errors as wide as the fragment tolerance x 4) is read
+  as floor and is not covered; dense spectra make the nearest-peak floor
+  slope towards zero. Both ends of a tag share the precursor error, so the
+  significance gate doubles the Poisson variance.
 - Cost: one extra tagging pass over the probe (500 spectra; about 0.35 s at
   one thread on a Q Exactive run, ~2% of a 27,000-MS2 run).
 - One window per run. Runs whose calibration drifts over the gradient get

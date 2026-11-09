@@ -6,10 +6,11 @@
 // the right one depends on the run: the precursor's mass error plus two
 // fragment errors. This file measures that error on the run itself.
 //
-// A probe tags a sample of MS2 spectra with the complement test made neutral
-// (a window as wide as the measurement window, so every tag is scored as if
-// its peaks had partners or not alike, which does not favour tags whose
-// partners happen to sit inside the configured window). For each spectrum
+// A probe tags a sample of MS2 spectra with the complement window set to the
+// whole measurement window W. The complement subscore still acts, but it no
+// longer depends on the configured window, so the probe does not favour tags
+// whose partners happen to sit inside it (a partner anywhere within W counts
+// alike, whatever its error). For each spectrum
 // whose rank-1 tag reaches kAutoMaxEvalue, both ends of that tag (two
 // observed peaks) give one signed error each: the observed partner peak
 // nearest the complement m/z, minus the complement m/z, when it lies within
@@ -27,6 +28,7 @@
 #pragma once
 
 #include "FASTagger.h"
+#include "SpectrumSampler.h"
 
 #include <OpenMS/CONCEPT/Constants.h>
 #include <OpenMS/KERNEL/MSSpectrum.h>
@@ -34,6 +36,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
+#include <iterator>
 #include <limits>
 #include <string>
 #include <vector>
@@ -78,6 +82,22 @@ namespace FASTag::ComplTol
     return p;
   }
 
+  /// The probe: @p want of the @p candidates (spectrum indices, ascending),
+  /// drawn uniformly without replacement with @p seed, returned ascending.
+  /// All of them when there are at most @p want. Uniform over the run, not
+  /// the first @p want in file order.
+  inline std::vector<std::size_t> pickProbe(const std::vector<std::size_t>& candidates, std::size_t want,
+                                            std::uint32_t seed)
+  {
+    if (candidates.size() <= want) return candidates;
+    const SampleMask m = sampleByCount(candidates.size(), want, seed);
+    std::vector<std::size_t> out;
+    out.reserve(want);
+    for (std::size_t i = 0; i < candidates.size(); ++i)
+      if (m[i]) out.push_back(candidates[i]);
+    return out;
+  }
+
   /// Signed complement errors of one spectrum's rank-1 tag, appended to
   /// @p out. @p prepared is the spectrum as tagSpectrum prepared it (the
   /// tag's peaks are among its peaks; m/z sorted), @p precursor_mz and
@@ -98,25 +118,21 @@ namespace FASTag::ComplTol
     const int z = tag.charge;
     const bool same_rule = cs.rule != ComplementRule::Precursor;
     const bool prec_rule = cs.rule != ComplementRule::SameCharge;
+    // The nearest peak to target, as prepare()'s complement test takes it
+    // (PeakGrid::nearest): when that peak is the end itself, the end has no
+    // partner under this rule (infinity), as there.
     const auto nearestOther = [&prepared](double target, double self) {
-      // The peak nearest target, skipping the end itself.
       const auto it = std::lower_bound(prepared.begin(), prepared.end(), target,
                                        [](const OpenMS::Peak1D& a, double v) { return a.getMZ() < v; });
       double best = std::numeric_limits<double>::infinity();
-      for (auto j = it; j != prepared.end(); ++j)
+      double at = 0;
+      if (it != prepared.end()) { best = it->getMZ() - target; at = it->getMZ(); }
+      if (it != prepared.begin())
       {
-        if (j->getMZ() == self) continue;
-        best = j->getMZ() - target;
-        break;
+        const double d = std::prev(it)->getMZ() - target;
+        if (std::fabs(d) < std::fabs(best)) { best = d; at = std::prev(it)->getMZ(); }
       }
-      for (auto j = it; j != prepared.begin();)
-      {
-        --j;
-        if (j->getMZ() == self) continue;
-        const double d = j->getMZ() - target;
-        if (std::fabs(d) < std::fabs(best)) best = d;
-        break;
-      }
+      if (at == self) return std::numeric_limits<double>::infinity();
       return best;
     };
     std::size_t added = 0;
@@ -195,7 +211,11 @@ namespace FASTag::ComplTol
     // well as min_signal.
     const double f1 = window / (window - from) - 1.0;
     const double n_inner = static_cast<double>(e.n - n_floor);
-    const double need = std::max(min_signal, 3.0 * std::sqrt(n_inner + f1 * f1 * static_cast<double>(n_floor)));
+    // Both ends of a tag share the precursor's error, so the two errors of a
+    // spectrum are not independent: the variance is doubled (two perfectly
+    // paired counts), which keeps the gate conservative.
+    const double need =
+        std::max(min_signal, 3.0 * std::sqrt(2.0 * (n_inner + f1 * f1 * static_cast<double>(n_floor))));
     if (!(e.signal >= need))
     {
       e.why = "too few complement pairs above the chance floor (signal " + std::to_string(static_cast<long>(std::lround(e.signal)))

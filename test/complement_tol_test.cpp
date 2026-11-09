@@ -11,6 +11,8 @@
 //       and independent of the floor's density; too few pairs, or a floor
 //       alone, give no measurement; values beyond the window are ignored;
 //       the 0.001 Da lower bound holds.
+//   (c2) a tag end at its own complement m/z has no partner, as in prepare().
+//   (e) pickProbe: a uniform, ascending, deterministic draw over the run.
 //
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
@@ -19,6 +21,7 @@
 #include "FASTagger.h"
 #include "complement_synth.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <random>
@@ -129,6 +132,42 @@ int main()
       for (const double x : e_prec) exact += std::fabs(x) < 1e-6;
       CHECK(exact >= 1, "precursor rule: %zu exact errors of %zu", exact, e_prec.size());
     }
+  }
+
+  // (c2) a tag end at the complement midpoint: prepare()'s test takes the
+  // nearest peak and drops it when it is the end itself, so the end has no
+  // partner; the probe must not report the next peak instead.
+  {
+    const double P = Constants::PROTON_MASS_U;
+    MSSpectrum prep;
+    for (const double mz : {500.0, 500.01, 557.02146372, 628.05857751, 715.09060592}) prep.emplace_back(mz, 1.0);
+    FASTag::Tag t;
+    t.charge = 1;
+    t.low_mz = 500.0;
+    t.high_mz = 715.09060592;
+    const double prec_mz = 500.0;  // charge 2: M = 1000 - 2p, so 500's complement is 500
+    std::vector<double> e;
+    CT::collectErrors(prep, prec_mz, 2, t, FASTag::ComplementSpec::fromParam(FASTag::cliDefaultParam()), 0.12, e);
+    CHECK(e.empty(), "midpoint end reported %zu errors (first %.6g); prepare() gives it no partner",
+          e.size(), e.empty() ? 0.0 : e[0]);
+    (void)P;
+  }
+
+  // (e) the probe draw: uniform over the run, ascending, deterministic.
+  {
+    std::vector<std::size_t> c;
+    for (std::size_t i = 0; i < 10000; ++i) c.push_back(3 * i);
+    const std::vector<std::size_t> a = CT::pickProbe(c, 500, 7);
+    const std::vector<std::size_t> b = CT::pickProbe(c, 500, 7);
+    CHECK(a.size() == 500 && a == b, "probe draw: %zu, deterministic %d", a.size(), int(a == b));
+    CHECK(std::is_sorted(a.begin(), a.end()), "probe draw not ascending");
+    CHECK(!a.empty() && a.front() < 3 * 1000 && a.back() > 3 * 9000,
+          "probe draw does not span the run: %zu..%zu", a.empty() ? 0 : a.front(), a.empty() ? 0 : a.back());
+    std::size_t second_half = 0;
+    for (const std::size_t x : a) second_half += x >= 3 * 5000;
+    CHECK(second_half > 200 && second_half < 300, "probe draw: %zu of 500 in the second half", second_half);
+    const std::vector<std::size_t> few(c.begin(), c.begin() + 40);
+    CHECK(CT::pickProbe(few, 500, 7) == few, "fewer candidates than the probe size: not all kept");
   }
 
   // (d)
