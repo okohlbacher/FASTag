@@ -1,5 +1,42 @@
 # Changelog
 
+## Unreleased (1.12.1)
+
+Documentation only: no code, default or output changes. The README now
+gives the held-out acceptance results of the 1.12 options (Validation,
+"Held-out acceptance of the 1.12 options"). Each item was preregistered
+and run on held-out public data; #2, #4 and #9 were scored once. #6 was
+scored twice: once on item06-H1-r2 (INCONCLUSIVE, PXD001473 without truth),
+then, by a user decision recorded before the run, once more on the unused
+high-resolution runs of the reserve sets item06-H2/H2r (PXD020394,
+PXD055983) (FAIL). No configuration was
+tuned on held-out data.
+
+- **#4 tags on unidentified spectra: PASS.** On 9 ProteomeTools pools the
+  rank-1 tag of a spectrum the database search does not identify is correct
+  27.0 points above decoy chance (95% CI 23.7-30.7, margin 5). Not shown:
+  that the precision on identified spectra transfers to unidentified ones
+  (0.28 against 0.55 at E <= 0.01). `-diversity`: no benefit claimed.
+- **#9 `-pick_profile auto`: FAIL.** The default stays `legacy`, and `auto`
+  is not recommended. Ion trap (PXD009049): two charge-3 cells fail
+  non-inferiority, the 4+ cells are underpowered, and `auto` tags fewer
+  spectra at tag length 4 and 5. Orbitrap (two runs, PXD016519 Q Exactive
+  Plus and PXD018024 Q Exactive HF; no Astral or TOF run was scored): all 9
+  cells gain +10.5 to +32.0 points rank-1 correct, but on PXD016519 `auto`
+  tags 567 fewer spectra at tag length 3 (15,987 against 16,554).
+- **#6 `-unknown_charge infer`: INCONCLUSIVE, then FAIL.** The first
+  scoring, on item06-H1-r2, was INCONCLUSIVE because PXD001473 has no truth.
+  The second, on the unused high-resolution runs of the reserve sets
+  item06-H2/H2r (PXD020394 Q Exactive Plus, PXD055983 Orbitrap Astral), FAILED: charge-call accuracy 0.745
+  against 0.90, and non-inferiority fails in 3 of 18 cells, all 2+. Gains on
+  3+, losses on 2+. The default stays `assume2`.
+- **#2 `-complement_rule both`: INCONCLUSIVE** by rule 5: the truth of one
+  Astral run (PXD074582) has 0 PSMs at 1% FDR. On the other runs endpoints
+  (i)-(iii) fail descriptively. The default stays `same_charge`.
+- **Not validated:** every other 1.12 option (#1/#10, #3, #5, #7 release
+  test, #11, #15, #17) stays experimental. Low-resolution (ion-trap) MS2 is
+  not validated for any 1.12 option.
+
 ## 1.12.0
 
 All defaults are those of FASTag 1.11, with one exception (#7 below). At the
