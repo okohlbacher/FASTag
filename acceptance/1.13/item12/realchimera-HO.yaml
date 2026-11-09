@@ -1,0 +1,23 @@
+# 1.13 item 12 (#16) frozen held-out config (CFG-12-realchimera). Scored exactly once, by item12/scripts/run_heldout.sh.
+# Harness: feat/b113-chimeric c80faa359be4d259be042721b3747d43095a252a (bench/fastag-bench, git archive on node data,
+# file sha256 in item12/SHA256SUMS). Same settings as the DEV config bench/config/realchimera-dev.yaml at that commit
+# except manifest, work_dir and split.
+realchimera:
+  manifest: /scratch/kohlbach/b113/chimeric/acc/manifests/item12-realchimera.tsv
+  work_dir: /scratch/kohlbach/b113/chimeric/work/heldout
+  split: HO
+  fdr: 0.01
+  purity_tol_ppm: 10
+  purity_center: target
+  fastag_threads: 8
+  fastag_args: []
+  chance_seed: 1
+  profiles:
+    default: []
+    cap10: [-max_tags, "10"]
+    cap10_div: [-max_tags, "10", -diversity]
+tools:
+  fastag: /scratch/kohlbach/b113/chimeric/opt/FASTag
+  sage: /scratch/kohlbach/jpr-bench/envs/sage/bin/sage
+sage:
+  threads: 16

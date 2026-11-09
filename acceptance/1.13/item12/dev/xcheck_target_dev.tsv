@@ -1,0 +1,4 @@
+# purity: work/realchimera/runs/DEV-PXD003531-NO03/purity.tsv (source: fastag-bench 1.9.0 realchimera purity DEV-PXD003531-NO03 (2026-11-09T20:31:24+01:00, host data); config: /scratch/kohlbach/b113/chimeric/bench/config/realchimera-dev.yaml; manifest: /scratch/kohlbach/b113/chimeric/bench/config/realchimera-dev-manifest.tsv; split: DEV; OpenMS PrecursorPurity port, tol 10 ppm, center target, from /ceph/ibmi/abi/oliver/jpr-bench/data/PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.mzML)
+# openms: work/xcheck/openms_dev.tsv
+n_ms2_purity	n_joined	n_equal	share_equal	max_abs_diff	n_total_rel_diff_gt_1e-6	openms_version
+27345	27345	24250	0.8868166026695923	0.8847552624251553	3133	3.4.1

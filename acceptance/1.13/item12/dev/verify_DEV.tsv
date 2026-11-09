@@ -1,0 +1,5 @@
+# source: fastag-bench 1.9.0 realchimera verify (2026-11-09T20:50:17+01:00, host data)
+# config: /scratch/kohlbach/b113/chimeric/bench/config/realchimera-dev.yaml; manifest: /scratch/kohlbach/b113/chimeric/bench/config/realchimera-dev-manifest.tsv; split: DEV
+run_id	kind	path	sha256_manifest	sha256_found	ok
+DEV-PXD003531-NO03	mzml	/ceph/ibmi/abi/oliver/jpr-bench/data/PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.mzML	2b1da22229a9d8e8d4cde05d889c3a74dedd68bb9f00f3bdd9d78d2a8d9ace4a	2b1da22229a9d8e8d4cde05d889c3a74dedd68bb9f00f3bdd9d78d2a8d9ace4a	True
+DEV-PXD003531-NO03	fasta	/ceph/ibmi/abi/oliver/jpr-bench/data/PXD054073/UP000005640_9606.fasta	1f028a9ab2bca643c0e121c01ba3e05c92136beaa693a6197a32a025670df4bc	1f028a9ab2bca643c0e121c01ba3e05c92136beaa693a6197a32a025670df4bc	True

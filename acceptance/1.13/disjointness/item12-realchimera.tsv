@@ -1,0 +1,7 @@
+# 1.13 item 12: every held-out run vs the one DEV run (bench/config/realchimera-dev-manifest.tsv at c80faa3)
+run_id	pxd	same_pxd_as_dev	same_raw_name	same_raw_sha1	same_mzml_sha256	disjoint
+HO-PXD066944-OFF03	PXD066944	False	False	False	False	True
+HO-PXD076528-7673	PXD076528	False	False	False	False	True
+HO-PXD009612-MW3	PXD009612	False	False	False	False	True
+HO-PXD040230-S2R1	PXD040230	False	False	False	False	True
+HO-PXD049370-185	PXD049370	False	False	False	False	True

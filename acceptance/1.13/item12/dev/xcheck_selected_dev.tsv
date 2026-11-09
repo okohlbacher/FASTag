@@ -1,0 +1,4 @@
+# purity: work/xcheck/purity_selected_dev.tsv (realchimera.purity_table center=selected tol 10 ppm)
+# openms: work/xcheck/openms_dev.tsv
+n_ms2_purity	n_joined	n_equal	share_equal	max_abs_diff	n_total_rel_diff_gt_1e-6	openms_version	verdict
+27345	27345	27345	1.0	0.0	0	3.4.1	PASS

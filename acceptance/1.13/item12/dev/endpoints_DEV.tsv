@@ -1,0 +1,64 @@
+# source: /scratch/kohlbach/b113/chimeric/work/realchimera/spectra_DEV.tsv.gz
+# scorer: scripts/stats_realchimera.py sha256 06bd3db99cd0110c94737e126b8069e1e2c5c6bb84726f2fdf5875b4fde709d7
+# n_boot 2000, seed 20261104, PURE_MIN 0.9, IMPURE_MAX 0.5, NONINF_MARGIN 0.1, MIN_SPECTRA 100
+endpoint	metric	group	n	clusters	value	ci_lo	ci_hi	p	verdict	note
+counts	spectra	chimeric	1292		1292.0					runs 1
+V1 purity	median_purity	chimeric	1292		0.6361496801658899					
+counts	spectra	nested	41		41.0					runs 1
+V1 purity	median_purity	nested	41		0.9198572177784848					
+counts	spectra	single	9794		9794.0					runs 1
+V1 purity	median_purity	single	9794		0.7717623678099945					
+counts	spectra	single_pure	2667		2667.0					
+counts	spectra	single_impure	1219		1219.0					
+V2 clusters	max_cluster_share	chimeric	1292	568.0	0.04953560371517028					
+E1 chimeric	union_rank1	truth	1292	568.0	0.7221362229102167	0.6897855104752971	0.7522222733971996			
+E1 chimeric	union_rank1	chance	1292	568.0	0.0007739938080495357	0.0	0.0026162683420747897			
+E1 chimeric	pep1_rank1	truth	1292	568.0	0.5379256965944272	0.5059524276413836	0.5693929164109209			
+E1 chimeric	pep1_rank1	chance	1292	568.0	0.0007739938080495357	0.0	0.0026162683420747897			
+E1 chimeric	pep2_rank1	truth	1292	568.0	0.18421052631578946	0.16160057773109246	0.20794592145644414			
+E1 chimeric	pep2_rank1	chance	1292	568.0	0.0	0.0	0.0			
+E1 chimeric	both_rank1	truth	1292	568.0	0.0	0.0	0.0			
+E1 chimeric	both_rank1	chance	1292	568.0	0.0	0.0	0.0			
+E1 chimeric	pep2_top10	truth	1292	568.0	0.5023219814241486	0.47403131620152894	0.5295184110331039			
+E1 chimeric	pep2_top10	chance	1292	568.0	0.0015479876160990713	0.0	0.003946564070414513			
+E1 chimeric	both_top10	truth	1292	568.0	0.3831269349845201	0.3552814427536671	0.40978282059216864			
+E1 chimeric	both_top10	chance	1292	568.0	0.0	0.0	0.0			
+E1 chimeric	pep2_top50	truth	1292	568.0	0.791795665634675	0.7697535218117321	0.8143577867612088			
+E1 chimeric	pep2_top50	chance	1292	568.0	0.0030959752321981426	0.0007132160315582494	0.006270085368979315			
+E1 chimeric	both_top50	truth	1292	568.0	0.7492260061919505	0.724735294117647	0.7739000019675212			
+E1 chimeric	both_top50	chance	1292	568.0	0.0	0.0	0.0			
+E1 by header	pep1_rank1	pep1 at header	732		0.6530054644808743					
+E1 by header	pep2_rank1	pep1 at header	732		0.0942622950819672					
+E1 by header	union_rank1	pep1 at header	732		0.7472677595628415					
+E1 by header	pep1_rank1	pep2 at header	279		0.2724014336917563					
+E1 by header	pep2_rank1	pep2 at header	279		0.44086021505376344					
+E1 by header	union_rank1	pep2 at header	279		0.7132616487455197					
+E1 by header	pep1_rank1	both at header	181		0.5966850828729282					
+E1 by header	pep2_rank1	both at header	181		0.14917127071823205					
+E1 by header	union_rank1	both at header	181		0.7458563535911602					
+E1 by header	pep1_rank1	neither at header	100		0.33					
+E1 by header	pep2_rank1	neither at header	100		0.19					
+E1 by header	union_rank1	neither at header	100		0.52					
+E1 attribution	rank1_tag	pep1	1292		0.5379256965944272					
+E1 attribution	rank1_tag	pep2	1292		0.18421052631578946					
+E1 attribution	rank1_tag	both	1292		0.0					
+E1 attribution	rank1_tag	neither	1292		0.27786377708978327					
+E1 attribution	rank1_tag	untagged	1292		0.0					
+V2 clusters	max_cluster_share	single_pure	2667	1615.0	0.016122984626921636					
+V2 clusters	max_cluster_share	single_impure	1219	928.0	0.012305168170631665					
+H1 chimeric penalty	pep1_rank1 chimeric - pep1_rank1 pure single	chimeric vs single_pure	3959		-0.1628617049803759	-0.20429283496545247	-0.1243476324280063		penalty shown	chimeric 0.5379 (n 1292), pure single 0.7008 (n 2667)
+H2 union non-inferiority	union_rank1 chimeric - pep1_rank1 pure single	chimeric vs single_pure	3959		0.021348821335413604	-0.01841390889760018	0.058179962250913306		non-inferior	chimeric 0.7221 (n 1292), pure single 0.7008 (n 2667)
+H3 purity gradient	pep1_rank1 pure - impure (single)	single	3886		0.24385549017201397	0.20669866462154726	0.28395108352165455		gradient shown	pure 0.7008 (n 2667), impure 0.4569 (n 1219)
+purity bins	pep1_rank1	single [0.0, 0.25)	163		0.37423312883435583					
+purity bins	pep1_rank1	single [0.25, 0.5)	1056		0.4696969696969697					
+purity bins	pep1_rank1	single [0.5, 0.75)	3331		0.5725007505253678					
+purity bins	pep1_rank1	single [0.75, 0.9)	2577		0.6243694218083042					
+purity bins	pep1_rank1	single [0.9, 1.0)	2667		0.7007874015748031					
+purity bins	union_rank1	chimeric [0.0, 0.25)	31		0.7419354838709677					
+purity bins	union_rank1	chimeric [0.25, 0.5)	258		0.7131782945736435					
+purity bins	union_rank1	chimeric [0.5, 0.75)	627		0.7288676236044657					
+purity bins	union_rank1	chimeric [0.75, 0.9)	255		0.7254901960784313					
+purity bins	union_rank1	chimeric [0.9, 1.0)	121		0.6942148760330579					
+H4 diversity	both_top10 cap10_div - cap10	chimeric	1292	568.0	0.1780185758513932	0.15609973615322117	0.19935274623597515	4.999750012499375e-05	benefit	union_rank1 loss -0.0000; both_top10 off 0.3831, on 0.5611; pep1_top10 off 0.8344, on 0.8893; pep2_top10 off 0.5023, on 0.6385
+per run	union_rank1 chimeric	DEV-PXD003531-NO03	1292		0.7221362229102167					
+per run	pep1_rank1 single_pure	DEV-PXD003531-NO03	2667		0.7007874015748031					
