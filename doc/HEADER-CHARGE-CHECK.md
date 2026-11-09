@@ -53,5 +53,20 @@ Precursors without a charge are not checked; `-unknown_charge` handles them.
 
 ## Validation
 
-The DEV and held-out results are in the 1.13 acceptance tree (`acceptance/1.13/PREREG-hdrcharge.md` and
-`acceptance/1.13/hdrcharge/`). The option stays experimental until a held-out test passes.
+The protocol is `acceptance/1.13/PREREG-item14.md` and the results are in `acceptance/1.13/hdrcharge/results/`. The
+held-out set was 5 runs, scored once. **Verdict: INCONCLUSIVE.** Two Astral runs had fewer than 500 Sage truth
+spectra: PXD070049 has 345, and PXD074582 has 0 targets at 1 % FDR.
+
+On the three Q Exactive runs, as given:
+
+- real headers disagree with Sage on 2.3 % of the identified spectra;
+- the check flags 138 of 31,891, of which 40 are wrong headers;
+- `override` would fix 35 charges and break 98, so it is net harmful (-2.0 per 1000).
+
+On a copy with every fifth charge changed, the check finds 28 % of the changed headers at precision 0.95.
+
+What follows:
+
+- `warn` is a diagnostic for systematically wrong charges, such as a converter or export error.
+- `override` is not recommended on vendor charges.
+- The option stays experimental.
