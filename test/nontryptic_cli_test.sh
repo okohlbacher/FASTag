@@ -115,7 +115,12 @@ grep -q 'give -search_config_template with one' "$TMP/anc/run.log" || fail "Asp-
 [ "$(go an "${CH[@]}" "${NEW[@]}" -shortlist_protease asp-n)" != 0 ] || fail "asp-n on a chymotryptic run was not refused"
 grep -q 'but the tag ends call Chymotrypsin' "$TMP/an/run.log" || fail "asp-n: the ERROR does not name the call"
 [ ! -e "$TMP/an/red.fasta" ] && [ ! -e "$TMP/an/sage.json" ] || fail "asp-n: hand-off outputs written although refused"
-grep -q '^# placement: Asp-N, full specificity.*withheld$' "$TMP/an/sl.tsv" || fail "asp-n: the TSV does not say it was withheld"
+grep -q '^# placement: Asp-N, full specificity.*; -fasta_out or -search_config_out withheld$' "$TMP/an/sl.tsv" \
+  || fail "asp-n: the TSV does not say what was withheld"
+# only -fasta_out asked: the header names only it
+[ "$(go anq "${CH[@]}" -out t.tsv -shortlist_out sl.tsv -fasta_out red.fasta -shortlist_protease asp-n)" != 0 ] \
+  || fail "asp-n with -fasta_out alone was not refused"
+grep -q '; -fasta_out withheld$' "$TMP/anq/sl.tsv" || fail "asp-n: the header does not name exactly -fasta_out"
 [ "$(go anf "${CH[@]}" "${NEW[@]}" -shortlist_protease asp-n -shortlist_force)" = 0 ] || fail "asp-n -shortlist_force: exit non-zero"
 grep -q '"cleave_at": "D"' "$TMP/anf/sage.json" && grep -q '"c_terminal": false' "$TMP/anf/sage.json" \
   || fail "asp-n forced: Sage is not Asp-N"

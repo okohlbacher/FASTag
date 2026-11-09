@@ -144,8 +144,8 @@ null` lifts the proline rule, `semi_enzymatic` gives 5,045.
 The shortlist TSV gets one header line after `# protease:` (only with this
 option):
 `# placement: <rule>, <specificity> specificity, missed cleavages <= <n>,
-windows by flank mass (<why>)`, ending in `; -fasta_out and
--search_config_out withheld` when they were. The log says how many of the
+windows by flank mass (<why>)`, ending in `; <outputs> withheld` (the
+withheld ones of `-fasta_out` and `-search_config_out`) when they were. The log says how many of the
 placements by flank mass fit the rule.
 
 Cost: a placement by mass walks at most the flank masses from each

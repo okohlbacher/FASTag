@@ -5116,6 +5116,7 @@ protected:
                                                                : "inconclusive";
         // 1.13 item 20: the rule the placements are kept by.
         FASTag::Cleavage::Choice sl_choice;
+        std::string sl_withheld;  // what the placement check withheld, for the TSV header
         if (sl_nontryptic)
         {
           sl_choice = FASTag::Cleavage::choose(sl_protease, sl_spec, verdict);
@@ -5138,6 +5139,7 @@ protected:
                              << ", so the shortlist may not describe this run. Not writing " << withheld
                              << " (-shortlist_force overrides)." << std::endl;
           handoff_refused = sl_choice.refuse && !force && !withheld.empty();
+          if (handoff_refused) sl_withheld = withheld;
           sl_plan.enzyme = FASTag::Cleavage::engineEnzyme(*sl_choice.rule, sl_choice.specificity);
           if (shortlist_on)
           {
@@ -5247,7 +5249,7 @@ protected:
                                      ? std::string("no missed-cleavage limit")
                                      : "missed cleavages <= " + std::to_string(getIntOption_("recon_missed_cleavages"))) +
                                 ", windows by flank mass (" + sl_choice.reason + ")" +
-                                (handoff_refused ? "; -fasta_out and -search_config_out withheld" : ""));
+                                (sl_withheld.empty() ? std::string() : "; " + sl_withheld + " withheld"));
             if (subsampling) header.push_back("counts are over the -subsample_* spectra only");
             if (filtering) header.push_back("-fasta filtered the tags before placement");
             std::string err;
