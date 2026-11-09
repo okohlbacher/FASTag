@@ -197,6 +197,7 @@ namespace FASTag::Census
     float min_conf = 0, mean_conf = 0;
     float peak_tic = 0;  ///< summed intensity of the tag's path peaks (BestTagTIC)
     bool cz = false;     ///< read as c/z-dot ions (1.12 #15 phase B), else b/y
+    bool ax = false;     ///< read as a/x ions (1.13 item 11)
   };
 
   inline constexpr std::size_t kNone = static_cast<std::size_t>(-1);
@@ -349,7 +350,7 @@ namespace FASTag::Census
     if (ion_series)
     {
       buf += '\t';
-      if (r.has_best) buf += r.best.cz ? "cz" : "by";
+      if (r.has_best) buf += r.best.cz ? "cz" : r.best.ax ? "ax" : "by";
     }
     buf += '\n';
   }
