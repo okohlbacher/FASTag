@@ -82,8 +82,11 @@ set(FASTAG_CORE_SOURCES_A src/Shortlist.cpp src/SearchConfig.cpp)
 set(FASTAG_CORE_SOURCES_D src/SpeciesLookup.cpp src/SpeciesCall.cpp src/AlkylationCall.cpp)
 # ---- 1.12 F: core sources ----
 set(FASTAG_CORE_SOURCES_F src/OutputGuard.cpp src/CensusIds.cpp)
+# ---- label discovery (-label_discovery_out): core sources ----
+set(FASTAG_CORE_SOURCES_LD src/LabelDiscovery.cpp)
 add_library(fastag_core STATIC ${FASTAG_CORE_SOURCES}
-            ${FASTAG_CORE_SOURCES_E} ${FASTAG_CORE_SOURCES_A} ${FASTAG_CORE_SOURCES_D} ${FASTAG_CORE_SOURCES_F})
+            ${FASTAG_CORE_SOURCES_E} ${FASTAG_CORE_SOURCES_A} ${FASTAG_CORE_SOURCES_D} ${FASTAG_CORE_SOURCES_F}
+            ${FASTAG_CORE_SOURCES_LD})
 target_include_directories(fastag_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
@@ -277,7 +280,10 @@ if(FASTAG_BUILD_TESTS)
   set(FASTAG_UNIT_TESTS_D species_call_test digest_v2_test alkylation_test)
   # ---- 1.12 F: unit tests ----
   set(FASTAG_UNIT_TESTS_F output_guard_test census_test census_ids_test)
-  foreach(t ${FASTAG_UNIT_TESTS} ${FASTAG_UNIT_TESTS_E} ${FASTAG_UNIT_TESTS_A} ${FASTAG_UNIT_TESTS_D} ${FASTAG_UNIT_TESTS_F})
+  # ---- label discovery: unit tests ----
+  set(FASTAG_UNIT_TESTS_LD label_discovery_test)
+  foreach(t ${FASTAG_UNIT_TESTS} ${FASTAG_UNIT_TESTS_E} ${FASTAG_UNIT_TESTS_A} ${FASTAG_UNIT_TESTS_D} ${FASTAG_UNIT_TESTS_F}
+            ${FASTAG_UNIT_TESTS_LD})
     add_executable(${t} test/${t}.cpp)
     target_link_libraries(${t} PRIVATE fastag_core)
     add_test(NAME ${t} COMMAND ${t})
