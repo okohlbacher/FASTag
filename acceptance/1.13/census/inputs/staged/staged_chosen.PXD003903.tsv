@@ -1,0 +1,2 @@
+accession	file	bytes	pride_sha1	status	raw_sha256	mzml	mzml_bytes	mzml_sha256	ms2	ms2_ftms_hcd	ms2_charged	check
+PXD003903	PT4530-6.raw	2534891259	f120068c406855f55ec6e1c6dc81d63f811b3c54	sha1_ok	01c073df1c75381e315416181f27eb38b33b8c224e207ae020b25b661e77b75d	PXD003903/PT4530-6.mzML	679078920	8b28666db5dc54f1ffad820acf64f51cc7a2c16b5c85fa1497d6db37c9966f57	39839	39839	39839	ok

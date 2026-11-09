@@ -1,0 +1,2 @@
+accession	file	bytes	pride_sha1	status	raw_sha256	mzml	mzml_bytes	mzml_sha256	ms2	ms2_ftms_hcd	ms2_charged	check
+PXD017427	QE9884.raw	998023054	e612262bc1352826036810ea1b9c8b54a52787d2	sha1_ok	dc9eff3ccdeb06147672d68e4366ff26be71059fafacc9afd15e0462571160e9	PXD017427/QE9884.mzML	408162584	e41e7e45611fe6fc4486ce841fa53f85651c41c2f756df0f389fb31ba1aabdc4	35994	35994	35994	ok

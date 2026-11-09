@@ -1,0 +1,2 @@
+accession	file	bytes	pride_sha1	status	raw_sha256	mzml	mzml_bytes	mzml_sha256	ms2	ms2_ftms_hcd	ms2_charged	check
+PXD034582	gamma6_DDA.raw	893806624	ec5880eb7a2a39fc859018ec609edcaf0e76652b	sha1_ok	ecefc2ecea4f8597160e78bc6db65ec16d837d50af6e5ec0417b84e7cb9cd6b5	PXD034582/gamma6_DDA.mzML	476694463	4efec66522267bb35647f8740546f7e63553f18849611bd9133d810ee883bf8c	59272	59272	59272	ok

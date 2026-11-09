@@ -1,0 +1,2 @@
+accession	file	bytes	pride_sha1	status	raw_sha256	mzml	mzml_bytes	mzml_sha256	ms2	ms2_ftms_hcd	ms2_charged	check
+PXD069084	1D2_pH5.raw	2678992173	-	no_pride_sha1,size_ok,second_download_same	3082504da784071a6a114ebb7a152386f44524527eb8550325df9bf21f4f6c29	PXD069084/1D2_pH5.mzML	923862149	76a338319dae60a2f74952ba51aa720e03c96b124badd8ab3a313e55af549cad	68314	68314	68314	ok

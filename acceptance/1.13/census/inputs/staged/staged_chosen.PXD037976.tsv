@@ -1,0 +1,2 @@
+accession	file	bytes	pride_sha1	status	raw_sha256	mzml	mzml_bytes	mzml_sha256	ms2	ms2_ftms_hcd	ms2_charged	check
+PXD037976	OA7A-2.raw	3734676405	ca394458782be20732a84f5fd4ef6b083fb994ee	sha1_ok	7c981ef69ec1a5792c5c740df13577cd96acf1f08dce5e594178d498c47ad202	PXD037976/OA7A-2.mzML	996533903	47970fcd61f0fea938bcb0c0a5e3dcee80104c30ead0c9769efaf0ffc4b600e3	69475	69475	69475	ok

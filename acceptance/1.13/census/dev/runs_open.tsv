@@ -1,0 +1,3 @@
+run	census	second	mzml
+PXD003531	/scratch/kohlbach/b113/census/dev/PXD003531/fastag/tags.census.tsv	/scratch/kohlbach/b113/census/dev/PXD003531/open/results.sage.tsv	20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.mzML
+PXD014764	/scratch/kohlbach/b113/census/dev/PXD014764/fastag/tags.census.tsv	/scratch/kohlbach/b113/census/dev/PXD014764/open/results.sage.tsv	20190412_KEH_HF_SA_ANW_R11_100419_CNOT_R1_f008.mzML

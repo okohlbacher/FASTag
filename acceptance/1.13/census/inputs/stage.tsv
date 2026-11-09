@@ -1,0 +1,13 @@
+role	accession	file	bytes	pride_sha1	url
+chosen	PXD016143	1DLC071619QE_NET_withoutDNAse_Protifi_NET2.raw	1108014187	1a246d126f9b76059bd91400215eb81390a44041	https://ftp.pride.ebi.ac.uk/pride/data/archive/2022/10/PXD016143/1DLC071619QE_NET_withoutDNAse_Protifi_NET2.raw
+backup	PXD016143	1DLC122018QE_ProtifiSTrap_NETs_NET1.raw	1105855276	1a6d4ffb375a256c03e491f450614d90e1744db5	https://ftp.pride.ebi.ac.uk/pride/data/archive/2022/10/PXD016143/1DLC122018QE_ProtifiSTrap_NETs_NET1.raw
+chosen	PXD069084	1D2_pH5.raw	2678992173	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2025/11/PXD069084/1D2_pH5.raw
+backup	PXD069084	IRT1_pH5.raw	3013356187	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2025/11/PXD069084/IRT1_pH5.raw
+chosen	PXD034582	gamma6_DDA.raw	893806624	ec5880eb7a2a39fc859018ec609edcaf0e76652b	https://ftp.pride.ebi.ac.uk/pride/data/archive/2022/10/PXD034582/gamma6_DDA.raw
+backup	PXD034582	gamma5_DDA.raw	875452392	95aa445027eb3b86bb24adffc9bd9502d176984f	https://ftp.pride.ebi.ac.uk/pride/data/archive/2022/10/PXD034582/gamma5_DDA.raw
+chosen	PXD017427	QE9884.raw	998023054	e612262bc1352826036810ea1b9c8b54a52787d2	https://ftp.pride.ebi.ac.uk/pride/data/archive/2020/05/PXD017427/QE9884.raw
+backup	PXD017427	QE9906.raw	874966180	0b578c6225d7bd9dc5cdee2873551ef79ad78dd0	https://ftp.pride.ebi.ac.uk/pride/data/archive/2020/05/PXD017427/QE9906.raw
+chosen	PXD003903	PT4530-6.raw	2534891259	f120068c406855f55ec6e1c6dc81d63f811b3c54	https://ftp.pride.ebi.ac.uk/pride/data/archive/2016/06/PXD003903/PT4530-6.raw
+backup	PXD003903	PT4729-4.raw	3182137125	ea83a876dc0c3c6abf1202ccd95a9bb9e092a8a6	https://ftp.pride.ebi.ac.uk/pride/data/archive/2016/06/PXD003903/PT4729-4.raw
+chosen	PXD037976	OA7A-2.raw	3734676405	ca394458782be20732a84f5fd4ef6b083fb994ee	https://ftp.pride.ebi.ac.uk/pride/data/archive/2023/07/PXD037976/OA7A-2.raw
+backup	PXD037976	OA7G-3.raw	3590724742	a52793d62b132cfb1769dd28f40b55939fceb0c9	https://ftp.pride.ebi.ac.uk/pride/data/archive/2023/07/PXD037976/OA7G-3.raw
