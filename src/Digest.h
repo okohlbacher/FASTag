@@ -112,6 +112,12 @@ namespace FASTag::Digest
     /// P1' the first residue after it. cpos[0..3] = P1..P4 on the C end,
     /// npos[0..3] = P1'..P4' on the N end.
     std::array<std::array<std::uint64_t, kNumAA>, 4> cpos{}, npos{};
+    // ---- 1.13 digqual (backlog 23): read by digestQuality() only ----
+    /// The residues at P2..P4 of the tags counted at P1, by their P1 residue:
+    /// cq[P1][residue] (kAAs order, labelled K merged into K as in cpos);
+    /// nq the same for P2'..P4' by the P1' residue.
+    std::array<std::array<std::uint64_t, kNumAA>, kNumAA> cq{}, nq{};
+    // ---- end 1.13 digqual ----
 
     /// Tag ends that match key k: C-terminal flank near the key mass, or
     /// N-terminal flank near the key mass + H2O.
@@ -464,6 +470,53 @@ namespace FASTag::Digest
   /// the -digest_out row share.kr (res() / tot() summed over the K and R keys
   /// in residueKeys() order). Needs tot() > 0.
   double krShare(const TerminusCounter& tc);
+
+  // ---- 1.13 digqual (backlog 23): digestion quality ----------------------
+  //
+  // Missed-cleavage and non-specific-end measurements for one enzyme (a model
+  // of the table), from the tag ends alone; see doc/DESIGN-digest.md,
+  // "Digestion quality". Written by -digest_quality after the 1.12 rows.
+
+  /// The measurements at one cleaving end of the enzyme's model.
+  struct QualityEnd
+  {
+    char end = 'C';                   ///< 'C' (P1) or 'N' (P1')
+    std::vector<int> sites;           ///< kAAs indices whose model probability is above the background's
+    bool measured = false;            ///< ends >= tag_min
+    std::uint64_t ends = 0;           ///< merged P1 (P1') counts
+    std::uint64_t specific = 0;       ///< of them at a site residue
+    double nonspecific_share = 0.0;   ///< 1 - specific / ends
+    double nonspecific_mle = 0.0;     ///< s maximising the likelihood of (1 - s) model + s background
+    std::uint64_t mc_positions = 0;   ///< residues at P2..P4 (P2'..P4') of the tags with a specific end
+    std::uint64_t mc_sites = 0;       ///< of them at a site residue
+    double mc_background_share = 0.0; ///< background share of the site residues
+    double mc_retention = 0.0;        ///< (sites / non-sites) / (b / (1 - b)); NaN when undefined
+  };
+
+  struct Quality
+  {
+    std::string enzyme;               ///< the model measured ("-" when none)
+    std::string basis;                ///< "named" (-digest_quality <model>) or "call" (auto)
+    bool measured = false;            ///< at least one end measured
+    std::string reason;               ///< not measured: no_call, no_specific_end, few_tags
+    std::vector<QualityEnd> ends;     ///< the model's non-background ends, C first
+  };
+
+  /// The site residues of one model end: residues with p(a) > bg(a), both
+  /// normalised over the 19 residues. Empty for a background end.
+  std::vector<int> siteResidues(const Dist& model_end, const Dist& bg);
+  /// The background share s in [0, 1] that maximises sum_a k_a ln((1 - s) p_a
+  /// + s b_a) (p, b normalised); bisection on the derivative (concave in s).
+  double mixtureShareMle(const std::array<std::uint64_t, kNumAA>& k, const Dist& p, const Dist& b);
+  /// The quality of @p model (a model of @p table, whose background is used)
+  /// over the counts of @p tc; an end is measured with >= @p tag_min ends.
+  /// @p basis is written as given.
+  Quality digestQuality(const TerminusCounter& tc, const ModelTable& table, const Model& model,
+                        const std::string& basis, int tag_min);
+  /// The quality section rows (section "quality"), for a measured or an
+  /// unmeasured result.
+  std::vector<Row> qualityRows(const Quality& q, const DigestSettings& s);
+  // ---- end 1.13 digqual ----
 
   // ---- label_call (FASTag 1.12 #3a) ---------------------------------------
   //

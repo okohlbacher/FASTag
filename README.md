@@ -530,6 +530,7 @@ MGF→mzML direction is exact.
 | `-digest_detection <none\|shipped>` | none | Experimental: score the tag ends with the table's detection weights of the run's instrument class (orbitrap_hcd, timstof, other) and call timsTOF runs instead of withholding them; needs a v2 table |
 | `-digest_flank2 <off\|auto>` | off | Experimental: where y1 is cut off or the P1 counts are too few, score the two-residue flank sums m(P2) + m(P1) instead |
 | `-digest_min_confidence <f>` / `-digest_calibration <file>` | 0 / shipped | Experimental: write the calibrated `p_correct` of a call and withhold one below the threshold (`low_confidence`); the shipped calibration is unfitted (p_correct 0.5) |
+| `-digest_quality <enzyme\|auto>` | none | Experimental (1.13): append missed-cleavage and non-specific-end measurements (section `quality`) to `-digest_out` for a model of the protease table (e.g. `Trypsin`) or for the report's own call (`auto`); see doc/DESIGN-digest.md, "Digestion quality" |
 | `-alkylation_out <file>` | none | Experimental (1.12), not validated on held-out data: which reagent alkylated the cysteines, or none, from the placements of single-Cys peptides (see Digest, label and mass-gap reports; format in doc/ALKYLATION-REPORT.md) |
 | `-alkylation_proteome <name\|file>` | auto | Database of `-alkylation_out` when nothing else places: a FASTA (`.gz` allowed); ignored with `-recon_fasta`. **In 1.12.0 `-alkylation_out` needs `-recon_fasta` or a FASTA path here:** the named proteomes `auto` (= human), `human`, `mouse`, `yeast`, `ecoli` (`share/FASTag/alkylation/<name>.fasta.gz`) are not shipped yet, and naming one (or leaving the default `auto`) stops with exit code 6 |
 | `-alkylation_min_spectra <n>` / `-alkylation_min_share <f>` / `-alkylation_window <Da>` | 10 / 0.6 / 0 | Advanced: spectra and share the call needs; bin window (0 = 0.02 Da on ppm runs, 0.5 Da on Da runs) |
@@ -883,6 +884,17 @@ and not validated on held-out data; at their defaults the report is the
 FASTag 1.11 one byte for byte, and with any of them on it gains `run`,
 `meta instrument_class`, `count flank2_n`, `call p_correct`/`flank2_used`/
 `timstof_call` and `nocall low_confidence` rows.
+
+`-digest_quality <enzyme|auto>` (1.13, experimental, off by default) appends a
+`quality` section after every other `-digest_out` row, so the report without
+it is unchanged. For each cleaving end of the enzyme's model it gives the
+share of tag ends outside the cleaving residues (`nonspecific_share`), the
+background share that fits the P1 counts best (`nonspecific_mle`), and a
+missed-cleavage odds ratio: how often the cleaving residues occur at P2..P4
+of the tags with a specific end, against the background (`mc_retention`; 0 =
+every site cut, 1 = as often as in the proteome). Measured from the tags
+alone; doc/DESIGN-digest.md has the definitions and a descriptive comparison
+with Sage.
 
 `-digest_out` also writes the background in use and each model's residue
 distribution before mixing, from which the Desktop GUI draws its logos. The

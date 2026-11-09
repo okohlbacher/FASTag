@@ -200,6 +200,41 @@ The per-MS2 counts are taken in the tagging loop only with `-digest_out`. This r
 the DEV fit, so the fitted `orbitrap_hcd` weights pool no ion-trap CID runs; PREREG-chem.md records
 it when it is written.
 
+### Digestion quality (1.13, `-digest_quality`, experimental)
+
+`-digest_quality <enzyme>` appends a `quality` section after every other `-digest_out` row (so the
+report without it, and its 1.12 rows with it, are byte-identical to 1.12). `<enzyme>` is a model of
+the table in use (`Trypsin`, `Asp-N`, ...; another name stops with exit code 6) or `auto`, the model of
+the report's `call` (after every 1.12 rule, `-digest_min_confidence` included); a no-call is
+`status not_measured`, `reason no_call`. Counted from the tags alone, no database.
+
+For each end of the model that is not the background (`C` = P1; `N` = P1' for Asp-N and Lys-N):
+
+| Key | Value |
+|---|---|
+| `<E>.sites` | the cleaving residues S: model probability above the background's, both normalised over the 19 (Trypsin `K,R`) |
+| `<E>.ends` | the merged P1 (P1') counts, `count.n_c` (`n_n`); the sentence says how many are at S |
+| `<E>.measured` | `yes` when the ends are ≥ `-digest_tag_min`; else `no` and no further rows for that end |
+| `<E>.nonspecific_share` | share of the ends whose P1 is not in S |
+| `<E>.nonspecific_mle` | the background share s in [0, 1] that maximises Σ k_a ln((1 − s) p_a + s bg_a) over the P1 counts k (the classifier's mixture with s estimated; concave, bisection). It counts the non-specific ends that fall on S by chance too |
+| `<E>.mc_positions` | residues at P2..P4 (P2'..P4') of the tags counted at a P1 (P1') in S; the positions are the tag residues next to the end, as for `pos` (`TerminusCounter::cq`, `nq`) |
+| `<E>.mc_sites` | of them in S: internal cleavage sites of a peptide with a specific end, i.e. missed cleavages |
+| `<E>.mc_site_share` | `mc_sites / mc_positions` |
+| `<E>.mc_background_share` | b_S, the background share of S |
+| `<E>.mc_retention` | (mc_sites / (mc_positions − mc_sites)) / (b_S / (1 − b_S)): the odds of a site at an internal position against the background; 0 = every site cut, 1 = as often as in the proteome; `-` when undefined |
+
+There is no proline rule: K or R before P counts as a site, in the tags and in the Sage reference
+below alike. `quality` also has `enzyme`, `basis` (`named` or `call`) and `status` (`measured`,
+`not_measured` with `reason` `no_call`, `no_specific_end` (every end of the model is the background,
+e.g. `unspecific`) or `few_tags`). On a Da tolerance the rows are written, and the `status` sentence
+says that the tag-end windows do not hold there.
+
+**Comparison with Sage (descriptive).** The registered evaluation is in
+`acceptance/1.13/digqual/` (branch `acceptance/1.13`): FASTag's `C.mc_retention` against the same odds
+ratio from Sage's target PSMs (1 % spectrum q-value, K/R C-terminus, P2..P4 of the peptide, same
+background) and against Sage's own missed-cleavage share, on public tryptic runs. It reports
+correlations and ratios and has no pass/fail criterion; the option stays experimental.
+
 ## Model table (`-digest_models`)
 
 ```
@@ -323,6 +358,7 @@ Input is the `-delta_out` histogram (0.0005 Da bins, local-max grouped), built w
 | `-massgap_min_spectra`, `-massgap_min_share`, `-massgap_min_bin` | 20, 0.005, 2 | advanced |
 | `-massgap_max_mods`, `-massgap_top` | 3, 5 | advanced |
 | `-massgap_silac_share`, `-massgap_silac_min` | 0.08, 500 | advanced |
+| `-digest_quality <enzyme\|auto>` | empty (off) | experimental (1.13); requires `-digest_out` |
 
 `-digest_models`, `-digest_tag_min` and `-digest_background_share` without `-digest_out`,
 `-digest_window` without `-digest_out` or `-label_out`, and `-digest_silac_min` without `-label_out`

@@ -914,6 +914,12 @@ export const PARAM_UI: Record<string, ParamUi> = {
       text: 'Give no digest call when its calibrated confidence is below this value. 0 turns it off.'
     }
   },
+  digest_quality: {
+    hidden: 'experimental (1.13): digestion-quality rows of -digest_out',
+    help: {
+      text: 'Add missed-cleavage and non-specific-end measurements for one enzyme (or the call: auto) to the digest report. Experimental.'
+    }
+  },
   digest_models_version: {
     hidden: OPT_IN_1_12,
     help: {
