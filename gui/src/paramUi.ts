@@ -1154,8 +1154,8 @@ export const PARAM_UI: Record<string, ParamUi> = {
     hidden: 'experimental 1.13 command-line option, not in the form (CLI default applies)',
     depends: [{ on: 'label_out', note: 'only the label report uses it' }],
     help: {
-      text: 'How many C-terminal tag ends the label call in the label report needs; with fewer it makes no call. At 0 (the default since 1.13) every run with a ppm fragment tolerance gets a call, and with few tag ends a label-free call only means that none of the label rules fired (the mass-gap report can still show SILAC).',
-      tip: '175 gives the FASTag 1.12 call.'
+      text: 'How many C-terminal tag ends the label call in the label report needs; with fewer it makes no call. The default 175 is the FASTag 1.12 call. At 0 every run with a ppm fragment tolerance gets a call, and with few tag ends a label-free call only means that none of the label rules fired (the mass-gap report can still show SILAC).',
+      tip: '0 is experimental: it failed its 1.13 held-out test.'
     }
   }
 }

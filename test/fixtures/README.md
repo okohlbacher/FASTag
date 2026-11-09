@@ -147,7 +147,7 @@ the OpenMS example, so BSD-3-Clause as well.
 `/scratch/kohlbach/fastag-heldout-1.12/rc-a117801/opt/FASTag`) on
 `Ecoli_MS2_small.mzML` with `-tag_length 4 -threads 2` (20 ppm): 0 C-terminal
 tag ends, so `label_call` is `no_call few_tags`. `test/digest_cli_test.sh`
-checks that `-label_call_min_tags 175` (1.13) writes it byte for byte, the
+checks that the default (`-label_call_min_tags 175`, 1.13) writes it byte for byte, the
 `run version` row aside. sha256
 `8b3c5fa97ddc22fddf26daa61e785c95ed42467838ea4abbf4e58f57c27b104f`. Derived
 from the OpenMS example, so BSD-3-Clause as well.

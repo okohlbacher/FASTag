@@ -584,9 +584,9 @@ protected:
                        "K- and R-terminal tag ends each before -label_out's heavy shares are gated in", false, true);
     setMinInt_("digest_silac_min", 0);
     // ---- 1.13: label call refit (backlog #8) ----
-    registerIntOption_("label_call_min_tags", "<n>", 0,
+    registerIntOption_("label_call_min_tags", "<n>", 175,
                        "C-terminal tag ends -label_out's label_call needs; fewer give no_call few_tags "
-                       "(0: every ppm run is called; 175: the FASTag 1.12 rule)",
+                       "(175: the FASTag 1.12 rule; 0, experimental: every ppm run is called)",
                        false, true);
     setMinInt_("label_call_min_tags", 0);
     registerDoubleOption_("massgap_window", "<Da>", 0.02,
