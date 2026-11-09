@@ -377,6 +377,15 @@ if(FASTAG_BUILD_TESTS)
                    $<TARGET_FILE:buildtaxdb>
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy)
   set_tests_properties(digest_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # Independent suite for -label_discovery_out, written from
+  # doc/DESIGN-label-discovery.md only, on the synthetic fixtures of
+  # test/fixtures/make_label_discovery_fixtures.py: known labels, label-free
+  # controls, reversed tags, threads, opt-in identity and edge inputs.
+  add_test(NAME label_discovery_indep_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/label_discovery_indep_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/label_discovery
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
+  set_tests_properties(label_discovery_indep_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # Integration: -recon_id_out in mzid, idXML and mzTab holds what -recon_out
   # holds; .mzid is empty (0 bytes) without placements; with
