@@ -157,25 +157,12 @@ int main()
     }
   }
 
-  // ---- 2b. residue-map decoy (1.13 species redesign) ------------------------
+  // ---- 2b. k-mer-keyed decoy (1.13 species redesign) -----------------------
   {
     const std::string A = "ACDEFGHKLMNPQRSTVWY";
-    for (uint32_t j = 0; j < 8; ++j)
-    {
-      const std::string d = residueDecoy(A, j);
-      check(sorted(d) == A, "residueDecoy: a permutation of the alphabet");
-      bool fixed = false;
-      for (size_t i = 0; i < A.size(); ++i) fixed = fixed || d[i] == A[i];
-      check(!fixed, "residueDecoy: no residue maps to itself");
-      check(residueDecoy("PEPTIDEK", j) == residueDecoy("PEPTLDEK", j), "residueDecoy: I/L folded");
-      // k-mer keyed: the decoy of a k-mer does not depend on the tag around it.
-      check(residueDecoy("CDEFGHKW", j).substr(2, 4) == residueDecoy("EFGH", j), "residueDecoy: k-mer keyed");
-    }
-    check(residueDecoy("CDEFGHK", 0) != residueDecoy("CDEFGHK", 1), "residueDecoy: replicates differ");
-
-    // Decoy hit rate vs a whole-tag shuffle on an i.i.d. uniform proteome for
-    // tag lengths k..k+4. Overlapping k-mers make a chance whole-tag hit far
-    // likelier than independent k-mers would; the decoy must keep that.
+    // Chance hit rates on an i.i.d. uniform proteome, k = 3, for L = k..k+4:
+    // a uniform random tag (exact chance rate), a whole-tag shuffle, the
+    // independent per-k-mer construction, and kmerDecoySupport.
     const int k = 3;
     Rng r{12345};
     std::string prot;
@@ -185,9 +172,13 @@ int main()
     TaxIndex pidx;
     pidx.build(pe, std::vector<uint32_t>{1}, k);
     const int M = 1000000;
+    const auto close = [](uint64_t a, uint64_t b, double z) {
+      return std::fabs(static_cast<double>(a) - static_cast<double>(b)) <=
+             z * (std::sqrt(static_cast<double>(a + b)) + 1.0);
+    };
     for (int L = k; L <= k + 4; ++L)
     {
-      uint64_t shuf = 0, res = 0, indep = 0, tgt = 0;
+      uint64_t shuf = 0, kd = 0, kd_none = 0, indep = 0, tgt = 0;
       for (int t = 0; t < M; ++t)
       {
         std::string s;
@@ -195,13 +186,14 @@ int main()
         TagLookupCounters c;
         std::vector<uint32_t> tx;
         if (tagSupport(pidx, s, k, 1000, 0.0, tx, c)) ++tgt;
-        // Whole-tag shuffle, a fresh seed per tag: one fixed seed is a fixed
-        // map of tags to decoys whose hit rate scatters by a few percent.
+        // A fresh shuffle seed per tag: one fixed seed is a fixed map of tags
+        // to decoys whose hit rate scatters by a few percent.
         const std::string sh = decoyTag(s, static_cast<uint32_t>(t));
         if (!sh.empty() && tagSupport(pidx, sh, k, 1000, 0.0, tx, c)) ++shuf;
-        if (kmerDecoySupport(pidx, s, k, static_cast<uint32_t>(t % 16), 1000, 0.0, tx, c, nullptr)) ++res;
-        // The rejected construction: every k-mer replaced independently.
-        bool all = true;
+        bool nd = false;
+        if (kmerDecoySupport(pidx, s, k, static_cast<uint32_t>(t), 1000, 0.0, tx, c, &nd)) ++kd;
+        if (nd) ++kd_none;
+        bool all = true;  // the rejected construction: every k-mer replaced independently
         for (int i = 0; i + k <= L && all; ++i)
         {
           std::string km;
@@ -211,23 +203,35 @@ int main()
         }
         if (all) ++indep;
       }
-      const std::string got = " (residue " + std::to_string(res) + ", shuffle " + std::to_string(shuf) +
-                              ", random tag " + std::to_string(tgt) + ", independent " + std::to_string(indep) + ")";
-      const auto close = [](uint64_t a, uint64_t b, double z = 4.0) {
-        return std::fabs(static_cast<double>(a) - static_cast<double>(b)) <=
-               z * (std::sqrt(static_cast<double>(a + b)) + 1.0);
-      };
-      // A uniform random tag is the exact chance rate here (the proteome is
-      // i.i.d. uniform and independent of the tags).
+      const std::string got = " (kmer decoy " + std::to_string(kd) + ", no decoy " + std::to_string(kd_none) +
+                              ", shuffle " + std::to_string(shuf) + ", random tag " + std::to_string(tgt) +
+                              ", independent " + std::to_string(indep) + ")";
       std::cout << "decoy rate L=" << L << got << "\n";
-      check(close(res, tgt), "residue decoy hit rate equals the chance rate at L=" + std::to_string(L) + got);
-      // decoyTag() is not quite the chance rate at L = k (it never returns the
-      // tag or its reverse, which reweights repeat patterns: about +3% here),
-      // hence the wider band for this secondary reference.
-      check(close(res, shuf, 6.0), "residue decoy hit rate matches a whole-tag shuffle at L=" + std::to_string(L) + got);
+      // decoyTag() never returns the tag or its reverse, which reweights repeat
+      // patterns slightly (about +3 % here), hence 6 sigma against the exact rate.
+      check(close(shuf, tgt, 6.0), "whole-tag shuffle is the chance rate at L=" + std::to_string(L) + got);
+      if (L == k)
+      {
+        check(kd_none < static_cast<uint64_t>(M / 100), "L == k: almost every tag has a decoy" + got);
+        check(close(kd, shuf, 6.0), "L == k: k-mer decoy hit rate is the shuffle rate" + got);
+      }
+      else
+      {
+        check(kd == 0 && kd_none == static_cast<uint64_t>(M), "L > k: no decoy (refused, not a silent miss)" + got);
+      }
       if (L == k + 1 || L == k + 2)
-        check(static_cast<double>(shuf) - static_cast<double>(indep) > 4.0 * (std::sqrt(static_cast<double>(shuf + indep)) + 1.0),
-              "sensitivity: independent per-k-mer decoys under-hit at L=" + std::to_string(L) + got);
+        check(static_cast<double>(tgt) - static_cast<double>(indep) > 4.0 * (std::sqrt(static_cast<double>(tgt + indep)) + 1.0),
+              "independent per-k-mer decoys under-hit at L=" + std::to_string(L) + got);
+    }
+    // k-mer keyed: the same k-mer has the same decoy in every spectrum.
+    {
+      TagLookupCounters c1, c2;
+      std::vector<uint32_t> t1, t2;
+      bool n1 = false, n2 = false;
+      const std::string km = prot.substr(10, 3);
+      kmerDecoySupport(pidx, km, k, 5, 1000, 0.0, t1, c1, &n1);
+      kmerDecoySupport(pidx, km, k, 5, 1000, 0.0, t2, c2, &n2);
+      check(n1 == n2 && t1 == t2, "k-mer decoy is deterministic");
     }
   }
 

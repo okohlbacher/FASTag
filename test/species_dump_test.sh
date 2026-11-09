@@ -55,6 +55,10 @@ bad=$(awk -F'\t' '/^T/ && (NF != 7 || split($6, r, "|") != 4)' "$TMP/d.tsv" | wc
 hits=$(awk -F'\t' '/^T/ && $5 != "-"' "$TMP/d.tsv" | wc -l | tr -d ' ')
 [ "$hits" -ge 1 ] || fail "dump: no tag maps to a target taxon"
 [ "$(grep -c $'^#overlap\t' "$TMP/d.tsv")" -ge 2 ] || fail "dump: no overlap matrix"
+withdec=$(awk -F'\t' '/^T/ && length($4) == 7 && $6 !~ /^X(\|X)*$/' "$TMP/d.tsv" | wc -l | tr -d ' ')
+[ "$withdec" -ge 50 ] || fail "dump: only $withdec 7-residue tags carry decoy replicates"
+longdec=$(awk -F'\t' '/^T/ && length($4) != 7 && $6 !~ /^X(\|X)*$/' "$TMP/d.tsv" | wc -l | tr -d ' ')
+[ "$longdec" = 0 ] || fail "dump: $longdec tags longer than k carry decoys"
 
 run calloff -species_call decoy -species_call_min_units 10 || { cat "$TMP/calloff.log" >&2; fail "-species_call decoy"; }
 FASTAG_SPECIES_DUMP="$TMP/d2.tsv" run callon -species_call decoy -species_call_min_units 10 \

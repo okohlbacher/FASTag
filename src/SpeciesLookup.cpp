@@ -77,40 +77,29 @@ namespace FASTag
     }
     return std::string();
   }
-  std::string residueDecoy(const std::string& seq, uint32_t j)
-  {
-    static const char kAlpha[] = "ACDEFGHKLMNPQRSTVWY";  // 19 residues, I folded to L
-    constexpr int n = 19;
-    // Sattolo's algorithm on a splitmix64 stream seeded by j: a uniformly drawn
-    // cyclic permutation, so no residue maps to itself (a derangement).
-    char perm[n];
-    for (int i = 0; i < n; ++i) perm[i] = kAlpha[i];
-    uint64_t state = 0x5ca1ab1e00000000ULL ^ static_cast<uint64_t>(j);
-    const auto next = [&state]() {
-      uint64_t z = (state += 0x9e3779b97f4a7c15ULL);
-      z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
-      z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
-      return z ^ (z >> 31);
-    };
-    for (int i = n - 1; i > 0; --i)
-      std::swap(perm[i], perm[static_cast<int>(next() % static_cast<uint64_t>(i))]);
-    char map[256];
-    for (int c = 0; c < 256; ++c) map[c] = static_cast<char>(c);
-    for (int i = 0; i < n; ++i) map[static_cast<unsigned char>(kAlpha[i])] = perm[i];
-    std::string d = TaxIndex::fold(seq);
-    for (char& c : d) c = map[static_cast<unsigned char>(c)];
-    return d;
-  }
   bool kmerDecoySupport(const TaxIndex& idx, const std::string& seq, int k, uint32_t j,
                         std::size_t share_cap, double min_margin,
                         std::vector<uint32_t>& taxa, TagLookupCounters& counters, bool* no_decoy)
   {
-    // One consistent decoy sequence for the whole tag: overlapping k-mers stay
-    // overlapping, so the whole-tag rule sees the same co-occurrence structure
-    // a target tag does (b113 review: independent per-k-mer decoys almost never
-    // hit for tags longer than k and made the null anti-conservative).
+    taxa.clear();
     if (no_decoy) *no_decoy = false;
-    return tagSupport(idx, residueDecoy(seq, j), k, share_cap, min_margin, taxa, counters);
+    // Defined for L == k only. For L > k, independent per-k-mer decoys lose the
+    // k-1 overlaps and almost never pass the whole-tag rule (anti-conservative
+    // null), and a whole-tag shuffle is no longer k-mer keyed; such a tag has
+    // no decoy here (b113 review; the residue-map alternative under-hit 3x on
+    // the DEV all-decoy arm because it changes composition, so it was dropped).
+    if (static_cast<int>(seq.size()) != k)
+    {
+      if (no_decoy) *no_decoy = true;
+      return false;
+    }
+    const std::string d = decoyTag(seq, j);
+    if (d.empty())
+    {
+      if (no_decoy) *no_decoy = true;
+      return false;
+    }
+    return tagSupport(idx, d, k, share_cap, min_margin, taxa, counters);
   }
 
   std::string reversedFolded(const std::string& seq)

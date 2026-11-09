@@ -58,19 +58,14 @@ namespace FASTag
   /// when no rotation differs from both (a homopolymer, a two-residue tag):
   /// that tag has no decoy.
   std::string decoyTag(const std::string& seq, uint32_t j);
-  /// Residue-map decoy @p j of a tag (1.13 species redesign, DEV prototype):
-  /// the I/L-folded @p seq with every residue sent through one fixed
-  /// derangement of the 19-letter alphabet chosen by @p j. The map is the same
-  /// for every tag, so a k-mer always gets the same decoy k-mer (decoy hits
-  /// repeat across spectra the way target hits do) and the k-mers of one tag
-  /// keep their k-1 overlaps (the whole-tag rule sees the same co-occurrence
-  /// structure for every tag length). Residues outside the alphabet pass
-  /// through unchanged. Known limitation: the map changes residue composition
-  /// (e.g. W->L), so the decoy rate is exact only for an i.i.d. uniform
-  /// proteome; the shuffled-proteome arm is the cross-check on real data.
-  std::string residueDecoy(const std::string& seq, uint32_t j);
-  /// tagSupport() of residueDecoy(@p seq, @p j). @p no_decoy, when given, is
-  /// always set to false (every tag has this decoy); kept for the dump format.
+  /// The k-mer-keyed decoy @p j of a tag of exactly @p k residues (1.13
+  /// species redesign, DEV prototype): tagSupport() of decoyTag(@p seq, @p j).
+  /// Such a tag is one k-mer, so two tags with the same k-mer share its decoy
+  /// and decoy hits repeat across spectra the way target hits do. A tag longer
+  /// than k has no decoy here (*@p no_decoy set): per-k-mer decoys would lose
+  /// the k-1 overlaps the whole-tag rule depends on (they almost never hit, an
+  /// anti-conservative null) and a whole-tag shuffle is not k-mer keyed. The
+  /// 1.12 DEV species runs evaluate only 7-residue tags at index k 7.
   bool kmerDecoySupport(const TaxIndex& idx, const std::string& seq, int k, uint32_t j,
                         std::size_t share_cap, double min_margin,
                         std::vector<uint32_t>& taxa, TagLookupCounters& counters, bool* no_decoy);
