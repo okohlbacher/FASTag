@@ -301,6 +301,8 @@ class TOPPFASTag : public TOPPBase
     {
       p.setMetaValue("complement_tolerance (auto)", compl_auto_rec_.tol);
       p.setMetaValue("complement_tolerance (auto) source", compl_auto_rec_.source);
+      if (!compl_auto_rec_.measured.empty())
+        p.setMetaValue("complement_tolerance (auto) measured", compl_auto_rec_.measured);
       p.setMetaValue("complement_tolerance (auto) probe", compl_auto_rec_.probe);
     }
     return p;
@@ -310,8 +312,9 @@ class TOPPFASTag : public TOPPBase
   struct ComplAutoRecord
   {
     bool on = false;
-    std::string tol;     ///< Da, full precision
-    std::string source;  ///< measured or fallback
+    std::string tol;       ///< Da in force, full precision
+    std::string source;    ///< measured, lower_bound (raised to -complement_tolerance) or fallback
+    std::string measured;  ///< Da as measured, full precision; empty when not measured
     std::string probe;   ///< the probe's statistics, as logged
   };
   ComplAutoRecord compl_auto_rec_;
@@ -3263,34 +3266,48 @@ protected:
       for (const auto& v : per_spec) errors.insert(errors.end(), v.begin(), v.end());
       const CT::Estimate est = CT::estimate(errors, window);
       const Size n_conf = static_cast<Size>(std::count(confident.begin(), confident.end(), char(1)));
-      if (est.ok)
+      // -complement_tolerance is the fallback and the lower bound
+      // (ComplTol::inForce): auto only widens the window.
+      const double fallback = p.complement_tol;
+      const double in_force = CT::inForce(est, fallback);
+      const bool raised = est.ok && in_force > est.tol;
+      const std::string source = !est.ok ? "fallback" : raised ? "lower_bound" : "measured";
+      if (in_force != fallback)
       {
-        p.complement_tol = est.tol;
-        for (FASTag::Param& lp : len_params) lp.complement_tol = est.tol;
-        for (FASTag::Param& lp : len_params_cz) lp.complement_tol = est.tol;
-        p_cz.complement_tol = est.tol;
+        p.complement_tol = in_force;
+        for (FASTag::Param& lp : len_params) lp.complement_tol = in_force;
+        for (FASTag::Param& lp : len_params_cz) lp.complement_tol = in_force;
+        p_cz.complement_tol = in_force;
         hyp_cs = FASTag::ComplementSpec::fromParam(p);
         hyp_cs_cz = FASTag::ComplementSpec::fromParam(p_cz);
       }
       // stderr, not stdout (nothing new may reach stdout or the gate's
       // summary line); the same values go to every Versioned run report
       // (format 6 rows) and to the -out_spectra mzML provenance below. The
-      // window at full precision, so it can be given back as
+      // window in force at full precision, so it can be given back as
       // -complement_tolerance and reproduce the run.
-      std::ostringstream tol_txt;
-      tol_txt << std::setprecision(17) << (est.ok ? est.tol : p.complement_tol);
+      const auto full = [](double v) {
+        std::ostringstream o;
+        o << std::setprecision(17) << v;
+        return o.str();
+      };
+      const std::string tol_txt = full(in_force);
       std::ostringstream probe_txt;
       probe_txt << probe_specs.size() << " MS2, " << n_conf << " confident tags, " << est.n << " pairs within "
                 << window << " Da (signal " << std::lround(est.signal);
       if (est.ok) probe_txt << ", median error " << est.median << " Da, MAD " << est.mad << " Da";
       probe_txt << ")";
-      std::cerr << "Complement tolerance (auto): "
-                << (est.ok ? "measured " : "not measured, using -complement_tolerance ")
-                << tol_txt.str() << " Da; probe " << probe_txt.str()
-                << (est.ok ? std::string() : "; " + est.why) << std::endl;
+      std::cerr << "Complement tolerance (auto): ";
+      if (!est.ok) std::cerr << "not measured, using -complement_tolerance " << tol_txt << " Da";
+      else
+        std::cerr << "measured " << full(est.tol) << " Da, in force " << tol_txt << " Da"
+                  << (raised ? " (not below -complement_tolerance)" : "");
+      std::cerr << "; probe " << probe_txt.str() << (est.ok ? std::string() : "; " + est.why) << std::endl;
       run_meta.complement_tol_auto = true;
       run_meta.complement_tol_measured = est.ok;
-      run_meta.complement_tol = est.ok ? est.tol : p.complement_tol;
+      run_meta.complement_tol = in_force;
+      run_meta.complement_tol_source = source;
+      run_meta.complement_tol_measured_value = est.ok ? est.tol : 0.0;
       run_meta.complement_tol_window = window;
       run_meta.complement_probe_ms2 = probe_specs.size();
       run_meta.complement_probe_confident = n_conf;
@@ -3300,8 +3317,9 @@ protected:
       run_meta.complement_probe_mad = est.mad;
       run_meta.complement_tol_why = est.why;
       compl_auto_rec_.on = true;
-      compl_auto_rec_.tol = tol_txt.str();
-      compl_auto_rec_.source = est.ok ? "measured" : "fallback";
+      compl_auto_rec_.tol = tol_txt;
+      compl_auto_rec_.source = source;
+      compl_auto_rec_.measured = est.ok ? full(est.tol) : std::string();
       compl_auto_rec_.probe = probe_txt.str() + (est.ok ? std::string() : "; " + est.why);
     }
 

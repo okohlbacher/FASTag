@@ -15,6 +15,8 @@
 //       alone, give no measurement; values beyond the window are ignored;
 //       the 0.001 Da lower bound holds.
 //   (c2) a tag end at its own complement m/z has no partner, as in prepare().
+//   (g) inForce: the measured window, never below -complement_tolerance;
+//       the fallback when nothing was measured.
 //   (e) pickProbe: a uniform, ascending, deterministic draw over the run.
 //   (f) stability at the sample sizes a probe gives (50-150 signal pairs on
 //       a floor): over 200 independent samples the estimate's 95th/5th
@@ -265,6 +267,19 @@ int main()
       const CT::Estimate a = CT::estimate(e, w);
       CHECK(a.ok && a.tol == CT::kAutoMinTol, "exact pairs: tol %.6g, want the 0.001 bound", a.tol);
     }
+  }
+
+  // (g)
+  {
+    CT::Estimate e;
+    e.ok = true;
+    e.tol = 0.2;
+    CHECK(CT::inForce(e, 0.02) == 0.2, "wider measured window not in force");
+    e.tol = 0.0139;
+    CHECK(CT::inForce(e, 0.02) == 0.02, "narrower measured window not raised to the lower bound");
+    CHECK(CT::inForce(e, 0.005) == 0.0139, "measured window above a lower bound 0.005 not in force");
+    e.ok = false;
+    CHECK(CT::inForce(e, 0.05) == 0.05, "fallback not -complement_tolerance");
   }
 
   // (f) stability on realistic probe sizes.

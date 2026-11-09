@@ -5,9 +5,12 @@
 #   - on real fixture spectra without a confident tag auto falls back to
 #     -complement_tolerance (the default, or the value given)
 #   - on in-silico spectra with fragment error sd 0.004 Da, auto measures a
-#     window near the pair's 95% bound 0.0111 Da and logs it; the auto run's tags
-#     equal a Da run at that window given back as -complement_tolerance
-#     (the measurement reaches the tags, and nothing else changes)
+#     window near the pair's 95% bound 0.0111 Da and logs it; at the default
+#     -complement_tolerance 0.02 (the lower bound) the window in force is 0.02
+#     and the tags are the defaults'; with -complement_tolerance 0.005 the
+#     measured window is in force and the auto run's tags equal a Da run at
+#     that window given back as -complement_tolerance (the measurement reaches
+#     the tags, and nothing else changes)
 #   - the measured window differs from 0.02 and the tags differ from the
 #     defaults (so the equality above is not the default by accident)
 #   - auto is deterministic across -threads
@@ -43,6 +46,8 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 run() { local name=$1 in=$2; shift 2; "$BIN" -in "$in" -out "$TMP/$name.tsv" -threads 2 "$@" >"$TMP/$name.log" 2>&1 \
           || { cat "$TMP/$name.log" >&2; fail "run $name failed"; }; }
 measured() { sed -n 's/^Complement tolerance (auto): measured \([0-9.e-]*\) Da.*/\1/p' "$1"; }
+inforce() { sed -n 's/^Complement tolerance (auto): measured [0-9.e-]* Da, in force \([0-9.e-]*\) Da.*/\1/p' "$1"; }
+LB="-complement_tolerance 0.005"   # a lower bound below the hires window, so the measurement is in force
 
 run def "$IN"
 [ "$(wc -l < "$TMP/def.tsv")" -gt 10 ] || fail "too few tags at defaults; the comparisons would prove nothing"
@@ -62,20 +67,30 @@ cmp -s "$TMP/fb05.tsv" "$TMP/def.tsv" && fail "-complement_tolerance 0.05 change
 
 # Measured: 20 ppm on fragment errors of sd 0.004 Da (pair window ~0.0111 Da).
 run hdef "$HI"
-run hauto "$HI" -complement_tolerance_unit auto
+# At the default lower bound 0.02 the narrower measured window is not in force.
+run hlb "$HI" -complement_tolerance_unit auto
+[ -n "$(measured "$TMP/hlb.log")" ] || { grep 'Complement tolerance' "$TMP/hlb.log" >&2; fail "auto did not measure on $HI"; }
+[ "$(inforce "$TMP/hlb.log")" = "0.02" ] || { grep 'Complement tolerance' "$TMP/hlb.log" >&2; fail "the window in force is not the lower bound 0.02"; }
+grep -q 'in force 0.02 Da (not below -complement_tolerance)' "$TMP/hlb.log" || fail "the lower bound is not logged as such"
+cmp -s "$TMP/hlb.tsv" "$TMP/hdef.tsv" || fail "auto at the lower bound 0.02 differs from the defaults"
+# shellcheck disable=SC2086
+run hauto "$HI" -complement_tolerance_unit auto $LB
 T=$(measured "$TMP/hauto.log")
 [ -n "$T" ] || { grep 'Complement tolerance' "$TMP/hauto.log" >&2; fail "auto did not measure a window on $HI"; }
 echo "complement_tol_cli_test: measured $T Da on $HI (want ~0.0111)"
 awk -v t="$T" 'BEGIN { exit !(t > 0.008 && t < 0.015) }' || fail "measured window $T is not in (0.008, 0.015)"
+[ "$(inforce "$TMP/hauto.log")" = "$T" ] || fail "with lower bound 0.005 the measured $T is not in force"
+[ "$(measured "$TMP/hlb.log")" = "$T" ] || fail "the lower bound changed the measurement"
 run hback "$HI" -complement_tolerance "$T" -complement_tolerance_unit Da
 cmp -s "$TMP/hauto.tsv" "$TMP/hback.tsv" || fail "auto tags differ from a Da run at the measured window $T"
 cmp -s "$TMP/hauto.tsv" "$TMP/hdef.tsv" && fail "auto left the tags at the defaults although it measured $T"
-"$BIN" -in "$HI" -out "$TMP/hauto1.tsv" -threads 1 -complement_tolerance_unit auto > "$TMP/hauto1.log" 2>&1 \
+"$BIN" -in "$HI" -out "$TMP/hauto1.tsv" -threads 1 -complement_tolerance_unit auto $LB > "$TMP/hauto1.log" 2>&1 \
   || fail "auto at 1 thread failed"
 cmp -s "$TMP/hauto.tsv" "$TMP/hauto1.tsv" || fail "auto differs between -threads 1 and 2"
 [ "$(measured "$TMP/hauto1.log")" = "$T" ] || fail "the measured window differs between -threads 1 and 2"
 # The precursor hypotheses read the measured window too (hyp_cs).
-run hiso "$HI" -complement_tolerance_unit auto -isotope_error 0 1
+# shellcheck disable=SC2086
+run hiso "$HI" -complement_tolerance_unit auto $LB -isotope_error 0 1
 run hisoback "$HI" -complement_tolerance "$T" -complement_tolerance_unit Da -isotope_error 0 1
 cmp -s "$TMP/hiso.tsv" "$TMP/hisoback.tsv" || fail "auto with -isotope_error differs from Da at the measured window"
 # A probe too small to measure falls back.
@@ -86,6 +101,7 @@ cmp -s "$TMP/hsmall.tsv" "$TMP/hdef.tsv" || fail "the small-probe fallback is no
 # Low resolution: 0.5 Da on fragment errors of sd 0.1 Da (pair window ~0.277 Da).
 run lauto "$LO" -complement_tolerance_unit auto -fragment_tolerance 0.5 -fragment_tolerance_unit Da
 TL=$(measured "$TMP/lauto.log")
+[ "$(inforce "$TMP/lauto.log")" = "$TL" ] || fail "0.5 Da: the measured window $TL is not in force"
 grep -q 'pairs within 0.9 Da' "$TMP/lauto.log" || fail "0.5 Da: the measurement window is not 0.9 Da"
 [ -n "$TL" ] || { grep 'Complement tolerance' "$TMP/lauto.log" >&2; fail "auto did not measure a window on $LO"; }
 echo "complement_tol_cli_test: measured $TL Da on $LO (want ~0.277)"
@@ -104,10 +120,13 @@ grep -q 'complement_tolerance_unit auto' "$TMP/s1.err" || { cat "$TMP/s1.err" >&
 grep -Eq 'name="parameter: complement_tolerance_unit"[^>]*value="auto"' "$TMP/o.mzML" \
   || { grep -o 'parameter: complement[^/]*' "$TMP/o.mzML" | head -3 >&2; fail "-out_spectra does not list unit auto"; }
 # The window is persisted in -out_spectra and in the Versioned run reports.
-run hspec "$HI" -complement_tolerance_unit auto -out_spectra "$TMP/hspec.mzML" -census
+# shellcheck disable=SC2086
+run hspec "$HI" -complement_tolerance_unit auto $LB -out_spectra "$TMP/hspec.mzML" -census
 TS=$(sed -n 's/.*name="complement_tolerance (auto)"[^>]*value="\([^"]*\)".*/\1/p' "$TMP/hspec.mzML" | head -1)
 [ -n "$TS" ] || { grep -o 'complement_tolerance[^/]*' "$TMP/hspec.mzML" | head -5 >&2; fail "-out_spectra does not record the window in force"; }
-[ "$TS" = "$(measured "$TMP/hspec.log")" ] || fail "-out_spectra records $TS, the log $(measured "$TMP/hspec.log")"
+[ "$TS" = "$(inforce "$TMP/hspec.log")" ] || fail "-out_spectra records $TS, the log $(inforce "$TMP/hspec.log")"
+grep -Eq "name=\"complement_tolerance \\(auto\\) measured\"[^>]*value=\"$T\"" "$TMP/hspec.mzML" \
+  || fail "-out_spectra does not record the measured window $T"
 [ "$TS" = "$T" ] || fail "-out_spectra/-census changed the measured window ($TS vs $T)"
 grep -Eq 'name="complement_tolerance \(auto\) source"[^>]*value="measured"' "$TMP/hspec.mzML" \
   || fail "-out_spectra does not record the source (measured)"
@@ -126,6 +145,14 @@ grep -q 'complement_tolerance (auto)' "$TMP/hspecda.mzML" && fail "-out_spectra 
 grep -q 'complement_' "$TMP/hspecda.census_summary.tsv" && fail "census summary carries complement rows without auto"
 awk -F'\t' '$1=="run" && $2=="run_report_version" { f=1; if ($3!="5") exit 1 } END { exit !f }' \
   "$TMP/hspecda.census_summary.tsv" || fail "census summary without auto is not run report format 5"
+# The lower bound is recorded as such (the measured value next to it).
+run hlbs "$HI" -complement_tolerance_unit auto -out_spectra "$TMP/hlbs.mzML" -census
+grep -Eq 'name="complement_tolerance \(auto\) source"[^>]*value="lower_bound"' "$TMP/hlbs.mzML" \
+  || fail "-out_spectra does not record the lower bound"
+awk -F'\t' '$1=="run" && $2=="complement_tolerance" { f=1; if ($3!="0.02") exit 1 } END { exit !f }' \
+  "$TMP/hlbs.census_summary.tsv" || fail "census summary at the lower bound is not 0.02"
+awk -F'\t' -v t="$T" '$1=="run" && $2=="complement_tolerance_measured" { f=1; if ($3!=t) exit 1 } END { exit !f }' \
+  "$TMP/hlbs.census_summary.tsv" || fail "census summary does not record the measured window $T"
 # The fallback is recorded as such.
 "$BIN" -in "$IN" -out "$TMP/fbs.tsv" -out_spectra "$TMP/fbs.mzML" -threads 2 -complement_tolerance_unit auto \
   > "$TMP/fbs.log" 2>&1 || { cat "$TMP/fbs.log" >&2; fail "fallback with -out_spectra failed"; }
@@ -137,7 +164,7 @@ grep -Eq 'name="complement_tolerance \(auto\)"[^>]*value="0.02"' "$TMP/fbs.mzML"
 # One file, one window: the probe ignores the run's search settings.
 for opt in "-tag_length 4" "-no_deisotope" "-gaps 0"; do
   # shellcheck disable=SC2086
-  run hcell "$HI" -complement_tolerance_unit auto $opt
+  run hcell "$HI" -complement_tolerance_unit auto $LB $opt
   [ "$(measured "$TMP/hcell.log")" = "$T" ] \
     || fail "auto with $opt measured $(measured "$TMP/hcell.log"), the default run $T"
 done

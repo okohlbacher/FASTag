@@ -28,6 +28,15 @@
 // far more stable on the 50-150 signal pairs a probe gives than the 95%
 // order statistic 1.13's first version read (one or two extreme errors set
 // that one); complement_tol_test bounds the spread over repeated samples.
+// The window in force is never narrower than -complement_tolerance
+// (inForce): the median/MAD bound assumes a normal error, and real
+// complement errors on high-resolution data have heavier tails, so it reads
+// them too narrow (on the Q Exactive DEV run 0.0139 Da against 0.0225 Da from
+// the 95% order statistic over 263 pairs, and -0.5 points rank-1 correct in
+// two 3+ cells). A window somewhat too wide costs little there (the first
+// version's 0.019-0.036 Da left DEV unchanged), one too narrow loses true
+// pairs. So auto widens the window where the run needs it (ion-trap MS2)
+// and otherwise keeps -complement_tolerance, which is also the fallback.
 //
 // Pure functions of their inputs; FASTag.cpp runs the probe and applies the
 // result. Nothing here runs unless -complement_tolerance_unit auto is given.
@@ -202,6 +211,14 @@ namespace FASTag::ComplTol
     double mad = 0;            ///< floor-corrected median absolute deviation from median, when measured
     std::string why;           ///< when not ok: why not
   };
+
+  /// The window in force under auto: the measured tolerance, but never
+  /// below @p fallback (-complement_tolerance); @p fallback when nothing was
+  /// measured.
+  inline double inForce(const Estimate& e, double fallback)
+  {
+    return e.ok ? std::max(e.tol, fallback) : fallback;
+  }
 
   /// The tolerance from signed errors (any order; values beyond W ignored).
   inline Estimate estimate(std::vector<double> errors, double window, double min_signal = kAutoMinSignal)

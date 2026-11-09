@@ -50,7 +50,17 @@ and that differs by instrument and calibration. On ion-trap MS2 read at
    95th/5th percentile ratio of the estimate stays below 2), where the 95%
    order statistic that 1.13's first version read was not (ratios 3.1 to 7.8
    on the same samples: one or two extreme errors set it).
-4. **Fallback.** When the signal is below 40 pairs, or below three standard
+4. **Lower bound.** The window in force is never narrower than
+   `-complement_tolerance` (0.02 Da unless given): `auto` widens the window
+   where the run needs it and otherwise keeps the Da window. The median/MAD
+   bound assumes a normal error; real complement errors on high-resolution
+   data have heavier tails, so it reads them too narrow. On the Q Exactive
+   DEV run it gave 0.0139 Da (the 95% order statistic over the same 263
+   signal pairs: 0.0225 Da), and in force that cost up to -0.54 points
+   rank-1 correct in two powered 3+ cells. A window somewhat too wide costs
+   little there (the first version's 0.019-0.036 Da left DEV within +-0.27
+   points). Give a smaller `-complement_tolerance` to let `auto` narrow it.
+5. **Fallback.** When the signal is below 40 pairs, or below three standard
    deviations of its fluctuation (Poisson variance doubled for the shared
    precursor error of a tag's two ends), or the window is not inside the inner
    two thirds of W, nothing is measured and the run keeps
@@ -58,20 +68,24 @@ and that differs by instrument and calibration. On ion-trap MS2 read at
 
 The result is logged to stderr, for example
 
-    Complement tolerance (auto): measured 0.0170 Da; probe 500 MS2, 289 confident tags,
-    330 pairs within 0.12 Da (signal 315, median error -0.00403 Da, MAD 0.0045 Da)
+    Complement tolerance (auto): measured 0.22422414115406886 Da, in force 0.22422414115406886 Da;
+    probe 500 MS2, 160 confident tags, 286 pairs within 0.9 Da (signal 259, median error 0.0548 Da,
+    MAD 0.0583 Da)
 
 and recorded with the run's outputs, so a run can be reproduced and audited
 without its log:
 
 - `-out_spectra` (mzML): the processing step carries the userParams
   `complement_tolerance (auto)` (the window in force, Da, full precision),
-  `complement_tolerance (auto) source` (`measured` or `fallback`) and
+  `complement_tolerance (auto) source` (`measured`, `lower_bound` when the
+  measurement was below `-complement_tolerance`, or `fallback`),
+  `complement_tolerance (auto) measured` (when measured) and
   `complement_tolerance (auto) probe` (the probe statistics, as logged).
   mzPeak output has no processing-step record and does not carry them.
 - Every run report that writes the versioned run section (`-census` summary,
-  `-alkylation_out`) adds the rows `complement_tolerance`,
-  `complement_tolerance_source`, `complement_probe_confident`,
+  `-alkylation_out`) adds the rows `complement_tolerance` (in force),
+  `complement_tolerance_source`, `complement_tolerance_measured` (when
+  measured), `complement_probe_confident`,
   `complement_probe_signal` and, when measured, `complement_probe_median` and
   `complement_probe_mad`, and says run report format 6.
 - Without `auto` none of this is written: those outputs stay byte-identical
@@ -106,7 +120,9 @@ mode at that window: the tags, the `-unknown_charge infer` and
 - One window per run. Runs whose calibration drifts over the gradient get
   one compromise window.
 - The MAD-based window assumes the true-pair errors are roughly normal. A
-  heavier-tailed error leaves more than 5% of true pairs outside it.
+  heavier-tailed error leaves more than 5% of true pairs outside it; the
+  lower bound `-complement_tolerance` covers that on high-resolution data,
+  not on low-resolution data whose tails are heavy too.
 
 ## Validation
 
@@ -120,12 +136,17 @@ input file: on the held-out Astral file PXD066944 it was 0.0146 Da
 failing Astral L5 default 2+ cell is the cell with the 0.0566 Da window, so
 the Astral failure is at least partly estimator variance, not only a wrong
 window. The current version (probe at length 3 with default settings; median
-and MAD) removes that dependence by construction and is far less variable on
-probe-sized samples. It has been run on DEV only (below). It has **not** been
+and MAD; `-complement_tolerance` as the lower bound) removes that dependence
+by construction and is far less variable on probe-sized samples. It has been
+run on DEV only: on PXD003531 one window per file (measured 0.0139 Da in all
+six cells, so 0.02 Da in force and the tags equal the defaults); on PXD001819
+(0.5 Da) 0.224 Da in all six cells and +2.3 to +7.6 points rank-1 correct in
+every powered 2+ and 3+ cell ((ii) PASS on DEV; the 4+ cells are
+underpowered). It has **not** been
 tested on held-out data: the held-out result stands for the first version, and
 a new held-out test would need data not used for this one.
 
-DEV: the #2 DEV runs with the frozen #2 scorer. On PXD003531 (Q Exactive, 20 ppm) the measured windows were
+DEV of the first version (c5f96b5): the #2 DEV runs with the frozen #2 scorer. On PXD003531 (Q Exactive, 20 ppm) the measured windows were
 0.019-0.036 Da, and the powered cells moved by -0.20 to +0.27 points. On PXD001819 (LTQ Orbitrap Velos,
 ion-trap MS2, 0.5 Da) they were 0.177-0.208 Da, and the powered cells gained +2.2 to +7.6 points.
 

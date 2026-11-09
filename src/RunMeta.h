@@ -109,7 +109,9 @@ namespace FASTag::RunReport
     // probe's statistics. Written (format 6) only when complement_tol_auto.
     bool complement_tol_auto = false;
     bool complement_tol_measured = false;
-    double complement_tol = 0;          ///< Da, in force (measured or -complement_tolerance)
+    double complement_tol = 0;          ///< Da, in force (measured, or -complement_tolerance)
+    std::string complement_tol_source = "fallback";  ///< measured, lower_bound or fallback
+    double complement_tol_measured_value = 0;        ///< Da as measured (measured only)
     double complement_tol_window = 0;   ///< measurement window W, Da
     std::size_t complement_probe_ms2 = 0;        ///< MS2 spectra the probe tagged
     std::size_t complement_probe_confident = 0;  ///< of them, rank-1 tag at E <= 0.01
@@ -230,10 +232,17 @@ namespace FASTag::RunReport
       const std::string w = num(m.complement_tol_window);
       r.push_back({"run", "complement_tolerance", tol, "-",
                    "The complement window in force was " + tol + " Da (-complement_tolerance_unit auto)."});
-      r.push_back({"run", "complement_tolerance_source", m.complement_tol_measured ? "measured" : "fallback", "-",
-                   m.complement_tol_measured
-                       ? "The window was measured on the run's probe."
-                       : "The window is -complement_tolerance: " + m.complement_tol_why + "."});
+      const std::string& src = m.complement_tol_source;
+      r.push_back({"run", "complement_tolerance_source", src, "-",
+                   src == "measured"      ? "The window was measured on the run's probe."
+                   : src == "lower_bound" ? "The measured window was below -complement_tolerance, the lower bound."
+                                          : "The window is -complement_tolerance: " + m.complement_tol_why + "."});
+      if (m.complement_tol_measured)
+      {
+        const std::string mv = num(m.complement_tol_measured_value);
+        r.push_back({"run", "complement_tolerance_measured", mv, "-",
+                     "The probe measured a complement window of " + mv + " Da."});
+      }
       const std::string ms2 = std::to_string(m.complement_probe_ms2);
       const std::string conf = std::to_string(m.complement_probe_confident);
       const std::string pairs = std::to_string(m.complement_probe_pairs);

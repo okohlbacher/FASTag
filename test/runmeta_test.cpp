@@ -200,44 +200,61 @@ int main()
     RR::RunMeta c = m;
     c.complement_tol_auto = true;
     c.complement_tol_measured = true;
-    c.complement_tol = 0.010549919472572744;
-    c.complement_tol_window = 0.12;
+    c.complement_tol_source = "measured";
+    c.complement_tol = 0.22422414115406886;
+    c.complement_tol_measured_value = 0.22422414115406886;
+    c.complement_tol_window = 0.9;
     c.complement_probe_ms2 = 500;
-    c.complement_probe_confident = 289;
-    c.complement_probe_pairs = 330;
-    c.complement_probe_signal = 314.6;
-    c.complement_probe_median = -0.004;
-    c.complement_probe_mad = 0.0045;
+    c.complement_probe_confident = 160;
+    c.complement_probe_pairs = 286;
+    c.complement_probe_signal = 259.4;
+    c.complement_probe_median = 0.0547615;
+    c.complement_probe_mad = 0.0583168;
     const auto rc = RR::runRows(c, RR::Emit::Versioned);
-    check(rc.size() == 34, "Versioned format 6 (measured) has 34 rows");
+    check(rc.size() == 35, "Versioned format 6 (measured) has 35 rows");
     check(rc[7].key == "run_report_version" && rc[7].value == "6" &&
             rc[7].description == "The run section follows FASTag run report format 6.",
           "auto: format 6");
-    check(rc.size() > 33 && rc[28].key == "complement_tolerance" && rc[28].value == "0.010549919472572744" &&
-            rc[28].description == "The complement window in force was 0.010549919472572744 Da "
+    check(rc.size() == 35 && rc[28].key == "complement_tolerance" && rc[28].value == "0.22422414115406886" &&
+            rc[28].description == "The complement window in force was 0.22422414115406886 Da "
                                    "(-complement_tolerance_unit auto).",
           "complement_tolerance row, full precision");
-    check(rc.size() > 33 && rc[29].key == "complement_tolerance_source" && rc[29].value == "measured",
+    check(rc.size() == 35 && rc[29].key == "complement_tolerance_source" && rc[29].value == "measured" &&
+            rc[29].description == "The window was measured on the run's probe.",
           "complement_tolerance_source row");
-    check(rc.size() > 33 && rc[30].key == "complement_probe_confident" && rc[30].value == "289" &&
-            rc[30].n == "500",
+    check(rc.size() == 35 && rc[30].key == "complement_tolerance_measured" && rc[30].value == "0.22422414115406886",
+          "complement_tolerance_measured row");
+    check(rc.size() == 35 && rc[31].key == "complement_probe_confident" && rc[31].value == "160" &&
+            rc[31].n == "500",
           "complement_probe_confident row");
-    check(rc.size() > 33 && rc[31].key == "complement_probe_signal" && rc[31].value == "315" &&
-            rc[31].n == "330" &&
-            rc[31].description == "330 complement pairs fell within 0.12 Da, 315 above the chance floor.",
+    check(rc.size() == 35 && rc[32].key == "complement_probe_signal" && rc[32].value == "259" &&
+            rc[32].n == "286" &&
+            rc[32].description == "286 complement pairs fell within 0.9 Da, 259 above the chance floor.",
           "complement_probe_signal row");
-    check(rc.size() > 33 && rc[32].key == "complement_probe_median" && rc[32].value == "-0.004" &&
-            rc[33].key == "complement_probe_mad" && rc[33].value == "0.0045",
+    check(rc.size() == 35 && rc[33].key == "complement_probe_median" && rc[33].value == "0.0547615" &&
+            rc[34].key == "complement_probe_mad" && rc[34].value == "0.0583168",
           "complement_probe_median/mad rows");
+    // Measured below -complement_tolerance: the lower bound is in force.
+    RR::RunMeta lb = c;
+    lb.complement_tol_source = "lower_bound";
+    lb.complement_tol = 0.02;
+    lb.complement_tol_measured_value = 0.013872973632812499;
+    const auto rl = RR::runRows(lb, RR::Emit::Versioned);
+    check(rl.size() == 35 && rl[28].value == "0.02" && rl[29].value == "lower_bound" &&
+            rl[29].description == "The measured window was below -complement_tolerance, the lower bound." &&
+            rl[30].value == "0.013872973632812499",
+          "lower-bound rows");
     RR::RunMeta fb = c;
     fb.complement_tol_measured = false;
+    fb.complement_tol_source = "fallback";
     fb.complement_tol = 0.02;
     fb.complement_tol_why = "too few complement pairs above the chance floor (signal 18, needs 40)";
     const auto rf = RR::runRows(fb, RR::Emit::Versioned);
     check(rf.size() == 32, "Versioned format 6 (fallback) has 32 rows");
-    check(rf.size() > 29 && rf[28].value == "0.02" && rf[29].value == "fallback" &&
+    check(rf.size() == 32 && rf[28].value == "0.02" && rf[29].value == "fallback" &&
             rf[29].description == "The window is -complement_tolerance: too few complement pairs above the "
-                                  "chance floor (signal 18, needs 40).",
+                                  "chance floor (signal 18, needs 40)." &&
+            rf[30].key == "complement_probe_confident",
           "fallback rows");
     check(written(RR::runRows(c)) == legacy, "complement rows never reach the Legacy rows");
     RR::RunMeta off = c;
