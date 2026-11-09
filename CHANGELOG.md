@@ -9,7 +9,8 @@
   harness's prose-auto 0.1.3 rule). On the 193 development runs (in-sample)
   this is 178/193 against 150/193 for the 1.12 rule and 159/193 for "always
   label-free". `-label_call_min_tags 175` restores the 1.12 rows. Every other
-  output is unchanged. Experimental until its held-out test
+  output is unchanged at the default (a non-default value is listed in the
+  `-out_spectra` processing info, as for every 1.12 option). Experimental until its held-out test
   (acceptance/1.13 PREREG-item08.md).
 
 ## 1.12.1 (2026-11-08)

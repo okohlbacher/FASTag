@@ -137,7 +137,9 @@ tr -d '\r' < "$TMP/label.tsv" | awk -F'\t' -v n="$(tr -d '\r' < "$TMP/label.tsv"
 run -in "$IN" -tag_length 4 -out "$TMP/p.tsv" -digest_out "$TMP/pdigest.tsv" -label_out "$TMP/plabel.tsv"
 ptot=$(val "$TMP/pdigest.tsv" count tot)
 case "$ptot" in ''|*[!0-9]*) fail "label_call: no count tot in the digest report ('$ptot')" ;; esac
-# (the ion-trap fixture has few or no ends at 20 ppm: 1.12 made no call on it, 1.13 calls it)
+# The fixture must stay below 175 ends (it has 0 at 20 ppm): only there do the default and the 1.12
+# rule differ, so only there can this test see a CLI default reverted to 175.
+[ "$ptot" -lt 175 ] || fail "label_call: the ppm fixture now has $ptot >= 175 tag ends; the default test would be vacuous"
 lcall() { echo "$(val "$1" label_call status) $(val "$1" label_call reason)"; }
 pcall=$(lcall "$TMP/plabel.tsv")
 [ "$pcall" = "call -" ] || fail "label_call: $ptot tag ends at 20 ppm and the default minimum gave '$pcall'"
@@ -147,7 +149,9 @@ if [ "$ptot" -lt 175 ]; then
 fi
 run -in "$IN" -tag_length 4 -out "$TMP/p1.tsv" -label_out "$TMP/plabel_eq.tsv" -label_call_min_tags "$ptot"
 [ "$(lcall "$TMP/plabel_eq.tsv")" = "call -" ] || fail "label_call: -label_call_min_tags $ptot (= tot) gave '$(lcall "$TMP/plabel_eq.tsv")'"
-run -in "$IN" -tag_length 4 -out "$TMP/p2.tsv" -label_out "$TMP/plabel_gt.tsv" -label_call_min_tags "$((ptot + 1))"
+run -in "$IN" -tag_length 4 -out "$TMP/p2.tsv" -digest_out "$TMP/pdigest_gt.tsv" -label_out "$TMP/plabel_gt.tsv" \
+  -label_call_min_tags "$((ptot + 1))"
+same "$TMP/pdigest.tsv" "$TMP/pdigest_gt.tsv" "-label_call_min_tags changed -digest_out"
 [ "$(lcall "$TMP/plabel_gt.tsv")" = "no_call few_tags" ] \
   || fail "label_call: -label_call_min_tags $((ptot + 1)) (> tot $ptot) gave '$(lcall "$TMP/plabel_gt.tsv")'"
 tr -d '\r' < "$TMP/plabel_gt.tsv" | awk -F'\t' '$1 == "label_call" && $2 == "status"' | grep -q "fewer than $((ptot + 1))" \
@@ -162,6 +166,16 @@ same "$TMP/p.tsv" "$TMP/p2.tsv" "-label_call_min_tags changed the tags"
 run -in "$IN" -tag_length 4 -out "$TMP/p3.tsv" -label_out "$TMP/plabel_175.tsv" -label_call_min_tags 175
 if [ "$ptot" -lt 175 ]; then [ "$(lcall "$TMP/plabel_175.tsv")" = "no_call few_tags" ] || fail "label_call: 175 at $ptot ends is not few_tags"
 else same "$TMP/plabel.tsv" "$TMP/plabel_175.tsv" "-label_call_min_tags 175 changed a run with $ptot >= 175 ends"; fi
+# -label_call_min_tags 175 writes the 1.12.0 -label_out byte for byte, descriptions included
+# (test/fixtures/label_1.12.0_Ecoli_MS2_small_ppm.tsv: the 1.12.0 RC a117801 on the same command), the
+# run version row aside
+nover_label() { tr -d '\r' < "$1" | awk -F'\t' '!($1 == "run" && $2 == "version")'; }
+nover_label "$TMP/plabel_175.tsv" > "$TMP/plabel_175.cmp"
+nover_label "$FIX/label_1.12.0_Ecoli_MS2_small_ppm.tsv" > "$TMP/plabel_112.cmp"
+same "$TMP/plabel_112.cmp" "$TMP/plabel_175.cmp" "-label_call_min_tags 175 is not the 1.12.0 -label_out"
+# and the default differs from 1.12.0 only in the label_call rows
+legacy "$FIX/label_1.12.0_Ecoli_MS2_small_ppm.tsv" > "$TMP/plabel_112.old"
+same "$TMP/plabel_112.old" "$TMP/plabel.old" "the default changed -label_out rows before label_call against 1.12.0"
 # a Da run is low_resolution at any minimum
 run "${COMMON[@]}" -out "$TMP/d0.tsv" -fixed_modifications -label_out "$TMP/dlabel0.tsv" -label_call_min_tags 0
 [ "$(lcall "$TMP/dlabel0.tsv")" = "no_call low_resolution" ] || fail "label_call: a Da run at minimum 0 is not low_resolution"

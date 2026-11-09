@@ -270,7 +270,8 @@ table. Tests use synthetic tables.
   and `heavy.gate` is `yes`; `strong` when both shares are ≥ 0.3, else `weak`.
 
 It reads only the tag-end counts, never the mass-gap result, so `-massgap_out` and `-recon_out` do not
-change it. Parity: 100 % identical calls with prose-auto 0.1.10 on the 193 label-evaluable SDRF runs of
+change it. Parity (1.12, i.e. with the 175 minimum, now `-label_call_min_tags 175`): 100 % identical
+calls with prose-auto 0.1.10 on the 193 label-evaluable SDRF runs of
 the digest validation (fastag-bench `table_s3_digest_truth_v190.tsv`), run with prose-auto's own
 termini command.
 
@@ -281,13 +282,16 @@ itself never returns "no call" for the label: below `TAG_MIN` its termini give n
 answer is label-free, the default. Ported as a no-call, it cost 30 of the 193 development runs (28 of
 them label-free), and `label_call` scored 150/193 (77.7 %), below "always label-free" (159/193). On the
 other 163 runs its label equalled the harness's (prose-auto 0.1.3's thresholds, no tag minimum; 178/193)
-(`output/jpr-paper/carryover-1.12/label_call.md`; all in-sample).
+(project output `output/jpr-paper/carryover-1.12/label_call.md`, not in this repository; all in-sample).
 
 - `-label_call_min_tags <n>` (default **0**): the `count.tot` a call needs. At 0 every ppm run is called:
   the isobaric, SILAC and `KR_TRYPTIC` rules above run on whatever ends there are, and when none fires the
-  call is label-free. That is the harness rule, so on the development runs the call is 178/193, not
-  180/193: the 2 mass-gap SILAC runs stay label-free, because `label_call` still never reads
-  `-massgap_out`.
+  call is label-free. This is the harness rule except that `label_call` compares the K/R share rounded
+  to 3 decimals (as prose-auto does) where the harness compares it unrounded; the two can differ only
+  for a K/R share in [0.7995, 0.8). On the 193 development runs the regenerated calls equal the
+  harness termini calls on 193/193 (178/193 correct), not 180/193: the 2 mass-gap SILAC runs stay
+  label-free, because `label_call` still never reads `-massgap_out`. At `-label_call_min_tags 175`
+  the -label_out reports of the 209 runs equal the 1.12.0 RC's byte for byte (run version row aside).
 - A call from fewer than 175 ends adds to the `status` row's description that "label-free" then means
   only that no label rule fired. Keys, values and the five-row layout are unchanged.
 - No C-terminal end at all (`tot = 0`): no SILAC test (the heavy shares are undefined); label-free unless
@@ -351,8 +355,8 @@ Input is the `-delta_out` histogram (0.0005 Da bins, local-max grouped), built w
 | `-massgap_silac_share`, `-massgap_silac_min` | 0.08, 500 | advanced |
 
 `-digest_models`, `-digest_tag_min` and `-digest_background_share` without `-digest_out`,
-`-digest_window` without `-digest_out` or `-label_out`, and `-digest_silac_min` without `-label_out`
-are ignored with a warning.
+`-digest_window` without `-digest_out` or `-label_out`, and `-digest_silac_min` and `-label_call_min_tags` (1.13)
+without `-label_out` are ignored with a warning.
 
 **`FASTAG_FULL_PRECISION=1`** (environment, not in `--help`): the tag TSV writes `nterm_mass`,
 `cterm_mass` and `evalue` in shortest round-trip form instead of 4 decimals and 6 significant digits,
