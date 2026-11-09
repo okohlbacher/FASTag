@@ -1,0 +1,11 @@
+#!/bin/sh
+# compltol (1.13 item 15) candidate binary on BinAC2: FASTag.bin built on IBMI node data from
+# feat/b113-compltol c5f96b5 (sha256 b7a1701c7cbe85d6ba7c9ecc270046a86e514e2eed45e4cd2eab78814d3ffac9),
+# started through data's loader and glibc exactly as the 1.12 RC wrapper $FT/bin/FASTag (BINAC2-RUNTIME.md).
+FT=/pfs/10/project/bw26g016/fastag-1.12
+BIN=/pfs/10/project/bw26g016/fastag-1.13/compltol/opt/FASTag.bin
+G=$FT/glibc-data
+LP=$G:$FT/envs/fastag-omsdev/lib:$FT/opt/openms-develop-70cebcd144/lib
+export OPENMS_DATA_PATH="${OPENMS_DATA_PATH:-$FT/opt/openms-develop-70cebcd144/share/OpenMS}"
+export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-1}"
+exec "$G/ld-linux-x86-64.so.2" --library-path "$LP" --argv0 "$BIN" "$BIN" "$@"
