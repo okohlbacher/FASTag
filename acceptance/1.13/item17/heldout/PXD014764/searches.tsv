@@ -1,0 +1,5 @@
+run	arm	engine	result	config	shifts	open
+PXD014764	base	sage	/scratch/kohlbach/b113/shifts/ho/PXD014764/base/sage_out/results.sage.tsv	/scratch/kohlbach/b113/shifts/ho/PXD014764/base/cfg_sage.json	-	/scratch/kohlbach/b113/shifts/ho/PXD014764/open/run.tsv
+PXD014764	base	comet	/scratch/kohlbach/b113/shifts/ho/PXD014764/base/comet.txt	/scratch/kohlbach/b113/shifts/ho/PXD014764/base/cfg_comet.params	-	/scratch/kohlbach/b113/shifts/ho/PXD014764/open/run.tsv
+PXD014764	cand	sage	/scratch/kohlbach/b113/shifts/ho/PXD014764/cand/sage_out/results.sage.tsv	/scratch/kohlbach/b113/shifts/ho/PXD014764/cand/cfg_sage.json	/scratch/kohlbach/b113/shifts/ho/PXD014764/cand/shifts_sage.tsv	/scratch/kohlbach/b113/shifts/ho/PXD014764/open/run.tsv
+PXD014764	cand	comet	/scratch/kohlbach/b113/shifts/ho/PXD014764/cand/comet.txt	/scratch/kohlbach/b113/shifts/ho/PXD014764/cand/cfg_comet.params	/scratch/kohlbach/b113/shifts/ho/PXD014764/cand/shifts_comet.tsv	/scratch/kohlbach/b113/shifts/ho/PXD014764/open/run.tsv

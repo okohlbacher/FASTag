@@ -1,0 +1,10 @@
+# FASTag 1.12.0 mass shifts for -search_config_out: candidates for an FDR-controlling engine, NOT identifications.
+# input: run.mzML; database: PXD000001_erwinia_spikes.fasta; engine: comet; mode: both
+# settings: window 0.02 Da, max_variable 3, max_offsets 10, expand_sites no
+# gap peaks: 4; exported: 0 variable, 2 offsets, 0 fixed; isotope errors 0..0
+# calibration: offsets corrected by the bias 0.0034 Da, the spectra-weighted median of centroid - mass over 1 single-modification peaks; residual 0.0000 Da (90 % of their spectra)
+peak	delta	spectra	explanation	action	mod_id	sites	exported	substitution_share	localized	reason
+1	229.1663	922	TMT6plex	expected_label	-	-	-	0.0000	0	the fixed label TMT6plex (N-term)
+2	-128.0925	79	none	dropped_engine	-	-	-128.0959	0.0000	0	a negative offset: Comet's mass_offsets are kept non-negative (unexplained)
+3	73.0641	58	none	offset	-	-	73.0608	0.0000	0	unexplained; centroid 73.0641 minus the calibration bias 0.0034
+4	25.9768	44	Gln->pyro-Glu + Carbamyl	offset	-	-	25.9734	0.0000	0	combination; centroid 25.9768 minus the calibration bias 0.0034

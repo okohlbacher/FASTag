@@ -1,0 +1,19 @@
+# FASTag 1.12.0 mass shifts for -search_config_out: candidates for an FDR-controlling engine, NOT identifications.
+# input: run.mzML; database: Homo_sapiens.fasta; engine: comet; mode: both
+# settings: window 0.02 Da, max_variable 3, max_offsets 10, expand_sites no
+# gap peaks: 13; exported: 4 variable, 3 offsets, 0 fixed; isotope errors 0..2
+# calibration: offsets corrected by the bias 0.0014 Da, the spectra-weighted median of centroid - mass over 6 single-modification peaks; residual 0.0012 Da (90 % of their spectra)
+peak	delta	spectra	explanation	action	mod_id	sites	exported	substitution_share	localized	reason
+1	8.0156	198	Label:13C(6)15N(2)	variable	Label:13C(6)15N(2) (K)	K	8.0142	0.0000	0	Label:13C(6)15N(2), a label of the called SILAC triplex (Lys4/Arg6, Lys8/Arg10) channel, exported with the whole channel outside -shift_max_variable
+2	4.0260	167	Label:2H(4)	variable	Label:2H(4) (K)	K	4.0251	0.0000	0	Label:2H(4), a label of the called SILAC triplex (Lys4/Arg6, Lys8/Arg10) channel, exported with the whole channel outside -shift_max_variable
+3	10.0097	133	Label:13C(6)15N(4)	variable	Label:13C(6)15N(4) (R)	R	10.0083	0.0075	0	Label:13C(6)15N(4), a label of the called SILAC triplex (Lys4/Arg6, Lys8/Arg10) channel, exported with the whole channel outside -shift_max_variable
+4	6.0204	80	Label:13C(6)	variable	Label:13C(6) (R)	R	6.0201	0.0000	0	Label:13C(6), a label of the called SILAC triplex (Lys4/Arg6, Lys8/Arg10) channel, exported with the whole channel outside -shift_max_variable
+5	1.0069	226	none	skipped_isotope	-	-	-	0.0000	0	1 x 13C spacing: a precursor isotope error
+6	128.0966	45	none	offset	-	-	128.0952	0.0000	0	unexplained; centroid 128.0966 minus the calibration bias 0.0014
+7	18.0241	29	Label:13C(6)15N(2) + Label:13C(6)15N(4)	already_searched	-	-	-	0.0345	0	a combination of the exported SILAC triplex (Lys4/Arg6, Lys8/Arg10) labels: the variable labels search it
+8	57.0235	43	Carbamidomethyl	variable	Carbamidomethyl (K);Carbamidomethyl (H);Carbamidomethyl (N-term)	K,H,N-term	57.0215	0.0698	0	the fixed Carbamidomethyl (C) again, on other sites
+9	10.0458	35	Label:2H(4) + Label:13C(6)	already_searched	-	-	-	0.0000	0	a combination of the exported SILAC triplex (Lys4/Arg6, Lys8/Arg10) labels: the variable labels search it
+10	156.1021	21	Trimethyl + GG	offset	-	-	156.1006	0.0000	0	combination; centroid 156.1021 minus the calibration bias 0.0014
+11	-89.0264	28	Met-loss+Acetyl	variable	Met-loss+Acetyl (Protein N-term M)	Protein N-term M	-89.0299	0.0000	0	Met-loss+Acetyl
+12	2.0096	25	none	skipped_isotope	-	-	-	0.0400	0	2 x 13C spacing: a precursor isotope error
+13	58.0289	32	Oxidation + Trimethyl	offset	-	-	58.0274	0.0000	0	combination; centroid 58.0289 minus the calibration bias 0.0014

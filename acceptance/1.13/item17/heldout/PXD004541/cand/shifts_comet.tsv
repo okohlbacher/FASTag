@@ -1,0 +1,19 @@
+# FASTag 1.12.0 mass shifts for -search_config_out: candidates for an FDR-controlling engine, NOT identifications.
+# input: run.mzML; database: Homo_sapiens.fasta; engine: comet; mode: both
+# settings: window 0.02 Da, max_variable 3, max_offsets 10, expand_sites no
+# gap peaks: 13; exported: 5 variable, 5 offsets, 0 fixed; isotope errors 0..0
+# calibration: offsets corrected by the bias 0.0007 Da, the spectra-weighted median of centroid - mass over 3 single-modification peaks; residual 0.0000 Da (90 % of their spectra)
+peak	delta	spectra	explanation	action	mod_id	sites	exported	substitution_share	localized	reason
+1	229.1636	2165	TMT6plex	expected_label	-	-	-	0.0000	0	the fixed label TMT6plex (N-term)
+2	-128.0941	196	none	dropped_engine	-	-	-128.0948	0.0000	0	a negative offset: Comet's mass_offsets are kept non-negative (unexplained)
+3	73.0626	166	none	offset	-	-	73.0619	0.0000	0	unexplained; centroid 73.0626 minus the calibration bias 0.0007
+4	230.1685	651	none	offset	-	-	1.0049	0.0000	0	the fixed label TMT6plex (N-term) plus combination; centroid 1.0056 minus the calibration bias 0.0007
+5	-40.0217	39	none	dropped_engine	-	-	-40.0224	0.0000	0	a negative offset: Comet's mass_offsets are kept non-negative (unexplained)
+6	245.1612	109	Oxidation + TMT6plex	already_searched	Oxidation (M)	M	15.9949	0.0000	0	the plan searches Oxidation (M) already
+7	57.0225	55	Carbamidomethyl	variable	Carbamidomethyl (K);Carbamidomethyl (H);Carbamidomethyl (N-term)	K,H,N-term	57.0215	0.1636	0	the fixed Carbamidomethyl (C) again, on other sites
+8	231.1675	185	none	offset	-	-	2.0039	0.0000	0	the fixed label TMT6plex (N-term) plus combination; centroid 2.0046 minus the calibration bias 0.0007
+9	246.1628	80	none	offset	-	-	16.9991	0.0000	0	the fixed label TMT6plex (N-term) plus combination; centroid 16.9999 minus the calibration bias 0.0007
+10	243.1803	34	Methyl + TMT6plex	variable	Methyl (K)	K	14.0157	0.0000	0	the fixed label TMT6plex (N-term) plus Methyl
+11	-127.0895	55	none	dropped_engine	-	-	-127.0902	0.0000	0	a negative offset: Comet's mass_offsets are kept non-negative (unexplained)
+12	26.0179	30	Oxidation + Label:13C(6)15N(4)	offset	-	-	26.0172	0.0667	0	combination; centroid 26.0179 minus the calibration bias 0.0007
+13	-17.0234	24	Gln->pyro-Glu	variable	Gln->pyro-Glu (N-term Q)	N-term Q	-17.0265	0.0000	0	Gln->pyro-Glu

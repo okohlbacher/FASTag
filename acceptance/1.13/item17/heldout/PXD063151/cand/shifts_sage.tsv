@@ -1,0 +1,27 @@
+# FASTag 1.12.0 mass shifts for -search_config_out: candidates for an FDR-controlling engine, NOT identifications.
+# input: run.mzML; database: Homo_sapiens.fasta; engine: sage; mode: variable
+# settings: window 0.02 Da, max_variable 3, max_offsets 10, expand_sites no
+# gap peaks: 21; exported: 2 variable, 0 offsets, 0 fixed; isotope errors 0..2
+# calibration: offsets corrected by the bias 0.0027 Da, the spectra-weighted median of centroid - mass over 3 single-modification peaks; residual 0.0011 Da (90 % of their spectra)
+peak	delta	spectra	explanation	action	mod_id	sites	exported	substitution_share	localized	reason
+1	1.0035	1408	Deamidated	skipped_isotope	-	-	-	0.0582	0	1 x 13C spacing: a precursor isotope error
+2	40.0343	686	none	dropped_mode	-	-	-	0.0000	0	unexplained; -search_shifts variable exports no offsets
+3	-1.0000	648	none	dropped_mode	-	-	-	0.0262	0	unexplained; -search_shifts variable exports no offsets
+4	-17.0239	297	Gln->pyro-Glu	variable	Gln->pyro-Glu (N-term Q)	N-term Q	-17.0265	0.0000	0	Gln->pyro-Glu
+5	15.9969	261	Oxidation	already_searched	Oxidation (M)	M	15.9949	0.0038	0	the plan searches Oxidation (M) already
+6	-2.0044	192	Oxidation + Glu->pyro-Glu	dropped_mode	-	-	-	0.0000	0	combination; -search_shifts variable exports no offsets
+7	128.0944	147	none	dropped_mode	-	-	-	0.0000	0	unexplained; -search_shifts variable exports no offsets
+8	-89.0262	230	Met-loss+Acetyl	variable	Met-loss+Acetyl (Protein N-term M)	Protein N-term M	-89.0299	0.0043	0	Met-loss+Acetyl
+9	2.0077	247	none	skipped_isotope	-	-	-	0.0000	0	2 x 13C spacing: a precursor isotope error
+10	0.9474	374	none	dropped_mode	-	-	-	0.0722	0	unexplained; -search_shifts variable exports no offsets
+11	0.0646	282	none	dropped_mode	-	-	-	0.0000	0	unexplained; -search_shifts variable exports no offsets
+12	-0.0847	274	none	dropped_mode	-	-	-	0.0000	0	unexplained; -search_shifts variable exports no offsets
+13	0.9087	228	none	dropped_mode	-	-	-	0.0000	0	unexplained; -search_shifts variable exports no offsets
+14	-0.0567	181	Oxidation + Deamidated + Gln->pyro-Glu	dropped_mode	-	-	-	0.0000	0	combination; -search_shifts variable exports no offsets
+15	0.1033	192	none	dropped_mode	-	-	-	0.0000	0	unexplained; -search_shifts variable exports no offsets
+16	1.0806	228	none	dropped_mode	-	-	-	0.0000	0	unexplained; -search_shifts variable exports no offsets
+17	-1.0619	221	none	dropped_mode	-	-	-	0.0000	0	unexplained; -search_shifts variable exports no offsets
+18	-0.9198	171	none	dropped_mode	-	-	-	0.0000	0	unexplained; -search_shifts variable exports no offsets
+19	1.0498	151	none	dropped_mode	-	-	-	0.0000	0	unexplained; -search_shifts variable exports no offsets
+20	-1.0968	141	none	dropped_mode	-	-	-	0.0000	0	unexplained; -search_shifts variable exports no offsets
+21	-0.9567	168	none	dropped_mode	-	-	-	0.0714	0	unexplained; -search_shifts variable exports no offsets

@@ -1,0 +1,27 @@
+# FASTag 1.12.0 mass shifts for -search_config_out: candidates for an FDR-controlling engine, NOT identifications.
+# input: run.mzML; database: Homo_sapiens.fasta; engine: comet; mode: both
+# settings: window 0.02 Da, max_variable 3, max_offsets 10, expand_sites no
+# gap peaks: 21; exported: 2 variable, 8 offsets, 0 fixed; isotope errors 0..2
+# calibration: offsets corrected by the bias 0.0027 Da, the spectra-weighted median of centroid - mass over 3 single-modification peaks; residual 0.0011 Da (90 % of their spectra)
+peak	delta	spectra	explanation	action	mod_id	sites	exported	substitution_share	localized	reason
+1	1.0035	1408	Deamidated	skipped_isotope	-	-	-	0.0582	0	1 x 13C spacing: a precursor isotope error
+2	40.0343	686	none	offset	-	-	40.0316	0.0000	0	unexplained; centroid 40.0343 minus the calibration bias 0.0027
+3	-1.0000	648	none	dropped_engine	-	-	-1.0027	0.0262	0	a negative offset: Comet's mass_offsets are kept non-negative (unexplained)
+4	-17.0239	297	Gln->pyro-Glu	variable	Gln->pyro-Glu (N-term Q)	N-term Q	-17.0265	0.0000	0	Gln->pyro-Glu
+5	15.9969	261	Oxidation	already_searched	Oxidation (M)	M	15.9949	0.0038	0	the plan searches Oxidation (M) already
+6	-2.0044	192	Oxidation + Glu->pyro-Glu	dropped_engine	-	-	-2.0071	0.0000	0	a negative offset: Comet's mass_offsets are kept non-negative (combination)
+7	128.0944	147	none	offset	-	-	128.0917	0.0000	0	unexplained; centroid 128.0944 minus the calibration bias 0.0027
+8	-89.0262	230	Met-loss+Acetyl	variable	Met-loss+Acetyl (Protein N-term M)	Protein N-term M	-89.0299	0.0043	0	Met-loss+Acetyl
+9	2.0077	247	none	skipped_isotope	-	-	-	0.0000	0	2 x 13C spacing: a precursor isotope error
+10	0.9474	374	none	offset	-	-	0.9448	0.0722	0	unexplained; centroid 0.9474 minus the calibration bias 0.0027
+11	0.0646	282	none	offset	-	-	0.0619	0.0000	0	unexplained; centroid 0.0646 minus the calibration bias 0.0027
+12	-0.0847	274	none	dropped_engine	-	-	-0.0874	0.0000	0	a negative offset: Comet's mass_offsets are kept non-negative (unexplained)
+13	0.9087	228	none	offset	-	-	0.9061	0.0000	0	unexplained; centroid 0.9087 minus the calibration bias 0.0027
+14	-0.0567	181	Oxidation + Deamidated + Gln->pyro-Glu	dropped_engine	-	-	-0.0594	0.0000	0	a negative offset: Comet's mass_offsets are kept non-negative (combination)
+15	0.1033	192	none	offset	-	-	0.1006	0.0000	0	unexplained; centroid 0.1033 minus the calibration bias 0.0027
+16	1.0806	228	none	offset	-	-	1.0779	0.0000	0	unexplained; centroid 1.0806 minus the calibration bias 0.0027
+17	-1.0619	221	none	dropped_engine	-	-	-1.0645	0.0000	0	a negative offset: Comet's mass_offsets are kept non-negative (unexplained)
+18	-0.9198	171	none	dropped_engine	-	-	-0.9225	0.0000	0	a negative offset: Comet's mass_offsets are kept non-negative (unexplained)
+19	1.0498	151	none	offset	-	-	1.0471	0.0000	0	unexplained; centroid 1.0498 minus the calibration bias 0.0027
+20	-1.0968	141	none	dropped_engine	-	-	-1.0995	0.0000	0	a negative offset: Comet's mass_offsets are kept non-negative (unexplained)
+21	-0.9567	168	none	dropped_engine	-	-	-0.9594	0.0714	0	a negative offset: Comet's mass_offsets are kept non-negative (unexplained)

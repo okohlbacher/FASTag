@@ -1,0 +1,28 @@
+6103 MS2 spectra, 210142 tags
+FASTag took 0.67 s (wall), 4.43 s (CPU), 0.27 s (system), 4.16 s (user); Peak Memory Usage: 147 MB.
+     - Run stats: 3s (6088 spectra, 0.59ms/spec, 1689Hz, 1.6GB)
+     - Run stats: 3s (6088 spectra, 0.65ms/spec, 1535Hz, 1.6GB)
+*******************************TOTAL TIME 0.259 MIN********************************
+36929 MS2 spectra, 1416073 tags
+FASTag took 2.63 s (wall), 29.34 s (CPU), 1.54 s (system), 27.80 s (user); Peak Memory Usage: 397 MB.
+     - Run stats: 30s (36297 spectra, 0.83ms/spec, 1210Hz, 4.1GB)
+     - Run stats: 7m:29s (36297 spectra, 12.38ms/spec, 81Hz, 4.1GB)
+*******************************TOTAL TIME 3.065 MIN********************************
+29180 MS2 spectra, 1050266 tags
+FASTag took 2.68 s (wall), 27.62 s (CPU), 1.05 s (system), 26.57 s (user); Peak Memory Usage: 358 MB.
+     - Run stats: 9m:13s (28788 spectra, 19.23ms/spec, 52Hz, 4.2GB)
+     - Run stats: 36m:30s (28788 spectra, 76.08ms/spec, 13Hz, 4.2GB)
+*******************************TOTAL TIME 31.171 MIN********************************
+168317 MS2 spectra, 5870736 tags
+FASTag took 11.33 s (wall), 02:39 m (CPU), 5.13 s (system), 02:34 m (user); Peak Memory Usage: 1078 MB.
+     - Run stats: 2m:32s (159475 spectra, 0.96ms/spec, 1043Hz, 5.3GB)
+     - Run stats: 8m:6s (159475 spectra, 3.05ms/spec, 328Hz, 5.3GB)
+*******************************TOTAL TIME 22.118 MIN********************************
+f57418b055cbfcad379f92c966b18b04b13ef232b1a946ca98a211280b8e103f  PXD000001/target_e.fasta
+e36bc3e8dfef889139dd83c9bbdc1110832c44688fbe22afc1901d6b4c40367e  PXD004541/target_e.fasta
+e36bc3e8dfef889139dd83c9bbdc1110832c44688fbe22afc1901d6b4c40367e  PXD014764/target_e.fasta
+e36bc3e8dfef889139dd83c9bbdc1110832c44688fbe22afc1901d6b4c40367e  PXD063151/target_e.fasta
+99e30a4bd6aa7be03f5aba829cb2e27301b4bd8aadb8a117346dc842d3b124e1  PXD000001/target_td.fasta
+2a7c8af682ca7a2fb552f6e44f12b8499948c340d5c1c5008c936193250ff938  PXD004541/target_td.fasta
+2a7c8af682ca7a2fb552f6e44f12b8499948c340d5c1c5008c936193250ff938  PXD014764/target_td.fasta
+2a7c8af682ca7a2fb552f6e44f12b8499948c340d5c1c5008c936193250ff938  PXD063151/target_td.fasta
