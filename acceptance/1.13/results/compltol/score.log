@@ -1,0 +1,2 @@
+{"manifest": "compltol-H1", "sets": ["astral", "ion_trap", "qe", "timstof"], "i": "FAIL", "ii": "PASS", "iii": "PASS", "iv": "PASS", "verdict": "FAIL", "runs_not_ok": []}
+SCORE_RC=0

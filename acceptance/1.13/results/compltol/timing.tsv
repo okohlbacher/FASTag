@@ -1,0 +1,7 @@
+arm	repeat	seconds	rc	host
+CFG-CT-base	1	19.906	0	node1-051
+CFG-CT-cand	1	19.687	0	node1-051
+CFG-CT-base	2	19.192	0	node1-051
+CFG-CT-cand	2	19.710	0	node1-051
+CFG-CT-base	3	19.111	0	node1-051
+CFG-CT-cand	3	19.857	0	node1-051
