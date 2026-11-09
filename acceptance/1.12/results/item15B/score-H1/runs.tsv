@@ -1,0 +1,7 @@
+CFG-15B-base:rc	CFG-15B-cand:rc	pxd	run	set	spectra_collisional	spectra_electron	spectra_hybrid	spectra_unknown	status	truth_by	truth_cz	truth_hybrid	truth_psms
+0	0	PXD024621	item15B/sets/PXD024621/19072019_D4-3_8175_2hHCD-ETD	set7	9358	9935	0	0	ok	True	True	False	1119
+0	0	PXD024621	item15B/sets/PXD024621/08062020_Nano1_uPAC50_9149_AMPK_2h_DDA_HCD-ETD	set7	19909	16118	0	0	ok	True	True	False	4757
+0	0	PXD024621	item15B/sets/PXD024621/19072019_D4-3_8169_2hHCD-ETD	set7	6211	7029	0	0	ok	True	True	False	947
+0	0	PXD009208	item15B/sets/PXD009208/LUMOS_SCL-IAH_AR_Control_R4_F0	set9	0	4780	0	0	ok	False	True	False	1480
+0	0	PXD009208	item15B/sets/PXD009208/LUMOS_SCL-IAH_AR_Olap-H2O2_R3_F2	set9	0	1960	0	0	ok	False	True	False	683
+0	0	PXD009208	item15B/sets/PXD009208/LUMOS_SCL-IAH_AR_Olap-H2O2_R2_F6	set9	0	9808	0	0	ok	False	True	False	4478

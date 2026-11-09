@@ -1,0 +1,2 @@
+{"split": "H1", "E1": "PASS", "E2": "INCONCLUSIVE", "E3": "PASS", "verdict": "INCONCLUSIVE", "runs_not_ok": []} {"clusters": 5313, "base_pct": 0.8798775822494261, "cand_pct": 82.24942616679418, "diff": 81.36954858454476, "p2_5": 79.48072412474647}
+SCORE_RC=0

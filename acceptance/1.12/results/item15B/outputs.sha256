@@ -1,0 +1,42 @@
+f662b96a53df03ec295c6317c03b06880be1668ee1244452ab0ad6d7567193c9  runs/CFG-15B-base/item15B-sets-r2/item15B/sets/PXD009208/LUMOS_SCL-IAH_AR_Control_R4_F0/RC/tags.tsv
+a9895775a60366e83e7b39eb47146cefb013e2410103d76efc0715cd6b56dee2  runs/CFG-15B-base/item15B-sets-r2/item15B/sets/PXD009208/LUMOS_SCL-IAH_AR_Olap-H2O2_R2_F6/RC/tags.tsv
+f0f1306571a98971bf4bf78283078e41a858b176df32a1ca9faefc45e633fa1d  runs/CFG-15B-base/item15B-sets-r2/item15B/sets/PXD009208/LUMOS_SCL-IAH_AR_Olap-H2O2_R3_F2/RC/tags.tsv
+38f84e7575f8cba19ad3ff59bdc5be1a3dc53b2cd046a1d2e4dca0902c2dd694  runs/CFG-15B-base/item15B-sets-r2/item15B/sets/PXD024621/08062020_Nano1_uPAC50_9149_AMPK_2h_DDA_HCD-ETD/RC/tags.tsv
+5e4cbcd4065e8e7d8624eb11b67deab4df7fc84099a1243055b5f36de3c6134d  runs/CFG-15B-base/item15B-sets-r2/item15B/sets/PXD024621/19072019_D4-3_8169_2hHCD-ETD/RC/tags.tsv
+52bdcc7fc935ca3712d16bdb411163bea3ad507c0ec2514e2c27dc49482afe43  runs/CFG-15B-base/item15B-sets-r2/item15B/sets/PXD024621/19072019_D4-3_8175_2hHCD-ETD/RC/tags.tsv
+9da66be0bdd325f02833897424862b4b9fa769ac3146442997adef509f66e2dc  runs/CFG-15B-cand/item15B-sets-r2/item15B/sets/PXD009208/LUMOS_SCL-IAH_AR_Control_R4_F0/RC/tags.tsv
+9d120fd95e74d09498f30889a1355e90e2cd0719eee1373d0e3b9a21206911b3  runs/CFG-15B-cand/item15B-sets-r2/item15B/sets/PXD009208/LUMOS_SCL-IAH_AR_Olap-H2O2_R2_F6/RC/tags.tsv
+7b0ff3b0cd5b285af20a53898c9aa1a68602c64e467e4c9ab81f87808a857db5  runs/CFG-15B-cand/item15B-sets-r2/item15B/sets/PXD009208/LUMOS_SCL-IAH_AR_Olap-H2O2_R3_F2/RC/tags.tsv
+20449513c55d37d9f055cfb97919e3f3805b9f7779fa174f0a749be26893ddac  runs/CFG-15B-cand/item15B-sets-r2/item15B/sets/PXD024621/08062020_Nano1_uPAC50_9149_AMPK_2h_DDA_HCD-ETD/RC/tags.tsv
+161fe02125742f3316953f797e2c359aa25f5b508d70e1b8232f5d4fb3eec1e2  runs/CFG-15B-cand/item15B-sets-r2/item15B/sets/PXD024621/19072019_D4-3_8169_2hHCD-ETD/RC/tags.tsv
+0d5cf911579b8e840d83d971a634f2fdcdc47cb9e5e4adf7cb50a68c677d52f6  runs/CFG-15B-cand/item15B-sets-r2/item15B/sets/PXD024621/19072019_D4-3_8175_2hHCD-ETD/RC/tags.tsv
+36d0b2ca71d44f8a70b0a9ca6a148785ca55d52d24b2663d6f0f31b18e225349  truth/item15B-sets-r2/item15B/sets/PXD009208/LUMOS_SCL-IAH_AR_Control_R4_F0/msfragger_cz.tsv
+ff50cdb7fc1eeb092adc0115203d26185bad9e5f53764d36f55e4e11695c3613  truth/item15B-sets-r2/item15B/sets/PXD009208/LUMOS_SCL-IAH_AR_Olap-H2O2_R2_F6/msfragger_cz.tsv
+18c0c7ec0c356e367e95bc537fc8efc2f3428fdc5bd65da5d3e1a233a0994db3  truth/item15B-sets-r2/item15B/sets/PXD009208/LUMOS_SCL-IAH_AR_Olap-H2O2_R3_F2/msfragger_cz.tsv
+3c55f099287496a1696d774641013ac892bd695dde56ae7410e17a0d9f163211  truth/item15B-sets-r2/item15B/sets/PXD024621/08062020_Nano1_uPAC50_9149_AMPK_2h_DDA_HCD-ETD/msfragger_by.tsv
+0f3f170276b34ed64bfa07c72a0420139435bde058eb51b665c52b2e30c75088  truth/item15B-sets-r2/item15B/sets/PXD024621/08062020_Nano1_uPAC50_9149_AMPK_2h_DDA_HCD-ETD/msfragger_cz.tsv
+25dbbf451d617b5d0ad1aa3777b632994e3d86f34cc212e8c69a26d5f726f11c  truth/item15B-sets-r2/item15B/sets/PXD024621/19072019_D4-3_8169_2hHCD-ETD/msfragger_by.tsv
+67c253a8b7f041d42b5290f26e5ff72222474c1459ca846a551e48b0156d1d59  truth/item15B-sets-r2/item15B/sets/PXD024621/19072019_D4-3_8169_2hHCD-ETD/msfragger_cz.tsv
+0e90ca6c597938f43c6e4e198293fa8bfded739e51098dcecdfd38f4c77ac701  truth/item15B-sets-r2/item15B/sets/PXD024621/19072019_D4-3_8175_2hHCD-ETD/msfragger_by.tsv
+1374ea26a7d77e4e8ae1b52eb8cdfe7b59f3788a0aaa31131e0febfdad75c6ff  truth/item15B-sets-r2/item15B/sets/PXD024621/19072019_D4-3_8175_2hHCD-ETD/msfragger_cz.tsv
+truth/item15B-sets-r2/item15B/sets/PXD009208/LUMOS_SCL-IAH_AR_Control_R4_F0/fragger_cz.log:FRAGGER_RC=0
+truth/item15B-sets-r2/item15B/sets/PXD009208/LUMOS_SCL-IAH_AR_Olap-H2O2_R2_F6/fragger_cz.log:FRAGGER_RC=0
+truth/item15B-sets-r2/item15B/sets/PXD009208/LUMOS_SCL-IAH_AR_Olap-H2O2_R3_F2/fragger_cz.log:FRAGGER_RC=0
+truth/item15B-sets-r2/item15B/sets/PXD024621/08062020_Nano1_uPAC50_9149_AMPK_2h_DDA_HCD-ETD/fragger_by.log:FRAGGER_RC=0
+truth/item15B-sets-r2/item15B/sets/PXD024621/08062020_Nano1_uPAC50_9149_AMPK_2h_DDA_HCD-ETD/fragger_cz.log:FRAGGER_RC=0
+truth/item15B-sets-r2/item15B/sets/PXD024621/19072019_D4-3_8169_2hHCD-ETD/fragger_by.log:FRAGGER_RC=0
+truth/item15B-sets-r2/item15B/sets/PXD024621/19072019_D4-3_8169_2hHCD-ETD/fragger_cz.log:FRAGGER_RC=0
+truth/item15B-sets-r2/item15B/sets/PXD024621/19072019_D4-3_8175_2hHCD-ETD/fragger_by.log:FRAGGER_RC=0
+truth/item15B-sets-r2/item15B/sets/PXD024621/19072019_D4-3_8175_2hHCD-ETD/fragger_cz.log:FRAGGER_RC=0
+runs/CFG-15B-base/item15B-sets-r2/item15B/sets/PXD009208/LUMOS_SCL-IAH_AR_Control_R4_F0/RC/run.log:FASTAG_RC=0
+runs/CFG-15B-base/item15B-sets-r2/item15B/sets/PXD009208/LUMOS_SCL-IAH_AR_Olap-H2O2_R2_F6/RC/run.log:FASTAG_RC=0
+runs/CFG-15B-base/item15B-sets-r2/item15B/sets/PXD009208/LUMOS_SCL-IAH_AR_Olap-H2O2_R3_F2/RC/run.log:FASTAG_RC=0
+runs/CFG-15B-base/item15B-sets-r2/item15B/sets/PXD024621/08062020_Nano1_uPAC50_9149_AMPK_2h_DDA_HCD-ETD/RC/run.log:FASTAG_RC=0
+runs/CFG-15B-base/item15B-sets-r2/item15B/sets/PXD024621/19072019_D4-3_8169_2hHCD-ETD/RC/run.log:FASTAG_RC=0
+runs/CFG-15B-base/item15B-sets-r2/item15B/sets/PXD024621/19072019_D4-3_8175_2hHCD-ETD/RC/run.log:FASTAG_RC=0
+runs/CFG-15B-cand/item15B-sets-r2/item15B/sets/PXD009208/LUMOS_SCL-IAH_AR_Control_R4_F0/RC/run.log:FASTAG_RC=0
+runs/CFG-15B-cand/item15B-sets-r2/item15B/sets/PXD009208/LUMOS_SCL-IAH_AR_Olap-H2O2_R2_F6/RC/run.log:FASTAG_RC=0
+runs/CFG-15B-cand/item15B-sets-r2/item15B/sets/PXD009208/LUMOS_SCL-IAH_AR_Olap-H2O2_R3_F2/RC/run.log:FASTAG_RC=0
+runs/CFG-15B-cand/item15B-sets-r2/item15B/sets/PXD024621/08062020_Nano1_uPAC50_9149_AMPK_2h_DDA_HCD-ETD/RC/run.log:FASTAG_RC=0
+runs/CFG-15B-cand/item15B-sets-r2/item15B/sets/PXD024621/19072019_D4-3_8169_2hHCD-ETD/RC/run.log:FASTAG_RC=0
+runs/CFG-15B-cand/item15B-sets-r2/item15B/sets/PXD024621/19072019_D4-3_8175_2hHCD-ETD/RC/run.log:FASTAG_RC=0

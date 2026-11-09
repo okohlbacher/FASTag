@@ -1,0 +1,4 @@
+cell	clusters	spectra	base_pct	cand_pct	diff	se	p2_5	p97_5	floor_pct	informative	powered	p_one_sided	holm_alpha	holm_lb	ni
+item15B-sets-r2:H1:collisional:z2	220	3008	83.8763	83.8763	0.0000	0.0000	0.0000	0.0000	nan	True	True	0.0000	0.0250	0.0000	pass
+item15B-sets-r2:H1:collisional:z3	0	0	nan	nan	nan	nan	nan	nan	nan	True	False	nan	nan	nan	inconclusive
+item15B-sets-r2:H1:collisional:z4+	0	0	nan	nan	nan	nan	nan	nan	nan	True	False	nan	nan	nan	inconclusive
