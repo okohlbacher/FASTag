@@ -32,6 +32,13 @@ options and the frozen acquisition-check thresholds are unchanged.
   the default stays `by`. The README now recommends `auto` or `cz` for ETD/ECD
   data. The ion-trap sets of the first preregistration were replaced by
   Orbitrap sets before any run.
+- **#7 raw-DIA check, release test E7-03: FAIL** (scored once on a fresh PRIDE
+  sample; the default stays `-acquisition_check refuse`). diaPASEF and Astral DIA
+  were refused 12/12 each, Orbitrap DIA 7/12 and SWATH 10/12 (< 90%); 8 of 202
+  must-pass files were refused (upper 95% bound 7.0%), all from Astral projects
+  labelled DDA; pseudo-DDA passed 37/37. A post-hoc reading that some of these are
+  label errors is a hypothesis, not a re-score (doc/ACQUISITION-RELEASE-TEST.md).
+  Override a wrong refusal with `-acquisition_check warn` or `off`.
 
 ## 1.12.1 (2026-11-08)
 
