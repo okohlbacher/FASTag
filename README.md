@@ -780,7 +780,10 @@ the run's mass-gap peaks to `-search_config_out`, closing an open-search loop
 cheaply. The peaks are exactly the ones `-massgap_out` reports (same
 `-massgap_*` thresholds), computed whether or not a report is written;
 `-delta_out` and `-massgap_out` are byte-identical with and without it. A peak
-at a precursor isotope spacing raises the engine's isotope errors instead; a
+at a precursor isotope spacing raises the engine's isotope errors instead
+(not with a fixed terminal label such as TMT: a peak at the label plus an
+isotope spacing becomes a Comet offset and does not raise the isotope
+errors, so Sage does not search it); a
 peak equal to a fixed terminal label is expected; a peak at minus a fixed
 modification or label is warned about; a fixed residue modification seen
 again becomes a variable modification on its other sites (overalkylation);
@@ -800,9 +803,12 @@ instead (a reagent call becomes it; `none` or `no_call` adds none). `-search_shi
 for an FDR-controlling engine, not identifications. Held-out test (1.13,
 acceptance/1.13 RESULT-item17.md; four public runs, SILAC, TMT10, TMT6,
 label-free): more PSMs at 1 % FDR on 3 of 4 runs with both engines (Comet
-+23 to +49 %, Sage +3 to +31 %), but the preregistered test FAILED on its
-other criteria (recovery of an open search's top mass shifts for both engines;
-entrapment FDP above 1.5 % for Sage), so the option stays experimental. Offsets need a narrow precursor
++23 to +49 %, Sage +3 to +31 %; a net count: Comet also lost up to 10.1 % of
+the scans the base search identified, Sage up to 1.3 %), but the
+preregistered test FAILED on its other criteria (recovery of an open search's
+top mass shifts for both engines, Comet's one passing run resting on
+calibration artefacts; entrapment FDP above 1.5 % for Sage), so the option
+stays experimental. Offsets need a narrow precursor
 tolerance, which the configuration sets explicitly. See
 [doc/SHORTLIST.md](doc/SHORTLIST.md#mass-shifts-as-engine-configuration-112-17).
 
