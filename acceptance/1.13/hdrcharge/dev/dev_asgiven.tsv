@@ -1,0 +1,6 @@
+run	n	n_wrong	flagged	tp	fp	fixed	call_right	sensitivity	false_alarm	false_alarm_hi95	precision	call_precision	net_per_1000	net_lo95	net_hi95
+PXD003531:qe	6720	190	12	8	4	8	8	0.0421	0.0006	0.0016	0.6667	0.6667	0.5952	-0.2976	1.6369
+PXD001819:ion_trap	3381	5	0	0	0	0	0	0.0000	0.0000	0.0011	nan	nan	0.0000	0.0000	0.0000
+stratum:ion_trap	3381	5	0	0	0	0	0	0.0000	0.0000	0.0011	nan	nan	0.0000	0.0000	0.0000
+stratum:qe	6720	190	12	8	4	8	8	0.0421	0.0006	0.0016	0.6667	0.6667	0.5952	-0.2976	1.6369
+pooled	10101	195	12	8	4	8	8	0.0410	0.0004	0.0010	0.6667	0.6667	0.3960	-0.2970	1.0890
