@@ -21,10 +21,12 @@ rank-1 PSMs of U only, by sage_discriminant_score (a separate FDR for the newly 
 
 Per run and pooled over runs (counts summed):
     n_u, n_triage, n_rest, t_triage, t_rest, p_triage = t_triage / n_triage, p_rest = t_rest / n_rest,
-    rr = p_triage / p_rest, recall = t_triage / (t_triage + t_rest),
+    rr = p_triage / p_rest (inf when the rest has no hit and the candidates have), recall = t_triage / (t_triage + t_rest),
     for each baseline column B: p_B = precision of the n_triage rows of U with the largest B (ties: lower input
     index first), d_B = p_triage - p_B,
     auroc of -log10(best_evalue) for T within U (spectra without a tag rank lowest; ties count one half).
+Join diagnostics: u_in_second, triage_in_second, rest_in_second (U spectra the second search reports); a run where no
+spectrum of U joins is refused. Non-finite or empty baseline values, spectrum_q and discriminants are refused.
 Run-cluster bootstrap (--boot resamples of the runs with replacement, --seed): percentile 95% intervals of the
 pooled rr and d_B. With one run the intervals are empty.
 
@@ -45,9 +47,11 @@ class EvalError(Exception):
     pass
 
 
-def read_tsv(path):
+def read_tsv(path, quoted=False):
+    """quoted: fields may be enclosed in double quotes (Sage writes its TSV with a CSV writer); FASTag's census
+    tables are unquoted."""
     with open(path, newline="") as f:
-        r = csv.reader(f, delimiter="\t", quoting=csv.QUOTE_NONE)
+        r = csv.reader(f, delimiter="\t", quoting=csv.QUOTE_MINIMAL if quoted else csv.QUOTE_NONE)
         try:
             header = next(r)
         except StopIteration:
@@ -65,7 +69,7 @@ def col(header, name, path):
 
 def second_psms(path, mzml=None):
     """Rank-1 PSMs of the second search: {native id: (is_target, spectrum_q, discriminant)}."""
-    h, rows = read_tsv(path)
+    h, rows = read_tsv(path, quoted=True)
     cf, cs, cr, cl, cq = (col(h, n, path) for n in ("filename", "scannr", "rank", "label", "spectrum_q"))
     cd = h.index("sage_discriminant_score") if "sage_discriminant_score" in h else None
     psms = {}
@@ -77,8 +81,22 @@ def second_psms(path, mzml=None):
         sid = row[cs]
         if sid in psms:
             raise EvalError(f"{path}: two rank-1 rows for '{sid}'")
-        psms[sid] = (row[cl] == TRUE_LABEL, float(row[cq]), float(row[cd]) if cd is not None else None)
+        if row[cl] not in (TRUE_LABEL, "-1"):
+            raise EvalError(f"{path}: label '{row[cl]}' for '{sid}' (1 target, -1 decoy)")
+        sq = finite(row[cq], path, "spectrum_q")
+        psms[sid] = (row[cl] == TRUE_LABEL, sq, finite(row[cd], path, "sage_discriminant_score") if cd is not None
+                     else None)
     return psms
+
+
+def finite(v, path, name):
+    try:
+        x = float(v)
+    except ValueError:
+        raise EvalError(f"{path}: {name} '{v}' is not a number")
+    if not math.isfinite(x):
+        raise EvalError(f"{path}: {name} '{v}' is not finite")
+    return x
 
 
 def global_truth(psms, q):
@@ -89,7 +107,8 @@ def global_truth(psms, q):
 def subset_truth(psms, sids, q):
     """Target-decoy q-values recomputed among the rank-1 PSMs of the spectra @p sids only (separate FDR of the
     spectra the first search left unidentified), ordered by sage_discriminant_score (higher better; equal scores
-    enter together). FDR at a cut = decoys / targets above it; q = the lowest FDR at or below the score.
+    enter together). FDR at a cut = (decoys + 1) / targets above it (the finite-sample target-decoy
+    competition estimate); q = the lowest FDR at or below the score.
     Returns the targets with q <= @p q."""
     sub = [(psms[s][2], psms[s][0], s) for s in sids if s in psms]
     if any(d is None for d, _, _ in sub):
@@ -106,7 +125,7 @@ def subset_truth(psms, sids, q):
     for g in groups:
         nt += sum(1 for x in g if x[1])
         nd += sum(1 for x in g if not x[1])
-        fdr.append(nd / nt if nt else math.inf)
+        fdr.append((nd + 1) / nt if nt else math.inf)
     qv = [0.0] * len(groups)
     m = math.inf
     for k in range(len(groups) - 1, -1, -1):
@@ -151,13 +170,17 @@ def run_counts(census, psms, q, fdr, baselines):
     ci, cs, cid, ctr, cev = (col(h, n, census) for n in ("index", "spectrum", "identified", "triage", "best_evalue"))
     cb = {b: col(h, b, census) for b in baselines}
     u_ids = {row[cs] for row in rows if row[cid] == "0"}
+    for b in baselines:
+        for row in rows:
+            if row[cid] == "0":
+                finite(row[cb[b]], census, b)
     if fdr == "global":
         truth = global_truth(psms, q)
     elif fdr == "subset":
         truth = subset_truth(psms, u_ids, q)
     else:
         raise EvalError(f"unknown FDR mode '{fdr}'")
-    u = []  # (index, is_triage, is_true, score, {baseline: value})
+    u = []  # (index, is_triage, is_true, score, {baseline: value}, in_second)
     unknown = 0
     for row in rows:
         ident = row[cid]
@@ -170,7 +193,7 @@ def run_counts(census, psms, q, fdr, baselines):
         if tr not in ("0", "1"):
             raise EvalError(f"{census}: identified 0 with triage '{tr}'")
         u.append((int(row[ci]), tr == "1", row[cs] in truth, score_key(row[cev]),
-                  {b: float(row[cb[b]]) if row[cb[b]] != "" else -math.inf for b in baselines}))
+                  {b: float(row[cb[b]]) for b in baselines}, row[cs] in psms))
     n_tri = sum(1 for x in u if x[1])
     c = {
         "n_unknown": unknown,
@@ -183,6 +206,12 @@ def run_counts(census, psms, q, fdr, baselines):
     for b in baselines:
         top = sorted(u, key=lambda x: (-x[4][b], x[0]))[:n_tri]
         c[f"t_top_{b}"] = sum(1 for x in top if x[2])
+    # join diagnostics: U spectra with a rank-1 PSM in the second search (an unreported spectrum is not a hit)
+    c["u_in_second"] = sum(1 for x in u if x[5])
+    c["triage_in_second"] = sum(1 for x in u if x[1] and x[5])
+    c["rest_in_second"] = sum(1 for x in u if not x[1] and x[5])
+    if u and c["u_in_second"] == 0:
+        raise EvalError(f"{census}: no spectrum of U has a PSM in the second search (native ids do not join)")
     c["second_rank1"] = len(psms)
     c["second_true_global"] = len(global_truth(psms, q))
     c["t_u"] = c["t_triage"] + c["t_rest"]
@@ -195,11 +224,20 @@ def ratio(a, b):
     return a / b if b else None
 
 
+def rate_ratio(pt, pr):
+    """p_triage / p_rest; inf when only the rest has no hit; None when a group is empty or neither has a hit."""
+    if pt is None or pr is None:
+        return None
+    if pr == 0:
+        return math.inf if pt > 0 else None
+    return pt / pr
+
+
 def summarize(c, baselines):
     s = {k: v for k, v in c.items() if not k.startswith("_")}
     s["p_triage"] = ratio(c["t_triage"], c["n_triage"])
     s["p_rest"] = ratio(c["t_rest"], c["n_rest"])
-    s["rr"] = ratio(s["p_triage"], s["p_rest"]) if s["p_triage"] is not None and s["p_rest"] else None
+    s["rr"] = rate_ratio(s["p_triage"], s["p_rest"])
     s["recall"] = ratio(c["t_triage"], c["t_triage"] + c["t_rest"])
     for b in baselines:
         pb = ratio(c[f"t_top_{b}"], c["n_triage"])
@@ -226,11 +264,17 @@ def percentile(xs, p):
         return None
     k = (len(xs) - 1) * p
     lo, hi = math.floor(k), math.ceil(k)
+    if xs[lo] == xs[hi] or k == lo:
+        return xs[lo]
+    if math.isinf(xs[hi]):
+        return math.inf
     return xs[lo] + (xs[hi] - xs[lo]) * (k - lo)
 
 
 def bootstrap(cs, baselines, n, seed):
-    """Percentile 95% intervals of the pooled rr and d_B over run resamples (no auroc: too slow, not an endpoint)."""
+    """Percentile 95% intervals of the pooled rr and d_B over run resamples (no auroc: too slow, not an endpoint).
+    rr = inf (no rest hit) is kept in the resamples; a resample where rr is undefined (no hit in either group) is
+    left out and counted in <key>_boot_undefined."""
     if len(cs) < 2 or n <= 0:
         return {}
     rng = random.Random(seed)
@@ -249,6 +293,7 @@ def bootstrap(cs, baselines, n, seed):
         out[f"{k}_ci_lo"] = percentile(vals[k], 0.025)
         out[f"{k}_ci_hi"] = percentile(vals[k], 0.975)
         out[f"{k}_boot_n"] = len(vals[k])
+        out[f"{k}_boot_undefined"] = n - len(vals[k])
     return out
 
 
@@ -256,6 +301,8 @@ def fmt(v):
     if v is None:
         return ""
     if isinstance(v, float):
+        if math.isinf(v):
+            return "inf" if v > 0 else "-inf"
         return repr(round(v, 10))
     return str(v)
 

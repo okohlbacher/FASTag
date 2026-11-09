@@ -113,21 +113,73 @@ class Tests(unittest.TestCase):
 
     def test_subset_fdr(self):
         # rank-1 PSMs of U by score: s2 10 T, s3 9 T, s4 8 T, s7 7 D, s5 6 T, s9 5 D (s0, a decoy at 20, and s1
-        # are outside U and must not enter).
-        # FDR per cut: 0, 0, 0, 1/3, 1/4, 2/4; q (running min from the bottom): 0, 0, 0, 1/4, 1/4, 1/2.
+        # are outside U and must not enter). FDR = (D + 1) / T per cut: 1, 1/2, 1/3, 2/3, 2/4, 3/4;
+        # q (running min from the bottom): 1/3, 1/3, 1/3, 1/2, 1/2, 3/4.
         a, _ = self.one(fdr="subset")
-        self.assertEqual((a["t_triage"], a["t_rest"]), (3, 0))  # s2 s3 s4; s3 is T here, not globally
-        self.assertIsNone(a["rr"])
-        a, _ = self.one(fdr="subset", q=0.25)  # s5 joins (q 1/4)
+        self.assertEqual((a["t_triage"], a["t_rest"]), (0, 0))  # nothing at 1% in so small a set
+        self.assertIsNone(a["rr"])                              # no hit in either group: undefined
+        a, _ = self.one(fdr="subset", q=0.34)
+        self.assertEqual((a["t_triage"], a["t_rest"]), (3, 0))  # s2 s3 s4; s3 is a hit here, not globally
+        self.assertEqual(a["rr"], math.inf)                     # no rest hit: inf, not undefined
+        a, _ = self.one(fdr="subset", q=0.5)                    # s5 joins (q 1/2)
         self.assertEqual((a["t_triage"], a["t_rest"]), (3, 1))
         self.assertAlmostEqual(a["rr"], 3.0)
-        # equal scores enter together: a decoy tied with the best target leaves nothing at 1%
+        self.assertEqual((a["u_in_second"], a["triage_in_second"], a["rest_in_second"]), (6, 3, 3))
+        # equal scores enter together: x T and y D tied at the top, z T below. (D+1)/T: 2, 1 -> q 1, 1.
         psms = {"x": (True, 0.0, 5.0), "y": (False, 0.0, 5.0), "z": (True, 0.0, 4.0)}
-        self.assertEqual(cte.subset_truth(psms, {"x", "y", "z"}, 0.01), set())
-        self.assertEqual(cte.subset_truth(psms, {"x", "y", "z"}, 0.5), {"x", "z"})
-        self.assertEqual(cte.subset_truth(psms, {"x", "z"}, 0.01), {"x", "z"})  # y outside the subset
+        self.assertEqual(cte.subset_truth(psms, {"x", "y", "z"}, 0.9), set())
+        self.assertEqual(cte.subset_truth(psms, {"x", "y", "z"}, 1.0), {"x", "z"})
+        self.assertEqual(cte.subset_truth(psms, {"x", "z"}, 0.5), {"x", "z"})  # y outside the subset: 1, 1/2
+        # one target and no decoy is not a 1% discovery under (D+1)/T
+        self.assertEqual(cte.subset_truth({"x": (True, 0.0, 5.0)}, {"x"}, 0.01), set())
         with self.assertRaises(cte.EvalError):
             cte.subset_truth({"x": (True, 0.0, None)}, {"x"}, 0.01)
+
+    def test_pooled_rr_is_ratio_of_sums(self):
+        # A (n_tri 10, t 10; n_rest 10, t 1), B (1000, 100; 1000, 100): pooled rr 110/1010 / (101/1010) = 110/101,
+        # not the mean of the run rr's (10 and 1).
+        rows_a = [(i, f"a{i}", 1, 1, "tagged", "1e-5", "0", "1") for i in range(10)] + \
+                 [(10 + i, f"a{10 + i}", 1, 1, "tagged", "0.5", "0", "0") for i in range(10)]
+        sage_a = [(i, "a.mzML", f"a{i}", 1, 1, 0.0, 1) for i in range(11)] + \
+                 [(11 + i, "a.mzML", f"a{11 + i}", 1, -1, 0.9, 1) for i in range(9)]
+        rows_b = [(i, f"b{i}", 1, 1, "tagged", "1e-5", "0", "1") for i in range(1000)] + \
+                 [(1000 + i, f"b{1000 + i}", 1, 1, "tagged", "0.5", "0", "0") for i in range(1000)]
+        sage_b = [(i, "b.mzML", f"b{i}", 1, 1 if i % 1000 < 100 else -1, 0.0 if i % 1000 < 100 else 0.9, 1)
+                  for i in range(2000)]
+        write(self.d, "pa.census.tsv", CEN_HEAD, rows_a)
+        write(self.d, "pa.sage.tsv", SAGE_HEAD, sage_a)
+        write(self.d, "pb.census.tsv", CEN_HEAD, rows_b)
+        write(self.d, "pb.sage.tsv", SAGE_HEAD, sage_b)
+        rs = self.runs([("A", "pa.census.tsv", "pa.sage.tsv", ""), ("B", "pb.census.tsv", "pb.sage.tsv", "")])
+        res = dict(cte.evaluate(rs, boot=300, seed=3))
+        self.assertAlmostEqual(res["A"]["rr"], 10.0)
+        self.assertAlmostEqual(res["B"]["rr"], 1.0)
+        self.assertAlmostEqual(res["pooled"]["rr"], 110 / 101)
+        # resamples: AA 10, BB 1, AB 110/101 -> the interval lies in [1, 10]; d_n_peaks of each resample is in
+        # [p_tri - p_top]: every row has n_peaks 1, so the top-k is the first k by index = the triage rows: d = 0.
+        p = res["pooled"]
+        self.assertGreaterEqual(p["rr_ci_lo"], 1.0 - 1e-12)
+        self.assertLessEqual(p["rr_ci_hi"], 10.0 + 1e-12)
+        self.assertEqual((p["d_n_peaks_ci_lo"], p["d_n_peaks_ci_hi"]), (0.0, 0.0))
+        self.assertEqual(p["rr_boot_n"] + p["rr_boot_undefined"], 300)
+        other = dict(cte.evaluate(rs, boot=300, seed=4))["pooled"]
+        same = dict(cte.evaluate(rs, boot=300, seed=3))["pooled"]
+        self.assertEqual((same["rr_ci_lo"], same["rr_ci_hi"]), (p["rr_ci_lo"], p["rr_ci_hi"]))
+        self.assertTrue(cte.percentile([1.0, 2.0, math.inf], 0.975) == math.inf)
+        self.assertIsNotNone(other["rr_ci_hi"])
+
+    def test_baseline_tie_independent_of_row_order(self):
+        write(self.d, "rev.census.tsv", CEN_HEAD, list(reversed(A_CEN)))
+        res = dict(cte.evaluate(self.runs([("A", "rev.census.tsv", "a.sage.tsv", "a.mzML")]), boot=0))
+        self.assertEqual(res["A"]["t_top_n_peaks"], 3)  # s4 (index 4) wins the tie with s7 (index 7)
+
+    def test_quoted_sage_fields(self):
+        q = [list(r) for r in A_SAGE]
+        for r in q:
+            r[2] = '"' + r[2] + '"'
+        write(self.d, "q.sage.tsv", SAGE_HEAD, q)
+        res = dict(cte.evaluate(self.runs([("A", "a.census.tsv", "q.sage.tsv", "a.mzML")]), boot=0))
+        self.assertEqual((res["A"]["t_triage"], res["A"]["t_rest"]), (2, 1))
 
     def test_auroc(self):
         a, _ = self.one()
@@ -178,6 +230,19 @@ class Tests(unittest.TestCase):
         write(self.d, "bad.census.tsv", CEN_HEAD, bad)
         with self.assertRaises(cte.EvalError):  # identified 0 must carry triage 0 or 1
             cte.evaluate(self.runs([("A", "bad.census.tsv", "a.sage.tsv", "")]), boot=0)
+        write(self.d, "nojoin.sage.tsv", SAGE_HEAD, [(1, "a.mzML", "zz", 1, 1, 0.0, 1)])
+        with self.assertRaises(cte.EvalError):  # no U spectrum joins the second search
+            cte.evaluate(self.runs([("A", "a.census.tsv", "nojoin.sage.tsv", "")]), boot=0)
+        nan = [list(r) for r in A_SAGE]
+        nan[3][6] = "nan"
+        write(self.d, "nan.sage.tsv", SAGE_HEAD, nan)
+        with self.assertRaises(cte.EvalError):  # non-finite discriminant
+            cte.evaluate(self.runs([("A", "a.census.tsv", "nan.sage.tsv", "")]), boot=0)
+        nob = [list(r) for r in A_CEN]
+        nob[3][2] = ""
+        write(self.d, "nob.census.tsv", CEN_HEAD, nob)
+        with self.assertRaises(cte.EvalError):  # empty baseline value in U
+            cte.evaluate(self.runs([("A", "nob.census.tsv", "a.sage.tsv", "")]), boot=0)
 
     def test_cli_output(self):
         rs = self.runs([("A", "a.census.tsv", "a.sage.tsv", "a.mzML")])
