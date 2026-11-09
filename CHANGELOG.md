@@ -8,7 +8,8 @@ gives the held-out acceptance results of the 1.12 options (Validation,
 and run on held-out public data; #2, #4 and #9 were scored once. #6 was
 scored twice: once on item06-H1-r2 (INCONCLUSIVE, PXD001473 without truth),
 then, by a user decision recorded before the run, once more on the unused
-high-resolution reserve sets item06-H2/H2r (FAIL). No configuration was
+high-resolution runs of the reserve sets item06-H2/H2r (PXD020394,
+PXD055983) (FAIL). No configuration was
 tuned on held-out data.
 
 - **#4 tags on unidentified spectra: PASS.** On 9 ProteomeTools pools the
@@ -25,8 +26,8 @@ tuned on held-out data.
   tags 567 fewer spectra at tag length 3 (15,987 against 16,554).
 - **#6 `-unknown_charge infer`: INCONCLUSIVE, then FAIL.** The first
   scoring, on item06-H1-r2, was INCONCLUSIVE because PXD001473 has no truth.
-  The second, on the high-resolution reserve sets item06-H2/H2r (PXD020394
-  Q Exactive, PXD055983 Orbitrap Astral), FAILED: charge-call accuracy 0.745
+  The second, on the unused high-resolution runs of the reserve sets
+  item06-H2/H2r (PXD020394 Q Exactive Plus, PXD055983 Orbitrap Astral), FAILED: charge-call accuracy 0.745
   against 0.90, and non-inferiority fails in 3 of 18 cells, all 2+. Gains on
   3+, losses on 2+. The default stays `assume2`.
 - **#2 `-complement_rule both`: INCONCLUSIVE** by rule 5: the truth of one

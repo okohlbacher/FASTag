@@ -1244,9 +1244,10 @@ The two containers return the same tags on centroided input. On **profile**
 MS2, as in this run, they do not, and the times are not comparable either: the
 mzML path tags profile samples as they are, while the archive was centroided
 when written, so FASTag reads peaks and finds more tags (2,032,961 against
-1,376,019). Centroid before tagging profile mzML, read the archive, or use
-`-pick_profile auto` (1.12), which centroids profile mzML MS2 on read with the
-same picker as the mzPeak path. Under `auto` a spectrum whose points are out
+1,376,019). Centroid before tagging profile mzML, or read the archive.
+`-pick_profile auto` (1.12, experimental; it failed its held-out test, see
+below) centroids profile mzML MS2 on read with the same picker as the mzPeak
+path. Under `auto` a spectrum whose points are out
 of m/z order is picked from an m/z-sorted copy (`PeakPickerHiRes` needs
 sorted input): msconvert's Thermo profile mzML puts the zero-intensity point
 after some peaks' last sample at a slightly lower m/z, while mzpeak-convert
@@ -1330,15 +1331,15 @@ data.
 |---|---|---|
 | #4 tags on unidentified spectra (default tagger) | **PASS** | On 9 ProteomeTools synthetic-peptide pools, spectra the database search does not identify still get a correct rank-1 tag 27.0 points above decoy chance (95% CI 23.7-30.7; margin 5 points; tag length 5: 23.7). That tags carry the *precision* measured on identified spectra over to unidentified ones is **not** shown (precision at E <= 0.01: 0.28 unidentified, 0.55 identified), and `-diversity` showed no benefit on chimeras |
 | #9 `-pick_profile auto` | **FAIL** | Ion trap (PXD009049): two charge-3 cells fail non-inferiority, 4+ underpowered, fewer tagged spectra at tag length 4 and 5. Orbitrap (PXD016519, PXD018024; no Astral or TOF run): all 9 cells +10.5 to +32.0 points, but 567 fewer tagged spectra on PXD016519 at tag length 3. Default stays `legacy`; `auto` is not recommended (see Performance) |
-| #6 `-unknown_charge infer` | **INCONCLUSIVE** (item06-H1-r2), then **FAIL** (item06-H2/H2r, high resolution) | Charge-call accuracy 0.751 (H1-r2, descriptive) and 0.745 (H2/H2r) against a 0.90 target; gains on 3+ spectra, losses on 2+. Default stays `assume2` |
+| #6 `-unknown_charge infer` | **INCONCLUSIVE** (item06-H1-r2), then **FAIL** (item06-H2/H2r, high resolution) | Charge-call accuracy 0.751 (H1-r2, descriptive) and 0.745 (H2/H2r) against a 0.90 target; on the high-resolution sets, gains on 3+ and losses on 2+ (on ion trap in H1-r2, losses at every charge). Default stays `assume2` |
 | #2 `-complement_rule both` | **INCONCLUSIVE** | By rule 5: the truth of one Astral run (PXD074582) has 0 PSMs at 1% FDR. On the other runs endpoints (i)-(iii) fail descriptively. Default stays `same_charge` |
 
 Every other 1.12 option (#1/#10 species call, #3 chemistry v2 and
 alkylation, #5 shortlist and search hand-off, #7 raw-DIA check, whose
 release test has not run, #11 census, #15 ion series, #17 search shifts) is experimental and not
-validated on held-out data. No held-out result covers low-resolution
-(ion-trap) MS2: none of the 1.12 options, and none of the numbers above, is
-validated there.
+validated on held-out data. No 1.12 option is validated on low-resolution
+(ion-trap) MS2: the only ion-trap held-out results (#9 PXD009049; the
+ion_trap set of #6 item06-H1-r2) are a failure and a descriptive result.
 
 ### Ranking, and the synthetic benchmark
 
@@ -1393,10 +1394,10 @@ tags fill the slots (hence the small change in total recall):
   b/y, and `cz` warns (`Collisional activation:`) when more than 1% are
   collisional.
 - **Low-resolution (ion-trap) MS2 is not validated.** The validation numbers
-  and the 1.12 held-out results are for high-resolution MS2. On ion-trap
+  and the passing 1.12 held-out result (#4) are for high-resolution MS2. On ion-trap
   data `-pick_profile auto` failed, `-unknown_charge infer` scored worse
   (in the INCONCLUSIVE item06-H1-r2 scoring), and the other 1.12 options
-  were not tested.
+  were not scored there.
 - **A tag is not an identification.** No per-tag q-value or FDR is emitted, and
   a `-fasta` match, a species call, a `delta_out` bin and a glyco flag are all
   candidates to follow up, not results to report.
