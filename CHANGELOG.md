@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.12.2 (2026-11-10)
+
+Documentation only: no code, default or output changes.
+
+- **#15 `-ion_series auto`: INCONCLUSIVE.** Scored once on held-out Orbitrap
+  ETD runs (PXD024621, PXD009208) against MSFragger 4.4.1 c/z• identifications
+  at 1% FDR: on ETD spectra correct rank-1 tags rise from 0.9% under `by` to
+  82.2% (+81.4 points, 95% interval 79.5-83.2; 5,313 peptide clusters), and
+  collisional spectra are byte-identical. The non-inferiority cells for 3+ and
+  4+ collisional spectra are empty (every HCD spectrum of PXD024621 is 2+), so
+  the default stays `by`. The README now recommends `auto` or `cz` for ETD/ECD
+  data. The ion-trap sets of the first preregistration were replaced by
+  Orbitrap sets before any run.
+
 ## 1.12.1 (2026-11-08)
 
 Documentation and packaging only: no code, default or output changes. The README now
