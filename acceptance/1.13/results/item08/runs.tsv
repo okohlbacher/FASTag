@@ -1,0 +1,173 @@
+pxd	run	stratum	label_class	CFG-08-cand	CFG-08-cand_basis	CFG-08-base	CFG-08-base_basis
+PXD005259	TW10828_L3	nontryptic:Lys-C	label-free	label-free	call	no call	few_tags
+PXD046389	QEXAC_NGL_YJ1_230918_1-46-6_SSbG_ABCbuffer_04	nontryptic:Lys-C	label-free	label-free	call	no call	few_tags
+PXD022605	20130719_EXQ2_NiKu_SA_Yeast_Ploidy3_02	nontryptic:Lys-C	SILAC	SILAC	call	SILAC	call
+PXD057192	LysCsample43	nontryptic:Lys-C	label-free	label-free	call	label-free	call
+PXD003764	20120718_VR_Bsu_TripleSILAC_WTPtkAPtpZ_GeLC_F05	nontryptic:Lys-C	SILAC	label-free	call	no call	few_tags
+PXD053103	20221024_Q2_MD_ColQ2-115_Emma	nontryptic:Lys-C	label-free	label-free	call	label-free	call
+PXD011875	j32789	nontryptic:Lys-C	SILAC	label-free	call	label-free	call
+PXD018600	CSL9686A8RW2_C2	nontryptic:Lys-C	label-free	label-free	call	no call	few_tags
+PXD011457	131122_10_QEx_LA_DCE_14D_GF_pH3	nontryptic:Lys-C	label-free	label-free	call	label-free	call
+PXD053909	neil_kimx1176_053110_CT5_ETD_LysC_tenth	nontryptic:Lys-C	label-free	label-free	call	no call	few_tags
+PXD047892	20190227_PIG_PdECM_E01	nontryptic:Lys-C	label-free	label-free	call	no call	few_tags
+PXD000601	20090625_Orbi6_ChRo_SA_CircaLiv_FASPSAX_CT33_05	nontryptic:Lys-C	SILAC	label-free	call	no call	few_tags
+PXD002455	20150803_QEp3_MaMu_SA_Zeb_RevisionCSQPlus_02	nontryptic:Lys-C	label-free	label-free	call	label-free	call
+PXD026062	MukBEF_BS3	nontryptic:Lys-C	label-free	label-free	call	label-free	call
+PXD004326	L6492_0723_Metabolomics_yeast3_28-32-9	nontryptic:Arg-C	label-free	label-free	call	no call	few_tags
+PXD003983	KU021_UHRF1_UN_Propionylation_Joe	nontryptic:Arg-C	label-free	label-free	call	no call	few_tags
+PXD013288	HF190226_D3_R4_MCF10A_T	nontryptic:Arg-C	SILAC	label-free	call	label-free	call
+PXD051470	240214_AZ-7847_TMTpro_colon_FAIMS_CV50	nontryptic:Arg-C	TMTpro/iTRAQ8	label-free	call	label-free	call
+PXD062076	20220907_MS_PP2213_TAILS_elu	nontryptic:Arg-C	label-free	label-free	call	no call	few_tags
+PXD064221	BRD4_HEK293Nucleosome_pulldown_rep1_DDA	nontryptic:Arg-C	label-free	label-free	call	label-free	call
+PXD004326	L6502_0723_Metabolomics_yeast3_24-28-3	nontryptic:Arg-C	label-free	label-free	call	no call	few_tags
+PXD003983	KU022_UHRF1_HE_Propionylation_Joe	nontryptic:Arg-C	label-free	label-free	call	no call	few_tags
+PXD013288	HF190214_D3_R2_231_T	nontryptic:Arg-C	SILAC	label-free	call	label-free	call
+PXD051470	240214_AZ-7847_TMTpro_colon_FAIMS_CV70	nontryptic:Arg-C	TMTpro/iTRAQ8	label-free	call	label-free	call
+PXD062076	20220907_MS_PP2213_TAILS_SN	nontryptic:Arg-C	label-free	label-free	call	label-free	call
+PXD064221	BRD4_HEK293Nucleosome_pulldown_rep2_DDA	nontryptic:Arg-C	label-free	label-free	call	label-free	call
+PXD004326	L6397_0723_Metabolomics_yeast1_24-28-15	nontryptic:Arg-C	label-free	label-free	call	no call	few_tags
+PXD049110	ETD-1208-S-FL-Chymo-PNG-Neu-VVA	nontryptic:Chymotrypsin	label-free	label-free	call	no call	few_tags
+PXD042540	200520_Malecki_Ce1_Cym	nontryptic:Chymotrypsin	label-free	label-free	call	no call	few_tags
+PXD018452	002_Pilot_C19	nontryptic:Chymotrypsin	label-free	label-free	call	label-free	call
+PXD061314	231108_C_AlGl_4083	nontryptic:Chymotrypsin	label-free	label-free	call	label-free	call
+PXD029295	Met_Chymotrypsin	nontryptic:Chymotrypsin	label-free	label-free	call	no call	few_tags
+PXD026082	MW36-7A-a	nontryptic:Chymotrypsin	label-free	label-free	call	label-free	call
+PXD043731	MMD6446_chymo_HC1_F3	nontryptic:Chymotrypsin	label-free	label-free	call	label-free	call
+PXD003342	Ecoli_ea_chymo_after_enrichment_1to10_2ul_TR1	nontryptic:Chymotrypsin	label-free	label-free	call	no call	few_tags
+PXD079310	CAR4878A50MA3DigestofJC-delAF2-MCHCh-10-220907-SJD	nontryptic:Chymotrypsin	SILAC	label-free	call	label-free	call
+PXD044322	20230214_jlb_OVRodriguez_v2GFP_6hchymo_160ng_60min_Wat25cmBEH_1	nontryptic:Chymotrypsin	label-free	label-free	call	label-free	call
+PXD044548	2023_03_42_Exploris_FAIMSTharp_postC18_rerun_041323	nontryptic:Chymotrypsin	label-free	label-free	call	label-free	call
+PXD058769	QEX03_MF_241108_MBS_WT_100	nontryptic:Chymotrypsin	label-free	label-free	call	label-free	call
+PXD066798	88185	nontryptic:Chymotrypsin	label-free	label-free	call	no call	few_tags
+PXD058484	LN231114_pAVIC_MLB2_chymotrypsin_Nterm_bRP5	nontryptic:Chymotrypsin	TMTpro/iTRAQ8	label-free	call	label-free	call
+PXD073419	FL_20220418_Dan_SV_20220314_ZNFX1_XL_5	nontryptic:Glu-C	label-free	label-free	call	label-free	call
+PXD038231	20220726_bkc_23-0075_Goldberg_Hasan_ATC	nontryptic:Glu-C	label-free	label-free	call	no call	few_tags
+PXD054332	20220907-A0732-9_90uL-Lys-C-4-2	nontryptic:Glu-C	label-free	label-free	call	no call	few_tags
+PXD006081	OFMYC160708_03	nontryptic:Glu-C	label-free	label-free	call	label-free	call
+PXD009079	Xlink_trp-gluC_Markley	nontryptic:Glu-C	label-free	label-free	call	no call	few_tags
+PXD047326	20220312_EXPL0_TuVu_SA_T838_diGlymapping_Daniel_GluC_3_2	nontryptic:Glu-C	label-free	label-free	call	label-free	call
+PXD011050	StS_Hvo_wt_GluC_SN_Big12_20160929	nontryptic:Glu-C	label-free	label-free	call	label-free	call
+PXD003304	PSI_PHP_039_21A_18Dec13_Tiger_13-11-13	nontryptic:Glu-C	label-free	label-free	call	no call	few_tags
+PXD037803	LH_P2010_248	nontryptic:Glu-C	label-free	label-free	call	label-free	call
+PXD078075	Inga_nD_MS20261_4uL_RPE1_MIX_GLUC	nontryptic:Glu-C	label-free	label-free	call	no call	few_tags
+PXD077477	20231027_R27T_DTT_IAA_PD10_G_HCD38_CSH_20231028094643	nontryptic:Glu-C	label-free	label-free	call	no call	few_tags
+PXD009737	GluC21	nontryptic:Glu-C	label-free	label-free	call	label-free	call
+PXD050316	06_pSt67_GluC	nontryptic:Glu-C	label-free	label-free	call	label-free	call
+PXD000131	OR4_120224_TY_ABC_BN3_V8_SCX_F33	nontryptic:Glu-C	label-free	label-free	call	no call	few_tags
+PXD002525	L4rep-1	nontryptic:Glu-C	label-free	label-free	call	no call	few_tags
+PXD001490	MPS_velos_S1	nontryptic:Asp-N	label-free	label-free	call	no call	few_tags
+PXD074543	20170303_SEL_HF_GEZ_EXT_020317_onB-AspN_beta_002	nontryptic:Asp-N	label-free	label-free	call	label-free	call
+PXD015454	Zhou_050319_AspN	nontryptic:Asp-N	label-free	label-free	call	no call	few_tags
+PXD077080	P1036	nontryptic:Asp-N	label-free	label-free	call	label-free	call
+PXD023753	PI20-24854-A171SKDC20-L3	nontryptic:Asp-N	label-free	label-free	call	label-free	call
+PXD032321	YugangZhang10432873_SILAC1_R	nontryptic:Asp-N	label-free	label-free	call	no call	few_tags
+PXD038494	qe2021101811	nontryptic:Asp-N	label-free	label-free	call	label-free	call
+PXD046237	EH3403	nontryptic:Asp-N	label-free	label-free	call	no call	few_tags
+PXD008508	Meganema_ASP_IS1	nontryptic:Asp-N	label-free	label-free	call	label-free	call
+PXD065397	20250530_014_S950066_RPS5_KD_3	nontryptic:Asp-N	label-free	label-free	call	label-free	call
+PXD019209	ns_5206_AG_053118_PDPK1_AspN	nontryptic:Asp-N	label-free	label-free	call	label-free	call
+PXD025959	PR516_LW_XL-phos_20190326_Ln6	nontryptic:Asp-N	label-free	label-free	call	no call	few_tags
+PXD042685	KS_CG_PSGL1_AspN_glyAse_543_1856	nontryptic:Asp-N	label-free	label-free	call	no call	few_tags
+PXD043144	jm_QEHFx_04052023_RKing_Ig_JK191_PAB_A1_AspN-2	nontryptic:Asp-N	label-free	label-free	call	no call	few_tags
+PXD073612	20250207_AJ823	nontryptic:unspecific	label-free	label-free	call	label-free	call
+PXD012437	F1_Agilent6_20161023_TST_C15_Probe1und2ausC13_MAE_HCD_OT_Rep9_7B_18s	nontryptic:unspecific	label-free	label-free	call	label-free	call
+PXD031451	F000195_1p_uPAC8_CMB-514_FRIMP_ImPep_TMT-Fr-8	nontryptic:unspecific	TMT	TMT	call	TMT	call
+PXD068731	Sara_Feola_20230213_Human-SeriesA_A06_30min_CEO-truck-MHC_Slot2-33_2023-04-06_1019	nontryptic:unspecific	label-free	label-free	call	no call	few_tags
+PXD072437	2zup_RCC10F8	nontryptic:unspecific	label-free	label-free	call	no call	few_tags
+PXD038273	Mesothelioma_Ligandome_2022may_Meso1_001_22-05-30_5920	nontryptic:unspecific	label-free	label-free	call	label-free	call
+PXD024369	a17659	nontryptic:unspecific	TMT	label-free	call	no call	few_tags
+PXD069588	F120190314_PF_4T1_Dd_IFN_positive_pool2	nontryptic:unspecific	label-free	label-free	call	label-free	call
+PXD015408	Unanue_7715_180601_08	nontryptic:unspecific	label-free	label-free	call	no call	few_tags
+PXD073207	FDA01_ExpJ_A1101_Cas12a_HLA1_10M_S4-A5_1_7695	nontryptic:unspecific	label-free	label-free	call	label-free	call
+PXD018539	15H013_161118_2	nontryptic:unspecific	label-free	label-free	call	label-free	call
+PXD006455	P120161215_jmobbs_C501_1_A10	nontryptic:unspecific	label-free	label-free	call	label-free	call
+PXD009602	UPN_27_HLA-class_I_NMT_benign_Rep4	nontryptic:unspecific	label-free	label-free	call	no call	few_tags
+PXD063722	cisPT_coi-P-N2-200-0C_2357	nontryptic:unspecific	label-free	label-free	call	label-free	call
+PXD015646	FL647_IPP80_PB_L243_6_odd	nontryptic:unspecific	label-free	label-free	call	label-free	call
+PXD027949	HF170209_DM_KRase_hmSILAC_SGC_NB4_pepIP_frazionato_asym4	nontryptic:LysargiNase	SILAC	label-free	call	no call	few_tags
+PXD017023	TrypN	nontryptic:LysargiNase	label-free	label-free	call	no call	few_tags
+PXD064974	X8651LD	nontryptic:LysargiNase	label-free	label-free	call	label-free	call
+PXD027949	HF170220_DM_SGC_hmSILAC_NB4_pepIP_fractionated_KRase_Mono_12	nontryptic:LysargiNase	SILAC	label-free	call	no call	few_tags
+PXD064974	X8652LD	nontryptic:LysargiNase	label-free	label-free	call	no call	few_tags
+PXD027949	HF170220_DM_SGC_hmSILAC_NB4_pepIP_fractionated_KRase_Mono_07	nontryptic:LysargiNase	SILAC	label-free	call	no call	few_tags
+PXD070562	210508_Emily_23_527	ddapasef	label-free	label-free	call	label-free	call
+PXD055823	210514_CatrionaIJM_E4_Slot1-5_1_197	ddapasef	label-free	label-free	call	no call	few_tags
+PXD072143	600_ng_561_250512_Slot1-18_1_2295	ddapasef	label-free	no call	rc_11	no call	rc_11
+PXD046730	201216_DQ_306_Es_5_Slot1-36_1_5304	ddapasef	label-free	label-free	call	label-free	call
+PXD036482	Probe_2_400ng_Slot2-38_1_5275	ddapasef	label-free	label-free	call	label-free	call
+PXD057312	hMICAL1-MO_coiPAnP-N2-200_3Murea-1Mthiourea-200mMtcep_MSMS_14733	ddapasef	label-free	label-free	call	label-free	call
+PXD030436	171215_P_134_WJ_113	alkylation_noncam	SILAC	label-free	call	no call	few_tags
+PXD029029	180518_AM_Mouse_HHD_HLA-DP4_Tumor_Tue39L243_Rep1_msms9	alkylation_noncam	label-free	label-free	call	no call	few_tags
+PXD014741	q100332c_ZBTB24	alkylation_noncam	SILAC	SILAC	call	SILAC	call
+PXD023459	Q25628_MS19-037_C11_T3	alkylation_noncam	label-free	label-free	call	label-free	call
+PXD019258	2Alu_classI_assayIII_3	alkylation_noncam	label-free	label-free	call	no call	few_tags
+PXD030405	161129_P_134_WJ_059	alkylation_noncam	SILAC	label-free	call	no call	few_tags
+PXD004208	160122_P4_O3_MaZ_BPA3_24h_10	alkylation_noncam	label-free	label-free	call	no call	few_tags
+PXD076291	T1	alkylation_noncam	label-free	label-free	call	label-free	call
+PXD007287	160727_JLee_Chaudhuri_5489_JL_DTSSP_sparse	alkylation_noncam	label-free	label-free	call	no call	few_tags
+PXD046454	Rep1_probe_on_bead	alkylation_noncam	label-free	label-free	call	label-free	call
+PXD020559	H083489_uPAC_10_PRC-4966_VangheluweLab_CHO_P5ATPase_WT-3	alkylation_noncam	label-free	label-free	call	label-free	call
+PXD037987	20220803__HyperDAO_TRO_04	alkylation_noncam	label-free	label-free	call	no call	few_tags
+PXD014530	E_20170905_HS780_2	alkylation_noncam	label-free	label-free	call	no call	few_tags
+PXD008992	5970	alkylation_noncam	label-free	label-free	call	label-free	call
+PXD001972	MALE_PANCREAS_11	alkylation_noncam	label-free	label-free	call	no call	few_tags
+PXD059755	220930_HFX_FT10_RKNB	tryptic	label-free	TMT	call	TMT	call
+PXD060785	OG_MSMS	tryptic	label-free	label-free	call	no call	few_tags
+PXD063410	Zammit_etal_2025_UVplus_SB_F3	tryptic	label-free	label-free	call	no call	few_tags
+PXD001077	Velos005137	tryptic	label-free	label-free	call	label-free	call
+PXD064394	R21867-INV-PG	tryptic	label-free	label-free	call	label-free	call
+PXD029210	Z9388TQ_7	tryptic	label-free	TMT	call	TMT	call
+PXD025387	20210319_E0_FAIMS_RSLC9_Waters_PepMapPrecol_5ulloop_scLF_direct_funnel4_04	tryptic	label-free	label-free	call	label-free	call
+PXD069635	Seq87407_480Ex2	tryptic	label-free	label-free	call	label-free	call
+PXD074092	original_raw_data	tryptic	label-free	label-free	call	label-free	call
+PXD010884	Rappsilber_x0975_1	tryptic	label-free	label-free	call	label-free	call
+PXD018346	B004262_Ap_CMB-325_FRIMP_APMS_GST-ISG15_2	tryptic	label-free	label-free	call	label-free	call
+PXD031266	MSB38429APEX2Band_05	tryptic	SILAC	SILAC	call	SILAC	call
+PXD018129	20180206_PJ_Chro_FRL2	tryptic	label-free	label-free	call	label-free	call
+PXD009815	QEKAC160601_38	tryptic	label-free	label-free	call	label-free	call
+PXD058199	230905_LDC_HFX_HGoold_Yeast_strain15_02	tryptic	label-free	no call	rc_11	no call	rc_11
+PXD057987	Recombinant_GCN5_noH2O2	tryptic	label-free	label-free	call	no call	few_tags
+PXD005944	P3762	tryptic	label-free	label-free	call	label-free	call
+PXD050093	MILA001_ECOL003_Bulk_TMT002_FL2_TMT001_f2_002045	tryptic	TMT	label-free	call	no call	few_tags
+PXD060148	Eclipse_230504_FAIMS_27	tryptic	label-free	label-free	call	no call	few_tags
+PXD039289	aleitner_D1604_146	tryptic	label-free	label-free	call	no call	few_tags
+PXD027906	20200923-B4470	tryptic	label-free	no call	rc_11	no call	rc_11
+PXD031167	male_single_1	tryptic	label-free	label-free	call	label-free	call
+PXD002789	O22	tryptic	label-free	label-free	call	no call	few_tags
+PXD041962	2020-07-02_PK44_HEW12_EI	tryptic	label-free	label-free	call	label-free	call
+PXD017642	Fusion_MP009_293WT	tryptic	label-free	label-free	call	no call	few_tags
+PXD023729	e034106	tryptic	label-free	label-free	call	no call	few_tags
+PXD068665	DS2_2p5ug	tryptic	label-free	label-free	call	label-free	call
+PXD029453	g07860_tc-s738_F2A_2	tryptic	label-free	label-free	call	no call	few_tags
+PXD069496	FL1259_MSQ1999_20200901_HYang_MRC002_10_Set2_FBX-MLN_2	tryptic	label-free	label-free	call	no call	few_tags
+PXD001769	20140419_QEp3_PhGe_SA_22	tryptic	label-free	label-free	call	label-free	call
+PXD031223	45065_1_MSPCL_matrix_mouse_412_F_21mo_1ug	tryptic	label-free	label-free	call	no call	few_tags
+PXD065511	180828_Pekka_Ctrl_CS_3_nr2	tryptic	label-free	label-free	call	label-free	call
+PXD015750	09102017_Onstott_RL_174_1BEDTA_Lumos1	tryptic	label-free	label-free	call	no call	few_tags
+PXD017717	Sample2untreatedMSdetection1of2	tryptic	label-free	label-free	call	no call	few_tags
+PXD004025	ALS110615_spiked_after_digestion_5_b	tryptic	label-free	label-free	call	no call	few_tags
+PXD058279	FS1_EB_22325_444_06102024	tryptic	label-free	label-free	call	no call	few_tags
+PXD021185	2017_October_18_UWPRQE_mesocosm_96	tryptic	label-free	label-free	call	label-free	call
+PXD032077	oecf1-MP0416-12	tryptic	label-free	label-free	call	label-free	call
+PXD030429	210412_HN_KaMe_F_04	tryptic	label-free	label-free	call	label-free	call
+PXD013216	20170130_QexHF2_RSLC2_Elsner_Leonard_MFPL_insol_PDK_ArgC_50p	tryptic	label-free	label-free	call	label-free	call
+PXD044293	20220531-2110_EXP4_Treated	tryptic	label-free	label-free	call	label-free	call
+PXD024608	201124_3OH1_03	tryptic	label-free	label-free	call	label-free	call
+PXD056235	20220422_T3_040	tryptic	label-free	label-free	call	label-free	call
+PXD027297	Leyuan_20201015_Exploris_MGMP_fractionation_MTFM_4_09	tryptic	SILAC	label-free	call	label-free	call
+PXD052327	Aktar_etal_2024_GFP_Mad1_arr_Rep1	tryptic	label-free	label-free	call	label-free	call
+PXD031415	qx013042	tryptic	label-free	label-free	call	label-free	call
+PXD059428	145_SGBS_MINCH_3_4_F1	tryptic	label-free	label-free	call	label-free	call
+PXD038241	G4-MonoPhos-f41-42	tryptic	TMT	TMT	call	TMT	call
+PXD082652	20240501_pH5.9_1	tryptic	label-free	label-free	call	label-free	call
+PXD046363	QEX2_941235	tryptic	label-free	label-free	call	no call	few_tags
+PXD003850	20131126_EXQ3_FrSa_SA_Min6_29_1	tryptic	label-free	label-free	call	label-free	call
+PXD002759	AC_Mg_week3_lab_eff_100214	tryptic	label-free	SILAC	call	SILAC	call
+PXD044959	160221_Fraction_1	tryptic	label-free	label-free	call	no call	few_tags
+PXD036266	QEp22-1562_Prophet_4Tor_IP-HSPA1A_MLF2-band	tryptic	label-free	label-free	call	label-free	call
+PXD019017	20200228_TRY_AMPK_ATPgS_REP3	tryptic	label-free	label-free	call	label-free	call
+PXD002099	110618_yeast_ups_25fmol_r1	tryptic	label-free	label-free	call	no call	few_tags
+PXD038770	221026_Ynamide_2hr_2	tryptic	label-free	label-free	call	label-free	call
+PXD012969	Hempseed_IEX_46a_07212017	nontryptic:Asp-N	label-free	label-free	call	no call	few_tags
+PXD002772	G_120323_01_VNSC	nontryptic:Chymotrypsin	label-free	label-free	call	no call	few_tags
+PXD018941	LHCII_canonical_winter_band2	tryptic	label-free	label-free	call	no call	few_tags

@@ -1,0 +1,172 @@
+{
+ "n": 172,
+ "majority_class": "label-free",
+ "majority_share": 0.8721,
+ "margin": 0.05,
+ "configs": {
+  "CFG-08-cand": {
+   "correct": 149,
+   "accuracy": 0.8663,
+   "accuracy_ci": [
+    0.8073,
+    0.9092
+   ],
+   "called": 169,
+   "called_correct": 149,
+   "called_accuracy": 0.8817,
+   "balanced_accuracy": 0.415,
+   "per_class": {
+    "SILAC": {
+     "n": 15,
+     "correct": 3,
+     "recall": 0.2,
+     "ci": [
+      0.0705,
+      0.4519
+     ]
+    },
+    "TMT": {
+     "n": 4,
+     "correct": 2,
+     "recall": 0.5,
+     "ci": [
+      0.15,
+      0.85
+     ]
+    },
+    "TMTpro/iTRAQ8": {
+     "n": 3,
+     "correct": 0,
+     "recall": 0.0,
+     "ci": [
+      0.0,
+      0.5615
+     ]
+    },
+    "label-free": {
+     "n": 150,
+     "correct": 144,
+     "recall": 0.96,
+     "ci": [
+      0.9155,
+      0.9815
+     ]
+    }
+   },
+   "confusion": {
+    "label-free": {
+     "label-free": 144,
+     "no call": 3,
+     "TMT": 2,
+     "SILAC": 1
+    },
+    "SILAC": {
+     "SILAC": 3,
+     "label-free": 12
+    },
+    "TMTpro/iTRAQ8": {
+     "label-free": 3
+    },
+    "TMT": {
+     "TMT": 2,
+     "label-free": 2
+    }
+   },
+   "reasons": {
+    "call": 169,
+    "rc_11": 3
+   }
+  },
+  "CFG-08-base": {
+   "correct": 83,
+   "accuracy": 0.4826,
+   "accuracy_ci": [
+    0.4091,
+    0.5568
+   ],
+   "called": 94,
+   "called_correct": 83,
+   "called_accuracy": 0.883,
+   "balanced_accuracy": 0.305,
+   "per_class": {
+    "SILAC": {
+     "n": 15,
+     "correct": 3,
+     "recall": 0.2,
+     "ci": [
+      0.0705,
+      0.4519
+     ]
+    },
+    "TMT": {
+     "n": 4,
+     "correct": 2,
+     "recall": 0.5,
+     "ci": [
+      0.15,
+      0.85
+     ]
+    },
+    "TMTpro/iTRAQ8": {
+     "n": 3,
+     "correct": 0,
+     "recall": 0.0,
+     "ci": [
+      0.0,
+      0.5615
+     ]
+    },
+    "label-free": {
+     "n": 150,
+     "correct": 78,
+     "recall": 0.52,
+     "ci": [
+      0.4406,
+      0.5984
+     ]
+    }
+   },
+   "confusion": {
+    "label-free": {
+     "no call": 69,
+     "label-free": 78,
+     "TMT": 2,
+     "SILAC": 1
+    },
+    "SILAC": {
+     "SILAC": 3,
+     "no call": 7,
+     "label-free": 5
+    },
+    "TMTpro/iTRAQ8": {
+     "label-free": 3
+    },
+    "TMT": {
+     "TMT": 2,
+     "no call": 2
+    }
+   },
+   "reasons": {
+    "call": 94,
+    "few_tags": 75,
+    "rc_11": 3
+   }
+  }
+ },
+ "E1": {
+  "rule": "accuracy(CFG-08-cand) >= majority_share + 0.05",
+  "value": 0.8663,
+  "threshold": 0.9221,
+  "result": "FAIL"
+ },
+ "E2": {
+  "rule": "correct(CFG-08-cand) >= correct(CFG-08-base)",
+  "cand": 149,
+  "base": 83,
+  "cand_right_base_wrong": 66,
+  "base_right_cand_wrong": 0,
+  "sign_test_p_descriptive": 2.710505431213761e-20,
+  "result": "PASS"
+ },
+ "overall": "FAIL"
+}

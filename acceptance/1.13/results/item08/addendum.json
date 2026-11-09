@@ -1,0 +1,22 @@
+{
+ "status": "post hoc, descriptive, no pass/fail",
+ "D1_few_tag_subset": {
+  "n": 75,
+  "truth": {
+   "label-free": 66,
+   "SILAC": 7,
+   "TMT": 2
+  },
+  "cand": {
+   "correct": 66,
+   "missed_label": 9
+  },
+  "false_label_on_label_free_truth": 0,
+  "label_free_truth_n": 66,
+  "spurious_runs": []
+ },
+ "D2_not_few_tags": {
+  "n": 97,
+  "cand_differs_from_base": 0
+ }
+}
