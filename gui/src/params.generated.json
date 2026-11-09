@@ -551,11 +551,10 @@
       "name": "label_discovery_max_flank",
       "type": "double",
       "default": "700.0",
-      "description": "Largest flank mass -label_discovery_out histograms, and the largest composition mass of its null image set (above 0, at most 2000)",
+      "description": "Largest flank mass -label_discovery_out histograms, and the largest composition mass of its null image set (above 0)",
       "required": false,
       "toppAdvanced": true,
-      "min": 0,
-      "max": 2000
+      "min": 0
     },
     {
       "name": "label_discovery_min_share",
