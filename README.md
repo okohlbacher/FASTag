@@ -1194,9 +1194,10 @@ The two containers return the same tags on centroided input. On **profile**
 MS2, as in this run, they do not, and the times are not comparable either: the
 mzML path tags profile samples as they are, while the archive was centroided
 when written, so FASTag reads peaks and finds more tags (2,032,961 against
-1,376,019). Centroid before tagging profile mzML, read the archive, or use
-`-pick_profile auto` (1.12), which centroids profile mzML MS2 on read with the
-same picker as the mzPeak path. Under `auto` a spectrum whose points are out
+1,376,019). Centroid before tagging profile mzML, or read the archive.
+`-pick_profile auto` (1.12, experimental; it failed its held-out test, see
+below) centroids profile mzML MS2 on read with the same picker as the mzPeak
+path. Under `auto` a spectrum whose points are out
 of m/z order is picked from an m/z-sorted copy (`PeakPickerHiRes` needs
 sorted input): msconvert's Thermo profile mzML puts the zero-intensity point
 after some peaks' last sample at a slightly lower m/z, while mzpeak-convert
