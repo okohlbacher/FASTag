@@ -168,6 +168,33 @@ class Tests(unittest.TestCase):
         self.assertTrue(cte.percentile([1.0, 2.0, math.inf], 0.975) == math.inf)
         self.assertIsNotNone(other["rr_ci_hi"])
 
+    def test_bootstrap_keeps_inf_and_baseline_interval(self):
+        # Six runs, each: 10 triage rows (5 hits, n_peaks 1), 10 rest rows (n_peaks 2, no hit) except run 6 (one rest
+        # hit). Run rr = inf (runs 1-5) or 5 (run 6); a resample without run 6 has rr inf and must be kept.
+        # Baseline n_peaks picks the 10 rest rows: d = 0.5 - 0 (runs 1-5) or 0.5 - 0.1 (run 6), so the d interval
+        # lies in [0.4, 0.5] and is not [0, 0].
+        runs = []
+        for r in range(6):
+            cen = [(i, f"r{r}t{i}", 1, 1, "tagged", "1e-5", "0", "1") for i in range(10)] + \
+                  [(10 + i, f"r{r}r{i}", 2, 1, "tagged", "0.5", "0", "0") for i in range(10)]
+            hits = [f"r{r}t{i}" for i in range(5)] + ([f"r{r}r0"] if r == 5 else [])
+            sage = [(k, "x.mzML", sid, 1, 1, 0.0, 1) for k, sid in enumerate(hits)] + \
+                   [(100 + i, "x.mzML", f"r{r}t{i}", 1, -1, 0.9, 1) for i in range(5, 10)]
+            write(self.d, f"bs{r}.census.tsv", CEN_HEAD, cen)
+            write(self.d, f"bs{r}.sage.tsv", SAGE_HEAD, sage)
+            runs.append((f"R{r}", f"bs{r}.census.tsv", f"bs{r}.sage.tsv", ""))
+        p = dict(cte.evaluate(self.runs(runs), boot=2000, seed=11))["pooled"]
+        self.assertAlmostEqual(p["rr"], 30.0)
+        self.assertEqual(p["rr_ci_hi"], math.inf)       # resamples without run 6
+        self.assertEqual(p["rr_boot_undefined"], 0)
+        self.assertEqual(p["rr_boot_n"], 2000)
+        # a resample holding run 6 k times has rr 30 / k: the lower bound is one of 30, 15, 10, 7.5, 6, 5
+        self.assertTrue(any(abs(p["rr_ci_lo"] - 30 / k) < 1e-9 for k in range(1, 7)), p["rr_ci_lo"])
+        self.assertGreater(p["d_n_peaks_ci_lo"], 0.39)                  # 0.5 - k / 60
+        self.assertLess(p["d_n_peaks_ci_lo"], p["d_n_peaks_ci_hi"])
+        self.assertLessEqual(p["d_n_peaks_ci_hi"], 0.5 + 1e-12)
+        self.assertAlmostEqual(p["d_n_peaks"], 0.5 - 1 / 60)
+
     def test_baseline_tie_independent_of_row_order(self):
         write(self.d, "rev.census.tsv", CEN_HEAD, list(reversed(A_CEN)))
         res = dict(cte.evaluate(self.runs([("A", "rev.census.tsv", "a.sage.tsv", "a.mzML")]), boot=0))
