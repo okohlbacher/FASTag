@@ -1,0 +1,8 @@
+# DEV test manifest (not held-out): PXD060724 (EThcD, FTMS MS2) DEV runs for the #15B scorer reader test on MSFragger 4.4.1 output (E15B-04)
+item	split	stratum	pxd	fastag_input	activation
+#15B	H1	devT	PXD060724	dev/PXD060724/Trypsin_EThCD_WZ20spd_161224_1.mzML	EThcD
+#15B	H1	devT	PXD060724	dev/PXD060724/Trypsin_EThCD_WZ20spd_161224_2.mzML	EThcD
+#15B	H1	devT	PXD060724	dev/PXD060724/Trypsin_EThCD_WZ20spd_161224_3.mzML	EThcD
+#15B	H1	devC	PXD060724	dev/PXD060724/Chymotrypsin_EThCD_WZ20spd_161224_1.mzML	EThcD
+#15B	H1	devC	PXD060724	dev/PXD060724/Chymotrypsin_EThCD_WZ20spd_161224_2.mzML	EThcD
+#15B	H1	devC	PXD060724	dev/PXD060724/Chymotrypsin_EThCD_WZ20spd_161224_3.mzML	EThcD

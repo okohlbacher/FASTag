@@ -1,0 +1,26 @@
+Chymotrypsin_EThCD_WZ20spd_161224_1.raw	141111015	size_ok,second_download_same	c72367ce7043f3dc717fa413566b62a062060de3d43afbb7d6f90aee6ead4107	0	90068107	c76b2795556dede0949366401c1ddc0f0cb0cf6e3317ebb26a9cebcd78fc6df7
+Chymotrypsin_EThCD_WZ20spd_161224_2.raw	160634652	size_ok,second_download_same	c79d31f5971de69be6a53aa167f89c685466b7210d05163a519fe3ccea4e9fba	0	93467511	2ab4ab239a8e203a97739f1c8a8457664fae4d4f3bf794ec9affc32b3555b5ab
+Chymotrypsin_EThCD_WZ20spd_161224_3.raw	173670449	size_ok,second_download_same	7d8c9effb776c163cd6f84ce6f0bad481ebe9a81cb5e79682ccc0c87469618f6	0	84266052	0f114f7c99bb9afff10c1e8e9a540fa2c877e758ba595220aa2a303d8c574b4e
+Trypsin_EThCD_WZ20spd_161224_1.raw	146951935	size_ok,SECOND_DOWNLOAD_DIFFERS	dfd5bde89934bcfbe0279883f6e2fadfa6dd6c7ea47a43f62eca23bb8cbee544	0	90282825	6b2df258816c639085dd516d6c269b24a9b0c7450292dc120fb2471a7e252114
+Trypsin_EThCD_WZ20spd_161224_2.raw	168548410	size_ok,second_download_same	7ac7d87001321c9c8b4670868239ffd17f1cdb6e9a005c10c879b7e0c372acf5	0	90456030	ffc869491c02f2d56052720e0fae34caca1f4c29b7deda5a4d37eebd6c70933a
+Trypsin_EThCD_WZ20spd_161224_3.raw	202629005	size_ok,second_download_same	60f9b01b33b17b2dc12a5422f79dfd35855b65a1fec57984214667479dac024a	0	91829908	e862654d9821e8dbcb40ed29dc5dc99c536f7515cd3ade747e71127b931fa7b1
+      6 FASTAG_RC=0
+      1 Ion series (-ion_series cz): 10106 MS2 spectra tagged as c/z-dot ions, 0 as b/y ions (activation: 0 collisional, 0 electron, 10106 hybrid, 0 unknown).
+      1 Ion series (-ion_series cz): 10322 MS2 spectra tagged as c/z-dot ions, 0 as b/y ions (activation: 0 collisional, 0 electron, 10322 hybrid, 0 unknown).
+      1 Ion series (-ion_series cz): 10611 MS2 spectra tagged as c/z-dot ions, 0 as b/y ions (activation: 0 collisional, 0 electron, 10611 hybrid, 0 unknown).
+      1 Ion series (-ion_series cz): 10618 MS2 spectra tagged as c/z-dot ions, 0 as b/y ions (activation: 0 collisional, 0 electron, 10618 hybrid, 0 unknown).
+      1 Ion series (-ion_series cz): 7731 MS2 spectra tagged as c/z-dot ions, 0 as b/y ions (activation: 0 collisional, 0 electron, 7731 hybrid, 0 unknown).
+      1 Ion series (-ion_series cz): 7906 MS2 spectra tagged as c/z-dot ions, 0 as b/y ions (activation: 0 collisional, 0 electron, 7906 hybrid, 0 unknown).
+     12 FRAGGER_RC=0
+988389e69be3d8beb55f2414475c1c4e0f8bee6c1fece9a99d3db7c44ea390f8  ../truth/dev15B-PXD060724/dev/PXD060724/Chymotrypsin_EThCD_WZ20spd_161224_1/msfragger_cz.tsv
+12eae6792b44275e099159e12ea73533856ab889ad89f0d30542bfb718913db1  ../truth/dev15B-PXD060724/dev/PXD060724/Chymotrypsin_EThCD_WZ20spd_161224_1/msfragger_hybrid.tsv
+ac6705de4b2316425bfeaec4cce8f5ca9e9718b705abbf4180dac09ad6851290  ../truth/dev15B-PXD060724/dev/PXD060724/Chymotrypsin_EThCD_WZ20spd_161224_2/msfragger_cz.tsv
+fe9803518560909882044231f3012ffb09ecc5bd849f3a8f38e4c2a9d24b4717  ../truth/dev15B-PXD060724/dev/PXD060724/Chymotrypsin_EThCD_WZ20spd_161224_2/msfragger_hybrid.tsv
+5e5a3143976c0e6208d570c9e81c25eedceda2114c890e55d4e6fdd406546893  ../truth/dev15B-PXD060724/dev/PXD060724/Chymotrypsin_EThCD_WZ20spd_161224_3/msfragger_cz.tsv
+91fb16f8a31d700105595d6686d20b282a3ae7d2f4b579c524491713bf9a748e  ../truth/dev15B-PXD060724/dev/PXD060724/Chymotrypsin_EThCD_WZ20spd_161224_3/msfragger_hybrid.tsv
+f0898c05775265b86fd5eb4198b3e5ca36dc44dfb5b9031c8031ebc84d8d8d60  ../truth/dev15B-PXD060724/dev/PXD060724/Trypsin_EThCD_WZ20spd_161224_1/msfragger_cz.tsv
+40b3617284137777e24ac0c709cb6e24dff662a8eeea97b546fd3a6bd0e4c4d1  ../truth/dev15B-PXD060724/dev/PXD060724/Trypsin_EThCD_WZ20spd_161224_1/msfragger_hybrid.tsv
+dae2fd5cec8d296a3a00c6fddd01fcb7dc5567d7ec465c408d0d57d6b6296393  ../truth/dev15B-PXD060724/dev/PXD060724/Trypsin_EThCD_WZ20spd_161224_2/msfragger_cz.tsv
+adcdb8df3db9efb27d7965e66648fbdb73c9cbd51b2d63a1235ffd8b076a16e7  ../truth/dev15B-PXD060724/dev/PXD060724/Trypsin_EThCD_WZ20spd_161224_2/msfragger_hybrid.tsv
+8e51fa4300a6b532b1af01c8c3ae29d1132d309d8403240e9ed8b5ae49d4b44d  ../truth/dev15B-PXD060724/dev/PXD060724/Trypsin_EThCD_WZ20spd_161224_3/msfragger_cz.tsv
+8fbcd4de926ce87dbacf2ddd2545e6a2d5de9279098b72eb822c7e66fcf55af5  ../truth/dev15B-PXD060724/dev/PXD060724/Trypsin_EThCD_WZ20spd_161224_3/msfragger_hybrid.tsv

@@ -1,0 +1,4 @@
+cell	clusters	spectra	base_pct	cand_pct	diff	se	p2_5	p97_5	floor_pct	informative	powered	p_one_sided	holm_alpha	holm_lb	ni
+dev15B-PXD060724:H1:hybrid:z2	120	237	54.0084	54.0084	0.0000	0.0000	0.0000	0.0000	nan	True	False	nan	nan	nan	inconclusive
+dev15B-PXD060724:H1:hybrid:z3	94	234	46.5812	46.5812	0.0000	0.0000	0.0000	0.0000	nan	True	False	nan	nan	nan	inconclusive
+dev15B-PXD060724:H1:hybrid:z4+	38	110	51.8182	51.8182	0.0000	0.0000	0.0000	0.0000	nan	True	False	nan	nan	nan	inconclusive

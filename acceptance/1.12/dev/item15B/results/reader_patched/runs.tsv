@@ -1,0 +1,7 @@
+CFG-15B-base:rc	CFG-15B-cand:rc	pxd	run	set	spectra_collisional	spectra_electron	spectra_hybrid	spectra_unknown	status	truth_by	truth_cz	truth_hybrid	truth_psms
+0	0	PXD060724	dev/PXD060724/Trypsin_EThCD_WZ20spd_161224_1	devT	0	0	10322	0	ok	False	True	True	234
+0	0	PXD060724	dev/PXD060724/Trypsin_EThCD_WZ20spd_161224_2	devT	0	0	10106	0	ok	False	True	True	36
+0	0	PXD060724	dev/PXD060724/Trypsin_EThCD_WZ20spd_161224_3	devT	0	0	7731	0	ok	False	True	True	136
+0	0	PXD060724	dev/PXD060724/Chymotrypsin_EThCD_WZ20spd_161224_1	devC	0	0	10618	0	ok	False	True	True	57
+0	0	PXD060724	dev/PXD060724/Chymotrypsin_EThCD_WZ20spd_161224_2	devC	0	0	10611	0	ok	False	True	True	56
+0	0	PXD060724	dev/PXD060724/Chymotrypsin_EThCD_WZ20spd_161224_3	devC	0	0	7906	0	ok	False	True	True	62

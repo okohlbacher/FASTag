@@ -1,0 +1,36 @@
+{
+ "manifest": "dev15B-PXD060724",
+ "split": "H1",
+ "E1": "FAIL",
+ "E1_cell": {
+  "cell": "dev15B-PXD060724:H1:electron",
+  "clusters": 0,
+  "spectra": 0,
+  "base_pct": NaN,
+  "cand_pct": NaN,
+  "diff": NaN,
+  "se": NaN,
+  "p2_5": NaN,
+  "p97_5": NaN
+ },
+ "E2": "INCONCLUSIVE",
+ "E3": "PASS",
+ "verdict": "FAIL",
+ "runs_not_ok": [],
+ "provenance": {
+  "python": "3.11.18",
+  "numpy": "2.4.6",
+  "pandas": "3.1.0",
+  "acclib.py": "fe387a3455a52678f78c20c3156b63c251e08daa5b92da2f3e205d1d9ab2b1c1",
+  "score_item01.py": "25f48ea2b6b6730c49cd020350a9952d7026f27e40b8264d3a41b0e5fc22cb56",
+  "score_item02.py": "5704b8634c5a98f8993a4dccc4c331e6d84405dbf0b5dbaa42b523d68677e395",
+  "score_item03.py": "285df1d0dd70bf9d0411c35b45c354b5ec2ba16391008199ec6186d03e845848",
+  "score_item06.py": "7020e187e07588e2de3b77c6629cb8b1148392f23c2f37e24a1be3ef3bc04713",
+  "score_item07.py": "b135aa9b5b9db5af7507ab81b5abd3f770c30590af7542789e3ad7ac6b0b750e",
+  "score_item09.py": "b0ef694172e5bb64e0487233819d663389cac0c4c3c540549bf2f8eef88cd3ca",
+  "score_item15B.py": "0e8534dba9f513008d53f69d988157fa3fecdda8a8f0de59324427744777cc62",
+  "score_item15B_devpatch.py": "ae824dbe143c6f6e334c7c458427f3fa55036dd8ad9ad42730cc1ccfb0daf8bb",
+  "bench/fastag-bench/src/fastag_bench/score.py": "e2b8788a78f1176169f617c01b2e17f21578b8909f7c79b33d23ae1b71075f79",
+  "bench/fastag-bench/src/fastag_bench/parsers.py": "01e27548bcae489d3f205960730c8bc36624e16935ea5df0bec5a6a04ea51f49"
+ }
+}

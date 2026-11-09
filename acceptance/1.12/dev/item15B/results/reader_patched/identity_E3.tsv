@@ -1,0 +1,7 @@
+run	collisional_rows_base	collisional_rows_cand	same
+dev/PXD060724/Trypsin_EThCD_WZ20spd_161224_1	0	0	True
+dev/PXD060724/Trypsin_EThCD_WZ20spd_161224_2	0	0	True
+dev/PXD060724/Trypsin_EThCD_WZ20spd_161224_3	0	0	True
+dev/PXD060724/Chymotrypsin_EThCD_WZ20spd_161224_1	0	0	True
+dev/PXD060724/Chymotrypsin_EThCD_WZ20spd_161224_2	0	0	True
+dev/PXD060724/Chymotrypsin_EThCD_WZ20spd_161224_3	0	0	True
