@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **#7 raw-DIA check, release test E7-03: FAIL** (acceptance/1.13, scored once;
+  no code, default or output change). 213 PRIDE files and 37 pseudo-DDA files were tested.
+  diaPASEF and Astral DIA were refused 12/12 each. Orbitrap DIA was refused 7/12 and the
+  SWATH stratum 10/12 (< 90%). 8 of 202 must-pass files were refused. All of them come from
+  "DDA" Astral projects, and their window listings show narrow-window DIA. Pseudo-DDA passed
+  37/37. See doc/ACQUISITION-RELEASE-TEST.md.
+
 ## 1.12.1 (2026-11-08)
 
 Documentation and packaging only: no code, default or output changes. The README now
