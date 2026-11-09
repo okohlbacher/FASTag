@@ -78,7 +78,8 @@ for prot in default auto human mouse yeast ecoli; do
   rc=$?
   [ "$rc" = 0 ] || { cat "$TMP/log" >&2; fail "-alkylation_proteome $prot: exit $rc"; }
   [ "$(val "$TMP/$prot.alk.tsv" alk_run database_source)" = "bundled:$want" ] || fail "$prot: database_source"
-  [ "$(val "$TMP/$prot.alk.tsv" alk_run database)" = "$TMP/inst/share/FASTag/alkylation/$want.fasta.gz" ] \
+  # suffix only: on Windows/MSYS the binary reports the C:/ spelling of $TMP
+  case "$(val "$TMP/$prot.alk.tsv" alk_run database)" in */inst/share/FASTag/alkylation/$want.fasta.gz) ;; *) false ;; esac \
     || fail "$prot: database $(val "$TMP/$prot.alk.tsv" alk_run database)"
   rel="UniProt $(man $want release) $(man $want proteome) (taxon $(man $want taxon), reviewed, $(man $want entries) entries, sha256 $(man $want sha256))"
   [ "$(val "$TMP/$prot.alk.tsv" alk_run database_release)" = "$rel" ] \
@@ -91,7 +92,7 @@ for prot in default auto human mouse yeast ecoli; do
     || { grep "Recon index" "$TMP/log" >&2; fail "$prot: the placement index is not the $(man $want entries) entries of $want"; }
   echo "proteomes_cli_test: $prot -> bundled:$want ($(man $want entries) entries)"
 done
-cnt() { tr -d '\r' < "$1" | awk -F'\t' '$1 == "alk_cys" { printf "%s=%s ", $2, $4 }'; }
+cnt() { tr -d '\r' < "$1" | awk -F'\t' '$1 == "alk_cys" { printf "%s=%s/%s ", $2, $3, $4 }'; }
 cmp -s "$TMP/auto.alk.tsv" "$TMP/human.alk.tsv" || fail "auto is not human"
 cmp -s "$TMP/default.alk.tsv" "$TMP/human.alk.tsv" || fail "the default is not human"
 
@@ -101,7 +102,7 @@ cp -R "$DIGEST" "$TMP/flat/share-FASTag-digest"
 cp -R "$ALK" "$TMP/flat/share-FASTag-alkylation"
 FASTAG_DIGEST_DIR="$TMP/flat/share-FASTag-digest" "$BIN" "${COMMON[@]}" -out "$TMP/f.tsv" \
   -alkylation_out "$TMP/f.alk.tsv" -alkylation_proteome yeast > "$TMP/log" 2>&1 || { cat "$TMP/log" >&2; fail "flat layout"; }
-[ "$(val "$TMP/f.alk.tsv" alk_run database)" = "$TMP/flat/share-FASTag-alkylation/yeast.fasta.gz" ] || fail "flat: database"
+case "$(val "$TMP/f.alk.tsv" alk_run database)" in */flat/share-FASTag-alkylation/yeast.fasta.gz) ;; *) fail "flat: database";; esac
 FASTAG_ALKYLATION_DIR="$ALK" "$BIN" "${COMMON[@]}" -out "$TMP/e.tsv" \
   -alkylation_out "$TMP/e.alk.tsv" -alkylation_proteome ecoli > "$TMP/log" 2>&1 || { cat "$TMP/log" >&2; fail "FASTAG_ALKYLATION_DIR"; }
 [ "$(val "$TMP/e.alk.tsv" alk_run database_source)" = bundled:ecoli ] || fail "FASTAG_ALKYLATION_DIR: database_source"
@@ -115,6 +116,18 @@ cmp -s "$TMP/e.cmp" "$TMP/ecoli.cmp" || fail "FASTAG_ALKYLATION_DIR and the inst
 tr -d '\r' < "$TMP/p.alk.tsv" | cut -f2 | grep -qx database_release && fail "FASTA path: a database_release row"
 # the same proteome as a FASTA path gives the same counts as the shipped name
 [ "$(cnt "$TMP/p.alk.tsv")" = "$(cnt "$TMP/ecoli.alk.tsv")" ] || fail "the shipped ecoli and its FASTA give different counts"
+# ...also where tags place: at -tag_length 7 (the derived minimum on E. coli;
+# shorter tags place nothing on a proteome-scale database) the fixture's tags
+# have placements, and the shipped name and the FASTA path count the same
+L7=(-in "$IN" -tag_length 7 -fragment_tolerance 0.5 -fragment_tolerance_unit Da -threads 2)
+FASTAG_DIGEST_DIR="$TMP/inst/share/FASTag/digest" "$BIN" "${L7[@]}" -out "$TMP/s7.tsv" -alkylation_out "$TMP/s7.alk.tsv" \
+  -alkylation_proteome ecoli > "$TMP/log" 2>&1 || { cat "$TMP/log" >&2; fail "shipped ecoli at tag length 7"; }
+"$BIN" "${L7[@]}" -out "$TMP/p7.tsv" -alkylation_out "$TMP/p7.alk.tsv" -alkylation_proteome "$TMP/ecoli.fasta" \
+  > "$TMP/log" 2>&1 || { cat "$TMP/log" >&2; fail "ecoli FASTA at tag length 7"; }
+placed=$(tr -d '\r' < "$TMP/s7.alk.tsv" | awk -F'\t' '$1 == "alk_cys" && $2 == "excluded.no_cys" { print $4 }')
+[ "${placed:-0}" -gt 0 ] || fail "tag length 7: no placement on the shipped ecoli; the equality check would be vacuous"
+[ "$(cnt "$TMP/s7.alk.tsv")" = "$(cnt "$TMP/p7.alk.tsv")" ] || fail "tag length 7: the shipped ecoli and its FASTA give different counts"
+[ "$(val "$TMP/s7.alk.tsv" alk_run spectra)" = "$(val "$TMP/p7.alk.tsv" alk_run spectra)" ] || fail "tag length 7: spectra differ"
 
 # ---- (d) refusals
 refused() {  # DIR NAME WANT_RC MESSAGE

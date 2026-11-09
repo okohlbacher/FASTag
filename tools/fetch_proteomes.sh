@@ -42,8 +42,11 @@ for row in human:UP000005640:9606 mouse:UP000000589:10090 yeast:UP000002311:5592
   [ -z "$total" ] || [ "$total" = "$n" ] || { echo "fetch_proteomes: $name has $n entries, the server reports $total" >&2; exit 1; }
   [ "$n" -gt 1000 ] || { echo "fetch_proteomes: $name has only $n entries" >&2; exit 1; }
   gzip -n -9 -c "$tmp/$name.fasta" > "$tmp/$name.fasta.gz"
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$name" "$up" "$taxon" "$r" "$d" "$n" "$(sha "$tmp/$name.fasta.gz")" \
-    "$(sha "$tmp/$name.fasta")" "$name.fasta.gz" \
+  gz_sha=$(sha "$tmp/$name.fasta.gz")
+  fa_sha=$(sha "$tmp/$name.fasta")
+  [ ${#gz_sha} = 64 ] && [ ${#fa_sha} = 64 ] || { echo "fetch_proteomes: no sha256 for $name (sha256sum or shasum needed)" >&2; exit 1; }
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$name" "$up" "$taxon" "$r" "$d" "$n" "$gz_sha" \
+    "$fa_sha" "$name.fasta.gz" \
     >> "$tmp/proteomes.tsv"
 done
 for name in human mouse yeast ecoli; do mv "$tmp/$name.fasta.gz" "$out/"; done
