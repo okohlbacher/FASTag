@@ -495,3 +495,195 @@ def test_single_group_cluster_gate_and_incomplete_h4():
     gap = _spectra()
     drop = gap[(gap["key"] == "scan=0") & (gap["profile"] == "cap10") & (gap["arm"] == "truth")].index
     assert _ep(gap.drop(drop), "H4 diversity")["verdict"] == "not evaluable"
+
+
+# ------------------------------------------------------------------------------------------------ second review
+def _qc_sage(path, n_target, n_decoy, n_pass, rank=True):
+    rows = []
+    for i in range(n_target):
+        rows.append({"rank": 1, "label": 1, "spectrum_q": 0.001 if i < n_pass else 0.5})
+    for i in range(n_decoy):
+        rows.append({"rank": 1, "label": -1, "spectrum_q": 0.6})
+    rows.append({"rank": 2, "label": 1, "spectrum_q": 0.001})  # rank 2 never counts
+    df = pd.DataFrame(rows)
+    if not rank:
+        df = df[df["rank"] == 1].drop(columns="rank")
+    df.to_csv(path, sep="\t", index=False)
+    return path
+
+
+def test_truth_qc_flags_runs_without_truth(tmp_path):
+    q = RC.truth_qc(_qc_sage(tmp_path / "a.tsv", 300, 100, 50))
+    assert q["status"] == "truth" and q["target_pass"] == 50 and q["rank1_target"] == 300 and q["rank1_decoy"] == 100
+    q = RC.truth_qc(_qc_sage(tmp_path / "b.tsv", 300, 100, 0))  # 1.12 rule 4b: 0 PSMs at q
+    assert q["status"] == "without truth" and "0 rank-1" in q["reason"]
+    q = RC.truth_qc(_qc_sage(tmp_path / "c.tsv", 110, 100, 5))  # close to 1:1, like PXD049370
+    assert q["status"] == "without truth" and "target:decoy" in q["reason"]
+    q = RC.truth_qc(_qc_sage(tmp_path / "d.tsv", 300, 100, 50, rank=False))  # closed search without rank column
+    assert q["status"] == "truth" and q["target_pass"] == 50
+
+
+def test_report_leaves_out_runs_without_truth(tmp_path):
+    a = _spectra()
+    b = _spectra(chim_rate=0.9, pure_rate=0.9, seed=3)
+    b["run_id"] = "r2"
+    for c in ("cluster1", "cluster2"):
+        b[c] = b[c].str.replace("r1|", "r2|", regex=False)
+    df = pd.concat([a, b], ignore_index=True)
+    qc = pd.DataFrame([{"run_id": "r1", "status": "truth", "target_pass": 900, "rank1_target": 1000, "rank1_decoy": 100,
+                        "td_ratio": 10.0, "reason": ""},
+                       {"run_id": "r2", "status": "without truth", "target_pass": 0, "rank1_target": 100,
+                        "rank1_decoy": 95, "td_ratio": 1.05, "reason": "0 rank-1 target PSMs at q <= 0.01"}])
+    full = SR.endpoints(df, n_boot=200)
+    gated = SR.endpoints(df, n_boot=200, truthqc=qc)
+    cnt = lambda e: e[(e["endpoint"] == "counts") & (e["group"] == "chimeric")].iloc[0]["n"]
+    assert cnt(full) == 600 and cnt(gated) == 300
+    t = gated[gated["endpoint"] == "T truth check"].set_index("group")
+    assert t.loc["r2", "verdict"] == "without truth" and t.loc["r1", "verdict"] == "truth"
+    p = tmp_path / "spectra_HO.tsv.gz"
+    with gzip.open(p, "wt") as fh:
+        df.to_csv(fh, sep="\t", index=False)
+    qp = tmp_path / "truthqc_HO.tsv"
+    qc.to_csv(qp, sep="\t", index=False)
+    text = SR.report(p, tmp_path / "ep.tsv", n_boot=100, log=lambda *_: None, truthqc=qp).read_text()
+    assert "without truth" in text and "truth check: " in text
+
+
+def test_stratified_difference_removes_run_mix():
+    rng = np.random.default_rng(5)
+
+    def grp(n, rate, run, tag):
+        return (np.array([f"{run}|{tag}{i}" for i in range(n)]), (rng.random(n) < rate).astype(float))
+    # run A: many chimeras, few pure singles, both at 0.5; run B: few chimeras, many pure singles, both at 0.9
+    ca, a = grp(2000, 0.5, "A", "c")
+    pa, b = grp(200, 0.5, "A", "p")
+    cb, c = grp(200, 0.9, "B", "c")
+    pb, d = grp(2000, 0.9, "B", "p")
+    pooled = np.r_[a, c].mean() - np.r_[b, d].mean()
+    assert pooled < -0.2  # the run mix alone makes a large pooled gap
+    est, lo, hi = SR.stratified_diff([(2000, ca, a, pa, b), (200, cb, c, pb, d)], n_boot=400)
+    assert abs(est) < 0.06 and lo < 0 < hi
+    assert all(math.isnan(x) for x in SR.stratified_diff([(0, [], [], [], [])]))
+
+
+def test_sensitivity_rows_per_run_and_weighted():
+    s = pd.DataFrame(SR.sensitivity(_spectra(), n_boot=200))
+    assert set(s["endpoint"]) == {"S run-stratified H1", "S run-stratified H2", "S run-stratified H3"}
+    w = s[s["group"].str.startswith("weighted")].set_index("endpoint")
+    r1 = s[s["group"] == "r1"].set_index("endpoint")
+    # one run only: the stratified difference equals that run's difference
+    for ep in w.index:
+        assert w.loc[ep, "value"] == pytest.approx(r1.loc[ep, "value"])
+    assert (s["note"].str.contains("not preregistered")).all()
+
+
+def _reuse_setup(tmp_path):
+    man = tmp_path / "acc" / "manifests" / "item.tsv"
+    man.parent.mkdir(parents=True)
+    row = _man_row("HO-1", "m.mzML", "f.fasta", split="HO", sha_m="a" * 64, sha_f="c" * 64)
+    row.update(pxd="PXD012345", raw_file="sample_MW_3.raw", raw_sha1="b" * 40)
+    pd.DataFrame([row]).to_csv(man, sep="\t", index=False)
+    other = tmp_path / "acc" / "manifests"
+    (other / "old_item.tsv").write_text("run\tfile\nx\tsample_MW_3\n")              # same raw file: refused
+    (other / "near.tsv").write_text("run\tfile\nx\tsample_MW_30\n")                  # another run: no raw hit
+    (other / "hash.md").write_text("checksum " + "b" * 40 + "\n")                    # same raw SHA-1: refused
+    (other / "pxd.tsv").write_text("pxd\nPXD012345\n")                               # PXD only: reported
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text(f"realchimera:\n  manifest: {man}\n  work_dir: {tmp_path / 'work'}\n  split: HO\n"
+                   f"  reuse:\n    scan: [{tmp_path / 'acc'}]\n")
+    return cfg, man
+
+
+def test_reuse_refuses_undeclared_and_accepts_declared(tmp_path):
+    cfg, man = _reuse_setup(tmp_path)
+    c = RC.load(cfg)
+    h = RC.check_reuse(RC.read_manifest(man), {"scan": [tmp_path / "acc"], "exclude": [str(man.resolve())]})
+    got = {(Path(f).name, lvl, st) for f, lvl, st in zip(h["file"], h["level"], h["status"])}
+    assert ("old_item.tsv", "raw_name", "refused") in got and ("hash.md", "raw_sha1", "refused") in got
+    assert ("pxd.tsv", "pxd", "reported") in got
+    assert not any(n == "near.tsv" and lvl == "raw_name" for n, lvl, _ in got)
+    assert not any(n == "item.tsv" for n, _, _ in got)  # the item's own manifest is excluded
+    with pytest.raises(RuntimeError):
+        RC.step_reuse(c, log=lambda *_: None)
+    assert main(["realchimera", "reuse", "-c", str(cfg)]) == 1
+    dec = tmp_path / "declared.tsv"
+    pd.DataFrame([{"run_id": "HO-1", "file_glob": "*/old_item.tsv", "reason": "1.12 held-out, no default changed"},
+                  {"run_id": "HO-1", "file_glob": "*/hash.md", "reason": "same file"}]).to_csv(dec, sep="\t", index=False)
+    cfg.write_text(cfg.read_text() + f"    declared: {dec}\n")
+    assert main(["realchimera", "reuse", "-c", str(cfg)]) == 0
+    out, _ = RC.read_tsv(tmp_path / "work" / "reuse_HO.tsv")
+    assert set(out["status"]) == {"declared", "reported"}
+    pd.DataFrame([{"run_id": "HO-*", "file_glob": "*/old_item.tsv", "reason": "pattern"},
+                  {"run_id": "HO-2", "file_glob": "*/hash.md", "reason": "another run"}]).to_csv(dec, sep="\t", index=False)
+    assert main(["realchimera", "reuse", "-c", str(cfg)]) == 1  # hash.md is declared for another run only
+    pd.DataFrame([{"run_id": "HO-1", "file_glob": "*", "reason": ""}]).to_csv(dec, sep="\t", index=False)
+    assert main(["realchimera", "reuse", "-c", str(cfg)]) == 1  # a declaration needs a reason
+
+
+def _fake_sage(path, n_target, n_decoy, n_pass):
+    rows = "\\n".join(["1\t1\t0.001"] * n_pass + ["1\t1\t0.5"] * (n_target - n_pass) + ["1\t-1\t0.6"] * n_decoy)
+    path.write_text("#!/bin/sh\n[ \"$1\" = --version ] && { echo 'sage 0.0-test'; exit 0; }\n"
+                    "while [ $# -gt 0 ]; do [ \"$1\" = -o ] && out=$2; shift; done\nmkdir -p \"$out\"\n"
+                    f"printf 'rank\\tlabel\\tspectrum_q\\n{rows}\\n' > \"$out/results.sage.tsv\"\n")
+    path.chmod(0o755)
+    return path
+
+
+def _census_mzml(path, n_ms2, n_itms):
+    lines = ['<cvParam cvRef="MS" accession="MS:1000511" value="1" name="ms level" />']
+    for i in range(n_ms2):
+        lines.append('<cvParam cvRef="MS" accession="MS:1000511" value="2" name="ms level" />')
+        f = "ITMS + c NSI d Full ms2 500.0@cid35.00" if i < n_itms else "FTMS + c NSI d Full ms2 500.0@hcd30.00"
+        lines.append(f'<cvParam cvRef="MS" accession="MS:1000512" value="{f}" name="filter string" />')
+    path.write_text("\n".join(lines) + "\n")
+    return path
+
+
+def test_ms2_census(tmp_path):
+    c = RC.ms2_census(_census_mzml(tmp_path / "a.mzML", 10, 7))
+    assert c["n_ms2"] == 10 and c["itms_share"] == pytest.approx(0.7)
+    assert RC.ms2_census(_census_mzml(tmp_path / "b.mzML", 0, 0)) == {"n_ms2": 0, "itms_share": 0.0}
+
+
+def _precheck_setup(tmp_path, n_ms2=1000, n_itms=0, frag="0.02Da"):
+    m, f = _census_mzml(tmp_path / "r.mzML", n_ms2, n_itms), tmp_path / "db.fasta"
+    f.write_bytes(b">p\nPEPTIDEK\n")
+    man = tmp_path / "manifest.tsv"
+    row = _man_row("r1", m, f, sha_m=hashlib.sha256(m.read_bytes()).hexdigest(),
+                   sha_f=hashlib.sha256(f.read_bytes()).hexdigest())
+    row["fragment_tol"] = frag
+    pd.DataFrame([row]).to_csv(man, sep="\t", index=False)
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text(f"realchimera:\n  manifest: {man}\n  work_dir: {tmp_path / 'work'}\n  split: DEV\n")
+    assert main(["realchimera", "verify", "-c", str(cfg)]) == 0
+    return RC.load(cfg)
+
+
+def test_precheck_refuses_low_id_rate_and_ion_trap_at_ppm(tmp_path):
+    (tmp_path / "a").mkdir()
+    c = _precheck_setup(tmp_path / "a")
+    c["tools"]["sage"] = str(_fake_sage(tmp_path / "sage", 300, 20, 30))  # clean ratio, but 30 of 1000 MS2
+    with pytest.raises(RuntimeError, match="MS2 identified"):
+        RC.step_precheck(c, log=lambda *_: None)
+    (tmp_path / "b").mkdir()
+    c = _precheck_setup(tmp_path / "b", n_itms=900, frag="20ppm")  # PXD049370: ITMS MS2 at 20 ppm
+    c["tools"]["sage"] = str(_fake_sage(tmp_path / "sage", 600, 20, 400))
+    with pytest.raises(RuntimeError, match="ion-trap"):
+        RC.step_precheck(c, log=lambda *_: None)
+    (tmp_path / "c").mkdir()
+    c = _precheck_setup(tmp_path / "c", n_itms=900, frag="0.5Da")
+    c["tools"]["sage"] = str(_fake_sage(tmp_path / "sage", 600, 20, 400))
+    RC.step_precheck(c, log=lambda *_: None)
+
+
+def test_precheck_refuses_a_run_without_truth(tmp_path):
+    c = _precheck_setup(tmp_path, n_ms2=200)
+    c["tools"]["sage"] = str(_fake_sage(tmp_path / "sage", 300, 50, 120))
+    out = RC.step_precheck(c, log=lambda *_: None)
+    assert (RC.read_tsv(out)[0]["n_ms2"] == 200).all()
+    df, _ = RC.read_tsv(out)
+    assert list(df["status"]) == ["truth"] and int(df["target_pass"].iloc[0]) == 120
+    assert (tmp_path / "work" / "runs" / "DEV" / "r1" / "precheck" / "inputs.txt").exists()
+    c["tools"]["sage"] = str(_fake_sage(tmp_path / "sage2", 300, 280, 0))
+    with pytest.raises(RuntimeError):
+        RC.step_precheck(c, log=lambda *_: None)

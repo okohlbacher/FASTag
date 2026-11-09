@@ -36,10 +36,12 @@ in `acceptance/1.13/PREREG-item12.md`:
 
 ## Results
 
-Held-out, scored once (2026-11-09; `acceptance/1.13/item12/RESULTS.md` on branch `acceptance/1.13`): five public
-runs (PXD066944, PXD076528 Astral; PXD009612, PXD040230, PXD049370 Q Exactive family), FASTag 1.12.1 defaults.
-28,146 Sage-chimeric and 71,259 single spectra (PXD049370 gave no Sage PSMs at 1 % in the chimera search and
-contributes none; PXD076528 holds 69 % of the chimeras).
+Held-out, scored once (2026-11-09; `acceptance/1.13/item12/RESULTS.md` on branch `acceptance/1.13`), FASTag
+1.12.1 defaults. Five public runs were staged (PXD066944, PXD076528 Astral; PXD009612, PXD040230 Q Exactive
+family; PXD049370), four have truth, and one of those (PXD009612) has only 45 chimeric spectra: 28,146
+Sage-chimeric and 71,259 single spectra, 93 % of the chimeric ones from the two Astral runs (PXD076528 69 %).
+PXD049370 gave no Sage PSMs at 1 % in the chimera search; post hoc, its MS2 turned out to be ion-trap CID
+searched at 20 ppm, outside the selection rule (see below).
 
 | | Result | Verdict |
 |---|---|---|
@@ -49,9 +51,41 @@ contributes none; PXD076528 holds 69 % of the chimeras).
 | H3 | single spectra, purity >= 0.9 vs < 0.5: 0.781 vs 0.493, +0.287 (0.276 to 0.299) | gradient shown |
 | H4 | `-diversity` under `-max_tags 10`: both peptides in the top 10 0.399 -> 0.491, +0.093 (0.088 to 0.097), rank 1 unchanged | benefit |
 
+The pooled H1-H3 compare groups with different run mixes (pure singles hold more PXD040230 and PXD009612 than
+the chimeric set). A run-stratified sensitivity, added after the result and not preregistered (per-run
+differences weighted by the chimeric share, cluster bootstrap within run), gives H1 -0.282 (-0.295 to -0.270),
+H2 -0.073 (-0.085 to -0.061) and H3 +0.302 (0.290 to 0.315). So the either-peptide gap is about 6-7 points; it
+stays inside the margin with the run mix fixed, but PXD066944 alone sits at it (-0.092, -0.118 to -0.065). H3
+is an association: purity differs with run and isolation window, and the purity bins are not monotone below
+0.5, so it does not show that co-isolation causes the whole drop.
+
 Which peptide the rank-1 tag reads follows the header precursor. `-diversity` stays off by default; its benefit is
 shown for a 10-tag cap only (1.12 #4 found none on synthetic chimeras under a 50-tag cap). The comparison of
 chimeric with pure spectra is between different spectra, and Sage-chimeric spectra are selected for two
 confident identifications.
 
+The held-out runs are held out from everything that shaped the evaluated tags (1.12.1 keeps the 1.11 tag
+defaults; the harness was developed on PXD003531), but they are not unused data (note of 2026-11-09): PXD066944
+OFF-03 was a held-out run of 1.12 #2 and #6 (scored, no default changed) and of the concurrent 1.13 compltol
+item; PXD076528 7673_YD12 is in the 1.12 species-call DEV lists and the 1.13 #23 evaluation manifest; the three
+Q Exactive-family runs are in 1.12 chemistry-call DEV tables, the 1.12 #7 DIA-refusal sweep and 1.13 DEV tables
+(#8 label call, alknodb). All of these are opt-in reports or the DIA refusal, which does not act on DDA input.
+The full list is `acceptance/1.13/disjointness/item12-realchimera-reuse.tsv`.
+
 DEV (PXD003531 NO_03, development only): union 0.722, H1 -0.163, H2 +0.021, H3 +0.244, H4 +0.178.
+
+## Checks added after the held-out result
+
+- **Truth check** (`truth_qc`; 1.12 rule 4b): `score` writes `truthqc_<split>.tsv`; the report marks a run
+  "without truth" when no rank-1 target passes q <= 0.01 or the rank-1 target:decoy ratio is below 1.2, and
+  leaves it out of every group (rows `T truth check`).
+- **Pre-freeze precheck** (`fastag-bench realchimera precheck`): a plain closed Sage search per run, not the
+  endpoint search. It refuses a run without truth, one that identifies under 5 % of its MS2, or one whose MS2 are
+  mostly ion-trap (`ITMS` filter strings) under a ppm fragment tolerance. On the item 12 runs, post hoc, it
+  flags PXD049370 only.
+- **Reuse check** (`fastag-bench realchimera reuse`, or `verify` with `realchimera.reuse` set): searches other
+  manifests and tables for each run's raw file name, raw SHA-1/sha256 and mzML sha256 (PXD-only hits are
+  reported) and refuses a run whose reuse is not declared with a reason (`declared` TSV: run_id, file_glob,
+  reason).
+- **Run-stratified sensitivity** (rows `S run-stratified`; `stats_realchimera.py --sensitivity` for the rows
+  alone): H1-H3 with the run mix held fixed, and per run.

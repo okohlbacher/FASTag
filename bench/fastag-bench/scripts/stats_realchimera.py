@@ -25,8 +25,19 @@ Endpoints (fixed in acceptance/1.13/PREREG-item12.md; the constants below are th
 Evaluability: an endpoint is 'not evaluable' when a group it needs has fewer than MIN_SPECTRA spectra or the
 largest cluster of the chimeric set holds MAX_CLUSTER_SHARE or more of it.
 
+Truth check (added after the 1.13 item 12 held-out result; rows 'T truth check'): with the per-run table
+truthqc_<split>.tsv of the score step (realchimera.truth_qc), a run 'without truth' (no rank-1 target at
+q <= fdr, or rank-1 target:decoy below realchimera.TRUTH_MIN_RATIO) is marked and left out of every group.
+
+Sensitivity (not preregistered; rows 'S run-stratified'): H1, H2 and H3 as run-standardized differences,
+sum_r w_r (mean_A,r - mean_B,r) over the runs that have both groups, with w_r the run's share of the
+chimeric spectra (H1, H2) or of the pure + impure single spectra (H3); 95 % interval from a cluster
+bootstrap within each run and group; plus each run's own difference. The pooled H1-H3 compare groups with
+different run mixes; this row shows how much of the pooled difference is the mix.
+
 Usage
-    python scripts/stats_realchimera.py <spectra_<split>.tsv.gz> <endpoints_<split>.tsv>
+    python scripts/stats_realchimera.py <spectra_<split>.tsv.gz> <endpoints_<split>.tsv> [truthqc_<split>.tsv]
+    python scripts/stats_realchimera.py --sensitivity <spectra_<split>.tsv.gz> <out.tsv>   # S rows only
 """
 from __future__ import annotations
 
@@ -109,8 +120,86 @@ def _row(endpoint, metric, group, n, value, lo=math.nan, hi=math.nan, clusters=m
             "value": value, "ci_lo": lo, "ci_hi": hi, "p": p, "verdict": verdict, "note": note}
 
 
-def endpoints(df: pd.DataFrame, n_boot: int = N_BOOT) -> pd.DataFrame:
+def _boot_group(cl, a, rng):
+    """One cluster-bootstrap mean of a (whole clusters resampled)."""
+    c, i = np.unique(np.asarray(cl), return_inverse=True)
+    n, s = np.bincount(i).astype(float), np.bincount(i, weights=np.asarray(a, float))
+    w = np.bincount(rng.integers(0, len(c), len(c)), minlength=len(c)).astype(float)
+    return (w @ s) / (w @ n)
+
+
+def stratified_diff(groups, n_boot: int = N_BOOT, seed: int = SEED) -> tuple[float, float, float]:
+    """groups: list of (weight, clusters_a, a, clusters_b, b), one per run. sum_r w_r (mean a_r - mean b_r)
+    with the weights normalized over the runs given, and its 95 % percentile interval (clusters resampled
+    within each run and group)."""
+    groups = [g for g in groups if len(g[2]) and len(g[4]) and g[0] > 0]
+    if not groups:
+        return (math.nan, math.nan, math.nan)
+    w = np.array([g[0] for g in groups], float)
+    w = w / w.sum()
+    est = float(sum(wi * (np.mean(np.asarray(g[2], float)) - np.mean(np.asarray(g[4], float))) for wi, g in zip(w, groups)))
+    rng = np.random.default_rng(seed)
+    draws = np.empty(n_boot)
+    for k in range(n_boot):
+        draws[k] = sum(wi * (_boot_group(g[1], g[2], rng) - _boot_group(g[3], g[4], rng)) for wi, g in zip(w, groups))
+    lo, hi = np.quantile(draws, [0.025, 0.975])
+    return (est, float(lo), float(hi))
+
+
+def sensitivity(df: pd.DataFrame, n_boot: int = N_BOOT) -> list[dict]:
+    """'S run-stratified' rows (see the module docstring): H1, H2, H3 run-standardized and per run."""
     rows = []
+    d = df[(df["profile"] == PRIMARY_PROFILE) & (df["arm"] == "truth")]
+    chim = d[d["category"] == "chimeric"].reset_index(drop=True)
+    ucl = SU.union_clusters(chim["cluster1"].to_numpy(), chim["cluster2"].to_numpy()) if len(chim) else np.array([])
+    chim = chim.assign(ucl=ucl)
+    single = d[d["category"] == "single"]
+    pure, impure = single[single["purity"] >= PURE_MIN], single[single["purity"] < IMPURE_MAX]
+    runs = sorted(set(d["run_id"]))
+    note = "sensitivity, not preregistered"
+    for ep, metric in (("H1", "pep1_rank1"), ("H2", "union_rank1")):
+        gs = []
+        for run in runs:
+            c, p = chim[chim["run_id"] == run], pure[pure["run_id"] == run]
+            gs.append((len(c), c["ucl"], c[metric], p["cluster1"], p["pep1_rank1"]))
+            if len(c) and len(p):
+                dd, lo, hi = two_group_boot(c["ucl"], c[metric], p["cluster1"], p["pep1_rank1"], n_boot)
+                rows.append(_row(f"S run-stratified {ep}", f"{metric} chimeric - pep1_rank1 pure single", run,
+                                 len(c) + len(p), dd, lo, hi, note=f"{note}; chimeric n {len(c)}, pure single n {len(p)}"))
+        est, lo, hi = stratified_diff(gs, n_boot)
+        rows.append(_row(f"S run-stratified {ep}", f"{metric} chimeric - pep1_rank1 pure single", "weighted by chimeric",
+                         len(chim) + len(pure), est, lo, hi,
+                         note=f"{note}; runs {sum(1 for g in gs if len(g[2]) and len(g[4]))}"))
+    gs = []
+    for run in runs:
+        p, q = pure[pure["run_id"] == run], impure[impure["run_id"] == run]
+        gs.append((len(p) + len(q), p["cluster1"], p["pep1_rank1"], q["cluster1"], q["pep1_rank1"]))
+        if len(p) and len(q):
+            dd, lo, hi = two_group_boot(p["cluster1"], p["pep1_rank1"], q["cluster1"], q["pep1_rank1"], n_boot)
+            rows.append(_row("S run-stratified H3", "pep1_rank1 pure - impure (single)", run, len(p) + len(q), dd, lo, hi,
+                             note=f"{note}; pure n {len(p)}, impure n {len(q)}"))
+    est, lo, hi = stratified_diff(gs, n_boot)
+    rows.append(_row("S run-stratified H3", "pep1_rank1 pure - impure (single)", "weighted by single",
+                     len(pure) + len(impure), est, lo, hi, note=f"{note}; runs {sum(1 for g in gs if len(g[2]) and len(g[4]))}"))
+    return rows
+
+
+def truth_rows(qc: pd.DataFrame) -> list[dict]:
+    rows = []
+    for r in qc.itertuples():
+        rows.append(_row("T truth check", "rank-1 target PSMs at q <= fdr", r.run_id, int(r.target_pass),
+                         float(r.target_pass), verdict=r.status,
+                         note=f"rank-1 target {r.rank1_target}, decoy {r.rank1_decoy}, ratio {float(r.td_ratio):.3f}"
+                              + (f"; {r.reason}" if isinstance(r.reason, str) and r.reason else "")))
+    return rows
+
+
+def endpoints(df: pd.DataFrame, n_boot: int = N_BOOT, truthqc: pd.DataFrame | None = None) -> pd.DataFrame:
+    rows = []
+    if truthqc is not None and len(truthqc):
+        rows += truth_rows(truthqc)
+        drop = set(truthqc.loc[truthqc["status"] != "truth", "run_id"])
+        df = df[~df["run_id"].isin(drop)]
     d = df[(df["profile"] == PRIMARY_PROFILE)]
     tr, ch = d[d["arm"] == "truth"], d[d["arm"] == "chance"]
     chim = tr[tr["category"] == "chimeric"].reset_index(drop=True)
@@ -234,15 +323,29 @@ def endpoints(df: pd.DataFrame, n_boot: int = N_BOOT) -> pd.DataFrame:
         c, s1 = g[g["category"] == "chimeric"], g[(g["category"] == "single") & (g["purity"] >= PURE_MIN)]
         rows.append(_row("per run", "union_rank1 chimeric", run, len(c), float(c["union_rank1"].mean()) if len(c) else math.nan))
         rows.append(_row("per run", "pep1_rank1 single_pure", run, len(s1), float(s1["pep1_rank1"].mean()) if len(s1) else math.nan))
+    rows += sensitivity(df, n_boot)
     return pd.DataFrame(rows)
 
 
-def report(spectra: str | Path, out: str | Path, n_boot: int = N_BOOT, log=print) -> Path:
+def read_truthqc(path) -> pd.DataFrame | None:
+    if path is None:
+        return None
+    from fastag_bench.tsv import read_tsv
+    qc, _ = read_tsv(path)
+    miss = [c for c in ("run_id", "status", "target_pass", "rank1_target", "rank1_decoy", "td_ratio") if c not in qc.columns]
+    if miss:
+        raise ValueError(f"{path}: truth check table misses {miss}")
+    qc["reason"] = qc["reason"].fillna("") if "reason" in qc.columns else ""
+    return qc
+
+
+def report(spectra: str | Path, out: str | Path, n_boot: int = N_BOOT, log=print, truthqc=None) -> Path:
     df = read_spectra(spectra)
-    ep = endpoints(df, n_boot)
+    ep = endpoints(df, n_boot, read_truthqc(truthqc))
     import hashlib
     me = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
     p = write_tsv(ep, out, [f"source: {spectra}", f"scorer: scripts/stats_realchimera.py sha256 {me}",
+                            f"truth check: {truthqc or 'none'}",
                             f"n_boot {n_boot}, seed {SEED}, PURE_MIN {PURE_MIN}, IMPURE_MAX {IMPURE_MAX}, "
                             f"NONINF_MARGIN {NONINF_MARGIN}, MIN_SPECTRA {MIN_SPECTRA}"])
     for r in ep[ep["endpoint"].str.match(r"^(H\d|E1 chimeric)") & (ep["verdict"] != "")].itertuples():
@@ -250,7 +353,23 @@ def report(spectra: str | Path, out: str | Path, n_boot: int = N_BOOT, log=print
     return p
 
 
+def report_sensitivity(spectra: str | Path, out: str | Path, n_boot: int = N_BOOT, log=print) -> Path:
+    """The 'S run-stratified' rows alone (post hoc on a scored table; no endpoint is recomputed)."""
+    df = read_spectra(spectra)
+    s = pd.DataFrame(sensitivity(df, n_boot))
+    import hashlib
+    me = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+    p = write_tsv(s, out, [f"source: {spectra}", f"scorer: scripts/stats_realchimera.py sha256 {me} (--sensitivity)",
+                           f"n_boot {n_boot}, seed {SEED}, PURE_MIN {PURE_MIN}, IMPURE_MAX {IMPURE_MAX}; not preregistered"])
+    for r in s.itertuples():
+        log(f"{r.endpoint} [{r.group}]: {r.value:.4f} ({r.ci_lo:.4f}, {r.ci_hi:.4f}) n {r.n}")
+    return p
+
+
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
+    if len(sys.argv) == 4 and sys.argv[1] == "--sensitivity":
+        report_sensitivity(sys.argv[2], sys.argv[3])
+    elif len(sys.argv) in (3, 4) and not sys.argv[1].startswith("--"):
+        report(sys.argv[1], sys.argv[2], truthqc=sys.argv[3] if len(sys.argv) == 4 else None)
+    else:
         sys.exit(__doc__)
-    report(sys.argv[1], sys.argv[2])

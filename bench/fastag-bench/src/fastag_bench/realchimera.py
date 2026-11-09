@@ -16,9 +16,14 @@ search settings). Two independent views of chimericity per MS2 spectrum:
   window around the selected ion, which the cross-check against pyopenms 3.4 uses).
 
 Steps (fastag-bench realchimera <step>): verify (sha256 of every mzML and FASTA against the
-manifest; nothing else runs on a mismatch), sage, purity, run (FASTag profiles), score (one row per
-scored spectrum and profile), report (scripts/stats_realchimera.py endpoints). The per-spectrum
+manifest; nothing else runs on a mismatch; with realchimera.reuse configured also the reuse check),
+sage, purity, run (FASTag profiles), score (one row per scored spectrum and profile, plus the per-run
+truth check truthqc_<split>.tsv), report (scripts/stats_realchimera.py endpoints). The per-spectrum
 scoring uses score.py's flank rule against each of the two peptides.
+
+Pre-freeze steps (not part of 'all'): precheck (a plain closed Sage search per run, not an endpoint
+search; refuses a run without truth, `truth_qc`) and reuse (refuses a run whose raw file, raw SHA-1 or
+mzML sha256 appears in another manifest or table unless the reuse is declared, `reuse_hits`).
 """
 from __future__ import annotations
 
@@ -38,7 +43,7 @@ from . import score as S
 from .tsv import read_tsv, write_tsv
 
 C13C12 = 1.0033548378  # OpenMS Constants::C13C12_MASSDIFF_U
-STEPS = ("verify", "sage", "purity", "run", "score", "report", "all")
+STEPS = ("verify", "sage", "purity", "run", "score", "report", "all", "precheck", "reuse")
 MANIFEST_COLS = ("run_id", "split", "pxd", "raw_file", "raw_sha1", "mzml", "mzml_sha256", "fasta", "fasta_sha256",
                  "conversion", "enzyme", "fixed_mods", "variable_mods", "max_variable_mods", "precursor_ppm", "fragment_tol",
                  "missed_cleavages")
@@ -47,6 +52,13 @@ DEFAULT_PROFILES = {"default": [], "cap10": ["-max_tags", "10"], "cap10_div": ["
 KS = (1, 5, 10, 50)
 HEADER_PPM = 20.0
 HEADER_ISOTOPES = (-1, 0, 1, 2, 3)
+# truth check (1.12 rule 4b "a truth with 0 PSMs at the preregistered q is without truth"; the ratio bound
+# was added after 1.13 item 12, where PXD049370 gave 4,196 rank-1 targets vs 3,843 decoys and 0 at 1 %)
+TRUTH_MIN_RATIO = 1.2
+# precheck only (closed search, also added after item 12: PXD049370's ion-trap CID MS2 searched at 20 ppm
+# gave 420 closed PSMs at 1 % on 13,059 MS2, 3.2 %, with a clean target:decoy ratio of 10.6)
+PRECHECK_MIN_ID_RATE = 0.05
+PRECHECK_MAX_ITMS_SHARE = 0.5
 
 
 # ------------------------------------------------------------------------------------------------ purity
@@ -257,7 +269,122 @@ def chance_truth(truth: pd.DataFrame, seed: int = 1) -> pd.DataFrame:
     return ch
 
 
-# ------------------------------------------------------------------------------------------------ scoring
+def truth_qc(results_sage: str | Path, fdr: float = 0.01, min_ratio: float = TRUTH_MIN_RATIO) -> dict:
+    """Per-run truth check of a Sage search: rank-1 target and decoy PSM counts, rank-1 targets at
+    spectrum_q <= fdr, their ratio, and status 'without truth' when no rank-1 target passes (1.12 rule 4b)
+    or the rank-1 target:decoy ratio is below min_ratio (a search that is close to random), else 'truth'.
+    A file without a rank column is read as rank 1 only (closed search)."""
+    df = pd.read_csv(results_sage, sep="\t", usecols=lambda c: c in ("rank", "label", "spectrum_q"))
+    r1 = df[df["rank"] == 1] if "rank" in df.columns else df
+    tgt, dec = int((r1["label"] == 1).sum()), int((r1["label"] != 1).sum())
+    npass = int(((r1["label"] == 1) & (r1["spectrum_q"] <= fdr)).sum())
+    ratio = tgt / dec if dec else math.inf
+    why = []
+    if npass == 0:
+        why.append(f"0 rank-1 target PSMs at q <= {fdr}")
+    if ratio < min_ratio:
+        why.append(f"rank-1 target:decoy {ratio:.3f} < {min_ratio}")
+    return {"rank1_target": tgt, "rank1_decoy": dec, "target_pass": npass, "td_ratio": ratio,
+            "status": "without truth" if why else "truth", "reason": "; ".join(why)}
+
+
+def ms2_census(mzml: str | Path) -> dict:
+    """MS2 spectra of an mzML (cvParam MS:1000511 'ms level' with value 2) and the share whose filter string
+    (MS:1000512) starts with ITMS (ion-trap MS2). Reads line by line: one cvParam per line, as written by
+    ThermoRawFileParser, msconvert and OpenMS."""
+    n2 = itms = 0
+    with open(mzml, "rb") as fh:
+        for line in fh:
+            if b"MS:1000511" in line and b'value="2"' in line:
+                n2 += 1
+            elif b"MS:1000512" in line and b'value="ITMS' in line:
+                itms += 1
+    return {"n_ms2": n2, "itms_share": itms / n2 if n2 else 0.0}
+
+
+# ------------------------------------------------------------------------------------------------ reuse
+REUSE_SUFFIXES = (".tsv", ".csv", ".txt", ".md", ".yaml", ".yml", ".json", ".sh", ".py")
+REUSE_REFUSE = ("raw_name", "raw_sha1", "raw_sha256", "mzml_sha256")
+
+
+def _reuse_keys(r) -> list[tuple[str, str, "object"]]:
+    import re
+    out = []
+    stem = str(r.raw_file)
+    for ext in (".raw", ".RAW", ".d", ".wiff", ".mzML"):
+        if stem.endswith(ext):
+            stem = stem[: -len(ext)]
+    if stem and stem != "nan":
+        out.append(("raw_name", stem, re.compile(r"(?<![A-Za-z0-9])" + re.escape(stem) + r"(?![A-Za-z0-9])")))
+    for col in ("raw_sha1", "raw_sha256", "mzml_sha256"):
+        v = str(getattr(r, col, "") or "").strip().lower()
+        if len(v) in (40, 64) and all(c in "0123456789abcdef" for c in v) and set(v) != {"0"}:
+            out.append((col, v, re.compile(r"(?i)(?<![0-9a-f])" + v + r"(?![0-9a-f])")))
+    pxd = str(r.pxd).strip()
+    if pxd.startswith("PXD"):
+        out.append(("pxd", pxd, re.compile(r"(?<![A-Za-z0-9])" + re.escape(pxd) + r"(?![0-9])")))
+    return out
+
+
+def reuse_hits(man: pd.DataFrame, scan, exclude=(), max_bytes: int = 64 << 20) -> pd.DataFrame:
+    """Every place outside the excluded paths where a manifest run appears: one row per (run_id, level,
+    file) with level raw_name (raw file name without extension, as a whole token), raw_sha1, raw_sha256,
+    mzml_sha256 or pxd (PXD only: reported, never refused). scan: files or directories (walked for
+    REUSE_SUFFIXES); exclude: fnmatch patterns on the absolute path."""
+    import fnmatch
+    files = []
+    for s in scan:
+        p = Path(s)
+        if p.is_dir():
+            files += [f for f in sorted(p.rglob("*")) if f.is_file() and f.suffix in REUSE_SUFFIXES and ".git" not in f.parts]
+        elif p.is_file():
+            files.append(p)
+    files = [f for f in dict.fromkeys(f.resolve() for f in files)
+             if not any(fnmatch.fnmatch(str(f), pat) for pat in exclude) and f.stat().st_size <= max_bytes]
+    keys = [(r.run_id, lvl, val, rx) for r in man.itertuples() for lvl, val, rx in _reuse_keys(r)]
+    rows = []
+    for f in files:
+        text = f.read_text(errors="ignore")
+        for run_id, lvl, val, rx in keys:
+            m = rx.search(text)
+            if m:
+                line = text.count("\n", 0, m.start()) + 1
+                rows.append({"run_id": run_id, "level": lvl, "key": val, "file": str(f), "line": line})
+    return pd.DataFrame(rows, columns=["run_id", "level", "key", "file", "line"])
+
+
+def _declared(path) -> pd.DataFrame:
+    if not path:
+        return pd.DataFrame(columns=["run_id", "file_glob", "reason"])
+    df, _ = read_tsv(path)
+    miss = [c for c in ("run_id", "file_glob", "reason") if c not in df.columns]
+    if miss:
+        raise ValueError(f"{path}: declared-reuse table misses columns {miss}")
+    df["reason"] = df["reason"].fillna("").astype(str)
+    if (df["reason"].str.strip() == "").any():
+        raise ValueError(f"{path}: every declared reuse needs a reason")
+    return df
+
+
+def check_reuse(man: pd.DataFrame, rcfg: dict) -> pd.DataFrame:
+    """reuse_hits with a 'declared' column; raw-level hits (REUSE_REFUSE) not covered by a declared row
+    (fnmatch of its run_id and file_glob on the hit's run and file path; a reason is required) are 'refused'."""
+    import fnmatch
+    hits = reuse_hits(man, rcfg.get("scan") or [], rcfg.get("exclude") or [])
+    dec = _declared(rcfg.get("declared"))
+    decl, status = [], []
+    for h in hits.itertuples():
+        ok = np.array([fnmatch.fnmatch(str(h.run_id), str(rid)) and fnmatch.fnmatch(h.file, str(g))
+                       for rid, g in zip(dec["run_id"], dec["file_glob"])], bool)
+        d = dec[ok]
+        decl.append("; ".join(d["reason"].astype(str)) if len(d) else "")
+        status.append("declared" if len(d) else ("refused" if h.level in REUSE_REFUSE else "reported"))
+    hits["declared"] = decl
+    hits["status"] = status
+    return hits
+
+
+
 def _correct_matrix(tags: pd.DataFrame, keys_peps: pd.DataFrame) -> pd.DataFrame:
     """Flank-rule correctness of every tag of the listed spectra against the given peptide (key, peptide);
     returns key, rank, correct."""
@@ -425,6 +552,29 @@ def step_verify(cfg, log=print) -> Path:
     if len(bad):
         raise RuntimeError(f"sha256 mismatch or missing input: {bad[['run_id', 'kind', 'path']].to_dict('records')}")
     log(f"verify: {len(df)} files match the manifest -> {out}")
+    if rc.get("reuse"):
+        step_reuse(cfg, log=log)
+    return out
+
+
+def step_reuse(cfg, log=print) -> Path:
+    """Pre-freeze reuse check (realchimera.reuse: {scan: [...], exclude: [...], declared: <tsv>}): writes
+    reuse_<split>.tsv and refuses (RuntimeError) a run whose raw file name, raw SHA-1/sha256 or mzML sha256
+    appears in a scanned file without a declared reuse; PXD-only hits are reported."""
+    rc = cfg["realchimera"]
+    if not rc.get("reuse") or not rc["reuse"].get("scan"):
+        raise ValueError("realchimera.reuse.scan is required for the reuse step")
+    man = read_manifest(rc["manifest"], rc["split"])
+    rcfg = {**rc["reuse"], "exclude": [str(Path(rc["manifest"]).resolve()), *(rc["reuse"].get("exclude") or [])]}
+    hits = check_reuse(man, rcfg)
+    out = write_tsv(hits, _wd(cfg) / f"reuse_{rc['split']}.tsv", _prov(cfg, "reuse") +
+                    [f"scan {rcfg['scan']}; exclude {rcfg['exclude']}; declared {rcfg.get('declared')}"])
+    ref = hits[hits["status"] == "refused"]
+    if len(ref):
+        raise RuntimeError(f"undeclared reuse of {ref['run_id'].nunique()} run(s), see {out}: "
+                           f"{ref[['run_id', 'level', 'file']].drop_duplicates().head(5).to_dict('records')}")
+    log(f"reuse: {len(hits)} hits ({int((hits['status'] == 'declared').sum())} declared, "
+        f"{int((hits['status'] == 'reported').sum())} PXD-only) -> {out}")
     return out
 
 
@@ -459,38 +609,83 @@ def _record_ok(rec: Path, text: str) -> bool:
     return rec.exists() and rec.read_text() == text
 
 
-def step_sage(cfg, log=print) -> None:
-    from .run import tool_path, tool_version
+def _sage_search(cfg, r, mode: str, sub: str, exe: str, exe_sha: str, log=print) -> Path:
+    """One Sage search of a manifest run in runs/<split>/<run>/<sub>; cached on the completion record."""
+    import json
+    from .run import tool_version
     from .sage import sage_config, write_sage_config
     from .timing import run_timed
-    man = _verified(cfg)
+    out = _rundir(cfg, r) / sub
+    res = out / "results.sage.tsv"
+    conf_d = sage_config(run_dataset(r), r.fasta, [r.mzml], cfg["sage"], mode=mode)
+    cmd = [exe, *map(str, cfg["sage"].get("args") or []), "-o", str(out), str(out / "sage.json")]
+    record = (f"{' '.join(cmd)}\nsage sha256 {exe_sha}\nmzml sha256 {r.mzml_sha256}\nfasta sha256 {r.fasta_sha256}\n"
+              f"config {json.dumps(conf_d, sort_keys=True)}\n")
+    if res.exists() and _record_ok(out / "inputs.txt", record):
+        return res
+    for f in (res, out / "inputs.txt"):
+        if f.exists():
+            f.unlink()
+    out.mkdir(parents=True, exist_ok=True)
+    write_sage_config(out / "sage.json", conf_d)
+    (out / "command.txt").write_text(" ".join(cmd) + "\n")
+    (out / "version.txt").write_text(tool_version(exe, ("--version",), r"sage ?([^\n]+)") + "\n")
+    t = run_timed(cmd, log=out / "run.log",
+                  env={**(cfg.get("env") or {}), "RAYON_NUM_THREADS": str(cfg["sage"].get("threads") or 16)})
+    if t["returncode"] != 0 or not res.exists():
+        raise RuntimeError(f"Sage {mode} failed on {r.run_id}: see {out / 'run.log'}")
+    (out / "inputs.txt").write_text(record)  # written only after success: the cache key of results.sage.tsv
+    log(f"{r.run_id} sage {mode}: {t['wall_s']} s")
+    return res
+
+
+def _sage_exe(cfg) -> tuple[str, str]:
+    from .run import tool_path
     exe = tool_path(cfg, "sage")
     if not exe:
         raise RuntimeError("tools.sage not found")
-    exe_sha = sha256_file(exe)
+    return exe, sha256_file(exe)
+
+
+def step_sage(cfg, log=print) -> None:
+    man = _verified(cfg)
+    exe, exe_sha = _sage_exe(cfg)
     for r in man.itertuples():
-        out = _rundir(cfg, r) / "sage"
-        res = out / "results.sage.tsv"
-        import json
-        conf_d = sage_config(run_dataset(r), r.fasta, [r.mzml], cfg["sage"], mode="chimera")
-        cmd = [exe, *map(str, cfg["sage"].get("args") or []), "-o", str(out), str(out / "sage.json")]
-        record = (f"{' '.join(cmd)}\nsage sha256 {exe_sha}\nmzml sha256 {r.mzml_sha256}\nfasta sha256 {r.fasta_sha256}\n"
-                  f"config {json.dumps(conf_d, sort_keys=True)}\n")
-        if res.exists() and _record_ok(out / "inputs.txt", record):
-            continue
-        for f in (res, out / "inputs.txt"):
-            if f.exists():
-                f.unlink()
-        out.mkdir(parents=True, exist_ok=True)
-        write_sage_config(out / "sage.json", conf_d)
-        (out / "command.txt").write_text(" ".join(cmd) + "\n")
-        (out / "version.txt").write_text(tool_version(exe, ("--version",), r"sage ?([^\n]+)") + "\n")
-        t = run_timed(cmd, log=out / "run.log",
-                      env={**(cfg.get("env") or {}), "RAYON_NUM_THREADS": str(cfg["sage"].get("threads") or 16)})
-        if t["returncode"] != 0 or not res.exists():
-            raise RuntimeError(f"Sage chimera failed on {r.run_id}: see {out / 'run.log'}")
-        (out / "inputs.txt").write_text(record)  # written only after success: the cache key of results.sage.tsv
-        log(f"{r.run_id} sage chimera: {t['wall_s']} s")
+        _sage_search(cfg, r, "chimera", "sage", exe, exe_sha, log)
+
+
+def step_precheck(cfg, log=print) -> Path:
+    """Pre-freeze truth check: a plain closed Sage search of every run (runs/<split>/<run>/precheck; not
+    the endpoint search, scores nothing), truth_qc on it -> precheck_<split>.tsv; RuntimeError when a run
+    is without truth (truth_qc), identifies fewer than PRECHECK_MIN_ID_RATE of its MS2 spectra, or has
+    mostly ion-trap MS2 (ITMS filter strings) under a ppm fragment tolerance (wrong database, fragment
+    tolerance or conversion show here before freezing)."""
+    rc = cfg["realchimera"]
+    man = _verified(cfg)
+    exe, exe_sha = _sage_exe(cfg)
+    rows = []
+    for r in man.itertuples():
+        res = _sage_search(cfg, r, "closed", "precheck", exe, exe_sha, log)
+        q = truth_qc(res, float(rc["fdr"]))
+        c = ms2_census(r.mzml)
+        rate = q["target_pass"] / c["n_ms2"] if c["n_ms2"] else 0.0
+        why = [q["reason"]] if q["reason"] else []
+        if rate < PRECHECK_MIN_ID_RATE:
+            why.append(f"{q['target_pass']} of {c['n_ms2']} MS2 identified ({rate:.3f} < {PRECHECK_MIN_ID_RATE})")
+        if c["itms_share"] > PRECHECK_MAX_ITMS_SHARE and str(r.fragment_tol).strip().endswith("ppm"):
+            why.append(f"{c['itms_share']:.2f} of the MS2 are ion-trap (ITMS) but fragment_tol is {r.fragment_tol}")
+        q.update(status="without truth" if why else "truth", reason="; ".join(why))
+        rows.append({"run_id": r.run_id, "pxd": r.pxd, "search": "closed", **q, **c, "id_rate": rate})
+    df = pd.DataFrame(rows)
+    out = write_tsv(df, _wd(cfg) / f"precheck_{rc['split']}.tsv", _prov(cfg, "precheck") +
+                    [f"plain closed Sage search, rank-1 target PSMs at q <= {rc['fdr']}, min target:decoy {TRUTH_MIN_RATIO}, "
+                     f"min identified MS2 share {PRECHECK_MIN_ID_RATE}, ion-trap MS2 needs a Da fragment tolerance"])
+    bad = df[df["status"] != "truth"]
+    if len(bad):
+        raise RuntimeError(f"run(s) without truth in the closed precheck, see {out}: "
+                           f"{bad[['run_id', 'reason']].to_dict('records')}")
+    log(f"precheck: {len(df)} runs with truth -> {out}")
+    return out
 
 
 def step_purity(cfg, log=print) -> None:
@@ -579,10 +774,14 @@ def score_run(cfg, r) -> pd.DataFrame:
 def step_score(cfg, log=print) -> Path:
     rc = cfg["realchimera"]
     man = _verified(cfg)
-    parts = []
+    parts, qc = [], []
     for r in man.itertuples():
         sc = score_run(cfg, r)
         parts.append(sc)
+        q = truth_qc(_rundir(cfg, r) / "sage" / "results.sage.tsv", float(rc["fdr"]))
+        qc.append({"run_id": r.run_id, "pxd": r.pxd, "search": "chimera", **q})
+        if q["status"] != "truth":
+            log(f"{r.run_id}: without truth ({q['reason']}); the report leaves the run out")
         one = sc[(sc["profile"] == next(iter(rc["profiles"]))) & (sc["arm"] == "truth")]
         log(f"{r.run_id}: " + ", ".join(f"{c} {int((one['category'] == c).sum())}" for c in CATEGORIES))
     df = pd.concat(parts, ignore_index=True)
@@ -594,6 +793,8 @@ def step_score(cfg, log=print) -> Path:
         for line in prov:
             fh.write(f"# {line}\n")
         df.to_csv(fh, sep="\t", index=False)
+    write_tsv(pd.DataFrame(qc), _wd(cfg) / f"truthqc_{rc['split']}.tsv", _prov(cfg, "score truth check") +
+              [f"rank-1 target PSMs at q <= {rc['fdr']}, min target:decoy {TRUTH_MIN_RATIO} (truth_qc)"])
     log(f"score: {len(df)} rows -> {out}")
     return out
 
@@ -606,7 +807,9 @@ def step_report(cfg, log=print) -> Path:
     spec.loader.exec_module(mod)
     rc = cfg["realchimera"]
     _verified(cfg)
-    return mod.report(_wd(cfg) / f"spectra_{rc['split']}.tsv.gz", _wd(cfg) / f"endpoints_{rc['split']}.tsv", log=log)
+    qc = _wd(cfg) / f"truthqc_{rc['split']}.tsv"
+    return mod.report(_wd(cfg) / f"spectra_{rc['split']}.tsv.gz", _wd(cfg) / f"endpoints_{rc['split']}.tsv", log=log,
+                      truthqc=qc if qc.exists() else None)
 
 
 def run_step(cfg, step: str, log=print):
@@ -614,7 +817,7 @@ def run_step(cfg, step: str, log=print):
         raise ValueError(f"step {step!r}: one of {STEPS}")
     order = ["verify", "sage", "purity", "run", "score", "report"] if step == "all" else [step]
     fns = {"verify": step_verify, "sage": step_sage, "purity": step_purity, "run": step_run,
-           "score": step_score, "report": step_report}
+           "score": step_score, "report": step_report, "precheck": step_precheck, "reuse": step_reuse}
     res = None
     for s in order:
         res = fns[s](cfg, log=log)

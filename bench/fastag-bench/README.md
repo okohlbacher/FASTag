@@ -470,10 +470,19 @@ endpoints: repository `doc/REAL-CHIMERA-BENCHMARK.md`; held-out protocol: branch
   `scripts/purity_xcheck.py` compares with pyopenms).
 - Scoring: the flank rule against each peptide; chance arm against the peptides of another spectrum of the same
   category that shares no identity. Endpoints E1, H1-H4: `scripts/stats_realchimera.py`.
+- Truth check: `score` writes `truthqc_<split>.tsv` (`realchimera.truth_qc`); the report marks a run "without
+  truth" (no rank-1 target at q <= fdr, or rank-1 target:decoy < 1.2) and leaves it out. The report also has the
+  run-stratified sensitivity rows (`S run-stratified`, not preregistered).
+- Before freezing a held-out manifest: `precheck` (plain closed Sage search, refuses a run without truth, under 5 %
+  of MS2 identified, or ion-trap MS2 at a ppm fragment tolerance) and `reuse` (refuses a run whose raw file or
+  hashes appear in the files under `realchimera.reuse.scan` unless `realchimera.reuse.declared` gives a reason).
 
 ```bash
 C=config/realchimera-dev.yaml   # node data paths
 fastag-bench realchimera all -c $C       # verify, sage, purity, run, score, report
+fastag-bench realchimera precheck -c $C  # pre-freeze truth check (closed search; not part of all)
+fastag-bench realchimera reuse -c $C     # pre-freeze reuse check (needs realchimera.reuse.scan)
+python3 scripts/stats_realchimera.py --sensitivity spectra_HO.tsv.gz sensitivity.tsv   # S rows only
 python3 scripts/purity_xcheck.py openms <run.mzML> openms.tsv 10        # in an env with pyopenms
 python3 scripts/purity_xcheck.py compare purity.tsv openms.tsv xcheck.tsv
 ```
