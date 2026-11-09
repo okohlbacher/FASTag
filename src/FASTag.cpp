@@ -2592,6 +2592,31 @@ protected:
           OPENMS_LOG_ERROR << "-search_config_out: " << err << "." << std::endl;
           return ILLEGAL_PARAMETERS;
         }
+        // 'auto' with Comet: name the rules the run could call that have no
+        // Comet enzyme entry (in the template, or in Comet's own table), so
+        // the user learns it before the run; such a call is refused after the
+        // run with neither hand-off output written.
+        if (sl_nontryptic && !sl_named && search_engine == "comet")
+        {
+          std::vector<std::pair<std::string, std::string>> keys;
+          FASTag::SearchConfig::cometKeys(sl_plan, keys);
+          std::string missing;
+          for (const FASTag::Cleavage::Rule& r : FASTag::Cleavage::rules())
+          {
+            const auto spec = r.unspecific() ? FASTag::Cleavage::Specificity::None : sl_spec;
+            const auto enz = FASTag::Cleavage::engineEnzyme(r, spec);
+            const bool has = sl_template.empty()
+                                 ? enz.comet_default >= 0
+                                 : FASTag::SearchConfig::mergeKeyValueTemplate(sl_template, keys, enz).error.empty();
+            if (!has) missing += (missing.empty() ? "" : ", ") + r.name;
+          }
+          if (!missing.empty())
+            OPENMS_LOG_WARN << "-shortlist_protease auto with Comet: " << (sl_template.empty()
+                                                                                ? "Comet's default enzyme table"
+                                                                                : "the -search_config_template")
+                            << " has no entry for " << missing << "; if the run calls one of them, neither "
+                            << "-fasta_out nor -search_config_out is written." << std::endl;
+        }
         if (fasta_out.empty() && sl_decoys > 0)
           OPENMS_LOG_WARN << "-search_config_out names '" << recon_db << "', which holds " << sl_decoys
                           << " decoys, and lets the engine generate decoys as well; give -fasta_out to search "
@@ -5124,7 +5149,12 @@ protected:
           if (!fasta_out.empty()) withheld = "-fasta_out";
           if (!search_config_out.empty()) withheld += (withheld.empty() ? "" : " or ") + std::string("-search_config_out");
           OPENMS_LOG_INFO << "Shortlist protease check: " << kind << " (" << verdict.reason << ")." << std::endl;
-          if (!sl_choice.refuse)
+          if (!sl_choice.refuse && sl_choice.mismatch)
+            OPENMS_LOG_WARN << "Shortlist placement: " << sl_choice.rule->name << ", "
+                            << FASTag::Cleavage::specificityName(sl_choice.specificity) << " specificity ("
+                            << sl_choice.reason << "); the engine searches the named rule, not the call."
+                            << std::endl;
+          else if (!sl_choice.refuse)
             OPENMS_LOG_INFO << "Shortlist placement: " << sl_choice.rule->name << ", "
                             << FASTag::Cleavage::specificityName(sl_choice.specificity) << " specificity ("
                             << sl_choice.reason << ")." << std::endl;
@@ -5262,6 +5292,37 @@ protected:
                             << " proteins with evidence kept, not FDR-controlled -> " << shortlist_out << std::endl;
           }
         }
+        // The engine configuration's text is made before -fasta_out is
+        // written: a rule the engine cannot express (1.13 item 20: 'auto'
+        // calling a protease without a Comet enzyme entry) writes neither.
+        std::string sc_text;
+        if (!handoff_refused && !search_config_out.empty())
+        {
+          std::string err;
+          if (search_engine == "sage") sc_text = FASTag::SearchConfig::renderSage(sl_plan);
+          else if (sl_template.empty()) sc_text = FASTag::SearchConfig::renderComet(sl_plan, &err);
+          else
+          {
+            std::vector<std::pair<std::string, std::string>> keys;
+            err = FASTag::SearchConfig::cometKeys(sl_plan, keys);
+            if (err.empty())
+            {
+              const auto m = sl_nontryptic
+                                 ? FASTag::SearchConfig::mergeKeyValueTemplate(sl_template, keys, sl_plan.enzyme)
+                                 : FASTag::SearchConfig::mergeKeyValueTemplate(sl_template, keys);
+              for (const std::string& w : m.warnings) OPENMS_LOG_WARN << "-search_config_template: " << w << "." << std::endl;
+              err = m.error;
+              sc_text = m.text;
+            }
+          }
+          if (!err.empty())
+          {
+            OPENMS_LOG_ERROR << "-search_config_out: " << err << (sl_nontryptic ? " (the placement rule " + sl_plan.enzyme.name + ")" : std::string())
+                             << ". Neither " << (fasta_out.empty() ? std::string() : "-fasta_out nor ")
+                             << "-search_config_out written." << std::endl;
+            return ILLEGAL_PARAMETERS;
+          }
+        }
         if (!handoff_refused && !fasta_out.empty())
         {
           const auto res = FASTag::Shortlist::writeReducedFasta(recon_db, keep, sl_background, fasta_out);
@@ -5275,29 +5336,13 @@ protected:
         }
         if (!handoff_refused && !search_config_out.empty())
         {
-          std::string text, err;
-          if (search_engine == "sage") text = FASTag::SearchConfig::renderSage(sl_plan);
-          else if (sl_template.empty()) text = FASTag::SearchConfig::renderComet(sl_plan, &err);
-          else
-          {
-            std::vector<std::pair<std::string, std::string>> keys;
-            err = FASTag::SearchConfig::cometKeys(sl_plan, keys);
-            if (err.empty())
-            {
-              const auto m = sl_nontryptic
-                                 ? FASTag::SearchConfig::mergeKeyValueTemplate(sl_template, keys, sl_plan.enzyme)
-                                 : FASTag::SearchConfig::mergeKeyValueTemplate(sl_template, keys);
-              for (const std::string& w : m.warnings) OPENMS_LOG_WARN << "-search_config_template: " << w << "." << std::endl;
-              err = m.error;
-              text = m.text;
-            }
-          }
+          std::string err;
           FASTag::PartFile pf(search_config_out);
           std::ofstream cf;
-          if (err.empty() && !pf.open(cf, std::ios::out | std::ios::binary)) err = pf.error();
+          if (!pf.open(cf, std::ios::out | std::ios::binary)) err = pf.error();
           if (err.empty())
           {
-            cf << text;
+            cf << sc_text;
             cf.close();
             if (cf.fail()) err = "write failed (disk full?)";
             else if (!pf.commit()) err = pf.error();

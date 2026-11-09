@@ -19,7 +19,14 @@
 #   g. the tryptic E. coli fixture (Da, inconclusive) under auto: Trypsin,
 #      prsA/metK/rplF kept;
 #   h. -shortlist_specificity without -shortlist_protease warns it is ignored;
-#      -shortlist_gapped with a non-tryptic rule warns it is ignored.
+#      -shortlist_gapped with a non-tryptic rule warns it is ignored;
+#   i. auto with Comet when the called rule has no Comet enzyme entry: a
+#      template without Chymotrypsin (the chymotryptic MGF), and no template on
+#      an in-silico Asp-N MGF built here (Comet's own table has no Asp-N
+#      entry). Both WARN before the run, then exit 6 (ILLEGAL_PARAMETERS) with
+#      neither -fasta_out nor -search_config_out written;
+#   j. Lys-C named on a run that calls Arg-C (an in-silico Arg-C MGF built
+#      here): refused although both are trypsin-compatible.
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 BIN="$1"
@@ -162,5 +169,89 @@ grep -q -- '-shortlist_specificity is only read for -shortlist_protease other th
 grep -q -- '-shortlist_protease is only read for' "$TMP/ig2/run.log" || fail "no WARN for -shortlist_protease without a hand-off output"
 [ "$(go ig3 "${CH[@]}" -out t.tsv -shortlist_out sl.tsv -shortlist_protease auto -shortlist_gapped)" = 0 ] || fail "ignored 3"
 grep -q -- '-shortlist_gapped is ignored with -shortlist_protease auto' "$TMP/ig3/run.log" || fail "no WARN for -shortlist_gapped"
+
+# ---- i: auto + Comet, the called rule without a Comet enzyme entry
+grep -v '^10\.  *Chymotrypsin' "$FIX/comet_template.params" > "$TMP/nochymo.params"
+grep -q 'Chymotrypsin' "$TMP/nochymo.params" && fail "the template still has a Chymotrypsin entry"
+rc=$(go anoc "${CH[@]}" -out t.tsv -shortlist_out sl.tsv -fasta_out red.fasta -search_config_out comet.params \
+       -search_engine comet -search_config_template "$TMP/nochymo.params" -shortlist_protease auto)
+[ "$rc" = 6 ] || { cat "$TMP/anoc/run.log" >&2; fail "auto/Comet, template without the call: exit $rc, want 6"; }
+grep -q 'shortlist_protease auto with Comet: the -search_config_template has no entry for .*Chymotrypsin' "$TMP/anoc/run.log" \
+  || fail "auto/Comet template: no WARN before the run"
+grep -q 'no Chymotrypsin entry.*Neither -fasta_out nor -search_config_out written' "$TMP/anoc/run.log" \
+  || { cat "$TMP/anoc/run.log" >&2; fail "auto/Comet template: the ERROR does not name the rule"; }
+[ ! -e "$TMP/anoc/red.fasta" ] && [ ! -e "$TMP/anoc/comet.params" ] || fail "auto/Comet template: a hand-off output written"
+grep -q 'Failed writing' "$TMP/anoc/run.log" && fail "auto/Comet template: reported as an I/O error"
+
+# mkmgf PROTEASE OUT: in-silico MGF (as make_shortlist_fixtures.py: charge 2,
+# b2..b(n-1), y1..y(n-1)) of the PROTEASE peptides (aspn: before D; argc: after
+# R, not before P) of the fixture database's target proteins, 7-20 residues, no C.
+mkmgf() {
+  awk -v mode="$1" '
+    BEGIN {
+      split("G 57.02146372 A 71.03711379 S 87.03202841 P 97.05276385 V 99.06841391 T 101.04767847 L 113.08406398 I 113.08406398 N 114.04292744 D 115.02694303 Q 128.05857751 K 128.09496302 E 129.04259309 M 131.04048491 H 137.05891186 F 147.06841391 R 156.10111103 Y 163.06332853 W 186.07931295", a, " ")
+      for (i = 1; i < 38; i += 2) M[a[i]] = a[i + 1]
+      PR = 1.00727646688; WA = 18.0105646837; n = 0
+    }
+    function emit(p,   i, k, m, ok, b, y, ions, t, c, j, tmp) {
+      if (length(p) < 7 || length(p) > 20 || (p in seen)) return
+      for (i = 1; i <= length(p); ++i) if (!(substr(p, i, 1) in M)) return
+      seen[p] = 1; ++n
+      m = 0; for (i = 1; i <= length(p); ++i) { r[i] = M[substr(p, i, 1)]; m += r[i] }
+      c = 0; b = 0
+      for (i = 1; i < length(p); ++i) { b += r[i]; if (i >= 2) ions[++c] = b + PR }
+      y = 0
+      for (i = length(p); i > 1; --i) { y += r[i]; ions[++c] = y + WA + PR }
+      for (i = 2; i <= c; ++i) { t = ions[i]; for (j = i - 1; j >= 1 && ions[j] > t; --j) ions[j + 1] = ions[j]; ions[j + 1] = t }
+      printf "BEGIN IONS\nTITLE=%s_insilico.%d.%d.2 %s\nRTINSECONDS=%.1f\nPEPMASS=%.6f\nCHARGE=2+\n", mode, n, n, p, 10 + n, (m + WA + 2 * PR) / 2
+      for (k = 1; k <= c; ++k) printf "%.6f %d.5\n", ions[k], 1000 + ((k - 1) * 379) % 9000
+      printf "END IONS\n"
+    }
+    function digest(s,   i, st, ch) {
+      st = 1
+      for (i = 1; i <= length(s); ++i) {
+        ch = substr(s, i, 1)
+        if (mode == "aspn" && ch == "D" && i > 1) { emit(substr(s, st, i - st)); st = i }
+        if (mode == "argc" && ch == "R" && substr(s, i + 1, 1) != "P") { emit(substr(s, st, i - st + 1)); st = i + 1 }
+      }
+      emit(substr(s, st))
+    }
+    /^>/ { if (seq != "" && keep) digest(seq); seq = ""; keep = ($0 !~ /^>(DECOY_|rev_)/); next }
+    { seq = seq $0 }
+    END { if (seq != "" && keep) digest(seq) }' "$DB0" | tr -d '\r' > "$2"
+}
+mkmgf aspn "$TMP/aspn.mgf"
+mkmgf argc "$TMP/argc.mgf"
+[ "$(grep -c '^BEGIN IONS' "$TMP/aspn.mgf")" -ge 100 ] || fail "fewer than 100 Asp-N spectra"
+[ "$(grep -c '^BEGIN IONS' "$TMP/argc.mgf")" -ge 100 ] || fail "fewer than 100 Arg-C spectra"
+AN=(-in "$TMP/aspn.mgf" -recon_fasta "$DB0" -tag_length 5 -fragment_tolerance 20 -fragment_tolerance_unit ppm -threads 2)
+rc=$(go anod "${AN[@]}" -out t.tsv -shortlist_out sl.tsv -fasta_out red.fasta -search_config_out comet.params \
+       -search_engine comet -shortlist_protease auto)
+grep -q '^# placement: Asp-N' "$TMP/anod/sl.tsv" \
+  || { grep '^#' "$TMP/anod/sl.tsv" >&2; fail "Asp-N MGF: auto did not call Asp-N (the case does not test the default table)"; }
+[ "$rc" = 6 ] || { cat "$TMP/anod/run.log" >&2; fail "auto/Comet without a template on an Asp-N call: exit $rc, want 6"; }
+grep -q "shortlist_protease auto with Comet: Comet's default enzyme table has no entry for Asp-N" "$TMP/anod/run.log" \
+  || fail "auto/Comet default: no WARN before the run"
+grep -q "default enzyme table has no Asp-N entry.*Neither -fasta_out nor -search_config_out written" "$TMP/anod/run.log" \
+  || { cat "$TMP/anod/run.log" >&2; fail "auto/Comet default: the ERROR does not name the rule"; }
+[ ! -e "$TMP/anod/red.fasta" ] && [ ! -e "$TMP/anod/comet.params" ] || fail "auto/Comet default: a hand-off output written"
+grep -q 'Failed writing' "$TMP/anod/run.log" && fail "auto/Comet default: reported as an I/O error"
+# the same run with Sage is written (the error is Comet's table, not the run)
+[ "$(go anos "${AN[@]}" -out t.tsv -fasta_out red.fasta -search_config_out sage.json -shortlist_protease auto)" = 0 ] \
+  || { cat "$TMP/anos/run.log" >&2; fail "Asp-N MGF auto/Sage: exit non-zero"; }
+grep -q '"cleave_at": "D"' "$TMP/anos/sage.json" && [ -s "$TMP/anos/red.fasta" ] || fail "Asp-N MGF auto/Sage: not Asp-N"
+
+# ---- j: Lys-C named on an Arg-C call
+AR=(-in "$TMP/argc.mgf" -recon_fasta "$DB0" -tag_length 5 -fragment_tolerance 20 -fragment_tolerance_unit ppm -threads 2)
+[ "$(go arc "${AR[@]}" -out t.tsv -shortlist_out sl.tsv -fasta_out red.fasta -shortlist_protease auto)" = 0 ] \
+  || { cat "$TMP/arc/run.log" >&2; fail "Arg-C MGF auto: exit non-zero"; }
+grep -q '^# placement: Arg-C' "$TMP/arc/sl.tsv" \
+  || { grep '^#' "$TMP/arc/sl.tsv" >&2; fail "Arg-C MGF: auto did not call Arg-C"; }
+[ "$(go arl "${AR[@]}" -out t.tsv -shortlist_out sl.tsv -fasta_out red.fasta -shortlist_protease lys-c)" != 0 ] \
+  || fail "lys-c on an Arg-C call was not refused"
+grep -q 'but the tag ends call Arg-C' "$TMP/arl/run.log" || fail "lys-c on Arg-C: the ERROR does not name the call"
+[ ! -e "$TMP/arl/red.fasta" ] || fail "lys-c on Arg-C: -fasta_out written although refused"
+[ "$(go arlf "${AR[@]}" -out t.tsv -fasta_out red.fasta -shortlist_protease lys-c -shortlist_force)" = 0 ] \
+  || fail "lys-c on Arg-C -shortlist_force: exit non-zero"
 
 echo "nontryptic_cli_test: all checks passed"

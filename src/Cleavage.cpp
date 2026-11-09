@@ -57,6 +57,18 @@ namespace FASTag::Cleavage
     return nullptr;
   }
 
+  bool nested(const Rule& a, const Rule& b)
+  {
+    if (a.unspecific() || b.unspecific()) return false;
+    if (a.c_terminal != b.c_terminal || a.nocut != b.nocut) return false;
+    const auto within = [](const std::string& x, const std::string& y) {
+      for (char ch : x)
+        if (y.find(ch) == std::string::npos) return false;
+      return true;
+    };
+    return within(a.cut, b.cut) || within(b.cut, a.cut);
+  }
+
   const char* specificityName(Specificity s)
   {
     switch (s)
@@ -116,6 +128,22 @@ namespace FASTag::Cleavage
     if (v.model == "unspecific")
     {
       c.reason += "; the tag ends call unspecific, which names no other protease";
+      return c;
+    }
+    const Rule* called = findRule(v.model);
+    if (called)
+    {
+      if (!nested(*c.rule, *called))
+      {
+        c.refuse = true;
+        c.reason += ", but the tag ends call " + v.model;
+      }
+      else
+      {
+        c.mismatch = true;
+        c.reason += "; the tag ends call " + v.model + ", whose cleavage sites " +
+                    (called->cut.size() > c.rule->cut.size() ? "include" : "are within") + " the rule's";
+      }
       return c;
     }
     const bool rule_tc = trypsinCompatible(c.rule->name);

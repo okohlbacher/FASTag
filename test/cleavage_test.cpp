@@ -126,7 +126,30 @@ int main()
     c = FC::choose("asp-n", FC::Specificity::Semi, verdict(Verdict::NonTryptic, "Chymotrypsin"));
     check(c.refuse && c.specificity == FC::Specificity::Semi, "semi: refused on another non-tryptic call");
     c = FC::choose("lys-c", full, verdict(Verdict::Compatible, "Trypsin"));
-    check(c.rule->name == "Lys-C" && !c.refuse, "Lys-C on a trypsin call: trypsin-compatible, not refused");
+    check(c.rule->name == "Lys-C" && !c.refuse && c.mismatch, "Lys-C on a trypsin call: nested, kept with a WARN");
+    // Lys-C (after K) and Arg-C (after R) are disjoint: a confident call of
+    // one contradicts a rule of the other, although both are trypsin-compatible.
+    c = FC::choose("arg-c", full, verdict(Verdict::Compatible, "Lys-C"));
+    check(c.rule->name == "Arg-C" && c.refuse, "Arg-C on a Lys-C call is refused (disjoint sites)");
+    c = FC::choose("lys-c", full, verdict(Verdict::Compatible, "Arg-C"));
+    check(c.rule->name == "Lys-C" && c.refuse, "Lys-C on an Arg-C call is refused (disjoint sites)");
+    c = FC::choose("lys-c", FC::Specificity::Semi, verdict(Verdict::Compatible, "Arg-C"));
+    check(c.refuse, "semi: Lys-C on an Arg-C call is refused");
+    c = FC::choose("arg-c", full, verdict(Verdict::Compatible, "Trypsin"));
+    check(!c.refuse && c.mismatch, "Arg-C on a trypsin call: nested, kept with a WARN");
+    c = FC::choose("lys-c", full, verdict(Verdict::Compatible, "Lys-C"));
+    check(!c.refuse && !c.mismatch, "Lys-C on a Lys-C call: no WARN");
+    c = FC::choose("lys-n", full, verdict(Verdict::Compatible, "Lys-C"));
+    check(c.refuse, "Lys-N (before K) on a Lys-C call (after K) is refused");
+    c = FC::choose("glu-c", full, verdict(Verdict::NonTryptic, "Asp-N"));
+    check(c.refuse, "Glu-C on an Asp-N call is refused");
+    check(FC::nested(*FC::findRule("Trypsin"), *FC::findRule("Lys-C")) &&
+              FC::nested(*FC::findRule("Arg-C"), *FC::findRule("Trypsin")),
+          "nested: Trypsin with Lys-C and Arg-C");
+    check(!FC::nested(*FC::findRule("Lys-C"), *FC::findRule("Arg-C")) &&
+              !FC::nested(*FC::findRule("Lys-C"), *FC::findRule("Lys-N")) &&
+              !FC::nested(*FC::findRule("unspecific"), *FC::findRule("unspecific")),
+          "nested: not Lys-C/Arg-C, Lys-C/Lys-N or unspecific");
     c = FC::choose("chymotrypsin", FC::Specificity::None, verdict(Verdict::Compatible, "Trypsin"));
     check(!c.refuse, "specificity none is never refused");
     c = FC::choose("chymotrypsin", full, verdict(Verdict::Inconclusive, "Trypsin"));

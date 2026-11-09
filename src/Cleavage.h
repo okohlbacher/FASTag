@@ -74,8 +74,18 @@ namespace FASTag::Cleavage
     /// The run's confident protease call contradicts a named rule: the
     /// hand-off outputs are withheld unless -shortlist_force.
     bool refuse = false;
+    /// A named rule kept although the confident call is another protease
+    /// whose cleavage sites nest with the rule's (Trypsin vs Lys-C or Arg-C):
+    /// the caller WARNs.
+    bool mismatch = false;
     std::string reason;  ///< one short phrase for the log and the TSV header
   };
+
+  /// True when one rule's cleavage sites are a subset of the other's: same
+  /// side of the residue, same no-cut residue, and one cut set within the
+  /// other (Trypsin with Lys-C or Arg-C; a rule with itself). Lys-C and
+  /// Arg-C are disjoint, so not nested. Unspecific rules nest with none.
+  bool nested(const Rule& a, const Rule& b);
 
   /// @p option is -shortlist_protease other than `trypsin` (`auto`,
   /// `unspecific` or a model name, which the caller validated with findRule),
@@ -83,12 +93,14 @@ namespace FASTag::Cleavage
   ///   auto:       a Compatible or NonTryptic call -> the called model's rule;
   ///               Inconclusive -> Trypsin (what FASTag 1.12 assumes);
   ///   unspecific: every window, never refused (the specificity is None);
-  ///   a model:    that rule; refused when the call is confident and names a
-  ///               protease the rule is not (a non-trypsin-compatible call
-  ///               other than the rule, or a trypsin-compatible call for a rule
-  ///               that is not), unless @p spec is None. A call of the
-  ///               `unspecific` model names no other protease and is never a
-  ///               contradiction.
+  ///   a model:    that rule; refused when the call is confident and names
+  ///               another protease whose cleavage sites do not nest with the
+  ///               rule's (nested(): so Lys-C vs Arg-C is refused, Trypsin vs
+  ///               Lys-C or Arg-C is kept with Choice::mismatch set), unless
+  ///               @p spec is None. A call of the `unspecific` model names no
+  ///               other protease and is never a contradiction. A called model
+  ///               without a rule: refused when NonTryptic, or Compatible for
+  ///               a rule that is not trypsin-compatible.
   Choice choose(const std::string& option, Specificity spec, const FASTag::Shortlist::ProteaseVerdict& v);
 
   /// The engine's digestion for a rule: its residues, semi = 1 terminus,

@@ -96,13 +96,18 @@ byte) chooses the cleavage rule of the shortlist's placements and of
   (Compatible or NonTryptic above); an inconclusive check is Trypsin, as 1.12
   assumes. A call of the `unspecific` model is the unspecific rule.
 - `chymotrypsin`, `lys-c`, `arg-c`, `asp-n`, `glu-c`, `lys-n`: that rule.
-  When the check calls another protease confidently (a non-trypsin-compatible
-  model other than the rule, or a trypsin-compatible model for a rule that is
-  not), the hand-off outputs are withheld as in 1.12 (ERROR, exit
-  `ILLEGAL_PARAMETERS`) unless `-shortlist_force`; `-shortlist_specificity
-  none` is never withheld, and a call of the `unspecific` model (no protease
-  fits better than the background; PXD040407's chymotrypsin run calls it)
-  names no other protease and does not withhold a named rule.
+  When the check confidently calls another protease whose cleavage sites do
+  not nest with the rule's (one site set within the other, same side, same
+  no-cut residue), the hand-off outputs are withheld as in 1.12 (ERROR, exit
+  `ILLEGAL_PARAMETERS`) unless `-shortlist_force`. Lys-C (after K) and Arg-C
+  (after R) are disjoint, so a Lys-C call withholds `arg-c` and an Arg-C call
+  withholds `lys-c`, although both are trypsin-compatible; Trypsin contains
+  both, so a Trypsin call with `lys-c` or `arg-c` (or the reverse) is kept
+  with a WARN that the engine searches the named rule, not the call.
+  `-shortlist_specificity none` is never withheld, and a call of the
+  `unspecific` model (no protease fits better than the background;
+  PXD040407's chymotrypsin run calls it) names no other protease and does not
+  withhold a named rule.
 - `unspecific`: every window, never withheld.
 
 With any value but `trypsin` the shortlist's tags are not placed on tryptic
@@ -135,7 +140,13 @@ residue pairs in `cleavage_test`. Glu-C: FASTag's model cuts after E only;
 ProteaseDB has no E-only enzyme, so the window test and the engines cut
 after D and E (a superset: no window is lost). With a template Comet's enzyme
 is looked up in its `[COMET_ENZYME_INFO]` table by rule (sense, cut residues,
-no-cut residue), as trypsin is in 1.12; `semi` writes Sage
+no-cut residue), as trypsin is in 1.12. A named rule without an entry (in
+the template, or in Comet's own table for Asp-N) is refused before tagging.
+With `auto` the rule is known only after the run: a WARN before the run names
+the rules without an entry, and if the run calls one of them the tool stops
+with ERROR and exit `ILLEGAL_PARAMETERS` and writes neither `-fasta_out` nor
+`-search_config_out` (the configuration is made before the FASTA is written,
+so the two are written together or not at all). `semi` writes Sage
 `"semi_enzymatic": true` and Comet `num_enzyme_termini = 1`. Sage 0.14.7's
 behaviour was checked on node data: `cleave_at ""` digests non-specifically
 (66,127 peptides on the fixture database against 271 tryptic), `"restrict":
