@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased (1.13)
+
+- **Shipped proteomes (backlog item 24).** The bundles (CMake install, the
+  Linux, macOS and Windows release bundles and the Homebrew casks, which
+  install the macOS image) carry the reviewed entries of the UniProt 2026_04
+  reference proteomes of human, mouse, yeast and E. coli
+  (`share/FASTag/alkylation`, about 17 MB, CC BY 4.0). `-alkylation_proteome
+  auto|human|mouse|yeast|ecoli` now uses them instead of stopping with exit
+  code 6. The alkylation report gains a `database_release` row for a shipped
+  proteome; FASTag refuses a shipped file whose entry count differs from its
+  manifest (exit 3). Reports on `-recon_fasta`, `-fasta` or a FASTA path are
+  unchanged. `tools/fetch_proteomes.sh` regenerates the files.
+
 ## 1.12.1 (2026-11-08)
 
 Documentation and packaging only: no code, default or output changes. The README now

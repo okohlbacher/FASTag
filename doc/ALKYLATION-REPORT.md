@@ -53,6 +53,7 @@ version. Their format is owned by RunMeta and numbered by
 | `format` | `1`, the format of the `alk_*` and `alkylation_call` sections | `-` |
 | `database` | path of the FASTA the placements are on | `-` |
 | `database_source` | `recon_fasta`, `fasta` (the run's placement database), `proteome` (an `-alkylation_proteome` FASTA) or `bundled:<name>` (`human`, `mouse`, `yeast`, `ecoli`) | `-` |
+| `database_release` | only for `bundled:<name>` with a `proteomes.tsv` beside it (1.13): `UniProt <release> <proteome> (taxon <id>, reviewed, <n> entries, sha256 <hash>)`; absent otherwise, so a report on a FASTA path is that of 1.12 | `-` |
 | `fixed_c_delta` | the run's fixed modification mass on C in Da (`0` without one); reagent mass = gap + this | `-` |
 | `fixed_nterm_delta` | the run's fixed peptide N-terminal modification mass in Da (a TMT or iTRAQ label; `0` without one), taken off an N-side gap first | `-` |
 | `fixed_cterm_delta` | the same for a fixed peptide C-terminal modification | `-` |
@@ -137,7 +138,7 @@ and `share`, and `alk_run database_source` for the caveat.
 | option | default | |
 |---|---|---|
 | `-alkylation_out <tsv>` | off | the report; refused with `-stream`, guarded against overwriting inputs and other outputs |
-| `-alkylation_proteome` | `auto` | database without `-recon_fasta`/placement readers: `auto` (= `human`), `human`, `mouse`, `yeast`, `ecoli` (shipped, `<bin>/../share/FASTag/alkylation/<name>.fasta.gz` or `$FASTAG_ALKYLATION_DIR`), or a FASTA file (`.gz` allowed). Ignored with a warning when `-recon_fasta` is given or another placement reader runs |
+| `-alkylation_proteome` | `auto` | database without `-recon_fasta`/placement readers: `auto` (= `human`), `human`, `mouse`, `yeast`, `ecoli` (shipped UniProt 2026_04 reference proteomes, reviewed entries: `<bin>/../share/FASTag/alkylation/<name>.fasta.gz` or `$FASTAG_ALKYLATION_DIR`; see Shipped proteomes), or a FASTA file (`.gz` allowed). Ignored with a warning when `-recon_fasta` is given or another placement reader runs |
 | `-alkylation_min_spectra` | 10 | |
 | `-alkylation_min_share` | 0.6 | |
 | `-alkylation_window` | 0 (= 0.02 Da on ppm runs, 0.5 Da on Da runs) | |
@@ -180,13 +181,50 @@ Recorded here so the integrator of D#3g finds them beside the format:
 
 ## Shipped proteomes
 
-PLAN-organism-chemistry #3g decides that the human, mouse, yeast and E. coli
-UniProt reference proteomes (UP000005640, UP000000589, UP000002311,
-UP000000625, CC BY 4.0, about 15 MB) ship in `data/alkylation/` with a README
-(release, sha256, licence notice) and a BOM.md row. They are not in the
-repository yet: fetching them from UniProt needs the user's approval. Until
-they are added, `-alkylation_proteome auto` and the named values refuse with a
-clear message; `-recon_fasta` or a FASTA path works. CMake installs them only
-together with `data/alkylation/README.md` (a drop without it is a configure
-error). digest_cli_test checks the installed-path lookup with a gzip it makes
-itself.
+Since 1.13 (backlog item 24) FASTag ships the reviewed (Swiss-Prot) entries of
+four UniProt reference proteomes, release 2026_04, in `data/alkylation/`,
+installed to `share/FASTag/alkylation` (flat release layout:
+`share-FASTag-alkylation`, beside `share-FASTag-digest`):
+
+| name | proteome | taxon | entries | gz size |
+|---|---|---|---|---|
+| `human` (`auto`) | UP000005640 | 9606 | 20,414 | 7.5 MB |
+| `mouse` | UP000000589 | 10090 | 17,279 | 6.6 MB |
+| `yeast` | UP000002311 | 559292 | 6,067 | 2.0 MB |
+| `ecoli` | UP000000625 | 83333 | 4,403 | 1.0 MB |
+
+`tools/fetch_proteomes.sh <dir>` downloads them from the UniProt REST API and
+writes `proteomes.tsv` (name, proteome, taxon, release, release_date, entries,
+sha256 of the `.gz`, sha256 of the FASTA, file). `data/alkylation/README.md`
+records the release, the hashes and the CC BY 4.0 notice; BOM.md has the row.
+
+Lookup: `$FASTAG_ALKYLATION_DIR`, else the directory `alkylation` beside the
+digest data directory (`$FASTAG_DIGEST_DIR`, `<bin>/../share/FASTag/digest`,
+`<bin>/share-FASTag-digest` or `<bin>/digest`). When the directory holds
+`proteomes.tsv`, the name's row gives the file, and FASTag
+
+- refuses a manifest without a valid row for the name (the nine columns, a
+  positive entry count, a release, a plain file name, one row per name) with
+  exit code 3 (INPUT_FILE_CORRUPT);
+- refuses a file whose entry count differs from the row (a truncated or
+  replaced file) with exit code 3, before any output is written;
+- writes the `database_release` row.
+
+A directory without `proteomes.tsv` (one's own `FASTAG_ALKYLATION_DIR`) is
+read as in 1.12: `<name>.fasta.gz`, no `database_release` row. A missing file
+still stops with exit code 6 (ILLEGAL_PARAMETERS) and the message
+`no shipped <name> proteome found`; that is now only the case for a build or
+copy without `share/FASTag/alkylation`.
+
+The names apply to `-alkylation_proteome` only. `-recon_fasta` stays a FASTA
+file parameter: accepting names there would change its registered type (the
+TOPP existence check, the INI/CTD and the GUI file picker) and every reader of
+that database (shortlist, digest background, mass gaps), which is not part of
+this item. The shipped files are gzip-compressed, and the `-recon_fasta`
+readers read plain FASTA only.
+
+`proteomes_cli_test` checks the manifest against the files (hashes, entries,
+every header a reviewed entry of the taxon, a known protein each), resolves
+every name in the installed and the flat layout and through
+`FASTAG_ALKYLATION_DIR`, and checks the refusals. CI checks the shipped Linux,
+macOS and Windows bundles with `-alkylation_out` at the default `auto`.

@@ -315,6 +315,20 @@ int main()
               value(rows, "alk_cys", "class.Carbamidomethyl") == "30" && value(rows, "alk_cys", "unexplained") == "12",
           "report values");
     check(value(rows, "alkylation_call", "mass") == D::num(CAM), "reagent mass row");
+    // 1.13 (#24): database_release only for a shipped proteome, right after database_source
+    check(value(rows, "alk_run", "database_release").rfind("<missing", 0) == 0,
+          "no database_release row for a database that is not shipped");
+    A::ReportInfo binfo = info;
+    binfo.database_source = "bundled:yeast";
+    binfo.database_release = "UniProt 2026_04 UP000002311 (taxon 559292, reviewed, 6067 entries, sha256 ab)";
+    const auto brows = A::alkylationRows(t, A::callAlkylation(t, s), s, forms, binfo);
+    check(brows.size() == rows.size() + 1, "a shipped proteome adds exactly one row");
+    std::size_t src_at = 0;
+    for (std::size_t i = 0; i < brows.size(); ++i)
+      if (brows[i].section == "alk_run" && brows[i].key == "database_source") src_at = i;
+    check(src_at + 1 < brows.size() && brows[src_at + 1].key == "database_release" &&
+              brows[src_at + 1].value == binfo.database_release && brows[src_at + 1].n == "-",
+          "database_release follows database_source with the release");
     const auto none_rows = A::alkylationRows(A::Tally(), A::callAlkylation(A::Tally(), s), s, forms, info);
     check(value(none_rows, "alkylation_call", "status") == "no_call" &&
               value(none_rows, "alkylation_call", "reason") == "few_cys_spectra" &&
@@ -348,6 +362,39 @@ int main()
     check(e.size() == 2 && e[0].identifier == "sp|P1|ONE" && e[0].sequence == "PEPTIDEK" && e[1].sequence == "ACDK",
           "plain FASTA read");
     std::remove(path.c_str());
+  }
+
+  // ---- 1.13 (#24): the shipped proteomes' manifest
+  {
+    const std::string hdr = "name\tproteome\ttaxon\trelease\trelease_date\tentries\tsha256\tfasta_sha256\tfile\n";
+    const std::string human = "human\tUP000005640\t9606\t2026_04\t04-November-2026\t20414\taa\tbb\thuman.fasta.gz\n";
+    const std::string yeast = "yeast\tUP000002311\t559292\t2026_04\t04-November-2026\t6067\tcc\tdd\tyeast.fasta.gz\r\n";
+    A::ShippedProteome sp;
+    check(A::findShippedProteome(hdr + human + yeast, "yeast", sp) && sp.proteome == "UP000002311" &&
+              sp.taxon == "559292" && sp.release == "2026_04" && sp.entries == 6067 && sp.sha256 == "cc" &&
+              sp.fasta_sha256 == "dd" && sp.file == "yeast.fasta.gz",
+          "manifest row read (CRLF tolerated)");
+    check(A::shippedRelease(sp) == "UniProt 2026_04 UP000002311 (taxon 559292, reviewed, 6067 entries, sha256 cc)",
+          "release value: " + A::shippedRelease(sp));
+    A::ShippedProteome none;
+    check(!A::findShippedProteome(hdr + human, "mouse", none) && none.entries == 0, "a name without a row");
+    check(!A::findShippedProteome(hdr + human + human, "human", none), "two rows for one name");
+    check(!A::findShippedProteome(human, "human", none), "no header");
+    check(!A::findShippedProteome("name\tproteome\tfile\n" + human, "human", none), "a header without the columns");
+    check(!A::findShippedProteome(hdr + "human\tUP1\t9606\t2026_04\td\t0\taa\tbb\thuman.fasta.gz\n", "human", none),
+          "zero entries");
+    check(!A::findShippedProteome(hdr + "human\tUP1\t9606\t2026_04\td\t2x\taa\tbb\thuman.fasta.gz\n", "human", none),
+          "entries not a number");
+    check(!A::findShippedProteome(hdr + "human\tUP1\t9606\t2026_04\td\t5\taa\tbb\t../x.fasta.gz\n", "human", none),
+          "a file with a path");
+    check(!A::findShippedProteome(hdr + "human\tUP1\t9606\t\td\t5\taa\tbb\th.fasta.gz\n", "human", none),
+          "an empty release");
+    // columns in another order and a comment line
+    const std::string reord = "# shipped\nfile\tname\tentries\trelease\trelease_date\tproteome\ttaxon\tsha256\tfasta_sha256\n"
+                              "e.fasta.gz\tecoli\t4403\t2026_04\td\tUP000000625\t83333\tee\tff\n";
+    check(A::findShippedProteome(reord, "ecoli", sp) && sp.file == "e.fasta.gz" && sp.entries == 4403 &&
+              sp.proteome == "UP000000625",
+          "columns found by name");
   }
 
   if (failures) std::cerr << failures << " failure(s)\n";

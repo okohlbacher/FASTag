@@ -513,6 +513,10 @@ jobs:
           # The -digest_out models and -massgap_out modifications, found the
           # same way (share-FASTag-digest in this flat layout).
           cp -r data/digest dist/FASTag/share-FASTag-digest
+          # 1.13 (#24): the -alkylation_proteome proteomes (UniProt, CC BY 4.0;
+          # data/alkylation/README.md), beside the digest data (share-FASTag-alkylation).
+          cp -r data/alkylation dist/FASTag/share-FASTag-alkylation
+          test -s dist/FASTag/share-FASTag-alkylation/proteomes.tsv
           # FASTag's own licence and the notices of every redistributed
           # library, which BSD/MIT/Apache-2.0 require in a binary
           # distribution (tools/third_party_notices.py maps each bundled
@@ -620,6 +624,10 @@ jobs:
           # The -digest_out models and -massgap_out modifications, found the
           # same way (share-FASTag-digest in this flat layout).
           cp -r data/digest dist/FASTag/share-FASTag-digest
+          # 1.13 (#24): the -alkylation_proteome proteomes (UniProt, CC BY 4.0;
+          # data/alkylation/README.md), beside the digest data (share-FASTag-alkylation).
+          cp -r data/alkylation dist/FASTag/share-FASTag-alkylation
+          test -s dist/FASTag/share-FASTag-alkylation/proteomes.tsv
           # FASTag's own licence and the notices of every redistributed
           # library, which BSD/MIT/Apache-2.0 require in a binary
           # distribution (tools/third_party_notices.py maps each bundled
@@ -754,6 +762,14 @@ jobs:
             || { cat "$BW/digest.log"; echo "::error::the shipped bundle cannot write -digest_out"; exit 1; }
           grep -q $'^run\tbackground\tshipped_human\t' "$BW/digest.tsv" \
             || { cat "$BW/digest.log"; echo "::error::-digest_out did not find the shipped digest data"; exit 1; }
+          # ...and its shipped proteomes (1.13 #24): -alkylation_out with the
+          # default -alkylation_proteome auto places on the shipped human proteome.
+          env -i HOME="$HOME" PATH=/usr/bin:/bin "$GITHUB_WORKSPACE/dist/FASTag/FASTag" \
+            -in "$MZ" -out "$BW/al.tsv" -alkylation_out "$BW/alk.tsv" -threads 2 > "$BW/alk.log" 2>&1 \
+            || { cat "$BW/alk.log"; echo "::error::the shipped bundle cannot write -alkylation_out with the shipped proteome"; exit 1; }
+          grep -q $'^alk_run\tdatabase_source\tbundled:human\t' "$BW/alk.tsv" \
+            && grep -q $'^alk_run\tdatabase_release\tUniProt ' "$BW/alk.tsv" \
+            || { cat "$BW/alk.log"; echo "::error::-alkylation_out did not find the shipped human proteome"; exit 1; }
 
           # Listed once into a variable, not `ls | grep -q` three times: this step
           # runs under `shell: bash`, which is pipefail, and grep -q exits at the
@@ -1053,6 +1069,7 @@ jobs:
           cp -RL dist/FASTag/share-OpenMS "$R/share/OpenMS"
           cp -RL dist/FASTag/share-FASTag-taxonomy "$R/share/FASTag/taxonomy"
           cp -RL dist/FASTag/share-FASTag-digest "$R/share/FASTag/digest"
+          cp -RL dist/FASTag/share-FASTag-alkylation "$R/share/FASTag/alkylation"
           cp dist/FASTag/LICENSE dist/FASTag/THIRD-PARTY-NOTICES.txt "$R/"
           # -L throughout: Tauri's resource bundler silently SKIPS symlinked
           # directories, so a symlink here becomes a missing file in the .app
@@ -1627,6 +1644,7 @@ jobs:
           cp -RL "$D/share-OpenMS" "$R/share/OpenMS"
           cp -RL "$D/share-FASTag-taxonomy" "$R/share/FASTag/taxonomy"
           cp -RL "$D/share-FASTag-digest" "$R/share/FASTag/digest"
+          cp -RL "$D/share-FASTag-alkylation" "$R/share/FASTag/alkylation"
           cp "$D/LICENSE" "$D/THIRD-PARTY-NOTICES.txt" "$R/"
           test -x "$R/bin/FASTag"
           test -s "$R/share/OpenMS/examples/ID/Ecoli_MS2_small.mzML"

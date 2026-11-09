@@ -299,6 +299,9 @@ namespace FASTag::Alkylation
         : info.database_source == "fasta"     ? "The database is -fasta, the placement database of this run."
         : info.database_source == "proteome"  ? "The database is the -alkylation_proteome FASTA."
                                               : "The database is the proteome shipped with FASTag (" + info.database_source + ").");
+    if (!info.database_release.empty())
+      add("alk_run", "database_release", info.database_release, "-",
+          "The shipped proteome's UniProt release, proteome, entries and sha256 (share/FASTag/alkylation/proteomes.tsv).");
     add("alk_run", "fixed_c_delta", num(s.fixed_c), "-",
         info.reagent_note.empty() ? "The run has no fixed modification on C; the reagent mass is the gap."
                                   : "The run's fixed " + info.reagent_note + " on C adds " + num(s.fixed_c) +
@@ -432,5 +435,78 @@ namespace FASTag::Alkylation
       if (nl == text.size()) break;
     }
     if (have) out.push_back(cur);
+  }
+
+  namespace
+  {
+    std::vector<std::string> splitTabs(const std::string& line)
+    {
+      std::vector<std::string> f;
+      std::size_t pos = 0;
+      for (;;)
+      {
+        const std::size_t t = line.find('\t', pos);
+        f.push_back(line.substr(pos, t == std::string::npos ? std::string::npos : t - pos));
+        if (t == std::string::npos) break;
+        pos = t + 1;
+      }
+      return f;
+    }
+  }
+
+  bool findShippedProteome(const std::string& manifest_text, const std::string& name, ShippedProteome& out)
+  {
+    static const char* const kCols[] = {"name", "proteome", "taxon", "release", "release_date",
+                                        "entries", "sha256", "fasta_sha256", "file"};
+    std::vector<int> col(9, -1);
+    bool header = false, found = false;
+    ShippedProteome got;
+    std::size_t pos = 0;
+    while (pos < manifest_text.size())
+    {
+      std::size_t nl = manifest_text.find('\n', pos);
+      if (nl == std::string::npos) nl = manifest_text.size();
+      std::string line = manifest_text.substr(pos, nl - pos);
+      pos = nl + 1;
+      if (!line.empty() && line.back() == '\r') line.pop_back();
+      if (line.empty() || line[0] == '#') continue;
+      const std::vector<std::string> f = splitTabs(line);
+      if (!header)
+      {
+        for (std::size_t i = 0; i < f.size(); ++i)
+          for (int c = 0; c < 9; ++c)
+            if (f[i] == kCols[c]) col[c] = static_cast<int>(i);
+        for (int c : col)
+          if (c < 0) return false;
+        header = true;
+        continue;
+      }
+      auto at = [&](int c) { return static_cast<std::size_t>(col[c]) < f.size() ? f[col[c]] : std::string(); };
+      if (at(0) != name) continue;
+      if (found) return false;  // two rows for one name: which file is meant?
+      found = true;
+      got.name = at(0);
+      got.proteome = at(1);
+      got.taxon = at(2);
+      got.release = at(3);
+      got.release_date = at(4);
+      const std::string e = at(5);
+      if (e.empty() || e.size() > 12 || e.find_first_not_of("0123456789") != std::string::npos) return false;
+      got.entries = std::stoull(e);
+      got.sha256 = at(6);
+      got.fasta_sha256 = at(7);
+      got.file = at(8);
+    }
+    if (!found || got.entries == 0 || got.file.empty() || got.release.empty()
+        || got.file.find_first_of("/\\") != std::string::npos)
+      return false;
+    out = got;
+    return true;
+  }
+
+  std::string shippedRelease(const ShippedProteome& sp)
+  {
+    return "UniProt " + sp.release + " " + sp.proteome + " (taxon " + sp.taxon + ", reviewed, "
+           + std::to_string(sp.entries) + " entries, sha256 " + sp.sha256 + ")";
   }
 }

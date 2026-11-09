@@ -83,6 +83,7 @@
 #include <filesystem>
 #include <functional>
 #include <fstream>
+#include <iterator>
 #include <iostream>
 #include <limits>
 #include <map>
@@ -978,8 +979,8 @@ protected:
     setValidFormats_("alkylation_out", ListUtils::create<std::string>("tsv"));
     registerStringOption_("alkylation_proteome", "<name>", "auto",
                           "Database of -alkylation_out without -recon_fasta: a FASTA file (.gz allowed). The names "
-                          "auto (= human), human, mouse, yeast and ecoli stand for shipped proteomes, which 1.12.0 "
-                          "does not ship: they stop with exit code 6, so give a FASTA file here or -recon_fasta",
+                          "auto (= human), human, mouse, yeast and ecoli stand for the shipped UniProt reference "
+                          "proteomes (reviewed entries; share/FASTag/alkylation, release in its proteomes.tsv)",
                           false, true);
     registerIntOption_("alkylation_min_spectra", "<n>", 10,
                        "Spectra the -alkylation_out call needs, binned and for the called class", false, true);
@@ -2052,6 +2053,9 @@ protected:
     std::size_t sl_decoys = 0;
     // #3g: where -alkylation_out's placements come from (its report says).
     std::string alk_db_source, alk_db;
+    // 1.13 (#24): a shipped proteome's manifest row (entries 0 = no manifest).
+    FASTag::Alkylation::ShippedProteome alk_shipped;
+    std::string alk_manifest;
     if (alkylation_on)
     {
       const std::string prot = getStringOption_("alkylation_proteome");
@@ -2071,7 +2075,30 @@ protected:
           // the species call before the tagging loop that places the tags.
           const std::string name = prot == "auto" ? "human" : prot;
           const std::string dir = alkylationDir_();
-          const std::string path = dir.empty() ? std::string() : dir + "/" + name + ".fasta.gz";
+          std::string path = dir.empty() ? std::string() : dir + "/" + name + ".fasta.gz";
+          // 1.13 (#24): the shipped directory's proteomes.tsv names each file and
+          // records its UniProt release, entries and sha256. A directory without
+          // it (a FASTAG_ALKYLATION_DIR of one's own) is read as in 1.12.
+          const std::string manifest = dir.empty() ? std::string() : dir + "/proteomes.tsv";
+          if (!manifest.empty() && File::exists(manifest))
+          {
+            std::ifstream mf(manifest.c_str(), std::ios::binary);
+            const std::string mtext((std::istreambuf_iterator<char>(mf)), std::istreambuf_iterator<char>());
+            if (!mf.good() && !mf.eof())
+            {
+              OPENMS_LOG_ERROR << "-alkylation_out: cannot read '" << manifest << "'." << std::endl;
+              return INPUT_FILE_NOT_READABLE;
+            }
+            if (!FASTag::Alkylation::findShippedProteome(mtext, name, alk_shipped))
+            {
+              OPENMS_LOG_ERROR << "-alkylation_out: '" << manifest << "' has no valid row for the " << name
+                               << " proteome (columns name, proteome, taxon, release, release_date, entries, "
+                                  "sha256, fasta_sha256, file; one row per name)." << std::endl;
+              return INPUT_FILE_CORRUPT;
+            }
+            path = dir + "/" + alk_shipped.file;
+            alk_manifest = manifest;
+          }
           if (path.empty() || !File::exists(path))
           {
             OPENMS_LOG_ERROR << "-alkylation_out: no shipped " << name << " proteome found (expected "
@@ -2109,6 +2136,17 @@ protected:
       // #3g: the shipped proteomes are gzip-compressed, which FASTAFile cannot read.
       if (alkylation_only_db) FASTag::Alkylation::loadFasta(recon_db, rentries);
       else FASTAFile().load(recon_db, rentries);
+      // 1.13 (#24): a shipped proteome must hold the entries its manifest
+      // records; fewer means a truncated or replaced file.
+      if (alkylation_only_db && alk_shipped.entries > 0 && rentries.size() != alk_shipped.entries)
+      {
+        OPENMS_LOG_ERROR << "-alkylation_out: the shipped " << alk_shipped.name << " proteome '" << recon_db
+                         << "' holds " << rentries.size() << " entries, its proteomes.tsv records "
+                         << alk_shipped.entries << " (UniProt " << alk_shipped.release
+                         << "); the file is damaged or was replaced. Reinstall FASTag, or give "
+                            "-alkylation_proteome <fasta>." << std::endl;
+        return INPUT_FILE_CORRUPT;
+      }
       pindex.build(rentries, fixed_deltas, iso_tol);
       if (handoff_on)
       {
@@ -3196,6 +3234,7 @@ protected:
       guard.input("digest_calibration", getStringOption_("digest_calibration"));
       // A named proteome (bundled:<name>) is read as much as a given one.
       if (!alk_db.empty()) guard.input("alkylation_proteome", alk_db);
+      if (!alk_manifest.empty()) guard.input("alkylation_proteome", alk_manifest);
       // Inputs resolved from defaults: the shipped digest tables loaded above,
       // and the bundled taxonomy -species reads when no -taxdb set is given.
       for (const auto& ri : resolved_inputs) guard.input(ri.first.c_str(), ri.second);
@@ -5346,6 +5385,7 @@ protected:
       FASTag::Alkylation::ReportInfo info;
       info.database = recon_db;
       info.database_source = alk_db_source;
+      if (alk_shipped.entries > 0) info.database_release = FASTag::Alkylation::shippedRelease(alk_shipped);
       for (const auto& m : p.mods)
         if (!m.variable && m.residue == 'C') info.reagent_note += (info.reagent_note.empty() ? "" : "+") + m.name;
       std::vector<FD::Row> rows = FASTag::RunReport::runRows(run_meta, FASTag::RunReport::Emit::Versioned);

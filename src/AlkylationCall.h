@@ -214,6 +214,10 @@ namespace FASTag::Alkylation
     std::string database;         ///< path of the FASTA the placements are on
     std::string database_source;  ///< recon_fasta, fasta, proteome or bundled:<name>
     std::string reagent_note;     ///< fixed C modification name ("" = none)
+    /// 1.13 (#24): a shipped proteome's provenance from its proteomes.tsv row
+    /// (UniProt release, proteome id, entries, sha256); "" writes no
+    /// database_release row (every non-bundled database, as in 1.12).
+    std::string database_release;
   };
   /// The alk_run, alk_cys and alkylation_call rows of -alkylation_out.
   std::vector<Digest::Row> alkylationRows(const Tally& t, const Call& c, const Settings& s,
@@ -223,4 +227,27 @@ namespace FASTag::Alkylation
   /// plain files, GzipIfstream otherwise (FASTAFile cannot read .gz).
   /// Identifier: the header up to the first blank; description: the rest.
   void loadFasta(const std::string& path, std::vector<OpenMS::FASTAFile::FASTAEntry>& out);
+
+  /// 1.13 (#24): one row of the shipped proteomes' manifest
+  /// (data/alkylation/proteomes.tsv, written by tools/fetch_proteomes.sh).
+  struct ShippedProteome
+  {
+    std::string name;          ///< human, mouse, yeast or ecoli
+    std::string proteome;      ///< UniProt proteome id (UP...)
+    std::string taxon;         ///< NCBI taxon id
+    std::string release;       ///< UniProt release (e.g. 2026_04)
+    std::string release_date;
+    std::uint64_t entries = 0; ///< FASTA entries of the file
+    std::string sha256;        ///< of the .fasta.gz
+    std::string fasta_sha256;  ///< of the uncompressed FASTA
+    std::string file;          ///< file name in the directory
+  };
+  /// The row of `name` in the manifest text (header line `name<TAB>proteome...`,
+  /// tab-separated, CR tolerated). false when the header lacks a needed column,
+  /// `name` has no row, its entries is not a positive number, its file names a
+  /// path (a '/' or '\\') rather than a file beside the manifest, or `name`
+  /// has two rows.
+  bool findShippedProteome(const std::string& manifest_text, const std::string& name, ShippedProteome& out);
+  /// The database_release value of a shipped proteome.
+  std::string shippedRelease(const ShippedProteome& sp);
 }

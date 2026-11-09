@@ -737,6 +737,9 @@ jobs:
           # The -digest_out models and -massgap_out modifications, found the
           # same way (share-FASTag-digest in this flat layout).
           cp -r fastag/data/digest dist/FASTag/share-FASTag-digest
+          # 1.13 (#24): the -alkylation_proteome proteomes (UniProt, CC BY 4.0).
+          cp -r fastag/data/alkylation dist/FASTag/share-FASTag-alkylation
+          test -s dist/FASTag/share-FASTag-alkylation/proteomes.tsv
           # FASTag's licence and the redistributed DLLs' notices (see ci.yml).
           cp fastag/LICENSE dist/FASTag/LICENSE
           PY=$(command -v python3 || command -v python)
@@ -827,6 +830,14 @@ jobs:
             || { cat "$BW/digest.log"; echo "::error::the shipped bundle cannot write -digest_out"; exit 1; }
           grep -q $'^run\tbackground\tshipped_human\t' "$BW/digest.tsv" \
             || { cat "$BW/digest.log"; echo "::error::-digest_out did not find the shipped digest data"; exit 1; }
+          # ...and its shipped proteomes (1.13 #24): -alkylation_out with the
+          # default -alkylation_proteome auto places on the shipped human proteome.
+          PATH="$CLEAN_PATH" "$GITHUB_WORKSPACE/dist/FASTag/FASTag.bat" \
+            -in "$MZ" -out "$BW/al.tsv" -alkylation_out "$BW/alk.tsv" -threads 2 > "$BW/alk.log" 2>&1 \
+            || { cat "$BW/alk.log"; echo "::error::the shipped bundle cannot write -alkylation_out with the shipped proteome"; exit 1; }
+          tr -d '\r' < "$BW/alk.tsv" | grep -q $'^alk_run\tdatabase_source\tbundled:human\t' \
+            && tr -d '\r' < "$BW/alk.tsv" | grep -q $'^alk_run\tdatabase_release\tUniProt ' \
+            || { cat "$BW/alk.log"; echo "::error::-alkylation_out did not find the shipped human proteome"; exit 1; }
           # ...and allocates from mimalloc in the shipped layout, for every
           # module: mi_is_redirected() via FASTAG_TIMING, and mimalloc's own
           # MIMALLOC_VERBOSE report.
@@ -962,6 +973,7 @@ jobs:
           cp -r dist/FASTag/share-OpenMS "$R/share/OpenMS"
           cp -r dist/FASTag/share-FASTag-taxonomy "$R/share/FASTag/taxonomy"
           cp -r dist/FASTag/share-FASTag-digest "$R/share/FASTag/digest"
+          cp -r dist/FASTag/share-FASTag-alkylation "$R/share/FASTag/alkylation"
           cp dist/FASTag/LICENSE dist/FASTag/THIRD-PARTY-NOTICES.txt "$R/"
           test -s "$R/bin/FASTag.exe"
           test -s "$R/share/OpenMS/examples/ID/Ecoli_MS2_small.mzML"
