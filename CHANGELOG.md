@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- **`-label_discovery_out` (experimental, opt-in, not validated on held-out
+  data):** database-free label discovery. Reports every N-terminal, K, R or
+  C-terminal mass offset the tag flanks carry, known or not, explained by
+  residues, the known labels or Unimod, with a provisional label call
+  (format 1, doc/LABEL-DISCOVERY-REPORT.md; design
+  doc/DESIGN-label-discovery.md). Advanced options
+  `-label_discovery_max_flank`, `_depth`, `_min_spectra`, `_min_share`,
+  `_window_n`, `_window_c`, `_unimod_top`. The thresholds are unfitted
+  priors. With the option off every output is unchanged; with it on only
+  the `-out_spectra` provenance lists it. On the probes: PXD004541 (TMT10)
+  `TMT+K:TMT`, PXD001587 (label-free) `label-free`.
+
 ## 1.12.1 (2026-11-08)
 
 Documentation and packaging only: no code, default or output changes. The README now
