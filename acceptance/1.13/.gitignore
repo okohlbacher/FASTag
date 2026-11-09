@@ -1,0 +1,2 @@
+# the repository ignores *.tsv; the held-out manifests, registry, tables and results here are records and are tracked
+!*.tsv
