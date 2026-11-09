@@ -131,6 +131,9 @@ int main()
     check(!c.refuse, "specificity none is never refused");
     c = FC::choose("chymotrypsin", full, verdict(Verdict::Inconclusive, "Trypsin"));
     check(!c.refuse, "an inconclusive call does not refuse");
+    c = FC::choose("chymotrypsin", full, verdict(Verdict::NonTryptic, "unspecific"));
+    check(c.rule->name == "Chymotrypsin" && !c.refuse && c.specificity == full,
+          "an unspecific call does not contradict a named rule");
     c = FC::choose("unspecific", full, verdict(Verdict::NonTryptic, "Chymotrypsin"));
     check(c.rule->unspecific() && !c.refuse && c.specificity == FC::Specificity::None, "unspecific");
     std::cout << "3. rule choice\n";

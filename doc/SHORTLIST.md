@@ -100,7 +100,9 @@ byte) chooses the cleavage rule of the shortlist's placements and of
   model other than the rule, or a trypsin-compatible model for a rule that is
   not), the hand-off outputs are withheld as in 1.12 (ERROR, exit
   `ILLEGAL_PARAMETERS`) unless `-shortlist_force`; `-shortlist_specificity
-  none` is never withheld.
+  none` is never withheld, and a call of the `unspecific` model (no protease
+  fits better than the background; PXD040407's chymotrypsin run calls it)
+  names no other protease and does not withhold a named rule.
 - `unspecific`: every window, never withheld.
 
 With any value but `trypsin` the shortlist's tags are not placed on tryptic

@@ -86,7 +86,9 @@ namespace FASTag::Cleavage
   ///   a model:    that rule; refused when the call is confident and names a
   ///               protease the rule is not (a non-trypsin-compatible call
   ///               other than the rule, or a trypsin-compatible call for a rule
-  ///               that is not), unless @p spec is None.
+  ///               that is not), unless @p spec is None. A call of the
+  ///               `unspecific` model names no other protease and is never a
+  ///               contradiction.
   Choice choose(const std::string& option, Specificity spec, const FASTag::Shortlist::ProteaseVerdict& v);
 
   /// The engine's digestion for a rule: its residues, semi = 1 terminus,

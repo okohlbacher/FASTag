@@ -110,6 +110,14 @@ namespace FASTag::Cleavage
     }
     c.reason = "-shortlist_protease " + c.rule->name;
     if (!confident || spec == Specificity::None || v.model == c.rule->name) return c;
+    // An `unspecific` call says no protease model fits better than the
+    // background; it names no other protease, so it does not contradict the
+    // named rule (a broad protease such as chymotrypsin often calls it).
+    if (v.model == "unspecific")
+    {
+      c.reason += "; the tag ends call unspecific, which names no other protease";
+      return c;
+    }
     const bool rule_tc = trypsinCompatible(c.rule->name);
     if (v.kind == Verdict::NonTryptic || (v.kind == Verdict::Compatible && !rule_tc))
     {
