@@ -1105,6 +1105,38 @@
       ]
     },
     {
+      "name": "shortlist_protease",
+      "type": "string",
+      "default": "trypsin",
+      "description": "Cleavage rule of the shortlist's placements and of -search_config_out. 'trypsin': tryptic windows, a confidently non-tryptic run is refused (FASTag 1.12). 'auto': the protease the tag ends call (trypsin when inconclusive). A protease name, or 'unspecific': that rule. Except for 'trypsin', windows are found by flank mass and kept by the rule and -shortlist_specificity; only exact placements count",
+      "required": false,
+      "toppAdvanced": true,
+      "choices": [
+        "trypsin",
+        "auto",
+        "unspecific",
+        "lys-c",
+        "arg-c",
+        "asp-n",
+        "glu-c",
+        "chymotrypsin",
+        "lys-n"
+      ]
+    },
+    {
+      "name": "shortlist_specificity",
+      "type": "string",
+      "default": "full",
+      "description": "With -shortlist_protease other than trypsin: 'full' both window ends at a cleavage site (or a protein terminus), 'semi' at least one, 'none' any window",
+      "required": false,
+      "toppAdvanced": true,
+      "choices": [
+        "full",
+        "semi",
+        "none"
+      ]
+    },
+    {
       "name": "shortlist_top",
       "type": "int",
       "default": "0",

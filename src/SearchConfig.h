@@ -38,6 +38,26 @@ namespace OpenMS
 
 namespace FASTag::SearchConfig
 {
+  /// The digestion the engine searches with (1.13 item 20). The default is
+  /// FASTag 1.12's: trypsin, fully specific, Comet enzyme 1, and every
+  /// renderer writes then exactly what 1.12 wrote.
+  struct Enzyme
+  {
+    std::string name = "Trypsin";  ///< for messages
+    std::string cut = "KR";        ///< "" = unspecific (no cleavage rule)
+    std::string nocut = "P";       ///< "" = no restriction
+    bool c_terminal = true;
+    int termini = 2;               ///< 2 fully, 1 semi-specific
+    /// Comet `comet -p` (2026.03.0) table number of this rule, -1 none: a
+    /// Comet configuration then needs -search_config_template.
+    int comet_default = 1;
+    bool unspecific() const { return cut.empty(); }
+    bool isDefault() const
+    {
+      return cut == "KR" && nocut == "P" && c_terminal && termini == 2;
+    }
+  };
+
   struct SearchPlan
   {
     std::string database;  ///< FASTA the engine searches
@@ -52,6 +72,7 @@ namespace FASTag::SearchConfig
     bool precursor_ppm = true;
     std::string decoy_prefix;          ///< "" = the engine's FASTag default (rev_ / DECOY_)
     std::string fastag_version;        ///< written into the header comment
+    Enzyme enzyme;                     ///< 1.13 item 20; default trypsin
   };
 
   /// The decoy prefix a plan uses for @p engine ("sage" or "comet").
@@ -113,6 +134,13 @@ namespace FASTag::SearchConfig
   /// or no trypsin in it, is an error.
   MergeResult mergeKeyValueTemplate(const std::string& tmpl,
                                     const std::vector<std::pair<std::string, std::string>>& keys);
+  /// 1.13 item 20: the same with the plan's enzyme: its entry in the table
+  /// (same sense, cut residues as a set, no-cut residue or '-'; unspecific:
+  /// sense 0, cut '-', no-cut '-') sets both enzyme numbers. The default
+  /// Enzyme is the call above, byte for byte.
+  MergeResult mergeKeyValueTemplate(const std::string& tmpl,
+                                    const std::vector<std::pair<std::string, std::string>>& keys,
+                                    const Enzyme& enzyme);
 
   // ---- #17: mass shifts as search-engine configuration --------------------
   //

@@ -91,6 +91,9 @@ export interface ParamUi {
 /// a GUI run uses the CLI defaults. The exception is acquisition_check (under
 /// Spectra).
 const OPT_IN_1_12 = '1.12 command-line option, not in the form yet (CLI default applies)'
+/// FASTag 1.13 experimental options: opt-in, the output is 1.12's at their
+/// default; command line only until they are validated.
+const EXPERIMENTAL_1_13 = '1.13 experimental command-line option, not in the form (CLI default applies)'
 
 const SPECIES_OFF: Dependency = { on: 'species', note: 'species detection is off' }
 const GLYCO_OFF: Dependency = { on: 'glyco', note: 'oxonium flagging is off' }
@@ -1068,6 +1071,18 @@ export const PARAM_UI: Record<string, ParamUi> = {
     hidden: OPT_IN_1_12,
     help: {
       text: 'Write the smaller FASTA and the search settings even when the protease of the run does not fit tryptic placement.'
+    }
+  },
+  shortlist_protease: {
+    hidden: EXPERIMENTAL_1_13,
+    help: {
+      text: 'The cleavage rule the shortlist places tags with: trypsin (as in 1.12), the protease the run calls (auto), a named protease, or none (unspecific).'
+    }
+  },
+  shortlist_specificity: {
+    hidden: EXPERIMENTAL_1_13,
+    help: {
+      text: 'How many window ends must be cleavage sites of the -shortlist_protease rule: both (full), one (semi) or none.'
     }
   },
   shortlist_gapped: {

@@ -542,6 +542,8 @@ MGF→mzML direction is exact.
 | `-shortlist_top <n>` | 0 | Advanced: keep at most this many proteins, ties at the cut kept; 0 = no cap |
 | `-shortlist_decoy_affix <list>` | `DECOY_ decoy_ rev_ REV_ reverse_ XXX_ shuffled_ random_ _DECOY _rev` | Advanced: accession prefixes and suffixes that mark a decoy entry |
 | `-shortlist_force` | off | Advanced: write `-fasta_out` and `-search_config_out` although the tag ends call a non-tryptic protease |
+| `-shortlist_protease <trypsin\|auto\|unspecific\|lys-c\|arg-c\|asp-n\|glu-c\|chymotrypsin\|lys-n>` | trypsin | Experimental (1.13), advanced: cleavage rule of the shortlist's placements and of `-search_config_out`. `trypsin` is 1.12 (tryptic windows, a non-tryptic run refused); `auto` takes the protease the tag ends call (trypsin when inconclusive); a name or `unspecific` takes that rule. Otherwise windows are found by flank mass, only exact placements count, and a named rule the run's call contradicts is refused unless `-shortlist_force` (see doc/SHORTLIST.md) |
+| `-shortlist_specificity <full\|semi\|none>` | full | Experimental (1.13), advanced: with a `-shortlist_protease` other than trypsin, both window ends at a cleavage site (`full`), at least one (`semi`, Sage `semi_enzymatic`, Comet `num_enzyme_termini = 1`) or none; missed cleavages up to `-recon_missed_cleavages` |
 | `-search_config_out <file>` | none | Experimental: a Sage configuration (JSON) or Comet parameters for `-fasta_out`, or for the input database without it |
 | `-search_engine <sage\|comet>` | sage | Engine of `-search_config_out`; `comet` is unverified against the Comet binary (see doc/SHORTLIST.md) |
 | `-search_config_template <file>` | none | Comet only: a `comet -p` file the managed keys are merged into; without it a fragment is written |
@@ -769,7 +771,12 @@ tryptic, so the run's tag ends are checked first: a confidently non-tryptic
 protease call (the PXD040407 chymotrypsin run calls `unspecific`) writes the
 shortlist with the call in its header but no FASTA and no configuration, and
 exits with `ILLEGAL_PARAMETERS` unless `-shortlist_force` (a run asking for
-`-shortlist_out` alone withholds nothing: WARN, exit 0). Only tags at or
+`-shortlist_out` alone withholds nothing: WARN, exit 0). Experimental in 1.13:
+`-shortlist_protease auto` (or a protease name, or `unspecific`) places the
+shortlist's tags on windows found by flank mass and keeps those that fit the
+called (or named) cleavage rule at `-shortlist_specificity`, and writes that
+rule into the engine configuration, so non-tryptic runs get their FASTA and
+configuration instead of being refused. Only tags at or
 above the placement floor place (`-recon_min_length`, derived as 8 residues on
 the human proteome), so give `-extension` (3 on the gate runs). See [doc/SHORTLIST.md](doc/SHORTLIST.md).
 

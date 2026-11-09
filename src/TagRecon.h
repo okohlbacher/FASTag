@@ -116,6 +116,20 @@ namespace FASTag
                                           const std::vector<double>* tag_shift = nullptr,
                                           const IonSeries::IonPair* series = nullptr) const;
 
+    /// 1.13 item 20: placements on windows chosen by mass, not by cleavage
+    /// site (ProteomeIndex::windowsByMass), for the shortlist's protease-aware
+    /// mode. Per occurrence of @p tag the windows are those whose database
+    /// flanks match the spectrum flanks (the wanted masses tryPlace derives,
+    /// each also less the fixed terminal modification on its side), and each
+    /// goes through tryPlace, so the flags, deltas and the peptide-mass
+    /// tolerance are those of reconcile(). Without a spectrum (no site
+    /// localization). Only placements where tryPlace finds both flanks, or one
+    /// flank off by exactly a fixed terminal modification, are useful; the
+    /// caller classifies them (Shortlist::classifyPlacement). Ascending
+    /// window order per occurrence; independent of mc and the cleavage rule.
+    std::vector<Reconciliation> reconcileByMass(const std::string& tag, double nterm_mass, double cterm_mass,
+                                                const IonSeries::IonPair* series = nullptr) const;
+
     /// Candidate variable modifications for interpreting a mass gap. Set
     /// before reconcile(); read-only after. Empty means only substitutions and
     /// "?" are ever reported.
@@ -131,6 +145,10 @@ namespace FASTag
 
   private:
     double tolAt(double m) const { return tol_ppm_ ? m * frag_tol_ * 1e-6 : frag_tol_; }
+    /// The database flank masses tryPlace compares an occurrence with (the
+    /// y-ion convention and the reversed-reading swap, see reconcile()).
+    static void wantedFlanks(bool reversed, double nterm_mass, double cterm_mass,
+                             const IonSeries::IonPair* series, double& want_n, double& want_c);
     void tryPlace(const ProteomeIndex::TagOcc& occ, const ProteomeIndex::Window& w,
                   double nterm_mass, double cterm_mass, const OpenMS::MSSpectrum* spec,
                   int frag_charges, const std::vector<double>* tag_shift,

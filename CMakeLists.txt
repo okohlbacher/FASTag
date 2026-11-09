@@ -82,8 +82,11 @@ set(FASTAG_CORE_SOURCES_A src/Shortlist.cpp src/SearchConfig.cpp)
 set(FASTAG_CORE_SOURCES_D src/SpeciesLookup.cpp src/SpeciesCall.cpp src/AlkylationCall.cpp)
 # ---- 1.12 F: core sources ----
 set(FASTAG_CORE_SOURCES_F src/OutputGuard.cpp src/CensusIds.cpp)
+# ---- 1.13: core sources ----
+set(FASTAG_CORE_SOURCES_113 src/Cleavage.cpp)
 add_library(fastag_core STATIC ${FASTAG_CORE_SOURCES}
-            ${FASTAG_CORE_SOURCES_E} ${FASTAG_CORE_SOURCES_A} ${FASTAG_CORE_SOURCES_D} ${FASTAG_CORE_SOURCES_F})
+            ${FASTAG_CORE_SOURCES_E} ${FASTAG_CORE_SOURCES_A} ${FASTAG_CORE_SOURCES_D} ${FASTAG_CORE_SOURCES_F}
+            ${FASTAG_CORE_SOURCES_113})
 target_include_directories(fastag_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
@@ -277,7 +280,10 @@ if(FASTAG_BUILD_TESTS)
   set(FASTAG_UNIT_TESTS_D species_call_test digest_v2_test alkylation_test)
   # ---- 1.12 F: unit tests ----
   set(FASTAG_UNIT_TESTS_F output_guard_test census_test census_ids_test)
-  foreach(t ${FASTAG_UNIT_TESTS} ${FASTAG_UNIT_TESTS_E} ${FASTAG_UNIT_TESTS_A} ${FASTAG_UNIT_TESTS_D} ${FASTAG_UNIT_TESTS_F})
+  # ---- 1.13: unit tests ----
+  set(FASTAG_UNIT_TESTS_113 cleavage_test)
+  foreach(t ${FASTAG_UNIT_TESTS} ${FASTAG_UNIT_TESTS_E} ${FASTAG_UNIT_TESTS_A} ${FASTAG_UNIT_TESTS_D} ${FASTAG_UNIT_TESTS_F}
+            ${FASTAG_UNIT_TESTS_113})
     add_executable(${t} test/${t}.cpp)
     target_link_libraries(${t} PRIVATE fastag_core)
     add_test(NAME ${t} COMMAND ${t})
@@ -488,11 +494,21 @@ if(FASTAG_BUILD_TESTS)
                              FASTAG_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
   target_compile_definitions(search_config_test PRIVATE
                              FASTAG_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
+  # ---- 1.13 item 20 ----
+  target_compile_definitions(cleavage_test PRIVATE
+                             FASTAG_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
   add_test(NAME shortlist_cli_test
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/shortlist_cli_test.sh $<TARGET_FILE:FASTag>
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
   set_tests_properties(shortlist_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # 1.13 item 20: protease-aware shortlist placement on the in-silico
+  # chymotryptic MGF.
+  add_test(NAME nontryptic_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/nontryptic_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
+  set_tests_properties(nontryptic_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # Sage and Comet on a generated configuration; SKIPs without
   # FASTAG_SAGE_BIN / FASTAG_COMET_BIN (the acceptance job sets them and
   # treats a skip as a failure).

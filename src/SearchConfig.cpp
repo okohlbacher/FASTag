@@ -134,9 +134,11 @@ namespace FASTag::SearchConfig
        << "      \"missed_cleavages\": " << p.missed_cleavages << ",\n"
        << "      \"min_len\": 5,\n"
        << "      \"max_len\": 50,\n"
-       << "      \"cleave_at\": \"KR\",\n"
-       << "      \"restrict\": \"P\",\n"
-       << "      \"c_terminal\": true\n"
+       << "      \"cleave_at\": " << jsonString(p.enzyme.cut) << ",\n"
+       << "      \"restrict\": " << (p.enzyme.nocut.empty() ? std::string("null") : jsonString(p.enzyme.nocut))
+       << ",\n"
+       << "      \"c_terminal\": " << (p.enzyme.c_terminal ? "true" : "false")
+       << (p.enzyme.termini == 1 && !p.enzyme.unspecific() ? ",\n      \"semi_enzymatic\": true\n" : "\n")
        << "    },\n"
        << "    \"fragment_min_mz\": 150.0,\n"
        << "    \"fragment_max_mz\": 2000.0,\n"
@@ -203,10 +205,10 @@ namespace FASTag::SearchConfig
     keys.emplace_back("peptide_mass_tolerance_lower", shortest(-p.precursor_tolerance));
     keys.emplace_back("peptide_mass_units", p.precursor_ppm ? "2" : "0");
     keys.emplace_back("isotope_error", std::to_string(p.isotope_errors));
-    keys.emplace_back("search_enzyme_number", "1");
+    keys.emplace_back("search_enzyme_number", std::to_string(p.enzyme.comet_default));
     keys.emplace_back("search_enzyme2_number", "0");
-    keys.emplace_back("sample_enzyme_number", "1");
-    keys.emplace_back("num_enzyme_termini", "2");
+    keys.emplace_back("sample_enzyme_number", std::to_string(p.enzyme.comet_default));
+    keys.emplace_back("num_enzyme_termini", p.enzyme.termini == 1 && !p.enzyme.unspecific() ? "1" : "2");
     keys.emplace_back("allowed_missed_cleavage", std::to_string(p.missed_cleavages));
     for (int slot = 1; slot <= kCometVariableSlots; ++slot)
     {
@@ -290,7 +292,10 @@ namespace FASTag::SearchConfig
   std::string renderComet(const SearchPlan& p, std::string* err)
   {
     std::vector<std::pair<std::string, std::string>> keys;
-    const std::string e = cometKeys(p, keys);
+    std::string e = cometKeys(p, keys);
+    if (e.empty() && p.enzyme.comet_default < 0)
+      e = "Comet's default enzyme table has no " + p.enzyme.name +
+          " entry with this rule; give -search_config_template with one";
     if (!e.empty())
     {
       if (err) *err = e;
@@ -316,6 +321,19 @@ namespace FASTag::SearchConfig
   MergeResult mergeKeyValueTemplate(const std::string& tmpl,
                                     const std::vector<std::pair<std::string, std::string>>& keys_in)
   {
+    return mergeKeyValueTemplate(tmpl, keys_in, Enzyme());
+  }
+
+  MergeResult mergeKeyValueTemplate(const std::string& tmpl,
+                                    const std::vector<std::pair<std::string, std::string>>& keys_in,
+                                    const Enzyme& enzyme)
+  {
+    const bool tryp = enzyme.isDefault();
+    std::string want_cut = enzyme.unspecific() ? "-" : enzyme.cut;
+    std::sort(want_cut.begin(), want_cut.end());
+    const std::string want_sense = enzyme.unspecific() ? "0" : enzyme.c_terminal ? "1" : "0";
+    const std::string want_nocut = enzyme.nocut.empty() ? "-" : enzyme.nocut;
+    const std::string label = tryp ? "trypsin" : enzyme.unspecific() ? "unspecific" : enzyme.name;
     MergeResult r;
     std::vector<std::string> lines;
     {
@@ -345,12 +363,21 @@ namespace FASTag::SearchConfig
       if (num.empty() || num.back() != '.') continue;
       std::string c = cut;
       std::sort(c.begin(), c.end());
-      if ((sense == "1" || sense == "1.") && c == "KR" && nocut == "P") trypsin = num.substr(0, num.size() - 1);
+      if (tryp)
+      {
+        if ((sense == "1" || sense == "1.") && c == "KR" && nocut == "P") trypsin = num.substr(0, num.size() - 1);
+      }
+      else if ((sense == want_sense || sense == want_sense + ".") && c == want_cut && nocut == want_nocut)
+        trypsin = num.substr(0, num.size() - 1);
     }
     if (trypsin.empty())
     {
-      r.error = "the template's [COMET_ENZYME_INFO] table has no trypsin entry (cut KR, not before P); "
-                "FASTag's placements are tryptic";
+      if (tryp)
+        r.error = "the template's [COMET_ENZYME_INFO] table has no trypsin entry (cut KR, not before P); "
+                  "FASTag's placements are tryptic";
+      else
+        r.error = "the template's [COMET_ENZYME_INFO] table has no " + label + " entry (sense " + want_sense +
+                  ", cut " + want_cut + ", no cut " + want_nocut + "), the rule the shortlist's placements used";
       return r;
     }
     std::vector<std::pair<std::string, std::string>> keys = keys_in;
@@ -394,7 +421,8 @@ namespace FASTag::SearchConfig
         {
           const std::string old = trim(hash == std::string::npos ? rest : rest.substr(0, hash));
           if (old != trypsin)
-            r.warnings.push_back("the template's search_enzyme_number " + old + " is not trypsin; set to " + trypsin);
+            r.warnings.push_back("the template's search_enzyme_number " + old + " is not " + label + "; set to " +
+                                 trypsin);
         }
         if (written.insert(key).second) put(key, keys[it->second].second, comment);
         continue;  // a repeated managed line is dropped

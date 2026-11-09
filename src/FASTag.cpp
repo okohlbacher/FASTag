@@ -51,6 +51,7 @@
 #include "Proforma.h"
 #include "ReconIds.h"
 #include "RunMeta.h"
+#include "Cleavage.h"
 #include "SearchConfig.h"
 #include "Shortlist.h"
 #include "SpeciesCall.h"
@@ -850,6 +851,19 @@ protected:
     registerFlag_("shortlist_force",
                   "Write -fasta_out and -search_config_out although the tag ends call a protease the "
                   "tryptic placement does not fit", true);
+    // ---- 1.13 item 20: protease-aware shortlist placement (experimental) ----
+    registerStringOption_("shortlist_protease", "<protease>", "trypsin",
+                          "Cleavage rule of the shortlist's placements and of -search_config_out. 'trypsin': "
+                          "tryptic windows, a confidently non-tryptic run is refused (FASTag 1.12). 'auto': the "
+                          "protease the tag ends call (trypsin when inconclusive). A protease name, or "
+                          "'unspecific': that rule. Except for 'trypsin', windows are found by flank mass and "
+                          "kept by the rule and -shortlist_specificity; only exact placements count", false, true);
+    setValidStrings_("shortlist_protease",
+                     ListUtils::create<std::string>("trypsin,auto,unspecific,lys-c,arg-c,asp-n,glu-c,chymotrypsin,lys-n"));
+    registerStringOption_("shortlist_specificity", "<mode>", "full",
+                          "With -shortlist_protease other than trypsin: 'full' both window ends at a cleavage "
+                          "site (or a protein terminus), 'semi' at least one, 'none' any window", false, true);
+    setValidStrings_("shortlist_specificity", ListUtils::create<std::string>("full,semi,none"));
     registerOutputFile_("search_config_out", "<file>", "",
                         "Search-engine configuration for -fasta_out (or the input database): Sage JSON, or "
                         "Comet parameters (merged into -search_config_template when given)", false);
@@ -1983,6 +1997,17 @@ protected:
     std::vector<std::string> sl_affixes;
     for (const std::string& a : sl_affix_option)
       if (!a.empty()) sl_affixes.push_back(a);
+    // 1.13 item 20: protease-aware placement for the hand-off outputs.
+    const std::string sl_protease = getStringOption_("shortlist_protease");
+    const bool sl_nontryptic = handoff_on && sl_protease != "trypsin";
+    FASTag::Cleavage::Specificity sl_spec = FASTag::Cleavage::Specificity::Full;
+    FASTag::Cleavage::parseSpecificity(getStringOption_("shortlist_specificity"), sl_spec);
+    if (sl_nontryptic && sl_settings.gapped)
+    {
+      OPENMS_LOG_WARN << "-shortlist_gapped is ignored with -shortlist_protease " << sl_protease
+                      << ": windows found by flank mass have no mismatched flank." << std::endl;
+      sl_settings.gapped = false;
+    }
     if (!handoff_on && optionNonDefault_("shortlist_force"))
     {
       OPENMS_LOG_WARN << "-shortlist_force is only read for -fasta_out or -search_config_out; it is ignored here." << std::endl;
@@ -2302,6 +2327,8 @@ protected:
           {"shortlist_gapped", "-shortlist_out or -fasta_out", shortlist_on},
           {"shortlist_parsimony", "-shortlist_out or -fasta_out", shortlist_on},
           {"shortlist_top", "-shortlist_out or -fasta_out", shortlist_on},
+          {"shortlist_protease", "-shortlist_out, -fasta_out or -search_config_out", handoff_on},
+          {"shortlist_specificity", "-shortlist_protease other than trypsin", sl_nontryptic},
           {"search_engine", "-search_config_out", !search_config_out.empty()},
           {"search_config_template", "-search_config_out", !search_config_out.empty()},
           {"search_precursor_tolerance", "-search_config_out", !search_config_out.empty()},
@@ -2530,6 +2557,11 @@ protected:
         sl_plan.decoy_prefix = getStringOption_("search_decoy_prefix");
         sl_plan.fastag_version = FASTAG_VERSION;
         std::string err;
+        // 1.13 item 20: a named rule is known now and validated with the
+        // template below; 'auto' knows its rule only after the run.
+        const bool sl_named = sl_nontryptic && sl_protease != "auto";
+        if (sl_named)
+          sl_plan.enzyme = FASTag::Cleavage::engineEnzyme(*FASTag::Cleavage::findRule(sl_protease), sl_spec);
         if (search_engine == "comet")
         {
           std::vector<std::pair<std::string, std::string>> keys;
@@ -2544,11 +2576,17 @@ protected:
             if (!tf.good() && !tf.eof()) err = "cannot read -search_config_template '" + tmpl_path + "'";
             else
             {
-              const auto m = FASTag::SearchConfig::mergeKeyValueTemplate(sl_template, keys);
+              const auto m = sl_named
+                                 ? FASTag::SearchConfig::mergeKeyValueTemplate(sl_template, keys, sl_plan.enzyme)
+                                 : FASTag::SearchConfig::mergeKeyValueTemplate(sl_template, keys);
               if (!m.error.empty()) err = "-search_config_template '" + tmpl_path + "': " + m.error;
             }
           }
         }
+        if (err.empty() && sl_named && search_engine == "comet" &&
+            getStringOption_("search_config_template").empty() && sl_plan.enzyme.comet_default < 0)
+          err = "Comet's default enzyme table has no " + sl_plan.enzyme.name +
+                " entry with this rule; give -search_config_template with one";
         if (!err.empty())
         {
           OPENMS_LOG_ERROR << "-search_config_out: " << err << "." << std::endl;
@@ -3853,8 +3891,14 @@ protected:
               ++a.protease_spectra;
               a.last_counted = index;
             }
+            // 1.13 item 20: windows by flank mass, kept by the cleavage
+            // rule after the run (Cleavage::WindowFilter).
+            std::vector<FASTag::Reconciliation> sl_by_mass;
+            if (sl_nontryptic && shortlist_on && t.evalue <= sl_settings.max_evalue)
+              sl_by_mass = recon.reconcileByMass(FASTag::baseSequence(t.seq), t.nterm_mass, t.cterm_mass,
+                                                 tag_cz ? &cz_pair : nullptr);
             if (shortlist_on && t.evalue <= sl_settings.max_evalue)
-              for (const auto& pl : places)
+              for (const auto& pl : (sl_nontryptic ? sl_by_mass : places))
               {
                 double flank = 0.0;
                 if (!pl.nterm_match) flank = pl.reversed ? t.cterm_mass : t.nterm_mass;
@@ -5070,7 +5114,59 @@ protected:
         const char* kind = verdict.kind == Verdict::Compatible ? "compatible"
                          : verdict.kind == Verdict::NonTryptic ? "non_tryptic"
                                                                : "inconclusive";
-        if (verdict.kind == Verdict::Compatible)
+        // 1.13 item 20: the rule the placements are kept by.
+        FASTag::Cleavage::Choice sl_choice;
+        if (sl_nontryptic)
+        {
+          sl_choice = FASTag::Cleavage::choose(sl_protease, sl_spec, verdict);
+          std::string withheld;
+          if (!fasta_out.empty()) withheld = "-fasta_out";
+          if (!search_config_out.empty()) withheld += (withheld.empty() ? "" : " or ") + std::string("-search_config_out");
+          OPENMS_LOG_INFO << "Shortlist protease check: " << kind << " (" << verdict.reason << ")." << std::endl;
+          if (!sl_choice.refuse)
+            OPENMS_LOG_INFO << "Shortlist placement: " << sl_choice.rule->name << ", "
+                            << FASTag::Cleavage::specificityName(sl_choice.specificity) << " specificity ("
+                            << sl_choice.reason << ")." << std::endl;
+          else if (force)
+            OPENMS_LOG_WARN << "Shortlist placement: " << sl_choice.reason
+                            << "; -shortlist_force writes the hand-off outputs anyway." << std::endl;
+          else if (withheld.empty())
+            OPENMS_LOG_WARN << "Shortlist placement: " << sl_choice.reason
+                            << ", so the shortlist may not describe this run (the call is in its header)." << std::endl;
+          else
+            OPENMS_LOG_ERROR << "Shortlist placement: " << sl_choice.reason
+                             << ", so the shortlist may not describe this run. Not writing " << withheld
+                             << " (-shortlist_force overrides)." << std::endl;
+          handoff_refused = sl_choice.refuse && !force && !withheld.empty();
+          sl_plan.enzyme = FASTag::Cleavage::engineEnzyme(*sl_choice.rule, sl_choice.specificity);
+          if (shortlist_on)
+          {
+            auto& ev = run_acc.a.sl;
+            const std::size_t n_all = ev.size();
+            std::stable_sort(ev.begin(), ev.end(),
+                             [](const FASTag::Shortlist::Evidence& x, const FASTag::Shortlist::Evidence& y) {
+                               return x.protein < y.protein;
+                             });
+            const FASTag::Cleavage::WindowFilter wf(*sl_choice.rule, sl_choice.specificity,
+                                                    getIntOption_("recon_missed_cleavages"));
+            std::string prot;
+            std::uint32_t cur = std::numeric_limits<std::uint32_t>::max();
+            std::size_t w = 0;
+            for (std::size_t i = 0; i < n_all; ++i)
+            {
+              if (ev[i].protein != cur)
+              {
+                cur = ev[i].protein;
+                prot = pindex.proteinText(cur);
+              }
+              if (wf.accepts(prot, ev[i].window_start, ev[i].window_len)) ev[w++] = ev[i];
+            }
+            ev.resize(w);
+            OPENMS_LOG_INFO << "Shortlist placement: " << w << " of " << n_all
+                            << " placements by flank mass fit the rule." << std::endl;
+          }
+        }
+        else if (verdict.kind == Verdict::Compatible)
           OPENMS_LOG_INFO << "Shortlist protease check: " << verdict.reason << "." << std::endl;
         else if (verdict.kind == Verdict::Inconclusive)
           OPENMS_LOG_WARN << "Shortlist protease check inconclusive: " << verdict.reason
@@ -5142,6 +5238,16 @@ protected:
                     " kept" + (n_bg_db ? ", " + std::to_string(n_bg_db) + " database entries kept as background"
                                        : std::string()) +
                     "; decoy entries in the database: " + std::to_string(sl_decoys)};
+            if (sl_nontryptic)
+              header.insert(header.begin() + 4,
+                            "placement: " + sl_choice.rule->name + ", " +
+                                FASTag::Cleavage::specificityName(sl_choice.specificity) + " specificity, " +
+                                (sl_choice.rule->unspecific() || sl_choice.specificity ==
+                                                                     FASTag::Cleavage::Specificity::None
+                                     ? std::string("no missed-cleavage limit")
+                                     : "missed cleavages <= " + std::to_string(getIntOption_("recon_missed_cleavages"))) +
+                                ", windows by flank mass (" + sl_choice.reason + ")" +
+                                (handoff_refused ? "; -fasta_out and -search_config_out withheld" : ""));
             if (subsampling) header.push_back("counts are over the -subsample_* spectra only");
             if (filtering) header.push_back("-fasta filtered the tags before placement");
             std::string err;
@@ -5176,7 +5282,9 @@ protected:
             err = FASTag::SearchConfig::cometKeys(sl_plan, keys);
             if (err.empty())
             {
-              const auto m = FASTag::SearchConfig::mergeKeyValueTemplate(sl_template, keys);
+              const auto m = sl_nontryptic
+                                 ? FASTag::SearchConfig::mergeKeyValueTemplate(sl_template, keys, sl_plan.enzyme)
+                                 : FASTag::SearchConfig::mergeKeyValueTemplate(sl_template, keys);
               for (const std::string& w : m.warnings) OPENMS_LOG_WARN << "-search_config_template: " << w << "." << std::endl;
               err = m.error;
               text = m.text;
