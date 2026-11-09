@@ -77,10 +77,21 @@ mode at that window: the tags, the `-unknown_charge infer` and
 
 ## Validation
 
-DEV (PXD003531 Q Exactive at 20 ppm; PXD001819 LTQ Orbitrap Velos ion-trap
-MS2 at 0.5 Da; the #2 DEV runs and the frozen #2 scorer) and the held-out
-test are recorded in the `acceptance/1.13` branch (`PREREG-compltol.md`). The
-option stays experimental until the held-out test passes.
+DEV: the #2 DEV runs with the frozen #2 scorer. On PXD003531 (Q Exactive, 20 ppm) the measured windows were
+0.019-0.036 Da, and the powered cells moved by -0.20 to +0.27 points. On PXD001819 (LTQ Orbitrap Velos,
+ion-trap MS2, 0.5 Da) they were 0.177-0.208 Da, and the powered cells gained +2.2 to +7.6 points.
+
+Held-out (`acceptance/1.13`, `PREREG-compltol.md`, `results/compltol/RESULT.md`): the #2 design and margins on
+11 runs (astral 2, ion_trap 5, qe 1, timsTOF 3), scored once. Verdict **FAIL**:
+- (i) fails on three Astral cells: L5 default 2+ at -0.503 points, and two 4+ cells whose Holm bound is below
+  -1.0.
+- (ii) passes: pooled length-3 gain +3.05 points on astral + ion trap, carried by the ion trap.
+- (iii) timsTOF 4+ passes.
+- (iv) time passes (ratio 1.027).
+
+The ion-trap runs gained +2.1 to +5.1 points in every powered 2+ and 3+ cell. Q Exactive and timsTOF stayed
+within +-0.33 points. Two high-resolution runs fell back to 0.02 Da (too few pairs). The option stays
+experimental; the default stays `Da`.
 
 ## Code
 
