@@ -797,8 +797,12 @@ fixed Cys modification, a Cys alkylation on at least half the C-containing
 placements is written as a fixed modification, with a WARN; with
 `-alkylation_out` the run's alkylation call decides the fixed Cys modification
 instead (a reagent call becomes it; `none` or `no_call` adds none). `-search_shifts_out` lists every decision. These are candidates
-for an FDR-controlling engine, not identifications: whether they improve
-identifications is not yet validated. Offsets need a narrow precursor
+for an FDR-controlling engine, not identifications. Held-out test (1.13,
+acceptance/1.13 RESULT-item17.md; four public runs, SILAC, TMT10, TMT6,
+label-free): more PSMs at 1 % FDR on 3 of 4 runs with both engines (Comet
++23 to +49 %, Sage +3 to +31 %), but the preregistered test FAILED on its
+other criteria (recovery of an open search's top mass shifts for both engines;
+entrapment FDP above 1.5 % for Sage), so the option stays experimental. Offsets need a narrow precursor
 tolerance, which the configuration sets explicitly. See
 [doc/SHORTLIST.md](doc/SHORTLIST.md#mass-shifts-as-engine-configuration-112-17).
 

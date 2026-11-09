@@ -223,11 +223,31 @@ none), `substitution_share`, `localized`, `reason`.
 
 Limits: an undeclared label shows as a single-modification peak and becomes a
 variable modification; more variable modifications can lower sensitivity
-(cap 3); Comet's handling of negative offsets and of the offset list is
-unverified against the pinned 2026.03.0 binary (as A5-01). Engine acceptance
-(Comet and Sage with a shift-carrying configuration) and the held-out protocol
-(PSMs, entrapment FDP, recall of an open search's top peaks) run on node data
-before this is documented as improving identifications.
+(cap 3). Comet 2026.03.0 ignores negative mass offsets (checked on the DEV
+run, acceptance/1.12 FREEZE-05-17.md), so dropping them loses nothing Comet
+could search; negative shifts reach Comet only as variable modifications.
+
+Held-out result (1.13, acceptance/1.13 `PREREG-item17.md`, `RESULT-item17.md`,
+scored once). Closed search with the run's declared chemistry vs the same
+search plus `-search_shifts` (defaults), Sage 0.14.7 and Comet 2026.03.0,
+shuffled entrapment at r = 1, 1 % PSM FDR, on PXD014764 (SILAC), PXD004541
+(TMT10), PXD000001 (TMT6) and PXD063151 (label-free):
+
+| Run | Comet PSMs | Sage PSMs |
+|---|---|---|
+| PXD014764 | 4224 -> 5979 (+41.6 %) | 4738 -> 6196 (+30.8 %) |
+| PXD004541 | 10079 -> 15053 (+49.4 %) | 11186 -> 11518 (+3.0 %) |
+| PXD000001 | 1116 -> 1133 (+1.5 %) | 1258 -> 1258 (0) |
+| PXD063151 | 34941 -> 43101 (+23.4 %) | 46530 -> 55805 (+20.0 %) |
+
+The identification gain (>= 2 % on 3 of 4 runs) and the no-loss criterion
+pass for both engines, but the test FAILED: an MSFragger open search's top
+mass shifts were recovered on only 1 of 4 runs (Comet) and 0 of 4 (Sage), and
+Sage's entrapment FDP exceeded 1.5 % on three runs (its closed search already
+did on PXD000001). Known causes: on labelled runs the isotope rule is not
+applied to the label-frame remainder (L + 1.003 becomes a Comet offset, and
+Sage searches no isotope errors); near-zero offsets on a run with a precursor
+calibration error widen the search instead. The option stays experimental.
 
 ## Known limits
 
