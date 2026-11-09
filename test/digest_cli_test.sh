@@ -132,12 +132,45 @@ tr -d '\r' < "$TMP/label.tsv" | awk -F'\t' -v n="$(tr -d '\r' < "$TMP/label.tsv"
   || fail "-label_out: label_call is not the last five rows status, label, basis, silac, reason"
 [ "$(val "$TMP/label.tsv" label_call status) $(val "$TMP/label.tsv" label_call reason)" = "no_call low_resolution" ] \
   || fail "label_call: a Da run is not no_call low_resolution"
-# a ppm run: few_tags exactly when the digest counts fewer than 175 C-terminal tag ends
+# a ppm run (1.13, backlog #8): called at the default -label_call_min_tags 0, whatever its tag ends;
+# few_tags exactly when -label_call_min_tags exceeds the digest's C-terminal tag ends (count tot)
 run -in "$IN" -tag_length 4 -out "$TMP/p.tsv" -digest_out "$TMP/pdigest.tsv" -label_out "$TMP/plabel.tsv"
 ptot=$(val "$TMP/pdigest.tsv" count tot)
-pcall="$(val "$TMP/plabel.tsv" label_call status) $(val "$TMP/plabel.tsv" label_call reason)"
-if [ "$ptot" -lt 175 ]; then [ "$pcall" = "no_call few_tags" ] || fail "label_call: $ptot tag ends at 20 ppm gave '$pcall'"
-else [ "$pcall" = "call -" ] || fail "label_call: $ptot tag ends at 20 ppm gave '$pcall'"; fi
+case "$ptot" in ''|*[!0-9]*) fail "label_call: no count tot in the digest report ('$ptot')" ;; esac
+# (the ion-trap fixture has few or no ends at 20 ppm: 1.12 made no call on it, 1.13 calls it)
+lcall() { echo "$(val "$1" label_call status) $(val "$1" label_call reason)"; }
+pcall=$(lcall "$TMP/plabel.tsv")
+[ "$pcall" = "call -" ] || fail "label_call: $ptot tag ends at 20 ppm and the default minimum gave '$pcall'"
+if [ "$ptot" -lt 175 ]; then
+  tr -d '\r' < "$TMP/plabel.tsv" | awk -F'\t' '$1 == "label_call" && $2 == "status"' | grep -q "fewer than 175" \
+    || fail "label_call: a call from $ptot (< 175) tag ends lacks the weak-evidence sentence"
+fi
+run -in "$IN" -tag_length 4 -out "$TMP/p1.tsv" -label_out "$TMP/plabel_eq.tsv" -label_call_min_tags "$ptot"
+[ "$(lcall "$TMP/plabel_eq.tsv")" = "call -" ] || fail "label_call: -label_call_min_tags $ptot (= tot) gave '$(lcall "$TMP/plabel_eq.tsv")'"
+run -in "$IN" -tag_length 4 -out "$TMP/p2.tsv" -label_out "$TMP/plabel_gt.tsv" -label_call_min_tags "$((ptot + 1))"
+[ "$(lcall "$TMP/plabel_gt.tsv")" = "no_call few_tags" ] \
+  || fail "label_call: -label_call_min_tags $((ptot + 1)) (> tot $ptot) gave '$(lcall "$TMP/plabel_gt.tsv")'"
+tr -d '\r' < "$TMP/plabel_gt.tsv" | awk -F'\t' '$1 == "label_call" && $2 == "status"' | grep -q "fewer than $((ptot + 1))" \
+  || fail "label_call: the few_tags row does not name -label_call_min_tags $((ptot + 1))"
+# only the label_call rows depend on the minimum
+for f in plabel_eq plabel_gt; do
+  legacy "$TMP/$f.tsv" > "$TMP/$f.old"; legacy "$TMP/plabel.tsv" > "$TMP/plabel.old"
+  same "$TMP/plabel.old" "$TMP/$f.old" "-label_call_min_tags changed rows before label_call"
+done
+same "$TMP/p.tsv" "$TMP/p2.tsv" "-label_call_min_tags changed the tags"
+# the 1.12 rule (175) equals the default on a run with at least 175 ends, and is few_tags below
+run -in "$IN" -tag_length 4 -out "$TMP/p3.tsv" -label_out "$TMP/plabel_175.tsv" -label_call_min_tags 175
+if [ "$ptot" -lt 175 ]; then [ "$(lcall "$TMP/plabel_175.tsv")" = "no_call few_tags" ] || fail "label_call: 175 at $ptot ends is not few_tags"
+else same "$TMP/plabel.tsv" "$TMP/plabel_175.tsv" "-label_call_min_tags 175 changed a run with $ptot >= 175 ends"; fi
+# a Da run is low_resolution at any minimum
+run "${COMMON[@]}" -out "$TMP/d0.tsv" -fixed_modifications -label_out "$TMP/dlabel0.tsv" -label_call_min_tags 0
+[ "$(lcall "$TMP/dlabel0.tsv")" = "no_call low_resolution" ] || fail "label_call: a Da run at minimum 0 is not low_resolution"
+# refused below 0; warned and ignored without -label_out
+"$BIN" -in "$IN" -tag_length 4 -out "$TMP/pn.tsv" -label_out "$TMP/pn.label" -label_call_min_tags -1 > "$TMP/log" 2>&1 \
+  && fail "-label_call_min_tags -1 was accepted"
+"$BIN" -in "$IN" -tag_length 4 -out "$TMP/pw.tsv" -label_call_min_tags 10 > "$TMP/log" 2>&1 \
+  || fail "-label_call_min_tags without -label_out was refused"
+grep -q -- "-label_call_min_tags is only read for -label_out" "$TMP/log" || fail "no warning for -label_call_min_tags"
 # label_call reads the tag ends only: the same with and without -recon_out/-massgap_out, at 1, 2 and 3
 # threads (all with R's empty -fixed_modifications, which changes the tags themselves)
 run "${COMMON[@]}" -out "$TMP/l0.tsv" -fixed_modifications -label_out "$TMP/label0.tsv"

@@ -574,7 +574,7 @@ int main()
     check(split.peaks.empty(), "rows below min_bin never combine into a peak");
   }
 
-  // ---- label_call: prose-auto 0.1.10 fastag_termini / termini_evidence
+  // ---- label_call: prose-auto fastag_termini / termini_evidence (0.1.10's rule; tag minimum 0 since 1.13)
   {
     const D::DigestSettings s;
     D::DigestSettings da = s;
@@ -583,11 +583,48 @@ int main()
     const D::TerminusCounter lf = labelCounter(1000, {{"K", 100}, {"R", 75}});
     check(lf.tot() == 175, "label_call: 175 tag ends");
     check(callOf(lf) == "call label-free none none -", "label_call: 175 ends, no label: label-free (" + callOf(lf) + ")");
-    check(callOf(labelCounter(1000, {{"K", 100}, {"R", 74}})) == "no_call - - - few_tags",
-          "label_call: 174 ends (below prose-auto's TAG_MIN 175) is few_tags");
+    // 1.13 (backlog #8): the default -label_call_min_tags 0 calls every ppm run (the harness's
+    // prose-auto 0.1.3 rule); -label_call_min_tags 175 is the 1.12 rule (prose-auto 0.1.10's TAG_MIN)
+    check(s.label_min_tags == 0, "label_call: the default tag minimum is 0");
+    D::DigestSettings m175 = s;
+    m175.label_min_tags = static_cast<int>(D::kLabelTagMin);
+    const D::TerminusCounter lf174 = labelCounter(1000, {{"K", 100}, {"R", 74}});
+    check(callOf(lf174) == "call label-free none none -", "label_call: 174 ends at the default minimum 0 is a call (" + callOf(lf174) + ")");
+    check(callOf(lf174, m175) == "no_call - - - few_tags",
+          "label_call: 174 ends at -label_call_min_tags 175 (prose-auto 0.1.10's TAG_MIN) is few_tags");
+    check(callOf(lf, m175) == "call label-free none none -", "label_call: 175 ends at -label_call_min_tags 175 is a call");
+    {
+      D::DigestSettings m176 = s;
+      m176.label_min_tags = 176;
+      check(callOf(lf, m176) == "no_call - - - few_tags", "label_call: 175 ends at -label_call_min_tags 176 is few_tags");
+      const auto rows = D::labelCallRows(D::labelCall(lf, m176), lf, m176);
+      bool says = false;
+      for (const D::Row& r : rows)
+        if (r.key == "status") says = r.description.find("fewer than 176") != std::string::npos;
+      check(says, "label_call: the few_tags row names the minimum in force");
+    }
+    // a call below 175 ends says how little it rests on; at 175 it does not
+    auto statusDesc = [&](const D::TerminusCounter& tc, const D::DigestSettings& st) {
+      for (const D::Row& r : D::labelCallRows(D::labelCall(tc, st), tc, st))
+        if (r.section == "label_call" && r.key == "status") return r.description;
+      return std::string("<missing>");
+    };
+    check(statusDesc(lf174, s).find("fewer than 175, so a label-free call means only that no label rule fired") != std::string::npos,
+          "label_call: a call from 174 ends carries the weak-evidence sentence");
+    check(statusDesc(lf, s).find("fewer than") == std::string::npos, "label_call: a call from 175 ends has no weak-evidence sentence");
+    check(statusDesc(lf, s) == statusDesc(lf, m175), "label_call: at 175 ends the status row is the same at minimum 0 and 175");
+    // no C-terminal end at all: label-free (no SILAC test on undefined shares); an isobaric gap still calls
+    const D::TerminusCounter none = labelCounter(1000, {});
+    check(none.tot() == 0, "label_call: the empty fixture has no tag end");
+    check(callOf(none) == "call label-free none none -", "label_call: 0 ends at the default is label-free (" + callOf(none) + ")");
+    check(callOf(labelCounter(1000, {}, {60, 0, 0})) == "call TMT nterm_gap none -", "label_call: 0 C-terminal ends, TMT gaps: TMT");
     check(callOf(lf, da) == "no_call - - - low_resolution", "label_call: a Da run is low_resolution");
-    // low_resolution comes before few_tags, and a Da run never calls a label
+    // low_resolution comes before few_tags at any minimum, and a Da run never calls a label
     check(callOf(labelCounter(1000, {{"K", 10}}, {500, 0, 0}), da) == "no_call - - - low_resolution",
+          "label_call: a Da run is low_resolution at the default minimum");
+    D::DigestSettings da175 = m175;
+    da175.low_resolution = true;
+    check(callOf(labelCounter(1000, {{"K", 10}}, {500, 0, 0}), da175) == "no_call - - - low_resolution",
           "label_call: low_resolution before few_tags");
 
     // isobaric: count >= 1% of the filtered tags AND >= 20 x max(background, 1)

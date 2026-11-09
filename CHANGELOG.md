@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased (1.13)
+
+- **Label call refit (backlog #8): `-label_call_min_tags`, default 0.** A
+  default output change of `-label_out`: `label_call` no longer makes
+  `no_call few_tags` below 175 C-terminal tag ends; every ppm run is called
+  with the same isobaric and SILAC rules, label-free when none fires (the
+  harness's prose-auto 0.1.3 rule). On the 193 development runs (in-sample)
+  this is 178/193 against 150/193 for the 1.12 rule and 159/193 for "always
+  label-free". `-label_call_min_tags 175` restores the 1.12 rows. Every other
+  output is unchanged. Experimental until its held-out test
+  (acceptance/1.13 PREREG-item08.md).
+
 ## 1.12.1 (2026-11-08)
 
 Documentation and packaging only: no code, default or output changes. The README now
