@@ -33,5 +33,28 @@ Tests: ctest `census_triage_eval_test` (hand-counted tables) and `census_triage_
 
 ## Held-out test (1.13)
 
-Preregistered in branch `acceptance/1.13`, directory `acceptance/1.13/census/` (manifest, PREREG, frozen config,
-scorer sha256, all committed before any held-out run; scored once). Result: see the section below.
+Preregistered in branch `acceptance/1.13` (`PREREG-census.md`, `manifests/census-triage.tsv`, `census/`; manifest,
+frozen config and scorer sha256 committed in f054006 before any held-out run; scored once, abcd607).
+
+- Runs: 6 Q Exactive HCD DDA runs of human lysates from 6 PRIDE projects never used before (PXD003903, PXD016143,
+  PXD017427, PXD034582, PXD037976, PXD069084), 202,422 spectra the first search left unidentified.
+- First search: Sage 0.14.7 through OpenMS SageAdapter (UP000005640 + reversed decoys, 10/20 ppm, tryptic,
+  fixed carbamidomethyl, variable Met oxidation), Sage's q-value as the idXML score (IDScoreSwitcher); FASTag at
+  defaults with `-census -census_ids`.
+- Second searches: Sage with the same settings, semi-enzymatic plus N-terminal acetyl and pyro-Glu (primary), or
+  with a [-500, +150] Da precursor window (open, secondary).
+- Criteria: E1 pooled rr >= 2.0 with CI lower bound >= 1.5; E2 rr > 1 in every run; E3 the candidates' hit rate
+  above that of the same number of spectra picked by `n_peaks`, CI lower bound > 0.
+
+**Result: FAIL**, by E2 only. E1 pooled rr 5.85 (run bootstrap 3.19-10.26) and E3 +0.055 (0.010-0.133) pass. In one
+run (PXD003903, 381 of 39,839 spectra identified by the first search) neither group had a single semi-search hit
+at 1% FDR, so its rr is undefined, which the protocol counts as a failure; in the other five runs the candidates'
+hit rate was 1.6 to 9.8 times that of the other unidentified spectra. Pooled, the candidates were 15.5% of the
+unidentified spectra and held 52% of their semi-search hits (hit rate 12.5% vs 2.1%).
+
+Secondary: against the open search the enrichment is similar (rr 4.7), but the candidates do no better than a pick
+by peak count (d +0.014, CI -0.030 to 0.082).
+
+What this supports: the triage list is enriched for spectra a semi-specific second search identifies, pooled and in
+most runs; it is not a per-run guarantee and not a quality call. The census classifier of the plan (phase C) was not
+built, because the spectrum-level labels it needs do not exist yet.
