@@ -2,8 +2,10 @@
 # 1.13 digqual (backlog 23): -digest_quality against the real binary on the
 # vendored fixture. Without the option -digest_out is unchanged; with it the
 # 1.12 report is a byte prefix, the tag TSV is unchanged, the quality rows
-# agree with a recount of the full-precision tag TSV, auto on a run without a
-# call is not measured, and an unknown enzyme is refused.
+# agree with a recount of the full-precision tag TSV, the missed-cleavage
+# ratios need -digest_tag_min specific ends, auto takes the report's own call
+# (and is not measured without one), a Da tolerance is not measured, and an
+# unknown enzyme is refused.
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 BIN="$1"
@@ -23,11 +25,14 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 run() { "$BIN" -threads 2 "$@" > "$TMP/log" 2>&1 || { cat "$TMP/log" >&2; fail "FASTag $*"; }; }
 val() { tr -d '\r' < "$1" | awk -F'\t' -v s="$2" -v k="$3" '$1 == s && $2 == k { print $3; exit }'; }
 
-COMMON=(-in "$IN" -tag_length 4 -fragment_tolerance 0.5 -fragment_tolerance_unit Da)
+# The fixture's MS2 is ion trap; a wide ppm tolerance gives tags (the quality
+# rows refuse a Da tolerance, checked below). At 1000 ppm the fixture has 23
+# C-terminal tag ends, 11 of them at K/R, so -digest_tag_min 10 measures the C
+# end and its missed-cleavage ratios (the default 100 gives few_tags).
+COMMON=(-in "$IN" -tag_length 4 -fragment_tolerance 1000 -fragment_tolerance_unit ppm)
+DA=(-in "$IN" -tag_length 4 -fragment_tolerance 0.5 -fragment_tolerance_unit Da)
 
-# ---- off: unchanged; on: 1.12 rows a byte prefix, tag TSV unchanged. The
-# fixture has 26 C-terminal tag ends, so -digest_tag_min 10 lets the C end be
-# measured (the default 100 gives few_tags, checked below).
+# ---- off: unchanged; on: 1.12 rows a byte prefix, tag TSV unchanged.
 run "${COMMON[@]}" -out "$TMP/t0.tsv" -digest_out "$TMP/d0.tsv" -digest_tag_min 10
 run "${COMMON[@]}" -out "$TMP/t1.tsv" -digest_out "$TMP/d1.tsv" -digest_quality Trypsin -digest_tag_min 10
 cmp -s "$TMP/t0.tsv" "$TMP/t1.tsv" || fail "-digest_quality changed the tag TSV"
@@ -37,13 +42,15 @@ tail -c +"$((n0 + 1))" "$TMP/d1.tsv" | tr -d '\r' > "$TMP/q.rows"
 [ -s "$TMP/q.rows" ] || fail "no quality rows"
 awk -F'\t' '$1 != "quality" || NF != 5 || $5 == "" { bad = 1 } END { exit bad }' "$TMP/q.rows" \
   || fail "a row after the 1.12 rows is not a five-field quality row"
-for k in enzyme basis status C.sites C.ends C.measured C.nonspecific_share C.nonspecific_mle C.mc_positions \
+for k in enzyme basis status C.sites C.ends C.measured C.nonspecific_share C.nonspecific_mle C.mc_measured C.mc_positions \
          C.mc_sites C.mc_site_share C.mc_background_share C.mc_retention; do
   grep -q "^quality	$k	" "$TMP/q.rows" || fail "no quality $k row"
 done
 [ "$(val "$TMP/d1.tsv" quality enzyme) $(val "$TMP/d1.tsv" quality basis) $(val "$TMP/d1.tsv" quality status)" = \
   "Trypsin named measured" ] || fail "enzyme/basis/status"
 [ "$(val "$TMP/d1.tsv" quality C.sites)" = "K,R" ] || fail "Trypsin sites are not K,R"
+[ "$(val "$TMP/d1.tsv" quality C.mc_measured)" = yes ] || fail "Trypsin at -digest_tag_min 10: C.mc_measured is not yes"
+[ "$(val "$TMP/d1.tsv" quality C.mc_reason)" = "" ] || fail "Trypsin at -digest_tag_min 10: an mc_reason row"
 [ "$(val "$TMP/d1.tsv" quality C.ends)" = "$(val "$TMP/d1.tsv" count n_c)" ] || fail "C.ends is not count.n_c"
 
 # ---- recount from the full-precision tag TSV: ends at K (labelled K merged) and
@@ -68,7 +75,7 @@ recount=$(tr -d '\r' < "$TMP/full.tsv" | awk -F'\t' -v w=0.008 '
   } END { print spec + 0, pos + 0, site + 0 }')
 want="$(tr -d '\r' < "$TMP/d1.tsv" | awk -F'\t' '$1 == "quality" && $2 == "C.ends" { print $5 }' | grep -oE ', [0-9]+ of them' | grep -oE '[0-9]+') $(val "$TMP/d1.tsv" quality C.mc_positions) $(val "$TMP/d1.tsv" quality C.mc_sites)"
 [ "$recount" = "$want" ] || fail "recount (specific ends, positions, sites) $recount differs from the report ($want)"
-[ "$(echo "$recount" | awk '{ print ($2 > 0) }')" = 1 ] || fail "the fixture gives no P2..P4 residue"
+[ "$(echo "$recount" | awk '{ print ($2 > 0 && $3 > 0) }')" = 1 ] || fail "the fixture gives no P2..P4 residue or no site among them"
 # retention = (sites / non-sites) / (b / (1 - b)), to 9 significant digits
 awk -v o="$(val "$TMP/d1.tsv" quality C.mc_sites)" -v n="$(val "$TMP/d1.tsv" quality C.mc_positions)" \
     -v b="$(val "$TMP/d1.tsv" quality C.mc_background_share)" -v r="$(val "$TMP/d1.tsv" quality C.mc_retention)" \
@@ -117,14 +124,58 @@ want7="$(tr -d '\r' < "$TMP/d7.tsv" | awk -F'\t' '$1 == "quality" && $2 == "C.en
 # ---- default -digest_tag_min 100: too few ends
 run "${COMMON[@]}" -out "$TMP/t6.tsv" -digest_out "$TMP/d6.tsv" -digest_quality Trypsin
 [ "$(val "$TMP/d6.tsv" quality status) $(val "$TMP/d6.tsv" quality reason) $(val "$TMP/d6.tsv" quality C.measured)" = \
-  "not_measured few_tags no" ] || fail "26 ends against tag_min 100 are not few_tags"
+  "not_measured few_tags no" ] || fail "$(val "$TMP/d6.tsv" quality C.ends) ends against tag_min 100 are not few_tags"
 [ "$(val "$TMP/d6.tsv" quality C.mc_retention)" = "" ] || fail "few_tags wrote a retention"
 
-# ---- auto on a Da run (no call): not measured
-run "${COMMON[@]}" -out "$TMP/t2.tsv" -digest_out "$TMP/d2.tsv" -digest_quality auto
+# ---- many ends, few specific: -digest_tag_min one above the specific ends
+# measures the end (non-specific rows) but not the missed-cleavage ratios
+spec1=$(tr -d '\r' < "$TMP/d1.tsv" | awk -F'\t' '$1 == "quality" && $2 == "C.mc_measured" { print $4 }')
+ends1=$(val "$TMP/d1.tsv" quality C.ends)
+[ "$ends1" -gt "$((spec1 + 1))" ] || fail "the fixture has no non-specific end ($ends1 ends, $spec1 specific)"
+run "${COMMON[@]}" -out "$TMP/t8.tsv" -digest_out "$TMP/d8.tsv" -digest_quality Trypsin -digest_tag_min "$((spec1 + 1))"
+[ "$(val "$TMP/d8.tsv" quality status) $(val "$TMP/d8.tsv" quality C.measured) $(val "$TMP/d8.tsv" quality C.mc_measured) $(val "$TMP/d8.tsv" quality C.mc_reason)" = \
+  "measured yes no mc_few_specific" ] || fail "$spec1 specific ends against tag_min $((spec1 + 1)) are not mc_few_specific"
+[ "$(val "$TMP/d8.tsv" quality C.mc_retention) $(val "$TMP/d8.tsv" quality C.mc_site_share)" = "- -" ] \
+  || fail "mc_few_specific wrote a retention or a site share"
+[ "$(val "$TMP/d8.tsv" quality C.nonspecific_share)" = "$(val "$TMP/d1.tsv" quality C.nonspecific_share)" ] \
+  || fail "mc_few_specific changed the non-specific share"
+
+# ---- auto on a run without a call: not measured
+[ "$(val "$TMP/d1.tsv" call status)" = no_call ] || fail "the default-table run is not a no_call"
+run "${COMMON[@]}" -out "$TMP/t2.tsv" -digest_out "$TMP/d2.tsv" -digest_quality auto -digest_tag_min 10
 [ "$(val "$TMP/d2.tsv" quality basis) $(val "$TMP/d2.tsv" quality status) $(val "$TMP/d2.tsv" quality reason)" = \
   "call not_measured no_call" ] || fail "auto without a call is not 'call not_measured no_call'"
 [ "$(val "$TMP/d2.tsv" quality C.ends)" = "" ] || fail "auto without a call wrote end rows"
+
+# ---- auto on a run with a call: a v2 table of the C-end proteases with
+# flank2 calls the fixture (as in digest_cli_test); auto measures the call's
+# model, and its rows equal the named run of that model
+awk -F'\t' '/^#/ || $1 == "model" || $1 == "background" || $1 == "Trypsin" || $1 == "Lys-C" || $1 == "Arg-C" ||
+  $1 == "detection" || $1 == "specificity"' "$DATA/digest_models_v2.tsv" > "$TMP/cend.tsv"
+CALL=(-digest_models "$TMP/cend.tsv" -digest_detection shipped -digest_flank2 auto -digest_tag_min 10)
+run "${COMMON[@]}" -out "$TMP/t9.tsv" -digest_out "$TMP/d9.tsv" "${CALL[@]}" -digest_quality auto
+[ "$(val "$TMP/d9.tsv" call status)" = call ] || fail "the C-end table run is not a call: $(val "$TMP/d9.tsv" call reason)"
+cmodel=$(val "$TMP/d9.tsv" call model)
+[ -n "$cmodel" ] || fail "the call has no model row"
+[ "$(val "$TMP/d9.tsv" quality basis) $(val "$TMP/d9.tsv" quality status) $(val "$TMP/d9.tsv" quality enzyme)" = \
+  "call measured $cmodel" ] || fail "auto with a call ($cmodel) is not 'call measured $cmodel'"
+[ "$(val "$TMP/d9.tsv" quality C.mc_measured)" = yes ] || fail "auto with a call: the missed-cleavage ratios are not measured"
+run "${COMMON[@]}" -out "$TMP/t10.tsv" -digest_out "$TMP/d10.tsv" "${CALL[@]}" -digest_quality "$cmodel"
+q9=$(tr -d '\r' < "$TMP/d9.tsv" | awk -F'\t' '$1 == "quality" && $2 != "enzyme" && $2 != "basis" { print $2, $3, $4 }')
+q10=$(tr -d '\r' < "$TMP/d10.tsv" | awk -F'\t' '$1 == "quality" && $2 != "enzyme" && $2 != "basis" { print $2, $3, $4 }')
+[ -n "$q9" ] && [ "$q9" = "$q10" ] || fail "auto ($cmodel) rows differ from -digest_quality $cmodel"
+[ "$(val "$TMP/d10.tsv" quality basis)" = named ] || fail "the named run is not basis named"
+cmp -s "$TMP/t9.tsv" "$TMP/t10.tsv" || fail "auto and named changed the tag TSV"
+
+# ---- a Da tolerance: not measured (low_resolution), named or auto, no end rows
+run "${DA[@]}" -out "$TMP/t11.tsv" -digest_out "$TMP/d11.tsv" -digest_quality Trypsin -digest_tag_min 10
+[ "$(val "$TMP/d11.tsv" quality enzyme) $(val "$TMP/d11.tsv" quality status) $(val "$TMP/d11.tsv" quality reason)" = \
+  "Trypsin not_measured low_resolution" ] || fail "Trypsin on a Da tolerance is not 'not_measured low_resolution'"
+[ "$(val "$TMP/d11.tsv" quality C.ends)$(val "$TMP/d11.tsv" quality C.mc_retention)" = "" ] || fail "Da: end rows written"
+[ "$(val "$TMP/d11.tsv" count n_c)" -ge 10 ] || fail "Da: fewer than 10 C ends, the check would not separate low_resolution from few_tags"
+run "${DA[@]}" -out "$TMP/t12.tsv" -digest_out "$TMP/d12.tsv" -digest_quality auto -digest_tag_min 10
+[ "$(val "$TMP/d12.tsv" quality basis) $(val "$TMP/d12.tsv" quality status) $(val "$TMP/d12.tsv" quality reason)" = \
+  "call not_measured low_resolution" ] || fail "auto on a Da tolerance is not 'call not_measured low_resolution'"
 
 # ---- a named N-end enzyme of the shipped table measures the N end
 run "${COMMON[@]}" -out "$TMP/t3.tsv" -digest_out "$TMP/d3.tsv" -digest_quality Asp-N

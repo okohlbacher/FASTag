@@ -892,9 +892,13 @@ share of tag ends outside the cleaving residues (`nonspecific_share`), the
 background share that fits the P1 counts best (`nonspecific_mle`), and a
 missed-cleavage odds ratio: how often the cleaving residues occur at P2..P4
 of the tags with a specific end, against the background (`mc_retention`; 0 =
-every site cut, 1 = as often as in the proteome). Measured from the tags
-alone; doc/DESIGN-digest.md has the definitions and a descriptive comparison
-with Sage.
+every site cut, 1 = as often as in the proteome). An end is measured with at
+least `-digest_tag_min` tag ends, and its missed-cleavage ratios need that
+many specific ends as well (else `mc_measured no`, `mc_reason
+mc_few_specific`, ratios `-`). On a Da fragment tolerance nothing is measured
+(`status not_measured`, `reason low_resolution`), as for the protease call.
+Measured from the tags alone; doc/DESIGN-digest.md has the definitions and a
+descriptive comparison with Sage.
 
 `-digest_out` also writes the background in use and each model's residue
 distribution before mixing, from which the Desktop GUI draws its logos. The

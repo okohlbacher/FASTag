@@ -380,7 +380,8 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy)
   set_tests_properties(digest_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # 1.13 digqual: -digest_quality on the vendored fixture (1.12 rows a byte
-  # prefix, recount from the tag TSV, auto without a call, refusals).
+  # prefix, recount from the tag TSV, mc_few_specific, auto with and without a
+  # call, low_resolution on Da, refusals).
   add_test(NAME digest_quality_cli_test
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/digest_quality_cli_test.sh $<TARGET_FILE:FASTag>
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML

@@ -113,21 +113,53 @@ namespace FASTag::Digest
         }
       }
       e.measured = e.ends >= static_cast<std::uint64_t>(tag_min);
+      e.mc_measured = e.measured && e.specific >= static_cast<std::uint64_t>(tag_min);
+      e.mc_retention = std::numeric_limits<double>::quiet_NaN();
       if (e.measured)
       {
         e.nonspecific_share = 1.0 - static_cast<double>(e.specific) / static_cast<double>(e.ends);
         e.nonspecific_mle = mixtureShareMle(counts, pm, bg);
         const double bs = e.mc_background_share;
-        if (e.mc_positions > e.mc_sites && bs > 0.0 && bs < 1.0)
+        // The missed-cleavage ratios need tag_min specific ends; below that
+        // mc_retention stays NaN and the rows say mc_few_specific.
+        if (e.mc_measured && e.mc_positions > e.mc_sites && bs > 0.0 && bs < 1.0)
           e.mc_retention = (static_cast<double>(e.mc_sites) / static_cast<double>(e.mc_positions - e.mc_sites)) /
                            (bs / (1.0 - bs));
-        else
-          e.mc_retention = std::numeric_limits<double>::quiet_NaN();
         q.measured = true;
       }
       q.ends.push_back(e);
     }
     if (!q.measured) q.reason = q.ends.empty() ? "no_specific_end" : "few_tags";
+    return q;
+  }
+
+  Quality reportQuality(const TerminusCounter& tc, const ModelTable& table, const std::vector<Row>& report,
+                        const std::string& option, const DigestSettings& s)
+  {
+    const bool is_auto = option == "auto";
+    Quality q;
+    q.basis = is_auto ? "call" : "named";
+    q.enzyme = "-";
+    if (s.low_resolution)
+    {
+      // The tag-end windows do not hold on a Da tolerance, as for the
+      // protease and label calls of the same report.
+      if (!is_auto) q.enzyme = option;
+      q.reason = "low_resolution";
+      return q;
+    }
+    std::string enzyme = option;
+    if (is_auto)
+    {
+      std::string status, model;
+      for (const Row& r : report)
+        if (r.section == "call" && r.key == "status") status = r.value;
+        else if (r.section == "call" && r.key == "model") model = r.value;
+      enzyme = status == "call" ? model : std::string();
+    }
+    for (const Model& m : table.models)
+      if (!enzyme.empty() && m.name == enzyme) return digestQuality(tc, table, m, q.basis, s.tag_min);
+    q.reason = "no_call";
     return q;
   }
 
@@ -139,22 +171,21 @@ namespace FASTag::Digest
     };
     add("enzyme", q.enzyme, "-",
         q.enzyme == "-" ? "No enzyme is measured."
-        : q.basis == "call" ? "Digestion quality is measured for " + q.enzyme + ", the protease call of this report."
-                            : "Digestion quality is measured for " + q.enzyme + ", as named by -digest_quality.");
+        : q.basis == "call" ? "The enzyme is " + q.enzyme + ", the protease call of this report."
+                            : "The enzyme is " + q.enzyme + ", as named by -digest_quality.");
     add("basis", q.basis, "-",
         q.basis == "call" ? "The enzyme is the report's call (-digest_quality auto)." : "The enzyme is named by -digest_quality.");
     if (!q.measured)
     {
       add("status", "not_measured", "-", "Digestion quality is not measured.");
-      const std::string why = q.reason == "no_call" ? "the report makes no protease call"
+      const std::string why = q.reason == "low_resolution" ? "the fragment tolerance is in Da, so the tag-end windows do not hold"
+                              : q.reason == "no_call" ? "the report makes no protease call"
                               : q.reason == "no_specific_end" ? "every end of the enzyme's model is the background"
                                                               : "fewer than " + std::to_string(s.tag_min) + " tag ends are at the enzyme's cleaving end";
       add("reason", q.reason, "-", "Not measured: " + why + ".");
     }
     else
-      add("status", "measured", "-",
-          s.low_resolution ? "Digestion quality is measured; the fragment tolerance is in Da, where the tag-end windows do not hold."
-                           : "Digestion quality is measured.");
+      add("status", "measured", "-", "Digestion quality is measured.");
     for (const QualityEnd& e : q.ends)
     {
       const std::string E(1, e.end);
@@ -172,19 +203,28 @@ namespace FASTag::Digest
           "A share of " + f(e.nonspecific_share, 4) + " of the " + P1 + " ends are not " + sites + ".");
       add(E + ".nonspecific_mle", num(e.nonspecific_mle), u(e.ends),
           "The " + P1 + " counts fit best with a background share of " + f(e.nonspecific_mle, 4) + " mixed into " + q.enzyme + ".");
+      add(E + ".mc_measured", e.mc_measured ? "yes" : "no", u(e.specific),
+          e.mc_measured ? "At least " + std::to_string(s.tag_min) + " tag ends are at " + sites + "."
+                        : u(e.specific) + " tag ends at " + sites + " are fewer than " + std::to_string(s.tag_min) +
+                              "; the missed-cleavage ratios are not measured.");
+      if (!e.mc_measured)
+        add(E + ".mc_reason", "mc_few_specific", u(e.specific),
+            "Not measured: fewer than " + std::to_string(s.tag_min) + " tag ends are at " + sites + ".");
       add(E + ".mc_positions", u(e.mc_positions), u(e.specific),
           u(e.mc_positions) + " residues are counted at " + P24 + " of the " + u(e.specific) + " tags with a " + sites + " end.");
       add(E + ".mc_sites", u(e.mc_sites), u(e.mc_positions), u(e.mc_sites) + " of them are " + sites + ".");
       const double share = e.mc_positions ? static_cast<double>(e.mc_sites) / static_cast<double>(e.mc_positions)
                                           : std::numeric_limits<double>::quiet_NaN();
-      add(E + ".mc_site_share", e.mc_positions ? num(share) : "-", u(e.mc_positions),
-          e.mc_positions ? "A share of " + f(share, 4) + " of the residues at " + P24 + " are " + sites + "."
+      add(E + ".mc_site_share", e.mc_measured && e.mc_positions ? num(share) : "-", u(e.mc_positions),
+          !e.mc_measured ? "Not measured (mc_few_specific)."
+          : e.mc_positions ? "A share of " + f(share, 4) + " of the residues at " + P24 + " are " + sites + "."
                          : "No residue is counted at " + P24 + ".");
       add(E + ".mc_background_share", num(e.mc_background_share), "-",
           "The background share of " + sites + " is " + f(e.mc_background_share, 4) + ".");
       const bool ok = !std::isnan(e.mc_retention);
       add(E + ".mc_retention", ok ? num(e.mc_retention) : "-", u(e.mc_positions),
-          ok ? "Uncut " + sites + " sites at " + P24 + " occur at " + f(e.mc_retention, 4) +
+          !e.mc_measured ? "Not measured (mc_few_specific)."
+          : ok ? "Uncut " + sites + " sites at " + P24 + " occur at " + f(e.mc_retention, 4) +
                    " times the background odds (0: every site cut, 1: as in the background)."
              : "The site odds at " + P24 + " are undefined (no residue or no non-site residue counted).");
     }

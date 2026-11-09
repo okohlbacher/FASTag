@@ -5336,26 +5336,7 @@ protected:
         // 1.13 digqual: the quality rows, after every 1.12 row.
         if (!digest_quality.empty())
         {
-          std::string enzyme = digest_quality, basis = "named";
-          if (digest_quality == "auto")
-          {
-            basis = "call";
-            std::string status, model;
-            for (const FD::Row& r : more)
-              if (r.section == "call" && r.key == "status") status = r.value;
-              else if (r.section == "call" && r.key == "model") model = r.value;
-            enzyme = status == "call" ? model : std::string();
-          }
-          FD::Quality qual;
-          qual.basis = basis;
-          qual.enzyme = "-";
-          qual.reason = "no_call";
-          for (const FD::Model& m : protease_models.models)
-            if (!enzyme.empty() && m.name == enzyme)
-            {
-              qual = FD::digestQuality(tc, protease_models, m, basis, digest_settings.tag_min);
-              break;
-            }
+          const FD::Quality qual = FD::reportQuality(tc, protease_models, more, digest_quality, digest_settings);
           const auto qrows = FD::qualityRows(qual, digest_settings);
           rows.insert(rows.end(), qrows.begin(), qrows.end());
         }

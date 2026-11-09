@@ -483,6 +483,7 @@ namespace FASTag::Digest
     char end = 'C';                   ///< 'C' (P1) or 'N' (P1')
     std::vector<int> sites;           ///< kAAs indices whose model probability is above the background's
     bool measured = false;            ///< ends >= tag_min
+    bool mc_measured = false;         ///< measured and specific >= tag_min (the mc_* ratios)
     std::uint64_t ends = 0;           ///< merged P1 (P1') counts
     std::uint64_t specific = 0;       ///< of them at a site residue
     double nonspecific_share = 0.0;   ///< 1 - specific / ends
@@ -498,7 +499,7 @@ namespace FASTag::Digest
     std::string enzyme;               ///< the model measured ("-" when none)
     std::string basis;                ///< "named" (-digest_quality <model>) or "call" (auto)
     bool measured = false;            ///< at least one end measured
-    std::string reason;               ///< not measured: no_call, no_specific_end, few_tags
+    std::string reason;               ///< not measured: low_resolution, no_call, no_specific_end, few_tags
     std::vector<QualityEnd> ends;     ///< the model's non-background ends, C first
   };
 
@@ -509,10 +510,20 @@ namespace FASTag::Digest
   /// + s b_a) (p, b normalised); bisection on the derivative (concave in s).
   double mixtureShareMle(const std::array<std::uint64_t, kNumAA>& k, const Dist& p, const Dist& b);
   /// The quality of @p model (a model of @p table, whose background is used)
-  /// over the counts of @p tc; an end is measured with >= @p tag_min ends.
-  /// @p basis is written as given.
+  /// over the counts of @p tc; an end is measured with >= @p tag_min ends,
+  /// and its missed-cleavage ratios (mc_site_share, mc_retention) need
+  /// >= @p tag_min specific ends as well (mc_measured). @p basis is written
+  /// as given.
   Quality digestQuality(const TerminusCounter& tc, const ModelTable& table, const Model& model,
                         const std::string& basis, int tag_min);
+  /// The quality written for -digest_quality @p option (a model name of
+  /// @p table, or "auto") on a report whose 1.12 rows are @p report: auto
+  /// takes the model of the rows `call status` = call and `call model`
+  /// (basis "call"; no call or a model not in @p table gives reason no_call).
+  /// A Da tolerance (@p s.low_resolution) gives reason low_resolution and no
+  /// end, whatever the enzyme.
+  Quality reportQuality(const TerminusCounter& tc, const ModelTable& table, const std::vector<Row>& report,
+                        const std::string& option, const DigestSettings& s);
   /// The quality section rows (section "quality"), for a measured or an
   /// unmeasured result.
   std::vector<Row> qualityRows(const Quality& q, const DigestSettings& s);

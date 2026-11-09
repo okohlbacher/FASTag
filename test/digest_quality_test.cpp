@@ -140,6 +140,8 @@ int main()
     check(value(rows, "C.sites") == "K,R" && value(rows, "C.ends") == "220" && value(rows, "C.mc_sites") == "150",
           "rows: sites, ends, mc_sites");
     check(value(rows, "C.mc_retention") == D::num(e.mc_retention), "rows: retention in round-trip form");
+    check(e.mc_measured && value(rows, "C.mc_measured") == "yes" && value(rows, "C.mc_reason") == "<none>",
+          "200 specific ends: mc measured");
     check(value(rows, "N.sites") == "<none>", "rows: no N end for Trypsin");
     for (const D::Row& r : rows)
       check(r.section == "quality" && !r.key.empty() && !r.value.empty() && !r.description.empty(),
@@ -182,6 +184,77 @@ int main()
     const D::Quality u = D::digestQuality(tc, t, model(t, "unspecific"), "named", 100);
     check(!u.measured && u.reason == "no_specific_end" && u.ends.empty(), "unspecific: no_specific_end");
     check(value(D::qualityRows(u, D::DigestSettings()), "reason") == "no_specific_end", "unspecific rows");
+  }
+
+  // ---- many ends, few specific: the end is measured, its missed-cleavage
+  // ratios are not (mc_few_specific); the non-specific rows are written
+  {
+    D::TerminusCounter tc;
+    for (int i = 0; i < 40; ++i) tc.add(500.0, K, "GAKS");               // 40 specific (K)
+    for (int i = 0; i < 400; ++i) tc.add(500.0, 113.08406, "AAAA");      // 400 at L
+    const D::Quality q = D::digestQuality(tc, t, model(t, "Trypsin"), "named", 100);
+    check(q.measured && q.ends.size() == 1 && q.ends[0].measured && !q.ends[0].mc_measured,
+          "few specific: end measured, mc not measured");
+    check(q.ends[0].ends == 440 && q.ends[0].specific == 40 && q.ends[0].mc_positions == 120 && q.ends[0].mc_sites == 40,
+          "few specific: counts");
+    check(std::isnan(q.ends[0].mc_retention), "few specific: no retention");
+    const auto rows = D::qualityRows(q, D::DigestSettings());
+    check(value(rows, "status") == "measured" && value(rows, "C.measured") == "yes" && value(rows, "C.mc_measured") == "no" &&
+              value(rows, "C.mc_reason") == "mc_few_specific",
+          "few specific rows: mc_measured no, mc_reason mc_few_specific");
+    check(value(rows, "C.mc_retention") == "-" && value(rows, "C.mc_site_share") == "-", "few specific rows: ratios are -");
+    close(q.ends[0].nonspecific_share, 400.0 / 440.0, 1e-15, "few specific: non-specific share");
+    check(value(rows, "C.nonspecific_share") == D::num(q.ends[0].nonspecific_share) &&
+              value(rows, "C.nonspecific_mle") == D::num(q.ends[0].nonspecific_mle),
+          "few specific rows: non-specific share and MLE written");
+    // At tag_min 40 the same counts measure the ratios.
+    const D::Quality q40 = D::digestQuality(tc, t, model(t, "Trypsin"), "named", 40);
+    check(q40.ends[0].mc_measured && !std::isnan(q40.ends[0].mc_retention), "specific == tag_min: mc measured");
+    const auto rows40 = D::qualityRows(q40, D::DigestSettings());
+    check(value(rows40, "C.mc_measured") == "yes" && value(rows40, "C.mc_reason") == "<none>" &&
+              value(rows40, "C.mc_retention") == D::num(q40.ends[0].mc_retention),
+          "specific == tag_min rows");
+  }
+
+  // ---- reportQuality: auto from the call rows, named, no call, Da tolerance
+  {
+    D::TerminusCounter tc;
+    for (int i = 0; i < 150; ++i) tc.add(500.0, K, "GAKS");
+    for (int i = 0; i < 50; ++i) tc.add(500.0, R, "AAAA");
+    D::DigestSettings s;  // tag_min 100, ppm
+    const std::vector<D::Row> called = {{"call", "status", "call", "-", "x"}, {"call", "model", "Trypsin", "-", "x"}};
+    const D::Quality a = D::reportQuality(tc, t, called, "auto", s);
+    const D::Quality n = D::reportQuality(tc, t, {}, "Trypsin", s);
+    check(a.measured && a.basis == "call" && a.enzyme == "Trypsin", "auto: the call's model, basis call");
+    check(n.measured && n.basis == "named" && n.enzyme == "Trypsin", "named: basis named");
+    auto ra = D::qualityRows(a, s), rn = D::qualityRows(n, s);
+    check(ra.size() == rn.size(), "auto and named give the same number of rows");
+    for (std::size_t i = 0; i < ra.size() && i < rn.size(); ++i)
+      if (ra[i].key != "basis" && ra[i].key != "enzyme")
+        check(ra[i].key == rn[i].key && ra[i].value == rn[i].value && ra[i].n == rn[i].n,
+              "auto row " + ra[i].key + " equals the named row");
+    // Asp-N called: the N end of Asp-N (the model name is looked up, not fixed)
+    const std::vector<D::Row> aspn = {{"call", "model", "Asp-N", "-", "x"}, {"call", "status", "call", "-", "x"}};
+    check(D::reportQuality(tc, t, aspn, "auto", s).enzyme == "Asp-N", "auto: Asp-N call");
+    const std::vector<D::Row> nocall = {{"call", "status", "no_call", "-", "x"}, {"call", "reason", "few_tags", "-", "x"}};
+    const D::Quality nc = D::reportQuality(tc, t, nocall, "auto", s);
+    check(!nc.measured && nc.reason == "no_call" && nc.enzyme == "-" && nc.ends.empty(), "auto without a call: no_call");
+    const std::vector<D::Row> other = {{"call", "status", "call", "-", "x"}, {"call", "model", "Papain", "-", "x"}};
+    check(D::reportQuality(tc, t, other, "auto", s).reason == "no_call", "auto with a model not in the table: no_call");
+    check(D::reportQuality(tc, t, {{"model", "status", "call", "-", "x"}, {"model", "model", "Trypsin", "-", "x"}}, "auto", s).reason ==
+              "no_call",
+          "auto reads the call section only");
+    D::DigestSettings da = s;
+    da.low_resolution = true;
+    const D::Quality ln = D::reportQuality(tc, t, called, "Trypsin", da);
+    const D::Quality la = D::reportQuality(tc, t, called, "auto", da);
+    check(!ln.measured && ln.reason == "low_resolution" && ln.enzyme == "Trypsin" && ln.ends.empty(),
+          "Da, named: low_resolution, no end");
+    check(!la.measured && la.reason == "low_resolution" && la.basis == "call" && la.ends.empty(), "Da, auto: low_resolution");
+    const auto lr = D::qualityRows(ln, da);
+    check(value(lr, "status") == "not_measured" && value(lr, "reason") == "low_resolution" && value(lr, "C.ends") == "<none>" &&
+              value(lr, "C.mc_retention") == "<none>",
+          "Da rows: not_measured low_resolution, no end rows");
   }
 
   if (failures) { std::cerr << failures << " failure(s)\n"; return 1; }

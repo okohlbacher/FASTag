@@ -215,22 +215,30 @@ For each end of the model that is not the background (`C` = P1; `N` = P1' for As
 | `<E>.sites` | the cleaving residues S: model probability above the background's, both normalised over the 19 (Trypsin `K,R`) |
 | `<E>.ends` | the merged P1 (P1') counts, `count.n_c` (`n_n`); the sentence says how many are at S |
 | `<E>.measured` | `yes` when the ends are ≥ `-digest_tag_min`; else `no` and no further rows for that end |
+| `<E>.mc_measured` | `yes` when the ends at S (the specific ends; the `n` column) are ≥ `-digest_tag_min` as well; else `no`, a row `<E>.mc_reason` `mc_few_specific`, and `mc_site_share` and `mc_retention` are `-` (the counts and the non-specific rows are still written) |
 | `<E>.nonspecific_share` | share of the ends whose P1 is not in S |
 | `<E>.nonspecific_mle` | the background share s in [0, 1] that maximises Σ k_a ln((1 − s) p_a + s bg_a) over the P1 counts k (the classifier's mixture with s estimated; concave, bisection). It counts the non-specific ends that fall on S by chance too |
 | `<E>.mc_positions` | residues at P2..P4 (P2'..P4') of the tags counted at a P1 (P1') in S; the positions are the tag residues next to the end, as for `pos` (`TerminusCounter::cq`, `nq`) |
 | `<E>.mc_sites` | of them in S: internal cleavage sites of a peptide with a specific end, i.e. missed cleavages |
-| `<E>.mc_site_share` | `mc_sites / mc_positions` |
+| `<E>.mc_site_share` | `mc_sites / mc_positions`; `-` when `mc_measured` is `no` |
 | `<E>.mc_background_share` | b_S, the background share of S |
-| `<E>.mc_retention` | (mc_sites / (mc_positions − mc_sites)) / (b_S / (1 − b_S)): the odds of a site at an internal position against the background; 0 = every site cut, 1 = as often as in the proteome; `-` when undefined |
+| `<E>.mc_retention` | (mc_sites / (mc_positions − mc_sites)) / (b_S / (1 − b_S)): the odds of a site at an internal position against the background; 0 = every site cut, 1 = as often as in the proteome; `-` when undefined or when `mc_measured` is `no` |
 
 There is no proline rule: K or R before P counts as a site, in the tags and in the Sage reference
 below alike. `quality` also has `enzyme`, `basis` (`named` or `call`) and `status` (`measured`,
-`not_measured` with `reason` `no_call`, `no_specific_end` (every end of the model is the background,
-e.g. `unspecific`) or `few_tags`). On a Da tolerance the rows are written, and the `status` sentence
-says that the tag-end windows do not hold there.
+`not_measured` with `reason` `low_resolution`, `no_call`, `no_specific_end` (every end of the model is
+the background, e.g. `unspecific`) or `few_tags`). On a Da fragment tolerance the 0.008 Da tag-end
+windows do not hold, so every enzyme, named or `auto`, is `not_measured` with `reason`
+`low_resolution` and no end rows, as the protease and label calls of the same report refuse it.
+
+The two gates are separate because the missed-cleavage ratios are built from the specific ends
+only: a run with many ends but few at S (a non-tryptic or poorly digested sample with
+`-digest_quality Trypsin`) passes the ends gate on the total and would otherwise report an odds
+ratio from a handful of counts. In `auto` the model is the `call model` row of a report whose `call
+status` is `call` (`Digest::reportQuality`); a no-call, or a model not in the table, is `no_call`.
 
 **Comparison with Sage (descriptive).** The registered evaluation is in
-`acceptance/1.13/digqual/` (branch `acceptance/1.13`): FASTag's `C.mc_retention` against the same odds
+`acceptance/1.13/item23/` (PREREG `acceptance/1.13/PREREG-item23.md`, branch `acceptance/1.13`): FASTag's `C.mc_retention` against the same odds
 ratio from Sage's target PSMs (1 % spectrum q-value, K/R C-terminus, P2..P4 of the peptide, same
 background) and against Sage's own missed-cleavage share, on public tryptic runs. It reports
 correlations and ratios and has no pass/fail criterion; the option stays experimental.
@@ -238,7 +246,11 @@ Scored once (2026-11-09, binary of 2fd1297, `-tag_length 4 -subsample_fraction 0
 35 runs (one with 43 C-terminal ends is not measured; two have no Sage PSM at 1 %). Spearman 0.83 and
 Pearson 0.90 against the Sage odds ratio, Spearman 0.72 against Sage's missed-cleavage share; median
 FASTag/Sage ratio 0.86; medians 0.078 (FASTag) and 0.071 (Sage), Sage MC share 0.108, FASTag
-`nonspecific_mle` 0.059.
+`nonspecific_mle` 0.059. That scoring is of 2fd1297, before the `mc_measured` gate and the
+`low_resolution` refusal were added; it is not re-scored. Of its 35 runs the gate changes one at the
+default `-digest_tag_min 100`: PXD065430_fat (787 ends, about 41 specific), which was not scored
+either way (no Sage PSM at 1 %); its `mc_retention` 0.54 is now `-` (`mc_few_specific`). The
+`eval` runs are all ppm (the ion-trap runs were excluded), so the Da refusal changes none.
 
 ## Model table (`-digest_models`)
 
