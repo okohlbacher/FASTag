@@ -135,6 +135,9 @@ awk -F'\t' 'NR == FNR { z[$1] = $2; s[$1] = $3; next }
   "$TMP/ovr_map.tsv" "$TMP/nf.tsv" || fail "override (no -fasta): a row's prec_charge/charge_src is not its verdict"
 novr=$(awk -F'\t' 'NR > 1 && $14 == "overridden" { print $1 }' "$TMP/nf.tsv" | sort -u | wc -l | tr -d ' ')
 grep -q "disagreeing spectra were tagged at the supported charge" "$O/log" || fail "override: no summary line"
+grep -q "check_header_charge override is experimental and not recommended" "$O/log" \
+  || fail "override: no not-recommended warning"
+grep -q "override is experimental and not recommended" "$TMP/wrong_warn/log" && fail "warn printed the override warning"
 ndis=$(awk -F'\t' -v V=$VC 'NR > 1 && $V == "disagree"' "$O/hc.tsv" | wc -l | tr -d ' ')
 [ "$novr" -ge 8 ] && [ "$novr" -le "$ndis" ] && [ $((novr * 10)) -ge $((ndis * 8)) ] \
   || fail "override: $novr spectra have overridden rows, $ndis disagree"

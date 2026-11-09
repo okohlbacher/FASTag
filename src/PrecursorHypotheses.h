@@ -295,7 +295,7 @@ namespace FASTag::Hyp
     ChargeCall call;                 ///< the infer call over the check's candidates
     bool header_ruled_out = false;   ///< the range evidence rules the header charge out
     int header_peaks_above = 0;      ///< strongest peaks above the header's fragment ceiling (b/y)
-    double header_excess = 0;        ///< complement excess at the header charge (0 when ruled out)
+    double header_excess = 0;        ///< complement excess at the header charge (also when ruled out or above the cap; 0 under the 1+ test)
     double call_excess = 0;          ///< complement excess at the call (0 without complement basis)
     /// The charge a disagreeing header is replaced by under override: the
     /// call; else the header.

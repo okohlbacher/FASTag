@@ -805,7 +805,9 @@ protected:
                           "-charge_min..-charge_max and the header charge): off (the default), warn "
                           "(count and report disagreements, tag at the header charge) or override "
                           "(tag a disagreeing spectrum at the supported charge; charge_src "
-                          "'overridden'). Experimental", false, true);
+                          "'overridden'; not recommended: on held-out Q Exactive data it broke more "
+                          "charges than it fixed). Experimental; validated on Q Exactive only (on "
+                          "Orbitrap Astral its disagreements were false)", false, true);
     setValidStrings_("check_header_charge", ListUtils::create<std::string>(FASTag::Hyp::kHeaderCheckValues));
     registerDoubleOption_("check_header_margin", "<value>", FASTag::Hyp::kHeaderMarginDefault,
                           "Complement-pair excess by which the supported charge must beat the header "
@@ -1783,6 +1785,12 @@ protected:
       OPENMS_LOG_ERROR << herr << std::endl;
       return ILLEGAL_PARAMETERS;
     }
+    // 1.13: the held-out test of override (acceptance/1.13, item 14) found it
+    // net harmful on real (vendor) header charges; say so whenever it runs.
+    if (hyp_param.header_check == FASTag::Hyp::HeaderCheck::Override)
+      OPENMS_LOG_WARN << "-check_header_charge override is experimental and not recommended: on held-out Q Exactive "
+                         "data it broke more real header charges than it fixed, and on Orbitrap Astral its "
+                         "disagreements were false (doc/HEADER-CHARGE-CHECK.md)." << std::endl;
     const bool hyp_on = !hyp_param.isDefault();
     // #6: -species reads the selected hypothesis' rows only, through a per-row
     // flag carried beside the rows (Block::row_species).

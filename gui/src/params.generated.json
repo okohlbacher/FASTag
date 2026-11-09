@@ -163,7 +163,7 @@
       "name": "check_header_charge",
       "type": "string",
       "default": "off",
-      "description": "Check every precursor charge the file gives against the charge its complement pairs support (the -unknown_charge infer call over -charge_min..-charge_max and the header charge): off (the default), warn (count and report disagreements, tag at the header charge) or override (tag a disagreeing spectrum at the supported charge; charge_src 'overridden'). Experimental",
+      "description": "Check every precursor charge the file gives against the charge its complement pairs support (the -unknown_charge infer call over -charge_min..-charge_max and the header charge): off (the default), warn (count and report disagreements, tag at the header charge) or override (tag a disagreeing spectrum at the supported charge; charge_src 'overridden'; not recommended: on held-out Q Exactive data it broke more charges than it fixed). Experimental; validated on Q Exactive only (on Orbitrap Astral its disagreements were false)",
       "required": false,
       "toppAdvanced": true,
       "choices": [

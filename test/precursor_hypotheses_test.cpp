@@ -31,7 +31,9 @@
 //       agreeing one at the header; warn keeps the 1.11 hypothesis; a large
 //       -check_header_margin turns the complement disagreement into nocall
 //       but leaves the range one; the verdict does not depend on peak order;
-//       candidates are -charge_min..-charge_max plus the header.
+//       candidates are -charge_min..-charge_max plus the header; one stray
+//       peak above a right header's ceiling does not let a weaker call
+//       disagree (the header's own excess is compared, not 0).
 // Plus: the defaults give the single 1.11 hypothesis; mergeHypotheses order
 // and cap; tagSpectrum's multiplicity; validate()'s refusals.
 //
@@ -550,6 +552,44 @@ namespace
       CHECK(!r39.header_ruled_out && r39.call.basis != H::CallBasis::Range,
             "%s (k): header 12 is not ruled out by range (got ruled out %d, %s, %s)", label, int(r39.header_ruled_out),
             H::basisName(r39.call.basis), H::verdictName(r39.verdict));
+      // One stray peak above a right header's ceiling (too few for range
+      // evidence) drops the header from the call's table; the margin must
+      // still compare with the header's real complement excess, not 0. A
+      // true 2+ spectrum, header 2, one strong peak above the 2+ ceiling and
+      // seven pairs at the 3+ complement sum (all below the 2+ ceiling):
+      // the call is 3 by complement with an excess >= the margin, below the
+      // header's own. It must not disagree (nor, ambiguous, disagree).
+      {
+        MSSpectrum st = s2.spec;
+        const double P = OpenMS::Constants::PROTON_MASS_U;
+        const double ceil2 = 2 * s2.prec_mz - P + 1.5;
+        st.emplace_back(ceil2 + 20.0, 5.0);
+        const double sum3 = 3 * s2.prec_mz - 3 * P + 2 * P;
+        for (const double m1 : {781.31, 823.72, 868.13, 912.94, 957.45, 1003.66, 1047.27})
+        {
+          st.emplace_back(m1, 1.0);
+          st.emplace_back(sum3 - m1, 1.0);
+        }
+        st.sortByPosition();
+        const auto rs = H::checkHeaderCharge(st, precursor(s2.prec_mz, 2), warn, cs);
+        CHECK(rs.header_ruled_out && rs.header_peaks_above == 1 && rs.call.charge == 3
+                  && rs.call.basis == H::CallBasis::Complement && rs.call_excess >= warn.header_margin
+                  && rs.header_excess > rs.call_excess && rs.verdict != V::Disagree,
+              "%s (k): one stray peak above a right header 2: no disagreement against its excess (got %s, call %d, "
+              "basis %s, ruled out %d, peaks above %d, %.2f vs header %.2f)",
+              label, H::verdictName(rs.verdict), rs.call.charge, H::basisName(rs.call.basis), int(rs.header_ruled_out),
+              rs.header_peaks_above, rs.call_excess, rs.header_excess);
+        const auto ra = H::checkHeaderCharge(st, precursor(s2.prec_mz, 2), amb, cs);
+        CHECK(ra.call.src == H::ChargeSource::Ambiguous && ra.header_ruled_out && ra.verdict == V::Ambiguous,
+              "%s (k): ambiguous call, one stray peak above header 2: ambiguous, not disagree (got %s, %s)", label,
+              H::sourceName(ra.call.src), H::verdictName(ra.verdict));
+        // Header 12 (above the cap, no table entry): its excess is computed too.
+        const auto r12 = H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 12), warn, cs);
+        double e12 = 0;
+        H::bestIsotope(s3.spec, s3.prec_mz, 12, warn.isotope_errors, cs, &e12);
+        CHECK(r12.header_excess == e12, "%s (k): header 12's excess is its own (%.3f vs %.3f)", label,
+              r12.header_excess, e12);
+      }
       // Candidates.
       CHECK((H::headerCheckCandidates(6, warn) == std::vector<int>{2, 3, 4, 6})
                 && (H::headerCheckCandidates(3, warn) == std::vector<int>{2, 3, 4})

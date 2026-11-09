@@ -309,6 +309,14 @@ namespace FASTag::Hyp
     // A header above kChargeLimit is no candidate: it is never "ruled out".
     const bool header_candidate = std::find(cands.begin(), cands.end(), header) != cands.end();
     r.header_ruled_out = header_candidate && c.basis != CallBasis::OnePlus && !c.excess.empty() && !header_seen;
+    // A header the table lacks (ruled out by range, or above kChargeLimit)
+    // still has complement pairs of its own: the margin comparisons below
+    // are against its real excess, never against 0. Without this one stray
+    // peak above the header's ceiling (too few for range evidence) would
+    // let any call excess >= the margin disagree, however strong the
+    // header's own support.
+    if (!header_seen && c.basis != CallBasis::OnePlus && !c.excess.empty())
+      bestIso(top, prec.getMZ(), header, isoOrder(hp.isotope_errors), cs, &r.header_excess);
     // Range evidence against the header: ruled out, by enough strong peaks.
     const bool range_against = r.header_ruled_out && r.header_peaks_above >= kHeaderRangeMinPeaks;
     if (c.src == ChargeSource::Ambiguous)
