@@ -1,0 +1,21 @@
+# 1.13 item 12 (#16) real-chimera benchmark, DEV split on IBMI node data (harness development only;
+# the held-out split has its own manifest and frozen config in acceptance/1.13).
+realchimera:
+  manifest: /scratch/kohlbach/b113/chimeric/bench/config/realchimera-dev-manifest.tsv
+  work_dir: /scratch/kohlbach/b113/chimeric/work/realchimera
+  split: DEV
+  fdr: 0.01
+  purity_tol_ppm: 10
+  purity_center: target
+  fastag_threads: 8
+  fastag_args: []
+  chance_seed: 1
+  profiles:
+    default: []
+    cap10: [-max_tags, "10"]
+    cap10_div: [-max_tags, "10", -diversity]
+tools:
+  fastag: /scratch/kohlbach/b113/chimeric/opt/FASTag
+  sage: /scratch/kohlbach/jpr-bench/envs/sage/bin/sage
+sage:
+  threads: 16
