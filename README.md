@@ -314,8 +314,17 @@ is tagged with a warning; a periodic scheme whose windows do not tile a range
 is PRM or an inclusion list and passes; so do DDA with wide windows and
 pseudo-DDA spectra, which DIAspeXtract (its software entry and `spx_*`
 userParams) and diaTracer (its software entry) mark in the mzML. The
-thresholds were frozen after a development sweep over 183 public data sets; a
-release test on a fresh PRIDE sample is pending. A mixed file
+thresholds were frozen after a development sweep over 183 public data sets. The
+preregistered release test on a fresh PRIDE sample (E7-03, 213 files and 37
+pseudo-DDA files) **failed**. Raw diaPASEF and Astral DIA were refused 12/12
+each. Orbitrap DIA was refused only 7/12 and the SWATH stratum 10/12, against
+>= 90%. 8 of 202 files that had to pass were refused (upper 95% bound 7.0%),
+all drawn from Astral projects labelled DDA. All 37 pseudo-DDA files passed.
+Charged tiling DIA is only warned about, by design. Post-hoc readings (not a
+re-score; only partly checked against vendor scan filters) are that the 8 refused files may be DIA
+runs filed as DDA, and that 4 of the missed DIA files, which showed no repeating
+window scheme, may be DDA library runs (see
+[doc/ACQUISITION-RELEASE-TEST.md](doc/ACQUISITION-RELEASE-TEST.md)). A mixed file
 is judged on its first MS2; `-stream` is not checked.
 
 `-acquisition_check warn` tags raw DIA anyway (experts; the tags are those
@@ -522,6 +531,7 @@ MGF→mzML direction is exact.
 | `-digest_window <Da>` | 0.008 | Advanced: window around a residue or label mass at the tag ends |
 | `-digest_background_share <f>` | 0.05 | Advanced: share of the background mixed into every model |
 | `-digest_silac_min <n>` | 50 | Advanced: K- and R-terminal tag ends each for `-label_out`'s heavy-share gate |
+| `-label_call_min_tags <n>` | 175 | Advanced, experimental (1.13): C-terminal tag ends `-label_out`'s `label_call` needs; fewer give `no_call few_tags`. 175 is the FASTag 1.12 rule; 0 calls every ppm run (failed its held-out test) |
 | `-massgap_window <Da>` / `-massgap_window_da <Da>` | 0.02 / 0.5 | Advanced: gap window on ppm runs / on Da runs |
 | `-massgap_min_spectra <n>` / `-massgap_min_share <f>` / `-massgap_min_bin <n>` | 20 / 0.005 / 2 | Advanced: spectra and share a gap peak needs; spectra a histogram row needs to take part |
 | `-massgap_max_mods <n>` / `-massgap_top <n>` | 3 / 5 | Advanced: modifications per explanation; modifications listed by share |
@@ -588,7 +598,8 @@ MGF→mzML direction is exact.
 | `-acquisition_probe_spectra <n>` | 4000 | MS2 spectra the acquisition check reads, metadata only, reading at most ten times as many spectra in all (advanced) |
 | `-pick_profile <legacy\|auto\|off>` | legacy | Centroid profile MS2 (MS:1000128) with OpenMS `PeakPickerHiRes` before tagging: `legacy` on mzPeak input only (as 1.11), `auto` on mzML and mzPeak input (not MGF), `off` never. Centroided MS2 are never re-picked. `-out_spectra` writes the spectra as they were tagged. Not with `-stream`. Experimental: `auto` failed its held-out test and is not recommended (see Performance) |
 | `-pick_unknown_type` | off | With `-pick_profile auto`: also centroid MS2 that declare no spectrum type, when OpenMS's `PeakTypeEstimator` reads their data as profile (advanced) |
-| `-ion_series <by\|cz\|auto>` | by | Ion series the MS2 spectra are read as: `by` (b/y ions, as 1.11), `cz` (c/z• ions of ETD/ECD, every spectrum), `auto` (c/z• for spectra whose activation is ETD or ECD, b/y for all others, hybrid EThcD/ETciD included, with a warning). Under `cz`, and under `auto` when the run has electron-activated spectra, the tag TSV gains a last `ion_series` column and the census a `best_ion_series` column (see Ion series). Not with `-stream`. Experimental: `auto` is not validated yet |
+| `-ion_series <by\|cz\|auto\|ax>` | by | Ion series the MS2 spectra are read as: `by` (b/y ions, as 1.11), `cz` (c/z• ions of ETD/ECD, every spectrum), `auto` (c/z• for spectra whose activation is ETD or ECD, b/y for all others, hybrid EThcD/ETciD included, with a warning), `ax` (1.13: a/x ions of photodissociation, UVPD, every spectrum). Under `cz` and `ax`, and under `auto` when the run has electron-activated spectra (or, with `-ion_series_photo ax`, photo-activated ones), the tag TSV gains a last `ion_series` column and the census a `best_ion_series` column (see Ion series). Not with `-stream`. Experimental: `auto` and `ax` are not validated yet |
+| `-ion_series_photo <by\|ax>` | by | 1.13, under `-ion_series auto` only: the series photodissociation spectra are read as (activation MS:1000435 or a Thermo `@uvpd` filter token, and no collisional or electron method). `by` is `auto` as in 1.12; `ax` reads them as a/x ions (doc/AX-IONS.md). Ignored with a warning under other modes; not with `-stream`. Experimental |
 | `-unknown_charge <assume2\|enumerate\|infer>` | assume2 | How a precursor without a charge is tagged: `assume2` as 2+ (as 1.11); `enumerate` at each listed possible charge (MS:1000633, MGF `2+ and 3+`), else at every charge `-charge_min`..`-charge_max`; `infer` at the charge its complement pairs support (1+ when `-charge_min` is 1, or 1 is listed, and almost no intensity lies above the precursor; both charges of a close call, `ambiguous`; without evidence 2+, or the lowest candidate when 2 is none, `assumed`). Every charge tagged is a listed possible charge, else one of `-charge_min`..`-charge_max`. A header charge is never replaced. A spectrum tagged under H hypotheses has every E-value multiplied by H before `-max_evalue` and `-max_tags`; its rows are merged by E-value. The reports that aggregate over spectra (digest, label, massgap, delta, species, shortlist, census) read the rows of one selected hypothesis, chosen from the charge evidence, never from the E-values. Experimental: `infer` failed its held-out test (see Validation); not with `-stream` |
 | `-charge_min <n>` / `-charge_max <n>` | 2 / 4 | The charges `enumerate` and `infer` try (1-8); `-charge_min 1` enables infer's 1+ test |
 | `-charge_infer_margin <x>` | 2 | Complement-pair excess by which an inferred charge must beat the runner-up to be tagged alone; closer, both are tagged (`ambiguous`). Any excess above 0 is a call; none is `assumed` (advanced) |
@@ -672,11 +683,23 @@ is the one whose neutral masses sum to M + H (under `-complement_rule
 precursor` at the c - 1 charges an electron-activated precursor of charge c
 leaves its fragments), and peaks at the unreacted
 precursor and its charge-reduced species (with their isotope and
-hydrogen-transfer forms) are dropped before tagging. `-recon_*`, `-digest_out`,
+hydrogen-transfer forms) are dropped before tagging. Under c/z• a peak that
+deisotoping moves to the 1+ scale above the precursor cut (neutral mass +
+proton + 1.5 Da) is dropped as well (1.13, issue T25): it cannot be a fragment
+of this precursor (doc/CZ-PRECURSOR-CUT.md). b/y tagging keeps the 1.12
+behaviour. `-recon_*`, `-digest_out`,
 `-label_out`, `-massgap_out`, `-delta_out` and the census take the offset from
 each tag; `-species` counts b/y tags only and reports how many c/z• rows it
 left out. Hybrid EThcD/ETciD spectra are read as b/y under `auto` (reading
-both series at once is not supported yet), and a/x ions are not read.
+both series at once is not supported yet). A tag read as a/x ions (1.13,
+`-ion_series ax`, or `auto -ion_series_photo ax` on photodissociation spectra;
+`ion_series` = `ax`) follows the same convention with a = residues - CO and
+x = residues + CO2: a reversed read (the low peak an a ion) carries
+offC - offN = CO2 + CO = +71.9847 Da (N-side residues = `cterm_mass` +
+71.9847, C-side residues = `nterm_mass` - 71.9847), the complement partner
+sums to M - H (a+1/x, a/x+1) or M (a+1/x+1) at the precursor's charges, and no precursor window is cut
+(doc/AX-IONS.md). `-species` and `-alkylation_out` leave a/x tags out and
+count them.
 `-ion_series auto` on a run without electron activation writes exactly what
 `by` writes. `auto` reads the activation of mzML input only: MGF and mzPeak
 spectra are read as b/y (an electron-activated spectrum such a reader delivers
@@ -854,10 +877,16 @@ options and their values.
   with scaled or averaged intensities is not caught.
 - **`-label_out`** counts tag ends that are a bare TMT, TMTpro or iTRAQ4 mass,
   against the same count 0.5 Da higher, and the Lys8 and Arg10 shares of the
-  C-terminal K and R. Its last five rows (section `label_call`) give the label
-  call prose-auto 0.1.10 makes from these counts: TMT, TMTpro, iTRAQ4, SILAC
-  or label-free, or no call on a Da tolerance and below 175 C-terminal tag
-  ends (doc/DESIGN-digest.md).
+  C-terminal K and R. Its last five rows (section `label_call`) give a label
+  call from these counts with prose-auto's thresholds: TMT, TMTpro, iTRAQ4,
+  SILAC or label-free, or no call on a Da tolerance or below 175 C-terminal
+  tag ends. The experimental `-label_call_min_tags 0` (1.13) calls every ppm
+  run; below 175 ends a label-free call then means only that no label rule
+  fired, and the status row says so. It scored 178/193 on the development
+  runs (in-sample; 150/193 at 175, 159/193 always label-free) but failed its
+  preregistered held-out test: 149/172 (0.866) against the threshold 0.922,
+  below always label-free (0.872); so 175 stays the default
+  (doc/DESIGN-digest.md, "Label call minimum").
 - **`-massgap_out`** reads the `-delta_out` histogram (built even when
   `-delta_out` is not written; run it without fixed modifications to see the
   Cys alkylation): spectra near each Cys alkylation mass, and gap peaks
@@ -959,7 +988,9 @@ listed in `--helphelp`, which is how the GUI detects them.
   uncharged precursor is tagged as 2+), `charge_given`, `native_id`, `index`,
   `tolerance` and `tolerance_unit`. Under `-ion_series cz`, or `auto` on an
   electron-activated mzML spectrum, the peaks are prepared as c/z-dot ions,
-  as the tagger reads that spectrum (the ETD precursor-window cut included).
+  as the tagger reads that spectrum (the ETD precursor-window cut included);
+  under `-ion_series ax`, or `auto -ion_series_photo ax` on a photo-activated
+  mzML spectrum, with the a/x ion pair.
   An unknown ID exits 6 with the ID on stderr
   and nothing on stdout. The dump prepares the given precursor at its charge
   (or 2+) only; with `-unknown_charge` or `-isotope_error` away from their
@@ -1336,7 +1367,7 @@ data.
 
 Every other 1.12 option (#1/#10 species call, #3 chemistry v2 and
 alkylation, #5 shortlist and search hand-off, #7 raw-DIA check, whose
-release test has not run, #11 census, #15 ion series, #17 search shifts) is experimental and not
+release test E7-03 failed (1.13 acceptance; see Raw DIA input is refused), #11 census, #15 ion series, #17 search shifts) is experimental and not
 validated on held-out data. No 1.12 option is validated on low-resolution
 (ion-trap) MS2: the only ion-trap held-out results (#9 PXD009049; the
 ion_trap set of #6 item06-H1-r2) are a failure and a descriptive result.
@@ -1387,6 +1418,10 @@ tags fill the slots (hence the small change in total recall):
   activation:` warning to stderr with the count per class (collisional,
   electron, hybrid, unknown). MGF and mzPeak input carry no activation, so
   their spectra count as unknown, and `-ion_series auto` reads them as b/y.
+  `-ion_series ax` (1.13, experimental) reads a/x ions, and warns
+  (`Activation:`) when more than 1% of the spectra have a collisional,
+  electron or hybrid activation; `-ion_series auto -ion_series_photo ax`
+  reads only photodissociation spectra as a/x (doc/AX-IONS.md).
   `-ion_series cz` or `auto` (1.12, experimental, not yet validated on real
   ETD data) reads c/z• ions (see Ion series); under them one `Ion series`
   line on stderr gives the spectra per series, `auto` warns (`Hybrid

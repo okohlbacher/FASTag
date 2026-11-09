@@ -91,6 +91,7 @@ export interface ParamUi {
 /// a GUI run uses the CLI defaults. The exception is acquisition_check (under
 /// Spectra).
 const OPT_IN_1_12 = '1.12 command-line option, not in the form yet (CLI default applies)'
+const OPT_IN_1_13_EXPERIMENTAL = '1.13 experimental command-line option, not in the form (CLI default applies)'
 
 const SPECIES_OFF: Dependency = { on: 'species', note: 'species detection is off' }
 const GLYCO_OFF: Dependency = { on: 'glyco', note: 'oxonium flagging is off' }
@@ -935,7 +936,13 @@ export const PARAM_UI: Record<string, ParamUi> = {
   ion_series: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'Read the spectra as b/y ions (the default), as c/z ions of ETD or ECD, or choose per spectrum from its activation (auto).'
+      text: 'Read the spectra as b/y ions (the default), as c/z ions of ETD or ECD, choose per spectrum from its activation (auto), or read them as a/x ions of UVPD (ax, experimental).'
+    }
+  },
+  ion_series_photo: {
+    hidden: OPT_IN_1_13_EXPERIMENTAL,
+    help: {
+      text: 'Under ion series auto: read photodissociation (UVPD) spectra as b/y ions (the default) or as a/x ions. Experimental.'
     }
   },
   isotope_error: {
@@ -1146,6 +1153,16 @@ export const PARAM_UI: Record<string, ParamUi> = {
     hidden: OPT_IN_1_12,
     help: {
       text: 'How a precursor whose charge the file does not give is tagged: as 2+ (the default, as before 1.12), at each possible charge, or at the charge its fragment pairs support best. A charge given in the file is never replaced.'
+    }
+  },
+
+  // ---- Not in the form: FASTag 1.13 experimental options
+  label_call_min_tags: {
+    hidden: 'experimental 1.13 command-line option, not in the form (CLI default applies)',
+    depends: [{ on: 'label_out', note: 'only the label report uses it' }],
+    help: {
+      text: 'How many C-terminal tag ends the label call in the label report needs; with fewer it makes no call. The default 175 is the FASTag 1.12 call. At 0 every run with a ppm fragment tolerance gets a call, and with few tag ends a label-free call only means that none of the label rules fired (the mass-gap report can still show SILAC).',
+      tip: '0 is experimental: it failed its 1.13 held-out test.'
     }
   }
 }

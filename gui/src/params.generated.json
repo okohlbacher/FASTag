@@ -506,13 +506,26 @@
       "name": "ion_series",
       "type": "string",
       "default": "by",
-      "description": "Ion series the MS2 spectra are read as: by (b/y ions, as before 1.12), cz (c/z-dot ions of electron transfer or capture dissociation, ETD/ECD), or auto (c/z-dot for spectra whose activation is ETD or ECD, b/y for all others, hybrid EThcD/ETciD included). Under cz and auto the tag TSV gains an ion_series column when some spectrum can be read as c/z",
+      "description": "Ion series the MS2 spectra are read as: by (b/y ions, as before 1.12), cz (c/z-dot ions of electron transfer or capture dissociation, ETD/ECD), or auto (c/z-dot for spectra whose activation is ETD or ECD, b/y for all others, hybrid EThcD/ETciD included), or ax (a/x ions of photodissociation, UVPD, every spectrum; experimental). Under cz, auto and ax the tag TSV gains an ion_series column when some spectrum can be read as c/z or a/x",
       "required": false,
       "toppAdvanced": false,
       "choices": [
         "by",
         "cz",
-        "auto"
+        "auto",
+        "ax"
+      ]
+    },
+    {
+      "name": "ion_series_photo",
+      "type": "string",
+      "default": "by",
+      "description": "Under -ion_series auto: the series photodissociation spectra (UVPD; activation MS:1000435 or a Thermo @uvpd filter token, and no collisional or electron method) are read as: by (as before 1.13) or ax (a/x ions). -ion_series ax reads every spectrum as a/x ions. Experimental",
+      "required": false,
+      "toppAdvanced": true,
+      "choices": [
+        "by",
+        "ax"
       ]
     },
     {
@@ -536,6 +549,15 @@
       "itemType": "int",
       "min": -1,
       "max": 3
+    },
+    {
+      "name": "label_call_min_tags",
+      "type": "int",
+      "default": "175",
+      "description": "C-terminal tag ends -label_out's label_call needs; fewer give no_call few_tags (175: the FASTag 1.12 rule; 0, experimental: every ppm run is called)",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
     },
     {
       "name": "label_out",
