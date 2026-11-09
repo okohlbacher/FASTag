@@ -1,4 +1,4 @@
-// Synthetic c/z-dot (and b/y) fragment spectra for the #15 phase B tests
+// Synthetic c/z-dot, a/x (1.13 item 11) and b/y fragment spectra for the #15 phase B tests
 // (ion_series_test.cpp, tagrecon_test.cpp), from OpenMS's
 // TheoreticalSpectrumGenerator: never from FASTag's own ion formulas, so a
 // wrong offset in src/IonSeries.h cannot cancel out.
@@ -33,6 +33,10 @@ namespace CzSynth
     C,      ///< c ions only
     Z,      ///< z-dot ions only
     BY,     ///< b and y ions, as CID/HCD
+    AX,     ///< a and x ions (1.13 item 11, photodissociation)
+    A,      ///< a ions only
+    X,      ///< x ions only
+    ABXY,   ///< a, b, x and y ions (a UVPD-like mixture)
   };
 
   /// The fragment spectrum of @p pep (OpenMS notation, modifications
@@ -52,8 +56,10 @@ namespace CzSynth
     OpenMS::TheoreticalSpectrumGenerator tsg;
     OpenMS::Param p = tsg.getParameters();
     const auto on = [](bool b) { return b ? "true" : "false"; };
-    p.setValue("add_b_ions", on(ions == Ions::BY));
-    p.setValue("add_y_ions", on(ions == Ions::BY));
+    p.setValue("add_b_ions", on(ions == Ions::BY || ions == Ions::ABXY));
+    p.setValue("add_y_ions", on(ions == Ions::BY || ions == Ions::ABXY));
+    p.setValue("add_a_ions", on(ions == Ions::AX || ions == Ions::A || ions == Ions::ABXY));
+    p.setValue("add_x_ions", on(ions == Ions::AX || ions == Ions::X || ions == Ions::ABXY));
     p.setValue("add_c_ions", on(ions == Ions::CZ || ions == Ions::C));
     p.setValue("add_zp1_ions", on(ions == Ions::CZ || ions == Ions::Z));
     p.setValue("add_first_prefix_ion", "false");
