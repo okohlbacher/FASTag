@@ -56,3 +56,20 @@ large gains; the item fails on the preregistered secondary criteria.
 - Candidate fixes for a later item (each needs a new DEV freeze and fresh held-out data; none is applied here):
   apply the isotope rule to label-frame remainders; skip near-zero offsets (|x| below a precursor-tolerance bound);
   report Sage's base FDP problem separately from the shifts.
+
+## Post-result review notes (post hoc; nothing re-run or re-scored)
+
+Added 2026-11-09 after the docs review on feat/b113-shifts. The preregistered verdicts above stand.
+
+- **Comet P4 on PXD063151 (the only P4 pass).** 7 of 10 open-search peaks count as recovered, but three of the
+  matches pair near-zero or near-isotope open-search peaks with FASTag offsets that this file already reads as a
+  precursor calibration error (`score/peaks.tsv`): 0.0616 matched by 0.0619, 0.9480 by 0.9448, and 1.0641 by 1.0779
+  and 1.0471 (0.0138 and 0.0170 Da away, near the 0.02 Da match tolerance). Without these three Comet recovers 4 of
+  10 (< 6 needed) there and P4 is 0 of 4. The verdict is FAIL either way, but "1 of 4" overstates real shift
+  recovery, and the scored P4 rewards the artefact the candidate fix (skip near-zero offsets) would remove.
+- **For the follow-up item** (label-frame isotope rule, near-zero offsets): its PREREG should state that an
+  open-search peak with |centroid| below a precursor-tolerance bound, or within that bound of k x 1.00335
+  (k = 1..3), cannot count as recovered by an offset, so that P4 measures recovery of real shifts.
+- **P3 is a net count** (PSMs(cand) >= 0.99 x PSMs(base)). It cannot see base identifications lost while others are
+  gained; the secondary measure "base scans lost" (Comet 10.1 % on PXD063151, 3.8 % PXD014764, 2.1 % PXD004541;
+  Sage at most 1.3 %) is now also stated in README and doc/SHORTLIST.md.
