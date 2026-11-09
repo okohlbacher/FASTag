@@ -1,0 +1,8 @@
+census_triage_eval.py: OK
+verdict_census.py: OK
+score_census.sh: OK
+run_census_triage.sh: OK
+E1 rr 5.8484192221 (>= 2.0: True), ci_lo 3.1949366264 (>= 1.5: True)
+E2 run rr PXD003903 None, PXD016143 1.5750362904, PXD017427 9.7550236976, PXD034582 5.3410962127, PXD037976 9.6872226044, PXD069084 2.2231286185 (all > 1: False)
+E3 d_n_peaks 0.0551996685 (> 0: True), ci_lo 0.0101135463 (> 0: True)
+VERDICT FAIL

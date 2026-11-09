@@ -1,0 +1,7 @@
+run	census	second	mzml
+PXD003903	/scratch/kohlbach/b113/census/heldout-runs/PXD003903/fastag/tags.census.tsv	/scratch/kohlbach/b113/census/heldout-runs/PXD003903/semi/results.sage.tsv	PT4530-6.mzML
+PXD016143	/scratch/kohlbach/b113/census/heldout-runs/PXD016143/fastag/tags.census.tsv	/scratch/kohlbach/b113/census/heldout-runs/PXD016143/semi/results.sage.tsv	1DLC071619QE_NET_withoutDNAse_Protifi_NET2.mzML
+PXD017427	/scratch/kohlbach/b113/census/heldout-runs/PXD017427/fastag/tags.census.tsv	/scratch/kohlbach/b113/census/heldout-runs/PXD017427/semi/results.sage.tsv	QE9884.mzML
+PXD034582	/scratch/kohlbach/b113/census/heldout-runs/PXD034582/fastag/tags.census.tsv	/scratch/kohlbach/b113/census/heldout-runs/PXD034582/semi/results.sage.tsv	gamma6_DDA.mzML
+PXD037976	/scratch/kohlbach/b113/census/heldout-runs/PXD037976/fastag/tags.census.tsv	/scratch/kohlbach/b113/census/heldout-runs/PXD037976/semi/results.sage.tsv	OA7A-2.mzML
+PXD069084	/scratch/kohlbach/b113/census/heldout-runs/PXD069084/fastag/tags.census.tsv	/scratch/kohlbach/b113/census/heldout-runs/PXD069084/semi/results.sage.tsv	1D2_pH5.mzML

@@ -1,0 +1,18 @@
+Census ids: 381 of 1983 spectrum identifications pass q <= 0.01 (/scratch/kohlbach/b113/census/heldout-runs/PXD003903/closed/closed.idXML)
+Census: 39839 MS2 spectra read, 19526 with a reported tag (0 placed), 20309 no_tags -> /scratch/kohlbach/b113/census/heldout-runs/PXD003903/fastag/tags.census.tsv, summary -> /scratch/kohlbach/b113/census/heldout-runs/PXD003903/fastag/tags.census_summary.tsv
+Census ids: 381 identified, 39458 not, 0 unknown; 2280 triage candidates (best_evalue <= 0.01)
+Census ids: 17921 of 20351 spectrum identifications pass q <= 0.01 (/scratch/kohlbach/b113/census/heldout-runs/PXD016143/closed/closed.idXML)
+Census: 23903 MS2 spectra read, 23715 with a reported tag (0 placed), 188 no_tags -> /scratch/kohlbach/b113/census/heldout-runs/PXD016143/fastag/tags.census.tsv, summary -> /scratch/kohlbach/b113/census/heldout-runs/PXD016143/fastag/tags.census_summary.tsv
+Census ids: 17921 identified, 5982 not, 0 unknown; 2476 triage candidates (best_evalue <= 0.01)
+Census ids: 511 of 1151 spectrum identifications pass q <= 0.01 (/scratch/kohlbach/b113/census/heldout-runs/PXD017427/closed/closed.idXML)
+Census: 35994 MS2 spectra read, 18784 with a reported tag (0 placed), 17190 no_tags -> /scratch/kohlbach/b113/census/heldout-runs/PXD017427/fastag/tags.census.tsv, summary -> /scratch/kohlbach/b113/census/heldout-runs/PXD017427/fastag/tags.census_summary.tsv
+Census ids: 511 identified, 35483 not, 0 unknown; 1270 triage candidates (best_evalue <= 0.01)
+Census ids: 13124 of 20350 spectrum identifications pass q <= 0.01 (/scratch/kohlbach/b113/census/heldout-runs/PXD034582/closed/closed.idXML)
+Census: 59272 MS2 spectra read, 55136 with a reported tag (0 placed), 4135 no_tags -> /scratch/kohlbach/b113/census/heldout-runs/PXD034582/fastag/tags.census.tsv, summary -> /scratch/kohlbach/b113/census/heldout-runs/PXD034582/fastag/tags.census_summary.tsv
+Census ids: 13124 identified, 46148 not, 0 unknown; 8464 triage candidates (best_evalue <= 0.01)
+Census ids: 31001 of 32839 spectrum identifications pass q <= 0.01 (/scratch/kohlbach/b113/census/heldout-runs/PXD037976/closed/closed.idXML)
+Census: 69475 MS2 spectra read, 50577 with a reported tag (0 placed), 18850 no_tags -> /scratch/kohlbach/b113/census/heldout-runs/PXD037976/fastag/tags.census.tsv, summary -> /scratch/kohlbach/b113/census/heldout-runs/PXD037976/fastag/tags.census_summary.tsv
+Census ids: 31001 identified, 38474 not, 0 unknown; 2940 triage candidates (best_evalue <= 0.01)
+Census ids: 31437 of 40810 spectrum identifications pass q <= 0.01 (/scratch/kohlbach/b113/census/heldout-runs/PXD069084/closed/closed.idXML)
+Census: 68314 MS2 spectra read, 64718 with a reported tag (0 placed), 3596 no_tags -> /scratch/kohlbach/b113/census/heldout-runs/PXD069084/fastag/tags.census.tsv, summary -> /scratch/kohlbach/b113/census/heldout-runs/PXD069084/fastag/tags.census_summary.tsv
+Census ids: 31437 identified, 36877 not, 0 unknown; 13947 triage candidates (best_evalue <= 0.01)

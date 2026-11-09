@@ -76,3 +76,8 @@ Commands (node data, one run after another, 8 threads):
 The census classifier (PLAN-qc phase C, F7: AUROC >= 0.80, ECE <= 0.05) is not built: it needs #4's spectrum-level
 labels and the F7 train pools, which do not exist. The reserved F7 pools (acceptance/1.12 `item11-f7test`,
 `item11-final`) stay unopened. MSFragger 4.4.1 is not run.
+
+## Result (appended 2026-11-09, after the single scoring)
+
+Scored once: **FAIL** (E1 pass, rr 5.85, CI 3.19-10.26; E2 fail, PXD003903 has no hit in either group, rr
+undefined; E3 pass, d +0.055, CI 0.010-0.133). Details: `census/results/RESULT.md`.
