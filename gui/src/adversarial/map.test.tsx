@@ -18,19 +18,21 @@ describe('map: param overlay vs CLI manifest', () => {
     expect(c).toContain('domain')
     expect(c).not.toContain('superkingdom')
   })
-  it('renders 68 parameters and hides 75 (mzpeak_read_memory, 63 of the 64 1.12 options and the 1.13 label_call_min_tags among them)', () => {
+  it('renders 68 parameters and hides 76 (mzpeak_read_memory, 63 of the 64 1.12 options and the 1.13 ion_series_photo and label_call_min_tags among them)', () => {
     // 1.10.0 added species_evidence (rendered) to the 1.9.0 set; 1.12.0 adds
     // 64 options (8 of them #17 -search_shifts), hidden until each has its GUI design, except
     // acquisition_check: its default refuses raw DIA, so the form offers warn/off.
+    // 1.13 adds ion_series_photo (backlog item 11, experimental, hidden).
     // Pinned on purpose: moving a parameter between a section and hidden must
     // fail here; a manifest regeneration updates these counts deliberately.
     // 1.13 adds label_call_min_tags (backlog #8, experimental, hidden).
     expect(RENDERED.length).toBe(68)
-    expect(HIDDEN_PARAMS.length).toBe(75)
+    expect(HIDDEN_PARAMS.length).toBe(76)
+    expect(HIDDEN_PARAMS).toContain('ion_series_photo')
     expect(HIDDEN_PARAMS).toContain('label_call_min_tags')
     expect(RENDERED).toContain('acquisition_check')
     expect(PARAM_BY_NAME.get('acquisition_check')?.choices).toEqual(['refuse', 'warn', 'off'])
-    expect(manifest.params.length).toBe(143)
+    expect(manifest.params.length).toBe(144)
   })
   it('renders or hides every parameter of the manifest once (mzpeak_read_memory hidden)', () => {
     // In addition to the pinned counts above: every manifest parameter is

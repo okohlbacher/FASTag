@@ -810,9 +810,17 @@ protected:
                           "Ion series the MS2 spectra are read as: by (b/y ions, as before 1.12), cz "
                           "(c/z-dot ions of electron transfer or capture dissociation, ETD/ECD), or auto "
                           "(c/z-dot for spectra whose activation is ETD or ECD, b/y for all others, hybrid "
-                          "EThcD/ETciD included). Under cz and auto the tag TSV gains an ion_series column "
-                          "when some spectrum can be read as c/z", false);
+                          "EThcD/ETciD included), or ax (a/x ions of photodissociation, UVPD, every spectrum; "
+                          "experimental). Under cz, auto and ax the tag TSV gains an ion_series column when some "
+                          "spectrum can be read as c/z or a/x", false);
     setValidStrings_("ion_series", ListUtils::create<std::string>(FASTag::IonSeries::kModeValues));
+    // 1.13 backlog item 11: a/x ions (photodissociation, UVPD); experimental.
+    registerStringOption_("ion_series_photo", "<series>", FASTag::IonSeries::kPhotoDefault,
+                          "Under -ion_series auto: the series photodissociation spectra (UVPD; activation "
+                          "MS:1000435 or a Thermo @uvpd filter token, and no collisional or electron method) "
+                          "are read as: by (as before 1.13) or ax (a/x ions). -ion_series ax reads every "
+                          "spectrum as a/x ions. Experimental", false, true);
+    setValidStrings_("ion_series_photo", ListUtils::create<std::string>(FASTag::IonSeries::kPhotoValues));
     // ---- 1.12 A: options ----
     // #5: ranked protein shortlist, reduced FASTA and a search-engine
     // configuration from the tag placements. A search-space reduction, NOT an
@@ -1368,6 +1376,7 @@ protected:
     opt.mzpeak_threads = std::min(std::max(1, omp_get_max_threads()), 8);
     opt.param = p;
     opt.ion_mode = FASTag::IonSeries::modeFromString(getStringOption_("ion_series"));
+    opt.photo_ax = getStringOption_("ion_series_photo") == "ax";
     const std::string id = getStringOption_("dump_spectrum");
     const P::DumpOutput r = P::dumpSpectrum(in, id, opt);
     if (r.status != P::Status::Ok)
@@ -1597,6 +1606,7 @@ protected:
           {"pick_profile", nullptr},
           {"pick_unknown_type", nullptr},
           {"ion_series", nullptr},
+          {"ion_series_photo", nullptr},
           {"unknown_charge", nullptr},
           {"charge_min", nullptr},
           {"charge_max", nullptr},
@@ -1768,6 +1778,10 @@ protected:
     FASTag::Param p_cz = p;
     p_cz.ion_pair = FASTag::IonSeries::ionPair(FASTag::IonSeries::Series::CZ);
     const FASTag::ComplementSpec hyp_cs_cz = FASTag::ComplementSpec::fromParam(p_cz);
+    // 1.13 item 11: a/x cleavage pairs sum to M - H or M, for a spectrum read as a/x.
+    FASTag::Param p_ax = p;
+    p_ax.ion_pair = FASTag::IonSeries::ionPair(FASTag::IonSeries::Series::AX);
+    const FASTag::ComplementSpec hyp_cs_ax = FASTag::ComplementSpec::fromParam(p_ax);
     // The residue modifications in use; -recon_id_out reports exactly these.
     StringList fixed_mods, variable_mods;
     double fixed_term_n = 0, fixed_term_c = 0;
@@ -1808,14 +1822,33 @@ protected:
     // c/z-dot ions (only the ion pair differs); under by it stays empty.
     const FASTag::IonSeries::Mode ion_mode = FASTag::IonSeries::modeFromString(getStringOption_("ion_series"));
     const FASTag::IonSeries::IonPair cz_pair = FASTag::IonSeries::ionPair(FASTag::IonSeries::Series::CZ);
-    std::vector<FASTag::Param> len_params_cz;
-    if (ion_mode != FASTag::IonSeries::Mode::By)
+    // 1.13 item 11: -ion_series ax, or auto with -ion_series_photo ax, adds
+    // a third set reading spectra as a/x ions.
+    const bool photo_ax =
+        ion_mode == FASTag::IonSeries::Mode::Auto && getStringOption_("ion_series_photo") == "ax";
+    const bool ax_tables = ion_mode == FASTag::IonSeries::Mode::Ax || photo_ax;
+    const bool cz_tables = ion_mode == FASTag::IonSeries::Mode::Cz || ion_mode == FASTag::IonSeries::Mode::Auto;
+    const FASTag::IonSeries::IonPair ax_pair = FASTag::IonSeries::ionPair(FASTag::IonSeries::Series::AX);
+    std::vector<FASTag::Param> len_params_cz, len_params_ax;
+    if (cz_tables)
     {
       len_params_cz = len_params;
       for (FASTag::Param& lp : len_params_cz) lp.ion_pair = cz_pair;
     }
-    auto build_tables = [&len_params, &len_params_cz](bool cz = false) {
-      const std::vector<FASTag::Param>& lps = cz ? len_params_cz : len_params;
+    if (ax_tables)
+    {
+      len_params_ax = len_params;
+      for (FASTag::Param& lp : len_params_ax) lp.ion_pair = ax_pair;
+    }
+    // The Params of series @p sr (b/y, c/z-dot or a/x).
+    const auto params_of = [&len_params, &len_params_cz, &len_params_ax](FASTag::IonSeries::Series sr)
+        -> const std::vector<FASTag::Param>& {
+      if (sr == FASTag::IonSeries::Series::CZ) return len_params_cz;
+      if (sr == FASTag::IonSeries::Series::AX) return len_params_ax;
+      return len_params;
+    };
+    auto build_tables = [&params_of](FASTag::IonSeries::Series sr = FASTag::IonSeries::Series::BY) {
+      const std::vector<FASTag::Param>& lps = params_of(sr);
       std::vector<FASTag::Tables> t;
       t.reserve(lps.size());
       for (const FASTag::Param& lp : lps) t.emplace_back(lp);
@@ -1829,11 +1862,12 @@ protected:
     // @p multiplicity (1.12 #6) is the number of precursor hypotheses tagged
     // for the spectrum; 1 changes nothing. @p cz (#15 phase B) reads the
     // spectrum as c/z-dot ions: len_params_cz with @p tabs built from it.
-    auto tag_all = [&len_params, &len_params_cz](const MSSpectrum& s, double prec_mz, int charge,
-                                                 const std::vector<FASTag::Tables>& tabs,
-                                                 FASTag::SpectrumDiag* diag = nullptr, double multiplicity = 1.0,
-                                                 bool cz = false) {
-      const std::vector<FASTag::Param>& lps = cz ? len_params_cz : len_params;
+    // 1.13 item 11: @p sr picks the series' Params (a/x: len_params_ax).
+    auto tag_all = [&params_of](const MSSpectrum& s, double prec_mz, int charge,
+                                const std::vector<FASTag::Tables>& tabs,
+                                FASTag::SpectrumDiag* diag = nullptr, double multiplicity = 1.0,
+                                FASTag::IonSeries::Series sr = FASTag::IonSeries::Series::BY) {
+      const std::vector<FASTag::Param>& lps = params_of(sr);
       if (lps.size() == 1)
         return FASTag::tagSpectrum(s, prec_mz, charge, lps[0], tabs[0], diag, multiplicity);
       return FASTag::mergeLengths(FASTag::tagSpectrum(s, prec_mz, charge, lps, tabs, diag, multiplicity));
@@ -2299,6 +2333,7 @@ protected:
           {"acquisition_probe_spectra", "-acquisition_check refuse or warn",
            getStringOption_("acquisition_check") != "off"},
           {"pick_unknown_type", "-pick_profile auto", pick_mode == FASTag::Centroid::Mode::Auto},
+          {"ion_series_photo", "-ion_series auto", getStringOption_("ion_series") == "auto"},
           {"charge_min", "-unknown_charge enumerate or infer", hyp_param.mode != FASTag::Hyp::ChargeMode::Assume2},
           {"charge_max", "-unknown_charge enumerate or infer", hyp_param.mode != FASTag::Hyp::ChargeMode::Assume2},
           {"charge_infer_margin", "-unknown_charge enumerate or infer",
@@ -3037,21 +3072,29 @@ protected:
     // output opens, that stops at the first one -- so a collisional run
     // under auto writes exactly what by writes. MGF and mzPeak carry no
     // activation (IonSeries.h): auto reads them as b/y, without the column.
-    bool ion_column = ion_mode == FASTag::IonSeries::Mode::Cz;
+    // 1.13 item 11: under ax always; under auto with -ion_series_photo ax
+    // also when some MS2 is photo-activated (the scan then stops at the
+    // first electron or photo-activated one).
+    bool ion_column = ion_mode == FASTag::IonSeries::Mode::Cz || ion_mode == FASTag::IonSeries::Mode::Ax;
     if (ion_mode == FASTag::IonSeries::Mode::Auto && FASTag::IonSeries::autoReadsActivation(mzpeak_in, mgf_in))
     {
       std::shared_ptr<PeakMap> od_meta;
       if (!fastmz && streaming) od_meta = ondisc->getMetaData();
       FASTag::IonSeries::ActivationCounts scan;
-      for (size_t i = 0; i < n_total && scan.of(FASTag::IonSeries::Activation::Electron) == 0; ++i)
+      for (size_t i = 0; i < n_total && scan.of(FASTag::IonSeries::Activation::Electron) == 0
+                         && !(photo_ax && scan.photo > 0); ++i)
       {
         MSSpectrum head;
         if (fastmz) head = fastmz->getSpectrumMetadata(i);
         else if (od_meta) { if (i < od_meta->size()) head = (*od_meta)[i]; }
         else if (i < exp.size()) head = exp[i];
-        if (head.getMSLevel() == 2) scan.add(FASTag::IonSeries::activationClass(head));
+        if (head.getMSLevel() == 2)
+        {
+          scan.add(FASTag::IonSeries::activationClass(head));
+          if (photo_ax && FASTag::IonSeries::photoActivated(head)) ++scan.photo;
+        }
       }
-      ion_column = FASTag::IonSeries::seriesColumn(ion_mode, scan);
+      ion_column = FASTag::IonSeries::seriesColumn(ion_mode, scan, photo_ax);
     }
     // The census layout of this run (Census::header() reads it; so does
     // -census_ids, which takes that header as the table's layout).
@@ -3158,7 +3201,10 @@ protected:
     const std::vector<FASTag::Tables> tables = build_tables();
     // #15 phase B: the c/z-dot tables (empty under by).
     const std::vector<FASTag::Tables> tables_cz =
-        ion_mode != FASTag::IonSeries::Mode::By ? build_tables(true) : std::vector<FASTag::Tables>();
+        cz_tables ? build_tables(FASTag::IonSeries::Series::CZ) : std::vector<FASTag::Tables>();
+    // 1.13 item 11: the a/x tables (empty unless ax or auto + photo ax).
+    const std::vector<FASTag::Tables> tables_ax =
+        ax_tables ? build_tables(FASTag::IonSeries::Series::AX) : std::vector<FASTag::Tables>();
     g_t_tables = std::chrono::duration<double>(std::chrono::steady_clock::now() - t_tables_a).count();
     // mzPeak output cannot store an ion mobility per peak: refuse before any
     // work. For mzML the first MS2 is checked here; an mzPeak input is read
@@ -3413,6 +3459,8 @@ protected:
       /// -species leaves these rows out and counts them; no reader finds the
       /// ion_series column by position.
       std::vector<char> row_cz;
+      /// 1.13 item 11: the same for a/x rows.
+      std::vector<char> row_ax;
       FASTag::ClusterAcc::ClusterBlock acc;  ///< 1.12 per-cluster slots (src/ClusterAcc.h)
     };
     // Three: a fourth only helped within noise, for another block of rows
@@ -3528,6 +3576,8 @@ protected:
       FASTag::Census::Row census_row;
       /// #15 phase B: the rows were read as c/z-dot ions (Block::row_cz).
       bool cz = false;
+      /// 1.13 item 11: the rows were read as a/x ions (Block::row_ax).
+      bool ax = false;
     };
 
     // @p index is the spectrum's position in the input, for a USI that cannot
@@ -3573,14 +3623,24 @@ protected:
       // ---- 1.12 E: per-spectrum counters ----
       const FASTag::IonSeries::Activation act = FASTag::IonSeries::activationClass(spec);
       pt.acc.e.activation.add(act);  // #15 phase A
+      // 1.13 item 11: photodissociation, read only when a/x may follow it.
+      const bool photo = (photo_ax || ion_mode == FASTag::IonSeries::Mode::Ax) && FASTag::IonSeries::photoActivated(spec);
+      if (photo) ++pt.acc.e.activation.photo;
+      const bool spec_photo_ax = photo_ax && photo;
       // #15 phase B: the series this spectrum is read as (by under by): c/z
-      // only in a run that writes the ion_series column, the one rule both
-      // decisions share (IonSeries::seriesInRun).
-      const bool read_cz = FASTag::IonSeries::seriesInRun(ion_mode, act, ion_column) == FASTag::IonSeries::Series::CZ;
+      // (or a/x, 1.13) only in a run that writes the ion_series column, the
+      // one rule both decisions share (IonSeries::seriesInRun).
+      const FASTag::IonSeries::Series read_series =
+          FASTag::IonSeries::seriesInRun(ion_mode, act, ion_column, spec_photo_ax);
+      const bool read_cz = read_series == FASTag::IonSeries::Series::CZ;
+      const bool read_ax = read_series == FASTag::IonSeries::Series::AX;
       if (read_cz) ++pt.acc.e.series.ms2_cz;
+      else if (read_ax) ++pt.acc.e.series.ms2_ax;
       else ++pt.acc.e.series.ms2_by;
       res.cz = read_cz;
-      if (!read_cz && FASTag::IonSeries::seriesFor(ion_mode, act) == FASTag::IonSeries::Series::CZ)
+      res.ax = read_ax;
+      if (read_series == FASTag::IonSeries::Series::BY
+          && FASTag::IonSeries::seriesFor(ion_mode, act, spec_photo_ax) == FASTag::IonSeries::Series::CZ)
         ++pt.acc.e.series.auto_by_no_column;
       if (digest_on)
       {
@@ -3647,7 +3707,7 @@ protected:
       // and, through a per-row flag (Block::row_species), the species evidence. The
       // TSV, -recon_out and -recon_id_out keep every row at its hypothesis'
       // charge.
-      const std::vector<FASTag::Hyp::Hypothesis> hyps = FASTag::Hyp::precursorHypotheses(spec, prec, hyp_param, read_cz ? hyp_cs_cz : hyp_cs);
+      const std::vector<FASTag::Hyp::Hypothesis> hyps = FASTag::Hyp::precursorHypotheses(spec, prec, hyp_param, read_cz ? hyp_cs_cz : read_ax ? hyp_cs_ax : hyp_cs);
       if (hyp_on) pt.acc.e.hyp.add(hyps);
       FASTag::SpectrumDiag cdiag;
       std::vector<FASTag::Tag> tags;
@@ -3658,7 +3718,8 @@ protected:
       // the selected one. #15 phase B: the ion series (read_cz, decided once
       // per spectrum above) picks the tables, for every hypothesis alike.
       const auto tag_at = [&](const FASTag::Hyp::Hypothesis& hy, double H, FASTag::SpectrumDiag* diag) {
-        return tag_all(spec, hy.mz, hy.charge, read_cz ? tables_cz : tables, diag, H, read_cz);
+        return tag_all(spec, hy.mz, hy.charge, read_cz ? tables_cz : read_ax ? tables_ax : tables, diag, H,
+                       read_series);
       };
       if (hyps.size() == 1)
       {
@@ -3772,6 +3833,7 @@ protected:
           v.mean_conf = t.mean_conf;
           v.peak_tic = t.peak_tic;
           v.cz = t.ion_series == FASTag::IonSeries::Series::CZ;
+          v.ax = t.ion_series == FASTag::IonSeries::Series::AX;
           ctags.push_back(v);
         }
 
@@ -3782,9 +3844,13 @@ protected:
         // is ungapped with E <= 1 (of the selected hypothesis, #6). A c/z tag
         // (#15 phase B) with its series' reversed-read offset.
         const bool tag_cz = t.ion_series == FASTag::IonSeries::Series::CZ;
+        // 1.13 item 11: an a/x tag counts with its own reversed offset (+CO2 + CO).
+        const bool tag_ax = t.ion_series == FASTag::IonSeries::Series::AX;
         if (count_on && sel && !t.gapped && t.evalue <= 1.0)
         {
           if (tag_cz) pt.digest.add(t.nterm_mass, t.cterm_mass, FASTag::baseSequence(t.seq), cz_pair.reversedOffset());
+          else if (tag_ax)
+            pt.digest.add(t.nterm_mass, t.cterm_mass, FASTag::baseSequence(t.seq), ax_pair.reversedOffset());
           else pt.digest.add(t.nterm_mass, t.cterm_mass, FASTag::baseSequence(t.seq));
         }
 
@@ -3794,8 +3860,8 @@ protected:
         // are b/y-only, so it is counted in Tally::excludeNonBy() instead
         // (PLAN-INTEGRATION 2.3 contract 2; doc/ALKYLATION-REPORT.md).
         const bool alk_counted = alkylation_on && sel && FASTag::Alkylation::countsTag(t.gapped, t.evalue);
-        const bool alk_tag = alk_counted && !tag_cz;
-        if (alk_counted && tag_cz) pt.acc.d.alk.excludeNonBy();
+        const bool alk_tag = alk_counted && !tag_cz && !tag_ax;
+        if (alk_counted && (tag_cz || tag_ax)) pt.acc.d.alk.excludeNonBy();
         if (place_on && !row_entrap && (place_every || alk_tag))  // known-false rows must not place or bin
         {
           // The tag's own variable mods go on the localization ladder.
@@ -3807,7 +3873,7 @@ protected:
                                               recon_loc ? &loc_peaks : nullptr,
                                               hy.charge,
                                               tag_modded ? &tag_shift : nullptr,
-                                              tag_cz ? &cz_pair : nullptr);
+                                              tag_cz ? &cz_pair : tag_ax ? &ax_pair : nullptr);
           if (res.census && recon_on && sel) cplaced += places.size();
           // -recon_out rows: one per placement.
           if (recon_on)
@@ -4002,6 +4068,7 @@ protected:
       if (entrap_on) b.row_meta[idx].swap(r.meta);
       if (species_sel_on) b.row_species[idx].swap(r.row_species);
       b.row_cz[idx] = r.cz ? 1 : 0;
+      b.row_ax[idx] = r.ax ? 1 : 0;
       b.keep[idx] = 1;
       // A spectrum whose only reported tags are entrapment matches is
       // calibration material, not a hit -- keep it out of -out_spectra.
@@ -4025,6 +4092,7 @@ protected:
       }
       b.keep.assign(n_used, 0);
       b.row_cz.assign(n_used, 0);
+      b.row_ax.assign(n_used, 0);
       if (want_out) b.keep_target.assign(n_used, 0);
       b.acc.prepare(n_used);
     };
@@ -4038,6 +4106,7 @@ protected:
     // #15 phase B: -species counts b/y tags only (PLAN-INTEGRATION 2.3,
     // contract 2); the c/z rows it leaves out (writer thread only).
     size_t species_cz_excluded = 0;
+    size_t species_ax_excluded = 0;  // 1.13 item 11
 
     // Write one finished block's rows in index order and recycle the buffers.
     //
@@ -4116,6 +4185,7 @@ protected:
             // #15 phase B: a c/z row (Block::row_cz, one flag per spectrum,
             // every row of it alike) is left out and counted.
             if (b.row_cz[i]) ++species_cz_excluded;
+            else if (b.row_ax[i]) ++species_ax_excluded;  // 1.13 item 11
             else if (readSpeciesFields(r, start, nl, id, tag, gapped, evalue))
             {
               // Skip GAPPED tags unless asked for. A gap spells two residues
@@ -4596,6 +4666,9 @@ protected:
       run_meta.ion_series = FASTag::IonSeries::modeName(ion_mode);
       run_meta.ion_series_ms2_by = run_acc.e.series.ms2_by;
       run_meta.ion_series_ms2_cz = run_acc.e.series.ms2_cz;
+      run_meta.ion_series_ms2_ax = run_acc.e.series.ms2_ax;
+      run_meta.ion_series_photo = getStringOption_("ion_series_photo");
+      run_meta.ion_series_ax_row = ax_tables;
     }
     // ---- 1.12 D: the alkylation call (#3g), once, right after the merge ----
     // Before the hand-off exports, so a reader of the call there (the A17
@@ -5872,13 +5945,16 @@ protected:
       }
       else
       {
-        std::cerr << IS::seriesInfo(ion_mode, run_acc.e.series, act) << std::endl;
+        std::cerr << IS::seriesInfo(ion_mode, run_acc.e.series, act, photo_ax) << std::endl;
         if (ion_mode == IS::Mode::Auto && IS::warnHybridUnderAuto(act))
           OPENMS_LOG_WARN << IS::hybridAutoWarning(act) << std::endl;
         if (ion_mode == IS::Mode::Cz && IS::warnCollisionalUnderCz(act))
           OPENMS_LOG_WARN << IS::collisionalCzWarning(act) << std::endl;
+        if (ion_mode == IS::Mode::Ax && IS::warnClassifiedUnderAx(act))
+          OPENMS_LOG_WARN << IS::classifiedAxWarning(act) << std::endl;
       }
       if (species_cz_excluded > 0) OPENMS_LOG_WARN << IS::speciesExcludedWarning(species_cz_excluded) << std::endl;
+      if (species_ax_excluded > 0) OPENMS_LOG_WARN << IS::speciesExcludedAxWarning(species_ax_excluded) << std::endl;
       if (run_acc.e.series.auto_by_no_column > 0)
         OPENMS_LOG_WARN << IS::autoNoColumnWarning(run_acc.e.series.auto_by_no_column) << std::endl;
     }

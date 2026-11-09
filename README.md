@@ -598,7 +598,8 @@ MGF→mzML direction is exact.
 | `-acquisition_probe_spectra <n>` | 4000 | MS2 spectra the acquisition check reads, metadata only, reading at most ten times as many spectra in all (advanced) |
 | `-pick_profile <legacy\|auto\|off>` | legacy | Centroid profile MS2 (MS:1000128) with OpenMS `PeakPickerHiRes` before tagging: `legacy` on mzPeak input only (as 1.11), `auto` on mzML and mzPeak input (not MGF), `off` never. Centroided MS2 are never re-picked. `-out_spectra` writes the spectra as they were tagged. Not with `-stream`. Experimental: `auto` failed its held-out test and is not recommended (see Performance) |
 | `-pick_unknown_type` | off | With `-pick_profile auto`: also centroid MS2 that declare no spectrum type, when OpenMS's `PeakTypeEstimator` reads their data as profile (advanced) |
-| `-ion_series <by\|cz\|auto>` | by | Ion series the MS2 spectra are read as: `by` (b/y ions, as 1.11), `cz` (c/z• ions of ETD/ECD, every spectrum), `auto` (c/z• for spectra whose activation is ETD or ECD, b/y for all others, hybrid EThcD/ETciD included, with a warning). Under `cz`, and under `auto` when the run has electron-activated spectra, the tag TSV gains a last `ion_series` column and the census a `best_ion_series` column (see Ion series). Not with `-stream`. Experimental: `auto` is not validated yet |
+| `-ion_series <by\|cz\|auto\|ax>` | by | Ion series the MS2 spectra are read as: `by` (b/y ions, as 1.11), `cz` (c/z• ions of ETD/ECD, every spectrum), `auto` (c/z• for spectra whose activation is ETD or ECD, b/y for all others, hybrid EThcD/ETciD included, with a warning), `ax` (1.13: a/x ions of photodissociation, UVPD, every spectrum). Under `cz` and `ax`, and under `auto` when the run has electron-activated spectra (or, with `-ion_series_photo ax`, photo-activated ones), the tag TSV gains a last `ion_series` column and the census a `best_ion_series` column (see Ion series). Not with `-stream`. Experimental: `auto` and `ax` are not validated yet |
+| `-ion_series_photo <by\|ax>` | by | 1.13, under `-ion_series auto` only: the series photodissociation spectra are read as (activation MS:1000435 or a Thermo `@uvpd` filter token, and no collisional or electron method). `by` is `auto` as in 1.12; `ax` reads them as a/x ions (doc/AX-IONS.md). Ignored with a warning under other modes; not with `-stream`. Experimental |
 | `-unknown_charge <assume2\|enumerate\|infer>` | assume2 | How a precursor without a charge is tagged: `assume2` as 2+ (as 1.11); `enumerate` at each listed possible charge (MS:1000633, MGF `2+ and 3+`), else at every charge `-charge_min`..`-charge_max`; `infer` at the charge its complement pairs support (1+ when `-charge_min` is 1, or 1 is listed, and almost no intensity lies above the precursor; both charges of a close call, `ambiguous`; without evidence 2+, or the lowest candidate when 2 is none, `assumed`). Every charge tagged is a listed possible charge, else one of `-charge_min`..`-charge_max`. A header charge is never replaced. A spectrum tagged under H hypotheses has every E-value multiplied by H before `-max_evalue` and `-max_tags`; its rows are merged by E-value. The reports that aggregate over spectra (digest, label, massgap, delta, species, shortlist, census) read the rows of one selected hypothesis, chosen from the charge evidence, never from the E-values. Experimental: `infer` failed its held-out test (see Validation); not with `-stream` |
 | `-charge_min <n>` / `-charge_max <n>` | 2 / 4 | The charges `enumerate` and `infer` try (1-8); `-charge_min 1` enables infer's 1+ test |
 | `-charge_infer_margin <x>` | 2 | Complement-pair excess by which an inferred charge must beat the runner-up to be tagged alone; closer, both are tagged (`ambiguous`). Any excess above 0 is a call; none is `assumed` (advanced) |
@@ -690,7 +691,15 @@ behaviour. `-recon_*`, `-digest_out`,
 `-label_out`, `-massgap_out`, `-delta_out` and the census take the offset from
 each tag; `-species` counts b/y tags only and reports how many c/z• rows it
 left out. Hybrid EThcD/ETciD spectra are read as b/y under `auto` (reading
-both series at once is not supported yet), and a/x ions are not read.
+both series at once is not supported yet). A tag read as a/x ions (1.13,
+`-ion_series ax`, or `auto -ion_series_photo ax` on photodissociation spectra;
+`ion_series` = `ax`) follows the same convention with a = residues - CO and
+x = residues + CO2: a reversed read (the low peak an a ion) carries
+offC - offN = CO2 + CO = +71.9847 Da (N-side residues = `cterm_mass` +
+71.9847, C-side residues = `nterm_mass` - 71.9847), the complement partner
+sums to M - H (a+1/x, a/x+1) or M (a+1/x+1) at the precursor's charges, and no precursor window is cut
+(doc/AX-IONS.md). `-species` and `-alkylation_out` leave a/x tags out and
+count them.
 `-ion_series auto` on a run without electron activation writes exactly what
 `by` writes. `auto` reads the activation of mzML input only: MGF and mzPeak
 spectra are read as b/y (an electron-activated spectrum such a reader delivers
@@ -979,7 +988,9 @@ listed in `--helphelp`, which is how the GUI detects them.
   uncharged precursor is tagged as 2+), `charge_given`, `native_id`, `index`,
   `tolerance` and `tolerance_unit`. Under `-ion_series cz`, or `auto` on an
   electron-activated mzML spectrum, the peaks are prepared as c/z-dot ions,
-  as the tagger reads that spectrum (the ETD precursor-window cut included).
+  as the tagger reads that spectrum (the ETD precursor-window cut included);
+  under `-ion_series ax`, or `auto -ion_series_photo ax` on a photo-activated
+  mzML spectrum, with the a/x ion pair.
   An unknown ID exits 6 with the ID on stderr
   and nothing on stdout. The dump prepares the given precursor at its charge
   (or 2+) only; with `-unknown_charge` or `-isotope_error` away from their
@@ -1407,6 +1418,10 @@ tags fill the slots (hence the small change in total recall):
   activation:` warning to stderr with the count per class (collisional,
   electron, hybrid, unknown). MGF and mzPeak input carry no activation, so
   their spectra count as unknown, and `-ion_series auto` reads them as b/y.
+  `-ion_series ax` (1.13, experimental) reads a/x ions, and warns
+  (`Activation:`) when more than 1% of the spectra have a collisional,
+  electron or hybrid activation; `-ion_series auto -ion_series_photo ax`
+  reads only photodissociation spectra as a/x (doc/AX-IONS.md).
   `-ion_series cz` or `auto` (1.12, experimental, not yet validated on real
   ETD data) reads c/z• ions (see Ion series); under them one `Ion series`
   line on stderr gives the spectra per series, `auto` warns (`Hybrid

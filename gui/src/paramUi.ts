@@ -91,6 +91,7 @@ export interface ParamUi {
 /// a GUI run uses the CLI defaults. The exception is acquisition_check (under
 /// Spectra).
 const OPT_IN_1_12 = '1.12 command-line option, not in the form yet (CLI default applies)'
+const OPT_IN_1_13_EXPERIMENTAL = '1.13 experimental command-line option, not in the form (CLI default applies)'
 
 const SPECIES_OFF: Dependency = { on: 'species', note: 'species detection is off' }
 const GLYCO_OFF: Dependency = { on: 'glyco', note: 'oxonium flagging is off' }
@@ -935,7 +936,13 @@ export const PARAM_UI: Record<string, ParamUi> = {
   ion_series: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'Read the spectra as b/y ions (the default), as c/z ions of ETD or ECD, or choose per spectrum from its activation (auto).'
+      text: 'Read the spectra as b/y ions (the default), as c/z ions of ETD or ECD, choose per spectrum from its activation (auto), or read them as a/x ions of UVPD (ax, experimental).'
+    }
+  },
+  ion_series_photo: {
+    hidden: OPT_IN_1_13_EXPERIMENTAL,
+    help: {
+      text: 'Under ion series auto: read photodissociation (UVPD) spectra as b/y ions (the default) or as a/x ions. Experimental.'
     }
   },
   isotope_error: {
