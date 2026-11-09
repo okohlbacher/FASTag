@@ -130,6 +130,15 @@ class Tests(unittest.TestCase):
         self.assertEqual(cte.subset_truth(psms, {"x", "y", "z"}, 0.9), set())
         self.assertEqual(cte.subset_truth(psms, {"x", "y", "z"}, 1.0), {"x", "z"})
         self.assertEqual(cte.subset_truth(psms, {"x", "z"}, 0.5), {"x", "z"})  # y outside the subset: 1, 1/2
+        # A tie whose outcome depends on grouping: targets a, b and decoy c tied at 5, target z at 4. Grouped:
+        # (D+1)/T = 2/2 at the tie, 2/3 with z -> q 2/3 for all. Taken one by one in the order a b c z, the cut
+        # a b alone would give 1/2 and admit a, b at q 0.6; in the order c a b z it would not. The result must be
+        # the grouped one in every input order (sub is built from the iteration order of the ids).
+        import itertools
+        tp = {"a": (True, 0.0, 5.0), "b": (True, 0.0, 5.0), "c": (False, 0.0, 5.0), "z": (True, 0.0, 4.0)}
+        for order in itertools.permutations(["a", "b", "c", "z"]):
+            self.assertEqual(cte.subset_truth(tp, list(order), 0.6), set(), order)
+            self.assertEqual(cte.subset_truth(tp, list(order), 2 / 3), {"a", "b", "z"}, order)
         # one target and no decoy is not a 1% discovery under (D+1)/T
         self.assertEqual(cte.subset_truth({"x": (True, 0.0, 5.0)}, {"x"}, 0.01), set())
         with self.assertRaises(cte.EvalError):
@@ -194,6 +203,46 @@ class Tests(unittest.TestCase):
         self.assertLess(p["d_n_peaks_ci_lo"], p["d_n_peaks_ci_hi"])
         self.assertLessEqual(p["d_n_peaks_ci_hi"], 0.5 + 1e-12)
         self.assertAlmostEqual(p["d_n_peaks"], 0.5 - 1 / 60)
+
+    def test_percentile_levels(self):
+        # linear interpolation at (n - 1) p: positions 0.1 and 3.9 of [0, 10, 20, 30, 40]
+        self.assertAlmostEqual(cte.percentile([40.0, 0.0, 20.0, 10.0, 30.0], 0.025), 1.0)
+        self.assertAlmostEqual(cte.percentile([40.0, 0.0, 20.0, 10.0, 30.0], 0.975), 39.0)
+        self.assertEqual(cte.percentile([7.0], 0.025), 7.0)
+        self.assertIsNone(cte.percentile([], 0.5))
+
+    def test_bootstrap_exact_interval(self):
+        # Six runs r = 0..5, each 10 triage rows (n_peaks 1, r + 1 hits) and 10 rest rows (n_peaks 2, one hit).
+        # A resample of runs k_1..k_6 has rr = sum(k + 1) / 6 and d_n_peaks = (sum(k + 1) - 6) / 60 (the n_peaks
+        # top-10 is the rest). The resamples are recomputed here from random.Random(seed) drawing run indices as
+        # the scorer does, and the interval must be the exact 2.5% / 97.5% interpolated percentiles of them.
+        import random
+        import statistics
+        runs = []
+        for r in range(6):
+            cen = [(i, f"e{r}t{i}", 1, 1, "tagged", "1e-5", "0", "1") for i in range(10)] + \
+                  [(10 + i, f"e{r}r{i}", 2, 1, "tagged", "0.5", "0", "0") for i in range(10)]
+            hits = [f"e{r}t{i}" for i in range(r + 1)] + [f"e{r}r0"]
+            sage = [(k, "x.mzML", sid, 1, 1, 0.0, 1) for k, sid in enumerate(hits)] + \
+                   [(100 + i, "x.mzML", f"e{r}t{i}", 1, -1, 0.9, 1) for i in range(r + 1, 10)]
+            write(self.d, f"ex{r}.census.tsv", CEN_HEAD, cen)
+            write(self.d, f"ex{r}.sage.tsv", SAGE_HEAD, sage)
+            runs.append((f"E{r}", f"ex{r}.census.tsv", f"ex{r}.sage.tsv", ""))
+        rs = self.runs(runs)
+        for seed, n in ((5, 40), (6, 40), (17, 333)):
+            rng = random.Random(seed)
+            rr, d = [], []
+            for _ in range(n):
+                ks = [rng.randrange(6) for _ in range(6)]
+                hit = sum(k + 1 for k in ks)
+                rr.append(hit / 6)
+                d.append((hit - 6) / 60)
+            p = dict(cte.evaluate(rs, boot=n, seed=seed))["pooled"]
+            for key, vals in (("rr", rr), ("d_n_peaks", d)):
+                qs = statistics.quantiles(vals, n=40, method="inclusive")
+                self.assertAlmostEqual(p[f"{key}_ci_lo"], qs[0], places=12, msg=(seed, key))
+                self.assertAlmostEqual(p[f"{key}_ci_hi"], qs[-1], places=12, msg=(seed, key))
+                self.assertEqual(p[f"{key}_boot_n"], n)
 
     def test_baseline_tie_independent_of_row_order(self):
         write(self.d, "rev.census.tsv", CEN_HEAD, list(reversed(A_CEN)))

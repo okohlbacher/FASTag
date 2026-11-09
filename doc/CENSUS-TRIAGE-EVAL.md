@@ -49,7 +49,11 @@ frozen config and scorer sha256 committed in f054006 before any held-out run; sc
 **Result: FAIL**, by E2 only. E1 pooled rr 5.85 (run bootstrap 3.19-10.26) and E3 +0.055 (0.010-0.133) pass. In one
 run (PXD003903, 381 of 39,839 spectra identified by the first search) neither group had a single semi-search hit
 at 1% FDR, so its rr is undefined, which the protocol counts as a failure; in the other five runs the candidates'
-hit rate was 1.6 to 9.8 times that of the other unidentified spectra. Pooled, the candidates were 15.5% of the
+hit rate was 1.6 to 9.8 times that of the other unidentified spectra. The zero in PXD003903 is at the subset (D+1)/T FDR, not
+in the second search itself: that estimator cannot report any 1% hit in a run with fewer than about 100 subset targets
+above the first decoy, so under E2's undefined-rr rule a run with so few identifications fails by construction,
+whatever triage does. With Sage's own q-values the semi search does identify 21 candidates and 21 other unidentified
+spectra in that run (rr 16.3). Pooled, the candidates were 15.5% of the
 unidentified spectra and held 52% of their semi-search hits (hit rate 12.5% vs 2.1%).
 
 Secondary: against the open search the enrichment is similar (rr 4.7), but the candidates do no better than a pick
