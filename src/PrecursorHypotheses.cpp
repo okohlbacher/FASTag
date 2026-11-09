@@ -74,12 +74,26 @@ namespace FASTag::Hyp
     {
       // 1+ pairs sum to M + 2p (b/y); a series with a pair delta (c/z-dot:
       // M + H, #15 phase B) adds it. b/y's single delta 0 leaves the sum as
-      // it was, bit for bit.
-      double target = M + 2.0 * kProton;
-      if (!cs.pair_deltas.empty() && cs.pair_deltas.front() != 0.0) target += cs.pair_deltas.front();
-      double off = 0;
-      for (const double d : kOffTargetShifts) off += pairCount(mz, target + d, cs);
-      return pairCount(mz, target, cs) - off / static_cast<double>(std::size(kOffTargetShifts));
+      // it was, bit for bit. A series with several deltas (a/x: M - H and M,
+      // 1.13 item 11) sums the excess over them; one delta is the old code.
+      const double base = M + 2.0 * kProton;
+      if (cs.pair_deltas.size() <= 1)
+      {
+        double target = base;
+        if (!cs.pair_deltas.empty() && cs.pair_deltas.front() != 0.0) target += cs.pair_deltas.front();
+        double off = 0;
+        for (const double d : kOffTargetShifts) off += pairCount(mz, target + d, cs);
+        return pairCount(mz, target, cs) - off / static_cast<double>(std::size(kOffTargetShifts));
+      }
+      double e = 0;
+      for (const double pd : cs.pair_deltas)
+      {
+        const double target = pd == 0.0 ? base : base + pd;
+        double off = 0;
+        for (const double d : kOffTargetShifts) off += pairCount(mz, target + d, cs);
+        e += pairCount(mz, target, cs) - off / static_cast<double>(std::size(kOffTargetShifts));
+      }
+      return e;
     }
 
     /// Isotope list in preference order: smaller |k| first, then smaller k.

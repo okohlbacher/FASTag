@@ -106,6 +106,12 @@ namespace FASTag::RunReport
     std::string ion_series = "by";
     std::size_t ion_series_ms2_by = 0;
     std::size_t ion_series_ms2_cz = 0;
+    // 1.13 item 11: a/x spectra, -ion_series_photo, and whether the run could
+    // read a/x (ax, or auto + -ion_series_photo ax): only then the
+    // ion_series_ax and ion_series_photo rows are written.
+    std::size_t ion_series_ms2_ax = 0;
+    std::string ion_series_photo = "by";
+    bool ion_series_ax_row = false;
     // ---- 1.12 A ----
     // ---- 1.12 D ----
     // ---- 1.12 F ----
@@ -218,12 +224,19 @@ namespace FASTag::RunReport
       }
       {
         // #15 phase B: value = spectra read as the series, n = all tagged MS2.
-        const std::string n = std::to_string(m.ion_series_ms2_by + m.ion_series_ms2_cz);
+        const std::string n = std::to_string(m.ion_series_ms2_by + m.ion_series_ms2_cz + m.ion_series_ms2_ax);
         r.push_back({"run", "ion_series", m.ion_series, "-",
                      "MS2 spectra were read under -ion_series " + m.ion_series + "."});
         const std::string by = std::to_string(m.ion_series_ms2_by), cz = std::to_string(m.ion_series_ms2_cz);
         r.push_back({"run", "ion_series_by", by, n, by + " of " + n + " MS2 spectra were tagged as b/y ions."});
         r.push_back({"run", "ion_series_cz", cz, n, cz + " of " + n + " MS2 spectra were tagged as c/z-dot ions."});
+        if (m.ion_series_ax_row)
+        {
+          const std::string ax = std::to_string(m.ion_series_ms2_ax);
+          r.push_back({"run", "ion_series_ax", ax, n, ax + " of " + n + " MS2 spectra were tagged as a/x ions."});
+          r.push_back({"run", "ion_series_photo", m.ion_series_photo, "-",
+                       "Photodissociation spectra were read under -ion_series_photo " + m.ion_series_photo + "."});
+        }
       }
     }
     // ---- 1.12 A ----
