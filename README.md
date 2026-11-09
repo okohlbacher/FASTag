@@ -314,8 +314,17 @@ is tagged with a warning; a periodic scheme whose windows do not tile a range
 is PRM or an inclusion list and passes; so do DDA with wide windows and
 pseudo-DDA spectra, which DIAspeXtract (its software entry and `spx_*`
 userParams) and diaTracer (its software entry) mark in the mzML. The
-thresholds were frozen after a development sweep over 183 public data sets; a
-release test on a fresh PRIDE sample is pending. A mixed file
+thresholds were frozen after a development sweep over 183 public data sets. The
+preregistered release test on a fresh PRIDE sample (E7-03, 213 files and 37
+pseudo-DDA files) **failed**. Raw diaPASEF and Astral DIA were refused 12/12
+each. Orbitrap DIA was refused only 7/12 and the SWATH stratum 10/12, against
+>= 90%. 8 of 202 files that had to pass were refused (upper 95% bound 7.0%),
+all drawn from Astral projects labelled DDA. All 37 pseudo-DDA files passed.
+Charged tiling DIA is only warned about, by design. Post-hoc readings (not a
+re-score; only partly checked against vendor scan filters) are that the 8 refused files may be DIA
+runs filed as DDA, and that 4 of the missed DIA files, which showed no repeating
+window scheme, may be DDA library runs (see
+[doc/ACQUISITION-RELEASE-TEST.md](doc/ACQUISITION-RELEASE-TEST.md)). A mixed file
 is judged on its first MS2; `-stream` is not checked.
 
 `-acquisition_check warn` tags raw DIA anyway (experts; the tags are those
@@ -1336,7 +1345,7 @@ data.
 
 Every other 1.12 option (#1/#10 species call, #3 chemistry v2 and
 alkylation, #5 shortlist and search hand-off, #7 raw-DIA check, whose
-release test has not run, #11 census, #15 ion series, #17 search shifts) is experimental and not
+release test E7-03 failed (1.13 acceptance; see Raw DIA input is refused), #11 census, #15 ion series, #17 search shifts) is experimental and not
 validated on held-out data. No 1.12 option is validated on low-resolution
 (ion-trap) MS2: the only ion-trap held-out results (#9 PXD009049; the
 ion_trap set of #6 item06-H1-r2) are a failure and a descriptive result.
