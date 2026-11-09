@@ -187,14 +187,17 @@ int main()
     const int M = 1000000;
     for (int L = k; L <= k + 4; ++L)
     {
-      uint64_t shuf = 0, res = 0, indep = 0;
+      uint64_t shuf = 0, res = 0, indep = 0, tgt = 0;
       for (int t = 0; t < M; ++t)
       {
         std::string s;
         for (int i = 0; i < L; ++i) s += A[r.next() % A.size()];
         TagLookupCounters c;
         std::vector<uint32_t> tx;
-        const std::string sh = decoyTag(s, 0);  // whole-tag shuffle
+        if (tagSupport(pidx, s, k, 1000, 0.0, tx, c)) ++tgt;
+        // Whole-tag shuffle, a fresh seed per tag: one fixed seed is a fixed
+        // map of tags to decoys whose hit rate scatters by a few percent.
+        const std::string sh = decoyTag(s, static_cast<uint32_t>(t));
         if (!sh.empty() && tagSupport(pidx, sh, k, 1000, 0.0, tx, c)) ++shuf;
         if (kmerDecoySupport(pidx, s, k, static_cast<uint32_t>(t % 16), 1000, 0.0, tx, c, nullptr)) ++res;
         // The rejected construction: every k-mer replaced independently.
@@ -208,14 +211,23 @@ int main()
         }
         if (all) ++indep;
       }
-      const double sd = std::sqrt(static_cast<double>(shuf + res)) + 1.0;
-      check(std::fabs(static_cast<double>(res) - static_cast<double>(shuf)) <= 4.0 * sd,
-            "residue decoy hit rate matches a whole-tag shuffle at L=" + std::to_string(L) + " (" +
-              std::to_string(res) + " vs " + std::to_string(shuf) + ")");
+      const std::string got = " (residue " + std::to_string(res) + ", shuffle " + std::to_string(shuf) +
+                              ", random tag " + std::to_string(tgt) + ", independent " + std::to_string(indep) + ")";
+      const auto close = [](uint64_t a, uint64_t b, double z = 4.0) {
+        return std::fabs(static_cast<double>(a) - static_cast<double>(b)) <=
+               z * (std::sqrt(static_cast<double>(a + b)) + 1.0);
+      };
+      // A uniform random tag is the exact chance rate here (the proteome is
+      // i.i.d. uniform and independent of the tags).
+      std::cout << "decoy rate L=" << L << got << "\n";
+      check(close(res, tgt), "residue decoy hit rate equals the chance rate at L=" + std::to_string(L) + got);
+      // decoyTag() is not quite the chance rate at L = k (it never returns the
+      // tag or its reverse, which reweights repeat patterns: about +3% here),
+      // hence the wider band for this secondary reference.
+      check(close(res, shuf, 6.0), "residue decoy hit rate matches a whole-tag shuffle at L=" + std::to_string(L) + got);
       if (L == k + 1 || L == k + 2)
         check(static_cast<double>(shuf) - static_cast<double>(indep) > 4.0 * (std::sqrt(static_cast<double>(shuf + indep)) + 1.0),
-              "sensitivity: independent per-k-mer decoys under-hit at L=" + std::to_string(L) + " (" +
-                std::to_string(indep) + " vs " + std::to_string(shuf) + ")");
+              "sensitivity: independent per-k-mer decoys under-hit at L=" + std::to_string(L) + got);
     }
   }
 
