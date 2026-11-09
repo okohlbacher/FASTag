@@ -1,0 +1,37 @@
+verify: 10 files match the manifest -> /scratch/kohlbach/b113/chimeric/work/heldout/verify_HO.tsv
+HO-PXD066944-OFF03 sage chimera: 69.928 s
+HO-PXD076528-7673 sage chimera: 96.475 s
+HO-PXD009612-MW3 sage chimera: 14.243 s
+HO-PXD040230-S2R1 sage chimera: 19.475 s
+HO-PXD049370-185 sage chimera: 9.192 s
+HO-PXD066944-OFF03: purity of 59204 MS2, median 0.173
+HO-PXD076528-7673: purity of 100438 MS2, median 0.286
+HO-PXD009612-MW3: purity of 24339 MS2, median 0.687
+HO-PXD040230-S2R1: purity of 37834 MS2, median 0.672
+HO-PXD049370-185: purity of 13059 MS2, median 0.885
+HO-PXD066944-OFF03 fastag default: 5.907 s
+HO-PXD066944-OFF03 fastag cap10: 5.84 s
+HO-PXD066944-OFF03 fastag cap10_div: 6.147 s
+HO-PXD076528-7673 fastag default: 12.82 s
+HO-PXD076528-7673 fastag cap10: 12.286 s
+HO-PXD076528-7673 fastag cap10_div: 12.415 s
+HO-PXD009612-MW3 fastag default: 1.868 s
+HO-PXD009612-MW3 fastag cap10: 1.752 s
+HO-PXD009612-MW3 fastag cap10_div: 1.904 s
+HO-PXD040230-S2R1 fastag default: 2.047 s
+HO-PXD040230-S2R1 fastag cap10: 1.845 s
+HO-PXD040230-S2R1 fastag cap10_div: 1.989 s
+HO-PXD049370-185 fastag default: 0.756 s
+HO-PXD049370-185 fastag cap10: 0.731 s
+HO-PXD049370-185 fastag cap10_div: 0.786 s
+HO-PXD066944-OFF03: chimeric 6577, nested 4, single 20373
+HO-PXD076528-7673: chimeric 19492, nested 263, single 38952
+HO-PXD009612-MW3: chimeric 45, nested 0, single 2316
+HO-PXD040230-S2R1: chimeric 2032, nested 5, single 9618
+HO-PXD049370-185: chimeric 0, nested 0, single 0
+score: 598062 rows -> /scratch/kohlbach/b113/chimeric/work/heldout/spectra_HO.tsv.gz
+H1 chimeric penalty pep1_rank1 chimeric - pep1_rank1 pure single [chimeric vs single_pure]: -0.2673 (-0.2789, -0.2552) penalty shown
+H2 union non-inferiority union_rank1 chimeric - pep1_rank1 pure single [chimeric vs single_pure]: -0.0582 (-0.0694, -0.0466) non-inferior
+H3 purity gradient pep1_rank1 pure - impure (single) [single]: 0.2874 (0.2756, 0.2988) gradient shown
+H4 diversity both_top10 cap10_div - cap10 [chimeric]: 0.0927 (0.0883, 0.0971) benefit
+HELDOUT_DONE
