@@ -538,6 +538,83 @@
       "max": 3
     },
     {
+      "name": "label_discovery_depth",
+      "type": "int",
+      "default": "2",
+      "description": "Most residues a -label_discovery_out channel-peak explanation names (0, 1 or 2)",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0,
+      "max": 2
+    },
+    {
+      "name": "label_discovery_max_flank",
+      "type": "double",
+      "default": "700.0",
+      "description": "Largest flank mass -label_discovery_out histograms, and the largest composition mass of its null image set (above 0, at most 2000)",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0,
+      "max": 2000
+    },
+    {
+      "name": "label_discovery_min_share",
+      "type": "double",
+      "default": "0.005",
+      "description": "Share of the counted spectra a -label_discovery_out peak needs",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0,
+      "max": 1
+    },
+    {
+      "name": "label_discovery_min_spectra",
+      "type": "int",
+      "default": "20",
+      "description": "Spectra a -label_discovery_out peak or site candidate needs",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 1
+    },
+    {
+      "name": "label_discovery_out",
+      "type": "output-file",
+      "default": "",
+      "description": "Experimental: report every terminal or lysine mass offset the tag flanks carry, known or not, explained by residues, the known labels or Unimod, and a provisional label call (not validated on held-out data; format in doc/LABEL-DISCOVERY-REPORT.md)",
+      "required": false,
+      "toppAdvanced": false,
+      "formats": [
+        "tsv"
+      ]
+    },
+    {
+      "name": "label_discovery_unimod_top",
+      "type": "int",
+      "default": "3",
+      "description": "Unimod alternatives -label_discovery_out lists per peak",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
+    },
+    {
+      "name": "label_discovery_window_c",
+      "type": "double",
+      "default": "0.0",
+      "description": "Half-window of the C-terminal flank channel of -label_discovery_out; 0 = estimate it from the run",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
+    },
+    {
+      "name": "label_discovery_window_n",
+      "type": "double",
+      "default": "0.0",
+      "description": "Half-window of the N-terminal flank channel of -label_discovery_out; 0 = estimate it from the run",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
+    },
+    {
       "name": "label_out",
       "type": "output-file",
       "default": "",
