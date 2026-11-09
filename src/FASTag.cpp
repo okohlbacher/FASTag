@@ -5960,7 +5960,7 @@ protected:
           return CANNOT_WRITE_OUTPUT_FILE;
         }
         std::string buf = "index\tnative_id\tprecursor_mz\theader_charge\tcall_charge\tcall_src\tbasis\trunner_up"
-                          "\theader_excess\tcall_excess\theader_ruled_out\tverdict\ttagged_charge\n";
+                          "\theader_excess\tcall_excess\theader_ruled_out\theader_peaks_above\tverdict\ttagged_charge\n";
         for (const auto* r : rows)
         {
           const auto& h = r->r;
@@ -5975,6 +5975,7 @@ protected:
           FASTag::appendNum(buf, h.header_excess, std::chars_format::fixed, 3); buf += '\t';
           FASTag::appendNum(buf, h.call_excess, std::chars_format::fixed, 3); buf += '\t';
           buf += h.header_ruled_out ? '1' : '0'; buf += '\t';
+          FASTag::appendNum(buf, h.header_peaks_above); buf += '\t';
           buf += FASTag::Hyp::verdictName(h.verdict); buf += '\t';
           FASTag::appendNum(buf, ovr ? h.replacement() : h.header);
           buf += '\n';

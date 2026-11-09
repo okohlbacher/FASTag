@@ -285,7 +285,16 @@ namespace FASTag::Hyp
     r.header = header;
     const std::vector<int> cands = headerCheckCandidates(header, hp);
     const bool one_plus = !cands.empty() && cands.front() == 1;
-    r.call = inferFromTop(spec, topMz(spec), prec.getMZ(), cands, one_plus, hp, cs);
+    const std::vector<double> top = topMz(spec);
+    r.call = inferFromTop(spec, top, prec.getMZ(), cands, one_plus, hp, cs);
+    // The strongest peaks above the header's 1+ fragment ceiling (b/y; an
+    // electron-activated read keeps charge-reduced species up there, so the
+    // count is left at 0 and range evidence never counts against it).
+    if (cs.charge_loss <= 0)
+    {
+      const double ceil = header * prec.getMZ() - (header - 1) * kProton + kCeilingMargin;
+      r.header_peaks_above = static_cast<int>(top.end() - std::upper_bound(top.begin(), top.end(), ceil));
+    }
     const ChargeCall& c = r.call;
     // The excess at the header and at the call, from the call's own table
     // (one entry per charge the range evidence left).
@@ -300,6 +309,8 @@ namespace FASTag::Hyp
     // A header above kChargeLimit is no candidate: it is never "ruled out".
     const bool header_candidate = std::find(cands.begin(), cands.end(), header) != cands.end();
     r.header_ruled_out = header_candidate && c.basis != CallBasis::OnePlus && !c.excess.empty() && !header_seen;
+    // Range evidence against the header: ruled out, by enough strong peaks.
+    const bool range_against = r.header_ruled_out && r.header_peaks_above >= kHeaderRangeMinPeaks;
     if (c.src == ChargeSource::Ambiguous)
     {
       // Two close charges. With the header one of them it agrees; else the
@@ -312,7 +323,7 @@ namespace FASTag::Hyp
         double runner_excess = 0;
         for (const auto& e : c.excess)
           if (e.first == c.runner_up) runner_excess = e.second.first;
-        const bool against = r.header_ruled_out || (runner_excess > 0 && runner_excess - r.header_excess >= hp.header_margin);
+        const bool against = range_against || (runner_excess > 0 && runner_excess - r.header_excess >= hp.header_margin);
         r.verdict = against ? HeaderVerdict::Disagree : HeaderVerdict::Ambiguous;
       }
       return r;
@@ -332,9 +343,9 @@ namespace FASTag::Hyp
     switch (c.basis)
     {
       case CallBasis::OnePlus: against = true; break;
-      case CallBasis::Range: against = r.header_ruled_out; break;
+      case CallBasis::Range: against = range_against; break;
       case CallBasis::Complement:
-        against = r.header_ruled_out || (r.call_excess > 0 && r.call_excess - r.header_excess >= hp.header_margin);
+        against = range_against || (r.call_excess > 0 && r.call_excess - r.header_excess >= hp.header_margin);
         break;
       case CallBasis::None: break;
     }

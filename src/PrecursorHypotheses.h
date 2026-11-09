@@ -144,8 +144,15 @@ namespace FASTag::Hyp
   inline constexpr const char* kHeaderCheckDefault = "off";
   inline constexpr const char* kHeaderCheckValues = "off,warn,override";
   /// -check_header_margin default: the complement-pair excess by which the
-  /// call must beat the header charge's own (DEV: DESIGN.md).
-  inline constexpr double kHeaderMarginDefault = 2.0;
+  /// call must beat the header charge's own. Chosen on DEV (PXD003531,
+  /// PXD001819 against a Sage charge truth; output/backlog-1.13/hdrcharge):
+  /// at 2 a third of the disagreements on real headers were false.
+  inline constexpr double kHeaderMarginDefault = 6.0;
+  /// Range evidence counts against a header charge only when at least this
+  /// many of the strongest kInferTopPeaks peaks lie above its fragment
+  /// ceiling (M_h + p + kCeilingMargin): one stray peak (a co-isolated
+  /// precursor's fragment) is not enough (DEV: DESIGN.md).
+  inline constexpr int kHeaderRangeMinPeaks = 3;
 
   // Registered defaults and limits of the #6 options.
   inline constexpr const char* kModeDefault = "assume2";
@@ -287,6 +294,7 @@ namespace FASTag::Hyp
     HeaderVerdict verdict = HeaderVerdict::NoCall;
     ChargeCall call;                 ///< the infer call over the check's candidates
     bool header_ruled_out = false;   ///< the range evidence rules the header charge out
+    int header_peaks_above = 0;      ///< strongest peaks above the header's fragment ceiling (b/y)
     double header_excess = 0;        ///< complement excess at the header charge (0 when ruled out)
     double call_excess = 0;          ///< complement excess at the call (0 without complement basis)
     /// The charge a disagreeing header is replaced by under override: the

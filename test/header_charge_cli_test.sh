@@ -7,15 +7,17 @@
 #     its summary); off writes no check row and no summary line;
 #   - warn writes one -check_header_out row per header-charged spectrum, the
 #     summary line, and the check rows of the census summary; on the wrong
-#     copy it calls a disagreement on at least half of the 42 wrong headers
-#     and on few of the 97 right ones, and every disagreement on a wrong
+#     copy (default margin 6) it calls a disagreement on at least 10 of the
+#     42 wrong headers (14 measured) and on at most 2 of the 97 right ones
+#     (0 measured), at most 3 of 139 on the right copy, and every disagreement on a wrong
 #     header calls a charge above 2;
 #   - override on the wrong copy tags exactly the disagreeing spectra at the
 #     call (charge_src overridden, prec_charge = the call = tagged_charge),
 #     every other spectrum's rows equal warn's, and it recovers more correct
 #     charges than the header gave; on the right copy it changes fewer
 #     spectra than warn calls wrong headers on the wrong copy;
-#   - a larger -check_header_margin never calls more disagreements;
+#   - a smaller -check_header_margin (2) calls every disagreement of the
+#     default and at least as many;
 #   - warn and override write the same bytes at 1, 3 and 8 threads;
 #   - refusals: an unknown mode, -stream, -dump_spectrum with override; the
 #     ignored-option warning for -check_header_out without the check.
@@ -55,10 +57,12 @@ full() {  # dir input args...
     > "$d/log" 2>&1 || { cat "$d/log" >&2; fail "run $d failed"; }
 }
 
+# -check_header_out columns by name (verdict, tagged_charge).
+VC=13; TC=14
 # ---- off and warn leave every output as it was ------------------------------
 for in in right wrong; do
   full "$TMP/${in}_absent" "$TMP/$in.mgf" -threads 2
-  full "$TMP/${in}_off" "$TMP/$in.mgf" -threads 2 -check_header_charge off -check_header_margin 2
+  full "$TMP/${in}_off" "$TMP/$in.mgf" -threads 2 -check_header_charge off -check_header_margin 6
   full "$TMP/${in}_warn" "$TMP/$in.mgf" -threads 2 -check_header_charge warn -check_header_out "$TMP/${in}_warn/hc.tsv"
   for x in "${OUTS[@]}"; do
     [ -s "$TMP/${in}_absent/t.$x" ] || fail "$in: no t.$x"
@@ -81,14 +85,14 @@ for in in right wrong; do
       || fail "$in: no header_charge_$k row of 139"
   done
   [ "$(wc -l < "$TMP/${in}_warn/hc.tsv" | tr -d ' ')" = 140 ] || fail "$in: -check_header_out does not have 139 rows"
-  [ "$(head -1 "$TMP/${in}_warn/hc.tsv")" = "$(printf 'index\tnative_id\tprecursor_mz\theader_charge\tcall_charge\tcall_src\tbasis\trunner_up\theader_excess\tcall_excess\theader_ruled_out\tverdict\ttagged_charge')" ] \
+  [ "$(head -1 "$TMP/${in}_warn/hc.tsv")" = "$(printf 'index\tnative_id\tprecursor_mz\theader_charge\tcall_charge\tcall_src\tbasis\trunner_up\theader_excess\tcall_excess\theader_ruled_out\theader_peaks_above\tverdict\ttagged_charge')" ] \
     || fail "$in: -check_header_out header"
   # warn tags at the header: tagged_charge is the header charge everywhere.
-  awk -F'\t' 'NR > 1 && $13 != $4 { bad++ } END { exit bad > 0 }' "$TMP/${in}_warn/hc.tsv" \
+  awk -F'\t' -v T=$TC 'NR > 1 && $T != $4 { bad++ } END { exit bad > 0 }' "$TMP/${in}_warn/hc.tsv" \
     || fail "$in: warn reports a tagged charge other than the header"
   # The summary counts equal the rows.
   for k in agree disagree ambiguous nocall; do
-    n=$(awk -F'\t' -v k=$k 'NR > 1 && $12 == k' "$TMP/${in}_warn/hc.tsv" | wc -l | tr -d ' ')
+    n=$(awk -F'\t' -v k=$k -v V=$VC 'NR > 1 && $V == k' "$TMP/${in}_warn/hc.tsv" | wc -l | tr -d ' ')
     grep -q "^run	header_charge_$k	$n	" "$TMP/${in}_warn/t.census_summary.tsv" \
       || fail "$in: header_charge_$k row is not the $n rows of -check_header_out"
   done
@@ -96,16 +100,16 @@ done
 
 # ---- warn on the wrong headers: recall and false calls -------------------------
 H=$TMP/wrong_warn/hc.tsv
-cut -f12,5 "$H" | tail -n +2 > "$TMP/wrong_calls.txt"   # call_charge \t verdict
+cut -f$VC,5 "$H" | tail -n +2 > "$TMP/wrong_calls.txt"   # call_charge \t verdict
 paste "$TMP/truth.txt" "$TMP/wrong_calls.txt" > "$TMP/wrong_scored.txt"  # truth call verdict
 caught=$(awk '$1 >= 3 && $3 == "disagree"' "$TMP/wrong_scored.txt" | wc -l | tr -d ' ')
 false_w=$(awk '$1 == 2 && $3 == "disagree"' "$TMP/wrong_scored.txt" | wc -l | tr -d ' ')
 bad_dir=$(awk '$1 >= 3 && $3 == "disagree" && $2 <= 2' "$TMP/wrong_scored.txt" | wc -l | tr -d ' ')
-right_dis=$(awk -F'\t' 'NR > 1 && $12 == "disagree"' "$TMP/right_warn/hc.tsv" | wc -l | tr -d ' ')
+right_dis=$(awk -F'\t' -v V=$VC 'NR > 1 && $V == "disagree"' "$TMP/right_warn/hc.tsv" | wc -l | tr -d ' ')
 echo "header_charge_cli_test: wrong headers caught $caught of 42; false disagreements $false_w of 97 (wrong copy), $right_dis of 139 (right copy)"
-[ "$caught" -ge 21 ] || fail "warn caught only $caught of the 42 wrong header charges (need >= 21)"
-[ "$false_w" -le 10 ] || fail "warn called $false_w of the 97 right 2+ headers wrong (allowed <= 10)"
-[ "$right_dis" -le 14 ] || fail "warn called $right_dis of 139 right headers wrong (allowed <= 14)"
+[ "$caught" -ge 10 ] || fail "warn caught only $caught of the 42 wrong header charges (need >= 10)"
+[ "$false_w" -le 2 ] || fail "warn called $false_w of the 97 right 2+ headers wrong (allowed <= 2)"
+[ "$right_dis" -le 3 ] || fail "warn called $right_dis of 139 right headers wrong (allowed <= 3)"
 [ "$bad_dir" = 0 ] || fail "$bad_dir disagreements on a wrong 2+ header call 2 or lower"
 
 # ---- override ----------------------------------------------------------------
@@ -113,11 +117,11 @@ full "$TMP/wrong_ovr" "$TMP/wrong.mgf" -threads 2 -check_header_charge override 
 O=$TMP/wrong_ovr
 [ "$(head -1 "$O/t.tsv" | cut -f13-)" = "$(printf 'prec_charge\tcharge_src\tiso_offset\tselected')" ] \
   || fail "override: the hypothesis columns are missing"
-cut -f1-12 "$O/hc.tsv" | cmp -s - <(cut -f1-12 "$H") || fail "override: the check rows differ from warn's"
-awk -F'\t' 'NR > 1 && $12 == "disagree" && $13 != $5 { bad++ } NR > 1 && $12 != "disagree" && $13 != $4 { bad++ }
+cut -f1-$VC "$O/hc.tsv" | cmp -s - <(cut -f1-$VC "$H") || fail "override: the check rows differ from warn's"
+awk -F'\t' -v V=$VC -v T=$TC 'NR > 1 && $V == "disagree" && $T != $5 { bad++ } NR > 1 && $V != "disagree" && $T != $4 { bad++ }
             END { exit bad > 0 }' "$O/hc.tsv" || fail "override: tagged_charge is not the call (disagree) or the header"
 # index -> tagged charge; every TSV row's prec_charge and charge_src follow it.
-awk -F'\t' 'NR > 1 { print "index=" $1 "\t" $13 "\t" ($12 == "disagree" ? "overridden" : "header") }' "$O/hc.tsv" > "$TMP/ovr_map.tsv"
+awk -F'\t' -v V=$VC -v T=$TC 'NR > 1 { print "index=" $1 "\t" $T "\t" ($V == "disagree" ? "overridden" : "header") }' "$O/hc.tsv" > "$TMP/ovr_map.tsv"
 awk -F'\t' 'NR == FNR { z[$1] = $2; s[$1] = $3; next }
             FNR > 1 && ($13 != z[$1] || $14 != s[$1] || $16 != 1) { bad++ } END { exit bad > 0 }' \
   "$TMP/ovr_map.tsv" "$O/t.tsv" || fail "override: a row's prec_charge/charge_src is not its spectrum's verdict"
@@ -131,15 +135,15 @@ awk -F'\t' 'NR == FNR { z[$1] = $2; s[$1] = $3; next }
   "$TMP/ovr_map.tsv" "$TMP/nf.tsv" || fail "override (no -fasta): a row's prec_charge/charge_src is not its verdict"
 novr=$(awk -F'\t' 'NR > 1 && $14 == "overridden" { print $1 }' "$TMP/nf.tsv" | sort -u | wc -l | tr -d ' ')
 grep -q "disagreeing spectra were tagged at the supported charge" "$O/log" || fail "override: no summary line"
-ndis=$(awk -F'\t' 'NR > 1 && $12 == "disagree"' "$O/hc.tsv" | wc -l | tr -d ' ')
-[ "$novr" -ge 15 ] && [ "$novr" -le "$ndis" ] && [ $((novr * 10)) -ge $((ndis * 8)) ] \
+ndis=$(awk -F'\t' -v V=$VC 'NR > 1 && $V == "disagree"' "$O/hc.tsv" | wc -l | tr -d ' ')
+[ "$novr" -ge 8 ] && [ "$novr" -le "$ndis" ] && [ $((novr * 10)) -ge $((ndis * 8)) ] \
   || fail "override: $novr spectra have overridden rows, $ndis disagree"
 grep -q "^run	header_charge_overridden	$ndis	139	" "$O/t.census_summary.tsv" \
   || fail "override: header_charge_overridden is not the disagreement count $ndis"
 grep -q "^run	charge_overridden	$ndis	" "$O/t.census_summary.tsv" \
   || fail "override: charge_overridden is not the disagreement count $ndis"
 # Rows of non-disagreeing spectra equal warn's (first 12 columns).
-awk -F'\t' 'NR > 1 && $12 != "disagree" { print "index=" $1 }' "$O/hc.tsv" | sort > "$TMP/keep.ids"
+awk -F'\t' -v V=$VC 'NR > 1 && $V != "disagree" { print "index=" $1 }' "$O/hc.tsv" | sort > "$TMP/keep.ids"
 sel() { awk -F'\t' 'NR == FNR { k[$1] = 1; next } FNR > 1 && ($1 in k)' "$TMP/keep.ids" "$1" | cut -f1-12; }
 sel "$TMP/wrong_warn/t.tsv" | cmp -s - <(sel "$O/t.tsv") || fail "override changed the rows of a non-disagreeing spectrum"
 # Correct charges: the census charge_used against the truth, override vs the header.
@@ -153,14 +157,15 @@ nr=$(awk -F'\t' 'NR > 1 && $14 == "overridden" { print $1 }' "$TMP/right_ovr/t.t
 [ "$nr" -le "$right_dis" ] || fail "override changed $nr spectra of the right copy, warn called $right_dis"
 
 # ---- margin --------------------------------------------------------------------
-"$BIN" -in "$TMP/wrong.mgf" -out "$TMP/m8.tsv" "${COMMON[@]}" -check_header_charge warn -check_header_margin 8 \
-  -check_header_out "$TMP/m8.hc.tsv" -threads 2 > "$TMP/m8.log" 2>&1 || { cat "$TMP/m8.log" >&2; fail "margin 8 failed"; }
-n8=$(awk -F'\t' 'NR > 1 && $12 == "disagree"' "$TMP/m8.hc.tsv" | wc -l | tr -d ' ')
-n2=$(awk -F'\t' 'NR > 1 && $12 == "disagree"' "$H" | wc -l | tr -d ' ')
-[ "$n8" -le "$n2" ] || fail "-check_header_margin 8 called more disagreements ($n8) than 2 ($n2)"
-awk -F'\t' 'NR == FNR { if (FNR > 1 && $12 == "disagree") d[$1] = 1; next }
-            FNR > 1 && $12 == "disagree" && !($1 in d) { bad++ } END { exit bad > 0 }' "$H" "$TMP/m8.hc.tsv" \
-  || fail "-check_header_margin 8 called a disagreement margin 2 did not"
+"$BIN" -in "$TMP/wrong.mgf" -out "$TMP/m2.tsv" "${COMMON[@]}" -check_header_charge warn -check_header_margin 2 \
+  -check_header_out "$TMP/m2.hc.tsv" -threads 2 > "$TMP/m2.log" 2>&1 || { cat "$TMP/m2.log" >&2; fail "margin 2 failed"; }
+n2=$(awk -F'\t' -v V=$VC 'NR > 1 && $V == "disagree"' "$TMP/m2.hc.tsv" | wc -l | tr -d ' ')
+n6=$(awk -F'\t' -v V=$VC 'NR > 1 && $V == "disagree"' "$H" | wc -l | tr -d ' ')
+[ "$n6" -le "$n2" ] || fail "the default margin called more disagreements ($n6) than margin 2 ($n2)"
+awk -F'\t' -v V=$VC 'NR == FNR { if (FNR > 1 && $V == "disagree") d[$1] = 1; next }
+            FNR > 1 && $V == "disagree" && !($1 in d) { bad++ } END { exit bad > 0 }' "$TMP/m2.hc.tsv" "$H" \
+  || fail "the default margin called a disagreement margin 2 did not"
+echo "header_charge_cli_test: margin 2 calls $n2 disagreements, the default $n6"
 
 # ---- threads -------------------------------------------------------------------
 for m in warn override; do

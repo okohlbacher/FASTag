@@ -14,7 +14,7 @@ the complement-pair excess. The candidates are `-charge_min`..`-charge_max` (def
 | verdict | when |
 |---|---|
 | `agree` | the call is `h`, or one of the two charges of an ambiguous call, and rests on evidence |
-| `disagree` | the call differs from `h` and the evidence is against `h`: (range) a strong peak lies above `h`'s 1+ fragment ceiling M_h + p, so `h` is impossible; (complement) the call's complement-pair excess is above 0 and beats `h`'s by at least `-check_header_margin` (default 2); for an ambiguous call without `h`, both charges must beat it; or (1+ test) the call is 1 |
+| `disagree` | the call differs from `h` and the evidence is against `h`: (range) the range evidence rules `h` out and at least 3 of the strongest 150 peaks lie above `h`'s 1+ fragment ceiling M_h + p + 1.5 Da; (complement) the call's complement-pair excess is above 0 and beats `h`'s by at least `-check_header_margin` (default 6); for an ambiguous call without `h`, both charges must beat it; or (1+ test) the call is 1 |
 | `ambiguous` | two close charges, neither `h`, without evidence against `h` |
 | `nocall` | no charge evidence either way |
 
@@ -32,7 +32,17 @@ the complement-pair excess. The candidates are `-charge_min`..`-charge_max` (def
 - `-check_header_out <tsv>` writes one row per header-charged MS2 spectrum in input order. The columns are `index`,
   `native_id`, `precursor_mz`, `header_charge`, `call_charge`, `call_src` (`inferred`, `ambiguous` or `assumed`),
   `basis` (`complement`, `range`, `one_plus` or `none`), `runner_up`, `header_excess`, `call_excess`,
-  `header_ruled_out`, `verdict` and `tagged_charge`.
+  `header_ruled_out`, `header_peaks_above`, `verdict` and `tagged_charge`.
+
+## Defaults (chosen on DEV)
+
+On the DEV runs PXD003531 (Q Exactive) and PXD001819 (LTQ), scored against a Sage charge truth on the charge-stripped
+copy, single stray peaks above the ceiling (a co-isolated precursor's fragments) and complement excesses of 2-4
+flagged right headers far more often than wrong ones. A margin of 2 with any one peak flagged 2.7 % of the right
+headers on PXD003531, and three in four of its disagreements were false. With 6 and 3 peaks it flags 0.06 %, with
+8 true and 4 false disagreements among 6,720 truth spectra. On a copy with every fifth charge changed it finds
+20 % of the changed headers (QE) at a precision of 0.99. The numbers are in
+`output/backlog-1.13/hdrcharge/RESULTS.md`.
 
 ## Options and limits
 
