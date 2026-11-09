@@ -1,0 +1,15 @@
+#class	TMT	6 runs from 6 PXDs (pool 66 PXDs)
+#class	TMTpro	6 runs from 6 PXDs (pool 43 PXDs)
+#class	iTRAQ4	6 runs from 6 PXDs (pool 7 PXDs)
+B	iTRAQ8	PXD030690	WZG-Ecoli-iTRAQ-10.raw	no PRIDE .raw <= 3 GiB
+B	iTRAQ8	PXD030690	WZG-Ecoli-iTRAQ-2.raw	no PRIDE .raw <= 3 GiB
+B	iTRAQ8	PXD030690	WZG-Ecoli-iTRAQ-6.raw	no PRIDE .raw <= 3 GiB
+B	iTRAQ8	PXD030690	WZG-Ecoli-iTRAQ-1.raw	no PRIDE .raw <= 3 GiB
+B	iTRAQ8	PXD030690	WZG-Ecoli-iTRAQ-9.raw	no PRIDE .raw <= 3 GiB
+B	iTRAQ8	PXD030690	WZG-Ecoli-iTRAQ-4.raw	no PRIDE .raw <= 3 GiB
+B	iTRAQ8	PXD030690	WZG-Ecoli-iTRAQ-3.raw	no PRIDE .raw <= 3 GiB
+B	iTRAQ8	PXD030690	WZG-Ecoli-iTRAQ-8.raw	no PRIDE .raw <= 3 GiB
+B	iTRAQ8	PXD030690	WZG-Ecoli-iTRAQ-7.raw	no PRIDE .raw <= 3 GiB
+B	iTRAQ8	PXD030690	WZG-Ecoli-iTRAQ-5.raw	no PRIDE .raw <= 3 GiB
+#class	iTRAQ8	0 runs from 0 PXDs (pool 2 PXDs)
+#class	dimethyl	0 runs from 0 PXDs (pool 0 PXDs)
