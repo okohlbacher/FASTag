@@ -15,6 +15,8 @@
 //   (c) the ETD precursor filter drops the unreacted precursor and the
 //       charge-reduced species (with isotopes and hydrogen transfer) but no
 //       fragment, and keeps peaks 5 Da away from them.
+//   (c2) issue T25: under cz a peak the deisotoper moves to the 1+ scale
+//       above the precursor cut is dropped; under by it stays.
 //   (d) the b/y branch reproduces the E-values FASTag 1.11.0 (78390cd)
 //       wrote (test/complement_ref_1_11.inc), with the pair set explicitly;
 //       bit for bit on glibc, and p_complement within 4 ulps elsewhere.
@@ -221,7 +223,7 @@ namespace
     }
   }
 
-  /// ion_series_test --write-mzml <fasta> <out.mzML> <cz|cz0|by> [n]: a synthetic
+  /// ion_series_test --write-mzml <fasta> <out.mzML> <cz|cz0|czt25|by> [n]: a synthetic
   /// run for the CLI tests (ion_series_cli_test, threads_test). n (40)
   /// tryptic peptides of @p fasta (up to one missed cleavage, length 8-18, no
   /// C/U/X/B/Z, unique, in protein order), at precursor charge 2 and 3 alternately: cz = c and z-dot ions
@@ -229,17 +231,20 @@ namespace
   /// the activation ETD (MS:1000598), the unreacted precursor and its
   /// charge-reduced species as ETD spectra carry them, and 15 noise peaks; by
   /// = b and y ions of the same peptides with CID (MS:1000133); cz0 = cz
-  /// without a precursor charge. Seeded,
+  /// without a precursor charge; czt25 = cz plus, per spectrum, a 2+ isotope
+  /// cluster whose 1+ equivalent lies 150 Da above the precursor cut
+  /// (CzSynth::addReducedAboveCut, issue T25). Seeded,
   /// deterministic; written by OpenMS MzMLFile (indexed).
   int writeMzml(int argc, char** argv)
   {
     if (argc < 5)
     {
-      std::cerr << "usage: ion_series_test --write-mzml <fasta> <out.mzML> <cz|cz0|by> [n]\n";
+      std::cerr << "usage: ion_series_test --write-mzml <fasta> <out.mzML> <cz|cz0|czt25|by> [n]\n";
       return 2;
     }
     // cz0: cz without a precursor charge (for -unknown_charge infer).
-    const bool cz = std::string(argv[4]) == "cz" || std::string(argv[4]) == "cz0";
+    const bool t25 = std::string(argv[4]) == "czt25";
+    const bool cz = std::string(argv[4]) == "cz" || std::string(argv[4]) == "cz0" || t25;
     const bool no_charge = std::string(argv[4]) == "cz0";
     const size_t n = argc > 5 ? static_cast<size_t>(std::stoul(argv[5])) : 40;
     std::vector<OpenMS::FASTAFile::FASTAEntry> prot;
@@ -272,6 +277,7 @@ namespace
       if (cz)
         for (int k = 0; k < z; ++k)  // the unreacted precursor (k = 0) and the charge-reduced species
           sp.spec.emplace_back((sp.M + z * P) / (z - k), 3.0 + k);
+      if (t25) CzSynth::addReducedAboveCut(sp);
       sp.spec.sortByPosition();
       sp.spec.setMSLevel(2);
       sp.spec.setRT(10.0 + i);
@@ -835,6 +841,50 @@ int main(int argc, char** argv)
         check(kept_probe == kept_lad + probes, what + ": peaks 5 Da from a precursor species are kept (" +
                                                    std::to_string(kept_probe) + " vs " + std::to_string(kept_lad + probes) + ")");
       }
+  }
+
+  // ---- (c2) issue T25: charge-reduced peaks re-filtered against the cut ----
+  // A 2+ isotope cluster below the precursor cut whose 1+ equivalent lies
+  // above it: under cz the deisotoped (moved) peak is cut again, under by it
+  // stays (the b/y output is the 1.12 reference), and without deisotoping
+  // nothing moves, so cz and by keep the same peaks.
+  {
+    const double P = OpenMS::Constants::PROTON_MASS_U;
+    int cases = 0;
+    for (const auto& [pname, base] : bothParams())
+      for (int z : {2, 3})
+        for (const char* pep : kPeptides)
+        {
+          CzSynth::Spec s = CzSynth::make(pep, z, CzSynth::Ions::CZ, 1);
+          const double max_mz = s.M + P + 1.5;  // the tagger's precursor cut
+          const double mz1 = CzSynth::addReducedAboveCut(s);
+          const std::string what = std::string("(c2) ") + pname + " " + std::to_string(z) + "+ " + pep;
+          bool measured_below = true;
+          for (const auto& pk : s.spec) measured_below = measured_below && pk.getMZ() <= max_mz;
+          check(measured_below, what + ": every measured peak lies below the precursor cut");
+          const FASTag::Param pcz = withPair(base, IS::Series::CZ), pby = withPair(base, IS::Series::BY);
+          const OpenMS::MSSpectrum kcz = FASTag::preparedPeaks(s.spec, s.prec_mz, z, pcz);
+          const OpenMS::MSSpectrum kby = FASTag::preparedPeaks(s.spec, s.prec_mz, z, pby);
+          const auto has = [](const OpenMS::MSSpectrum& k, double mz) {
+            for (const auto& pk : k) if (std::fabs(pk.getMZ() - mz) < 0.01) return true;
+            return false;
+          };
+          double top_cz = 0;
+          for (const auto& pk : kcz) top_cz = std::max(top_cz, pk.getMZ());
+          check(top_cz <= max_mz, what + ": cz keeps no peak above the precursor cut (top " + std::to_string(top_cz) +
+                                      ", cut " + std::to_string(max_mz) + ")");
+          if (base.deisotope)
+          {
+            check(has(kby, mz1), what + ": by keeps the moved peak above the cut (fixture triggers T25)");
+            check(!has(kcz, mz1), what + ": cz drops the moved peak");
+            check(kcz.size() + 1 == kby.size(), what + ": cz drops exactly the moved peak (" +
+                                                    std::to_string(kcz.size()) + " vs " + std::to_string(kby.size()) + ")");
+          }
+          else
+            check(kcz.size() == kby.size(), what + ": without deisotoping nothing moves, cz keeps what by keeps");
+          ++cases;
+        }
+    std::cout << "c2. T25 re-filter of charge-reduced peaks: " << cases << " cases\n";
   }
 
   // ---- (d) the b/y branch reproduces FASTag 1.11.0 ----

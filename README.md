@@ -672,7 +672,11 @@ is the one whose neutral masses sum to M + H (under `-complement_rule
 precursor` at the c - 1 charges an electron-activated precursor of charge c
 leaves its fragments), and peaks at the unreacted
 precursor and its charge-reduced species (with their isotope and
-hydrogen-transfer forms) are dropped before tagging. `-recon_*`, `-digest_out`,
+hydrogen-transfer forms) are dropped before tagging. Under c/z• a peak that
+deisotoping moves to the 1+ scale above the precursor cut (neutral mass +
+proton + 1.5 Da) is dropped as well (1.13, issue T25): it cannot be a fragment
+of this precursor (doc/CZ-PRECURSOR-CUT.md). b/y tagging keeps the 1.12
+behaviour. `-recon_*`, `-digest_out`,
 `-label_out`, `-massgap_out`, `-delta_out` and the census take the offset from
 each tag; `-species` counts b/y tags only and reports how many c/z• rows it
 left out. Hybrid EThcD/ETciD spectra are read as b/y under `auto` (reading
