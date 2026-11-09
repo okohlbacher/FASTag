@@ -186,9 +186,12 @@ int main()
       // A true window around it, and its masses.
       std::uniform_int_distribution<int> ext(0, 12);
       const int s0 = std::max(0, pos - ext(rng)), e0 = std::min(120, pos + len + ext(rng));
-      const double wn = sumMass(seq.substr(static_cast<std::size_t>(s0), static_cast<std::size_t>(pos - s0)));
-      const double wc = sumMass(seq.substr(static_cast<std::size_t>(pos + len), static_cast<std::size_t>(e0 - pos - len)));
       const double tol = trial % 2 ? 0.02 : 0.6;
+      // Every fourth query asks for masses 0.8 tol away from the true ones,
+      // so the true window sits near the tolerance edge on both sides.
+      const double off = trial % 4 >= 2 ? 0.8 * tol : 0.0;
+      const double wn = sumMass(seq.substr(static_cast<std::size_t>(s0), static_cast<std::size_t>(pos - s0))) + off;
+      const double wc = sumMass(seq.substr(static_cast<std::size_t>(pos + len), static_cast<std::size_t>(e0 - pos - len))) - off;
       // text position: proteins are '#'-separated, 121 characters each
       const uint32_t tpos = static_cast<uint32_t>(prot * 121 + pos);
       std::vector<ProteomeIndex::Window> got;
