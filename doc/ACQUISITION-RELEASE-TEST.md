@@ -32,21 +32,41 @@ frozen RC a117801 and 1.12.1.
 | DDA (Q Exactive, Exploris, Tribrid, ddaPASEF, Q-TOF, ion trap), PRM, SureQuant, WWA passed | 149 / 149 | - |
 | DDA_astral (as drawn) passed | 8 / 16 | - |
 
-Every one of the 8 refused must-pass files comes from the DDA_astral stratum. Each run's own listing is a
-narrow-window DIA scheme: 20-300 windows of 2-20 Th that tile the range every cycle, with 100% of the MS2
-uncharged. The draw takes its strata from project metadata, which did not say DIA. The 7 DIA files that were not
-refused fall into three groups:
+The scored result is the table above: 8 of 202 must-pass files refused, Orbitrap DIA 7/12, SWATH 10/12. Nothing
+below changes it, and none of it is a re-score.
 
-- 4 have no repeating scheme. They have 1000-2000 distinct precursors, as DDA/IDA library runs in DIA projects do.
-- 2 are tiling Orbitrap DIA whose converted MS2 carry a charge. The rule only warns on such runs, by design.
-- 1 is a genuine miss: uncharged and periodic, but its 38 m/z do not form one cycle of 12.
+### Post-hoc reading of the disagreements (hypotheses, not part of the score)
+
+The truth label is the stratum each file was drawn into, which the draw took from project text (title,
+description, protocols, keywords, instrument list). The readings below come after scoring. Most of them rest on
+FASTag's own `Acquisition check:` window listing, the output of the rule under test, so they cannot vouch for it.
+
+- **The 8 refused must-pass files (all DDA_astral).** FASTag lists a tiling narrow-window scheme for each (20-300
+  windows of 2-20 Th, 100% uncharged MS2). One check outside FASTag was made after scoring: the Thermo filter
+  strings that ThermoRawFileParser copies into the mzML (`MS:1000512`, first 3000 MS2 of each file). In all 8
+  refused files none of these MS2 carries the data-dependent flag `d` (e.g. `ASTMS + c NSI Full ms2
+  352.4101@hcd29.00`). In all 8 DDA_astral files that passed, every one does (e.g. `ASTMS + c NSI d Full ms2`).
+  That suggests the 8 are DIA runs filed in projects whose text did not say DIA. It is a hypothesis: no instrument
+  method or PRIDE file annotation was checked, and the preregistered score counts them as false refusals.
+- **The 7 DIA files that passed.** As listed by FASTag:
+  - 4 show no repeating window scheme (1000-2000 distinct precursor m/z). They may be DDA library runs deposited
+    in DIA projects; this is not verified. For the two Orbitrap files (DIA_orbitrap.02, .09) the Thermo filter
+    strings carry the data-dependent flag in every MS2 checked. For the two SCIEX files (DIA_swath.07, .09) the
+    .wiff conversions have no filter strings; their MS2 isolation windows are 1 Th wide, which is consistent
+    with, but does not prove, IDA.
+  - 2 are tiling Orbitrap DIA whose converted MS2 carry a charge (no data-dependent flag in their filter
+    strings). The rule only warns on such runs, by design, so these are misses of the rule as frozen.
+  - 1 is a genuine miss (DIA_orbitrap.12): uncharged and periodic, but its 38 m/z do not form one cycle of 12.
 
 ## What this means for users
 
-- Raw diaPASEF and Astral (n)DIA were refused in every case. So were most SWATH and Orbitrap DIA runs. The check
-  did not pass every raw-DIA run it was given. A charged, tiling Orbitrap DIA run is tagged with a warning, not
-  refused. Read the `Acquisition check:` line on stderr.
-- The check does not refuse pseudo-DDA output, and no DDA run outside the mis-stratified Astral projects was
-  refused.
-- The held-out test does not validate the rule. A revised rule needs a fresh sample, preferably stratified by the
-  file's own window listing rather than by project text. Whether the default stays `refuse` is open.
+- The rule failed its held-out release test: 8 of 202 files that had to pass were refused (upper 95% bound 7.0%),
+  and only 7 of 12 Orbitrap DIA and 10 of 12 SWATH files were refused. Raw diaPASEF and Astral DIA strata were
+  refused 12/12 each.
+- If a file is refused that you know is DDA, read the `Acquisition check:` line on stderr and rerun with
+  `-acquisition_check warn` or `off`. A charged, tiling Orbitrap DIA run is tagged with a warning, not refused.
+- All 37 pseudo-DDA files and all 149 files of the other must-pass strata (DDA on Q Exactive, Exploris, Tribrid,
+  ddaPASEF, Q-TOF, ion trap; PRM; SureQuant; WWA) passed.
+- The held-out test does not validate the rule. A revised rule needs a fresh sample, preferably stratified from the
+  files themselves (for example vendor scan filters) rather than from project text. Whether the default stays
+  `refuse` is open.

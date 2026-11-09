@@ -318,10 +318,12 @@ thresholds were frozen after a development sweep over 183 public data sets. The
 preregistered release test on a fresh PRIDE sample (E7-03, 213 files and 37
 pseudo-DDA files) **failed**. Raw diaPASEF and Astral DIA were refused 12/12
 each. Orbitrap DIA was refused only 7/12 and the SWATH stratum 10/12, against
->= 90%. Charged DIA scans are only warned about, and DDA-like files in DIA
-projects pass. 8 of 202 files that had to pass were refused: all of them come
-from "DDA" Astral projects, and their own window listings show narrow-window
-DIA. All 37 pseudo-DDA files passed (see
+>= 90%. 8 of 202 files that had to pass were refused (upper 95% bound 7.0%),
+all drawn from Astral projects labelled DDA. All 37 pseudo-DDA files passed.
+Charged tiling DIA is only warned about, by design. Post-hoc readings (not a
+re-score; only partly checked against vendor scan filters) are that the 8 refused files may be DIA
+runs filed as DDA, and that 4 of the missed DIA files, which showed no repeating
+window scheme, may be DDA library runs (see
 [doc/ACQUISITION-RELEASE-TEST.md](doc/ACQUISITION-RELEASE-TEST.md)). A mixed file
 is judged on its first MS2; `-stream` is not checked.
 
