@@ -541,6 +541,20 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta)
   set_tests_properties(census_ids_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # 1.13 item 7: the census triage evaluation scorer (tools/census_triage_eval.py):
+  # unit tests on hand-counted tables, and a CLI test on a real -census_ids run.
+  # Both skip (77) without python3 (FASTAG_PYTHON names another).
+  add_test(NAME census_triage_eval_test
+           COMMAND bash -c "PY=\${FASTAG_PYTHON:-python3}; command -v \"\$PY\" >/dev/null || exit 77; exec \"\$PY\" \"\$0\" \"\$1\""
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/census_triage_eval_test.py
+                   ${CMAKE_CURRENT_SOURCE_DIR}/tools/census_triage_eval.py)
+  set_tests_properties(census_triage_eval_test PROPERTIES SKIP_RETURN_CODE 77)
+  add_test(NAME census_triage_eval_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/census_triage_eval_cli_test.sh $<TARGET_FILE:FASTag>
+                   $<TARGET_FILE:census_ids_test>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/tools/census_triage_eval.py)
+  set_tests_properties(census_triage_eval_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # ---- 1.12 G: CLI tests ----
   # G1: the JSON writers, the mzML header parse and the spectrum record
   # against the tagger's preprocessing; probeInput()/dumpSpectrum() on the
