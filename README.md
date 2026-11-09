@@ -538,7 +538,7 @@ MGF→mzML direction is exact.
 | `-mzpeak_read_memory <MB>` | 0 | No effect; accepted for existing command lines |
 | `-acquisition_check <refuse\|warn\|off>` | refuse | Refuse raw DIA input with exit code 11, tag it anyway with a warning, or skip the check (see Raw DIA input is refused) |
 | `-acquisition_probe_spectra <n>` | 4000 | MS2 spectra the acquisition check reads, metadata only, reading at most ten times as many spectra in all (advanced) |
-| `-pick_profile <legacy\|auto\|off>` | legacy | Centroid profile MS2 (MS:1000128) with OpenMS `PeakPickerHiRes` before tagging: `legacy` on mzPeak input only (as 1.11), `auto` on mzML and mzPeak input (not MGF), `off` never. Centroided MS2 are never re-picked. Recommended: `auto` for high-resolution profile MS2 only, not ion trap (held-out item09-H1; see Performance) `-out_spectra` writes the spectra as they were tagged. Not with `-stream` |
+| `-pick_profile <legacy\|auto\|off>` | legacy | Centroid profile MS2 (MS:1000128) with OpenMS `PeakPickerHiRes` before tagging: `legacy` on mzPeak input only (as 1.11), `auto` on mzML and mzPeak input (not MGF), `off` never. Centroided MS2 are never re-picked. Experimental: `auto` failed its held-out test (item09-H1) and is not recommended (see Performance). `-out_spectra` writes the spectra as they were tagged. Not with `-stream` |
 | `-pick_unknown_type` | off | With `-pick_profile auto`: also centroid MS2 that declare no spectrum type, when OpenMS's `PeakTypeEstimator` reads their data as profile (advanced) |
 | `-ion_series <by\|cz\|auto>` | by | Ion series the MS2 spectra are read as: `by` (b/y ions, as 1.11), `cz` (c/z• ions of ETD/ECD, every spectrum), `auto` (c/z• for spectra whose activation is ETD or ECD, b/y for all others, hybrid EThcD/ETciD included, with a warning). Under `cz`, and under `auto` when the run has electron-activated spectra, the tag TSV gains a last `ion_series` column and the census a `best_ion_series` column (see Ion series). Not with `-stream`. Experimental: `auto` is not validated yet |
 | `-unknown_charge <assume2\|enumerate\|infer>` | assume2 | How a precursor without a charge is tagged: `assume2` as 2+ (as 1.11); `enumerate` at each listed possible charge (MS:1000633, MGF `2+ and 3+`), else at every charge `-charge_min`..`-charge_max`; `infer` at the charge its complement pairs support (1+ when `-charge_min` is 1, or 1 is listed, and almost no intensity lies above the precursor; both charges of a close call, `ambiguous`; without evidence 2+, or the lowest candidate when 2 is none, `assumed`). Every charge tagged is a listed possible charge, else one of `-charge_min`..`-charge_max`. A header charge is never replaced. A spectrum tagged under H hypotheses has every E-value multiplied by H before `-max_evalue` and `-max_tags`; its rows are merged by E-value. The reports that aggregate over spectra (digest, label, massgap, delta, species, shortlist, census) read the rows of one selected hypothesis, chosen from the charge evidence, never from the E-values. Experimental, not validated; not with `-stream` |
@@ -1205,21 +1205,18 @@ that, the PXD000865 profile mzML under `auto` and its mzpeak-convert 0.18.0
 archive give byte-identical tags (2,011,636). Its default stays `legacy`
 (mzML tagged as sampled).
 
-**Observation, not a validated result: `-pick_profile auto` helped on
-Orbitrap profile MS2 (tested on two Q Exactive runs); Astral and TOF profile
-MS2 were not tested, and ion-trap MS2 should stay at `legacy`.** The 1.12
-held-out test (item09-H1, scored once; `acceptance/1.12/results/item09/`)
-failed as a whole: non-inferiority (B1) and "no fewer tagged spectra" (B2)
-both failed. Within it, against Sage 1% FDR truths, rank-1 correct tags rose
-by +10.5 to +32.0 points in all 9 high-resolution cells (tag length 3-5,
-charge 2, 3, 4+), drawn from two Orbitrap runs only (PXD016519, Q Exactive
-Plus; PXD018024, Q Exactive HF); the set is named `orbitrap_tof`, but no TOF
-or Astral run was scored. This subgroup was picked after the protocol had
-failed, so it is descriptive. On the ion-trap run two charge-3 cells failed
-non-inferiority (+0.49 points, lower bound below -1.0) and the charge-4+
-cells were underpowered. Even on Orbitrap MS2 `auto` tagged fewer spectra in
-one run at tag length 3 (PXD016519: 15,987 against 16,554). The default
-stays `legacy`.
+**`-pick_profile auto` failed its held-out test; the default stays `legacy`
+and `auto` is not recommended.** The 1.12 test (#9, item09-H1, scored once
+against Sage 1% FDR truths; `acceptance/1.12/results/item09/`) failed both
+non-inferiority (B1) and "no fewer tagged spectra" (B2). Measured on the
+ion-trap run (PXD009049): two charge-3 cells failed non-inferiority (+0.49
+points, lower bound below -1.0), the charge-4+ cells were underpowered, and
+`auto` tagged fewer spectra at tag length 4 and 5. Measured on two Orbitrap
+runs (PXD016519, Q Exactive Plus; PXD018024, Q Exactive HF): rank-1 correct
+tags rose by +10.5 to +32.0 points in all 9 cells (tag length 3-5, charge 2,
+3, 4+), but on PXD016519 `auto` tagged 567 fewer spectra at tag length 3
+(15,987 against 16,554). The set is named `orbitrap_tof`, but no Astral or
+TOF run was scored.
 
 Output is identical at every thread count (`threads_test` checks every output
 on the fixture). Row memory on the mzML path is bounded by a ring of three
