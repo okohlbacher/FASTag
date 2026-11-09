@@ -851,10 +851,13 @@ protected:
                   "Write -fasta_out and -search_config_out although the tag ends call a protease the "
                   "tryptic placement does not fit", true);
     registerOutputFile_("search_config_out", "<file>", "",
-                        "Search-engine configuration for -fasta_out (or the input database): Sage JSON, or "
-                        "Comet parameters (merged into -search_config_template when given)", false);
-    registerStringOption_("search_engine", "<engine>", "sage", "Engine of -search_config_out", false);
-    setValidStrings_("search_engine", ListUtils::create<std::string>("sage,comet"));
+                        "Search-engine configuration for -fasta_out (or the input database): Sage JSON, "
+                        "Comet parameters (merged into -search_config_template when given), or a complete "
+                        "MSFragger fragger.params", false);
+    registerStringOption_("search_engine", "<engine>", "sage",
+                          "Engine of -search_config_out; msfragger (MSFragger 4.4.1, experimental) needs decoys "
+                          "in the database: -fasta_out then appends reversed ones", false);
+    setValidStrings_("search_engine", ListUtils::create<std::string>("sage,comet,msfragger"));
     registerInputFile_("search_config_template", "<file>", "",
                        "Comet only: a `comet -p` parameter file the managed keys are merged into", false);
     registerDoubleOption_("search_precursor_tolerance", "<f>", 10.0,
@@ -868,7 +871,7 @@ protected:
     setMinInt_("search_isotope_errors", 0);
     setMaxInt_("search_isotope_errors", 3);
     registerStringOption_("search_decoy_prefix", "<s>", "",
-                          "Decoy prefix the engine generates; empty = rev_ (Sage) or DECOY_ (Comet)", false);
+                          "Decoy prefix the engine generates; empty = rev_ (Sage, MSFragger) or DECOY_ (Comet)", false);
     // #17: the run's mass-gap peaks (the -massgap_out peaks) as variable
     // modifications or Comet mass offsets in -search_config_out. Candidates
     // for an FDR-controlling engine, NOT identifications. Off by default.
@@ -1936,7 +1939,7 @@ protected:
     if (!getStringOption_("search_config_template").empty() && search_engine != "comet")
     {
       OPENMS_LOG_ERROR << "-search_config_template is a `comet -p` parameter file; it needs -search_engine comet "
-                          "(a Sage configuration is written complete)." << std::endl;
+                          "(a Sage or MSFragger configuration is written complete)." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
     // #17 checks: the shifts go into -search_config_out; offsets are Comet's;
@@ -2050,6 +2053,12 @@ protected:
     std::vector<std::uint32_t> sl_bg_twins;  // database entries the background duplicates
     std::array<std::uint64_t, FASTag::Digest::kNumAA> sl_db_residues{};
     std::size_t sl_decoys = 0;
+    // 1.13 #18: entries starting with the MSFragger decoy prefix (MSFragger
+    // generates no decoys; without -fasta_out the database must hold them).
+    std::size_t sl_prefix_decoys = 0;
+    const bool msfragger_on = !search_config_out.empty() && getStringOption_("search_engine") == "msfragger";
+    const std::string msfragger_prefix =
+        getStringOption_("search_decoy_prefix").empty() ? std::string("rev_") : getStringOption_("search_decoy_prefix");
     // #3g: where -alkylation_out's placements come from (its report says).
     std::string alk_db_source, alk_db;
     if (alkylation_on)
@@ -2134,6 +2143,7 @@ protected:
           pi.decoy = FASTag::Shortlist::isDecoy(pi.accession, sl_affixes);
           pi.canonical = dup.canonical[i];
           if (pi.decoy) ++sl_decoys;
+          if (msfragger_on && pi.accession.compare(0, msfragger_prefix.size(), msfragger_prefix) == 0) ++sl_prefix_decoys;
           else FASTag::Digest::addResidues(rentries[i].sequence, sl_db_residues);
         }
         // DecoyHelper's whole-database heuristic only to say what the input is.
@@ -2549,12 +2559,32 @@ protected:
             }
           }
         }
+        else if (search_engine == "msfragger")
+        {
+          std::vector<std::pair<std::string, std::string>> keys;
+          err = FASTag::SearchConfig::msfraggerKeys(sl_plan, keys);
+          // A target-decoy database by DecoyHelper::findDecoyString's rule: the
+          // prefix on at least 40 % of the entries (here case-sensitive, as
+          // MSFragger matches it).
+          if (err.empty() && fasta_out.empty() &&
+              static_cast<double>(sl_prefix_decoys) < 0.4 * static_cast<double>(sl_proteins.size()))
+            err = "MSFragger generates no decoys, and only " + std::to_string(sl_prefix_decoys) + " of " +
+                  std::to_string(sl_proteins.size()) + " entries of '" + recon_db + "' start with the decoy prefix '" +
+                  msfragger_prefix + "' (a target-decoy database has them on >= 40 %); give -fasta_out (FASTag then "
+                  "appends reversed decoys), a target-decoy database, or its prefix as -search_decoy_prefix";
+        }
         if (!err.empty())
         {
           OPENMS_LOG_ERROR << "-search_config_out: " << err << "." << std::endl;
           return ILLEGAL_PARAMETERS;
         }
-        if (fasta_out.empty() && sl_decoys > 0)
+        if (search_engine == "msfragger")
+        {
+          if (fasta_out.empty())
+            OPENMS_LOG_INFO << "-search_config_out (msfragger): '" << recon_db << "' holds " << sl_prefix_decoys
+                            << " entries with the decoy prefix '" << msfragger_prefix << "'." << std::endl;
+        }
+        else if (fasta_out.empty() && sl_decoys > 0)
           OPENMS_LOG_WARN << "-search_config_out names '" << recon_db << "', which holds " << sl_decoys
                           << " decoys, and lets the engine generate decoys as well; give -fasta_out to search "
                              "a database without them." << std::endl;
@@ -5156,19 +5186,34 @@ protected:
         }
         if (!handoff_refused && !fasta_out.empty())
         {
-          const auto res = FASTag::Shortlist::writeReducedFasta(recon_db, keep, sl_background, fasta_out);
+          // 1.13 #18: MSFragger generates no decoys; its -fasta_out gets reversed ones.
+          const auto res = FASTag::Shortlist::writeReducedFasta(recon_db, keep, sl_background, fasta_out,
+                                                                msfragger_on ? msfragger_prefix : std::string());
           if (!res.ok)
           {
             OPENMS_LOG_ERROR << "Failed writing " << fasta_out << ": " << res.error
                              << "; -search_config_out not written." << std::endl;
             return CANNOT_WRITE_OUTPUT_FILE;
           }
-          OPENMS_LOG_INFO << "Reduced FASTA: " << res.entries << " entries (no decoys) -> " << fasta_out << std::endl;
+          if (res.decoys > 0)
+            OPENMS_LOG_INFO << "Reduced FASTA: " << res.entries << " entries and " << res.decoys
+                            << " reversed decoys ('" << msfragger_prefix << "', for MSFragger) -> " << fasta_out
+                            << std::endl;
+          else
+            OPENMS_LOG_INFO << "Reduced FASTA: " << res.entries << " entries (no decoys) -> " << fasta_out << std::endl;
         }
         if (!handoff_refused && !search_config_out.empty())
         {
           std::string text, err;
           if (search_engine == "sage") text = FASTag::SearchConfig::renderSage(sl_plan);
+          else if (search_engine == "msfragger")
+          {
+            text = FASTag::SearchConfig::renderMSFragger(sl_plan, &err);
+            if (err.empty() && !sl_plan.precursor_ppm && !sl_plan.mass_offsets.empty())
+              OPENMS_LOG_WARN << "-search_config_out (msfragger): mass offsets with a Da precursor window; "
+                                 "MSFragger 4.4.1 exited 1 on such a configuration in FASTag's test (\"Could not "
+                                 "find <delta> in the list\"). Prefer -search_precursor_unit ppm." << std::endl;
+          }
           else if (sl_template.empty()) text = FASTag::SearchConfig::renderComet(sl_plan, &err);
           else
           {

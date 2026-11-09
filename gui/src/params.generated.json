@@ -872,7 +872,7 @@
       "name": "search_config_out",
       "type": "output-file",
       "default": "",
-      "description": "Search-engine configuration for -fasta_out (or the input database): Sage JSON, or Comet parameters (merged into -search_config_template when given)",
+      "description": "Search-engine configuration for -fasta_out (or the input database): Sage JSON, Comet parameters (merged into -search_config_template when given), or a complete MSFragger fragger.params",
       "required": false,
       "toppAdvanced": false
     },
@@ -888,7 +888,7 @@
       "name": "search_decoy_prefix",
       "type": "string",
       "default": "",
-      "description": "Decoy prefix the engine generates; empty = rev_ (Sage) or DECOY_ (Comet)",
+      "description": "Decoy prefix the engine generates; empty = rev_ (Sage, MSFragger) or DECOY_ (Comet)",
       "required": false,
       "toppAdvanced": false
     },
@@ -896,12 +896,13 @@
       "name": "search_engine",
       "type": "string",
       "default": "sage",
-      "description": "Engine of -search_config_out",
+      "description": "Engine of -search_config_out; msfragger (MSFragger 4.4.1, experimental) needs decoys in the database: -fasta_out then appends reversed ones",
       "required": false,
       "toppAdvanced": false,
       "choices": [
         "sage",
-        "comet"
+        "comet",
+        "msfragger"
       ]
     },
     {
