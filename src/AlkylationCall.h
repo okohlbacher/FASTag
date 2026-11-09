@@ -202,11 +202,17 @@ namespace FASTag::Alkylation
   {
     bool called = false;
     int cls = -1;                ///< the call (called) or the leading class
-    std::string reason = "-";    ///< no call: few_cys_spectra or ambiguous
+    std::string reason = "-";    ///< no call: few_cys_spectra, ambiguous or (shipped proteome) tags_too_short
     std::uint64_t top = 0, binned = 0;
     double share = 0.0;          ///< top / binned (0 when nothing is binned)
   };
   Call callAlkylation(const Tally& t, const Settings& s);
+  /// 1.13 (#24): a no_call whose run cannot place any tag on the database --
+  /// its longest tag (seed length + 2 x extension) is shorter than the
+  /// reconciler's minimum tag length -- gets the reason tags_too_short
+  /// instead of few_cys_spectra. Applied to the shipped proteomes only (the
+  /// 1.12 database sources keep their report). true when it applied.
+  bool markTagsTooShort(Call& c, int longest_tag, int min_tag_length);
 
   /// What the report states about the database and the run.
   struct ReportInfo
@@ -218,6 +224,11 @@ namespace FASTag::Alkylation
     /// (UniProt release, proteome id, entries, sha256); "" writes no
     /// database_release row (every non-bundled database, as in 1.12).
     std::string database_release;
+    /// 1.13 (#24): with a shipped proteome, the reconciler's minimum tag
+    /// length on it and the run's longest tag (alk_run min_tag_length);
+    /// 0 writes no row.
+    int min_tag_length = 0;
+    int longest_tag = 0;
   };
   /// The alk_run, alk_cys and alkylation_call rows of -alkylation_out.
   std::vector<Digest::Row> alkylationRows(const Tally& t, const Call& c, const Settings& s,
@@ -226,7 +237,10 @@ namespace FASTag::Alkylation
   /// A FASTA, plain or gzip-compressed (a ".gz" name): OpenMS FASTAFile for
   /// plain files, GzipIfstream otherwise (FASTAFile cannot read .gz).
   /// Identifier: the header up to the first blank; description: the rest.
-  void loadFasta(const std::string& path, std::vector<OpenMS::FASTAFile::FASTAEntry>& out);
+  /// With @p sha256, also the SHA-256 (64 hex digits) of the FASTA text read:
+  /// the decompressed bytes of a .gz, the file's bytes otherwise.
+  void loadFasta(const std::string& path, std::vector<OpenMS::FASTAFile::FASTAEntry>& out,
+                 std::string* sha256 = nullptr);
 
   /// 1.13 (#24): one row of the shipped proteomes' manifest
   /// (data/alkylation/proteomes.tsv, written by tools/fetch_proteomes.sh).
@@ -245,9 +259,10 @@ namespace FASTag::Alkylation
   /// The row of `name` in the manifest text (header line `name<TAB>proteome...`,
   /// tab-separated, CR tolerated). false when the header lacks a needed column,
   /// `name` has no row, its entries is not a positive number, its file names a
-  /// path (a '/' or '\\', or a leading '.') rather than a file beside the manifest, or `name`
-  /// has two rows.
+  /// path (a '/' or '\\', or a leading '.') rather than a file beside the manifest, its
+  /// sha256 or fasta_sha256 is not 64 lowercase hex digits, or `name` has two rows.
   bool findShippedProteome(const std::string& manifest_text, const std::string& name, ShippedProteome& out);
-  /// The database_release value of a shipped proteome.
+  /// The database_release value of a shipped proteome; its sha256 is the
+  /// FASTA's (fasta_sha256), which FASTag checks the file against at load.
   std::string shippedRelease(const ShippedProteome& sp);
 }

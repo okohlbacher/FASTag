@@ -763,13 +763,26 @@ jobs:
           grep -q $'^run\tbackground\tshipped_human\t' "$BW/digest.tsv" \
             || { cat "$BW/digest.log"; echo "::error::-digest_out did not find the shipped digest data"; exit 1; }
           # ...and its shipped proteomes (1.13 #24): -alkylation_out with the
-          # default -alkylation_proteome auto places on the shipped human proteome.
+          # default -alkylation_proteome auto resolves the shipped human
+          # proteome; at the default -tag_length nothing places (tags_too_short).
           env -i HOME="$HOME" PATH=/usr/bin:/bin "$GITHUB_WORKSPACE/dist/FASTag/FASTag" \
             -in "$MZ" -out "$BW/al.tsv" -alkylation_out "$BW/alk.tsv" -threads 2 > "$BW/alk.log" 2>&1 \
             || { cat "$BW/alk.log"; echo "::error::the shipped bundle cannot write -alkylation_out with the shipped proteome"; exit 1; }
           grep -q $'^alk_run\tdatabase_source\tbundled:human\t' "$BW/alk.tsv" \
             && grep -q $'^alk_run\tdatabase_release\tUniProt ' "$BW/alk.tsv" \
+            && grep -q $'^alkylation_call\treason\ttags_too_short\t' "$BW/alk.tsv" \
             || { cat "$BW/alk.log"; echo "::error::-alkylation_out did not find the shipped human proteome"; exit 1; }
+          # Placement on a shipped file: E. coli data on the shipped ecoli
+          # proteome at -tag_length 8 must place tags (the placements the
+          # alk_cys excluded.* rows count; the example is too small for
+          # single-Cys votes, alk_run spectra, at this length).
+          env -i HOME="$HOME" PATH=/usr/bin:/bin "$GITHUB_WORKSPACE/dist/FASTag/FASTag" \
+            -in "$MZ" -out "$BW/al8.tsv" -alkylation_out "$BW/alk8.tsv" -alkylation_proteome ecoli -tag_length 8 \
+            -fragment_tolerance 0.5 -fragment_tolerance_unit Da -threads 2 > "$BW/alk8.log" 2>&1 \
+            || { cat "$BW/alk8.log"; echo "::error::-alkylation_out on the shipped ecoli proteome failed"; exit 1; }
+          alk8=$(awk -F'\t' '$1 == "alk_cys" && $2 == "excluded.no_cys" { print $4 }' "$BW/alk8.tsv")
+          [ "${alk8:-0}" -gt 0 ] && ! grep -q $'^alkylation_call\treason\ttags_too_short' "$BW/alk8.tsv" \
+            || { cat "$BW/alk8.log" "$BW/alk8.tsv"; echo "::error::no tag placed on the shipped ecoli proteome at -tag_length 8"; exit 1; }
 
           # Listed once into a variable, not `ls | grep -q` three times: this step
           # runs under `shell: bash`, which is pipefail, and grep -q exits at the

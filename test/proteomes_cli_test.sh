@@ -9,9 +9,15 @@
 #      exits 0 with database_source bundled:<name> and the manifest's
 #      database_release row; the tag TSV is the one without -alkylation_out;
 #  (c) the flat release layout (share-FASTag-digest -> share-FASTag-alkylation);
-#  (d) refusals: a truncated proteome and a manifest without a valid row stop
-#      with exit 3 (INPUT_FILE_CORRUPT) before any output is written; a
-#      manifest naming a missing file stops with exit 6.
+#  (d) refusals: a file whose FASTA sha256 differs from the manifest's
+#      fasta_sha256 (truncated, or the same entries with one residue changed;
+#      a recompressed but unchanged file is accepted), a file whose entry count
+#      differs, and a manifest without a valid row stop with exit 3
+#      (INPUT_FILE_CORRUPT) before any output is written; a manifest naming a
+#      missing file stops with exit 6.
+#  At -tag_length 4 nothing places on a shipped proteome: the report's reason
+#  is tags_too_short with a min_tag_length row, and the log warns; at the
+#  derived minimum (7 on E. coli) tags place and neither appears.
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 BIN="$1"
@@ -81,7 +87,7 @@ for prot in default auto human mouse yeast ecoli; do
   # suffix only: on Windows/MSYS the binary reports the C:/ spelling of $TMP
   case "$(val "$TMP/$prot.alk.tsv" alk_run database)" in */inst/share/FASTag/alkylation/$want.fasta.gz) ;; *) false ;; esac \
     || fail "$prot: database $(val "$TMP/$prot.alk.tsv" alk_run database)"
-  rel="UniProt $(man $want release) $(man $want proteome) (taxon $(man $want taxon), reviewed, $(man $want entries) entries, sha256 $(man $want sha256))"
+  rel="UniProt $(man $want release) $(man $want proteome) (taxon $(man $want taxon), reviewed, $(man $want entries) entries, FASTA sha256 $(man $want fasta_sha256))"
   [ "$(val "$TMP/$prot.alk.tsv" alk_run database_release)" = "$rel" ] \
     || fail "$prot: database_release '$(val "$TMP/$prot.alk.tsv" alk_run database_release)', want '$rel'"
   tr -d '\r' < "$TMP/$prot.alk.tsv" | awk -F'\t' 'NF != 5 || $5 == "" { bad = 1 } END { exit bad }' || fail "$prot: a malformed row"
@@ -90,7 +96,18 @@ for prot in default auto human mouse yeast ecoli; do
   # the placements are on the whole shipped proteome: the index holds its entries
   grep -q "^Recon index: $(man $want entries) proteins, " "$TMP/log" \
     || { grep "Recon index" "$TMP/log" >&2; fail "$prot: the placement index is not the $(man $want entries) entries of $want"; }
-  echo "proteomes_cli_test: $prot -> bundled:$want ($(man $want entries) entries)"
+  # 1.13 (#24) review: at -tag_length 4 no tag reaches the derived minimum on a
+  # proteome-scale database, so the no_call says why (tags_too_short, not
+  # few_cys_spectra), the min_tag_length row says what to give, and the log warns
+  mt=$(val "$TMP/$prot.alk.tsv" alk_run min_tag_length)
+  [ "${mt:-0}" -gt 4 ] 2> /dev/null || fail "$prot: min_tag_length '$mt', want the derived minimum above 4"
+  [ "$(tr -d '\r' < "$TMP/$prot.alk.tsv" | awk -F'\t' '$1 == "alk_run" && $2 == "min_tag_length" { print $4 }')" = 4 ] \
+    || fail "$prot: min_tag_length does not name the longest tag (4)"
+  [ "$(val "$TMP/$prot.alk.tsv" alkylation_call reason)" = tags_too_short ] \
+    || fail "$prot: reason '$(val "$TMP/$prot.alk.tsv" alkylation_call reason)', want tags_too_short"
+  grep -q -- "this run's longest tag has 4 .*Give -tag_length $mt or more" "$TMP/log" \
+    || { cat "$TMP/log" >&2; fail "$prot: no warning that the tags are too short"; }
+  echo "proteomes_cli_test: $prot -> bundled:$want ($(man $want entries) entries, tags place from $mt)"
 done
 cnt() { tr -d '\r' < "$1" | awk -F'\t' '$1 == "alk_cys" { printf "%s=%s/%s ", $2, $3, $4 }'; }
 cmp -s "$TMP/auto.alk.tsv" "$TMP/human.alk.tsv" || fail "auto is not human"
@@ -128,6 +145,12 @@ placed=$(tr -d '\r' < "$TMP/s7.alk.tsv" | awk -F'\t' '$1 == "alk_cys" && $2 == "
 [ "${placed:-0}" -gt 0 ] || fail "tag length 7: no placement on the shipped ecoli; the equality check would be vacuous"
 [ "$(cnt "$TMP/s7.alk.tsv")" = "$(cnt "$TMP/p7.alk.tsv")" ] || fail "tag length 7: the shipped ecoli and its FASTA give different counts"
 [ "$(val "$TMP/s7.alk.tsv" alk_run spectra)" = "$(val "$TMP/p7.alk.tsv" alk_run spectra)" ] || fail "tag length 7: spectra differ"
+[ "$(val "$TMP/s7.alk.tsv" alk_run min_tag_length)" = 7 ] || fail "tag length 7: min_tag_length $(val "$TMP/s7.alk.tsv" alk_run min_tag_length), want 7"
+[ "$(val "$TMP/s7.alk.tsv" alkylation_call reason)" != tags_too_short ] || fail "tag length 7: tags_too_short although tags place"
+grep -q "no tag will place" "$TMP/log" && fail "tag length 7: the too-short warning although tags place"
+# a FASTA path keeps the 1.12 report: no min_tag_length row, the 1.12 reason
+tr -d '\r' < "$TMP/p.alk.tsv" | cut -f2 | grep -qx min_tag_length && fail "FASTA path: a min_tag_length row"
+[ "$(val "$TMP/p.alk.tsv" alkylation_call reason)" = few_cys_spectra ] || fail "FASTA path: reason changed"
 
 # ---- (d) refusals
 refused() {  # DIR NAME WANT_RC MESSAGE
@@ -143,7 +166,29 @@ refused() {  # DIR NAME WANT_RC MESSAGE
 mkdir -p "$TMP/trunc" "$TMP/badman" "$TMP/missing"
 cp "$ALK/proteomes.tsv" "$TMP/trunc/"
 awk '/^>/ { ++n } n <= 100' "$TMP/yeast.fasta" | gzip -n -c > "$TMP/trunc/yeast.fasta.gz"
+# the sha256 is checked first: a truncated file, and a file of the same
+# entries with one residue changed (the entry count alone passes it)
+gzsha() { gzip -dc "$1" > "$TMP/gzsha.fasta" && sha "$TMP/gzsha.fasta"; }
+refused "$TMP/trunc" yeast 3 "reads as a FASTA with sha256 $(gzsha "$TMP/trunc/yeast.fasta.gz"), its proteomes.tsv records $(man yeast fasta_sha256)"
+mkdir -p "$TMP/edit"
+cp "$ALK/proteomes.tsv" "$TMP/edit/"
+awk 'done || /^>/ { print; next } { sub(/^./, $0 ~ /^W/ ? "Y" : "W"); print; done = 1 }' "$TMP/yeast.fasta" | gzip -n -c > "$TMP/edit/yeast.fasta.gz"
+[ "$(gzip -dc "$TMP/edit/yeast.fasta.gz" | grep -c '^>')" = "$(man yeast entries)" ] || fail "edited yeast: entry count changed"
+cmp -s <(gzip -dc "$TMP/edit/yeast.fasta.gz") "$TMP/yeast.fasta" && fail "edited yeast: not edited"
+refused "$TMP/edit" yeast 3 "reads as a FASTA with sha256 $(gzsha "$TMP/edit/yeast.fasta.gz"), its proteomes.tsv records"
+# a recompressed but unchanged file is the same FASTA: accepted
+mkdir -p "$TMP/regz"
+cp "$ALK/proteomes.tsv" "$TMP/regz/"
+gzip -1 -c "$TMP/yeast.fasta" > "$TMP/regz/yeast.fasta.gz"
+cmp -s "$TMP/regz/yeast.fasta.gz" "$ALK/yeast.fasta.gz" && fail "recompressed yeast: same bytes as shipped"
+FASTAG_ALKYLATION_DIR="$TMP/regz" "$BIN" "${COMMON[@]}" -out "$TMP/rz.tsv" -alkylation_out "$TMP/rz.alk.tsv" \
+  -alkylation_proteome yeast > "$TMP/log" 2>&1 || { cat "$TMP/log" >&2; fail "recompressed yeast refused"; }
+# the entry count is still checked: a manifest whose sha256 matches the file but not its entries
+awk -F'\t' -v h="$(gzsha "$TMP/trunc/yeast.fasta.gz")" 'BEGIN { OFS = "\t" } NR > 1 && $1 == "yeast" { $8 = h } 1' \
+  "$ALK/proteomes.tsv" > "$TMP/trunc/proteomes.tsv"
 refused "$TMP/trunc" yeast 3 "holds 100 entries, its proteomes.tsv records $(man yeast entries)"
+awk -F'\t' 'BEGIN { OFS = "\t" } NR > 1 && $1 == "yeast" { $8 = "ab" } 1' "$ALK/proteomes.tsv" > "$TMP/edit/proteomes.tsv"
+refused "$TMP/edit" yeast 3 "has no valid row for the yeast proteome"
 awk -F'\t' 'NR == 1 || $1 != "mouse"' "$ALK/proteomes.tsv" > "$TMP/badman/proteomes.tsv"
 cp "$ALK/mouse.fasta.gz" "$TMP/badman/"
 refused "$TMP/badman" mouse 3 "has no valid row for the mouse proteome"

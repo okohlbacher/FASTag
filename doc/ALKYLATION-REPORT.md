@@ -53,7 +53,8 @@ version. Their format is owned by RunMeta and numbered by
 | `format` | `1`, the format of the `alk_*` and `alkylation_call` sections | `-` |
 | `database` | path of the FASTA the placements are on | `-` |
 | `database_source` | `recon_fasta`, `fasta` (the run's placement database), `proteome` (an `-alkylation_proteome` FASTA) or `bundled:<name>` (`human`, `mouse`, `yeast`, `ecoli`) | `-` |
-| `database_release` | only for `bundled:<name>` with a `proteomes.tsv` beside it (1.13): `UniProt <release> <proteome> (taxon <id>, reviewed, <n> entries, sha256 <hash>)`; absent otherwise, so a report on a FASTA path is that of 1.12 | `-` |
+| `database_release` | only for `bundled:<name>` with a `proteomes.tsv` beside it (1.13): `UniProt <release> <proteome> (taxon <id>, reviewed, <n> entries, FASTA sha256 <hash>)`, the hash being the manifest's `fasta_sha256`, which the FASTA read was checked against before the run; absent otherwise, so a report on a FASTA path is that of 1.12 | `-` |
+| `min_tag_length` | only with `database_release` (1.13): the reconciler's minimum tag length on the database (`-recon_min_length`, else derived from its size); shorter tags do not place | the run's longest tag (seed length + 2 x `-extension`) |
 | `fixed_c_delta` | the run's fixed modification mass on C in Da (`0` without one); reagent mass = gap + this | `-` |
 | `fixed_nterm_delta` | the run's fixed peptide N-terminal modification mass in Da (a TMT or iTRAQ label; `0` without one), taken off an N-side gap first | `-` |
 | `fixed_cterm_delta` | the same for a fixed peptide C-terminal modification | `-` |
@@ -108,13 +109,16 @@ and without Met oxidation (+15.995) must fall into one class.
 | `reagent` | the class: `Carbamidomethyl`, `Propionamide`, `Nethylmaleimide`, `Methylthio`, `Carboxymethyl` or `none` | `-` | spectra of the class (call) or `-` |
 | `mass` | the reagent's mass on C in Da; `-` for `none` | `-` | `-` |
 | `share` | class spectra / binned spectra | the leading class's share, `-` when nothing is binned | binned spectra |
-| `reason` | `-` | `few_cys_spectra` or `ambiguous` | `-` |
+| `reason` | `-` | `few_cys_spectra`, `ambiguous` or (shipped proteome only, 1.13) `tags_too_short` | `-` |
 
 Rule: the class with the most binned spectra is called when the binned spectra
 and its own spectra are both at least `min_spectra` and its share is at least
 `min_share`. Fewer binned spectra than `min_spectra` is `few_cys_spectra`; a
 tie for the lead, or a leader short of `min_spectra` or `min_share`, is
-`ambiguous`.
+`ambiguous`. On a shipped proteome (1.13), a no_call whose longest tag is
+shorter than `alk_run min_tag_length` is `tags_too_short` instead: no tag could
+place, which says nothing about the run's Cys spectra. The other database
+sources keep the 1.12 reasons (and the log warns there too).
 
 A reader that only wants the call reads `alkylation_call status`, `reagent`
 and `share`, and `alk_run database_source` for the caveat.
@@ -206,15 +210,24 @@ digest data directory (`$FASTAG_DIGEST_DIR`, `<bin>/../share/FASTag/digest`,
 - refuses a manifest without a valid row for the name (the nine columns, a
   positive entry count, a release, a plain file name, one row per name) with
   exit code 3 (INPUT_FILE_CORRUPT);
-- refuses a file whose entry count differs from the row (a truncated or
-  replaced file) with exit code 3, before any output is written;
-- writes the `database_release` row.
+- reads the file and refuses it with exit code 3, before any output is
+  written, when the sha256 of the FASTA read (the decompressed bytes) differs
+  from the row's `fasta_sha256`, or its entry count from the row's `entries`
+  (a truncated, edited or replaced file). The check is on the FASTA, not the
+  `.gz`: a recompressed but unchanged file passes. The `.gz` sha256 (`sha256`)
+  is recorded for the download and checked by `proteomes_cli_test`, not at run
+  time;
+- writes the `database_release` and `min_tag_length` rows.
 
 Tag length: the reconciler derives a minimum tag length from the database
 size (`Recon index: ... min tag length N (derived)` in the log): 8 on the
 shipped human and mouse proteomes, 7 on yeast and E. coli. Shorter tags are not
 placed, so at the default `-tag_length` a run on a shipped proteome places
-nothing and the call is `no_call` (`few_cys_spectra`); give `-tag_length 8`.
+nothing: the log warns at startup (`no tag will place and there will be no
+call. Give -tag_length N or more`), the report's `alk_run min_tag_length` row
+gives N and the run's longest tag, and the call is `no_call` with reason
+`tags_too_short`. Give `-tag_length 8` (human, mouse) or `-tag_length 7` (yeast,
+E. coli).
 Measured on data with `-tag_length 8` (1.13 branch build): PXD014764
 (`20190412_KEH_HF_SA_ANW_R11_100419_CNOT_R1_f008`) 636 spectra with a single-Cys placement (`alk_run spectra`),
 call Carbamidomethyl, share 0.937; PXD003531
@@ -238,5 +251,13 @@ readers read plain FASTA only.
 `proteomes_cli_test` checks the manifest against the files (hashes, entries,
 every header a reviewed entry of the taxon, a known protein each), resolves
 every name in the installed and the flat layout and through
-`FASTAG_ALKYLATION_DIR`, and checks the refusals. CI checks the shipped Linux,
-macOS and Windows bundles with `-alkylation_out` at the default `auto`.
+`FASTAG_ALKYLATION_DIR`, and checks the refusals (truncated, one residue
+edited with the entry count kept, entry count wrong, invalid row) and that a
+recompressed unchanged file is accepted, and the `tags_too_short` reason at
+`-tag_length 4`. CI checks the shipped Linux and Windows bundles with
+`-alkylation_out` at the default `auto` (it must resolve the shipped human
+proteome and report `tags_too_short`) and with `-alkylation_proteome ecoli
+-tag_length 8` (0.5 Da) on the E. coli example, where the placements (the `n`
+of the `alk_cys excluded.*` rows) must be above 0: tags place on the shipped
+file. That example is too small for single-Cys votes at length 8 (115
+placements, `alk_run spectra` 0; at length 7, 194 placements and 2 spectra).

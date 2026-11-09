@@ -24,10 +24,13 @@ FASTA format, sorted by accession and compressed with GNU gzip 1.12
 `proteomes.tsv` is the manifest FASTag reads: per name the proteome, taxon,
 release, release date, number of entries, the sha256 of the `.fasta.gz` and of
 the uncompressed FASTA, and the file name. FASTag writes the release, proteome,
-entries and sha256 into the `alk_run database_release` row of the alkylation
-report, and refuses a file whose number of entries differs from the manifest
-(exit code 3, a damaged or replaced file). Another gzip build compresses the
-same release to other bytes; `fasta_sha256` stays the same.
+entries and `fasta_sha256` into the `alk_run database_release` row of the
+alkylation report. Before the run it checks the FASTA it read (the
+decompressed bytes) against `fasta_sha256` and `entries` and refuses a
+mismatch (exit code 3: a truncated, edited or replaced file). Another gzip
+build compresses the same release to other bytes; `fasta_sha256` stays the
+same, so a recompressed file passes. The `.gz` `sha256` is for checking a
+download (`sha256sum -c`); FASTag does not check it at run time.
 
 sha256 of the shipped files:
 

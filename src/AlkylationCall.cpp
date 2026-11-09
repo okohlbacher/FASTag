@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "AlkylationCall.h"
+#include "Sha256.h"
 
 #include <OpenMS/CHEMISTRY/ModificationsDB.h>
 #include <OpenMS/CHEMISTRY/Residue.h>
@@ -272,6 +273,13 @@ namespace FASTag::Alkylation
     return c;
   }
 
+  bool markTagsTooShort(Call& c, int longest_tag, int min_tag_length)
+  {
+    if (c.called || min_tag_length <= 0 || longest_tag >= min_tag_length) return false;
+    c.reason = "tags_too_short";
+    return true;
+  }
+
   namespace
   {
     std::string u(std::uint64_t v) { return std::to_string(v); }
@@ -301,7 +309,15 @@ namespace FASTag::Alkylation
                                               : "The database is the proteome shipped with FASTag (" + info.database_source + ").");
     if (!info.database_release.empty())
       add("alk_run", "database_release", info.database_release, "-",
-          "The shipped proteome's UniProt release, proteome, entries and sha256 (share/FASTag/alkylation/proteomes.tsv).");
+          "The shipped proteome's UniProt release, proteome, entries and sha256 (share/FASTag/alkylation/proteomes.tsv); "
+          "the FASTA read had that sha256 and number of entries (checked before the run).");
+    if (info.min_tag_length > 0)
+      add("alk_run", "min_tag_length", std::to_string(info.min_tag_length), std::to_string(info.longest_tag),
+          "Tags place on this database from " + std::to_string(info.min_tag_length) +
+              " residues (the reconciler's minimum); the run's longest tag has " + std::to_string(info.longest_tag) +
+              (info.longest_tag < info.min_tag_length ? " residues, so no tag places: give -tag_length " +
+                                                            std::to_string(info.min_tag_length) + " or more."
+                                                      : " residues."));
     add("alk_run", "fixed_c_delta", num(s.fixed_c), "-",
         info.reagent_note.empty() ? "The run has no fixed modification on C; the reagent mass is the gap."
                                   : "The run's fixed " + info.reagent_note + " on C adds " + num(s.fixed_c) +
@@ -374,7 +390,9 @@ namespace FASTag::Alkylation
     else
     {
       add("alkylation_call", "status", "no_call", u(c.binned),
-          c.reason == "few_cys_spectra"
+          c.reason == "tags_too_short"
+              ? "No alkylation is called: the run's tags are too short to place on this database (alk_run min_tag_length)."
+          : c.reason == "few_cys_spectra"
               ? "No alkylation is called: " + u(c.binned) + " binned spectra are fewer than " + u(s.min_spectra) + "."
               : "No alkylation is called: the leading class " + name + " has " + u(c.top) + " of " + u(c.binned) +
                     " binned spectra, short of " + u(s.min_spectra) + " spectra and a share of " + num(s.min_share) +
@@ -388,12 +406,13 @@ namespace FASTag::Alkylation
     return r;
   }
 
-  void loadFasta(const std::string& path, std::vector<OpenMS::FASTAFile::FASTAEntry>& out)
+  void loadFasta(const std::string& path, std::vector<OpenMS::FASTAFile::FASTAEntry>& out, std::string* sha256)
   {
     const bool gz = path.size() > 3 && path.compare(path.size() - 3, 3, ".gz") == 0;
     if (!gz)
     {
       OpenMS::FASTAFile().load(path, out);
+      if (sha256) *sha256 = sha256File(path);
       return;
     }
     out.clear();
@@ -407,6 +426,12 @@ namespace FASTag::Alkylation
       if (n == 0) break;
     }
     in.close();
+    if (sha256)
+    {
+      Sha256 h;
+      h.update(text.data(), text.size());
+      *sha256 = h.hexDigest();
+    }
     OpenMS::FASTAFile::FASTAEntry cur;
     bool have = false;
     std::size_t pos = 0;
@@ -497,7 +522,8 @@ namespace FASTag::Alkylation
       got.fasta_sha256 = at(7);
       got.file = at(8);
     }
-    if (!found || got.entries == 0 || got.file.empty() || got.release.empty()
+    if (!found || got.entries == 0 || got.file.empty() || got.release.empty() || !isSha256Hex(got.sha256)
+        || !isSha256Hex(got.fasta_sha256)
         || got.file.find_first_of("/\\") != std::string::npos || got.file[0] == '.')
       return false;
     out = got;
@@ -507,6 +533,6 @@ namespace FASTag::Alkylation
   std::string shippedRelease(const ShippedProteome& sp)
   {
     return "UniProt " + sp.release + " " + sp.proteome + " (taxon " + sp.taxon + ", reviewed, "
-           + std::to_string(sp.entries) + " entries, sha256 " + sp.sha256 + ")";
+           + std::to_string(sp.entries) + " entries, FASTA sha256 " + sp.fasta_sha256 + ")";
   }
 }
