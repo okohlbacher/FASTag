@@ -234,6 +234,11 @@ says that the tag-end windows do not hold there.
 ratio from Sage's target PSMs (1 % spectrum q-value, K/R C-terminus, P2..P4 of the peptide, same
 background) and against Sage's own missed-cleavage share, on public tryptic runs. It reports
 correlations and ratios and has no pass/fail criterion; the option stays experimental.
+Scored once (2026-11-09, binary of 2fd1297, `-tag_length 4 -subsample_fraction 0.25`, 20 ppm): 32 of
+35 runs (one with 43 C-terminal ends is not measured; two have no Sage PSM at 1 %). Spearman 0.83 and
+Pearson 0.90 against the Sage odds ratio, Spearman 0.72 against Sage's missed-cleavage share; median
+FASTag/Sage ratio 0.86; medians 0.078 (FASTag) and 0.071 (Sage), Sage MC share 0.108, FASTag
+`nonspecific_mle` 0.059.
 
 ## Model table (`-digest_models`)
 
