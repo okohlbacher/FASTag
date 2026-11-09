@@ -157,6 +157,68 @@ int main()
     }
   }
 
+  // ---- 2b. residue-map decoy (1.13 species redesign) ------------------------
+  {
+    const std::string A = "ACDEFGHKLMNPQRSTVWY";
+    for (uint32_t j = 0; j < 8; ++j)
+    {
+      const std::string d = residueDecoy(A, j);
+      check(sorted(d) == A, "residueDecoy: a permutation of the alphabet");
+      bool fixed = false;
+      for (size_t i = 0; i < A.size(); ++i) fixed = fixed || d[i] == A[i];
+      check(!fixed, "residueDecoy: no residue maps to itself");
+      check(residueDecoy("PEPTIDEK", j) == residueDecoy("PEPTLDEK", j), "residueDecoy: I/L folded");
+      // k-mer keyed: the decoy of a k-mer does not depend on the tag around it.
+      check(residueDecoy("CDEFGHKW", j).substr(2, 4) == residueDecoy("EFGH", j), "residueDecoy: k-mer keyed");
+    }
+    check(residueDecoy("CDEFGHK", 0) != residueDecoy("CDEFGHK", 1), "residueDecoy: replicates differ");
+
+    // Decoy hit rate vs a whole-tag shuffle on an i.i.d. uniform proteome for
+    // tag lengths k..k+4. Overlapping k-mers make a chance whole-tag hit far
+    // likelier than independent k-mers would; the decoy must keep that.
+    const int k = 3;
+    Rng r{12345};
+    std::string prot;
+    for (int i = 0; i < 300; ++i) prot += A[r.next() % A.size()];
+    std::vector<OpenMS::FASTAFile::FASTAEntry> pe;
+    pe.emplace_back("p", "", prot);
+    TaxIndex pidx;
+    pidx.build(pe, std::vector<uint32_t>{1}, k);
+    const int M = 1000000;
+    for (int L = k; L <= k + 4; ++L)
+    {
+      uint64_t shuf = 0, res = 0, indep = 0;
+      for (int t = 0; t < M; ++t)
+      {
+        std::string s;
+        for (int i = 0; i < L; ++i) s += A[r.next() % A.size()];
+        TagLookupCounters c;
+        std::vector<uint32_t> tx;
+        const std::string sh = decoyTag(s, 0);  // whole-tag shuffle
+        if (!sh.empty() && tagSupport(pidx, sh, k, 1000, 0.0, tx, c)) ++shuf;
+        if (kmerDecoySupport(pidx, s, k, static_cast<uint32_t>(t % 16), 1000, 0.0, tx, c, nullptr)) ++res;
+        // The rejected construction: every k-mer replaced independently.
+        bool all = true;
+        for (int i = 0; i + k <= L && all; ++i)
+        {
+          std::string km;
+          for (int q = 0; q < k; ++q) km += A[r.next() % A.size()];
+          pidx.lookup(km, tx);
+          all = !tx.empty();
+        }
+        if (all) ++indep;
+      }
+      const double sd = std::sqrt(static_cast<double>(shuf + res)) + 1.0;
+      check(std::fabs(static_cast<double>(res) - static_cast<double>(shuf)) <= 4.0 * sd,
+            "residue decoy hit rate matches a whole-tag shuffle at L=" + std::to_string(L) + " (" +
+              std::to_string(res) + " vs " + std::to_string(shuf) + ")");
+      if (L == k + 1 || L == k + 2)
+        check(static_cast<double>(shuf) - static_cast<double>(indep) > 4.0 * (std::sqrt(static_cast<double>(shuf + indep)) + 1.0),
+              "sensitivity: independent per-k-mer decoys under-hit at L=" + std::to_string(L) + " (" +
+                std::to_string(indep) + " vs " + std::to_string(shuf) + ")");
+    }
+  }
+
   // ---- 3. Poisson tail and the random part --------------------------------
   {
     check(SC::poissonUpperTail(0, 3.0) == 1.0, "P(X>=0) = 1");

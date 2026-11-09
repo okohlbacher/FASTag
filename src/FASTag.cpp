@@ -5517,13 +5517,37 @@ protected:
       if (const char* dp = std::getenv("FASTAG_SPECIES_DUMP"))
       {
         dump.reset(new std::ofstream(dp));
-        const char* nk = std::getenv("FASTAG_SPECIES_DUMP_DECOYS");
-        dump_nkd = nk ? std::atoi(nk) : 10;
+        if (!*dump)
+        {
+          OPENMS_LOG_ERROR << "FASTAG_SPECIES_DUMP: cannot open '" << dp << "' for writing." << std::endl;
+          return CANNOT_WRITE_OUTPUT_FILE;
+        }
+        dump_nkd = 10;
+        if (const char* nk = std::getenv("FASTAG_SPECIES_DUMP_DECOYS"))
+        {
+          const std::string nks(nk);
+          if (nks.empty() || nks.size() > 4 || nks.find_first_not_of("0123456789") != std::string::npos)
+          {
+            OPENMS_LOG_ERROR << "FASTAG_SPECIES_DUMP_DECOYS: '" << nks << "' is not an integer in 0..9999." << std::endl;
+            return ILLEGAL_PARAMETERS;
+          }
+          dump_nkd = std::stoi(nks);
+        }
         if (const char* ddb = std::getenv("FASTAG_SPECIES_DECOYDB"))
         {
           std::string derr;
-          dump_didx_ok = dump_didx.load(ddb, &derr);
-          if (!dump_didx_ok) OPENMS_LOG_WARN << "FASTAG_SPECIES_DECOYDB: " << derr << std::endl;
+          if (!dump_didx.load(ddb, &derr))
+          {
+            OPENMS_LOG_ERROR << "FASTAG_SPECIES_DECOYDB: " << derr << std::endl;
+            return INPUT_FILE_CORRUPT;
+          }
+          if (dump_didx.k() != index_k)
+          {
+            OPENMS_LOG_ERROR << "FASTAG_SPECIES_DECOYDB: index k " << dump_didx.k() << " differs from the target index k "
+                             << index_k << "; every decoy lookup would miss." << std::endl;
+            return ILLEGAL_PARAMETERS;
+          }
+          dump_didx_ok = true;
         }
         *dump << "#k\t" << index_k << "\tkmer_decoys\t" << dump_nkd << "\tdecoydb\t" << (dump_didx_ok ? 1 : 0) << '\n';
         for (uint32_t tx : idx_taxa) *dump << "#taxon\t" << tx << '\t' << idx.postings(tx) << '\n';
@@ -5631,6 +5655,11 @@ protected:
           *dump << '\n';
         }
         dump->close();
+        if (!*dump)
+        {
+          OPENMS_LOG_ERROR << "FASTAG_SPECIES_DUMP: write failed (disk full?)." << std::endl;
+          return CANNOT_WRITE_OUTPUT_FILE;
+        }
       }
 
       // Subtract the evidence a taxon earns only by resembling a stronger one.

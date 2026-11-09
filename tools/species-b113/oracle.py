@@ -1,21 +1,39 @@
 """Oracle table: per run/arm/genus, observed o, exclusive u given S (truth positives for real; empty for alldecoy),
-k-mer decoy replicate exclusive counts. DEV only."""
+decoy replicate exclusive counts. DEV only.
+
+usage: oracle.py OUT.tsv [--analyzer FTMS|any]
+The analysis set is logged to OUT.tsv.set.tsv (run, arm, included 0/1, reason) so every excluded run or arm is
+stated. The analyzer restriction defaults to FTMS (the species call targets high-resolution MS2; ion-trap runs are
+a low_resolution no_call in 1.12) and must be restated in the DESIGN/PREREG before a number is used."""
 import json, sys
 import numpy as np
 from load import *
 parent, rank, name = taxonomy()
 man = manifest()
 out = open(sys.argv[1], "w")
+analyzer = "FTMS"
+if "--analyzer" in sys.argv: analyzer = sys.argv[sys.argv.index("--analyzer") + 1]
+aset = open(sys.argv[1] + ".set.tsv", "w")
+aset.write("run\tarm\tincluded\treason\n")
+def log(run, arm, inc, why):
+    aset.write(f"{run}\t{arm}\t{int(inc)}\t{why}\n"); aset.flush()
 out.write("run\tarm\tgenus\tstatus\to\tu\tunexpl\tn_spec\tkd_mean\tkd_var\tkd\tddb_u\tconc_u\tconc_dec_u\n")
 for rd in sorted(DUMP.iterdir()):
     if not rd.is_dir(): continue
     meta = json.loads((rd / "meta.json").read_text()) if (rd / "meta.json").exists() else None
-    if not meta or meta.get("analyzer") != "FTMS": continue
+    if not meta:
+        log(rd.name, "*", 0, "no meta.json"); continue
+    if analyzer != "any" and meta.get("analyzer") != analyzer:
+        log(rd.name, "*", 0, f"analyzer {meta.get('analyzer')} != {analyzer}"); continue
+    if rd.name not in man:
+        log(rd.name, "*", 0, "not in DEV manifest"); continue
     truth = parse_truth(man[rd.name]["truth"])
     human = "Homo" in truth
     for arm in ("real", "alldecoy"):
         p = rd / arm / "dump.tsv.gz"
-        if not p.exists(): continue
+        if not p.exists():
+            log(rd.name, arm, 0, "dump.tsv.gz missing"); continue
+        log(rd.name, arm, 1, "ok")
         D = load_dump(p, parent, rank)
         gn = [name[g] for g in D["genera"]]
         n = len(gn)

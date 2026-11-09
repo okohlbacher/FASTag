@@ -77,49 +77,40 @@ namespace FASTag
     }
     return std::string();
   }
+  std::string residueDecoy(const std::string& seq, uint32_t j)
+  {
+    static const char kAlpha[] = "ACDEFGHKLMNPQRSTVWY";  // 19 residues, I folded to L
+    constexpr int n = 19;
+    // Sattolo's algorithm on a splitmix64 stream seeded by j: a uniformly drawn
+    // cyclic permutation, so no residue maps to itself (a derangement).
+    char perm[n];
+    for (int i = 0; i < n; ++i) perm[i] = kAlpha[i];
+    uint64_t state = 0x5ca1ab1e00000000ULL ^ static_cast<uint64_t>(j);
+    const auto next = [&state]() {
+      uint64_t z = (state += 0x9e3779b97f4a7c15ULL);
+      z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
+      z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
+      return z ^ (z >> 31);
+    };
+    for (int i = n - 1; i > 0; --i)
+      std::swap(perm[i], perm[static_cast<int>(next() % static_cast<uint64_t>(i))]);
+    char map[256];
+    for (int c = 0; c < 256; ++c) map[c] = static_cast<char>(c);
+    for (int i = 0; i < n; ++i) map[static_cast<unsigned char>(kAlpha[i])] = perm[i];
+    std::string d = TaxIndex::fold(seq);
+    for (char& c : d) c = map[static_cast<unsigned char>(c)];
+    return d;
+  }
   bool kmerDecoySupport(const TaxIndex& idx, const std::string& seq, int k, uint32_t j,
                         std::size_t share_cap, double min_margin,
                         std::vector<uint32_t>& taxa, TagLookupCounters& counters, bool* no_decoy)
   {
-    taxa.clear();
+    // One consistent decoy sequence for the whole tag: overlapping k-mers stay
+    // overlapping, so the whole-tag rule sees the same co-occurrence structure
+    // a target tag does (b113 review: independent per-k-mer decoys almost never
+    // hit for tags longer than k and made the null anti-conservative).
     if (no_decoy) *no_decoy = false;
-    const int tag_len = static_cast<int>(seq.size());
-    if (tag_len < k) return false;
-    std::vector<uint32_t> kmer_taxa;
-    std::map<uint32_t, int> kmers_per_taxon;
-    int n_eval = 0;
-    // All decoy k-mers first: a k-mer without a decoy makes the whole tag
-    // decoy-less, whatever the lookups would say.
-    std::vector<std::string> dk;
-    dk.reserve(static_cast<std::size_t>(tag_len - k + 1));
-    for (int i = 0; i + k <= tag_len; ++i)
-    {
-      std::string d = decoyTag(seq.substr(static_cast<std::size_t>(i), static_cast<std::size_t>(k)), j);
-      if (d.empty())
-      {
-        if (no_decoy) *no_decoy = true;
-        return false;
-      }
-      dk.push_back(std::move(d));
-    }
-    for (const std::string& d : dk)
-    {
-      idx.lookup(d, kmer_taxa);  // decoyTag() output is folded already
-      if (kmer_taxa.empty()) return false;
-      if (kmer_taxa.size() > share_cap) { ++counters.kmer_skipped; continue; }
-      ++n_eval;
-      for (uint32_t tx : kmer_taxa) ++kmers_per_taxon[tx];
-    }
-    if (n_eval == 0) return false;
-    int best = 0;
-    for (const auto& kv : kmers_per_taxon) best = std::max(best, kv.second);
-    if (best < n_eval) return false;
-    int runner = 0;
-    for (const auto& kv : kmers_per_taxon) if (kv.second < best) runner = std::max(runner, kv.second);
-    const double margin = static_cast<double>(best - runner) / static_cast<double>(n_eval);
-    if (margin < min_margin) { ++counters.tag_generic; return false; }
-    for (const auto& kv : kmers_per_taxon) if (kv.second == best) taxa.push_back(kv.first);
-    return true;
+    return tagSupport(idx, residueDecoy(seq, j), k, share_cap, min_margin, taxa, counters);
   }
 
   std::string reversedFolded(const std::string& seq)
