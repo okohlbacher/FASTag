@@ -1,0 +1,9 @@
+# E15B-05 DEV parse check (2026-11-09): each frozen held-out MSFragger 4.4.1 parameter file (scorers/truth/item15B) run once on the DEV file PXD060724 Trypsin_EThCD_WZ20spd_161224_1.mzML (EThcD only, FTMS); no held-out file read. java -Xmx48G (cz_set9: -Xmx64G after the first version OOMed). Columns: params, RC, spectra searched, tsv rows incl. header
+msfragger_by_set7.params	0	progress: 0/0	1
+msfragger_cz_set7.params	0	progress: 10322/10322	2632
+msfragger_cz_set10.params	0	progress: 10322/10322	2377
+msfragger_hybrid_set10.params	0	progress: 10322/10322	4032
+msfragger_cz_set9.params (v1, ADP-ribosyl max 3; not committed)	1 (Not enough memory allocated to MSFragger; 1399602171 modified peptides)	-	-
+msfragger_cz_set9.params	0	progress: 10322/10322	2437	82398968 modified peptides, max RSS 57212224 kB
+
+# finding: activation_types = ETD admits EThcD scans (10322/10322 searched), activation_types = HCD admits none of them (0/0).

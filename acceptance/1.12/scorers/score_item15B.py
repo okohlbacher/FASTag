@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """#15B held-out scorer (PREREG-item15B.md): CFG-15B-cand (-ion_series auto) against CFG-15B-base (-ion_series by).
 
-Runs: the manifest rows of one split (H1 = set6 + set7; H2 = set8, used only to confirm a variant after an H1
-failure). One FASTag run per arm at the frozen options (cell 'RC'). Activation per spectrum from the staged mzML
+Runs: the manifest rows of one split of item15B-sets-r2 (PREREG-item15B.md amendment 1, 2026-11-09: H1 = set7 +
+set9; H2 = set10, used only to confirm a variant after an H1 failure; set6 and set8 were dropped before any run). One FASTag run per arm at the frozen options (cell 'RC'). Activation per spectrum from the staged mzML
 (<activation> cvParams; the RC's own phase-A classes): electron = ETD (MS:1000598) or ECD (MS:1000250) without a
 supplemental collisional activation; hybrid = ETD/ECD with supplemental beam-type CID (MS:1002678) or supplemental
 CID (MS:1002679), or EThcD (MS:1002631); collisional = CID (MS:1000133), HCD (MS:1000422), trap-type CID
@@ -31,7 +31,7 @@ from pathlib import Path
 
 import acclib as A
 
-MANIFEST = "item15B-sets"
+MANIFEST = "item15B-sets-r2"   # amendment 1 (2026-11-09); was item15B-sets (set6/set8 dropped, never run)
 ELECTRON = {"MS:1000598", "MS:1000250"}
 SUPPL = {"MS:1002678", "MS:1002679"}
 HYBRID = {"MS:1002631"}
@@ -80,12 +80,13 @@ def fragger_peptide(pep, mods):
 
 
 def fragger_psms(path, fdr=0.01, decoy="rev_"):
-    df = A.pd.read_csv(path, sep="\t", dtype={"peptide": str, "modification_info": str, "protein": str},
-                       keep_default_na=False)
+    df = A.pd.read_csv(path, sep="\t", dtype={"peptide": str, "modification_info": str, "protein": str,
+                                              "proteins": str}, keep_default_na=False)
     if "hit_rank" in df.columns:
         df = df[df["hit_rank"].astype(int) == 1]
     df = df.copy()
-    df["decoy"] = df["protein"].str.startswith(decoy)
+    pcol = "protein" if "protein" in df.columns else "proteins"   # MSFragger 4.4.1 writes 'proteins' (E15B-04)
+    df["decoy"] = df[pcol].str.startswith(decoy)
     df = df.sort_values("expectscore", kind="mergesort").reset_index(drop=True)
     d, t = df["decoy"].cumsum(), (~df["decoy"]).cumsum()
     df["q"] = (d / t.clip(lower=1))[::-1].cummin()[::-1]
