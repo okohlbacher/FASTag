@@ -18,7 +18,7 @@ def _datasets():
 
 
 def test_modes_listed():
-    assert SAGE_MODES == ("closed", "pool", "charge_truth")
+    assert SAGE_MODES == ("closed", "pool", "charge_truth", "chimera")
 
 
 @pytest.mark.parametrize("ds", [d for d in _datasets() if d.id in GOLDEN], ids=lambda d: d.id)
