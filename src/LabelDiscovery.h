@@ -48,6 +48,13 @@ namespace FASTag::LabelDiscovery
   inline constexpr std::size_t kMaxPeaks = 200;   ///< channel peaks written per channel
   inline constexpr std::size_t kMaxSiteCandidates = 200;  ///< site candidates evaluated per site
   inline constexpr std::uint64_t kMinReference = 200;     ///< reference deviations a window estimate needs
+  inline constexpr std::uint64_t kMinCalibrationReference = 20;  ///< ... a calibration offset needs
+  /// Reference deviations calibrate only when they form a peak: at least
+  /// kReferencePeakShare of them within kReferencePeakHalfWidth (Da) of their
+  /// median (uniform chance values over the 0.02 Da window give 25 %).
+  inline constexpr double kReferencePeakHalfWidth = 0.005, kReferencePeakShare = 0.6;
+  /// An offset beyond this (ppm) is chance references, not a calibration.
+  inline constexpr double kMaxCalibrationPpm = 30.0;
   inline constexpr std::uint64_t kSlopeReference = 1000;  ///< ... and a linear calibration term
   inline constexpr double kSlopeSpan = 150.0;             ///< Da the references must span for the linear term
   inline constexpr std::uint64_t kPerReferenceMin = 50;   ///< values per reference mass in the spread term
@@ -156,8 +163,8 @@ namespace FASTag::LabelDiscovery
     int unimod_top = 3;
     // priors of the call (sections 6, 9)
     double min_fold = 20.0, max_log10_q = -2.0, call_min_share = 0.01;
-    /// A further called label needs this share of the parsimony of the
-    /// strongest called one (prior).
+    /// A called label needs this share of the parsimony of the strongest
+    /// called one and of its site's delta 0 control (prior).
     double min_relative_parsimony = 0.1;
     std::uint64_t min_counted_spectra = 175;  ///< Digest::kLabelTagMin
     bool low_resolution = false;              ///< fragment tolerance in Da
@@ -203,6 +210,7 @@ namespace FASTag::LabelDiscovery
   struct Calibration
   {
     std::uint64_t n_ref_c = 0, n_ref_n = 0;
+    std::uint64_t n_ref_n_all = 0;  ///< channel n deviations against every residue (the window's spread)
     bool estimated_c = false, estimated_n = false;  ///< enough references (kMinReference)
     double ppm_c = 0, ppm_n = 0;     ///< median ppm offsets
     bool slope = false;              ///< linear term in mass fitted for channel c
@@ -215,8 +223,9 @@ namespace FASTag::LabelDiscovery
     double ppmC(double m) const { return slope ? intercept_c + slope_c * m : ppm_c; }
   };
   /// Reference deviations (nearest one-residue image within kRefWindow: c =
-  /// m_r, n = m_r + H2O, m_r over the alphabet and bare K and R) give the
-  /// per-channel calibration.
+  /// m_r over the alphabet and bare K and R; n = m_r + H2O) give the
+  /// per-channel calibration. The channel n offset is taken from r = K or R
+  /// only (the tryptic C-terminal residue), its spread from every r.
   Calibration calibrate(const std::vector<Record>& records, const std::vector<Residue>& alphabet);
 
   struct Windows

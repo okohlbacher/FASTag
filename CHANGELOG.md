@@ -10,8 +10,8 @@
   doc/DESIGN-label-discovery.md). Advanced options
   `-label_discovery_max_flank`, `_depth`, `_min_spectra`, `_min_share`,
   `_window_n`, `_window_c`, `_unimod_top`. The thresholds are unfitted
-  priors. With the option off every output is unchanged; with it on only
-  the `-out_spectra` provenance lists it. On the probes: PXD004541 (TMT10)
+  priors. Every other output is byte-identical with the option off or on
+  (the `-out_spectra` provenance leaves the options out). On the probes: PXD004541 (TMT10)
   `TMT+K:TMT`, PXD001587 (label-free) `label-free`.
 
 ## 1.12.1 (2026-11-08)

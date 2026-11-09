@@ -321,9 +321,28 @@ namespace FASTag::LabelDiscovery
 
   Calibration calibrate(const std::vector<Record>& records, const std::vector<Residue>& alphabet)
   {
+    // Reference deviations form a peak when most of them lie near their
+    // median; chance values near a residue mass (a run whose C-termini all
+    // carry a modification) spread over the whole reference window.
+    auto peaked = [](const std::vector<double>& dev) {
+      if (dev.empty()) return false;
+      const double c = median(dev);
+      std::size_t near = 0;
+      for (double d : dev) near += std::fabs(d - c) <= kReferencePeakHalfWidth;
+      return static_cast<double>(near) >= kReferencePeakShare * static_cast<double>(dev.size());
+    };
     Calibration cal;
     const std::vector<double> refs = referenceMasses(alphabet);
-    std::vector<double> ppm_c, ppm_n;
+    // channel n: the reversed read of a one-residue C side, which in a
+    // tryptic run is K or R (n = K + H2O, R + H2O); other residue masses
+    // there are mostly chance compositions
+    std::vector<double> refs_n{kMassK, kMassR};
+    for (const Residue& r : alphabet)
+      if (r.letter == 'K' || r.letter == 'R') refs_n.push_back(r.mass);
+    std::sort(refs_n.begin(), refs_n.end());
+    refs_n.erase(std::unique(refs_n.begin(), refs_n.end(), [](double a, double b) { return std::fabs(a - b) < 1e-9; }),
+                 refs_n.end());
+    std::vector<double> ppm_c, ppm_n, ppm_n_all;
     std::vector<int> ref_c;
     std::vector<double> dev_c_da, mass_c;
     for (const Record& r : records)
@@ -342,16 +361,16 @@ namespace FASTag::LabelDiscovery
       }
       if (r.n > 0 && r.M > 0)
       {
+        // the spread (window) from every residue, the offset from K and R
         const int k = nearestRef(refs, r.n - kH2O);
-        if (k >= 0)
-        {
-          const double m = refs[static_cast<std::size_t>(k)] + kH2O;
-          ppm_n.push_back((r.n - m) / r.M * 1e6);
-        }
+        if (k >= 0) ppm_n_all.push_back((r.n - (refs[static_cast<std::size_t>(k)] + kH2O)) / r.M * 1e6);
+        const int q = nearestRef(refs_n, r.n - kH2O);
+        if (q >= 0) ppm_n.push_back((r.n - (refs_n[static_cast<std::size_t>(q)] + kH2O)) / r.M * 1e6);
       }
     }
     cal.n_ref_c = ppm_c.size();
     cal.n_ref_n = ppm_n.size();
+    cal.n_ref_n_all = ppm_n_all.size();
     // per-reference medians of channel c (>= kPerReferenceMin values each)
     auto perRefMedians = [&](const std::vector<double>& resid_ppm) {
       std::vector<std::pair<double, double>> pts;  // (mass, median ppm)
@@ -361,7 +380,7 @@ namespace FASTag::LabelDiscovery
         if (by[k].size() >= kPerReferenceMin) pts.emplace_back(refs[k], median(by[k]));
       return pts;
     };
-    if (cal.n_ref_c >= kMinReference)
+    if (cal.n_ref_c >= kMinCalibrationReference)
     {
       cal.estimated_c = true;
       cal.ppm_c = median(ppm_c);
@@ -400,14 +419,34 @@ namespace FASTag::LabelDiscovery
         spread = b - a;
       }
       cal.unc_ppm_c = mad(resid_ppm, median(resid_ppm)) / std::sqrt(static_cast<double>(cal.n_ref_c)) + spread;
+      // references that do not form a peak (deviations spread over the
+      // whole reference window: chance values near a residue mass, as in a
+      // run whose C-termini all carry a modification) calibrate nothing
+      if (!peaked(dev_c_da) || std::fabs(cal.ppm_c) > kMaxCalibrationPpm)
+      {
+        cal.estimated_c = false;
+        cal.slope = false;
+        cal.ppm_c = 0;
+        cal.unc_ppm_c = -1;
+      }
     }
-    if (cal.n_ref_n >= kMinReference)
+    if (cal.n_ref_n >= kMinCalibrationReference)
     {
       cal.estimated_n = true;
       cal.ppm_n = median(ppm_n);
-      const double m = mad(ppm_n, cal.ppm_n);
-      cal.sigma_ppm_n = 1.4826 * m;
-      cal.unc_ppm_n = m / std::sqrt(static_cast<double>(cal.n_ref_n));
+      cal.unc_ppm_n = mad(ppm_n, cal.ppm_n) / std::sqrt(static_cast<double>(cal.n_ref_n));
+      if (std::fabs(cal.ppm_n) > kMaxCalibrationPpm)
+      {
+        cal.estimated_n = false;
+        cal.ppm_n = 0;
+        cal.unc_ppm_n = -1;
+      }
+    }
+    if (!ppm_n_all.empty())
+    {
+      // the window's spread around the offset in use
+      const double c = cal.estimated_n ? cal.ppm_n : median(ppm_n_all);
+      cal.sigma_ppm_n = 1.4826 * mad(ppm_n_all, c);
     }
     return cal;
   }
@@ -429,10 +468,10 @@ namespace FASTag::LabelDiscovery
     w.m_q50 = quantile(Ms, 0.50);
     w.m_q90 = quantile(Ms, 0.90);
     if (s.window_c > 0) { w.w_c = s.window_c; w.source_c = "option"; }
-    else if (cal.estimated_c) { w.w_c = std::clamp(3.0 * cal.sigma_c, kWindowMin, kWindowMax); w.source_c = "estimated"; }
+    else if (cal.estimated_c && cal.n_ref_c >= kMinReference) { w.w_c = std::clamp(3.0 * cal.sigma_c, kWindowMin, kWindowMax); w.source_c = "estimated"; }
     else { w.w_c = kDefaultWindowC; w.source_c = "default"; }
     if (s.window_n > 0) { w.n_flat = s.window_n; w.source_n = "option"; }
-    else if (cal.estimated_n) { w.n_flat = 0; w.sigma_ppm_n = cal.sigma_ppm_n; w.source_n = "estimated"; }
+    else if (cal.n_ref_n_all >= kMinReference) { w.n_flat = 0; w.sigma_ppm_n = cal.sigma_ppm_n; w.source_n = "estimated"; }
     else { w.n_flat = kDefaultWindowN; w.source_n = "default"; }
     w.sigma_ppm_n = cal.sigma_ppm_n;
     w.w_n_hist = w.n_flat > 0 ? w.n_flat : w.wn(w.m_q90);
@@ -743,6 +782,7 @@ namespace FASTag::LabelDiscovery
       u64 shadow_spectra = 0;
       int shadow_owner = -1;  ///< the accepted hypothesis most shadowed spectra point at
       bool base_shadow = false;  ///< every base image with spectra is an accepted image
+      double est_top = 0;        ///< x + the mean deviation of the image with the most tags
       u64 spectra_nonzero = 0;
       std::vector<std::pair<double, double>> est_c;  ///< (image mass, delta estimate) per clean c image
     };
@@ -973,6 +1013,13 @@ namespace FASTag::LabelDiscovery
           if (pred(q.img)) d.push_back(static_cast<double>(q.dev));
         return d;
       };
+      {
+        // the offset its strongest image (most tags) puts it at
+        std::size_t top = ni;
+        for (std::size_t i = 0; i < ni; ++i)
+          if (img_tags[i] > 0 && (top == ni || img_tags[i] > img_tags[top])) top = i;
+        ev.est_top = top == ni ? x : x + img_dev[top];
+      }
       std::vector<double> dev = estimate([&](std::size_t k) { return clean2(k) && imgs[k].ch == 'c'; });
       if (dev.size() < thr) dev = estimate([&](std::size_t k) { return clean2(k); });
       if (dev.empty()) dev = estimate([](std::size_t) { return true; });
@@ -1497,7 +1544,7 @@ namespace FASTag::LabelDiscovery
         // exact recount at the peak position
         Image im;
         im.ch = ch;
-        im.mass = (static_cast<double>(i) + 0.5) * kBin;
+        im.mass = p.mass;  // at the centroid: a plateau's lowest bin may lie off its centre
         std::vector<Match> m;
         ctx.match(im, 0, m);
         p.tags = m.size();
@@ -1606,7 +1653,12 @@ namespace FASTag::LabelDiscovery
         }
         const double bg = std::max(n > 0 ? sum / n : 0.0, 1.0);
         if (static_cast<double>(o) < s.min_fold * bg) continue;
-        cand.emplace_back(o, x);
+        // a flat top (the window wider than the spread of the flanks) is
+        // taken at its centre, not its lowest bin, so that the images sit on
+        // the flanks
+        i64 e = j;
+        while (e + 1 < P && O[static_cast<std::size_t>(e + 1)] == o) ++e;
+        cand.emplace_back(o, x + 0.5 * static_cast<double>(e - j) * kBin);
       }
       std::sort(cand.begin(), cand.end(), [](const auto& a, const auto& b) {
         if (a.first != b.first) return a.first > b.first;
@@ -1890,7 +1942,7 @@ namespace FASTag::LabelDiscovery
       const SiteCandidate& sc = c.ev.s;
       const u64 thr = c.ctx->thr4();
       if (excludedClass(sc.cls)) return false;
-      if (std::fabs(sc.delta) <= std::max(c.ctx->win.w_c, 1e-9)) return false;
+      if (std::fabs(sc.delta) <= std::max(c.ctx->win.w_n_hist, c.ctx->win.w_c)) return false;
       if (sc.spectra < s.min_spectra || sc.share < s.call_min_share) return false;
       if (sc.fold < s.min_fold || sc.log10_q > s.max_log10_q) return false;
       if (!(sc.ladder_clean >= 3 || sc.zero_clean)) return false;
@@ -1899,6 +1951,20 @@ namespace FASTag::LabelDiscovery
     };
     auto keptRule = [&](const SiteCandidate& sc) {
       return sc.spectra >= s.min_spectra && sc.share >= s.min_share && sc.fold >= s.min_fold && sc.log10_q <= s.max_log10_q;
+    };
+    // A scan maximum on a flat top can lie up to a window off the offset
+    // (the window wider than the spread of the flanks): evaluate, move x to
+    // where the candidate's strongest image puts it, rebuild the images and
+    // evaluate again.
+    auto refine = [&](Cand& c, const NullImages* acc) {
+      c.ev = evaluate(*c.ctx, c.site, c.x, c.imgs, false, acc);
+      const double d = c.ev.est_top;
+      if (std::isfinite(d) && std::fabs(d - c.x) > kBin)
+      {
+        c.x = d;
+        c.imgs = imagesFor(c.site, c.x, c.ctx->alphabet, max_s, s.max_flank);
+        c.ev = evaluate(*c.ctx, c.site, c.x, c.imgs, false, acc);
+      }
     };
     auto runSites = [&](const Ctx& c, const std::string& sites, std::vector<Cand>& cands) {
       for (char site : sites)
@@ -2008,6 +2074,16 @@ namespace FASTag::LabelDiscovery
       }
     };
 
+    double ctrl_pars[3] = {0, 0, 0};  // N, K, R; set below, before the call
+    auto controlParsimony = [&](char site) {
+      switch (site)
+      {
+        case 'N': return ctrl_pars[0];
+        case 'K': return ctrl_pars[1];
+        case 'R': return ctrl_pars[2];
+        default: return std::max(ctrl_pars[1], ctrl_pars[2]);
+      }
+    };
     auto callLoop = [&](std::vector<Cand>& cands) {
       for (;;)
       {
@@ -2033,11 +2109,18 @@ namespace FASTag::LabelDiscovery
         // a further label needs a tenth of the strongest called one's
         // parsimony (prior): the residue-sum and ion-series relatives of a
         // strong label that no image rule catches stay below it
+        // and a tenth of its site's delta 0 control (prior): a label sits on
+        // a share of the peptides comparable to the unlabelled ones, the
+        // chance offsets of a label-free run do not
         double top = 0;
         for (const SiteCandidate& h : called) top = std::max(top, h.parsimony);
         Cand* pick = nullptr;
         for (Cand* c : order)
-          if (passes(*c) && c->ev.s.parsimony >= s.min_relative_parsimony * top) { pick = c; break; }
+          if (passes(*c) && c->ev.s.parsimony >= s.min_relative_parsimony * std::max(top, controlParsimony(c->site)))
+          {
+            pick = c;
+            break;
+          }
         if (pick == nullptr) break;
         pick->decided = true;
         pick->ev.s.called = true;
@@ -2046,12 +2129,16 @@ namespace FASTag::LabelDiscovery
       }
     };
 
+    ctrl_pars[0] = controlOf(ctx, 'N').s.parsimony;
+    ctrl_pars[1] = controlOf(ctx, 'K').s.parsimony;
+    ctrl_pars[2] = controlOf(ctx, 'R').s.parsimony;
     std::vector<Cand> cands;
     runSites(ctx, "NKR", cands);
+    const double w_zero = std::max(a.win.w_n_hist, a.win.w_c);  // delta 0 is the control, never a candidate
     for (Cand& c : cands)
     {
-      c.ev = evaluate(ctx, c.site, c.x, c.imgs, false, nullptr);
-      c.kept = keptRule(c.ev.s);
+      refine(c, nullptr);
+      c.kept = keptRule(c.ev.s) && std::fabs(c.x) > w_zero;
     }
     mergeC(cands, ctx);
     callLoop(cands);
@@ -2092,8 +2179,8 @@ namespace FASTag::LabelDiscovery
           bool dup = false;
           for (const Cand& o : cands) dup = dup || (o.site == 'N' && std::fabs(o.x - c.x) <= w0);
           if (dup) continue;
-          c.ev = evaluate(ctx2, c.site, c.x, c.imgs, false, acc);
-          c.kept = keptRule(c.ev.s);
+          refine(c, acc);
+          c.kept = keptRule(c.ev.s) && std::fabs(c.x) > w_zero;
           cands.push_back(std::move(c));
         }
         callLoop(cands);
@@ -2232,7 +2319,7 @@ namespace FASTag::LabelDiscovery
     }
     row("ld_run", "unimod_entries", num(static_cast<std::uint64_t>(a.unimod_entries)), "-", "ModificationsDB entries searched");
     row("ld_run", "digest_assumption", "tryptic_P1", "-", "the site scan assumes K and R at P1");
-    row("ld_run", "sigma_ppm_n", an && a.cal.estimated_n ? fix(a.cal.sigma_ppm_n, 4) : "-", "-",
+    row("ld_run", "sigma_ppm_n", an && a.cal.n_ref_n_all > 0 ? fix(a.cal.sigma_ppm_n, 4) : "-", num(a.cal.n_ref_n_all),
         "1.4826 MAD of the channel n reference deviations, ppm of M");
     row("ld_run", "window_n_p90", an ? fix(a.win.w_n_hist, 6) : "-", "-", "the histograms' n window: w_n at the 90th percentile of M");
     row("ld_run", "precursor_mass_q10", an ? fix(a.win.m_q10, 4) : "-", "-", "precursor neutral mass, 10 % quantile");
@@ -2314,6 +2401,25 @@ namespace FASTag::LabelDiscovery
         row("ld_site", k + "completeness", sc.completeness >= 0 ? fix(sc.completeness, 4) : "-", "-",
             "spectra(L) / (spectra(L) + spectra(delta 0)), descriptive");
         row("ld_site", k + "called", sc.called ? "yes" : "no", "-", "the candidate is part of the call");
+      }
+    }
+    if (!an)
+    {
+      // the delta 0 controls are always written; without an analysis
+      // (low_resolution, cz_only) they hold no values
+      for (char site : {'N', 'K', 'R'})
+      {
+        const std::string k = std::string(1, site) + ".0.";
+        row("ld_site", k + "delta", "0", "-", "delta 0: the unlabelled control");
+        for (const char* f : {"sigma", "spectra", "spectra_clean", "parsimony", "image_hits", "null_expectation", "share",
+                              "ladder_clean", "ladder_confounded", "support_c", "support_n", "null_coincident", "images",
+                              "fold", "log10_q"})
+          row("ld_site", k + f, "-", "-", "not analysed");
+        row("ld_site", k + "class", "control", "-", "class (doc/LABEL-DISCOVERY-REPORT.md)");
+        row("ld_site", k + "explanation", "unlabelled", "-", "the best explanation");
+        row("ld_site", k + "alternatives", "-", "-", "other explanations (error in Da)");
+        row("ld_site", k + "completeness", "-", "-", "spectra(L) / (spectra(L) + spectra(delta 0)), descriptive");
+        row("ld_site", k + "called", "no", "-", "the candidate is part of the call");
       }
     }
     if (!s.low_resolution)

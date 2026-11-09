@@ -54,9 +54,10 @@ Sections, in this order:
 | `ld_known` | `-label_out`-compatible counts of the known labels |
 | `ld_call` | the call |
 
-On a Da fragment tolerance only `run`, `ld_run`, `ld_count` and `ld_call` are
-written, with `ld_call status no_call`, `reason low_resolution` (the
-`-label_out` rule). A run with only c/z tags has no `ld_peak`/`ld_site` rows
+On a Da fragment tolerance nothing is analysed: `run`, `ld_run`, `ld_count`,
+the three delta 0 control rows of `ld_site` (with `-` values) and `ld_call`
+are written, with `ld_call status no_call`, `reason low_resolution` (the
+`-label_out` rule). A run with only c/z tags is the same, with `ld_known`
 and `reason cz_only`.
 
 ### `ld_run`
@@ -79,14 +80,21 @@ and `reason cz_only`.
 | `sigma_ppm_n` | 1.4826 MAD of the channel n reference deviations, in ppm of the precursor mass |
 | `window_n_p90` | the n window the histograms use: w_n at the 90th percentile of M |
 | `precursor_mass_q10/q50/q90` | precursor neutral mass quantiles |
-| `calib_ppm_c`, `calib_ppm_n` | the median reference offsets (ppm; for n, ppm of M); `n` = the reference values |
+| `calib_ppm_c`, `calib_ppm_n` | the median reference offsets (ppm; for n, ppm of M), from >= 20 reference values (`n`) that form a peak (c: >= 60 % of the deviations within 0.005 Da of their median) at an offset within 30 ppm, else `-` and no correction |
 | `calib_slope_c` | the linear term of the c calibration (ppm per Da; Theil-Sen over the per-reference medians, fitted with >= 1000 references spanning >= 150 Da), else `-` |
 | `calib_unc_ppm_c`, `calib_unc_ppm_n` | residual calibration uncertainty: MAD / sqrt(n_ref), plus for c the range of the per-reference medians with >= 50 values each |
 | `null_compositions` | residue compositions of the null image set (0.0005 Da bins) |
 
 The reference deviations are those of the nearest one-residue image within
 0.02 Da: c = m_r and n = m_r + H2O, m_r over the alphabet and bare K and R.
-Every flank is corrected by the calibration before it is binned.
+The channel n offset is taken from r = K or R only (the reversed read of a
+tryptic one-residue C side; other residue masses there are often chance
+compositions), its spread (`sigma_ppm_n`, `n` = its reference values) from
+every residue.
+Every flank is corrected by the calibration before it is binned. The
+`-out_spectra` provenance never lists the `-label_discovery_*` options (the
+report writes its own settings), so every other output is byte-identical
+with the option on.
 
 ### `ld_count`
 
@@ -230,7 +238,8 @@ has spectra >= `min_spectra`, share >= 0.01, fold >= 20 and log10_q <= -2,
 3 clean ladder residues or a clean zero-residue image with >= `min_spectra`
 spectra, channel c support (`support_c` >= `min_spectra`, or both channels
 >= `min_spectra`/4), and a parsimony of at least a tenth of the strongest
-called label. A called candidate's images join the null set and the rest are
+called label and of its site's delta 0 control (for C: of the K and R
+controls). A called candidate's images join the null set and the rest are
 re-classed before the next is taken. When a K label is called, K + its delta
 joins the alphabet and the N site is scanned once more for new offsets.
 
@@ -260,9 +269,16 @@ Found on the PXD004541 (TMT10) and PXD001587 (label-free) probes:
    half-integer background. With the null expectation in lambda, TMT on the
    TMT10 probe has a fold of about 3 (its confounded N1 images carry its own
    signal) and would not be called.
-6. **Centred ladder images**, and a **relative parsimony** of 0.1 for a
-   further label: noise tails and residue-sum relatives of a strong label
-   gave single unknown calls with 3 weak ladder residues.
+6. **Centred ladder images**, and a **relative parsimony** of 0.1 against
+   the strongest called label and the site's delta 0 control: noise tails,
+   residue-sum relatives of a strong label and chance offsets of a
+   label-free run gave unknown calls with 3 weak ladder residues.
+7. **Scan maxima are moved** to where the candidate's strongest image puts
+   them before the candidate is evaluated (a flat O top can lie a window off
+   the offset when the window is wider than the spread of the flanks).
+8. **Calibration** needs 20 reference values, in channel c forming a peak;
+   the channel n offset uses K + H2O and R + H2O only (the window estimate
+   keeps the 200 references of the design).
 
 Two-modification combinations (`unimod_combo`, `FD::combinations` over
 `massgap_mods.tsv`) are not tried in format 1.

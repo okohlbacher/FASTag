@@ -517,7 +517,7 @@ MGF→mzML direction is exact.
 | `-digest_out <file>` | none | Terminal residues of the tags (ungapped, E-value ≤ 1) at P4..P1 and P1'..P4', and the protease call they support with its margin, or `no_call` with the reason (see Digest, label and mass-gap reports) |
 | `-label_out <file>` | none | TMT, TMTpro and iTRAQ4 gaps at either tag end (N- and C-terminal counts pooled, each given in the description) and the heavy Lys8/Arg10 shares |
 | `-label_discovery_out <file>` | none | Experimental, not validated on held-out data: every N-terminal, lysine, arginine or C-terminal mass offset the tag flanks carry, known or not, explained by residues, the known labels or Unimod, and a provisional label call (see Digest, label and mass-gap reports; format in doc/LABEL-DISCOVERY-REPORT.md) |
-| `-label_discovery_max_flank <Da>` / `-label_discovery_depth <n>` | 700 / 2 | Advanced: largest flank mass histogrammed and of the null compositions (above 0, at most 2000); most residues a peak explanation names (0-2) |
+| `-label_discovery_max_flank <Da>` / `-label_discovery_depth <n>` | 700 / 2 | Advanced: largest flank mass histogrammed and of the null compositions (above 0); most residues a peak explanation names (0-2) |
 | `-label_discovery_min_spectra <n>` / `-label_discovery_min_share <f>` | 20 / 0.005 | Advanced: spectra and share of the counted spectra a peak or site candidate needs |
 | `-label_discovery_window_n <Da>` / `-label_discovery_window_c <Da>` | 0 / 0 | Advanced: half-window of the N- and C-terminal flank channel; 0 = estimate it from the run |
 | `-label_discovery_unimod_top <n>` | 3 | Advanced: Unimod alternatives listed per peak |
@@ -878,8 +878,8 @@ options and their values.
   call on a Da tolerance, with c/z tags only, below 175 spectra or without
   N-terminal flanks. Its `ld_known` rows give `-label_out`'s counts again. It
   never feeds `-label_out`'s `label_call`, and every other output is the
-  same with or without it (the `-out_spectra` provenance lists the option
-  when it is set). Format, classes and the call rule: doc/LABEL-DISCOVERY-REPORT.md;
+  same with or without it (the `-out_spectra` provenance leaves its options
+  out). Format, classes and the call rule: doc/LABEL-DISCOVERY-REPORT.md;
   design: doc/DESIGN-label-discovery.md.
 - **`-massgap_out`** reads the `-delta_out` histogram (built even when
   `-delta_out` is not written; run it without fixed modifications to see the

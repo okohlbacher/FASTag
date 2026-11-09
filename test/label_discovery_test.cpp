@@ -318,7 +318,9 @@ int main()
     o.c_C = 4.0085;
     const LD::Analysis a = run({o}, S, unimod);
     const LD::SiteCandidate* c = siteNear(a, 'C', 4.0085, 0.003);
-    CHECK(c != nullptr && c->called, "+4.0085 on K and R: site C %s [%s]", c ? c->cls.c_str() : "missing", calledList(a).c_str());
+    CHECK(c != nullptr && c->called, "+4.0085 on K and R: site C %s [%s] (ppm_c %g ppm_n %g w_c %g w_n %g)", c ? c->cls.c_str() : "missing",
+          calledList(a).c_str(), a.cal.ppm_c, a.cal.ppm_n, a.win.w_c, a.win.w_n_hist);
+
   }
 
   // ---- 4. collisions ----
