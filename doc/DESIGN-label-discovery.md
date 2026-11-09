@@ -4,6 +4,9 @@ Status: design, 2026-11-09, branch `feat/label-discovery` (from `origin/main` 70
 Nothing here is implemented yet. The thresholds are priors. They are not fitted, and none is
 frozen until the evaluation in section 13 has run.
 
+Revision 2 (2026-11-09) takes in the first design review. The issues and what was done with each
+are in section 15.
+
 Backlog seed: `output/BACKLOG.md`, "Database-free label discovery". Related code and documents:
 `-label_out` (`src/Digest.{h,cpp}`, `src/DigestReport.cpp`), `-massgap_out` / `-delta_out`,
 the README section "Digest, label and mass-gap reports", `doc/DESIGN-digest.md` and
@@ -37,8 +40,8 @@ Out of scope for format 1:
 | option | default | meaning |
 |---|---|---|
 | `-label_discovery_out <file>` | none (off) | Write the report (TSV, format in `doc/LABEL-DISCOVERY-REPORT.md`, to be written with the code). This option alone switches the feature on. |
-| `-label_discovery_max_flank <Da>` | 420 | Advanced: largest flank mass histogrammed. It covers the TMTpro images (zero-residue N-terminal flank 304.2, C-terminal K + TMTpro 432.3 is above it; see below), dimethyl/acetyl plus two residues, and K + TMT (357.26). |
-| `-label_discovery_depth <0\|1\|2>` | 2 | Advanced: the most residues a flank explanation may contain. |
+| `-label_discovery_max_flank <Da>` | 700 | Advanced: largest flank mass histogrammed, and the largest composition mass of the null image set (section 7). It covers every one- and two-residue image of TMTpro (K1f 432.30, K1r 450.31, K2f ≤ 618.38, K2r ≤ 636.39, N2f ≤ 676.37), and so every lighter label. |
+| `-label_discovery_depth <0\|1\|2>` | 2 | Advanced: the most residues a channel-peak explanation names (`N2r:TMT+AG`). It does not limit the null image set, which takes every composition up to `max_flank`. |
 | `-label_discovery_min_spectra <n>` | 20 | Advanced: spectra a peak or site candidate needs. This is the `-massgap_min_spectra` prior. |
 | `-label_discovery_min_share <f>` | 0.005 | Advanced: share of the counted spectra a peak needs. This is the `-massgap_min_share` prior. |
 | `-label_discovery_window_n <Da>` / `-label_discovery_window_c <Da>` | 0 / 0 | Advanced: the half-window of the N- and C-terminal flank channels. 0 means estimate it from the run (section 5). |
@@ -48,14 +51,10 @@ Out of scope for format 1:
 `-label_discovery_out` is warned about and ignored. It goes into the existing `IgnoredOption`
 table in `FASTag.cpp` (about line 2272), with reader `-label_discovery_out`.
 
-**K + TMTpro.** K + TMTpro is 432.30 Da, so it is not covered by the default `max_flank` of 420.
-Two options were considered:
-
-- Raise the default to 440.
-- Leave the K-site TMTpro signal to its zero-residue image K0f at 304.2 (section 3), which the
-  default covers.
-
-The choice is decided on the TMTpro runs in section 13. The memory cost of 440 is in section 10.
+**Why 700.** The first draft used 420, which put K1f (432.30) and K1r (450.31) of TMTpro outside
+the range and left the TMTpro K site to its single K0f image. The default is now 700. The
+half-integer background (section 6) still holds there: a peptide-like composition of 700 Da has a
+mass defect of about 0.35, below 0.5. The memory cost is in section 11.
 
 **Interface change.** `--help`, `-write_ctd` and the INI gain these options. The `-out_spectra`
 mzML does not, because of the 1.12 legacy-parameter shim (`FASTag::Cli::kLegacyOutSpectraParameters`,
@@ -89,7 +88,8 @@ FASTag cannot know which reading a tag is. So the report works on the two raw ch
 masses it predicts in each channel. These predicted masses are its "images".
 
 L_N is an N-terminal modification, L_K a lysine side-chain modification, c_C a C-terminal
-modification (0 for a free acid), S a multiset of 0-2 residues and m(S) its mass.
+modification (0 for a free acid), S a multiset of residues and m(S) its mass. In the label
+images below |S| ≤ 2. In the null image set of section 7, S is any composition up to `max_flank`.
 
 | image | channel | predicted mass | how the ion arises |
 |---|---|---|---|
@@ -151,7 +151,11 @@ PXD001587 `140120_Lysate90min_38` (label-free, 55,431 filtered tags):
    Channel n is precursor-limited, about ±0.007 Da. So they get separate windows (section 5).
    Channel c is the one that can separate iTRAQ8 (304.205360) from TMTpro (304.207146).
 2. Below 420 Da, the background at half-integer masses is effectively zero (the mass-defect
-   gap). That is the null (section 6).
+   gap). That is the null (section 6). Up to 700 Da it is expected to stay near zero; this is
+   checked on the probes in the implementation.
+3. Added in revision 2: the scan mixes both termini and both readings into each channel, so the
+   ordinary flanks of an unlabelled peptide leak into the label offsets (section 7, null image
+   set). And channel n carries every precursor pick error, including 13C picks (section 5).
 
 ## 4. Which tags count
 
@@ -173,13 +177,23 @@ counter sees a different input.
 - **c/z tags** (`t.ion_series == CZ`) are counted in `ld_count tags_excluded_cz` and not binned.
   Their reversed-read offset is −15.0347, not +H2O, and format 1 does not model them. A run with
   only c/z tags gets `no_call cz_only`.
-- **Both units are kept.**
-  - Tags: every counted tag adds its n and c value. This is the unit of `-label_out`.
-  - Spectra: within one spectrum, each (channel, bin) counts once, so many overlapping tags of
-    one ion ladder cannot inflate a peak. This is the `-delta_out` "one sample per spectrum"
-    idea.
-  - Peaks are called on spectra. Tags are reported beside them.
-- **Adjacent residue.** For channel c the report also keeps a histogram restricted to tags whose
+- **Per-tag record list.** Every counted tag is kept as one compact record: n, c, the
+  precursor neutral mass M (all `float`), the spectrum's index in scan order (`uint32`), and a
+  flag byte (first residue K, last residue K, first R, last R). That is 17 bytes, padded to 20.
+  The 130k tags of the PXD004541 probe take 2.6 MB; a full, unsubsampled run of 2M tags takes
+  40 MB. Records are collected per thread and merged in scan order, so the list does not depend
+  on the thread count.
+- **Two units, with different jobs.**
+  - `image_hits`: the dense histograms (section 5) are built from the list, one count per tag
+    and channel. They find the candidates and nothing else.
+  - `spectra`: after the candidates are found, each one is recounted exactly on the list as the
+    number of distinct spectra with at least one tag that lies within w of at least one of the
+    candidate's images. `spectra`, `share`, `min_spectra`, the completeness and the Poisson test
+    of the call all use this count. A b-ion ladder of one spectrum (b0, b1, b2) then counts
+    once, not once per image and channel.
+  - `tags` is reported beside them, as the unit of `-label_out`.
+- **Adjacent residue.** The flags come from `FASTag::baseSequence(t.seq)`. For channel c the
+  report also builds a histogram restricted to tags whose
   last residue is K, and for channel n one restricted to tags whose first residue is K. That is
   `FASTag::baseSequence(t.seq)` front and back, after I/L folding. These are the K0f image (the
   K-site evidence that needs no residue in the flank) and its reversed counterpart.
@@ -195,21 +209,48 @@ counter sees a different input.
   - Take the deviations from the nearest one-residue reference image within ±0.02 Da. The
     reference images are c = K, R and the residue keys of `Digest::residueKeys()`, and
     n = (the same) + H2O.
-  - w = 3 × 1.4826 × MAD of those deviations.
-  - Clamp w to [0.0015, 0.02].
+  - Channel c is fragment-limited, and its error does not grow with M. w_c = 3 × 1.4826 × MAD
+    of the c deviations (after the calibration below), clamped to [0.0015, 0.02].
+  - Channel n is precursor-limited: its error is a precursor ppm error, so in Da it grows with M
+    (5 ppm is 0.005 Da at 1000 Da and 0.02 Da at 4000 Da). So the n deviations are taken as ppm
+    of M, σ_ppm = 1.4826 × MAD(dev / M × 1e6), and the window is a function of the tag's
+    precursor, w_n(M) = 3 × σ_ppm × M × 1e-6, clamped to [0.0015, 0.02]. The exact recounts of
+    section 4 use w_n(M) per tag. The histograms need one Da window, so they use w_n at the 90th
+    percentile of M. That is wider than most tags need, which can merge close peaks but does not
+    miss any; the recount then narrows it.
   - With fewer than 200 reference values, the defaults are used instead: w_n = 0.008 (the
-    `-digest_window` value) and w_c = 0.004.
-  - `ld_run window_source_n/_c` records `estimated`, `default` or `option`.
+    `-digest_window` value, as a flat Da window) and w_c = 0.004.
+  - `ld_run` records `window_source_n/_c` (`estimated`, `default` or `option`), `sigma_ppm_n`,
+    `window_n_p90`, and the M quantiles 10/50/90 %.
   - On the PXD004541 probe the quantiles above give about w_c 0.0015 (the floor) and w_n 0.006.
     This is still to be measured on the implementation.
+- **Calibration.** The same reference deviations give a per-channel calibration. For channel c
+  it is the median ppm offset of the c deviations against the reference mass. For channel n it
+  is the median of dev / M in ppm. When at least 1000 reference values span at least 150 Da, a
+  linear term in mass is fitted as well (Theil-Sen, deterministic); otherwise the offset alone
+  is used. Every peak centroid is corrected before annotation. `ld_run` writes `calib_ppm_c`,
+  `calib_ppm_n`, `calib_slope_c` (or `-`) and `calib_unc_ppm_c/_n`. The residual uncertainty is
+  the MAD of the reference ppm divided by √n_ref, plus the spread of the median ppm across the
+  reference masses (the range of the per-reference medians with ≥ 50 values each).
+- **Precursor isotope picks.** FASTag's default is `-isotope_error 0` (`FASTag.cpp` line 794).
+  A precursor picked one or two 13C peaks too high shifts n by +1.003355 or +2.006710. Every
+  n-channel image, including the unlabelled N1f ladder, then has satellites at those offsets.
+  Section 7 models them as images and section 8 classes them `isotope_error`.
 - **Mass of a peak.** It is the count-weighted mean of the bin centres within ±w, summed in
   ascending bin order. Its spread is reported as the MAD-based σ over the same bins, and its
   standard error as se = σ/√spectra.
 - **Close masses.** Two masses closer than the window are not resolved as two peaks. They are
-  told apart by the centroid instead (section 8). Example: iTRAQ8 304.205360 vs TMTpro
-  304.207146 differ by 0.0018 Da. A c-channel peak of 1,000 spectra at σ 0.0004 has
-  se ≈ 0.00001, so its centroid decides between them. A sample with both labels at once would
-  stay a single peak.
+  told apart by the corrected centroid instead (section 8). Example: iTRAQ8 304.205360 vs
+  TMTpro 304.207146 differ by 0.0018 Da, about 6 ppm at the N0r image (286.19). The statistical
+  se of a 1,000-spectra peak (≈ 1e-5 Da) is not the limit. A systematic fragment calibration
+  offset of 2-4 ppm, common on TOF and uncalibrated Orbitrap runs, moves the centroid by
+  0.6-1.2 mDa. So a near-isobaric pair (separation s) is decided only when both hold:
+  - |corrected centroid − label| < 0.25 × s, and
+  - the residual calibration uncertainty at that mass is below 0.25 × s.
+
+  The decision combines every image the range allows: N0r and N0f, and K0f and K1f. Each image
+  is corrected and compared on its own; they must agree. Otherwise the label is written
+  `ambiguous:iTRAQ8plex|TMTpro`. A sample with both labels at once would stay a single peak.
 - **Da tolerance.** On a Da fragment tolerance (`fragment_tolerance_unit Da`), peaks are not
   called. The report keeps `ld_run`, `ld_count` and writes `ld_call no_call low_resolution`.
   This is the `-label_out` rule (`low_resolution yes on a Da tolerance`).
@@ -241,14 +282,23 @@ ladder. Telling these apart is the job of the explanation (section 8) and of the
 (section 7). The same half-integer rule is applied to the site scan, whose background is not 0
 (it carries the smear of the residue subtraction).
 
+**Null expectation for site candidates.** For a site candidate the half-integer background is
+not the right null: ordinary flanks land on many label images (section 7). So each candidate is
+also scored against the expected count from the unlabelled flanks. At each of its images, the
+null expectation is the observed count of the null images that lie within w of it (the
+delta-0 flank distribution, shifted by the residue differences). λ for the candidate is then
+max(half-integer background, null expectation, 1), and fold and q of a site candidate use that
+λ.
+
 **Peak calling in a channel:**
 
 1. A peak is a local maximum of C over ±2w. A plateau goes to its lowest bin.
-2. It is kept when all of these hold: spectra ≥ `min_spectra`, spectra / counted spectra ≥
+2. It is kept when all of these hold (spectra from the exact recount of section 4):
+   spectra ≥ `min_spectra`, spectra / counted spectra ≥
    `min_share`, fold ≥ 20 (the `kLabelBackgroundFold` prior), log10_q ≤ −2.
 3. Peaks are ranked by spectra, then by mass, and at most 200 per channel are written.
 
-## 7. Site scan: separating labels from 0-2-residue flanks
+## 7. Site scan: separating labels from residue flanks
 
 A real label L_N moves a whole family of images by the same offset: N0f, N0r, then N1f and N1r
 for every residue r. A residue combination does not. The site scan turns each channel into an
@@ -280,15 +330,61 @@ are the main evidence. But sums over all pairs smear the whole scan. So S2 = uno
 S1 (about 325 sums) is not scanned. It is used in a second pass that scores each candidate
 offset with its N2 or K2 images.
 
-**Site candidates.** These are the local maxima of O_N, O_K and O_R. They are kept by the
-peak-calling rule of section 6, with O's own half-integer background. For each candidate the
-report gives:
+**The termini leak into each other (revision 2).** Each channel holds both termini and both
+readings. Channel c also holds the forward C-side flanks (c = m(S)), and channel n the reversed
+C-side flanks (n = m(S) + H2O). O_N reads c at x − H2O and n at x, so the unlabelled C-side
+flanks give O_N peaks at x = m(S) + H2O. These include:
 
-- `spectra`: distinct spectra with at least one image.
+- x = +18.0106: every y1 or b(n−1) flank minus its own residue lands there, a ladder over all
+  19 residues;
+- x = K + H2O (146.1055) and R + H2O (174.1117);
+- in a TMT run, the K1f, K1r and K2 images at L_K + H2O (247.17) and K + L_K + H2O (375.27).
+
+The same leak puts y = −18.0106 and y = r − H2O (G − H2O 39.01, A − H2O 53.03, ...) into O_K
+and O_R, and −18.0106 in both would be attributed to site C. O_N also peaks at x = m(S) for
+three-residue and longer flanks. The first draft explained only offsets m(S) with |S| ≤ 2 and
+did not catch any of this.
+
+**Null image set.** The fix is to model the unlabelled flanks completely and to count only the
+evidence they cannot produce.
+
+- A DP over the run alphabet S1 enumerates every composition S with m(S) ≤ `max_flank` + H2O.
+  It runs on the 0.0005 Da bins and keeps, per reachable bin, the exact lowest and highest
+  composition mass, so that rounding does not accumulate. For the standard alphabet and 720 Da
+  there are about 41,000 distinct composition masses.
+- The null channel images are all four reading/terminus combinations: n = m(S),
+  n = m(S) + H2O, c = m(S) and c = m(S) − H2O, for every S.
+- The precursor isotope picks (section 5) add n = (each null n image) + k × 1.003355, k = 1, 2.
+- A label image is **confounded** when a null channel image lies within w (the channel's own
+  window) of it. Otherwise it is **clean**.
+- Once a hypothesis is accepted (section 9, in order of strength), its full image set, including
+  its isotope satellites, joins the null set for every later candidate.
+
+A check of the rule, done for this revision with monoisotopic masses, CAM-Cys, Met-ox,
+w_c 0.0015 and w_n 0.006 (scratch script, to become unit test 11): of the N0/N1 images (40 per
+label), the clean ones are TMT 24, TMTpro 16, iTRAQ4 24, Dimethyl 25, Acetyl 31, Propionyl 31,
+Carbamyl 24, an unknown +123.4567 40. The leak offsets +18.0106 and K + H2O have 0 clean images.
+TMT's N0f, N0r and K0f are all clean.
+
+**Site candidates.** These are the local maxima of O_N, O_K and O_R. They are kept by the
+peak-calling rule of section 6, with O's own background and the null expectation. For each
+candidate the report gives:
+
+- `spectra`: distinct spectra with at least one image within w, from the exact recount on the
+  tag list (section 4). `spectra_clean` is the same count restricted to clean images.
+- `image_hits`: the summed histogram reads over all images. It is reported only.
 - `share`: spectra over counted spectra.
-- `ladder`: the distinct residues r whose N1 or K2 image alone reaches `min_spectra`/4 (prior 5).
-- `images`: the count per image class, for example `N0f=2598;N0r=19400;N1f=...;N1r=...`.
-- `log10_q`, `fold`.
+- `ladder_clean`: the distinct residues r whose clean N1 (n: L + m_r, c: L + m_r − H2O) or
+  clean K2 image alone reaches `min_spectra`/4 (prior 5) distinct spectra.
+- `ladder_confounded`: the same for confounded images. It is descriptive only.
+- `support_c`, `support_n`: spectra with a clean image in channel c, or in channel n.
+- `images`: the count per image class with a `*` on the confounded ones, for example
+  `N0f=2598;N0r=19400;N1rA=1532;N1fV*=...`.
+- `null_coincident`: `yes` when the offset itself lies within w of a null offset, that is m(S)
+  or m(S) ± H2O for some composition S. This is shown, but by itself it does not decide the
+  class, because at 700 Da the null offsets are dense and true labels (TMT among them) can
+  coincide with one.
+- `log10_q`, `fold`, against λ of section 6.
 
 **Site attribution:**
 
@@ -296,7 +392,9 @@ report gives:
 - An offset in O_K only is a lysine modification (TMT side chain, Lys8, a K-only label).
 - An offset in O_R only is an arginine modification (Arg10).
 - The same offset in both O_K and O_R, within w_c, is a C-terminal modification of the peptide
-  (for example 18O labelling, +2.0042 or +4.0085).
+  (for example 18O labelling, +2.0042 or +4.0085). It is attributed to C only on channel-c
+  support (K1f/R1f images). 2 × 13C (+2.0067) lies 2.5 mDa from +2.0042, inside w_n, so the
+  n images cannot tell 18O from an isotope mis-pick; at w_c 0.0015 the c images can.
 - The scan assumes K and R at P1, which is the tryptic case. For a non-tryptic call by
   `-digest_out` this is noted in `ld_run`; it is not corrected.
 
@@ -304,20 +402,35 @@ report gives:
 is because a labelled N-terminal K carries both labels, so its N1 image is L_N + K + L_K. Only
 one second pass is made.
 
-**Completeness.** It is spectra(L) / (spectra(L) + spectra(delta 0)), per site. It is
-descriptive, because labels change fragment detectability: TMT enhances the b ions. It is the
-"partial labelling" read-out of the backlog entry.
+**Completeness.** It is spectra(L) / (spectra(L) + spectra(delta 0)), per site, with both
+counts from the exact distinct-spectra recount and restricted to the image classes both
+hypotheses can show (so a hypothesis with more observable images, such as TMT's b0, is not
+favoured). It is descriptive, because labels change fragment detectability: TMT enhances the b
+ions. It is the "partial labelling" read-out of the backlog entry.
 
 ## 8. Annotation of peaks and site candidates
 
 Every channel peak and every site candidate gets exactly one class and up to `unimod_top`
 alternatives. Classes are tried in this order, and the first that matches within ±w wins:
 
-1. **`residue_combo`.** It matches an image of the unlabelled hypotheses with |S| ≤ `depth`. Those
-   hypotheses are L_N = 0, or the run's configured fixed terminal modification; the C-side K or R
-   with c_C = 0; and the run alphabet. For a site candidate, the offset itself equals m(S) for
-   some |S| ≤ 2. Such an offset is the image of a longer unlabelled flank, for example x = 113.08
-   in O_N from three-residue flanks.
+1. **`residue_combo`, `null_shadow`, `isotope_error`, `shadow`.** These are the classes of
+   evidence that the unlabelled flanks, the precursor picks or an already accepted label explain.
+   None of them is ever called.
+   - `residue_combo` (channel peaks): the mass matches a null channel image (section 7) with
+     |S| ≤ `depth` named in the explanation, or a longer S, named by its composition count.
+   - `null_shadow` (site candidates): the candidate has no clean support, that is
+     `ladder_clean` < 3 and no clean zero-residue image (N0f, N0r, K0f) with ≥ `min_spectra`
+     spectra. This covers +18.0106, K + H2O, R + H2O, −18.0106, r − H2O, offsets m(S) of longer
+     flanks (x = 113.08 from three-residue flanks), and the residue-difference collisions of
+     common labels on a label-free run (Dimethyl A→V, S→P, N→AA, Q→GV, C(CAM)→GM; Methyl;
+     Oxidation; Carbamyl; Formyl; Acetyl S→E, K→AV/GL), whose ladders are confounded.
+   - `isotope_error`: the candidate lies at +k × 1.003355 (k = 1, 2) from a stronger candidate
+     of the same site, within w_n, and its clean support is in channel n only.
+   - `shadow:<site>+<delta>`: more than 50 % of the candidate's spectra have their supporting
+     images among the images of an accepted hypothesis (for example the N candidate at
+     L_K + H2O = 247.17 of a TMT K-only set, or K + L_K + H2O = 375.27).
+   - A candidate that passes all four but has `null_coincident yes` keeps its class below and
+     lists the composition as an alternative.
    - Collisions are listed as alternatives: GG = N, AG = Q exactly; K/Q at 0.036 Da, separated
      only at w < 0.018.
    - A known artefact whose mass equals a residue, such as N-terminal carbamidomethyl = G
@@ -338,10 +451,26 @@ alternatives. Classes are tried in this order, and the first that matches within
    term_spec)` (`OpenMS/CHEMISTRY/ModificationsDB.h`). `ModificationsDB` is built once, when the
    report is written, in a single thread.
 
-   Ranking: fewer residues in S first, then smaller |error|, then the `getFullId()` string. That
-   order is deterministic. The same rule ranks `known_label` alternatives. The explanation names
-   the best one. An alternative whose error is within 2 se of the best one is written as
-   `ambiguous` in `.alternatives`.
+   **Same-composition groups.** Unimod has several entries with one elemental composition:
+   C3H4O (56.0262) is Propionyl and `Delta:H(4)C(3)O(1)`; C2H4 (28.0313) is Dimethyl, Ethyl and
+   `Delta:H(4)C(2)`. Entries with the same `getDiffFormula()` form one explanation group, and
+   the group is named by this priority:
+   1. a curated list of derivatisation labels: Dimethyl and its 2H/13C variants, Acetyl,
+      Propionyl, Carbamyl, TMT6plex/TMTpro/iTRAQ4plex/iTRAQ8plex and DiLeu (kept in the code
+      beside `Digest::labelKeys()`);
+   2. then the Unimod classification of the matching specificity
+      (`getSourceClassification()`): `ISOTOPIC_LABEL` or `CHEMICAL_DERIVATIVE` before
+      everything else, `ARTIFACT` and the `Delta:` entries last;
+   3. then the lowest `getUniModRecordId()`.
+
+   The other members are listed in `.alternatives` as `same_composition`.
+
+   Ranking between groups: fewer residues in S first, then smaller |error| of the corrected
+   centroid, then the group priority above. That order is deterministic. The same rule ranks
+   `known_label` alternatives. Entries of different composition that are within the decision
+   limit of section 5 (for example iTRAQ8plex 304.2054 and iTRAQ8plex:13C(6)15N(2) 304.1990,
+   6 mDa apart, inside w_n) are decided by the corrected c-channel centroids of section 5. When
+   that rule cannot decide, the label is written `ambiguous:<a>|<b>` and both are listed.
 
    Two-modification combinations are reused from `-massgap_out`: `FD::combinations` /
    `FD::explain` over `share/FASTag/digest/massgap_mods.tsv`. They are tried only when no single
@@ -370,20 +499,25 @@ Sections, in this order:
 | section | keys |
 |---|---|
 | `run` | The shared versioned run rows (`FASTag::RunReport::runRows`, `run_report_version`), as in `-alkylation_out`. |
-| `ld_run` | `format`, `tags_source`, `low_resolution`, `window_n`, `window_c`, `window_source_n`, `window_source_c`, `bin_da`, `max_flank_da`, `depth`, `min_spectra`, `min_share`, `min_fold`, `max_log10_q`, `fixed_nterm_delta`, `fixed_cterm_delta`, `alphabet` (residue=mass list), `unimod_entries` (searched entries), `digest_assumption` (`tryptic_P1`). |
+| `ld_run` | `format`, `tags_source`, `low_resolution`, `window_n`, `window_c`, `window_source_n`, `window_source_c`, `bin_da`, `max_flank_da`, `depth`, `min_spectra`, `min_share`, `min_fold`, `max_log10_q`, `fixed_nterm_delta`, `fixed_cterm_delta`, `alphabet` (residue=mass list), `unimod_entries` (searched entries), `digest_assumption` (`tryptic_P1`), `sigma_ppm_n`, `window_n_p90`, `precursor_mass_q10/q50/q90`, `calib_ppm_c`, `calib_ppm_n`, `calib_slope_c`, `calib_unc_ppm_c`, `calib_unc_ppm_n`, `null_compositions`. |
 | `ld_count` | `spectra_counted`, `tags_counted`, `tags_excluded_cz`, `clamped_n`, `clamped_c`, `above_max_n`, `above_max_c`. |
 | `ld_peak` | Per channel `n` and `c`, ranked: `<ch>.<i>.mass`, `.sigma`, `.spectra`, `.tags`, `.background`, `.fold`, `.log10_q`, `.class`, `.explanation` (e.g. `N1r:TMT+A` or `K1f:K+TMT6plex (K)`), `.alternatives`, `.share_adjacent_k`, `.se`. |
-| `ld_site` | Per site `N`, `K`, `R`, `C`, ranked: `<site>.<i>.delta`, `.sigma`, `.spectra`, `.share`, `.ladder`, `.images`, `.fold`, `.log10_q`, `.class`, `.explanation`, `.alternatives`, `.completeness`. The delta 0 rows (unlabelled N, K, R) are always written, as the positive control. |
+| `ld_site` | Per site `N`, `K`, `R`, `C`, ranked: `<site>.<i>.delta`, `.sigma`, `.spectra`, `.spectra_clean`, `.image_hits`, `.share`, `.ladder_clean`, `.ladder_confounded`, `.support_c`, `.support_n`, `.null_coincident`, `.images`, `.fold`, `.log10_q`, `.class`, `.explanation`, `.alternatives`, `.completeness`. The delta 0 rows (unlabelled N, K, R) are always written, as the positive control. |
 | `ld_known` | For each `labelKeys()` label and configured fixed terminal/K modification: tags and spectra per image at `-digest_window` (0.008 Da). This lets a reader relate the report to `-label_out`. |
-| `ld_call` | `status` (`call`, `no_call`), `labels` (e.g. `TMT`, `Dimethyl`, `TMTpro+K:TMTpro`, `unknown:N+123.4567`, `label-free`; `+`-joined; `-` on a no call), `sites`, `basis` (`site_scan`), `reason` (`low_resolution`, `few_spectra`, `cz_only`, `no_reference`; `-` on a call). |
+| `ld_call` | `status` (`call`, `no_call`), `labels` (e.g. `TMT`, `Dimethyl`, `TMTpro+K:TMTpro`, `unknown:N+123.4567`, `ambiguous:iTRAQ8plex|TMTpro`, `label-free`; `+`-joined; `-` on a no call), `sites`, `basis` (`site_scan`), `reason` (`low_resolution`, `few_spectra`, `cz_only`, `no_reference`; `-` on a call). |
 
-**Call rule (prior, unfitted).** A site candidate with delta ≠ 0 whose class is not
-`residue_combo` is called when all of these hold:
+**Call rule (prior, unfitted).** Candidates are taken in order of `spectra_clean`. A site
+candidate with delta ≠ 0 whose class is not `residue_combo`, `null_shadow`, `isotope_error` or
+`shadow` is called when all of these hold (all counts are distinct spectra from the recount):
 
 - share ≥ 0.01 (`kLabelMinShare`),
-- fold ≥ 20,
-- log10_q ≤ −2,
-- ladder ≥ 3, or a zero-residue image (N0f, N0r, K0f) with ≥ `min_spectra`.
+- fold ≥ 20 and log10_q ≤ −2, both against λ of section 6 (null expectation included),
+- `ladder_clean` ≥ 3, or a clean zero-residue image (N0f, N0r, K0f) with ≥ `min_spectra`,
+- channel-c support: `support_c` ≥ `min_spectra`, or clean images in both channels each with
+  ≥ `min_spectra`/4. A delta with only n-channel support is never called.
+
+A called candidate becomes an accepted hypothesis: its images join the null set (section 7) and
+the remaining candidates are re-classed before the next one is taken.
 
 The call is `label-free` when no candidate passes and the delta 0 N-terminal control passes the
 same rule. If neither passes, it is `no_call no_reference`: no sign of N-terminal flanks at all.
@@ -409,27 +543,32 @@ The report states measurements first, and the call is the last section, as in `-
 
 ## 11. Runtime, memory, determinism
 
-**Memory.** There are four dense histograms (n, c, c with last residue K, n with first residue K)
-of `ceil(max_flank / 0.0005)` = 840,000 `std::atomic<uint32_t>` bins each. That is 13.4 MB,
-allocated only when the option is on, and shared by all threads. At `max_flank` 440 it would be
-14.1 MB. The prefix sums and offset spectra of the post-processing take another ≤ 30 MB, freed
+**Memory.** The per-tag record list (section 4) takes 20 bytes per counted tag: 2.6 MB on the
+PXD004541 probe, about 40 MB for a full run of 2M tags. It is allocated only when the option is
+on. The four dense histograms (n, c, c with last residue K, n with first residue K) are built
+from the list in the post-processing, `ceil(max_flank / 0.0005)` = 1,400,000 `uint32_t` bins
+each, 22.4 MB. The null-image bitsets (one per channel, dilated by w) and the composition DP
+take under 2 MB. The prefix sums and offset spectra take another ≤ 50 MB. All of this is freed
 before the report is written.
 
-**Counting.** Each counting thread keeps a small per-spectrum key buffer, which is a
-`thread_local` vector, for the spectrum dedupe. At the end of the spectrum the buffer is sorted,
-made unique, and added with `fetch_add(relaxed)`. Integer addition commutes, so the final counts
-do not depend on the thread count or the schedule. The post-processing runs single-threaded on
-the merged integer counts and sums floats in ascending bin order. So the report is byte-identical
-at any `-threads`.
+**Counting.** Each counting thread appends records to a `thread_local` vector, tagged with the
+spectrum's scan-order index. At the end of the run the vectors are merged and sorted by
+(spectrum index, then the tag's write order within the spectrum), which is deterministic. The
+histograms are no longer atomic and are filled single-threaded from the sorted list. The
+post-processing sums floats in ascending bin or list order. So the report is byte-identical at
+any `-threads`.
 
 **Time.**
 
 - Counting is O(1) per tag.
-- The site scan is about 3 sites × 900k positions × 2 × 26 lookups, roughly 140 M array reads.
+- The site scan is about 3 sites × 1.5M positions × 2 × 26 lookups, roughly 230 M array reads.
+- The composition DP is 1.4M bins × 20 residues, about 30 M steps.
+- The exact recount is ≤ 600 candidates × (tags in the candidate's image windows), with the
+  list indexed by binned n and c, so each recount reads only the tags near its images.
 - The S2 second pass is ≤ 600 candidates × 650 lookups.
 - Annotation is ≤ 1,000 peaks × 351 images, with binary search in sorted image and Unimod
   tables.
-- Target: ≤ 0.5 s of post-processing, and a wall-time overhead of ≤ 1 % when on, on PXD004541 at
+- Target: ≤ 1 s of post-processing, and a wall-time overhead of ≤ 1 % when on, on PXD004541 at
   8 and 64 threads.
 - Timing is measured on node data, paired with the option off. ibminode05 is reserved, so this
   timing is indicative, not a benchmark.
@@ -440,9 +579,11 @@ at any `-threads`.
 **New code:**
 
 - `src/LabelDiscovery.{h,cpp}`, namespace `FASTag::LabelDiscovery`:
-  - `Histograms` (atomic arrays, `addSpectrum`)
-  - `ImageTable` (hypothesis → images)
-  - `estimateWindow`
+  - `TagList` (per-thread records, deterministic merge) and `Histograms` (built from the list)
+  - `ImageTable` (hypothesis → images) and `NullImages` (composition DP, the four null readings,
+    isotope satellites, accepted-hypothesis images)
+  - `estimateWindow` and `calibrate` (per-channel ppm offset, n window in ppm of M)
+  - `recount` (exact distinct-spectra counts per candidate)
   - `callPeaks`
   - `siteScan`
   - `annotate` (takes a `ModificationsDB` adaptor, so that unit tests can inject a table)
@@ -471,19 +612,24 @@ paragraph in "Digest, label and mass-gap reports". `CHANGELOG.md`.
 3. **Separation.**
    - Synthetic flank sets of unlabelled 0-2-residue flanks only give `residue_combo` and the call
      `label-free`.
-   - Adding N0f/N0r/N1r images of +123.4567 gives one `unexplained` N site with ladder ≥ 3 and
-     the call `unknown:N+123.4567`.
+   - Adding N0f/N0r/N1r images of +123.4567 gives one `unexplained` N site with
+     `ladder_clean` ≥ 3 and the call `unknown:N+123.4567`.
    - Dimethyl given only as N1f/N2r images gives `unimod` Dimethyl via `ModificationsDB`.
-   - A TMT K-only set gives site K, not N.
-   - An offset common to K and R (+4.0085) gives site C.
+   - A TMT K-only set gives site K, and no called N candidate at 247.17 (L_K + H2O) or 375.27;
+     those are `shadow:K+229.1629`.
+   - An offset common to K and R (+4.0085), present in the c images, gives site C.
 4. **Collisions.** GG/N and AG/Q are listed as alternatives. N-terminal carbamidomethyl is
    `residue_combo` with Unimod `Carbamidomethyl (N-term)` among the alternatives.
 5. **Precision.**
    - iTRAQ8 (304.205360) and TMTpro (304.207146) N0r images at σ 0.0004 Da, given one label at a
      time, are each annotated as the correct label at w_c 0.0015.
    - At the same σ they form one peak at w 0.008.
-   - The centroid still names the right label in both cases, with the other label listed as an
-     alternative and its error.
+   - The corrected centroid still names the right label in both cases, with the other label
+     listed as an alternative and its error.
+   - With a +3 ppm offset applied to every c value (labels and references alike), the
+     calibration recovers 3 ± 0.3 ppm and the label is still named correctly. With the
+     references removed, so that the calibration uncertainty is large, the call is
+     `ambiguous:iTRAQ8plex|TMTpro`.
 6. **Background.** The half-integer mean, the floor 1, the Bonferroni count, and the Poisson tail
    against a reference value. Edge bins near 0 and near `max_flank` are checked.
 7. **Window estimate.** Gaussian deviations with a known σ give w within 10 %. Fewer than 200
@@ -493,6 +639,24 @@ paragraph in "Digest, label and mass-gap reports". `CHANGELOG.md`.
 9. **Clamp.** Values of exactly 0 are counted in `clamped_*` and never binned.
 10. **`-label_out` parity.** On one flank list, the `ld_known` tags equal `TerminusCounter`'s
     `lab_n`/`lab_c`.
+11. **Null leak (label-free).** A label-free synthetic set with N-side flanks and forward and
+    reversed C-terminal K/R flanks of 1-6 residues gives no called candidate, and in particular
+    no candidate other than `null_shadow` at +18.0106, 146.1055, 174.1117, −18.0106 and the
+    r − H2O offsets.
+12. **Residue-difference collisions.** The same label-free set must not call any of: Dimethyl
+    (A→V, S→P, N→AA, Q→GV, C(CAM)→GM), Methyl (G→A, S→T, V→L, T→P, N→Q, D→E, Q→AA), Oxidation
+    (A→S, V→P, F→Y, M→Mox, Q→GS, W→AM), Carbamyl (A→N/GG, V→AA, T→GS, L→GV, Q→GN, E→DG),
+    Formyl (S→D, T→E, K→GV), Acetyl (S→E, K→AV/GL). Their `ladder_confounded` is reported,
+    their `ladder_clean` stays below 3. The clean-image counts per label of section 7 are
+    pinned.
+13. **Isotope picks.** The label-free set with 20 % of the n values shifted by +1.003355 (and
+    5 % by +2.00671) gives no call; the +1.0034 N candidate is `isotope_error`. A TMT set with the
+    same shift still calls TMT and nothing else.
+14. **Same composition.** Synthetic Propionyl, Dimethyl and Acetyl N sites are named Propionyl,
+    Dimethyl and Acetyl, with `Delta:H(4)C(3)O(1)`, Ethyl and `Delta:H(4)C(2)` listed as
+    `same_composition`.
+15. **Distinct spectra.** One spectrum holding a b0, b1 and b2 TMT ladder in both channels adds 1
+    to `spectra` and 6 to `image_hits`.
 
 **CLI tests** (`test/label_discovery_cli_test.sh`, fixture `test/fixtures`):
 
@@ -533,12 +697,12 @@ the gate inputs. Truth comes from the SDRF.
 | TMT6 | PXD000001 (gate input; SDRF TMT126-131) | N site TMT6plex (229.1629) `known_label`, K site the same, completeness reported |
 | TMT10 | PXD004541 `..._fr02` (probe above), PXD010941, PXD004725 | as TMT6 |
 | "TMT8" | PXD000865 (Kuster proteome, `/ceph/ibmi/abi/projects/proteomics/kuster_proteome/MZML/8/`, listed as qex_tmt8 in `jpr-paper/inventory.md`) | First confirm the label from PRIDE or the run. There is no 8-plex TMT reagent, and the folder name may be a sample number. The report itself is one check. |
-| TMTpro | PXD047517, PXD035354, PXD046211 (from the 193) | TMTpro (304.2071) at N and K; check whether K1f lies above `max_flank` 420 (section 2) |
+| TMTpro | PXD047517, PXD035354, PXD046211 (from the 193) | TMTpro (304.2071) at N and K, with K1f (432.30) and K1r (450.31) inside the default `max_flank` 700 |
 | iTRAQ4 | PXD006536 | iTRAQ4plex (144.1021) |
 | iTRAQ8 | PXD001540, PXD001670, PXD012764 | iTRAQ8plex 304.2054 told apart from TMTpro 304.2071 by the c-channel images. The 1.12 `label_call` calls all three TMTpro. |
 | dimethyl | PXD052824 (in the 193, `label_call` no_call), PXD025168 (bigbio SDRF DIMETHYL3PLEX: Dimethyl, :2H(4), :2H(6)13C(2)) | Dimethyl 28.0313, and for PXD025168 three N-terminal deltas (28.0313, 32.0564, 36.0757) at N and K, class `unimod`. Confirm first that the label is fixed in the SDRF. |
 | acetyl / propionyl | one public run with chemical N-terminal acetylation or propionylation, still to be selected (selection rule: SDRF lists it as a fixed N-terminal modification; histone propionylation sets are candidates) | Acetyl 42.0106 or Propionyl 56.0262, `unimod`, despite the missing b0 image |
-| label-free | PXD001587 `140120_Lysate90min_38` (probe above), PXD003531 (gate input) | call `label-free`; no N or K site candidate other than delta 0 and `residue_combo` |
+| label-free | PXD001587 `140120_Lysate90min_38` (probe above), PXD003531 (gate input) | call `label-free`; no called N, K, R or C candidate; every candidate other than delta 0 is `residue_combo`, `null_shadow` or `isotope_error` |
 | SILAC (secondary) | the 19 SILAC runs of the corpus | K+8.0142 at site K and R+10.0083 at site R. This is descriptive: SILAC is not a terminal label, but the site scan sees it. |
 
 **Development data.** The 193 label-evaluable runs (`output/jpr-paper/carryover-1.12/label_call.tsv`)
@@ -564,7 +728,28 @@ on that result and nothing else.
 
 - Whether the K0f image (c = L_K, last residue K) is a real ion species or a tagging artefact.
   It is reported either way. Its mechanism needs a look at annotated TMT spectra.
-- The `max_flank` default (420 or 440). This depends on the TMTpro K1f image.
 - The site scan assumes tryptic C termini. Lys-C, Lys-N and non-specific digests may need O_K and
   O_R at every C-terminal residue. That would be format 2.
 - c/z support: images with the c/z reversed offset (`reversedOffset()` −15.0347), also format 2.
+- How dense the null image set is near 700 Da on real alphabets with several variable
+  modifications. If the clean-image counts of section 7 fall too low for TMTpro (16 of 40 at the
+  standard alphabet), the composition DP may be limited to the compositions the run's own
+  delta-0 flanks support.
+- The null expectation of section 6 assumes the delta-0 flank distribution is a fair model of
+  where unlabelled flanks land. That is checked on the label-free probes.
+
+## 15. Review of revision 1
+
+The first design review raised seven issues. All were adopted; two with a change to the proposed
+fix. The seventh issue reached this revision truncated after its first line (TMTpro K1f at 432.30
+outside the default `max_flank` 420); it was handled on that content.
+
+| # | severity | issue | decision | reason / where |
+|---|---|---|---|---|
+| 1 | critical | Both termini and readings leak into each site scan (+18.0106, K/R + H2O, L_K + H2O, −18.0106, r − H2O, longer m(S)); `residue_combo` covered only m(S), \|S\| ≤ 2 | Adopted, modified | Full null image set from a composition DP up to `max_flank`, four readings, plus accepted-hypothesis images and `shadow:` class (sections 7, 8; tests 3, 11). Modified: a candidate is classed by its *clean support*, not by its offset coinciding with a null offset. At 700 Da the null offsets are dense (about 41,000 composition masses) and a pure offset veto would also remove true labels; the offset coincidence is reported as `null_coincident`. |
+| 2 | critical | Common labels equal residue differences (Dimethyl, Methyl, Oxidation, Carbamyl, Formyl, Acetyl), so their ladders build on label-free runs | Adopted | `ladder_clean` / `ladder_confounded`; the call needs `ladder_clean` ≥ 3 or a clean zero-residue image; λ includes the null expectation from the delta-0 flanks (sections 6, 7, 9; test 12 with the full collision table). |
+| 3 | major | Channel n carries 13C precursor picks (`-isotope_error 0` default), so +1.0034/+2.0067 satellites with full ladders; 18O +2.0042 vs 2 × 13C; n error is ppm of M | Adopted | Isotope satellites in the null set, class `isotope_error`, no call on n-only support, site C only on c images; w_n(M) from a ppm σ, histograms at the 90th-percentile M (sections 5, 7, 8, 9; test 13). |
+| 4 | major | iTRAQ8 vs TMTpro decided on statistical se; a 2-4 ppm calibration offset flips it | Adopted | Per-channel calibration from the reference deviations, corrected centroids, decision only within 0.25 × separation for both error and calibration uncertainty, several images, else `ambiguous:` (sections 5, 8; test 5 with +3 ppm). |
+| 5 | major | Tie-break by `getFullId()` names Unimod artefacts (`Delta:H(4)C(3)O(1)`, `Delta:H(4)C(2)`) instead of Propionyl/Dimethyl | Adopted | Same-composition groups named by curated label list, then `getSourceClassification()`, then `getUniModRecordId()`; others as `same_composition` (section 8; test 14). |
+| 6 | major | `spectra` not computable from aggregate histograms; summed image reads inflate share, min_spectra, Poisson test and completeness | Adopted, modified | A per-tag record list (n, c, M, spectrum index, flags; 20 bytes, M added for issue 3), merged in scan order; exact distinct-spectra recount per candidate; histogram sums kept as `image_hits`. Modified: the histograms are now built from the list after counting, which removes the atomic arrays (sections 4, 11; test 15). |
+| 7 | major | Default `max_flank` 420 puts TMTpro K1f (432.30) and K1r (450.31) outside the range | Adopted | Default 700, which covers every one- and two-residue TMTpro image (≤ 676.37); the half-integer background still holds (sections 2, 11, 13). |
