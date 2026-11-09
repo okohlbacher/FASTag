@@ -1,0 +1,13 @@
+metric	value
+runs_manifest	1
+runs_scored	1
+runs_not_scored	-
+E1_spearman_retention_fastag_vs_sage	nan
+E1_pearson_retention_fastag_vs_sage	nan
+E2_spearman_retention_fastag_vs_sage_mc_share	nan
+E3_median_ratio_retention_fastag_over_sage	0.934623301502104
+E3_median_abs_diff_site_share	0.0009533498327968862
+median_fastag_retention	0.10942380809875506
+median_sage_retention	0.11707797989081992
+median_sage_mc_share	0.22708405396056727
+median_fastag_nonspecific_mle	0.11933549040933
