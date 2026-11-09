@@ -16,6 +16,39 @@
   (the `-out_spectra` provenance leaves the options out). On the probes: PXD004541 (TMT10)
   `TMT+K:TMT`, PXD001587 (label-free) `label-free`.
 
+## 1.12.2 (2026-11-10)
+
+Faster mzML reading and acquisition check; no output changes. Defaults,
+options and the frozen acquisition-check thresholds are unchanged.
+
+- **Faster mzML reading.** 1.12.0 parsed every 1.12 metadata field of
+  every spectrum (type, filter string, activation, possible charges, the
+  isolation-target meta value), 4-6 µs per spectrum (+12% read time)
+  where the tagging loop needs only some of them. A read now fills only the
+  fields its caller uses, and the searches inside a spectrum stop at the
+  end of the element they look in. Read time is back to 1.11.0's
+  (single core: 44.9 µs per spectrum against 46.0-46.8 for 1.11.0 and 52.0
+  for 1.12.0 on PXD003531; 39.9 against 39.6-40.2 and 43.9 on PXD047793).
+- **Faster acquisition check.** On mzML the probe reads its spectra in
+  parallel over `-threads`, one reader per thread, and parses only the
+  fields the check uses. It reads the same spectra in the same order and
+  stops at the same one, so the call, the `Acquisition check:` line and
+  `-probe_input` are unchanged.
+- Measured on ibminode05 (AMD EPYC 7763, idle), matched settings, median
+  of 5 interleaved runs, wall against 1.11.0: PXD003531 at 1 thread +2.1%
+  (1.12.0: +7.8%), at 32 threads +0.0% (1.12.0: +31%), PXD047793 at 32
+  threads +1.4% (1.12.0: +4.5%). Tags equal 1.12.0's and 1.11.0's in every
+  run.
+- **#15 `-ion_series auto`: INCONCLUSIVE.** Scored once on held-out Orbitrap
+  ETD runs (PXD024621, PXD009208) against MSFragger 4.4.1 c/z• identifications
+  at 1% FDR: on ETD spectra correct rank-1 tags rise from 0.9% under `by` to
+  82.2% (+81.4 points, 95% interval 79.5-83.2; 5,313 peptide clusters), and
+  collisional spectra are byte-identical. The non-inferiority cells for 3+ and
+  4+ collisional spectra are empty (every HCD spectrum of PXD024621 is 2+), so
+  the default stays `by`. The README now recommends `auto` or `cz` for ETD/ECD
+  data. The ion-trap sets of the first preregistration were replaced by
+  Orbitrap sets before any run.
+
 ## 1.12.1 (2026-11-08)
 
 Documentation and packaging only: no code, default or output changes. The README now
