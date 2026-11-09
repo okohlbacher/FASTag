@@ -12,7 +12,7 @@ run, each config is scored exactly once, never tuned on held-out data, and the r
 | `scripts/conv.ps1`, `scripts/list.tsv` | the conversion script and list run on flash (Windows) |
 | `frozen-configs.tsv` | CFG-07, status `frozen` |
 | `validation-registry.tsv` | the 1.13 rows (`HO-07-E7-03-a1*`, results row). The 1.12 rows stay in `acceptance/1.12/` |
-| `results/item07/` | job script (`jobs/run_item07.sh`), and after the single scoring `result.json`, `units.tsv` |
+| `results/item07/` | job script (`jobs/run_item07.sh`); the single scoring: `result.json`, `units.tsv`, `RESULT.md` (verdict **FAIL**) |
 
 The scorer is the committed 1.12 one, unchanged: `acceptance/1.12/scorers/score_item07.py`, called with
 `--acc acceptance/1.13`, so that it reads `acceptance/1.13/manifests/item07-E7-03.tsv`.
