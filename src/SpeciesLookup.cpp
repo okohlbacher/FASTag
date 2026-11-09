@@ -77,6 +77,51 @@ namespace FASTag
     }
     return std::string();
   }
+  bool kmerDecoySupport(const TaxIndex& idx, const std::string& seq, int k, uint32_t j,
+                        std::size_t share_cap, double min_margin,
+                        std::vector<uint32_t>& taxa, TagLookupCounters& counters, bool* no_decoy)
+  {
+    taxa.clear();
+    if (no_decoy) *no_decoy = false;
+    const int tag_len = static_cast<int>(seq.size());
+    if (tag_len < k) return false;
+    std::vector<uint32_t> kmer_taxa;
+    std::map<uint32_t, int> kmers_per_taxon;
+    int n_eval = 0;
+    // All decoy k-mers first: a k-mer without a decoy makes the whole tag
+    // decoy-less, whatever the lookups would say.
+    std::vector<std::string> dk;
+    dk.reserve(static_cast<std::size_t>(tag_len - k + 1));
+    for (int i = 0; i + k <= tag_len; ++i)
+    {
+      std::string d = decoyTag(seq.substr(static_cast<std::size_t>(i), static_cast<std::size_t>(k)), j);
+      if (d.empty())
+      {
+        if (no_decoy) *no_decoy = true;
+        return false;
+      }
+      dk.push_back(std::move(d));
+    }
+    for (const std::string& d : dk)
+    {
+      idx.lookup(d, kmer_taxa);  // decoyTag() output is folded already
+      if (kmer_taxa.empty()) return false;
+      if (kmer_taxa.size() > share_cap) { ++counters.kmer_skipped; continue; }
+      ++n_eval;
+      for (uint32_t tx : kmer_taxa) ++kmers_per_taxon[tx];
+    }
+    if (n_eval == 0) return false;
+    int best = 0;
+    for (const auto& kv : kmers_per_taxon) best = std::max(best, kv.second);
+    if (best < n_eval) return false;
+    int runner = 0;
+    for (const auto& kv : kmers_per_taxon) if (kv.second < best) runner = std::max(runner, kv.second);
+    const double margin = static_cast<double>(best - runner) / static_cast<double>(n_eval);
+    if (margin < min_margin) { ++counters.tag_generic; return false; }
+    for (const auto& kv : kmers_per_taxon) if (kv.second == best) taxa.push_back(kv.first);
+    return true;
+  }
+
   std::string reversedFolded(const std::string& seq)
   {
     return TaxIndex::fold(std::string(seq.rbegin(), seq.rend()));

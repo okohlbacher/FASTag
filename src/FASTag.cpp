@@ -5506,16 +5506,67 @@ protected:
       FASTag::TagLookupCounters rev_counters, decoy_rev_counters;
       FASTag::OrientationCounts orient_counts;
       std::vector<std::vector<FASTag::TagSupport>> decoy_support(static_cast<size_t>(n_decoys));
+      // DEV PROTOTYPE (1.13 species redesign): FASTAG_SPECIES_DUMP=<file> writes every evaluated tag with
+      // its target taxa, FASTAG_SPECIES_DUMP_DECOYS k-mer-keyed decoy replicates and, with
+      // FASTAG_SPECIES_DECOYDB=<taxdb>, its taxa in a decoy index. Diagnostic only; no other output changes.
+      std::unique_ptr<std::ofstream> dump;
+      FASTag::TaxIndex dump_didx;
+      bool dump_didx_ok = false;
+      int dump_nkd = 0;
+      uint64_t dump_spec = 0;
+      if (const char* dp = std::getenv("FASTAG_SPECIES_DUMP"))
+      {
+        dump.reset(new std::ofstream(dp));
+        const char* nk = std::getenv("FASTAG_SPECIES_DUMP_DECOYS");
+        dump_nkd = nk ? std::atoi(nk) : 10;
+        if (const char* ddb = std::getenv("FASTAG_SPECIES_DECOYDB"))
+        {
+          std::string derr;
+          dump_didx_ok = dump_didx.load(ddb, &derr);
+          if (!dump_didx_ok) OPENMS_LOG_WARN << "FASTAG_SPECIES_DECOYDB: " << derr << std::endl;
+        }
+        *dump << "#k\t" << index_k << "\tkmer_decoys\t" << dump_nkd << "\tdecoydb\t" << (dump_didx_ok ? 1 : 0) << '\n';
+        for (uint32_t tx : idx_taxa) *dump << "#taxon\t" << tx << '\t' << idx.postings(tx) << '\n';
+      }
+      auto dump_list = [](std::ostream& o, const std::vector<uint32_t>& v) {
+        if (v.empty()) { o << '-'; return; }
+        for (size_t i = 0; i < v.size(); ++i) { if (i) o << ','; o << v[i]; }
+      };
       for (const auto& sp : by_spec)
       {
         support.clear();
         for (auto& ds : decoy_support) ds.clear();
         bool trial = false;
+        if (dump) ++dump_spec;
         for (const auto& row : sp.second)
         {
           const std::string seq = FASTag::baseSequence(row.first);
           if (static_cast<int>(seq.size()) < min_len) continue;
           trial = true;
+          if (dump)
+          {
+            FASTag::TagLookupCounters dc;
+            std::vector<uint32_t> tt;
+            FASTag::tagSupport(idx, seq, index_k, share_cap, min_margin, tt, dc);
+            *dump << "T\t" << dump_spec << '\t' << row.second << '\t' << FASTag::TaxIndex::fold(seq) << '\t';
+            dump_list(*dump, tt);
+            *dump << '\t';
+            for (int j = 0; j < dump_nkd; ++j)
+            {
+              bool nd = false;
+              FASTag::kmerDecoySupport(idx, seq, index_k, static_cast<uint32_t>(j), share_cap, min_margin, tt, dc, &nd);
+              if (j) *dump << '|';
+              if (nd) *dump << 'X'; else dump_list(*dump, tt);
+            }
+            *dump << '\t';
+            if (dump_didx_ok)
+            {
+              FASTag::tagSupport(dump_didx, seq, index_k, share_cap, min_margin, tt, dc);
+              dump_list(*dump, tt);
+            }
+            else *dump << '-';
+            *dump << '\n';
+          }
           bool decoy_less = false;
           for (int j = 0; j < n_decoys; ++j)
           {
@@ -5567,6 +5618,19 @@ protected:
         for (uint32_t tx : taxa)
           for (uint32_t a : tax.lineage(tx)) spec_nodes.insert(a);
         for (uint32_t a : spec_nodes) ++hits[a];
+      }
+
+      if (dump)
+      {
+        const std::vector<uint64_t> ov = idx.pairwiseOverlap();
+        const size_t nt = idx_taxa.size();
+        for (size_t i = 0; i < nt; ++i)
+        {
+          *dump << "#overlap\t" << idx_taxa[i];
+          for (size_t j2 = 0; j2 < nt; ++j2) *dump << '\t' << ov[i * nt + j2];
+          *dump << '\n';
+        }
+        dump->close();
       }
 
       // Subtract the evidence a taxon earns only by resembling a stronger one.
