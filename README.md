@@ -887,7 +887,9 @@ options and their values.
   call (`unresolved_forms`). There are known confounds:
   C[Carbamidomethyl] = G + C and C[Propionamide] = A + C when the peak
   between them is missing. The report lists the twins within the run's
-  tolerance. The pass costs about one more tagging run.
+  tolerance. The pass costs about one more tagging run. On the development
+  runs it almost never calls: random C edges spread the votes over all
+  forms (doc/ALKYLATION-REPORT.md).
   Sections `alkt_run`, `alkt_form` and `alkylation_tags_call`.
 
 The `-digest_out` options of 1.12 (`-digest_models_version v2`,

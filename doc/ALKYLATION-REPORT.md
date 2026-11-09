@@ -248,6 +248,15 @@ twice the run's edge tolerance (`alias.<form>`). At 20 ppm the list also
 holds S + S for C[Propionamide] (0.018 Da). At 0.5 Da it holds many more
 pairs.
 
+**Development result (descriptive, not held-out).** On the 123 evaluable
+SDRF development runs of acceptance/1.12 (105 CAM, 17 none, 1 Methylthio),
+the report made 3 calls, 2 of them right. It returned no call `ambiguous` on
+117 runs. Random C edges spread the votes over all six forms. The median
+share is 0.22 for CAM in CAM runs and 0.24 for unmodified in none runs, far
+from the 0.6 the call needs. The #3g placement call made 27 calls (24 right)
+on the same 95 gap-command runs. The option is not usable as built; a
+background-corrected rule would need its own held-out test.
+
 **Cost.** One more tagging of every MS2 spectrum. The alphabet has five more
 residues and no gap edges.
 
