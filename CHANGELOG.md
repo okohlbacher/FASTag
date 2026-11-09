@@ -24,6 +24,13 @@
   stays 175 and 0 stays experimental. With zero tag ends the SILAC test is
   now skipped (no undefined heavy share); this is reachable only at a
   minimum of 0.
+- **c/z• preprocessing: charge-reduced peaks re-filtered against the
+  precursor cut (issue T25).** Peaks were cut at the precursor (neutral mass
+  + proton + 1.5 Da) before deisotoping only, so a peak the deisotoper moved
+  to the 1+ scale could land above the cut and be tagged. Under
+  `-ion_series cz` (and `auto` on electron-activated spectra) such peaks are
+  now dropped after deisotoping. c/z• output can change; b/y output
+  (the default) is byte-identical to 1.12.
 
 ## 1.12.1 (2026-11-08)
 

@@ -319,6 +319,37 @@ if [ -n "$GEN" ] && [ -n "$DB" ]; then
            if (!(s in seen)) { seen[s] = 1; if ($pc == want) n++ } } END { print n + 0 }' "$TMP/s_etd_inf.tsv")
   echo "synthetic ETD, no charges, auto + infer: $right of 40 spectra selected at their true charge"
   [ "$right" -ge 30 ] || fail "synthetic infer: only $right of 40 spectra at their true charge (c/z charge evidence)"
+
+  # Issue T25: the czt25 run adds to each spectrum a 2+ isotope cluster below
+  # the precursor cut whose 1+ equivalent (where the deisotoper moves it)
+  # lies 150 Da above it. -dump_spectrum prints the peaks FASTag tags: under
+  # cz none lies above the cut, under by (the 1.12 reference) the moved peak
+  # does. The cut is the tagger's: neutral mass + proton + 1.5 Da.
+  if grep -qE '^ +-dump_spectrum <nativeId>' <<< "$("$BIN" --helphelp 2>&1)"; then
+    "$GEN" --write-mzml "$DB" "$TMP/syn_t25.mzML" czt25 6 > /dev/null || fail "writing the synthetic T25 run"
+    above() {  # mode scan -> number of tagged peaks above the precursor cut
+      "$BIN" -in "$TMP/syn_t25.mzML" -out "$TMP/t25.tsv" -ion_series "$1" -fragment_tolerance 0.3 \
+        -fragment_tolerance_unit Da -dump_spectrum "controllerType=0 controllerNumber=1 scan=$2" > "$TMP/t25_$1_$2.json" \
+        2> "$TMP/t25_$1_$2.err" || { cat "$TMP/t25_$1_$2.err" >&2; fail "T25: -dump_spectrum scan $2 under $1 exited non-zero"; }
+      awk 'index($0, "\"spectrum\"") {
+             p = $0; sub(/.*"precursor":/, "", p); sub(/[,}].*/, "", p)
+             c = $0; sub(/.*"charge":/, "", c); sub(/[,}].*/, "", c)
+             m = $0; sub(/.*"mz":\[/, "", m); sub(/\].*/, "", m)
+             cut = p * c - (c - 1) * 1.007276466812 + 1.5
+             n = split(m, v, ","); k = 0
+             for (i = 1; i <= n; i++) if (v[i] + 0 > cut) k++
+             print k; found = 1 }
+           END { if (!found) print "none" }' "$TMP/t25_$1_$2.json"
+    }
+    for sc in 1 2 3 4 5 6; do
+      a_cz=$(above cz "$sc"); a_by=$(above by "$sc")
+      [ "$a_by" != none ] && [ "$a_by" -ge 1 ] || fail "T25 scan $sc: by keeps no peak above the cut ($a_by; the fixture does not trigger T25)"
+      [ "$a_cz" = 0 ] || fail "T25 scan $sc: cz keeps $a_cz peak(s) above the precursor cut"
+    done
+    echo "ion_series_cli_test: T25, cz tags no moved peak above the precursor cut (6 spectra, 2+ and 3+)"
+  else
+    echo "ion_series_cli_test: -dump_spectrum not in this binary; the T25 case is skipped"
+  fi
 fi
 
 # ---- cz on collisional spectra: the WARN ----
