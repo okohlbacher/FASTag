@@ -845,17 +845,28 @@ int main(int argc, char** argv)
 
   // ---- (c2) issue T25: charge-reduced peaks re-filtered against the cut ----
   // A 2+ isotope cluster below the precursor cut whose 1+ equivalent lies
-  // above it: under cz the deisotoped (moved) peak is cut again, under by it
-  // stays (the b/y output is the 1.12 reference), and without deisotoping
-  // nothing moves, so cz and by keep the same peaks.
+  // above it, added to a c/z ladder. With deisotoping, under cz the moved
+  // peak is cut again, so cz keeps exactly the peaks of the ladder alone;
+  // under by it stays (the b/y output is the 1.12 reference). Without
+  // deisotoping nothing moves: both keep the 4 cluster peaks.
   {
     const double P = OpenMS::Constants::PROTON_MASS_U;
     int cases = 0;
+    const auto mzs = [](const OpenMS::MSSpectrum& k) {
+      std::vector<double> v;
+      for (const auto& pk : k) v.push_back(pk.getMZ());
+      return v;
+    };
+    const auto has = [](const OpenMS::MSSpectrum& k, double mz) {
+      for (const auto& pk : k) if (std::fabs(pk.getMZ() - mz) < 0.01) return true;
+      return false;
+    };
     for (const auto& [pname, base] : bothParams())
       for (int z : {2, 3})
         for (const char* pep : kPeptides)
         {
-          CzSynth::Spec s = CzSynth::make(pep, z, CzSynth::Ions::CZ, 1);
+          const CzSynth::Spec lad = CzSynth::make(pep, z, CzSynth::Ions::CZ, 1);
+          CzSynth::Spec s = lad;
           const double max_mz = s.M + P + 1.5;  // the tagger's precursor cut
           const double mz1 = CzSynth::addReducedAboveCut(s);
           const std::string what = std::string("(c2) ") + pname + " " + std::to_string(z) + "+ " + pep;
@@ -865,23 +876,25 @@ int main(int argc, char** argv)
           const FASTag::Param pcz = withPair(base, IS::Series::CZ), pby = withPair(base, IS::Series::BY);
           const OpenMS::MSSpectrum kcz = FASTag::preparedPeaks(s.spec, s.prec_mz, z, pcz);
           const OpenMS::MSSpectrum kby = FASTag::preparedPeaks(s.spec, s.prec_mz, z, pby);
-          const auto has = [](const OpenMS::MSSpectrum& k, double mz) {
-            for (const auto& pk : k) if (std::fabs(pk.getMZ() - mz) < 0.01) return true;
-            return false;
-          };
+          const OpenMS::MSSpectrum lcz = FASTag::preparedPeaks(lad.spec, lad.prec_mz, z, pcz);
+          const OpenMS::MSSpectrum lby = FASTag::preparedPeaks(lad.spec, lad.prec_mz, z, pby);
+          check(lcz.size() > 10, what + ": the ladder keeps peaks under cz");
           double top_cz = 0;
           for (const auto& pk : kcz) top_cz = std::max(top_cz, pk.getMZ());
           check(top_cz <= max_mz, what + ": cz keeps no peak above the precursor cut (top " + std::to_string(top_cz) +
                                       ", cut " + std::to_string(max_mz) + ")");
           if (base.deisotope)
           {
-            check(has(kby, mz1), what + ": by keeps the moved peak above the cut (fixture triggers T25)");
+            check(has(kby, mz1) && kby.size() == lby.size() + 1,
+                  what + ": by keeps the moved peak above the cut (the fixture triggers T25; " +
+                      std::to_string(kby.size()) + " vs ladder " + std::to_string(lby.size()) + ")");
             check(!has(kcz, mz1), what + ": cz drops the moved peak");
-            check(kcz.size() + 1 == kby.size(), what + ": cz drops exactly the moved peak (" +
-                                                    std::to_string(kcz.size()) + " vs " + std::to_string(kby.size()) + ")");
+            check(mzs(kcz) == mzs(lcz), what + ": cz keeps exactly the ladder's peaks (" + std::to_string(kcz.size()) +
+                                            " vs " + std::to_string(lcz.size()) + ")");
           }
           else
-            check(kcz.size() == kby.size(), what + ": without deisotoping nothing moves, cz keeps what by keeps");
+            check(kcz.size() == lcz.size() + 4 && kby.size() == lby.size() + 4,
+                  what + ": without deisotoping nothing moves, cz and by keep the 4 cluster peaks");
           ++cases;
         }
     std::cout << "c2. T25 re-filter of charge-reduced peaks: " << cases << " cases\n";
