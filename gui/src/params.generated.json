@@ -551,6 +551,15 @@
       "max": 3
     },
     {
+      "name": "label_call_min_tags",
+      "type": "int",
+      "default": "175",
+      "description": "C-terminal tag ends -label_out's label_call needs; fewer give no_call few_tags (175: the FASTag 1.12 rule; 0, experimental: every ppm run is called)",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
+    },
+    {
       "name": "label_out",
       "type": "output-file",
       "default": "",

@@ -577,7 +577,7 @@ namespace FASTag::Digest
     const std::uint64_t tot = tc.tot();
     if (tot > 0) c.kr_rounded = round3(krShare(tc));
     if (s.low_resolution) { c.reason = "low_resolution"; return c; }
-    if (tot < kLabelTagMin) { c.reason = "few_tags"; return c; }
+    if (tot < static_cast<std::uint64_t>(std::max(0, s.label_min_tags))) { c.reason = "few_tags"; return c; }
     c.called = true;
     const double tags = static_cast<double>(tc.tags);
     const auto& labs = labelKeys();
@@ -591,6 +591,7 @@ namespace FASTag::Digest
         c.isobaric = true;
       }
     }
+    if (tot == 0) return c;  // no C-terminal end: the heavy shares are undefined, no SILAC test
     const int K = keyIndex("K"), K8 = keyIndex("K+8"), R = keyIndex("R"), R10 = keyIndex("R+10");
     const double hk = heavyShare(tc, K, K8), hr = heavyShare(tc, R, R10);
     const std::uint64_t nk = tc.res(K) + tc.res(K8), nr = tc.res(R) + tc.res(R10);
@@ -615,7 +616,7 @@ namespace FASTag::Digest
       const std::string why =
           c.reason == "low_resolution"
               ? "the fragment tolerance is in Da, so the label windows do not hold"
-              : u(tot) + " C-terminal tag ends are fewer than " + std::to_string(kLabelTagMin);
+              : u(tot) + " C-terminal tag ends are fewer than " + std::to_string(s.label_min_tags);
       r.add(sec, "status", "no_call", u(tot), "No label is called: " + why + ".");
       r.add(sec, "label", "-", "-", "There is no label call.");
       r.add(sec, "basis", "-", "-", "There is no label call.");
@@ -627,7 +628,10 @@ namespace FASTag::Digest
     for (const std::string& l : c.labels) label += (label.empty() ? "" : "+") + l;
     if (label.empty()) label = "label-free";
     r.add(sec, "status", "call", u(tot),
-          "A label call is made from " + u(tot) + " C-terminal tag ends and " + u(tc.tags) + " filtered tags.");
+          "A label call is made from " + u(tot) + " C-terminal tag ends and " + u(tc.tags) + " filtered tags." +
+              (tot < kLabelTagMin ? " These are fewer than " + std::to_string(kLabelTagMin) +
+                                        ", so a label-free call means only that no label rule fired."
+                                  : std::string()));
     std::string desc;
     if (c.labels.empty())
       desc = "No label passes: no isobaric gap reaches " + g(kLabelMinShare * 100, 3) + "% of the filtered tags and " +

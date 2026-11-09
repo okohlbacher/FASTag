@@ -229,6 +229,18 @@ describe('Overview model: suggested settings', () => {
     expect(line(o, 'fragment tol.')).toMatchObject({ value: '20 ppm', evidence: 'preset', note: 'from instrument preset Orbitrap HCD 20 ppm' })
   })
 
+  it('1.13: a label-free call from fewer than 175 tag ends is the default, not a call', () => {
+    const weakLabel = CLI_CASES.v112.label.replace(
+      /^label_call\tstatus\tcall\t\d+\t([^\n]*)$/m,
+      'label_call\tstatus\tcall\t12\tA label call is made from 12 C-terminal tag ends and 38300 filtered tags. These are fewer than 175, so a label-free call means only that no label rule fired.'
+    )
+    expect(weakLabel).not.toBe(CLI_CASES.v112.label)
+    const o = overviewOf({ ...CLI_CASES.v112, label: weakLabel })
+    expect(line(o, 'label')).toMatchObject({ value: 'none', evidence: 'default' })
+    expect(line(o, 'label').note).toMatch(/label-free from 12 C-terminal tag ends only/)
+    expect(tile(o, 'label').note).toMatch(/fewer than 175, so a label-free call means only that no label rule fired/)
+  })
+
   it('without a call the enzyme is the default and says why', () => {
     const o = overviewOf(CLI_CASES.v112Da)
     expect(line(o, 'enzyme')).toMatchObject({ value: 'Trypsin/P', evidence: 'default' })

@@ -117,4 +117,25 @@ namespace CzSynth
     r.spec.sortByPosition();
     return r;
   }
+
+  /// Issue T25: an averagine-shaped (Poisson, lambda = mass / 1800) isotope
+  /// cluster of 4 peaks at charge 2 whose 1+ equivalent lies @p above Da over
+  /// the tagger's precursor cut (M + proton + 1.5), while every peak of the
+  /// cluster as measured lies below it. Intense (@p scale), so the deisotoper
+  /// reads it at 2+ and moves it to the 1+ scale. Appended to @p s.spec
+  /// (re-sorted); returns the 1+ m/z the deisotoper moves it to.
+  inline double addReducedAboveCut(Spec& s, double above = 150.0, double scale = 20.0)
+  {
+    const double P = OpenMS::Constants::PROTON_MASS_U, C13 = 1.0033548378;
+    const double mz1 = s.M + P + 1.5 + above;  // the 1+ monoisotopic m/z
+    const double mass = mz1 - P;               // its neutral mass
+    double w = 1.0;
+    for (int k = 0; k < 4; ++k)
+    {
+      if (k > 0) w *= mass / 1800.0 / k;
+      s.spec.emplace_back((mass + 2 * P) / 2 + k * C13 / 2, scale * w);
+    }
+    s.spec.sortByPosition();
+    return mz1;
+  }
 }
