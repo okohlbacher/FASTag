@@ -1,0 +1,10 @@
+# post hoc (2026-11-09, after the item 12 held-out result): closed-search precheck of the HO runs; no endpoint search, scores nothing
+realchimera:
+  manifest: /scratch/kohlbach/b113/chimeric/acc/manifests/item12-realchimera.tsv
+  work_dir: /scratch/kohlbach/b113/chimeric/posthoc/precheck/work
+  split: HO
+  fdr: 0.01
+tools:
+  sage: /scratch/kohlbach/jpr-bench/envs/sage/bin/sage
+sage:
+  threads: 8

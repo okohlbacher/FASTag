@@ -1,0 +1,9 @@
+# source: fastag-bench 1.9.0 realchimera precheck (2026-11-09T21:46:36+01:00, host data)
+# config: /scratch/kohlbach/b113/chimeric/posthoc/precheck/precheck-HO.yaml; manifest: /scratch/kohlbach/b113/chimeric/acc/manifests/item12-realchimera.tsv; split: HO
+# plain closed Sage search, rank-1 target PSMs at q <= 0.01, min target:decoy 1.2, min identified MS2 share 0.05, ion-trap MS2 needs a Da fragment tolerance
+run_id	pxd	search	rank1_target	rank1_decoy	target_pass	td_ratio	status	reason	n_ms2	itms_share	id_rate
+HO-PXD066944-OFF03	PXD066944	closed	35903	17688	14637	2.02979421076436	truth		59204	0.0	0.24722991689750692
+HO-PXD076528-7673	PXD076528	closed	67037	19450	44013	3.4466323907455014	truth		100438	0.0	0.4382106374081523
+HO-PXD009612-MW3	PXD009612	closed	9026	6397	2001	1.4109738940128185	truth		24339	0.0	0.08221373104893381
+HO-PXD040230-S2R1	PXD040230	closed	15852	4580	10341	3.461135371179039	truth		37834	0.0	0.2733255801659883
+HO-PXD049370-185	PXD049370	closed	466	44	420	10.590909090909092	without truth	420 of 13059 MS2 identified (0.032 < 0.05); 1.00 of the MS2 are ion-trap (ITMS) but fragment_tol is 20ppm	13059	1.0	0.03216172754422238

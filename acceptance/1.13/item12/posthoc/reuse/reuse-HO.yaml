@@ -1,0 +1,11 @@
+# post hoc (2026-11-09, after the item 12 held-out result): reuse scan of the item 12 HO runs against every
+# earlier and concurrent acceptance record (origin/acceptance/1.12, origin/acceptance/1.13 at 28a9a63) and the
+# 1.13 backlog DEV tables (output/backlog-1.13, without item 12 itself)
+realchimera:
+  manifest: /scratch/kohlbach/b113/chimeric/acc/manifests/item12-realchimera.tsv
+  work_dir: /scratch/kohlbach/b113/chimeric/posthoc/reuse/work
+  split: HO
+  reuse:
+    scan: [/scratch/kohlbach/b113/chimeric/posthoc/reuse/acc112, /scratch/kohlbach/b113/chimeric/posthoc/reuse/acc113, /scratch/kohlbach/b113/chimeric/posthoc/reuse/backlog113]
+    exclude: ["*/item12/*", "*item12-*", "*PREREG-item12.md"]
+    declared: /scratch/kohlbach/b113/chimeric/posthoc/reuse/declared.tsv

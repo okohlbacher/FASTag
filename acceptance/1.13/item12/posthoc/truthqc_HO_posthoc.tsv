@@ -1,0 +1,11 @@
+run_id	search	rank1_target	rank1_decoy	target_pass	td_ratio	status	reason
+HO-PXD066944-OFF03	chimera (endpoint search, as run 2026-11-09)	43526	15662	26954	2.7790831311454474	truth	
+HO-PXD076528-7673	chimera (endpoint search, as run 2026-11-09)	77567	17760	58707	4.367511261261261	truth	
+HO-PXD009612-MW3	chimera (endpoint search, as run 2026-11-09)	11872	8366	2361	1.419077217308152	truth	
+HO-PXD040230-S2R1	chimera (endpoint search, as run 2026-11-09)	21415	9183	11655	2.332026570837417	truth	
+HO-PXD049370-185	chimera (endpoint search, as run 2026-11-09)	4196	3843	0	1.091855321363518	without truth	0 rank-1 target PSMs at q <= 0.01; rank-1 target:decoy 1.092 < 1.2
+HO-PXD049370-185	post hoc diagnosis: closed	466	44	420	10.590909090909092	truth	
+HO-PXD049370-185	post hoc diagnosis: wideonly	4196	3843	0	1.091855321363518	without truth	0 rank-1 target PSMs at q <= 0.01; rank-1 target:decoy 1.092 < 1.2
+HO-PXD049370-185	post hoc diagnosis: chimonly	466	44	412	10.590909090909092	truth	
+HO-PXD049370-185	post hoc diagnosis: closed_frag05da	8072	3660	4103	2.205464480874317	truth	
+HO-PXD049370-185	post hoc diagnosis: chimera_frag05da	6535	6034	537	1.0830294995028173	without truth	rank-1 target:decoy 1.083 < 1.2

@@ -15,3 +15,14 @@ never tuned on held-out data; no criterion is relaxed; a FAIL is a valid result.
 
 Concurrent items append to the shared tables; on a rejected push: fetch, rebase, keep both sides' rows, push again
 (never force).
+
+## Rules added after item 12 (2026-11-09)
+
+- Before a held-out manifest is frozen, check every run's truth from a non-endpoint search (for the real-chimera
+  harness: `fastag-bench realchimera precheck`, a plain closed Sage search; refuses a run without truth, one that
+  identifies under 5 % of its MS2, or ion-trap MS2 under a ppm fragment tolerance). Check the MS2 analyzer from
+  the file, not from a candidate list.
+- Check reuse against every earlier and concurrent record, not only the item's DEV runs: PXD, raw file name, raw
+  SHA-1 and mzML sha256 against acceptance/1.12, acceptance/1.13 and the backlog DEV tables
+  (`fastag-bench realchimera reuse`). Each raw-level reuse is declared with its reason before the run, or the run
+  is dropped.

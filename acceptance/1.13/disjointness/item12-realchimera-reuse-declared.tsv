@@ -1,0 +1,22 @@
+# 1.13 item 12: declared reuse of the held-out runs (post hoc, 2026-11-09, after the result; nothing re-scored).
+# Globs match the scan copies on node data (posthoc/reuse/{acc112,acc113,backlog113}); read by fastag-bench realchimera reuse.
+# Why none of it reaches the evaluated binary: item 12 scores FASTag 1.12.1 at its defaults (plus -max_tags 10 and -diversity), and
+# 1.12.0/1.12.1 keep every 1.11 default except the #7 DIA refusal (CHANGELOG 1.12.0: DDA outputs byte-identical to 1.11.0); the item 12
+# harness was developed on PXD003531 only.
+run_id	file_glob	reason
+HO-PXD066944-OFF03	*/acc112/acceptance/1.12/manifests/item0[26]-H1*	1.12 #2/#6 H1 held-out run; #2 INCONCLUSIVE, #6 not passed; no default changed (ACCEPTANCE-1.12-round3)
+HO-PXD066944-OFF03	*/acc112/acceptance/1.12/disjointness/item0[26]-H1*	1.12 #2/#6 H1 disjointness record of the same held-out run
+HO-PXD066944-OFF03	*/acc112/acceptance/1.12/results/item0[26]/*	1.12 #2/#6 H1 run tables of the same held-out run (scored; no default changed)
+HO-PXD066944-OFF03	*/acc112/acceptance/1.12/scorers/truth/item02.tsv	1.12 #2 truth list of the same held-out run
+HO-PXD066944-OFF03	*/acc112/acceptance/1.12/inputs/staged/*	1.12 #2/#6 staging records of the same held-out run
+HO-PXD066944-OFF03	*/acc113/acceptance/1.13/*compltol*	concurrent 1.13 compltol (#15) held-out run (opt-in option, FAIL; no default changed)
+HO-PXD066944-OFF03	*/acc113/acceptance/1.13/results/compltol/*	concurrent 1.13 compltol (#15) held-out run table
+*	*/acc112/acceptance/1.12/dev/*	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation
+*	*/acc112/acceptance/1.12/scorers/tests/*	1.12 scorer test fixtures (copies of DEV tables and of the #7 sweep list)
+*	*/acc112/acceptance/1.12/inputs/e7-02-sweep.tsv	1.12 #7 DIA-refusal development sweep: thresholds act on DIA input only; these DDA runs pass unchanged
+*	*/acc112/acceptance/1.12/inputs/prose_*	1.12 corpus listings (prose-auto bench2/valset inventories), no fit
+*	*/acc112/acceptance/1.12/inputs/sdrf_truth_runs.tsv	1.12 SDRF truth listing (#1/chemistry DEV inputs), no tag default
+*	*/acc113/acceptance/1.13/inputs/item08_dev_label_call.tsv	concurrent 1.13 #8 label-call DEV table (opt-in report)
+*	*/acc113/acceptance/1.13/scorers/tests/dev_results/item08/*	concurrent 1.13 #8 label-call DEV results (opt-in report)
+HO-PXD076528-7673	*/acc113/acceptance/1.13/manifests/item23-digqual.tsv	concurrent 1.13 #23 digqual evaluation run (opt-in report); same raw file, item 12 scores the unchanged 1.12.1 binary
+*	*/backlog113/alknodb/*	concurrent 1.13 alknodb DEV table (opt-in alkylation report)
