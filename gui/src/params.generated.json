@@ -61,6 +61,17 @@
       "toppAdvanced": true
     },
     {
+      "name": "alkylation_tags_out",
+      "type": "output-file",
+      "default": "",
+      "description": "Experimental: report which reagent alkylated the cysteines (or none) without a database, from a second tagging pass with unmodified C and one alternative C edge per reagent (Carbamidomethyl, Propionamide, Nethylmaleimide, Methylthio, Carboxymethyl): votes per C form inside tags and the call (not validated on held-out data)",
+      "required": false,
+      "toppAdvanced": true,
+      "formats": [
+        "tsv"
+      ]
+    },
+    {
       "name": "alkylation_window",
       "type": "double",
       "default": "0.0",

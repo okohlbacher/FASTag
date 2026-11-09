@@ -190,3 +190,82 @@ clear message; `-recon_fasta` or a FASTA path works. CMake installs them only
 together with `data/alkylation/README.md` (a drop without it is a configure
 error). digest_cli_test checks the installed-path lookup with a gzip it makes
 itself.
+
+## `-alkylation_tags_out` (1.13, database-free, format 1)
+
+Backlog #22, src/AlkylationTags.h. This report gives the same call without a
+protein database. It is opt-in and experimental. With the option off nothing
+runs and no output changes. With it on, the tag TSV and every other output are
+byte-identical.
+
+**Method.** Each MS2 spectrum (its selected precursor hypothesis, b/y) is
+tagged a second time. That pass writes no tags. Its settings are the run's
+Param, with these changes:
+- every C modification of the run (fixed or variable) is removed, so C is
+  103.009;
+- five variable alternatives are added: `C[Carbamidomethyl]`,
+  `C[Propionamide]`, `C[Nethylmaleimide]`, `C[Methylthio]`,
+  `C[Carboxymethyl]`, with masses from OpenMS ModificationsDB;
+- there are no gap edges.
+
+A tag counts when it is ungapped with E <= 1 and holds a C. Each spectrum
+votes once, with its best counted tag:
+- for the form that all of the tag's C residues share;
+- otherwise as a conflict.
+
+The call is #3g's rule over six classes: the five reagents, and `none` for
+unmodified C. The leading class needs `-alkylation_min_spectra` votes and a
+share of `-alkylation_min_share` of the votes. Oxidised, cysteinylated and
+dehydroalanine Cys are not candidates here.
+
+**Confounds (not corrected).** A single edge equals a two-residue sum when the
+peak between the two residues is missing:
+- C[Carbamidomethyl] = G + C exactly;
+- C[Propionamide] = A + C exactly;
+- C[Nethylmaleimide] is 0.029 Da from N + N and 0.036 Da from M + P.
+
+So in an unalkylated sample, GC/CG and AC/CA with a missing peak vote
+Carbamidomethyl or Propionamide.
+
+**Cost.** One more tagging of every MS2 spectrum. The alphabet has five more
+residues and no gap edges.
+
+The report has the shared `run` rows, then these sections. Rows are looked up
+by `(section, key)`. The GUI does not read this report:
+gui/src/digestReport.ts names none of its sections and refuses it.
+
+### `alkt_run`
+
+| key | value |
+|---|---|
+| `format` | 1 |
+| `method` | `shadow_tags` |
+| `forms` | the six candidate forms, comma-separated (n: 6) |
+| `c_mods_removed` | the run's C modifications that the second pass leaves out, as `Name (fixed)` / `Name (variable)`, or `-` |
+| `tag_lengths` | the seed lengths |
+| `spectra_tagged` | MS2 spectra the second pass tagged |
+| `spectra_cz` | MS2 spectra read as c/z (`-ion_series`); not shadow-tagged |
+| `tags` | counted shadow tags (ungapped, E <= 1) |
+| `tags_with_c` | of them, tags with a C (n: `tags`) |
+| `spectra` | spectra with a vote (n: `spectra_tagged`) |
+| `min_spectra`, `min_share` | the call thresholds |
+| `confounds` | the twin masses above |
+
+### `alkt_form`
+
+| key | value |
+|---|---|
+| `<form>`, six rows in the order of `forms` | votes for the form (n: votes without conflicts) |
+| `residues.<form>` | C residues of the form in all counted tags (n: all C residues) |
+| `conflict` | votes whose tag holds two forms (n: `spectra`) |
+
+### `alkylation_tags_call`
+
+`status` (`call` / `no_call`), `reagent`, `mass`, `share`, `reason`
+(`-`, `few_cys_spectra` or `ambiguous`). These are the rows of `alkylation_call`,
+with the votes in place of the binned spectra.
+
+| option | default | |
+|---|---|---|
+| `-alkylation_tags_out <tsv>` | off | the report; refused with `-stream`, guarded against overwriting inputs and other outputs |
+| `-alkylation_min_spectra`, `-alkylation_min_share` | 10, 0.6 | shared with `-alkylation_out` |

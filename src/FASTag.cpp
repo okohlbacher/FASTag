@@ -32,6 +32,7 @@
 #include "Acquisition.h"
 #include "AcquisitionProbe.h"
 #include "AlkylationCall.h"
+#include "AlkylationTags.h"
 #include "Centroid.h"
 #include "CliParam.h"
 #include "Census.h"
@@ -992,6 +993,16 @@ protected:
                           "Window of -alkylation_out around each Cys form mass; 0 = 0.02 Da on a ppm run, "
                           "0.5 Da on a run with a Da fragment tolerance", false, true);
     setMinFloat_("alkylation_window", 0.0);
+    // 1.13 #22: the database-free alkylation call (src/AlkylationTags.h),
+    // from a second, unwritten tagging pass with alternative C edges.
+    // Opt-in; every other output is the same with or without it.
+    registerOutputFile_("alkylation_tags_out", "<file>", "",
+                        "Experimental: report which reagent alkylated the cysteines (or none) without a database, "
+                        "from a second tagging pass with unmodified C and one alternative C edge per reagent "
+                        "(Carbamidomethyl, Propionamide, Nethylmaleimide, Methylthio, Carboxymethyl): votes per "
+                        "C form inside tags and the call (not validated on held-out data)",
+                        false, true);
+    setValidFormats_("alkylation_tags_out", ListUtils::create<std::string>("tsv"));
     // ---- 1.12 F: options ----
     // #11 phase A: the per-spectrum census. Opt-in; every other output is
     // the same with or without it (src/Census.h).
@@ -1607,6 +1618,7 @@ protected:
           {"species_call", "-stream cannot be combined with -species_call."},
           {"species_orientation", nullptr},
           {"alkylation_out", nullptr},
+          {"alkylation_tags_out", nullptr},  // 1.13 #22
           // ---- 1.12 F: -stream refusals ----
           {"census", nullptr},
           {"census_out", nullptr},
@@ -1891,6 +1903,9 @@ protected:
     // #3g: -alkylation_out reads the placements of the run's own reconciler.
     const std::string alkylation_out = getStringOption_("alkylation_out");
     const bool alkylation_on = !alkylation_out.empty();
+    // 1.13 #22: -alkylation_tags_out tags every MS2 a second time; it places nothing.
+    const std::string alkylation_tags_out = getStringOption_("alkylation_tags_out");
+    const bool alkylation_tags_on = !alkylation_tags_out.empty();
     const bool place_on = recon_on
         // ---- 1.12 A: placement readers ----
         || handoff_on
@@ -2328,8 +2343,10 @@ protected:
           {"digest_min_confidence", "-digest_out", digest_on},
           {"digest_calibration", "-digest_out", digest_on},
           {"alkylation_proteome", "-alkylation_out", alkylation_on},
-          {"alkylation_min_spectra", "-alkylation_out", alkylation_on},
-          {"alkylation_min_share", "-alkylation_out", alkylation_on},
+          {"alkylation_min_spectra", alkylation_tags_on ? "-alkylation_out or -alkylation_tags_out" : "-alkylation_out",
+           alkylation_on || alkylation_tags_on},
+          {"alkylation_min_share", alkylation_tags_on ? "-alkylation_out or -alkylation_tags_out" : "-alkylation_out",
+           alkylation_on || alkylation_tags_on},
           {"alkylation_window", "-alkylation_out", alkylation_on},
           // ---- 1.12 F: ignored-option warnings ----
           {"census_out", "-census", getFlag_("census")},
@@ -3151,6 +3168,25 @@ protected:
     // #15 phase B: the c/z-dot tables (empty under by).
     const std::vector<FASTag::Tables> tables_cz =
         ion_mode != FASTag::IonSeries::Mode::By ? build_tables(true) : std::vector<FASTag::Tables>();
+    // 1.13 #22: -alkylation_tags_out's shadow pass, one Param and one set of
+    // tables per seed length (AlkylationTags::shadowParam); empty when off.
+    std::vector<FASTag::Alkylation::Form> alkt_cands;
+    std::vector<FASTag::Param> alkt_params;
+    std::vector<FASTag::Tables> alkt_tables;
+    std::vector<std::string> alkt_dropped;
+    if (alkylation_tags_on)
+    {
+      try { alkt_cands = FASTag::AlkylationTags::candidates(FASTag::Alkylation::forms()); }
+      catch (const std::exception& e)
+      {
+        OPENMS_LOG_ERROR << "-alkylation_tags_out: " << e.what() << "." << std::endl;
+        return INTERNAL_ERROR;
+      }
+      for (const FASTag::Param& lp : len_params)
+        alkt_params.push_back(FASTag::AlkylationTags::shadowParam(lp, alkt_cands, alkt_params.empty() ? &alkt_dropped : nullptr));
+      alkt_tables.reserve(alkt_params.size());
+      for (const FASTag::Param& lp : alkt_params) alkt_tables.emplace_back(lp);
+    }
     g_t_tables = std::chrono::duration<double>(std::chrono::steady_clock::now() - t_tables_a).count();
     // mzPeak output cannot store an ion mobility per peak: refuse before any
     // work. For mzML the first MS2 is checked here; an mzPeak input is read
@@ -3241,6 +3277,7 @@ protected:
       guard.output("search_shifts_out", search_shifts_out, true);
       // ---- 1.12 D: output paths ----
       guard.output("alkylation_out", alkylation_out, true);
+      guard.output("alkylation_tags_out", alkylation_tags_out, true);  // 1.13 #22
       // ---- 1.12 F: output paths ----
       if (getFlag_("census"))
       {
@@ -3681,6 +3718,26 @@ protected:
       const auto hyp_of = [&](size_t i) -> const FASTag::Hyp::Hypothesis& {
         return hyps[tag_hyp.empty() ? 0 : tag_hyp[i]];
       };
+      // 1.13 #22: the shadow pass of -alkylation_tags_out, on the selected
+      // hypothesis with the run's multiplicity. Its tags are counted, never
+      // written; a spectrum read as c/z is not shadow-tagged.
+      if (alkylation_tags_on)
+      {
+        if (read_cz) ++pt.acc.d.alkt.spectra_cz;
+        else
+          for (const FASTag::Hyp::Hypothesis& hy : hyps)
+          {
+            if (!hy.selected) continue;
+            const double H = static_cast<double>(hyps.size());
+            const std::vector<FASTag::Tag> st = alkt_params.size() == 1
+                ? FASTag::tagSpectrum(spec, hy.mz, hy.charge, alkt_params[0], alkt_tables[0], nullptr, H)
+                : FASTag::mergeLengths(FASTag::tagSpectrum(spec, hy.mz, hy.charge, alkt_params, alkt_tables, nullptr, H));
+            FASTag::AlkylationTags::Vote v;
+            for (const FASTag::Tag& t : st) pt.acc.d.alkt.addTag(v, t, alkt_cands);
+            pt.acc.d.alkt.addSpectrum(v);
+            break;
+          }
+      }
       pt.tags += tags.size();
       // -census: the reported rows (scratch reused per thread) and placements.
       static thread_local std::vector<FASTag::Census::TagView> ctags;
@@ -5361,6 +5418,33 @@ protected:
                       << (call.called ? std::string("call ") + FASTag::Alkylation::className(call.cls)
                                       : "no_call " + call.reason)
                       << " -> " << alkylation_out << std::endl;
+    }
+
+    // ---- 1.13 #22: -alkylation_tags_out ----
+    if (alkylation_tags_on)
+    {
+      const FASTag::AlkylationTags::Tally& at = run_acc.d.alkt;
+      FASTag::Alkylation::Settings as;
+      as.min_spectra = static_cast<std::uint64_t>(getIntOption_("alkylation_min_spectra"));
+      as.min_share = getDoubleOption_("alkylation_min_share");
+      const FASTag::Alkylation::Call call = FASTag::Alkylation::callAlkylation(at.asAlkylationTally(alkt_cands), as);
+      FASTag::AlkylationTags::ReportInfo info;
+      info.dropped = alkt_dropped;
+      for (int L : lengths) info.lengths += (info.lengths.empty() ? "" : ",") + std::to_string(L);
+      std::vector<FD::Row> rows = FASTag::RunReport::runRows(run_meta, FASTag::RunReport::Emit::Versioned);
+      for (FD::Row& r : FASTag::AlkylationTags::rows(at, call, as, alkt_cands, info)) rows.push_back(std::move(r));
+      FASTag::PartFile part(alkylation_tags_out);
+      if (!part.begin() || !FD::writeReport(part.writePath(), rows) || !part.commit())
+      {
+        OPENMS_LOG_ERROR << "Failed writing " << alkylation_tags_out
+                         << (part.error().empty() ? std::string() : ": " + part.error()) << std::endl;
+        return CANNOT_WRITE_OUTPUT_FILE;
+      }
+      OPENMS_LOG_INFO << "Alkylation (tags, no database): " << at.spectra << " of " << at.spectra_tagged
+                      << " spectra vote, "
+                      << (call.called ? std::string("call ") + FASTag::Alkylation::className(call.cls)
+                                      : "no_call " + call.reason)
+                      << " -> " << alkylation_tags_out << std::endl;
     }
 
     // ---- phase 10: species detection ---------------------------------------

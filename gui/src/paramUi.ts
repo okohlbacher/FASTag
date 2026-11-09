@@ -800,6 +800,12 @@ export const PARAM_UI: Record<string, ParamUi> = {
       text: 'The database the alkylation report uses when no reconciliation database is given: a FASTA file. In 1.12.0 the alkylation report needs this FASTA file or a reconciliation database: the shipped proteomes (human, mouse, yeast, E. coli) that the names stand for are not in this release, and naming one, or leaving the default auto, stops the run with an error.'
     }
   },
+  alkylation_tags_out: {
+    hidden: 'experimental 1.13 command-line option, not in the form (CLI default applies)',
+    help: {
+      text: 'Write a report of which reagent alkylated the cysteines, or none, without a database: every spectrum is tagged a second time with unmodified and alkylated cysteine as alternatives, and the cysteine forms inside those tags vote. Experimental, not validated on held-out data.'
+    }
+  },
   alkylation_window: {
     hidden: OPT_IN_1_12,
     help: {
