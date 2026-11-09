@@ -803,7 +803,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   alkylation_tags_out: {
     hidden: 'experimental 1.13 command-line option, not in the form (CLI default applies)',
     help: {
-      text: 'Write a report of which reagent alkylated the cysteines, or none, without a database: every spectrum is tagged a second time with unmodified and alkylated cysteine as alternatives, and the cysteine forms inside those tags vote. Experimental, not validated on held-out data.'
+      text: 'Write a report of which reagent alkylated the cysteines, or none, without a database: every spectrum is tagged a second time with unmodified and alkylated cysteine as alternatives, and the cysteine forms inside those tags vote. Experimental and measured to fail on development data (3 calls on 123 runs): its calls are unreliable.'
     }
   },
   alkylation_window: {

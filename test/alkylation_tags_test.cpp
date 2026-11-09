@@ -228,7 +228,13 @@ int main(int argc, char** argv)
           "Propionamide aliases A+C and S+S: " + al[1]);
     check(al[2].find("N+N:0.0290") != std::string::npos && al[2].find("M+P:0.0364") != std::string::npos,
           "Nethylmaleimide aliases N+N and M+P: " + al[2]);
-    check(al[3] == "-" && al[4] == "-", "Methylthio and Carboxymethyl have no alias at 0.02 Da: " + al[3] + " " + al[4]);
+    check(al[3] == "-", "Methylthio has no alias at 0.02 Da: " + al[3]);
+    // The isotope twin: C[Carbamidomethyl] + 13C is 0.0193 Da from C[Carboxymethyl].
+    check(al[4] == "C[Carbamidomethyl]+13C:0.0193", "Carboxymethyl's only alias is C[Carbamidomethyl]+13C: " + al[4]);
+    check(al[0].find("C[Carboxymethyl]-13C:0.0193") != std::string::npos,
+          "CAM aliases C[Carboxymethyl]-13C: " + al[0]);
+    const auto al5 = AT::aliases(cands, 0.005);
+    check(al5[4] == "-" && al5[0].find("13C") == std::string::npos, "no isotope twin at 0.005 Da: " + al5[4]);
     AT::Tally t;
     t.spectra = 30;
     t.votes[0] = 30;
@@ -370,6 +376,42 @@ int main(int argc, char** argv)
     check(saw_2plus_prop, "the 2+ C[Propionamide] reading of the S ladder exists (the test is live)");
     check(t.votes[1] == 0, "no Propionamide vote from the 1+ S ladder");
     check(!A::callAlkylation(t.asAlkylationTally(cands), A::Settings{}).called, "no call from the S ladder");
+  }
+
+  // ---- the isotope twin through the tagger (review): undeisotoped CAM
+  //      spectra with 13C peaks give C[Carboxymethyl] readings (edges that end
+  //      on the next ion's 13C peak); the alias row names the twin. At a
+  //      0.02 Da tolerance the 0.0193 Da offset matches at every m/z (at 20 ppm
+  //      only above ~965 m/z, where the peak tolerance reaches 0.0193 Da).
+  {
+    FASTag::Param run;
+    run.tag_length = 3;
+    run.deisotope = false;
+    run.tol_ppm = false;
+    run.frag_tol = 0.02;
+    run.mods = {{'C', cands[0].mass, "Carbamidomethyl", false}};
+    const FASTag::Param sp = AT::shadowParam(run, cands);
+    const FASTag::Tables tabs(sp);
+    AT::Tally t;
+    int cm_reads = 0;
+    unsigned seed = 300;
+    for (const char* pep : kPeptides)
+    {
+      const ComplementSynth::Spec s = ComplementSynth::make(withForm(pep, "Carbamidomethyl"), 2, false, 2, 0.0, 20, seed++);
+      AT::Vote v;
+      for (const FASTag::Tag& tg : FASTag::tagSpectrum(s.spec, s.prec_mz, 2, sp, tabs))
+      {
+        if (std::getenv("ALKT_DEBUG") && tg.seq.find("C[Carboxymethyl]") != std::string::npos)
+          std::cerr << pep << " " << tg.seq << " z" << tg.charge << " E " << tg.evalue << "\n";
+        if (tg.charge == 1 && !tg.gapped && tg.evalue <= 1.0 && tg.seq.find("C[Carboxymethyl]") != std::string::npos) ++cm_reads;
+        t.addTag(v, tg, cands);
+      }
+      t.addSpectrum(v);
+    }
+    std::cerr << "isotope twin: " << cm_reads << " C[Carboxymethyl] readings; votes CAM " << t.votes[0]
+              << " Carboxymethyl " << t.votes[4] << " of " << t.spectra << "\n";
+    check(cm_reads > 0, "undeisotoped CAM spectra with 13C peaks read C[Carboxymethyl] (the confound is live)");
+    check(t.residues[4] > 0, "the C[Carboxymethyl] readings reach the counted residues");
   }
 
   // ---- negative control: peptides without C give no vote and no call;

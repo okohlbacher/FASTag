@@ -29,11 +29,15 @@
 // two-residue sum when the peak between them is missing. C[Carbamidomethyl]
 // is G + C exactly (C2H3NO is the Gly residue), C[Propionamide] is A + C
 // exactly (and 0.018 Da from S + S), C[Nethylmaleimide] lies 0.029 Da from
-// N + N and 0.036 Da from M + P. The report lists the twins within the
-// run's tolerance (aliases()).
+// N + N and 0.036 Da from M + P. An edge that starts or ends on a 13C
+// peak (an isotope peak the deisotoper keeps, every one under
+// -no_deisotope) is another form +/- 1.00336 Da: C[Carbamidomethyl] + 13C
+// lies 0.0193 Da from C[Carboxymethyl], so in CAM runs such edges can vote
+// Carboxymethyl. The report lists the twins within the run's tolerance
+// (aliases()); formsResolved() compares the forms' own masses only.
 //
-// Opt-in and not validated on held-out data (doc/ALKYLATION-REPORT.md,
-// section "-alkylation_tags_out").
+// Opt-in and experimental: measured to fail on development data (3 calls
+// on 123 runs; doc/ALKYLATION-REPORT.md, section "-alkylation_tags_out").
 //
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
@@ -52,6 +56,9 @@ namespace FASTag::AlkylationTags
 {
   /// Version of the -alkylation_tags_out sections (alkt_run.format).
   inline constexpr int kReportFormat = 1;
+
+  /// The 13C - 12C spacing (Da) the alias check uses for isotope-shifted edges.
+  inline constexpr double kC13Spacing = 1.0033548378;
 
   /// The candidate forms: Alkylation::forms() 0 .. kNumCandidates-1, the five
   /// reagents then "unmodified" (class none).
@@ -103,8 +110,10 @@ namespace FASTag::AlkylationTags
   bool formsResolved(const std::vector<Alkylation::Form>& cands, double tol_da);
 
   /// Per candidate, the two-residue sums (unmodified base residues, I as L)
-  /// within 2 * @p tol_da of the candidate's C mass: "G+C:0.0000" entries,
-  /// comma-separated, "-" when none.
+  /// and the other candidate C forms shifted by +/- kC13Spacing within
+  /// 2 * @p tol_da of the candidate's C mass: "G+C:0.0000" and
+  /// "C[Carbamidomethyl]+13C:0.0193" entries, by distance, comma-separated,
+  /// "-" when none.
   std::vector<std::string> aliases(const std::vector<Alkylation::Form>& cands, double tol_da);
 
   struct Tally

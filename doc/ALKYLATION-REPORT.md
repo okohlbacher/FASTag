@@ -193,8 +193,11 @@ itself.
 
 ## `-alkylation_tags_out` (1.13, database-free, format 1)
 
-Backlog #22, src/AlkylationTags.h. This report gives the same call without a
-protein database. It is opt-in and experimental. With the option off nothing
+Backlog #22, src/AlkylationTags.h. This report tries the same call without a
+protein database. It is opt-in and experimental, and it was **measured to fail
+on development data** (3 calls on 123 runs; see "Development result" below):
+its calls are unreliable, and the report says so in `alkt_run.status` and in
+the `alkylation_tags_call.status` description. With the option off nothing
 runs and no output changes. With it on, the tag TSV and every other result file
 are byte-identical, with two exceptions: the log gains one line, and an
 `-out_spectra` mzML records `parameter: alkylation_tags_out`, as it records
@@ -248,6 +251,24 @@ twice the run's edge tolerance (`alias.<form>`). At 20 ppm the list also
 holds S + S for C[Propionamide] (0.018 Da). At 0.5 Da it holds many more
 pairs.
 
+An edge can also start or end on the 13C peak of an ion: an isotope peak the
+deisotoper keeps, and every one under `-no_deisotope`. Such an edge is another
+C form +/- 1.00336 Da. C[Carbamidomethyl] + 13C lies 0.0193 Da from
+C[Carboxymethyl] (58.00548 - 57.02146 = 0.98402 Da), so in CAM runs those
+edges vote Carboxymethyl whenever such a reading is a spectrum's best tag, and
+in Carboxymethyl runs C[Carboxymethyl] - 13C can vote CAM. The tagger matches an edge with the tolerance at its peak, so the
+twin reads at a 0.02 Da tolerance at every m/z, and at 20 ppm only for
+fragments above about 965 m/z. It is within twice the report's edge tolerance
+(the ppm tolerance at 1000 m/z) from 10 ppm up. The report lists it as `C[Carbamidomethyl]+13C` under
+`alias.Carboxymethyl` and `C[Carboxymethyl]-13C` under
+`alias.Carbamidomethyl`. It is not corrected and does not set
+`forms_resolved` to `no`: that row compares the forms' own masses, the
+quantity a coarse tolerance cannot resolve, while the isotope twin, like
+G + C, is a second peak path to the same edge mass. The unit test builds an
+undeisotoped CAM ladder with 13C peaks (0.02 Da tolerance) and checks that the
+C[Carboxymethyl] reading exists: 25 such readings in 12 spectra, none of them
+a spectrum's best tag there.
+
 **Development result (descriptive, not held-out).** On the 123 evaluable
 SDRF development runs of acceptance/1.12 (105 CAM, 17 none, 1 Methylthio),
 the report made 3 calls, 2 of them right. It returned no call `ambiguous` on
@@ -270,6 +291,7 @@ gui/src/digestReport.ts names none of its sections and refuses it.
 |---|---|
 | `format` | 1 |
 | `method` | `shadow_tags` |
+| `status` | `experimental_failed`: the method was measured to fail on development data; calls are unreliable |
 | `forms` | the six candidate forms, comma-separated (n: 6) |
 | `c_mods_removed` | the run's C modifications that the second pass leaves out, as `Name (fixed)` / `Name (variable)`, or `-` |
 | `tag_lengths` | the seed lengths |
@@ -281,7 +303,7 @@ gui/src/digestReport.ts names none of its sections and refuses it.
 | `spectra` | spectra with a vote (n: `spectra_tagged`) |
 | `min_spectra`, `min_share` | the call thresholds |
 | `edge_tolerance` | the edge tolerance in Da |
-| `forms_resolved` | `yes`, or `no` when two forms lie within twice the edge tolerance (then no call) |
+| `forms_resolved` | `yes`, or `no` when two forms' own masses lie within twice the edge tolerance (then no call); 13C-shifted readings are under `alias.<form>` |
 
 ### `alkt_form`
 
@@ -289,7 +311,7 @@ gui/src/digestReport.ts names none of its sections and refuses it.
 |---|---|
 | `<form>`, six rows in the order of `forms` | votes for the form (n: votes without conflicts) |
 | `residues.<form>` | C residues of the form in all counted tags (n: all C residues) |
-| `alias.<form>` | two-residue sums within twice the edge tolerance of the C form (`C+G:0.0000`, comma-separated), or `-` |
+| `alias.<form>` | two-residue sums (`C+G:0.0000`) and 13C-shifted other C forms (`C[Carbamidomethyl]+13C:0.0193`) within twice the edge tolerance of the C form, by distance, comma-separated, or `-` |
 | `conflict` | votes whose tag holds two forms (n: `spectra`) |
 
 ### `alkylation_tags_call`

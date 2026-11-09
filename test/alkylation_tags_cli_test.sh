@@ -99,6 +99,10 @@ run -in "$TMP/Carbamidomethyl.mzML" -out "$TMP/da.tsv" -tag_length 3 -fragment_t
 [ "$(val "$TMP/da.alkt.tsv" alkt_run forms_resolved)" = no ] || fail "0.5 Da: forms_resolved is not no"
 [ "$(val "$R" alkt_run forms_resolved)" = yes ] || fail "20 ppm: forms_resolved is not yes"
 val "$R" alkt_form alias.Propionamide | grep -q "S+S" || fail "20 ppm: S+S is not an alias of Propionamide"
+[ "$(val "$R" alkt_form alias.Carboxymethyl)" = "C[Carbamidomethyl]+13C:0.0193" ] \
+  || fail "20 ppm: the isotope twin is not the alias of Carboxymethyl"
+[ "$(val "$R" alkt_run status)" = experimental_failed ] || fail "alkt_run status is not experimental_failed"
+grep -q "measured to fail" "$R" || fail "the report does not state the measured failure"
 
 # ---- -alkylation_min_spectra applies
 run -in "$TMP/Carbamidomethyl.mzML" -out "$TMP/ms.tsv" "${COMMON[@]}" -alkylation_tags_out "$TMP/ms.alkt.tsv" \

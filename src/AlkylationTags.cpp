@@ -94,6 +94,19 @@ namespace FASTag::AlkylationTags
           const double d = std::fabs(res[i].second + res[j].second - target);
           if (d <= 2.0 * tol_da) hits.emplace_back(d, std::string(1, res[i].first) + "+" + std::string(1, res[j].first));
         }
+      // 1.13 #22 review: an edge that starts or ends on the 13C peak of an
+      // ion (not deisotoped, or under -no_deisotope) reads as another form
+      // +/- 1.00336 Da: C[Carbamidomethyl] + 13C lies 0.0193 Da from
+      // C[Carboxymethyl].
+      for (const auto& g : cands)
+      {
+        if (&g == &f) continue;
+        for (int sign : {+1, -1})
+        {
+          const double d = std::fabs(g.mass + sign * kC13Spacing - f.mass);
+          if (d <= 2.0 * tol_da) hits.emplace_back(d, "C[" + g.name + "]" + (sign > 0 ? "+13C" : "-13C"));
+        }
+      }
       std::sort(hits.begin(), hits.end());
       std::string v;
       for (const auto& [d, name] : hits)
@@ -245,6 +258,9 @@ namespace FASTag::AlkylationTags
     add("alkt_run", "method", "shadow_tags", "-",
         "Every MS2 spectrum is tagged a second time with unmodified C and one alternative C edge per reagent; "
         "those tags are not written. No database is used.");
+    add("alkt_run", "status", "experimental_failed", "-",
+        "Experimental: measured to fail on development data (3 calls on 123 runs; doc/ALKYLATION-REPORT.md). "
+        "Random C edges spread the votes over all forms; calls are unreliable.");
     std::string forms;
     for (const auto& f : cands) forms += (forms.empty() ? "" : ",") + f.name;
     add("alkt_run", "forms", forms, std::to_string(cands.size()), "The C forms the shadow pass can spell.");
@@ -274,7 +290,7 @@ namespace FASTag::AlkylationTags
             " Da (the fragment tolerance, or in ppm at 1000 m/z).");
     const bool resolved = formsResolved(cands, info.tol_da);
     add("alkt_run", "forms_resolved", resolved ? "yes" : "no", "-",
-        resolved ? "Every two C forms are more than twice the edge tolerance apart."
+        resolved ? "Every two C forms are more than twice the edge tolerance apart (isotope-shifted readings are listed under alias)."
                  : "Two C forms lie within twice the edge tolerance (Carbamidomethyl and Carboxymethyl are 0.984 Da apart): no call is made.");
 
     // ---- alkt_form
@@ -301,8 +317,9 @@ namespace FASTag::AlkylationTags
       const auto& f = cands[static_cast<std::size_t>(k)];
       add("alkt_form", "alias." + f.name, al[static_cast<std::size_t>(k)], "-",
           al[static_cast<std::size_t>(k)] == "-"
-              ? "No two residues sum to C[" + f.name + "] within twice the edge tolerance."
-              : "Two residues whose middle peak is missing read like C[" + f.name + "] (pair:distance in Da); such votes are not corrected.");
+              ? "No two residues sum to C[" + f.name + "] and no 13C-shifted C form reads like it within twice the edge tolerance."
+              : "Two residues whose middle peak is missing (X+Y), or another C form whose edge starts or ends on a 13C peak "
+                "(C[Name]+13C / -13C), read like C[" + f.name + "] (reading:distance in Da); such votes are not corrected.");
     }
     add("alkt_form", "conflict", u(t.conflict), u(t.spectra),
         u(t.conflict) + " spectra have a best tag (or tags of equal E-value) with C residues of two forms; they are not in the share.");
@@ -316,9 +333,10 @@ namespace FASTag::AlkylationTags
       for (const auto& f : cands)
         if (f.cls == c.cls && f.cls != Alkylation::None) { mass = f.mass; break; }
       add(sec, "status", "call", u(c.binned),
-          c.cls == Alkylation::None ? "The cysteines are not alkylated (database-free; not validated on held-out data)."
-                                    : "The cysteines are alkylated with " + name +
-                                          " (database-free; not validated on held-out data).");
+          c.cls == Alkylation::None
+              ? "The votes favour unalkylated cysteines (database-free; the method was measured to fail on development data, so the call is unreliable)."
+              : "The votes favour " + name +
+                    " (database-free; the method was measured to fail on development data, so the call is unreliable).");
       add(sec, "reagent", name, u(c.top), "The call is " + name + ".");
       add(sec, "mass", c.cls == Alkylation::None ? "-" : num(mass), "-",
           c.cls == Alkylation::None ? "A call of none has no reagent mass." : name + " adds " + num(mass) + " Da to C.");
