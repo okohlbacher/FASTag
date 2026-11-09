@@ -5,7 +5,7 @@
 # Usage: run_item11.sh <acceptance/1.13 dir> <work dir (data:/scratch/kohlbach/b113/ax/heldout)>
 set -u
 ACC=$(cd "$1" && pwd); W=$2
-BIN=/scratch/kohlbach/b113/ax/frozen/FASTag; BIN_SHA=d3ec817573e114446f601943378939b59f91aadf256cbd68fdf675fb62e84701
+BIN=/scratch/kohlbach/b113/ax/frozen/FASTag; BIN_SHA=064b82780b9edb44294000423b6e0b7fff4c2dc15241b5a8525cb9d5011a978c
 J=/ceph/ibmi/abi/oliver/spextract/tools/MSFragger-4.4.1.jar; JAVA=/ceph/ibmi/abi/oliver/opt/jdk-21.0.12.1/bin/java
 PY=/ceph/ibmi/abi/oliver/envs/prepdda/bin/python
 # feat/b113-ax at 99ec699 (git archive), for bench/fastag-bench score.py with the a/x offset

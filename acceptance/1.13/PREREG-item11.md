@@ -100,3 +100,11 @@ b/y (tags identical to by), as specified.
 
 Expectation, stated before the run: on this evidence E1 will FAIL. The held-out run is done anyway, because the
 protocol for opt-in modes asks for a registered held-out result and the set exists.
+
+## Erratum 1 (2026-11-09, before any held-out run)
+
+`item11/scripts/run_item11.sh` as committed in 43ac368 pinned the sha256 of the 6ee8b4b build (`d3ec8175...`)
+instead of the frozen 99ec699 binary (`064b8278...`, as `frozen-configs.tsv` and `item11/SHA256SUMS` state). Its
+first start refused (`refusing: binary sha256`) before any FASTag, MSFragger or scorer step; nothing ran on the
+held-out files. Only that constant changed; the script's sha256 in `item11/SHA256SUMS` is updated. Nothing else in
+this protocol changed.
