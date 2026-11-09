@@ -1,7 +1,29 @@
 # Changelog
 
-## Unreleased (1.13)
+## Unreleased
 
+- **#7 raw-DIA check, release test E7-03: FAIL** (acceptance/1.13, scored once;
+  no code, default or output change). 213 PRIDE files and 37 pseudo-DDA files were tested.
+  diaPASEF and Astral DIA were refused 12/12 each. Orbitrap DIA was refused 7/12 and the
+  SWATH stratum 10/12 (< 90%). 8 of 202 must-pass files were refused (upper 95% bound 7.0%),
+  all drawn from Astral projects labelled DDA. Pseudo-DDA passed 37/37. A post-hoc reading
+  that some disagreements are label errors is a hypothesis, not a re-score; see
+  doc/ACQUISITION-RELEASE-TEST.md.
+- **Label call minimum (backlog #8): `-label_call_min_tags`, experimental,
+  default 175 (the 1.12 rule; no output change at the default).** At 0
+  `label_call` makes no `no_call few_tags` below 175 C-terminal tag ends:
+  every ppm run is called with the same isobaric and SILAC rules,
+  label-free when none fires (the harness's prose-auto 0.1.3 rule), and a
+  call from fewer than 175 ends says that label-free then means only that
+  no label rule fired. On the 193 development runs (in-sample) 0 gave
+  178/193 against 150/193 for the 1.12 rule and 159/193 for "always
+  label-free". Its preregistered held-out test (acceptance/1.13
+  PREREG-item08.md, 172 public runs) FAILED: 149/172 = 0.866 against the
+  threshold 0.922 ("always label-free" + 0.05; always label-free is 0.872);
+  the 1.12 rule gave 83/172. Per the preregistered decision rule the default
+  stays 175 and 0 stays experimental. With zero tag ends the SILAC test is
+  now skipped (no undefined heavy share); this is reachable only at a
+  minimum of 0.
 - **c/z• preprocessing: charge-reduced peaks re-filtered against the
   precursor cut (issue T25).** Peaks were cut at the precursor (neutral mass
   + proton + 1.5 Da) before deisotoping only, so a peak the deisotoper moved

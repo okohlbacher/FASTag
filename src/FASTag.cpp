@@ -583,6 +583,12 @@ protected:
     registerIntOption_("digest_silac_min", "<n>", 50,
                        "K- and R-terminal tag ends each before -label_out's heavy shares are gated in", false, true);
     setMinInt_("digest_silac_min", 0);
+    // ---- 1.13: label call refit (backlog #8) ----
+    registerIntOption_("label_call_min_tags", "<n>", 175,
+                       "C-terminal tag ends -label_out's label_call needs; fewer give no_call few_tags "
+                       "(175: the FASTag 1.12 rule; 0, experimental: every ppm run is called)",
+                       false, true);
+    setMinInt_("label_call_min_tags", 0);
     registerDoubleOption_("massgap_window", "<Da>", 0.02,
                           "Gap window of -massgap_out on a ppm run", false, true);
     setMinFloat_("massgap_window", 0.0);
@@ -2246,6 +2252,7 @@ protected:
       return ILLEGAL_PARAMETERS;
     }
     digest_settings.silac_min = getIntOption_("digest_silac_min");
+    digest_settings.label_min_tags = getIntOption_("label_call_min_tags");
     digest_settings.low_resolution = !p.tol_ppm;
     FD::ModelTable protease_models;
     const std::string digest_models = getStringOption_("digest_models");
@@ -2274,6 +2281,7 @@ protected:
           {"digest_background_share", "-digest_out", digest_on},
           {"digest_window", "-digest_out or -label_out", count_on},
           {"digest_silac_min", "-label_out", label_on},
+          {"label_call_min_tags", "-label_out", label_on},
           {"glyco_out", "-glyco", glyco_flag},
           {"glyco_min_fraction", "-glyco", glyco_flag},
           {"species_out", "-species", want_species},
