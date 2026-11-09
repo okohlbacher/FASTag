@@ -683,7 +683,7 @@ both series at once is not supported yet). A tag read as a/x ions (1.13,
 x = residues + CO2: a reversed read (the low peak an a ion) carries
 offC - offN = CO2 + CO = +71.9847 Da (N-side residues = `cterm_mass` +
 71.9847, C-side residues = `nterm_mass` - 71.9847), the complement partner
-sums to M - 2H at the precursor's charges, and no precursor window is cut
+sums to M - H (a+1/x, a/x+1) or M (a+1/x+1) at the precursor's charges, and no precursor window is cut
 (doc/AX-IONS.md). `-species` and `-alkylation_out` leave a/x tags out and
 count them.
 `-ion_series auto` on a run without electron activation writes exactly what

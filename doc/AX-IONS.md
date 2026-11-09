@@ -5,24 +5,30 @@ FASTag 1.13, backlog item 11. Experimental and opt-in: with both options at thei
 
 ## What is read
 
-Ultraviolet photodissociation (UVPD, 193 or 213 nm) cleaves the Calpha-C bond of the backbone and yields a and x
-ions next to a+1, b, y and y-1 ions. FASTag reads a spectrum as one ion pair at a time (`src/IonSeries.h`,
+Ultraviolet photodissociation (UVPD, 193 or 213 nm) cleaves the Calpha-C bond of the backbone and yields a, a+1,
+x and x+1 ions next to b, y and y-1 ions (a+1 and x+1: the even-electron ion plus one hydrogen atom). FASTag reads a spectrum as one ion pair at a time (`src/IonSeries.h`,
 `IonPair`):
 
-| Series | N-terminal ion | C-terminal ion | Pair sum | Reversed offset (offC - offN) | Charge loss |
+| Series | N-terminal ion | C-terminal ion | Complement pair sum | Reversed offset (offC - offN) | Charge loss |
 |---|---|---|---|---|---|
 | b/y (`by`) | residues | residues + H2O | M | +18.0106 | 0 |
 | c/z• (`cz`) | residues + NH3 | residues + O - N + H | M + H | -15.0347 | 1 |
-| a/x (`ax`) | residues - CO | residues + CO2 | M - 2H | +71.9847 | 0 |
+| a/x (`ax`) | residues - CO | residues + CO2 | M - H or M | +71.9847 | 0 |
 
 The offsets come from OpenMS (`Residue::getInternalToAIon`, `getInternalToXIon`). Tags are spelled from residue
-differences and do not depend on the series. What does depend on it:
+differences and do not depend on the series. The flanks use the even-electron a and x offsets above; a tag spelled
+from an a+1 or x+1 ladder gets flanks 1.0078 Da off, which the flank rule (0.05 Da) scores as wrong. What does
+depend on the series:
 
 - the flanks: a forward read (the low peak an x ion) has `cterm_mass` = low neutral mass - CO2 and keeps the
   residue-sum convention `nterm_mass + tag + cterm_mass + H2O = M`; a reversed read (the low peak an a ion) carries
   +71.9847 Da: N-side residues = `cterm_mass` + 71.9847, C-side residues = `nterm_mass` - 71.9847;
-- the complement test: a peak's partner is the one whose neutral masses sum to M - 2H (2.01565 Da below the b/y
-  partner), at the precursor's charges (`-complement_rule precursor` shares all c charges, as for b/y);
+- the complement test: a peak's partner is one whose neutral mass completes it to M - H or to M, at the
+  precursor's charges (`-complement_rule precursor` shares all c charges, as for b/y). One Calpha-C cleavage
+  conserves mass: its fragments sum to M (the radical pair a+1/x+1) or, after one hydrogen moves off, to M - H
+  (a+1/x or a/x+1). The even-electron a and x sum to M - 2H, which no single cleavage yields, so that sum is not
+  tested. `-unknown_charge`/`-isotope_error` sum the pair excess over both sums. (Before the adversarial review the
+  rule was M - 2H only; the validation below was run with that rule.)
 - no precursor window is cut (that is the c/z• ETD filter only).
 
 Every consumer takes the offset from the tag's series: `-recon_out`/`-recon_id_out`/`-delta_out`/`-massgap_out`
@@ -66,10 +72,18 @@ Rank-1 tag correct (flank rule) on UVPD spectra, truth from each precursor's HCD
 | DEV PXD018176 replicate 1 (213 nm, 5-100 ms) | 77,594 | 31.65% | 0.05% |
 | held-out PXD018176 replicate 2 (scored once) | 77,643 | 30.87% | 0.04% |
 
-The held-out endpoint (ax - by >= +5 points) fails: -30.83 [-31.63, -30.02]. On a 193-nm run (PXD003109, DEV,
-truth MSFragger a,b,x,y) by 63.1%, ax 0.3%. MSFragger with a,x ions only identifies 0-214 spectra per 213-nm run
-and 541 on the 193-nm run, against thousands with a,b,x,y: these spectra hold b/y ladders and isolated a/a+1 ions,
-not a/x ladders. `-ion_series ax` stays experimental; it is not a default candidate.
+The held-out endpoint (ax - by >= +5 points) fails: -30.83 [-31.63, -30.02]. As measured: `-ion_series ax`
+(even-electron a/x flanks, the M - 2H complement rule, every spectrum read as a/x only) loses to b/y by 30.8 points
+on held-out PXD018176. On a 193-nm run (PXD003109, DEV, truth MSFragger a,b,x,y) by 63.1%, ax 0.3%. MSFragger with
+a,x ions only identifies 0-214 spectra per 213-nm run and 541 on the 193-nm run, against thousands with a,b,x,y.
+
+What was not tested: an a+1/x+1 reading (a+1 and x+1 are the more frequent photo ions in the DEV census:
+a+1 5.01% vs a 3.59%, x+1 1.83% vs x 1.01% at 100 ms), a mixed b/y + a/x reading of one spectrum, and the
+complement rule M - H / M that replaced M - 2H after the review (DEV-only change; the held-out set PXD018176
+replicate 2 has been scored once and is not reused). The result does not show that these spectra lack a/x
+information; it shows that this even-electron, a/x-only reading does not recover it. An a+1/x+1 or hybrid
+reading would be a new backlog item with its own DEV work and a new held-out set. `-ion_series ax` stays
+experimental; it is not a default candidate.
 
 ## Tests
 
