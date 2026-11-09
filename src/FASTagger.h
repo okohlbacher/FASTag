@@ -243,10 +243,11 @@ namespace FASTag
       c.frag_tol_ppm = p.tol_ppm;
       c.midp = p.complement_midp;
       // b/y keeps the single delta 0 (1.11's doubles); c/z-dot pairs sum to
-      // M + H (IonSeries::IonPair::compl_delta).
+      // M + H, a/x cleavage pairs to M - H or M (IonSeries::IonPair::
+      // compl_deltas).
       if (p.ion_pair.kind != IonSeries::Series::BY)
       {
-        c.pair_deltas = {p.ion_pair.compl_delta};
+        c.pair_deltas = p.ion_pair.compl_deltas;
         c.charge_loss = p.ion_pair.charge_loss;
       }
       return c;

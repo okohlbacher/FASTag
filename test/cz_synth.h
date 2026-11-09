@@ -8,6 +8,7 @@
 #pragma once
 
 #include <OpenMS/CHEMISTRY/AASequence.h>
+#include <OpenMS/CHEMISTRY/EmpiricalFormula.h>
 #include <OpenMS/CHEMISTRY/TheoreticalSpectrumGenerator.h>
 #include <OpenMS/CONCEPT/Constants.h>
 #include <OpenMS/DATASTRUCTURES/Param.h>
@@ -37,6 +38,8 @@ namespace CzSynth
     A,      ///< a ions only
     X,      ///< x ions only
     ABXY,   ///< a, b, x and y ions (a UVPD-like mixture)
+    A1X,    ///< a+1 and x ions: one Calpha-C cleavage pair after an H shift (sum M - H)
+    A1X1,   ///< a+1 and x+1 ions: the homolytic radical pair (sum M)
   };
 
   /// The fragment spectrum of @p pep (OpenMS notation, modifications
@@ -53,6 +56,37 @@ namespace CzSynth
     r.M = aa.getMonoWeight();
     r.prec_mz = (r.M + prec_charge * P) / prec_charge;
 
+    OpenMS::PeakSpectrum th;
+    if (ions == Ions::A1X || ions == Ions::A1X1)
+    {
+      // a+1 and x+1 = the even-electron ion plus one hydrogen atom (not a
+      // proton): OpenMS's a and x ions per fragment charge z, shifted by H/z.
+      const double H = OpenMS::EmpiricalFormula("H").getMonoWeight();
+      for (const bool a_side : {true, false})
+        for (int z = 1; z <= max_frag_charge; ++z)
+        {
+          OpenMS::TheoreticalSpectrumGenerator g;
+          OpenMS::Param q = g.getParameters();
+          q.setValue("add_b_ions", "false");
+          q.setValue("add_y_ions", "false");
+          q.setValue("add_a_ions", a_side ? "true" : "false");
+          q.setValue("add_x_ions", a_side ? "false" : "true");
+          q.setValue("add_first_prefix_ion", "false");
+          q.setValue("add_metainfo", "false");
+          q.setValue("add_losses", "false");
+          q.setValue("add_precursor_peaks", "false");
+          g.setParameters(q);
+          OpenMS::PeakSpectrum one;
+          g.getSpectrum(one, aa, z, z);
+          const double shift = (a_side || ions == Ions::A1X1) ? H / z : 0.0;
+          for (auto pk : one)
+          {
+            pk.setMZ(pk.getMZ() + shift);
+            th.push_back(pk);
+          }
+        }
+      th.sortByPosition();
+    }
     OpenMS::TheoreticalSpectrumGenerator tsg;
     OpenMS::Param p = tsg.getParameters();
     const auto on = [](bool b) { return b ? "true" : "false"; };
@@ -67,8 +101,7 @@ namespace CzSynth
     p.setValue("add_losses", "false");
     p.setValue("add_precursor_peaks", "false");
     tsg.setParameters(p);
-    OpenMS::PeakSpectrum th;
-    tsg.getSpectrum(th, aa, 1, max_frag_charge);
+    if (ions != Ions::A1X && ions != Ions::A1X1) tsg.getSpectrum(th, aa, 1, max_frag_charge);
 
     std::mt19937 rng(seed);
     const auto u01 = [&rng]() { return (rng() >> 8) * (1.0 / 16777216.0); };

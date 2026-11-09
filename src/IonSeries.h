@@ -20,10 +20,16 @@
 // -15.0347 for c/z-dot) do. Hybrid by+cz is deferred (PLAN-data-types E9).
 //
 // a/x (1.13 backlog item 11, -ion_series ax): offN -CO (OpenMS a ion,
-// Residue::getInternalToAIon), offC CO2 (x ion, getInternalToXIon); the pair
-// sums to M - 2H (compl_delta -2.015650), loses no charge, and its reversed
-// offset is CO2 + CO = +71.984744. Photodissociation (UVPD) yields them,
-// together with a+1, b, y and y-1 ions. -ion_series ax reads every spectrum
+// Residue::getInternalToAIon), offC CO2 (x ion, getInternalToXIon); it
+// loses no charge, and its reversed offset is CO2 + CO = +71.984744. The
+// even-electron a and x sum to M - 2H (compl_delta -2.015650), but no single
+// Calpha-C cleavage yields that pair: mass is conserved, so its two
+// fragments sum to M (the radical pair a+1/x+1) or, after one hydrogen
+// moves off, to M - H (a+1/x or a/x+1). The complement test therefore looks
+// for partners at M - H and M (IonPair::compl_deltas {-H, 0}), never at
+// M - 2H. Photodissociation (UVPD) yields a, a+1, b, x, x+1, y and y-1 ions;
+// a tag spelled from an a+1 or x+1 ladder has flanks 1.007825 Da off the
+// even-electron offsets used here. -ion_series ax reads every spectrum
 // as a/x; under auto, -ion_series_photo ax reads a spectrum as a/x when its
 // activation is photodissociation (PSI-MS MS:1000435, which both mzML
 // readers map to PHD, or a Thermo filter token @uvpd) and nothing else
@@ -59,6 +65,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace FASTag::IonSeries
 {
@@ -240,7 +247,12 @@ namespace FASTag::IonSeries
     Series kind = Series::BY;
     double offN = std::numeric_limits<double>::quiet_NaN();  ///< N-terminal ion neutral mass minus its residues
     double offC = std::numeric_limits<double>::quiet_NaN();  ///< C-terminal ion neutral mass minus its residues
-    double compl_delta = 0.0;   ///< offN + offC - H2O: the pair's neutral masses sum to M + this
+    double compl_delta = 0.0;   ///< offN + offC - H2O: the even-electron ions' neutral masses sum to M + this
+    /// The complement test's partner sums (ComplementSpec::pair_deltas): a
+    /// cleavage pair's neutral masses sum to M + one of these. b/y {0} and
+    /// c/z-dot {+H} are {compl_delta}; a/x is {-H, 0} (a+1/x or a/x+1, and
+    /// a+1/x+1), since the even-electron a/x sum M - 2H is no cleavage pair.
+    std::vector<double> compl_deltas{0.0};
     /// Charges the precursor loses on the way to the pair: 0 for b/y; 1 for
     /// c/z-dot, since [M+cH]^c+ takes up one electron and its c and z-dot
     /// fragments share c - 1 charges (the complement's precursor rule).
@@ -277,6 +289,9 @@ namespace FASTag::IonSeries
       p.offC = Residue::getInternalToYIon().getMonoWeight();
     }
     p.compl_delta = s == Series::BY ? 0.0 : p.offN + p.offC - kWater;
+    static const double kH = OpenMS::EmpiricalFormula("H").getMonoWeight();
+    if (s == Series::AX) p.compl_deltas = {-kH, 0.0};
+    else p.compl_deltas = {p.compl_delta};
     return p;
   }
 

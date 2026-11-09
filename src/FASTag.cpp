@@ -1772,7 +1772,7 @@ protected:
     FASTag::Param p_cz = p;
     p_cz.ion_pair = FASTag::IonSeries::ionPair(FASTag::IonSeries::Series::CZ);
     const FASTag::ComplementSpec hyp_cs_cz = FASTag::ComplementSpec::fromParam(p_cz);
-    // 1.13 item 11: a/x pairs sum to M - 2H, for a spectrum read as a/x.
+    // 1.13 item 11: a/x cleavage pairs sum to M - H or M, for a spectrum read as a/x.
     FASTag::Param p_ax = p;
     p_ax.ion_pair = FASTag::IonSeries::ionPair(FASTag::IonSeries::Series::AX);
     const FASTag::ComplementSpec hyp_cs_ax = FASTag::ComplementSpec::fromParam(p_ax);

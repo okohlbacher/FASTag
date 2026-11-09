@@ -1,8 +1,10 @@
 // a/x ions (FASTag 1.13 backlog item 11; src/IonSeries.h, -ion_series ax and
 // -ion_series auto -ion_series_photo ax):
 //   (a) the a/x IonPair equals OpenMS's internal-to-A/X formulas and the
-//       hand values a = residues - CO, x = residues + CO2; compl_delta -2H,
-//       reversed offset CO2 + CO = +71.984744, no charge loss; ComplementSpec.
+//       hand values a = residues - CO, x = residues + CO2; the even-electron
+//       sum -2H, the cleavage-pair deltas {-H, 0} (a+1/x or a/x+1, and
+//       a+1/x+1), reversed offset CO2 + CO = +71.984744, no charge loss;
+//       ComplementSpec.
 //   (b) modes and names: ax reads every class as a/x; auto reads a
 //       photo-activated spectrum as a/x only with photo_ax; the column and
 //       seriesInRun rules; the 1.12 by/cz/auto results are unchanged.
@@ -10,8 +12,10 @@
 //       collisional or electron method or token classifies the spectrum.
 //   (d) a/x ladders (TheoreticalSpectrumGenerator) of 5 tryptic peptides at
 //       2+ and 3+: under ax every tag the peptide holds has flanks within
-//       0.01 Da of the truth, most with p_complement < 1; read as b/y the
-//       same reads are off by the documented offsets.
+//       0.01 Da of the truth; read as b/y the same reads are off by the
+//       documented offsets. On a+1/x and a+1/x+1 ladders (OpenMS a and x
+//       ions shifted by H) most true tags find their complement under
+//       {-H, 0}, and (almost) none under the even-electron -2H rule.
 //   (e) a reversed (a-derived) tag is placed by TagRecon and counted by the
 //       digest TerminusCounter with offset offC - offN, not with H2O.
 //   (f) the INFO and WARN lines: 1.12's text under by/cz/auto, a/x counts
@@ -203,12 +207,19 @@ int main(int argc, char** argv)
     // Hand values (not OpenMS's): a = residues - CO, x = residues + CO2.
     check(std::fabs(axp.offN + 27.994915) < 1e-5, "a = residues - CO (-27.994915)");
     check(std::fabs(axp.offC - 43.989829) < 1e-5, "x = residues + CO2 (+43.989829)");
-    check(std::fabs(axp.compl_delta + 2.015650) < 1e-5, "compl_delta(a/x) = -2H = -2.015650");
+    check(std::fabs(axp.compl_delta + 2.015650) < 1e-5, "even-electron a + x = M - 2H (compl_delta -2.015650)");
+    check(axp.compl_deltas.size() == 2 && std::fabs(axp.compl_deltas[0] + 1.007825) < 1e-6 &&
+            axp.compl_deltas[1] == 0.0,
+          "a/x cleavage pairs sum to M - H or M, never M - 2H");
+    check(byp.compl_deltas == std::vector<double>{0.0}, "b/y compl_deltas stay {0}");
+    check(IS::ionPair(IS::Series::CZ).compl_deltas.size() == 1 &&
+            IS::ionPair(IS::Series::CZ).compl_deltas[0] == IS::ionPair(IS::Series::CZ).compl_delta,
+          "c/z-dot compl_deltas stay {compl_delta}");
     check(std::fabs(axp.reversedOffset() - 71.984744) < 1e-5, "a/x reversed offset offC - offN = +71.984744");
     check(axp.charge_loss == 0, "a/x loses no charge");
     const auto cs = FASTag::ComplementSpec::fromParam(withPair(FASTag::cliDefaultParam(), IS::Series::AX));
-    check(cs.pair_deltas.size() == 1 && std::fabs(cs.pair_deltas[0] + 2.015650) < 1e-5 && cs.charge_loss == 0,
-          "a/x complement pairs sum to M - 2H at the precursor's charges");
+    check(cs.pair_deltas == axp.compl_deltas && cs.charge_loss == 0,
+          "a/x complement pairs sum to M - H or M at the precursor's charges");
     check(std::string(IS::seriesName(IS::Series::AX)) == "ax", "seriesName(AX) is ax");
     check(std::string(IS::seriesName(IS::Series::BY)) == "by" && std::string(IS::seriesName(IS::Series::CZ)) == "cz",
           "1.12 series names unchanged");
@@ -343,22 +354,42 @@ int main(int argc, char** argv)
               << " with p_complement < 1; " << by_off << " of " << by_reads << " b/y reads off the truth\n";
     check(spectra_with_true == 10, "every a/x spectrum yields a true tag under ax");
     check(true_tags >= 50, "enough true a/x tags for a meaningful check");
-    check(2 * compl_ok >= true_tags, "most true a/x tags find their complement (M - 2H)");
+    (void)compl_ok;  // even-electron a + x sum to M - 2H: no cleavage pair, so not asserted
     check(by_reads >= 20 && by_off == by_reads, "every b/y read of an a/x ladder misses the a/x truth");
-    // A wrong compl_delta must cost the complement: with b/y's delta 0 the
-    // same a/x reads find (almost) none.
-    FASTag::Param wrong = pax;
-    wrong.ion_pair.compl_delta = 0.0;
-    const FASTag::Tables tw(wrong);
-    int wrong_compl = 0, right_compl = 0;
-    for (const char* pep : kPeptides)
+    // The complement rule on physically possible pairs: a+1/x (M - H) and
+    // a+1/x+1 (M). {-H, 0} must find the partners of most true tags; the
+    // even-electron -2H rule (the rule before review) must find (almost)
+    // none, so this check fails under it.
+    FASTag::Param old_rule = pax;
+    old_rule.ion_pair.compl_deltas = {axp.compl_delta};
+    const FASTag::Tables to(old_rule);
+    for (const CzSynth::Ions kind : {CzSynth::Ions::A1X, CzSynth::Ions::A1X1})
     {
-      const CzSynth::Spec s = CzSynth::make(pep, 2, CzSynth::Ions::AX, 1, 20, 302u);
-      for (const FASTag::Tag& t : FASTag::tagSpectrum(s.spec, s.prec_mz, 2, wrong, tw)) wrong_compl += t.p_complement < 1.0;
-      for (const FASTag::Tag& t : FASTag::tagSpectrum(s.spec, s.prec_mz, 2, pax, tax)) right_compl += t.p_complement < 1.0;
+      const std::string kname = kind == CzSynth::Ions::A1X ? "a+1/x" : "a+1/x+1";
+      int new_true = 0, new_compl = 0, old_compl = 0;
+      for (const char* pep : kPeptides)
+        for (int z : {2, 3})
+        {
+          const CzSynth::Spec s = CzSynth::make(pep, z, kind, z - 1, 20, 400u + static_cast<unsigned>(z));
+          for (const FASTag::Tag& t : FASTag::tagSpectrum(s.spec, s.prec_mz, z, pax, tax))
+          {
+            if (t.gapped || t.evalue > 1.0 || occurrences(pep, FASTag::baseSequence(t.seq)).empty()) continue;
+            ++new_true;
+            new_compl += t.p_complement < 1.0;
+          }
+          for (const FASTag::Tag& t : FASTag::tagSpectrum(s.spec, s.prec_mz, z, old_rule, to))
+          {
+            if (t.gapped || t.evalue > 1.0 || occurrences(pep, FASTag::baseSequence(t.seq)).empty()) continue;
+            old_compl += t.p_complement < 1.0;
+          }
+        }
+      std::cout << "d. " << kname << ": " << new_true << " true tags, " << new_compl << " with p_complement < 1 under "
+                << "{-H, 0}, " << old_compl << " under -2H\n";
+      check(new_true >= 30, kname + ": enough true tags");
+      check(2 * new_compl >= new_true, kname + ": most true tags find their complement under {-H, 0}");
+      check(new_compl > 3 * old_compl + 5, kname + ": the -2H rule misses the cleavage pairs (" +
+                                               std::to_string(new_compl) + " vs " + std::to_string(old_compl) + ")");
     }
-    check(right_compl > 3 * wrong_compl + 5, "the -2H complement delta is what finds the a/x pairs (" +
-                                                 std::to_string(right_compl) + " vs " + std::to_string(wrong_compl) + ")");
     // b/y ladders under b/y keep 1.11's convention (the default Param).
     check(FASTag::cliDefaultParam().ion_pair.kind == IS::Series::BY, "the default Param stays b/y");
   }
