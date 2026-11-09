@@ -871,9 +871,14 @@ options and their values.
   turns every hypothesis into the masses it predicts in both channels and
   both readings (b and y). Offsets the unlabelled flanks of any residue
   composition, the precursor 13C picks or an accepted label explain are
-  classed and never called; the others are explained by the known labels or
-  Unimod (ModificationsDB), and iTRAQ8plex is told from TMTpro by the
-  calibrated C-terminal channel or written `ambiguous`. The call is a label
+  classed and never called (the unlabelled flanks are read as y, b and a
+  ions with their NH3 and H2O losses, and the precursor less NH3 or H2O);
+  the others are explained by the known labels or Unimod (ModificationsDB),
+  and iTRAQ8plex is told from TMTpro by the calibrated C-terminal channel or
+  written `ambiguous`. A known label (TMT, TMTpro, iTRAQ4/8, dimethyl, SILAC
+  Lys4/6/8 and Arg6/10) is called on a lower evidence bar than a Unimod label,
+  and an unknown mass only when it sits on most of the peptides on a ladder
+  of many residues (bar set on development data only). The call is a label
   set (`TMT+K:TMT`, `Dimethyl`, `unknown:N+123.4567`), `label-free`, or no
   call on a Da tolerance, with c/z tags only, below 175 spectra or without
   N-terminal flanks. Its `ld_known` rows give `-label_out`'s counts again. It

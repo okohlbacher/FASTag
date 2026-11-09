@@ -20,8 +20,8 @@
 // other output changes (the collector reads the tag values -label_out reads,
 // through its own counter).
 //
-// Thresholds are priors, not fitted (section 13): not validated on held-out
-// data.
+// Thresholds are priors; the evidence bar of the call (Settings::tier_min_*)
+// was set on the DEV half of evaluation 2 only (design section 16).
 //
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
@@ -31,6 +31,7 @@
 
 #include <array>
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -176,6 +177,18 @@ namespace FASTag::LabelDiscovery
     /// A called label needs this share of the parsimony of the strongest
     /// called one and of its site's delta 0 control (prior).
     double min_relative_parsimony = 0.1;
+    /// The evidence bar of a call (evaluation 2, fitted on the DEV half of the
+    /// 256-run evaluation only), per tier of the candidate's explanation:
+    /// 0 a known label (TMT, TMTpro, iTRAQ4/8, SILAC Lys4/6/8 and Arg6/10,
+    /// dimethyl light/medium/heavy), 1 a Unimod label (N-terminal or K/R
+    /// entry classed isotopic label or chemical derivative, or a curated
+    /// derivatisation label), 2 anything else (an unknown mass, other Unimod
+    /// entries). relative share = spectra_clean / (spectra_clean + the site's
+    /// delta 0 control spectra); clean share = spectra_clean / counted spectra;
+    /// ladder = ladder_clean (residues with a clean ladder image).
+    double tier_min_relative[3] = {0.15, 0.35, 0.5};
+    double tier_min_clean_share[3] = {0.02, 0.1, 0.2};
+    int tier_min_ladder[3] = {0, 3, 5};
     std::uint64_t min_counted_spectra = 175;  ///< Digest::kLabelTagMin
     bool low_resolution = false;              ///< fragment tolerance in Da
     bool fasta_filtered = false;              ///< -fasta: only database matches are written
@@ -270,14 +283,40 @@ namespace FASTag::LabelDiscovery
   };
   Compositions compositions(const std::vector<Residue>& alphabet, double max_mass);
 
+  /// One null reading (section 7): where an unlabelled flank of residue
+  /// composition S lands in a channel, from FASTagger's flank formula
+  /// (section 3: c = low peak neutral - H2O, n = M - high peak neutral). The
+  /// predicted mass is m(S) + shift.
+  ///   c, forward (low peak y = S + H2O):       y, y - NH3, y - H2O
+  ///   c, reversed (low peak b = S):            b, b - NH3, b - H2O, a = b - CO, a - NH3
+  ///   n, forward (high peak y_high = M - S):   y, y - NH3, y - H2O
+  ///   n, reversed (high peak b = M - S - H2O): b, b - NH3, b - H2O
+  ///   n, each of these with the precursor picked k = 1, 2 13C peaks high (+k 13C)
+  /// The precursor family (S empty, @c precursor): a high peak that is the
+  /// precursor less NH3 or H2O (forward: n = NH3, H2O) or b_n = M - H2O less
+  /// nothing, NH3 or H2O (reversed: n = H2O, H2O + NH3, 2 H2O), each read at
+  /// k = -1, 0, 1, 2 13C (its own 13C peak as the high peak, or a 13C pick of
+  /// the precursor). A reading that coincides with another (y - H2O and b in
+  /// channel c) is listed once.
+  struct NullReading
+  {
+    char ch;
+    double shift;
+    std::string name;
+    bool precursor;  ///< S empty: the mass is the shift itself
+  };
+  /// The readings, indexed by NullImages::Interval::reading. Index 0 is
+  /// channel c, m(S) exactly (the composition mass itself).
+  const std::vector<NullReading>& nullReadings();
+  inline constexpr std::uint8_t kReadingAccepted = 255;  ///< an accepted hypothesis' image
+
   /// Null channel images: intervals of predicted masses per channel.
   struct NullImages
   {
     struct Interval
     {
       double lo, hi;
-      /// reading: 0 S, 1 S+H2O, 2 S-H2O, 3 S+13C, 4 S+2x13C, 5 S+H2O+13C,
-      /// 6 S+H2O+2x13C, 7 accepted, 8 S-H2O-CO (a ion), 9 S-H2O-CO-NH3 (|S| = 1: immonium - NH3)
+      /// reading: an index of nullReadings(), or kReadingAccepted
       std::uint8_t nres, reading;
       int owner = -1;              ///< accepted hypothesis (reading 7), else -1
     };
@@ -289,11 +328,12 @@ namespace FASTag::LabelDiscovery
     void add(char ch, double lo, double hi, std::uint8_t nres, std::uint8_t reading, int owner = -1);
     void sortAll();
   };
-  /// The four readings n = m(S), n = m(S) + H2O, c = m(S), c = m(S) - H2O of
-  /// every composition, n + k * 13C (k = 1, 2) of both n readings, the a ion
-  /// of the reversed reading (c = m(S) - H2O - CO), and for single residues
-  /// the immonium ion less NH3 read as a b0 ion (c = m_r - H2O - CO - NH3).
-  NullImages nullImages(const Compositions& comps);
+  /// Every nullReadings() reading of every composition, and the precursor
+  /// family once; images above @p max_mass are left out.
+  NullImages nullImages(const Compositions& comps, double max_mass = std::numeric_limits<double>::infinity());
+  /// Composition masses the null set needs for flanks up to @p max_flank: the
+  /// largest negative c shift (a - NH3 = S - H2O - CO - NH3) still reaches it.
+  double compositionLimit(double max_flank);
 
   // ---- images (section 3) ---------------------------------------------------
 
@@ -341,6 +381,9 @@ namespace FASTag::LabelDiscovery
     std::string cls, explanation, alternatives, label;
     double completeness = -1;  ///< -1: not computed
     bool called = false;
+    int tier = 2;               ///< evidence tier of the explanation (Settings::tier_min_*), -1 for the controls
+    double relative_share = 0;  ///< spectra_clean / (spectra_clean + the site's control spectra)
+    double clean_share = 0;     ///< spectra_clean / counted spectra
     /// Ranking key of the call: per spectrum 2^-k, k the fewest residues of
     /// a clean image supporting it, summed (zero-residue images weigh 1).
     double parsimony = 0;

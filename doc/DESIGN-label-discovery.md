@@ -5,7 +5,9 @@ Nothing here is implemented yet. The thresholds are priors. They are not fitted,
 frozen until the evaluation in section 13 has run.
 
 Revision 2 (2026-11-09) takes in the first design review. The issues and what was done with each
-are in section 15.
+are in section 15. Revision 3 (2026-11-10, section 16) follows the first evaluation on public data
+(67 of 159 label-free runs with a false label call): systematic neutral-loss null readings, a tiered
+evidence bar fitted on a DEV half only, more known labels, and a robust calibration uncertainty.
 
 Backlog seed: `output/BACKLOG.md`, "Database-free label discovery". Related code and documents:
 `-label_out` (`src/Digest.{h,cpp}`, `src/DigestReport.cpp`), `-massgap_out` / `-delta_out`,
@@ -231,7 +233,11 @@ counter sees a different input.
   is used. Every peak centroid is corrected before annotation. `ld_run` writes `calib_ppm_c`,
   `calib_ppm_n`, `calib_slope_c` (or `-`) and `calib_unc_ppm_c/_n`. The residual uncertainty is
   the MAD of the reference ppm divided by √n_ref, plus the spread of the median ppm across the
-  reference masses (the range of the per-reference medians with ≥ 50 values each).
+  reference masses. *Revision 3:* each per-reference median (≥ 50 values) is taken over the
+  residuals within 4 σ_c (at least 2 mDa) of the calibrated position, and the spread is the robust
+  standard deviation of the medians (1.4826 MAD; half their difference for two references). The
+  range of medians over the whole ±0.02 Da reference window (±350 ppm at G) was set by one
+  contaminated reference: above 50 ppm on 64 of 183 runs of the first evaluation.
 - **Precursor isotope picks.** FASTag's default is `-isotope_error 0` (`FASTag.cpp` line 794).
   A precursor picked one or two 13C peaks too high shifts n by +1.003355 or +2.006710. Every
   n-channel image, including the unlabelled N1f ladder, then has satellites at those offsets.
@@ -251,6 +257,11 @@ counter sees a different input.
   The decision combines every image the range allows: N0r and N0f, and K0f and K1f. Each image
   is corrected and compared on its own; they must agree. Otherwise the label is written
   `ambiguous:iTRAQ8plex|TMTpro`. A sample with both labels at once would stay a single peak.
+  *Revision 3:* iTRAQ8plex is a range, 304.199040-304.205360. The kit's channels carry two
+  compositions (Unimod 731 iTRAQ8plex:13C(6)15N(2) and 730), so a sample of mixed channels centres
+  between them; on the first evaluation the iTRAQ8 runs centred at 304.2032, 2.2 mDa below Unimod
+  730 and 3.9 mDa below TMTpro, and no point hypothesis matched. The error of the range is 0
+  inside it, and the two entries are one family, not rivals.
 - **Da tolerance.** On a Da fragment tolerance (`fragment_tolerance_unit Da`), peaks are not
   called. The report keeps `ld_run`, `ld_count` and writes `ld_call no_call low_resolution`.
   This is the `-label_out` rule (`low_resolution yes on a Da tolerance`).
@@ -355,6 +366,17 @@ evidence they cannot produce.
 - The null channel images are all four reading/terminus combinations: n = m(S),
   n = m(S) + H2O, c = m(S) and c = m(S) − H2O, for every S.
 - The precursor isotope picks (section 5) add n = (each null n image) + k × 1.003355, k = 1, 2.
+- *Revision 3:* the readings are derived from the flank formula of section 3 for every ion type
+  and its single NH3 and H2O losses: channel c y, y − NH3, y − H2O (forward low peak; c = m(S),
+  m(S) − NH3, m(S) − H2O) and b, b − NH3, b − H2O, a, a − NH3 (reversed low peak; c = m(S) − H2O,
+  − H2O − NH3, − 2 H2O, − H2O − CO, − H2O − CO − NH3); channel n y, y − NH3, y − H2O (forward high
+  peak; n = m(S), m(S) + NH3, m(S) + H2O) and b, b − NH3, b − H2O (reversed high peak; n = m(S) +
+  H2O, + H2O + NH3, + 2 H2O), each with the 13C picks. The precursor family (S empty): the
+  precursor less NH3 or H2O as a forward high peak (n = NH3, H2O) and b_n = M − H2O less nothing,
+  NH3 or H2O (n = H2O, H2O + NH3, 2 H2O), each at −1, 0, +1, +2 × 13C. y1(K) − NH3 (c = 111.068)
+  was the clean N0r image of N + 129.079 and N1rK of N + 0.984 on real runs (PXD003531), and
+  n = 16.02 / 17.00-17.03 the clean N0f images of N + 16.02 / 17.02. The table is
+  `LabelDiscovery::nullReadings()`; unit test 16 fails without these readings.
 - A label image is **confounded** when a null channel image lies within w (the channel's own
   window) of it. Otherwise it is **clean**.
 - Once a hypothesis is accepted (section 9, in order of strength), its full image set, including
@@ -518,6 +540,26 @@ candidate with delta ≠ 0 whose class is not `residue_combo`, `null_shadow`, `i
 
 A called candidate becomes an accepted hypothesis: its images join the null set (section 7) and
 the remaining candidates are re-classed before the next one is taken.
+
+*Revision 3, the evidence bar.* On real label-free runs clean N1/N2 images are taken by
+compositions outside the null alphabet (variable modifications, internal and chimeric fragments),
+so "3 clean ladder residues of `min_spectra`/4 spectra" called chance offsets on 42 % of them. A
+candidate is now also held to the bar of its explanation's tier, with relative share =
+spectra_clean / (spectra_clean + the site's delta 0 control spectra), clean share = spectra_clean /
+counted spectra and the clean ladder:
+
+| tier | explanation | relative share | clean share | ladder_clean |
+|---|---|---|---|---|
+| 0 | known label: TMT, TMTpro, iTRAQ4, iTRAQ8plex, Dimethyl (light, 2H(4), 2H(4)13C(2), 2H(6)13C(2)) at N or K; Lys4, Lys6, Lys8; Arg6, Arg10 | ≥ 0.15 | ≥ 0.02 | - |
+| 1 | Unimod label: N-terminal or K/R entry classed isotopic label or chemical derivative, or curated (Acetyl, Propionyl, Carbamyl, DiLeu, ...) | ≥ 0.35 | ≥ 0.1 | ≥ 3 |
+| 2 | unknown mass, other Unimod entries, the run's configured fixed modification | ≥ 0.5 | ≥ 0.2 | ≥ 5 |
+
+The values were set on the DEV half (by PXD, stratified by label class) of the 256 runs of the
+first evaluation and frozen before the TEST half and the held-out runs were scored
+(acceptance/1.13 `PREREG-labeldisc.md`). On DEV the false tier-2 offsets of label-free runs reach a
+relative share of 0.41 and a clean share of 0.24; the true labels have relative shares of 0.72 or
+more (isobaric, N site) and 0.37-0.54 (Lys8). An offset common to K and R that is a known SILAC
+pair (Lys6/Arg6) is not merged into a C-terminal candidate.
 
 The call is `label-free` when no candidate passes and the delta 0 N-terminal control passes the
 same rule. If neither passes, it is `no_call no_reference`: no sign of N-terminal flanks at all.
@@ -763,3 +805,24 @@ outside the default `max_flank` 420); it was handled on that content.
 | 5 | major | Tie-break by `getFullId()` names Unimod artefacts (`Delta:H(4)C(3)O(1)`, `Delta:H(4)C(2)`) instead of Propionyl/Dimethyl | Adopted | Same-composition groups named by curated label list, then `getSourceClassification()`, then `getUniModRecordId()`; others as `same_composition` (section 8; test 14). |
 | 6 | major | `spectra` not computable from aggregate histograms; summed image reads inflate share, min_spectra, Poisson test and completeness | Adopted, modified | A per-tag record list (n, c, M, spectrum index, flags; 20 bytes, M added for issue 3), merged in scan order; exact distinct-spectra recount per candidate; histogram sums kept as `image_hits`. Modified: the histograms are now built from the list after counting, which removes the atomic arrays (sections 4, 11; test 15). |
 | 7 | major | Default `max_flank` 420 puts TMTpro K1f (432.30) and K1r (450.31) outside the range | Adopted | Default 700, which covers every one- and two-residue TMTpro image (≤ 676.37); the half-integer background still holds (sections 2, 11, 13). |
+
+## 16. Revision 3 (evaluation 2, 2026-11-10)
+
+The first evaluation on public data (`output/label-discovery/EVALUATION.md`, 1cdcb65) is the
+input. Its findings and what was done:
+
+| finding | change | where |
+|---|---|---|
+| y1(K) − NH3 and the precursor NH3/H2O losses missing from the null set (N + 129.079, N + 0.98, N + 16.02, N + 17.02) | null readings derived from the flank formula for every ion type with its NH3 and H2O losses, and the precursor family with its 13C peaks | section 7; `nullReadings()`; unit test 16 (fails without them) |
+| a call on 3 ladder residues of 5 spectra; 42 % false label calls on label-free runs | tiered evidence bar (relative share, clean share, clean ladder), fitted on the DEV half only | section 9; `Settings::tier_min_*`; unit test 3 |
+| medium SILAC read as N offsets; Lys4/Arg6 unknown | Lys4, Lys6, Arg6 known; a Lys6/Arg6 pair is not a C-terminal offset | section 8 |
+| iTRAQ8 never named; centroid 304.2032 between the two Unimod iTRAQ8 compositions | iTRAQ8plex as the range 304.199040-304.205360 | section 5 |
+| calibration uncertainty above 50 ppm on 64/183 runs | tight-window per-reference medians, robust spread | section 5 |
+| dimethyl a Unimod-only explanation | dimethyl light/medium/heavy are known labels (tier 0) | section 8; the independent suite expects `known_label` |
+
+Tests changed with the design (not to make them pass): the clean-image pins of test 12 (the null
+set is larger: TMT 24 → 19, iTRAQ4 20 → 17, Dimethyl 21 → 20, Acetyl/Propionyl 13 → 11, Carbamyl
+22 → 21); test 3's unknown +123.4567 set (now 3000 of 4000 spectra labelled; the former 1500 of
+4000 is a second block that must not be called); the class of dimethyl (`known_label`) in test 3
+and in `label_discovery_indep_test.sh`. Not changed: the runtime (the post-processing still takes
+about 1 s at 76k tags), c/z and non-tryptic digests (section 14).

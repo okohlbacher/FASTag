@@ -68,6 +68,11 @@ namespace
     std::uint32_t first_spectrum = 0;
     int spectra = 2000;
     bool refs_only = false;  ///< only tags one residue before the C-terminus (calibration references)
+    /// neutral losses (test 16): share of tags whose low peak lost NH3 (c -
+    /// NH3: y - NH3, b - NH3) or whose high peak lost NH3 (n + NH3), and share
+    /// of the forward tags from residue 0 whose high peak is the precursor
+    /// less NH3 or H2O (n = NH3, n = H2O) instead of the clamped whole peptide
+    double nh3_low = 0, nh3_high = 0, prec_loss = 0;
   };
 
   void generate(const Gen& g, LD::Collector& col)
@@ -98,8 +103,14 @@ namespace
         const int after = len - i - nt;
         if (!g.keep(rev, i, after)) continue;
         // a tag whose high peak is the whole peptide (forward from residue 0,
-        // reversed up to the C-terminus) only with a label in that flank
-        if (!rev && i == 0 && g.L_N == 0 && !g.refs_only) continue;
+        // reversed up to the C-terminus) only with a label in that flank, or
+        // (prec_loss) with the precursor less NH3 / H2O as its high peak
+        double prec = -1;
+        if (!rev && i == 0 && g.L_N == 0 && !g.refs_only)
+        {
+          if (!(g.prec_loss > 0 && u01(rng) < g.prec_loss)) continue;
+          prec = u01(rng) < 0.5 ? LD::kNH3 : H2O;
+        }
         if (after == 0 && !(pep.back() == 'K' && g.L_K != 0) && g.c_C == 0) continue;
         double pre = 0, suf = 0;
         for (int k = 0; k < i; ++k) pre += m[static_cast<std::size_t>(k)];
@@ -118,9 +129,12 @@ namespace
           n = suf + g.c_C + H2O + shift;
           std::reverse(seq.begin(), seq.end());
         }
+        if (g.nh3_low > 0 && u01(rng) < g.nh3_low) c -= LD::kNH3;
+        if (g.nh3_high > 0 && u01(rng) < g.nh3_high) n += LD::kNH3;
+        if (prec >= 0) n = prec + shift;
         c = c * (1.0 + g.ppm_c * 1e-6) + g.sigma_c * gauss(rng);
         n = n + g.sigma_ppm_n * Mobs * 1e-6 * gauss(rng);
-        if (!rev && pre == 0 && g.L_N == 0 && shift == 0) n = 0;  // FASTagger's clamp
+        if (prec < 0 && !rev && pre == 0 && g.L_N == 0 && shift == 0) n = 0;  // FASTagger's clamp
         if (g.refs_only) n = 0;
         col.add(std::max(0.0, n), std::max(0.0, c), Mobs, g.first_spectrum + static_cast<std::uint32_t>(s), order++, seq,
                 false);
@@ -280,14 +294,31 @@ int main()
     CHECK(bad == 0, "label-free set: %d channel peaks not residue_combo", bad);
   }
   {
+    // An unknown offset is called on strong, site-consistent evidence only
+    // (evaluation 2, tier 2: relative share >= 0.5, clean share >= 0.2,
+    // >= 5 clean ladder residues). A run whose peptides mostly carry it:
+    // called. (Format 1 called it at 1500 labelled against 2500 unlabelled
+    // spectra; that partial set is now below the bar, next block.)
+    Gen u = labelFree(12, 3000, 100000);
+    u.L_N = kUnknown;
+    u.keep = [](bool rev, int pre, int) { return (!rev && pre == 0) || (rev && pre <= 1); };
+    const LD::Analysis a = run({labelFree(13, 1000), u}, S, unimod);
+    const LD::SiteCandidate* c = siteNear(a, 'N', kUnknown, 0.005);
+    CHECK(c != nullptr && c->cls == "unexplained" && c->ladder_clean >= 5 && c->called, "unknown +123.4567: %s ladder %d rel %f",
+          c ? c->cls.c_str() : "missing", c ? c->ladder_clean : -1, c ? c->relative_share : 0.0);
+    CHECK(a.labels == "unknown:N+123.4567", "unknown call: %s [%s]", a.labels.c_str(), calledList(a).c_str());
+  }
+  {
+    // the same offset on 1500 of 4000 spectra: below the unknown bar, not
+    // called (a known label at that share would be)
     Gen u = labelFree(12, 1500, 100000);
     u.L_N = kUnknown;
     u.keep = [](bool rev, int pre, int) { return (!rev && pre == 0) || (rev && pre <= 1); };
     const LD::Analysis a = run({labelFree(13), u}, S, unimod);
     const LD::SiteCandidate* c = siteNear(a, 'N', kUnknown, 0.005);
-    CHECK(c != nullptr && c->cls == "unexplained" && c->ladder_clean >= 3 && c->called, "unknown +123.4567: %s ladder %d",
-          c ? c->cls.c_str() : "missing", c ? c->ladder_clean : -1);
-    CHECK(a.labels == "unknown:N+123.4567", "unknown call: %s [%s]", a.labels.c_str(), calledList(a).c_str());
+    CHECK(c != nullptr && c->cls == "unexplained" && !c->called && c->relative_share < 0.5, "partial unknown +123.4567: %s called %d rel %f",
+          c ? c->cls.c_str() : "missing", c ? static_cast<int>(c->called) : -1, c ? c->relative_share : 0.0);
+    CHECK(a.labels == "label-free", "partial unknown call: %s [%s]", a.labels.c_str(), calledList(a).c_str());
   }
   {
     Gen d = labelFree(14, 2500);
@@ -295,8 +326,10 @@ int main()
     d.keep = [](bool rev, int pre, int) { return (!rev && pre == 1) || (rev && pre == 2); };
     const LD::Analysis a = run({d, labelFree(15, 1500, 100000)}, S, unimod);
     const LD::SiteCandidate* c = siteNear(a, 'N', kDimethyl, 0.005);
-    CHECK(c != nullptr && c->cls == "unimod" && c->explanation == "Dimethyl" && c->called, "Dimethyl N1f/N2r: %s %s [%s]",
-          c ? c->cls.c_str() : "missing", c ? c->explanation.c_str() : "", calledList(a).c_str());
+    // Dimethyl is a known label (tier 0) since evaluation 2; it is still
+    // found through the N1f/N2r images alone (Unimod names it too)
+    CHECK(c != nullptr && c->cls == "known_label" && c->explanation == "Dimethyl" && c->called, "Dimethyl N1f/N2r: %s %s [%s] rel %f",
+          c ? c->cls.c_str() : "missing", c ? c->explanation.c_str() : "", calledList(a).c_str(), c ? c->relative_share : 0.0);
   }
   {
     Gen k = labelFree(16, 3000);
@@ -548,13 +581,17 @@ int main()
       double L;
       int want;
     };
-    // Pinned for this null set (the four readings, 13C picks, n = H2O, and
-    // the a-ion and NH3-loss readings of the reversed read). The design's
-    // revision-2 check, without the last two, gave TMT 24, TMTpro 16,
-    // iTRAQ4 24, Dimethyl 25, Acetyl 31, Propionyl 31, Carbamyl 24.
-    const Pin pins[] = {{"TMT", kTMT, 24},        {"TMTpro", kTMTpro, 14},      {"iTRAQ4", kiTRAQ4, 20},
-                        {"Dimethyl", kDimethyl, 21}, {"Acetyl", 42.010565, 13}, {"Propionyl", 56.026215, 13},
-                        {"Carbamyl", 43.005814, 22}, {"unknown", kUnknown, 40}, {"leak H2O", H2O, 0},
+    // Pinned for this null set: every reading of LD::nullReadings() (y, b and
+    // a ions with their NH3 and H2O losses in both channels, the 13C picks,
+    // the precursor family). The design's revision-2 check (four readings,
+    // 13C picks, n = H2O) gave TMT 24, TMTpro 16, iTRAQ4 24, Dimethyl 25,
+    // Acetyl 31, Propionyl 31, Carbamyl 24; with the a-ion and b - NH3
+    // readings of format 1 it was TMT 24, TMTpro 14, iTRAQ4 20, Dimethyl 21,
+    // Acetyl 13, Propionyl 13, Carbamyl 22 (evaluation 2 added the y - NH3,
+    // b - H2O and high-peak losses, section 7).
+    const Pin pins[] = {{"TMT", kTMT, 19},        {"TMTpro", kTMTpro, 14},      {"iTRAQ4", kiTRAQ4, 17},
+                        {"Dimethyl", kDimethyl, 20}, {"Acetyl", 42.010565, 11}, {"Propionyl", 56.026215, 11},
+                        {"Carbamyl", 43.005814, 21}, {"unknown", kUnknown, 40}, {"leak H2O", H2O, 0},
                         {"leak K+H2O", 128.09496 + H2O, 0}};
     for (const Pin& p : pins)
     {
@@ -581,6 +618,38 @@ int main()
     t.iso2 = 0.05;
     const LD::Analysis b = run({t}, S, unimod);
     CHECK(b.labels == "TMT", "TMT with 13C picks: %s [%s]", b.labels.c_str(), calledList(b).c_str());
+  }
+
+  // ---- 16. neutral-loss null images (label-free) ----
+  // y - NH3 / b - NH3 low peaks (c = m(S) - NH3, y1(K) - NH3 = 111.068) and
+  // NH3-loss high peaks (n = m(S) + NH3), and the precursor less NH3 / H2O
+  // as the high peak (n = 17.03, 18.01). Without these null readings, K -
+  // NH3 is read as the clean N0r image of N + 129.079 (and as N1rK of N +
+  // 0.984) and n = NH3 as the clean N0f image of N + 17.03: the false calls
+  // of the first evaluation (PXD003531 unknown:N+0.9839).
+  {
+    const LD::NullImages ni = LD::nullImages(LD::compositions(A, LD::compositionLimit(700.0)), 701.0);
+    CHECK(ni.near('c', 128.09496 - LD::kNH3, 0.0005), "null: c = K - NH3 (y1(K) - NH3)");
+    CHECK(ni.near('c', 156.10111 - LD::kNH3, 0.0005), "null: c = R - NH3");
+    CHECK(ni.near('n', LD::kNH3, 0.0005) && ni.near('n', LD::kNH3 - C13, 0.0005), "null: n = NH3 (precursor - NH3), its 13C peak");
+    CHECK(ni.near('n', 128.09496 + H2O + LD::kNH3, 0.0005), "null: n = K + H2O + NH3 (b(n-1) - NH3)");
+    CHECK(ni.near('c', 128.09496 - 2 * H2O, 0.0005), "null: c = K - 2 H2O (b - H2O)");
+    Gen g = labelFree(101, 5000);
+    g.nh3_low = 0.4;
+    g.nh3_high = 0.3;
+    g.prec_loss = 0.6;
+    const LD::Analysis a = run({g}, S, unimod);
+    CHECK(calledCount(a) == 0 && a.labels == "label-free", "label-free with neutral losses: %s [%s]", a.labels.c_str(),
+          calledList(a).c_str());
+    for (double x : {129.0790, 0.9840, LD::kNH3, LD::kNH3 - C13})
+    {
+      const LD::SiteCandidate* c = siteNear(a, 'N', x, 0.004);
+      CHECK(c == nullptr || !c->called, "neutral loss N%+.4f called (%s)", x, c ? c->cls.c_str() : "");
+    }
+    for (const LD::Peak& p : a.peaks_c)
+      if (std::fabs(p.mass - (128.09496 - LD::kNH3)) < 0.002)
+        CHECK(p.cls == "residue_combo" && p.explanation.find("S-NH3") != std::string::npos, "c 111.068 is %s %s", p.cls.c_str(),
+              p.explanation.c_str());
   }
 
   // ---- 14. same composition ----

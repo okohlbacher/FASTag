@@ -410,15 +410,32 @@ namespace FASTag::LabelDiscovery
         resid_da[i] = dev_c_da[i] - cal.ppmC(mass_c[i]) * mass_c[i] * 1e-6;
       }
       cal.sigma_c = 1.4826 * mad(resid_da, median(resid_da));
+      // The residual uncertainty: the standard error of the offset plus the
+      // spread of the per-reference medians. Each reference's median is
+      // taken over its residuals within a tight window (4 sigma_c, at least
+      // 2 mDa) around the calibrated position, so that a neighbouring peak
+      // inside the 0.02 Da reference window (+-350 ppm at G, 57 Da) does
+      // not move it; the spread is the robust standard deviation of the
+      // medians (1.4826 MAD; with two references half their difference),
+      // not their range, which one contaminated reference sets (evaluation
+      // 1: above 50 ppm on 64 of 183 runs).
+      const double tight = std::max(4.0 * cal.sigma_c, 0.002), rc = median(resid_da);
+      std::vector<double> tight_ppm;
+      std::vector<std::vector<double>> byref(refs.size());
+      for (std::size_t i = 0; i < resid_ppm.size(); ++i)
+        if (std::fabs(resid_da[i] - rc) <= tight)
+        {
+          tight_ppm.push_back(resid_ppm[i]);
+          byref[static_cast<std::size_t>(ref_c[i])].push_back(resid_ppm[i]);
+        }
+      std::vector<double> meds;
+      for (const auto& v : byref)
+        if (v.size() >= kPerReferenceMin) meds.push_back(median(v));
       double spread = 0;
-      const auto rp = perRefMedians(resid_ppm);
-      if (rp.size() >= 2)
-      {
-        double a = std::numeric_limits<double>::infinity(), b = -a;
-        for (const auto& p : rp) { a = std::min(a, p.second); b = std::max(b, p.second); }
-        spread = b - a;
-      }
-      cal.unc_ppm_c = mad(resid_ppm, median(resid_ppm)) / std::sqrt(static_cast<double>(cal.n_ref_c)) + spread;
+      if (meds.size() >= 3) spread = 1.4826 * mad(meds, median(meds));
+      else if (meds.size() == 2) spread = 0.5 * std::fabs(meds[0] - meds[1]);
+      const std::vector<double>& base = tight_ppm.size() >= kMinCalibrationReference ? tight_ppm : resid_ppm;
+      cal.unc_ppm_c = mad(base, median(base)) / std::sqrt(static_cast<double>(base.size())) + spread;
       // references that do not form a peak (deviations spread over the
       // whole reference window: chance values near a residue mass, as in a
       // run whose C-termini all carry a modification) calibrate nothing
@@ -613,33 +630,62 @@ namespace FASTag::LabelDiscovery
 
   bool NullImages::near(char ch, double v, double w) const { return nearest(ch, v, w) != nullptr; }
 
-  NullImages nullImages(const Compositions& comps)
+  const std::vector<NullReading>& nullReadings()
+  {
+    static const std::vector<NullReading> r = [] {
+      std::vector<NullReading> v = {
+        // channel c (index 0 must be m(S) itself)
+        {'c', 0.0, "S", false},                        // forward y
+        {'c', -kNH3, "S-NH3", false},                  // forward y - NH3 (y1(K) - NH3 = 111.068)
+        {'c', -kH2O, "S-H2O", false},                  // forward y - H2O = reversed b
+        {'c', -kH2O - kNH3, "S-H2O-NH3", false},       // reversed b - NH3
+        {'c', -2 * kH2O, "S-2H2O", false},             // reversed b - H2O
+        {'c', -kH2O - kCO, "S-H2O-CO", false},         // reversed a
+        {'c', -kH2O - kCO - kNH3, "S-H2O-CO-NH3", false},  // reversed a - NH3 (|S| = 1: immonium - NH3)
+      };
+      // channel n: forward y_high (S, + NH3, + H2O) and reversed b_high (S +
+      // H2O, + NH3, + H2O), the H2O reading shared; each at 0, 1, 2 13C picks
+      const std::pair<double, const char*> nb[5] = {
+        {0.0, "S"}, {kNH3, "S+NH3"}, {kH2O, "S+H2O"}, {kH2O + kNH3, "S+H2O+NH3"}, {2 * kH2O, "S+2H2O"}};
+      const char* iso[3] = {"", "+13C", "+2x13C"};
+      for (int k = 0; k < 3; ++k)
+        for (const auto& b : nb)
+        {
+          v.push_back({'n', b.first + k * kC13, std::string(b.second) + iso[k], false});
+        }
+      // the precursor family (S empty): forward precursor - NH3 / - H2O,
+      // reversed b_n = M - H2O, less NH3 or H2O; at -1, 0, 1, 2 13C
+      const std::pair<double, const char*> pb[4] = {
+        {kNH3, "M-NH3"}, {kH2O, "M-H2O"}, {kH2O + kNH3, "M-H2O-NH3"}, {2 * kH2O, "M-2H2O"}};
+      const char* piso[4] = {"-13C", "", "+13C", "+2x13C"};
+      for (int k = -1; k <= 2; ++k)
+        for (const auto& b : pb)
+        {
+          v.push_back({'n', b.first + k * kC13, std::string(b.second) + piso[k + 1], true});
+        }
+      return v;
+    }();
+    return r;
+  }
+
+  double compositionLimit(double max_flank) { return max_flank + kH2O + kCO + kNH3 + 1.0; }
+
+  NullImages nullImages(const Compositions& comps, double max_mass)
   {
     NullImages ni;
-    // the empty composition of a reversed read (high peak b_n = M - H2O):
-    // n = H2O, with the precursor 13C picks
-    ni.add('n', kH2O, kH2O, 0, 1);
-    ni.add('n', kH2O + kC13, kH2O + kC13, 0, 5);
-    ni.add('n', kH2O + 2 * kC13, kH2O + 2 * kC13, 0, 6);
+    const std::vector<NullReading>& R = nullReadings();
+    for (std::size_t j = 0; j < R.size(); ++j)
+      if (R[j].precursor && R[j].shift > 0) ni.add(R[j].ch, R[j].shift, R[j].shift, 0, static_cast<std::uint8_t>(j));
     for (std::size_t i = 0; i < comps.size(); ++i)
     {
-      const double lo = comps.lo[i], hi = comps.hi[i];
       const std::uint8_t k = comps.nres[i];
-      ni.add('n', lo, hi, k, 0);
-      ni.add('n', lo + kH2O, hi + kH2O, k, 1);
-      ni.add('c', lo, hi, k, 0);
-      if (hi - kH2O > 0) ni.add('c', std::max(0.0, lo - kH2O), hi - kH2O, k, 2);
-      ni.add('n', lo + kC13, hi + kC13, k, 3);
-      ni.add('n', lo + 2 * kC13, hi + 2 * kC13, k, 4);
-      ni.add('n', lo + kH2O + kC13, hi + kH2O + kC13, k, 5);
-      ni.add('n', lo + kH2O + 2 * kC13, hi + kH2O + 2 * kC13, k, 6);
-      // the a ion of a reversed (b) reading: c = m(S) - H2O - CO
-      if (hi - kH2O - kCO > 0) ni.add('c', std::max(0.0, lo - kH2O - kCO), hi - kH2O - kCO, k, 8);
-      // ammonia loss of the a and b ions of a reversed reading: c = m(S) -
-      // H2O - CO - NH3 (for one residue the immonium ion less NH3, Q/K
-      // 84.04, read as a b0 ion) and c = m(S) - H2O - NH3
-      if (hi - kH2O - kCO - kNH3 > 0) ni.add('c', std::max(0.0, lo - kH2O - kCO - kNH3), hi - kH2O - kCO - kNH3, k, 9);
-      if (hi - kH2O - kNH3 > 0) ni.add('c', std::max(0.0, lo - kH2O - kNH3), hi - kH2O - kNH3, k, 10);
+      for (std::size_t j = 0; j < R.size(); ++j)
+      {
+        if (R[j].precursor) continue;
+        const double lo = comps.lo[i] + R[j].shift, hi = comps.hi[i] + R[j].shift;
+        if (!(hi > 0) || lo > max_mass) continue;
+        ni.add(R[j].ch, std::max(0.0, lo), hi, k, static_cast<std::uint8_t>(j));
+      }
     }
     ni.sortAll();
     return ni;
@@ -1107,8 +1153,10 @@ namespace FASTag::LabelDiscovery
       std::string cls;   ///< known_label, unimod
       std::string name;  ///< what the label is called (TMT, Dimethyl, ...)
       std::string text;  ///< the explanation text
-      double mass = 0;   ///< the label mass
-      double err = 0;    ///< observed - predicted
+      double mass = 0;   ///< the label mass (the lower end of a range)
+      double hi = 0;     ///< the upper end of a range label (iTRAQ8plex), else = mass
+      double obs = 0;    ///< the observed mass the error is taken at
+      double err = 0;    ///< observed - predicted (0 inside a range)
       int nres = 0;
       int prio = 0;      ///< group priority (lower first)
       bool label_like = false;  ///< known or curated: the precision rule applies
@@ -1116,30 +1164,70 @@ namespace FASTag::LabelDiscovery
       std::vector<std::string> same;  ///< same-composition members
     };
 
+    /// The error of @p e at the observed mass @p x (0 inside a range label).
+    double errAt(const Expl& e, double x)
+    {
+      const double hi = std::max(e.mass, e.hi);
+      return x < e.mass ? x - e.mass : (x > hi ? x - hi : 0.0);
+    }
+    /// One family of names: iTRAQ8plex and its 13C(6)15N(2) composition.
+    bool sameFamily(const std::string& a, const std::string& b)
+    {
+      auto fam = [](const std::string& x) { return x.rfind("iTRAQ8plex", 0) == 0 ? std::string("iTRAQ8plex") : x; };
+      return fam(a) == fam(b);
+    }
+
     struct KnownSite
     {
       std::string name;
       double mass;
+      double hi = -1;  ///< > mass: a range (the label's channels differ in composition)
+      bool configured = false;  ///< the run's own fixed modification (not a known label: tier 2)
     };
+    /// iTRAQ8plex: the kit's channels carry two compositions, Unimod 730
+    /// (304.205360) and 731 iTRAQ8plex:13C(6)15N(2) (304.199040), so a sample
+    /// of mixed channels centres between them. TMTpro's 16 channels share one
+    /// composition (304.207146).
+    constexpr double kITRAQ8Lo = 304.199040, kITRAQ8Hi = 304.205360;
+    /// The known labels of the lower evidence bar (tier 0) beside
+    /// Digest::labelKeys(): dimethyl light, medium and heavy at N and K, and
+    /// the SILAC lysines and arginines.
+    const std::vector<KnownSite>& dimethyls()
+    {
+      static const std::vector<KnownSite> d = {{"Dimethyl", 28.031300}, {"Dimethyl:2H(4)", 32.056407},
+                                               {"Dimethyl:2H(4)13C(2)", 34.063117}, {"Dimethyl:2H(6)13C(2)", 36.075670}};
+      return d;
+    }
     std::vector<KnownSite> knownAt(char site, const Settings& s)
     {
       std::vector<KnownSite> k;
+      auto isobaric = [&] {
+        for (const auto& l : Digest::labelKeys()) k.push_back({l.name, l.mass});
+        k.push_back({"iTRAQ8plex", kITRAQ8Lo, kITRAQ8Hi});
+        for (const KnownSite& d : dimethyls()) k.push_back(d);
+      };
       if (site == 'N')
       {
-        for (const auto& l : Digest::labelKeys()) k.push_back({l.name, l.mass});
-        if (s.fixed_nterm != 0.0) k.push_back({s.fixed_nterm_name.empty() ? "fixed_nterm" : s.fixed_nterm_name, s.fixed_nterm});
+        isobaric();
+        if (s.fixed_nterm != 0.0)
+          k.push_back({s.fixed_nterm_name.empty() ? "fixed_nterm" : s.fixed_nterm_name, s.fixed_nterm, -1, true});
       }
       else if (site == 'K')
       {
-        for (const auto& l : Digest::labelKeys()) k.push_back({l.name, l.mass});
+        isobaric();
+        k.push_back({"Lys4", 4.025107});
+        k.push_back({"Lys6", 6.020129});
         k.push_back({"Lys8", 8.014199});
-        for (const KnownSet& f : s.fixed_k) k.push_back({f.name, f.mass});
+        for (const KnownSet& f : s.fixed_k) k.push_back({f.name, f.mass, -1, true});
       }
       else if (site == 'R')
+      {
+        k.push_back({"Arg6", 6.020129});
         k.push_back({"Arg10", 10.008269});
+      }
       else if (site == 'C')
       {
-        if (s.fixed_cterm != 0.0) k.push_back({s.fixed_cterm_name.empty() ? "fixed_cterm" : s.fixed_cterm_name, s.fixed_cterm});
+        if (s.fixed_cterm != 0.0) k.push_back({s.fixed_cterm_name.empty() ? "fixed_cterm" : s.fixed_cterm_name, s.fixed_cterm, -1, true});
       }
       return k;
     }
@@ -1183,6 +1271,8 @@ namespace FASTag::LabelDiscovery
         e.name = v.front()->id;
         e.text = prefix + v.front()->id;
         e.mass = v.front()->mass;
+        e.hi = e.mass;
+        e.obs = L;
         e.err = L - v.front()->mass;
         e.nres = nres;
         e.prio = priorityRank(*v.front());
@@ -1257,8 +1347,19 @@ namespace FASTag::LabelDiscovery
       if (d.best.label_like)
         for (const Expl& e : ex)
           if (e.label_like && e.nres == d.best.nres &&
-              (&e == &ex.front() || std::fabs(e.err - d.best.err) > 1e-6))
+              (&e == &ex.front() || (std::fabs(e.err - d.best.err) > 1e-6 && !sameFamily(e.name, d.best.name))))
             all.push_back(&e);
+      // a rival of the same family as one already listed is not a rival
+      {
+        std::vector<const Expl*> keep;
+        for (const Expl* e : all)
+        {
+          bool dup = false;
+          for (const Expl* k : keep) dup = dup || sameFamily(k->name, e->name);
+          if (!dup) keep.push_back(e);
+        }
+        all.swap(keep);
+      }
       bool ambiguous = false;
       if (all.size() >= 2)
       {
@@ -1275,7 +1376,7 @@ namespace FASTag::LabelDiscovery
           for (const auto& e : estimates)
           {
             const double u = unc_da(e.first);
-            if (!(u >= 0) || u >= 0.25 * sep || std::fabs(a->err + e.second) >= 0.25 * sep)
+            if (!(u >= 0) || u >= 0.25 * sep || std::fabs(errAt(*a, a->obs + e.second)) >= 0.25 * sep)
             {
               decided = false;
               break;
@@ -1345,20 +1446,17 @@ namespace FASTag::LabelDiscovery
           int nres;
         };
         std::vector<C> combos;
+        // every null reading (section 7) of the compositions up to depth,
+        // named, then the precursor family, then any longer composition
+        const std::vector<NullReading>& R = nullReadings();
         auto readings = [&](double m, const std::string& S, int k) {
-          if (p.ch == 'n')
-          {
-            const double cand[6] = {m, m + kH2O, m + kC13, m + 2 * kC13, m + kH2O + kC13, m + kH2O + 2 * kC13};
-            const char* nm[6] = {"n:S:", "n:S+H2O:", "n:S+13C:", "n:S+2x13C:", "n:S+H2O+13C:", "n:S+H2O+2x13C:"};
-            for (int i = 0; i < 6; ++i)
-              if (std::fabs(v - cand[i]) <= w) combos.push_back({nm[i] + S, v - cand[i], k});
-          }
-          else
-          {
-            if (std::fabs(v - m) <= w) combos.push_back({"c:S:" + S, v - m, k});
-            if (std::fabs(v - (m - kH2O)) <= w) combos.push_back({"c:S-H2O:" + S, v - (m - kH2O), k});
-          }
+          for (const NullReading& q : R)
+            if (!q.precursor && q.ch == p.ch && std::fabs(v - (m + q.shift)) <= w)
+              combos.push_back({std::string(1, p.ch) + ":" + q.name + ":" + S, v - (m + q.shift), k});
         };
+        for (const NullReading& q : R)
+          if (q.precursor && q.ch == p.ch && std::fabs(v - q.shift) <= w)
+            combos.push_back({std::string(1, p.ch) + ":" + q.name, v - q.shift, 0});
         if (s.depth >= 1)
           for (int r = 0; r < nA; ++r) readings(A[static_cast<std::size_t>(r)].mass, A[static_cast<std::size_t>(r)].name, 1);
         if (s.depth >= 2)
@@ -1369,10 +1467,9 @@ namespace FASTag::LabelDiscovery
         if (combos.empty())
           if (const NullImages::Interval* iv = ctx.null.nearest(p.ch, v, w))
           {
-            static const char* rn[11] = {"S", "S+H2O", "S-H2O", "S+13C", "S+2x13C", "S+H2O+13C", "S+H2O+2x13C", "accepted",
-                                         "S-H2O-CO", "S-H2O-CO-NH3", "S-H2O-NH3"};
+            const std::string rn = iv->reading == kReadingAccepted ? std::string("accepted") : R[iv->reading].name;
             const double mid = 0.5 * (iv->lo + iv->hi);
-            combos.push_back({std::string(1, p.ch) + ":" + rn[iv->reading] + ":|S|=" + std::to_string(static_cast<int>(iv->nres)),
+            combos.push_back({std::string(1, p.ch) + ":" + rn + ":|S|=" + std::to_string(static_cast<int>(iv->nres)),
                               v - mid, static_cast<int>(iv->nres)});
           }
         if (!combos.empty())
@@ -1410,21 +1507,25 @@ namespace FASTag::LabelDiscovery
       const double wl = w + allow;
       auto hyp = [&](char site, double L, int nres, const std::string& S, const std::string& let, const std::string& img) {
         for (const KnownSite& k : knownAt(site, s))
-          if (std::fabs(L - k.mass) <= wl)
+        {
+          Expl e;
+          e.mass = k.mass;
+          e.hi = std::max(k.mass, k.hi);
+          e.obs = L;
+          e.err = errAt(e, L);
+          if (std::fabs(e.err) <= wl)
           {
-            Expl e;
             e.cls = "known_label";
             e.name = k.name;
             const std::string anchor = img == "K0f" ? "" : (site == 'K' ? "K+" : (site == 'R' ? "R+" : ""));
             e.text = img + ":" + anchor + k.name + (S.empty() ? "" : "+" + S);
-            e.mass = k.mass;
-            e.err = L - k.mass;
             e.nres = nres;
-            e.prio = -1;
+            e.prio = k.configured ? 150 : -1;
             e.label_like = true;
             e.outside = std::fabs(e.err) > w;
             ex.push_back(std::move(e));
           }
+        }
         const std::string anchor = img == "K0f" ? "" : (site == 'K' ? "K+" : (site == 'R' ? "R+" : ""));
         std::vector<Expl> u;
         unimodAt(*ctx.unimod, site, L, wl, let, nres, img + ":" + anchor, u);
@@ -1682,19 +1783,23 @@ namespace FASTag::LabelDiscovery
                            (sc.has_est_c ? std::max(1.0, d) : ctx.win.m_q50) * 1e-6;
       const double wl = w + allow;
       for (const KnownSite& k : knownAt(sc.site, s))
-        if (std::fabs(d - k.mass) <= wl)
+      {
+        Expl e;
+        e.mass = k.mass;
+        e.hi = std::max(k.mass, k.hi);
+        e.obs = d;
+        e.err = errAt(e, d);
+        if (std::fabs(e.err) <= wl)
         {
-          Expl e;
           e.cls = "known_label";
           e.name = k.name;
           e.text = k.name;
-          e.mass = k.mass;
-          e.err = d - k.mass;
-          e.prio = -1;
+          e.prio = k.configured ? 150 : -1;
           e.label_like = true;
           e.outside = std::fabs(e.err) > w;
           ex.push_back(std::move(e));
         }
+      }
       {
         std::vector<Expl> u;
         unimodAt(*ctx.unimod, sc.site, d, wl, "", 0, "", u);
@@ -1719,12 +1824,18 @@ namespace FASTag::LabelDiscovery
         sc.cls = dd.cls;
         sc.explanation = dd.explanation;
         sc.label = dd.label;
+        // the evidence tier: a known label (an ambiguous pair of known
+        // labels too), a Unimod label, anything else
+        if (dd.cls == "known_label") sc.tier = dd.best.prio < 0 ? 0 : 2;
+        else if (dd.cls == "unimod") sc.tier = dd.best.prio <= 100 ? 1 : 2;
+        else sc.tier = 2;
       }
       else
       {
         sc.cls = "unexplained";
         sc.explanation = "-";
         sc.label = "unknown:" + std::string(1, sc.site) + fixed4(d);
+        sc.tier = 2;
       }
       sc.alternatives = joinAlts(alts);
     }
@@ -1841,8 +1952,8 @@ namespace FASTag::LabelDiscovery
     const double P = std::ceil((s.max_flank - kScanLow) / kBin);
     ctx.n_tested_sites = 3.0 * P;
     // null image set
-    ctx.comps = compositions(s.alphabet, s.max_flank + kH2O);
-    ctx.null = nullImages(ctx.comps);
+    ctx.comps = compositions(s.alphabet, compositionLimit(s.max_flank));
+    ctx.null = nullImages(ctx.comps, s.max_flank + 1.0);
     a.null_compositions = ctx.comps.size();
     // channel peaks
     a.peaks_n = callPeaks(ctx, 'n');
@@ -1873,21 +1984,29 @@ namespace FASTag::LabelDiscovery
     };
     NullImages accepted;
     std::vector<SiteCandidate> called;
+    double ctrl_spec[3] = {0, 0, 0};  // N, K, R: spectra of the delta 0 controls; set below, before the call
+    auto shares = [&](SiteCandidate& sc) {
+      const double c0 = sc.site == 'N' ? ctrl_spec[0]
+                                       : (sc.site == 'K' ? ctrl_spec[1] : (sc.site == 'R' ? ctrl_spec[2] : ctrl_spec[1] + ctrl_spec[2]));
+      const double cl = static_cast<double>(sc.spectra_clean);
+      sc.relative_share = cl + c0 > 0 ? cl / (cl + c0) : 0.0;
+      sc.clean_share = a.spectra_counted > 0 ? cl / static_cast<double>(a.spectra_counted) : 0.0;
+    };
     auto acceptImages = [&](const Cand& c, int owner) {
       for (const Image& im : c.imgs)
       {
         const auto k = static_cast<std::uint8_t>(im.nres);
-        accepted.add(im.ch, im.mass, im.mass, k, 7, owner);
+        accepted.add(im.ch, im.mass, im.mass, k, kReadingAccepted, owner);
         // ion-series satellites of the low or high peak (a = b - CO,
         // - NH3): the flank moves down in c, up in n. (- H2O is left out:
         // K0f - H2O is exactly N0r of the same label.)
         const double sat[2] = {kCO, kNH3};
         for (double d : sat)
-          accepted.add(im.ch, im.ch == 'c' ? im.mass - d : im.mass + d, im.ch == 'c' ? im.mass - d : im.mass + d, k, 7, owner);
+          accepted.add(im.ch, im.ch == 'c' ? im.mass - d : im.mass + d, im.ch == 'c' ? im.mass - d : im.mass + d, k, kReadingAccepted, owner);
         if (im.ch == 'n')
         {
-          accepted.add('n', im.mass + kC13, im.mass + kC13, k, 7, owner);
-          accepted.add('n', im.mass + 2 * kC13, im.mass + 2 * kC13, k, 7, owner);
+          accepted.add('n', im.mass + kC13, im.mass + kC13, k, kReadingAccepted, owner);
+          accepted.add('n', im.mass + 2 * kC13, im.mass + 2 * kC13, k, kReadingAccepted, owner);
         }
       }
       accepted.sortAll();
@@ -1896,6 +2015,8 @@ namespace FASTag::LabelDiscovery
       SiteCandidate& sc = c.ev.s;
       const u64 thr = c.ctx->thr4();
       sc.cls.clear();
+      sc.tier = 2;
+      shares(sc);
       if (c.ev.ladder_clean_base < 3 && !c.ev.zero_clean_base) sc.cls = "null_shadow";
       if (sc.cls.empty() && c.ev.support_c_base < thr)
         for (int k = 1; k <= 2; ++k)
@@ -1947,6 +2068,15 @@ namespace FASTag::LabelDiscovery
       if (sc.fold < s.min_fold || sc.log10_q > s.max_log10_q) return false;
       if (!(sc.ladder_clean >= 3 || sc.zero_clean)) return false;
       if (!(sc.support_c >= s.min_spectra || (sc.support_c >= thr && sc.support_n >= thr))) return false;
+      // the evidence bar of the candidate's tier (Settings::tier_min_*): a
+      // label sits on a share of the peptides comparable to the unlabelled
+      // ones and on a ladder of many residues; the chance offsets of a
+      // label-free run (variable modifications, internal and chimeric
+      // fragments) do not
+      const int t = std::clamp(sc.tier, 0, 2);
+      if (sc.relative_share < s.tier_min_relative[t] || sc.clean_share < s.tier_min_clean_share[t] ||
+          sc.ladder_clean < s.tier_min_ladder[t])
+        return false;
       return true;
     };
     auto keptRule = [&](const SiteCandidate& sc) {
@@ -1988,6 +2118,15 @@ namespace FASTag::LabelDiscovery
         {
           if (r.site != 'R' || !r.kept) continue;
           if (std::fabs(k.ev.s.delta - r.ev.s.delta) > c.win.w_c) continue;
+          // a SILAC pair of the same offset (Lys6 and Arg6, 13C(6)) is a K
+          // and an R label, not a C-terminal modification
+          {
+            const double m = 0.5 * (k.ev.s.delta + r.ev.s.delta);
+            bool kk = false, rr = false;
+            for (const KnownSite& q : knownAt('K', s)) kk = kk || (!q.configured && std::fabs(m - q.mass) <= c.win.w_c);
+            for (const KnownSite& q : knownAt('R', s)) rr = rr || (!q.configured && std::fabs(m - q.mass) <= c.win.w_c);
+            if (kk && rr) continue;
+          }
           Cand cc;
           cc.site = 'C';
           cc.x = 0.5 * (k.ev.s.delta + r.ev.s.delta);
@@ -2129,9 +2268,15 @@ namespace FASTag::LabelDiscovery
       }
     };
 
-    ctrl_pars[0] = controlOf(ctx, 'N').s.parsimony;
-    ctrl_pars[1] = controlOf(ctx, 'K').s.parsimony;
-    ctrl_pars[2] = controlOf(ctx, 'R').s.parsimony;
+    {
+      const char cs[3] = {'N', 'K', 'R'};
+      for (int i = 0; i < 3; ++i)
+      {
+        const Eval e = controlOf(ctx, cs[i]);
+        ctrl_pars[i] = e.s.parsimony;
+        ctrl_spec[i] = static_cast<double>(e.s.spectra);
+      }
+    }
     std::vector<Cand> cands;
     runSites(ctx, "NKR", cands);
     const double w_zero = std::max(a.win.w_n_hist, a.win.w_c);  // delta 0 is the control, never a candidate
@@ -2166,8 +2311,8 @@ namespace FASTag::LabelDiscovery
       {
         ctx2 = ctx;  // shares the data; own alphabet and null set
         ctx2.alphabet = A2;
-        ctx2.comps = compositions(A2, s.max_flank + kH2O);
-        ctx2.null = nullImages(ctx2.comps);
+        ctx2.comps = compositions(A2, compositionLimit(s.max_flank));
+        ctx2.null = nullImages(ctx2.comps, s.max_flank + 1.0);
         // the first pass' decisions stand; offsets the rescan finds that no
         // N candidate holds yet join the undecided ones
         const double w0 = std::max(a.win.w_n_hist, a.win.w_c);
@@ -2203,6 +2348,7 @@ namespace FASTag::LabelDiscovery
       if (site != 'C')
       {
         SiteCandidate cs = ctrl[order.find(site)].s;
+        cs.tier = -1;
         a.sites.push_back(cs);
       }
       std::vector<const Cand*> v;
@@ -2310,6 +2456,17 @@ namespace FASTag::LabelDiscovery
     row("ld_run", "call_min_share", fix(s.call_min_share, 6), "-", "share of the counted spectra a called candidate needs");
     row("ld_run", "min_relative_parsimony", fix(s.min_relative_parsimony, 6), "-",
         "share of the strongest called label's parsimony a further label needs");
+    for (int t = 0; t < 3; ++t)
+    {
+      const std::string k = "tier" + std::to_string(t) + "_";
+      const char* what = t == 0 ? "a known label" : (t == 1 ? "a Unimod label" : "an unknown or other offset");
+      row("ld_run", k + "min_relative_share", fix(s.tier_min_relative[t], 6), "-",
+          std::string("relative share a called candidate needs, explained as ") + what);
+      row("ld_run", k + "min_clean_share", fix(s.tier_min_clean_share[t], 6), "-",
+          std::string("clean share of the counted spectra a called candidate needs, explained as ") + what);
+      row("ld_run", k + "min_ladder_clean", std::to_string(s.tier_min_ladder[t]), "-",
+          std::string("clean ladder residues a called candidate needs, explained as ") + what);
+    }
     row("ld_run", "fixed_nterm_delta", fix(s.fixed_nterm, 6), "-", "the run's fixed N-terminal modification (not subtracted)");
     row("ld_run", "fixed_cterm_delta", fix(s.fixed_cterm, 6), "-", "the run's fixed C-terminal modification (not subtracted)");
     {
@@ -2401,6 +2558,11 @@ namespace FASTag::LabelDiscovery
         row("ld_site", k + "completeness", sc.completeness >= 0 ? fix(sc.completeness, 4) : "-", "-",
             "spectra(L) / (spectra(L) + spectra(delta 0)), descriptive");
         row("ld_site", k + "called", sc.called ? "yes" : "no", "-", "the candidate is part of the call");
+        row("ld_site", k + "tier", sc.control ? "-" : std::to_string(sc.tier), "-",
+            "evidence tier of the explanation: 0 known label, 1 Unimod label, 2 other or unknown");
+        row("ld_site", k + "relative_share", sc.control ? "-" : fix(sc.relative_share, 4), "-",
+            "spectra_clean / (spectra_clean + the site's delta 0 control spectra)");
+        row("ld_site", k + "clean_share", sc.control ? "-" : fix(sc.clean_share, 4), "-", "spectra_clean / counted spectra");
       }
     }
     if (!an)
@@ -2420,6 +2582,7 @@ namespace FASTag::LabelDiscovery
         row("ld_site", k + "alternatives", "-", "-", "other explanations (error in Da)");
         row("ld_site", k + "completeness", "-", "-", "spectra(L) / (spectra(L) + spectra(delta 0)), descriptive");
         row("ld_site", k + "called", "no", "-", "the candidate is part of the call");
+        for (const char* f : {"tier", "relative_share", "clean_share"}) row("ld_site", k + f, "-", "-", "not analysed");
       }
     }
     if (!s.low_resolution)

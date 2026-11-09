@@ -15,6 +15,13 @@
   priors. Every other output is byte-identical with the option off or on
   (the `-out_spectra` provenance leaves the options out). On the probes: PXD004541 (TMT10)
   `TMT+K:TMT`, PXD001587 (label-free) `label-free`.
+  Evaluation 2 revision (design section 16): null readings for the NH3 and
+  H2O losses of every unlabelled ion type and the precursor; a tiered
+  evidence bar (known label, Unimod label, unknown mass) set on a DEV half
+  only; iTRAQ8plex (as the range of its two compositions), dimethyl
+  light/medium/heavy, Lys4, Lys6 and Arg6 as known labels; a robust
+  calibration uncertainty. New `ld_site` keys `.tier`, `.relative_share`,
+  `.clean_share` and `ld_run` keys `tier<t>_*` (format 1 unchanged).
 
 ## 1.12.2 (2026-11-10)
 

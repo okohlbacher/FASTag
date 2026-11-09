@@ -13,7 +13,7 @@
 #   format     header, five non-empty fields, unique (section, key), the
 #              documented section order, ld_run format 1, no .part (section 9)
 #   counts     ld_count against a recount of the tag TSV (sections 3, 4, 5)
-#   labels     TMT, TMTpro, iTRAQ4 (known_label), Dimethyl (unimod, no b0),
+#   labels     TMT, TMTpro, iTRAQ4, Dimethyl (known_label; Dimethyl since evaluation 2, no b0),
 #              an unknown +123.4567 (unexplained), each at the N site, and the
 #              K site of the K-labelled sets (sections 7, 8, 9)
 #   reversed   b ions only: the label is still found from the reversed images;
@@ -280,16 +280,18 @@ L=$(labels itraq4)
 site_class "$TMP/itraq4.ld.tsv" N $ITRAQ4 itraq4 '^known_label$'
 site_class "$TMP/itraq4.ld.tsv" K $ITRAQ4 itraq4 '^known_label$'
 
-# Dimethyl at N and K, with no b0 ion: a unimod explanation named Dimethyl (sections 3, 8)
+# Dimethyl at N and K, with no b0 ion: named Dimethyl (sections 3, 8). Evaluation 2 made
+# dimethyl light/medium/heavy known labels (class known_label, the lower evidence bar of
+# section 9); format 1 found it as a Unimod entry (class unimod).
 expect_call dimethyl
 L=$(labels dimethyl)
 [[ "$L" =~ Dimethyl ]] && ! [[ "$L" =~ TMT|iTRAQ|unknown|label-free|Ethyl|Delta ]] || check "dimethyl: labels '$L', want Dimethyl only"
-if site_class "$TMP/dimethyl.ld.tsv" N $DIMETHYL dimethyl '^unimod$'; then
+if site_class "$TMP/dimethyl.ld.tsv" N $DIMETHYL dimethyl '^known_label$'; then
   i=$(site_idx "$TMP/dimethyl.ld.tsv" N $DIMETHYL $DTOL)
   [[ "$(val "$TMP/dimethyl.ld.tsv" ld_site N.$i.explanation)" =~ Dimethyl ]] \
     || check "dimethyl: the N site is explained as '$(val "$TMP/dimethyl.ld.tsv" ld_site N.$i.explanation)', not Dimethyl"
 fi
-site_class "$TMP/dimethyl.ld.tsv" K $DIMETHYL dimethyl '^unimod$'
+site_class "$TMP/dimethyl.ld.tsv" K $DIMETHYL dimethyl '^known_label$'
 
 # An unknown +123.4567 at N only: unexplained, called as unknown:N+123.45..; K not labelled
 expect_call unknown
