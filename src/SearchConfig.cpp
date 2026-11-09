@@ -394,7 +394,12 @@ namespace FASTag::SearchConfig
     if (p.isotope_errors < 0 || p.isotope_errors > 3) return "FASTag exports MSFragger isotope errors 0..3 only";
     if (static_cast<int>(p.variable.size()) > kMSFraggerVariableSlots)
       return "MSFragger has " + std::to_string(kMSFraggerVariableSlots) + " variable modification slots";
+    if (!p.precursor_ppm && !p.mass_offsets.empty())
+      return "MSFragger 4.4.1 exits 1 on mass offsets with a Da precursor window (\"Could not find <delta> in the "
+             "list\"); use a ppm precursor window";
+    if (p.threads < 0) return "a negative number of threads";
     std::map<std::string, std::string> v;
+    v["num_threads"] = std::to_string(p.threads);
     v["database_name"] = p.database;
     v["decoy_prefix"] = decoyPrefix(p, "msfragger");
     const std::string ptol = shortest(p.precursor_tolerance), punit = p.precursor_ppm ? "1" : "0";
@@ -1142,6 +1147,12 @@ namespace FASTag::SearchConfig
       {
         D.action = "dropped_engine";
         D.reason = "Sage has no mass offsets (" + why + ")";
+        continue;
+      }
+      if (msfragger && !plan.precursor_ppm)
+      {
+        D.action = "dropped_engine";
+        D.reason = "MSFragger 4.4.1 exits 1 on mass offsets with a Da precursor window (" + why + ")";
         continue;
       }
       if (value < 0 && comet)

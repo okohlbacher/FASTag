@@ -353,6 +353,20 @@ namespace
       check(actionAt(o2, 42.0106) == "dropped_cap" &&
                 decisionAt(o2, 42.0106)->reason.find("MSFragger's 16 variable modification slots") != std::string::npos,
             "shifts 7m: a 17th modification is dropped_cap at MSFragger's 16 slots");
+      // A Da precursor window: MSFragger 4.4.1 exits 1 on mass offsets, so
+      // none is exported; the variable modifications are.
+      auto d = shiftPlan({cam}, {mod("Oxidation (M)")});
+      d.precursor_ppm = false;
+      d.precursor_tolerance = 0.02;
+      auto sd = shiftSettings("msfragger");
+      const auto o3 = SC::shiftsToPlan(fx.result({{123.4567, 50}, {-77.7777, 60}, {42.0106, 40}}), {}, fx.mods,
+                                       fx.combos, sd, d);
+      check(actionAt(o3, 123.4567) == "dropped_engine" && actionAt(o3, -77.7777) == "dropped_engine" &&
+                decisionAt(o3, 123.4567)->reason.find("Da precursor window") != std::string::npos,
+            "shifts 7m: Da precursor window -> offsets dropped_engine");
+      check(d.mass_offsets.empty() && actionAt(o3, 42.0106) == "variable", "shifts 7m: Da window keeps the variable mod");
+      d.database = "x.fasta";
+      check(SC::msfraggerKeys(d, keys).empty(), "shifts 7m: the Da plan renders for MSFragger");
     }
     // 8. isotope vs Deamidated
     {

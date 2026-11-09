@@ -57,6 +57,7 @@ namespace FASTag::SearchConfig
     bool precursor_ppm = true;
     std::string decoy_prefix;          ///< "" = the engine's FASTag default (rev_ / DECOY_)
     std::string fastag_version;        ///< written into the header comment
+    int threads = 0;                   ///< MSFragger num_threads (FASTag's -threads; 0 = all CPUs)
   };
 
   /// The decoy prefix a plan uses for @p engine ("sage", "comet" or
@@ -112,9 +113,12 @@ namespace FASTag::SearchConfig
   /// isotope_error 0/../n, mass_offsets with 0 first ('/'-separated),
   /// trypsin and missed cleavages, the used variable_mod_NN slots only and
   /// every add_* key (0.0 unless the plan sets it). The other keys keep the
-  /// --config closed defaults, except num_threads 0 and
-  /// labile_fragment_ion_series b,y (4.4.1 rejects its own blank default).
-  /// Returns "" or an error (a modification or setting MSFragger cannot take).
+  /// --config closed defaults, except num_threads (the plan's threads: an
+  /// explicit -threads n is n, FASTag's default -threads 0 stays 0 = every
+  /// CPU) and labile_fragment_ion_series b,y (4.4.1 rejects its own blank
+  /// default). Returns "" or an error (a modification or setting MSFragger
+  /// cannot take; also mass offsets with a Da precursor window, on which
+  /// MSFragger 4.4.1 exits 1 with "Could not find <delta> in the list").
   std::string msfraggerKeys(const SearchPlan& p, std::vector<std::pair<std::string, std::string>>& keys);
 
   /// The complete fragger.params ("key = value" lines, no inline comments:
@@ -176,7 +180,9 @@ namespace FASTag::SearchConfig
   //      (the spectra-weighted median of centroid - mass over the
   //      single-modification peaks other than rule-0 isotope peaks, applied
   //      only beyond ShiftSettings::resolution; Sage, or a negative offset:
-  //      dropped_engine; MSFragger keeps negative offsets); a combination of exported SILAC labels only ->
+  //      dropped_engine; MSFragger keeps negative offsets, but with a Da
+  //      precursor window every offset is dropped_engine: MSFragger 4.4.1
+  //      exits 1 on it); a combination of exported SILAC labels only ->
   //      already_searched;
   //   5. caps: max_variable peaks as variable modifications, max_offsets
   //      offsets (0 is always first and not counted), 15 Comet slots with the

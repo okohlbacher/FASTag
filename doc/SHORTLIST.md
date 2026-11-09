@@ -165,8 +165,11 @@ values:
 - `mass_offsets`: 0 always first, then the `-search_shifts` offsets at 4
   decimals, `/`-separated; negative offsets are kept (Comet's are dropped);
   `localize_delta_mass 1` when offsets are exported, as the file recommends.
-  With a Da precursor window and offsets FASTag WARNs: MSFragger 4.4.1 exited
-  1 on such a file in FASTag's test even with the true tolerance at the window;
+  With a Da precursor window FASTag exports no offset: MSFragger 4.4.1 exited
+  1 on such a file in FASTag's test even with the true tolerance at the window
+  ("Could not find <delta> in the list"). `-search_shifts both` then marks each
+  offset `dropped_engine` (the variable modifications are still exported),
+  `-search_shifts offsets` is refused; use `-search_precursor_unit ppm`;
 - trypsin (`search_enzyme_name_1 trypsin`, cut `KR`, nocut `P`, sense `C`),
   `allowed_missed_cleavage_1` from `-recon_missed_cleavages` (at most 5),
   `num_enzyme_termini 2`;
@@ -180,7 +183,9 @@ values:
   terminal modification on one residue, and fixed modifications on MSFragger's
   user amino acids (B, J, O, U, X, Z), are refused;
 - `decoy_prefix` `rev_` (Philosopher/FragPipe), or `-search_decoy_prefix`;
-  `num_threads 0` (MSFragger uses all CPUs); every other key keeps the
+  `num_threads` from `-threads` (an explicit `-threads n` writes n; FASTag's
+  default `-threads 0` writes 0, which MSFragger reads as every CPU, so give
+  `-threads` on a large shared node); every other key keeps the
   `--config closed` default.
 
 **Decoys.** MSFragger generates none (`decoy_prefix` is "used for parameter

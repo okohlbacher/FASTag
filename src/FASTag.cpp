@@ -1959,6 +1959,14 @@ protected:
                           "-search_shifts variable." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
+    if (shift_settings.mode == FASTag::SearchConfig::ShiftMode::Offsets && search_engine == "msfragger" &&
+        getStringOption_("search_precursor_unit") != "ppm")
+    {
+      OPENMS_LOG_ERROR << "-search_shifts offsets: MSFragger 4.4.1 exits 1 on mass offsets with a Da precursor "
+                          "window (\"Could not find <delta> in the list\"); use -search_precursor_unit ppm, or "
+                          "-search_shifts variable." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
     shift_settings.engine = search_engine;
     shift_settings.max_variable = static_cast<std::size_t>(getIntOption_("shift_max_variable"));
     shift_settings.max_offsets = static_cast<std::size_t>(getIntOption_("shift_max_offsets"));
@@ -2539,6 +2547,7 @@ protected:
         sl_plan.isotope_errors = getIntOption_("search_isotope_errors");
         sl_plan.decoy_prefix = getStringOption_("search_decoy_prefix");
         sl_plan.fastag_version = FASTAG_VERSION;
+        sl_plan.threads = getIntOption_("threads");  // MSFragger num_threads; 0 = every CPU
         std::string err;
         if (search_engine == "comet")
         {
@@ -5209,10 +5218,6 @@ protected:
           else if (search_engine == "msfragger")
           {
             text = FASTag::SearchConfig::renderMSFragger(sl_plan, &err);
-            if (err.empty() && !sl_plan.precursor_ppm && !sl_plan.mass_offsets.empty())
-              OPENMS_LOG_WARN << "-search_config_out (msfragger): mass offsets with a Da precursor window; "
-                                 "MSFragger 4.4.1 exited 1 on such a configuration in FASTag's test (\"Could not "
-                                 "find <delta> in the list\"). Prefer -search_precursor_unit ppm." << std::endl;
           }
           else if (sl_template.empty()) text = FASTag::SearchConfig::renderComet(sl_plan, &err);
           else

@@ -102,7 +102,9 @@ if [ -n "${FASTAG_MSFRAGGER_JAR:-}" ]; then
     awk -v a="$(echoed $k)" -v b="$(written $k)" 'BEGIN { exit !(a != "" && a + 0 == b + 0) }' \
       || fail "MSFragger read $k = '$(echoed $k)', FASTag wrote '$(written $k)'"
   done
-  for k in isotope_error mass_offsets database_name decoy_prefix variable_mod_01; do
+  # num_threads: FASTag's -threads 2, not 0 (every CPU).
+  [ "$(written num_threads)" = 2 ] || fail "fragger.params num_threads is not -threads 2"
+  for k in isotope_error mass_offsets database_name decoy_prefix variable_mod_01 num_threads; do
     [ "$(echoed $k)" = "$(written $k)" ] || fail "MSFragger read $k = '$(echoed $k)', FASTag wrote '$(written $k)'"
   done
   echo "MSFragger: $n target PSMs"

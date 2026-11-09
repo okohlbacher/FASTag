@@ -378,6 +378,28 @@ int main(int argc, char** argv)
     check(!SC::msfraggerKeys(q, k).empty(), "a fixed terminal modification on one residue refused");
     std::string err;
     check(SC::renderMSFragger(q, &err).empty() && !err.empty(), "renderMSFragger returns the error");
+    // MSFragger 4.4.1 exits 1 on mass offsets with a Da precursor window
+    // ("Could not find <delta> in the list"), true tolerance or not.
+    q = p;
+    q.precursor_ppm = false;
+    q.precursor_tolerance = 3;
+    check(!q.mass_offsets.empty(), "the golden plan has offsets");
+    check(SC::msfraggerKeys(q, k).find("Da precursor window") != std::string::npos,
+          "mass offsets with a Da precursor window refused");
+    q.mass_offsets.clear();
+    check(SC::msfraggerKeys(q, k).empty(), "a Da precursor window without offsets accepted");
+    q = p;
+    q.threads = -1;
+    check(!SC::msfraggerKeys(q, k).empty(), "negative threads refused");
+  }
+  // ---- num_threads follows the plan's threads (FASTag's -threads)
+  {
+    SC::SearchPlan q = p;
+    Keys k;
+    check(p.threads == 0 && SC::msfraggerKeys(q, k).empty() && asMap(k).at("num_threads") == "0",
+          "threads 0 (FASTag's default) -> num_threads 0");
+    q.threads = 16;
+    check(SC::msfraggerKeys(q, k).empty() && asMap(k).at("num_threads") == "16", "threads 16 -> num_threads 16");
   }
   // ---- defaults: no offsets -> mass_offsets 0, localize_delta_mass 0; Da units
   {
