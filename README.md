@@ -531,6 +531,7 @@ MGF→mzML direction is exact.
 | `-digest_window <Da>` | 0.008 | Advanced: window around a residue or label mass at the tag ends |
 | `-digest_background_share <f>` | 0.05 | Advanced: share of the background mixed into every model |
 | `-digest_silac_min <n>` | 50 | Advanced: K- and R-terminal tag ends each for `-label_out`'s heavy-share gate |
+| `-label_call_min_tags <n>` | 175 | Advanced, experimental (1.13): C-terminal tag ends `-label_out`'s `label_call` needs; fewer give `no_call few_tags`. 175 is the FASTag 1.12 rule; 0 calls every ppm run (failed its held-out test) |
 | `-massgap_window <Da>` / `-massgap_window_da <Da>` | 0.02 / 0.5 | Advanced: gap window on ppm runs / on Da runs |
 | `-massgap_min_spectra <n>` / `-massgap_min_share <f>` / `-massgap_min_bin <n>` | 20 / 0.005 / 2 | Advanced: spectra and share a gap peak needs; spectra a histogram row needs to take part |
 | `-massgap_max_mods <n>` / `-massgap_top <n>` | 3 / 5 | Advanced: modifications per explanation; modifications listed by share |
@@ -863,10 +864,16 @@ options and their values.
   with scaled or averaged intensities is not caught.
 - **`-label_out`** counts tag ends that are a bare TMT, TMTpro or iTRAQ4 mass,
   against the same count 0.5 Da higher, and the Lys8 and Arg10 shares of the
-  C-terminal K and R. Its last five rows (section `label_call`) give the label
-  call prose-auto 0.1.10 makes from these counts: TMT, TMTpro, iTRAQ4, SILAC
-  or label-free, or no call on a Da tolerance and below 175 C-terminal tag
-  ends (doc/DESIGN-digest.md).
+  C-terminal K and R. Its last five rows (section `label_call`) give a label
+  call from these counts with prose-auto's thresholds: TMT, TMTpro, iTRAQ4,
+  SILAC or label-free, or no call on a Da tolerance or below 175 C-terminal
+  tag ends. The experimental `-label_call_min_tags 0` (1.13) calls every ppm
+  run; below 175 ends a label-free call then means only that no label rule
+  fired, and the status row says so. It scored 178/193 on the development
+  runs (in-sample; 150/193 at 175, 159/193 always label-free) but failed its
+  preregistered held-out test: 149/172 (0.866) against the threshold 0.922,
+  below always label-free (0.872); so 175 stays the default
+  (doc/DESIGN-digest.md, "Label call minimum").
 - **`-massgap_out`** reads the `-delta_out` histogram (built even when
   `-delta_out` is not written; run it without fixed modifications to see the
   Cys alkylation): spectra near each Cys alkylation mass, and gap peaks

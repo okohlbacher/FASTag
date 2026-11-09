@@ -1147,5 +1147,15 @@ export const PARAM_UI: Record<string, ParamUi> = {
     help: {
       text: 'How a precursor whose charge the file does not give is tagged: as 2+ (the default, as before 1.12), at each possible charge, or at the charge its fragment pairs support best. A charge given in the file is never replaced.'
     }
+  },
+
+  // ---- Not in the form: FASTag 1.13 experimental options
+  label_call_min_tags: {
+    hidden: 'experimental 1.13 command-line option, not in the form (CLI default applies)',
+    depends: [{ on: 'label_out', note: 'only the label report uses it' }],
+    help: {
+      text: 'How many C-terminal tag ends the label call in the label report needs; with fewer it makes no call. The default 175 is the FASTag 1.12 call. At 0 every run with a ppm fragment tolerance gets a call, and with few tag ends a label-free call only means that none of the label rules fired (the mass-gap report can still show SILAC).',
+      tip: '0 is experimental: it failed its 1.13 held-out test.'
+    }
   }
 }
