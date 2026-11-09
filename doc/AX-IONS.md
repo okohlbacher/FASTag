@@ -57,9 +57,19 @@ file that carries only that term is read through its filter string, or not at al
 
 ## Validation
 
-Opt-in and experimental. The protocol (DEV on public UVPD data, truth search, held-out only on a disjoint public
-set) is in the 1.13 acceptance branch (`acceptance/1.13/PREREG-item11.md`); results are reported there. Not a default
-candidate before that.
+Opt-in and experimental. Protocol and results: `acceptance/1.13/PREREG-item11.md` (branch acceptance/1.13).
+Rank-1 tag correct (flank rule) on UVPD spectra, truth from each precursor's HCD partner spectrum (MSFragger b/y,
+1% FDR):
+
+| Set | UVPD spectra | by | ax |
+|---|---|---|---|
+| DEV PXD018176 replicate 1 (213 nm, 5-100 ms) | 77,594 | 31.65% | 0.05% |
+| held-out PXD018176 replicate 2 (scored once) | 77,643 | 30.87% | 0.04% |
+
+The held-out endpoint (ax - by >= +5 points) fails: -30.83 [-31.63, -30.02]. On a 193-nm run (PXD003109, DEV,
+truth MSFragger a,b,x,y) by 63.1%, ax 0.3%. MSFragger with a,x ions only identifies 0-214 spectra per 213-nm run
+and 541 on the 193-nm run, against thousands with a,b,x,y: these spectra hold b/y ladders and isolated a/a+1 ions,
+not a/x ladders. `-ion_series ax` stays experimental; it is not a default candidate.
 
 ## Tests
 
