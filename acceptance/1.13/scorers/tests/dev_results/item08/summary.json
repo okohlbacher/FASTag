@@ -1,0 +1,201 @@
+{
+ "n": 193,
+ "majority_class": "label-free",
+ "majority_share": 0.8238,
+ "margin": 0.05,
+ "configs": {
+  "CFG-08-cand": {
+   "correct": 178,
+   "accuracy": 0.9223,
+   "accuracy_ci": [
+    0.8757,
+    0.9523
+   ],
+   "called": 193,
+   "called_correct": 178,
+   "called_accuracy": 0.9223,
+   "balanced_accuracy": 0.8304,
+   "per_class": {
+    "SILAC": {
+     "n": 11,
+     "correct": 5,
+     "recall": 0.4545,
+     "ci": [
+      0.2127,
+      0.7199
+     ]
+    },
+    "TMT": {
+     "n": 13,
+     "correct": 11,
+     "recall": 0.8462,
+     "ci": [
+      0.5777,
+      0.9567
+     ]
+    },
+    "TMTpro/iTRAQ8": {
+     "n": 9,
+     "correct": 8,
+     "recall": 0.8889,
+     "ci": [
+      0.565,
+      0.9801
+     ]
+    },
+    "iTRAQ4": {
+     "n": 1,
+     "correct": 1,
+     "recall": 1.0,
+     "ci": [
+      0.2065,
+      1.0
+     ]
+    },
+    "label-free": {
+     "n": 159,
+     "correct": 153,
+     "recall": 0.9623,
+     "ci": [
+      0.9201,
+      0.9826
+     ]
+    }
+   },
+   "confusion": {
+    "TMTpro/iTRAQ8": {
+     "TMTpro/iTRAQ8": 8,
+     "label-free": 1
+    },
+    "label-free": {
+     "label-free": 153,
+     "TMTpro/iTRAQ8": 2,
+     "SILAC": 2,
+     "iTRAQ4": 1,
+     "TMT": 1
+    },
+    "TMT": {
+     "TMT": 11,
+     "TMTpro/iTRAQ8": 1,
+     "label-free": 1
+    },
+    "SILAC": {
+     "SILAC": 5,
+     "label-free": 6
+    },
+    "iTRAQ4": {
+     "iTRAQ4": 1
+    }
+   },
+   "reasons": {
+    "call": 193
+   }
+  },
+  "CFG-08-base": {
+   "correct": 150,
+   "accuracy": 0.7772,
+   "accuracy_ci": [
+    0.7134,
+    0.8302
+   ],
+   "called": 163,
+   "called_correct": 150,
+   "called_accuracy": 0.9202,
+   "balanced_accuracy": 0.7952,
+   "per_class": {
+    "SILAC": {
+     "n": 11,
+     "correct": 5,
+     "recall": 0.4545,
+     "ci": [
+      0.2127,
+      0.7199
+     ]
+    },
+    "TMT": {
+     "n": 13,
+     "correct": 11,
+     "recall": 0.8462,
+     "ci": [
+      0.5777,
+      0.9567
+     ]
+    },
+    "TMTpro/iTRAQ8": {
+     "n": 9,
+     "correct": 8,
+     "recall": 0.8889,
+     "ci": [
+      0.565,
+      0.9801
+     ]
+    },
+    "iTRAQ4": {
+     "n": 1,
+     "correct": 1,
+     "recall": 1.0,
+     "ci": [
+      0.2065,
+      1.0
+     ]
+    },
+    "label-free": {
+     "n": 159,
+     "correct": 125,
+     "recall": 0.7862,
+     "ci": [
+      0.7161,
+      0.8427
+     ]
+    }
+   },
+   "confusion": {
+    "TMTpro/iTRAQ8": {
+     "TMTpro/iTRAQ8": 8,
+     "label-free": 1
+    },
+    "label-free": {
+     "label-free": 125,
+     "TMTpro/iTRAQ8": 2,
+     "no call": 28,
+     "SILAC": 2,
+     "iTRAQ4": 1,
+     "TMT": 1
+    },
+    "TMT": {
+     "TMT": 11,
+     "TMTpro/iTRAQ8": 1,
+     "no call": 1
+    },
+    "SILAC": {
+     "SILAC": 5,
+     "label-free": 5,
+     "no call": 1
+    },
+    "iTRAQ4": {
+     "iTRAQ4": 1
+    }
+   },
+   "reasons": {
+    "call": 163,
+    "few_tags": 30
+   }
+  }
+ },
+ "E1": {
+  "rule": "accuracy(CFG-08-cand) >= majority_share + 0.05",
+  "value": 0.9223,
+  "threshold": 0.8738,
+  "result": "PASS"
+ },
+ "E2": {
+  "rule": "correct(CFG-08-cand) >= correct(CFG-08-base)",
+  "cand": 178,
+  "base": 150,
+  "cand_right_base_wrong": 28,
+  "base_right_cand_wrong": 0,
+  "sign_test_p_descriptive": 7.450580596923828e-09,
+  "result": "PASS"
+ },
+ "overall": "PASS"
+}
