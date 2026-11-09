@@ -293,8 +293,28 @@ class TOPPFASTag : public TOPPBase
                                                                    : getParam_().getValue(name) == e.default_value;
       if (at_default) p.removeMetaValue(k);
     }
+    // 1.13 item 15: under -complement_tolerance_unit auto the window in force
+    // is not an option value, so it is recorded next to the options (full
+    // precision; with -complement_tolerance_unit Da it reproduces the tags).
+    // Absent without auto, so those exports keep their bytes.
+    if (compl_auto_rec_.on)
+    {
+      p.setMetaValue("complement_tolerance (auto)", compl_auto_rec_.tol);
+      p.setMetaValue("complement_tolerance (auto) source", compl_auto_rec_.source);
+      p.setMetaValue("complement_tolerance (auto) probe", compl_auto_rec_.probe);
+    }
     return p;
   }
+
+  // What -complement_tolerance_unit auto decided (set by the probe in main_).
+  struct ComplAutoRecord
+  {
+    bool on = false;
+    std::string tol;     ///< Da, full precision
+    std::string source;  ///< measured or fallback
+    std::string probe;   ///< the probe's statistics, as logged
+  };
+  ComplAutoRecord compl_auto_rec_;
 
 public:
   // toolhandler_test = false: FASTag lives outside the OpenMS tree and so is
@@ -3177,11 +3197,14 @@ protected:
     // 1.13 item 15: -complement_tolerance_unit auto (src/ComplementTol.h).
     // A probe of up to -complement_probe MS2 spectra, drawn uniformly over
     // the run with a fixed seed and read as the tagging pass reads them, is
-    // tagged at the first seed length with the complement window set to the
-    // whole measurement window, at the header charge (the precursor
+    // tagged at seed length ComplTol::kAutoProbeLength with the default
+    // preprocessing and search settings (ComplTol::probeParam: one file, one
+    // window, whatever -tag_length or -no_deisotope) and the complement
+    // window set to the whole measurement window, at the header charge (the precursor
     // hypotheses of -unknown_charge and -isotope_error are not probed);
     // the rank-1 tags at or below ComplTol::kAutoMaxEvalue give the signed
-    // complement errors, and their distribution gives the window. Too few
+    // complement errors, and their floor-corrected median and MAD give the
+    // window (|median| + 1.96 x 1.4826 x MAD). Too few
     // pairs keep -complement_tolerance (Da). Not reached under Da or fragment.
     if (compl_auto)
     {
@@ -3210,8 +3233,8 @@ protected:
         s.sortByPosition();
         probe_specs.push_back(std::move(s));
       }
-      // The Params the probe tags with: the first length's, b/y or c/z-dot
-      // per spectrum as the tagging pass decides.
+      // The Params the probe tags with (ComplTol::probeParam of the run's b/y
+      // or c/z-dot Param, per spectrum as the tagging pass decides).
       const FASTag::Param probe_by = CT::probeParam(len_params.front(), window);
       const FASTag::Tables probe_tab_by(probe_by);
       const bool any_cz = !len_params_cz.empty();
@@ -3249,20 +3272,37 @@ protected:
         hyp_cs = FASTag::ComplementSpec::fromParam(p);
         hyp_cs_cz = FASTag::ComplementSpec::fromParam(p_cz);
       }
-      // stderr only: nothing new may reach stdout or the gate's summary line.
-      // The window at full precision, so it can be given back as
+      // stderr, not stdout (nothing new may reach stdout or the gate's
+      // summary line); the same values go to every Versioned run report
+      // (format 6 rows) and to the -out_spectra mzML provenance below. The
+      // window at full precision, so it can be given back as
       // -complement_tolerance and reproduce the run.
       std::ostringstream tol_txt;
       tol_txt << std::setprecision(17) << (est.ok ? est.tol : p.complement_tol);
+      std::ostringstream probe_txt;
+      probe_txt << probe_specs.size() << " MS2, " << n_conf << " confident tags, " << est.n << " pairs within "
+                << window << " Da (signal " << std::lround(est.signal);
+      if (est.ok) probe_txt << ", median error " << est.median << " Da, MAD " << est.mad << " Da";
+      probe_txt << ")";
       std::cerr << "Complement tolerance (auto): "
                 << (est.ok ? "measured " : "not measured, using -complement_tolerance ")
-                << tol_txt.str() << " Da; probe " << probe_specs.size()
-                << " MS2, " << n_conf << " confident tags, " << est.n << " pairs within " << window
-                << " Da (signal " << std::lround(est.signal) << ", median error " << est.median << " Da)"
+                << tol_txt.str() << " Da; probe " << probe_txt.str()
                 << (est.ok ? std::string() : "; " + est.why) << std::endl;
       run_meta.complement_tol_auto = true;
       run_meta.complement_tol_measured = est.ok;
       run_meta.complement_tol = est.ok ? est.tol : p.complement_tol;
+      run_meta.complement_tol_window = window;
+      run_meta.complement_probe_ms2 = probe_specs.size();
+      run_meta.complement_probe_confident = n_conf;
+      run_meta.complement_probe_pairs = est.n;
+      run_meta.complement_probe_signal = est.signal;
+      run_meta.complement_probe_median = est.median;
+      run_meta.complement_probe_mad = est.mad;
+      run_meta.complement_tol_why = est.why;
+      compl_auto_rec_.on = true;
+      compl_auto_rec_.tol = tol_txt.str();
+      compl_auto_rec_.source = est.ok ? "measured" : "fallback";
+      compl_auto_rec_.probe = probe_txt.str() + (est.ok ? std::string() : "; " + est.why);
     }
 
     const auto t_tables_a = std::chrono::steady_clock::now();

@@ -3,7 +3,9 @@
 //
 // The Legacy bytes below are what FASTag 1.11.0 (78390cd) writes at the top
 // of -digest_out, -label_out and -massgap_out. Changing them, or the
-// Versioned rows, needs a kFormatVersion bump and new references.
+// Versioned rows, needs a kFormatVersion bump and new references. Format 6
+// (1.13 item 15) adds rows only under -complement_tolerance_unit auto; the
+// section without them stays format 5, byte for byte.
 //
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
@@ -78,7 +80,8 @@ int main()
 
   // Versioned: the legacy rows are a byte prefix, then the version row.
   const std::string versioned = written(RR::runRows(m, RR::Emit::Versioned));
-  check(RR::kFormatVersion == 5, "format version 5");
+  check(RR::kFormatVersion == 6, "format version 6");
+  check(RR::kFormatVersionNoAuto == 5, "without -complement_tolerance_unit auto the run section is format 5");
   check(versioned.rfind(legacy, 0) == 0, "Versioned starts with the legacy bytes");
   check(versioned.substr(legacy.size()) ==
           "run\trun_report_version\t5\t-\tThe run section follows FASTag run report format 5.\n"
@@ -190,6 +193,57 @@ int main()
             rs[27].description == "3491 of 6983 MS2 spectra were tagged as c/z-dot ions.",
           "ion_series_cz row");
     check(written(RR::runRows(s)) == legacy, "ion-series counts never reach the Legacy rows");
+  }
+  // The 1.13 complement-tolerance rows (format 6): only under
+  // -complement_tolerance_unit auto; without it the section is format 5.
+  {
+    RR::RunMeta c = m;
+    c.complement_tol_auto = true;
+    c.complement_tol_measured = true;
+    c.complement_tol = 0.010549919472572744;
+    c.complement_tol_window = 0.12;
+    c.complement_probe_ms2 = 500;
+    c.complement_probe_confident = 289;
+    c.complement_probe_pairs = 330;
+    c.complement_probe_signal = 314.6;
+    c.complement_probe_median = -0.004;
+    c.complement_probe_mad = 0.0045;
+    const auto rc = RR::runRows(c, RR::Emit::Versioned);
+    check(rc.size() == 34, "Versioned format 6 (measured) has 34 rows");
+    check(rc[7].key == "run_report_version" && rc[7].value == "6" &&
+            rc[7].description == "The run section follows FASTag run report format 6.",
+          "auto: format 6");
+    check(rc.size() > 33 && rc[28].key == "complement_tolerance" && rc[28].value == "0.010549919472572744" &&
+            rc[28].description == "The complement window in force was 0.010549919472572744 Da "
+                                   "(-complement_tolerance_unit auto).",
+          "complement_tolerance row, full precision");
+    check(rc.size() > 33 && rc[29].key == "complement_tolerance_source" && rc[29].value == "measured",
+          "complement_tolerance_source row");
+    check(rc.size() > 33 && rc[30].key == "complement_probe_confident" && rc[30].value == "289" &&
+            rc[30].n == "500",
+          "complement_probe_confident row");
+    check(rc.size() > 33 && rc[31].key == "complement_probe_signal" && rc[31].value == "315" &&
+            rc[31].n == "330" &&
+            rc[31].description == "330 complement pairs fell within 0.12 Da, 315 above the chance floor.",
+          "complement_probe_signal row");
+    check(rc.size() > 33 && rc[32].key == "complement_probe_median" && rc[32].value == "-0.004" &&
+            rc[33].key == "complement_probe_mad" && rc[33].value == "0.0045",
+          "complement_probe_median/mad rows");
+    RR::RunMeta fb = c;
+    fb.complement_tol_measured = false;
+    fb.complement_tol = 0.02;
+    fb.complement_tol_why = "too few complement pairs above the chance floor (signal 18, needs 40)";
+    const auto rf = RR::runRows(fb, RR::Emit::Versioned);
+    check(rf.size() == 32, "Versioned format 6 (fallback) has 32 rows");
+    check(rf.size() > 29 && rf[28].value == "0.02" && rf[29].value == "fallback" &&
+            rf[29].description == "The window is -complement_tolerance: too few complement pairs above the "
+                                  "chance floor (signal 18, needs 40).",
+          "fallback rows");
+    check(written(RR::runRows(c)) == legacy, "complement rows never reach the Legacy rows");
+    RR::RunMeta off = c;
+    off.complement_tol_auto = false;
+    check(written(RR::runRows(off, RR::Emit::Versioned)) == versioned,
+          "without auto the complement fields write nothing (format 5 bytes)");
   }
 
   // ClusterAcc: composes and merges without touching anything.

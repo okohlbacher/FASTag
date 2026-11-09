@@ -20,8 +20,15 @@ and that differs by instrument and calibration. On ion-trap MS2 read at
    over the run is read; of the MS2 among them, a second uniform draw keeps
    `-complement_probe` (default 500), so the probe spans the whole run. They
    are read as the tagging pass reads them (centroided under
-   `-pick_profile` as there) and tagged at the first seed length, at the
-   header charge (2 when none). The probe's complement window is the whole
+   `-pick_profile` as there) and tagged at seed length 3 with the command
+   line's default preprocessing and search settings (deisotoping on, `-gaps 1`,
+   the default peak budget, E-value cut and gap penalty), whatever the run's
+   own `-tag_length`, `-no_deisotope`, `-gaps` or peak options; only the
+   settings that describe the measurement (fragment tolerance, ion series,
+   complement rule, modifications) are the run's. So one input file gives one
+   window in every configuration (`complement_tol_cli_test` checks
+   `-tag_length 4`, `-no_deisotope` and `-gaps 0`). At the header charge (2
+   when none). The probe's complement window is the whole
    measurement window W: the complement subscore still acts, but it no longer
    depends on the configured window, so tags are not selected for having
    partners inside it.
@@ -32,24 +39,48 @@ and that differs by instrument and calibration. On ion-trap MS2 read at
    1000, within 0.1-0.9 Da (below one 13C spacing): 0.12 Da at 20 ppm,
    0.9 Da at 0.5 Da.
 3. **Window.** The errors are a peak near zero (true partners) on a flat floor
-   (chance peaks). The floor's density is read from the outer third of W. The
-   window is the smallest |error| t for which the errors inside [-t, t], minus
-   the floor over that width, reach 95% of the signal over all of W (at
-   least 0.001 Da). A systematic offset widens the window, because the
-   window is centred on the complement m/z.
+   (chance peaks). The floor's density is read from the outer third of W.
+   From the middle half of the signal, with the floor subtracted, come the
+   median signed error m and the median absolute deviation from it (MAD).
+   The window is |m| + 1.96 x 1.4826 x MAD (at least 0.001 Da): the
+   two-sided 95% bound of a normal error, widened by a systematic offset
+   because the window is centred on the complement m/z. A probe gives 50 to
+   150 signal pairs on typical high-resolution runs; at that size the median
+   and MAD are stable (`complement_tol_test` (f): over 200 samples the
+   95th/5th percentile ratio of the estimate stays below 2), where the 95%
+   order statistic that 1.13's first version read was not (ratios 3.1 to 7.8
+   on the same samples: one or two extreme errors set it).
 4. **Fallback.** When the signal is below 40 pairs, or below three standard
    deviations of its fluctuation (Poisson variance doubled for the shared
-   precursor error of a tag's two ends), or not contained in the inner two
-   thirds of W, nothing is measured and the run keeps `-complement_tolerance`.
+   precursor error of a tag's two ends), or the window is not inside the inner
+   two thirds of W, nothing is measured and the run keeps
+   `-complement_tolerance`.
 
-The result goes to stderr, for example
+The result is logged to stderr, for example
 
     Complement tolerance (auto): measured 0.0170 Da; probe 500 MS2, 289 confident tags,
-    330 pairs within 0.12 Da (signal 315, median error -0.00403 Da)
+    330 pairs within 0.12 Da (signal 315, median error -0.00403 Da, MAD 0.0045 Da)
 
-The window is printed at full precision: giving it back as
+and recorded with the run's outputs, so a run can be reproduced and audited
+without its log:
+
+- `-out_spectra` (mzML): the processing step carries the userParams
+  `complement_tolerance (auto)` (the window in force, Da, full precision),
+  `complement_tolerance (auto) source` (`measured` or `fallback`) and
+  `complement_tolerance (auto) probe` (the probe statistics, as logged).
+  mzPeak output has no processing-step record and does not carry them.
+- Every run report that writes the versioned run section (`-census` summary,
+  `-alkylation_out`) adds the rows `complement_tolerance`,
+  `complement_tolerance_source`, `complement_probe_confident`,
+  `complement_probe_signal` and, when measured, `complement_probe_median` and
+  `complement_probe_mad`, and says run report format 6.
+- Without `auto` none of this is written: those outputs stay byte-identical
+  (format 5).
+
+The window is written at full precision: giving it back as
 `-complement_tolerance <value> -complement_tolerance_unit Da` reproduces the
-run's tags exactly (`complement_tol_cli_test`). The rest of the run is the Da
+run's tags exactly (`complement_tol_cli_test` reads it back from
+`-out_spectra` and from the census summary). The rest of the run is the Da
 mode at that window: the tags, the `-unknown_charge infer` and
 `-isotope_error` complement counts and every report use it.
 
@@ -59,8 +90,8 @@ mode at that window: the tags, the `-unknown_charge infer` and
   read in one pass); mzML and MGF only.
 - The probe's errors come from the ends of confident tags, whose own m/z fit
   is good, so the measured window is somewhat narrower than the 95% bound of
-  all fragment pairs (on the in-silico fixtures 0.0097 for a 0.0111 Da bound
-  and 0.205 for 0.277 Da).
+  all fragment pairs (on the in-silico fixtures 0.0105 for a 0.0111 Da bound
+  and 0.255 for 0.277 Da).
 - The probe reads the header charge and m/z only: the hypotheses of
   `-unknown_charge` and `-isotope_error` are not probed (a run whose header
   monoisotopes are often wrong measures fewer pairs and may fall back).
@@ -74,8 +105,25 @@ mode at that window: the tags, the `-unknown_charge infer` and
   one thread on a Q Exactive run, ~2% of a 27,000-MS2 run).
 - One window per run. Runs whose calibration drifts over the gradient get
   one compromise window.
+- The MAD-based window assumes the true-pair errors are roughly normal. A
+  heavier-tailed error leaves more than 5% of true pairs outside it.
 
 ## Validation
+
+The held-out result below was measured with 1.13's first version
+(c5f96b5): the probe tagged at the run's first seed length with the run's
+preprocessing, and the window was the 95% order statistic of the
+floor-corrected |error|. That version's window was not a property of the
+input file: on the held-out Astral file PXD066944 it was 0.0146 Da
+(L4 default), 0.0184 Da (L3 default) and 0.0566 Da (L5 default), each from
+65 to 71 signal pairs, and PXD076520 ranged from 0.026 to 0.037 Da. The
+failing Astral L5 default 2+ cell is the cell with the 0.0566 Da window, so
+the Astral failure is at least partly estimator variance, not only a wrong
+window. The current version (probe at length 3 with default settings; median
+and MAD) removes that dependence by construction and is far less variable on
+probe-sized samples. It has been run on DEV only (below). It has **not** been
+tested on held-out data: the held-out result stands for the first version, and
+a new held-out test would need data not used for this one.
 
 DEV: the #2 DEV runs with the frozen #2 scorer. On PXD003531 (Q Exactive, 20 ppm) the measured windows were
 0.019-0.036 Da, and the powered cells moved by -0.20 to +0.27 points. On PXD001819 (LTQ Orbitrap Velos,

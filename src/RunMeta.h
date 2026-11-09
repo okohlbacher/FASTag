@@ -32,6 +32,7 @@
 
 #include "Digest.h"
 
+#include <cmath>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -44,9 +45,15 @@ namespace FASTag::RunReport
   /// 3 = format 2, then the E activation rows (#15 phase A).
   /// 4 = format 3, then the E precursor-hypothesis rows (#6, wave 2).
   /// 5 = format 4, then the E ion-series rows (#15 phase B, wave 2).
+  /// 6 = format 5, then the 1.13 complement-tolerance rows (backlog item 15).
+  ///     They are written only under -complement_tolerance_unit auto; a
+  ///     report without them is format 5 and says 5 (kFormatVersionNoAuto),
+  ///     so every report of a run without auto keeps its bytes.
   /// Bumped once per item in the PLAN-INTEGRATION merge order (E#7 adds
   /// fields only, E#9 = 2, E#15A = 3, E#6 = 4, E#15B = 5).
-  inline constexpr int kFormatVersion = 5;
+  inline constexpr int kFormatVersion = 6;
+  /// The version a Versioned report without the format-6 rows writes.
+  inline constexpr int kFormatVersionNoAuto = 5;
 
   /// Run-level facts shared by every long-form report. Filled once per run.
   struct RunMeta
@@ -98,11 +105,19 @@ namespace FASTag::RunReport
     std::size_t ion_series_ms2_cz = 0;
     // ---- 1.13 item 15 ----
     // -complement_tolerance_unit auto (src/ComplementTol.h): whether it ran,
-    // whether the probe measured a window, and the window in force (Da).
-    // Fields only, as #7: no report writes a row for them.
+    // whether the probe measured a window, the window in force (Da) and the
+    // probe's statistics. Written (format 6) only when complement_tol_auto.
     bool complement_tol_auto = false;
     bool complement_tol_measured = false;
-    double complement_tol = 0;
+    double complement_tol = 0;          ///< Da, in force (measured or -complement_tolerance)
+    double complement_tol_window = 0;   ///< measurement window W, Da
+    std::size_t complement_probe_ms2 = 0;        ///< MS2 spectra the probe tagged
+    std::size_t complement_probe_confident = 0;  ///< of them, rank-1 tag at E <= 0.01
+    std::size_t complement_probe_pairs = 0;      ///< signed errors within W
+    double complement_probe_signal = 0;          ///< pairs minus the chance floor
+    double complement_probe_median = 0;          ///< floor-corrected median error, Da (measured only)
+    double complement_probe_mad = 0;             ///< floor-corrected MAD, Da (measured only)
+    std::string complement_tol_why;              ///< why not measured (fallback only)
     // ---- 1.12 A ----
     // ---- 1.12 D ----
     // ---- 1.12 F ----
@@ -142,7 +157,7 @@ namespace FASTag::RunReport
                  std::to_string(m.subsample_spectra) + " spectra were drawn for tagging (0 = all)."});
     if (emit == Emit::Legacy) return r;
 
-    const std::string v = std::to_string(kFormatVersion);
+    const std::string v = std::to_string(m.complement_tol_auto ? kFormatVersion : kFormatVersionNoAuto);
     r.push_back({"run", "run_report_version", v, "-", "The run section follows FASTag run report format " + v + "."});
     // ---- 1.12 E ----
     {
@@ -204,6 +219,36 @@ namespace FASTag::RunReport
         const std::string by = std::to_string(m.ion_series_ms2_by), cz = std::to_string(m.ion_series_ms2_cz);
         r.push_back({"run", "ion_series_by", by, n, by + " of " + n + " MS2 spectra were tagged as b/y ions."});
         r.push_back({"run", "ion_series_cz", cz, n, cz + " of " + n + " MS2 spectra were tagged as c/z-dot ions."});
+      }
+    }
+    // ---- 1.13 item 15 (format 6; only under -complement_tolerance_unit auto) ----
+    if (m.complement_tol_auto)
+    {
+      // The window at full precision: given back as -complement_tolerance
+      // with -complement_tolerance_unit Da it reproduces the run's tags.
+      const std::string tol = num(m.complement_tol);
+      const std::string w = num(m.complement_tol_window);
+      r.push_back({"run", "complement_tolerance", tol, "-",
+                   "The complement window in force was " + tol + " Da (-complement_tolerance_unit auto)."});
+      r.push_back({"run", "complement_tolerance_source", m.complement_tol_measured ? "measured" : "fallback", "-",
+                   m.complement_tol_measured
+                       ? "The window was measured on the run's probe."
+                       : "The window is -complement_tolerance: " + m.complement_tol_why + "."});
+      const std::string ms2 = std::to_string(m.complement_probe_ms2);
+      const std::string conf = std::to_string(m.complement_probe_confident);
+      const std::string pairs = std::to_string(m.complement_probe_pairs);
+      r.push_back({"run", "complement_probe_confident", conf, ms2,
+                   conf + " of " + ms2 + " probe MS2 spectra had a rank-1 tag at E <= 0.01."});
+      const std::string sig = std::to_string(std::lround(m.complement_probe_signal));
+      r.push_back({"run", "complement_probe_signal", sig, pairs,
+                   pairs + " complement pairs fell within " + w + " Da, " + sig + " above the chance floor."});
+      if (m.complement_tol_measured)
+      {
+        const std::string med = num(m.complement_probe_median), mad = num(m.complement_probe_mad);
+        r.push_back({"run", "complement_probe_median", med, "-",
+                     "The floor-corrected median complement error was " + med + " Da."});
+        r.push_back({"run", "complement_probe_mad", mad, "-",
+                     "The floor-corrected median absolute deviation of the complement error was " + mad + " Da."});
       }
     }
     // ---- 1.12 A ----

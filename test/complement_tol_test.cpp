@@ -1,18 +1,28 @@
 // Run-measured complement tolerance (1.13 item 15, src/ComplementTol.h).
 //   (a) measurementWindow: 6x the fragment tolerance at m/z 1000, in [0.1, 0.9] Da.
-//   (b) probeParam: Da mode at the window, nothing else changed.
+//   (b) probeParam: Da mode at the window, seed length 3 and the CLI's
+//       default preprocessing and search settings, the run's measurement
+//       settings; two runs that differ only in -tag_length, -no_deisotope,
+//       -gaps, peak budget or E-value cut probe with the same Param.
 //   (c) collectErrors on a synthetic spectrum whose fragments all sit +s Da
 //       off: every rank-1 tag end that has its partner reports +2s (the pair
 //       sum moves by 2s); with no partner peak nothing is reported; a partner
 //       beyond the window is not reported; the precursor rule reads 3+ pairs
 //       that same_charge does not.
 //   (d) estimate: Gaussian errors (sd sigma) on a flat floor give a window
-//       near the 95% two-sided quantile 1.96 sigma, wider for a wider error,
+//       near the 95% two-sided bound |offset| + 1.96 sigma, wider for a wider error,
 //       and independent of the floor's density; too few pairs, or a floor
 //       alone, give no measurement; values beyond the window are ignored;
 //       the 0.001 Da lower bound holds.
 //   (c2) a tag end at its own complement m/z has no partner, as in prepare().
 //   (e) pickProbe: a uniform, ascending, deterministic draw over the run.
+//   (f) stability at the sample sizes a probe gives (50-150 signal pairs on
+//       a floor): over 200 independent samples the estimate's 95th/5th
+//       percentile ratio stays below 2 and its coefficient of variation
+//       below 0.25, centred on the true bound. 1.13's first estimator (the
+//       95% order statistic of |error|) gives ratios of 3.1-7.8 and
+//       coefficients of variation of 0.43-0.92 on the same samples; the
+//       reference implementation here reproduces that, so the bound can fail.
 //
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
@@ -24,6 +34,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <random>
 #include <vector>
 
@@ -60,7 +71,10 @@ namespace
   /// Rank-1 tag of @p s at @p p (complement test neutral at @p w), its errors.
   std::vector<double> errorsOf(const ComplementSynth::Spec& s, int charge, FASTag::Param p, double w)
   {
-    p = CT::probeParam(p, w);
+    // The complement test made neutral as probeParam makes it, keeping the
+    // test's own preprocessing (probeParam's defaults are checked in (b)).
+    p.complement_tol_mode = FASTag::ComplementTolMode::Da;
+    p.complement_tol = w;
     const FASTag::Tables tab(p);
     const std::vector<FASTag::Tag> tg = FASTag::tagSpectrum(s.spec, s.prec_mz, charge, p, tab);
     std::vector<double> e;
@@ -83,10 +97,42 @@ int main()
   {
     FASTag::Param p = FASTag::cliDefaultParam();
     p.complement_tol_mode = FASTag::ComplementTolMode::Fragment;
+    p.frag_tol = 0.5;
+    p.tol_ppm = false;
+    p.complement_rule = FASTag::ComplementRule::Both;
+    p.ion_pair = FASTag::IonSeries::ionPair(FASTag::IonSeries::Series::CZ);
+    p.tag_length = 5;
+    p.deisotope = false;
+    p.max_gaps = 0;
+    p.max_extension = 2;
+    p.peaks_per_window = 0;
+    p.max_peak_count = 150;
+    p.max_evalue = 1;
+    p.gap_penalty = 10;
+    p.diversity = true;
     const FASTag::Param q = CT::probeParam(p, 0.12);
+    const FASTag::Param d = FASTag::cliDefaultParam();
     CHECK(q.complement_tol_mode == FASTag::ComplementTolMode::Da && q.complement_tol == 0.12, "probe window");
-    CHECK(q.frag_tol == p.frag_tol && q.tag_length == p.tag_length && q.complement_rule == p.complement_rule,
-          "probeParam changed more than the complement window");
+    CHECK(q.frag_tol == 0.5 && !q.tol_ppm && q.complement_rule == FASTag::ComplementRule::Both
+            && q.ion_pair.kind == FASTag::IonSeries::Series::CZ && q.mods.size() == p.mods.size(),
+          "probeParam dropped a measurement setting of the run");
+    CHECK(q.tag_length == CT::kAutoProbeLength && CT::kAutoProbeLength == 3, "probe seed length %d", q.tag_length);
+    CHECK(q.deisotope == d.deisotope && q.max_gaps == d.max_gaps && q.max_extension == d.max_extension
+            && q.peaks_per_window == d.peaks_per_window && q.max_peak_count == d.max_peak_count
+            && q.max_evalue == d.max_evalue && q.gap_penalty == d.gap_penalty && q.diversity == d.diversity
+            && q.max_tag_count == d.max_tag_count,
+          "probeParam kept a search or preprocessing setting of the run");
+    // A run at the defaults with the same measurement settings probes alike.
+    FASTag::Param r = FASTag::cliDefaultParam();
+    r.frag_tol = 0.5;
+    r.tol_ppm = false;
+    r.complement_rule = FASTag::ComplementRule::Both;
+    r.ion_pair = p.ion_pair;
+    const FASTag::Param qr = CT::probeParam(r, 0.12);
+    CHECK(qr.tag_length == q.tag_length && qr.deisotope == q.deisotope && qr.max_gaps == q.max_gaps
+            && qr.peaks_per_window == q.peaks_per_window && qr.max_peak_count == q.max_peak_count
+            && qr.max_evalue == q.max_evalue && qr.complement_tol == q.complement_tol,
+          "two runs differing only in search settings probe differently");
   }
 
   // (c) fragments shifted by +s: pair errors +2s.
@@ -218,6 +264,69 @@ int main()
       std::vector<double> e(500, 0.0);
       const CT::Estimate a = CT::estimate(e, w);
       CHECK(a.ok && a.tol == CT::kAutoMinTol, "exact pairs: tol %.6g, want the 0.001 bound", a.tol);
+    }
+  }
+
+  // (f) stability on realistic probe sizes.
+  {
+    const double w = 0.12;
+    // 1.13's first estimator, kept here only as the reference the bound
+    // must separate from: the smallest |error| t whose floor-corrected
+    // count reaches 95% of the signal.
+    const auto order95 = [w](std::vector<double> e) {
+      const double from = CT::kAutoFloorFrom * w;
+      std::vector<double> a;
+      for (const double x : e)
+        if (std::fabs(x) <= w) a.push_back(std::fabs(x));
+      std::size_t nf = 0;
+      for (const double x : a) nf += x >= from;
+      const double f = nf / (2.0 * (w - from));
+      const double sig = a.size() - f * 2.0 * w;
+      std::sort(a.begin(), a.end());
+      for (std::size_t i = 0; i < a.size() && a[i] < from; ++i)
+        if (static_cast<double>(i + 1) - f * 2.0 * a[i] >= 0.95 * sig) return std::max(a[i], CT::kAutoMinTol);
+      return std::numeric_limits<double>::quiet_NaN();
+    };
+    struct Case { std::size_t n_sig, n_floor; double sigma, offset; };
+    for (const Case c : {Case{50, 15, 0.008, -0.006}, Case{65, 15, 0.005, 0.0}, Case{100, 20, 0.008, -0.006},
+                         Case{150, 30, 0.005, 0.0}})
+    {
+      std::vector<double> got, ref;
+      for (unsigned seed = 1; seed <= 200; ++seed)
+      {
+        std::vector<double> e = synth(c.n_sig, c.sigma, c.n_floor, w, 1000 + seed);
+        for (std::size_t i = 0; i < c.n_sig; ++i) e[i] += c.offset;
+        const CT::Estimate est = CT::estimate(e, w);
+        if (est.ok) got.push_back(est.tol);
+        const double o = order95(e);
+        if (std::isfinite(o)) ref.push_back(o);
+      }
+      const auto spread = [](std::vector<double> v, double& ratio, double& cv, double& mean) {
+        std::sort(v.begin(), v.end());
+        const double p5 = v[static_cast<std::size_t>(0.05 * (v.size() - 1))];
+        const double p95 = v[static_cast<std::size_t>(0.95 * (v.size() - 1))];
+        ratio = p95 / p5;
+        mean = 0;
+        for (const double x : v) mean += x;
+        mean /= v.size();
+        double ss = 0;
+        for (const double x : v) ss += (x - mean) * (x - mean);
+        cv = std::sqrt(ss / (v.size() - 1)) / mean;
+      };
+      const double truth = std::fabs(c.offset) + 1.96 * c.sigma;
+      CHECK(got.size() >= 190, "n_sig %zu: only %zu of 200 samples measured", c.n_sig, got.size());
+      double ratio = 0, cv = 0, mean = 0;
+      if (got.size() >= 10) spread(got, ratio, cv, mean);
+      std::printf("stability n_sig %zu sigma %.3g offset %.3g: p95/p5 %.2f cv %.3f mean %.5g (true %.5g)\n",
+                  c.n_sig, c.sigma, c.offset, ratio, cv, mean, truth);
+      CHECK(ratio > 0 && ratio < 2.0, "n_sig %zu: p95/p5 %.2f, want < 2", c.n_sig, ratio);
+      CHECK(cv > 0 && cv < 0.25, "n_sig %zu: coefficient of variation %.3f, want < 0.25", c.n_sig, cv);
+      CHECK(std::fabs(mean - truth) < 0.15 * truth, "n_sig %zu: mean %.5g, true bound %.5g", c.n_sig, mean, truth);
+      double rr = 0, rcv = 0, rmean = 0;
+      if (ref.size() >= 10) spread(ref, rr, rcv, rmean);
+      std::printf("  order statistic (1.13 first version): p95/p5 %.2f cv %.3f\n", rr, rcv);
+      CHECK(rr >= 2.0 || rcv >= 0.25, "n_sig %zu: the reference order statistic is within the bound too "
+            "(p95/p5 %.2f, cv %.3f), so the bound cannot tell the estimators apart", c.n_sig, rr, rcv);
     }
   }
 

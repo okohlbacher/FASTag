@@ -16,6 +16,14 @@
 #     measured within a 0.9 Da window near 0.277 Da
 #   - -stream with auto is refused; -stream with -complement_probe is refused
 #   - -out_spectra lists complement_tolerance_unit auto in its provenance
+#   - the window in force is persisted: -out_spectra carries
+#     "complement_tolerance (auto)" (and its source) at full precision, equal
+#     to the logged value, and a Da run at the value read back from the file
+#     reproduces the tags; the census summary (a Versioned run report) carries
+#     run/complement_tolerance (format 6) with the same value; without auto
+#     neither the mzML userParam nor the rows appear (format 5)
+#   - the probe is cell-independent: -tag_length 4, -no_deisotope and -gaps 0
+#     measure exactly the window of the default run
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 BIN="$1"
@@ -95,4 +103,42 @@ grep -q 'complement_tolerance_unit auto' "$TMP/s1.err" || { cat "$TMP/s1.err" >&
   > "$TMP/o.log" 2>&1 || { cat "$TMP/o.log" >&2; fail "auto with -out_spectra failed"; }
 grep -Eq 'name="parameter: complement_tolerance_unit"[^>]*value="auto"' "$TMP/o.mzML" \
   || { grep -o 'parameter: complement[^/]*' "$TMP/o.mzML" | head -3 >&2; fail "-out_spectra does not list unit auto"; }
+# The window is persisted in -out_spectra and in the Versioned run reports.
+run hspec "$HI" -complement_tolerance_unit auto -out_spectra "$TMP/hspec.mzML" -census
+TS=$(sed -n 's/.*name="complement_tolerance (auto)"[^>]*value="\([^"]*\)".*/\1/p' "$TMP/hspec.mzML" | head -1)
+[ -n "$TS" ] || { grep -o 'complement_tolerance[^/]*' "$TMP/hspec.mzML" | head -5 >&2; fail "-out_spectra does not record the window in force"; }
+[ "$TS" = "$(measured "$TMP/hspec.log")" ] || fail "-out_spectra records $TS, the log $(measured "$TMP/hspec.log")"
+[ "$TS" = "$T" ] || fail "-out_spectra/-census changed the measured window ($TS vs $T)"
+grep -Eq 'name="complement_tolerance \(auto\) source"[^>]*value="measured"' "$TMP/hspec.mzML" \
+  || fail "-out_spectra does not record the source (measured)"
+run hspecback "$HI" -complement_tolerance "$TS" -complement_tolerance_unit Da
+cmp -s "$TMP/hspec.tsv" "$TMP/hspecback.tsv" || fail "a Da run at the window read from -out_spectra ($TS) differs"
+CS="$TMP/hspec.census_summary.tsv"
+[ -f "$CS" ] || fail "no census summary at $CS"
+awk -F'\t' -v t="$TS" '$1=="run" && $2=="complement_tolerance" { f=1; if ($3!=t) exit 1 } END { exit !f }' "$CS" \
+  || { grep complement "$CS" >&2; fail "census summary run/complement_tolerance is not $TS"; }
+awk -F'\t' '$1=="run" && $2=="run_report_version" { f=1; if ($3!="6") exit 1 } END { exit !f }' "$CS" \
+  || fail "census summary under auto is not run report format 6"
+awk -F'\t' '$1=="run" && $2=="complement_tolerance_source" { f=1; if ($3!="measured") exit 1 } END { exit !f }' "$CS" \
+  || fail "census summary does not record the source (measured)"
+run hspecda "$HI" -out_spectra "$TMP/hspecda.mzML" -census
+grep -q 'complement_tolerance (auto)' "$TMP/hspecda.mzML" && fail "-out_spectra records an auto window without auto"
+grep -q 'complement_' "$TMP/hspecda.census_summary.tsv" && fail "census summary carries complement rows without auto"
+awk -F'\t' '$1=="run" && $2=="run_report_version" { f=1; if ($3!="5") exit 1 } END { exit !f }' \
+  "$TMP/hspecda.census_summary.tsv" || fail "census summary without auto is not run report format 5"
+# The fallback is recorded as such.
+"$BIN" -in "$IN" -out "$TMP/fbs.tsv" -out_spectra "$TMP/fbs.mzML" -threads 2 -complement_tolerance_unit auto \
+  > "$TMP/fbs.log" 2>&1 || { cat "$TMP/fbs.log" >&2; fail "fallback with -out_spectra failed"; }
+grep -Eq 'name="complement_tolerance \(auto\) source"[^>]*value="fallback"' "$TMP/fbs.mzML" \
+  || fail "-out_spectra does not record the fallback"
+grep -Eq 'name="complement_tolerance \(auto\)"[^>]*value="0.02"' "$TMP/fbs.mzML" \
+  || fail "-out_spectra does not record the fallback window 0.02"
+
+# One file, one window: the probe ignores the run's search settings.
+for opt in "-tag_length 4" "-no_deisotope" "-gaps 0"; do
+  # shellcheck disable=SC2086
+  run hcell "$HI" -complement_tolerance_unit auto $opt
+  [ "$(measured "$TMP/hcell.log")" = "$T" ] \
+    || fail "auto with $opt measured $(measured "$TMP/hcell.log"), the default run $T"
+done
 echo "complement_tol_cli_test: PASS"
