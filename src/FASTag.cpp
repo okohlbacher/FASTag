@@ -3184,6 +3184,14 @@ protected:
       }
       for (const FASTag::Param& lp : len_params)
         alkt_params.push_back(FASTag::AlkylationTags::shadowParam(lp, alkt_cands, alkt_params.empty() ? &alkt_dropped : nullptr));
+      // The tagger indexes its alphabet with 8 bits; the five alternatives
+      // must not push a large -variable_modifications list past it.
+      if (FASTag::AlkylationTags::alphabetSize(alkt_params.front().mods) > 255)
+      {
+        OPENMS_LOG_ERROR << "-alkylation_tags_out: the variable modifications and the five C alternatives make more "
+                            "than 255 residue entries; give fewer -variable_modifications." << std::endl;
+        return ILLEGAL_PARAMETERS;
+      }
       alkt_tables.reserve(alkt_params.size());
       for (const FASTag::Param& lp : alkt_params) alkt_tables.emplace_back(lp);
     }
@@ -5427,8 +5435,10 @@ protected:
       FASTag::Alkylation::Settings as;
       as.min_spectra = static_cast<std::uint64_t>(getIntOption_("alkylation_min_spectra"));
       as.min_share = getDoubleOption_("alkylation_min_share");
-      const FASTag::Alkylation::Call call = FASTag::Alkylation::callAlkylation(at.asAlkylationTally(alkt_cands), as);
+      const double tol_da = FASTag::AlkylationTags::edgeToleranceDa(len_params.front());
+      const FASTag::Alkylation::Call call = FASTag::AlkylationTags::callTags(at, as, alkt_cands, tol_da);
       FASTag::AlkylationTags::ReportInfo info;
+      info.tol_da = tol_da;
       info.dropped = alkt_dropped;
       for (int L : lengths) info.lengths += (info.lengths.empty() ? "" : ",") + std::to_string(L);
       std::vector<FD::Row> rows = FASTag::RunReport::runRows(run_meta, FASTag::RunReport::Emit::Versioned);

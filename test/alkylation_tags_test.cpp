@@ -20,6 +20,7 @@
 #include <OpenMS/KERNEL/MSExperiment.h>
 #include <OpenMS/METADATA/Precursor.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -58,7 +59,9 @@ static int writeMzml(const std::string& out, const std::string& form, int n)
     for (const char* pep : kPeptides)
     {
       if (scan >= n) break;
-      ComplementSynth::Spec s = ComplementSynth::make(withForm(pep, form), 2, false, 0, 0.0, 20, 1000u + static_cast<unsigned>(scan));
+      // "mixed": two of three spectra Carbamidomethyl, one Nethylmaleimide.
+      const std::string f = form != "mixed" ? form : (scan % 3 == 2 ? "Nethylmaleimide" : "Carbamidomethyl");
+      ComplementSynth::Spec s = ComplementSynth::make(withForm(pep, f), 2, false, 0, 0.0, 20, 1000u + static_cast<unsigned>(scan));
       OpenMS::MSSpectrum sp = s.spec;
       sp.setMSLevel(2);
       sp.setRT(10.0 + scan);
@@ -76,12 +79,13 @@ static int writeMzml(const std::string& out, const std::string& form, int n)
   return 0;
 }
 
-static FASTag::Tag tag(const std::string& seq, double e, bool gapped = false)
+static FASTag::Tag tag(const std::string& seq, double e, bool gapped = false, int charge = 1)
 {
   FASTag::Tag t;
   t.seq = seq;
   t.evalue = e;
   t.gapped = gapped;
+  t.charge = charge;
   return t;
 }
 
@@ -129,6 +133,14 @@ int main(int argc, char** argv)
     check(sp.max_gaps == 0, "shadow pass has no gap edges");
     check(sp.ion_pair.kind == FASTag::IonSeries::Series::BY, "shadow pass reads b/y");
     check(sp.tag_length == p.tag_length && sp.frag_tol == p.frag_tol, "shadow pass keeps length and tolerance");
+    p.max_tag_count = 1;
+    p.max_evalue = 0.1;
+    p.diversity = true;
+    const FASTag::Param sq = AT::shadowParam(p, cands);
+    check(sq.max_tag_count == 0 && sq.max_evalue == 1.0 && !sq.diversity,
+          "shadow pass ignores the run's -max_tags, -max_evalue and -diversity");
+    check(AT::alphabetSize({}) == 19, "19 base residues");
+    check(AT::alphabetSize(sq.mods) == 19 + 1 + 5, "M oxidation and five C alternatives");
   }
 
   // ---- formsInTag
@@ -176,6 +188,54 @@ int main(int argc, char** argv)
     u.merge(t);
     u.merge(t);
     check(u.spectra == 4 && u.votes[0] == 2 && u.residues[0] == 4 && u.conflict == 2, "merge sums");
+
+    // equal E-values: another form makes a conflict, the same form does not
+    AT::Tally e;
+    AT::Vote a, b, c2;
+    e.addTag(a, tag("LC[Propionamide]EK", 0.1), cands);
+    e.addTag(a, tag("VC[Carbamidomethyl]EK", 0.1), cands);
+    e.addSpectrum(a);
+    check(e.conflict == 1 && e.votes[0] == 0 && e.votes[1] == 0, "tied tags of two forms are a conflict");
+    e.addTag(b, tag("LC[Carbamidomethyl]EK", 0.1), cands);
+    e.addTag(b, tag("C[Carbamidomethyl]VEK", 0.1), cands);
+    e.addSpectrum(b);
+    check(e.votes[0] == 1 && e.conflict == 1, "tied tags of one form vote that form");
+    e.addTag(c2, tag("LC[Propionamide]EK", 0.1), cands);
+    e.addTag(c2, tag("VC[Carbamidomethyl]EK", 0.1), cands);
+    e.addTag(c2, tag("C[Nethylmaleimide]VEK", 0.01), cands);  // a strictly better tag decides
+    e.addSpectrum(c2);
+    check(e.votes[2] == 1 && e.conflict == 1, "a better tag replaces a tied conflict");
+    // fragment charge 2 and more: not counted
+    AT::Tally z;
+    AT::Vote zv;
+    z.addTag(zv, tag("C[Propionamide]C[Propionamide]C[Propionamide]", 0.001, false, 2), cands);
+    z.addSpectrum(zv);
+    check(z.tags == 0 && z.tags_multi == 1 && z.spectra == 0, "a 2+ tag does not vote");
+  }
+
+  // ---- resolution and aliases
+  {
+    check(AT::formsResolved(cands, 0.02) && AT::formsResolved(cands, 0.3), "forms resolved at 0.02 and 0.3 Da");
+    check(!AT::formsResolved(cands, 0.5), "CAM and Carboxymethyl (0.984 Da apart) unresolved at 0.5 Da");
+    FASTag::Param pp;
+    check(std::fabs(AT::edgeToleranceDa(pp) - 0.02) < 1e-12, "20 ppm is 0.02 Da at 1000 m/z");
+    pp.tol_ppm = false;
+    pp.frag_tol = 0.5;
+    check(AT::edgeToleranceDa(pp) == 0.5, "a Da tolerance is itself");
+    const auto al = AT::aliases(cands, 0.02);
+    check(al[0].rfind("C+G:0.0000", 0) == 0, "CAM's first alias is C+G at 0: " + al[0]);
+    check(al[1].find("A+C:0.0000") != std::string::npos && al[1].find("S+S:0.0178") != std::string::npos,
+          "Propionamide aliases A+C and S+S: " + al[1]);
+    check(al[2].find("N+N:0.0290") != std::string::npos && al[2].find("M+P:0.0364") != std::string::npos,
+          "Nethylmaleimide aliases N+N and M+P: " + al[2]);
+    check(al[3] == "-" && al[4] == "-", "Methylthio and Carboxymethyl have no alias at 0.02 Da: " + al[3] + " " + al[4]);
+    AT::Tally t;
+    t.spectra = 30;
+    t.votes[0] = 30;
+    A::Settings s;
+    check(AT::callTags(t, s, cands, 0.02).called, "30 CAM votes at 0.02 Da: call");
+    const A::Call c = AT::callTags(t, s, cands, 0.5);
+    check(!c.called && c.reason == "unresolved_forms", "30 CAM votes at 0.5 Da: unresolved_forms");
   }
 
   // ---- the call: #3g's rule over the six classes
@@ -278,6 +338,81 @@ int main(int argc, char** argv)
         check(r.votes[2] == 0, "the run alphabet spells no Nethylmaleimide C");
       }
     }
+  }
+
+  // ---- a 3+ precursor whose S ladder reads as 2+ C[Propionamide] (the
+  //      review's counterexample): the 2+ reading exists but does not vote
+  {
+    FASTag::Param run;
+    run.tag_length = 3;
+    run.max_extension = 0;
+    run.deisotope = false;
+    run.peaks_per_window = 0;
+    run.max_peak_count = 20;
+    const FASTag::Param sp = AT::shadowParam(run, cands);
+    const FASTag::Tables tabs(sp);
+    OpenMS::MSSpectrum s;
+    for (int i = 0; i < 16; ++i) s.emplace_back(100.0 + 0.1 * i, 1.0f);
+    for (double mz : {500.0, 587.032028435, 674.064056870, 761.096085305}) s.emplace_back(mz, 100.0f);
+    s.sortByPosition();
+    AT::Tally t;
+    bool saw_2plus_prop = false;
+    for (int rep = 0; rep < 10; ++rep)
+    {
+      AT::Vote v;
+      for (const FASTag::Tag& tg : FASTag::tagSpectrum(s, 800.0, 3, sp, tabs))
+      {
+        if (tg.charge == 2 && tg.seq.find("C[Propionamide]") != std::string::npos && tg.evalue <= 1.0) saw_2plus_prop = true;
+        t.addTag(v, tg, cands);
+      }
+      t.addSpectrum(v);
+    }
+    check(saw_2plus_prop, "the 2+ C[Propionamide] reading of the S ladder exists (the test is live)");
+    check(t.votes[1] == 0, "no Propionamide vote from the 1+ S ladder");
+    check(!A::callAlkylation(t.asAlkylationTally(cands), A::Settings{}).called, "no call from the S ladder");
+  }
+
+  // ---- negative control: peptides without C give no vote and no call;
+  //      3+ precursors with 2+ y ions still call CAM
+  {
+    FASTag::Param run;
+    run.tag_length = 3;
+    run.mods = {{'C', cands[0].mass, "Carbamidomethyl", false}};
+    const FASTag::Param sp = AT::shadowParam(run, cands);
+    const FASTag::Tables tabs(sp);
+    AT::Tally none, z3;
+    unsigned seed = 50;
+    for (const char* pep : kPeptides)
+    {
+      std::string nc = pep;
+      nc[nc.find('C')] = 'S';
+      const ComplementSynth::Spec s = ComplementSynth::make(nc, 2, false, 0, 0.0, 20, seed++);
+      AT::Vote v;
+      for (const FASTag::Tag& tg : FASTag::tagSpectrum(s.spec, s.prec_mz, 2, sp, tabs))
+      {
+        if (std::getenv("ALKT_DEBUG") && tg.seq.find('C') != std::string::npos && tg.evalue <= 1)
+          std::cerr << nc << " " << tg.seq << " z" << tg.charge << " E " << tg.evalue << "\n";
+        none.addTag(v, tg, cands);
+      }
+      none.addSpectrum(v);
+      const ComplementSynth::Spec s3 = ComplementSynth::make(withForm(pep, "Carbamidomethyl"), 3, true, 0, 0.0, 20, seed++);
+      AT::Vote w;
+      for (const FASTag::Tag& tg : FASTag::tagSpectrum(s3.spec, s3.prec_mz, 3, sp, tabs)) z3.addTag(w, tg, cands);
+      z3.addSpectrum(w);
+    }
+    // Random edges between noise peaks give a few weak (E 0.3-1) C votes even
+    // without a C (3 of 12 here, each a different form): far fewer than the
+    // 12 of 12 a C peptide set gives, and no call.
+    check(none.spectra <= 4, "C-free peptides: at most 4 of 12 vote (" + std::to_string(none.spectra) + ")");
+    std::uint64_t top = 0;
+    for (auto v : none.votes) top = std::max(top, v);
+    check(top <= 2, "C-free peptides: no form gets more than 2 votes");
+    check(!A::callAlkylation(none.asAlkylationTally(cands), A::Settings{}).called, "C-free peptides: no call");
+    A::Settings st;
+    st.min_spectra = 6;
+    const A::Call c3 = A::callAlkylation(z3.asAlkylationTally(cands), st);
+    check(c3.called && c3.cls == A::Carbamidomethyl,
+          "3+ CAM spectra: call " + (c3.called ? std::string(A::className(c3.cls)) : "no_call " + c3.reason));
   }
 
   if (failures)

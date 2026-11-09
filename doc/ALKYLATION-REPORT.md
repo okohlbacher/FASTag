@@ -195,8 +195,10 @@ itself.
 
 Backlog #22, src/AlkylationTags.h. This report gives the same call without a
 protein database. It is opt-in and experimental. With the option off nothing
-runs and no output changes. With it on, the tag TSV and every other output are
-byte-identical.
+runs and no output changes. With it on, the tag TSV and every other result file
+are byte-identical, with two exceptions: the log gains one line, and an
+`-out_spectra` mzML records `parameter: alkylation_tags_out`, as it records
+every option that is not at its default.
 
 **Method.** Each MS2 spectrum (its selected precursor hypothesis, b/y) is
 tagged a second time. That pass writes no tags. Its settings are the run's
@@ -206,17 +208,33 @@ Param, with these changes:
 - five variable alternatives are added: `C[Carbamidomethyl]`,
   `C[Propionamide]`, `C[Nethylmaleimide]`, `C[Methylthio]`,
   `C[Carboxymethyl]`, with masses from OpenMS ModificationsDB;
-- there are no gap edges.
+- there are no gap edges;
+- every tag with E <= 1 is kept: the run's `-max_tags`, `-max_evalue` and
+  `-diversity` select output rows only, and the second pass writes none.
 
-A tag counts when it is ungapped with E <= 1 and holds a C. Each spectrum
-votes once, with its best counted tag:
+A tag counts when it is ungapped, has E <= 1, was read at fragment charge 1
+and holds a C. Fragment charge 2 is left out because C[Propionamide]/2 lies
+0.009 Th from a singly charged S, so a 1+ S ladder also reads as a 2+
+Propionamide ladder. Each spectrum votes once, with its best counted tag:
 - for the form that all of the tag's C residues share;
-- otherwise as a conflict.
+- as a conflict when the tag's C residues have two forms;
+- as a conflict when another tag of equal E-value has another form.
+
+Conflicts are not in the share.
 
 The call is #3g's rule over six classes: the five reagents, and `none` for
 unmodified C. The leading class needs `-alkylation_min_spectra` votes and a
-share of `-alkylation_min_share` of the votes. Oxidised, cysteinylated and
-dehydroalanine Cys are not candidates here.
+share of `-alkylation_min_share` of the votes. One more rule comes first:
+when two candidate C masses lie within twice the edge tolerance of each
+other, there is no call (`unresolved_forms`). The edge tolerance is the
+fragment tolerance in Da, or the ppm tolerance at 1000 m/z.
+Carbamidomethyl and Carboxymethyl are 0.984 Da apart, so a 0.5 Da run
+cannot tell them apart; a 0.3 Da or ppm run can. Oxidised, cysteinylated
+and dehydroalanine Cys are not candidates here.
+
+**Background votes.** Random edges between noise peaks give weak C votes
+(E 0.3 to 1) even in spectra without a C. In the unit test, 3 of 12 synthetic
+C-free spectra with 20 noise peaks vote, each for a different form.
 
 **Confounds (not corrected).** A single edge equals a two-residue sum when the
 peak between the two residues is missing:
@@ -225,7 +243,10 @@ peak between the two residues is missing:
 - C[Nethylmaleimide] is 0.029 Da from N + N and 0.036 Da from M + P.
 
 So in an unalkylated sample, GC/CG and AC/CA with a missing peak vote
-Carbamidomethyl or Propionamide.
+Carbamidomethyl or Propionamide. The report lists every such twin within
+twice the run's edge tolerance (`alias.<form>`). At 20 ppm the list also
+holds S + S for C[Propionamide] (0.018 Da). At 0.5 Da it holds many more
+pairs.
 
 **Cost.** One more tagging of every MS2 spectrum. The alphabet has five more
 residues and no gap edges.
@@ -243,13 +264,15 @@ gui/src/digestReport.ts names none of its sections and refuses it.
 | `forms` | the six candidate forms, comma-separated (n: 6) |
 | `c_mods_removed` | the run's C modifications that the second pass leaves out, as `Name (fixed)` / `Name (variable)`, or `-` |
 | `tag_lengths` | the seed lengths |
-| `spectra_tagged` | MS2 spectra the second pass tagged |
+| `spectra_tagged` | MS2 spectra with peaks and a precursor that the second pass was run on (an attempt count: some give no tag) |
 | `spectra_cz` | MS2 spectra read as c/z (`-ion_series`); not shadow-tagged |
-| `tags` | counted shadow tags (ungapped, E <= 1) |
+| `tags` | counted shadow tags (ungapped, E <= 1, fragment charge 1) |
+| `tags_multi` | ungapped E <= 1 shadow tags at fragment charge 2 or more, not counted |
 | `tags_with_c` | of them, tags with a C (n: `tags`) |
 | `spectra` | spectra with a vote (n: `spectra_tagged`) |
 | `min_spectra`, `min_share` | the call thresholds |
-| `confounds` | the twin masses above |
+| `edge_tolerance` | the edge tolerance in Da |
+| `forms_resolved` | `yes`, or `no` when two forms lie within twice the edge tolerance (then no call) |
 
 ### `alkt_form`
 
@@ -257,12 +280,13 @@ gui/src/digestReport.ts names none of its sections and refuses it.
 |---|---|
 | `<form>`, six rows in the order of `forms` | votes for the form (n: votes without conflicts) |
 | `residues.<form>` | C residues of the form in all counted tags (n: all C residues) |
+| `alias.<form>` | two-residue sums within twice the edge tolerance of the C form (`C+G:0.0000`, comma-separated), or `-` |
 | `conflict` | votes whose tag holds two forms (n: `spectra`) |
 
 ### `alkylation_tags_call`
 
 `status` (`call` / `no_call`), `reagent`, `mass`, `share`, `reason`
-(`-`, `few_cys_spectra` or `ambiguous`). These are the rows of `alkylation_call`,
+(`-`, `unresolved_forms`, `few_cys_spectra` or `ambiguous`). These are the rows of `alkylation_call`,
 with the votes in place of the binned spectra.
 
 | option | default | |

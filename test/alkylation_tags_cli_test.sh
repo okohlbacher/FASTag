@@ -19,17 +19,19 @@ fi
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/fastag-alkt-test.XXXXXX") || exit 1
 trap 'rm -rf "$TMP"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
+# same EXPECTED ACTUAL MESSAGE: byte for byte (both written by this binary on this platform)
 same() {
-  tr -d '\r' < "$1" > "$1.lf" && tr -d '\r' < "$2" > "$2.lf" || fail "cannot read $1 or $2"
-  cmp -s "$1.lf" "$2.lf" && return
-  diff "$1.lf" "$2.lf" | head -8 | sed -n l >&2
+  cmp -s "$1" "$2" && return
+  diff "$1" "$2" | head -8 | sed -n l >&2
   fail "$3"
 }
+# the alkylation sections only (the run rows name the input and the version)
+alk() { tr -d '\r' < "$1" | awk -F'\t' '$1 != "run"'; }
 run() { "$BIN" -threads 2 "$@" > "$TMP/log" 2>&1 || { cat "$TMP/log" >&2; fail "FASTag $*"; }; }
 val() { tr -d '\r' < "$1" | awk -F'\t' -v s="$2" -v k="$3" '$1 == s && $2 == k { print $3; exit }'; }
 call() { if [ "$(val "$1" alkylation_tags_call status)" = call ]; then val "$1" alkylation_tags_call reagent; else echo "no_call:$(val "$1" alkylation_tags_call reason)"; fi; }
 
-for f in Carbamidomethyl Nethylmaleimide unmodified; do
+for f in Carbamidomethyl Nethylmaleimide unmodified mixed; do
   "$GEN" --write-mzml "$TMP/$f.mzML" "$f" 60 || fail "cannot write the synthetic $f mzML"
 done
 COMMON=(-tag_length 3 -fragment_tolerance 20 -fragment_tolerance_unit ppm)
@@ -70,6 +72,33 @@ spectra=$(val "$R" alkt_run spectra)
 [ "$votes" -ge 30 ] || fail "only $votes CAM votes of 60 spectra"
 [ "$spectra" -le "$(val "$R" alkt_run spectra_tagged)" ] || fail "more voting spectra than tagged"
 [ "$(val "$R" alkt_run spectra_tagged)" = 60 ] || fail "spectra_tagged is not 60"
+
+# ---- the report does not depend on the thread count or on the run's output selection
+"$BIN" -threads 1 -in "$TMP/Carbamidomethyl.mzML" -out "$TMP/t1.tsv" "${COMMON[@]}" -alkylation_tags_out "$TMP/t1.alkt.tsv" >"$TMP/log" 2>&1 \
+  || { cat "$TMP/log" >&2; fail "-threads 1"; }
+"$BIN" -threads 4 -in "$TMP/Carbamidomethyl.mzML" -out "$TMP/t4.tsv" "${COMMON[@]}" -alkylation_tags_out "$TMP/t4.alkt.tsv" >"$TMP/log" 2>&1 \
+  || { cat "$TMP/log" >&2; fail "-threads 4"; }
+alk "$TMP/t1.alkt.tsv" > "$TMP/t1.alk"; alk "$TMP/t4.alkt.tsv" > "$TMP/t4.alk"; alk "$R" > "$TMP/t2.alk"
+same "$TMP/t1.alk" "$TMP/t4.alk" "the report differs between 1 and 4 threads"
+same "$TMP/t1.alk" "$TMP/t2.alk" "the report differs between 1 and 2 threads"
+run -in "$TMP/Carbamidomethyl.mzML" -out "$TMP/cap.tsv" "${COMMON[@]}" -max_tags 1 -max_evalue 0.01 -alkylation_tags_out "$TMP/cap.alkt.tsv"
+alk "$TMP/cap.alkt.tsv" > "$TMP/cap.alk"
+same "$TMP/t1.alk" "$TMP/cap.alk" "-max_tags/-max_evalue changed the alkylation report"
+
+# ---- -alkylation_min_share applies (two thirds CAM, one third NEM)
+run -in "$TMP/mixed.mzML" -out "$TMP/mx.tsv" "${COMMON[@]}" -alkylation_tags_out "$TMP/mx.alkt.tsv"
+[ "$(call "$TMP/mx.alkt.tsv")" = Carbamidomethyl ] || fail "mixed (2:1) spectra: call $(call "$TMP/mx.alkt.tsv")"
+run -in "$TMP/mixed.mzML" -out "$TMP/mx2.tsv" "${COMMON[@]}" -alkylation_tags_out "$TMP/mx2.alkt.tsv" -alkylation_min_share 0.9
+[ "$(call "$TMP/mx2.alkt.tsv")" = "no_call:ambiguous" ] || fail "mixed with -alkylation_min_share 0.9: $(call "$TMP/mx2.alkt.tsv")"
+grep -q -- "-alkylation_min_share is only read for" "$TMP/log" && fail "warned about -alkylation_min_share with -alkylation_tags_out"
+
+# ---- a 0.5 Da run cannot resolve CAM from Carboxymethyl: no call
+run -in "$TMP/Carbamidomethyl.mzML" -out "$TMP/da.tsv" -tag_length 3 -fragment_tolerance 0.5 -fragment_tolerance_unit Da \
+  -alkylation_tags_out "$TMP/da.alkt.tsv"
+[ "$(call "$TMP/da.alkt.tsv")" = "no_call:unresolved_forms" ] || fail "0.5 Da: $(call "$TMP/da.alkt.tsv")"
+[ "$(val "$TMP/da.alkt.tsv" alkt_run forms_resolved)" = no ] || fail "0.5 Da: forms_resolved is not no"
+[ "$(val "$R" alkt_run forms_resolved)" = yes ] || fail "20 ppm: forms_resolved is not yes"
+val "$R" alkt_form alias.Propionamide | grep -q "S+S" || fail "20 ppm: S+S is not an alias of Propionamide"
 
 # ---- -alkylation_min_spectra applies
 run -in "$TMP/Carbamidomethyl.mzML" -out "$TMP/ms.tsv" "${COMMON[@]}" -alkylation_tags_out "$TMP/ms.alkt.tsv" \

@@ -881,9 +881,13 @@ options and their values.
   data) makes the same call without a database. A second tagging pass, whose
   tags are not written, drops the run's C modifications. It spells C as
   unmodified or as `C[<reagent>]` for the five reagents. Each MS2 spectrum
-  votes once with its best ungapped tag (E <= 1) that holds a C. There are known
-  confounds: C[Carbamidomethyl] = G + C and C[Propionamide] = A + C when the
-  peak between them is missing. The pass costs about one more tagging run.
+  votes once with its best ungapped 1+ tag (E <= 1) that holds a C; tied
+  tags of two forms are a conflict. A tolerance that cannot separate
+  Carbamidomethyl from Carboxymethyl (0.984 Da apart, so 0.5 Da) gives no
+  call (`unresolved_forms`). There are known confounds:
+  C[Carbamidomethyl] = G + C and C[Propionamide] = A + C when the peak
+  between them is missing. The report lists the twins within the run's
+  tolerance. The pass costs about one more tagging run.
   Sections `alkt_run`, `alkt_form` and `alkylation_tags_call`.
 
 The `-digest_out` options of 1.12 (`-digest_models_version v2`,

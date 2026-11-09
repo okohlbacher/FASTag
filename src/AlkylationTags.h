@@ -8,20 +8,29 @@
 // (103.009), plus one variable alternative per reagent form of
 // Alkylation::forms() (Carbamidomethyl, Propionamide, Nethylmaleimide,
 // Methylthio, Carboxymethyl). The tagger spells such an edge C[Name]. The
-// shadow pass has no gap edges (max_gaps 0) and reads b/y only.
+// shadow pass has no gap edges (max_gaps 0), reads b/y only, and keeps
+// every tag with E <= 1 (no -max_tags cap, no -diversity, its own E cutoff
+// 1), so the run's output selection does not censor the votes.
 //
 // A shadow tag counts when it is ungapped with E <= 1
-// (Alkylation::countsTag) and holds at least one C. Each spectrum votes
-// once, with its best (lowest E-value) counted tag: for the form all its C
-// residues share, else as a conflict. The call is #3g's rule
-// (Alkylation::callAlkylation) over the six classes (five reagents and
-// none = unmodified C).
+// (Alkylation::countsTag), was read at fragment charge 1 and holds at least
+// one C. Fragment charge 2 is left out: C[Propionamide]/2 lies 0.009 Th from
+// a singly charged S, so a 1+ S ladder also reads as a 2+ Propionamide one.
+// Each spectrum votes once, with its best (lowest E-value) counted tag: for
+// the form all its C residues share, else as a conflict; a tag of equal
+// E-value with another form also makes the vote a conflict. The call is
+// #3g's rule (Alkylation::callAlkylation) over the six classes (five
+// reagents and none = unmodified C), plus one rule of its own: no call
+// (unresolved_forms) when two candidate C masses lie within twice the edge
+// tolerance of each other (CAM and Carboxymethyl are 0.984 Da apart, so a
+// 0.5 Da run cannot tell them).
 //
 // Known confounds, reported and not corrected: an ordinary edge can equal a
 // two-residue sum when the peak between them is missing. C[Carbamidomethyl]
 // is G + C exactly (C2H3NO is the Gly residue), C[Propionamide] is A + C
-// exactly, C[Nethylmaleimide] lies 0.029 Da from N + N and 0.036 Da from
-// M + P. Unmodified C, Methylthio and Carboxymethyl have no such twin.
+// exactly (and 0.018 Da from S + S), C[Nethylmaleimide] lies 0.029 Da from
+// N + N and 0.036 Da from M + P. The report lists the twins within the
+// run's tolerance (aliases()).
 //
 // Opt-in and not validated on held-out data (doc/ALKYLATION-REPORT.md,
 // section "-alkylation_tags_out").
@@ -61,7 +70,8 @@ namespace FASTag::AlkylationTags
                                   const std::vector<Alkylation::Form>& cands,
                                   std::vector<std::string>* dropped = nullptr);
 
-  /// The shadow Param of a run Param: shadowMods(), no gap edges, b/y.
+  /// The shadow Param of a run Param: shadowMods(), no gap edges, b/y, no
+  /// tag cap, no diversity, E cutoff 1.
   Param shadowParam(const Param& run, const std::vector<Alkylation::Form>& cands,
                     std::vector<std::string>* dropped = nullptr);
 
@@ -80,11 +90,29 @@ namespace FASTag::AlkylationTags
     int form = -1;  ///< candidate index (no conflict)
   };
 
+  /// The number of alphabet entries the tagger builds for @p mods (19 base
+  /// residues plus one per variable modification on a base residue); the
+  /// tagger indexes them with 8 bits, so a Param needs at most 255.
+  std::size_t alphabetSize(const std::vector<ModSpec>& mods);
+
+  /// The edge tolerance in Da the report reasons with: the fragment
+  /// tolerance, or in ppm at 1000 m/z.
+  double edgeToleranceDa(const Param& p);
+
+  /// Whether every two candidate C masses are more than 2 * @p tol_da apart.
+  bool formsResolved(const std::vector<Alkylation::Form>& cands, double tol_da);
+
+  /// Per candidate, the two-residue sums (unmodified base residues, I as L)
+  /// within 2 * @p tol_da of the candidate's C mass: "G+C:0.0000" entries,
+  /// comma-separated, "-" when none.
+  std::vector<std::string> aliases(const std::vector<Alkylation::Form>& cands, double tol_da);
+
   struct Tally
   {
     std::uint64_t spectra_tagged = 0;  ///< spectra the shadow pass tagged
     std::uint64_t spectra_cz = 0;      ///< spectra read as c/z, not shadow-tagged
-    std::uint64_t tags = 0;            ///< counted shadow tags (ungapped, E <= 1)
+    std::uint64_t tags = 0;            ///< counted shadow tags (ungapped, E <= 1, fragment charge 1)
+    std::uint64_t tags_multi = 0;      ///< ungapped E <= 1 shadow tags at fragment charge >= 2, not counted
     std::uint64_t tags_with_c = 0;     ///< of those, tags with a C
     std::uint64_t spectra = 0;         ///< spectra with a vote
     std::uint64_t conflict = 0;        ///< votes whose tag holds two forms
@@ -107,7 +135,13 @@ namespace FASTag::AlkylationTags
   {
     std::vector<std::string> dropped;  ///< C modifications the shadow pass took out
     std::string lengths;               ///< seed lengths, "4" or "3,4"
+    double tol_da = 0.0;               ///< edgeToleranceDa() of the run
   };
+
+  /// #3g's call over the votes, then no_call unresolved_forms when the
+  /// candidates are not resolved at @p tol_da (formsResolved()).
+  Alkylation::Call callTags(const Tally& t, const Alkylation::Settings& s,
+                            const std::vector<Alkylation::Form>& cands, double tol_da);
 
   /// The alkt_run, alkt_form and alkylation_tags_call rows of -alkylation_tags_out.
   std::vector<Digest::Row> rows(const Tally& t, const Alkylation::Call& c, const Alkylation::Settings& s,

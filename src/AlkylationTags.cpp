@@ -3,6 +3,11 @@
 
 #include "AlkylationTags.h"
 
+#include <OpenMS/CHEMISTRY/Residue.h>
+#include <OpenMS/CHEMISTRY/ResidueDB.h>
+
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <stdexcept>
 
@@ -39,7 +44,79 @@ namespace FASTag::AlkylationTags
     p.mods = shadowMods(run.mods, cands, dropped);
     p.max_gaps = 0;
     p.ion_pair = IonSeries::ionPair(IonSeries::Series::BY);
+    // Every tag a vote can use (E <= 1): the run's -max_tags, -max_evalue and
+    // -diversity select output rows, which these tags never are.
+    p.max_tag_count = 0;
+    p.max_evalue = 1.0;
+    p.diversity = false;
     return p;
+  }
+
+  std::size_t alphabetSize(const std::vector<ModSpec>& mods)
+  {
+    std::size_t n = 0;
+    std::string base;
+    for (const OpenMS::Residue* r : OpenMS::ResidueDB::getInstance()->getResidues("Natural19WithoutI"))
+      base.push_back(r->getOneLetterCode()[0]);
+    n = base.size();
+    for (const ModSpec& m : mods)
+      if (m.variable && base.find(m.residue) != std::string::npos) ++n;
+    return n;
+  }
+
+  double edgeToleranceDa(const Param& p) { return p.tol_ppm ? 1000.0 * p.frag_tol * 1e-6 : p.frag_tol; }
+
+  bool formsResolved(const std::vector<Alkylation::Form>& cands, double tol_da)
+  {
+    for (std::size_t i = 0; i < cands.size(); ++i)
+      for (std::size_t j = i + 1; j < cands.size(); ++j)
+        if (std::fabs(cands[i].mass - cands[j].mass) <= 2.0 * tol_da) return false;
+    return true;
+  }
+
+  std::vector<std::string> aliases(const std::vector<Alkylation::Form>& cands, double tol_da)
+  {
+    std::vector<std::pair<char, double>> res;
+    for (const OpenMS::Residue* r : OpenMS::ResidueDB::getInstance()->getResidues("Natural19WithoutI"))
+      res.emplace_back(r->getOneLetterCode()[0], r->getMonoWeight(OpenMS::Residue::Internal));
+    std::sort(res.begin(), res.end());
+    double c = 0.0;
+    for (const auto& [k, m] : res)
+      if (k == 'C') c = m;
+    std::vector<std::string> out;
+    for (const auto& f : cands)
+    {
+      const double target = c + f.mass;
+      std::vector<std::pair<double, std::string>> hits;
+      for (std::size_t i = 0; i < res.size(); ++i)
+        for (std::size_t j = i; j < res.size(); ++j)
+        {
+          const double d = std::fabs(res[i].second + res[j].second - target);
+          if (d <= 2.0 * tol_da) hits.emplace_back(d, std::string(1, res[i].first) + "+" + std::string(1, res[j].first));
+        }
+      std::sort(hits.begin(), hits.end());
+      std::string v;
+      for (const auto& [d, name] : hits)
+      {
+        char b[32];
+        std::snprintf(b, sizeof b, ":%.4f", d);
+        v += (v.empty() ? "" : ",") + name + b;
+      }
+      out.push_back(v.empty() ? "-" : v);
+    }
+    return out;
+  }
+
+  Alkylation::Call callTags(const Tally& t, const Alkylation::Settings& s, const std::vector<Alkylation::Form>& cands,
+                            double tol_da)
+  {
+    Alkylation::Call c = Alkylation::callAlkylation(t.asAlkylationTally(cands), s);
+    if (!formsResolved(cands, tol_da))
+    {
+      c.called = false;
+      c.reason = "unresolved_forms";
+    }
+    return c;
   }
 
   std::array<std::uint32_t, kNumCandidates> formsInTag(const std::string& seq, const std::vector<Alkylation::Form>& cands)
@@ -73,6 +150,11 @@ namespace FASTag::AlkylationTags
   void Tally::addTag(Vote& v, const Tag& t, const std::vector<Alkylation::Form>& cands)
   {
     if (!Alkylation::countsTag(t.gapped, t.evalue)) return;
+    if (t.charge != 1)
+    {
+      ++tags_multi;
+      return;
+    }
     ++tags;
     const auto n = formsInTag(t.seq, cands);
     int form = -1, kinds = 0;
@@ -85,6 +167,16 @@ namespace FASTag::AlkylationTags
       }
     if (kinds == 0) return;
     ++tags_with_c;
+    if (v.have && t.evalue == v.evalue)
+    {
+      // An equal E-value with another form: the evidence does not decide.
+      if (kinds > 1 || v.conflict || form != v.form)
+      {
+        v.conflict = true;
+        v.form = -1;
+      }
+      return;
+    }
     if (v.have && !(t.evalue < v.evalue)) return;
     v.have = true;
     v.evalue = t.evalue;
@@ -106,6 +198,7 @@ namespace FASTag::AlkylationTags
     spectra_tagged += o.spectra_tagged;
     spectra_cz += o.spectra_cz;
     tags += o.tags;
+    tags_multi += o.tags_multi;
     tags_with_c += o.tags_with_c;
     spectra += o.spectra;
     conflict += o.conflict;
@@ -162,18 +255,27 @@ namespace FASTag::AlkylationTags
                         : "The shadow pass leaves out the run's C modifications: " + dropped + ".");
     add("alkt_run", "tag_lengths", info.lengths.empty() ? "-" : info.lengths, "-",
         "The shadow pass uses the run's seed lengths, extension and tolerances, without gap edges.");
-    add("alkt_run", "spectra_tagged", u(t.spectra_tagged), "-", u(t.spectra_tagged) + " MS2 spectra were shadow-tagged (b/y).");
+    add("alkt_run", "spectra_tagged", u(t.spectra_tagged), "-",
+        u(t.spectra_tagged) + " MS2 spectra with peaks and a precursor were shadow-tagged (b/y); some may give no tag.");
     add("alkt_run", "spectra_cz", u(t.spectra_cz), "-",
         u(t.spectra_cz) + " MS2 spectra were read as c/z and are not shadow-tagged.");
-    add("alkt_run", "tags", u(t.tags), "-", u(t.tags) + " shadow tags are ungapped with an E-value of at most 1.");
+    add("alkt_run", "tags", u(t.tags), "-",
+        u(t.tags) + " shadow tags are ungapped with an E-value of at most 1, read at fragment charge 1.");
+    add("alkt_run", "tags_multi", u(t.tags_multi), "-",
+        u(t.tags_multi) + " such tags read at fragment charge 2 or more are not counted (C[Propionamide]/2 reads like S).");
     add("alkt_run", "tags_with_c", u(t.tags_with_c), u(t.tags), u(t.tags_with_c) + " of them hold a C.");
     add("alkt_run", "spectra", u(t.spectra), u(t.spectra_tagged),
         u(t.spectra) + " spectra have such a tag; each votes once, with its best one.");
     add("alkt_run", "min_spectra", u(s.min_spectra), "-",
         "A call needs " + u(s.min_spectra) + " votes in total and for the called class.");
     add("alkt_run", "min_share", num(s.min_share), "-", "A call needs a share of " + num(s.min_share) + " of the votes.");
-    add("alkt_run", "confounds", "Carbamidomethyl=G+C,Propionamide=A+C,Nethylmaleimide~N+N|M+P", "-",
-        "A C edge of these forms equals (or nearly equals) two residues whose middle peak is missing; such votes are not corrected.");
+    add("alkt_run", "edge_tolerance", num(info.tol_da), "-",
+        "The report reasons with an edge tolerance of " + num(info.tol_da) +
+            " Da (the fragment tolerance, or in ppm at 1000 m/z).");
+    const bool resolved = formsResolved(cands, info.tol_da);
+    add("alkt_run", "forms_resolved", resolved ? "yes" : "no", "-",
+        resolved ? "Every two C forms are more than twice the edge tolerance apart."
+                 : "Two C forms lie within twice the edge tolerance (Carbamidomethyl and Carboxymethyl are 0.984 Da apart): no call is made.");
 
     // ---- alkt_form
     std::uint64_t binned = 0;
@@ -193,8 +295,17 @@ namespace FASTag::AlkylationTags
       add("alkt_form", "residues." + f.name, u(t.residues[static_cast<std::size_t>(k)]), u(res_all),
           u(t.residues[static_cast<std::size_t>(k)]) + " of " + u(res_all) + " C residues in counted tags are " + f.name + ".");
     }
+    const std::vector<std::string> al = aliases(cands, info.tol_da);
+    for (int k = 0; k < kNumCandidates; ++k)
+    {
+      const auto& f = cands[static_cast<std::size_t>(k)];
+      add("alkt_form", "alias." + f.name, al[static_cast<std::size_t>(k)], "-",
+          al[static_cast<std::size_t>(k)] == "-"
+              ? "No two residues sum to C[" + f.name + "] within twice the edge tolerance."
+              : "Two residues whose middle peak is missing read like C[" + f.name + "] (pair:distance in Da); such votes are not corrected.");
+    }
     add("alkt_form", "conflict", u(t.conflict), u(t.spectra),
-        u(t.conflict) + " spectra have a best tag with C residues of two forms.");
+        u(t.conflict) + " spectra have a best tag (or tags of equal E-value) with C residues of two forms; they are not in the share.");
 
     // ---- alkylation_tags_call
     const std::string name = c.cls >= 0 ? Alkylation::className(c.cls) : "-";
@@ -217,7 +328,9 @@ namespace FASTag::AlkylationTags
     else
     {
       add(sec, "status", "no_call", u(c.binned),
-          c.reason == "few_cys_spectra"
+          c.reason == "unresolved_forms"
+              ? std::string("No alkylation is called: the fragment tolerance does not resolve the C forms.")
+          : c.reason == "few_cys_spectra"
               ? "No alkylation is called: " + u(c.binned) + " votes are fewer than " + u(s.min_spectra) + "."
               : "No alkylation is called: the leading class " + name + " has " + u(c.top) + " of " + u(c.binned) +
                     " votes, short of " + u(s.min_spectra) + " votes and a share of " + num(s.min_share) + " (or tied).");
