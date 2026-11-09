@@ -1,0 +1,4 @@
+cell	clusters	spectra	base_pct	cand_pct	diff	se	p2_5	p97_5	union_pct
+item11:DEV2ph:T1	0	0	nan	nan	nan	nan	nan	nan	nan
+item11:DEV2ph:T2	9362	12689	63.1177	63.1177	0.0000	0.0000	0.0000	0.0000	63.1177
+item11:DEV2ph:T2:50ms	9362	12689	63.1177	63.1177	0.0000	0.0000	0.0000	0.0000	63.1177

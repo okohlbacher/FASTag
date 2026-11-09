@@ -1,0 +1,12 @@
+== by
+28346 MS2 spectra, 843888 tags
+FASTAG_RC=0
+== ax
+28346 MS2 spectra, 774293 tags
+ 0 MS2 spectra tagged as c/z-dot ions, 0 as b/y ions, 28346 as a/x ions (activation: 28346 collisional, 0 electron, 0 hybrid, 0 unknown, of them 0 photodissociation).
+ 28346 of 28346 MS2 spectra were activated by collision (CID, HCD), electron transfer or capture (ETD, ECD) or a hybrid method, which yield b/y or c/z ions, but -ion_series ax reads every spectrum as a/x ions; use -ion_series auto -ion_series_photo ax to read only photodissociation spectra as a/x.
+FASTAG_RC=0
+== ph
+28346 MS2 spectra, 843888 tags
+ 0 MS2 spectra tagged as c/z-dot ions, 28346 as b/y ions, 0 as a/x ions (activation: 28346 collisional, 0 electron, 0 hybrid, 0 unknown, of them 0 photodissociation).
+FASTAG_RC=0

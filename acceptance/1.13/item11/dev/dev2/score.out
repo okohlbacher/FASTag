@@ -1,0 +1,4 @@
+item11:DEV2:T1	spectra 0	clusters 0	by nan	ax nan	diff +nan [+nan, +nan]	union nan
+item11:DEV2:T2	spectra 12689	clusters 9362	by 63.12	ax 0.32	diff -62.80 [-63.79, -61.86]	union 63.24
+item11:DEV2:T2:50ms	spectra 12689	clusters 9362	by 63.12	ax 0.32	diff -62.80 [-63.81, -61.93]	union 63.24
+chance (T1, shuffled peptides): {'by': nan, 'ax': nan}

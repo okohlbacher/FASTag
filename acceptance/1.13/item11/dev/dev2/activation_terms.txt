@@ -1,0 +1,2 @@
+  28346 accession="MS:1000045" name="collision energy"
+  28346 accession="MS:1000422" name="beam-type collision-induced dissociation"

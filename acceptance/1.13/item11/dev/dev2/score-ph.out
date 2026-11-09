@@ -1,0 +1,4 @@
+item11:DEV2ph:T1	spectra 0	clusters 0	by nan	ph nan	diff +nan [+nan, +nan]	union nan
+item11:DEV2ph:T2	spectra 12689	clusters 9362	by 63.12	ph 63.12	diff +0.00 [+0.00, +0.00]	union 63.12
+item11:DEV2ph:T2:50ms	spectra 12689	clusters 9362	by 63.12	ph 63.12	diff +0.00 [+0.00, +0.00]	union 63.12
+chance (T1, shuffled peptides): {'by': nan, 'ph': nan}

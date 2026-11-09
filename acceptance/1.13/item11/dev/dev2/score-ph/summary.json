@@ -1,0 +1,50 @@
+{
+ "split": "DEV2ph",
+ "base": "by",
+ "cand": "ph",
+ "cells": [
+  {
+   "cell": "item11:DEV2ph:T1",
+   "clusters": 0,
+   "spectra": 0,
+   "base_pct": NaN,
+   "cand_pct": NaN,
+   "diff": NaN,
+   "se": NaN,
+   "p2_5": NaN,
+   "p97_5": NaN,
+   "union_pct": NaN
+  },
+  {
+   "cell": "item11:DEV2ph:T2",
+   "clusters": 9362,
+   "spectra": 12689,
+   "base_pct": 63.11766096619119,
+   "cand_pct": 63.11766096619119,
+   "diff": 0.0,
+   "se": 0.0,
+   "p2_5": 0.0,
+   "p97_5": 0.0,
+   "union_pct": 63.11766096619119
+  }
+ ],
+ "chance_T1_pct": {
+  "by": NaN,
+  "ph": NaN
+ },
+ "provenance": {
+  "python": "3.11.15",
+  "numpy": "2.4.6",
+  "pandas": "3.0.6",
+  "acclib.py": "fe387a3455a52678f78c20c3156b63c251e08daa5b92da2f3e205d1d9ab2b1c1",
+  "score_item01.py": "25f48ea2b6b6730c49cd020350a9952d7026f27e40b8264d3a41b0e5fc22cb56",
+  "score_item02.py": "5704b8634c5a98f8993a4dccc4c331e6d84405dbf0b5dbaa42b523d68677e395",
+  "score_item03.py": "285df1d0dd70bf9d0411c35b45c354b5ec2ba16391008199ec6186d03e845848",
+  "score_item06.py": "7020e187e07588e2de3b77c6629cb8b1148392f23c2f37e24a1be3ef3bc04713",
+  "score_item07.py": "b135aa9b5b9db5af7507ab81b5abd3f770c30590af7542789e3ad7ac6b0b750e",
+  "score_item09.py": "b0ef694172e5bb64e0487233819d663389cac0c4c3c540549bf2f8eef88cd3ca",
+  "score_item15B.py": "1d91c8f42491c34249dd2c7b6c3d40b99947ab7fa47f7a869be8e575633e4b11",
+  "bench/fastag-bench/src/fastag_bench/score.py": "2130853fb32867a8b19b717df3e2aca308a17ce07b3bafbc8ec44034a6507a9b",
+  "bench/fastag-bench/src/fastag_bench/parsers.py": "01e27548bcae489d3f205960730c8bc36624e16935ea5df0bec5a6a04ea51f49"
+ }
+}
