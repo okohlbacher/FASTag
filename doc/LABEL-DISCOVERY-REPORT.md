@@ -68,7 +68,7 @@ and `reason cz_only`.
 | `tags_source` | `all`, or `fasta_filtered` with `-fasta` |
 | `low_resolution` | `yes` on a Da fragment tolerance |
 | `window_n` | the flat n half-window (Da), or `ppm` when it is w_n(M) = 3 sigma_ppm_n M (clamped to 0.0015-0.02 Da) |
-| `window_c` | the c half-window (Da) |
+| `window_c` | the c half-window (Da). An option value (`window_source_* option`) is used as given, not clamped; the options take at most 0.05 Da |
 | `window_source_n`, `window_source_c` | `estimated` (from >= 200 reference deviations), `default` (0.008 / 0.004 Da) or `option` |
 | `bin_da` | 0.0005 |
 | `max_flank_da`, `depth`, `min_spectra`, `min_share` | the options |

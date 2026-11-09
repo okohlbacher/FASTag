@@ -551,10 +551,11 @@
       "name": "label_discovery_max_flank",
       "type": "double",
       "default": "700.0",
-      "description": "Largest flank mass -label_discovery_out histograms, and the largest composition mass of its null image set (above 0)",
+      "description": "Largest flank mass -label_discovery_out histograms, and the largest composition mass of its null image set (above 0, at most 1500)",
       "required": false,
       "toppAdvanced": true,
-      "min": 0
+      "min": 0,
+      "max": 1500
     },
     {
       "name": "label_discovery_min_share",
@@ -599,19 +600,21 @@
       "name": "label_discovery_window_c",
       "type": "double",
       "default": "0.0",
-      "description": "Half-window of the C-terminal flank channel of -label_discovery_out; 0 = estimate it from the run",
+      "description": "Half-window of the C-terminal flank channel of -label_discovery_out; 0 = estimate it from the run (at most 0.05)",
       "required": false,
       "toppAdvanced": true,
-      "min": 0
+      "min": 0,
+      "max": 0.05
     },
     {
       "name": "label_discovery_window_n",
       "type": "double",
       "default": "0.0",
-      "description": "Half-window of the N-terminal flank channel of -label_discovery_out; 0 = estimate it from the run",
+      "description": "Half-window of the N-terminal flank channel of -label_discovery_out; 0 = estimate it from the run (at most 0.05)",
       "required": false,
       "toppAdvanced": true,
-      "min": 0
+      "min": 0,
+      "max": 0.05
     },
     {
       "name": "label_out",

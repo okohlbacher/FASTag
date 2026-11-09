@@ -399,10 +399,10 @@ tr -d '\r' < "$f" | cut -f1 | grep -qx ld_peak && check "largeflank: ld_peak row
 [ "$(val "$f" ld_call status) $(val "$f" ld_call reason)" = "no_call no_reference" ] \
   || check "largeflank: ld_call '$(val "$f" ld_call status) $(val "$f" ld_call reason)', want no_call no_reference"
 # the same input with max_flank raised past the flanks bins them (the option is read)
-run -in "$FIX/ld_largeflank.mgf" "${COMMON[@]}" -out "$TMP/big2.t.tsv" -label_discovery_out "$TMP/big2.ld.tsv" -label_discovery_max_flank 5000
+run -in "$FIX/ld_largeflank.mgf" "${COMMON[@]}" -out "$TMP/big2.t.tsv" -label_discovery_out "$TMP/big2.ld.tsv" -label_discovery_max_flank 1500
 [ "$(val "$TMP/big2.ld.tsv" ld_count above_max_c)" -lt "$tc" ] 2>/dev/null \
-  || check "largeflank: -label_discovery_max_flank 5000 still has every c flank above max"
-[ "$(val "$TMP/big2.ld.tsv" ld_run max_flank_da)" = 5000 ] || check "largeflank: ld_run max_flank_da is not 5000"
+  || check "largeflank: -label_discovery_max_flank 1500 still has every c flank above max"
+[ "$(val "$TMP/big2.ld.tsv" ld_run max_flank_da)" = 1500 ] || check "largeflank: ld_run max_flank_da is not 1500"
 
 # Da fragment tolerance: no_call low_resolution (section 5)
 run -in "$FIX/ld_tmt.mgf" "${COMMON[@]}" -fragment_tolerance 0.02 -fragment_tolerance_unit Da \
@@ -439,6 +439,13 @@ refuse "-label_discovery_max_flank 0" -label_discovery_max_flank 0
 refuse "-label_discovery_max_flank -5" -label_discovery_max_flank -5
 refuse "-label_discovery_min_share 1.5" -label_discovery_min_share 1.5
 refuse "-label_discovery_max_flank nan" -label_discovery_max_flank nan
+# upper bounds: the null image set's memory (max_flank) and the
+# half-integer background, which must stay outside the window
+refuse "-label_discovery_max_flank 5000" -label_discovery_max_flank 5000
+refuse "-label_discovery_max_flank 1500.5" -label_discovery_max_flank 1500.5
+refuse "-label_discovery_window_n 10" -label_discovery_window_n 10
+refuse "-label_discovery_window_c 0.3" -label_discovery_window_c 0.3
+refuse "-label_discovery_window_c 0.051" -label_discovery_window_c 0.051
 # the report naming the input is refused like any other output
 "$BIN" -in "$FIX/ld_tmt.mgf" "${COMMON[@]}" -out "$TMP/x.t.tsv" -label_discovery_out "$TMP/x.t.tsv" > "$TMP/r.log" 2>&1 \
   && check "-label_discovery_out naming -out was accepted"

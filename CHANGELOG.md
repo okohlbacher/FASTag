@@ -9,7 +9,9 @@
   (format 1, doc/LABEL-DISCOVERY-REPORT.md; design
   doc/DESIGN-label-discovery.md). Advanced options
   `-label_discovery_max_flank`, `_depth`, `_min_spectra`, `_min_share`,
-  `_window_n`, `_window_c`, `_unimod_top`. The thresholds are unfitted
+  `_window_n`, `_window_c`, `_unimod_top` (`_max_flank` at most 1500 Da, as
+  the null image set's memory grows faster than linearly with it; the windows
+  at most 0.05 Da, so the half-integer background stays outside them). The thresholds are unfitted
   priors. Every other output is byte-identical with the option off or on
   (the `-out_spectra` provenance leaves the options out). On the probes: PXD004541 (TMT10)
   `TMT+K:TMT`, PXD001587 (label-free) `label-free`.

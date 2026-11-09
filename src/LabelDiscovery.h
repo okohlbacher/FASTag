@@ -61,6 +61,16 @@ namespace FASTag::LabelDiscovery
   inline constexpr double kRefWindow = 0.02;              ///< reference deviations are taken within this (Da)
   inline constexpr double kWindowMin = 0.0015, kWindowMax = 0.02;
   inline constexpr double kDefaultWindowN = 0.008, kDefaultWindowC = 0.004;
+  /// Largest -label_discovery_max_flank. The null image set grows faster
+  /// than linearly with it (composition bins, 11 intervals of 24 bytes each):
+  /// about 5 MB at the default 700 Da, 25 MB at 1000 Da and 130 MB at 1500 Da,
+  /// but 315 MB at 2000 Da and several GB at 5000 Da. Measured peak RSS of a
+  /// fixture run: 145 MB at 700 Da, 704 MB at 1500 Da (design section 11).
+  inline constexpr double kMaxFlankLimit = 1500.0;
+  /// Largest -label_discovery_window_n / _window_c (Da). The background is read
+  /// at half-integer offsets (+-(k + 0.5) Da) and must stay outside the
+  /// window, and the local-maximum scans cost O(bins x window / kBin).
+  inline constexpr double kWindowOptionMax = 0.05;
   /// Calibration allowance (ppm) of the near-isobaric rule when a channel
   /// has no calibration: a TOF or uncalibrated Orbitrap offset (section 5).
   inline constexpr double kUnknownCalibrationPpm = 5.0;

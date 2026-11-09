@@ -579,8 +579,11 @@ protected:
     setValidFormats_("label_discovery_out", ListUtils::create<std::string>("tsv"));
     registerDoubleOption_("label_discovery_max_flank", "<Da>", 700.0,
                           "Largest flank mass -label_discovery_out histograms, and the largest composition mass "
-                          "of its null image set (above 0)", false, true);
+                          "of its null image set (above 0, at most 1500)", false, true);
     setMinFloat_("label_discovery_max_flank", 0.0);
+    // the null image set's memory grows faster than linearly with it
+    // (LabelDiscovery.h kMaxFlankLimit: peak RSS about 700 MB at 1500 Da, GBs at 5000 Da)
+    setMaxFloat_("label_discovery_max_flank", FASTag::LabelDiscovery::kMaxFlankLimit);
     registerIntOption_("label_discovery_depth", "<n>", 2,
                        "Most residues a -label_discovery_out channel-peak explanation names (0, 1 or 2)", false, true);
     setMinInt_("label_discovery_depth", 0);
@@ -594,12 +597,14 @@ protected:
     setMaxFloat_("label_discovery_min_share", 1.0);
     registerDoubleOption_("label_discovery_window_n", "<Da>", 0.0,
                           "Half-window of the N-terminal flank channel of -label_discovery_out; 0 = estimate it "
-                          "from the run", false, true);
+                          "from the run (at most 0.05)", false, true);
     setMinFloat_("label_discovery_window_n", 0.0);
+    setMaxFloat_("label_discovery_window_n", FASTag::LabelDiscovery::kWindowOptionMax);
     registerDoubleOption_("label_discovery_window_c", "<Da>", 0.0,
                           "Half-window of the C-terminal flank channel of -label_discovery_out; 0 = estimate it "
-                          "from the run", false, true);
+                          "from the run (at most 0.05)", false, true);
     setMinFloat_("label_discovery_window_c", 0.0);
+    setMaxFloat_("label_discovery_window_c", FASTag::LabelDiscovery::kWindowOptionMax);
     registerIntOption_("label_discovery_unimod_top", "<n>", 3,
                        "Unimod alternatives -label_discovery_out lists per peak", false, true);
     setMinInt_("label_discovery_unimod_top", 0);

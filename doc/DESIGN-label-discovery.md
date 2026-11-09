@@ -40,11 +40,11 @@ Out of scope for format 1:
 | option | default | meaning |
 |---|---|---|
 | `-label_discovery_out <file>` | none (off) | Write the report (TSV, format in `doc/LABEL-DISCOVERY-REPORT.md`, to be written with the code). This option alone switches the feature on. |
-| `-label_discovery_max_flank <Da>` | 700 | Advanced: largest flank mass histogrammed, and the largest composition mass of the null image set (section 7). It covers every one- and two-residue image of TMTpro (K1f 432.30, K1r 450.31, K2f ≤ 618.38, K2r ≤ 636.39, N2f ≤ 676.37), and so every lighter label. |
+| `-label_discovery_max_flank <Da>` | 700 | Advanced: largest flank mass histogrammed, and the largest composition mass of the null image set (section 7). It covers every one- and two-residue image of TMTpro (K1f 432.30, K1r 450.31, K2f ≤ 618.38, K2r ≤ 636.39, N2f ≤ 676.37), and so every lighter label. At most 1500 (`kMaxFlankLimit`): the null image set grows faster than linearly with it (section 11). |
 | `-label_discovery_depth <0\|1\|2>` | 2 | Advanced: the most residues a channel-peak explanation names (`N2r:TMT+AG`). It does not limit the null image set, which takes every composition up to `max_flank`. |
 | `-label_discovery_min_spectra <n>` | 20 | Advanced: spectra a peak or site candidate needs. This is the `-massgap_min_spectra` prior. |
 | `-label_discovery_min_share <f>` | 0.005 | Advanced: share of the counted spectra a peak needs. This is the `-massgap_min_share` prior. |
-| `-label_discovery_window_n <Da>` / `-label_discovery_window_c <Da>` | 0 / 0 | Advanced: the half-window of the N- and C-terminal flank channels. 0 means estimate it from the run (section 5). |
+| `-label_discovery_window_n <Da>` / `-label_discovery_window_c <Da>` | 0 / 0 | Advanced: the half-window of the N- and C-terminal flank channels. 0 means estimate it from the run (section 5). At most 0.05 Da (`kWindowOptionMax`): the background is read at half-integer offsets (±(k + 0.5) Da, section 6) and must stay outside the window, and the local-maximum scans cost O(bins × w / 0.0005). |
 | `-label_discovery_unimod_top <n>` | 3 | Advanced: Unimod alternatives listed per peak. |
 
 **Ignored-option rule.** Any `-label_discovery_*` advanced option given without
@@ -547,9 +547,19 @@ The report states measurements first, and the call is the last section, as in `-
 PXD004541 probe, about 40 MB for a full run of 2M tags. It is allocated only when the option is
 on. The four dense histograms (n, c, c with last residue K, n with first residue K) are built
 from the list in the post-processing, `ceil(max_flank / 0.0005)` = 1,400,000 `uint32_t` bins
-each, 22.4 MB. The null-image bitsets (one per channel, dilated by w) and the composition DP
-take under 2 MB. The prefix sums and offset spectra take another ≤ 50 MB. All of this is freed
+each, 22.4 MB. The prefix sums and offset spectra take another ≤ 50 MB. All of this is freed
 before the report is written.
+
+*As implemented* (the figures above hold for the default `max_flank` 700 only): the null image
+set is not a bitset but 11 intervals of 24 bytes per occupied 0.0005 Da composition bin, built
+from a dense DP of 17 bytes per bin. With the 19-residue alphabet (fixed carbamidomethyl Cys) the
+occupied bins grow faster than linearly with `max_flank`: about 17k at 700 Da (null set about
+5 MB), 94k at 1000 Da (25 MB), 486k at 1500 Da (130 MB) and 1.2M at 2000 Da (315 MB); at 5000 Da
+it would be several GB. Variable modifications in the run alphabet add more. The dense histograms
+and the scan arrays grow linearly (about 24 bytes per bin and channel). So `max_flank` is limited
+to 1500 Da (`kMaxFlankLimit`), and a larger value is refused before the run starts. Measured
+peak RSS on the `ld_tmt.mgf` fixture (data node, 4 threads): 33 MB with the option off, 145 MB
+at 700 Da, 260 MB at 1000 Da and 704 MB at 1500 Da (post-processing 0.9, 1.4 and 2.9 s).
 
 **Counting.** Each counting thread appends records to a `thread_local` vector, tagged with the
 spectrum's scan-order index. At the end of the run the vectors are merged and sorted by
@@ -670,7 +680,7 @@ paragraph in "Digest, label and mass-gap reports". `CHANGELOG.md`.
 - **c/z.** `-ion_series cz` gives `tags_excluded_cz` > 0 and reason `cz_only`.
 - **Guards.**
   - An advanced option without `-label_discovery_out` is warned about and ignored.
-  - Invalid values (depth 3, `max_flank` ≤ 0, `min_share` > 1) are rejected with the usual
+  - Invalid values (depth 3, `max_flank` ≤ 0 or > 1500, `min_share` > 1, a window above 0.05 Da) are rejected with the usual
     exit code.
   - The `.part` file is renamed, and a refused run leaves no file.
 - **Interface.** `--help` and `-write_ctd` list the options. `baseline_iface_added_test` passes
