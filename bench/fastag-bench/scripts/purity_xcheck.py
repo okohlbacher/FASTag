@@ -48,8 +48,10 @@ def compare(purity: str, openms: str, out: str) -> None:
 
     a, prov = read_tsv(purity)
     b = pd.read_csv(openms, sep="\t")
+    if a["key"].duplicated().any() or b["key"].duplicated().any():
+        raise SystemExit("purity_xcheck: duplicate spectrum keys")
     m = a.merge(b, on="key", how="inner")
-    m = m[m["purity"].notna()]
+    m = m[m["purity"].notna() & m["openms_purity"].notna()]
     d = (m["purity"] - m["openms_purity"]).abs()
     dt = (m["purity_total"] - m["openms_total"]).abs() / m["openms_total"].clip(lower=1e-12)
     s = pd.DataFrame([{"n_ms2_purity": int(a["purity"].notna().sum()), "n_joined": len(m),
@@ -57,6 +59,9 @@ def compare(purity: str, openms: str, out: str) -> None:
                        "max_abs_diff": float(d.max()) if len(m) else np.nan,
                        "n_total_rel_diff_gt_1e-6": int((dt > 1e-6).sum()),
                        "openms_version": str(b["openms_version"].iloc[0]) if len(b) else ""}])
+    # PASS only when every purity-bearing spectrum was compared and all agree
+    s["verdict"] = "PASS" if (s["n_joined"].iloc[0] == s["n_ms2_purity"].iloc[0] and s["n_equal"].iloc[0] == s["n_joined"].iloc[0]
+                              and s["n_joined"].iloc[0] > 0) else "FAIL"
     write_tsv(s, out, [f"purity: {purity} ({'; '.join(prov)})", f"openms: {openms}"])
     print(s.to_string(index=False))
 

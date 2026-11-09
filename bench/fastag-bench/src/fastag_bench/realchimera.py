@@ -87,13 +87,20 @@ def precursor_purity(mz, intensity, target_mz: float, charge: int | None, lower_
         nxt = target_mz + iso * C13C12 / z
         if nxt > hi:
             break
+        # MSSpectrum::findNearest(mz, tol): the nearest peak (left one on a tie), accepted when it lies in
+        # [mz - tol, mz + tol] with the interval ends computed first (not |peak - mz| <= tol)
         j = bisect_left(wmz, nxt)
-        best, bd = -1, None
-        for k in (j - 1, j):
-            if 0 <= k < len(wmz):
-                d = abs(wmz[k] - nxt)
-                if d <= tol and (bd is None or d < bd):
-                    best, bd = k, d
+        best = -1
+        if wmz:
+            if j == 0:
+                best = 0
+            elif j == len(wmz):
+                best = j - 1
+            else:
+                best = j if abs(wmz[j] - nxt) < abs(wmz[j - 1] - nxt) else j - 1
+            near = wmz[best]
+            if not ((near < nxt and near >= nxt - tol) or (near >= nxt and near <= nxt + tol)):
+                best = -1
         if best >= 0:
             target += wit[best]
             del wmz[best], wit[best]
@@ -152,11 +159,17 @@ def _nested(a: str, b: str) -> bool:
 
 
 def rank_q(df: pd.DataFrame, score: str = "sage_discriminant_score") -> pd.Series:
-    """Target-decoy q-value computed within the given PSMs only (one rank): sorted by score (best first,
-    ties by input order), q = decoys / targets at or above the score, made monotone. Index of df."""
+    """Target-decoy q-value computed within the given PSMs only (one rank): q = decoys / targets at or above
+    the score (a tied group counted as a whole), made monotone. Index of df."""
     o = df.sort_values(score, ascending=False, kind="stable")
     dec = (o["label"] != 1).cumsum().to_numpy(float)
     tgt = (o["label"] == 1).cumsum().to_numpy(float)
+    # a tied score group shares one q: the counts at the end of the group (independent of row order)
+    sc = o[score].to_numpy(float)
+    last = np.r_[sc[1:] != sc[:-1], True] if len(sc) else np.array([], bool)
+    end = np.flatnonzero(last)
+    grp = np.searchsorted(end, np.arange(len(sc)))
+    dec, tgt = dec[end][grp], tgt[end][grp]
     q = np.where(tgt > 0, dec / np.maximum(tgt, 1), 1.0)
     q = np.minimum.accumulate(q[::-1])[::-1]
     return pd.Series(q, index=o.index).reindex(df.index)
@@ -187,6 +200,11 @@ def chimera_truth(results_sage: str | Path, fdr: float = 0.01) -> pd.DataFrame:
         raise ValueError(f"{results_sage}: one mzML per Sage run expected")
     score = "sage_discriminant_score" if "sage_discriminant_score" in df.columns else "hyperscore"
     df["key"] = df["scannr"].map(P.spectrum_key)
+    clash = df.groupby("key")["scannr"].nunique()
+    if (clash > 1).any():
+        raise ValueError(f"{results_sage}: native IDs collide on one key: {list(clash[clash > 1].index[:3])}")
+    if df.duplicated(["key", "rank"]).any():
+        raise ValueError(f"{results_sage}: more than one PSM per spectrum and rank")
     df["hdr"] = header_match(df)
     r1 = df[(df["rank"] == 1) & (df["label"] == 1) & (df["spectrum_q"] <= fdr)].drop_duplicates("key")
     r2a = df[df["rank"] == 2].copy()
@@ -209,16 +227,33 @@ def chimera_truth(results_sage: str | Path, fdr: float = 0.01) -> pd.DataFrame:
 
 
 def chance_truth(truth: pd.DataFrame, seed: int = 1) -> pd.DataFrame:
-    """Chance control: pep1 and pep2 each replaced by score.shuffled_peptides (a derangement over
-    I/L-normalized identities; pep1 over all spectra, pep2 over the spectra that have one, seeds seed and
-    seed + 1). Keys, categories and purities stay; only the peptides scored against change."""
+    """Chance control: every spectrum is scored against the peptides of another spectrum of its category.
+    Spectra of a category are put in a seeded random cycle; each takes the (pep1, pep2) of the next spectrum
+    in the cycle whose I/L-normalized identities share none with its own pep1 or pep2 (so neither slot can
+    give back one of the spectrum's own identities); a spectrum without such a partner gets '' (scored as
+    not correct). Keys, categories and purities stay; only the peptides scored against change."""
     ch = truth.copy()
-    s1 = S.shuffled_peptides(truth[["key", "pep1"]].rename(columns={"pep1": "peptide"}), seed=seed)
-    ch["pep1"] = ch["key"].map(dict(zip(s1["key"], s1["peptide"]))).fillna("")
-    has2 = truth[truth["pep2"].astype(str) != ""]
-    if len(has2):
-        s2 = S.shuffled_peptides(has2[["key", "pep2"]].rename(columns={"pep2": "peptide"}), seed=seed + 1)
-        ch["pep2"] = ch["key"].map(dict(zip(s2["key"], s2["peptide"]))).fillna("")
+    rng = np.random.default_rng(seed)
+    for cat in sorted(truth["category"].unique()):
+        idx = np.flatnonzero((truth["category"] == cat).to_numpy())
+        if not len(idx):
+            continue
+        order = idx[rng.permutation(len(idx))]
+        p1 = truth["pep1"].astype(str).to_numpy()
+        p2 = truth["pep2"].astype(str).to_numpy()
+        ids = {i: {S.normalize_peptide(x) for x in (p1[i], p2[i]) if x} for i in order}
+        n = len(order)
+        new1, new2 = {}, {}
+        for pos, i in enumerate(order):
+            new1[i], new2[i] = "", ""
+            for step in range(1, n):
+                j = order[(pos + step) % n]
+                if not (ids[j] & ids[i]):
+                    new1[i], new2[i] = p1[j], p2[j]
+                    break
+        rows = list(order)
+        ch.iloc[rows, ch.columns.get_loc("pep1")] = [new1[i] for i in rows]
+        ch.iloc[rows, ch.columns.get_loc("pep2")] = [new2[i] for i in rows]
     return ch
 
 
@@ -226,10 +261,13 @@ def chance_truth(truth: pd.DataFrame, seed: int = 1) -> pd.DataFrame:
 def _correct_matrix(tags: pd.DataFrame, keys_peps: pd.DataFrame) -> pd.DataFrame:
     """Flank-rule correctness of every tag of the listed spectra against the given peptide (key, peptide);
     returns key, rank, correct."""
-    if keys_peps.empty:
-        return pd.DataFrame(columns=["key", "rank", "correct"])
+    empty = pd.DataFrame({"key": pd.Series(dtype=str), "rank": pd.Series(dtype=int), "correct": pd.Series(dtype=bool)})
+    if keys_peps.empty or tags.empty:
+        return empty
     m = S._mark(tags, keys_peps[["key", "peptide"]], rule="flank")
-    return m[["key", "rank", "correct"]]
+    if m.empty:
+        return empty
+    return m[["key", "rank", "correct"]].astype({"correct": bool})
 
 
 def score_spectra(tags: pd.DataFrame, truth: pd.DataFrame, ks=KS) -> pd.DataFrame:
@@ -320,9 +358,13 @@ def read_manifest(path: str | Path, split: str | None = None) -> pd.DataFrame:
 
 
 def _mods(s) -> dict:
-    """'M:15.994915;S:79.966331' -> {'M': [15.994915], 'S': [79.966331]}; repeated residues accumulate."""
+    """'M:15.994915;S:79.966331' -> {'M': [15.994915], 'S': [79.966331]}; repeated residues accumulate.
+    An empty cell is refused: sage.py replaces empty modification sets by its defaults (C+57, M+16), so a
+    manifest must name its modifications."""
+    if s is None or (isinstance(s, float) and math.isnan(s)) or not str(s).strip():
+        raise ValueError("manifest: empty modification cell (name the modifications explicitly)")
     out: dict = {}
-    for part in str(s or "").split(";"):
+    for part in str(s).split(";"):
         part = part.strip()
         if not part:
             continue
@@ -356,7 +398,7 @@ def _wd(cfg) -> Path:
 
 
 def _rundir(cfg, r) -> Path:
-    return _wd(cfg) / "runs" / str(r.run_id)
+    return _wd(cfg) / "runs" / str(r.split) / str(r.run_id)
 
 
 def _prov(cfg, what: str) -> list[str]:
@@ -386,82 +428,136 @@ def step_verify(cfg, log=print) -> Path:
     return out
 
 
-def _verified(cfg) -> None:
-    p = _wd(cfg) / f"verify_{cfg['realchimera']['split']}.tsv"
+def _verified(cfg) -> pd.DataFrame:
+    """Gate of every step after verify: the split's verify record must exist and every manifest file must
+    hash, now, to its manifest sha256 at the recorded path (the files are re-hashed on each call, so a file
+    replaced after verify is caught). Returns the split's manifest."""
+    rc = cfg["realchimera"]
+    p = _wd(cfg) / f"verify_{rc['split']}.tsv"
     if not p.exists():
         raise RuntimeError(f"{p} missing: run the verify step first")
     df, _ = read_tsv(p)
-    man = read_manifest(cfg["realchimera"]["manifest"], cfg["realchimera"]["split"])
-    need = {(r.run_id, k, getattr(r, f"{k}_sha256")) for r in man.itertuples() for k in ("mzml", "fasta")}
-    have = {(a, b, c) for a, b, c, ok in zip(df["run_id"], df["kind"], df["sha256_found"], df["ok"]) if str(ok) == "True"}
-    if not need <= have:
-        raise RuntimeError(f"{p} does not cover the manifest: rerun verify")
+    man = read_manifest(rc["manifest"], rc["split"])
+    rec = {(a, b): (c, d) for a, b, c, d in zip(df["run_id"], df["kind"], df["path"], df["sha256_found"])}
+    for r in man.itertuples():
+        for k in ("mzml", "fasta"):
+            want, path = getattr(r, f"{k}_sha256"), str(getattr(r, k))
+            if rec.get((r.run_id, k)) != (path, want):
+                raise RuntimeError(f"{p} does not cover {r.run_id} {k} ({path}): rerun verify")
+            key = (path, Path(path).stat().st_mtime_ns if Path(path).exists() else None)
+            got = _HASHED.get(key) or (sha256_file(path) if Path(path).exists() else "missing")
+            if got != want:
+                raise RuntimeError(f"{r.run_id} {k} {path}: sha256 {got} != manifest {want}")
+            _HASHED[key] = got
+    return man
+
+
+_HASHED: dict = {}
+
+
+def _record_ok(rec: Path, text: str) -> bool:
+    return rec.exists() and rec.read_text() == text
 
 
 def step_sage(cfg, log=print) -> None:
     from .run import tool_path, tool_version
     from .sage import sage_config, write_sage_config
     from .timing import run_timed
-    _verified(cfg)
-    for r in read_manifest(cfg["realchimera"]["manifest"], cfg["realchimera"]["split"]).itertuples():
+    man = _verified(cfg)
+    exe = tool_path(cfg, "sage")
+    if not exe:
+        raise RuntimeError("tools.sage not found")
+    exe_sha = sha256_file(exe)
+    for r in man.itertuples():
         out = _rundir(cfg, r) / "sage"
         res = out / "results.sage.tsv"
-        if res.exists():
+        import json
+        conf_d = sage_config(run_dataset(r), r.fasta, [r.mzml], cfg["sage"], mode="chimera")
+        cmd = [exe, *map(str, cfg["sage"].get("args") or []), "-o", str(out), str(out / "sage.json")]
+        record = (f"{' '.join(cmd)}\nsage sha256 {exe_sha}\nmzml sha256 {r.mzml_sha256}\nfasta sha256 {r.fasta_sha256}\n"
+                  f"config {json.dumps(conf_d, sort_keys=True)}\n")
+        if res.exists() and _record_ok(out / "inputs.txt", record):
             continue
+        for f in (res, out / "inputs.txt"):
+            if f.exists():
+                f.unlink()
         out.mkdir(parents=True, exist_ok=True)
-        exe = tool_path(cfg, "sage")
-        conf = write_sage_config(out / "sage.json", sage_config(run_dataset(r), r.fasta, [r.mzml], cfg["sage"], mode="chimera"))
-        cmd = [exe, *map(str, cfg["sage"].get("args") or []), "-o", str(out), str(conf)]
+        write_sage_config(out / "sage.json", conf_d)
         (out / "command.txt").write_text(" ".join(cmd) + "\n")
         (out / "version.txt").write_text(tool_version(exe, ("--version",), r"sage ?([^\n]+)") + "\n")
         t = run_timed(cmd, log=out / "run.log",
                       env={**(cfg.get("env") or {}), "RAYON_NUM_THREADS": str(cfg["sage"].get("threads") or 16)})
         if t["returncode"] != 0 or not res.exists():
             raise RuntimeError(f"Sage chimera failed on {r.run_id}: see {out / 'run.log'}")
+        (out / "inputs.txt").write_text(record)  # written only after success: the cache key of results.sage.tsv
         log(f"{r.run_id} sage chimera: {t['wall_s']} s")
 
 
 def step_purity(cfg, log=print) -> None:
     rc = cfg["realchimera"]
-    _verified(cfg)
-    for r in read_manifest(rc["manifest"], rc["split"]).itertuples():
+    man = _verified(cfg)
+    for r in man.itertuples():
         p = _rundir(cfg, r) / "purity.tsv"
-        if p.exists():
+        rec = p.with_suffix(".inputs.txt")
+        record = (f"mzml sha256 {r.mzml_sha256}\ntol_ppm {float(rc['purity_tol_ppm'])}\ncenter {rc['purity_center']}\n"
+                  f"realchimera.py sha256 {sha256_file(__file__)}\n")
+        if p.exists() and _record_ok(rec, record):
             continue
+        for f in (p, rec):
+            if f.exists():
+                f.unlink()
         df = purity_table(r.mzml, float(rc["purity_tol_ppm"]), rc["purity_center"])
+        if df["key"].duplicated().any():
+            raise RuntimeError(f"{r.run_id}: duplicate spectrum keys in {r.mzml}")
         write_tsv(df, p, _prov(cfg, f"purity {r.run_id}") + [
             f"OpenMS PrecursorPurity port, tol {rc['purity_tol_ppm']} ppm, center {rc['purity_center']}, from {r.mzml}"])
+        rec.write_text(record)
         log(f"{r.run_id}: purity of {len(df)} MS2, median {df['purity'].median():.3f}")
 
 
 def step_run(cfg, log=print) -> None:
     from .run import tool_path, tool_version
     from .timing import run_timed
-    from .unidentified import _command_record, cached_tags
     rc = cfg["realchimera"]
-    _verified(cfg)
+    man = _verified(cfg)
     exe = tool_path(cfg, "fastag")
-    for r in read_manifest(rc["manifest"], rc["split"]).itertuples():
+    if not exe:
+        raise RuntimeError("tools.fastag not found")
+    exe_sha = sha256_file(exe)
+    for r in man.itertuples():
         for prof, args in rc["profiles"].items():
             out = _rundir(cfg, r) / "fastag" / prof
             tags = out / "tags.tsv"
             inp = Path(r.mzml)
             cmd = [exe, "-in", str(inp), "-out", str(tags), "-threads", str(rc["fastag_threads"]),
                    *map(str, rc["fastag_args"]), *map(str, args)]
-            if cached_tags(tags, cmd, inp):
+            record = (f"{' '.join(cmd)}\nfastag sha256 {exe_sha}\nmzml sha256 {r.mzml_sha256}\n"
+                      f"env {sorted((cfg.get('env') or {}).items())}\n")
+            if tags.exists() and _record_ok(out / "inputs.txt", record):
                 continue
+            for f in (tags, out / "inputs.txt"):
+                if f.exists():
+                    f.unlink()
             out.mkdir(parents=True, exist_ok=True)
-            (out / "command.txt").write_text(_command_record(cmd, inp))
+            (out / "command.txt").write_text(" ".join(cmd) + "\n")
             (out / "version.txt").write_text(tool_version(exe) + "\n")
             t = run_timed(cmd, log=out / "run.log", env=cfg.get("env") or {})
-            if t["returncode"] != 0:
+            if t["returncode"] != 0 or not tags.exists():
                 raise RuntimeError(f"FASTag {prof} failed on {r.run_id}: see {out / 'run.log'}")
+            (out / "inputs.txt").write_text(record)  # written only after success: the cache key of tags.tsv
             log(f"{r.run_id} fastag {prof}: {t['wall_s']} s")
 
 
 def score_run(cfg, r) -> pd.DataFrame:
     rc = cfg["realchimera"]
     base = _rundir(cfg, r)
+    need = [base / "sage" / "inputs.txt", base / "purity.inputs.txt"] + [base / "fastag" / p / "inputs.txt" for p in rc["profiles"]]
+    miss = [str(x) for x in need if not x.exists()]
+    if miss:
+        raise RuntimeError(f"{r.run_id}: outputs without a completion record (rerun sage/purity/run): {miss}")
+    for x in need:
+        if f"mzml sha256 {r.mzml_sha256}\n" not in x.read_text():
+            raise RuntimeError(f"{x}: made from another mzML than the manifest's (rerun)")
     truth = chimera_truth(base / "sage" / "results.sage.tsv", float(rc["fdr"]))
     pur, _ = read_tsv(base / "purity.tsv")
     truth = truth.merge(pur[["key", "purity", "charge", "precursor_mz", "iso_lower", "iso_upper"]], on="key", how="left")
@@ -482,7 +578,7 @@ def score_run(cfg, r) -> pd.DataFrame:
 
 def step_score(cfg, log=print) -> Path:
     rc = cfg["realchimera"]
-    man = read_manifest(rc["manifest"], rc["split"])
+    man = _verified(cfg)
     parts = []
     for r in man.itertuples():
         sc = score_run(cfg, r)
@@ -509,6 +605,7 @@ def step_report(cfg, log=print) -> Path:
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     rc = cfg["realchimera"]
+    _verified(cfg)
     return mod.report(_wd(cfg) / f"spectra_{rc['split']}.tsv.gz", _wd(cfg) / f"endpoints_{rc['split']}.tsv", log=log)
 
 

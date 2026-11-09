@@ -159,12 +159,19 @@ def endpoints(df: pd.DataFrame, n_boot: int = N_BOOT) -> pd.DataFrame:
         rows.append(_row("E1 attribution", "rank1_tag", att, nchim,
                          float((chim["attribution"] == att).mean()) if nchim else math.nan))
 
-    # H1 / H2
-    ok_pure = len(pure) >= MIN_SPECTRA
+    # H1 / H2 (the cluster-share gate applies to every group a bootstrap resamples)
+    pure_share, impure_share = max_cluster_share(pure["cluster1"]), max_cluster_share(impure["cluster1"])
+    rows.append(_row("V2 clusters", "max_cluster_share", "single_pure", len(pure), pure_share,
+                     clusters=pure["cluster1"].nunique()))
+    rows.append(_row("V2 clusters", "max_cluster_share", "single_impure", len(impure), impure_share,
+                     clusters=impure["cluster1"].nunique()))
+    ok_pure = len(pure) >= MIN_SPECTRA and pure_share < MAX_CLUSTER_SHARE
+    ok_impure = len(impure) >= MIN_SPECTRA and impure_share < MAX_CLUSTER_SHARE
     for ep, metric in (("H1 chimeric penalty", "pep1_rank1"), ("H2 union non-inferiority", "union_rank1")):
         if not (ok_chim and ok_pure):
             rows.append(_row(ep, f"{metric} chimeric - pep1_rank1 pure single", "chimeric vs single_pure", nchim + len(pure),
-                             math.nan, verdict="not evaluable", note=why_chim or f"pure single n={len(pure)}"))
+                             math.nan, verdict="not evaluable",
+                             note=why_chim or f"pure single n={len(pure)} (min {MIN_SPECTRA}), largest cluster share {pure_share:.3f}"))
             continue
         diff, lo, hi = two_group_boot(ucl, chim[metric], pure["cluster1"], pure["pep1_rank1"], n_boot)
         if ep.startswith("H1"):
@@ -177,14 +184,15 @@ def endpoints(df: pd.DataFrame, n_boot: int = N_BOOT) -> pd.DataFrame:
                          note=f"chimeric {chim[metric].mean():.4f} (n {nchim}), pure single {pure['pep1_rank1'].mean():.4f} (n {len(pure)})"))
 
     # H3
-    if len(pure) >= MIN_SPECTRA and len(impure) >= MIN_SPECTRA:
+    if ok_pure and ok_impure:
         diff, lo, hi = two_group_boot(pure["cluster1"], pure["pep1_rank1"], impure["cluster1"], impure["pep1_rank1"], n_boot)
         rows.append(_row("H3 purity gradient", "pep1_rank1 pure - impure (single)", "single", len(pure) + len(impure),
                          diff, lo, hi, verdict="gradient shown" if lo > 0 else "not shown",
                          note=f"pure {pure['pep1_rank1'].mean():.4f} (n {len(pure)}), impure {impure['pep1_rank1'].mean():.4f} (n {len(impure)})"))
     else:
         rows.append(_row("H3 purity gradient", "pep1_rank1 pure - impure (single)", "single", len(pure) + len(impure),
-                         math.nan, verdict="not evaluable", note=f"pure n={len(pure)}, impure n={len(impure)}"))
+                         math.nan, verdict="not evaluable",
+                         note=f"pure n={len(pure)} share {pure_share:.3f}, impure n={len(impure)} share {impure_share:.3f}"))
     bins = pd.cut(single["purity"], list(PURITY_BINS), right=False)
     for b, g in single.groupby(bins, observed=False):
         rows.append(_row("purity bins", "pep1_rank1", f"single {b}", len(g), float(g["pep1_rank1"].mean()) if len(g) else math.nan))
@@ -198,7 +206,12 @@ def endpoints(df: pd.DataFrame, n_boot: int = N_BOOT) -> pd.DataFrame:
         w = t.pivot_table(index=["run_id", "key"], columns="profile", values=["both_top10", "union_rank1", "pep1_top10",
                                                                              "pep2_top10"], aggfunc="first")
         keys = list(zip(chim["run_id"], chim["key"]))
-        w = w.loc[keys]
+        w = w.reindex(keys)
+        complete = not w.isna().any().any() and len(w) == nchim
+    if set(t["profile"]) == {DIV_OFF, DIV_ON} and ok_chim and not complete:
+        rows.append(_row("H4 diversity", "both_top10 cap10_div - cap10", "chimeric", nchim, math.nan,
+                         verdict="not evaluable", note="cap10/cap10_div rows missing for some chimeric spectra"))
+    elif set(t["profile"]) == {DIV_OFF, DIV_ON} and ok_chim:
         dboth = w[("both_top10", DIV_ON)].astype(float).to_numpy() - w[("both_top10", DIV_OFF)].astype(float).to_numpy()
         dun = w[("union_rank1", DIV_ON)].astype(float).to_numpy() - w[("union_rank1", DIV_OFF)].astype(float).to_numpy()
         p = SU.cluster_permutation(ucl, dboth)

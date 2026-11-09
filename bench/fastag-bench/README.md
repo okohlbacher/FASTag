@@ -47,6 +47,7 @@ those 302 runs (PRIDE lists a checksum for 161 of them).
 | `results/sdrf_truth_runs.tsv`, `table_s3_digest_truth[_v190].tsv`, `fig7_*[_v190].tsv`, `digest_calls_*.tsv` | Table S4 and Figure 7 (file names keep the older `table_s3` prefix): SDRF truth per run, FASTag 1.8.0 and 1.9.0 calls (`digest_calls_v180_vs_v190.tsv` lists the 19 runs that changed; RC 71a68e0 calls for comparison), correctness, summaries |
 | `scripts/cluster/` | node-side scripts that produced the Table S4 reports (`rerun180.py`: release re-run of the 244 validation runs; `nt_run.sh` + `nt_runs.tsv`: download, conversion and FASTag runs of the 10 added non-tryptic runs) and the differential-test tables (`difftest_export.py`) |
 | `figures/` | rendered figures (PDF and PNG); `*_v190.*` from the 1.9.0 tables (the article's figures), unsuffixed from the 1.8.0 (or older) tables, `fig_{gap_penalty,peak_budget}_v180.*` from the 1.8.0 harness sweeps; `fig4_*_v190`, `fig5_*_v190` from the 1.9.0 ladder, unsuffixed `fig4_*`, `fig5_*` from the 1.8.0 ladder |
+| `src/fastag_bench/realchimera.py`, `scripts/stats_realchimera.py`, `scripts/purity_xcheck.py`, `config/realchimera-dev*` | FASTag 1.13 item 12 (#16): tag accuracy on real chimeric spectra (Sage chimera/wide_window truth, MS1 precursor purity); see "Real chimeric spectra" |
 | `config/bench.example.yaml` | every configuration key with its default |
 | `config/minirun-data.yaml` | the configuration of the end-to-end check on IBMI node `data` |
 | `tests/` | pytest unit tests for the scoring rule, the parsers, the configuration, the figure index and the paired statistics |
@@ -449,6 +450,32 @@ for step in pool-truth sage-modes chimera-build run score collect; do
   fastag-bench unidentified $step -c $C --split dev
 done
 fastag-bench unidentified v190-check -c $C   # closed path reproduces the v1.9.0 pair table
+```
+
+## Real chimeric spectra (`fastag-bench realchimera`, FASTag 1.13 item 12 / #16)
+
+Tag accuracy on spectra that really contain two peptides (the #4 chimeras above are synthetic). Design and
+endpoints: repository `doc/REAL-CHIMERA-BENCHMARK.md`; held-out protocol: branch `acceptance/1.13`,
+`acceptance/1.13/PREREG-item12.md`.
+
+- Inputs: a manifest TSV (`config/realchimera-dev-manifest.tsv`: run, split, PXD, PRIDE raw file and SHA-1, mzML and
+  sha256, FASTA and sha256, conversion, search settings). `verify` hashes every file; every later step re-hashes
+  them and refuses a split whose files do not match. Caches (Sage, purity, FASTag) are reused only when their
+  completion record names the same command, binary sha256, input sha256 and settings.
+- Truth: `sage.py` mode `chimera` (closed search + `chimera`, `wide_window`, `report_psms 2`). Categories
+  `chimeric` (both ranks target at Sage q <= 0.01, rank 2 also at a within-rank-2 target-decoy q <= 0.01, distinct
+  non-nested I/L peptides), `nested` (excluded), `single`.
+- MS1 precursor purity: `realchimera.precursor_purity`, a port of OpenMS `PrecursorPurity::computePrecursorPurity`
+  on the preceding MS1 scan (`purity_center: target` = OpenMS develop, `selected` = OpenMS 3.4;
+  `scripts/purity_xcheck.py` compares with pyopenms).
+- Scoring: the flank rule against each peptide; chance arm against the peptides of another spectrum of the same
+  category that shares no identity. Endpoints E1, H1-H4: `scripts/stats_realchimera.py`.
+
+```bash
+C=config/realchimera-dev.yaml   # node data paths
+fastag-bench realchimera all -c $C       # verify, sage, purity, run, score, report
+python3 scripts/purity_xcheck.py openms <run.mzML> openms.tsv 10        # in an env with pyopenms
+python3 scripts/purity_xcheck.py compare purity.tsv openms.tsv xcheck.tsv
 ```
 
 ## Runtime analysis of PXD047793 (`results/runtime_pxd047793_v190.tsv`)

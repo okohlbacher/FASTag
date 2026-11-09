@@ -387,3 +387,111 @@ def test_report_round_trip(tmp_path):
     out = SR.report(p, tmp_path / "ep.tsv", n_boot=200, log=lambda *_: None)
     text = out.read_text()
     assert "scorer: scripts/stats_realchimera.py sha256" in text and "H4 diversity" in text
+
+
+# ------------------------------------------------------------------------------------------------ review fixes
+def test_purity_tolerance_interval_as_openms():
+    # 101.00202 vs isotope 101.0 (z 2, iso 0): |d| = 0.00202 = tol in floating point only via the interval ends
+    assert RC.precursor_purity([101.00202], [100.0], 101.0, 2, 1.0, 1.0, tol_ppm=10)["signal_proportion"] == 1.0
+
+
+def test_rank_q_ties_are_order_independent():
+    a = pd.DataFrame({"label": [1, -1, 1], "sage_discriminant_score": [10, 10, 9]})
+    b = a.iloc[[1, 0, 2]]
+    qa, qb = RC.rank_q(a), RC.rank_q(b)
+    assert qa.loc[0] == qb.loc[0] == pytest.approx(0.5)
+    assert list(qa.sort_index()) == list(qb.sort_index())
+
+
+def test_chance_never_returns_an_own_identity():
+    truth = pd.DataFrame({"key": ["scan=1", "scan=2", "scan=3", "scan=4"],
+                          "pep1": ["PEPTIDEK", "SAMPLER", "AAAK", "CCCK"], "pep2": ["SAMPLER", "PEPTIDEK", "DDDK", "AAAK"],
+                          "category": ["chimeric"] * 4})
+    for seed in range(20):
+        ch = RC.chance_truth(truth, seed)
+        for (_, t), (_, c) in zip(truth.iterrows(), ch.iterrows()):
+            own = {S.normalize_peptide(t.pep1), S.normalize_peptide(t.pep2)}
+            assert not ({S.normalize_peptide(x) for x in (c.pep1, c.pep2) if x} & own)
+    # a spectrum with no compatible partner is scored against nothing
+    two = truth.iloc[:2].reset_index(drop=True)
+    ch = RC.chance_truth(two, 1)
+    assert (ch["pep1"] == "").all() and (ch["pep2"] == "").all()
+
+
+def test_truth_refuses_key_collisions(tmp_path):
+    p = _sage_tsv(tmp_path / "r.tsv", [("f", "controllerNumber=1 scan=7", 1, 1, "PEPTIDEK", 0.001, 9),
+                                         ("f", "controllerNumber=2 scan=7", 2, 1, "SAMPLER", 0.001, 9)])
+    with pytest.raises(ValueError):
+        RC.chimera_truth(p)
+
+
+def test_score_spectra_empty_inputs():
+    truth = pd.DataFrame({"key": ["scan=1"], "pep1": ["PEPTIDEK"], "pep2": [""], "category": ["single"]})
+    junk = _tags([{"spectrum": "scan=1", "tag": "WWW", "nterm_mass": 1.0, "cterm_mass": 2.0}])
+    sc = RC.score_spectra(junk, truth, ks=(1,))
+    assert not sc["pep1_rank1"].any() and sc["attribution"].iloc[0] == "neither"
+    sc = RC.score_spectra(junk.iloc[:0], truth, ks=(1,))
+    assert sc["attribution"].iloc[0] == "untagged"
+
+
+def test_empty_modification_cell_refused():
+    r = pd.DataFrame([{**_man_row("a", "x", "y"), "variable_mods": ""}]).iloc[0]
+    with pytest.raises(ValueError):
+        RC.run_dataset(r)
+
+
+def test_verify_catches_replaced_file_and_score_needs_verify(tmp_path):
+    cfg = _setup(tmp_path)
+    c = RC.load(cfg)
+    with pytest.raises(RuntimeError):
+        RC.step_score(c)  # no verify record yet
+    with pytest.raises(RuntimeError):
+        RC.step_report(c)
+    assert main(["realchimera", "verify", "-c", str(cfg)]) == 0
+    RC._HASHED.clear()
+    RC._verified(c)
+    (tmp_path / "r.mzML").write_bytes(b"other bytes")  # replaced after verify
+    RC._HASHED.clear()
+    with pytest.raises(RuntimeError):
+        RC._verified(c)
+
+
+def _fake_fastag(path, body):
+    path.write_text("#!/bin/sh\n# " + body + "\nwhile [ $# -gt 0 ]; do [ \"$1\" = -out ] && out=$2; shift; done\n"
+                    "printf 'spectrum\\ttag\\tnterm_mass\\tcterm_mass\\nscan=1\\tPEP\\t0\\t0\\n' > \"$out\"\n")
+    path.chmod(0o755)
+    return path
+
+
+def test_run_cache_bound_to_binary_and_completion(tmp_path):
+    cfg = _setup(tmp_path)
+    c = RC.load(cfg)
+    exe = _fake_fastag(tmp_path / "FASTag", "build A")
+    c["tools"]["fastag"] = str(exe)
+    c["realchimera"]["profiles"] = {"default": []}
+    assert main(["realchimera", "verify", "-c", str(cfg)]) == 0
+    RC.step_run(c, log=lambda *_: None)
+    out = tmp_path / "work" / "runs" / "DEV" / "r1" / "fastag" / "default"
+    rec = (out / "inputs.txt").read_text()
+    assert "fastag sha256" in rec
+    (out / "tags.tsv").write_text("stale\n")
+    RC.step_run(c, log=lambda *_: None)  # same binary: cached
+    assert (out / "tags.tsv").read_text() == "stale\n"
+    _fake_fastag(exe, "build B")  # same path, other bytes: rerun
+    RC.step_run(c, log=lambda *_: None)
+    assert (out / "tags.tsv").read_text().startswith("spectrum")
+    exe.write_text("#!/bin/sh\nexit 3\n")  # failing build: no completion record, nothing cached on retry
+    with pytest.raises(RuntimeError):
+        RC.step_run(c, log=lambda *_: None)
+    assert not (out / "inputs.txt").exists() and not (out / "tags.tsv").exists()
+
+
+def test_single_group_cluster_gate_and_incomplete_h4():
+    one = _spectra()
+    m = one["category"] == "single"
+    one.loc[m, "cluster1"] = "r1|SAME"
+    assert _ep(one, "H3 purity gradient")["verdict"] == "not evaluable"
+    assert _ep(one, "H1 chimeric penalty")["verdict"] == "not evaluable"
+    gap = _spectra()
+    drop = gap[(gap["key"] == "scan=0") & (gap["profile"] == "cap10") & (gap["arm"] == "truth")].index
+    assert _ep(gap.drop(drop), "H4 diversity")["verdict"] == "not evaluable"
