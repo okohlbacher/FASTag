@@ -146,6 +146,7 @@ namespace FASTag::Hyp
       {
         call.charge = 1;
         call.src = ChargeSource::Inferred;
+        call.basis = CallBasis::OnePlus;
         return call;
       }
       const std::vector<int> order = isoOrder(hp.isotope_errors);
@@ -205,6 +206,7 @@ namespace FASTag::Hyp
         {
           call.charge = call.range_min;
           call.src = ChargeSource::Inferred;
+          call.basis = CallBasis::Range;
           return call;
         }
         call.charge = left.empty() || std::find(left.begin(), left.end(), 2) != left.end() ? 2 : left.front();
@@ -212,6 +214,7 @@ namespace FASTag::Hyp
         return call;
       }
       call.charge = c1;
+      call.basis = CallBasis::Complement;
       if (c2 != 0 && e1 - e2 < hp.infer_margin)
       {
         call.src = ChargeSource::Ambiguous;
@@ -276,8 +279,105 @@ namespace FASTag::Hyp
     return inferFromTop(spec, topMz(spec), prec_mz, charges, true, hp, cs);
   }
 
+  std::vector<int> headerCheckCandidates(int header, const HypParam& hp)
+  {
+    std::vector<int> c = range(hp.charge_min, hp.charge_max);
+    if (header >= 1 && header <= kChargeLimit && std::find(c.begin(), c.end(), header) == c.end())
+    {
+      c.push_back(header);
+      std::sort(c.begin(), c.end());
+    }
+    return c;
+  }
+
+  HeaderCheckResult checkHeaderCharge(const OpenMS::MSSpectrum& spec, const OpenMS::Precursor& prec,
+                                      const HypParam& hp, const ComplementSpec& cs)
+  {
+    HeaderCheckResult r;
+    const int header = prec.getCharge();
+    if (header <= 0) return r;
+    r.header = header;
+    const std::vector<int> cands = headerCheckCandidates(header, hp);
+    const bool one_plus = !cands.empty() && cands.front() == 1;
+    const std::vector<double> top = topMz(spec);
+    r.call = inferFromTop(spec, top, prec.getMZ(), cands, one_plus, hp, cs);
+    // The strongest peaks above the header's 1+ fragment ceiling (b/y; an
+    // electron-activated read keeps charge-reduced species up there, so the
+    // count is left at 0 and range evidence never counts against it).
+    if (cs.charge_loss <= 0)
+    {
+      const double ceil = header * prec.getMZ() - (header - 1) * kProton + kCeilingMargin;
+      r.header_peaks_above = static_cast<int>(top.end() - std::upper_bound(top.begin(), top.end(), ceil));
+    }
+    const ChargeCall& c = r.call;
+    // The excess at the header and at the call, from the call's own table
+    // (one entry per charge the range evidence left).
+    bool header_seen = false;
+    for (const auto& e : c.excess)
+    {
+      if (e.first == header) { r.header_excess = e.second.first; header_seen = true; }
+      if (e.first == c.charge) r.call_excess = e.second.first;
+    }
+    // The header is ruled out when the range evidence left charges and the
+    // header is not among them (the 1+ test returns before any is tested).
+    // A header above kChargeLimit is no candidate: it is never "ruled out".
+    const bool header_candidate = std::find(cands.begin(), cands.end(), header) != cands.end();
+    r.header_ruled_out = header_candidate && c.basis != CallBasis::OnePlus && !c.excess.empty() && !header_seen;
+    // A header the table lacks (ruled out by range, or above kChargeLimit)
+    // still has complement pairs of its own: the margin comparisons below
+    // are against its real excess, never against 0. Without this one stray
+    // peak above the header's ceiling (too few for range evidence) would
+    // let any call excess >= the margin disagree, however strong the
+    // header's own support.
+    if (!header_seen && c.basis != CallBasis::OnePlus && !c.excess.empty())
+      bestIso(top, prec.getMZ(), header, isoOrder(hp.isotope_errors), cs, &r.header_excess);
+    // Range evidence against the header: ruled out, by enough strong peaks.
+    const bool range_against = r.header_ruled_out && r.header_peaks_above >= kHeaderRangeMinPeaks;
+    if (c.src == ChargeSource::Ambiguous)
+    {
+      // Two close charges. With the header one of them it agrees; else the
+      // evidence is against the header when the range rules it out or both
+      // charges beat its excess by the margin (the runner-up's excess is the
+      // lower one): a disagreement whose call is the better of the two.
+      if (c.charge == header || c.runner_up == header) r.verdict = HeaderVerdict::Agree;
+      else
+      {
+        double runner_excess = 0;
+        for (const auto& e : c.excess)
+          if (e.first == c.runner_up) runner_excess = e.second.first;
+        const bool against = range_against || (runner_excess > 0 && runner_excess - r.header_excess >= hp.header_margin);
+        r.verdict = against ? HeaderVerdict::Disagree : HeaderVerdict::Ambiguous;
+      }
+      return r;
+    }
+    if (c.src == ChargeSource::Assumed || c.basis == CallBasis::None)
+    {
+      r.verdict = HeaderVerdict::NoCall;
+      return r;
+    }
+    if (c.charge == header)
+    {
+      r.verdict = HeaderVerdict::Agree;
+      return r;
+    }
+    // An unambiguous call other than the header.
+    bool against = false;
+    switch (c.basis)
+    {
+      case CallBasis::OnePlus: against = true; break;
+      case CallBasis::Range: against = range_against; break;
+      case CallBasis::Complement:
+        against = range_against || (r.call_excess > 0 && r.call_excess - r.header_excess >= hp.header_margin);
+        break;
+      case CallBasis::None: break;
+    }
+    r.verdict = against ? HeaderVerdict::Disagree : HeaderVerdict::NoCall;
+    return r;
+  }
+
   std::vector<Hypothesis> precursorHypotheses(const OpenMS::MSSpectrum& spec, const OpenMS::Precursor& prec,
-                                              const HypParam& hp, const ComplementSpec& cs, ChargeCall* call_out)
+                                              const HypParam& hp, const ComplementSpec& cs, ChargeCall* call_out,
+                                              const HeaderCheckResult* header_check)
   {
     const int header = prec.getCharge();
     const double prec_mz = prec.getMZ();
@@ -306,6 +406,15 @@ namespace FASTag::Hyp
 
     if (header > 0)
     {
+      // 1.13 -check_header_charge override: a disagreeing header is tagged
+      // at the check's call instead.
+      if (hp.header_check == HeaderCheck::Override && header_check && header_check->header == header
+          && header_check->verdict == HeaderVerdict::Disagree)
+      {
+        const int z = header_check->call.charge;
+        out.push_back(make(z, ChargeSource::Overridden));
+        return finish(z);
+      }
       out.push_back(make(header, ChargeSource::Header));
       return finish(header);
     }

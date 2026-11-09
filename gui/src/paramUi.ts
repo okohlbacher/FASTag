@@ -93,6 +93,10 @@ export interface ParamUi {
 const OPT_IN_1_12 = '1.12 command-line option, not in the form yet (CLI default applies)'
 const OPT_IN_1_13_EXPERIMENTAL = '1.13 experimental command-line option, not in the form (CLI default applies)'
 
+/// FASTag 1.13 experimental options: opt-in, output unchanged at the default,
+/// not offered in the form.
+const EXPERIMENTAL_1_13 = '1.13 experimental command-line option, not in the form (CLI default applies)'
+
 const SPECIES_OFF: Dependency = { on: 'species', note: 'species detection is off' }
 const GLYCO_OFF: Dependency = { on: 'glyco', note: 'oxonium flagging is off' }
 const RECON_OFF: Dependency = { on: 'recon_out', note: 'reconciliation only runs when it has an output file' }
@@ -861,6 +865,24 @@ export const PARAM_UI: Record<string, ParamUi> = {
       text: 'The lowest charge tried for a precursor without a charge, when it is not tagged as 2+.'
     }
   },
+  check_header_charge: {
+    hidden: EXPERIMENTAL_1_13,
+    help: {
+      text: 'Whether the charge the file gives for a precursor is checked against the charge its fragment pairs support: off, warn (report disagreements only) or override (tag a disagreeing spectrum at the supported charge). Experimental.'
+    }
+  },
+  check_header_margin: {
+    hidden: EXPERIMENTAL_1_13,
+    help: {
+      text: 'By how much the supported charge must beat the given charge before the header charge check calls a disagreement.'
+    }
+  },
+  check_header_out: {
+    hidden: EXPERIMENTAL_1_13,
+    help: {
+      text: 'Where the header charge check writes one row per spectrum with a given charge: the given charge, the supported charge, the evidence and the verdict.'
+    }
+  },
   complement_midp: {
     hidden: OPT_IN_1_12,
     help: {
@@ -1152,7 +1174,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   unknown_charge: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'How a precursor whose charge the file does not give is tagged: as 2+ (the default, as before 1.12), at each possible charge, or at the charge its fragment pairs support best. A charge given in the file is never replaced.'
+      text: 'How a precursor whose charge the file does not give is tagged: as 2+ (the default, as before 1.12), at each possible charge, or at the charge its fragment pairs support best. A charge given in the file is never replaced (except by the experimental header charge check in override mode).'
     }
   },
 

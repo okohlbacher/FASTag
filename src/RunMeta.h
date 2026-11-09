@@ -89,6 +89,16 @@ namespace FASTag::RunReport
     std::size_t charge_ambiguous = 0;        ///< selected: the call of an ambiguous pair
     std::size_t charge_assumed = 0;          ///< selected: 2 without evidence
     std::size_t charge_enumerated = 0;       ///< selected: one of -charge_min..-charge_max
+    std::size_t charge_overridden = 0;       ///< 1.13 selected: a header charge replaced by the check call
+    // 1.13 (backlog #14): -check_header_charge and its verdicts; rows only
+    // when it is not off, so every report is unchanged at the default.
+    std::string check_header_charge = "off";
+    std::size_t header_checked = 0;
+    std::size_t header_agree = 0;
+    std::size_t header_disagree = 0;
+    std::size_t header_ambiguous = 0;
+    std::size_t header_nocall = 0;
+    std::size_t header_overridden = 0;
     std::size_t iso_shifted = 0;             ///< selected hypothesis with an isotope offset
     std::size_t multi_hypothesis = 0;        ///< spectra tagged under more than one hypothesis
     // #15 phase B: -ion_series and the tagged MS2 spectra per series; filled
@@ -180,7 +190,7 @@ namespace FASTag::RunReport
         r.push_back({"run", "isotope_error", m.isotope_error, "-",
                      "Precursor isotope offsets " + m.isotope_error + " were considered."});
         const std::size_t all = m.charge_header + m.charge_possible + m.charge_inferred + m.charge_ambiguous
-                              + m.charge_assumed + m.charge_enumerated;
+                              + m.charge_assumed + m.charge_enumerated + m.charge_overridden;
         const std::string n = std::to_string(all);
         const auto row = [&](const char* key, std::size_t k, const std::string& how) {
           const std::string c = std::to_string(k);
@@ -194,6 +204,23 @@ namespace FASTag::RunReport
         row("charge_enumerated", m.charge_enumerated, "were reported at an enumerated charge");
         row("isotope_shifted", m.iso_shifted, "were reported at a precursor isotope offset other than 0");
         row("multi_hypothesis", m.multi_hypothesis, "were tagged under more than one precursor hypothesis");
+        if (m.check_header_charge != "off")
+        {
+          // 1.13: value = spectra, n = header-charged MS2 spectra checked.
+          row("charge_overridden", m.charge_overridden, "were reported at a check call instead of their header charge");
+          r.push_back({"run", "check_header_charge", m.check_header_charge, "-",
+                       "Header charges were checked under -check_header_charge " + m.check_header_charge + "."});
+          const std::string hn = std::to_string(m.header_checked);
+          const auto hrow = [&](const char* key, std::size_t k, const std::string& how) {
+            const std::string c = std::to_string(k);
+            r.push_back({"run", key, c, hn, c + " of " + hn + " header-charged MS2 spectra " + how + "."});
+          };
+          hrow("header_charge_agree", m.header_agree, "agree with their complement-pair evidence");
+          hrow("header_charge_disagree", m.header_disagree, "disagree with their complement-pair evidence");
+          hrow("header_charge_ambiguous", m.header_ambiguous, "have two close supported charges, neither the header");
+          hrow("header_charge_nocall", m.header_nocall, "have no charge evidence either way");
+          hrow("header_charge_overridden", m.header_overridden, "were tagged at the supported charge (override)");
+        }
       }
       {
         // #15 phase B: value = spectra read as the series, n = all tagged MS2.

@@ -160,6 +160,39 @@
       "max": 8
     },
     {
+      "name": "check_header_charge",
+      "type": "string",
+      "default": "off",
+      "description": "Check every precursor charge the file gives against the charge its complement pairs support (the -unknown_charge infer call over -charge_min..-charge_max and the header charge): off (the default), warn (count and report disagreements, tag at the header charge) or override (tag a disagreeing spectrum at the supported charge; charge_src 'overridden'; not recommended: on held-out Q Exactive data it broke more charges than it fixed). Experimental; validated on Q Exactive only (on Orbitrap Astral its disagreements were false)",
+      "required": false,
+      "toppAdvanced": true,
+      "choices": [
+        "off",
+        "warn",
+        "override"
+      ]
+    },
+    {
+      "name": "check_header_margin",
+      "type": "double",
+      "default": "6.0",
+      "description": "Complement-pair excess by which the supported charge must beat the header charge's own for -check_header_charge to call a disagreement",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
+    },
+    {
+      "name": "check_header_out",
+      "type": "output-file",
+      "default": "",
+      "description": "-check_header_charge: one row per header-charged MS2 spectrum (header charge, call, evidence, verdict)",
+      "required": false,
+      "toppAdvanced": true,
+      "formats": [
+        "tsv"
+      ]
+    },
+    {
       "name": "complement_midp",
       "type": "bool",
       "default": "false",
@@ -1382,7 +1415,7 @@
       "name": "unknown_charge",
       "type": "string",
       "default": "assume2",
-      "description": "How a precursor without a charge is tagged: assume2 (as 2+, as before 1.12), enumerate (at each listed possible charge, else at every charge -charge_min..-charge_max) or infer (at the charge its complement pairs support; both of two close calls; 1+ when 1 is a candidate and almost no intensity lies above the precursor; without evidence 2+, or the lowest candidate when 2 is none). Every charge tagged is a listed possible charge, else one of -charge_min..-charge_max. With several, E-values are multiplied by their number and the reports count the charge-evidence choice only. A header charge is never replaced",
+      "description": "How a precursor without a charge is tagged: assume2 (as 2+, as before 1.12), enumerate (at each listed possible charge, else at every charge -charge_min..-charge_max) or infer (at the charge its complement pairs support; both of two close calls; 1+ when 1 is a candidate and almost no intensity lies above the precursor; without evidence 2+, or the lowest candidate when 2 is none). Every charge tagged is a listed possible charge, else one of -charge_min..-charge_max. With several, E-values are multiplied by their number and the reports count the charge-evidence choice only. A header charge is never replaced (except by -check_header_charge override)",
       "required": false,
       "toppAdvanced": false,
       "choices": [
