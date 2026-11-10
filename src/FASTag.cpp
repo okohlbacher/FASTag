@@ -4133,6 +4133,7 @@ protected:
       size_t ms1_lo = 1, ms1_hi = 0;
       bool ms1_has = false;
       FASTag::LabelDiscovery::Collector ldisc;  ///< -label_discovery_out only
+      FASTag::LabelDiscovery::ReporterCounter reporters;  ///< -label_discovery_out only
     };
     std::vector<PerThread> per_thread(static_cast<size_t>(std::max(1, omp_get_max_threads())));
     for (PerThread& q : per_thread)
@@ -5136,6 +5137,31 @@ protected:
         }
         const MSSpectrum& spec = loaded_here ? loaded : exp[static_cast<Size>(i)];
         if (mzpeak_out && spec.getMSLevel() == 2 && spec.containsIMData()) throw IonMobilityRefused{};
+        if (ldisc_on && spec.getMSLevel() >= 2)
+        {
+          // Reporter ions (label discovery, format 2). The indexed reader decodes MS2 peaks only, so an MS3 scan is read again.
+          MSSpectrum ms3;
+          if (spec.getMSLevel() > 2 && spec.empty() && freader) ms3 = freader->getSpectrumAnyLevel(static_cast<Size>(i));
+          const MSSpectrum& rs = ms3.empty() ? spec : ms3;
+          FASTag::LabelDiscovery::ReporterCounter& rc = per_thread[tid].reporters;
+          const bool trap = rs.metaValueExists("filter string") && rs.getMetaValue("filter string").toString().rfind("ITMS", 0) == 0;
+          if (rs.getMSLevel() == 2)
+          {
+            ++rc.ms2;
+            rc.ms2_ion_trap += trap;
+          }
+          if (!trap && !rs.empty())
+          {
+            std::vector<std::pair<double, double>> low;
+            double base = 0;
+            for (const Peak1D& p : rs)
+            {
+              base = std::max(base, static_cast<double>(p.getIntensity()));
+              if (p.getMZ() >= 112.0 && p.getMZ() <= 137.0) low.emplace_back(p.getMZ(), p.getIntensity());
+            }
+            rc.add(low, base);
+          }
+        }
         const Clock::time_point tb = timing ? Clock::now() : ta;
         record(blk, idx, tag_one(spec, tid, static_cast<size_t>(i)), spec);
         tick();
@@ -6289,7 +6315,10 @@ protected:
       col.finish();
       // ModificationsDB once, in one thread (section 8).
       const LD::UnimodTable unimod = ldisc_settings.low_resolution ? LD::UnimodTable() : LD::UnimodTable::fromModificationsDB();
-      const LD::Analysis ana = LD::analyze(col, ldisc_settings, unimod);
+      LD::Analysis ana = LD::analyze(col, ldisc_settings, unimod);
+      LD::ReporterCounter reporters;
+      for (const PerThread& pt : per_thread) reporters.merge(pt.reporters);
+      LD::applyReporters(ana, reporters);
       col = LD::Collector();
       std::vector<FD::Row> rows = FASTag::RunReport::runRows(run_meta, FASTag::RunReport::Emit::Versioned);
       for (FD::Row& r : LD::reportRows(ana, ldisc_settings)) rows.push_back(std::move(r));

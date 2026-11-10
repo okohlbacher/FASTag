@@ -11,7 +11,7 @@
 #   identity   the option off leaves every output byte-identical; with it on,
 #              every other output is byte-identical (sections 2, 10, 12)
 #   format     header, five non-empty fields, unique (section, key), the
-#              documented section order, ld_run format 1, no .part (section 9)
+#              documented section order, ld_run format 2, no .part (section 9)
 #   counts     ld_count against a recount of the tag TSV (sections 3, 4, 5)
 #   labels     TMT, TMTpro, iTRAQ4, Dimethyl (known_label; Dimethyl since evaluation 2, no b0),
 #              an unknown +123.4567 (unexplained), each at the N site, and the
@@ -89,7 +89,7 @@ TMT=229.162932; TMTPRO=304.207146; ITRAQ4=144.102063; DIMETHYL=28.0313; UNKNOWN=
 DTOL=0.003   # a site delta / peak mass: the c window floor 0.0015 and the fixture's jitter
 
 # ---------------------------------------------------------------- format (section 9)
-ORDER="run ld_run ld_count ld_peak ld_site ld_known ld_call"
+ORDER="run ld_run ld_count ld_peak ld_site ld_known ld_reporter ld_call"
 check_format() {   # FILE NAME
   local f="$1" name="$2"
   [ -s "$f" ] || { check "$name: no report"; return 1; }
@@ -110,14 +110,14 @@ check_format() {   # FILE NAME
   for s in run ld_run ld_count ld_site ld_call; do
     tr -d '\r' < "$f" | cut -f1 | grep -qx "$s" || check "$name: no $s section"
   done
-  [ "$(val "$f" ld_run format)" = 1 ] || check "$name: ld_run format is not 1"
+  [ "$(val "$f" ld_run format)" = 2 ] || check "$name: ld_run format is not 2"
   local st lab rs
   st=$(val "$f" ld_call status); lab=$(val "$f" ld_call labels); rs=$(val "$f" ld_call reason)
   case "$st" in
     call) [ "$rs" = - ] || check "$name: a call with reason '$rs'"
           [ -n "$lab" ] && [ "$lab" != - ] || check "$name: a call without labels" ;;
     no_call) [ "$lab" = - ] || check "$name: a no_call with labels '$lab'"
-             case "$rs" in low_resolution|few_spectra|cz_only|no_reference) ;; *) check "$name: no_call reason '$rs'" ;; esac ;;
+             case "$rs" in low_resolution|low_resolution_ms2|few_spectra|cz_only|no_reference|no_reporter_ions) ;; *) check "$name: no_call reason '$rs'" ;; esac ;;
     *) check "$name: ld_call status '$st'" ;;
   esac
   # the last section is the call (section 9: measurements first, the call last)

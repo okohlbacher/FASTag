@@ -69,7 +69,7 @@
   database-free label discovery. Reports every N-terminal, K, R or
   C-terminal mass offset the tag flanks carry, known or not, explained by
   residues, the known labels (TMT, TMTpro, iTRAQ4/8, dimethyl, SILAC Lys4/6/8
-  and Arg6/10) or Unimod, with a label call (format 1,
+  and Arg6/10) or Unimod, with a label call (format 2,
   doc/LABEL-DISCOVERY-REPORT.md; design doc/DESIGN-label-discovery.md).
   Advanced options `-label_discovery_max_flank` (at most 1500 Da), `_depth`,
   `_min_spectra`, `_min_share`, `_window_n`, `_window_c` (at most 0.05 Da)

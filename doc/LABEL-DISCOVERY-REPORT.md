@@ -1,4 +1,4 @@
-# The label discovery report (`-label_discovery_out`), format 1
+# The label discovery report (`-label_discovery_out`), format 2
 
 Experimental and opt-in. It failed its held-out test (acceptance/1.13
 PREREG-labeldisc.md; 190 public runs, scored once on 2026-11-10):
@@ -49,7 +49,9 @@ and `-alkylation_out`:
   7); `FASTAG_FULL_PRECISION=1` in the environment writes them in full.
 - The file is written to `<file>.part` and renamed when complete. A refused
   or failed run leaves no file.
-- The version is the row `ld_run format` = `1`. A reader that does not know
+- The version is the row `ld_run format` = `2` (format 2 added the
+  `ld_reporter` section, the `basis` `reporter_ions` and the reasons
+  `low_resolution_ms2` and `no_reporter_ions`). A reader that does not know
   the format should stop.
 
 Sections, in this order:
@@ -256,6 +258,55 @@ K0f (c = L, any last residue), K1f, K1r, at `-digest_window` with the
 c/z included). `<label>.N0f.tags` equals `-label_out`'s N-terminal count of
 that label and `<label>.K0f.tags` its C-terminal count.
 
+### `ld_reporter`
+
+The reporter ions of the isobaric labels, counted in the MS2 and MS3 scans
+that do not come from an ion trap (filter string not `ITMS`; a scan without
+a filter string counts as high resolution). MS1 scans are not read.
+
+| key | value |
+|---|---|
+| `scans` | scans examined |
+| `covered` | scans with a peak in 112-137 m/z |
+| `ms2_scans`, `ms2_ion_trap` | MS2 scans seen, and those from an ion trap |
+| `tmt_excess` | share of the scans with at least 2 of the 11 TMT reporters (126-131), minus the same share at decoy m/z |
+| `itraq4_excess` | the same for at least 2 of the iTRAQ 4-plex reporters (114-117) |
+| `itraq8_excess` | the same for at least 1 reporter of iTRAQ 8-plex only (113, 118, 119, 121) |
+| `tmtpro_excess` | the same for at least 2 reporters of TMTpro only (132-135); reported, not used by the call |
+| `gate` | `unknown`, `tmt`, `itraq4`, `itraq8`, `none` or `unclear` |
+
+A reporter counts when a peak within 0.003 Da reaches 1 % of the scan's base
+peak. The decoy m/z are all channels shifted by +0.0170 and by -0.0170 Da
+(the decoy share is the mean of the two). Gate: below 200 scans `unknown`;
+`tmt_excess` >= 0.3 `tmt`; `itraq4_excess` >= 0.3 `itraq4`, or `itraq8` when
+`itraq8_excess` >= 0.3 too; both below 0.05 and at least half of the scans `covered` `none` (a run
+whose scans start above the reporter region cannot show reporters); else
+`unclear`.
+
+Effect on the call (`basis` `reporter_ions` when it changes the call):
+
+- Gate `tmt`, `itraq4` or `itraq8`: a call that names a label of the family
+  stays, and `ambiguous:iTRAQ8plex|TMTpro` becomes the label of the family.
+  Any other result is replaced by the family's label. For TMT the variant is
+  the N-terminal candidate with the most spectra within 0.008 Da of 229.1629
+  (`TMT`) or 304.2071 (`TMTpro`); without one the call is `TMT` with sites
+  `-` (family known, variant not).
+- Gate `none`: TMT and iTRAQ labels are removed from the call. If none is
+  left, the result is `no_call no_reporter_ions`.
+- Gate `unknown` or `unclear`: no effect.
+- A no call with the reason `few_spectra`, `no_reference` or
+  `low_resolution` on a run whose MS2 scans are mostly ion-trap scans gets
+  the reason `low_resolution_ms2`. The gate still reads the run's
+  high-resolution MS3 (or MS2) scans, so a TMT run with ion-trap MS2 and
+  Orbitrap MS3 can get a family call. Label-free and SILAC cannot be decided
+  on such a run.
+
+The thresholds and the rule were set on the 99 development runs after the
+held-out test above; on them the rule turns one wrong result into a right
+one (86 instead of 85 right, PXD046211) and changes no other. It has no
+held-out test: the verdict above is the one of format 1, and a new test
+needs new runs. The `low_resolution_ms2` reason has not been evaluated.
+
 ### `ld_call`
 
 | key | value |
@@ -263,8 +314,8 @@ that label and `<label>.K0f.tags` its C-terminal count.
 | `status` | `call` or `no_call` |
 | `labels` | the labels called, `+`-joined: an N label by name (`TMT`, `Dimethyl`, `iTRAQ8plex`), others `<site>:<name>` (`K:TMT`, `K:Lys8`, `R:Arg6`), unknown ones `unknown:<site><+delta>`, near-isobaric ones that the calibration cannot separate `ambiguous:<a>|<b>` (e.g. `ambiguous:iTRAQ8plex|TMTpro`: isobaric, not decided); `label-free`; `-` on a no call |
 | `sites` | the sites of the called labels, comma-joined |
-| `basis` | `site_scan` |
-| `reason` | `low_resolution`, `cz_only`, `few_spectra` (below 175 counted spectra), `no_reference`; `-` on a call |
+| `basis` | `site_scan`, or `reporter_ions` when the reporter gate changed the call (see `ld_reporter`) |
+| `reason` | `low_resolution`, `low_resolution_ms2` (ion-trap MS2 scans), `cz_only`, `few_spectra` (below 175 counted spectra), `no_reference`, `no_reporter_ions` (an isobaric label call without reporter ions); `-` on a call |
 
 **Call rule (priors; the evidence bar set on development runs only; it
 failed the held-out test above).** Candidates are taken in order of
