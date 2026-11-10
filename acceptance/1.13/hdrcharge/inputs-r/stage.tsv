@@ -1,0 +1,11 @@
+role	class	accession	file	bytes	pride_sha1	url
+chosen	qe	PXD037572	20210815_PHCOQEHF_PC878-Giudice_5.raw	1762684324	64cae8e74af85543ef43dc3fa9490bf26de64120	https://ftp.pride.ebi.ac.uk/pride/data/archive/2023/10/PXD037572/20210815_PHCOQEHF_PC878-Giudice_5.raw
+backup	qe	PXD037572	20210815_PHCOQEHF_PC878-Giudice_3.raw	1686148483	c1e7036809979089567d0d95e285164a7203ad65	https://ftp.pride.ebi.ac.uk/pride/data/archive/2023/10/PXD037572/20210815_PHCOQEHF_PC878-Giudice_3.raw
+chosen	qe	PXD016408	20171128_QE5_nLC3_MJ_MT9GFPclone5_Rep1_5ul.raw	1942770116	94624217747d53f32fbc9863459eeb228f1f00c9	https://ftp.pride.ebi.ac.uk/pride/data/archive/2020/11/PXD016408/20171128_QE5_nLC3_MJ_MT9GFPclone5_Rep1_5ul.raw
+backup	qe	PXD016408	20171128_QE5_nLC3_MJ_MT9GFPclone5_Rep2_5ul.raw	1865667316	de97985db1d7c1bb4d40d05fbedf577d46533b5a	https://ftp.pride.ebi.ac.uk/pride/data/archive/2020/11/PXD016408/20171128_QE5_nLC3_MJ_MT9GFPclone5_Rep2_5ul.raw
+chosen	qe	PXD033520	q108996a.raw	1332691627	a2441c67b1c26bb7c70c3c3be4c04b4f74f87e1e	https://ftp.pride.ebi.ac.uk/pride/data/archive/2023/02/PXD033520/q108996a.raw
+backup	qe	PXD033520	q109007a.raw	1400557270	37b1692c90fbd91f5b19de64034fe52f287db1c0	https://ftp.pride.ebi.ac.uk/pride/data/archive/2023/02/PXD033520/q109007a.raw
+chosen	astral	PXD071028	20251007_A2_N1_Grujic_Dagdas_GMI_ID2315_DDA_2per_S11_ANS-FLAG-IP-2.raw	4613301208	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2026/03/PXD071028/20251007_A2_N1_Grujic_Dagdas_GMI_ID2315_DDA_2per_S11_ANS-FLAG-IP-2.raw
+backup	astral	PXD071028	20251007_A2_N1_Grujic_Dagdas_GMI_ID2315_DDA_2per_S12_ANS-FLAG-IP-3.raw	4504118825	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2026/03/PXD071028/20251007_A2_N1_Grujic_Dagdas_GMI_ID2315_DDA_2per_S12_ANS-FLAG-IP-3.raw
+chosen	astral	PXD080900	20260612_AST1_IMB_HU_0491_IP_NON_90.raw	6503273884	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2026/10/PXD080900/20260612_AST1_IMB_HU_0491_IP_NON_90.raw
+backup	astral	PXD080900	20260612_AST1_IMB_HU_0488_IP_NON_90.raw	6334277742	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2026/10/PXD080900/20260612_AST1_IMB_HU_0488_IP_NON_90.raw

@@ -1,0 +1,2 @@
+class	accession	file	bytes	pride_sha1	status	raw_sha256	mzml	mzml_bytes	mzml_sha256	instrument	ms1	ms2	ms2_charged	isolation_targets	check
+astral	PXD080900	20260612_AST1_IMB_HU_0491_IP_NON_90.raw	6503273884	-	no_pride_sha1,size_ok,second_download_same	519e3df7709e0161456dda0b5674699833206ab505ee7c002d2e2ecf4a492680	PXD080900/20260612_AST1_IMB_HU_0491_IP_NON_90.mzML	4662986391	4e570df09e3364dfbcf19b684961a73b191b0d749341bae688ad3045148327cd	Orbitrap Astral	12461	227508	227508	216693	ok

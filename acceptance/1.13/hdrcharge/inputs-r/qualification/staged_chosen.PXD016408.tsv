@@ -1,0 +1,2 @@
+class	accession	file	bytes	pride_sha1	status	raw_sha256	mzml	mzml_bytes	mzml_sha256	instrument	ms1	ms2	ms2_charged	isolation_targets	check
+qe	PXD016408	20171128_QE5_nLC3_MJ_MT9GFPclone5_Rep1_5ul.raw	1942770116	94624217747d53f32fbc9863459eeb228f1f00c9	sha1_ok	5dc6e6315aba1bd93c3d557ce6ec0027928a1dc0c39528338c3e86af71f5bd52	PXD016408/20171128_QE5_nLC3_MJ_MT9GFPclone5_Rep1_5ul.mzML	603998673	8eaf7219c88238ac213afef31c04c5ee4a9127ee39567118585f4f2d543b5692	Q Exactive HF-X	9616	42755	42755	42465	ok

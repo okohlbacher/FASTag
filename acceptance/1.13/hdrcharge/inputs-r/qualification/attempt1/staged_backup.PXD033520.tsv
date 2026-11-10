@@ -1,0 +1,2 @@
+class	accession	file	bytes	pride_sha1	status	raw_sha256	mzml	mzml_bytes	mzml_sha256	instrument	ms1	ms2	ms2_charged	isolation_targets	check
+qe	PXD033520	q109007a.raw	1400557270	37b1692c90fbd91f5b19de64034fe52f287db1c0	DOWNLOAD_FAILED		PXD033520/q109007a.mzML	-	-	-	-	-	-	-	FAIL

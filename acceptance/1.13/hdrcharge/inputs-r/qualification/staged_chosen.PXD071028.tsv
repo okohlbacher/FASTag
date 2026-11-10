@@ -1,0 +1,2 @@
+class	accession	file	bytes	pride_sha1	status	raw_sha256	mzml	mzml_bytes	mzml_sha256	instrument	ms1	ms2	ms2_charged	isolation_targets	check
+astral	PXD071028	20251007_A2_N1_Grujic_Dagdas_GMI_ID2315_DDA_2per_S11_ANS-FLAG-IP-2.raw	4613301208	-	SECOND_DOWNLOAD_DIFFERS	b118ca2811fd7bb6d5be4e01b73f8da79b356b3307c31b03b7ed9f5cbd3ff8f9	PXD071028/20251007_A2_N1_Grujic_Dagdas_GMI_ID2315_DDA_2per_S11_ANS-FLAG-IP-2.mzML	-	-	-	-	-	-	-	FAIL

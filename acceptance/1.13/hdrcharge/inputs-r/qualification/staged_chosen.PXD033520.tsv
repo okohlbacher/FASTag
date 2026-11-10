@@ -1,0 +1,2 @@
+class	accession	file	bytes	pride_sha1	status	raw_sha256	mzml	mzml_bytes	mzml_sha256	instrument	ms1	ms2	ms2_charged	isolation_targets	check
+qe	PXD033520	q108996a.raw	1332691627	a2441c67b1c26bb7c70c3c3be4c04b4f74f87e1e	sha1_ok	47bf10d87f6e39d41f02312cfccd44287eedb578039e41a93248e78b82d4ef39	PXD033520/q108996a.mzML	398280713	5c3dba4b6c3533da21895257065a51b202fe79b46856f6f44693d1e01a5ffde9	Q Exactive	10061	24844	24844	24556	ok

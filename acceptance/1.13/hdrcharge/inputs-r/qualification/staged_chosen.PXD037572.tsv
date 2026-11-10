@@ -1,0 +1,2 @@
+class	accession	file	bytes	pride_sha1	status	raw_sha256	mzml	mzml_bytes	mzml_sha256	instrument	ms1	ms2	ms2_charged	isolation_targets	check
+qe	PXD037572	20210815_PHCOQEHF_PC878-Giudice_5.raw	1762684324	64cae8e74af85543ef43dc3fa9490bf26de64120	sha1_ok	8f996baea55e991d77d5000e53d67f6525b973a85d53975b6158aa469e4d2d67	PXD037572/20210815_PHCOQEHF_PC878-Giudice_5.mzML	585337495	6bc0b50da474c123864a5b55b733e910474a7f429ab2fb20e82d06f483b8a284	Q Exactive HF	10861	45287	45287	43685	ok

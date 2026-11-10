@@ -1,0 +1,2 @@
+class	accession	file	bytes	pride_sha1	status	raw_sha256	mzml	mzml_bytes	mzml_sha256	instrument	ms1	ms2	ms2_charged	isolation_targets	check
+astral	PXD071028	20251007_A2_N1_Grujic_Dagdas_GMI_ID2315_DDA_2per_S12_ANS-FLAG-IP-3.raw	4504118825	-	no_pride_sha1,size_ok,second_download_same	3b9911045e5d4cb55e5bc6153dbcd81c8c4a08b0145a6656cedbe1e12d411d54	PXD071028/20251007_A2_N1_Grujic_Dagdas_GMI_ID2315_DDA_2per_S12_ANS-FLAG-IP-3.mzML	3651092392	2bc92370cb2b922fb9328bf460ad9519052e9b6e7c1f62e2db7926e42ba27b2d	Orbitrap Astral	7740	244965	244965	236080	ok

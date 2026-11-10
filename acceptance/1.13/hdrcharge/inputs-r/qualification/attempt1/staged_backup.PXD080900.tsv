@@ -1,0 +1,2 @@
+class	accession	file	bytes	pride_sha1	status	raw_sha256	mzml	mzml_bytes	mzml_sha256	instrument	ms1	ms2	ms2_charged	isolation_targets	check
+astral	PXD080900	20260612_AST1_IMB_HU_0488_IP_NON_90.raw	6334277742	-	SECOND_DOWNLOAD_DIFFERS	d8b5cef2373dfc6e11ca0532fa690d36f3f100cbf602b6c6919c3781bfe9218e	PXD080900/20260612_AST1_IMB_HU_0488_IP_NON_90.mzML	-	-	-	-	-	-	-	FAIL

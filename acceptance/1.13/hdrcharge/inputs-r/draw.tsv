@@ -1,0 +1,348 @@
+class	accession	draw_rank	result	note
+qe	PXD017772	1	organism	mus musculus (mouse)
+qe	PXD037572	2	TAKEN	9 eligible files; chosen 20210815_PHCOQEHF_PC878-Giudice_5.raw
+qe	PXD010248	3	organism	mus musculus (mouse)
+qe	PXD016408	4	TAKEN	6 eligible files; chosen 20171128_QE5_nLC3_MJ_MT9GFPclone5_Rep1_5ul.raw
+qe	PXD033520	5	TAKEN	24 eligible files; chosen q108996a.raw
+qe	PXD017524	6	not_needed	
+qe	PXD001360	7	not_needed	
+qe	PXD041996	8	not_needed	
+qe	PXD024088	9	not_needed	
+qe	PXD008548	10	not_needed	
+qe	PXD013656	11	not_needed	
+qe	PXD039384	12	not_needed	
+qe	PXD029492	13	not_needed	
+qe	PXD006396	14	not_needed	
+qe	PXD076368	15	not_needed	
+qe	PXD039324	16	not_needed	
+qe	PXD014692	17	not_needed	
+qe	PXD010608	18	not_needed	
+qe	PXD055880	19	not_needed	
+qe	PXD023068	20	not_needed	
+qe	PXD039508	21	not_needed	
+qe	PXD031524	22	not_needed	
+qe	PXD013968	23	not_needed	
+qe	PXD071884	24	not_needed	
+qe	PXD003412	25	not_needed	
+qe	PXD016208	26	not_needed	
+qe	PXD072948	27	not_needed	
+qe	PXD025556	28	not_needed	
+qe	PXD053932	29	not_needed	
+qe	PXD026904	30	not_needed	
+qe	PXD012148	31	not_needed	
+qe	PXD048976	32	not_needed	
+qe	PXD026880	33	not_needed	
+qe	PXD018044	34	not_needed	
+qe	PXD068064	35	not_needed	
+qe	PXD011712	36	not_needed	
+qe	PXD014416	37	not_needed	
+qe	PXD031604	38	not_needed	
+qe	PXD062600	39	not_needed	
+qe	PXD006692	40	not_needed	
+qe	PXD035780	41	not_needed	
+qe	PXD018112	42	not_needed	
+qe	PXD014592	43	not_needed	
+qe	PXD052084	44	not_needed	
+qe	PXD010540	45	not_needed	
+qe	PXD028308	46	not_needed	
+qe	PXD062516	47	not_needed	
+qe	PXD013648	48	not_needed	
+qe	PXD016416	49	not_needed	
+qe	PXD008104	50	not_needed	
+qe	PXD022660	51	not_needed	
+qe	PXD014468	52	not_needed	
+qe	PXD031580	53	not_needed	
+qe	PXD027032	54	not_needed	
+qe	PXD059048	55	not_needed	
+qe	PXD047656	56	not_needed	
+qe	PXD035024	57	not_needed	
+qe	PXD040972	58	not_needed	
+qe	PXD027364	59	not_needed	
+qe	PXD015780	60	not_needed	
+qe	PXD045980	61	not_needed	
+qe	PXD007088	62	not_needed	
+qe	PXD033076	63	not_needed	
+qe	PXD021172	64	not_needed	
+qe	PXD029560	65	not_needed	
+qe	PXD018516	66	not_needed	
+qe	PXD040172	67	not_needed	
+qe	PXD043796	68	not_needed	
+qe	PXD005372	69	not_needed	
+qe	PXD027896	70	not_needed	
+qe	PXD057436	71	not_needed	
+qe	PXD039136	72	not_needed	
+qe	PXD030984	73	not_needed	
+qe	PXD019140	74	not_needed	
+qe	PXD020988	75	not_needed	
+qe	PXD013368	76	not_needed	
+qe	PXD052144	77	not_needed	
+qe	PXD015736	78	not_needed	
+qe	PXD022080	79	not_needed	
+qe	PXD036260	80	not_needed	
+qe	PXD023892	81	not_needed	
+qe	PXD045696	82	not_needed	
+qe	PXD005368	83	not_needed	
+qe	PXD031404	84	not_needed	
+qe	PXD012724	85	not_needed	
+qe	PXD059688	86	not_needed	
+qe	PXD042800	87	not_needed	
+qe	PXD027280	88	not_needed	
+qe	PXD041132	89	not_needed	
+qe	PXD024988	90	not_needed	
+qe	PXD010672	91	not_needed	
+qe	PXD001732	92	not_needed	
+qe	PXD029144	93	not_needed	
+qe	PXD020896	94	not_needed	
+qe	PXD035184	95	not_needed	
+qe	PXD015536	96	not_needed	
+qe	PXD017248	97	not_needed	
+qe	PXD049332	98	not_needed	
+qe	PXD046512	99	not_needed	
+qe	PXD044136	100	not_needed	
+qe	PXD080456	101	not_needed	
+qe	PXD048308	102	not_needed	
+qe	PXD020104	103	not_needed	
+qe	PXD015840	104	not_needed	
+qe	PXD059780	105	not_needed	
+qe	PXD043808	106	not_needed	
+qe	PXD007788	107	not_needed	
+qe	PXD022056	108	not_needed	
+qe	PXD014556	109	not_needed	
+qe	PXD040180	110	not_needed	
+qe	PXD004068	111	not_needed	
+qe	PXD045772	112	not_needed	
+qe	PXD069784	113	not_needed	
+qe	PXD004424	114	not_needed	
+qe	PXD042384	115	not_needed	
+qe	PXD060520	116	not_needed	
+qe	PXD020220	117	not_needed	
+qe	PXD052220	118	not_needed	
+qe	PXD049360	119	not_needed	
+qe	PXD056720	120	not_needed	
+qe	PXD046592	121	not_needed	
+qe	PXD021856	122	not_needed	
+qe	PXD045256	123	not_needed	
+qe	PXD011920	124	not_needed	
+qe	PXD035192	125	not_needed	
+qe	PXD003364	126	not_needed	
+qe	PXD052800	127	not_needed	
+qe	PXD012276	128	not_needed	
+qe	PXD075764	129	not_needed	
+qe	PXD066920	130	not_needed	
+qe	PXD037944	131	not_needed	
+qe	PXD011172	132	not_needed	
+qe	PXD003408	133	not_needed	
+qe	PXD027748	134	not_needed	
+qe	PXD010168	135	not_needed	
+qe	PXD030384	136	not_needed	
+qe	PXD001608	137	not_needed	
+qe	PXD005092	138	not_needed	
+qe	PXD027444	139	not_needed	
+qe	PXD021544	140	not_needed	
+qe	PXD019252	141	not_needed	
+qe	PXD038896	142	not_needed	
+qe	PXD009856	143	not_needed	
+qe	PXD051580	144	not_needed	
+qe	PXD030012	145	not_needed	
+qe	PXD045196	146	not_needed	
+qe	PXD014528	147	not_needed	
+qe	PXD009328	148	not_needed	
+qe	PXD016916	149	not_needed	
+qe	PXD039152	150	not_needed	
+qe	PXD007176	151	not_needed	
+qe	PXD016656	152	not_needed	
+qe	PXD044560	153	not_needed	
+qe	PXD042152	154	not_needed	
+qe	PXD010788	155	not_needed	
+qe	PXD047752	156	not_needed	
+qe	PXD064288	157	not_needed	
+qe	PXD068260	158	not_needed	
+qe	PXD011976	159	not_needed	
+qe	PXD027572	160	not_needed	
+qe	PXD053620	161	not_needed	
+qe	PXD032824	162	not_needed	
+qe	PXD050868	163	not_needed	
+qe	PXD067552	164	not_needed	
+qe	PXD046928	165	not_needed	
+qe	PXD005388	166	not_needed	
+qe	PXD018636	167	not_needed	
+qe	PXD010600	168	not_needed	
+qe	PXD045288	169	not_needed	
+qe	PXD008928	170	not_needed	
+qe	PXD021136	171	not_needed	
+qe	PXD037548	172	not_needed	
+qe	PXD033124	173	not_needed	
+qe	PXD041236	174	not_needed	
+qe	PXD039664	175	not_needed	
+qe	PXD011368	176	not_needed	
+qe	PXD003416	177	not_needed	
+qe	PXD029496	178	not_needed	
+qe	PXD005840	179	not_needed	
+qe	PXD066488	180	not_needed	
+qe	PXD061708	181	not_needed	
+qe	PXD027252	182	not_needed	
+qe	PXD065424	183	not_needed	
+qe	PXD030708	184	not_needed	
+qe	PXD042808	185	not_needed	
+qe	PXD006280	186	not_needed	
+qe	PXD005880	187	not_needed	
+qe	PXD028604	188	not_needed	
+qe	PXD010084	189	not_needed	
+qe	PXD006720	190	not_needed	
+qe	PXD054784	191	not_needed	
+qe	PXD017492	192	not_needed	
+qe	PXD045804	193	not_needed	
+qe	PXD035728	194	not_needed	
+qe	PXD005736	195	not_needed	
+qe	PXD006336	196	not_needed	
+qe	PXD048268	197	not_needed	
+qe	PXD054704	198	not_needed	
+qe	PXD048144	199	not_needed	
+qe	PXD022664	200	not_needed	
+qe	PXD026292	201	not_needed	
+qe	PXD014088	202	not_needed	
+qe	PXD006212	203	not_needed	
+qe	PXD014472	204	not_needed	
+qe	PXD028276	205	not_needed	
+qe	PXD019440	206	not_needed	
+qe	PXD030776	207	not_needed	
+qe	PXD005376	208	not_needed	
+qe	PXD068540	209	not_needed	
+qe	PXD024688	210	not_needed	
+qe	PXD023812	211	not_needed	
+qe	PXD051672	212	not_needed	
+qe	PXD024176	213	not_needed	
+qe	PXD049324	214	not_needed	
+qe	PXD030308	215	not_needed	
+qe	PXD033068	216	not_needed	
+qe	PXD013600	217	not_needed	
+qe	PXD013684	218	not_needed	
+qe	PXD034100	219	not_needed	
+qe	PXD000288	220	not_needed	
+qe	PXD012416	221	not_needed	
+qe	PXD031088	222	not_needed	
+qe	PXD016724	223	not_needed	
+qe	PXD024244	224	not_needed	
+qe	PXD005432	225	not_needed	
+qe	PXD025412	226	not_needed	
+qe	PXD026408	227	not_needed	
+qe	PXD020024	228	not_needed	
+astral	PXD063864	1	ptm_or_special	palmitoyl
+astral	PXD082032	2	instr	orbitrap astral;orbitrap eclipse
+astral	PXD061620	3	no_eligible_file	
+astral	PXD066600	4	no_trypsin	
+astral	PXD069824	5	organism	saccharomyces cerevisiae (baker's yeast)
+astral	PXD057944	6	ptm_or_special	enrich
+astral	PXD068528	7	no_eligible_file	
+astral	PXD060376	8	ptm_or_special	enrich
+astral	PXD063024	9	instr	orbitrap astral;orbitrap exploris 480;q exactive
+astral	PXD059096	10	instr	orbitrap astral;orbitrap eclipse
+astral	PXD075964	11	organism	bacteria;escherichia coli
+astral	PXD063840	12	ptm_or_special	palmitoyl
+astral	PXD059540	13	ptm_or_special	Acetylom
+astral	PXD056212	14	sample	xenograft
+astral	PXD059548	15	no_eligible_file	
+astral	PXD060332	16	instr	orbitrap astral;orbitrap exploris 480;orbitrap eclipse
+astral	PXD079616	17	organism	rattus norvegicus (rat)
+astral	PXD082640	18	no_trypsin	
+astral	PXD060372	19	no_trypsin	
+astral	PXD068212	20	organism	mus musculus (mouse)
+astral	PXD078004	21	sample	excised
+astral	PXD070540	22	ptm_or_special	enrich
+astral	PXD054316	23	organism	bacteria;peptoclostridium difficile (strain 630) (clostridium difficile)
+astral	PXD067912	24	ptm_or_special	biotin
+astral	PXD061608	25	instr	orbitrap exploris 480
+astral	PXD071972	26	organism	escherichia coli;homo sapiens (human);saccharomyces cerevisiae (baker's yeast)
+astral	PXD077476	27	organism	acinetobacter sp. adp1
+astral	PXD069060	28	instr	orbitrap astral;orbitrap eclipse;timstof pro
+astral	PXD075440	29	organism	mus musculus (mouse)
+astral	PXD054440	30	no_eligible_file	
+astral	PXD077620	31	organism	mus musculus (mouse)
+astral	PXD069676	32	instr	ltq orbitrap elite;orbitrap astral
+astral	PXD078868	33	organism	gut metagenome
+astral	PXD068960	34	no_eligible_file	
+astral	PXD078928	35	organism	mus musculus (mouse)
+astral	PXD054356	36	organism	mus musculus (mouse)
+astral	PXD056564	37	ptm_or_special	ubiquitylat
+astral	PXD067004	38	organism	cricetulus griseus (chinese hamster) (cricetulus barabensis griseus);mus musculus (mouse)
+astral	PXD061052	39	no_eligible_file	
+astral	PXD046372	40	no_eligible_file	
+astral	PXD078568	41	ptm_or_special	biotin
+astral	PXD055588	42	organism	mus musculus (mouse)
+astral	PXD070324	43	ptm_or_special	enrich
+astral	PXD078972	44	organism	rattus norvegicus (rat)
+astral	PXD060808	45	no_trypsin	
+astral	PXD067688	46	organism	mus musculus (mouse)
+astral	PXD065688	47	no_trypsin	
+astral	PXD071156	48	organism	plasmodium falciparum (isolate 3d7)
+astral	PXD062088	49	organism	spodoptera frugiperda
+astral	PXD071864	50	organism	lucilia cuprina
+astral	PXD063072	51	organism	capra hircus (goat)
+astral	PXD052472	52	organism	leishmania donovani bpk282a1
+astral	PXD085656	53	label	dimethyl
+astral	PXD081812	54	organism	mus musculus (mouse)
+astral	PXD081080	55	organism	riemerella anatipestifer ra-ch-1
+astral	PXD064180	56	ptm_or_special	SUMO
+astral	PXD067760	57	organism	mus musculus (mouse)
+astral	PXD066616	58	no_eligible_file	
+astral	PXD055516	59	organism	homo sapiens (human);mus musculus (mouse)
+astral	PXD060648	60	ptm_or_special	Phospho
+astral	PXD074668	61	instr	ltq orbitrap
+astral	PXD063572	62	ptm_or_special	enrich
+astral	PXD071048	63	ptm_or_special	Phospho
+astral	PXD083384	64	organism	mus musculus musculus
+astral	PXD080172	65	organism	ctenopharyngodon idella
+astral	PXD049028	66	no_eligible_file	
+astral	PXD074200	67	organism	saccharomyces cerevisiae (baker's yeast)
+astral	PXD070408	68	ptm_or_special	enrich
+astral	PXD027452	69	instr	orbitrap fusion
+astral	PXD067456	70	instr	orbitrap fusion
+astral	PXD070072	71	instr	orbitrap astral;orbitrap exploris 480
+astral	PXD082880	72	no_eligible_file	
+astral	PXD071028	73	TAKEN	16 eligible files; chosen 20251007_A2_N1_Grujic_Dagdas_GMI_ID2315_DDA_2per_S11_ANS-FLAG-IP-2.raw
+astral	PXD074568	74	organism	mus musculus (mouse)
+astral	PXD074900	75	no_trypsin	
+astral	PXD057708	76	no_eligible_file	
+astral	PXD066924	77	no_trypsin	
+astral	PXD057656	78	organism	mus musculus (mouse)
+astral	PXD046444	79	organism	escherichia coli;homo sapiens (human);saccharomyces cerevisiae (baker's yeast)
+astral	PXD028828	80	organism	saccharomyces cerevisiae (baker's yeast)
+astral	PXD069152	81	organism	mus musculus (mouse)
+astral	PXD059240	82	no_trypsin	
+astral	PXD072140	83	no_eligible_file	
+astral	PXD077140	84	no_eligible_file	
+astral	PXD085732	85	organism	escherichia coli;homo sapiens (human);saccharomyces cerevisiae (baker's yeast)
+astral	PXD066700	86	organism	bos taurus (bovine);homo sapiens (human)
+astral	PXD074576	87	instr	orbitrap eclipse
+astral	PXD078528	88	no_trypsin	
+astral	PXD080900	89	TAKEN	9 eligible files; chosen 20260612_AST1_IMB_HU_0491_IP_NON_90.raw
+astral	PXD063016	90	not_needed	
+astral	PXD068912	91	not_needed	
+astral	PXD061848	92	not_needed	
+astral	PXD079280	93	not_needed	
+astral	PXD061272	94	not_needed	
+astral	PXD062748	95	not_needed	
+astral	PXD073640	96	not_needed	
+astral	PXD058160	97	not_needed	
+astral	PXD070488	98	not_needed	
+astral	PXD062616	99	not_needed	
+astral	PXD062492	100	not_needed	
+astral	PXD070052	101	not_needed	
+astral	PXD064564	102	not_needed	
+astral	PXD080728	103	not_needed	
+astral	PXD074056	104	not_needed	
+astral	PXD080976	105	not_needed	
+astral	PXD071084	106	not_needed	
+astral	PXD061132	107	not_needed	
+astral	PXD071500	108	not_needed	
+astral	PXD070780	109	not_needed	
+astral	PXD070016	110	not_needed	
+astral	PXD071948	111	not_needed	
+astral	PXD075204	112	not_needed	
+astral	PXD069324	113	not_needed	
+astral	PXD065124	114	not_needed	
+astral	PXD041412	115	not_needed	
+astral	PXD077344	116	not_needed	
+astral	PXD083748	117	not_needed	
+astral	PXD068040	118	not_needed	
+astral	PXD058708	119	not_needed	
