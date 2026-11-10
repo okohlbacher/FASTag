@@ -557,7 +557,7 @@ if(FASTAG_BUILD_TESTS)
   set_tests_properties(charge_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # 1.13 (backlog #14): -check_header_charge on the fixture MGF and on a copy
   # whose 3+/4+ headers are given as 2+: off and warn change no output, the
-  # wrong headers are found, override retags them, threads, refusals.
+  # wrong headers are found, both tags them under two charges, threads, refusals.
   add_test(NAME header_charge_cli_test
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/header_charge_cli_test.sh $<TARGET_FILE:FASTag>
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mgf

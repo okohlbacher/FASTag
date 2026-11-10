@@ -824,6 +824,11 @@ namespace FASTag
   /****************************************************************************/
   MSSpectrum IndexedMzMLReader::getSpectrum(Size i, unsigned fields) { return read_(i, /*want_peaks=*/true, fields); }
 
+  MSSpectrum IndexedMzMLReader::getSpectrumAnyLevel(Size i)
+  {
+    return read_(i, /*want_peaks=*/true, kAllFields, /*any_level=*/true);
+  }
+
   MSSpectrum IndexedMzMLReader::getSpectrumMetadata(Size i, unsigned fields)
   {
     return read_(i, /*want_peaks=*/false, fields);
@@ -854,7 +859,7 @@ namespace FASTag
     return any_level;
   }
 
-  MSSpectrum IndexedMzMLReader::read_(Size i, bool want_peaks, unsigned fields)
+  MSSpectrum IndexedMzMLReader::read_(Size i, bool want_peaks, unsigned fields, bool any_level)
   {
     MSSpectrum spec;
     if (!impl_->ok || i + 1 >= impl_->offsets->size()) return spec;
@@ -1017,7 +1022,7 @@ namespace FASTag
     // is most of the file's bytes, never used.
     //
     // This may GROW the buffer, so every view below is taken afterwards.
-    if (ms_level == 2 && want_peaks)
+    if ((ms_level == 2 || any_level) && want_peaks)
     {
       if (const std::string why = read_rest(); !why.empty()) return unreadable(why);
       if (impl_->direct_on && impl_->direct.decode(impl_->bytes, spec))
@@ -1041,7 +1046,7 @@ namespace FASTag
         }
         catch (const Exception::BaseException& e)
         {
-          return unreadable(std::string("an undecodable MS2 spectrum (") + e.what() + ")");
+          return unreadable(std::string("an undecodable spectrum (") + e.what() + ")");
         }
       }
     }

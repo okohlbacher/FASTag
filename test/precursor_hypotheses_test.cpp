@@ -26,8 +26,8 @@
 //   (k) 1.13 -check_header_charge: a 3+ spectrum with header 2 disagrees
 //       (range: the 2+ fragment ceiling is exceeded) and with header 4
 //       disagrees by complement pairs, both calling 3; header 3 agrees; a 2+
-//       spectrum with header 2 agrees; random peaks never disagree; override
-//       tags a disagreeing spectrum at the call (overridden) and keeps an
+//       spectrum with header 2 agrees; random peaks never disagree; both
+//       tags a disagreeing spectrum at both charges (check_call) and keeps an
 //       agreeing one at the header; warn keeps the 1.11 hypothesis; a large
 //       -check_header_margin turns the complement disagreement into nocall
 //       but leaves the range one; the verdict does not depend on peak order;
@@ -463,18 +463,20 @@ namespace
     // ---- (k) 1.13 -check_header_charge ----
     {
       using V = H::HeaderVerdict;
-      H::HypParam warn, ovr;
+      H::HypParam warn, both;
       warn.header_check = H::HeaderCheck::Warn;
-      ovr.header_check = H::HeaderCheck::Override;
-      CHECK(warn.isDefault() && !ovr.isDefault() && H::HypParam{}.header_check == H::HeaderCheck::Off,
-            "%s (k): warn keeps the 1.11 hypothesis path, override does not", label);
+      both.header_check = H::HeaderCheck::Both;
+      CHECK(warn.isDefault() && !both.isDefault() && H::HypParam{}.header_check == H::HeaderCheck::Off,
+            "%s (k): warn keeps the 1.11 hypothesis path, both does not", label);
       const auto s3 = ComplementSynth::make("SAMPLERKDLVEGFNTWQR", 3, false, 0, 0.0, 40, 12);
       const auto s2 = ComplementSynth::make("VGAHAGEYGAEALER", 2, false, 1, 0.0, 30, 11);
-      // header 2 on a 3+ spectrum: the range evidence rules 2 out.
+      // header 2 on a 3+ spectrum: its complement pairs call 3; the peaks
+      // above the 2+ ceiling are reported, never the ground.
       const auto r32 = H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 2), warn, cs);
-      CHECK(r32.header == 2 && r32.verdict == V::Disagree && r32.call.charge == 3 && r32.header_ruled_out,
-            "%s (k): 3+ with header 2 disagrees, call 3 by range (got %s, call %d, basis %s, ruled out %d)", label,
-            H::verdictName(r32.verdict), r32.call.charge, H::basisName(r32.call.basis), int(r32.header_ruled_out));
+      CHECK(r32.header == 2 && r32.verdict == V::Disagree && r32.call.charge == 3 && r32.header_ruled_out
+                && r32.flag_basis == H::CallBasis::Complement && r32.flag_charge == 3,
+            "%s (k): 3+ with header 2 disagrees by complement pairs (got %s, call %d, basis %s, ruled out %d)", label,
+            H::verdictName(r32.verdict), r32.call.charge, H::basisName(r32.flag_basis), int(r32.header_ruled_out));
       // header 4 on a 3+ spectrum: 4 is never ruled out by range; complement pairs call 3.
       const auto r34 = H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 4), warn, cs);
       CHECK(r34.verdict == V::Disagree && r34.call.charge == 3 && r34.call.basis == H::CallBasis::Complement
@@ -491,40 +493,108 @@ namespace
       // No header: no check.
       CHECK(H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 0), warn, cs).header == 0, "%s (k): no header, no check",
             label);
-      // A large margin: the complement disagreement is no call, the range one stays.
+      // A large margin: no disagreement, peaks above the header's ceiling or not.
       H::HypParam wide = warn;
       wide.header_margin = 1e9;
       CHECK(H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 4), wide, cs).verdict == V::NoCall
-                && H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 2), wide, cs).verdict == V::Disagree,
-            "%s (k): -check_header_margin gates the complement verdict only", label);
+                && H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 2), wide, cs).verdict != V::Disagree,
+            "%s (k): range evidence alone is no ground to disagree", label);
       // Ambiguous calls (a margin no runner-up can miss): with the header one of
-      // the two it agrees; a ruled-out header disagrees, the call the better one.
+      // the two it agrees; a ruled-out header is ambiguous, not a disagreement.
       H::HypParam amb = warn;
       amb.infer_margin = 1e9;
       const auto a2 = H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 2), amb, cs);
-      CHECK(a2.call.src == H::ChargeSource::Ambiguous && a2.verdict == V::Disagree && a2.call.charge == 3
+      CHECK(a2.call.src == H::ChargeSource::Ambiguous && a2.verdict == V::Ambiguous && a2.call.charge == 3
                 && a2.header_ruled_out,
-            "%s (k): ambiguous call, header 2 ruled out: disagree at 3 (got %s, %s, call %d/%d)", label,
+            "%s (k): ambiguous call, header 2 ruled out: ambiguous (got %s, %s, call %d/%d)", label,
             H::sourceName(a2.call.src), H::verdictName(a2.verdict), a2.call.charge, a2.call.runner_up);
       const auto a4 = H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 4), amb, cs);
       CHECK(a4.call.src == H::ChargeSource::Ambiguous && a4.verdict == V::Agree && a4.call.runner_up == 4,
             "%s (k): ambiguous call 3/4 agrees with header 4 (got %s, call %d/%d)", label, H::verdictName(a4.verdict),
             a4.call.charge, a4.call.runner_up);
-      // override: disagreeing -> the call, overridden; agreeing -> header.
-      const auto ho = H::precursorHypotheses(s3.spec, precursor(s3.prec_mz, 4), ovr, cs, nullptr, &r34);
-      const H::Hypothesis* so = selected(ho);
-      CHECK(ho.size() == 1 && so && so->charge == 3 && so->src == H::ChargeSource::Overridden && so->mz == s3.prec_mz,
-            "%s (k): override tags header 4 at 3 (got %d, %s)", label, so ? so->charge : -1,
-            so ? H::sourceName(so->src) : "-");
-      const auto ha = H::precursorHypotheses(s3.spec, precursor(s3.prec_mz, 3), ovr, cs, nullptr, &r33);
+      // both: disagreeing -> header charge (selected) and the check's charge,
+      // ascending; agreeing -> header.
+      const auto ho = H::precursorHypotheses(s3.spec, precursor(s3.prec_mz, 4), both, cs, nullptr, &r34);
+      CHECK(ho.size() == 2 && ho[0].charge == 3 && ho[0].src == H::ChargeSource::CheckCall && !ho[0].selected
+                && ho[1].charge == 4 && ho[1].src == H::ChargeSource::Header && ho[1].selected,
+            "%s (k): both tags header 4 at 3 and 4, 4 selected (got %zu hypotheses)", label, ho.size());
+      const auto ha = H::precursorHypotheses(s3.spec, precursor(s3.prec_mz, 3), both, cs, nullptr, &r33);
       CHECK(ha.size() == 1 && ha[0].charge == 3 && ha[0].src == H::ChargeSource::Header,
-            "%s (k): override keeps an agreeing header", label);
+            "%s (k): both keeps an agreeing header", label);
+      // MS1 isotope spacing: a 3+ pattern at the precursor outranks the
+      // fragment evidence; profile or centroid; no pattern, no MS1 charge.
+      {
+        MSSpectrum m3;
+        m3.emplace_back(s3.prec_mz - 7.3, 500.0);
+        m3.emplace_back(s3.prec_mz, 100.0);
+        m3.emplace_back(s3.prec_mz + kC13 / 3, 60.0);
+        m3.emplace_back(s3.prec_mz + 2 * kC13 / 3, 20.0);
+        m3.emplace_back(s3.prec_mz + 5.1, 300.0);
+        int n = 0;
+        CHECK(H::ms1Charge(m3, s3.prec_mz, &n) == 3 && n == 2, "%s (k): MS1 3+ pattern gives 3 (%d peaks)", label, n);
+        MSSpectrum prof = m3;
+        prof.setType(OpenMS::SpectrumSettings::SpectrumType::PROFILE);
+        CHECK(H::ms1Charge(prof, s3.prec_mz) == 3, "%s (k): MS1 charge on a profile scan", label);
+        MSSpectrum m2;
+        m2.emplace_back(s3.prec_mz, 100.0);
+        m2.emplace_back(s3.prec_mz + kC13 / 2, 50.0);
+        m2.emplace_back(s3.prec_mz + kC13, 15.0);
+        CHECK(H::ms1Charge(m2, s3.prec_mz) == 2, "%s (k): MS1 2+ pattern gives 2", label);
+        MSSpectrum lone;
+        lone.emplace_back(s3.prec_mz, 100.0);
+        CHECK(H::ms1Charge(lone, s3.prec_mz) == 0 && H::ms1Charge(MSSpectrum(), s3.prec_mz) == 0
+                  && H::ms1Charge(m3, s3.prec_mz + 2.0) == 0,
+              "%s (k): no isotope pattern, no MS1 charge", label);
+        const auto q2 = H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 2), wide, cs, &m3);
+        CHECK(q2.verdict == V::Disagree && q2.flag_basis == H::CallBasis::Ms1Isotope && q2.flag_charge == 3
+                  && q2.ms1_charge == 3 && q2.replacement() == 3,
+              "%s (k): MS1 3+ against header 2 disagrees at 3 (got %s, %s)", label, H::verdictName(q2.verdict),
+              H::basisName(q2.flag_basis));
+        // The MS1 charge agrees with header 4 on a spectrum whose pairs say 3: agree.
+        MSSpectrum m4;
+        m4.emplace_back(s3.prec_mz, 100.0);
+        m4.emplace_back(s3.prec_mz + kC13 / 4, 60.0);
+        m4.emplace_back(s3.prec_mz + 2 * kC13 / 4, 20.0);
+        const auto q4 = H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 4), warn, cs, &m4);
+        CHECK(q4.verdict == V::Agree && q4.flag_basis == H::CallBasis::Ms1Isotope && q4.call.charge == 3,
+              "%s (k): MS1 4+ keeps header 4 against the pairs (got %s)", label, H::verdictName(q4.verdict));
+        // A doubled MS1 call (4 on a 2+ pattern with a peak at 1/4) leaves a
+        // header 2 whose own +1/2 peak is there.
+        MSSpectrum m24 = m2;
+        m24.emplace_back(s3.prec_mz + kC13 / 4, 30.0);
+        m24.sortByPosition();
+        const auto qd = H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 2), wide, cs, &m24);
+        CHECK(H::ms1Charge(m24, s3.prec_mz) == 4 && qd.ms1_charge == 4 && qd.verdict == V::Agree
+                  && qd.flag_basis == H::CallBasis::Ms1Isotope && qd.flag_charge == 2 && qd.replacement() == 2,
+              "%s (k): a doubled MS1 charge keeps a header with its own spacing (got %s)", label,
+              H::verdictName(qd.verdict));
+        const auto q0 = H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 4), warn, cs, &lone);
+        CHECK(q0.verdict == r34.verdict && q0.flag_basis == r34.flag_basis && q0.ms1_charge == 0,
+              "%s (k): an MS1 scan without a pattern leaves the complement verdict", label);
+      }
+      // Charge-aware pairs: a 3+ precursor whose fragments are 1+/2+ pairs
+      // only (m1 + 2 m2 = 3 prec_mz), header 2, all below the 2+ ceiling.
+      {
+        MSSpectrum sp;
+        const double pm = 600.0;
+        for (const double m2 : {310.17, 345.68, 371.10, 402.21, 455.74, 512.27, 560.30, 588.90})
+        {
+          sp.emplace_back(m2, 1.0);
+          sp.emplace_back(3 * pm - 2 * m2, 1.0);
+        }
+        sp.sortByPosition();
+        const auto r = H::checkHeaderCharge(sp, precursor(pm, 2), warn, cs);
+        CHECK(r.verdict == V::Disagree && r.flag_charge == 3 && r.flag_basis == H::CallBasis::Complement
+                  && !r.header_ruled_out,
+              "%s (k): 1+/2+ pairs call a 3+ against header 2 (got %s, call %d, %.2f vs %.2f)", label,
+              H::verdictName(r.verdict), r.call.charge, r.call_excess, r.header_excess);
+      }
       // warn: the 1.11 hypothesis whatever the verdict.
       const auto hw = H::precursorHypotheses(s3.spec, precursor(s3.prec_mz, 4), warn, cs, nullptr, &r34);
       CHECK(hw.size() == 1 && hw[0].charge == 4 && hw[0].src == H::ChargeSource::Header,
             "%s (k): warn tags at the header charge", label);
       // A verdict for another header charge is not applied.
-      const auto hx = H::precursorHypotheses(s3.spec, precursor(s3.prec_mz, 2), ovr, cs, nullptr, &r34);
+      const auto hx = H::precursorHypotheses(s3.spec, precursor(s3.prec_mz, 2), both, cs, nullptr, &r34);
       CHECK(hx.size() == 1 && hx[0].charge == 2 && hx[0].src == H::ChargeSource::Header,
             "%s (k): a verdict for another header is ignored", label);
       // Random peaks never disagree.
@@ -602,7 +672,7 @@ namespace
       hc.add(r33, true);
       hc.add(H::HeaderCheckResult{}, true);
       CHECK(hc.checked == 2 && hc.verdict[size_t(V::Disagree)] == 1 && hc.verdict[size_t(V::Agree)] == 1
-                && hc.overridden == 1 && hc.moves[4][3] == 1
+                && hc.both == 1 && hc.moves[4][3] == 1
                 && hc.disagree_by[size_t(H::CallBasis::Complement)] == 1,
             "%s (k): counts", label);
     }

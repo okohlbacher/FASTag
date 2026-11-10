@@ -874,7 +874,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   check_header_charge: {
     hidden: EXPERIMENTAL_1_13,
     help: {
-      text: 'Whether the charge the file gives for a precursor is checked against the charge its fragment pairs support: off, warn (report disagreements only) or override (tag a disagreeing spectrum at the supported charge). Experimental.'
+      text: "Whether the charge the file gives for a precursor is checked against the isotope spacing of the precursor in the preceding MS1 scan and against its fragment pairs: off, warn (report disagreements only) or both (tag a disagreeing spectrum under the file's charge and under the charge the check found). Experimental."
     }
   },
   check_header_margin: {
@@ -1210,7 +1210,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   unknown_charge: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'How a precursor whose charge the file does not give is tagged: as 2+ (the default, as before 1.12), at each possible charge, or at the charge its fragment pairs support best. A charge given in the file is never replaced (except by the experimental header charge check in override mode).'
+      text: 'How a precursor whose charge the file does not give is tagged: as 2+ (the default, as before 1.12), at each possible charge, or at the charge its fragment pairs support best. A charge given in the file is never replaced (the experimental header charge check in both mode can add a second charge).'
     }
   },
 
