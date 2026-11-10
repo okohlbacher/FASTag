@@ -1,0 +1,40 @@
+# FASTag 1.13 #17r: the modifications of the candidate massgap_mods.tsv (28cc8ce, sha256 c1ec6f57...) with the Unimod monoisotopic delta (OpenMS unimod.xml sha256 22231d32...). P4 for Sage: an open-search peak is expressible if its centroid is > 0 and within 0.02 Da of one mono_mass.
+name	site	mono_mass
+Oxidation	Oxidation (M)	15.994915
+Dioxidation	Dioxidation (M)	31.989829
+Deamidated	Deamidated (N)	0.984016
+Gln->pyro-Glu	Gln->pyro-Glu (N-term Q)	-17.026549
+Glu->pyro-Glu	Glu->pyro-Glu (N-term E)	-18.010565
+Carbamidomethyl	Carbamidomethyl (C)	57.021464
+Cation:Na	Cation:Na (D)	21.981943
+Cation:K	Cation:K (D)	37.955882
+Carbamyl	Carbamyl (N-term)	43.005814
+Formyl	Formyl (N-term)	27.994915
+Acetyl	Acetyl (K)	42.010565
+Methyl	Methyl (K)	14.015650
+Dimethyl	Dimethyl (K)	28.031300
+Trimethyl	Trimethyl (K)	42.046950
+Propionyl	Propionyl (K)	56.026215
+Butyryl	Butyryl (K)	70.041865
+Crotonyl	Crotonyl (K)	68.026215
+Succinyl	Succinyl (K)	100.016044
+Malonyl	Malonyl (K)	86.000394
+GG	GG (K)	114.042927
+Phospho	Phospho (S)	79.966331
+Sulfo	Sulfo (Y)	79.956815
+Nitro	Nitro (Y)	44.985078
+HexNAc	HexNAc (S)	203.079373
+Hex	Hex (K)	162.052824
+Cysteinyl	Cysteinyl (C)	119.004099
+Methylthio	Methylthio (C)	45.987721
+Propionamide	Propionamide (C)	71.037114
+Nethylmaleimide	Nethylmaleimide (C)	125.047679
+TMT6plex	TMT6plex (K)	229.162932
+TMTpro	TMTpro (K)	304.207146
+iTRAQ4plex	iTRAQ4plex (K)	144.102063
+Label:13C(6)15N(2)	Label:13C(6)15N(2) (K)	8.014199
+Label:13C(6)15N(4)	Label:13C(6)15N(4) (R)	10.008269
+Label:2H(4)	Label:2H(4) (K)	4.025107
+Label:13C(6)	Label:13C(6) (R)	6.020129
+Met-loss	Met-loss (Protein N-term M)	-131.040485
+Met-loss+Acetyl	Met-loss+Acetyl (Protein N-term M)	-89.029920
