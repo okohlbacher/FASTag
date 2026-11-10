@@ -66,15 +66,20 @@ Truth: Sage on a charge-stripped copy, q <= 0.001. "Perturbed" is a copy with ev
 | PXD003531, perturbed | 1,353 / 6,339 | 1,186 | 0.86 | 0.98 | 0.44 % |
 | PXD001819 (LTQ Orbitrap), as given | 0 / 1,369 | 0 | - | - | 0 % |
 | PXD001819, perturbed | 265 / 1,369 | 257 | 0.97 | 1.00 | 0 % |
+| PXD030418 (Q Exactive), as given | 99 / 10,555 | 49 | 0.39 | 0.80 | 0.10 % |
+| PXD031485 (Q Exactive), as given | 145 / 6,713 | 59 | 0.34 | 0.83 | 0.15 % |
+| PXD006882 (Q Exactive Plus), as given | 84 / 11,398 | 57 | 0.61 | 0.89 | 0.05 % |
+| PXD082249 (Orbitrap Astral Zoom), as given | 62 / 2,331 | 36 | 0.50 | 0.86 | 0.22 % |
+| PXD058340 (Orbitrap Astral), as given | 1,241 / 39,400 | 525 | 0.30 | 0.71 | 0.40 % |
+| the five runs above, perturbed | 14,928 / 70,043 | 11,921 | 0.79 | 0.99 | 0.27 % |
 
-The MS1 scan gives a charge for 91 % (PXD003531) and 97 % (PXD001819) of the truth spectra, and that charge equals
-Sage's in 97 %. On real headers about four flags in ten are still false; most are 2+ headers with a 3+, 4+ or 6+
-pattern in the MS1 scan. The previous rule found 6 % of the real wrong headers on PXD003531.
+Over the six runs with real wrong headers (1,775), the check finds one in three, and three flags in four are
+right. The MS1 scan gives a charge for 73-97 % of the truth spectra, and that charge equals Sage's in 95-99 %. The previous rule found 6 % of the real wrong headers on PXD003531.
 
 ## Validation
 
-**The current rule has no held-out result.** It was developed on the two DEV runs above; a held-out test needs new
-runs (the five runs below are spent) and a DEV set with at least 200 real wrong headers.
+**The current rule has no held-out result.** It was developed on PXD003531 and PXD001819 and then run unchanged on the other five DEV runs; a held-out test
+needs new runs (the five runs below are spent).
 
 Record of the previous rule (complement pairs with 1+/1+ pairs only, range evidence as a ground, `override` instead
 of `both`; protocol `acceptance/1.13/PREREG-item14.md`, results in `acceptance/1.13/hdrcharge/results/`): 5 held-out
@@ -82,7 +87,7 @@ runs, scored once, **INCONCLUSIVE** (two Astral runs had fewer than 500 Sage tru
 runs as given it flagged 138 of 31,891 spectra, of which 40 were wrong headers, and `override` would have fixed 35
 charges and broken 98. On the perturbed copies it found 28 % of the changed headers at precision 0.95. On Orbitrap
 Astral (PXD070049) all 9 flags as given and all 8 on the perturbed copy were false. These numbers do not describe
-the current rule, and the current rule is untested on Astral.
+the current rule.
 
 The option stays experimental. Until the held-out test, read `warn`'s disagreements as candidates, not as wrong
 charges.
