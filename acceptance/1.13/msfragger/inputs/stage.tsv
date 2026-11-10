@@ -1,0 +1,17 @@
+role	accession	file	bytes	pride_sha1	url
+chosen	PXD010982	QE6657.raw	1056291595	dfadb42815de2a847c6240a8c9241852a3d6daa8	https://ftp.pride.ebi.ac.uk/pride/data/archive/2019/05/PXD010982/QE6657.raw
+backup	PXD010982	QE7312.raw	843302960	9bcaab6203446ba74b769c3e3ffb6a481aa9a08a	https://ftp.pride.ebi.ac.uk/pride/data/archive/2019/05/PXD010982/QE7312.raw
+chosen	PXD003606	H1_3rd_04.raw	801619843	b8a430662d131e477a9ff10b5f49970a733b354d	https://ftp.pride.ebi.ac.uk/pride/data/archive/2016/09/PXD003606/H1_3rd_04.raw
+backup	PXD003606	CD-8_5th.raw	1162875456	664d09ecdc31e26ec511054b24f77dd7729414b0	https://ftp.pride.ebi.ac.uk/pride/data/archive/2016/09/PXD003606/CD-8_5th.raw
+chosen	PXD028846	005_SecrIII_F20.raw	469737624	b3e69849d950b49e29f5668a0a34c1f26162e146	https://ftp.pride.ebi.ac.uk/pride/data/archive/2021/11/PXD028846/005_SecrIII_F20.raw
+backup	PXD028846	014_SecrIII_F20.raw	475008854	2df9b973a0a05e9aaf731e03f8b3636cdae2a2a9	https://ftp.pride.ebi.ac.uk/pride/data/archive/2021/11/PXD028846/014_SecrIII_F20.raw
+chosen	PXD055832	055_SS05.raw	1906344976	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2026/05/PXD055832/055_SS05.raw
+backup	PXD055832	062_SS12.raw	1690013640	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2026/05/PXD055832/062_SS12.raw
+chosen	PXD045916	20210615_QEp5_SA_SaMu_A549_NTC_IFN_HSV_4.raw	3084015204	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2026/04/PXD045916/20210615_QEp5_SA_SaMu_A549_NTC_IFN_HSV_4.raw
+backup	PXD045916	20210615_QEp5_SA_SaMu_A549_NTC_IFN_HSV_3.raw	2522276164	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2026/04/PXD045916/20210615_QEp5_SA_SaMu_A549_NTC_IFN_HSV_3.raw
+chosen	PXD001725	130708_M787_002.raw	2236717618	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2015/04/PXD001725/130708_M787_002.raw
+backup	PXD001725	130708_M687_002.raw	2430590426	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2015/04/PXD001725/130708_M687_002.raw
+chosen	PXD042467	Aggregate-Ag-insoluble-1.raw	994418454	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2024/03/PXD042467/Aggregate-Ag-insoluble-1.raw
+backup	PXD042467	Aggregate-CTR-soluble-2.raw	776679759	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2024/03/PXD042467/Aggregate-CTR-soluble-2.raw
+chosen	PXD035276	HF181023_MM_neuro_WT1_3.raw	1815829021	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2024/10/PXD035276/HF181023_MM_neuro_WT1_3.raw
+backup	PXD035276	HF181023_MM_neuro_WBS3_2.raw	1578021325	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2024/10/PXD035276/HF181023_MM_neuro_WBS3_2.raw
