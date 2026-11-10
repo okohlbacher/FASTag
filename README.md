@@ -790,10 +790,8 @@ the run's mass-gap peaks to `-search_config_out`, closing an open-search loop
 cheaply. The peaks are exactly the ones `-massgap_out` reports (same
 `-massgap_*` thresholds), computed whether or not a report is written;
 `-delta_out` and `-massgap_out` are byte-identical with and without it. A peak
-at a precursor isotope spacing raises the engine's isotope errors instead
-(not with a fixed terminal label such as TMT: a peak at the label plus an
-isotope spacing becomes a Comet offset and does not raise the isotope
-errors, so Sage does not search it); a
+at a precursor isotope spacing, or at a fixed terminal label (TMT) plus an
+isotope spacing, raises the engine's isotope errors instead; a
 peak equal to a fixed terminal label is expected; a peak at minus a fixed
 modification or label is warned about; a fixed residue modification seen
 again becomes a variable modification on its other sites (overalkylation);

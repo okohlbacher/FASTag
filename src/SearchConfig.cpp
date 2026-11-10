@@ -721,6 +721,16 @@ namespace FASTag::SearchConfig
                                  ": the labelling looks incomplete");
           done = true;
         }
+        else if (const int liso = isotopeStep(d - lm))
+        {
+          // Rule 0 in the label's frame: label + n x 13C is the labelled
+          // peptide's isotope error, not a shift of its own.
+          D.action = "skipped_isotope";
+          D.reason = "the fixed label " + L->getFullId() + " plus " + std::to_string(liso) +
+                     " x 13C spacing: a precursor isotope error";
+          out.isotope_max = std::max(out.isotope_max, liso);
+          done = true;
+        }
         if (done) break;
       }
       if (done) continue;

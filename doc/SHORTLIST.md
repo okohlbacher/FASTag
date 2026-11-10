@@ -164,12 +164,10 @@ first (ties: smaller |delta|):
    configuration's isotope errors (Sage `isotope_errors`, Comet
    `isotope_error`). Deamidated is exported only when the centroid is closer to
    0.98402 than to 1.00335.
-   Rule 0 tests the centroid itself, not the remainder after a fixed terminal
-   label (rule 1): with a fixed terminal label L (TMT), a peak at
-   L + n x 1.00335 is not recognised as an isotope peak. It becomes a Comet
-   offset near n x 1.0034 and does not raise the isotope errors, so Sage
-   (no offsets) does not search it (held-out PXD004541: L + 1.005 and
-   L + 2.004, 651 and 185 spectra; isotope errors 0..0).
+   The same test applies in the frame of a fixed terminal label L (TMT): a
+   peak at L + n x 1.00335 is `skipped_isotope` and raises the isotope errors
+   (up to the 1.13 held-out test it became a Comet offset near n x 1.0034
+   and Sage did not search it).
 1. a fixed terminal label L: a peak at L is `expected_label`, at -L
    `label_incomplete` (WARN); a peak explained as L + X goes on as X (to
    rules 2 to 4; rule 0 is not applied to X, see above).
@@ -262,10 +260,13 @@ near-zero or near-isotope open-search peaks (0.062, 0.948, 1.064) and offsets
 consistent with a precursor calibration error, without which it is 4 of 10
 (post-hoc note in RESULT-item17.md; the verdict is FAIL either way), and
 Sage's entrapment FDP exceeded 1.5 % on three runs (its closed search already
-did on PXD000001). Known causes: on labelled runs the isotope rule is not
-applied to the label-frame remainder (L + 1.003 becomes a Comet offset, and
-Sage searches no isotope errors); near-zero offsets on a run with a precursor
-calibration error widen the search instead. The option stays experimental.
+did on PXD000001). Known causes: on labelled runs the isotope rule was not
+applied to the label-frame remainder (L + 1.003 became a Comet offset, and
+Sage searched no isotope errors; fixed after the test, see rule 0, checked on
+development data only); near-zero offsets on a run with a precursor
+calibration error widen the search instead; most of the open search's top
+shifts are not among the run's mass-gap peaks at all. The option stays
+experimental.
 
 ## Known limits
 

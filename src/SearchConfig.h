@@ -127,7 +127,8 @@ namespace FASTag::SearchConfig
   // ascending, then delta):
   //   0. isotope: within the window of n x 1.00335 (n = 1..3) and closer to it
   //      than to every single modification -> skipped_isotope; the largest n
-  //      raises the plan's isotope errors;
+  //      raises the plan's isotope errors; the same for a peak at a fixed
+  //      terminal label plus n x 1.00335;
   //   1. a fixed terminal label L: a peak at L -> expected_label, at -L ->
   //      label_incomplete (WARN); a peak explained as L + X goes on as X;
   //   2. a fixed residue modification F: at +F -> the same Unimod name on K, H
