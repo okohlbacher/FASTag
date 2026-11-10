@@ -1,4 +1,4 @@
-# The label discovery report (`-label_discovery_out`), format 3
+# The label discovery report (`-label_discovery_out`), format 4
 
 Experimental and opt-in. It failed its held-out test (acceptance/1.13
 PREREG-labeldisc.md; 190 public runs, scored once on 2026-11-10):
@@ -49,10 +49,12 @@ and `-alkylation_out`:
   7); `FASTAG_FULL_PRECISION=1` in the environment writes them in full.
 - The file is written to `<file>.part` and renamed when complete. A refused
   or failed run leaves no file.
-- The version is the row `ld_run format` = `3` (format 2 added the
+- The version is the row `ld_run format` = `4` (format 2 added the
   `ld_reporter` section, the `basis` `reporter_ions` and the reasons
   `low_resolution_ms2` and `no_reporter_ions`; format 3 added the `ld_pair`
-  section and the `basis` values `precursor_pairs` and `absence`). A reader that does not know
+  section and the `basis` values `precursor_pairs` and `absence`; format 4
+  added the `basis` suffix `+precursor_pairs` with the rule of `ld_pair`
+  that extends a SILAC call, no row or column). A reader that does not know
   the format should stop.
 
 Sections, in this order:
@@ -330,8 +332,14 @@ precursors of the same charge whose m/z differ by a label mass / z within
 Effect on the call:
 
 - `silac` `yes` and no call or a `label-free` call: the call becomes
-  `K:Lys8+R:Arg10` (`basis` `precursor_pairs`). A call that names a label
-  stays.
+  `K:Lys8+R:Arg10` (`basis` `precursor_pairs`).
+- `silac` `yes` and a call of SILAC labels only (every label `K:Lys...` or
+  `R:Arg...`): `K:Lys8` and `R:Arg10` are added when the call lacks them,
+  their sites are added to `sites`, and `+precursor_pairs` is appended to
+  the `basis` (format 4; e.g. `K:Lys8` becomes `K:Lys8+R:Arg10` with the
+  `basis` `site_scan+precursor_pairs`). The labels of the call stay. A call
+  with any other label (TMT, iTRAQ, dimethyl, unknown, ambiguous) is not
+  changed.
 - A no call with the reason `few_spectra` or `no_reference`, the reporter
   gate `none`, at least 500 precursors and no pair signal (`lys8_pairs`,
   `arg10_pairs` and `other_pairs` all below 30 pairs or below a ratio of 2):
@@ -341,9 +349,29 @@ Effect on the call:
 On the 99 development runs the two rules give 93 right results instead of 86:
 the pair rule adds two SILAC runs with ion-trap MS2 (PXD011848, PXD050844),
 the absence rule five label-free runs with few tags; no result gets worse.
+Format 4 was set on the development runs as well, with no new threshold
+(126 runs, 96 with an audited label): the extension changes six calls, all
+SILAC runs, and the six calls are right at class level before and after.
+PXD066890, PXD043814 and PXD064675 go from `K:Lys8` to `K:Lys8+R:Arg10`,
+which is the labelling their submitters state. PXD016465 (`R:Arg6`),
+PXD023400 and PXD001186 (Lys4, Lys8 and Arg6 called) gain the missing heavy
+labels; these are triple SILAC runs whose submitters do not name the heavy
+amino acids. No other call changes; 96 of 96 audited runs are right at
+class level before and after, and 93 of the 99 runs of the first
+development manifest.
+
 Limits:
 
 - The thresholds were set on the development runs; there is no held-out test.
+- The extension needs both pair signals (`silac` `yes`), so a run labelled
+  on one residue only is not extended, and it adds the heavy pair Lys8 and
+  Arg10 only. A call with an isobaric label is not extended: the one such
+  development run with `silac` `yes` (PXD000865, call `TMT`) has no known
+  truth.
+- Under the gate `unclear` no absence call is made, also when the scans
+  that cover the reporter region show no reporters: the only development
+  run that such a rule would change is a blank injection (PXD073687), which
+  the audited manifest excludes.
 - All development runs that the absence rule decides are label-free, and
   there is no dimethyl run among the 99, so the rate of labelled runs that
   the rule calls `label-free` is not measured.
@@ -360,7 +388,7 @@ Limits:
 | `status` | `call` or `no_call` |
 | `labels` | the labels called, `+`-joined: an N label by name (`TMT`, `Dimethyl`, `iTRAQ8plex`), others `<site>:<name>` (`K:TMT`, `K:Lys8`, `R:Arg6`), unknown ones `unknown:<site><+delta>`, near-isobaric ones that the calibration cannot separate `ambiguous:<a>|<b>` (e.g. `ambiguous:iTRAQ8plex|TMTpro`: isobaric, not decided); `label-free`; `-` on a no call |
 | `sites` | the sites of the called labels, comma-joined |
-| `basis` | `site_scan`; `reporter_ions` when the reporter gate changed the call (see `ld_reporter`); `precursor_pairs` or `absence` when the precursor pairs did (see `ld_pair`) |
+| `basis` | `site_scan`; `reporter_ions` when the reporter gate changed the call (see `ld_reporter`); `precursor_pairs` or `absence` when the precursor pairs did (see `ld_pair`); format 4: with the suffix `+precursor_pairs` (e.g. `site_scan+precursor_pairs`) when the pairs added a SILAC label to the call |
 | `reason` | `low_resolution`, `low_resolution_ms2` (ion-trap MS2 scans), `cz_only`, `few_spectra` (below 175 counted spectra), `no_reference`, `no_reporter_ions` (an isobaric label call without reporter ions); `-` on a call |
 
 **Call rule (priors; the evidence bar set on development runs only; it

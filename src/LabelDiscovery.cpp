@@ -2053,7 +2053,28 @@ namespace FASTag::LabelDiscovery
       a.basis = "absence";
       return;
     }
-    if (!a.pairs.silac() || (a.status == "call" && a.labels != "label-free")) return;
+    if (!a.pairs.silac()) return;
+    if (a.status == "call" && a.labels != "label-free")
+    {
+      // Format 4: a call of SILAC labels only (the tags often show one residue's label) gains the label the pairs show.
+      // Any other label call stays: pairs on an isobaric run are not evaluated.
+      const std::string have = "+" + a.labels + "+";
+      for (std::size_t p = 0, q; p < a.labels.size(); p = q + 1)
+      {
+        q = std::min(a.labels.find('+', p), a.labels.size());
+        if (a.labels.compare(p, 5, "K:Lys") != 0 && a.labels.compare(p, 5, "R:Arg") != 0) return;
+      }
+      bool added = false;
+      for (const char* label : {"K:Lys8", "R:Arg10"})
+      {
+        if (have.find(std::string("+") + label + "+") != std::string::npos) continue;
+        a.labels += std::string("+") + label;
+        if (a.call_sites.find(label[0]) == std::string::npos) a.call_sites += std::string(",") + label[0];
+        added = true;
+      }
+      if (added) a.basis += "+precursor_pairs";
+      return;
+    }
     a.status = "call";
     a.labels = "K:Lys8+R:Arg10";
     a.call_sites = "K,R";
@@ -2827,7 +2848,7 @@ namespace FASTag::LabelDiscovery
     row("ld_call", "status", a.status, "-", "call or no_call");
     row("ld_call", "labels", a.status == "call" ? a.labels : "-", "-", "the labels called, +-joined");
     row("ld_call", "sites", a.status == "call" ? a.call_sites : "-", "-", "the sites of the called labels");
-    row("ld_call", "basis", a.basis, "-", "what the call is made from: site_scan, reporter_ions, precursor_pairs or absence");
+    row("ld_call", "basis", a.basis, "-", "what the call is made from: site_scan, reporter_ions, precursor_pairs or absence; +precursor_pairs: the pairs added a SILAC label");
     row("ld_call", "reason", a.status == "call" ? "-" : a.reason, "-", "why there is no call");
     return rows;
   }

@@ -113,6 +113,15 @@
   signal is called label-free (`basis` `absence`). On the development runs
   93 right instead of 86; no held-out test. A sample labelled in one
   channel only is read as label-free by the absence rule.
+  Format 4 changes one rule of `ld_pair` (no new row, column or
+  threshold). A call of SILAC labels only gains `K:Lys8` and `R:Arg10`
+  when the pairs show both and the call lacks them (`basis` with the suffix
+  `+precursor_pairs`); a call with any other label is not changed. It was
+  set on the development runs, no held-out test: six SILAC calls change
+  (three to the labels their submitters state, e.g. PXD066890 `K:Lys8` to
+  `K:Lys8+R:Arg10`; three triple SILAC runs gain the missing heavy labels);
+  the class of no run changes (96 of 96 audited runs right). Under the
+  reporter gate `unclear` no absence call is made.
 
 ## 1.12.2 (2026-11-10)
 

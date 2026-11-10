@@ -500,7 +500,7 @@ alternatives. Classes are tried in this order, and the first that matches within
 4. **`unexplained`.** Nothing matched. The mass, the site and the images are still reported, so
    an unknown label is visible. This is the point of the report.
 
-## 9. Output format (format 1; format 2 adds `ld_reporter`, format 3 `ld_pair`, see doc/LABEL-DISCOVERY-REPORT.md)
+## 9. Output format (format 1; format 2 adds `ld_reporter`, format 3 `ld_pair`, format 4 extends a SILAC call from the pairs, see doc/LABEL-DISCOVERY-REPORT.md)
 
 The format is the long-form report family of `-digest_out`, `-label_out`, `-massgap_out` and
 `-alkylation_out`, written by `FASTag::Digest::writeReport`:
@@ -526,7 +526,7 @@ Sections, in this order:
 | `ld_peak` | Per channel `n` and `c`, ranked: `<ch>.<i>.mass`, `.sigma`, `.spectra`, `.tags`, `.background`, `.fold`, `.log10_q`, `.class`, `.explanation` (e.g. `N1r:TMT+A` or `K1f:K+TMT6plex (K)`), `.alternatives`, `.share_adjacent_k`, `.se`. |
 | `ld_site` | Per site `N`, `K`, `R`, `C`, ranked: `<site>.<i>.delta`, `.sigma`, `.spectra`, `.spectra_clean`, `.image_hits`, `.share`, `.ladder_clean`, `.ladder_confounded`, `.support_c`, `.support_n`, `.null_coincident`, `.images`, `.fold`, `.log10_q`, `.class`, `.explanation`, `.alternatives`, `.completeness`. The delta 0 rows (unlabelled N, K, R) are always written, as the positive control. |
 | `ld_known` | For each `labelKeys()` label and configured fixed terminal/K modification: tags and spectra per image at `-digest_window` (0.008 Da). This lets a reader relate the report to `-label_out`. |
-| `ld_call` | `status` (`call`, `no_call`), `labels` (e.g. `TMT`, `Dimethyl`, `TMTpro+K:TMTpro`, `unknown:N+123.4567`, `ambiguous:iTRAQ8plex|TMTpro`, `label-free`; `+`-joined; `-` on a no call), `sites`, `basis` (`site_scan`; format 2: also `reporter_ions`; format 3: also `precursor_pairs`, `absence`), `reason` (`low_resolution`, `few_spectra`, `cz_only`, `no_reference`; `-` on a call). |
+| `ld_call` | `status` (`call`, `no_call`), `labels` (e.g. `TMT`, `Dimethyl`, `TMTpro+K:TMTpro`, `unknown:N+123.4567`, `ambiguous:iTRAQ8plex|TMTpro`, `label-free`; `+`-joined; `-` on a no call), `sites`, `basis` (`site_scan`; format 2: also `reporter_ions`; format 3: also `precursor_pairs`, `absence`; format 4: the suffix `+precursor_pairs`), `reason` (`low_resolution`, `few_spectra`, `cz_only`, `no_reference`; `-` on a call). |
 
 **Call rule (prior, unfitted).** Candidates are taken in order of `spectra_clean`. A site
 candidate with delta ≠ 0 whose class is not `residue_combo`, `null_shadow`, `isotope_error` or
@@ -715,7 +715,7 @@ paragraph in "Digest, label and mass-gap reports". `CHANGELOG.md`.
 - **Off is identity.** Without the option, the tag TSV, `-digest_out`, `-label_out`,
   `-massgap_out`, `-recon_out` and `-out_spectra` are byte-identical to a run that does not
   mention it. With it on, every other output is byte-identical to the run without it.
-- **Format.** With the option on, the report exists, `ld_run format 3` is present, the sections
+- **Format.** With the option on, the report exists, `ld_run format 4` is present, the sections
   come in the documented order, and every row has five non-empty fields.
 - **Threads.** `-threads 1` and `-threads 4` give a byte-identical report.
 - **Low resolution.** A Da tolerance gives `ld_call status no_call` with reason `low_resolution`.

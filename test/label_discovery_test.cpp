@@ -721,7 +721,7 @@ int main()
       if (order.empty() || order.substr(order.rfind(',') + 1) != r.section) order += "," + r.section;
     }
     CHECK(order == ",ld_run,ld_count,ld_peak,ld_site,ld_known,ld_reporter,ld_pair,ld_call", "section order %s", order.c_str());
-    CHECK(rowsOf(a, S).at("ld_run/format") == "3", "format");
+    CHECK(rowsOf(a, S).at("ld_run/format") == "4", "format");
     CHECK(a.labels == "TMT", "TMT set call %s [%s]", a.labels.c_str(), calledList(a).c_str());
     LD::Settings lr = S;
     lr.low_resolution = true;
@@ -848,6 +848,32 @@ int main()
     x = run({labelFree(92, 100)}, S, unimod);  // few_spectra no call
     LD::applyPairs(x, pairsOf(60, 50));
     CHECK(x.status == "call" && x.labels == "K:Lys8+R:Arg10", "no call becomes SILAC: %s", x.status.c_str());
+
+    // format 4: a call of SILAC labels only gains the labels the pairs show
+    auto extended = [&](const char* labels, const char* sites, const LD::PairCounter& pc) {
+      LD::Analysis e = lf;
+      e.labels = labels;
+      e.call_sites = sites;
+      LD::applyPairs(e, pc);
+      return e;
+    };
+    x = extended("K:Lys8", "K", pairsOf(60, 50));
+    CHECK(x.labels == "K:Lys8+R:Arg10" && x.call_sites == "K,R" && x.basis == "site_scan+precursor_pairs", "Lys8 gains Arg10: %s %s %s",
+          x.labels.c_str(), x.call_sites.c_str(), x.basis.c_str());
+    CHECK(rowsOf(x, S).at("ld_call/labels") == "K:Lys8+R:Arg10" && rowsOf(x, S).at("ld_call/basis") == "site_scan+precursor_pairs",
+          "extended call rows");
+    x = extended("K:Lys8+K:Lys4+R:Arg6", "K,R", pairsOf(60, 50));
+    CHECK(x.labels == "K:Lys8+K:Lys4+R:Arg6+R:Arg10" && x.call_sites == "K,R", "triple SILAC gains Arg10: %s", x.labels.c_str());
+    x = extended("R:Arg6", "R", pairsOf(60, 50));
+    CHECK(x.labels == "R:Arg6+K:Lys8+R:Arg10" && x.call_sites == "R,K", "Arg6 gains the heavy pair: %s", x.labels.c_str());
+    x = extended("K:Lys8+R:Arg10", "K,R", pairsOf(60, 50));
+    CHECK(x.labels == "K:Lys8+R:Arg10" && x.basis == "site_scan", "a complete call keeps its basis");
+    x = extended("K:Lys8", "K", pairsOf(60, 0));
+    CHECK(x.labels == "K:Lys8" && x.basis == "site_scan", "no extension without both pair signals");
+    x = extended("TMT+K:Lys8", "N,K", pairsOf(60, 50));
+    CHECK(x.labels == "TMT+K:Lys8" && x.basis == "site_scan", "a call with an isobaric label is not extended: %s", x.labels.c_str());
+    x = extended("K:Dimethyl", "K", pairsOf(60, 50));
+    CHECK(x.labels == "K:Dimethyl", "a call of another label is not extended");
 
     // label-free by absence: few tags, reporter gate none, >= 500 precursors, no label pairs
     const LD::Analysis few = run({labelFree(92, 100)}, S, unimod);
