@@ -613,6 +613,15 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy)
   set_tests_properties(species_call_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # 1.13 species redesign: the env-gated DEV dump changes no output and fails
+  # loudly on a bad decoy index, count or path (test/species_dump_test.sh).
+  add_test(NAME species_dump_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/species_dump_test.sh $<TARGET_FILE:FASTag>
+                   $<TARGET_FILE:buildtaxdb>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy)
+  set_tests_properties(species_dump_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # #10: -species_orientation both on the same toy index; exact counts against
   # an independent Python recount (tools/species_orientation_recount.py).
   add_test(NAME species_orientation_cli_test

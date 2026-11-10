@@ -1254,12 +1254,13 @@
       "name": "species_call",
       "type": "string",
       "default": "none",
-      "description": "Call each taxon of the -species report present, no_call or not_detected: 'decoy' tests its count against a null of decoy tags (looked up like the tags) plus the spill expected from stronger related taxa, and appends the columns call, call_reason, decoy_spectra, decoy_expected, decoy_qvalue, share and lod. 'none' = the ranked report only",
+      "description": "Call each taxon of the -species report present, no_call or not_detected: 'decoy' tests its count against a null of decoy tags (looked up like the tags) plus the spill expected from stronger related taxa, and appends the columns call, call_reason, decoy_spectra, decoy_expected, decoy_qvalue, share and lod. 'explain' (1.13, experimental; failed the recovery guard of its held-out test, doc/SPECIES-DETECTOR.md) calls the taxa one at a time, strongest first, on their distinct tags in spectra that no taxon called before explains, against the same count on the decoy tags; it appends the same columns plus tags and unexplained_tags. 'none' = the ranked report only",
       "required": false,
       "toppAdvanced": true,
       "choices": [
         "none",
-        "decoy"
+        "decoy",
+        "explain"
       ]
     },
     {

@@ -160,6 +160,29 @@ run dec "${COMMON[@]}" -species "${TAX[@]}" "${CALL[@]}" -species_deconvolve -th
   || { cat "$TMP/dec.log" >&2; fail "-species_deconvolve"; }
 [ "$(col "$TMP/dec.species.tsv" 561 call)" = present ] || fail "Escherichia not present under -species_deconvolve"
 
+# ---- explain (1.13): same columns plus tags and unexplained_tags ----------------
+EXPL=(-species_call explain -species_call_min_units 10 -species_call_params "$TMP/params.tsv")
+for t in 1 3; do
+  run expl_t$t "${COMMON[@]}" -species "${TAX[@]}" "${EXPL[@]}" -threads $t || { cat "$TMP/expl_t$t.log" >&2; fail "explain, -threads $t"; }
+done
+E="$TMP/expl_t1.species.tsv"
+cmp -s "$E" "$TMP/expl_t3.species.tsv" || fail "explain report differs between 1 and 3 threads"
+cmp -s "$TMP/absent.tsv" "$TMP/expl_t1.tsv" || fail "-species_call explain changed the tags"
+[ "$(fields "$E")" = 17 ] || fail "explain report: not 17 fields on every line ($(fields "$E"))"
+tr -d '\r' < "$E" | cut -f1-8 | cmp -s <(tr -d '\r' < "$TMP/absent.species.tsv") - || fail "explain report: first 8 columns differ"
+[ "$(head -1 "$E" | cut -f9-)" = "$(printf 'call\tcall_reason\tdecoy_spectra\tdecoy_expected\tdecoy_qvalue\tshare\tlod\ttags\tunexplained_tags')" ] \
+  || fail "explain report: unexpected appended header: $(head -1 "$E" | cut -f9-)"
+[ "$(col "$E" 561 call)" = present ] || { cat "$E" >&2; fail "explain: Escherichia is not present"; }
+np=$(awk -F'\t' 'NR > 1 && $9 == "present"' "$E" | wc -l | tr -d ' ')
+[ "$np" = 1 ] || { cat "$E" >&2; fail "explain: $np genera present, expected only Escherichia"; }
+awk -F'\t' 'NR > 1 && ($17 + 0 > $16 + 0 || $13 + 0 < 0 || $13 + 0 > 1 || $15 != "NA") { exit 1 }' "$E" \
+  || { cat "$E" >&2; fail "explain: unexplained_tags > tags, decoy_qvalue out of range or lod set"; }
+grep -q "Species call (-species_call explain)" "$TMP/expl_t1.log" || fail "explain: no log line"
+run expl_da -in "$IN" -tag_length 7 -fragment_tolerance 0.5 -fragment_tolerance_unit Da -species "${TAX[@]}" "${EXPL[@]}" -threads 2 \
+  || { cat "$TMP/expl_da.log" >&2; fail "explain, Da run"; }
+bad=$(awk -F'\t' 'NR > 1 && !($9 == "no_call" && $10 == "low_resolution")' "$TMP/expl_da.species.tsv" | wc -l | tr -d ' ')
+[ "$bad" = 0 ] || fail "explain, Da run: $bad rows are not a low_resolution no_call"
+
 # ---- negatives -----------------------------------------------------------------
 # Ion-trap tolerance in Da: low_resolution for every row.
 run da -in "$IN" -tag_length 7 -fragment_tolerance 0.5 -fragment_tolerance_unit Da -species "${TAX[@]}" "${CALL[@]}" -threads 2 \
