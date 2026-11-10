@@ -1,0 +1,2 @@
+accession	file	bytes	pride_sha1	status	raw_sha256	mzml	mzml_bytes	mzml_sha256	ms2	ms2_ftms_hcd	ms2_charged	check
+PXD028322	QEXHF08361.raw	2735871262	d2a0f64d70669d2f5d5c7eaa72209894a4b0bdbc	sha1_ok	bd86d32f5e7d695ae65fbdf9725809a885c6dcbd3b245f8f21610bfe49be3770	PXD028322/QEXHF08361.mzML	814725510	d826a36ad55fa60cfeaab7377e7e25beeb5d4a112f736176c8f57a5e2e94dc4c	59330	59330	59330	ok

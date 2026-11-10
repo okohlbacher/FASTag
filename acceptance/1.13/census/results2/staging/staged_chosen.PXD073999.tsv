@@ -1,0 +1,2 @@
+accession	file	bytes	pride_sha1	status	raw_sha256	mzml	mzml_bytes	mzml_sha256	ms2	ms2_ftms_hcd	ms2_charged	check
+PXD073999	20180509_A375_shSIRT6_2_rep2.raw	1341456042	-	no_pride_sha1,size_ok,second_download_same	7672a80a54ebf0a4221bac6fc42606caaedfae6a28cc5f2c03e280b3d9fe9564	PXD073999/20180509_A375_shSIRT6_2_rep2.mzML	782191640	b054fcd92ccfe1e97c0e468dce22a7a0e9b89ae1b77c81b85fa0db70fcec11f2	65787	65787	65787	ok

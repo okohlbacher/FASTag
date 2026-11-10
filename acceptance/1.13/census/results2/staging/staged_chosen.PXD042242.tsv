@@ -1,0 +1,2 @@
+accession	file	bytes	pride_sha1	status	raw_sha256	mzml	mzml_bytes	mzml_sha256	ms2	ms2_ftms_hcd	ms2_charged	check
+PXD042242	N184A_1.raw	1270646391	e826f85bf456a2d690d6e4ecccd98842f0cfb7fa	sha1_ok	1c33b5b2922eb688b17c67f11d1f87c60c5febd3e457aa4c848098daa69acda9	PXD042242/N184A_1.mzML	314693335	987c7e7561821f82fe2d209436cd1d887277ed96825800ba152d286607b02545	12574	12574	12574	ok

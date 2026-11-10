@@ -1,0 +1,2 @@
+accession	file	bytes	pride_sha1	status	raw_sha256	mzml	mzml_bytes	mzml_sha256	ms2	ms2_ftms_hcd	ms2_charged	check
+PXD032145	P800_EXTL3_batch1.raw	543341250	b199ba724f5d65c8cbe37284e94feb090461656a	sha1_ok	56a48f0856bde5ca0378d35509ee0e9d0d6dea6057525945a0be7cee163b35f1	PXD032145/P800_EXTL3_batch1.mzML	156905614	c0a141e825e840261cb4790257816321b721ff57f2ad4c480e1eb65f1cc88344	8653	8653	8653	ok

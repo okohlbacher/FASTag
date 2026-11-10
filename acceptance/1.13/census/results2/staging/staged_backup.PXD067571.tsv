@@ -1,0 +1,2 @@
+accession	file	bytes	pride_sha1	status	raw_sha256	mzml	mzml_bytes	mzml_sha256	ms2	ms2_ftms_hcd	ms2_charged	check
+PXD067571	18.9_Basal-out_ODM_day6_L_230724.raw	2191820117	-	no_pride_sha1,size_ok,second_download_same	1340486d8638e4941c4ae9d1ecf48594d97d6f368612d035222a7712c543fe4a	PXD067571/18.9_Basal-out_ODM_day6_L_230724.mzML	870748975	1a0620bd1f7713d1f00568a824247bd34f8d42556f37dd4f36c4da54eb8c3d58	94775	94775	40804	ok

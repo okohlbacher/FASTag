@@ -1,0 +1,2 @@
+accession	file	bytes	pride_sha1	status	raw_sha256	mzml	mzml_bytes	mzml_sha256	ms2	ms2_ftms_hcd	ms2_charged	check
+PXD068740	2150-gr1-1.raw	976226404	-	SECOND_DOWNLOAD_DIFFERS	43ae0d90a440cf330c74a2960a0d8f2f46fd751b44c548052a66b2a64e843ee8	PXD068740/2150-gr1-1.mzML	-	-	-	-	-	FAIL

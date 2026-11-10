@@ -1,0 +1,2 @@
+accession	file	bytes	pride_sha1	status	raw_sha256	mzml	mzml_bytes	mzml_sha256	ms2	ms2_ftms_hcd	ms2_charged	check
+PXD068740	1984-gr3-29.raw	838373576	-	no_pride_sha1,size_ok,second_download_same	8234d85c002240ea742dde046739466bdab8a2feddcd0707b29a231d894a5591	PXD068740/1984-gr3-29.mzML	420608619	8fff1ebe8e2e1565be0e10af2ca46fb8c2faf766c71937b550abdd6585c352c0	38894	38894	38894	ok

@@ -1,0 +1,2 @@
+accession	file	bytes	pride_sha1	status	raw_sha256	mzml	mzml_bytes	mzml_sha256	ms2	ms2_ftms_hcd	ms2_charged	check
+PXD067571	18.9_Apical-outl_OGM_day4_1_T_210816.raw	1350800173	-	SECOND_DOWNLOAD_DIFFERS	16c2318c568fa3f1d81aafaab6394239bb09a6d4936eafac8c8e4626c755cd48	PXD067571/18.9_Apical-outl_OGM_day4_1_T_210816.mzML	-	-	-	-	-	FAIL
