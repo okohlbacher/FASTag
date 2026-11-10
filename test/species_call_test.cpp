@@ -157,6 +157,84 @@ int main()
     }
   }
 
+  // ---- 2b. k-mer-keyed decoy (1.13 species redesign) -----------------------
+  {
+    const std::string A = "ACDEFGHKLMNPQRSTVWY";
+    // Chance hit rates on an i.i.d. uniform proteome, k = 3, for L = k..k+4:
+    // a uniform random tag (exact chance rate), a whole-tag shuffle, the
+    // independent per-k-mer construction, and kmerDecoySupport.
+    const int k = 3;
+    Rng r{12345};
+    std::string prot;
+    for (int i = 0; i < 300; ++i) prot += A[r.next() % A.size()];
+    std::vector<OpenMS::FASTAFile::FASTAEntry> pe;
+    pe.emplace_back("p", "", prot);
+    TaxIndex pidx;
+    pidx.build(pe, std::vector<uint32_t>{1}, k);
+    const int M = 1000000;
+    const auto close = [](uint64_t a, uint64_t b, double z) {
+      return std::fabs(static_cast<double>(a) - static_cast<double>(b)) <=
+             z * (std::sqrt(static_cast<double>(a + b)) + 1.0);
+    };
+    for (int L = k; L <= k + 4; ++L)
+    {
+      uint64_t shuf = 0, kd = 0, kd_none = 0, indep = 0, tgt = 0;
+      for (int t = 0; t < M; ++t)
+      {
+        std::string s;
+        for (int i = 0; i < L; ++i) s += A[r.next() % A.size()];
+        TagLookupCounters c;
+        std::vector<uint32_t> tx;
+        if (tagSupport(pidx, s, k, 1000, 0.0, tx, c)) ++tgt;
+        // A fresh shuffle seed per tag: one fixed seed is a fixed map of tags
+        // to decoys whose hit rate scatters by a few percent.
+        const std::string sh = decoyTag(s, static_cast<uint32_t>(t));
+        if (!sh.empty() && tagSupport(pidx, sh, k, 1000, 0.0, tx, c)) ++shuf;
+        bool nd = false;
+        if (kmerDecoySupport(pidx, s, k, static_cast<uint32_t>(t), 1000, 0.0, tx, c, &nd)) ++kd;
+        if (nd) ++kd_none;
+        bool all = true;  // the rejected construction: every k-mer replaced independently
+        for (int i = 0; i + k <= L && all; ++i)
+        {
+          std::string km;
+          for (int q = 0; q < k; ++q) km += A[r.next() % A.size()];
+          pidx.lookup(km, tx);
+          all = !tx.empty();
+        }
+        if (all) ++indep;
+      }
+      const std::string got = " (kmer decoy " + std::to_string(kd) + ", no decoy " + std::to_string(kd_none) +
+                              ", shuffle " + std::to_string(shuf) + ", random tag " + std::to_string(tgt) +
+                              ", independent " + std::to_string(indep) + ")";
+      std::cout << "decoy rate L=" << L << got << "\n";
+      // decoyTag() never returns the tag or its reverse, which reweights repeat
+      // patterns slightly (about +3 % here), hence 6 sigma against the exact rate.
+      check(close(shuf, tgt, 6.0), "whole-tag shuffle is the chance rate at L=" + std::to_string(L) + got);
+      if (L == k)
+      {
+        check(kd_none < static_cast<uint64_t>(M / 100), "L == k: almost every tag has a decoy" + got);
+        check(close(kd, shuf, 6.0), "L == k: k-mer decoy hit rate is the shuffle rate" + got);
+      }
+      else
+      {
+        check(kd == 0 && kd_none == static_cast<uint64_t>(M), "L > k: no decoy (refused, not a silent miss)" + got);
+      }
+      if (L == k + 1 || L == k + 2)
+        check(static_cast<double>(tgt) - static_cast<double>(indep) > 4.0 * (std::sqrt(static_cast<double>(tgt + indep)) + 1.0),
+              "independent per-k-mer decoys under-hit at L=" + std::to_string(L) + got);
+    }
+    // k-mer keyed: the same k-mer has the same decoy in every spectrum.
+    {
+      TagLookupCounters c1, c2;
+      std::vector<uint32_t> t1, t2;
+      bool n1 = false, n2 = false;
+      const std::string km = prot.substr(10, 3);
+      kmerDecoySupport(pidx, km, k, 5, 1000, 0.0, t1, c1, &n1);
+      kmerDecoySupport(pidx, km, k, 5, 1000, 0.0, t2, c2, &n2);
+      check(n1 == n2 && t1 == t2, "k-mer decoy is deterministic");
+    }
+  }
+
   // ---- 3. Poisson tail and the random part --------------------------------
   {
     check(SC::poissonUpperTail(0, 3.0) == 1.0, "P(X>=0) = 1");
@@ -505,6 +583,83 @@ int main()
     check(!SC::loadParams(f, p, &err), "loadParams: n_min 0 refused");
     check(!SC::loadParams(dir + "/no_such_species_call.tsv", p, &err), "loadParams: missing file refused");
     std::remove(f.c_str());
+  }
+
+  // ---- 12. -species_call explain (1.13) ----------------------------------------
+  {
+    using namespace FASTag::SpeciesCall;
+    check(negBinomialUpperTail(0, 2.0, 2.0) == 1.0, "NB tail: o = 0");
+    check(std::fabs(negBinomialUpperTail(7, 3.0, 1.0) - poissonUpperTail(7, 3.0)) < 1e-15, "NB tail: factor 1 is Poisson");
+    // mean 2, variance 4: size 2, p 1/2 -> P(0) = 1/4, P(1) = 1/4.
+    check(std::fabs(negBinomialUpperTail(1, 2.0, 2.0) - 0.75) < 1e-12, "NB tail: P(X >= 1)");
+    check(std::fabs(negBinomialUpperTail(2, 2.0, 2.0) - 0.5) < 1e-12, "NB tail: P(X >= 2)");
+    check(negBinomialUpperTail(20, 3.0, 2.0) > poissonUpperTail(20, 3.0), "NB tail: heavier than Poisson");
+
+    // contributingTags is the tag view of spectrumTaxa.
+    std::vector<TagSupport> tags(4);
+    tags[0].evalue = 0.5; tags[0].taxa = {1, 2};
+    tags[1].evalue = 0.1; tags[1].taxa = {3};
+    tags[2].evalue = 0.1; tags[2].taxa = {4};
+    tags[3].evalue = 0.01;  // best E but not informative
+    for (SpeciesEvidence mode : {SpeciesEvidence::Best, SpeciesEvidence::All})
+    {
+      std::set<uint32_t> u;
+      for (std::size_t i : contributingTags(tags, mode)) u.insert(tags[i].taxa.begin(), tags[i].taxa.end());
+      check(u == spectrumTaxa(tags, mode), "contributingTags: union of taxa equals spectrumTaxa");
+    }
+    check(contributingTags(tags, SpeciesEvidence::Best) == std::vector<std::size_t>({1, 2}), "contributingTags: the best informative E");
+
+    // Group 0 is the organism (40 tags), group 1 a relative that shares 15 of
+    // its tags and has nothing of its own, group 2 a second organism (12 tags
+    // in its own spectra), group 3 has chance hits only. One decoy hit per
+    // replicate.
+    const std::vector<uint32_t> taxid = {10, 20, 30, 40};
+    std::vector<TagHit> target;
+    for (uint32_t s = 0; s < 40; ++s) target.push_back({s, s, 0});
+    for (uint32_t s = 0; s < 15; ++s) target.push_back({s, s, 1});
+    for (uint32_t s = 100; s < 112; ++s) target.push_back({s, s, 2});
+    target.push_back({200, 200, 3});
+    std::vector<std::vector<TagHit>> decoys(5);
+    for (uint32_t j = 0; j < 5; ++j) decoys[j].push_back({j, j, j % 4});
+    Params prm;  // alpha 0.01, n_min 10
+    RunInput run;
+    run.n_units = 1000;
+    const std::vector<GenusStat> st = callExplain(taxid, target, decoys, run, prm);
+    check(st.size() == 4 && st[0].taxid == 10 && st[3].taxid == 40, "explain: one row per group, in order");
+    check(st[0].call == Call::Present && st[0].observed == 40 && st[0].tags == 40, "explain: the organism is present");
+    check(st[2].call == Call::Present && st[2].observed == 12, "explain: the second organism is present");
+    check(st[1].call == Call::NotDetected && st[1].reason == "explained" && st[1].tags == 15 && st[1].observed == 0,
+          "explain: the relative's tags are explained by the organism");
+    check(st[3].call == Call::NotDetected && st[3].reason == "not_significant", "explain: chance hits are not detected");
+    check(st[0].qvalue <= prm.alpha && st[1].qvalue == 1.0, "explain: decoy_qvalue");
+    // The relative alone would be called: the explaining is what removes it.
+    std::vector<TagHit> alone;
+    for (uint32_t s = 0; s < 15; ++s) alone.push_back({s, s, 1});
+    check(callExplain(taxid, alone, decoys, run, prm)[1].call == Call::Present, "explain: the same 15 tags alone are present");
+    // The same tag in many spectra is one tag.
+    std::vector<TagHit> repeat;
+    for (uint32_t s = 0; s < 500; ++s) repeat.push_back({s, 7, 0});
+    const GenusStat rs = callExplain(taxid, repeat, decoys, run, prm)[0];
+    check(rs.tags == 1 && rs.call == Call::NotDetected, "explain: 500 spectra of one tag are one tag");
+    // Targets that look like the decoys: nothing present.
+    std::vector<TagHit> flat;
+    std::vector<std::vector<TagHit>> dflat(5);
+    for (uint32_t g = 0; g < 4; ++g)
+    {
+      for (uint32_t t = 0; t < 12; ++t) flat.push_back({g * 100 + t, g * 100 + t, g});
+      for (uint32_t j = 0; j < 5; ++j)
+        for (uint32_t t = 0; t < 10 + (j + g) % 5; ++t) dflat[j].push_back({g * 100 + t, g * 100 + t, g});
+    }
+    for (const GenusStat& s : callExplain(taxid, flat, dflat, run, prm))
+      check(s.call == Call::NotDetected, "explain: targets at the decoy level are not detected");
+    // Run-level abstention as in the decoy call.
+    run.low_resolution = true;
+    for (const GenusStat& s : callExplain(taxid, target, decoys, run, prm))
+      check(s.call == Call::NoCall && s.reason == "low_resolution", "explain: low_resolution is a run-level no_call");
+    run.low_resolution = false;
+    run.n_units = 10;
+    check(callExplain(taxid, target, decoys, run, prm)[0].reason == "few_spectra", "explain: few_spectra is a run-level no_call");
+    check(callExplain({}, target, decoys, run, prm).empty(), "explain: no groups");
   }
 
   if (failures) { std::cerr << failures << " species_call_test check(s) failed\n"; return 1; }

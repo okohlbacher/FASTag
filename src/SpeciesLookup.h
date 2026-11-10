@@ -58,6 +58,17 @@ namespace FASTag
   /// when no rotation differs from both (a homopolymer, a two-residue tag):
   /// that tag has no decoy.
   std::string decoyTag(const std::string& seq, uint32_t j);
+  /// The k-mer-keyed decoy @p j of a tag of exactly @p k residues (1.13
+  /// species redesign, DEV prototype): tagSupport() of decoyTag(@p seq, @p j).
+  /// Such a tag is one k-mer, so two tags with the same k-mer share its decoy
+  /// and decoy hits repeat across spectra the way target hits do. A tag longer
+  /// than k has no decoy here (*@p no_decoy set): per-k-mer decoys would lose
+  /// the k-1 overlaps the whole-tag rule depends on (they almost never hit, an
+  /// anti-conservative null) and a whole-tag shuffle is not k-mer keyed. The
+  /// 1.12 DEV species runs evaluate only 7-residue tags at index k 7.
+  bool kmerDecoySupport(const TaxIndex& idx, const std::string& seq, int k, uint32_t j,
+                        std::size_t share_cap, double min_margin,
+                        std::vector<uint32_t>& taxa, TagLookupCounters& counters, bool* no_decoy);
   /// @p seq reversed and I/L folded: the reading of a tag written N->C under a
   /// y-ion assumption when it was really read from b ions.
   std::string reversedFolded(const std::string& seq);

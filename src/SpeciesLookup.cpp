@@ -77,6 +77,31 @@ namespace FASTag
     }
     return std::string();
   }
+  bool kmerDecoySupport(const TaxIndex& idx, const std::string& seq, int k, uint32_t j,
+                        std::size_t share_cap, double min_margin,
+                        std::vector<uint32_t>& taxa, TagLookupCounters& counters, bool* no_decoy)
+  {
+    taxa.clear();
+    if (no_decoy) *no_decoy = false;
+    // Defined for L == k only. For L > k, independent per-k-mer decoys lose the
+    // k-1 overlaps and almost never pass the whole-tag rule (anti-conservative
+    // null), and a whole-tag shuffle is no longer k-mer keyed; such a tag has
+    // no decoy here (b113 review; the residue-map alternative under-hit 3x on
+    // the DEV all-decoy arm because it changes composition, so it was dropped).
+    if (static_cast<int>(seq.size()) != k)
+    {
+      if (no_decoy) *no_decoy = true;
+      return false;
+    }
+    const std::string d = decoyTag(seq, j);
+    if (d.empty())
+    {
+      if (no_decoy) *no_decoy = true;
+      return false;
+    }
+    return tagSupport(idx, d, k, share_cap, min_margin, taxa, counters);
+  }
+
   std::string reversedFolded(const std::string& seq)
   {
     return TaxIndex::fold(std::string(seq.rbegin(), seq.rend()));

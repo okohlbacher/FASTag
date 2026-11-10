@@ -254,6 +254,74 @@ calibrated for D = 5) are PROVISIONAL: they are not fitted yet, and
 `-species_call_decoys` from the one the file states gives a warning.
 `-species_call` refuses `-stream`.
 
+## Explain-away call (`-species_call explain`, opt-in, experimental, 1.13)
+
+The decoy call counts spectra and subtracts an expected spill from related
+taxa. On real runs that null is too small: a peptide seen in hundreds of
+spectra counts hundreds of times, its decoy at most as often, and the spill
+model does not cover real homology. `-species_call explain` changes the unit
+and the way a called taxon accounts for its relatives.
+
+- **Unit.** A taxon is counted by its DISTINCT TAGS (I/L-folded sequence)
+  among the tags that contribute under `-species_evidence`, not by spectra.
+- **Explaining.** Taxa are called one at a time. Once a taxon is called, every
+  spectrum with a contributing tag of it is explained and counts for no other
+  taxon. A relative that only shares tags with the organism in the sample has
+  no unexplained tags left; a second organism keeps its own.
+- **Null.** Each step counts, for every taxon not yet called, its tags in
+  unexplained spectra (o) and the same on each of the D decoy replicates of
+  those spectra's tags. The null is negative binomial with mean
+  (sum of the decoy counts + 0.5) / D and variance phi (1 + 1/D) times the
+  mean: 1/D for the estimated mean, phi (at least 1) the spread between
+  replicates relative to Poisson, pooled over the taxa not yet called.
+- **Decision.** The taxon with the smallest p is called present when
+  p times m is at most alpha, m being the taxa not yet called with at least
+  n_min unexplained tags (step-down Bonferroni). The first failure ends the
+  loop; everything left is `not_detected` (`explained` when the taxon had
+  n_min tags in the run but fewer left, `not_significant` otherwise). The
+  run-level `no_call` rows (low_resolution, few_spectra) are those of the
+  decoy call.
+
+Report: the columns of the decoy call plus `tags` and `unexplained_tags`.
+`decoy_spectra` is the decoy tag count over the D replicates, `decoy_expected`
+the null's mean, `decoy_qvalue` min(1, p m), all at the taxon's decision (its
+step when called, the stop otherwise); `share` is as in the decoy call, `lod`
+is NA. alpha and n_min come from `species_call.tsv`; tau and `-species_pi0` are
+not used.
+
+Limits. A taxon that is in the sample but not in the index is not explained by
+anything: its conserved tags can call the nearest indexed relative. Reagent and
+expression-host proteins (protease, Protein A, E. coli from a recombinant
+protein) are real material and are called. Developed on 36 FTMS runs of the
+1.12 development set and the same runs against a shuffled-proteome index.
+
+Held-out result (1.13, branch `acc113r/species`: `PREREG-species-explain.md`,
+`species/results/summary.tsv`; 62 public runs, scored once): **FAIL**. The
+primary endpoint passes, the recovery guard fails.
+
+| | explain | decoy call | rule |
+|---|---|---|---|
+| False genus calls per run (primary) | 0.50 [0.29, 0.73] (31 calls in 19 runs) | 5.98 [4.68, 7.48] (371 calls) | upper bound <= 0.75: PASS |
+| Recovery of the genera in the truth (guard) | 38/105 = 0.362 | 77/105 = 0.733 | explain >= decoy - 0.05: FAIL |
+| of these: Sus or Bos | 3/68 | 41/68 | |
+
+"False" is the label under the frozen genus rule, not established absence.
+
+Scope: experimental selection of the sample organism among the 50 indexed
+genera (42 of 49 runs; wrong relative as only call in 2 of 37 confirmed
+runs); failed the recovery guard; a second organism or contaminant is not
+reported (Sus/Bos 3 of 68); organisms outside the index are usually reported
+as their nearest indexed relative (10 of 13 runs) or not at all; 12-fold
+fewer calls labelled false under the frozen genus rule.
+
+Post hoc reading of the spent runs, not a test result: of the 23 calls in the
+13 runs whose organism is outside the index, 14 name a nearest indexed
+relative, 6 name material that is in the sample (such as keratin or host
+protein) and 3 are unsupported.
+
+The mode stays opt-in and experimental; the default (`none`) and the decoy
+call are unchanged.
+
 ## Both tag orientations (`-species_orientation both`, opt-in, 1.12)
 
 Tags are written N->C under a y-ion assumption, so a tag read from b ions is

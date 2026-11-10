@@ -21,6 +21,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <iterator>
 #include <set>
@@ -33,9 +34,25 @@ namespace FASTag
   {
     double evalue = 0.0;          ///< the tag's E-value (lower is better)
     std::vector<uint32_t> taxa;   ///< taxa carrying every evaluated k-mer; empty = not informative
+    uint32_t tag = 0;             ///< caller's id of the tag sequence (-species_call explain); unused otherwise
   };
 
   enum class SpeciesEvidence { Best, All };
+
+  /// The tags spectrumTaxa() takes its taxa from, as indices into @p tags: the
+  /// union of their taxa is spectrumTaxa(@p tags, @p mode). For
+  /// -species_call explain, which counts tags, not spectra.
+  inline std::vector<std::size_t> contributingTags(const std::vector<TagSupport>& tags, SpeciesEvidence mode)
+  {
+    std::vector<std::size_t> out;
+    const TagSupport* best = nullptr;
+    if (mode == SpeciesEvidence::Best)
+      for (const TagSupport& t : tags)
+        if (!t.taxa.empty() && t.evalue == t.evalue && (!best || t.evalue < best->evalue)) best = &t;
+    for (std::size_t i = 0; i < tags.size(); ++i)
+      if (!tags[i].taxa.empty() && (!best || tags[i].evalue == best->evalue)) out.push_back(i);
+    return out;
+  }
 
   /// The taxa @p tags make one spectrum count for. All: the union over every
   /// informative tag. Best: the union over the informative tags with the
