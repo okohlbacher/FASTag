@@ -1,0 +1,10 @@
+Modifications: Carbamidomethyl (C, fixed), Oxidation (M, variable)
+Recon index: 20416 proteins, 11414601 residues, 13 isobaric rules; min tag length 8 (derived)
+'run.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 55675 spectra by scanning it instead (0.02 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 3036 repeat gaps, cycle 78, 961 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+-search_shifts: isotope-spaced gap peaks: the configuration searches precursor isotope errors 0..1.
+Search shifts: 4 gap peaks, 2 variable, 0 offsets, 0 fixed -> cand/shifts_sage.tsv
+Shortlist protease check: Trypsin fits the tag ends best.
+Search configuration (sage, database /scratch/kohlbach/gate-in/db/Homo_sapiens.fasta) -> cand/cfg_sage.json
+46316 MS2 spectra, 730565 tags
+FASTag took 1.28 s (wall), 9.92 s (CPU), 1.42 s (system), 8.50 s (user); Peak Memory Usage: 273 MB.

@@ -1,0 +1,10 @@
+# FASTag 1.12.2 mass shifts for -search_config_out: candidates for an FDR-controlling engine, NOT identifications.
+# input: run.mzML; database: Homo_sapiens.fasta; engine: sage; mode: variable
+# settings: window 0.02 Da, max_variable 3, max_offsets 10, expand_sites no
+# gap peaks: 4; exported: 2 variable, 0 offsets, 0 fixed; isotope errors 0..1
+# calibration: offsets corrected by the bias 0.0024 Da, the spectra-weighted median of centroid - mass over 3 single-modification peaks; residual 0.0011 Da (90 % of their spectra)
+peak	delta	spectra	explanation	action	mod_id	sites	exported	substitution_share	localized	reason
+1	43.0082	60	Carbamyl	variable	Carbamyl (N-term)	N-term	43.0058	0.0000	0	Carbamyl
+2	15.9984	32	Oxidation	already_searched	Oxidation (M)	M	15.9949	0.0000	0	the plan searches Oxidation (M) already
+3	-89.0269	28	Met-loss+Acetyl	variable	Met-loss+Acetyl (Protein N-term M)	Protein N-term M	-89.0299	0.0000	0	Met-loss+Acetyl
+4	1.0056	21	none	skipped_isotope	-	-	-	0.0476	0	1 x 13C spacing: a precursor isotope error

@@ -1,0 +1,11 @@
+Modification 'TMTpro (N-term)' is terminal; it is absorbed into the reported flanking masses and not annotated per-residue.
+Modifications: Carbamidomethyl (C, fixed), TMTpro (K, fixed), Oxidation (M, variable)
+Recon index: 20416 proteins, 11414601 residues, 11 isobaric rules; min tag length 8 (derived)
+'run.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 74265 spectra by scanning it instead (0.03 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0 over 1977 repeat gaps, cycle 248, 2021 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+-search_shifts: isotope-spaced gap peaks: the configuration searches precursor isotope errors 0..1.
+Search shifts: 16 gap peaks, 4 variable, 0 offsets, 0 fixed -> cand/shifts_sage.tsv
+Shortlist protease check: Trypsin fits the tag ends best.
+Search configuration (sage, database /scratch/kohlbach/gate-in/db/Homo_sapiens.fasta) -> cand/cfg_sage.json
+66315 MS2 spectra, 2134523 tags
+FASTag took 3.12 s (wall), 39.73 s (CPU), 2.12 s (system), 37.61 s (user); Peak Memory Usage: 521 MB.

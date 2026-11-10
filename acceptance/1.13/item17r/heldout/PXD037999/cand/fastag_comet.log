@@ -1,0 +1,10 @@
+Modification 'TMT6plex (N-term)' is terminal; it is absorbed into the reported flanking masses and not annotated per-residue.
+Modifications: Carbamidomethyl (C, fixed), TMT6plex (K, fixed), Oxidation (M, variable)
+Recon index: 20416 proteins, 11414601 residues, 11 isobaric rules; min tag length 8 (derived)
+'run.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 65596 spectra by scanning it instead (0.06 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2762 repeat gaps, cycle 3, 1223 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Search shifts: 5 gap peaks, 2 variable, 0 offsets, 0 fixed -> cand/shifts_comet.tsv
+Shortlist protease check: Trypsin fits the tag ends best.
+Search configuration (comet, database /scratch/kohlbach/gate-in/db/Homo_sapiens.fasta) -> cand/cfg_comet.params
+31975 MS2 spectra, 868296 tags
+FASTag took 1.87 s (wall), 19.02 s (CPU), 2.94 s (system), 16.08 s (user); Peak Memory Usage: 326 MB.

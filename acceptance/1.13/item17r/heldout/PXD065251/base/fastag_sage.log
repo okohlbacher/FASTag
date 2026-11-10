@@ -1,0 +1,8 @@
+Modifications: Oxidation (M, variable), Label:13C(6) (K, variable)
+Recon index: 20416 proteins, 11414601 residues, 13 isobaric rules; min tag length 8 (derived)
+'run.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 79208 spectra by scanning it instead (0.06 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2250 repeat gaps, cycle 9, 1749 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Shortlist protease check: Trypsin fits the tag ends best.
+Search configuration (sage, database /scratch/kohlbach/gate-in/db/Homo_sapiens.fasta) -> base/cfg_sage.json
+70580 MS2 spectra, 2771182 tags
+FASTag took 9.21 s (wall), 02:12 m (CPU), 2.98 s (system), 02:09 m (user); Peak Memory Usage: 654 MB.

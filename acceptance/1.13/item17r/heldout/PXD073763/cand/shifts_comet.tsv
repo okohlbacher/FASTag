@@ -1,0 +1,22 @@
+# FASTag 1.12.2 mass shifts for -search_config_out: candidates for an FDR-controlling engine, NOT identifications.
+# input: run.mzML; database: Homo_sapiens.fasta; engine: comet; mode: both
+# settings: window 0.02 Da, max_variable 3, max_offsets 10, expand_sites no
+# gap peaks: 16; exported: 4 variable, 2 offsets, 0 fixed; isotope errors 0..1
+# calibration: offsets uncorrected, the bias 0.0002 Da is within the centroid resolution 0.00025 Da, the spectra-weighted median of centroid - mass over 3 single-modification peaks; residual 0.0002 Da (90 % of their spectra)
+peak	delta	spectra	explanation	action	mod_id	sites	exported	substitution_share	localized	reason
+1	304.2074	1611	TMTpro	expected_label	-	-	-	0.0000	0	the fixed label TMTpro (N-term)
+2	-128.0945	239	none	dropped_engine	-	-	-128.0945	0.0000	0	a negative offset: Comet's mass_offsets are kept non-negative (unexplained)
+3	148.1061	93	none	offset	-	-	148.1061	0.0000	0	unexplained
+4	320.2027	148	Oxidation + TMTpro	already_searched	Oxidation (M)	M	15.9949	0.0000	0	the plan searches Oxidation (M) already
+5	-241.1799	25	none	dropped_engine	-	-	-241.1799	0.0000	0	a negative offset: Comet's mass_offsets are kept non-negative (unexplained)
+6	26.0153	63	Oxidation + Label:13C(6)15N(4)	offset	-	-	26.0153	0.1270	0	combination
+7	303.2050	79	none	dropped_engine	-	-	-1.0021	0.0000	0	a negative offset: Comet's mass_offsets are kept non-negative (combination)
+8	305.2052	97	Deamidated + TMTpro	skipped_isotope	-	-	-	0.0000	0	the fixed label TMTpro (N-term) plus 1 x 13C spacing: a precursor isotope error
+9	-199.1324	22	none	dropped_engine	-	-	-199.1324	0.0000	0	a negative offset: Comet's mass_offsets are kept non-negative (unexplained)
+10	-89.0295	38	Met-loss+Acetyl	variable	Met-loss+Acetyl (Protein N-term M)	Protein N-term M	-89.0299	0.0000	0	Met-loss+Acetyl
+11	608.4148	33	TMTpro + TMTpro	variable	TMTpro (H);TMTpro (N-term)	H,N-term	304.2071	0.0000	0	the fixed label TMTpro (N-term) plus the fixed TMTpro (K) again, on other sites
+12	-257.1371	29	none	dropped_engine	-	-	-257.1371	0.0000	0	a negative offset: Comet's mass_offsets are kept non-negative (unexplained)
+13	-17.0268	34	Gln->pyro-Glu	variable	Gln->pyro-Glu (N-term Q)	N-term Q	-17.0265	0.0000	0	Gln->pyro-Glu
+14	305.1898	20	Deamidated + TMTpro	dropped_cap	Deamidated (N)	N	0.9840	0.0000	0	-shift_max_variable 3 reached (the fixed label TMTpro (N-term) plus Deamidated)
+15	-215.1267	29	none	dropped_engine	-	-	-215.1267	0.0000	0	a negative offset: Comet's mass_offsets are kept non-negative (unexplained)
+16	336.1978	24	Dioxidation + TMTpro	dropped_cap	Dioxidation (M)	M	31.9898	0.0000	0	-shift_max_variable 3 reached (the fixed label TMTpro (N-term) plus Dioxidation)

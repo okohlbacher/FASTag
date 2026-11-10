@@ -1,0 +1,11 @@
+# FASTag 1.12.2 mass shifts for -search_config_out: candidates for an FDR-controlling engine, NOT identifications.
+# input: run.mzML; database: Homo_sapiens.fasta; engine: comet; mode: both
+# settings: window 0.02 Da, max_variable 3, max_offsets 10, expand_sites no
+# gap peaks: 5; exported: 2 variable, 0 offsets, 0 fixed; isotope errors 0..0
+# calibration: offsets corrected by the bias 0.0045 Da, the spectra-weighted median of centroid - mass over 1 single-modification peaks; residual 0.0000 Da (90 % of their spectra)
+peak	delta	spectra	explanation	action	mod_id	sites	exported	substitution_share	localized	reason
+1	229.1674	1449	TMT6plex	expected_label	-	-	-	0.0000	0	the fixed label TMT6plex (N-term)
+2	-128.0907	143	none	dropped_engine	-	-	-128.0952	0.0000	0	a negative offset: Comet's mass_offsets are kept non-negative (unexplained)
+3	73.0664	105	none	dropped_engine	-	-	-156.1010	0.0000	0	a negative offset: Comet's mass_offsets are kept non-negative (combination)
+4	458.3352	70	TMT6plex + TMT6plex	variable	TMT6plex (H);TMT6plex (N-term)	H,N-term	229.1629	0.0000	0	the fixed label TMT6plex (N-term) plus the fixed TMT6plex (K) again, on other sites
+5	245.1669	45	Oxidation + TMT6plex	already_searched	Oxidation (M)	M	15.9949	0.0000	0	the plan searches Oxidation (M) already
