@@ -22,6 +22,11 @@
   light/medium/heavy, Lys4, Lys6 and Arg6 as known labels; a robust
   calibration uncertainty. New `ld_site` keys `.tier`, `.relative_share`,
   `.clean_share` and `ld_run` keys `tier<t>_*` (format 1 unchanged).
+  Scored once (acceptance/1.13 PREREG-labeldisc.md): false label calls on
+  4 of 79 label-free TEST runs and 6 of 150 held-out label-free runs (all
+  known labels, several probably unlisted in the SDRF; no unknown mass);
+  correct calls 96/190 held-out against label_call's 91 and the majority's
+  150 (no calls on few-spectra runs). The report stays experimental.
 
 ## 1.12.2 (2026-11-10)
 
