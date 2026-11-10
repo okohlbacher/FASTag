@@ -1,0 +1,6 @@
+PXD037572 qe ok {'truth': 2610, 'wrong': 549, 'right': 2061, 'flagged': 454, 'tp': 452, 'fp': 2, 'tp_charge': 444, 'decoy_other': 0, 'flags_ms1': 454, 'tp_ms1': 452, 'flags_compl': 0, 'tp_compl': 0, 'wrong_agree': 40, 'wrong_nocall': 46, 'wrong_ambiguous': 11}
+PXD016408 qe ok {'truth': 27055, 'wrong': 5414, 'right': 21641, 'flagged': 5082, 'tp': 5017, 'fp': 65, 'tp_charge': 4857, 'decoy_other': 6, 'flags_ms1': 5012, 'tp_ms1': 4948, 'flags_compl': 70, 'tp_compl': 69, 'wrong_agree': 183, 'wrong_nocall': 177, 'wrong_ambiguous': 37}
+PXD033520 qe ok {'truth': 3115, 'wrong': 612, 'right': 2503, 'flagged': 562, 'tp': 558, 'fp': 4, 'tp_charge': 554, 'decoy_other': 1, 'flags_ms1': 559, 'tp_ms1': 555, 'flags_compl': 3, 'tp_compl': 3, 'wrong_agree': 22, 'wrong_nocall': 24, 'wrong_ambiguous': 8}
+PXD071028 astral ok {'truth': 26086, 'wrong': 5249, 'right': 20837, 'flagged': 3622, 'tp': 3516, 'fp': 106, 'tp_charge': 3416, 'decoy_other': 8, 'flags_ms1': 3191, 'tp_ms1': 3091, 'flags_compl': 431, 'tp_compl': 425, 'wrong_agree': 567, 'wrong_nocall': 896, 'wrong_ambiguous': 270}
+PXD080900 astral ok {'truth': 24061, 'wrong': 4760, 'right': 19301, 'flagged': 3188, 'tp': 3128, 'fp': 60, 'tp_charge': 3050, 'decoy_other': 5, 'flags_ms1': 2801, 'tp_ms1': 2746, 'flags_compl': 387, 'tp_compl': 382, 'wrong_agree': 507, 'wrong_nocall': 876, 'wrong_ambiguous': 249}
+SCORE_RC=0

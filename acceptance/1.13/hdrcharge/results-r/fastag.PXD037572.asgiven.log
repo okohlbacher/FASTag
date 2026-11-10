@@ -1,0 +1,8 @@
+Modifications: Carbamidomethyl (C, fixed)
+'/scratch/kohlbach/b113/hdrcharge/heldout/r2/PXD037572/20210815_PHCOQEHF_PC878-Giudice_5.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 56148 spectra by scanning it instead (0.04 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2351 repeat gaps, cycle 38, 1648 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+45287 MS2 spectra, 686345 tags
+Header charge check (-check_header_charge warn): 45287 of 45287 MS2 spectra carry a precursor charge; 32477 agree with their charge evidence, 1584 disagree (1576 by MS1 isotope spacing, 8 by complement pairs, 0 by the 1+ test; 2+ -> 1+: 212, 2+ -> 3+: 82, 2+ -> 4+: 28, 2+ -> 5+: 52, 2+ -> 6+: 45, 2+ -> 7+: 29, 2+ -> 8+: 45, 3+ -> 1+: 159, 3+ -> 2+: 190, 3+ -> 4+: 64, 3+ -> 5+: 30, 3+ -> 6+: 18, 3+ -> 7+: 30, 3+ -> 8+: 25, 4+ -> 1+: 41, 4+ -> 2+: 267, 4+ -> 3+: 53, 4+ -> 5+: 11, 4+ -> 6+: 11, 4+ -> 7+: 7, 4+ -> 8+: 8, 5+ -> 1+: 31, 5+ -> 2+: 9, 5+ -> 3+: 5, 5+ -> 4+: 11, 5+ -> 6+: 6, 5+ -> 7+: 4, 5+ -> 8+: 4, 6+ -> 1+: 2, 6+ -> 2+: 19, 6+ -> 3+: 71, 6+ -> 4+: 2, 6+ -> 5+: 8, 6+ -> 7+: 2, 6+ -> 8+: 3), 222 ambiguous and 11004 without evidence; every spectrum was tagged at its header charge.
+Header charge check: 45287 rows -> hc.tsv
+FASTag took 0.69 s (wall), 8.30 s (CPU), 1.34 s (system), 6.96 s (user); Peak Memory Usage: 183 MB.
+FASTAG_RC=0

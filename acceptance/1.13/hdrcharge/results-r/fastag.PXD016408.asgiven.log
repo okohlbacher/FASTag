@@ -1,0 +1,8 @@
+Modifications: Carbamidomethyl (C, fixed)
+'/scratch/kohlbach/b113/hdrcharge/heldout/r2/PXD016408/20171128_QE5_nLC3_MJ_MT9GFPclone5_Rep1_5ul.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 52371 spectra by scanning it instead (0.04 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2226 repeat gaps, cycle 61, 1771 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+42755 MS2 spectra, 1856317 tags
+Header charge check (-check_header_charge warn): 42755 of 42755 MS2 spectra carry a precursor charge; 39862 agree with their charge evidence, 393 disagree (374 by MS1 isotope spacing, 19 by complement pairs, 0 by the 1+ test; 2+ -> 1+: 88, 2+ -> 3+: 47, 2+ -> 4+: 20, 2+ -> 5+: 4, 2+ -> 6+: 8, 2+ -> 7+: 2, 2+ -> 8+: 1, 3+ -> 1+: 17, 3+ -> 2+: 27, 3+ -> 4+: 13, 3+ -> 5+: 2, 3+ -> 6+: 7, 3+ -> 7+: 1, 3+ -> 8+: 3, 4+ -> 1+: 7, 4+ -> 2+: 92, 4+ -> 3+: 12, 4+ -> 5+: 3, 4+ -> 6+: 5, 4+ -> 8+: 2, 5+ -> 1+: 7, 5+ -> 2+: 10, 5+ -> 3+: 6, 5+ -> 4+: 6, 5+ -> 6+: 1, 5+ -> 7+: 1, 5+ -> 8+: 1), 297 ambiguous and 2203 without evidence; every spectrum was tagged at its header charge.
+Header charge check: 42755 rows -> hc.tsv
+FASTag took 2.66 s (wall), 35.32 s (CPU), 1.65 s (system), 33.67 s (user); Peak Memory Usage: 379 MB.
+FASTAG_RC=0

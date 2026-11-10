@@ -1,0 +1,6 @@
+run	class	status	truth	wrong	right	flagged	tp	fp	tp_charge	decoy_other	flags_ms1	tp_ms1	flags_compl	tp_compl	wrong_agree	wrong_nocall	wrong_ambiguous
+PXD037572	qe	ok	2750	140	2610	81	78	3	76	0	81	78	0	0	49	11	2
+PXD016408	qe	ok	27509	454	27055	152	75	77	68	4	147	71	5	4	343	29	7
+PXD033520	qe	ok	3157	42	3115	20	14	6	13	0	20	14	0	0	27	1	0
+PXD071028	astral	ok	27143	1057	26086	403	272	131	258	3	364	239	39	33	461	232	92
+PXD080900	astral	ok	24626	565	24061	240	169	71	159	0	194	128	46	41	212	128	56
