@@ -314,8 +314,18 @@ is tagged with a warning; a periodic scheme whose windows do not tile a range
 is PRM or an inclusion list and passes; so do DDA with wide windows and
 pseudo-DDA spectra, which DIAspeXtract (its software entry and `spx_*`
 userParams) and diaTracer (its software entry) mark in the mzML. The
-thresholds were frozen after a development sweep over 183 public data sets; a
-release test on a fresh PRIDE sample is pending. A mixed file
+thresholds were frozen after a development sweep over 183 public data sets. The
+preregistered release test on a fresh PRIDE sample (E7-03, 213 files and 37
+pseudo-DDA files) **failed**. Raw diaPASEF and Astral DIA were refused 12/12
+each. Orbitrap DIA was refused only 7/12 and the SWATH stratum 10/12, against
+>= 90%. 8 of 202 files that had to pass were refused (upper 95% bound 7.0%),
+all drawn from Astral projects labelled DDA. All 37 pseudo-DDA files passed.
+Charged tiling DIA is only warned about, by design. Post-hoc readings (not a
+re-score; only partly checked against vendor scan filters) are that the 8 refused files may be DIA
+runs filed as DDA, and that 4 of the missed DIA files, which showed no repeating
+window scheme, may be DDA library runs (see
+[doc/ACQUISITION-RELEASE-TEST.md](doc/ACQUISITION-RELEASE-TEST.md)). If a file
+you know is DDA is refused, rerun with `-acquisition_check warn` or `off`. A mixed file
 is judged on its first MS2; `-stream` is not checked.
 
 `-acquisition_check warn` tags raw DIA anyway (experts; the tags are those
@@ -588,7 +598,7 @@ MGF→mzML direction is exact.
 | `-acquisition_probe_spectra <n>` | 4000 | MS2 spectra the acquisition check reads, metadata only, reading at most ten times as many spectra in all (advanced) |
 | `-pick_profile <legacy\|auto\|off>` | legacy | Centroid profile MS2 (MS:1000128) with OpenMS `PeakPickerHiRes` before tagging: `legacy` on mzPeak input only (as 1.11), `auto` on mzML and mzPeak input (not MGF), `off` never. Centroided MS2 are never re-picked. `-out_spectra` writes the spectra as they were tagged. Not with `-stream`. Experimental: `auto` failed its held-out test and is not recommended (see Performance) |
 | `-pick_unknown_type` | off | With `-pick_profile auto`: also centroid MS2 that declare no spectrum type, when OpenMS's `PeakTypeEstimator` reads their data as profile (advanced) |
-| `-ion_series <by\|cz\|auto>` | by | Ion series the MS2 spectra are read as: `by` (b/y ions, as 1.11), `cz` (c/z• ions of ETD/ECD, every spectrum), `auto` (c/z• for spectra whose activation is ETD or ECD, b/y for all others, hybrid EThcD/ETciD included, with a warning). Under `cz`, and under `auto` when the run has electron-activated spectra, the tag TSV gains a last `ion_series` column and the census a `best_ion_series` column (see Ion series). Not with `-stream`. Experimental: `auto` is not validated yet |
+| `-ion_series <by\|cz\|auto>` | by | Ion series the MS2 spectra are read as: `by` (b/y ions, as 1.11), `cz` (c/z• ions of ETD/ECD, every spectrum), `auto` (c/z• for spectra whose activation is ETD or ECD, b/y for all others, hybrid EThcD/ETciD included, with a warning). Under `cz`, and under `auto` when the run has electron-activated spectra, the tag TSV gains a last `ion_series` column and the census a `best_ion_series` column (see Ion series). Not with `-stream`. Opt-in: on held-out Orbitrap ETD spectra `auto` gave 82.2% correct rank-1 tags against 0.9% under `by` (verdict inconclusive, see Validation) |
 | `-unknown_charge <assume2\|enumerate\|infer>` | assume2 | How a precursor without a charge is tagged: `assume2` as 2+ (as 1.11); `enumerate` at each listed possible charge (MS:1000633, MGF `2+ and 3+`), else at every charge `-charge_min`..`-charge_max`; `infer` at the charge its complement pairs support (1+ when `-charge_min` is 1, or 1 is listed, and almost no intensity lies above the precursor; both charges of a close call, `ambiguous`; without evidence 2+, or the lowest candidate when 2 is none, `assumed`). Every charge tagged is a listed possible charge, else one of `-charge_min`..`-charge_max`. A header charge is never replaced. A spectrum tagged under H hypotheses has every E-value multiplied by H before `-max_evalue` and `-max_tags`; its rows are merged by E-value. The reports that aggregate over spectra (digest, label, massgap, delta, species, shortlist, census) read the rows of one selected hypothesis, chosen from the charge evidence, never from the E-values. Experimental: `infer` failed its held-out test (see Validation); not with `-stream` |
 | `-charge_min <n>` / `-charge_max <n>` | 2 / 4 | The charges `enumerate` and `infer` try (1-8); `-charge_min 1` enables infer's 1+ test |
 | `-charge_infer_margin <x>` | 2 | Complement-pair excess by which an inferred charge must beat the runner-up to be tagged alone; closer, both are tagged (`ambiguous`). Any excess above 0 is a call; none is `assumed` (advanced) |
@@ -1343,10 +1353,11 @@ data.
 | #9 `-pick_profile auto` | **FAIL** | Ion trap (PXD009049): two charge-3 cells fail non-inferiority, 4+ underpowered, fewer tagged spectra at tag length 4 and 5. Orbitrap (PXD016519, PXD018024; no Astral or TOF run): all 9 cells +10.5 to +32.0 points, but 567 fewer tagged spectra on PXD016519 at tag length 3. Default stays `legacy`; `auto` is not recommended (see Performance) |
 | #6 `-unknown_charge infer` | **INCONCLUSIVE** (item06-H1-r2), then **FAIL** (item06-H2/H2r, high resolution) | Charge-call accuracy 0.751 (H1-r2, descriptive) and 0.745 (H2/H2r) against a 0.90 target; on the high-resolution sets, gains on 3+ and losses on 2+ (on ion trap in H1-r2, losses at every charge). Default stays `assume2` |
 | #2 `-complement_rule both` | **INCONCLUSIVE** | By rule 5: the truth of one Astral run (PXD074582) has 0 PSMs at 1% FDR. On the other runs endpoints (i)-(iii) fail descriptively. Default stays `same_charge` |
+| #15 `-ion_series auto` | **INCONCLUSIVE** | On the ETD spectra of 6 Orbitrap runs (PXD024621, PXD009208; MSFragger 4.4.1 c/z• truth at 1% FDR) correct rank-1 tags rise from 0.9% under `by` to 82.2% (+81.4 points, 95% interval 79.5-83.2; 5,313 peptide clusters): the electron endpoint passes. Collisional spectra are byte-identical, but the non-inferiority cells for 3+ and 4+ collisional spectra are empty (every HCD spectrum of PXD024621 is 2+), so the verdict is inconclusive. Default stays `by`; use `auto` (or `cz`) on ETD/ECD data |
 
 Every other 1.12 option (#1/#10 species call, #3 chemistry v2 and
 alkylation, #5 shortlist and search hand-off, #7 raw-DIA check, whose
-release test has not run, #11 census, #15 ion series, #17 search shifts) is experimental and not
+release test E7-03 failed (see Raw DIA input is refused), #11 census, #17 search shifts) is experimental and not
 validated on held-out data. No 1.12 option is validated on low-resolution
 (ion-trap) MS2: the only ion-trap held-out results (#9 PXD009049; the
 ion_trap set of #6 item06-H1-r2) are a failure and a descriptive result.
@@ -1397,8 +1408,8 @@ tags fill the slots (hence the small change in total recall):
   activation:` warning to stderr with the count per class (collisional,
   electron, hybrid, unknown). MGF and mzPeak input carry no activation, so
   their spectra count as unknown, and `-ion_series auto` reads them as b/y.
-  `-ion_series cz` or `auto` (1.12, experimental, not yet validated on real
-  ETD data) reads c/z• ions (see Ion series); under them one `Ion series`
+  `-ion_series cz` or `auto` (1.12, opt-in; on held-out Orbitrap ETD spectra
+  `auto` raised correct rank-1 tags from 0.9% to 82.2%, see Validation) reads c/z• ions (see Ion series); under them one `Ion series`
   line on stderr gives the spectra per series, `auto` warns (`Hybrid
   activation:`) when more than 1% of the spectra are hybrid and were read as
   b/y, and `cz` warns (`Collisional activation:`) when more than 1% are
