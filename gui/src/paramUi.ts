@@ -97,6 +97,11 @@ const OPT_IN_1_13_EXPERIMENTAL = '1.13 experimental command-line option, not in 
 /// not offered in the form.
 const EXPERIMENTAL_1_13 = '1.13 experimental command-line option, not in the form (CLI default applies)'
 
+/// Label discovery (-label_discovery_out): experimental and opt-in; it failed
+/// its held-out test; command line only until it has a GUI design.
+const EXPERIMENTAL_LABEL_DISCOVERY =
+  'experimental command-line option (label discovery), not in the form (CLI default applies)'
+
 const SPECIES_OFF: Dependency = { on: 'species', note: 'species detection is off' }
 const GLYCO_OFF: Dependency = { on: 'glyco', note: 'oxonium flagging is off' }
 const RECON_OFF: Dependency = { on: 'recon_out', note: 'reconciliation only runs when it has an output file' }
@@ -1221,6 +1226,56 @@ export const PARAM_UI: Record<string, ParamUi> = {
     help: {
       text: 'How many C-terminal tag ends the label call in the label report needs; with fewer it makes no call. The default 175 is the FASTag 1.12 call. At 0 every run with a ppm fragment tolerance gets a call, and with few tag ends a label-free call only means that none of the label rules fired (the mass-gap report can still show SILAC).',
       tip: '0 is experimental: it failed its 1.13 held-out test.'
+    }
+  },
+
+  // ---- Not in the form: label discovery (see EXPERIMENTAL_LABEL_DISCOVERY)
+  label_discovery_out: {
+    hidden: EXPERIMENTAL_LABEL_DISCOVERY,
+    help: {
+      text: 'Write the label discovery report: every mass offset the tag flanks carry at the peptide N-terminus, at lysine, at arginine or at the C-terminus, known or not, explained by residues, the known labels or Unimod, with a label call. Experimental: it failed its held-out test (6 of 150 label-free runs got a label call), so do not rely on it as free of false label calls.'
+    }
+  },
+  label_discovery_depth: {
+    hidden: EXPERIMENTAL_LABEL_DISCOVERY,
+    help: {
+      text: 'How many residues an explanation of a flank peak may name in the label discovery report (0, 1 or 2).'
+    }
+  },
+  label_discovery_max_flank: {
+    hidden: EXPERIMENTAL_LABEL_DISCOVERY,
+    help: {
+      text: 'The largest flank mass the label discovery report looks at, in Da.'
+    }
+  },
+  label_discovery_min_share: {
+    hidden: EXPERIMENTAL_LABEL_DISCOVERY,
+    help: {
+      text: 'Which share of the counted spectra a peak of the label discovery report needs.'
+    }
+  },
+  label_discovery_min_spectra: {
+    hidden: EXPERIMENTAL_LABEL_DISCOVERY,
+    help: {
+      text: 'How many spectra a peak or an offset of the label discovery report needs.'
+    }
+  },
+  label_discovery_unimod_top: {
+    hidden: EXPERIMENTAL_LABEL_DISCOVERY,
+    help: {
+      text: 'How many Unimod alternatives the label discovery report lists per peak.'
+    }
+  },
+  label_discovery_window_c: {
+    hidden: EXPERIMENTAL_LABEL_DISCOVERY,
+    help: {
+      text: 'The mass window of the C-terminal flanks in the label discovery report, in Da. 0 means it is estimated from the run.'
+    }
+  },
+  label_discovery_window_n: {
+    hidden: EXPERIMENTAL_LABEL_DISCOVERY,
+    help: {
+      text: 'The mass window of the N-terminal flanks in the label discovery report, in Da. 0 means it is estimated from the run.'
     }
   }
 }

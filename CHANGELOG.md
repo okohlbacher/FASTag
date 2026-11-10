@@ -77,6 +77,22 @@
   places, the log warns, and the report gives the reason `tags_too_short` and
   an `alk_run min_tag_length` row. Reports on `-recon_fasta`, `-fasta` or a
   FASTA path are unchanged. `tools/fetch_proteomes.sh` regenerates the files.
+- **`-label_discovery_out` (experimental, opt-in; held-out test FAILED):**
+  database-free label discovery. Reports every N-terminal, K, R or
+  C-terminal mass offset the tag flanks carry, known or not, explained by
+  residues, the known labels (TMT, TMTpro, iTRAQ4/8, dimethyl, SILAC Lys4/6/8
+  and Arg6/10) or Unimod, with a label call (format 1,
+  doc/LABEL-DISCOVERY-REPORT.md; design doc/DESIGN-label-discovery.md).
+  Advanced options `-label_discovery_max_flank` (at most 1500 Da), `_depth`,
+  `_min_spectra`, `_min_share`, `_window_n`, `_window_c` (at most 0.05 Da)
+  and `_unimod_top`. Every other output is byte-identical with the option
+  off or on (the `-out_spectra` provenance leaves the options out).
+  Held-out, 190 public runs, scored once on 2026-11-10 (acceptance/1.13
+  PREREG-labeldisc.md): P1 FAIL, 6 of 150 label-free runs got a label call
+  (4.0 %; the criterion was 0); P2 FAIL, 96/190 runs right against 150/190
+  for "always label-free"; P3 PASS, 96 against 91 for `-label_out`'s
+  `label_call` (sign test p = 0.33). Do not rely on the call as free of
+  false label calls.
 
 ## 1.12.2 (2026-11-10)
 
