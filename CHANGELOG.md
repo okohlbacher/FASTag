@@ -57,6 +57,14 @@
   from 57 PRIDE projects it called 40, 37 of them right (0.925, Wilson 95%
   interval 0.801-0.974). It abstains on samples that are not alkylated; the
   help text and the report's `alkt_run status` row now state the result.
+- **Census triage evaluation: held-out test PASS (second test).**
+  `tools/census_triage_eval.py` and doc/CENSUS-TRIAGE-EVAL.md; FASTag's
+  output is unchanged. On 8 runs from 8 PRIDE projects (7 evaluable) a
+  semi-enzymatic Sage search identified 10.9 % of the `-census_ids` triage
+  candidates against 2.0 % of the other unidentified spectra (rate ratio
+  5.32, 95 % CI 2.59-8.25; gain over the peak-count baseline +0.023).
+  Against an open search the candidates are not better than the peak-count
+  baseline. The first test FAILED and stays on record in the doc.
 - **c/z• preprocessing: charge-reduced peaks re-filtered against the
   precursor cut (issue T25).** Peaks were cut at the precursor (neutral mass
   + proton + 1.5 Da) before deisotoping only, so a peak the deisotoper moved

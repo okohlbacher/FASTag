@@ -1503,7 +1503,7 @@ data.
 
 Every other 1.12 option (#1/#10 species call, #3 chemistry v2 and
 alkylation, #5 shortlist and search hand-off, #7 raw-DIA check, whose
-release test E7-03 failed (see Raw DIA input is refused), #11 census) is experimental and not
+release test E7-03 failed (see Raw DIA input is refused), #11 census, except the triage candidates of `-census_ids` in the table) is experimental and not
 validated on held-out data. No 1.12 option is validated on low-resolution
 (ion-trap) MS2: the only ion-trap held-out results (#9 PXD009049; the
 ion_trap set of #6 item06-H1-r2) are a failure and a descriptive result.
