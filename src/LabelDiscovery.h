@@ -39,7 +39,7 @@
 
 namespace FASTag::LabelDiscovery
 {
-  inline constexpr int kFormat = 3;
+  inline constexpr int kFormat = 4;
   inline constexpr double kBin = 0.0005;          ///< histogram bin width (Da)
   inline constexpr double kC13 = 1.0033548378;    ///< 13C - 12C
   inline constexpr double kH2O = Digest::kH2O;
@@ -416,6 +416,10 @@ namespace FASTag::LabelDiscovery
       return scans == 0 ? 0.0 : (static_cast<double>(hits) - 0.5 * static_cast<double>(decoy)) / static_cast<double>(scans);
     }
     bool ionTrapMs2() const { return ms2 > 0 && 2 * ms2_ion_trap > ms2; }
+    /// At least 200 covered scans, and the TMT and iTRAQ4 excess taken over
+    /// the covered scans (not all scans) are both below 0.05: no reporters
+    /// where the reporter region was recorded (format 4, the absence call).
+    bool absentWhereCovered() const;
   };
   /// `unknown` (below 200 scans), `tmt`, `itraq4`, `itraq8`, `none` (no
   /// isobaric label) or `unclear`.
@@ -488,7 +492,10 @@ namespace FASTag::LabelDiscovery
 
   /// Counts the pairs of @p pc (sorts it) and, when they show SILAC, replaces
   /// a label-free call or a no call by `K:Lys8+R:Arg10` (basis
-  /// `precursor_pairs`). A label call stays. Call after applyReporters().
+  /// `precursor_pairs`); a call of SILAC labels only gains `K:Lys8` and
+  /// `R:Arg10` where it lacks them (basis `+precursor_pairs` appended, format
+  /// 4). Any other label call stays. Also makes the label-free call by
+  /// absence. Call after applyReporters().
   void applyPairs(Analysis& a, PairCounter pc);
 
   /// The report rows after the shared run rows: ld_run, ld_count, ld_peak,

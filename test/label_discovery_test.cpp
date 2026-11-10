@@ -721,7 +721,7 @@ int main()
       if (order.empty() || order.substr(order.rfind(',') + 1) != r.section) order += "," + r.section;
     }
     CHECK(order == ",ld_run,ld_count,ld_peak,ld_site,ld_known,ld_reporter,ld_pair,ld_call", "section order %s", order.c_str());
-    CHECK(rowsOf(a, S).at("ld_run/format") == "3", "format");
+    CHECK(rowsOf(a, S).at("ld_run/format") == "4", "format");
     CHECK(a.labels == "TMT", "TMT set call %s [%s]", a.labels.c_str(), calledList(a).c_str());
     LD::Settings lr = S;
     lr.low_resolution = true;
@@ -849,6 +849,32 @@ int main()
     LD::applyPairs(x, pairsOf(60, 50));
     CHECK(x.status == "call" && x.labels == "K:Lys8+R:Arg10", "no call becomes SILAC: %s", x.status.c_str());
 
+    // format 4: a call of SILAC labels only gains the labels the pairs show
+    auto extended = [&](const char* labels, const char* sites, const LD::PairCounter& pc) {
+      LD::Analysis e = lf;
+      e.labels = labels;
+      e.call_sites = sites;
+      LD::applyPairs(e, pc);
+      return e;
+    };
+    x = extended("K:Lys8", "K", pairsOf(60, 50));
+    CHECK(x.labels == "K:Lys8+R:Arg10" && x.call_sites == "K,R" && x.basis == "site_scan+precursor_pairs", "Lys8 gains Arg10: %s %s %s",
+          x.labels.c_str(), x.call_sites.c_str(), x.basis.c_str());
+    CHECK(rowsOf(x, S).at("ld_call/labels") == "K:Lys8+R:Arg10" && rowsOf(x, S).at("ld_call/basis") == "site_scan+precursor_pairs",
+          "extended call rows");
+    x = extended("K:Lys8+K:Lys4+R:Arg6", "K,R", pairsOf(60, 50));
+    CHECK(x.labels == "K:Lys8+K:Lys4+R:Arg6+R:Arg10" && x.call_sites == "K,R", "triple SILAC gains Arg10: %s", x.labels.c_str());
+    x = extended("R:Arg6", "R", pairsOf(60, 50));
+    CHECK(x.labels == "R:Arg6+K:Lys8+R:Arg10" && x.call_sites == "R,K", "Arg6 gains the heavy pair: %s", x.labels.c_str());
+    x = extended("K:Lys8+R:Arg10", "K,R", pairsOf(60, 50));
+    CHECK(x.labels == "K:Lys8+R:Arg10" && x.basis == "site_scan", "a complete call keeps its basis");
+    x = extended("K:Lys8", "K", pairsOf(60, 0));
+    CHECK(x.labels == "K:Lys8" && x.basis == "site_scan", "no extension without both pair signals");
+    x = extended("TMT+K:Lys8", "N,K", pairsOf(60, 50));
+    CHECK(x.labels == "TMT+K:Lys8" && x.basis == "site_scan", "a call with an isobaric label is not extended: %s", x.labels.c_str());
+    x = extended("K:Dimethyl", "K", pairsOf(60, 50));
+    CHECK(x.labels == "K:Dimethyl", "a call of another label is not extended");
+
     // label-free by absence: few tags, reporter gate none, >= 500 precursors, no label pairs
     const LD::Analysis few = run({labelFree(92, 100)}, S, unimod);
     LD::PairCounter many = pairsOf(0, 0);
@@ -861,6 +887,38 @@ int main()
     x.reporter_gate = "unclear";
     LD::applyPairs(x, many);
     CHECK(x.status == "no_call" && x.reason == "few_spectra", "no absence call without gate none");
+    {
+      // format 4: gate unclear for coverage only; the covered scans decide
+      using Low = std::vector<std::pair<double, double>>;
+      auto counter = [](const Low& low, int n) {
+        LD::ReporterCounter rc;
+        for (int i = 0; i < n; ++i) rc.add(low, 100.0);
+        return rc;
+      };
+      const Low tmt = {{126.1277, 50}, {127.1248, 40}, {120.0, 100}}, none = {{120.0, 100}, {129.1024, 30}};
+      LD::ReporterCounter rc = counter(none, 250);
+      rc.merge(counter(Low{}, 400));
+      x = few;
+      LD::applyReporters(x, rc);
+      CHECK(x.reporter_gate == "unclear" && rc.absentWhereCovered(), "gate unclear below half coverage");
+      LD::applyPairs(x, many);
+      CHECK(x.status == "call" && x.labels == "label-free" && x.basis == "absence" && x.reporter_gate == "unclear",
+            "absence call from the covered scans: %s %s", x.status.c_str(), x.reason.c_str());
+      rc = counter(none, 199);
+      rc.merge(counter(Low{}, 400));
+      x = few;
+      LD::applyReporters(x, rc);
+      LD::applyPairs(x, many);
+      CHECK(x.status == "no_call" && !rc.absentWhereCovered(), "no absence call below 200 covered scans");
+      rc = counter(tmt, 100);
+      rc.merge(counter(none, 150));
+      rc.merge(counter(Low{}, 600));
+      x = few;
+      LD::applyReporters(x, rc);
+      CHECK(x.reporter_gate == "unclear" && !rc.absentWhereCovered(), "reporters in the covered scans: %s", x.reporter_gate.c_str());
+      LD::applyPairs(x, many);
+      CHECK(x.status == "no_call", "no absence call with reporters in the covered scans");
+    }
     x = few;
     x.reporter_gate = "none";
     LD::applyPairs(x, pairsOf(0, 0));

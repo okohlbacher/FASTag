@@ -950,8 +950,14 @@ options and their values.
   2026-11-10): 6 of 150 label-free runs got a label call (4.0 %; criterion
   0), and 96/190 runs were right against 150/190 for "always label-free"
   and 91/190 for `label_call`. Do not rely on it as free of false label
-  calls. Format, classes and the call rule: doc/LABEL-DISCOVERY-REPORT.md;
-  design: doc/DESIGN-label-discovery.md.
+  calls. Rules added after that test (set on the development runs, no
+  held-out test): TMT and iTRAQ reporter ions set or remove an isobaric
+  call, precursor pairs at the Lys8 and Arg10 spacings call SILAC and
+  (format 4) add `K:Lys8` and `R:Arg10` to a call of SILAC labels only that
+  lacks them, and a run with few tags, no reporter ions (format 4: also when
+  only a part of the scans covers the reporter region) and no pairs is
+  called `label-free`. Format, classes and the call rule:
+  doc/LABEL-DISCOVERY-REPORT.md; design: doc/DESIGN-label-discovery.md.
 - **`-massgap_out`** reads the `-delta_out` histogram (built even when
   `-delta_out` is not written; run it without fixed modifications to see the
   Cys alkylation): spectra near each Cys alkylation mass, and gap peaks
