@@ -1848,6 +1848,139 @@ namespace FASTag::LabelDiscovery
 
   // ---- analyze ----------------------------------------------------------------------------
 
+  // ---- reporter ions ------------------------------------------------------------------------
+
+  namespace
+  {
+    bool isobaric(const std::string& label) { return label.find("TMT") != std::string::npos || label.find("iTRAQ") != std::string::npos; }
+
+    /// The called site candidates as the ld_call labels and sites; false when none is left.
+    bool joinCalls(const Analysis& a, bool skip_isobaric, std::string& labels, std::string& sites)
+    {
+      labels.clear();
+      sites.clear();
+      for (char site : std::string("NKRC"))
+        for (const SiteCandidate& c : a.sites)
+        {
+          if (c.site != site || !c.called || (skip_isobaric && isobaric(c.label))) continue;
+          std::string nm = c.label;
+          const bool own_site = nm.rfind("unknown:", 0) == 0;
+          if (c.site != 'N' && !own_site) nm = std::string(1, c.site) + ":" + nm;
+          labels += (labels.empty() ? "" : "+") + nm;
+          const std::string st(1, c.site);
+          if (sites.find(st) == std::string::npos) sites += (sites.empty() ? "" : ",") + st;
+        }
+      return !labels.empty();
+    }
+
+    constexpr double kTmt[] = {126.127726, 127.124761, 127.131081, 128.128116, 128.134436, 129.131471,
+                               129.137790, 130.134825, 130.141145, 131.138180, 131.144500};
+    constexpr double kTmtproOnly[] = {132.141535, 132.147855, 133.144890, 133.151210, 134.148245, 134.154565, 135.151600};
+    constexpr double kItraq4[] = {114.110680, 115.107715, 116.111069, 117.114424};
+    constexpr double kItraq8Only[] = {113.107325, 118.111459, 119.114814, 121.121524};
+    constexpr double kReporterTol = 0.003, kReporterDecoy = 0.0170, kReporterMinRel = 0.01;
+    constexpr std::uint64_t kGateMinScans = 200;
+    constexpr double kGateOn = 0.3, kGateOff = 0.05, kVariantTol = 0.008;
+
+    template <std::size_t N>
+    int channels(const std::vector<std::pair<double, double>>& low, const double (&set)[N], double shift, double thr)
+    {
+      int k = 0;
+      for (double m : set)
+        for (const auto& p : low)  // ponytail: linear scan, the list holds the peaks of 25 m/z units
+          if (std::fabs(p.first - (m + shift)) <= kReporterTol && p.second >= thr)
+          {
+            ++k;
+            break;
+          }
+      return k;
+    }
+  }
+
+  void ReporterCounter::add(const std::vector<std::pair<double, double>>& low, double base_peak)
+  {
+    ++scans;
+    if (low.empty() || !(base_peak > 0)) return;
+    ++covered;
+    const double thr = kReporterMinRel * base_peak;
+    tmt += channels(low, kTmt, 0, thr) >= 2;
+    itraq4 += channels(low, kItraq4, 0, thr) >= 2;
+    itraq8 += channels(low, kItraq8Only, 0, thr) >= 1;
+    tmtpro += channels(low, kTmtproOnly, 0, thr) >= 2;
+    for (double d : {kReporterDecoy, -kReporterDecoy})
+    {
+      tmt_decoy += channels(low, kTmt, d, thr) >= 2;
+      itraq4_decoy += channels(low, kItraq4, d, thr) >= 2;
+      itraq8_decoy += channels(low, kItraq8Only, d, thr) >= 1;
+      tmtpro_decoy += channels(low, kTmtproOnly, d, thr) >= 2;
+    }
+  }
+
+  void ReporterCounter::merge(const ReporterCounter& o)
+  {
+    scans += o.scans; covered += o.covered; ms2 += o.ms2; ms2_ion_trap += o.ms2_ion_trap;
+    tmt += o.tmt; itraq4 += o.itraq4; itraq8 += o.itraq8; tmtpro += o.tmtpro;
+    tmt_decoy += o.tmt_decoy; itraq4_decoy += o.itraq4_decoy; itraq8_decoy += o.itraq8_decoy; tmtpro_decoy += o.tmtpro_decoy;
+  }
+
+  std::string reporterGate(const ReporterCounter& rc)
+  {
+    if (rc.scans < kGateMinScans) return "unknown";
+    const double t = rc.excess(rc.tmt, rc.tmt_decoy), i = rc.excess(rc.itraq4, rc.itraq4_decoy);
+    if (t >= kGateOn && i >= kGateOn) return "unclear";
+    if (t >= kGateOn) return "tmt";
+    if (i >= kGateOn) return rc.excess(rc.itraq8, rc.itraq8_decoy) >= kGateOn ? "itraq8" : "itraq4";
+    // "none" only when the scans record the reporter region at all (a first mass above it leaves it empty).
+    return t < kGateOff && i < kGateOff && 2 * rc.covered >= rc.scans ? "none" : "unclear";
+  }
+
+  void applyReporters(Analysis& a, const ReporterCounter& rc)
+  {
+    a.reporters = rc;
+    a.reporter_gate = reporterGate(rc);
+    const std::string& g = a.reporter_gate;
+    if (g == "tmt" || g == "itraq4" || g == "itraq8")
+    {
+      const bool tmt = g == "tmt";
+      const std::string family = tmt ? "TMT" : "iTRAQ";
+      // The near-isobaric pair the tag flanks cannot separate.
+      for (const char* amb : {"ambiguous:iTRAQ8plex|TMTpro", "ambiguous:TMTpro|iTRAQ8plex"})
+        for (std::size_t p; a.status == "call" && (p = a.labels.find(amb)) != std::string::npos;)
+          a.labels.replace(p, std::string(amb).size(), tmt ? "TMTpro" : "iTRAQ8plex");
+      if (a.status == "call" && a.labels.find(family) != std::string::npos) return;
+      // The variant from the tags: the strongest N-terminal candidate at a label mass of the family.
+      std::string name = tmt ? "TMT" : g == "itraq8" ? "iTRAQ8plex" : "iTRAQ4";
+      const SiteCandidate* best = nullptr;
+      const std::pair<double, const char*> variants[] = {{229.162932, "TMT"}, {304.207146, "TMTpro"}};
+      if (tmt)
+        for (const SiteCandidate& c : a.sites)
+          for (const auto& v : variants)
+            if (c.site == 'N' && !c.control && std::fabs(c.delta - v.first) <= kVariantTol && (!best || c.spectra > best->spectra))
+            {
+              best = &c;
+              name = v.second;
+            }
+      a.status = "call";
+      a.labels = name;
+      a.call_sites = best || !tmt ? "N" : "-";
+      a.reason = "-";
+      a.basis = "reporter_ions";
+      return;
+    }
+    if (g == "none" && a.status == "call" && isobaric(a.labels))
+    {
+      a.basis = "reporter_ions";
+      if (!joinCalls(a, true, a.labels, a.call_sites))
+      {
+        a.status = "no_call";
+        a.labels = a.call_sites = "-";
+        a.reason = "no_reporter_ions";
+      }
+    }
+    if (a.status == "no_call" && rc.ionTrapMs2() && (a.reason == "few_spectra" || a.reason == "no_reference" || a.reason == "low_resolution"))
+      a.reason = "low_resolution_ms2";
+  }
+
   Analysis analyze(const Collector& col, const Settings& s_in, const UnimodTable& unimod)
   {
     Analysis a;
@@ -2381,28 +2514,13 @@ namespace FASTag::LabelDiscovery
       a.reason = "few_spectra";
       return a;
     }
-    std::vector<const SiteCandidate*> calls;
-    for (char site : order)
-      for (const SiteCandidate& sc : a.sites)
-        if (sc.site == site && sc.called) calls.push_back(&sc);
-    if (!calls.empty())
+    if (joinCalls(a, false, a.labels, a.call_sites))
     {
-      std::string labels, sites;
-      for (const SiteCandidate* c : calls)
-      {
-        std::string nm = c->label;
-        const bool own_site = nm.rfind("unknown:", 0) == 0;
-        if (c->site != 'N' && !own_site) nm = std::string(1, c->site) + ":" + nm;
-        labels += (labels.empty() ? "" : "+") + nm;
-        const std::string st(1, c->site);
-        if (sites.find(st) == std::string::npos) sites += (sites.empty() ? "" : ",") + st;
-      }
       a.status = "call";
-      a.labels = labels;
-      a.call_sites = sites;
       a.reason = "-";
       return a;
     }
+    a.labels = a.call_sites = "-";
     // label-free: the delta 0 N-terminal control passes the same rule
     {
       const SiteCandidate& c0 = ctrl[0].s;
@@ -2597,11 +2715,25 @@ namespace FASTag::LabelDiscovery
           row("ld_known", k + ".spectra", num(a.known_spectra[i][static_cast<std::size_t>(j)]), "-", "distinct spectra at the image");
         }
     }
+    // ld_reporter
+    {
+      const ReporterCounter& rc = a.reporters;
+      const std::string sc = num(rc.scans);
+      row("ld_reporter", "scans", sc, "-", "high-resolution (not ion-trap) MS2 and MS3 scans examined for reporter ions");
+      row("ld_reporter", "covered", num(rc.covered), sc, "scans with a peak in 112-137 m/z; gate none needs at least half");
+      row("ld_reporter", "ms2_scans", num(rc.ms2), "-", "MS2 scans seen");
+      row("ld_reporter", "ms2_ion_trap", num(rc.ms2_ion_trap), "-", "MS2 scans from an ion trap (filter string ITMS)");
+      row("ld_reporter", "tmt_excess", fix(rc.excess(rc.tmt, rc.tmt_decoy), 4), sc, "share of scans with >= 2 TMT reporters (126-131) minus the share at decoy m/z");
+      row("ld_reporter", "itraq4_excess", fix(rc.excess(rc.itraq4, rc.itraq4_decoy), 4), sc, "the same for >= 2 iTRAQ 4-plex reporters (114-117)");
+      row("ld_reporter", "itraq8_excess", fix(rc.excess(rc.itraq8, rc.itraq8_decoy), 4), sc, "the same for >= 1 reporter of iTRAQ 8-plex only (113, 118, 119, 121)");
+      row("ld_reporter", "tmtpro_excess", fix(rc.excess(rc.tmtpro, rc.tmtpro_decoy), 4), sc, "the same for >= 2 reporters of TMTpro only (132-135); not used by the call");
+      row("ld_reporter", "gate", a.reporter_gate, "-", "unknown (below 200 scans), tmt, itraq4, itraq8, none or unclear");
+    }
     // ld_call
     row("ld_call", "status", a.status, "-", "call or no_call");
     row("ld_call", "labels", a.status == "call" ? a.labels : "-", "-", "the labels called, +-joined");
     row("ld_call", "sites", a.status == "call" ? a.call_sites : "-", "-", "the sites of the called labels");
-    row("ld_call", "basis", "site_scan", "-", "what the call is made from");
+    row("ld_call", "basis", a.basis, "-", "what the call is made from: site_scan or reporter_ions");
     row("ld_call", "reason", a.status == "call" ? "-" : a.reason, "-", "why there is no call");
     return rows;
   }

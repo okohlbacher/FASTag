@@ -34,11 +34,12 @@
 #include <limits>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace FASTag::LabelDiscovery
 {
-  inline constexpr int kFormat = 1;
+  inline constexpr int kFormat = 2;
   inline constexpr double kBin = 0.0005;          ///< histogram bin width (Da)
   inline constexpr double kC13 = 1.0033548378;    ///< 13C - 12C
   inline constexpr double kH2O = Digest::kH2O;
@@ -391,6 +392,35 @@ namespace FASTag::LabelDiscovery
     bool has_est_c = false;
   };
 
+  /// Reporter ions of the isobaric labels in the high-resolution MS2 and MS3
+  /// scans of the run (format 2). The reporters decide the label family, the
+  /// tag flanks the variant. Thresholds were set on development runs only.
+  struct ReporterCounter
+  {
+    std::uint64_t scans = 0, covered = 0;  // covered: scans with a peak in 112-137 m/z
+                     ///< non-ion-trap MS2/MS3 scans examined
+    std::uint64_t ms2 = 0, ms2_ion_trap = 0;  ///< MS2 scans seen, and those from an ion trap (filter string ITMS)
+    /// Scans with >= 2 TMT channels (126-131), >= 2 iTRAQ4 channels (114-117),
+    /// >= 1 iTRAQ8-only channel (113, 118, 119, 121), >= 2 TMTpro-only
+    /// channels (132-135); *_decoy: the same at all channels + and - 0.0170 Da
+    /// (two decoy counts per scan).
+    std::uint64_t tmt = 0, itraq4 = 0, itraq8 = 0, tmtpro = 0;
+    std::uint64_t tmt_decoy = 0, itraq4_decoy = 0, itraq8_decoy = 0, tmtpro_decoy = 0;
+    /// One non-ion-trap MSn scan: its peaks (m/z, intensity) between 112 and
+    /// 137 m/z in any order, and the base peak intensity of the whole scan.
+    void add(const std::vector<std::pair<double, double>>& low, double base_peak);
+    void merge(const ReporterCounter& o);
+    /// Fraction of scans with the reporters minus the decoy fraction.
+    double excess(std::uint64_t hits, std::uint64_t decoy) const
+    {
+      return scans == 0 ? 0.0 : (static_cast<double>(hits) - 0.5 * static_cast<double>(decoy)) / static_cast<double>(scans);
+    }
+    bool ionTrapMs2() const { return ms2 > 0 && 2 * ms2_ion_trap > ms2; }
+  };
+  /// `unknown` (below 200 scans), `tmt`, `itraq4`, `itraq8`, `none` (no
+  /// isobaric label) or `unclear`.
+  std::string reporterGate(const ReporterCounter& rc);
+
   struct Analysis
   {
     // ld_count
@@ -405,6 +435,10 @@ namespace FASTag::LabelDiscovery
     std::vector<SiteCandidate> sites;  ///< per site N, K, R, C: the control first, then the ranked candidates
     // ld_call
     std::string status = "no_call", labels = "-", call_sites = "-", reason = "-";
+    std::string basis = "site_scan";  ///< `reporter_ions` when applyReporters() made the call
+    // ld_reporter
+    ReporterCounter reporters;
+    std::string reporter_gate = "unknown";
     // ld_known
     std::vector<KnownSet> known;
     std::vector<std::array<std::uint64_t, kKnownImages>> known_tags, known_spectra;
@@ -413,7 +447,14 @@ namespace FASTag::LabelDiscovery
   /// The whole analysis over finished (scan-ordered) collector records.
   Analysis analyze(const Collector& col, const Settings& s, const UnimodTable& unimod);
 
+  /// The reporter-ion gate on the finished call: a TMT or iTRAQ gate keeps a
+  /// call of that family and otherwise replaces the call by the family's
+  /// label (variant from the N-terminal candidates, sites `-` when none
+  /// fits); gate `none` removes isobaric labels from the call; a no call on a
+  /// run of ion-trap MS2 scans gets the reason `low_resolution_ms2`.
+  void applyReporters(Analysis& a, const ReporterCounter& rc);
+
   /// The report rows after the shared run rows: ld_run, ld_count, ld_peak,
-  /// ld_site, ld_known, ld_call.
+  /// ld_site, ld_known, ld_reporter, ld_call.
   std::vector<Digest::Row> reportRows(const Analysis& a, const Settings& s);
 }

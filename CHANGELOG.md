@@ -81,7 +81,7 @@
   database-free label discovery. Reports every N-terminal, K, R or
   C-terminal mass offset the tag flanks carry, known or not, explained by
   residues, the known labels (TMT, TMTpro, iTRAQ4/8, dimethyl, SILAC Lys4/6/8
-  and Arg6/10) or Unimod, with a label call (format 1,
+  and Arg6/10) or Unimod, with a label call (format 2,
   doc/LABEL-DISCOVERY-REPORT.md; design doc/DESIGN-label-discovery.md).
   Advanced options `-label_discovery_max_flank` (at most 1500 Da), `_depth`,
   `_min_spectra`, `_min_share`, `_window_n`, `_window_c` (at most 0.05 Da)
@@ -93,6 +93,12 @@
   for "always label-free"; P3 PASS, 96 against 91 for `-label_out`'s
   `label_call` (sign test p = 0.33). Do not rely on the call as free of
   false label calls.
+  Added after that test, and not covered by it: the `ld_reporter` section
+  counts TMT and iTRAQ reporter ions in the high-resolution MS2/MS3 scans.
+  A clear reporter signal sets the label family, missing reporters remove
+  an isobaric label call (`no_reporter_ions`), and a no call on a run with
+  ion-trap MS2 scans is reported as `low_resolution_ms2`. Thresholds were
+  set on the 99 development runs (86 right instead of 85).
 
 ## 1.12.2 (2026-11-10)
 

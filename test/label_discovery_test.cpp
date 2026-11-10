@@ -720,8 +720,8 @@ int main()
       CHECK(++seen[r.section + "\t" + r.key] == 1, "duplicate %s %s", r.section.c_str(), r.key.c_str());
       if (order.empty() || order.substr(order.rfind(',') + 1) != r.section) order += "," + r.section;
     }
-    CHECK(order == ",ld_run,ld_count,ld_peak,ld_site,ld_known,ld_call", "section order %s", order.c_str());
-    CHECK(rowsOf(a, S).at("ld_run/format") == "1", "format");
+    CHECK(order == ",ld_run,ld_count,ld_peak,ld_site,ld_known,ld_reporter,ld_call", "section order %s", order.c_str());
+    CHECK(rowsOf(a, S).at("ld_run/format") == "2", "format");
     CHECK(a.labels == "TMT", "TMT set call %s [%s]", a.labels.c_str(), calledList(a).c_str());
     LD::Settings lr = S;
     lr.low_resolution = true;
@@ -736,6 +736,65 @@ int main()
     CHECK(c.reason == "cz_only" && c.tags_excluded_cz == 400, "cz_only");
     const LD::Analysis f = run({labelFree(92, 100)}, S, unimod);
     CHECK(f.status == "no_call" && f.reason == "few_spectra", "few_spectra: %s %s", f.status.c_str(), f.reason.c_str());
+  }
+
+  // ---- reporter ions (format 2): the gate and its effect on the call ----
+  {
+    using Low = std::vector<std::pair<double, double>>;
+    auto counter = [](const Low& low, int n) {
+      LD::ReporterCounter rc;
+      for (int i = 0; i < n; ++i) rc.add(low, 100.0);
+      return rc;
+    };
+    const Low tmt = {{126.1277, 50}, {127.1248, 40}, {120.0, 100}}, none = {{120.0, 100}, {129.1024, 30}};
+    const Low decoy = {{126.127726 + 0.017, 50}, {127.124761 + 0.017, 40}}, weak = {{126.1277, 0.5}, {127.1248, 0.5}};
+    const Low itraq8 = {{114.1107, 50}, {115.1077, 50}, {113.1073, 50}}, itraq4 = {{114.1107, 50}, {117.1144, 50}};
+    CHECK(LD::reporterGate(counter(tmt, 199)) == "unknown", "gate below 200 scans");
+    CHECK(LD::reporterGate(counter(tmt, 300)) == "tmt", "gate tmt");
+    CHECK(LD::reporterGate(counter(none, 300)) == "none", "gate none");
+    CHECK(LD::reporterGate(counter(Low{}, 300)) == "unclear", "no peak in the reporter region is not none");
+    CHECK(LD::reporterGate(counter(decoy, 300)) == "none" && counter(decoy, 300).tmt_decoy == 300, "decoy offsets");
+    CHECK(LD::reporterGate(counter(weak, 300)) == "none", "below 1 %% of the base peak");
+    CHECK(LD::reporterGate(counter(itraq8, 300)) == "itraq8" && LD::reporterGate(counter(itraq4, 300)) == "itraq4", "gate itraq");
+    LD::ReporterCounter mixed = counter(tmt, 60);
+    mixed.merge(counter(none, 240));
+    CHECK(LD::reporterGate(mixed) == "unclear", "gate unclear at 0.2");
+
+    Gen g = labelFree(93, 1500);
+    LD::Analysis lf = run({g}, S, unimod);
+    CHECK(lf.status == "call" && lf.labels == "label-free", "label-free base %s", lf.labels.c_str());
+    LD::Analysis x = lf;
+    LD::applyReporters(x, counter(tmt, 300));
+    CHECK(x.status == "call" && x.labels == "TMT" && x.call_sites == "-" && x.basis == "reporter_ions", "family call %s %s",
+          x.labels.c_str(), x.call_sites.c_str());
+    x = lf;
+    LD::applyReporters(x, counter(itraq8, 300));
+    CHECK(x.labels == "iTRAQ8plex" && x.call_sites == "N", "iTRAQ call %s", x.labels.c_str());
+    x = lf;
+    LD::applyReporters(x, counter(none, 300));
+    CHECK(x.labels == "label-free" && x.basis == "site_scan", "gate none keeps label-free");
+    g.L_N = kTMT;
+    const LD::Analysis t = run({g}, S, unimod);
+    x = t;
+    LD::applyReporters(x, counter(tmt, 300));
+    CHECK(x.labels == t.labels && x.call_sites == t.call_sites && x.basis == "site_scan", "family already called");
+    CHECK(rowsOf(x, S).at("ld_reporter/gate") == "tmt" && rowsOf(x, S).at("ld_reporter/tmt_excess") == "1", "ld_reporter rows");
+    x = t;
+    LD::applyReporters(x, counter(none, 300));
+    CHECK(x.status == "no_call" && x.reason == "no_reporter_ions" && x.labels == "-", "veto %s %s", x.status.c_str(), x.reason.c_str());
+    x = t;
+    LD::applyReporters(x, counter(tmt, 100));
+    CHECK(x.labels == t.labels && x.reporter_gate == "unknown", "unknown gate changes nothing");
+    LD::Analysis f = run({labelFree(92, 100)}, S, unimod);
+    LD::ReporterCounter trap;
+    trap.ms2 = 100;
+    trap.ms2_ion_trap = 90;
+    LD::applyReporters(f, trap);
+    CHECK(f.status == "no_call" && f.reason == "low_resolution_ms2", "ion-trap MS2: %s", f.reason.c_str());
+    f = run({labelFree(92, 100)}, S, unimod);
+    trap.merge(counter(tmt, 300));  // FT MS3 reporters in an ion-trap MS2 run
+    LD::applyReporters(f, trap);
+    CHECK(f.status == "call" && f.labels == "TMT" && f.basis == "reporter_ions", "ion-trap MS2 with MS3 reporters: %s", f.labels.c_str());
   }
 
   if (failures == 0) std::printf("label_discovery_test: all passed\n");
