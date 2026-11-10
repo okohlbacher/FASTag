@@ -362,6 +362,14 @@
       ]
     },
     {
+      "name": "digest_quality",
+      "type": "string",
+      "default": "",
+      "description": "Append missed-cleavage and non-specific-end measurements for this enzyme to -digest_out: a model name of the protease table (e.g. Trypsin) or 'auto' (the report's call). Experimental; empty = off",
+      "required": false,
+      "toppAdvanced": true
+    },
+    {
       "name": "digest_silac_min",
       "type": "int",
       "default": "50",

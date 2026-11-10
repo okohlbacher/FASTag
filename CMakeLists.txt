@@ -73,7 +73,7 @@ endif()
 # anchored list, in the fixed order E, A, D, F (E data types and acquisition,
 # A identification and search hand-off, D organism and run chemistry, F quality
 # control).
-set(FASTAG_CORE_SOURCES src/FASTagger.cpp src/AveragineDeisotoper.cpp src/Digest.cpp src/DigestReport.cpp src/FastaFilter.cpp src/ProteomeIndex.cpp src/ReconIds.cpp src/TagRecon.cpp src/TaxDeconv.cpp src/TaxIndex.cpp src/TaxStats.cpp)
+set(FASTAG_CORE_SOURCES src/FASTagger.cpp src/AveragineDeisotoper.cpp src/Digest.cpp src/DigestReport.cpp src/DigestQuality.cpp src/FastaFilter.cpp src/ProteomeIndex.cpp src/ReconIds.cpp src/TagRecon.cpp src/TaxDeconv.cpp src/TaxIndex.cpp src/TaxStats.cpp)
 # ---- 1.12 E: core sources ----
 set(FASTAG_CORE_SOURCES_E src/Acquisition.cpp src/Centroid.cpp src/PrecursorHypotheses.cpp)
 # ---- 1.12 A: core sources ----
@@ -280,12 +280,14 @@ if(FASTAG_BUILD_TESTS)
   set(FASTAG_UNIT_TESTS_D species_call_test digest_v2_test alkylation_test)
   # ---- 1.12 F: unit tests ----
   set(FASTAG_UNIT_TESTS_F output_guard_test census_test census_ids_test)
+  # ---- 1.13 digqual: unit tests ----
+  set(FASTAG_UNIT_TESTS_DIGQUAL digest_quality_test)
   # ---- 1.13 #18: unit tests ----
   set(FASTAG_UNIT_TESTS_B113_MSFRAGGER msfragger_config_test)
   # ---- 1.13: unit tests ----
   set(FASTAG_UNIT_TESTS_113 complement_tol_test cleavage_test)
   foreach(t ${FASTAG_UNIT_TESTS} ${FASTAG_UNIT_TESTS_E} ${FASTAG_UNIT_TESTS_A} ${FASTAG_UNIT_TESTS_D} ${FASTAG_UNIT_TESTS_F} ${FASTAG_UNIT_TESTS_113}
-            ${FASTAG_UNIT_TESTS_B113_MSFRAGGER})
+            ${FASTAG_UNIT_TESTS_B113_MSFRAGGER} ${FASTAG_UNIT_TESTS_DIGQUAL})
     add_executable(${t} test/${t}.cpp)
     target_link_libraries(${t} PRIVATE fastag_core)
     add_test(NAME ${t} COMMAND ${t})
@@ -385,6 +387,14 @@ if(FASTAG_BUILD_TESTS)
                    $<TARGET_FILE:buildtaxdb>
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy)
   set_tests_properties(digest_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # 1.13 digqual: -digest_quality on the vendored fixture (1.12 rows a byte
+  # prefix, recount from the tag TSV, mc_few_specific, auto with and without a
+  # call, low_resolution on Da, refusals).
+  add_test(NAME digest_quality_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/digest_quality_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
+  set_tests_properties(digest_quality_cli_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # Integration: -recon_id_out in mzid, idXML and mzTab holds what -recon_out
   # holds; .mzid is empty (0 bytes) without placements; with

@@ -1053,6 +1053,13 @@ protected:
                        "Calibration of p_correct for -digest_out (columns feature, coef). Default: the shipped "
                        "digest_calibration.tsv when p_correct is written", false, true);
     setValidFormats_("digest_calibration", ListUtils::create<std::string>("tsv"));
+    // 1.13 digqual (backlog 23): digestion quality rows of -digest_out. Off by
+    // default: without it -digest_out is the 1.12 report byte for byte.
+    registerStringOption_("digest_quality", "<enzyme>", "",
+                          "Append missed-cleavage and non-specific-end measurements for this enzyme to -digest_out: "
+                          "a model name of the protease table (e.g. Trypsin) or 'auto' (the report's call). "
+                          "Experimental; empty = off",
+                          false, true);
     // #3g the alkylation call (src/AlkylationCall.h), from the reconciler's
     // placements. Opt-in; every other output is the same with or without it.
     registerOutputFile_("alkylation_out", "<file>", "",
@@ -2502,6 +2509,7 @@ protected:
           {"digest_flank2", "-digest_out", digest_on},
           {"digest_min_confidence", "-digest_out", digest_on},
           {"digest_calibration", "-digest_out", digest_on},
+          {"digest_quality", "-digest_out", digest_on},  // 1.13 digqual
           {"alkylation_proteome", "-alkylation_out", alkylation_on},
           {"alkylation_min_spectra", "-alkylation_out", alkylation_on},
           {"alkylation_min_share", "-alkylation_out", alkylation_on},
@@ -2610,6 +2618,21 @@ protected:
         protease_models.bg_n = shipped.bg_n;
         protease_models.has_bg = true;
         resolved_inputs.emplace_back("digest_models (shipped)", digest_dir + "/digest_models.tsv");
+      }
+    }
+    // 1.13 digqual: the enzyme of -digest_quality must be a model of the table.
+    const std::string digest_quality = digest_on ? getStringOption_("digest_quality") : std::string();
+    if (!digest_quality.empty() && digest_quality != "auto")
+    {
+      bool found = false;
+      for (const FD::Model& m : protease_models.models) found = found || m.name == digest_quality;
+      if (!found)
+      {
+        std::string names;
+        for (const FD::Model& m : protease_models.models) names += (names.empty() ? "" : ", ") + m.name;
+        OPENMS_LOG_ERROR << "-digest_quality '" << digest_quality << "' is not a model of the protease table ("
+                         << names << ") and not 'auto'." << std::endl;
+        return ILLEGAL_PARAMETERS;
       }
     }
     std::vector<FD::GapMod> gap_mods, cys_alkylations;
@@ -5861,6 +5884,13 @@ protected:
         std::vector<FD::Row> rows = run_rows();
         const auto more = FD::digestRows(tc, protease_models, meta, digest_settings);
         rows.insert(rows.end(), more.begin(), more.end());
+        // 1.13 digqual: the quality rows, after every 1.12 row.
+        if (!digest_quality.empty())
+        {
+          const FD::Quality qual = FD::reportQuality(tc, protease_models, more, digest_quality, digest_settings);
+          const auto qrows = FD::qualityRows(qual, digest_settings);
+          rows.insert(rows.end(), qrows.begin(), qrows.end());
+        }
         if (!FD::writeReport(digest_out, rows))
         {
           OPENMS_LOG_ERROR << "Failed writing " << digest_out << "." << std::endl;
