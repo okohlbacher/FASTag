@@ -17,6 +17,19 @@
   stays 175 and 0 stays experimental. With zero tag ends the SILAC test is
   now skipped (no undefined heavy share); this is reachable only at a
   minimum of 0.
+- **MSFragger configuration (backlog #18): `-search_engine msfragger`,
+  experimental, no held-out test.** `-search_config_out` writes a complete
+  `fragger.params` for MSFragger 4.4.1. MSFragger needs decoys in the
+  database: with `-fasta_out` FASTag appends reversed `rev_` decoys, without
+  it the input database must be a target-decoy database. `num_threads` is
+  `-threads`. `-search_shifts offsets` exports mass offsets (negative ones
+  included) on a ppm precursor window and is refused on a Da window, where
+  MSFragger 4.4.1 exits 1 on them. Sage and Comet configurations are
+  unchanged (doc/SHORTLIST.md, "MSFragger configuration").
+- **`-alkylation_tags_out`: held-out test PASS at the margin.** On 57 runs
+  from 57 PRIDE projects it called 40, 37 of them right (0.925, Wilson 95%
+  interval 0.801-0.974). It abstains on samples that are not alkylated; the
+  help text and the report's `alkt_run status` row now state the result.
 - **c/z• preprocessing: charge-reduced peaks re-filtered against the
   precursor cut (issue T25).** Peaks were cut at the precursor (neutral mass
   + proton + 1.5 Da) before deisotoping only, so a peak the deisotoper moved

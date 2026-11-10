@@ -40,8 +40,9 @@
 // (aliases()); formsResolved() compares the forms' own masses only.
 //
 // Opt-in and experimental: on development data 61 of 123 runs are called,
-// 51 as the SDRF annotation states, and unalkylated runs are rarely called;
-// no held-out test yet (doc/ALKYLATION-REPORT.md, "-alkylation_tags_out").
+// 51 as the SDRF annotation states, and unalkylated runs are rarely called.
+// The held-out test passed at the margin: 40 of 57 runs called, 37 right
+// (doc/ALKYLATION-REPORT.md, "-alkylation_tags_out").
 //
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT

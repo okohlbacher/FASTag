@@ -1,7 +1,9 @@
 # Run-measured complement tolerance (`-complement_tolerance_unit auto`)
 
-Experimental, opt-in (1.13, backlog item 15). With the option off, nothing in
-this file runs and every output is unchanged.
+Experimental, opt-in (1.13, backlog item 15); `auto` **failed** its held-out
+test with the first estimator, and the revised estimator is checked on
+development data only (see Validation). With the option off, nothing in this
+file runs and every output is unchanged.
 
 ## What it does
 
