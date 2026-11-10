@@ -1,0 +1,242 @@
+draw_rank	pxd	keyword_class	reader_truth	grade	quote	reader_reason	stratum	decision
+1	PXD014747	CAM	Carbamidomethyl	A	reduced and alkylated with tris(2-carboxyethyl)phosphine and chloroacetamide	-	CAM	eligible
+2	PXD008055	CAM	Carbamidomethyl	A	alkylated with 5.5 mM iodoacetamide for one hour at room temperature	-	CAM	eligible
+6	PXD039878	CAM	EXCLUDE	-	-	two workflows; in-gel part without stated reagent	-	excluded_by_reader
+13	PXD024138	CAM	Carbamidomethyl	A	alkylated with 30 mM iodoacetamide (45 min, room temperature, dark)	-	CAM	eligible
+16	PXD068779	CAM	EXCLUDE	-	-	iodoacetamide only in lysis buffer without reduction; partial alkylation	-	excluded_by_reader
+18	PXD022153	CAM	EXCLUDE	-	-	no sample preparation described	-	excluded_by_reader
+22	PXD002583	CAM	Carbamidomethyl	A	alkylated for 20 min in 55 mM iodacetamide in the dark	-	CAM	eligible
+26	PXD010438	CAM	Carbamidomethyl	A	Iodoacetamide (IAA) by Chloracetamide (CAA) as alkylating agent	-	CAM	eligible
+29	PXD022894	CAM	Carbamidomethyl	A	100mM Tris pH8.0, 10mM CAA, 40mM TCEP pH7.0	-	CAM	eligible
+33	PXD024513	CAM	Carbamidomethyl	A	alkylated with 10 mM iodoacetamide for 30 min in the dark	-	CAM	eligible
+35	PXD019647	CAM	Carbamidomethyl	A	Cysteines were alkylated by adding iodoacetamide (IAA)	-	CAM	eligible
+36	PXD075986	CAM	Carbamidomethyl	A	proteins were alkylated using 20 or 30mM iodoacetamide (Sigma-Aldrich)	-	CAM	eligible
+41	PXD042229	CAM	Carbamidomethyl	A	Samples were alkylated with 50 mM IAA for 30 min in the dark	-	CAM	eligible
+42	PXD037618	CAM	Carbamidomethyl	A	containing 2 M urea, 7.5 mM Ambic and 5 m IAA	-	CAM	eligible
+45	PXD019398	CAM	Carbamidomethyl	A	alkylated with 2-iodoacetamide	-	CAM	eligible
+47	PXD048882	CAM	Carbamidomethyl	A	IAA was added to the solution with the final concentration of 50 mM	-	CAM	eligible
+49	PXD056187	CAM	Carbamidomethyl	A	reduced with dithiothreitol, alkylated with chloroacetamide	-	CAM	eligible
+51	PXD018855	OTHER	Propionamide	A	reduced with 20 mM dithiothreitol and alkylated using 1% acrylamide	-	OTHER	eligible
+53	PXD002977	CAM	Carbamidomethyl	A	alkylated (10 mM iodacetamide	-	CAM	eligible
+61	PXD005489	CAM	Carbamidomethyl	A	Histones were reduced with DTT and alkylated with IAA	-	CAM	eligible
+64	PXD018097	CAM	Carbamidomethyl	A	reduced and alkylated using 10 mM TCEP and 55mM CAA	-	CAM	eligible
+65	PXD025329	CAM	EXCLUDE	-	-	mBBr thiol labelling plus IAM	-	excluded_by_reader
+66	PXD006011	CAM	Carbamidomethyl	A	375 mM iodoacetamide to each sample	-	CAM	eligible
+68	PXD064651	CAM	Carbamidomethyl	A	alkylated (55 mM IAM, dark, 45 min)	-	CAM	eligible
+69	PXD009243	CAM	Carbamidomethyl	A	the reduced proteins were alkylated with 375mM iodoacetamide	-	CAM	eligible
+71	PXD021191	CAM	Carbamidomethyl	A	reduced and alkylated with the 10 mM tris(2-carboxyethyl)phosphine (TCEP) and 11 mM 2-chloroacetamide (CAA)	-	CAM	eligible
+72	PXD061846	CAM	Carbamidomethyl	A	5 mM Tris(2-carboxy-ethyl)phosphine and 50 mM iodoacetamide	-	CAM	eligible
+76	PXD012565	CAM	Carbamidomethyl	A	subsequently alkylated in 10 mM iodoacetamide for 15 min in the dark	-	CAM	eligible
+77	PXD035833	CAM	Carbamidomethyl	A	cysteine residues were alkylated (100 mM iodoacetamide, 30 min, room temperature)	-	CAM	eligible
+80	PXD062742	CAM	Carbamidomethyl	A	Alkylation of the reduced disulfide bridges was performed using 20 mM iodoacetamide	-	CAM	eligible
+83	PXD023757	CAM	Carbamidomethyl	A	alkylated with 15 mM of chloroacetamide for 30 min	-	CAM	eligible
+86	PXD010942	CAM	Carbamidomethyl	A	alkylated with 20 mM 2-chloroacetamide in 50 mM HEPES pH 8.5	-	CAM	eligible
+87	PXD016989	CAM	Carbamidomethyl	A	reduced carbamidomethylated and trypsinized in gel	-	CAM	eligible
+89	PXD001238	CAM	Carbamidomethyl	A	alkylated with 15 mMiodoacetamide for 30 min at room temperature in the dark	-	CAM	eligible
+92	PXD044325	CAM	Carbamidomethyl	A	reduced and alkylated (15mM tris(2-carboxyethyl)phosphine, 25mM chloroacetamide)	-	CAM	eligible
+94	PXD013978	CAM	Carbamidomethyl	A	subsequently alkylated with 2-Chloroacetamide (CAA, 15 mM final concentration)	-	CAM	eligible
+95	PXD004791	CAM	Carbamidomethyl	A	carbamidomethylated with iodacetamide (45 min in the dark)	-	CAM	eligible
+96	PXD058133	CAM	Carbamidomethyl	A	alkylation (40 mM iodoacetamide in 25 mM NH4HCO3	-	CAM	eligible
+99	PXD011671	CAM	Carbamidomethyl	A	alkylated with 10 mM iodoacetamide (IAA, Sigma)	-	CAM	eligible
+102	PXD044362	CAM	Carbamidomethyl	A	in the presence of 1.25 mM TCEP and 5 mM chloroacetamide	-	CAM	eligible
+104	PXD060171	CAM	Carbamidomethyl	A	reduced and alkylated with tris(2-carboxyethyl)phosphine (10 mM) and chloroacetamide (40 mM)	-	CAM	eligible
+107	PXD021499	OTHER	Carbamidomethyl	A	alkylated for 45 min in 30 mM iodoacetamid	-	-	excluded_class_mismatch
+109	PXD028158	CAM	Carbamidomethyl	A	alkylation with 10 mmol/L iodoacetamide (IAA) for 15 minutes in the dark	-	CAM	eligible
+110	PXD062403	CAM	Carbamidomethyl	A	11mM Iodoacetamide (IAA) was added and incubated at RT for 15 min	-	CAM	eligible
+112	PXD028590	CAM	Carbamidomethyl	A	then alkylated with 50 mM iodoacetamide (1 hour at RT in the dark)	-	CAM	eligible
+113	PXD029003	CAM	Carbamidomethyl	A	replaced with 55mM iodoacetamide in 100mM NH4HCO3	-	CAM	eligible
+114	PXD024501	CAM	Carbamidomethyl	A	84 mM iodoacetamide, vortexed and then centrifuged as in previous step	-	CAM	eligible
+117	PXD024083	CAM	Carbamidomethyl	A	Proteins were alkylated (50 mM IAA, 20 min at room temperature in the dark)	-	CAM	eligible
+118	PXD015494	CAM	Carbamidomethyl	A	alkylated with 55 mM iodoacetamide in 100 mM ammonium bicarbonate	-	CAM	eligible
+119	PXD015990	CAM	Carbamidomethyl	A	iodoacetamide was added to a final concentration of 55 mM	-	CAM	eligible
+120	PXD063570	CAM	Carbamidomethyl	A	Samples were reduced with dithiothreitol and alkylated with iodoacetamide	-	CAM	eligible
+122	PXD018253	CAM	Carbamidomethyl	A	alkylated using 10 mM TCEP and 40 mM 2-chloroacetamide	-	CAM	eligible
+127	PXD055579	CAM	Carbamidomethyl	A	reduced using 5 mM dithiothreitol and alkylated with 10 mM iodoacetamide	-	CAM	eligible
+130	PXD045730	CAM	Carbamidomethyl	A	2-Chloroacetamide (CAA) to a final concentration of 40 mM	-	CAM	eligible
+131	PXD057513	CAM	Carbamidomethyl	A	In-gel alkylation was carried out using iodoacetamide (50 mM)	-	CAM	eligible
+135	PXD005497	CAM	EXCLUDE	-	-	mixed: only SILAC samples alkylated, others not	-	excluded_by_reader
+137	PXD002571	CAM	Carbamidomethyl	A	alkylated with iodoacetamide	-	CAM	eligible
+140	PXD006025	CAM	Carbamidomethyl	A	alkylated with 20 mM iodoacetamide for 45 min at room temperature in the dark	-	CAM	eligible
+146	PXD034015	CAM	Carbamidomethyl	A	further alkylated with 50 mM iodoacetamide	-	CAM	eligible
+148	PXD018121	CAM	Carbamidomethyl	A	alkylated with 55 mM IAA 30 min at RT in the dark	-	CAM	eligible
+152	PXD056069	CAM	Carbamidomethyl	A	5 mM Chloro Acetamide (CAA) for 30 min	-	CAM	eligible
+155	PXD016378	CAM	Carbamidomethyl	A	subsequently alkylated with 50mM IAM for 30 min in the dark	-	CAM	eligible
+158	PXD016478	CAM	Carbamidomethyl	A	reduced with DTT, alkylated with iodoacetamide and digested by sequential addition of LysC	-	CAM	eligible
+159	PXD044074	CAM	Carbamidomethyl	A	then alkylated with 20 mM iodoacetamide for 30 min at room temperature	-	CAM	eligible
+160	PXD039554	CAM	Carbamidomethyl	A	After protein reduction and alkylation using DTT and iodoacetamide	-	CAM	eligible
+161	PXD025674	CAM	Carbamidomethyl	A	alkylated with 20 mM iodoacetamide (Sigma) for 1 hours in the dark	-	CAM	eligible
+166	PXD045910	OTHER	Methylthio	A	alkylated with MMTS (S-methyl methanethiosulfonate)	-	OTHER	eligible
+167	PXD027517	CAM	Carbamidomethyl	A	alkylated with 20 mM IAA for 45 min at room temperature	-	CAM	eligible
+171	PXD022395	CAM	Carbamidomethyl	A	50 mM iodoacetamide (IAA) were added for reduction and alkylation respectively	-	CAM	eligible
+173	PXD022866	CAM	Carbamidomethyl	A	alkylated with 25 mM IAA for 45 min at room temperature in darkness	-	CAM	eligible
+175	PXD077803	CAM	Carbamidomethyl	A	including an alkylation step in 10 mg/ml iodoacetamide	-	CAM	eligible
+177	PXD015067	CAM	Carbamidomethyl	A	alkylated with 11 mM iodoacetamide for 15 min	-	CAM	eligible
+179	PXD027330	CAM	Carbamidomethyl	A	then supplemented with 5mM chloroacetamide (CAA) and incubated 30min	-	CAM	eligible
+182	PXD013146	CAM	Carbamidomethyl	A	alkylated in 18.75 mM iodoacetamide for 30 min at room temperature in the dark	-	CAM	eligible
+187	PXD036991	CAM	Carbamidomethyl	A	it underwent alkylation with 11 mM iodoacetamide for 15 min at room temperature	-	CAM	eligible
+188	PXD029586	CAM	Carbamidomethyl	A	alkylation with 50mM iodoacetamide at RT	-	CAM	eligible
+189	PXD027550	OTHER	EXCLUDE	-	-	redox proteomics, differential labelling (NEM and iodoTMT)	-	excluded_by_reader
+190	PXD036937	CAM	Carbamidomethyl	A	alkylated with 20 mM iodoacetamide for 45 min at room temperature	-	CAM	eligible
+195	PXD016334	CAM	Carbamidomethyl	A	alkylated with 50 mM iodoacetamide for 30 min in the dark	-	CAM	eligible
+197	PXD036621	CAM	Carbamidomethyl	A	reduction-alkylation step (dithiothreitol 5 mM – iodoacetamide 10 mM)	-	CAM	eligible
+209	PXD055601	CAM	Carbamidomethyl	A	alkylated with 3.75 µl 800 mM CAA for 30 min	-	CAM	eligible
+215	PXD041767	CAM	Carbamidomethyl	A	sulfhydryl alkylation with 55 mM iodoacetamide	-	CAM	eligible
+217	PXD014185	CAM	Carbamidomethyl	A	prior to alkylation with 55 mM iodoacetamide	-	CAM	eligible
+218	PXD075029	CAM	Carbamidomethyl	A	Reduction and alkylation were performed with 10 mM TCEP and 20 mM IAM, respectively	-	CAM	eligible
+225	PXD068603	OTHER	EXCLUDE	-	-	reduced, alkylated; reagent not stated	-	excluded_by_reader
+235	PXD020717	OTHER	Propionamide	A	DTT reduced and alkylated (1% acrylamide)	-	OTHER	eligible
+263	PXD010091	OTHER	EXCLUDE	-	-	differential NEM / d5-NEM redox labelling	-	excluded_by_reader
+296	PXD024893	NONE	none	A	a procedure that does not include reduction or alkylation of cysteine residues	-	NONE	eligible
+300	PXD055511	OTHER	Carbamidomethyl	A	alkylated for 45 min in 30 mM iodoacetamid	-	-	excluded_class_mismatch
+328	PXD034619	OTHER	EXCLUDE	-	-	in-gel, refers to earlier paper, reagent not stated	-	excluded_by_reader
+332	PXD030865	OTHER	Propionamide	A	alkylated with 100 mM acrylamide	-	OTHER	eligible
+356	PXD029715	OTHER	EXCLUDE	-	-	sulfenylation redox probe pulldown; alkylation reagent unclear	-	excluded_by_reader
+397	PXD026913	OTHER	EXCLUDE	-	-	sample text says iodoacetic acid but search uses carbamidomethyl; conflicting	-	excluded_by_reader
+492	PXD047014	OTHER	Methylthio	A	Free thiol groups were further alkylated by 10 mM S-Methyl methanethiosulfonate (MMTS)	-	OTHER	eligible
+494	PXD038891	OTHER	EXCLUDE	-	-	in-gel digestion, reagent not stated	-	excluded_by_reader
+521	PXD037034	OTHER	Methylthio	A	blocked with 200mM MMTS (10mM f.c.) for 10 min at RT	-	OTHER	eligible
+541	PXD053461	OTHER	Carbamidomethyl	A	alkylated for 45 min in 30 mM iodoacetamid	-	-	excluded_class_mismatch
+638	PXD019951	OTHER	Methylthio	A	blocked with 200mM MMTS (10mM f.c.) for 10 min at RT	-	OTHER	eligible
+653	PXD035694	OTHER	EXCLUDE	-	-	reduced, alkylated without reagent named	-	excluded_by_reader
+710	PXD033054	OTHER	Propionamide	A	alkylated with 20 mM acrylamide in 100 mM Tris-HCl (pH 8.0)	-	OTHER	eligible
+712	PXD004027	NONE	EXCLUDE	-	Alternatively samples were also processed without reduction and alkylation.	alkylated and non-alkylated samples in one project	-	excluded_by_reader
+742	PXD061385	NONE_B	EXCLUDE	-	-	preparation too terse to establish no alkylation	-	excluded_by_reader
+813	PXD020670	OTHER	Carboxymethyl	A	followed by carboxylation with 100 mM sodium iodoacetate	-	OTHER	eligible
+823	PXD021386	OTHER	Carbamidomethyl	A	alkylated for 45 min in 30 mM iodoacetamid	-	-	excluded_class_mismatch
+857	PXD022873	OTHER	EXCLUDE	-	-	histone in-gel, no alkylation stated	-	excluded_by_reader
+866	PXD022837	OTHER	EXCLUDE	-	-	reduced, alkylated; reagent not stated	-	excluded_by_reader
+902	PXD015163	OTHER	EXCLUDE	-	-	4-vinylpyridine, reagent not in list	-	excluded_by_reader
+908	PXD065155	OTHER	EXCLUDE	-	-	no alkylation step stated (polyacrylamide plug)	-	excluded_by_reader
+912	PXD038319	OTHER	EXCLUDE	-	-	reagent unclear ('alkylated with JAA')	-	excluded_by_reader
+1013	PXD043473	NONE	none	A	proteins were digested without reduction and alkylation	-	NONE	eligible
+1102	PXD039411	OTHER	Propionamide	A	The proteins were reduced and alkylated with acrylamide	-	OTHER	eligible
+1107	PXD032015	NONE	none	A	but without Cys alkylation	-	NONE	eligible
+1179	PXD036933	OTHER	Carbamidomethyl	A	alkylated for 45 min in 30 mM iodoacetamid	-	-	excluded_class_mismatch
+1207	PXD024605	NONE	EXCLUDE	-	-	alkylated and non-alkylated (disulfide mapping) samples	-	excluded_by_reader
+1217	PXD002466	OTHER	Methylthio	A	cysteine blocking reagent, methyl methanethiosulfonate (MMTS) for 10 minutes at RT	-	OTHER	eligible
+1311	PXD009073	OTHER	EXCLUDE	-	proteins were reduced, alkylated and digested by trypsin	alkylation reagent not stated	-	excluded_by_reader
+1358	PXD022839	OTHER	EXCLUDE	-	-	alkylation reagent not stated	-	excluded_by_reader
+1368	PXD031795	OTHER	Methylthio	A	cysteine blocking by 15 min incubation with 50 mM s-methylmethanethiosulfonate (MMTS)	-	OTHER	eligible
+1393	PXD023439	OTHER	Methylthio	A	alkylated using 55 mM MMTS (45 min at RT in the dark)	-	OTHER	eligible
+1410	PXD009451	OTHER	Propionamide	A	to facilitate cysteine alkylation to propionamide	-	OTHER	eligible
+1451	PXD026634	NONE	none	A	The peptide samples were not reduced or alkylated prior to MS analysis.	-	NONE	eligible
+1491	PXD046413	NONE_B	none	B	No fixed modifications were set.	-	NONE	eligible
+1551	PXD006335	OTHER	EXCLUDE	-	-	NEM only in lysis buffer, no clear alkylation step	-	excluded_by_reader
+1580	PXD034531	OTHER	Carboxymethyl	A	alkylated in 10 mM Iodoacetic acid	-	OTHER	eligible
+1590	PXD059677	OTHER	EXCLUDE	-	-	iodoTMT labelling of S-nitrosothiols	-	excluded_by_reader
+1739	PXD067843	OTHER	Methylthio	A	with 4 mM methylmethanethiosulfonate (Sigma-Aldrich, #64306) (15 minutes, room temperature)	-	OTHER	eligible
+1863	PXD012582	OTHER	Methylthio	A	reduced and alkylated by TCEP (Tris-2-Carboxyethyl phosphine) and MMTS (5-methyl-methanoethiosulphate) respectively	-	OTHER	eligible
+1865	PXD022290	OTHER	Carboxymethyl	A	alkylated for 20 min with 25 mm iodoacetic acid	-	OTHER	eligible
+1891	PXD005341	OTHER	EXCLUDE	-	-	no alkylation statement (tube gel)	-	excluded_by_reader
+1952	PXD008754	OTHER	Nethylmaleimide	A	N-ethylmaleimide (NEM) was added to the fractions at a final concentration of 20 mM	-	OTHER	eligible
+1957	PXD013874	OTHER	EXCLUDE	-	-	in-gel digestion as previously described; reagent not stated	-	excluded_by_reader
+2010	PXD018042	OTHER	EXCLUDE	-	-	no reagent stated	-	excluded_by_reader
+2049	PXD003334	OTHER	EXCLUDE	-	-	no alkylation statement (gel spots)	-	excluded_by_reader
+2256	PXD037847	OTHER	EXCLUDE	-	-	NEM in buffer, then in-gel digest with unstated reagent	-	excluded_by_reader
+2260	PXD022835	OTHER	EXCLUDE	-	-	reduced, alkylated without reagent named	-	excluded_by_reader
+2269	PXD038369	OTHER	Propionamide	A	Acrylamide was added to 50 mM and incubated for an extra 30 minutes	-	OTHER	eligible
+2271	PXD052635	NONE_B	none	B	No fixed modifications were set.	-	NONE	eligible
+2473	PXD028835	OTHER	EXCLUDE	-	-	palmitoylation ABE, NEM/biotin; incomplete protocol	-	excluded_by_reader
+2516	PXD026590	OTHER	EXCLUDE	-	-	NEM in homogenisation buffer, palmitoyl/SNO biotin switch	-	excluded_by_reader
+2592	PXD025935	OTHER	EXCLUDE	-	-	acyl-biotin exchange (MMTS/HPDP-biotin); iTRAQ reagent not stated	-	excluded_by_reader
+2602	PXD000782	OTHER	EXCLUDE	-	carbamidomethylation was specified as a fixed modification on cysteines	MMTS and iodoacetamide samples in the project	-	excluded_by_reader
+2746	PXD017895	OTHER	EXCLUDE	-	-	in-gel digestion; reagent not stated	-	excluded_by_reader
+2767	PXD035554	OTHER	Carbamidomethyl	A	alkylated for 45 min in 30 mM iodoacetamid	-	-	excluded_class_mismatch
+2769	PXD028778	OTHER	EXCLUDE	-	-	sequential labelling (NEM, HPDP-biotin, iodoacetamide)	-	excluded_by_reader
+2805	PXD018085	OTHER	EXCLUDE	-	-	redox proteomics, sequential labelling (NEM then BIAM)	-	excluded_by_reader
+2887	PXD034241	OTHER	Methylthio	A	alkylated in 4 mM methyl methanethiosulfonate (MMTS, Fluka) for 30 min	-	OTHER	eligible
+2932	PXD054445	NONE	EXCLUDE	-	as the protocol does not involve reduction and alkylation	non-alkylated one-tip samples plus CAA bulk samples; DIA	-	excluded_by_reader
+2960	PXD063463	OTHER	EXCLUDE	-	-	acyl-biotin exchange: NEM blocking then HPDP-biotin	-	excluded_by_reader
+2976	PXD027721	OTHER	EXCLUDE	-	-	redox proteomics: MMTS block plus iodoTMT	-	excluded_by_reader
+2982	PXD054433	OTHER	EXCLUDE	-	-	palmitoylation ABE, NEM then biotin-HPDP	-	excluded_by_reader
+3043	PXD010186	OTHER	EXCLUDE	-	-	in-gel digest, reagent not stated	-	excluded_by_reader
+3062	PXD014395	OTHER	Propionamide	A	boiled and alkylated with 120 mM acrylamide	-	OTHER	eligible
+3109	PXD026750	OTHER	EXCLUDE	-	-	reagent not stated in sample processing text (protocol by reference)	-	excluded_by_reader
+3123	PXD031615	OTHER	EXCLUDE	-	-	MMTS block plus iodoTMT labelling	-	excluded_by_reader
+3141	PXD022767	OTHER	Methylthio	A	alkylated using 15 mM MMTS (S-Methyl methanethiosulfonate	-	OTHER	eligible
+3197	PXD045811	OTHER	EXCLUDE	-	-	no alkylation step described but search does not state absence of fixed/cysteine modification	-	excluded_by_reader
+3298	PXD001009	OTHER	Methylthio	A	alkylated (final concentration 10 mM methyl-methanethiosulfonate, 30 min)	-	OTHER	eligible
+3299	PXD003937	OTHER	Methylthio	A	alkylated with 10mM MMTS for 45min at room temperature in the dark	-	OTHER	eligible
+3389	PXD005583	OTHER	Methylthio	A	then alkylated with 15 mM of MMTS for 1 hours	-	OTHER	eligible
+3465	PXD036019	OTHER	EXCLUDE	-	-	in-gel digest as described elsewhere; reagent not stated	-	excluded_by_reader
+3481	PXD060045	OTHER	EXCLUDE	-	-	palmitoylation ABE, NEM/DTDP then biotin-HPDP	-	excluded_by_reader
+3596	PXD030833	OTHER	Propionamide	A	alkylated with 20 mM acrylamide, and digested with trypsin	-	OTHER	eligible
+3598	PXD007647	OTHER	Methylthio	A	alkylated with 10 mM methyl methanethiosulfonate in 50 mM TEAB	-	OTHER	eligible
+3669	PXD043767	OTHER	EXCLUDE	-	-	digestion as previously described; reagent not stated	-	excluded_by_reader
+3783	PXD023242	OTHER	EXCLUDE	-	-	NEM only in lysis buffer; no alkylation step stated	-	excluded_by_reader
+3798	PXD024031	OTHER	Carboxymethyl	A	Free thiol groups were alkylated by adding 230 mM iodoacetic acid	-	OTHER	eligible
+3862	PXD019917	OTHER	Methylthio	A	were alkylated with 15 mM MMTS for 10 minutes at room temperature	-	OTHER	eligible
+3961	PXD032675	OTHER	EXCLUDE	-	-	two reagents: NEM in lysis, MMTS alkylation	-	excluded_by_reader
+3991	PXD002439	NONE_B	none	B	No fixed modifications	-	NONE	eligible
+4155	PXD014917	NONE	EXCLUDE	-	-	mixed alkylated and non-alkylated samples; reagent not stated	-	excluded_by_reader
+4366	PXD004963	OTHER	EXCLUDE	-	-	redox: NEM plus iodoTMT	-	excluded_by_reader
+4435	PXD012791	OTHER	EXCLUDE	-	-	alkylation reagent not stated	-	excluded_by_reader
+4533	PXD010097	OTHER	EXCLUDE	-	-	reagent not stated	-	excluded_by_reader
+4645	PXD017922	NONE	none	B	no cysteine alkylation, no enzyme digestion	-	NONE	eligible
+4682	PXD029062	OTHER	EXCLUDE	-	-	in-gel digestion as previously described; reagent not stated	-	excluded_by_reader
+4714	PXD071267	OTHER	EXCLUDE	-	-	NEM in lysis, in-gel alkylation unstated, search has NEM and carbamidomethyl variable	-	excluded_by_reader
+4809	PXD007582	OTHER	EXCLUDE	-	-	histone in-gel, no cysteine alkylation stated	-	excluded_by_reader
+4816	PXD045159	OTHER	Methylthio	A	free thiol groups were blocked using 10mM methyl methanethiosulfonate (MMTS)	-	OTHER	eligible
+4867	PXD020329	OTHER	Methylthio	A	free thiol groups were blocked using 10mM methyl methanethiosulfonate at room temperature	-	OTHER	eligible
+4964	PXD054718	OTHER	Methylthio	A	100 mM methyl methanethiosulfonate in isopropanol	-	OTHER	eligible
+4965	PXD036901	OTHER	Carbamidomethyl	A	alkylated for 45 min in 30 mM iodoacetamid	-	-	excluded_class_mismatch
+5021	PXD009666	OTHER	EXCLUDE	-	-	reagent not stated	-	excluded_by_reader
+5076	PXD066861	OTHER	Methylthio	A	To block reduced cysteines, 200 mM methyl methanethiosulfonate (MMTS)	-	OTHER	eligible
+5150	PXD074601	OTHER	Methylthio	A	incubation at room temperature with 100 mM s-methylmethanethiosulfonate	-	OTHER	eligible
+5184	PXD037757	OTHER	Carbamidomethyl	A	alkylated for 45 min in 30 mM iodoacetamid	-	-	excluded_class_mismatch
+5192	PXD034865	OTHER	EXCLUDE	-	-	in-gel digestion, no alkylation statement	-	excluded_by_reader
+5292	PXD025325	OTHER	Nethylmaleimide	A	followed by addition of NEM buffer (0.1 M NEM in digestion buffer)	-	OTHER	eligible
+5299	PXD010071	OTHER	EXCLUDE	-	-	in-gel digestion, reagent not stated	-	excluded_by_reader
+5360	PXD010939	OTHER	Methylthio	A	alkylated with 10 mM methyl methane thiosulfonate	-	OTHER	eligible
+5390	PXD001582	OTHER	EXCLUDE	-	-	redox: NEM then biotin maleimide	-	excluded_by_reader
+5411	PXD016597	OTHER	Methylthio	A	thiols were blocked using S–methyl methanethiosulfonate	-	OTHER	eligible
+5445	PXD021689	OTHER	EXCLUDE	-	-	sample text says iodoacetic acid but search uses carbamidomethyl; conflicting	-	excluded_by_reader
+5463	PXD013973	NONE	EXCLUDE	-	-	multiple alkylating reagents compared	-	excluded_by_reader
+5469	PXD027786	OTHER	EXCLUDE	-	-	4-vinylpyridine	-	excluded_by_reader
+5480	PXD015282	OTHER	EXCLUDE	-	-	no alkylation step stated; NEM only in buffer	-	excluded_by_reader
+5526	PXD015410	OTHER	EXCLUDE	-	-	4-vinylpyridine	-	excluded_by_reader
+5545	PXD055073	OTHER	Methylthio	A	To block reduced cysteines, 2 M methyl methanethiosulfonate (MMTS)was added	-	OTHER	eligible
+5558	PXD025349	OTHER	Propionamide	A	alkylated using acrylamide (AA)	-	OTHER	eligible
+5580	PXD008219	OTHER	Methylthio	A	TCEP for reduction, MMTS for alkylation and Trypsin/LysC for digestion	-	OTHER	eligible
+5607	PXD058551	OTHER	Carboxymethyl	A	followed by carboxymethylation with iodoacetate	-	OTHER	eligible
+5644	PXD038953	OTHER	EXCLUDE	-	-	no alkylation statement, search settings not given	-	excluded_by_reader
+5705	PXD018059	OTHER	Methylthio	A	alkylated with 200 mM (10 mM f.c.) methyl methanethiosulfonate (MMTS)	-	OTHER	eligible
+5709	PXD014289	OTHER	EXCLUDE	-	-	reagent not in list (4-vinylpyridine)	-	excluded_by_reader
+5725	PXD007866	OTHER	EXCLUDE	-	-	immunopeptidomics; no alkylation statement and no modification statement in search	-	excluded_by_reader
+5816	PXD034806	OTHER	Propionamide	A	20 mM acrylamide was added, after which incubation took place for 10 min	-	OTHER	eligible
+5819	PXD010822	OTHER	EXCLUDE	-	-	NEM block plus biotin switch (mixed thiol labels)	-	excluded_by_reader
+5821	PXD021541	OTHER	EXCLUDE	-	-	in-gel digestion; reagent not stated	-	excluded_by_reader
+5833	PXD043647	OTHER	Methylthio	A	blocked employing a 10 mM solution of S-methyl methanethiosulfonate (MMTS)	-	OTHER	eligible
+5842	PXD046638	OTHER	EXCLUDE	-	-	reagent not stated (reference only)	-	excluded_by_reader
+5854	PXD022555	OTHER	Methylthio	A	alkylated using 15 mM MMTS (S-Methyl methanethiosulfonate	-	OTHER	eligible
+5923	PXD029470	OTHER	Propionamide	A	alkylation (50mM acrylamide and 50 mM NH4HCO3)	-	OTHER	eligible
+5954	PXD030529	NONE	Carbamidomethyl	A	Samples were alkylated for 45 min at room temperature in the dark using iodoacetamide	-	-	excluded_class_mismatch
+6053	PXD043297	OTHER	EXCLUDE	-	-	reduced and alkylated without reagent named	-	excluded_by_reader
+6154	PXD015749	OTHER	Carbamidomethyl	A	alkylated for 45 min in 30 mM iodoacetamid	-	-	excluded_class_mismatch
+6193	PXD033690	OTHER	Methylthio	A	alkylation with 10 mM methyl methanethiosulfonate in DB for 20 min	-	OTHER	eligible
+6244	PXD033007	OTHER	Methylthio	A	Cys side-chains then were derivatized with 10 mM methyl methanethiosulfonate	-	OTHER	eligible
+6433	PXD003754	OTHER	Nethylmaleimide	A	25 mM TCEP, 50 mM N-ethylmaleimide	-	OTHER	eligible
+6440	PXD043098	OTHER	Methylthio	A	Proteins were reduced and alkylated with TCEP/MMTS	-	OTHER	eligible
+6452	PXD022339	OTHER	Carbamidomethyl	A	alkylated for 45 min in 30 mM iodoacetamid	-	-	excluded_class_mismatch
+6490	PXD024625	OTHER	Carbamidomethyl	A	alkylated for 45 min in 30 mM iodoacetamid	-	-	excluded_class_mismatch
+6599	PXD081275	OTHER	Propionamide	A	Proteins were reduced and alkylated with 5 mM TCEP and 10 mM acrylamide	-	OTHER	eligible
+6606	PXD028909	OTHER	EXCLUDE	-	-	persulfidation thiol labelling plus MMTS experiment; mixed	-	excluded_by_reader
+6765	PXD013009	OTHER	Methylthio	A	3 µl of 0.2 MS-methyl methanethiosulfonate was added	-	OTHER	eligible
+6786	PXD007789	OTHER	EXCLUDE	-	alkylation was performed with vinylpyridine	vinylpyridine, reagent not in list	-	excluded_by_reader
+6795	PXD050355	OTHER	Carboxymethyl	A	free sulfhydryl groups were modified by adding iodoacetate	-	OTHER	eligible
+6917	PXD055547	NONE_B	EXCLUDE	-	-	sample preparation not described (reference only)	-	excluded_by_reader
+7219	PXD015889	NONE	EXCLUDE	-	-	multiple alkylation reagents compared	-	excluded_by_reader
+7808	PXD030381	NONE	EXCLUDE	-	-	mixed: samples with and without alkylation	-	excluded_by_reader
+7848	PXD002199	NONE	EXCLUDE	-	-	mixed: non-alkylated pulldowns plus alkylated aliquot, reagent unstated	-	excluded_by_reader
+8038	PXD069898	NONE	EXCLUDE	-	processed without cysteine carbamidomethylation	IAA bulk samples plus non-alkylated single-cell samples	-	excluded_by_reader
+8120	PXD003573	NONE_B	none	B	No fixed modifications were set.	-	NONE	eligible
+8201	PXD023358	NONE	EXCLUDE	-	-	non-alkylated, IAM and NEM samples in the project	-	excluded_by_reader
+9097	PXD016554	NONE	EXCLUDE	-	-	reagent not stated; mixed alkylated/non-alkylated	-	excluded_by_reader
+9741	PXD046414	NONE_B	none	B	No fixed modifications were set.	-	NONE	eligible
+10125	PXD086821	NONE	none	B	no carbamidomethylation	-	NONE	eligible
+10582	PXD032786	NONE_B	none	B	variable modifications of methionine oxidation and N-terminal acetylation without any fixed modification	-	NONE	eligible
+11133	PXD001205	NONE_B	none	B	No fixed modifications were used.	-	NONE	eligible
+11213	PXD047462	NONE	EXCLUDE	-	-	alkylated (IAA) and non-alkylated samples	-	excluded_by_reader
+11342	PXD032926	NONE_B	none	B	No fixed modifications were specified	-	NONE	eligible
+11819	PXD036747	NONE	none	A	without reduction or alkylation	-	NONE	eligible
+12210	PXD042894	NONE_B	none	B	deamination (NQ) and no fixed modifications	-	NONE	eligible
