@@ -563,7 +563,7 @@ MGF→mzML direction is exact.
 | `-search_precursor_tolerance <f>` / `-search_precursor_unit <ppm\|Da>` | 10 / ppm | Precursor tolerance written to the configuration |
 | `-search_isotope_errors <n>` | 0 | Precursor isotope errors 0..n (at most 3) |
 | `-search_decoy_prefix <s>` | `rev_` (Sage, MSFragger) / `DECOY_` (Comet) | Prefix of the decoys the engine generates (MSFragger: the decoys FASTag appends to `-fasta_out`, or the ones the input database holds) |
-| `-search_shifts <none\|variable\|offsets\|both>` | none | Experimental (1.12): add the run's mass-gap peaks (the `-massgap_out` peaks, computed without writing it) to `-search_config_out` as variable modifications or Comet mass offsets (see Mass shifts as search configuration). Candidates for an FDR-controlling engine, NOT identifications. Needs `-search_config_out` and a database; `offsets` needs `-search_engine comet` or `msfragger` (MSFragger keeps negative offsets and has 16 variable slots; with a Da precursor window it gets no offsets, MSFragger 4.4.1 exits 1 on them) |
+| `-search_shifts <none\|variable\|offsets\|both>` | none | Experimental (1.12): add the run's mass-gap peaks (the `-massgap_out` peaks, computed without writing it) to `-search_config_out` as variable modifications or Comet mass offsets (see Mass shifts as search configuration). Candidates for an FDR-controlling engine, NOT identifications; failed both held-out tests (see Held-out acceptance). Needs `-search_config_out` and a database; `offsets` needs `-search_engine comet` or `msfragger` (MSFragger keeps negative offsets and has 16 variable slots; with a Da precursor window it gets no offsets, MSFragger 4.4.1 exits 1 on them) |
 | `-search_shifts_out <file>` | none | With `-search_shifts`: one row per mass-gap peak with its explanation and the action taken (`variable`, `offset`, `fixed`, `skipped_isotope`, `expected_label`, `label_incomplete`, `fixed_mod_questionable`, `skipped_silac`, `deferred_alkylation_call`, `already_searched`, `dropped_cap`, `dropped_engine`, `dropped_mode`) |
 | `-shift_max_variable <n>` / `-shift_max_offsets <n>` | 3 / 10 | Advanced: gap peaks exported as variable modifications / as offsets besides 0, most spectra first |
 | `-shift_expand_sites` | off | Advanced, unvalidated: add the residues `-recon_localize` places a variable shift on to that modification (needs `-recon_localize`) |
@@ -847,8 +847,14 @@ label-free): more PSMs at 1 % FDR on 3 of 4 runs with both engines (Comet
 the scans the base search identified, Sage up to 1.3 %), but the
 preregistered test FAILED on its other criteria (recovery of an open search's
 top mass shifts for both engines, Comet's one passing run resting on
-calibration artefacts; entrapment FDP above 1.5 % for Sage), so the option
-stays experimental. Offsets need a narrow precursor
+calibration artefacts; entrapment FDP above 1.5 % for Sage). A second
+held-out test with relaxed criteria on four new runs (`acc113r/shifts`,
+RESULT-item17r.md) FAILED as well: +7.7 to +36.8 % PSMs with Comet and +6.5
+to +25.2 % with Sage on all four runs, but Comet's entrapment FDP rose from
+0.88 to 1.28 % on the TMT run, and only 5 of 32 (Comet) and 3 of 11 (Sage)
+admissible open-search peaks were recovered. Part of the gain is the isotope
+error setting (0..1 against 0 in the base search). The option does not
+replace an open search and stays experimental. Offsets need a narrow precursor
 tolerance, which the configuration sets explicitly. See
 [doc/SHORTLIST.md](doc/SHORTLIST.md#mass-shifts-as-engine-configuration-112-17).
 
@@ -1423,13 +1429,14 @@ data.
 | #9 `-pick_profile auto` | **FAIL** | Ion trap (PXD009049): two charge-3 cells fail non-inferiority, 4+ underpowered, fewer tagged spectra at tag length 4 and 5. Orbitrap (PXD016519, PXD018024; no Astral or TOF run): all 9 cells +10.5 to +32.0 points, but 567 fewer tagged spectra on PXD016519 at tag length 3. Default stays `legacy`; `auto` is not recommended (see Performance) |
 | #6 `-unknown_charge infer` | **INCONCLUSIVE** (item06-H1-r2), then **FAIL** (item06-H2/H2r, high resolution) | Charge-call accuracy 0.751 (H1-r2, descriptive) and 0.745 (H2/H2r) against a 0.90 target; on the high-resolution sets, gains on 3+ and losses on 2+ (on ion trap in H1-r2, losses at every charge). Default stays `assume2` |
 | #14 `-check_header_charge` (1.13, `acceptance/1.13`) | **PASS** (item14r, revised rule); first rule **INCONCLUSIVE** (item14-hdrcharge: two Astral runs without enough truth) | First rule: On the three Q Exactive runs `warn` flags 0.31% of right header charges, and on a copy with every fifth charge changed it finds 28% of the wrong ones at precision 0.95. Overriding real header charges breaks more than it fixes: -2.2 per 1000 identified spectra, lower bound -2.9 (criterion -1.0). Q Exactive only: on Astral (PXD070049) all 9 flags as given and all 8 on the perturbed copy were false (false alarm 0.026), with no changed header found. That rule (range evidence, `override`) was replaced. The revised rule (MS1 isotope spacing, charge-aware pairs, `both`) passed its held-out test (item14r, five new runs, `warn`): it finds 26.9% of the wrong headers at precision 0.679 (95% lower bound 0.647) and flags 0.35% of the right ones (doc/HEADER-CHARGE-CHECK.md). Experimental |
+| #17 `-search_shifts` (1.13, `acceptance/1.13`, `acc113r/shifts`) | **FAIL** (item17), **FAIL** (item17r, second test on four new runs) | Closed search against the same search plus the option, Comet 2026.03.0 and Sage 0.14.7, 1% FDR, shuffled entrapment. Second test: more PSMs on 4 of 4 runs (Comet +7.7 to +36.8%, Sage +6.5 to +25.2%), but Comet's entrapment FDP rises on the TMT run PXD037999 (0.88% -> 1.28%, limit +0.30 points; Sage passes), and the option recovers only 5 of 32 (Comet) and 3 of 11 (Sage) admissible peaks of an MSFragger open search. Part of the gain is the isotope error setting (base 0, option 0..1 on three runs); the gain over a base with the same setting was not measured. The option does not replace an open search. Experimental (doc/SHORTLIST.md) |
 | #2 `-complement_rule both` | **INCONCLUSIVE** | By rule 5: the truth of one Astral run (PXD074582) has 0 PSMs at 1% FDR. On the other runs endpoints (i)-(iii) fail descriptively. Default stays `same_charge` |
 | 1.13 `-complement_tolerance_unit auto` | **FAIL** | On the #2 design (`acceptance/1.13`, PREREG-compltol.md; 11 runs): ion trap at 0.5 Da +2.1 to +5.1 points rank-1 correct in every powered 2+/3+ cell, pooled L3 gain +3.05 points (ii PASS), timsTOF 4+ and time (ratio 1.027) PASS; but three Astral cells fail non-inferiority (L5 2+ -0.50 points; two 4+ cells by their bound). Measured with the first estimator (c5f96b5), whose window varied with the cell; the current cell-independent median/MAD estimator with `-complement_tolerance` as its lower bound is checked on DEV only. Default stays `Da` |
 | #15 `-ion_series auto` | **INCONCLUSIVE** | On the ETD spectra of 6 Orbitrap runs (PXD024621, PXD009208; MSFragger 4.4.1 c/z• truth at 1% FDR) correct rank-1 tags rise from 0.9% under `by` to 82.2% (+81.4 points, 95% interval 79.5-83.2; 5,313 peptide clusters): the electron endpoint passes. Collisional spectra are byte-identical, but the non-inferiority cells for 3+ and 4+ collisional spectra are empty (every HCD spectrum of PXD024621 is 2+), so the verdict is inconclusive. Default stays `by`; use `auto` (or `cz`) on ETD/ECD data |
 
 Every other 1.12 option (#1/#10 species call, #3 chemistry v2 and
 alkylation, #5 shortlist and search hand-off, #7 raw-DIA check, whose
-release test E7-03 failed (see Raw DIA input is refused), #11 census, #17 search shifts) is experimental and not
+release test E7-03 failed (see Raw DIA input is refused), #11 census) is experimental and not
 validated on held-out data. No 1.12 option is validated on low-resolution
 (ion-trap) MS2: the only ion-trap held-out results (#9 PXD009049; the
 ion_trap set of #6 item06-H1-r2) are a failure and a descriptive result.
