@@ -720,8 +720,8 @@ int main()
       CHECK(++seen[r.section + "\t" + r.key] == 1, "duplicate %s %s", r.section.c_str(), r.key.c_str());
       if (order.empty() || order.substr(order.rfind(',') + 1) != r.section) order += "," + r.section;
     }
-    CHECK(order == ",ld_run,ld_count,ld_peak,ld_site,ld_known,ld_reporter,ld_call", "section order %s", order.c_str());
-    CHECK(rowsOf(a, S).at("ld_run/format") == "2", "format");
+    CHECK(order == ",ld_run,ld_count,ld_peak,ld_site,ld_known,ld_reporter,ld_pair,ld_call", "section order %s", order.c_str());
+    CHECK(rowsOf(a, S).at("ld_run/format") == "3", "format");
     CHECK(a.labels == "TMT", "TMT set call %s [%s]", a.labels.c_str(), calledList(a).c_str());
     LD::Settings lr = S;
     lr.low_resolution = true;
@@ -795,6 +795,83 @@ int main()
     trap.merge(counter(tmt, 300));  // FT MS3 reporters in an ion-trap MS2 run
     LD::applyReporters(f, trap);
     CHECK(f.status == "call" && f.labels == "TMT" && f.basis == "reporter_ions", "ion-trap MS2 with MS3 reporters: %s", f.labels.c_str());
+  }
+
+  // ---- precursor pairs (format 3): SILAC from Lys8/Arg10 partners ----
+  {
+    // 400 precursors 3 s and 1.7 m/z apart (no chance pairs); `heavy` of them get a partner.
+    auto pairsOf = [](int lys, int arg, double shift = 0.0) {
+      LD::PairCounter pc;
+      for (int i = 0; i < 400; ++i)
+      {
+        const double mz = 400.0 + 1.7 * i, rt = 3.0 * i;
+        pc.add(rt, mz, 2);
+        if (i < lys) pc.add(rt + 2.0, mz + (8.014199 + shift) / 2, 2);
+        else if (i < lys + arg) pc.add(rt - 2.0, mz + (10.008269 + shift) / 2, 2);
+      }
+      pc.add(10.0, 500.0, 1);  // charge 1 and 5 are dropped
+      pc.add(10.0, 500.0, 5);
+      return pc;
+    };
+    LD::PairCounter pc = pairsOf(60, 50);
+    CHECK(pc.precursors.size() == 510, "precursors %zu", pc.precursors.size());
+    pc.count();
+    CHECK(pc.lys8 == 60 && pc.arg10 == 50 && pc.control == 0 && pc.silac(), "pairs %llu %llu %.1f",
+          static_cast<unsigned long long>(pc.lys8), static_cast<unsigned long long>(pc.arg10), pc.control);
+    pc = pairsOf(60, 50, 0.01);  // 10 mDa off: outside the 2 mDa window
+    pc.count();
+    CHECK(pc.lys8 == 0 && pc.arg10 == 0 && !pc.silac(), "off-mass pairs");
+    pc = pairsOf(60, 0);  // Lys8 alone is no call
+    pc.count();
+    CHECK(pc.lys8 == 60 && !pc.silac(), "Lys8 only");
+    pc = pairsOf(20, 20);  // below 30 pairs
+    pc.count();
+    CHECK(!pc.silac(), "few pairs");
+
+    const LD::Analysis lf = run({labelFree(94, 1500)}, S, unimod);
+    LD::Analysis x = lf;
+    LD::applyPairs(x, pairsOf(60, 50));
+    CHECK(x.status == "call" && x.labels == "K:Lys8+R:Arg10" && x.call_sites == "K,R" && x.basis == "precursor_pairs", "SILAC call %s",
+          x.labels.c_str());
+    CHECK(rowsOf(x, S).at("ld_pair/lys8_pairs") == "60" && rowsOf(x, S).at("ld_pair/silac") == "yes" &&
+            rowsOf(x, S).at("ld_call/basis") == "precursor_pairs",
+          "ld_pair rows");
+    x = lf;
+    LD::applyPairs(x, pairsOf(0, 0));
+    CHECK(x.labels == "label-free" && x.basis == "site_scan", "no pairs keeps label-free");
+    Gen g = labelFree(95, 1500);
+    g.L_N = kTMT;
+    const LD::Analysis t = run({g}, S, unimod);
+    x = t;
+    LD::applyPairs(x, pairsOf(60, 50));
+    CHECK(x.labels == t.labels && x.basis == t.basis, "a label call stays");
+    x = run({labelFree(92, 100)}, S, unimod);  // few_spectra no call
+    LD::applyPairs(x, pairsOf(60, 50));
+    CHECK(x.status == "call" && x.labels == "K:Lys8+R:Arg10", "no call becomes SILAC: %s", x.status.c_str());
+
+    // label-free by absence: few tags, reporter gate none, >= 500 precursors, no label pairs
+    const LD::Analysis few = run({labelFree(92, 100)}, S, unimod);
+    LD::PairCounter many = pairsOf(0, 0);
+    for (int i = 0; i < 200; ++i) many.add(3.0 * i, 1200.0 + 1.7 * i, 3);
+    x = few;
+    x.reporter_gate = "none";
+    LD::applyPairs(x, many);
+    CHECK(x.status == "call" && x.labels == "label-free" && x.basis == "absence", "absence call %s %s", x.status.c_str(), x.reason.c_str());
+    x = few;
+    x.reporter_gate = "unclear";
+    LD::applyPairs(x, many);
+    CHECK(x.status == "no_call" && x.reason == "few_spectra", "no absence call without gate none");
+    x = few;
+    x.reporter_gate = "none";
+    LD::applyPairs(x, pairsOf(0, 0));
+    CHECK(x.status == "no_call", "no absence call below 500 precursors");
+    x = few;
+    x.reporter_gate = "none";
+    LD::PairCounter dim = many;
+    for (int i = 0; i < 60; ++i) dim.add(3.0 * i + 1.0, 400.0 + 1.7 * i + 4.025107 / 2, 2);
+    LD::applyPairs(x, dim);
+    CHECK(x.status == "no_call" && x.pairs.other == 60, "a +4.0251 pair spacing blocks the absence call (%llu)",
+          static_cast<unsigned long long>(x.pairs.other));
   }
 
   if (failures == 0) std::printf("label_discovery_test: all passed\n");

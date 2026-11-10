@@ -9,6 +9,7 @@
 #include <OpenMS/CHEMISTRY/ResidueModification.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -1981,6 +1982,85 @@ namespace FASTag::LabelDiscovery
       a.reason = "low_resolution_ms2";
   }
 
+  void PairCounter::add(double rt_seconds, double mz, int charge)
+  {
+    if (charge >= 2 && charge <= 4 && mz > 0) precursors.push_back({mz, static_cast<float>(rt_seconds), static_cast<std::int8_t>(charge)});
+  }
+
+  void PairCounter::merge(PairCounter&& o)
+  {
+    precursors.insert(precursors.end(), o.precursors.begin(), o.precursors.end());
+    o.precursors.clear();
+  }
+
+  void PairCounter::count()
+  {
+    constexpr double kTol = 0.002, kRt = 9.0, kLys8 = 8.014199, kArg10 = 10.008269;
+    // The label masses shifted by whole Da; none within 8 mDa of n x 1.00335.
+    constexpr double kControl[] = {7.014199, 9.014199, 13.014199, 9.008269, 11.008269, 12.008269, 3.025107, 5.025107};
+    std::sort(precursors.begin(), precursors.end(), [](const Precursor& a, const Precursor& b) {
+      return a.z != b.z ? a.z < b.z : a.mz != b.mz ? a.mz < b.mz : a.rt < b.rt;
+    });
+    auto pairs = [&](double delta) {
+      std::uint64_t n = 0;
+      std::size_t lo = 0;
+      for (const Precursor& p : precursors)
+      {
+        const double want = p.mz + delta / p.z, tol = kTol / p.z;
+        while (lo < precursors.size() && (precursors[lo].z < p.z || (precursors[lo].z == p.z && precursors[lo].mz < want - tol))) ++lo;
+        for (std::size_t j = lo; j < precursors.size() && precursors[j].z == p.z && precursors[j].mz <= want + tol; ++j)
+          if (std::fabs(precursors[j].rt - p.rt) <= kRt)
+          {
+            ++n;
+            break;
+          }
+      }
+      return n;
+    };
+    lys8 = pairs(kLys8);
+    arg10 = pairs(kArg10);
+    other = std::max({pairs(4.025107), pairs(6.020129), pairs(8.044366)});
+    std::array<std::uint64_t, 8> c{};
+    for (std::size_t i = 0; i < c.size(); ++i) c[i] = pairs(kControl[i]);
+    std::sort(c.begin(), c.end());
+    control = 0.5 * static_cast<double>(c[3] + c[4]);
+  }
+
+  bool PairCounter::silac() const
+  {
+    return lys8 >= 30 && arg10 >= 30 && ratio(lys8) >= 2.0 && ratio(arg10) >= 2.0;
+  }
+
+  bool PairCounter::anyLabel() const
+  {
+    const std::uint64_t m = std::max({lys8, arg10, other});
+    return m >= 30 && ratio(m) >= 2.0;
+  }
+
+  void applyPairs(Analysis& a, PairCounter pc)
+  {
+    pc.count();
+    a.pairs = std::move(pc);
+    a.pairs.precursors.shrink_to_fit();
+    // Too few tags for the site scan, but reporters and label pairs were looked for and are absent.
+    // ponytail: a sample labelled in one channel only (all heavy, light dimethyl) is called label-free here.
+    if (a.status == "no_call" && (a.reason == "few_spectra" || a.reason == "no_reference") && a.reporter_gate == "none" &&
+        a.pairs.precursors.size() >= 500 && !a.pairs.anyLabel())
+    {
+      a.status = "call";
+      a.labels = "label-free";
+      a.call_sites = a.reason = "-";
+      a.basis = "absence";
+      return;
+    }
+    if (!a.pairs.silac() || (a.status == "call" && a.labels != "label-free")) return;
+    a.status = "call";
+    a.labels = "K:Lys8+R:Arg10";
+    a.call_sites = "K,R";
+    a.reason = "-";
+    a.basis = "precursor_pairs";
+  }
+
   Analysis analyze(const Collector& col, const Settings& s_in, const UnimodTable& unimod)
   {
     Analysis a;
@@ -2729,11 +2809,25 @@ namespace FASTag::LabelDiscovery
       row("ld_reporter", "tmtpro_excess", fix(rc.excess(rc.tmtpro, rc.tmtpro_decoy), 4), sc, "the same for >= 2 reporters of TMTpro only (132-135); not used by the call");
       row("ld_reporter", "gate", a.reporter_gate, "-", "unknown (below 200 scans), tmt, itraq4, itraq8, none or unclear");
     }
+    // ld_pair
+    {
+      const PairCounter& pc = a.pairs;
+      const std::string n = num(static_cast<std::uint64_t>(pc.precursors.size()));
+      row("ld_pair", "precursors", n, "-", "MS2 precursors of charge 2-4 examined for SILAC pairs");
+      row("ld_pair", "lys8_pairs", num(pc.lys8), n, "precursors with a partner of the same charge at +8.0142 Da within 2 mDa and 9 s");
+      row("ld_pair", "arg10_pairs", num(pc.arg10), n, "the same at +10.0083 Da");
+      row("ld_pair", "control_pairs", fix(pc.control, 1), n, "median over eight control spacings (the label masses shifted by whole Da)");
+      row("ld_pair", "lys8_ratio", fix(pc.ratio(pc.lys8), 2), "-", "lys8_pairs / (control_pairs + 5)");
+      row("ld_pair", "arg10_ratio", fix(pc.ratio(pc.arg10), 2), "-", "arg10_pairs / (control_pairs + 5)");
+      row("ld_pair", "other_pairs", num(pc.other), n, "the largest count at +4.0251 (Lys4, dimethyl), +6.0201 (Lys6, Arg6) and +8.0444 Da (dimethyl)");
+      row("ld_pair", "other_ratio", fix(pc.ratio(pc.other), 2), "-", "other_pairs / (control_pairs + 5)");
+      row("ld_pair", "silac", pc.silac() ? "yes" : "no", "-", "yes: both counts >= 30 and both ratios >= 2");
+    }
     // ld_call
     row("ld_call", "status", a.status, "-", "call or no_call");
     row("ld_call", "labels", a.status == "call" ? a.labels : "-", "-", "the labels called, +-joined");
     row("ld_call", "sites", a.status == "call" ? a.call_sites : "-", "-", "the sites of the called labels");
-    row("ld_call", "basis", a.basis, "-", "what the call is made from: site_scan or reporter_ions");
+    row("ld_call", "basis", a.basis, "-", "what the call is made from: site_scan, reporter_ions, precursor_pairs or absence");
     row("ld_call", "reason", a.status == "call" ? "-" : a.reason, "-", "why there is no call");
     return rows;
   }

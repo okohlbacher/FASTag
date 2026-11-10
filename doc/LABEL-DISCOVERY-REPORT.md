@@ -1,4 +1,4 @@
-# The label discovery report (`-label_discovery_out`), format 2
+# The label discovery report (`-label_discovery_out`), format 3
 
 Experimental and opt-in. It failed its held-out test (acceptance/1.13
 PREREG-labeldisc.md; 190 public runs, scored once on 2026-11-10):
@@ -49,9 +49,10 @@ and `-alkylation_out`:
   7); `FASTAG_FULL_PRECISION=1` in the environment writes them in full.
 - The file is written to `<file>.part` and renamed when complete. A refused
   or failed run leaves no file.
-- The version is the row `ld_run format` = `2` (format 2 added the
+- The version is the row `ld_run format` = `3` (format 2 added the
   `ld_reporter` section, the `basis` `reporter_ions` and the reasons
-  `low_resolution_ms2` and `no_reporter_ions`). A reader that does not know
+  `low_resolution_ms2` and `no_reporter_ions`; format 3 added the `ld_pair`
+  section and the `basis` values `precursor_pairs` and `absence`). A reader that does not know
   the format should stop.
 
 Sections, in this order:
@@ -64,6 +65,8 @@ Sections, in this order:
 | `ld_peak` | the channel peaks, per channel `n` and `c`, ranked |
 | `ld_site` | the site candidates, per site `N`, `K`, `R`, `C`; the delta 0 control first |
 | `ld_known` | `-label_out`-compatible counts of the known labels |
+| `ld_reporter` | the reporter ions of the isobaric labels |
+| `ld_pair` | precursor pairs of heavy-isotope labels |
 | `ld_call` | the call |
 
 On a Da fragment tolerance nothing is analysed: `run`, `ld_run`, `ld_count`,
@@ -298,14 +301,57 @@ Effect on the call (`basis` `reporter_ions` when it changes the call):
   `low_resolution` on a run whose MS2 scans are mostly ion-trap scans gets
   the reason `low_resolution_ms2`. The gate still reads the run's
   high-resolution MS3 (or MS2) scans, so a TMT run with ion-trap MS2 and
-  Orbitrap MS3 can get a family call. Label-free and SILAC cannot be decided
-  on such a run.
+  Orbitrap MS3 can get a family call. On such a run label-free and SILAC
+  are decided from the precursors only (`ld_pair`).
 
 The thresholds and the rule were set on the 99 development runs after the
 held-out test above; on them the rule turns one wrong result into a right
 one (86 instead of 85 right, PXD046211) and changes no other. It has no
 held-out test: the verdict above is the one of format 1, and a new test
 needs new runs. The `low_resolution_ms2` reason has not been evaluated.
+
+### `ld_pair`
+
+Precursor pairs of heavy-isotope labels (format 3). Every MS2 precursor of
+charge 2-4 is read (with an indexed mzML also those of the spectra that the
+subsample skips; other readers give the sampled spectra only). A pair is two
+precursors of the same charge whose m/z differ by a label mass / z within
+0.002 Da / z and whose retention times differ by at most 9 s.
+
+| key | value |
+|---|---|
+| `precursors` | precursors examined |
+| `lys8_pairs`, `arg10_pairs` | precursors with a partner at +8.0142 Da (Lys8) and at +10.0083 Da (Arg10) |
+| `control_pairs` | median count over eight control spacings (the label masses shifted by whole Da) |
+| `lys8_ratio`, `arg10_ratio` | pairs / (`control_pairs` + 5) |
+| `other_pairs`, `other_ratio` | the largest count at +4.0251 (Lys4, dimethyl), +6.0201 (Lys6, Arg6) and +8.0444 Da (dimethyl), and its ratio |
+| `silac` | `yes` when both `lys8_pairs` and `arg10_pairs` are >= 30 and both ratios >= 2 |
+
+Effect on the call:
+
+- `silac` `yes` and no call or a `label-free` call: the call becomes
+  `K:Lys8+R:Arg10` (`basis` `precursor_pairs`). A call that names a label
+  stays.
+- A no call with the reason `few_spectra` or `no_reference`, the reporter
+  gate `none`, at least 500 precursors and no pair signal (`lys8_pairs`,
+  `arg10_pairs` and `other_pairs` all below 30 pairs or below a ratio of 2):
+  the call becomes `label-free` (`basis` `absence`). With any other gate the
+  no call stays.
+
+On the 99 development runs the two rules give 93 right results instead of 86:
+the pair rule adds two SILAC runs with ion-trap MS2 (PXD011848, PXD050844),
+the absence rule five label-free runs with few tags; no result gets worse.
+Limits:
+
+- The thresholds were set on the development runs; there is no held-out test.
+- All development runs that the absence rule decides are label-free, and
+  there is no dimethyl run among the 99, so the rate of labelled runs that
+  the rule calls `label-free` is not measured.
+- A sample labelled in one channel only (all heavy, or light dimethyl only)
+  shows no pairs; the absence rule calls it `label-free`.
+- The pair rule sees Lys8 with Arg10 only. Other heavy labels (Lys4, Lys6,
+  Arg6, dimethyl channels) block the absence call through `other_pairs`, but
+  are not called from pairs.
 
 ### `ld_call`
 
@@ -314,7 +360,7 @@ needs new runs. The `low_resolution_ms2` reason has not been evaluated.
 | `status` | `call` or `no_call` |
 | `labels` | the labels called, `+`-joined: an N label by name (`TMT`, `Dimethyl`, `iTRAQ8plex`), others `<site>:<name>` (`K:TMT`, `K:Lys8`, `R:Arg6`), unknown ones `unknown:<site><+delta>`, near-isobaric ones that the calibration cannot separate `ambiguous:<a>|<b>` (e.g. `ambiguous:iTRAQ8plex|TMTpro`: isobaric, not decided); `label-free`; `-` on a no call |
 | `sites` | the sites of the called labels, comma-joined |
-| `basis` | `site_scan`, or `reporter_ions` when the reporter gate changed the call (see `ld_reporter`) |
+| `basis` | `site_scan`; `reporter_ions` when the reporter gate changed the call (see `ld_reporter`); `precursor_pairs` or `absence` when the precursor pairs did (see `ld_pair`) |
 | `reason` | `low_resolution`, `low_resolution_ms2` (ion-trap MS2 scans), `cz_only`, `few_spectra` (below 175 counted spectra), `no_reference`, `no_reporter_ions` (an isobaric label call without reporter ions); `-` on a call |
 
 **Call rule (priors; the evidence bar set on development runs only; it
