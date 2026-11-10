@@ -1,7 +1,8 @@
 # a/x ions (`-ion_series ax`, `-ion_series_photo ax`)
 
-FASTag 1.13, backlog item 11. Experimental and opt-in: with both options at their defaults
-(`-ion_series by`, `-ion_series_photo by`) every output is byte-identical to 1.12.
+FASTag 1.13, backlog item 11. Experimental and opt-in; the a/x reading **failed** its held-out test (see
+Validation). With both options at their defaults (`-ion_series by`, `-ion_series_photo by`) every output is
+byte-identical to 1.12.
 
 ## What is read
 

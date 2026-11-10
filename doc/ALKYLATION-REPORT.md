@@ -268,9 +268,8 @@ Backlog #22, src/AlkylationTags.h. This report tries the same call without a
 protein database. It is opt-in and experimental. On development data it calls
 61 of 123 runs, 51 of them as the SDRF annotation states (see "Development
 result" below); unalkylated and low-resolution runs are rarely called. A
-held-out test followed and passed at the margin (see "Held-out result" below).
-The report's `alkt_run.status` row and the `alkylation_tags_call.status`
-description were written before that test and still say that there is none. With the option off nothing
+held-out test followed and passed at the margin (see "Held-out result" below);
+the report's `alkt_run.status` row states it. With the option off nothing
 runs and no output changes. With it on, the tag TSV and every other result file
 are byte-identical, with two exceptions: the log gains one line, and an
 `-out_spectra` mzML records `parameter: alkylation_tags_out`, as it records
@@ -399,6 +398,7 @@ Limits of this result:
   1 of them as `none`. It does not confirm the absence of alkylation.
 - Only Thermo data-dependent runs with high-resolution MS2 (Orbitrap, Astral)
   were tested; timsTOF and other TOF data were not.
+- The second pass on spectra read as a/x ions (`-ion_series ax`) is untested.
 
 **Cost.** One more tagging of every MS2 spectrum. The alphabet has five more
 residues and no gap edges.
@@ -413,7 +413,7 @@ gui/src/digestReport.ts names none of its sections and refuses it.
 |---|---|
 | `format` | 1 |
 | `method` | `shadow_tags` |
-| `status` | `experimental`: development result only, no held-out test |
+| `status` | `experimental`; the description gives the held-out result (passed at the margin: 40 of 57 runs called, 37 right) |
 | `forms` | the six candidate forms, comma-separated (n: 6) |
 | `c_mods_removed` | the run's C modifications that the second pass leaves out, as `Name (fixed)` / `Name (variable)`, or `-` |
 | `tag_lengths` | the seed lengths |
