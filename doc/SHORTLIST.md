@@ -195,7 +195,8 @@ is left under the name, and no configuration is written.
   Without a template a fragment is written whose header says to merge it.
 - The database in the configuration is `-fasta_out`, else the input database
   (WARN when that holds decoys, since the engine adds its own).
-- MSFragger: backlog.
+- **MSFragger** (`-search_engine msfragger`, experimental since 1.13, pinned
+  4.4.1): see "MSFragger configuration" below.
 
 Engine acceptance (`test/search_engine_smoke_test.sh` with `FASTAG_SAGE_BIN`
 and `FASTAG_COMET_BIN`, mandatory with `FASTAG_ENGINES_REQUIRED=1`) runs on
@@ -216,6 +217,83 @@ against the binary: the `isotope_error` value for 0..3 (copied from
 `-search_isotope_errors`), the 15 `variable_mod` slots and their 8-field
 format, an empty or 0-first `mass_offsets`, and how Comet treats negative
 offsets. Check a Comet configuration by hand before relying on it.
+
+## MSFragger configuration (1.13, backlog #18)
+
+`-search_engine msfragger` writes a complete `fragger.params` for MSFragger
+4.4.1 (`java -jar MSFragger-4.4.1.jar fragger.params <spectra>`), keys in the
+order of the engine's own `--config closed` file
+(`test/fixtures/msfragger_4.4.1_closed.params`), one `key = value` per line
+and no inline comments: MSFragger 4.4.1 reads a comment that follows the value
+after spaces as part of the value, so its own `--config` file stops with
+"labile ion type must be one of ..." on `labile_fragment_ion_series`. FASTag's
+values:
+
+- precursor: `precursor_mass_lower = -tol`, `precursor_mass_upper = +tol`,
+  `precursor_mass_units` (0 Da, 1 ppm) from `-search_precursor_tolerance`;
+  `precursor_true_tolerance`/`precursor_true_units` are separate keys and are
+  set to the same window: MSFragger assigns a PSM's delta to its offset or
+  isotope window with them, and with the 20 ppm default and mass offsets
+  4.4.1 exits 1 ("Could not find <delta> in the list");
+- fragment: `fragment_mass_tolerance`/`fragment_mass_units`; `calibrate_mass 0`
+  so the exported tolerances are the ones searched (set 2 for MSFragger's own
+  calibration);
+- `isotope_error` `0`, or `0/1/../n` for `-search_isotope_errors n`;
+- `mass_offsets`: 0 always first, then the `-search_shifts` offsets at 4
+  decimals, `/`-separated; negative offsets are kept (Comet's are dropped);
+  `localize_delta_mass 1` when offsets are exported, as the file recommends.
+  With a Da precursor window FASTag exports no offset: MSFragger 4.4.1 exited
+  1 on such a file in FASTag's test even with the true tolerance at the window
+  ("Could not find <delta> in the list"). `-search_shifts both` then marks each
+  offset `dropped_engine` (the variable modifications are still exported),
+  `-search_shifts offsets` is refused; use `-search_precursor_unit ppm`;
+- trypsin (`search_enzyme_name_1 trypsin`, cut `KR`, nocut `P`, sense `C`),
+  `allowed_missed_cleavage_1` from `-recon_missed_cleavages` (at most 5),
+  `num_enzyme_termini 2`; with a `-shortlist_protease` other than trypsin
+  (item 20) its rule instead: the rule's name in lower case, its cut and
+  no-cut residues, sense `C` or `N`, `num_enzyme_termini` 2 (`full`) or 1
+  (`semi`); `unspecific` (or `-shortlist_specificity none`) writes
+  `search_enzyme_name_1 nonspecific`, empty cut and no-cut, and
+  `num_enzyme_termini 0`;
+- variable modifications in `variable_mod_01..16` (only the used slots; the
+  default file's Oxidation and protein N-term Acetyl are not kept):
+  `<mass> <site> <max>`, site the residue, `n^`/`c^` a peptide terminus,
+  `[^`/`]^` a protein terminus, `nQ`/`[M` a terminus on one residue; max 3
+  on residues, 1 on termini. More than 16 is refused; `-search_shifts` caps at 16;
+- fixed modifications as `add_*` (every key written, 0.0 unless set, so the
+  default file's `add_C_cysteine 57.02146` is off without a fixed CAM). A fixed
+  terminal modification on one residue, and fixed modifications on MSFragger's
+  user amino acids (B, J, O, U, X, Z), are refused;
+- `decoy_prefix` `rev_` (Philosopher/FragPipe), or `-search_decoy_prefix`;
+  `num_threads` from `-threads` (an explicit `-threads n` writes n; FASTag's
+  default `-threads 0` writes 0, which MSFragger reads as every CPU, so give
+  `-threads` on a large shared node); every other key keeps the
+  `--config closed` default.
+
+**Decoys.** MSFragger generates none (`decoy_prefix` is "used for parameter
+optimization only"); its FDR tools need them in the database. With
+`-fasta_out` and `-search_engine msfragger`, FASTag appends one decoy per
+written entry (database entries and background), after all of them:
+identifier `<prefix><identifier>`, the same description, the sequence
+reversed whole (DecoyDatabase `-method reverse`, Philosopher). The log says
+"N entries and N reversed decoys". Sage and Comet `-fasta_out` are unchanged
+(no decoys). Without `-fasta_out` the input database is named, and it must be
+a target-decoy database: at least 40 % of its entries start with the prefix
+(DecoyHelper's rule, case-sensitive as in MSFragger); otherwise refused.
+
+**Verification.** `msfragger_config_test` compares the file with MSFragger
+4.4.1's own `--config closed` key set and with the parameters MSFragger
+printed ("Parameters:") and wrote into its pepXML (`<aminoacid_modification>`,
+`<terminal_modification>`) when it ran a golden plan with seven variable
+modifications of every site kind, two fixed ones, a positive and a negative
+offset and isotope errors 0..2
+(`test/fixtures/msfragger_4.4.1_echo.txt`, recorded on node data
+2026-11-09): every managed value must equal what MSFragger read, and every
+modification must be modelled on the site OpenMS gives it. With
+`FASTAG_MSFRAGGER_JAR`, `search_engine_smoke_test` runs MSFragger on the
+fixture (20 target PSMs in the first run, prsA/metK/rplF found) and checks
+the echoed parameters again. `msfragger_cli_test` covers the decoys, the
+refusals and `-search_shifts` with MSFragger.
 
 ## Mass shifts as engine configuration (1.12, #17)
 

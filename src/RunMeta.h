@@ -32,6 +32,7 @@
 
 #include "Digest.h"
 
+#include <cmath>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -44,9 +45,15 @@ namespace FASTag::RunReport
   /// 3 = format 2, then the E activation rows (#15 phase A).
   /// 4 = format 3, then the E precursor-hypothesis rows (#6, wave 2).
   /// 5 = format 4, then the E ion-series rows (#15 phase B, wave 2).
+  /// 6 = format 5, then the 1.13 complement-tolerance rows (backlog item 15).
+  ///     They are written only under -complement_tolerance_unit auto; a
+  ///     report without them is format 5 and says 5 (kFormatVersionNoAuto),
+  ///     so every report of a run without auto keeps its bytes.
   /// Bumped once per item in the PLAN-INTEGRATION merge order (E#7 adds
   /// fields only, E#9 = 2, E#15A = 3, E#6 = 4, E#15B = 5).
-  inline constexpr int kFormatVersion = 5;
+  inline constexpr int kFormatVersion = 6;
+  /// The version a Versioned report without the format-6 rows writes.
+  inline constexpr int kFormatVersionNoAuto = 5;
 
   /// Run-level facts shared by every long-form report. Filled once per run.
   struct RunMeta
@@ -89,6 +96,16 @@ namespace FASTag::RunReport
     std::size_t charge_ambiguous = 0;        ///< selected: the call of an ambiguous pair
     std::size_t charge_assumed = 0;          ///< selected: 2 without evidence
     std::size_t charge_enumerated = 0;       ///< selected: one of -charge_min..-charge_max
+    std::size_t charge_overridden = 0;       ///< 1.13 selected: a header charge replaced by the check call
+    // 1.13 (backlog #14): -check_header_charge and its verdicts; rows only
+    // when it is not off, so every report is unchanged at the default.
+    std::string check_header_charge = "off";
+    std::size_t header_checked = 0;
+    std::size_t header_agree = 0;
+    std::size_t header_disagree = 0;
+    std::size_t header_ambiguous = 0;
+    std::size_t header_nocall = 0;
+    std::size_t header_overridden = 0;
     std::size_t iso_shifted = 0;             ///< selected hypothesis with an isotope offset
     std::size_t multi_hypothesis = 0;        ///< spectra tagged under more than one hypothesis
     // #15 phase B: -ion_series and the tagged MS2 spectra per series; filled
@@ -96,6 +113,29 @@ namespace FASTag::RunReport
     std::string ion_series = "by";
     std::size_t ion_series_ms2_by = 0;
     std::size_t ion_series_ms2_cz = 0;
+    // 1.13 item 11: a/x spectra, -ion_series_photo, and whether the run could
+    // read a/x (ax, or auto + -ion_series_photo ax): only then the
+    // ion_series_ax and ion_series_photo rows are written.
+    std::size_t ion_series_ms2_ax = 0;
+    std::string ion_series_photo = "by";
+    bool ion_series_ax_row = false;
+    // ---- 1.13 item 15 ----
+    // -complement_tolerance_unit auto (src/ComplementTol.h): whether it ran,
+    // whether the probe measured a window, the window in force (Da) and the
+    // probe's statistics. Written (format 6) only when complement_tol_auto.
+    bool complement_tol_auto = false;
+    bool complement_tol_measured = false;
+    double complement_tol = 0;          ///< Da, in force (measured, or -complement_tolerance)
+    std::string complement_tol_source = "fallback";  ///< measured, lower_bound or fallback
+    double complement_tol_measured_value = 0;        ///< Da as measured (measured only)
+    double complement_tol_window = 0;   ///< measurement window W, Da
+    std::size_t complement_probe_ms2 = 0;        ///< MS2 spectra the probe tagged
+    std::size_t complement_probe_confident = 0;  ///< of them, rank-1 tag at E <= 0.01
+    std::size_t complement_probe_pairs = 0;      ///< signed errors within W
+    double complement_probe_signal = 0;          ///< pairs minus the chance floor
+    double complement_probe_median = 0;          ///< floor-corrected median error, Da (measured only)
+    double complement_probe_mad = 0;             ///< floor-corrected MAD, Da (measured only)
+    std::string complement_tol_why;              ///< why not measured (fallback only)
     // ---- 1.12 A ----
     // ---- 1.12 D ----
     // ---- 1.12 F ----
@@ -135,7 +175,7 @@ namespace FASTag::RunReport
                  std::to_string(m.subsample_spectra) + " spectra were drawn for tagging (0 = all)."});
     if (emit == Emit::Legacy) return r;
 
-    const std::string v = std::to_string(kFormatVersion);
+    const std::string v = std::to_string(m.complement_tol_auto ? kFormatVersion : kFormatVersionNoAuto);
     r.push_back({"run", "run_report_version", v, "-", "The run section follows FASTag run report format " + v + "."});
     // ---- 1.12 E ----
     {
@@ -174,7 +214,7 @@ namespace FASTag::RunReport
         r.push_back({"run", "isotope_error", m.isotope_error, "-",
                      "Precursor isotope offsets " + m.isotope_error + " were considered."});
         const std::size_t all = m.charge_header + m.charge_possible + m.charge_inferred + m.charge_ambiguous
-                              + m.charge_assumed + m.charge_enumerated;
+                              + m.charge_assumed + m.charge_enumerated + m.charge_overridden;
         const std::string n = std::to_string(all);
         const auto row = [&](const char* key, std::size_t k, const std::string& how) {
           const std::string c = std::to_string(k);
@@ -188,15 +228,76 @@ namespace FASTag::RunReport
         row("charge_enumerated", m.charge_enumerated, "were reported at an enumerated charge");
         row("isotope_shifted", m.iso_shifted, "were reported at a precursor isotope offset other than 0");
         row("multi_hypothesis", m.multi_hypothesis, "were tagged under more than one precursor hypothesis");
+        if (m.check_header_charge != "off")
+        {
+          // 1.13: value = spectra, n = header-charged MS2 spectra checked.
+          row("charge_overridden", m.charge_overridden, "were reported at a check call instead of their header charge");
+          r.push_back({"run", "check_header_charge", m.check_header_charge, "-",
+                       "Header charges were checked under -check_header_charge " + m.check_header_charge + "."});
+          const std::string hn = std::to_string(m.header_checked);
+          const auto hrow = [&](const char* key, std::size_t k, const std::string& how) {
+            const std::string c = std::to_string(k);
+            r.push_back({"run", key, c, hn, c + " of " + hn + " header-charged MS2 spectra " + how + "."});
+          };
+          hrow("header_charge_agree", m.header_agree, "agree with their complement-pair evidence");
+          hrow("header_charge_disagree", m.header_disagree, "disagree with their complement-pair evidence");
+          hrow("header_charge_ambiguous", m.header_ambiguous, "have two close supported charges, neither the header");
+          hrow("header_charge_nocall", m.header_nocall, "have no charge evidence either way");
+          hrow("header_charge_overridden", m.header_overridden, "were tagged at the supported charge (override)");
+        }
       }
       {
         // #15 phase B: value = spectra read as the series, n = all tagged MS2.
-        const std::string n = std::to_string(m.ion_series_ms2_by + m.ion_series_ms2_cz);
+        const std::string n = std::to_string(m.ion_series_ms2_by + m.ion_series_ms2_cz + m.ion_series_ms2_ax);
         r.push_back({"run", "ion_series", m.ion_series, "-",
                      "MS2 spectra were read under -ion_series " + m.ion_series + "."});
         const std::string by = std::to_string(m.ion_series_ms2_by), cz = std::to_string(m.ion_series_ms2_cz);
         r.push_back({"run", "ion_series_by", by, n, by + " of " + n + " MS2 spectra were tagged as b/y ions."});
         r.push_back({"run", "ion_series_cz", cz, n, cz + " of " + n + " MS2 spectra were tagged as c/z-dot ions."});
+        if (m.ion_series_ax_row)
+        {
+          const std::string ax = std::to_string(m.ion_series_ms2_ax);
+          r.push_back({"run", "ion_series_ax", ax, n, ax + " of " + n + " MS2 spectra were tagged as a/x ions."});
+          r.push_back({"run", "ion_series_photo", m.ion_series_photo, "-",
+                       "Photodissociation spectra were read under -ion_series_photo " + m.ion_series_photo + "."});
+        }
+      }
+    }
+    // ---- 1.13 item 15 (format 6; only under -complement_tolerance_unit auto) ----
+    if (m.complement_tol_auto)
+    {
+      // The window at full precision: given back as -complement_tolerance
+      // with -complement_tolerance_unit Da it reproduces the run's tags.
+      const std::string tol = num(m.complement_tol);
+      const std::string w = num(m.complement_tol_window);
+      r.push_back({"run", "complement_tolerance", tol, "-",
+                   "The complement window in force was " + tol + " Da (-complement_tolerance_unit auto)."});
+      const std::string& src = m.complement_tol_source;
+      r.push_back({"run", "complement_tolerance_source", src, "-",
+                   src == "measured"      ? "The window was measured on the run's probe."
+                   : src == "lower_bound" ? "The measured window was below -complement_tolerance, the lower bound."
+                                          : "The window is -complement_tolerance: " + m.complement_tol_why + "."});
+      if (m.complement_tol_measured)
+      {
+        const std::string mv = num(m.complement_tol_measured_value);
+        r.push_back({"run", "complement_tolerance_measured", mv, "-",
+                     "The probe measured a complement window of " + mv + " Da."});
+      }
+      const std::string ms2 = std::to_string(m.complement_probe_ms2);
+      const std::string conf = std::to_string(m.complement_probe_confident);
+      const std::string pairs = std::to_string(m.complement_probe_pairs);
+      r.push_back({"run", "complement_probe_confident", conf, ms2,
+                   conf + " of " + ms2 + " probe MS2 spectra had a rank-1 tag at E <= 0.01."});
+      const std::string sig = std::to_string(std::lround(m.complement_probe_signal));
+      r.push_back({"run", "complement_probe_signal", sig, pairs,
+                   pairs + " complement pairs fell within " + w + " Da, " + sig + " above the chance floor."});
+      if (m.complement_tol_measured)
+      {
+        const std::string med = num(m.complement_probe_median), mad = num(m.complement_probe_mad);
+        r.push_back({"run", "complement_probe_median", med, "-",
+                     "The floor-corrected median complement error was " + med + " Da."});
+        r.push_back({"run", "complement_probe_mad", mad, "-",
+                     "The floor-corrected median absolute deviation of the complement error was " + mad + " Da."});
       }
     }
     // ---- 1.12 A ----

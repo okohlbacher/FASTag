@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdio>
 #include <fstream>
 #include <limits>
 #include <numeric>
@@ -84,7 +85,7 @@ namespace FASTag::SearchConfig
   std::string decoyPrefix(const SearchPlan& p, const std::string& engine)
   {
     if (!p.decoy_prefix.empty()) return p.decoy_prefix;
-    return engine == "comet" ? "DECOY_" : "rev_";
+    return engine == "comet" ? "DECOY_" : "rev_";  // Sage, MSFragger (Philosopher): rev_
   }
 
   std::string sageModKey(const ResidueModification& mod)
@@ -306,6 +307,226 @@ namespace FASTag::SearchConfig
        << "# A FRAGMENT, not a complete comet.params: merge it into the defaults of `comet -p`\n"
        << "# by passing that file as -search_config_template. Database search-space reduction\n"
        << "# from tag placements, not an identification and not FDR-controlled.\n"
+       << "# spectra: " << p.spectra << "\n";
+    for (const auto& kv : keys) os << kv.first << " = " << kv.second << "\n";
+    return os.str();
+  }
+
+  // ---- MSFragger (1.13, backlog #18) ---------------------------------------
+
+  namespace
+  {
+    constexpr int kMSFraggerVariableSlots = 16;
+
+    /// `java -jar MSFragger-4.4.1.jar --config closed`, in its order, without
+    /// the comments (test/fixtures/msfragger_4.4.1_closed.params). The
+    /// variable_mod_NN slots are written where variable_mod_01 stands.
+    const std::vector<std::pair<const char*, const char*>>& msfraggerDefaults()
+    {
+      static const std::vector<std::pair<const char*, const char*>> keys = {
+          {"database_name", ""}, {"num_threads", "0"},
+          {"precursor_mass_lower", "-20"}, {"precursor_mass_upper", "20"}, {"precursor_mass_units", "1"},
+          {"data_type", "0"},
+          {"precursor_true_tolerance", "20"}, {"precursor_true_units", "1"},
+          {"fragment_mass_tolerance", "20"}, {"fragment_mass_units", "1"},
+          {"calibrate_mass", "0"}, {"use_all_mods_in_first_search", "0"}, {"decoy_prefix", "rev_"},
+          {"deisotope", "1"}, {"deneutralloss", "1"},
+          {"isotope_error", "0"}, {"mass_offsets", "0"}, {"mass_offsets_detailed", ""},
+          {"use_detailed_offsets", "0"}, {"precursor_mass_mode", "selected"},
+          {"remove_precursor_peak", "1"}, {"remove_precursor_range", "-1.500000,1.500000"},
+          {"intensity_transform", "0"}, {"activation_types", "all"}, {"analyzer_types", "all"},
+          {"group_variable", "0"}, {"require_precursor", "1"}, {"reuse_dia_fragment_peaks", "0"},
+          {"write_calibrated_mzml", "0"}, {"write_uncalibrated_mzml", "1"}, {"write_mzbin_all", "0"},
+          {"mass_diff_to_variable_mod", "0"},
+          {"localize_delta_mass", "0"}, {"delta_mass_exclude_ranges", "(-1.5,3.5)"},
+          {"fragment_ion_series", "b,y"}, {"labile_fragment_ion_series", "b,y"}, {"ion_series_definitions", ""},
+          {"labile_search_mode", "off"}, {"restrict_deltamass_to", "all"}, {"diagnostic_intensity_filter", "0"},
+          {"Y_type_masses", ""}, {"diagnostic_fragments", ""}, {"remainder_fragment_masses", ""},
+          {"search_enzyme_name_1", "trypsin"}, {"search_enzyme_cut_1", "KR"}, {"search_enzyme_nocut_1", "P"},
+          {"search_enzyme_sense_1", "C"}, {"allowed_missed_cleavage_1", "2"},
+          {"search_enzyme_name_2", "null"}, {"search_enzyme_cut_2", ""}, {"search_enzyme_nocut_2", ""},
+          {"search_enzyme_sense_2", "C"}, {"allowed_missed_cleavage_2", "2"},
+          {"num_enzyme_termini", "2"}, {"clip_nTerm_M", "1"},
+          {"variable_mod_01", nullptr},
+          {"allow_multiple_variable_mods_on_residue", "0"}, {"max_variable_mods_per_peptide", "3"},
+          {"max_variable_mods_combinations", "5000"},
+          {"output_format", "pepXML_pin"}, {"output_report_topN", "1"}, {"output_max_expect", "50"},
+          {"report_alternative_proteins", "1"},
+          {"precursor_charge", "1 4"}, {"override_charge", "0"},
+          {"digest_min_length", "7"}, {"digest_max_length", "50"}, {"digest_mass_range", "500.0 5000.0"},
+          {"max_fragment_charge", "2"},
+          {"track_zero_topN", "0"}, {"zero_bin_accept_expect", "0"}, {"zero_bin_mult_expect", "1"},
+          {"check_spectral_files", "1"}, {"minimum_peaks", "15"}, {"use_topN_peaks", "150"},
+          {"min_fragments_modelling", "2"}, {"min_matched_fragments", "4"}, {"min_sequence_matches", "2"},
+          {"minimum_ratio", "0.01"}, {"clear_mz_range", "0.0 0.0"},
+          {"add_Cterm_peptide", nullptr}, {"add_Nterm_peptide", nullptr}, {"add_Cterm_protein", nullptr},
+          {"add_Nterm_protein", nullptr},
+          {"add_G_glycine", nullptr}, {"add_A_alanine", nullptr}, {"add_S_serine", nullptr},
+          {"add_P_proline", nullptr}, {"add_V_valine", nullptr}, {"add_T_threonine", nullptr},
+          {"add_C_cysteine", nullptr}, {"add_L_leucine", nullptr}, {"add_I_isoleucine", nullptr},
+          {"add_N_asparagine", nullptr}, {"add_D_aspartic_acid", nullptr}, {"add_Q_glutamine", nullptr},
+          {"add_K_lysine", nullptr}, {"add_E_glutamic_acid", nullptr}, {"add_M_methionine", nullptr},
+          {"add_H_histidine", nullptr}, {"add_F_phenylalanine", nullptr}, {"add_R_arginine", nullptr},
+          {"add_Y_tyrosine", nullptr}, {"add_W_tryptophan", nullptr},
+          {"add_B_user_amino_acid", nullptr}, {"add_J_user_amino_acid", nullptr}, {"add_O_user_amino_acid", nullptr},
+          {"add_U_user_amino_acid", nullptr}, {"add_X_user_amino_acid", nullptr}, {"add_Z_user_amino_acid", nullptr}};
+      return keys;
+    }
+  }
+
+  std::string msfraggerSite(const ResidueModification& mod)
+  {
+    const char o = mod.getOrigin();
+    const bool any = o == 'X' || o == '\0';
+    std::string term;
+    switch (mod.getTermSpecificity())
+    {
+      case ResidueModification::N_TERM: term = "n"; break;
+      case ResidueModification::C_TERM: term = "c"; break;
+      case ResidueModification::PROTEIN_N_TERM: term = "["; break;
+      case ResidueModification::PROTEIN_C_TERM: term = "]"; break;
+      default:
+        return any ? std::string() : std::string(1, o);
+    }
+    return term + (any ? '^' : o);
+  }
+
+  std::string msfraggerKeys(const SearchPlan& p, std::vector<std::pair<std::string, std::string>>& keys)
+  {
+    keys.clear();
+    if (p.missed_cleavages > 5) return "MSFragger allows at most 5 missed cleavages (allowed_missed_cleavage_1)";
+    if (p.missed_cleavages < 0) return "a negative number of missed cleavages";
+    if (p.isotope_errors < 0 || p.isotope_errors > 3) return "FASTag exports MSFragger isotope errors 0..3 only";
+    if (static_cast<int>(p.variable.size()) > kMSFraggerVariableSlots)
+      return "MSFragger has " + std::to_string(kMSFraggerVariableSlots) + " variable modification slots";
+    if (!p.precursor_ppm && !p.mass_offsets.empty())
+      return "MSFragger 4.4.1 exits 1 on mass offsets with a Da precursor window (\"Could not find <delta> in the "
+             "list\"); use a ppm precursor window";
+    if (p.threads < 0) return "a negative number of threads";
+    std::map<std::string, std::string> v;
+    v["num_threads"] = std::to_string(p.threads);
+    v["database_name"] = p.database;
+    v["decoy_prefix"] = decoyPrefix(p, "msfragger");
+    const std::string ptol = shortest(p.precursor_tolerance), punit = p.precursor_ppm ? "1" : "0";
+    v["precursor_mass_lower"] = shortest(-p.precursor_tolerance);
+    v["precursor_mass_upper"] = ptol;
+    v["precursor_mass_units"] = punit;
+    // The true tolerance assigns a PSM's delta to its offset/isotope window;
+    // left at its 20 ppm default MSFragger 4.4.1 exits 1 on offsets outside it.
+    v["precursor_true_tolerance"] = ptol;
+    v["precursor_true_units"] = punit;
+    v["fragment_mass_tolerance"] = shortest(p.fragment_tolerance);
+    v["fragment_mass_units"] = p.fragment_ppm ? "1" : "0";
+    std::string iso = "0";
+    for (int i = 1; i <= p.isotope_errors; ++i) iso += "/" + std::to_string(i);
+    v["isotope_error"] = iso;
+    std::string offsets = "0";
+    for (double o : p.mass_offsets)
+      if (o != 0.0) offsets += "/" + fixed(o, 4);
+    v["mass_offsets"] = offsets;
+    if (offsets != "0") v["localize_delta_mass"] = "1";
+    v["allowed_missed_cleavage_1"] = std::to_string(p.missed_cleavages);
+    // 1.13 item 20: the placement rule (left at the trypsin defaults above
+    // unless -shortlist_protease names another). num_enzyme_termini: 2 fully,
+    // 1 semi, 0 nonspecific (MSFragger's encoding, as FragPipe writes it).
+    if (!p.enzyme.isDefault())
+    {
+      if (p.enzyme.unspecific())
+      {
+        v["search_enzyme_name_1"] = "nonspecific";
+        v["search_enzyme_cut_1"] = "";
+        v["search_enzyme_nocut_1"] = "";
+        v["search_enzyme_sense_1"] = "C";
+        v["num_enzyme_termini"] = "0";
+      }
+      else
+      {
+        std::string name = p.enzyme.name;
+        for (char& c : name) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        v["search_enzyme_name_1"] = name;
+        v["search_enzyme_cut_1"] = p.enzyme.cut;
+        v["search_enzyme_nocut_1"] = p.enzyme.nocut;
+        v["search_enzyme_sense_1"] = p.enzyme.c_terminal ? "C" : "N";
+        v["num_enzyme_termini"] = p.enzyme.termini == 1 ? "1" : "2";
+      }
+    }
+    std::vector<std::pair<std::string, std::string>> slots;
+    for (std::size_t i = 0; i < p.variable.size(); ++i)
+    {
+      const ResidueModification& m = *p.variable[i];
+      const std::string site = msfraggerSite(m);
+      if (site.empty()) return "MSFragger: '" + m.getFullId() + "' is a modification on any residue; FASTag does not export it";
+      const bool terminal = m.getTermSpecificity() != ResidueModification::ANYWHERE;
+      char name[24];
+      std::snprintf(name, sizeof(name), "variable_mod_%02d", static_cast<int>(i + 1));
+      slots.emplace_back(name, fixed(m.getDiffMonoMass(), 6) + " " + site + (terminal ? " 1" : " 3"));
+    }
+    std::map<std::string, double> add;
+    for (const ResidueModification* m : p.fixed)
+    {
+      const auto ts = m->getTermSpecificity();
+      const char o = m->getOrigin();
+      const bool any = o == 'X' || o == '\0';
+      std::string key;
+      if (ts == ResidueModification::ANYWHERE && !any)
+      {
+        for (const auto& kv : msfraggerDefaults())
+        {
+          const std::string k = kv.first;
+          if (k.size() > 6 && k.compare(0, 4, "add_") == 0 && k[4] == o && k[5] == '_' &&
+              k.find("user_amino_acid") == std::string::npos)
+            key = k;
+        }
+        if (key.empty())
+          return "MSFragger cannot apply '" + m->getFullId() + "' as a fixed modification (" + std::string(1, o) +
+                 " is a user amino acid there)";
+      }
+      else if (any)
+      {
+        if (ts == ResidueModification::N_TERM) key = "add_Nterm_peptide";
+        else if (ts == ResidueModification::C_TERM) key = "add_Cterm_peptide";
+        else if (ts == ResidueModification::PROTEIN_N_TERM) key = "add_Nterm_protein";
+        else if (ts == ResidueModification::PROTEIN_C_TERM) key = "add_Cterm_protein";
+      }
+      if (key.empty())
+        return "MSFragger cannot apply '" + m->getFullId() + "' as a fixed modification (a terminal mod on one residue)";
+      add[key] += m->getDiffMonoMass();
+    }
+    for (const auto& kv : msfraggerDefaults())
+    {
+      const std::string k = kv.first;
+      if (k == "variable_mod_01")
+      {
+        keys.insert(keys.end(), slots.begin(), slots.end());
+        continue;
+      }
+      if (k.compare(0, 4, "add_") == 0)
+      {
+        const auto it = add.find(k);
+        keys.emplace_back(k, it == add.end() ? std::string("0.0") : fixed(it->second, 6));
+        continue;
+      }
+      const auto it = v.find(k);
+      keys.emplace_back(k, it != v.end() ? it->second : std::string(kv.second));
+    }
+    return std::string();
+  }
+
+  std::string renderMSFragger(const SearchPlan& p, std::string* err)
+  {
+    std::vector<std::pair<std::string, std::string>> keys;
+    const std::string e = msfraggerKeys(p, keys);
+    if (!e.empty())
+    {
+      if (err) *err = e;
+      return std::string();
+    }
+    std::ostringstream os;
+    os << "# MSFragger-4.4.1 parameters written by FASTag " << p.fastag_version << " (-search_config_out).\n"
+       << "# A complete fragger.params: java -jar MSFragger.jar <this file> <spectra>. Database\n"
+       << "# search-space reduction from tag placements, not an identification and not FDR-controlled.\n"
+       << "# MSFragger does not generate decoys: the database holds them (decoy_prefix).\n"
+       << "# calibrate_mass is 0 so the exported tolerances are searched; 2 lets MSFragger calibrate.\n"
        << "# spectra: " << p.spectra << "\n";
     for (const auto& kv : keys) os << kv.first << " = " << kv.second << "\n";
     return os.str();
@@ -587,6 +808,10 @@ namespace FASTag::SearchConfig
     const bool var_ok = s.mode == ShiftMode::Variable || s.mode == ShiftMode::Both;
     const bool off_ok = s.mode == ShiftMode::Offsets || s.mode == ShiftMode::Both;
     const bool comet = s.engine == "comet";
+    const bool msfragger = s.engine == "msfragger";  // 1.13 #18: offsets, also negative ones; 16 slots
+    // The engine's variable modification slots (Sage: no fixed limit).
+    const std::size_t slots = comet ? 15 : msfragger ? 16 : std::numeric_limits<std::size_t>::max();
+    const std::string slot_engine = comet ? "Comet" : "MSFragger";
     const double tol = s.tol;
     const double c13 = OpenMS::Constants::C13C12_MASSDIFF_U;
     // The plan's fixed chemistry the gaps are relative to: terminal labels
@@ -674,8 +899,8 @@ namespace FASTag::SearchConfig
       {
         if (!missing.empty())
           silac_why = "the modification list lacks " + missing;
-        else if (comet && plan.variable.size() + add.size() > 15)
-          silac_why = "Comet's 15 variable modification slots cannot hold the channel";
+        else if (plan.variable.size() + add.size() > slots)
+          silac_why = slot_engine + "'s " + std::to_string(slots) + " variable modification slots cannot hold the channel";
         if (silac_why.empty())
         {
           silac_state = 1;
@@ -937,10 +1162,10 @@ namespace FASTag::SearchConfig
           D.action = "dropped_cap";
           D.reason = "-shift_max_variable " + std::to_string(s.max_variable) + " reached (" + why + ")";
         }
-        else if (comet && plan.variable.size() + add.size() > 15)
+        else if (plan.variable.size() + add.size() > slots)
         {
           D.action = "dropped_cap";
-          D.reason = "Comet's 15 variable modification slots are full (" + why + ")";
+          D.reason = slot_engine + "'s " + std::to_string(slots) + " variable modification slots are full (" + why + ")";
         }
         else
         {
@@ -970,13 +1195,19 @@ namespace FASTag::SearchConfig
       D.exported = value;
       const std::string calib = out.bias != 0.0 ? "; centroid " + f4(base) + " minus the calibration bias " + f4(out.bias)
                                                 : std::string();
-      if (!comet)
+      if (!comet && !msfragger)
       {
         D.action = "dropped_engine";
         D.reason = "Sage has no mass offsets (" + why + ")";
         continue;
       }
-      if (value < 0)
+      if (msfragger && !plan.precursor_ppm)
+      {
+        D.action = "dropped_engine";
+        D.reason = "MSFragger 4.4.1 exits 1 on mass offsets with a Da precursor window (" + why + ")";
+        continue;
+      }
+      if (value < 0 && comet)
       {
         D.action = "dropped_engine";
         D.reason = "a negative offset: Comet's mass_offsets are kept non-negative (" + why + ")";
