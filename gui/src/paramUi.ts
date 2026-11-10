@@ -91,6 +91,11 @@ export interface ParamUi {
 /// a GUI run uses the CLI defaults. The exception is acquisition_check (under
 /// Spectra).
 const OPT_IN_1_12 = '1.12 command-line option, not in the form yet (CLI default applies)'
+const OPT_IN_1_13_EXPERIMENTAL = '1.13 experimental command-line option, not in the form (CLI default applies)'
+
+/// FASTag 1.13 experimental options: opt-in, output unchanged at the default,
+/// not offered in the form.
+const EXPERIMENTAL_1_13 = '1.13 experimental command-line option, not in the form (CLI default applies)'
 
 const SPECIES_OFF: Dependency = { on: 'species', note: 'species detection is off' }
 const GLYCO_OFF: Dependency = { on: 'glyco', note: 'oxonium flagging is off' }
@@ -860,10 +865,34 @@ export const PARAM_UI: Record<string, ParamUi> = {
       text: 'The lowest charge tried for a precursor without a charge, when it is not tagged as 2+.'
     }
   },
+  check_header_charge: {
+    hidden: EXPERIMENTAL_1_13,
+    help: {
+      text: 'Whether the charge the file gives for a precursor is checked against the charge its fragment pairs support: off, warn (report disagreements only) or override (tag a disagreeing spectrum at the supported charge). Experimental.'
+    }
+  },
+  check_header_margin: {
+    hidden: EXPERIMENTAL_1_13,
+    help: {
+      text: 'By how much the supported charge must beat the given charge before the header charge check calls a disagreement.'
+    }
+  },
+  check_header_out: {
+    hidden: EXPERIMENTAL_1_13,
+    help: {
+      text: 'Where the header charge check writes one row per spectrum with a given charge: the given charge, the supported charge, the evidence and the verdict.'
+    }
+  },
   complement_midp: {
     hidden: OPT_IN_1_12,
     help: {
       text: 'Score tags with no or one complement pair with the mid-p variant of the complement test.'
+    }
+  },
+  complement_probe: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'How many MS2 spectra the auto complement window is measured on (experimental).'
     }
   },
   complement_rule: {
@@ -887,7 +916,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   complement_tolerance_unit: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'Whether the complement window is a fixed value in Da or follows the fragment tolerance.'
+      text: 'Whether the complement window is a fixed value in Da, follows the fragment tolerance, or (auto, experimental) is measured on the run from the complement pairs of confident tags.'
     }
   },
   digest_calibration: {
@@ -914,6 +943,12 @@ export const PARAM_UI: Record<string, ParamUi> = {
       text: 'Give no digest call when its calibrated confidence is below this value. 0 turns it off.'
     }
   },
+  digest_quality: {
+    hidden: 'experimental (1.13): digestion-quality rows of -digest_out',
+    help: {
+      text: 'Add missed-cleavage and non-specific-end measurements for one enzyme (or the call: auto) to the digest report. Experimental.'
+    }
+  },
   digest_models_version: {
     hidden: OPT_IN_1_12,
     help: {
@@ -935,7 +970,13 @@ export const PARAM_UI: Record<string, ParamUi> = {
   ion_series: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'Read the spectra as b/y ions (the default), as c/z ions of ETD or ECD, or choose per spectrum from its activation (auto).'
+      text: 'Read the spectra as b/y ions (the default), as c/z ions of ETD or ECD, choose per spectrum from its activation (auto), or read them as a/x ions of UVPD (ax, experimental).'
+    }
+  },
+  ion_series_photo: {
+    hidden: OPT_IN_1_13_EXPERIMENTAL,
+    help: {
+      text: 'Under ion series auto: read photodissociation (UVPD) spectra as b/y ions (the default) or as a/x ions. Experimental.'
     }
   },
   isotope_error: {
@@ -983,7 +1024,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   search_engine: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'The search engine the settings are written for: Sage or Comet.'
+      text: 'The search engine the settings are written for: Sage, Comet or MSFragger (experimental; needs decoys in the database).'
     }
   },
   search_isotope_errors: {
@@ -1070,6 +1111,18 @@ export const PARAM_UI: Record<string, ParamUi> = {
       text: 'Write the smaller FASTA and the search settings even when the protease of the run does not fit tryptic placement.'
     }
   },
+  shortlist_protease: {
+    hidden: EXPERIMENTAL_1_13,
+    help: {
+      text: 'The cleavage rule the shortlist places tags with: trypsin (as in 1.12), the protease the run calls (auto), a named protease, or none (unspecific).'
+    }
+  },
+  shortlist_specificity: {
+    hidden: EXPERIMENTAL_1_13,
+    help: {
+      text: 'How many window ends must be cleavage sites of the -shortlist_protease rule: both (full), one (semi) or none.'
+    }
+  },
   shortlist_gapped: {
     hidden: OPT_IN_1_12,
     help: {
@@ -1145,7 +1198,17 @@ export const PARAM_UI: Record<string, ParamUi> = {
   unknown_charge: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'How a precursor whose charge the file does not give is tagged: as 2+ (the default, as before 1.12), at each possible charge, or at the charge its fragment pairs support best. A charge given in the file is never replaced.'
+      text: 'How a precursor whose charge the file does not give is tagged: as 2+ (the default, as before 1.12), at each possible charge, or at the charge its fragment pairs support best. A charge given in the file is never replaced (except by the experimental header charge check in override mode).'
+    }
+  },
+
+  // ---- Not in the form: FASTag 1.13 experimental options
+  label_call_min_tags: {
+    hidden: 'experimental 1.13 command-line option, not in the form (CLI default applies)',
+    depends: [{ on: 'label_out', note: 'only the label report uses it' }],
+    help: {
+      text: 'How many C-terminal tag ends the label call in the label report needs; with fewer it makes no call. The default 175 is the FASTag 1.12 call. At 0 every run with a ppm fragment tolerance gets a call, and with few tag ends a label-free call only means that none of the label rules fired (the mass-gap report can still show SILAC).',
+      tip: '0 is experimental: it failed its 1.13 held-out test.'
     }
   }
 }

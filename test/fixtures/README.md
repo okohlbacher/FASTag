@@ -142,6 +142,16 @@ aside. sha256
 `7be84af167c367b58732a9503f89328a2a790185dc4d1c660363bfb66525dff6`. Derived from
 the OpenMS example, so BSD-3-Clause as well.
 
+`label_1.12.0_Ecoli_MS2_small_ppm.tsv` — the `-label_out` report of the FASTag
+1.12.0 release candidate a117801 (FASTag.bin sha256 `c4c2ad67...`, node data
+`/scratch/kohlbach/fastag-heldout-1.12/rc-a117801/opt/FASTag`) on
+`Ecoli_MS2_small.mzML` with `-tag_length 4 -threads 2` (20 ppm): 0 C-terminal
+tag ends, so `label_call` is `no_call few_tags`. `test/digest_cli_test.sh`
+checks that the default (`-label_call_min_tags 175`, 1.13) writes it byte for byte, the
+`run version` row aside. sha256
+`8b3c5fa97ddc22fddf26daa61e785c95ed42467838ea4abbf4e58f57c27b104f`. Derived
+from the OpenMS example, so BSD-3-Clause as well.
+
 `digest_1.11.0_Ecoli_MS2_small_Da.tsv` — the `-digest_out` report of the same
 FASTag 1.11.0 run (same binary, input and options, written together with the
 label report above, whose sha256 it reproduced). `test/digest_cli_test.sh`
@@ -211,3 +221,35 @@ unexplained (12), -77.7777 unexplained (10). With `-extension 3` and
 dropped_engine). Derived from the vendored FASTA only, so the same licence.
 
 sha256: `shifts_insilico.mgf` `bb609510728087057effddcf1fec8b0a52cec4907e2e954cdd287d27cee4d257`.
+
+`msfragger_4.4.1_closed.params` — written by `java -jar MSFragger-4.4.1.jar
+--config closed` (MSFragger 4.4.1, OpenJDK 21.0.12.1, node data, 2026-11-09),
+unedited, sha256
+`0bb456769c6afc8e6c0759624b65def1cc87dae0a397a6bd6be9d70e5aeff0cd`.
+`msfragger_config_test` checks the key set and order of FASTag's MSFragger
+configuration against it. Note: MSFragger 4.4.1 does not run this file as it
+is (its `labile_fragment_ion_series` line carries a comment after spaces,
+which MSFragger reads as the value).
+
+`msfragger_4.4.1_echo.txt` — what MSFragger 4.4.1 read from the golden plan
+of `test/msfragger_config_test.cpp`: `msfragger_config_test --emit
+golden.params` (sha256 `3025697178e64d55869c1aff20a19ff54ba18931722562a303d10c2cf44cb631`),
+then `java -Xmx24g -jar MSFragger-4.4.1.jar golden.params run.mzML` with
+`run.mzML` = `Ecoli_MS2_small.mzML` and `golden_td.fasta` =
+`Ecoli_shortlist.fasta` plus a reversed `rev_` copy of every entry (exit 0;
+log sha256 `c6a2ad55...`, pepXML sha256 `80f8bdc7...`). The file holds the
+log's "Parameters:" block verbatim and the pepXML's sorted unique
+`<aminoacid_modification>` and `<terminal_modification>` elements except the
+26 mass-offset entries. Changing the golden plan needs a new run.
+
+## Complement-tolerance fixtures (1.13 item 15)
+
+`compltol_hires.mgf` and `compltol_lowres.mgf` (250 MS2 each), written by
+`make_compltol_fixture.py Ecoli_MS2_small.fasta .` (standard library only):
+in-silico charge-2 spectra of the tryptic peptides of `Ecoli_MS2_small.fasta`
+(b2..b(n-1), y1..y(n-1), 25 noise peaks), every fragment m/z with a Gaussian
+error of sd 0.004 Da (hires; a complement pair's 95% window 0.0111 Da) or
+0.1 Da (lowres; 0.277 Da). `complement_tol_cli_test` measures the window of
+`-complement_tolerance_unit auto` on them. sha256: `compltol_hires.mgf`
+`ff0210b513bf9c5515f845774617ca1de2959ed5c7f19d52d56e375e1cd3a7e0`,
+`compltol_lowres.mgf` `3437bfdef43f685735c8d00e39c302009ad4350d5173e5bd47e7254790ed8aa2`.

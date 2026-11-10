@@ -34,6 +34,7 @@
 #include "AlkylationCall.h"
 #include "Centroid.h"
 #include "CliParam.h"
+#include "ComplementTol.h"
 #include "Census.h"
 #include "CensusIds.h"
 #include "ClusterAcc.h"
@@ -51,6 +52,7 @@
 #include "Proforma.h"
 #include "ReconIds.h"
 #include "RunMeta.h"
+#include "Cleavage.h"
 #include "SearchConfig.h"
 #include "Sha256.h"
 #include "Shortlist.h"
@@ -91,6 +93,7 @@
 #include <memory>
 #include <mutex>
 #include <set>
+#include <iomanip>
 #include <sstream>
 #include <thread>
 #include <vector>
@@ -293,8 +296,31 @@ class TOPPFASTag : public TOPPBase
                                                                    : getParam_().getValue(name) == e.default_value;
       if (at_default) p.removeMetaValue(k);
     }
+    // 1.13 item 15: under -complement_tolerance_unit auto the window in force
+    // is not an option value, so it is recorded next to the options (full
+    // precision; with -complement_tolerance_unit Da it reproduces the tags).
+    // Absent without auto, so those exports keep their bytes.
+    if (compl_auto_rec_.on)
+    {
+      p.setMetaValue("complement_tolerance (auto)", compl_auto_rec_.tol);
+      p.setMetaValue("complement_tolerance (auto) source", compl_auto_rec_.source);
+      if (!compl_auto_rec_.measured.empty())
+        p.setMetaValue("complement_tolerance (auto) measured", compl_auto_rec_.measured);
+      p.setMetaValue("complement_tolerance (auto) probe", compl_auto_rec_.probe);
+    }
     return p;
   }
+
+  // What -complement_tolerance_unit auto decided (set by the probe in main_).
+  struct ComplAutoRecord
+  {
+    bool on = false;
+    std::string tol;       ///< Da in force, full precision
+    std::string source;    ///< measured, lower_bound (raised to -complement_tolerance) or fallback
+    std::string measured;  ///< Da as measured, full precision; empty when not measured
+    std::string probe;   ///< the probe's statistics, as logged
+  };
+  ComplAutoRecord compl_auto_rec_;
 
 public:
   // toolhandler_test = false: FASTag lives outside the OpenMS tree and so is
@@ -585,6 +611,12 @@ protected:
     registerIntOption_("digest_silac_min", "<n>", 50,
                        "K- and R-terminal tag ends each before -label_out's heavy shares are gated in", false, true);
     setMinInt_("digest_silac_min", 0);
+    // ---- 1.13: label call refit (backlog #8) ----
+    registerIntOption_("label_call_min_tags", "<n>", 175,
+                       "C-terminal tag ends -label_out's label_call needs; fewer give no_call few_tags "
+                       "(175: the FASTag 1.12 rule; 0, experimental: every ppm run is called)",
+                       false, true);
+    setMinInt_("label_call_min_tags", 0);
     registerDoubleOption_("massgap_window", "<Da>", 0.02,
                           "Gap window of -massgap_out on a ppm run", false, true);
     setMinFloat_("massgap_window", 0.0);
@@ -760,8 +792,17 @@ protected:
     registerStringOption_("complement_tolerance_unit", "<u>", FASTag::Cli::kComplementToleranceUnit,
                           "Da: the window is -complement_tolerance. fragment: "
                           "-complement_tol_factor scales the run's -fragment_tolerance at "
-                          "both partners", false, true);
-    setValidStrings_("complement_tolerance_unit", ListUtils::create<std::string>("Da,fragment"));
+                          "both partners. auto (experimental): the window is measured on the run, "
+                          "from the complement pairs of high-confidence tags in a probe of "
+                          "-complement_probe MS2 spectra; -complement_tolerance when too few pairs",
+                          false, true);
+    setValidStrings_("complement_tolerance_unit", ListUtils::create<std::string>("Da,fragment,auto"));
+    // 1.13 item 15 (src/ComplementTol.h): the probe size of
+    // -complement_tolerance_unit auto. Read only under auto.
+    registerIntOption_("complement_probe", "<n>", 500,
+                       "MS2 spectra the -complement_tolerance_unit auto probe tags to measure "
+                       "the complement window", false, true);
+    setMinInt_("complement_probe", 1);
     registerFlag_("complement_midp",
                   "Score complements with DirecTag's hypergeometric mid-p P(X>c) + P(X=c)/2 "
                   "for tags with 0 or 1 complemented peaks; 2 or more keep P(X>=c)", true);
@@ -777,7 +818,7 @@ protected:
                           "candidate when 2 is none). Every charge tagged is a listed possible charge, "
                           "else one of -charge_min..-charge_max. With several, E-values are multiplied "
                           "by their number and the reports count the charge-evidence choice only. A "
-                          "header charge is never replaced", false);
+                          "header charge is never replaced (except by -check_header_charge override)", false);
     setValidStrings_("unknown_charge", ListUtils::create<std::string>(FASTag::Hyp::kModeValues));
     registerIntOption_("charge_min", "<n>", FASTag::Hyp::kChargeMinDefault,
                        "Lowest charge -unknown_charge enumerate or infer tries (1 enables infer's "
@@ -800,15 +841,42 @@ protected:
                      "below 0.05 Da", false, true);
     setMinInt_("isotope_error", FASTag::Hyp::kIsotopeMin);
     setMaxInt_("isotope_error", FASTag::Hyp::kIsotopeMax);
+    // 1.13 (backlog #14): re-check header charges against the infer call.
+    registerStringOption_("check_header_charge", "<mode>", FASTag::Hyp::kHeaderCheckDefault,
+                          "Check every precursor charge the file gives against the charge its "
+                          "complement pairs support (the -unknown_charge infer call over "
+                          "-charge_min..-charge_max and the header charge): off (the default), warn "
+                          "(count and report disagreements, tag at the header charge) or override "
+                          "(tag a disagreeing spectrum at the supported charge; charge_src "
+                          "'overridden'; not recommended: on held-out Q Exactive data it broke more "
+                          "charges than it fixed). Experimental; validated on Q Exactive only (on "
+                          "Orbitrap Astral its disagreements were false)", false, true);
+    setValidStrings_("check_header_charge", ListUtils::create<std::string>(FASTag::Hyp::kHeaderCheckValues));
+    registerDoubleOption_("check_header_margin", "<value>", FASTag::Hyp::kHeaderMarginDefault,
+                          "Complement-pair excess by which the supported charge must beat the header "
+                          "charge's own for -check_header_charge to call a disagreement", false, true);
+    setMinFloat_("check_header_margin", 0.0);
+    registerOutputFile_("check_header_out", "<file>", "",
+                        "-check_header_charge: one row per header-charged MS2 spectrum (header "
+                        "charge, call, evidence, verdict)", false, true);
+    setValidFormats_("check_header_out", ListUtils::create<std::string>("tsv"));
     // #15 phase B: c/z-dot ions for electron activation (src/IonSeries.h).
     // Default by is FASTag 1.11; validation decides any other default.
     registerStringOption_("ion_series", "<mode>", FASTag::IonSeries::kModeDefault,
                           "Ion series the MS2 spectra are read as: by (b/y ions, as before 1.12), cz "
                           "(c/z-dot ions of electron transfer or capture dissociation, ETD/ECD), or auto "
                           "(c/z-dot for spectra whose activation is ETD or ECD, b/y for all others, hybrid "
-                          "EThcD/ETciD included). Under cz and auto the tag TSV gains an ion_series column "
-                          "when some spectrum can be read as c/z", false);
+                          "EThcD/ETciD included), or ax (a/x ions of photodissociation, UVPD, every spectrum; "
+                          "experimental). Under cz, auto and ax the tag TSV gains an ion_series column when some "
+                          "spectrum can be read as c/z or a/x", false);
     setValidStrings_("ion_series", ListUtils::create<std::string>(FASTag::IonSeries::kModeValues));
+    // 1.13 backlog item 11: a/x ions (photodissociation, UVPD); experimental.
+    registerStringOption_("ion_series_photo", "<series>", FASTag::IonSeries::kPhotoDefault,
+                          "Under -ion_series auto: the series photodissociation spectra (UVPD; activation "
+                          "MS:1000435 or a Thermo @uvpd filter token, and no collisional or electron method) "
+                          "are read as: by (as before 1.13) or ax (a/x ions). -ion_series ax reads every "
+                          "spectrum as a/x ions. Experimental", false, true);
+    setValidStrings_("ion_series_photo", ListUtils::create<std::string>(FASTag::IonSeries::kPhotoValues));
     // ---- 1.12 A: options ----
     // #5: ranked protein shortlist, reduced FASTA and a search-engine
     // configuration from the tag placements. A search-space reduction, NOT an
@@ -852,11 +920,27 @@ protected:
     registerFlag_("shortlist_force",
                   "Write -fasta_out and -search_config_out although the tag ends call a protease the "
                   "tryptic placement does not fit", true);
+    // ---- 1.13 item 20: protease-aware shortlist placement (experimental) ----
+    registerStringOption_("shortlist_protease", "<protease>", "trypsin",
+                          "Cleavage rule of the shortlist's placements and of -search_config_out. 'trypsin': "
+                          "tryptic windows, a confidently non-tryptic run is refused (FASTag 1.12). 'auto': the "
+                          "protease the tag ends call (trypsin when inconclusive). A protease name, or "
+                          "'unspecific': that rule. Except for 'trypsin', windows are found by flank mass and "
+                          "kept by the rule and -shortlist_specificity; only exact placements count", false, true);
+    setValidStrings_("shortlist_protease",
+                     ListUtils::create<std::string>("trypsin,auto,unspecific,lys-c,arg-c,asp-n,glu-c,chymotrypsin,lys-n"));
+    registerStringOption_("shortlist_specificity", "<mode>", "full",
+                          "With -shortlist_protease other than trypsin: 'full' both window ends at a cleavage "
+                          "site (or a protein terminus), 'semi' at least one, 'none' any window", false, true);
+    setValidStrings_("shortlist_specificity", ListUtils::create<std::string>("full,semi,none"));
     registerOutputFile_("search_config_out", "<file>", "",
-                        "Search-engine configuration for -fasta_out (or the input database): Sage JSON, or "
-                        "Comet parameters (merged into -search_config_template when given)", false);
-    registerStringOption_("search_engine", "<engine>", "sage", "Engine of -search_config_out", false);
-    setValidStrings_("search_engine", ListUtils::create<std::string>("sage,comet"));
+                        "Search-engine configuration for -fasta_out (or the input database): Sage JSON, "
+                        "Comet parameters (merged into -search_config_template when given), or a complete "
+                        "MSFragger fragger.params", false);
+    registerStringOption_("search_engine", "<engine>", "sage",
+                          "Engine of -search_config_out; msfragger (MSFragger 4.4.1, experimental) needs decoys "
+                          "in the database: -fasta_out then appends reversed ones", false);
+    setValidStrings_("search_engine", ListUtils::create<std::string>("sage,comet,msfragger"));
     registerInputFile_("search_config_template", "<file>", "",
                        "Comet only: a `comet -p` parameter file the managed keys are merged into", false);
     registerDoubleOption_("search_precursor_tolerance", "<f>", 10.0,
@@ -870,7 +954,7 @@ protected:
     setMinInt_("search_isotope_errors", 0);
     setMaxInt_("search_isotope_errors", 3);
     registerStringOption_("search_decoy_prefix", "<s>", "",
-                          "Decoy prefix the engine generates; empty = rev_ (Sage) or DECOY_ (Comet)", false);
+                          "Decoy prefix the engine generates; empty = rev_ (Sage, MSFragger) or DECOY_ (Comet)", false);
     // #17: the run's mass-gap peaks (the -massgap_out peaks) as variable
     // modifications or Comet mass offsets in -search_config_out. Candidates
     // for an FDR-controlling engine, NOT identifications. Off by default.
@@ -971,6 +1055,13 @@ protected:
                        "Calibration of p_correct for -digest_out (columns feature, coef). Default: the shipped "
                        "digest_calibration.tsv when p_correct is written", false, true);
     setValidFormats_("digest_calibration", ListUtils::create<std::string>("tsv"));
+    // 1.13 digqual (backlog 23): digestion quality rows of -digest_out. Off by
+    // default: without it -digest_out is the 1.12 report byte for byte.
+    registerStringOption_("digest_quality", "<enzyme>", "",
+                          "Append missed-cleavage and non-specific-end measurements for this enzyme to -digest_out: "
+                          "a model name of the protease table (e.g. Trypsin) or 'auto' (the report's call). "
+                          "Experimental; empty = off",
+                          false, true);
     // #3g the alkylation call (src/AlkylationCall.h), from the reconciler's
     // placements. Opt-in; every other output is the same with or without it.
     registerOutputFile_("alkylation_out", "<file>", "",
@@ -1360,12 +1451,20 @@ protected:
                           "-isotope_error at their defaults." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
+    // 1.13: override can tag a spectrum at another charge than its header's.
+    if (registeredNonDefault_("check_header_charge") && getStringOption_("check_header_charge") == "override")
+    {
+      OPENMS_LOG_ERROR << "-dump_spectrum prepares the peaks at the given precursor and its charge only and does "
+                          "not follow -check_header_charge override yet; leave it off or at warn." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
     P::DumpOptions opt;
     FASTag::Centroid::parseMode(getStringOption_("pick_profile"), opt.pick_mode);
     opt.pick_unknown_type = getFlag_("pick_unknown_type");
     opt.mzpeak_threads = std::min(std::max(1, omp_get_max_threads()), 8);
     opt.param = p;
     opt.ion_mode = FASTag::IonSeries::modeFromString(getStringOption_("ion_series"));
+    opt.photo_ax = getStringOption_("ion_series_photo") == "ax";
     const std::string id = getStringOption_("dump_spectrum");
     const P::DumpOutput r = P::dumpSpectrum(in, id, opt);
     if (r.status != P::Status::Ok)
@@ -1507,7 +1606,7 @@ protected:
     // setMin/MaxFloat_ cannot refuse NaN, and e.g. -shortlist_max_evalue nan
     // rejected every placement and -census_ids_fdr nan left every spectrum
     // unidentified, both with exit 0. Refused here, before any output opens.
-    for (const char* o : {"charge_infer_margin", "shortlist_max_evalue", "search_precursor_tolerance",
+    for (const char* o : {"charge_infer_margin", "check_header_margin", "shortlist_max_evalue", "search_precursor_tolerance",
                           "shift_site_min_share", "species_pi0", "digest_min_confidence", "alkylation_min_share",
                           "alkylation_window", "census_ids_fdr", "census_triage_evalue"})
     {
@@ -1595,11 +1694,16 @@ protected:
           {"pick_profile", nullptr},
           {"pick_unknown_type", nullptr},
           {"ion_series", nullptr},
+          {"ion_series_photo", nullptr},
           {"unknown_charge", nullptr},
           {"charge_min", nullptr},
           {"charge_max", nullptr},
           {"charge_infer_margin", nullptr},
           {"isotope_error", nullptr},
+          {"complement_probe", nullptr},
+          {"check_header_charge", nullptr},
+          {"check_header_margin", nullptr},
+          {"check_header_out", nullptr},
           // ---- 1.12 A: -stream refusals ----
           {"shortlist_out", nullptr},
           {"fasta_out", nullptr},
@@ -1622,6 +1726,12 @@ protected:
           {"probe_input", nullptr},
           {"dump_spectrum", nullptr},
       };
+      // 1.13 item 15: the probe needs random access to the run.
+      if (getStringOption_("complement_tolerance_unit") == "auto")
+      {
+        OPENMS_LOG_ERROR << "-stream cannot be combined with -complement_tolerance_unit auto." << std::endl;
+        return ILLEGAL_PARAMETERS;
+      }
       for (const StreamRefusal& r : stream_refusals)
         if (optionNonDefault_(r.option))
         {
@@ -1750,22 +1860,39 @@ protected:
     hyp_param.infer_margin = getDoubleOption_("charge_infer_margin");
     hyp_param.isotope_errors.clear();
     for (const Int k : getIntList_("isotope_error")) hyp_param.isotope_errors.push_back(k);
+    // 1.13 (backlog #14): -check_header_charge; off leaves every output as before.
+    FASTag::Hyp::parseHeaderCheck(getStringOption_("check_header_charge"), hyp_param.header_check);
+    hyp_param.header_margin = getDoubleOption_("check_header_margin");
+    const bool hdr_check_on = hyp_param.header_check != FASTag::Hyp::HeaderCheck::Off;
+    const std::string check_header_out = getStringOption_("check_header_out");
     if (const std::string herr = FASTag::Hyp::validate(hyp_param, p.frag_tol, p.tol_ppm); !herr.empty())
     {
       OPENMS_LOG_ERROR << herr << std::endl;
       return ILLEGAL_PARAMETERS;
     }
+    // 1.13: the held-out test of override (acceptance/1.13, item 14) found it
+    // net harmful on real (vendor) header charges; say so whenever it runs.
+    if (hyp_param.header_check == FASTag::Hyp::HeaderCheck::Override)
+      OPENMS_LOG_WARN << "-check_header_charge override is experimental and not recommended: on held-out Q Exactive "
+                         "data it broke more real header charges than it fixed, and on Orbitrap Astral its "
+                         "disagreements were false (doc/HEADER-CHARGE-CHECK.md)." << std::endl;
     const bool hyp_on = !hyp_param.isDefault();
     // #6: -species reads the selected hypothesis' rows only, through a per-row
     // flag carried beside the rows (Block::row_species).
     const bool species_sel_on = hyp_on && want_species;
     // The complement pairs the infer call counts: #2's rule and tolerance.
-    const FASTag::ComplementSpec hyp_cs = FASTag::ComplementSpec::fromParam(p);
+    // Not const: -complement_tolerance_unit auto sets the window after the
+    // probe (phase 5) and rebuilds both.
+    FASTag::ComplementSpec hyp_cs = FASTag::ComplementSpec::fromParam(p);
     // #15 phase B: a spectrum read as c/z-dot counts c/z-dot pairs (they sum
     // to M + H) for its charge and isotope evidence, as its tags do.
     FASTag::Param p_cz = p;
     p_cz.ion_pair = FASTag::IonSeries::ionPair(FASTag::IonSeries::Series::CZ);
-    const FASTag::ComplementSpec hyp_cs_cz = FASTag::ComplementSpec::fromParam(p_cz);
+    FASTag::ComplementSpec hyp_cs_cz = FASTag::ComplementSpec::fromParam(p_cz);
+    // 1.13 item 11: a/x cleavage pairs sum to M - H or M, for a spectrum read as a/x.
+    FASTag::Param p_ax = p;
+    p_ax.ion_pair = FASTag::IonSeries::ionPair(FASTag::IonSeries::Series::AX);
+    FASTag::ComplementSpec hyp_cs_ax = FASTag::ComplementSpec::fromParam(p_ax);
     // The residue modifications in use; -recon_id_out reports exactly these.
     StringList fixed_mods, variable_mods;
     double fixed_term_n = 0, fixed_term_c = 0;
@@ -1806,14 +1933,33 @@ protected:
     // c/z-dot ions (only the ion pair differs); under by it stays empty.
     const FASTag::IonSeries::Mode ion_mode = FASTag::IonSeries::modeFromString(getStringOption_("ion_series"));
     const FASTag::IonSeries::IonPair cz_pair = FASTag::IonSeries::ionPair(FASTag::IonSeries::Series::CZ);
-    std::vector<FASTag::Param> len_params_cz;
-    if (ion_mode != FASTag::IonSeries::Mode::By)
+    // 1.13 item 11: -ion_series ax, or auto with -ion_series_photo ax, adds
+    // a third set reading spectra as a/x ions.
+    const bool photo_ax =
+        ion_mode == FASTag::IonSeries::Mode::Auto && getStringOption_("ion_series_photo") == "ax";
+    const bool ax_tables = ion_mode == FASTag::IonSeries::Mode::Ax || photo_ax;
+    const bool cz_tables = ion_mode == FASTag::IonSeries::Mode::Cz || ion_mode == FASTag::IonSeries::Mode::Auto;
+    const FASTag::IonSeries::IonPair ax_pair = FASTag::IonSeries::ionPair(FASTag::IonSeries::Series::AX);
+    std::vector<FASTag::Param> len_params_cz, len_params_ax;
+    if (cz_tables)
     {
       len_params_cz = len_params;
       for (FASTag::Param& lp : len_params_cz) lp.ion_pair = cz_pair;
     }
-    auto build_tables = [&len_params, &len_params_cz](bool cz = false) {
-      const std::vector<FASTag::Param>& lps = cz ? len_params_cz : len_params;
+    if (ax_tables)
+    {
+      len_params_ax = len_params;
+      for (FASTag::Param& lp : len_params_ax) lp.ion_pair = ax_pair;
+    }
+    // The Params of series @p sr (b/y, c/z-dot or a/x).
+    const auto params_of = [&len_params, &len_params_cz, &len_params_ax](FASTag::IonSeries::Series sr)
+        -> const std::vector<FASTag::Param>& {
+      if (sr == FASTag::IonSeries::Series::CZ) return len_params_cz;
+      if (sr == FASTag::IonSeries::Series::AX) return len_params_ax;
+      return len_params;
+    };
+    auto build_tables = [&params_of](FASTag::IonSeries::Series sr = FASTag::IonSeries::Series::BY) {
+      const std::vector<FASTag::Param>& lps = params_of(sr);
       std::vector<FASTag::Tables> t;
       t.reserve(lps.size());
       for (const FASTag::Param& lp : lps) t.emplace_back(lp);
@@ -1827,11 +1973,12 @@ protected:
     // @p multiplicity (1.12 #6) is the number of precursor hypotheses tagged
     // for the spectrum; 1 changes nothing. @p cz (#15 phase B) reads the
     // spectrum as c/z-dot ions: len_params_cz with @p tabs built from it.
-    auto tag_all = [&len_params, &len_params_cz](const MSSpectrum& s, double prec_mz, int charge,
-                                                 const std::vector<FASTag::Tables>& tabs,
-                                                 FASTag::SpectrumDiag* diag = nullptr, double multiplicity = 1.0,
-                                                 bool cz = false) {
-      const std::vector<FASTag::Param>& lps = cz ? len_params_cz : len_params;
+    // 1.13 item 11: @p sr picks the series' Params (a/x: len_params_ax).
+    auto tag_all = [&params_of](const MSSpectrum& s, double prec_mz, int charge,
+                                const std::vector<FASTag::Tables>& tabs,
+                                FASTag::SpectrumDiag* diag = nullptr, double multiplicity = 1.0,
+                                FASTag::IonSeries::Series sr = FASTag::IonSeries::Series::BY) {
+      const std::vector<FASTag::Param>& lps = params_of(sr);
       if (lps.size() == 1)
         return FASTag::tagSpectrum(s, prec_mz, charge, lps[0], tabs[0], diag, multiplicity);
       return FASTag::mergeLengths(FASTag::tagSpectrum(s, prec_mz, charge, lps, tabs, diag, multiplicity));
@@ -1940,7 +2087,7 @@ protected:
     if (!getStringOption_("search_config_template").empty() && search_engine != "comet")
     {
       OPENMS_LOG_ERROR << "-search_config_template is a `comet -p` parameter file; it needs -search_engine comet "
-                          "(a Sage configuration is written complete)." << std::endl;
+                          "(a Sage or MSFragger configuration is written complete)." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
     // #17 checks: the shifts go into -search_config_out; offsets are Comet's;
@@ -1957,6 +2104,14 @@ protected:
     if (shift_settings.mode == FASTag::SearchConfig::ShiftMode::Offsets && search_engine == "sage")
     {
       OPENMS_LOG_ERROR << "-search_shifts offsets: Sage has no mass offsets; use -search_engine comet, or "
+                          "-search_shifts variable." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    if (shift_settings.mode == FASTag::SearchConfig::ShiftMode::Offsets && search_engine == "msfragger" &&
+        getStringOption_("search_precursor_unit") != "ppm")
+    {
+      OPENMS_LOG_ERROR << "-search_shifts offsets: MSFragger 4.4.1 exits 1 on mass offsets with a Da precursor "
+                          "window (\"Could not find <delta> in the list\"); use -search_precursor_unit ppm, or "
                           "-search_shifts variable." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
@@ -1987,6 +2142,17 @@ protected:
     std::vector<std::string> sl_affixes;
     for (const std::string& a : sl_affix_option)
       if (!a.empty()) sl_affixes.push_back(a);
+    // 1.13 item 20: protease-aware placement for the hand-off outputs.
+    const std::string sl_protease = getStringOption_("shortlist_protease");
+    const bool sl_nontryptic = handoff_on && sl_protease != "trypsin";
+    FASTag::Cleavage::Specificity sl_spec = FASTag::Cleavage::Specificity::Full;
+    FASTag::Cleavage::parseSpecificity(getStringOption_("shortlist_specificity"), sl_spec);
+    if (sl_nontryptic && sl_settings.gapped)
+    {
+      OPENMS_LOG_WARN << "-shortlist_gapped is ignored with -shortlist_protease " << sl_protease
+                      << ": windows found by flank mass have no mismatched flank." << std::endl;
+      sl_settings.gapped = false;
+    }
     if (!handoff_on && optionNonDefault_("shortlist_force"))
     {
       OPENMS_LOG_WARN << "-shortlist_force is only read for -fasta_out or -search_config_out; it is ignored here." << std::endl;
@@ -2054,6 +2220,12 @@ protected:
     std::vector<std::uint32_t> sl_bg_twins;  // database entries the background duplicates
     std::array<std::uint64_t, FASTag::Digest::kNumAA> sl_db_residues{};
     std::size_t sl_decoys = 0;
+    // 1.13 #18: entries starting with the MSFragger decoy prefix (MSFragger
+    // generates no decoys; without -fasta_out the database must hold them).
+    std::size_t sl_prefix_decoys = 0;
+    const bool msfragger_on = !search_config_out.empty() && getStringOption_("search_engine") == "msfragger";
+    const std::string msfragger_prefix =
+        getStringOption_("search_decoy_prefix").empty() ? std::string("rev_") : getStringOption_("search_decoy_prefix");
     // #3g: where -alkylation_out's placements come from (its report says).
     std::string alk_db_source, alk_db;
     // 1.13 (#24): a shipped proteome's manifest row (entries 0 = no manifest).
@@ -2190,6 +2362,7 @@ protected:
           pi.length = pindex.proteinLength(static_cast<uint32_t>(i));
           pi.decoy = FASTag::Shortlist::isDecoy(pi.accession, sl_affixes);
           pi.canonical = dup.canonical[i];
+          if (msfragger_on && pi.accession.compare(0, msfragger_prefix.size(), msfragger_prefix) == 0) ++sl_prefix_decoys;
           if (pi.decoy) ++sl_decoys;
           else FASTag::Digest::addResidues(rentries[i].sequence, sl_db_residues);
         }
@@ -2312,6 +2485,7 @@ protected:
       return ILLEGAL_PARAMETERS;
     }
     digest_settings.silac_min = getIntOption_("digest_silac_min");
+    digest_settings.label_min_tags = getIntOption_("label_call_min_tags");
     digest_settings.low_resolution = !p.tol_ppm;
     FD::ModelTable protease_models;
     const std::string digest_models = getStringOption_("digest_models");
@@ -2340,6 +2514,7 @@ protected:
           {"digest_background_share", "-digest_out", digest_on},
           {"digest_window", "-digest_out or -label_out", count_on},
           {"digest_silac_min", "-label_out", label_on},
+          {"label_call_min_tags", "-label_out", label_on},
           {"glyco_out", "-glyco", glyco_flag},
           {"glyco_min_fraction", "-glyco", glyco_flag},
           {"species_out", "-species", want_species},
@@ -2357,10 +2532,15 @@ protected:
           {"acquisition_probe_spectra", "-acquisition_check refuse or warn",
            getStringOption_("acquisition_check") != "off"},
           {"pick_unknown_type", "-pick_profile auto", pick_mode == FASTag::Centroid::Mode::Auto},
-          {"charge_min", "-unknown_charge enumerate or infer", hyp_param.mode != FASTag::Hyp::ChargeMode::Assume2},
-          {"charge_max", "-unknown_charge enumerate or infer", hyp_param.mode != FASTag::Hyp::ChargeMode::Assume2},
-          {"charge_infer_margin", "-unknown_charge enumerate or infer",
-           hyp_param.mode != FASTag::Hyp::ChargeMode::Assume2},
+          {"ion_series_photo", "-ion_series auto", getStringOption_("ion_series") == "auto"},
+          {"charge_min", "-unknown_charge enumerate or infer, or -check_header_charge",
+           hyp_param.mode != FASTag::Hyp::ChargeMode::Assume2 || hdr_check_on},
+          {"charge_max", "-unknown_charge enumerate or infer, or -check_header_charge",
+           hyp_param.mode != FASTag::Hyp::ChargeMode::Assume2 || hdr_check_on},
+          {"charge_infer_margin", "-unknown_charge enumerate or infer, or -check_header_charge",
+           hyp_param.mode != FASTag::Hyp::ChargeMode::Assume2 || hdr_check_on},
+          {"check_header_margin", "-check_header_charge warn or override", hdr_check_on},
+          {"check_header_out", "-check_header_charge warn or override", hdr_check_on},
           // ---- 1.12 A: ignored-option warnings ----
           {"shortlist_background", "-fasta_out", !fasta_out.empty()},
           {"shortlist_max_evalue", "-shortlist_out or -fasta_out", shortlist_on},
@@ -2368,6 +2548,8 @@ protected:
           {"shortlist_gapped", "-shortlist_out or -fasta_out", shortlist_on},
           {"shortlist_parsimony", "-shortlist_out or -fasta_out", shortlist_on},
           {"shortlist_top", "-shortlist_out or -fasta_out", shortlist_on},
+          {"shortlist_protease", "-shortlist_out, -fasta_out or -search_config_out", handoff_on},
+          {"shortlist_specificity", "-shortlist_protease other than trypsin", sl_nontryptic},
           {"search_engine", "-search_config_out", !search_config_out.empty()},
           {"search_config_template", "-search_config_out", !search_config_out.empty()},
           {"search_precursor_tolerance", "-search_config_out", !search_config_out.empty()},
@@ -2393,6 +2575,7 @@ protected:
           {"digest_flank2", "-digest_out", digest_on},
           {"digest_min_confidence", "-digest_out", digest_on},
           {"digest_calibration", "-digest_out", digest_on},
+          {"digest_quality", "-digest_out", digest_on},  // 1.13 digqual
           {"alkylation_proteome", "-alkylation_out", alkylation_on},
           {"alkylation_min_spectra", "-alkylation_out", alkylation_on},
           {"alkylation_min_share", "-alkylation_out", alkylation_on},
@@ -2503,6 +2686,21 @@ protected:
         resolved_inputs.emplace_back("digest_models (shipped)", digest_dir + "/digest_models.tsv");
       }
     }
+    // 1.13 digqual: the enzyme of -digest_quality must be a model of the table.
+    const std::string digest_quality = digest_on ? getStringOption_("digest_quality") : std::string();
+    if (!digest_quality.empty() && digest_quality != "auto")
+    {
+      bool found = false;
+      for (const FD::Model& m : protease_models.models) found = found || m.name == digest_quality;
+      if (!found)
+      {
+        std::string names;
+        for (const FD::Model& m : protease_models.models) names += (names.empty() ? "" : ", ") + m.name;
+        OPENMS_LOG_ERROR << "-digest_quality '" << digest_quality << "' is not a model of the protease table ("
+                         << names << ") and not 'auto'." << std::endl;
+        return ILLEGAL_PARAMETERS;
+      }
+    }
     std::vector<FD::GapMod> gap_mods, cys_alkylations;
     std::vector<FD::Combo> gap_combos;
     FD::GapSettings gap_settings;
@@ -2595,7 +2793,13 @@ protected:
         sl_plan.isotope_errors = getIntOption_("search_isotope_errors");
         sl_plan.decoy_prefix = getStringOption_("search_decoy_prefix");
         sl_plan.fastag_version = FASTAG_VERSION;
+        sl_plan.threads = getIntOption_("threads");  // MSFragger num_threads; 0 = every CPU
         std::string err;
+        // 1.13 item 20: a named rule is known now and validated with the
+        // template below; 'auto' knows its rule only after the run.
+        const bool sl_named = sl_nontryptic && sl_protease != "auto";
+        if (sl_named)
+          sl_plan.enzyme = FASTag::Cleavage::engineEnzyme(*FASTag::Cleavage::findRule(sl_protease), sl_spec);
         if (search_engine == "comet")
         {
           std::vector<std::pair<std::string, std::string>> keys;
@@ -2610,17 +2814,68 @@ protected:
             if (!tf.good() && !tf.eof()) err = "cannot read -search_config_template '" + tmpl_path + "'";
             else
             {
-              const auto m = FASTag::SearchConfig::mergeKeyValueTemplate(sl_template, keys);
+              const auto m = sl_named
+                                 ? FASTag::SearchConfig::mergeKeyValueTemplate(sl_template, keys, sl_plan.enzyme)
+                                 : FASTag::SearchConfig::mergeKeyValueTemplate(sl_template, keys);
               if (!m.error.empty()) err = "-search_config_template '" + tmpl_path + "': " + m.error;
             }
           }
         }
+        else if (search_engine == "msfragger")
+        {
+          std::vector<std::pair<std::string, std::string>> keys;
+          err = FASTag::SearchConfig::msfraggerKeys(sl_plan, keys);
+          // A target-decoy database by DecoyHelper::findDecoyString's rule: the
+          // prefix on at least 40 % of the entries (here case-sensitive, as
+          // MSFragger matches it).
+          if (err.empty() && fasta_out.empty() &&
+              static_cast<double>(sl_prefix_decoys) < 0.4 * static_cast<double>(sl_proteins.size()))
+            err = "MSFragger generates no decoys, and only " + std::to_string(sl_prefix_decoys) + " of " +
+                  std::to_string(sl_proteins.size()) + " entries of '" + recon_db + "' start with the decoy prefix '" +
+                  msfragger_prefix + "' (a target-decoy database has them on >= 40 %); give -fasta_out (FASTag then "
+                  "appends reversed decoys), a target-decoy database, or its prefix as -search_decoy_prefix";
+        }
+        if (err.empty() && sl_named && search_engine == "comet" &&
+            getStringOption_("search_config_template").empty() && sl_plan.enzyme.comet_default < 0)
+          err = "Comet's default enzyme table has no " + sl_plan.enzyme.name +
+                " entry with this rule; give -search_config_template with one";
         if (!err.empty())
         {
           OPENMS_LOG_ERROR << "-search_config_out: " << err << "." << std::endl;
           return ILLEGAL_PARAMETERS;
         }
-        if (fasta_out.empty() && sl_decoys > 0)
+        // 'auto' with Comet: name the rules the run could call that have no
+        // Comet enzyme entry (in the template, or in Comet's own table), so
+        // the user learns it before the run; such a call is refused after the
+        // run with neither hand-off output written.
+        if (sl_nontryptic && !sl_named && search_engine == "comet")
+        {
+          std::vector<std::pair<std::string, std::string>> keys;
+          FASTag::SearchConfig::cometKeys(sl_plan, keys);
+          std::string missing;
+          for (const FASTag::Cleavage::Rule& r : FASTag::Cleavage::rules())
+          {
+            const auto spec = r.unspecific() ? FASTag::Cleavage::Specificity::None : sl_spec;
+            const auto enz = FASTag::Cleavage::engineEnzyme(r, spec);
+            const bool has = sl_template.empty()
+                                 ? enz.comet_default >= 0
+                                 : FASTag::SearchConfig::mergeKeyValueTemplate(sl_template, keys, enz).error.empty();
+            if (!has) missing += (missing.empty() ? "" : ", ") + r.name;
+          }
+          if (!missing.empty())
+            OPENMS_LOG_WARN << "-shortlist_protease auto with Comet: " << (sl_template.empty()
+                                                                                ? "Comet's default enzyme table"
+                                                                                : "the -search_config_template")
+                            << " has no entry for " << missing << "; if the run calls one of them, neither "
+                            << "-fasta_out nor -search_config_out is written." << std::endl;
+        }
+        if (search_engine == "msfragger")
+        {
+          if (fasta_out.empty())
+            OPENMS_LOG_INFO << "-search_config_out (msfragger): '" << recon_db << "' holds " << sl_prefix_decoys
+                            << " entries with the decoy prefix '" << msfragger_prefix << "'." << std::endl;
+        }
+        else if (fasta_out.empty() && sl_decoys > 0)
           OPENMS_LOG_WARN << "-search_config_out names '" << recon_db << "', which holds " << sl_decoys
                           << " decoys, and lets the engine generate decoys as well; give -fasta_out to search "
                              "a database without them." << std::endl;
@@ -2844,6 +3099,15 @@ protected:
     }
     const bool mzpeak_in = is_mzpeak(in);
     const bool mgf_in = !mzpeak_in && is_mgf(in);
+    // 1.13 item 15: the auto probe reads spectra by index before the tagging
+    // pass; mzPeak input is read once, in file order.
+    const bool compl_auto = getStringOption_("complement_tolerance_unit") == "auto";
+    if (compl_auto && mzpeak_in)
+    {
+      OPENMS_LOG_ERROR << "-complement_tolerance_unit auto needs mzML or MGF input; mzPeak input is "
+                          "read in one pass. Give -complement_tolerance_unit Da or fragment." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
     // #9: what each reader does with profile MS2 (src/Centroid.h). mzPeak
     // centroids in MzPeakStream; mzML (any of its readers) in the tagging
     // loop, the probe and the -out_spectra re-read; MGF never.
@@ -3095,21 +3359,29 @@ protected:
     // output opens, that stops at the first one -- so a collisional run
     // under auto writes exactly what by writes. MGF and mzPeak carry no
     // activation (IonSeries.h): auto reads them as b/y, without the column.
-    bool ion_column = ion_mode == FASTag::IonSeries::Mode::Cz;
+    // 1.13 item 11: under ax always; under auto with -ion_series_photo ax
+    // also when some MS2 is photo-activated (the scan then stops at the
+    // first electron or photo-activated one).
+    bool ion_column = ion_mode == FASTag::IonSeries::Mode::Cz || ion_mode == FASTag::IonSeries::Mode::Ax;
     if (ion_mode == FASTag::IonSeries::Mode::Auto && FASTag::IonSeries::autoReadsActivation(mzpeak_in, mgf_in))
     {
       std::shared_ptr<PeakMap> od_meta;
       if (!fastmz && streaming) od_meta = ondisc->getMetaData();
       FASTag::IonSeries::ActivationCounts scan;
-      for (size_t i = 0; i < n_total && scan.of(FASTag::IonSeries::Activation::Electron) == 0; ++i)
+      for (size_t i = 0; i < n_total && scan.of(FASTag::IonSeries::Activation::Electron) == 0
+                         && !(photo_ax && scan.photo > 0); ++i)
       {
         MSSpectrum head;
         if (fastmz) head = fastmz->getSpectrumMetadata(i);
         else if (od_meta) { if (i < od_meta->size()) head = (*od_meta)[i]; }
         else if (i < exp.size()) head = exp[i];
-        if (head.getMSLevel() == 2) scan.add(FASTag::IonSeries::activationClass(head));
+        if (head.getMSLevel() == 2)
+        {
+          scan.add(FASTag::IonSeries::activationClass(head));
+          if (photo_ax && FASTag::IonSeries::photoActivated(head)) ++scan.photo;
+        }
       }
-      ion_column = FASTag::IonSeries::seriesColumn(ion_mode, scan);
+      ion_column = FASTag::IonSeries::seriesColumn(ion_mode, scan, photo_ax);
     }
     // The census layout of this run (Census::header() reads it; so does
     // -census_ids, which takes that header as the table's layout).
@@ -3211,12 +3483,152 @@ protected:
     }
     else tolerance_probe(read_spectrum);
 
+    // 1.13 item 15: -complement_tolerance_unit auto (src/ComplementTol.h).
+    // A probe of up to -complement_probe MS2 spectra, drawn uniformly over
+    // the run with a fixed seed and read as the tagging pass reads them, is
+    // tagged at seed length ComplTol::kAutoProbeLength with the default
+    // preprocessing and search settings (ComplTol::probeParam: one file, one
+    // window, whatever -tag_length or -no_deisotope) and the complement
+    // window set to the whole measurement window, at the header charge (the precursor
+    // hypotheses of -unknown_charge and -isotope_error are not probed);
+    // the rank-1 tags at or below ComplTol::kAutoMaxEvalue give the signed
+    // complement errors, and their floor-corrected median and MAD give the
+    // window (|median| + 1.96 x 1.4826 x MAD). Too few
+    // pairs keep -complement_tolerance (Da). Not reached under Da or fragment.
+    if (compl_auto)
+    {
+      namespace CT = FASTag::ComplTol;
+      const Size want = static_cast<Size>(getIntOption_("complement_probe"));
+      const double window = CT::measurementWindow(p.frag_tol, p.tol_ppm);
+      // Candidates: a uniform draw of 4x the probe size over all spectra
+      // (MS1 included; the level is known only once read), every one read;
+      // of the MS2 among them, a second uniform draw keeps the probe size
+      // (ComplTol::pickProbe), so the probe spans the whole run.
+      const FASTag::SampleMask cand = FASTag::sampleByCount(n_total, std::min<Size>(n_total, 4 * want), 0x434F4D50u);
+      std::vector<Size> ms2_idx;
+      for (Size i = 0; i < n_total; ++i)
+      {
+        if (!cand[i]) continue;
+        const MSSpectrum s = read_spectrum(i);
+        if (s.getMSLevel() == 2 && !s.empty() && !s.getPrecursors().empty()) ms2_idx.push_back(i);
+      }
+      std::vector<MSSpectrum> probe_specs;
+      probe_specs.reserve(want);
+      PeakPickerHiRes ct_picker;
+      for (const Size i : CT::pickProbe(ms2_idx, want, 0x50524F42u))
+      {
+        MSSpectrum s = read_spectrum(i);
+        if (pick_in_loop) FC::apply(s, ct_picker, pick_mzml);
+        s.sortByPosition();
+        probe_specs.push_back(std::move(s));
+      }
+      // The Params the probe tags with (ComplTol::probeParam of the run's b/y,
+      // c/z-dot or a/x Param, per spectrum as the tagging pass decides).
+      const FASTag::Param probe_by = CT::probeParam(len_params.front(), window);
+      const FASTag::Tables probe_tab_by(probe_by);
+      const bool any_cz = !len_params_cz.empty();
+      const FASTag::Param probe_cz = any_cz ? CT::probeParam(len_params_cz.front(), window) : probe_by;
+      const FASTag::Tables probe_tab_cz(probe_cz);
+      // 1.13 item 11: under -ion_series ax, or auto with -ion_series_photo
+      // ax, the spectra the tagging pass reads as a/x are probed as a/x.
+      const bool any_ax = !len_params_ax.empty();
+      const FASTag::Param probe_ax = any_ax ? CT::probeParam(len_params_ax.front(), window) : probe_by;
+      const FASTag::Tables probe_tab_ax(probe_ax);
+      std::vector<std::vector<double>> per_spec(probe_specs.size());
+      std::vector<char> confident(probe_specs.size(), 0);
+#pragma omp parallel for schedule(dynamic, 8)
+      for (std::ptrdiff_t k = 0; k < static_cast<std::ptrdiff_t>(probe_specs.size()); ++k)
+      {
+        const MSSpectrum& s = probe_specs[static_cast<Size>(k)];
+        const Precursor& pc = s.getPrecursors().front();
+        // The series rule of the tagging pass (IonSeries::seriesInRun).
+        const bool photo = (photo_ax || ion_mode == FASTag::IonSeries::Mode::Ax) && FASTag::IonSeries::photoActivated(s);
+        const FASTag::IonSeries::Series sr =
+            FASTag::IonSeries::seriesInRun(ion_mode, FASTag::IonSeries::activationClass(s), ion_column, photo_ax && photo);
+        const bool cz = any_cz && sr == FASTag::IonSeries::Series::CZ;
+        const bool ax = any_ax && sr == FASTag::IonSeries::Series::AX;
+        const FASTag::Param& pp = cz ? probe_cz : ax ? probe_ax : probe_by;
+        const std::vector<FASTag::Tag> tg =
+            FASTag::tagSpectrum(s, pc.getMZ(), pc.getCharge(), pp, cz ? probe_tab_cz : ax ? probe_tab_ax : probe_tab_by);
+        if (tg.empty() || !(tg.front().evalue <= CT::kAutoMaxEvalue)) continue;
+        confident[static_cast<Size>(k)] = 1;
+        const MSSpectrum prep = FASTag::preparedPeaks(s, pc.getMZ(), pc.getCharge(), pp);
+        CT::collectErrors(prep, pc.getMZ(), pc.getCharge(), tg.front(), FASTag::ComplementSpec::fromParam(pp),
+                          window, per_spec[static_cast<Size>(k)]);
+      }
+      std::vector<double> errors;
+      for (const auto& v : per_spec) errors.insert(errors.end(), v.begin(), v.end());
+      const CT::Estimate est = CT::estimate(errors, window);
+      const Size n_conf = static_cast<Size>(std::count(confident.begin(), confident.end(), char(1)));
+      // -complement_tolerance is the fallback and the lower bound
+      // (ComplTol::inForce): auto only widens the window.
+      const double fallback = p.complement_tol;
+      const double in_force = CT::inForce(est, fallback);
+      const bool raised = est.ok && in_force > est.tol;
+      const std::string source = !est.ok ? "fallback" : raised ? "lower_bound" : "measured";
+      if (in_force != fallback)
+      {
+        p.complement_tol = in_force;
+        for (FASTag::Param& lp : len_params) lp.complement_tol = in_force;
+        for (FASTag::Param& lp : len_params_cz) lp.complement_tol = in_force;
+        for (FASTag::Param& lp : len_params_ax) lp.complement_tol = in_force;
+        p_cz.complement_tol = in_force;
+        p_ax.complement_tol = in_force;
+        hyp_cs = FASTag::ComplementSpec::fromParam(p);
+        hyp_cs_cz = FASTag::ComplementSpec::fromParam(p_cz);
+        hyp_cs_ax = FASTag::ComplementSpec::fromParam(p_ax);
+      }
+      // stderr, not stdout (nothing new may reach stdout or the gate's
+      // summary line); the same values go to every Versioned run report
+      // (format 6 rows) and to the -out_spectra mzML provenance below. The
+      // window in force at full precision, so it can be given back as
+      // -complement_tolerance and reproduce the run.
+      const auto full = [](double v) {
+        std::ostringstream o;
+        o << std::setprecision(17) << v;
+        return o.str();
+      };
+      const std::string tol_txt = full(in_force);
+      std::ostringstream probe_txt;
+      probe_txt << probe_specs.size() << " MS2, " << n_conf << " confident tags, " << est.n << " pairs within "
+                << window << " Da (signal " << std::lround(est.signal);
+      if (est.ok) probe_txt << ", median error " << est.median << " Da, MAD " << est.mad << " Da";
+      probe_txt << ")";
+      std::cerr << "Complement tolerance (auto): ";
+      if (!est.ok) std::cerr << "not measured, using -complement_tolerance " << tol_txt << " Da";
+      else
+        std::cerr << "measured " << full(est.tol) << " Da, in force " << tol_txt << " Da"
+                  << (raised ? " (not below -complement_tolerance)" : "");
+      std::cerr << "; probe " << probe_txt.str() << (est.ok ? std::string() : "; " + est.why) << std::endl;
+      run_meta.complement_tol_auto = true;
+      run_meta.complement_tol_measured = est.ok;
+      run_meta.complement_tol = in_force;
+      run_meta.complement_tol_source = source;
+      run_meta.complement_tol_measured_value = est.ok ? est.tol : 0.0;
+      run_meta.complement_tol_window = window;
+      run_meta.complement_probe_ms2 = probe_specs.size();
+      run_meta.complement_probe_confident = n_conf;
+      run_meta.complement_probe_pairs = est.n;
+      run_meta.complement_probe_signal = est.signal;
+      run_meta.complement_probe_median = est.median;
+      run_meta.complement_probe_mad = est.mad;
+      run_meta.complement_tol_why = est.why;
+      compl_auto_rec_.on = true;
+      compl_auto_rec_.tol = tol_txt;
+      compl_auto_rec_.source = source;
+      compl_auto_rec_.measured = est.ok ? full(est.tol) : std::string();
+      compl_auto_rec_.probe = probe_txt.str() + (est.ok ? std::string() : "; " + est.why);
+    }
+
     const auto t_tables_a = std::chrono::steady_clock::now();
     g_t_probe = std::chrono::duration<double>(t_tables_a - t_probe_a).count();
     const std::vector<FASTag::Tables> tables = build_tables();
     // #15 phase B: the c/z-dot tables (empty under by).
     const std::vector<FASTag::Tables> tables_cz =
-        ion_mode != FASTag::IonSeries::Mode::By ? build_tables(true) : std::vector<FASTag::Tables>();
+        cz_tables ? build_tables(FASTag::IonSeries::Series::CZ) : std::vector<FASTag::Tables>();
+    // 1.13 item 11: the a/x tables (empty unless ax or auto + photo ax).
+    const std::vector<FASTag::Tables> tables_ax =
+        ax_tables ? build_tables(FASTag::IonSeries::Series::AX) : std::vector<FASTag::Tables>();
     g_t_tables = std::chrono::duration<double>(std::chrono::steady_clock::now() - t_tables_a).count();
     // mzPeak output cannot store an ion mobility per peak: refuse before any
     // work. For mzML the first MS2 is checked here; an mzPeak input is read
@@ -3286,6 +3698,7 @@ protected:
       guard.output("digest_out", digest_out);
       guard.output("label_out", label_out);
       guard.output("massgap_out", massgap_out);
+      if (hdr_check_on) guard.output("check_header_out", check_header_out, true);
       // The q_db post-pass writes <out>.qtmp and renames it onto -out.
       if (entrap_on) guard.output("out (q_db temporary file)", out + ".qtmp");
       if (getFlag_("glyco"))
@@ -3472,6 +3885,8 @@ protected:
       /// -species leaves these rows out and counts them; no reader finds the
       /// ion_series column by position.
       std::vector<char> row_cz;
+      /// 1.13 item 11: the same for a/x rows.
+      std::vector<char> row_ax;
       FASTag::ClusterAcc::ClusterBlock acc;  ///< 1.12 per-cluster slots (src/ClusterAcc.h)
     };
     // Three: a fourth only helped within noise, for another block of rows
@@ -3529,6 +3944,17 @@ protected:
       double s_read = 0, s_slow = 0, s_tag = 0, s_ring = 0, s_idle = 0;
       size_t n_slow = 0;
       FASTag::ClusterAcc::ClusterThread acc;  ///< 1.12 per-cluster accumulators (src/ClusterAcc.h)
+      // 1.13 -check_header_charge: verdict counts, and (-check_header_out)
+      // one row per header-charged MS2 spectrum, sorted by index at the end.
+      FASTag::Hyp::HeaderCheckCounts hdr;
+      struct HdrRow
+      {
+        size_t index = 0;
+        std::string native_id;
+        double mz = 0;
+        FASTag::Hyp::HeaderCheckResult r;
+      };
+      std::vector<HdrRow> hdr_rows;
     };
     std::vector<PerThread> per_thread(static_cast<size_t>(std::max(1, omp_get_max_threads())));
     for (PerThread& q : per_thread)
@@ -3587,6 +4013,8 @@ protected:
       FASTag::Census::Row census_row;
       /// #15 phase B: the rows were read as c/z-dot ions (Block::row_cz).
       bool cz = false;
+      /// 1.13 item 11: the rows were read as a/x ions (Block::row_ax).
+      bool ax = false;
     };
 
     // @p index is the spectrum's position in the input, for a USI that cannot
@@ -3632,14 +4060,24 @@ protected:
       // ---- 1.12 E: per-spectrum counters ----
       const FASTag::IonSeries::Activation act = FASTag::IonSeries::activationClass(spec);
       pt.acc.e.activation.add(act);  // #15 phase A
+      // 1.13 item 11: photodissociation, read only when a/x may follow it.
+      const bool photo = (photo_ax || ion_mode == FASTag::IonSeries::Mode::Ax) && FASTag::IonSeries::photoActivated(spec);
+      if (photo) ++pt.acc.e.activation.photo;
+      const bool spec_photo_ax = photo_ax && photo;
       // #15 phase B: the series this spectrum is read as (by under by): c/z
-      // only in a run that writes the ion_series column, the one rule both
-      // decisions share (IonSeries::seriesInRun).
-      const bool read_cz = FASTag::IonSeries::seriesInRun(ion_mode, act, ion_column) == FASTag::IonSeries::Series::CZ;
+      // (or a/x, 1.13) only in a run that writes the ion_series column, the
+      // one rule both decisions share (IonSeries::seriesInRun).
+      const FASTag::IonSeries::Series read_series =
+          FASTag::IonSeries::seriesInRun(ion_mode, act, ion_column, spec_photo_ax);
+      const bool read_cz = read_series == FASTag::IonSeries::Series::CZ;
+      const bool read_ax = read_series == FASTag::IonSeries::Series::AX;
       if (read_cz) ++pt.acc.e.series.ms2_cz;
+      else if (read_ax) ++pt.acc.e.series.ms2_ax;
       else ++pt.acc.e.series.ms2_by;
       res.cz = read_cz;
-      if (!read_cz && FASTag::IonSeries::seriesFor(ion_mode, act) == FASTag::IonSeries::Series::CZ)
+      res.ax = read_ax;
+      if (read_series == FASTag::IonSeries::Series::BY
+          && FASTag::IonSeries::seriesFor(ion_mode, act, spec_photo_ax) == FASTag::IonSeries::Series::CZ)
         ++pt.acc.e.series.auto_by_no_column;
       if (digest_on)
       {
@@ -3706,7 +4144,19 @@ protected:
       // and, through a per-row flag (Block::row_species), the species evidence. The
       // TSV, -recon_out and -recon_id_out keep every row at its hypothesis'
       // charge.
-      const std::vector<FASTag::Hyp::Hypothesis> hyps = FASTag::Hyp::precursorHypotheses(spec, prec, hyp_param, read_cz ? hyp_cs_cz : hyp_cs);
+      // 1.13 (backlog #14) -check_header_charge: a header charge is put to the
+      // infer call; under override a disagreeing one is tagged at the call.
+      // Off (the default): nothing here runs.
+      FASTag::Hyp::HeaderCheckResult hdr_res;
+      const bool hdr_this = hdr_check_on && prec.getCharge() > 0;
+      if (hdr_this)
+      {
+        hdr_res = FASTag::Hyp::checkHeaderCharge(spec, prec, hyp_param, read_cz ? hyp_cs_cz : read_ax ? hyp_cs_ax : hyp_cs);
+        pt.hdr.add(hdr_res, hyp_param.header_check == FASTag::Hyp::HeaderCheck::Override);
+        if (!check_header_out.empty()) pt.hdr_rows.push_back({index, spec.getNativeID(), prec.getMZ(), hdr_res});
+      }
+      const std::vector<FASTag::Hyp::Hypothesis> hyps = FASTag::Hyp::precursorHypotheses(
+          spec, prec, hyp_param, read_cz ? hyp_cs_cz : read_ax ? hyp_cs_ax : hyp_cs, nullptr, hdr_this ? &hdr_res : nullptr);
       if (hyp_on) pt.acc.e.hyp.add(hyps);
       FASTag::SpectrumDiag cdiag;
       std::vector<FASTag::Tag> tags;
@@ -3717,7 +4167,8 @@ protected:
       // the selected one. #15 phase B: the ion series (read_cz, decided once
       // per spectrum above) picks the tables, for every hypothesis alike.
       const auto tag_at = [&](const FASTag::Hyp::Hypothesis& hy, double H, FASTag::SpectrumDiag* diag) {
-        return tag_all(spec, hy.mz, hy.charge, read_cz ? tables_cz : tables, diag, H, read_cz);
+        return tag_all(spec, hy.mz, hy.charge, read_cz ? tables_cz : read_ax ? tables_ax : tables, diag, H,
+                       read_series);
       };
       if (hyps.size() == 1)
       {
@@ -3831,6 +4282,7 @@ protected:
           v.mean_conf = t.mean_conf;
           v.peak_tic = t.peak_tic;
           v.cz = t.ion_series == FASTag::IonSeries::Series::CZ;
+          v.ax = t.ion_series == FASTag::IonSeries::Series::AX;
           ctags.push_back(v);
         }
 
@@ -3841,9 +4293,13 @@ protected:
         // is ungapped with E <= 1 (of the selected hypothesis, #6). A c/z tag
         // (#15 phase B) with its series' reversed-read offset.
         const bool tag_cz = t.ion_series == FASTag::IonSeries::Series::CZ;
+        // 1.13 item 11: an a/x tag counts with its own reversed offset (+CO2 + CO).
+        const bool tag_ax = t.ion_series == FASTag::IonSeries::Series::AX;
         if (count_on && sel && !t.gapped && t.evalue <= 1.0)
         {
           if (tag_cz) pt.digest.add(t.nterm_mass, t.cterm_mass, FASTag::baseSequence(t.seq), cz_pair.reversedOffset());
+          else if (tag_ax)
+            pt.digest.add(t.nterm_mass, t.cterm_mass, FASTag::baseSequence(t.seq), ax_pair.reversedOffset());
           else pt.digest.add(t.nterm_mass, t.cterm_mass, FASTag::baseSequence(t.seq));
         }
 
@@ -3853,8 +4309,8 @@ protected:
         // are b/y-only, so it is counted in Tally::excludeNonBy() instead
         // (PLAN-INTEGRATION 2.3 contract 2; doc/ALKYLATION-REPORT.md).
         const bool alk_counted = alkylation_on && sel && FASTag::Alkylation::countsTag(t.gapped, t.evalue);
-        const bool alk_tag = alk_counted && !tag_cz;
-        if (alk_counted && tag_cz) pt.acc.d.alk.excludeNonBy();
+        const bool alk_tag = alk_counted && !tag_cz && !tag_ax;
+        if (alk_counted && (tag_cz || tag_ax)) pt.acc.d.alk.excludeNonBy();
         if (place_on && !row_entrap && (place_every || alk_tag))  // known-false rows must not place or bin
         {
           // The tag's own variable mods go on the localization ladder.
@@ -3866,7 +4322,7 @@ protected:
                                               recon_loc ? &loc_peaks : nullptr,
                                               hy.charge,
                                               tag_modded ? &tag_shift : nullptr,
-                                              tag_cz ? &cz_pair : nullptr);
+                                              tag_cz ? &cz_pair : tag_ax ? &ax_pair : nullptr);
           if (res.census && recon_on && sel) cplaced += places.size();
           // -recon_out rows: one per placement.
           if (recon_on)
@@ -3920,8 +4376,14 @@ protected:
               ++a.protease_spectra;
               a.last_counted = index;
             }
+            // 1.13 item 20: windows by flank mass, kept by the cleavage
+            // rule after the run (Cleavage::WindowFilter).
+            std::vector<FASTag::Reconciliation> sl_by_mass;
+            if (sl_nontryptic && shortlist_on && t.evalue <= sl_settings.max_evalue)
+              sl_by_mass = recon.reconcileByMass(FASTag::baseSequence(t.seq), t.nterm_mass, t.cterm_mass,
+                                                 tag_cz ? &cz_pair : nullptr);
             if (shortlist_on && t.evalue <= sl_settings.max_evalue)
-              for (const auto& pl : places)
+              for (const auto& pl : (sl_nontryptic ? sl_by_mass : places))
               {
                 double flank = 0.0;
                 if (!pl.nterm_match) flank = pl.reversed ? t.cterm_mass : t.nterm_mass;
@@ -4061,6 +4523,7 @@ protected:
       if (entrap_on) b.row_meta[idx].swap(r.meta);
       if (species_sel_on) b.row_species[idx].swap(r.row_species);
       b.row_cz[idx] = r.cz ? 1 : 0;
+      b.row_ax[idx] = r.ax ? 1 : 0;
       b.keep[idx] = 1;
       // A spectrum whose only reported tags are entrapment matches is
       // calibration material, not a hit -- keep it out of -out_spectra.
@@ -4084,6 +4547,7 @@ protected:
       }
       b.keep.assign(n_used, 0);
       b.row_cz.assign(n_used, 0);
+      b.row_ax.assign(n_used, 0);
       if (want_out) b.keep_target.assign(n_used, 0);
       b.acc.prepare(n_used);
     };
@@ -4097,6 +4561,7 @@ protected:
     // #15 phase B: -species counts b/y tags only (PLAN-INTEGRATION 2.3,
     // contract 2); the c/z rows it leaves out (writer thread only).
     size_t species_cz_excluded = 0;
+    size_t species_ax_excluded = 0;  // 1.13 item 11
 
     // Write one finished block's rows in index order and recycle the buffers.
     //
@@ -4175,6 +4640,7 @@ protected:
             // #15 phase B: a c/z row (Block::row_cz, one flag per spectrum,
             // every row of it alike) is left out and counted.
             if (b.row_cz[i]) ++species_cz_excluded;
+            else if (b.row_ax[i]) ++species_ax_excluded;  // 1.13 item 11
             else if (readSpeciesFields(r, start, nl, id, tag, gapped, evalue))
             {
               // Skip GAPPED tags unless asked for. A gap spells two residues
@@ -4603,9 +5069,11 @@ protected:
 
     size_t n_no_charge = 0, n_multi_charge = 0;
     FASTag::ClusterAcc::ClusterThread run_acc;  // the per-cluster accumulators, summed in thread order
+    FASTag::Hyp::HeaderCheckCounts hdr_counts;  // 1.13 -check_header_charge
     for (const PerThread& pt : per_thread)
     {
       run_acc.merge(pt.acc);
+      hdr_counts.merge(pt.hdr);
       n_no_charge += pt.no_charge;
       n_multi_charge += pt.multi_charge;
       n_ms2 += pt.ms2;
@@ -4649,12 +5117,24 @@ protected:
       run_meta.charge_ambiguous = sel_of(ChargeSource::Ambiguous);
       run_meta.charge_assumed = sel_of(ChargeSource::Assumed);
       run_meta.charge_enumerated = sel_of(ChargeSource::Enumerated);
+      run_meta.charge_overridden = sel_of(ChargeSource::Overridden);
+      // 1.13 -check_header_charge (rows only when it is on).
+      run_meta.check_header_charge = getStringOption_("check_header_charge");
+      run_meta.header_checked = hdr_counts.checked;
+      run_meta.header_agree = hdr_counts.verdict[static_cast<size_t>(FASTag::Hyp::HeaderVerdict::Agree)];
+      run_meta.header_disagree = hdr_counts.verdict[static_cast<size_t>(FASTag::Hyp::HeaderVerdict::Disagree)];
+      run_meta.header_ambiguous = hdr_counts.verdict[static_cast<size_t>(FASTag::Hyp::HeaderVerdict::Ambiguous)];
+      run_meta.header_nocall = hdr_counts.verdict[static_cast<size_t>(FASTag::Hyp::HeaderVerdict::NoCall)];
+      run_meta.header_overridden = hdr_counts.overridden;
       run_meta.iso_shifted = hc.iso_shifted;
       run_meta.multi_hypothesis = hc.multi;
       // #15 phase B: the series per tagged MS2.
       run_meta.ion_series = FASTag::IonSeries::modeName(ion_mode);
       run_meta.ion_series_ms2_by = run_acc.e.series.ms2_by;
       run_meta.ion_series_ms2_cz = run_acc.e.series.ms2_cz;
+      run_meta.ion_series_ms2_ax = run_acc.e.series.ms2_ax;
+      run_meta.ion_series_photo = getStringOption_("ion_series_photo");
+      run_meta.ion_series_ax_row = ax_tables;
     }
     // ---- 1.12 D: the alkylation call (#3g), once, right after the merge ----
     // Before the hand-off exports, so a reader of the call there (the A17
@@ -5142,7 +5622,66 @@ protected:
         const char* kind = verdict.kind == Verdict::Compatible ? "compatible"
                          : verdict.kind == Verdict::NonTryptic ? "non_tryptic"
                                                                : "inconclusive";
-        if (verdict.kind == Verdict::Compatible)
+        // 1.13 item 20: the rule the placements are kept by.
+        FASTag::Cleavage::Choice sl_choice;
+        std::string sl_withheld;  // what the placement check withheld, for the TSV header
+        if (sl_nontryptic)
+        {
+          sl_choice = FASTag::Cleavage::choose(sl_protease, sl_spec, verdict);
+          std::string withheld;
+          if (!fasta_out.empty()) withheld = "-fasta_out";
+          if (!search_config_out.empty()) withheld += (withheld.empty() ? "" : " or ") + std::string("-search_config_out");
+          OPENMS_LOG_INFO << "Shortlist protease check: " << kind << " (" << verdict.reason << ")." << std::endl;
+          if (!sl_choice.refuse && sl_choice.mismatch)
+            OPENMS_LOG_WARN << "Shortlist placement: " << sl_choice.rule->name << ", "
+                            << FASTag::Cleavage::specificityName(sl_choice.specificity) << " specificity ("
+                            << sl_choice.reason << "); the engine searches the named rule, not the call."
+                            << std::endl;
+          else if (!sl_choice.refuse)
+            OPENMS_LOG_INFO << "Shortlist placement: " << sl_choice.rule->name << ", "
+                            << FASTag::Cleavage::specificityName(sl_choice.specificity) << " specificity ("
+                            << sl_choice.reason << ")." << std::endl;
+          else if (force)
+            OPENMS_LOG_WARN << "Shortlist placement: " << sl_choice.reason
+                            << "; -shortlist_force writes the hand-off outputs anyway." << std::endl;
+          else if (withheld.empty())
+            OPENMS_LOG_WARN << "Shortlist placement: " << sl_choice.reason
+                            << ", so the shortlist may not describe this run (the call is in its header)." << std::endl;
+          else
+            OPENMS_LOG_ERROR << "Shortlist placement: " << sl_choice.reason
+                             << ", so the shortlist may not describe this run. Not writing " << withheld
+                             << " (-shortlist_force overrides)." << std::endl;
+          handoff_refused = sl_choice.refuse && !force && !withheld.empty();
+          if (handoff_refused) sl_withheld = withheld;
+          sl_plan.enzyme = FASTag::Cleavage::engineEnzyme(*sl_choice.rule, sl_choice.specificity);
+          if (shortlist_on)
+          {
+            auto& ev = run_acc.a.sl;
+            const std::size_t n_all = ev.size();
+            std::stable_sort(ev.begin(), ev.end(),
+                             [](const FASTag::Shortlist::Evidence& x, const FASTag::Shortlist::Evidence& y) {
+                               return x.protein < y.protein;
+                             });
+            const FASTag::Cleavage::WindowFilter wf(*sl_choice.rule, sl_choice.specificity,
+                                                    getIntOption_("recon_missed_cleavages"));
+            std::string prot;
+            std::uint32_t cur = std::numeric_limits<std::uint32_t>::max();
+            std::size_t w = 0;
+            for (std::size_t i = 0; i < n_all; ++i)
+            {
+              if (ev[i].protein != cur)
+              {
+                cur = ev[i].protein;
+                prot = pindex.proteinText(cur);
+              }
+              if (wf.accepts(prot, ev[i].window_start, ev[i].window_len)) ev[w++] = ev[i];
+            }
+            ev.resize(w);
+            OPENMS_LOG_INFO << "Shortlist placement: " << w << " of " << n_all
+                            << " placements by flank mass fit the rule." << std::endl;
+          }
+        }
+        else if (verdict.kind == Verdict::Compatible)
           OPENMS_LOG_INFO << "Shortlist protease check: " << verdict.reason << "." << std::endl;
         else if (verdict.kind == Verdict::Inconclusive)
           OPENMS_LOG_WARN << "Shortlist protease check inconclusive: " << verdict.reason
@@ -5214,6 +5753,16 @@ protected:
                     " kept" + (n_bg_db ? ", " + std::to_string(n_bg_db) + " database entries kept as background"
                                        : std::string()) +
                     "; decoy entries in the database: " + std::to_string(sl_decoys)};
+            if (sl_nontryptic)
+              header.insert(header.begin() + 4,
+                            "placement: " + sl_choice.rule->name + ", " +
+                                FASTag::Cleavage::specificityName(sl_choice.specificity) + " specificity, " +
+                                (sl_choice.rule->unspecific() || sl_choice.specificity ==
+                                                                     FASTag::Cleavage::Specificity::None
+                                     ? std::string("no missed-cleavage limit")
+                                     : "missed cleavages <= " + std::to_string(getIntOption_("recon_missed_cleavages"))) +
+                                ", windows by flank mass (" + sl_choice.reason + ")" +
+                                (sl_withheld.empty() ? std::string() : "; " + sl_withheld + " withheld"));
             if (subsampling) header.push_back("counts are over the -subsample_* spectra only");
             if (filtering) header.push_back("-fasta filtered the tags before placement");
             std::string err;
@@ -5226,40 +5775,65 @@ protected:
                             << " proteins with evidence kept, not FDR-controlled -> " << shortlist_out << std::endl;
           }
         }
-        if (!handoff_refused && !fasta_out.empty())
-        {
-          const auto res = FASTag::Shortlist::writeReducedFasta(recon_db, keep, sl_background, fasta_out);
-          if (!res.ok)
-          {
-            OPENMS_LOG_ERROR << "Failed writing " << fasta_out << ": " << res.error
-                             << "; -search_config_out not written." << std::endl;
-            return CANNOT_WRITE_OUTPUT_FILE;
-          }
-          OPENMS_LOG_INFO << "Reduced FASTA: " << res.entries << " entries (no decoys) -> " << fasta_out << std::endl;
-        }
+        // The engine configuration's text is made before -fasta_out is
+        // written: a rule the engine cannot express (1.13 item 20: 'auto'
+        // calling a protease without a Comet enzyme entry) writes neither.
+        std::string sc_text;
         if (!handoff_refused && !search_config_out.empty())
         {
-          std::string text, err;
-          if (search_engine == "sage") text = FASTag::SearchConfig::renderSage(sl_plan);
-          else if (sl_template.empty()) text = FASTag::SearchConfig::renderComet(sl_plan, &err);
+          std::string err;
+          if (search_engine == "sage") sc_text = FASTag::SearchConfig::renderSage(sl_plan);
+          else if (search_engine == "msfragger") sc_text = FASTag::SearchConfig::renderMSFragger(sl_plan, &err);
+          else if (sl_template.empty()) sc_text = FASTag::SearchConfig::renderComet(sl_plan, &err);
           else
           {
             std::vector<std::pair<std::string, std::string>> keys;
             err = FASTag::SearchConfig::cometKeys(sl_plan, keys);
             if (err.empty())
             {
-              const auto m = FASTag::SearchConfig::mergeKeyValueTemplate(sl_template, keys);
+              const auto m = sl_nontryptic
+                                 ? FASTag::SearchConfig::mergeKeyValueTemplate(sl_template, keys, sl_plan.enzyme)
+                                 : FASTag::SearchConfig::mergeKeyValueTemplate(sl_template, keys);
               for (const std::string& w : m.warnings) OPENMS_LOG_WARN << "-search_config_template: " << w << "." << std::endl;
               err = m.error;
-              text = m.text;
+              sc_text = m.text;
             }
           }
+          if (!err.empty())
+          {
+            OPENMS_LOG_ERROR << "-search_config_out: " << err << (sl_nontryptic ? " (the placement rule " + sl_plan.enzyme.name + ")" : std::string())
+                             << ". Neither " << (fasta_out.empty() ? std::string() : "-fasta_out nor ")
+                             << "-search_config_out written." << std::endl;
+            return ILLEGAL_PARAMETERS;
+          }
+        }
+        if (!handoff_refused && !fasta_out.empty())
+        {
+          // 1.13 #18: MSFragger generates no decoys; its -fasta_out gets reversed ones.
+          const auto res = FASTag::Shortlist::writeReducedFasta(recon_db, keep, sl_background, fasta_out,
+                                                                msfragger_on ? msfragger_prefix : std::string());
+          if (!res.ok)
+          {
+            OPENMS_LOG_ERROR << "Failed writing " << fasta_out << ": " << res.error
+                             << "; -search_config_out not written." << std::endl;
+            return CANNOT_WRITE_OUTPUT_FILE;
+          }
+          if (res.decoys > 0)
+            OPENMS_LOG_INFO << "Reduced FASTA: " << res.entries << " entries and " << res.decoys
+                            << " reversed decoys ('" << msfragger_prefix << "', for MSFragger) -> " << fasta_out
+                            << std::endl;
+          else
+            OPENMS_LOG_INFO << "Reduced FASTA: " << res.entries << " entries (no decoys) -> " << fasta_out << std::endl;
+        }
+        if (!handoff_refused && !search_config_out.empty())
+        {
+          std::string err;
           FASTag::PartFile pf(search_config_out);
           std::ofstream cf;
-          if (err.empty() && !pf.open(cf, std::ios::out | std::ios::binary)) err = pf.error();
+          if (!pf.open(cf, std::ios::out | std::ios::binary)) err = pf.error();
           if (err.empty())
           {
-            cf << text;
+            cf << sc_text;
             cf.close();
             if (cf.fail()) err = "write failed (disk full?)";
             else if (!pf.commit()) err = pf.error();
@@ -5382,6 +5956,13 @@ protected:
         std::vector<FD::Row> rows = run_rows();
         const auto more = FD::digestRows(tc, protease_models, meta, digest_settings);
         rows.insert(rows.end(), more.begin(), more.end());
+        // 1.13 digqual: the quality rows, after every 1.12 row.
+        if (!digest_quality.empty())
+        {
+          const FD::Quality qual = FD::reportQuality(tc, protease_models, more, digest_quality, digest_settings);
+          const auto qrows = FD::qualityRows(qual, digest_settings);
+          rows.insert(rows.end(), qrows.begin(), qrows.end());
+        }
         if (!FD::writeReport(digest_out, rows))
         {
           OPENMS_LOG_ERROR << "Failed writing " << digest_out << "." << std::endl;
@@ -5928,6 +6509,76 @@ protected:
                       << " and were tagged as 2+: their peaks above the 2+ precursor "
                          "mass are dropped, and their nterm_mass flanks assume charge 2 (wrong "
                          "for a 3+ or higher precursor)." << std::endl;
+    // ---- 1.13: -check_header_charge summary and -check_header_out ----
+    if (hdr_check_on)
+    {
+      using FASTag::Hyp::HeaderVerdict;
+      using FASTag::Hyp::CallBasis;
+      const auto v = [&](HeaderVerdict x) { return hdr_counts.verdict[static_cast<size_t>(x)]; };
+      const auto by = [&](CallBasis b) { return hdr_counts.disagree_by[static_cast<size_t>(b)]; };
+      const bool ovr = hyp_param.header_check == FASTag::Hyp::HeaderCheck::Override;
+      std::string moves;
+      for (int a = 1; a <= FASTag::Hyp::kChargeLimit; ++a)
+        for (int b = 1; b <= FASTag::Hyp::kChargeLimit; ++b)
+          if (hdr_counts.moves[a][b] > 0)
+            moves += (moves.empty() ? "" : ", ") + std::to_string(a) + "+ -> " + std::to_string(b) + "+: "
+                   + std::to_string(hdr_counts.moves[a][b]);
+      std::ostringstream m;
+      m << "Header charge check (-check_header_charge " << getStringOption_("check_header_charge") << "): "
+        << hdr_counts.checked << " of " << n_ms2 << " MS2 spectra carry a precursor charge; " << v(HeaderVerdict::Agree)
+        << " agree with their complement-pair evidence, " << v(HeaderVerdict::Disagree) << " disagree ("
+        << by(CallBasis::Complement) << " by complement pairs, " << by(CallBasis::Range) << " by fragment range, "
+        << by(CallBasis::OnePlus) << " by the 1+ test" << (moves.empty() ? std::string() : "; " + moves) << "), "
+        << v(HeaderVerdict::Ambiguous) << " ambiguous and " << v(HeaderVerdict::NoCall) << " without evidence; "
+        << (ovr ? std::to_string(hdr_counts.overridden) + " disagreeing spectra were tagged at the supported charge."
+                : std::string("every spectrum was tagged at its header charge."));
+      if (v(HeaderVerdict::Disagree) > 0) OPENMS_LOG_WARN << m.str() << std::endl;
+      else OPENMS_LOG_INFO << m.str() << std::endl;
+      if (!check_header_out.empty())
+      {
+        std::vector<const PerThread::HdrRow*> rows;
+        for (const PerThread& pt : per_thread)
+          for (const auto& r : pt.hdr_rows) rows.push_back(&r);
+        std::sort(rows.begin(), rows.end(), [](const auto* a, const auto* b) { return a->index < b->index; });
+        FASTag::PartFile part(check_header_out);
+        std::ofstream os;
+        if (!part.open(os))
+        {
+          OPENMS_LOG_ERROR << "Failed writing " << check_header_out << ": " << part.error() << std::endl;
+          return CANNOT_WRITE_OUTPUT_FILE;
+        }
+        std::string buf = "index\tnative_id\tprecursor_mz\theader_charge\tcall_charge\tcall_src\tbasis\trunner_up"
+                          "\theader_excess\tcall_excess\theader_ruled_out\theader_peaks_above\tverdict\ttagged_charge\n";
+        for (const auto* r : rows)
+        {
+          const auto& h = r->r;
+          FASTag::appendNum(buf, r->index); buf += '\t';
+          buf += r->native_id; buf += '\t';
+          FASTag::appendNum(buf, r->mz, std::chars_format::fixed, 5); buf += '\t';
+          FASTag::appendNum(buf, h.header); buf += '\t';
+          FASTag::appendNum(buf, h.call.charge); buf += '\t';
+          buf += FASTag::Hyp::sourceName(h.call.src); buf += '\t';
+          buf += FASTag::Hyp::basisName(h.call.basis); buf += '\t';
+          FASTag::appendNum(buf, h.call.runner_up); buf += '\t';
+          FASTag::appendNum(buf, h.header_excess, std::chars_format::fixed, 3); buf += '\t';
+          FASTag::appendNum(buf, h.call_excess, std::chars_format::fixed, 3); buf += '\t';
+          buf += h.header_ruled_out ? '1' : '0'; buf += '\t';
+          FASTag::appendNum(buf, h.header_peaks_above); buf += '\t';
+          buf += FASTag::Hyp::verdictName(h.verdict); buf += '\t';
+          FASTag::appendNum(buf, ovr ? h.replacement() : h.header);
+          buf += '\n';
+        }
+        os << buf;
+        os.close();
+        if (os.fail() || !part.commit())
+        {
+          OPENMS_LOG_ERROR << "Failed writing " << check_header_out
+                           << (part.error().empty() ? std::string() : ": " + part.error()) << std::endl;
+          return CANNOT_WRITE_OUTPUT_FILE;
+        }
+        OPENMS_LOG_INFO << "Header charge check: " << rows.size() << " rows -> " << check_header_out << std::endl;
+      }
+    }
     // ---- 1.12 E: end-of-run warnings ----
     // #15 phase A: under -ion_series by tagging reads b/y ions; warn (stderr)
     // when more than 1% of the MS2 spectra are electron or hybrid activated.
@@ -5942,13 +6593,16 @@ protected:
       }
       else
       {
-        std::cerr << IS::seriesInfo(ion_mode, run_acc.e.series, act) << std::endl;
+        std::cerr << IS::seriesInfo(ion_mode, run_acc.e.series, act, photo_ax) << std::endl;
         if (ion_mode == IS::Mode::Auto && IS::warnHybridUnderAuto(act))
           OPENMS_LOG_WARN << IS::hybridAutoWarning(act) << std::endl;
         if (ion_mode == IS::Mode::Cz && IS::warnCollisionalUnderCz(act))
           OPENMS_LOG_WARN << IS::collisionalCzWarning(act) << std::endl;
+        if (ion_mode == IS::Mode::Ax && IS::warnClassifiedUnderAx(act))
+          OPENMS_LOG_WARN << IS::classifiedAxWarning(act) << std::endl;
       }
       if (species_cz_excluded > 0) OPENMS_LOG_WARN << IS::speciesExcludedWarning(species_cz_excluded) << std::endl;
+      if (species_ax_excluded > 0) OPENMS_LOG_WARN << IS::speciesExcludedAxWarning(species_ax_excluded) << std::endl;
       if (run_acc.e.series.auto_by_no_column > 0)
         OPENMS_LOG_WARN << IS::autoNoColumnWarning(run_acc.e.series.auto_by_no_column) << std::endl;
     }
