@@ -405,6 +405,34 @@ namespace
     return {};
   }
 
+  /// @p full with the step-0 fields NOT in @p fields cleared: what a read
+  /// with that field mask must give (1.12.2).
+  MSSpectrum masked(MSSpectrum full, unsigned fields)
+  {
+    using R = FASTag::IndexedMzMLReader;
+    if (!(fields & R::kStep0Type)) full.setType(SpectrumSettings::SpectrumType::UNKNOWN);
+    if (!(fields & R::kStep0FilterString) && full.metaValueExists("filter string")) full.removeMetaValue("filter string");
+    for (Precursor& p : full.getPrecursors())
+    {
+      if (!(fields & R::kStep0Activation)) p.setActivationMethods({});
+      if (!(fields & R::kStep0ActivationEnergy)) p.setActivationEnergy(0.0);
+      if (!(fields & R::kStep0PossibleCharges)) p.setPossibleChargeStates({});
+      if (!(fields & R::kStep0TargetMeta) && p.metaValueExists("isolation window target m/z"))
+        p.removeMetaValue("isolation window target m/z");
+    }
+    return full;
+  }
+
+  /// The field masks a read is checked under: none, each field alone, and
+  /// the callers' (1.12.2).
+  std::vector<unsigned> field_masks()
+  {
+    using R = FASTag::IndexedMzMLReader;
+    std::vector<unsigned> m = {0u, R::kTaggingFields, R::kProbeFields, R::kActivationFields};
+    for (unsigned b = 1; b < R::kAllFields; b <<= 1) m.push_back(b);
+    return m;
+  }
+
   /// Every spectrum of @p path through the fast reader against OpenMS's
   /// MzMLFile, which parses with the same MzMLHandler as OnDiscMSExperiment
   /// and needs no index (the synthetic fixtures have none).
@@ -422,8 +450,8 @@ namespace
     check(r.ok(), what + ": reader opens the file");
     check(r.getNrSpectra() == ref.size(), what + ": same spectrum count");
     const Size n = std::min<Size>(r.getNrSpectra(), ref.size());
-    Size bad = 0, bad_meta = 0;
-    std::string first, first_meta;
+    Size bad = 0, bad_meta = 0, bad_mask = 0;
+    std::string first, first_meta, first_mask;
     for (Size i = 0; i < n; ++i)
     {
       const MSSpectrum got = r.getSpectrum(i);
@@ -431,7 +459,19 @@ namespace
       if (!d.empty() && bad++ == 0) first = "spectrum " + std::to_string(i) + ": " + d;
       const std::string dm = metadata_only_diff(r.getSpectrumMetadata(i), got);
       if (!dm.empty() && bad_meta++ == 0) first_meta = "spectrum " + std::to_string(i) + ": " + dm;
+      // A masked read is the full read with the other step-0 fields unset.
+      const MSSpectrum got_meta = r.getSpectrumMetadata(i);
+      for (const unsigned m : field_masks())
+      {
+        if (!(r.getSpectrum(i, m) == masked(got, m)) && bad_mask++ == 0)
+          first_mask = "spectrum " + std::to_string(i) + ", getSpectrum mask " + std::to_string(m);
+        if (!(r.getSpectrumMetadata(i, m) == masked(got_meta, m)) && bad_mask++ == 0)
+          first_mask = "spectrum " + std::to_string(i) + ", getSpectrumMetadata mask " + std::to_string(m);
+      }
     }
+    check(bad_mask == 0, what + ": a masked read is the full read with the other step-0 fields unset (" +
+                             std::to_string(bad_mask) + " differ" +
+                             (bad_mask ? "; first " + first_mask : std::string()) + ")");
     check(n > 0 && bad == 0, what + ": step-0 metadata equals OpenMS's (" + std::to_string(bad) + " of " +
                                  std::to_string(n) + " differ" + (bad ? "; first " + first : std::string()) + ")");
     check(bad_meta == 0, what + ": getSpectrumMetadata equals getSpectrum's metadata (" +

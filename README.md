@@ -324,7 +324,8 @@ Charged tiling DIA is only warned about, by design. Post-hoc readings (not a
 re-score; only partly checked against vendor scan filters) are that the 8 refused files may be DIA
 runs filed as DDA, and that 4 of the missed DIA files, which showed no repeating
 window scheme, may be DDA library runs (see
-[doc/ACQUISITION-RELEASE-TEST.md](doc/ACQUISITION-RELEASE-TEST.md)). A mixed file
+[doc/ACQUISITION-RELEASE-TEST.md](doc/ACQUISITION-RELEASE-TEST.md)). If a file
+you know is DDA is refused, rerun with `-acquisition_check warn` or `off`. A mixed file
 is judged on its first MS2; `-stream` is not checked.
 
 `-acquisition_check warn` tags raw DIA anyway (experts; the tags are those
@@ -601,7 +602,7 @@ MGF→mzML direction is exact.
 | `-acquisition_probe_spectra <n>` | 4000 | MS2 spectra the acquisition check reads, metadata only, reading at most ten times as many spectra in all (advanced) |
 | `-pick_profile <legacy\|auto\|off>` | legacy | Centroid profile MS2 (MS:1000128) with OpenMS `PeakPickerHiRes` before tagging: `legacy` on mzPeak input only (as 1.11), `auto` on mzML and mzPeak input (not MGF), `off` never. Centroided MS2 are never re-picked. `-out_spectra` writes the spectra as they were tagged. Not with `-stream`. Experimental: `auto` failed its held-out test and is not recommended (see Performance) |
 | `-pick_unknown_type` | off | With `-pick_profile auto`: also centroid MS2 that declare no spectrum type, when OpenMS's `PeakTypeEstimator` reads their data as profile (advanced) |
-| `-ion_series <by\|cz\|auto\|ax>` | by | Ion series the MS2 spectra are read as: `by` (b/y ions, as 1.11), `cz` (c/z• ions of ETD/ECD, every spectrum), `auto` (c/z• for spectra whose activation is ETD or ECD, b/y for all others, hybrid EThcD/ETciD included, with a warning), `ax` (1.13: a/x ions of photodissociation, UVPD, every spectrum). Under `cz` and `ax`, and under `auto` when the run has electron-activated spectra (or, with `-ion_series_photo ax`, photo-activated ones), the tag TSV gains a last `ion_series` column and the census a `best_ion_series` column (see Ion series). Not with `-stream`. Experimental: `auto` and `ax` are not validated yet |
+| `-ion_series <by\|cz\|auto\|ax>` | by | Ion series the MS2 spectra are read as: `by` (b/y ions, as 1.11), `cz` (c/z• ions of ETD/ECD, every spectrum), `auto` (c/z• for spectra whose activation is ETD or ECD, b/y for all others, hybrid EThcD/ETciD included, with a warning), `ax` (1.13: a/x ions of photodissociation, UVPD, every spectrum). Under `cz` and `ax`, and under `auto` when the run has electron-activated spectra (or, with `-ion_series_photo ax`, photo-activated ones), the tag TSV gains a last `ion_series` column and the census a `best_ion_series` column (see Ion series). Not with `-stream`. Opt-in: on held-out Orbitrap ETD spectra `auto` gave 82.2% correct rank-1 tags against 0.9% under `by` (verdict inconclusive, see Validation); `ax` is not validated |
 | `-ion_series_hybrid <by\|both>` | by | 1.13, under `-ion_series auto` only: how hybrid EThcD/ETciD spectra are read. `by` is `auto` as in 1.12 (b/y ions, with the `Hybrid activation:` warning); `both` tags each hybrid mzML spectrum twice, as b/y and as c/z• ions, multiplies every E-value by 2 and merges the two passes' rows by E-value under one `-max_tags` cap; each row keeps its `ion_series` and every per-row consumer reads its offsets from it; `-species` and `-alkylation_out` count b/y rows only. The precursor hypotheses, `-check_header_charge`, the `-complement_tolerance_unit auto` probe, `-dump_spectrum` and the census diagnostics (`n_kept`, `n_edges`, `n_compl`) still read a hybrid spectrum as b/y (doc/HYBRID-IONS.md). Ignored with a warning under other modes; not with `-stream`. Experimental, not validated |
 | `-ion_series_photo <by\|ax>` | by | 1.13, under `-ion_series auto` only: the series photodissociation spectra are read as (activation MS:1000435 or a Thermo `@uvpd` filter token, and no collisional or electron method). `by` is `auto` as in 1.12; `ax` reads them as a/x ions (doc/AX-IONS.md). Ignored with a warning under other modes; not with `-stream`. Experimental |
 | `-complement_tolerance_unit <Da\|fragment\|auto>` | Da | How the complement window is set: `Da` is `-complement_tolerance` (0.02 Da, as 1.11); `fragment` is `-complement_tol_factor` x (the fragment tolerance at the peak + at its partner); `auto` measures it on the run from the complement pairs of high-confidence tags (see doc/COMPLEMENT-TOLERANCE.md) and never sets a window narrower than `-complement_tolerance`, which is also the fallback when the probe finds too few pairs. The window in force is logged and recorded in `-out_spectra` (mzML) and the `-census`/`-alkylation_out` run rows. Experimental: `auto` failed its held-out test (see Validation); not with `-stream` or mzPeak input |
@@ -1398,10 +1399,11 @@ data.
 | #14 `-check_header_charge` (1.13, `acceptance/1.13`) | **INCONCLUSIVE** (item14-hdrcharge: two Astral runs without enough truth) | On the three Q Exactive runs `warn` flags 0.31% of right header charges, and on a copy with every fifth charge changed it finds 28% of the wrong ones at precision 0.95. Overriding real header charges breaks more than it fixes: -2.2 per 1000 identified spectra, lower bound -2.9 (criterion -1.0). Q Exactive only: on Astral (PXD070049) all 9 flags as given and all 8 on the perturbed copy were false (false alarm 0.026), with no changed header found. Experimental; `override` not recommended |
 | #2 `-complement_rule both` | **INCONCLUSIVE** | By rule 5: the truth of one Astral run (PXD074582) has 0 PSMs at 1% FDR. On the other runs endpoints (i)-(iii) fail descriptively. Default stays `same_charge` |
 | 1.13 `-complement_tolerance_unit auto` | **FAIL** | On the #2 design (`acceptance/1.13`, PREREG-compltol.md; 11 runs): ion trap at 0.5 Da +2.1 to +5.1 points rank-1 correct in every powered 2+/3+ cell, pooled L3 gain +3.05 points (ii PASS), timsTOF 4+ and time (ratio 1.027) PASS; but three Astral cells fail non-inferiority (L5 2+ -0.50 points; two 4+ cells by their bound). Measured with the first estimator (c5f96b5), whose window varied with the cell; the current cell-independent median/MAD estimator with `-complement_tolerance` as its lower bound is checked on DEV only. Default stays `Da` |
+| #15 `-ion_series auto` | **INCONCLUSIVE** | On the ETD spectra of 6 Orbitrap runs (PXD024621, PXD009208; MSFragger 4.4.1 c/z• truth at 1% FDR) correct rank-1 tags rise from 0.9% under `by` to 82.2% (+81.4 points, 95% interval 79.5-83.2; 5,313 peptide clusters): the electron endpoint passes. Collisional spectra are byte-identical, but the non-inferiority cells for 3+ and 4+ collisional spectra are empty (every HCD spectrum of PXD024621 is 2+), so the verdict is inconclusive. Default stays `by`; use `auto` (or `cz`) on ETD/ECD data |
 
 Every other 1.12 option (#1/#10 species call, #3 chemistry v2 and
 alkylation, #5 shortlist and search hand-off, #7 raw-DIA check, whose
-release test E7-03 failed (1.13 acceptance; see Raw DIA input is refused), #11 census, #15 ion series, #17 search shifts) is experimental and not
+release test E7-03 failed (see Raw DIA input is refused), #11 census, #17 search shifts) is experimental and not
 validated on held-out data. No 1.12 option is validated on low-resolution
 (ion-trap) MS2: the only ion-trap held-out results (#9 PXD009049; the
 ion_trap set of #6 item06-H1-r2) are a failure and a descriptive result.
@@ -1456,8 +1458,8 @@ tags fill the slots (hence the small change in total recall):
   (`Activation:`) when more than 1% of the spectra have a collisional,
   electron or hybrid activation; `-ion_series auto -ion_series_photo ax`
   reads only photodissociation spectra as a/x (doc/AX-IONS.md).
-  `-ion_series cz` or `auto` (1.12, experimental, not yet validated on real
-  ETD data) reads c/z• ions (see Ion series); under them one `Ion series`
+  `-ion_series cz` or `auto` (1.12, opt-in; on held-out Orbitrap ETD spectra
+  `auto` raised correct rank-1 tags from 0.9% to 82.2%, see Validation) reads c/z• ions (see Ion series); under them one `Ion series`
   line on stderr gives the spectra per series, `auto` warns (`Hybrid
   activation:`) when more than 1% of the spectra are hybrid and were read as
   b/y (not under `-ion_series_hybrid both`, which reads them as both series),

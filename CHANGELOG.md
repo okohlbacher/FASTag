@@ -2,13 +2,6 @@
 
 ## Unreleased
 
-- **#7 raw-DIA check, release test E7-03: FAIL** (acceptance/1.13, scored once;
-  no code, default or output change). 213 PRIDE files and 37 pseudo-DDA files were tested.
-  diaPASEF and Astral DIA were refused 12/12 each. Orbitrap DIA was refused 7/12 and the
-  SWATH stratum 10/12 (< 90%). 8 of 202 must-pass files were refused (upper 95% bound 7.0%),
-  all drawn from Astral projects labelled DDA. Pseudo-DDA passed 37/37. A post-hoc reading
-  that some disagreements are label errors is a hypothesis, not a re-score; see
-  doc/ACQUISITION-RELEASE-TEST.md.
 - **Label call minimum (backlog #8): `-label_call_min_tags`, experimental,
   default 175 (the 1.12 rule; no output change at the default).** At 0
   `label_call` makes no `no_call few_tags` below 175 C-terminal tag ends:
@@ -44,6 +37,46 @@
   places, the log warns, and the report gives the reason `tags_too_short` and
   an `alk_run min_tag_length` row. Reports on `-recon_fasta`, `-fasta` or a
   FASTA path are unchanged. `tools/fetch_proteomes.sh` regenerates the files.
+
+## 1.12.2 (2026-11-10)
+
+Faster mzML reading and acquisition check; no output changes. Defaults,
+options and the frozen acquisition-check thresholds are unchanged.
+
+- **Faster mzML reading.** 1.12.0 parsed every 1.12 metadata field of
+  every spectrum (type, filter string, activation, possible charges, the
+  isolation-target meta value), 4-6 µs per spectrum (+12% read time)
+  where the tagging loop needs only some of them. A read now fills only the
+  fields its caller uses, and the searches inside a spectrum stop at the
+  end of the element they look in. Read time is back to 1.11.0's
+  (single core: 44.9 µs per spectrum against 46.0-46.8 for 1.11.0 and 52.0
+  for 1.12.0 on PXD003531; 39.9 against 39.6-40.2 and 43.9 on PXD047793).
+- **Faster acquisition check.** On mzML the probe reads its spectra in
+  parallel over `-threads`, one reader per thread, and parses only the
+  fields the check uses. It reads the same spectra in the same order and
+  stops at the same one, so the call, the `Acquisition check:` line and
+  `-probe_input` are unchanged.
+- Measured on ibminode05 (AMD EPYC 7763, idle), matched settings, median
+  of 5 interleaved runs, wall against 1.11.0: PXD003531 at 1 thread +2.1%
+  (1.12.0: +7.8%), at 32 threads +0.0% (1.12.0: +31%), PXD047793 at 32
+  threads +1.4% (1.12.0: +4.5%). Tags equal 1.12.0's and 1.11.0's in every
+  run.
+- **#15 `-ion_series auto`: INCONCLUSIVE.** Scored once on held-out Orbitrap
+  ETD runs (PXD024621, PXD009208) against MSFragger 4.4.1 c/z• identifications
+  at 1% FDR: on ETD spectra correct rank-1 tags rise from 0.9% under `by` to
+  82.2% (+81.4 points, 95% interval 79.5-83.2; 5,313 peptide clusters), and
+  collisional spectra are byte-identical. The non-inferiority cells for 3+ and
+  4+ collisional spectra are empty (every HCD spectrum of PXD024621 is 2+), so
+  the default stays `by`. The README now recommends `auto` or `cz` for ETD/ECD
+  data. The ion-trap sets of the first preregistration were replaced by
+  Orbitrap sets before any run.
+- **#7 raw-DIA check, release test E7-03: FAIL** (scored once on a fresh PRIDE
+  sample; the default stays `-acquisition_check refuse`). diaPASEF and Astral DIA
+  were refused 12/12 each, Orbitrap DIA 7/12 and SWATH 10/12 (< 90%); 8 of 202
+  must-pass files were refused (upper 95% bound 7.0%), all from Astral projects
+  labelled DDA; pseudo-DDA passed 37/37. A post-hoc reading that some of these are
+  label errors is a hypothesis, not a re-score (doc/ACQUISITION-RELEASE-TEST.md).
+  Override a wrong refusal with `-acquisition_check warn` or `off`.
 
 ## 1.12.1 (2026-11-08)
 

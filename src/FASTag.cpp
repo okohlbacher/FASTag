@@ -3386,7 +3386,8 @@ protected:
                          && !(hybrid_both && scan.of(FASTag::IonSeries::Activation::Hybrid) > 0); ++i)
       {
         MSSpectrum head;
-        if (fastmz) head = fastmz->getSpectrumMetadata(i);
+        // Activation and filter string only (1.12.2): all activationClass() reads.
+        if (fastmz) head = fastmz->getSpectrumMetadata(i, FASTag::IndexedMzMLReader::kActivationFields);
         else if (od_meta) { if (i < od_meta->size()) head = (*od_meta)[i]; }
         else if (i < exp.size()) head = exp[i];
         if (head.getMSLevel() == 2)
@@ -4889,7 +4890,12 @@ protected:
         bool loaded_here = false;
         if (mzs) { loaded = mzs->take(static_cast<size_t>(i), *picker); loaded_here = true; }
         if (!loaded_here && mreader) { loaded = mreader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
-        if (!loaded_here && freader) { loaded = freader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
+        // The step-0 fields the loop reads, no more (1.12.2; IndexedMzMLReader::kTaggingFields).
+        if (!loaded_here && freader)
+        {
+          loaded = freader->getSpectrum(static_cast<Size>(i), FASTag::IndexedMzMLReader::kTaggingFields);
+          loaded_here = true;
+        }
         if (!loaded_here && reader) { loaded = reader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
         if (pick_in_loop)
         {
