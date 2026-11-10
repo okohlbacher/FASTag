@@ -16,7 +16,13 @@
 //     explicit add_C_cysteine = 0 (Comet applies Carbamidomethyl by default),
 //     the variable-mod terminus encoding (CometModification.cpp) and the rule
 //     that [COMET_ENZYME_INFO] must come last.
-// The enzyme is always trypsin: placement windows are tryptic (ProteomeIndex).
+// renderMSFragger (1.13, backlog #18) writes a complete MSFragger 4.4.1
+// fragger.params in the key order of `java -jar MSFragger.jar --config
+// closed`; its key names and value encodings were checked against the
+// parameters MSFragger 4.4.1 echoes ("Parameters:" in its log), see
+// test/fixtures/msfragger_4.4.1_echo.txt.
+// The enzyme is trypsin unless -shortlist_protease (1.13 item 20) names
+// another rule: every renderer then writes that rule (SearchPlan::enzyme).
 //
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
@@ -38,6 +44,26 @@ namespace OpenMS
 
 namespace FASTag::SearchConfig
 {
+  /// The digestion the engine searches with (1.13 item 20). The default is
+  /// FASTag 1.12's: trypsin, fully specific, Comet enzyme 1, and every
+  /// renderer writes then exactly what 1.12 wrote.
+  struct Enzyme
+  {
+    std::string name = "Trypsin";  ///< for messages
+    std::string cut = "KR";        ///< "" = unspecific (no cleavage rule)
+    std::string nocut = "P";       ///< "" = no restriction
+    bool c_terminal = true;
+    int termini = 2;               ///< 2 fully, 1 semi-specific
+    /// Comet `comet -p` (2026.03.0) table number of this rule, -1 none: a
+    /// Comet configuration then needs -search_config_template.
+    int comet_default = 1;
+    bool unspecific() const { return cut.empty(); }
+    bool isDefault() const
+    {
+      return cut == "KR" && nocut == "P" && c_terminal && termini == 2;
+    }
+  };
+
   struct SearchPlan
   {
     std::string database;  ///< FASTA the engine searches
@@ -52,9 +78,12 @@ namespace FASTag::SearchConfig
     bool precursor_ppm = true;
     std::string decoy_prefix;          ///< "" = the engine's FASTag default (rev_ / DECOY_)
     std::string fastag_version;        ///< written into the header comment
+    Enzyme enzyme;                     ///< 1.13 item 20; default trypsin
+    int threads = 0;                   ///< MSFragger num_threads (FASTag's -threads; 0 = all CPUs)
   };
 
-  /// The decoy prefix a plan uses for @p engine ("sage" or "comet").
+  /// The decoy prefix a plan uses for @p engine ("sage", "comet" or
+  /// "msfragger"): rev_ for Sage and MSFragger (Philosopher/FragPipe), DECOY_ for Comet.
   std::string decoyPrefix(const SearchPlan& p, const std::string& engine);
 
   /// Sage term symbol and residue for one modification, as SageAdapter
@@ -91,6 +120,33 @@ namespace FASTag::SearchConfig
   /// to merge it into `comet -p` defaults (-search_config_template).
   std::string renderComet(const SearchPlan& p, std::string* err = nullptr);
 
+  /// MSFragger's site of a variable modification (fragger.params: "amino acid
+  /// codes, [ and ] specifies protein termini, n and c specifies peptide
+  /// termini"): the residue letter; "n^"/"c^" a peptide terminus, "[^"/"]^" a
+  /// protein terminus, followed by the residue instead of '^' for a terminal
+  /// modification on one residue ("nQ", "[M"). "" for a modification on any
+  /// residue, which FASTag does not export.
+  std::string msfraggerSite(const OpenMS::ResidueModification& mod);
+
+  /// Every key of a complete MSFragger 4.4.1 fragger.params in the order of
+  /// its `--config closed` file, with FASTag's values: database, decoy prefix,
+  /// the precursor window (precursor_mass_lower/upper/units) and the same
+  /// precursor_true_tolerance/units, fragment tolerance, calibrate_mass 0,
+  /// isotope_error 0/../n, mass_offsets with 0 first ('/'-separated),
+  /// trypsin and missed cleavages, the used variable_mod_NN slots only and
+  /// every add_* key (0.0 unless the plan sets it). The other keys keep the
+  /// --config closed defaults, except num_threads (the plan's threads: an
+  /// explicit -threads n is n, FASTag's default -threads 0 stays 0 = every
+  /// CPU) and labile_fragment_ion_series b,y (4.4.1 rejects its own blank
+  /// default). Returns "" or an error (a modification or setting MSFragger
+  /// cannot take; also mass offsets with a Da precursor window, on which
+  /// MSFragger 4.4.1 exits 1 with "Could not find <delta> in the list").
+  std::string msfraggerKeys(const SearchPlan& p, std::vector<std::pair<std::string, std::string>>& keys);
+
+  /// The complete fragger.params ("key = value" lines, no inline comments:
+  /// MSFragger 4.4.1 reads a comment after spaces as part of the value).
+  std::string renderMSFragger(const SearchPlan& p, std::string* err = nullptr);
+
   struct MergeResult
   {
     std::string text;
@@ -113,6 +169,13 @@ namespace FASTag::SearchConfig
   /// or no trypsin in it, is an error.
   MergeResult mergeKeyValueTemplate(const std::string& tmpl,
                                     const std::vector<std::pair<std::string, std::string>>& keys);
+  /// 1.13 item 20: the same with the plan's enzyme: its entry in the table
+  /// (same sense, cut residues as a set, no-cut residue or '-'; unspecific:
+  /// sense 0, cut '-', no-cut '-') sets both enzyme numbers. The default
+  /// Enzyme is the call above, byte for byte.
+  MergeResult mergeKeyValueTemplate(const std::string& tmpl,
+                                    const std::vector<std::pair<std::string, std::string>>& keys,
+                                    const Enzyme& enzyme);
 
   // ---- #17: mass shifts as search-engine configuration --------------------
   //
@@ -147,11 +210,13 @@ namespace FASTag::SearchConfig
   //      (the spectra-weighted median of centroid - mass over the
   //      single-modification peaks other than rule-0 isotope peaks, applied
   //      only beyond ShiftSettings::resolution; Sage, or a negative offset:
-  //      dropped_engine); a combination of exported SILAC labels only ->
+  //      dropped_engine; MSFragger keeps negative offsets, but with a Da
+  //      precursor window every offset is dropped_engine: MSFragger 4.4.1
+  //      exits 1 on it); a combination of exported SILAC labels only ->
   //      already_searched;
   //   5. caps: max_variable peaks as variable modifications, max_offsets
   //      offsets (0 is always first and not counted), 15 Comet slots with the
-  //      plan's own: the rest dropped_cap;
+  //      plan's own (MSFragger 16): the rest dropped_cap;
   //   -search_shifts variable or offsets: what the mode does not export is
   //      dropped_mode (offsets: rules 2 and 3 export the gap as an offset).
   // Site expansion (expand_sites): a variable modification of rule 3 gains a
@@ -186,7 +251,7 @@ namespace FASTag::SearchConfig
   struct ShiftSettings
   {
     ShiftMode mode = ShiftMode::None;
-    std::string engine = "sage";       ///< sage or comet
+    std::string engine = "sage";       ///< sage, comet or msfragger
     double tol = 0.02;                 ///< the gap window in Da (FD::GapSettings::window)
     std::size_t max_variable = 3, max_offsets = 10;
     bool expand_sites = false;

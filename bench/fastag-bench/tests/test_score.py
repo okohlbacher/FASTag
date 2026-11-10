@@ -177,9 +177,29 @@ def test_flank_reversed_offset_per_ion_series():
     tags["ion_series"] = ["cz", "by"]
     mixed = S.score_tags(tags, psms, ks=(1,), rule="flank")
     assert mixed["all_tags_correct"] == 1
-    tags["ion_series"] = ["ax", "by"]
+    tags["ion_series"] = ["zz", "by"]
     with pytest.raises(ValueError):
         S.score_tags(tags, psms, ks=(1,), rule="flank")
+
+
+def test_flank_reversed_offset_ax():
+    # FASTag 1.13 item 11: a reversed a-ion read carries offC - offN = CO2 + CO = +71.984744.
+    res, pref, total = _flank_case()
+    j = res.index("TLD")
+    off = S.REVERSED_OFFSET["ax"]
+    assert abs(off - 71.984744) < 1e-5
+    n_ax, c_ax = total - pref[j + 3] + off, pref[j] - off
+    assert S.tag_correct_flank("DLT", n_ax, c_ax, res, pref, total, reversed_offset=off)
+    assert not S.tag_correct_flank("DLT", n_ax, c_ax, res, pref, total)          # read as b/y: wrong
+    assert not S.tag_correct_flank("DLT", n_ax, c_ax, res, pref, total, reversed_offset=S.REVERSED_OFFSET["cz"])
+    psms = pd.DataFrame({"key": ["scan=1", "scan=2"], "peptide": ["PEPTIDEK", "PEPTIDEK"]})
+    tags = _tags([("scan=1", "DLT"), ("scan=2", "DLT")])
+    tags["nterm_mass"] = [n_ax, n_ax]
+    tags["cterm_mass"] = [c_ax, c_ax]
+    tags["ion_series"] = ["ax", "by"]
+    assert S.score_tags(tags, psms, ks=(1,), rule="flank")["all_tags_correct"] == 1
+    tags["ion_series"] = ["ax", "ax"]
+    assert S.score_tags(tags, psms, ks=(1,), rule="flank")["all_tags_correct"] == 2
 
 
 def test_score_tags_flank_vs_sequence_and_chance():

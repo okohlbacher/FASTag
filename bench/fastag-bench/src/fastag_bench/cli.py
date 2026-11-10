@@ -274,6 +274,19 @@ def cmd_unidentified(a) -> int:
     return 0
 
 
+def cmd_realchimera(a) -> int:
+    from . import realchimera as RC
+    cfg = RC.load(a.config)
+    if a.split:
+        cfg["realchimera"]["split"] = a.split
+    try:
+        RC.run_step(cfg, a.step)
+    except (ValueError, RuntimeError) as e:
+        print(f"fastag-bench realchimera: {e}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="fastag-bench", description=__doc__)
     ap.add_argument("--version", action="version", version=f"fastag-bench {__version__}")
@@ -385,6 +398,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--ratios", help="chimera ratios major:minor, comma list (default unidentified.ratios)")
     p.add_argument("--seed", type=int, help="override the decoy, swap and chimera seeds")
     p.set_defaults(func=cmd_unidentified)
+
+    from .realchimera import STEPS as RC_STEPS
+    p = sub.add_parser("realchimera", help="1.13 item 12: tag accuracy on real chimeric spectra (Sage chimera/"
+                                           "wide_window truth, MS1 precursor purity)")
+    p.add_argument("step", choices=RC_STEPS)
+    p.add_argument("-c", "--config", required=True, help="e.g. config/realchimera-dev.yaml")
+    p.add_argument("--split", help="manifest split to run (default realchimera.split of the config)")
+    p.set_defaults(func=cmd_realchimera)
     return ap
 
 

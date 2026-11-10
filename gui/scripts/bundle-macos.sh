@@ -7,6 +7,7 @@
 #     share/OpenMS/           OpenMS data (OPENMS_DATA_PATH)
 #     share/FASTag/taxonomy/  the k-mer index + NCBI dumps (FASTAG_TAXONOMY_DIR)
 #     share/FASTag/digest/    the -digest_out models, -massgap_out modifications
+#     share/FASTag/alkylation/ the -alkylation_proteome proteomes (UniProt, CC BY 4.0)
 #
 # Bundling libomp exactly once is what avoids `OMP: Error #15 (libomp already
 # initialized)` without KMP_DUPLICATE_LIB_OK. Tauri's resource bundler skips
@@ -19,6 +20,7 @@
 #   OPENMS_SHARE   OpenMS data dir                   [openms-src/share/OpenMS]
 #   TAXONOMY_DIR   share/FASTag/taxonomy             [share/FASTag/taxonomy]
 #   DIGEST_DIR     share/FASTag/digest               [data/digest]
+#   ALKYLATION_DIR share/FASTag/alkylation           [data/alkylation]
 #   OUT            output resource root              [gui/src-tauri/resources/fastag]
 set -euo pipefail
 
@@ -29,6 +31,7 @@ DEPS_LIB="${DEPS_LIB:-$repo/../fastag-mm/envs/omsbuild/lib}"
 OPENMS_SHARE="${OPENMS_SHARE:-$repo/../openms-src/share/OpenMS}"
 TAXONOMY_DIR="${TAXONOMY_DIR:-$repo/share/FASTag/taxonomy}"
 DIGEST_DIR="${DIGEST_DIR:-$repo/data/digest}"
+ALKYLATION_DIR="${ALKYLATION_DIR:-$repo/data/alkylation}"
 OUT="${OUT:-$repo/gui/src-tauri/resources/fastag}"
 
 command -v dylibbundler >/dev/null || { echo "need dylibbundler (brew install dylibbundler)"; exit 1; }
@@ -69,6 +72,7 @@ echo ">> copying OpenMS data, taxonomy and digest data"
 cp -R "$OPENMS_SHARE" "$OUT/share/OpenMS"
 cp -R "$TAXONOMY_DIR" "$OUT/share/FASTag/taxonomy"
 cp -R "$DIGEST_DIR" "$OUT/share/FASTag/digest"
+cp -R "$ALKYLATION_DIR" "$OUT/share/FASTag/alkylation"
 
 libomp=$(ls "$OUT"/lib | grep -c '^libomp\.dylib$' || true)
 echo ">> done: $(du -sh "$OUT" | cut -f1) at $OUT (libomp copies: $libomp — must be 1)"
