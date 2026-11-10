@@ -568,6 +568,18 @@
       ]
     },
     {
+      "name": "ion_series_hybrid",
+      "type": "string",
+      "default": "by",
+      "description": "Under -ion_series auto: how hybrid-activated spectra (EThcD, ETciD) are read: by (b/y ions, as before 1.13) or both (tagged twice, as b/y and as c/z-dot ions; the rows of both passes merged by E-value under one -max_tags cap, every E-value multiplied by 2, each row with its ion_series). mzML input only. Experimental",
+      "required": false,
+      "toppAdvanced": true,
+      "choices": [
+        "by",
+        "both"
+      ]
+    },
+    {
       "name": "ion_series_photo",
       "type": "string",
       "default": "by",

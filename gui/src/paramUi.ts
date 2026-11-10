@@ -979,6 +979,12 @@ export const PARAM_UI: Record<string, ParamUi> = {
       text: 'Under ion series auto: read photodissociation (UVPD) spectra as b/y ions (the default) or as a/x ions. Experimental.'
     }
   },
+  ion_series_hybrid: {
+    hidden: OPT_IN_1_13_EXPERIMENTAL,
+    help: {
+      text: 'Under ion series auto: read hybrid EThcD/ETciD spectra as b/y ions (the default) or tag them twice, as b/y and as c/z ions, and merge the rows (both). Experimental.'
+    }
+  },
   isotope_error: {
     hidden: OPT_IN_1_12,
     help: {

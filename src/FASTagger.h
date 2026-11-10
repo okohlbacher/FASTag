@@ -374,6 +374,14 @@ namespace FASTag
   /// apart, ~1e-6 Da) stay two tags.
   std::vector<Tag> mergeLengths(std::vector<std::vector<Tag>> per_length);
 
+  /// One hybrid spectrum's rows from its b/y and its c/z-dot pass (1.13 item
+  /// 10, -ion_series_hybrid both): both lists in one, stably sorted by E-value
+  /// (ties: b/y first, each pass's own order within it), cut to the @p cap
+  /// best rows (0: no cap). Every row keeps its Tag::ion_series; nothing is
+  /// deduplicated across passes, since the same peaks read as b/y and as c/z
+  /// give different flanks (two readings, not one).
+  std::vector<Tag> mergeSeriesPasses(std::vector<Tag> by, std::vector<Tag> cz, size_t cap);
+
   /// Strip inline modification annotations, leaving one base residue per
   /// position: "GS[Phospho]TK[TMT6plex]" -> "GSTK". Used for FASTA matching,
   /// which is against unmodified protein sequences.

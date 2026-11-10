@@ -526,6 +526,24 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mgf)
   set_tests_properties(ax_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # ---- 1.13 hybrid (backlog item 10): EThcD/ETciD as b/y and c/z-dot ----
+  # -ion_series auto -ion_series_hybrid both on synthetic mixed y/z runs
+  # (hybrid_ions_test --write-mzml): option off == 1.12, rows of both series,
+  # E-values x 2, placements, warnings, -stream refusal, threads, OnDisc,
+  # species exclusion.
+  add_executable(hybrid_ions_test test/hybrid_ions_test.cpp)
+  target_link_libraries(hybrid_ions_test PRIVATE fastag_core)
+  add_test(NAME hybrid_ions_test COMMAND hybrid_ions_test)
+  add_test(NAME hybrid_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/hybrid_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   $<TARGET_FILE:hybrid_ions_test>
+                   $<TARGET_FILE:buildtaxdb>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mgf)
+  set_tests_properties(hybrid_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # #6: -unknown_charge, -charge_*, -isotope_error on the fixture MGF with its
   # charges stripped: defaults equal 1.11.0, the infer call, header charges
   # kept, threads, losing hypotheses add no species, refusals.

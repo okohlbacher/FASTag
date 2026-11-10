@@ -1420,4 +1420,14 @@ namespace FASTag
         if (winner.at(key(t)).second == i) rows.push_back(std::move(t));
     return rows;
   }
+
+  std::vector<Tag> mergeSeriesPasses(std::vector<Tag> by, std::vector<Tag> cz, size_t cap)
+  {
+    std::vector<Tag> rows = std::move(by);
+    rows.reserve(rows.size() + cz.size());
+    for (Tag& t : cz) rows.push_back(std::move(t));
+    std::stable_sort(rows.begin(), rows.end(), [](const Tag& a, const Tag& b) { return a.evalue < b.evalue; });
+    if (cap > 0 && rows.size() > cap) rows.erase(rows.begin() + static_cast<std::ptrdiff_t>(cap), rows.end());
+    return rows;
+  }
 }

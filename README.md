@@ -602,6 +602,7 @@ MGF→mzML direction is exact.
 | `-pick_profile <legacy\|auto\|off>` | legacy | Centroid profile MS2 (MS:1000128) with OpenMS `PeakPickerHiRes` before tagging: `legacy` on mzPeak input only (as 1.11), `auto` on mzML and mzPeak input (not MGF), `off` never. Centroided MS2 are never re-picked. `-out_spectra` writes the spectra as they were tagged. Not with `-stream`. Experimental: `auto` failed its held-out test and is not recommended (see Performance) |
 | `-pick_unknown_type` | off | With `-pick_profile auto`: also centroid MS2 that declare no spectrum type, when OpenMS's `PeakTypeEstimator` reads their data as profile (advanced) |
 | `-ion_series <by\|cz\|auto\|ax>` | by | Ion series the MS2 spectra are read as: `by` (b/y ions, as 1.11), `cz` (c/z• ions of ETD/ECD, every spectrum), `auto` (c/z• for spectra whose activation is ETD or ECD, b/y for all others, hybrid EThcD/ETciD included, with a warning), `ax` (1.13: a/x ions of photodissociation, UVPD, every spectrum). Under `cz` and `ax`, and under `auto` when the run has electron-activated spectra (or, with `-ion_series_photo ax`, photo-activated ones), the tag TSV gains a last `ion_series` column and the census a `best_ion_series` column (see Ion series). Not with `-stream`. Experimental: `auto` and `ax` are not validated yet |
+| `-ion_series_hybrid <by\|both>` | by | 1.13, under `-ion_series auto` only: how hybrid EThcD/ETciD spectra are read. `by` is `auto` as in 1.12 (b/y ions, with the `Hybrid activation:` warning); `both` tags each hybrid mzML spectrum twice, as b/y and as c/z• ions, multiplies every E-value by 2 and merges the two passes' rows by E-value under one `-max_tags` cap; each row keeps its `ion_series` and every per-row consumer reads its offsets from it; `-species` and `-alkylation_out` count b/y rows only. The precursor hypotheses, `-check_header_charge`, the `-complement_tolerance_unit auto` probe, `-dump_spectrum` and the census diagnostics (`n_kept`, `n_edges`, `n_compl`) still read a hybrid spectrum as b/y (doc/HYBRID-IONS.md). Ignored with a warning under other modes; not with `-stream`. Experimental, not validated |
 | `-ion_series_photo <by\|ax>` | by | 1.13, under `-ion_series auto` only: the series photodissociation spectra are read as (activation MS:1000435 or a Thermo `@uvpd` filter token, and no collisional or electron method). `by` is `auto` as in 1.12; `ax` reads them as a/x ions (doc/AX-IONS.md). Ignored with a warning under other modes; not with `-stream`. Experimental |
 | `-complement_tolerance_unit <Da\|fragment\|auto>` | Da | How the complement window is set: `Da` is `-complement_tolerance` (0.02 Da, as 1.11); `fragment` is `-complement_tol_factor` x (the fragment tolerance at the peak + at its partner); `auto` measures it on the run from the complement pairs of high-confidence tags (see doc/COMPLEMENT-TOLERANCE.md) and never sets a window narrower than `-complement_tolerance`, which is also the fallback when the probe finds too few pairs. The window in force is logged and recorded in `-out_spectra` (mzML) and the `-census`/`-alkylation_out` run rows. Experimental: `auto` failed its held-out test (see Validation); not with `-stream` or mzPeak input |
 | `-complement_probe <n>` | 500 | With `-complement_tolerance_unit auto`: MS2 spectra the probe tags, drawn uniformly over the run with a fixed seed (advanced) |
@@ -698,8 +699,11 @@ of this precursor (doc/CZ-PRECURSOR-CUT.md). b/y tagging keeps the 1.12
 behaviour. `-recon_*`, `-digest_out`,
 `-label_out`, `-massgap_out`, `-delta_out` and the census take the offset from
 each tag; `-species` counts b/y tags only and reports how many c/z• rows it
-left out. Hybrid EThcD/ETciD spectra are read as b/y under `auto` (reading
-both series at once is not supported yet). A tag read as a/x ions (1.13,
+left out. Hybrid EThcD/ETciD spectra are read as b/y under `auto`; with
+`-ion_series_hybrid both` (1.13, experimental) they are tagged twice, as b/y
+and as c/z•, and the rows of both passes are merged by E-value, each with its
+own `ion_series`; the precursor hypotheses, `-check_header_charge`, the complement-tolerance probe,
+`-dump_spectrum` and the census diagnostics still read them as b/y (doc/HYBRID-IONS.md). A tag read as a/x ions (1.13,
 `-ion_series ax`, or `auto -ion_series_photo ax` on photodissociation spectra;
 `ion_series` = `ax`) follows the same convention with a = residues - CO and
 x = residues + CO2: a reversed read (the low peak an a ion) carries
@@ -1456,7 +1460,8 @@ tags fill the slots (hence the small change in total recall):
   ETD data) reads c/z• ions (see Ion series); under them one `Ion series`
   line on stderr gives the spectra per series, `auto` warns (`Hybrid
   activation:`) when more than 1% of the spectra are hybrid and were read as
-  b/y, and `cz` warns (`Collisional activation:`) when more than 1% are
+  b/y (not under `-ion_series_hybrid both`, which reads them as both series),
+  and `cz` warns (`Collisional activation:`) when more than 1% are
   collisional.
 - **Low-resolution (ion-trap) MS2 is not validated.** The validation numbers
   and the passing 1.12 held-out result (#4) are for high-resolution MS2. On ion-trap
