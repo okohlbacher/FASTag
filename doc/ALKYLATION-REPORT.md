@@ -194,9 +194,10 @@ itself.
 ## `-alkylation_tags_out` (1.13, database-free, format 1)
 
 Backlog #22, src/AlkylationTags.h. This report tries the same call without a
-protein database. It is opt-in and experimental, and it was **measured to fail
-on development data** (3 calls on 123 runs; see "Development result" below):
-its calls are unreliable, and the report says so in `alkt_run.status` and in
+protein database. It is opt-in and experimental. On development data it calls
+61 of 123 runs, 51 of them as the SDRF annotation states (see "Development
+result" below); unalkylated and low-resolution runs are rarely called, and
+there is no held-out test yet. The report says so in `alkt_run.status` and in
 the `alkylation_tags_call.status` description. With the option off nothing
 runs and no output changes. With it on, the tag TSV and every other result file
 are byte-identical, with two exceptions: the log gains one line, and an
@@ -215,10 +216,14 @@ Param, with these changes:
 - every tag with E <= 1 is kept: the run's `-max_tags`, `-max_evalue` and
   `-diversity` select output rows only, and the second pass writes none.
 
-A tag counts when it is ungapped, has E <= 1, was read at fragment charge 1
-and holds a C. Fragment charge 2 is left out because C[Propionamide]/2 lies
+A tag counts when it is ungapped, has E <= 1 and was read at fragment
+charge 1. Fragment charge 2 is left out because C[Propionamide]/2 lies
 0.009 Th from a singly charged S, so a 1+ S ladder also reads as a 2+
-Propionamide ladder. Each spectrum votes once, with its best counted tag:
+Propionamide ladder. A spectrum votes only when its best counted tag (lowest
+E-value) holds a C, no C is the first or last residue of that tag, and the
+E-value is at most 1e-4. A tag of equal E-value without a C does not stop the
+vote. Short tags leave few inner positions, so `-extension` gives more votes.
+The vote is:
 - for the form that all of the tag's C residues share;
 - as a conflict when the tag's C residues have two forms;
 - as a conflict when another tag of equal E-value has another form.
@@ -235,9 +240,11 @@ Carbamidomethyl and Carboxymethyl are 0.984 Da apart, so a 0.5 Da run
 cannot tell them apart; a 0.3 Da or ppm run can. Oxidised, cysteinylated
 and dehydroalanine Cys are not candidates here.
 
-**Background votes.** Random edges between noise peaks give weak C votes
-(E 0.3 to 1) even in spectra without a C. In the unit test, 3 of 12 synthetic
-C-free spectra with 20 noise peaks vote, each for a different form.
+**Background votes.** Random edges between noise peaks give weak C tags
+(E 0.3 to 1) even in spectra without a C, mostly at an end of a tag. The first
+version of the rule let every spectrum vote with its best C tag at E <= 1;
+those chance edges then spread the votes over all six forms (3 calls on 123
+development runs). The three conditions above remove most of them.
 
 **Confounds (not corrected).** A single edge equals a two-residue sum when the
 peak between the two residues is missing:
@@ -271,12 +278,30 @@ a spectrum's best tag there.
 
 **Development result (descriptive, not held-out).** On the 123 evaluable
 SDRF development runs of acceptance/1.12 (105 CAM, 17 none, 1 Methylthio),
-the report made 3 calls, 2 of them right. It returned no call `ambiguous` on
-117 runs. Random C edges spread the votes over all six forms. The median
-share is 0.22 for CAM in CAM runs and 0.24 for unmodified in none runs, far
-from the 0.6 the call needs. The #3g placement call made 27 calls (24 right)
-on the same 95 gap-command runs. The option is not usable as built; a
-background-corrected rule would need its own held-out test.
+split by PXD into a fitting half (59 runs) and a check half (64 runs); the
+rule was chosen on the fitting half only.
+
+| | runs | called | as annotated | not as annotated | no call |
+|---|---|---|---|---|---|
+| first rule, all | 123 | 3 | 2 | 1 | 120 |
+| fitting half | 59 | 29 | 26 | 3 | 30 |
+| check half | 64 | 32 | 25 | 7 | 32 |
+| all | 123 | 61 | 51 | 10 | 62 |
+
+Of the 10 calls that differ from the annotation, 5 are the five runs of
+PXD000900 (annotated CAM, called Nethylmaleimide with 0.73 to 0.85 of the
+votes), 3 are calls of none on runs annotated CAM (PXD040230, two HLA runs of
+PXD006939), 1 is Propionamide (PXD041573, Propionamide 221 and CAM 133
+votes), and 1 is CAM on a run annotated none (PXD062749, 23 of 24 votes). The
+#3g placement call, which uses a database, calls 25 of these 61 runs and
+gives the same class on all 25, among them Nethylmaleimide for a PXD000900
+run and none for PXD040230: part of the annotation is wrong, and it is not
+known how much.
+
+Limits: of the 17 runs annotated none, 1 is called none and 15 get no call
+(an unalkylated run reads about 0.5 unmodified and 0.2 CAM, the G + C twin).
+Runs with a fragment tolerance of 0.3 Da give flat votes and no call. The 62
+no-calls are 45 `ambiguous` and 17 `few_cys_spectra`.
 
 **Cost.** One more tagging of every MS2 spectrum. The alphabet has five more
 residues and no gap edges.
@@ -291,7 +316,7 @@ gui/src/digestReport.ts names none of its sections and refuses it.
 |---|---|
 | `format` | 1 |
 | `method` | `shadow_tags` |
-| `status` | `experimental_failed`: the method was measured to fail on development data; calls are unreliable |
+| `status` | `experimental`: development result only, no held-out test |
 | `forms` | the six candidate forms, comma-separated (n: 6) |
 | `c_mods_removed` | the run's C modifications that the second pass leaves out, as `Name (fixed)` / `Name (variable)`, or `-` |
 | `tag_lengths` | the seed lengths |
@@ -300,7 +325,7 @@ gui/src/digestReport.ts names none of its sections and refuses it.
 | `tags` | counted shadow tags (ungapped, E <= 1, fragment charge 1) |
 | `tags_multi` | ungapped E <= 1 shadow tags at fragment charge 2 or more, not counted |
 | `tags_with_c` | of them, tags with a C (n: `tags`) |
-| `spectra` | spectra with a vote (n: `spectra_tagged`) |
+| `spectra` | spectra with a vote: the best counted tag holds a C, none at an end, E <= 1e-4 (n: `spectra_tagged`) |
 | `min_spectra`, `min_share` | the call thresholds |
 | `edge_tolerance` | the edge tolerance in Da |
 | `forms_resolved` | `yes`, or `no` when two forms' own masses lie within twice the edge tolerance (then no call); 13C-shifted readings are under `alias.<form>` |

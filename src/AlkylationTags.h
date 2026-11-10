@@ -13,12 +13,15 @@
 // 1), so the run's output selection does not censor the votes.
 //
 // A shadow tag counts when it is ungapped with E <= 1
-// (Alkylation::countsTag), was read at fragment charge 1 and holds at least
-// one C. Fragment charge 2 is left out: C[Propionamide]/2 lies 0.009 Th from
+// (Alkylation::countsTag) and was read at fragment charge 1. Fragment charge 2 is left out: C[Propionamide]/2 lies 0.009 Th from
 // a singly charged S, so a 1+ S ladder also reads as a 2+ Propionamide one.
-// Each spectrum votes once, with its best (lowest E-value) counted tag: for
-// the form all its C residues share, else as a conflict; a tag of equal
-// E-value with another form also makes the vote a conflict. The call is
+// A spectrum votes only when its best (lowest E-value) counted tag holds a
+// C, no C is the first or last residue of that tag, and its E-value is at
+// most kVoteMaxEvalue (1e-4): the vote is for the form all its C residues
+// share, else a conflict; a tag of equal E-value with another form also
+// makes the vote a conflict. (The first rule, the best C tag of every
+// spectrum at E <= 1, failed: chance C edges in weak or terminal positions
+// spread the votes over all forms.) The call is
 // #3g's rule (Alkylation::callAlkylation) over the six classes (five
 // reagents and none = unmodified C), plus one rule of its own: no call
 // (unresolved_forms) when two candidate C masses lie within twice the edge
@@ -36,8 +39,9 @@
 // Carboxymethyl. The report lists the twins within the run's tolerance
 // (aliases()); formsResolved() compares the forms' own masses only.
 //
-// Opt-in and experimental: measured to fail on development data (3 calls
-// on 123 runs; doc/ALKYLATION-REPORT.md, section "-alkylation_tags_out").
+// Opt-in and experimental: on development data 61 of 123 runs are called,
+// 51 as the SDRF annotation states, and unalkylated runs are rarely called;
+// no held-out test yet (doc/ALKYLATION-REPORT.md, "-alkylation_tags_out").
 //
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
@@ -88,9 +92,22 @@ namespace FASTag::AlkylationTags
   std::array<std::uint32_t, kNumCandidates> formsInTag(const std::string& seq,
                                                        const std::vector<Alkylation::Form>& cands);
 
-  /// One spectrum's vote: its best counted tag with a C.
+  /// A spectrum votes only when its best counted tag has an E-value of at
+  /// most this (reassessment on development data: chance C edges fill the
+  /// looser tags).
+  inline constexpr double kVoteMaxEvalue = 1e-4;
+
+  /// Whether the first or the last residue of the tag sequence @p seq is a C
+  /// (any form). A terminal edge has one neighbour less to confirm it.
+  bool cAtEnd(const std::string& seq);
+
+  /// One spectrum's vote: its best counted tag whose C residues are all
+  /// inside the tag (have, evalue, conflict, form), and the best E-value of
+  /// any counted tag (best).
   struct Vote
   {
+    bool any = false;
+    double best = 0.0;  ///< lowest E-value over the counted tags, with or without C
     bool have = false;
     double evalue = 0.0;
     bool conflict = false;
@@ -129,9 +146,11 @@ namespace FASTag::AlkylationTags
     std::array<std::uint64_t, kNumCandidates> residues{};  ///< C residues per form over counted tags
 
     /// One shadow tag of a spectrum: counted when countsTag(); its vote kept
-    /// in @p v when it has a C and is the spectrum's best so far.
+    /// in @p v when it has a C, none at an end, and is the best such so far.
     void addTag(Vote& v, const Tag& t, const std::vector<Alkylation::Form>& cands);
-    /// The spectrum's vote (after its tags); also counts the spectrum as tagged.
+    /// The spectrum's vote (after its tags), cast only when that tag is the
+    /// spectrum's best counted tag and its E-value is at most kVoteMaxEvalue;
+    /// also counts the spectrum as tagged.
     void addSpectrum(const Vote& v);
     void merge(const Tally& o);
     /// The vote counts as an Alkylation::Tally (class = candidate class), for

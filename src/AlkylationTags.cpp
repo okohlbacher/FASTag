@@ -160,6 +160,15 @@ namespace FASTag::AlkylationTags
     return n;
   }
 
+  bool cAtEnd(const std::string& seq)
+  {
+    if (seq.empty()) return false;
+    if (seq.front() == 'C' || seq.back() == 'C') return true;
+    if (seq.back() != ']') return false;
+    const std::size_t b = seq.rfind('[');
+    return b != std::string::npos && b > 0 && seq[b - 1] == 'C';
+  }
+
   void Tally::addTag(Vote& v, const Tag& t, const std::vector<Alkylation::Form>& cands)
   {
     if (!Alkylation::countsTag(t.gapped, t.evalue)) return;
@@ -169,6 +178,8 @@ namespace FASTag::AlkylationTags
       return;
     }
     ++tags;
+    if (!v.any || t.evalue < v.best) v.best = t.evalue;
+    v.any = true;
     const auto n = formsInTag(t.seq, cands);
     int form = -1, kinds = 0;
     for (int k = 0; k < kNumCandidates; ++k)
@@ -180,6 +191,7 @@ namespace FASTag::AlkylationTags
       }
     if (kinds == 0) return;
     ++tags_with_c;
+    if (cAtEnd(t.seq)) return;
     if (v.have && t.evalue == v.evalue)
     {
       // An equal E-value with another form: the evidence does not decide.
@@ -200,7 +212,7 @@ namespace FASTag::AlkylationTags
   void Tally::addSpectrum(const Vote& v)
   {
     ++spectra_tagged;
-    if (!v.have) return;
+    if (!v.have || v.evalue > v.best || v.evalue > kVoteMaxEvalue) return;
     ++spectra;
     if (v.conflict) ++conflict;
     else ++votes[static_cast<std::size_t>(v.form)];
@@ -258,9 +270,9 @@ namespace FASTag::AlkylationTags
     add("alkt_run", "method", "shadow_tags", "-",
         "Every MS2 spectrum is tagged a second time with unmodified C and one alternative C edge per reagent; "
         "those tags are not written. No database is used.");
-    add("alkt_run", "status", "experimental_failed", "-",
-        "Experimental: measured to fail on development data (3 calls on 123 runs; doc/ALKYLATION-REPORT.md). "
-        "Random C edges spread the votes over all forms; calls are unreliable.");
+    add("alkt_run", "status", "experimental", "-",
+        "Experimental: on development data 61 of 123 runs were called, 51 as annotated (doc/ALKYLATION-REPORT.md); "
+        "not tested on held-out data. Unalkylated and low-resolution runs are rarely called.");
     std::string forms;
     for (const auto& f : cands) forms += (forms.empty() ? "" : ",") + f.name;
     add("alkt_run", "forms", forms, std::to_string(cands.size()), "The C forms the shadow pass can spell.");
@@ -281,7 +293,8 @@ namespace FASTag::AlkylationTags
         u(t.tags_multi) + " such tags read at fragment charge 2 or more are not counted (C[Propionamide]/2 reads like S).");
     add("alkt_run", "tags_with_c", u(t.tags_with_c), u(t.tags), u(t.tags_with_c) + " of them hold a C.");
     add("alkt_run", "spectra", u(t.spectra), u(t.spectra_tagged),
-        u(t.spectra) + " spectra have such a tag; each votes once, with its best one.");
+        u(t.spectra) + " spectra vote: their best counted tag holds a C, none at an end of the tag, with an E-value of at most " +
+            num(kVoteMaxEvalue) + ".");
     add("alkt_run", "min_spectra", u(s.min_spectra), "-",
         "A call needs " + u(s.min_spectra) + " votes in total and for the called class.");
     add("alkt_run", "min_share", num(s.min_share), "-", "A call needs a share of " + num(s.min_share) + " of the votes.");
@@ -322,7 +335,7 @@ namespace FASTag::AlkylationTags
                 "(C[Name]+13C / -13C), read like C[" + f.name + "] (reading:distance in Da); such votes are not corrected.");
     }
     add("alkt_form", "conflict", u(t.conflict), u(t.spectra),
-        u(t.conflict) + " spectra have a best tag (or tags of equal E-value) with C residues of two forms; they are not in the share.");
+        u(t.conflict) + " voting spectra have a best tag (or tags of equal E-value) with C residues of two forms; they are not in the share.");
 
     // ---- alkylation_tags_call
     const std::string name = c.cls >= 0 ? Alkylation::className(c.cls) : "-";
@@ -334,9 +347,9 @@ namespace FASTag::AlkylationTags
         if (f.cls == c.cls && f.cls != Alkylation::None) { mass = f.mass; break; }
       add(sec, "status", "call", u(c.binned),
           c.cls == Alkylation::None
-              ? "The votes favour unalkylated cysteines (database-free; the method was measured to fail on development data, so the call is unreliable)."
+              ? "The votes favour unalkylated cysteines (database-free; experimental, not tested on held-out data)."
               : "The votes favour " + name +
-                    " (database-free; the method was measured to fail on development data, so the call is unreliable).");
+                    " (database-free; experimental, not tested on held-out data).");
       add(sec, "reagent", name, u(c.top), "The call is " + name + ".");
       add(sec, "mass", c.cls == Alkylation::None ? "-" : num(mass), "-",
           c.cls == Alkylation::None ? "A call of none has no reagent mass." : name + " adds " + num(mass) + " Da to C.");

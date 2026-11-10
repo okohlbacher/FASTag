@@ -161,15 +161,16 @@ int main(int argc, char** argv)
     check(sum == 0, "no C, nothing counted");
   }
 
-  // ---- votes: best counted tag with a C; conflicts; gapped and E > 1 ignored
+  // ---- votes: the spectrum's best counted tag, when it has a C, none at an
+  // end, and E <= kVoteMaxEvalue; conflicts; gapped and E > 1 ignored
   {
     AT::Tally t;
     AT::Vote v;
-    t.addTag(v, tag("PEPTK", 1e-3), cands);                    // counted, no C
-    t.addTag(v, tag("LC[Propionamide]EK", 0.5), cands);        // vote Prop
-    t.addTag(v, tag("LC[Carbamidomethyl]EK", 0.1), cands);     // better: CAM
-    t.addTag(v, tag("LCEK", 0.2), cands);                      // worse
-    t.addTag(v, tag("C[Methylthio]EK", 1e-5, true), cands);    // gapped: not counted
+    t.addTag(v, tag("PEPTK", 1e-5), cands);                    // counted, no C
+    t.addTag(v, tag("LC[Propionamide]EK", 1e-6), cands);       // vote Prop
+    t.addTag(v, tag("LC[Carbamidomethyl]EK", 1e-7), cands);    // better: CAM
+    t.addTag(v, tag("LCEK", 1e-6), cands);                     // worse
+    t.addTag(v, tag("C[Methylthio]EK", 1e-9, true), cands);    // gapped: not counted
     t.addTag(v, tag("C[Methylthio]EK", 2.0), cands);           // E > 1: not counted
     t.addSpectrum(v);
     check(t.tags == 4 && t.tags_with_c == 3, "counted tags and tags with C");
@@ -177,11 +178,11 @@ int main(int argc, char** argv)
     check(t.residues[0] == 1 && t.residues[1] == 1 && t.residues[AT::kUnmodified] == 1 && t.residues[3] == 0,
           "residues per form over counted tags");
     AT::Vote w;
-    t.addTag(w, tag("C[Carbamidomethyl]VC", 0.01), cands);
+    t.addTag(w, tag("LC[Carbamidomethyl]VCK", 1e-6), cands);
     t.addSpectrum(w);
     check(t.spectra == 2 && t.conflict == 1 && t.votes[0] == 1, "two forms in the best tag is a conflict");
     AT::Vote none;
-    t.addTag(none, tag("PEPK", 0.1), cands);
+    t.addTag(none, tag("PEPK", 1e-6), cands);
     t.addSpectrum(none);
     check(t.spectra_tagged == 3 && t.spectra == 2, "a spectrum without a C tag is tagged but does not vote");
     AT::Tally u;
@@ -189,20 +190,46 @@ int main(int argc, char** argv)
     u.merge(t);
     check(u.spectra == 4 && u.votes[0] == 2 && u.residues[0] == 4 && u.conflict == 2, "merge sums");
 
+    // 1.13 #22 reassessment: no vote when the spectrum's best tag has no C,
+    // when the C is the first or last residue, or when E > kVoteMaxEvalue
+    check(AT::cAtEnd("CVEK") && AT::cAtEnd("C[Carbamidomethyl]VEK") && AT::cAtEnd("VEKC") && AT::cAtEnd("VEKC[Propionamide]"),
+          "cAtEnd: a C at either end, any form");
+    check(!AT::cAtEnd("VC[Propionamide]EK") && !AT::cAtEnd("VCEM[Oxidation]") && !AT::cAtEnd("") && !AT::cAtEnd("PEPK"),
+          "cAtEnd: an inner C, another residue's annotation, no C");
+    AT::Tally q;
+    AT::Vote q1, q2, q3, q4, q5;
+    q.addTag(q1, tag("LC[Carbamidomethyl]EK", 1e-6), cands);
+    q.addTag(q1, tag("PEPTK", 1e-7), cands);  // the best tag has no C
+    q.addSpectrum(q1);
+    check(q.spectra == 0, "no vote when a tag without C is better");
+    q.addTag(q2, tag("C[Carbamidomethyl]VEK", 1e-7), cands);
+    q.addSpectrum(q2);
+    q.addTag(q3, tag("VEKC", 1e-7), cands);
+    q.addTag(q3, tag("LC[Propionamide]EK", 1e-6), cands);  // inner C, but not the best tag
+    q.addSpectrum(q3);
+    check(q.spectra == 0 && q.tags_with_c == 4, "no vote with a C at an end of the best tag");
+    q.addTag(q4, tag("LC[Carbamidomethyl]EK", 2.0 * AT::kVoteMaxEvalue), cands);
+    q.addSpectrum(q4);
+    check(q.spectra == 0, "no vote above kVoteMaxEvalue");
+    q.addTag(q5, tag("LC[Carbamidomethyl]EK", AT::kVoteMaxEvalue), cands);
+    q.addTag(q5, tag("PEPTK", AT::kVoteMaxEvalue), cands);  // a tie with a tag without C keeps the vote
+    q.addSpectrum(q5);
+    check(q.spectra == 1 && q.votes[0] == 1, "a vote at kVoteMaxEvalue, tied with a tag without C");
+
     // equal E-values: another form makes a conflict, the same form does not
     AT::Tally e;
     AT::Vote a, b, c2;
-    e.addTag(a, tag("LC[Propionamide]EK", 0.1), cands);
-    e.addTag(a, tag("VC[Carbamidomethyl]EK", 0.1), cands);
+    e.addTag(a, tag("LC[Propionamide]EK", 1e-6), cands);
+    e.addTag(a, tag("VC[Carbamidomethyl]EK", 1e-6), cands);
     e.addSpectrum(a);
     check(e.conflict == 1 && e.votes[0] == 0 && e.votes[1] == 0, "tied tags of two forms are a conflict");
-    e.addTag(b, tag("LC[Carbamidomethyl]EK", 0.1), cands);
-    e.addTag(b, tag("C[Carbamidomethyl]VEK", 0.1), cands);
+    e.addTag(b, tag("LC[Carbamidomethyl]EK", 1e-6), cands);
+    e.addTag(b, tag("VC[Carbamidomethyl]VEK", 1e-6), cands);
     e.addSpectrum(b);
     check(e.votes[0] == 1 && e.conflict == 1, "tied tags of one form vote that form");
-    e.addTag(c2, tag("LC[Propionamide]EK", 0.1), cands);
-    e.addTag(c2, tag("VC[Carbamidomethyl]EK", 0.1), cands);
-    e.addTag(c2, tag("C[Nethylmaleimide]VEK", 0.01), cands);  // a strictly better tag decides
+    e.addTag(c2, tag("LC[Propionamide]EK", 1e-6), cands);
+    e.addTag(c2, tag("VC[Carbamidomethyl]EK", 1e-6), cands);
+    e.addTag(c2, tag("LC[Nethylmaleimide]VEK", 1e-7), cands);  // a strictly better tag decides
     e.addSpectrum(c2);
     check(e.votes[2] == 1 && e.conflict == 1, "a better tag replaces a tied conflict");
     // fragment charge 2 and more: not counted
@@ -306,6 +333,7 @@ int main(int argc, char** argv)
   {
     FASTag::Param run;
     run.tag_length = 3;
+    run.max_extension = 6;  // as the tool runs (-extension): a vote needs a tag with an inner C
     run.mods = {{'C', cands[0].mass, "Carbamidomethyl", false}};
     const FASTag::Param sp = AT::shadowParam(run, cands);
     const FASTag::Tables tabs(sp);
@@ -419,6 +447,7 @@ int main(int argc, char** argv)
   {
     FASTag::Param run;
     run.tag_length = 3;
+    run.max_extension = 6;  // as the tool runs (-extension): a vote needs a tag with an inner C
     run.mods = {{'C', cands[0].mass, "Carbamidomethyl", false}};
     const FASTag::Param sp = AT::shadowParam(run, cands);
     const FASTag::Tables tabs(sp);
@@ -450,8 +479,11 @@ int main(int argc, char** argv)
     for (auto v : none.votes) top = std::max(top, v);
     check(top <= 2, "C-free peptides: no form gets more than 2 votes");
     check(!A::callAlkylation(none.asAlkylationTally(cands), A::Settings{}).called, "C-free peptides: no call");
+    // With 2+ y ions only the b ladder reads at charge 1: the right tags have
+    // E near kVoteMaxEvalue, so fewer spectra vote (5 of 12), all for CAM.
     A::Settings st;
-    st.min_spectra = 6;
+    st.min_spectra = 4;
+    check(z3.spectra == z3.votes[0], "3+ CAM spectra: every vote is CAM");
     const A::Call c3 = A::callAlkylation(z3.asAlkylationTally(cands), st);
     check(c3.called && c3.cls == A::Carbamidomethyl,
           "3+ CAM spectra: call " + (c3.called ? std::string(A::className(c3.cls)) : "no_call " + c3.reason));

@@ -997,11 +997,12 @@ protected:
     // from a second, unwritten tagging pass with alternative C edges.
     // Opt-in; every other output is the same with or without it.
     registerOutputFile_("alkylation_tags_out", "<file>", "",
-                        "Experimental, measured to fail on development data (3 calls on 123 runs; calls are "
-                        "unreliable): report which reagent alkylated the cysteines (or none) without a database, "
+                        "Experimental (61 of 123 development runs called, 51 as annotated; no held-out test; "
+                        "unalkylated runs are rarely called): report which reagent alkylated the cysteines (or none) without a database, "
                         "from a second tagging pass with unmodified C and one alternative C edge per reagent "
                         "(Carbamidomethyl, Propionamide, Nethylmaleimide, Methylthio, Carboxymethyl): votes per "
-                        "C form inside tags and the call",
+                        "C form inside tags and the call. Use with -extension (measured with -tag_length 4 -extension 6): "
+                        "without it few spectra vote",
                         false, true);
     setValidFormats_("alkylation_tags_out", ListUtils::create<std::string>("tsv"));
     // ---- 1.12 F: options ----
