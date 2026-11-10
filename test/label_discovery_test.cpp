@@ -887,38 +887,6 @@ int main()
     x.reporter_gate = "unclear";
     LD::applyPairs(x, many);
     CHECK(x.status == "no_call" && x.reason == "few_spectra", "no absence call without gate none");
-    {
-      // format 4: gate unclear for coverage only; the covered scans decide
-      using Low = std::vector<std::pair<double, double>>;
-      auto counter = [](const Low& low, int n) {
-        LD::ReporterCounter rc;
-        for (int i = 0; i < n; ++i) rc.add(low, 100.0);
-        return rc;
-      };
-      const Low tmt = {{126.1277, 50}, {127.1248, 40}, {120.0, 100}}, none = {{120.0, 100}, {129.1024, 30}};
-      LD::ReporterCounter rc = counter(none, 250);
-      rc.merge(counter(Low{}, 400));
-      x = few;
-      LD::applyReporters(x, rc);
-      CHECK(x.reporter_gate == "unclear" && rc.absentWhereCovered(), "gate unclear below half coverage");
-      LD::applyPairs(x, many);
-      CHECK(x.status == "call" && x.labels == "label-free" && x.basis == "absence" && x.reporter_gate == "unclear",
-            "absence call from the covered scans: %s %s", x.status.c_str(), x.reason.c_str());
-      rc = counter(none, 199);
-      rc.merge(counter(Low{}, 400));
-      x = few;
-      LD::applyReporters(x, rc);
-      LD::applyPairs(x, many);
-      CHECK(x.status == "no_call" && !rc.absentWhereCovered(), "no absence call below 200 covered scans");
-      rc = counter(tmt, 100);
-      rc.merge(counter(none, 150));
-      rc.merge(counter(Low{}, 600));
-      x = few;
-      LD::applyReporters(x, rc);
-      CHECK(x.reporter_gate == "unclear" && !rc.absentWhereCovered(), "reporters in the covered scans: %s", x.reporter_gate.c_str());
-      LD::applyPairs(x, many);
-      CHECK(x.status == "no_call", "no absence call with reporters in the covered scans");
-    }
     x = few;
     x.reporter_gate = "none";
     LD::applyPairs(x, pairsOf(0, 0));

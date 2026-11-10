@@ -416,10 +416,6 @@ namespace FASTag::LabelDiscovery
       return scans == 0 ? 0.0 : (static_cast<double>(hits) - 0.5 * static_cast<double>(decoy)) / static_cast<double>(scans);
     }
     bool ionTrapMs2() const { return ms2 > 0 && 2 * ms2_ion_trap > ms2; }
-    /// At least 200 covered scans, and the TMT and iTRAQ4 excess taken over
-    /// the covered scans (not all scans) are both below 0.05: no reporters
-    /// where the reporter region was recorded (format 4, the absence call).
-    bool absentWhereCovered() const;
   };
   /// `unknown` (below 200 scans), `tmt`, `itraq4`, `itraq8`, `none` (no
   /// isobaric label) or `unclear`.

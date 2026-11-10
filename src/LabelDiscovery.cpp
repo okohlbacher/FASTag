@@ -1935,15 +1935,6 @@ namespace FASTag::LabelDiscovery
     return t < kGateOff && i < kGateOff && 2 * rc.covered >= rc.scans ? "none" : "unclear";
   }
 
-  bool ReporterCounter::absentWhereCovered() const
-  {
-    if (covered < kGateMinScans) return false;
-    auto share = [&](std::uint64_t hits, std::uint64_t decoy) {
-      return (static_cast<double>(hits) - 0.5 * static_cast<double>(decoy)) / static_cast<double>(covered);
-    };
-    return share(tmt, tmt_decoy) < kGateOff && share(itraq4, itraq4_decoy) < kGateOff;
-  }
-
   void applyReporters(Analysis& a, const ReporterCounter& rc)
   {
     a.reporters = rc;
@@ -2053,10 +2044,8 @@ namespace FASTag::LabelDiscovery
     a.pairs.precursors.shrink_to_fit();
     // Too few tags for the site scan, but reporters and label pairs were looked for and are absent.
     // ponytail: a sample labelled in one channel only (all heavy, light dimethyl) is called label-free here.
-    // Format 4: a gate that is `unclear` only because fewer than half of the scans cover the reporter region
-    // counts as well when the scans that do cover it show no reporters.
-    if (a.status == "no_call" && (a.reason == "few_spectra" || a.reason == "no_reference") &&
-        (a.reporter_gate == "none" || a.reporters.absentWhereCovered()) && a.pairs.precursors.size() >= 500 && !a.pairs.anyLabel())
+    if (a.status == "no_call" && (a.reason == "few_spectra" || a.reason == "no_reference") && a.reporter_gate == "none" &&
+        a.pairs.precursors.size() >= 500 && !a.pairs.anyLabel())
     {
       a.status = "call";
       a.labels = "label-free";

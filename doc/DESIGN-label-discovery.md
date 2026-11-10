@@ -500,7 +500,7 @@ alternatives. Classes are tried in this order, and the first that matches within
 4. **`unexplained`.** Nothing matched. The mass, the site and the images are still reported, so
    an unknown label is visible. This is the point of the report.
 
-## 9. Output format (format 1; format 2 adds `ld_reporter`, format 3 `ld_pair`, format 4 changes two `ld_pair` rules, see doc/LABEL-DISCOVERY-REPORT.md)
+## 9. Output format (format 1; format 2 adds `ld_reporter`, format 3 `ld_pair`, format 4 extends a SILAC call from the pairs, see doc/LABEL-DISCOVERY-REPORT.md)
 
 The format is the long-form report family of `-digest_out`, `-label_out`, `-massgap_out` and
 `-alkylation_out`, written by `FASTag::Digest::writeReport`:
