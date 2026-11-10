@@ -585,7 +585,7 @@ MGF→mzML direction is exact.
 | `-species_use_gapped` | off | Let gapped tags contribute taxonomic evidence (see Species detection) |
 | `-species_deconvolve` | off | Correct taxon counts for sequence shared between taxa |
 | `-species_evidence <mode>` | best | Which of a spectrum's tags make it count for a taxon: `best` = the taxa of its lowest-E-value tag that maps into the index (compared as printed in the `evalue` column; ties united), `all` = the union over every reported tag (the rule up to 1.9.0) |
-| `-species_call <mode>` | none | `decoy`: call each reported taxon present, no_call or not_detected against a decoy-tag null plus homology spill; appends 7 columns (see Species detection) |
+| `-species_call <mode>` | none | `decoy`: call each reported taxon present, no_call or not_detected against a decoy-tag null plus homology spill; appends 7 columns (see Species detection). `explain` (1.13, experimental): call the taxa one at a time on their distinct tags in spectra no taxon called before explains; appends the same 7 columns plus `tags` and `unexplained_tags` |
 | `-species_call_params <file>` | `species_call.tsv` in the taxonomy dir | With `-species_call decoy`: the decision parameters (alpha, tau, n_min) |
 | `-species_call_min_units <n>` | 200 | With `-species_call decoy`: fewer spectra with taxon evidence make the run a few_spectra no_call |
 | `-species_call_decoys <n>` | 5 | With `-species_call decoy`: decoy tags per tag (1-100) |
@@ -1149,6 +1149,20 @@ meaning). The shipped parameters are provisional (not fitted), and in 1.12.0
 the decoy null failed its development check on real runs, so `call` and
 `decoy_qvalue` are not calibrated. See
 [doc/SPECIES-DETECTOR.md](doc/SPECIES-DETECTOR.md).
+
+**Explain-away calls (opt-in, experimental, 1.13).** `-species_call explain`
+calls the taxa one at a time, strongest first. A taxon is tested on its
+distinct tags in spectra that no taxon called before it explains, against the
+same count on the decoy tags, and once it is called its spectra no longer count
+for any other taxon: a relative that only shares tags with the organism in the
+sample is left with nothing. The report has the columns of `decoy` plus `tags`
+(distinct tags of the taxon) and `unexplained_tags` (those left at its
+decision); `decoy_spectra`, `decoy_expected` and `decoy_qvalue` are then in tags
+(decoy tags over all replicates, the null's expectation, p times the number of
+taxa still tested), `lod` is NA. It reads alpha and n_min from the same
+parameter file and uses `-species_call_decoys` and `-species_call_min_units`;
+`-species_pi0` does not apply. Development result only, no held-out test yet;
+see [doc/SPECIES-DETECTOR.md](doc/SPECIES-DETECTOR.md).
 
 **Both tag orientations (opt-in).** Tags are written N->C under a y-ion
 assumption, so a tag read from b ions is written reversed, and `-species`

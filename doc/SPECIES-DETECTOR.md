@@ -254,6 +254,48 @@ calibrated for D = 5) are PROVISIONAL: they are not fitted yet, and
 `-species_call_decoys` from the one the file states gives a warning.
 `-species_call` refuses `-stream`.
 
+## Explain-away call (`-species_call explain`, opt-in, experimental, 1.13)
+
+The decoy call counts spectra and subtracts an expected spill from related
+taxa. On real runs that null is too small: a peptide seen in hundreds of
+spectra counts hundreds of times, its decoy at most as often, and the spill
+model does not cover real homology. `-species_call explain` changes the unit
+and the way a called taxon accounts for its relatives.
+
+- **Unit.** A taxon is counted by its DISTINCT TAGS (I/L-folded sequence)
+  among the tags that contribute under `-species_evidence`, not by spectra.
+- **Explaining.** Taxa are called one at a time. Once a taxon is called, every
+  spectrum with a contributing tag of it is explained and counts for no other
+  taxon. A relative that only shares tags with the organism in the sample has
+  no unexplained tags left; a second organism keeps its own.
+- **Null.** Each step counts, for every taxon not yet called, its tags in
+  unexplained spectra (o) and the same on each of the D decoy replicates of
+  those spectra's tags. The null is negative binomial with mean
+  (sum of the decoy counts + 0.5) / D and variance phi (1 + 1/D) times the
+  mean: 1/D for the estimated mean, phi (at least 1) the spread between
+  replicates relative to Poisson, pooled over the taxa not yet called.
+- **Decision.** The taxon with the smallest p is called present when
+  p times m is at most alpha, m being the taxa not yet called with at least
+  n_min unexplained tags (step-down Bonferroni). The first failure ends the
+  loop; everything left is `not_detected` (`explained` when the taxon had
+  n_min tags in the run but fewer left, `not_significant` otherwise). The
+  run-level `no_call` rows (low_resolution, few_spectra) are those of the
+  decoy call.
+
+Report: the columns of the decoy call plus `tags` and `unexplained_tags`.
+`decoy_spectra` is the decoy tag count over the D replicates, `decoy_expected`
+the null's mean, `decoy_qvalue` min(1, p m), all at the taxon's decision (its
+step when called, the stop otherwise); `share` is as in the decoy call, `lod`
+is NA. alpha and n_min come from `species_call.tsv`; tau and `-species_pi0` are
+not used.
+
+Limits. A taxon that is in the sample but not in the index is not explained by
+anything: its conserved tags can call the nearest indexed relative. Reagent and
+expression-host proteins (protease, Protein A, E. coli from a recombinant
+protein) are real material and are called. Development data only (36 FTMS runs
+of the 1.12 development set and the same runs against a shuffled-proteome
+index); no held-out test has been run, so the mode stays opt-in.
+
 ## Both tag orientations (`-species_orientation both`, opt-in, 1.12)
 
 Tags are written N->C under a y-ion assumption, so a tag read from b ions is
