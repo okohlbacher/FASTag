@@ -176,3 +176,9 @@ copies checked by sha256. Results (small tables and logs) go to `census/results2
 ## Not in this test
 
 As in PREREG-census: no census classifier (PLAN-qc phase C, F7), the reserved F7 pools stay unopened, no MSFragger.
+
+## Result (appended 2026-11-10, after the single scoring)
+
+Scored once: **PASS**. E0 7 of 8 runs evaluable; E1 rr 5.32 (CI 2.59 to 8.25); E2 rr > 1 in all 7 evaluable runs
+(1.75 to 21.1); E3 d +0.0229 (CI 0.0176 to 0.0286). PXD067571 and PXD068740 ran on their backup file (staging
+rule). Details: `census/results2/RESULT.md`.
