@@ -500,7 +500,7 @@ alternatives. Classes are tried in this order, and the first that matches within
 4. **`unexplained`.** Nothing matched. The mass, the site and the images are still reported, so
    an unknown label is visible. This is the point of the report.
 
-## 9. Output format (format 1; format 2 adds `ld_reporter`, format 3 `ld_pair`, format 4 extends a SILAC call from the pairs, see doc/LABEL-DISCOVERY-REPORT.md)
+## 9. Output format (format 1; format 2 adds `ld_reporter`, format 3 `ld_pair`, format 4 extends a SILAC call from the pairs, format 5 makes the absence call on runs that do not record the reporter region, see doc/LABEL-DISCOVERY-REPORT.md)
 
 The format is the long-form report family of `-digest_out`, `-label_out`, `-massgap_out` and
 `-alkylation_out`, written by `FASTag::Digest::writeReport`:
@@ -715,7 +715,7 @@ paragraph in "Digest, label and mass-gap reports". `CHANGELOG.md`.
 - **Off is identity.** Without the option, the tag TSV, `-digest_out`, `-label_out`,
   `-massgap_out`, `-recon_out` and `-out_spectra` are byte-identical to a run that does not
   mention it. With it on, every other output is byte-identical to the run without it.
-- **Format.** With the option on, the report exists, `ld_run format 4` is present, the sections
+- **Format.** With the option on, the report exists, `ld_run format 5` is present, the sections
   come in the documented order, and every row has five non-empty fields.
 - **Threads.** `-threads 1` and `-threads 4` give a byte-identical report.
 - **Low resolution.** A Da tolerance gives `ld_call status no_call` with reason `low_resolution`.

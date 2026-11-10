@@ -721,7 +721,7 @@ int main()
       if (order.empty() || order.substr(order.rfind(',') + 1) != r.section) order += "," + r.section;
     }
     CHECK(order == ",ld_run,ld_count,ld_peak,ld_site,ld_known,ld_reporter,ld_pair,ld_call", "section order %s", order.c_str());
-    CHECK(rowsOf(a, S).at("ld_run/format") == "4", "format");
+    CHECK(rowsOf(a, S).at("ld_run/format") == "5", "format");
     CHECK(a.labels == "TMT", "TMT set call %s [%s]", a.labels.c_str(), calledList(a).c_str());
     LD::Settings lr = S;
     lr.low_resolution = true;
@@ -897,6 +897,59 @@ int main()
     for (int i = 0; i < 60; ++i) dim.add(3.0 * i + 1.0, 400.0 + 1.7 * i + 4.025107 / 2, 2);
     LD::applyPairs(x, dim);
     CHECK(x.status == "no_call" && x.pairs.other == 60, "a +4.0251 pair spacing blocks the absence call (%llu)",
+          static_cast<unsigned long long>(x.pairs.other));
+
+    // format 5: the absence call on a run that does not record the reporter region
+    using Low = std::vector<std::pair<double, double>>;
+    const Low tmt = {{126.127726, 50}, {127.124761, 40}, {120.0, 100}}, plain = {{120.0, 100}};
+    auto counter = [](int trap, int trap_covered, const Low& low, int ft, int ft_empty) {
+      LD::ReporterCounter rc;
+      for (int i = 0; i < trap; ++i) rc.addTrap(i < trap_covered);
+      for (int i = 0; i < ft; ++i) rc.add(low, 100.0);
+      for (int i = 0; i < ft_empty; ++i) rc.add(Low{}, 100.0);
+      rc.ms2 = static_cast<std::uint64_t>(trap + ft + ft_empty);
+      rc.ms2_ion_trap = static_cast<std::uint64_t>(trap);
+      return rc;
+    };
+    auto absence = [&](const LD::ReporterCounter& rc, const LD::PairCounter& pc) {
+      LD::Analysis y = few;
+      LD::applyReporters(y, rc);
+      LD::applyPairs(y, pc);
+      return y;
+    };
+    // ion-trap CID: 1000 scans, 150 reach down to the reporter region
+    LD::ReporterCounter rc = counter(1000, 150, plain, 0, 0);
+    CHECK(rc.regionNotRecorded(), "ion-trap run without the reporter region");
+    x = absence(rc, many);
+    CHECK(x.status == "call" && x.labels == "label-free" && x.basis == "absence" && x.reporter_gate == "unknown",
+          "absence call on ion-trap CID: %s %s", x.status.c_str(), x.reason.c_str());
+    CHECK(rowsOf(x, S).at("ld_reporter/it_scans") == "1000" && rowsOf(x, S).at("ld_reporter/it_covered") == "150" &&
+          rowsOf(x, S).at("ld_reporter/region_recorded") == "no", "format 5 ld_reporter rows");
+    // ion-trap HCD records the region: reporters cannot be excluded at unit resolution
+    rc = counter(1000, 600, plain, 0, 0);
+    x = absence(rc, many);
+    CHECK(!rc.regionNotRecorded() && x.status == "no_call" && x.reason == "low_resolution_ms2", "no absence call when the ion trap records the region");
+    CHECK(rowsOf(x, S).at("ld_reporter/region_recorded") == "yes", "region_recorded yes");
+    // below 200 scans
+    rc = counter(199, 0, plain, 0, 0);
+    CHECK(!rc.regionNotRecorded() && absence(rc, many).status == "no_call", "no absence call below 200 scans");
+    // high resolution with a first mass above the region in most scans: the covered scans decide
+    rc = counter(0, 0, plain, 250, 400);
+    x = absence(rc, many);
+    CHECK(x.reporter_gate == "unclear" && rc.regionNotRecorded() && x.status == "call" && x.labels == "label-free", "absence call from the covered scans");
+    rc = counter(0, 0, tmt, 30, 400);
+    x = absence(rc, many);
+    CHECK(x.reporter_gate == "unclear" && !rc.regionNotRecorded() && x.status == "no_call", "reporters in the covered scans block the absence call");
+    // SPS-MS3 with few MS3 scans: ion-trap MS2 without the region, reporters in the MS3 scans
+    rc = counter(1000, 100, tmt, 150, 0);
+    CHECK(!rc.regionNotRecorded() && absence(rc, many).status == "no_call", "reporters in few high-resolution scans block the absence call");
+    // pair signals still block it; format 5 adds medium to heavy (Lys4 to Lys8)
+    rc = counter(1000, 150, plain, 0, 0);
+    CHECK(absence(rc, pairsOf(0, 0)).status == "no_call", "no absence call below 500 precursors (ion trap)");
+    LD::PairCounter mid = many;
+    for (int i = 0; i < 60; ++i) mid.add(3.0 * i + 1.0, 400.0 + 1.7 * i + 3.989092 / 2, 2);
+    x = absence(rc, mid);
+    CHECK(x.status == "no_call" && x.reason == "low_resolution_ms2" && x.pairs.other == 60, "a medium-to-heavy spacing blocks the absence call (%llu)",
           static_cast<unsigned long long>(x.pairs.other));
   }
 

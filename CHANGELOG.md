@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- **Label discovery (`-label_discovery_out`), report format 5: fewer no
+  calls.** A no call on a run that does not record the reporter region
+  (ion-trap CID, or a first mass above 137 m/z in most scans; new row
+  `ld_reporter region_recorded` `no`, with `it_scans` and `it_covered`) now
+  becomes `label-free` by absence under the conditions of format 3 (at least
+  500 precursors, no pair signal), also for the reason `low_resolution_ms2`;
+  before, the absence call needed the reporter gate `none`. `other_pairs`
+  also counts the medium-to-heavy SILAC spacings (+3.9891, +3.9881 Da). On
+  the 172 audited runs of the spent first held-out set (in-sample) 48 no
+  calls become 18 and 117 right calls 147, with 7 wrong calls before and
+  after; the 84 audited runs of the first development set are all right
+  before and after. No held-out test. An isobaric sample measured with
+  ion-trap CID only would be called `label-free`. Output without
+  `-label_discovery_out` is unchanged.
 - **Label call minimum (backlog #8): `-label_call_min_tags`, experimental,
   default 175 (the 1.12 rule; no output change at the default).** At 0
   `label_call` makes no `no_call few_tags` below 175 C-terminal tag ends:

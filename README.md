@@ -955,7 +955,9 @@ options and their values.
   call, precursor pairs at the Lys8 and Arg10 spacings call SILAC and
   (format 4) add `K:Lys8` and `R:Arg10` to a call of SILAC labels only that
   lacks them, and a run with few tags, no reporter ions and no pairs is
-  called `label-free` (not when the reporter gate is `unclear`). Format, classes and the call rule:
+  called `label-free`; format 5 extends this to runs that do not record
+  the reporter region (ion-trap CID, a first mass above it), not to
+  ion-trap runs that record it. Format, classes and the call rule:
   doc/LABEL-DISCOVERY-REPORT.md; design: doc/DESIGN-label-discovery.md.
 - **`-massgap_out`** reads the `-delta_out` histogram (built even when
   `-delta_out` is not written; run it without fixed modifications to see the

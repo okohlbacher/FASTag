@@ -1,4 +1,4 @@
-# The label discovery report (`-label_discovery_out`), format 4
+# The label discovery report (`-label_discovery_out`), format 5
 
 Experimental and opt-in. It failed its held-out test (acceptance/1.13
 PREREG-labeldisc.md; 190 public runs, scored once on 2026-11-10):
@@ -49,12 +49,15 @@ and `-alkylation_out`:
   7); `FASTAG_FULL_PRECISION=1` in the environment writes them in full.
 - The file is written to `<file>.part` and renamed when complete. A refused
   or failed run leaves no file.
-- The version is the row `ld_run format` = `4` (format 2 added the
+- The version is the row `ld_run format` = `5` (format 2 added the
   `ld_reporter` section, the `basis` `reporter_ions` and the reasons
   `low_resolution_ms2` and `no_reporter_ions`; format 3 added the `ld_pair`
   section and the `basis` values `precursor_pairs` and `absence`; format 4
   added the `basis` suffix `+precursor_pairs` with the rule of `ld_pair`
-  that extends a SILAC call, no row or column). A reader that does not know
+  that extends a SILAC call, no row or column; format 5 added the
+  `ld_reporter` rows `it_scans`, `it_covered` and `region_recorded`, the
+  absence call on runs that do not record the reporter region, and two
+  spacings in `other_pairs`). A reader that does not know
   the format should stop.
 
 Sections, in this order:
@@ -278,6 +281,8 @@ a filter string counts as high resolution). MS1 scans are not read.
 | `itraq4_excess` | the same for at least 2 of the iTRAQ 4-plex reporters (114-117) |
 | `itraq8_excess` | the same for at least 1 reporter of iTRAQ 8-plex only (113, 118, 119, 121) |
 | `tmtpro_excess` | the same for at least 2 reporters of TMTpro only (132-135); reported, not used by the call |
+| `it_scans`, `it_covered` | format 5: ion-trap MS2 and MS3 scans with peaks, and those with a peak in 112-137 m/z (counted only: unit resolution cannot tell reporters from immonium ions) |
+| `region_recorded` | format 5: `no` when the run does not record the reporter region, else `yes` (see below) |
 | `gate` | `unknown`, `tmt`, `itraq4`, `itraq8`, `none` or `unclear` |
 
 A reporter counts when a peak within 0.003 Da reaches 1 % of the scan's base
@@ -287,6 +292,14 @@ peak. The decoy m/z are all channels shifted by +0.0170 and by -0.0170 Da
 `itraq8_excess` >= 0.3 too; both below 0.05 and at least half of the scans `covered` `none` (a run
 whose scans start above the reporter region cannot show reporters); else
 `unclear`.
+
+`region_recorded` is `no` when `scans` + `it_scans` is at least 200, fewer
+than half of them (`covered` + `it_covered`) have a peak in 112-137 m/z, and
+the covered high-resolution scans show no reporters (TMT and iTRAQ4 hits
+minus decoys both below 0.05 of `covered`). This is ion-trap CID, whose low
+mass cut-off lies above the reporters, or a first mass above the region.
+Such a run cannot quantify an isobaric label, and the absence rule of
+`ld_pair` treats it like the gate `none`. It does not change the gate.
 
 Effect on the call (`basis` `reporter_ions` when it changes the call):
 
@@ -326,7 +339,7 @@ precursors of the same charge whose m/z differ by a label mass / z within
 | `lys8_pairs`, `arg10_pairs` | precursors with a partner at +8.0142 Da (Lys8) and at +10.0083 Da (Arg10) |
 | `control_pairs` | median count over eight control spacings (the label masses shifted by whole Da) |
 | `lys8_ratio`, `arg10_ratio` | pairs / (`control_pairs` + 5) |
-| `other_pairs`, `other_ratio` | the largest count at +4.0251 (Lys4, dimethyl), +6.0201 (Lys6, Arg6) and +8.0444 Da (dimethyl), and its ratio |
+| `other_pairs`, `other_ratio` | the largest count at +4.0251 (Lys4, dimethyl), +6.0201 (Lys6, Arg6), +8.0444 Da (dimethyl) and, format 5, at the medium-to-heavy spacings +3.9891 (Lys4 to Lys8) and +3.9881 Da (Arg6 to Arg10), and its ratio |
 | `silac` | `yes` when both `lys8_pairs` and `arg10_pairs` are >= 30 and both ratios >= 2 |
 
 Effect on the call:
@@ -343,8 +356,12 @@ Effect on the call:
 - A no call with the reason `few_spectra` or `no_reference`, the reporter
   gate `none`, at least 500 precursors and no pair signal (`lys8_pairs`,
   `arg10_pairs` and `other_pairs` all below 30 pairs or below a ratio of 2):
-  the call becomes `label-free` (`basis` `absence`). With any other gate the
-  no call stays.
+  the call becomes `label-free` (`basis` `absence`).
+- Format 5: the same holds, with the same precursor and pair conditions,
+  when `ld_reporter region_recorded` is `no` instead of the gate `none`, and
+  then also for the reason `low_resolution_ms2`. Otherwise the no call stays
+  (an ion-trap run that records the reporter region, as with ion-trap HCD,
+  could carry reporters that unit resolution does not show).
 
 On the 99 development runs the two rules give 93 right results instead of 86:
 the pair rule adds two SILAC runs with ion-trap MS2 (PXD011848, PXD050844),
@@ -360,18 +377,35 @@ amino acids. No other call changes; 96 of 96 audited runs are right at
 class level before and after, and 93 of the 99 runs of the first
 development manifest.
 
+Format 5 was set on both development sets (84 audited runs of the first, all
+right before and after, and the 172 audited runs of the spent first held-out
+set, in-sample from here on). On the 172 runs it turns 30 of 48 no calls
+into `label-free` calls, all on label-free runs (117 to 147 right, 7 wrong
+calls before and after): 25 ion-trap CID runs, 3 high-resolution runs with a
+first mass above the reporter region in most scans, and 2 runs of both scan
+kinds. The medium-to-heavy spacings keep the one run with medium and heavy
+SILAC channels only (PXD030436, 417 pairs, ratio 36) a no call; no
+label-free run of either set reaches 30 such pairs at a ratio of 2. The 18
+remaining no calls: 9 label-free runs with ion-trap HCD (region recorded),
+4 SILAC runs with ion-trap MS2 whose pairs are not Lys8 with Arg10, 1
+label-free run blocked by a pair signal (PXD066798), 3 label-free runs
+without a precursor of charge 2-4, 1 label-free run below 200 scans.
+
 Limits:
 
 - The thresholds were set on the development runs; there is no held-out test.
+- Format 5: neither set has a run of an isobaric sample measured with
+  ion-trap CID MS2 and no high-resolution scan; such a run would be called
+  `label-free` (its reporters are not recorded, and the site scan has too
+  few tags at ion-trap resolution).
 - The extension needs both pair signals (`silac` `yes`), so a run labelled
   on one residue only is not extended, and it adds the heavy pair Lys8 and
   Arg10 only. A call with an isobaric label is not extended: the one such
   development run with `silac` `yes` (PXD000865, call `TMT`) has no known
   truth.
-- Under the gate `unclear` no absence call is made, also when the scans
-  that cover the reporter region show no reporters: the only development
-  run that such a rule would change is a blank injection (PXD073687), which
-  the audited manifest excludes.
+- Under the gate `unclear` the absence call needs `region_recorded` `no`
+  (format 5). On the first development set this changes only a blank
+  injection (PXD073687), which the audited manifest excludes.
 - All development runs that the absence rule decides are label-free, and
   there is no dimethyl run among the 99, so the rate of labelled runs that
   the rule calls `label-free` is not measured.

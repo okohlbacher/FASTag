@@ -1920,6 +1920,7 @@ namespace FASTag::LabelDiscovery
   void ReporterCounter::merge(const ReporterCounter& o)
   {
     scans += o.scans; covered += o.covered; ms2 += o.ms2; ms2_ion_trap += o.ms2_ion_trap;
+    it_scans += o.it_scans; it_covered += o.it_covered;
     tmt += o.tmt; itraq4 += o.itraq4; itraq8 += o.itraq8; tmtpro += o.tmtpro;
     tmt_decoy += o.tmt_decoy; itraq4_decoy += o.itraq4_decoy; itraq8_decoy += o.itraq8_decoy; tmtpro_decoy += o.tmtpro_decoy;
   }
@@ -1933,6 +1934,17 @@ namespace FASTag::LabelDiscovery
     if (i >= kGateOn) return rc.excess(rc.itraq8, rc.itraq8_decoy) >= kGateOn ? "itraq8" : "itraq4";
     // "none" only when the scans record the reporter region at all (a first mass above it leaves it empty).
     return t < kGateOff && i < kGateOff && 2 * rc.covered >= rc.scans ? "none" : "unclear";
+  }
+
+  bool ReporterCounter::regionNotRecorded() const
+  {
+    // scans counts empty high-resolution scans too; they record nothing either.
+    const std::uint64_t all = scans + it_scans, cov = covered + it_covered;
+    if (all < kGateMinScans || 2 * cov >= all) return false;
+    auto present = [&](std::uint64_t hits, std::uint64_t decoy) {
+      return static_cast<double>(hits) - 0.5 * static_cast<double>(decoy) >= kGateOff * static_cast<double>(covered);
+    };
+    return covered == 0 || (!present(tmt, tmt_decoy) && !present(itraq4, itraq4_decoy));
   }
 
   void applyReporters(Analysis& a, const ReporterCounter& rc)
@@ -2019,7 +2031,8 @@ namespace FASTag::LabelDiscovery
     };
     lys8 = pairs(kLys8);
     arg10 = pairs(kArg10);
-    other = std::max({pairs(4.025107), pairs(6.020129), pairs(8.044366)});
+    // Format 5: medium to heavy (Lys4 to Lys8, Arg6 to Arg10), the pairs of a run without a light channel.
+    other = std::max({pairs(4.025107), pairs(6.020129), pairs(8.044366), pairs(3.989092), pairs(3.988140)});
     std::array<std::uint64_t, 8> c{};
     for (std::size_t i = 0; i < c.size(); ++i) c[i] = pairs(kControl[i]);
     std::sort(c.begin(), c.end());
@@ -2044,8 +2057,12 @@ namespace FASTag::LabelDiscovery
     a.pairs.precursors.shrink_to_fit();
     // Too few tags for the site scan, but reporters and label pairs were looked for and are absent.
     // ponytail: a sample labelled in one channel only (all heavy, light dimethyl) is called label-free here.
-    if (a.status == "no_call" && (a.reason == "few_spectra" || a.reason == "no_reference") && a.reporter_gate == "none" &&
-        a.pairs.precursors.size() >= 500 && !a.pairs.anyLabel())
+    // Format 5: a run that does not record the reporter region (ion-trap CID, a first mass above it) cannot
+    // quantify an isobaric label; it counts like the gate `none`, also when the no call says low_resolution_ms2.
+    const bool not_recorded = a.reporters.regionNotRecorded();
+    if (a.status == "no_call" &&
+        (a.reason == "few_spectra" || a.reason == "no_reference" || (a.reason == "low_resolution_ms2" && not_recorded)) &&
+        (a.reporter_gate == "none" || not_recorded) && a.pairs.precursors.size() >= 500 && !a.pairs.anyLabel())
     {
       a.status = "call";
       a.labels = "label-free";
@@ -2828,6 +2845,10 @@ namespace FASTag::LabelDiscovery
       row("ld_reporter", "itraq4_excess", fix(rc.excess(rc.itraq4, rc.itraq4_decoy), 4), sc, "the same for >= 2 iTRAQ 4-plex reporters (114-117)");
       row("ld_reporter", "itraq8_excess", fix(rc.excess(rc.itraq8, rc.itraq8_decoy), 4), sc, "the same for >= 1 reporter of iTRAQ 8-plex only (113, 118, 119, 121)");
       row("ld_reporter", "tmtpro_excess", fix(rc.excess(rc.tmtpro, rc.tmtpro_decoy), 4), sc, "the same for >= 2 reporters of TMTpro only (132-135); not used by the call");
+      row("ld_reporter", "it_scans", num(rc.it_scans), "-", "ion-trap MS2 and MS3 scans with peaks (not examined for reporter ions)");
+      row("ld_reporter", "it_covered", num(rc.it_covered), num(rc.it_scans), "ion-trap scans with a peak in 112-137 m/z");
+      row("ld_reporter", "region_recorded", rc.regionNotRecorded() ? "no" : "yes", "-",
+          "no: >= 200 scans (scans + it_scans), under half with a peak in 112-137 m/z, no reporters in the covered high-resolution scans");
       row("ld_reporter", "gate", a.reporter_gate, "-", "unknown (below 200 scans), tmt, itraq4, itraq8, none or unclear");
     }
     // ld_pair
@@ -2840,7 +2861,7 @@ namespace FASTag::LabelDiscovery
       row("ld_pair", "control_pairs", fix(pc.control, 1), n, "median over eight control spacings (the label masses shifted by whole Da)");
       row("ld_pair", "lys8_ratio", fix(pc.ratio(pc.lys8), 2), "-", "lys8_pairs / (control_pairs + 5)");
       row("ld_pair", "arg10_ratio", fix(pc.ratio(pc.arg10), 2), "-", "arg10_pairs / (control_pairs + 5)");
-      row("ld_pair", "other_pairs", num(pc.other), n, "the largest count at +4.0251 (Lys4, dimethyl), +6.0201 (Lys6, Arg6) and +8.0444 Da (dimethyl)");
+      row("ld_pair", "other_pairs", num(pc.other), n, "the largest count at +4.0251 (Lys4, dimethyl), +6.0201 (Lys6, Arg6), +8.0444 (dimethyl), +3.9891 and +3.9881 Da (Lys4 to Lys8, Arg6 to Arg10)");
       row("ld_pair", "other_ratio", fix(pc.ratio(pc.other), 2), "-", "other_pairs / (control_pairs + 5)");
       row("ld_pair", "silac", pc.silac() ? "yes" : "no", "-", "yes: both counts >= 30 and both ratios >= 2");
     }

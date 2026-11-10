@@ -5172,7 +5172,7 @@ protected:
             if (!rs.getPrecursors().empty())
               per_thread[tid].pairs.add(rs.getRT(), rs.getPrecursors()[0].getMZ(), rs.getPrecursors()[0].getCharge());
           }
-          if (!trap && !rs.empty())
+          if (!rs.empty())
           {
             std::vector<std::pair<double, double>> low;
             double base = 0;
@@ -5181,7 +5181,8 @@ protected:
               base = std::max(base, static_cast<double>(p.getIntensity()));
               if (p.getMZ() >= 112.0 && p.getMZ() <= 137.0) low.emplace_back(p.getMZ(), p.getIntensity());
             }
-            rc.add(low, base);
+            if (trap) rc.addTrap(!low.empty() && base > 0);
+            else rc.add(low, base);
           }
         }
         const Clock::time_point tb = timing ? Clock::now() : ta;
