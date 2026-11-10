@@ -4141,6 +4141,7 @@ protected:
       bool ms1_has = false;
       FASTag::LabelDiscovery::Collector ldisc;  ///< -label_discovery_out only
       FASTag::LabelDiscovery::ReporterCounter reporters;  ///< -label_discovery_out only
+      FASTag::LabelDiscovery::PairCounter pairs;          ///< -label_discovery_out only
     };
     std::vector<PerThread> per_thread(static_cast<size_t>(std::max(1, omp_get_max_threads())));
     for (PerThread& q : per_thread)
@@ -5123,7 +5124,19 @@ protected:
       PeakPickerHiRes* picker = pickers[tid].get();
       auto work = [&](SignedSize i, Block& blk, size_t idx)
       {
-        if (!sample_mask.empty() && !sample_mask[static_cast<size_t>(i)]) { tick(); return; }
+        if (!sample_mask.empty() && !sample_mask[static_cast<size_t>(i)])
+        {
+          // SILAC pairs (label discovery, format 3) need the precursors of the spectra the subsample skips as well;
+          // the indexed mzML reader gives them without decoding peaks. Other readers: pairs among the sampled spectra only.
+          if (ldisc_on && freader)
+          {
+            const MSSpectrum head = freader->getSpectrumMetadata(static_cast<Size>(i), 0);
+            if (head.getMSLevel() == 2 && !head.getPrecursors().empty())
+              per_thread[tid].pairs.add(head.getRT(), head.getPrecursors()[0].getMZ(), head.getPrecursors()[0].getCharge());
+          }
+          tick();
+          return;
+        }
         const Clock::time_point ta = timing ? Clock::now() : Clock::time_point();
         MSSpectrum loaded;
         bool loaded_here = false;
@@ -5156,6 +5169,8 @@ protected:
           {
             ++rc.ms2;
             rc.ms2_ion_trap += trap;
+            if (!rs.getPrecursors().empty())
+              per_thread[tid].pairs.add(rs.getRT(), rs.getPrecursors()[0].getMZ(), rs.getPrecursors()[0].getCharge());
           }
           if (!trap && !rs.empty())
           {
@@ -6326,6 +6341,9 @@ protected:
       LD::ReporterCounter reporters;
       for (const PerThread& pt : per_thread) reporters.merge(pt.reporters);
       LD::applyReporters(ana, reporters);
+      LD::PairCounter pairs;
+      for (PerThread& pt : per_thread) pairs.merge(std::move(pt.pairs));
+      LD::applyPairs(ana, std::move(pairs));
       col = LD::Collector();
       std::vector<FD::Row> rows = FASTag::RunReport::runRows(run_meta, FASTag::RunReport::Emit::Versioned);
       for (FD::Row& r : LD::reportRows(ana, ldisc_settings)) rows.push_back(std::move(r));

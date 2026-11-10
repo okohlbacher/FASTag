@@ -39,7 +39,7 @@
 
 namespace FASTag::LabelDiscovery
 {
-  inline constexpr int kFormat = 2;
+  inline constexpr int kFormat = 3;
   inline constexpr double kBin = 0.0005;          ///< histogram bin width (Da)
   inline constexpr double kC13 = 1.0033548378;    ///< 13C - 12C
   inline constexpr double kH2O = Digest::kH2O;
@@ -421,6 +421,36 @@ namespace FASTag::LabelDiscovery
   /// isobaric label) or `unclear`.
   std::string reporterGate(const ReporterCounter& rc);
 
+  /// SILAC from precursor pairs (format 3): the MS2 precursors (charge 2-4) of
+  /// the run and how many have a partner of the same charge at +8.0142 Da
+  /// (Lys8) and +10.0083 Da (Arg10) within 2 mDa and 9 s, against eight
+  /// control spacings (the label masses shifted by whole Da, off the 13C
+  /// isotope spacing). Needs no tags, so it also sees the heavy partner whose
+  /// tags the site scan misses. Thresholds were set on development runs only.
+  struct PairCounter
+  {
+    struct Precursor
+    {
+      double mz;
+      float rt;  ///< seconds
+      std::int8_t z;
+    };
+    std::vector<Precursor> precursors;
+    void add(double rt_seconds, double mz, int charge);  ///< charges outside 2-4 are dropped
+    void merge(PairCounter&& o);
+    // filled by count()
+    std::uint64_t lys8 = 0, arg10 = 0;
+    std::uint64_t other = 0;  ///< the largest count at +4.0251 (Lys4, dimethyl), +6.0201 (Lys6, Arg6), +8.0444 (dimethyl)
+    double control = 0;  ///< median of the eight control counts
+    void count();
+    /// count / (control + 5): the excess of a label spacing over the controls.
+    double ratio(std::uint64_t pairs) const { return static_cast<double>(pairs) / (control + 5.0); }
+    /// Both Lys8 and Arg10 have >= 30 pairs and a ratio >= 2.
+    bool silac() const;
+    /// Any label spacing has >= 30 pairs and a ratio >= 2.
+    bool anyLabel() const;
+  };
+
   struct Analysis
   {
     // ld_count
@@ -435,10 +465,12 @@ namespace FASTag::LabelDiscovery
     std::vector<SiteCandidate> sites;  ///< per site N, K, R, C: the control first, then the ranked candidates
     // ld_call
     std::string status = "no_call", labels = "-", call_sites = "-", reason = "-";
-    std::string basis = "site_scan";  ///< `reporter_ions` when applyReporters() made the call
+    std::string basis = "site_scan";  ///< `reporter_ions` / `precursor_pairs` when applyReporters() / applyPairs() made the call
     // ld_reporter
     ReporterCounter reporters;
     std::string reporter_gate = "unknown";
+    // ld_pair
+    PairCounter pairs;
     // ld_known
     std::vector<KnownSet> known;
     std::vector<std::array<std::uint64_t, kKnownImages>> known_tags, known_spectra;
@@ -454,7 +486,12 @@ namespace FASTag::LabelDiscovery
   /// run of ion-trap MS2 scans gets the reason `low_resolution_ms2`.
   void applyReporters(Analysis& a, const ReporterCounter& rc);
 
+  /// Counts the pairs of @p pc (sorts it) and, when they show SILAC, replaces
+  /// a label-free call or a no call by `K:Lys8+R:Arg10` (basis
+  /// `precursor_pairs`). A label call stays. Call after applyReporters().
+  void applyPairs(Analysis& a, PairCounter pc);
+
   /// The report rows after the shared run rows: ld_run, ld_count, ld_peak,
-  /// ld_site, ld_known, ld_reporter, ld_call.
+  /// ld_site, ld_known, ld_reporter, ld_pair, ld_call.
   std::vector<Digest::Row> reportRows(const Analysis& a, const Settings& s);
 }

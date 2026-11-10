@@ -81,7 +81,7 @@
   database-free label discovery. Reports every N-terminal, K, R or
   C-terminal mass offset the tag flanks carry, known or not, explained by
   residues, the known labels (TMT, TMTpro, iTRAQ4/8, dimethyl, SILAC Lys4/6/8
-  and Arg6/10) or Unimod, with a label call (format 2,
+  and Arg6/10) or Unimod, with a label call (format 3,
   doc/LABEL-DISCOVERY-REPORT.md; design doc/DESIGN-label-discovery.md).
   Advanced options `-label_discovery_max_flank` (at most 1500 Da), `_depth`,
   `_min_spectra`, `_min_share`, `_window_n`, `_window_c` (at most 0.05 Da)
@@ -99,6 +99,12 @@
   an isobaric label call (`no_reporter_ions`), and a no call on a run with
   ion-trap MS2 scans is reported as `low_resolution_ms2`. Thresholds were
   set on the 99 development runs (86 right instead of 85).
+  Format 3 adds the `ld_pair` section: precursor pairs at the Lys8 and
+  Arg10 spacings call SILAC (`basis` `precursor_pairs`), also on runs with
+  ion-trap MS2, and a run with few tags, no reporter ions and no pair
+  signal is called label-free (`basis` `absence`). On the development runs
+  93 right instead of 86; no held-out test. A sample labelled in one
+  channel only is read as label-free by the absence rule.
 
 ## 1.12.2 (2026-11-10)
 
