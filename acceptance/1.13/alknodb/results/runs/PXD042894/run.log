@@ -1,0 +1,5 @@
+'staged/PXD042894/20211020_C26346_002_S321667_noDox1_Control.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 25677 spectra by scanning it instead (0.02 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2087 repeat gaps, cycle 203, 1903 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 25 of 18759 spectra vote, no_call ambiguous -> runs/PXD042894/alkt.tsv
+18759 MS2 spectra, 245607 tags
+FASTag took 1.15 s (wall), 5.21 s (CPU), 0.49 s (system), 4.72 s (user); Peak Memory Usage: 397 MB.

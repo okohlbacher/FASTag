@@ -1,0 +1,5 @@
+'staged/PXD060171/wc_QE_053023_John_Whitaker_DDL357_InVivo_TMT_F1.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 42656 spectra by scanning it instead (0.03 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2442 repeat gaps, cycle 78, 1552 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 108 of 13722 spectra vote, call Carbamidomethyl -> runs/PXD060171/alkt.tsv
+13722 MS2 spectra, 503708 tags
+FASTag took 1.72 s (wall), 9.00 s (CPU), 0.93 s (system), 8.07 s (user); Peak Memory Usage: 381 MB.

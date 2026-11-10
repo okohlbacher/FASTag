@@ -1,0 +1,33 @@
+alknodb held-out: 57 runs; no_report 0
+PRIMARY accuracy among calls 37/40 = 0.925 (Wilson 95 % 0.801-0.974); criterion: at least 30 calls and lower end at least 0.8
+VERDICT PASS: 40 runs called, Wilson lower end 0.801 at least 0.8
+
+SECONDARY (no verdict)
+call rate 40/57 = 0.702
+stratum CAM: runs 30; call rate 26/30 = 0.867; accuracy among calls 25/26 = 0.962 (Wilson 0.811-0.993)
+stratum OTHER: runs 15; call rate 12/15 = 0.800; accuracy among calls 11/12 = 0.917 (Wilson 0.646-0.985)
+stratum NONE: runs 12; call rate 2/12 = 0.167; accuracy among calls 1/2 = 0.500 (Wilson 0.095-0.905)
+truth Carbamidomethyl: runs 30; called 26; right 25
+truth Methylthio: runs 7; called 7; right 7
+truth Propionamide: runs 6; called 3; right 3
+truth Carboxymethyl: runs 2; called 2; right 1
+truth none: runs 12; called 2; right 1
+recall of none on the not-alkylated stratum 1/12 = 0.083
+
+truth x call (no_call with its reason)
+    Carbamidomethyl  -> Carbamidomethyl              25
+    Carbamidomethyl  -> no_call:ambiguous            3
+    Carbamidomethyl  -> no_call:few_cys_spectra      1
+    Carbamidomethyl  -> none                         1
+    Carboxymethyl    -> Carbamidomethyl              1
+    Carboxymethyl    -> Carboxymethyl                1
+    Methylthio       -> Methylthio                   7
+    Propionamide     -> Propionamide                 3
+    Propionamide     -> no_call:ambiguous            3
+    none             -> Carbamidomethyl              1
+    none             -> no_call:ambiguous            9
+    none             -> no_call:few_cys_spectra      1
+    none             -> none                         1
+
+database call (-alkylation_out, human proteome): rows 25; called 13; no_report 0; right among its calls 11/13 = 0.846
+both methods call: 10; same class 10

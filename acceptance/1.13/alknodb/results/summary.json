@@ -1,0 +1,11 @@
+{
+ "runs": 57,
+ "no_report": 0,
+ "called": 40,
+ "right": 37,
+ "accuracy": 0.925,
+ "wilson_lo": 0.8013576647568946,
+ "wilson_hi": 0.9741639742254119,
+ "verdict": "PASS",
+ "why": "40 runs called, Wilson lower end 0.801 at least 0.8"
+}

@@ -1,0 +1,5 @@
+'staged/PXD009243/Circadianproteomics_Discovery_Bmal1KO_Global_MSF_Fr2.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 60599 spectra by scanning it instead (0.04 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2243 repeat gaps, cycle 13, 1755 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 3227 of 51668 spectra vote, call Carbamidomethyl -> runs/PXD009243/alkt.tsv
+51668 MS2 spectra, 2257480 tags
+FASTag took 6.09 s (wall), 43.27 s (CPU), 1.50 s (system), 41.77 s (user); Peak Memory Usage: 497 MB.

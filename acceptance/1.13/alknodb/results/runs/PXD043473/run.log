@@ -1,0 +1,5 @@
+'staged/PXD043473/20221215_HF2_01_Ecoli_bulk22127_FToP_TM6.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 47332 spectra by scanning it instead (0.04 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2293 repeat gaps, cycle 207, 1707 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 333 of 33841 spectra vote, no_call ambiguous -> runs/PXD043473/alkt.tsv
+33841 MS2 spectra, 1620655 tags
+FASTag took 6.09 s (wall), 41.28 s (CPU), 1.19 s (system), 40.09 s (user); Peak Memory Usage: 421 MB.

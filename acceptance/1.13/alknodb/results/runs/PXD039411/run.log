@@ -1,0 +1,5 @@
+'staged/PXD039411/STING_0h_1.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 22300 spectra by scanning it instead (0.01 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.05 over 3430 repeat gaps, cycle 67, 569 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 259 of 19105 spectra vote, no_call ambiguous -> runs/PXD039411/alkt.tsv
+19105 MS2 spectra, 467492 tags
+FASTag took 2.63 s (wall), 14.66 s (CPU), 0.52 s (system), 14.14 s (user); Peak Memory Usage: 397 MB.

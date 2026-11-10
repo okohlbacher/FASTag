@@ -1,0 +1,6 @@
+Recon index: 20950 proteins, 11469285 residues, 13 isobaric rules; min tag length 8 (derived)
+'staged/PXD022894/20180426_QX0_AsJa_SA_Proteome_HL60_1.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 168727 spectra by scanning it instead (0.08 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2851 repeat gaps, cycle 11, 1146 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation: 6830 spectra with a single-Cys placement, call Carbamidomethyl -> runs/PXD022894/alkdb.tsv
+155294 MS2 spectra, 6294349 tags
+FASTag took 13.50 s (wall), 01:43 m (CPU), 4.12 s (system), 01:39 m (user); Peak Memory Usage: 1178 MB.

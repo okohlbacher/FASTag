@@ -1,0 +1,6 @@
+Recon index: 20950 proteins, 11469285 residues, 13 isobaric rules; min tag length 8 (derived)
+'staged/PXD012565/QE3_181025_OPL0000_RdH_RB_organoids_LYS_L.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 54143 spectra by scanning it instead (0.04 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2030 repeat gaps, cycle 181, 1970 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation: 1787 spectra with a single-Cys placement, call Carbamidomethyl -> runs/PXD012565/alkdb.tsv
+44203 MS2 spectra, 1842142 tags
+FASTag took 4.82 s (wall), 32.61 s (CPU), 1.41 s (system), 31.20 s (user); Peak Memory Usage: 460 MB.

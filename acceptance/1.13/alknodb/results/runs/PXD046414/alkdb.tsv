@@ -1,0 +1,72 @@
+section	key	value	n	description
+run	version	1.12.2	-	FASTag 1.12.2 wrote this report.
+run	input	H090600_1p_PackedBed1_PM3_CMB-988_SVEYC_140-1.mzML	-	The spectra were read from H090600_1p_PackedBed1_PM3_CMB-988_SVEYC_140-1.mzML.
+run	fragment_tolerance	20	-	The fragment tolerance is 20 ppm.
+run	fragment_tolerance_unit	ppm	-	The fragment tolerance is in ppm.
+run	tag_length	4	-	Tags were seeded at length 4.
+run	subsample_fraction	0	-	A fraction of 0 of the spectra was tagged (0 = all).
+run	subsample_spectra	0	-	0 spectra were drawn for tagging (0 = all).
+run	run_report_version	5	-	The run section follows FASTag run report format 5.
+run	pick_profile	legacy	-	Profile MS2 was centroided under -pick_profile legacy.
+run	profile_ms2_picked	0	0	0 of 0 profile MS2 spectra were centroided before tagging.
+run	profile_ms2_kept	0	0	0 of 0 profile MS2 spectra were tagged as profile (picking yielded nothing).
+run	activation_collisional	36059	36059	36059 of 36059 MS2 spectra were activated by collision (CID, HCD, trap-type CID, PQD).
+run	activation_electron	0	36059	0 of 36059 MS2 spectra were activated by electron transfer or capture (ETD, ECD).
+run	activation_hybrid	0	36059	0 of 36059 MS2 spectra were activated by a hybrid method (EThcD, ETciD).
+run	activation_unknown	0	36059	0 of 36059 MS2 spectra carry no activation FASTag classifies.
+run	unknown_charge	assume2	-	Precursors without a charge were tagged under -unknown_charge assume2.
+run	isotope_error	0	-	Precursor isotope offsets 0 were considered.
+run	charge_header	0	0	0 of 0 MS2 spectra were reported at their precursor's charge.
+run	charge_possible	0	0	0 of 0 MS2 spectra were reported at a listed possible charge.
+run	charge_inferred	0	0	0 of 0 MS2 spectra were reported at an inferred charge.
+run	charge_ambiguous	0	0	0 of 0 MS2 spectra were reported at the better of two inferred charges.
+run	charge_assumed	0	0	0 of 0 MS2 spectra were reported at charge 2 without charge evidence.
+run	charge_enumerated	0	0	0 of 0 MS2 spectra were reported at an enumerated charge.
+run	isotope_shifted	0	0	0 of 0 MS2 spectra were reported at a precursor isotope offset other than 0.
+run	multi_hypothesis	0	0	0 of 0 MS2 spectra were tagged under more than one precursor hypothesis.
+run	ion_series	by	-	MS2 spectra were read under -ion_series by.
+run	ion_series_by	36059	36059	36059 of 36059 MS2 spectra were tagged as b/y ions.
+run	ion_series_cz	0	36059	0 of 36059 MS2 spectra were tagged as c/z-dot ions.
+alk_run	format	1	-	The alkylation report follows format 1 (doc/ALKYLATION-REPORT.md).
+alk_run	database	/ceph/ibmi/abi/oliver/jpr-bench/data/PXD054073/UP000005640_9606.fasta	-	The placements are on the database /ceph/ibmi/abi/oliver/jpr-bench/data/PXD054073/UP000005640_9606.fasta.
+alk_run	database_source	proteome	-	The database is the -alkylation_proteome FASTA.
+alk_run	fixed_c_delta	0	-	The run has no fixed modification on C; the reagent mass is the gap.
+alk_run	fixed_nterm_delta	0	-	The run has no fixed peptide N-terminal modification.
+alk_run	fixed_cterm_delta	0	-	The run has no fixed peptide C-terminal modification.
+alk_run	window	0.02	-	A reagent mass bins to a Cys form within 0.02 Da of it.
+alk_run	min_spectra	10	-	A call needs 10 spectra binned in total and for the called class.
+alk_run	min_share	0.6	-	A call needs a share of 0.6 of the binned spectra.
+alk_run	tags	68397	-	68397 placed tags (ungapped, E-value at most 1) were looked at.
+alk_run	spectra	639	-	639 MS2 spectra have a tag with a single-Cys placement that counts; each votes once, with its best such tag.
+alk_cys	Carbamidomethyl	0	0	0 spectra bin to Carbamidomethyl (57.021464 Da on C; class Carbamidomethyl).
+alk_cys	Propionamide	0	0	0 spectra bin to Propionamide (71.037114 Da on C; class Propionamide).
+alk_cys	Nethylmaleimide	0	0	0 spectra bin to Nethylmaleimide (125.047679 Da on C; class Nethylmaleimide).
+alk_cys	Methylthio	0	0	0 spectra bin to Methylthio (45.987721 Da on C; class Methylthio).
+alk_cys	Carboxymethyl	0	0	0 spectra bin to Carboxymethyl (58.005479 Da on C; class Carboxymethyl).
+alk_cys	unmodified	0	0	0 spectra bin to unmodified (0 Da on C; class none).
+alk_cys	Oxidation	0	0	0 spectra bin to Oxidation (15.994915 Da on C; class none).
+alk_cys	Dioxidation	0	0	0 spectra bin to Dioxidation (31.989829 Da on C; class none).
+alk_cys	Trioxidation	0	0	0 spectra bin to Trioxidation (47.984744 Da on C; class none).
+alk_cys	Cysteinyl	0	0	0 spectra bin to Cysteinyl (119.004099 Da on C; class none).
+alk_cys	Dehydroalanine	0	0	0 spectra bin to Dehydroalanine (-33.987721 Da on C; class none).
+alk_cys	class.Carbamidomethyl	0	0	0 of 0 binned spectra are of the class Carbamidomethyl.
+alk_cys	class.Propionamide	0	0	0 of 0 binned spectra are of the class Propionamide.
+alk_cys	class.Nethylmaleimide	0	0	0 of 0 binned spectra are of the class Nethylmaleimide.
+alk_cys	class.Methylthio	0	0	0 of 0 binned spectra are of the class Methylthio.
+alk_cys	class.Carboxymethyl	0	0	0 of 0 binned spectra are of the class Carboxymethyl.
+alk_cys	class.none	0	0	0 of 0 binned spectra are of the class none (unmodified, oxidised, cysteinylated or dehydroalanine Cys).
+alk_cys	unexplained	600	639	600 spectra have a reagent mass no Cys form explains within the window.
+alk_cys	conflict	39	639	39 spectra have a best tag whose counted placements disagree on the class.
+alk_cys	excluded.no_cys	39104	42820	39104 of 42820 placements are left out: they have no C in the peptide.
+alk_cys	excluded.multi_cys	474	42820	474 of 42820 placements are left out: they have two or more C in the peptide.
+alk_cys	excluded.cys_in_tag	171	42820	171 of 42820 placements are left out: they have their one C inside the tag.
+alk_cys	excluded.cys_outside_region	25	42820	25 of 42820 placements are left out: they have their one C on the side without the gap.
+alk_cys	excluded.protein_nterm	113	42820	113 of 42820 placements are left out: they have the gap at the protein N-terminus.
+alk_cys	excluded.truncation	53	42820	53 of 42820 placements are left out: they have a gap equal to the mass of the outermost one or two residues (a shorter product).
+alk_cys	excluded.met_ambiguous	0	42820	0 of 42820 placements are left out: they read as two classes with and without an M oxidation in the gap.
+alk_cys	excluded.non_by	0	68397	0 of 68397 tags are left out because they are not b/y tags (c/z); they are not placed for the call.
+alkylation_call	status	no_call	0	No alkylation is called: 0 binned spectra are fewer than 10.
+alkylation_call	reagent	-	-	No reagent is called.
+alkylation_call	mass	-	-	No reagent is called.
+alkylation_call	share	-	0	No spectrum is binned.
+alkylation_call	reason	few_cys_spectra	-	The first no-call rule that applies is few_cys_spectra.

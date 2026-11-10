@@ -1,0 +1,5 @@
+'staged/PXD061846/QEplus043285.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 55871 spectra by scanning it instead (0.04 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2311 repeat gaps, cycle 9, 1687 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 326 of 44490 spectra vote, call Carbamidomethyl -> runs/PXD061846/alkt.tsv
+44490 MS2 spectra, 834167 tags
+FASTag took 1.96 s (wall), 9.96 s (CPU), 1.04 s (system), 8.92 s (user); Peak Memory Usage: 365 MB.

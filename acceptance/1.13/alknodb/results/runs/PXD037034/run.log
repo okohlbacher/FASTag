@@ -1,0 +1,5 @@
+'staged/PXD037034/8101072719lit_WT.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 35370 spectra by scanning it instead (0.02 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 2374 repeat gaps, cycle 74, 1625 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 404 of 24654 spectra vote, call Methylthio -> runs/PXD037034/alkt.tsv
+24654 MS2 spectra, 520789 tags
+FASTag took 1.85 s (wall), 10.24 s (CPU), 0.76 s (system), 9.48 s (user); Peak Memory Usage: 381 MB.

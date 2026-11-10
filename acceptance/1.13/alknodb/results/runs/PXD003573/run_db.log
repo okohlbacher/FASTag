@@ -1,0 +1,6 @@
+Recon index: 20950 proteins, 11469285 residues, 13 isobaric rules; min tag length 8 (derived)
+'staged/PXD003573/ECS_1A.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 35562 spectra by scanning it instead (0.02 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2402 repeat gaps, cycle 81, 1594 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation: 18 spectra with a single-Cys placement, no_call few_cys_spectra -> runs/PXD003573/alkdb.tsv
+18850 MS2 spectra, 325034 tags
+FASTag took 1.12 s (wall), 5.49 s (CPU), 0.69 s (system), 4.80 s (user); Peak Memory Usage: 397 MB.

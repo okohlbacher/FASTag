@@ -1,0 +1,6 @@
+Recon index: 20950 proteins, 11469285 residues, 13 isobaric rules; min tag length 8 (derived)
+'staged/PXD024893/190419_Hela_2frac_1000ng.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 120413 spectra by scanning it instead (0.09 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2592 repeat gaps, cycle 30, 1408 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation: 2477 spectra with a single-Cys placement, call Carbamidomethyl -> runs/PXD024893/alkdb.tsv
+103149 MS2 spectra, 2789340 tags
+FASTag took 4.55 s (wall), 32.47 s (CPU), 2.11 s (system), 30.36 s (user); Peak Memory Usage: 596 MB.

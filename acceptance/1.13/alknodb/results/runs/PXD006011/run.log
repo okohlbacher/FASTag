@@ -1,0 +1,5 @@
+'staged/PXD006011/051616_citrus_50_1.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 75985 spectra by scanning it instead (0.04 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.06 over 2842 repeat gaps, cycle 30, 1151 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 2527 of 69844 spectra vote, call Carbamidomethyl -> runs/PXD006011/alkt.tsv
+69844 MS2 spectra, 2350747 tags
+FASTag took 5.90 s (wall), 41.80 s (CPU), 1.85 s (system), 39.95 s (user); Peak Memory Usage: 502 MB.

@@ -1,0 +1,5 @@
+'staged/PXD023439/retina-fr-10.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 21295 spectra by scanning it instead (0.03 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1874 repeat gaps, cycle 137, 2126 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 115 of 16512 spectra vote, call Methylthio -> runs/PXD023439/alkt.tsv
+16512 MS2 spectra, 590971 tags
+FASTag took 1.62 s (wall), 8.07 s (CPU), 0.56 s (system), 7.51 s (user); Peak Memory Usage: 397 MB.

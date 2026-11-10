@@ -1,0 +1,69 @@
+section	key	value	n	description
+run	version	1.12.2	-	FASTag 1.12.2 wrote this report.
+run	input	20170830_QE1_BK_1703_500ng_Top20_Day0_BR1.mzML	-	The spectra were read from 20170830_QE1_BK_1703_500ng_Top20_Day0_BR1.mzML.
+run	fragment_tolerance	20	-	The fragment tolerance is 20 ppm.
+run	fragment_tolerance_unit	ppm	-	The fragment tolerance is in ppm.
+run	tag_length	4	-	Tags were seeded at length 4.
+run	subsample_fraction	0	-	A fraction of 0 of the spectra was tagged (0 = all).
+run	subsample_spectra	0	-	0 spectra were drawn for tagging (0 = all).
+run	run_report_version	5	-	The run section follows FASTag run report format 5.
+run	pick_profile	legacy	-	Profile MS2 was centroided under -pick_profile legacy.
+run	profile_ms2_picked	0	0	0 of 0 profile MS2 spectra were centroided before tagging.
+run	profile_ms2_kept	0	0	0 of 0 profile MS2 spectra were tagged as profile (picking yielded nothing).
+run	activation_collisional	17400	17400	17400 of 17400 MS2 spectra were activated by collision (CID, HCD, trap-type CID, PQD).
+run	activation_electron	0	17400	0 of 17400 MS2 spectra were activated by electron transfer or capture (ETD, ECD).
+run	activation_hybrid	0	17400	0 of 17400 MS2 spectra were activated by a hybrid method (EThcD, ETciD).
+run	activation_unknown	0	17400	0 of 17400 MS2 spectra carry no activation FASTag classifies.
+run	unknown_charge	assume2	-	Precursors without a charge were tagged under -unknown_charge assume2.
+run	isotope_error	0	-	Precursor isotope offsets 0 were considered.
+run	charge_header	0	0	0 of 0 MS2 spectra were reported at their precursor's charge.
+run	charge_possible	0	0	0 of 0 MS2 spectra were reported at a listed possible charge.
+run	charge_inferred	0	0	0 of 0 MS2 spectra were reported at an inferred charge.
+run	charge_ambiguous	0	0	0 of 0 MS2 spectra were reported at the better of two inferred charges.
+run	charge_assumed	0	0	0 of 0 MS2 spectra were reported at charge 2 without charge evidence.
+run	charge_enumerated	0	0	0 of 0 MS2 spectra were reported at an enumerated charge.
+run	isotope_shifted	0	0	0 of 0 MS2 spectra were reported at a precursor isotope offset other than 0.
+run	multi_hypothesis	0	0	0 of 0 MS2 spectra were tagged under more than one precursor hypothesis.
+run	ion_series	by	-	MS2 spectra were read under -ion_series by.
+run	ion_series_by	17400	17400	17400 of 17400 MS2 spectra were tagged as b/y ions.
+run	ion_series_cz	0	17400	0 of 17400 MS2 spectra were tagged as c/z-dot ions.
+alkt_run	format	1	-	The database-free alkylation report follows format 1 (doc/ALKYLATION-REPORT.md, -alkylation_tags_out).
+alkt_run	method	shadow_tags	-	Every MS2 spectrum is tagged a second time with unmodified C and one alternative C edge per reagent; those tags are not written. No database is used.
+alkt_run	status	experimental	-	Experimental: on development data 61 of 123 runs were called, 51 as annotated (doc/ALKYLATION-REPORT.md); not tested on held-out data. Unalkylated and low-resolution runs are rarely called.
+alkt_run	forms	Carbamidomethyl,Propionamide,Nethylmaleimide,Methylthio,Carboxymethyl,unmodified	6	The C forms the shadow pass can spell.
+alkt_run	c_mods_removed	-	0	The run has no modification on C.
+alkt_run	tag_lengths	4	-	The shadow pass uses the run's seed lengths, extension and tolerances, without gap edges.
+alkt_run	spectra_tagged	17400	-	17400 MS2 spectra with peaks and a precursor were shadow-tagged (b/y); some may give no tag.
+alkt_run	spectra_cz	0	-	0 MS2 spectra were read as c/z and are not shadow-tagged.
+alkt_run	tags	181829	-	181829 shadow tags are ungapped with an E-value of at most 1, read at fragment charge 1.
+alkt_run	tags_multi	124	-	124 such tags read at fragment charge 2 or more are not counted (C[Propionamide]/2 reads like S).
+alkt_run	tags_with_c	60121	181829	60121 of them hold a C.
+alkt_run	spectra	1351	17400	1351 spectra vote: their best counted tag holds a C, none at an end of the tag, with an E-value of at most 1e-04.
+alkt_run	min_spectra	10	-	A call needs 10 votes in total and for the called class.
+alkt_run	min_share	0.6	-	A call needs a share of 0.6 of the votes.
+alkt_run	edge_tolerance	0.02	-	The report reasons with an edge tolerance of 0.02 Da (the fragment tolerance, or in ppm at 1000 m/z).
+alkt_run	forms_resolved	yes	-	Every two C forms are more than twice the edge tolerance apart (isotope-shifted readings are listed under alias).
+alkt_form	Carbamidomethyl	1246	1334	1246 spectra vote Carbamidomethyl (57.021464 Da on C; class Carbamidomethyl).
+alkt_form	Propionamide	14	1334	14 spectra vote Propionamide (71.037114 Da on C; class Propionamide).
+alkt_form	Nethylmaleimide	18	1334	18 spectra vote Nethylmaleimide (125.047679 Da on C; class Nethylmaleimide).
+alkt_form	Methylthio	8	1334	8 spectra vote Methylthio (45.987721 Da on C; class Methylthio).
+alkt_form	Carboxymethyl	9	1334	9 spectra vote Carboxymethyl (58.005479 Da on C; class Carboxymethyl).
+alkt_form	unmodified	39	1334	39 spectra vote unmodified (0 Da on C; class none).
+alkt_form	residues.Carbamidomethyl	42965	73262	42965 of 73262 C residues in counted tags are Carbamidomethyl.
+alkt_form	residues.Propionamide	7276	73262	7276 of 73262 C residues in counted tags are Propionamide.
+alkt_form	residues.Nethylmaleimide	6140	73262	6140 of 73262 C residues in counted tags are Nethylmaleimide.
+alkt_form	residues.Methylthio	3092	73262	3092 of 73262 C residues in counted tags are Methylthio.
+alkt_form	residues.Carboxymethyl	5509	73262	5509 of 73262 C residues in counted tags are Carboxymethyl.
+alkt_form	residues.unmodified	8280	73262	8280 of 73262 C residues in counted tags are unmodified.
+alkt_form	alias.Carbamidomethyl	C+G:0.0000,C[Carboxymethyl]-13C:0.0193	-	Two residues whose middle peak is missing (X+Y), or another C form whose edge starts or ends on a 13C peak (C[Name]+13C / -13C), read like C[Carbamidomethyl] (reading:distance in Da); such votes are not corrected.
+alkt_form	alias.Propionamide	A+C:0.0000,S+S:0.0178	-	Two residues whose middle peak is missing (X+Y), or another C form whose edge starts or ends on a 13C peak (C[Name]+13C / -13C), read like C[Propionamide] (reading:distance in Da); such votes are not corrected.
+alkt_form	alias.Nethylmaleimide	N+N:0.0290,M+P:0.0364	-	Two residues whose middle peak is missing (X+Y), or another C form whose edge starts or ends on a 13C peak (C[Name]+13C / -13C), read like C[Nethylmaleimide] (reading:distance in Da); such votes are not corrected.
+alkt_form	alias.Methylthio	-	-	No two residues sum to C[Methylthio] and no 13C-shifted C form reads like it within twice the edge tolerance.
+alkt_form	alias.Carboxymethyl	C[Carbamidomethyl]+13C:0.0193	-	Two residues whose middle peak is missing (X+Y), or another C form whose edge starts or ends on a 13C peak (C[Name]+13C / -13C), read like C[Carboxymethyl] (reading:distance in Da); such votes are not corrected.
+alkt_form	alias.unmodified	-	-	No two residues sum to C[unmodified] and no 13C-shifted C form reads like it within twice the edge tolerance.
+alkt_form	conflict	17	1351	17 voting spectra have a best tag (or tags of equal E-value) with C residues of two forms; they are not in the share.
+alkylation_tags_call	status	call	1334	The votes favour Carbamidomethyl (database-free; experimental, not tested on held-out data).
+alkylation_tags_call	reagent	Carbamidomethyl	1246	The call is Carbamidomethyl.
+alkylation_tags_call	mass	57.021464	-	Carbamidomethyl adds 57.021464 Da to C.
+alkylation_tags_call	share	0.9340329835082459	1334	A share of 0.934 of the 1334 votes are Carbamidomethyl.
+alkylation_tags_call	reason	-	-	The call is made.

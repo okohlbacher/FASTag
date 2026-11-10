@@ -1,0 +1,5 @@
+'staged/PXD012565/QE3_181025_OPL0000_RdH_RB_organoids_LYS_L.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 54143 spectra by scanning it instead (0.04 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2030 repeat gaps, cycle 181, 1970 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 413 of 44203 spectra vote, no_call ambiguous -> runs/PXD012565/alkt.tsv
+44203 MS2 spectra, 1842142 tags
+FASTag took 5.23 s (wall), 34.72 s (CPU), 1.44 s (system), 33.28 s (user); Peak Memory Usage: 439 MB.

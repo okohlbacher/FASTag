@@ -1,0 +1,6 @@
+Recon index: 20950 proteins, 11469285 residues, 13 isobaric rules; min tag length 8 (derived)
+'staged/PXD020717/AD02_BA46_SOLUBLE_01.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 53312 spectra by scanning it instead (0.02 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.03 over 2314 repeat gaps, cycle 43, 1685 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation: 173 spectra with a single-Cys placement, no_call ambiguous -> runs/PXD020717/alkdb.tsv
+46090 MS2 spectra, 670864 tags
+FASTag took 1.89 s (wall), 11.24 s (CPU), 0.95 s (system), 10.29 s (user); Peak Memory Usage: 381 MB.

@@ -1,0 +1,6 @@
+Recon index: 20950 proteins, 11469285 residues, 13 isobaric rules; min tag length 8 (derived)
+'staged/PXD046414/H090600_1p_PackedBed1_PM3_CMB-988_SVEYC_140-1.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 51321 spectra by scanning it instead (0.04 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 2532 repeat gaps, cycle 104, 1467 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation: 639 spectra with a single-Cys placement, no_call few_cys_spectra -> runs/PXD046414/alkdb.tsv
+36059 MS2 spectra, 623973 tags
+FASTag took 1.76 s (wall), 10.21 s (CPU), 1.04 s (system), 9.17 s (user); Peak Memory Usage: 397 MB.

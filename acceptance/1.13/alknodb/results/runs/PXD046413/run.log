@@ -1,0 +1,5 @@
+'staged/PXD046413/B102794_Ap_110uPAc_LumosLC_CMB-1046_SVEYC_AP-MS-183-2.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 90754 spectra by scanning it instead (0.04 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 2851 repeat gaps, cycle 106, 1147 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 138 of 82159 spectra vote, no_call ambiguous -> runs/PXD046413/alkt.tsv
+82159 MS2 spectra, 2156619 tags
+FASTag took 4.17 s (wall), 27.89 s (CPU), 1.69 s (system), 26.20 s (user); Peak Memory Usage: 483 MB.

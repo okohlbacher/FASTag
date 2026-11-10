@@ -1,0 +1,5 @@
+'staged/PXD042229/20210903_AD_MBr_APP_124798-1_R1.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 113922 spectra by scanning it instead (0.15 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2538 repeat gaps, cycle 256, 1457 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 2057 of 104894 spectra vote, call Carbamidomethyl -> runs/PXD042229/alkt.tsv
+104894 MS2 spectra, 3642813 tags
+FASTag took 7.95 s (wall), 57.86 s (CPU), 3.41 s (system), 54.45 s (user); Peak Memory Usage: 710 MB.

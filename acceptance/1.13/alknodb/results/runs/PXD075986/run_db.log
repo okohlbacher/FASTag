@@ -1,0 +1,7 @@
+Recon index: 20950 proteins, 11469285 residues, 13 isobaric rules; min tag length 8 (derived)
+'staged/PXD075986/MS227362QEHF_Mengying_Lyden_Activated_T-1.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 78192 spectra by scanning it instead (0.07 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 2299 repeat gaps, cycle 180, 1699 distinct precursor m/z, 58% uncharged, 4000 MS2 probed))
+Alkylation: 2354 spectra with a single-Cys placement, call Carbamidomethyl -> runs/PXD075986/alkdb.tsv
+67389 MS2 spectra, 2972001 tags
+42157 of 67389 MS2 spectra carry no precursor charge and were tagged as 2+: their peaks above the 2+ precursor mass are dropped, and their nterm_mass flanks assume charge 2 (wrong for a 3+ or higher precursor).
+FASTag took 10.47 s (wall), 01:12 m (CPU), 2.58 s (system), 01:10 m (user); Peak Memory Usage: 670 MB.

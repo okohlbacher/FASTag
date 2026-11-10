@@ -1,0 +1,14 @@
+truth	call	runs
+Carbamidomethyl	Carbamidomethyl	25
+Carbamidomethyl	no_call:ambiguous	3
+Carbamidomethyl	no_call:few_cys_spectra	1
+Carbamidomethyl	none	1
+Carboxymethyl	Carbamidomethyl	1
+Carboxymethyl	Carboxymethyl	1
+Methylthio	Methylthio	7
+Propionamide	Propionamide	3
+Propionamide	no_call:ambiguous	3
+none	Carbamidomethyl	1
+none	no_call:ambiguous	9
+none	no_call:few_cys_spectra	1
+none	none	1

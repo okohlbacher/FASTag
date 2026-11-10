@@ -1,0 +1,5 @@
+'staged/PXD052635/20180328_QE5_nLC5_MEM_COLLAB_GeoG_1314.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 29394 spectra by scanning it instead (0.02 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.03 over 3030 repeat gaps, cycle 130, 959 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 40 of 25445 spectra vote, no_call ambiguous -> runs/PXD052635/alkt.tsv
+25445 MS2 spectra, 894906 tags
+FASTag took 3.20 s (wall), 20.07 s (CPU), 0.75 s (system), 19.32 s (user); Peak Memory Usage: 397 MB.

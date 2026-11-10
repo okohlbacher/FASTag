@@ -1,0 +1,5 @@
+'staged/PXD024138/20200608_TEB_2h_5-35_EC_atrdef1exp_C_1ug_1.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 59766 spectra by scanning it instead (0.06 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.03 over 3281 repeat gaps, cycle 30, 714 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 2412 of 55203 spectra vote, call Carbamidomethyl -> runs/PXD024138/alkt.tsv
+55203 MS2 spectra, 2335314 tags
+FASTag took 7.25 s (wall), 51.82 s (CPU), 2.14 s (system), 49.68 s (user); Peak Memory Usage: 511 MB.

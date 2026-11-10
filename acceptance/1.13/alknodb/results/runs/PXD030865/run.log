@@ -1,0 +1,5 @@
+'staged/PXD030865/H446_SEV_band_A.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 10836 spectra by scanning it instead (0.01 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 2047 repeat gaps, cycle 18, 1952 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 24 of 6963 spectra vote, no_call ambiguous -> runs/PXD030865/alkt.tsv
+6963 MS2 spectra, 99980 tags
+FASTag took 0.91 s (wall), 3.02 s (CPU), 0.31 s (system), 2.71 s (user); Peak Memory Usage: 381 MB.

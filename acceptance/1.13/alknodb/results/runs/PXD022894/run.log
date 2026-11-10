@@ -1,0 +1,5 @@
+'staged/PXD022894/20180426_QX0_AsJa_SA_Proteome_HL60_1.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 168727 spectra by scanning it instead (0.15 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2851 repeat gaps, cycle 11, 1146 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 5876 of 155294 spectra vote, call Carbamidomethyl -> runs/PXD022894/alkt.tsv
+155294 MS2 spectra, 6294349 tags
+FASTag took 14.79 s (wall), 01:52 m (CPU), 4.22 s (system), 01:48 m (user); Peak Memory Usage: 1140 MB.

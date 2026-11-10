@@ -1,0 +1,5 @@
+'staged/PXD013978/20170830_QE1_BK_1703_500ng_Top20_Day0_BR1.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 24305 spectra by scanning it instead (0.02 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1879 repeat gaps, cycle 172, 2120 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 1351 of 17400 spectra vote, call Carbamidomethyl -> runs/PXD013978/alkt.tsv
+17400 MS2 spectra, 622233 tags
+FASTag took 2.72 s (wall), 14.47 s (CPU), 0.73 s (system), 13.74 s (user); Peak Memory Usage: 365 MB.

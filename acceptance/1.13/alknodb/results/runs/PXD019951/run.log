@@ -1,0 +1,5 @@
+'staged/PXD019951/70127_perl_1_s.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 86053 spectra by scanning it instead (0.04 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1844 repeat gaps, cycle 18, 2155 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 724 of 71365 spectra vote, call Methylthio -> runs/PXD019951/alkt.tsv
+71365 MS2 spectra, 1728569 tags
+FASTag took 4.21 s (wall), 29.39 s (CPU), 1.47 s (system), 27.92 s (user); Peak Memory Usage: 411 MB.

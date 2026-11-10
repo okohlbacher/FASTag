@@ -1,0 +1,5 @@
+'staged/PXD086821/190222S_LCA9_QC_SQCA1_0241.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 19159 spectra by scanning it instead (0.05 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2679 repeat gaps, cycle 90, 1321 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 39 of 8127 spectra vote, no_call ambiguous -> runs/PXD086821/alkt.tsv
+8127 MS2 spectra, 361717 tags
+FASTag took 1.20 s (wall), 5.25 s (CPU), 0.59 s (system), 4.66 s (user); Peak Memory Usage: 397 MB.

@@ -1,0 +1,5 @@
+'staged/PXD021191/20180926_QE3_nLC3_DS_SA_AD1_01.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 37413 spectra by scanning it instead (0.03 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0 over 1722 repeat gaps, cycle 360, 2274 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 98 of 33029 spectra vote, call none -> runs/PXD021191/alkt.tsv
+33029 MS2 spectra, 590084 tags
+FASTag took 2.17 s (wall), 12.80 s (CPU), 0.76 s (system), 12.04 s (user); Peak Memory Usage: 365 MB.

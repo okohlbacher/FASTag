@@ -1,0 +1,5 @@
+'staged/PXD045910/PLK074_EXPL_220212_FGU13_A-CS1_3uL_DDA_150M_120G.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 129612 spectra by scanning it instead (0.06 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2355 repeat gaps, cycle 35, 1644 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 2858 of 120607 spectra vote, call Methylthio -> runs/PXD045910/alkt.tsv
+120607 MS2 spectra, 4144895 tags
+FASTag took 8.28 s (wall), 01:00 m (CPU), 2.75 s (system), 57.77 s (user); Peak Memory Usage: 786 MB.

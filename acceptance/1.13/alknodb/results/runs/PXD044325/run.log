@@ -1,0 +1,5 @@
+'staged/PXD044325/20210709_EZ_EPIC_Chick_1.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 77345 spectra by scanning it instead (0.08 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2051 repeat gaps, cycle 406, 1947 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 1401 of 65616 spectra vote, no_call ambiguous -> runs/PXD044325/alkt.tsv
+65616 MS2 spectra, 2517641 tags
+FASTag took 6.29 s (wall), 45.66 s (CPU), 1.79 s (system), 43.87 s (user); Peak Memory Usage: 536 MB.

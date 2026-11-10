@@ -1,0 +1,6 @@
+'staged/PXD001238/1.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 16402 spectra by scanning it instead (0.02 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.06 over 2898 repeat gaps, cycle 30, 1100 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 335 of 14136 spectra vote, call Carbamidomethyl -> runs/PXD001238/alkt.tsv
+14136 MS2 spectra, 486262 tags
+4 of 14136 MS2 spectra carry no precursor charge and were tagged as 2+: their peaks above the 2+ precursor mass are dropped, and their nterm_mass flanks assume charge 2 (wrong for a 3+ or higher precursor).
+FASTag took 2.31 s (wall), 14.01 s (CPU), 0.59 s (system), 13.42 s (user); Peak Memory Usage: 365 MB.

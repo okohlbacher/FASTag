@@ -1,0 +1,5 @@
+'staged/PXD023757/RJEKOG_TPP_HpHRP_TMT10_DMSO1_fr01.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 80171 spectra by scanning it instead (0.04 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 981 repeat gaps, cycle 49, 3019 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 1076 of 62158 spectra vote, call Carbamidomethyl -> runs/PXD023757/alkt.tsv
+62158 MS2 spectra, 1431047 tags
+FASTag took 2.77 s (wall), 18.29 s (CPU), 1.40 s (system), 16.89 s (user); Peak Memory Usage: 365 MB.

@@ -1,0 +1,5 @@
+'staged/PXD067843/hTERT_antimiR.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 55207 spectra by scanning it instead (0.04 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2418 repeat gaps, cycle 121, 1577 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 230 of 43953 spectra vote, call Methylthio -> runs/PXD067843/alkt.tsv
+43953 MS2 spectra, 817942 tags
+FASTag took 1.79 s (wall), 9.69 s (CPU), 1.03 s (system), 8.66 s (user); Peak Memory Usage: 397 MB.

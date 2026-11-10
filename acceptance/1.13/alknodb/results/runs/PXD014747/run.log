@@ -1,0 +1,5 @@
+'staged/PXD014747/190201_CETSA_0hpi_3_Fr1.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 46485 spectra by scanning it instead (0.05 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2294 repeat gaps, cycle 170, 1706 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 524 of 40206 spectra vote, call Carbamidomethyl -> runs/PXD014747/alkt.tsv
+40206 MS2 spectra, 1751166 tags
+FASTag took 3.74 s (wall), 23.12 s (CPU), 1.75 s (system), 21.37 s (user); Peak Memory Usage: 411 MB.

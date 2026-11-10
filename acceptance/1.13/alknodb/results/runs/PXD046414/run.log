@@ -1,0 +1,5 @@
+'staged/PXD046414/H090600_1p_PackedBed1_PM3_CMB-988_SVEYC_140-1.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 51321 spectra by scanning it instead (0.04 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 2532 repeat gaps, cycle 104, 1467 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 50 of 36059 spectra vote, no_call ambiguous -> runs/PXD046414/alkt.tsv
+36059 MS2 spectra, 623973 tags
+FASTag took 1.82 s (wall), 10.22 s (CPU), 0.88 s (system), 9.34 s (user); Peak Memory Usage: 397 MB.

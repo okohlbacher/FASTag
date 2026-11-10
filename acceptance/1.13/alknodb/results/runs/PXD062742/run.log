@@ -1,0 +1,5 @@
+'staged/PXD062742/20231117_Q1_EB_ColQ1-144_DNAK_CIP_BF_0_R2.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 49356 spectra by scanning it instead (0.03 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2395 repeat gaps, cycle 52, 1605 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 8 of 35273 spectra vote, no_call few_cys_spectra -> runs/PXD062742/alkt.tsv
+35273 MS2 spectra, 803772 tags
+FASTag took 2.16 s (wall), 12.78 s (CPU), 1.00 s (system), 11.78 s (user); Peak Memory Usage: 365 MB.

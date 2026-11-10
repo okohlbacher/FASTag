@@ -1,0 +1,5 @@
+'staged/PXD020717/AD02_BA46_SOLUBLE_01.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 53312 spectra by scanning it instead (0.03 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.03 over 2314 repeat gaps, cycle 43, 1685 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 125 of 46090 spectra vote, no_call ambiguous -> runs/PXD020717/alkt.tsv
+46090 MS2 spectra, 670864 tags
+FASTag took 2.33 s (wall), 13.89 s (CPU), 0.92 s (system), 12.97 s (user); Peak Memory Usage: 381 MB.

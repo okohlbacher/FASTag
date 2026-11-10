@@ -1,0 +1,6 @@
+Recon index: 20950 proteins, 11469285 residues, 13 isobaric rules; min tag length 8 (derived)
+'staged/PXD010942/170818_P0420_MR_JP_rep2_1_8_fr1.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 41249 spectra by scanning it instead (0.02 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 1915 repeat gaps, cycle 179, 2085 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation: 169 spectra with a single-Cys placement, no_call few_cys_spectra -> runs/PXD010942/alkdb.tsv
+35466 MS2 spectra, 1451834 tags
+FASTag took 3.11 s (wall), 20.95 s (CPU), 1.08 s (system), 19.87 s (user); Peak Memory Usage: 395 MB.

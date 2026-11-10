@@ -1,0 +1,5 @@
+'staged/PXD024893/190419_Hela_2frac_1000ng.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 120413 spectra by scanning it instead (0.12 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2592 repeat gaps, cycle 30, 1408 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 1466 of 103149 spectra vote, call Carbamidomethyl -> runs/PXD024893/alkt.tsv
+103149 MS2 spectra, 2789340 tags
+FASTag took 5.65 s (wall), 37.13 s (CPU), 2.28 s (system), 34.85 s (user); Peak Memory Usage: 572 MB.

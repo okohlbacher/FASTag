@@ -1,0 +1,5 @@
+'staged/PXD002977/Salt_Steps_100mM_74.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 15363 spectra by scanning it instead (0.02 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 2791 repeat gaps, cycle 115, 1208 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 14 of 7902 spectra vote, no_call ambiguous -> runs/PXD002977/alkt.tsv
+7902 MS2 spectra, 234484 tags
+FASTag took 1.45 s (wall), 5.91 s (CPU), 0.48 s (system), 5.43 s (user); Peak Memory Usage: 302 MB.

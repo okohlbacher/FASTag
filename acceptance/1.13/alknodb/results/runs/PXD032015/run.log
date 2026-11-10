@@ -1,0 +1,5 @@
+'staged/PXD032015/IP_RIF1_A.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 17708 spectra by scanning it instead (0.02 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1335 repeat gaps, cycle 250, 2665 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 47 of 11985 spectra vote, no_call ambiguous -> runs/PXD032015/alkt.tsv
+11985 MS2 spectra, 319827 tags
+FASTag took 1.63 s (wall), 8.55 s (CPU), 0.45 s (system), 8.10 s (user); Peak Memory Usage: 397 MB.

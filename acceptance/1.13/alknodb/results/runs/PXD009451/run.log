@@ -1,0 +1,5 @@
+'staged/PXD009451/HF0083_MSQ459_Irem_20160109_1w-1A_9.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 51833 spectra by scanning it instead (0.03 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2090 repeat gaps, cycle 20, 1906 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 709 of 37111 spectra vote, call Propionamide -> runs/PXD009451/alkt.tsv
+37111 MS2 spectra, 1169657 tags
+FASTag took 2.93 s (wall), 17.14 s (CPU), 1.02 s (system), 16.12 s (user); Peak Memory Usage: 397 MB.

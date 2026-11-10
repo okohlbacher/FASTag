@@ -1,0 +1,5 @@
+'staged/PXD018855/20190412_PB_MGH_progression_1564_rerun.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 55784 spectra by scanning it instead (0.03 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 2553 repeat gaps, cycle 52, 1447 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 1104 of 48134 spectra vote, call Propionamide -> runs/PXD018855/alkt.tsv
+48134 MS2 spectra, 1040917 tags
+FASTag took 3.92 s (wall), 25.82 s (CPU), 1.20 s (system), 24.62 s (user); Peak Memory Usage: 322 MB.

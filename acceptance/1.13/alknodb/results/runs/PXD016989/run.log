@@ -1,0 +1,5 @@
+'staged/PXD016989/Seq44415_QE3.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 29836 spectra by scanning it instead (0.02 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1665 repeat gaps, cycle 33, 2333 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 169 of 18265 spectra vote, call Carbamidomethyl -> runs/PXD016989/alkt.tsv
+18265 MS2 spectra, 305022 tags
+FASTag took 1.18 s (wall), 5.11 s (CPU), 0.63 s (system), 4.48 s (user); Peak Memory Usage: 365 MB.

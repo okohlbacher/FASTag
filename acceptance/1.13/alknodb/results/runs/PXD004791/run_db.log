@@ -1,0 +1,6 @@
+Recon index: 20950 proteins, 11469285 residues, 13 isobaric rules; min tag length 8 (derived)
+'staged/PXD004791/SW480_ne_KP46_1a.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 42693 spectra by scanning it instead (0.02 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0 over 1837 repeat gaps, cycle 314, 2162 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation: 3096 spectra with a single-Cys placement, call Carbamidomethyl -> runs/PXD004791/alkdb.tsv
+32565 MS2 spectra, 1452438 tags
+FASTag took 4.28 s (wall), 29.84 s (CPU), 1.08 s (system), 28.76 s (user); Peak Memory Usage: 406 MB.

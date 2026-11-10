@@ -1,0 +1,5 @@
+'staged/PXD033054/DMS161_Trichococcus_Swolfei_Mhungatei1.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 71957 spectra by scanning it instead (0.05 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2545 repeat gaps, cycle 364, 1452 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Alkylation (tags, no database): 1551 of 67289 spectra vote, call Propionamide -> runs/PXD033054/alkt.tsv
+67289 MS2 spectra, 2416969 tags
+FASTag took 5.05 s (wall), 36.28 s (CPU), 1.49 s (system), 34.79 s (user); Peak Memory Usage: 523 MB.
