@@ -1399,7 +1399,7 @@
     {
       "name": "version",
       "type": "string",
-      "default": "1.12.1",
+      "default": "1.12.2",
       "description": "Version of the tool that generated this parameters file.",
       "required": false,
       "toppAdvanced": true

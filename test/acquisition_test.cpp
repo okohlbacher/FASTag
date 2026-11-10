@@ -37,6 +37,10 @@
 #include <string>
 #include <vector>
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 using namespace OpenMS;
 namespace A = FASTag::Acquisition;
 using A::Mode;
@@ -552,6 +556,42 @@ namespace
       const A::ProbeResult r_mem = A::probeRun(f(n), s_mem);
       check(r_od.ok && A::infoLine(r_od.call) == fast_line, std::string(n) + ": OnDisc probeRun = probeFile");
       check(r_mem.ok && A::infoLine(r_mem.call) == fast_line, std::string(n) + ": in-memory probeRun = probeFile");
+    }
+    // 1.12.2: the fast reader's probe reads in parallel and parses only the
+    // fields it needs. At any thread count and cap it must give exactly the
+    // serial full-field collectMs2Meta(): the same MS2 in the same order.
+    for (const char* n : {"dia_like.mzML", "dia_pseudo_like.mzML", "diatracer_like.mzML", "prm_like.mzML",
+                          "Ecoli_MS2_small.mzML", "dia_shifted_target.mzML", "diapasef_split_like.mzML"})
+    {
+      FASTag::IndexedMzMLReader fast(f(n));
+      if (!fast.ok() || !fast.reportsSpectrumMetadata()) continue;
+      const bool prov = A::mzmlHeaderProvenance(f(n));
+      for (const std::size_t cap : {std::size_t{1}, std::size_t{3}, std::size_t{7}, std::size_t{50}, std::size_t{4000}})
+      {
+        const auto want = A::collectMs2Meta(fast.getNrSpectra(), [&](std::size_t i) { return fast.getSpectrumMetadata(i); },
+                                            A::probeLimits(cap), prov);
+        for (const int t : {1, 2, 3, 8})
+        {
+#ifdef _OPENMP
+          const int saved = omp_get_max_threads();
+          omp_set_num_threads(t);
+#endif
+          A::ProbeSource src;
+          src.fastmz = &fast;
+          src.n_total = fast.getNrSpectra();
+          const A::ProbeResult r = A::probeRun(f(n), src, cap);
+#ifdef _OPENMP
+          omp_set_num_threads(saved);
+#endif
+          bool same = r.ok && r.ms2.size() == want.size();
+          for (std::size_t i = 0; same && i < want.size(); ++i)
+            same = r.ms2[i].x == want[i].x && r.ms2[i].target == want[i].target && r.ms2[i].lower == want[i].lower &&
+                   r.ms2[i].upper == want[i].upper && r.ms2[i].charge == want[i].charge && r.ms2[i].im == want[i].im &&
+                   r.ms2[i].provenance == want[i].provenance;
+          check(same, std::string(n) + ": parallel probe = serial probe at " + std::to_string(t) + " threads, cap " +
+                          std::to_string(cap));
+        }
+      }
     }
     // The probe limits: n MS2, 10 n spectra.
     const A::ProbeLimits l = A::probeLimits(7);
