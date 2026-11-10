@@ -51,6 +51,7 @@ both; `MIMALLOC_DISABLE_REDIRECT=1` switches the redirection off at run time.
 | Data | Source | Licence | Used by |
 |---|---|---|---|
 | Residue composition of the human reference proteome (`share/FASTag/digest/digest_models.tsv`, `background` rows) | UniProt UP000005640 (The UniProt Consortium, *Nucleic Acids Res.* 2025), written by `tools/digest_models.py` | CC BY 4.0 | `-digest_out` |
+| Reference proteomes for `-alkylation_proteome` (`share/FASTag/alkylation/{human,mouse,yeast,ecoli}.fasta.gz`, about 17 MB; release, sha256 and notice in `data/alkylation/README.md` and `proteomes.tsv`) | UniProt release 2026_04, reviewed entries of UP000005640, UP000000589, UP000002311, UP000000625 (The UniProt Consortium, *Nucleic Acids Res.* 2025), fetched by `tools/fetch_proteomes.sh` | CC BY 4.0 | `-alkylation_out` |
 | Mass-gap modification list and priors (`share/FASTag/digest/massgap_mods.tsv`) | prose-auto 0.1.3 `delta_combos.MODS`; masses from OpenMS's Unimod | BSD-3-Clause (prose-auto ships in the OpenMS tree); Unimod as distributed with OpenMS | `-massgap_out` |
 
 ## Bundled assets (desktop GUI)

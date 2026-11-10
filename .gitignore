@@ -27,3 +27,4 @@ __pycache__/
 !data/digest/*.tsv
 # ...and the gate reference sets' run tables (gate.sh --refs writes cases.tsv, results.tsv)
 !tools/gate-1.12/refs-*/*.tsv
+!data/alkylation/proteomes.tsv

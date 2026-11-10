@@ -562,9 +562,10 @@ done
 "$BIN" "${COMMON[@]}" -out "$TMP/x.tsv" -alkylation_out "$TMP/x9.tsv" -alkylation_proteome zebrafish > "$TMP/log" 2>&1 \
   && fail "an unknown -alkylation_proteome was accepted"
 grep -q "is neither auto" "$TMP/log" || fail "no message for an unknown -alkylation_proteome"
-# 1.12.0 ships no proteomes: without -recon_fasta or a FASTA path, the default auto and every
-# name stop with ILLEGAL_PARAMETERS (exit 6) before any output opens. An empty
-# FASTAG_ALKYLATION_DIR stands for a release install, so the check holds in any tree.
+# Without a shipped proteome (1.12.0, or a build or copy without share/FASTag/alkylation;
+# 1.13 ships them, see proteomes_cli_test): without -recon_fasta or a FASTA path, the
+# default auto and every name stop with ILLEGAL_PARAMETERS (exit 6) before any output
+# opens. An empty FASTAG_ALKYLATION_DIR stands for such an install, so the check holds in any tree.
 mkdir -p "$TMP/alk_empty" "$TMP/noprot"
 for prot in default auto human mouse yeast ecoli zebrafish; do
   printf 'sentinel\n' > "$TMP/noprot/tags.tsv"

@@ -56,7 +56,7 @@
       "name": "alkylation_proteome",
       "type": "string",
       "default": "auto",
-      "description": "Database of -alkylation_out without -recon_fasta: a FASTA file (.gz allowed). The names auto (= human), human, mouse, yeast and ecoli stand for shipped proteomes, which 1.12.0 does not ship: they stop with exit code 6, so give a FASTA file here or -recon_fasta",
+      "description": "Database of -alkylation_out without -recon_fasta: a FASTA file (.gz allowed). The names auto (= human), human, mouse, yeast and ecoli stand for the shipped UniProt reference proteomes (reviewed entries; share/FASTag/alkylation, release in its proteomes.tsv). Tags place on them from 8 residues (human, mouse) or 7 (yeast, ecoli): give -tag_length 8 or 7, at the default no tag places and there is no call (reason tags_too_short)",
       "required": false,
       "toppAdvanced": true
     },

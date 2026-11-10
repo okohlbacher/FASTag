@@ -79,7 +79,7 @@ set(FASTAG_CORE_SOURCES_E src/Acquisition.cpp src/Centroid.cpp src/PrecursorHypo
 # ---- 1.12 A: core sources ----
 set(FASTAG_CORE_SOURCES_A src/Shortlist.cpp src/SearchConfig.cpp)
 # ---- 1.12 D: core sources ----
-set(FASTAG_CORE_SOURCES_D src/SpeciesLookup.cpp src/SpeciesCall.cpp src/AlkylationCall.cpp)
+set(FASTAG_CORE_SOURCES_D src/SpeciesLookup.cpp src/SpeciesCall.cpp src/AlkylationCall.cpp src/Sha256.cpp)
 # ---- 1.12 F: core sources ----
 set(FASTAG_CORE_SOURCES_F src/OutputGuard.cpp src/CensusIds.cpp)
 # ---- 1.13: core sources ----
@@ -245,16 +245,22 @@ install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/data/digest/digest_models.tsv"
         DESTINATION share/FASTag/digest)
 # ---- 1.12 D: the -alkylation_proteome proteomes (#3g), beside the digest
 # data at <bin>/../share/FASTag/alkylation (flat layout: share-FASTag-alkylation).
-# Installed only once data/alkylation holds them (not in git yet). The
-# proteomes ship only with their README (UniProt release, sha256, CC BY 4.0
-# notice): a drop without it is a configure error, not an install failure.
+# 1.13 (#24): shipped (UniProt reference proteomes, reviewed entries, written by
+# tools/fetch_proteomes.sh). They install only with their README (UniProt
+# release, sha256, CC BY 4.0 notice) and proteomes.tsv (the manifest FASTag
+# reads): a drop without them is a configure error, not an install failure.
 file(GLOB FASTAG_ALKYLATION_PROTEOMES "${CMAKE_CURRENT_SOURCE_DIR}/data/alkylation/*.fasta.gz")
 if(FASTAG_ALKYLATION_PROTEOMES)
-  if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/data/alkylation/README.md")
-    message(FATAL_ERROR "data/alkylation holds proteomes (${FASTAG_ALKYLATION_PROTEOMES}) but no README.md "
-                        "with their UniProt release, sha256 and licence notice; add it (and the BOM.md row).")
-  endif()
-  install(FILES ${FASTAG_ALKYLATION_PROTEOMES} "${CMAKE_CURRENT_SOURCE_DIR}/data/alkylation/README.md"
+  foreach(f README.md proteomes.tsv)
+    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/data/alkylation/${f}")
+      message(FATAL_ERROR "data/alkylation holds proteomes (${FASTAG_ALKYLATION_PROTEOMES}) but no ${f} "
+                          "(README.md: UniProt release, sha256, licence notice; proteomes.tsv: the manifest "
+                          "tools/fetch_proteomes.sh writes); add it (and the BOM.md row).")
+    endif()
+  endforeach()
+  install(FILES ${FASTAG_ALKYLATION_PROTEOMES}
+                "${CMAKE_CURRENT_SOURCE_DIR}/data/alkylation/README.md"
+                "${CMAKE_CURRENT_SOURCE_DIR}/data/alkylation/proteomes.tsv"
           DESTINATION share/FASTag/alkylation)
 endif()
 
@@ -395,6 +401,15 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
   set_tests_properties(digest_quality_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+
+  # 1.13 (#24): the shipped -alkylation_proteome proteomes: manifest against
+  # the files, every name resolved in the installed and flat layouts, refusals.
+  add_test(NAME proteomes_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/proteomes_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/alkylation)
+  set_tests_properties(proteomes_cli_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # Integration: -recon_id_out in mzid, idXML and mzTab holds what -recon_out
   # holds; .mzid is empty (0 bytes) without placements; with

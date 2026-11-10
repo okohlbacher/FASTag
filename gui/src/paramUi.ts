@@ -802,7 +802,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   alkylation_proteome: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'The database the alkylation report uses when no reconciliation database is given: a FASTA file. In 1.12.0 the alkylation report needs this FASTA file or a reconciliation database: the shipped proteomes (human, mouse, yeast, E. coli) that the names stand for are not in this release, and naming one, or leaving the default auto, stops the run with an error.'
+      text: 'The database the alkylation report uses when no reconciliation database is given: auto (the human proteome), human, mouse, yeast or ecoli for the UniProt reference proteomes shipped with FASTag (reviewed entries; the release is in the report), or a FASTA file. Tags place on the shipped proteomes from 8 residues (human, mouse) or 7 (yeast, E. coli): set the tag length to 8 or 7, otherwise no tag places and there is no call (reason tags_too_short).'
     }
   },
   alkylation_window: {
