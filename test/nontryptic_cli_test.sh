@@ -26,7 +26,11 @@
 #      entry). Both WARN before the run, then exit 6 (ILLEGAL_PARAMETERS) with
 #      neither -fasta_out nor -search_config_out written;
 #   j. Lys-C named on a run that calls Arg-C (an in-silico Arg-C MGF built
-#      here): refused although both are trypsin-compatible.
+#      here): refused although both are trypsin-compatible;
+#   k. -search_engine msfragger (1.13 #18): fragger.params carries the rule
+#      (auto chymotrypsin; Asp-N semi with sense N; unspecific as nonspecific,
+#      cut '@'); with FASTAG_MSFRAGGER_JAR MSFragger 4.4.1 runs both and
+#      echoes the rules it read.
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 BIN="$1"
@@ -253,5 +257,36 @@ grep -q 'but the tag ends call Arg-C' "$TMP/arl/run.log" || fail "lys-c on Arg-C
 [ ! -e "$TMP/arl/red.fasta" ] || fail "lys-c on Arg-C: -fasta_out written although refused"
 [ "$(go arlf "${AR[@]}" -out t.tsv -fasta_out red.fasta -shortlist_protease lys-c -shortlist_force)" = 0 ] \
   || fail "lys-c on Arg-C -shortlist_force: exit non-zero"
+
+# ---- k: MSFragger (1.13 #18) gets the placement rule
+[ "$(go mf "${CH[@]}" -out t.tsv -fasta_out red.fasta -search_config_out fragger.params -search_engine msfragger \
+       -shortlist_protease auto)" = 0 ] || { cat "$TMP/mf/run.log" >&2; fail "auto/MSFragger: exit non-zero"; }
+for kv in 'search_enzyme_name_1 = chymotrypsin' 'search_enzyme_cut_1 = FWYL' 'search_enzyme_nocut_1 = P' \
+          'search_enzyme_sense_1 = C' 'num_enzyme_termini = 2'; do
+  grep -qx "$kv" "$TMP/mf/fragger.params" || fail "auto/MSFragger: no '$kv'"
+done
+grep -q '^>rev_CHYMO_A ' "$TMP/mf/red.fasta" || fail "auto/MSFragger: -fasta_out lacks the reversed decoys"
+[ "$(go mfn "${CH[@]}" -out t.tsv -fasta_out red.fasta -search_config_out fragger.params -search_engine msfragger \
+       -shortlist_protease asp-n -shortlist_force -shortlist_specificity semi)" = 0 ] || fail "asp-n semi/MSFragger: exit non-zero"
+for kv in 'search_enzyme_name_1 = asp-n' 'search_enzyme_cut_1 = D' 'search_enzyme_nocut_1 =' \
+          'search_enzyme_sense_1 = N' 'num_enzyme_termini = 1'; do
+  grep -Eqx "$kv ?" "$TMP/mfn/fragger.params" || fail "asp-n semi/MSFragger: no '$kv'"
+done
+[ "$(go mfu "${CH[@]}" -out t.tsv -fasta_out red.fasta -search_config_out fragger.params -search_engine msfragger \
+       -shortlist_protease unspecific)" = 0 ] || fail "unspecific/MSFragger: exit non-zero"
+grep -qx 'search_enzyme_name_1 = nonspecific' "$TMP/mfu/fragger.params" && grep -qx 'search_enzyme_cut_1 = @' "$TMP/mfu/fragger.params" \
+  && grep -qx 'num_enzyme_termini = 0' "$TMP/mfu/fragger.params" || fail "unspecific/MSFragger: not nonspecific"
+# With FASTAG_MSFRAGGER_JAR: MSFragger 4.4.1 reads the rules as written.
+if [ -n "${FASTAG_MSFRAGGER_JAR:-}" ]; then
+  for d in mf mfu; do
+    cp "$CHYMO" "$TMP/$d/run.mgf"
+    ( cd "$TMP/$d" && "${FASTAG_JAVA:-java}" -Xmx"${FASTAG_MSFRAGGER_XMX:-8g}" -jar "$FASTAG_MSFRAGGER_JAR" \
+        fragger.params run.mgf > fragger.log 2>&1 ) || { tail -20 "$TMP/$d/fragger.log" >&2; fail "$d: MSFragger exited non-zero"; }
+  done
+  grep -qx 'search_enzyme_name = chymotrypsin' "$TMP/mf/fragger.log" && grep -qx 'search_enzyme_cut_1 = FWYL' "$TMP/mf/fragger.log" \
+    || fail "MSFragger did not read the chymotrypsin rule"
+  grep -qx 'search_enzyme_name = nonspecific' "$TMP/mfu/fragger.log" && grep -qx 'num_enzyme_termini = 0' "$TMP/mfu/fragger.log" \
+    && grep -qx 'allowed_missed_cleavage_1 = 1' "$TMP/mfu/fragger.log" || fail "MSFragger did not read the nonspecific rule"
+fi
 
 echo "nontryptic_cli_test: all checks passed"

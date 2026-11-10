@@ -253,8 +253,12 @@ values:
   (item 20) its rule instead: the rule's name in lower case, its cut and
   no-cut residues, sense `C` or `N`, `num_enzyme_termini` 2 (`full`) or 1
   (`semi`); `unspecific` (or `-shortlist_specificity none`) writes
-  `search_enzyme_name_1 nonspecific`, empty cut and no-cut, and
-  `num_enzyme_termini 0`;
+  `search_enzyme_name_1 nonspecific`, cut `@`, empty no-cut, and
+  `num_enzyme_termini 0` (with an empty cut MSFragger 4.4.1 ignores the
+  whole `_1` enzyme block: it echoed `stricttrypsin` and 2 missed
+  cleavages). Checked on node data with MSFragger 4.4.1 on the in-silico
+  chymotryptic MGF: it echoes the exported chymotrypsin rule (474 peptides
+  from the reduced FASTA) and `nonspecific` (87,087 peptides);
 - variable modifications in `variable_mod_01..16` (only the used slots; the
   default file's Oxidation and protein N-term Acetyl are not kept):
   `<mass> <site> <max>`, site the residue, `n^`/`c^` a peptide terminus,

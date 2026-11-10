@@ -472,9 +472,9 @@ int main(int argc, char** argv)
     none.cut.clear();
     none.nocut.clear();
     const auto ns = enzKeys(none);
-    check(ns.at("search_enzyme_name_1") == "nonspecific" && ns.at("search_enzyme_cut_1").empty() &&
-              ns.at("num_enzyme_termini") == "0",
-          "unspecific: nonspecific, no cut, num_enzyme_termini 0");
+    check(ns.at("search_enzyme_name_1") == "nonspecific" && ns.at("search_enzyme_cut_1") == "@" &&
+              ns.at("search_enzyme_nocut_1").empty() && ns.at("num_enzyme_termini") == "0",
+          "unspecific: nonspecific, cut '@' (MSFragger ignores the block on an empty cut), num_enzyme_termini 0");
   }
   // ---- the reversed decoys of -fasta_out
   {

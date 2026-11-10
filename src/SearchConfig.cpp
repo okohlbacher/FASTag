@@ -428,13 +428,15 @@ namespace FASTag::SearchConfig
     v["allowed_missed_cleavage_1"] = std::to_string(p.missed_cleavages);
     // 1.13 item 20: the placement rule (left at the trypsin defaults above
     // unless -shortlist_protease names another). num_enzyme_termini: 2 fully,
-    // 1 semi, 0 nonspecific (MSFragger's encoding, as FragPipe writes it).
+    // 1 semi, 0 nonspecific. Nonspecific cuts at '@' (FragPipe's encoding):
+    // with an empty search_enzyme_cut_1 MSFragger 4.4.1 ignores the whole
+    // _1 enzyme block (it echoed stricttrypsin and 2 missed cleavages).
     if (!p.enzyme.isDefault())
     {
       if (p.enzyme.unspecific())
       {
         v["search_enzyme_name_1"] = "nonspecific";
-        v["search_enzyme_cut_1"] = "";
+        v["search_enzyme_cut_1"] = "@";
         v["search_enzyme_nocut_1"] = "";
         v["search_enzyme_sense_1"] = "C";
         v["num_enzyme_termini"] = "0";
