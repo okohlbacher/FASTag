@@ -1923,6 +1923,7 @@ namespace FASTag::LabelDiscovery
   void ReporterCounter::merge(const ReporterCounter& o)
   {
     scans += o.scans; covered += o.covered; ms2 += o.ms2; ms2_ion_trap += o.ms2_ion_trap;
+    it_scans += o.it_scans; it_covered += o.it_covered;
     tmt += o.tmt; itraq4 += o.itraq4; itraq8 += o.itraq8; tmtpro += o.tmtpro;
     tmt_decoy += o.tmt_decoy; itraq4_decoy += o.itraq4_decoy; itraq8_decoy += o.itraq8_decoy; tmtpro_decoy += o.tmtpro_decoy;
   }
@@ -1936,6 +1937,17 @@ namespace FASTag::LabelDiscovery
     if (i >= kGateOn) return rc.excess(rc.itraq8, rc.itraq8_decoy) >= kGateOn ? "itraq8" : "itraq4";
     // "none" only when the scans record the reporter region at all (a first mass above it leaves it empty).
     return t < kGateOff && i < kGateOff && 2 * rc.covered >= rc.scans ? "none" : "unclear";
+  }
+
+  bool ReporterCounter::regionNotRecorded() const
+  {
+    // scans counts empty high-resolution scans too; they record nothing either.
+    const std::uint64_t all = scans + it_scans, cov = covered + it_covered;
+    if (all < kGateMinScans || 2 * cov >= all) return false;
+    auto present = [&](std::uint64_t hits, std::uint64_t decoy) {
+      return static_cast<double>(hits) - 0.5 * static_cast<double>(decoy) >= kGateOff * static_cast<double>(covered);
+    };
+    return covered == 0 || (!present(tmt, tmt_decoy) && !present(itraq4, itraq4_decoy));
   }
 
   void applyReporters(Analysis& a, const ReporterCounter& rc)
@@ -2077,13 +2089,16 @@ namespace FASTag::LabelDiscovery
     }
     // Format 5: also on ion-trap MS2 without high-resolution MSn scans (gate unknown).
     // ponytail: an isobaric sample measured with ion-trap MSn only is called label-free here.
-    const bool few = (a.reason == "few_spectra" || a.reason == "no_reference") && a.reporter_gate == "none";
+    // Format 6: a run that does not record the reporter region (ion-trap CID, a first mass above it) cannot
+    // quantify an isobaric label; it counts like the gate `none`.
+    const bool nr = a.reporters.regionNotRecorded();
+    const bool few = (a.reason == "few_spectra" || a.reason == "no_reference") && (a.reporter_gate == "none" || nr);
     // There the pairs are the only evidence, so the run must be large enough to show them: 1500 precursors give the 30
     // pairs at a pair share of 2 % (development dimethyl runs: 0.6 to 5.1 %, median 2.5 %).
     // Below 200 high-resolution scans (gate unknown) those scans must not show reporters (SPS-MS3 with few MS3 scans).
     const ReporterCounter& rc = a.reporters;
     const bool quiet = rc.excess(rc.tmt, rc.tmt_decoy) < kGateOff && rc.excess(rc.itraq4, rc.itraq4_decoy) < kGateOff;
-    const bool trap = a.reason == "low_resolution_ms2" && (a.reporter_gate == "none" || (a.reporter_gate == "unknown" && quiet)) &&
+    const bool trap = a.reason == "low_resolution_ms2" && (a.reporter_gate == "none" || (a.reporter_gate == "unknown" && quiet) || nr) &&
                       a.pairs.precursors.size() >= 1500;
     if (a.status == "no_call" && (few || trap) && a.pairs.precursors.size() >= 500 && !a.pairs.anyLabel())
     {
@@ -2868,6 +2883,10 @@ namespace FASTag::LabelDiscovery
       row("ld_reporter", "itraq4_excess", fix(rc.excess(rc.itraq4, rc.itraq4_decoy), 4), sc, "the same for >= 2 iTRAQ 4-plex reporters (114-117)");
       row("ld_reporter", "itraq8_excess", fix(rc.excess(rc.itraq8, rc.itraq8_decoy), 4), sc, "the same for >= 1 reporter of iTRAQ 8-plex only (113, 118, 119, 121)");
       row("ld_reporter", "tmtpro_excess", fix(rc.excess(rc.tmtpro, rc.tmtpro_decoy), 4), sc, "the same for >= 2 reporters of TMTpro only (132-135); at half of tmt_excess or more the reporter call is TMTpro");
+      row("ld_reporter", "it_scans", num(rc.it_scans), "-", "ion-trap MS2 and MS3 scans with peaks (not examined for reporter ions)");
+      row("ld_reporter", "it_covered", num(rc.it_covered), num(rc.it_scans), "ion-trap scans with a peak in 112-137 m/z");
+      row("ld_reporter", "region_recorded", rc.regionNotRecorded() ? "no" : "yes", "-",
+          "no: >= 200 scans (scans + it_scans), under half with a peak in 112-137 m/z, no reporters in the covered high-resolution scans");
       row("ld_reporter", "gate", a.reporter_gate, "-", "unknown (below 200 scans), tmt, itraq4, itraq8, none or unclear");
     }
     // ld_pair

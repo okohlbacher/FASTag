@@ -39,7 +39,7 @@
 
 namespace FASTag::LabelDiscovery
 {
-  inline constexpr int kFormat = 5;
+  inline constexpr int kFormat = 6;
   inline constexpr double kBin = 0.0005;          ///< histogram bin width (Da)
   inline constexpr double kC13 = 1.0033548378;    ///< 13C - 12C
   inline constexpr double kH2O = Digest::kH2O;
@@ -409,6 +409,11 @@ namespace FASTag::LabelDiscovery
     /// One non-ion-trap MSn scan: its peaks (m/z, intensity) between 112 and
     /// 137 m/z in any order, and the base peak intensity of the whole scan.
     void add(const std::vector<std::pair<double, double>>& low, double base_peak);
+    /// Ion-trap MS2 and MS3 scans with peaks (format 5), and those with a peak
+    /// in 112-137 m/z. Unit resolution cannot tell reporters from immonium
+    /// ions, so they are only counted.
+    std::uint64_t it_scans = 0, it_covered = 0;
+    void addTrap(bool covered) { ++it_scans; it_covered += covered; }
     void merge(const ReporterCounter& o);
     /// Fraction of scans with the reporters minus the decoy fraction.
     double excess(std::uint64_t hits, std::uint64_t decoy) const
@@ -416,6 +421,13 @@ namespace FASTag::LabelDiscovery
       return scans == 0 ? 0.0 : (static_cast<double>(hits) - 0.5 * static_cast<double>(decoy)) / static_cast<double>(scans);
     }
     bool ionTrapMs2() const { return ms2 > 0 && 2 * ms2_ion_trap > ms2; }
+    /// Format 5, for the absence call: the run does not record the reporter
+    /// region (at least 200 scans with peaks, high-resolution and ion-trap
+    /// together, and fewer than half of them with a peak in 112-137 m/z), and
+    /// the high-resolution scans that do record it show no reporters (TMT and
+    /// iTRAQ4 excess over the covered scans both below 0.05). Such a run
+    /// cannot quantify an isobaric label.
+    bool regionNotRecorded() const;
   };
   /// `unknown` (below 200 scans), `tmt`, `itraq4`, `itraq8`, `none` (no
   /// isobaric label) or `unclear`.
@@ -506,7 +518,9 @@ namespace FASTag::LabelDiscovery
   /// 4). Any other label call stays. Format 5: pairs at a dimethyl spacing
   /// and at twice that spacing replace a label-free call or a no call by
   /// `Dimethyl`, and the label-free call by absence is also made on a run of
-  /// ion-trap MS2 scans without a reporter gate. Call after applyReporters().
+  /// ion-trap MS2 scans without a reporter gate. Format 6: the absence
+  /// call is also made on a run that does not record the reporter region
+  /// (ReporterCounter::regionNotRecorded()). Call after applyReporters().
   void applyPairs(Analysis& a, PairCounter pc);
 
   /// The report rows after the shared run rows: ld_run, ld_count, ld_peak,
