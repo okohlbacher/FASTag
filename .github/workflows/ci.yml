@@ -344,7 +344,7 @@ jobs:
       # --only-binary: every compiled dependency has a wheel for all five
       # targets, and a source build here would be a silent multi-minute
       # detour on a runner without a compiler for it.
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         id: validator-python
         with:
           python-version: '3.12'
