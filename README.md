@@ -532,7 +532,7 @@ MGF→mzML direction is exact.
 | `-digest_window <Da>` | 0.008 | Advanced: window around a residue or label mass at the tag ends |
 | `-digest_background_share <f>` | 0.05 | Advanced: share of the background mixed into every model |
 | `-digest_silac_min <n>` | 50 | Advanced: K- and R-terminal tag ends each for `-label_out`'s heavy-share gate |
-| `-label_call_min_tags <n>` | 175 | Advanced, experimental (1.13): C-terminal tag ends `-label_out`'s `label_call` needs; fewer give `no_call few_tags`. 175 is the FASTag 1.12 rule; 0 calls every ppm run (failed its held-out test) |
+| `-label_call_min_tags <n>` | 175 | Advanced, experimental (1.13): C-terminal tag ends `-label_out`'s `label_call` needs; fewer give `no_call few_tags`. 175 is the FASTag 1.12 rule; 0 calls every ppm run (failed its held-out test: 0.866 against the threshold 0.922) |
 | `-massgap_window <Da>` / `-massgap_window_da <Da>` | 0.02 / 0.5 | Advanced: gap window on ppm runs / on Da runs |
 | `-massgap_min_spectra <n>` / `-massgap_min_share <f>` / `-massgap_min_bin <n>` | 20 / 0.005 / 2 | Advanced: spectra and share a gap peak needs; spectra a histogram row needs to take part |
 | `-massgap_max_mods <n>` / `-massgap_top <n>` | 3 / 5 | Advanced: modifications per explanation; modifications listed by share |
@@ -545,7 +545,7 @@ MGF→mzML direction is exact.
 | `-alkylation_out <file>` | none | Experimental (1.12), not validated on held-out data: which reagent alkylated the cysteines, or none, from the placements of single-Cys peptides (see Digest, label and mass-gap reports; format in doc/ALKYLATION-REPORT.md) |
 | `-alkylation_proteome <name\|file>` | auto | Database of `-alkylation_out` when nothing else places: `auto` (= human), `human`, `mouse`, `yeast`, `ecoli` name the shipped UniProt reference proteomes (release 2026_04, reviewed entries, `share/FASTag/alkylation/<name>.fasta.gz`, CC BY 4.0; since 1.13, in 1.12 they stopped with exit code 6), or a FASTA file (`.gz` allowed); ignored with `-recon_fasta`. **The shipped proteomes need `-tag_length 8` (human, mouse) or `-tag_length 7` (yeast, ecoli):** shorter tags do not place on them, and at the default `-tag_length 3` the call is `no_call` with reason `tags_too_short`. The report's `database_release` row names the release and the FASTA's sha256, which FASTag checks the file against (doc/ALKYLATION-REPORT.md, Shipped proteomes) |
 | `-alkylation_min_spectra <n>` / `-alkylation_min_share <f>` / `-alkylation_window <Da>` | 10 / 0.6 / 0 | Advanced: spectra and share the call needs; bin window (0 = 0.02 Da on ppm runs, 0.5 Da on Da runs) |
-| `-alkylation_tags_out <file>` | none | Experimental (1.13), advanced; on development data 61 of 123 runs are called, 51 as annotated, unalkylated runs are rarely called, and there is no held-out test yet: the database-free alkylation call. Every MS2 spectrum is tagged a second time with unmodified C and one alternative C edge per reagent; a spectrum votes when its best such tag (E <= 1e-4) holds a C inside the tag (use with `-extension`; measured with `-tag_length 4 -extension 6`; without extension few spectra vote), and the call uses `-alkylation_min_spectra` / `-alkylation_min_share`. Every other output is unchanged (format in doc/ALKYLATION-REPORT.md, section `-alkylation_tags_out`) |
+| `-alkylation_tags_out <file>` | none | Experimental (1.13), advanced; its held-out test passed at the margin (40 of 57 runs called, 37 right; see Validation), and unalkylated runs are rarely called: the database-free alkylation call. Every MS2 spectrum is tagged a second time with unmodified C and one alternative C edge per reagent; a spectrum votes when its best such tag (E <= 1e-4) holds a C inside the tag (use with `-extension`; measured with `-tag_length 4 -extension 6`; without extension few spectra vote), and the call uses `-alkylation_min_spectra` / `-alkylation_min_share`. Every other output is unchanged (format in doc/ALKYLATION-REPORT.md, section `-alkylation_tags_out`) |
 | `-shortlist_out <file>` | none | Experimental (1.12): ranked protein shortlist from the tag placements on `-recon_fasta` (or `-fasta`), one row per protein with evidence (see Protein shortlist and search hand-off). A search-space reduction, NOT FDR-controlled |
 | `-fasta_out <file>` | none | Experimental: reduced FASTA of the kept proteins (never decoys), then `-shortlist_background` |
 | `-shortlist_background <file>` | none | Proteins always written to `-fasta_out` (host proteome, contaminants), decoys left out; an entry identical to a database entry is written once, as that entry (kept even below the shortlist cut, reason `background`) |
@@ -555,10 +555,10 @@ MGF→mzML direction is exact.
 | `-shortlist_top <n>` | 0 | Advanced: keep at most this many proteins, ties at the cut kept; 0 = no cap |
 | `-shortlist_decoy_affix <list>` | `DECOY_ decoy_ rev_ REV_ reverse_ XXX_ shuffled_ random_ _DECOY _rev` | Advanced: accession prefixes and suffixes that mark a decoy entry |
 | `-shortlist_force` | off | Advanced: write `-fasta_out` and `-search_config_out` although the tag ends call a non-tryptic protease |
-| `-shortlist_protease <trypsin\|auto\|unspecific\|lys-c\|arg-c\|asp-n\|glu-c\|chymotrypsin\|lys-n>` | trypsin | Experimental (1.13), advanced: cleavage rule of the shortlist's placements and of `-search_config_out` (Sage, Comet or MSFragger). `trypsin` is 1.12 (tryptic windows, a non-tryptic run refused); `auto` takes the protease the tag ends call (trypsin when inconclusive); a name or `unspecific` takes that rule. Otherwise windows are found by flank mass, only exact placements count, and a named rule the run's call contradicts is refused unless `-shortlist_force` (see doc/SHORTLIST.md) |
-| `-shortlist_specificity <full\|semi\|none>` | full | Experimental (1.13), advanced: with a `-shortlist_protease` other than trypsin, both window ends at a cleavage site (`full`), at least one (`semi`, Sage `semi_enzymatic`, Comet `num_enzyme_termini = 1`) or none; missed cleavages up to `-recon_missed_cleavages` |
+| `-shortlist_protease <trypsin\|auto\|unspecific\|lys-c\|arg-c\|asp-n\|glu-c\|chymotrypsin\|lys-n>` | trypsin | Experimental (1.13), no held-out test, advanced: cleavage rule of the shortlist's placements and of `-search_config_out` (Sage, Comet or MSFragger). `trypsin` is 1.12 (tryptic windows, a non-tryptic run refused); `auto` takes the protease the tag ends call (trypsin when inconclusive); a name or `unspecific` takes that rule. Otherwise windows are found by flank mass, only exact placements count, and a named rule the run's call contradicts is refused unless `-shortlist_force` (see doc/SHORTLIST.md) |
+| `-shortlist_specificity <full\|semi\|none>` | full | Experimental (1.13), no held-out test, advanced: with a `-shortlist_protease` other than trypsin, both window ends at a cleavage site (`full`), at least one (`semi`, Sage `semi_enzymatic`, Comet `num_enzyme_termini = 1`) or none; missed cleavages up to `-recon_missed_cleavages` |
 | `-search_config_out <file>` | none | Experimental: a Sage configuration (JSON), Comet parameters or a complete MSFragger `fragger.params` for `-fasta_out`, or for the input database without it |
-| `-search_engine <sage\|comet\|msfragger>` | sage | Engine of `-search_config_out`; `comet` is unverified against the Comet binary; `msfragger` (experimental, 1.13) is checked against MSFragger 4.4.1 and needs decoys in the database: with `-fasta_out` FASTag appends reversed `rev_` decoys, without it the input database must be a target-decoy database; its `num_threads` is `-threads` (0 = every CPU) (see doc/SHORTLIST.md) |
+| `-search_engine <sage\|comet\|msfragger>` | sage | Engine of `-search_config_out`; `comet` is unverified against the Comet binary; `msfragger` (experimental, 1.13, no held-out test) is checked against MSFragger 4.4.1 and needs decoys in the database: with `-fasta_out` FASTag appends reversed `rev_` decoys, without it the input database must be a target-decoy database; its `num_threads` is `-threads` (0 = every CPU) (see doc/SHORTLIST.md) |
 | `-search_config_template <file>` | none | Comet only (Sage and MSFragger files are written complete): a `comet -p` file the managed keys are merged into; without it a fragment is written |
 | `-search_precursor_tolerance <f>` / `-search_precursor_unit <ppm\|Da>` | 10 / ppm | Precursor tolerance written to the configuration |
 | `-search_isotope_errors <n>` | 0 | Precursor isotope errors 0..n (at most 3) |
@@ -599,14 +599,14 @@ MGF→mzML direction is exact.
 | `-subsample_spectra <n>` / `-subsample_fraction <f>` | 0 | Tag only a random subset (count or fraction; if both are given, the count wins); 0 = all |
 | `-subsample_seed <n>` | 1 | Seed for the `-subsample_*` selection |
 | `-mzpeak_read_memory <MB>` | 0 | No effect; accepted for existing command lines |
-| `-acquisition_check <refuse\|warn\|off>` | refuse | Refuse raw DIA input with exit code 11, tag it anyway with a warning, or skip the check (see Raw DIA input is refused) |
+| `-acquisition_check <refuse\|warn\|off>` | refuse | Refuse raw DIA input with exit code 11, tag it anyway with a warning, or skip the check. The check failed its held-out release test: 8 of 202 DDA-labelled files were refused, and Orbitrap DIA was refused 7/12 and SWATH 10/12 (see Raw DIA input is refused) |
 | `-acquisition_probe_spectra <n>` | 4000 | MS2 spectra the acquisition check reads, metadata only, reading at most ten times as many spectra in all (advanced) |
 | `-pick_profile <legacy\|auto\|off>` | legacy | Centroid profile MS2 (MS:1000128) with OpenMS `PeakPickerHiRes` before tagging: `legacy` on mzPeak input only (as 1.11), `auto` on mzML and mzPeak input (not MGF), `off` never. Centroided MS2 are never re-picked. `-out_spectra` writes the spectra as they were tagged. Not with `-stream`. Experimental: `auto` failed its held-out test and is not recommended (see Performance) |
 | `-pick_unknown_type` | off | With `-pick_profile auto`: also centroid MS2 that declare no spectrum type, when OpenMS's `PeakTypeEstimator` reads their data as profile (advanced) |
-| `-ion_series <by\|cz\|auto\|ax>` | by | Ion series the MS2 spectra are read as: `by` (b/y ions, as 1.11), `cz` (c/z• ions of ETD/ECD, every spectrum), `auto` (c/z• for spectra whose activation is ETD or ECD, b/y for all others, hybrid EThcD/ETciD included, with a warning), `ax` (1.13: a/x ions of photodissociation, UVPD, every spectrum). Under `cz` and `ax`, and under `auto` when the run has electron-activated spectra (or, with `-ion_series_photo ax`, photo-activated ones), the tag TSV gains a last `ion_series` column and the census a `best_ion_series` column (see Ion series). Not with `-stream`. Opt-in: on held-out Orbitrap ETD spectra `auto` gave 82.2% correct rank-1 tags against 0.9% under `by` (verdict inconclusive, see Validation); `ax` is not validated |
-| `-ion_series_hybrid <by\|both>` | by | 1.13, under `-ion_series auto` only: how hybrid EThcD/ETciD spectra are read. `by` is `auto` as in 1.12 (b/y ions, with the `Hybrid activation:` warning); `both` tags each hybrid mzML spectrum twice, as b/y and as c/z• ions, multiplies every E-value by 2 and merges the two passes' rows by E-value under one `-max_tags` cap; each row keeps its `ion_series` and every per-row consumer reads its offsets from it; `-species` and `-alkylation_out` count b/y rows only. The precursor hypotheses, `-check_header_charge`, the `-complement_tolerance_unit auto` probe, `-dump_spectrum` and the census diagnostics (`n_kept`, `n_edges`, `n_compl`) still read a hybrid spectrum as b/y (doc/HYBRID-IONS.md). Ignored with a warning under other modes; not with `-stream`. Experimental, not validated |
-| `-ion_series_photo <by\|ax>` | by | 1.13, under `-ion_series auto` only: the series photodissociation spectra are read as (activation MS:1000435 or a Thermo `@uvpd` filter token, and no collisional or electron method). `by` is `auto` as in 1.12; `ax` reads them as a/x ions (doc/AX-IONS.md). Ignored with a warning under other modes; not with `-stream`. Experimental |
-| `-complement_tolerance_unit <Da\|fragment\|auto>` | Da | How the complement window is set: `Da` is `-complement_tolerance` (0.02 Da, as 1.11); `fragment` is `-complement_tol_factor` x (the fragment tolerance at the peak + at its partner); `auto` measures it on the run from the complement pairs of high-confidence tags (see doc/COMPLEMENT-TOLERANCE.md) and never sets a window narrower than `-complement_tolerance`, which is also the fallback when the probe finds too few pairs. The window in force is logged and recorded in `-out_spectra` (mzML) and the `-census`/`-alkylation_out` run rows. Experimental: `auto` failed its held-out test (see Validation); not with `-stream` or mzPeak input |
+| `-ion_series <by\|cz\|auto\|ax>` | by | Ion series the MS2 spectra are read as: `by` (b/y ions, as 1.11), `cz` (c/z• ions of ETD/ECD, every spectrum), `auto` (c/z• for spectra whose activation is ETD or ECD, b/y for all others, hybrid EThcD/ETciD included, with a warning), `ax` (1.13: a/x ions of photodissociation, UVPD, every spectrum). Under `cz` and `ax`, and under `auto` when the run has electron-activated spectra (or, with `-ion_series_photo ax`, photo-activated ones), the tag TSV gains a last `ion_series` column and the census a `best_ion_series` column (see Ion series). Not with `-stream`. Opt-in: on held-out Orbitrap ETD spectra `auto` gave 82.2% correct rank-1 tags against 0.9% under `by` (verdict inconclusive, see Validation); `ax` is experimental and failed its held-out test (see Validation) |
+| `-ion_series_hybrid <by\|both>` | by | 1.13, under `-ion_series auto` only: how hybrid EThcD/ETciD spectra are read. `by` is `auto` as in 1.12 (b/y ions, with the `Hybrid activation:` warning); `both` tags each hybrid mzML spectrum twice, as b/y and as c/z• ions, multiplies every E-value by 2 and merges the two passes' rows by E-value under one `-max_tags` cap; each row keeps its `ion_series` and every per-row consumer reads its offsets from it; `-species` and `-alkylation_out` count b/y rows only. The precursor hypotheses, `-check_header_charge`, the `-complement_tolerance_unit auto` probe, `-dump_spectrum` and the census diagnostics (`n_kept`, `n_edges`, `n_compl`) still read a hybrid spectrum as b/y (doc/HYBRID-IONS.md). Ignored with a warning under other modes; not with `-stream`. Experimental, no held-out test |
+| `-ion_series_photo <by\|ax>` | by | 1.13, under `-ion_series auto` only: the series photodissociation spectra are read as (activation MS:1000435 or a Thermo `@uvpd` filter token, and no collisional or electron method). `by` is `auto` as in 1.12; `ax` reads them as a/x ions (doc/AX-IONS.md). Ignored with a warning under other modes; not with `-stream`. Experimental: the a/x reading failed its held-out test (see Validation) |
+| `-complement_tolerance_unit <Da\|fragment\|auto>` | Da | How the complement window is set: `Da` is `-complement_tolerance` (0.02 Da, as 1.11); `fragment` is `-complement_tol_factor` x (the fragment tolerance at the peak + at its partner); `auto` measures it on the run from the complement pairs of high-confidence tags (see doc/COMPLEMENT-TOLERANCE.md) and never sets a window narrower than `-complement_tolerance`, which is also the fallback when the probe finds too few pairs. The window in force is logged and recorded in `-out_spectra` (mzML) and the `-census`/`-alkylation_out` run rows. Experimental: `auto` failed its held-out test with the first estimator, and the revised estimator is checked on development data only (see Validation); not with `-stream` or mzPeak input |
 | `-complement_probe <n>` | 500 | With `-complement_tolerance_unit auto`: MS2 spectra the probe tags, drawn uniformly over the run with a fixed seed (advanced) |
 | `-unknown_charge <assume2\|enumerate\|infer>` | assume2 | How a precursor without a charge is tagged: `assume2` as 2+ (as 1.11); `enumerate` at each listed possible charge (MS:1000633, MGF `2+ and 3+`), else at every charge `-charge_min`..`-charge_max`; `infer` at the charge its complement pairs support (1+ when `-charge_min` is 1, or 1 is listed, and almost no intensity lies above the precursor; both charges of a close call, `ambiguous`; without evidence 2+, or the lowest candidate when 2 is none, `assumed`). Every charge tagged is a listed possible charge, else one of `-charge_min`..`-charge_max`. A header charge is never replaced (`-check_header_charge both`, 1.13, can add a second charge). A spectrum tagged under H hypotheses has every E-value multiplied by H before `-max_evalue` and `-max_tags`; its rows are merged by E-value. The reports that aggregate over spectra (digest, label, massgap, delta, species, shortlist, census) read the rows of one selected hypothesis, chosen from the charge evidence, never from the E-values. Experimental: `infer` failed its held-out test (see Validation); not with `-stream` |
 | `-charge_min <n>` / `-charge_max <n>` | 2 / 4 | The charges `enumerate` and `infer` try (1-8); `-charge_min 1` enables infer's 1+ test |
@@ -702,7 +702,7 @@ behaviour. `-recon_*`, `-digest_out`,
 `-label_out`, `-massgap_out`, `-delta_out` and the census take the offset from
 each tag; `-species` counts b/y tags only and reports how many c/z• rows it
 left out. Hybrid EThcD/ETciD spectra are read as b/y under `auto`; with
-`-ion_series_hybrid both` (1.13, experimental) they are tagged twice, as b/y
+`-ion_series_hybrid both` (1.13, experimental, no held-out test) they are tagged twice, as b/y
 and as c/z•, and the rows of both passes are merged by E-value, each with its
 own `ion_series`; the precursor hypotheses, `-check_header_charge`, the complement-tolerance probe,
 `-dump_spectrum` and the census diagnostics still read them as b/y (doc/HYBRID-IONS.md). A tag read as a/x ions (1.13,
@@ -713,7 +713,8 @@ offC - offN = CO2 + CO = +71.9847 Da (N-side residues = `cterm_mass` +
 71.9847, C-side residues = `nterm_mass` - 71.9847), the complement partner
 sums to M - H (a+1/x, a/x+1) or M (a+1/x+1) at the precursor's charges, and no precursor window is cut
 (doc/AX-IONS.md). `-species` and `-alkylation_out` leave a/x tags out and
-count them.
+count them. The a/x reading is experimental and failed its held-out test (see
+Validation).
 `-ion_series auto` on a run without electron activation writes exactly what
 `by` writes. `auto` reads the activation of mzML input only: MGF and mzPeak
 spectra are read as b/y (an electron-activated spectrum such a reader delivers
@@ -806,8 +807,8 @@ tryptic, so the run's tag ends are checked first: a confidently non-tryptic
 protease call (the PXD040407 chymotrypsin run calls `unspecific`) writes the
 shortlist with the call in its header but no FASTA and no configuration, and
 exits with `ILLEGAL_PARAMETERS` unless `-shortlist_force` (a run asking for
-`-shortlist_out` alone withholds nothing: WARN, exit 0). Experimental in 1.13:
-`-shortlist_protease auto` (or a protease name, or `unspecific`) places the
+`-shortlist_out` alone withholds nothing: WARN, exit 0). Experimental in 1.13,
+no held-out test: `-shortlist_protease auto` (or a protease name, or `unspecific`) places the
 shortlist's tags on windows found by flank mass and keeps those that fit the
 called (or named) cleavage rule at `-shortlist_specificity`, and writes that
 rule into the engine configuration, so non-tryptic runs get their FASTA and
@@ -938,8 +939,8 @@ options and their values.
   output is the same with and without it. Sections `alk_run`, `alk_cys` and
   `alkylation_call`; the format is documented and versioned in
   doc/ALKYLATION-REPORT.md.
-- **`-alkylation_tags_out`** (1.13, experimental, not validated on held-out
-  data) makes the same call without a database. A second tagging pass, whose
+- **`-alkylation_tags_out`** (1.13, experimental; held-out test passed at the
+  margin) makes the same call without a database. A second tagging pass, whose
   tags are not written, drops the run's C modifications. It spells C as
   unmodified or as `C[<reagent>]` for the five reagents. Each MS2 spectrum
   votes once with its best ungapped 1+ tag (E <= 1) that holds a C; tied
@@ -948,9 +949,11 @@ options and their values.
   call (`unresolved_forms`). There are known confounds:
   C[Carbamidomethyl] = G + C and C[Propionamide] = A + C when the peak
   between them is missing. The report lists the twins within the run's
-  tolerance. The pass costs about one more tagging run. On the development
-  runs it almost never calls: random C edges spread the votes over all
-  forms (doc/ALKYLATION-REPORT.md).
+  tolerance. The pass costs about one more tagging run. On 57 held-out runs
+  from 57 PRIDE projects it called 40, 37 of them right (0.925, Wilson 95%
+  interval 0.801-0.974). It abstains on samples that are not alkylated (2 of
+  12 called) and does not confirm the absence of alkylation; spectra read as
+  a/x ions are untested (doc/ALKYLATION-REPORT.md).
   Sections `alkt_run`, `alkt_form` and `alkylation_tags_call`.
 
 The `-digest_out` options of 1.12 (`-digest_models_version v2`,
@@ -1432,6 +1435,11 @@ data.
 | #17 `-search_shifts` (1.13, `acceptance/1.13`, `acc113r/shifts`) | **FAIL** (item17), **FAIL** (item17r, second test on four new runs) | Closed search against the same search plus the option, Comet 2026.03.0 and Sage 0.14.7, 1% FDR, shuffled entrapment. Second test: more PSMs on 4 of 4 runs (Comet +7.7 to +36.8%, Sage +6.5 to +25.2%), but Comet's entrapment FDP rises on the TMT run PXD037999 (0.88% -> 1.28%, limit +0.30 points; Sage passes), and the option recovers only 5 of 32 (Comet) and 3 of 11 (Sage) admissible peaks of an MSFragger open search. Part of the gain is the isotope error setting (base 0, option 0..1 on three runs); the gain over a base with the same setting was not measured. The option does not replace an open search. Experimental (doc/SHORTLIST.md) |
 | #2 `-complement_rule both` | **INCONCLUSIVE** | By rule 5: the truth of one Astral run (PXD074582) has 0 PSMs at 1% FDR. On the other runs endpoints (i)-(iii) fail descriptively. Default stays `same_charge` |
 | 1.13 `-complement_tolerance_unit auto` | **FAIL** | On the #2 design (`acceptance/1.13`, PREREG-compltol.md; 11 runs): ion trap at 0.5 Da +2.1 to +5.1 points rank-1 correct in every powered 2+/3+ cell, pooled L3 gain +3.05 points (ii PASS), timsTOF 4+ and time (ratio 1.027) PASS; but three Astral cells fail non-inferiority (L5 2+ -0.50 points; two 4+ cells by their bound). Measured with the first estimator (c5f96b5), whose window varied with the cell; the current cell-independent median/MAD estimator with `-complement_tolerance` as its lower bound is checked on DEV only. Default stays `Da` |
+| #7 raw-DIA check (`-acquisition_check`), release test E7-03 (`acceptance/1.13`) | **FAIL** | 8 of 202 files that had to pass were refused (upper 95% bound 7.0%), all from Astral projects labelled DDA. Raw diaPASEF and Astral DIA were refused 12/12 each, Orbitrap DIA 7/12 and SWATH 10/12 (criterion >= 90%); pseudo-DDA passed 37/37. Default stays `refuse`; override a wrong refusal with `warn` or `off` (see Raw DIA input is refused) |
+| 1.13 `-label_call_min_tags 0` | **FAIL** | 149/172 runs right (0.866) against the threshold 0.922; always label-free gives 0.872 and the 1.12 rule 83/172. Default stays 175; 0 stays experimental |
+| 1.13 `-ion_series ax` | **FAIL** | On the UVPD spectra of PXD018176 replicate 2, rank-1 tags are correct for 0.04% under `ax` against 30.87% under `by`: -30.83 points (95% interval -31.63 to -30.02; criterion +5). Tested as an a/x-only reading with even-electron flanks; an a+1/x+1 reading and a mixed b/y + a/x reading are untested (doc/AX-IONS.md). Experimental |
+| 1.13 census triage (`-census_ids`) | **PASS** (second test); first test **FAIL** | Second test, 8 runs, 7 evaluable: the triage candidates are identified by a semi-enzymatic second search 5.32 times as often as the other unidentified spectra (95% CI 2.59-8.25), 0.023 above a peak-count baseline. Against an open search they are enriched but not better than that baseline (doc/CENSUS-TRIAGE-EVAL.md) |
+| 1.13 `-alkylation_tags_out` | **PASS**, at the margin | 57 runs from 57 PRIDE projects: 40 called, 37 right (0.925, Wilson 95% interval 0.801-0.974; criterion: at least 30 calls and a lower end of at least 0.80). It abstains on samples that are not alkylated (2 of 12 called); spectra read as a/x ions are untested (doc/ALKYLATION-REPORT.md). Experimental |
 | #15 `-ion_series auto` | **INCONCLUSIVE** | On the ETD spectra of 6 Orbitrap runs (PXD024621, PXD009208; MSFragger 4.4.1 c/z• truth at 1% FDR) correct rank-1 tags rise from 0.9% under `by` to 82.2% (+81.4 points, 95% interval 79.5-83.2; 5,313 peptide clusters): the electron endpoint passes. Collisional spectra are byte-identical, but the non-inferiority cells for 3+ and 4+ collisional spectra are empty (every HCD spectrum of PXD024621 is 2+), so the verdict is inconclusive. Default stays `by`; use `auto` (or `cz`) on ETD/ECD data |
 
 Every other 1.12 option (#1/#10 species call, #3 chemistry v2 and
@@ -1440,6 +1448,9 @@ release test E7-03 failed (see Raw DIA input is refused), #11 census) is experim
 validated on held-out data. No 1.12 option is validated on low-resolution
 (ion-trap) MS2: the only ion-trap held-out results (#9 PXD009049; the
 ion_trap set of #6 item06-H1-r2) are a failure and a descriptive result.
+Of the 1.13 options, `-ion_series_hybrid both`, `-shortlist_protease` /
+`-shortlist_specificity` (checked on development runs only) and
+`-search_engine msfragger` are experimental and have no held-out test.
 
 ### Ranking, and the synthetic benchmark
 
@@ -1487,7 +1498,7 @@ tags fill the slots (hence the small change in total recall):
   activation:` warning to stderr with the count per class (collisional,
   electron, hybrid, unknown). MGF and mzPeak input carry no activation, so
   their spectra count as unknown, and `-ion_series auto` reads them as b/y.
-  `-ion_series ax` (1.13, experimental) reads a/x ions, and warns
+  `-ion_series ax` (1.13, experimental, failed its held-out test) reads a/x ions, and warns
   (`Activation:`) when more than 1% of the spectra have a collisional,
   electron or hybrid activation; `-ion_series auto -ion_series_photo ax`
   reads only photodissociation spectra as a/x (doc/AX-IONS.md).

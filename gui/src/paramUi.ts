@@ -110,7 +110,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     section: 'Spectra',
     label: 'Raw DIA check',
     help: {
-      text: 'Before tagging, FASTag checks whether the file is raw DIA data, whose MS2 spectra each mix several peptides. By default (refuse) such a file is not tagged: the run stops with exit code 11 before any file is written. warn tags it anyway, with a warning in the log; off skips the check. DDA and pseudo-DDA files pass the check and are tagged the same under every setting.',
+      text: 'Before tagging, FASTag checks whether the file is raw DIA data, whose MS2 spectra each mix several peptides. By default (refuse) such a file is not tagged: the run stops with exit code 11 before any file is written. warn tags it anyway, with a warning in the log; off skips the check. DDA and pseudo-DDA files pass the check and are tagged the same under every setting. The check failed its held-out test: 8 of 202 files labelled DDA were refused, so switch to warn or off when a DDA file is refused.',
       tip: 'Better than warn: make pseudo-DDA spectra with DIAspeXtract (or diaTracer for timsTOF .d) first, and tag those. Tags of raw DIA spectra get wrong flanking masses and complement statistics.'
     }
   },
@@ -808,7 +808,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   alkylation_tags_out: {
     hidden: 'experimental 1.13 command-line option, not in the form (CLI default applies)',
     help: {
-      text: 'Write a report of which reagent alkylated the cysteines, or none, without a database: every spectrum is tagged a second time with unmodified and alkylated cysteine as alternatives, and the cysteine forms inside the best tags vote. Experimental: on development data 61 of 123 runs were called, 51 as annotated; unalkylated runs are rarely called and there is no held-out test yet. Use it with tag extension; without it few spectra vote.'
+      text: 'Write a report of which reagent alkylated the cysteines, or none, without a database: every spectrum is tagged a second time with unmodified and alkylated cysteine as alternatives, and the cysteine forms inside the best tags vote. Experimental: its held-out test passed at the margin (40 of 57 runs called, 37 right); unalkylated runs are rarely called. Use it with tag extension; without it few spectra vote.'
     }
   },
   alkylation_window: {
@@ -922,7 +922,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   complement_tolerance_unit: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'Whether the complement window is a fixed value in Da, follows the fragment tolerance, or (auto, experimental) is measured on the run from the complement pairs of confident tags.'
+      text: 'Whether the complement window is a fixed value in Da, follows the fragment tolerance, or (auto, experimental; it failed its held-out test) is measured on the run from the complement pairs of confident tags.'
     }
   },
   digest_calibration: {
@@ -976,19 +976,19 @@ export const PARAM_UI: Record<string, ParamUi> = {
   ion_series: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'Read the spectra as b/y ions (the default), as c/z ions of ETD or ECD, choose per spectrum from its activation (auto), or read them as a/x ions of UVPD (ax, experimental).'
+      text: 'Read the spectra as b/y ions (the default), as c/z ions of ETD or ECD, choose per spectrum from its activation (auto), or read them as a/x ions of UVPD (ax, experimental; it failed its held-out test).'
     }
   },
   ion_series_photo: {
     hidden: OPT_IN_1_13_EXPERIMENTAL,
     help: {
-      text: 'Under ion series auto: read photodissociation (UVPD) spectra as b/y ions (the default) or as a/x ions. Experimental.'
+      text: 'Under ion series auto: read photodissociation (UVPD) spectra as b/y ions (the default) or as a/x ions. Experimental: the a/x reading failed its held-out test.'
     }
   },
   ion_series_hybrid: {
     hidden: OPT_IN_1_13_EXPERIMENTAL,
     help: {
-      text: 'Under ion series auto: read hybrid EThcD/ETciD spectra as b/y ions (the default) or tag them twice, as b/y and as c/z ions, and merge the rows (both). Experimental.'
+      text: 'Under ion series auto: read hybrid EThcD/ETciD spectra as b/y ions (the default) or tag them twice, as b/y and as c/z ions, and merge the rows (both). Experimental, no held-out test.'
     }
   },
   isotope_error: {
@@ -1036,7 +1036,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   search_engine: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'The search engine the settings are written for: Sage, Comet or MSFragger (experimental; needs decoys in the database).'
+      text: 'The search engine the settings are written for: Sage, Comet or MSFragger (experimental, no held-out test; needs decoys in the database).'
     }
   },
   search_isotope_errors: {
@@ -1126,7 +1126,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   shortlist_protease: {
     hidden: EXPERIMENTAL_1_13,
     help: {
-      text: 'The cleavage rule the shortlist places tags with: trypsin (as in 1.12), the protease the run calls (auto), a named protease, or none (unspecific).'
+      text: 'The cleavage rule the shortlist places tags with: trypsin (as in 1.12), the protease the run calls (auto), a named protease, or none (unspecific). Experimental, no held-out test.'
     }
   },
   shortlist_specificity: {

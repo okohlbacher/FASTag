@@ -88,6 +88,8 @@ thresholds.
 
 ## Protease-aware placement (1.13, item 20, experimental)
 
+Experimental, no held-out test: checked on development runs only.
+
 `-shortlist_protease` (default `trypsin`, the 1.12 behaviour above, byte for
 byte) chooses the cleavage rule of the shortlist's placements and of
 `-search_config_out`:
@@ -195,8 +197,8 @@ is left under the name, and no configuration is written.
   Without a template a fragment is written whose header says to merge it.
 - The database in the configuration is `-fasta_out`, else the input database
   (WARN when that holds decoys, since the engine adds its own).
-- **MSFragger** (`-search_engine msfragger`, experimental since 1.13, pinned
-  4.4.1): see "MSFragger configuration" below.
+- **MSFragger** (`-search_engine msfragger`, experimental since 1.13, no
+  held-out test, pinned 4.4.1): see "MSFragger configuration" below.
 
 Engine acceptance (`test/search_engine_smoke_test.sh` with `FASTAG_SAGE_BIN`
 and `FASTAG_COMET_BIN`, mandatory with `FASTAG_ENGINES_REQUIRED=1`) runs on

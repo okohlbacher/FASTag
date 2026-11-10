@@ -1,6 +1,6 @@
 # Hybrid EThcD/ETciD spectra as b/y and c/z• ions (`-ion_series_hybrid both`)
 
-FASTag 1.13, backlog item 10. Experimental, opt-in and **not validated**: with `-ion_series_hybrid` at its default
+FASTag 1.13, backlog item 10. Experimental, opt-in and **not validated** (no held-out test): with `-ion_series_hybrid` at its default
 `by` every output is byte-identical to 1.12 (and to `-ion_series auto` before this option).
 
 ## What is read

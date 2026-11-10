@@ -271,8 +271,8 @@ namespace FASTag::AlkylationTags
         "Every MS2 spectrum is tagged a second time with unmodified C and one alternative C edge per reagent; "
         "those tags are not written. No database is used.");
     add("alkt_run", "status", "experimental", "-",
-        "Experimental: on development data 61 of 123 runs were called, 51 as annotated (doc/ALKYLATION-REPORT.md); "
-        "not tested on held-out data. Unalkylated and low-resolution runs are rarely called.");
+        "Experimental: the held-out test passed at the margin, 40 of 57 runs called and 37 of the calls right "
+        "(doc/ALKYLATION-REPORT.md). Unalkylated and low-resolution runs are rarely called.");
     std::string forms;
     for (const auto& f : cands) forms += (forms.empty() ? "" : ",") + f.name;
     add("alkt_run", "forms", forms, std::to_string(cands.size()), "The C forms the shadow pass can spell.");
@@ -347,9 +347,9 @@ namespace FASTag::AlkylationTags
         if (f.cls == c.cls && f.cls != Alkylation::None) { mass = f.mass; break; }
       add(sec, "status", "call", u(c.binned),
           c.cls == Alkylation::None
-              ? "The votes favour unalkylated cysteines (database-free; experimental, not tested on held-out data)."
+              ? "The votes favour unalkylated cysteines (database-free; experimental)."
               : "The votes favour " + name +
-                    " (database-free; experimental, not tested on held-out data).");
+                    " (database-free; experimental).");
       add(sec, "reagent", name, u(c.top), "The call is " + name + ".");
       add(sec, "mass", c.cls == Alkylation::None ? "-" : num(mass), "-",
           c.cls == Alkylation::None ? "A call of none has no reagent mass." : name + " adds " + num(mass) + " Da to C.");

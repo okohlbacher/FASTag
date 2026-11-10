@@ -104,7 +104,9 @@ val "$R" alkt_form alias.Propionamide | grep -q "S+S" || fail "20 ppm: S+S is no
 [ "$(val "$R" alkt_form alias.Carboxymethyl)" = "C[Carbamidomethyl]+13C:0.0193" ] \
   || fail "20 ppm: the isotope twin is not the alias of Carboxymethyl"
 [ "$(val "$R" alkt_run status)" = experimental ] || fail "alkt_run status is not experimental"
-grep -q "not tested on held-out data" "$R" || fail "the report does not state that it is untested on held-out data"
+grep -q "held-out test passed at the margin, 40 of 57 runs called and 37 of the calls right" "$R" \
+  || fail "the report does not state the held-out result"
+grep -q "not tested on held-out data" "$R" && fail "the report still says that it is untested on held-out data"
 
 # ---- -alkylation_min_spectra applies
 run -in "$TMP/Carbamidomethyl.mzML" -out "$TMP/ms.tsv" "${COMMON[@]}" -alkylation_tags_out "$TMP/ms.alkt.tsv" \
