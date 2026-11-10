@@ -616,7 +616,7 @@ protected:
     // ---- 1.13: label call refit (backlog #8) ----
     registerIntOption_("label_call_min_tags", "<n>", 175,
                        "C-terminal tag ends -label_out's label_call needs; fewer give no_call few_tags "
-                       "(175: the FASTag 1.12 rule; 0, experimental: every ppm run is called)",
+                       "(175: the FASTag 1.12 rule; 0, experimental, failed its held-out test: every ppm run is called)",
                        false, true);
     setMinInt_("label_call_min_tags", 0);
     registerDoubleOption_("massgap_window", "<Da>", 0.02,
@@ -749,7 +749,9 @@ protected:
                           "isolation windows holding several peptides, is refused with exit code 11 "
                           "(refuse), tagged anyway with a warning as before 1.12 (warn), or not "
                           "checked (off). Tag DIA through pseudo-DDA spectra instead: run DIAspeXtract "
-                          "(or diaTracer for .d) first; their output passes the check", false);
+                          "(or diaTracer for .d) first; their output passes the check. The check failed its "
+                          "held-out release test (8 of 202 DDA-labelled files refused): if a DDA file is "
+                          "refused, use warn or off", false);
     setValidStrings_("acquisition_check", ListUtils::create<std::string>("refuse,warn,off"));
     registerIntOption_("acquisition_probe_spectra", "<n>", 4000,
                        "MS2 spectra the acquisition check reads (metadata only) from the start of "
@@ -794,7 +796,7 @@ protected:
     registerStringOption_("complement_tolerance_unit", "<u>", FASTag::Cli::kComplementToleranceUnit,
                           "Da: the window is -complement_tolerance. fragment: "
                           "-complement_tol_factor scales the run's -fragment_tolerance at "
-                          "both partners. auto (experimental): the window is measured on the run, "
+                          "both partners. auto (experimental, failed its held-out test): the window is measured on the run, "
                           "from the complement pairs of high-confidence tags in a probe of "
                           "-complement_probe MS2 spectra; -complement_tolerance when too few pairs",
                           false, true);
@@ -871,7 +873,7 @@ protected:
                           "(c/z-dot ions of electron transfer or capture dissociation, ETD/ECD), or auto "
                           "(c/z-dot for spectra whose activation is ETD or ECD, b/y for all others, hybrid "
                           "EThcD/ETciD included), or ax (a/x ions of photodissociation, UVPD, every spectrum; "
-                          "experimental). Under cz, auto and ax the tag TSV gains an ion_series column when some "
+                          "experimental, failed its held-out test). Under cz, auto and ax the tag TSV gains an ion_series column when some "
                           "spectrum can be read as c/z or a/x", false);
     setValidStrings_("ion_series", ListUtils::create<std::string>(FASTag::IonSeries::kModeValues));
     // 1.13 backlog item 11: a/x ions (photodissociation, UVPD); experimental.
@@ -879,14 +881,14 @@ protected:
                           "Under -ion_series auto: the series photodissociation spectra (UVPD; activation "
                           "MS:1000435 or a Thermo @uvpd filter token, and no collisional or electron method) "
                           "are read as: by (as before 1.13) or ax (a/x ions). -ion_series ax reads every "
-                          "spectrum as a/x ions. Experimental", false, true);
+                          "spectrum as a/x ions. Experimental: the a/x reading failed its held-out test", false, true);
     setValidStrings_("ion_series_photo", ListUtils::create<std::string>(FASTag::IonSeries::kPhotoValues));
     // 1.13 backlog item 10: hybrid EThcD/ETciD read as b/y and c/z-dot; experimental.
     registerStringOption_("ion_series_hybrid", "<series>", FASTag::IonSeries::kHybridDefault,
                           "Under -ion_series auto: how hybrid-activated spectra (EThcD, ETciD) are read: by (b/y "
                           "ions, as before 1.13) or both (tagged twice, as b/y and as c/z-dot ions; the rows of "
                           "both passes merged by E-value under one -max_tags cap, every E-value multiplied by 2, "
-                          "each row with its ion_series). mzML input only. Experimental", false, true);
+                          "each row with its ion_series). mzML input only. Experimental, no held-out test", false, true);
     setValidStrings_("ion_series_hybrid", ListUtils::create<std::string>(FASTag::IonSeries::kHybridValues));
     // ---- 1.12 A: options ----
     // #5: ranked protein shortlist, reduced FASTA and a search-engine
@@ -937,7 +939,8 @@ protected:
                           "tryptic windows, a confidently non-tryptic run is refused (FASTag 1.12). 'auto': the "
                           "protease the tag ends call (trypsin when inconclusive). A protease name, or "
                           "'unspecific': that rule. Except for 'trypsin', windows are found by flank mass and "
-                          "kept by the rule and -shortlist_specificity; only exact placements count", false, true);
+                          "kept by the rule and -shortlist_specificity; only exact placements count. Experimental, "
+                          "no held-out test", false, true);
     setValidStrings_("shortlist_protease",
                      ListUtils::create<std::string>("trypsin,auto,unspecific,lys-c,arg-c,asp-n,glu-c,chymotrypsin,lys-n"));
     registerStringOption_("shortlist_specificity", "<mode>", "full",
@@ -973,7 +976,7 @@ protected:
                           "Add the run's mass-gap peaks to -search_config_out: 'variable' as variable "
                           "modifications, 'offsets' as Comet mass offsets, 'both'. Isotope errors, fixed "
                           "labels and caps are applied; -search_shifts_out lists every decision. "
-                          "Experimental", false);
+                          "Experimental: failed both held-out tests (doc/SHORTLIST.md)", false);
     setValidStrings_("search_shifts", ListUtils::create<std::string>("none,variable,offsets,both"));
     registerOutputFile_("search_shifts_out", "<file>", "",
                         "One row per mass-gap peak: its explanation and what -search_shifts did with it", false);
@@ -1106,7 +1109,7 @@ protected:
     // from a second, unwritten tagging pass with alternative C edges.
     // Opt-in; every other output is the same with or without it.
     registerOutputFile_("alkylation_tags_out", "<file>", "",
-                        "Experimental (61 of 123 development runs called, 51 as annotated; no held-out test; "
+                        "Experimental (held-out test passed at the margin: 40 of 57 runs called, 37 right; "
                         "unalkylated runs are rarely called): report which reagent alkylated the cysteines (or none) without a database, "
                         "from a second tagging pass with unmodified C and one alternative C edge per reagent "
                         "(Carbamidomethyl, Propionamide, Nethylmaleimide, Methylthio, Carboxymethyl): votes per "

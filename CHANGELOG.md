@@ -29,6 +29,34 @@
   the 50 indexed genera (42 of 49 runs); a second organism or contaminant
   is not reported; organisms outside the index are usually reported as
   their nearest indexed relative (10 of 13 runs) or not at all.
+- **`-search_shifts` (backlog #17): isotope rule in the frame of a fixed
+  terminal label, and the held-out result.** A mass-gap peak at a fixed
+  terminal label (TMT) plus n x 1.00335 is now `skipped_isotope` and raises
+  the engine's isotope errors; before, it became a Comet offset near
+  n x 1.0034 and Sage did not search it. Output changes only under
+  `-search_shifts` on runs with a fixed terminal label. Both preregistered
+  held-out tests FAILED (acceptance/1.13 RESULT-item17.md; second test on
+  four new runs, `acc113r/shifts` RESULT-item17r.md: Comet P2 and P4, Sage
+  P4). In the second test PSMs at 1 % FDR rose on all four runs (Comet +7.7
+  to +36.8 %, Sage +6.5 to +25.2 %), but Comet's entrapment FDP rose from
+  0.88 to 1.28 % on the TMT run PXD037999, and 5 of 32 (Comet) and 3 of 11
+  (Sage) admissible open-search peaks were recovered. Part of the gain is
+  the isotope error setting (0..1 against 0 in the base search). The test
+  did not measure the fix. The option stays experimental and does not
+  replace an open search.
+- **MSFragger configuration (backlog #18): `-search_engine msfragger`,
+  experimental, no held-out test.** `-search_config_out` writes a complete
+  `fragger.params` for MSFragger 4.4.1. MSFragger needs decoys in the
+  database: with `-fasta_out` FASTag appends reversed `rev_` decoys, without
+  it the input database must be a target-decoy database. `num_threads` is
+  `-threads`. `-search_shifts offsets` exports mass offsets (negative ones
+  included) on a ppm precursor window and is refused on a Da window, where
+  MSFragger 4.4.1 exits 1 on them. Sage and Comet configurations are
+  unchanged (doc/SHORTLIST.md, "MSFragger configuration").
+- **`-alkylation_tags_out`: held-out test PASS at the margin.** On 57 runs
+  from 57 PRIDE projects it called 40, 37 of them right (0.925, Wilson 95%
+  interval 0.801-0.974). It abstains on samples that are not alkylated; the
+  help text and the report's `alkt_run status` row now state the result.
 - **c/z• preprocessing: charge-reduced peaks re-filtered against the
   precursor cut (issue T25).** Peaks were cut at the precursor (neutral mass
   + proton + 1.5 Da) before deisotoping only, so a peak the deisotoper moved
