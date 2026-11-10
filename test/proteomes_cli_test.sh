@@ -78,9 +78,10 @@ cp -R "$DIGEST" "$TMP/inst/share/FASTag/digest"
 cp -R "$ALK" "$TMP/inst/share/FASTag/alkylation"
 for prot in default auto human mouse yeast ecoli; do
   want=$prot; { [ "$want" = default ] || [ "$want" = auto ]; } && want=human
+  # ${args[@]+...}: bash 3.2 (macOS) treats an empty array as unset under set -u
   args=(); [ "$prot" = default ] || args=(-alkylation_proteome "$prot")
   FASTAG_DIGEST_DIR="$TMP/inst/share/FASTag/digest" "$BIN" "${COMMON[@]}" -out "$TMP/$prot.tsv" \
-    -alkylation_out "$TMP/$prot.alk.tsv" "${args[@]}" > "$TMP/log" 2>&1
+    -alkylation_out "$TMP/$prot.alk.tsv" ${args[@]+"${args[@]}"} > "$TMP/log" 2>&1
   rc=$?
   [ "$rc" = 0 ] || { cat "$TMP/log" >&2; fail "-alkylation_proteome $prot: exit $rc"; }
   [ "$(val "$TMP/$prot.alk.tsv" alk_run database_source)" = "bundled:$want" ] || fail "$prot: database_source"
