@@ -4,6 +4,7 @@
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
 #include "AlkylationCall.h"
+#include "Sha256.h"
 
 #include <OpenMS/CHEMISTRY/ModificationsDB.h>
 #include <OpenMS/CHEMISTRY/ResidueModification.h>
@@ -315,6 +316,20 @@ int main()
               value(rows, "alk_cys", "class.Carbamidomethyl") == "30" && value(rows, "alk_cys", "unexplained") == "12",
           "report values");
     check(value(rows, "alkylation_call", "mass") == D::num(CAM), "reagent mass row");
+    // 1.13 (#24): database_release only for a shipped proteome, right after database_source
+    check(value(rows, "alk_run", "database_release").rfind("<missing", 0) == 0,
+          "no database_release row for a database that is not shipped");
+    A::ReportInfo binfo = info;
+    binfo.database_source = "bundled:yeast";
+    binfo.database_release = "UniProt 2026_04 UP000002311 (taxon 559292, reviewed, 6067 entries, sha256 ab)";
+    const auto brows = A::alkylationRows(t, A::callAlkylation(t, s), s, forms, binfo);
+    check(brows.size() == rows.size() + 1, "a shipped proteome adds exactly one row");
+    std::size_t src_at = 0;
+    for (std::size_t i = 0; i < brows.size(); ++i)
+      if (brows[i].section == "alk_run" && brows[i].key == "database_source") src_at = i;
+    check(src_at + 1 < brows.size() && brows[src_at + 1].key == "database_release" &&
+              brows[src_at + 1].value == binfo.database_release && brows[src_at + 1].n == "-",
+          "database_release follows database_source with the release");
     const auto none_rows = A::alkylationRows(A::Tally(), A::callAlkylation(A::Tally(), s), s, forms, info);
     check(value(none_rows, "alkylation_call", "status") == "no_call" &&
               value(none_rows, "alkylation_call", "reason") == "few_cys_spectra" &&
@@ -348,6 +363,124 @@ int main()
     check(e.size() == 2 && e[0].identifier == "sp|P1|ONE" && e[0].sequence == "PEPTIDEK" && e[1].sequence == "ACDK",
           "plain FASTA read");
     std::remove(path.c_str());
+  }
+
+  // ---- 1.13 (#24): the shipped proteomes' manifest
+  {
+    const std::string A64(64, 'a'), B64(64, 'b'), C64(64, 'c'), D64(64, 'd'), E64(64, 'e'), F64(64, 'f');
+    const std::string hdr = "name\tproteome\ttaxon\trelease\trelease_date\tentries\tsha256\tfasta_sha256\tfile\n";
+    const std::string human = "human\tUP000005640\t9606\t2026_04\t04-November-2026\t20414\t" + A64 + "\t" + B64 + "\thuman.fasta.gz\n";
+    const std::string yeast = "yeast\tUP000002311\t559292\t2026_04\t04-November-2026\t6067\t" + C64 + "\t" + D64 + "\tyeast.fasta.gz\r\n";
+    A::ShippedProteome sp;
+    check(A::findShippedProteome(hdr + human + yeast, "yeast", sp) && sp.proteome == "UP000002311" &&
+              sp.taxon == "559292" && sp.release == "2026_04" && sp.entries == 6067 && sp.sha256 == C64 &&
+              sp.fasta_sha256 == D64 && sp.file == "yeast.fasta.gz",
+          "manifest row read (CRLF tolerated)");
+    check(A::shippedRelease(sp) == "UniProt 2026_04 UP000002311 (taxon 559292, reviewed, 6067 entries, FASTA sha256 " + D64 + ")",
+          "release value: " + A::shippedRelease(sp));
+    A::ShippedProteome none;
+    check(!A::findShippedProteome(hdr + human, "mouse", none) && none.entries == 0, "a name without a row");
+    check(!A::findShippedProteome(hdr + human + human, "human", none), "two rows for one name");
+    check(!A::findShippedProteome(human, "human", none), "no header");
+    check(!A::findShippedProteome("name\tproteome\tfile\n" + human, "human", none), "a header without the columns");
+    check(!A::findShippedProteome(hdr + "human\tUP1\t9606\t2026_04\td\t0\t" + A64 + "\t" + B64 + "\thuman.fasta.gz\n", "human", none),
+          "zero entries");
+    check(!A::findShippedProteome(hdr + "human\tUP1\t9606\t2026_04\td\t2x\t" + A64 + "\t" + B64 + "\thuman.fasta.gz\n", "human", none),
+          "entries not a number");
+    check(!A::findShippedProteome(hdr + "human\tUP1\t9606\t2026_04\td\t5\t" + A64 + "\t" + B64 + "\t../x.fasta.gz\n", "human", none),
+          "a file with a path");
+    check(!A::findShippedProteome(hdr + "human\tUP1\t9606\t2026_04\td\t5\t" + A64 + "\t" + B64 + "\t..\n", "human", none),
+          "a file named ..");
+    check(!A::findShippedProteome(hdr + "human\tUP1\t9606\t\td\t5\t" + A64 + "\t" + B64 + "\th.fasta.gz\n", "human", none),
+          "an empty release");
+    // the sha256 is checked against the file at run time: it must be one
+    check(!A::findShippedProteome(hdr + "human\tUP1\t9606\t2026_04\td\t5\tab\t" + B64 + "\th.fasta.gz\n", "human", none),
+          "a sha256 that is not 64 hex digits");
+    check(!A::findShippedProteome(hdr + "human\tUP1\t9606\t2026_04\td\t5\t" + std::string(64, 'A') + "\t" + B64 + "\th.fasta.gz\n",
+                                  "human", none),
+          "an upper-case sha256 (sha256sum prints lower case)");
+    check(!A::findShippedProteome(hdr + "human\tUP1\t9606\t2026_04\td\t5\t" + std::string(63, 'a') + "g\t" + B64 + "\th.fasta.gz\n",
+                                  "human", none),
+          "a sha256 with a non-hex digit");
+    check(!A::findShippedProteome(hdr + "human\tUP1\t9606\t2026_04\td\t5\t" + A64 + "\tbb\th.fasta.gz\n", "human", none),
+          "a fasta_sha256 that is not 64 hex digits");
+    // columns in another order and a comment line
+    const std::string reord = "# shipped\nfile\tname\tentries\trelease\trelease_date\tproteome\ttaxon\tsha256\tfasta_sha256\n"
+                              "e.fasta.gz\tecoli\t4403\t2026_04\td\tUP000000625\t83333\t" + E64 + "\t" + F64 + "\n";
+    check(A::findShippedProteome(reord, "ecoli", sp) && sp.file == "e.fasta.gz" && sp.entries == 4403 &&
+              sp.proteome == "UP000000625",
+          "columns found by name");
+  }
+
+  // ---- 1.13 (#24): SHA-256 (FIPS 180-4 test vectors), and of a file
+  {
+    auto hex = [](const std::string& m) { FASTag::Sha256 h; h.update(m.data(), m.size()); return h.hexDigest(); };
+    check(hex("") == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "sha256 of the empty string");
+    check(hex("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", "sha256 of abc");
+    check(hex("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq") ==
+              "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1",
+          "sha256 of the two-block message");
+    FASTag::Sha256 mill;
+    const std::string chunk(1000, 'a');
+    for (int k = 0; k < 1000; ++k)
+    {
+      mill.update(chunk.data(), 0);  // an empty update changes nothing
+      mill.update(chunk.data(), chunk.size());
+    }
+    check(mill.hexDigest() == "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0", "sha256 of a million a");
+    // split across every block boundary the same as in one piece
+    const std::string m = "The quick brown fox jumps over the lazy dog, then over the lazy dog again and again.";
+    for (std::size_t cut = 0; cut <= m.size(); ++cut)
+    {
+      FASTag::Sha256 h;
+      h.update(m.data(), cut);
+      h.update(m.data() + cut, m.size() - cut);
+      if (h.hexDigest() != hex(m)) { check(false, "sha256 split at " + std::to_string(cut)); break; }
+    }
+    const std::string path = "alkylation_test.sha";
+    std::ofstream(path, std::ios::binary) << "abc";
+    check(FASTag::sha256File(path) == hex("abc"), "sha256File");
+    std::remove(path.c_str());
+    check(FASTag::sha256File("alkylation_test.no-such-file").empty(), "sha256File of a missing file is empty");
+    const std::string fa = "alkylation_test_sha.fasta";
+    const std::string text = ">P1 one\nACDK\n";
+    std::ofstream(fa, std::ios::binary) << text;
+    std::vector<OpenMS::FASTAFile::FASTAEntry> fe;
+    std::string got;
+    A::loadFasta(fa, fe, &got);
+    check(fe.size() == 1 && got == hex(text), "loadFasta: sha256 of a plain FASTA");
+    std::remove(fa.c_str());
+    check(FASTag::isSha256Hex(hex("abc")) && !FASTag::isSha256Hex("abc") && !FASTag::isSha256Hex(std::string(64, 'G')),
+          "isSha256Hex");
+  }
+
+  // ---- 1.13 (#24): tags too short to place on a shipped proteome
+  {
+    const A::Settings s = settings(0.0);
+    const std::vector<A::Form> forms = A::forms();
+    A::Call c = A::callAlkylation(A::Tally(), s);
+    check(!A::markTagsTooShort(c, 8, 8) && c.reason == "few_cys_spectra", "tags as long as the minimum: few_cys_spectra");
+    check(!A::markTagsTooShort(c, 3, 0) && c.reason == "few_cys_spectra", "no minimum known: unchanged");
+    check(A::markTagsTooShort(c, 3, 8) && c.reason == "tags_too_short", "tags of 3 on a minimum of 8: tags_too_short");
+    A::Tally t = tally(30, 0);
+    A::Call called = A::callAlkylation(t, s);
+    check(called.called && !A::markTagsTooShort(called, 3, 8) && called.reason == "-", "a call is never changed");
+    A::ReportInfo info{"h.fasta.gz", "bundled:human", "", "UniProt x"};
+    info.min_tag_length = 8;
+    info.longest_tag = 3;
+    const auto rows = A::alkylationRows(A::Tally(), c, s, forms, info);
+    check(value(rows, "alk_run", "min_tag_length") == "8" && value(rows, "alkylation_call", "reason") == "tags_too_short" &&
+              value(rows, "alkylation_call", "status") == "no_call",
+          "min_tag_length row and the tags_too_short reason");
+    bool says = false;
+    for (const D::Row& r : rows)
+      if (r.section == "alk_run" && r.key == "min_tag_length")
+        says = r.n == "3" && r.description.find("give -tag_length 8 or more") != std::string::npos;
+    check(says, "min_tag_length names the longest tag and the -tag_length to give");
+    A::ReportInfo plain{"db.fasta", "proteome", ""};
+    const auto prow = A::alkylationRows(A::Tally(), A::callAlkylation(A::Tally(), s), s, forms, plain);
+    check(value(prow, "alk_run", "min_tag_length").rfind("<missing", 0) == 0 && prow.size() + 2 == rows.size(),
+          "no min_tag_length row without a shipped proteome");
   }
 
   if (failures) std::cerr << failures << " failure(s)\n";

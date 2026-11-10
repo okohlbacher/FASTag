@@ -243,10 +243,11 @@ namespace FASTag
       c.frag_tol_ppm = p.tol_ppm;
       c.midp = p.complement_midp;
       // b/y keeps the single delta 0 (1.11's doubles); c/z-dot pairs sum to
-      // M + H (IonSeries::IonPair::compl_delta).
+      // M + H, a/x cleavage pairs to M - H or M (IonSeries::IonPair::
+      // compl_deltas).
       if (p.ion_pair.kind != IonSeries::Series::BY)
       {
-        c.pair_deltas = {p.ion_pair.compl_delta};
+        c.pair_deltas = p.ion_pair.compl_deltas;
         c.charge_loss = p.ion_pair.charge_loss;
       }
       return c;
@@ -372,6 +373,14 @@ namespace FASTag
   /// two readings that merely print alike (e.g. a gap placed one residue
   /// apart, ~1e-6 Da) stay two tags.
   std::vector<Tag> mergeLengths(std::vector<std::vector<Tag>> per_length);
+
+  /// One hybrid spectrum's rows from its b/y and its c/z-dot pass (1.13 item
+  /// 10, -ion_series_hybrid both): both lists in one, stably sorted by E-value
+  /// (ties: b/y first, each pass's own order within it), cut to the @p cap
+  /// best rows (0: no cap). Every row keeps its Tag::ion_series; nothing is
+  /// deduplicated across passes, since the same peaks read as b/y and as c/z
+  /// give different flanks (two readings, not one).
+  std::vector<Tag> mergeSeriesPasses(std::vector<Tag> by, std::vector<Tag> cz, size_t cap);
 
   /// Strip inline modification annotations, leaving one base residue per
   /// position: "GS[Phospho]TK[TMT6plex]" -> "GSTK". Used for FASTA matching,

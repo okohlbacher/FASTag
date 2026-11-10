@@ -452,6 +452,20 @@ namespace FASTag
         deisotopeAveragine(work, deiso_tol, p.tol_ppm, DEISOTOPE_MAX_CHARGE, mower);
         work.sortByPosition();
 
+        // c/z only (issue T25): the precursor cut above ran on the peaks as
+        // measured, but a peak the deisotoper moved to the 1+ scale can land
+        // above it (a 2+ cluster at m/z m becomes 2m - proton). Such a peak
+        // cannot be a fragment of this precursor, so cut again. Unmoved peaks
+        // all passed the cut, so only moved ones go, and before the merge
+        // below, so none can displace a real neighbour. The b/y path is left
+        // as it was: its output is the 1.12 reference.
+        if (etd_filter && !work.empty() && work[work.size() - 1].getMZ() > max_mz)
+        {
+          const auto first_above = std::upper_bound(work.begin(), work.end(), max_mz,
+                                                    [](double v, const Peak1D& pk) { return v < pk.getMZ(); });
+          work.erase(first_above, work.end());
+        }
+
         // A fragment seen as 1+ AND 2+ (common for precursors of charge >= 3)
         // is two peaks a few ppm apart once the 2+ copy is moved: each path
         // then exists twice, with flanks ~1e-4 Da apart that no exact key
@@ -1404,6 +1418,16 @@ namespace FASTag
     for (size_t i = 0; i < per_length.size(); ++i)
       for (Tag& t : per_length[i])
         if (winner.at(key(t)).second == i) rows.push_back(std::move(t));
+    return rows;
+  }
+
+  std::vector<Tag> mergeSeriesPasses(std::vector<Tag> by, std::vector<Tag> cz, size_t cap)
+  {
+    std::vector<Tag> rows = std::move(by);
+    rows.reserve(rows.size() + cz.size());
+    for (Tag& t : cz) rows.push_back(std::move(t));
+    std::stable_sort(rows.begin(), rows.end(), [](const Tag& a, const Tag& b) { return a.evalue < b.evalue; });
+    if (cap > 0 && rows.size() > cap) rows.erase(rows.begin() + static_cast<std::ptrdiff_t>(cap), rows.end());
     return rows;
   }
 }
