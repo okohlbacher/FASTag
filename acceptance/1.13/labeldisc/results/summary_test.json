@@ -1,0 +1,122 @@
+{
+ "P1": {
+  "clopper_pearson_95": [
+   0.014,
+   0.1246
+  ],
+  "false_label_calls": 4,
+  "label_free_runs": 79,
+  "one_sided_upper_95": 0.1121,
+  "rate": 0.0506,
+  "runs": [
+   "borg_ho__PXD017052__EXP19002_X2062_A_MSB39197A:R:Arg10",
+   "mixset__PXD027945__Lumos_P0605_PH_MS_PEP_R1_F8:TMT+K:TMT",
+   "valset__PXD003575__Suping_Exp1_TomatoRoot_16:iTRAQ8plex",
+   "valset__PXD078554__100424_TA-BPD-004_Slot2-42_1_2475:Dimethyl:2H(4)"
+  ],
+  "verdict": "FAIL"
+ },
+ "P2": {
+  "correct_ld": 68,
+  "correct_majority": 79,
+  "discordant_ld_only": 12,
+  "discordant_majority_only": 23,
+  "sign_p": 0.0895,
+  "verdict": "FAIL"
+ },
+ "P3": {
+  "correct_label_call": 70,
+  "correct_ld": 68,
+  "discordant_label_call_only": 7,
+  "discordant_ld_only": 5,
+  "sign_p": 0.7744,
+  "verdict": "FAIL"
+ },
+ "accuracy": {
+  "label_call": [
+   70,
+   95,
+   [
+    0.6403,
+    0.8149
+   ]
+  ],
+  "ld": [
+   68,
+   95,
+   [
+    0.6181,
+    0.7967
+   ]
+  ],
+  "ld_lenient": [
+   69,
+   95
+  ],
+  "majority": [
+   79,
+   95,
+   [
+    0.7438,
+    0.8936
+   ]
+  ]
+ },
+ "confusion": {
+  "SILAC": {
+   "SILAC": 4,
+   "no call": 1
+  },
+  "TMT": {
+   "TMT": 5,
+   "TMTpro/iTRAQ8": 1,
+   "no call": 1
+  },
+  "TMTpro/iTRAQ8": {
+   "TMTpro/iTRAQ8": 3,
+   "mixed": 1
+  },
+  "label-free": {
+   "SILAC": 1,
+   "TMT": 1,
+   "TMTpro/iTRAQ8": 1,
+   "dimethyl": 1,
+   "label-free": 56,
+   "no call": 19
+  }
+ },
+ "isobaric_names": [
+  "TMTpro+K:TMTpro",
+  "ambiguous:TMTpro|iTRAQ8plex+K:ambiguous:TMTpro|iTRAQ8plex",
+  "ambiguous:iTRAQ8plex|TMTpro+unknown:N+450.3116"
+ ],
+ "majority_class": "label-free",
+ "n": 95,
+ "no_call_reasons": {
+  "few_spectra": 10,
+  "no_reference": 11
+ },
+ "recall": {
+  "SILAC": {
+   "label_call": 2,
+   "ld": 4,
+   "n": 5
+  },
+  "TMT": {
+   "label_call": 5,
+   "ld": 5,
+   "n": 7
+  },
+  "TMTpro/iTRAQ8": {
+   "label_call": 3,
+   "ld": 3,
+   "n": 4
+  },
+  "label-free": {
+   "label_call": 60,
+   "ld": 56,
+   "n": 79
+  }
+ },
+ "set": "test"
+}

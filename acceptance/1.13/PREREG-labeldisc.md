@@ -116,3 +116,29 @@ Commands (node data):
       /scratch/kohlbach/fastag-labeldisc/frozen/FASTag /scratch/kohlbach/fastag-labeldisc/eval2/test 14
     python3 -I labeldisc/scorers/score_labeldisc.py labeldisc/manifests/labeldisc-test256.tsv \
       /scratch/kohlbach/fastag-labeldisc/eval2/test labeldisc/results test
+
+## TEST half: scored once (2026-11-10, node data, CFG-LD-test-113)
+
+`results/summary_test.json`, `results/per_run_test.tsv` (130 runs, all rc 0; 95 scored rows):
+
+- **P1 FAIL:** 4 of 79 label-free runs with a label call (5.1 %, Clopper-Pearson 95 % 1.4-12.5 %, one-sided upper
+  11.2 %): R:Arg10 (PXD017052), TMT+K:TMT (PXD027945), iTRAQ8plex (PXD003575), Dimethyl:2H(4) (PXD078554).
+- **P2 FAIL:** correct 68/95 against the majority's 79/95 (sign test p = 0.09).
+- **P3 FAIL:** correct 68/95 against `label_call`'s 70/95 (p = 0.77).
+- No calls: 21 (few_spectra 10, no_reference 11), 19 of them on label-free runs.
+
+Nothing was changed after this result.
+
+## Addendum A0: the held-out manifest (committed before any held-out run)
+
+`labeldisc/manifests/labeldisc-heldout.tsv` sha256 **6290a0f62268f22d0c010bc27e4ebb8908cf5cf2483168ccde8071cb57044311**: 190 rows, all included, every input staged (part A:
+the item08 inputs and sha256 unchanged; part B: `staged_B.tsv` and one retry, `staged_B_retry1.tsv`, of the 4
+downloads PRIDE broke off; all 18 B inputs converted, rc 0). Built by `scripts/build_heldout_manifest.py`
+(sha256 f3d729c3798c34395a23c87766933af68b1773200494397b26a56d1189c871cd).
+
+    python3 -I labeldisc/scripts/run_heldout_labeldisc.py labeldisc/manifests/labeldisc-heldout.tsv \
+      /scratch/kohlbach/fastag-labeldisc/frozen/FASTag /scratch/kohlbach/fastag-labeldisc/frozen/FASTag.bin \
+      c9275d35c47439be0110426c19a40721368798546ab0644a3f1296f17e4f5f1f /scratch/kohlbach/fastag-labeldisc/frozen/digest \
+      /scratch/kohlbach/fastag-labeldisc/eval2/heldout 8
+    python3 -I labeldisc/scorers/score_labeldisc.py labeldisc/manifests/labeldisc-heldout.tsv \
+      /scratch/kohlbach/fastag-labeldisc/eval2/heldout labeldisc/results heldout
