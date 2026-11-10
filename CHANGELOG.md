@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **`-ion_series_hybrid both` (backlog #10): held-out result, PASS.** No
+  code change besides the help text. On 9 EThcD/ETciD runs from 5 PRIDE
+  projects (`acc113r/hybrid`, PREREG-hybrid.md, scored once) the truth
+  spectra with at least one correct tag rise by 43.2 points over
+  `-ion_series auto` alone (95% interval 41.3-45.1; worst project +28.2),
+  the precision of the reported tags by 14.3 points, at 1.60 times the CPU
+  time. Three of the five projects are ADP-ribosylation samples from one
+  laboratory. The option stays experimental and the default stays `by`
+  (doc/HYBRID-IONS.md).
 - **Label call minimum (backlog #8): `-label_call_min_tags`, experimental,
   default 175 (the 1.12 rule; no output change at the default).** At 0
   `label_call` makes no `no_call few_tags` below 175 C-terminal tag ends:
