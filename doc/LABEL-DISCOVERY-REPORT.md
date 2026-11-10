@@ -1,7 +1,17 @@
 # The label discovery report (`-label_discovery_out`), format 1
 
-Experimental, opt-in, not validated on held-out data. The thresholds are
-priors (doc/DESIGN-label-discovery.md, section 13 has the evaluation plan).
+Experimental and opt-in. It failed its held-out test (acceptance/1.13
+PREREG-labeldisc.md; 190 public runs, scored once on 2026-11-10):
+
+| Endpoint | Verdict | Result |
+|---|---|---|
+| P1: no label call on a label-free run | **FAIL** | 6 of 150 label-free runs got a label call (4.0 %) |
+| P2: at least as many runs right as "always label-free" | **FAIL** | 96/190 against 150/190 |
+| P3: at least as many runs right as `-label_out`'s `label_call` | **PASS** | 96/190 against 91/190 (sign test p = 0.33) |
+
+Do not rely on the call as free of false label calls. The evidence bar was
+set on development runs only (doc/DESIGN-label-discovery.md, sections 9 and
+13).
 The code is `src/LabelDiscovery.{h,cpp}`; its unit tests are
 `test/label_discovery_test.cpp`.
 
@@ -17,7 +27,7 @@ without a protein database:
 - the **site candidates**: offsets at the peptide N-terminus (`N`), at lysine
   (`K`), at arginine (`R`) or at the peptide C-terminus (`C`), each with its
   evidence and class;
-- a provisional **call**.
+- a **call**.
 
 It reads the tags `-label_out` reads: every written row of the selected
 precursor hypothesis that is ungapped with E-value <= 1, read as b/y. c/z tags
@@ -256,8 +266,8 @@ that label and `<label>.K0f.tags` its C-terminal count.
 | `basis` | `site_scan` |
 | `reason` | `low_resolution`, `cz_only`, `few_spectra` (below 175 counted spectra), `no_reference`; `-` on a call |
 
-**Call rule (priors; the evidence bar set on the DEV half of evaluation 2,
-not on held-out data).** Candidates are taken in order of
+**Call rule (priors; the evidence bar set on development runs only; it
+failed the held-out test above).** Candidates are taken in order of
 parsimony: per spectrum 2^-k, k the fewest residues (besides the site's own
 K or R) of a clean image supporting it, summed. A candidate of class
 `known_label`, `unimod` or `unexplained` with delta != 0 is called when it

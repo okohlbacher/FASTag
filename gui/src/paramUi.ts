@@ -91,9 +91,14 @@ export interface ParamUi {
 /// a GUI run uses the CLI defaults. The exception is acquisition_check (under
 /// Spectra).
 const OPT_IN_1_12 = '1.12 command-line option, not in the form yet (CLI default applies)'
+const OPT_IN_1_13_EXPERIMENTAL = '1.13 experimental command-line option, not in the form (CLI default applies)'
 
-/// Label discovery (-label_discovery_out): experimental, opt-in and not
-/// validated on held-out data; command line only until it has a GUI design.
+/// FASTag 1.13 experimental options: opt-in, output unchanged at the default,
+/// not offered in the form.
+const EXPERIMENTAL_1_13 = '1.13 experimental command-line option, not in the form (CLI default applies)'
+
+/// Label discovery (-label_discovery_out): experimental and opt-in; it failed
+/// its held-out test; command line only until it has a GUI design.
 const EXPERIMENTAL_LABEL_DISCOVERY =
   'experimental command-line option (label discovery), not in the form (CLI default applies)'
 
@@ -110,7 +115,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     section: 'Spectra',
     label: 'Raw DIA check',
     help: {
-      text: 'Before tagging, FASTag checks whether the file is raw DIA data, whose MS2 spectra each mix several peptides. By default (refuse) such a file is not tagged: the run stops with exit code 11 before any file is written. warn tags it anyway, with a warning in the log; off skips the check. DDA and pseudo-DDA files pass the check and are tagged the same under every setting.',
+      text: 'Before tagging, FASTag checks whether the file is raw DIA data, whose MS2 spectra each mix several peptides. By default (refuse) such a file is not tagged: the run stops with exit code 11 before any file is written. warn tags it anyway, with a warning in the log; off skips the check. DDA and pseudo-DDA files pass the check and are tagged the same under every setting. The check failed its held-out test: 8 of 202 files labelled DDA were refused, so switch to warn or off when a DDA file is refused.',
       tip: 'Better than warn: make pseudo-DDA spectra with DIAspeXtract (or diaTracer for timsTOF .d) first, and tag those. Tags of raw DIA spectra get wrong flanking masses and complement statistics.'
     }
   },
@@ -802,7 +807,13 @@ export const PARAM_UI: Record<string, ParamUi> = {
   alkylation_proteome: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'The database the alkylation report uses when no reconciliation database is given: a FASTA file. In 1.12.0 the alkylation report needs this FASTA file or a reconciliation database: the shipped proteomes (human, mouse, yeast, E. coli) that the names stand for are not in this release, and naming one, or leaving the default auto, stops the run with an error.'
+      text: 'The database the alkylation report uses when no reconciliation database is given: auto (the human proteome), human, mouse, yeast or ecoli for the UniProt reference proteomes shipped with FASTag (reviewed entries; the release is in the report), or a FASTA file. Tags place on the shipped proteomes from 8 residues (human, mouse) or 7 (yeast, E. coli): set the tag length to 8 or 7, otherwise no tag places and there is no call (reason tags_too_short).'
+    }
+  },
+  alkylation_tags_out: {
+    hidden: 'experimental 1.13 command-line option, not in the form (CLI default applies)',
+    help: {
+      text: 'Write a report of which reagent alkylated the cysteines, or none, without a database: every spectrum is tagged a second time with unmodified and alkylated cysteine as alternatives, and the cysteine forms inside the best tags vote. Experimental: its held-out test passed at the margin (40 of 57 runs called, 37 right); unalkylated runs are rarely called. Use it with tag extension; without it few spectra vote.'
     }
   },
   alkylation_window: {
@@ -865,10 +876,34 @@ export const PARAM_UI: Record<string, ParamUi> = {
       text: 'The lowest charge tried for a precursor without a charge, when it is not tagged as 2+.'
     }
   },
+  check_header_charge: {
+    hidden: EXPERIMENTAL_1_13,
+    help: {
+      text: "Whether the charge the file gives for a precursor is checked against the isotope spacing of the precursor in the preceding MS1 scan and against its fragment pairs: off, warn (report disagreements only) or both (tag a disagreeing spectrum under the file's charge and under the charge the check found). Experimental."
+    }
+  },
+  check_header_margin: {
+    hidden: EXPERIMENTAL_1_13,
+    help: {
+      text: 'By how much the supported charge must beat the given charge before the header charge check calls a disagreement.'
+    }
+  },
+  check_header_out: {
+    hidden: EXPERIMENTAL_1_13,
+    help: {
+      text: 'Where the header charge check writes one row per spectrum with a given charge: the given charge, the supported charge, the evidence and the verdict.'
+    }
+  },
   complement_midp: {
     hidden: OPT_IN_1_12,
     help: {
       text: 'Score tags with no or one complement pair with the mid-p variant of the complement test.'
+    }
+  },
+  complement_probe: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'How many MS2 spectra the auto complement window is measured on (experimental).'
     }
   },
   complement_rule: {
@@ -892,7 +927,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   complement_tolerance_unit: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'Whether the complement window is a fixed value in Da or follows the fragment tolerance.'
+      text: 'Whether the complement window is a fixed value in Da, follows the fragment tolerance, or (auto, experimental; it failed its held-out test) is measured on the run from the complement pairs of confident tags.'
     }
   },
   digest_calibration: {
@@ -919,6 +954,12 @@ export const PARAM_UI: Record<string, ParamUi> = {
       text: 'Give no digest call when its calibrated confidence is below this value. 0 turns it off.'
     }
   },
+  digest_quality: {
+    hidden: 'experimental (1.13): digestion-quality rows of -digest_out',
+    help: {
+      text: 'Add missed-cleavage and non-specific-end measurements for one enzyme (or the call: auto) to the digest report. Experimental.'
+    }
+  },
   digest_models_version: {
     hidden: OPT_IN_1_12,
     help: {
@@ -940,7 +981,19 @@ export const PARAM_UI: Record<string, ParamUi> = {
   ion_series: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'Read the spectra as b/y ions (the default), as c/z ions of ETD or ECD, or choose per spectrum from its activation (auto).'
+      text: 'Read the spectra as b/y ions (the default), as c/z ions of ETD or ECD, choose per spectrum from its activation (auto), or read them as a/x ions of UVPD (ax, experimental; it failed its held-out test).'
+    }
+  },
+  ion_series_photo: {
+    hidden: OPT_IN_1_13_EXPERIMENTAL,
+    help: {
+      text: 'Under ion series auto: read photodissociation (UVPD) spectra as b/y ions (the default) or as a/x ions. Experimental: the a/x reading failed its held-out test.'
+    }
+  },
+  ion_series_hybrid: {
+    hidden: OPT_IN_1_13_EXPERIMENTAL,
+    help: {
+      text: 'Under ion series auto: read hybrid EThcD/ETciD spectra as b/y ions (the default) or tag them twice, as b/y and as c/z ions, and merge the rows (both). Experimental, no held-out test.'
     }
   },
   isotope_error: {
@@ -988,7 +1041,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   search_engine: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'The search engine the settings are written for: Sage or Comet.'
+      text: 'The search engine the settings are written for: Sage, Comet or MSFragger (experimental, no held-out test; needs decoys in the database).'
     }
   },
   search_isotope_errors: {
@@ -1075,6 +1128,18 @@ export const PARAM_UI: Record<string, ParamUi> = {
       text: 'Write the smaller FASTA and the search settings even when the protease of the run does not fit tryptic placement.'
     }
   },
+  shortlist_protease: {
+    hidden: EXPERIMENTAL_1_13,
+    help: {
+      text: 'The cleavage rule the shortlist places tags with: trypsin (as in 1.12), the protease the run calls (auto), a named protease, or none (unspecific). Experimental, no held-out test.'
+    }
+  },
+  shortlist_specificity: {
+    hidden: EXPERIMENTAL_1_13,
+    help: {
+      text: 'How many window ends must be cleavage sites of the -shortlist_protease rule: both (full), one (semi) or none.'
+    }
+  },
   shortlist_gapped: {
     hidden: OPT_IN_1_12,
     help: {
@@ -1150,7 +1215,17 @@ export const PARAM_UI: Record<string, ParamUi> = {
   unknown_charge: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'How a precursor whose charge the file does not give is tagged: as 2+ (the default, as before 1.12), at each possible charge, or at the charge its fragment pairs support best. A charge given in the file is never replaced.'
+      text: 'How a precursor whose charge the file does not give is tagged: as 2+ (the default, as before 1.12), at each possible charge, or at the charge its fragment pairs support best. A charge given in the file is never replaced (the experimental header charge check in both mode can add a second charge).'
+    }
+  },
+
+  // ---- Not in the form: FASTag 1.13 experimental options
+  label_call_min_tags: {
+    hidden: 'experimental 1.13 command-line option, not in the form (CLI default applies)',
+    depends: [{ on: 'label_out', note: 'only the label report uses it' }],
+    help: {
+      text: 'How many C-terminal tag ends the label call in the label report needs; with fewer it makes no call. The default 175 is the FASTag 1.12 call. At 0 every run with a ppm fragment tolerance gets a call, and with few tag ends a label-free call only means that none of the label rules fired (the mass-gap report can still show SILAC).',
+      tip: '0 is experimental: it failed its 1.13 held-out test.'
     }
   },
 
@@ -1158,7 +1233,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   label_discovery_out: {
     hidden: EXPERIMENTAL_LABEL_DISCOVERY,
     help: {
-      text: 'Write the label discovery report: every mass offset the tag flanks carry at the peptide N-terminus, at lysine, at arginine or at the C-terminus, known or not, explained by residues, the known labels or Unimod, with a provisional label call. Experimental, not validated on held-out data.'
+      text: 'Write the label discovery report: every mass offset the tag flanks carry at the peptide N-terminus, at lysine, at arginine or at the C-terminus, known or not, explained by residues, the known labels or Unimod, with a label call. Experimental: it failed its held-out test (6 of 150 label-free runs got a label call), so do not rely on it as free of false label calls.'
     }
   },
   label_discovery_depth: {

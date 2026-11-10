@@ -776,6 +776,17 @@ labels from the SDRF: dimethyl, acetyl, iTRAQ8, TMTpro, DiLeu if available, and 
 controls. It is scored once. Whether a change to `label_call` should read `ld_site` is decided
 on that result and nothing else.
 
+**Held-out result** (acceptance/1.13 `PREREG-labeldisc.md`; 190 runs, scored once on 2026-11-10):
+
+| Endpoint | Verdict | Result |
+|---|---|---|
+| P1: no label call on a label-free run | **FAIL** | 6 of 150 label-free runs got a label call (4.0 %) |
+| P2: at least as many runs right as "always label-free" | **FAIL** | 96/190 against 150/190 |
+| P3: at least as many runs right as `label_call` | **PASS** | 96/190 against 91/190 (sign test p = 0.33) |
+
+The report stays experimental and opt-in, and is not described as free of false label calls.
+`label_call` does not read `ld_site`.
+
 ## 14. Open points
 
 - Whether the K0f image (c = L_K, last residue K) is a real ion species or a tagging artefact.

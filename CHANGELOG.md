@@ -2,31 +2,70 @@
 
 ## Unreleased
 
-- **`-label_discovery_out` (experimental, opt-in, not validated on held-out
-  data):** database-free label discovery. Reports every N-terminal, K, R or
+- **Label call minimum (backlog #8): `-label_call_min_tags`, experimental,
+  default 175 (the 1.12 rule; no output change at the default).** At 0
+  `label_call` makes no `no_call few_tags` below 175 C-terminal tag ends:
+  every ppm run is called with the same isobaric and SILAC rules,
+  label-free when none fires (the harness's prose-auto 0.1.3 rule), and a
+  call from fewer than 175 ends says that label-free then means only that
+  no label rule fired. On the 193 development runs (in-sample) 0 gave
+  178/193 against 150/193 for the 1.12 rule and 159/193 for "always
+  label-free". Its preregistered held-out test (acceptance/1.13
+  PREREG-item08.md, 172 public runs) FAILED: 149/172 = 0.866 against the
+  threshold 0.922 ("always label-free" + 0.05; always label-free is 0.872);
+  the 1.12 rule gave 83/172. Per the preregistered decision rule the default
+  stays 175 and 0 stays experimental. With zero tag ends the SILAC test is
+  now skipped (no undefined heavy share); this is reachable only at a
+  minimum of 0.
+- **MSFragger configuration (backlog #18): `-search_engine msfragger`,
+  experimental, no held-out test.** `-search_config_out` writes a complete
+  `fragger.params` for MSFragger 4.4.1. MSFragger needs decoys in the
+  database: with `-fasta_out` FASTag appends reversed `rev_` decoys, without
+  it the input database must be a target-decoy database. `num_threads` is
+  `-threads`. `-search_shifts offsets` exports mass offsets (negative ones
+  included) on a ppm precursor window and is refused on a Da window, where
+  MSFragger 4.4.1 exits 1 on them. Sage and Comet configurations are
+  unchanged (doc/SHORTLIST.md, "MSFragger configuration").
+- **`-alkylation_tags_out`: held-out test PASS at the margin.** On 57 runs
+  from 57 PRIDE projects it called 40, 37 of them right (0.925, Wilson 95%
+  interval 0.801-0.974). It abstains on samples that are not alkylated; the
+  help text and the report's `alkt_run status` row now state the result.
+- **c/z• preprocessing: charge-reduced peaks re-filtered against the
+  precursor cut (issue T25).** Peaks were cut at the precursor (neutral mass
+  + proton + 1.5 Da) before deisotoping only, so a peak the deisotoper moved
+  to the 1+ scale could land above the cut and be tagged. Under
+  `-ion_series cz` (and `auto` on electron-activated spectra) such peaks are
+  now dropped after deisotoping. c/z• output can change; b/y output
+  (the default) is byte-identical to 1.12.
+- **Shipped proteomes (backlog item 24).** The bundles (CMake install, the
+  Linux, macOS and Windows release bundles and the Homebrew casks, which
+  install the macOS image) carry the reviewed entries of the UniProt 2026_04
+  reference proteomes of human, mouse, yeast and E. coli
+  (`share/FASTag/alkylation`, about 17 MB, CC BY 4.0). `-alkylation_proteome
+  auto|human|mouse|yeast|ecoli` now uses them instead of stopping with exit
+  code 6. The alkylation report gains a `database_release` row for a shipped
+  proteome; FASTag refuses a shipped file whose FASTA sha256 or entry count
+  differs from its manifest (exit 3). The shipped proteomes need
+  `-tag_length 8` (human, mouse) or 7 (yeast, E. coli): at the default no tag
+  places, the log warns, and the report gives the reason `tags_too_short` and
+  an `alk_run min_tag_length` row. Reports on `-recon_fasta`, `-fasta` or a
+  FASTA path are unchanged. `tools/fetch_proteomes.sh` regenerates the files.
+- **`-label_discovery_out` (experimental, opt-in; held-out test FAILED):**
+  database-free label discovery. Reports every N-terminal, K, R or
   C-terminal mass offset the tag flanks carry, known or not, explained by
-  residues, the known labels or Unimod, with a provisional label call
-  (format 1, doc/LABEL-DISCOVERY-REPORT.md; design
-  doc/DESIGN-label-discovery.md). Advanced options
-  `-label_discovery_max_flank`, `_depth`, `_min_spectra`, `_min_share`,
-  `_window_n`, `_window_c`, `_unimod_top` (`_max_flank` at most 1500 Da, as
-  the null image set's memory grows faster than linearly with it; the windows
-  at most 0.05 Da, so the half-integer background stays outside them). The thresholds are unfitted
-  priors. Every other output is byte-identical with the option off or on
-  (the `-out_spectra` provenance leaves the options out). On the probes: PXD004541 (TMT10)
-  `TMT+K:TMT`, PXD001587 (label-free) `label-free`.
-  Evaluation 2 revision (design section 16): null readings for the NH3 and
-  H2O losses of every unlabelled ion type and the precursor; a tiered
-  evidence bar (known label, Unimod label, unknown mass) set on a DEV half
-  only; iTRAQ8plex (as the range of its two compositions), dimethyl
-  light/medium/heavy, Lys4, Lys6 and Arg6 as known labels; a robust
-  calibration uncertainty. New `ld_site` keys `.tier`, `.relative_share`,
-  `.clean_share` and `ld_run` keys `tier<t>_*` (format 1 unchanged).
-  Scored once (acceptance/1.13 PREREG-labeldisc.md): false label calls on
-  4 of 79 label-free TEST runs and 6 of 150 held-out label-free runs (all
-  known labels, several probably unlisted in the SDRF; no unknown mass);
-  correct calls 96/190 held-out against label_call's 91 and the majority's
-  150 (no calls on few-spectra runs). The report stays experimental.
+  residues, the known labels (TMT, TMTpro, iTRAQ4/8, dimethyl, SILAC Lys4/6/8
+  and Arg6/10) or Unimod, with a label call (format 1,
+  doc/LABEL-DISCOVERY-REPORT.md; design doc/DESIGN-label-discovery.md).
+  Advanced options `-label_discovery_max_flank` (at most 1500 Da), `_depth`,
+  `_min_spectra`, `_min_share`, `_window_n`, `_window_c` (at most 0.05 Da)
+  and `_unimod_top`. Every other output is byte-identical with the option
+  off or on (the `-out_spectra` provenance leaves the options out).
+  Held-out, 190 public runs, scored once on 2026-11-10 (acceptance/1.13
+  PREREG-labeldisc.md): P1 FAIL, 6 of 150 label-free runs got a label call
+  (4.0 %; the criterion was 0); P2 FAIL, 96/190 runs right against 150/190
+  for "always label-free"; P3 PASS, 96 against 91 for `-label_out`'s
+  `label_call` (sign test p = 0.33). Do not rely on the call as free of
+  false label calls.
 
 ## 1.12.2 (2026-11-10)
 
@@ -60,6 +99,13 @@ options and the frozen acquisition-check thresholds are unchanged.
   the default stays `by`. The README now recommends `auto` or `cz` for ETD/ECD
   data. The ion-trap sets of the first preregistration were replaced by
   Orbitrap sets before any run.
+- **#7 raw-DIA check, release test E7-03: FAIL** (scored once on a fresh PRIDE
+  sample; the default stays `-acquisition_check refuse`). diaPASEF and Astral DIA
+  were refused 12/12 each, Orbitrap DIA 7/12 and SWATH 10/12 (< 90%); 8 of 202
+  must-pass files were refused (upper 95% bound 7.0%), all from Astral projects
+  labelled DDA; pseudo-DDA passed 37/37. A post-hoc reading that some of these are
+  label errors is a hypothesis, not a re-score (doc/ACQUISITION-RELEASE-TEST.md).
+  Override a wrong refusal with `-acquisition_check warn` or `off`.
 
 ## 1.12.1 (2026-11-08)
 

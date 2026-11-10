@@ -247,7 +247,7 @@ export function buildOverview(i: OverviewInputs): Overview {
             ? 'default, alkylation not assessed (mass-gap report not written)'
             : 'default, alkylation not assessed (no FASTA)'
     },
-    lab.state === 'call' && callOk
+    lab.state === 'call' && callOk && !(lab.weak && lab.label === 'label-free')
       ? { setting: 'label', value: labelMods(lab.label), evidence: 'call', note: `from the label call (${lab.label})${cutoffApplied ? '' : `; ${NOT_APPLIED}`}` }
       : {
           setting: 'label',
@@ -258,6 +258,8 @@ export function buildOverview(i: OverviewInputs): Overview {
               ? 'default; label report not written'
               : lab.state === 'not_called'
                 ? 'default; this FASTag makes no label call (FASTag 1.12 does)'
+                : lab.state === 'call' && lab.weak
+                ? `default; label-free from ${fmt(lab.ends)} C-terminal tag ends only (no label rule fired)`
                 : `default; no label call (${lab.state === 'no_call' ? lab.reason : 'too little evidence'})`
         },
     {

@@ -109,6 +109,15 @@ namespace FASTag::Digest
       for (std::size_t j = 0; j < 3 && j < seq.size(); ++j)
         if (const int a = aaIndex(seq[seq.size() - 1 - j]); a >= 0) ++pos[j + 1][static_cast<std::size_t>(a)];
     };
+    // 1.13 digqual: the same residues, by the residue at P1 (P1').
+    auto qhead = [&](std::array<std::uint64_t, kNumAA>& row) {
+      for (std::size_t j = 0; j < 3 && j < seq.size(); ++j)
+        if (const int a = aaIndex(seq[j]); a >= 0) ++row[static_cast<std::size_t>(a)];
+    };
+    auto qtail = [&](std::array<std::uint64_t, kNumAA>& row) {
+      for (std::size_t j = 0; j < 3 && j < seq.size(); ++j)
+        if (const int a = aaIndex(seq[seq.size() - 1 - j]); a >= 0) ++row[static_cast<std::size_t>(a)];
+    };
     const auto& keys = residueKeys();
     for (std::size_t k = 0; k < keys.size(); ++k)
     {
@@ -117,18 +126,18 @@ namespace FASTag::Digest
       if (near_(cterm, m))
       {
         ++c_near[k];
-        if (a >= 0) { ++cpos[0][static_cast<std::size_t>(a)]; tail(cpos); }
+        if (a >= 0) { ++cpos[0][static_cast<std::size_t>(a)]; tail(cpos); qtail(cq[static_cast<std::size_t>(a)]); }
       }
       // b/y (no offset given): 1.11's m + kH2O; c/z-dot: m + offC - offN.
       if (near_(nterm, m + kH2O))
       {
         ++n_h2o[k];
-        if (a >= 0) { ++cpos[0][static_cast<std::size_t>(a)]; head(cpos); }
+        if (a >= 0) { ++cpos[0][static_cast<std::size_t>(a)]; head(cpos); qhead(cq[static_cast<std::size_t>(a)]); }
       }
       if (near_(nterm, m))
       {
         ++n_near[k];
-        if (a >= 0) { ++npos[0][static_cast<std::size_t>(a)]; head(npos); }
+        if (a >= 0) { ++npos[0][static_cast<std::size_t>(a)]; head(npos); qhead(nq[static_cast<std::size_t>(a)]); }
       }
     }
     const auto& labs = labelKeys();
@@ -160,6 +169,7 @@ namespace FASTag::Digest
     add(lab_bg_n, o.lab_bg_n);
     add(lab_bg_c, o.lab_bg_c);
     for (std::size_t p = 0; p < 4; ++p) { add(cpos[p], o.cpos[p]); add(npos[p], o.npos[p]); }
+    for (std::size_t a = 0; a < cq.size(); ++a) { add(cq[a], o.cq[a]); add(nq[a], o.nq[a]); }  // 1.13 digqual
     if (o.bins_)
     {
       if (!bins_) { bins_ = o.bins_; dip.assign(o.dip.size(), 0); }
