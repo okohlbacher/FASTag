@@ -1006,7 +1006,8 @@ protected:
                           "'decoy' tests its count against a null of decoy tags (looked up like the "
                           "tags) plus the spill expected from stronger related taxa, and appends the "
                           "columns call, call_reason, decoy_spectra, decoy_expected, decoy_qvalue, "
-                          "share and lod. 'explain' (1.13, experimental) calls the taxa one at a time, "
+                          "share and lod. 'explain' (1.13, experimental; failed the recovery guard of its "
+                          "held-out test, doc/SPECIES-DETECTOR.md) calls the taxa one at a time, "
                           "strongest first, on their distinct tags in spectra that no taxon called before "
                           "explains, against the same count on the decoy tags; it appends the same columns "
                           "plus tags and unexplained_tags. 'none' = the ranked report only", false, true);

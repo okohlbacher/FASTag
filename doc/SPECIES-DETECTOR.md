@@ -292,9 +292,35 @@ not used.
 Limits. A taxon that is in the sample but not in the index is not explained by
 anything: its conserved tags can call the nearest indexed relative. Reagent and
 expression-host proteins (protease, Protein A, E. coli from a recombinant
-protein) are real material and are called. Development data only (36 FTMS runs
-of the 1.12 development set and the same runs against a shuffled-proteome
-index); no held-out test has been run, so the mode stays opt-in.
+protein) are real material and are called. Developed on 36 FTMS runs of the
+1.12 development set and the same runs against a shuffled-proteome index.
+
+Held-out result (1.13, branch `acc113r/species`: `PREREG-species-explain.md`,
+`species/results/summary.tsv`; 62 public runs, scored once): **FAIL**. The
+primary endpoint passes, the recovery guard fails.
+
+| | explain | decoy call | rule |
+|---|---|---|---|
+| False genus calls per run (primary) | 0.50 [0.29, 0.73] (31 calls in 19 runs) | 5.98 [4.68, 7.48] (371 calls) | upper bound <= 0.75: PASS |
+| Recovery of the genera in the truth (guard) | 38/105 = 0.362 | 77/105 = 0.733 | explain >= decoy - 0.05: FAIL |
+| of these: Sus or Bos | 3/68 | 41/68 | |
+
+"False" is the label under the frozen genus rule, not established absence.
+
+Scope: experimental selection of the sample organism among the 50 indexed
+genera (42 of 49 runs; wrong relative as only call in 2 of 37 confirmed
+runs); failed the recovery guard; a second organism or contaminant is not
+reported (Sus/Bos 3 of 68); organisms outside the index are usually reported
+as their nearest indexed relative (10 of 13 runs) or not at all; 12-fold
+fewer calls labelled false under the frozen genus rule.
+
+Post hoc reading of the spent runs, not a test result: of the 23 calls in the
+13 runs whose organism is outside the index, 14 name a nearest indexed
+relative, 6 name material that is in the sample (such as keratin or host
+protein) and 3 are unsupported.
+
+The mode stays opt-in and experimental; the default (`none`) and the decoy
+call are unchanged.
 
 ## Both tag orientations (`-species_orientation both`, opt-in, 1.12)
 

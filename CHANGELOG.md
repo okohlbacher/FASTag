@@ -17,6 +17,18 @@
   stays 175 and 0 stays experimental. With zero tag ends the SILAC test is
   now skipped (no undefined heavy share); this is reachable only at a
   minimum of 0.
+- **Explain-away species call: `-species_call explain`, experimental,
+  opt-in.** Calls the taxa one at a time on their distinct tags in spectra
+  that no taxon called before explains; the report has the columns of the
+  `decoy` call plus `tags` and `unexplained_tags`. The default (`none`) and
+  the `decoy` call are unchanged. Its preregistered held-out test
+  (`acc113r/species`, PREREG-species-explain.md, 62 public runs) FAILED: the
+  primary endpoint passes (0.50 false genus calls per run against 5.98 for
+  the decoy call), the guard fails (recovery 38/105 against 77/105; Sus or
+  Bos 3/68 against 41/68). Scope: selection of the sample organism among
+  the 50 indexed genera (42 of 49 runs); a second organism or contaminant
+  is not reported; organisms outside the index are usually reported as
+  their nearest indexed relative (10 of 13 runs) or not at all.
 - **c/z• preprocessing: charge-reduced peaks re-filtered against the
   precursor cut (issue T25).** Peaks were cut at the precursor (neutral mass
   + proton + 1.5 Da) before deisotoping only, so a peak the deisotoper moved
