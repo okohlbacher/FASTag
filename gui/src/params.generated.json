@@ -676,7 +676,7 @@
       "name": "label_discovery_out",
       "type": "output-file",
       "default": "",
-      "description": "Experimental: report every terminal or lysine mass offset the tag flanks carry, known or not, explained by residues, the known labels or Unimod, and a provisional label call (not validated on held-out data; format in doc/LABEL-DISCOVERY-REPORT.md)",
+      "description": "Experimental: report every terminal or lysine mass offset the tag flanks carry, known or not, explained by residues, the known labels or Unimod, and a label call (failed its held-out test: 6 of 150 label-free runs got a label call; format in doc/LABEL-DISCOVERY-REPORT.md)",
       "required": false,
       "toppAdvanced": false,
       "formats": [
