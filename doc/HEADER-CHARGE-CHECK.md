@@ -39,7 +39,8 @@ Otherwise the complement call decides:
 - `warn` tags every spectrum at `h`, exactly as `off` does. It writes one summary line per run (a WARN when anything
   disagrees) with the counts by verdict and by evidence kind, and the moves (e.g. `2+ -> 3+: 20`). The reports that
   carry the run rows of format 5 (census summary, alkylation report) gain the run rows `check_header_charge` and
-  `header_charge_agree|disagree|ambiguous|nocall|both`. Every other output is byte-identical to `off`.
+  `header_charge_agree|disagree|ambiguous|nocall|both`. Every other output is byte-identical to `off`, except that the parameter record of an `-out_spectra` mzML
+  names the options (`check_header_charge`, `check_header_out`), which also shifts its index offsets.
 - `both` tags a `disagree` spectrum twice: at `h` (`charge_src` `header`, `selected` 1) and at the charge the check
   found (`charge_src` `check_call`, `selected` 0); the m/z is unchanged. The tag TSV gains the four hypothesis
   columns (`prec_charge`, `charge_src`, `iso_offset`, `selected`, as under `-unknown_charge`). The E-values of a
