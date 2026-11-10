@@ -53,6 +53,8 @@ version. Their format is owned by RunMeta and numbered by
 | `format` | `1`, the format of the `alk_*` and `alkylation_call` sections | `-` |
 | `database` | path of the FASTA the placements are on | `-` |
 | `database_source` | `recon_fasta`, `fasta` (the run's placement database), `proteome` (an `-alkylation_proteome` FASTA) or `bundled:<name>` (`human`, `mouse`, `yeast`, `ecoli`) | `-` |
+| `database_release` | only for `bundled:<name>` with a `proteomes.tsv` beside it (1.13): `UniProt <release> <proteome> (taxon <id>, reviewed, <n> entries, FASTA sha256 <hash>)`, the hash being the manifest's `fasta_sha256`, which the FASTA read was checked against before the run; absent otherwise, so a report on a FASTA path is that of 1.12 | `-` |
+| `min_tag_length` | only with `database_release` (1.13): the reconciler's minimum tag length on the database (`-recon_min_length`, else derived from its size); shorter tags do not place | the run's longest tag (seed length + 2 x `-extension`) |
 | `fixed_c_delta` | the run's fixed modification mass on C in Da (`0` without one); reagent mass = gap + this | `-` |
 | `fixed_nterm_delta` | the run's fixed peptide N-terminal modification mass in Da (a TMT or iTRAQ label; `0` without one), taken off an N-side gap first | `-` |
 | `fixed_cterm_delta` | the same for a fixed peptide C-terminal modification | `-` |
@@ -107,13 +109,16 @@ and without Met oxidation (+15.995) must fall into one class.
 | `reagent` | the class: `Carbamidomethyl`, `Propionamide`, `Nethylmaleimide`, `Methylthio`, `Carboxymethyl` or `none` | `-` | spectra of the class (call) or `-` |
 | `mass` | the reagent's mass on C in Da; `-` for `none` | `-` | `-` |
 | `share` | class spectra / binned spectra | the leading class's share, `-` when nothing is binned | binned spectra |
-| `reason` | `-` | `few_cys_spectra` or `ambiguous` | `-` |
+| `reason` | `-` | `few_cys_spectra`, `ambiguous` or (shipped proteome only, 1.13) `tags_too_short` | `-` |
 
 Rule: the class with the most binned spectra is called when the binned spectra
 and its own spectra are both at least `min_spectra` and its share is at least
 `min_share`. Fewer binned spectra than `min_spectra` is `few_cys_spectra`; a
 tie for the lead, or a leader short of `min_spectra` or `min_share`, is
-`ambiguous`.
+`ambiguous`. On a shipped proteome (1.13), a no_call whose longest tag is
+shorter than `alk_run min_tag_length` is `tags_too_short` instead: no tag could
+place, which says nothing about the run's Cys spectra. The other database
+sources keep the 1.12 reasons (and the log warns there too).
 
 A reader that only wants the call reads `alkylation_call status`, `reagent`
 and `share`, and `alk_run database_source` for the caveat.
@@ -137,7 +142,7 @@ and `share`, and `alk_run database_source` for the caveat.
 | option | default | |
 |---|---|---|
 | `-alkylation_out <tsv>` | off | the report; refused with `-stream`, guarded against overwriting inputs and other outputs |
-| `-alkylation_proteome` | `auto` | database without `-recon_fasta`/placement readers: `auto` (= `human`), `human`, `mouse`, `yeast`, `ecoli` (shipped, `<bin>/../share/FASTag/alkylation/<name>.fasta.gz` or `$FASTAG_ALKYLATION_DIR`), or a FASTA file (`.gz` allowed). Ignored with a warning when `-recon_fasta` is given or another placement reader runs |
+| `-alkylation_proteome` | `auto` | database without `-recon_fasta`/placement readers: `auto` (= `human`), `human`, `mouse`, `yeast`, `ecoli` (shipped UniProt 2026_04 reference proteomes, reviewed entries: `<bin>/../share/FASTag/alkylation/<name>.fasta.gz` or `$FASTAG_ALKYLATION_DIR`; see Shipped proteomes), or a FASTA file (`.gz` allowed). Ignored with a warning when `-recon_fasta` is given or another placement reader runs |
 | `-alkylation_min_spectra` | 10 | |
 | `-alkylation_min_share` | 0.6 | |
 | `-alkylation_window` | 0 (= 0.02 Da on ppm runs, 0.5 Da on Da runs) | |
@@ -180,25 +185,92 @@ Recorded here so the integrator of D#3g finds them beside the format:
 
 ## Shipped proteomes
 
-PLAN-organism-chemistry #3g decides that the human, mouse, yeast and E. coli
-UniProt reference proteomes (UP000005640, UP000000589, UP000002311,
-UP000000625, CC BY 4.0, about 15 MB) ship in `data/alkylation/` with a README
-(release, sha256, licence notice) and a BOM.md row. They are not in the
-repository yet: fetching them from UniProt needs the user's approval. Until
-they are added, `-alkylation_proteome auto` and the named values refuse with a
-clear message; `-recon_fasta` or a FASTA path works. CMake installs them only
-together with `data/alkylation/README.md` (a drop without it is a configure
-error). digest_cli_test checks the installed-path lookup with a gzip it makes
-itself.
+Since 1.13 (backlog item 24) FASTag ships the reviewed (Swiss-Prot) entries of
+four UniProt reference proteomes, release 2026_04, in `data/alkylation/`,
+installed to `share/FASTag/alkylation` (flat release layout:
+`share-FASTag-alkylation`, beside `share-FASTag-digest`):
+
+| name | proteome | taxon | entries | gz size |
+|---|---|---|---|---|
+| `human` (`auto`) | UP000005640 | 9606 | 20,414 | 7.5 MB |
+| `mouse` | UP000000589 | 10090 | 17,279 | 6.6 MB |
+| `yeast` | UP000002311 | 559292 | 6,067 | 2.0 MB |
+| `ecoli` | UP000000625 | 83333 | 4,403 | 1.0 MB |
+
+`tools/fetch_proteomes.sh <dir>` downloads them from the UniProt REST API and
+writes `proteomes.tsv` (name, proteome, taxon, release, release_date, entries,
+sha256 of the `.gz`, sha256 of the FASTA, file). `data/alkylation/README.md`
+records the release, the hashes and the CC BY 4.0 notice; BOM.md has the row.
+
+Lookup: `$FASTAG_ALKYLATION_DIR`, else the directory `alkylation` beside the
+digest data directory (`$FASTAG_DIGEST_DIR`, `<bin>/../share/FASTag/digest`,
+`<bin>/share-FASTag-digest` or `<bin>/digest`). When the directory holds
+`proteomes.tsv`, the name's row gives the file, and FASTag
+
+- refuses a manifest without a valid row for the name (the nine columns, a
+  positive entry count, a release, a plain file name, one row per name) with
+  exit code 3 (INPUT_FILE_CORRUPT);
+- reads the file and refuses it with exit code 3, before any output is
+  written, when the sha256 of the FASTA read (the decompressed bytes) differs
+  from the row's `fasta_sha256`, or its entry count from the row's `entries`
+  (a truncated, edited or replaced file). The check is on the FASTA, not the
+  `.gz`: a recompressed but unchanged file passes. The `.gz` sha256 (`sha256`)
+  is recorded for the download and checked by `proteomes_cli_test`, not at run
+  time;
+- writes the `database_release` and `min_tag_length` rows.
+
+Tag length: the reconciler derives a minimum tag length from the database
+size (`Recon index: ... min tag length N (derived)` in the log): 8 on the
+shipped human and mouse proteomes, 7 on yeast and E. coli. Shorter tags are not
+placed, so at the default `-tag_length` a run on a shipped proteome places
+nothing: the log warns at startup (`no tag will place and there will be no
+call. Give -tag_length N or more`), the report's `alk_run min_tag_length` row
+gives N and the run's longest tag, and the call is `no_call` with reason
+`tags_too_short`. Give `-tag_length 8` (human, mouse) or `-tag_length 7` (yeast,
+E. coli).
+Measured on data with `-tag_length 8` (1.13 branch build): PXD014764
+(`20190412_KEH_HF_SA_ANW_R11_100419_CNOT_R1_f008`) 636 spectra with a single-Cys placement (`alk_run spectra`),
+call Carbamidomethyl, share 0.937; PXD003531
+(`20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01`) 1,065, Carbamidomethyl,
+0.667. Both reports equal those on the same FASTA given as a path, apart from
+the `database*` rows.
+
+A directory without `proteomes.tsv` (one's own `FASTAG_ALKYLATION_DIR`) is
+read as in 1.12: `<name>.fasta.gz`, no `database_release` row. A missing file
+still stops with exit code 6 (ILLEGAL_PARAMETERS) and the message
+`no shipped <name> proteome found`; that is now only the case for a build or
+copy without `share/FASTag/alkylation`.
+
+The names apply to `-alkylation_proteome` only. `-recon_fasta` stays a FASTA
+file parameter: accepting names there would change its registered type (the
+TOPP existence check, the INI/CTD and the GUI file picker) and every reader of
+that database (shortlist, digest background, mass gaps), which is not part of
+this item. The shipped files are gzip-compressed, and the `-recon_fasta`
+readers read plain FASTA only.
+
+`proteomes_cli_test` checks the manifest against the files (hashes, entries,
+every header a reviewed entry of the taxon, a known protein each), resolves
+every name in the installed and the flat layout and through
+`FASTAG_ALKYLATION_DIR`, and checks the refusals (truncated, one residue
+edited with the entry count kept, entry count wrong, invalid row) and that a
+recompressed unchanged file is accepted, and the `tags_too_short` reason at
+`-tag_length 4`. CI checks the shipped Linux and Windows bundles with
+`-alkylation_out` at the default `auto` (it must resolve the shipped human
+proteome and report `tags_too_short`) and with `-alkylation_proteome ecoli
+-tag_length 8` (0.5 Da) on the E. coli example, where the placements (the `n`
+of the `alk_cys excluded.*` rows) must be above 0: tags place on the shipped
+file. That example is too small for single-Cys votes at length 8 (115
+placements, `alk_run spectra` 0; at length 7, 194 placements and 2 spectra).
 
 ## `-alkylation_tags_out` (1.13, database-free, format 1)
 
 Backlog #22, src/AlkylationTags.h. This report tries the same call without a
 protein database. It is opt-in and experimental. On development data it calls
 61 of 123 runs, 51 of them as the SDRF annotation states (see "Development
-result" below); unalkylated and low-resolution runs are rarely called, and
-there is no held-out test yet. The report says so in `alkt_run.status` and in
-the `alkylation_tags_call.status` description. With the option off nothing
+result" below); unalkylated and low-resolution runs are rarely called. A
+held-out test followed and passed at the margin (see "Held-out result" below).
+The report's `alkt_run.status` row and the `alkylation_tags_call.status`
+description were written before that test and still say that there is none. With the option off nothing
 runs and no output changes. With it on, the tag TSV and every other result file
 are byte-identical, with two exceptions: the log gains one line, and an
 `-out_spectra` mzML records `parameter: alkylation_tags_out`, as it records
@@ -302,6 +374,31 @@ Limits: of the 17 runs annotated none, 1 is called none and 15 get no call
 (an unalkylated run reads about 0.5 unmodified and 0.2 CAM, the G + C twin).
 Runs with a fragment tolerance of 0.3 Da give flat votes and no call. The 62
 no-calls are 45 `ambiguous` and 17 `few_cys_spectra`.
+
+**Held-out result.** 57 held-out runs, one from each of 57 PRIDE projects
+(30 carbamidomethyl, 15 another reagent, 12 not alkylated), with
+`-tag_length 4 -extension 6`, 20 ppm and the default thresholds; protocol
+`acceptance/1.13/PREREG-alknodb.md`. 40 of the 57 runs are called and 37 of
+the calls are right: accuracy among calls 0.925, Wilson 95 % interval 0.801 to
+0.974. The preregistered criterion (at least 30 calls, lower end of the
+interval at least 0.80) is met, at the margin: one more wrong call would not
+have met it. Every run gave a report.
+
+| truth | runs | called | right |
+|---|---|---|---|
+| Carbamidomethyl | 30 | 26 | 25 |
+| other reagent | 15 | 12 | 11 |
+| not alkylated | 12 | 2 | 1 |
+
+Limits of this result:
+- The truth is the text of the PRIDE project record, not the paper and not a
+  measurement.
+- 9 of the 12 not-alkylated truths are inferred (a complete protocol without
+  an alkylation step and a search without fixed modifications), not stated.
+- The method abstains on samples that are not alkylated: 2 of 12 are called,
+  1 of them as `none`. It does not confirm the absence of alkylation.
+- Only Thermo data-dependent runs with high-resolution MS2 (Orbitrap, Astral)
+  were tested; timsTOF and other TOF data were not.
 
 **Cost.** One more tagging of every MS2 spectrum. The alphabet has five more
 residues and no gap edges.

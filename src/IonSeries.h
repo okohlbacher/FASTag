@@ -17,8 +17,33 @@
 // (b/y 0, c/z-dot +H = 1.007825). A tag is spelled from residue differences,
 // which do not depend on the series; only its flanking masses, the complement
 // partner and the reversed-read offset offC - offN (+18.0106 for b/y,
-// -15.0347 for c/z-dot) do. Hybrid by+cz and a/x ions are deferred
-// (PLAN-data-types E9).
+// -15.0347 for c/z-dot) do. Hybrid by+cz: see 1.13 item 10 below.
+//
+// a/x (1.13 backlog item 11, -ion_series ax): offN -CO (OpenMS a ion,
+// Residue::getInternalToAIon), offC CO2 (x ion, getInternalToXIon); it
+// loses no charge, and its reversed offset is CO2 + CO = +71.984744. The
+// even-electron a and x sum to M - 2H (compl_delta -2.015650), but no single
+// Calpha-C cleavage yields that pair: mass is conserved, so its two
+// fragments sum to M (the radical pair a+1/x+1) or, after one hydrogen
+// moves off, to M - H (a+1/x or a/x+1). The complement test therefore looks
+// for partners at M - H and M (IonPair::compl_deltas {-H, 0}), never at
+// M - 2H. Photodissociation (UVPD) yields a, a+1, b, x, x+1, y and y-1 ions;
+// a tag spelled from an a+1 or x+1 ladder has flanks 1.007825 Da off the
+// even-electron offsets used here. -ion_series ax reads every spectrum
+// as a/x; under auto, -ion_series_photo ax reads a spectrum as a/x when its
+// activation is photodissociation (PSI-MS MS:1000435, which both mzML
+// readers map to PHD, or a Thermo filter token @uvpd) and nothing else
+// classifies it. The default -ion_series_photo by keeps auto as in 1.12.
+//
+// Hybrid EThcD/ETciD (1.13 backlog item 10, -ion_series_hybrid both): a
+// hybrid spectrum carries b/y and c/z-dot ions together, and no one ion pair
+// gives its tags the right flanks. Under auto with -ion_series_hybrid both,
+// each hybrid spectrum is tagged twice, once as b/y and once as c/z-dot, with
+// every E-value multiplied by kHybridPasses (two readings were tested, as for
+// precursor hypotheses), and the two row lists are merged by E-value under one
+// cap (FASTag::mergeSeriesPasses). Every row keeps the series it was read as
+// (Tag::ion_series), and every consumer takes its offsets from that row. The
+// default -ion_series_hybrid by keeps 1.12's auto (hybrid as b/y, a WARN).
 //
 // Classes:
 //   collisional  CID (MS:1000133), HCD (MS:1000422), trap-type CID
@@ -50,6 +75,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace FASTag::IonSeries
 {
@@ -160,11 +186,15 @@ namespace FASTag::IonSeries
   struct ActivationCounts
   {
     std::array<std::size_t, kActivationClasses> n{};
+    /// Photo-activated spectra (photoActivated()), a part of the unknown
+    /// ones: no message of 1.12 reads it (1.13 item 11).
+    std::size_t photo = 0;
 
     void add(Activation a) { ++n[static_cast<std::size_t>(a)]; }
     void merge(const ActivationCounts& o)
     {
       for (std::size_t i = 0; i < kActivationClasses; ++i) n[i] += o.n[i];
+      photo += o.photo;
     }
     std::size_t of(Activation a) const { return n[static_cast<std::size_t>(a)]; }
     std::size_t total() const
@@ -203,9 +233,19 @@ namespace FASTag::IonSeries
   {
     BY = 0,  ///< b/y: FASTag 1.11, collisional activation
     CZ = 1,  ///< c/z-dot (z+1 radical): electron activation (ETD, ECD)
+    AX = 2,  ///< a/x: photodissociation (UVPD), 1.13 backlog item 11
   };
 
-  inline const char* seriesName(Series s) { return s == Series::CZ ? "cz" : "by"; }
+  inline const char* seriesName(Series s)
+  {
+    switch (s)
+    {
+      case Series::CZ: return "cz";
+      case Series::AX: return "ax";
+      case Series::BY: break;
+    }
+    return "by";
+  }
 
   /// One N-/C-terminal ion pair (see the file comment); ionPair() fills it.
   /// The b/y consumers (tagger flanks, TagRecon, Digest) keep FASTag 1.11's
@@ -217,7 +257,12 @@ namespace FASTag::IonSeries
     Series kind = Series::BY;
     double offN = std::numeric_limits<double>::quiet_NaN();  ///< N-terminal ion neutral mass minus its residues
     double offC = std::numeric_limits<double>::quiet_NaN();  ///< C-terminal ion neutral mass minus its residues
-    double compl_delta = 0.0;   ///< offN + offC - H2O: the pair's neutral masses sum to M + this
+    double compl_delta = 0.0;   ///< offN + offC - H2O: the even-electron ions' neutral masses sum to M + this
+    /// The complement test's partner sums (ComplementSpec::pair_deltas): a
+    /// cleavage pair's neutral masses sum to M + one of these. b/y {0} and
+    /// c/z-dot {+H} are {compl_delta}; a/x is {-H, 0} (a+1/x or a/x+1, and
+    /// a+1/x+1), since the even-electron a/x sum M - 2H is no cleavage pair.
+    std::vector<double> compl_deltas{0.0};
     /// Charges the precursor loses on the way to the pair: 0 for b/y; 1 for
     /// c/z-dot, since [M+cH]^c+ takes up one electron and its c and z-dot
     /// fragments share c - 1 charges (the complement's precursor rule).
@@ -241,12 +286,22 @@ namespace FASTag::IonSeries
       p.offC = Residue::getInternalToZp1Ion().getMonoWeight();
       p.charge_loss = 1;
     }
+    else if (s == Series::AX)
+    {
+      // a = b - CO, x = y + CO - H2: photodissociation of the Calpha-C bond.
+      // No electron is taken up, so the pair shares the precursor's charges.
+      p.offN = Residue::getInternalToAIon().getMonoWeight();
+      p.offC = Residue::getInternalToXIon().getMonoWeight();
+    }
     else
     {
       p.offN = Residue::getInternalToBIon().getMonoWeight();
       p.offC = Residue::getInternalToYIon().getMonoWeight();
     }
     p.compl_delta = s == Series::BY ? 0.0 : p.offN + p.offC - kWater;
+    static const double kH = OpenMS::EmpiricalFormula("H").getMonoWeight();
+    if (s == Series::AX) p.compl_deltas = {-kH, 0.0};
+    else p.compl_deltas = {p.compl_delta};
     return p;
   }
 
@@ -256,14 +311,16 @@ namespace FASTag::IonSeries
     By,    ///< every spectrum as b/y (FASTag 1.11; the default)
     Cz,    ///< every spectrum as c/z-dot
     Auto,  ///< electron-activated spectra as c/z-dot, all others as b/y
+    Ax,    ///< every spectrum as a/x (1.13 item 11)
   };
   inline constexpr const char* kModeDefault = "by";
-  inline constexpr const char* kModeValues = "by,cz,auto";
+  inline constexpr const char* kModeValues = "by,cz,auto,ax";
 
   inline Mode modeFromString(std::string_view s)
   {
     if (s == "cz") return Mode::Cz;
     if (s == "auto") return Mode::Auto;
+    if (s == "ax") return Mode::Ax;
     return Mode::By;
   }
 
@@ -273,18 +330,82 @@ namespace FASTag::IonSeries
     {
       case Mode::Cz: return "cz";
       case Mode::Auto: return "auto";
+      case Mode::Ax: return "ax";
       case Mode::By: break;
     }
     return "by";
   }
 
+  /// -ion_series_photo (1.13 item 11): what -ion_series auto reads a
+  /// photodissociation spectrum as. by (the default) is 1.12's auto.
+  inline constexpr const char* kPhotoDefault = "by";
+  inline constexpr const char* kPhotoValues = "by,ax";
+
+  /// Whether a precursor's methods or a Thermo filter string say
+  /// photodissociation: PHD (MS:1000435) among the methods, or an @uvpd token.
+  inline bool photoMethod(const std::set<OpenMS::Precursor::ActivationMethod>& methods)
+  {
+    return methods.count(OpenMS::Precursor::ActivationMethod::PHD) != 0;
+  }
+  inline bool photoFilter(std::string_view filter)
+  {
+    for (std::size_t at = filter.find('@'); at != std::string_view::npos; at = filter.find('@', at + 1))
+    {
+      std::string tok;
+      for (std::size_t i = at + 1; i < filter.size(); ++i)
+      {
+        char c = filter[i];
+        if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+        if (c < 'a' || c > 'z') break;
+        tok += c;
+      }
+      if (tok == "uvpd") return true;
+    }
+    return false;
+  }
+
+  /// Whether one MS2 spectrum is photo-activated: its class is unknown (no
+  /// collisional, electron or hybrid method or token: those keep their
+  /// reading) and its first precursor lists photodissociation, or its filter
+  /// string has an @uvpd token. MGF and mzPeak carry no activation.
+  inline bool photoActivated(const OpenMS::MSSpectrum& spec)
+  {
+    if (activationClass(spec) != Activation::Unknown) return false;
+    if (!spec.getPrecursors().empty() && photoMethod(spec.getPrecursors().front().getActivationMethods())) return true;
+    return spec.metaValueExists("filter string") && photoFilter(spec.getMetaValue("filter string").toString());
+  }
+
+  /// -ion_series_hybrid (1.13 item 10): what -ion_series auto does with a
+  /// hybrid (EThcD, ETciD) spectrum: by (the default, 1.12's auto) or both
+  /// (a b/y and a c/z-dot pass, merged per row).
+  inline constexpr const char* kHybridDefault = "by";
+  inline constexpr const char* kHybridValues = "by,both";
+  /// The E-value factor of a two-pass hybrid reading: two series tested.
+  inline constexpr double kHybridPasses = 2.0;
+
+  /// Whether a spectrum of class @p a is read in two passes (b/y and c/z-dot)
+  /// in a run under @p m with -ion_series_hybrid both (@p hybrid_both) whose
+  /// tag TSV carries the ion_series column iff @p run_column. As with
+  /// seriesInRun(), c/z rows only in a run with the column.
+  inline bool hybridTwoPass(Mode m, Activation a, bool run_column, bool hybrid_both)
+  {
+    return m == Mode::Auto && hybrid_both && a == Activation::Hybrid && run_column;
+  }
+
   /// The series a spectrum of activation class @p a is read as under @p m.
   /// auto reads electron activation as c/z-dot and everything else -- hybrid
-  /// (by+cz is deferred), collisional and unknown -- as b/y.
-  inline Series seriesFor(Mode m, Activation a)
+  /// (unless -ion_series_hybrid both: hybridTwoPass()), collisional and
+  /// unknown -- as b/y.
+  ///
+  /// 1.13 item 11: ax reads every spectrum as a/x; auto reads a spectrum as
+  /// a/x when @p photo_ax, i.e. it is photo-activated (photoActivated(), an
+  /// unknown class) and -ion_series_photo is ax.
+  inline Series seriesFor(Mode m, Activation a, bool photo_ax = false)
   {
     if (m == Mode::Cz) return Series::CZ;
+    if (m == Mode::Ax) return Series::AX;
     if (m == Mode::Auto && a == Activation::Electron) return Series::CZ;
+    if (m == Mode::Auto && photo_ax && a == Activation::Unknown) return Series::AX;
     return Series::BY;
   }
 
@@ -292,10 +413,16 @@ namespace FASTag::IonSeries
   /// c/z: then the tag TSV (and the census) carry an ion_series column. Under
   /// by never; under cz always; under auto when some spectrum is electron
   /// activated, so a collisional run's outputs stay those of by.
-  inline bool seriesColumn(Mode m, const ActivationCounts& c)
+  /// 1.13 item 11: under ax always; under auto with -ion_series_photo ax
+  /// (@p photo_ax) also when some spectrum is photo-activated.
+  /// 1.13 item 10: under auto with -ion_series_hybrid both (@p hybrid_both)
+  /// also when some spectrum is hybrid activated.
+  inline bool seriesColumn(Mode m, const ActivationCounts& c, bool photo_ax = false, bool hybrid_both = false)
   {
-    if (m == Mode::Cz) return true;
-    return m == Mode::Auto && c.of(Activation::Electron) > 0;
+    if (m == Mode::Cz || m == Mode::Ax) return true;
+    return m == Mode::Auto
+        && (c.of(Activation::Electron) > 0 || (photo_ax && c.photo > 0)
+            || (hybrid_both && c.of(Activation::Hybrid) > 0));
   }
 
   /// Whether -ion_series auto reads the activation of an input: mzML yes;
@@ -311,10 +438,10 @@ namespace FASTag::IonSeries
   /// column rule did not foresee (an input auto does not read the activation
   /// of, autoReadsActivation()) is read as b/y and counted (SeriesCounts::
   /// auto_by_no_column).
-  inline Series seriesInRun(Mode m, Activation a, bool run_column)
+  inline Series seriesInRun(Mode m, Activation a, bool run_column, bool photo_ax = false)
   {
-    const Series s = seriesFor(m, a);
-    return s == Series::CZ && !run_column ? Series::BY : s;
+    const Series s = seriesFor(m, a, photo_ax);
+    return s != Series::BY && !run_column ? Series::BY : s;
   }
 
   /// Per-run (or per-thread) phase B counts: MS2 spectra tagged per series,
@@ -323,6 +450,10 @@ namespace FASTag::IonSeries
   struct SeriesCounts
   {
     std::size_t ms2_by = 0, ms2_cz = 0;
+    std::size_t ms2_ax = 0;  ///< 1.13 item 11
+    /// 1.13 item 10: MS2 read in two passes (b/y and c/z-dot), counted in
+    /// neither ms2_by nor ms2_cz.
+    std::size_t ms2_hybrid = 0;
     std::size_t species_excluded = 0;  ///< c/z rows -species did not count
     /// MS2 that seriesFor() reads as c/z but seriesInRun() read as b/y: the
     /// run writes no ion_series column (auto on mzPeak or MGF input).
@@ -331,6 +462,8 @@ namespace FASTag::IonSeries
     {
       ms2_by += o.ms2_by;
       ms2_cz += o.ms2_cz;
+      ms2_ax += o.ms2_ax;
+      ms2_hybrid += o.ms2_hybrid;
       species_excluded += o.species_excluded;
       auto_by_no_column += o.auto_by_no_column;
     }
@@ -338,13 +471,42 @@ namespace FASTag::IonSeries
 
   /// The stderr INFO line of a run under auto or cz. It starts with "Ion
   /// series", so it can never match gate.sh's summary-line pattern.
-  inline std::string seriesInfo(Mode m, const SeriesCounts& s, const ActivationCounts& c)
+  inline std::string seriesInfo(Mode m, const SeriesCounts& s, const ActivationCounts& c, bool photo_ax = false,
+                                bool hybrid_both = false)
   {
     const auto n = [](std::size_t v) { return std::to_string(v); };
+    // 1.13 item 11: a run that can read a/x (ax, or auto with
+    // -ion_series_photo ax: @p photo_ax) also names its a/x spectra and the
+    // photo-activated ones; every other run's line is 1.12's.
+    const bool ax = m == Mode::Ax || (m == Mode::Auto && photo_ax);
     return std::string("Ion series (-ion_series ") + modeName(m) + "): " + n(s.ms2_cz)
-         + " MS2 spectra tagged as c/z-dot ions, " + n(s.ms2_by) + " as b/y ions (activation: "
+         + " MS2 spectra tagged as c/z-dot ions, " + n(s.ms2_by) + " as b/y ions"
+         + (ax ? ", " + n(s.ms2_ax) + " as a/x ions" : std::string())
+         // 1.13 item 10: only under auto with -ion_series_hybrid both.
+         + (m == Mode::Auto && hybrid_both ? ", " + n(s.ms2_hybrid) + " as b/y and c/z-dot ions (hybrid, two passes)"
+                                           : std::string())
+         + " (activation: "
          + n(c.of(Activation::Collisional)) + " collisional, " + n(c.of(Activation::Electron)) + " electron, "
-         + n(c.of(Activation::Hybrid)) + " hybrid, " + n(c.of(Activation::Unknown)) + " unknown).";
+         + n(c.of(Activation::Hybrid)) + " hybrid, " + n(c.of(Activation::Unknown)) + " unknown"
+         + (ax ? ", of them " + n(c.photo) + " photodissociation" : std::string()) + ").";
+  }
+
+  /// ax reads every spectrum as a/x: warn when more than 1% of the MS2
+  /// spectra have a collisional, electron or hybrid activation (1.13 item 11).
+  inline bool warnClassifiedUnderAx(const ActivationCounts& c)
+  {
+    const std::size_t k = c.of(Activation::Collisional) + c.of(Activation::Electron) + c.of(Activation::Hybrid);
+    return k > 0 && 100 * k > c.total();
+  }
+
+  inline std::string classifiedAxWarning(const ActivationCounts& c)
+  {
+    const std::size_t k = c.of(Activation::Collisional) + c.of(Activation::Electron) + c.of(Activation::Hybrid);
+    return "Activation: " + std::to_string(k) + " of " + std::to_string(c.total())
+         + " MS2 spectra were activated by collision (CID, HCD), electron transfer or capture (ETD, ECD) or a hybrid "
+           "method, which yield b/y or c/z ions, but -ion_series ax reads every spectrum as a/x ions; use -ion_series "
+           "auto -ion_series_photo ax to read only photodissociation spectra as a/x (a UVPD source that records its "
+           "spectra as HCD, such as a retrofitted HCD cell, also warns here).";
   }
 
   /// auto reads hybrid spectra as b/y: warn when more than 1% are hybrid.
@@ -383,6 +545,13 @@ namespace FASTag::IonSeries
     return "Ion series: " + std::to_string(n)
          + " electron-activated MS2 spectra were tagged as b/y ions: -ion_series auto reads the activation of mzML "
            "input only and writes no ion_series column here; use -ion_series cz to read them as c/z-dot ions.";
+  }
+
+  /// An a/x tag that -species left out (1.13 item 11): the warning.
+  inline std::string speciesExcludedAxWarning(std::size_t n)
+  {
+    return "Ion series: " + std::to_string(n)
+         + " tag rows read as a/x ions were left out of -species, which counts b/y tags only.";
   }
 
   /// A c/z tag that -species left out (it reads b/y tags only): the warning.

@@ -132,12 +132,59 @@ tr -d '\r' < "$TMP/label.tsv" | awk -F'\t' -v n="$(tr -d '\r' < "$TMP/label.tsv"
   || fail "-label_out: label_call is not the last five rows status, label, basis, silac, reason"
 [ "$(val "$TMP/label.tsv" label_call status) $(val "$TMP/label.tsv" label_call reason)" = "no_call low_resolution" ] \
   || fail "label_call: a Da run is not no_call low_resolution"
-# a ppm run: few_tags exactly when the digest counts fewer than 175 C-terminal tag ends
+# a ppm run (1.13, backlog #8): at the default -label_call_min_tags 175 (the 1.12 rule) few_tags below 175
+# C-terminal tag ends; called at -label_call_min_tags 0 (experimental), whatever its tag ends; few_tags
+# exactly when -label_call_min_tags exceeds the digest's C-terminal tag ends (count tot)
 run -in "$IN" -tag_length 4 -out "$TMP/p.tsv" -digest_out "$TMP/pdigest.tsv" -label_out "$TMP/plabel.tsv"
 ptot=$(val "$TMP/pdigest.tsv" count tot)
-pcall="$(val "$TMP/plabel.tsv" label_call status) $(val "$TMP/plabel.tsv" label_call reason)"
-if [ "$ptot" -lt 175 ]; then [ "$pcall" = "no_call few_tags" ] || fail "label_call: $ptot tag ends at 20 ppm gave '$pcall'"
-else [ "$pcall" = "call -" ] || fail "label_call: $ptot tag ends at 20 ppm gave '$pcall'"; fi
+case "$ptot" in ''|*[!0-9]*) fail "label_call: no count tot in the digest report ('$ptot')" ;; esac
+# The fixture must stay below 175 ends (it has 0 at 20 ppm): only there do 0 and the 1.12 rule differ,
+# so only there can this test see a CLI default changed away from 175.
+[ "$ptot" -lt 175 ] || fail "label_call: the ppm fixture now has $ptot >= 175 tag ends; the default test would be vacuous"
+lcall() { echo "$(val "$1" label_call status) $(val "$1" label_call reason)"; }
+pcall=$(lcall "$TMP/plabel.tsv")
+[ "$pcall" = "no_call few_tags" ] || fail "label_call: $ptot tag ends at 20 ppm and the default minimum 175 gave '$pcall'"
+# the default writes the 1.12.0 -label_out byte for byte, descriptions included
+# (test/fixtures/label_1.12.0_Ecoli_MS2_small_ppm.tsv: the 1.12.0 RC a117801 on the same command), the
+# run version row aside; so does an explicit -label_call_min_tags 175
+nover_label() { tr -d '\r' < "$1" | awk -F'\t' '!($1 == "run" && $2 == "version")'; }
+nover_label "$FIX/label_1.12.0_Ecoli_MS2_small_ppm.tsv" > "$TMP/plabel_112.cmp"
+nover_label "$TMP/plabel.tsv" > "$TMP/plabel_def.cmp"
+same "$TMP/plabel_112.cmp" "$TMP/plabel_def.cmp" "the default -label_out is not the 1.12.0 -label_out"
+run -in "$IN" -tag_length 4 -out "$TMP/p3.tsv" -label_out "$TMP/plabel_175.tsv" -label_call_min_tags 175
+nover_label "$TMP/plabel_175.tsv" > "$TMP/plabel_175.cmp"
+same "$TMP/plabel_112.cmp" "$TMP/plabel_175.cmp" "-label_call_min_tags 175 is not the 1.12.0 -label_out"
+# -label_call_min_tags 0: a call, with the weak-evidence sentence below 175 ends
+run -in "$IN" -tag_length 4 -out "$TMP/p0.tsv" -label_out "$TMP/plabel0.tsv" -label_call_min_tags 0
+[ "$(lcall "$TMP/plabel0.tsv")" = "call -" ] || fail "label_call: $ptot tag ends at -label_call_min_tags 0 gave '$(lcall "$TMP/plabel0.tsv")'"
+tr -d '\r' < "$TMP/plabel0.tsv" | awk -F'\t' '$1 == "label_call" && $2 == "status"' | grep -q "fewer than 175" \
+  || fail "label_call: a call from $ptot (< 175) tag ends lacks the weak-evidence sentence"
+run -in "$IN" -tag_length 4 -out "$TMP/p1.tsv" -label_out "$TMP/plabel_eq.tsv" -label_call_min_tags "$ptot"
+[ "$(lcall "$TMP/plabel_eq.tsv")" = "call -" ] || fail "label_call: -label_call_min_tags $ptot (= tot) gave '$(lcall "$TMP/plabel_eq.tsv")'"
+run -in "$IN" -tag_length 4 -out "$TMP/p2.tsv" -digest_out "$TMP/pdigest_gt.tsv" -label_out "$TMP/plabel_gt.tsv" \
+  -label_call_min_tags "$((ptot + 1))"
+same "$TMP/pdigest.tsv" "$TMP/pdigest_gt.tsv" "-label_call_min_tags changed -digest_out"
+[ "$(lcall "$TMP/plabel_gt.tsv")" = "no_call few_tags" ] \
+  || fail "label_call: -label_call_min_tags $((ptot + 1)) (> tot $ptot) gave '$(lcall "$TMP/plabel_gt.tsv")'"
+tr -d '\r' < "$TMP/plabel_gt.tsv" | awk -F'\t' '$1 == "label_call" && $2 == "status"' | grep -q "fewer than $((ptot + 1))" \
+  || fail "label_call: the few_tags row does not name -label_call_min_tags $((ptot + 1))"
+# only the label_call rows depend on the minimum
+legacy "$TMP/plabel.tsv" > "$TMP/plabel.old"
+for f in plabel0 plabel_eq plabel_gt; do
+  legacy "$TMP/$f.tsv" > "$TMP/$f.old"
+  same "$TMP/plabel.old" "$TMP/$f.old" "-label_call_min_tags changed rows before label_call"
+done
+same "$TMP/p.tsv" "$TMP/p0.tsv" "-label_call_min_tags 0 changed the tags"
+same "$TMP/p.tsv" "$TMP/p2.tsv" "-label_call_min_tags changed the tags"
+# a Da run is low_resolution at any minimum
+run "${COMMON[@]}" -out "$TMP/d0.tsv" -fixed_modifications -label_out "$TMP/dlabel0.tsv" -label_call_min_tags 0
+[ "$(lcall "$TMP/dlabel0.tsv")" = "no_call low_resolution" ] || fail "label_call: a Da run at minimum 0 is not low_resolution"
+# refused below 0; warned and ignored without -label_out
+"$BIN" -in "$IN" -tag_length 4 -out "$TMP/pn.tsv" -label_out "$TMP/pn.label" -label_call_min_tags -1 > "$TMP/log" 2>&1 \
+  && fail "-label_call_min_tags -1 was accepted"
+"$BIN" -in "$IN" -tag_length 4 -out "$TMP/pw.tsv" -label_call_min_tags 10 > "$TMP/log" 2>&1 \
+  || fail "-label_call_min_tags without -label_out was refused"
+grep -q -- "-label_call_min_tags is only read for -label_out" "$TMP/log" || fail "no warning for -label_call_min_tags"
 # label_call reads the tag ends only: the same with and without -recon_out/-massgap_out, at 1, 2 and 3
 # threads (all with R's empty -fixed_modifications, which changes the tags themselves)
 run "${COMMON[@]}" -out "$TMP/l0.tsv" -fixed_modifications -label_out "$TMP/label0.tsv"
@@ -515,9 +562,10 @@ done
 "$BIN" "${COMMON[@]}" -out "$TMP/x.tsv" -alkylation_out "$TMP/x9.tsv" -alkylation_proteome zebrafish > "$TMP/log" 2>&1 \
   && fail "an unknown -alkylation_proteome was accepted"
 grep -q "is neither auto" "$TMP/log" || fail "no message for an unknown -alkylation_proteome"
-# 1.12.0 ships no proteomes: without -recon_fasta or a FASTA path, the default auto and every
-# name stop with ILLEGAL_PARAMETERS (exit 6) before any output opens. An empty
-# FASTAG_ALKYLATION_DIR stands for a release install, so the check holds in any tree.
+# Without a shipped proteome (1.12.0, or a build or copy without share/FASTag/alkylation;
+# 1.13 ships them, see proteomes_cli_test): without -recon_fasta or a FASTA path, the
+# default auto and every name stop with ILLEGAL_PARAMETERS (exit 6) before any output
+# opens. An empty FASTAG_ALKYLATION_DIR stands for such an install, so the check holds in any tree.
 mkdir -p "$TMP/alk_empty" "$TMP/noprot"
 for prot in default auto human mouse yeast ecoli zebrafish; do
   printf 'sentinel\n' > "$TMP/noprot/tags.tsv"
