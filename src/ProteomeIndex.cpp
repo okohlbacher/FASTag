@@ -9,6 +9,7 @@
 #include <OpenMS/CHEMISTRY/ResidueDB.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <limits>
 #include <tuple>
@@ -290,6 +291,58 @@ namespace FASTag
         out.push_back({bounds_[s].first, bounds_[e].first});
       }
     }
+  }
+
+  void ProteomeIndex::windowsByMass(uint32_t pos, uint32_t len, const std::vector<double>& want_n,
+                                    const std::vector<double>& want_c, double tol,
+                                    std::vector<Window>& out) const
+  {
+    if (want_n.empty() || want_c.empty() || pos + len > text_.size()) return;
+    for (uint32_t k = pos; k < pos + len; ++k)
+      if (text_[k] == RESIDUE_AMBIG) return;
+    const auto max_of = [](const std::vector<double>& v) {
+      double m = v.front();
+      for (double x : v) m = std::max(m, x);
+      return m;
+    };
+    const auto hit = [tol](const std::vector<double>& v, double m) {
+      for (double x : v)
+        if (std::fabs(m - x) <= tol) return true;
+      return false;
+    };
+    // Starts: walk left from pos while the N-side mass can still reach a
+    // wanted one; the segment ends at a sentinel or an ambiguity residue.
+    std::vector<uint32_t> starts, ends;
+    const double lim_n = max_of(want_n) + tol, lim_c = max_of(want_c) + tol;
+    double m = 0.0;
+    for (uint32_t s = pos;; --s)
+    {
+      if (s < pos) m += mass_[static_cast<unsigned char>(text_[s])];
+      if (m > lim_n) break;
+      if (hit(want_n, m)) starts.push_back(s);
+      if (s == 0 || text_[s - 1] == RESIDUE_AMBIG) break;
+    }
+    m = 0.0;
+    for (uint32_t e = pos + len; e <= text_.size(); ++e)
+    {
+      if (e > pos + len) m += mass_[static_cast<unsigned char>(text_[e - 1])];
+      if (m > lim_c) break;
+      if (hit(want_c, m)) ends.push_back(e);
+      if (e == text_.size() || text_[e] == RESIDUE_AMBIG) break;
+    }
+    std::reverse(starts.begin(), starts.end());
+    for (uint32_t s : starts)
+      for (uint32_t e : ends)
+        if (e > s) out.push_back({s, e});
+  }
+
+  std::string ProteomeIndex::proteinText(uint32_t i) const
+  {
+    const uint32_t from = starts_[i];
+    std::string s = originalText(from, from + proteinLength(i));
+    for (char& c : s)
+      if (c == RESIDUE_AMBIG) c = 'X';
+    return s;
   }
 
   std::string ProteomeIndex::originalText(uint32_t from, uint32_t to) const

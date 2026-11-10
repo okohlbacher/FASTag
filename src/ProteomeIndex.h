@@ -71,6 +71,21 @@ namespace FASTag
     void windowsAt(uint32_t pos, uint32_t len, int missed_cleavages,
                    std::vector<Window>& out) const;
 
+    /// 1.13 item 20: windows by mass instead of by cleavage site. Every
+    /// window [s, e) around [pos, pos+len) whose N-side mass (text [s, pos))
+    /// is within @p tol of one of @p want_n and whose C-side mass (text
+    /// [pos+len, e)) is within @p tol of one of @p want_c, inside one
+    /// sentinel- and ambiguity-free segment. A candidate set for tryPlace,
+    /// which judges each flank at its own tolerance; ascending (start, end),
+    /// no duplicates. Appends to @p out.
+    void windowsByMass(uint32_t pos, uint32_t len, const std::vector<double>& want_n,
+                       const std::vector<double>& want_c, double tol, std::vector<Window>& out) const;
+
+    /// The database sequence of protein @p i as the index keeps it (original
+    /// spelling, ambiguity residues as 'X'), so text position
+    /// starts + k is residue k (proteinOffset's coordinates).
+    std::string proteinText(uint32_t i) const;
+
     /// Sum of (fixed-mod-adjusted) residue masses over text [from, to).
     double massBetween(uint32_t from, uint32_t to) const
     {

@@ -418,6 +418,10 @@ namespace FASTag::Digest
     int tag_min = 100;
     double background_share = 0.05;
     int silac_min = 50;
+    /// -label_call_min_tags: C-terminal tag ends a label_call needs (1.13,
+    /// backlog #8). The default 175 (kLabelTagMin) is the 1.12 rule; 0
+    /// (experimental) calls every ppm run.
+    int label_min_tags = 175;
     bool low_resolution = false;               ///< fragment tolerance in Da
     std::string models = "shipped", background = "shipped_human";
     bool background_pseudocount = false;       ///< one count added per residue of the FASTA
@@ -538,8 +542,12 @@ namespace FASTag::Digest
   // result, so -massgap_out cannot change it.
   //   - no_call low_resolution: the fragment tolerance is in Da (prose-auto
   //     runs the termini only on ppm runs);
-  //   - no_call few_tags: fewer than kLabelTagMin C-terminal tag ends
-  //     (tot(), prose-auto's TAG_MIN);
+  //   - no_call few_tags: fewer than DigestSettings::label_min_tags
+  //     C-terminal tag ends (tot()). The default kLabelTagMin (175,
+  //     prose-auto 0.1.10's TAG_MIN) is the 1.12 rule; 0 (experimental,
+  //     FASTag 1.13, backlog #8) calls every ppm run, as the harness's
+  //     prose-auto 0.1.3 rule does. A call from fewer than kLabelTagMin ends
+  //     says so;
   //   - an isobaric label (labelKeys() order) when its count reaches
   //     kLabelMinShare of the filtered tags AND kLabelBackgroundFold times
   //     max(its +0.5 Da background, 1);
@@ -550,7 +558,7 @@ namespace FASTag::Digest
   //     strong when both shares are >= kHeavyStrong;
   //   - every label that passes is listed (isobaric first); none is
   //     label-free.
-  inline constexpr std::uint64_t kLabelTagMin = 175;
+  inline constexpr std::uint64_t kLabelTagMin = 175;  // = DigestSettings::label_min_tags' default
   inline constexpr double kLabelMinShare = 0.01, kLabelBackgroundFold = 20.0;
   inline constexpr double kHeavyMin = 0.2, kHeavyStrong = 0.3, kKrTryptic = 0.8;
 

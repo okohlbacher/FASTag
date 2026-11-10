@@ -18,7 +18,9 @@ position j, cterm_mass = prefix mass before j minus H2O and nterm_mass = suffix 
 Ion series (FASTag 1.12 #15 phase B, -ion_series cz|auto): a tag read as c/z-dot ions carries
 `ion_series` = cz in the tag TSV. Its forward reads use the same residue-sum convention; its
 reversed (c-ion) reads carry the offset offC - offN = (H2O - NH2) - NH3 = -15.034708 instead of
-+H2O (`REVERSED_OFFSET`). A TSV without the column is b/y throughout.
++H2O (`REVERSED_OFFSET`). A TSV without the column is b/y throughout. A tag read as a/x ions
+(FASTag 1.13, -ion_series ax, or auto with -ion_series_photo ax) carries `ion_series` = ax; its
+reversed (a-ion) reads carry offC - offN = CO2 - (-CO) = +71.984744.
 """
 from __future__ import annotations
 
@@ -68,7 +70,9 @@ RESIDUE_MASS = {
 WATER = 18.010565
 # Reversed-read flank offset per ion series (offC - offN; FASTag src/IonSeries.h, OpenMS
 # Residue::getInternalTo{B,Y,C,Zp1}Ion): b/y one water, c/z-dot H2O - NH2 - NH3.
-REVERSED_OFFSET = {"by": WATER, "cz": 1.991841 - 17.026549}
+# a/x (FASTag 1.13 item 11, -ion_series ax): x = residues + CO2, a = residues - CO (OpenMS
+# Residue::getInternalTo{X,A}Ion), offC - offN = CO2 + CO = 71.984744.
+REVERSED_OFFSET = {"by": WATER, "cz": 1.991841 - 17.026549, "ax": 43.989829 + 27.994915}
 FLANK_TOL = 0.05
 RULES = ("flank", "sequence")
 _TOKEN = re.compile(r"([A-Z])((?:\[[^\]]*\])*)")
