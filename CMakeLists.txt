@@ -277,7 +277,9 @@ if(FASTAG_BUILD_TESTS)
   set(FASTAG_UNIT_TESTS_D species_call_test digest_v2_test alkylation_test)
   # ---- 1.12 F: unit tests ----
   set(FASTAG_UNIT_TESTS_F output_guard_test census_test census_ids_test)
-  foreach(t ${FASTAG_UNIT_TESTS} ${FASTAG_UNIT_TESTS_E} ${FASTAG_UNIT_TESTS_A} ${FASTAG_UNIT_TESTS_D} ${FASTAG_UNIT_TESTS_F})
+  # ---- 1.13: unit tests ----
+  set(FASTAG_UNIT_TESTS_113 complement_tol_test)
+  foreach(t ${FASTAG_UNIT_TESTS} ${FASTAG_UNIT_TESTS_E} ${FASTAG_UNIT_TESTS_A} ${FASTAG_UNIT_TESTS_D} ${FASTAG_UNIT_TESTS_F} ${FASTAG_UNIT_TESTS_113})
     add_executable(${t} test/${t}.cpp)
     target_link_libraries(${t} PRIVATE fastag_core)
     add_test(NAME ${t} COMMAND ${t})
@@ -452,6 +454,12 @@ if(FASTAG_BUILD_TESTS)
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/complement_cli_test.sh $<TARGET_FILE:FASTag>
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML)
   set_tests_properties(complement_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # 1.13 item 15: -complement_tolerance_unit auto measures the window on the
+  # run and reaches the tags exactly as that window given in Da would.
+  add_test(NAME complement_tol_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/complement_tol_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures)
+  set_tests_properties(complement_tol_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # #15 phase A: activation counts and the b/y warning on derived ETD, EThcD
   # and filter-string fixtures; tags unchanged; fast reader equals OnDisc.
   # Phase B: -ion_series by|cz|auto (by == absent, auto on collisional ==

@@ -22,6 +22,8 @@
 #   - ax on the CID source warns (classified activation); -ion_series_photo
 #     without auto warns that it is ignored; -stream refuses it;
 #   - threads 1/3/8 identical under ax;
+#   - -complement_tolerance_unit auto probes a/x spectra as a/x (more
+#     complement pairs than the b/y probe; auto + photo ax equals ax);
 #   - -species leaves a/x rows out and says how many (with buildtaxdb).
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
@@ -170,6 +172,21 @@ for t in 3 8; do
   cmp -s "$TMP/th1.tsv" "$TMP/th$t.tsv" || fail "ax: tags differ at $t threads"
   cmp -s "$TMP/th1.recon.tsv" "$TMP/th$t.recon.tsv" || fail "ax: recon differs at $t threads"
 done
+
+# ---- -complement_tolerance_unit auto (1.13 item 15) probes a/x spectra as a/x ----
+# The probe reads each spectrum as the tagging pass does: under ax, and under
+# auto + -ion_series_photo ax, the UVPD spectra are probed as a/x and give
+# more complement pairs than the same probe read as b/y.
+probe_pairs() {  # <name>: the probe's pair count from its stderr line
+  sed -n 's/^Complement tolerance (auto): .* confident tags, \([0-9]*\) pairs within .*/\1/p' "$TMP/$1.err"
+}
+runb ct_by "$TMP/syn_uvpd.mzML" 2 -ion_series by -complement_tolerance_unit auto
+runb ct_ax "$TMP/syn_uvpd.mzML" 2 -ion_series ax -complement_tolerance_unit auto
+runb ct_ph "$TMP/syn_uvpd.mzML" 2 -ion_series auto -ion_series_photo ax -complement_tolerance_unit auto
+pb=$(probe_pairs ct_by); pa=$(probe_pairs ct_ax); pp=$(probe_pairs ct_ph)
+[ -n "$pb" ] && [ -n "$pa" ] && [ -n "$pp" ] || { cat "$TMP/ct_ax.err" >&2; fail "compltol auto: no probe line"; }
+[ "$pa" -gt "$pb" ] || fail "compltol auto: the a/x probe has no more pairs ($pa) than the b/y probe ($pb); a/x spectra probed as b/y?"
+[ "$pp" = "$pa" ] || fail "compltol auto: auto + photo ax probe pairs ($pp) differ from ax ($pa)"
 
 # ---- -species counts b/y tags only ----
 if [ -n "$BUILDTAXDB" ] && [ -n "$TAXDIR" ]; then
