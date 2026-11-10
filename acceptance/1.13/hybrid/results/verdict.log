@@ -1,0 +1,12 @@
+  project  runs  truth_spectra  clusters  by_pct  both_pct  diff_pp  by_precision  both_precision  precision_diff_pp  by_tags_per_spectrum  both_tags_per_spectrum  by_rank1_pct  both_rank1_pct  both_correct_rows_by  both_correct_rows_cz  spectra_gained  spectra_lost  by_cpu_s  both_cpu_s  by_wall_s  both_wall_s
+PXD007058     2           7175      3367  47.080    75.261   28.181         3.908           9.975              6.067                 1.180                   3.545        18.160          40.878                  7022                 18412            2076            54     5.980       7.340      1.530        1.150
+PXD027504     1            200       147  54.500    99.500   45.000         4.826          27.206             22.380                 2.340                  13.505        21.500          90.500                   329                  2372              90             0     3.360       6.070      0.570        0.840
+PXD065289     2          14299      8887  40.828    78.845   38.017         3.449           9.380              5.931                 0.941                   3.155        11.218          46.912                 10259                 34860            5660           224    13.050      18.750      2.910        2.770
+PXD066033     2           6205      2206  36.680    93.038   56.358         3.280          20.550             17.270                 1.533                   9.919         9.106          68.896                  6146                 55400            3512            15    22.060      38.860      3.320        5.090
+PXD070310     2           1152       813  50.174    98.438   48.264         5.437          25.455             20.018                 2.655                  12.648        17.101          83.767                  2252                 12319             557             1     9.850      15.800      1.540        2.190
+criterion                                               value                                          threshold verdict
+        P +43.16 pp [+41.27, +45.13]; worst project +28.18 pp lower bound > +1.0 pp and no project below -1.0 pp    PASS
+       G1                                           +14.33 pp                                         >= -1.0 pp    PASS
+       G2                                                1.60                                             <= 2.0    PASS
+ projects                                                   5                                               >= 4      ok
+VERDICT_RC=0

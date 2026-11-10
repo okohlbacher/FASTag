@@ -1,0 +1,31 @@
+Modifications: Carbamidomethyl (C, fixed)
+22096 MS2 spectra, 219135 tags
+FASTag took 0.70 s (wall), 2.99 s (CPU), 0.74 s (system), 2.25 s (user); Peak Memory Usage: 79 MB.
+FASTAG_RC=0
+'/scratch/kohlbach/b113/hybrid/heldout/PXD007058/SF_200217_U2OS_TiO2_EThcD_OT_rep2.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 30584 spectra by scanning it instead (0.03 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1333 repeat gaps, cycle 271, 2662 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Ion series (-ion_series auto): 0 MS2 spectra tagged as c/z-dot ions, 22096 as b/y ions (activation: 0 collisional, 0 electron, 22096 hybrid, 0 unknown).
+Hybrid activation: 22096 of 22096 MS2 spectra were activated by a hybrid method (EThcD, ETciD) and were tagged as b/y ions under -ion_series auto; reading them as b/y and c/z ions together is not supported yet.
+	Command being timed: "/scratch/kohlbach/b113/hybrid/frozen/FASTag -in /scratch/kohlbach/b113/hybrid/heldout/PXD007058/SF_200217_U2OS_TiO2_EThcD_OT_rep2.mzML -out tags.tsv -threads 8 -ion_series auto"
+	User time (seconds): 2.28
+	System time (seconds): 0.76
+	Percent of CPU this job got: 395%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:00.77
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 81008
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 4
+	Minor (reclaiming a frame) page faults: 33924
+	Voluntary context switches: 153
+	Involuntary context switches: 17
+	Swaps: 0
+	File system inputs: 1440425
+	File system outputs: 42234
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

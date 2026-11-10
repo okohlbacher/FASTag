@@ -1,0 +1,5 @@
+criterion	value	threshold	verdict
+P	+43.16 pp [+41.27, +45.13]; worst project +28.18 pp	lower bound > +1.0 pp and no project below -1.0 pp	PASS
+G1	+14.33 pp	>= -1.0 pp	PASS
+G2	1.60	<= 2.0	PASS
+projects	5	>= 4	ok

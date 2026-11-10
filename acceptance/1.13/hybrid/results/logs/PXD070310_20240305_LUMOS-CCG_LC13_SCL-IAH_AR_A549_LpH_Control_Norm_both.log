@@ -1,0 +1,30 @@
+Modifications: Carbamidomethyl (C, fixed)
+4095 MS2 spectra, 180691 tags
+FASTag took 1.16 s (wall), 8.84 s (CPU), 0.37 s (system), 8.47 s (user); Peak Memory Usage: 93 MB.
+FASTAG_RC=0
+'/scratch/kohlbach/b113/hybrid/heldout/PXD070310/20240305_LUMOS-CCG_LC13_SCL-IAH_AR_A549_LpH_Control_Norm.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 7010 spectra by scanning it instead (0.02 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.04 over 1254 repeat gaps, cycle 2, 2644 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Ion series (-ion_series auto): 0 MS2 spectra tagged as c/z-dot ions, 0 as b/y ions, 4095 as b/y and c/z-dot ions (hybrid, two passes) (activation: 0 collisional, 0 electron, 4095 hybrid, 0 unknown).
+	Command being timed: "/scratch/kohlbach/b113/hybrid/frozen/FASTag -in /scratch/kohlbach/b113/hybrid/heldout/PXD070310/20240305_LUMOS-CCG_LC13_SCL-IAH_AR_A549_LpH_Control_Norm.mzML -out tags.tsv -threads 8 -ion_series auto -ion_series_hybrid both"
+	User time (seconds): 8.50
+	System time (seconds): 0.39
+	Percent of CPU this job got: 722%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:01.23
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 95580
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 4
+	Minor (reclaiming a frame) page faults: 52241
+	Voluntary context switches: 279
+	Involuntary context switches: 19
+	Swaps: 0
+	File system inputs: 668206
+	File system outputs: 35953
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
