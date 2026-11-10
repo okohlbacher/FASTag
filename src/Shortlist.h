@@ -171,6 +171,7 @@ namespace FASTag::Shortlist
   {
     bool ok = false;
     std::size_t entries = 0;  ///< entries written (database plus background)
+    std::size_t decoys = 0;   ///< reversed decoys appended (@p decoy_prefix set)
     std::string error;
   };
 
@@ -182,9 +183,14 @@ namespace FASTag::Shortlist
   /// to a .part file and renamed only when every write and the close
   /// succeeded. A database with a different number of entries than @p keep is
   /// an error (the file changed during the run).
+  /// With @p decoy_prefix (1.13 #18, MSFragger, which generates no decoys)
+  /// every written entry is followed, after all of them, by a decoy in the
+  /// same order: identifier @p decoy_prefix + identifier, the same
+  /// description, the sequence reversed whole (DecoyDatabase -method
+  /// reverse; Philosopher). Empty: no decoys, the file as before.
   FastaWriteResult writeReducedFasta(const std::string& db_path, const std::vector<bool>& keep,
                                      const std::vector<OpenMS::FASTAFile::FASTAEntry>& background,
-                                     const std::string& out_path);
+                                     const std::string& out_path, const std::string& decoy_prefix = std::string());
 
   /// The protease check before the hand-off writers. The placement index is
   /// tryptic (ProteomeIndex), so a shortlist from a run digested otherwise

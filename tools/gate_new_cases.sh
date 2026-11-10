@@ -175,7 +175,9 @@ digest_case() { # in the case directory; $1 = exit code (as gate.sh)
   local rc=$1 f
   echo "summary $(grep -m1 -E '^[0-9]+ MS2 spectra, [0-9]+ tags' run.log || echo MISSING)"
   echo "exit $rc"
-  for f in $(ls | sort); do
+  # C collation: the line order must not depend on the caller's locale
+  # (en_US.UTF-8 sorts tags.census_summary.tsv before tags.census.tsv, C after).
+  for f in $(LC_ALL=C ls | LC_ALL=C sort); do
     [ -d "$f" ] && continue  # a comparison run of the case (etd_auto by/)
     case $f in
       run.log|time.txt) ;;
@@ -183,8 +185,12 @@ digest_case() { # in the case directory; $1 = exit code (as gate.sh)
         echo "mzml $f masked=$(sed -E -e 's/(name="completion time" value=")[^"]*"/\1MASKED"/' \
               -e 's/(<software id="so_dp_[^"]*" version=")[^"]*"/\1MASKED"/' "$f" | sha256sum | cut -d' ' -f1)" ;;
       # The input directory is masked: -digest_out names its background FASTA
-      # by path, so the digest would otherwise depend on GATE_NEW_IN.
-      *) echo "file $f $(sed "s|$IN_RE|<GATE_NEW_IN>|g" "$f" | sha256sum | cut -d' ' -f1)" ;;
+      # by path, so the digest would otherwise depend on GATE_NEW_IN. So is the
+      # version of the RunMeta "run version" row of the reports (as gate.sh masks
+      # the mzML software version), so a version bump alone does not move them.
+      *) echo "file $f $(sed "s|$IN_RE|<GATE_NEW_IN>|g" "$f" \
+              | sed -E 's/^(run\tversion\t)[^\t]*(\t-\tFASTag )[^ ]*( wrote this report\.)$/\1MASKED\2MASKED\3/' \
+              | sha256sum | cut -d' ' -f1)" ;;
     esac
   done
   # Not compared: what picking did, for the reader of a failing diff.
@@ -200,7 +206,7 @@ run_case() { # $1 case, $2 case dir; writes the digest to stdout, sets rc and th
       echo "exit $rc"
       echo "refused $(grep -m1 '^FASTAG_REFUSED ' "$d/run.log" || echo MISSING)"
       echo "sentinel tags.tsv $(sha256sum "$d/tags.tsv" | cut -d' ' -f1)"
-      echo "files $(cd "$d" && ls | grep -v -x -e run.log -e tags.tsv -e time.txt | tr '\n' ' ')"
+      echo "files $(cd "$d" && LC_ALL=C ls | grep -v -x -e run.log -e tags.tsv -e time.txt | tr '\n' ' ')"
       echo "advice $(grep -c 'DIAspeXtract -in ' "$d/run.log")"
       [ $rc = 11 ] && rc=0 ;;  # the expected outcome
     pseudo_pass) # #7: passes, tags equal to -acquisition_check off

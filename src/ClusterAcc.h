@@ -22,6 +22,7 @@
 #pragma once
 
 #include "AlkylationCall.h"
+#include "AlkylationTags.h"
 #include "Centroid.h"
 #include "IonSeries.h"
 #include "PrecursorHypotheses.h"
@@ -87,7 +88,12 @@ namespace FASTag::ClusterAcc
   struct ThreadD
   {
     Alkylation::Tally alk;
-    void merge(const ThreadD& o) { alk.merge(o.alk); }
+    AlkylationTags::Tally alkt;  ///< 1.13 #22: -alkylation_tags_out (shadow tags)
+    void merge(const ThreadD& o)
+    {
+      alk.merge(o.alk);
+      alkt.merge(o.alkt);
+    }
   };
   struct BlockD
   {

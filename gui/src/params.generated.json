@@ -56,9 +56,20 @@
       "name": "alkylation_proteome",
       "type": "string",
       "default": "auto",
-      "description": "Database of -alkylation_out without -recon_fasta: a FASTA file (.gz allowed). The names auto (= human), human, mouse, yeast and ecoli stand for shipped proteomes, which 1.12.0 does not ship: they stop with exit code 6, so give a FASTA file here or -recon_fasta",
+      "description": "Database of -alkylation_out without -recon_fasta: a FASTA file (.gz allowed). The names auto (= human), human, mouse, yeast and ecoli stand for the shipped UniProt reference proteomes (reviewed entries; share/FASTag/alkylation, release in its proteomes.tsv). Tags place on them from 8 residues (human, mouse) or 7 (yeast, ecoli): give -tag_length 8 or 7, at the default no tag places and there is no call (reason tags_too_short)",
       "required": false,
       "toppAdvanced": true
+    },
+    {
+      "name": "alkylation_tags_out",
+      "type": "output-file",
+      "default": "",
+      "description": "Experimental (61 of 123 development runs called, 51 as annotated; no held-out test; unalkylated runs are rarely called): report which reagent alkylated the cysteines (or none) without a database, from a second tagging pass with unmodified C and one alternative C edge per reagent (Carbamidomethyl, Propionamide, Nethylmaleimide, Methylthio, Carboxymethyl): votes per C form inside tags and the call. Use with -extension (measured with -tag_length 4 -extension 6): without it few spectra vote",
+      "required": false,
+      "toppAdvanced": true,
+      "formats": [
+        "tsv"
+      ]
     },
     {
       "name": "alkylation_window",
@@ -201,6 +212,15 @@
       "toppAdvanced": true
     },
     {
+      "name": "complement_probe",
+      "type": "int",
+      "default": "500",
+      "description": "MS2 spectra the -complement_tolerance_unit auto probe tags to measure the complement window",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 1
+    },
+    {
       "name": "complement_rule",
       "type": "string",
       "default": "same_charge",
@@ -235,12 +255,13 @@
       "name": "complement_tolerance_unit",
       "type": "string",
       "default": "Da",
-      "description": "Da: the window is -complement_tolerance. fragment: -complement_tol_factor scales the run's -fragment_tolerance at both partners",
+      "description": "Da: the window is -complement_tolerance. fragment: -complement_tol_factor scales the run's -fragment_tolerance at both partners. auto (experimental): the window is measured on the run, from the complement pairs of high-confidence tags in a probe of -complement_probe MS2 spectra; -complement_tolerance when too few pairs",
       "required": false,
       "toppAdvanced": true,
       "choices": [
         "Da",
-        "fragment"
+        "fragment",
+        "auto"
       ]
     },
     {
@@ -350,6 +371,14 @@
       "formats": [
         "tsv"
       ]
+    },
+    {
+      "name": "digest_quality",
+      "type": "string",
+      "default": "",
+      "description": "Append missed-cleavage and non-specific-end measurements for this enzyme to -digest_out: a model name of the protease table (e.g. Trypsin) or 'auto' (the report's call). Experimental; empty = off",
+      "required": false,
+      "toppAdvanced": true
     },
     {
       "name": "digest_silac_min",
@@ -547,6 +576,18 @@
         "cz",
         "auto",
         "ax"
+      ]
+    },
+    {
+      "name": "ion_series_hybrid",
+      "type": "string",
+      "default": "by",
+      "description": "Under -ion_series auto: how hybrid-activated spectra (EThcD, ETciD) are read: by (b/y ions, as before 1.13) or both (tagged twice, as b/y and as c/z-dot ions; the rows of both passes merged by E-value under one -max_tags cap, every E-value multiplied by 2, each row with its ion_series). mzML input only. Experimental",
+      "required": false,
+      "toppAdvanced": true,
+      "choices": [
+        "by",
+        "both"
       ]
     },
     {
@@ -927,7 +968,7 @@
       "name": "search_config_out",
       "type": "output-file",
       "default": "",
-      "description": "Search-engine configuration for -fasta_out (or the input database): Sage JSON, or Comet parameters (merged into -search_config_template when given)",
+      "description": "Search-engine configuration for -fasta_out (or the input database): Sage JSON, Comet parameters (merged into -search_config_template when given), or a complete MSFragger fragger.params",
       "required": false,
       "toppAdvanced": false
     },
@@ -943,7 +984,7 @@
       "name": "search_decoy_prefix",
       "type": "string",
       "default": "",
-      "description": "Decoy prefix the engine generates; empty = rev_ (Sage) or DECOY_ (Comet)",
+      "description": "Decoy prefix the engine generates; empty = rev_ (Sage, MSFragger) or DECOY_ (Comet)",
       "required": false,
       "toppAdvanced": false
     },
@@ -951,12 +992,13 @@
       "name": "search_engine",
       "type": "string",
       "default": "sage",
-      "description": "Engine of -search_config_out",
+      "description": "Engine of -search_config_out; msfragger (MSFragger 4.4.1, experimental) needs decoys in the database: -fasta_out then appends reversed ones",
       "required": false,
       "toppAdvanced": false,
       "choices": [
         "sage",
-        "comet"
+        "comet",
+        "msfragger"
       ]
     },
     {
@@ -1157,6 +1199,38 @@
         "none",
         "subset",
         "greedy"
+      ]
+    },
+    {
+      "name": "shortlist_protease",
+      "type": "string",
+      "default": "trypsin",
+      "description": "Cleavage rule of the shortlist's placements and of -search_config_out. 'trypsin': tryptic windows, a confidently non-tryptic run is refused (FASTag 1.12). 'auto': the protease the tag ends call (trypsin when inconclusive). A protease name, or 'unspecific': that rule. Except for 'trypsin', windows are found by flank mass and kept by the rule and -shortlist_specificity; only exact placements count",
+      "required": false,
+      "toppAdvanced": true,
+      "choices": [
+        "trypsin",
+        "auto",
+        "unspecific",
+        "lys-c",
+        "arg-c",
+        "asp-n",
+        "glu-c",
+        "chymotrypsin",
+        "lys-n"
+      ]
+    },
+    {
+      "name": "shortlist_specificity",
+      "type": "string",
+      "default": "full",
+      "description": "With -shortlist_protease other than trypsin: 'full' both window ends at a cleavage site (or a protein terminus), 'semi' at least one, 'none' any window",
+      "required": false,
+      "toppAdvanced": true,
+      "choices": [
+        "full",
+        "semi",
+        "none"
       ]
     },
     {
@@ -1443,7 +1517,7 @@
     {
       "name": "version",
       "type": "string",
-      "default": "1.12.1",
+      "default": "1.12.2",
       "description": "Version of the tool that generated this parameters file.",
       "required": false,
       "toppAdvanced": true

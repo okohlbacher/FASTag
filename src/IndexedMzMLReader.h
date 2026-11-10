@@ -51,6 +51,16 @@
 // by no 1.11 consumer. indexed_mzml_test compares the step-0 fields against
 // OpenMS and pins the 1.11 reading of the others.
 //
+// FIELD MASKS (1.12.2): parsing every step-0 field cost about 6 us per
+// spectrum, +12% read time, in a tagging loop that reads only some of them.
+// A read now fills the step-0 fields its caller names (Field) and no others;
+// what it fills is the same as before. The tagging loop takes
+// kTaggingFields, the acquisition probe kProbeFields, -ion_series auto's
+// scan kActivationFields; every other caller (-probe_input, -dump_spectrum,
+// the serial probes, the tests) all of them. The element searches are also
+// bounded to the element they belong to, so a field that is absent no
+// longer costs a scan of the rest of the head.
+//
 // NO INDEX, OR A STALE ONE: the spectrum offsets are rebuilt by scanning the
 // file for <spectrum> start tags, in parallel, and the file is then read the
 // same way. A stale index is the common case, not an exotic one: any tool
@@ -111,8 +121,34 @@ namespace FASTag
     static std::vector<std::uint64_t> scanSpectrumOffsets(const std::string& path,
                                                           std::size_t chunk_bytes = std::size_t{4} << 20);
 
+    /// The step-0 fields (see the file comment) a read fills, as a bit mask
+    /// (1.12.2). Everything else -- peaks, native id, MS level, RT, scan
+    /// windows, ion mobility, the 1.11 precursor fields -- is read always.
+    /// A field left out is simply not set; every field that IS set is
+    /// exactly what kAllFields gives. Callers pass only what they consume,
+    /// so the per-spectrum parse costs what 1.11's did where nothing more
+    /// is needed (the tagging loop, the acquisition probe).
+    enum Field : unsigned
+    {
+      kStep0Type = 1u << 0,              ///< centroid / profile (MS:1000127/128)
+      kStep0FilterString = 1u << 1,      ///< the "filter string" meta value
+      kStep0Activation = 1u << 2,        ///< each precursor's dissociation methods
+      kStep0ActivationEnergy = 1u << 3,  ///< each precursor's activation energy
+      kStep0PossibleCharges = 1u << 4,   ///< possible charge states (MS:1000633)
+      kStep0TargetMeta = 1u << 5,        ///< the "isolation window target m/z" meta value
+      kAllFields = (1u << 6) - 1,
+      /// What the tagging loop reads: the type (-pick_profile), activation
+      /// and filter string (IonSeries::activationClass, -digest_out) and the
+      /// possible charges (precursor hypotheses, the no-charge warning).
+      kTaggingFields = kStep0Type | kStep0FilterString | kStep0Activation | kStep0PossibleCharges,
+      /// What the acquisition probe reads (Acquisition::fromSpectrum).
+      kProbeFields = kStep0TargetMeta,
+      /// What -ion_series auto's activation scan reads.
+      kActivationFields = kStep0FilterString | kStep0Activation,
+    };
+
     /// Spectrum @p i with native id, MS level, retention time (in SECONDS, as
-    /// OpenMS wants) and precursors.
+    /// OpenMS wants) and precursors; the step-0 fields in @p fields.
     ///
     /// PEAKS ARE DECODED FOR MS2 ONLY. Decoding is the expensive half of a
     /// read (a DOM parse plus zlib per spectrum) and FASTag tags MS2, so an
@@ -123,9 +159,9 @@ namespace FASTag
     /// @throws OpenMS::Exception::ParseError if the range cannot be read or
     ///   the decoder rejects an MS2 spectrum (OpenMS's reader fails the same
     ///   file; a silent empty spectrum would drop its tags).
-    OpenMS::MSSpectrum getSpectrum(OpenMS::Size i);
-    /// As getSpectrum(), but with the peaks of a spectrum of any MS level
-    /// (1.13 -check_header_charge reads the MS1 scan before an MS2).
+    OpenMS::MSSpectrum getSpectrum(OpenMS::Size i, unsigned fields = kAllFields);
+    /// As getSpectrum() with every field, but with the peaks of a spectrum of
+    /// any MS level (1.13 -check_header_charge reads the MS1 scan before an MS2).
     OpenMS::MSSpectrum getSpectrumAnyLevel(OpenMS::Size i);
 
     /// Spectrum @p i WITHOUT peaks: every metadata field getSpectrum() fills
@@ -134,7 +170,7 @@ namespace FASTag
     /// the head of the element. Lenient: an unreadable spectrum comes back
     /// empty instead of throwing. For a probe over many spectra (the 1.12
     /// acquisition check) that must not pay for decoding.
-    OpenMS::MSSpectrum getSpectrumMetadata(OpenMS::Size i);
+    OpenMS::MSSpectrum getSpectrumMetadata(OpenMS::Size i, unsigned fields = kAllFields);
     /// Byte range [first, second) of spectrum @p i in the file, as the
     /// offsets in use give it; {0, 0} when there is no such spectrum. Read
     /// only, for callers that scrape what the reader does not keep (1.12
@@ -160,7 +196,7 @@ namespace FASTag
     static constexpr OpenMS::Size kMetadataProbe = 5000;
 
   private:
-    OpenMS::MSSpectrum read_(OpenMS::Size i, bool want_peaks, bool any_level = false);
+    OpenMS::MSSpectrum read_(OpenMS::Size i, bool want_peaks, unsigned fields, bool any_level = false);
 
     struct Impl;
     std::unique_ptr<Impl> impl_;

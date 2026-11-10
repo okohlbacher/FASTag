@@ -802,7 +802,13 @@ export const PARAM_UI: Record<string, ParamUi> = {
   alkylation_proteome: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'The database the alkylation report uses when no reconciliation database is given: a FASTA file. In 1.12.0 the alkylation report needs this FASTA file or a reconciliation database: the shipped proteomes (human, mouse, yeast, E. coli) that the names stand for are not in this release, and naming one, or leaving the default auto, stops the run with an error.'
+      text: 'The database the alkylation report uses when no reconciliation database is given: auto (the human proteome), human, mouse, yeast or ecoli for the UniProt reference proteomes shipped with FASTag (reviewed entries; the release is in the report), or a FASTA file. Tags place on the shipped proteomes from 8 residues (human, mouse) or 7 (yeast, E. coli): set the tag length to 8 or 7, otherwise no tag places and there is no call (reason tags_too_short).'
+    }
+  },
+  alkylation_tags_out: {
+    hidden: 'experimental 1.13 command-line option, not in the form (CLI default applies)',
+    help: {
+      text: 'Write a report of which reagent alkylated the cysteines, or none, without a database: every spectrum is tagged a second time with unmodified and alkylated cysteine as alternatives, and the cysteine forms inside the best tags vote. Experimental: on development data 61 of 123 runs were called, 51 as annotated; unalkylated runs are rarely called and there is no held-out test yet. Use it with tag extension; without it few spectra vote.'
     }
   },
   alkylation_window: {
@@ -889,6 +895,12 @@ export const PARAM_UI: Record<string, ParamUi> = {
       text: 'Score tags with no or one complement pair with the mid-p variant of the complement test.'
     }
   },
+  complement_probe: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'How many MS2 spectra the auto complement window is measured on (experimental).'
+    }
+  },
   complement_rule: {
     hidden: OPT_IN_1_12,
     help: {
@@ -910,7 +922,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   complement_tolerance_unit: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'Whether the complement window is a fixed value in Da or follows the fragment tolerance.'
+      text: 'Whether the complement window is a fixed value in Da, follows the fragment tolerance, or (auto, experimental) is measured on the run from the complement pairs of confident tags.'
     }
   },
   digest_calibration: {
@@ -935,6 +947,12 @@ export const PARAM_UI: Record<string, ParamUi> = {
     hidden: OPT_IN_1_12,
     help: {
       text: 'Give no digest call when its calibrated confidence is below this value. 0 turns it off.'
+    }
+  },
+  digest_quality: {
+    hidden: 'experimental (1.13): digestion-quality rows of -digest_out',
+    help: {
+      text: 'Add missed-cleavage and non-specific-end measurements for one enzyme (or the call: auto) to the digest report. Experimental.'
     }
   },
   digest_models_version: {
@@ -965,6 +983,12 @@ export const PARAM_UI: Record<string, ParamUi> = {
     hidden: OPT_IN_1_13_EXPERIMENTAL,
     help: {
       text: 'Under ion series auto: read photodissociation (UVPD) spectra as b/y ions (the default) or as a/x ions. Experimental.'
+    }
+  },
+  ion_series_hybrid: {
+    hidden: OPT_IN_1_13_EXPERIMENTAL,
+    help: {
+      text: 'Under ion series auto: read hybrid EThcD/ETciD spectra as b/y ions (the default) or tag them twice, as b/y and as c/z ions, and merge the rows (both). Experimental.'
     }
   },
   isotope_error: {
@@ -1012,7 +1036,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   search_engine: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'The search engine the settings are written for: Sage or Comet.'
+      text: 'The search engine the settings are written for: Sage, Comet or MSFragger (experimental; needs decoys in the database).'
     }
   },
   search_isotope_errors: {
@@ -1097,6 +1121,18 @@ export const PARAM_UI: Record<string, ParamUi> = {
     hidden: OPT_IN_1_12,
     help: {
       text: 'Write the smaller FASTA and the search settings even when the protease of the run does not fit tryptic placement.'
+    }
+  },
+  shortlist_protease: {
+    hidden: EXPERIMENTAL_1_13,
+    help: {
+      text: 'The cleavage rule the shortlist places tags with: trypsin (as in 1.12), the protease the run calls (auto), a named protease, or none (unspecific).'
+    }
+  },
+  shortlist_specificity: {
+    hidden: EXPERIMENTAL_1_13,
+    help: {
+      text: 'How many window ends must be cleavage sites of the -shortlist_protease rule: both (full), one (semi) or none.'
     }
   },
   shortlist_gapped: {
