@@ -142,3 +142,20 @@ downloads PRIDE broke off; all 18 B inputs converted, rc 0). Built by `scripts/b
       /scratch/kohlbach/fastag-labeldisc/eval2/heldout 8
     python3 -I labeldisc/scorers/score_labeldisc.py labeldisc/manifests/labeldisc-heldout.tsv \
       /scratch/kohlbach/fastag-labeldisc/eval2/heldout labeldisc/results heldout
+
+## HELD-OUT: scored once (2026-11-10, node data, CFG-LD-heldout-113)
+
+`results/summary_heldout.json`, `results/per_run_heldout.tsv`, `results/heldout_inputs_verified.tsv` (190 of 190
+inputs sha256 OK; 187 runs rc 0, 3 refused as raw DIA by the acquisition check, rc 11, scored as no calls):
+
+- **P1 FAIL:** 6 of 150 label-free runs with a label call (4.0 %, Clopper-Pearson 95 % 1.5-8.5 %, one-sided upper
+  7.7 %): K:Lys6 (PXD011457), Dimethyl (PXD062076, a TAILS run; PXD003342), TMT+K:TMT (PXD059755, PXD029210),
+  K:Lys8 (PXD002759, "lab_eff"). `label_call` agrees on three (both TMT, the Lys8).
+- **P2 FAIL:** correct 96/190 against the majority's 150/190 (65 label-free runs are no calls: few_spectra 39,
+  no_reference 23, DIA refused 3).
+- **P3 PASS:** correct 96/190 against `label_call`'s 91/190 (11 vs 6 discordant, sign test p = 0.33).
+- Labelled runs (40): correct ld 17, label_call 13. iTRAQ8 named twice (PXD008165, PXD008152, both SDRF iTRAQ4,
+  304.20 Da flanks); TMTpro 5 of 9; one TMTpro|iTRAQ8plex ambiguous.
+
+Decision rule: P1 fails on both TEST and HELD-OUT, so the report is not described as free of false label calls; it
+stays experimental and opt-in. Nothing was changed after the result.

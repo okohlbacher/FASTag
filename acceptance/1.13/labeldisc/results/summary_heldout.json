@@ -1,0 +1,139 @@
+{
+ "P1": {
+  "clopper_pearson_95": [
+   0.0148,
+   0.085
+  ],
+  "false_label_calls": 6,
+  "label_free_runs": 150,
+  "one_sided_upper_95": 0.0774,
+  "rate": 0.04,
+  "runs": [
+   "PXD011457__131122_10_QEx_LA_DCE_14D_GF_pH3:K:Lys6",
+   "PXD062076__20220907_MS_PP2213_TAILS_SN:Dimethyl",
+   "PXD003342__Ecoli_ea_chymo_after_enrichment_1to10_2ul_TR1:Dimethyl",
+   "PXD059755__220930_HFX_FT10_RKNB:TMT+K:TMT",
+   "PXD029210__Z9388TQ_7:TMT+K:TMT",
+   "PXD002759__AC_Mg_week3_lab_eff_100214:K:Lys8"
+  ],
+  "verdict": "FAIL"
+ },
+ "P2": {
+  "correct_ld": 96,
+  "correct_majority": 150,
+  "discordant_ld_only": 17,
+  "discordant_majority_only": 71,
+  "sign_p": 0.0,
+  "verdict": "FAIL"
+ },
+ "P3": {
+  "correct_label_call": 91,
+  "correct_ld": 96,
+  "discordant_label_call_only": 6,
+  "discordant_ld_only": 11,
+  "sign_p": 0.3323,
+  "verdict": "PASS"
+ },
+ "accuracy": {
+  "label_call": [
+   91,
+   190,
+   [
+    0.409,
+    0.5497
+   ]
+  ],
+  "ld": [
+   96,
+   190,
+   [
+    0.4348,
+    0.5755
+   ]
+  ],
+  "ld_lenient": [
+   96,
+   190
+  ],
+  "majority": [
+   150,
+   190,
+   [
+    0.7261,
+    0.8414
+   ]
+  ]
+ },
+ "confusion": {
+  "SILAC": {
+   "SILAC": 5,
+   "label-free": 3,
+   "no call": 7
+  },
+  "TMT": {
+   "TMT": 3,
+   "TMTpro/iTRAQ8": 1,
+   "no call": 6
+  },
+  "TMTpro/iTRAQ8": {
+   "TMTpro/iTRAQ8": 6,
+   "label-free": 1,
+   "no call": 1,
+   "other": 1
+  },
+  "iTRAQ4": {
+   "TMTpro/iTRAQ8": 2,
+   "iTRAQ4": 3,
+   "no call": 1
+  },
+  "label-free": {
+   "SILAC": 2,
+   "TMT": 2,
+   "dimethyl": 2,
+   "label-free": 79,
+   "no call": 65
+  }
+ },
+ "isobaric_names": [
+  "-",
+  "TMTpro+K:TMTpro",
+  "ambiguous:TMTpro|iTRAQ8plex",
+  "label-free",
+  "unknown:K+286.1962"
+ ],
+ "majority_class": "label-free",
+ "n": 190,
+ "no_call_reasons": {
+  "few_spectra": 50,
+  "no_reference": 27,
+  "rc_11": 3
+ },
+ "recall": {
+  "SILAC": {
+   "label_call": 3,
+   "ld": 5,
+   "n": 15
+  },
+  "TMT": {
+   "label_call": 3,
+   "ld": 3,
+   "n": 10
+  },
+  "TMTpro/iTRAQ8": {
+   "label_call": 5,
+   "ld": 6,
+   "n": 9
+  },
+  "iTRAQ4": {
+   "label_call": 2,
+   "ld": 3,
+   "n": 6
+  },
+  "label-free": {
+   "label_call": 78,
+   "ld": 79,
+   "n": 150
+  }
+ },
+ "set": "heldout"
+}

@@ -1,0 +1,191 @@
+id	pxd	truth	ld_status	ld_labels	ld_reason	ld_class	ld_token_classes	lc_class	note	ld_correct	lc_correct
+PXD005259__TW10828_L3	PXD005259	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD046389__QEXAC_NGL_YJ1_230918_1-46-6_SSbG_ABCbuffer_04	PXD046389	label-free	call	label-free	-	label-free	-	no call		True	False
+PXD022605__20130719_EXQ2_NiKu_SA_Yeast_Ploidy3_02	PXD022605	SILAC	call	K:Lys8	-	SILAC	SILAC	SILAC		True	True
+PXD057192__LysCsample43	PXD057192	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD003764__20120718_VR_Bsu_TripleSILAC_WTPtkAPtpZ_GeLC_F05	PXD003764	SILAC	no_call	-	few_spectra	no call	-	no call		False	False
+PXD053103__20221024_Q2_MD_ColQ2-115_Emma	PXD053103	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD011875__j32789	PXD011875	SILAC	call	K:Lys8	-	SILAC	SILAC	label-free		True	False
+PXD018600__CSL9686A8RW2_C2	PXD018600	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD011457__131122_10_QEx_LA_DCE_14D_GF_pH3	PXD011457	label-free	call	K:Lys6	-	SILAC	SILAC	label-free		False	True
+PXD053909__neil_kimx1176_053110_CT5_ETD_LysC_tenth	PXD053909	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD047892__20190227_PIG_PdECM_E01	PXD047892	label-free	call	label-free	-	label-free	-	no call		True	False
+PXD000601__20090625_Orbi6_ChRo_SA_CircaLiv_FASPSAX_CT33_05	PXD000601	SILAC	no_call	-	few_spectra	no call	-	no call		False	False
+PXD002455__20150803_QEp3_MaMu_SA_Zeb_RevisionCSQPlus_02	PXD002455	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD026062__MukBEF_BS3	PXD026062	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD004326__L6492_0723_Metabolomics_yeast3_28-32-9	PXD004326	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD003983__KU021_UHRF1_UN_Propionylation_Joe	PXD003983	label-free	no_call	-	no_reference	no call	-	no call		False	False
+PXD013288__HF190226_D3_R4_MCF10A_T	PXD013288	SILAC	call	label-free	-	label-free	-	label-free		False	False
+PXD051470__240214_AZ-7847_TMTpro_colon_FAIMS_CV50	PXD051470	TMTpro/iTRAQ8	call	unknown:K+286.1962	-	other	other	label-free		False	False
+PXD062076__20220907_MS_PP2213_TAILS_elu	PXD062076	label-free	call	label-free	-	label-free	-	no call		True	False
+PXD064221__BRD4_HEK293Nucleosome_pulldown_rep1_DDA	PXD064221	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD004326__L6502_0723_Metabolomics_yeast3_24-28-3	PXD004326	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD003983__KU022_UHRF1_HE_Propionylation_Joe	PXD003983	label-free	no_call	-	no_reference	no call	-	no call		False	False
+PXD013288__HF190214_D3_R2_231_T	PXD013288	SILAC	call	label-free	-	label-free	-	label-free		False	False
+PXD051470__240214_AZ-7847_TMTpro_colon_FAIMS_CV70	PXD051470	TMTpro/iTRAQ8	call	label-free	-	label-free	-	label-free		False	False
+PXD062076__20220907_MS_PP2213_TAILS_SN	PXD062076	label-free	call	Dimethyl	-	dimethyl	dimethyl	label-free		False	True
+PXD064221__BRD4_HEK293Nucleosome_pulldown_rep2_DDA	PXD064221	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD004326__L6397_0723_Metabolomics_yeast1_24-28-15	PXD004326	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD049110__ETD-1208-S-FL-Chymo-PNG-Neu-VVA	PXD049110	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD042540__200520_Malecki_Ce1_Cym	PXD042540	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD018452__002_Pilot_C19	PXD018452	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD061314__231108_C_AlGl_4083	PXD061314	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD029295__Met_Chymotrypsin	PXD029295	label-free	call	label-free	-	label-free	-	no call		True	False
+PXD026082__MW36-7A-a	PXD026082	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD043731__MMD6446_chymo_HC1_F3	PXD043731	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD003342__Ecoli_ea_chymo_after_enrichment_1to10_2ul_TR1	PXD003342	label-free	call	Dimethyl	-	dimethyl	dimethyl	no call		False	False
+PXD079310__CAR4878A50MA3DigestofJC-delAF2-MCHCh-10-220907-SJD	PXD079310	SILAC	call	K:Lys8	-	SILAC	SILAC	label-free		True	False
+PXD044322__20230214_jlb_OVRodriguez_v2GFP_6hchymo_160ng_60min_Wat25cmBEH_1	PXD044322	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD044548__2023_03_42_Exploris_FAIMSTharp_postC18_rerun_041323	PXD044548	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD058769__QEX03_MF_241108_MBS_WT_100	PXD058769	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD066798__88185	PXD066798	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD058484__LN231114_pAVIC_MLB2_chymotrypsin_Nterm_bRP5	PXD058484	TMTpro/iTRAQ8	call	ambiguous:TMTpro|iTRAQ8plex	-	TMTpro/iTRAQ8	TMTpro/iTRAQ8	label-free		True	False
+PXD073419__FL_20220418_Dan_SV_20220314_ZNFX1_XL_5	PXD073419	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD038231__20220726_bkc_23-0075_Goldberg_Hasan_ATC	PXD038231	label-free	no_call	-	no_reference	no call	-	no call		False	False
+PXD054332__20220907-A0732-9_90uL-Lys-C-4-2	PXD054332	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD006081__OFMYC160708_03	PXD006081	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD009079__Xlink_trp-gluC_Markley	PXD009079	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD047326__20220312_EXPL0_TuVu_SA_T838_diGlymapping_Daniel_GluC_3_2	PXD047326	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD011050__StS_Hvo_wt_GluC_SN_Big12_20160929	PXD011050	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD003304__PSI_PHP_039_21A_18Dec13_Tiger_13-11-13	PXD003304	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD037803__LH_P2010_248	PXD037803	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD078075__Inga_nD_MS20261_4uL_RPE1_MIX_GLUC	PXD078075	label-free	no_call	-	no_reference	no call	-	no call		False	False
+PXD077477__20231027_R27T_DTT_IAA_PD10_G_HCD38_CSH_20231028094643	PXD077477	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD009737__GluC21	PXD009737	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD050316__06_pSt67_GluC	PXD050316	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD000131__OR4_120224_TY_ABC_BN3_V8_SCX_F33	PXD000131	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD002525__L4rep-1	PXD002525	label-free	no_call	-	no_reference	no call	-	no call		False	False
+PXD001490__MPS_velos_S1	PXD001490	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD074543__20170303_SEL_HF_GEZ_EXT_020317_onB-AspN_beta_002	PXD074543	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD015454__Zhou_050319_AspN	PXD015454	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD077080__P1036	PXD077080	label-free	no_call	-	no_reference	no call	-	label-free		False	True
+PXD023753__PI20-24854-A171SKDC20-L3	PXD023753	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD032321__YugangZhang10432873_SILAC1_R	PXD032321	label-free	no_call	-	no_reference	no call	-	no call		False	False
+PXD038494__qe2021101811	PXD038494	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD046237__EH3403	PXD046237	label-free	no_call	-	no_reference	no call	-	no call		False	False
+PXD008508__Meganema_ASP_IS1	PXD008508	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD065397__20250530_014_S950066_RPS5_KD_3	PXD065397	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD019209__ns_5206_AG_053118_PDPK1_AspN	PXD019209	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD025959__PR516_LW_XL-phos_20190326_Ln6	PXD025959	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD042685__KS_CG_PSGL1_AspN_glyAse_543_1856	PXD042685	label-free	call	label-free	-	label-free	-	no call		True	False
+PXD043144__jm_QEHFx_04052023_RKing_Ig_JK191_PAB_A1_AspN-2	PXD043144	label-free	no_call	-	no_reference	no call	-	no call		False	False
+PXD073612__20250207_AJ823	PXD073612	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD012437__F1_Agilent6_20161023_TST_C15_Probe1und2ausC13_MAE_HCD_OT_Rep9_7B_18s	PXD012437	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD031451__F000195_1p_uPAC8_CMB-514_FRIMP_ImPep_TMT-Fr-8	PXD031451	TMT	call	TMT+K:TMT	-	TMT	TMT,TMT	TMT		True	True
+PXD068731__Sara_Feola_20230213_Human-SeriesA_A06_30min_CEO-truck-MHC_Slot2-33_2023-04-06_1019	PXD068731	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD072437__2zup_RCC10F8	PXD072437	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD038273__Mesothelioma_Ligandome_2022may_Meso1_001_22-05-30_5920	PXD038273	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD024369__a17659	PXD024369	TMT	no_call	-	few_spectra	no call	-	no call		False	False
+PXD069588__F120190314_PF_4T1_Dd_IFN_positive_pool2	PXD069588	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD015408__Unanue_7715_180601_08	PXD015408	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD073207__FDA01_ExpJ_A1101_Cas12a_HLA1_10M_S4-A5_1_7695	PXD073207	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD018539__15H013_161118_2	PXD018539	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD006455__P120161215_jmobbs_C501_1_A10	PXD006455	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD009602__UPN_27_HLA-class_I_NMT_benign_Rep4	PXD009602	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD063722__cisPT_coi-P-N2-200-0C_2357	PXD063722	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD015646__FL647_IPP80_PB_L243_6_odd	PXD015646	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD027949__HF170209_DM_KRase_hmSILAC_SGC_NB4_pepIP_frazionato_asym4	PXD027949	SILAC	no_call	-	few_spectra	no call	-	no call		False	False
+PXD017023__TrypN	PXD017023	label-free	no_call	-	no_reference	no call	-	no call		False	False
+PXD064974__X8651LD	PXD064974	label-free	no_call	-	no_reference	no call	-	label-free		False	True
+PXD027949__HF170220_DM_SGC_hmSILAC_NB4_pepIP_fractionated_KRase_Mono_12	PXD027949	SILAC	no_call	-	few_spectra	no call	-	no call		False	False
+PXD064974__X8652LD	PXD064974	label-free	no_call	-	no_reference	no call	-	no call		False	False
+PXD027949__HF170220_DM_SGC_hmSILAC_NB4_pepIP_fractionated_KRase_Mono_07	PXD027949	SILAC	no_call	-	no_reference	no call	-	no call		False	False
+PXD070562__210508_Emily_23_527	PXD070562	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD055823__210514_CatrionaIJM_E4_Slot1-5_1_197	PXD055823	label-free	call	label-free	-	label-free	-	no call		True	False
+PXD072143__600_ng_561_250512_Slot1-18_1_2295	PXD072143	label-free	-	-	-	no call	-	no call	rc_11	False	False
+PXD046730__201216_DQ_306_Es_5_Slot1-36_1_5304	PXD046730	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD036482__Probe_2_400ng_Slot2-38_1_5275	PXD036482	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD057312__hMICAL1-MO_coiPAnP-N2-200_3Murea-1Mthiourea-200mMtcep_MSMS_14733	PXD057312	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD030436__171215_P_134_WJ_113	PXD030436	SILAC	no_call	-	few_spectra	no call	-	no call		False	False
+PXD029029__180518_AM_Mouse_HHD_HLA-DP4_Tumor_Tue39L243_Rep1_msms9	PXD029029	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD014741__q100332c_ZBTB24	PXD014741	SILAC	call	K:Lys8	-	SILAC	SILAC	SILAC		True	True
+PXD023459__Q25628_MS19-037_C11_T3	PXD023459	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD019258__2Alu_classI_assayIII_3	PXD019258	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD030405__161129_P_134_WJ_059	PXD030405	SILAC	no_call	-	few_spectra	no call	-	no call		False	False
+PXD004208__160122_P4_O3_MaZ_BPA3_24h_10	PXD004208	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD076291__T1	PXD076291	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD007287__160727_JLee_Chaudhuri_5489_JL_DTSSP_sparse	PXD007287	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD046454__Rep1_probe_on_bead	PXD046454	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD020559__H083489_uPAC_10_PRC-4966_VangheluweLab_CHO_P5ATPase_WT-3	PXD020559	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD037987__20220803__HyperDAO_TRO_04	PXD037987	label-free	no_call	-	no_reference	no call	-	no call		False	False
+PXD014530__E_20170905_HS780_2	PXD014530	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD008992__5970	PXD008992	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD001972__MALE_PANCREAS_11	PXD001972	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD059755__220930_HFX_FT10_RKNB	PXD059755	label-free	call	TMT+K:TMT	-	TMT	TMT,TMT	TMT		False	False
+PXD060785__OG_MSMS	PXD060785	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD063410__Zammit_etal_2025_UVplus_SB_F3	PXD063410	label-free	no_call	-	no_reference	no call	-	no call		False	False
+PXD001077__Velos005137	PXD001077	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD064394__R21867-INV-PG	PXD064394	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD029210__Z9388TQ_7	PXD029210	label-free	call	TMT+K:TMT	-	TMT	TMT,TMT	TMT		False	False
+PXD025387__20210319_E0_FAIMS_RSLC9_Waters_PepMapPrecol_5ulloop_scLF_direct_funnel4_04	PXD025387	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD069635__Seq87407_480Ex2	PXD069635	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD074092__original_raw_data	PXD074092	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD010884__Rappsilber_x0975_1	PXD010884	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD018346__B004262_Ap_CMB-325_FRIMP_APMS_GST-ISG15_2	PXD018346	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD031266__MSB38429APEX2Band_05	PXD031266	SILAC	call	K:Lys8	-	SILAC	SILAC	SILAC		True	True
+PXD018129__20180206_PJ_Chro_FRL2	PXD018129	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD009815__QEKAC160601_38	PXD009815	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD058199__230905_LDC_HFX_HGoold_Yeast_strain15_02	PXD058199	label-free	-	-	-	no call	-	no call	rc_11	False	False
+PXD057987__Recombinant_GCN5_noH2O2	PXD057987	label-free	no_call	-	no_reference	no call	-	no call		False	False
+PXD005944__P3762	PXD005944	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD050093__MILA001_ECOL003_Bulk_TMT002_FL2_TMT001_f2_002045	PXD050093	TMT	no_call	-	no_reference	no call	-	no call		False	False
+PXD060148__Eclipse_230504_FAIMS_27	PXD060148	label-free	no_call	-	no_reference	no call	-	no call		False	False
+PXD039289__aleitner_D1604_146	PXD039289	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD027906__20200923-B4470	PXD027906	label-free	-	-	-	no call	-	no call	rc_11	False	False
+PXD031167__male_single_1	PXD031167	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD002789__O22	PXD002789	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD041962__2020-07-02_PK44_HEW12_EI	PXD041962	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD017642__Fusion_MP009_293WT	PXD017642	label-free	no_call	-	no_reference	no call	-	no call		False	False
+PXD023729__e034106	PXD023729	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD068665__DS2_2p5ug	PXD068665	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD029453__g07860_tc-s738_F2A_2	PXD029453	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD069496__FL1259_MSQ1999_20200901_HYang_MRC002_10_Set2_FBX-MLN_2	PXD069496	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD001769__20140419_QEp3_PhGe_SA_22	PXD001769	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD031223__45065_1_MSPCL_matrix_mouse_412_F_21mo_1ug	PXD031223	label-free	no_call	-	no_reference	no call	-	no call		False	False
+PXD065511__180828_Pekka_Ctrl_CS_3_nr2	PXD065511	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD015750__09102017_Onstott_RL_174_1BEDTA_Lumos1	PXD015750	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD017717__Sample2untreatedMSdetection1of2	PXD017717	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD004025__ALS110615_spiked_after_digestion_5_b	PXD004025	label-free	no_call	-	no_reference	no call	-	no call		False	False
+PXD058279__FS1_EB_22325_444_06102024	PXD058279	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD021185__2017_October_18_UWPRQE_mesocosm_96	PXD021185	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD032077__oecf1-MP0416-12	PXD032077	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD030429__210412_HN_KaMe_F_04	PXD030429	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD013216__20170130_QexHF2_RSLC2_Elsner_Leonard_MFPL_insol_PDK_ArgC_50p	PXD013216	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD044293__20220531-2110_EXP4_Treated	PXD044293	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD024608__201124_3OH1_03	PXD024608	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD056235__20220422_T3_040	PXD056235	label-free	no_call	-	no_reference	no call	-	label-free		False	True
+PXD027297__Leyuan_20201015_Exploris_MGMP_fractionation_MTFM_4_09	PXD027297	SILAC	call	label-free	-	label-free	-	label-free		False	False
+PXD052327__Aktar_etal_2024_GFP_Mad1_arr_Rep1	PXD052327	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD031415__qx013042	PXD031415	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD059428__145_SGBS_MINCH_3_4_F1	PXD059428	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD038241__G4-MonoPhos-f41-42	PXD038241	TMT	call	TMT+K:TMT	-	TMT	TMT,TMT	TMT		True	True
+PXD082652__20240501_pH5.9_1	PXD082652	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD046363__QEX2_941235	PXD046363	label-free	no_call	-	no_reference	no call	-	no call		False	False
+PXD003850__20131126_EXQ3_FrSa_SA_Min6_29_1	PXD003850	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD002759__AC_Mg_week3_lab_eff_100214	PXD002759	label-free	call	K:Lys8	-	SILAC	SILAC	SILAC		False	False
+PXD044959__160221_Fraction_1	PXD044959	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD036266__QEp22-1562_Prophet_4Tor_IP-HSPA1A_MLF2-band	PXD036266	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD019017__20200228_TRY_AMPK_ATPgS_REP3	PXD019017	label-free	no_call	-	no_reference	no call	-	label-free		False	True
+PXD002099__110618_yeast_ups_25fmol_r1	PXD002099	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD038770__221026_Ynamide_2hr_2	PXD038770	label-free	call	label-free	-	label-free	-	label-free		True	True
+PXD012969__Hempseed_IEX_46a_07212017	PXD012969	label-free	no_call	-	no_reference	no call	-	no call		False	False
+PXD002772__G_120323_01_VNSC	PXD002772	label-free	no_call	-	few_spectra	no call	-	no call		False	False
+PXD018941__LHCII_canonical_winter_band2	PXD018941	label-free	call	label-free	-	label-free	-	no call		True	False
+PXD021792__Lumos_190430_72	PXD021792	TMT	no_call	-	few_spectra	no call	-	no call		False	False
+PXD074337__Lumos_200513_81	PXD074337	TMT	no_call	-	few_spectra	no call	-	no call		False	False
+PXD014871__2015-068_sample2antesc-18_11-09_MJF	PXD014871	TMT	call	TMT+K:TMT	-	TMT	TMT,TMT	TMT		True	True
+PXD035964__PisaRex_NCF1_Frac14	PXD035964	TMT	call	ambiguous:TMTpro|iTRAQ8plex+K:ambiguous:TMTpro|iTRAQ8plex	-	TMTpro/iTRAQ8	TMTpro/iTRAQ8,TMTpro/iTRAQ8	TMTpro/iTRAQ8		False	False
+PXD018116__Fusion_180705_61	PXD018116	TMT	no_call	-	few_spectra	no call	-	no call		False	False
+PXD074762__20220225_Eclipse_LC4_PepMap50cm-cartridge_Mazumdar_Kuchler_MPL_MUW_TMT10plex_fr8_12p	PXD074762	TMT	no_call	-	no_reference	no call	-	no call		False	False
+PXD067660__CRM5913_TMT16_MS3RTS_HS_prot_F6b	PXD067660	TMTpro/iTRAQ8	no_call	-	no_reference	no call	-	no call		False	False
+PXD055241__OP_3-8	PXD055241	TMTpro/iTRAQ8	call	TMTpro+K:TMTpro	-	TMTpro/iTRAQ8	TMTpro/iTRAQ8,TMTpro/iTRAQ8	TMTpro/iTRAQ8		True	True
+PXD062085__IP_MHo_041-V0057-B03-F031-X0335-1	PXD062085	TMTpro/iTRAQ8	call	TMTpro+K:TMTpro	-	TMTpro/iTRAQ8	TMTpro/iTRAQ8,TMTpro/iTRAQ8	TMTpro/iTRAQ8		True	True
+PXD064023__TMT_Cells_F10	PXD064023	TMTpro/iTRAQ8	call	TMTpro+K:TMTpro	-	TMTpro/iTRAQ8	TMTpro/iTRAQ8,TMTpro/iTRAQ8	TMTpro/iTRAQ8		True	True
+PXD020586__20200829_MK_ES_E1200_precol_scMS_160mins_500ms_8227_bulk_b_P3_S17	PXD020586	TMTpro/iTRAQ8	call	TMTpro+K:TMTpro	-	TMTpro/iTRAQ8	TMTpro/iTRAQ8,TMTpro/iTRAQ8	TMTpro/iTRAQ8		True	True
+PXD036720__CT2A_GL261_intracranial_pSpT_F03	PXD036720	TMTpro/iTRAQ8	call	TMTpro+K:TMTpro	-	TMTpro/iTRAQ8	TMTpro/iTRAQ8,TMTpro/iTRAQ8	TMTpro/iTRAQ8		True	True
+PXD005207__Plasmo_TP9_R3	PXD005207	iTRAQ4	call	iTRAQ4+K:iTRAQ4	-	iTRAQ4	iTRAQ4,iTRAQ4	iTRAQ4		True	True
+PXD008165__20151223_REC-1555_Fr_16	PXD008165	iTRAQ4	call	iTRAQ8plex	-	TMTpro/iTRAQ8	TMTpro/iTRAQ8	TMTpro/iTRAQ8		False	False
+PXD000878__proteome_fr44	PXD000878	iTRAQ4	call	iTRAQ4	-	iTRAQ4	iTRAQ4	no call		True	False
+PXD002548__2014-0403_iTRAQ-2	PXD002548	iTRAQ4	call	iTRAQ4+K:iTRAQ4	-	iTRAQ4	iTRAQ4,iTRAQ4	iTRAQ4		True	True
+PXD008152__20160330_REC-1563_Fr_02	PXD008152	iTRAQ4	call	iTRAQ8plex	-	TMTpro/iTRAQ8	TMTpro/iTRAQ8	no call		False	False
+PXD000558__frac_82	PXD000558	iTRAQ4	no_call	-	few_spectra	no call	-	no call		False	False
