@@ -159,3 +159,16 @@ inputs sha256 OK; 187 runs rc 0, 3 refused as raw DIA by the acquisition check, 
 
 Decision rule: P1 fails on both TEST and HELD-OUT, so the report is not described as free of false label calls; it
 stays experimental and opt-in. Nothing was changed after the result.
+
+## Addendum A2: `-digest_out` and `log.txt` on item03-heldout (disclosure, 2026-11-10, after scoring)
+
+The HELD-OUT command includes `-digest_out`, which `score_labeldisc.py` does not read. Part A of the held-out set
+is the 172 item03-heldout runs, so this run wrote the protease/alkylation report for them a second time (the
+first: `PREREG-item08-addendum.md`, section 3). Under `data:/scratch/kohlbach/fastag-labeldisc/eval2/heldout`
+there are 187 `digest.tsv` and 190 `log.txt` (parts A and B). No `digest.tsv` was read or copied. Three `log.txt`
+were read, those of the runs refused as raw DIA (rc 11: PXD027906, PXD058199, PXD072143); these runs wrote no
+digest report. The 377 files were not sealed during scoring; all were set to mode 000 on 2026-11-10. This does not
+change the scores or verdicts above.
+
+Decision of the user (2026-11-10): item03-heldout stays reserved for the protease and alkylation items (#3/#5)
+only. Its label use is spent (item #8 and this evaluation).

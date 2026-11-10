@@ -138,3 +138,12 @@ in four of its disagreements were false, and the override net was -18.8 per 1000
   minimum of 2 or more (k = 3: -5.65, -0.74, 0.15, 0.60, 0.15 per 1000). PXD001819 flags nothing from margin 5 on;
 - a range minimum of 3 rather than 2 roughly halves the false-alarm rate on PXD003531 (0.0006 vs 0.0011), at a
   lower sensitivity on the perturbed LTQ copy.
+
+## Erratum (2026-11-10, after scoring)
+
+"Data and split" says that the 6 Q Exactive rows of the 1.12 #3 held-out manifest "were scored for the chemistry
+call only". That is wrong. The chemistry call (protease, alkylation) was never scored on these rows; the reports
+written for them are sealed and unread (`PREREG-item08-addendum.md`, section 3; `PREREG-labeldisc.md`, addendum
+A2). The three drawn runs (PXD001769, PXD003850, PXD009815) had been scored for the label call only (item #8,
+label discovery). Their charges had not been looked at before this item, as stated. The frozen criteria and the
+result are unchanged.
