@@ -1,0 +1,13 @@
+run	protease	accession	role	truth_source
+R01	Arg-C	PXD059514	primary	PRIDE sample processing protocol; file name token Arg-C
+R02	Asp-N	PXD040583	primary	PRIDE sample processing protocol; file name token AspN
+R03	Asp-N	PXD064794	primary	PRIDE sample processing protocol; file name token AspN
+R04	Glu-C	PXD015759	primary	PRIDE sample processing protocol; file name token GluC
+R05	Glu-C	PXD008333	primary	PRIDE sample processing protocol; file name token GluC
+R06	Glu-C	PXD048926	primary	PRIDE sample processing protocol; file name token GluC
+R07	Lys-C	PXD015759	primary	PRIDE sample processing protocol; file name token LysC
+R08	Lys-C	PXD006465	primary	PRIDE sample processing protocol; file name token LysC
+R09	Lys-C	PXD040583	primary	PRIDE sample processing protocol; file name token LysC
+R10	Chymotrypsin	PXD064794	primary	PRIDE sample processing protocol; file name token Chymo
+R11	Glu-C	PXD040583	reserve	PRIDE sample processing protocol; file name token GluC
+R12	Lys-C	PXD048926	reserve	PRIDE sample processing protocol; file name token LysC

@@ -1,0 +1,75 @@
+accession	protease	n_raw_named	n_raw	instruments	experiment	title
+PXD001281	Lys-C	2	10	Q Exactive	Affinity purification coupled with mass spectrometry proteomics;Shotgun proteomics	Proteome-wide identification of SUMO2 modification sites
+PXD001281	Glu-C	2	10	Q Exactive	Affinity purification coupled with mass spectrometry proteomics;Shotgun proteomics	Proteome-wide identification of SUMO2 modification sites
+PXD002228	Asp-N	5	13	Q Exactive	Gel-based experiment	Mammalian Bcnt/Cfdp1, a potential epigenetic factor characterized by an acidic stretch in 
+PXD006465	Lys-C	21	63	Q Exactive HF	Shotgun proteomics;Gel-based experiment	Human Testis LC-MS/MS -  Multi-Protease Strategy Identifies Three PE2 Missing Proteins in 
+PXD006465	Glu-C	21	63	Q Exactive HF	Shotgun proteomics;Gel-based experiment	Human Testis LC-MS/MS -  Multi-Protease Strategy Identifies Three PE2 Missing Proteins in 
+PXD008333	Glu-C	12	220	Q Exactive	Shotgun proteomics	Identification of a damaging variant rs35033974 associated with idiopathic male infertilit
+PXD008434	Chymotrypsin	62	186	Q Exactive	Shotgun proteomics	Plasma fibrin clot-bound proteins in antiphospholipid syndrome and venous thromboembolism:
+PXD008965	Arg-C	4	4	Q Exactive	Shotgun proteomics	KMT9 writes the histone mark H4K12me1 and controls metabolism and proliferation of castrat
+PXD009800	Glu-C	3	18	Q Exactive	Shotgun proteomics	Multi-Enzymatic Limited Digestion - the Next-Generation Sequencing for Proteomics
+PXD012571	Lys-C	11	28	Q Exactive	Shotgun proteomics	Oxyntomodulin Identified as a Marker of Type 2 Diabetes and Gastric Bypass Surgery by Mass
+PXD012571	Chymotrypsin	6	28	Q Exactive	Shotgun proteomics	Oxyntomodulin Identified as a Marker of Type 2 Diabetes and Gastric Bypass Surgery by Mass
+PXD012615	Chymotrypsin	12	36	Q Exactive	Shotgun proteomics	Human liver cells proteome
+PXD013234	Chymotrypsin	18	54	Q Exactive	Shotgun proteomics	Comparison of proteome composition of serum enriched in extracellular vesicles isolated fr
+PXD014526	Chymotrypsin	6	69	Orbitrap Fusion Lumos;Orbitrap Fusion	Shotgun proteomics	Flow-induced reorganization of laminin-integrin networks within the endothelial basement m
+PXD015759	Lys-C	36	108	Q Exactive	Shotgun proteomics	Open-pFind Enhances the Identification of Missing Proteins from Human Testis Tissue
+PXD015759	Glu-C	36	108	Q Exactive	Shotgun proteomics	Open-pFind Enhances the Identification of Missing Proteins from Human Testis Tissue
+PXD018418	Glu-C	8	24	Orbitrap Fusion Lumos	Shotgun proteomics	Essential functions of glycans in human epithelia dissected by a CRISPR/Cas9-engineered hu
+PXD018506	Glu-C	39	69	Orbitrap Fusion Lumos	Shotgun proteomics	Site-specific N-glycosylation Characterization of Recombinant SARS-CoV-2 Spike Proteins us
+PXD020128	Glu-C	1	12	Orbitrap Fusion Lumos	Shotgun proteomics	ABHD11 maintains 2-oxoglutarate metabolism by preserving functional lipoylation of the 2-o
+PXD020128	Asp-N	1	12	Orbitrap Fusion Lumos	Shotgun proteomics	ABHD11 maintains 2-oxoglutarate metabolism by preserving functional lipoylation of the 2-o
+PXD022784	Lys-C	2	10	Q Exactive	Shotgun proteomics	Mass spectrometry provides a highly sensitive non-invasive means of sequencing and trackin
+PXD022784	Asp-N	2	10	Q Exactive	Shotgun proteomics	Mass spectrometry provides a highly sensitive non-invasive means of sequencing and trackin
+PXD022784	Chymotrypsin	2	10	Q Exactive	Shotgun proteomics	Mass spectrometry provides a highly sensitive non-invasive means of sequencing and trackin
+PXD022896	Glu-C	6	24	Orbitrap Fusion Lumos	Shotgun proteomics	Mucin-type O-glycosylation Landscapes of SARS-CoV-2 Spike Proteins
+PXD025078	Glu-C	18	36	Orbitrap Fusion Lumos	Shotgun proteomics	Sequential N/O-glycosylation analysis of heavily glycosylated HIV-1 gp120 by combination o
+PXD026086	Lys-C	25	404	Q Exactive Plus;Q Exactive HF	Shotgun proteomics	The Human Melanoma Proteome Atlas – Defining the Molecular Pathology & Complementing the M
+PXD026752	Chymotrypsin	1	1	Q Exactive	Affinity purification coupled with mass spectrometry proteomics	MS analysis of GAR1 methylation immunopurified from HEK-293 Cells
+PXD027914	Chymotrypsin	6	13	Orbitrap Fusion Lumos;Orbitrap Exploris 480	Shotgun proteomics	The kidney releases in the urine and circulation a non-polymerizing form of Uromodulin tha
+PXD030094	Chymotrypsin	62	268	Orbitrap Fusion	Shotgun proteomics	De Novo Sequencing of SARS-CoV-2 and influenza monoclonal antibodies by mass spectrometry 
+PXD031941	Chymotrypsin	2	8	Orbitrap Fusion	Shotgun proteomics	Template-based assembly of proteomic short reads for de novo antibody sequencing and reper
+PXD033779	Chymotrypsin	3	18	Orbitrap Fusion Lumos	Shotgun proteomics	Hydrophobic-hydration hydrophilic interaction (H3I) capturing intact glycopeptides
+PXD034086	Glu-C	6	18	Orbitrap Fusion Lumos	Shotgun proteomics	Structural- and Site-specific N-glycosylation Characterization of COVID-19 Virus Spike wit
+PXD034086	Chymotrypsin	6	18	Orbitrap Fusion Lumos	Shotgun proteomics	Structural- and Site-specific N-glycosylation Characterization of COVID-19 Virus Spike wit
+PXD034130	Chymotrypsin	2	6	Orbitrap Fusion Lumos	Shotgun proteomics;Gel-based experiment	An N-glycan on the C2 domain of Jagged-1 is essential for Notch activation
+PXD034420	Lys-C	4	12	Orbitrap Exploris 240	Shotgun proteomics	PKC isoforms activate LRRK1 kinase by phosphorylating conserved residues (Ser1064, Ser1074
+PXD034420	Asp-N	4	12	Orbitrap Exploris 240	Shotgun proteomics	PKC isoforms activate LRRK1 kinase by phosphorylating conserved residues (Ser1064, Ser1074
+PXD035067	Chymotrypsin	1	2	Orbitrap Fusion Lumos	Affinity purification coupled with mass spectrometry proteomics	CELF1 Mass-spectrometric Identification of post-translational modification
+PXD035664	Chymotrypsin	2	4	Orbitrap Fusion	Shotgun proteomics	Mutational screens highlight glycosylation as a modulator of colony-stimulating factor 3 r
+PXD036289	Chymotrypsin	8	24	Orbitrap Fusion Lumos	Shotgun proteomics	Revealing the effect of SARS-CoV-2 spike stabilisation on receptor binding dynamics with s
+PXD036577	Chymotrypsin	6	6	Q Exactive	Shotgun proteomics	Mitotic spindle disassembly in human cells relies on CRIPT having hierarchical redox signa
+PXD040102	Chymotrypsin	4	4	Orbitrap Eclipse	Shotgun proteomics	TDP-43 forms amyloid filaments with a distinct fold in type A FTLD-TDP
+PXD040583	Lys-C	24	120	Orbitrap Eclipse	Shotgun proteomics	Potential of Negative Ion Mode Proteomics: MS1-Only Approach
+PXD040583	Glu-C	24	120	Orbitrap Eclipse	Shotgun proteomics	Potential of Negative Ion Mode Proteomics: MS1-Only Approach
+PXD040583	Asp-N	24	120	Orbitrap Eclipse	Shotgun proteomics	Potential of Negative Ion Mode Proteomics: MS1-Only Approach
+PXD045137	Chymotrypsin	1	1	Orbitrap Fusion Lumos	Gel-based experiment	O-GlcNAcylation of YTHDF2 antagonizes ERK-dependent phosphorylation and inhibits lung carc
+PXD046041	Chymotrypsin	29	87	Orbitrap Fusion Lumos	Shotgun proteomics;Gel-based experiment	Proteomic analysis of human sperm protamines from men with and without infertility
+PXD048926	Lys-C	48	144	Orbitrap Exploris 480	Shotgun proteomics;Bottom-up proteomics	Increasing Proteome Coverage Through a Reduction in Analyte Complexity and Its Application
+PXD048926	Glu-C	48	144	Orbitrap Exploris 480	Shotgun proteomics;Bottom-up proteomics	Increasing Proteome Coverage Through a Reduction in Analyte Complexity and Its Application
+PXD049184	Chymotrypsin	3	6	Q Exactive HF-X;Orbitrap Exploris 480	Gel-based experiment;Bottom-up proteomics	Identification of phosphorylation sites on NAP1/AZI2
+PXD051771	Glu-C	1	5	Orbitrap Fusion	Bottom-up proteomics	N-Glycosylation-Defective IL6 Alternatively Activates the SRC-YAP-SOX2 Axis to Drive Metas
+PXD052358	Chymotrypsin	2	2	Q Exactive	Gel-based experiment	LC-MS targeting the rpL40-Lys22 spanning peptide in rpL40-immunoprecipitated KKLS human ga
+PXD055345	Chymotrypsin	15	15	Q Exactive Plus	Bottom-up proteomics	Heteromeric amyloid filaments of ANXA11 and TDP-43 in FTLD-TDP Type C
+PXD058541	Glu-C	1	7	Orbitrap Fusion Lumos	All-ion fragmentation;Data-independent acquisition	The phosphoproteomics study of Chk1 and ATR inhibitors regulation on cells
+PXD058868	Chymotrypsin	36	144	Q Exactive	Data-dependent acquisition	N-terminome analysis of HeLa cells with UPR stress
+PXD059514	Arg-C	9	12	Orbitrap Fusion Lumos	Bottom-up proteomics	Arg-C Ultra simplifies histone preparation for LC-MS/MS
+PXD060570	Chymotrypsin	2	4	Q Exactive	Data-dependent acquisition	Identification of lysine sites in RIG-I ubiquitinated by RNF167 through mass spectrometry 
+PXD063877	Glu-C	3	20	Orbitrap Fusion Lumos	Bottom-up proteomics	Ubiquitination site analysis of eGFP by DARPin-based bioPROTACs analysed by LC-MS-MS
+PXD063877	Chymotrypsin	7	20	Orbitrap Fusion Lumos	Bottom-up proteomics	Ubiquitination site analysis of eGFP by DARPin-based bioPROTACs analysed by LC-MS-MS
+PXD063934	Chymotrypsin	9	27	Orbitrap Ascend	Bottom-up proteomics	Antibody-lectin chimeras for glyco-immune checkpoint blockade
+PXD064311	Glu-C	22	47	Orbitrap Fusion Lumos	Bottom-up proteomics	Retention time calibration for RP-HPLC at pH 9
+PXD064794	Lys-C	30	131	Orbitrap Eclipse	Data-dependent acquisition;Bottom-up proteomics	IsoBayes: a Bayesian approach for single-isoform proteomics inference
+PXD064794	Asp-N	35	131	Orbitrap Eclipse	Data-dependent acquisition;Bottom-up proteomics	IsoBayes: a Bayesian approach for single-isoform proteomics inference
+PXD064794	Chymotrypsin	36	131	Orbitrap Eclipse	Data-dependent acquisition;Bottom-up proteomics	IsoBayes: a Bayesian approach for single-isoform proteomics inference
+PXD065426	Asp-N	1	4	Orbitrap Exploris 480	Gel-based experiment	Light chain amyloid fibrils from multiple myeloma patient (case 1), abdominal fat biopsy
+PXD065428	Asp-N	1	5	Orbitrap Exploris 480	Gel-based experiment	Light chain amyloid fibrils from multiple myeloma patient (case 2), abdominal fat biopsy
+PXD065431	Asp-N	1	5	Orbitrap Exploris 480	Gel-based experiment	Light chain amyloid fibrils from an AL amyloidosis patient (case 2), abdominal fat biopsy
+PXD065432	Asp-N	1	7	Orbitrap Exploris 480	Gel-based experiment	Light chain amyloid fibrils from an AL amyloidosis patient (case 3), abdominal fat biopsy
+PXD066494	Glu-C	16	24	Orbitrap Eclipse	Data-dependent acquisition	Human Bone Morphogenetic Protein Receptor 2 (BMPR2) N-Glycopeptides
+PXD069405	Chymotrypsin	34	102	Orbitrap Eclipse	Data-dependent acquisition;Bottom-up proteomics	Phosphoproteomics reveals altered RNA splicing as a major potential driver of pathology in
+PXD069591	Chymotrypsin	8	39	Orbitrap Exploris 480	Data-dependent acquisition	Characterization of Non-histone Lysine Methylation Across Neuronal Differentiation of LUHM
+PXD073937	Glu-C	2	6	Orbitrap Fusion	Bottom-up proteomics	Truncated N-glycans destabilize POMT1 and POMT2 but do not limit cellular O-mannosylation 
+PXD073937	Chymotrypsin	2	6	Orbitrap Fusion	Bottom-up proteomics	Truncated N-glycans destabilize POMT1 and POMT2 but do not limit cellular O-mannosylation 
+PXD077483	Glu-C	1	2	Orbitrap Fusion Lumos	Data-dependent acquisition;Glycoproteomics;Bottom-up proteomics	Recombinant Ag85B Glycoproteomics
+PXD077924	Chymotrypsin	1	60	Q Exactive	Data-dependent acquisition;Affinity purification coupled with mass spectrometry proteomics;Bottom-up proteomics	Assembly of the catalytic module and the rotor of human ATP synthase.

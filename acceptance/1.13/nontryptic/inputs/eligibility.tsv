@@ -1,0 +1,90 @@
+protease	order	accession	pool	eligible	reason
+Arg-C	1	PXD008965	search	no	E1: in-vitro assay on purified histone H4
+Arg-C	2	PXD059514	search	yes	histone acid extract of MEC-1 cells (biochemical fraction), Arg-C alone; files with TMA derivatisation excluded by name
+Asp-N	1	PXD065426	search	no	E1: amyloid gel band
+Asp-N	2	PXD020128	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Asp-N	3	PXD065432	search	no	E1: amyloid gel band
+Asp-N	4	PXD034420	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Asp-N	5	PXD040583	search	yes	HeLa lysate, Asp-N alone; positive-mode files only
+Asp-N	6	PXD064794	search	yes	WTC-11 cell proteome, Asp-N alone, high-pH fractions
+Asp-N	7	PXD002228	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Asp-N	8	PXD022784	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Asp-N	9	PXD065431	search	no	E1: amyloid gel band
+Asp-N	10	PXD065428	search	no	E1: amyloid gel band
+Chymotrypsin	1	PXD060570	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Chymotrypsin	2	PXD063877	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Chymotrypsin	3	PXD073937	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Chymotrypsin	4	PXD064794	search	yes	WTC-11 cell proteome, chymotrypsin alone, high-pH fractions
+Chymotrypsin	5	PXD035067	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Chymotrypsin	6	PXD036577	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Chymotrypsin	7	PXD035664	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Chymotrypsin	8	PXD012615	search	no	E3: MED-FASP, consecutive Lys-C, trypsin, chymotrypsin
+Chymotrypsin	9	PXD027914	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Chymotrypsin	10	PXD046041	search	no	E1: excised protamine gel bands
+Chymotrypsin	11	PXD058868	search	no	E2: N-terminal peptide enrichment, isotope label
+Chymotrypsin	12	PXD077924	search	no	E2: SILAC
+Chymotrypsin	13	PXD034130	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Chymotrypsin	14	PXD069405	search	no	E2: TMT
+Chymotrypsin	15	PXD022479	sdrf	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Chymotrypsin	16	PXD030094	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Chymotrypsin	17	PXD008434	search	no	E3: MED-FASP, consecutive digestion
+Chymotrypsin	18	PXD049184	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Chymotrypsin	19	PXD022784	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Chymotrypsin	20	PXD012571	search	no	E1: HPLC fractions of plasma prepared for single peptide hormones (about 0.2 ug protein)
+Chymotrypsin	21	PXD057790	sdrf	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Chymotrypsin	22	PXD019081	sdrf	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Chymotrypsin	23	PXD069591	search	no	E2: TMT
+Chymotrypsin	24	PXD052358	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Chymotrypsin	25	PXD031941	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Chymotrypsin	26	PXD013234	search	no	E3: MED-FASP, consecutive Lys-C, trypsin, chymotrypsin
+Chymotrypsin	27	PXD045137	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Chymotrypsin	28	PXD014526	search	no	E1/E2: biotin pull-down, SILAC
+Chymotrypsin	29	PXD034086	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Chymotrypsin	30	PXD055345	search	no	E3: sarkosyl-insoluble brain fraction treated with pronase before chymotrypsin
+Chymotrypsin	31	PXD033779	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Chymotrypsin	32	PXD063934	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Chymotrypsin	33	PXD040102	search	no	E3: sarkosyl-insoluble brain fraction treated with pronase before chymotrypsin
+Chymotrypsin	34	PXD036289	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Chymotrypsin	35	PXD029851	sdrf	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Chymotrypsin	36	PXD026752	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Glu-C	1	PXD018506	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Glu-C	2	PXD020128	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Glu-C	3	PXD015759	search	yes	testis tissue lysate, gel fractions, Glu-C alone
+Glu-C	4	PXD018418	search	no	E2: lectin (Jacalin) enrichment
+Glu-C	5	PXD001281	search	no	E1/E2: SUMO affinity purification, Lys-C then Glu-C
+Glu-C	6	PXD008333	search	yes	seminal plasma / spermatozoa digest with Glu-C alone; recombinant TEX101 files excluded by name
+Glu-C	7	PXD051771	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Glu-C	8	PXD073937	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Glu-C	9	PXD025078	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Glu-C	10	PXD048926	search	yes	HeLa lysate, Glu-C alone
+Glu-C	11	PXD077483	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Glu-C	12	PXD009800	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Glu-C	13	PXD034086	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Glu-C	14	PXD066494	search	no	E1: purified or recombinant protein, immunoprecipitate, in-vitro assay, antibody or excised gel band of one protein
+Glu-C	15	PXD040583	search	reserve	HeLa lysate, Glu-C alone; positive-mode files only
+Glu-C	16	PXD058541	search	not_read	after the third eligible project and the reserve
+Glu-C	17	PXD064311	search	not_read	after the third eligible project and the reserve
+Glu-C	18	PXD022896	search	not_read	after the third eligible project and the reserve
+Glu-C	19	PXD063877	search	not_read	after the third eligible project and the reserve
+Glu-C	20	PXD006465	search	not_read	after the third eligible project and the reserve
+Lys-C	1	PXD042838	sdrf	no	E3: trypsin/Lys-C mixture; LCQ instrument
+Lys-C	2	PXD015759	search	yes	testis tissue lysate, gel fractions, Lys-C alone
+Lys-C	3	PXD001281	search	no	E1/E2: SUMO affinity purification
+Lys-C	4	PXD006465	search	yes	testis tissue lysate, gel fractions, Lys-C alone
+Lys-C	5	PXD040583	search	yes	HeLa lysate, Lys-C alone; positive-mode files only
+Lys-C	6	PXD048926	search	reserve	HeLa lysate, Lys-C alone
+Lys-C	7	PXD047102	sdrf	not_read	after the third eligible project and the reserve
+Lys-C	8	PXD034420	search	not_read	after the third eligible project and the reserve
+Lys-C	9	PXD020022	sdrf	not_read	after the third eligible project and the reserve
+Lys-C	10	PXD074354	sdrf	not_read	after the third eligible project and the reserve
+Lys-C	11	PXD013234	sdrf	not_read	after the third eligible project and the reserve
+Lys-C	12	PXD012824	sdrf	not_read	after the third eligible project and the reserve
+Lys-C	13	PXD044925	sdrf	not_read	after the third eligible project and the reserve
+Lys-C	14	PXD013142	sdrf	not_read	after the third eligible project and the reserve
+Lys-C	15	PXD014131	sdrf	not_read	after the third eligible project and the reserve
+Lys-C	16	PXD024364	sdrf	not_read	after the third eligible project and the reserve
+Lys-C	17	PXD064794	search	not_read	after the third eligible project and the reserve
+Lys-C	18	PXD002137	sdrf	not_read	after the third eligible project and the reserve
+Lys-C	19	PXD026086	search	not_read	after the third eligible project and the reserve
+Lys-C	20	PXD022784	search	not_read	after the third eligible project and the reserve
+Lys-C	21	PXD012571	search	not_read	after the third eligible project and the reserve
