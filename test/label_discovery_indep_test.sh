@@ -181,7 +181,7 @@ outs() {   # DIR: the full set of other outputs into DIR, in the array OUTS
 # every run, so the index offsets do not move) is masked and the file
 # checksum over those paths dropped. The -label_discovery_* options must not
 # appear there at all (section 2: the legacy-parameter shim keeps them out).
-norm() { for d in a d b c; do sed -e "s#$IDT/$d/#$IDT/R/#g" -e '/<fileChecksum>/d' "$IDT/$d/spectra.mzML" > "$IDT/$d/spectra.norm"; done; }
+norm() { for d in a d b c; do sed -e "s#$IDT/$d/#$IDT/R/#g" -e '/<fileChecksum>/d' -e '/MS:1000747/d' "$IDT/$d/spectra.mzML" > "$IDT/$d/spectra.norm"; done; }
 ADV=(-label_discovery_max_flank 500 -label_discovery_depth 1 -label_discovery_min_spectra 5
      -label_discovery_min_share 0.01 -label_discovery_window_n 0.01 -label_discovery_window_c 0.002
      -label_discovery_unimod_top 1)
