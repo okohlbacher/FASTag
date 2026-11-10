@@ -78,8 +78,29 @@ right. The MS1 scan gives a charge for 73-97 % of the truth spectra, and that ch
 
 ## Validation
 
-**The current rule has no held-out result.** It was developed on PXD003531 and PXD001819 and then run unchanged on the other five DEV runs; a held-out test
-needs new runs (the five runs below are spent).
+**Held-out result: PASS** (protocol `acceptance/1.13/PREREG-item14r.md`, branch `acc113r/hdrcharge`: freeze
+8d13581, results dee3281; scored once; mode `warn`). Five new runs from five PRIDE projects, headers as given;
+truth: Sage on a charge-stripped copy, q <= 0.001; 2,258 wrong headers among 85,185 truth spectra.
+
+| criterion | result |
+|---|---|
+| precision, Wilson 95 % lower bound >= 0.60 | 608 / 896 = 0.679 (0.647-0.708) |
+| sensitivity >= 0.20 | 608 / 2,258 = 0.269 |
+| right headers flagged <= 0.5 % pooled, <= 1.0 % per run | 288 / 82,927 = 0.35 %; worst run 0.50 % |
+
+| run | precision | sensitivity |
+|---|---|---|
+| PXD037572 | 0.963 | 0.557 |
+| PXD016408 | 0.493 | 0.165 |
+| PXD033520 | 0.700 | 0.333 |
+| PXD071028 (Orbitrap Astral) | 0.675 | 0.257 |
+| PXD080900 (Orbitrap Astral) | 0.704 | 0.299 |
+
+806 of the 896 flags come from the MS1 isotope spacing (0.658 right), 90 from complement pairs (0.867 right). The
+flagged charge equals Sage's in 574 of 896 flags (0.641). On the perturbed copies: precision 0.982, sensitivity
+0.764. The held-out values are lower than on DEV. Limits: all five runs are affinity-purification samples; one run
+(PXD016408) is below the pooled thresholds on its own; the truth assumes fixed Cys carbamidomethylation, which does
+not hold for PXD071028 (MMTS) and PXD033520 (not alkylated).
 
 Record of the previous rule (complement pairs with 1+/1+ pairs only, range evidence as a ground, `override` instead
 of `both`; protocol `acceptance/1.13/PREREG-item14.md`, results in `acceptance/1.13/hdrcharge/results/`): 5 held-out
@@ -89,5 +110,5 @@ charges and broken 98. On the perturbed copies it found 28 % of the changed head
 Astral (PXD070049) all 9 flags as given and all 8 on the perturbed copy were false. These numbers do not describe
 the current rule.
 
-The option stays experimental. Until the held-out test, read `warn`'s disagreements as candidates, not as wrong
-charges.
+The option stays experimental. About one flag in three is wrong, so read `warn`'s disagreements as candidates;
+`both` keeps the header charge as the selected row.

@@ -1894,10 +1894,10 @@ protected:
       OPENMS_LOG_ERROR << herr << std::endl;
       return ILLEGAL_PARAMETERS;
     }
-    // 1.13: not validated on held-out data yet; say so whenever it runs.
+    // 1.13: experimental; say so whenever it runs.
     if (hyp_param.header_check == FASTag::Hyp::HeaderCheck::Both)
       OPENMS_LOG_WARN << "-check_header_charge both is experimental: a flagged spectrum is tagged under two "
-                         "charges, and the check has not passed a held-out test (doc/HEADER-CHARGE-CHECK.md)."
+                         "charges, and on held-out data about one flag in three was wrong (doc/HEADER-CHARGE-CHECK.md)."
                       << std::endl;
     const bool hyp_on = !hyp_param.isDefault();
     // #6: -species reads the selected hypothesis' rows only, through a per-row

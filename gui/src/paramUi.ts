@@ -1210,7 +1210,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   unknown_charge: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'How a precursor whose charge the file does not give is tagged: as 2+ (the default, as before 1.12), at each possible charge, or at the charge its fragment pairs support best. A charge given in the file is never replaced (except by the experimental header charge check in override mode).'
+      text: 'How a precursor whose charge the file does not give is tagged: as 2+ (the default, as before 1.12), at each possible charge, or at the charge its fragment pairs support best. A charge given in the file is never replaced (the experimental header charge check in both mode can add a second charge).'
     }
   },
 
