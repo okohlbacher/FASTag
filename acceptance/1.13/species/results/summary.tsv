@@ -1,0 +1,31 @@
+runs_manifest	62
+runs_scored	62
+excluded	-
+true_in_index	105
+CFG-explain:false_per_run	0.5000 [0.2903, 0.7258]
+CFG-explain:false_per_run_sdrfonly	0.6613 [0.4194, 0.9355]
+CFG-explain:false_per_run_literal	0.1290 [0.0323, 0.2419]
+CFG-explain:false_total	31
+CFG-explain:runs_any_false	19
+CFG-explain:recovered	38
+CFG-explain:recovery	0.3619
+CFG-explain:recovered_literal	75
+CFG-explain:sdrf_recovered	42
+CFG-explain:relative_instead	3
+CFG-explain:no_present	6
+CFG-decoy:false_per_run	5.9839 [4.6774, 7.4839]
+CFG-decoy:false_per_run_sdrfonly	7.7581 [6.1935, 9.4677]
+CFG-decoy:false_per_run_literal	3.5806 [2.5484, 4.8714]
+CFG-decoy:false_total	371
+CFG-decoy:runs_any_false	51
+CFG-decoy:recovered	77
+CFG-decoy:recovery	0.7333
+CFG-decoy:recovered_literal	302
+CFG-decoy:sdrf_recovered	43
+CFG-decoy:relative_instead	2
+CFG-decoy:no_present	6
+true_in_index_literal	700
+sdrf_in_index	49
+primary	PASS
+guard	FAIL
+overall	FAIL
