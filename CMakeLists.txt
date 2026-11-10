@@ -277,9 +277,12 @@ if(FASTAG_BUILD_TESTS)
   set(FASTAG_UNIT_TESTS_D species_call_test digest_v2_test alkylation_test)
   # ---- 1.12 F: unit tests ----
   set(FASTAG_UNIT_TESTS_F output_guard_test census_test census_ids_test)
+  # ---- 1.13 #18: unit tests ----
+  set(FASTAG_UNIT_TESTS_B113_MSFRAGGER msfragger_config_test)
   # ---- 1.13: unit tests ----
   set(FASTAG_UNIT_TESTS_113 complement_tol_test)
-  foreach(t ${FASTAG_UNIT_TESTS} ${FASTAG_UNIT_TESTS_E} ${FASTAG_UNIT_TESTS_A} ${FASTAG_UNIT_TESTS_D} ${FASTAG_UNIT_TESTS_F} ${FASTAG_UNIT_TESTS_113})
+  foreach(t ${FASTAG_UNIT_TESTS} ${FASTAG_UNIT_TESTS_E} ${FASTAG_UNIT_TESTS_A} ${FASTAG_UNIT_TESTS_D} ${FASTAG_UNIT_TESTS_F} ${FASTAG_UNIT_TESTS_113}
+            ${FASTAG_UNIT_TESTS_B113_MSFRAGGER})
     add_executable(${t} test/${t}.cpp)
     target_link_libraries(${t} PRIVATE fastag_core)
     add_test(NAME ${t} COMMAND ${t})
@@ -523,6 +526,8 @@ if(FASTAG_BUILD_TESTS)
                              FASTAG_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
   target_compile_definitions(search_config_test PRIVATE
                              FASTAG_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
+  target_compile_definitions(msfragger_config_test PRIVATE
+                             FASTAG_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
   add_test(NAME shortlist_cli_test
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/shortlist_cli_test.sh $<TARGET_FILE:FASTag>
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures
@@ -536,6 +541,12 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
   set_tests_properties(search_engine_smoke_test PROPERTIES SKIP_RETURN_CODE 77)
+  # ---- 1.13 #18: -search_engine msfragger ----
+  add_test(NAME msfragger_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/msfragger_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
+  set_tests_properties(msfragger_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # ---- 1.12 D: CLI tests ----
   # #1: -species_call (decoy null, calls, warnings, refusals) on a toy index
   # built at test time; none equals the option absent (and FASTAG_BASELINE_BIN).

@@ -222,6 +222,26 @@ dropped_engine). Derived from the vendored FASTA only, so the same licence.
 
 sha256: `shifts_insilico.mgf` `bb609510728087057effddcf1fec8b0a52cec4907e2e954cdd287d27cee4d257`.
 
+`msfragger_4.4.1_closed.params` — written by `java -jar MSFragger-4.4.1.jar
+--config closed` (MSFragger 4.4.1, OpenJDK 21.0.12.1, node data, 2026-11-09),
+unedited, sha256
+`0bb456769c6afc8e6c0759624b65def1cc87dae0a397a6bd6be9d70e5aeff0cd`.
+`msfragger_config_test` checks the key set and order of FASTag's MSFragger
+configuration against it. Note: MSFragger 4.4.1 does not run this file as it
+is (its `labile_fragment_ion_series` line carries a comment after spaces,
+which MSFragger reads as the value).
+
+`msfragger_4.4.1_echo.txt` — what MSFragger 4.4.1 read from the golden plan
+of `test/msfragger_config_test.cpp`: `msfragger_config_test --emit
+golden.params` (sha256 `3025697178e64d55869c1aff20a19ff54ba18931722562a303d10c2cf44cb631`),
+then `java -Xmx24g -jar MSFragger-4.4.1.jar golden.params run.mzML` with
+`run.mzML` = `Ecoli_MS2_small.mzML` and `golden_td.fasta` =
+`Ecoli_shortlist.fasta` plus a reversed `rev_` copy of every entry (exit 0;
+log sha256 `c6a2ad55...`, pepXML sha256 `80f8bdc7...`). The file holds the
+log's "Parameters:" block verbatim and the pepXML's sorted unique
+`<aminoacid_modification>` and `<terminal_modification>` elements except the
+26 mass-offset entries. Changing the golden plan needs a new run.
+
 ## Complement-tolerance fixtures (1.13 item 15)
 
 `compltol_hires.mgf` and `compltol_lowres.mgf` (250 MS2 each), written by
