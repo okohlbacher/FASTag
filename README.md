@@ -545,6 +545,7 @@ MGF→mzML direction is exact.
 | `-alkylation_out <file>` | none | Experimental (1.12), not validated on held-out data: which reagent alkylated the cysteines, or none, from the placements of single-Cys peptides (see Digest, label and mass-gap reports; format in doc/ALKYLATION-REPORT.md) |
 | `-alkylation_proteome <name\|file>` | auto | Database of `-alkylation_out` when nothing else places: `auto` (= human), `human`, `mouse`, `yeast`, `ecoli` name the shipped UniProt reference proteomes (release 2026_04, reviewed entries, `share/FASTag/alkylation/<name>.fasta.gz`, CC BY 4.0; since 1.13, in 1.12 they stopped with exit code 6), or a FASTA file (`.gz` allowed); ignored with `-recon_fasta`. **The shipped proteomes need `-tag_length 8` (human, mouse) or `-tag_length 7` (yeast, ecoli):** shorter tags do not place on them, and at the default `-tag_length 3` the call is `no_call` with reason `tags_too_short`. The report's `database_release` row names the release and the FASTA's sha256, which FASTag checks the file against (doc/ALKYLATION-REPORT.md, Shipped proteomes) |
 | `-alkylation_min_spectra <n>` / `-alkylation_min_share <f>` / `-alkylation_window <Da>` | 10 / 0.6 / 0 | Advanced: spectra and share the call needs; bin window (0 = 0.02 Da on ppm runs, 0.5 Da on Da runs) |
+| `-alkylation_tags_out <file>` | none | Experimental (1.13), advanced; on development data 61 of 123 runs are called, 51 as annotated, unalkylated runs are rarely called, and there is no held-out test yet: the database-free alkylation call. Every MS2 spectrum is tagged a second time with unmodified C and one alternative C edge per reagent; a spectrum votes when its best such tag (E <= 1e-4) holds a C inside the tag (use with `-extension`; measured with `-tag_length 4 -extension 6`; without extension few spectra vote), and the call uses `-alkylation_min_spectra` / `-alkylation_min_share`. Every other output is unchanged (format in doc/ALKYLATION-REPORT.md, section `-alkylation_tags_out`) |
 | `-shortlist_out <file>` | none | Experimental (1.12): ranked protein shortlist from the tag placements on `-recon_fasta` (or `-fasta`), one row per protein with evidence (see Protein shortlist and search hand-off). A search-space reduction, NOT FDR-controlled |
 | `-fasta_out <file>` | none | Experimental: reduced FASTA of the kept proteins (never decoys), then `-shortlist_background` |
 | `-shortlist_background <file>` | none | Proteins always written to `-fasta_out` (host proteome, contaminants), decoys left out; an entry identical to a database entry is written once, as that entry (kept even below the shortlist cut, reason `background`) |
@@ -923,6 +924,20 @@ options and their values.
   output is the same with and without it. Sections `alk_run`, `alk_cys` and
   `alkylation_call`; the format is documented and versioned in
   doc/ALKYLATION-REPORT.md.
+- **`-alkylation_tags_out`** (1.13, experimental, not validated on held-out
+  data) makes the same call without a database. A second tagging pass, whose
+  tags are not written, drops the run's C modifications. It spells C as
+  unmodified or as `C[<reagent>]` for the five reagents. Each MS2 spectrum
+  votes once with its best ungapped 1+ tag (E <= 1) that holds a C; tied
+  tags of two forms are a conflict. A tolerance that cannot separate
+  Carbamidomethyl from Carboxymethyl (0.984 Da apart, so 0.5 Da) gives no
+  call (`unresolved_forms`). There are known confounds:
+  C[Carbamidomethyl] = G + C and C[Propionamide] = A + C when the peak
+  between them is missing. The report lists the twins within the run's
+  tolerance. The pass costs about one more tagging run. On the development
+  runs it almost never calls: random C edges spread the votes over all
+  forms (doc/ALKYLATION-REPORT.md).
+  Sections `alkt_run`, `alkt_form` and `alkylation_tags_call`.
 
 The `-digest_out` options of 1.12 (`-digest_models_version v2`,
 `-digest_detection`, `-digest_flank2`, `-digest_min_confidence`) are opt-in

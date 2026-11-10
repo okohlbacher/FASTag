@@ -18,7 +18,7 @@ describe('map: param overlay vs CLI manifest', () => {
     expect(c).toContain('domain')
     expect(c).not.toContain('superkingdom')
   })
-  it('renders 68 parameters and hides 84 (mzpeak_read_memory, 63 of the 64 1.12 options, the 1.13 complement_probe, ion_series_photo, ion_series_hybrid and label_call_min_tags, the 3 1.13 -check_header_* options, the 2 1.13 item 20 options and the 1.13 digest_quality among them)', () => {
+  it('renders 68 parameters and hides 85 (mzpeak_read_memory, 63 of the 64 1.12 options, the 1.13 complement_probe, ion_series_photo, ion_series_hybrid and label_call_min_tags, the 3 1.13 -check_header_* options, the 2 1.13 item 20 options, the 1.13 digest_quality and the 1.13 #22 alkylation_tags_out among them)', () => {
     // 1.10.0 added species_evidence (rendered) to the 1.9.0 set; 1.12.0 adds
     // 64 options (8 of them #17 -search_shifts), hidden until each has its GUI design, except
     // acquisition_check: its default refuses raw DIA, so the form offers warn/off.
@@ -32,8 +32,9 @@ describe('map: param overlay vs CLI manifest', () => {
     // 1.13 item 15 adds complement_probe (hidden, experimental).
     expect(RENDERED.length).toBe(68)
     // 1.13 digqual adds digest_quality, hidden as experimental.
-    expect(HIDDEN_PARAMS.length).toBe(84)
+    expect(HIDDEN_PARAMS.length).toBe(85)
     expect(HIDDEN_PARAMS).toContain('digest_quality')
+    expect(HIDDEN_PARAMS).toContain('alkylation_tags_out')
     expect(HIDDEN_PARAMS).toContain('ion_series_photo')
     expect(HIDDEN_PARAMS).toContain('ion_series_hybrid')
     expect(HIDDEN_PARAMS).toContain('label_call_min_tags')
@@ -43,7 +44,7 @@ describe('map: param overlay vs CLI manifest', () => {
     for (const n of ['check_header_charge', 'check_header_margin', 'check_header_out']) expect(HIDDEN_PARAMS).toContain(n)
     expect(RENDERED).toContain('acquisition_check')
     expect(PARAM_BY_NAME.get('acquisition_check')?.choices).toEqual(['refuse', 'warn', 'off'])
-    expect(manifest.params.length).toBe(152)
+    expect(manifest.params.length).toBe(153)
   })
   it('renders or hides every parameter of the manifest once (mzpeak_read_memory hidden)', () => {
     // In addition to the pinned counts above: every manifest parameter is

@@ -79,7 +79,7 @@ set(FASTAG_CORE_SOURCES_E src/Acquisition.cpp src/Centroid.cpp src/PrecursorHypo
 # ---- 1.12 A: core sources ----
 set(FASTAG_CORE_SOURCES_A src/Shortlist.cpp src/SearchConfig.cpp)
 # ---- 1.12 D: core sources ----
-set(FASTAG_CORE_SOURCES_D src/SpeciesLookup.cpp src/SpeciesCall.cpp src/AlkylationCall.cpp src/Sha256.cpp)
+set(FASTAG_CORE_SOURCES_D src/SpeciesLookup.cpp src/SpeciesCall.cpp src/AlkylationCall.cpp src/AlkylationTags.cpp src/Sha256.cpp)
 # ---- 1.12 F: core sources ----
 set(FASTAG_CORE_SOURCES_F src/OutputGuard.cpp src/CensusIds.cpp)
 # ---- 1.13: core sources ----
@@ -283,7 +283,7 @@ if(FASTAG_BUILD_TESTS)
   # ---- 1.12 A: unit tests ----
   set(FASTAG_UNIT_TESTS_A shortlist_test search_config_test)
   # ---- 1.12 D: unit tests ----
-  set(FASTAG_UNIT_TESTS_D species_call_test digest_v2_test alkylation_test)
+  set(FASTAG_UNIT_TESTS_D species_call_test digest_v2_test alkylation_test alkylation_tags_test)
   # ---- 1.12 F: unit tests ----
   set(FASTAG_UNIT_TESTS_F output_guard_test census_test census_ids_test)
   # ---- 1.13 digqual: unit tests ----
@@ -623,6 +623,14 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy
                    ${CMAKE_CURRENT_SOURCE_DIR}/tools/species_orientation_recount.py)
   set_tests_properties(species_orientation_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # 1.13 #22: -alkylation_tags_out on synthetic single-Cys mzML that
+  # alkylation_tags_test writes (CAM, NEM, unmodified); the tag TSV is the
+  # same with and without it; refusals.
+  add_test(NAME alkylation_tags_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/alkylation_tags_cli_test.sh $<TARGET_FILE:FASTag>
+                   $<TARGET_FILE:alkylation_tags_test>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML)
+  set_tests_properties(alkylation_tags_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # ---- 1.12 F: CLI tests ----
   # #11 phase A: -census on the fixture, its MGF twin, census_edge.mzML (every
   # status, subsampling) and diatracer_like.mzML; existing outputs unchanged.
