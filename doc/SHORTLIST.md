@@ -86,6 +86,83 @@ per tag end ahead, and is refused; PXD010783 (ion trap, Da) is inconclusive.
 The 0.05 margin is provisional and is fixed on the dev split with the other
 thresholds.
 
+## Protease-aware placement (1.13, item 20, experimental)
+
+`-shortlist_protease` (default `trypsin`, the 1.12 behaviour above, byte for
+byte) chooses the cleavage rule of the shortlist's placements and of
+`-search_config_out`:
+
+- `auto`: the model the protease check calls, when the call is confident
+  (Compatible or NonTryptic above); an inconclusive check is Trypsin, as 1.12
+  assumes. A call of the `unspecific` model is the unspecific rule.
+- `chymotrypsin`, `lys-c`, `arg-c`, `asp-n`, `glu-c`, `lys-n`: that rule.
+  When the check confidently calls another protease whose cleavage sites do
+  not nest with the rule's (one site set within the other, same side, same
+  no-cut residue), the hand-off outputs are withheld as in 1.12 (ERROR, exit
+  `ILLEGAL_PARAMETERS`) unless `-shortlist_force`. Lys-C (after K) and Arg-C
+  (after R) are disjoint, so a Lys-C call withholds `arg-c` and an Arg-C call
+  withholds `lys-c`, although both are trypsin-compatible; Trypsin contains
+  both, so a Trypsin call with `lys-c` or `arg-c` (or the reverse) is kept
+  with a WARN that the engine searches the named rule, not the call.
+  `-shortlist_specificity none` is never withheld, and a call of the
+  `unspecific` model (no protease fits better than the background;
+  PXD040407's chymotrypsin run calls it) names no other protease and does not
+  withhold a named rule.
+- `unspecific`: every window, never withheld.
+
+With any value but `trypsin` the shortlist's tags are not placed on tryptic
+windows. For each occurrence of a tag in the database, the windows are those
+whose database flanks match the spectrum's flanks by mass (each also less a
+fixed terminal label on its side), inside one ambiguity-free segment
+(`ProteomeIndex::windowsByMass`); each goes through the same flank test as a
+tryptic placement (`TagReconciler::reconcileByMass`). Only exact and
+label-exact placements count, so `-shortlist_gapped` is ignored with a WARN.
+After the run the rule is chosen and each placement is kept when OpenMS
+`ProteaseDigestion::isValidProduct` accepts its window for the rule's
+ProteaseDB enzyme at `-shortlist_specificity` (`full`: both ends at a site or
+a protein terminus, an initiator Met may be cleaved; `semi`: one end; `none`:
+any) and at most `-recon_missed_cleavages` internal sites. `-recon_out` and
+every other placement reader keep their tryptic placements.
+
+| Rule | ProteaseDB enzyme | Sage `cleave_at` / `restrict` / `c_terminal` | Comet (`comet -p` 2026.03.0) |
+|---|---|---|---|
+| Trypsin | Trypsin | KR / P / true | 1 |
+| Lys-C | Lys-C | K / P / true | 3 |
+| Arg-C | Arg-C | R / P / true | 5 |
+| Asp-N | Asp-N/B | D / null / false | none (its 6 cuts before D and N): needs `-search_config_template` with a `0 D -` entry |
+| Glu-C | glutamyl endopeptidase | DE / null / true | 8 (Asp-N_ambic, after D/E) |
+| Chymotrypsin | Chymotrypsin | FWYL / P / true | 10 |
+| Lys-N | Lys-N | K / null / false | 4 |
+| unspecific | (all windows) | "" / null / true | 0 (Cut_everywhere) |
+
+The rules' residues are checked against their ProteaseDB enzymes over all
+residue pairs in `cleavage_test`. Glu-C: FASTag's model cuts after E only;
+ProteaseDB has no E-only enzyme, so the window test and the engines cut
+after D and E (a superset: no window is lost). With a template Comet's enzyme
+is looked up in its `[COMET_ENZYME_INFO]` table by rule (sense, cut residues,
+no-cut residue), as trypsin is in 1.12. A named rule without an entry (in
+the template, or in Comet's own table for Asp-N) is refused before tagging.
+With `auto` the rule is known only after the run: a WARN before the run names
+the rules without an entry, and if the run calls one of them the tool stops
+with ERROR and exit `ILLEGAL_PARAMETERS` and writes neither `-fasta_out` nor
+`-search_config_out` (the configuration is made before the FASTA is written,
+so the two are written together or not at all). `semi` writes Sage
+`"semi_enzymatic": true` and Comet `num_enzyme_termini = 1`. Sage 0.14.7's
+behaviour was checked on node data: `cleave_at ""` digests non-specifically
+(66,127 peptides on the fixture database against 271 tryptic), `"restrict":
+null` lifts the proline rule, `semi_enzymatic` gives 5,045.
+
+The shortlist TSV gets one header line after `# protease:` (only with this
+option):
+`# placement: <rule>, <specificity> specificity, missed cleavages <= <n>,
+windows by flank mass (<why>)`, ending in `; <outputs> withheld` (the
+withheld ones of `-fasta_out` and `-search_config_out`) when they were. The log says how many of the
+placements by flank mass fit the rule.
+
+Cost: a placement by mass walks at most the flank masses from each
+occurrence (a few dozen residues), for the shortlist's tags only (E <=
+`-shortlist_max_evalue`); the evidence is filtered once after the run.
+
 ## Reduced FASTA
 
 The database is streamed again and the kept entries are written in database
@@ -172,7 +249,16 @@ values:
   `-search_shifts offsets` is refused; use `-search_precursor_unit ppm`;
 - trypsin (`search_enzyme_name_1 trypsin`, cut `KR`, nocut `P`, sense `C`),
   `allowed_missed_cleavage_1` from `-recon_missed_cleavages` (at most 5),
-  `num_enzyme_termini 2`;
+  `num_enzyme_termini 2`; with a `-shortlist_protease` other than trypsin
+  (item 20) its rule instead: the rule's name in lower case, its cut and
+  no-cut residues, sense `C` or `N`, `num_enzyme_termini` 2 (`full`) or 1
+  (`semi`); `unspecific` (or `-shortlist_specificity none`) writes
+  `search_enzyme_name_1 nonspecific`, cut `@`, empty no-cut, and
+  `num_enzyme_termini 0` (with an empty cut MSFragger 4.4.1 ignores the
+  whole `_1` enzyme block: it echoed `stricttrypsin` and 2 missed
+  cleavages). Checked on node data with MSFragger 4.4.1 on the in-silico
+  chymotryptic MGF: it echoes the exported chymotrypsin rule (474 peptides
+  from the reduced FASTA) and `nonspecific` (87,087 peptides);
 - variable modifications in `variable_mod_01..16` (only the used slots; the
   default file's Oxidation and protein N-term Acetyl are not kept):
   `<mass> <site> <max>`, site the residue, `n^`/`c^` a peptide terminus,
@@ -306,5 +392,6 @@ before this is documented as improving identifications.
 
 - Counts under `-subsample_*` are subsample counts; with `-fasta` the tags are
   filtered before placement. The TSV header says so.
-- Placement is tryptic. Non-tryptic shortlists wait for #8/#19.
+- Placement is tryptic unless `-shortlist_protease` (1.13, experimental) is
+  given; see Protease-aware placement.
 - Evidence costs about 20 bytes per qualifying placement (E-filtered).

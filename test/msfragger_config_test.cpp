@@ -431,6 +431,51 @@ int main(int argc, char** argv)
       if (!l.empty() && l[0] != '#' && l.find('#') != std::string::npos) comment_after_value = true;
     check(!comment_after_value, "no inline comments (MSFragger 4.4.1 reads them as values)");
   }
+  // ---- 1.13 item 20: a -shortlist_protease rule reaches fragger.params;
+  // the default plan (trypsin) keeps the 1.12/#18 enzyme keys.
+  {
+    const auto enzKeys = [](const SC::Enzyme& e) {
+      SC::SearchPlan q = goldenPlan();
+      q.enzyme = e;
+      Keys k;
+      const std::string err = SC::msfraggerKeys(q, k);
+      check(err.empty(), "enzyme plan renders: " + err);
+      return asMap(k);
+    };
+    const auto tryp = enzKeys(SC::Enzyme());
+    check(tryp.at("search_enzyme_name_1") == "trypsin" && tryp.at("search_enzyme_cut_1") == "KR" &&
+              tryp.at("search_enzyme_nocut_1") == "P" && tryp.at("search_enzyme_sense_1") == "C" &&
+              tryp.at("num_enzyme_termini") == "2",
+          "default enzyme: trypsin KR/P, C, fully specific");
+    SC::Enzyme chymo;
+    chymo.name = "Chymotrypsin";
+    chymo.cut = "FWYL";
+    chymo.nocut = "P";
+    chymo.termini = 1;
+    const auto ch = enzKeys(chymo);
+    check(ch.at("search_enzyme_name_1") == "chymotrypsin" && ch.at("search_enzyme_cut_1") == "FWYL" &&
+              ch.at("search_enzyme_nocut_1") == "P" && ch.at("search_enzyme_sense_1") == "C" &&
+              ch.at("num_enzyme_termini") == "1",
+          "semi-specific chymotrypsin: cut FWYL, nocut P, C, num_enzyme_termini 1");
+    SC::Enzyme aspn;
+    aspn.name = "Asp-N";
+    aspn.cut = "D";
+    aspn.nocut = "";
+    aspn.c_terminal = false;
+    const auto an = enzKeys(aspn);
+    check(an.at("search_enzyme_name_1") == "asp-n" && an.at("search_enzyme_cut_1") == "D" &&
+              an.at("search_enzyme_nocut_1").empty() && an.at("search_enzyme_sense_1") == "N" &&
+              an.at("num_enzyme_termini") == "2",
+          "Asp-N: cut D, no nocut, N-terminal sense");
+    SC::Enzyme none;
+    none.name = "unspecific";
+    none.cut.clear();
+    none.nocut.clear();
+    const auto ns = enzKeys(none);
+    check(ns.at("search_enzyme_name_1") == "nonspecific" && ns.at("search_enzyme_cut_1") == "@" &&
+              ns.at("search_enzyme_nocut_1").empty() && ns.at("num_enzyme_termini") == "0",
+          "unspecific: nonspecific, cut '@' (MSFragger ignores the block on an empty cut), num_enzyme_termini 0");
+  }
   // ---- the reversed decoys of -fasta_out
   {
     const std::string db = "msfragger_config_test_db.fasta", out = "msfragger_config_test_out.fasta";

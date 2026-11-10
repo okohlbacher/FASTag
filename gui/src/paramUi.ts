@@ -1105,6 +1105,18 @@ export const PARAM_UI: Record<string, ParamUi> = {
       text: 'Write the smaller FASTA and the search settings even when the protease of the run does not fit tryptic placement.'
     }
   },
+  shortlist_protease: {
+    hidden: EXPERIMENTAL_1_13,
+    help: {
+      text: 'The cleavage rule the shortlist places tags with: trypsin (as in 1.12), the protease the run calls (auto), a named protease, or none (unspecific).'
+    }
+  },
+  shortlist_specificity: {
+    hidden: EXPERIMENTAL_1_13,
+    help: {
+      text: 'How many window ends must be cleavage sites of the -shortlist_protease rule: both (full), one (semi) or none.'
+    }
+  },
   shortlist_gapped: {
     hidden: OPT_IN_1_12,
     help: {
