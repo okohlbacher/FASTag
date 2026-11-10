@@ -124,6 +124,9 @@ namespace FASTag
     ///   the decoder rejects an MS2 spectrum (OpenMS's reader fails the same
     ///   file; a silent empty spectrum would drop its tags).
     OpenMS::MSSpectrum getSpectrum(OpenMS::Size i);
+    /// As getSpectrum(), but with the peaks of a spectrum of any MS level
+    /// (1.13 -check_header_charge reads the MS1 scan before an MS2).
+    OpenMS::MSSpectrum getSpectrumAnyLevel(OpenMS::Size i);
 
     /// Spectrum @p i WITHOUT peaks: every metadata field getSpectrum() fills
     /// (native id, MS level, retention time, type, scan windows, ion
@@ -157,7 +160,7 @@ namespace FASTag
     static constexpr OpenMS::Size kMetadataProbe = 5000;
 
   private:
-    OpenMS::MSSpectrum read_(OpenMS::Size i, bool want_peaks);
+    OpenMS::MSSpectrum read_(OpenMS::Size i, bool want_peaks, bool any_level = false);
 
     struct Impl;
     std::unique_ptr<Impl> impl_;

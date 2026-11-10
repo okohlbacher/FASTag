@@ -781,7 +781,8 @@ protected:
                           "candidate when 2 is none). Every charge tagged is a listed possible charge, "
                           "else one of -charge_min..-charge_max. With several, E-values are multiplied "
                           "by their number and the reports count the charge-evidence choice only. A "
-                          "header charge is never replaced (except by -check_header_charge override)", false);
+                          "header charge is never replaced (-check_header_charge both tags a flagged "
+                          "spectrum under the flagged charge as well)", false);
     setValidStrings_("unknown_charge", ListUtils::create<std::string>(FASTag::Hyp::kModeValues));
     registerIntOption_("charge_min", "<n>", FASTag::Hyp::kChargeMinDefault,
                        "Lowest charge -unknown_charge enumerate or infer tries (1 enables infer's "
@@ -806,14 +807,15 @@ protected:
     setMaxInt_("isotope_error", FASTag::Hyp::kIsotopeMax);
     // 1.13 (backlog #14): re-check header charges against the infer call.
     registerStringOption_("check_header_charge", "<mode>", FASTag::Hyp::kHeaderCheckDefault,
-                          "Check every precursor charge the file gives against the charge its "
-                          "complement pairs support (the -unknown_charge infer call over "
-                          "-charge_min..-charge_max and the header charge): off (the default), warn "
-                          "(count and report disagreements, tag at the header charge) or override "
-                          "(tag a disagreeing spectrum at the supported charge; charge_src "
-                          "'overridden'; not recommended: on held-out Q Exactive data it broke more "
-                          "charges than it fixed). Experimental; validated on Q Exactive only (on "
-                          "Orbitrap Astral its disagreements were false)", false, true);
+                          "Check every precursor charge the file gives against the isotope spacing "
+                          "of the precursor in the preceding MS1 scan and, where that gives no "
+                          "charge, against the charge its complement pairs support (the "
+                          "-unknown_charge infer call over -charge_min..-charge_max and the header "
+                          "charge, with 1+/(z-1)+ pairs for z >= 3): off (the default), warn (count "
+                          "and report disagreements, tag at the header charge) or both (tag a "
+                          "disagreeing spectrum under its header charge and under the charge the "
+                          "check found, charge_src 'check_call'; the header charge stays the "
+                          "selected one). Experimental", false, true);
     setValidStrings_("check_header_charge", ListUtils::create<std::string>(FASTag::Hyp::kHeaderCheckValues));
     registerDoubleOption_("check_header_margin", "<value>", FASTag::Hyp::kHeaderMarginDefault,
                           "Complement-pair excess by which the supported charge must beat the header "
@@ -821,7 +823,7 @@ protected:
     setMinFloat_("check_header_margin", 0.0);
     registerOutputFile_("check_header_out", "<file>", "",
                         "-check_header_charge: one row per header-charged MS2 spectrum (header "
-                        "charge, call, evidence, verdict)", false, true);
+                        "charge, MS1 charge, call, evidence, verdict)", false, true);
     setValidFormats_("check_header_out", ListUtils::create<std::string>("tsv"));
     // #15 phase B: c/z-dot ions for electron activation (src/IonSeries.h).
     // Default by is FASTag 1.11; validation decides any other default.
@@ -1389,11 +1391,11 @@ protected:
                           "-isotope_error at their defaults." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
-    // 1.13: override can tag a spectrum at another charge than its header's.
-    if (registeredNonDefault_("check_header_charge") && getStringOption_("check_header_charge") == "override")
+    // 1.13: both tags a flagged spectrum at another charge than its header's as well.
+    if (registeredNonDefault_("check_header_charge") && getStringOption_("check_header_charge") == "both")
     {
       OPENMS_LOG_ERROR << "-dump_spectrum prepares the peaks at the given precursor and its charge only and does "
-                          "not follow -check_header_charge override yet; leave it off or at warn." << std::endl;
+                          "not follow -check_header_charge both yet; leave it off or at warn." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
     P::DumpOptions opt;
@@ -1801,12 +1803,11 @@ protected:
       OPENMS_LOG_ERROR << herr << std::endl;
       return ILLEGAL_PARAMETERS;
     }
-    // 1.13: the held-out test of override (acceptance/1.13, item 14) found it
-    // net harmful on real (vendor) header charges; say so whenever it runs.
-    if (hyp_param.header_check == FASTag::Hyp::HeaderCheck::Override)
-      OPENMS_LOG_WARN << "-check_header_charge override is experimental and not recommended: on held-out Q Exactive "
-                         "data it broke more real header charges than it fixed, and on Orbitrap Astral its "
-                         "disagreements were false (doc/HEADER-CHARGE-CHECK.md)." << std::endl;
+    // 1.13: not validated on held-out data yet; say so whenever it runs.
+    if (hyp_param.header_check == FASTag::Hyp::HeaderCheck::Both)
+      OPENMS_LOG_WARN << "-check_header_charge both is experimental: a flagged spectrum is tagged under two "
+                         "charges, and the check has not passed a held-out test (doc/HEADER-CHARGE-CHECK.md)."
+                      << std::endl;
     const bool hyp_on = !hyp_param.isDefault();
     // #6: -species reads the selected hypothesis' rows only, through a per-row
     // flag carried beside the rows (Block::row_species).
@@ -2380,8 +2381,8 @@ protected:
            hyp_param.mode != FASTag::Hyp::ChargeMode::Assume2 || hdr_check_on},
           {"charge_infer_margin", "-unknown_charge enumerate or infer, or -check_header_charge",
            hyp_param.mode != FASTag::Hyp::ChargeMode::Assume2 || hdr_check_on},
-          {"check_header_margin", "-check_header_charge warn or override", hdr_check_on},
-          {"check_header_out", "-check_header_charge warn or override", hdr_check_on},
+          {"check_header_margin", "-check_header_charge warn or both", hdr_check_on},
+          {"check_header_out", "-check_header_charge warn or both", hdr_check_on},
           // ---- 1.12 A: ignored-option warnings ----
           {"shortlist_background", "-fasta_out", !fasta_out.empty()},
           {"shortlist_max_evalue", "-shortlist_out or -fasta_out", shortlist_on},
@@ -3574,6 +3575,11 @@ protected:
         FASTag::Hyp::HeaderCheckResult r;
       };
       std::vector<HdrRow> hdr_rows;
+      // -check_header_charge: spectra ms1_lo..ms1_hi are known to hold no MS1
+      // scan; with ms1_has, the scan at ms1_lo - 1 is one and is kept in ms1.
+      MSSpectrum ms1;
+      size_t ms1_lo = 1, ms1_hi = 0;
+      bool ms1_has = false;
     };
     std::vector<PerThread> per_thread(static_cast<size_t>(std::max(1, omp_get_max_threads())));
     for (PerThread& q : per_thread)
@@ -3634,6 +3640,34 @@ protected:
       bool cz = false;
       /// 1.13 item 11: the rows were read as a/x ions (Block::row_ax).
       bool ax = false;
+    };
+
+    // 1.13 -check_header_charge: the MS1 scan before spectrum @p index, at
+    // most kMs1Back spectra back, else nullptr. The answer depends on the
+    // file only, never on which thread asks or what it read before.
+    constexpr size_t kMs1Back = 512;
+    std::function<MSSpectrum(size_t tid, size_t j, bool peaks)> ms1_read;  // set once the readers exist
+    auto ms1_for = [&](size_t tid, size_t index) -> const MSSpectrum*
+    {
+      if (!ms1_read) return nullptr;
+      PerThread& q = per_thread[tid];
+      const size_t stop = index > kMs1Back ? index - kMs1Back : 0;
+      for (size_t j = index; j-- > stop;)
+      {
+        if (j >= q.ms1_lo && j <= q.ms1_hi)  // scanned before: skip to its lower end
+        {
+          if (!q.ms1_has) { j = q.ms1_lo; continue; }
+          q.ms1_hi = std::max(q.ms1_hi, index);
+          return q.ms1_lo - 1 >= stop ? &q.ms1 : nullptr;
+        }
+        if (ms1_read(tid, j, false).getMSLevel() != 1) continue;
+        try { q.ms1 = ms1_read(tid, j, true); }
+        catch (const Exception::BaseException&) { q.ms1 = MSSpectrum(); }  // unreadable MS1: no MS1 evidence
+        q.ms1_lo = j + 1; q.ms1_hi = index; q.ms1_has = true;
+        return &q.ms1;
+      }
+      q.ms1_lo = stop; q.ms1_hi = index; q.ms1_has = false;
+      return nullptr;
     };
 
     // @p index is the spectrum's position in the input, for a USI that cannot
@@ -3764,14 +3798,16 @@ protected:
       // TSV, -recon_out and -recon_id_out keep every row at its hypothesis'
       // charge.
       // 1.13 (backlog #14) -check_header_charge: a header charge is put to the
-      // infer call; under override a disagreeing one is tagged at the call.
+      // MS1 isotope spacing and the infer call; under both a disagreeing one
+      // is tagged at the check's charge as well.
       // Off (the default): nothing here runs.
       FASTag::Hyp::HeaderCheckResult hdr_res;
       const bool hdr_this = hdr_check_on && prec.getCharge() > 0;
       if (hdr_this)
       {
-        hdr_res = FASTag::Hyp::checkHeaderCharge(spec, prec, hyp_param, read_cz ? hyp_cs_cz : read_ax ? hyp_cs_ax : hyp_cs);
-        pt.hdr.add(hdr_res, hyp_param.header_check == FASTag::Hyp::HeaderCheck::Override);
+        hdr_res = FASTag::Hyp::checkHeaderCharge(spec, prec, hyp_param, read_cz ? hyp_cs_cz : read_ax ? hyp_cs_ax : hyp_cs,
+                                                 ms1_for(tid, index));
+        pt.hdr.add(hdr_res, hyp_param.header_check == FASTag::Hyp::HeaderCheck::Both);
         if (!check_header_out.empty()) pt.hdr_rows.push_back({index, spec.getNativeID(), prec.getMZ(), hdr_res});
       }
       const std::vector<FASTag::Hyp::Hypothesis> hyps = FASTag::Hyp::precursorHypotheses(
@@ -4364,6 +4400,17 @@ protected:
       if (mzs || pick_in_loop) pickers[t] = std::make_unique<PeakPickerHiRes>();
     }
     t_readers = secs(t_readers_a, Clock::now());
+    // 1.13 -check_header_charge: MS1 access for the formats that keep MS1
+    // scans (indexed or in-memory mzML); MGF and mzPeak have none here.
+    if (hdr_check_on && !mgf && !mzs)
+      ms1_read = [&](size_t tid, size_t j, bool peaks) -> MSSpectrum {
+        if (freaders[tid]) return peaks ? freaders[tid]->getSpectrumAnyLevel(j) : freaders[tid]->getSpectrumMetadata(j);
+        if (readers[tid]) return peaks ? readers[tid]->getSpectrum(j) : readers[tid]->getMetaData()->operator[](j);
+        if (peaks) return exp[j];
+        MSSpectrum m;
+        m.setMSLevel(exp[j].getMSLevel());
+        return m;
+      };
 
     // ONE parallel region over the whole run. Blocks only bound the memory the
     // results take; a writer thread empties them in input order. A region per
@@ -4730,7 +4777,6 @@ protected:
       run_meta.charge_ambiguous = sel_of(ChargeSource::Ambiguous);
       run_meta.charge_assumed = sel_of(ChargeSource::Assumed);
       run_meta.charge_enumerated = sel_of(ChargeSource::Enumerated);
-      run_meta.charge_overridden = sel_of(ChargeSource::Overridden);
       // 1.13 -check_header_charge (rows only when it is on).
       run_meta.check_header_charge = getStringOption_("check_header_charge");
       run_meta.header_checked = hdr_counts.checked;
@@ -4738,7 +4784,7 @@ protected:
       run_meta.header_disagree = hdr_counts.verdict[static_cast<size_t>(FASTag::Hyp::HeaderVerdict::Disagree)];
       run_meta.header_ambiguous = hdr_counts.verdict[static_cast<size_t>(FASTag::Hyp::HeaderVerdict::Ambiguous)];
       run_meta.header_nocall = hdr_counts.verdict[static_cast<size_t>(FASTag::Hyp::HeaderVerdict::NoCall)];
-      run_meta.header_overridden = hdr_counts.overridden;
+      run_meta.header_both = hdr_counts.both;
       run_meta.iso_shifted = hc.iso_shifted;
       run_meta.multi_hypothesis = hc.multi;
       // #15 phase B: the series per tagged MS2.
@@ -6017,7 +6063,7 @@ protected:
       using FASTag::Hyp::CallBasis;
       const auto v = [&](HeaderVerdict x) { return hdr_counts.verdict[static_cast<size_t>(x)]; };
       const auto by = [&](CallBasis b) { return hdr_counts.disagree_by[static_cast<size_t>(b)]; };
-      const bool ovr = hyp_param.header_check == FASTag::Hyp::HeaderCheck::Override;
+      const bool both = hyp_param.header_check == FASTag::Hyp::HeaderCheck::Both;
       std::string moves;
       for (int a = 1; a <= FASTag::Hyp::kChargeLimit; ++a)
         for (int b = 1; b <= FASTag::Hyp::kChargeLimit; ++b)
@@ -6027,12 +6073,12 @@ protected:
       std::ostringstream m;
       m << "Header charge check (-check_header_charge " << getStringOption_("check_header_charge") << "): "
         << hdr_counts.checked << " of " << n_ms2 << " MS2 spectra carry a precursor charge; " << v(HeaderVerdict::Agree)
-        << " agree with their complement-pair evidence, " << v(HeaderVerdict::Disagree) << " disagree ("
-        << by(CallBasis::Complement) << " by complement pairs, " << by(CallBasis::Range) << " by fragment range, "
+        << " agree with their charge evidence, " << v(HeaderVerdict::Disagree) << " disagree ("
+        << by(CallBasis::Ms1Isotope) << " by MS1 isotope spacing, " << by(CallBasis::Complement) << " by complement pairs, "
         << by(CallBasis::OnePlus) << " by the 1+ test" << (moves.empty() ? std::string() : "; " + moves) << "), "
         << v(HeaderVerdict::Ambiguous) << " ambiguous and " << v(HeaderVerdict::NoCall) << " without evidence; "
-        << (ovr ? std::to_string(hdr_counts.overridden) + " disagreeing spectra were tagged at the supported charge."
-                : std::string("every spectrum was tagged at its header charge."));
+        << (both ? std::to_string(hdr_counts.both) + " disagreeing spectra were tagged under both charges."
+                 : std::string("every spectrum was tagged at its header charge."));
       if (v(HeaderVerdict::Disagree) > 0) OPENMS_LOG_WARN << m.str() << std::endl;
       else OPENMS_LOG_INFO << m.str() << std::endl;
       if (!check_header_out.empty())
@@ -6049,7 +6095,8 @@ protected:
           return CANNOT_WRITE_OUTPUT_FILE;
         }
         std::string buf = "index\tnative_id\tprecursor_mz\theader_charge\tcall_charge\tcall_src\tbasis\trunner_up"
-                          "\theader_excess\tcall_excess\theader_ruled_out\theader_peaks_above\tverdict\ttagged_charge\n";
+                          "\theader_excess\tcall_excess\theader_ruled_out\theader_peaks_above\tms1_charge\tms1_peaks\tflag_basis"
+                          "\tflag_charge\tverdict\ttagged_charge\n";
         for (const auto* r : rows)
         {
           const auto& h = r->r;
@@ -6065,8 +6112,19 @@ protected:
           FASTag::appendNum(buf, h.call_excess, std::chars_format::fixed, 3); buf += '\t';
           buf += h.header_ruled_out ? '1' : '0'; buf += '\t';
           FASTag::appendNum(buf, h.header_peaks_above); buf += '\t';
+          FASTag::appendNum(buf, h.ms1_charge); buf += '\t';
+          FASTag::appendNum(buf, h.ms1_peaks); buf += '\t';
+          buf += FASTag::Hyp::basisName(h.flag_basis); buf += '\t';
+          FASTag::appendNum(buf, h.flag_charge); buf += '\t';
           buf += FASTag::Hyp::verdictName(h.verdict); buf += '\t';
-          FASTag::appendNum(buf, ovr ? h.replacement() : h.header);
+          // Under both, a flagged spectrum's two charges, ascending.
+          const int z = both ? h.replacement() : h.header;
+          if (z >= 1 && z <= FASTag::Hyp::kChargeLimit && z != h.header)
+          {
+            FASTag::appendNum(buf, std::min(z, h.header)); buf += ',';
+            FASTag::appendNum(buf, std::max(z, h.header));
+          }
+          else FASTag::appendNum(buf, h.header);
           buf += '\n';
         }
         os << buf;
