@@ -1,0 +1,17 @@
+project	file	download	ms2	ms2_classes	hybrid_ftms_ms2	truth_spectra	truth_clusters	sage_rc	truth_config	qualifies
+PXD065289	ASND01_NGL_YD1_241129_Expi_trypsin_ETciD_frac10_21.raw	size_ok	41365	hybrid FTMS 41365	41365	7624	5552	0	human_trypsin	yes
+PXD065289	ASND01_NGL_YD1_241129_Expi_trypsin_ETciD_frac11_23.raw	size_ok	40726	hybrid FTMS 40726	40726	6675	4922	0	human_trypsin	yes
+PXD007058	SF_200217_U2OS_TiO2_EThcD_OT_rep1.raw	sha1_ok	22812	hybrid FTMS 22812	22812	3663	2864	0	human_trypsin_phospho	yes
+PXD007058	SF_200217_U2OS_TiO2_EThcD_OT_rep2.raw	sha1_ok	22096	hybrid FTMS 22096	22096	3512	2755	0	human_trypsin_phospho	yes
+PXD053508	PRC-6072DDA_UP_5061_F012257_1p_IhT_trapPM1_Neo_EASYJB_DDM_PRC-6072_A.raw	size_ok	10648	collisional ITMS 5324; hybrid ITMS 5324	0	0	0	0	afum_trypsin	no
+PXD053508	PRC-6072DDA_UP_5061_F012259_1p_IhT_trapPM1_Neo_EASYJB_DDM_PRC-6072_B.raw	size_ok	11048	collisional ITMS 5524; hybrid ITMS 5524	0	0	0	0	afum_trypsin	no
+PXD066033	20250220_LUMOS-CCG_LC12_JE_lowpH_4SA_ctrl_01.raw	size_ok	12647	hybrid FTMS 12647	12647	3128	1819	0	human_lysc_adpr	yes
+PXD066033	20250220_LUMOS-CCG_LC12_JE_lowpH_4SA_ctrl_02.raw	size_ok	11934	hybrid FTMS 11934	11934	3077	1692	0	human_lysc_adpr	yes
+PXD070310	20240305_LUMOS-CCG_LC13_SCL-IAH_AR_A549_HpH_Control_Super.raw	size_ok	3741	hybrid FTMS 3741	3741	640	548	0	human_lysc_adpr_cam	yes
+PXD070310	20240305_LUMOS-CCG_LC13_SCL-IAH_AR_A549_LpH_Control_Norm.raw	size_ok	4095	hybrid FTMS 4095	4095	512	372	0	human_lysc_adpr_cam	yes
+PXD027504	20210511_LUMOS1_LC4_SCL-IAH_BAR_C_01_F0.raw	sha1_ok	11384	hybrid FTMS 11384	11384	0	0	0	human_trypsin_adpr	no
+PXD027504	20210511_LUMOS1_LC4_SCL-IAH_BAR_C_01_F1.raw	sha1_ok	3857	hybrid FTMS 3857	3857	200	147	0	human_trypsin_adpr	yes
+PXD008083	Mef_ARH3ko_H2O2_A.raw	sha1_ok	17738	collisional FTMS 17738	0	0		134	mouse_trypsin_adpr	no
+PXD008083	Mef_ARH3ko_H2O2_B.raw	sha1_ok	19326	collisional FTMS 19326	0	0		134	mouse_trypsin_adpr	no
+PXD022156	20190517_05_DLP150_HSP_LpH30_StdAqMet.raw	sha1_ok	21410	collisional FTMS 21410	0	0		134	human_trypsin_adpr	no
+PXD022156	20190517_19_DLP150_HMmerge25ACNfrac_LpH30_ModAqMet.raw	sha1_ok	1649	collisional FTMS 1649	0	0		134	human_trypsin_adpr	no

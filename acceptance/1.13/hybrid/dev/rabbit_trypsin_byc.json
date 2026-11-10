@@ -1,0 +1,18 @@
+{
+ "static_mods": {
+  "C": 57.021464
+ },
+ "variable_mods": {
+  "M": [
+   15.994915
+  ]
+ },
+ "fasta": "/scratch/kohlbach/b113/hybrid/dev/n/rabbit.fasta",
+ "cleave_at": "KR",
+ "restrict": "P",
+ "ion_kinds": [
+  "b",
+  "y",
+  "c"
+ ]
+}

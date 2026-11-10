@@ -1,0 +1,7 @@
+project	run	hybrid_ftms_ms2	truth_spectra	by_rc	by_cpu_s	by_wall_s	by_rss_mb	both_rc	both_cpu_s	both_wall_s	both_rss_mb	by_spectra_correct	by_rows	by_rows_correct	both_spectra_correct	both_rows	both_rows_correct
+PXD060724	Trypsin_EThCD_WZ20spd_161224_1	10322	264	0	2.540	0.640	81.637	0	3.750	0.570	90.438	241	12451	1135	258	12923	2008
+PXD060724	Trypsin_EThCD_WZ20spd_161224_2	10106	0	0	1.860	0.550	59.586	0	2.310	0.370	71.645	0	0	0	0	0	0
+PXD060724	Trypsin_EThCD_WZ20spd_161224_3	7731	108	0	3.470	0.620	88.438	0	5.570	0.790	92.980	102	4980	731	102	5038	735
+PXD060724	Chymotrypsin_EThCD_WZ20spd_161224_1	10618	0	0	2.500	0.640	79.203	0	3.650	0.550	88.098	0	0	0	0	0	0
+PXD060724	Chymotrypsin_EThCD_WZ20spd_161224_2	10611	0	0	2.200	0.480	75.195	0	3.200	0.480	79.133	0	0	0	0	0	0
+PXD060724	Chymotrypsin_EThCD_WZ20spd_161224_3	7906	0	0	2.510	0.480	81.980	0	3.940	0.590	85.117	0	0	0	0	0	0

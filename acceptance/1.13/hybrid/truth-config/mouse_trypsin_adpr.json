@@ -1,0 +1,16 @@
+{
+ "cleave_at": "KR",
+ "restrict": "P",
+ "static_mods": {
+  "C": 57.021464
+ },
+ "variable_mods": {
+  "M": [
+   15.994915
+  ],
+  "S": [
+   541.06111
+  ]
+ },
+ "fasta": "/scratch/kohlbach/b113/hybrid/fasta/UP000000589_10090.fasta"
+}

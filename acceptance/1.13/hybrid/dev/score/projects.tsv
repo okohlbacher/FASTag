@@ -1,0 +1,2 @@
+project	runs	truth_spectra	clusters	by_pct	both_pct	diff_pp	by_precision	both_precision	precision_diff_pp	by_tags_per_spectrum	both_tags_per_spectrum	by_rank1_pct	both_rank1_pct	both_correct_rows_by	both_correct_rows_cz	spectra_gained	spectra_lost	by_cpu_s	both_cpu_s	by_wall_s	both_wall_s
+PXD060724	6	372	137	92.204	96.774	4.570	10.705	15.272	4.567	5.016	7.374	60.215	70.968	1667	1076	18	1	15.080	22.420	3.410	3.350
