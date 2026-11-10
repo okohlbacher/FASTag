@@ -217,8 +217,10 @@ sources, which is our own reading, not an independent reference (the adapter
 test `.ini` files list TOPP parameter names, not engine keys). Not verified
 against the binary: the `isotope_error` value for 0..3 (copied from
 `-search_isotope_errors`), the 15 `variable_mod` slots and their 8-field
-format, an empty or 0-first `mass_offsets`, and how Comet treats negative
-offsets. Check a Comet configuration by hand before relying on it.
+format, and an empty or 0-first `mass_offsets`. Comet's handling of negative
+offsets has since been checked on the binary (acceptance/1.12
+FREEZE-05-17.md, A5-01): Comet 2026.03.0 ignores them. Check a Comet
+configuration by hand before relying on it.
 
 ## MSFragger configuration (1.13, backlog #18)
 
@@ -323,8 +325,13 @@ first (ties: smaller |delta|):
    configuration's isotope errors (Sage `isotope_errors`, Comet
    `isotope_error`). Deamidated is exported only when the centroid is closer to
    0.98402 than to 1.00335.
+   The same test applies in the frame of a fixed terminal label L (TMT): a
+   peak at L + n x 1.00335 is `skipped_isotope` and raises the isotope errors
+   (up to the 1.13 held-out test it became a Comet offset near n x 1.0034
+   and Sage did not search it).
 1. a fixed terminal label L: a peak at L is `expected_label`, at -L
-   `label_incomplete` (WARN); a peak explained as L + X goes on as X.
+   `label_incomplete` (WARN); a peak explained as L + X goes on as X (to
+   rules 2 to 4; rule 0 is not applied to X, see above).
 2. a fixed residue modification F: a peak at +F becomes the same Unimod name
    on K, H and the peptide N-term where ModificationsDB knows it (the fixed
    residue left out); a peak at -F is `fixed_mod_questionable` (WARN). Without
@@ -384,11 +391,83 @@ none), `substitution_share`, `localized`, `reason`.
 
 Limits: an undeclared label shows as a single-modification peak and becomes a
 variable modification; more variable modifications can lower sensitivity
-(cap 3); Comet's handling of negative offsets and of the offset list is
-unverified against the pinned 2026.03.0 binary (as A5-01). Engine acceptance
-(Comet and Sage with a shift-carrying configuration) and the held-out protocol
-(PSMs, entrapment FDP, recall of an open search's top peaks) run on node data
-before this is documented as improving identifications.
+(cap 3). Comet 2026.03.0 ignores negative mass offsets (checked on the DEV
+run, acceptance/1.12 FREEZE-05-17.md), so dropping them loses nothing Comet
+could search; negative shifts reach Comet only as variable modifications.
+
+First held-out test (1.13, acceptance/1.13 `PREREG-item17.md`, `RESULT-item17.md`,
+scored once). Closed search with the run's declared chemistry vs the same
+search plus `-search_shifts` (defaults), Sage 0.14.7 and Comet 2026.03.0,
+shuffled entrapment at r = 1, 1 % PSM FDR, on PXD014764 (SILAC), PXD004541
+(TMT10), PXD000001 (TMT6) and PXD063151 (label-free):
+
+| Run | Comet PSMs | Sage PSMs |
+|---|---|---|
+| PXD014764 | 4224 -> 5979 (+41.6 %) | 4738 -> 6196 (+30.8 %) |
+| PXD004541 | 10079 -> 15053 (+49.4 %) | 11186 -> 11518 (+3.0 %) |
+| PXD000001 | 1116 -> 1133 (+1.5 %) | 1258 -> 1258 (0) |
+| PXD063151 | 34941 -> 43101 (+23.4 %) | 46530 -> 55805 (+20.0 %) |
+
+The identification gain (>= 2 % on 3 of 4 runs) and the no-loss criterion
+pass for both engines. The no-loss criterion (P3) is a net count,
+PSMs(cand) >= 0.99 x PSMs(base); it does not see base identifications that
+the candidate search loses while it adds others. As a secondary measure (no
+criterion), the candidate search lost up to 10.1 % of the base-identified
+scans with Comet (PXD063151; 3.8 % on PXD014764, 2.1 % on PXD004541) and up
+to 1.3 % with Sage (PXD063151). The test FAILED: an MSFragger open search's
+top mass shifts were recovered on only 1 of 4 runs (Comet) and 0 of 4 (Sage);
+Comet's one pass (PXD063151, 7 of 10 peaks) rests on three matches between
+near-zero or near-isotope open-search peaks (0.062, 0.948, 1.064) and offsets
+consistent with a precursor calibration error, without which it is 4 of 10
+(post-hoc note in RESULT-item17.md; the verdict is FAIL either way), and
+Sage's entrapment FDP exceeded 1.5 % on three runs (its closed search already
+did on PXD000001). Known causes: on labelled runs the isotope rule was not
+applied to the label-frame remainder (L + 1.003 became a Comet offset, and
+Sage searched no isotope errors; fixed after the test, see rule 0, checked on
+development data only); near-zero offsets on a run with a precursor
+calibration error widen the search instead; most of the open search's top
+shifts are not among the run's mass-gap peaks at all. The option stays
+experimental.
+
+Second held-out test (1.13, branch `acc113r/shifts`: `PREREG-item17r.md`,
+`RESULT-item17r.md`, scored once; four new public runs, build with the rule 0
+fix). Same design with relaxed criteria (entrapment FDP at most base + 0.3
+points and at most 2.0 %; at least 60 % of the admissible open-search peaks
+recovered on at least 3 runs). **FAIL**: Comet on P2 and P4, Sage on P4.
+Target PSMs at 1 % FDR base -> candidate, entrapment FDP base -> candidate,
+peaks recovered / admissible:
+
+| Run | Comet PSMs | Comet FDP % | Comet peaks | Sage PSMs | Sage FDP % | Sage peaks |
+|---|---|---|---|---|---|---|
+| PXD049248 label-free | 11979 -> 13081 (+9.2 %) | 0.90 -> 0.96 | 1 / 10 | 15754 -> 17423 (+10.6 %) | 0.96 -> 0.96 | 1 / 3 |
+| PXD065251 SILAC | 27494 -> 29607 (+7.7 %) | 1.14 -> 0.95 | 2 / 7 | 29384 -> 31280 (+6.5 %) | 1.12 -> 1.13 | 0 / 1 (not evaluable) |
+| PXD037999 TMT10 | 7469 -> 10215 (+36.8 %) | 0.88 -> 1.28 | 1 / 8 | 8451 -> 10582 (+25.2 %) | 1.04 -> 0.98 | 1 / 3 |
+| PXD073763 TMTpro | 13321 -> 14747 (+10.7 %) | 1.31 -> 1.16 | 1 / 7 | 14195 -> 16074 (+13.2 %) | 1.18 -> 1.08 | 1 / 4 |
+
+- P1 (gain of at least 2 % on at least 3 runs) and P3 (net PSM count) pass on
+  4 of 4 runs for both engines. The candidate search lost 0.8 to 3.7 % of the
+  base-identified scans with Comet and 0.3 to 2.6 % with Sage (no criterion).
+- P2 fails for Comet on the TMT run PXD037999: entrapment FDP 0.88 -> 1.28 %
+  (+0.40 points; limit +0.30). Entrapment hits rose from 33 to 66 while
+  targets rose from 7469 to 10215. The shifts exported on this run are
+  variable TMT6plex on H and on the peptide N-terminus. The development run
+  PXD003531 showed the same rise (0.91 -> 1.34 %). Sage shows none. The cause
+  is not diagnosed.
+- Part of the gain is the isotope error setting: the base search uses isotope
+  error 0 and the option sets 0..1 on three of the four runs, which a
+  standard engine setting also gives. On Sage PXD065251 the only new masses
+  are Met-loss+Acetyl and the 13C error (+1896 PSMs). The gain over a base
+  search with the same isotope errors was not measured.
+- P4 fails on every evaluable run. Of the admissible open-search peaks the
+  option recovered 5 of 32 with Comet (9 are among the run's mass-gap peaks,
+  6 were exported) and 3 of 11 with Sage (5 among the mass-gap peaks). The
+  peaks that are not mass-gap peaks include catalogued modifications
+  (Acetyl, ammonia and water loss, Na, K).
+
+The test compared the option on against off; it did not measure the rule 0
+fix. `-search_shifts` does not replace an open search. With Comet on
+labelled data, check the error rate of the additional PSMs. The option stays
+experimental.
 
 ## Known limits
 
