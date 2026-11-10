@@ -987,7 +987,7 @@ dependencies = [
 
 [[package]]
 name = "fastag"
-version = "1.12.1"
+version = "1.12.2"
 dependencies = [
  "libc",
  "muda",

@@ -1,6 +1,6 @@
-binary /scratch/kohlbach/fastag112-rcb/m6/opt/FASTag
+binary /scratch/kohlbach/fastag-heldout-1.12/rc-a117801/opt/FASTag
 sha256 b84c190a1348e2f4c8435671fc27c94e0af89691d8ca7bebeef7efcca5fdb43b
-FASTag.bin sha256 cf3d73dad2f76352d9e0c7898eb0faddb541f6cc2e4882e7adf0798ba1a6cd19
+FASTag.bin sha256 c4c2ad67fcd9106e474f552267f7cdfefe107f394b268bbc236308b773e4d7f3
 Version: 1.12.0 (OpenMS 3.7.0-pre-HEAD-2026-11-02)
 digest python none pyarrow none (sha256sum and sed only)
-host data threads 32 date 2026-11-08T07:15:03+01:00
+host data threads 32 date 2026-11-09T23:35:35+01:00
