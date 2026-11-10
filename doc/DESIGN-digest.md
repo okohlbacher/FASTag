@@ -200,6 +200,58 @@ The per-MS2 counts are taken in the tagging loop only with `-digest_out`. This r
 the DEV fit, so the fitted `orbitrap_hcd` weights pool no ion-trap CID runs; PREREG-chem.md records
 it when it is written.
 
+### Digestion quality (1.13, `-digest_quality`, experimental)
+
+`-digest_quality <enzyme>` appends a `quality` section after every other `-digest_out` row (so the
+report without it, and its 1.12 rows with it, are byte-identical to 1.12). `<enzyme>` is a model of
+the table in use (`Trypsin`, `Asp-N`, ...; another name stops with exit code 6) or `auto`, the model of
+the report's `call` (after every 1.12 rule, `-digest_min_confidence` included); a no-call is
+`status not_measured`, `reason no_call`. Counted from the tags alone, no database.
+
+For each end of the model that is not the background (`C` = P1; `N` = P1' for Asp-N and Lys-N):
+
+| Key | Value |
+|---|---|
+| `<E>.sites` | the cleaving residues S: model probability above the background's, both normalised over the 19 (Trypsin `K,R`) |
+| `<E>.ends` | the merged P1 (P1') counts, `count.n_c` (`n_n`); the sentence says how many are at S |
+| `<E>.measured` | `yes` when the ends are ≥ `-digest_tag_min`; else `no` and no further rows for that end |
+| `<E>.mc_measured` | `yes` when the ends at S (the specific ends; the `n` column) are ≥ `-digest_tag_min` as well; else `no`, a row `<E>.mc_reason` `mc_few_specific`, and `mc_site_share` and `mc_retention` are `-` (the counts and the non-specific rows are still written) |
+| `<E>.nonspecific_share` | share of the ends whose P1 is not in S |
+| `<E>.nonspecific_mle` | the background share s in [0, 1] that maximises Σ k_a ln((1 − s) p_a + s bg_a) over the P1 counts k (the classifier's mixture with s estimated; concave, bisection). It counts the non-specific ends that fall on S by chance too |
+| `<E>.mc_positions` | residues at P2..P4 (P2'..P4') of the tags counted at a P1 (P1') in S; the positions are the tag residues next to the end, as for `pos` (`TerminusCounter::cq`, `nq`) |
+| `<E>.mc_sites` | of them in S: internal cleavage sites of a peptide with a specific end, i.e. missed cleavages |
+| `<E>.mc_site_share` | `mc_sites / mc_positions`; `-` when `mc_measured` is `no` |
+| `<E>.mc_background_share` | b_S, the background share of S |
+| `<E>.mc_retention` | (mc_sites / (mc_positions − mc_sites)) / (b_S / (1 − b_S)): the odds of a site at an internal position against the background; 0 = every site cut, 1 = as often as in the proteome; `-` when undefined or when `mc_measured` is `no` |
+
+There is no proline rule: K or R before P counts as a site, in the tags and in the Sage reference
+below alike. `quality` also has `enzyme`, `basis` (`named` or `call`) and `status` (`measured`,
+`not_measured` with `reason` `low_resolution`, `no_call`, `no_specific_end` (every end of the model is
+the background, e.g. `unspecific`) or `few_tags`). On a Da fragment tolerance the 0.008 Da tag-end
+windows do not hold, so every enzyme, named or `auto`, is `not_measured` with `reason`
+`low_resolution` and no end rows, as the protease and label calls of the same report refuse it.
+
+The two gates are separate because the missed-cleavage ratios are built from the specific ends
+only: a run with many ends but few at S (a non-tryptic or poorly digested sample with
+`-digest_quality Trypsin`) passes the ends gate on the total and would otherwise report an odds
+ratio from a handful of counts. In `auto` the model is the `call model` row of a report whose `call
+status` is `call` (`Digest::reportQuality`); a no-call, or a model not in the table, is `no_call`.
+
+**Comparison with Sage (descriptive).** The registered evaluation is in
+`acceptance/1.13/item23/` (PREREG `acceptance/1.13/PREREG-item23.md`, branch `acceptance/1.13`): FASTag's `C.mc_retention` against the same odds
+ratio from Sage's target PSMs (1 % spectrum q-value, K/R C-terminus, P2..P4 of the peptide, same
+background) and against Sage's own missed-cleavage share, on public tryptic runs. It reports
+correlations and ratios and has no pass/fail criterion; the option stays experimental.
+Scored once (2026-11-09, binary of 2fd1297, `-tag_length 4 -subsample_fraction 0.25`, 20 ppm): 32 of
+35 runs (one with 43 C-terminal ends is not measured; two have no Sage PSM at 1 %). Spearman 0.83 and
+Pearson 0.90 against the Sage odds ratio, Spearman 0.72 against Sage's missed-cleavage share; median
+FASTag/Sage ratio 0.86; medians 0.078 (FASTag) and 0.071 (Sage), Sage MC share 0.108, FASTag
+`nonspecific_mle` 0.059. That scoring is of 2fd1297, before the `mc_measured` gate and the
+`low_resolution` refusal were added; it is not re-scored. Of its 35 runs the gate changes one at the
+default `-digest_tag_min 100`: PXD065430_fat (787 ends, about 41 specific), which was not scored
+either way (no Sage PSM at 1 %); its `mc_retention` 0.54 is now `-` (`mc_few_specific`). The
+`eval` runs are all ppm (the ion-trap runs were excluded), so the Da refusal changes none.
+
 ## Model table (`-digest_models`)
 
 ```
@@ -255,13 +307,14 @@ table. Tests use synthetic tables.
 | `count` | `tags_filtered` | integer |
 | `nlabel` | `<L>.count` = `near(n, m) + near(c, m)`, `<L>.background` = the same at `m + 0.5` Da, `<L>.share` = count / `tags_filtered`, for L = `TMT` (229.162932), `TMTpro` (304.207146), `iTRAQ4` (144.102063) (`_NLABEL`) | integer, decimal |
 | `heavy` | `K8.share` = `s(K+8) / max(s(K+8) + s(K), 1e-9)`, `R10.share` likewise, with `s = res / tot` as in 0.1.3; `K.tags` = `res[K] + res[K+8]`, `R.tags` = `res[R] + res[R+10]`; `gate` = `yes` when both are ≥ `-digest_silac_min` (50, `SILAC_MIN_TAGS`) | decimal, integer, word |
-| `label_call` (1.12, appended last; the rows above are byte-identical to 1.11) | `status` (`call`, `no_call`), `label` (`TMT`, `TMTpro`, `iTRAQ4`, `SILAC`, joined with `+` when several pass, isobaric first; `label-free` when none passes; `-` on a no call), `basis` (`nterm_gap`, `heavy_share`, `nterm_gap+heavy_share`, `none`), `silac` (`none`, `weak`, `strong`), `reason` (`low_resolution`, `few_tags`; `-` on a call) | word |
+| `label_call` (1.12, appended last; the rows above are byte-identical to 1.11) | `status` (`call`, `no_call`), `label` (`TMT`, `TMTpro`, `iTRAQ4`, `SILAC`, joined with `+` when several pass, isobaric first; `label-free` when none passes; `-` on a no call), `basis` (`nterm_gap`, `heavy_share`, `nterm_gap+heavy_share`, `none`), `silac` (`none`, `weak`, `strong`), `reason` (`low_resolution`, `few_tags` (not at the experimental `-label_call_min_tags 0`, 1.13); `-` on a call) | word |
 
 `label_call` is prose-auto 0.1.10's termini label rule (`prose_auto/external.py` `fastag_termini` /
 `termini_evidence`, commit e15aaf7), ported rule for rule (`FASTag::Digest::labelCall`):
 
 - no call on a Da tolerance (`low_resolution`; prose-auto runs the termini only on ppm runs) and below
-  175 C-terminal tag ends, `count.tot` of `-digest_out` (`few_tags`, prose-auto's `TAG_MIN`);
+  `-label_call_min_tags` C-terminal tag ends, `count.tot` of `-digest_out` (`few_tags`; 1.12 used
+  prose-auto's `TAG_MIN` 175; 1.13 makes it `-label_call_min_tags`, default 175, see "Label call minimum" below);
 - an isobaric label when `<L>.count` ≥ 0.01 × `tags_filtered` and ≥ 20 × max(`<L>.background`, 1);
   the TMTpro row says that iTRAQ8plex has the same mass;
 - SILAC (Lys8/Arg10) when `K8.share` and `R10.share` are both ≥ 0.2, the K/R share (`share.kr` of
@@ -269,9 +322,45 @@ table. Tests use synthetic tables.
   and `heavy.gate` is `yes`; `strong` when both shares are ≥ 0.3, else `weak`.
 
 It reads only the tag-end counts, never the mass-gap result, so `-massgap_out` and `-recon_out` do not
-change it. Parity: 100 % identical calls with prose-auto 0.1.10 on the 193 label-evaluable SDRF runs of
+change it. Parity (1.12, i.e. with the 175 minimum, still the default): 100 % identical
+calls with prose-auto 0.1.10 on the 193 label-evaluable SDRF runs of
 the digest validation (fastag-bench `table_s3_digest_truth_v190.tsv`), run with prose-auto's own
 termini command.
+
+### Label call minimum (1.13, backlog #8; `-label_call_min_tags`)
+
+1.12 ported prose-auto 0.1.10's `TAG_MIN` (175 C-terminal tag ends) as `no_call few_tags`. prose-auto
+itself never returns "no call" for the label: below `TAG_MIN` its termini give no label evidence and its
+answer is label-free, the default. Ported as a no-call, it cost 30 of the 193 development runs (28 of
+them label-free), and `label_call` scored 150/193 (77.7 %), below "always label-free" (159/193). On the
+other 163 runs its label equalled the harness's (prose-auto 0.1.3's thresholds, no tag minimum; 178/193)
+(project output `output/jpr-paper/carryover-1.12/label_call.md`, not in this repository; all in-sample).
+
+- `-label_call_min_tags <n>` (default **175**, the 1.12 rule): the `count.tot` a call needs. At 0
+  (experimental) every ppm run is called:
+  the isobaric, SILAC and `KR_TRYPTIC` rules above run on whatever ends there are, and when none fires the
+  call is label-free. This is the harness rule except that `label_call` compares the K/R share rounded
+  to 3 decimals (as prose-auto does) where the harness compares it unrounded; the two can differ only
+  for a K/R share in [0.7995, 0.8). On the 193 development runs the regenerated calls equal the
+  harness termini calls on 193/193 (178/193 correct), not 180/193: the 2 mass-gap SILAC runs stay
+  label-free, because `label_call` still never reads `-massgap_out`. At the default 175 the
+  -label_out reports of the 209 runs equal the 1.12.0 RC's byte for byte (run version row aside).
+- A call from fewer than 175 ends adds to the `status` row's description that "label-free" then means
+  only that no label rule fired. Keys, values and the five-row layout are unchanged.
+- No C-terminal end at all (`tot = 0`): no SILAC test (the heavy shares are undefined); label-free unless
+  an isobaric gap passes.
+- `low_resolution` stays a no-call and comes first at any minimum.
+- The default (175) writes the 1.12 rows byte for byte.
+
+Status: experimental; 0 is not the default. Held-out test (`acceptance/1.13`, `PREREG-item08.md`,
+preregistered before the run; 172 public runs of the never-scored item03 held-out draw, label-free 150,
+SILAC 15, TMT 4, TMTpro/iTRAQ8 3): **FAIL**. At 0, 149/172 correct (0.866, Wilson 0.807-0.909)
+against the threshold 0.922 (always label-free 0.872 + 0.05); at 175, 83/172. The gain is the 66
+label-free runs below 175 ends, and on those 75 few-tag-end runs 0 made no false label (post hoc,
+descriptive); but SILAC recall is 3/15, TMT 2/4 and TMTpro/iTRAQ8 0/3 under both settings, so the call
+stays below the always-label-free baseline. The second endpoint (0 no worse than 175 on the same runs)
+holds by construction and carries no information. Per the preregistered decision rule the default stays
+175.
 
 ## `-massgap_out` (requires `-recon_out`, like `-delta_out`)
 
@@ -319,14 +408,16 @@ Input is the `-delta_out` histogram (0.0005 Da bins, local-max grouped), built w
 | `-digest_window` | 0.008 Da | advanced |
 | `-digest_background_share` | 0.05 | advanced; below 1 |
 | `-digest_silac_min` | 50 | advanced |
+| `-label_call_min_tags` | 175 | advanced, experimental (1.13) |
 | `-massgap_window`, `-massgap_window_da` | 0.02, 0.5 Da | advanced |
 | `-massgap_min_spectra`, `-massgap_min_share`, `-massgap_min_bin` | 20, 0.005, 2 | advanced |
 | `-massgap_max_mods`, `-massgap_top` | 3, 5 | advanced |
 | `-massgap_silac_share`, `-massgap_silac_min` | 0.08, 500 | advanced |
+| `-digest_quality <enzyme\|auto>` | empty (off) | experimental (1.13); requires `-digest_out` |
 
 `-digest_models`, `-digest_tag_min` and `-digest_background_share` without `-digest_out`,
-`-digest_window` without `-digest_out` or `-label_out`, and `-digest_silac_min` without `-label_out`
-are ignored with a warning.
+`-digest_window` without `-digest_out` or `-label_out`, and `-digest_silac_min` and `-label_call_min_tags` (1.13)
+without `-label_out` are ignored with a warning.
 
 **`FASTAG_FULL_PRECISION=1`** (environment, not in `--help`): the tag TSV writes `nterm_mass`,
 `cterm_mass` and `evalue` in shortest round-trip form instead of 4 decimals and 6 significant digits,

@@ -1,5 +1,43 @@
 # Changelog
 
+## Unreleased
+
+- **Label call minimum (backlog #8): `-label_call_min_tags`, experimental,
+  default 175 (the 1.12 rule; no output change at the default).** At 0
+  `label_call` makes no `no_call few_tags` below 175 C-terminal tag ends:
+  every ppm run is called with the same isobaric and SILAC rules,
+  label-free when none fires (the harness's prose-auto 0.1.3 rule), and a
+  call from fewer than 175 ends says that label-free then means only that
+  no label rule fired. On the 193 development runs (in-sample) 0 gave
+  178/193 against 150/193 for the 1.12 rule and 159/193 for "always
+  label-free". Its preregistered held-out test (acceptance/1.13
+  PREREG-item08.md, 172 public runs) FAILED: 149/172 = 0.866 against the
+  threshold 0.922 ("always label-free" + 0.05; always label-free is 0.872);
+  the 1.12 rule gave 83/172. Per the preregistered decision rule the default
+  stays 175 and 0 stays experimental. With zero tag ends the SILAC test is
+  now skipped (no undefined heavy share); this is reachable only at a
+  minimum of 0.
+- **c/z• preprocessing: charge-reduced peaks re-filtered against the
+  precursor cut (issue T25).** Peaks were cut at the precursor (neutral mass
+  + proton + 1.5 Da) before deisotoping only, so a peak the deisotoper moved
+  to the 1+ scale could land above the cut and be tagged. Under
+  `-ion_series cz` (and `auto` on electron-activated spectra) such peaks are
+  now dropped after deisotoping. c/z• output can change; b/y output
+  (the default) is byte-identical to 1.12.
+- **Shipped proteomes (backlog item 24).** The bundles (CMake install, the
+  Linux, macOS and Windows release bundles and the Homebrew casks, which
+  install the macOS image) carry the reviewed entries of the UniProt 2026_04
+  reference proteomes of human, mouse, yeast and E. coli
+  (`share/FASTag/alkylation`, about 17 MB, CC BY 4.0). `-alkylation_proteome
+  auto|human|mouse|yeast|ecoli` now uses them instead of stopping with exit
+  code 6. The alkylation report gains a `database_release` row for a shipped
+  proteome; FASTag refuses a shipped file whose FASTA sha256 or entry count
+  differs from its manifest (exit 3). The shipped proteomes need
+  `-tag_length 8` (human, mouse) or 7 (yeast, E. coli): at the default no tag
+  places, the log warns, and the report gives the reason `tags_too_short` and
+  an `alk_run min_tag_length` row. Reports on `-recon_fasta`, `-fasta` or a
+  FASTA path are unchanged. `tools/fetch_proteomes.sh` regenerates the files.
+
 ## 1.12.2 (2026-11-10)
 
 Faster mzML reading and acquisition check; no output changes. Defaults,

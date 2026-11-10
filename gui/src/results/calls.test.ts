@@ -118,6 +118,28 @@ describe('calls.ts: label (label report, label_call rows of 1.12, D3a)', () => {
     })
   })
 
+  it('1.13: a call from fewer than 175 tag ends keeps the status row caveat; 175 or more has none', () => {
+    const rep = (n: number, extra: string) =>
+      parseReport(
+        'section\tkey\tvalue\tn\tdescription\n' +
+          'heavy\tgate\tno\t-\tToo few K and R tag ends.\n' +
+          `label_call\tstatus\tcall\t${n}\tA label call is made from ${n} C-terminal tag ends and 900 filtered tags.${extra}\n` +
+          'label_call\tlabel\tlabel-free\t900\tNo label passes.\n' +
+          'label_call\tbasis\tnone\t-\tNo label rule fired.\n' +
+          'label_call\tsilac\tnone\t-\tSILAC needs more.\n' +
+          'label_call\treason\t-\t-\tA label call is made.\n',
+        '/d/run.label.tsv'
+      )
+    const weak = labelCall(rep(12, ' These are fewer than 175, so a label-free call means only that no label rule fired.'))
+    expect(weak).toMatchObject({ state: 'call', label: 'label-free', ends: 12, weak: true })
+    expect(weak.state === 'call' && weak.why).toBe(
+      'No label passes. These are fewer than 175, so a label-free call means only that no label rule fired.'
+    )
+    const full = labelCall(rep(500, ''))
+    expect(full.state === 'call' && full.why).toBe('No label passes.')
+    expect(full).toMatchObject({ weak: false })
+  })
+
   it('is absent without a label report', () => {
     expect(labelCall(undefined)).toEqual({ state: 'absent' })
   })

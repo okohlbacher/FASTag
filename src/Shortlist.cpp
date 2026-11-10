@@ -445,9 +445,11 @@ namespace FASTag::Shortlist
 
   FastaWriteResult writeReducedFasta(const std::string& db_path, const std::vector<bool>& keep,
                                      const std::vector<OpenMS::FASTAFile::FASTAEntry>& background,
-                                     const std::string& out_path)
+                                     const std::string& out_path, const std::string& decoy_prefix)
   {
     FastaWriteResult res;
+    const bool decoys = !decoy_prefix.empty();
+    std::vector<OpenMS::FASTAFile::FASTAEntry> written;  // for the decoys
     FASTag::PartFile pf(out_path);
     std::ofstream os;
     if (!pf.open(os, std::ios::out | std::ios::binary))
@@ -474,6 +476,7 @@ namespace FASTag::Shortlist
           putEntry(os, e.identifier, e.description, e.sequence);
           if (!os) break;
           ++res.entries;
+          if (decoys) written.push_back(e);
         }
         ++ordinal;
       }
@@ -495,12 +498,20 @@ namespace FASTag::Shortlist
       if (!os) break;
       putEntry(os, b.identifier, b.description, b.sequence);
       if (os) ++res.entries;
+      if (decoys) written.push_back(b);
+    }
+    for (const auto& w : written)
+    {
+      if (!os) break;
+      putEntry(os, decoy_prefix + w.identifier, w.description, std::string(w.sequence.rbegin(), w.sequence.rend()));
+      if (os) ++res.decoys;
     }
     os.close();
     if (os.fail())
     {
       res.error = "write failed (disk full?)";
       res.entries = 0;
+      res.decoys = 0;
       pf.discard();
       return res;
     }
@@ -508,6 +519,7 @@ namespace FASTag::Shortlist
     {
       res.error = pf.error();
       res.entries = 0;
+      res.decoys = 0;
       return res;
     }
     res.ok = true;

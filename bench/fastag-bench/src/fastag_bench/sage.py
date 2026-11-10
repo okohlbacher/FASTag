@@ -18,7 +18,8 @@ ENZYMES = {
 }
 
 
-SAGE_MODES = ("closed", "pool", "charge_truth")
+SAGE_MODES = ("closed", "pool", "charge_truth", "chimera")
+CHIMERA_REPORT_PSMS = 2
 
 
 def sage_config(ds: Dataset, fasta: str | Path, mzml: list[str | Path], scfg: dict, mode: str = "closed",
@@ -32,8 +33,12 @@ def sage_config(ds: Dataset, fasta: str | Path, mzml: list[str | Path], scfg: di
     JSON). mode 'pool' (#4 S3-PT) searches pool_fasta, one entry per pool peptide plus the shuffled decoy
     pool (pooltruth.write_pool_fasta), without digestion (cleave_at '$', no missed cleavages); everything
     else, Sage's own reversed decoys included, is the closed search. mode 'charge_truth' (#6) is the
-    closed search with precursor_charge [1, 4] and isotope_errors [-1, 3]. Backlog modes ('open' with
-    precursor_tol da [-500, 150]; 'chimera' with wide_window) are not implemented."""
+    closed search with precursor_charge [1, 4] and isotope_errors [-1, 3]. mode 'chimera' (1.13 item 12,
+    realchimera.py) is the closed search with Sage's chimera search on (after the best hit Sage removes its
+    matched fragment peaks and searches the rest again), wide_window on (the precursor tolerance becomes the
+    spectrum's isolation window, so a co-isolated peptide other than the header precursor can match) and
+    report_psms 2 (rank 1 and the chimeric rank 2). The backlog mode 'open' (precursor_tol da [-500, 150])
+    is not implemented."""
     if mode not in SAGE_MODES:
         raise ValueError(f"Sage mode {mode!r}: one of {SAGE_MODES}")
     if mode == "charge_truth":
@@ -42,6 +47,12 @@ def sage_config(ds: Dataset, fasta: str | Path, mzml: list[str | Path], scfg: di
         cfg = sage_config(ds, fasta, mzml, scfg, mode="closed")
         cfg["precursor_charge"] = [1, 4]
         cfg["isotope_errors"] = [-1, 3]
+        return cfg
+    if mode == "chimera":
+        cfg = sage_config(ds, fasta, mzml, scfg, mode="closed")
+        cfg["chimera"] = True
+        cfg["wide_window"] = True
+        cfg["report_psms"] = CHIMERA_REPORT_PSMS
         return cfg
     if mode == "pool":
         if pool_fasta is None:

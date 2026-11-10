@@ -32,6 +32,26 @@ namespace FASTag
           r->getMonoWeight(Residue::Internal);
   }
 
+  void TagReconciler::wantedFlanks(bool reversed, double nterm_mass, double cterm_mass,
+                                   const IonSeries::IonPair* series, double& want_n, double& want_c)
+  {
+    static const double WATER = EmpiricalFormula("H2O").getMonoWeight();
+    if (!series || series->kind == IonSeries::Series::BY)
+    {
+      want_n = reversed ? cterm_mass + WATER : nterm_mass;
+      want_c = reversed ? std::max(0.0, nterm_mass - WATER) : cterm_mass;
+    }
+    else
+    {
+      // Another series (#15 phase B): the same swap with the series' own
+      // reversed offset (c/z-dot: offC - offN = -15.0347; the tagger's
+      // clamp at 0 mirrored as for b/y).
+      const double off = series->reversedOffset();
+      want_n = reversed ? std::max(0.0, cterm_mass + off) : nterm_mass;
+      want_c = reversed ? std::max(0.0, nterm_mass - off) : cterm_mass;
+    }
+  }
+
   void TagReconciler::tryPlace(const ProteomeIndex::TagOcc& occ, const ProteomeIndex::Window& w,
                                double nterm_mass, double cterm_mass,
                                const MSSpectrum* spec, int frag_charges,
@@ -51,20 +71,7 @@ namespace FASTag
     // C-side residues + H2O. (The C-side clamp mirrors the tagger's at 0.)
     static const double WATER = EmpiricalFormula("H2O").getMonoWeight();
     double want_n, want_c;
-    if (!series || series->kind == IonSeries::Series::BY)
-    {
-      want_n = occ.reversed ? cterm_mass + WATER : nterm_mass;
-      want_c = occ.reversed ? std::max(0.0, nterm_mass - WATER) : cterm_mass;
-    }
-    else
-    {
-      // Another series (#15 phase B): the same swap with the series' own
-      // reversed offset (c/z-dot: offC - offN = -15.0347; the tagger's
-      // clamp at 0 mirrored as for b/y).
-      const double off = series->reversedOffset();
-      want_n = occ.reversed ? std::max(0.0, cterm_mass + off) : nterm_mass;
-      want_c = occ.reversed ? std::max(0.0, nterm_mass - off) : cterm_mass;
-    }
+    wantedFlanks(occ.reversed, nterm_mass, cterm_mass, series, want_n, want_c);
 
     // The spectrum flank that is the precursor less the top fragment (want_n
     // forward, want_c reversed) carries an error on the PEPTIDE's mass scale,
@@ -300,6 +307,43 @@ namespace FASTag
       idx_->windowsAt(occ.pos, occ.len, mc_, windows);
       for (const auto& w : windows)
         tryPlace(occ, w, nterm_mass, cterm_mass, spec, frag_charges, tag_shift, series, out);
+    }
+    return out;
+  }
+
+  std::vector<Reconciliation> TagReconciler::reconcileByMass(const std::string& tag, double nterm_mass,
+                                                             double cterm_mass,
+                                                             const IonSeries::IonPair* series) const
+  {
+    std::vector<Reconciliation> out;
+    if (!idx_) return out;
+    const int len = static_cast<int>(tag.size());
+    if (len < min_len_ || len > MAX_FILTER_LEN) return out;
+
+    std::vector<ProteomeIndex::TagOcc> occs;
+    idx_->locateTag(tag, both_, occs);
+    static const double WATER = EmpiricalFormula("H2O").getMonoWeight();
+    std::vector<ProteomeIndex::Window> windows;
+    std::vector<double> want_n, want_c;
+    for (const auto& occ : occs)
+    {
+      double wn, wc;
+      wantedFlanks(occ.reversed, nterm_mass, cterm_mass, series, wn, wc);
+      want_n.assign(1, wn);
+      want_c.assign(1, wc);
+      if (fixed_n_ != 0.0 && wn - fixed_n_ >= 0.0) want_n.push_back(wn - fixed_n_);
+      if (fixed_c_ != 0.0 && wc - fixed_c_ >= 0.0) want_c.push_back(wc - fixed_c_);
+      // A superset of tryPlace's tolerances: both are at most the tolerance
+      // at the peptide's mass, which is below the flanks plus the tag plus
+      // water (fixed masses are never negative in this bound's use; a
+      // negative one only lowers the window mass).
+      const double tag_mass = idx_->massBetween(occ.pos, occ.pos + occ.len);
+      const double tol = tolAt(std::max(wn, 0.0) + std::max(wc, 0.0) + tag_mass + WATER +
+                               std::fabs(fixed_n_) + std::fabs(fixed_c_)) * 1.5;
+      windows.clear();
+      idx_->windowsByMass(occ.pos, occ.len, want_n, want_c, tol, windows);
+      for (const auto& w : windows)
+        tryPlace(occ, w, nterm_mass, cterm_mass, nullptr, 1, nullptr, series, out);
     }
     return out;
   }
