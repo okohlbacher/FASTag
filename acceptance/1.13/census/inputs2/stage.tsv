@@ -1,0 +1,16 @@
+role	accession	file	bytes	pride_sha1	url
+chosen	PXD073999	20180509_A375_shSIRT6_2_rep2.raw	1341456042	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2026/03/PXD073999/20180509_A375_shSIRT6_2_rep2.raw
+backup	PXD073999	20180509_A375_shns_3_rep1.raw	1356085034	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2026/03/PXD073999/20180509_A375_shns_3_rep1.raw
+chosen	PXD042242	N184A_1.raw	1270646391	e826f85bf456a2d690d6e4ecccd98842f0cfb7fa	https://ftp.pride.ebi.ac.uk/pride/data/archive/2023/10/PXD042242/N184A_1.raw
+backup	PXD042242	PP185_186AA_2.raw	1063600889	fd763a40c427f22a24d2305b0d1d1e9be816284a	https://ftp.pride.ebi.ac.uk/pride/data/archive/2023/10/PXD042242/PP185_186AA_2.raw
+chosen	PXD067571	18.9_Apical-outl_OGM_day4_1_T_210816.raw	1350800173	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2026/08/PXD067571/18.9_Apical-outl_OGM_day4_1_T_210816.raw
+backup	PXD067571	18.9_Basal-out_ODM_day6_L_230724.raw	2191820117	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2026/08/PXD067571/18.9_Basal-out_ODM_day6_L_230724.raw
+chosen	PXD032145	P800_EXTL3_batch1.raw	543341250	b199ba724f5d65c8cbe37284e94feb090461656a	https://ftp.pride.ebi.ac.uk/pride/data/archive/2022/07/PXD032145/P800_EXTL3_batch1.raw
+backup	PXD032145	P822_EXTL3_batch3.raw	459169061	8781f420c889088c8a32680b4363fb5e08b12cb1	https://ftp.pride.ebi.ac.uk/pride/data/archive/2022/07/PXD032145/P822_EXTL3_batch3.raw
+chosen	PXD003400	20150421_JoLI_FASP_RIPA_10ug_n1_2153.raw	776085003	b7ac8916e39c5058102fbcd7c58d37767e639c43	https://ftp.pride.ebi.ac.uk/pride/data/archive/2020/11/PXD003400/20150421_JoLI_FASP_RIPA_10ug_n1_2153.raw
+backup	PXD003400	20151022_JoLI_FASPp_1ug_SDS_n2_2860.raw	777857040	17ddd17e4ea17587fad3e585ec5fa7d704d07fe9	https://ftp.pride.ebi.ac.uk/pride/data/archive/2020/11/PXD003400/20151022_JoLI_FASPp_1ug_SDS_n2_2860.raw
+chosen	PXD044743	20200816_EXPL5_nLC7_MEM_collab_77min_DDA_Ancient_calculus_1835_01.raw	1197254596	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2024/02/PXD044743/20200816_EXPL5_nLC7_MEM_collab_77min_DDA_Ancient_calculus_1835_01.raw
+chosen	PXD068740	2150-gr1-1.raw	976226404	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2026/09/PXD068740/2150-gr1-1.raw
+backup	PXD068740	1984-gr3-29.raw	838373576	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2026/09/PXD068740/1984-gr3-29.raw
+chosen	PXD028322	QEXHF08361.raw	2735871262	d2a0f64d70669d2f5d5c7eaa72209894a4b0bdbc	https://ftp.pride.ebi.ac.uk/pride/data/archive/2022/05/PXD028322/QEXHF08361.raw
+backup	PXD028322	QEXHF08347.raw	2547946683	9face372b02e31752326c7df654e9b829fbf4e47	https://ftp.pride.ebi.ac.uk/pride/data/archive/2022/05/PXD028322/QEXHF08347.raw

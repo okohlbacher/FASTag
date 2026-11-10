@@ -1,0 +1,136 @@
+accession	draw_rank	result	note
+PXD014451	1	organism	mus musculus (mouse)
+PXD073999	2	TAKEN	12 eligible files; chosen 20180509_A375_shSIRT6_2_rep2.raw
+PXD042242	3	TAKEN	30 eligible files; chosen N184A_1.raw
+PXD019374	4	organism	mus musculus (mouse)
+PXD017245	5	organism	mus musculus (mouse)
+PXD067571	6	TAKEN	90 eligible files; chosen 18.9_Apical-outl_OGM_day4_1_T_210816.raw
+PXD007651	7	organism	escherichia coli
+PXD016074	8	organism	escherichia coli
+PXD066569	9	organism	mus musculus (mouse)
+PXD032145	10	TAKEN	2 eligible files; chosen P800_EXTL3_batch1.raw
+PXD069084	11	excluded_used	
+PXD003400	12	TAKEN	51 eligible files; chosen 20150421_JoLI_FASP_RIPA_10ug_n1_2153.raw
+PXD044743	13	TAKEN	1 eligible files; chosen 20200816_EXPL5_nLC7_MEM_collab_77min_DDA_Ancient_calculus_1835_01.raw
+PXD067090	14	organism	mus musculus (mouse)
+PXD017766	15	organism	mus musculus (mouse)
+PXD068740	16	TAKEN	36 eligible files; chosen 2150-gr1-1.raw
+PXD028322	17	TAKEN	18 eligible files; chosen QEXHF08361.raw
+PXD034582	18	not_needed	
+PXD014242	19	not_needed	
+PXD004612	20	not_needed	
+PXD021895	21	not_needed	
+PXD009636	22	not_needed	
+PXD006553	23	not_needed	
+PXD018223	24	not_needed	
+PXD040351	25	not_needed	
+PXD003252	26	not_needed	
+PXD027840	27	not_needed	
+PXD004900	28	not_needed	
+PXD019012	29	not_needed	
+PXD035696	30	not_needed	
+PXD018795	31	not_needed	
+PXD006165	32	not_needed	
+PXD035182	33	not_needed	
+PXD009844	34	not_needed	
+PXD006776	35	not_needed	
+PXD000666	36	not_needed	
+PXD066511	37	not_needed	
+PXD009161	38	not_needed	
+PXD051187	39	not_needed	
+PXD055832	40	not_needed	
+PXD016143	41	not_needed	
+PXD028566	42	not_needed	
+PXD010982	43	not_needed	
+PXD009324	44	not_needed	
+PXD026724	45	not_needed	
+PXD051730	46	not_needed	
+PXD030771	47	not_needed	
+PXD045922	48	not_needed	
+PXD011989	49	not_needed	
+PXD007081	50	not_needed	
+PXD001725	51	not_needed	
+PXD016227	52	not_needed	
+PXD006188	53	not_needed	
+PXD013478	54	not_needed	
+PXD055107	55	not_needed	
+PXD038911	56	not_needed	
+PXD000999	57	not_needed	
+PXD050874	58	not_needed	
+PXD027143	59	not_needed	
+PXD023336	60	not_needed	
+PXD005924	61	not_needed	
+PXD018404	62	not_needed	
+PXD014938	63	not_needed	
+PXD050335	64	not_needed	
+PXD003981	65	not_needed	
+PXD059544	66	not_needed	
+PXD018780	67	not_needed	
+PXD024632	68	not_needed	
+PXD008222	69	not_needed	
+PXD019254	70	not_needed	
+PXD046508	71	not_needed	
+PXD008425	72	not_needed	
+PXD023777	73	not_needed	
+PXD022011	74	not_needed	
+PXD005957	75	not_needed	
+PXD020410	76	not_needed	
+PXD003903	77	not_needed	
+PXD011990	78	not_needed	
+PXD042840	79	not_needed	
+PXD005951	80	not_needed	
+PXD047200	81	not_needed	
+PXD016001	82	not_needed	
+PXD001724	83	not_needed	
+PXD059625	84	not_needed	
+PXD062723	85	not_needed	
+PXD031766	86	not_needed	
+PXD032816	87	not_needed	
+PXD014328	88	not_needed	
+PXD053237	89	not_needed	
+PXD020501	90	not_needed	
+PXD041040	91	not_needed	
+PXD045783	92	not_needed	
+PXD007080	93	not_needed	
+PXD017427	94	not_needed	
+PXD052806	95	not_needed	
+PXD055130	96	not_needed	
+PXD065046	97	not_needed	
+PXD028796	98	not_needed	
+PXD023998	99	not_needed	
+PXD028846	100	not_needed	
+PXD029361	101	not_needed	
+PXD010785	102	not_needed	
+PXD045654	103	not_needed	
+PXD022671	104	not_needed	
+PXD055067	105	not_needed	
+PXD047576	106	not_needed	
+PXD045916	107	not_needed	
+PXD042045	108	not_needed	
+PXD042467	109	not_needed	
+PXD046787	110	not_needed	
+PXD012858	111	not_needed	
+PXD043802	112	not_needed	
+PXD002612	113	not_needed	
+PXD012610	114	not_needed	
+PXD003308	115	not_needed	
+PXD022999	116	not_needed	
+PXD035276	117	not_needed	
+PXD046328	118	not_needed	
+PXD035773	119	not_needed	
+PXD018792	120	not_needed	
+PXD047407	121	not_needed	
+PXD008934	122	not_needed	
+PXD011353	123	not_needed	
+PXD037344	124	not_needed	
+PXD014946	125	not_needed	
+PXD018069	126	not_needed	
+PXD008535	127	not_needed	
+PXD045164	128	not_needed	
+PXD037976	129	not_needed	
+PXD056281	130	not_needed	
+PXD054323	131	not_needed	
+PXD052721	132	not_needed	
+PXD017805	133	not_needed	
+PXD014823	134	not_needed	
+PXD003606	135	not_needed	
