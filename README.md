@@ -1110,7 +1110,7 @@ counts (`refs`, `refs_exact`, `refs_scan`, `refs_ambiguous`,
 `<status>_identified_<1|0|unknown>` and `triage_candidates`. Triage is an
 E-value threshold, not a quality call. Whether the candidates are the
 unidentified spectra a second (semi-specific or open) search identifies was
-tested on held-out runs: [doc/CENSUS-TRIAGE-EVAL.md](doc/CENSUS-TRIAGE-EVAL.md),
+tested on held-out runs (second test PASS for a semi-enzymatic search; not shown for an open search): [doc/CENSUS-TRIAGE-EVAL.md](doc/CENSUS-TRIAGE-EVAL.md),
 which also describes `tools/census_triage_eval.py`, the scorer.
 
 For front ends that list a run's outputs by option name (the GUI's resolved

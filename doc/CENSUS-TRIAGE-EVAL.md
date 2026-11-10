@@ -35,7 +35,18 @@ second search's Sage `results.sage.tsv`) and optionally `mzml` (the basename the
 Tests: ctest `census_triage_eval_test` (hand-counted tables) and `census_triage_eval_cli_test` (a real
 `-census -census_ids` run of the fixture against an awk recount).
 
-## Held-out test (1.13)
+## Held-out result
+
+Second preregistered held-out test (branch `acc113r/census`: freeze 7aa2ae3, staged manifest 1d7d7a0, results 083abda;
+scored once): **PASS**. 8 runs from 8 PRIDE projects, 7 evaluable. Identification rate of the triage set against the
+rest of the unidentified spectra in a semi-enzymatic Sage search at subset FDR 1%: 10.9% vs 2.0%, rate ratio 5.3
+(95% CI 2.6-8.3); the ratio is > 1 in all 7 evaluable runs (1.7-21.1). Gain over the peak-count baseline: +0.023
+(CI 0.018-0.029).
+
+Not shown: against an open search the triage set is no better than the peak-count baseline (d +0.002, CI lower bound
+-0.019).
+
+## First held-out test (1.13)
 
 Preregistered in branch `acceptance/1.13` (`PREREG-census.md`, `manifests/census-triage.tsv`, `census/`; manifest,
 frozen config and scorer sha256 committed in f054006 before any held-out run; scored once, abcd607).
@@ -63,11 +74,11 @@ unidentified spectra and held 52% of their semi-search hits (hit rate 12.5% vs 2
 Secondary: against the open search the enrichment is similar (rr 4.7), but the candidates do no better than a pick
 by peak count (d +0.014, CI -0.030 to 0.082).
 
-What this supports: the triage list is enriched for spectra a semi-specific second search identifies, pooled and in
-most runs; it is not a per-run guarantee and not a quality call. The census classifier of the plan (phase C) was not
+What this test supports: the triage list is enriched for spectra a semi-specific second search identifies, pooled and
+in most runs; it is not a quality call. The census classifier of the plan (phase C) was not
 built, because the spectrum-level labels it needs do not exist yet.
 
-## Reassessment of the E2 failure (after the held-out test; DEV runs only)
+## Reassessment of the E2 failure (after the first held-out test; DEV runs only)
 
 The failure is one of the test design, not of triage. In PXD003903 the lowest subset q-value of any unidentified
 spectrum is 0.028 (36 targets above the first decoy), so no spectrum could be a hit at 1% and the run could not pass
@@ -75,5 +86,5 @@ E2 under any triage rule. Thinning the two DEV runs shows the same: at about 100
 undefined in 78 to 100% of 300 random thinnings, and it is never <= 1 when it is defined. The scorer now reports
 `evaluable` and `q_min` per run, so that a later test can state E2 over the evaluable runs and fix beforehand how
 many runs must be evaluable. The triage rule and its default threshold are unchanged: on the DEV runs no other
-`-census_triage_evalue` raised `rr` in both runs. The held-out verdict above stands (FAIL); a new held-out test
-with new runs is needed to replace it.
+`-census_triage_evalue` raised `rr` in both runs. The verdict of the first test stands (FAIL); the second
+held-out test (Held-out result, above) used new runs and stated its per-run criterion over the evaluable runs.
