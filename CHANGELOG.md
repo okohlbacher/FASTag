@@ -81,6 +81,12 @@
   for "always label-free"; P3 PASS, 96 against 91 for `-label_out`'s
   `label_call` (sign test p = 0.33). Do not rely on the call as free of
   false label calls.
+  Added after that test, and not covered by it: the `ld_reporter` section
+  counts TMT and iTRAQ reporter ions in the high-resolution MS2/MS3 scans.
+  A clear reporter signal sets the label family, missing reporters remove
+  an isobaric label call (`no_reporter_ions`), and a no call on a run with
+  ion-trap MS2 scans is reported as `low_resolution_ms2`. Thresholds were
+  set on the 99 development runs (86 right instead of 85).
 
 ## 1.12.2 (2026-11-10)
 
