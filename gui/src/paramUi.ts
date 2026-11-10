@@ -874,7 +874,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   check_header_charge: {
     hidden: EXPERIMENTAL_1_13,
     help: {
-      text: 'Whether the charge the file gives for a precursor is checked against the isotope spacing of the precursor in the preceding MS1 scan and against its fragment pairs: off, warn (report disagreements only) or both (tag a disagreeing spectrum under the file's charge and under the charge the check found). Experimental.'
+      text: "Whether the charge the file gives for a precursor is checked against the isotope spacing of the precursor in the preceding MS1 scan and against its fragment pairs: off, warn (report disagreements only) or both (tag a disagreeing spectrum under the file's charge and under the charge the check found). Experimental."
     }
   },
   check_header_margin: {
