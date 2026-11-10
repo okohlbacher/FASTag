@@ -17,6 +17,21 @@
   stays 175 and 0 stays experimental. With zero tag ends the SILAC test is
   now skipped (no undefined heavy share); this is reachable only at a
   minimum of 0.
+- **`-search_shifts` (backlog #17): isotope rule in the frame of a fixed
+  terminal label, and the held-out result.** A mass-gap peak at a fixed
+  terminal label (TMT) plus n x 1.00335 is now `skipped_isotope` and raises
+  the engine's isotope errors; before, it became a Comet offset near
+  n x 1.0034 and Sage did not search it. Output changes only under
+  `-search_shifts` on runs with a fixed terminal label. Both preregistered
+  held-out tests FAILED (acceptance/1.13 RESULT-item17.md; second test on
+  four new runs, `acc113r/shifts` RESULT-item17r.md: Comet P2 and P4, Sage
+  P4). In the second test PSMs at 1 % FDR rose on all four runs (Comet +7.7
+  to +36.8 %, Sage +6.5 to +25.2 %), but Comet's entrapment FDP rose from
+  0.88 to 1.28 % on the TMT run PXD037999, and 5 of 32 (Comet) and 3 of 11
+  (Sage) admissible open-search peaks were recovered. Part of the gain is
+  the isotope error setting (0..1 against 0 in the base search). The test
+  did not measure the fix. The option stays experimental and does not
+  replace an open search.
 - **MSFragger configuration (backlog #18): `-search_engine msfragger`,
   experimental, no held-out test.** `-search_config_out` writes a complete
   `fragger.params` for MSFragger 4.4.1. MSFragger needs decoys in the

@@ -1036,7 +1036,7 @@
       "name": "search_shifts",
       "type": "string",
       "default": "none",
-      "description": "Add the run's mass-gap peaks to -search_config_out: 'variable' as variable modifications, 'offsets' as Comet mass offsets, 'both'. Isotope errors, fixed labels and caps are applied; -search_shifts_out lists every decision. Experimental",
+      "description": "Add the run's mass-gap peaks to -search_config_out: 'variable' as variable modifications, 'offsets' as Comet mass offsets, 'both'. Isotope errors, fixed labels and caps are applied; -search_shifts_out lists every decision. Experimental: failed both held-out tests (doc/SHORTLIST.md)",
       "required": false,
       "toppAdvanced": false,
       "choices": [

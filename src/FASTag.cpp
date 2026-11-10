@@ -975,7 +975,7 @@ protected:
                           "Add the run's mass-gap peaks to -search_config_out: 'variable' as variable "
                           "modifications, 'offsets' as Comet mass offsets, 'both'. Isotope errors, fixed "
                           "labels and caps are applied; -search_shifts_out lists every decision. "
-                          "Experimental", false);
+                          "Experimental: failed both held-out tests (doc/SHORTLIST.md)", false);
     setValidStrings_("search_shifts", ListUtils::create<std::string>("none,variable,offsets,both"));
     registerOutputFile_("search_shifts_out", "<file>", "",
                         "One row per mass-gap peak: its explanation and what -search_shifts did with it", false);

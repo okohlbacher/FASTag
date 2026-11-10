@@ -392,6 +392,17 @@ namespace
       for (const auto* v : p.variable) tmt_var = tmt_var || v->getId() == "TMT6plex";
       check(!tmt_var && p.variable.size() == 1 && p.fixed.size() == 2, "shifts 9: the label is not exported again");
     }
+    // 9b. label + n x 13C is an isotope error, not an offset
+    {
+      const auto* tmt = mod("TMT6plex (N-term)");
+      const double L = tmt->getDiffMonoMass();
+      auto p = shiftPlan({cam, tmt});
+      const auto o = SC::shiftsToPlan(fx.result({{L, 300}, {L + 1.0049, 90}, {L + 2.0039, 40}}), {}, fx.mods, fx.combos,
+                                      shiftSettings(), p);
+      check(actionAt(o, L + 1.0049) == "skipped_isotope" && actionAt(o, L + 2.0039) == "skipped_isotope",
+            "shifts 9b: label + n x 13C is skipped_isotope");
+      check(o.isotope_max == 2 && p.isotope_errors == 2 && o.offsets == 0, "shifts 9b: the isotope range is raised, no offset exported");
+    }
     // 10. substitution-dominated -> offset
     {
       auto p = shiftPlan({cam});
