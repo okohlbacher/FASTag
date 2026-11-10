@@ -25,6 +25,10 @@ second search's Sage `results.sage.tsv`) and optionally `mzml` (the basename the
   candidates; `d_<column>` = hit rate of the candidates minus that of the same number of U spectra with the largest
   `<column>` (ties to the lower input index); `auroc_neglog10_evalue` = AUROC of -log10(best_evalue) for the hits
   within U (untagged spectra rank lowest).
+- `evaluable` = 1 when U has at least one hit (`t_u` > 0), else 0; `q_min` = the lowest q-value of a target of U.
+  With `--fdr subset` a q of 0.01 needs 100 targets above the decoys, so a run with fewer has `q_min` > 0.01, no hit
+  in either group and an undefined `rr`, whatever triage does. Both are computed from U as a whole, never from the
+  triage split. Pooled, `evaluable` is the number of evaluable runs.
 - Pooled values sum the runs' counts. `rr` and `d_*` get percentile 95% intervals from a run-cluster bootstrap
   (`--boot` resamples, `--seed`).
 
@@ -62,3 +66,14 @@ by peak count (d +0.014, CI -0.030 to 0.082).
 What this supports: the triage list is enriched for spectra a semi-specific second search identifies, pooled and in
 most runs; it is not a per-run guarantee and not a quality call. The census classifier of the plan (phase C) was not
 built, because the spectrum-level labels it needs do not exist yet.
+
+## Reassessment of the E2 failure (after the held-out test; DEV runs only)
+
+The failure is one of the test design, not of triage. In PXD003903 the lowest subset q-value of any unidentified
+spectrum is 0.028 (36 targets above the first decoy), so no spectrum could be a hit at 1% and the run could not pass
+E2 under any triage rule. Thinning the two DEV runs shows the same: at about 100 expected hits or fewer, `rr` is
+undefined in 78 to 100% of 300 random thinnings, and it is never <= 1 when it is defined. The scorer now reports
+`evaluable` and `q_min` per run, so that a later test can state E2 over the evaluable runs and fix beforehand how
+many runs must be evaluable. The triage rule and its default threshold are unchanged: on the DEV runs no other
+`-census_triage_evalue` raised `rr` in both runs. The held-out verdict above stands (FAIL); a new held-out test
+with new runs is needed to replace it.

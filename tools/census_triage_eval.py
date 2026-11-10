@@ -24,6 +24,9 @@ Per run and pooled over runs (counts summed):
     rr = p_triage / p_rest (inf when the rest has no hit and the candidates have), recall = t_triage / (t_triage + t_rest),
     for each baseline column B: p_B = precision of the n_triage rows of U with the largest B (ties: lower input
     index first), d_B = p_triage - p_B,
+    q_min = the lowest q-value of a target of U (empty: U has no target PSM), evaluable = 1 when U has a hit
+    (t_u > 0), else 0: with --fdr subset a run with fewer than 1 / q targets above its decoys has q_min > q, no
+    hit in either group and an undefined rr whatever triage does (pooled: the number of evaluable runs),
     auroc of -log10(best_evalue) for T within U (spectra without a tag rank lowest; ties count one half).
 Join diagnostics: u_in_second, triage_in_second, rest_in_second (U spectra the second search reports); a run where no
 spectrum of U joins is refused. Non-finite or empty baseline values, spectrum_q and discriminants are refused.
@@ -104,12 +107,12 @@ def global_truth(psms, q):
     return {sid for sid, (t, sq, _) in psms.items() if t and sq <= q}
 
 
-def subset_truth(psms, sids, q):
+def subset_qvalues(psms, sids):
     """Target-decoy q-values recomputed among the rank-1 PSMs of the spectra @p sids only (separate FDR of the
     spectra the first search left unidentified), ordered by sage_discriminant_score (higher better; equal scores
     enter together). FDR at a cut = (decoys + 1) / targets above it (the finite-sample target-decoy
     competition estimate); q = the lowest FDR at or below the score.
-    Returns the targets with q <= @p q."""
+    Returns [(q, is_target, native id)], best score first."""
     sub = [(psms[s][2], psms[s][0], s) for s in sids if s in psms]
     if any(d is None for d, _, _ in sub):
         raise EvalError("subset FDR needs the column sage_discriminant_score")
@@ -131,7 +134,12 @@ def subset_truth(psms, sids, q):
     for k in range(len(groups) - 1, -1, -1):
         m = min(m, fdr[k])
         qv[k] = m
-    return {x[2] for g, qq in zip(groups, qv) if qq <= q for x in g if x[1]}
+    return [(qq, x[1], x[2]) for g, qq in zip(groups, qv) for x in g]
+
+
+def subset_truth(psms, sids, q):
+    """The targets with a subset q-value (subset_qvalues) <= @p q."""
+    return {s for qq, t, s in subset_qvalues(psms, sids) if t and qq <= q}
 
 
 def score_key(ev):
@@ -175,11 +183,13 @@ def run_counts(census, psms, q, fdr, baselines):
             if row[cid] == "0":
                 finite(row[cb[b]], census, b)
     if fdr == "global":
-        truth = global_truth(psms, q)
+        tq = [sq for sid, (t, sq, _) in psms.items() if t and sid in u_ids]
     elif fdr == "subset":
-        truth = subset_truth(psms, u_ids, q)
+        sub = subset_qvalues(psms, u_ids)
+        tq = [qq for qq, t, _ in sub if t]
     else:
         raise EvalError(f"unknown FDR mode '{fdr}'")
+    truth = global_truth(psms, q) if fdr == "global" else {s for qq, t, s in sub if t and qq <= q}
     u = []  # (index, is_triage, is_true, score, {baseline: value}, in_second)
     unknown = 0
     for row in rows:
@@ -215,6 +225,10 @@ def run_counts(census, psms, q, fdr, baselines):
     c["second_rank1"] = len(psms)
     c["second_true_global"] = len(global_truth(psms, q))
     c["t_u"] = c["t_triage"] + c["t_rest"]
+    # A run where U has no hit at all cannot show an enrichment: the truth cannot resolve q there (with --fdr
+    # subset, (D + 1) / T <= q needs 1 / q targets above the decoys). Judged from U as a whole, never from triage.
+    c["evaluable"] = 1 if c["t_u"] > 0 else 0
+    c["_q_min"] = [min(tq)] if tq else []
     c["_scores"] = [x[3] for x in u]
     c["_labels"] = [1 if x[2] else 0 for x in u]
     return c
@@ -244,6 +258,7 @@ def summarize(c, baselines):
         s[f"p_top_{b}"] = pb
         s[f"d_{b}"] = s["p_triage"] - pb if s["p_triage"] is not None and pb is not None else None
     s["auroc_neglog10_evalue"] = auroc(c["_scores"], c["_labels"])
+    s["q_min"] = min(c["_q_min"]) if c.get("_q_min") else None
     return s
 
 

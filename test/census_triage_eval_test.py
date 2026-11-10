@@ -144,6 +144,38 @@ class Tests(unittest.TestCase):
         with self.assertRaises(cte.EvalError):
             cte.subset_truth({"x": (True, 0.0, None)}, {"x"}, 0.01)
 
+    def test_evaluable_and_q_min(self):
+        # Subset q-values of U's targets (test_subset_fdr): 1/3 (s2 s3 s4), 1/2 (s5). At q 0.01 the run has no hit
+        # in either group: not evaluable, and q_min says why. Evaluable is judged from U as a whole (t_u), so a run
+        # whose hits all lie in the rest stays evaluable.
+        a, p = self.one(fdr="subset")
+        self.assertEqual((a["evaluable"], a["t_u"]), (0, 0))
+        self.assertAlmostEqual(a["q_min"], 1 / 3)
+        self.assertEqual(p["evaluable"], 0)
+        a, _ = self.one(fdr="subset", q=0.34)
+        self.assertEqual(a["evaluable"], 1)
+        a, _ = self.one()  # global: spectrum_q of U's targets s2 0.01, s3 0.0101, s4 0.005, s5 0.002
+        self.assertEqual(a["evaluable"], 1)
+        self.assertAlmostEqual(a["q_min"], 0.002)
+        a, _ = self.one(q=0.001)
+        self.assertEqual((a["evaluable"], a["rr"]), (0, None))
+        # pooled: the number of evaluable runs; q_min the lowest of the runs
+        rows = [("A", "a.census.tsv", "a.sage.tsv", ""), ("B", "a.census.tsv", "a.sage.tsv", "")]
+        res = dict(cte.evaluate(self.runs(rows), boot=0, fdr="subset", q=0.34))
+        self.assertEqual((res["pooled"]["evaluable"], res["pooled"]["n_runs"]), (2, 2))
+        self.assertAlmostEqual(res["pooled"]["q_min"], 1 / 3)
+        # the floor of (D + 1) / T: 99 targets and no decoy cannot reach 1%, 100 can
+        for n, hits in ((99, 0), (100, 100)):
+            psms = {f"t{i}": (True, 0.0, float(1000 - i)) for i in range(n)}
+            qs = cte.subset_qvalues(psms, set(psms))
+            self.assertAlmostEqual(min(q for q, _, _ in qs), 1 / n)
+            self.assertEqual(len(cte.subset_truth(psms, set(psms), 0.01)), hits)
+        # U without a target PSM: q_min empty, not evaluable
+        write(self.d, "d.sage.tsv", SAGE_HEAD, [(1, "a.mzML", "s2", 1, -1, 0.5, 3)])
+        res = dict(cte.evaluate(self.runs([("A", "a.census.tsv", "d.sage.tsv", "")]), boot=0, fdr="subset"))
+        self.assertIsNone(res["A"]["q_min"])
+        self.assertEqual(res["A"]["evaluable"], 0)
+
     def test_pooled_rr_is_ratio_of_sums(self):
         # A (n_tri 10, t 10; n_rest 10, t 1), B (1000, 100; 1000, 100): pooled rr 110/1010 / (101/1010) = 110/101,
         # not the mean of the run rr's (10 and 1).
