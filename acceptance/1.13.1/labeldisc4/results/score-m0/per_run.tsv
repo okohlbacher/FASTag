@@ -1,0 +1,145 @@
+id	truth	call	outcome	labels	basis	reason	gate	fam_correct	pm_class	pm_fam_correct	pm_fam_correct_generous	ms2_analyzer	acquisition	digestion	cell
+PXD022092__OEI15916	label-free	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	SILAC	0	0	IT	MS2	tryptic	HYB
+PXD002681__Strip-049	label-free	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	label-free	1	1	IT	MS2	unstated	HYB
+PXD010153__02214_G05_P023630_B00_A00_R1	label-free	label-free	correct	label-free	site_scan	-	none	1	label-free	1	1	FT	MS2	unstated	HYB
+PXD062315__OVAJS121206_08	label-free	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	label-free	1	1	IT	MS2	tryptic	HYB
+PXD016373__ACE_0234_LG02	label-free	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	label-free	1	1	IT	MS2	tryptic	HYB
+PXD021493__20191103_Reetta_P_H_03	label-free	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	label-free	1	1	IT	MS2	tryptic	HYB
+PXD001509__o6	label-free	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	label-free	1	1	IT	MS2	tryptic	HYB
+PXD051212__El7664b_2p_TRAP5_200uPAC11_PRC-5303_more_1	label-free	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	label-free	1	1	IT	MS2	tryptic	HYB
+PXD003561__120621_ZhangH_YW_ACH_3	label-free	label-free	correct	label-free	site_scan	-	none	1	label-free	1	1	FT	MS2	tryptic	HYB
+PXD005605__Vehicle-3	label-free	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	label-free	1	1	IT	MS2	tryptic	HYB
+PXD029634__5_50-14_020415_Low-Intensity	label-free	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	label-free	1	1	IT	MS2	tryptic	HYB
+PXD008278__130321_LS_26pt1_CO20_4	label-free	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	label-free	1	1	IT	MS2	tryptic	HYB
+PXD005073__b1365p28_B2_0_T2	label-free	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	label-free	1	1	IT	MS2	tryptic	HYB
+PXD069601__No_CIP1	label-free	label-free	correct	label-free	site_scan	-	unclear	1	label-free	1	1	FT	MS2	tryptic	HYB
+PXD034869__ACE_0236_DS07	label-free	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	label-free	1	1	IT	MS2	tryptic	HYB
+PXD001978__M395-E09-HS-P4392-1	label-free	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	label-free	1	1	IT	MS2	tryptic	HYB
+PXD006040__GeDR1	label-free	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	label-free	1	1	IT	MS2	tryptic	HYB
+PXD006426__DiGly_BR_161101125826	label-free	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	label-free	1	1	IT	MS2	tryptic	HYB
+PXD010404__mcE16_MV_OB_02	label-free	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	TMT	0	0	IT	MS2	tryptic	HYB
+PXD000756__Ls_180512_AM_som_3	label-free	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	label-free	1	1	IT	MS2	tryptic	HYB
+PXD003176__SA_260713_CVL_257	label-free	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	label-free	1	1	IT	MS2	tryptic	HYB
+PXD024442__Beads_Recom_Htra2_3_S08	label-free	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	label-free	1	1	IT	MS2	mixed	HYB
+PXD044216__25021801_2	label-free	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	label-free	1	1	IT	MS2	tryptic	HYB
+PXD014511__DVPTPaMA160419_S2E8_SCX2_F16156	label-free	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	label-free	1	1	IT	MS2	tryptic	TRI
+PXD040520__DDA_HCD-KK16_OK1E10_OP50	label-free	label-free	correct	label-free	site_scan	-	none	1	label-free	1	1	FT	MS2	unstated	TRI
+PXD013075__lu001284	label-free	label-free	correct	label-free	site_scan	-	none	1	label-free	1	1	FT	MS2	tryptic	TRI
+PXD033122__20211126_Fusion_Project_549_sample_1119	label-free	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	label-free	1	1	IT	MS2	tryptic	TRI
+PXD012809__3_STXBP5_WT_Control_2	label-free	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	label-free	1	1	IT	MS2	tryptic	TRI
+PXD069820__AtRPS7_kd_mock3	label-free	label-free	correct	label-free	site_scan	-	none	1	label-free	1	1	FT	MS2	unstated	TRI
+PXD048690__200604_B9	label-free	label-free	correct	label-free	site_scan	-	none	1	label-free	1	1	FT	MS2	tryptic	TRI
+PXD047792__James_20220518_OTE_Aur_1h_WTGx5-1	label-free	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	label-free	1	1	IT	MS2	tryptic	TRI
+PXD015848__OF_20190610_COU_06	label-free	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	label-free	1	1	IT	MS2	tryptic	TRI
+PXD013328__P2CH20180322_Apex_15	label-free	label-free	correct	label-free	site_scan	-	none	1	label-free	1	1	FT	MS2	tryptic	QE
+PXD060761__EX1_MS_15397_2754_30062022	label-free	label-free	correct	label-free	site_scan	-	none	1	label-free	1	1	FT	MS2	tryptic	QE
+PXD054470__339_1	label-free	label-free	correct	label-free	site_scan	-	none	1	label-free	1	1	FT	MS2	tryptic	QE
+PXD028372__2_UC300_FLAG	label-free	label-free	correct	label-free	site_scan	-	none	1	label-free	1	1	FT	MS2	tryptic	QE
+PXD038132__H1299_Q1904_hoellmuellere_187	label-free	label-free	correct	label-free	site_scan	-	none	1	label-free	1	1	FT	MS2	tryptic	QE
+PXD052314__EX480YM_120_5590_20112023	label-free	label-free	correct	label-free	site_scan	-	none	1	label-free	1	1	FT	MS2	mixed	QE
+PXD003872__20150527_RG_Benzing_Rinschen_150523_TQ_S18	label-free	label-free	correct	label-free	site_scan	-	none	1	label-free	1	1	FT	MS2	tryptic	QE
+PXD001800__8H_03	label-free	label-free	correct	label-free	site_scan	-	unclear	1	label-free	1	1	FT	MS2	tryptic	QE
+PXD032334__20220218_EX1_UM8_Bauza001_SA_EXT02_iso153_P2_full	label-free	label-free	correct	label-free	site_scan	-	none	1	label-free	1	1	FT	MS2	tryptic	QE
+PXD017976__20180807_Q1_AWH_ColID_654_ProjID_1327_RolfesBonn_sample_1	label-free	label-free	correct	label-free	site_scan	-	none	1	label-free	1	1	FT	MS2	unstated	QE
+PXD005810__170913_6178_MSA	SILAC	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	label-free	0	0	IT	MS2	tryptic	HYB
+PXD004950__ELITE-RSLC002611	SILAC	SILAC	correct	K:Lys8+R:Arg10	precursor_pairs	-	unknown	1	SILAC	1	1	IT	MS2	tryptic	HYB
+PXD002165__MU2-R3T1NO-1	SILAC	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	SILAC	1	1	IT	MS2	tryptic	HYB
+PXD009424__20150724_RT_4NHF_2D_vs_3D_8_10_2_4	SILAC	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	label-free	0	0	IT	MS2	unstated	HYB
+PXD000691__JIMTp_B09	SILAC	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	SILAC	1	1	IT	MS2	tryptic	HYB
+PXD002844__L7	SILAC	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	SILAC	1	1	IT	MS2	tryptic	HYB
+PXD007256__CAL27_Curcumin_2SILAC_pST_03	SILAC	label-free	wrong	label-free	site_scan	-	none	0	label-free	0	0	FT	MS2	tryptic	HYB
+PXD001645__HaCaT_TP_05_R2	SILAC	label-free	wrong	label-free	site_scan	-	none	0	SILAC	1	1	FT	MS2	tryptic	HYB
+PXD002001__1306018_Bousquet_3_11	SILAC	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	SILAC	1	1	IT	MS2	tryptic	HYB
+PXD003696__AnMi_20120813_ProteinTurnover_A_13_4	SILAC	SILAC	correct	K:Lys8+R:Arg10	precursor_pairs	-	unknown	1	SILAC	1	1	IT	MS2	tryptic	HYB
+PXD000690__Shelley_20131127_CD_CoA_327_Mild_F4	SILAC	SILAC	correct	K:Lys8+R:Arg10	precursor_pairs	-	unknown	1	SILAC	1	1	IT	MS2	tryptic	HYB
+PXD004868__HaCaT_phospho_6_R1	SILAC	SILAC	correct	K:Lys6+R:Arg6	site_scan	-	none	1	SILAC	1	1	FT	MS2	tryptic	HYB
+PXD018215__MGE9284A67RW3-40-563420	SILAC	SILAC	correct	K:Lys8+R:Arg10	precursor_pairs	-	unknown	1	SILAC	1	1	IT	MS2	tryptic	TRI
+PXD034847__SethMiller10363110_SILAC9-HHRasGDNT-LHRasGD	SILAC	SILAC	correct	K:Lys8+R:Arg10	precursor_pairs	-	unknown	1	label-free	0	0	IT	MS2	tryptic	TRI
+PXD004264__Vora_Thr_N3_TiO2	SILAC	SILAC	correct	K:Lys4+R:Arg6+K:Lys8+R:Arg10	site_scan+precursor_pairs	-	none	1	SILAC	1	1	FT	MS2	tryptic	TRI
+PXD007101__1735_L_LennartvdWal_FW_diGly_3	SILAC	SILAC	correct	K:Lys8+R:Arg10	precursor_pairs	-	unknown	1	SILAC	1	1	IT	MS2	tryptic	TRI
+PXD033009__ICL8271A4RW56-40-544667	SILAC	SILAC	correct	K:Lys8+R:Arg10	precursor_pairs	-	unknown	1	SILAC	1	1	IT	MS2	tryptic	TRI
+PXD011968__20161027_JaCO_3_2_DR_4347	SILAC	SILAC	correct	K:Lys8+R:Arg10	site_scan+precursor_pairs	-	none	1	SILAC	1	1	FT	MS2	tryptic	QE
+PXD003940__151218_Songjing_SILAC_S1_04_A	SILAC	SILAC	correct	R:Arg6	site_scan	-	none	1	label-free	0	0	FT	MS2	tryptic	QE
+PXD049319__Stamatiou_etal_2024_K2_TotProt_Noc_DNA	SILAC	SILAC	correct	K:Lys8+R:Arg10	site_scan+precursor_pairs	-	none	1	SILAC	1	1	FT	MS2	tryptic	QE
+PXD009868__20120511_EXQ6_DiIg_SA_PCA_40_5	SILAC	SILAC	correct	K:Lys8+R:Arg10	site_scan+precursor_pairs	-	none	1	SILAC	1	1	FT	MS2	tryptic	QE
+PXD062420__QEplus026693	SILAC	SILAC	correct	K:Lys8+R:Arg10	site_scan+precursor_pairs	-	none	1	label-free	0	0	FT	MS2	tryptic	QE
+PXD009190__Seq31296_E2O2	dimethyl	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	label-free	0	0	IT	MS2	tryptic	HYB
+PXD005181__Figure3_replicate_20150820_complex_proteins_mixture_CPALBH_control_2	dimethyl	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	SILAC	0	1	IT	MS2	tryptic	HYB
+PXD011883__2013-12-17-yiling18-nuclear-CAPA-200mM-1	dimethyl	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	SILAC	0	1	IT	MS2	tryptic	HYB
+PXD000794__110824_JH_Treg_A9	dimethyl	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	SILAC	0	1	IT	MS2	tryptic	HYB
+PXD004085__33987	dimethyl	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	SILAC	0	1	IT	MS2	tryptic	HYB
+PXD005093__140607-T5-01	dimethyl	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	label-free	0	0	IT	MS2	tryptic	HYB
+PXD010336__Whole_Tissue_Lysate_d10_rep04_dimethyl_19	dimethyl	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	SILAC	0	1	IT	MS2	tryptic	HYB
+PXD000148__IP_3	dimethyl	no call	no_call	-	site_scan	few_spectra	unclear	0	mixed	0	0	mixed	MS2	unstated	HYB
+PXD016633__SR_BR3_14	dimethyl	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	label-free	0	0	IT	MS2	tryptic	HYB
+PXD005472__20160712_SJW_Pho_3	dimethyl	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	SILAC	0	1	IT	MS2	tryptic	HYB
+PXD006337__20170313-Dab2-IP-ctrl_L-thrombin_H-1_2-TiO2	dimethyl	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	label-free	0	0	IT	MS3	tryptic	HYB
+PXD006577__JG_QL109_2_14	dimethyl	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	SILAC	0	1	IT	MS2	tryptic	HYB
+PXD000072__OR5_111206_MD_LLW3_F28	dimethyl	dimethyl	correct	K:Dimethyl:2H(4)+K:Dimethyl	site_scan	-	unclear	1	SILAC	0	1	mixed	MS2	tryptic	HYB
+PXD018505__GAvsHttaggregateproteome_R3	dimethyl	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	SILAC	0	1	IT	MS2	tryptic	HYB
+PXD016265__170711PESSAM02977_May1	dimethyl	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	SILAC	0	1	IT	MS2	other	TRI
+PXD022806__MS-F14	dimethyl	dimethyl	correct	Dimethyl:2H(4)13C(2)+K:Dimethyl:2H(4)13C(2)+K:Dimethyl	site_scan	-	none	1	label-free	0	0	FT	MS2	tryptic	TRI
+PXD011767__NTL_ScrI_shH_Rep1_3	dimethyl	dimethyl	correct	Dimethyl:2H(4)+Dimethyl:2H(6)13C(2)+K:Dimethyl:2H(4)	site_scan	-	none	1	SILAC	0	1	FT	MS2	tryptic	TRI
+PXD009745__20160211_MC_Dim_Nyco_R3	dimethyl	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	SILAC	0	1	IT	MS2	tryptic	TRI
+PXD041605__Dimethyl_label_H9PvsPXGL_R2	dimethyl	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	SILAC	0	1	IT	MS2	tryptic	TRI
+PXD039143__20210522_KBVII012_73_4	dimethyl	no call	no_call	-	site_scan	low_resolution_ms2	unknown	0	label-free	0	0	IT	MS2	tryptic	TRI
+PXD015573__17-AAG_Pelletproteome_Replicate1	dimethyl	dimethyl	correct	Dimethyl+K:Dimethyl+K:Dimethyl:2H(4)	site_scan	-	none	1	SILAC	0	1	FT	MS2	tryptic	TRI
+PXD023704__q2161003a	dimethyl	dimethyl	correct	Dimethyl:2H(4)+K:Dimethyl:2H(4)+K:Dimethyl	site_scan	-	none	1	SILAC	0	1	FT	MS2	tryptic	QE
+PXD006820__3T3L1-Rep3-CTRL_M-Hypoxia_L-F3	dimethyl	dimethyl	correct	Dimethyl+K:Dimethyl+K:Dimethyl:2H(4)	site_scan	-	none	1	SILAC	0	1	FT	MS2	tryptic	QE
+PXD053317__TABLE_S3_TAB_Protein_ReDiMe_COLUMN_B2T1_02	dimethyl	dimethyl	correct	Dimethyl:2H(4)13C(2)+Dimethyl+K:Dimethyl:2H(4)13C(2)	site_scan	-	unclear	1	SILAC	0	1	FT	MS2	tryptic	QE
+PXD068196__Seq93138_88min_480Ex1	dimethyl	dimethyl	correct	Dimethyl+K:Dimethyl:2H(4)13C(2)	site_scan	-	unclear	1	SILAC	0	1	FT	MS2	tryptic	QE
+PXD003584__QEplus008095	dimethyl	dimethyl	correct	Dimethyl:2H(6)+Dimethyl+K:Dimethyl+K:Dimethyl:2H(6)	site_scan	-	none	1	label-free	0	0	FT	MS2	tryptic	QE
+PXD012424__LO2_GP_C18_tr3_f5_pentaHILIC_75um_150min_20181122	dimethyl	label-free	wrong	label-free	absence	-	none	0	TMT	0	0	FT	MS2	unstated	QE
+PXD034528__H292_Set4_F9	dimethyl	dimethyl	correct	K:Dimethyl:2H(4)+K:Dimethyl:2H(6)13C(2)	site_scan	-	none	1	SILAC	0	1	FT	MS2	tryptic	QE
+PXD011836__QE1_20160317_Gianluca_Patrick_fr01	TMT	TMT	correct	TMT+K:TMT	site_scan	-	tmt	1	TMT	1	1	FT	MS2	tryptic	HYB
+PXD018702__Huh7_AMA_TMT_SET1_F3_500ng	TMT	TMT	correct	TMT+K:TMT	site_scan	-	tmt	1	TMT	1	1	FT	MS2	tryptic	HYB
+PXD004993__Velos_120203_25	TMT	TMT	correct	TMT	site_scan	-	tmt	1	TMT	1	1	mixed	MS2	tryptic	HYB
+PXD036079__PV_DR_TMT6PLEX_BR2_10pm_1	TMT	TMT	correct	TMT+K:TMT	site_scan	-	tmt	1	TMT	1	1	FT	MS2	tryptic	HYB
+PXD006005__09122014_NPC_1061_1_SAHA_DMSO_TMT2plex_40ug_v1_mudpit03	TMT	TMT	correct	TMT	reporter_ions	-	tmt	1	TMT	1	1	FT	MS2	tryptic	HYB
+PXD003024__Depleted_CSF_FullPlateRepro_13-18_02	TMT	TMT	correct	TMT+K:TMT	site_scan	-	tmt	1	TMT	1	1	FT	MS2	tryptic	HYB
+PXD014986__f10977	TMT	TMT	correct	TMT	reporter_ions	-	tmt	1	TMT	1	1	IT	MS3	tryptic	TRI
+PXD020381__PAB9658A13RW23_A2	TMT	TMT	correct	TMT+K:TMT	site_scan	-	tmt	1	TMT	1	1	FT	MS2	tryptic	TRI
+PXD012031__20180212_EH_Frankel_lab_FSN_set01_27-rep	TMT	TMT	correct	TMT	reporter_ions	-	tmt	1	TMT	1	1	IT	MS3	tryptic	TRI
+PXD025853__Salomon_082520_rerun_TMT1_PV_SF10	TMT	TMT	correct	TMT	reporter_ions	-	tmt	1	TMT	1	1	IT	MS3	tryptic	TRI
+PXD019992__ANAN-376_Human_HUVEVcells_2DRPRP_25cm_120min_25pctACN_20170811_OT	TMT	TMT	correct	TMT	reporter_ions	-	tmt	1	TMT	1	1	IT	MS3	tryptic	TRI
+PXD020908__HF_20191130_20cm_60min_onecolumn_TMT_2F3	TMT	TMT	correct	TMT+K:TMT	site_scan	-	tmt	1	TMT	1	1	FT	MS2	tryptic	QE
+PXD020856__Hs_Ahx-4plex_K562-WCE_KAT-2_Ti_QE1_1	TMT	TMT	correct	TMT+K:TMT	site_scan	-	tmt	1	TMT	1	1	FT	MS2	tryptic	QE
+PXD033916__P20190600786-F5	TMT	TMT	correct	TMT+K:TMT	site_scan	-	tmt	1	TMT	1	1	FT	MS2	tryptic	QE
+PXD051724__20200604_QEHFX3_MYW_LM_11168O_MHvs5CJvs5Muc_TMT9plex_Exp2_Fr5	TMT	TMT	correct	TMT+K:TMT	site_scan	-	tmt	1	TMT	1	1	FT	MS2	tryptic	QE
+PXD012676__20151105_G11	TMT	TMT	correct	TMT+K:TMT	site_scan	-	tmt	1	TMT	1	1	FT	MS2	unstated	QE
+PXD026576__22082018_Astrocytes_TMT_Fr2_5ug_ExcList	TMT	TMT	correct	TMT+K:TMT	site_scan	-	tmt	1	TMT	1	1	FT	MS2	tryptic	QE
+PXD046646__ea14965	TMTpro	TMT	wrong	TMT	reporter_ions	-	tmt	1	TMT	1	1	IT	MS3	tryptic	HYB
+PXD039645__20201112_SPSTMT_180min_Temp50_TOP20_MS3_CID35_HCD55_3ug_set1_Frac21	TMTpro	TMT	wrong	TMT	reporter_ions	-	tmt	1	TMT	1	1	IT	MS3	tryptic	HYB
+PXD041633__S20220110-38_FTMSms2hcd	TMTpro	TMTpro	correct	TMTpro+K:TMTpro	site_scan	-	tmt	1	label-free	0	0	FT	MS2	tryptic	TRI
+PXD062086__PRF_F_2023_J_VARA_914_57384_57400_5	TMTpro	TMT	wrong	TMT	reporter_ions	-	tmt	1	TMT	1	1	IT	MS3	tryptic	TRI
+PXD040193__20220717_LU_LC2_GT_HM_E428_400ng_F22	TMTpro	TMT	wrong	TMT	reporter_ions	-	tmt	1	TMT	1	1	IT	MS3	tryptic	TRI
+PXD051581__a31385	TMTpro	TMT	wrong	TMT	reporter_ions	-	tmt	1	TMT	1	1	IT	MS3	tryptic	TRI
+PXD042303__Demongrp_011321_TMT1_F58	TMTpro	TMTpro	correct	TMTpro+K:TMTpro	site_scan	-	tmt	1	TMT	1	1	FT	MS2	tryptic	TRI
+PXD044572__220701_37280_AS_L7	TMTpro	TMT	wrong	TMT	reporter_ions	-	tmt	1	TMT	1	1	IT	MS3	tryptic	TRI
+PXD065722__GSK3_2H_Phospho_2	TMTpro	TMTpro	correct	TMTpro+K:TMTpro	site_scan	-	tmt	1	TMT	1	1	FT	MS2	tryptic	TRI
+PXD068312__20240412_EVO_EVO_MVL_FAIMS_2CV_Endurance15_44min_P0705_DDA_TMTPro_Pool1_frac10	TMTpro	TMT	wrong	TMT	reporter_ions	-	tmt	1	TMT	1	1	IT	MS3	tryptic	TRI
+PXD054745__ea11982	TMTpro	TMT	wrong	TMT	reporter_ions	-	tmt	1	TMT	1	1	IT	MS3	unstated	TRI
+PXD048718__ea11779	TMTpro	TMTpro	correct	TMTpro+K:TMTpro	site_scan	-	tmt	1	TMT	1	1	FT	MS2	tryptic	TRI
+PXD056666__Lara_240719_S4303_CP_EGF_timecourse_phospho_F33	TMTpro	TMTpro	correct	TMTpro+K:TMTpro	site_scan	-	tmt	1	TMT	1	1	FT	MS2	tryptic	TRI
+PXD057315__Demongrp_080322_SolTMT_F07	TMTpro	TMTpro	correct	TMTpro	reporter_ions	-	tmt	1	TMT	1	1	FT	MS2	tryptic	QE
+PXD047445__207292533smo_lut_TMT2_13	TMTpro	TMTpro	correct	TMTpro+K:TMTpro	site_scan	-	tmt	1	TMT	1	1	FT	MS2	tryptic	QE
+PXD054102__20240216_PX_Jaime_TP_F30	TMTpro	TMTpro	correct	TMTpro+K:TMTpro	site_scan	-	tmt	1	TMT	1	1	FT	MS2	tryptic	QE
+PXD041164__20210106_KMJ_SS_Kris_2	TMTpro	TMTpro	correct	TMTpro+K:TMTpro	site_scan	-	tmt	1	TMT	1	1	FT	MS2	tryptic	QE
+PXD067164__CF_20231110_NSCLC_ALKi_pY_TMTpro12	TMTpro	TMTpro	correct	TMTpro+K:TMTpro	site_scan	-	tmt	1	label-free	0	0	FT	MS2	tryptic	QE
+PXD030395__Rowlf_20200723_TM_HStmtpro_Calu3_phos_12	TMTpro	TMTpro	correct	TMTpro+K:TMTpro	site_scan	-	tmt	1	TMT	1	1	FT	MS2	tryptic	QE
+PXD050869__20221223_JavierGarciaMartin_PROT_1832_FR2	TMTpro	TMTpro	correct	TMTpro+K:TMTpro	site_scan	-	tmt	1	TMT	1	1	FT	MS2	tryptic	QE
+PXD020365__Velos_111215_30	iTRAQ4	iTRAQ4	correct	iTRAQ4+K:iTRAQ4	site_scan	-	itraq4	1	iTRAQ4	1	1	FT	MS2	tryptic	HYB
+PXD033998__Exos_KO_WT_with_without_Lis_F2	iTRAQ4	iTRAQ4	correct	iTRAQ4+K:iTRAQ4	site_scan	-	itraq4	1	iTRAQ4	1	1	FT	MS2	tryptic	HYB
+PXD010776__VL_0001717_HILIC10NMR1	iTRAQ4	iTRAQ4	correct	iTRAQ4+K:iTRAQ4	site_scan	-	itraq4	1	iTRAQ4	1	1	FT	MS2	tryptic	HYB
+PXD003112__iTRAQ310212_9M_F_18	iTRAQ4	mixed	wrong	iTRAQ4+unknown:N+318.2370+K:iTRAQ4	site_scan	-	itraq4	0	iTRAQ4	1	1	FT	MS2	unstated	HYB
+PXD021004__AB_Ex4_13	iTRAQ4	iTRAQ4	correct	iTRAQ4+K:iTRAQ4	site_scan	-	itraq4	1	iTRAQ4	1	1	FT	MS2	tryptic	HYB
+PXD015296__SC-GWM-A6	iTRAQ4	iTRAQ4	correct	iTRAQ4+K:iTRAQ4	site_scan	-	itraq4	1	iTRAQ4	1	1	FT	MS2	tryptic	QE
+PXD008814__SPD1590_iTRAQ_11	iTRAQ8	mixed	wrong	iTRAQ8plex+unknown:R+276.1967	site_scan	-	itraq8	0	iTRAQ8	1	1	FT	MS2	tryptic	HYB
+PXD004001__F101112	iTRAQ8	iTRAQ8	correct	iTRAQ8plex	reporter_ions	-	itraq8	1	iTRAQ8	1	1	FT	MS2	tryptic	HYB
+PXD000737__HNSCC_TP_8plex_iTRAQ_8	iTRAQ8	iTRAQ8	correct	iTRAQ8plex	site_scan	-	itraq8	1	iTRAQ8	1	1	FT	MS2	tryptic	HYB
+PXD009352__Totalproteins_R1_10	iTRAQ8	iTRAQ8	correct	iTRAQ8plex	site_scan	-	itraq8	1	iTRAQ8	1	1	FT	MS2	tryptic	TRI
+PXD005785__FUS05888_CT	iTRAQ8	iTRAQ8	correct	iTRAQ8plex+K:iTRAQ8plex	site_scan	-	itraq8	1	iTRAQ8	1	1	FT	MS2	tryptic	TRI
+PXD016296__QExactiveHF02_03609	iTRAQ8	iTRAQ8	correct	iTRAQ8plex	site_scan	-	itraq8	1	iTRAQ8	1	1	FT	MS2	tryptic	QE
+PXD009220__MS-G2	iTRAQ8	iTRAQ8	correct	iTRAQ8plex	site_scan	-	itraq8	1	iTRAQ8	1	1	FT	MS2	tryptic	QE
+PXD007124__20140620_humid_fract_setA_10_B9	iTRAQ8	iTRAQ8	correct	iTRAQ8plex	site_scan	-	itraq8	1	iTRAQ8	1	1	FT	MS2	tryptic	QE
+PXD016040__P20180200083_F8	iTRAQ8	iTRAQ8	correct	iTRAQ8plex+K:iTRAQ8plex	site_scan	-	itraq8	1	iTRAQ8	1	1	FT	MS2	tryptic	QE

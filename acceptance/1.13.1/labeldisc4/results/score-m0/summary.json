@@ -1,0 +1,1004 @@
+{
+ "n": 144,
+ "by_class": {
+  "label-free": {
+   "n": 42,
+   "correct": 17,
+   "no_call": 25,
+   "wrong": 0,
+   "recall": 0.4048,
+   "wilson95": [
+    0.2704,
+    0.5551
+   ],
+   "called_label_free": 0
+  },
+  "TMT": {
+   "n": 17,
+   "correct": 17,
+   "no_call": 0,
+   "wrong": 0,
+   "recall": 1.0,
+   "wilson95": [
+    0.8157,
+    1.0
+   ],
+   "called_label_free": 0
+  },
+  "TMTpro": {
+   "n": 20,
+   "correct": 12,
+   "no_call": 0,
+   "wrong": 8,
+   "recall": 0.6,
+   "wilson95": [
+    0.3866,
+    0.7812
+   ],
+   "called_label_free": 0
+  },
+  "iTRAQ4": {
+   "n": 6,
+   "correct": 5,
+   "no_call": 0,
+   "wrong": 1,
+   "recall": 0.8333,
+   "wilson95": [
+    0.4365,
+    0.9699
+   ],
+   "called_label_free": 0
+  },
+  "iTRAQ8": {
+   "n": 9,
+   "correct": 8,
+   "no_call": 0,
+   "wrong": 1,
+   "recall": 0.8889,
+   "wilson95": [
+    0.565,
+    0.9801
+   ],
+   "called_label_free": 0
+  },
+  "SILAC": {
+   "n": 22,
+   "correct": 14,
+   "no_call": 6,
+   "wrong": 2,
+   "recall": 0.6364,
+   "wilson95": [
+    0.4295,
+    0.8027
+   ],
+   "called_label_free": 2
+  },
+  "dimethyl": {
+   "n": 28,
+   "correct": 10,
+   "no_call": 17,
+   "wrong": 1,
+   "recall": 0.3571,
+   "wilson95": [
+    0.2071,
+    0.5417
+   ],
+   "called_label_free": 1
+  }
+ },
+ "S1": {
+  "label_free_runs": 42,
+  "wrong_calls": 0,
+  "clopper95": [
+   0.0,
+   0.0841
+  ],
+  "upper95_one_sided": 0.0688,
+  "runs": [],
+  "pass": true
+ },
+ "A1": {
+  "accuracy_label_free": 0.4048,
+  "accuracy_labelled": 0.6471,
+  "weighted": 0.4532,
+  "always_label_free": 0.8,
+  "raw_correct": 83,
+  "raw_always_label_free": 42,
+  "pass": false
+ },
+ "A2": {
+  "fastag_family_correct": 91,
+  "param_medic_family_correct_generous": 125,
+  "param_medic_family_correct_strict": 106,
+  "fastag_only": 7,
+  "param_medic_only": 41,
+  "sign_test_p": 0.0,
+  "param_medic_failed": 0,
+  "by_class": {
+   "label-free": {
+    "n": 42,
+    "fastag": 17,
+    "param_medic": 40
+   },
+   "TMT": {
+    "n": 17,
+    "fastag": 17,
+    "param_medic": 17
+   },
+   "TMTpro": {
+    "n": 20,
+    "fastag": 20,
+    "param_medic": 18
+   },
+   "iTRAQ4": {
+    "n": 6,
+    "fastag": 5,
+    "param_medic": 6
+   },
+   "iTRAQ8": {
+    "n": 9,
+    "fastag": 8,
+    "param_medic": 9
+   },
+   "SILAC": {
+    "n": 22,
+    "fastag": 14,
+    "param_medic": 16
+   },
+   "dimethyl": {
+    "n": 28,
+    "fastag": 10,
+    "param_medic": 19
+   }
+  },
+  "pass": false
+ },
+ "R": {
+  "TMT": {
+   "n": 17,
+   "correct": 17,
+   "no_call": 0,
+   "wrong": 0,
+   "recall": 1.0,
+   "threshold": 0.8,
+   "pass": true
+  },
+  "TMTpro": {
+   "n": 20,
+   "correct": 12,
+   "no_call": 0,
+   "wrong": 8,
+   "recall": 0.6,
+   "threshold": 0.8,
+   "pass": false
+  },
+  "iTRAQ4+iTRAQ8": {
+   "n": 15,
+   "correct": 13,
+   "no_call": 0,
+   "wrong": 2,
+   "recall": 0.8667,
+   "threshold": 0.8,
+   "pass": true
+  },
+  "SILAC": {
+   "n": 22,
+   "correct": 14,
+   "no_call": 6,
+   "wrong": 2,
+   "recall": 0.6364,
+   "threshold": 0.6,
+   "pass": true
+  },
+  "dimethyl": {
+   "n": 28,
+   "correct": 10,
+   "no_call": 17,
+   "wrong": 1,
+   "recall": 0.3571,
+   "threshold": 0.5,
+   "pass": false
+  },
+  "pass": false
+ },
+ "F": {
+  "labelled_runs": 102,
+  "called_label_free": 3,
+  "rate": 0.0294,
+  "clopper95": [
+   0.0061,
+   0.0836
+  ],
+  "by_basis": {
+   "site_scan": 2,
+   "absence": 1
+  },
+  "by_class": {
+   "SILAC": 2,
+   "dimethyl": 1
+  },
+  "runs": [
+   "PXD007256__CAL27_Curcumin_2SILAC_pST_03",
+   "PXD001645__HaCaT_TP_05_R2",
+   "PXD012424__LO2_GP_C18_tr3_f5_pentaHILIC_75um_150min_20181122"
+  ],
+  "pass": true
+ },
+ "no_call_reasons": {
+  "low_resolution_ms2": 47,
+  "few_spectra": 1
+ },
+ "confusion": {
+  "label-free": {
+   "no call": 25,
+   "label-free": 17
+  },
+  "TMT": {
+   "TMT": 17
+  },
+  "TMTpro": {
+   "TMT": 8,
+   "TMTpro": 12
+  },
+  "iTRAQ4": {
+   "iTRAQ4": 5,
+   "mixed": 1
+  },
+  "iTRAQ8": {
+   "mixed": 1,
+   "iTRAQ8": 8
+  },
+  "SILAC": {
+   "no call": 6,
+   "SILAC": 14,
+   "label-free": 2
+  },
+  "dimethyl": {
+   "no call": 17,
+   "dimethyl": 10,
+   "label-free": 1
+  }
+ },
+ "strata": {
+  "ms2_analyzer": {
+   "FT": {
+    "label-free": {
+     "n": 17,
+     "correct": 17,
+     "no_call": 0,
+     "wrong": 0,
+     "recall": 1.0,
+     "wilson95": [
+      0.8157,
+      1.0
+     ],
+     "called_label_free": 0
+    },
+    "TMT": {
+     "n": 12,
+     "correct": 12,
+     "no_call": 0,
+     "wrong": 0,
+     "recall": 1.0,
+     "wilson95": [
+      0.7575,
+      1.0
+     ],
+     "called_label_free": 0
+    },
+    "TMTpro": {
+     "n": 12,
+     "correct": 12,
+     "no_call": 0,
+     "wrong": 0,
+     "recall": 1.0,
+     "wilson95": [
+      0.7575,
+      1.0
+     ],
+     "called_label_free": 0
+    },
+    "iTRAQ4": {
+     "n": 6,
+     "correct": 5,
+     "no_call": 0,
+     "wrong": 1,
+     "recall": 0.8333,
+     "wilson95": [
+      0.4365,
+      0.9699
+     ],
+     "called_label_free": 0
+    },
+    "iTRAQ8": {
+     "n": 9,
+     "correct": 8,
+     "no_call": 0,
+     "wrong": 1,
+     "recall": 0.8889,
+     "wilson95": [
+      0.565,
+      0.9801
+     ],
+     "called_label_free": 0
+    },
+    "SILAC": {
+     "n": 9,
+     "correct": 7,
+     "no_call": 0,
+     "wrong": 2,
+     "recall": 0.7778,
+     "wilson95": [
+      0.4526,
+      0.9368
+     ],
+     "called_label_free": 2
+    },
+    "dimethyl": {
+     "n": 10,
+     "correct": 9,
+     "no_call": 0,
+     "wrong": 1,
+     "recall": 0.9,
+     "wilson95": [
+      0.5958,
+      0.9821
+     ],
+     "called_label_free": 1
+    }
+   },
+   "IT": {
+    "label-free": {
+     "n": 25,
+     "correct": 0,
+     "no_call": 25,
+     "wrong": 0,
+     "recall": 0.0,
+     "wilson95": [
+      0.0,
+      0.1332
+     ],
+     "called_label_free": 0
+    },
+    "TMT": {
+     "n": 4,
+     "correct": 4,
+     "no_call": 0,
+     "wrong": 0,
+     "recall": 1.0,
+     "wilson95": [
+      0.5101,
+      1.0
+     ],
+     "called_label_free": 0
+    },
+    "TMTpro": {
+     "n": 8,
+     "correct": 0,
+     "no_call": 0,
+     "wrong": 8,
+     "recall": 0.0,
+     "wilson95": [
+      0.0,
+      0.3244
+     ],
+     "called_label_free": 0
+    },
+    "SILAC": {
+     "n": 13,
+     "correct": 7,
+     "no_call": 6,
+     "wrong": 0,
+     "recall": 0.5385,
+     "wilson95": [
+      0.2914,
+      0.7679
+     ],
+     "called_label_free": 0
+    },
+    "dimethyl": {
+     "n": 16,
+     "correct": 0,
+     "no_call": 16,
+     "wrong": 0,
+     "recall": 0.0,
+     "wilson95": [
+      0.0,
+      0.1936
+     ],
+     "called_label_free": 0
+    }
+   },
+   "mixed": {
+    "TMT": {
+     "n": 1,
+     "correct": 1,
+     "no_call": 0,
+     "wrong": 0,
+     "recall": 1.0,
+     "wilson95": [
+      0.2065,
+      1.0
+     ],
+     "called_label_free": 0
+    },
+    "dimethyl": {
+     "n": 2,
+     "correct": 1,
+     "no_call": 1,
+     "wrong": 0,
+     "recall": 0.5,
+     "wilson95": [
+      0.0945,
+      0.9055
+     ],
+     "called_label_free": 0
+    }
+   }
+  },
+  "acquisition": {
+   "MS2": {
+    "label-free": {
+     "n": 42,
+     "correct": 17,
+     "no_call": 25,
+     "wrong": 0,
+     "recall": 0.4048,
+     "wilson95": [
+      0.2704,
+      0.5551
+     ],
+     "called_label_free": 0
+    },
+    "TMT": {
+     "n": 13,
+     "correct": 13,
+     "no_call": 0,
+     "wrong": 0,
+     "recall": 1.0,
+     "wilson95": [
+      0.7719,
+      1.0
+     ],
+     "called_label_free": 0
+    },
+    "TMTpro": {
+     "n": 12,
+     "correct": 12,
+     "no_call": 0,
+     "wrong": 0,
+     "recall": 1.0,
+     "wilson95": [
+      0.7575,
+      1.0
+     ],
+     "called_label_free": 0
+    },
+    "iTRAQ4": {
+     "n": 6,
+     "correct": 5,
+     "no_call": 0,
+     "wrong": 1,
+     "recall": 0.8333,
+     "wilson95": [
+      0.4365,
+      0.9699
+     ],
+     "called_label_free": 0
+    },
+    "iTRAQ8": {
+     "n": 9,
+     "correct": 8,
+     "no_call": 0,
+     "wrong": 1,
+     "recall": 0.8889,
+     "wilson95": [
+      0.565,
+      0.9801
+     ],
+     "called_label_free": 0
+    },
+    "SILAC": {
+     "n": 22,
+     "correct": 14,
+     "no_call": 6,
+     "wrong": 2,
+     "recall": 0.6364,
+     "wilson95": [
+      0.4295,
+      0.8027
+     ],
+     "called_label_free": 2
+    },
+    "dimethyl": {
+     "n": 27,
+     "correct": 10,
+     "no_call": 16,
+     "wrong": 1,
+     "recall": 0.3704,
+     "wilson95": [
+      0.2153,
+      0.5577
+     ],
+     "called_label_free": 1
+    }
+   },
+   "MS3": {
+    "TMT": {
+     "n": 4,
+     "correct": 4,
+     "no_call": 0,
+     "wrong": 0,
+     "recall": 1.0,
+     "wilson95": [
+      0.5101,
+      1.0
+     ],
+     "called_label_free": 0
+    },
+    "TMTpro": {
+     "n": 8,
+     "correct": 0,
+     "no_call": 0,
+     "wrong": 8,
+     "recall": 0.0,
+     "wilson95": [
+      0.0,
+      0.3244
+     ],
+     "called_label_free": 0
+    },
+    "dimethyl": {
+     "n": 1,
+     "correct": 0,
+     "no_call": 1,
+     "wrong": 0,
+     "recall": 0.0,
+     "wilson95": [
+      0.0,
+      0.7935
+     ],
+     "called_label_free": 0
+    }
+   }
+  },
+  "digestion": {
+   "mixed": {
+    "label-free": {
+     "n": 2,
+     "correct": 1,
+     "no_call": 1,
+     "wrong": 0,
+     "recall": 0.5,
+     "wilson95": [
+      0.0945,
+      0.9055
+     ],
+     "called_label_free": 0
+    }
+   },
+   "other": {
+    "dimethyl": {
+     "n": 1,
+     "correct": 0,
+     "no_call": 1,
+     "wrong": 0,
+     "recall": 0.0,
+     "wilson95": [
+      0.0,
+      0.7935
+     ],
+     "called_label_free": 0
+    }
+   },
+   "tryptic": {
+    "label-free": {
+     "n": 35,
+     "correct": 12,
+     "no_call": 23,
+     "wrong": 0,
+     "recall": 0.3429,
+     "wilson95": [
+      0.2083,
+      0.5085
+     ],
+     "called_label_free": 0
+    },
+    "TMT": {
+     "n": 16,
+     "correct": 16,
+     "no_call": 0,
+     "wrong": 0,
+     "recall": 1.0,
+     "wilson95": [
+      0.8064,
+      1.0
+     ],
+     "called_label_free": 0
+    },
+    "TMTpro": {
+     "n": 19,
+     "correct": 12,
+     "no_call": 0,
+     "wrong": 7,
+     "recall": 0.6316,
+     "wilson95": [
+      0.4104,
+      0.8085
+     ],
+     "called_label_free": 0
+    },
+    "iTRAQ4": {
+     "n": 5,
+     "correct": 5,
+     "no_call": 0,
+     "wrong": 0,
+     "recall": 1.0,
+     "wilson95": [
+      0.5655,
+      1.0
+     ],
+     "called_label_free": 0
+    },
+    "iTRAQ8": {
+     "n": 9,
+     "correct": 8,
+     "no_call": 0,
+     "wrong": 1,
+     "recall": 0.8889,
+     "wilson95": [
+      0.565,
+      0.9801
+     ],
+     "called_label_free": 0
+    },
+    "SILAC": {
+     "n": 21,
+     "correct": 14,
+     "no_call": 5,
+     "wrong": 2,
+     "recall": 0.6667,
+     "wilson95": [
+      0.4537,
+      0.8281
+     ],
+     "called_label_free": 2
+    },
+    "dimethyl": {
+     "n": 25,
+     "correct": 10,
+     "no_call": 15,
+     "wrong": 0,
+     "recall": 0.4,
+     "wilson95": [
+      0.234,
+      0.5926
+     ],
+     "called_label_free": 0
+    }
+   },
+   "unstated": {
+    "label-free": {
+     "n": 5,
+     "correct": 4,
+     "no_call": 1,
+     "wrong": 0,
+     "recall": 0.8,
+     "wilson95": [
+      0.3755,
+      0.9638
+     ],
+     "called_label_free": 0
+    },
+    "TMT": {
+     "n": 1,
+     "correct": 1,
+     "no_call": 0,
+     "wrong": 0,
+     "recall": 1.0,
+     "wilson95": [
+      0.2065,
+      1.0
+     ],
+     "called_label_free": 0
+    },
+    "TMTpro": {
+     "n": 1,
+     "correct": 0,
+     "no_call": 0,
+     "wrong": 1,
+     "recall": 0.0,
+     "wilson95": [
+      0.0,
+      0.7935
+     ],
+     "called_label_free": 0
+    },
+    "iTRAQ4": {
+     "n": 1,
+     "correct": 0,
+     "no_call": 0,
+     "wrong": 1,
+     "recall": 0.0,
+     "wilson95": [
+      0.0,
+      0.7935
+     ],
+     "called_label_free": 0
+    },
+    "SILAC": {
+     "n": 1,
+     "correct": 0,
+     "no_call": 1,
+     "wrong": 0,
+     "recall": 0.0,
+     "wilson95": [
+      0.0,
+      0.7935
+     ],
+     "called_label_free": 0
+    },
+    "dimethyl": {
+     "n": 2,
+     "correct": 0,
+     "no_call": 1,
+     "wrong": 1,
+     "recall": 0.0,
+     "wilson95": [
+      0.0,
+      0.6576
+     ],
+     "called_label_free": 1
+    }
+   }
+  },
+  "cell": {
+   "HYB": {
+    "label-free": {
+     "n": 23,
+     "correct": 3,
+     "no_call": 20,
+     "wrong": 0,
+     "recall": 0.1304,
+     "wilson95": [
+      0.0454,
+      0.3213
+     ],
+     "called_label_free": 0
+    },
+    "TMT": {
+     "n": 6,
+     "correct": 6,
+     "no_call": 0,
+     "wrong": 0,
+     "recall": 1.0,
+     "wilson95": [
+      0.6097,
+      1.0
+     ],
+     "called_label_free": 0
+    },
+    "TMTpro": {
+     "n": 2,
+     "correct": 0,
+     "no_call": 0,
+     "wrong": 2,
+     "recall": 0.0,
+     "wilson95": [
+      0.0,
+      0.6576
+     ],
+     "called_label_free": 0
+    },
+    "iTRAQ4": {
+     "n": 5,
+     "correct": 4,
+     "no_call": 0,
+     "wrong": 1,
+     "recall": 0.8,
+     "wilson95": [
+      0.3755,
+      0.9638
+     ],
+     "called_label_free": 0
+    },
+    "iTRAQ8": {
+     "n": 3,
+     "correct": 2,
+     "no_call": 0,
+     "wrong": 1,
+     "recall": 0.6667,
+     "wilson95": [
+      0.2077,
+      0.9385
+     ],
+     "called_label_free": 0
+    },
+    "SILAC": {
+     "n": 12,
+     "correct": 4,
+     "no_call": 6,
+     "wrong": 2,
+     "recall": 0.3333,
+     "wilson95": [
+      0.1381,
+      0.6094
+     ],
+     "called_label_free": 2
+    },
+    "dimethyl": {
+     "n": 14,
+     "correct": 1,
+     "no_call": 13,
+     "wrong": 0,
+     "recall": 0.0714,
+     "wilson95": [
+      0.0127,
+      0.3147
+     ],
+     "called_label_free": 0
+    }
+   },
+   "QE": {
+    "label-free": {
+     "n": 10,
+     "correct": 10,
+     "no_call": 0,
+     "wrong": 0,
+     "recall": 1.0,
+     "wilson95": [
+      0.7225,
+      1.0
+     ],
+     "called_label_free": 0
+    },
+    "TMT": {
+     "n": 6,
+     "correct": 6,
+     "no_call": 0,
+     "wrong": 0,
+     "recall": 1.0,
+     "wilson95": [
+      0.6097,
+      1.0
+     ],
+     "called_label_free": 0
+    },
+    "TMTpro": {
+     "n": 7,
+     "correct": 7,
+     "no_call": 0,
+     "wrong": 0,
+     "recall": 1.0,
+     "wilson95": [
+      0.6457,
+      1.0
+     ],
+     "called_label_free": 0
+    },
+    "iTRAQ4": {
+     "n": 1,
+     "correct": 1,
+     "no_call": 0,
+     "wrong": 0,
+     "recall": 1.0,
+     "wilson95": [
+      0.2065,
+      1.0
+     ],
+     "called_label_free": 0
+    },
+    "iTRAQ8": {
+     "n": 4,
+     "correct": 4,
+     "no_call": 0,
+     "wrong": 0,
+     "recall": 1.0,
+     "wilson95": [
+      0.5101,
+      1.0
+     ],
+     "called_label_free": 0
+    },
+    "SILAC": {
+     "n": 5,
+     "correct": 5,
+     "no_call": 0,
+     "wrong": 0,
+     "recall": 1.0,
+     "wilson95": [
+      0.5655,
+      1.0
+     ],
+     "called_label_free": 0
+    },
+    "dimethyl": {
+     "n": 7,
+     "correct": 6,
+     "no_call": 0,
+     "wrong": 1,
+     "recall": 0.8571,
+     "wilson95": [
+      0.4869,
+      0.9743
+     ],
+     "called_label_free": 1
+    }
+   },
+   "TRI": {
+    "label-free": {
+     "n": 9,
+     "correct": 4,
+     "no_call": 5,
+     "wrong": 0,
+     "recall": 0.4444,
+     "wilson95": [
+      0.1888,
+      0.7333
+     ],
+     "called_label_free": 0
+    },
+    "TMT": {
+     "n": 5,
+     "correct": 5,
+     "no_call": 0,
+     "wrong": 0,
+     "recall": 1.0,
+     "wilson95": [
+      0.5655,
+      1.0
+     ],
+     "called_label_free": 0
+    },
+    "TMTpro": {
+     "n": 11,
+     "correct": 5,
+     "no_call": 0,
+     "wrong": 6,
+     "recall": 0.4545,
+     "wilson95": [
+      0.2127,
+      0.7199
+     ],
+     "called_label_free": 0
+    },
+    "iTRAQ8": {
+     "n": 2,
+     "correct": 2,
+     "no_call": 0,
+     "wrong": 0,
+     "recall": 1.0,
+     "wilson95": [
+      0.3424,
+      1.0
+     ],
+     "called_label_free": 0
+    },
+    "SILAC": {
+     "n": 5,
+     "correct": 5,
+     "no_call": 0,
+     "wrong": 0,
+     "recall": 1.0,
+     "wilson95": [
+      0.5655,
+      1.0
+     ],
+     "called_label_free": 0
+    },
+    "dimethyl": {
+     "n": 7,
+     "correct": 3,
+     "no_call": 4,
+     "wrong": 0,
+     "recall": 0.4286,
+     "wilson95": [
+      0.1582,
+      0.7495
+     ],
+     "called_label_free": 0
+    }
+   }
+  }
+ }
+}
