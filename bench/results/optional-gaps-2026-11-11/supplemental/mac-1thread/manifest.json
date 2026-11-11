@@ -1,0 +1,135 @@
+{
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "processor": "arm",
+  "logical_cpus": 16,
+  "args": {
+    "bench_package": "/Users/kohlbach/Claude/OpenMS/New Tools/FASTag/output/jpr-paper/supplement/fastag-bench",
+    "baseline": "/Users/kohlbach/Claude/OpenMS - XERCES Replacement/fastag-gap-build-baseline/FASTag",
+    "feature": "/Users/kohlbach/Claude/OpenMS - XERCES Replacement/fastag-gap-build-feature/FASTag",
+    "data_root": "/Users/kohlbach/Claude/OpenMS - XERCES Replacement/fastag-gap-benchmark",
+    "output": "/Users/kohlbach/Claude/OpenMS - XERCES Replacement/fastag-gap-benchmark/results",
+    "datasets": [
+      "PXD003531",
+      "PXD001819"
+    ],
+    "arms": [
+      "baseline",
+      "new_default",
+      "modified_pairs",
+      "triples",
+      "both"
+    ],
+    "lengths": [
+      3,
+      5
+    ],
+    "reps": 3,
+    "threads": 1,
+    "steps": [
+      "test",
+      "run",
+      "score"
+    ]
+  },
+  "datasets": {
+    "PXD003531": {
+      "id": "PXD003531_QE_NO_03",
+      "file": "20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.mzML",
+      "variables": [
+        "Oxidation (M)",
+        "Phospho (S)",
+        "Phospho (T)",
+        "Phospho (Y)"
+      ],
+      "tolerance": [
+        "20",
+        "ppm"
+      ],
+      "mzml_sha256": "2b1da22229a9d8e8d4cde05d889c3a74dedd68bb9f00f3bdd9d78d2a8d9ace4a"
+    },
+    "PXD001819": {
+      "id": "PXD001819_UPS1_yeast_LTQ_CID",
+      "file": "UPS1_25000amol_R1.mzML",
+      "variables": [
+        "Oxidation (M)"
+      ],
+      "tolerance": [
+        "0.5",
+        "Da"
+      ],
+      "mzml_sha256": "03985d6cfde59f42181d5e0a6f3a2521dcdaaef8bb8a3448f14c6d6b611c68fd"
+    }
+  },
+  "fixed_masses": {
+    "C": 57.021464
+  },
+  "variable_masses": {
+    "Oxidation": 15.994915,
+    "Phospho": 79.966331
+  },
+  "truth_filter": "Sage rank 1, label=1, spectrum_q<=0.01; unique filename and scan; no localization filter",
+  "paper_rule": "I/L-folded sequence in either direction and at least one same-position flank within 0.05 Da",
+  "strict_rule": "paper rule plus every residue's fixed+variable mass within 0.02 Da in the matching orientation",
+  "timing_scope": "wall/CPU per process, including startup, input parsing and output TSV; scoring excluded",
+  "baseline_sha256": "8e99b598c944d6e186964f4d942341e613546f696a99497ab088d58ca68eb832",
+  "feature_sha256": "b25841858c3e58225b1c9032527c021c5483283b24b81f757d0712797acfecb4",
+  "python": "3.15.2 (main, Oct 25 2026, 16:57:51) [Clang 21.0.0 (clang-2100.3.34.2)]",
+  "scorer_sha256": "a7d409158a9783c9d1e34ef8bb5c7123c36e6385dccc3dad050895362f67fd91",
+  "harness_sha256": "8f7a5c473c4ca3642ec2ad610a78c047b4588ab8fab365f3b79559e34ff5a889",
+  "inputs": {
+    "PXD003531": {
+      "mzml": "/Users/kohlbach/Claude/OpenMS - XERCES Replacement/fastag-gap-benchmark/data/PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.mzML",
+      "mzml_sha256": "2b1da22229a9d8e8d4cde05d889c3a74dedd68bb9f00f3bdd9d78d2a8d9ace4a",
+      "truth": "/Users/kohlbach/Claude/OpenMS - XERCES Replacement/fastag-gap-benchmark/truth/PXD003531/results.sage.tsv",
+      "truth_sha256": "52e5de7b5b18f5ce1f9abfe5475861b0a32e2db86a1e9ef96f5d4fbfbce1eadb",
+      "source_mzml": "data:/scratch/kohlbach/jpr-ablation-v190/data/PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.mzML",
+      "source_truth": "data:/ceph/ibmi/abi/oliver/jpr-bench/accuracy/work/runs/PXD003531_QE_NO_03/sage/default/",
+      "sage.json": {
+        "text": "{\n  \"database\": {\n    \"bucket_size\": 32768,\n    \"enzyme\": {\n      \"missed_cleavages\": 2,\n      \"min_len\": 7,\n      \"max_len\": 50,\n      \"cleave_at\": \"KR\",\n      \"restrict\": \"P\"\n    },\n    \"fragment_min_mz\": 150.0,\n    \"fragment_max_mz\": 2000.0,\n    \"peptide_min_mass\": 500.0,\n    \"peptide_max_mass\": 5000.0,\n    \"ion_kinds\": [\n      \"b\",\n      \"y\"\n    ],\n    \"min_ion_index\": 2,\n    \"static_mods\": {\n      \"C\": 57.021464\n    },\n    \"variable_mods\": {\n      \"M\": [\n        15.994915\n      ],\n      \"S\": [\n        79.966331\n      ],\n      \"T\": [\n        79.966331\n      ],\n      \"Y\": [\n        79.966331\n      ],\n      \"N\": [\n        0.984016\n      ],\n      \"Q\": [\n        0.984016\n      ],\n      \"[\": [\n        42.010565\n      ]\n    },\n    \"max_variable_mods\": 3,\n    \"decoy_tag\": \"rev_\",\n    \"generate_decoys\": true,\n    \"fasta\": \"/scratch/kohlbach/jpr-acc/data/PXD054073/UP000005640_9606.fasta\"\n  },\n  \"precursor_tol\": {\n    \"ppm\": [\n      -7.0,\n      7.0\n    ]\n  },\n  \"fragment_tol\": {\n    \"da\": [\n      -0.02,\n      0.02\n    ]\n  },\n  \"isotope_errors\": [\n    0,\n    1\n  ],\n  \"deisotope\": true,\n  \"chimera\": false,\n  \"wide_window\": false,\n  \"predict_rt\": true,\n  \"min_peaks\": 15,\n  \"max_peaks\": 150,\n  \"report_psms\": 1,\n  \"mzml_paths\": [\n    \"/scratch/kohlbach/jpr-acc/data/PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.mzML\"\n  ]\n}\n",
+        "sha256": "5d68c3cd08857e4067aaa468107bb65426a651aa25c17eaa6ae84bc8e9c86281"
+      },
+      "command.txt": {
+        "text": "/ceph/ibmi/abi/oliver/jpr-bench/envs/sage-0.14.7/sage-v0.14.7-x86_64-unknown-linux-gnu/sage --disable-telemetry-i-dont-want-to-improve-sage -o /scratch/kohlbach/jpr-acc/work/runs/PXD003531_QE_NO_03/sage/default /scratch/kohlbach/jpr-acc/work/runs/PXD003531_QE_NO_03/sage/default/sage.json\n",
+        "sha256": "1a72f84a9cffbbb7eef4d8c5cf3e0b467da01bbc3e4711e08061c0812242732d"
+      },
+      "version.txt": {
+        "text": "0.14.6 (GitHub release v0.14.7, commit 99407db; the binary reports 0.14.6 because the release did not bump Cargo.toml)\n",
+        "sha256": "a1a9df2d9125db89596b8879a1a9bffedc3d3ed3e63d64fc0f91bdb72fd4cea7"
+      }
+    },
+    "PXD001819": {
+      "mzml": "/Users/kohlbach/Claude/OpenMS - XERCES Replacement/fastag-gap-benchmark/data/PXD001819/UPS1_25000amol_R1.mzML",
+      "mzml_sha256": "03985d6cfde59f42181d5e0a6f3a2521dcdaaef8bb8a3448f14c6d6b611c68fd",
+      "truth": "/Users/kohlbach/Claude/OpenMS - XERCES Replacement/fastag-gap-benchmark/truth/PXD001819/results.sage.tsv",
+      "truth_sha256": "8dea83df026281fb01818a3df6b51c65470bf6ad97166c2c72fc6761b2b4abcd",
+      "source_mzml": "data:/scratch/kohlbach/jpr-ablation-v190/data/PXD001819/UPS1_25000amol_R1.mzML",
+      "source_truth": "data:/ceph/ibmi/abi/oliver/jpr-bench/accuracy/work/runs/PXD001819_UPS1_yeast_LTQ_CID/sage/default/",
+      "sage.json": {
+        "text": "{\n  \"database\": {\n    \"bucket_size\": 32768,\n    \"enzyme\": {\n      \"missed_cleavages\": 2,\n      \"min_len\": 7,\n      \"max_len\": 50,\n      \"cleave_at\": \"KR\"\n    },\n    \"fragment_min_mz\": 150.0,\n    \"fragment_max_mz\": 2000.0,\n    \"peptide_min_mass\": 500.0,\n    \"peptide_max_mass\": 5000.0,\n    \"ion_kinds\": [\n      \"b\",\n      \"y\"\n    ],\n    \"min_ion_index\": 2,\n    \"static_mods\": {\n      \"C\": 57.021464\n    },\n    \"variable_mods\": {\n      \"M\": [\n        15.994915\n      ],\n      \"[\": [\n        42.010565\n      ]\n    },\n    \"max_variable_mods\": 2,\n    \"decoy_tag\": \"rev_\",\n    \"generate_decoys\": true,\n    \"fasta\": \"/scratch/kohlbach/jpr-acc/data/PXD001819/yeast_ups.fasta\"\n  },\n  \"precursor_tol\": {\n    \"ppm\": [\n      -5.0,\n      5.0\n    ]\n  },\n  \"fragment_tol\": {\n    \"da\": [\n      -0.8,\n      0.8\n    ]\n  },\n  \"isotope_errors\": [\n    0,\n    1\n  ],\n  \"deisotope\": false,\n  \"chimera\": false,\n  \"wide_window\": false,\n  \"predict_rt\": true,\n  \"min_peaks\": 15,\n  \"max_peaks\": 150,\n  \"report_psms\": 1,\n  \"mzml_paths\": [\n    \"/scratch/kohlbach/jpr-acc/data/PXD001819/UPS1_25000amol_R1.mzML\"\n  ]\n}\n",
+        "sha256": "5a77d47fb48f3e95e0876f3266a247c3191a77df10126745ae34599589748090"
+      },
+      "command.txt": {
+        "text": "/ceph/ibmi/abi/oliver/jpr-bench/envs/sage-0.14.7/sage-v0.14.7-x86_64-unknown-linux-gnu/sage --disable-telemetry-i-dont-want-to-improve-sage -o /scratch/kohlbach/jpr-acc/work/runs/PXD001819_UPS1_yeast_LTQ_CID/sage/default /scratch/kohlbach/jpr-acc/work/runs/PXD001819_UPS1_yeast_LTQ_CID/sage/default/sage.json\n",
+        "sha256": "9cbc072a8aa3c7013ef9dbcbb5480f89098f238ef47d7af29491c7b55f0bb65b"
+      },
+      "version.txt": {
+        "text": "0.14.6 (GitHub release v0.14.7, commit 99407db; the binary reports 0.14.6 because the release did not bump Cargo.toml)\n",
+        "sha256": "a1a9df2d9125db89596b8879a1a9bffedc3d3ed3e63d64fc0f91bdb72fd4cea7"
+      }
+    }
+  },
+  "python_packages": {
+    "numpy": "2.5.4",
+    "pandas": "3.1.1",
+    "pyyaml": "6.0.3"
+  },
+  "hardware": [
+    "Model Name: MacBook Pro",
+    "Model Identifier: Mac16,6",
+    "Chip: Apple M4 Max",
+    "Total Number of Cores: 16 (12 Performance and 4 Efficiency)",
+    "Memory: 128 GB"
+  ],
+  "baseline_version": "Version: 1.13.1 (OpenMS 3.7.0-pre-exported-20261104)",
+  "feature_version": "Version: 1.13.1 (OpenMS 3.7.0-pre-exported-20261104)"
+}

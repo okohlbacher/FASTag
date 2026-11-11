@@ -1,0 +1,1 @@
+Exact std::array<uint8_t,3> permutation loop: 7980 cases passed under GCC14.4 -O3 -fsanitize=address,undefined; no sanitizer findings.

@@ -91,7 +91,7 @@ beside the local input files.
 Five arms compare the release binary, the feature binary with both modes off,
 modified pairs, triplets, and both. Every arm has the same fixed/variable
 modification lists, seed length, gap limit (1), extension (0), peak selection
-(400 maximum; 10 per window), score cutoff (20), gap penalty (100), and output
+(400 maximum; 10 per window), score cutoff (20, before the gap penalty), gap penalty (100), and output
 cap (50). Seed lengths 3 and 5 are evaluated separately. This isolates the new
 gap search from the already-existing support for ordinary modified residues.
 
@@ -111,13 +111,100 @@ tags is also retained in the machine-readable results. Per-spectrum paired
 gains/losses distinguish new recoveries from lost correct tags.
 
 Timing uses three sequential repetitions per arm and length, with reproducibly
-shuffled arm order within each repetition. Runs use one FASTag thread on the
-same Apple M4 Max (16 cores, 128 GiB RAM). File hashing warms the input cache;
-wall times include process startup, reading the complete input, tagging all
-spectra, and writing the tag TSV. They are end-to-end times, not isolated graph
-search times. Both binaries use AppleClang 21.0.0.21000401, Release optimization,
-OpenMP, and the same OpenMS 3.7.0 development SDK
-(`3.7.0-pre-exported-20261104`). No builds or tests run concurrently with timing.
+shuffled arm order within each repetition. The primary comparison uses 32
+FASTag threads on `dax`, a dual AMD EPYC 9654 host with 192 physical cores,
+384 logical CPUs, and approximately 2.2 TiB RAM. Its load before benchmarking
+was 3.96. Both exact source commits were compiled with GCC 14.4, Release
+optimization, OpenMP 4.5, and the same OpenMS SDK at revision `70cebcd144`.
+Inputs are staged on node-local scratch and checked against the original
+hashes. File hashing warms the input cache; wall times include process startup,
+reading the complete input, tagging all spectra, and writing the tag TSV.
+They are end-to-end times, not isolated graph-search times. No builds or tests
+run concurrently with timing. Affinity, per-run load, CPU time, and timing
+ranges are retained with the results; no exclusive CPU allocation is claimed.
+
+Supplementary measurements on an Apple M4 Max (16 cores, 128 GiB RAM) use one
+and eight threads, AppleClang 21.0.0.21000401, and the same OpenMS 3.7.0
+development SDK for both builds (`3.7.0-pre-exported-20261104`). The high-resolution
+panels completed at both thread counts. Background load subsequently made the
+local low-resolution timings unreliable, so they are retained as supplementary
+records and excluded from the primary runtime conclusions. Interrupted runs
+are marked unmeasured. The remote primary comparison covers both full datasets
+under one consistent protocol.
+
+## Results: primary 32-thread comparison
+
+**The measurements favor retaining the current defaults.** Triplets reduced recall@50 and rank-1 accuracy in all four dataset/seed-length comparisons. Modified pairs produced only a small overall recall gain with five-residue seeds on the high-resolution run (10 additional reference spectra, +0.12 percentage points), while its rank-1 count fell by 8. They reduced overall recall in the other three comparisons. These are results for the existing, untuned scoring and output limits, not a test of a recalibrated gap model.
+
+Triplets took **1.53–3.56 times** the baseline wall time across the four comparisons; modified pairs took **1.06–1.17 times** the baseline. All 60 runs succeeded. Every arm was byte-deterministic across its three repetitions, and the feature binary with both modes off produced byte-identical tag files to 1.13.1 in all four dataset/length cases.
+
+The tables use the paper flank-correctness rule. Counts in parentheses are correct reference spectra. Wall time is the median of three runs, with the complete minimum–maximum range in brackets; CPU time is the median aggregate CPU time across threads. Times are seconds for the entire input file.
+
+### PXD003531
+
+High-resolution phospho-enriched run; 8,254 reference spectra.
+
+| Seed residues | Mode | Recall@50 | Rank-1 accuracy | Wall seconds [min–max] | CPU seconds |
+| ---: | --- | ---: | ---: | ---: | ---: |
+| 3 | FASTag 1.13.1 | 96.24% (7,944) | 68.60% (5,662) | 0.862 [0.856–0.883] | 20.25 |
+| 3 | Feature, both modes off | 96.24% (7,944) | 68.60% (5,662) | 0.860 [0.848–0.871] | 20.42 |
+| 3 | Modified pairs | 96.00% (7,924) | 68.57% (5,660) | 0.968 [0.965–0.997] | 23.66 |
+| 3 | Triplets | 90.50% (7,470) | 68.15% (5,625) | 2.864 [2.863–2.872] | 83.75 |
+| 3 | Both modes | 90.63% (7,481) | 68.12% (5,623) | 2.914 [2.912–2.932] | 85.09 |
+| 5 | FASTag 1.13.1 | 90.48% (7,468) | 64.43% (5,318) | 1.160 [1.153–1.161] | 29.13 |
+| 5 | Feature, both modes off | 90.48% (7,468) | 64.43% (5,318) | 1.153 [1.136–1.212] | 29.12 |
+| 5 | Modified pairs | 90.60% (7,478) | 64.33% (5,310) | 1.353 [1.348–1.359] | 34.23 |
+| 5 | Triplets | 86.31% (7,124) | 63.29% (5,224) | 4.134 [4.132–4.138] | 120.94 |
+| 5 | Both modes | 86.61% (7,149) | 63.22% (5,218) | 4.166 [4.156–4.171] | 122.32 |
+
+### PXD001819
+
+Low-resolution ion-trap run; 13,342 reference spectra.
+
+| Seed residues | Mode | Recall@50 | Rank-1 accuracy | Wall seconds [min–max] | CPU seconds |
+| ---: | --- | ---: | ---: | ---: | ---: |
+| 3 | FASTag 1.13.1 | 63.48% (8,469) | 23.64% (3,154) | 6.256 [6.245–6.272] | 187.40 |
+| 3 | Feature, both modes off | 63.48% (8,469) | 23.64% (3,154) | 6.264 [6.262–6.346] | 188.68 |
+| 3 | Modified pairs | 63.27% (8,442) | 23.63% (3,153) | 6.643 [6.643–6.745] | 200.22 |
+| 3 | Triplets | 62.07% (8,282) | 23.63% (3,153) | 9.559 [9.504–9.651] | 291.49 |
+| 3 | Both modes | 61.90% (8,259) | 23.62% (3,152) | 9.882 [9.881–9.981] | 303.37 |
+| 5 | FASTag 1.13.1 | 45.12% (6,020) | 14.41% (1,923) | 43.859 [43.817–43.910] | 1375.11 |
+| 5 | Feature, both modes off | 45.12% (6,020) | 14.41% (1,923) | 43.140 [43.132–43.588] | 1352.93 |
+| 5 | Modified pairs | 44.99% (6,003) | 14.40% (1,921) | 47.175 [47.135–47.238] | 1479.53 |
+| 5 | Triplets | 44.39% (5,922) | 14.36% (1,916) | 80.073 [79.873–80.391] | 2519.13 |
+| 5 | Both modes | 44.32% (5,913) | 14.34% (1,913) | 84.279 [84.085–122.121] | 2652.14 |
+
+The first low-resolution, five-residue, combined-mode run took 122.121 seconds; the other two took 84.085 and 84.279 seconds. The slow run is retained in the range and raw records. The reported median is 84.279 seconds; the cause of that one-run variation was not established.
+
+### Modified reference peptides: stricter correctness
+
+This subset contains reference PSMs carrying at least one configured variable modification. Correctness additionally requires every residue mass, including its modifications, to agree with the reference assignment. Each cell compares baseline → modified pairs; the denominator is the full subset, including spectra with no tag.
+
+| Dataset | Seed residues | Reference spectra | Strict recall@50: baseline → pairs | Strict rank-1: baseline → pairs |
+| --- | ---: | ---: | ---: | ---: |
+| PXD003531 | 3 | 4,358 | 95.23% (4150) → 94.88% (4135) | 61.31% (2672) → 61.24% (2669) |
+| PXD003531 | 5 | 4,358 | 86.90% (3787) → 87.45% (3811) | 57.27% (2496) → 57.11% (2489) |
+| PXD001819 | 3 | 205 | 56.59% (116) → 56.59% (116) | 19.51% (40) → 19.51% (40) |
+| PXD001819 | 5 | 205 | 37.56% (77) → 38.54% (79) | 13.66% (28) → 13.66% (28) |
+
+With five-residue seeds, modified pairs gain 24 correctly covered modified reference spectra in PXD003531 (+0.55 percentage points) and 2 in the small PXD001819 oxidation subset (+0.98 points). Rank-1 accuracy falls in the former and is unchanged in the latter. These small subset gains do not establish a general advantage, and phosphosite assignments here have not been independently localization-filtered.
+
+### Recoveries, losses, and interpretation
+
+Adding gap edges can recover true tags while reducing the final recall. Under the strict rule, high-resolution three-residue triplets recover 5 previously missed spectra but lose correct coverage for 484 others. Modified pairs with five-residue seeds recover 46 and lose 31 in that same dataset (net +15 under the strict rule). The [paired results](../bench/results/optional-gaps-2026-11-11/paired_changes.tsv) retain gains and losses for every arm, length, and scoring rule.
+
+FASTag multiplies each candidate's combined score by the number of enumerated candidates. A larger gap alphabet can therefore raise the E-values of existing tags as well as introduce new competing tags. Both the fixed score cutoff and the top-50 cap can remove correct tags. The experiment measures that complete behavior; it does not isolate the contribution of each mechanism. The existing gap penalty was retained, with no mode-specific calibration.
+
+### Single-thread reference on the Mac
+
+These complete high-resolution measurements are supplementary, on different hardware from the primary table. They are medians of three one-thread runs on the Apple M4 Max, in seconds.
+
+| Seed residues | FASTag 1.13.1 | Modified pairs | Triplets | Both |
+| ---: | ---: | ---: | ---: | ---: |
+| 3 | 12.696 | 14.164 | 60.851 | 61.164 |
+| 5 | 17.825 | 21.247 | 83.302 | 83.841 |
+
+Primary [summary tables](../bench/results/optional-gaps-2026-11-11/summary.tsv), [per-run measurements](../bench/results/optional-gaps-2026-11-11/timings.jsonl), and [artifact/provenance guide](../bench/results/optional-gaps-2026-11-11/README.md) accompany this report. The summaries also contain strict all-spectrum results, oxidation/phosphorylation subsets, and conditional rank-1 precision among spectra with tags.
 
 ## Validation
 
@@ -133,3 +220,43 @@ OpenMP, and the same OpenMS 3.7.0 development SDK
   lengths, and invalid gap limits.
 - GUI type checking and 26 parameter-contract/dependency tests passed. The GUI
   parameter manifest was regenerated from the built CLI.
+- All 15 available Mac eight-thread versus Linux 32-thread tag-file comparisons
+  were byte-identical; the corresponding 140 accuracy-summary rows agreed.
+- Linux builds also passed the gap-mode, release-compatibility, and output
+  provenance checks. GCC's warning on the fixed-size `next_permutation` loop
+  was checked with an isolated ASan/UBSan run: 7,980 cases across all 1,330
+  triplet compositions passed without a sanitizer finding.
+
+## Reproduction
+
+The tested implementation is commit `0322813`; the pristine comparison is
+`v1.13.1`. Build both in Release mode against the same OpenMS SDK. Exact build
+settings, source and binary hashes, commands, input hashes, and per-run timing
+records are retained with the results.
+
+The [benchmark script](../bench/optional_gap_modes.py) reuses the paper's
+`fastag_bench` parsers, correctness rule, and timing helper. The exact modules
+used are frozen in the result provenance; their scorer hash matches the
+measurement manifest. The repository's newer general-purpose scorer also
+supports c/z and a/x ions, while this experiment uses b/y ions throughout.
+It requires Python
+with numpy, pandas, and PyYAML. Arrange the input mzMLs under
+`DATA/data/PXD003531/` and `DATA/data/PXD001819/`, and the corresponding
+`results.sage.tsv`, `sage.json`, `command.txt`, and `version.txt` under
+`DATA/truth/PXD003531/` and `DATA/truth/PXD001819/`. From the checkout root:
+
+```sh
+python bench/optional_gap_modes.py \
+  --bench-package bench/results/optional-gaps-2026-11-11/provenance/bench-package \
+  --baseline /path/to/baseline-build/FASTag \
+  --feature /path/to/feature-build/FASTag \
+  --data-root /path/to/DATA \
+  --output /path/to/new-results \
+  --threads 32 --lengths 3 5 --reps 3
+```
+
+The script first checks the supplementary correctness rule, then executes and
+scores the five arms. It refuses to append duplicate timing runs to an existing
+output directory. Raw tag files from the first repetition are retained; hashes
+from all repetitions check determinism. `--steps score` recalculates the
+accuracy tables from retained tag files without rerunning the algorithms.

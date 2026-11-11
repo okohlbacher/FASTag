@@ -1,0 +1,77 @@
+{
+  "database": {
+    "bucket_size": 32768,
+    "enzyme": {
+      "missed_cleavages": 2,
+      "min_len": 7,
+      "max_len": 50,
+      "cleave_at": "KR",
+      "restrict": "P"
+    },
+    "fragment_min_mz": 150.0,
+    "fragment_max_mz": 2000.0,
+    "peptide_min_mass": 500.0,
+    "peptide_max_mass": 5000.0,
+    "ion_kinds": [
+      "b",
+      "y"
+    ],
+    "min_ion_index": 2,
+    "static_mods": {
+      "C": 57.021464
+    },
+    "variable_mods": {
+      "M": [
+        15.994915
+      ],
+      "S": [
+        79.966331
+      ],
+      "T": [
+        79.966331
+      ],
+      "Y": [
+        79.966331
+      ],
+      "N": [
+        0.984016
+      ],
+      "Q": [
+        0.984016
+      ],
+      "[": [
+        42.010565
+      ]
+    },
+    "max_variable_mods": 3,
+    "decoy_tag": "rev_",
+    "generate_decoys": true,
+    "fasta": "/scratch/kohlbach/jpr-acc/data/PXD054073/UP000005640_9606.fasta"
+  },
+  "precursor_tol": {
+    "ppm": [
+      -7.0,
+      7.0
+    ]
+  },
+  "fragment_tol": {
+    "da": [
+      -0.02,
+      0.02
+    ]
+  },
+  "isotope_errors": [
+    0,
+    1
+  ],
+  "deisotope": true,
+  "chimera": false,
+  "wide_window": false,
+  "predict_rt": true,
+  "min_peaks": 15,
+  "max_peaks": 150,
+  "report_psms": 1,
+  "mzml_paths": [
+    "/scratch/kohlbach/jpr-acc/data/PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.mzML"
+  ]
+}

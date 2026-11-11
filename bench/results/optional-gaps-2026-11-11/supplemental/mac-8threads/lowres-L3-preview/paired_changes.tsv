@@ -1,0 +1,17 @@
+dataset	length	rule	arm	metric	psms	gained	lost	unchanged
+PXD001819	3	paper_flank	new_default	rank1	13342	0	0	13342
+PXD001819	3	paper_flank	new_default	any50	13342	0	0	13342
+PXD001819	3	paper_flank	modified_pairs	rank1	13342	0	1	13341
+PXD001819	3	paper_flank	modified_pairs	any50	13342	1	28	13313
+PXD001819	3	paper_flank	triples	rank1	13342	0	1	13341
+PXD001819	3	paper_flank	triples	any50	13342	15	202	13125
+PXD001819	3	paper_flank	both	rank1	13342	0	2	13340
+PXD001819	3	paper_flank	both	any50	13342	18	228	13096
+PXD001819	3	strict_mass	new_default	rank1	13342	0	0	13342
+PXD001819	3	strict_mass	new_default	any50	13342	0	0	13342
+PXD001819	3	strict_mass	modified_pairs	rank1	13342	0	1	13341
+PXD001819	3	strict_mass	modified_pairs	any50	13342	1	28	13313
+PXD001819	3	strict_mass	triples	rank1	13342	0	1	13341
+PXD001819	3	strict_mass	triples	any50	13342	15	202	13125
+PXD001819	3	strict_mass	both	rank1	13342	0	2	13340
+PXD001819	3	strict_mass	both	any50	13342	17	228	13097

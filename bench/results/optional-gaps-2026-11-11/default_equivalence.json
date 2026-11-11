@@ -1,0 +1,30 @@
+[
+  {
+    "dataset": "PXD003531",
+    "length": 3,
+    "identical": true,
+    "baseline_sha256": "58a17a5187557d1e5d2600eba23834b4b511719a1bd49bd17f51716b2dc993a0",
+    "new_default_sha256": "58a17a5187557d1e5d2600eba23834b4b511719a1bd49bd17f51716b2dc993a0"
+  },
+  {
+    "dataset": "PXD003531",
+    "length": 5,
+    "identical": true,
+    "baseline_sha256": "0286a961f4bcf7a3037de9dc9ad2521c00cb2c0352195b657bd39a09366d0f1b",
+    "new_default_sha256": "0286a961f4bcf7a3037de9dc9ad2521c00cb2c0352195b657bd39a09366d0f1b"
+  },
+  {
+    "dataset": "PXD001819",
+    "length": 3,
+    "identical": true,
+    "baseline_sha256": "806fcf9adf8084645becedada1691f8028622a25adc8951557a2c934f582304b",
+    "new_default_sha256": "806fcf9adf8084645becedada1691f8028622a25adc8951557a2c934f582304b"
+  },
+  {
+    "dataset": "PXD001819",
+    "length": 5,
+    "identical": true,
+    "baseline_sha256": "1ee7f3edf72061a1b73f0cd77239bdb65b04a0df9f4fb25b42db25ca6634cf1b",
+    "new_default_sha256": "1ee7f3edf72061a1b73f0cd77239bdb65b04a0df9f4fb25b42db25ca6634cf1b"
+  }
+]

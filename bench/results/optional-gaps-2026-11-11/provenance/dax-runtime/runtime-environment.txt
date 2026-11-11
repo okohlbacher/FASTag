@@ -1,0 +1,2 @@
+LD_LIBRARY_PATH=/ceph/ibmi/abi/oliver/opt/openms-develop-70cebcd144/lib:/ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib
+OPENMS_TMPDIR=/scratch/kohlbach/fastag-gap-modes-20261111-0322813/tmp

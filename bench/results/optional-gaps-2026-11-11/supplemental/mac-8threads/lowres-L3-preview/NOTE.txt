@@ -1,0 +1,1 @@
+Partial local 8-thread PXD001819 L3 preview. Accuracy evaluated on complete first-replicate outputs. Runtime records were collected during substantial concurrent workstation load and are not the primary benchmark. Final primary results use dax with 32 threads.

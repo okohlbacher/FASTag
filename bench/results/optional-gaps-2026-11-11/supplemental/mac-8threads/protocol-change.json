@@ -1,0 +1,13 @@
+{
+  "utc": "2026-11-11T13:19:59.782338+00:00",
+  "status": "partial supplemental run; local timing stopped",
+  "completed_timed_runs": 40,
+  "complete_panel": "PXD003531, L3 and L5, all 5 arms, 3 reps, 8 threads",
+  "incomplete_panel": "PXD001819 L3, completed records only; L5 not run",
+  "reason": "Substantial concurrent interactive workstation load appeared during low-resolution runs. The full primary 60-run comparison moves to idle dax at 8 threads, preserving all inputs and parameters.",
+  "feature_source_commit": "0322813",
+  "load_max": 114.83,
+  "final_primary_host": "dax",
+  "final_primary_threads": 32,
+  "final_primary_protocol": "Full 2-dataset, 2-length, 5-arm, 3-replicate matrix, serial processes with 32 worker threads each. Dax has 192 physical cores; 32 threads use less than 17% of physical capacity. This supersedes interim 8-thread primary plans."
+}

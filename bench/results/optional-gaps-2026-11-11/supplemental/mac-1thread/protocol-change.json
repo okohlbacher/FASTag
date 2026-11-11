@@ -1,0 +1,20 @@
+{
+  "utc": "2026-11-11T13:10:50.225000+00:00",
+  "status": "partial supplemental run",
+  "completed_timed_runs": 31,
+  "complete_panel": "PXD003531, L3 and L5, all5arms,3reps,1thread",
+  "additional_completed": [
+    [
+      "PXD001819",
+      3,
+      "triples",
+      1
+    ]
+  ],
+  "interrupted_unmeasured": "PXD001819 L3 modified_pairs rep1",
+  "reason": "Main full comparison restarted at8threads for bothdatasets and allarms to use availableM4 performancecores; preserve data/PSMdenominators, avoid hourplus serial panel. Eightthread run will be crosschecked against completed1thread output hashes.",
+  "feature_source_commit": "0322813",
+  "final_primary_host": "dax",
+  "final_primary_threads": 32,
+  "final_primary_protocol": "Full 2-dataset, 2-length, 5-arm, 3-replicate matrix, serial processes with 32 worker threads each. Dax has 192 physical cores; 32 threads use less than 17% of physical capacity. This supersedes interim 8-thread primary plans."
+}

@@ -28,3 +28,9 @@ __pycache__/
 # ...and the gate reference sets' run tables (gate.sh --refs writes cases.tsv, results.tsv)
 !tools/gate-1.12/refs-*/*.tsv
 !data/alkylation/proteomes.tsv
+
+# Compact, reproducible tables for the optional-gap benchmark.
+!bench/results/optional-gaps-2026-11-11/**/summary.tsv
+!bench/results/optional-gaps-2026-11-11/**/paired_changes.tsv
+!bench/results/optional-gaps-2026-11-11/**/oxidation_paired_changes.tsv
+!bench/results/optional-gaps-2026-11-11/**/timing_summary.tsv

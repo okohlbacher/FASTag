@@ -1,0 +1,134 @@
+[
+  {
+    "dataset": "PXD001819",
+    "length": 3,
+    "arm": "triples",
+    "one_thread_hashes": [
+      "262ad21e9384ee666e9c5aa7f2261fb5d467656b41491afe9ec20ddf882ab490"
+    ],
+    "eight_thread_hashes": [
+      "262ad21e9384ee666e9c5aa7f2261fb5d467656b41491afe9ec20ddf882ab490"
+    ],
+    "equal": true
+  },
+  {
+    "dataset": "PXD003531",
+    "length": 3,
+    "arm": "baseline",
+    "one_thread_hashes": [
+      "58a17a5187557d1e5d2600eba23834b4b511719a1bd49bd17f51716b2dc993a0"
+    ],
+    "eight_thread_hashes": [
+      "58a17a5187557d1e5d2600eba23834b4b511719a1bd49bd17f51716b2dc993a0"
+    ],
+    "equal": true
+  },
+  {
+    "dataset": "PXD003531",
+    "length": 3,
+    "arm": "both",
+    "one_thread_hashes": [
+      "ddfcb536a032abd1e1d7b48320725202658fecb9905ca328b6d51976e643aaec"
+    ],
+    "eight_thread_hashes": [
+      "ddfcb536a032abd1e1d7b48320725202658fecb9905ca328b6d51976e643aaec"
+    ],
+    "equal": true
+  },
+  {
+    "dataset": "PXD003531",
+    "length": 3,
+    "arm": "modified_pairs",
+    "one_thread_hashes": [
+      "5ec151779348c4fac3fd72192016c88b0f70904e05df4bc6f33a01c43bed89ab"
+    ],
+    "eight_thread_hashes": [
+      "5ec151779348c4fac3fd72192016c88b0f70904e05df4bc6f33a01c43bed89ab"
+    ],
+    "equal": true
+  },
+  {
+    "dataset": "PXD003531",
+    "length": 3,
+    "arm": "new_default",
+    "one_thread_hashes": [
+      "58a17a5187557d1e5d2600eba23834b4b511719a1bd49bd17f51716b2dc993a0"
+    ],
+    "eight_thread_hashes": [
+      "58a17a5187557d1e5d2600eba23834b4b511719a1bd49bd17f51716b2dc993a0"
+    ],
+    "equal": true
+  },
+  {
+    "dataset": "PXD003531",
+    "length": 3,
+    "arm": "triples",
+    "one_thread_hashes": [
+      "8aa4a956d30affa0e1d9decf20578bbca4cce3bdafca00586cec9f07b29e1a6f"
+    ],
+    "eight_thread_hashes": [
+      "8aa4a956d30affa0e1d9decf20578bbca4cce3bdafca00586cec9f07b29e1a6f"
+    ],
+    "equal": true
+  },
+  {
+    "dataset": "PXD003531",
+    "length": 5,
+    "arm": "baseline",
+    "one_thread_hashes": [
+      "0286a961f4bcf7a3037de9dc9ad2521c00cb2c0352195b657bd39a09366d0f1b"
+    ],
+    "eight_thread_hashes": [
+      "0286a961f4bcf7a3037de9dc9ad2521c00cb2c0352195b657bd39a09366d0f1b"
+    ],
+    "equal": true
+  },
+  {
+    "dataset": "PXD003531",
+    "length": 5,
+    "arm": "both",
+    "one_thread_hashes": [
+      "deae24967ef9b559660203d5e0d2014a86082d7232ff4d25abfe0b5c2488c8f5"
+    ],
+    "eight_thread_hashes": [
+      "deae24967ef9b559660203d5e0d2014a86082d7232ff4d25abfe0b5c2488c8f5"
+    ],
+    "equal": true
+  },
+  {
+    "dataset": "PXD003531",
+    "length": 5,
+    "arm": "modified_pairs",
+    "one_thread_hashes": [
+      "125ff0d68647713335228a68d62a45bcddac94562514ab1fc4f29c4d885fbb80"
+    ],
+    "eight_thread_hashes": [
+      "125ff0d68647713335228a68d62a45bcddac94562514ab1fc4f29c4d885fbb80"
+    ],
+    "equal": true
+  },
+  {
+    "dataset": "PXD003531",
+    "length": 5,
+    "arm": "new_default",
+    "one_thread_hashes": [
+      "0286a961f4bcf7a3037de9dc9ad2521c00cb2c0352195b657bd39a09366d0f1b"
+    ],
+    "eight_thread_hashes": [
+      "0286a961f4bcf7a3037de9dc9ad2521c00cb2c0352195b657bd39a09366d0f1b"
+    ],
+    "equal": true
+  },
+  {
+    "dataset": "PXD003531",
+    "length": 5,
+    "arm": "triples",
+    "one_thread_hashes": [
+      "8ff55a8fa6055d7c43df82cb81bcada6a52c4fc82212bf4c31fc5e37ce77f193"
+    ],
+    "eight_thread_hashes": [
+      "8ff55a8fa6055d7c43df82cb81bcada6a52c4fc82212bf4c31fc5e37ce77f193"
+    ],
+    "equal": true
+  }
+]

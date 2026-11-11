@@ -203,7 +203,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   gaps: {
     section: 'Tagging',
     help: {
-      text: 'With 1, a tag may cross one missing peak: two peaks whose distance is the mass of two residues are joined, and both residue orders are written as separate tags. 0 turns this off.',
+      text: 'With 1, a seed tag may contain one gap. By default this bridges one missing peak using two residues; maximum residues in a gap can extend the span to three. The possible residue orders are separate candidates. 0 turns all gap modes off.',
       tip: 'Leave it at 1; it lets a tag continue past a fragment that was not measured.'
     }
   },

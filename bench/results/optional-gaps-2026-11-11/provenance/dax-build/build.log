@@ -1,0 +1,296 @@
+Wed Nov 11 13:19:35 UTC 2026
+dax
+1.55 1.67 1.74 3/10848 2058274
+x86_64-conda-linux-gnu-g++ (conda-forge gcc 14.4.0-7) 14.4.0
+Copyright (C) 2024 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+-- The CXX compiler identification is GNU 14.4.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /ceph/ibmi/abi/oliver/envs/fastag-omsdev/bin/x86_64-conda-linux-gnu-g++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- FASTag: version 1.13.1 agrees across CMakeLists.txt, gui/package.json, gui/src-tauri/tauri.conf.json, gui/package-lock.json, gui/src-tauri/Cargo.toml, gui/src-tauri/Cargo.lock
+-- Found OpenMP_CXX: -fopenmp (found version "4.5")
+-- Found OpenMP: TRUE (found version "4.5") found components: CXX
+-- FASTag: using OpenMS 3.7.0 (/ceph/ibmi/abi/oliver/opt/openms-develop-70cebcd144/lib/cmake/OpenMS)
+-- Found OpenMP_CXX: -fopenmp (found version "4.5")
+-- Found OpenMP: TRUE (found version "4.5")
+-- FASTag: OpenMP 4.5 -- parallel over spectra
+-- Found ZLIB: /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/libz.so (found version "1.3.2")
+-- Configuring done (5.9s)
+-- Generating done (0.1s)
+-- Build files have been written to: /scratch/kohlbach/fastag-gap-modes-20261111-0322813/build-baseline
+[1/37] Building CXX object CMakeFiles/fastag_core.dir/src/TaxDeconv.cpp.o
+[2/37] Building CXX object CMakeFiles/fastag_core.dir/src/TaxStats.cpp.o
+[3/37] Building CXX object CMakeFiles/fastag_core.dir/src/SpeciesLookup.cpp.o
+[4/37] Building CXX object CMakeFiles/fastag_core.dir/src/AveragineDeisotoper.cpp.o
+[5/37] Building CXX object CMakeFiles/fastag_core.dir/src/FastaFilter.cpp.o
+[6/37] Building CXX object CMakeFiles/fastag_core.dir/src/DigestQuality.cpp.o
+[7/37] Building CXX object CMakeFiles/fastag_core.dir/src/TagRecon.cpp.o
+[8/37] Building CXX object CMakeFiles/fastag_core.dir/src/ProteomeIndex.cpp.o
+[9/37] Building CXX object CMakeFiles/fastag_core.dir/src/TaxIndex.cpp.o
+[10/37] Building CXX object CMakeFiles/fastag_core.dir/src/Centroid.cpp.o
+[11/37] Building CXX object CMakeFiles/fastag_core.dir/src/Sha256.cpp.o
+[12/37] Building CXX object CMakeFiles/fastag_core.dir/src/Acquisition.cpp.o
+[13/37] Building CXX object CMakeFiles/fastag_core.dir/src/Shortlist.cpp.o
+[14/37] Building CXX object CMakeFiles/fastag_core.dir/src/PrecursorHypotheses.cpp.o
+[15/37] Building CXX object CMakeFiles/fastag_core.dir/src/DigestReport.cpp.o
+[16/37] Building CXX object CMakeFiles/fastag_core.dir/src/Cleavage.cpp.o
+[17/37] Building CXX object CMakeFiles/fastag_core.dir/src/Digest.cpp.o
+[18/37] Building CXX object CMakeFiles/fastag_core.dir/src/OutputGuard.cpp.o
+[19/37] Building CXX object CMakeFiles/FASTag.dir/src/MzMLDirectDecoder.cpp.o
+[20/37] Building CXX object CMakeFiles/fastag_core.dir/src/SearchConfig.cpp.o
+[21/37] Building CXX object CMakeFiles/fastag_core.dir/src/AlkylationCall.cpp.o
+[22/37] Building CXX object CMakeFiles/fastag_core.dir/src/ReconIds.cpp.o
+[23/37] Building CXX object CMakeFiles/fastag_core.dir/src/AlkylationTags.cpp.o
+[24/37] Building CXX object CMakeFiles/fastag_core.dir/src/CensusIds.cpp.o
+[25/37] Building CXX object CMakeFiles/buildtaxdb.dir/src/buildtaxdb.cpp.o
+[26/37] Building CXX object CMakeFiles/FASTag.dir/src/AcquisitionProbe.cpp.o
+[27/37] Building CXX object CMakeFiles/FASTag.dir/src/MgfReader.cpp.o
+[28/37] Building CXX object CMakeFiles/FASTag.dir/src/IndexedMzMLReader.cpp.o
+[29/37] Building CXX object CMakeFiles/fastag_core.dir/src/SpeciesCall.cpp.o
+[30/37] Building CXX object CMakeFiles/FASTag.dir/src/MzPeakStream.cpp.o
+[31/37] Building CXX object CMakeFiles/FASTag.dir/src/InputProbe.cpp.o
+[32/37] Building CXX object CMakeFiles/fastag_core.dir/src/FASTagger.cpp.o
+[33/37] Building CXX object CMakeFiles/fastag_core.dir/src/LabelDiscovery.cpp.o
+[34/37] Linking CXX static library libfastag_core.a
+[35/37] Linking CXX executable buildtaxdb
+[36/37] Building CXX object CMakeFiles/FASTag.dir/src/FASTag.cpp.o
+[37/37] Linking CXX executable FASTag
+-- The CXX compiler identification is GNU 14.4.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /ceph/ibmi/abi/oliver/envs/fastag-omsdev/bin/x86_64-conda-linux-gnu-g++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- FASTag: version 1.13.1 agrees across CMakeLists.txt, gui/package.json, gui/src-tauri/tauri.conf.json, gui/package-lock.json, gui/src-tauri/Cargo.toml, gui/src-tauri/Cargo.lock
+-- Found OpenMP_CXX: -fopenmp (found version "4.5")
+-- Found OpenMP: TRUE (found version "4.5") found components: CXX
+-- FASTag: using OpenMS 3.7.0 (/ceph/ibmi/abi/oliver/opt/openms-develop-70cebcd144/lib/cmake/OpenMS)
+-- Found OpenMP_CXX: -fopenmp (found version "4.5")
+-- Found OpenMP: TRUE (found version "4.5")
+-- FASTag: OpenMP 4.5 -- parallel over spectra
+-- Found ZLIB: /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/libz.so (found version "1.3.2")
+-- Configuring done (1.6s)
+-- Generating done (0.1s)
+-- Build files have been written to: /scratch/kohlbach/fastag-gap-modes-20261111-0322813/build-feature
+[1/39] Building CXX object CMakeFiles/fastag_core.dir/src/TaxDeconv.cpp.o
+[2/39] Building CXX object CMakeFiles/fastag_core.dir/src/DigestQuality.cpp.o
+[3/39] Building CXX object CMakeFiles/fastag_core.dir/src/AveragineDeisotoper.cpp.o
+[4/39] Building CXX object CMakeFiles/fastag_core.dir/src/Centroid.cpp.o
+[5/39] Building CXX object CMakeFiles/fastag_core.dir/src/TaxStats.cpp.o
+[6/39] Building CXX object CMakeFiles/fastag_core.dir/src/FastaFilter.cpp.o
+[7/39] Building CXX object CMakeFiles/fastag_core.dir/src/TagRecon.cpp.o
+[8/39] Building CXX object CMakeFiles/fastag_core.dir/src/TaxIndex.cpp.o
+[9/39] Building CXX object CMakeFiles/fastag_core.dir/src/ProteomeIndex.cpp.o
+[10/39] Building CXX object CMakeFiles/fastag_core.dir/src/Acquisition.cpp.o
+[11/39] Building CXX object CMakeFiles/fastag_core.dir/src/SpeciesLookup.cpp.o
+[12/39] Building CXX object CMakeFiles/fastag_core.dir/src/Shortlist.cpp.o
+[13/39] Building CXX object CMakeFiles/fastag_core.dir/src/Sha256.cpp.o
+[14/39] Building CXX object CMakeFiles/fastag_core.dir/src/PrecursorHypotheses.cpp.o
+[15/39] Building CXX object CMakeFiles/fastag_core.dir/src/DigestReport.cpp.o
+[16/39] Building CXX object CMakeFiles/fastag_core.dir/src/ReconIds.cpp.o
+[17/39] Building CXX object CMakeFiles/fastag_core.dir/src/Cleavage.cpp.o
+[18/39] Building CXX object CMakeFiles/fastag_core.dir/src/Digest.cpp.o
+[19/39] Building CXX object CMakeFiles/fastag_core.dir/src/OutputGuard.cpp.o
+[20/39] Building CXX object CMakeFiles/fastag_core.dir/src/SearchConfig.cpp.o
+[21/39] Building CXX object CMakeFiles/FASTag.dir/src/MzMLDirectDecoder.cpp.o
+[22/39] Building CXX object CMakeFiles/fastag_core.dir/src/AlkylationCall.cpp.o
+[23/39] Building CXX object CMakeFiles/fastag_core.dir/src/SpeciesCall.cpp.o
+[24/39] Building CXX object CMakeFiles/fastag_core.dir/src/AlkylationTags.cpp.o
+[25/39] Building CXX object CMakeFiles/fastag_core.dir/src/CensusIds.cpp.o
+[26/39] Building CXX object CMakeFiles/buildtaxdb.dir/src/buildtaxdb.cpp.o
+[27/39] Building CXX object CMakeFiles/FASTag.dir/src/AcquisitionProbe.cpp.o
+[28/39] Building CXX object CMakeFiles/FASTag.dir/src/MgfReader.cpp.o
+[29/39] Building CXX object CMakeFiles/FASTag.dir/src/IndexedMzMLReader.cpp.o
+[30/39] Building CXX object CMakeFiles/gap_modes_test.dir/test/gap_modes_test.cpp.o
+[31/39] Building CXX object CMakeFiles/fastag_core.dir/src/FASTagger.cpp.o
+In file included from /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_construct.h:60,
+                 from /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/char_traits.h:57,
+                 from /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/string:42,
+                 from /ceph/ibmi/abi/oliver/opt/openms-develop-70cebcd144/include/OpenMS/CONCEPT/Constants.h:12,
+                 from /scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.h:16,
+                 from /scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:4:
+In function 'constexpr std::_Require<std::__not_<std::__is_tuple_like<_Tp> >, std::is_move_constructible<_Tp>, std::is_move_assignable<_Tp> > std::swap(_Tp&, _Tp&) [with _Tp = unsigned char]',
+    inlined from 'constexpr void std::iter_swap(_ForwardIterator1, _ForwardIterator2) [with _ForwardIterator1 = unsigned char*; _ForwardIterator2 = unsigned char*]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algobase.h:185:11,
+    inlined from 'constexpr void std::__reverse(_RandomAccessIterator, _RandomAccessIterator, random_access_iterator_tag) [with _RandomAccessIterator = unsigned char*]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algo.h:1062:18,
+    inlined from 'constexpr bool std::__next_permutation(_BidirectionalIterator, _BidirectionalIterator, _Compare) [with _BidirectionalIterator = unsigned char*; _Compare = __gnu_cxx::__ops::_Iter_less_iter]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algo.h:2911:22,
+    inlined from 'constexpr bool std::next_permutation(_BIter, _BIter) [with _BIter = unsigned char*]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algo.h:2951:2,
+    inlined from 'std::string FASTag::{anonymous}::spell(const FASTag::Alphabet&, const std::vector<Step>&)' at /scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:220:71:
+/ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/move.h:235:11: warning: writing 8 bytes into a region of size 2 [-Wstringop-overflow=]
+  235 |       __a = _GLIBCXX_MOVE(__b);
+      |           ^
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp: In function 'std::string FASTag::{anonymous}::spell(const FASTag::Alphabet&, const std::vector<Step>&)':
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [1, 2] into destination object 'r' of size 3
+  219 |           std::array<uint8_t, 3> r{pe.a, pe.b, pe.c};
+      |                                  ^
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [2, 3] into destination object 'r' of size 3
+In function 'constexpr std::_Require<std::__not_<std::__is_tuple_like<_Tp> >, std::is_move_constructible<_Tp>, std::is_move_assignable<_Tp> > std::swap(_Tp&, _Tp&) [with _Tp = unsigned char]',
+    inlined from 'constexpr void std::iter_swap(_ForwardIterator1, _ForwardIterator2) [with _ForwardIterator1 = unsigned char*; _ForwardIterator2 = unsigned char*]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algobase.h:185:11,
+    inlined from 'constexpr void std::__reverse(_RandomAccessIterator, _RandomAccessIterator, random_access_iterator_tag) [with _RandomAccessIterator = unsigned char*]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algo.h:1062:18,
+    inlined from 'constexpr bool std::__next_permutation(_BidirectionalIterator, _BidirectionalIterator, _Compare) [with _BidirectionalIterator = unsigned char*; _Compare = __gnu_cxx::__ops::_Iter_less_iter]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algo.h:2911:22,
+    inlined from 'constexpr bool std::next_permutation(_BIter, _BIter) [with _BIter = unsigned char*]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algo.h:2951:2,
+    inlined from 'std::string FASTag::{anonymous}::spell(const FASTag::Alphabet&, const std::vector<Step>&)' at /scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:220:71:
+/ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/move.h:236:11: warning: writing 8 bytes into a region of size 0 [-Wstringop-overflow=]
+  236 |       __b = _GLIBCXX_MOVE(__tmp);
+      |           ^
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp: In function 'std::string FASTag::{anonymous}::spell(const FASTag::Alphabet&, const std::vector<Step>&)':
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset 9223372036854775803 into destination object 'r' of size 3
+  219 |           std::array<uint8_t, 3> r{pe.a, pe.b, pe.c};
+      |                                  ^
+In function 'constexpr std::_Require<std::__not_<std::__is_tuple_like<_Tp> >, std::is_move_constructible<_Tp>, std::is_move_assignable<_Tp> > std::swap(_Tp&, _Tp&) [with _Tp = unsigned char]',
+    inlined from 'constexpr void std::iter_swap(_ForwardIterator1, _ForwardIterator2) [with _ForwardIterator1 = unsigned char*; _ForwardIterator2 = unsigned char*]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algobase.h:185:11,
+    inlined from 'constexpr void std::__reverse(_RandomAccessIterator, _RandomAccessIterator, random_access_iterator_tag) [with _RandomAccessIterator = unsigned char*]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algo.h:1062:18,
+    inlined from 'constexpr bool std::__next_permutation(_BidirectionalIterator, _BidirectionalIterator, _Compare) [with _BidirectionalIterator = unsigned char*; _Compare = __gnu_cxx::__ops::_Iter_less_iter]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algo.h:2911:22,
+    inlined from 'constexpr bool std::next_permutation(_BIter, _BIter) [with _BIter = unsigned char*]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algo.h:2951:2,
+    inlined from 'std::string FASTag::{anonymous}::spell(const FASTag::Alphabet&, const std::vector<Step>&)' at /scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:220:71:
+/ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/move.h:235:11: warning: writing 1 byte into a region of size 0 [-Wstringop-overflow=]
+  235 |       __a = _GLIBCXX_MOVE(__b);
+      |           ^
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp: In function 'std::string FASTag::{anonymous}::spell(const FASTag::Alphabet&, const std::vector<Step>&)':
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [1, 3] into destination object 'r' of size 3
+  219 |           std::array<uint8_t, 3> r{pe.a, pe.b, pe.c};
+      |                                  ^
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [2, 3] into destination object 'r' of size 3
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [1, 3] into destination object 'r' of size 3
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [2, 3] into destination object 'r' of size 3
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [1, 3] into destination object 'r' of size 3
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [2, 3] into destination object 'r' of size 3
+In function 'constexpr std::_Require<std::__not_<std::__is_tuple_like<_Tp> >, std::is_move_constructible<_Tp>, std::is_move_assignable<_Tp> > std::swap(_Tp&, _Tp&) [with _Tp = unsigned char]',
+    inlined from 'constexpr void std::iter_swap(_ForwardIterator1, _ForwardIterator2) [with _ForwardIterator1 = unsigned char*; _ForwardIterator2 = unsigned char*]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algobase.h:185:11,
+    inlined from 'constexpr void std::__reverse(_RandomAccessIterator, _RandomAccessIterator, random_access_iterator_tag) [with _RandomAccessIterator = unsigned char*]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algo.h:1062:18,
+    inlined from 'constexpr bool std::__next_permutation(_BidirectionalIterator, _BidirectionalIterator, _Compare) [with _BidirectionalIterator = unsigned char*; _Compare = __gnu_cxx::__ops::_Iter_less_iter]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algo.h:2911:22,
+    inlined from 'constexpr bool std::next_permutation(_BIter, _BIter) [with _BIter = unsigned char*]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algo.h:2951:2,
+    inlined from 'std::string FASTag::{anonymous}::spell(const FASTag::Alphabet&, const std::vector<Step>&)' at /scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:220:71:
+/ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/move.h:235:11: warning: writing 1 byte into a region of size 0 [-Wstringop-overflow=]
+  235 |       __a = _GLIBCXX_MOVE(__b);
+      |           ^
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp: In function 'std::string FASTag::{anonymous}::spell(const FASTag::Alphabet&, const std::vector<Step>&)':
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [2, 3] into destination object 'r' of size 3
+  219 |           std::array<uint8_t, 3> r{pe.a, pe.b, pe.c};
+      |                                  ^
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset 3 into destination object 'r' of size 3
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [2, 3] into destination object 'r' of size 3
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset 3 into destination object 'r' of size 3
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [2, 3] into destination object 'r' of size 3
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset 3 into destination object 'r' of size 3
+In function 'constexpr std::_Require<std::__not_<std::__is_tuple_like<_Tp> >, std::is_move_constructible<_Tp>, std::is_move_assignable<_Tp> > std::swap(_Tp&, _Tp&) [with _Tp = unsigned char]',
+    inlined from 'constexpr void std::iter_swap(_ForwardIterator1, _ForwardIterator2) [with _ForwardIterator1 = unsigned char*; _ForwardIterator2 = unsigned char*]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algobase.h:185:11,
+    inlined from 'constexpr void std::__reverse(_RandomAccessIterator, _RandomAccessIterator, random_access_iterator_tag) [with _RandomAccessIterator = unsigned char*]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algo.h:1062:18,
+    inlined from 'constexpr bool std::__next_permutation(_BidirectionalIterator, _BidirectionalIterator, _Compare) [with _BidirectionalIterator = unsigned char*; _Compare = __gnu_cxx::__ops::_Iter_less_iter]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algo.h:2911:22,
+    inlined from 'constexpr bool std::next_permutation(_BIter, _BIter) [with _BIter = unsigned char*]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algo.h:2951:2,
+    inlined from 'std::string FASTag::{anonymous}::spell(const FASTag::Alphabet&, const std::vector<Step>&)' at /scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:220:71:
+/ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/move.h:235:11: warning: writing 1 byte into a region of size 0 [-Wstringop-overflow=]
+  235 |       __a = _GLIBCXX_MOVE(__b);
+      |           ^
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp: In function 'std::string FASTag::{anonymous}::spell(const FASTag::Alphabet&, const std::vector<Step>&)':
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset 3 into destination object 'r' of size 3
+  219 |           std::array<uint8_t, 3> r{pe.a, pe.b, pe.c};
+      |                                  ^
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [4, 13] into destination object 'r' of size 3
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset 3 into destination object 'r' of size 3
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [4, 13] into destination object 'r' of size 3
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset 3 into destination object 'r' of size 3
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [4, 13] into destination object 'r' of size 3
+In function 'constexpr std::_Require<std::__not_<std::__is_tuple_like<_Tp> >, std::is_move_constructible<_Tp>, std::is_move_assignable<_Tp> > std::swap(_Tp&, _Tp&) [with _Tp = unsigned char]',
+    inlined from 'constexpr void std::iter_swap(_ForwardIterator1, _ForwardIterator2) [with _ForwardIterator1 = unsigned char*; _ForwardIterator2 = unsigned char*]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algobase.h:185:11,
+    inlined from 'constexpr void std::__reverse(_RandomAccessIterator, _RandomAccessIterator, random_access_iterator_tag) [with _RandomAccessIterator = unsigned char*]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algo.h:1062:18,
+    inlined from 'constexpr bool std::__next_permutation(_BidirectionalIterator, _BidirectionalIterator, _Compare) [with _BidirectionalIterator = unsigned char*; _Compare = __gnu_cxx::__ops::_Iter_less_iter]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algo.h:2911:22,
+    inlined from 'constexpr bool std::next_permutation(_BIter, _BIter) [with _BIter = unsigned char*]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algo.h:2951:2,
+    inlined from 'std::string FASTag::{anonymous}::spell(const FASTag::Alphabet&, const std::vector<Step>&)' at /scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:220:71:
+/ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/move.h:235:11: warning: writing 1 byte into a region of size 0 [-Wstringop-overflow=]
+  235 |       __a = _GLIBCXX_MOVE(__b);
+      |           ^
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp: In function 'std::string FASTag::{anonymous}::spell(const FASTag::Alphabet&, const std::vector<Step>&)':
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [4, 13] into destination object 'r' of size 3
+  219 |           std::array<uint8_t, 3> r{pe.a, pe.b, pe.c};
+      |                                  ^
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [5, 14] into destination object 'r' of size 3
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [4, 13] into destination object 'r' of size 3
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [5, 14] into destination object 'r' of size 3
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [4, 13] into destination object 'r' of size 3
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [5, 14] into destination object 'r' of size 3
+In function 'constexpr std::_Require<std::__not_<std::__is_tuple_like<_Tp> >, std::is_move_constructible<_Tp>, std::is_move_assignable<_Tp> > std::swap(_Tp&, _Tp&) [with _Tp = unsigned char]',
+    inlined from 'constexpr void std::iter_swap(_ForwardIterator1, _ForwardIterator2) [with _ForwardIterator1 = unsigned char*; _ForwardIterator2 = unsigned char*]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algobase.h:185:11,
+    inlined from 'constexpr void std::__reverse(_RandomAccessIterator, _RandomAccessIterator, random_access_iterator_tag) [with _RandomAccessIterator = unsigned char*]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algo.h:1062:18,
+    inlined from 'constexpr bool std::__next_permutation(_BidirectionalIterator, _BidirectionalIterator, _Compare) [with _BidirectionalIterator = unsigned char*; _Compare = __gnu_cxx::__ops::_Iter_less_iter]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algo.h:2911:22,
+    inlined from 'constexpr bool std::next_permutation(_BIter, _BIter) [with _BIter = unsigned char*]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algo.h:2951:2,
+    inlined from 'std::string FASTag::{anonymous}::spell(const FASTag::Alphabet&, const std::vector<Step>&)' at /scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:220:71:
+/ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/move.h:235:11: warning: writing 1 byte into a region of size 0 [-Wstringop-overflow=]
+  235 |       __a = _GLIBCXX_MOVE(__b);
+      |           ^
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp: In function 'std::string FASTag::{anonymous}::spell(const FASTag::Alphabet&, const std::vector<Step>&)':
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [5, 14] into destination object 'r' of size 3
+  219 |           std::array<uint8_t, 3> r{pe.a, pe.b, pe.c};
+      |                                  ^
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [6, 15] into destination object 'r' of size 3
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [5, 14] into destination object 'r' of size 3
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [6, 15] into destination object 'r' of size 3
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [5, 14] into destination object 'r' of size 3
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [6, 15] into destination object 'r' of size 3
+In function 'constexpr std::_Require<std::__not_<std::__is_tuple_like<_Tp> >, std::is_move_constructible<_Tp>, std::is_move_assignable<_Tp> > std::swap(_Tp&, _Tp&) [with _Tp = unsigned char]',
+    inlined from 'constexpr void std::iter_swap(_ForwardIterator1, _ForwardIterator2) [with _ForwardIterator1 = unsigned char*; _ForwardIterator2 = unsigned char*]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algobase.h:185:11,
+    inlined from 'constexpr void std::__reverse(_RandomAccessIterator, _RandomAccessIterator, random_access_iterator_tag) [with _RandomAccessIterator = unsigned char*]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algo.h:1062:18,
+    inlined from 'constexpr bool std::__next_permutation(_BidirectionalIterator, _BidirectionalIterator, _Compare) [with _BidirectionalIterator = unsigned char*; _Compare = __gnu_cxx::__ops::_Iter_less_iter]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algo.h:2911:22,
+    inlined from 'constexpr bool std::next_permutation(_BIter, _BIter) [with _BIter = unsigned char*]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algo.h:2951:2,
+    inlined from 'std::string FASTag::{anonymous}::spell(const FASTag::Alphabet&, const std::vector<Step>&)' at /scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:220:71:
+/ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/move.h:235:11: warning: writing 1 byte into a region of size 0 [-Wstringop-overflow=]
+  235 |       __a = _GLIBCXX_MOVE(__b);
+      |           ^
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp: In function 'std::string FASTag::{anonymous}::spell(const FASTag::Alphabet&, const std::vector<Step>&)':
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [6, 15] into destination object 'r' of size 3
+  219 |           std::array<uint8_t, 3> r{pe.a, pe.b, pe.c};
+      |                                  ^
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [7, 16] into destination object 'r' of size 3
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [6, 15] into destination object 'r' of size 3
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [7, 16] into destination object 'r' of size 3
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [6, 15] into destination object 'r' of size 3
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [7, 16] into destination object 'r' of size 3
+In function 'constexpr std::_Require<std::__not_<std::__is_tuple_like<_Tp> >, std::is_move_constructible<_Tp>, std::is_move_assignable<_Tp> > std::swap(_Tp&, _Tp&) [with _Tp = unsigned char]',
+    inlined from 'constexpr void std::iter_swap(_ForwardIterator1, _ForwardIterator2) [with _ForwardIterator1 = unsigned char*; _ForwardIterator2 = unsigned char*]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algobase.h:185:11,
+    inlined from 'constexpr void std::__reverse(_RandomAccessIterator, _RandomAccessIterator, random_access_iterator_tag) [with _RandomAccessIterator = unsigned char*]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algo.h:1062:18,
+    inlined from 'constexpr bool std::__next_permutation(_BidirectionalIterator, _BidirectionalIterator, _Compare) [with _BidirectionalIterator = unsigned char*; _Compare = __gnu_cxx::__ops::_Iter_less_iter]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algo.h:2911:22,
+    inlined from 'constexpr bool std::next_permutation(_BIter, _BIter) [with _BIter = unsigned char*]' at /ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/stl_algo.h:2951:2,
+    inlined from 'std::string FASTag::{anonymous}::spell(const FASTag::Alphabet&, const std::vector<Step>&)' at /scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:220:71:
+/ceph/ibmi/abi/oliver/envs/fastag-omsdev/lib/gcc/x86_64-conda-linux-gnu/14.4.0/include/c++/bits/move.h:235:11: warning: writing 1 byte into a region of size 0 [-Wstringop-overflow=]
+  235 |       __a = _GLIBCXX_MOVE(__b);
+      |           ^
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp: In function 'std::string FASTag::{anonymous}::spell(const FASTag::Alphabet&, const std::vector<Step>&)':
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [7, 16] into destination object 'r' of size 3
+  219 |           std::array<uint8_t, 3> r{pe.a, pe.b, pe.c};
+      |                                  ^
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [8, 17] into destination object 'r' of size 3
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [7, 16] into destination object 'r' of size 3
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [8, 17] into destination object 'r' of size 3
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [7, 16] into destination object 'r' of size 3
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/src/FASTagger.cpp:219:34: note: at offset [8, 17] into destination object 'r' of size 3
+[32/39] Building CXX object CMakeFiles/FASTag.dir/src/MzPeakStream.cpp.o
+[33/39] Building CXX object CMakeFiles/FASTag.dir/src/InputProbe.cpp.o
+[34/39] Building CXX object CMakeFiles/fastag_core.dir/src/LabelDiscovery.cpp.o
+[35/39] Linking CXX static library libfastag_core.a
+[36/39] Linking CXX executable buildtaxdb
+[37/39] Linking CXX executable gap_modes_test
+[38/39] Building CXX object CMakeFiles/FASTag.dir/src/FASTag.cpp.o
+[39/39] Linking CXX executable FASTag
+gap modes: all checks passed
+Test project /scratch/kohlbach/fastag-gap-modes-20261111-0322813/build-feature
+    Start  3: gap_modes_test
+1/3 Test  #3: gap_modes_test ...................   Passed    0.12 sec
+    Start 50: baseline_identity_test
+2/3 Test #50: baseline_identity_test ...........   Passed   35.19 sec
+    Start 52: out_spectra_params_test
+3/3 Test #52: out_spectra_params_test ..........***Failed    0.07 sec
+/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/test/out_spectra_params_test.sh: line 28: /scratch/kohlbach/fastag-gap-modes-20261111-0322813/build-feature/cli_param_test: No such file or directory
+FAIL: the legacy list does not have 77 names
+
+
+67% tests passed, 1 tests failed out of 3
+
+Total Test time (real) =  35.38 sec
+
+The following tests FAILED:
+	 52 - out_spectra_params_test (Failed)
+Errors while running CTest

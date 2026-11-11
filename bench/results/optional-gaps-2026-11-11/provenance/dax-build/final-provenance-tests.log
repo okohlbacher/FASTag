@@ -1,0 +1,35 @@
+Start testing: Nov 11 14:21 CET
+----------------------------------------------------------
+3/87 Testing: gap_modes_test
+3/87 Test: gap_modes_test
+Command: "/scratch/kohlbach/fastag-gap-modes-20261111-0322813/build-feature/gap_modes_test"
+Directory: /scratch/kohlbach/fastag-gap-modes-20261111-0322813/build-feature
+"gap_modes_test" start time: Nov 11 14:21 CET
+Output:
+----------------------------------------------------------
+gap modes: all checks passed
+<end of output>
+Test time =   0.12 sec
+----------------------------------------------------------
+Test Passed.
+"gap_modes_test" end time: Nov 11 14:21 CET
+"gap_modes_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+52/87 Testing: out_spectra_params_test
+52/87 Test: out_spectra_params_test
+Command: "/usr/bin/bash" "/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/test/out_spectra_params_test.sh" "/scratch/kohlbach/fastag-gap-modes-20261111-0322813/build-feature/FASTag" "/scratch/kohlbach/fastag-gap-modes-20261111-0322813/build-feature/cli_param_test" "/scratch/kohlbach/fastag-gap-modes-20261111-0322813/src-feature/test/fixtures/Ecoli_MS2_small.mzML"
+Directory: /scratch/kohlbach/fastag-gap-modes-20261111-0322813/build-feature
+"out_spectra_params_test" start time: Nov 11 14:21 CET
+Output:
+----------------------------------------------------------
+out_spectra_params_test: passed
+<end of output>
+Test time =   0.98 sec
+----------------------------------------------------------
+Test Passed.
+"out_spectra_params_test" end time: Nov 11 14:21 CET
+"out_spectra_params_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Nov 11 14:21 CET

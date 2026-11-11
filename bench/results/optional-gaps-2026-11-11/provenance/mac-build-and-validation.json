@@ -1,0 +1,47 @@
+{
+  "baseline_ref": "v1.13.1 (d16328b4a7f9746055dcc1623918867ff7ee6b93)",
+  "compiler": "AppleClang21.0.0.21000401 /usr/bin/c++",
+  "build_type": "Release",
+  "OpenMS_DIR": "/Users/kohlbach/.cache/cmake/diaspextract-openms-develop",
+  "OpenMS_version": "3.7.0-pre-exported-20261104",
+  "CMAKE_PREFIX_PATH": "/Users/kohlbach/Claude/fastag-mm/envs/omsbuild;/opt/homebrew/opt/libomp",
+  "OpenMP_ROOT": "/opt/homebrew/opt/libomp",
+  "OpenMP_CXX_FLAGS": "-Xclang -fopenmp",
+  "OpenMP_CXX_INCLUDE_DIR": "/opt/homebrew/opt/libomp/include",
+  "OpenMP_CXX_LIB_NAMES": "libomp",
+  "OpenMP_libomp_LIBRARY": "/opt/homebrew/opt/libomp/lib/libomp.dylib",
+  "source_sha256": {
+    "fastag-gap-feature/src/FASTagger.cpp": "1b4af18dde67cb7f572a2fe863c7097060c8cd2611f6e5fcdad4ff41b13a387a",
+    "fastag-gap-feature/src/FASTagger.h": "ff44300e73d5d3498cff016df206469fac4740e0c68d6d7ec7d7b3f15bb9d1d2",
+    "fastag-gap-feature/src/FASTag.cpp": "c34bf78db9527afd344f6cadf8c27c574066ffa3c931cfb6b49d8e862c886cbb",
+    "fastag-gap-feature/src/CliParam.h": "c4a8231c35613143e3b0f1619a07042999de546e79693bc85d4ce7b4acba9a3a"
+  },
+  "ctest": {
+    "total": 89,
+    "passed_initial": 83,
+    "sandbox_failures_then_passed_outside_sandbox": [
+      "taxindex_test",
+      "cli_guards_test"
+    ],
+    "skipped": {
+      "search_engine_smoke_test": "No external search engine",
+      "mzpeak_e2e": "No matched E2E input pair configured",
+      "mzpeak_validate": "No external mzpeak validator",
+      "mzml_to_mgf_test": "No Python with pyteomics and numpy"
+    },
+    "baseline_identity": "126 comparisons: 123 SAME, 3 ADDED, 0 PREFIX; 2 taxdb files identical",
+    "final_focused_recheck": {
+      "gap_modes_test": "passed",
+      "baseline_identity_test": "passed",
+      "out_spectra_params_test": "passed"
+    }
+  },
+  "binary_sha256": {
+    "baseline": "8e99b598c944d6e186964f4d942341e613546f696a99497ab088d58ca68eb832",
+    "feature": "b25841858c3e58225b1c9032527c021c5483283b24b81f757d0712797acfecb4"
+  },
+  "OpenMS_library_sha256": "b5aa1aabba9c63a9eb49782704557688f807ae36f389adeb00d6afb2cc98cd98",
+  "cmake_generator": "Ninja",
+  "FASTAG_BUILD_TESTS": true,
+  "FASTAG_BUILD_BENCH": true
+}
