@@ -151,3 +151,17 @@ and the export defaults, so the values are optimistic by an unknown amount. C2 f
 G2 with a single run above 2.0 % out of 10; a run with a few thousand identified spectra moves by 0.3 to 0.5 points
 on 10 entrapment hits. The default shortlist (arm a0) kept 0.678 to 0.915 on the development runs (8 of 9 at or above
 0.80) and is expected below 0.80 in at least one run.
+
+## Staging result (added with the staged manifest, before any run)
+
+Staged 2026-11-11; `manifests/msfragger-heldout2.tsv` now carries sha256 of every raw and mzML file
+(`msfragger2/inputs/staged_chosen.tsv`). All 10 chosen files passed download and check (6 with the PRIDE SHA-1, 4
+without one: size and identical second download); no backup file was downloaded. **The test runs on 10 runs from 10
+projects** (`msfragger2/inputs/list.tsv`). MG09 (PXD059544): 40,172 of 97,104 MS2 carry a charge; the check
+(at least 5,000) passes.
+
+Deviations up to here: (1) the freeze is two commits, 8c26eb1 (protocol, scripts, scorer) and dd9c384 (manifest,
+disjointness, draw, staging list, exclusion list, pool); the `*.tsv` ignore rule kept the tables out of the first.
+Both were pushed before the first download. (2) A first staging launch between the two commits ended after 2 s
+without a download because the staging list was missing on the node; its empty outputs are kept in
+`heldout2/stage/aborted_no_list/`. Nothing else in this document changed.
