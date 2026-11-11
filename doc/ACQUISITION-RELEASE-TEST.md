@@ -70,3 +70,17 @@ FASTag's own `Acquisition check:` window listing, the output of the rule under t
 - The held-out test does not validate the rule. A revised rule needs a fresh sample, preferably stratified from the
   files themselves (for example vendor scan filters) rather than from project text. Whether the default stays
   `refuse` is open.
+
+## Revised rule (1.13) and its held-out test (acqcheck2)
+
+Causes on the E7-03 sample, checked against scan filters and isolation windows: the 8 refused Astral files and one
+Tribrid file are DIA runs filed as DDA; 4 missed files are DDA/IDA library runs in DIA projects; 3 Orbitrap DIA
+files were genuine misses (2 with a default charge 2+ on every MS2, 1 with blocks of windows repeated without one
+cycle). The 1.13 rule refuses both schemes (see README, Raw DIA input is refused). E7-03 was its development set.
+
+Preregistered test on 98 fresh public PRIDE projects (one Thermo file each, disjoint from E7-03; truth per file
+from scan-filter dependence and window coverage; `acceptance/1.13/PREREG-acqcheck2.md` on `acc113r/acqcheck`):
+**PASS**. Refused: 0 of 58 non-DIA files (upper 95% bound 5.0%), 35 of 37 DIA files (94.6%; the 1.12 rule 19 of
+37). 3 files had no clear truth and were excluded. Misses: one DIA run with mixed charges (warned, not refused)
+and one non-dependent run with 5384 windows of 2 Th and no repeating scheme. The sample held no Astral, timsTOF or
+SCIEX file; for those the rule is unchanged and E7-03 is the only test.
