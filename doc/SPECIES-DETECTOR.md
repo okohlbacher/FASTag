@@ -350,7 +350,7 @@ No row of the explain call changes: on 98 runs the calls with reason `pass`
 are identical with and without the option. A `reagent` call says that the
 protein reagent is in the sample, not that the organism is the sample.
 
-Development data only (62 spent held-out runs and 23 runs of the 1.12
+Development data only (62 spent held-out runs and 35 runs of the 1.12
 development set with a Sage truth search; frozen genus rule of
 `PREREG-species-explain.md`, Sus/Bos counted as positives; branch
 `post1131/species`). **Not held-out tested.**
@@ -360,13 +360,13 @@ development set with a Sage truth search; frozen genus rule of
 | Spent runs (62): false genus calls per run | 5.98 [4.68, 7.48] | 0.50 [0.29, 0.73] | 0.58 [0.36, 0.82] |
 | Spent runs: recovery | 77/105 | 38/105 | 80/105 |
 | of these: Sus or Bos | 41/68 | 3/68 | 45/68 |
-| Development runs (23): false genus calls per run | 8.26 [6.39, 10.43] | 0.43 [0.13, 0.83] | 0.52 [0.22, 0.91] |
-| Development runs: recovery | 57/69 | 34/69 | 58/69 |
-| of these: Sus or Bos | 24/35 | 1/35 | 25/35 |
+| Development runs (35): false genus calls per run | 7.37 [6.03, 8.89] | 0.40 [0.17, 0.66] | 0.49 [0.26, 0.74] |
+| Development runs: recovery | 87/102 | 50/102 | 84/102 |
+| of these: Sus or Bos | 40/54 | 3/54 | 37/54 |
 
 With the reagent calls counted as genus calls the upper bound on the spent
-runs (0.82) is above the 0.75 of the primary criterion; the seven added calls
-labelled false (5 + 2) pass the tag test in listed proteins but have fewer
+runs (0.82) is above the 0.75 of the primary criterion, on the development
+runs (0.74) at it; the eight added calls labelled false (5 + 3) pass the tag test in listed proteins but have fewer
 than three genus-unique Sage peptides. Of the 68 Sus/Bos positives of the spent
 runs none is a sample organism: in 53 the Sage peptides come from reagent
 proteins (>= 3 peptides), in 11 from one or two such peptides, in 4 from
