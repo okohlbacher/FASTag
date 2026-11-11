@@ -89,7 +89,8 @@ namespace FASTag::Cleavage
     return true;
   }
 
-  Choice choose(const std::string& option, Specificity spec, const FASTag::Shortlist::ProteaseVerdict& v)
+  Choice choose(const std::string& option, Specificity spec, const FASTag::Shortlist::ProteaseVerdict& v,
+                bool spec_given)
   {
     using Verdict = FASTag::Shortlist::ProteaseVerdict;
     Choice c;
@@ -102,6 +103,12 @@ namespace FASTag::Cleavage
       {
         c.rule = called;
         c.reason = "auto: the tag ends call " + called->name;
+        if (!spec_given && called->name == "Asp-N")
+        {
+          c.specificity = Specificity::Semi;
+          c.auto_semi = true;
+          c.reason += "; semi-specific unless -shortlist_specificity is given";
+        }
       }
       else
       {
@@ -110,6 +117,7 @@ namespace FASTag::Cleavage
                              : "auto: no confident protease call; Trypsin assumed";
       }
       if (c.rule->unspecific()) c.specificity = Specificity::None;
+      c.auto_unspecific = c.rule->unspecific();
       return c;
     }
     c.rule = findRule(option);

@@ -249,6 +249,18 @@ export const PARAM_UI: Record<string, ParamUi> = {
       tip: 'Try it for spectra that hold two peptides at once (common in TMT runs).'
     }
   },
+  tmt_pseudo_filter: {
+    hidden: EXPERIMENTAL_1_13,
+    help: {
+      text: 'Experimental TMT6/10 filter for tags whose terminal G or A step is consistent with label fragmentation. Terminal K alone never triggers rejection. Auto first checks a sample for both N-terminal and lysine TMT evidence and abstains on conflicting label evidence. Off is the default; on is for known TMT6/10 input.'
+    }
+  },
+  tmt_reporter_filter: {
+    hidden: EXPERIMENTAL_1_13,
+    help: {
+      text: 'Also reject singly charged tags that use a TMT reporter ion as their low endpoint. Requires an active TMT pseudo-tag filter; ordinary residue and a-ion endpoints are retained.'
+    }
+  },
 
   // ---- Sequence matching
   fasta: {
@@ -1137,7 +1149,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   shortlist_specificity: {
     hidden: EXPERIMENTAL_1_13,
     help: {
-      text: 'How many window ends must be cleavage sites of the -shortlist_protease rule: both (full), one (semi) or none.'
+      text: 'How many window ends must be cleavage sites of the -shortlist_protease rule: both (full), one (semi) or none. Left at full with auto, a run called Asp-N is still placed and exported semi-specific (development runs only, no held-out test); a named asp-n stays full.'
     }
   },
   shortlist_gapped: {

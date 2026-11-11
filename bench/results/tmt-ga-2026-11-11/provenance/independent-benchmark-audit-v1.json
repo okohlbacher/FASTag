@@ -1,0 +1,906 @@
+{
+  "root": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1",
+  "completed_processes": 108,
+  "complete_design": true,
+  "all_returncodes_zero": true,
+  "repeat_checks": [
+    {
+      "dataset": "PXD000001",
+      "chemistry": "label_aware",
+      "arm": "auto",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD000001",
+      "chemistry": "label_aware",
+      "arm": "baseline",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD000001",
+      "chemistry": "label_aware",
+      "arm": "off",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD000001",
+      "chemistry": "label_aware",
+      "arm": "on",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD000001",
+      "chemistry": "label_blind",
+      "arm": "auto",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD000001",
+      "chemistry": "label_blind",
+      "arm": "baseline",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD000001",
+      "chemistry": "label_blind",
+      "arm": "off",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD000001",
+      "chemistry": "label_blind",
+      "arm": "on",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD003531",
+      "chemistry": "control",
+      "arm": "auto",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD003531",
+      "chemistry": "control",
+      "arm": "baseline",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD003531",
+      "chemistry": "control",
+      "arm": "off",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD003531",
+      "chemistry": "control",
+      "arm": "on",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD004541_fr02",
+      "chemistry": "label_aware",
+      "arm": "auto",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD004541_fr02",
+      "chemistry": "label_aware",
+      "arm": "baseline",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD004541_fr02",
+      "chemistry": "label_aware",
+      "arm": "off",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD004541_fr02",
+      "chemistry": "label_aware",
+      "arm": "on",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD004541_fr02",
+      "chemistry": "label_blind",
+      "arm": "auto",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD004541_fr02",
+      "chemistry": "label_blind",
+      "arm": "baseline",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD004541_fr02",
+      "chemistry": "label_blind",
+      "arm": "off",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD004541_fr02",
+      "chemistry": "label_blind",
+      "arm": "on",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD004541_fr09",
+      "chemistry": "label_aware",
+      "arm": "auto",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD004541_fr09",
+      "chemistry": "label_aware",
+      "arm": "baseline",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD004541_fr09",
+      "chemistry": "label_aware",
+      "arm": "off",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD004541_fr09",
+      "chemistry": "label_aware",
+      "arm": "on",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD004541_fr09",
+      "chemistry": "label_blind",
+      "arm": "auto",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD004541_fr09",
+      "chemistry": "label_blind",
+      "arm": "baseline",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD004541_fr09",
+      "chemistry": "label_blind",
+      "arm": "off",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD004541_fr09",
+      "chemistry": "label_blind",
+      "arm": "on",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD037999",
+      "chemistry": "label_aware",
+      "arm": "auto",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD037999",
+      "chemistry": "label_aware",
+      "arm": "baseline",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD037999",
+      "chemistry": "label_aware",
+      "arm": "off",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD037999",
+      "chemistry": "label_aware",
+      "arm": "on",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD037999",
+      "chemistry": "label_blind",
+      "arm": "auto",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD037999",
+      "chemistry": "label_blind",
+      "arm": "baseline",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD037999",
+      "chemistry": "label_blind",
+      "arm": "off",
+      "n": 3,
+      "identical": true
+    },
+    {
+      "dataset": "PXD037999",
+      "chemistry": "label_blind",
+      "arm": "on",
+      "n": 3,
+      "identical": true
+    }
+  ],
+  "equality_checks": [
+    {
+      "dataset": "PXD000001",
+      "chemistry": "label_aware",
+      "left": "baseline",
+      "right": "off",
+      "identical": true
+    },
+    {
+      "dataset": "PXD000001",
+      "chemistry": "label_aware",
+      "left": "auto",
+      "right": "on",
+      "identical": true
+    },
+    {
+      "dataset": "PXD000001",
+      "chemistry": "label_blind",
+      "left": "baseline",
+      "right": "off",
+      "identical": true
+    },
+    {
+      "dataset": "PXD000001",
+      "chemistry": "label_blind",
+      "left": "auto",
+      "right": "on",
+      "identical": true
+    },
+    {
+      "dataset": "PXD003531",
+      "chemistry": "control",
+      "left": "baseline",
+      "right": "off",
+      "identical": true
+    },
+    {
+      "dataset": "PXD003531",
+      "chemistry": "control",
+      "left": "auto",
+      "right": "baseline",
+      "identical": true
+    },
+    {
+      "dataset": "PXD004541_fr02",
+      "chemistry": "label_aware",
+      "left": "baseline",
+      "right": "off",
+      "identical": true
+    },
+    {
+      "dataset": "PXD004541_fr02",
+      "chemistry": "label_aware",
+      "left": "auto",
+      "right": "on",
+      "identical": true
+    },
+    {
+      "dataset": "PXD004541_fr02",
+      "chemistry": "label_blind",
+      "left": "baseline",
+      "right": "off",
+      "identical": true
+    },
+    {
+      "dataset": "PXD004541_fr02",
+      "chemistry": "label_blind",
+      "left": "auto",
+      "right": "on",
+      "identical": true
+    },
+    {
+      "dataset": "PXD004541_fr09",
+      "chemistry": "label_aware",
+      "left": "baseline",
+      "right": "off",
+      "identical": true
+    },
+    {
+      "dataset": "PXD004541_fr09",
+      "chemistry": "label_aware",
+      "left": "auto",
+      "right": "on",
+      "identical": true
+    },
+    {
+      "dataset": "PXD004541_fr09",
+      "chemistry": "label_blind",
+      "left": "baseline",
+      "right": "off",
+      "identical": true
+    },
+    {
+      "dataset": "PXD004541_fr09",
+      "chemistry": "label_blind",
+      "left": "auto",
+      "right": "on",
+      "identical": true
+    },
+    {
+      "dataset": "PXD037999",
+      "chemistry": "label_aware",
+      "left": "baseline",
+      "right": "off",
+      "identical": true
+    },
+    {
+      "dataset": "PXD037999",
+      "chemistry": "label_aware",
+      "left": "auto",
+      "right": "on",
+      "identical": true
+    },
+    {
+      "dataset": "PXD037999",
+      "chemistry": "label_blind",
+      "left": "baseline",
+      "right": "off",
+      "identical": true
+    },
+    {
+      "dataset": "PXD037999",
+      "chemistry": "label_blind",
+      "left": "auto",
+      "right": "on",
+      "identical": true
+    }
+  ],
+  "auto_decisions": [
+    {
+      "dataset": "PXD000001",
+      "chemistry": "label_aware",
+      "messages": [
+        "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=769, threshold=20, TMT_N=498, TMT_K=416, TMTpro_N=2, TMTpro_K=0; reporters=off"
+      ],
+      "stable": true,
+      "expected": true
+    },
+    {
+      "dataset": "PXD000001",
+      "chemistry": "label_blind",
+      "messages": [
+        "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=790, threshold=20, TMT_N=508, TMT_K=414, TMTpro_N=2, TMTpro_K=0; reporters=off"
+      ],
+      "stable": true,
+      "expected": true
+    },
+    {
+      "dataset": "PXD003531",
+      "chemistry": "control",
+      "messages": [
+        "TMT pseudo-filter (auto): off; insufficient_two_site_TMT_evidence; probed=1024; eligible=969, threshold=20, TMT_N=0, TMT_K=0, TMTpro_N=0, TMTpro_K=0; reporters=off"
+      ],
+      "stable": true,
+      "expected": true
+    },
+    {
+      "dataset": "PXD004541_fr02",
+      "chemistry": "label_aware",
+      "messages": [
+        "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=877, threshold=20, TMT_N=727, TMT_K=475, TMTpro_N=0, TMTpro_K=0; reporters=off"
+      ],
+      "stable": true,
+      "expected": true
+    },
+    {
+      "dataset": "PXD004541_fr02",
+      "chemistry": "label_blind",
+      "messages": [
+        "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=880, threshold=20, TMT_N=726, TMT_K=474, TMTpro_N=0, TMTpro_K=0; reporters=off"
+      ],
+      "stable": true,
+      "expected": true
+    },
+    {
+      "dataset": "PXD004541_fr09",
+      "chemistry": "label_aware",
+      "messages": [
+        "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=818, threshold=20, TMT_N=690, TMT_K=463, TMTpro_N=0, TMTpro_K=0; reporters=off"
+      ],
+      "stable": true,
+      "expected": true
+    },
+    {
+      "dataset": "PXD004541_fr09",
+      "chemistry": "label_blind",
+      "messages": [
+        "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=822, threshold=20, TMT_N=698, TMT_K=462, TMTpro_N=0, TMTpro_K=0; reporters=off"
+      ],
+      "stable": true,
+      "expected": true
+    },
+    {
+      "dataset": "PXD037999",
+      "chemistry": "label_aware",
+      "messages": [
+        "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=620, threshold=20, TMT_N=431, TMT_K=240, TMTpro_N=0, TMTpro_K=0; reporters=off"
+      ],
+      "stable": true,
+      "expected": true
+    },
+    {
+      "dataset": "PXD037999",
+      "chemistry": "label_blind",
+      "messages": [
+        "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=639, threshold=20, TMT_N=426, TMT_K=239, TMTpro_N=0, TMTpro_K=0; reporters=off"
+      ],
+      "stable": true,
+      "expected": true
+    }
+  ],
+  "output_hashes_recomputed": [
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr02/label_blind/auto/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr02/label_blind/baseline/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr02/label_blind/on/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr02/label_blind/off/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr02/label_blind/off/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr02/label_blind/baseline/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr02/label_blind/on/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr02/label_blind/auto/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr02/label_blind/on/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr02/label_blind/off/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr02/label_blind/auto/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr02/label_blind/baseline/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr02/label_aware/auto/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr02/label_aware/off/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr02/label_aware/baseline/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr02/label_aware/on/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr02/label_aware/on/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr02/label_aware/auto/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr02/label_aware/baseline/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr02/label_aware/off/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr02/label_aware/on/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr02/label_aware/baseline/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr02/label_aware/off/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr02/label_aware/auto/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD037999/label_blind/off/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD037999/label_blind/auto/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD037999/label_blind/baseline/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD037999/label_blind/on/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD037999/label_blind/on/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD037999/label_blind/auto/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD037999/label_blind/off/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD037999/label_blind/baseline/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD037999/label_blind/auto/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD037999/label_blind/off/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD037999/label_blind/on/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD037999/label_blind/baseline/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD037999/label_aware/baseline/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD037999/label_aware/on/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD037999/label_aware/auto/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD037999/label_aware/off/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD037999/label_aware/off/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD037999/label_aware/auto/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD037999/label_aware/baseline/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD037999/label_aware/on/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD037999/label_aware/baseline/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD037999/label_aware/off/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD037999/label_aware/on/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD037999/label_aware/auto/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD000001/label_blind/on/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD000001/label_blind/baseline/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD000001/label_blind/auto/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD000001/label_blind/off/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD000001/label_blind/auto/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD000001/label_blind/baseline/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD000001/label_blind/on/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD000001/label_blind/off/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD000001/label_blind/baseline/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD000001/label_blind/off/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD000001/label_blind/auto/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD000001/label_blind/on/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD000001/label_aware/auto/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD000001/label_aware/off/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD000001/label_aware/baseline/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD000001/label_aware/on/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD000001/label_aware/auto/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD000001/label_aware/baseline/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD000001/label_aware/on/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD000001/label_aware/off/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD000001/label_aware/off/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD000001/label_aware/on/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD000001/label_aware/auto/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD000001/label_aware/baseline/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr09/label_blind/baseline/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr09/label_blind/on/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr09/label_blind/off/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr09/label_blind/auto/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr09/label_blind/on/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr09/label_blind/auto/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr09/label_blind/off/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr09/label_blind/baseline/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr09/label_blind/off/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr09/label_blind/baseline/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr09/label_blind/auto/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr09/label_blind/on/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr09/label_aware/on/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr09/label_aware/auto/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr09/label_aware/off/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr09/label_aware/baseline/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr09/label_aware/off/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr09/label_aware/on/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr09/label_aware/baseline/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr09/label_aware/auto/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr09/label_aware/off/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr09/label_aware/baseline/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr09/label_aware/on/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD004541_fr09/label_aware/auto/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD003531/control/auto/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD003531/control/baseline/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD003531/control/on/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD003531/control/off/rep1.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD003531/control/off/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD003531/control/auto/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD003531/control/on/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD003531/control/baseline/rep2.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD003531/control/on/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD003531/control/off/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD003531/control/auto/rep3.tags.tsv",
+      "match": true
+    },
+    {
+      "path": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1/PXD003531/control/baseline/rep3.tags.tsv",
+      "match": true
+    }
+  ],
+  "passed": true
+}

@@ -119,6 +119,27 @@ int main()
     check(c.rule->name == "Trypsin" && !c.refuse, "auto: inconclusive is Trypsin, whatever the top model");
     c = FC::choose("auto", full, verdict(Verdict::NonTryptic, "unspecific"));
     check(c.rule->unspecific() && c.specificity == FC::Specificity::None, "auto: an unspecific call");
+    check(c.auto_unspecific, "auto: an unspecific call is flagged for the export warning");
+    check(!FC::choose("auto", full, verdict(Verdict::NonTryptic, "Asp-N")).auto_unspecific &&
+              !FC::choose("unspecific", full, verdict(Verdict::NonTryptic, "unspecific")).auto_unspecific,
+          "a called protease or a named unspecific rule is not flagged");
+    // post-1.13.1 (aspn): an Asp-N call under auto is semi-specific unless
+    // the user gave -shortlist_specificity; no other call and no named rule is.
+    c = FC::choose("auto", full, verdict(Verdict::NonTryptic, "Asp-N"), false);
+    check(c.rule->name == "Asp-N" && c.specificity == FC::Specificity::Semi && c.auto_semi && !c.refuse,
+          "auto: an Asp-N call is semi-specific when the specificity is not given");
+    c = FC::choose("auto", full, verdict(Verdict::NonTryptic, "Asp-N"), true);
+    check(c.specificity == full && !c.auto_semi, "auto: an Asp-N call keeps a given full specificity");
+    check(FC::choose("auto", FC::Specificity::None, verdict(Verdict::NonTryptic, "Asp-N"), true).specificity ==
+              FC::Specificity::None, "auto: an Asp-N call keeps a given none specificity");
+    check(FC::choose("asp-n", full, verdict(Verdict::NonTryptic, "Asp-N"), false).specificity == full,
+          "a named asp-n stays full");
+    check(FC::choose("auto", full, verdict(Verdict::NonTryptic, "Chymotrypsin"), false).specificity == full &&
+              FC::choose("auto", full, verdict(Verdict::Compatible, "Lys-C"), false).specificity == full &&
+              FC::choose("auto", full, verdict(Verdict::Inconclusive, "Asp-N"), false).specificity == full &&
+              FC::choose("auto", full, verdict(Verdict::NonTryptic, "unspecific"), false).specificity ==
+                  FC::Specificity::None,
+          "auto: only a confident Asp-N call becomes semi");
     c = FC::choose("chymotrypsin", full, verdict(Verdict::Compatible, "Trypsin"));
     check(c.rule->name == "Chymotrypsin" && c.refuse, "a named rule is refused on a contradicting trypsin call");
     c = FC::choose("chymotrypsin", full, verdict(Verdict::NonTryptic, "Chymotrypsin"));

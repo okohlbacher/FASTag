@@ -1,0 +1,47 @@
+[
+  {
+    "dataset": "PXD004541_fr02",
+    "chemistry": "label_blind",
+    "default_identical": true
+  },
+  {
+    "dataset": "PXD004541_fr02",
+    "chemistry": "label_aware",
+    "default_identical": true
+  },
+  {
+    "dataset": "PXD037999",
+    "chemistry": "label_blind",
+    "default_identical": true
+  },
+  {
+    "dataset": "PXD037999",
+    "chemistry": "label_aware",
+    "default_identical": true
+  },
+  {
+    "dataset": "PXD000001",
+    "chemistry": "label_blind",
+    "default_identical": true
+  },
+  {
+    "dataset": "PXD000001",
+    "chemistry": "label_aware",
+    "default_identical": true
+  },
+  {
+    "dataset": "PXD004541_fr09",
+    "chemistry": "label_blind",
+    "default_identical": true
+  },
+  {
+    "dataset": "PXD004541_fr09",
+    "chemistry": "label_aware",
+    "default_identical": true
+  },
+  {
+    "dataset": "PXD003531",
+    "chemistry": "control",
+    "default_identical": true
+  }
+]

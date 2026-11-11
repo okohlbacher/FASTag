@@ -1,0 +1,2127 @@
+{
+  "PXD000869__20130503iTRAQ_c04": {
+    "groups": {
+      "ms2|FTMS|HCD": {
+        "chan": {
+          "TMT:0": 1,
+          "TMT:1": 4,
+          "TMT:2": 1,
+          "TMT:5": 1,
+          "TMT:6": 25,
+          "TMT:7": 2,
+          "TMT:8": 3,
+          "TMT:9": 3,
+          "TMTproX:0": 2,
+          "TMTproX:4": 1,
+          "TMTproX:5": 1,
+          "iTRAQ4:0": 2706,
+          "iTRAQ4:1": 2681,
+          "iTRAQ4:2": 2731,
+          "iTRAQ4:3": 2709,
+          "iTRAQ8X:0": 32,
+          "iTRAQ8X:1": 1,
+          "iTRAQ8X:2": 1,
+          "iTRAQ8X:3": 1
+        },
+        "decoded": 2779,
+        "decoy_hits": {
+          "TMT:0": 5517,
+          "TMT:1": 38,
+          "TMT:3": 1,
+          "TMT:4": 2,
+          "TMTproX:0": 5544,
+          "TMTproX:1": 14,
+          "iTRAQ4:0": 5426,
+          "iTRAQ4:1": 127,
+          "iTRAQ4:2": 5,
+          "iTRAQ8X:0": 5549,
+          "iTRAQ8X:1": 9
+        },
+        "hits": {
+          "TMT:0": 2739,
+          "TMT:1": 40,
+          "TMTproX:0": 2775,
+          "TMTproX:1": 4,
+          "iTRAQ4:0": 40,
+          "iTRAQ4:1": 19,
+          "iTRAQ4:2": 20,
+          "iTRAQ4:3": 32,
+          "iTRAQ4:4": 2668,
+          "iTRAQ8X:0": 2744,
+          "iTRAQ8X:1": 35
+        },
+        "minmz_q10": 100.2,
+        "minmz_q50": 101.1,
+        "minmz_q90": 110.2,
+        "n": 2779,
+        "relint_median": {
+          "TMT": 0.048,
+          "TMTproX": 0.019,
+          "iTRAQ4": 2.03,
+          "iTRAQ8X": 0.013
+        }
+      },
+      "ms2|ITMS|CID": {
+        "chan": {},
+        "decoded": 0,
+        "decoy_hits": {},
+        "hits": {},
+        "minmz_q10": null,
+        "minmz_q50": null,
+        "minmz_q90": null,
+        "n": 2779,
+        "relint_median": {}
+      }
+    },
+    "id": "PXD000869__20130503iTRAQ_c04",
+    "levels": {
+      "1": 1110,
+      "2": 5558
+    },
+    "ms1_analyzer": {
+      "FTMS": 1110
+    },
+    "ms2_isolation_width_median": 2.0,
+    "path": "in/PXD000869/20130503iTRAQ_c04.mzML",
+    "stride": 2,
+    "undecodable": 0
+  },
+  "PXD006321__B_PH2_5": {
+    "groups": {
+      "ms2|ITMS|CID": {
+        "chan": {
+          "TMT:0": 72,
+          "TMT:1": 150,
+          "TMT:10": 194,
+          "TMT:2": 150,
+          "TMT:3": 114,
+          "TMT:4": 114,
+          "TMT:5": 399,
+          "TMT:6": 399,
+          "TMT:7": 375,
+          "TMT:8": 374,
+          "TMT:9": 194,
+          "TMTproX:0": 285,
+          "TMTproX:1": 284,
+          "TMTproX:2": 228,
+          "TMTproX:3": 228,
+          "TMTproX:4": 153,
+          "TMTproX:5": 153,
+          "TMTproX:6": 93,
+          "iTRAQ4:0": 6,
+          "iTRAQ4:1": 18,
+          "iTRAQ4:2": 23,
+          "iTRAQ4:3": 18,
+          "iTRAQ8X:0": 1,
+          "iTRAQ8X:1": 14,
+          "iTRAQ8X:2": 28,
+          "iTRAQ8X:3": 36
+        },
+        "decoded": 7812,
+        "decoy_hits": {},
+        "hits": {
+          "TMT:0": 7309,
+          "TMT:1": 5,
+          "TMT:2": 139,
+          "TMT:3": 3,
+          "TMT:4": 356,
+          "TMTproX:0": 7389,
+          "TMTproX:1": 21,
+          "TMTproX:2": 188,
+          "TMTproX:3": 19,
+          "TMTproX:4": 195,
+          "iTRAQ4:0": 7760,
+          "iTRAQ4:1": 41,
+          "iTRAQ4:2": 9,
+          "iTRAQ4:3": 2,
+          "iTRAQ8X:0": 7748,
+          "iTRAQ8X:1": 50,
+          "iTRAQ8X:2": 13,
+          "iTRAQ8X:3": 1
+        },
+        "minmz_q10": 140.2,
+        "minmz_q50": 208.3,
+        "minmz_q90": 320.4,
+        "n": 15682,
+        "relint_median": {
+          "TMT": 1.054,
+          "TMTproX": 0.288,
+          "iTRAQ4": 0.083,
+          "iTRAQ8X": 0.086
+        }
+      }
+    },
+    "id": "PXD006321__B_PH2_5",
+    "levels": {
+      "1": 3206,
+      "2": 15682
+    },
+    "ms1_analyzer": {
+      "FTMS": 3206
+    },
+    "ms2_isolation_width_median": 2.0,
+    "path": "in/PXD006321/B_PH2_5.mzML",
+    "stride": 2,
+    "undecodable": 0
+  },
+  "PXD007694__ch_g2_03": {
+    "groups": {
+      "ms2|ITMS|CID": {
+        "chan": {
+          "TMT:0": 31,
+          "TMT:1": 126,
+          "TMT:10": 210,
+          "TMT:2": 131,
+          "TMT:3": 182,
+          "TMT:4": 182,
+          "TMT:5": 270,
+          "TMT:6": 273,
+          "TMT:7": 293,
+          "TMT:8": 300,
+          "TMT:9": 210,
+          "TMTproX:0": 68,
+          "TMTproX:1": 66,
+          "TMTproX:2": 26,
+          "TMTproX:3": 26,
+          "TMTproX:4": 7,
+          "TMTproX:5": 7,
+          "TMTproX:6": 3,
+          "iTRAQ4:2": 1
+        },
+        "decoded": 11128,
+        "decoy_hits": {},
+        "hits": {
+          "TMT:0": 10683,
+          "TMT:1": 6,
+          "TMT:2": 126,
+          "TMT:3": 6,
+          "TMT:4": 307,
+          "TMTproX:0": 11036,
+          "TMTproX:1": 3,
+          "TMTproX:2": 79,
+          "TMTproX:4": 10,
+          "iTRAQ4:0": 11127,
+          "iTRAQ4:1": 1,
+          "iTRAQ8X:0": 11128
+        },
+        "minmz_q10": 137.5,
+        "minmz_q50": 197.7,
+        "minmz_q90": 295.9,
+        "n": 22255,
+        "relint_median": {
+          "TMT": 0.108,
+          "TMTproX": 0.035,
+          "iTRAQ4": 0.011
+        }
+      },
+      "ms3|FTMS|CID+HCD": {
+        "chan": {
+          "TMT:0": 10297,
+          "TMT:1": 10258,
+          "TMT:10": 3674,
+          "TMT:2": 10281,
+          "TMT:3": 10372,
+          "TMT:4": 10319,
+          "TMT:5": 10444,
+          "TMT:6": 10419,
+          "TMT:7": 10273,
+          "TMT:8": 10230,
+          "TMT:9": 10179,
+          "TMTproX:0": 2800,
+          "TMTproX:1": 9,
+          "TMTproX:2": 6,
+          "TMTproX:3": 4,
+          "TMTproX:4": 1,
+          "TMTproX:5": 10,
+          "TMTproX:6": 4,
+          "iTRAQ4:0": 11,
+          "iTRAQ4:1": 10,
+          "iTRAQ4:2": 8,
+          "iTRAQ4:3": 8,
+          "iTRAQ8X:0": 102,
+          "iTRAQ8X:1": 6,
+          "iTRAQ8X:2": 10,
+          "iTRAQ8X:3": 8
+        },
+        "decoded": 11463,
+        "decoy_hits": {
+          "TMT:0": 22754,
+          "TMT:1": 159,
+          "TMT:2": 6,
+          "TMT:3": 4,
+          "TMT:4": 3,
+          "TMTproX:0": 22835,
+          "TMTproX:1": 91,
+          "iTRAQ4:0": 22690,
+          "iTRAQ4:1": 235,
+          "iTRAQ4:2": 1,
+          "iTRAQ8X:0": 22500,
+          "iTRAQ8X:1": 423,
+          "iTRAQ8X:2": 3
+        },
+        "hits": {
+          "TMT:0": 684,
+          "TMT:1": 175,
+          "TMT:2": 87,
+          "TMT:3": 103,
+          "TMT:4": 10414,
+          "TMTproX:0": 8632,
+          "TMTproX:1": 2828,
+          "TMTproX:2": 3,
+          "iTRAQ4:0": 11426,
+          "iTRAQ4:1": 37,
+          "iTRAQ8X:0": 11337,
+          "iTRAQ8X:1": 126
+        },
+        "minmz_q10": 100.0,
+        "minmz_q50": 100.1,
+        "minmz_q90": 102.0,
+        "n": 22926,
+        "relint_median": {
+          "TMT": 6.041,
+          "TMTproX": 0.017,
+          "iTRAQ4": 0.025,
+          "iTRAQ8X": 0.018
+        }
+      }
+    },
+    "id": "PXD007694__ch_g2_03",
+    "levels": {
+      "1": 3914,
+      "2": 22255,
+      "3": 22926
+    },
+    "ms1_analyzer": {
+      "FTMS": 3914
+    },
+    "ms2_isolation_width_median": 2.0,
+    "path": "in/PXD007694/ch_g2_03.mzML",
+    "stride": 2,
+    "undecodable": 0
+  },
+  "PXD014001__TMT09": {
+    "groups": {
+      "ms2|ITMS|CID": {
+        "chan": {
+          "TMT:0": 106,
+          "TMT:1": 183,
+          "TMT:10": 22,
+          "TMT:2": 183,
+          "TMT:3": 193,
+          "TMT:4": 193,
+          "TMT:5": 237,
+          "TMT:6": 237,
+          "TMT:7": 273,
+          "TMT:8": 275,
+          "TMT:9": 22,
+          "TMTproX:0": 38,
+          "TMTproX:1": 38,
+          "TMTproX:2": 21,
+          "TMTproX:3": 19,
+          "TMTproX:4": 11,
+          "TMTproX:5": 11,
+          "TMTproX:6": 4,
+          "iTRAQ4:0": 4,
+          "iTRAQ4:1": 6,
+          "iTRAQ4:2": 15,
+          "iTRAQ4:3": 8,
+          "iTRAQ8X:0": 1,
+          "iTRAQ8X:1": 1,
+          "iTRAQ8X:2": 6,
+          "iTRAQ8X:3": 10
+        },
+        "decoded": 13913,
+        "decoy_hits": {},
+        "hits": {
+          "TMT:0": 13564,
+          "TMT:1": 3,
+          "TMT:2": 113,
+          "TMT:3": 3,
+          "TMT:4": 230,
+          "TMTproX:0": 13845,
+          "TMTproX:1": 5,
+          "TMTproX:2": 57,
+          "TMTproX:3": 1,
+          "TMTproX:4": 5,
+          "iTRAQ4:0": 13889,
+          "iTRAQ4:1": 16,
+          "iTRAQ4:2": 7,
+          "iTRAQ4:3": 1,
+          "iTRAQ8X:0": 13895,
+          "iTRAQ8X:1": 18
+        },
+        "minmz_q10": 145.8,
+        "minmz_q50": 216.8,
+        "minmz_q90": 309.7,
+        "n": 27826,
+        "relint_median": {
+          "TMT": 0.147,
+          "TMTproX": 0.046,
+          "iTRAQ4": 0.019,
+          "iTRAQ8X": 0.019
+        }
+      },
+      "ms3|FTMS|CID+HCD": {
+        "chan": {
+          "TMT:0": 9100,
+          "TMT:1": 9272,
+          "TMT:10": 774,
+          "TMT:2": 9142,
+          "TMT:3": 9325,
+          "TMT:4": 9385,
+          "TMT:5": 9503,
+          "TMT:6": 9017,
+          "TMT:7": 8795,
+          "TMT:8": 8661,
+          "TMT:9": 1476,
+          "TMTproX:0": 21,
+          "TMTproX:1": 10,
+          "TMTproX:2": 16,
+          "TMTproX:3": 23,
+          "TMTproX:4": 82,
+          "TMTproX:5": 68,
+          "TMTproX:6": 2958,
+          "iTRAQ8X:3": 33
+        },
+        "decoded": 13913,
+        "decoy_hits": {
+          "TMT:0": 27128,
+          "TMT:1": 641,
+          "TMT:2": 23,
+          "TMT:3": 32,
+          "TMT:4": 2,
+          "TMTproX:0": 21703,
+          "TMTproX:1": 5972,
+          "TMTproX:2": 147,
+          "TMTproX:3": 4,
+          "iTRAQ4:0": 27826,
+          "iTRAQ8X:0": 27767,
+          "iTRAQ8X:1": 59
+        },
+        "hits": {
+          "TMT:0": 3288,
+          "TMT:1": 511,
+          "TMT:2": 278,
+          "TMT:3": 331,
+          "TMT:4": 9505,
+          "TMTproX:0": 10812,
+          "TMTproX:1": 3027,
+          "TMTproX:2": 71,
+          "TMTproX:3": 3,
+          "iTRAQ4:0": 13913,
+          "iTRAQ8X:0": 13880,
+          "iTRAQ8X:1": 33
+        },
+        "minmz_q10": 120.1,
+        "minmz_q50": 121.0,
+        "minmz_q90": 126.1,
+        "n": 27826,
+        "relint_median": {
+          "TMT": 2.841,
+          "TMTproX": 0.058,
+          "iTRAQ8X": 0.022
+        }
+      }
+    },
+    "id": "PXD014001__TMT09",
+    "levels": {
+      "1": 7147,
+      "2": 27826,
+      "3": 27826
+    },
+    "ms1_analyzer": {
+      "FTMS": 7147
+    },
+    "ms2_isolation_width_median": 0.7,
+    "path": "in/PXD014001/TMT09.mzML",
+    "stride": 2,
+    "undecodable": 0
+  },
+  "PXD014274__Tg3_R": {
+    "groups": {
+      "ms2|FTMS|HCD": {
+        "chan": {
+          "TMT:0": 1,
+          "TMT:6": 3,
+          "iTRAQ8X:0": 2,
+          "iTRAQ8X:1": 1,
+          "iTRAQ8X:3": 1
+        },
+        "decoded": 5677,
+        "decoy_hits": {
+          "TMT:0": 11343,
+          "TMT:1": 11,
+          "TMTproX:0": 11352,
+          "TMTproX:1": 2,
+          "iTRAQ4:0": 11347,
+          "iTRAQ4:1": 7,
+          "iTRAQ8X:0": 11349,
+          "iTRAQ8X:1": 5
+        },
+        "hits": {
+          "TMT:0": 5673,
+          "TMT:1": 4,
+          "TMTproX:0": 5677,
+          "iTRAQ4:0": 5677,
+          "iTRAQ8X:0": 5673,
+          "iTRAQ8X:1": 4
+        },
+        "minmz_q10": 115.1,
+        "minmz_q50": 303.3,
+        "minmz_q90": 409.2,
+        "n": 11354,
+        "relint_median": {
+          "TMT": 0.024,
+          "iTRAQ8X": 0.067
+        }
+      }
+    },
+    "id": "PXD014274__Tg3_R",
+    "levels": {
+      "1": 27517,
+      "2": 11354
+    },
+    "ms1_analyzer": {
+      "FTMS": 27517
+    },
+    "ms2_isolation_width_median": 1.5,
+    "path": "in/PXD014274/Tg3_R.mzML",
+    "stride": 2,
+    "undecodable": 0
+  },
+  "PXD014616__Bh13CM_bjhb4_1": {
+    "groups": {
+      "ms2|FTMS|HCD": {
+        "chan": {
+          "TMT:0": 1172,
+          "TMT:1": 13900,
+          "TMT:10": 910,
+          "TMT:2": 13891,
+          "TMT:3": 13896,
+          "TMT:4": 13899,
+          "TMT:5": 13895,
+          "TMT:6": 13885,
+          "TMT:7": 12898,
+          "TMT:8": 10150,
+          "TMT:9": 13896,
+          "TMTproX:0": 9711,
+          "TMTproX:1": 1,
+          "TMTproX:2": 15,
+          "TMTproX:3": 2,
+          "iTRAQ4:0": 262,
+          "iTRAQ4:1": 130,
+          "iTRAQ4:3": 94,
+          "iTRAQ8X:0": 613,
+          "iTRAQ8X:1": 4,
+          "iTRAQ8X:2": 2,
+          "iTRAQ8X:3": 2
+        },
+        "decoded": 13913,
+        "decoy_hits": {
+          "TMT:0": 27126,
+          "TMT:1": 670,
+          "TMT:2": 28,
+          "TMT:3": 2,
+          "TMTproX:0": 27790,
+          "TMTproX:1": 36,
+          "iTRAQ4:0": 27571,
+          "iTRAQ4:1": 233,
+          "iTRAQ4:2": 13,
+          "iTRAQ4:3": 8,
+          "iTRAQ4:4": 1,
+          "iTRAQ8X:0": 27780,
+          "iTRAQ8X:1": 46
+        },
+        "hits": {
+          "TMT:0": 4,
+          "TMT:1": 2,
+          "TMT:2": 6,
+          "TMT:3": 4,
+          "TMT:4": 13897,
+          "TMTproX:0": 4198,
+          "TMTproX:1": 9701,
+          "TMTproX:2": 14,
+          "iTRAQ4:0": 13647,
+          "iTRAQ4:1": 129,
+          "iTRAQ4:2": 54,
+          "iTRAQ4:3": 83,
+          "iTRAQ8X:0": 13293,
+          "iTRAQ8X:1": 619,
+          "iTRAQ8X:2": 1
+        },
+        "minmz_q10": 100.1,
+        "minmz_q50": 100.1,
+        "minmz_q90": 101.1,
+        "n": 27826,
+        "relint_median": {
+          "TMT": 3.725,
+          "TMTproX": 0.026,
+          "iTRAQ4": 0.036,
+          "iTRAQ8X": 0.021
+        }
+      }
+    },
+    "id": "PXD014616__Bh13CM_bjhb4_1",
+    "levels": {
+      "1": 6077,
+      "2": 27826
+    },
+    "ms1_analyzer": {
+      "FTMS": 6077
+    },
+    "ms2_isolation_width_median": 2.0,
+    "path": "in/PXD014616/Bh13CM_bjhb4_1.mzML",
+    "stride": 2,
+    "undecodable": 0
+  },
+  "PXD015559__Fraction_11": {
+    "groups": {
+      "ms2|ITMS|CID": {
+        "chan": {
+          "TMT:0": 266,
+          "TMT:1": 512,
+          "TMT:10": 925,
+          "TMT:2": 512,
+          "TMT:3": 552,
+          "TMT:4": 552,
+          "TMT:5": 586,
+          "TMT:6": 586,
+          "TMT:7": 485,
+          "TMT:8": 485,
+          "TMT:9": 925,
+          "TMTproX:0": 73,
+          "TMTproX:1": 73,
+          "TMTproX:2": 33,
+          "TMTproX:3": 33,
+          "TMTproX:4": 1,
+          "TMTproX:5": 1,
+          "TMTproX:6": 1,
+          "iTRAQ4:1": 2,
+          "iTRAQ4:2": 3,
+          "iTRAQ4:3": 1,
+          "iTRAQ8X:2": 3,
+          "iTRAQ8X:3": 4
+        },
+        "decoded": 15456,
+        "decoy_hits": {},
+        "hits": {
+          "TMT:0": 14487,
+          "TMT:1": 2,
+          "TMT:2": 276,
+          "TMT:3": 1,
+          "TMT:4": 690,
+          "TMTproX:0": 15352,
+          "TMTproX:1": 1,
+          "TMTproX:2": 100,
+          "TMTproX:4": 3,
+          "iTRAQ4:0": 15450,
+          "iTRAQ4:1": 6,
+          "iTRAQ8X:0": 15449,
+          "iTRAQ8X:1": 7
+        },
+        "minmz_q10": 132.0,
+        "minmz_q50": 195.1,
+        "minmz_q90": 288.5,
+        "n": 30912,
+        "relint_median": {
+          "TMT": 0.148,
+          "TMTproX": 0.028,
+          "iTRAQ4": 0.011,
+          "iTRAQ8X": 0.025
+        }
+      },
+      "ms3|FTMS|CID+HCD": {
+        "chan": {
+          "TMT:0": 13085,
+          "TMT:1": 13900,
+          "TMT:10": 2549,
+          "TMT:2": 5906,
+          "TMT:3": 8927,
+          "TMT:4": 13749,
+          "TMT:5": 13667,
+          "TMT:6": 6792,
+          "TMT:7": 9839,
+          "TMT:8": 12181,
+          "TMT:9": 14235,
+          "TMTproX:0": 6057,
+          "TMTproX:1": 9,
+          "TMTproX:2": 12,
+          "TMTproX:3": 11,
+          "TMTproX:4": 8,
+          "TMTproX:5": 9,
+          "TMTproX:6": 8,
+          "iTRAQ4:0": 15,
+          "iTRAQ4:1": 17,
+          "iTRAQ4:2": 19,
+          "iTRAQ4:3": 7,
+          "iTRAQ8X:0": 32,
+          "iTRAQ8X:1": 13,
+          "iTRAQ8X:2": 5,
+          "iTRAQ8X:3": 4
+        },
+        "decoded": 15437,
+        "decoy_hits": {
+          "TMT:0": 30418,
+          "TMT:1": 453,
+          "TMT:2": 3,
+          "TMTproX:0": 30763,
+          "TMTproX:1": 111,
+          "iTRAQ4:0": 30754,
+          "iTRAQ4:1": 120,
+          "iTRAQ8X:0": 30786,
+          "iTRAQ8X:1": 88
+        },
+        "hits": {
+          "TMT:0": 982,
+          "TMT:1": 282,
+          "TMT:2": 287,
+          "TMT:3": 324,
+          "TMT:4": 13562,
+          "TMTproX:0": 9342,
+          "TMTproX:1": 6076,
+          "TMTproX:2": 19,
+          "iTRAQ4:0": 15380,
+          "iTRAQ4:1": 56,
+          "iTRAQ4:2": 1,
+          "iTRAQ8X:0": 15383,
+          "iTRAQ8X:1": 54
+        },
+        "minmz_q10": 100.4,
+        "minmz_q50": 102.1,
+        "minmz_q90": 110.1,
+        "n": 30873,
+        "relint_median": {
+          "TMT": 2.5,
+          "TMTproX": 0.027,
+          "iTRAQ4": 0.023,
+          "iTRAQ8X": 0.028
+        }
+      }
+    },
+    "id": "PXD015559__Fraction_11",
+    "levels": {
+      "1": 9151,
+      "2": 30912,
+      "3": 30873
+    },
+    "ms1_analyzer": {
+      "FTMS": 9151
+    },
+    "ms2_isolation_width_median": 1.2,
+    "path": "in/PXD015559/Fraction_11.mzML",
+    "stride": 2,
+    "undecodable": 0
+  },
+  "PXD017216__Replicate2_Phospho_11": {
+    "groups": {
+      "ms2|FTMS|HCD": {
+        "chan": {
+          "TMT:0": 18011,
+          "TMT:1": 924,
+          "TMT:10": 18135,
+          "TMT:2": 17979,
+          "TMT:3": 730,
+          "TMT:4": 17875,
+          "TMT:5": 892,
+          "TMT:6": 18052,
+          "TMT:7": 2080,
+          "TMT:8": 18038,
+          "TMT:9": 1369,
+          "TMTproX:0": 18,
+          "TMTproX:1": 1595,
+          "TMTproX:2": 6,
+          "TMTproX:3": 3,
+          "TMTproX:4": 4,
+          "TMTproX:5": 4,
+          "TMTproX:6": 7,
+          "iTRAQ4:0": 25,
+          "iTRAQ4:1": 4,
+          "iTRAQ4:2": 9,
+          "iTRAQ4:3": 4,
+          "iTRAQ8X:0": 26,
+          "iTRAQ8X:1": 6,
+          "iTRAQ8X:2": 4,
+          "iTRAQ8X:3": 5
+        },
+        "decoded": 19513,
+        "decoy_hits": {
+          "TMT:0": 38173,
+          "TMT:1": 826,
+          "TMT:2": 25,
+          "TMT:3": 1,
+          "TMT:4": 1,
+          "TMTproX:0": 38967,
+          "TMTproX:1": 59,
+          "iTRAQ4:0": 38793,
+          "iTRAQ4:1": 220,
+          "iTRAQ4:2": 13,
+          "iTRAQ8X:0": 38881,
+          "iTRAQ8X:1": 145
+        },
+        "hits": {
+          "TMT:0": 859,
+          "TMT:1": 267,
+          "TMT:2": 244,
+          "TMT:3": 183,
+          "TMT:4": 17960,
+          "TMTproX:0": 17889,
+          "TMTproX:1": 1611,
+          "TMTproX:2": 13,
+          "iTRAQ4:0": 19471,
+          "iTRAQ4:1": 42,
+          "iTRAQ8X:0": 19472,
+          "iTRAQ8X:1": 41
+        },
+        "minmz_q10": 100.8,
+        "minmz_q50": 102.0,
+        "minmz_q90": 110.1,
+        "n": 39026,
+        "relint_median": {
+          "TMT": 2.319,
+          "TMTproX": 0.024,
+          "iTRAQ4": 0.026,
+          "iTRAQ8X": 0.032
+        }
+      }
+    },
+    "id": "PXD017216__Replicate2_Phospho_11",
+    "levels": {
+      "1": 8188,
+      "2": 39026
+    },
+    "ms1_analyzer": {
+      "FTMS": 8188
+    },
+    "ms2_isolation_width_median": 1.2,
+    "path": "in/PXD017216/Replicate2_Phospho_11.mzML",
+    "stride": 2,
+    "undecodable": 0
+  },
+  "PXD019532__Prog_pig_1-10_HpH_ii_3": {
+    "groups": {
+      "ms2|FTMS|HCD": {
+        "chan": {
+          "TMT:0": 34,
+          "TMT:1": 63,
+          "TMT:10": 12,
+          "TMT:2": 48,
+          "TMT:3": 16,
+          "TMT:4": 18,
+          "TMT:5": 21,
+          "TMT:6": 23,
+          "TMT:7": 12,
+          "TMT:8": 18,
+          "TMT:9": 17,
+          "TMTproX:0": 16,
+          "TMTproX:1": 14,
+          "TMTproX:2": 10,
+          "TMTproX:3": 11,
+          "TMTproX:4": 9,
+          "TMTproX:5": 6,
+          "TMTproX:6": 14,
+          "iTRAQ4:0": 36421,
+          "iTRAQ4:1": 36699,
+          "iTRAQ4:2": 36577,
+          "iTRAQ4:3": 38239,
+          "iTRAQ8X:0": 42044,
+          "iTRAQ8X:1": 41881,
+          "iTRAQ8X:2": 37340,
+          "iTRAQ8X:3": 37097
+        },
+        "decoded": 50117,
+        "decoy_hits": {
+          "TMT:0": 99361,
+          "TMT:1": 859,
+          "TMT:2": 14,
+          "TMTproX:0": 100004,
+          "TMTproX:1": 229,
+          "TMTproX:2": 1,
+          "iTRAQ4:0": 90157,
+          "iTRAQ4:1": 3538,
+          "iTRAQ4:2": 2371,
+          "iTRAQ4:3": 4160,
+          "iTRAQ4:4": 8,
+          "iTRAQ8X:0": 93363,
+          "iTRAQ8X:1": 6848,
+          "iTRAQ8X:2": 23
+        },
+        "hits": {
+          "TMT:0": 49845,
+          "TMT:1": 264,
+          "TMT:2": 7,
+          "TMT:4": 1,
+          "TMTproX:0": 50038,
+          "TMTproX:1": 78,
+          "TMTproX:2": 1,
+          "iTRAQ4:0": 8737,
+          "iTRAQ4:1": 3206,
+          "iTRAQ4:2": 2572,
+          "iTRAQ4:3": 2822,
+          "iTRAQ4:4": 32780,
+          "iTRAQ8X:0": 5785,
+          "iTRAQ8X:1": 3008,
+          "iTRAQ8X:2": 3245,
+          "iTRAQ8X:3": 3452,
+          "iTRAQ8X:4": 34627
+        },
+        "minmz_q10": 100.1,
+        "minmz_q50": 102.0,
+        "minmz_q90": 113.1,
+        "n": 100234,
+        "relint_median": {
+          "TMT": 0.06,
+          "TMTproX": 0.081,
+          "iTRAQ4": 1.504,
+          "iTRAQ8X": 1.906
+        }
+      }
+    },
+    "id": "PXD019532__Prog_pig_1-10_HpH_ii_3",
+    "levels": {
+      "1": 47793,
+      "2": 100234
+    },
+    "ms1_analyzer": {
+      "FTMS": 47793
+    },
+    "ms2_isolation_width_median": 2.0,
+    "path": "in/PXD019532/Prog_pig_1-10_HpH_ii_3.mzML",
+    "stride": 2,
+    "undecodable": 0
+  },
+  "PXD021560__Rono_TMT_6plex": {
+    "groups": {
+      "ms2|FTMS|HCD": {
+        "chan": {
+          "TMT:0": 32561,
+          "TMT:1": 2832,
+          "TMT:10": 1307,
+          "TMT:2": 32161,
+          "TMT:3": 906,
+          "TMT:4": 32138,
+          "TMT:5": 2888,
+          "TMT:6": 31300,
+          "TMT:7": 31472,
+          "TMT:8": 4674,
+          "TMT:9": 31593,
+          "TMTproX:0": 13327,
+          "TMTproX:1": 1,
+          "TMTproX:2": 3,
+          "TMTproX:3": 2,
+          "TMTproX:4": 1,
+          "TMTproX:5": 4,
+          "TMTproX:6": 4,
+          "iTRAQ4:0": 32,
+          "iTRAQ4:1": 5,
+          "iTRAQ4:2": 8,
+          "iTRAQ4:3": 11,
+          "iTRAQ8X:0": 46,
+          "iTRAQ8X:1": 6,
+          "iTRAQ8X:2": 8,
+          "iTRAQ8X:3": 16
+        },
+        "decoded": 33656,
+        "decoy_hits": {
+          "TMT:0": 55427,
+          "TMT:1": 10575,
+          "TMT:2": 1228,
+          "TMT:3": 81,
+          "TMT:4": 1,
+          "TMTproX:0": 67234,
+          "TMTproX:1": 78,
+          "iTRAQ4:0": 67214,
+          "iTRAQ4:1": 98,
+          "iTRAQ8X:0": 67246,
+          "iTRAQ8X:1": 66
+        },
+        "hits": {
+          "TMT:0": 828,
+          "TMT:1": 244,
+          "TMT:2": 257,
+          "TMT:3": 765,
+          "TMT:4": 31562,
+          "TMTproX:0": 20318,
+          "TMTproX:1": 13334,
+          "TMTproX:2": 4,
+          "iTRAQ4:0": 33604,
+          "iTRAQ4:1": 49,
+          "iTRAQ4:2": 2,
+          "iTRAQ4:3": 1,
+          "iTRAQ8X:0": 33580,
+          "iTRAQ8X:1": 76
+        },
+        "minmz_q10": 100.1,
+        "minmz_q50": 101.1,
+        "minmz_q90": 110.1,
+        "n": 67311,
+        "relint_median": {
+          "TMT": 3.002,
+          "TMTproX": 0.02,
+          "iTRAQ4": 0.017,
+          "iTRAQ8X": 0.025
+        }
+      }
+    },
+    "id": "PXD021560__Rono_TMT_6plex",
+    "levels": {
+      "1": 15983,
+      "2": 67311
+    },
+    "ms1_analyzer": {
+      "FTMS": 15983
+    },
+    "ms2_isolation_width_median": 1.6,
+    "path": "in/PXD021560/Rono_TMT_6plex.mzML",
+    "stride": 2,
+    "undecodable": 0
+  },
+  "PXD022181__180518FJKU27-C3K3-EL60": {
+    "groups": {
+      "ms2|ITMS|CID": {
+        "chan": {
+          "TMT:0": 2,
+          "TMT:1": 47,
+          "TMT:10": 47,
+          "TMT:2": 47,
+          "TMT:3": 12,
+          "TMT:4": 12,
+          "TMT:5": 45,
+          "TMT:6": 45,
+          "TMT:7": 372,
+          "TMT:8": 372,
+          "TMT:9": 48,
+          "TMTproX:0": 67,
+          "TMTproX:1": 67,
+          "TMTproX:2": 56,
+          "TMTproX:3": 56,
+          "TMTproX:4": 19,
+          "TMTproX:5": 19,
+          "TMTproX:6": 85,
+          "iTRAQ4:0": 193,
+          "iTRAQ4:1": 80,
+          "iTRAQ4:2": 23,
+          "iTRAQ8X:1": 18,
+          "iTRAQ8X:2": 8,
+          "iTRAQ8X:3": 71
+        },
+        "decoded": 7683,
+        "decoy_hits": {},
+        "hits": {
+          "TMT:0": 7272,
+          "TMT:2": 313,
+          "TMT:3": 1,
+          "TMT:4": 97,
+          "TMTproX:0": 7498,
+          "TMTproX:1": 71,
+          "TMTproX:2": 79,
+          "TMTproX:3": 10,
+          "TMTproX:4": 25,
+          "iTRAQ4:0": 7463,
+          "iTRAQ4:1": 148,
+          "iTRAQ4:2": 68,
+          "iTRAQ4:3": 4,
+          "iTRAQ8X:0": 7594,
+          "iTRAQ8X:1": 82,
+          "iTRAQ8X:2": 6,
+          "iTRAQ8X:3": 1
+        },
+        "minmz_q10": 120.2,
+        "minmz_q50": 186.1,
+        "minmz_q90": 288.6,
+        "n": 15369,
+        "relint_median": {
+          "TMT": 0.049,
+          "TMTproX": 0.032,
+          "iTRAQ4": 0.038,
+          "iTRAQ8X": 0.017
+        }
+      }
+    },
+    "id": "PXD022181__180518FJKU27-C3K3-EL60",
+    "levels": {
+      "1": 3579,
+      "2": 15369
+    },
+    "ms1_analyzer": {
+      "FTMS": 3579
+    },
+    "ms2_isolation_width_median": 2.0,
+    "path": "in/PXD022181/180518FJKU27-C3K3-EL60.mzML",
+    "stride": 2,
+    "undecodable": 0
+  },
+  "PXD024282__ea04668": {
+    "groups": {
+      "ms2|ITMS|CID": {
+        "chan": {
+          "TMT:0": 147,
+          "TMT:1": 244,
+          "TMT:10": 366,
+          "TMT:2": 243,
+          "TMT:3": 252,
+          "TMT:4": 252,
+          "TMT:5": 291,
+          "TMT:6": 291,
+          "TMT:7": 347,
+          "TMT:8": 347,
+          "TMT:9": 366,
+          "TMTproX:0": 388,
+          "TMTproX:1": 389,
+          "TMTproX:2": 444,
+          "TMTproX:3": 443,
+          "TMTproX:4": 309,
+          "TMTproX:5": 308,
+          "TMTproX:6": 11,
+          "iTRAQ4:1": 1,
+          "iTRAQ4:2": 2,
+          "iTRAQ4:3": 1,
+          "iTRAQ8X:1": 1,
+          "iTRAQ8X:2": 2,
+          "iTRAQ8X:3": 4
+        },
+        "decoded": 11201,
+        "decoy_hits": {},
+        "hits": {
+          "TMT:0": 10748,
+          "TMT:1": 2,
+          "TMT:2": 101,
+          "TMT:3": 1,
+          "TMT:4": 349,
+          "TMTproX:0": 10683,
+          "TMTproX:1": 5,
+          "TMTproX:2": 138,
+          "TMTproX:3": 5,
+          "TMTproX:4": 370,
+          "iTRAQ4:0": 11197,
+          "iTRAQ4:1": 4,
+          "iTRAQ8X:0": 11196,
+          "iTRAQ8X:1": 3,
+          "iTRAQ8X:2": 2
+        },
+        "minmz_q10": 141.0,
+        "minmz_q50": 188.8,
+        "minmz_q90": 254.1,
+        "n": 22405,
+        "relint_median": {
+          "TMT": 0.222,
+          "TMTproX": 0.171,
+          "iTRAQ4": 0.055,
+          "iTRAQ8X": 0.053
+        }
+      },
+      "ms3|FTMS|CID+HCD": {
+        "chan": {
+          "TMT:0": 5075,
+          "TMT:1": 5052,
+          "TMT:10": 5122,
+          "TMT:2": 5115,
+          "TMT:3": 5027,
+          "TMT:4": 5077,
+          "TMT:5": 5058,
+          "TMT:6": 5158,
+          "TMT:7": 5132,
+          "TMT:8": 5117,
+          "TMT:9": 5104,
+          "TMTproX:0": 5110,
+          "TMTproX:1": 5065,
+          "TMTproX:2": 5094,
+          "TMTproX:3": 5054,
+          "TMTproX:4": 4997,
+          "TMTproX:5": 498,
+          "TMTproX:6": 53,
+          "iTRAQ4:0": 8,
+          "iTRAQ4:1": 9,
+          "iTRAQ4:2": 11,
+          "iTRAQ4:3": 7,
+          "iTRAQ8X:0": 21,
+          "iTRAQ8X:1": 6,
+          "iTRAQ8X:2": 8,
+          "iTRAQ8X:3": 11
+        },
+        "decoded": 6018,
+        "decoy_hits": {
+          "TMT:0": 11880,
+          "TMT:1": 147,
+          "TMT:2": 4,
+          "TMT:3": 1,
+          "TMT:4": 4,
+          "TMTproX:0": 11966,
+          "TMTproX:1": 70,
+          "iTRAQ4:0": 11961,
+          "iTRAQ4:1": 74,
+          "iTRAQ4:2": 1,
+          "iTRAQ8X:0": 11962,
+          "iTRAQ8X:1": 74
+        },
+        "hits": {
+          "TMT:0": 582,
+          "TMT:1": 115,
+          "TMT:2": 66,
+          "TMT:3": 50,
+          "TMT:4": 5205,
+          "TMTproX:0": 687,
+          "TMTproX:1": 158,
+          "TMTproX:2": 106,
+          "TMTproX:3": 106,
+          "TMTproX:4": 4961,
+          "iTRAQ4:0": 5983,
+          "iTRAQ4:1": 35,
+          "iTRAQ8X:0": 5972,
+          "iTRAQ8X:1": 46
+        },
+        "minmz_q10": 100.4,
+        "minmz_q50": 102.0,
+        "minmz_q90": 106.3,
+        "n": 12036,
+        "relint_median": {
+          "TMT": 5.266,
+          "TMTproX": 2.592,
+          "iTRAQ4": 0.024,
+          "iTRAQ8X": 0.024
+        }
+      }
+    },
+    "id": "PXD024282__ea04668",
+    "levels": {
+      "1": 5304,
+      "2": 22405,
+      "3": 12036
+    },
+    "ms1_analyzer": {
+      "FTMS": 5304
+    },
+    "ms2_isolation_width_median": 0.7,
+    "path": "in/PXD024282/ea04668.mzML",
+    "stride": 2,
+    "undecodable": 0
+  },
+  "PXD028364__QEP2_11215_YMER_396_1_160420": {
+    "groups": {
+      "ms2|FTMS|HCD": {
+        "chan": {
+          "TMT:0": 12,
+          "TMT:1": 6,
+          "TMT:10": 4,
+          "TMT:2": 3,
+          "TMT:3": 4,
+          "TMT:4": 2,
+          "TMT:5": 3,
+          "TMT:6": 9,
+          "TMT:7": 5,
+          "TMT:8": 2,
+          "TMT:9": 6,
+          "TMTproX:0": 1,
+          "TMTproX:1": 1,
+          "TMTproX:2": 4,
+          "TMTproX:3": 4,
+          "TMTproX:4": 2,
+          "TMTproX:5": 5,
+          "TMTproX:6": 2,
+          "iTRAQ4:0": 5,
+          "iTRAQ4:1": 16,
+          "iTRAQ4:2": 5,
+          "iTRAQ4:3": 4,
+          "iTRAQ8X:0": 26,
+          "iTRAQ8X:1": 4,
+          "iTRAQ8X:2": 4,
+          "iTRAQ8X:3": 6
+        },
+        "decoded": 22457,
+        "decoy_hits": {
+          "TMT:0": 43678,
+          "TMT:1": 1181,
+          "TMT:2": 53,
+          "TMT:3": 2,
+          "TMTproX:0": 44864,
+          "TMTproX:1": 50,
+          "iTRAQ4:0": 44594,
+          "iTRAQ4:1": 320,
+          "iTRAQ8X:0": 44560,
+          "iTRAQ8X:1": 354
+        },
+        "hits": {
+          "TMT:0": 22403,
+          "TMT:1": 52,
+          "TMT:2": 2,
+          "TMTproX:0": 22438,
+          "TMTproX:1": 19,
+          "iTRAQ4:0": 22427,
+          "iTRAQ4:1": 30,
+          "iTRAQ8X:0": 22417,
+          "iTRAQ8X:1": 40
+        },
+        "minmz_q10": 101.1,
+        "minmz_q50": 103.0,
+        "minmz_q90": 123.0,
+        "n": 44913,
+        "relint_median": {
+          "TMT": 0.063,
+          "TMTproX": 0.07,
+          "iTRAQ4": 0.041,
+          "iTRAQ8X": 0.038
+        }
+      }
+    },
+    "id": "PXD028364__QEP2_11215_YMER_396_1_160420",
+    "levels": {
+      "1": 7459,
+      "2": 44913
+    },
+    "ms1_analyzer": {
+      "FTMS": 7459
+    },
+    "ms2_isolation_width_median": 1.8,
+    "path": "in/PXD028364/QEP2_11215_YMER_396_1_160420.mzML",
+    "stride": 2,
+    "undecodable": 0
+  },
+  "PXD029808__vf_ratcsf_tmt48_20": {
+    "groups": {
+      "ms2|FTMS|HCD": {
+        "chan": {
+          "TMT:0": 1299,
+          "TMT:1": 1212,
+          "TMT:10": 159,
+          "TMT:2": 2111,
+          "TMT:3": 1306,
+          "TMT:4": 4117,
+          "TMT:5": 2467,
+          "TMT:6": 3849,
+          "TMT:7": 3935,
+          "TMT:8": 4047,
+          "TMT:9": 4123,
+          "TMTproX:0": 177,
+          "TMTproX:1": 43,
+          "TMTproX:2": 46,
+          "TMTproX:3": 36,
+          "TMTproX:4": 25,
+          "TMTproX:5": 27,
+          "TMTproX:6": 1,
+          "iTRAQ4:0": 12,
+          "iTRAQ4:1": 11,
+          "iTRAQ4:3": 1,
+          "iTRAQ8X:0": 19,
+          "iTRAQ8X:1": 1,
+          "iTRAQ8X:2": 1,
+          "iTRAQ8X:3": 3
+        },
+        "decoded": 5009,
+        "decoy_hits": {
+          "TMT:0": 9618,
+          "TMT:1": 383,
+          "TMT:2": 17,
+          "TMTproX:0": 9723,
+          "TMTproX:1": 292,
+          "TMTproX:2": 2,
+          "TMTproX:3": 1,
+          "iTRAQ4:0": 9988,
+          "iTRAQ4:1": 29,
+          "iTRAQ4:3": 1,
+          "iTRAQ8X:0": 9987,
+          "iTRAQ8X:1": 31
+        },
+        "hits": {
+          "TMT:0": 383,
+          "TMT:1": 301,
+          "TMT:2": 239,
+          "TMT:3": 250,
+          "TMT:4": 3836,
+          "TMTproX:0": 4678,
+          "TMTproX:1": 315,
+          "TMTproX:2": 11,
+          "TMTproX:3": 3,
+          "TMTproX:4": 2,
+          "iTRAQ4:0": 4990,
+          "iTRAQ4:1": 15,
+          "iTRAQ4:2": 3,
+          "iTRAQ4:3": 1,
+          "iTRAQ8X:0": 4985,
+          "iTRAQ8X:1": 24
+        },
+        "minmz_q10": 110.1,
+        "minmz_q50": 110.1,
+        "minmz_q90": 119.4,
+        "n": 10018,
+        "relint_median": {
+          "TMT": 0.615,
+          "TMTproX": 0.039,
+          "iTRAQ4": 0.033,
+          "iTRAQ8X": 0.081
+        }
+      }
+    },
+    "id": "PXD029808__vf_ratcsf_tmt48_20",
+    "levels": {
+      "1": 1577,
+      "2": 10018
+    },
+    "ms1_analyzer": {
+      "FTMS": 1577
+    },
+    "ms2_isolation_width_median": 0.7,
+    "path": "in/PXD029808/vf_ratcsf_tmt48_20.mzML",
+    "stride": 2,
+    "undecodable": 0
+  },
+  "PXD031534__ACE_0653-03_MK115": {
+    "groups": {
+      "ms2|ITMS|CID": {
+        "chan": {
+          "TMT:0": 16,
+          "TMT:1": 36,
+          "TMT:10": 34,
+          "TMT:2": 36,
+          "TMT:3": 19,
+          "TMT:4": 19,
+          "TMT:5": 30,
+          "TMT:6": 30,
+          "TMT:7": 17,
+          "TMT:8": 17,
+          "TMT:9": 34,
+          "TMTproX:0": 25,
+          "TMTproX:1": 25,
+          "TMTproX:2": 154,
+          "TMTproX:3": 155,
+          "TMTproX:4": 36,
+          "TMTproX:5": 36,
+          "TMTproX:6": 57,
+          "iTRAQ4:0": 16,
+          "iTRAQ4:1": 36,
+          "iTRAQ4:2": 9,
+          "iTRAQ4:3": 11,
+          "iTRAQ8X:0": 23,
+          "iTRAQ8X:1": 8,
+          "iTRAQ8X:2": 30,
+          "iTRAQ8X:3": 48
+        },
+        "decoded": 1607,
+        "decoy_hits": {},
+        "hits": {
+          "TMT:0": 1502,
+          "TMT:1": 7,
+          "TMT:2": 66,
+          "TMT:3": 4,
+          "TMT:4": 28,
+          "TMTproX:0": 1407,
+          "TMTproX:1": 18,
+          "TMTproX:2": 123,
+          "TMTproX:3": 27,
+          "TMTproX:4": 32,
+          "iTRAQ4:0": 1546,
+          "iTRAQ4:1": 50,
+          "iTRAQ4:2": 11,
+          "iTRAQ8X:0": 1526,
+          "iTRAQ8X:1": 61,
+          "iTRAQ8X:2": 12,
+          "iTRAQ8X:3": 8
+        },
+        "minmz_q10": 119.1,
+        "minmz_q50": 198.1,
+        "minmz_q90": 708.5,
+        "n": 3213,
+        "relint_median": {
+          "TMT": 0.052,
+          "TMTproX": 0.077,
+          "iTRAQ4": 0.025,
+          "iTRAQ8X": 0.025
+        }
+      }
+    },
+    "id": "PXD031534__ACE_0653-03_MK115",
+    "levels": {
+      "1": 1627,
+      "2": 3213
+    },
+    "ms1_analyzer": {
+      "FTMS": 1627
+    },
+    "ms2_isolation_width_median": 2.0,
+    "path": "in/PXD031534/ACE_0653-03_MK115.mzML",
+    "stride": 2,
+    "undecodable": 0
+  },
+  "PXD038900__20200917LU1_Li_LP_JM_01_04": {
+    "groups": {
+      "ms2|ITMS|CID": {
+        "chan": {
+          "TMT:0": 153,
+          "TMT:1": 298,
+          "TMT:10": 451,
+          "TMT:2": 298,
+          "TMT:3": 340,
+          "TMT:4": 340,
+          "TMT:5": 387,
+          "TMT:6": 387,
+          "TMT:7": 443,
+          "TMT:8": 443,
+          "TMT:9": 451,
+          "TMTproX:0": 463,
+          "TMTproX:1": 463,
+          "TMTproX:2": 508,
+          "TMTproX:3": 508,
+          "TMTproX:4": 330,
+          "TMTproX:5": 329,
+          "TMTproX:6": 9,
+          "iTRAQ4:0": 1,
+          "iTRAQ4:1": 10,
+          "iTRAQ4:2": 15,
+          "iTRAQ4:3": 1,
+          "iTRAQ8X:1": 1,
+          "iTRAQ8X:2": 6,
+          "iTRAQ8X:3": 8
+        },
+        "decoded": 15616,
+        "decoy_hits": {},
+        "hits": {
+          "TMT:0": 15060,
+          "TMT:1": 5,
+          "TMT:2": 117,
+          "TMT:4": 434,
+          "TMTproX:0": 15042,
+          "TMTproX:1": 8,
+          "TMTproX:2": 122,
+          "TMTproX:4": 444,
+          "iTRAQ4:0": 15593,
+          "iTRAQ4:1": 19,
+          "iTRAQ4:2": 4,
+          "iTRAQ8X:0": 15601,
+          "iTRAQ8X:1": 15
+        },
+        "minmz_q10": 143.1,
+        "minmz_q50": 201.3,
+        "minmz_q90": 304.2,
+        "n": 31231,
+        "relint_median": {
+          "TMT": 0.203,
+          "TMTproX": 0.139,
+          "iTRAQ4": 0.026,
+          "iTRAQ8X": 0.02
+        }
+      },
+      "ms3|FTMS|CID+HCD": {
+        "chan": {
+          "TMT:0": 12485,
+          "TMT:1": 12503,
+          "TMT:10": 12592,
+          "TMT:2": 12570,
+          "TMT:3": 12598,
+          "TMT:4": 12681,
+          "TMT:5": 12623,
+          "TMT:6": 12608,
+          "TMT:7": 12623,
+          "TMT:8": 12559,
+          "TMT:9": 12574,
+          "TMTproX:0": 12584,
+          "TMTproX:1": 12638,
+          "TMTproX:2": 12618,
+          "TMTproX:3": 12549,
+          "TMTproX:4": 12515,
+          "TMTproX:5": 3233,
+          "TMTproX:6": 329,
+          "iTRAQ4:0": 22,
+          "iTRAQ4:1": 18,
+          "iTRAQ4:2": 18,
+          "iTRAQ4:3": 9,
+          "iTRAQ8X:0": 222,
+          "iTRAQ8X:1": 14,
+          "iTRAQ8X:2": 11,
+          "iTRAQ8X:3": 14
+        },
+        "decoded": 15592,
+        "decoy_hits": {
+          "TMT:0": 30756,
+          "TMT:1": 369,
+          "TMT:2": 25,
+          "TMT:3": 7,
+          "TMT:4": 27,
+          "TMTproX:0": 30980,
+          "TMTproX:1": 202,
+          "TMTproX:2": 1,
+          "TMTproX:3": 1,
+          "iTRAQ4:0": 30980,
+          "iTRAQ4:1": 201,
+          "iTRAQ4:2": 3,
+          "iTRAQ8X:0": 30785,
+          "iTRAQ8X:1": 399
+        },
+        "hits": {
+          "TMT:0": 2282,
+          "TMT:1": 367,
+          "TMT:2": 144,
+          "TMT:3": 108,
+          "TMT:4": 12691,
+          "TMTproX:0": 2553,
+          "TMTproX:1": 347,
+          "TMTproX:2": 139,
+          "TMTproX:3": 140,
+          "TMTproX:4": 12413,
+          "iTRAQ4:0": 15526,
+          "iTRAQ4:1": 65,
+          "iTRAQ4:2": 1,
+          "iTRAQ8X:0": 15331,
+          "iTRAQ8X:1": 261
+        },
+        "minmz_q10": 100.0,
+        "minmz_q50": 101.1,
+        "minmz_q90": 104.6,
+        "n": 31183,
+        "relint_median": {
+          "TMT": 6.042,
+          "TMTproX": 3.236,
+          "iTRAQ4": 0.028,
+          "iTRAQ8X": 0.018
+        }
+      }
+    },
+    "id": "PXD038900__20200917LU1_Li_LP_JM_01_04",
+    "levels": {
+      "1": 6624,
+      "2": 31231,
+      "3": 31183
+    },
+    "ms1_analyzer": {
+      "FTMS": 6624
+    },
+    "ms2_isolation_width_median": 0.7,
+    "path": "in/PXD038900/20200917LU1_Li_LP_JM_01_04.mzML",
+    "stride": 2,
+    "undecodable": 0
+  },
+  "PXD039509__Batch6-Frxn13-TR1": {
+    "groups": {
+      "ms2|FTMS|HCD": {
+        "chan": {
+          "TMT:0": 19192,
+          "TMT:1": 19316,
+          "TMT:10": 19397,
+          "TMT:2": 19402,
+          "TMT:3": 19632,
+          "TMT:4": 19861,
+          "TMT:5": 19485,
+          "TMT:6": 19534,
+          "TMT:7": 19903,
+          "TMT:8": 19583,
+          "TMT:9": 19508,
+          "TMTproX:0": 20059,
+          "TMTproX:1": 19520,
+          "TMTproX:2": 19945,
+          "TMTproX:3": 19634,
+          "TMTproX:4": 19295,
+          "TMTproX:5": 493,
+          "TMTproX:6": 195,
+          "iTRAQ4:0": 26,
+          "iTRAQ4:1": 14,
+          "iTRAQ4:2": 5,
+          "iTRAQ4:3": 9,
+          "iTRAQ8X:0": 451,
+          "iTRAQ8X:1": 4,
+          "iTRAQ8X:2": 7,
+          "iTRAQ8X:3": 7
+        },
+        "decoded": 23234,
+        "decoy_hits": {
+          "TMT:0": 46030,
+          "TMT:1": 372,
+          "TMT:2": 30,
+          "TMT:3": 12,
+          "TMT:4": 24,
+          "TMTproX:0": 46316,
+          "TMTproX:1": 146,
+          "TMTproX:2": 5,
+          "TMTproX:3": 1,
+          "iTRAQ4:0": 46317,
+          "iTRAQ4:1": 147,
+          "iTRAQ4:2": 4,
+          "iTRAQ8X:0": 46356,
+          "iTRAQ8X:1": 111,
+          "iTRAQ8X:2": 1
+        },
+        "hits": {
+          "TMT:0": 2655,
+          "TMT:1": 284,
+          "TMT:2": 194,
+          "TMT:3": 168,
+          "TMT:4": 19933,
+          "TMTproX:0": 2710,
+          "TMTproX:1": 400,
+          "TMTproX:2": 340,
+          "TMTproX:3": 430,
+          "TMTproX:4": 19354,
+          "iTRAQ4:0": 23181,
+          "iTRAQ4:1": 52,
+          "iTRAQ4:2": 1,
+          "iTRAQ8X:0": 22765,
+          "iTRAQ8X:1": 469
+        },
+        "minmz_q10": 110.1,
+        "minmz_q50": 110.1,
+        "minmz_q90": 116.1,
+        "n": 46468,
+        "relint_median": {
+          "TMT": 2.105,
+          "TMTproX": 1.15,
+          "iTRAQ4": 0.021,
+          "iTRAQ8X": 0.033
+        }
+      }
+    },
+    "id": "PXD039509__Batch6-Frxn13-TR1",
+    "levels": {
+      "1": 8039,
+      "2": 46468
+    },
+    "ms1_analyzer": {
+      "FTMS": 8039
+    },
+    "ms2_isolation_width_median": 0.7,
+    "path": "in/PXD039509/Batch6-Frxn13-TR1.mzML",
+    "stride": 2,
+    "undecodable": 0
+  },
+  "PXD051521__20210304_PN_HipAkp_Rep2_Chymo_Phospho2": {
+    "groups": {
+      "ms2|FTMS|HCD": {
+        "chan": {
+          "TMT:0": 42,
+          "TMT:1": 18,
+          "TMT:10": 1,
+          "TMT:2": 11,
+          "TMT:3": 3,
+          "TMT:4": 1,
+          "TMT:5": 4,
+          "TMT:6": 29,
+          "TMT:7": 3,
+          "TMT:8": 3,
+          "TMT:9": 26,
+          "TMTproX:0": 4,
+          "TMTproX:1": 3,
+          "TMTproX:2": 2,
+          "TMTproX:3": 2,
+          "TMTproX:4": 5,
+          "TMTproX:5": 1,
+          "TMTproX:6": 2,
+          "iTRAQ4:0": 8,
+          "iTRAQ4:1": 83,
+          "iTRAQ4:2": 5,
+          "iTRAQ4:3": 1,
+          "iTRAQ8X:0": 118,
+          "iTRAQ8X:1": 4,
+          "iTRAQ8X:2": 1495,
+          "iTRAQ8X:3": 15
+        },
+        "decoded": 17441,
+        "decoy_hits": {
+          "TMT:0": 34008,
+          "TMT:1": 859,
+          "TMT:2": 15,
+          "TMTproX:0": 32967,
+          "TMTproX:1": 1800,
+          "TMTproX:2": 99,
+          "TMTproX:3": 16,
+          "iTRAQ4:0": 24604,
+          "iTRAQ4:1": 10267,
+          "iTRAQ4:2": 11,
+          "iTRAQ8X:0": 30843,
+          "iTRAQ8X:1": 3880,
+          "iTRAQ8X:2": 159
+        },
+        "hits": {
+          "TMT:0": 17310,
+          "TMT:1": 121,
+          "TMT:2": 10,
+          "TMTproX:0": 17422,
+          "TMTproX:1": 19,
+          "iTRAQ4:0": 17344,
+          "iTRAQ4:1": 97,
+          "iTRAQ8X:0": 15827,
+          "iTRAQ8X:1": 1596,
+          "iTRAQ8X:2": 18
+        },
+        "minmz_q10": 100.1,
+        "minmz_q50": 100.1,
+        "minmz_q90": 101.1,
+        "n": 34882,
+        "relint_median": {
+          "TMT": 0.027,
+          "TMTproX": 0.021,
+          "iTRAQ4": 0.013,
+          "iTRAQ8X": 0.029
+        }
+      }
+    },
+    "id": "PXD051521__20210304_PN_HipAkp_Rep2_Chymo_Phospho2",
+    "levels": {
+      "1": 6044,
+      "2": 34882
+    },
+    "ms1_analyzer": {
+      "FTMS": 6044
+    },
+    "ms2_isolation_width_median": 1.3,
+    "path": "in/PXD051521/20210304_PN_HipAkp_Rep2_Chymo_Phospho2.mzML",
+    "stride": 2,
+    "undecodable": 0
+  },
+  "PXD051941__F5": {
+    "groups": {
+      "ms2|FTMS|HCD": {
+        "chan": {
+          "TMT:0": 15,
+          "TMT:1": 14,
+          "TMT:10": 4,
+          "TMT:2": 4,
+          "TMT:3": 6,
+          "TMT:4": 4,
+          "TMT:5": 11,
+          "TMT:6": 14,
+          "TMT:7": 8,
+          "TMT:8": 2,
+          "TMT:9": 11,
+          "TMTproX:0": 9,
+          "TMTproX:1": 5,
+          "TMTproX:2": 7,
+          "TMTproX:3": 3,
+          "TMTproX:4": 5,
+          "TMTproX:5": 2,
+          "TMTproX:6": 8,
+          "iTRAQ4:0": 8,
+          "iTRAQ4:1": 8,
+          "iTRAQ4:2": 8,
+          "iTRAQ4:3": 2,
+          "iTRAQ8X:0": 34,
+          "iTRAQ8X:1": 12,
+          "iTRAQ8X:2": 5,
+          "iTRAQ8X:3": 7
+        },
+        "decoded": 48075,
+        "decoy_hits": {
+          "TMT:0": 95317,
+          "TMT:1": 824,
+          "TMT:2": 9,
+          "TMTproX:0": 96045,
+          "TMTproX:1": 105,
+          "iTRAQ4:0": 95907,
+          "iTRAQ4:1": 242,
+          "iTRAQ4:2": 1,
+          "iTRAQ8X:0": 96024,
+          "iTRAQ8X:1": 126
+        },
+        "hits": {
+          "TMT:0": 47982,
+          "TMT:1": 93,
+          "TMTproX:0": 48036,
+          "TMTproX:1": 39,
+          "iTRAQ4:0": 48049,
+          "iTRAQ4:1": 26,
+          "iTRAQ8X:0": 48017,
+          "iTRAQ8X:1": 58
+        },
+        "minmz_q10": 101.1,
+        "minmz_q50": 109.5,
+        "minmz_q90": 139.2,
+        "n": 96149,
+        "relint_median": {
+          "TMT": 0.125,
+          "TMTproX": 0.133,
+          "iTRAQ4": 0.14,
+          "iTRAQ8X": 0.075
+        }
+      }
+    },
+    "id": "PXD051941__F5",
+    "levels": {
+      "1": 8678,
+      "2": 96149
+    },
+    "ms1_analyzer": {
+      "FTMS": 8678
+    },
+    "ms2_isolation_width_median": 1.6,
+    "path": "in/PXD051941/F5.mzML",
+    "stride": 2,
+    "undecodable": 0
+  },
+  "PXD055089__20210104_GM_NS_MBM_set1_HiRIEF_3-10_fr29": {
+    "groups": {
+      "ms2|FTMS|HCD": {
+        "chan": {
+          "TMT:0": 9020,
+          "TMT:1": 9190,
+          "TMT:10": 8543,
+          "TMT:2": 9308,
+          "TMT:3": 9155,
+          "TMT:4": 8419,
+          "TMT:5": 8686,
+          "TMT:6": 8763,
+          "TMT:7": 8517,
+          "TMT:8": 8435,
+          "TMT:9": 8887,
+          "TMTproX:0": 8438,
+          "TMTproX:1": 7111,
+          "TMTproX:2": 7971,
+          "TMTproX:3": 8551,
+          "TMTproX:4": 8425,
+          "TMTproX:5": 123,
+          "TMTproX:6": 13,
+          "iTRAQ4:0": 8,
+          "iTRAQ4:1": 7,
+          "iTRAQ4:2": 9,
+          "iTRAQ4:3": 2,
+          "iTRAQ8X:0": 13,
+          "iTRAQ8X:1": 2,
+          "iTRAQ8X:2": 3,
+          "iTRAQ8X:3": 2
+        },
+        "decoded": 13013,
+        "decoy_hits": {
+          "TMT:0": 25789,
+          "TMT:1": 202,
+          "TMT:2": 16,
+          "TMT:3": 14,
+          "TMT:4": 5,
+          "TMTproX:0": 25950,
+          "TMTproX:1": 76,
+          "iTRAQ4:0": 25500,
+          "iTRAQ4:1": 482,
+          "iTRAQ4:2": 42,
+          "iTRAQ4:3": 2,
+          "iTRAQ8X:0": 25976,
+          "iTRAQ8X:1": 50
+        },
+        "hits": {
+          "TMT:0": 2733,
+          "TMT:1": 390,
+          "TMT:2": 278,
+          "TMT:3": 214,
+          "TMT:4": 9398,
+          "TMTproX:0": 3637,
+          "TMTproX:1": 670,
+          "TMTproX:2": 528,
+          "TMTproX:3": 621,
+          "TMTproX:4": 7557,
+          "iTRAQ4:0": 12987,
+          "iTRAQ4:1": 26,
+          "iTRAQ8X:0": 12993,
+          "iTRAQ8X:1": 20
+        },
+        "minmz_q10": 101.0,
+        "minmz_q50": 104.8,
+        "minmz_q90": 112.8,
+        "n": 26025,
+        "relint_median": {
+          "TMT": 2.519,
+          "TMTproX": 0.749,
+          "iTRAQ4": 0.056,
+          "iTRAQ8X": 0.057
+        }
+      }
+    },
+    "id": "PXD055089__20210104_GM_NS_MBM_set1_HiRIEF_3-10_fr29",
+    "levels": {
+      "1": 13957,
+      "2": 26025
+    },
+    "ms1_analyzer": {
+      "FTMS": 13957
+    },
+    "ms2_isolation_width_median": 2.0,
+    "path": "in/PXD055089/20210104_GM_NS_MBM_set1_HiRIEF_3-10_fr29.mzML",
+    "stride": 2,
+    "undecodable": 0
+  },
+  "PXD074090__1249415057B_Nina_TMT18_RTS_prot_F12": {
+    "groups": {
+      "ms2|ITMS|HCD": {
+        "chan": {},
+        "decoded": 22845,
+        "decoy_hits": {},
+        "hits": {
+          "TMT:0": 22845,
+          "TMTproX:0": 22845,
+          "iTRAQ4:0": 22845,
+          "iTRAQ8X:0": 22845
+        },
+        "minmz_q10": 200.2,
+        "minmz_q50": 200.9,
+        "minmz_q90": 203.4,
+        "n": 45690,
+        "relint_median": {}
+      },
+      "ms3|FTMS|HCD": {
+        "chan": {
+          "TMT:0": 7046,
+          "TMT:1": 6881,
+          "TMT:10": 7064,
+          "TMT:2": 7015,
+          "TMT:3": 7004,
+          "TMT:4": 7069,
+          "TMT:5": 7063,
+          "TMT:6": 7078,
+          "TMT:7": 7296,
+          "TMT:8": 6982,
+          "TMT:9": 6887,
+          "TMTproX:0": 7104,
+          "TMTproX:1": 7221,
+          "TMTproX:2": 7112,
+          "TMTproX:3": 7194,
+          "TMTproX:4": 7272,
+          "TMTproX:5": 7078,
+          "TMTproX:6": 7286,
+          "iTRAQ4:0": 53,
+          "iTRAQ4:1": 43,
+          "iTRAQ4:2": 37,
+          "iTRAQ4:3": 34,
+          "iTRAQ8X:0": 52,
+          "iTRAQ8X:1": 30,
+          "iTRAQ8X:2": 20,
+          "iTRAQ8X:3": 39
+        },
+        "decoded": 8892,
+        "decoy_hits": {
+          "TMT:0": 17177,
+          "TMT:1": 584,
+          "TMT:2": 17,
+          "TMT:3": 2,
+          "TMT:4": 4,
+          "TMTproX:0": 17417,
+          "TMTproX:1": 361,
+          "TMTproX:2": 6,
+          "iTRAQ4:0": 17465,
+          "iTRAQ4:1": 315,
+          "iTRAQ4:2": 4,
+          "iTRAQ8X:0": 17506,
+          "iTRAQ8X:1": 278
+        },
+        "hits": {
+          "TMT:0": 849,
+          "TMT:1": 320,
+          "TMT:2": 206,
+          "TMT:3": 147,
+          "TMT:4": 7370,
+          "TMTproX:0": 898,
+          "TMTproX:1": 352,
+          "TMTproX:2": 212,
+          "TMTproX:3": 208,
+          "TMTproX:4": 7222,
+          "iTRAQ4:0": 8725,
+          "iTRAQ4:1": 167,
+          "iTRAQ8X:0": 8753,
+          "iTRAQ8X:1": 137,
+          "iTRAQ8X:2": 2
+        },
+        "minmz_q10": 110.1,
+        "minmz_q50": 110.3,
+        "minmz_q90": 112.6,
+        "n": 17783,
+        "relint_median": {
+          "TMT": 3.006,
+          "TMTproX": 2.211,
+          "iTRAQ4": 0.034,
+          "iTRAQ8X": 0.033
+        }
+      }
+    },
+    "id": "PXD074090__1249415057B_Nina_TMT18_RTS_prot_F12",
+    "levels": {
+      "1": 5154,
+      "2": 45690,
+      "3": 17783
+    },
+    "ms1_analyzer": {
+      "FTMS": 5154
+    },
+    "ms2_isolation_width_median": 0.7,
+    "path": "in/PXD074090/1249415057B_Nina_TMT18_RTS_prot_F12.mzML",
+    "stride": 2,
+    "undecodable": 0
+  },
+  "PXD081776__2023-05-05_Brieno-Enriquez_ProtTMT_SF_Plex1_F8": {
+    "groups": {
+      "ms2|FTMS|HCD": {
+        "chan": {
+          "TMT:0": 7293,
+          "TMT:1": 7833,
+          "TMT:10": 6531,
+          "TMT:2": 7256,
+          "TMT:3": 8336,
+          "TMT:4": 6594,
+          "TMT:5": 8056,
+          "TMT:6": 5896,
+          "TMT:7": 4077,
+          "TMT:8": 6975,
+          "TMT:9": 7166,
+          "TMTproX:0": 6177,
+          "TMTproX:1": 6967,
+          "TMTproX:2": 7034,
+          "TMTproX:3": 34,
+          "TMTproX:4": 36,
+          "TMTproX:5": 6,
+          "TMTproX:6": 4,
+          "iTRAQ4:0": 9,
+          "iTRAQ4:1": 933,
+          "iTRAQ4:2": 7,
+          "iTRAQ4:3": 10,
+          "iTRAQ8X:0": 17,
+          "iTRAQ8X:1": 9,
+          "iTRAQ8X:2": 4,
+          "iTRAQ8X:3": 12
+        },
+        "decoded": 12202,
+        "decoy_hits": {
+          "TMT:0": 24224,
+          "TMT:1": 172,
+          "TMT:2": 5,
+          "TMT:3": 1,
+          "TMT:4": 2,
+          "TMTproX:0": 24314,
+          "TMTproX:1": 90,
+          "iTRAQ4:0": 23934,
+          "iTRAQ4:1": 467,
+          "iTRAQ4:2": 2,
+          "iTRAQ4:4": 1,
+          "iTRAQ8X:0": 24341,
+          "iTRAQ8X:1": 63
+        },
+        "hits": {
+          "TMT:0": 1618,
+          "TMT:1": 830,
+          "TMT:2": 790,
+          "TMT:3": 695,
+          "TMT:4": 8269,
+          "TMTproX:0": 3769,
+          "TMTproX:1": 1734,
+          "TMTproX:2": 1634,
+          "TMTproX:3": 5013,
+          "TMTproX:4": 52,
+          "iTRAQ4:0": 11247,
+          "iTRAQ4:1": 951,
+          "iTRAQ4:2": 4,
+          "iTRAQ8X:0": 12160,
+          "iTRAQ8X:1": 42
+        },
+        "minmz_q10": 110.1,
+        "minmz_q50": 112.1,
+        "minmz_q90": 122.3,
+        "n": 24403,
+        "relint_median": {
+          "TMT": 1.865,
+          "TMTproX": 0.575,
+          "iTRAQ4": 0.123,
+          "iTRAQ8X": 0.114
+        }
+      }
+    },
+    "id": "PXD081776__2023-05-05_Brieno-Enriquez_ProtTMT_SF_Plex1_F8",
+    "levels": {
+      "1": 28499,
+      "2": 24403
+    },
+    "ms1_analyzer": {
+      "FTMS": 28499
+    },
+    "ms2_isolation_width_median": 0.7,
+    "path": "in/PXD081776/2023-05-05_Brieno-Enriquez_ProtTMT_SF_Plex1_F8.mzML",
+    "stride": 2,
+    "undecodable": 0
+  }
+}

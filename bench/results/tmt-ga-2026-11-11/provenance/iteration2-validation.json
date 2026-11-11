@@ -1,0 +1,19 @@
+{
+  "iteration": "ga-v2",
+  "commit": "27e70f2",
+  "local_checks": "tmt_pseudo_test passed; preceding GA-v1 checks recorded separately",
+  "linux_checks": "tmt_pseudo_test passed",
+  "linux_binary_sha256": "2b03654a786c5a1ac267a9b1c53615481a2f329afa2ace71faf3e9d869a68d32",
+  "local_binary_sha256": "15965bc94e2b1bda93db62627e2c7905708ae592c7a9d99ca5c8bb9972b9cedb",
+  "source_sha256": {
+    "src/TmtPseudoFilter.h": "c7a5983912b7b9f2b9573de9ef28583bea334909c346d211274dad4371e304f7",
+    "src/FASTag.cpp": "0a387ecd8eb2170a5fb4334334b999a007319506b8083789e01bf1c0e374f7c1",
+    "test/tmt_pseudo_test.cpp": "2fe404b25db69ed1b09d856f49718107d8ecdd07e060b921a66e6e64f0871c7f",
+    "bench/tmt_pseudo_filter.py": "cdfbb6730f59eb32a32bf7673edb5e44fbe234e0ece2e174db3c2a2c9c87bfd5",
+    "doc/TMT-GA-ITERATION-PROTOCOL.txt": "0456f87fd5d0b58f0195e01cd1c1208320fcc064e522e971d48b001abcc81de9",
+    "bench/reuse_identical_scores.py": "352ad73a0d89a0bf225e7207c0217e7451453879b0704ffbdc96037bc201dd22",
+    "gui/src/paramUi.ts": "3b08eac10890213f06aea04dbccd3a60f9ab8bb0f39824216fe29add5f09e94c"
+  },
+  "gui_checks": "25 paramUi and paramLayout tests passed after correcting help text to G/A-only",
+  "helper_checks": "Six score-reuse synthetic checks passed under Python -O, including old/new file tampering, duplicate/missing repetitions, and length mismatch"
+}
