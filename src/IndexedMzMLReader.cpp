@@ -19,6 +19,7 @@
 #include <fstream>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <new>
 #include <locale.h>
 #include <set>
@@ -516,18 +517,31 @@ namespace FASTag
     /// one past the last spectrum, so every spectrum has an end.
     std::shared_ptr<const std::vector<std::uint64_t>> offsets;
     PositionedFile in;
-    /// The spectrum being read, at the start of `raw`: page-aligned, never
-    /// zero-filled, reused. The kernel copies into it from the page cache,
-    /// and that copy is slow into a destination that is not aligned (see the
-    /// offset scan). Placing the bytes at the same offset within a page as
-    /// in the file was measured too: 7% slower reads than the old
-    /// std::string, against 7% faster for this. `bytes` views them.
-    AlignedBuffer raw;
-    std::string_view bytes;
+    /// What reading one spectrum needs: the spectrum's bytes at the start of
+    /// `raw` (page-aligned, never zero-filled, reused; the kernel copies into
+    /// it from the page cache, and that copy is slow into a destination that
+    /// is not aligned, see the offset scan) and the direct decoder's buffers.
+    /// MzMLSpectrumDecoder (OpenMS) takes every spectrum `direct` declines.
+    struct Scratch
+    {
+      AlignedBuffer raw;
+      MzMLDirectDecoder direct;
+    };
+    /// Scratch sets shared by every per-thread copy, leased for one read_():
+    /// the sets in use follow the threads reading at that moment, not the
+    /// thread count. Each set keeps the largest spectrum it has held, about
+    /// 4 MB on un-centroided timsTOF frames (120k peaks); a quarter of a
+    /// tagging thread's time is reading, so far fewer sets than threads.
+    // ponytail: one mutex, two locks per spectrum; per-NUMA pools if it shows.
+    struct ScratchPool
+    {
+      std::mutex m;
+      std::vector<std::unique_ptr<Scratch>> idle;
+    };
+    std::shared_ptr<ScratchPool> pool = std::make_shared<ScratchPool>();
+    Scratch* cur = nullptr; ///< the set read_() holds, else null
+    std::string_view bytes; ///< views cur->raw
     MzMLSpectrumDecoder decoder;
-    /// Peaks without a DOM (see MzMLDirectDecoder.h); OpenMS's decoder above
-    /// takes every spectrum this one declines.
-    MzMLDirectDecoder direct;
     bool direct_on = !MzMLDirectDecoder::disabledByEnvironment();
     std::size_t n_direct = 0;   ///< MS2 peaks decoded directly
     std::size_t n_openms = 0;   ///< MS2 peaks decoded by OpenMS
@@ -796,6 +810,7 @@ namespace FASTag
   {
     impl_->offsets = other.impl_->offsets;
     impl_->groups = other.impl_->groups;
+    impl_->pool = other.impl_->pool;
     impl_->rebuilt = other.impl_->rebuilt;
     impl_->direct_on = other.impl_->direct_on;
     if (!other.impl_->ok) return;
@@ -876,6 +891,36 @@ namespace FASTag
     };
     if (end <= begin) return unreadable("an empty byte range");
 
+    // A scratch set for this read, back to the pool however it ends.
+    {
+      std::lock_guard<std::mutex> g(impl_->pool->m);
+      if (!impl_->pool->idle.empty())
+      {
+        impl_->cur = impl_->pool->idle.back().release();
+        impl_->pool->idle.pop_back();
+      }
+    }
+    if (!impl_->cur) impl_->cur = new Impl::Scratch;
+    struct Release
+    {
+      Impl& impl;
+      ~Release()
+      {
+        std::unique_ptr<Impl::Scratch> s(impl.cur);
+        impl.cur = nullptr;
+        impl.bytes = {};
+        try
+        {
+          std::lock_guard<std::mutex> g(impl.pool->m);
+          impl.pool->idle.push_back(std::move(s));
+        }
+        catch (...)
+        {
+          // No room to keep it: the set is freed instead.
+        }
+      }
+    } release{*impl_};
+
     // Two-stage read: the HEAD first, and the body only if this spectrum's
     // peaks are actually wanted.
     //
@@ -886,11 +931,11 @@ namespace FASTag
     const std::uint64_t len = end - begin;
     constexpr std::uint64_t kHead = 16384;
     const std::uint64_t head_len = std::min(len, kHead);
-    if (!impl_->raw.reserve(static_cast<std::size_t>(head_len), 0))
+    if (!impl_->cur->raw.reserve(static_cast<std::size_t>(head_len), 0))
       return unreadable("no memory for " + std::to_string(head_len) + " bytes");
-    if (!impl_->in.read(begin, impl_->raw.data.get(), static_cast<std::size_t>(head_len)))
+    if (!impl_->in.read(begin, impl_->cur->raw.data.get(), static_cast<std::size_t>(head_len)))
       return unreadable(impl_->in.error());
-    impl_->bytes = std::string_view(impl_->raw.data.get(), static_cast<std::size_t>(head_len));
+    impl_->bytes = std::string_view(impl_->cur->raw.data.get(), static_cast<std::size_t>(head_len));
 
     // The head is only known to hold the whole metadata region once the
     // arrays have been seen; otherwise fall back to the full element rather
@@ -900,11 +945,11 @@ namespace FASTag
     auto read_rest = [&]() -> std::string {
       const std::size_t have = impl_->bytes.size();
       if (have >= len) return {};
-      if (!impl_->raw.reserve(static_cast<std::size_t>(len), have))
+      if (!impl_->cur->raw.reserve(static_cast<std::size_t>(len), have))
         return "no memory for a spectrum of " + std::to_string(len) + " bytes";
-      if (!impl_->in.read(begin + have, impl_->raw.data.get() + have, static_cast<std::size_t>(len) - have))
+      if (!impl_->in.read(begin + have, impl_->cur->raw.data.get() + have, static_cast<std::size_t>(len) - have))
         return impl_->in.error();
-      impl_->bytes = std::string_view(impl_->raw.data.get(), static_cast<std::size_t>(len));
+      impl_->bytes = std::string_view(impl_->cur->raw.data.get(), static_cast<std::size_t>(len));
       return {};
     };
     std::size_t cut = impl_->bytes.find(kArrays);
@@ -1024,7 +1069,7 @@ namespace FASTag
     if ((ms_level == 2 || any_level) && want_peaks)
     {
       if (const std::string why = read_rest(); !why.empty()) return unreadable(why);
-      if (impl_->direct_on && impl_->direct.decode(impl_->bytes, spec))
+      if (impl_->direct_on && impl_->cur->direct.decode(impl_->bytes, spec))
       {
         ++impl_->n_direct;
       }
