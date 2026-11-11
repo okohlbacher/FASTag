@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased (branch post1131/labeldisc-format5, not for merge)
+
+- **`-label_discovery_out`, report format 6 (format 5 plus PR #66): held-out
+  test 4, FAIL.** On 144 runs from 144 new PRIDE projects
+  (`post1131/labeldisc-heldout4`, PREREG-labeldisc4.md, scored once) both
+  safety criteria of PR #66 fail: one run is wrong that format 5 leaves
+  uncalled (PXD000148, dimethyl, called label-free by the absence rule), and
+  3 of 26 labelled runs without a recorded reporter region are called
+  label-free (criterion 0). Format 5 on the same runs passes (see branch
+  post1131/labeldisc).
+
 ## 1.13.1 (2026-11-10)
 
 No change to the program. Five test scripts compare and pass the Windows
