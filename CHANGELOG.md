@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **`-label_discovery_out`, report formats 2 to 4: third held-out test, FAIL.**
+  No code change. On 163 runs from 163 new PRIDE projects
+  (`acc113r/labeldisc3`, PREREG-labeldisc3.md, scored once) three of nine
+  criteria fail: weighted accuracy 0.572 (criterion above 0.80), 119 runs
+  right by label family against 149 for Param-Medic, TMTpro recall 11/18.
+  No label-free run got a label call (0 of 64); TMT, iTRAQ, SILAC and
+  dimethyl recall pass. Both causes are ion-trap MS2: no call is made there,
+  and TMTpro runs acquired as SPS-MS3 are called TMT. With Orbitrap MS2,
+  95 of 96 runs are right. The option stays experimental.
 - **`-complement_tolerance_unit auto` (backlog #15): second held-out
   result, INCONCLUSIVE, no criterion failed.** No code change besides the
   help text. With the revised estimator on 8 new runs (`acc113r/compltol`,
