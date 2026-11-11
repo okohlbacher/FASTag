@@ -1,0 +1,7 @@
+criterion	verdict	detail
+evaluable	9	MG01,MG02,MG03,MG04,MG05,MG07,MG08,MG09,MG10
+C1	PASS	10 of 10 runs
+C2	PASS	min 0.8327 median 0.9340 pooled 0.9316 (n 9)
+G1	PASS	median 2.047 min 1.640 max 4.720 (n 9)
+G2	PASS	pooled 0.0107 max run 0.0188 (n 9)
+OVERALL	PASS	
