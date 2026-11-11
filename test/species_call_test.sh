@@ -183,6 +183,26 @@ run expl_da -in "$IN" -tag_length 7 -fragment_tolerance 0.5 -fragment_tolerance_
 bad=$(awk -F'\t' 'NR > 1 && !($9 == "no_call" && $10 == "low_resolution")' "$TMP/expl_da.species.tsv" | wc -l | tr -d ' ')
 [ "$bad" = 0 ] || fail "explain, Da run: $bad rows are not a low_resolution no_call"
 
+# ---- -species_reagents: two more columns; a taxon explain does not detect is called on its listed proteins ------
+awk '/^>/ { print $1 " OX=562" ; next } { print }' "$DB" > "$TMP/reagents.fasta"
+run reag "${COMMON[@]}" -species "${TAX[@]}" "${EXPL[@]}" -species_reagents "$TMP/reagents.fasta" -threads 2 \
+  || { cat "$TMP/reag.log" >&2; fail "-species_reagents"; }
+G="$TMP/reag.species.tsv"
+[ "$(fields "$G")" = 19 ] || fail "-species_reagents: not 19 fields on every line ($(fields "$G"))"
+cut -f1-17 "$G" | cmp -s "$E" - || fail "-species_reagents changed the explain columns of a run without a reagent call"
+[ "$(head -1 "$G" | cut -f18-)" = "$(printf 'reagent_tags\treagent_expected')" ] || fail "-species_reagents: header"
+[ "$(col "$G" 590 reagent_tags)" = NA ] || fail "-species_reagents: a taxon without listed proteins is not NA"
+# With an explain n_min nothing reaches, Escherichia is found through the listed (fixture) proteins alone.
+printf 'alpha\t0.01\ntau\t0\nn_min\t100000\nreagent_n_min\t3\n' > "$TMP/params_r.tsv"
+run reag2 "${COMMON[@]}" -species "${TAX[@]}" -species_call explain -species_call_min_units 10 -species_call_params "$TMP/params_r.tsv" \
+  -species_reagents "$TMP/reagents.fasta" -threads 2 || { cat "$TMP/reag2.log" >&2; fail "-species_reagents, reagent call"; }
+G="$TMP/reag2.species.tsv"
+[ "$(col "$G" 561 call) $(col "$G" 561 call_reason)" = "present reagent" ] || { cat "$G" >&2; fail "-species_reagents: Escherichia is not present/reagent"; }
+[ "$(awk -F'\t' 'NR > 1 && $9 == "present"' "$G" | wc -l | tr -d ' ')" = 1 ] || { cat "$G" >&2; fail "-species_reagents: more than one taxon present"; }
+[ "$(col "$G" 561 reagent_tags)" -ge 3 ] || fail "-species_reagents: reagent_tags"
+printf '>x no taxid\nACDEFGHIKLMNPQRSTVWY\n' > "$TMP/bad.fasta"
+run reag3 "${COMMON[@]}" -species "${TAX[@]}" "${EXPL[@]}" -species_reagents "$TMP/bad.fasta" -threads 2 && fail "-species_reagents without OX= was accepted"
+
 # ---- negatives -----------------------------------------------------------------
 # Ion-trap tolerance in Da: low_resolution for every row.
 run da -in "$IN" -tag_length 7 -fragment_tolerance 0.5 -fragment_tolerance_unit Da -species "${TAX[@]}" "${CALL[@]}" -threads 2 \

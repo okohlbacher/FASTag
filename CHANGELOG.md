@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- `-species_reagents <fasta>` (experimental, off by default, with
+  `-species_call explain`): a taxon the explain call does not detect is
+  reported `present` with `call_reason` `reagent` when its tags in the listed
+  reagent proteins (`data/taxonomy/species_reagents.fasta`: porcine trypsin
+  and pepsin, bovine serum, milk and enzyme proteins, 38 entries) exceed the
+  same count on the decoy tags; new report columns `reagent_tags`,
+  `reagent_expected`; optional key `reagent_n_min` (8) in `species_call.tsv`.
+  The calls of the explain rule are unchanged. Development data only (62
+  spent held-out runs): recovery 80/105 against 38/105, false genus calls per
+  run 0.58 against 0.50. Not held-out tested.
+
 ## 1.13.1 (2026-11-10)
 
 No change to the program. Five test scripts compare and pass the Windows

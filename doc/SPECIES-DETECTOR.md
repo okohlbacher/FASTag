@@ -322,6 +322,59 @@ protein) and 3 are unsupported.
 The mode stays opt-in and experimental; the default (`none`) and the decoy
 call are unchanged.
 
+## Reagent organisms (`-species_reagents`, opt-in, experimental, after 1.13.1)
+
+Why `explain` does not report porcine trypsin or bovine serum: after the
+sample organism is called, a genus is tested on all its unexplained tags
+against the random matches of its whole proteome. A protein reagent gives
+some tens of tags from a few proteins; the null of a mammalian proteome is
+several hundred (PXD001587: Bos 467 unexplained tags against 468.7 expected,
+of which 376 lie in listed bovine serum proteins). All 65 lost Sus/Bos
+positives of the spent runs end as `not_significant`. The `decoy` call
+reports them through tags shared with the sample organism, the channel that
+also gives its 5.98 false calls per run.
+
+`-species_reagents <fasta>` (with `-species_call explain` only) tests a
+smaller hypothesis. The file lists reagent proteins with UniProt headers
+(`OX=` gives the taxon); `data/taxonomy/species_reagents.fasta` has 38
+entries (porcine trypsin and pepsin; bovine serum proteins, caseins and whey
+proteins, trypsin, chymotrypsin, aprotinin, RNase A, DNase I). For a taxon
+the explain call did not call, the distinct tags that lie in its listed
+proteins, whose index support holds that taxon and no called taxon, are
+counted against the same membership of the decoy tags. Greedy over the
+reagent taxa; a taxon with at least `reagent_n_min` tags (8; optional key of
+`species_call.tsv`) and Poisson p times the number of candidates <= alpha is
+reported `present` with `call_reason` `reagent`. The report gets the columns
+`reagent_tags` and `reagent_expected` (NA for taxa without listed proteins).
+No row of the explain call changes: on 98 runs the calls with reason `pass`
+are identical with and without the option. A `reagent` call says that the
+protein reagent is in the sample, not that the organism is the sample.
+
+Development data only (62 spent held-out runs and 23 runs of the 1.12
+development set with a Sage truth search; frozen genus rule of
+`PREREG-species-explain.md`, Sus/Bos counted as positives; branch
+`post1131/species`). **Not held-out tested.**
+
+| | decoy call | explain (1.13.1) | explain + reagents |
+|---|---|---|---|
+| Spent runs (62): false genus calls per run | 5.98 [4.68, 7.48] | 0.50 [0.29, 0.73] | 0.58 [0.36, 0.82] |
+| Spent runs: recovery | 77/105 | 38/105 | 80/105 |
+| of these: Sus or Bos | 41/68 | 3/68 | 45/68 |
+| Development runs (23): false genus calls per run | 8.26 [6.39, 10.43] | 0.43 [0.13, 0.83] | 0.52 [0.22, 0.91] |
+| Development runs: recovery | 57/69 | 34/69 | 58/69 |
+| of these: Sus or Bos | 24/35 | 1/35 | 25/35 |
+
+With the reagent calls counted as genus calls the upper bound on the spent
+runs (0.82) is above the 0.75 of the primary criterion; the seven added calls
+labelled false (5 + 2) pass the tag test in listed proteins but have fewer
+than three genus-unique Sage peptides. Of the 68 Sus/Bos positives of the spent
+runs none is a sample organism: in 53 the Sage peptides come from reagent
+proteins (>= 3 peptides), in 11 from one or two such peptides, in 4 from
+none. Limits: a genuine second organism at low level (meat or milk
+admixture, xenograft host) is still not recovered by `explain`; only Sus and
+Bos have listed proteins; a reagent protein that is absent from the list is
+not found.
+
 ## Both tag orientations (`-species_orientation both`, opt-in, 1.12)
 
 Tags are written N->C under a y-ion assumption, so a tag read from b ions is

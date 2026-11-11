@@ -1206,6 +1206,12 @@ export const PARAM_UI: Record<string, ParamUi> = {
       text: 'Look up each tag in the species index as written (the default) or also reversed. When reversed readings are used, the log p-value and q-value columns are NA.'
     }
   },
+  species_reagents: {
+    hidden: OPT_IN_1_13_EXPERIMENTAL,
+    help: {
+      text: 'A FASTA file of reagent proteins (trypsin, serum albumin, milk proteins). With the explain organism call, an organism seen only through these proteins is reported as a reagent, not as a sample organism.'
+    }
+  },
   species_pi0: {
     hidden: OPT_IN_1_12,
     help: {
