@@ -47,3 +47,40 @@ Stop when a reproducible improvement is demonstrated and remaining failure
 types are explained to the level supported by the data, or when available
 evidence cannot justify a further change. Do not tune indefinitely to a finite
 reference set or claim that every residual failure has been solved.
+
+Iteration 2 — conflicting-label veto, after frozen iteration-1 results
+The initial 90:10 TMT:TMTpro mixture produced 29 N-site and 16 K-site
+304-Da supports. The shared minimum of 20 therefore failed to veto it.
+The eight original TMT chemistry panels and four additional high-resolution
+TMT files had at most 2 N-site and 1 K-site 304-Da supports. This motivates a
+separate conflict threshold, without weakening positive TMT evidence.
+
+The candidate rule was frozen before executing the second set of mixtures:
+keep eligible >=100 and the positive threshold max(20,ceil(eligible/100));
+veto only when BOTH 304-Da site counts reach max(5,ceil(eligible/100)). Keep
+sampling, mass windows, G/A rejection, K retention, and Da abstention unchanged.
+The veto reason is conflicting_304Da_label_evidence: these mass anchors are
+compatible with both TMTpro and iTRAQ8 and do not identify the chemistry.
+
+Second-source validation used TMT PXD021560 and TMTpro PXD039509, separate
+from the initial mixture sources, with sampling seed 1948 and order seed 403.
+The source files' pure counts had already been inspected; the new mixture
+outcomes had not. These are artificial mixtures of independently acquired MS2
+spectra, not chemical dilutions or co-isolation experiments, and are a small
+mechanistic validation rather than an untouched population-level test.
+The unchanged iteration-1 binary supplied counts for an offline rule replay:
+pure TMT had 0/0 conflicting supports and remains on; pure TMTpro remains off;
+50:50 had 147/87 with veto minimum 7 and remains off; 90:10 had 31/11 with
+minimum 8 and changes from on to off. The 95:5 detection-limit case had 10/7
+with minimum 8 and remains on. Report that limitation without further tuning.
+TMT presence is detected; labeling purity is not established.
+
+Evidence is retained in the detector-challenge artifacts:
+MINORITY-VALIDATION-PROTOCOL.txt, candidate-evaluation.json, and
+minority-validation/synthetic-mixtures.json, with input hashes and commands.
+Implement iteration 2 only after this count replay, then validate the compiled
+gate against it. Unit checks cover 4 versus 5 supports at 100 eligible spectra,
+9 versus 10 at 1000, ceiling behavior at 1001, and each single-site-only case.
+Preserve all iteration-1 artifacts and attribute its main benchmark results to
+that frozen binary. Any unchanged iteration-2 results require explicit replay
+or new-binary verification; the threshold change alone is not a runtime claim.

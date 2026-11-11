@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <iostream>
 #include <stdexcept>
+#include <utility>
 
 namespace TP = FASTag::TmtPseudo;
 using FASTag::Tag;
@@ -67,6 +68,26 @@ int main()
   require(!pro_only.detected(true) && !mixed.detected(true), "TMTpro safeguard failed");
   require(!edge.detected(true), "gate accepted 19 supporting spectra");
   edge.add({tmt}); require(edge.detected(true), "gate rejected 20 supporting spectra");
+
+  // Conflicting 304-Da evidence has a lower, separate two-site threshold.
+  // The 1001-spectra case also checks that the 1% requirement rounds up.
+  for (const auto [eligible, veto] : {std::pair<std::size_t, std::size_t>{100, 5}, {1000, 10}, {1001, 11}})
+  {
+    TP::ProbeCounts boundary;
+    boundary.eligible = eligible;
+    boundary.tmt_n = boundary.tmt_k = 20;
+    require(boundary.threshold() == 20 && boundary.vetoThreshold() == veto, "positive/veto thresholds changed");
+    boundary.pro_n = boundary.pro_k = veto - 1;
+    require(boundary.detected(true), "subthreshold 304-Da evidence vetoed TMT");
+    boundary.pro_n = veto;
+    require(boundary.detected(true), "N-site-only 304-Da evidence vetoed TMT");
+    boundary.pro_k = veto;
+    require(!boundary.detected(true), "two-site 304-Da evidence did not veto TMT");
+    require(boundary.reason(true) == "conflicting_304Da_label_evidence", "veto incorrectly identifies a label chemistry");
+    boundary.pro_n = veto - 1;
+    require(boundary.detected(true), "K-site-only 304-Da evidence vetoed TMT");
+  }
+  require(counts.summary().find("veto_min=5") != std::string::npos, "veto threshold missing from diagnostics");
 
   // Two overlapping 4-residue paths share one spectrum. The stronger GPEP
   // starts inside the TMT mass; the weaker PEPQ starts at intact TMT.

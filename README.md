@@ -685,8 +685,12 @@ requires at least 100 spectra with an ungapped length-4 tag at E-value ≤ 1.
 Both N-terminal TMT evidence (`n = 229.162932` or `c = 211.152367`) and
 TMT-lysine evidence (`c = 357.257895` or `n = 375.268460`) must occur in at
 least 20 spectra and at least 1% of eligible spectra. Counts are per spectrum,
-with ±0.020 Da N-channel and ±0.006 Da C-channel windows. The same two-site
-evidence for TMTpro causes abstention; a Da fragment tolerance also abstains.
+with ±0.020 Da N-channel and ±0.006 Da C-channel windows. Conflicting 304 Da
+label evidence causes abstention when both sites occur in at least 5 spectra
+and at least 1% of eligible spectra. These anchors are compatible with TMTpro
+and iTRAQ8; the veto does not identify either chemistry. A Da fragment
+tolerance also abstains. The gate tests for TMT6/10 presence, not purity:
+minority labeling chemistries below the veto threshold can remain undetected.
 The automatic probe has no protein-database input. It logs its decision and
 records it in versioned reports and exported mzML provenance.
 

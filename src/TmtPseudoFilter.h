@@ -116,12 +116,14 @@ namespace FASTag::TmtPseudo
       pro_n += b[0] || b[1]; pro_k += b[2] || b[3];
     }
     std::size_t threshold() const { return std::max<std::size_t>(20, (eligible + 99) / 100); }
+    std::size_t vetoThreshold() const { return std::max<std::size_t>(5, (eligible + 99) / 100); }
     std::string reason(bool high_resolution) const
     {
       if (!high_resolution) return "Da_tolerance";
       if (eligible < kMinEligible) return "few_eligible_spectra";
       const auto limit = threshold();
-      if (pro_n >= limit && pro_k >= limit) return "TMTpro_or_mixed_evidence";
+      // TMTpro and iTRAQ8 fit these windows; this veto does not identify either.
+      if (pro_n >= vetoThreshold() && pro_k >= vetoThreshold()) return "conflicting_304Da_label_evidence";
       if (tmt_n < limit || tmt_k < limit) return "insufficient_two_site_TMT_evidence";
       return "TMT6_10_two_site_evidence";
     }
@@ -129,6 +131,7 @@ namespace FASTag::TmtPseudo
     std::string summary() const
     {
       return "eligible=" + std::to_string(eligible) + ", threshold=" + std::to_string(threshold())
+        + ", veto_min=" + std::to_string(vetoThreshold())
         + ", TMT_N=" + std::to_string(tmt_n) + ", TMT_K=" + std::to_string(tmt_k)
         + ", TMTpro_N=" + std::to_string(pro_n) + ", TMTpro_K=" + std::to_string(pro_k);
     }
