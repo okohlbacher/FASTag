@@ -58,7 +58,6 @@ namespace FASTag::TmtPseudo
         if (mod.variable) continue;
         if (mod.residue == 'G') fixed_[0] += mod.delta;
         if (mod.residue == 'A') fixed_[1] += mod.delta;
-        if (mod.residue == 'K') fixed_[2] += mod.delta;
       }
     }
     bool rejects(const Tag& tag) const
@@ -73,7 +72,8 @@ namespace FASTag::TmtPseudo
         if (first == residue && near(tag.nterm_mass, kLabel - mass, kWindowN)) return true;
         if (last == residue && near(tag.cterm_mass, kLabel - kWater - mass, kWindowC)) return true;
       }
-      if (last == 'K' && std::fabs(fixed_[2]) <= 1e-8 && near(tag.cterm_mass, kLabel, kWindowC)) return true;
+      // A terminal K can carry its TMT mass in the C flank while preserving
+      // the correct sequence. That mass allocation is not a pseudo-residue.
       if (reporters_ && tag.charge == 1)
         for (const double reporter : kReporters)
           if (near(tag.cterm_mass + kWater + kProton, reporter, kWindowC)) return true;
@@ -81,7 +81,7 @@ namespace FASTag::TmtPseudo
     }
   private:
     bool enabled_, reporters_;
-    std::array<double, 3> fixed_{};
+    std::array<double, 2> fixed_{};
   };
 
   /// Four tag-flank images, excluding the ambiguous raw-C bare-label peak.

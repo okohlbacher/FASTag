@@ -1,0 +1,49 @@
+TMT G/A-only iteration and adversarial audit — frozen before iteration-1 scoring
+2026-11-11
+
+User request: preserve terminal K tags, filter only the G/A pseudo-residue
+patterns, benchmark both configured and unconfigured TMT masses, iterate to
+improve detection, and critically assess failure cases and the reference truth.
+
+Iteration 1
+Remove the terminal bare-K rejection only. Retain the N/K two-site detector,
+TMTpro abstention, mass windows, sequence conditions, preprocessing, scores,
+and pre-dedup/pre-cap placement. Do not activate the separate reporter filter.
+The same four TMT files and label-free control, unchanged Sage references and
+chemistry configurations, are used with the original frozen scoring harness.
+Compare baseline, new default/off, forced G/A on, and automatic G/A filtering.
+Three serial, randomly ordered repetitions per cell, eight threads on dax.
+9 cells x 4 arms x 3 repetitions = 108 runs. Record load and elapsed runtime.
+Use a new output directory and unique binary name; retain the original results.
+
+Primary outcomes: recall@50 and rank-1 accuracy under the existing sequence
+plus one-correct-flank rule. Supplement: strict residue-mass consistency.
+Denominators remain all reference PSMs; no output remains a miss.
+Desired improvement: rank-1 gains without losses of primary recall, separately
+for label-blind and label-aware settings. Report paired gains AND losses,
+independent validation projects separately from development/same-project data.
+
+Audit and iteration policy
+Inspect every newly lost correct call, if any. Quantify remaining recall and
+ranking failures, then examine selected spectra from defined failure strata.
+Check source/native-ID mapping, precursor mass/charge/isotopes, modification
+parsing, fragment evidence, score/q-value, isobaric ambiguities, and independent
+search-engine agreement where available. A q-value is a set-level error-rate
+estimate, not proof of a particular peptide. Engine agreement is supporting
+evidence, not absolute truth; disagreements remain uncertain without evidence.
+Do not delete or relabel inconvenient references to improve headline metrics.
+Keep any adjudicated/consensus subset or alternative valid peptides separate.
+
+Test automatic label gating on additional existing positive/negative inputs
+where feasible, including TMTpro and unsupported acquisition modes. Distinguish
+abstention from false activation and distinguish label detection from tag
+sequence detection. Preserve expectations before inspecting decisions.
+
+If a reproducible defect warrants another change, document its mechanism and
+freeze the changed rule before the next benchmark. Report every iteration,
+including failures. Reusing these validation files for tuning makes later
+results exploratory; do not describe them as untouched held-out validation.
+Stop when a reproducible improvement is demonstrated and remaining failure
+types are explained to the level supported by the data, or when available
+evidence cannot justify a further change. Do not tune indefinitely to a finite
+reference set or claim that every residual failure has been solved.

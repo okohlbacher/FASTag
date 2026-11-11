@@ -691,9 +691,10 @@ The automatic probe has no protein-database input. It logs its decision and
 records it in versioned reports and exported mzML provenance.
 
 When active, the filter removes b/y tags starting with bare G/A at
-`n = TMT − G/A`, ending with bare G/A at `c = TMT − H2O − G/A`, or ending
-with bare K at `c = TMT`. The K rule is disabled when K has a fixed mass shift.
-Residue identity and flank mass must both agree; modified G/A/K are not treated
+`n = TMT − G/A` or ending with bare G/A at `c = TMT − H2O − G/A`.
+Terminal K is retained, including when its TMT mass is allocated to the C flank;
+lysine signatures still contribute to labeling detection.
+Residue identity and flank mass must both agree; modified G/A are not treated
 as bare residues. Filtering occurs after scoring but before the tag-count cap,
 so surviving tags retain their scores and can fill the vacated slots.
 Ordinary TMT-plus-residue flanks and a-ion counterparts are retained.
@@ -704,8 +705,9 @@ endpoint matches a TMT6/10 reporter ion, under the same active TMT gate.
 `-stream` and mzPeak input; forced `on` supports them. These filters are
 experimental, not modification identification or labeling-efficiency estimates.
 
-The [frozen TMT benchmark](bench/results/tmt-pseudo-2026-11-11/report.html)
-tested four TMT files and one label-free control. In the two independent TMT
+The [first frozen TMT benchmark](bench/results/tmt-pseudo-2026-11-11/report.html),
+which included the former bare-K rejection rule, tested four TMT files and one
+label-free control. In the two independent TMT
 validation projects (10,912 reference PSMs), specifying TMT masses and enabling
 the automatic filter increased rank-1 accuracy from 81.562% to 82.093%, with
 recall@50 unchanged at 94.630%. Omitting TMT masses instead reduced the existing

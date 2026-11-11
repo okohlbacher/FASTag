@@ -24,13 +24,17 @@ int main()
   require(TP::Filter(p).rejects(tag("APEP", TP::kLabel - TP::kA, 300)), "A pseudo-prefix not filtered");
   require(TP::Filter(p).rejects(tag("PEPG", 300, TP::kLabel - TP::kWater - TP::kG)), "G pseudo-suffix not filtered");
   require(TP::Filter(p).rejects(tag("PEPA", 300, TP::kLabel - TP::kWater - TP::kA)), "A pseudo-suffix not filtered");
-  require(TP::Filter(p).rejects(tag("PEPK", 300, TP::kLabel)), "bare K pseudo-suffix not filtered");
+  require(!TP::Filter(p).rejects(tag("PEPK", 300, TP::kLabel)), "terminal K with TMT mass in its flank rejected");
+  // PXD037999 scan 15823: a sequence-correct rank-1 tag from
+  // [TMT]-HSEVETDSK[TMT], lost by the former bare-K rejection.
+  require(!TP::Filter(p).rejects(tag("TDSK", 810.4038, 229.1644)), "real terminal K regression rejected");
+  require(!TP::Filter(p).rejects(tag("KPEP", TP::kLabel, 300)), "N-terminal K rejected");
   require(!TP::Filter(p).rejects(tag("GPEP", TP::kLabel, 300)), "real G prefix filtered without flank match");
   require(!TP::Filter(p).rejects(tag("FPEP", TP::kLabel - TP::kG, 300)), "flank alone caused rejection");
   require(!TP::Filter(p).rejects(tag("G[Label]PEP", TP::kLabel - TP::kG, 300)), "modified G rejected as bare G");
-  require(!TP::Filter(p).rejects(tag("PEPK[Label]", 300, TP::kLabel)), "modified K rejected as bare K");
+  require(!TP::Filter(p).rejects(tag("PEPK[Label]", 300, TP::kLabel)), "inline-modified terminal K rejected");
   p.mods.push_back({'K', TP::kLabel, "TMT6plex", false});
-  require(!TP::Filter(p).rejects(tag("PEPK", 300, TP::kLabel)), "fixed TMT K rejected as bare K");
+  require(!TP::Filter(p).rejects(tag("PEPK", 300, TP::kLabel)), "fixed TMT terminal K rejected");
   p.mods.push_back({'G', 1., "test", false});
   require(!TP::Filter(p).rejects(pseudo_g), "fixed modified G rejected as bare G");
   p.mods.clear();

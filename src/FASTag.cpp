@@ -398,7 +398,7 @@ protected:
     // another unobserved split, and a two-gap tag would be mostly inference.
     setMaxInt_("gaps", 1);
     registerStringOption_("tmt_pseudo_filter", "off|auto|on", "off",
-                          "Experimental TMT6/10 pseudo-residue filter before the tag cap; auto probes "
+                          "Experimental TMT6/10 G/A pseudo-residue filter before the tag cap; auto probes "
                           "N-terminal and lysine mass signatures, on asserts TMT6/10 labeling", false);
     setValidStrings_("tmt_pseudo_filter", ListUtils::create<std::string>("off,auto,on"));
     registerFlag_("tmt_reporter_filter", "Also reject b/y tags anchored on singly charged TMT6/10 "

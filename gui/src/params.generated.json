@@ -1569,7 +1569,7 @@
       "name": "tmt_pseudo_filter",
       "type": "string",
       "default": "off",
-      "description": "Experimental TMT6/10 pseudo-residue filter before the tag cap; auto probes N-terminal and lysine mass signatures, on asserts TMT6/10 labeling",
+      "description": "Experimental TMT6/10 G/A pseudo-residue filter before the tag cap; auto probes N-terminal and lysine mass signatures, on asserts TMT6/10 labeling",
       "required": false,
       "toppAdvanced": false,
       "choices": [
