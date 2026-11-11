@@ -1,0 +1,1 @@
+targets 1682 entrapment 1682 decoys 3364 target_residues 935011

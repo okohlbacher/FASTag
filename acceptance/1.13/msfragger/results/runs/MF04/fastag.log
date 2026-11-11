@@ -1,0 +1,10 @@
+Modifications: Carbamidomethyl (C, fixed), Oxidation (M, variable)
+Recon index: 20414 proteins, 11414074 residues, 13 isobaric rules; min tag length 8 (derived)
+'/scratch/kohlbach/b113/msfragger/heldout/data/PXD055832/055_SS05.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 43116 spectra by scanning it instead (0.05 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.03 over 2612 repeat gaps, cycle 19, 1366 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Shortlist protease check: Trypsin fits the tag ends best.
+Shortlist: 189 of 189 proteins with evidence kept, not FDR-controlled -> sl.tsv
+Reduced FASTA: 189 entries and 189 reversed decoys ('rev_', for MSFragger) -> red.fasta
+Search configuration (msfragger, database red.fasta) -> fragger.params
+21369 MS2 spectra, 277787 tags
+FASTag took 1.00 s (wall), 11.54 s (CPU), 2.69 s (system), 8.85 s (user); Peak Memory Usage: 254 MB.

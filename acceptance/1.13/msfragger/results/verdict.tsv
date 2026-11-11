@@ -1,0 +1,7 @@
+criterion	verdict	detail
+evaluable	7	MF01,MF02,MF03,MF04,MF05,MF07,MF08
+C1	PASS	7 of 7 runs
+C2	FAIL	min 0.4860 median 0.6125 pooled 0.6085 (n 7)
+G1	PASS	median 3.383 min 2.025 max 3.908 (n 7)
+G2	FAIL	pooled 0.0127 max run 0.0209 (n 7)
+OVERALL	FAIL	
