@@ -255,7 +255,7 @@
       "name": "complement_tolerance_unit",
       "type": "string",
       "default": "Da",
-      "description": "Da: the window is -complement_tolerance. fragment: -complement_tol_factor scales the run's -fragment_tolerance at both partners. auto (experimental, failed its held-out test): the window is measured on the run, from the complement pairs of high-confidence tags in a probe of -complement_probe MS2 spectra; -complement_tolerance when too few pairs",
+      "description": "Da: the window is -complement_tolerance. fragment: -complement_tol_factor scales the run's -fragment_tolerance at both partners. auto (experimental; its first held-out test failed, the second, with the revised estimator, was inconclusive with no criterion failed: +1.1 points of correct rank-1 tags on ion trap, same window as Da on the high-resolution files): the window is measured on the run, from the complement pairs of high-confidence tags in a probe of -complement_probe MS2 spectra; -complement_tolerance when too few pairs",
       "required": false,
       "toppAdvanced": true,
       "choices": [
@@ -1284,7 +1284,7 @@
       "name": "shortlist_protease",
       "type": "string",
       "default": "trypsin",
-      "description": "Cleavage rule of the shortlist's placements and of -search_config_out. 'trypsin': tryptic windows, a confidently non-tryptic run is refused (FASTag 1.12). 'auto': the protease the tag ends call (trypsin when inconclusive). A protease name, or 'unspecific': that rule. Except for 'trypsin', windows are found by flank mass and kept by the rule and -shortlist_specificity; only exact placements count. Experimental, no held-out test",
+      "description": "Cleavage rule of the shortlist's placements and of -search_config_out. 'trypsin': tryptic windows, a confidently non-tryptic run is refused (FASTag 1.12). 'auto': the protease the tag ends call (trypsin when inconclusive). A protease name, or 'unspecific': that rule. Except for 'trypsin', windows are found by flank mass and kept by the rule and -shortlist_specificity; only exact placements count. Experimental; auto passed its held-out test (9 runs, 5 proteases: median protein recall 0.25 against the full search, +0.12 over the trypsin shortlist); a named rule and unspecific have no held-out test",
       "required": false,
       "toppAdvanced": true,
       "choices": [
