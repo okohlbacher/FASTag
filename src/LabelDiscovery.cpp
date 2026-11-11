@@ -1882,6 +1882,9 @@ namespace FASTag::LabelDiscovery
     constexpr double kReporterTol = 0.003, kReporterDecoy = 0.0170, kReporterMinRel = 0.01;
     constexpr std::uint64_t kGateMinScans = 200;
     constexpr double kGateOn = 0.3, kGateOff = 0.05, kVariantTol = 0.008;
+    // TMTpro when the TMTpro-only reporters reach this share of the TMT excess. Development runs:
+    // TMT at most 0.28, TMTpro at least 0.35 (reporters in MS3) and 0.94 (in MS2).
+    constexpr double kTmtproShare = 0.5;
 
     template <std::size_t N>
     int channels(const std::vector<std::pair<double, double>>& low, const double (&set)[N], double shift, double thr)
@@ -1953,14 +1956,17 @@ namespace FASTag::LabelDiscovery
       std::string name = tmt ? "TMT" : g == "itraq8" ? "iTRAQ8plex" : "iTRAQ4";
       const SiteCandidate* best = nullptr;
       const std::pair<double, const char*> variants[] = {{229.162932, "TMT"}, {304.207146, "TMTpro"}};
+      const bool pro = tmt && rc.excess(rc.tmtpro, rc.tmtpro_decoy) >= kTmtproShare * rc.excess(rc.tmt, rc.tmt_decoy);
       if (tmt)
         for (const SiteCandidate& c : a.sites)
           for (const auto& v : variants)
-            if (c.site == 'N' && !c.control && std::fabs(c.delta - v.first) <= kVariantTol && (!best || c.spectra > best->spectra))
+            if (c.site == 'N' && !c.control && std::fabs(c.delta - v.first) <= kVariantTol && (!best || c.spectra > best->spectra) &&
+                (!pro || v.first > 300))
             {
               best = &c;
               name = v.second;
             }
+      if (pro) name = "TMTpro";
       a.status = "call";
       a.labels = name;
       a.call_sites = best || !tmt ? "N" : "-";
@@ -2019,7 +2025,16 @@ namespace FASTag::LabelDiscovery
     };
     lys8 = pairs(kLys8);
     arg10 = pairs(kArg10);
-    other = std::max({pairs(4.025107), pairs(6.020129), pairs(8.044366)});
+    other = std::max({pairs(6.020129), pairs(3.989092), pairs(3.988140)});
+    silac_top = std::max({lys8, arg10, other});
+    dimethyl2 = 0;
+    // Per labelled site: light/intermediate, light/13CD2O, light/CD2O+NaBD3CN, light/heavy, intermediate/heavy.
+    for (double s : {4.025107, 6.031812, 6.037660, 8.044366, 4.019259})
+    {
+      const std::uint64_t one = pairs(s);
+      other = std::max(other, one);
+      dimethyl2 = std::max(dimethyl2, std::min(one, pairs(2 * s)));
+    }
     std::array<std::uint64_t, 8> c{};
     for (std::size_t i = 0; i < c.size(); ++i) c[i] = pairs(kControl[i]);
     std::sort(c.begin(), c.end());
@@ -2029,6 +2044,12 @@ namespace FASTag::LabelDiscovery
   bool PairCounter::silac() const
   {
     return lys8 >= 30 && arg10 >= 30 && ratio(lys8) >= 2.0 && ratio(arg10) >= 2.0;
+  }
+
+  bool PairCounter::dimethyl() const
+  {
+    // ponytail: SILAC with Lys4 alone (no Arg6, no heavy channel) reads as dimethyl; needs tags to separate.
+    return dimethyl2 >= 30 && ratio(dimethyl2) >= 2.0 && dimethyl2 > silac_top;
   }
 
   bool PairCounter::anyLabel() const
@@ -2044,8 +2065,24 @@ namespace FASTag::LabelDiscovery
     a.pairs.precursors.shrink_to_fit();
     // Too few tags for the site scan, but reporters and label pairs were looked for and are absent.
     // ponytail: a sample labelled in one channel only (all heavy, light dimethyl) is called label-free here.
-    if (a.status == "no_call" && (a.reason == "few_spectra" || a.reason == "no_reference") && a.reporter_gate == "none" &&
-        a.pairs.precursors.size() >= 500 && !a.pairs.anyLabel())
+    // Format 5: dimethyl shows as pairs at one spacing and at twice that spacing, also where the site scan saw too few
+    // tags or called label-free.
+    if (a.pairs.dimethyl() && (a.status == "no_call" || a.labels == "label-free"))
+    {
+      a.status = "call";
+      a.labels = "Dimethyl";
+      a.call_sites = a.reason = "-";
+      a.basis = "precursor_pairs";
+      return;
+    }
+    // Format 5: also on ion-trap MS2 without high-resolution MSn scans (gate unknown).
+    // ponytail: an isobaric sample measured with ion-trap MSn only is called label-free here.
+    const bool few = (a.reason == "few_spectra" || a.reason == "no_reference") && a.reporter_gate == "none";
+    // There the pairs are the only evidence, so the run must be large enough to show them: 1500 precursors give the 30
+    // pairs at a pair share of 2 % (development dimethyl runs: 0.6 to 5.1 %, median 2.5 %).
+    const bool trap = a.reason == "low_resolution_ms2" && (a.reporter_gate == "none" || a.reporter_gate == "unknown") &&
+                      a.pairs.precursors.size() >= 1500;
+    if (a.status == "no_call" && (few || trap) && a.pairs.precursors.size() >= 500 && !a.pairs.anyLabel())
     {
       a.status = "call";
       a.labels = "label-free";
@@ -2827,7 +2864,7 @@ namespace FASTag::LabelDiscovery
       row("ld_reporter", "tmt_excess", fix(rc.excess(rc.tmt, rc.tmt_decoy), 4), sc, "share of scans with >= 2 TMT reporters (126-131) minus the share at decoy m/z");
       row("ld_reporter", "itraq4_excess", fix(rc.excess(rc.itraq4, rc.itraq4_decoy), 4), sc, "the same for >= 2 iTRAQ 4-plex reporters (114-117)");
       row("ld_reporter", "itraq8_excess", fix(rc.excess(rc.itraq8, rc.itraq8_decoy), 4), sc, "the same for >= 1 reporter of iTRAQ 8-plex only (113, 118, 119, 121)");
-      row("ld_reporter", "tmtpro_excess", fix(rc.excess(rc.tmtpro, rc.tmtpro_decoy), 4), sc, "the same for >= 2 reporters of TMTpro only (132-135); not used by the call");
+      row("ld_reporter", "tmtpro_excess", fix(rc.excess(rc.tmtpro, rc.tmtpro_decoy), 4), sc, "the same for >= 2 reporters of TMTpro only (132-135); at half of tmt_excess or more the reporter call is TMTpro");
       row("ld_reporter", "gate", a.reporter_gate, "-", "unknown (below 200 scans), tmt, itraq4, itraq8, none or unclear");
     }
     // ld_pair
@@ -2840,9 +2877,12 @@ namespace FASTag::LabelDiscovery
       row("ld_pair", "control_pairs", fix(pc.control, 1), n, "median over eight control spacings (the label masses shifted by whole Da)");
       row("ld_pair", "lys8_ratio", fix(pc.ratio(pc.lys8), 2), "-", "lys8_pairs / (control_pairs + 5)");
       row("ld_pair", "arg10_ratio", fix(pc.ratio(pc.arg10), 2), "-", "arg10_pairs / (control_pairs + 5)");
-      row("ld_pair", "other_pairs", num(pc.other), n, "the largest count at +4.0251 (Lys4, dimethyl), +6.0201 (Lys6, Arg6) and +8.0444 Da (dimethyl)");
+      row("ld_pair", "other_pairs", num(pc.other), n, "the largest count at another label spacing: +6.0201, +3.9891, +3.9881 (SILAC), +4.0251, +6.0318, +6.0377, +8.0444, +4.0193 Da (dimethyl)");
       row("ld_pair", "other_ratio", fix(pc.ratio(pc.other), 2), "-", "other_pairs / (control_pairs + 5)");
       row("ld_pair", "silac", pc.silac() ? "yes" : "no", "-", "yes: both counts >= 30 and both ratios >= 2");
+      row("ld_pair", "dimethyl_pairs", num(pc.dimethyl2), n, "largest over the dimethyl spacings of the smaller count at the spacing and at twice the spacing");
+      row("ld_pair", "dimethyl_ratio", fix(pc.ratio(pc.dimethyl2), 2), "-", "dimethyl_pairs / (control_pairs + 5)");
+      row("ld_pair", "dimethyl", pc.dimethyl() ? "yes" : "no", "-", "yes: count >= 30, ratio >= 2 and above the largest SILAC spacing count");
     }
     // ld_call
     row("ld_call", "status", a.status, "-", "call or no_call");
