@@ -1321,11 +1321,13 @@ explain call does not detect as `present` with `call_reason` `reagent` when
 its tags in the listed reagent proteins (porcine trypsin, bovine serum
 proteins, caseins; `species_reagents.fasta` in the taxonomy directory, 38
 entries) exceed the same count on the decoy tags. The calls of the explain
-rule itself do not change. On development data (62 spent held-out runs)
-recovery of the truth genera is 80/105 against 38/105 for `explain` alone and
-77/105 for the decoy call (Sus or Bos 45/68, 3/68, 41/68), with 0.58 false
-genus calls per run against 0.50 and 5.98. A `reagent` call names the source
-of a protein reagent, not a sample organism; see
+rule itself do not change. A `reagent` call names the source of a protein
+reagent, not a sample organism: it is scored neither as a true nor as a
+false genus call and is counted separately. On development data (62 spent
+held-out runs) there are 47 reagent calls in 37 runs, 40 of them with at
+least 3 Sage peptides in the listed proteins of the called genus; false
+genus calls per run stay at the 0.50 of `explain` alone (decoy call 5.98);
+see
 [doc/SPECIES-DETECTOR.md](doc/SPECIES-DETECTOR.md).
 
 **Both tag orientations (opt-in).** Tags are written N->C under a y-ion

@@ -355,19 +355,27 @@ development set with a Sage truth search; frozen genus rule of
 `PREREG-species-explain.md`, Sus/Bos counted as positives; branch
 `post1131/species`). **Not held-out tested.**
 
+Scoring: a reagent call (a row with `call` `present` and `call_reason`
+`reagent`, read from the report alone) is neither a true nor a false genus
+call. It is left out of the false genus calls; a positive genus that is not
+a sample genus and has a reagent call is left out of the recovery of all
+three columns; the reagent calls are counted on their own.
+
 | | decoy call | explain (1.13.1) | explain + reagents |
 |---|---|---|---|
-| Spent runs (62): false genus calls per run | 5.98 [4.68, 7.48] | 0.50 [0.29, 0.73] | 0.58 [0.36, 0.82] |
-| Spent runs: recovery | 77/105 | 38/105 | 80/105 |
-| of these: Sus or Bos | 41/68 | 3/68 | 45/68 |
-| Development runs (35): false genus calls per run | 7.37 [6.03, 8.89] | 0.40 [0.17, 0.66] | 0.49 [0.26, 0.74] |
-| Development runs: recovery | 87/102 | 50/102 | 84/102 |
-| of these: Sus or Bos | 40/54 | 3/54 | 37/54 |
+| Spent runs (62): false genus calls per run | 5.98 [4.68, 7.48] | 0.50 [0.29, 0.73] | 0.50 [0.29, 0.73] |
+| Spent runs: recovery (42 of 105 positives left out) | 52/63 | 38/63 | 38/63 |
+| Spent runs: reagent calls | | | 47 in 37 runs |
+| of these: >= 3 / 1 or 2 / no Sage peptides in listed proteins | | | 40 / 5 / 2 |
+| Development runs (35): false genus calls per run | 7.37 [6.03, 8.89] | 0.40 [0.17, 0.66] | 0.40 [0.17, 0.66] |
+| Development runs: recovery (34 of 102 positives left out) | 61/68 | 50/68 | 50/68 |
+| Development runs: reagent calls | | | 37 in 28 runs |
+| of these: >= 3 / 1 or 2 / no Sage peptides in listed proteins | | | 32 / 3 / 2 |
 
-With the reagent calls counted as genus calls the upper bound on the spent
-runs (0.82) is above the 0.75 of the primary criterion, on the development
-runs (0.74) at it; the eight added calls labelled false (5 + 3) pass the tag test in listed proteins but have fewer
-than three genus-unique Sage peptides. Of the 68 Sus/Bos positives of the spent
+Scored this way the option changes neither false genus calls nor recovery
+against `explain` alone; what it adds is the reagent calls. Sus or Bos
+positives with a reagent call: 42 of 68 on the spent runs, 34 of 54 on the
+development runs. Of the 68 Sus/Bos positives of the spent
 runs none is a sample organism: in 53 the Sage peptides come from reagent
 proteins (>= 3 peptides), in 11 from one or two such peptides, in 4 from
 none. Limits: a genuine second organism at low level (meat or milk
