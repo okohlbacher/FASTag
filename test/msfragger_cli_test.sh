@@ -43,7 +43,7 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 ARGS=(-in "$IN" -recon_fasta "$DB" -tag_length 4 -extension 1 -fragment_tolerance 0.5
       -fragment_tolerance_unit Da -fixed_modifications 'Carbamidomethyl (C)'
       -variable_modifications 'Oxidation (M)' 'Acetyl (Protein N-term)'
-      -search_precursor_tolerance 15 -search_isotope_errors 2 -threads 2)
+      -search_precursor_tolerance 15 -search_isotope_errors 2 -search_missed_cleavages 1 -threads 2)
 run() {
   local d=$1; shift
   mkdir -p "$d"
@@ -210,5 +210,20 @@ runh "$TMP/h2" -search_config_out f.params -search_engine msfragger -search_isot
 [ "$(key "$TMP/h2/f.params" isotope_error)" = 0 ] || fail "h: an explicit -search_isotope_errors 0 is not kept"
 runh "$TMP/h3" -search_config_out sage.json
 grep -q '"isotope_errors": \[0, 0\]' "$TMP/h3/sage.json" || fail "h: the Sage default isotope errors changed"
-echo "h: isotope error default by engine"
+# the other by-engine defaults: MSFragger 2 missed cleavages, 20 ppm, protein N-terminal acetylation;
+# Sage keeps -recon_missed_cleavages, 10 ppm and no acetylation; explicit values are kept
+H1=$TMP/h1/f.params
+[ "$(key "$H1" allowed_missed_cleavage_1)" = 2 ] || fail "h: msfragger default missed cleavages are not 2"
+[ "$(key "$H1" precursor_mass_upper)" = 20 ] && [ "$(key "$H1" precursor_true_tolerance)" = 20 ] \
+  || fail "h: msfragger default precursor tolerance is not 20 ppm"
+[ "$(key "$H1" variable_mod_01)" = "42.010565 [^ 1" ] || fail "h: msfragger default lacks protein N-terminal acetylation"
+runh "$TMP/h4" -search_config_out f.params -search_engine msfragger -search_missed_cleavages 1 \
+  -search_precursor_tolerance 10 -search_nterm_acetyl no
+[ "$(key "$TMP/h4/f.params" allowed_missed_cleavage_1)" = 1 ] && [ "$(key "$TMP/h4/f.params" precursor_mass_upper)" = 10 ] \
+  || fail "h: explicit missed cleavages / tolerance are not kept"
+grep -q '^variable_mod_01' "$TMP/h4/f.params" && fail "h: -search_nterm_acetyl no still writes the modification"
+grep -q '"missed_cleavages": 1,' "$TMP/h3/sage.json" && grep -q '"ppm": \[-10, 10\]' "$TMP/h3/sage.json" \
+  || fail "h: the Sage default missed cleavages or precursor tolerance changed"
+grep -q '42\.01' "$TMP/h3/sage.json" && fail "h: Sage got protein N-terminal acetylation by default"
+echo "h: isotope error, missed cleavage, tolerance and acetylation defaults by engine"
 echo "msfragger_cli_test: all checks passed"

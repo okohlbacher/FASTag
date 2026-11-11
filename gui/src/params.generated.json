@@ -1091,13 +1091,36 @@
       "max": 3
     },
     {
-      "name": "search_precursor_tolerance",
-      "type": "double",
-      "default": "10.0",
-      "description": "Precursor tolerance written to -search_config_out",
+      "name": "search_missed_cleavages",
+      "type": "int",
+      "default": "-1",
+      "description": "Missed cleavages the engine searches; -1 = by engine: -recon_missed_cleavages for Sage and Comet and with -shortlist_protease other than trypsin, 2 (MSFragger's own default) for msfragger",
       "required": false,
       "toppAdvanced": false,
-      "min": 0
+      "min": -1,
+      "max": 10
+    },
+    {
+      "name": "search_nterm_acetyl",
+      "type": "string",
+      "default": "engine",
+      "description": "Add 'Acetyl (Protein N-term)' to the variable modifications of -search_config_out; 'engine' = yes for msfragger (its own default), no for Sage and Comet",
+      "required": false,
+      "toppAdvanced": false,
+      "choices": [
+        "engine",
+        "yes",
+        "no"
+      ]
+    },
+    {
+      "name": "search_precursor_tolerance",
+      "type": "double",
+      "default": "-1.0",
+      "description": "Precursor tolerance written to -search_config_out; -1 = by engine: 10, or 20 ppm (MSFragger's own default) for msfragger",
+      "required": false,
+      "toppAdvanced": false,
+      "min": -1
     },
     {
       "name": "search_precursor_unit",

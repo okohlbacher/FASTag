@@ -1008,9 +1008,10 @@ protected:
     setValidStrings_("search_engine", ListUtils::create<std::string>("sage,comet,msfragger"));
     registerInputFile_("search_config_template", "<file>", "",
                        "Comet only: a `comet -p` parameter file the managed keys are merged into", false);
-    registerDoubleOption_("search_precursor_tolerance", "<f>", 10.0,
-                          "Precursor tolerance written to -search_config_out", false);
-    setMinFloat_("search_precursor_tolerance", 0.0);
+    registerDoubleOption_("search_precursor_tolerance", "<f>", -1.0,
+                          "Precursor tolerance written to -search_config_out; -1 = by engine: 10, or 20 ppm "
+                          "(MSFragger's own default) for msfragger", false);
+    setMinFloat_("search_precursor_tolerance", -1.0);
     registerStringOption_("search_precursor_unit", "<unit>", "ppm",
                           "Unit of -search_precursor_tolerance", false);
     setValidStrings_("search_precursor_unit", ListUtils::create<std::string>("ppm,Da"));
@@ -1019,6 +1020,16 @@ protected:
                        "Sage and Comet, 0..3 (MSFragger's own default) for msfragger", false);
     setMinInt_("search_isotope_errors", -1);
     setMaxInt_("search_isotope_errors", 3);
+    registerIntOption_("search_missed_cleavages", "<n>", -1,
+                       "Missed cleavages the engine searches; -1 = by engine: -recon_missed_cleavages for Sage "
+                       "and Comet and with -shortlist_protease other than trypsin, 2 (MSFragger's own default) "
+                       "for msfragger", false);
+    setMinInt_("search_missed_cleavages", -1);
+    setMaxInt_("search_missed_cleavages", 10);
+    registerStringOption_("search_nterm_acetyl", "<mode>", "engine",
+                          "Add 'Acetyl (Protein N-term)' to the variable modifications of -search_config_out; "
+                          "'engine' = yes for msfragger (its own default), no for Sage and Comet", false);
+    setValidStrings_("search_nterm_acetyl", ListUtils::create<std::string>("engine,yes,no"));
     registerStringOption_("search_decoy_prefix", "<s>", "",
                           "Decoy prefix the engine generates; empty = rev_ (Sage, MSFragger) or DECOY_ (Comet)", false);
     // #17: the run's mass-gap peaks (the -massgap_out peaks) as variable
@@ -2694,6 +2705,8 @@ protected:
           {"search_precursor_tolerance", "-search_config_out", !search_config_out.empty()},
           {"search_precursor_unit", "-search_config_out", !search_config_out.empty()},
           {"search_isotope_errors", "-search_config_out", !search_config_out.empty()},
+          {"search_missed_cleavages", "-search_config_out", !search_config_out.empty()},
+          {"search_nterm_acetyl", "-search_config_out", !search_config_out.empty()},
           {"search_decoy_prefix", "-search_config_out", !search_config_out.empty()},
           {"search_shifts_out", "-search_shifts", shifts_on},
           {"shift_max_variable", "-search_shifts", shifts_on},
@@ -2934,11 +2947,23 @@ protected:
           if (!nm.empty()) sl_plan.fixed.push_back(mdb->getModification(nm));
         for (const std::string& nm : getStringList_("variable_modifications"))
           if (!nm.empty()) sl_plan.variable.push_back(mdb->getModification(nm));
-        sl_plan.missed_cleavages = getIntOption_("recon_missed_cleavages");
+        // By engine (post-1.13.1, nine development runs): MSFragger gets its own
+        // closed-search defaults (2 missed cleavages, 20 ppm, protein N-terminal
+        // acetylation); Sage and Comet are unchanged.
+        const bool msf = search_engine == "msfragger";
+        const std::string ac = getStringOption_("search_nterm_acetyl");
+        const ResidueModification* acetyl = mdb->getModification("Acetyl (Protein N-term)");
+        if ((ac == "yes" || (ac == "engine" && msf)) &&
+            std::find(sl_plan.variable.begin(), sl_plan.variable.end(), acetyl) == sl_plan.variable.end())
+          sl_plan.variable.push_back(acetyl);
+        sl_plan.missed_cleavages = getIntOption_("search_missed_cleavages");
+        if (sl_plan.missed_cleavages < 0)  // 2 measured with trypsin only
+          sl_plan.missed_cleavages = msf && !sl_nontryptic ? 2 : getIntOption_("recon_missed_cleavages");
         sl_plan.fragment_tolerance = p.frag_tol;
         sl_plan.fragment_ppm = p.tol_ppm;
-        sl_plan.precursor_tolerance = getDoubleOption_("search_precursor_tolerance");
         sl_plan.precursor_ppm = getStringOption_("search_precursor_unit") == "ppm";
+        sl_plan.precursor_tolerance = getDoubleOption_("search_precursor_tolerance");
+        if (sl_plan.precursor_tolerance < 0) sl_plan.precursor_tolerance = msf && sl_plan.precursor_ppm ? 20.0 : 10.0;
         // -1: Sage and Comet none (as before); MSFragger its own default 0..3
         // (development runs: without it the search lost a third of its PSMs).
         sl_plan.isotope_errors = getIntOption_("search_isotope_errors");

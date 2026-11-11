@@ -1050,10 +1050,22 @@ export const PARAM_UI: Record<string, ParamUi> = {
       text: 'How many precursor isotope errors the search engine should consider; -1 leaves it to the engine: none for Sage and Comet, up to 3 for MSFragger.'
     }
   },
+  search_missed_cleavages: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'How many missed cleavages the search engine should allow; -1 leaves it to the engine: the tag placement setting for Sage and Comet, 2 for MSFragger with trypsin.'
+    }
+  },
+  search_nterm_acetyl: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Whether protein N-terminal acetylation is written into the search settings as a variable modification; "engine" means yes for MSFragger and no for Sage and Comet.'
+    }
+  },
   search_precursor_tolerance: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'The precursor tolerance written into the search settings.'
+      text: 'The precursor tolerance written into the search settings; -1 leaves it to the engine: 10, or 20 ppm for MSFragger.'
     }
   },
   search_precursor_unit: {

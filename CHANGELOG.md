@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased (after 1.13.1)
+
+- **`-search_engine msfragger`: three more export values follow MSFragger's
+  own closed-search defaults.** 2 missed cleavages (new
+  `-search_missed_cleavages`, default -1 = by engine; with
+  `-shortlist_protease` other than trypsin the value stays
+  `-recon_missed_cleavages`), a 20 ppm precursor window
+  (`-search_precursor_tolerance` defaults to -1 = by engine) and variable
+  protein N-terminal acetylation (new `-search_nterm_acetyl`, default
+  `engine`). The Sage and Comet exports are byte-identical to 1.13.1. On
+  nine development runs (two development runs and the seven runs of the
+  spent held-out set of 1.13) the share of the full search's identified
+  spectra that the shortlist search keeps rose from 0.723 to 0.831 on
+  average (lowest run 0.563 to 0.678), largest per-run entrapment FDP 2.39%
+  to 1.63%. With the shortlist widened by the existing options
+  `-shortlist_gapped -recon_min_length 7` it is 0.911 on average, 0.878 in
+  the lowest run, entrapment FDP at most 1.46% per run. **Set on development
+  runs only; no held-out test.** The held-out FAIL of 1.13 stands.
+  The shortlist options are not defaults.
+
 ## 1.13.1 (2026-11-10)
 
 No change to the program. Five test scripts compare and pass the Windows
