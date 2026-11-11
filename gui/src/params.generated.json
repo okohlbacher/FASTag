@@ -1009,7 +1009,7 @@
       "name": "recon_min_length",
       "type": "int",
       "default": "0",
-      "description": "Shortest tag worth reconciling; 0 derives it from database size (the length where chance matches fall below 5%). Overridable because the floor is a noise gate, not a correctness rule. With -search_engine msfragger and -search_config_out the default is 6 (the held-out-tested MSFragger configuration) unless given on the command line or in an INI",
+      "description": "Shortest tag worth reconciling; 0 derives it from database size (the length where chance matches fall below 5%). Overridable because the floor is a noise gate, not a correctness rule",
       "required": false,
       "toppAdvanced": false,
       "min": 0
@@ -1018,7 +1018,7 @@
       "name": "recon_missed_cleavages",
       "type": "int",
       "default": "1",
-      "description": "Missed tryptic cleavages allowed in reconciliation windows (at most 10). With -search_engine msfragger and -search_config_out the default is 2 (the held-out-tested MSFragger configuration) unless given on the command line or in an INI",
+      "description": "Missed tryptic cleavages allowed in reconciliation windows (at most 10)",
       "required": false,
       "toppAdvanced": false,
       "min": 0,
@@ -1071,7 +1071,7 @@
       "name": "search_engine",
       "type": "string",
       "default": "sage",
-      "description": "Engine of -search_config_out; msfragger (MSFragger 4.4.1, experimental) needs decoys in the database: -fasta_out then appends reversed ones. With msfragger -shortlist_gapped is on, -shortlist_max_evalue 10, -recon_min_length 6 and -recon_missed_cleavages 2 unless given: the configuration that passed its second held-out test (kept share 0.83-0.98 of a full MSFragger search, 9 runs; the first test, with the 1.13 shortlist, FAILED at 0.49-0.73)",
+      "description": "Engine of -search_config_out; msfragger (MSFragger 4.4.1, experimental) needs decoys in the database: -fasta_out then appends reversed ones. With msfragger and -shortlist_protease trypsin, -shortlist_gapped is on, -shortlist_max_evalue 10, -recon_min_length 6 and -recon_missed_cleavages 2, each unless given on the command line or in an INI: the configuration that passed its second held-out test (kept share 0.83-0.98 of a full MSFragger search, 9 runs; the first test, with the 1.13 shortlist, FAILED at 0.49-0.73)",
       "required": false,
       "toppAdvanced": false,
       "choices": [
@@ -1257,7 +1257,7 @@
       "name": "shortlist_gapped",
       "type": "bool",
       "default": "false",
-      "description": "Let placements with one mismatched flank (a mass gap) count for the shortlist; by default only exact ones count (a gap equal to a fixed terminal label is exact). On by default with -search_engine msfragger and -search_config_out (the held-out-tested MSFragger configuration; tryptic shortlist only)",
+      "description": "Let placements with one mismatched flank (a mass gap) count for the shortlist; by default only exact ones count (a gap equal to a fixed terminal label is exact). On by default with -search_engine msfragger, -search_config_out and -shortlist_protease trypsin (the held-out-tested MSFragger configuration)",
       "required": false,
       "toppAdvanced": false
     },
@@ -1265,7 +1265,7 @@
       "name": "shortlist_max_evalue",
       "type": "double",
       "default": "0.1",
-      "description": "E-value a tag needs for its placements to count for the shortlist. With -search_engine msfragger and -search_config_out the default is 10 (the held-out-tested MSFragger configuration) unless given on the command line or in an INI",
+      "description": "E-value a tag needs for its placements to count for the shortlist. With -search_engine msfragger, -search_config_out and -shortlist_protease trypsin the default is 10 (the held-out-tested MSFragger configuration) unless given on the command line or in an INI",
       "required": false,
       "toppAdvanced": true,
       "min": 0
