@@ -534,7 +534,6 @@ namespace FASTag
     std::size_t n_openms = 0;   ///< MS2 peaks decoded by OpenMS
     std::size_t n_bad_mz = 0;   ///< getSpectrum() reads with a selected-ion m/z <= 0 or not finite
     std::size_t n_bad_mz_target = 0;  ///< ... of them given the isolation target instead
-    std::string buffer;         ///< a copy of `bytes` for domParseSpectrum
     bool ok = false;
     bool rebuilt = false; ///< offsets came from a scan, not the file's index
     /// The file's referenceableParamGroups, read once at open and shared by
@@ -1078,8 +1077,10 @@ namespace FASTag
           impl_->direct_on = false;
         try
         {
-          impl_->buffer.assign(impl_->bytes.data(), impl_->bytes.size());
-          impl_->decoder.domParseSpectrum(impl_->buffer, spec);
+          // domParseSpectrum wants a std::string. A local one: a copy kept in
+          // the reader would hold the largest spectrum's bytes per thread.
+          const std::string copy(impl_->bytes.data(), impl_->bytes.size());
+          impl_->decoder.domParseSpectrum(copy, spec);
           // domParseSpectrum resets the spectrum, so the level goes back on.
           spec.setMSLevel(static_cast<UInt>(ms_level));
         }

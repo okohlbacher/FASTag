@@ -623,6 +623,7 @@ MGF→mzML direction is exact.
 | `-species_call_params <file>` | `species_call.tsv` in the taxonomy dir | With `-species_call decoy`: the decision parameters (alpha, tau, n_min) |
 | `-species_call_min_units <n>` | 200 | With `-species_call decoy`: fewer spectra with taxon evidence make the run a few_spectra no_call |
 | `-species_call_decoys <n>` | 5 | With `-species_call decoy`: decoy tags per tag (1-100) |
+| `-species_reagents <fasta>` | none | Experimental, with `-species_call explain`: protein reagents (UniProt headers with `OX=`; `species_reagents.fasta` in the taxonomy dir). A taxon the explain call does not detect is called present with `call_reason` `reagent` when its tags in the listed proteins exceed the decoy tags' count; appends `reagent_tags`, `reagent_expected`. Not held-out tested |
 | `-species_pi0 <f>` | 1 | With `-species_call decoy`: pi0 of the q-values; 1 = Benjamini-Hochberg, 0 = estimate (Storey) |
 | `-species_orientation <mode>` | forward | `both`: also look each tag up reversed (a tag read from b ions is written reversed); one informative reading is used as it is, two are intersected, two without a common taxon skip the tag. Independent of `-orientation` (which applies to `-fasta` and `-recon_fasta`). The analytic `log_pvalue` and `qvalue` columns are NA under `both`, also with `-species_call decoy`; the decoy-based value is its `decoy_qvalue` (not calibrated in 1.12.0; see `-species_call`) |
 | `-subsample_spectra <n>` / `-subsample_fraction <f>` | 0 | Tag only a random subset (count or fraction; if both are given, the count wins); 0 = all |
@@ -1398,6 +1399,21 @@ the spent runs, not a test result: of the 23 calls in the 13 runs whose
 organism is outside the index, 14 name a nearest indexed relative, 6 name
 material that is in the sample (such as keratin or host protein) and 3 are
 unsupported. The default (`none`) and the decoy call are unchanged; see
+[doc/SPECIES-DETECTOR.md](doc/SPECIES-DETECTOR.md).
+
+**Reagent organisms (opt-in, experimental, not held-out tested).** With
+`-species_call explain`, `-species_reagents <fasta>` reports a taxon the
+explain call does not detect as `present` with `call_reason` `reagent` when
+its tags in the listed reagent proteins (porcine trypsin, bovine serum
+proteins, caseins; `species_reagents.fasta` in the taxonomy directory, 38
+entries) exceed the same count on the decoy tags. The calls of the explain
+rule itself do not change. A `reagent` call names the source of a protein
+reagent, not a sample organism: it is scored neither as a true nor as a
+false genus call and is counted separately. On development data (62 spent
+held-out runs) there are 47 reagent calls in 37 runs, 40 of them with at
+least 3 Sage peptides in the listed proteins of the called genus; false
+genus calls per run stay at the 0.50 of `explain` alone (decoy call 5.98);
+see
 [doc/SPECIES-DETECTOR.md](doc/SPECIES-DETECTOR.md).
 
 **Both tag orientations (opt-in).** Tags are written N->C under a y-ion

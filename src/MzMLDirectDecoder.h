@@ -13,13 +13,19 @@
 //
 // SCOPE: exactly what domParseSpectrum fills for the spectra FASTag reads:
 // the <spectrum> id and the peaks of one "m/z array" and one "intensity
-// array", 32- or 64-bit float, uncompressed or zlib. decode() returns false,
-// and leaves the spectrum's peaks untouched, for ANYTHING else -- numpress,
-// zstd, integer or string arrays, extra arrays (ion mobility, ...), unknown
-// or unit-carrying cvParams, userParams or other elements among the arrays,
+// array", 32- or 64-bit float, uncompressed, zlib, or MS-Numpress (linear,
+// pic, slof; with or without zlib; decoded by OpenMS's own MSNumpress
+// functions), and any further array that is a non-standard one named by its
+// value (MS:1000786, e.g. the "Ion Mobility" array of timsTOF conversions)
+// of the same encodings, which becomes the float data array OpenMS builds.
+// decode() returns false, and leaves the spectrum untouched, for ANYTHING
+// else -- zstd, integer or string arrays, further arrays named by another
+// term (CV ion mobility arrays, ...), a Numpress array without a float type,
+// unknown or unit-carrying cvParams, userParams or other elements among the arrays,
 // param group refs, CDATA, entities in the values it uses, malformed base64,
-// a broken zlib stream, a decoded length that differs from
-// defaultArrayLength, or a failed allocation -- and the caller uses
+// a broken zlib or Numpress stream, a decoded length that differs from
+// defaultArrayLength (for Numpress arrays too, where OpenMS itself does not
+// compare), or a failed allocation -- and the caller uses
 // domParseSpectrum, which then also prints or throws whatever OpenMS prints
 // or throws for that input.
 //
@@ -41,7 +47,7 @@
 // MEMORY: defaultArrayLength is the file's claim and sizes nothing up
 // front: the first inflate buffer follows the compressed size and grows by
 // doubling, and inflating stops (declined) once the output passes the
-// claimed length.
+// claimed length (for Numpress, the most bytes that many values can take).
 //
 // One instance per thread: the buffers are reused, not shared.
 //

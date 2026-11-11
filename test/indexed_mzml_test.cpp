@@ -195,8 +195,12 @@ namespace
   }
 
   /// @p src rewritten with the given array encoding.
+  /// MS-Numpress: @p mz_np for m/z, @p other_np for the intensities and for
+  /// an added per-peak float array named "Ion Mobility" (written as a
+  /// non-standard array, MS:1000786, as timsTOF conversions do).
   std::string rewrite_encoded(const std::string& src, const std::string& dst, bool zlib, bool mz32, bool int32,
-                              bool numpress = false)
+                              MSNumpressCoder::NumpressCompression mz_np = MSNumpressCoder::NONE,
+                              MSNumpressCoder::NumpressCompression other_np = MSNumpressCoder::NONE)
   {
     try
     {
@@ -207,13 +211,21 @@ namespace
       mz.getOptions().setCompression(zlib);
       mz.getOptions().setMz32Bit(mz32);
       mz.getOptions().setIntensity32Bit(int32);
-      if (numpress)
-      {
-        MSNumpressCoder::NumpressConfig c;
-        c.np_compression = MSNumpressCoder::LINEAR;
-        c.estimate_fixed_point = true;
-        mz.getOptions().setNumpressConfigurationMassTime(c);
-      }
+      MSNumpressCoder::NumpressConfig c;
+      c.estimate_fixed_point = true;
+      c.numpressErrorTolerance = 0; // lossy is fine here; never fall back to plain arrays
+      c.np_compression = mz_np;
+      mz.getOptions().setNumpressConfigurationMassTime(c);
+      c.np_compression = other_np;
+      mz.getOptions().setNumpressConfigurationIntensity(c);
+      mz.getOptions().setNumpressConfigurationFloatDataArray(c);
+      if (other_np != MSNumpressCoder::NONE)
+        for (MSSpectrum& sp : exp)
+        {
+          auto& im = sp.getFloatDataArrays().emplace_back();
+          im.setName("Ion Mobility");
+          for (Size k = 0; k < sp.size(); ++k) im.push_back(0.6f + 0.001f * static_cast<float>(k % 900));
+        }
       mz.store(dst, exp);
       return dst;
     }
@@ -1106,10 +1118,26 @@ int main(int argc, char** argv)
           check(!f.empty(), "write the " + tag + " copy");
           if (!f.empty()) direct_vs_openms(f, "direct: " + tag, true);
         }
-    // Numpress is OpenMS's alone: every spectrum declined, same result.
+    // MS-Numpress, decoded with OpenMS's own functions: m/z alone, and all
+    // three arrays of a timsTOF conversion (m/z, intensity, "Ion Mobility").
     {
-      const std::string f = rewrite_encoded(fixture, tmp + "/fastag_enc_numpress.mzML", true, false, true, true);
-      if (!f.empty()) direct_vs_openms(f, "direct: numpress (declined)", false);
+      using NP = MSNumpressCoder;
+      const std::string f = rewrite_encoded(fixture, tmp + "/fastag_enc_numpress.mzML", true, false, true, NP::LINEAR);
+      check(!f.empty(), "numpress fixture written");
+      if (!f.empty()) direct_vs_openms(f, "direct: numpress linear m/z", true);
+      for (const bool zlib : {false, true})
+        for (const NP::NumpressCompression other : {NP::LINEAR, NP::PIC, NP::SLOF})
+        {
+          const std::string tag = std::string("numpress linear+") + (other == NP::LINEAR ? "linear" : other == NP::PIC ? "pic" : "slof") +
+                                  (zlib ? "+zlib" : "") + " with ion mobility";
+          const std::string g = rewrite_encoded(fixture, tmp + "/fastag_enc_np" + std::to_string(int(other)) + (zlib ? "z" : "") + ".mzML",
+                                                zlib, false, false, NP::LINEAR, other);
+          check(!g.empty(), tag + ": fixture written");
+          if (g.empty()) continue;
+          check(slurp(g).find("value=\"Ion Mobility\"") != std::string::npos && slurp(g).find("MS-Numpress") != std::string::npos,
+                tag + ": the file has a Numpress non-standard array");
+          direct_vs_openms(g, "direct: " + tag, true);
+        }
     }
     // Line breaks inside the base64, as some writers emit them: the index
     // goes stale (rescanned), the decoder skips the whitespace as OpenMS
