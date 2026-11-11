@@ -1,6 +1,6 @@
 # Hybrid EThcD/ETciD spectra as b/y and c/z• ions (`-ion_series_hybrid both`)
 
-FASTag 1.13, backlog item 10. Experimental, opt-in and **not validated** (no held-out test): with `-ion_series_hybrid` at its default
+FASTag 1.13, backlog item 10. Experimental and opt-in; **passed** its held-out test (see Validation): with `-ion_series_hybrid` at its default
 `by` every output is byte-identical to 1.12 (and to `-ion_series auto` before this option).
 
 ## What is read
@@ -80,16 +80,30 @@ Under `both` these steps read a hybrid spectrum once, as b/y (their 1.12 reading
 
 ## Validation
 
-None yet. The option has no DEV score and no preregistered held-out result. It must not be described as
-validated.
+**Held-out result: PASS** (protocol `acceptance/1.13/PREREG-hybrid.md`, branch `acc113r/hybrid`: freeze bc3e039,
+results 2181e45; scored once). 9 EThcD/ETciD runs from 5 PRIDE projects; arms `-ion_series auto` with
+`-ion_series_hybrid by` and `both`; truth: Sage 0.14.7 with b, y, c and z ions, 1% FDR, 29,031 truth spectra; a tag
+is correct by the flank rule with the offset of its row's series.
 
-- DEV (planned): PXD060724, 6 EThcD runs, truth MSFragger 4.4.1 with b, y, c, z ions at 1% target-decoy FDR;
-  endpoint rank-1 tag correct (flank rule, per-row series offset), `auto -ion_series_hybrid both` against `auto`.
-- Held-out (planned, not registered): PXD010595 (ProteomeTools ETD runs with supplemental activation on part of the
-  spectra). A metadata count (cvParams only, no FASTag run) of its three staged files: ETD on 12,559, 12,893 and
-  15,941 spectra, a supplemental beam-type CID (MS:1002678) or supplemental CID (MS:1002679) term 8,021, 8,383 and
-  10,320 times; both readers map these terms to EThcD/ETciD, i.e. hybrid. The manifest, PREREG (endpoint, margin, CI rule, scorer sha256) and frozen config go to
-  `acceptance/1.13` before any held-out run.
+| criterion | result |
+|---|---|
+| truth spectra with at least one correct tag, `both` minus `by`, macro mean over projects: 95% lower bound > +1.0 points, no project below -1.0 | +43.16 points (41.27-45.13); worst project +28.18 |
+| precision of the reported tags, `both` minus `by` >= -1.0 points | +14.33 points |
+| CPU time `both` / `by` <= 2.0 | 1.60 |
+
+| project | activation, sample | runs | truth spectra | with a correct tag, `by` | `both` | rank-1 tag correct, `by` | `both` |
+|---|---|---|---|---|---|---|---|
+| PXD065289 | ETciD, human, trypsin | 2 | 14,299 | 40.8% | 78.8% | 11.2% | 46.9% |
+| PXD007058 | EThcD, human, phosphopeptides | 2 | 7,175 | 47.1% | 75.3% | 18.2% | 40.9% |
+| PXD066033 | EThcD, human, ADP-ribosyl, Lys-C | 2 | 6,205 | 36.7% | 93.0% | 9.1% | 68.9% |
+| PXD070310 | EThcD, human, ADP-ribosyl, Lys-C | 2 | 1,152 | 50.2% | 98.4% | 17.1% | 83.8% |
+| PXD027504 | EThcD, human, ADP-ribosyl, trypsin | 1 | 200 | 54.5% | 99.5% | 21.5% | 90.5% |
+
+294 truth spectra (1.0%) lose their only correct tag under `both`, 11,895 gain one. Limits: three of the five
+projects are ADP-ribosylation samples from one laboratory; the truth search uses c and z ions, so it favours spectra
+with c/z series and the size of the gain depends on it; the development project (PXD060724, 92% under `by`)
+predicted the held-out runs poorly, so the thresholds were easy to meet; the test ran on integration/1.13 at
+9365ff1. The option stays experimental and the default stays `by`.
 
 ## Tests
 
