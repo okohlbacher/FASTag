@@ -1470,7 +1470,9 @@
       "required": false,
       "toppAdvanced": true,
       "formats": [
-        "fasta"
+        "fasta",
+        "fa",
+        "faa"
       ]
     },
     {
