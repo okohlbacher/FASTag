@@ -963,6 +963,38 @@ int main()
     x = few;
     LD::applyPairs(x, lys4);
     CHECK(x.status == "no_call" && !x.pairs.dimethyl(), "Lys4 SILAC is not dimethyl");
+
+    // one SILAC spacing alone: >= 30 pairs and a ratio >= 20 (control 0 here: >= 100 pairs)
+    auto single = [&](double s, int n) {
+      LD::PairCounter d = many;
+      for (int i = 0; i < n; ++i) d.add(3.0 * i + 1.0, 400.0 + 1.7 * i + s / 2, 2);
+      return d;
+    };
+    x = few;
+    x.reason = "low_resolution_ms2";
+    LD::applyPairs(x, single(6.020129, 120));
+    CHECK(x.status == "call" && x.labels == "K:Lys6+R:Arg6" && x.call_sites == "K,R" && x.basis == "precursor_pairs" &&
+            rowsOf(x, S).at("ld_pair/silac_single") == "yes" && rowsOf(x, S).at("ld_pair/lys6arg6_pairs") == "120",
+          "Lys6/Arg6 pairs: %s %s", x.status.c_str(), x.labels.c_str());
+    x = few;
+    LD::applyPairs(x, single(8.014199, 120));
+    CHECK(x.labels == "K:Lys8" && x.call_sites == "K", "Lys8 pairs alone: %s", x.labels.c_str());
+    x = few;
+    LD::applyPairs(x, single(10.008269, 120));
+    CHECK(x.labels == "R:Arg10" && x.call_sites == "R", "Arg10 pairs alone: %s", x.labels.c_str());
+    x = few;
+    LD::applyPairs(x, single(3.989092, 120));
+    CHECK(x.labels == "K:Lys4+K:Lys8+R:Arg6+R:Arg10" && rowsOf(x, S).at("ld_pair/medium_heavy_pairs") == "120",
+          "medium to heavy pairs: %s", x.labels.c_str());
+    x = lf;
+    LD::applyPairs(x, single(6.020129, 120));
+    CHECK(x.labels == "K:Lys6+R:Arg6", "single-spacing pairs replace a label-free call");
+    x = few;
+    x.reason = "low_resolution_ms2";
+    LD::applyPairs(x, single(6.020129, 90));
+    CHECK(x.status == "no_call" && rowsOf(x, S).at("ld_pair/silac_single") == "no", "ratio below 20: no call");
+    x = extended("K:Lys8", "K", single(6.020129, 120));
+    CHECK(x.labels == "K:Lys8" && x.basis == "site_scan", "a label call is not changed by one spacing");
   }
 
   if (failures == 0) std::printf("label_discovery_test: all passed\n");
