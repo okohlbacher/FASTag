@@ -1,0 +1,17 @@
+files in manifest: 98; scored: 95; excluded: 3
+K1 refused among truth NONDIA: candidate 0 of 58 (criterion 0, n >= 40); base 0 of 58
+K2 refused among truth DIA: candidate 35 of 37 (criterion >= 90%, n >= 25); base 19 of 37
+by truth|stratum (n, candidate refused, base refused):
+  DIA|DDA_qexactive	1	0	0
+  DIA|DIA_orbitrap	36	35	19
+  NONDIA|DDA_exploris	13	0	0
+  NONDIA|DDA_qexactive	11	0	0
+  NONDIA|DDA_tribrid	14	0	0
+  NONDIA|DIA_orbitrap	8	0	0
+  NONDIA|PRM	8	0	0
+  NONDIA|WWA_DDA	4	0	0
+excluded:
+  AQ2.DIA_orbitrap.13	UNCLEAR	nondependent_other	PRM/targeted
+  AQ2.DDA_qexactive.06	UNCLEAR	nondependent_other	DDA
+  AQ2.DDA_qexactive.12	UNCLEAR	nondependent_other	DDA
+VERDICT: PASS
