@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.13.1 (2026-11-10)
+
+No change to the program. Five test scripts compare and pass the Windows
+form of the temporary directory under MSYS; they failed on Windows in
+1.13.0, so that release has no Windows packages. Two statements in README
+and CHANGELOG are corrected: the label-discovery rules of report formats 2
+to 4 have a held-out test (FAIL, 3 of 9 criteria), and for organisms
+outside the index `-species_call explain` calls the closest indexed genus
+in 6 of 13 runs, not "the nearest indexed relative in 10 of 13".
+
 ## 1.13.0 (2026-11-10)
 
 Experimental options from the 1.13 backlog, each with its held-out result
@@ -97,8 +107,8 @@ kept as experimental with the result documented: `-label_discovery_out`,
   the decoy call), the guard fails (recovery 38/105 against 77/105; Sus or
   Bos 3/68 against 41/68). Scope: selection of the sample organism among
   the 50 indexed genera (42 of 49 runs); a second organism or contaminant
-  is not reported; organisms outside the index are usually reported as
-  their nearest indexed relative (10 of 13 runs) or not at all.
+  is not reported; for organisms outside the index the closest indexed
+  genus is called in 6 of 13 runs (assigned post hoc, not a test result).
 - **`-search_shifts` (backlog #17): isotope rule in the frame of a fixed
   terminal label, and the held-out result.** A mass-gap peak at a fixed
   terminal label (TMT) plus n x 1.00335 is now `skipped_isotope` and raises
@@ -198,17 +208,19 @@ kept as experimental with the result documented: `-label_discovery_out`,
   Arg10 spacings call SILAC (`basis` `precursor_pairs`), also on runs with
   ion-trap MS2, and a run with few tags, no reporter ions and no pair
   signal is called label-free (`basis` `absence`). On the development runs
-  93 right instead of 86; no held-out test. A sample labelled in one
+  93 right instead of 86. A sample labelled in one
   channel only is read as label-free by the absence rule.
   Format 4 changes one rule of `ld_pair` (no new row, column or
   threshold). A call of SILAC labels only gains `K:Lys8` and `R:Arg10`
   when the pairs show both and the call lacks them (`basis` with the suffix
   `+precursor_pairs`); a call with any other label is not changed. It was
-  set on the development runs, no held-out test: six SILAC calls change
+  set on the development runs: six SILAC calls change
   (three to the labels their submitters state, e.g. PXD066890 `K:Lys8` to
   `K:Lys8+R:Arg10`; three triple SILAC runs gain the missing heavy labels);
   the class of no run changes (96 of 96 audited runs right). Under the
   reporter gate `unclear` no absence call is made.
+  Formats 2 to 4 FAILED their held-out test (`acc113r/labeldisc3`, 163
+  runs, 3 of 9 criteria; see README, Validation).
 
 ## 1.12.2 (2026-11-10)
 

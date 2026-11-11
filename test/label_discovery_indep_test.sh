@@ -44,6 +44,8 @@ export FASTAG_DIGEST_DIR="$DATA"
 unset FASTAG_FULL_PRECISION
 
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/fastag-ldisc-indep.XXXXXX") || exit 1
+# Windows (MSYS): the native binary and python see C:/..., not /tmp/...; compare and pass that form.
+command -v cygpath >/dev/null 2>&1 && TMP=$(cygpath -m "$TMP")
 trap 'rm -rf "$TMP"' EXIT
 NFAIL=0
 fail() { echo "FAIL: $*" >&2; exit 1; }

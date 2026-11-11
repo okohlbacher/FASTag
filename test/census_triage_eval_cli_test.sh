@@ -19,6 +19,8 @@ if ! "$BIN" --help >/dev/null 2>&1; then
 fi
 command -v "$PY" >/dev/null 2>&1 || { echo "SKIP: no $PY" >&2; exit 77; }
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/fastag-census-triage.XXXXXX") || exit 1
+# Windows (MSYS): the native binary and python see C:/..., not /tmp/...; compare and pass that form.
+command -v cygpath >/dev/null 2>&1 && TMP=$(cygpath -m "$TMP")
 trap 'rm -rf "$TMP"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 ARGS=(-fragment_tolerance 0.3 -fragment_tolerance_unit Da -threads 2)
