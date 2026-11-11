@@ -1071,7 +1071,7 @@
       "name": "search_engine",
       "type": "string",
       "default": "sage",
-      "description": "Engine of -search_config_out; msfragger (MSFragger 4.4.1, experimental) needs decoys in the database: -fasta_out then appends reversed ones",
+      "description": "Engine of -search_config_out; msfragger (MSFragger 4.4.1, experimental; held-out test FAILED: the shortlist search kept 49-73% of the spectra a full MSFragger search identifies, criterion 80%) needs decoys in the database: -fasta_out then appends reversed ones",
       "required": false,
       "toppAdvanced": false,
       "choices": [
@@ -1083,11 +1083,11 @@
     {
       "name": "search_isotope_errors",
       "type": "int",
-      "default": "0",
-      "description": "Precursor isotope errors 0..n the engine searches; 0 = none",
+      "default": "-1",
+      "description": "Precursor isotope errors 0..n the engine searches; 0 = none; -1 = by engine: none for Sage and Comet, 0..3 (MSFragger's own default) for msfragger",
       "required": false,
       "toppAdvanced": false,
-      "min": 0,
+      "min": -1,
       "max": 3
     },
     {

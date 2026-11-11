@@ -1001,8 +1001,10 @@ protected:
                         "Comet parameters (merged into -search_config_template when given), or a complete "
                         "MSFragger fragger.params", false);
     registerStringOption_("search_engine", "<engine>", "sage",
-                          "Engine of -search_config_out; msfragger (MSFragger 4.4.1, experimental) needs decoys "
-                          "in the database: -fasta_out then appends reversed ones", false);
+                          "Engine of -search_config_out; msfragger (MSFragger 4.4.1, experimental; held-out test "
+                          "FAILED: the shortlist search kept 49-73% of the spectra a full MSFragger search "
+                          "identifies, criterion 80%) needs decoys in the database: -fasta_out then appends "
+                          "reversed ones", false);
     setValidStrings_("search_engine", ListUtils::create<std::string>("sage,comet,msfragger"));
     registerInputFile_("search_config_template", "<file>", "",
                        "Comet only: a `comet -p` parameter file the managed keys are merged into", false);
@@ -1012,9 +1014,10 @@ protected:
     registerStringOption_("search_precursor_unit", "<unit>", "ppm",
                           "Unit of -search_precursor_tolerance", false);
     setValidStrings_("search_precursor_unit", ListUtils::create<std::string>("ppm,Da"));
-    registerIntOption_("search_isotope_errors", "<n>", 0,
-                       "Precursor isotope errors 0..n the engine searches; 0 = none", false);
-    setMinInt_("search_isotope_errors", 0);
+    registerIntOption_("search_isotope_errors", "<n>", -1,
+                       "Precursor isotope errors 0..n the engine searches; 0 = none; -1 = by engine: none for "
+                       "Sage and Comet, 0..3 (MSFragger's own default) for msfragger", false);
+    setMinInt_("search_isotope_errors", -1);
     setMaxInt_("search_isotope_errors", 3);
     registerStringOption_("search_decoy_prefix", "<s>", "",
                           "Decoy prefix the engine generates; empty = rev_ (Sage, MSFragger) or DECOY_ (Comet)", false);
@@ -2936,7 +2939,10 @@ protected:
         sl_plan.fragment_ppm = p.tol_ppm;
         sl_plan.precursor_tolerance = getDoubleOption_("search_precursor_tolerance");
         sl_plan.precursor_ppm = getStringOption_("search_precursor_unit") == "ppm";
+        // -1: Sage and Comet none (as before); MSFragger its own default 0..3
+        // (development runs: without it the search lost a third of its PSMs).
         sl_plan.isotope_errors = getIntOption_("search_isotope_errors");
+        if (sl_plan.isotope_errors < 0) sl_plan.isotope_errors = search_engine == "msfragger" ? 3 : 0;
         sl_plan.decoy_prefix = getStringOption_("search_decoy_prefix");
         sl_plan.fastag_version = FASTAG_VERSION;
         sl_plan.threads = getIntOption_("threads");  // MSFragger num_threads; 0 = every CPU

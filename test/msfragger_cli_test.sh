@@ -194,4 +194,19 @@ rune "$TMP/g2" -search_shifts offsets && fail "g: -search_shifts offsets with a 
 grep -q 'Da precursor' "$TMP/g2/run.log" || { cat "$TMP/g2/run.log" >&2; fail "g: no refusal message"; }
 [ -e "$TMP/g2/f.params" ] && fail "g: the refused config was written"
 echo "g: Da window, $n_da offsets dropped_engine"
+# ---- h: without -search_isotope_errors MSFragger gets its own default 0..3, Sage none; an explicit 0 stays 0
+HARGS=(-in "$IN" -recon_fasta "$DB" -tag_length 4 -extension 1 -fragment_tolerance 0.5 -fragment_tolerance_unit Da
+       -out t.tsv -shortlist_out sl.tsv -fasta_out red.fasta -threads 2)
+runh() {
+  local d=$1; shift
+  mkdir -p "$d"
+  ( cd "$d" && "$BIN" "${HARGS[@]}" "$@" > run.log 2>&1 ) || { cat "$d/run.log" >&2; fail "$(basename "$d"): exit non-zero"; }
+}
+runh "$TMP/h1" -search_config_out f.params -search_engine msfragger
+[ "$(key "$TMP/h1/f.params" isotope_error)" = 0/1/2/3 ] || fail "h: msfragger default isotope_error is not 0/1/2/3"
+runh "$TMP/h2" -search_config_out f.params -search_engine msfragger -search_isotope_errors 0
+[ "$(key "$TMP/h2/f.params" isotope_error)" = 0 ] || fail "h: an explicit -search_isotope_errors 0 is not kept"
+runh "$TMP/h3" -search_config_out sage.json
+grep -q '"isotope_errors": \[0, 0\]' "$TMP/h3/sage.json" || fail "h: the Sage default isotope errors changed"
+echo "h: isotope error default by engine"
 echo "msfragger_cli_test: all checks passed"
