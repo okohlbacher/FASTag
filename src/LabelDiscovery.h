@@ -450,6 +450,8 @@ namespace FASTag::LabelDiscovery
     /// spacing (N-terminus and one Lys).
     std::uint64_t dimethyl2 = 0;
     std::uint64_t silac_top = 0;  ///< the largest count at a SILAC spacing (Lys8, Arg10, +6.0201, medium to heavy)
+    std::uint64_t lys6arg6 = 0;      ///< count at +6.0201 (Lys6, Arg6: 13C(6))
+    std::uint64_t medium_heavy = 0;  ///< the larger count at +3.9891 (Lys4 to Lys8) and +3.9881 (Arg6 to Arg10)
     double control = 0;  ///< median of the eight control counts
     void count();
     /// count / (control + 5): the excess of a label spacing over the controls.
@@ -461,6 +463,12 @@ namespace FASTag::LabelDiscovery
     bool dimethyl() const;
     /// Any label spacing has >= 30 pairs and a ratio >= 2.
     bool anyLabel() const;
+    /// One SILAC spacing alone (Lys8, Arg10, +6.0201 or medium to heavy) has
+    /// >= 30 pairs and a ratio >= 20, and dimethyl() is false.
+    bool silacSingle() const;
+    /// The labels of the SILAC spacings that pass silacSingle()'s bar, in the
+    /// order K:Lys4, K:Lys6, K:Lys8, R:Arg6, R:Arg10 ("-" when none).
+    std::string silacSingleLabels() const;
   };
 
   struct Analysis
