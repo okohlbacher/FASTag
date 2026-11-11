@@ -1,0 +1,18 @@
+stratum	draw_rank	pxd	file	bytes	sha1	url	fasta	instruments	sha256_accession_prefix
+astral	1	PXD069807	20250622_DDA_400ng_Tube80_ISS_WT83_Plate1_RowF_Column7.raw	7109962769	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2026/02/PXD069807/20250622_DDA_400ng_Tube80_ISS_WT83_Plate1_RowF_Column7.raw	Homo_sapiens	orbitrap astral	55732c36d91d
+astral	1	PXD069807	20250622_DDA_400ng_Tube27_Ground_QX_Plate2_RowE_Column9.raw	7911873381	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2026/02/PXD069807/20250622_DDA_400ng_Tube27_Ground_QX_Plate2_RowE_Column9.raw	Homo_sapiens	orbitrap astral	55732c36d91d
+ion_trap	1	PXD044453	20230404_HNM_W0003_R2.raw	163084644	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2024/02/PXD044453/20230404_HNM_W0003_R2.raw	Mus_musculus	ltq orbitrap elite	01a0c7a76646
+ion_trap	2	PXD041382	102641.raw	177672354	2f276e84bc6824e51252e7ad4fb44f2e5cdf01b2	https://ftp.pride.ebi.ac.uk/pride/data/archive/2023/05/PXD041382/102641.raw	Mus_musculus	ltq orbitrap velos	1fb53efe54c9
+ion_trap	3	PXD037091	KK370_Col0_Siliques_3.raw	222047302	d8f4bc6a78edd3b360428b058587cf2528b77514	https://ftp.pride.ebi.ac.uk/pride/data/archive/2023/03/PXD037091/KK370_Col0_Siliques_3.raw	Arabidopsis_thaliana	ltq orbitrap xl	20d3d617d518
+ion_trap	4	PXD027039	COM-MP2-2.raw	150648948	8e924ff1e362b638f26955a09f3273f8c8d99269	https://ftp.pride.ebi.ac.uk/pride/data/archive/2021/11/PXD027039/COM-MP2-2.raw	Homo_sapiens	ltq orbitrap	220a4466c949
+ion_trap	5	PXD058223	CNN1_180410113835.raw	616316681	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2026/10/PXD058223/CNN1_180410113835.raw	Mus_musculus	ltq orbitrap velos	383432abe311
+ion_trap	6	PXD056008	LCY_WFM_GEL_ELITE_20240908.raw	463137584	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2025/01/PXD056008/LCY_WFM_GEL_ELITE_20240908.raw	Arabidopsis_thaliana	ltq orbitrap elite	424b813c5c3f
+ion_trap	7	PXD060552	210615_AraRoo_SYT1c.raw	562528932	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2025/11/PXD060552/210615_AraRoo_SYT1c.raw	Arabidopsis_thaliana	ltq orbitrap elite	59cfd324cfa2
+ion_trap	8	PXD019360	Mod2.raw	157262238	d593a4fbfabaeceeded8df5954e62f8c89b1c49f	https://ftp.pride.ebi.ac.uk/pride/data/archive/2021/11/PXD019360/Mod2.raw	Homo_sapiens	ltq orbitrap xl	5a846311ec03
+ion_trap	9	PXD060832	C10_20.raw	688058126	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2025/02/PXD060832/C10_20.raw	Mus_musculus	ltq orbitrap elite	610c37d41a1f
+ion_trap	10	PXD052400	SMXL2-GFP.raw	425484454	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2024/06/PXD052400/SMXL2-GFP.raw	Arabidopsis_thaliana	ltq orbitrap elite	64dc63edd370
+qe	1	PXD075617	OMG5379A7LC2_G1.raw	462124457	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2026/06/PXD075617/OMG5379A7LC2_G1.raw	Homo_sapiens	q exactive	1d86dec88acf
+qe	2	PXD076370	MS221730-KS.raw	1229958001	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2026/09/PXD076370/MS221730-KS.raw	Homo_sapiens	q exactive	219260a3dad3
+qe	3	PXD078122	20260205_HF1_MaRa_SA_P0312_Dmo2_04.raw	768348262	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2026/08/PXD078122/20260205_HF1_MaRa_SA_P0312_Dmo2_04.raw	Saccharomyces_cerevisiae	q exactive hf	585c81372345
+qe	4	PXD075574	CB-6644_3.raw	1253397151	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2026/08/PXD075574/CB-6644_3.raw	Homo_sapiens	q exactive hf	6463c6ac7087
+qe	5	PXD078303	NW_N1.raw	1502693938	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2026/05/PXD078303/NW_N1.raw	Homo_sapiens	q exactive hf	8e9d24110379

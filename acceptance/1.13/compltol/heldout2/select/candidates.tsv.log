@@ -1,0 +1,6 @@
+astral: 1 projects pass the metadata rule
+ion_trap: 20 projects pass the metadata rule
+ion_trap: PXD016966 skipped, no eligible .raw (36 files)
+ion_trap: PXD037553 skipped, no eligible .raw (16 files)
+qe: 8 projects pass the metadata rule
+qe: PXD075677 skipped, no eligible .raw (19 files)
