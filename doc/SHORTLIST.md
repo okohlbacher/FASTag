@@ -294,15 +294,16 @@ and largest per-run entrapment FDP:
 | + `-shortlist_gapped` | 0.766; 0.669; 2.19% | 0.888; 0.846; 1.62% |
 | + `-shortlist_gapped -recon_min_length 7` | 0.786; 0.702; 2.48% | 0.911; 0.878; 1.46% |
 | + `-shortlist_gapped -recon_min_length 6` | 0.801; 0.710; 2.51% | 0.928; 0.886; 1.57% |
+| + `-shortlist_gapped -recon_min_length 6 -shortlist_max_evalue 10 -recon_missed_cleavages 2` (recipe) | not searched | 0.935; 0.888; 1.43% |
 
 Each of the three values raised the kept share on every shortlist. The
 shortlist of the held-out configuration reaches 68 to 93% of the full
 search's identified spectra (mean 85%); most of the rest has no tag of the
 default minimum length 8 on the right protein, or a tag with one flank off by
 an isotope or modification mass. `-shortlist_gapped` and a lower
-`-recon_min_length` admit these: 89 to 97% (mean 94%) with
-`-shortlist_gapped -recon_min_length 7`, at 1.7 times as many proteins and an
-unchanged search time. They are not defaults (`-recon_min_length` also changes
+`-recon_min_length` admit these: 95 to 98% (mean 97%) with the recipe of the
+last row, at 2.7 times as many proteins (3,594 of 20,414 on average) and a
+search time 9% longer. They are not defaults (`-recon_min_length` also changes
 the reconciliation output); give them with the export when the kept share
 matters. MSFragger's mass calibration (`calibrate_mass 2`) and `stricttrypsin`
 added nothing on the two first runs and are not exported. **All of this was

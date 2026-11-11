@@ -15,8 +15,9 @@
   spectra that the shortlist search keeps rose from 0.723 to 0.831 on
   average (lowest run 0.563 to 0.678), largest per-run entrapment FDP 2.39%
   to 1.63%. With the shortlist widened by the existing options
-  `-shortlist_gapped -recon_min_length 7` it is 0.911 on average, 0.878 in
-  the lowest run, entrapment FDP at most 1.46% per run. **Set on development
+  `-shortlist_gapped -recon_min_length 6 -shortlist_max_evalue 10
+  -recon_missed_cleavages 2` it is 0.935 on average, 0.888 in the lowest
+  run, entrapment FDP at most 1.43% per run. **Set on development
   runs only; no held-out test.** The held-out FAIL of 1.13 stands.
   The shortlist options are not defaults.
 
