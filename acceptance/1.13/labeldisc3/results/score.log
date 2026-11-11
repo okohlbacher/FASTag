@@ -1,0 +1,137 @@
+{
+ "n": 163,
+ "S1": {
+  "label_free_runs": 64,
+  "wrong_calls": 0,
+  "clopper95": [
+   0.0,
+   0.056
+  ],
+  "upper95_one_sided": 0.0457,
+  "runs": [],
+  "pass": true
+ },
+ "A1": {
+  "accuracy_label_free": 0.5156,
+  "accuracy_labelled": 0.798,
+  "weighted": 0.5721,
+  "always_label_free": 0.8,
+  "raw_correct": 112,
+  "raw_always_label_free": 64,
+  "pass": false
+ },
+ "A2": {
+  "fastag_family_correct": 119,
+  "param_medic_family_correct_generous": 149,
+  "param_medic_family_correct_strict": 137,
+  "fastag_only": 9,
+  "param_medic_only": 39,
+  "sign_test_p": 2e-05,
+  "param_medic_failed": 0,
+  "by_class": {
+   "label-free": {
+    "n": 64,
+    "fastag": 33,
+    "param_medic": 63
+   },
+   "TMT": {
+    "n": 18,
+    "fastag": 18,
+    "param_medic": 17
+   },
+   "TMTpro": {
+    "n": 18,
+    "fastag": 18,
+    "param_medic": 18
+   },
+   "iTRAQ4": {
+    "n": 8,
+    "fastag": 8,
+    "param_medic": 8
+   },
+   "iTRAQ8": {
+    "n": 11,
+    "fastag": 11,
+    "param_medic": 10
+   },
+   "SILAC": {
+    "n": 22,
+    "fastag": 18,
+    "param_medic": 21
+   },
+   "dimethyl": {
+    "n": 22,
+    "fastag": 13,
+    "param_medic": 12
+   }
+  },
+  "pass": false
+ },
+ "R": {
+  "TMT": {
+   "n": 18,
+   "correct": 18,
+   "no_call": 0,
+   "wrong": 0,
+   "recall": 1.0,
+   "threshold": 0.8,
+   "pass": true
+  },
+  "TMTpro": {
+   "n": 18,
+   "correct": 11,
+   "no_call": 0,
+   "wrong": 7,
+   "recall": 0.6111,
+   "threshold": 0.8,
+   "pass": false
+  },
+  "iTRAQ4+iTRAQ8": {
+   "n": 19,
+   "correct": 19,
+   "no_call": 0,
+   "wrong": 0,
+   "recall": 1.0,
+   "threshold": 0.8,
+   "pass": true
+  },
+  "SILAC": {
+   "n": 22,
+   "correct": 18,
+   "no_call": 4,
+   "wrong": 0,
+   "recall": 0.8182,
+   "threshold": 0.6,
+   "pass": true
+  },
+  "dimethyl": {
+   "n": 22,
+   "correct": 13,
+   "no_call": 8,
+   "wrong": 1,
+   "recall": 0.5909,
+   "threshold": 0.5,
+   "pass": true
+  },
+  "pass": false
+ },
+ "F": {
+  "labelled_runs": 99,
+  "called_label_free": 1,
+  "rate": 0.0101,
+  "clopper95": [
+   0.0003,
+   0.055
+  ],
+  "by_basis": {
+   "site_scan": 1
+  },
+  "by_class": {
+   "dimethyl": 1
+  },
+  "runs": [
+   "PXD051521__20210304_PN_HipAkp_Rep2_Chymo_Phospho2"
+  ],
+  "pass": true
+ }
+}
